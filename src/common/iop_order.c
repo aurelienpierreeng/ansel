@@ -106,6 +106,7 @@ const dt_iop_order_entry_t legacy_order[] = {
   { {27.0f }, "colorin", 0},
   { {27.5f }, "negadoctor", 0},
   { {27.5f }, "basicadj", 0},
+  { {27.5f }, "channelmixerrgb", 0},
   { {28.0f }, "colorreconstruct", 0},
   { {29.0f }, "colorchecker", 0},
   { {30.0f }, "defringe", 0},
@@ -210,6 +211,8 @@ const dt_iop_order_entry_t v30_order[] = {
                                   //    but coefs are user-defined instead of calibrated and read from ICC profile.
                                   //    Really versatile yet under-used module, doing linear ops,
                                   //    very good in scene-referred workflow
+  { {39.5f }, "channelmixerrgb", 0},
+
   { {40.0f }, "basicadj", 0},        // module mixing view/model/control at once, usage should be discouraged
   { {41.0f }, "colorbalance", 0},    // scene-referred color manipulation
   { {42.0f }, "rgbcurve", 0},        // really versatile way to edit colour in scene-referred and display-referred workflow
@@ -630,6 +633,7 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
           // @@_NEW_MOUDLE: For new module it is required to insert the new module name in the iop-order list here.
           //                The insertion can be done depending on the current iop-order list kind.
           _insert_before(iop_order_list, "nlmeans", "negadoctor");
+          _insert_before(iop_order_list, "basicadj", "channelmixerrgb");
         }
       }
       else if(version == DT_IOP_ORDER_LEGACY)
