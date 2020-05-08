@@ -22,6 +22,7 @@
 #include "bauhaus/bauhaus.h"
 #include "external/adobe_coeff.c"
 #include "dtgtk/drawingarea.h"
+#include "common/chromatic_adaptation.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/opencl.h"
 #include "common/illuminants.h"
@@ -71,6 +72,7 @@ typedef struct dt_iop_channelmixer_rgb_params_t
   dt_illuminant_t illuminant;
   dt_illuminant_fluo_t illum_fluo;
   dt_illuminant_led_t illum_led;
+  dt_adaptation_t adaptation;
   float x, y;
   float temperature;
 } dt_iop_channelmixer_rgb_params_t;
@@ -78,7 +80,7 @@ typedef struct dt_iop_channelmixer_rgb_params_t
 typedef struct dt_iop_channelmixer_rgb_gui_data_t
 {
   GtkNotebook *notebook;
-  GtkWidget *illuminant, *temperature;
+  GtkWidget *illuminant, *temperature, *adaptation;
   GtkWidget *illum_fluo, *illum_led, *illum_x, *illum_y, *approx_cct, *illum_color;
   GtkWidget *scale_red_R, *scale_red_G, *scale_red_B;
   GtkWidget *scale_green_R, *scale_green_G, *scale_green_B;
@@ -98,6 +100,7 @@ typedef struct dt_iop_channelmixer_rbg_data_t
   float DT_ALIGNED_PIXEL illuminant[4]; // XYZ coordinates of illuminant
   float p;
   int apply_grey;
+  dt_adaptation_t adaptation;
 } dt_iop_channelmixer_rbg_data_t;
 
 
@@ -123,18 +126,6 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_p
 
 
 #ifdef _OPENMP
-#pragma omp declare simd uniform(M) aligned(M:64) aligned(v_in, v_out:16)
-#endif
-static inline void dot_product(const float v_in[4], const float M[3][4], float v_out[4])
-{
-  // specialized 3×3 dot products of 4×1 RGB-alpha pixels
-  v_out[0] = M[0][0] * v_in[0] + M[0][1] * v_in[1] + M[0][2] * v_in[2];
-  v_out[1] = M[1][0] * v_in[0] + M[1][1] * v_in[1] + M[1][2] * v_in[2];
-  v_out[2] = M[2][0] * v_in[0] + M[2][1] * v_in[1] + M[2][2] * v_in[2];
-}
-
-
-#ifdef _OPENMP
 #pragma omp declare simd uniform(v_2) aligned(v_1, v_2:16)
 #endif
 static inline float scalar_product(const float v_1[4], const float v_2[4])
@@ -142,68 +133,6 @@ static inline float scalar_product(const float v_1[4], const float v_2[4])
   // specialized 3×1 dot products 2 4×1 RGB-alpha pixels.
   // v_2 needs to be uniform along loop increments, e.g. independent from current pixel values
   return v_1[0] * v_2[0] + v_1[1] * v_2[1] + v_1[2] * v_2[2];
-}
-
-
-// modified LMS cone response space for Bradford transform
-// explanation here : https://onlinelibrary.wiley.com/doi/pdf/10.1002/9781119021780.app3
-// but coeffs are wrong in the above, so they come from :
-// http://www2.cmp.uea.ac.uk/Research/compvis/Papers/FinSuss_COL00.pdf
-// At any time, ensure XYZ_to_LMS is the exact matrice inverse of LMS_to_XYZ
-#ifdef _OPENMP
-#pragma omp declare simd aligned(XYZ, LMS:16)
-#endif
-static inline void convert_XYZ_to_LMS(const float XYZ[4], float LMS[4])
-{
-  // Warning : needs XYZ normalized with Y - you need to downscale before
-  static const float DT_ALIGNED_ARRAY XYZ_to_LMS[3][4] = { {  0.8951f,  0.2664f, -0.1614f, 0.f },
-                                                           { -0.7502f,  1.7135f,  0.0367f, 0.f },
-                                                           {  0.0389f, -0.0685f,  1.0296f, 0.f } };
-  dot_product(XYZ, XYZ_to_LMS, LMS);
-}
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(XYZ, LMS:16)
-#endif
-static inline void convert_LMS_to_XYZ(const float LMS[4], float XYZ[4])
-{
-  // Warning : output XYZ normalized with Y - you need to upscale later
-  static const float DT_ALIGNED_ARRAY LMS_to_XYZ[3][4] = { {  0.9870f, -0.1471f,  0.1600f, 0.f },
-                                                           {  0.4323f,  0.5184f,  0.0493f, 0.f },
-                                                           { -0.0085f,  0.0400f,  0.9685f, 0.f } };
-  dot_product(LMS, LMS_to_XYZ, XYZ);
-}
-
-
-#ifdef _OPENMP
-#pragma omp declare simd uniform(origin_illuminant) \
-  aligned(lms_in, lms_out, origin_illuminant:16)
-#endif
-static inline void bradford_adapt(const float lms_in[4],
-                                  const float origin_illuminant[4],
-                                  const float p,
-                                  float lms_out[4])
-{
-  // Bradford chromatic adaptation from origin to target D50 illuminant in LMS space
-
-  // Precomputed D50 primaries in Bradford LMS for darktable's pipeline between colorin and colorout
-  // darktable's pipeline is hard-set to D50 because it is the ICC default connection space.
-  // FIXME: if darktable's pipeline standard illuminant is EVER CHANGED in the future,
-  // this const needs to be updated or become a variable.
-  //static const float DT_ALIGNED_PIXEL D50[4] = { 0.996078f, 1.020646f, 0.818155f, 0.f };
-  static const float DT_ALIGNED_PIXEL D65[4] = { 0.941238f, 1.040633f, 1.088932f, 0.f };
-
-
-  float DT_ALIGNED_PIXEL temp[4] = { lms_in[0] / origin_illuminant[0],
-                                     lms_in[1] / origin_illuminant[1],
-                                     lms_in[2] / origin_illuminant[2],
-                                     0.f };
-
-  temp[2] = powf(fmaxf(temp[2], 0.f), p);
-
-  lms_out[0] = D65[0] * temp[0];
-  lms_out[1] = D65[1] * temp[1];
-  lms_out[2] = D65[2] * temp[2];
 }
 
 
@@ -252,6 +181,26 @@ static inline void upscale_vector(float vector[4], const float scaling)
 }
 
 
+static inline void repack_3x3_to_3xSSE(const float input[9], float output[3][4])
+{
+  // Repack a 3×3 array/matrice into a 3×1 SSE2 vector to enable SSE4/AVX/AVX2 dot products
+  output[0][0] = input[0];
+  output[0][1] = input[1];
+  output[0][2] = input[2];
+  output[0][3] = 0.0f;
+
+  output[1][0] = input[3];
+  output[1][1] = input[4];
+  output[1][2] = input[5];
+  output[1][3] = 0.0f;
+
+  output[2][0] = input[6];
+  output[2][1] = input[7];
+  output[2][2] = input[8];
+  output[2][3] = 0.0f;
+}
+
+
 void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
              void *const restrict ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
@@ -262,39 +211,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   float DT_ALIGNED_ARRAY XYZ_to_RGB[3][4];
 
   // repack the matrices as flat AVX2-compliant matrice
-  if(work_profile) // this can't be fetched in commit_params since work_profile is not yet initialised
+  if(work_profile)
   {
-    // Input
-    RGB_to_XYZ[0][0] = work_profile->matrix_in[0];
-    RGB_to_XYZ[0][1] = work_profile->matrix_in[1];
-    RGB_to_XYZ[0][2] = work_profile->matrix_in[2];
-    RGB_to_XYZ[0][3] = 0.0f;
-
-    RGB_to_XYZ[1][0] = work_profile->matrix_in[3];
-    RGB_to_XYZ[1][1] = work_profile->matrix_in[4];
-    RGB_to_XYZ[1][2] = work_profile->matrix_in[5];
-    RGB_to_XYZ[1][3] = 0.0f;
-
-    RGB_to_XYZ[2][0] = work_profile->matrix_in[6];
-    RGB_to_XYZ[2][1] = work_profile->matrix_in[7];
-    RGB_to_XYZ[2][2] = work_profile->matrix_in[8];
-    RGB_to_XYZ[2][3] = 0.0f;
-
-    // Output
-    XYZ_to_RGB[0][0] = work_profile->matrix_out[0];
-    XYZ_to_RGB[0][1] = work_profile->matrix_out[1];
-    XYZ_to_RGB[0][2] = work_profile->matrix_out[2];
-    XYZ_to_RGB[0][3] = 0.0f;
-
-    XYZ_to_RGB[1][0] = work_profile->matrix_out[3];
-    XYZ_to_RGB[1][1] = work_profile->matrix_out[4];
-    XYZ_to_RGB[1][2] = work_profile->matrix_out[5];
-    XYZ_to_RGB[1][3] = 0.0f;
-
-    XYZ_to_RGB[2][0] = work_profile->matrix_out[6];
-    XYZ_to_RGB[2][1] = work_profile->matrix_out[7];
-    XYZ_to_RGB[2][2] = work_profile->matrix_out[8];
-    XYZ_to_RGB[2][3] = 0.0f;
+    // work profile can't be fetched in commit_params since it is not yet initialised
+    repack_3x3_to_3xSSE(work_profile->matrix_in, RGB_to_XYZ);
+    repack_3x3_to_3xSSE(work_profile->matrix_out, XYZ_to_RGB);
   }
 
   assert(piece->colors == 4);
@@ -302,11 +223,12 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   const float *const restrict in = (const float *const restrict)ivoid;
   float *const restrict out = (float *const restrict)ovoid;
+  const float *const restrict illuminant = data->illuminant;
 
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(ch, in, out, roi_out, data, XYZ_to_RGB, RGB_to_XYZ) \
-  aligned(in, out, XYZ_to_RGB, RGB_to_XYZ:64) \
+  dt_omp_firstprivate(ch, in, out, roi_out, data, XYZ_to_RGB, RGB_to_XYZ, illuminant) \
+  aligned(in, out, XYZ_to_RGB, RGB_to_XYZ:64) aligned(illuminant:16)\
   schedule(simd:static)
 #endif
   for(size_t k = 0; k < roi_out->height * roi_out->width * ch; k += ch)
@@ -319,21 +241,32 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     dot_product(in + k, RGB_to_XYZ, temp_one);
     const float Y = temp_one[1];
     downscale_vector(temp_one, Y);
-    convert_XYZ_to_LMS(temp_one, temp_two);
 
-    // Bradford chromatic adaptation / white balance -> fancy LMS scaling
-    bradford_adapt(temp_two, data->illuminant, data->p, temp_one);
-
-    // Clip negatives -> gamut mapping step 1
-    temp_one[0] = fmaxf(temp_one[0], 0.f);
-    temp_one[1] = fmaxf(temp_one[1], 0.f);
-    temp_one[2] = fmaxf(temp_one[2], 0.f);
+    switch(data->adaptation)
+    {
+      case DT_ADAPTATION_BRADFORD:
+      {
+        convert_XYZ_to_bradford_LMS(temp_one, temp_two);
+        bradford_adapt_D65(temp_two, illuminant, data->p, temp_one);
+        break;
+      }
+      case DT_ADAPTATION_CAT16:
+      {
+        convert_XYZ_to_CAT16_LMS(temp_one, temp_two);
+        CAT16_adapt_D65(temp_two, illuminant, 1.0f, temp_one); // force full-adaptation
+        break;
+      }
+      case DT_ADAPTATION_LAST:
+      {
+        break;
+      }
+    }
 
     // Compute the 3D mix - this is a rotation + homothety of the vector base of LMS primaries
     // This is equavilent of correcting the RGB primaries from input profile matrice
     dot_product(temp_one, data->MIX, temp_two);
 
-    // Clip negatives -> gamut mapping step 2
+    // Clip negatives -> gamut mapping
     temp_two[0] = fmaxf(temp_two[0], 0.f);
     temp_two[1] = fmaxf(temp_two[1], 0.f);
     temp_two[2] = fmaxf(temp_two[2], 0.f);
@@ -365,7 +298,27 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     const float grey = Y * scalar_product(temp_two, data->grey);
 
     // Convert back LMS to XYZ to RGB
-    convert_LMS_to_XYZ(temp_two, temp_one);
+    switch(data->adaptation)
+    {
+      case DT_ADAPTATION_BRADFORD :
+      {
+        convert_bradford_LMS_to_XYZ(temp_two, temp_one);
+        break;
+      }
+      case DT_ADAPTATION_CAT16:
+      {
+        convert_CAT16_LMS_to_XYZ(temp_two, temp_one);
+        break;
+      }
+      case DT_ADAPTATION_LAST:
+      {
+        temp_one[0] = temp_two[0];
+        temp_one[1] = temp_two[1];
+        temp_one[2] = temp_two[2];
+        break;
+      }
+    }
+
     upscale_vector(temp_one, Y);
     dot_product(temp_one, XYZ_to_RGB, temp_two);
 
@@ -416,6 +369,8 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->lightness[CHANNEL_SIZE - 1] = 0.0f;
   d->grey[CHANNEL_SIZE - 1] = 0.0f;
 
+  d->adaptation = p->adaptation;
+
   // find x y coordinates of illuminant for CIE 1931 2° observer
   float x = p->x;
   float y = p->y;
@@ -426,7 +381,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   illuminant_xy_to_XYZ(x, y, XYZ);
 
   // Convert illuminant from XYZ to Bradford modified LMS
-  convert_XYZ_to_LMS(XYZ, d->illuminant);
+  if(d->adaptation == DT_ADAPTATION_BRADFORD)
+    convert_XYZ_to_bradford_LMS(XYZ, d->illuminant);
+  else if(d->adaptation == DT_ADAPTATION_CAT16)
+    convert_XYZ_to_CAT16_LMS(XYZ, d->illuminant);
+
   d->illuminant[3] = 0.f;
 
   //fprintf(stdout, "illuminant: %i\n", p->illuminant);
@@ -476,8 +435,8 @@ static inline void dt_colorspaces_pseudoinverse(float (*in)[3], float (*out)[3],
 }
 
 
-static int find_temperature_from_raw_coeffs(dt_iop_module_t *self, float *chroma_x, float *chroma_y,
-                                            float *temperature, dt_illuminant_t *illuminant)
+static int find_temperature_from_raw_coeffs(dt_iop_module_t *self, float *chroma_x, float *chroma_y,float *temperature,
+                                            dt_illuminant_t *illuminant, dt_adaptation_t *adaptation)
 {
   const dt_image_t *img = &self->dev->image_storage;
   const int is_raw = dt_image_is_matrix_correction_supported(img);
@@ -513,20 +472,9 @@ static int find_temperature_from_raw_coeffs(dt_iop_module_t *self, float *chroma
       dt_colorspaces_pseudoinverse(XYZ_to_CAM, CAM_to_XYZ, 3);
       if(isnan(CAM_to_XYZ[0][0])) return FALSE;
 
-      float XYZ[4];
-      // Simulate white point, aka convert (1, 1, 1) in camera space to XYZ
-      // warning : we multiply the transpose of CAM_to_XYZ  since the pseudoinverse transposes it
-      XYZ[0] = CAM_to_XYZ[0][0] / WB[0] + CAM_to_XYZ[1][0] / WB[1] + CAM_to_XYZ[2][0] / WB[2];
-      XYZ[1] = CAM_to_XYZ[0][1] / WB[0] + CAM_to_XYZ[1][1] / WB[1] + CAM_to_XYZ[2][1] / WB[2];
-      XYZ[2] = CAM_to_XYZ[0][2] / WB[0] + CAM_to_XYZ[1][2] / WB[1] + CAM_to_XYZ[2][2] / WB[2];
+      float x, y;
+      WB_coeffs_to_illuminant_xy(CAM_to_XYZ, WB, &x, &y);
 
-      // Get white point chromaticity
-      XYZ[0] /= XYZ[1];
-      XYZ[2] /= XYZ[1];
-      XYZ[1] /= XYZ[1];
-
-      float x = XYZ[0] / (XYZ[0] + XYZ[1] + XYZ[2]);
-      float y = XYZ[1] / (XYZ[0] + XYZ[1] + XYZ[2]);
       *chroma_x = x;
       *chroma_y = y;
 
@@ -544,8 +492,16 @@ static int find_temperature_from_raw_coeffs(dt_iop_module_t *self, float *chroma
       // reference : https://onlinelibrary.wiley.com/doi/abs/10.1002/9780470175637.ch3
       // so if err < 5 %, we default to D illuminant with CCT for better UX
       // or else we use the custom x and y for better accuracy.
-      if(err < 0.05f) *illuminant = DT_ILLUMINANT_D;
-      else *illuminant = DT_ILLUMINANT_CUSTOM;
+      if(err < 0.05f)
+      {
+        *illuminant = DT_ILLUMINANT_D;
+        *adaptation = DT_ADAPTATION_BRADFORD; // Bradford is better suited for daylight
+      }
+      else
+      {
+        *illuminant = DT_ILLUMINANT_CUSTOM;
+        *adaptation = DT_ADAPTATION_CAT16; // CAT16 is less accurate but more robust for non-daylight
+      }
 
       return TRUE;
     }
@@ -557,6 +513,31 @@ static void update_illuminants(dt_iop_module_t *self)
 {
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+
+  if(p->adaptation == DT_ADAPTATION_LAST)
+  {
+    // user disabled CAT at all, hide everything and exit
+    gtk_widget_set_visible(g->illuminant, FALSE);
+    gtk_widget_set_visible(g->illum_color, FALSE);
+    gtk_widget_set_visible(g->approx_cct, FALSE);
+    gtk_widget_set_visible(g->temperature, FALSE);
+    gtk_widget_set_visible(g->illum_fluo, FALSE);
+    gtk_widget_set_visible(g->illum_led, FALSE);
+    gtk_widget_set_visible(g->illum_x, FALSE);
+    gtk_widget_set_visible(g->illum_y, FALSE);
+    return;
+  }
+  else
+  {
+    // set everything visible again and carry on
+    gtk_widget_set_visible(g->illuminant, TRUE);
+    gtk_widget_set_visible(g->illum_color, TRUE);
+    gtk_widget_set_visible(g->approx_cct, TRUE);
+    gtk_widget_set_visible(g->temperature, TRUE);
+    gtk_widget_set_visible(g->illum_fluo, TRUE);
+    gtk_widget_set_visible(g->illum_led, TRUE);
+    gtk_widget_set_visible(g->illum_x, TRUE);
+  }
 
   // Put current illuminant x y derivated from standard options
   // directly in user params x and y in case user wants take over manually
@@ -696,7 +677,7 @@ static void illuminant_callback(GtkWidget *combo, dt_iop_module_t *self)
   if(p->illuminant == DT_ILLUMINANT_LAST)
   {
     // Get camera WB
-    int found = find_temperature_from_raw_coeffs(self, &(p->x), &(p->y), &(p->temperature), &(p->illuminant));
+    int found = find_temperature_from_raw_coeffs(self, &(p->x), &(p->y), &(p->temperature), &(p->illuminant), &(p->adaptation));
 
     if(found)
     {
@@ -800,6 +781,20 @@ static void illum_y_callback(GtkWidget *slider, gpointer user_data)
   darktable.gui->reset = 1;
   update_approx_cct(self);
   update_illuminant_color(self);
+  darktable.gui->reset = reset;
+
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+static void adaptation_callback(GtkWidget *combo, dt_iop_module_t *self)
+{
+  if(self->dt->gui->reset) return;
+  dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+  p->adaptation = dt_bauhaus_combobox_get(combo);
+
+  const int reset = darktable.gui->reset;
+  darktable.gui->reset = 1;
+  update_illuminants(self);
   darktable.gui->reset = reset;
 
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -1040,6 +1035,7 @@ void gui_update(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->temperature, p->temperature);
   dt_bauhaus_slider_set(g->illum_x, p->x);
   dt_bauhaus_slider_set(g->illum_y, p->y);
+  dt_bauhaus_combobox_set(g->adaptation, p->adaptation);
 
   dt_bauhaus_slider_set(g->scale_red_R, p->red[0]);
   dt_bauhaus_slider_set(g->scale_red_G, p->red[1]);
@@ -1095,10 +1091,10 @@ void init(dt_iop_module_t *module)
                                                                              { 0.f, 0.f, 0.f, 0.f },
                                                                              { 0.f, 0.f, 0.f, 0.f },
                                                                              FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
-                                                                             DT_ILLUMINANT_D, DT_ILLUMINANT_FLUO_F3, DT_ILLUMINANT_LED_B5,
+                                                                             DT_ILLUMINANT_D, DT_ILLUMINANT_FLUO_F3, DT_ILLUMINANT_LED_B5, DT_ADAPTATION_BRADFORD,
                                                                              0.33f, 0.33f, 5003.f};
 
-  if(find_temperature_from_raw_coeffs(module, &(tmp.x), &(tmp.y), &(tmp.temperature), &(tmp.illuminant)))
+  find_temperature_from_raw_coeffs(module, &(tmp.x), &(tmp.y), &(tmp.temperature), &(tmp.illuminant), &(tmp.adaptation));
   memcpy(module->params, &tmp, sizeof(dt_iop_channelmixer_rgb_params_t));
   memcpy(module->default_params, &tmp, sizeof(dt_iop_channelmixer_rgb_params_t));
 }
@@ -1112,10 +1108,10 @@ void reload_defaults(dt_iop_module_t *module)
                                                                              { 0.f, 0.f, 0.f, 0.f },
                                                                              { 0.f, 0.f, 0.f, 0.f },
                                                                              FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
-                                                                             DT_ILLUMINANT_D, DT_ILLUMINANT_FLUO_F3, DT_ILLUMINANT_LED_B5,
+                                                                             DT_ILLUMINANT_D, DT_ILLUMINANT_FLUO_F3, DT_ILLUMINANT_LED_B5, DT_ADAPTATION_BRADFORD,
                                                                              0.33f, 0.33f, 5003.f};
 
-  if(find_temperature_from_raw_coeffs(module, &(tmp.x), &(tmp.y), &(tmp.temperature), &(tmp.illuminant)))
+  find_temperature_from_raw_coeffs(module, &(tmp.x), &(tmp.y), &(tmp.temperature), &(tmp.illuminant), &(tmp.adaptation));
   if(module->gui_data)
     update_illuminants(module);
 
@@ -1163,9 +1159,23 @@ void gui_init(struct dt_iop_module_t *self)
 
   dtgtk_justify_notebook_tabs(g->notebook);
 
+  g->adaptation = dt_bauhaus_combobox_new(self);
+  dt_bauhaus_widget_set_label(g->adaptation, NULL, _("adaptation"));
+  dt_bauhaus_combobox_add(g->adaptation, _("Bradford (ICC v4)"));
+  dt_bauhaus_combobox_add(g->adaptation, _("CAT16 (CIECAM16)"));
+  dt_bauhaus_combobox_add(g->adaptation, _("none"));
+  gtk_widget_set_tooltip_text(GTK_WIDGET(g->adaptation), _("choose the method to adapt the illuminant: \n"
+                                                           "• Bradford (1999) is more accurate for illuminants close to daylight\n"
+                                                           "but can push colors out of the gamut for difficult illuminants.\n"
+                                                           "• CAT16 (2016) is more robust to avoid imaginary colours\n"
+                                                           "while working with large gamut or saturated cyan and purple.\n"
+                                                           "• none disables any illuminant adaptation."));
+  g_signal_connect(G_OBJECT(g->adaptation), "value-changed", G_CALLBACK(adaptation_callback), self);
+  gtk_box_pack_start(GTK_BOX(page0), g->adaptation, FALSE, FALSE, 0);
+
   g->illuminant = dt_bauhaus_combobox_new(self);
   dt_bauhaus_widget_set_label(g->illuminant, NULL, _("illuminant"));
-  dt_bauhaus_combobox_add(g->illuminant, _("pipeline default (D50)"));
+  dt_bauhaus_combobox_add(g->illuminant, _("same as pipeline (D65)"));
   dt_bauhaus_combobox_add(g->illuminant, _("A (incandescent)"));
   dt_bauhaus_combobox_add(g->illuminant, _("D (daylight)"));
   dt_bauhaus_combobox_add(g->illuminant, _("E (equi-energy)"));
@@ -1238,7 +1248,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->approx_cct), _("approximated correlated color temperature\n"
                                                            "this is the closest equivalent illuminant in daylight spectrum\n"
                                                            "but the value is inacurate for non-daylight and below 3000 K.\n"
-                                                           "information for what it is worth only.\n"));
+                                                           "information for what it is worth only."));
   //gtk_box_pack_start(GTK_BOX(page0), GTK_WIDGET(g->approx_cct), FALSE, FALSE, 0);
   gtk_grid_attach(grid, GTK_WIDGET(g->approx_cct), 0, 0, 1, 1);
 
@@ -1246,10 +1256,14 @@ void gui_init(struct dt_iop_module_t *self)
   const float size = DT_PIXEL_APPLY_DPI(2 * darktable.bauhaus->line_space + darktable.bauhaus->line_height);
   gtk_widget_set_size_request(g->illum_color, size, size);
   gtk_widget_set_hexpand(GTK_WIDGET(g->illum_color), TRUE);
+  gtk_widget_set_tooltip_text(GTK_WIDGET(g->illum_color), _("corresponding color of the illuminant in source\n"
+                                                            "image before chromatic adaptation.\n"
+                                                            "this will be turned into white by adaptation."));
+
   g_signal_connect(G_OBJECT(g->illum_color), "draw", G_CALLBACK(illuminant_color_draw), self);
   gtk_grid_attach(grid, GTK_WIDGET(g->illum_color), 1, 0, 1, 1);
 
-  gtk_box_pack_start(GTK_BOX(page0), GTK_WIDGET(grid), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(page0), GTK_WIDGET(grid), FALSE, FALSE, 0);
 
   g->illum_x = dt_bauhaus_slider_new_with_range(self, 0., 0.5, 0.005, p->x, 4);
   dt_bauhaus_widget_set_label(g->illum_x, NULL, _("x"));
