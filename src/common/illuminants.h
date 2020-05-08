@@ -280,7 +280,7 @@ static inline void illuminant_xy_to_RGB(const float x, const float y, float RGB[
 
   // Fixme : convert to RGB display space instead of sRGB but first the display profile should be global in dt,
   // not confined to colorout where it gets created/destroyed all the time.
-  dt_XYZ_to_Rec709(XYZ, RGB);
+  dt_XYZ_to_Rec709_D65(XYZ, RGB);
 
   // Handle gamut clipping
   float max_RGB = fmaxf(fmaxf(RGB[0], RGB[1]), RGB[2]);

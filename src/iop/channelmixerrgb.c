@@ -645,6 +645,208 @@ static void update_xy_color(dt_iop_module_t *self)
     illuminant_xy_to_RGB(p->x, y, RGB);
     dt_bauhaus_slider_set_stop(g->illum_y, stop, RGB[0], RGB[1], RGB[2]);
   }
+
+  gtk_widget_queue_draw(self->widget);
+
+}
+
+
+static void update_R_colors(dt_iop_module_t *self)
+{
+  // update the fill background color of x, y sliders
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+  dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+
+  // scale params if needed
+  float RGB[3] = { p->red[0], p->red[1], p->red[2] };
+
+  if(p->normalize_R)
+  {
+    float sum = RGB[0] + RGB[1] + RGB[2];
+    for(int c = 0; c < 3; c++) RGB[c] /= sum;
+  }
+
+  // Get the current values bound of the slider, taking into account the possible soft rescaling
+  const float RR_min = DT_BAUHAUS_WIDGET(g->scale_red_R)->data.slider.soft_min;
+  const float RR_max = DT_BAUHAUS_WIDGET(g->scale_red_R)->data.slider.soft_max;
+  const float RR_range = RR_max - RR_min;
+
+  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
+  {
+    float RGB_t[4];
+    float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
+    float RR = RR_min + stop * RR_range;
+    float stop_R = RR + RGB[1] + RGB[2];
+    float LMS[4] = { 0.5f * stop_R, 0.5f, 0.5f };
+    convert_any_LMS_to_RGB(LMS, RGB_t, p->adaptation);
+    dt_bauhaus_slider_set_stop(g->scale_red_R, stop, RGB_t[0], RGB_t[1], RGB_t[2]);
+  }
+
+  const float RG_min = DT_BAUHAUS_WIDGET(g->scale_red_G)->data.slider.soft_min;
+  const float RG_max = DT_BAUHAUS_WIDGET(g->scale_red_G)->data.slider.soft_max;
+  const float RG_range = RG_max - RG_min;
+
+  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
+  {
+    float RGB_t[4];
+    float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
+    float RG = RG_min + stop * RG_range;
+    float stop_R = RGB[0] + RG + RGB[2];
+    float LMS[4] = { 0.5f * stop_R, 0.5f, 0.5f };
+    convert_any_LMS_to_RGB(LMS, RGB_t, p->adaptation);
+    dt_bauhaus_slider_set_stop(g->scale_red_G, stop, RGB_t[0], RGB_t[1], RGB_t[2]);
+  }
+
+  const float RB_min = DT_BAUHAUS_WIDGET(g->scale_red_B)->data.slider.soft_min;
+  const float RB_max = DT_BAUHAUS_WIDGET(g->scale_red_B)->data.slider.soft_max;
+  const float RB_range = RB_max - RB_min;
+
+  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
+  {
+    float RGB_t[4];
+    float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
+    float RB = RB_min + stop * RB_range;
+    float stop_R = RGB[0] + RGB[1] + RB;
+    float LMS[4] = { 0.5f * stop_R, 0.5f, 0.5f };
+    convert_any_LMS_to_RGB(LMS, RGB_t, p->adaptation);
+    dt_bauhaus_slider_set_stop(g->scale_red_B, stop, RGB_t[0], RGB_t[1], RGB_t[2]);
+  }
+
+  gtk_widget_queue_draw(self->widget);
+
+}
+
+
+static void update_B_colors(dt_iop_module_t *self)
+{
+  // update the fill background color of x, y sliders
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+  dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+
+  // scale params if needed
+  float RGB[3] = { p->blue[0], p->blue[1], p->blue[2] };
+
+  if(p->normalize_B)
+  {
+    float sum = RGB[0] + RGB[1] + RGB[2];
+    for(int c = 0; c < 3; c++) RGB[c] /= sum;
+  }
+
+  // Get the current values bound of the slider, taking into account the possible soft rescaling
+  const float BR_min = DT_BAUHAUS_WIDGET(g->scale_blue_R)->data.slider.soft_min;
+  const float BR_max = DT_BAUHAUS_WIDGET(g->scale_blue_R)->data.slider.soft_max;
+  const float BR_range = BR_max - BR_min;
+
+  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
+  {
+    float RGB_t[4];
+    float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
+    float BR = BR_min + stop * BR_range;
+    float stop_B = BR + RGB[1] + RGB[2];
+    float LMS[4] = { 0.5f, 0.5f, 0.5f * stop_B };
+    convert_any_LMS_to_RGB(LMS, RGB_t, p->adaptation);
+    dt_bauhaus_slider_set_stop(g->scale_blue_R, stop, RGB_t[0], RGB_t[1], RGB_t[2]);
+  }
+
+  const float BG_min = DT_BAUHAUS_WIDGET(g->scale_blue_G)->data.slider.soft_min;
+  const float BG_max = DT_BAUHAUS_WIDGET(g->scale_blue_G)->data.slider.soft_max;
+  const float BG_range = BG_max - BG_min;
+
+  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
+  {
+    float RGB_t[4];
+    float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
+    float BG = BG_min + stop * BG_range;
+    float stop_B = RGB[0] + BG + RGB[2];
+    float LMS[4] = { 0.5f , 0.5f, 0.5f * stop_B };
+    convert_any_LMS_to_RGB(LMS, RGB_t, p->adaptation);
+    dt_bauhaus_slider_set_stop(g->scale_blue_G, stop, RGB_t[0], RGB_t[1], RGB_t[2]);
+  }
+
+  const float BB_min = DT_BAUHAUS_WIDGET(g->scale_blue_B)->data.slider.soft_min;
+  const float BB_max = DT_BAUHAUS_WIDGET(g->scale_blue_B)->data.slider.soft_max;
+  const float BB_range = BB_max - BB_min;
+
+  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
+  {
+    float RGB_t[4];
+    float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
+    float BB = BB_min + stop * BB_range;
+    float stop_B = RGB[0] + RGB[1] + BB;
+    float LMS[4] = { 0.5f, 0.5f, 0.5f * stop_B };
+    convert_any_LMS_to_RGB(LMS, RGB_t, p->adaptation);
+    dt_bauhaus_slider_set_stop(g->scale_blue_B, stop, RGB_t[0], RGB_t[1], RGB_t[2]);
+  }
+
+  gtk_widget_queue_draw(self->widget);
+
+}
+
+
+
+static void update_G_colors(dt_iop_module_t *self)
+{
+  // update the fill background color of x, y sliders
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+  dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+
+  // scale params if needed
+  float RGB[3] = { p->green[0], p->green[1], p->green[2] };
+
+  if(p->normalize_G)
+  {
+    float sum = RGB[0] + RGB[1] + RGB[2];
+    for(int c = 0; c < 3; c++) RGB[c] /= sum;
+  }
+
+  // Get the current values bound of the slider, taking into account the possible soft rescaling
+  const float GR_min = DT_BAUHAUS_WIDGET(g->scale_green_R)->data.slider.soft_min;
+  const float GR_max = DT_BAUHAUS_WIDGET(g->scale_green_R)->data.slider.soft_max;
+  const float GR_range = GR_max - GR_min;
+
+  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
+  {
+    float RGB_t[4];
+    float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
+    float GR = GR_min + stop * GR_range;
+    float stop_G = GR + RGB[1] + RGB[2];
+    float LMS[4] = { 0.5f , 0.5f * stop_G, 0.5f };
+    convert_any_LMS_to_RGB(LMS, RGB_t, p->adaptation);
+    dt_bauhaus_slider_set_stop(g->scale_green_R, stop, RGB_t[0], RGB_t[1], RGB_t[2]);
+  }
+
+  const float GG_min = DT_BAUHAUS_WIDGET(g->scale_green_G)->data.slider.soft_min;
+  const float GG_max = DT_BAUHAUS_WIDGET(g->scale_green_G)->data.slider.soft_max;
+  const float GG_range = GG_max - GG_min;
+
+  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
+  {
+    float RGB_t[4];
+    float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
+    float GG = GG_min + stop * GG_range;
+    float stop_G = RGB[0] + GG + RGB[2];
+    float LMS[4] = { 0.5f, 0.5f * stop_G, 0.5f };
+    convert_any_LMS_to_RGB(LMS, RGB_t, p->adaptation);
+    dt_bauhaus_slider_set_stop(g->scale_green_G, stop, RGB_t[0], RGB_t[1], RGB_t[2]);
+  }
+
+  const float GB_min = DT_BAUHAUS_WIDGET(g->scale_green_B)->data.slider.soft_min;
+  const float GB_max = DT_BAUHAUS_WIDGET(g->scale_green_B)->data.slider.soft_max;
+  const float GB_range = GB_max - GB_min;
+
+  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
+  {
+    float RGB_t[4];
+    float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
+    float GB = GB_min + stop * GB_range;
+    float stop_G = RGB[0] + RGB[1] + GB;
+    float LMS[4] = { 0.5f, 0.5f * stop_G , 0.5f};
+    convert_any_LMS_to_RGB(LMS, RGB_t, p->adaptation);
+    dt_bauhaus_slider_set_stop(g->scale_green_B, stop, RGB_t[0], RGB_t[1], RGB_t[2]);
+  }
+
+  gtk_widget_queue_draw(self->widget);
+
 }
 
 
@@ -831,6 +1033,9 @@ static void adaptation_callback(GtkWidget *combo, dt_iop_module_t *self)
   const int reset = darktable.gui->reset;
   darktable.gui->reset = 1;
   update_illuminants(self);
+  update_R_colors(self);
+  update_G_colors(self);
+  update_B_colors(self);
   darktable.gui->reset = reset;
 
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -842,6 +1047,12 @@ static void red_R_callback(GtkWidget *slider, gpointer user_data)
   if(self->dt->gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->red[0] = dt_bauhaus_slider_get(slider);
+
+  const int reset = darktable.gui->reset;
+  darktable.gui->reset = 1;
+  update_R_colors(self);
+  darktable.gui->reset = reset;
+
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
@@ -851,6 +1062,12 @@ static void red_G_callback(GtkWidget *slider, gpointer user_data)
   if(self->dt->gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->red[1] = dt_bauhaus_slider_get(slider);
+
+  const int reset = darktable.gui->reset;
+  darktable.gui->reset = 1;
+  update_R_colors(self);
+  darktable.gui->reset = reset;
+
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
@@ -860,6 +1077,12 @@ static void red_B_callback(GtkWidget *slider, gpointer user_data)
   if(self->dt->gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->red[2] = dt_bauhaus_slider_get(slider);
+
+  const int reset = darktable.gui->reset;
+  darktable.gui->reset = 1;
+  update_R_colors(self);
+  darktable.gui->reset = reset;
+
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
@@ -869,6 +1092,12 @@ static void green_R_callback(GtkWidget *slider, gpointer user_data)
   if(self->dt->gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->green[0] = dt_bauhaus_slider_get(slider);
+
+  const int reset = darktable.gui->reset;
+  darktable.gui->reset = 1;
+  update_G_colors(self);
+  darktable.gui->reset = reset;
+
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
@@ -878,6 +1107,12 @@ static void green_G_callback(GtkWidget *slider, gpointer user_data)
   if(self->dt->gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->green[1] = dt_bauhaus_slider_get(slider);
+
+  const int reset = darktable.gui->reset;
+  darktable.gui->reset = 1;
+  update_G_colors(self);
+  darktable.gui->reset = reset;
+
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
@@ -887,6 +1122,12 @@ static void green_B_callback(GtkWidget *slider, gpointer user_data)
   if(self->dt->gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->green[2] = dt_bauhaus_slider_get(slider);
+
+  const int reset = darktable.gui->reset;
+  darktable.gui->reset = 1;
+  update_G_colors(self);
+  darktable.gui->reset = reset;
+
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
@@ -896,6 +1137,12 @@ static void blue_R_callback(GtkWidget *slider, gpointer user_data)
   if(self->dt->gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->blue[0] = dt_bauhaus_slider_get(slider);
+
+  const int reset = darktable.gui->reset;
+  darktable.gui->reset = 1;
+  update_B_colors(self);
+  darktable.gui->reset = reset;
+
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
@@ -905,6 +1152,12 @@ static void blue_G_callback(GtkWidget *slider, gpointer user_data)
   if(self->dt->gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->blue[1] = dt_bauhaus_slider_get(slider);
+
+  const int reset = darktable.gui->reset;
+  darktable.gui->reset = 1;
+  update_B_colors(self);
+  darktable.gui->reset = reset;
+
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
@@ -914,6 +1167,12 @@ static void blue_B_callback(GtkWidget *slider, gpointer user_data)
   if(self->dt->gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->blue[2] = dt_bauhaus_slider_get(slider);
+
+  const int reset = darktable.gui->reset;
+  darktable.gui->reset = 1;
+  update_B_colors(self);
+  darktable.gui->reset = reset;
+
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
@@ -1003,6 +1262,12 @@ static void normalize_R_callback(GtkWidget *widget, dt_iop_module_t *self)
   if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->normalize_R = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+
+  const int reset = darktable.gui->reset;
+  darktable.gui->reset = 1;
+  update_R_colors(self);
+  darktable.gui->reset = reset;
+
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
@@ -1011,6 +1276,12 @@ static void normalize_G_callback(GtkWidget *widget, dt_iop_module_t *self)
   if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->normalize_G = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+
+  const int reset = darktable.gui->reset;
+  darktable.gui->reset = 1;
+  update_G_colors(self);
+  darktable.gui->reset = reset;
+
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
@@ -1019,6 +1290,12 @@ static void normalize_B_callback(GtkWidget *widget, dt_iop_module_t *self)
   if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->normalize_B = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+
+  const int reset = darktable.gui->reset;
+  darktable.gui->reset = 1;
+  update_B_colors(self);
+  darktable.gui->reset = reset;
+
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
@@ -1112,6 +1389,10 @@ void gui_update(struct dt_iop_module_t *self)
   update_illuminants(self);
   update_approx_cct(self);
   update_illuminant_color(self);
+
+  update_R_colors(self);
+  update_G_colors(self);
+  update_B_colors(self);
 }
 
 void init(dt_iop_module_t *module)

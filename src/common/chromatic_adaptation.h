@@ -16,6 +16,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/colorspaces_inline_conversions.h"
+
+
 typedef enum dt_adaptation_t
 {
   DT_ADAPTATION_BRADFORD  = 0,
@@ -91,6 +94,57 @@ static inline void convert_CAT16_LMS_to_XYZ(const float LMS[4], float XYZ[4])
                                                            {  0.3875275f ,  0.62144898f, -0.00897401f },
                                                            { -0.01584074f, -0.03412172f,  1.04996442f } };
   dot_product(LMS, LMS_to_XYZ, XYZ);
+}
+
+
+#ifdef _OPENMP
+#pragma omp declare simd aligned(XYZ, LMS:16) uniform(kind)
+#endif
+static inline void convert_any_LMS_to_XYZ(const float LMS[4], float XYZ[4], dt_adaptation_t kind)
+{
+  // helper function switching internally to the proper conversion
+
+  switch(kind)
+  {
+    case DT_ADAPTATION_BRADFORD:
+    {
+      convert_bradford_LMS_to_XYZ(LMS, XYZ);
+      break;
+    }
+    case DT_ADAPTATION_CAT16:
+    {
+      convert_CAT16_LMS_to_XYZ(LMS, XYZ);
+      break;
+    }
+    case DT_ADAPTATION_LAST:
+    {
+      // special case : just pass through.
+      XYZ[0] = LMS[0];
+      XYZ[1] = LMS[1];
+      XYZ[2] = LMS[2];
+      break;
+    }
+  }
+}
+
+
+#ifdef _OPENMP
+#pragma omp declare simd aligned(RGB, LMS:16) uniform(kind)
+#endif
+static inline void convert_any_LMS_to_RGB(const float LMS[4], float RGB[4], dt_adaptation_t kind)
+{
+  // helper function switching internally to the proper conversion
+  float XYZ[4] = { 0.f };
+  convert_any_LMS_to_XYZ(LMS, XYZ, kind);
+
+  // Fixme : convert to RGB display space instead of sRGB but first the display profile should be global in dt,
+  // not confined to colorout where it gets created/destroyed all the time.
+  dt_XYZ_to_Rec709_D65(XYZ, RGB);
+
+  // Handle gamut clipping
+  float max_RGB = fmaxf(fmaxf(RGB[0], RGB[1]), RGB[2]);
+  for(int c = 0; c < 3; c++) RGB[c] = fmaxf(RGB[c] / max_RGB, 0.f);
+
 }
 
 

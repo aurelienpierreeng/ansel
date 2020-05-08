@@ -247,16 +247,16 @@ static inline void dt_XYZ_to_sRGB(const float *const XYZ, float *const sRGB)
 }
 
 
-/** Uses D65 **/
+/** Uses D50 **/
 #ifdef _OPENMP
 #pragma omp declare simd
 #endif
-static inline void dt_XYZ_to_Rec709(const float *const XYZ, float *const sRGB)
+static inline void dt_XYZ_to_Rec709_D50(const float *const XYZ, float *const sRGB)
 {
   // linear sRGB == Rec709 with no gamma
-  const float xyz_to_srgb_matrix[3][3] = { { 3.2404542f, -1.5371385f, -0.4985314f },
-                                           { -0.9692660f, 1.8760108f,  0.0415560f },
-                                           { 0.0556434f, -0.2040259f,  1.0572252f } };
+  const float xyz_to_srgb_matrix[3][3] = { {  3.1338561f, -1.6168667f, -0.4906146f },
+                                           { -0.9787684f,  1.9161415f,  0.0334540f },
+                                           {  0.0719453f, -0.2289914f,  1.4052427f } };
 
   // XYZ -> sRGB
   float rgb[3] = { 0, 0, 0 };
@@ -264,6 +264,26 @@ static inline void dt_XYZ_to_Rec709(const float *const XYZ, float *const sRGB)
     for(int c = 0; c < 3; c++) rgb[r] += xyz_to_srgb_matrix[r][c] * XYZ[c];
   for(int r = 0; r < 3; r++) sRGB[r] = rgb[r];
 }
+
+
+/** Uses D65 **/
+#ifdef _OPENMP
+#pragma omp declare simd
+#endif
+static inline void dt_XYZ_to_Rec709_D65(const float *const XYZ, float *const sRGB)
+{
+  // linear sRGB == Rec709 with no gamma
+  const float xyz_to_srgb_matrix[3][3] = { {  3.2404542f, -1.5371385f, -0.4985314f },
+                                           { -0.9692660f,  1.8760108f,  0.0415560f },
+                                           {  0.0556434f, -0.2040259f,  1.0572252f } };
+
+  // XYZ -> sRGB
+  float rgb[3] = { 0, 0, 0 };
+  for(int r = 0; r < 3; r++)
+    for(int c = 0; c < 3; c++) rgb[r] += xyz_to_srgb_matrix[r][c] * XYZ[c];
+  for(int r = 0; r < 3; r++) sRGB[r] = rgb[r];
+}
+
 
 /** uses D50 white point and clips the output to [0..1]. */
 #ifdef _OPENMP
