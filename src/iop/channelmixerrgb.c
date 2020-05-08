@@ -612,11 +612,47 @@ static void update_illuminants(dt_iop_module_t *self)
   }
 }
 
+static void update_xy_color(dt_iop_module_t *self)
+{
+  // update the fill background color of x, y sliders
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+  dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+
+  // Get the current values bound of the slider, taking into account the possible soft rescaling
+  const float x_min = DT_BAUHAUS_WIDGET(g->illum_x)->data.slider.soft_min;
+  const float x_max = DT_BAUHAUS_WIDGET(g->illum_x)->data.slider.soft_max;
+  const float y_min = DT_BAUHAUS_WIDGET(g->illum_y)->data.slider.soft_min;
+  const float y_max = DT_BAUHAUS_WIDGET(g->illum_y)->data.slider.soft_max;
+  const float x_range = x_max - x_min;
+  const float y_range = y_max - y_min;
+
+  // Varies x in range around current y param
+  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
+  {
+    float RGB[4];
+    float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
+    float x = x_min + stop * x_range;
+    illuminant_xy_to_RGB(x, p->y, RGB);
+    dt_bauhaus_slider_set_stop(g->illum_x, stop, RGB[0], RGB[1], RGB[2]);
+  }
+
+  // Varies y in range around current x params
+  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
+  {
+    float RGB[4];
+    float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
+    float y = y_min + stop * y_range;
+    illuminant_xy_to_RGB(p->x, y, RGB);
+    dt_bauhaus_slider_set_stop(g->illum_y, stop, RGB[0], RGB[1], RGB[2]);
+  }
+}
+
 
 static void update_illuminant_color(dt_iop_module_t *self)
 {
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   gtk_widget_queue_draw(g->illum_color);
+  update_xy_color(self);
 }
 
 static gboolean illuminant_color_draw(GtkWidget *widget, cairo_t *crf, gpointer user_data)
@@ -1075,6 +1111,7 @@ void gui_update(struct dt_iop_module_t *self)
 
   update_illuminants(self);
   update_approx_cct(self);
+  update_illuminant_color(self);
 }
 
 void init(dt_iop_module_t *module)
