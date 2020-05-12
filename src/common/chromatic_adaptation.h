@@ -173,7 +173,8 @@ static inline void bradford_adapt_D65(const float lms_in[4],
                                      lms_in[2] / origin_illuminant[2],
                                      0.f };
 
-  temp[2] = powf(fmaxf(temp[2], 0.f), p);
+  // use linear Bradford if B is negative
+  temp[2] = (temp[2] < 0.f) ? temp[2] : powf(temp[2], p);
 
   lms_out[0] = D65[0] * temp[0];
   lms_out[1] = D65[1] * temp[1];
@@ -204,7 +205,8 @@ static inline void bradford_adapt_D50(const float lms_in[4],
                                      lms_in[2] / origin_illuminant[2],
                                      0.f };
 
-  temp[2] = powf(fmaxf(temp[2], 0.f), p);
+  // use linear Bradford if B is negative
+  temp[2] = (temp[2] < 0.f) ? temp[2] : powf(temp[2], p);
 
   lms_out[0] = D50[0] * temp[0];
   lms_out[1] = D50[1] * temp[1];
