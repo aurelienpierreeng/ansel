@@ -75,12 +75,13 @@ typedef struct dt_iop_channelmixer_rgb_params_t
   dt_adaptation_t adaptation;
   float x, y;
   float temperature;
+  float gamut;
 } dt_iop_channelmixer_rgb_params_t;
 
 typedef struct dt_iop_channelmixer_rgb_gui_data_t
 {
   GtkNotebook *notebook;
-  GtkWidget *illuminant, *temperature, *adaptation;
+  GtkWidget *illuminant, *temperature, *adaptation, *gamut;
   GtkWidget *illum_fluo, *illum_led, *illum_x, *illum_y, *approx_cct, *illum_color;
   GtkWidget *scale_red_R, *scale_red_G, *scale_red_B;
   GtkWidget *scale_green_R, *scale_green_G, *scale_green_B;
@@ -98,7 +99,7 @@ typedef struct dt_iop_channelmixer_rbg_data_t
   float DT_ALIGNED_PIXEL lightness[CHANNEL_SIZE];
   float DT_ALIGNED_PIXEL grey[CHANNEL_SIZE];
   float DT_ALIGNED_PIXEL illuminant[4]; // XYZ coordinates of illuminant
-  float p;
+  float p, gamut;
   int apply_grey;
   dt_adaptation_t adaptation;
 } dt_iop_channelmixer_rbg_data_t;
@@ -160,11 +161,12 @@ static inline float euclidean_norm(const float vector[4])
 static inline void downscale_vector(float vector[4], const float scaling)
 {
   // check zero or NaN
-  const int valid = (scaling != 0.f) && !isnan(scaling);
+  static const float eps = 1e-6f;
+  const int valid = (scaling < eps) && !isnan(scaling);
 
-  vector[0] = (valid) ? vector[0] / scaling : 0.0f;
-  vector[1] = (valid) ? vector[1] / scaling : 0.0f;
-  vector[2] = (valid) ? vector[2] / scaling : 0.0f;
+  vector[0] = (valid) ? vector[0] / (scaling + eps) : vector[0] / eps;
+  vector[1] = (valid) ? vector[1] / (scaling + eps) : vector[1] / eps;
+  vector[2] = (valid) ? vector[2] / (scaling + eps) : vector[2] / eps;
 }
 
 
@@ -173,11 +175,12 @@ static inline void downscale_vector(float vector[4], const float scaling)
 #endif
 static inline void upscale_vector(float vector[4], const float scaling)
 {
-  const int valid = !isnan(scaling);
+  static const float eps = 1e-6f;
+  const int valid = (scaling < eps) && !isnan(scaling);
 
-  vector[0] = (valid) ? vector[0] * scaling : 0.0f;
-  vector[1] = (valid) ? vector[1] * scaling : 0.0f;
-  vector[2] = (valid) ? vector[2] * scaling : 0.0f;
+  vector[0] = (valid) ? vector[0] * (scaling - eps) : vector[0] * eps;
+  vector[1] = (valid) ? vector[1] * (scaling - eps) : vector[1] * eps;
+  vector[2] = (valid) ? vector[2] * (scaling - eps) : vector[2] * eps;
 }
 
 
@@ -266,10 +269,85 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     // This is equavilent of correcting the RGB primaries from input profile matrice
     dot_product(temp_one, data->MIX, temp_two);
 
-    // Clip negatives -> gamut mapping
-    temp_two[0] = fmaxf(temp_two[0], 0.f);
-    temp_two[1] = fmaxf(temp_two[1], 0.f);
-    temp_two[2] = fmaxf(temp_two[2], 0.f);
+    // Convert back LMS to XYZ
+    switch(data->adaptation)
+    {
+      case DT_ADAPTATION_BRADFORD :
+      {
+        convert_bradford_LMS_to_XYZ(temp_two, temp_one);
+        break;
+      }
+      case DT_ADAPTATION_CAT16:
+      {
+        convert_CAT16_LMS_to_XYZ(temp_two, temp_one);
+        break;
+      }
+      case DT_ADAPTATION_LAST:
+      {
+        temp_one[0] = temp_two[0];
+        temp_one[1] = temp_two[1];
+        temp_one[2] = temp_two[2];
+        break;
+      }
+    }
+
+    upscale_vector(temp_one, Y);
+
+    // Gamut mapping
+    const float sum = temp_one[0] + temp_one[1] + temp_one[2];
+    float x = temp_one[0] / sum;
+    float y = temp_one[1] / sum;
+    float Y_o = fmaxf(temp_one[1] + 1e-6f, 1e-6f);
+
+    static const float x_D50 = 0.34567f;
+    static const float y_D50 = 0.35850f;
+
+    const float delta_x = Y_o * (x_D50 - x);
+    const float delta_y = Y_o * (y_D50 - y);
+    const float delta = sqrtf(sqf(delta_x) + sqf(delta_y));
+    const float correction = (data->gamut == 0.0f) ? 0.f : powf(delta, data->gamut);
+
+    x = x + correction * delta_x / Y_o;
+    y = y + correction * delta_y / Y_o;
+
+    float scale = x + y + 1e-6f;
+
+    if(scale > 1.f)
+    {
+      // Z = Y_o * (1.f - x - y) / y;
+      // if x + y >= 1, Z will be negative and we don't want that
+      x /= scale;
+      y /= scale;
+    }
+
+    temp_one[0] = Y_o * x / y;
+    temp_one[1] = Y_o;
+    temp_one[2] = Y_o * (1.f - x - y) / y;
+
+
+    // flip back to LMS
+    downscale_vector(temp_one, Y);
+
+    switch(data->adaptation)
+    {
+      case DT_ADAPTATION_BRADFORD:
+      {
+        convert_XYZ_to_bradford_LMS(temp_one, temp_two);
+        break;
+      }
+      case DT_ADAPTATION_CAT16:
+      {
+        convert_XYZ_to_CAT16_LMS(temp_one, temp_two);
+        break;
+      }
+      case DT_ADAPTATION_LAST:
+      {
+        temp_two[0] = temp_one[0];
+        temp_two[1] = temp_one[1];
+        temp_two[2] = temp_one[2];
+        break;
+      }
+    }
 
     // Compute euclidean norm and ratios for the lightness/colorfulness demodulation
     float norm = euclidean_norm(temp_two);
@@ -295,7 +373,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     }
 
     // Turn RGB into monochrome
-    const float grey = Y * scalar_product(temp_two, data->grey);
+    const float grey = fmaxf(Y * scalar_product(temp_two, data->grey), 0.0f);
 
     // Convert back LMS to XYZ to RGB
     switch(data->adaptation)
@@ -370,6 +448,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->grey[CHANNEL_SIZE - 1] = 0.0f;
 
   d->adaptation = p->adaptation;
+  d->gamut = (p->gamut == 0.f) ? p->gamut : 1.f / p->gamut;
 
   // find x y coordinates of illuminant for CIE 1931 2° observer
   float x = p->x;
@@ -992,6 +1071,15 @@ static void temperature_callback(GtkWidget *slider, gpointer user_data)
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
+static void gamut_callback(GtkWidget *slider, gpointer user_data)
+{
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  if(self->dt->gui->reset) return;
+  dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+  p->gamut = dt_bauhaus_slider_get(slider);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
 static void illum_x_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
@@ -1346,6 +1434,7 @@ void gui_update(struct dt_iop_module_t *self)
   dt_bauhaus_combobox_set(g->illum_fluo, p->illum_fluo);
   dt_bauhaus_combobox_set(g->illum_led, p->illum_led);
   dt_bauhaus_slider_set(g->temperature, p->temperature);
+  dt_bauhaus_slider_set(g->gamut, p->gamut);
   dt_bauhaus_slider_set(g->illum_x, p->x);
   dt_bauhaus_slider_set(g->illum_y, p->y);
   dt_bauhaus_combobox_set(g->adaptation, p->adaptation);
@@ -1410,7 +1499,7 @@ void init(dt_iop_module_t *module)
                                                                              { 0.f, 0.f, 0.f, 0.f },
                                                                              FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
                                                                              DT_ILLUMINANT_D, DT_ILLUMINANT_FLUO_F3, DT_ILLUMINANT_LED_B5, DT_ADAPTATION_BRADFORD,
-                                                                             0.33f, 0.33f, 5003.f};
+                                                                             0.33f, 0.33f, 6004.f, 0.0f};
 
   find_temperature_from_raw_coeffs(module, &(tmp.x), &(tmp.y), &(tmp.temperature), &(tmp.illuminant), &(tmp.adaptation));
   memcpy(module->params, &tmp, sizeof(dt_iop_channelmixer_rgb_params_t));
@@ -1427,7 +1516,7 @@ void reload_defaults(dt_iop_module_t *module)
                                                                              { 0.f, 0.f, 0.f, 0.f },
                                                                              FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
                                                                              DT_ILLUMINANT_D, DT_ILLUMINANT_FLUO_F3, DT_ILLUMINANT_LED_B5, DT_ADAPTATION_BRADFORD,
-                                                                             0.33f, 0.33f, 5003.f};
+                                                                             0.33f, 0.33f, 6004.f, 0.0f};
 
   find_temperature_from_raw_coeffs(module, &(tmp.x), &(tmp.y), &(tmp.temperature), &(tmp.illuminant), &(tmp.adaptation));
   if(module->gui_data)
@@ -1592,6 +1681,11 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_widget_set_label(g->illum_y, NULL, _("y"));
   g_signal_connect(G_OBJECT(g->illum_y), "value-changed", G_CALLBACK(illum_y_callback), self);
   gtk_box_pack_start(GTK_BOX(page0), GTK_WIDGET(g->illum_y), FALSE, FALSE, 0);
+
+  g->gamut = dt_bauhaus_slider_new_with_range(self, 0., 2., 0.01, p->gamut, 2);
+  dt_bauhaus_widget_set_label(g->gamut, NULL, _("gamut compression"));
+  g_signal_connect(G_OBJECT(g->gamut), "value-changed", G_CALLBACK(gamut_callback), self);
+  gtk_box_pack_start(GTK_BOX(page0), GTK_WIDGET(g->gamut), FALSE, FALSE, 0);
 
   /* red */
   g->scale_red_R = dt_bauhaus_slider_new_with_range(self, -2.0, 2.0, 0.005, p->red[0], 3);
