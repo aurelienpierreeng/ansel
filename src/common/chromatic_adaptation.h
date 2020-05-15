@@ -129,6 +129,37 @@ static inline void convert_any_LMS_to_XYZ(const float LMS[4], float XYZ[4], dt_a
 
 
 #ifdef _OPENMP
+#pragma omp declare simd aligned(XYZ, LMS:16) uniform(kind)
+#endif
+static inline void convert_any_XYZ_to_LMS(const float XYZ[4], float LMS[4], dt_adaptation_t kind)
+{
+  // helper function switching internally to the proper conversion
+
+  switch(kind)
+  {
+    case DT_ADAPTATION_BRADFORD:
+    {
+      convert_XYZ_to_bradford_LMS(XYZ, LMS);
+      break;
+    }
+    case DT_ADAPTATION_CAT16:
+    {
+      convert_XYZ_to_CAT16_LMS(XYZ, LMS);
+      break;
+    }
+    case DT_ADAPTATION_LAST:
+    {
+      // special case : just pass through.
+      LMS[0] = XYZ[0];
+      LMS[1] = XYZ[1];
+      LMS[2] = XYZ[2];
+      break;
+    }
+  }
+}
+
+
+#ifdef _OPENMP
 #pragma omp declare simd aligned(RGB, LMS:16) uniform(kind)
 #endif
 static inline void convert_any_LMS_to_RGB(const float LMS[4], float RGB[4], dt_adaptation_t kind)
