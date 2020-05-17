@@ -381,6 +381,21 @@ static inline float get_tint_from_tinted_xy(const float x, const float y, const 
 }
 
 
+#ifdef _OPENMP
+#pragma omp declare simd
+#endif
+static inline void xy_to_uv(const float xy[2], float uv[4])
+{
+  // Convert to CIE1960 Yuv color space, usefull to compute CCT
+  // https://en.wikipedia.org/wiki/CIE_1960_color_space
+  const float denom = 12.f * xy[1] - 1.882f * xy[0] + 2.9088f;
+  uv[0] = 5.5932f * xy[0] + 1.9116 * xy[1];
+  uv[1] = 7.8972f * xy[1];
+  uv[0] /= denom;
+  uv[1] /= denom;
+}
+
+
 /*
  * The following defines a custom OpenMP reduction so the reverse-lookup can be fully parallelized without sharing.
  *

@@ -92,6 +92,8 @@ typedef struct dt_iop_channelmixer_rgb_gui_data_t
   GtkWidget *scale_lightness_R, *scale_lightness_G, *scale_lightness_B;
   GtkWidget *scale_grey_R, *scale_grey_G, *scale_grey_B;
   GtkWidget *normalize_R, *normalize_G, *normalize_B, *normalize_sat, *normalize_light, *normalize_grey;
+  int auto_detect_illuminant;
+  float xy[2];
 } dt_iop_channelmixer_rgb_gui_data_t;
 
 typedef struct dt_iop_channelmixer_rbg_data_t
@@ -264,7 +266,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
                                const float illuminant[4], const float saturation[4], const float lightness[4], const float grey[4],
                                const float p, const float gamut, const int clip, const int apply_grey, const dt_adaptation_t kind)
 {
-  #ifdef _OPENMP
+#ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(width, height, ch, in, out, XYZ_to_RGB, RGB_to_XYZ, MIX, illuminant, saturation, lightness, grey, p, gamut, clip, apply_grey, kind) \
   aligned(in, out, XYZ_to_RGB, RGB_to_XYZ, MIX:64) aligned(illuminant, saturation, lightness, grey:16)\
@@ -285,16 +287,22 @@ static inline void loop_switch(const float *const restrict in, float *const rest
 
     switch(kind)
     {
-      case DT_ADAPTATION_BRADFORD:
+      case DT_ADAPTATION_FULL_BRADFORD:
       {
         convert_XYZ_to_bradford_LMS(temp_one, temp_two);
-        bradford_adapt_D65(temp_two, illuminant, p, temp_one);
+        bradford_adapt_D50(temp_two, illuminant, p, TRUE, temp_one);
+        break;
+      }
+      case DT_ADAPTATION_LINEAR_BRADFORD:
+      {
+        convert_XYZ_to_bradford_LMS(temp_one, temp_two);
+        bradford_adapt_D50(temp_two, illuminant, p, FALSE, temp_one);
         break;
       }
       case DT_ADAPTATION_CAT16:
       {
         convert_XYZ_to_CAT16_LMS(temp_one, temp_two);
-        CAT16_adapt_D65(temp_two, illuminant, 1.0f, temp_one); // force full-adaptation
+        CAT16_adapt_D50(temp_two, illuminant, 1.0f, TRUE, temp_one); // force full-adaptation
         break;
       }
       case DT_ADAPTATION_LAST:
@@ -334,6 +342,121 @@ static inline void loop_switch(const float *const restrict in, float *const rest
 }
 
 
+// util to shift pixel index without headache
+#define SHF(ii, jj, c) ((i + ii) * width + j + jj) * ch + c
+#define off 1
+
+static inline void auto_detect_WB(const float *const restrict in,
+                                  const size_t width, const size_t height, const size_t ch,
+                                  const float RGB_to_XYZ[3][4], float illuminant[4])
+{
+  /**
+   * Detect the chromaticity of the illuminant based on the grey edges hypothesis.
+   * So we compute a laplacian filter and get the weighted average of its chromaticities
+   *
+   * Inspired by :
+   *  A Fast White Balance Algorithm Based on Pixel Greyness, Ba Thai·Guang Deng·Robert Ross
+   *  https://www.researchgate.net/profile/Ba_Son_Thai/publication/308692177_A_Fast_White_Balance_Algorithm_Based_on_Pixel_Greyness/
+   *
+   *  Edge-Based Color Constancy, Joost van de Weijer, Theo Gevers, Arjan Gijsenij
+   *  https://hal.inria.fr/inria-00548686/document
+   *
+  */
+
+   float *const restrict temp = dt_alloc_sse_ps(width * height * ch);
+
+   // Convert RGB to xy
+  #ifdef _OPENMP
+#pragma omp parallel for simd default(none) \
+  dt_omp_firstprivate(width, height, ch, in, temp, RGB_to_XYZ) \
+  aligned(in, temp, RGB_to_XYZ:64)\
+  schedule(simd:static)
+#endif
+  for(size_t i = 0; i < height; i++)
+  for(size_t j = 0; j < width; j++)
+  {
+    const size_t index = (i * width + j) * ch;
+    float DT_ALIGNED_PIXEL RGB[4];
+    float DT_ALIGNED_PIXEL XYZ[4];
+
+    // Clip negatives
+    for(size_t c = 0; c < 3; c++) RGB[c] = fmaxf(in[index + c], 0.0f);
+
+    // Convert to XYZ
+    dot_product(RGB, RGB_to_XYZ, XYZ);
+
+    // Convert to xy
+    const float sum = XYZ[0] + XYZ[1] + XYZ[2];
+    XYZ[0] /= sum;
+    XYZ[2] = XYZ[1];
+    XYZ[1] /= sum;
+
+    // Shift the chromaticity plane so the D50 point (target) becomes the origin
+    static const float D50[2] = { 0.34567f, 0.35850 };
+    const float norm = hypotf(D50[0], D50[1]);
+
+    temp[index    ] = (XYZ[0] - D50[0]) / norm;
+    temp[index + 1] = (XYZ[1] - D50[1]) / norm;
+    temp[index + 2] =  XYZ[2];
+  }
+
+  float norm_edge = 0.0f, norm_surface = 0.0f;
+  float XYZ_edge[4] = { 0.f }, XYZ_surface[4] = { 0.f };
+
+   // Compute the Laplacian
+#ifdef _OPENMP
+#pragma omp parallel for simd default(none) reduction(+:XYZ_edge, XYZ_surface) reduction(+:norm_edge, norm_surface)\
+  dt_omp_firstprivate(width, height, ch, temp) \
+  aligned(temp:64) \
+  schedule(simd:static)
+#endif
+  for(size_t i = off; i < height - off; i++)
+    for(size_t j = off; j < width - off; j++)
+    {
+      float DT_ALIGNED_PIXEL dd[4];
+      float DT_ALIGNED_PIXEL central_average[4];
+
+      for(size_t c = 0; c < 3; c++)
+      {
+        // B-spline local average / blur
+        central_average[c] = (      temp[SHF(-off, -off, c)] + 2.f * temp[SHF(-off, 0, c)] +       temp[SHF(-off, +off, c)] +
+                              2.f * temp[SHF(   0, -off, c)] + 4.f * temp[SHF(   0, 0, c)] + 2.f * temp[SHF(   0, +off, c)] +
+                                    temp[SHF(+off, -off, c)] + 2.f * temp[SHF(+off, 0, c)] +       temp[SHF(+off, +off, c)]) / 16.0f;
+
+        // image - blur = laplacian = edges
+        dd[c] = temp[SHF(0, 0, c)] - central_average[c];
+      }
+
+      // For each pixel, edge or surface, brightest pixels get a higher vote, assuming illuminants are highlights
+      const float weight_luma = central_average[2];
+
+      // For edges chromaticity, cast votes of edge pixels with higher weight
+      const float weight_edge = weight_luma / (sqf((1.f - hypotf(dd[0], dd[1]))) + 1e-6f);
+      for(size_t c = 0; c < 2; c++) XYZ_edge[c] += (dd[c]) * weight_edge;
+      norm_edge += weight_edge;
+
+      // For surface chromaticity, cast votes of neutral pixels with higher weight
+      const float weight_surface = expf(-(sqf(central_average[0]) + sqf(central_average[1])) / (2.f * weight_luma));
+      for(size_t c = 0; c < 2; c++) XYZ_surface[c] += (central_average[c]) * weight_surface;
+      norm_surface += weight_surface;
+
+    }
+
+  static const float D50[2] = { 0.34567f, 0.35850 };
+  const float norm = hypotf(D50[0], D50[1]);
+
+  for(size_t c = 0; c < 2; c++)
+  {
+    XYZ_edge[c] = XYZ_edge[c] / norm_edge + D50[c];
+    XYZ_surface[c] = norm * XYZ_surface[c] / norm_surface + D50[c];
+    illuminant[c] =  (XYZ_edge[c] + XYZ_surface[c] ) / 2.;
+  }
+
+  fprintf(stdout, "X : %f, Y : %f\n", illuminant[0], illuminant[1]);
+
+  dt_free_align(temp);
+}
+
 static inline void repack_3x3_to_3xSSE(const float input[9], float output[3][4])
 {
   // Repack a 3×3 array/matrice into a 3×1 SSE2 vector to enable SSE4/AVX/AVX2 dot products
@@ -354,11 +477,66 @@ static inline void repack_3x3_to_3xSSE(const float input[9], float output[3][4])
 }
 
 
+static void update_illuminants(struct dt_iop_module_t *self);
+static void update_approx_cct(struct dt_iop_module_t *self);
+static void update_illuminant_color(struct dt_iop_module_t *self);
+
+
+static void check_if_close_to_daylight(const float x, const float y, float *temperature,
+                                       dt_illuminant_t *illuminant, dt_adaptation_t *adaptation)
+{
+  /* Check if a chromaticity x, y is close to daylight within 2.5 %.
+   * If so, we enable the daylight GUI for better ergonomics
+   * Otherwise, we default to direct x, y control for better accuracy
+   *
+   * Note : The use of CCT is discouraged if dE > 5 % in CIE 1960 Yuv space
+   *        reference : https://onlinelibrary.wiley.com/doi/abs/10.1002/9780470175637.ch3
+   */
+
+  // Get the correlated color temperature
+  *temperature = xy_to_CCT(x, y);
+
+  // Convert to CIE 1960 Yuv space
+  float xy_ref[2] = { x, y };
+  float uv_ref[2];
+  xy_to_uv(xy_ref, uv_ref);
+
+  float xy_test[2] = { 0.f };
+  float uv_test[2];
+
+  // Compute the test chromaticity from the daylight model
+  illuminant_to_xy(DT_ILLUMINANT_D, &xy_test[0], &xy_test[1], *temperature, DT_ILLUMINANT_FLUO_LAST, DT_ILLUMINANT_LED_LAST);
+  xy_to_uv(xy_test, uv_test);
+  const float delta_daylight = hypotf((uv_test[0] - uv_ref[0]), (uv_test[1] - uv_ref[1]));
+
+  // Compute the test chromaticity from the blackbody model
+  illuminant_to_xy(DT_ILLUMINANT_BB, &xy_test[0], &xy_test[1], *temperature, DT_ILLUMINANT_FLUO_LAST, DT_ILLUMINANT_LED_LAST);
+  const float delta_bb = hypotf((uv_test[0] - uv_ref[0]), (uv_test[1] - uv_ref[1]));
+
+  // Check the error between original and test chromaticity
+  if(delta_bb < 0.005f || delta_daylight < 0.005f)
+  {
+    *adaptation = DT_ADAPTATION_LINEAR_BRADFORD; // Bradford is more accurate for daylight
+
+    if(delta_bb < delta_daylight)
+      *illuminant = DT_ILLUMINANT_BB;
+    else
+      *illuminant = DT_ILLUMINANT_D;
+  }
+  else
+  {
+    *illuminant = DT_ILLUMINANT_CUSTOM;
+    *adaptation = DT_ADAPTATION_CAT16; // CAT16 is less accurate but more robust for non-daylight
+  }
+}
+
+
 void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
              void *const restrict ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_channelmixer_rbg_data_t *data = (dt_iop_channelmixer_rbg_data_t *)piece->data;
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(piece->pipe);
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
   float DT_ALIGNED_ARRAY RGB_to_XYZ[3][4];
   float DT_ALIGNED_ARRAY XYZ_to_RGB[3][4];
@@ -377,15 +555,59 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   const float *const restrict in = (const float *const restrict)ivoid;
   float *const restrict out = (float *const restrict)ovoid;
 
+  // auto-detect WB upon request
+  if(self->dev->gui_attached && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW && g)
+  {
+    if(g->auto_detect_illuminant && !self->dt->gui->reset)
+    {
+      float XYZ[4] = { 0.f };
+      auto_detect_WB(in, roi_out->width, roi_out->height, ch, RGB_to_XYZ, XYZ);
+
+      const int reset = darktable.gui->reset;
+      darktable.gui->reset = 1;
+      dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+      p->x = XYZ[0];
+      p->y = XYZ[1];
+
+      check_if_close_to_daylight(p->x, p->y, &p->temperature, &p->illuminant, &p->adaptation);
+
+      dt_bauhaus_slider_set(g->temperature, p->temperature);
+      dt_bauhaus_combobox_set(g->illuminant, p->illuminant);
+      dt_bauhaus_combobox_set(g->adaptation, p->adaptation);
+      dt_bauhaus_slider_set(g->illum_x, p->x);
+      dt_bauhaus_slider_set(g->illum_y, p->y);
+
+      update_illuminants(self);
+      update_approx_cct(self);
+      update_illuminant_color(self);
+
+      g->auto_detect_illuminant = FALSE;
+
+      darktable.gui->reset = reset;
+
+      dt_control_log(_("auto-detection of white balance completed"));
+
+      dt_dev_add_history_item(darktable.develop, self, TRUE);
+    }
+  }
+
   // force loop unswitching in a controlled way
   switch(data->adaptation)
   {
-    case DT_ADAPTATION_BRADFORD:
+    case DT_ADAPTATION_FULL_BRADFORD:
     {
       loop_switch(in, out, roi_out->width, roi_out->height, ch,
                   XYZ_to_RGB, RGB_to_XYZ, data->MIX,
                   data->illuminant, data->saturation, data->lightness, data->grey,
-                  data->p, data->gamut, data->clip, data->apply_grey, DT_ADAPTATION_BRADFORD);
+                  data->p, data->gamut, data->clip, data->apply_grey, DT_ADAPTATION_FULL_BRADFORD);
+      break;
+    }
+    case DT_ADAPTATION_LINEAR_BRADFORD:
+    {
+      loop_switch(in, out, roi_out->width, roi_out->height, ch,
+                  XYZ_to_RGB, RGB_to_XYZ, data->MIX,
+                  data->illuminant, data->saturation, data->lightness, data->grey,
+                  data->p, data->gamut, data->clip, data->apply_grey, DT_ADAPTATION_LINEAR_BRADFORD);
       break;
     }
     case DT_ADAPTATION_CAT16:
@@ -462,22 +684,18 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   illuminant_xy_to_XYZ(x, y, XYZ);
 
   // Convert illuminant from XYZ to Bradford modified LMS
-  if(d->adaptation == DT_ADAPTATION_BRADFORD)
-    convert_XYZ_to_bradford_LMS(XYZ, d->illuminant);
-  else if(d->adaptation == DT_ADAPTATION_CAT16)
-    convert_XYZ_to_CAT16_LMS(XYZ, d->illuminant);
-
+  convert_any_XYZ_to_LMS(XYZ, d->illuminant, d->adaptation);
   d->illuminant[3] = 0.f;
 
   //fprintf(stdout, "illuminant: %i\n", p->illuminant);
-  fprintf(stdout, "x: %f, y: %f\n", x, y);
+  //fprintf(stdout, "x: %f, y: %f\n", x, y);
   //fprintf(stdout, "X: %f - Y: %f - Z: %f\n", XYZ[0], XYZ[1], XYZ[2]);
   //fprintf(stdout, "L: %f - M: %f - S: %f\n", d->illuminant[0], d->illuminant[1], d->illuminant[2]);
 
   // blue compensation for Bradford transform = (test illuminant blue / reference illuminant blue)^0.0834
   // reference illuminant is hard-set D50 for darktable's pipeline
   // test illuminant is user params
-  d->p = powf(d->illuminant[2] / 1.088932f, 0.0834f);
+  d->p = powf(d->illuminant[2] / 0.818155f, 0.0834f);
 }
 
 
@@ -555,34 +773,9 @@ static int find_temperature_from_raw_coeffs(dt_iop_module_t *self, float *chroma
 
       float x, y;
       WB_coeffs_to_illuminant_xy(CAM_to_XYZ, WB, &x, &y);
-
       *chroma_x = x;
       *chroma_y = y;
-
-      // Get the correlated color temperature
-      const float t = xy_to_CCT(x, y);
-      *temperature = t;
-
-      // Compute again the chromaticity from the daylight model
-      illuminant_to_xy(DT_ILLUMINANT_D, &x, &y, t, DT_ILLUMINANT_FLUO_LAST, DT_ILLUMINANT_LED_LAST);
-
-      // check the error with absolute chromaticity computed directly
-      const float err = sqrtf(sqf(*chroma_x - x) + sqf(*chroma_y - y)) / sqrtf(sqf(*chroma_x) + sqf(*chroma_y));
-
-      // The use of CCT is discouraged if err > 5 %
-      // reference : https://onlinelibrary.wiley.com/doi/abs/10.1002/9780470175637.ch3
-      // so if err < 5 %, we default to D illuminant with CCT for better UX
-      // or else we use the custom x and y for better accuracy.
-      if(err < 0.05f)
-      {
-        *illuminant = DT_ILLUMINANT_D;
-        *adaptation = DT_ADAPTATION_BRADFORD; // Bradford is better suited for daylight
-      }
-      else
-      {
-        *illuminant = DT_ILLUMINANT_CUSTOM;
-        *adaptation = DT_ADAPTATION_CAT16; // CAT16 is less accurate but more robust for non-daylight
-      }
+      check_if_close_to_daylight(x, y, temperature, illuminant, adaptation);
 
       return TRUE;
     }
@@ -979,8 +1172,7 @@ static void update_approx_cct(dt_iop_module_t *self)
 {
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
-  const float t = CCT_reverse_lookup(p->x, p->y);
-  //xy_to_CCT(p->x, p->y);
+  const float t = xy_to_CCT(p->x, p->y);
   gchar *str = g_strdup_printf(_("CCT: %.0f K"), t);
   gtk_label_set_text(GTK_LABEL(g->approx_cct), str);
 }
@@ -994,7 +1186,7 @@ static void illuminant_callback(GtkWidget *combo, dt_iop_module_t *self)
 
   p->illuminant = dt_bauhaus_combobox_get(combo);
 
-  if(p->illuminant == DT_ILLUMINANT_LAST)
+  if(p->illuminant == DT_ILLUMINANT_LAST + 1)
   {
     // Get camera WB
     int found = find_temperature_from_raw_coeffs(self, &(p->x), &(p->y), &(p->temperature), &(p->illuminant), &(p->adaptation));
@@ -1006,13 +1198,30 @@ static void illuminant_callback(GtkWidget *combo, dt_iop_module_t *self)
       // find_temperature either set illuminant to custom or D, so update the combobox
       const int reset = darktable.gui->reset;
       darktable.gui->reset = 1;
+      dt_bauhaus_slider_set(g->temperature, p->temperature);
       dt_bauhaus_combobox_set(g->illuminant, p->illuminant);
+      dt_bauhaus_combobox_set(g->adaptation, p->adaptation);
+      dt_bauhaus_slider_set(g->illum_x, p->x);
+      dt_bauhaus_slider_set(g->illum_y, p->y);
       darktable.gui->reset = reset;
     }
     else
     {
       dt_control_log(_("no white balance was found in raw image"));
     }
+  }
+  else if(p->illuminant == DT_ILLUMINANT_LAST)
+  {
+    // Get image WB
+    const int reset = darktable.gui->reset;
+    darktable.gui->reset = 1;
+    g->auto_detect_illuminant = TRUE;
+    darktable.gui->reset = reset;
+
+    // We need to recompute only the thumbnail
+    dt_control_log(_("auto-detection of white balance started…"));
+    dt_dev_add_history_item(darktable.develop, self, TRUE);
+    return;
   }
 
   const int reset = darktable.gui->reset;
@@ -1494,6 +1703,8 @@ void gui_update(struct dt_iop_module_t *self)
   update_R_colors(self);
   update_G_colors(self);
   update_B_colors(self);
+
+  g->auto_detect_illuminant = FALSE;
 }
 
 void init(dt_iop_module_t *module)
@@ -1510,7 +1721,7 @@ void init(dt_iop_module_t *module)
                                                                              { 0.f, 0.f, 0.f, 0.f },
                                                                              { 0.f, 0.f, 0.f, 0.f },
                                                                              FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
-                                                                             DT_ILLUMINANT_D, DT_ILLUMINANT_FLUO_F3, DT_ILLUMINANT_LED_B5, DT_ADAPTATION_BRADFORD,
+                                                                             DT_ILLUMINANT_D, DT_ILLUMINANT_FLUO_F3, DT_ILLUMINANT_LED_B5, DT_ADAPTATION_LINEAR_BRADFORD,
                                                                              0.33f, 0.33f, 6004.f, 1.0f, TRUE};
 
   find_temperature_from_raw_coeffs(module, &(tmp.x), &(tmp.y), &(tmp.temperature), &(tmp.illuminant), &(tmp.adaptation));
@@ -1527,7 +1738,7 @@ void reload_defaults(dt_iop_module_t *module)
                                                                              { 0.f, 0.f, 0.f, 0.f },
                                                                              { 0.f, 0.f, 0.f, 0.f },
                                                                              FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
-                                                                             DT_ILLUMINANT_D, DT_ILLUMINANT_FLUO_F3, DT_ILLUMINANT_LED_B5, DT_ADAPTATION_BRADFORD,
+                                                                             DT_ILLUMINANT_D, DT_ILLUMINANT_FLUO_F3, DT_ILLUMINANT_LED_B5, DT_ADAPTATION_LINEAR_BRADFORD,
                                                                              0.33f, 0.33f, 6004.f, 1.0f, TRUE};
 
   find_temperature_from_raw_coeffs(module, &(tmp.x), &(tmp.y), &(tmp.temperature), &(tmp.illuminant), &(tmp.adaptation));
@@ -1550,6 +1761,8 @@ void gui_init(struct dt_iop_module_t *self)
   self->gui_data = malloc(sizeof(dt_iop_channelmixer_rgb_gui_data_t));
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
+
+  g->auto_detect_illuminant = FALSE;
 
   const dt_image_t *img = &self->dev->image_storage;
   const int is_raw = dt_image_is_matrix_correction_supported(img);
@@ -1580,12 +1793,14 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->adaptation = dt_bauhaus_combobox_new(self);
   dt_bauhaus_widget_set_label(g->adaptation, NULL, _("adaptation"));
-  dt_bauhaus_combobox_add(g->adaptation, _("Bradford (ICC v4)"));
+  dt_bauhaus_combobox_add(g->adaptation, _("linear Bradford (ICC v4)"));
   dt_bauhaus_combobox_add(g->adaptation, _("CAT16 (CIECAM16)"));
+  dt_bauhaus_combobox_add(g->adaptation, _("original Bradford"));
   dt_bauhaus_combobox_add(g->adaptation, _("none"));
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->adaptation), _("choose the method to adapt the illuminant: \n"
-                                                           "• Bradford (1999) is more accurate for illuminants close to daylight\n"
+                                                           "• Bradford (1985) is more accurate for illuminants close to daylight\n"
                                                            "but can push colors out of the gamut for difficult illuminants.\n"
+                                                           "the original version will give poor results away from D50.\n"
                                                            "• CAT16 (2016) is more robust to avoid imaginary colours\n"
                                                            "while working with large gamut or saturated cyan and purple.\n"
                                                            "• none disables any illuminant adaptation."));
@@ -1624,9 +1839,10 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_combobox_add(g->illuminant, _("LED (LED light)"));
   dt_bauhaus_combobox_add(g->illuminant, _("Planckian (black body)"));
   dt_bauhaus_combobox_add(g->illuminant, _("custom"));
+  dt_bauhaus_combobox_add(g->illuminant, _("auto-detect from image content..."));
 
   if(is_raw)
-     dt_bauhaus_combobox_add(g->illuminant, _("compute from camera..."));
+     dt_bauhaus_combobox_add(g->illuminant, _("auto-detect from camera EXIF..."));
 
   g_signal_connect(G_OBJECT(g->illuminant), "value-changed", G_CALLBACK(illuminant_callback), self);
   gtk_box_pack_start(GTK_BOX(page0), g->illuminant, FALSE, FALSE, 0);

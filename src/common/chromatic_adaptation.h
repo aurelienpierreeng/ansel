@@ -21,8 +21,9 @@
 
 typedef enum dt_adaptation_t
 {
-  DT_ADAPTATION_BRADFORD  = 0,
-  DT_ADAPTATION_CAT16     = 1,
+  DT_ADAPTATION_LINEAR_BRADFORD = 0,
+  DT_ADAPTATION_CAT16           = 1,
+  DT_ADAPTATION_FULL_BRADFORD   = 2,
   DT_ADAPTATION_LAST
 } dt_adaptation_t;
 
@@ -79,8 +80,8 @@ static inline void convert_XYZ_to_CAT16_LMS(const float XYZ[4], float LMS[4])
 {
   // Warning : needs XYZ normalized with Y - you need to downscale before
   static const float DT_ALIGNED_ARRAY XYZ_to_LMS[3][4] = { {  0.401288f, 0.650173f, -0.051461f, 0.f },
-                                                           { -0.250268f, 1.20441f,   0.045854f, 0.f },
-                                                           { -0.002079f, 0.04895f,   0.953127f, 0.f } };
+                                                           { -0.250268f, 1.204414f,  0.045854f, 0.f },
+                                                           { -0.002079f, 0.048952f,  0.953127f, 0.f } };
   dot_product(XYZ, XYZ_to_LMS, LMS);
 }
 
@@ -90,9 +91,9 @@ static inline void convert_XYZ_to_CAT16_LMS(const float XYZ[4], float LMS[4])
 static inline void convert_CAT16_LMS_to_XYZ(const float LMS[4], float XYZ[4])
 {
   // Warning : output XYZ normalized with Y - you need to upscale later
-  static const float DT_ALIGNED_ARRAY LMS_to_XYZ[3][4] = { {  1.8620664f , -1.01125696f,  0.14918681f },
-                                                           {  0.3875275f ,  0.62144898f, -0.00897401f },
-                                                           { -0.01584074f, -0.03412172f,  1.04996442f } };
+  static const float DT_ALIGNED_ARRAY LMS_to_XYZ[3][4] = { {  1.862068f, -1.011255f,  0.149187f },
+                                                           {  0.38752f ,  0.621447f, -0.008974f },
+                                                           { -0.015841f, -0.034123f,  1.049964f } };
   dot_product(LMS, LMS_to_XYZ, XYZ);
 }
 
@@ -106,7 +107,8 @@ static inline void convert_any_LMS_to_XYZ(const float LMS[4], float XYZ[4], dt_a
 
   switch(kind)
   {
-    case DT_ADAPTATION_BRADFORD:
+    case DT_ADAPTATION_FULL_BRADFORD:
+    case DT_ADAPTATION_LINEAR_BRADFORD:
     {
       convert_bradford_LMS_to_XYZ(LMS, XYZ);
       break;
@@ -137,7 +139,8 @@ static inline void convert_any_XYZ_to_LMS(const float XYZ[4], float LMS[4], dt_a
 
   switch(kind)
   {
-    case DT_ADAPTATION_BRADFORD:
+    case DT_ADAPTATION_FULL_BRADFORD:
+    case DT_ADAPTATION_LINEAR_BRADFORD:
     {
       convert_XYZ_to_bradford_LMS(XYZ, LMS);
       break;
@@ -187,7 +190,7 @@ static inline void convert_any_LMS_to_RGB(const float LMS[4], float RGB[4], dt_a
 #endif
 static inline void bradford_adapt_D65(const float lms_in[4],
                                       const float origin_illuminant[4],
-                                      const float p,
+                                      const float p, const int full,
                                       float lms_out[4])
 {
   // Bradford chromatic adaptation from origin to target D65 illuminant in LMS space
@@ -205,7 +208,7 @@ static inline void bradford_adapt_D65(const float lms_in[4],
                                      0.f };
 
   // use linear Bradford if B is negative
-  temp[2] = (temp[2] < 0.f) ? temp[2] : powf(temp[2], p);
+  if(full) temp[2] = (temp[2] > 0.f) ? powf(temp[2], p) : temp[2];
 
   lms_out[0] = D65[0] * temp[0];
   lms_out[1] = D65[1] * temp[1];
@@ -219,7 +222,7 @@ static inline void bradford_adapt_D65(const float lms_in[4],
 #endif
 static inline void bradford_adapt_D50(const float lms_in[4],
                                       const float origin_illuminant[4],
-                                      const float p,
+                                      const float p, const int full,
                                       float lms_out[4])
 {
   // Bradford chromatic adaptation from origin to target D50 illuminant in LMS space
@@ -237,7 +240,7 @@ static inline void bradford_adapt_D50(const float lms_in[4],
                                      0.f };
 
   // use linear Bradford if B is negative
-  temp[2] = (temp[2] < 0.f) ? temp[2] : powf(temp[2], p);
+  if(full) temp[2] = (temp[2] > 0.f) ? powf(temp[2], p) : temp[2];
 
   lms_out[0] = D50[0] * temp[0];
   lms_out[1] = D50[1] * temp[1];
@@ -253,7 +256,7 @@ static inline void bradford_adapt_D50(const float lms_in[4],
 #endif
 static inline void CAT16_adapt_D65(const float lms_in[4],
                                       const float origin_illuminant[4],
-                                      const float D,
+                                      const float D, const int full,
                                       float lms_out[4])
 {
   // CAT16 chromatic adaptation from origin to target D65 illuminant in LMS space
@@ -263,9 +266,18 @@ static inline void CAT16_adapt_D65(const float lms_in[4],
   // Precomputed D65 primaries in CAT16 LMS for camera WB adjustment
   static const float DT_ALIGNED_PIXEL D65[4] = { 0.97553267f, 1.01647859f, 1.0848344f, 0.f };
 
-  lms_out[0] = lms_in[0] * (D * D65[0] / origin_illuminant[0] + 1.f - D);
-  lms_out[1] = lms_in[1] * (D * D65[1] / origin_illuminant[1] + 1.f - D);
-  lms_out[2] = lms_in[2] * (D * D65[2] / origin_illuminant[2] + 1.f - D);
+  if(full)
+  {
+    lms_out[0] = lms_in[0] * D65[0] / origin_illuminant[0];
+    lms_out[1] = lms_in[1] * D65[1] / origin_illuminant[1];
+    lms_out[2] = lms_in[2] * D65[2] / origin_illuminant[2];
+  }
+  else
+  {
+    lms_out[0] = lms_in[0] * (D * D65[0] / origin_illuminant[0] + 1.f - D);
+    lms_out[1] = lms_in[1] * (D * D65[1] / origin_illuminant[1] + 1.f - D);
+    lms_out[2] = lms_in[2] * (D * D65[2] / origin_illuminant[2] + 1.f - D);
+  }
 }
 
 
@@ -275,18 +287,27 @@ static inline void CAT16_adapt_D65(const float lms_in[4],
 #endif
 static inline void CAT16_adapt_D50(const float lms_in[4],
                                       const float origin_illuminant[4],
-                                      const float D,
+                                      const float D, const int full,
                                       float lms_out[4])
 {
-  // CAT16 chromatic adaptation from origin to target D65 illuminant in LMS space
+  // CAT16 chromatic adaptation from origin to target D50 illuminant in LMS space
   // D is the coefficient of adaptation, depending of the surround lighting
   // origin illuminant need also to be precomputed to LMS
 
   // Precomputed D50 primaries in CAT16 LMS for ICC transforms
-  static const float DT_ALIGNED_PIXEL D50[4] = { 0.99463469f, 1.00093678f, 0.83345464f, 0.f };
+  static const float DT_ALIGNED_PIXEL D50[4] = { 0.994535f, 1.000997f, 0.833036f, 0.f };
 
-  lms_out[0] = lms_in[0] * (D * D50[0] / origin_illuminant[0] + 1.f - D);
-  lms_out[1] = lms_in[1] * (D * D50[1] / origin_illuminant[1] + 1.f - D);
-  lms_out[2] = lms_in[2] * (D * D50[2] / origin_illuminant[2] + 1.f - D);
+  if(full)
+  {
+    lms_out[0] = lms_in[0] * D50[0] / origin_illuminant[0];
+    lms_out[1] = lms_in[1] * D50[1] / origin_illuminant[1];
+    lms_out[2] = lms_in[2] * D50[2] / origin_illuminant[2];
+  }
+  else
+  {
+    lms_out[0] = lms_in[0] * (D * D50[0] / origin_illuminant[0] + 1.f - D);
+    lms_out[1] = lms_in[1] * (D * D50[1] / origin_illuminant[1] + 1.f - D);
+    lms_out[2] = lms_in[2] * (D * D50[2] / origin_illuminant[2] + 1.f - D);
+  }
 }
 
