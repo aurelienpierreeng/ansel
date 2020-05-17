@@ -344,7 +344,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
 
 // util to shift pixel index without headache
 #define SHF(ii, jj, c) ((i + ii) * width + j + jj) * ch + c
-#define off 1
+#define off 3
 
 static inline void auto_detect_WB(const float *const restrict in,
                                   const size_t width, const size_t height, const size_t ch,
@@ -385,11 +385,11 @@ static inline void auto_detect_WB(const float *const restrict in,
     // Convert to XYZ
     dot_product(RGB, RGB_to_XYZ, XYZ);
 
-    // Convert to xy
+    // Convert to xyY
     const float sum = XYZ[0] + XYZ[1] + XYZ[2];
-    XYZ[0] /= sum;
-    XYZ[2] = XYZ[1];
-    XYZ[1] /= sum;
+    XYZ[0] /= sum;   // x
+    XYZ[2] = XYZ[1]; // Y
+    XYZ[1] /= sum;   // y
 
     // Shift the chromaticity plane so the D50 point (target) becomes the origin
     static const float D50[2] = { 0.34567f, 0.35850 };
@@ -403,15 +403,15 @@ static inline void auto_detect_WB(const float *const restrict in,
   float norm_edge = 0.0f, norm_surface = 0.0f;
   float XYZ_edge[4] = { 0.f }, XYZ_surface[4] = { 0.f };
 
-   // Compute the Laplacian
+  // Compute the Laplacian
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) reduction(+:XYZ_edge, XYZ_surface) reduction(+:norm_edge, norm_surface)\
-  dt_omp_firstprivate(width, height, ch, temp) \
+  dt_omp_firstprivate(width, height, ch, temp, stdout) \
   aligned(temp:64) \
   schedule(simd:static)
 #endif
-  for(size_t i = off; i < height - off; i++)
-    for(size_t j = off; j < width - off; j++)
+  for(size_t i = 2 * off; i < height - 2 * off; i++)
+    for(size_t j = 2 * off; j < width - 2 * off; j++)
     {
       float DT_ALIGNED_PIXEL dd[4];
       float DT_ALIGNED_PIXEL central_average[4];
@@ -422,24 +422,26 @@ static inline void auto_detect_WB(const float *const restrict in,
         central_average[c] = (      temp[SHF(-off, -off, c)] + 2.f * temp[SHF(-off, 0, c)] +       temp[SHF(-off, +off, c)] +
                               2.f * temp[SHF(   0, -off, c)] + 4.f * temp[SHF(   0, 0, c)] + 2.f * temp[SHF(   0, +off, c)] +
                                     temp[SHF(+off, -off, c)] + 2.f * temp[SHF(+off, 0, c)] +       temp[SHF(+off, +off, c)]) / 16.0f;
+        central_average[c] = fmaxf(central_average[c], 0.0f);
 
         // image - blur = laplacian = edges
-        dd[c] = temp[SHF(0, 0, c)] - central_average[c];
+        dd[c] = fminf(fmaxf(temp[SHF(0, 0, c)] - central_average[c], -1.0f), 1.0f);
       }
+
+      const size_t num_elem = (height - 4 * off - 1) * (width - 4 * off - 1);
 
       // For each pixel, edge or surface, brightest pixels get a higher vote, assuming illuminants are highlights
       const float weight_luma = central_average[2];
 
       // For edges chromaticity, cast votes of edge pixels with higher weight
-      const float weight_edge = weight_luma / (sqf((1.f - hypotf(dd[0], dd[1]))) + 1e-6f);
+      const float weight_edge = fmaxf(weight_luma / (sqf((1.f - hypotf(dd[0], dd[1]))) + 1e-3f), 0.f) / (float)num_elem;
       for(size_t c = 0; c < 2; c++) XYZ_edge[c] += (dd[c]) * weight_edge;
       norm_edge += weight_edge;
 
       // For surface chromaticity, cast votes of neutral pixels with higher weight
-      const float weight_surface = expf(-(sqf(central_average[0]) + sqf(central_average[1])) / (2.f * weight_luma));
+      const float weight_surface = fmaxf(expf(-(sqf(central_average[0]) + sqf(central_average[1])) / (2.f * weight_luma)), 0.f) / (float)num_elem;
       for(size_t c = 0; c < 2; c++) XYZ_surface[c] += (central_average[c]) * weight_surface;
       norm_surface += weight_surface;
-
     }
 
   static const float D50[2] = { 0.34567f, 0.35850 };
@@ -561,7 +563,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     if(g->auto_detect_illuminant && !self->dt->gui->reset)
     {
       float XYZ[4] = { 0.f };
-      auto_detect_WB(in, roi_out->width, roi_out->height, ch, RGB_to_XYZ, XYZ);
+      auto_detect_WB(in, roi_in->width, roi_in->height, ch, RGB_to_XYZ, XYZ);
 
       const int reset = darktable.gui->reset;
       darktable.gui->reset = 1;
