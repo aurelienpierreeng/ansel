@@ -256,7 +256,7 @@ static inline void luma_chroma(const float input[4], const float saturation[4], 
 
     // Apply colorfulness adjustment channel-wise and repack with lightness to get LMS back
     norm *= fmaxf(1.f + mix / avg, 0.f);
-    for(size_t c = 0; c < 3; c++) output[c] = (output[c] + ratio_correct) * norm;
+    for(size_t c = 0; c < 3; c++) output[c] = fmaxf((output[c] + ratio_correct), 0.f) * norm;
 }
 
 
