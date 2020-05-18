@@ -366,47 +366,89 @@ static inline void auto_detect_WB(const float *const restrict in,
    float *const restrict temp = dt_alloc_sse_ps(width * height * ch);
 
    // Convert RGB to xy
-  #ifdef _OPENMP
+#ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(width, height, ch, in, temp, RGB_to_XYZ) \
-  aligned(in, temp, RGB_to_XYZ:64)\
+  aligned(in, temp, RGB_to_XYZ:64) collapse(2)\
   schedule(simd:static)
 #endif
   for(size_t i = 0; i < height; i++)
-  for(size_t j = 0; j < width; j++)
+    for(size_t j = 0; j < width; j++)
+    {
+      const size_t index = (i * width + j) * ch;
+      float DT_ALIGNED_PIXEL RGB[4];
+      float DT_ALIGNED_PIXEL XYZ[4];
+
+      // Clip negatives
+      for(size_t c = 0; c < 3; c++) RGB[c] = fmaxf(in[index + c], 0.0f);
+
+      // Convert to XYZ
+      dot_product(RGB, RGB_to_XYZ, XYZ);
+
+      // Convert to xyY
+      const float sum = fmaxf(XYZ[0] + XYZ[1] + XYZ[2], 1e-6f);
+      XYZ[0] /= sum;   // x
+      XYZ[2] = XYZ[1]; // Y
+      XYZ[1] /= sum;   // y
+
+      // Shift the chromaticity plane so the D50 point (target) becomes the origin
+      static const float D50[2] = { 0.34567f, 0.35850 };
+      const float norm = hypotf(D50[0], D50[1]);
+
+      temp[index    ] = (XYZ[0] - D50[0]) / norm;
+      temp[index + 1] = (XYZ[1] - D50[1]) / norm;
+      temp[index + 2] =  XYZ[2];
+    }
+
+  // Get the mean of luma and chroma in image
+  float chroma_mean[2] = { 0.0f };
+  float luma_mean = 0.0f;
+
+#ifdef _OPENMP
+#pragma omp parallel for simd default(none) \
+  dt_omp_firstprivate(width, height, ch, temp) \
+  aligned(temp:64) reduction(+:luma_mean, chroma_mean)\
+  schedule(simd:static)
+#endif
+  for(size_t k = 0; k < height * width * ch; k += ch)
   {
-    const size_t index = (i * width + j) * ch;
-    float DT_ALIGNED_PIXEL RGB[4];
-    float DT_ALIGNED_PIXEL XYZ[4];
-
-    // Clip negatives
-    for(size_t c = 0; c < 3; c++) RGB[c] = fmaxf(in[index + c], 0.0f);
-
-    // Convert to XYZ
-    dot_product(RGB, RGB_to_XYZ, XYZ);
-
-    // Convert to xyY
-    const float sum = XYZ[0] + XYZ[1] + XYZ[2];
-    XYZ[0] /= sum;   // x
-    XYZ[2] = XYZ[1]; // Y
-    XYZ[1] /= sum;   // y
-
-    // Shift the chromaticity plane so the D50 point (target) becomes the origin
-    static const float D50[2] = { 0.34567f, 0.35850 };
-    const float norm = hypotf(D50[0], D50[1]);
-
-    temp[index    ] = (XYZ[0] - D50[0]) / norm;
-    temp[index + 1] = (XYZ[1] - D50[1]) / norm;
-    temp[index + 2] =  XYZ[2];
+    const float num_elem = 1.f / (float)(width * height);
+    chroma_mean[0] += temp[k + 0] * num_elem;
+    chroma_mean[1] += temp[k + 1]* num_elem;
+    luma_mean += temp[k + 2] * num_elem;
   }
+
+  fprintf(stdout, "luma: %f, chroma : %f, %f\n", luma_mean, chroma_mean[0], chroma_mean[1]);
+
+  // Get the variance of luma and chroma in image
+  float chroma_std[2] = { 0.0f };
+  float luma_std = 0.f;
+
+#ifdef _OPENMP
+#pragma omp parallel for simd default(none) \
+  dt_omp_firstprivate(width, height, ch, temp, luma_mean, chroma_mean) \
+  aligned(temp:64) reduction(+:luma_std, chroma_std)\
+  schedule(simd:static)
+#endif
+  for(size_t k = 0; k < height * width * ch; k += ch)
+  {
+    const float num_elem = 1.f / (float)(width * height);
+    chroma_std[0] += sqf(temp[k + 0] - chroma_mean[0]) * num_elem;
+    chroma_std[1] += sqf(temp[k + 1] - chroma_mean[1]) * num_elem;
+    luma_std += sqf(temp[k + 2] - luma_mean) * num_elem;
+  }
+
+  fprintf(stdout, "luma: %f, chroma : %f, %f\n", luma_std, chroma_std[0], chroma_std[1]);
 
   float norm_edge = 0.0f, norm_surface = 0.0f;
   float XYZ_edge[4] = { 0.f }, XYZ_surface[4] = { 0.f };
+  const float flat_chroma_mean = - sqf(chroma_mean[0]) - sqf(chroma_mean[1]);
+  const float flat_chroma_var = (chroma_std[0] + chroma_std[1]);
 
   // Compute the Laplacian
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) reduction(+:XYZ_edge, XYZ_surface) reduction(+:norm_edge, norm_surface)\
-  dt_omp_firstprivate(width, height, ch, temp, stdout) \
+  dt_omp_firstprivate(width, height, ch, temp, stdout, chroma_mean, luma_mean, chroma_std, luma_std, flat_chroma_mean, flat_chroma_var) \
   aligned(temp:64) \
   schedule(simd:static)
 #endif
@@ -431,15 +473,16 @@ static inline void auto_detect_WB(const float *const restrict in,
       const size_t num_elem = (height - 4 * off - 1) * (width - 4 * off - 1);
 
       // For each pixel, edge or surface, brightest pixels get a higher vote, assuming illuminants are highlights
-      const float weight_luma = central_average[2];
+      const float weight_luma = expf(-sqf(central_average[2] - luma_mean) / luma_std);
+      const float weight_chroma = expf(-(sqf(central_average[0]) + sqf(central_average[1]) - flat_chroma_mean) / flat_chroma_var);
 
       // For edges chromaticity, cast votes of edge pixels with higher weight
-      const float weight_edge = fmaxf(weight_luma / (sqf((1.f - hypotf(dd[0], dd[1]))) + 1e-6f), 0.f) / (float)num_elem;
+      const float weight_edge = weight_luma / fmaxf(1.f - sqf(hypotf(dd[0], dd[1])), 1e-6f) / (float)num_elem / weight_chroma;
       for(size_t c = 0; c < 2; c++) XYZ_edge[c] += (dd[c]) * weight_edge;
       norm_edge += weight_edge;
 
       // For surface chromaticity, cast votes of neutral pixels with higher weight
-      const float weight_surface = fmaxf(expf(-(sqf(central_average[0]) + sqf(central_average[1])) / (2.f * weight_luma)), 0.f) / (float)num_elem;
+      const float weight_surface = weight_chroma * weight_luma / (float)num_elem;
       for(size_t c = 0; c < 2; c++) XYZ_surface[c] += (central_average[c]) * weight_surface;
       norm_surface += weight_surface;
     }
@@ -451,7 +494,7 @@ static inline void auto_detect_WB(const float *const restrict in,
   {
     XYZ_edge[c] = XYZ_edge[c] / norm_edge + D50[c];
     XYZ_surface[c] = norm * XYZ_surface[c] / norm_surface + D50[c];
-    illuminant[c] =  (XYZ_edge[c] + XYZ_surface[c]) / 2.f;
+    illuminant[c] =  (2.f * XYZ_edge[c] + 4.f * XYZ_surface[c] ) / 6.f;
   }
 
   fprintf(stdout, "X : %f, Y : %f\n", illuminant[0], illuminant[1]);
@@ -1175,7 +1218,11 @@ static void update_approx_cct(dt_iop_module_t *self)
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   const float t = xy_to_CCT(p->x, p->y);
-  gchar *str = g_strdup_printf(_("CCT: %.0f K"), t);
+  gchar *str;
+  if(t >= 1667.f && t < 25000.f)
+    str = g_strdup_printf(_("CCT: %.0f K"), t);
+  else
+    str = g_strdup_printf(_("CCT: undefined"));
   gtk_label_set_text(GTK_LABEL(g->approx_cct), str);
 }
 
