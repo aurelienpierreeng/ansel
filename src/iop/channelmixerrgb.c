@@ -434,7 +434,7 @@ static inline void auto_detect_WB(const float *const restrict in,
       const float weight_luma = central_average[2];
 
       // For edges chromaticity, cast votes of edge pixels with higher weight
-      const float weight_edge = fmaxf(weight_luma / (sqf((1.f - hypotf(dd[0], dd[1]))) + 1e-3f), 0.f) / (float)num_elem;
+      const float weight_edge = fmaxf(weight_luma / (sqf((1.f - hypotf(dd[0], dd[1]))) + 1e-6f), 0.f) / (float)num_elem;
       for(size_t c = 0; c < 2; c++) XYZ_edge[c] += (dd[c]) * weight_edge;
       norm_edge += weight_edge;
 
@@ -451,7 +451,7 @@ static inline void auto_detect_WB(const float *const restrict in,
   {
     XYZ_edge[c] = XYZ_edge[c] / norm_edge + D50[c];
     XYZ_surface[c] = norm * XYZ_surface[c] / norm_surface + D50[c];
-    illuminant[c] =  (XYZ_edge[c] + XYZ_surface[c] ) / 2.;
+    illuminant[c] =  (XYZ_edge[c] + XYZ_surface[c]) / 2.f;
   }
 
   fprintf(stdout, "X : %f, Y : %f\n", illuminant[0], illuminant[1]);
