@@ -202,14 +202,21 @@ static inline void gamut_mapping(const float input[4], const float compression, 
   const float Y = fmaxf(input[1] + 1e-6f, 1e-6f);
   float xyY[4] DT_ALIGNED_PIXEL = { input[0] / sum, input[1] / sum , input[1], 0.0f };
 
-  // Get the chromaticity difference with white point xy
-  static const float D65[2] DT_ALIGNED_PIXEL = { 0.34567f, 0.35850f };
-  const float delta[2] DT_ALIGNED_PIXEL = { D65[0] - xyY[0], D65[1] - xyY[1] };
+  // Convert to uvY
+  float uvY[4] DT_ALIGNED_PIXEL;
+  dt_xyY_to_uvY(xyY, uvY);
+
+  // Get the chromaticity difference with white point uv
+  static const float D50[2] DT_ALIGNED_PIXEL = { 0.20915914598542354f, 0.488075320769787f };
+  const float delta[2] DT_ALIGNED_PIXEL = { D50[0] - uvY[0], D50[1] - uvY[1] };
   const float Delta = Y * hypotf(delta[0], delta[1]);
 
   // Compress chromaticity (move toward white point)
   const float correction = (compression == 0.0f) ? 0.f : powf(Delta, compression);
-  for(size_t c = 0; c < 2; c++) xyY[c] += correction * delta[c];
+  for(size_t c = 0; c < 2; c++) uvY[c] += correction * delta[c];
+
+  // Convert back to xyY
+  dt_uvY_to_xyY(uvY, xyY);
 
   // Clip upon request
   for(size_t c = 0; c < 2; c++) xyY[c] = (clip) ? fmaxf(xyY[c], 0.0f) :  xyY[c];
@@ -443,8 +450,8 @@ static inline void auto_detect_WB(const float *const restrict in,
   float norm_surface = 0.0f;
   float XYZ_surface[4] = { 0.f };
   const float flat_chroma_mean = sqf(chroma_mean[0]) + sqf(chroma_mean[1]);
-  const float flat_chroma_var = fmaxf((chroma_std[0] + chroma_std[1]), 1e-3f);
-  luma_std = fmaxf(luma_std, 1e-3f);
+  const float flat_chroma_var = fmaxf((chroma_std[0] + chroma_std[1]), 1e-2f);
+  luma_std = fmaxf(luma_std, 1e-2f);
 
   // Compute the Laplacian
 #ifdef _OPENMP
@@ -473,10 +480,13 @@ static inline void auto_detect_WB(const float *const restrict in,
 
       const float num_elem = 1.f / (float)((height - 4 * off - 1) * (width - 4 * off - 1));
 
-      // For each pixel, edge or surface, brightest pixels get a higher vote, assuming illuminants are highlights
+      // For each pixel :
+      // pixels on sharp edges get a higher vote
+      // pixels close to the average luminance ± std get a higher vote
+      // pixels close to the average chrominance ± std get a higher vote
       const float weight_luma = expf(-sqf(central_average[2] - luma_mean) / luma_std);
       const float weight_chroma = expf(-(sqf(central_average[0]) + sqf(central_average[1]) - flat_chroma_mean) / flat_chroma_var);
-      const float weight_edge = 1.f / fmaxf(1.f - sqf(hypotf(dd[0], dd[1])), 1e-6f);
+      const float weight_edge = 1.f / fmaxf(1.f - sqf(dd[0]) - sqf(dd[1]), 1e-6f);
 
       // For surface chromaticity, cast votes of neutral pixels with higher weight
       const float weight_surface = weight_edge * weight_chroma * weight_luma * num_elem;

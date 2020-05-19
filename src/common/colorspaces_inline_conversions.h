@@ -227,6 +227,43 @@ static inline void dt_Lab_to_XYZ(const float Lab[3], float XYZ[3])
   for(int i = 0; i < 3; i++) XYZ[i] = d50[i] * lab_f_inv(f[i]);
 }
 
+
+#ifdef _OPENMP
+#pragma omp declare simd aligned(xyY, uvY:16)
+#endif
+static inline void dt_xyY_to_uvY(const float xyY[3], float uvY[3])
+{
+  // This is the linear part of the chromaticity transform from CIE L*u*v* e.g. u'v'.
+  // See https://en.wikipedia.org/wiki/CIELUV
+  // It rescales the chromaticity diagram xyY in a more perceptual way,
+  // but it is still not hue-linear and not perfectly perceptual.
+  // As such, it is the only radiometricly-accurate representation of hue non-linearity in human vision system.
+  // Use it for "hue preserving" (as much as possible) gamut mapping in scene-referred space
+  const float denominator = -2.f * xyY[0] + 12.f * xyY[1] + 3.f;
+  uvY[0] = 4.f * xyY[0] / denominator; // u'
+  uvY[1] = 9.f * xyY[1] / denominator; // v'
+  uvY[2] = xyY[2];                     // Y
+}
+
+
+#ifdef _OPENMP
+#pragma omp declare simd aligned(uvY, xyY:16)
+#endif
+static inline void dt_uvY_to_xyY(const float uvY[3], float xyY[3])
+{
+  // This is the linear part of chromaticity transform from CIE L*u*v* e.g. u'v'.
+  // See https://en.wikipedia.org/wiki/CIELUV
+  // It rescales the chromaticity diagram xyY in a more perceptual way,
+  // but it is still not hue-linear and not perfectly perceptual.
+  // As such, it is the only radiometricly-accurate representation of hue non-linearity in human vision system.
+  // Use it for "hue preserving" (as much as possible) gamut mapping in scene-referred space
+  const float denominator = 6.0f * uvY[0] - 16.f * uvY[1] + 12.0f;
+  xyY[0] = 9.f * uvY[0] / denominator; // x
+  xyY[1] = 4.f * uvY[1] / denominator; // y
+  xyY[2] = uvY[2];                     // Y
+}
+
+
 /** uses D50 white point. */
 #ifdef _OPENMP
 #pragma omp declare simd
