@@ -442,7 +442,7 @@ static inline void auto_detect_WB(const float *const restrict in,
 
   float norm_surface = 0.0f;
   float XYZ_surface[4] = { 0.f };
-  const float flat_chroma_mean = - sqf(chroma_mean[0]) - sqf(chroma_mean[1]);
+  const float flat_chroma_mean = sqf(chroma_mean[0]) + sqf(chroma_mean[1]);
   const float flat_chroma_var = (chroma_std[0] + chroma_std[1]);
 
   // Compute the Laplacian
