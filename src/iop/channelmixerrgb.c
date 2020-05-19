@@ -443,7 +443,8 @@ static inline void auto_detect_WB(const float *const restrict in,
   float norm_surface = 0.0f;
   float XYZ_surface[4] = { 0.f };
   const float flat_chroma_mean = sqf(chroma_mean[0]) + sqf(chroma_mean[1]);
-  const float flat_chroma_var = (chroma_std[0] + chroma_std[1]);
+  const float flat_chroma_var = fmaxf((chroma_std[0] + chroma_std[1]), 1e-3f);
+  luma_std = fmaxf(luma_std, 1e-3f);
 
   // Compute the Laplacian
 #ifdef _OPENMP
