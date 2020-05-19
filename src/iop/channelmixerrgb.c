@@ -440,14 +440,14 @@ static inline void auto_detect_WB(const float *const restrict in,
 
   fprintf(stdout, "luma: %f, chroma : %f, %f\n", luma_std, chroma_std[0], chroma_std[1]);
 
-  float norm_edge = 0.0f, norm_surface = 0.0f;
-  float XYZ_edge[4] = { 0.f }, XYZ_surface[4] = { 0.f };
+  float norm_surface = 0.0f;
+  float XYZ_surface[4] = { 0.f };
   const float flat_chroma_mean = - sqf(chroma_mean[0]) - sqf(chroma_mean[1]);
   const float flat_chroma_var = (chroma_std[0] + chroma_std[1]);
 
   // Compute the Laplacian
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) reduction(+:XYZ_edge, XYZ_surface) reduction(+:norm_edge, norm_surface)\
+#pragma omp parallel for simd default(none) reduction(+:XYZ_surface) reduction(+:norm_surface)\
   dt_omp_firstprivate(width, height, ch, temp, stdout, chroma_mean, luma_mean, chroma_std, luma_std, flat_chroma_mean, flat_chroma_var) \
   aligned(temp:64) \
   schedule(simd:static)
@@ -470,19 +470,15 @@ static inline void auto_detect_WB(const float *const restrict in,
         dd[c] = fminf(fmaxf(temp[SHF(0, 0, c)] - central_average[c], -1.0f), 1.0f);
       }
 
-      const size_t num_elem = (height - 4 * off - 1) * (width - 4 * off - 1);
+      const float num_elem = 1.f / (float)((height - 4 * off - 1) * (width - 4 * off - 1));
 
       // For each pixel, edge or surface, brightest pixels get a higher vote, assuming illuminants are highlights
       const float weight_luma = expf(-sqf(central_average[2] - luma_mean) / luma_std);
       const float weight_chroma = expf(-(sqf(central_average[0]) + sqf(central_average[1]) - flat_chroma_mean) / flat_chroma_var);
-
-      // For edges chromaticity, cast votes of edge pixels with higher weight
-      const float weight_edge = weight_luma / fmaxf(1.f - sqf(hypotf(dd[0], dd[1])), 1e-6f) / (float)num_elem / weight_chroma;
-      for(size_t c = 0; c < 2; c++) XYZ_edge[c] += (dd[c]) * weight_edge;
-      norm_edge += weight_edge;
+      const float weight_edge = 1.f / fmaxf(1.f - sqf(hypotf(dd[0], dd[1])), 1e-6f);
 
       // For surface chromaticity, cast votes of neutral pixels with higher weight
-      const float weight_surface = weight_chroma * weight_luma / (float)num_elem;
+      const float weight_surface = weight_edge * weight_chroma * weight_luma * num_elem;
       for(size_t c = 0; c < 2; c++) XYZ_surface[c] += (central_average[c]) * weight_surface;
       norm_surface += weight_surface;
     }
@@ -492,12 +488,10 @@ static inline void auto_detect_WB(const float *const restrict in,
 
   for(size_t c = 0; c < 2; c++)
   {
-    XYZ_edge[c] = XYZ_edge[c] / norm_edge + D50[c];
-    XYZ_surface[c] = norm * XYZ_surface[c] / norm_surface + D50[c];
-    illuminant[c] =  (2.f * XYZ_edge[c] + 4.f * XYZ_surface[c] ) / 6.f;
+    illuminant[c] = norm * XYZ_surface[c] / norm_surface + D50[c];
   }
 
-  fprintf(stdout, "X : %f, Y : %f\n", illuminant[0], illuminant[1]);
+  fprintf(stdout, "surface : X : %f, Y : %f, norm : %f\n", XYZ_surface[0], XYZ_surface[1], norm_surface);
 
   dt_free_align(temp);
 }
