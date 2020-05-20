@@ -624,8 +624,12 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       dt_bauhaus_slider_set(g->temperature, p->temperature);
       dt_bauhaus_combobox_set(g->illuminant, p->illuminant);
       dt_bauhaus_combobox_set(g->adaptation, p->adaptation);
-      dt_bauhaus_slider_set(g->illum_x, p->x);
-      dt_bauhaus_slider_set(g->illum_y, p->y);
+
+      float xyY[3] = { p->x, p->y, 1.f };
+      float Lch[3];
+      dt_xyY_to_Lch(xyY, Lch);
+      dt_bauhaus_slider_set(g->illum_x, Lch[2] / M_PI * 180.f);
+      dt_bauhaus_slider_set(g->illum_y, Lch[1] * 2.f);
 
       update_illuminants(self);
       update_approx_cct(self);
@@ -874,8 +878,12 @@ static void update_illuminants(dt_iop_module_t *self)
   {
     p->x = x;
     p->y = y;
-    dt_bauhaus_slider_set(g->illum_x, x);
-    dt_bauhaus_slider_set(g->illum_y, y);
+
+    float xyY[3] = { p->x, p->y, 1.f };
+    float Lch[3];
+    dt_xyY_to_Lch(xyY, Lch);
+    dt_bauhaus_slider_set(g->illum_x, Lch[2] / M_PI * 180.f);
+    dt_bauhaus_slider_set(g->illum_y, Lch[1] * 2.f);
   }
 
   // Display only the relevant sliders
@@ -956,7 +964,11 @@ static void update_xy_color(dt_iop_module_t *self)
     float RGB[4];
     float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
     float x = x_min + stop * x_range;
-    illuminant_xy_to_RGB(x, p->y, RGB);
+
+    const float Lch[3] = { 100.f, 50.f, x / 180.f * M_PI };
+    float xyY[3];
+    dt_Lch_to_xyY(Lch, xyY);
+    illuminant_xy_to_RGB(xyY[0], xyY[1], RGB);
     dt_bauhaus_slider_set_stop(g->illum_x, stop, RGB[0], RGB[1], RGB[2]);
   }
 
@@ -965,8 +977,20 @@ static void update_xy_color(dt_iop_module_t *self)
   {
     float RGB[4];
     float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
-    float y = y_min + stop * y_range;
-    illuminant_xy_to_RGB(p->x, y, RGB);
+    float y = (y_min + stop * y_range) / 2.0f;
+
+    // Find current hue
+    float xyY[3] = { p->x, p->y, 1.f };
+    float Lch[3];
+    dt_xyY_to_Lch(xyY, Lch);
+
+    // Replace chroma by current step
+    Lch[0] = 75.f;
+    Lch[1] = y;
+
+    // Go back to xyY
+    dt_Lch_to_xyY(Lch, xyY);
+    illuminant_xy_to_RGB(xyY[0], xyY[1], RGB);
     dt_bauhaus_slider_set_stop(g->illum_y, stop, RGB[0], RGB[1], RGB[2]);
   }
 
@@ -1255,8 +1279,12 @@ static void illuminant_callback(GtkWidget *combo, dt_iop_module_t *self)
       dt_bauhaus_slider_set(g->temperature, p->temperature);
       dt_bauhaus_combobox_set(g->illuminant, p->illuminant);
       dt_bauhaus_combobox_set(g->adaptation, p->adaptation);
-      dt_bauhaus_slider_set(g->illum_x, p->x);
-      dt_bauhaus_slider_set(g->illum_y, p->y);
+
+      float xyY[3] = { p->x, p->y, 1.f };
+      float Lch[3];
+      dt_xyY_to_Lch(xyY, Lch);
+      dt_bauhaus_slider_set(g->illum_x, Lch[2] / M_PI * 180.f);
+      dt_bauhaus_slider_set(g->illum_y, Lch[1] * 2.f);
       darktable.gui->reset = reset;
     }
     else
@@ -1351,7 +1379,17 @@ static void illum_x_callback(GtkWidget *slider, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   if(self->dt->gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
-  p->x = dt_bauhaus_slider_get(slider);
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+
+  float Lch[3];
+  Lch[0] = 100.f;
+  Lch[2] = dt_bauhaus_slider_get(g->illum_x) / 180. * M_PI;
+  Lch[1] = dt_bauhaus_slider_get(g->illum_y) / 2.f;
+
+  float xyY[3];
+  dt_Lch_to_xyY(Lch, xyY);
+  p->x = xyY[0];
+  p->y = xyY[1];
 
   const int reset = darktable.gui->reset;
   darktable.gui->reset = 1;
@@ -1367,7 +1405,17 @@ static void illum_y_callback(GtkWidget *slider, gpointer user_data)
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   if(self->dt->gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
-  p->y = dt_bauhaus_slider_get(slider);
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+
+  float Lch[3];
+  Lch[0] = 100.f;
+  Lch[2] = dt_bauhaus_slider_get(g->illum_x) / 180. * M_PI;
+  Lch[1] = dt_bauhaus_slider_get(g->illum_y) / 2.f;
+
+  float xyY[3];
+  dt_Lch_to_xyY(Lch, xyY);
+  p->x = xyY[0];
+  p->y = xyY[1];
 
   const int reset = darktable.gui->reset;
   darktable.gui->reset = 1;
@@ -1710,8 +1758,14 @@ void gui_update(struct dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->temperature, p->temperature);
   dt_bauhaus_slider_set(g->gamut, p->gamut);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->clip), p->clip);
-  dt_bauhaus_slider_set(g->illum_x, p->x);
-  dt_bauhaus_slider_set(g->illum_y, p->y);
+
+  float xyY[3] = { p->x, p->y, 1.f };
+  float Lch[3];
+  dt_xyY_to_Lch(xyY, Lch);
+
+  dt_bauhaus_slider_set(g->illum_x, Lch[2] / M_PI * 180.f);
+  dt_bauhaus_slider_set(g->illum_y, Lch[1] * 2.f);
+
   dt_bauhaus_combobox_set(g->adaptation, p->adaptation);
 
   dt_bauhaus_slider_set(g->scale_red_R, p->red[0]);
@@ -1776,7 +1830,7 @@ void init(dt_iop_module_t *module)
                                                                              { 0.f, 0.f, 0.f, 0.f },
                                                                              FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
                                                                              DT_ILLUMINANT_D, DT_ILLUMINANT_FLUO_F3, DT_ILLUMINANT_LED_B5, DT_ADAPTATION_LINEAR_BRADFORD,
-                                                                             0.33f, 0.33f, 6004.f, 1.0f, TRUE};
+                                                                             0.33f, 0.33f, 5003.f, 1.0f, TRUE};
 
   find_temperature_from_raw_coeffs(module, &(tmp.x), &(tmp.y), &(tmp.temperature), &(tmp.illuminant), &(tmp.adaptation));
   memcpy(module->params, &tmp, sizeof(dt_iop_channelmixer_rgb_params_t));
@@ -1793,7 +1847,7 @@ void reload_defaults(dt_iop_module_t *module)
                                                                              { 0.f, 0.f, 0.f, 0.f },
                                                                              FALSE, FALSE, FALSE, FALSE, FALSE, FALSE,
                                                                              DT_ILLUMINANT_D, DT_ILLUMINANT_FLUO_F3, DT_ILLUMINANT_LED_B5, DT_ADAPTATION_LINEAR_BRADFORD,
-                                                                             0.33f, 0.33f, 6004.f, 1.0f, TRUE};
+                                                                             0.33f, 0.33f, 5003.f, 1.0f, TRUE};
 
   find_temperature_from_raw_coeffs(module, &(tmp.x), &(tmp.y), &(tmp.temperature), &(tmp.illuminant), &(tmp.adaptation));
   if(module->gui_data)
@@ -1953,13 +2007,19 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->temperature), "value-changed", G_CALLBACK(temperature_callback), self);
   gtk_box_pack_start(GTK_BOX(page0), GTK_WIDGET(g->temperature), FALSE, FALSE, 0);
 
-  g->illum_x = dt_bauhaus_slider_new_with_range(self, 0., 0.5, 0.005, p->x, 4);
-  dt_bauhaus_widget_set_label(g->illum_x, NULL, _("x"));
+  float xyY[3] = { p->x, p->y, 1.f };
+  float Lch[3];
+  dt_xyY_to_Lch(xyY, Lch);
+
+  g->illum_x = dt_bauhaus_slider_new_with_range(self, 0., 360., 0.5, Lch[2] / M_2_PI * 360., 1);
+  dt_bauhaus_widget_set_label(g->illum_x, NULL, _("hue"));
+  dt_bauhaus_slider_set_format(g->illum_x, "%.1f °");
   g_signal_connect(G_OBJECT(g->illum_x), "value-changed", G_CALLBACK(illum_x_callback), self);
   gtk_box_pack_start(GTK_BOX(page0), GTK_WIDGET(g->illum_x), FALSE, FALSE, 0);
 
-  g->illum_y = dt_bauhaus_slider_new_with_range(self, 0., 0.5, 0.005, p->y, 4);
-  dt_bauhaus_widget_set_label(g->illum_y, NULL, _("y"));
+  g->illum_y = dt_bauhaus_slider_new_with_range(self, 0., 50., 0.5, Lch[1], 1);
+  dt_bauhaus_widget_set_label(g->illum_y, NULL, _("chroma"));
+  dt_bauhaus_slider_set_format(g->illum_y, "%.1f %%");
   g_signal_connect(G_OBJECT(g->illum_y), "value-changed", G_CALLBACK(illum_y_callback), self);
   gtk_box_pack_start(GTK_BOX(page0), GTK_WIDGET(g->illum_y), FALSE, FALSE, 0);
 
