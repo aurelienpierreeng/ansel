@@ -219,7 +219,7 @@ static inline void gamut_mapping(const float input[4], const float compression, 
   dt_uvY_to_xyY(uvY, xyY);
 
   // Clip upon request
-  for(size_t c = 0; c < 2; c++) xyY[c] = (clip) ? fmaxf(xyY[c], 0.0f) :  xyY[c];
+  for(size_t c = 0; c < 2; c++) xyY[c] = fmaxf(xyY[c], 0.0f);
 
   // Check sanity of x and y :
   // since Z = Y (1 - x - y) / y, if x + y >= 1, Z will be negative
@@ -257,13 +257,9 @@ static inline void luma_chroma(const float input[4], const float saturation[4], 
     // Adjust the RGB ratios with the pixel correction
     for(size_t c = 0; c < 3; c++) output[c] += (1.0f - output[c]) * coeff_ratio;
 
-    // Sanitize negative ratios
-    const float min_ratio = fminf(fminf(output[0], output[1]), output[2]);
-    const float ratio_correct = (min_ratio < 0.f) ? - min_ratio : 0.f;
-
     // Apply colorfulness adjustment channel-wise and repack with lightness to get LMS back
     norm *= fmaxf(1.f + mix / avg, 0.f);
-    for(size_t c = 0; c < 3; c++) output[c] = fmaxf((output[c] + ratio_correct), 0.f) * norm;
+    for(size_t c = 0; c < 3; c++) output[c] = fmaxf(output[c], 0.f) * norm;
 }
 
 
@@ -328,6 +324,9 @@ static inline void loop_switch(const float *const restrict in, float *const rest
         gamut_mapping(temp_one, gamut, clip, temp_two);
       downscale_vector(temp_two, Y);
     convert_any_XYZ_to_LMS(temp_two, temp_one, kind);
+
+    // Clip in LMS
+    for(size_t c = 0; c < 3; c++) temp_one[c] = fmaxf(temp_one[c], 0.0f);
 
     // Apply lightness / saturation adjustment
     luma_chroma(temp_one, saturation, lightness, temp_two);
