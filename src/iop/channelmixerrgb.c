@@ -152,6 +152,15 @@ static inline float sqf(const float x)
 
 
 #ifdef _OPENMP
+#pragma omp declare simd
+#endif
+static inline float clamp_simd(const float x)
+{
+  return fminf(fmaxf(x, 0.0f), 1.0f);
+}
+
+
+#ifdef _OPENMP
 #pragma omp declare simd aligned(vector:16)
 #endif
 static inline float euclidean_norm(const float vector[4])
@@ -183,9 +192,9 @@ static inline void upscale_vector(float vector[4], const float scaling)
   static const float eps = 1e-6f;
   const int valid = (scaling < eps) && !isnan(scaling);
 
-  vector[0] = (valid) ? vector[0] * (scaling - eps) : vector[0] * eps;
-  vector[1] = (valid) ? vector[1] * (scaling - eps) : vector[1] * eps;
-  vector[2] = (valid) ? vector[2] * (scaling - eps) : vector[2] * eps;
+  vector[0] = (valid) ? vector[0] * (scaling + eps) : vector[0] * eps;
+  vector[1] = (valid) ? vector[1] * (scaling + eps) : vector[1] * eps;
+  vector[2] = (valid) ? vector[2] * (scaling + eps) : vector[2] * eps;
 }
 
 
@@ -219,7 +228,7 @@ static inline void gamut_mapping(const float input[4], const float compression, 
   dt_uvY_to_xyY(uvY, xyY);
 
   // Clip upon request
-  for(size_t c = 0; c < 2; c++) xyY[c] = fmaxf(xyY[c], 0.0f);
+  for(size_t c = 0; c < 2; c++) xyY[c] = (clip) ? fmaxf(xyY[c], 0.0f) : xyY[c];
 
   // Check sanity of x and y :
   // since Z = Y (1 - x - y) / y, if x + y >= 1, Z will be negative
@@ -255,11 +264,17 @@ static inline void luma_chroma(const float input[4], const float saturation[4], 
     coeff_ratio /= 3.f;
 
     // Adjust the RGB ratios with the pixel correction
-    for(size_t c = 0; c < 3; c++) output[c] += (1.0f - output[c]) * coeff_ratio;
+    for(size_t c = 0; c < 3; c++)
+    {
+      // if the ratio was already invalid (negative), we accept the result to be invalid too
+      // otherwise bright saturated blues end up solid black
+      const float min_ratio = (output[c] < 0.0f) ? output[c] : 0.0f;
+      output[c] = fmaxf(output[c] + (1.0f - output[c]) * coeff_ratio, min_ratio);
+    }
 
     // Apply colorfulness adjustment channel-wise and repack with lightness to get LMS back
     norm *= fmaxf(1.f + mix / avg, 0.f);
-    for(size_t c = 0; c < 3; c++) output[c] = fmaxf(output[c], 0.f) * norm;
+    for(size_t c = 0; c < 3; c++) output[c] *= norm;
 }
 
 
@@ -326,7 +341,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
     convert_any_XYZ_to_LMS(temp_two, temp_one, kind);
 
     // Clip in LMS
-    for(size_t c = 0; c < 3; c++) temp_one[c] = fmaxf(temp_one[c], 0.0f);
+    for(size_t c = 0; c < 3; c++) temp_one[c] = (clip) ? fmaxf(temp_one[c], 0.0f) : temp_one[c];
 
     // Apply lightness / saturation adjustment
     luma_chroma(temp_one, saturation, lightness, temp_two);
@@ -336,13 +351,17 @@ static inline void loop_switch(const float *const restrict in, float *const rest
 
     // Convert back LMS to XYZ to RGB
     convert_any_LMS_to_XYZ(temp_two, temp_one, kind);
+
+    // Clip in XYZ
+    for(size_t c = 0; c < 3; c++) temp_one[c] = (clip) ? fmaxf(temp_one[c], 0.0f) : temp_one[c];
+
     upscale_vector(temp_one, Y);
     dot_product(temp_one, XYZ_to_RGB, temp_two);
 
     // Save
-    out[k]     = (apply_grey) ? grey_mix : fmaxf(temp_two[0], 0.0f);
-    out[k + 1] = (apply_grey) ? grey_mix : fmaxf(temp_two[1], 0.0f);
-    out[k + 2] = (apply_grey) ? grey_mix : fmaxf(temp_two[2], 0.0f);
+    out[k]     = (apply_grey) ? grey_mix : (clip) ? fmaxf(temp_two[0], 0.0f) : temp_two[0];
+    out[k + 1] = (apply_grey) ? grey_mix : (clip) ? fmaxf(temp_two[1], 0.0f) : temp_two[1];
+    out[k + 2] = (apply_grey) ? grey_mix : (clip) ? fmaxf(temp_two[2], 0.0f) : temp_two[2];
     out[k + 3] = in[k + 3]; // alpha mask
   }
 }
