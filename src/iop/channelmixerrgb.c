@@ -20,7 +20,6 @@
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
-#include "external/adobe_coeff.c"
 #include "dtgtk/drawingarea.h"
 #include "common/chromatic_adaptation.h"
 #include "common/colorspaces_inline_conversions.h"
@@ -562,7 +561,12 @@ static void check_if_close_to_daylight(const float x, const float y, float *temp
    */
 
   // Get the correlated color temperature
-  *temperature = xy_to_CCT(x, y);
+  float t = xy_to_CCT(x, y);
+
+  // xy_to_CCT is valid only in 3000 - 25000 K. We need another model below
+  if(t < 3000.f) t = CCT_reverse_lookup(x, y);
+
+  if(temperature) *temperature = t;
 
   // Convert to CIE 1960 Yuv space
   float xy_ref[2] = { x, y };
@@ -573,28 +577,32 @@ static void check_if_close_to_daylight(const float x, const float y, float *temp
   float uv_test[2];
 
   // Compute the test chromaticity from the daylight model
-  illuminant_to_xy(DT_ILLUMINANT_D, &xy_test[0], &xy_test[1], *temperature, DT_ILLUMINANT_FLUO_LAST, DT_ILLUMINANT_LED_LAST);
+  illuminant_to_xy(DT_ILLUMINANT_D, NULL, &xy_test[0], &xy_test[1], t, DT_ILLUMINANT_FLUO_LAST, DT_ILLUMINANT_LED_LAST);
   xy_to_uv(xy_test, uv_test);
   const float delta_daylight = hypotf((uv_test[0] - uv_ref[0]), (uv_test[1] - uv_ref[1]));
 
   // Compute the test chromaticity from the blackbody model
-  illuminant_to_xy(DT_ILLUMINANT_BB, &xy_test[0], &xy_test[1], *temperature, DT_ILLUMINANT_FLUO_LAST, DT_ILLUMINANT_LED_LAST);
+  illuminant_to_xy(DT_ILLUMINANT_BB, NULL, &xy_test[0], &xy_test[1], t, DT_ILLUMINANT_FLUO_LAST, DT_ILLUMINANT_LED_LAST);
   const float delta_bb = hypotf((uv_test[0] - uv_ref[0]), (uv_test[1] - uv_ref[1]));
+  fprintf(stdout, "daylight : %f, black body : %f\n", delta_daylight, delta_bb);
 
   // Check the error between original and test chromaticity
   if(delta_bb < 0.005f || delta_daylight < 0.005f)
   {
-    *adaptation = DT_ADAPTATION_LINEAR_BRADFORD; // Bradford is more accurate for daylight
+    if(adaptation) *adaptation = DT_ADAPTATION_LINEAR_BRADFORD; // Bradford is more accurate for daylight
 
-    if(delta_bb < delta_daylight)
-      *illuminant = DT_ILLUMINANT_BB;
-    else
-      *illuminant = DT_ILLUMINANT_D;
+    if(illuminant)
+    {
+      if(delta_bb < delta_daylight)
+        *illuminant = DT_ILLUMINANT_BB;
+      else
+        *illuminant = DT_ILLUMINANT_D;
+    }
   }
   else
   {
-    *illuminant = DT_ILLUMINANT_CUSTOM;
-    *adaptation = DT_ADAPTATION_CAT16; // CAT16 is less accurate but more robust for non-daylight
+    if(illuminant) *illuminant = DT_ILLUMINANT_CUSTOM;
+    if(adaptation) *adaptation = DT_ADAPTATION_CAT16; // CAT16 is less accurate but more robust for non-daylight
   }
 }
 
@@ -647,7 +655,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       float Lch[3];
       dt_xyY_to_Lch(xyY, Lch);
       dt_bauhaus_slider_set(g->illum_x, Lch[2] / M_PI * 180.f);
-      dt_bauhaus_slider_set(g->illum_y, Lch[1] * 2.f);
+      dt_bauhaus_slider_set(g->illum_y, Lch[1]);
 
       update_illuminants(self);
       update_approx_cct(self);
@@ -660,6 +668,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       dt_control_log(_("auto-detection of white balance completed"));
 
       dt_dev_add_history_item(darktable.develop, self, TRUE);
+      return;
     }
   }
 
@@ -749,7 +758,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // find x y coordinates of illuminant for CIE 1931 2° observer
   float x = p->x;
   float y = p->y;
-  illuminant_to_xy(p->illuminant, &x, &y, p->temperature, p->illum_fluo, p->illum_led);
+  illuminant_to_xy(p->illuminant, &(self->dev->image_storage), &x, &y, p->temperature, p->illum_fluo, p->illum_led);
+
+  // if illuminant is set as camera, x and y are set on-the-fly at commit time, so we need to set adaptation too
+  if(p->illuminant == DT_ILLUMINANT_CAMERA)
+    check_if_close_to_daylight(x, y, NULL, NULL, &(d->adaptation));
 
   // Convert illuminant from xyY to XYZ
   float XYZ[3];
@@ -770,90 +783,6 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->p = powf(d->illuminant[2] / 0.818155f, 0.0834f);
 }
 
-
-static inline void dt_colorspaces_pseudoinverse(float (*in)[3], float (*out)[3], int size)
-{
-  float work[3][6];
-
-  for(int i = 0; i < 3; i++)
-  {
-    for(int j = 0; j < 6; j++)
-      work[i][j] = j == i+3;
-    for(int j = 0; j < 3; j++)
-      for(int k = 0; k < size; k++)
-        work[i][j] += in[k][i] * in[k][j];
-  }
-  for(int i = 0; i < 3; i++)
-  {
-    float num = work[i][i];
-    for(int j = 0; j < 6; j++)
-      work[i][j] /= num;
-    for(int k = 0; k < 3; k++)
-    {
-      if(k==i) continue;
-      num = work[k][i];
-      for(int j = 0; j < 6; j++)
-        work[k][j] -= work[i][j] * num;
-    }
-  }
-  for(int i = 0; i < size; i++)
-    for(int j = 0; j < 3; j++)
-    {
-      out[i][j] = 0.0f;
-      for(int k = 0; k < 3; k++)
-        out[i][j] += work[j][k+3] * in[i][k];
-    }
-}
-
-
-static int find_temperature_from_raw_coeffs(dt_iop_module_t *self, float *chroma_x, float *chroma_y,float *temperature,
-                                            dt_illuminant_t *illuminant, dt_adaptation_t *adaptation)
-{
-  const dt_image_t *img = &self->dev->image_storage;
-  const int is_raw = dt_image_is_matrix_correction_supported(img);
-
-  if(is_raw)
-  {
-    int has_valid_coeffs = TRUE;
-    const int num_coeffs = (img->flags & DT_IMAGE_4BAYER) ? 4 : 3;
-
-    // Check coeffs
-    for(int k = 0; has_valid_coeffs && k < num_coeffs; k++)
-      if(!isnormal(img->wb_coeffs[k]) || img->wb_coeffs[k] == 0.0f) has_valid_coeffs = FALSE;
-
-    if(has_valid_coeffs)
-    {
-      // Get white balance camera factors
-      float WB[4] = { img->wb_coeffs[0],
-                      img->wb_coeffs[1],
-                      img->wb_coeffs[2],
-                      img->wb_coeffs[3] };
-
-      // Get the camera input profile (matrice of primaries)
-      float XYZ_to_CAM[4][3];
-      XYZ_to_CAM[0][0] = NAN;
-      dt_dcraw_adobe_coeff(self->dev->image_storage.camera_makermodel, (float(*)[12])XYZ_to_CAM);
-
-      if(isnan(XYZ_to_CAM[0][0])) return FALSE;
-
-      // Bloody input matrices define XYZ -> CAM transform, as if we often needed camera profiles to output
-      // So we need to invert them. Here go your CPU cycles again.
-      float CAM_to_XYZ[4][3];
-      CAM_to_XYZ[0][0] = NAN;
-      dt_colorspaces_pseudoinverse(XYZ_to_CAM, CAM_to_XYZ, 3);
-      if(isnan(CAM_to_XYZ[0][0])) return FALSE;
-
-      float x, y;
-      WB_coeffs_to_illuminant_xy(CAM_to_XYZ, WB, &x, &y);
-      *chroma_x = x;
-      *chroma_y = y;
-      check_if_close_to_daylight(x, y, temperature, illuminant, adaptation);
-
-      return TRUE;
-    }
-  }
-  return FALSE;
-}
 
 static void update_illuminants(dt_iop_module_t *self)
 {
@@ -890,7 +819,7 @@ static void update_illuminants(dt_iop_module_t *self)
   float x = p->x;
   float y = p->y;
 
-  int changed = illuminant_to_xy(p->illuminant, &x, &y, p->temperature, p->illum_fluo, p->illum_led);
+  int changed = illuminant_to_xy(p->illuminant, NULL, &x, &y, p->temperature, p->illum_fluo, p->illum_led);
 
   if(changed)
   {
@@ -901,7 +830,7 @@ static void update_illuminants(dt_iop_module_t *self)
     float Lch[3];
     dt_xyY_to_Lch(xyY, Lch);
     dt_bauhaus_slider_set(g->illum_x, Lch[2] / M_PI * 180.f);
-    dt_bauhaus_slider_set(g->illum_y, Lch[1] * 2.f);
+    dt_bauhaus_slider_set(g->illum_y, Lch[1]);
   }
 
   // Display only the relevant sliders
@@ -911,6 +840,7 @@ static void update_illuminants(dt_iop_module_t *self)
     case DT_ILLUMINANT_A:
     case DT_ILLUMINANT_E:
     {
+      gtk_widget_set_visible(g->adaptation, TRUE);
       gtk_widget_set_visible(g->temperature, FALSE);
       gtk_widget_set_visible(g->illum_fluo, FALSE);
       gtk_widget_set_visible(g->illum_led, FALSE);
@@ -921,6 +851,7 @@ static void update_illuminants(dt_iop_module_t *self)
     case DT_ILLUMINANT_D:
     case DT_ILLUMINANT_BB:
     {
+      gtk_widget_set_visible(g->adaptation, TRUE);
       gtk_widget_set_visible(g->temperature, TRUE);
       gtk_widget_set_visible(g->illum_fluo, FALSE);
       gtk_widget_set_visible(g->illum_led, FALSE);
@@ -930,6 +861,7 @@ static void update_illuminants(dt_iop_module_t *self)
     }
     case DT_ILLUMINANT_F:
     {
+      gtk_widget_set_visible(g->adaptation, TRUE);
       gtk_widget_set_visible(g->temperature, FALSE);
       gtk_widget_set_visible(g->illum_fluo, TRUE);
       gtk_widget_set_visible(g->illum_led, FALSE);
@@ -939,6 +871,7 @@ static void update_illuminants(dt_iop_module_t *self)
     }
     case DT_ILLUMINANT_LED:
     {
+      gtk_widget_set_visible(g->adaptation, TRUE);
       gtk_widget_set_visible(g->temperature, FALSE);
       gtk_widget_set_visible(g->illum_fluo, FALSE);
       gtk_widget_set_visible(g->illum_led, TRUE);
@@ -948,11 +881,23 @@ static void update_illuminants(dt_iop_module_t *self)
     }
     case DT_ILLUMINANT_CUSTOM:
     {
+      gtk_widget_set_visible(g->adaptation, TRUE);
       gtk_widget_set_visible(g->temperature, FALSE);
       gtk_widget_set_visible(g->illum_fluo, FALSE);
       gtk_widget_set_visible(g->illum_led, FALSE);
       gtk_widget_set_visible(g->illum_x, TRUE);
       gtk_widget_set_visible(g->illum_y, TRUE);
+      break;
+    }
+    case DT_ILLUMINANT_CAMERA:
+    case DT_ILLUMINANT_DETECT:
+    {
+      gtk_widget_set_visible(g->adaptation, FALSE);
+      gtk_widget_set_visible(g->temperature, FALSE);
+      gtk_widget_set_visible(g->illum_fluo, FALSE);
+      gtk_widget_set_visible(g->illum_led, FALSE);
+      gtk_widget_set_visible(g->illum_x, FALSE);
+      gtk_widget_set_visible(g->illum_y, FALSE);
       break;
     }
     case DT_ILLUMINANT_LAST:
@@ -1242,9 +1187,12 @@ static gboolean illuminant_color_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   width -= 2. * DT_PIXEL_APPLY_DPI(darktable.bauhaus->quad_width) + INNER_PADDING;
   height -= 2 * margin;
 
-  // Paint illuminant color
+  // Paint illuminant color - we need to recompute it in full in case camera RAW is choosen
   float RGB[4];
-  illuminant_xy_to_RGB(p->x, p->y, RGB);
+  float x = p->x;
+  float y = p->y;
+  illuminant_to_xy(p->illuminant, &(self->dev->image_storage), &x, &y, p->temperature, p->illum_fluo, p->illum_led);
+  illuminant_xy_to_RGB(x, y, RGB);
   cairo_set_source_rgb(cr, RGB[0], RGB[1], RGB[2]);
   cairo_rectangle(cr, 0, 0, width, height);
   cairo_fill(cr);
@@ -1264,10 +1212,28 @@ static void update_approx_cct(dt_iop_module_t *self)
 {
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
-  const float t = xy_to_CCT(p->x, p->y);
+
+  float x = p->x;
+  float y = p->y;
+  illuminant_to_xy(p->illuminant, &(self->dev->image_storage), &x, &y, p->temperature, p->illum_fluo, p->illum_led);
+
+  dt_illuminant_t test_illuminant;
+  check_if_close_to_daylight(x, y, NULL, &test_illuminant, NULL);
+
+  float t = xy_to_CCT(x, y);
+  // xy_to_CCT is valid only above 3000 K
+  if(t < 3000.f) t = CCT_reverse_lookup(x, y);
+
   gchar *str;
   if(t >= 1667.f && t < 25000.f)
-    str = g_strdup_printf(_("CCT: %.0f K"), t);
+  {
+    if(test_illuminant == DT_ILLUMINANT_D)
+      str = g_strdup_printf(_("CCT: %.0f K (daylight)"), t);
+    else if(test_illuminant == DT_ILLUMINANT_BB)
+      str = g_strdup_printf(_("CCT: %.0f K (black body)"), t);
+    else
+      str = g_strdup_printf(_("CCT: %.0f K (invalid)"), t);
+  }
   else
     str = g_strdup_printf(_("CCT: undefined"));
   gtk_label_set_text(GTK_LABEL(g->approx_cct), str);
@@ -1282,35 +1248,43 @@ static void illuminant_callback(GtkWidget *combo, dt_iop_module_t *self)
 
   p->illuminant = dt_bauhaus_combobox_get(combo);
 
-  if(p->illuminant == DT_ILLUMINANT_LAST + 1)
+  if(p->illuminant == DT_ILLUMINANT_CAMERA)
   {
-    // Get camera WB
-    int found = find_temperature_from_raw_coeffs(self, &(p->x), &(p->y), &(p->temperature), &(p->illuminant), &(p->adaptation));
+    // if DT_ILLUMINANT_CAMERA was already selected, we switch to the closest match between the daylight or custom
+
+    // Get camera WB and update illuminant
+    const float x = p->x;
+    const float y = p->y;
+    int found = find_temperature_from_raw_coeffs(&(self->dev->image_storage), &(p->x), &(p->y));
 
     if(found)
     {
-      dt_control_log(_("white balance successfuly extracted from raw image"));
+      if(x == p->x && y == p->y)
+      {
+        // Parameters did not change, assume user wants to edit auto-set params and display controls
+        dt_control_log(_("white balance successfuly extracted from raw image"));
 
-      // find_temperature either set illuminant to custom or D, so update the combobox
-      const int reset = darktable.gui->reset;
-      darktable.gui->reset = 1;
-      dt_bauhaus_slider_set(g->temperature, p->temperature);
-      dt_bauhaus_combobox_set(g->illuminant, p->illuminant);
-      dt_bauhaus_combobox_set(g->adaptation, p->adaptation);
+        check_if_close_to_daylight(p->x, p->y, &(p->temperature), NULL, &(p->adaptation));
 
-      float xyY[3] = { p->x, p->y, 1.f };
-      float Lch[3];
-      dt_xyY_to_Lch(xyY, Lch);
-      dt_bauhaus_slider_set(g->illum_x, Lch[2] / M_PI * 180.f);
-      dt_bauhaus_slider_set(g->illum_y, Lch[1] * 2.f);
-      darktable.gui->reset = reset;
+        float xyY[3] = { p->x, p->y, 1.f };
+        float Lch[3];
+        dt_xyY_to_Lch(xyY, Lch);
+
+        const int reset = darktable.gui->reset;
+        darktable.gui->reset = 1;
+        dt_bauhaus_slider_set(g->temperature, p->temperature);
+        dt_bauhaus_combobox_set(g->adaptation, p->adaptation);
+        dt_bauhaus_slider_set(g->illum_x, Lch[2] / M_PI * 180.f);
+        dt_bauhaus_slider_set(g->illum_y, Lch[1]);
+        darktable.gui->reset = reset;
+      }
     }
     else
     {
       dt_control_log(_("no white balance was found in raw image"));
     }
   }
-  else if(p->illuminant == DT_ILLUMINANT_LAST)
+  else if(p->illuminant == DT_ILLUMINANT_DETECT)
   {
     // Get image WB
     const int reset = darktable.gui->reset;
@@ -1320,8 +1294,6 @@ static void illuminant_callback(GtkWidget *combo, dt_iop_module_t *self)
 
     // We need to recompute only the thumbnail
     dt_control_log(_("auto-detection of white balance started…"));
-    dt_dev_add_history_item(darktable.develop, self, TRUE);
-    return;
   }
 
   const int reset = darktable.gui->reset;
@@ -1402,15 +1374,21 @@ static void illum_x_callback(GtkWidget *slider, gpointer user_data)
   float Lch[3];
   Lch[0] = 100.f;
   Lch[2] = dt_bauhaus_slider_get(g->illum_x) / 180. * M_PI;
-  Lch[1] = dt_bauhaus_slider_get(g->illum_y) / 2.f;
+  Lch[1] = dt_bauhaus_slider_get(g->illum_y);
 
   float xyY[3];
   dt_Lch_to_xyY(Lch, xyY);
   p->x = xyY[0];
   p->y = xyY[1];
 
+  float t = xy_to_CCT(p->x, p->y);
+  // xy_to_CCT is valid only above 3000 K
+  if(t < 3000.f) t = CCT_reverse_lookup(p->x, p->y);
+  p->temperature = t;
+
   const int reset = darktable.gui->reset;
   darktable.gui->reset = 1;
+  dt_bauhaus_slider_set(g->temperature, p->temperature);
   update_approx_cct(self);
   update_illuminant_color(self);
   darktable.gui->reset = reset;
@@ -1428,15 +1406,21 @@ static void illum_y_callback(GtkWidget *slider, gpointer user_data)
   float Lch[3];
   Lch[0] = 100.f;
   Lch[2] = dt_bauhaus_slider_get(g->illum_x) / 180. * M_PI;
-  Lch[1] = dt_bauhaus_slider_get(g->illum_y) / 2.f;
+  Lch[1] = dt_bauhaus_slider_get(g->illum_y);
 
   float xyY[3];
   dt_Lch_to_xyY(Lch, xyY);
   p->x = xyY[0];
   p->y = xyY[1];
 
+  float t = xy_to_CCT(p->x, p->y);
+  // xy_to_CCT is valid only above 3000 K
+  if(t < 3000.f) t = CCT_reverse_lookup(p->x, p->y);
+  p->temperature = t;
+
   const int reset = darktable.gui->reset;
   darktable.gui->reset = 1;
+  dt_bauhaus_slider_set(g->temperature, p->temperature);
   update_approx_cct(self);
   update_illuminant_color(self);
   darktable.gui->reset = reset;
@@ -1782,7 +1766,7 @@ void gui_update(struct dt_iop_module_t *self)
   dt_xyY_to_Lch(xyY, Lch);
 
   dt_bauhaus_slider_set(g->illum_x, Lch[2] / M_PI * 180.f);
-  dt_bauhaus_slider_set(g->illum_y, Lch[1] * 2.f);
+  dt_bauhaus_slider_set(g->illum_y, Lch[1]);
 
   dt_bauhaus_combobox_set(g->adaptation, p->adaptation);
 
@@ -1850,7 +1834,8 @@ void init(dt_iop_module_t *module)
                                                                              DT_ILLUMINANT_D, DT_ILLUMINANT_FLUO_F3, DT_ILLUMINANT_LED_B5, DT_ADAPTATION_LINEAR_BRADFORD,
                                                                              0.33f, 0.33f, 5003.f, 1.0f, TRUE};
 
-  find_temperature_from_raw_coeffs(module, &(tmp.x), &(tmp.y), &(tmp.temperature), &(tmp.illuminant), &(tmp.adaptation));
+  find_temperature_from_raw_coeffs(&(module->dev->image_storage), &(tmp.x), &(tmp.y));
+  check_if_close_to_daylight(tmp.x, tmp.y, &(tmp.temperature), &(tmp.illuminant), &(tmp.adaptation));
   memcpy(module->params, &tmp, sizeof(dt_iop_channelmixer_rgb_params_t));
   memcpy(module->default_params, &tmp, sizeof(dt_iop_channelmixer_rgb_params_t));
 }
@@ -1867,7 +1852,9 @@ void reload_defaults(dt_iop_module_t *module)
                                                                              DT_ILLUMINANT_D, DT_ILLUMINANT_FLUO_F3, DT_ILLUMINANT_LED_B5, DT_ADAPTATION_LINEAR_BRADFORD,
                                                                              0.33f, 0.33f, 5003.f, 1.0f, TRUE};
 
-  find_temperature_from_raw_coeffs(module, &(tmp.x), &(tmp.y), &(tmp.temperature), &(tmp.illuminant), &(tmp.adaptation));
+  find_temperature_from_raw_coeffs(&(module->dev->image_storage), &(tmp.x), &(tmp.y));
+  check_if_close_to_daylight(tmp.x, tmp.y, &(tmp.temperature), &(tmp.illuminant), &(tmp.adaptation));
+
   if(module->gui_data)
     update_illuminants(module);
 
@@ -1922,7 +1909,7 @@ void gui_init(struct dt_iop_module_t *self)
   dt_bauhaus_combobox_add(g->adaptation, _("linear Bradford (ICC v4)"));
   dt_bauhaus_combobox_add(g->adaptation, _("CAT16 (CIECAM16)"));
   dt_bauhaus_combobox_add(g->adaptation, _("original Bradford"));
-  dt_bauhaus_combobox_add(g->adaptation, _("none"));
+  dt_bauhaus_combobox_add(g->adaptation, _("XYZ (none)"));
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->adaptation), _("choose the method to adapt the illuminant: \n"
                                                            "• Bradford (1985) is more accurate for illuminants close to daylight\n"
                                                            "but can push colors out of the gamut for difficult illuminants.\n"
@@ -1957,7 +1944,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->illuminant = dt_bauhaus_combobox_new(self);
   dt_bauhaus_widget_set_label(g->illuminant, NULL, _("illuminant"));
-  dt_bauhaus_combobox_add(g->illuminant, _("same as pipeline (D65)"));
+  dt_bauhaus_combobox_add(g->illuminant, _("same as pipeline (D50)"));
   dt_bauhaus_combobox_add(g->illuminant, _("A (incandescent)"));
   dt_bauhaus_combobox_add(g->illuminant, _("D (daylight)"));
   dt_bauhaus_combobox_add(g->illuminant, _("E (equi-energy)"));
