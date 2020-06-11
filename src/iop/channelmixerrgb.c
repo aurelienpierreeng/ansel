@@ -345,9 +345,6 @@ static inline void loop_switch(const float *const restrict in, float *const rest
     // Apply lightness / saturation adjustment
     luma_chroma(temp_one, saturation, lightness, temp_two);
 
-    // Turn RGB into monochrome
-    const float grey_mix = Y * fmaxf(scalar_product(temp_two, grey), 0.0f);
-
     // Convert back LMS to XYZ to RGB
     convert_any_LMS_to_XYZ(temp_two, temp_one, kind);
 
@@ -355,6 +352,10 @@ static inline void loop_switch(const float *const restrict in, float *const rest
     for(size_t c = 0; c < 3; c++) temp_one[c] = (clip) ? fmaxf(temp_one[c], 0.0f) : temp_one[c];
 
     upscale_vector(temp_one, Y);
+
+    // Turn RGB into monochrome
+    const float grey_mix = fmaxf(scalar_product(temp_one, grey), 0.0f);
+
     dot_product(temp_one, XYZ_to_RGB, temp_two);
 
     // Save
