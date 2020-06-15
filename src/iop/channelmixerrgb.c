@@ -473,8 +473,8 @@ static inline void auto_detect_WB(const float *const restrict in,
 
   // Compute the Laplacian
 #ifdef _OPENMP
-#pragma omp parallel for simd default(none) reduction(+:XYZ_surface) reduction(+:norm_surface)\
-  dt_omp_firstprivate(width, height, ch, temp, stdout, chroma_mean, luma_mean, chroma_std, luma_std, flat_chroma_mean, flat_chroma_var) \
+#pragma omp parallel for simd default(none) reduction(+:XYZ_surface) reduction(+:norm_surface) \
+  dt_omp_firstprivate(width, height, ch, temp, chroma_mean, luma_mean, chroma_std, luma_std, flat_chroma_mean, flat_chroma_var) \
   aligned(temp:64) \
   schedule(simd:static)
 #endif
