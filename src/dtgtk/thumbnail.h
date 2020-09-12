@@ -87,6 +87,7 @@ typedef struct
   gboolean img_surf_preview; // if TRUE, the image is originated from preview pipe
   gboolean img_surf_dirty;   // if TRUE, we need to recreate the surface on next drawing code
 
+  GtkWidget *w_cursor;    // GtkDrawingArea -- triangle to show current image(s) in filmstrip
   GtkWidget *w_bottom_eb; // GtkEventBox -- background of the bottom infos area (contains w_bottom)
   GtkWidget *w_bottom;    // GtkLabel -- text of the bottom infos area, just with #thumb_bottom_ext
   GtkWidget *w_reject;    // GtkDarktableThumbnailBtn -- Reject icon
@@ -108,10 +109,12 @@ typedef struct
   dt_thumbnail_selection_mode_t sel_mode; // do we allow to change selection with mouse ?
   gboolean single_click;                  // do we activate on single or double click ?
   gboolean disable_mouseover;             // do we allow to change mouseoverid by mouse move
+  gboolean disable_actions;               // do we allow to change rating/etc...
 
   dt_thumbnail_overlay_t over;  // type of overlays
   int overlay_timeout_duration; // for hover_block overlay, we hide the it after a delay
   int overlay_timeout_id;       // id of the g_source timeout fct
+  gboolean tooltip;             // should we show the tooltip ?
 
   // specific for culling and preview
   gboolean zoomable;   // can we zoom in/out the thumbnail (used for culling/preview)
@@ -129,7 +132,8 @@ typedef struct
   gboolean display_focus; // do we display rectangles to show focused part of the image
 } dt_thumbnail_t;
 
-dt_thumbnail_t *dt_thumbnail_new(int width, int height, int imgid, int rowid, dt_thumbnail_overlay_t over, gboolean zoomable);
+dt_thumbnail_t *dt_thumbnail_new(int width, int height, int imgid, int rowid, dt_thumbnail_overlay_t over,
+                                 gboolean zoomable, gboolean tooltip);
 void dt_thumbnail_destroy(dt_thumbnail_t *thumb);
 GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb);
 void dt_thumbnail_resize(dt_thumbnail_t *thumb, int width, int height, gboolean force);
@@ -147,7 +151,7 @@ void dt_thumbnail_update_infos(dt_thumbnail_t *thumb);
 void dt_thumbnail_image_refresh(dt_thumbnail_t *thumb);
 
 // do we need to display simple overlays or extended ?
-void dt_thumbnail_set_overlay(dt_thumbnail_t *thumb, dt_thumbnail_overlay_t over);
+void dt_thumbnail_set_overlay(dt_thumbnail_t *thumb, dt_thumbnail_overlay_t over, int timeout);
 
 // force reloading image infos
 void dt_thumbnail_reload_infos(dt_thumbnail_t *thumb);

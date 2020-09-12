@@ -18,15 +18,9 @@
 /** a class to manage a collection of zoomable thumbnails for culling or full preview.  */
 #include "dtgtk/culling.h"
 #include "common/collection.h"
-#include "common/colorlabels.h"
 #include "common/debug.h"
-#include "common/history.h"
-#include "common/ratings.h"
 #include "common/selection.h"
 #include "control/control.h"
-#include "dtgtk/thumbtable.h"
-#include "gui/accelerators.h"
-#include "gui/drag_and_drop.h"
 #include "gui/gtk.h"
 #include "views/view.h"
 
@@ -156,6 +150,44 @@ static gboolean _compute_sizes(dt_culling_t *table, gboolean force)
   return ret;
 }
 
+// set mouse_over_id to thumb under mouse or to first thumb
+static void _thumbs_refocus(dt_culling_t *table)
+{
+  int overid = -1;
+
+  if(table->mouse_inside)
+  {
+    // the exact position of the mouse
+    int x = -1;
+    int y = -1;
+    gdk_window_get_origin(gtk_widget_get_window(table->widget), &x, &y);
+    x = table->pan_x - x;
+    y = table->pan_y - y;
+
+    // which thumb is under the mouse ?
+    GList *l = table->list;
+    while(l)
+    {
+      dt_thumbnail_t *th = (dt_thumbnail_t *)l->data;
+      if(th->x <= x && th->x + th->width > x && th->y <= y && th->y + th->height > y)
+      {
+        overid = th->imgid;
+        break;
+      }
+      l = g_list_next(l);
+    }
+  }
+
+  // if overid not valid, we use the offest image
+  if(overid <= 0)
+  {
+    overid = table->offset_imgid;
+  }
+
+  // and we set the overid
+  dt_control_set_mouse_over_id(overid);
+}
+
 static void _thumbs_move(dt_culling_t *table, int move)
 {
   if(move == 0) return;
@@ -281,6 +313,7 @@ static void _thumbs_move(dt_culling_t *table, int move)
   {
     table->offset = new_offset;
     dt_culling_full_redraw(table, TRUE);
+    _thumbs_refocus(table);
   }
 }
 
@@ -394,9 +427,9 @@ static gboolean _event_scroll(GtkWidget *widget, GdkEvent *event, gpointer user_
 {
   GdkEventScroll *e = (GdkEventScroll *)event;
   dt_culling_t *table = (dt_culling_t *)user_data;
-  gdouble delta;
+  int delta;
 
-  if(dt_gui_get_scroll_delta(e, &delta))
+  if(dt_gui_get_scroll_unit_delta(e, &delta))
   {
     if((e->state & GDK_CONTROL_MASK) == GDK_CONTROL_MASK)
     {
@@ -448,10 +481,14 @@ static gboolean _event_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 
 static gboolean _event_leave_notify(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data)
 {
-  // if the leaving cause is the hide of the widget, no mouseover change
-  if(!gtk_widget_is_visible(widget)) return FALSE;
-
   dt_culling_t *table = (dt_culling_t *)user_data;
+  // if the leaving cause is the hide of the widget, no mouseover change
+  if(!gtk_widget_is_visible(widget))
+  {
+    table->mouse_inside = FALSE;
+    return FALSE;
+  }
+
   // if we leave thumbtable in favour of an inferior (a thumbnail) it's not a real leave !
   if(event->detail == GDK_NOTIFY_INFERIOR) return FALSE;
 
@@ -516,7 +553,13 @@ static gboolean _event_button_press(GtkWidget *widget, GdkEventButton *event, gp
 static gboolean _event_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer user_data)
 {
   dt_culling_t *table = (dt_culling_t *)user_data;
-  if(!table->panning) return FALSE;
+  table->mouse_inside = TRUE;
+  if(!table->panning)
+  {
+    table->pan_x = event->x_root;
+    table->pan_y = event->y_root;
+    return FALSE;
+  }
 
   GList *l;
 
@@ -649,7 +692,11 @@ static void _dt_selection_changed_callback(gpointer instance, gpointer user_data
     dt_view_lighttable_set_zoom(darktable.view_manager, nz);
   }
   // if we navigate only in the selection we just redraw to ensure no unselected image is present
-  if(table->navigate_inside_selection) dt_culling_full_redraw(table, TRUE);
+  if(table->navigate_inside_selection)
+  {
+    dt_culling_full_redraw(table, TRUE);
+    _thumbs_refocus(table);
+  }
 }
 
 static void _dt_profile_change_callback(gpointer instance, int type, gpointer user_data)
@@ -702,6 +749,29 @@ static void _dt_filmstrip_change(gpointer instance, int imgid, gpointer user_dat
 
   table->offset = _thumb_get_rowid(imgid);
   dt_culling_full_redraw(table, TRUE);
+  _thumbs_refocus(table);
+}
+
+// get the class name associated with the overlays mode
+static gchar *_thumbs_get_overlays_class(dt_thumbnail_overlay_t over)
+{
+  switch(over)
+  {
+    case DT_THUMBNAIL_OVERLAYS_NONE:
+      return dt_util_dstrcat(NULL, "dt_overlays_none");
+    case DT_THUMBNAIL_OVERLAYS_HOVER_EXTENDED:
+      return dt_util_dstrcat(NULL, "dt_overlays_hover_extended");
+    case DT_THUMBNAIL_OVERLAYS_ALWAYS_NORMAL:
+      return dt_util_dstrcat(NULL, "dt_overlays_always");
+    case DT_THUMBNAIL_OVERLAYS_ALWAYS_EXTENDED:
+      return dt_util_dstrcat(NULL, "dt_overlays_always_extended");
+    case DT_THUMBNAIL_OVERLAYS_MIXED:
+      return dt_util_dstrcat(NULL, "dt_overlays_mixed");
+    case DT_THUMBNAIL_OVERLAYS_HOVER_BLOCK:
+      return dt_util_dstrcat(NULL, "dt_overlays_hover_block");
+    default:
+      return dt_util_dstrcat(NULL, "dt_overlays_hover");
+  }
 }
 
 dt_culling_t *dt_culling_new(dt_culling_mode_t mode)
@@ -721,7 +791,27 @@ dt_culling_t *dt_culling_new(dt_culling_mode_t mode)
     gtk_style_context_add_class(context, "dt_preview");
   else
     gtk_style_context_add_class(context, "dt_culling");
-  gtk_style_context_add_class(context, "dt_overlays_hover_block");
+
+  // overlays
+  gchar *otxt = dt_util_dstrcat(NULL, "plugins/lighttable/overlays/culling/%d", table->mode);
+  table->overlays = dt_conf_get_int(otxt);
+  g_free(otxt);
+
+  gchar *cl0 = _thumbs_get_overlays_class(table->overlays);
+  gtk_style_context_add_class(context, cl0);
+  free(cl0);
+
+  otxt = dt_util_dstrcat(NULL, "plugins/lighttable/overlays/culling_block_timeout/%d", table->mode);
+  table->overlays_block_timeout = 2;
+  if(!dt_conf_key_exists(otxt))
+    table->overlays_block_timeout = dt_conf_get_int("plugins/lighttable/overlay_timeout");
+  else
+    table->overlays_block_timeout = dt_conf_get_int(otxt);
+  g_free(otxt);
+
+  otxt = dt_util_dstrcat(NULL, "plugins/lighttable/tooltips/culling/%d", table->mode);
+  table->show_tooltips = dt_conf_get_bool(otxt);
+  g_free(otxt);
 
   // set widget signals
   gtk_widget_set_events(table->widget, GDK_EXPOSURE_MASK | GDK_POINTER_MOTION_MASK | GDK_POINTER_MOTION_HINT_MASK
@@ -739,15 +829,15 @@ dt_culling_t *dt_culling_new(dt_culling_mode_t mode)
   g_signal_connect(G_OBJECT(table->widget), "button-release-event", G_CALLBACK(_event_button_release), table);
 
   // we register globals signals
-  dt_control_signal_connect(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
                             G_CALLBACK(_dt_mouse_over_image_callback), table);
-  dt_control_signal_connect(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
                             G_CALLBACK(_dt_profile_change_callback), table);
-  dt_control_signal_connect(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE, G_CALLBACK(_dt_pref_change_callback),
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE, G_CALLBACK(_dt_pref_change_callback),
                             table);
-  dt_control_signal_connect(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
                             G_CALLBACK(_dt_filmstrip_change), table);
-  dt_control_signal_connect(darktable.signals, DT_SIGNAL_SELECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_SELECTION_CHANGED,
                             G_CALLBACK(_dt_selection_changed_callback), table);
   gtk_widget_show(table->widget);
 
@@ -778,6 +868,18 @@ void dt_culling_init(dt_culling_t *table, int offset)
   // init values
   table->navigate_inside_selection = FALSE;
   table->selection_sync = FALSE;
+
+  // reset remaining zooming values if any
+  GList *l = table->list;
+  while(l)
+  {
+    dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
+    thumb->zoom = 1.0f;
+    thumb->zoomx = 0.0;
+    thumb->zoomy = 0.0;
+    thumb->img_surf_dirty = TRUE;
+    l = g_list_next(l);
+  }
 
   const gboolean culling_dynamic
       = (table->mode == DT_CULLING_MODE_CULLING
@@ -974,6 +1076,7 @@ static void _thumbs_prefetch(dt_culling_t *table)
     const int id = sqlite3_column_int(stmt, 0);
     if(id > 0) dt_mipmap_cache_get(darktable.mipmap_cache, NULL, id, mip, DT_MIPMAP_PREFETCH, 'r');
   }
+  sqlite3_finalize(stmt);
 }
 
 static gboolean _thumbs_recreate_list_at(dt_culling_t *table, const int offset)
@@ -1026,7 +1129,7 @@ static gboolean _thumbs_recreate_list_at(dt_culling_t *table, const int offset)
     else
     {
       // we create a completly new thumb
-      dt_thumbnail_t *thumb = dt_thumbnail_new(10, 10, nid, nrow, DT_THUMBNAIL_OVERLAYS_HOVER_BLOCK, TRUE);
+      dt_thumbnail_t *thumb = dt_thumbnail_new(10, 10, nid, nrow, table->overlays, TRUE, table->show_tooltips);
       thumb->display_focus = table->focus;
       thumb->sel_mode = DT_THUMBNAIL_SEL_MODE_DISABLED;
       double aspect_ratio = sqlite3_column_double(stmt, 2);
@@ -1077,7 +1180,7 @@ static gboolean _thumbs_recreate_list_at(dt_culling_t *table, const int offset)
         else
         {
           // we create a completly new thumb
-          dt_thumbnail_t *thumb = dt_thumbnail_new(10, 10, nid, nrow, DT_THUMBNAIL_OVERLAYS_HOVER_BLOCK, TRUE);
+          dt_thumbnail_t *thumb = dt_thumbnail_new(10, 10, nid, nrow, table->overlays, TRUE, table->show_tooltips);
           thumb->display_focus = table->focus;
           thumb->sel_mode = DT_THUMBNAIL_SEL_MODE_DISABLED;
           double aspect_ratio = sqlite3_column_double(stmt, 2);
@@ -1317,6 +1420,26 @@ static gboolean _thumbs_compute_positions(dt_culling_t *table)
   return TRUE;
 }
 
+void dt_culling_update_active_images_list(dt_culling_t *table)
+{
+  // we erase the list of active images
+  g_slist_free(darktable.view_manager->active_images);
+  darktable.view_manager->active_images = NULL;
+
+  // and we effectively move and resize thumbs
+  GList *l = table->list;
+  while(l)
+  {
+    dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
+    // we update the active images list
+    darktable.view_manager->active_images
+        = g_slist_append(darktable.view_manager->active_images, GINT_TO_POINTER(thumb->imgid));
+    l = g_list_next(l);
+  }
+
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+}
+
 // recreate the list of thumb if needed and recomputes sizes and positions if needed
 void dt_culling_full_redraw(dt_culling_t *table, gboolean force)
 {
@@ -1325,6 +1448,21 @@ void dt_culling_full_redraw(dt_culling_t *table, gboolean force)
   // first, we see if we need to do something
   if(!_compute_sizes(table, force)) return;
 
+  // we store first image zoom and pos for new ones
+  float old_z = 1.0;
+  float old_zx = 0.0;
+  float old_zy = 0.0;
+  int old_margin_x = 0;
+  int old_margin_y = 0;
+  if(g_list_length(table->list) > 0)
+  {
+    dt_thumbnail_t *thumb = (dt_thumbnail_t *)g_list_nth_data(table->list, 0);
+    old_z = thumb->zoom;
+    old_zx = thumb->zoomx;
+    old_zy = thumb->zoomy;
+    old_margin_x = gtk_widget_get_margin_start(thumb->w_image_box);
+    old_margin_y = gtk_widget_get_margin_top(thumb->w_image_box);
+  }
   // we recreate the list of images
   _thumbs_recreate_list_at(table, table->offset);
 
@@ -1340,10 +1478,17 @@ void dt_culling_full_redraw(dt_culling_t *table, gboolean force)
   while(l)
   {
     dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
+    // we set the overlays timeout
+    thumb->overlay_timeout_duration = table->overlays_block_timeout;
     // we add or move the thumb at the right position
     if(!gtk_widget_get_parent(thumb->w_main))
     {
+      gtk_widget_set_margin_start(thumb->w_image_box, old_margin_x);
+      gtk_widget_set_margin_top(thumb->w_image_box, old_margin_y);
       gtk_layout_put(GTK_LAYOUT(table->widget), thumb->w_main, thumb->x, thumb->y);
+      thumb->zoomx = old_zx;
+      thumb->zoomy = old_zy;
+      thumb->zoom = old_z;
     }
     else
     {
@@ -1359,7 +1504,7 @@ void dt_culling_full_redraw(dt_culling_t *table, gboolean force)
     l = g_list_next(l);
   }
 
-  dt_control_signal_raise(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
 
   // if the selection should follow active images
   if(table->selection_sync)
@@ -1431,6 +1576,7 @@ void dt_culling_change_offset_image(dt_culling_t *table, int imgid)
 {
   table->offset = _thumb_get_rowid(imgid);
   dt_culling_full_redraw(table, TRUE);
+  _thumbs_refocus(table);
 }
 
 void dt_culling_zoom_max(dt_culling_t *table, gboolean only_current)
@@ -1481,6 +1627,50 @@ void dt_culling_zoom_fit(dt_culling_t *table, gboolean only_current)
       l = g_list_next(l);
     }
   }
+}
+
+// change the type of overlays that should be shown
+void dt_culling_set_overlays_mode(dt_culling_t *table, dt_thumbnail_overlay_t over)
+{
+  if(!table) return;
+  gchar *txt = dt_util_dstrcat(NULL, "plugins/lighttable/overlays/culling/%d", table->mode);
+  dt_conf_set_int(txt, over);
+  g_free(txt);
+  gchar *cl0 = _thumbs_get_overlays_class(table->overlays);
+  gchar *cl1 = _thumbs_get_overlays_class(over);
+
+  GtkStyleContext *context = gtk_widget_get_style_context(table->widget);
+  gtk_style_context_remove_class(context, cl0);
+  gtk_style_context_add_class(context, cl1);
+
+  txt = dt_util_dstrcat(NULL, "plugins/lighttable/overlays/culling_block_timeout/%d", table->mode);
+  int timeout = 2;
+  if(!dt_conf_key_exists(txt))
+    timeout = dt_conf_get_int("plugins/lighttable/overlay_timeout");
+  else
+    timeout = dt_conf_get_int(txt);
+  g_free(txt);
+
+  txt = dt_util_dstrcat(NULL, "plugins/lighttable/tooltips/culling/%d", table->mode);
+  table->show_tooltips = dt_conf_get_bool(txt);
+  g_free(txt);
+
+  // we need to change the overlay content if we pass from normal to extended overlays
+  // this is not done on the fly with css to avoid computing extended msg for nothing and to reserve space if needed
+  GList *l = table->list;
+  while(l)
+  {
+    dt_thumbnail_t *th = (dt_thumbnail_t *)l->data;
+    dt_thumbnail_set_overlay(th, over, timeout);
+    th->tooltip = table->show_tooltips;
+    // and we resize the bottom area
+    dt_thumbnail_resize(th, th->width, th->height, TRUE);
+    l = g_list_next(l);
+  }
+
+  table->overlays = over;
+  g_free(cl0);
+  g_free(cl1);
 }
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh

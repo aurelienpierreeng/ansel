@@ -140,11 +140,10 @@ static void _update_picker_output(dt_lib_module_t *self)
   dt_iop_module_t *module = dt_iop_get_colorout_module();
   if(module)
   {
-    const int reset = darktable.gui->reset;
-    darktable.gui->reset = 1;
+    ++darktable.gui->reset;
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->picker_button),
                                  module->request_color_pick != DT_REQUEST_COLORPICK_OFF);
-    darktable.gui->reset = reset;
+    --darktable.gui->reset;
 
     int input_color = dt_conf_get_int("ui_last/colorpicker_model");
 
@@ -437,6 +436,7 @@ static void _add_sample(GtkButton *widget, gpointer self)
 
   // Updating the display
   _update_samples_output((dt_lib_module_t *)self);
+  if(darktable.lib->proxy.colorpicker.display_samples) dt_dev_invalidate_from_gui(darktable.develop);
 }
 
 static void _display_samples_changed(GtkToggleButton *button, gpointer data)
@@ -548,6 +548,8 @@ void gui_init(dt_lib_module_t *self)
 
   // Setting up the GUI
   self->widget = container;
+  GtkStyleContext *context = gtk_widget_get_style_context(self->widget);
+  gtk_style_context_add_class(context, "picker-module");
   gtk_box_pack_start(GTK_BOX(container), output_row, TRUE, TRUE, 0);
   dt_gui_add_help_link(self->widget, dt_get_help_url(self->plugin_name));
 
@@ -571,7 +573,7 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(data->size_selector), "changed", G_CALLBACK(_size_changed), (gpointer)self);
 
   data->picker_button = dt_color_picker_new(NULL, DT_COLOR_PICKER_AREA, picker_subrow);
-  gtk_widget_set_name(GTK_WIDGET(data->picker_button), "control-button");
+  gtk_widget_set_name(GTK_WIDGET(data->picker_button), "color-picker-button");
   g_signal_connect(G_OBJECT(data->picker_button), "toggled", G_CALLBACK(_picker_button_toggled), self);
 
   gtk_box_pack_start(GTK_BOX(output_options), picker_subrow, TRUE, TRUE, 0);

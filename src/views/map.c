@@ -100,9 +100,9 @@ static void _view_map_collection_changed(gpointer instance, dt_collection_change
 /* callback when an image is selected in filmstrip, centers map */
 static void _view_map_filmstrip_activate_callback(gpointer instance, int imgid, gpointer user_data);
 /* callback when an image is dropped from filmstrip */
-static void drag_and_drop_received(GtkWidget *widget, GdkDragContext *context, gint x, gint y,
-                                   GtkSelectionData *selection_data, guint target_type, guint time,
-                                   gpointer data);
+static void _drag_and_drop_received(GtkWidget *widget, GdkDragContext *context, gint x, gint y,
+                                    GtkSelectionData *selection_data, guint target_type, guint time,
+                                    gpointer data);
 /* callback when the user drags images FROM the map */
 static void _view_map_dnd_get_callback(GtkWidget *widget, GdkDragContext *context,
                                        GtkSelectionData *selection_data, guint target_type, guint time,
@@ -312,7 +312,7 @@ static GdkPixbuf *init_image_pin()
   cairo_surface_t *cst = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
   cairo_t *cr = cairo_create(cst);
   cairo_set_source_rgba(cr, r, g, b, a);
-  dtgtk_cairo_paint_map_pin(cr, 0, 0, w, h, 0, NULL);
+  dtgtk_cairo_paint_map_pin(cr, (h-w)/2, 0, w, h, 0, NULL); // keep the pin on left
   cairo_destroy(cr);
   uint8_t *data = cairo_image_surface_get_data(cst);
   dt_draw_cairo_to_gdk_pixbuf(data, w, h);
@@ -439,7 +439,7 @@ void init(dt_view_t *self)
     /* allow drag&drop of images from filmstrip */
     gtk_drag_dest_set(GTK_WIDGET(lib->map), GTK_DEST_DEFAULT_ALL, target_list_internal, n_targets_internal,
                       GDK_ACTION_COPY);
-    g_signal_connect(GTK_WIDGET(lib->map), "drag-data-received", G_CALLBACK(drag_and_drop_received), self);
+    g_signal_connect(GTK_WIDGET(lib->map), "drag-data-received", G_CALLBACK(_drag_and_drop_received), self);
     g_signal_connect(GTK_WIDGET(lib->map), "changed", G_CALLBACK(_view_map_changed_callback), self);
     g_signal_connect_after(G_OBJECT(lib->map), "button-press-event",
                            G_CALLBACK(_view_map_button_press_callback), self);
@@ -470,10 +470,10 @@ void init(dt_view_t *self)
 
 #endif // USE_LUA
   /* connect collection changed signal */
-  dt_control_signal_connect(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED,
                             G_CALLBACK(_view_map_collection_changed), (gpointer)self);
   /* connect preference changed signal */
-  dt_control_signal_connect(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE,
                             G_CALLBACK(_view_map_check_preference_changed), (gpointer)self);
 }
 
@@ -481,8 +481,8 @@ void cleanup(dt_view_t *self)
 {
   dt_map_t *lib = (dt_map_t *)self->data;
 
-  dt_control_signal_disconnect(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
-  dt_control_signal_disconnect(darktable.signals, G_CALLBACK(_view_map_check_preference_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_collection_changed), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_check_preference_changed), self);
 
   if(darktable.gui)
   {
@@ -815,11 +815,10 @@ static gboolean _display_selected(gpointer user_data)
   dt_view_t *self = (dt_view_t *)user_data;
   gboolean done = FALSE;
 
-  GList *selected_images = dt_view_get_images_to_act_on(TRUE);
+  const GList *selected_images = dt_view_get_images_to_act_on(TRUE, TRUE);
   if(selected_images)
   {
     done = _view_map_center_on_image_list(self, selected_images);
-    g_list_free(selected_images);
   }
 
   if(!done)
@@ -876,7 +875,7 @@ void enter(dt_view_t *self)
   osm_gps_map_set_center_and_zoom(lib->map, lat, lon, zoom);
 
   /* connect signal for filmstrip image activate */
-  dt_control_signal_connect(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
                             G_CALLBACK(_view_map_filmstrip_activate_callback), self);
 
   /* scroll filmstrip to the first selected image */
@@ -895,7 +894,7 @@ void leave(dt_view_t *self)
   _view_map_set_map_source_g_object(self, OSM_GPS_MAP_SOURCE_NULL);
 
   /* disconnect from filmstrip image activate */
-  dt_control_signal_disconnect(darktable.signals, G_CALLBACK(_view_map_filmstrip_activate_callback),
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_filmstrip_activate_callback),
                                (gpointer)self);
   g_signal_handlers_disconnect_by_func(dt_ui_thumbtable(darktable.gui->ui)->widget,
                                        G_CALLBACK(_view_map_dnd_remove_callback), self);
@@ -1208,7 +1207,7 @@ static void _view_map_filmstrip_activate_callback(gpointer instance, int imgid, 
   _view_map_center_on_image(self, imgid);
 }
 
-static void drag_and_drop_received(GtkWidget *widget, GdkDragContext *context, gint x, gint y,
+static void _drag_and_drop_received(GtkWidget *widget, GdkDragContext *context, gint x, gint y,
                                    GtkSelectionData *selection_data, guint target_type, guint time,
                                    gpointer data)
 {

@@ -9,6 +9,7 @@ include(CheckCSourceCompiles)
 #
 FILE(GLOB SOURCE_FILES
   "bauhaus/bauhaus.c"
+  "common/atomic.c"
   "common/bilateral.c"
   "common/bilateralcl.c"
   "common/cache.c"
@@ -59,6 +60,7 @@ FILE(GLOB SOURCE_FILES
   "common/mipmap_cache.c"
   "common/module.c"
   "common/noiseprofiles.c"
+  "common/nlmeans_core.c"
   "common/pdf.c"
   "common/presets.c"
   "common/styles.c"
@@ -93,6 +95,7 @@ FILE(GLOB SOURCE_FILES
   "develop/develop.c"
   "develop/imageop.c"
   "develop/imageop_math.c"
+  "develop/imageop_gui.c"
   "develop/lightroom.c"
   "develop/pixelpipe.c"
   "develop/blend.c"
@@ -124,6 +127,7 @@ FILE(GLOB SOURCE_FILES
   "gui/presets.c"
   "gui/styles_dialog.c"
   "gui/color_picker_proxy.c"
+  "gui/import_metadata.c"
   "libs/lib.c"
   "views/view.c"
   )
@@ -286,7 +290,7 @@ include_directories(SYSTEM ${LIBXML2_INCLUDE_DIR})
 list(APPEND LIBS ${LIBXML2_LIBRARIES})
 add_definitions(${LIBXML2_DEFINITIONS})
 
-# used to launch a tiny http server, used by facebook exporter
+# used to launch a tiny http server, which could be used by OAuth services
 find_package(LibSoup2)
 if(LibSoup2_FOUND)
   include_directories(SYSTEM ${LibSoup2_INCLUDE_DIRS})
@@ -411,11 +415,11 @@ endif(USE_KWALLET)
 
 if(USE_MAC_INTEGRATION)
   find_package(MacIntegration)
-  if(MACINTEGRATION_FOUND)
+  if(MacIntegration_FOUND)
     include_directories(SYSTEM ${MacIntegration_INCLUDE_DIRS})
     list(APPEND LIBS ${MacIntegration_LIBRARIES})
     add_definitions("-DMAC_INTEGRATION")
-  endif(MACINTEGRATION_FOUND)
+  endif(MacIntegration_FOUND)
 endif(USE_MAC_INTEGRATION)
 
 if(USE_UNITY)
@@ -772,6 +776,13 @@ if(USE_GAME)
 else(USE_GAME)
   message(STATUS "Game: no")
 endif(USE_GAME)
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  if(HAVE_EXECINFO_H)
+    add_definitions("-DDT_HAVE_SIGNAL_TRACE")
+    message(STATUS "Signal debug: print-trace possible")
+  endif(HAVE_EXECINFO_H)
+endif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 
 #
 # set development flags for our code

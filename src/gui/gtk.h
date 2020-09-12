@@ -19,6 +19,7 @@
 #pragma once
 
 #include "common/darktable.h"
+#include "common/dtpthread.h"
 
 #include <gtk/gtk.h>
 #include <stdint.h>
@@ -110,8 +111,11 @@ typedef struct dt_gui_gtk_t
 
   gboolean show_overlays;
   gboolean show_focus_peaking;
+  GtkWidget *focus_peaking_button;
 
   double dpi, dpi_factor, ppd;
+
+  int icon_size; // size of top panel icons
 
   // store which gtkrc we loaded:
   char gtkrc[PATH_MAX];
@@ -122,6 +126,8 @@ typedef struct dt_gui_gtk_t
   guint sidebar_scroll_mask;
 
   cairo_filter_t filter_image;
+
+  dt_pthread_mutex_t mutex;
 } dt_gui_gtk_t;
 
 #if (CAIRO_VERSION >= CAIRO_VERSION_ENCODE(1, 13, 1))
@@ -180,6 +186,11 @@ int dt_gui_gtk_write_config();
 void dt_gui_gtk_set_source_rgb(cairo_t *cr, dt_gui_color_t);
 void dt_gui_gtk_set_source_rgba(cairo_t *cr, dt_gui_color_t, float opacity_coef);
 
+/* Check sidebar_scroll_default and modifier keys to determine if scroll event
+ * should be processed by control or by panel. If default is panel scroll but
+ * modifiers are pressed to indicate the control should be scrolled, then remove
+ * the modifiers from the event before returning false */
+gboolean dt_gui_ignore_scroll(GdkEventScroll *event);
 /* Return requested scroll delta(s) from event. If delta_x or delta_y
  * is NULL, do not return that delta. Return TRUE if requested deltas
  * can be retrieved. Handles both GDK_SCROLL_UP/DOWN/LEFT/RIGHT and
@@ -314,6 +325,10 @@ void dt_ui_toggle_panels_visibility(struct dt_ui_t *ui);
 void dt_ui_notify_user();
 /** \brief get visible state of panel */
 gboolean dt_ui_panel_visible(struct dt_ui_t *ui, const dt_ui_panel_t);
+/**  \brief get width of right, left, or bottom panel */
+int dt_ui_panel_get_size(struct dt_ui_t *ui, const dt_ui_panel_t p);
+/**  \brief set width of right, left, or bottom panel */
+void dt_ui_panel_set_size(struct dt_ui_t *ui, const dt_ui_panel_t p, int s);
 /** \brief get the center drawable widget */
 GtkWidget *dt_ui_center(struct dt_ui_t *ui);
 GtkWidget *dt_ui_center_base(struct dt_ui_t *ui);
@@ -334,9 +349,11 @@ void dt_ellipsize_combo(GtkComboBox *cbox);
 static inline void dt_ui_section_label_set(GtkWidget *label)
 {
   gtk_widget_set_halign(label, GTK_ALIGN_FILL); // make it span the whole available width
+  gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END); // ellipsize labels
   g_object_set(G_OBJECT(label), "xalign", 0.0, (gchar *)0);    // make the text left aligned
   gtk_widget_set_name(label, "section_label"); // make sure that we can style these easily
 }
+
 static inline GtkWidget *dt_ui_section_label_new(const gchar *str)
 {
   GtkWidget *label = gtk_label_new(str);
@@ -344,14 +361,15 @@ static inline GtkWidget *dt_ui_section_label_new(const gchar *str)
   return label;
 };
 
-static inline void dtgtk_justify_notebook_tabs(GtkNotebook *notebook)
+static inline GtkWidget *dt_ui_label_new(const gchar *str)
 {
-  // force the notebook tabs to fill the available width
-  for(gint i = 0; i < gtk_notebook_get_n_pages(notebook); ++i)
-    gtk_container_child_set(GTK_CONTAINER(notebook),
-                            gtk_notebook_get_nth_page(notebook, i),
-                            "tab-expand", TRUE, "tab-fill", TRUE, (char *)NULL);
-}
+  GtkWidget *label = gtk_label_new(str);
+  gtk_widget_set_halign(label, GTK_ALIGN_START);
+  gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
+  return label;
+};
+
+GtkWidget *dt_ui_notebook_page(GtkNotebook *notebook, const char *text, const char *tooltip);
 
 // show a dialog box with 2 buttons in case some user interaction is required BEFORE dt's gui is initialised.
 // this expects gtk_init() to be called already which should be the case during most of dt's init phase.
@@ -370,9 +388,25 @@ void dt_gui_add_help_link(GtkWidget *widget, const char *link);
 // load a CSS theme
 void dt_gui_load_theme(const char *theme);
 
-//translate key press events to remove any modifiers used to produce the keyval
+// reload GUI scalings
+void dt_configure_ppd_dpi(dt_gui_gtk_t *gui);
+
+// translate key press events to remove any modifiers used to produce the keyval
 // for example when the shift key is used to create the asterisk character
 guint dt_gui_translated_key_state(GdkEventKey *event);
+
+// return modifier keys currently pressed, independent of any key event
+GdkModifierType dt_key_modifier_state();
+
+// create an ellipsized button with label, tooltip and help link
+static inline GtkWidget *dt_ui_button_new(const gchar *label, const gchar *tooltip, const gchar *help)
+{
+  GtkWidget *button = gtk_button_new_with_label(label);
+  gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(button))), PANGO_ELLIPSIZE_END);
+  if(tooltip) gtk_widget_set_tooltip_text(button, tooltip);
+  if(help) dt_gui_add_help_link(button, help);
+  return button;
+};
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

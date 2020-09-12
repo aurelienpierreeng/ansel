@@ -16,10 +16,11 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/darktable.h"
-#include "common/history.h"
-#include "common/debug.h"
 #include "common/history_snapshot.h"
+#include "common/darktable.h"
+#include "common/debug.h"
+#include "common/history.h"
+#include "control/signal.h"
 
 dt_undo_lt_history_t *dt_history_snapshot_item_init(void)
 {
@@ -114,6 +115,7 @@ static void _history_snapshot_undo_restore(int32_t imgid, int snap_id, int histo
   sqlite3_exec(dt_database_get(darktable.db), "BEGIN TRANSACTION", NULL, NULL, NULL);
 
   dt_history_delete_on_image_ext(imgid, FALSE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
 
   // copy undo_history snapshot back as current history state
 
@@ -224,7 +226,6 @@ void dt_history_snapshot_undo_pop(gpointer user_data, dt_undo_type_t type, dt_un
       _history_snapshot_undo_restore(hist->imgid, hist->after, hist->after_history_end);
     }
 
-  // in principle undo() routine should add imgid to imgs list to make _undo_do_undo_redo() refresh XMP file for each of them
-  // in this case the update of XMP file is done by the normal image (re)development process.
+    *imgs = g_list_append(*imgs, GINT_TO_POINTER(hist->imgid));
   }
 }

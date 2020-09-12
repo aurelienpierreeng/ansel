@@ -188,14 +188,15 @@ typedef enum dt_view_image_over_t
 } dt_view_image_over_t;
 
 // get images to act on for gloabals change (via libs or accels)
-GList *dt_view_get_images_to_act_on(gboolean only_visible);
+// no need to free the list - done internally
+const GList *dt_view_get_images_to_act_on(const gboolean only_visible, const gboolean force);
 // get the main image to act on during global changes (libs, accels)
 int dt_view_get_image_to_act_on();
 
 /** returns an uppercase string of file extension **plus** some flag information **/
 char* dt_view_extend_modes_str(const char * name, const int is_hdr, const int is_bw);
 /** expose an image and return a cairi_surface. return != 0 if thumbnail wasn't loaded yet. */
-int dt_view_image_get_surface(int imgid, int width, int height, cairo_surface_t **surface);
+int dt_view_image_get_surface(int imgid, int width, int height, cairo_surface_t **surface, const gboolean quality);
 
 
 /** Set the selection bit to a given value for the specified image */
@@ -226,6 +227,15 @@ typedef struct dt_view_manager_t
     gboolean sticky;
     gboolean prevent_refresh;
   } accels_window;
+
+  struct
+  {
+    GList *images;
+    gboolean ok;
+    int image_over;
+    gboolean inside_table;
+    GSList *active_imgs;
+  } act_on;
 
   /* reusable db statements
    * TODO: reconsider creating a common/database helper API
@@ -312,6 +322,7 @@ typedef struct dt_view_manager_t
       void (*set_layout)(struct dt_lib_module_t *module, dt_lighttable_layout_t layout);
       void (*culling_init_mode)(struct dt_view_t *view);
       void (*culling_preview_refresh)(struct dt_view_t *view);
+      void (*culling_preview_reload_overlays)(struct dt_view_t *view);
       dt_lighttable_culling_zoom_mode_t (*get_zoom_mode)(struct dt_lib_module_t *module);
       gboolean (*get_preview_state)(struct dt_view_t *view);
       void (*change_offset)(struct dt_view_t *view, gboolean reset, gint imgid);
@@ -445,6 +456,8 @@ dt_lighttable_culling_zoom_mode_t dt_view_lighttable_get_culling_zoom_mode(dt_vi
 void dt_view_lighttable_culling_init_mode(dt_view_manager_t *vm);
 /** force refresh of culling and/or preview */
 void dt_view_lighttable_culling_preview_refresh(dt_view_manager_t *vm);
+/** force refresh of culling and/or preview overlays */
+void dt_view_lighttable_culling_preview_reload_overlays(dt_view_manager_t *vm);
 /** sets the offset image (for culling and full preview) */
 void dt_view_lighttable_change_offset(dt_view_manager_t *vm, gboolean reset, gint imgid);
 

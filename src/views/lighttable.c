@@ -21,6 +21,7 @@
 #include "common/darktable.h"
 #include "common/debug.h"
 #include "common/file_location.h"
+#include "common/focus_peaking.h"
 #include "common/grouping.h"
 #include "common/history.h"
 #include "common/image_cache.h"
@@ -41,6 +42,10 @@
 #include "libs/lib.h"
 #include "views/view.h"
 #include "views/view_api.h"
+
+#ifdef USE_LUA
+#include "lua/image.h"
+#endif
 
 #include <assert.h>
 #include <dirent.h>
@@ -89,6 +94,58 @@ uint32_t view(const dt_view_t *self)
   return DT_VIEW_LIGHTTABLE;
 }
 
+// exit the full preview mode
+static void _preview_quit(dt_view_t *self)
+{
+  dt_library_t *lib = (dt_library_t *)self->data;
+  gtk_widget_hide(lib->preview->widget);
+  if(lib->preview->selection_sync)
+  {
+    dt_selection_select_single(darktable.selection, lib->preview->offset_imgid);
+  }
+  lib->preview_state = FALSE;
+  // restore panels
+  dt_ui_restore_panels(darktable.gui->ui);
+
+  // show/hide filmstrip & timeline when entering the view
+  if(lib->current_layout == DT_LIGHTTABLE_LAYOUT_CULLING)
+  {
+    // update thumbtable, to indicate if we navigate inside selection or not
+    // this is needed as collection change is handle there
+    dt_ui_thumbtable(darktable.gui->ui)->navigate_inside_selection = lib->culling->navigate_inside_selection;
+
+    dt_lib_set_visible(darktable.view_manager->proxy.timeline.module, FALSE); // not available in this layouts
+    dt_lib_set_visible(darktable.view_manager->proxy.filmstrip.module,
+                       TRUE); // always on, visibility is driven by panel state
+
+    dt_culling_update_active_images_list(lib->culling);
+  }
+  else
+  {
+    dt_ui_thumbtable(darktable.gui->ui)->navigate_inside_selection = FALSE;
+    dt_lib_set_visible(darktable.view_manager->proxy.filmstrip.module, FALSE); // not available in this layouts
+    dt_lib_set_visible(darktable.view_manager->proxy.timeline.module,
+                       TRUE); // always on, visibility is driven by panel state
+
+    // set offset back
+    dt_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), lib->thumbtable_offset, TRUE);
+
+    // we need to show thumbtable
+    if(lib->current_layout == DT_LIGHTTABLE_LAYOUT_FILEMANAGER)
+    {
+      dt_thumbtable_set_parent(dt_ui_thumbtable(darktable.gui->ui), dt_ui_center_base(darktable.gui->ui),
+                               DT_THUMBTABLE_MODE_FILEMANAGER);
+    }
+    else if(lib->current_layout == DT_LIGHTTABLE_LAYOUT_ZOOMABLE)
+    {
+      dt_thumbtable_set_parent(dt_ui_thumbtable(darktable.gui->ui), dt_ui_center_base(darktable.gui->ui),
+                               DT_THUMBTABLE_MODE_ZOOM);
+    }
+    gtk_widget_show(dt_ui_thumbtable(darktable.gui->ui)->widget);
+    dt_thumbtable_full_redraw(dt_ui_thumbtable(darktable.gui->ui), TRUE);
+  }
+}
+
 // check if we need to change the layout, and apply the change if needed
 static void _lighttable_check_layout(dt_view_t *self)
 {
@@ -97,6 +154,10 @@ static void _lighttable_check_layout(dt_view_t *self)
   const dt_lighttable_layout_t layout_old = lib->current_layout;
 
   if(lib->current_layout == layout) return;
+
+  // if we are in full preview mode, we first need to exit this mode
+  if(lib->preview_state) _preview_quit(self);
+
   lib->current_layout = layout;
 
   // layout has changed, let restore panels
@@ -168,6 +229,8 @@ static void _lighttable_check_layout(dt_view_t *self)
     dt_lib_set_visible(darktable.view_manager->proxy.filmstrip.module,
                        TRUE); // always on, visibility is driven by panel state
     dt_ui_scrollbars_show(darktable.gui->ui, FALSE);
+    dt_thumbtable_set_offset_image(dt_ui_thumbtable(darktable.gui->ui), lib->culling->offset_imgid, TRUE);
+    dt_culling_update_active_images_list(lib->culling);
   }
   else
   {
@@ -201,9 +264,28 @@ static void _culling_reinit(dt_view_t *self)
   dt_culling_init(lib->culling, lib->culling->offset);
 }
 
+static void _culling_preview_reload_overlays(dt_view_t *self)
+{
+  dt_library_t *lib = (dt_library_t *)self->data;
+
+  // change overlays if needed for culling and preview
+  gchar *otxt = dt_util_dstrcat(NULL, "plugins/lighttable/overlays/culling/%d", DT_CULLING_MODE_CULLING);
+  dt_thumbnail_overlay_t over = dt_conf_get_int(otxt);
+  dt_culling_set_overlays_mode(lib->culling, over);
+  g_free(otxt);
+  otxt = dt_util_dstrcat(NULL, "plugins/lighttable/overlays/culling/%d", DT_CULLING_MODE_PREVIEW);
+  over = dt_conf_get_int(otxt);
+  dt_culling_set_overlays_mode(lib->preview, over);
+  g_free(otxt);
+}
+
 static void _culling_preview_refresh(dt_view_t *self)
 {
   dt_library_t *lib = (dt_library_t *)self->data;
+
+  // change overlays if needed for culling and preview
+  _culling_preview_reload_overlays(self);
+
   // full_preview change
   if(lib->preview_state)
   {
@@ -223,6 +305,65 @@ static gboolean _preview_get_state(dt_view_t *self)
   return lib->preview_state;
 }
 
+#ifdef USE_LUA
+
+static int set_image_visible_cb(lua_State *L)
+{
+  dt_lua_image_t imgid = -1;
+  dt_view_t *self = lua_touserdata(L, lua_upvalueindex(1));  //check were in lighttable view
+  if(view(self) == DT_VIEW_LIGHTTABLE)
+  {
+    //check we are in file manager or zoomable
+    dt_library_t *lib = (dt_library_t *)self->data;
+    const dt_lighttable_layout_t layout = lib->current_layout;
+    if(layout == DT_LIGHTTABLE_LAYOUT_FILEMANAGER || layout == DT_LIGHTTABLE_LAYOUT_ZOOMABLE)
+    {
+      if(luaL_testudata(L, 1, "dt_lua_image_t"))
+      {
+        luaA_to(L, dt_lua_image_t, &imgid, 1);
+        dt_thumbtable_set_offset_image(dt_ui_thumbtable(darktable.gui->ui), imgid, TRUE);
+        return 0;
+      }
+      else
+        return luaL_error(L, "no image specified");
+    }
+    else
+      return luaL_error(L, "must be in file manager or zoomable lighttable mode");
+  }
+  else
+    return luaL_error(L, "must be in lighttable view");
+}
+
+static gboolean is_image_visible_cb(lua_State *L)
+{
+  dt_lua_image_t imgid = -1;
+  dt_view_t *self = lua_touserdata(L, lua_upvalueindex(1));  //check were in lighttable view
+  //check we are in file manager or zoomable
+  if(view(self) == DT_VIEW_LIGHTTABLE)
+  {
+    //check we are in file manager or zoomable
+    dt_library_t *lib = (dt_library_t *)self->data;
+    const dt_lighttable_layout_t layout = lib->current_layout;
+    if(layout == DT_LIGHTTABLE_LAYOUT_FILEMANAGER || layout == DT_LIGHTTABLE_LAYOUT_ZOOMABLE)
+    {
+      if(luaL_testudata(L, 1, "dt_lua_image_t"))
+      {
+        luaA_to(L, dt_lua_image_t, &imgid, 1);
+        lua_pushboolean(L, dt_thumbtable_check_imgid_visibility(dt_ui_thumbtable(darktable.gui->ui), imgid));
+        return 1;
+      }
+      else
+        return luaL_error(L, "no image specified");
+    }
+    else
+      return luaL_error(L, "must be in file manager or zoomable lighttable mode");
+  }
+  else
+    return luaL_error(L, "must be in lighttable view");
+}
+
+#endif
+
 void init(dt_view_t *self)
 {
   self->data = calloc(1, sizeof(dt_library_t));
@@ -232,9 +373,27 @@ void init(dt_view_t *self)
   darktable.view_manager->proxy.lighttable.change_offset = _lighttable_change_offset;
   darktable.view_manager->proxy.lighttable.culling_init_mode = _culling_reinit;
   darktable.view_manager->proxy.lighttable.culling_preview_refresh = _culling_preview_refresh;
+  darktable.view_manager->proxy.lighttable.culling_preview_reload_overlays = _culling_preview_reload_overlays;
 
   // ensure the memory table is up to date
   dt_collection_memory_update();
+
+#ifdef USE_LUA
+  lua_State *L = darktable.lua_state.state;
+  const int my_type = dt_lua_module_entry_get_type(L, "view", self->module_name);
+
+  lua_pushlightuserdata(L, self);
+  lua_pushcclosure(L, set_image_visible_cb, 1);
+  dt_lua_gtk_wrap(L);
+  lua_pushcclosure(L, dt_lua_type_member_common, 1);
+  dt_lua_type_register_const_type(L, my_type, "set_image_visible");
+
+  lua_pushlightuserdata(L, self);
+  lua_pushcclosure(L, is_image_visible_cb, 1);
+  dt_lua_gtk_wrap(L);
+  lua_pushcclosure(L, dt_lua_type_member_common, 1);
+  dt_lua_type_register_const_type(L, my_type, "is_image_visible");
+#endif
 }
 
 
@@ -390,6 +549,11 @@ void enter(dt_view_t *self)
     dt_lib_set_visible(darktable.view_manager->proxy.timeline.module, FALSE); // not available in this layouts
     dt_lib_set_visible(darktable.view_manager->proxy.filmstrip.module,
                        TRUE); // always on, visibility is driven by panel state
+
+    if(lib->preview_state)
+      dt_culling_update_active_images_list(lib->preview);
+    else
+      dt_culling_update_active_images_list(lib->culling);
   }
   else
   {
@@ -431,7 +595,7 @@ static void _preview_enter(dt_view_t *self, gboolean sticky, gboolean focus, int
   darktable.view_manager->active_images = NULL;
   darktable.view_manager->active_images
       = g_slist_append(darktable.view_manager->active_images, GINT_TO_POINTER(lib->preview->offset_imgid));
-  dt_control_signal_raise(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
 
   // restore panels
   dt_ui_restore_panels(darktable.gui->ui);
@@ -439,66 +603,17 @@ static void _preview_enter(dt_view_t *self, gboolean sticky, gboolean focus, int
   // we don't need the scrollbars
   dt_ui_scrollbars_show(darktable.gui->ui, FALSE);
 }
-static void _preview_quit(dt_view_t *self)
-{
-  dt_library_t *lib = (dt_library_t *)self->data;
-  gtk_widget_hide(lib->preview->widget);
-  if(lib->preview->selection_sync)
-  {
-    dt_selection_select_single(darktable.selection, lib->preview->offset_imgid);
-  }
-  lib->preview_state = FALSE;
-  // restore panels
-  dt_ui_restore_panels(darktable.gui->ui);
-
-  // show/hide filmstrip & timeline when entering the view
-  if(lib->current_layout == DT_LIGHTTABLE_LAYOUT_CULLING)
-  {
-    // update thumbtable, to indicate if we navigate inside selection or not
-    // this is needed as collection change is handle there
-    dt_ui_thumbtable(darktable.gui->ui)->navigate_inside_selection = lib->culling->navigate_inside_selection;
-
-    dt_lib_set_visible(darktable.view_manager->proxy.timeline.module, FALSE); // not available in this layouts
-    dt_lib_set_visible(darktable.view_manager->proxy.filmstrip.module,
-                       TRUE); // always on, visibility is driven by panel state
-  }
-  else
-  {
-    dt_ui_thumbtable(darktable.gui->ui)->navigate_inside_selection = FALSE;
-    dt_lib_set_visible(darktable.view_manager->proxy.filmstrip.module, FALSE); // not available in this layouts
-    dt_lib_set_visible(darktable.view_manager->proxy.timeline.module,
-                       TRUE); // always on, visibility is driven by panel state
-
-    // set offset back
-    dt_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), lib->thumbtable_offset, TRUE);
-
-    // we need to show thumbtable
-    if(lib->current_layout == DT_LIGHTTABLE_LAYOUT_FILEMANAGER)
-    {
-      dt_thumbtable_set_parent(dt_ui_thumbtable(darktable.gui->ui), dt_ui_center_base(darktable.gui->ui),
-                               DT_THUMBTABLE_MODE_FILEMANAGER);
-    }
-    else if(lib->current_layout == DT_LIGHTTABLE_LAYOUT_ZOOMABLE)
-    {
-      dt_thumbtable_set_parent(dt_ui_thumbtable(darktable.gui->ui), dt_ui_center_base(darktable.gui->ui),
-                               DT_THUMBTABLE_MODE_ZOOM);
-    }
-    gtk_widget_show(dt_ui_thumbtable(darktable.gui->ui)->widget);
-    dt_thumbtable_full_redraw(dt_ui_thumbtable(darktable.gui->ui), TRUE);
-  }
-}
 
 void leave(dt_view_t *self)
 {
-  // we remove the thumbtable from main view
   dt_library_t *lib = (dt_library_t *)self->data;
-  dt_thumbtable_set_parent(dt_ui_thumbtable(darktable.gui->ui), NULL, DT_THUMBTABLE_MODE_FILMSTRIP);
+
   // ensure we have no active image remaining
   if(darktable.view_manager->active_images)
   {
     g_slist_free(darktable.view_manager->active_images);
     darktable.view_manager->active_images = NULL;
-    dt_control_signal_raise(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
   }
 
   // we hide culling and preview too
@@ -510,6 +625,9 @@ void leave(dt_view_t *self)
   {
     _preview_quit(self);
   }
+
+  // we remove the thumbtable from main view
+  dt_thumbtable_set_parent(dt_ui_thumbtable(darktable.gui->ui), NULL, DT_THUMBTABLE_MODE_FILMSTRIP);
 
   dt_ui_scrollbars_show(darktable.gui->ui, FALSE);
 }
@@ -700,6 +818,20 @@ static gboolean zoom_out_callback(GtkAccelGroup *accel_group, GObject *accelerat
   return TRUE;
 }
 
+static gboolean zoom_max_callback(GtkAccelGroup *accel_group, GObject *acceleratable, guint keyval,
+                                           GdkModifierType modifier, gpointer data)
+{
+  dt_view_lighttable_set_zoom(darktable.view_manager, 1);
+  return TRUE;
+}
+
+static gboolean zoom_min_callback(GtkAccelGroup *accel_group, GObject *acceleratable, guint keyval,
+                                           GdkModifierType modifier, gpointer data)
+{
+  dt_view_lighttable_set_zoom(darktable.view_manager, DT_LIGHTTABLE_MAX_ZOOM);
+  return TRUE;
+}
+
 void init_key_accels(dt_view_t *self)
 {
   // movement keys
@@ -742,9 +874,11 @@ void init_key_accels(dt_view_t *self)
   dt_accel_register_view(self, NC_("accel", "preview zoom 100%"), 0, 0);
   dt_accel_register_view(self, NC_("accel", "preview zoom fit"), 0, 0);
 
-  // zoom in/out
+  // zoom in/out/min/max
   dt_accel_register_view(self, NC_("accel", "zoom in"), GDK_KEY_plus, GDK_CONTROL_MASK);
+  dt_accel_register_view(self, NC_("accel", "zoom max"), GDK_KEY_plus, GDK_MOD1_MASK);
   dt_accel_register_view(self, NC_("accel", "zoom out"), GDK_KEY_minus, GDK_CONTROL_MASK);
+  dt_accel_register_view(self, NC_("accel", "zoom min"), GDK_KEY_minus, GDK_MOD1_MASK);
 }
 
 static gboolean _lighttable_undo_callback(GtkAccelGroup *accel_group, GObject *acceleratable, guint keyval,
@@ -885,11 +1019,15 @@ void connect_key_accels(dt_view_t *self)
   closure = g_cclosure_new(G_CALLBACK(_accel_culling_zoom_fit), (gpointer)self, NULL);
   dt_accel_connect_view(self, "preview zoom fit", closure);
 
-  // zoom in/out
+  // zoom in/out/min/max
   closure = g_cclosure_new(G_CALLBACK(zoom_in_callback), (gpointer)self, NULL);
   dt_accel_connect_view(self, "zoom in", closure);
   closure = g_cclosure_new(G_CALLBACK(zoom_out_callback), (gpointer)self, NULL);
   dt_accel_connect_view(self, "zoom out", closure);
+  closure = g_cclosure_new(G_CALLBACK(zoom_min_callback), (gpointer)self, NULL);
+  dt_accel_connect_view(self, "zoom min", closure);
+  closure = g_cclosure_new(G_CALLBACK(zoom_max_callback), (gpointer)self, NULL);
+  dt_accel_connect_view(self, "zoom max", closure);
 }
 
 GSList *mouse_actions(const dt_view_t *self)
@@ -1103,7 +1241,7 @@ end:
     pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
     dt_colorspaces_update_display_transforms();
     pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
-    dt_control_signal_raise(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
                             DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
     dt_control_queue_redraw_center();
   }
@@ -1144,7 +1282,7 @@ end:
     pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
     dt_colorspaces_update_display2_transforms();
     pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
-    dt_control_signal_raise(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
                             DT_COLORSPACES_PROFILE_TYPE_DISPLAY2);
     dt_control_queue_redraw_center();
   }
@@ -1224,9 +1362,13 @@ void gui_init(dt_view_t *self)
                               gtk_widget_get_parent(dt_ui_log_msg(darktable.gui->ui)), -1);
   gtk_overlay_reorder_overlay(GTK_OVERLAY(dt_ui_center_base(darktable.gui->ui)),
                               gtk_widget_get_parent(dt_ui_toast_msg(darktable.gui->ui)), -1);
+
+  /* add the global focus peaking button in toolbox */
+  dt_view_manager_module_toolbox_add(darktable.view_manager, darktable.gui->focus_peaking_button,
+                                     DT_VIEW_LIGHTTABLE | DT_VIEW_DARKROOM);
+
   // create display profile button
-  GtkWidget *const profile_button = dtgtk_button_new(dtgtk_cairo_paint_display, CPF_STYLE_FLAT,
-                                                     NULL);
+  GtkWidget *const profile_button = dtgtk_button_new(dtgtk_cairo_paint_display, CPF_STYLE_FLAT, NULL);
   gtk_widget_set_tooltip_text(profile_button, _("set display profile"));
   dt_view_manager_module_toolbox_add(darktable.view_manager, profile_button, DT_VIEW_LIGHTTABLE);
 
@@ -1317,9 +1459,9 @@ void gui_init(dt_view_t *self)
                    NULL);
 
   // update the gui when profiles change
-  dt_control_signal_connect(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
                             G_CALLBACK(_profile_display_changed), (gpointer)display_profile);
-  dt_control_signal_connect(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
                             G_CALLBACK(_profile_display2_changed), (gpointer)display2_profile);
 }
 

@@ -161,9 +161,6 @@ void dt_exif_set_exiv2_taglist()
 {
   if(exiv2_taglist) return;
 
-  Exiv2::XmpParser::initialize();
-  ::atexit(Exiv2::XmpParser::terminate);
-
   try
   {
     const Exiv2::GroupInfo *groupList = Exiv2::ExifTags::groupList();
@@ -288,7 +285,7 @@ public:
 }
 
 static void _exif_import_tags(dt_image_t *img, Exiv2::XmpData::iterator &pos);
-static gboolean read_xmp_timestamps(Exiv2::XmpData &xmpData, const int imgid);
+static void read_xmp_timestamps(Exiv2::XmpData &xmpData, dt_image_t *img);
 
 // this array should contain all XmpBag and XmpSeq keys used by dt
 const char *dt_xmp_keys[]
@@ -412,8 +409,11 @@ static bool dt_exif_read_xmp_tag(Exiv2::XmpData &xmpData, Exiv2::XmpData::iterat
 // there is no need to pass xmpData
 // version = -1 -> version ignored
 static bool _exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int version,
-                                  bool use_default_rating)
+                                  bool exif_read)
 {
+  // as this can be called several times during the image lifetime, clean up first
+  GList *imgs = NULL;
+  imgs = g_list_append(imgs, GINT_TO_POINTER(img->id));
   try
   {
     Exiv2::XmpData::iterator pos;
@@ -424,6 +424,7 @@ static bool _exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int 
     // why for they don't get passed to that function.
     if(version == -1 || version > 0)
     {
+      if(!exif_read) dt_metadata_clear(imgs, FALSE);
       for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
       {
         const gchar *key = dt_metadata_get_key(i);
@@ -448,6 +449,7 @@ static bool _exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int 
       dt_image_set_xmp_rating(img, stars);
     }
 
+    if(!exif_read) dt_colorlabels_remove_labels(img->id);
     if(FIND_XMP_TAG("Xmp.xmp.Label"))
     {
       std::string label = pos->toString();
@@ -462,18 +464,20 @@ static bool _exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int 
       else if(label == "Purple") // Is it really called like that in XMP files?
         dt_colorlabels_set_label(img->id, 4);
     }
-    if(FIND_XMP_TAG("Xmp.darktable.colorlabels"))
+    // if Xmp.xmp.Label not managed from an external app use dt colors
+    else if(FIND_XMP_TAG("Xmp.darktable.colorlabels"))
     {
-      // TODO: store these in dc:subject or xmp:Label?
       // color labels
       const int cnt = pos->count();
-      dt_colorlabels_remove_labels(img->id);
       for(int i = 0; i < cnt; i++)
       {
         dt_colorlabels_set_label(img->id, pos->toLong(i));
       }
     }
 
+    GList *tags = NULL;
+    // preserve dt tags which are not saved in xmp file
+    if(!exif_read) dt_tag_set_tags(tags, imgs, TRUE, TRUE, FALSE);
     if(FIND_XMP_TAG("Xmp.lr.hierarchicalSubject"))
       _exif_import_tags(img, pos);
     else if(FIND_XMP_TAG("Xmp.dc.subject"))
@@ -545,10 +549,14 @@ static bool _exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int 
       free(datetime);
     }
 
+    if(imgs) g_list_free(imgs);
+    imgs = NULL;
     return true;
   }
   catch(Exiv2::AnyError &e)
   {
+    if(imgs) g_list_free(imgs);
+    imgs = NULL;
     std::string s(e.what());
     std::cerr << "[exiv2 _exif_decode_xmp_data] " << img->filename << ": " << s << std::endl;
     return false;
@@ -590,10 +598,11 @@ static bool _exif_decode_iptc_data(dt_image_t *img, Exiv2::IptcData &iptcData)
         char *tag = dt_util_foo_to_utf8(str.c_str());
         guint tagid = 0;
         dt_tag_new(tag, &tagid);
-        dt_tag_attach_from_gui(tagid, img->id, FALSE, FALSE);
+        dt_tag_attach(tagid, img->id, FALSE, FALSE);
         g_free(tag);
         ++pos;
       }
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
     }
     if(FIND_IPTC_TAG("Iptc.Application2.Caption"))
     {
@@ -2017,8 +2026,11 @@ static void _exif_import_tags(dt_image_t *img, Exiv2::XmpData::iterator &pos)
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "INSERT INTO data.tags (id, name) VALUES (NULL, ?1)",
                               -1, &stmt_ins_tags, NULL);
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "INSERT INTO main.tagged_images (tagid, imgid) VALUES (?1, ?2)", -1,
-                              &stmt_ins_tagged, NULL);
+                              "INSERT INTO main.tagged_images (tagid, imgid, position)"
+                              "  VALUES (?1, ?2,"
+                              "    (SELECT (IFNULL(MAX(position),0) & 0xFFFFFFFF00000000) + (1 << 32)"
+                              "      FROM main.tagged_images))",
+                               -1, &stmt_ins_tagged, NULL);
   for(int i = 0; i < cnt; i++)
   {
     char tagbuf[1024];
@@ -2650,7 +2662,9 @@ static gboolean _image_altered_deprecated(const uint32_t imgid)
 {
   sqlite3_stmt *stmt;
 
-  const gboolean basecurve_auto_apply = dt_conf_get_bool("plugins/darkroom/basecurve/auto_apply");
+  char *workflow = dt_conf_get_string("plugins/darkroom/workflow");
+  const gboolean basecurve_auto_apply = strcmp(workflow, "display-referred") == 0;
+  g_free(workflow);
   const gboolean sharpen_auto_apply = dt_conf_get_bool("plugins/darkroom/sharpen/auto_apply");
 
   char query[1024] = { 0 };
@@ -2702,8 +2716,8 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
     if(!history_only)
     {
       // otherwise we ignore title, description, ... from non-dt xmp files :(
-      size_t ns_pos = image->xmpPacket().find("xmlns:darktable=\"http://darktable.sf.net/\"");
-      bool is_a_dt_xmp = (ns_pos != std::string::npos);
+      const size_t ns_pos = image->xmpPacket().find("xmlns:darktable=\"http://darktable.sf.net/\"");
+      const bool is_a_dt_xmp = (ns_pos != std::string::npos);
       _exif_decode_xmp_data(img, xmpData, is_a_dt_xmp ? version : -1, false);
     }
 
@@ -2758,7 +2772,9 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
 
       if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.iop_order_version"))) != xmpData.end())
       {
-        iop_order_version = pos->toLong() == 2 ? DT_IOP_ORDER_LEGACY : DT_IOP_ORDER_V30;
+        //  All iop-order version before 3 are legacy one. Starting with version 3 we have the first
+        //  attempts to propose the final v3 iop-order.
+        iop_order_version = pos->toLong() < 3 ? DT_IOP_ORDER_LEGACY : DT_IOP_ORDER_V30;
         iop_order_list = dt_ioppr_get_iop_order_list_version(iop_order_version);
       }
       else
@@ -3040,7 +3056,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
 
   end:
 
-    all_ok = read_xmp_timestamps(xmpData, img->id);
+    read_xmp_timestamps(xmpData, img);
 
     sqlite3_finalize(stmt);
 
@@ -3285,50 +3301,23 @@ static void set_xmp_timestamps(Exiv2::XmpData &xmpData, const int imgid)
 }
 
 // read timestamps from XmpData
-gboolean read_xmp_timestamps(Exiv2::XmpData &xmpData, const int imgid)
+void read_xmp_timestamps(Exiv2::XmpData &xmpData, dt_image_t *img)
 {
-  gboolean all_ok = TRUE;
   Exiv2::XmpData::iterator pos;
 
-  const char *timestamps[] = { "change_timestamp", "export_timestamp", "print_timestamp" };
   // Do not read for import_ts. It must be updated at each import.
-
-  const int nb_timestamps = sizeof(timestamps) / sizeof(char *);
-  char xmpkey[1024] = { 0 };
-  char query[1024] = { 0 };
-  char values[1024] = { 0 };
-  char tmp[64];
-  gboolean found_some = FALSE;
-
-  for (int i = 0 ; i < nb_timestamps ; i++)
+  if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.change_timestamp"))) != xmpData.end())
   {
-    snprintf(xmpkey, sizeof(xmpkey), "Xmp.darktable.%s", timestamps[i]);
-    if((pos = xmpData.findKey(Exiv2::XmpKey(xmpkey))) != xmpData.end())
-    {
-      snprintf(tmp, sizeof(tmp), " %s = %ld,", timestamps[i], pos->toLong());
-      g_strlcat(values, tmp, sizeof(values));
-      found_some = TRUE;
-    }
+    img->change_timestamp = pos->toLong();
   }
-
-  if(found_some)
+  if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.export_timestamp"))) != xmpData.end())
   {
-    sqlite3_stmt *stmt;
-
-    values[strlen(values) - 1] = '\0'; /* remove last comma */
-    snprintf(query, sizeof(query), "UPDATE main.images SET %s WHERE id = %d", values, imgid);
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
-
-    if(sqlite3_step(stmt) != SQLITE_DONE)
-      {
-        fprintf(stderr, "[exif] error writing timestamps entry for image %d\n", imgid);
-        fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
-        all_ok = FALSE;
-      }
-    sqlite3_finalize(stmt);
+    img->export_timestamp = pos->toLong();
   }
-
-  return all_ok;
+  if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.print_timestamp"))) != xmpData.end())
+  {
+    img->print_timestamp = pos->toLong();
+  }
 }
 
 static void dt_remove_xmp_exif_geotag(Exiv2::XmpData &xmpData)
@@ -4078,6 +4067,7 @@ gboolean dt_exif_get_datetime_taken(const uint8_t *data, size_t size, time_t *da
       {
         exif_tm.tm_year -= 1900;
         exif_tm.tm_mon--;
+        exif_tm.tm_isdst = -1;    // no daylight saving time
         *datetime_taken = mktime(&exif_tm);
         return TRUE;
       }
@@ -4111,8 +4101,25 @@ void dt_exif_init()
   Exiv2::XmpParser::initialize();
   // this has to stay with the old url (namespace already propagated outside dt)
   Exiv2::XmpProperties::registerNs("http://darktable.sf.net/", "darktable");
-  Exiv2::XmpProperties::registerNs("http://ns.adobe.com/lightroom/1.0/", "lr");
-  Exiv2::XmpProperties::registerNs("http://cipa.jp/exif/1.0/", "exifEX");
+  // check is Exiv2 version already knows these prefixes
+  try
+  {
+    Exiv2::XmpProperties::propertyList("lr");
+  }
+  catch(Exiv2::AnyError &e)
+  {
+    // if lightroom is not known register it
+    Exiv2::XmpProperties::registerNs("http://ns.adobe.com/lightroom/1.0/", "lr");
+  }
+  try
+  {
+    Exiv2::XmpProperties::propertyList("exifEX");
+  }
+  catch(Exiv2::AnyError &e)
+  {
+    // if exifEX is not known register it
+    Exiv2::XmpProperties::registerNs("http://cipa.jp/exif/1.0/", "exifEX");
+  }
 }
 
 void dt_exif_cleanup()

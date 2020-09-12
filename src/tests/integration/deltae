@@ -15,6 +15,10 @@ import numpy
 import os
 import sys
 
+if "delta_E" not in dir(colour):
+    print("  Unable to compute delta-E, please upgrade python3-colour")
+    exit(0)
+
 expected = sys.argv[1]
 output = sys.argv[2]
 
@@ -36,6 +40,9 @@ if(max_dE > MAX_DELTA_E):
     count_above = numpy.sum(delta_E >= MAX_DELTA_E)
     print("      Mean dE         %.4f" % mean_dE)
     print("      Count above max %d" % count_above)
-    exit(1)
+    exit(2)
 
-exit(0)
+if max_dE < 0.01:
+    exit(0)
+else:
+    exit(1)
