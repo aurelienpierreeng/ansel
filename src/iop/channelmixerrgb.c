@@ -81,7 +81,6 @@ typedef struct dt_iop_channelmixer_rgb_params_t
 
 typedef struct dt_iop_channelmixer_rgb_gui_data_t
 {
-  GtkNotebook *notebook;
   GtkWidget *illuminant, *temperature, *adaptation, *gamut, *clip;
   GtkWidget *illum_fluo, *illum_led, *illum_x, *illum_y, *approx_cct, *illum_color;
   GtkWidget *scale_red_R, *scale_red_G, *scale_red_B;
@@ -635,7 +634,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   // auto-detect WB upon request
   if(self->dev->gui_attached && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW && g)
   {
-    if(g->auto_detect_illuminant && !self->dt->gui->reset)
+    if(g->auto_detect_illuminant && !darktable.gui->reset)
     {
       float XYZ[4] = { 0.f };
       auto_detect_WB(in, roi_in->width, roi_in->height, ch, RGB_to_XYZ, XYZ);
@@ -1243,7 +1242,7 @@ static void update_approx_cct(dt_iop_module_t *self)
 
 static void illuminant_callback(GtkWidget *combo, dt_iop_module_t *self)
 {
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
 
@@ -1309,7 +1308,7 @@ static void illuminant_callback(GtkWidget *combo, dt_iop_module_t *self)
 
 static void fluo_callback(GtkWidget *combo, dt_iop_module_t *self)
 {
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->illum_fluo = dt_bauhaus_combobox_get(combo);
 
@@ -1325,7 +1324,7 @@ static void fluo_callback(GtkWidget *combo, dt_iop_module_t *self)
 
 static void led_callback(GtkWidget *combo, dt_iop_module_t *self)
 {
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->illum_led = dt_bauhaus_combobox_get(combo);
 
@@ -1342,7 +1341,7 @@ static void led_callback(GtkWidget *combo, dt_iop_module_t *self)
 static void temperature_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->temperature = dt_bauhaus_slider_get(slider);
 
@@ -1359,7 +1358,7 @@ static void temperature_callback(GtkWidget *slider, gpointer user_data)
 static void gamut_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->gamut = dt_bauhaus_slider_get(slider);
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -1368,7 +1367,7 @@ static void gamut_callback(GtkWidget *slider, gpointer user_data)
 static void illum_x_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
@@ -1400,7 +1399,7 @@ static void illum_x_callback(GtkWidget *slider, gpointer user_data)
 static void illum_y_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
@@ -1431,7 +1430,7 @@ static void illum_y_callback(GtkWidget *slider, gpointer user_data)
 
 static void adaptation_callback(GtkWidget *combo, dt_iop_module_t *self)
 {
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->adaptation = dt_bauhaus_combobox_get(combo);
 
@@ -1449,7 +1448,7 @@ static void adaptation_callback(GtkWidget *combo, dt_iop_module_t *self)
 static void red_R_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->red[0] = dt_bauhaus_slider_get(slider);
 
@@ -1464,7 +1463,7 @@ static void red_R_callback(GtkWidget *slider, gpointer user_data)
 static void red_G_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->red[1] = dt_bauhaus_slider_get(slider);
 
@@ -1479,7 +1478,7 @@ static void red_G_callback(GtkWidget *slider, gpointer user_data)
 static void red_B_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->red[2] = dt_bauhaus_slider_get(slider);
 
@@ -1494,7 +1493,7 @@ static void red_B_callback(GtkWidget *slider, gpointer user_data)
 static void green_R_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->green[0] = dt_bauhaus_slider_get(slider);
 
@@ -1509,7 +1508,7 @@ static void green_R_callback(GtkWidget *slider, gpointer user_data)
 static void green_G_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->green[1] = dt_bauhaus_slider_get(slider);
 
@@ -1524,7 +1523,7 @@ static void green_G_callback(GtkWidget *slider, gpointer user_data)
 static void green_B_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->green[2] = dt_bauhaus_slider_get(slider);
 
@@ -1539,7 +1538,7 @@ static void green_B_callback(GtkWidget *slider, gpointer user_data)
 static void blue_R_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->blue[0] = dt_bauhaus_slider_get(slider);
 
@@ -1554,7 +1553,7 @@ static void blue_R_callback(GtkWidget *slider, gpointer user_data)
 static void blue_G_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->blue[1] = dt_bauhaus_slider_get(slider);
 
@@ -1569,7 +1568,7 @@ static void blue_G_callback(GtkWidget *slider, gpointer user_data)
 static void blue_B_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->blue[2] = dt_bauhaus_slider_get(slider);
 
@@ -1584,7 +1583,7 @@ static void blue_B_callback(GtkWidget *slider, gpointer user_data)
 static void saturation_R_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->saturation[0] = dt_bauhaus_slider_get(slider);
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -1593,7 +1592,7 @@ static void saturation_R_callback(GtkWidget *slider, gpointer user_data)
 static void saturation_G_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->saturation[1] = dt_bauhaus_slider_get(slider);
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -1602,7 +1601,7 @@ static void saturation_G_callback(GtkWidget *slider, gpointer user_data)
 static void saturation_B_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->saturation[2] = dt_bauhaus_slider_get(slider);
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -1611,7 +1610,7 @@ static void saturation_B_callback(GtkWidget *slider, gpointer user_data)
 static void lightness_R_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->lightness[0] = dt_bauhaus_slider_get(slider);
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -1620,7 +1619,7 @@ static void lightness_R_callback(GtkWidget *slider, gpointer user_data)
 static void lightness_G_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->lightness[1] = dt_bauhaus_slider_get(slider);
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -1629,7 +1628,7 @@ static void lightness_G_callback(GtkWidget *slider, gpointer user_data)
 static void lightness_B_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->lightness[2] = dt_bauhaus_slider_get(slider);
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -1638,7 +1637,7 @@ static void lightness_B_callback(GtkWidget *slider, gpointer user_data)
 static void grey_R_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->grey[0] = dt_bauhaus_slider_get(slider);
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -1647,7 +1646,7 @@ static void grey_R_callback(GtkWidget *slider, gpointer user_data)
 static void grey_G_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->grey[1] = dt_bauhaus_slider_get(slider);
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -1656,7 +1655,7 @@ static void grey_G_callback(GtkWidget *slider, gpointer user_data)
 static void grey_B_callback(GtkWidget *slider, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(self->dt->gui->reset) return;
+  if(darktable.gui->reset) return;
   dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
   p->grey[2] = dt_bauhaus_slider_get(slider);
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -1881,29 +1880,14 @@ void gui_init(struct dt_iop_module_t *self)
   const dt_image_t *img = &self->dev->image_storage;
   const int is_raw = dt_image_is_matrix_correction_supported(img);
 
-  // Init GTK notebook
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-
-  g->notebook = GTK_NOTEBOOK(gtk_notebook_new());
-  GtkWidget *page0 = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
-  GtkWidget *page1 = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
-  GtkWidget *page2 = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
-  GtkWidget *page3 = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
-  GtkWidget *page4 = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
-  GtkWidget *page5 = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
-  GtkWidget *page6 = GTK_WIDGET(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
-
-  gtk_notebook_append_page(GTK_NOTEBOOK(g->notebook), page0, gtk_label_new(_("CAT")));
-  gtk_notebook_append_page(GTK_NOTEBOOK(g->notebook), page1, gtk_label_new(_("R")));
-  gtk_notebook_append_page(GTK_NOTEBOOK(g->notebook), page2, gtk_label_new(_("G")));
-  gtk_notebook_append_page(GTK_NOTEBOOK(g->notebook), page3, gtk_label_new(_("B")));
-  gtk_notebook_append_page(GTK_NOTEBOOK(g->notebook), page4, gtk_label_new(_("colorfulness")));
-  gtk_notebook_append_page(GTK_NOTEBOOK(g->notebook), page5, gtk_label_new(_("brightness")));
-  gtk_notebook_append_page(GTK_NOTEBOOK(g->notebook), page6, gtk_label_new(_("grey")));
-  gtk_widget_show_all(GTK_WIDGET(gtk_notebook_get_nth_page(g->notebook, 0)));
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->notebook), FALSE, FALSE, 0);
-
-  dtgtk_justify_notebook_tabs(g->notebook);
+  self->widget = gtk_notebook_new();
+  GtkWidget *page0 = dt_ui_notebook_page(GTK_NOTEBOOK(self->widget), _("CAT"), NULL);
+  GtkWidget *page1 = dt_ui_notebook_page(GTK_NOTEBOOK(self->widget), _("R"), NULL);
+  GtkWidget *page2 = dt_ui_notebook_page(GTK_NOTEBOOK(self->widget), _("G"), NULL);
+  GtkWidget *page3 = dt_ui_notebook_page(GTK_NOTEBOOK(self->widget), _("B"), NULL);
+  GtkWidget *page4 = dt_ui_notebook_page(GTK_NOTEBOOK(self->widget), _("colorfulness"), NULL);
+  GtkWidget *page5 = dt_ui_notebook_page(GTK_NOTEBOOK(self->widget), _("brightness"), NULL);
+  GtkWidget *page6 = dt_ui_notebook_page(GTK_NOTEBOOK(self->widget), _("grey"), NULL);
 
   g->adaptation = dt_bauhaus_combobox_new(self);
   dt_bauhaus_widget_set_label(g->adaptation, NULL, _("adaptation"));
