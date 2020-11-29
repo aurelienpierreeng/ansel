@@ -408,17 +408,16 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img, RawImage r, d
   else
   {
     // Scanners DNG don't need white balance and black point
+    img->flags &= ~DT_IMAGE_LDR;
     img->flags &= ~DT_IMAGE_RAW;
     img->flags &= ~DT_IMAGE_S_RAW;
 
     if(DataType == TYPE_USHORT16)
     {
-      img->flags |= DT_IMAGE_LDR;
       img->flags &= ~DT_IMAGE_HDR;
     }
     else if(DataType == TYPE_FLOAT32)
     {
-      img->flags &= ~DT_IMAGE_LDR;
       img->flags |= DT_IMAGE_HDR;
     }
   }
