@@ -344,7 +344,7 @@ int write_image(dt_imageio_module_data_t *jpg_tmp, const char *filename, const v
 
   jpeg_start_compress(&(jpg->cinfo), TRUE);
 
-  cmsHPROFILE out_profile = dt_colorspaces_get_output_profile(imgid, over_type, over_filename)->profile;
+  cmsHPROFILE out_profile = dt_colorspaces_get_output_profile(imgid, &over_type, over_filename)->profile;
   uint32_t len = 0;
   cmsSaveProfileToMem(out_profile, NULL, &len);
   if(len > 0)

@@ -73,10 +73,6 @@ typedef struct dt_iop_colorout_params_t
   dt_iop_color_intent_t intent; // $DEFAULT: DT_INTENT_PERCEPTUAL
 } dt_iop_colorout_params_t;
 
-typedef struct dt_iop_colorout_gui_data_t
-{
-  GtkWidget *output_intent, *output_profile;
-} dt_iop_colorout_gui_data_t;
 
 
 const char *name()
@@ -103,7 +99,7 @@ int default_group()
 
 int flags()
 {
-  return IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_ONE_INSTANCE;
+  return IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_HIDDEN | IOP_FLAGS_NO_HISTORY_STACK;
 }
 
 int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -226,45 +222,9 @@ void cleanup_global(dt_iop_module_so_t *module)
   module->data = NULL;
 }
 
-static void intent_changed(GtkWidget *widget, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return;
-  dt_iop_colorout_params_t *p = (dt_iop_colorout_params_t *)self->params;
-  p->intent = (dt_iop_color_intent_t)dt_bauhaus_combobox_get(widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
-}
 
-static void output_profile_changed(GtkWidget *widget, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(darktable.gui->reset) return;
-  dt_iop_colorout_params_t *p = (dt_iop_colorout_params_t *)self->params;
-  int pos = dt_bauhaus_combobox_get(widget);
 
-  for(GList *profiles = darktable.color_profiles->profiles; profiles; profiles = g_list_next(profiles))
-  {
-    dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)profiles->data;
-    if(pp->out_pos == pos)
-    {
-      p->type = pp->type;
-      g_strlcpy(p->filename, pp->filename, sizeof(p->filename));
-      dt_dev_add_history_item(darktable.develop, self, TRUE);
 
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_EXPORT);
-      return;
-    }
-  }
-
-  fprintf(stderr, "[colorout] color profile %s seems to have disappeared!\n", dt_colorspaces_get_name(p->type, p->filename));
-}
-
-static void _signal_profile_changed(gpointer instance, gpointer user_data)
-{
-  dt_develop_t *dev = (dt_develop_t *)user_data;
-  if(!dev->gui_attached || dev->gui_leaving) return;
-  dt_dev_reprocess_center(dev);
-}
 
 #if 1
 static float lerp_lut(const float *const lut, const float v)
@@ -607,10 +567,33 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   {
     if(pipe->icc_type != DT_COLORSPACE_NONE)
     {
+      // User defined explicitly a color space in export box: use that
       p->type = pipe->icc_type;
       g_strlcpy(p->filename, pipe->icc_filename, sizeof(p->filename));
+
     }
-    if((unsigned int)pipe->icc_intent < DT_INTENT_LAST) p->intent = pipe->icc_intent;
+    else
+    {
+      // No color space defined : save with input profile
+      dt_iop_order_iccprofile_info_t *icc_input = dt_ioppr_get_pipe_input_profile_info(pipe);
+      if(icc_input)
+      {
+        p->type = icc_input->type;
+        g_strlcpy(p->filename, icc_input->filename, sizeof(p->filename));
+      }
+    }
+
+    if((unsigned int)pipe->icc_intent < DT_INTENT_LAST)
+    {
+      // User defined explicitly an intent in export box: use that
+      p->intent = pipe->icc_intent;
+    }
+    else
+    {
+      // No intent defined : save with input intent
+      dt_iop_order_iccprofile_info_t *icc_input = dt_ioppr_get_pipe_input_profile_info(pipe);
+      if(icc_input) p->intent = icc_input->intent;
+    }
 
     out_type = p->type;
     out_filename = p->filename;
@@ -652,10 +635,19 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
                                    | DT_PROFILE_DIRECTION_DISPLAY2);
   if(out_profile)
   {
+    // Path for internal profile or external ICC file
     output = out_profile->profile;
     if(out_type == DT_COLORSPACE_XYZ) output_format = TYPE_XYZA_FLT;
   }
-  else
+  else if((pipe->type & DT_DEV_PIXELPIPE_EXPORT) == DT_DEV_PIXELPIPE_EXPORT)
+  {
+    // Export with no explicit profile specified : use input file embedded profile
+    output = dt_colorspaces_get_embedded_profile(pipe->image.id, &out_type);
+  }
+
+  // We don't have an internal, embedded or external file profile,
+  // just fall back to sRGB
+  if(!output)
   {
     output = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "",
                                         DT_PROFILE_DIRECTION_OUT
@@ -792,27 +784,6 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
   piece->data = NULL;
 }
 
-void gui_update(struct dt_iop_module_t *self)
-{
-  dt_iop_colorout_gui_data_t *g = (dt_iop_colorout_gui_data_t *)self->gui_data;
-  dt_iop_colorout_params_t *p = (dt_iop_colorout_params_t *)self->params;
-
-  dt_bauhaus_combobox_set(g->output_intent, (int)p->intent);
-
-  for(GList *iter = darktable.color_profiles->profiles; iter; iter = g_list_next(iter))
-  {
-    dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)iter->data;
-    if(pp->out_pos > -1 &&
-       p->type == pp->type && (p->type != DT_COLORSPACE_FILE || !strcmp(p->filename, pp->filename)))
-    {
-      dt_bauhaus_combobox_set(g->output_profile, pp->out_pos);
-      return;
-    }
-  }
-
-  dt_bauhaus_combobox_set(g->output_profile, 0);
-  fprintf(stderr, "[colorout] could not find requested profile `%s'!\n", dt_colorspaces_get_name(p->type, p->filename));
-}
 
 void init(dt_iop_module_t *module)
 {
@@ -822,88 +793,8 @@ void init(dt_iop_module_t *module)
   module->default_enabled = 1;
 }
 
-static void _preference_changed(gpointer instance, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_colorout_gui_data_t *g = (dt_iop_colorout_gui_data_t *)self->gui_data;
 
-  const int force_lcms2 = dt_conf_get_bool("plugins/lighttable/export/force_lcms2");
-  if(force_lcms2)
-  {
-    gtk_widget_set_no_show_all(g->output_intent, FALSE);
-    gtk_widget_set_visible(g->output_intent, TRUE);
-  }
-  else
-  {
-    gtk_widget_set_no_show_all(g->output_intent, TRUE);
-    gtk_widget_set_visible(g->output_intent, FALSE);
-  }
-}
 
-void gui_init(struct dt_iop_module_t *self)
-{
-  const int force_lcms2 = dt_conf_get_bool("plugins/lighttable/export/force_lcms2");
-
-  dt_iop_colorout_gui_data_t *g = IOP_GUI_ALLOC(colorout);
-
-  char datadir[PATH_MAX] = { 0 };
-  char confdir[PATH_MAX] = { 0 };
-  dt_loc_get_datadir(datadir, sizeof(datadir));
-  dt_loc_get_user_config_dir(confdir, sizeof(confdir));
-
-  self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
-
-  // TODO:
-  g->output_intent = dt_bauhaus_combobox_new(self);
-  gtk_box_pack_start(GTK_BOX(self->widget), g->output_intent, TRUE, TRUE, 0);
-  dt_bauhaus_widget_set_label(g->output_intent, NULL, N_("output intent"));
-  dt_bauhaus_combobox_add(g->output_intent, _("perceptual"));
-  dt_bauhaus_combobox_add(g->output_intent, _("relative colorimetric"));
-  dt_bauhaus_combobox_add(g->output_intent, C_("rendering intent", "saturation"));
-  dt_bauhaus_combobox_add(g->output_intent, _("absolute colorimetric"));
-
-  if(!force_lcms2)
-  {
-    gtk_widget_set_no_show_all(g->output_intent, TRUE);
-    gtk_widget_set_visible(g->output_intent, FALSE);
-  }
-
-  g->output_profile = dt_bauhaus_combobox_new(self);
-  dt_bauhaus_widget_set_label(g->output_profile, NULL, N_("export profile"));
-  gtk_box_pack_start(GTK_BOX(self->widget), g->output_profile, TRUE, TRUE, 0);
-  for(GList *l = darktable.color_profiles->profiles; l; l = g_list_next(l))
-  {
-    dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
-    if(prof->out_pos > -1) dt_bauhaus_combobox_add(g->output_profile, prof->name);
-  }
-
-  gtk_widget_set_tooltip_text(g->output_intent, _("rendering intent"));
-  char *system_profile_dir = g_build_filename(datadir, "color", "out", NULL);
-  char *user_profile_dir = g_build_filename(confdir, "color", "out", NULL);
-  char *tooltip = g_strdup_printf(_("ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
-  gtk_widget_set_tooltip_text(g->output_profile, tooltip);
-  g_free(system_profile_dir);
-  g_free(user_profile_dir);
-  g_free(tooltip);
-
-  g_signal_connect(G_OBJECT(g->output_intent), "value-changed", G_CALLBACK(intent_changed), (gpointer)self);
-  g_signal_connect(G_OBJECT(g->output_profile), "value-changed", G_CALLBACK(output_profile_changed), (gpointer)self);
-
-  // reload the profiles when the display or softproof profile changed!
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_CHANGED,
-                            G_CALLBACK(_signal_profile_changed), self->dev);
-  // update the gui when the preferences changed (i.e. show intent when using lcms2)
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE,
-                            G_CALLBACK(_preference_changed), (gpointer)self);
-}
-
-void gui_cleanup(struct dt_iop_module_t *self)
-{
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_signal_profile_changed), self->dev);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_preference_changed), self);
-
-  IOP_GUI_FREE;
-}
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

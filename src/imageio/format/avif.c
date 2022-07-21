@@ -350,7 +350,7 @@ int write_image(struct dt_imageio_module_data_t *data,
     {
       const dt_colorspaces_color_profile_t *cp =
         dt_colorspaces_get_output_profile(imgid,
-                                          over_type,
+                                          &over_type,
                                           over_filename);
       cmsHPROFILE out_profile = cp->profile;
 
@@ -949,4 +949,3 @@ void gui_reset(dt_imageio_module_format_t *self)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

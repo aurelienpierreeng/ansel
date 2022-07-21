@@ -270,7 +270,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
   if(imgid > 0 && d->params.icc && d->params.mode == MODE_NORMAL)
   {
     // get the id of the profile
-    const dt_colorspaces_color_profile_t *profile = dt_colorspaces_get_output_profile(imgid, over_type, over_filename);
+    const dt_colorspaces_color_profile_t *profile = dt_colorspaces_get_output_profile(imgid, &over_type, over_filename);
 
     // look it up in the list
     for(GList *iter = d->icc_profiles; iter; iter = g_list_next(iter))
@@ -843,4 +843,3 @@ int set_params(dt_imageio_module_format_t *self, const void *params, const int s
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

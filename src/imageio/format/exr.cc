@@ -159,7 +159,7 @@ int write_image(dt_imageio_module_data_t *tmp, const char *filename, const void 
     cmsCIEXYZ *red_color = NULL,
               *green_color = NULL,
               *blue_color = NULL;
-    cmsHPROFILE out_profile = dt_colorspaces_get_output_profile(imgid, over_type, over_filename)->profile;
+    cmsHPROFILE out_profile = dt_colorspaces_get_output_profile(imgid, &over_type, over_filename)->profile;
     float r[2], g[2], b[2], w[2];
     float sum;
     Imf::Chromaticities chromaticities;

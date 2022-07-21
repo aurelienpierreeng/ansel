@@ -20,6 +20,7 @@
 #include "common/colormatrices.c"
 #include "common/darktable.h"
 #include "common/debug.h"
+#include "common/image_cache.h"
 #include "common/file_location.h"
 #include "common/math.h"
 #include "common/matrices.h"
@@ -40,6 +41,11 @@
 #include <Carbon/Carbon.h>
 #include <CoreServices/CoreServices.h>
 #endif
+
+static dt_colorspaces_color_profile_t *_create_profile(dt_colorspaces_color_profile_type_t type,
+                                                       cmsHPROFILE profile, const char *name, int in_pos,
+                                                       int out_pos, int display_pos, int category_pos,
+                                                       int work_pos, int display2_pos);
 
 static const cmsCIEXYZ d65 = {0.95045471, 1.00000000, 1.08905029};
 
@@ -859,60 +865,113 @@ const dt_colorspaces_color_profile_t *dt_colorspaces_get_work_profile(const int 
   return p;
 }
 
+const cmsHPROFILE dt_colorspaces_get_embedded_profile(const int imgid, dt_colorspaces_color_profile_type_t *type)
+{
+  cmsHPROFILE output = NULL;
+
+  fprintf(stdout, "image %i\n", imgid);
+
+  // Extract any color profile that could be embedded in a file
+  if(*type == DT_COLORSPACE_EMBEDDED_ICC)
+  {
+    // embedded ICC color profile : file is JPEG, PNG, TIFF, etc.
+    const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    if(cimg == NULL || cimg->profile == NULL)
+    {
+      *type = DT_COLORSPACE_EMBEDDED_MATRIX;
+      fprintf(stdout, "embedded color profile NOT found\n");
+    }
+    else
+    {
+      output = dt_colorspaces_get_rgb_profile_from_mem(cimg->profile, cimg->profile_size);
+      fprintf(stdout, "embedded color profile found\n");
+    }
+    dt_image_cache_read_release(darktable.image_cache, cimg);
+  }
+  if(*type == DT_COLORSPACE_EMBEDDED_MATRIX)
+  {
+    // embedded matrix, hopefully D65: file is DNG
+    const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    if(isnan(cimg->d65_color_matrix[0]))
+    {
+      *type = DT_COLORSPACE_NONE;
+      fprintf(stdout, "embedded matrix NOT found\n");
+    }
+    else
+    {
+      output = dt_colorspaces_create_xyzimatrix_profile((float(*)[3])cimg->d65_color_matrix);
+      fprintf(stdout, "embedded matrix found\n");
+    }
+    dt_image_cache_read_release(darktable.image_cache, cimg);
+  }
+
+  return output;
+}
+
+
 const dt_colorspaces_color_profile_t *dt_colorspaces_get_output_profile(const int imgid,
-                                                                        dt_colorspaces_color_profile_type_t over_type,
+                                                                        dt_colorspaces_color_profile_type_t *over_type,
                                                                         const char *over_filename)
 {
-  // find the colorout module -- the pointer stays valid until darktable shuts down
-  static const dt_iop_module_so_t *colorout = NULL;
-  if(colorout == NULL)
-  {
-    for(const GList *modules = darktable.iop; modules; modules = g_list_next(modules))
-    {
-      const dt_iop_module_so_t *module = (const dt_iop_module_so_t *)(modules->data);
-      if(!strcmp(module->op, "colorout"))
-      {
-        colorout = module;
-        break;
-      }
-    }
-  }
+  fprintf(stdout, "[get_output_profile] called with ICC type %i\n", *over_type);
 
   const dt_colorspaces_color_profile_t *p = NULL;
 
-  if(over_type != DT_COLORSPACE_NONE)
-  {
-    // return the profile specified in export.
-    // we have that in here to get rid of the if() check in all places calling this function.
-    p = dt_colorspaces_get_profile(over_type, over_filename, DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY);
-  }
-  else if(colorout && colorout->get_p)
-  {
-    // get the profile assigned from colorout
-    // FIXME: does this work when using JPEG thumbs and the image was never opened?
-    sqlite3_stmt *stmt;
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
-      "SELECT op_params FROM main.history WHERE imgid=?1 AND operation='colorout' ORDER BY num DESC LIMIT 1", -1,
-      &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-    if(sqlite3_step(stmt) == SQLITE_ROW)
-    {
-      // use introspection to get the profile name from the binary params blob
-      const void *params = sqlite3_column_blob(stmt, 0);
-      dt_colorspaces_color_profile_type_t *type = colorout->get_p(params, "type");
-      char *filename = colorout->get_p(params, "filename");
+  // Special case if output is undefined : use the embedded profile if any.
+  // We need to read it from the original image and create it on-the-fly
+  if(*over_type == DT_COLORSPACE_NONE) *over_type = DT_COLORSPACE_EMBEDDED_ICC;
 
-      if(type && filename) p = dt_colorspaces_get_profile(*type, filename,
-                                                          DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY);
+  if(*over_type == DT_COLORSPACE_EMBEDDED_ICC || *over_type == DT_COLORSPACE_EMBEDDED_MATRIX)
+  {
+    fprintf(stdout, "[colorspaces] Trying to fetch embedded profile.\n");
+
+    // return the profile of the original picture
+    cmsHPROFILE profile = dt_colorspaces_get_embedded_profile(imgid, over_type);
+    // over_type will get reset to DT_COLORSPACE_NONE if no embedded profile is found
+
+    if(profile)
+    {
+      // create a dt profile object
+      dt_colorspaces_color_profile_t *container = _create_profile(*over_type, profile, "", -1, -1, -1, -1, -1, -1);
+
+      if(container)
+      {
+        char *lang = getenv("LANG");
+        if(!lang) lang = "en_US";
+        dt_colorspaces_get_profile_name(profile, lang, lang + 3, container->name, sizeof(container->name));
+
+        // add it to the stack of dt profiles so it gets freed properly when we don't need it anymore
+        darktable.color_profiles->profiles = g_list_append(darktable.color_profiles->profiles, container);
+
+        p = (const dt_colorspaces_color_profile_t *)container;
+      }
+      else // output space is defined by an ICC file or an internal profile
+      {
+        fprintf(stdout,
+                "[colorspaces] could not pass the original embedded profile to the output. Report the bug.\n");
+      }
     }
-    sqlite3_finalize(stmt);
+    else
+    {
+      fprintf(stdout,
+                "[colorspaces] could not fetch the profile.\n");
+    }
+  }
+  else
+  {
+    // return a pointer to the profile specified in export.
+    // we have that in here to get rid of the if() check in all places calling this function.
+    p = dt_colorspaces_get_profile(*over_type, over_filename, DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY);
   }
 
   // if all else fails -> fall back to sRGB
-  if(!p) p = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_DIRECTION_OUT);
+  if(!p)
+  {
+    p = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "", DT_PROFILE_DIRECTION_OUT);
+    *over_type = DT_COLORSPACE_SRGB;
+    fprintf(stdout, "[colorspaces] WARNING: no colorspace found, sRGB will be tagged in final exported file. "
+                    "Colors may be inconsistent\n");
+  }
 
   return p;
 }

@@ -80,7 +80,7 @@ int write_image(dt_imageio_module_data_t *d_tmp, const char *filename, const voi
 
   if(imgid > 0)
   {
-    cmsHPROFILE out_profile = dt_colorspaces_get_output_profile(imgid, over_type, over_filename)->profile;
+    cmsHPROFILE out_profile = dt_colorspaces_get_output_profile(imgid, &over_type, over_filename)->profile;
     cmsSaveProfileToMem(out_profile, 0, &profile_len);
     if(profile_len > 0)
     {
@@ -871,4 +871,3 @@ int flags(dt_imageio_module_data_t *data)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

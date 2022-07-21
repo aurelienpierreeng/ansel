@@ -1223,7 +1223,7 @@ void gui_init(dt_lib_module_t *self)
   d->profile = dt_bauhaus_combobox_new_action(DT_ACTION(self));
   dt_bauhaus_widget_set_label(d->profile, NULL, N_("profile"));
   gtk_box_pack_start(GTK_BOX(self->widget), d->profile, FALSE, TRUE, 0);
-  dt_bauhaus_combobox_add(d->profile, _("image settings"));
+  dt_bauhaus_combobox_add(d->profile, _("same as original"));
   for(GList *l = darktable.color_profiles->profiles; l; l = g_list_next(l))
   {
     const dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
@@ -1245,7 +1245,7 @@ void gui_init(dt_lib_module_t *self)
 
   d->intent = dt_bauhaus_combobox_new_action(DT_ACTION(self));
   dt_bauhaus_widget_set_label(d->intent, NULL, N_("intent"));
-  dt_bauhaus_combobox_add(d->intent, _("image settings"));
+  dt_bauhaus_combobox_add(d->intent, _("same as original"));
   dt_bauhaus_combobox_add(d->intent, _("perceptual"));
   dt_bauhaus_combobox_add(d->intent, _("relative colorimetric"));
   dt_bauhaus_combobox_add(d->intent, C_("rendering intent", "saturation"));

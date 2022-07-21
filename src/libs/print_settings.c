@@ -352,7 +352,7 @@ static int _export_image(dt_job_t *job, dt_image_box *img)
 
   const dt_colorspaces_color_profile_t *buf_profile =
     dt_colorspaces_get_output_profile(img->imgid,
-                                      params->buf_icc_type,
+                                      &params->buf_icc_type,
                                       params->buf_icc_profile);
   if(*params->p_icc_profile)
   {

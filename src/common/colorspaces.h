@@ -223,9 +223,12 @@ int dt_colorspaces_get_darktable_matrix(const char *makermodel, float *matrix);
 /** return the work profile as set in colorin */
 const dt_colorspaces_color_profile_t *dt_colorspaces_get_work_profile(const int imgid);
 
+/** return the embedded profile of a particular image **/
+const cmsHPROFILE dt_colorspaces_get_embedded_profile(const int imgid, dt_colorspaces_color_profile_type_t *type);
+
 /** return the output profile as set in colorout, taking export override into account if passed in. */
 const dt_colorspaces_color_profile_t *dt_colorspaces_get_output_profile(const int imgid,
-                                                                        dt_colorspaces_color_profile_type_t over_type,
+                                                                        dt_colorspaces_color_profile_type_t *over_type,
                                                                         const char *over_filename);
 
 /** return an rgb lcms2 profile from data. if data points to a grayscale profile a new rgb profile is created
@@ -298,4 +301,3 @@ void dt_colorspaces_rgb_to_cygm(float *out, int num, double RGB_to_CAM[4][3]);
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

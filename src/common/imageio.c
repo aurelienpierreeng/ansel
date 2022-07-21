@@ -789,6 +789,9 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
 
   dt_ioppr_resync_modules_order(&dev);
 
+  // Update the ICC type if DT_COLORSPACE_NONE is passed
+  dt_colorspaces_get_output_profile(imgid, &icc_type, icc_filename);
+
   dt_dev_pixelpipe_set_icc(&pipe, icc_type, icc_filename, icc_intent);
   dt_dev_pixelpipe_set_input(&pipe, &dev, (float *)buf.buf, buf.width, buf.height, buf.iscale);
   dt_dev_pixelpipe_create_nodes(&pipe, &dev);
@@ -827,29 +830,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   dt_show_times(&start, "[export] creating pixelpipe");
 
   // find output color profile for this image:
-  int sRGB = 1;
-  if(icc_type == DT_COLORSPACE_SRGB)
-  {
-    sRGB = 1;
-  }
-  else if(icc_type == DT_COLORSPACE_NONE)
-  {
-    dt_iop_module_t *colorout = NULL;
-    for(GList *modules = dev.iop; modules; modules = g_list_next(modules))
-    {
-      colorout = (dt_iop_module_t *)modules->data;
-      if(colorout->get_p && strcmp(colorout->op, "colorout") == 0)
-      {
-        const dt_colorspaces_color_profile_type_t *type = colorout->get_p(colorout->params, "type");
-        sRGB = (!type || *type == DT_COLORSPACE_SRGB);
-        break; // colorout can't have > 1 instance
-      }
-    }
-  }
-  else
-  {
-    sRGB = 0;
-  }
+  int sRGB = (icc_type == DT_COLORSPACE_SRGB);
 
   // if is_scaling is used don't override high_quality
   // get only once at the beginning, in case the user changes it on the way:
@@ -1313,4 +1294,3 @@ gboolean dt_imageio_lookup_makermodel(const char *maker, const char *model,
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

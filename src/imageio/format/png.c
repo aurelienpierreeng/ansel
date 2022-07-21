@@ -167,7 +167,7 @@ int write_image(dt_imageio_module_data_t *p_tmp, const char *filename, const voi
   // metadata has to be written before the pixels
 
   // embed icc profile
-  cmsHPROFILE out_profile = dt_colorspaces_get_output_profile(imgid, over_type, over_filename)->profile;
+  cmsHPROFILE out_profile = dt_colorspaces_get_output_profile(imgid, &over_type, over_filename)->profile;
   uint32_t len = 0;
   cmsSaveProfileToMem(out_profile, NULL, &len);
   if(len > 0)
