@@ -61,7 +61,7 @@ How to make an Ansel Windows installer (x64 only):
     $ . .bash_profile
     ```
 
-* From the MINGW64 terminal, clone the darktable git repository (in this example into `~/darktable`):
+* From the MINGW64 terminal, clone the Ansel git repository (in this example into `~/Ansel`):
     ```bash
     $ cd ~
     $ git clone https://github.com/Aurelien-Pierre/Ansel.git
