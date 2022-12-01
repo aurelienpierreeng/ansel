@@ -1,5 +1,5 @@
 ## Native compile using MSYS2:
-How to make an R&Darktable Windows installer (x64 only):
+How to make an Ansel Windows installer (x64 only):
 
 * Install MSYS2 (instructions and prerequisites can be found on the official website: https://www.msys2.org)
 
@@ -64,8 +64,8 @@ How to make an R&Darktable Windows installer (x64 only):
 * From the MINGW64 terminal, clone the darktable git repository (in this example into `~/darktable`):
     ```bash
     $ cd ~
-    $ git clone https://github.com/Aurelien-Pierre/R-Darktable.git
-    $ cd R-Darktable/
+    $ git clone https://github.com/Aurelien-Pierre/Ansel.git
+    $ cd Ansel/
     $ git submodule init
     $ git submodule update
     ```

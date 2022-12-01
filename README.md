@@ -1,6 +1,6 @@
-[![CI](https://github.com/aurelienpierre/R-Darktable/actions/workflows/ci.yml/badge.svg)](https://github.com/aurelienpierre/R-Darktable/actions/workflows/ci.yml)
+[![CI](https://github.com/aurelienpierre/Ansel/actions/workflows/ci.yml/badge.svg)](https://github.com/aurelienpierre/Ansel/actions/workflows/ci.yml)
 
-[![icon](/data/pixmaps/idbutton.png?raw=true)](https://www.darktable.org/) R&Darktable
+[![icon](/data/pixmaps/idbutton.png?raw=true)](https://www.darktable.org/) Ansel
 ============
 
 ## Foreword
@@ -47,7 +47,7 @@ for example they deprecated OpenCL (which they invented 15 years ago) for Metal 
 to rewrite GPU code with this. Not going to happen.
 
 Also, you can't cross-compile for Mac from another OS, and one can legitimately ask if all that is not
-specifically meant to cast away open-source and independent software. R&Darktable may or may not build on
+specifically meant to cast away open-source and independent software. Ansel may or may not build on
 Mac OS. It may or may not work. It may or may not be able to use OpenCL (GPU acceleration) and
 OpenMP (multi-threading on CPU), I have no way to know nor to debug since I don't own a Mac box.
 
