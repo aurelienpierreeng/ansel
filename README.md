@@ -7,7 +7,7 @@
 
 ### Dr Rant got fed up
 
-**Rational & Darktable** is a fork of the official darktable software with
+**Ansel** is a fork of the official darktable software with
 GUI changes that essentially aim at removing clutter and options.
 
 I strongly disagree with
