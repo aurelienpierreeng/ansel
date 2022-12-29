@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: darktable 3.9\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2022-12-28 12:43+0100\n"
-"PO-Revision-Date: 2022-12-28 21:58+0100\n"
+"PO-Revision-Date: 2022-12-29 09:23+0100\n"
 "Last-Translator: Aurélien PIERRE <contact@aurelienpierre.com>\n"
 "Language-Team: \n"
 "Language: fr_FR\n"
@@ -1080,7 +1080,7 @@ msgid ""
 msgstr ""
 "les catégories des tailles permettent d'utiliser différentes informations en "
 "superposition et présentation graphique en fonction de la taille des "
-"miniatures, séparée par « | ». par exemple, 120|400 défini trois catégories "
+"miniatures, séparée par « | ». par exemple, 120|400 définit trois catégories "
 "de miniature : ≤ 120px, 120px → 400px et > 400px"
 
 #: ../build/bin/preferences_gen.h:3923
@@ -11156,7 +11156,9 @@ msgstr "vérifier le delta E de sortie"
 #: ../src/iop/choleski.h:288 ../src/iop/choleski.h:386
 msgid ""
 "Choleski decomposition failed to allocate memory, check your RAM settings"
-msgstr "la décomposition de Choleski n'a pas assez de mémoire, vérifier la RAM"
+msgstr ""
+"la décomposition de Choleski n'a pas assez de mémoire, vérifier les "
+"paramètres de la RAM"
 
 #: ../src/iop/clahe.c:74
 msgid ""
@@ -11835,11 +11837,9 @@ msgid "isolate luminances"
 msgstr "isoler luminances"
 
 #: ../src/iop/colorbalancergb.c:1978
-#, fuzzy
-#| msgid "choose in which uniform color space the saturation is computed"
 msgid "choose in which uniform color space the saturation is computed."
 msgstr ""
-"choisi dans quel espace de couleur uniforme la saturation est calculée."
+"choisir dans quel espace de couleur uniforme la saturation est calculée."
 
 #: ../src/iop/colorbalancergb.c:1980
 msgid "luminance ranges"
@@ -12668,8 +12668,8 @@ msgid ""
 "toggle to visualize the mask"
 msgstr ""
 "seuil de contraste pour le dématriçage double.\n"
-"utiliser 0.0 pour favoriser les hautes-fréquences (détails)\n"
-"utiliser 1.0 pour favoriser les basses-fréquences (aplats)"
+"régler à 0.0 pour favoriser les hautes-fréquences (détails)\n"
+"régler à  1.0 pour favoriser les basses-fréquences (aplats)"
 
 #: ../src/iop/demosaic.c:5808
 msgid ""
@@ -13053,9 +13053,9 @@ msgid ""
 "if you plan on sharpening or inpainting, \n"
 "more iterations help reconstruction."
 msgstr ""
-"plus d'itération rend l'effet plus fort mais ralenti le traitement.\n"
+"plus d'itérations rend l'effet plus fort mais ralentit le traitement.\n"
 "ceci est similaire à laisser plus de temps à la réaction de diffusion.\n"
-"pour la netteté ou la reconstruction, plus d'itération peuvent aider."
+"pour la netteté ou la reconstruction, plus d'itérations peuvent aider.avec"
 
 #: ../src/iop/diffuse.c:1494
 msgid ""
@@ -14775,7 +14775,7 @@ msgstr "stéréographique"
 
 #: ../src/iop/lens.cc:2390
 msgid "equisolid angle"
-msgstr "angle solide constant"
+msgstr "angle solide constantra"
 
 #: ../src/iop/lens.cc:2391
 msgid "thoby fish-eye"
