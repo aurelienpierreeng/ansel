@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: darktable 3.9\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2022-12-28 12:43+0100\n"
-"PO-Revision-Date: 2022-12-29 09:38+0100\n"
+"PO-Revision-Date: 2023-01-02 18:48+0100\n"
 "Last-Translator: Aurélien PIERRE <contact@aurelienpierre.com>\n"
 "Language-Team: \n"
 "Language: fr_FR\n"
@@ -2336,7 +2336,7 @@ msgstr "zoom"
 
 #: ../src/bauhaus/bauhaus.c:3371
 msgid "selection"
-msgstr "sélection"
+msgstr "sélectionner"
 
 #: ../src/bauhaus/bauhaus.c:3390
 msgid "slider"
