@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: darktable 3.9\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2023-01-02 20:49+0100\n"
-"PO-Revision-Date: 2023-01-02 21:50+0100\n"
+"PO-Revision-Date: 2023-01-03 20:34+0100\n"
 "Last-Translator: Aurélien PIERRE <contact@aurelienpierre.com>\n"
 "Language-Team: \n"
 "Language: fr_FR\n"
@@ -4684,7 +4684,7 @@ msgstr "zoom"
 
 #: ../src/bauhaus/bauhaus.c:3371
 msgid "selection"
-msgstr "sélectionner"
+msgstr "sélection"
 
 #: ../src/bauhaus/bauhaus.c:3390
 msgid "slider"
@@ -6330,7 +6330,7 @@ msgstr "image notée à « %s »"
 #: ../src/common/ratings.c:305 ../src/libs/select.c:39
 #: ../src/views/lighttable.c:723
 msgid "select"
-msgstr "sélection"
+msgstr "sélectionner"
 
 #: ../src/common/ratings.c:306
 msgid "upgrade"
@@ -20941,14 +20941,6 @@ msgstr ""
 "avec les images)"
 
 #: ../src/libs/metadata.c:706
-#, fuzzy
-#| msgid ""
-#| "metadata text. ctrl+scroll to resize the text box\n"
-#| " ctrl-enter inserts a new line (caution, may not be compatible with "
-#| "standard metadata).\n"
-#| "if <leave unchanged> selected images have different metadata.\n"
-#| "in that case, right-click gives the possibility to choose one of them.\n"
-#| "press escape to exit the popup window"
 msgid ""
 "metadata text. ctrl-wheel scroll to resize the text box\n"
 " ctrl-enter inserts a new line (caution, may not be compatible with standard "
