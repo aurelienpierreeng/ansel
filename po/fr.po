@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: darktable 3.9\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2023-01-02 20:49+0100\n"
-"PO-Revision-Date: 2023-01-03 21:20+0100\n"
+"PO-Revision-Date: 2023-01-03 21:27+0100\n"
 "Last-Translator: Aurélien PIERRE <contact@aurelienpierre.com>\n"
 "Language-Team: \n"
 "Language: fr_FR\n"
@@ -3860,10 +3860,8 @@ msgid "v6 (2022)"
 msgstr "v6 (2022)"
 
 #: ../build/lib64/ansel/plugins/introspection_filmicrgb.c:547
-#, fuzzy
-#| msgid "v4 (2020)"
 msgid "v7 (2023)"
-msgstr "v4 (2020)"
+msgstr "v7 (2023)"
 
 #: ../build/lib64/ansel/plugins/introspection_filmicrgb.c:551
 msgid "uniform"
@@ -22310,7 +22308,7 @@ msgid ""
 "press shift+Tab to select the first attached user tag"
 msgstr ""
 "entrer le nom du mot-clé\n"
-"presser Enter pour créer un nouveau mot-clé et l'attacher aux images "
+"presser Entrée pour créer un nouveau mot-clé et l'attacher aux images "
 "sélectionnées\n"
 "presser Tab ou touche Bas pour aller vers le premier mot-clé affiché\n"
 "presser maj+Tab pour sélectionner le premier mot-clé utilisateur attaché"
@@ -22360,7 +22358,7 @@ msgstr "changer la vue liste / arbre"
 
 #: ../src/libs/tagging.c:3240
 msgid "tree"
-msgstr "abre"
+msgstr "arbre"
 
 #: ../src/libs/tagging.c:3242
 msgid "toggle list with / without suggestion"
@@ -22372,7 +22370,7 @@ msgstr "suggestion"
 
 #: ../src/libs/tagging.c:3263
 msgid "redo last tag"
-msgstr "ré-appliquer mot-clé"
+msgstr "ré-attacher le précédent mot-clé"
 
 #: ../src/libs/tagging.c:3346
 msgid ""
