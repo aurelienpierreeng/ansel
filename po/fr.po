@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: darktable 3.9\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2023-01-02 20:49+0100\n"
-"PO-Revision-Date: 2023-01-03 21:27+0100\n"
+"PO-Revision-Date: 2023-01-07 22:22+0100\n"
 "Last-Translator: Aurélien PIERRE <contact@aurelienpierre.com>\n"
 "Language-Team: \n"
 "Language: fr_FR\n"
@@ -1165,12 +1165,6 @@ msgid "demosaicing for zoomed out darkroom mode"
 msgstr "méthode de dématriçage pour la vue en chambre noire"
 
 #: ../build/bin/preferences_gen.h:4388
-#, fuzzy
-#| msgid ""
-#| "demosaicer when not viewing 1:1 in darkroom mode: 'bilinear' is fast but "
-#| "slightly blurry. 'default' uses the default demosaicer for the used "
-#| "sensor (RCD or Markesteijn). 'full' will use exactly the settings as for "
-#| "full-size export."
 msgid ""
 "interpolation when not viewing 1:1 in darkroom mode: bilinear is fastest, "
 "but not as sharp. middle ground is using RCD + interpolation modes specified "
@@ -1178,11 +1172,12 @@ msgid ""
 "the settings for full-size export. X-Trans sensors use VNG rather than RCD "
 "as middle ground."
 msgstr ""
-"méthode d'interpolation pour les vues différentes de 1:1 dans la chambre "
-"noire : 'bilinéaire' est rapide mais peu net. 'moyen' utilise RCD plus les "
-"modes d'interpolations spécifiés par l'option \"algorithme d'interpolation"
-"\" (section traitement) . 'full' utilise les réglages de l'exportation. Les "
-"capteurs X-Trans utilisent VNG plutôt que RCD en réglage moyen."
+"méthodes d'interpolation lorsqu'on ne visualise pas en 1:1 dans la chambre "
+"noire : 'bilinéaire' est rapide mais peu net. 'moyen' utilise RCD ainsi que "
+"les modes d'interpolations spécifiés par l'option \"algorithme "
+"d'interpolation\" (section traitement) . 'full' utilise les réglages de "
+"l'exportation. Les capteurs X-Trans utilisent VNG plutôt que RCD en réglage "
+"moyen."
 
 #: ../build/bin/preferences_gen.h:4410
 msgid "reduce resolution of preview image"
@@ -1370,8 +1365,6 @@ msgstr ""
 "bicubique, lanczos2, lanczos3)"
 
 #: ../build/bin/preferences_gen.h:5112
-#, fuzzy
-#| msgid "LUT 3D root folder"
 msgid "3D lut root folder"
 msgstr "répertoire 3D lut racine"
 
@@ -1387,10 +1380,6 @@ msgid "select directory"
 msgstr "sélectionner un répertoire"
 
 #: ../build/bin/preferences_gen.h:5133
-#, fuzzy
-#| msgid ""
-#| "this folder (and sub-folders) contains LUT files used by LUT 3D module. "
-#| "(need a restart)."
 msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
 "(need a restart)."
@@ -1471,10 +1460,6 @@ msgid "detect monochrome previews"
 msgstr "détecter les miniatures monochromes"
 
 #: ../build/bin/preferences_gen.h:5366
-#, fuzzy
-#| msgid ""
-#| "many monochrome images can be identified via EXIF and preview data. "
-#| "beware: this slows down imports and reading of EXIF data"
 msgid ""
 "many monochrome images can be identified via exif and preview data. beware: "
 "this slows down imports and reading exif data"
@@ -1506,10 +1491,8 @@ msgid "cpu / gpu / memory"
 msgstr "cpu / gpu / mémoire"
 
 #: ../build/bin/preferences_gen.h:5432
-#, fuzzy
-#| msgid "darktable resources"
 msgid "ansel resources"
-msgstr "ressources darktable"
+msgstr "ressources d'ansel"
 
 #: ../build/bin/preferences_gen.h:5481
 #, no-c-format
@@ -1546,15 +1529,6 @@ msgid "enable disk backend for thumbnail cache"
 msgstr "utilisation du disque pour le cache des miniatures"
 
 #: ../build/bin/preferences_gen.h:5517
-#, fuzzy
-#| msgid ""
-#| "if enabled, write thumbnails to disk (.cache/darktable/) when evicted "
-#| "from the memory cache. note that this can take a lot of memory (several "
-#| "gigabytes for 20k images) and will never delete cached thumbnails again. "
-#| "it's safe though to delete these manually, if you want. light table "
-#| "performance will be increased greatly when browsing a lot. to generate "
-#| "all thumbnails of your entire collection offline, run 'darktable-generate-"
-#| "cache'."
 msgid ""
 "if enabled, write thumbnails to disk (.cache/ansel/) when evicted from the "
 "memory cache. note that this can take a lot of memory (several gigabytes for "
@@ -1563,11 +1537,11 @@ msgid ""
 "increased greatly when browsing a lot. to generate all thumbnails of your "
 "entire collection offline, run 'ansel-generate-cache'."
 msgstr ""
-"si activé, écrit les miniatures sur le disque (.cache/darktable/) lorsque "
-"supprimées de la mémoire. à noter que cela peut prendre beaucoup de mémoire "
-"(plusieurs gigaoctets pour 20 mille images) et ne supprimera jamais les "
-"miniatures du cache. il est possible cependant de les effacer manuellement "
-"si désiré. la table lumineuse sera beaucoup plus fluide lors de navigation "
+"si activé, écrit les miniatures sur le disque (.cache/ansel/) lorsque "
+"supprimées du cache en mémoire. à noter que cela peut prendre beaucoup de "
+"mémoire (plusieurs gigaoctets pour 20 milles images) et ne supprimera jamais "
+"les miniatures du cache. il est cependant sûr de les effacer manuellement si "
+"désiré. la table lumineuse sera beaucoup plus fluide lors d'une navigation "
 "importante. pour générer toutes les miniatures de toutes les collections "
 "hors-ligne exécuter 'darktable-generate-cache'."
 
@@ -1671,9 +1645,6 @@ msgid "ask before removing images from the library"
 msgstr "demander avant d'enlever des images de la bibliothèque"
 
 #: ../build/bin/preferences_gen.h:5807
-#, fuzzy
-#| msgid ""
-#| "always ask the user before removing image information from the library"
 msgid "always ask the user before any image is removed from the library"
 msgstr "toujours demander avant d'enlever une image de le bibliothèque"
 
@@ -1827,16 +1798,6 @@ msgid "create database snapshot"
 msgstr "faire une sauvegarde de la base de données"
 
 #: ../build/bin/preferences_gen.h:6519
-#, fuzzy
-#| msgid ""
-#| "database snapshots are created right before closing darktable. options "
-#| "allow you to choose how often to make snapshots:\n"
-#| "never - simply don't do snapshots. that way the only snapshots done are "
-#| "mandatory version-upgrade snapshots\n"
-#| "once a month - create snapshot if a month has passed since last snapshot\n"
-#| "once a week - create snapshot if 7 days had passed since last snapshot\n"
-#| "once a day - create snapshot if over 24h passed since last snapshot\n"
-#| "on close - create snapshot every time darktable is closed"
 msgid ""
 "database snapshots are created right before closing ansel. options allow you "
 "to choose how often to make snapshots:\n"
@@ -1847,9 +1808,9 @@ msgid ""
 "once a day - create snapshot if over 24h passed since last snapshot\n"
 "on close - create snapshot every time ansel is closed"
 msgstr ""
-"les sauvegardes sont effectuées juste avant de fermer darktable. différentes "
-"options permettent de contrôler la fréquence des sauvergardes:\n"
-"jamais - ne jamais faire de sauvegarde. uniquement les sauvegardes "
+"les sauvegardes de la base de données sont effectuées juste avant de fermer "
+"ansel. les options permettent de contrôler la fréquence des sauvegardes:\n"
+"jamais - ne jamais faire de sauvegardes. seulement les sauvegardes "
 "obligatoires lors des montées de version de la base de données sont "
 "effectuées.\n"
 "une fois par mois - fait une sauvegarde si un mois est passé depuis la "
@@ -1858,7 +1819,7 @@ msgstr ""
 "dernière sauvegarde\n"
 "une fois par jour - fait une sauvegarde si 24h sont passées depuis la "
 "dernière sauvegarde\n"
-"à la fermeture - fait une sauvegarde à chaque fermeture de darktable"
+"à la fermeture - fait une sauvegarde à chaque fermeture de ansel"
 
 #: ../build/bin/preferences_gen.h:6541
 msgid "how many snapshots to keep"
@@ -1905,10 +1866,8 @@ msgstr ""
 " - après édition : après toutes modifications sur l'image"
 
 #: ../build/bin/preferences_gen.h:6659
-#, fuzzy
-#| msgid "store XMP tags in compressed format"
 msgid "store xmp tags in compressed format"
-msgstr "enregistre les mots-clés xmp avec un format compressé"
+msgstr "enregistre les mots-clés xmp dans un format compressé"
 
 #: ../build/bin/preferences_gen.h:6702
 #, fuzzy
@@ -1926,16 +1885,10 @@ msgstr ""
 "cette option permet de compresser les mots-clés xmp pour gagner de la place."
 
 #: ../build/bin/preferences_gen.h:6724
-#, fuzzy
-#| msgid "look for updated XMP files on startup"
 msgid "look for updated xmp files on startup"
 msgstr "vérifie les fichiers xmp modifiés au démarrage"
 
 #: ../build/bin/preferences_gen.h:6738
-#, fuzzy
-#| msgid ""
-#| "check file modification times of all XMP files on startup to check if any "
-#| "got updated in the meantime"
 msgid ""
 "check file modification times of all xmp files on startup to check if any "
 "got updated in the meantime"
@@ -2045,12 +1998,6 @@ msgid "omit hierarchy in simple tag lists"
 msgstr "ignore la hiérarchie des mots-clés"
 
 #: ../build/bin/preferences_gen.h:7126
-#, fuzzy
-#| msgid ""
-#| "when creating XMP file the hierarchical tags are also added as a simple "
-#| "list of non-hierarchical ones to make them visible to some other "
-#| "programs. when this option is checked darktable will only include their "
-#| "last part and ignore the rest. so 'foo|bar|baz' will only add 'baz'."
 msgid ""
 "when creating XMP file the hierarchical tags are also added as a simple list "
 "of non-hierarchical ones to make them visible to some other programs. when "
@@ -2059,9 +2006,9 @@ msgid ""
 msgstr ""
 "lors de le création des XMP les mots-clés hiérarchiques sont aussi ajoutés "
 "comme simple liste non hiérarchique pour les rendre visibles aux autres "
-"applications. lorsque cette option est sélectionnée, darktable inclura "
-"seulement leur dernière partie et ignorera le reste : ainsi 'faune|insecte|"
-"syrphe' ajoutera uniquement 'syrphe'."
+"applications. lorsque cette option est sélectionnée, ansel inclura seulement "
+"leur dernière partie et ignorera le reste : ainsi 'faune|insecte|syrphe' "
+"ajoutera uniquement 'syrphe'."
 
 #: ../build/bin/preferences_gen.h:7136 ../tools/generate_prefs.xsl:400
 msgid "shortcuts with multiple instances"
@@ -2190,10 +2137,6 @@ msgid "tags case sensitivity"
 msgstr "sensibilité à la casse"
 
 #: ../build/bin/preferences_gen.h:7582
-#, fuzzy
-#| msgid ""
-#| "tags case sensitivity. without the Sqlite ICU extension, insensitivity "
-#| "works only for the 26 latin letters"
 msgid ""
 "tags case sensitivity. without the Sqlite ICU extension, insensivity works "
 "only for the 26 latin letters"
@@ -3955,8 +3898,6 @@ msgstr "répartition de projection"
 
 #: ../build/lib64/ansel/plugins/introspection_highlights.c:161
 #: ../build/lib64/ansel/plugins/introspection_highlights.c:252
-#, fuzzy
-#| msgid "combine masks"
 msgid "combine segments"
 msgstr "combinaison des masques"
 
@@ -4616,10 +4557,8 @@ msgid "integration contributors"
 msgstr "contributeurs intégration"
 
 #: ../build/lib64/ansel/plugins/lighttable/tools/darktable_authors.h:31
-#, fuzzy
-#| msgid "contributors"
 msgid "LibRaw contributors"
-msgstr "contributeurs"
+msgstr "contributeurs de LibRaw"
 
 #: ../data/build/ansel.desktop.in.h:1 ../data/ansel.desktop.in.h:1
 msgid "Virtual Lighttable and Darkroom"
@@ -4637,11 +4576,6 @@ msgid "graphics;photography;raw;"
 msgstr "graphisme;photographie;raw;"
 
 #: ../data/photos.ansel.app.appdata.xml.in.h:2
-#, fuzzy
-#| msgid ""
-#| "darktable manages your digital negatives in a database and lets you view "
-#| "them through a lighttable. It also enables you to develop raw images and "
-#| "enhance them in a darkroom."
 msgid ""
 "Ansel manages your digital negatives in a database and lets you view them "
 "through a lighttable. It also enables you to develop raw images and enhance "
@@ -4682,7 +4616,7 @@ msgstr "zoom"
 
 #: ../src/bauhaus/bauhaus.c:3371
 msgid "selection"
-msgstr "sélection"
+msgstr "sélectionner"
 
 #: ../src/bauhaus/bauhaus.c:3390
 msgid "slider"
@@ -6232,9 +6166,6 @@ msgid "noiseprofile file `%s' is not valid"
 msgstr "le profil de gestion du bruit « %s » n'est pas valide"
 
 #: ../src/common/opencl.c:1109
-#, fuzzy
-#| msgid ""
-#| "due to a slow GPU hardware acceleration using OpenCL has been deactivated"
 msgid ""
 "due to a slow GPU hardware acceleration via opencl has been de-activated"
 msgstr ""
@@ -6328,7 +6259,7 @@ msgstr "image notée à « %s »"
 #: ../src/common/ratings.c:305 ../src/libs/select.c:39
 #: ../src/views/lighttable.c:723
 msgid "select"
-msgstr "sélectionner"
+msgstr "sélection"
 
 #: ../src/common/ratings.c:306
 msgid "upgrade"
@@ -6478,9 +6409,6 @@ msgid "processing modules"
 msgstr "modules de traitement"
 
 #: ../src/control/control.c:114
-#, fuzzy
-#| msgctxt "accel"
-#| msgid "<blending>"
 msgctxt "accel"
 msgid "blending"
 msgstr "fusion"
@@ -6613,8 +6541,6 @@ msgid "time difference"
 msgstr "différence horaire"
 
 #: ../src/control/crawler.c:656
-#, fuzzy
-#| msgid "updated XMP sidecar files found"
 msgid "updated xmp sidecar files found"
 msgstr "versions modifiées de fichier xmp trouvées"
 
@@ -6644,8 +6570,6 @@ msgid "on the selection:"
 msgstr "sur la sélection :"
 
 #: ../src/control/crawler.c:686
-#, fuzzy
-#| msgid "keep the XMP edit"
 msgid "keep the xmp edit"
 msgstr "garder le développement xmp"
 
@@ -6889,10 +6813,8 @@ msgid "image `%s' is currently unavailable"
 msgstr "image « %s » non disponible actuellement"
 
 #: ../src/control/jobs/control_jobs.c:1509
-#, fuzzy
-#| msgid "merge HDR image"
 msgid "merge hdr image"
-msgstr "fusion hdr d'images"
+msgstr "fusion d'une image HDR"
 
 #: ../src/control/jobs/control_jobs.c:1523
 msgid "duplicate images"
@@ -8186,8 +8108,7 @@ msgstr "impossible de trouver un XMP venant de Lightroom !"
 
 #: ../src/develop/lightroom.c:1115 ../src/develop/lightroom.c:1137
 #: ../src/develop/lightroom.c:1157
-#, fuzzy, c-format
-#| msgid "`%s' is not a Lightroom XMP!"
+#, c-format
 msgid "`%s' not a lightroom XMP!"
 msgstr "« %s » n'est pas un XMP de Lightroom !"
 
@@ -8530,16 +8451,12 @@ msgstr ""
 "coller d'historique"
 
 #: ../src/develop/pixelpipe_hb.c:2248
-#, fuzzy
-#| msgid ""
-#| "darktable discovered problems with your OpenCL setup; disabling OpenCL "
-#| "for this session!"
 msgid ""
 "ansel discovered problems with your OpenCL setup; disabling OpenCL for this "
 "session!"
 msgstr ""
-"Ansel a rencontré des problèmes avec la configuration OpenCL qui sera "
-"désactivé pour cette session!"
+"ansel a rencontré des problèmes avec la configuration OpenCL qui sera "
+"désactivé pour cette session !"
 
 #: ../src/develop/tiling.c:833 ../src/develop/tiling.c:1167
 #, c-format
@@ -9314,11 +9231,6 @@ msgid "_edits"
 msgstr "_avant modif"
 
 #: ../src/gui/accelerators.c:1899
-#, fuzzy
-#| msgid ""
-#| "restore default shortcuts\n"
-#| "  either as at startup\n"
-#| "  or when the configuration dialog was opened\n"
 msgid ""
 "restore default shortcuts\n"
 "  or as at startup\n"
@@ -9523,8 +9435,6 @@ msgid "%s assigned to %s"
 msgstr "« %s » est assigné à « %s »"
 
 #: ../src/gui/gtk.c:165
-#, fuzzy
-#| msgid "darktable - darkroom preview"
 msgid "ansel - darkroom preview"
 msgstr "Ansel - pré-visualisation chambre noire"
 
@@ -14555,15 +14465,6 @@ msgstr "spline monotone"
 
 #: ../src/iop/colorzones.c:2536 ../src/iop/rgbcurve.c:1427
 #: ../src/iop/tonecurve.c:1203
-#, fuzzy
-#| msgid ""
-#| "change this method if you see oscillations or cusps in the curve\n"
-#| "- cubic spline is better to produce smooth curves but oscillates when "
-#| "nodes are too close\n"
-#| "- centripetal is better to avoids cusps and oscillations with close nodes "
-#| "but is less smooth\n"
-#| "- monotonic is better for accuracy of pure analytical functions (log, "
-#| "gamma, exp)"
 msgid ""
 "change this method if you see oscillations or cusps in the curve\n"
 "- cubic spline is better to produce smooth curves but oscillates when nodes "
@@ -15011,23 +14912,17 @@ msgid "diffusion|deconvolution|blur|sharpening"
 msgstr "diffusion|déconvolution|flou|netteté"
 
 #: ../src/iop/diffuse.c:143
-#, fuzzy
-#| msgid ""
-#| "simulate directional diffusion of light with heat transfer model\n"
-#| "to apply an iterative edge-oriented blur,\n"
-#| "inpaint damaged parts of the image, or to remove blur with blind "
-#| "deconvolution."
 msgid ""
 "simulate directional diffusion of light with heat transfer model\n"
 "to apply an iterative edge-oriented blur,\n"
 "inpaint damaged parts of the image,or to remove blur with blind "
 "deconvolution."
 msgstr ""
-"simule la diffusion directionnelle de la lumière d'après un modèle de "
-"transfert de chaleur\n"
-"pour appliquer un flou itératif suivant les bords,\n"
-"reconstruire les zones endommagées d'une image,\n"
-"ou pour supprimer le flou en utilisant une déconvolution aveugle."
+"simule la diffusion directionnelle de la lumière avec le modèle de transfert "
+"de chaleur\n"
+"pour appliquer un flou itératif orienté vers les bords,\n"
+"reconstruire les zones endommagées d'une image ou pour supprimer le flou "
+"avec une déconvolution aveugle."
 
 #: ../src/iop/diffuse.c:236
 msgid "lens deblur: soft"
@@ -16095,12 +15990,7 @@ msgstr ""
 "doux pour une compression tonale plus faible."
 
 #: ../src/iop/filmicrgb.c:4737
-#, fuzzy, c-format
-#| msgid ""
-#| "enable to input custom middle-gray values.\n"
-#| "this is not recommended in general.\n"
-#| "fix the global exposure in the exposure module instead.\n"
-#| "disable to use standard 18.45% middle gray."
+#, c-format
 msgid ""
 "enable to input custom middle-gray values.\n"
 "this is not recommended in general.\n"
@@ -16109,7 +15999,7 @@ msgid ""
 msgstr ""
 "active la modification du gris moyen.\n"
 "cela n'est pas recommandé en général.\n"
-"préférez la modification de l'exposition globale dans le module exposition.\n"
+"à la place régler l'exposition globale dans le module exposition.\n"
 "désactiver pour utiliser un gris moyen standard de 18.45 %%."
 
 #: ../src/iop/filmicrgb.c:4744
@@ -16125,19 +16015,13 @@ msgstr ""
 "désactiver pour contrôler manuellement."
 
 #: ../src/iop/filmicrgb.c:4750
-#, fuzzy
-#| msgid ""
-#| "run extra passes of chromaticity reconstruction.\n"
-#| "more iterations means more color propagation from neighborhood.\n"
-#| "this will be slower but will yield more neutral highlights.\n"
-#| "it also helps with difficult cases of magenta highlights."
 msgid ""
 "run extra passes of chromaticity reconstruction.\n"
 "more iterations means more color propagation from neighbourhood.\n"
 "this will be slower but will yield more neutral highlights.\n"
 "it also helps with difficult cases of magenta highlights."
 msgstr ""
-"exécute une passe supplémentaire de reconstruction de la chromaticité.\n"
+"exécuter une passe supplémentaire de reconstruction de la chromaticité.\n"
 "plus d'itérations implique plus de propagation de couleur depuis les "
 "voisins.\n"
 "c'est plus lent mais donnera des hautes lumières plus neutres.\n"
@@ -16155,10 +16039,6 @@ msgstr ""
 "alors les hautes-lumières se fondent mieux avec le reste de l'image."
 
 #: ../src/iop/filmicrgb.c:4764
-#, fuzzy
-#| msgid ""
-#| "choose the statistical distribution of noise.\n"
-#| "this is useful to match natural sensor noise pattern."
 msgid ""
 "choose the statistical distribution of noise.\n"
 "this is useful to match natural sensor noise pattern.\n"
@@ -16442,40 +16322,26 @@ msgid "reconstruction, raw"
 msgstr "reconstruire, raw"
 
 #: ../src/iop/highlights.c:2116
-#, fuzzy
-#| msgid ""
-#| "highlights: mode not available for this type of image. falling back to "
-#| "inpaint opposed."
 msgid ""
 "highlights: guided laplacian mode not available for X-Trans sensors. falling "
 "back to clip."
 msgstr ""
-"reconstruction des hautes lumières: mode laplacien guidé non disponible pour "
-"capteur X-Trans. Repli sur écrêtage."
+"hautes lumières: mode laplacien guidé non disponible pour les capteurs X-"
+"Trans. Repli sur écrêtage."
 
 #: ../src/iop/highlights.c:2189
 msgid "highlight reconstruction method"
 msgstr "méthode de reconstruction des hautes lumières"
 
 #: ../src/iop/highlights.c:2194
-#, fuzzy
-#| msgid ""
-#| "manually adjust the clipping threshold mostly used against magenta "
-#| "highlights\n"
-#| "the mask icon shows the clipped areas.\n"
-#| "you might use this for tuning 'laplacian', 'inpaint opposed' or "
-#| "'segmentation' modes,\n"
-#| "especially if camera white point is incorrect."
 msgid ""
 "manually adjust the clipping threshold against magenta highlights\n"
 "the mask icon shows the clipped area\n"
 "(you shouldn't ever need to touch this)"
 msgstr ""
 "ajuste le seuil de troncature pour éviter les hautes lumières magenta\n"
-"l’icône masque permet de montrer les zones tronquées\n"
-"vous pouvez l'utiliser pour régler les modes  « laplacien »,  « peinture "
-"opposée »,  « segmentation »,\n"
-"surtout si le point blanc de la caméra est incorrect."
+"l’icône masque montre les zones tronquées\n"
+"(vous ne devriez pas avoir besoin de toucher cela)"
 
 #: ../src/iop/highlights.c:2203
 msgid ""
@@ -16543,12 +16409,9 @@ msgid "hot pixels"
 msgstr "pixels chauds"
 
 #: ../src/iop/hotpixels.c:72
-#, fuzzy
-#| msgid "remove abnormally bright pixels by dampening them with neighbors"
 msgid "remove abnormally bright pixels by dampening them with neighbours"
 msgstr ""
-"supprime les pixels anormalement lumineux en les amortissant avec leur "
-"voisins"
+"supprime les pixels anormalement lumineux en les atténuant avec leurs voisins"
 
 #: ../src/iop/hotpixels.c:364
 #, c-format
@@ -17114,10 +16977,8 @@ msgid "defined by profile, RGB"
 msgstr "défini par le profil, RVB"
 
 #: ../src/iop/lut3d.c:466
-#, fuzzy
-#| msgid "error allocating buffer for gmz LUT"
 msgid "error allocating buffer for gmz lut"
-msgstr "erreur - impossible d'allouer la mémoire pour le gmz lut"
+msgstr "erreur d'allocation de mémoire pour le lut gmz"
 
 #: ../src/iop/lut3d.c:492
 #, c-format
@@ -17135,22 +16996,18 @@ msgid "invalid level in png file %d %d"
 msgstr "niveaux invalides dans le fichier png %d %d"
 
 #: ../src/iop/lut3d.c:519
-#, fuzzy
-#| msgid "this darktable build is not compatible with compressed CLUT"
 msgid "this darktable build is not compatible with compressed clut"
-msgstr "cette version de darktable n'a pas le support des lut compressées"
+msgstr ""
+"cette version de darktable n'est pas compatible avec les lut compressées"
 
 #: ../src/iop/lut3d.c:536 ../src/iop/lut3d.c:785
-#, fuzzy, c-format
-#| msgid "error - LUT 3D size %d exceeds the maximum supported"
+#, c-format
 msgid "error - lut 3D size %d exceeds the maximum supported"
 msgstr "erreur - la taille 3D lut de %d dépasse le maximum supporté"
 
 #: ../src/iop/lut3d.c:548
-#, fuzzy
-#| msgid "error allocating buffer for png LUT"
 msgid "error allocating buffer for png lut"
-msgstr "erreur - impossible d'allouer la mémoire pour le png lut"
+msgstr "erreur - impossible d'allouer la mémoire pour la lut png"
 
 #: ../src/iop/lut3d.c:556
 #, c-format
@@ -17158,10 +17015,8 @@ msgid "error - could not read png image %s"
 msgstr "erreur - impossible de lire l'image png « %s »"
 
 #: ../src/iop/lut3d.c:566
-#, fuzzy
-#| msgid "error - allocating buffer for png LUT"
 msgid "error - allocating buffer for png lut"
-msgstr "erreur - impossible d'allouer la mémoire pour le png lut"
+msgstr "erreur - impossible d'allouer la mémoire pour la lut png"
 
 #: ../src/iop/lut3d.c:740
 #, c-format
@@ -17177,10 +17032,8 @@ msgid "DOMAIN MAX <> 1.0 is not supported"
 msgstr "DOMAIN MAX <> 1.0 non supporté"
 
 #: ../src/iop/lut3d.c:774
-#, fuzzy
-#| msgid "[1D cube LUT is not supported"
 msgid "[1D cube lut is not supported"
-msgstr "[1D lut cube non supporté"
+msgstr "[1D lut cube n'est pas supporté"
 
 #: ../src/iop/lut3d.c:796 ../src/iop/lut3d.c:900
 msgid "error - allocating buffer for cube lut"
@@ -17191,22 +17044,21 @@ msgid "error - cube lut size is not defined"
 msgstr "erreur - taille de lut cube non définie"
 
 #: ../src/iop/lut3d.c:818
-#, fuzzy, c-format
-#| msgid "error - cube LUT invalid number line %d"
+#, c-format
 msgid "error - cube lut invalid number line %d"
-msgstr "erreur - nombre de lignes du lut cube non valide %d"
+msgstr "erreur - lut cube non valide ligne numéro %d"
 
 #: ../src/iop/lut3d.c:834
-#, fuzzy, c-format
-#| msgid "error - cube LUT lines number %d is not correct, should be %d"
+#, c-format
 msgid "error - cube lut lines number %d is not correct, should be %d"
-msgstr "erreur - nombre (%d) de lignes du lut cube non valide, devrait être %d"
+msgstr ""
+"erreur - le nombre (%d) de lignes du lut cube n'est pas correct, il devrait "
+"être de %d"
 
 #: ../src/iop/lut3d.c:844
-#, fuzzy, c-format
-#| msgid "warning - cube LUT %d out of range values [0,1]"
+#, c-format
 msgid "warning - cube lut %d out of range values [0,1]"
-msgstr "attention - lut cube %d valeurs hors de la plage [0,1]"
+msgstr "attention -%d valeurs hors de la plage [0,1] dans la lut cube"
 
 #: ../src/iop/lut3d.c:868
 #, c-format
@@ -17214,29 +17066,22 @@ msgid "error - invalid 3dl file: %s"
 msgstr "erreur : fichier 3dl invalide « %s »"
 
 #: ../src/iop/lut3d.c:889
-#, fuzzy, c-format
-#| msgid "error - the maximum shaper LUT value %d is too low"
+#, c-format
 msgid "error - the maximum shaper lut value %d is too low"
 msgstr ""
-"erreur - la valeur maximum pour la table de transformation lut %d est trop "
-"petite"
+"erreur - la valeur maximum pour la table de transformation de la lut %d est "
+"trop petite"
 
 #: ../src/iop/lut3d.c:941
-#, fuzzy
-#| msgid "error - cube LUT lines number is not correct"
 msgid "error - cube lut lines number is not correct"
-msgstr "erreur - nombre de lignes du lut cube non valide"
+msgstr "erreur - le nombre de lignes de la lut cube n'est pas correct"
 
 #: ../src/iop/lut3d.c:957
-#, fuzzy
-#| msgid "error - the maximum LUT value does not match any valid bit depth"
 msgid "error - the maximum lut value does not match any valid bit depth"
 msgstr ""
 "erreur - la valeur lut maximum ne correspond à aucune taille de bit valide"
 
 #: ../src/iop/lut3d.c:1550
-#, fuzzy
-#| msgid "LUT root folder not defined"
 msgid "lut root folder not defined"
 msgstr "répertoire racine des fichiers lut non défini"
 
@@ -17249,29 +17094,19 @@ msgid "_select"
 msgstr "sélection"
 
 #: ../src/iop/lut3d.c:1577
-#, fuzzy
-#| msgid "hald CLUT (png), 3D LUT (cube or 3dl) or gmic compressed LUT (gmz)"
 msgid "hald cluts (png), 3D lut (cube or 3dl) or gmic compressed lut (gmz)"
 msgstr "hald cluts (png), 3D lut (cube ou 3dl) ou gmic lut compressée (gmz)"
 
 #: ../src/iop/lut3d.c:1579
-#, fuzzy
-#| msgid "hald CLUT (png) or 3D LUT (cube or 3dl)"
 msgid "hald cluts (png) or 3D lut (cube or 3dl)"
 msgstr "hald cluts (png) ou 3D lut (cube ou 3dl)"
 
 #: ../src/iop/lut3d.c:1603
-#, fuzzy
-#| msgid "select file outside LUT root folder is not allowed"
 msgid "select file outside Lut root folder is not allowed"
-msgstr "sélection d'un fichier en dehors du répertoire racine non permise"
+msgstr ""
+"sélectionner un fichier en dehors du répertoire racine n'est pas permis"
 
 #: ../src/iop/lut3d.c:1674
-#, fuzzy
-#| msgid ""
-#| "select a png (haldclut), a cube, a 3dl or a gmz (compressed LUT) file "
-#| "CAUTION: 3D LUT folder must be set in preferences/processing before "
-#| "choosing the LUT file"
 msgid ""
 "select a png (haldclut), a cube, a 3dl or a gmz (compressed lut) file "
 "CAUTION: 3D lut folder must be set in preferences/processing before choosing "
@@ -17282,45 +17117,31 @@ msgstr ""
 "(section traitement) avant de choisir un fichier lut"
 
 #: ../src/iop/lut3d.c:1678
-#, fuzzy
-#| msgid ""
-#| "select a png (haldclut), a cube or a 3dl file CAUTION: 3D LUT folder must "
-#| "be set in preferences/processing before choosing the LUT file"
 msgid ""
 "select a png (haldclut), a cube or a 3dl file CAUTION: 3D lut folder must be "
 "set in preferences/processing before choosing the lut file"
 msgstr ""
-"sélectionner fichier png (haldclut), cube, ou 3dl\n"
-"ATTENTION : le répertoire lut doit être positionné depuis les préférences "
-"avant de choisir un fichier lut"
+"sélectionner un fichier png (haldclut), cube, ou 3dl\n"
+"ATTENTION : le répertoire lut doit être réglé dans les préférences (section "
+"traitement) avant de choisir un fichier lut"
 
 #: ../src/iop/lut3d.c:1690
-#, fuzzy
-#| msgid ""
-#| "the file path (relative to LUT folder) is saved with image along with the "
-#| "LUT data if it's a compressed LUT (gmz)"
 msgid ""
 "the file path (relative to lut folder) is saved with image along with the "
 "lut data if it's a compressed lut (gmz)"
 msgstr ""
-"le chemin (relatif au répertoire lut) est sauvé avec l'image ainsi ques les "
+"le chemin (relatif au répertoire lut) est sauvé avec l'image ainsi que les "
 "données lut pour les lut compressées (gmz)"
 
 #: ../src/iop/lut3d.c:1693
-#, fuzzy
-#| msgid ""
-#| "the file path (relative to LUT folder) is saved with image (and not the "
-#| "LUT data themselves)"
 msgid ""
 "the file path (relative to lut folder) is saved with image (and not the lut "
 "data themselves)"
 msgstr ""
-"le chemin (relatif au répertoire lut) est sauvé avec l'image (et pas avec "
-"les données lut elles mêmes)"
+"le chemin (relatif au répertoire lut) est sauvé avec l'image (et pas les "
+"données lut elles-mêmes)"
 
 #: ../src/iop/lut3d.c:1702
-#, fuzzy
-#| msgid "enter tag name"
 msgid "enter lut name"
 msgstr "entrer le nom de la lut"
 
@@ -17554,17 +17375,12 @@ msgstr ""
 "et récupère le contraste. utiliser un grade élevé pour une D max important."
 
 #: ../src/iop/negadoctor.c:972
-#, fuzzy
-#| msgid ""
-#| "gradually compress specular highlights past this value\n"
-#| "to avoid clipping while pushing the exposure for mid-tones.\n"
-#| "this somewhat reproduces the behavior of matte paper."
 msgid ""
 "gradually compress specular highlights past this value\n"
 "to avoid clipping while pushing the exposure for mid-tones.\n"
 "this somewhat reproduces the behaviour of matte paper."
 msgstr ""
-"compresse les hautes lumières progressivement au delà de cette valuer\n"
+"compresse les hautes lumières progressivement au delà de cette valeur\n"
 "pour éviter de tronquer tout en augmentant l'exposition des tons moyens.\n"
 "cela reproduit en quelque sorte le comportement d'un papier mat."
 
@@ -18153,17 +17969,12 @@ msgid "rotate pixels"
 msgstr "rotation des pixels"
 
 #: ../src/iop/rotatepixels.c:97 ../src/iop/scalepixels.c:81
-#, fuzzy
-#| msgid ""
-#| "internal module to setup technical specificities of raw sensor.\n"
-#| "\n"
-#| "you should not touch values here!"
 msgid ""
 "internal module to setup technical specificities of raw sensor.\n"
 "\n"
 "you should not touch values here !"
 msgstr ""
-"module interne pour spécifier dans informations techniques du capteur.\n"
+"module interne pour spécifier les informations techniques du capteur.\n"
 "\n"
 "vous ne devriez pas changer les valeurs !"
 
@@ -18370,8 +18181,6 @@ msgid "geometric, raw"
 msgstr "géométrique, raw"
 
 #: ../src/iop/spots.c:220
-#, fuzzy
-#| msgid "spot module is limited to 64 shapes. please add a new instance!"
 msgid "spot module is limited to 64 shapes. please add a new instance !"
 msgstr ""
 "le module correction des tâches est limité à 64 formes, merci d'utiliser une "
@@ -19877,14 +19686,6 @@ msgid "only embedded"
 msgstr "seulement embarqué"
 
 #: ../src/libs/export_metadata.c:322
-#, fuzzy
-#| msgid ""
-#| "per default the interface sends some (limited) metadata beside the image "
-#| "to remote storage.\n"
-#| "to avoid this and let only image embedded darktable XMP metadata, check "
-#| "this flag.\n"
-#| "if remote storage doesn't understand darktable XMP metadata, you can use "
-#| "calculated metadata instead"
 msgid ""
 "per default the interface sends some (limited) metadata beside the image to "
 "remote storage.\n"
@@ -19892,12 +19693,12 @@ msgid ""
 "if remote storage doesn't understand dt xmp metadata, you can use calculated "
 "metadata instead"
 msgstr ""
-"par défaut des métadonnées sont exporter en plus de celles embarquées dans "
-"l'image.\n"
-"si sélectionné alors uniquement les métadonnées de embarquées dans l'image "
+"par défaut ansel envoie certaines métadonnées (limitées) à coté de l'image "
+"au stockage distant.\n"
+"si sélectionné, seulement les métadonnées de ansel embarquées dans l'image "
 "sont exportées\n"
-"si le stockage distant ne supporte pas les métadonnées de darktable, il est "
-"possible de les définir"
+"si le stockage distant ne supporte pas les métadonnées de ansel, vous pouvez "
+"les définir à la place"
 
 #: ../src/libs/export_metadata.c:328 ../src/libs/image.c:563
 msgid "geo tags"
@@ -19952,16 +19753,12 @@ msgid "develop history"
 msgstr "historique"
 
 #: ../src/libs/export_metadata.c:354
-#, fuzzy
-#| msgid ""
-#| "export darktable development data (recovery purpose in case of loss of "
-#| "database or XMP file)"
 msgid ""
 "export dt development data (recovery purpose in case of loss of database or "
 "xmp file)"
 msgstr ""
-"exporter l'historique de développement de darktable (pratique pour récupérer "
-"un développement en cas de perte des xmp et base de données)."
+"exporter l'historique de développement de ansel (pratique pour récupérer un "
+"développement en cas de perte des xmp et base de données)."
 
 #: ../src/libs/export_metadata.c:361
 msgid "per metadata settings"
@@ -20499,10 +20296,8 @@ msgid "select geo tags metadata"
 msgstr "sélectionner les métadonnées géolocalisation"
 
 #: ../src/libs/image.c:573
-#, fuzzy
-#| msgid "select darktable metadata (from metadata editor module)"
 msgid "select dt metadata (from metadata editor module)"
-msgstr "sélectionner les métadonnées dt (du module d'édition des métadonnées)"
+msgstr "sélectionner les métadonnées dt ( module d'édition des métadonnées)"
 
 #: ../src/libs/image.c:581
 msgid "set the selected image as source of metadata"
@@ -21431,11 +21226,6 @@ msgid "clear text"
 msgstr "effacer texte"
 
 #: ../src/libs/modulegroups.c:2856
-#, fuzzy
-#| msgid ""
-#| "the following modules are deprecated because they have internal design "
-#| "mistakes which can't be solved and alternative modules which solve them.\n"
-#| " they will be removed for new edits in the next release."
 msgid ""
 "the following modules are deprecated because they have internal design "
 "mistakes which can't be solved and alternative modules which solve them.\n"
@@ -21792,11 +21582,6 @@ msgid "new image area"
 msgstr "nouvelle zone image"
 
 #: ../src/libs/print_settings.c:2532
-#, fuzzy
-#| msgid ""
-#| "add a new image area on the page\n"
-#| "click and drag on the page to place the area\n"
-#| "drag and drop image from film strip on it"
 msgid ""
 "add a new image area on the page\n"
 "click and drag on the page to place the area\n"
@@ -21968,10 +21753,6 @@ msgid "darktable style files"
 msgstr "fichiers de style"
 
 #: ../src/libs/styles.c:798
-#, fuzzy
-#| msgid ""
-#| "available styles,\n"
-#| "double-click to apply"
 msgid ""
 "available styles,\n"
 "doubleclick to apply"
@@ -22308,7 +22089,7 @@ msgid ""
 "press shift+Tab to select the first attached user tag"
 msgstr ""
 "entrer le nom du mot-clé\n"
-"presser Entrée pour créer un nouveau mot-clé et l'attacher aux images "
+"presser Enter pour créer un nouveau mot-clé et l'attacher aux images "
 "sélectionnées\n"
 "presser Tab ou touche Bas pour aller vers le premier mot-clé affiché\n"
 "presser maj+Tab pour sélectionner le premier mot-clé utilisateur attaché"
@@ -22358,7 +22139,7 @@ msgstr "changer la vue liste / arbre"
 
 #: ../src/libs/tagging.c:3240
 msgid "tree"
-msgstr "arbre"
+msgstr "abre"
 
 #: ../src/libs/tagging.c:3242
 msgid "toggle list with / without suggestion"
@@ -22370,7 +22151,7 @@ msgstr "suggestion"
 
 #: ../src/libs/tagging.c:3263
 msgid "redo last tag"
-msgstr "ré-attacher le précédent mot-clé"
+msgstr "ré-appliquer mot-clé"
 
 #: ../src/libs/tagging.c:3346
 msgid ""
@@ -22407,7 +22188,7 @@ msgid ""
 "Copyright © Ansel authors 2022-%s"
 msgstr ""
 "Copyright © les auteurs de darktable  2009-2022\n"
-"Copyright © les auteurs d'Ansel 2022-%s"
+"Copyright © les autuers d'Ansel 2022-%s"
 
 #: ../src/libs/tools/darktable.c:281
 msgid "all those of you that made previous releases possible"
