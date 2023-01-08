@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: darktable 3.9\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2023-01-02 20:49+0100\n"
-"PO-Revision-Date: 2023-01-07 22:22+0100\n"
+"PO-Revision-Date: 2023-01-08 09:37+0100\n"
 "Last-Translator: Aurélien PIERRE <contact@aurelienpierre.com>\n"
 "Language-Team: \n"
 "Language: fr_FR\n"
@@ -1511,14 +1511,14 @@ msgid ""
 "recommended for general use!"
 msgstr ""
 "définit le niveau de ressource que ansel peut prendre sur le système.\n"
-"- défaut : prend ~50% des ressources systèmes ce qui permet à darktable "
-"d'être performant.\n"
+"- défaut : prend ~50% des ressources systèmes ce qui permet à ansel d'être "
+"performant.\n"
 "- faibles : peut être utilisé si vous utilisez simultanément des "
 "applications prenant une part importante des ressources systèmes ou des "
 "applications OpenCL/GL comme des jeux ou hugin.\n"
-"- importantes : la meilleure option si vous utilisez darktable exclusivement "
-"et que vous souhaitez lui allouer une part importante des ressources "
-"systèmes pour la performance.\n"
+"- importantes : la meilleure option si vous utilisez ansel exclusivement et "
+"que vous souhaitez lui allouer une part importante des ressources systèmes "
+"pour la performance.\n"
 "- sans-restriction : devrait être utilisé uniquement lors du développement "
 "de très grandes images car ansel utilisera toutes les ressources systèmes et "
 "ainsi peut entraîner des lenteurs dûes à l'utilisation de la partition "
@@ -1543,21 +1543,13 @@ msgstr ""
 "les miniatures du cache. il est cependant sûr de les effacer manuellement si "
 "désiré. la table lumineuse sera beaucoup plus fluide lors d'une navigation "
 "importante. pour générer toutes les miniatures de toutes les collections "
-"hors-ligne exécuter 'darktable-generate-cache'."
+"hors-ligne exécuter 'ansel-generate-cache'."
 
 #: ../build/bin/preferences_gen.h:5539
 msgid "enable disk backend for full preview cache"
 msgstr "utilisation du disque pour le cache des prévisualisations plein écran"
 
 #: ../build/bin/preferences_gen.h:5553
-#, fuzzy
-#| msgid ""
-#| "if enabled, write full preview to disk (.cache/darktable/) when evicted "
-#| "from the memory cache. note that this can take a lot of memory (several "
-#| "gigabytes for 20k images) and will never delete cached thumbnails again. "
-#| "it's safe though to delete these manually, if you want. light table "
-#| "performance will be increased greatly when zooming image in full preview "
-#| "mode."
 msgid ""
 "if enabled, write full preview to disk (.cache/ansel/) when evicted from the "
 "memory cache. note that this can take a lot of memory (several gigabytes for "
@@ -1565,11 +1557,11 @@ msgid ""
 "to delete these manually, if you want. light table performance will be "
 "increased greatly when zooming image in full preview mode."
 msgstr ""
-"si activé, écrit les prévisualisation plein écran sur le disque (.cache/"
-"darktable/) lorsque supprimées de la mémoire. à noter que cela peut prendre "
-"beaucoup de mémoire (plusieurs gigaoctets pour 20 mille images) et ne "
-"supprimera jamais les miniatures du cache. il est possible cependant de les "
-"effacer manuellement si désiré. la table lumineuse serra beaucoup plus "
+"si activé, écrit les prévisualisations plein écran sur le disque (.cache/"
+"ansel/) lorsqu'elles sont supprimées de la mémoire. à noter que cela peut "
+"prendre beaucoup de mémoire (plusieurs gigaoctets pour 20 mille images) et "
+"ne supprimera jamais les miniatures du cache. il est possible cependant de "
+"les effacer manuellement si désiré. la table lumineuse sera beaucoup plus "
 "fluide lors du zoom plein écran de prévisualisation d'une image."
 
 #: ../build/bin/preferences_gen.h:5575
@@ -1581,8 +1573,8 @@ msgid ""
 "if found, use OpenCL runtime on your system for improved processing speed. "
 "can be switched on and off at any time."
 msgstr ""
-"si OpenCL est présent sur votre système, darktable l'utilise pour améliorer "
-"les performances. peut être désactivé à tout moment."
+"si trouvé, utiliser OpenCL sur votre système pour améliorer les "
+"performances. peut être désactivé à tout moment."
 
 #: ../build/bin/preferences_gen.h:5590 ../build/bin/preferences_gen.h:5661
 #: ../build/bin/preferences_gen.h:5737 ../build/bin/preferences_gen.h:7077
@@ -1622,18 +1614,13 @@ msgid "tune OpenCL performance"
 msgstr "optimiser les performances OpenCL"
 
 #: ../build/bin/preferences_gen.h:5736
-#, fuzzy
-#| msgid ""
-#| "allows runtime tuning of OpenCL devices. 'memory size' uses a fixed "
-#| "headroom (400MB as default), 'memory transfer' tries a faster memory "
-#| "access mode (pinned memory) used for tiling."
 msgid ""
 "allows runtime tuning of OpenCL devices. 'memory size' tests for available "
 "graphics ram, 'memory transfer' tries a faster memory access mode (pinned "
 "memory) used for tiling."
 msgstr ""
 "permet d'optimiser les périphériques OpenCL lors de l'exécution. « taille "
-"mémoire » utilise 400Mo de mémoire de marge, « transfert mémoire » tente un "
+"mémoire »teste la ram graphique disponible, « transfert mémoire » tente un "
 "accès plus rapide à la mémoire (mémoire épinglée) utilisée pour le tuilage."
 
 #: ../build/bin/preferences_gen.h:5770 ../tools/generate_prefs.xsl:303
@@ -1870,11 +1857,6 @@ msgid "store xmp tags in compressed format"
 msgstr "enregistre les mots-clés xmp dans un format compressé"
 
 #: ../build/bin/preferences_gen.h:6702
-#, fuzzy
-#| msgid ""
-#| "entries in XMP tags can get rather large and may exceed the available "
-#| "space to store the history stack in output files. this option allows XMP "
-#| "tags to be compressed and save space."
 msgid ""
 "entries in xmp tags can get rather large and may exceed the available space "
 "to store the history stack in output files. this option allows xmp tags to "
@@ -2170,10 +2152,6 @@ msgid "sort collection descending"
 msgstr "tri descendant des collections"
 
 #: ../build/bin/preferences_gen.h:7724
-#, fuzzy
-#| msgid ""
-#| "sort the following collections in descending order: 'film roll' by "
-#| "folder, 'folder', 'times' (e.g. 'capture date')"
 msgid ""
 "sort the following collections in descending order: 'film roll' by folder, "
 "'folder', 'times' (e.g. 'date taken')"
@@ -3112,7 +3090,7 @@ msgstr "JzAzBz (2021)"
 
 #: ../build/lib64/ansel/plugins/introspection_colorbalancergb.c:604
 msgid "darktable UCS (2022)"
-msgstr "darktable UCS (2022)"
+msgstr "ansel UCS (2022)"
 
 #: ../build/lib64/ansel/plugins/introspection_colorcontrast.c:54
 #: ../build/lib64/ansel/plugins/introspection_colorcontrast.c:121
@@ -5464,7 +5442,7 @@ msgid ""
 "performance have changed."
 msgstr ""
 "l'interface utilisateur et les options internes pour optimiser les "
-"performance ont changé."
+"performances d'ansel ont changé."
 
 #: ../src/common/darktable.c:1737
 msgid ""
@@ -5476,7 +5454,7 @@ msgstr ""
 
 #: ../src/common/darktable.c:1739
 msgid "1) darktable resources"
-msgstr "1) ressources darktable"
+msgstr "1) ressources ansel"
 
 #: ../src/common/darktable.c:1741
 msgid "2) tune OpenCL performance"
@@ -5541,17 +5519,17 @@ msgid ""
 "</i>\n"
 msgstr ""
 "\n"
-"Désolé, darktable ne peut se lancer (la base de données est verrouillée)\n"
+"Désolé, ansel ne peut se lancer (la base de données est verrouillée)\n"
 "\n"
-"Comment résoudre se problème ?\n"
+"Comment résoudre ce problème ?\n"
 "\n"
 "1 - Si une autre instance de darktable est déjà ouverte,\n"
 "      cliquer annuler et soit vous utilisez cette instance ou vous la fermée "
-"avant de redémarrer darktable.\n"
+"avant de redémarrer ansel.\n"
 "      (processus n° <i><b>%d</b></i> a créé les verrous)\n"
 "\n"
-"2 - Si vous ne pouvez pas trouver d'instance de darktable s'exécutant , "
-"essayer de relancer votre session sur l'ordinateur.\n"
+"2 - Si vous ne pouvez pas trouver d'instance de ansel s'exécutant , essayer "
+"de relancer votre session sur l'ordinateur.\n"
 "      Ceci fermera toutes les programmes s'exécutant et pourrait fermer les "
 "bases de données correctement.\n"
 "\n"
@@ -5572,7 +5550,7 @@ msgstr ""
 #. clang-format on
 #: ../src/common/database.c:2743
 msgid "error starting darktable"
-msgstr "erreur de lancement de darktable"
+msgstr "erreur de lancement de ansel"
 
 #: ../src/common/database.c:2744 ../src/libs/collect.c:2957
 #: ../src/libs/export_metadata.c:288 ../src/libs/import.c:1693
@@ -5622,7 +5600,7 @@ msgid ""
 msgstr ""
 "\n"
 "suppression des fichiers verrous réussie.\n"
-"darktable doit être redémarré\n"
+"ansel peut maintenant être redémarré\n"
 
 #: ../src/common/database.c:2768 ../src/common/database.c:2775
 msgid "ok"
@@ -5696,7 +5674,7 @@ msgstr "Ansel - migration de la base"
 #: ../src/common/database.c:3280 ../src/common/database.c:3442
 #: ../src/common/database.c:3460
 msgid "close darktable"
-msgstr "quitter darktable"
+msgstr "quitter ansel"
 
 #: ../src/common/database.c:2949
 msgid "upgrade database"
@@ -5733,7 +5711,7 @@ msgid ""
 "from the most recent snapshot or delete the corrupted database\n"
 "and start with a new one?"
 msgstr ""
-"voulez-vous quitter darktable maintenant pour restaurer manuellement\n"
+"voulez-vous quitter ansel maintenant pour restaurer manuellement\n"
 "la base de données depuis une sauvegarde, essayer une restauration "
 "automatique\n"
 "depuis la sauvegarde la plus récente ou supprimer la base corrompues\n"
@@ -5745,7 +5723,7 @@ msgid ""
 "the database from a backup or delete the corrupted database\n"
 "and start with a new one?"
 msgstr ""
-"voulez-vous quitter darktable maintenant pour restaurer manuellement\n"
+"voulez-vous quitter ansel maintenant pour restaurer manuellement\n"
 "la base de données depuis une sauvegarde ou supprimer la base corrompues\n"
 "et redémarrer avec une nouvelle ?"
 
@@ -5878,7 +5856,7 @@ msgid ""
 "your browser now and <b>go back</b> to darktable.</p>"
 msgstr ""
 "<h1>Merci,</h1><p>tout devrait s'être bien passé, vous pouvez <b>fermer</b> "
-"votre navigateur maintenant et <b>retourner</b> dans darktable.</p>"
+"votre navigateur maintenant et <b>retourner</b> dans ansel.</p>"
 
 #: ../src/common/image.c:296
 msgid "orphaned image"
@@ -6842,7 +6820,7 @@ msgid_plural ""
 "do you really want to remove %d images from darktable\n"
 "(without deleting files on disk)?"
 msgstr[0] ""
-"êtes-vous sûr de vouloir enlever %d image de darktable\n"
+"êtes-vous sûr de vouloir enlever %d image de ansel\n"
 "(sans supprimer le fichier du disque)?"
 msgstr[1] ""
 "êtes-vous sûr de vouloir enlever %d images de darktable\n"
@@ -8788,7 +8766,7 @@ msgid ""
 msgstr ""
 "attention : l'utilisation du disque pour les miniatures est désactivé "
 "(cache_disk_backend)\n"
-"si vous voulez pré-générer les miniatures pour que darktable puisse les "
+"si vous voulez pré-générer les miniatures pour que ansel puisse les "
 "utiliser, vous devez activer l'utilisation du cache disque\n"
 "aucune miniature à générer, fini.\n"
 
@@ -8803,8 +8781,8 @@ msgid ""
 msgstr ""
 "attention : l'utilisation du disque pour les prévisualisations est désactivé "
 "(cache_disk_backend_full)\n"
-"si vous voulez pré-générer les prévisualisations pour que darktable puisse "
-"les utiliser, vous devez activer l'utilisation du cache disque\n"
+"si vous voulez pré-générer les prévisualisations pour que ansel puisse les "
+"utiliser, vous devez activer l'utilisation du cache disque\n"
 "aucune prévisualisation à générer, fini.\n"
 
 #: ../src/generate-cache/main.c:248
@@ -9456,7 +9434,7 @@ msgstr ""
 
 #: ../src/gui/gtk.c:665
 msgid "closing darktable..."
-msgstr "quitter darktable..."
+msgstr "quitter ansel..."
 
 #: ../src/gui/gtk.c:976
 msgid "panels"
@@ -9845,11 +9823,11 @@ msgstr "$(TAGS) - mots-clés des métadonnées"
 
 #: ../src/gui/gtkentry.c:242
 msgid "$(DARKTABLE.NAME) - darktable name"
-msgstr "$(DARKTABLE.NAME) - nom darktable"
+msgstr "$(DARKTABLE.NAME) - nom ansel"
 
 #: ../src/gui/gtkentry.c:243
 msgid "$(DARKTABLE.VERSION) - current darktable version"
-msgstr "$(DARKTABLE.VERSION) - version de darktable"
+msgstr "$(DARKTABLE.VERSION) - version de ansel"
 
 #: ../src/gui/guides.c:30 ../src/iop/colorcorrection.c:263
 msgid "grid"
@@ -10031,24 +10009,18 @@ msgid "from xmp"
 msgstr "depuis xmp"
 
 #: ../src/gui/import_metadata.c:433
-#, fuzzy
-#| msgid ""
-#| "selected metadata are imported from image and override the default value\n"
-#| " this drives also the 'look for updated XMP files' and 'load sidecar "
-#| "file' actions\n"
-#| " CAUTION: not selected metadata are cleaned up when XMP file is updated"
 msgid ""
 "selected metadata are imported from image and override the default value\n"
 " this drives also the 'look for updated xmp files' and 'load sidecar file' "
 "actions\n"
 " CAUTION: not selected metadata are cleaned up when xmp file is updated"
 msgstr ""
-"les meta-données sélectionnées sont importées depuis l'image et remplace les "
-"valeurs par défaut\n"
-"cette option est aussi utilisée par \"vérifie les fichiers xmp modifiés au "
-"démarrage\" et l'action \"charger un xmp\"\n"
-"ATTENTION: les méta-données non sélectionnées seront supprimées lorsque le "
-"fichier xmp est mis à jour"
+"les métadonnées sélectionnées sont importées depuis l'image et remplacent "
+"les valeurs par défaut\n"
+"cette option est aussi utilisée par les actions \"vérifie les fichiers xmp "
+"modifiés au démarrage\" et \"charger un xmp\"\n"
+"ATTENTION: les métadonnées non sélectionnées seront supprimées lorsque le "
+"fichier xmp sera mis à jour"
 
 #. tags
 #: ../src/gui/import_metadata.c:469
@@ -10206,10 +10178,8 @@ msgid "_open"
 msgstr "_ouvrir"
 
 #: ../src/gui/preferences.c:1005
-#, fuzzy
-#| msgid "darktable preset files"
 msgid "Ansel preset files"
-msgstr "Fichiers de préréglages d'Ansel"
+msgstr "Fichiers de préréglage d'Ansel"
 
 #: ../src/gui/preferences.c:1010 ../src/iop/lut3d.c:1588
 #: ../src/libs/copy_history.c:144 ../src/libs/geotagging.c:946
@@ -10851,19 +10821,14 @@ msgid "debug"
 msgstr "débogage"
 
 #: ../src/imageio/format/pdf.c:717
-#, fuzzy
-#| msgid ""
-#| "normal -- just put the images into the pdf\n"
-#| "draft -- images are replaced with boxes\n"
-#| "debug -- only show the outlines and bounding boxes"
 msgid ""
 "normal -- just put the images into the pdf\n"
 "draft -- images are replaced with boxes\n"
 "debug -- only show the outlines and bounding boxen"
 msgstr ""
-"normal -- inclure les images dans le pdf\n"
+"normal -- mettre les images dans le pdf\n"
 "épreuve -- les images sont remplacées par des boîtes\n"
-"débogage -- montre uniquement le contours des boîtes englobantes"
+"débogage -- montre uniquement les contours des boîtes englobantes"
 
 #: ../src/imageio/format/pfm.c:118
 msgid "PFM (float)"
@@ -10930,12 +10895,6 @@ msgid "image hint"
 msgstr "type d'image"
 
 #: ../src/imageio/format/webp.c:353
-#, fuzzy
-#| msgid ""
-#| "image characteristics hint for the underlying encoder.\n"
-#| "picture: digital picture, like portrait, inner shot\n"
-#| "photo: outdoor photograph, with natural lighting\n"
-#| "graphic: discrete tone image (graph, map-tile etc)"
 msgid ""
 "image characteristics hint for the underlying encoder.\n"
 "picture : digital picture, like portrait, inner shot\n"
@@ -10945,7 +10904,7 @@ msgstr ""
 "description de l'image pour l'encodeur.\n"
 "image : photographie d'intérieur, portrait\n"
 "photo : photographie d'extérieur, avec lumière naturelle\n"
-" graphique : image avec des couleurs uniformes (schéma, etc)"
+"graphique : image avec des couleurs uniformes (schéma, etc)"
 
 #: ../src/imageio/format/webp.c:358
 msgid "picture"
@@ -11024,22 +10983,16 @@ msgstr[0] "%d/%d exportée vers « %s »"
 msgstr[1] "%d/%d exportées vers « %s »"
 
 #: ../src/imageio/storage/disk.c:391
-#, fuzzy
-#| msgid ""
-#| "you are going to export in overwrite mode, this will overwrite any "
-#| "existing images\n"
-#| "\n"
-#| "do you really want to continue?"
 msgid ""
 "you are going to export on overwrite mode, this will overwrite any existing "
 "images\n"
 "\n"
 "do you really want to continue?"
 msgstr ""
-"l'exportation est en mode « écraser », ce mode écrasera toutes\n"
-"les images existantes du même nom.\n"
+"l'exportation est en mode « écraser », ce mode écrasera toutes les images "
+"existantes du même nom.\n"
 "\n"
-"voulez-vous vraiment continuer?"
+"voulez-vous vraiment continuer ?"
 
 #: ../src/imageio/storage/email.c:52
 msgid "send as email"
@@ -11047,7 +11000,7 @@ msgstr "envoyer par e-mail"
 
 #: ../src/imageio/storage/email.c:198
 msgid "images exported from darktable"
-msgstr "images exportées depuis darktable"
+msgstr "images exportées depuis ansel"
 
 #: ../src/imageio/storage/email.c:251
 msgid "could not launch email client!"
@@ -11371,13 +11324,6 @@ msgstr ""
 "maj+clic pour la correction de distorsion uniquement"
 
 #: ../src/iop/ashift.c:5808
-#, fuzzy
-#| msgid ""
-#| "automatically correct for vertical and horizontal perspective "
-#| "distortions, fitting rotation, lens shift in both directions, and shear\n"
-#| "ctrl+click to only fit rotation\n"
-#| "shift+click to only fit lens shift\n"
-#| "ctrl+shift+click to only fit rotation and lens shift"
 msgid ""
 "automatically correct for vertical and horizontal perspective distortions; "
 "fitting rotation,lens shift in both directions, and shear\n"
@@ -11385,13 +11331,13 @@ msgid ""
 "shift+click to only fit lens shift\n"
 "ctrl+shift+click to only fit rotation and lens shift"
 msgstr ""
-"correction automatique des distorsions verticales et horizontales de "
-"perspective; ajuste la rotation, l'alignement de l'objectif dans les deux "
+"corrige automatique les distorsions verticales et horizontales de "
+"perspective ; ajuste la rotation, l'alignement de l'objectif dans les deux "
 "directions et l'inclinaison\n"
-"ctrl+clic pour la correction de rotation seulement\n"
-"shift+clic pour la correction de distorsion uniquement\n"
-"ctrl+shift-clic pour uniquement la correction de rotation et d'alignement "
-"d'objectif"
+"ctrl+clic pour ajuster uniquement la rotation\n"
+"shift+clic pour ajuster uniquement la distorsion\n"
+"ctrl+shift-clic pour ajuster uniquement la rotation et l'alignement de "
+"l'objectif"
 
 #: ../src/iop/ashift.c:5814
 msgid ""
@@ -12280,11 +12226,6 @@ msgid "bypassed while zooming in"
 msgstr "sauté en zoomant"
 
 #: ../src/iop/cacorrect.c:1340
-#, fuzzy
-#| msgid ""
-#| "while calculating the correction parameters the internal maths failed so "
-#| "module is bypassed.\n"
-#| "you can get more info by running darktable via the console."
 msgid ""
 "while calculating the correction parameters the internal maths failed so "
 "module is bypassed.\n"
@@ -12292,8 +12233,7 @@ msgid ""
 msgstr ""
 "le module est contourné car une erreur s'est produite lors du calcul des "
 "paramètres de la correction.\n"
-"vous pouvez obtenir plus d'information en exécutant darktable depuis une "
-"console."
+"vous pouvez obtenir plus d'information en exécutant ansel depuis une console."
 
 #: ../src/iop/cacorrect.c:1344
 msgid ""
@@ -13045,15 +12985,6 @@ msgid "optimize for"
 msgstr "optimisé pour"
 
 #: ../src/iop/channelmixerrgb.c:4223
-#, fuzzy
-#| msgid ""
-#| "choose the colors that will be optimized with higher priority.\n"
-#| "neutral colors gives the lowest average delta E but a high maximum delta "
-#| "E\n"
-#| "saturated colors gives the lowest maximum delta E but a high average "
-#| "delta E\n"
-#| "none is a trade-off between both\n"
-#| "the others are special behaviors to protect some hues"
 msgid ""
 "choose the colors that will be optimized with higher priority.\n"
 "neutral colors gives the lowest average delta E but a high maximum delta E\n"
@@ -14815,33 +14746,23 @@ msgstr ""
 "du pixel central."
 
 #: ../src/iop/denoiseprofile.c:3719
-#, fuzzy
-#| msgid ""
-#| "emergency use only: radius of the neighborhood to search patches in. "
-#| "increase for better denoising performance, but watch the long runtimes! "
-#| "large radii can be very slow. you have been warned"
 msgid ""
 "emergency use only: radius of the neighbourhood to search patches in. "
 "increase for better denoising performance, but watch the long runtimes! "
 "large radii can be very slow. you have been warned"
 msgstr ""
-"en cas d'urgence seulement : taille du rayon de recherche, augmenter pour "
-"une meilleure suppression du bruit au détriment de la performance qui peut "
-"très vite devenir très pénalisante"
+"seulement en cas d'urgence : taille du rayon de recherche des taches, "
+"augmenter le pour une meilleure suppression du bruit au détriment de la "
+"performance qui peut très vite devenir lente. Vous avez été prévenu"
 
 #: ../src/iop/denoiseprofile.c:3722
-#, fuzzy
-#| msgid ""
-#| "scattering of the neighborhood to search patches in.\n"
-#| "increase for better coarse-grain noise reduction.\n"
-#| "does not affect execution time."
 msgid ""
 "scattering of the neighbourhood to search patches in.\n"
 "increase for better coarse-grain noise reduction.\n"
 "does not affect execution time."
 msgstr ""
-"diffusion du voisinage pour la recherche de similarité.\n"
-"augmenter pour traiter un grain grossier.\n"
+"diffusion du voisinage pour la recherche des patchs.\n"
+"augmenter pour traiter un bruit à grain grossier.\n"
 "n'affecte pas le temps d'exécution."
 
 #: ../src/iop/denoiseprofile.c:3725
@@ -15955,19 +15876,14 @@ msgstr ""
 "la lumière."
 
 #: ../src/iop/filmicrgb.c:4721
-#, fuzzy
-#| msgid ""
-#| "ensure the original colors are preserved.\n"
-#| "may reinforce chromatic aberrations and chroma noise,\n"
-#| "so ensure they are properly corrected elsewhere."
 msgid ""
 "ensure the original color are preserved.\n"
 "may reinforce chromatic aberrations and chroma noise,\n"
 "so ensure they are properly corrected elsewhere.\n"
 msgstr ""
-"préserve les couleurs d'origine.\n"
+"assure la préservation des couleurs d'origine.\n"
 "peut renforcer les aberrations chromatiques et le bruit chromatique,\n"
-"assurez-vous qu'ils sont correctement corrigés avant.\n"
+"assurez-vous qu'ils sont correctement corrigés ailleurs.\n"
 
 #: ../src/iop/filmicrgb.c:4727
 msgid ""
@@ -16997,8 +16913,7 @@ msgstr "niveaux invalides dans le fichier png %d %d"
 
 #: ../src/iop/lut3d.c:519
 msgid "this darktable build is not compatible with compressed clut"
-msgstr ""
-"cette version de darktable n'est pas compatible avec les lut compressées"
+msgstr "cette version de ansel n'est pas compatible avec les lut compressées"
 
 #: ../src/iop/lut3d.c:536 ../src/iop/lut3d.c:785
 #, c-format
@@ -22075,7 +21990,7 @@ msgstr "trier"
 
 #: ../src/libs/tagging.c:3115
 msgid "toggle show or not darktable tags"
-msgstr "basculer l'affichage des mots-clés spécifiques à darktable"
+msgstr "basculer l'affichage des mots-clés spécifiques à ansel"
 
 #: ../src/libs/tagging.c:3115
 msgid "dttags"
@@ -22188,7 +22103,7 @@ msgid ""
 "Copyright © Ansel authors 2022-%s"
 msgstr ""
 "Copyright © les auteurs de darktable  2009-2022\n"
-"Copyright © les autuers d'Ansel 2022-%s"
+"Copyright © les auteurs d'Ansel 2022-%s"
 
 #: ../src/libs/tools/darktable.c:281
 msgid "all those of you that made previous releases possible"
@@ -22671,9 +22586,9 @@ msgid ""
 "an issue\n"
 "at https://github.com/darktable-org/darktable"
 msgstr ""
-"darktable n'a pas réussi à charger « %s », retour vers la table lumineuse.\n"
+"ansel n'a pas réussi à charger « %s », retour vers la table lumineuse.\n"
 "\n"
-"vérifiez que l'appareil photo est supporté par darktable\n"
+"vérifiez que l'appareil photo est supporté par ansel\n"
 "(la liste des appareils supportés est ici https://www.darktable.org/"
 "resources/camera-support/).\n"
 "si vous êtes certain que l'appareil est supporté, alors considérez "
@@ -23283,7 +23198,7 @@ msgstr "clic-droit + déplacer"
 
 #: ../src/views/view.c:1210
 msgid "darktable - accels window"
-msgstr "darktable - fenêtre des raccourcis"
+msgstr "ansel - fenêtre des raccourcis"
 
 #: ../src/views/view.c:1258
 msgid "switch to a classic window which will stay open after key release"
