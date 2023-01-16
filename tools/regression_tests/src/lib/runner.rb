@@ -46,7 +46,7 @@ class Runner
     model = model[0..5] == "NX2000" ? "NX2000" : model.strip
 
     if (maker == "" || model == "") # Try with rawspeed instead
-      IO.popen("darktable-rs-identify \"#{file}\"","r").each do |line|
+      IO.popen("ansel-rs-identify \"#{file}\"","r").each do |line|
         parts = line.split(":")
         case parts[0].strip
         when "make"

@@ -27,7 +27,7 @@ class DTBuild
     @ref = IO.popen("git -C #{@repodir} rev-parse HEAD").read.strip
 
     @instdir = File.expand_path "../../bin/builds/#{@ref}/inst/", File.dirname(__FILE__)
-    @bin = File.expand_path "./bin/darktable-cli", @instdir
+    @bin = File.expand_path "./bin/ansel-cli", @instdir
 
     if !File.exists? @bin
       # We need to actually build this thing
