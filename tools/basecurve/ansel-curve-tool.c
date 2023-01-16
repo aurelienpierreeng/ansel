@@ -1,19 +1,20 @@
 /*
-    This file is part of darktable,
+    This file is part of ansel,
     Copyright (C) 2018-2020 darktable developers.
+    Copyright (C) 2023 ansel developers.
 
-    darktable is free software: you can redistribute it and/or modify
+    ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    darktable is distributed in the hope that it will be useful,
+    ansel is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+    along with ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <stdio.h>
@@ -1055,7 +1056,7 @@ fit:;
     fprintf(stdout, "# note that it is a smart idea to backup your database before messing with it on this level.\n");
     fprintf(stdout, "# (you have been warned :) )\n\n");
     // the big binary blob is a canonical blend mode option (switched off).
-    fprintf(stdout, "echo \"INSERT INTO presets (name,description,operation,op_version,op_params,enabled,blendop_params,blendop_version,multi_priority,multi_name,model,maker,lens,iso_min,iso_max,exposure_min,exposure_max,aperture_min,aperture_max,focal_length_min,focal_length_max,writeprotect,autoapply,filter,def,format) VALUES('%s','','basecurve',%d,X'%s',1,X'00000000180000000000C842000000000000000000000000000000000000000000000000000000000000000000000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F',7,0,'','%%','%%','%%',0.0,340282346638528859812000000000000000000,0.0,10000000.0,0.0,100000000.0,0.0,1000.0,0,0,0,0,2);\" | sqlite3 ~/.config/darktable/data.db\n",
+    fprintf(stdout, "echo \"INSERT INTO presets (name,description,operation,op_version,op_params,enabled,blendop_params,blendop_version,multi_priority,multi_name,model,maker,lens,iso_min,iso_max,exposure_min,exposure_max,aperture_min,aperture_max,focal_length_min,focal_length_max,writeprotect,autoapply,filter,def,format) VALUES('%s','','basecurve',%d,X'%s',1,X'00000000180000000000C842000000000000000000000000000000000000000000000000000000000000000000000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F',7,0,'','%%','%%','%%',0.0,340282346638528859812000000000000000000,0.0,10000000.0,0.0,100000000.0,0.0,1000.0,0,0,0,0,2);\" | sqlite3 ~/.config/ansel/data.db\n",
       opt.filename_exif ? model : "new measured basecurve",
       BASECURVE_PARAMS_VERSION, encoded);
 
@@ -1136,7 +1137,7 @@ fit:;
     fprintf(stdout, "#!/bin/sh\n");
     fprintf(stdout, "# to test your new tonecurve, copy/paste the following line into your shell.\n");
     fprintf(stdout, "# note that it is a smart idea to backup your database before messing with it on this level.\n\n");
-    fprintf(stdout, "echo \"INSERT INTO presets (name,description,operation,op_version,op_params,enabled,blendop_params,blendop_version,multi_priority,multi_name,model,maker,lens,iso_min,iso_max,exposure_min,exposure_max,aperture_min,aperture_max,focal_length_min,focal_length_max,writeprotect,autoapply,filter,def,format) VALUES('%s','','tonecurve',%d,X'%s',1,X'00000000180000000000C842000000000000000000000000000000000000000000000000000000000000000000000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F',7,0,'','%%','%%','%%',0.0,340282346638528859812000000000000000000,0.0,10000000.0,0.0,100000000.0,0.0,1000.0,0,0,0,0,2);\" | sqlite3 ~/.config/darktable/data.db\n",
+    fprintf(stdout, "echo \"INSERT INTO presets (name,description,operation,op_version,op_params,enabled,blendop_params,blendop_version,multi_priority,multi_name,model,maker,lens,iso_min,iso_max,exposure_min,exposure_max,aperture_min,aperture_max,focal_length_min,focal_length_max,writeprotect,autoapply,filter,def,format) VALUES('%s','','tonecurve',%d,X'%s',1,X'00000000180000000000C842000000000000000000000000000000000000000000000000000000000000000000000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F00000000000000000000803F0000803F',7,0,'','%%','%%','%%',0.0,340282346638528859812000000000000000000,0.0,10000000.0,0.0,100000000.0,0.0,1000.0,0,0,0,0,2);\" | sqlite3 ~/.config/ansel/data.db\n",
             opt.filename_exif ? model : "new measured tonecurve",
             TONECURVE_PARAMS_VERSION, encoded);
     fprintf(stdout, "\n\n\n"
