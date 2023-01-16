@@ -50,7 +50,10 @@ get_filename_component(CMAKE_INSTALL_BINDIR_ABS "${CMAKE_INSTALL_FULL_BINDIR}" R
 file(RELATIVE_PATH REL_BIN_TO_LIBDIR    ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_LIBDIR}/ansel")
 file(RELATIVE_PATH REL_BIN_TO_SHAREDIR  ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_DATADIR}")
 file(RELATIVE_PATH REL_BIN_TO_LOCALEDIR ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_LOCALEDIR}")
-set(REL_BIN_TO_DATADIR  "${REL_BIN_TO_SHAREDIR}/darktable") # Required by rawspeed-identify.cpp
+# The original comment is 'Required by rawspeed-identify.cpp', I don't see what
+# it means and I already changed the binary prefix in CMake. I have to change
+# `darktable` to `ansel` here to keep all things works.
+set(REL_BIN_TO_DATADIR  "${REL_BIN_TO_SHAREDIR}/ansel")
 set(DARKTABLE_BINDIR    "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
 set(DARKTABLE_LIBDIR    "${DARKTABLE_BINDIR}/${REL_BIN_TO_LIBDIR}")
 set(DARKTABLE_SHAREDIR  "${DARKTABLE_BINDIR}/${REL_BIN_TO_SHAREDIR}")
