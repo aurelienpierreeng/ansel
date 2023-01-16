@@ -1,17 +1,17 @@
 # Only build on real unix system (excludes MingW, MSYS, etc.)
 if (UNIX AND NOT WIN32)
-    add_executable(darktable-noiseprofile noiseprofile.c)
-    target_link_libraries(darktable-noiseprofile m)
+    add_executable(ansel-noiseprofile noiseprofile.c)
+    target_link_libraries(ansel-noiseprofile m)
 
     install(TARGETS
-                darktable-noiseprofile
+                ansel-noiseprofile
             DESTINATION
                 ${CMAKE_INSTALL_LIBEXECDIR}/ansel/tools
             COMPONENT
                 DTApplication)
 
     install(PROGRAMS
-                darktable-gen-noiseprofile
+                ansel-gen-noiseprofile
             DESTINATION
                 ${CMAKE_INSTALL_LIBEXECDIR}/ansel/tools
             COMPONENT
