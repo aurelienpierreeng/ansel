@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: darktable 3.9\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2023-01-02 20:49+0100\n"
-"PO-Revision-Date: 2023-01-08 09:37+0100\n"
+"PO-Revision-Date: 2023-01-20 20:23+0100\n"
 "Last-Translator: Aurélien PIERRE <contact@aurelienpierre.com>\n"
 "Language-Team: \n"
 "Language: fr_FR\n"
@@ -6237,7 +6237,7 @@ msgstr "image notée à « %s »"
 #: ../src/common/ratings.c:305 ../src/libs/select.c:39
 #: ../src/views/lighttable.c:723
 msgid "select"
-msgstr "sélection"
+msgstr "sélectionner"
 
 #: ../src/common/ratings.c:306
 msgid "upgrade"
