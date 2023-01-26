@@ -1911,7 +1911,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->global_H, _("hue of the global color offset"));
 
   g->global_C = dt_bauhaus_slider_from_params(self, "global_C");
-  dt_bauhaus_slider_set_soft_range(g->global_C, 0., 0.01);
+  dt_bauhaus_slider_set_soft_range(g->global_C, 0., 0.0075);
   dt_bauhaus_slider_set_digits(g->global_C, 4);
   dt_bauhaus_slider_set_format(g->global_C, "%");
   gtk_widget_set_tooltip_text(g->global_C, _("chroma of the global color offset"));
@@ -1930,7 +1930,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->shadows_H, _("hue of the color gain in shadows"));
 
   g->shadows_C = dt_bauhaus_slider_from_params(self, "shadows_C");
-  dt_bauhaus_slider_set_soft_range(g->shadows_C, 0., 0.5);
+  dt_bauhaus_slider_set_soft_range(g->shadows_C, 0., 0.375);
   dt_bauhaus_slider_set_digits(g->shadows_C, 4);
   dt_bauhaus_slider_set_format(g->shadows_C, "%");
   gtk_widget_set_tooltip_text(g->shadows_C, _("chroma of the color gain in shadows"));
@@ -1949,7 +1949,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->highlights_H, _("hue of the color gain in highlights"));
 
   g->highlights_C = dt_bauhaus_slider_from_params(self, "highlights_C");
-  dt_bauhaus_slider_set_soft_range(g->highlights_C, 0., 0.2);
+  dt_bauhaus_slider_set_soft_range(g->highlights_C, 0., 0.15);
   dt_bauhaus_slider_set_digits(g->highlights_C, 4);
   dt_bauhaus_slider_set_format(g->highlights_C, "%");
   gtk_widget_set_tooltip_text(g->highlights_C, _("chroma of the color gain in highlights"));
@@ -1968,7 +1968,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->midtones_H, _("hue of the color exponent in mid-tones"));
 
   g->midtones_C = dt_bauhaus_slider_from_params(self, "midtones_C");
-  dt_bauhaus_slider_set_soft_range(g->midtones_C, 0., 0.1);
+  dt_bauhaus_slider_set_soft_range(g->midtones_C, 0., 0.075);
   dt_bauhaus_slider_set_digits(g->midtones_C, 4);
   dt_bauhaus_slider_set_format(g->midtones_C, "%");
   gtk_widget_set_tooltip_text(g->midtones_C, _("chroma of the color exponent in mid-tones"));
