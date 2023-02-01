@@ -65,7 +65,6 @@ jobs:
             libcmocka-dev \
             libcups2-dev \
             libcurl4-gnutls-dev \
-            libexiv2-dev \
             libimage-exiftool-perl \
             libgdk-pixbuf2.0-dev \
             libglib2.0-dev \
@@ -116,6 +115,24 @@ jobs:
           fetch-depth: 0
           submodules: true
           path: src
+      # Fetch exiv2 source, because the version in Ubuntu 20.04 is tooooooo old.
+      - uses: actions/checkout@v3
+        with:
+          repository: 'Exiv2/exiv2'
+          # Exiv2 replaces AutoPtr with UniquePtr, before we update the base
+          # curve tool, stick to 0.27 branch.
+          ref: '0.27-maintenance'
+          path: 'exiv2-src'
+          fetch-depth: 1
+      # Install manually compiled dependencies into system, so ansel will link
+      # against it and AppImage will grab it.
+      - name: Manually build dependencies
+        run: |
+          cd exiv2-src
+          cmake -B build -GNinja -DCMAKE_INSTALL_PREFIX=/usr -DEXIV2_ENABLE_VIDEO=ON -DEXIV2_ENABLE_NLS=ON -DEXIV2_ENABLE_XMP=ON -DEXIV2_ENABLE_CURL=ON -DEXIV2_ENABLE_WEBREADY=ON -DEXIV2_ENABLE_BMFF=ON
+          ninja -C build
+          sudo ninja -C build install
+          cd ..
       - name: Update lensfun data for root
         if: ${{ false }} #${{ success() }} re-enable when lensfun servers renew the SSL certificate
         run: |
