@@ -38,4 +38,12 @@ chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-gtk.sh
 export DEPLOY_GTK_VERSION="3"
 export VERSION=$(sh ../tools/get_git_version_string.sh)
 
-./linuxdeploy-x86_64.AppImage --appdir ../AppDir --plugin gtk --output appimage
+# Our plugins link against libansel, it's not in system, so tell linuxdeploy
+# where to find it. Don't use LD_PRELOAD here, linuxdeploy cannot see preloaded
+# libraries.
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:../AppDir/usr/lib64/ansel/"
+# Using `--deploy-deps-only` to tell linuxdeploy also collect dependencies for
+# libraries in this dir, but don't copy those libraries. On the contrary,
+# `--library` will copy both libraries and their dependencies, which is not what
+# we want, we already installed our plugins.
+./linuxdeploy-x86_64.AppImage --appdir ../AppDir --plugin gtk --deploy-deps-only ../AppDir/usr/lib64/ansel/plugins --output appimage
