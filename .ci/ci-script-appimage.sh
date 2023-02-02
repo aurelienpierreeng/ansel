@@ -26,6 +26,11 @@ export DESTDIR=../AppDir
 cmake .. -DCMAKE_INSTALL_PREFIX=/usr -G Ninja -DCMAKE_BUILD_TYPE=Release -DBINARY_PACKAGE_BUILD=1 -DCMAKE_INSTALL_LIBDIR=lib64
 cmake --build . --target install
 
+# Grab lensfun database. You should run `sudo lensfun-update-data` before making
+# AppImage, we did this in CI.
+mkdir -p ../AppDir/usr/share/lensfun
+cp -a /var/lib/lensfun-updates/* ../AppDir/usr/share/lensfun
+
 ## Replace relative pathes to executable in ansel.desktop
 ## The pathes will be handled by AppImage.
 sed -i 's/\/usr\/bin\///' ../AppDir/usr/share/applications/photos.ansel.app.desktop
