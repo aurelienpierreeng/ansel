@@ -109,14 +109,16 @@ jobs:
             gstreamer1.0-tools \
             debianutils;
       # squashfs, libfuse2, gstreamer are deps of AppImage builder, not Ansel
-      - uses: actions/checkout@v3
+      - name: Checkout ansel source
+        uses: actions/checkout@v3
         with:
           ref: ${{ env.BRANCH }}
           fetch-depth: 0
           submodules: true
           path: src
       # Fetch exiv2 source, because the version in Ubuntu 20.04 is tooooooo old.
-      - uses: actions/checkout@v3
+      - name: Checkout exiv2 source
+        uses: actions/checkout@v3
         with:
           repository: 'Exiv2/exiv2'
           # Exiv2 replaces AutoPtr with UniquePtr, before we update the base
@@ -126,15 +128,22 @@ jobs:
           fetch-depth: 1
       # Install manually compiled dependencies into system, so ansel will link
       # against it and AppImage will grab it.
-      - name: Manually build dependencies
+      - name: Manually build exiv2 dependency
         run: |
           cd exiv2-src
-          cmake -B build -GNinja -DCMAKE_INSTALL_PREFIX=/usr -DEXIV2_ENABLE_VIDEO=ON -DEXIV2_ENABLE_NLS=ON -DEXIV2_ENABLE_XMP=ON -DEXIV2_ENABLE_CURL=ON -DEXIV2_ENABLE_WEBREADY=ON -DEXIV2_ENABLE_BMFF=ON
+          cmake -B build -GNinja \
+          -DCMAKE_INSTALL_PREFIX=/usr \
+          -DEXIV2_ENABLE_VIDEO=ON \
+          -DEXIV2_ENABLE_NLS=ON \
+          -DEXIV2_ENABLE_XMP=ON \
+          -DEXIV2_ENABLE_CURL=ON \
+          -DEXIV2_ENABLE_WEBREADY=ON \
+          -DEXIV2_ENABLE_BMFF=ON
           ninja -C build
           sudo ninja -C build install
           cd ..
       - name: Update lensfun data for root
-        if: ${{ false }} #${{ success() }} re-enable when lensfun servers renew the SSL certificate
+        if: ${{ success() }}
         run: |
           sudo lensfun-update-data
       - name: Build and Install
