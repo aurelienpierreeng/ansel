@@ -23,7 +23,7 @@ jobs:
         generator:
           - Ninja
         branch:
-          - { code: master, label: stable }
+          - { code: "${{ github.ref_name }}", label: stable }
     env:
       CC: ${{ matrix.compiler.CC }}
       CXX: ${{ matrix.compiler.CXX }}
