@@ -34,10 +34,16 @@ JsonParser *dt_noiseprofile_init(const char *alternative)
 
   if(alternative == NULL)
   {
-    // TODO: shall we look for profiles in the user config dir?
-    char datadir[PATH_MAX] = { 0 };
-    dt_loc_get_datadir(datadir, sizeof(datadir));
-    snprintf(filename, sizeof(filename), "%s/%s", datadir, "noiseprofiles.json");
+    char dir[PATH_MAX] = { 0 };
+
+    dt_loc_get_user_config_dir(dir, sizeof(dir));
+    snprintf(filename, sizeof(filename), "%s/%s", dir, "noiseprofiles.json");
+
+    if(!g_file_test(filename, G_FILE_TEST_EXISTS))
+    {
+      dt_loc_get_datadir(dir, sizeof(dir));
+      snprintf(filename, sizeof(filename), "%s/%s", dir, "noiseprofiles.json");
+    }
   }
   else
     g_strlcpy(filename, alternative, sizeof(filename));
