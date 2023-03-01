@@ -786,6 +786,12 @@ static void _pixelpipe_pick_from_image(dt_iop_module_t *module,
     int converted_cst;
     dt_ioppr_transform_image_colorspace(module, picked_rgb[0], sample->lab[0], 3, 1, IOP_CS_RGB, IOP_CS_LAB,
                                         &converted_cst, display_profile);
+
+    // NOTE: Previously, the scope member is used to convert display profile
+    // color into histogram profile color, but we dropped histogram profile in
+    // Ansel and just use display profile for histogram. So assign the same
+    // value here.
+    memcpy(sample->scope[0], sample->display[0], sizeof(lib_colorpicker_sample_statistics));
   }
   else if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
   {
@@ -796,6 +802,11 @@ static void _pixelpipe_pick_from_image(dt_iop_module_t *module,
     memcpy(sample->display[0], pixel + 4 * (roi_in->width * y + x), sizeof(dt_aligned_pixel_t));
     dt_ioppr_transform_image_colorspace(module, sample->display[0], sample->lab[0], 1, 1, IOP_CS_RGB, IOP_CS_LAB,
                                         &converted_cst, display_profile);
+    // NOTE: Previously, the scope member is used to convert display profile
+    // color into histogram profile color, but we dropped histogram profile in
+    // Ansel and just use display profile for histogram. So assign the same
+    // value here.
+    memcpy(sample->scope[0], sample->display[0], sizeof(dt_aligned_pixel_t));
 
     for(dt_lib_colorpicker_statistic_t stat = 1; stat < DT_LIB_COLORPICKER_STATISTIC_N; stat++)
     {

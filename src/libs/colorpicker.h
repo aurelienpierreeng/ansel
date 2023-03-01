@@ -53,7 +53,8 @@ typedef struct dt_colorpicker_sample_t
   /** The actual picked colors */
   // picked color in display profile, as picked from preview pixelpipe
   lib_colorpicker_sample_statistics display;
-  // picked color converted display profile -> histogram profile
+  // picked color converted display profile -> histogram profile (currently did
+  // nothing because we dropped histogram profile)
   lib_colorpicker_sample_statistics scope;
   // picked color converted display profile -> Lab
   lib_colorpicker_sample_statistics lab;
