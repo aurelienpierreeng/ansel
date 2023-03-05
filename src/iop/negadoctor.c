@@ -129,8 +129,8 @@ typedef struct dt_iop_negadoctor_gui_data_t
   GtkWidget *offset;
   GtkWidget *black, *gamma, *soft_clip, *exposure;
   GtkWidget *Dmin_picker, *Dmin_sampler;
-  GtkWidget *WB_high_picker, *WB_high_sampler;
-  GtkWidget *WB_low_picker, *WB_low_sampler;
+  GtkWidget *WB_high_picker, *WB_high_norm, *WB_high_sampler;
+  GtkWidget *WB_low_picker, *WB_low_norm, *WB_low_sampler;
 } dt_iop_negadoctor_gui_data_t;
 
 
