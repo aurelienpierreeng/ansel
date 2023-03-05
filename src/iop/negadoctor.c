@@ -596,6 +596,52 @@ static void WB_high_picker_callback(GtkColorButton *widget, dt_iop_module_t *sel
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
+static void Wb_low_norm_callback(GtkColorButton *widget, dt_iop_module_t *self)
+{
+  if(darktable.gui->reset) return;
+  
+  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
+  
+
+  const float WB_low_max = v_maxf(p->wb_low);
+  for(size_t c = 0; c < 3; ++c)
+    p->wb_low[c] /= WB_low_max;
+
+   
+  ++darktable.gui->reset;
+  dt_bauhaus_slider_set(g->wb_low_R, p->wb_low[0]);
+  dt_bauhaus_slider_set(g->wb_low_G, p->wb_low[1]);
+  dt_bauhaus_slider_set(g->wb_low_B, p->wb_low[2]);
+  --darktable.gui->reset;
+
+  WB_low_picker_update(self);
+  dt_control_queue_redraw_widget(self->widget);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+static void Wb_high_norm_callback(GtkColorButton *widget, dt_iop_module_t *self)
+{
+  if(darktable.gui->reset) return;
+  
+  dt_iop_negadoctor_gui_data_t *const g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_iop_negadoctor_params_t *p = (dt_iop_negadoctor_params_t *)self->params;
+
+  const float WB_high_min = v_minf(p->wb_high);
+  for(size_t c = 0; c < 3; ++c)
+    p->wb_high[c] /= WB_high_min;
+
+   
+  ++darktable.gui->reset;
+  dt_bauhaus_slider_set(g->wb_high_R, p->wb_high[0]);
+  dt_bauhaus_slider_set(g->wb_high_G, p->wb_high[1]);
+  dt_bauhaus_slider_set(g->wb_high_B, p->wb_high[2]);
+  --darktable.gui->reset;
+
+  WB_low_picker_update(self);
+  dt_control_queue_redraw_widget(self->widget);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
 
 /* Color pickers auto-tuners */
 
@@ -882,6 +928,9 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(row3), GTK_WIDGET(g->WB_low_picker), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->WB_low_picker), "color-set", G_CALLBACK(WB_low_picker_callback), self);
 
+  g->WB_low_norm = dt_action_button_new((dt_lib_module_t *)self, N_("normalize"), Wb_low_norm_callback, self, _("normalize shadows white balance settings"), 0, 0);
+  gtk_box_pack_start(GTK_BOX(row3), GTK_WIDGET(g->WB_low_norm), FALSE, FALSE, 0);
+    
   g->WB_low_sampler = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, row3);
   gtk_widget_set_tooltip_text(g->WB_low_sampler, _("pick shadows color from image"));
 
@@ -919,6 +968,9 @@ void gui_init(dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(row2), GTK_WIDGET(g->WB_high_picker), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->WB_high_picker), "color-set", G_CALLBACK(WB_high_picker_callback), self);
 
+  g->WB_high_norm = dt_action_button_new((dt_lib_module_t *)self, N_("normalize"), Wb_high_norm_callback, self, _("normalize highlight white balance settings"), 0, 0);
+  gtk_box_pack_start(GTK_BOX(row2), GTK_WIDGET(g->WB_high_norm), FALSE, FALSE, 0);  
+    
   g->WB_high_sampler = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, row2);
   gtk_widget_set_tooltip_text(g->WB_high_sampler , _("pick illuminant color from image"));
 
