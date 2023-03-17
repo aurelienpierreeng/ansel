@@ -50,7 +50,7 @@ void append_select(GtkWidget **menus, GList **lists, const dt_menus_t index)
   ac = dt_action_define(pnl, NULL, N_("Invert selection"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, invert_selection_callback, GDK_KEY_i, GDK_CONTROL_MASK);
 
-  add_sub_menu_entry(menus, lists, _("Selected unedited"), index, NULL, select_unedited_callback, NULL, NULL, NULL);
+  add_sub_menu_entry(menus, lists, _("Select unedited"), index, NULL, select_unedited_callback, NULL, NULL, NULL);
   ac = dt_action_define(pnl, NULL, N_("Select unedited"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, select_unedited_callback, 0, 0);
 
