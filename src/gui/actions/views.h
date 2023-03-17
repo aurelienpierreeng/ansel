@@ -48,7 +48,7 @@ void append_views(GtkWidget **menus, GList **lists, const dt_menus_t index)
     if(view->flags() & VIEW_FLAGS_HIDDEN) continue;
     add_sub_menu_entry(menus, lists, view->name(view), index,
                        NULL, view_switch_callback, NULL, views_active_callback, views_sensitive_callback);
-    dt_action_define(&darktable.control->actions_global, "switch views", view->module_name, get_last_widget(lists), NULL);
+    dt_action_define(&darktable.control->actions_global, _("Switch views"), view->module_name, get_last_widget(lists), NULL);
   }
 }
 
