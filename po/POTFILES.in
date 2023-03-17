@@ -163,10 +163,12 @@ src/external/wb_presets.c
 src/generate-cache/main.c
 src/gui/accelerators.c
 src/gui/actions/file.h
-src/gui/actions/help.h
-src/gui/actions/display.h
 src/gui/actions/edit.h
+src/gui/actions/select.h
 src/gui/actions/run.h
+src/gui/actions/display.h
+src/gui/actions/views.h
+src/gui/actions/help.h
 src/gui/gtk.c
 src/gui/gtkentry.c
 src/gui/guides.c
@@ -288,7 +290,6 @@ src/libs/backgroundjobs.c
 src/libs/collect.c
 src/libs/collect.h
 src/libs/colorpicker.c
-src/libs/copy_history.c
 src/libs/duplicate.c
 src/libs/export.c
 src/libs/export_metadata.c
@@ -310,8 +311,6 @@ src/libs/modulegroups.c
 src/libs/navigation.c
 src/libs/print_settings.c
 src/libs/recentcollect.c
-src/libs/select.c
-src/libs/session.c
 src/libs/snapshots.c
 src/libs/styles.c
 src/libs/tagging.c
