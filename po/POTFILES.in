@@ -87,7 +87,6 @@ build/lib64/ansel/plugins/introspection_watermark.c
 build/lib64/ansel/plugins/introspection_zonesystem.c
 build/lib64/ansel/plugins/lighttable/tools/darktable_authors.h
 data/photos.ansel.app.appdata.xml.in
-data/build/ansel.desktop.in
 data/ansel.desktop.in
 data/anselconfig.dtd
 data/anselconfig.xml.in
