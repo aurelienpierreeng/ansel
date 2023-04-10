@@ -2721,18 +2721,18 @@ void dt_database_show_error(const dt_database_t *db)
     // clang-format off
     char *label_text = g_markup_printf_escaped(
         _("\n"
-          "  Sorry, Ansel could not be started (database is locked)\n"
+          "  Sorry, darktable could not be started (database is locked)\n"
           "\n"
           "  How to solve this problem?\n"
           "\n"
-          "  1 - If another Ansel instance is already open, \n"
-          "      click cancel and either use that instance or close it before attempting to rerun Ansel \n"
+          "  1 - If another darktable instance is already open, \n"
+          "      click cancel and either use that instance or close it before attempting to rerun darktable \n"
           "      (process ID <i><b>%d</b></i> created the database locks)\n"
           "\n"
-          "  2 - If you can't find a running instance of Ansel, try restarting your session or your computer. \n"
+          "  2 - If you can't find a running instance of darktable, try restarting your session or your computer. \n"
           "      This will close all running programs and hopefully close the databases correctly. \n"
           "\n"
-          "  3 - If you have done this or are certain that no other instances of Ansel are running, \n"
+          "  3 - If you have done this or are certain that no other instances of darktable are running, \n"
           "      this probably means that the last instance was ended abnormally. \n"
           "      Click on the \"delete database lock files\" button to remove the files <i>data.db.lock</i> and <i>library.db.lock</i>.  \n"
           "\n\n"
@@ -2741,7 +2741,7 @@ void dt_database_show_error(const dt_database_t *db)
       db->error_other_pid);
     // clang-format on
 
-    gboolean delete_lockfiles = dt_gui_show_standalone_yes_no_dialog(_("error starting Ansel"),
+    gboolean delete_lockfiles = dt_gui_show_standalone_yes_no_dialog(_("error starting darktable"),
                                         label_text, _("cancel"), _("delete database lock files"));
 
     if(delete_lockfiles)
@@ -2765,7 +2765,7 @@ void dt_database_show_error(const dt_database_t *db)
 
         if(status==0)
           dt_gui_show_standalone_yes_no_dialog(_("done"),
-                                        _("\nsuccessfully deleted the lock files.\nyou can now restart Ansel\n"),
+                                        _("\nsuccessfully deleted the lock files.\nyou can now restart darktable\n"),
                                         _("ok"), NULL);
         else
           dt_gui_show_standalone_yes_no_dialog
@@ -2946,8 +2946,8 @@ void ask_for_upgrade(const gchar *dbname, const gboolean has_gui)
                                                dbname);
 
   gboolean shall_we_update_the_db =
-    dt_gui_show_standalone_yes_no_dialog(_("Ansel - schema migration"), label_text,
-                                         _("close Ansel"), _("upgrade database"));
+    dt_gui_show_standalone_yes_no_dialog(_("ansel - schema migration"), label_text,
+                                         _("close darktable"), _("upgrade database"));
 
   g_free(label_text);
 
@@ -3224,7 +3224,7 @@ start:
       else if(db_version > CURRENT_DATABASE_VERSION_DATA)
       {
         // newer: bail out
-        fprintf(stderr, "[init] database version of `%s' is too new for this build of Ansel. aborting\n",
+        fprintf(stderr, "[init] database version of `%s' is too new for this build of darktable. aborting\n",
                 dbfilename_data);
         dt_database_destroy(db);
         db = NULL;
@@ -3260,7 +3260,7 @@ start:
         dialog = gtk_dialog_new_with_buttons(_("ansel - error opening database"),
                                             NULL,
                                             dflags,
-                                            _("close Ansel"),
+                                            _("close darktable"),
                                             GTK_RESPONSE_CLOSE,
                                             _("attempt restore"),
                                             GTK_RESPONSE_ACCEPT,
@@ -3268,7 +3268,7 @@ start:
                                             GTK_RESPONSE_REJECT,
                                             NULL);
         gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
-        label_options = _("do you want to close Ansel now to manually restore\n"
+        label_options = _("do you want to close darktable now to manually restore\n"
                           "the database from a backup, attempt an automatic restore\n"
                           "from the most recent snapshot or delete the corrupted database\n"
                           "and start with a new one?");
@@ -3278,13 +3278,13 @@ start:
         dialog = gtk_dialog_new_with_buttons(_("ansel - error opening database"),
                                             NULL,
                                             dflags,
-                                            _("close Ansel"),
+                                            _("close darktable"),
                                             GTK_RESPONSE_CLOSE,
                                             _("delete database"),
                                             GTK_RESPONSE_REJECT,
                                             NULL);
         gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
-        label_options = _("do you want to close Ansel now to manually restore\n"
+        label_options = _("do you want to close darktable now to manually restore\n"
                           "the database from a backup or delete the corrupted database\n"
                           "and start with a new one?");
       }
@@ -3321,7 +3321,7 @@ start:
       if(resp != GTK_RESPONSE_ACCEPT && resp != GTK_RESPONSE_REJECT)
       {
         fprintf(stderr, "[init] database `%s' is corrupt and can't be opened! either replace it from a backup or "
-        "delete the file so that Ansel can create a new one the next time. aborting\n", dbfilename_data);
+        "delete the file so that darktable can create a new one the next time. aborting\n", dbfilename_data);
         g_free(data_snap);
         goto error;
       }
@@ -3404,7 +3404,7 @@ start:
     else if(db_version > CURRENT_DATABASE_VERSION_LIBRARY)
     {
       // newer: bail out. it's better than what we did before: delete everything
-      fprintf(stderr, "[init] database version of `%s' is too new for this build of Ansel. aborting\n",
+      fprintf(stderr, "[init] database version of `%s' is too new for this build of darktable. aborting\n",
               dbname);
       dt_database_destroy(db);
       db = NULL;
@@ -3440,7 +3440,7 @@ start:
       dialog = gtk_dialog_new_with_buttons(_("ansel - error opening database"),
                                           NULL,
                                           dflags,
-                                          _("close Ansel"),
+                                          _("close darktable"),
                                           GTK_RESPONSE_CLOSE,
                                           _("attempt restore"),
                                           GTK_RESPONSE_ACCEPT,
@@ -3448,7 +3448,7 @@ start:
                                           GTK_RESPONSE_REJECT,
                                           NULL);
       gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
-      label_options = _("do you want to close Ansel now to manually restore\n"
+      label_options = _("do you want to close darktable now to manually restore\n"
                         "the database from a backup, attempt an automatic restore\n"
                         "from the most recent snapshot or delete the corrupted database\n"
                         "and start with a new one?");
@@ -3458,13 +3458,13 @@ start:
       dialog = gtk_dialog_new_with_buttons(_("ansel - error opening database"),
                                           NULL,
                                           dflags,
-                                          _("close Ansel"),
+                                          _("close darktable"),
                                           GTK_RESPONSE_CLOSE,
                                           _("delete database"),
                                           GTK_RESPONSE_REJECT,
                                           NULL);
       gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
-      label_options = _("do you want to close Ansel now to manually restore\n"
+      label_options = _("do you want to close darktable now to manually restore\n"
                         "the database from a backup or delete the corrupted database\n"
                         "and start with a new one?");
     }
@@ -3499,7 +3499,7 @@ start:
     if(resp != GTK_RESPONSE_ACCEPT && resp != GTK_RESPONSE_REJECT)
     {
       fprintf(stderr, "[init] database `%s' is corrupt and can't be opened! either replace it from a backup or "
-        "delete the file so that Ansel can create a new one the next time. aborting\n", dbfilename_library);
+        "delete the file so that darktable can create a new one the next time. aborting\n", dbfilename_library);
       g_free(data_snap);
       goto error;
     }
@@ -3791,11 +3791,11 @@ gboolean _ask_for_maintenance(const gboolean has_gui, const gboolean closing_tim
   }
   else if (!closing_time && (!g_strcmp0(config, "on both")))
   {
-    later_info = _("click later to be asked when closing Ansel");
+    later_info = _("click later to be asked when closing darktable");
   }
   else if (!g_strcmp0(config, "on close"))
   {
-    later_info = _("click later to be asked next time when closing Ansel");
+    later_info = _("click later to be asked next time when closing darktable");
   }
 
   char *label_text = g_markup_printf_escaped(_("the database could use some maintenance\n"

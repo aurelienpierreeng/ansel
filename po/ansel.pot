@@ -1,21 +1,22 @@
+# SOME DESCRIPTIVE TITLE.
 # Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
 # This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
-# Maurizio Paglia <mpaglia0@gmail.com>, 2023.
+#, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: \n"
+"Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2023-04-02 22:42+0200\n"
-"PO-Revision-Date: 2023-04-02 22:50+0200\n"
-"Last-Translator: Maurizio Paglia <mpaglia0@gmail.com>\n"
-"Language-Team: Italian <>\n"
-"Language: it\n"
+"POT-Creation-Date: 2023-03-17 13:05+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Lokalize 21.12.3\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
 #: ../build/bin/conf_gen.h:176 ../build/bin/preferences_gen.h:6682
 msgctxt "preferences"
@@ -1878,7 +1879,7 @@ msgstr ""
 #: ../build/lib64/ansel/plugins/introspection_colorin.c:301
 #: ../build/lib64/ansel/plugins/introspection_vignette.c:263
 #: ../src/develop/blend_gui.c:101 ../src/develop/blend_gui.c:124
-#: ../src/develop/blend_gui.c:2956 ../src/develop/develop.c:2060
+#: ../src/develop/blend_gui.c:2956 ../src/develop/develop.c:2055
 #: ../src/gui/accelerators.c:121 ../src/gui/accelerators.c:130
 #: ../src/gui/accelerators.c:203 ../src/imageio/format/avif.c:825
 #: ../src/imageio/format/j2k.c:672
@@ -3475,7 +3476,7 @@ msgstr ""
 
 #: ../build/lib64/ansel/plugins/introspection_highlights.c:133
 #: ../build/lib64/ansel/plugins/introspection_highlights.c:234
-#: ../src/views/darkroom.c:1999
+#: ../src/views/darkroom.c:2003
 msgid "clipping threshold"
 msgstr ""
 
@@ -3591,7 +3592,7 @@ msgstr ""
 #: ../src/iop/levels.c:680 ../src/iop/profile_gamma.c:676
 #: ../src/libs/export.c:1292 ../src/libs/image.c:594
 #: ../src/libs/print_settings.c:2707 ../src/libs/styles.c:827
-#: ../src/views/darkroom.c:1975
+#: ../src/views/darkroom.c:1979
 msgid "mode"
 msgstr ""
 
@@ -3622,8 +3623,8 @@ msgstr ""
 
 #. move left/right/up/down
 #: ../build/lib64/ansel/plugins/introspection_liquify.c:429
-#: ../src/views/darkroom.c:1781 ../src/views/darkroom.c:2182
-#: ../src/views/darkroom.c:2185 ../src/views/lighttable.c:298
+#: ../src/views/darkroom.c:1785 ../src/views/darkroom.c:2186
+#: ../src/views/darkroom.c:2189 ../src/views/lighttable.c:298
 #: ../src/views/lighttable.c:307 ../src/views/lighttable.c:389
 #: ../src/views/lighttable.c:393 ../src/views/lighttable.c:397
 #: ../src/views/lighttable.c:401 ../src/views/lighttable.c:405
@@ -4159,19 +4160,9 @@ msgstr ""
 msgid "LibRaw contributors"
 msgstr ""
 
-#: ../build/share/ansel/ansel.desktop.in.h:1 ../data/ansel.desktop.in.h:1
-msgid "Virtual Lighttable and Darkroom"
-msgstr ""
-
-#: ../build/share/ansel/ansel.desktop.in.h:2
 #: ../data/photos.ansel.app.appdata.xml.in.h:1 ../data/ansel.desktop.in.h:2
 #: ../src/gui/actions/help.h:18
 msgid "Organize and develop images from digital cameras"
-msgstr ""
-
-#. TRANSLATORS: Search terms to find this application. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
-#: ../build/share/ansel/ansel.desktop.in.h:4 ../data/ansel.desktop.in.h:4
-msgid "graphics;photography;raw;"
 msgstr ""
 
 #: ../data/photos.ansel.app.appdata.xml.in.h:2
@@ -4183,6 +4174,15 @@ msgstr ""
 
 #: ../data/photos.ansel.app.appdata.xml.in.h:3
 msgid "Virtual light table, showing a collection"
+msgstr ""
+
+#: ../data/ansel.desktop.in.h:1
+msgid "Virtual Lighttable and Darkroom"
+msgstr ""
+
+#. TRANSLATORS: Search terms to find this application. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
+#: ../data/ansel.desktop.in.h:4
+msgid "graphics;photography;raw;"
 msgstr ""
 
 #: ../src/bauhaus/bauhaus.c:3200
@@ -4855,7 +4855,7 @@ msgid "export profile"
 msgstr ""
 
 #: ../src/common/colorspaces.c:1408 ../src/common/colorspaces.c:1639
-#: ../src/views/darkroom.c:2113
+#: ../src/views/darkroom.c:2117
 msgid "softproof profile"
 msgstr ""
 
@@ -5070,22 +5070,22 @@ msgstr ""
 #, c-format
 msgid ""
 "\n"
-"  Sorry, Ansel could not be started (database is locked)\n"
+"  Sorry, darktable could not be started (database is locked)\n"
 "\n"
 "  How to solve this problem?\n"
 "\n"
-"  1 - If another Ansel instance is already open, \n"
+"  1 - If another darktable instance is already open, \n"
 "      click cancel and either use that instance or close it before "
-"attempting to rerun Ansel \n"
+"attempting to rerun darktable \n"
 "      (process ID <i><b>%d</b></i> created the database locks)\n"
 "\n"
-"  2 - If you can't find a running instance of Ansel, try restarting your "
+"  2 - If you can't find a running instance of darktable, try restarting your "
 "session or your computer. \n"
 "      This will close all running programs and hopefully close the databases "
 "correctly. \n"
 "\n"
-"  3 - If you have done this or are certain that no other instances of Ansel "
-"are running, \n"
+"  3 - If you have done this or are certain that no other instances of "
+"darktable are running, \n"
 "      this probably means that the last instance was ended abnormally. \n"
 "      Click on the \"delete database lock files\" button to remove the files "
 "<i>data.db.lock</i> and <i>library.db.lock</i>.  \n"
@@ -5099,7 +5099,7 @@ msgstr ""
 
 #. clang-format on
 #: ../src/common/database.c:2744
-msgid "error starting Ansel"
+msgid "error starting darktable"
 msgstr ""
 
 #: ../src/common/database.c:2745 ../src/libs/collect.c:3170
@@ -5144,7 +5144,7 @@ msgstr ""
 msgid ""
 "\n"
 "successfully deleted the lock files.\n"
-"you can now restart Ansel\n"
+"you can now restart darktable\n"
 msgstr ""
 
 #: ../src/common/database.c:2769 ../src/common/database.c:2776
@@ -5196,13 +5196,13 @@ msgid ""
 msgstr ""
 
 #: ../src/common/database.c:2949
-msgid "Ansel - schema migration"
+msgid "ansel - schema migration"
 msgstr ""
 
 #: ../src/common/database.c:2950 ../src/common/database.c:3263
 #: ../src/common/database.c:3281 ../src/common/database.c:3443
 #: ../src/common/database.c:3461
-msgid "close Ansel"
+msgid "close darktable"
 msgstr ""
 
 #: ../src/common/database.c:2950
@@ -5232,7 +5232,7 @@ msgstr ""
 
 #: ../src/common/database.c:3271 ../src/common/database.c:3451
 msgid ""
-"do you want to close Ansel now to manually restore\n"
+"do you want to close darktable now to manually restore\n"
 "the database from a backup, attempt an automatic restore\n"
 "from the most recent snapshot or delete the corrupted database\n"
 "and start with a new one?"
@@ -5240,7 +5240,7 @@ msgstr ""
 
 #: ../src/common/database.c:3287 ../src/common/database.c:3467
 msgid ""
-"do you want to close Ansel now to manually restore\n"
+"do you want to close darktable now to manually restore\n"
 "the database from a backup or delete the corrupted database\n"
 "and start with a new one?"
 msgstr ""
@@ -5261,11 +5261,11 @@ msgid "click later to be asked on next startup"
 msgstr ""
 
 #: ../src/common/database.c:3794
-msgid "click later to be asked when closing Ansel"
+msgid "click later to be asked when closing darktable"
 msgstr ""
 
 #: ../src/common/database.c:3798
-msgid "click later to be asked next time when closing Ansel"
+msgid "click later to be asked next time when closing darktable"
 msgstr ""
 
 #: ../src/common/database.c:3801
@@ -6189,7 +6189,7 @@ msgstr ""
 msgid "exporting %d / %d to %s"
 msgstr ""
 
-#: ../src/control/jobs/control_jobs.c:1417 ../src/views/darkroom.c:703
+#: ../src/control/jobs/control_jobs.c:1417 ../src/views/darkroom.c:707
 #: ../src/views/print.c:337
 #, c-format
 msgid "image `%s' is currently unavailable"
@@ -6711,7 +6711,7 @@ msgstr ""
 msgid "input after blur"
 msgstr ""
 
-#: ../src/develop/blend_gui.c:125 ../src/develop/develop.c:2060
+#: ../src/develop/blend_gui.c:125 ../src/develop/develop.c:2055
 #: ../src/gui/accelerators.c:120 ../src/gui/accelerators.c:129
 #: ../src/gui/accelerators.c:203 ../src/imageio/format/avif.c:823
 msgid "on"
@@ -6961,7 +6961,7 @@ msgstr ""
 #: ../src/iop/toneequal.c:3131 ../src/iop/toneequal.c:3134
 #: ../src/iop/toneequal.c:3137 ../src/iop/toneequal.c:3140
 #: ../src/iop/toneequal.c:3234 ../src/iop/toneequal.c:3241
-#: ../src/iop/toneequal.c:3251 ../src/views/darkroom.c:2046
+#: ../src/iop/toneequal.c:3251 ../src/views/darkroom.c:2050
 msgid " EV"
 msgstr ""
 
@@ -7237,13 +7237,13 @@ msgstr ""
 #. For scene-referred workflow, since filmic doesn't brighten as base curve does,
 #. we need an initial exposure boost. This might be too much in some cases but…
 #. (the preset name is used in develop.c)
-#: ../src/develop/develop.c:1343 ../src/gui/presets.c:952
+#: ../src/develop/develop.c:1338 ../src/gui/presets.c:952
 #: ../src/iop/colorbalancergb.c:465 ../src/iop/colorbalancergb.c:466
 #: ../src/iop/exposure.c:276 ../src/iop/exposure.c:285
 msgid "scene-referred default"
 msgstr ""
 
-#: ../src/develop/develop.c:1817
+#: ../src/develop/develop.c:1812
 #, c-format
 msgid "%s: module `%s' version mismatch: %d != %d"
 msgstr ""
@@ -7529,8 +7529,8 @@ msgstr ""
 #, c-format
 msgid ""
 "<b>feather mode</b>: shift+click, <b>rotate</b>: ctrl+drag\n"
-"<b>size</b>: scroll, <b>feather size</b>: shift+scroll, <b>opacity</b>: ctrl"
-"+scroll (%d%%)"
+"<b>size</b>: scroll, <b>feather size</b>: shift+scroll, <b>opacity</b>: "
+"ctrl+scroll (%d%%)"
 msgstr ""
 
 #: ../src/develop/masks/gradient.c:102 ../src/develop/masks/gradient.c:141
@@ -7898,7 +7898,7 @@ msgstr ""
 msgid "underwater"
 msgstr ""
 
-#: ../src/external/wb_presets.c:77 ../src/views/darkroom.c:2040
+#: ../src/external/wb_presets.c:77 ../src/views/darkroom.c:2044
 msgid "black & white"
 msgstr ""
 
@@ -7984,7 +7984,7 @@ msgstr ""
 #: ../src/iop/ashift.c:5398 ../src/iop/ashift.c:5500 ../src/iop/ashift.c:5501
 #: ../src/iop/ashift.c:5810 ../src/iop/clipping.c:1919
 #: ../src/iop/clipping.c:2111 ../src/iop/clipping.c:2127
-#: ../src/views/darkroom.c:2182 ../src/views/lighttable.c:393
+#: ../src/views/darkroom.c:2186 ../src/views/lighttable.c:393
 msgid "horizontal"
 msgstr ""
 
@@ -7992,7 +7992,7 @@ msgstr ""
 #: ../src/iop/ashift.c:5398 ../src/iop/ashift.c:5500 ../src/iop/ashift.c:5501
 #: ../src/iop/ashift.c:5809 ../src/iop/clipping.c:1918
 #: ../src/iop/clipping.c:2112 ../src/iop/clipping.c:2126
-#: ../src/views/darkroom.c:2185 ../src/views/lighttable.c:397
+#: ../src/views/darkroom.c:2189 ../src/views/lighttable.c:397
 msgid "vertical"
 msgstr ""
 
@@ -8077,8 +8077,8 @@ msgstr ""
 
 #: ../src/gui/accelerators.c:119 ../src/gui/accelerators.c:131
 #: ../src/gui/accelerators.c:246 ../src/libs/tagging.c:3101
-#: ../src/views/darkroom.c:1957 ../src/views/darkroom.c:2012
-#: ../src/views/darkroom.c:2154
+#: ../src/views/darkroom.c:1961 ../src/views/darkroom.c:2016
+#: ../src/views/darkroom.c:2158
 msgid "toggle"
 msgstr ""
 
@@ -8098,7 +8098,7 @@ msgstr ""
 msgid "right-on"
 msgstr ""
 
-#: ../src/gui/accelerators.c:128 ../src/views/darkroom.c:1667
+#: ../src/gui/accelerators.c:128 ../src/views/darkroom.c:1671
 msgid "hold"
 msgstr ""
 
@@ -8580,7 +8580,7 @@ msgstr ""
 
 #: ../src/gui/actions/edit.h:395
 msgid "Undo"
-msgstr "Annulla"
+msgstr ""
 
 #: ../src/gui/actions/edit.h:396
 msgid "Undo last action"
@@ -8588,11 +8588,11 @@ msgstr ""
 
 #: ../src/gui/actions/edit.h:399
 msgid "Redo"
-msgstr "Ripristina"
+msgstr ""
 
 #: ../src/gui/actions/edit.h:400
 msgid "Redo last action"
-msgstr "Ripristina l'ultima azione"
+msgstr ""
 
 #: ../src/gui/actions/edit.h:405 ../src/gui/actions/edit.h:406
 msgid "Copy development"
@@ -8632,7 +8632,7 @@ msgstr ""
 
 #: ../src/gui/actions/edit.h:449
 msgid "Preferences"
-msgstr "Preferenze"
+msgstr ""
 
 #: ../src/gui/actions/select.h:38
 msgid "Selection"
@@ -8769,7 +8769,7 @@ msgstr ""
 
 #: ../src/gui/actions/display.h:400
 msgid "Full screen"
-msgstr "Schermo intero"
+msgstr ""
 
 #: ../src/gui/actions/display.h:403
 msgid "Fullscreen window"
@@ -8860,7 +8860,7 @@ msgid "About"
 msgstr ""
 
 #: ../src/gui/gtk.c:452
-msgid "closing Ansel..."
+msgid "closing darktable..."
 msgstr ""
 
 #. This is utterly broken and deeply messed-up as it breaks tooltips positionning while being generally ugly.
@@ -9282,7 +9282,7 @@ msgid "global guide overlay settings"
 msgstr ""
 
 #: ../src/gui/guides.c:707 ../src/gui/guides.c:716 ../src/gui/guides.c:724
-#: ../src/gui/guides.c:737 ../src/views/darkroom.c:2154
+#: ../src/gui/guides.c:737 ../src/views/darkroom.c:2158
 msgid "guide lines"
 msgstr ""
 
@@ -15867,9 +15867,9 @@ msgstr ""
 #. * let's fill the encapsulating widgets
 #. preview mode
 #. color scheme
-#: ../src/iop/overexposed.c:73 ../src/views/darkroom.c:2012
-#: ../src/views/darkroom.c:2030 ../src/views/darkroom.c:2037
-#: ../src/views/darkroom.c:2047 ../src/views/darkroom.c:2064
+#: ../src/iop/overexposed.c:73 ../src/views/darkroom.c:2016
+#: ../src/views/darkroom.c:2034 ../src/views/darkroom.c:2041
+#: ../src/views/darkroom.c:2051 ../src/views/darkroom.c:2068
 msgid "overexposed"
 msgstr ""
 
@@ -15959,9 +15959,9 @@ msgstr ""
 
 #. * let's fill the encapsulating widgets
 #. mode of operation
-#: ../src/iop/rawoverexposed.c:69 ../src/views/darkroom.c:1957
-#: ../src/views/darkroom.c:1975 ../src/views/darkroom.c:1984
-#: ../src/views/darkroom.c:1999
+#: ../src/iop/rawoverexposed.c:69 ../src/views/darkroom.c:1961
+#: ../src/views/darkroom.c:1979 ../src/views/darkroom.c:1988
+#: ../src/views/darkroom.c:2003
 msgid "raw overexposed"
 msgstr ""
 
@@ -17965,7 +17965,7 @@ msgstr ""
 msgid "open GPX file"
 msgstr ""
 
-#: ../src/libs/geotagging.c:929 ../src/views/darkroom.c:1734
+#: ../src/libs/geotagging.c:929 ../src/views/darkroom.c:1738
 msgid "preview"
 msgstr ""
 
@@ -20169,7 +20169,7 @@ msgstr ""
 msgid "Darkroom"
 msgstr ""
 
-#: ../src/views/darkroom.c:511
+#: ../src/views/darkroom.c:515
 #, c-format
 msgid ""
 "darktable could not load `%s', switching to lighttable now.\n"
@@ -20183,154 +20183,154 @@ msgid ""
 "at https://github.com/darktable-org/darktable"
 msgstr ""
 
-#: ../src/views/darkroom.c:528
+#: ../src/views/darkroom.c:532
 #, c-format
 msgctxt "darkroom"
 msgid "loading `%s' ..."
 msgstr ""
 
-#: ../src/views/darkroom.c:652 ../src/views/darkroom.c:2089
+#: ../src/views/darkroom.c:656 ../src/views/darkroom.c:2093
 msgid "gamut check"
 msgstr ""
 
-#: ../src/views/darkroom.c:652
+#: ../src/views/darkroom.c:656
 msgid "soft proof"
 msgstr ""
 
 #. fail :(
-#: ../src/views/darkroom.c:690 ../src/views/print.c:324
+#: ../src/views/darkroom.c:694 ../src/views/print.c:324
 msgid "no image to open !"
 msgstr ""
 
-#: ../src/views/darkroom.c:1167
+#: ../src/views/darkroom.c:1171
 #, c-format
 msgid "applied style `%s' on current image"
 msgstr ""
 
-#: ../src/views/darkroom.c:1292
+#: ../src/views/darkroom.c:1296
 msgid "no styles have been created yet"
 msgstr ""
 
-#: ../src/views/darkroom.c:1938
+#: ../src/views/darkroom.c:1942
 msgid "quick access for applying any of your styles"
 msgstr ""
 
-#: ../src/views/darkroom.c:1944
+#: ../src/views/darkroom.c:1948
 msgid "color assessment"
 msgstr ""
 
-#: ../src/views/darkroom.c:1947
+#: ../src/views/darkroom.c:1951
 msgid "toggle ISO 12646 color assessment conditions"
 msgstr ""
 
-#: ../src/views/darkroom.c:1960
+#: ../src/views/darkroom.c:1964
 msgid ""
 "toggle raw over exposed indication\n"
 "right click for options"
 msgstr ""
 
-#: ../src/views/darkroom.c:1976
+#: ../src/views/darkroom.c:1980
 msgid "select how to mark the clipped pixels"
 msgstr ""
 
-#: ../src/views/darkroom.c:1978
+#: ../src/views/darkroom.c:1982
 msgid "mark with CFA color"
 msgstr ""
 
-#: ../src/views/darkroom.c:1978
+#: ../src/views/darkroom.c:1982
 msgid "mark with solid color"
 msgstr ""
 
-#: ../src/views/darkroom.c:1978
+#: ../src/views/darkroom.c:1982
 msgid "false color"
 msgstr ""
 
-#: ../src/views/darkroom.c:1984 ../src/views/darkroom.c:2037
+#: ../src/views/darkroom.c:1988 ../src/views/darkroom.c:2041
 msgid "color scheme"
 msgstr ""
 
-#: ../src/views/darkroom.c:1985
+#: ../src/views/darkroom.c:1989
 msgctxt "solidcolor"
 msgid "red"
 msgstr ""
 
-#: ../src/views/darkroom.c:1986
+#: ../src/views/darkroom.c:1990
 msgctxt "solidcolor"
 msgid "green"
 msgstr ""
 
-#: ../src/views/darkroom.c:1987
+#: ../src/views/darkroom.c:1991
 msgctxt "solidcolor"
 msgid "blue"
 msgstr ""
 
-#: ../src/views/darkroom.c:1988
+#: ../src/views/darkroom.c:1992
 msgctxt "solidcolor"
 msgid "black"
 msgstr ""
 
-#: ../src/views/darkroom.c:1992
+#: ../src/views/darkroom.c:1996
 msgid ""
 "select the solid color to indicate over exposure.\n"
 "will only be used if mode = mark with solid color"
 msgstr ""
 
-#: ../src/views/darkroom.c:2001
+#: ../src/views/darkroom.c:2005
 msgid ""
 "threshold of what shall be considered overexposed\n"
 "1.0 - white level\n"
 "0.0 - black level"
 msgstr ""
 
-#: ../src/views/darkroom.c:2015
+#: ../src/views/darkroom.c:2019
 msgid ""
 "toggle clipping indication\n"
 "right click for options"
 msgstr ""
 
-#: ../src/views/darkroom.c:2030
+#: ../src/views/darkroom.c:2034
 msgid "clipping preview mode"
 msgstr ""
 
-#: ../src/views/darkroom.c:2031
+#: ../src/views/darkroom.c:2035
 msgid ""
 "select the metric you want to preview\n"
 "full gamut is the combination of all other modes"
 msgstr ""
 
-#: ../src/views/darkroom.c:2033
+#: ../src/views/darkroom.c:2037
 msgid "full gamut"
 msgstr ""
 
-#: ../src/views/darkroom.c:2033
+#: ../src/views/darkroom.c:2037
 msgid "any RGB channel"
 msgstr ""
 
-#: ../src/views/darkroom.c:2033
+#: ../src/views/darkroom.c:2037
 msgid "luminance only"
 msgstr ""
 
-#: ../src/views/darkroom.c:2033
+#: ../src/views/darkroom.c:2037
 msgid "saturation only"
 msgstr ""
 
-#: ../src/views/darkroom.c:2038
+#: ../src/views/darkroom.c:2042
 msgid "select colors to indicate clipping"
 msgstr ""
 
-#: ../src/views/darkroom.c:2040
+#: ../src/views/darkroom.c:2044
 msgid "red & blue"
 msgstr ""
 
-#: ../src/views/darkroom.c:2040
+#: ../src/views/darkroom.c:2044
 msgid "purple & green"
 msgstr ""
 
-#: ../src/views/darkroom.c:2047
+#: ../src/views/darkroom.c:2051
 msgid "lower threshold"
 msgstr ""
 
-#: ../src/views/darkroom.c:2048
+#: ../src/views/darkroom.c:2052
 msgid ""
 "clipping threshold for the black point,\n"
 "in EV, relatively to white (0 EV).\n"
@@ -20342,187 +20342,187 @@ msgid ""
 "typical B&W glossy prints produce black at -9.00 EV."
 msgstr ""
 
-#: ../src/views/darkroom.c:2064
+#: ../src/views/darkroom.c:2068
 msgid "upper threshold"
 msgstr ""
 
-#: ../src/views/darkroom.c:2066
+#: ../src/views/darkroom.c:2070
 #, no-c-format
 msgid ""
 "clipping threshold for the white point.\n"
 "100% is peak medium luminance."
 msgstr ""
 
-#: ../src/views/darkroom.c:2078
+#: ../src/views/darkroom.c:2082
 msgid "softproof"
 msgstr ""
 
-#: ../src/views/darkroom.c:2081
+#: ../src/views/darkroom.c:2085
 msgid ""
 "toggle softproofing\n"
 "right click for profile options"
 msgstr ""
 
-#: ../src/views/darkroom.c:2092
+#: ../src/views/darkroom.c:2096
 msgid ""
 "toggle gamut checking\n"
 "right click for profile options"
 msgstr ""
 
-#: ../src/views/darkroom.c:2113
+#: ../src/views/darkroom.c:2117
 msgid "profiles"
 msgstr ""
 
-#: ../src/views/darkroom.c:2133
+#: ../src/views/darkroom.c:2137
 #, c-format
 msgid "softproof ICC profiles in %s or %s"
 msgstr ""
 
-#: ../src/views/darkroom.c:2157
+#: ../src/views/darkroom.c:2161
 msgid ""
 "toggle guide lines\n"
 "right click for guides options"
 msgstr ""
 
 #. Fullscreen preview key
-#: ../src/views/darkroom.c:2174
+#: ../src/views/darkroom.c:2178
 msgid "full preview"
 msgstr ""
 
 #. add an option to allow skip mouse events while editing masks
-#: ../src/views/darkroom.c:2178
+#: ../src/views/darkroom.c:2182
 msgid "temporarily override global masks lock"
 msgstr ""
 
 #. Zoom shortcuts
-#: ../src/views/darkroom.c:2190
+#: ../src/views/darkroom.c:2194
 msgid "zoom close-up"
 msgstr ""
 
-#: ../src/views/darkroom.c:2191
+#: ../src/views/darkroom.c:2195
 msgid "zoom fill"
 msgstr ""
 
-#: ../src/views/darkroom.c:2192
+#: ../src/views/darkroom.c:2196
 msgid "zoom fit"
 msgstr ""
 
 #. zoom in/out
 #. zoom in/out/min/max
-#: ../src/views/darkroom.c:2195 ../src/views/lighttable.c:413
+#: ../src/views/darkroom.c:2199 ../src/views/lighttable.c:413
 msgid "zoom in"
 msgstr ""
 
-#: ../src/views/darkroom.c:2196 ../src/views/lighttable.c:415
+#: ../src/views/darkroom.c:2200 ../src/views/lighttable.c:415
 msgid "zoom out"
 msgstr ""
 
 #. Shortcut to skip images
-#: ../src/views/darkroom.c:2199
+#: ../src/views/darkroom.c:2203
 msgid "image forward"
 msgstr ""
 
-#: ../src/views/darkroom.c:2200
+#: ../src/views/darkroom.c:2204
 msgid "image back"
 msgstr ""
 
 #. cycle overlay colors
-#: ../src/views/darkroom.c:2203
+#: ../src/views/darkroom.c:2207
 msgid "cycle overlay colors"
 msgstr ""
 
 #. toggle visibility of drawn masks for current gui module
-#: ../src/views/darkroom.c:2206
+#: ../src/views/darkroom.c:2210
 msgid "show drawn masks"
 msgstr ""
 
 #. brush size +/-
-#: ../src/views/darkroom.c:2209
+#: ../src/views/darkroom.c:2213
 msgid "increase brush size"
 msgstr ""
 
-#: ../src/views/darkroom.c:2210
+#: ../src/views/darkroom.c:2214
 msgid "decrease brush size"
 msgstr ""
 
 #. brush hardness +/-
-#: ../src/views/darkroom.c:2213
+#: ../src/views/darkroom.c:2217
 msgid "increase brush hardness"
 msgstr ""
 
-#: ../src/views/darkroom.c:2214
+#: ../src/views/darkroom.c:2218
 msgid "decrease brush hardness"
 msgstr ""
 
 #. brush opacity +/-
-#: ../src/views/darkroom.c:2217
+#: ../src/views/darkroom.c:2221
 msgid "increase brush opacity"
 msgstr ""
 
-#: ../src/views/darkroom.c:2218
+#: ../src/views/darkroom.c:2222
 msgid "decrease brush opacity"
 msgstr ""
 
 #. set focus to the search modules text box
-#: ../src/views/darkroom.c:2221
+#: ../src/views/darkroom.c:2225
 msgid "search modules"
 msgstr ""
 
 #. change the precision for adjusting sliders with keyboard shortcuts
-#: ../src/views/darkroom.c:2224
+#: ../src/views/darkroom.c:2228
 msgid "change keyboard shortcut slider precision"
 msgstr ""
 
 #. Focus on next/previous modules
-#: ../src/views/darkroom.c:2227
+#: ../src/views/darkroom.c:2231
 msgid "focus on the next module"
 msgstr ""
 
-#: ../src/views/darkroom.c:2228
+#: ../src/views/darkroom.c:2232
 msgid "focus on the previous module"
 msgstr ""
 
-#: ../src/views/darkroom.c:2230
+#: ../src/views/darkroom.c:2234
 msgid "enable focused module"
 msgstr ""
 
-#: ../src/views/darkroom.c:2231
+#: ../src/views/darkroom.c:2235
 msgid "disable focused module"
 msgstr ""
 
-#: ../src/views/darkroom.c:3371
+#: ../src/views/darkroom.c:3375
 msgid "keyboard shortcut slider precision: fine"
 msgstr ""
 
-#: ../src/views/darkroom.c:3373
+#: ../src/views/darkroom.c:3377
 msgid "keyboard shortcut slider precision: normal"
 msgstr ""
 
-#: ../src/views/darkroom.c:3375
+#: ../src/views/darkroom.c:3379
 msgid "keyboard shortcut slider precision: coarse"
 msgstr ""
 
-#: ../src/views/darkroom.c:3390
+#: ../src/views/darkroom.c:3394
 msgid "switch to lighttable"
 msgstr ""
 
-#: ../src/views/darkroom.c:3391
+#: ../src/views/darkroom.c:3395
 msgid "zoom in the image"
 msgstr ""
 
-#: ../src/views/darkroom.c:3392
+#: ../src/views/darkroom.c:3396
 msgid "unbounded zoom in the image"
 msgstr ""
 
-#: ../src/views/darkroom.c:3393
+#: ../src/views/darkroom.c:3397
 msgid "zoom to 100% 200% and back"
 msgstr ""
 
-#: ../src/views/darkroom.c:3395
+#: ../src/views/darkroom.c:3399
 msgid "[modules] expand module without closing others"
 msgstr ""
 
-#: ../src/views/darkroom.c:3397
+#: ../src/views/darkroom.c:3401
 msgid "[modules] change module position in pipe"
 msgstr ""
 
@@ -20692,7 +20692,7 @@ msgid "right click+drag"
 msgstr ""
 
 #: ../src/views/view.c:1143
-msgid "Ansel - accels window"
+msgid "darktable - accels window"
 msgstr ""
 
 #: ../src/views/view.c:1174
