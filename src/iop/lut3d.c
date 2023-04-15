@@ -515,8 +515,8 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
 #else
     if (png.height == 2)
     {
-      fprintf(stderr, "[lut3d] this darktable build is not compatible with compressed clut\n");
-      dt_control_log(_("this darktable build is not compatible with compressed clut"));
+      fprintf(stderr, "[lut3d] this Ansel build is not compatible with compressed clut\n");
+      dt_control_log(_("this Ansel build is not compatible with compressed clut"));
     }
     else
     {

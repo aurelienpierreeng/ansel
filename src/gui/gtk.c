@@ -449,7 +449,7 @@ void dt_gui_gtk_quit()
 {
   GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
   dt_gui_add_class(win, "dt_gui_quit");
-  gtk_window_set_title(GTK_WINDOW(win), _("closing darktable..."));
+  gtk_window_set_title(GTK_WINDOW(win), _("closing Ansel..."));
 
   // Write out windows dimension
   dt_gui_gtk_write_config();

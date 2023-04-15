@@ -508,8 +508,8 @@ void expose(
     {
       fontsize = DT_PIXEL_APPLY_DPI(16);
       load_txt = g_strdup_printf(
-          _("darktable could not load `%s', switching to lighttable now.\n\n"
-            "please check that the camera model that produced the image is supported in darktable\n"
+          _("Ansel could not load `%s', switching to lighttable now.\n\n"
+            "please check that the camera model that produced the image is supported in Ansel\n"
             "(list of supported cameras is at https://www.darktable.org/resources/camera-support/).\n"
             "if you are sure that the camera model is supported, please consider opening an issue\n"
             "at https://github.com/darktable-org/darktable"),

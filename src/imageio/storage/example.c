@@ -195,7 +195,7 @@ void finalize_store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t 
 
   argv[0] = "xdg-email";
   argv[1] = "--subject";
-  argv[2] = _("images exported from darktable");
+  argv[2] = _("images exported from Ansel");
   argv[3] = "--body";
   int n = 5;
 

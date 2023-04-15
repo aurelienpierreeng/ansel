@@ -1691,11 +1691,11 @@ void dt_configure_runtime_performance(const int old, char *info)
   if(old < 5)
   {
     g_strlcat(info, INFO_HEADER, DT_PERF_INFOSIZE);
-    g_strlcat(info, _("the user interface and the underlying internals for tuning darktable performance have changed."), DT_PERF_INFOSIZE);
+    g_strlcat(info, _("the user interface and the underlying internals for tuning Ansel performance have changed."), DT_PERF_INFOSIZE);
     g_strlcat(info, "\n", DT_PERF_INFOSIZE);
     g_strlcat(info, _("you won't find headroom and friends any longer, instead in preferences/processing use:"), DT_PERF_INFOSIZE);
     g_strlcat(info, "\n  ", DT_PERF_INFOSIZE);
-    g_strlcat(info, _("1) darktable resources"), DT_PERF_INFOSIZE);
+    g_strlcat(info, _("1) Ansel resources"), DT_PERF_INFOSIZE);
     g_strlcat(info, "\n  ", DT_PERF_INFOSIZE);
     g_strlcat(info, _("2) tune OpenCL performance"), DT_PERF_INFOSIZE);
     g_strlcat(info, "\n\n", DT_PERF_INFOSIZE);

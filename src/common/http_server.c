@@ -100,7 +100,7 @@ static void _new_connection(SoupServer *server, SoupMessage *msg, const char *pa
 
   if(res)
     body = _("<h1>Thank you,</h1><p>everything should have worked, you can <b>close</b> your browser now and "
-             "<b>go back</b> to darktable.</p>");
+             "<b>go back</b> to Ansel.</p>");
 
 
   char *resp_body = g_strdup_printf(reply, page_title, res ? 0 : 1, title, body);
