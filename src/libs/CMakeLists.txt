@@ -20,11 +20,9 @@ add_custom_target(
 )
 
 # The modules
-set(MODULES import export copy_history styles tagging image select collect recentcollect metadata metadata_view navigation histogram history snapshots modulegroups backgroundjobs colorpicker masks session duplicate ioporder)
+set(MODULES import export styles tagging image collect recentcollect metadata metadata_view navigation histogram history snapshots modulegroups backgroundjobs colorpicker masks duplicate ioporder)
 
 # The tools
-set(MODULES ${MODULES} viewswitcher)
-set(MODULES ${MODULES} darktable_label)
 set(MODULES ${MODULES} colorlabels)
 set(MODULES ${MODULES} filter)
 set(MODULES ${MODULES} lighttable_mode)
@@ -32,8 +30,11 @@ set(MODULES ${MODULES} view_toolbox)
 set(MODULES ${MODULES} module_toolbox)
 set(MODULES ${MODULES} filmstrip)
 set(MODULES ${MODULES} hinter)
-set(MODULES ${MODULES} global_toolbox)
 set(MODULES ${MODULES} image_infos)
+set(MODULES ${MODULES} menu)
+set(MODULES ${MODULES} menubuttons)
+set(MODULES ${MODULES} masktoolbar)
+
 
 if(BUILD_BATTERY_INDICATOR)
   set(MODULES ${MODULES} battery_indicator)
@@ -42,11 +43,9 @@ endif()
 # modules
 add_library(import MODULE "import.c")
 add_library(export MODULE "export.c" "export_metadata.c")
-add_library(copy_history MODULE "copy_history.c")
 add_library(styles MODULE "styles.c")
 add_library(image MODULE "image.c")
 add_library(tagging MODULE "tagging.c")
-add_library(select MODULE "select.c")
 add_library(collect MODULE "collect.c")
 add_library(recentcollect MODULE "recentcollect.c")
 add_library(metadata MODULE "metadata.c")
@@ -59,16 +58,10 @@ add_library(modulegroups MODULE "modulegroups.c")
 add_library(backgroundjobs MODULE "backgroundjobs.c")
 add_library(colorpicker MODULE "colorpicker.c")
 add_library(masks MODULE "masks.c")
-add_library(session MODULE "session.c")
 add_library(duplicate MODULE "duplicate.c")
 add_library(ioporder MODULE "ioporder.c")
 
 # tools
-add_library(viewswitcher MODULE "tools/viewswitcher.c")
-
-add_library(darktable_label MODULE "tools/darktable.c")
-add_dependencies(darktable_label generate_authors_h)
-
 add_library(colorlabels MODULE "tools/colorlabels.c")
 add_library(filter MODULE "tools/filter.c")
 add_library(lighttable_mode MODULE "tools/lighttable.c")
@@ -76,8 +69,11 @@ add_library(view_toolbox MODULE "tools/view_toolbox.c")
 add_library(module_toolbox MODULE "tools/module_toolbox.c")
 add_library(filmstrip MODULE "tools/filmstrip.c")
 add_library(hinter MODULE "tools/hinter.c")
-add_library(global_toolbox MODULE "tools/global_toolbox.c")
 add_library(image_infos MODULE "tools/image_infos.c")
+add_library(menu MODULE "tools/menu.c")
+add_dependencies(menu generate_authors_h)
+add_library(menubuttons MODULE "tools/menu_buttons.c")
+add_library(masktoolbar MODULE "tools/mask_toolbar.c")
 
 find_path(PORTMIDI_INCLUDE_DIR NAMES portmidi.h
           DOC "The Portmidi include directory"
@@ -134,7 +130,7 @@ endforeach(module)
 #       in a better matching structure then just in lighttable directory.
 foreach(module ${MODULES})
     if (WIN32)
-      _detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/ansel/plugins/lighttable)
+      #_detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/ansel/plugins/lighttable)
     else()
         set_target_properties(${module}
                               PROPERTIES

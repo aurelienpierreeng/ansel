@@ -558,12 +558,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
                "  Colord support disabled\n"
 #endif
 
-#ifdef HAVE_GPHOTO2
-               "  gPhoto2 support enabled\n"
-#else
-               "  gPhoto2 support disabled\n"
-#endif
-
 #ifdef HAVE_GRAPHICSMAGICK
                "  GraphicsMagick support enabled\n"
 #else
@@ -759,7 +753,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
         CHKSIGDBG(DT_SIGNAL_IMAGE_EXPORT_TMPFILE);
         CHKSIGDBG(DT_SIGNAL_IMAGEIO_STORAGE_CHANGE);
         CHKSIGDBG(DT_SIGNAL_PREFERENCES_CHANGE);
-        CHKSIGDBG(DT_SIGNAL_CAMERA_DETECTED);
         CHKSIGDBG(DT_SIGNAL_CONTROL_NAVIGATION_REDRAW);
         CHKSIGDBG(DT_SIGNAL_CONTROL_LOG_REDRAW);
         CHKSIGDBG(DT_SIGNAL_CONTROL_TOAST_REDRAW);
@@ -1207,12 +1200,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
   if(init_gui)
   {
-#ifdef HAVE_GPHOTO2
-    // Initialize the camera control.
-    // this is done late so that the gui can react to the signal sent but before switching to lighttable!
-    darktable.camctl = dt_camctl_new();
-#endif
-
     darktable.lib = (dt_lib_t *)calloc(1, sizeof(dt_lib_t));
     dt_lib_init(darktable.lib);
 
@@ -1343,7 +1330,7 @@ void dt_get_sysresource_level()
   res->level = oldlevel = level;
   oldtunecl = tunecl;
   res->tunemode = tunecl;
-  if(mod && (darktable.unmuted & (DT_DEBUG_MEMORY | DT_DEBUG_OPENCL | DT_DEBUG_DEV)))
+  if(mod && (darktable.unmuted & (DT_DEBUG_MEMORY | DT_DEBUG_OPENCL)))
   {
     const int oldgrp = res->group;
     res->group = 4 * level;
@@ -1352,7 +1339,6 @@ void dt_get_sysresource_level()
     fprintf(stderr,"  mipmap cache:    %luMB\n", _get_mipmap_size() / 1024lu / 1024lu);
     fprintf(stderr,"  available mem:   %luMB\n", dt_get_available_mem() / 1024lu / 1024lu);
     fprintf(stderr,"  singlebuff:      %luMB\n", dt_get_singlebuffer_mem() / 1024lu / 1024lu);
-    fprintf(stderr,"  iop cache:       %luMB\n", dt_get_iopcache_mem() / 1024lu / 1024lu);
 #ifdef HAVE_OPENCL
     fprintf(stderr,"  OpenCL tune mem: %s\n", ((tunecl & DT_OPENCL_TUNE_MEMSIZE) && (level >= 0)) ? "WANTED" : "OFF");
     fprintf(stderr,"  OpenCL pinned:   %s\n", ((tunecl & DT_OPENCL_TUNE_PINNED) && (level >= 0)) ? "WANTED" : "OFF");
@@ -1432,10 +1418,6 @@ void dt_cleanup()
   darktable.iop_order_rules = NULL;
   dt_opencl_cleanup(darktable.opencl);
   free(darktable.opencl);
-#ifdef HAVE_GPHOTO2
-  dt_camctl_destroy((dt_camctl_t *)darktable.camctl);
-  darktable.camctl = NULL;
-#endif
   dt_pwstorage_destroy(darktable.pwstorage);
 
 #ifdef HAVE_GRAPHICSMAGICK
@@ -1659,13 +1641,6 @@ size_t dt_get_singlebuffer_mem()
   return MAX(2lu * 1024lu * 1024lu, total_mem / 1024lu * fraction);
 }
 
-size_t dt_get_iopcache_mem()
-{
-  dt_sys_resources_t *res = &darktable.dtresources;
-  const size_t cachemb = res->total_memory / 1024lu / 1024lu / 20lu;
-  return MIN(6000lu, MAX(400lu, cachemb)) * 1024lu * 1024lu;
-}
-
 void dt_configure_runtime_performance(const int old, char *info)
 {
   const size_t threads = dt_get_num_threads();
@@ -1681,22 +1656,6 @@ void dt_configure_runtime_performance(const int old, char *info)
   {
     dt_conf_set_string("resourcelevel", (sufficient) ? "default" : "small");
     dt_print(DT_DEBUG_DEV, "[dt_configure_runtime_performance] resourcelevel=%s\n", (sufficient) ? "default" : "small");
-  }
-
-  if(!dt_conf_key_not_empty("plugins/darkroom/demosaic/quality"))
-  {
-    dt_conf_set_string("plugins/darkroom/demosaic/quality", (sufficient) ? "at most RCD (reasonable)" : "always bilinear (fast)");
-    dt_print(DT_DEBUG_DEV, "[dt_configure_runtime_performance] plugins/darkroom/demosaic/quality=%s",
-      (sufficient) ? "at most RCD (reasonable)" : "always bilinear (fast)");
-  }
-  else if(old == 2)
-  {
-    const gchar *demosaic_quality = dt_conf_get_string_const("plugins/darkroom/demosaic/quality");
-    if(!strcmp(demosaic_quality, "always bilinear (fast)"))
-    {
-      dt_conf_set_string("plugins/darkroom/demosaic/quality", "at most RCD (reasonable)");
-      dt_print(DT_DEBUG_DEV, "[dt_configure_performance] override: plugins/darkroom/demosaic/quality=at most RCD (reasonable)\n");
-    }
   }
 
   if(!dt_conf_key_not_empty("cache_disk_backend_full"))

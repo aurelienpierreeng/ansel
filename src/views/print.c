@@ -52,7 +52,7 @@ dt_print_t;
 
 const char *name(const dt_view_t *self)
 {
-  return C_("view", "print");
+  return C_("view", "Print");
 }
 
 uint32_t view(const dt_view_t *self)

@@ -1557,14 +1557,14 @@ gboolean dt_control_remove_images()
 
     dialog = gtk_message_dialog_new(
         GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
-        ngettext("do you really want to remove %d image from darktable\n(without deleting file on disk)?",
-                 "do you really want to remove %d images from darktable\n(without deleting files on disk)?", number),
+        ngettext("Do you really want to remove %d image from Ansel library ?\nThe files will not be deleted on disk.",
+                 "Do you really want to remove %d images from Ansel library ?\nThe files will not be deletetd on disk.", number),
         number);
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(dialog);
 #endif
 
-    gtk_window_set_title(GTK_WINDOW(dialog), ngettext(_("remove image?"), _("remove images?"), number));
+    gtk_window_set_title(GTK_WINDOW(dialog), ngettext(_("Remove image from library ?"), _("Remove images from library ?"), number));
     gint res = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
     if(res != GTK_RESPONSE_YES)
@@ -1582,7 +1582,6 @@ void dt_control_delete_images()
   // first get all selected images, to avoid the set changing during ui interaction
   dt_job_t *job = dt_control_generic_images_job_create(&dt_control_delete_images_job_run, N_("delete images"), 0,
                                                        NULL, PROGRESS_SIMPLE, FALSE);
-  int send_to_trash = dt_conf_get_bool("send_to_trash");
   if(dt_conf_get_bool("ask_before_delete"))
   {
     GtkWidget *dialog;
@@ -1600,16 +1599,14 @@ void dt_control_delete_images()
 
     dialog = gtk_message_dialog_new(
         GTK_WINDOW(win), GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
-        send_to_trash ? ngettext("do you really want to physically delete %d image\n(using trash if possible)?",
-                                 "do you really want to physically delete %d images\n(using trash if possible)?", number)
-                      : ngettext("do you really want to physically delete %d image from disk?",
-                                 "do you really want to physically delete %d images from disk?", number),
+        ngettext("Do you really want to physically delete %d image ?\nThe system trash bin will be used if possible.",
+                 "Do you really want to physically delete %d images ?\nThe system trash bin will be used if possible.", number),
         number);
 #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(dialog);
 #endif
 
-    gtk_window_set_title(GTK_WINDOW(dialog), ngettext(_("delete image?"), _("delete images?"), number));
+    gtk_window_set_title(GTK_WINDOW(dialog), ngettext(_("Remove image from disk ?"), _("Remove images from disk ?"), number));
     gint res = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
     if(res != GTK_RESPONSE_YES)

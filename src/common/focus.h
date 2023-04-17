@@ -282,8 +282,7 @@ static void dt_focus_draw_clusters(cairo_t *cr, int width, int height, int imgid
   }
 
   const int32_t tb = darktable.develop->border_size;
-  const float prev_scale = darktable.develop->preview_downsampling;
-  const float scale = fminf((width - 2 * tb) / (float)wd, (height - 2 * tb) / (float)ht) * full_zoom / prev_scale;
+  const float scale = fminf((width - 2 * tb) / (float)wd, (height - 2 * tb) / (float)ht) * full_zoom;
   cairo_scale(cr, scale, scale);
   float fx = 0.0f;
   float fy = 0.0f;
@@ -298,7 +297,7 @@ static void dt_focus_draw_clusters(cairo_t *cr, int width, int height, int imgid
     if(ht * scale <= height) fy = 0;
   }
 
-  cairo_translate(cr, -wd / 2.0f * prev_scale + fx / scale * darktable.gui->ppd_thb, -ht / 2.0f * prev_scale + fy / scale * darktable.gui->ppd_thb);
+  cairo_translate(cr, -wd / 2.0f + fx / scale * darktable.gui->ppd_thb, -ht / 2.0f + fy / scale * darktable.gui->ppd_thb);
 
   cairo_rectangle(cr, 0, 0, wd, ht);
   cairo_clip(cr);
@@ -375,4 +374,3 @@ static void dt_focus_draw_clusters(cairo_t *cr, int width, int height, int imgid
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

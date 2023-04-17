@@ -19,7 +19,7 @@
 #pragma once
 
 #include "common/dtpthread.h"  // for dt_pthread_mutex_t
-#include <glib.h>              // for gpointer, GList
+#include <glib.h>              // for gpointer, GList, gboolean
 #include <stdint.h>            // for uint32_t
 
 //  types that are known by the undo module
@@ -95,9 +95,13 @@ void dt_undo_iterate(dt_undo_t *self, uint32_t filter, gpointer user_data,
 // disable the next record, this is to avoid recording when reverting a value (in undo callbacks)
 void dt_undo_disable_next(dt_undo_t *self);
 
+// Check if the undo/redo stack has at least one available element for the corresponding filter.
+// Mostly meant to disable GUI undo/redo controls if they wouldn't have any effect.
+gboolean dt_is_undo_list_populated(dt_undo_t *self, uint32_t filter);
+gboolean dt_is_redo_list_populated(dt_undo_t *self, uint32_t filter);
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

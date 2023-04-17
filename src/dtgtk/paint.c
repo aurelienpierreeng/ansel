@@ -2351,29 +2351,6 @@ void dtgtk_cairo_paint_display(cairo_t *cr, gint x, gint y, gint w, gint h, gint
   FINISH
 }
 
-void dtgtk_cairo_paint_display2(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
-{
-  PREAMBLE(0.55, 1, 0.5, 0.5)
-
-  cairo_move_to(cr, -0.55, 0.9);
-  cairo_rel_line_to(cr, 0.7, 0);
-  cairo_stroke(cr);
-
-  cairo_rectangle(cr, -0.9, -0.5, 1.4, 1.0);
-  cairo_move_to(cr, -0.5, -0.7);
-  cairo_rel_line_to(cr, 0, -0.2);
-  cairo_rel_line_to(cr, 1.4, 0);
-  cairo_rel_line_to(cr, 0, 1.0);
-  cairo_rel_line_to(cr, -0.2, 0);
-  cairo_stroke(cr);
-
-  cairo_move_to(cr, -0.2, 0.6);
-  cairo_rel_line_to(cr, 0, 0.2);
-  cairo_stroke(cr);
-
-  FINISH
-}
-
 void dtgtk_cairo_paint_rect_landscape(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
   PREAMBLE(1, 1, 0, 0)

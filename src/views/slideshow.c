@@ -595,18 +595,9 @@ static void _step_forward_callback(dt_action_t *action)
   _step_state(d, S_REQUEST_STEP);
 }
 
-static void _exit_callback(dt_action_t *action)
-{
-  dt_slideshow_t *d = dt_action_view(action)->data;
-  // go back to lt mode
-  d->auto_advance = FALSE;
-  dt_ctl_switch_mode_to("lighttable");
-}
-
 void gui_init(dt_view_t *self)
 {
   dt_action_register(DT_ACTION(self), N_("start and stop"), _start_stop_callback, GDK_KEY_space, 0);
-  dt_action_register(DT_ACTION(self), N_("exit slideshow"), _exit_callback, GDK_KEY_Escape, 0);
 
   dt_action_t *ac;
   ac = dt_action_register(DT_ACTION(self), N_("slow down"), _slow_down_callback, GDK_KEY_Up, 0);

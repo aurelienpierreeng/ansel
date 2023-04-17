@@ -121,8 +121,8 @@ image_export_tools_installed() {
 
 	echo "--> Check for images export tools availability"
 
-	if ! tool_installed darktable-cli "
-darktable-cli (shipped with darktable 1.1 and later) is required to
+	if ! tool_installed ansel-cli "
+ansel-cli (shipped with ansel 1.1 and later) is required to
 export RAW images to jpeg and PFM files. Please install this package and
 re-run this script."; then
 		missing_tool=1
@@ -193,8 +193,8 @@ profiling_tools_installed() {
 
 	echo "--> Check for profiling tools availability"
 
-	if ! tool_installed darktable-cli "
-darktable-cli (shipped with darktable 1.1 and later) is required to
+	if ! tool_installed ansel-cli "
+ansel-cli (shipped with ansel 1.1 and later) is required to
 export RAW images to jpeg and PFM files. Please install this package and
 re-run this script."; then
 		missing_tool=1
@@ -209,15 +209,15 @@ of the presets. Please install this command and re-run this script."; then
 	return $missing_tool
 }
 
-get_darktable_version() {
+get_ansel_version() {
 	local version
 
-	version=$(darktable --version | head -n 1 | cut -d' ' -f 4)
+	version=$(ansel --version | head -n 1 | cut -d' ' -f 4)
 
 	echo "$version"
 }
 
-normalize_darktable_version() {
+normalize_ansel_version() {
 	local version
 	version=$1
 
@@ -236,14 +236,14 @@ normalize_darktable_version() {
 
 	echo "$normalized"
 }
-cmp_darktable_version() {
+cmp_ansel_version() {
 	local v1 v2 cmp
 	v1=$1
 	cmp=$2
 	v2=$3
 
-	v1=$(normalize_darktable_version "$v1")
-	v2=$(normalize_darktable_version "$v2")
+	v1=$(normalize_ansel_version "$v1")
+	v2=$(normalize_ansel_version "$v2")
 
 	test "$v1" "$cmp" "$v2"
 }
@@ -391,7 +391,7 @@ EOF
 
 	camera=$(get_camera_name)
 	subdir=$(echo $camera | $sed 's/[^a-zA-Z0-9_]+/-/g')
-	profiling_dir="/var/tmp/darktable-noise-profiling/$subdir/profiling"
+	profiling_dir="/var/tmp/ansel-noise-profiling/$subdir/profiling"
 	test -d "$profiling_dir" || mkdir -p "$profiling_dir"
 }
 
@@ -450,10 +450,10 @@ export_large_jpeg() {
 	xmp="$input.xmp"
 	xmp_profiling="$scriptdir/profiling-shot.xmp"
 	
-	tool_installed darktable-cli
+	tool_installed ansel-cli
 
 	rm -f "$output" "$xmp"
-	darktable-cli "$input" "$xmp_profiling" "$output" --core --conf plugins/lighttable/export/iccprofile=image --conf plugins/lighttable/export/style=none --apply-custom-presets false
+	ansel-cli "$input" "$xmp_profiling" "$output" --core --conf plugins/lighttable/export/iccprofile=image --conf plugins/lighttable/export/style=none --apply-custom-presets false
 	rm -f "$xmp"
 }
 

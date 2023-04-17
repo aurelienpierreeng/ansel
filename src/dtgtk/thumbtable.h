@@ -19,6 +19,8 @@
 #include "dtgtk/thumbnail.h"
 #include <gtk/gtk.h>
 
+#pragma once
+
 // number of images per row in zoomable mode
 #define DT_ZOOMABLE_NB_PER_ROW 13
 
@@ -92,9 +94,6 @@ typedef struct dt_thumbtable_t
 
   // are scrollbars shown ?
   gboolean scrollbars;
-
-  // in lighttable preview or culling, we can navigate inside selection or inside full collection
-  gboolean navigate_inside_selection;
 
   // let's remember previous thumbnail generation settings to detect if they change
   int pref_embedded;

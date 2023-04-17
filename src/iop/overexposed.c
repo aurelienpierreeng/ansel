@@ -75,7 +75,7 @@ const char *name()
 
 int default_group()
 {
-  return IOP_GROUP_BASIC | IOP_GROUP_TECHNICAL;
+  return IOP_GROUP_TECHNICAL;
 }
 
 int flags()
@@ -125,14 +125,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   const int ch = 4;
 
-  float *restrict img_tmp = NULL;
-  if (!dt_iop_alloc_image_buffers(self, roi_in, roi_out, ch, &img_tmp, 0))
-  {
-    dt_iop_copy_image_roi(ovoid, ivoid, ch, roi_in, roi_out, TRUE);
-    dt_control_log(_("module overexposed failed in buffer allocation"));
-    return;
-  }
-
   const float lower = exp2f(fminf(dev->overexposed.lower, -4.f));   // in EV
   const float upper = dev->overexposed.upper / 100.0f;              // in %
 
@@ -144,21 +136,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   float *const restrict out = __builtin_assume_aligned((float *const restrict)ovoid, 64);
 
   const dt_iop_order_iccprofile_info_t *const current_profile = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
-  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_histogram_profile_info(dev);
-
-  // display mask using histogram profile as output
-  // FIXME: the histogram already does this work -- use that data instead?
-  if(current_profile && work_profile)
-    dt_ioppr_transform_image_colorspace_rgb(in, img_tmp, roi_out->width, roi_out->height, current_profile,
-                                            work_profile, self->op);
-  else
-  {
-    fprintf(stderr, "[overexposed process] can't create transform profile\n");
-    dt_iop_copy_image_roi(ovoid, ivoid, ch, roi_in, roi_out, TRUE);
-    dt_control_log(_("module overexposed failed in color conversion"));
-    goto process_finish;
-  }
-
 
   #ifdef __SSE2__
     // flush denormals to zero to avoid performance penalty if there are a lot of near-zero values
@@ -171,17 +148,17 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     // Any of the RGB channels is out of bounds
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(ch, img_tmp, in, lower, lower_color, out, roi_out, \
+  dt_omp_firstprivate(ch, in, lower, lower_color, out, roi_out, \
                       upper, upper_color) \
   schedule(static)
 #endif
     for(size_t k = 0; k < (size_t)ch * roi_out->width * roi_out->height; k += ch)
     {
-      if(img_tmp[k + 0] >= upper || img_tmp[k + 1] >= upper || img_tmp[k + 2] >= upper)
+      if(in[k + 0] >= upper || in[k + 1] >= upper || in[k + 2] >= upper)
       {
         copy_pixel(out + k, upper_color);
       }
-      else if(img_tmp[k + 0] <= lower && img_tmp[k + 1] <= lower && img_tmp[k + 2] <= lower)
+      else if(in[k + 0] <= lower && in[k + 1] <= lower && in[k + 2] <= lower)
       {
         copy_pixel(out + k, lower_color);
       }
@@ -192,21 +169,21 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     }
   }
 
-  else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_GAMUT && work_profile)
+  else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_GAMUT && current_profile)
   {
     // Gamut is out of bounds
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(ch, img_tmp, in, lower, lower_color, out, roi_out, \
-                      upper, upper_color, work_profile) \
+  dt_omp_firstprivate(ch, in, lower, lower_color, out, roi_out, \
+                      upper, upper_color, current_profile) \
   schedule(static)
 #endif
     for(size_t k = 0; k < (size_t)ch * roi_out->width * roi_out->height; k += ch)
     {
-      const float luminance = dt_ioppr_get_rgb_matrix_luminance(img_tmp + k,
-                                                                work_profile->matrix_in, work_profile->lut_in,
-                                                                work_profile->unbounded_coeffs_in,
-                                                                work_profile->lutsize, work_profile->nonlinearlut);
+      const float luminance = dt_ioppr_get_rgb_matrix_luminance(in + k,
+                                                                current_profile->matrix_in, current_profile->lut_in,
+                                                                current_profile->unbounded_coeffs_in,
+                                                                current_profile->lutsize, current_profile->nonlinearlut);
 
       // luminance is out of bounds
       if(luminance >= upper)
@@ -222,21 +199,21 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       {
         dt_aligned_pixel_t saturation = { 0.f };
 
-        for_each_channel(c,aligned(saturation, img_tmp : 64))
+        for_each_channel(c,aligned(saturation, in : 64))
         {
-          saturation[c] = (img_tmp[k + c] - luminance);
-          saturation[c] = sqrtf(saturation[c] * saturation[c] / (luminance * luminance + img_tmp[k + c] * img_tmp[k + c]));
+          saturation[c] = (in[k + c] - luminance);
+          saturation[c] = sqrtf(saturation[c] * saturation[c] / (luminance * luminance + in[k + c] * in[k + c]));
         }
 
         // we got over-saturation, relatively to luminance or absolutely over RGB
         if(saturation[0] > upper || saturation[1] > upper || saturation[2] > upper ||
-          img_tmp[k + 0] >= upper || img_tmp[k + 1] >= upper || img_tmp[k + 2] >= upper)
+          in[k + 0] >= upper || in[k + 1] >= upper || in[k + 2] >= upper)
         {
           copy_pixel(out + k, upper_color);
         }
 
         // saturation is fine but we got out-of-bounds RGB
-        else if(img_tmp[k + 0] <= lower && img_tmp[k + 1] <= lower && img_tmp[k + 2] <= lower)
+        else if(in[k + 0] <= lower && in[k + 1] <= lower && in[k + 2] <= lower)
         {
           copy_pixel(out + k, lower_color);
         }
@@ -250,21 +227,21 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     }
   }
 
-  else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_LUMINANCE && work_profile)
+  else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_LUMINANCE && current_profile)
   {
     // Luminance channel is out of bounds
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(ch, img_tmp, in, lower, lower_color, out, roi_out, \
-                      upper, upper_color, work_profile) \
+  dt_omp_firstprivate(ch, in, lower, lower_color, out, roi_out, \
+                      upper, upper_color, current_profile) \
   schedule(static)
 #endif
     for(size_t k = 0; k < (size_t)ch * roi_out->width * roi_out->height; k += ch)
     {
-      const float luminance = dt_ioppr_get_rgb_matrix_luminance(img_tmp + k,
-                                                                work_profile->matrix_in, work_profile->lut_in,
-                                                                work_profile->unbounded_coeffs_in,
-                                                                work_profile->lutsize, work_profile->nonlinearlut);
+      const float luminance = dt_ioppr_get_rgb_matrix_luminance(in + k,
+                                                                current_profile->matrix_in, current_profile->lut_in,
+                                                                current_profile->unbounded_coeffs_in,
+                                                                current_profile->lutsize, current_profile->nonlinearlut);
 
       if(luminance >= upper)
       {
@@ -282,38 +259,38 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     }
   }
 
-  else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_SATURATION && work_profile)
+  else if(dev->overexposed.mode == DT_CLIPPING_PREVIEW_SATURATION && current_profile)
   {
     // Show saturation out of bounds where luminance is valid
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(ch, img_tmp, in, lower, lower_color, out, roi_out, \
-                      upper, upper_color, work_profile) \
+  dt_omp_firstprivate(ch, in, lower, lower_color, out, roi_out, \
+                      upper, upper_color, current_profile) \
   schedule(static)
 #endif
     for(size_t k = 0; k < (size_t)ch * roi_out->width * roi_out->height; k += ch)
     {
-      const float luminance = dt_ioppr_get_rgb_matrix_luminance(img_tmp + k,
-                                                                work_profile->matrix_in, work_profile->lut_in,
-                                                                work_profile->unbounded_coeffs_in,
-                                                                work_profile->lutsize, work_profile->nonlinearlut);
+      const float luminance = dt_ioppr_get_rgb_matrix_luminance(in + k,
+                                                                current_profile->matrix_in, current_profile->lut_in,
+                                                                current_profile->unbounded_coeffs_in,
+                                                                current_profile->lutsize, current_profile->nonlinearlut);
       if(luminance < upper && luminance > lower)
       {
         dt_aligned_pixel_t saturation = { 0.f };
 
-        for_each_channel(c,aligned(saturation, img_tmp : 64))
+        for_each_channel(c,aligned(saturation, in : 64))
         {
-          saturation[c] = (img_tmp[k + c] - luminance);
-          saturation[c] = sqrtf(saturation[c] * saturation[c] / (luminance * luminance + img_tmp[k + c] * img_tmp[k + c]));
+          saturation[c] = (in[k + c] - luminance);
+          saturation[c] = sqrtf(saturation[c] * saturation[c] / (luminance * luminance + in[k + c] * in[k + c]));
         }
 
         // we got over-saturation, relatively to luminance or absolutely over RGB
         if(saturation[0] > upper || saturation[1] > upper || saturation[2] > upper ||
-           img_tmp[k + 0] >= upper || img_tmp[k + 1] >= upper || img_tmp[k + 2] >= upper)
+           in[k + 0] >= upper || in[k + 1] >= upper || in[k + 2] >= upper)
         {
           copy_pixel(out + k, upper_color);
         }
-        else if(img_tmp[k + 0] <= lower && img_tmp[k + 1] <= lower && img_tmp[k + 2] <= lower)
+        else if(in[k + 0] <= lower && in[k + 1] <= lower && in[k + 2] <= lower)
         {
           copy_pixel(out + k, lower_color);
         }
@@ -336,9 +313,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
-
-process_finish:
-  dt_free_align(img_tmp);
 }
 
 #ifdef HAVE_OPENCL
@@ -350,43 +324,18 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   cl_int err = -999;
   const int devid = piece->pipe->devid;
-
-  const int ch = piece->colors;
-  cl_mem dev_tmp = NULL;
-
   const int width = roi_out->width;
   const int height = roi_out->height;
 
   const dt_iop_order_iccprofile_info_t *const current_profile = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
-  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_histogram_profile_info(dev);
 
-  // display mask using histogram profile as output
-  dev_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * ch);
-  if(dev_tmp == NULL)
-  {
-    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-    fprintf(stderr, "[overexposed process_cl] error allocating memory for color transformation\n");
-    dt_control_log(_("module overexposed failed in buffer allocation"));
-    goto error;
-  }
-
-  if(current_profile && work_profile)
-    dt_ioppr_transform_image_colorspace_rgb_cl(devid, dev_in, dev_tmp, roi_out->width, roi_out->height,
-                                               current_profile, work_profile, self->op);
-  else
-  {
-    fprintf(stderr, "[overexposed process_cl] can't create transform profile\n");
-    dt_control_log(_("module overexposed failed in color conversion"));
-    goto error;
-  }
-
-  const int use_work_profile = (work_profile == NULL) ? 0 : 1;
+  const int use_work_profile = (current_profile == NULL) ? 0 : 1;
   cl_mem dev_profile_info = NULL;
   cl_mem dev_profile_lut = NULL;
   dt_colorspaces_iccprofile_info_cl_t *profile_info_cl;
   cl_float *profile_lut_cl = NULL;
 
-  err = dt_ioppr_build_iccprofile_params_cl(work_profile, devid, &profile_info_cl, &profile_lut_cl,
+  err = dt_ioppr_build_iccprofile_params_cl(current_profile, devid, &profile_info_cl, &profile_lut_cl,
                                             &dev_profile_info, &dev_profile_lut);
   if(err != CL_SUCCESS) goto error;
 
@@ -401,24 +350,21 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   size_t sizes[2] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid) };
   dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 0, sizeof(cl_mem), &dev_in);
   dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 1, sizeof(cl_mem), &dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 2, sizeof(cl_mem), &dev_tmp);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 3, sizeof(int), &width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 4, sizeof(int), &height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 5, sizeof(float), &lower);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 6, sizeof(float), &upper);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 7, 4 * sizeof(float), lower_color);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 8, 4 * sizeof(float), upper_color);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 9, sizeof(cl_mem), (void *)&dev_profile_info);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 10, sizeof(cl_mem), (void *)&dev_profile_lut);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 11, sizeof(int), (void *)&use_work_profile);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 12, sizeof(int), (void *)&mode);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 2, sizeof(int), &width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 3, sizeof(int), &height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 4, sizeof(float), &lower);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 5, sizeof(float), &upper);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 6, 4 * sizeof(float), lower_color);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 7, 4 * sizeof(float), upper_color);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 8, sizeof(cl_mem), (void *)&dev_profile_info);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 9, sizeof(cl_mem), (void *)&dev_profile_lut);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 10, sizeof(int), (void *)&use_work_profile);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_overexposed, 11, sizeof(int), (void *)&mode);
   err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_overexposed, sizes);
   if(err != CL_SUCCESS) goto error;
-  if(dev_tmp) dt_opencl_release_mem_object(dev_tmp);
   return TRUE;
 
 error:
-  if(dev_tmp) dt_opencl_release_mem_object(dev_tmp);
   dt_print(DT_DEBUG_OPENCL, "[opencl_overexposed] couldn't enqueue kernel! %s\n", cl_errstr(err));
   return FALSE;
 }
@@ -488,4 +434,3 @@ void init(dt_iop_module_t *module)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

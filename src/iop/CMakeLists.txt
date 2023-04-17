@@ -40,7 +40,7 @@ macro (add_iop _lib _src)
   target_link_libraries(${_lib} lib_ansel)
 
   if (WIN32)
-    _detach_debuginfo (${_lib} ${CMAKE_INSTALL_LIBDIR}/ansel/plugins)
+    #_detach_debuginfo (${_lib} ${CMAKE_INSTALL_LIBDIR}/ansel/plugins)
   else()
       set_target_properties(${_lib}
                             PROPERTIES
@@ -105,7 +105,7 @@ add_iop(channelmixer "channelmixer.c")
 add_iop(graduatednd "graduatednd.c")
 add_iop(relight "relight.c")
 add_iop(zonesystem "zonesystem.c")
-add_iop(demosaic "demosaic.c" "amaze_demosaic_RT.cc" DEFAULT_VISIBLE)
+add_iop(demosaic "demosaic.c" "demosaic/amaze.cc" DEFAULT_VISIBLE)
 add_iop(rotatepixels "rotatepixels.c")
 add_iop(scalepixels "scalepixels.c")
 add_iop(atrous "atrous.c")

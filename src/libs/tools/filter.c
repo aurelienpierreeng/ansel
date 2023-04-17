@@ -17,6 +17,7 @@
 */
 
 #include "common/collection.h"
+#include "common/selection.h"
 #include "common/darktable.h"
 #include "control/conf.h"
 #include "control/control.h"
@@ -38,8 +39,10 @@ typedef struct dt_lib_tool_filter_t
   GtkWidget *reverse;
   GtkWidget *text;
   GtkWidget *colors[6];
+  GtkWidget *culling;
   int time_out;
   double last_key_time;
+  int zoom_level;
 } dt_lib_tool_filter_t;
 
 #ifdef USE_LUA
@@ -275,6 +278,17 @@ static void _reset_text_entry(GtkButton *button, dt_lib_module_t *self)
   dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_SORT, NULL);
 }
 
+
+static void _focus_filter_search(dt_action_t *action)
+{
+  // set focus to the search text box
+  dt_lib_module_t *self = dt_action_lib(action);
+  dt_lib_tool_filter_t *d = (dt_lib_tool_filter_t *)self->data;
+  if(GTK_IS_ENTRY(d->text))
+    gtk_widget_grab_focus(GTK_WIDGET(d->text));
+}
+
+
 #define CPF_USER_DATA_INCLUDE CPF_USER_DATA
 #define CPF_USER_DATA_EXCLUDE CPF_USER_DATA << 1
 #define CL_AND_MASK 0x80000000
@@ -339,6 +353,39 @@ static gboolean _colorlabel_clicked(GtkWidget *w, GdkEventButton *e, dt_lib_modu
   _update_colors_filter(self);
   dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_COLORLABEL, NULL);
   return FALSE;
+}
+
+static void _culling_mode(GtkWidget *widget, gpointer data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)data;
+  dt_lib_tool_filter_t *d = (dt_lib_tool_filter_t *)self->data;
+
+  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget)))
+  {
+    darktable.gui->culling_mode = TRUE;
+    d->zoom_level = dt_view_lighttable_get_zoom(darktable.view_manager);
+
+    // Adjust lighttable zoom level
+    const uint32_t selected_pictures = MAX(dt_collection_get_selected_count(darktable.collection), 1);
+    int zoom_level;
+    if(selected_pictures < 7)
+      zoom_level = selected_pictures;
+    else if(selected_pictures < 9)
+      zoom_level = 4;
+    else
+      zoom_level = 6;
+
+    dt_view_lighttable_set_zoom(darktable.view_manager, zoom_level);
+  }
+  else
+  {
+    darktable.gui->culling_mode = FALSE;
+    dt_culling_mode_to_selection();
+    dt_view_lighttable_set_zoom(darktable.view_manager, d->zoom_level);
+  }
+
+  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_SELECTION_CHANGED);
 }
 
 #undef CPF_USER_DATA_INCLUDE
@@ -420,6 +467,16 @@ void gui_init(dt_lib_module_t *self)
   dt_gui_add_class(hbox, "quick_filter_box");
   _update_colors_filter(self);
 
+    // Culling mode
+  hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
+  d->culling = gtk_toggle_button_new_with_label(_("Selected"));
+  gtk_widget_set_tooltip_text(d->culling, _("Restrict the current view to only selected pictures"));
+  g_signal_connect(G_OBJECT(d->culling), "toggled", G_CALLBACK(_culling_mode), (gpointer)self);
+  gtk_box_pack_start(GTK_BOX(GTK_BOX(hbox)), d->culling, FALSE, FALSE, 0);
+  gtk_widget_set_name(d->culling, "quickfilter-culling");
+  dt_gui_add_class(hbox, "quick_filter_box");
+
   /* sort combobox */
   hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
@@ -453,7 +510,7 @@ void gui_init(dt_lib_module_t *self)
 
   // text filter
   hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_box_pack_end(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget), hbox, TRUE, TRUE, 0);
 
   label = gtk_label_new(C_("quickfilter", "Find"));
   gtk_box_pack_start(GTK_BOX(hbox), label, TRUE, TRUE, 0);
@@ -462,10 +519,11 @@ void gui_init(dt_lib_module_t *self)
   d->text = gtk_search_entry_new();
   char *text = _decode_text_filter(dt_collection_get_text_filter(darktable.collection));
   gtk_entry_set_text(GTK_ENTRY(d->text), text);
+  gtk_entry_set_placeholder_text(GTK_ENTRY(d->text), _("Search an image…"));
   g_free(text);
   g_signal_connect(G_OBJECT(d->text), "search-changed", G_CALLBACK(_text_entry_changed), self);
   g_signal_connect(G_OBJECT(d->text), "stop-search", G_CALLBACK(_reset_text_entry), self);
-  gtk_entry_set_width_chars(GTK_ENTRY(d->text), 14);
+  gtk_entry_set_width_chars(GTK_ENTRY(d->text), 24);
   gtk_widget_set_tooltip_text(d->text,
           /* xgettext:no-c-format */
                               _("filter by text from images metadata, tags, file path and name"
@@ -481,6 +539,8 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_end(GTK_BOX(hbox), d->text, TRUE, TRUE, 0);
   gtk_widget_set_name(hbox, "quickfilter-search-box");
   dt_gui_add_class(hbox, "quick_filter_box");
+
+  dt_action_register(DT_ACTION(self), N_("search images"), _focus_filter_search, GDK_KEY_f, GDK_CONTROL_MASK);
 
   /* initialize proxy */
   darktable.view_manager->proxy.filter.module = self;

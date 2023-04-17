@@ -13,6 +13,6 @@ foreach(pixmap_size ${FIXED_SIZES})
 endforeach(pixmap_size)
 
 FILE(GLOB OTHER_PIXMAPS "*.png" "*.svg")
-install(FILES ${OTHER_PIXMAPS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable/pixmaps COMPONENT DTApplication)
+install(FILES ${OTHER_PIXMAPS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel/pixmaps COMPONENT DTApplication)
 # Need to copy to have themes, icons, etc all in one path like after installing
 file(COPY ${OTHER_PIXMAPS} DESTINATION ${DARKTABLE_DATADIR}/pixmaps)

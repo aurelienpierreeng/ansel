@@ -181,7 +181,7 @@ static void _update(dt_lib_module_t *self)
 
   // using dt_metadata_get() is not possible here. we want to do all this in a single pass, everything else
   // takes ages.
-  gchar *images = dt_act_on_get_query(FALSE);
+  gchar *images = dt_selection_get_list_query(darktable.selection, FALSE, FALSE);
   const uint32_t imgs_count = g_list_length((GList *)imgs);
 
   if(images)
@@ -228,13 +228,6 @@ static void _update(dt_lib_module_t *self)
 }
 
 static void _image_selection_changed_callback(gpointer instance, dt_lib_module_t *self)
-{
-  _update(self);
-}
-
-static void _collection_updated_callback(gpointer instance, dt_collection_change_t query_change,
-                                         dt_collection_properties_t changed_property, gpointer imgs, int next,
-                                         dt_lib_module_t *self)
 {
   _update(self);
 }
@@ -294,7 +287,6 @@ static void _write_metadata(GtkTextView *textview, dt_lib_module_t *self)
   }
   g_list_free(key_value);
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_METADATA_CHANGED, DT_METADATA_SIGNAL_NEW_VALUE);
 
   dt_image_synch_xmps(imgs);
@@ -750,8 +742,6 @@ void gui_init(dt_lib_module_t *self)
   // and 2 other interesting signals:
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_SELECTION_CHANGED,
                             G_CALLBACK(_image_selection_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_COLLECTION_CHANGED,
-                            G_CALLBACK(_collection_updated_callback), self);
 
   gtk_widget_show_all(self->widget);
   gtk_widget_set_no_show_all(self->widget, TRUE);
@@ -765,7 +755,6 @@ void gui_cleanup(dt_lib_module_t *self)
   dt_lib_cancel_postponed_update(self);
   const dt_lib_metadata_t *d = (dt_lib_metadata_t *)self->data;
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_image_selection_changed_callback), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
 
   for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
   {
@@ -938,7 +927,6 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
 
   g_list_free(key_value);
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE);
   dt_image_synch_xmps(imgs);
   g_list_free(imgs);
   // force the ui refresh to update the info from preset

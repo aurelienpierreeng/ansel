@@ -53,12 +53,6 @@
 
 #include "common/imagebuf.h"
 
-// We don't want to use the SIMD version as we might access unaligned memory
-static inline float sqrf(float a)
-{
-  return a * a;
-}
-
 typedef enum dt_distance_transform_t
 {
   DT_DISTANCE_TRANSFORM_NONE = 0,
@@ -75,11 +69,11 @@ static void _image_distance_transform(const float *f, float *z, float *d, int *v
   z[1] = DT_DISTANCE_TRANSFORM_MAX;
   for(int q = 1; q <= n-1; q++)
   {
-    float s = (f[q] + sqrf((float)q)) - (f[v[k]] + sqrf((float)v[k]));
+    float s = (f[q] + sqf((float)q)) - (f[v[k]] + sqf((float)v[k]));
     while(s <= z[k] * (float)(2*q - 2*v[k]))
     {
       k--;
-      s = (f[q] + sqrf((float)q)) - (f[v[k]] + sqrf((float)v[k]));
+      s = (f[q] + sqf((float)q)) - (f[v[k]] + sqf((float)v[k]));
     }
     s /= (float)(2*q - 2*v[k]);
     k++;
@@ -93,7 +87,7 @@ static void _image_distance_transform(const float *f, float *z, float *d, int *v
   {
     while(z[k+1] < (float)q)
       k++;
-    d[q] = sqrf((float)(q-v[k])) + f[v[k]];
+    d[q] = sqf((float)(q-v[k])) + f[v[k]];
   }
 }
 
@@ -173,4 +167,3 @@ float dt_image_distance_transform(float *const restrict src, float *const restri
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

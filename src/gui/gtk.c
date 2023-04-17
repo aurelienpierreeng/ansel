@@ -29,9 +29,9 @@
 #include "dtgtk/button.h"
 #include "dtgtk/expander.h"
 #include "dtgtk/sidepanel.h"
-#include "dtgtk/thumbtable.h"
 #include "gui/accelerators.h"
 #include "gui/gtk.h"
+#include "gui/actions/display.h"
 
 #include "common/styles.h"
 #include "control/conf.h"
@@ -75,31 +75,6 @@ typedef enum dt_gui_view_switch_t
   DT_GUI_VIEW_SWITCH_TO_SLIDESHOW,
   DT_GUI_VIEW_SWITCH_TO_PRINT
 } dt_gui_view_switch_to_t;
-
-const char *_ui_panel_config_names[]
-    = { "header", "toolbar_top", "toolbar_bottom", "left", "right", "bottom" };
-
-typedef struct dt_ui_t
-{
-  /* container widgets */
-  GtkWidget *containers[DT_UI_CONTAINER_SIZE];
-
-  /* panel widgets */
-  GtkWidget *panels[DT_UI_PANEL_SIZE];
-
-  /* center widget */
-  GtkWidget *center;
-  GtkWidget *center_base;
-
-  /* main widget */
-  GtkWidget *main_window;
-
-  /* thumb table */
-  dt_thumbtable_t *thumbtable;
-
-  /* log msg and toast labels */
-  GtkWidget *log_msg, *toast_msg;
-} dt_ui_t;
 
 /* initialize the whole left panel */
 static void _ui_init_panel_left(struct dt_ui_t *ui, GtkWidget *container);
@@ -145,49 +120,6 @@ static void _init_widgets(dt_gui_gtk_t *gui);
 
 static void _init_main_table(GtkWidget *container);
 
-static void _fullscreen_key_accel_callback(dt_action_t *action)
-{
-  GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
-
-  if(gdk_window_get_state(gtk_widget_get_window(widget)) & GDK_WINDOW_STATE_FULLSCREEN)
-    gtk_window_unfullscreen(GTK_WINDOW(widget));
-  else
-    gtk_window_fullscreen(GTK_WINDOW(widget));
-
-  dt_dev_invalidate(darktable.develop);
-
-  /* redraw center view */
-  gtk_widget_queue_draw(widget);
-
-#ifdef __APPLE__
-  // workaround for GTK Quartz backend bug
-  gtk_window_set_title(GTK_WINDOW(widget), widget == dt_ui_main_window(darktable.gui->ui)
-                                         ? "ansel" : _("ansel - darkroom preview"));
-#endif
-}
-
-static void _toggle_tooltip_visibility(dt_action_t *action)
-{
-  if(gdk_screen_is_composited(gdk_screen_get_default()))
-  {
-    gboolean tooltip_hidden = !dt_conf_get_bool("ui/hide_tooltips");
-    dt_conf_set_bool("ui/hide_tooltips", tooltip_hidden);
-    if(tooltip_hidden)
-      dt_toast_log(_("tooltips off"));
-    else
-      dt_toast_log(_("tooltips on"));
-  }
-  else
-  {
-    dt_conf_set_bool("ui/hide_tooltips", FALSE);
-    dt_control_log(_("tooltip visibility can only be toggled if compositing is enabled in your window manager"));
-  }
-
-  const char *theme = dt_conf_get_string_const("ui_last/theme");
-  dt_gui_load_theme(theme);
-  dt_bauhaus_load_theme();
-}
-
 static inline void _update_focus_peaking_button()
 {
   // read focus peaking global state and update toggle button accordingly
@@ -217,151 +149,6 @@ static void _focuspeaking_switch_button_callback(GtkWidget *button, gpointer use
 
   // we inform that all thumbnails need to be redraw
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MIPMAP_UPDATED, -1);
-}
-
-static gchar *_panels_get_view_path(char *suffix)
-{
-  if(!darktable.view_manager) return NULL;
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  // in lighttable, we store panels states per layout
-  char lay[32] = "";
-  if(g_strcmp0(cv->module_name, "lighttable") == 0)
-  {
-    if(dt_view_lighttable_preview_state(darktable.view_manager))
-      g_snprintf(lay, sizeof(lay), "preview/");
-    else
-      g_snprintf(lay, sizeof(lay), "%d/", dt_view_lighttable_get_layout(darktable.view_manager));
-  }
-  else if(g_strcmp0(cv->module_name, "darkroom") == 0)
-  {
-    g_snprintf(lay, sizeof(lay), "%d/", dt_view_darkroom_get_layout(darktable.view_manager));
-  }
-
-  return g_strdup_printf("%s/ui/%s%s", cv->module_name, lay, suffix);
-}
-
-static gchar *_panels_get_panel_path(dt_ui_panel_t panel, char *suffix)
-{
-  gchar *v = _panels_get_view_path("");
-  if(!v) return NULL;
-  return dt_util_dstrcat(v, "%s%s", _ui_panel_config_names[panel], suffix);
-}
-
-static gboolean _panel_is_visible(dt_ui_panel_t panel)
-{
-  gchar *key = _panels_get_view_path("panel_collaps_state");
-  if(dt_conf_get_int(key))
-  {
-    g_free(key);
-    return FALSE;
-  }
-  key = _panels_get_panel_path(panel, "_visible");
-  const gboolean ret = dt_conf_get_bool(key);
-  g_free(key);
-  return ret;
-}
-
-static void _panel_toggle(dt_ui_border_t border, dt_ui_t *ui)
-{
-  switch(border)
-  {
-    case DT_UI_BORDER_LEFT: // left border
-    {
-      dt_ui_panel_show(ui, DT_UI_PANEL_LEFT, !_panel_is_visible(DT_UI_PANEL_LEFT), TRUE);
-    }
-    break;
-
-    case DT_UI_BORDER_RIGHT: // right border
-    {
-      dt_ui_panel_show(ui, DT_UI_PANEL_RIGHT, !_panel_is_visible(DT_UI_PANEL_RIGHT), TRUE);
-    }
-    break;
-
-    case DT_UI_BORDER_TOP: // top border
-    {
-      const gboolean show_ct = _panel_is_visible(DT_UI_PANEL_CENTER_TOP);
-      const gboolean show_t = _panel_is_visible(DT_UI_PANEL_TOP);
-      // all visible => toolbar hidden => all hidden => toolbar visible => all visible
-      if(show_ct && show_t)
-        dt_ui_panel_show(ui, DT_UI_PANEL_CENTER_TOP, FALSE, TRUE);
-      else if(!show_ct && show_t)
-        dt_ui_panel_show(ui, DT_UI_PANEL_TOP, FALSE, TRUE);
-      else if(!show_ct && !show_t)
-        dt_ui_panel_show(ui, DT_UI_PANEL_CENTER_TOP, TRUE, TRUE);
-      else
-        dt_ui_panel_show(ui, DT_UI_PANEL_TOP, TRUE, TRUE);
-    }
-    break;
-
-    case DT_UI_BORDER_BOTTOM: // bottom border
-    default:
-    {
-      const gboolean show_cb = _panel_is_visible(DT_UI_PANEL_CENTER_BOTTOM);
-      const gboolean show_b = _panel_is_visible(DT_UI_PANEL_BOTTOM);
-      // all visible => toolbar hidden => all hidden => toolbar visible => all visible
-      if(show_cb && show_b)
-        dt_ui_panel_show(ui, DT_UI_PANEL_CENTER_BOTTOM, FALSE, TRUE);
-      else if(!show_cb && show_b)
-        dt_ui_panel_show(ui, DT_UI_PANEL_BOTTOM, FALSE, TRUE);
-      else if(!show_cb && !show_b)
-        dt_ui_panel_show(ui, DT_UI_PANEL_CENTER_BOTTOM, TRUE, TRUE);
-      else
-        dt_ui_panel_show(ui, DT_UI_PANEL_BOTTOM, TRUE, TRUE);
-    }
-    break;
-  }
-}
-
-static void _toggle_side_borders_accel_callback(dt_action_t *action)
-{
-  /* toggle panel viewstate */
-  dt_ui_toggle_panels_visibility(darktable.gui->ui);
-
-  /* trigger invalidation of centerview to reprocess pipe */
-  dt_dev_invalidate(darktable.develop);
-  gtk_widget_queue_draw(dt_ui_center(darktable.gui->ui));
-}
-
-static void _toggle_panel_accel_callback(dt_action_t *action)
-{
-  if(!strcmp(action->id, "left"))
-    _panel_toggle(DT_UI_BORDER_LEFT, darktable.gui->ui);
-  else if(!strcmp(action->id, "right"))
-    _panel_toggle(DT_UI_BORDER_RIGHT, darktable.gui->ui);
-  else if(!strcmp(action->id, "top"))
-    _panel_toggle(DT_UI_BORDER_TOP, darktable.gui->ui);
-  else
-    _panel_toggle(DT_UI_BORDER_BOTTOM, darktable.gui->ui);
-}
-
-static void _toggle_header_accel_callback(dt_action_t *action)
-{
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_TOP, !_panel_is_visible(DT_UI_PANEL_TOP), TRUE);
-}
-static void _toggle_filmstrip_accel_callback(dt_action_t *action)
-{
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_BOTTOM, !_panel_is_visible(DT_UI_PANEL_BOTTOM), TRUE);
-}
-static void _toggle_top_tool_accel_callback(dt_action_t *action)
-{
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_CENTER_TOP, !_panel_is_visible(DT_UI_PANEL_CENTER_TOP), TRUE);
-}
-static void _toggle_bottom_tool_accel_callback(dt_action_t *action)
-{
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_CENTER_BOTTOM, !_panel_is_visible(DT_UI_PANEL_CENTER_BOTTOM),
-                   TRUE);
-}
-static void _toggle_top_all_accel_callback(dt_action_t *action)
-{
-  const gboolean v = (_panel_is_visible(DT_UI_PANEL_CENTER_TOP) || _panel_is_visible(DT_UI_PANEL_TOP));
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_TOP, !v, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_CENTER_TOP, !v, TRUE);
-}
-static void _toggle_bottom_all_accel_callback(dt_action_t *action)
-{
-  const gboolean v = (_panel_is_visible(DT_UI_PANEL_CENTER_BOTTOM) || _panel_is_visible(DT_UI_PANEL_BOTTOM));
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_BOTTOM, !v, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_CENTER_BOTTOM, !v, TRUE);
 }
 
 gboolean dt_gui_ignore_scroll(GdkEventScroll *event)
@@ -683,18 +470,9 @@ void dt_gui_store_last_preset(const char *name)
   darktable.gui->last_preset = g_strdup(name);
 }
 
-static void _gui_noop_action_callback(dt_action_t *action)
-{
-}
-
 static void _gui_switch_view_key_accel_callback(dt_action_t *action)
 {
   dt_ctl_switch_mode_to(action->id);
-}
-
-static void _quit_callback(dt_action_t *action)
-{
-  dt_control_quit();
 }
 
 #ifdef MAC_INTEGRATION
@@ -775,26 +553,11 @@ static gboolean _window_configure(GtkWidget *da, GdkEvent *event, gpointer user_
   return FALSE;
 }
 
-guint dt_gui_translated_key_state(GdkEventKey *event)
-{
-  if (gdk_keyval_to_lower(event->keyval) == gdk_keyval_to_upper(event->keyval) )
-  {
-    //not an alphabetic character
-    //find any modifiers consumed to produce keyval
-    guint consumed;
-    gdk_keymap_translate_keyboard_state(gdk_keymap_get_for_display(gdk_display_get_default()), event->hardware_keycode, event->state, event->group, NULL, NULL, NULL, &consumed);
-    return event->state & ~consumed & gtk_accelerator_get_default_mod_mask();
-  }
-  else
-    return event->state & gtk_accelerator_get_default_mod_mask();
-}
-
 static gboolean _button_pressed(GtkWidget *w, GdkEventButton *event, gpointer user_data)
 {
   /* Reset Gtk focus */
   gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
   darktable.gui->has_scroll_focus = NULL;
-  fprintf(stdout, "focus 2\n");
 
   double pressure = 1.0;
   GdkDevice *device = gdk_event_get_source_device((GdkEvent *)event);
@@ -916,6 +679,9 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   gui->surface = NULL;
   gui->center_tooltip = 0;
   gui->grouping = dt_conf_get_bool("ui_last/grouping");
+  gui->culling_mode = FALSE;
+  gui->selection_stacked = FALSE;
+  gui->anchor_imgid = 0;
   gui->expanded_group_id = -1;
   gui->show_overlays = dt_conf_get_bool("lighttable/ui/expose_statuses");
   gui->presets_popup_menu = NULL;
@@ -939,6 +705,9 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
 
   // Initializing widgets
   _init_widgets(gui);
+
+  // Init global accels
+  gui->global_accels = gtk_accel_group_new();
 
   //init overlay colors
   dt_guides_set_overlay_colors();
@@ -973,25 +742,16 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   g_signal_connect(G_OBJECT(widget), "button-press-event", G_CALLBACK(_scrollbar_press_event), NULL);
   g_signal_connect(G_OBJECT(widget), "button-release-event", G_CALLBACK(_scrollbar_release_event), NULL);
 
-  dt_action_t *pnl = dt_action_section(&darktable.control->actions_global, N_("panels"));
   dt_action_t *ac;
-
-  ac = dt_action_define(pnl, NULL, N_("left"), NULL, NULL);
-  dt_action_register(ac, NULL, _toggle_panel_accel_callback, GDK_KEY_L, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
-
-  ac = dt_action_define(pnl, NULL, N_("right"), NULL, NULL);
-  dt_action_register(ac, NULL, _toggle_panel_accel_callback, GDK_KEY_R, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
-
-  ac = dt_action_define(pnl, NULL, N_("top"), NULL, NULL);
-  dt_action_register(ac, NULL, _toggle_panel_accel_callback, GDK_KEY_T, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
-
-  ac = dt_action_define(pnl, NULL, N_("bottom"), NULL, NULL);
-  dt_action_register(ac, NULL, _toggle_panel_accel_callback, GDK_KEY_B, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
 
   dt_gui_presets_init();
 
   widget = dt_ui_center(darktable.gui->ui);
   gtk_widget_set_app_paintable(widget, TRUE);
+  gtk_widget_set_can_default(widget, TRUE);
+  gtk_widget_set_receives_default(widget, TRUE);
+  gtk_widget_grab_default(widget);
+  gtk_widget_grab_focus(widget);
 
   // TODO: make this work as: libgnomeui testgnome.c
   /*  GtkContainer *box = GTK_CONTAINER(darktable.gui->widgets.plugins_vbox);
@@ -1003,42 +763,34 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   // update the profile when the window is moved. resize is already handled in configure()
   widget = dt_ui_main_window(darktable.gui->ui);
   g_signal_connect(G_OBJECT(widget), "configure-event", G_CALLBACK(_window_configure), NULL);
-  g_signal_connect(G_OBJECT(widget), "event", G_CALLBACK(dt_shortcut_dispatcher), NULL);
-  g_signal_override_class_handler("query-tooltip", gtk_widget_get_type(), G_CALLBACK(dt_shortcut_tooltip_callback));
 
-  //an action that does nothing - used for overriding/removing default shortcuts
-  dt_action_register(&darktable.control->actions_global, N_("no-op"), _gui_noop_action_callback, 0, 0);
+  // Init the shortcuts dispatcher
+  gtk_window_set_role(GTK_WINDOW(widget), "main-app");
+  darktable.gui->grab_window = widget;
+  darktable.gui->grab_widget = NULL;
+  g_signal_connect(G_OBJECT(widget), "event", G_CALLBACK(dt_shortcut_dispatcher), NULL);
+
+  // This is utterly broken and deeply messed-up as it breaks tooltips positionning while being generally ugly.
+  // TODO: 1. implement API `const char * get_shortcut_for_widget(GtkWidget *w)` in accelerators.c
+  //       2. call it in the tooltip constructor where relevant
+  //       3. append the shortcut path as text to the tooltip text content __BEFORE__ initialization of the widget.
+  //       4. Find out where Diederik Ter Rahe lives and ensure he never writes another line of code.
+  // g_signal_override_class_handler("query-tooltip", gtk_widget_get_type(), G_CALLBACK(dt_shortcut_tooltip_callback));
 
   ac = dt_action_section(&darktable.control->actions_global, N_("switch views"));
-  dt_action_register(ac, N_("tethering"), _gui_switch_view_key_accel_callback, GDK_KEY_t, 0);
-  dt_action_register(ac, N_("lighttable"), _gui_switch_view_key_accel_callback, GDK_KEY_l, 0);
-  dt_action_register(ac, N_("darkroom"), _gui_switch_view_key_accel_callback, GDK_KEY_d, 0);
-  dt_action_register(ac, N_("map"), _gui_switch_view_key_accel_callback, GDK_KEY_m, 0);
-  dt_action_register(ac, N_("slideshow"), _gui_switch_view_key_accel_callback, GDK_KEY_s, 0);
-  dt_action_register(ac, N_("print"), _gui_switch_view_key_accel_callback, GDK_KEY_p, 0);
+  dt_action_register(ac, N_("tethering"), _gui_switch_view_key_accel_callback, 0, 0);
+  dt_action_register(ac, N_("lighttable"), _gui_switch_view_key_accel_callback, GDK_KEY_Escape, 0);
+  dt_action_register(ac, N_("darkroom"), _gui_switch_view_key_accel_callback, 0, 0);
+  dt_action_register(ac, N_("map"), _gui_switch_view_key_accel_callback, 0, 0);
+  dt_action_register(ac, N_("slideshow"), _gui_switch_view_key_accel_callback, 0, 0);
+  dt_action_register(ac, N_("print"), _gui_switch_view_key_accel_callback, 0, 0);
 
   // register actions for applying styles via shortcuts
   dt_init_styles_actions();
 
-  // register ctrl-q to quit:
-  dt_action_register(&darktable.control->actions_global, N_("quit"), _quit_callback, GDK_KEY_q, GDK_CONTROL_MASK);
-
-  // Full-screen accelerator (no ESC handler here to enable quit-slideshow using ESC)
-  dt_action_register(&darktable.control->actions_global, N_("fullscreen"), _fullscreen_key_accel_callback, GDK_KEY_F11, 0);
-
-  // specific top/bottom toggles
-  dt_action_register(pnl, N_("all"), _toggle_side_borders_accel_callback, GDK_KEY_Tab, 0);
-  dt_action_register(pnl, N_("header"), _toggle_header_accel_callback, GDK_KEY_h, GDK_CONTROL_MASK);
-  dt_action_register(pnl, N_("filmstrip"), _toggle_filmstrip_accel_callback, GDK_KEY_f, GDK_CONTROL_MASK);
-  dt_action_register(pnl, N_("top toolbar"), _toggle_top_tool_accel_callback, 0, 0);
-  dt_action_register(pnl, N_("bottom toolbar"), _toggle_bottom_tool_accel_callback, 0, 0);
-  dt_action_register(pnl, N_("all top"), _toggle_top_all_accel_callback, 0, 0);
-  dt_action_register(pnl, N_("all bottom"), _toggle_bottom_all_accel_callback, 0, 0);
-
-  dt_action_register(&darktable.control->actions_global, N_("toggle tooltip visibility"), _toggle_tooltip_visibility, GDK_KEY_T, GDK_SHIFT_MASK);
   dt_action_register(&darktable.control->actions_global, N_("reinitialise input devices"), dt_shortcuts_reinitialise, GDK_KEY_I, GDK_CONTROL_MASK | GDK_SHIFT_MASK | GDK_MOD1_MASK);
 
-  // Register global rating shortcut
+  // Register global rating shortcut, with regular numbers
   ac = dt_action_define(&darktable.control->actions_thumb, NULL, N_("rating"), NULL, &dt_action_def_rating);
   dt_shortcut_register(ac, 0, 0, GDK_KEY_0, 0);
   dt_shortcut_register(ac, 1, 0, GDK_KEY_1, 0);
@@ -1086,12 +838,13 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   darktable.gui->focus_peaking_button = dtgtk_togglebutton_new(dtgtk_cairo_paint_focus_peaking, 0, NULL);
   gtk_widget_set_tooltip_text(darktable.gui->focus_peaking_button, _("toggle focus-peaking mode"));
   g_signal_connect(G_OBJECT(darktable.gui->focus_peaking_button), "clicked", G_CALLBACK(_focuspeaking_switch_button_callback), NULL);
+  dt_gui_add_help_link(darktable.gui->focus_peaking_button, dt_get_help_url("focuspeaking"));
   _update_focus_peaking_button();
 
   // toggle focus peaking everywhere
   ac = dt_action_define(&darktable.control->actions_global, NULL, N_("toggle focus peaking"),
                         darktable.gui->focus_peaking_button, &dt_action_def_toggle);
-  dt_shortcut_register(ac, 0, 0, GDK_KEY_f, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+  dt_shortcut_register(ac, 0, 0, GDK_KEY_p, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
 
   return 0;
 }
@@ -1422,24 +1175,6 @@ void dt_ui_container_destroy_children(struct dt_ui_t *ui, const dt_ui_container_
   dt_gui_container_destroy_children(GTK_CONTAINER(ui->containers[c]));
 }
 
-void dt_ui_toggle_panels_visibility(struct dt_ui_t *ui)
-{
-  gchar *key = _panels_get_view_path("panel_collaps_state");
-  const uint32_t state = dt_conf_get_int(key);
-
-  if(state)
-  {
-    dt_conf_set_int(key, 0);
-  }
-  else
-  {
-    dt_conf_set_int(key, 1);
-  }
-
-  dt_ui_restore_panels(ui);
-  g_free(key);
-}
-
 void dt_ui_notify_user()
 {
   if(darktable.gui && !gtk_window_is_active(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui))))
@@ -1558,87 +1293,6 @@ void dt_ui_scrollbars_show(dt_ui_t *ui, gboolean show)
   }
 }
 
-void dt_ui_panel_show(dt_ui_t *ui, const dt_ui_panel_t p, gboolean show, gboolean write)
-{
-  g_return_if_fail(GTK_IS_WIDGET(ui->panels[p]));
-
-  // for left and right sides, panels are inside a gtkoverlay
-  GtkWidget *over_panel = NULL;
-  if(p == DT_UI_PANEL_LEFT || p == DT_UI_PANEL_RIGHT || p == DT_UI_PANEL_BOTTOM)
-    over_panel = gtk_widget_get_parent(ui->panels[p]);
-
-  if(show)
-  {
-    gtk_widget_show(ui->panels[p]);
-    if(over_panel) gtk_widget_show(over_panel);
-  }
-  else
-  {
-    gtk_widget_hide(ui->panels[p]);
-    if(over_panel) gtk_widget_hide(over_panel);
-  }
-
-  if(write)
-  {
-    gchar *key;
-    if(show)
-    {
-      // we reset the collaps_panel value if we show a panel
-      key = _panels_get_view_path("panel_collaps_state");
-      if(dt_conf_get_int(key) != 0)
-      {
-        dt_conf_set_int(key, 0);
-        g_free(key);
-        // we ensure that all panels state are recorded as hidden
-        for(int k = 0; k < DT_UI_PANEL_SIZE; k++)
-        {
-          key = _panels_get_panel_path(k, "_visible");
-          dt_conf_set_bool(key, FALSE);
-          g_free(key);
-        }
-      }
-      else
-        g_free(key);
-      key = _panels_get_panel_path(p, "_visible");
-      dt_conf_set_bool(key, show);
-      g_free(key);
-    }
-    else
-    {
-      // if it was the last visible panel, we set collaps_panel value instead
-      // so collapsing panels after will have an effect
-      gboolean collapse = TRUE;
-      for(int k = 0; k < DT_UI_PANEL_SIZE; k++)
-      {
-        if(k != p && dt_ui_panel_visible(ui, k))
-        {
-          collapse = FALSE;
-          break;
-        }
-      }
-
-      if(collapse)
-      {
-        key = _panels_get_view_path("panel_collaps_state");
-        dt_conf_set_int(key, 1);
-        g_free(key);
-      }
-      else
-      {
-        key = _panels_get_panel_path(p, "_visible");
-        dt_conf_set_bool(key, show);
-        g_free(key);
-      }
-    }
-  }
-}
-
-gboolean dt_ui_panel_visible(dt_ui_t *ui, const dt_ui_panel_t p)
-{
-  g_return_val_if_fail(GTK_IS_WIDGET(ui->panels[p]), FALSE);
-  return gtk_widget_get_visible(ui->panels[p]);
-}
-
 int dt_ui_panel_get_size(dt_ui_t *ui, const dt_ui_panel_t p)
 {
   gchar *key = NULL;
@@ -1718,12 +1372,6 @@ static GtkWidget *_ui_init_panel_container_top(GtkWidget *container)
   return w;
 }
 
-static gboolean _ui_init_panel_container_center_scroll_event(GtkWidget *widget, GdkEventScroll *event)
-{
-  // just make sure nothing happens unless ctrl-alt are pressed:
-  return (event->state & gtk_accelerator_get_default_mod_mask());
-}
-
 // this should work as long as everything happens in the gui thread
 static void _ui_panel_size_changed(GtkAdjustment *adjustment, GParamSpec *pspec, gpointer user_data)
 {
@@ -1777,14 +1425,10 @@ static GtkWidget *_ui_init_panel_container_center(GtkWidget *container, gboolean
   gtk_viewport_set_shadow_type(GTK_VIEWPORT(widget), GTK_SHADOW_NONE);
   gtk_container_add(GTK_CONTAINER(container), widget);
 
-  /* avoid scrolling with wheel, it's distracting (you'll end up over a control, and scroll it's value) */
-  g_signal_connect(G_OBJECT(widget), "scroll-event", G_CALLBACK(_ui_init_panel_container_center_scroll_event),
-                   NULL);
-
   /* create the container */
   container = widget;
   widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  gtk_widget_set_name(widget, "plugins_vbox_left");
+  gtk_widget_set_name(widget, "plugins_box");
   gtk_container_add(GTK_CONTAINER(container), widget);
 
   return widget;
@@ -1819,17 +1463,11 @@ static gboolean _panel_handle_button_callback(GtkWidget *w, GdkEventButton *e, g
     else if(e->type == GDK_2BUTTON_PRESS)
     {
       darktable.gui->widgets.panel_handle_dragging = FALSE;
-      // we hide the panel
-      if(strcmp(gtk_widget_get_name(w), "panel-handle-right") == 0)
-        dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_RIGHT, FALSE, TRUE);
-      else if(strcmp(gtk_widget_get_name(w), "panel-handle-left") == 0)
-        dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_LEFT, FALSE, TRUE);
-      else if(strcmp(gtk_widget_get_name(w), "panel-handle-bottom") == 0)
-        dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_BOTTOM, FALSE, TRUE);
     }
   }
   return TRUE;
 }
+
 static gboolean _panel_handle_cursor_callback(GtkWidget *w, GdkEventCrossing *e, gpointer user_data)
 {
   if(strcmp(gtk_widget_get_name(w), "panel-handle-bottom") == 0)
@@ -1838,6 +1476,7 @@ static gboolean _panel_handle_cursor_callback(GtkWidget *w, GdkEventCrossing *e,
     dt_control_change_cursor((e->type == GDK_ENTER_NOTIFY) ? GDK_SB_H_DOUBLE_ARROW : GDK_LEFT_PTR);
   return TRUE;
 }
+
 static gboolean _panel_handle_motion_callback(GtkWidget *w, GdkEventButton *e, gpointer user_data)
 {
   GtkWidget *widget = (GtkWidget *)user_data;
@@ -1971,6 +1610,7 @@ static void _ui_init_panel_top(dt_ui_t *ui, GtkWidget *container)
 
   /* create the panel box */
   ui->panels[DT_UI_PANEL_TOP] = widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_widget_set_name(ui->panels[DT_UI_PANEL_TOP], "top");
   gtk_widget_set_hexpand(GTK_WIDGET(widget), TRUE);
   gtk_grid_attach(GTK_GRID(container), widget, 1, 0, 3, 1);
 
@@ -2470,13 +2110,6 @@ void dt_gui_load_theme(const char *theme)
     [DT_GUI_COLOR_THUMBNAIL_BORDER] = { "thumbnail_border_color", { 0.1, 0.1, 0.1, 1.0 } },
     [DT_GUI_COLOR_THUMBNAIL_SELECTED_BORDER] = { "thumbnail_selected_border_color", { 0.9, 0.9, 0.9, 1.0 } },
     [DT_GUI_COLOR_FILMSTRIP_BG] = { "filmstrip_bg_color", { 0.2, 0.2, 0.2, 1.0 } },
-    [DT_GUI_COLOR_TIMELINE_BG] = { "timeline_bg_color", { 0.4, 0.4, 0.4, 1.0 } },
-    [DT_GUI_COLOR_TIMELINE_FG] = { "timeline_fg_color", { 0.8, 0.8, 0.8, 1.0 } },
-    [DT_GUI_COLOR_TIMELINE_TEXT_BG] = { "timeline_text_bg_color", { 0., 0., 0., 0.8 } },
-    [DT_GUI_COLOR_TIMELINE_TEXT_FG] = { "timeline_text_fg_color", { 1., 1., 1., 0.9 } },
-    [DT_GUI_COLOR_CULLING_SELECTED_BORDER] = { "culling_selected_border_color", { 0.1, 0.1, 0.1, 1.0 } },
-    [DT_GUI_COLOR_CULLING_FILMSTRIP_SELECTED_BORDER]
-    = { "culling_filmstrip_selected_border_color", { 0.1, 0.1, 0.1, 1.0 } },
     [DT_GUI_COLOR_PREVIEW_HOVER_BORDER] = { "preview_hover_border_color", { 0.9, 0.9, 0.9, 1.0 } },
     [DT_GUI_COLOR_LOG_BG] = { "log_bg_color", { 0.1, 0.1, 0.1, 1.0 } },
     [DT_GUI_COLOR_LOG_FG] = { "log_fg_color", { 0.6, 0.6, 0.6, 1.0 } },
@@ -2486,11 +2119,6 @@ void dt_gui_load_theme(const char *theme)
     [DT_GUI_COLOR_MAP_LOC_SHAPE_HIGH] = { "map_count_circle_color_h", { 1.0, 1.0, 0.8, 1.0 } },
     [DT_GUI_COLOR_MAP_LOC_SHAPE_LOW] = { "map_count_circle_color_l", { 0.0, 0.0, 0.0, 1.0 } },
     [DT_GUI_COLOR_MAP_LOC_SHAPE_DEF] = { "map_count_circle_color_d", { 1.0, 0.0, 0.0, 1.0 } },
-    [DT_GUI_COLOR_RANGE_BG] = { "range_bg_color", { 1.0, 0.0, 0.0, 1.0 } },
-    [DT_GUI_COLOR_RANGE_GRAPH] = { "range_graph_color", { 1.0, 0.0, 0.0, 1.0 } },
-    [DT_GUI_COLOR_RANGE_SELECTION] = { "range_sel_color", { 1.0, 0.0, 0.0, 1.0 } },
-    [DT_GUI_COLOR_RANGE_CURSOR] = { "range_cursor_color", { 1.0, 0.0, 0.0, 1.0 } },
-    [DT_GUI_COLOR_RANGE_ICONS] = { "range_icon_color", { 1.0, 0.0, 0.0, 1.0 } },
   };
 
   // starting from 1 as DT_GUI_COLOR_BG is not part of this table
@@ -2728,7 +2356,9 @@ static gboolean _scroll_wrap_resize(GtkWidget *w, void *cr, const char *config_s
 
   gint height = dt_conf_get_int(config_str);
 
-  const gint max_height = DT_PIXEL_APPLY_DPI(1000);
+  // Max height is 75% of window height
+  GtkWidget *container = dt_ui_main_window(darktable.gui->ui);
+  const gint max_height = (container) ? gtk_widget_get_allocated_height(container) * 3 / 4 : DT_PIXEL_APPLY_DPI(1000);
 
   height = (height < 1) ? 1 : (height > max_height) ? max_height : height;
 
@@ -2763,7 +2393,6 @@ static gboolean _scroll_wrap_resize(GtkWidget *w, void *cr, const char *config_s
     value -= value % increment;
     gtk_adjustment_set_value(adj, value);
   }
-
   return FALSE;
 }
 

@@ -3571,25 +3571,25 @@ msgstr "допринели"
 msgid "rawspeed contributors"
 msgstr "rawspeed-у допринели"
 
-#: ../build/share/darktable/ansel.desktop.in.h:1
-#: ../data/ansel.desktop.in.h:1
+#: ../build/share/darktable/darktable.desktop.in.h:1
+#: ../data/darktable.desktop.in.h:1
 msgid "Virtual Lighttable and Darkroom"
 msgstr "Виртуелни Светли сто у Тамној соби"
 
-#: ../build/share/darktable/ansel.desktop.in.h:2
-#: ../data/photos.ansel.app.appdata.xml.in.h:1 ../data/ansel.desktop.in.h:2
+#: ../build/share/darktable/darktable.desktop.in.h:2
+#: ../data/darktable.appdata.xml.in.h:1 ../data/darktable.desktop.in.h:2
 msgid "Organize and develop images from digital cameras"
 msgstr "Организујте и развијте слике из дигиталних камера"
 
 #. TRANSLATORS: Search terms to find this application. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
-#: ../build/share/darktable/ansel.desktop.in.h:4
-#: ../data/ansel.desktop.in.h:4
+#: ../build/share/darktable/darktable.desktop.in.h:4
+#: ../data/darktable.desktop.in.h:4
 msgid "graphics;photography;raw;"
 msgstr ""
 "graphics;photography;raw;grafika:fotografija;rav;графика;фотографија;рав;"
 "развијање;razvijanje"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:2
+#: ../data/darktable.appdata.xml.in.h:2
 msgid ""
 "darktable manages your digital negatives in a database and lets you view "
 "them through a lighttable. It also enables you to develop raw images and "
@@ -3599,7 +3599,7 @@ msgstr ""
 "прегледате кроз светли сто. То вам такође омогућава да развијете raw слике и "
 "побољшате их у тамној соби."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:3
+#: ../data/darktable.appdata.xml.in.h:3
 msgid ""
 "Other modes besides lighttable and darkroom are a map for geotagging, "
 "tethering, print and a slideshow."
@@ -3607,7 +3607,7 @@ msgstr ""
 "Поред светлог стола и тамне собе на располагању су вам и карте за подешавање "
 "локације, повезивање уређаја, штампу и приказ слајдова."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:4
+#: ../data/darktable.appdata.xml.in.h:4
 msgid ""
 "darktable supports most modern cameras' raw formats, and does all of its "
 "processing at very high precision."
@@ -3615,23 +3615,23 @@ msgstr ""
 "тамни сто подржава највећи број raw формата са модерних камера и врши читаву "
 "обраду са великом прецизношћу."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:5
+#: ../data/darktable.appdata.xml.in.h:5
 msgid "Virtual light table, showing a collection"
 msgstr "Виртуелни светли сто, приказује збирку"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:6
+#: ../data/darktable.appdata.xml.in.h:6
 msgid "Virtual dark room with an opened image"
 msgstr "Виртуелна тамна соба са отвореном сликом"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:7
+#: ../data/darktable.appdata.xml.in.h:7
 msgid "Virtual dark room, sharpening an image"
 msgstr "Виртуелна тамна соба, изоштравање слике"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:8
+#: ../data/darktable.appdata.xml.in.h:8
 msgid "Show images on a map"
 msgstr "Прикажите слике на карти"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:9
+#: ../data/darktable.appdata.xml.in.h:9
 msgid "Print your images"
 msgstr "Одштампајте ваше слике"
 

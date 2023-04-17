@@ -26,6 +26,8 @@ struct dt_selection_t;
 struct dt_selection_t *dt_selection_new();
 void dt_selection_free(struct dt_selection_t *selection);
 
+/** Get the first imgid of a selection */
+uint32_t dt_selection_get_first_id(struct dt_selection_t *selection);
 /** inverts the current selection */
 void dt_selection_invert(struct dt_selection_t *selection);
 /** clears the selection */
@@ -55,9 +57,12 @@ GList *dt_selection_get_list(struct dt_selection_t *selection, const gboolean on
                              const gboolean ordering);
 gchar *dt_selection_get_list_query(struct dt_selection_t *selection, const gboolean only_visible,
                                    const gboolean ordering);
+/** backup the current selection */
+void dt_push_selection();
+/** restore the previous selection */
+void dt_pop_selection();
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

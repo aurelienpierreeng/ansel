@@ -414,13 +414,7 @@ static void _thumb_set_image_area(dt_thumbnail_t *thumb, float zoom_ratio)
     gtk_widget_get_size_request(thumb->w_bottom_eb, &w, &h);
     image_h = thumb->height - MAX(0, h);
     gtk_widget_get_size_request(thumb->w_altered, &w, &h);
-    if(!thumb->zoomable)
-    {
-      posy = h + gtk_widget_get_margin_top(thumb->w_altered);
-      image_h -= posy;
-    }
-    else
-      image_h -= thumb->img_margin->bottom;
+    image_h -= thumb->img_margin->bottom;
     image_h -= thumb->img_margin->top;
     posy += thumb->img_margin->top;
   }
@@ -567,16 +561,7 @@ static gboolean _event_image_draw(GtkWidget *widget, cairo_t *cr, gpointer user_
     else
     {
       cairo_surface_t *img_surf = NULL;
-      if(thumb->zoomable)
-      {
-        if(thumb->zoom > 1.0f)
-          thumb->zoom = MIN(thumb->zoom, dt_thumbnail_get_zoom100(thumb));
-        res = dt_view_image_get_surface(thumb->imgid, image_w * thumb->zoom, image_h * thumb->zoom, &img_surf, FALSE);
-      }
-      else
-      {
-        res = dt_view_image_get_surface(thumb->imgid, image_w, image_h, &img_surf, FALSE);
-      }
+      res = dt_view_image_get_surface(thumb->imgid, image_w, image_h, &img_surf, FALSE);
 
       if(res == DT_VIEW_SURFACE_OK || res == DT_VIEW_SURFACE_SMALLER)
       {
@@ -714,10 +699,7 @@ static gboolean _event_main_motion(GtkWidget *widget, GdkEventMotion *event, gpo
 static gboolean _event_main_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
   dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
-  if(event->button == 1
-     && ((event->type == GDK_2BUTTON_PRESS && !thumb->single_click)
-         || (event->type == GDK_BUTTON_PRESS
-             && dt_modifier_is(event->state, 0) && thumb->single_click)))
+  if(event->button == 1 && event->type == GDK_2BUTTON_PRESS)
   {
     dt_control_set_mouse_over_id(thumb->imgid); // to ensure we haven't lost imgid during double-click
   }
@@ -727,11 +709,9 @@ static gboolean _event_main_release(GtkWidget *widget, GdkEventButton *event, gp
 {
   dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
 
-  if(event->button == 1 && !thumb->moved && thumb->sel_mode != DT_THUMBNAIL_SEL_MODE_DISABLED)
+  if(event->button == 1 && !thumb->moved)
   {
-    if(dt_modifier_is(event->state, 0) && thumb->sel_mode != DT_THUMBNAIL_SEL_MODE_MOD_ONLY)
-      dt_selection_select_single(darktable.selection, thumb->imgid);
-    else if(dt_modifier_is(event->state, GDK_MOD1_MASK))
+    if(dt_modifier_is(event->state, 0))
       dt_selection_select_single(darktable.selection, thumb->imgid);
     else if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
       dt_selection_toggle(darktable.selection, thumb->imgid);
@@ -1149,10 +1129,6 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb, float zoom_ratio)
     gtk_widget_show(evt_image);
     gtk_overlay_add_overlay(GTK_OVERLAY(thumb->w_image_box), evt_image);
     thumb->w_image = gtk_drawing_area_new();
-    if(thumb->container == DT_THUMBNAIL_CONTAINER_PREVIEW)
-      dt_gui_add_class(thumb->w_image, "dt_preview_thumb_image");
-    else if(thumb->container == DT_THUMBNAIL_CONTAINER_CULLING)
-      dt_gui_add_class(thumb->w_image, "dt_culling_thumb_image");
     dt_gui_add_class(thumb->w_image, "thumb-image");
     gtk_widget_set_valign(thumb->w_image, GTK_ALIGN_CENTER);
     gtk_widget_set_halign(thumb->w_image, GTK_ALIGN_CENTER);
@@ -1309,7 +1285,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb, float zoom_ratio)
 }
 
 dt_thumbnail_t *dt_thumbnail_new(int width, int height, float zoom_ratio, int imgid, int rowid,
-                                 dt_thumbnail_overlay_t over, dt_thumbnail_container_t container)
+                                 dt_thumbnail_overlay_t over)
 {
   dt_thumbnail_t *thumb = calloc(1, sizeof(dt_thumbnail_t));
   thumb->width = width;
@@ -1317,9 +1293,6 @@ dt_thumbnail_t *dt_thumbnail_new(int width, int height, float zoom_ratio, int im
   thumb->imgid = imgid;
   thumb->rowid = rowid;
   thumb->over = over;
-  thumb->container = container;
-  thumb->zoomable = (container == DT_THUMBNAIL_CONTAINER_CULLING
-                     || container == DT_THUMBNAIL_CONTAINER_PREVIEW);
   thumb->zoom = 1.0f;
   thumb->expose_again_timeout_id = 0;
 
@@ -1503,42 +1476,38 @@ void dt_thumbnail_resize(dt_thumbnail_t *thumb, int width, int height, gboolean 
   thumb->height = height;
   gtk_widget_set_size_request(thumb->w_main, width, height);
 
-  // for thumbtable, we need to set the size class to the image widget
-  if(thumb->container == DT_THUMBNAIL_CONTAINER_LIGHTTABLE)
+  // we get the corresponding size
+  const char *txt = dt_conf_get_string_const("plugins/lighttable/thumbnail_sizes");
+  gchar **ts = g_strsplit(txt, "|", -1);
+  int i = 0;
+  while(ts[i])
   {
-    // we get the corresponding size
-    const char *txt = dt_conf_get_string_const("plugins/lighttable/thumbnail_sizes");
-    gchar **ts = g_strsplit(txt, "|", -1);
-    int i = 0;
-    while(ts[i])
-    {
-      const int s = g_ascii_strtoll(ts[i], NULL, 10);
-      if(thumb->width < s) break;
-      i++;
-    }
-    g_strfreev(ts);
-
-    gchar *cl = g_strdup_printf("dt_thumbnails_%d", i);
-    GtkStyleContext *context = gtk_widget_get_style_context(thumb->w_image);
-    if(!gtk_style_context_has_class(context, cl))
-    {
-      // we remove all previous size class if any
-      GList *l = gtk_style_context_list_classes(context);
-      for(GList *l_iter = l; l_iter; l_iter = g_list_next(l_iter))
-      {
-        gchar *ll = (gchar *)l_iter->data;
-        if(g_str_has_prefix(ll, "dt_thumbnails_"))
-        {
-          gtk_style_context_remove_class(context, ll);
-        }
-      }
-      g_list_free(l);
-
-      // we set the new class
-      gtk_style_context_add_class(context, cl);
-    }
-    g_free(cl);
+    const int s = g_ascii_strtoll(ts[i], NULL, 10);
+    if(thumb->width < s) break;
+    i++;
   }
+  g_strfreev(ts);
+
+  gchar *cl = g_strdup_printf("dt_thumbnails_%d", i);
+  GtkStyleContext *context = gtk_widget_get_style_context(thumb->w_image);
+  if(!gtk_style_context_has_class(context, cl))
+  {
+    // we remove all previous size class if any
+    GList *l = gtk_style_context_list_classes(context);
+    for(GList *l_iter = l; l_iter; l_iter = g_list_next(l_iter))
+    {
+      gchar *ll = (gchar *)l_iter->data;
+      if(g_str_has_prefix(ll, "dt_thumbnails_"))
+      {
+        gtk_style_context_remove_class(context, ll);
+      }
+    }
+    g_list_free(l);
+
+    // we set the new class
+    gtk_style_context_add_class(context, cl);
+  }
+  g_free(cl);
 
   // file extension
   _thumb_retrieve_margins(thumb);

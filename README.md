@@ -1,489 +1,147 @@
-[![CI](https://github.com/aurelienpierre/Ansel/actions/workflows/ci.yml/badge.svg)](https://github.com/aurelienpierre/Ansel/actions/workflows/ci.yml)
-
-[![icon](/data/pixmaps/idbutton.png?raw=true)](https://www.darktable.org/) Ansel
-============
-
-## Foreword
-
-### Dr Rant got fed up
-
-**Rational & Darktable** is a fork of the official darktable software with
-GUI changes that essentially aim at removing clutter and options.
-
-I strongly disagree with
-the latest decisions of the dev team that has proven to favour
-over-engineered solutions to simple problems, leading to brittle code, regressions,
-cumbersom GUI, less efficient usage and performance bottlenecks.
-
-The trend in darktable development lately has been to add many
-options to avoid making design decisions instead of focusing on an
-unified, consistent and streamlined workflow, in an attempt to pretend that everyone can be right at the same time. This is slowly heading
-toward a mix between Microsoft and Dassault Systems software design.
-
-Meanwhile, every design book states basic principles like "less is more"
-or "keep it stupid simple".
-
-### Interoperability with upstream darktable
-
-This fork is and will aim at staying compatible with upstream darktable
-regarding the pixel processing pipeline, modules, old histories and so on.
-Edits created with this fork or upstream darktable can be open in either
-of the apps.
-
-GUI changes introduced in upstream darktable may not and will probably not
-be backported here.
-
-## Test coverage and supported OS/Platforms/Compilers
-
-The build matrix tests the compilation on typical desktop computers (x86_64) over the following OS:
-
-* Ubuntu 22.04,
-* Ubuntu 20.04,
-* Windows/MingW64
-
-MacOS tests have been removed because they fail at init time (so the software does not even have the opportunity to build). Mac OS is a closed OS that doesn't play nice with indie devs,
-and doesn't allow cross-platform development. Instead, they want devs to use only their custom software stack,
-for example they deprecated OpenCL (which they invented 15 years ago) for Metal and are forcing devs
-to rewrite GPU code with this. Not going to happen.
-
-Also, you can't cross-compile for Mac from another OS, and one can legitimately ask if all that is not
-specifically meant to cast away open-source and independent software. Ansel may or may not build on
-Mac OS. It may or may not work. It may or may not be able to use OpenCL (GPU acceleration) and
-OpenMP (multi-threading on CPU), I have no way to know nor to debug since I don't own a Mac box.
-
-The following compilers are tested :
-
-* GCC 9 to 11,
-* Clang/LLVM 9 to 15.
-
-
-## Back to your usual program
-
-darktable is an open source photography workflow application and non-destructive raw developer - a virtual lighttable and darkroom for photographers. It manages your digital negatives in a database, lets you view them through a zoomable lighttable and enables you to develop raw images, enhance them and export them to local or remote storage.
-
-![screenshot_lighttable](https://user-images.githubusercontent.com/45535283/148689197-e53dd75f-32f1-4297-9a0f-a9547fd4e7c7.jpg)
-
-darktable is **not** a free Adobe® Lightroom® replacement.
-
-[https://www.darktable.org/](https://www.darktable.org/ "darktable homepage")
-
-## Table of Contents
-
-1. [Documentation](#documentation)
-2. [Website](#website)
-3. [Requirements](#requirements)
-   - [Supported platforms](#supported-platforms)
-   - [Hardware](#hardware)
-4. [Installing](#installing)
-   - [Latest release](#latest-release)
-   - [Development snapshot](#development-snapshot)
-5. [Updating from older versions](#updating-from-older-versions)
-6. [Obtaining extensions](#obtainin-extensions)
-7. [Building](#building)
-   - [Dependencies](#dependencies)
-   - [Get the source](#get-the-source)
-   - [Get submodules](#get-submodules)
-   - [Compile](#compile)
-   - [Further reading](#further-reading)
-8. [Using](#using)
-   - [Test/unstable version](#testunstable-version)
-   - [Regular/stable version](#regularstable-version)
-9. [Contributing](#contributing)
-10. [FAQ](#faq)
-   - [Why is my camera not detected when plugged-in ?](#why-is-my-camera-not-detected-when-plugged-in-)
-   - [Why is my lens not detected/corrected in darkroom ?](#why-is-my-lens-not-detectedcorrected-in-darkroom-)
-   - [Why do the thumbnails in the lighttable view look different to the preview in the darkroom view ?](#why-do-the-thumbnails-in-the-lighttable-view-look-different-to-the-preview-in-the-darkroom-view-)
-11. [Wiki](#wiki)
-12. [Mailing lists](#mailing-lists)
-
-Documentation
--------------
-
-The darktable user manual is maintained in the [dtdocs](https://github.com/darktable-org/dtdocs) repository.
-
-Lua API documentation is maintained in the [luadocs](https://github.com/darktable-org/luadocs) repository.
-
-Website
--------
-
-The website ([https://www.darktable.org/](https://www.darktable.org/)) is maintained in the [dtorg](https://github.com/darktable-org/dtorg) repository.
-
-Requirements
-------------
-
-### Supported platforms
-
-* Linux (64 bit)
-* Free BSD (64 bit)
-* Windows 8 (64 bit), Windows 10 (64 bit)
-* macOS
-
-*32 bit platforms are not officially supported - they might or might not work.*
-
-*Windows support is still young and suffers from bugs that do not affect Linux. If possible,
-prefer using darktable on Linux.*
-
-### Hardware
-
-(workable minimum / **recommended minimum**):
-* RAM: 4 GB / **8 GB**
-* CPU: Intel Pentium 4 / **Intel Core i5 4×2.4 GHz**
-* GPU: none / **Nvidia with 1024 CUDA cores, 4 GB, OpenCL 1.2 compatible**
-* free disk space: 250 MB / **1 GB**
-
-*darktable can run on lightweight configurations (even on a Raspberry Pi), but expect modules like denoise, local contrast,
-contrast equalizer, retouch or liquify to be slow beyond usable.*
-
-*A GPU is not mandatory but is strongly recommended for a smoother experience.
-Nvidia GPUs are recommended for safety because some AMD drivers behave unreliably with some modules (e.g. local contrast).*
-
-Installing
-----------
-
-If the latest release is still not available as a pre-built package for your distribution,
-you can build the software yourself following the instructions [below](#building).
-
-### Latest release
-
-3.8.1 (stable)
-
-* [Download executable for Windows](https://github.com/darktable-org/darktable/releases/download/release-3.8.1/darktable-3.8.1-win64.exe)
-* [Download executable for mac OS](https://github.com/darktable-org/darktable/releases/download/release-3.8.1/darktable-3.8.1.dmg)
-* [Install native packages and repositories for Linux](https://software.opensuse.org/download.html?project=graphics:darktable:stable&package=darktable)
-* [Install Flatpak package for Linux](https://flathub.org/apps/details/org.darktable.Darktable)
-* [More information about installing darktable on any system](https://www.darktable.org/install/)
-
-*When using a pre-built package, ensure that it has been built with Lua, OpenCL, OpenMP and Colord support.
-These are optional and will not prevent darktable from running if missing,
-but their absence will degrade the user experience.
-Notably, some Flatpak, Snap and Appimage packages lack OpenCL and Lua support.*
-
-### Development snapshot
-
-The development snapshot reflects the current state of the master branch. It is intended for testing and is generally not safe. See the notes [below](#get-the-source) for warnings and precautions about using the master branch.
-
-* [Install native packages and repositories for Linux](https://software.opensuse.org/download.html?project=graphics:darktable:master&package=darktable) (one snapshot per day).
-* No pre-compiled packages are provided for the master branch on macOS and Windows. See how to build it manually below.
-
-Updating from older versions
-----------------------------
-
-When updating darktable from an older release, you only need install
-the newest version. Existing files will be preserved.
-
-However, newer releases occasionally need to change the structure of the library database
-(containing the whole list of images known to darktable, with their editing history). If this happens
-you will be prompted with a request to either upgrade the database or close the software.
-
-**Migration to a newer database structure/newer release means that your edits (both new and old)
-will no longer be compatible with older versions of darktable.** Upgrades are definitive.
-Newer versions are always compatible with older edits, but newer edits are generally
-not compatible with older versions.
-
-darktable automatically backs up the library database when a new version causes it to be upgraded
-(in `~/.config/ansel/library.db-pre-3.0.0` for example), so
-you can revert to the previous release by restoring this backup if needed
-(simply rename it to `library.db`).
-
-If you try to open a newer database with an older version of the software, any portions of your edits that were
-undertaken with new features will be discarded and you will lose them. This also applies to the sidecar XMP files.
-
-If you plan to move regularly between two versions (new/unstable and old/stable) see [below](#testunstable-version)
-for details of how to do it safely.
-
-Obtaining extensions
---------------------
-
-Extensions and plugins use the Lua scripting language and can be downloaded [here](https://github.com/darktable-org/lua-scripts). Lua support is optional in darktable, so make sure you have the `lua` interpreter and its development files (package
-`lua-dev` or `lua-devel`, depending on distributions) installed on your system
-while building or ensure the package you are using has been built with this library.
-
-Extensions allow exporting for various media and websites, merge/stack/blend HDR, panoramas or focus bracketing,
-apply AI-based facial recognition, manage tags and GPS data, etc.
-
-Building
---------
-
-### Dependencies
-
-Compatible compilers:
-* Clang: 8, 9, 10
-* GCC: 8, 9, 10
-* Mingw64: 6, 7
-
-Required dependencies (minimum version):
-* CMake 3.10
-* Gtk 3.22
-* Glib 2.40
-* SQLite 3.15 *(but 3.24 or newer strongly recommended)*
-* Exiv2 0.24 *(but at least 0.27.4 built with ISO BMFF support needed for Canon CR3 raw import)*
-
-Required dependencies (no version requirement):
-* Lcms2
-
-Optional dependencies (minimum version):
-* OpenMP 4.5 *(for CPU multi-threading and SIMD vectorization)*
-* LLVM 3.9 *(for OpenCL checks at compilation time)*
-* OpenCL 1.2 *(for GPU-accelerated computing)*
-* Lua 5.4 *(for plugins and extension scripting)*
-* libavif 0.8.2 *(for AVIF import/export)*
-* libheif 1.9.0 *(for HEIF/HEIC/HIF import)*
-* WebP 0.3.0 *(for WebP export)*
-
-Optional dependencies (no version requirement):
-* Lensfun *(for automatic lens correction)*
-* OpenEXR *(for EXR import and export)*
-* OpenJPEG *(for Jpeg2000 export)*
-* Colord, Xatom *(for fetching the system display color profile)*
-* G'Mic *(for .gmz compressed LUT support)*
-* PortMidi *(for MIDI input support)*
-* SDL2 *(for gamepad input support)*
-* Cups *(for print mode support)*
-* GraphicsMagick or ImageMagick *(for misc image format import)*
-
-To install all the dependencies on Linux systems, you may use the source repositories of your distribution
-(provided they are up-to-date):
-
-#### Fedora and RHEL
+__Ansel__ is a better future for Darktable, designed from real-life use cases and solving actual problems,
+by the guy who did the scene-referred workflow and spent these past 4 years working full-time on Darktable.
+
+[Website](https://ansel.photos) (including docs, workflows, support, etc.)
+
+It is forked on Darktable 4.0, and is compatible with editing histories produced with Darktable 4.0 and earlier.
+It is not compatible with Darktable 4.2 and later and will not be, since 4.2 introduces irresponsible choices that
+will be the burden of those who commited them to maintain, and 4.4 will be even worse.
+
+30.000 lines of code have been removed from Darktable 4.0 and 10.000 lines have been re-written. The end goal
+is :
+
+1. to produce a more robust and faster software, with fewer opportunities for weird, contextual bugs
+that can't be systematically reproduced, and therefore will never be fixed,
+2. to break with the trend of making Darktable a Vim editor for image processing, truly usable
+only from (broken) keyboard shortcuts known only by the hardcore geeks that made them,
+3. to sanitize the code base in order to reduce the cost of maintenance, now and in the future,
+4. to make the general UI nicer to people who don't have a master's in computer science and
+more efficient to use for people actually interested in photography, especially for folks
+using Wacom (and other brands) graphic tablets,
+5. optimize the GUI to streamline the scene-referred workflow and make it feel more natural.
+
+Ultimately, the future of Darktable is [vkdt](https://github.com/hanatos/vkdt/), but
+this will be available only for computers with GPU and is a prototype that will not be usable by a general
+audience for the next years to come. __Ansel__ aims at sunsetting __Darktable__ with something "finished",
+pending a VKDT version usable by common folks.
+
+## Design choices
+
+### Users should not have to read the manual
+
+_(some restrictions apply)_
+
+Image processing is hard. It uses notions of optics and color "science". No matter if you shoot
+digital or analog, _illuminant_, _dynamic range_, _gamut_ and _chroma_ will affect your process,
+in ways you may not have foreseen, and it might be a good idea to understand what they mean and
+where they come at play. Digital has its own lot of issues, from _color spaces & management_ to
+_alpha compositing_. Not much we can do here, except providing documentation : you need the skills.
+But that's at least the core of what we do.
+
+Managing files and navigating in a graphical interface are things computer users
+have been doing for decades, using well-known paradigms that converged to pretty unified semantics.
+Users should not have to read a manual to discover why mouse scrolling is blocked,
+for example, or how to increase the opacity of a mask, or even what all those silly custom-drawn icons mean.
+
+Users should not have to read the manual because, anyway, they won't. Instead, they will annoy developers
+with questions already answered somewhere on the extensive docs, which are too long to read because
+they have to explain why too much standard stuff is not handled in a standard way.
+
+Acknowleging that, bad design loses the time of both users and developers, and it's time to cut the losses,
+for everybody's sake.
+
+### If it ain't broken, don't fix it
+
+Too much of Darktable "design" has started with "it would be cool if we could ...".
+I'll tell you what's cool : hanging good pictures of yours on your walls ASAP.
+Visual arts are not performing art (like music or theater), so only the result matters.
+Everything that comes before is overhead, and you typically want to keep it minimal.
+That's not to say that the process can't be enjoyed in itself.
+However, to enjoy the process, you need to master your tools and to bend them to __your__ will,
+otherwise you only fight them and the whole process amounts to frustration.
+Problem is, Darktable "design" puts too much effort into being different for the sake of it.
+
+In this process of adding "cool new stuff", Darktable has broken keyboard shortcuts and a
+lot of basic GUI behaviours, replacing clean code with spaghetti and adding more GUI clutter
+without ever pruning stuff.
+
+__Ansel__ has an [explicit](https://github.com/aurelienpierreeng/ansel/wiki/Contributing-to-Ansel#design-process)
+design process that mandatorily starts with defined problems met by defined users. Turns
+out the quantity of code to write is inversly proportionnal to the amount of thinking you
+have done on your solution, typically to spot the root problem out of what users tell you,
+and find the simplest path to solution (which is often not even a software solution…).
+
+But bugs don't wait for you in the thinking, they wait only in the code you wrote. So, the more
+you think, the less you code, the less maintainance burden you create for yourself in the future.
+But of course… you need to have enough time to think things through.
+Essentially, that means bye bye to Saturday-afternoon, amateur-driven hacking !
+
+### Don't extend it if you can't simplify it first
+
+A lot of Darktable hacking has been done by copy-pasting code, from other parts of the software, or even
+from other projects, mostly because contributors don't have time nor skills to undertake large rewrites.
+This triggers code duplication and increases the length of functions,
+adding internal branching and introducing `if` and `switch case` nested sometimes on more than 4 levels,
+making the structure and logic more difficult to grasp and bugs more difficult (and frustrating) to chase,
+while being more likely to happen.
+
+In any case, when the code responsible for existing features is only growing (sometimes by a factor 10 over 4 years),
+it raises serious questions regarding future maintainablity, in a context where contributors stick around for
+no more than a couple of years, and developers have a limited time to invest. It's simply irresponsible,
+as it sacrifices long-term maintainability for shiny new things.
+
+Simplifying and generalizing code, through clean APIs, before adding new features is a must and Ansel
+only accepts code I personaly understand and have the skills to maintain. KISS.
+
+## Build and test
+
+If you plan on contributing, you way want to clone the whole Git repository with history, using:
 
 ```bash
-sudo dnf builddep darktable
+git clone --recurse-submodules https://github.com/aurelienpierreeng/ansel.git
 ```
 
-#### OpenSuse
+If you just want the current code without plan on contributing, the following command should save
+you a lot of bandwidth by discarding 12 years of history:
 
 ```bash
-sudo zypper si -d darktable
+git clone --recurse-submodules --depth 1 https://github.com/aurelienpierreeng/ansel.git
 ```
 
-#### Ubuntu
+If you already have cloned the code, and just want to update it with latest changes,
+such that it already download the changes (that might save lots of bandwidth), run:
 
 ```bash
-sed -e '/^#\sdeb-src /s/^# *//;t;d' "/etc/apt/sources.list" \
-  | sudo tee /etc/apt/sources.list.d/darktable-sources-tmp.list > /dev/null \
-  && (
-    sudo apt-get update
-    sudo apt-get build-dep darktable
-  )
-sudo rm /etc/apt/sources.list.d/darktable-sources-tmp.list
+git pull --recurse-submodules
 ```
 
-#### Debian
+The list of dependencies you need depends on your OS. The most straightforward way is to start a test build,
+using the Mac/Linux script provided here :
 
 ```bash
-sudo apt-get build-dep darktable
+sh build.sh --build-type Release --install --sudo --clean-all
 ```
 
-#### Install missing dependencies
+If a dependency is missing, the script will report it and you just have to locate it in your package manager.
+Alternatively, the scripts used to build Ansel by the continuous integration bots can be found in the subfolder
+`.github/workflows/*.yml` for Linux Ubuntu, Mac OS and Windows 10 and 11. The `packaging` folder
+also contains useful info on how to build for Windows.
 
-If mandatory dependencies are missing on your system, the software build will fail with
-errors like `Package XXX has not been found` or `Command YYY has no provider on this system`.
-If you see one of these errors you should find out which package provides the missing package/command in your distribution,
-then install it. This can usually be done in your package manager (not the application manager
-customarily provided by default in your distribution) or from the internet with a search engine.
-You may need to install a package manager first (like Synaptic on Debian/Ubuntu, or DNF Dragora on Fedora/RHEL).
+## Download and test
 
-This process might be tedious but you only need to do it once. See
-[this page on building darktable](https://github.com/darktable-org/darktable/wiki/Building-darktable)
-for one-line commands that will install most dependencies on the most common Linux distributions.
+The virtual `0.0.0` [pre-release](https://github.com/aurelienpierreeng/ansel/releases/tag/v0.0.0)
+contains nightly build, with Linux `.Appimage` and Windows `.exe`, compiled automatically
+each night with the latest code, and containing all up-to-date dependencies.
 
-### Get the source
+## OS support
 
-#### Master branch (unstable)
+Ansel is developped on Fedora, heavily tested on Ubuntu and fairly tested on Windows.
 
-The master branch contains the latest version of the source code and is intended:
-* as a working base for developers,
-* for beta-testers to chase bugs,
-* for users willing to sacrifice stability for new features without waiting for the next release.
+Mac OS and, to a lesser extent, Windows have known GUI issues that come from using Gtk as
+a graphical toolkit. Not much can be done here, as Gtk suffers from a lack of Windows/Mac devs too.
+Go and support this project so it can have more man-hours put on fixing those.
 
-The master branch comes with no guarantee of stability and might corrupt your database and XMP files,
-result in loss of data and edit history or temporarily break compatibility with previous versions and commits.
-
-How dangerous is it? Most of the time, it is fairly stable. As with any rolling-release kind of deployment, bugs appear more often
-but are fixed faster too. Sometimes, though, these bugs can result in losses or inconsistencies in the editing history of your pictures.
-This is fine if you don't need to open your edits again in the future, but maybe not if you manage an estate.
-
-After backing up your `~/.config/darktable` directory and the sidecar .XMP files of any pictures you intend to open
-with the master branch, you may obtain the source as follows:
-
-```bash
-git clone --recurse-submodules --depth 1 https://github.com/darktable-org/darktable.git
-cd darktable
-```
-
-See below (in "Using") how to start a test install of the unstable version without damaging your regular stable install and files.
-
-#### Latest stable release
-
-3.8.1
-
-The darktable project releases two major versions every year, in mid-Summer and at Christmas, tagged with even numbers (e.g. 3.0, 3.2, 3.4, 3.6).
-Minor revisions are tagged with a third digit (e.g. 3.0.1, 3.0.2) and mostly provide bug fixes and camera support.
-You may want to compile these stable releases yourself to get better performance for your particular computer:
-
-```bash
-git clone --recurse-submodules --depth 1 https://github.com/darktable-org/darktable.git
-cd darktable
-git fetch --tags
-git checkout tags/release-3.8.1
-```
-
-### Get submodules
-
-Note that [LibXCF](https://github.com/houz/libxcf.git), [OpenCL](https://github.com/KhronosGroup/OpenCL-Headers.git), [rawspeed](https://github.com/darktable-org/rawspeed), [whereami](https://github.com/gpakosz/whereami) and [LibRaw](https://github.com/LibRaw/LibRaw) are tracked via git submodules, so after checking-out darktable, you need to update/checkout the submodules too:
-
-```bash
-git submodule update --init
-```
-
-### Compile
-
-#### Easy way
-
-WARNING: If you have previously built darktable, don't forget to first completely remove (`rm -R`) the `build`
-and `/opt/ansel` directories to avoid conflicting files from different versions. Many weird behaviours and transient
-bugs have been reported that can be traced to the build cache not properly invalidating the changed dependencies, so
-the safest way is to completely remove previously built binaries and start again from scratch.
-
-darktable provides a shell script that automatically takes care of building on Linux and macOS for classic cases in a single command.
-
-```bash
-./build.sh --prefix /opt/ansel --build-type Release --install --sudo --clean-all
-```
-
-If you want to install a test version alongside your regular/stable version, change the install prefix:
-
-```bash
-./build.sh --prefix /opt/ansel-test --build-type Release --install --sudo -clean-all
-```
-
-This builds the software for your architecture only, with:
-
-* `-O3` optimization level,
-* SSE/AVX support if detected,
-* OpenMP support (multi-threading and vectorization) if detected,
-* OpenCL support (GPU offloading) if detected,
-* Lua scripting support if detected.
-
-If you want to have dartkable displayed along your other applications, you only need to add a symbolic link:
-
-```bash
-ln -s /opt/ansel/share/applications/photos.ansel.app.desktop /usr/share/applications/photos.ansel.app.desktop
-```
-
-Now, your custom-built darktable is ready to be used just like any pre-packaged software.
-
-#### Manual way
-
-Alternatively, you can use a manual build to pass custom arguments.
-
-##### Linux/macOS
-
-```bash
-mkdir build/
-cd build/
-cmake -DCMAKE_INSTALL_PREFIX=/opt/ansel/ ..
-make
-sudo make install
-```
-
-##### Windows
-
-See https://github.com/darktable-org/darktable/blob/master/packaging/windows/BUILD.md
-
-### Using
-
-#### Test/unstable version
-
-To use a test version of darktable without damaging your regular/stable version's files and database, start darktable in a terminal with:
-
-```bash
-/opt/ansel-test/bin/ansel --configdir "~/.config/darktable-test"
-```
-
-and ensure that you set the option "write sidecar file for each image" to "never" in preferences -> storage -> XMP. This way,
-your regular/stable version will save its configuration files in `~/.config/darktable`, as usual,
-the test/unstable one will save in `~/.config/darktable-test`, and the two versions will not produce database conflicts.
-
-#### Regular/stable version
-
-Simply launch it from your desktop application menu or, from a terminal, run `darktable` or `/opt/ansel/bin/ansel`. If the installation did not create a launcher in your applications menu, run:
-
-```bash
-sudo ln -s /opt/ansel/share/applications/photos.ansel.app.desktop /usr/share/applications/photos.ansel.app.desktop
-```
-
-You may find darktable configuration files in `~/.config/darktable`.
-If you experience crashes at startup, try launching darktable without OpenCL, from a terminal, with `darktable --conf opencl=FALSE`.
-
-### Further reading
-
-There is a comprehensive list of build instructions for [Ubuntu/Debian related distributions](https://github.com/darktable-org/darktable/wiki/Build-instructions-for-Ubuntu) or for [Fedora and related distributions](https://github.com/darktable-org/darktable/wiki/Build-Instructions-for-Fedora). These build instructions can be easily adapted to many other Linux distributions.
-
-
-Contributing
-------------
-
-There are many ways you can contribute to the darktable project:
-
-* Write a blog about darktable
-* Create a tutorial for darktable
-* Help expand the [user wiki](https://github.com/darktable-org/darktable/wiki) or [user manual](https://github.com/darktable-org/dtdocs)
-* Answer questions on the [user mailing list](https://www.mail-archive.com/darktable-user@lists.darktable.org/) or the [pixls.us forums](https://discuss.pixls.us)
-* Share your ideas on the [developer mailing list](https://www.mail-archive.com/darktable-dev@lists.darktable.org/)
-* Test [releases](https://www.darktable.org/install/)
-* Review [pull requests](https://github.com/darktable-org/darktable/pulls)
-* Start [hacking on darktable](https://www.darktable.org/development/) and see [developer's guide](https://github.com/darktable-org/darktable/wiki/Developer's-guide)
-
-
-FAQ
----
-
-### Why is my lens not detected/corrected in darkroom ?
-
-Lens correction profiles are provided by Lensfun, which has 2 parts: a program and a database.
-Most Linux distributions provide a recent enough version of the program,
-but provide an outdated version of the database. If
-[Lensfun](https://lensfun.github.io/) is correctly installed, then update its database in a terminal by running:
-
-```bash
-lensfun-update-data
-```
-
-or alternatively
-
-```bash
-/usr/bin/g-lensfun-update-data
-```
-
-### Why do the thumbnails in the lighttable view look different to the preview in the darkroom view ?
-
-For RAW files that have never been edited in darktable (when you have just imported them), the lighttable view, by default, shows
-the JPEG preview placed into the RAW file by your camera. Loading this JPEG file is faster and makes the
-lighttable view more responsive when importing large collections of images.
-
-However, this JPEG thumbnail is processed by the firmware of the camera, with proprietary algorithms,
-and colors, sharpness and contrast that might not look the same as
-darktable processing (which is what you see when opening the image in the darkroom view).
-Camera manufacturers don't publish details of the pixel processing they perform in their firmware
-so their look is not exactly or easily reproducible by other software.
-
-However, once RAW images have been edited in darktable,
-the lighttable thumbnail should exactly match the darkroom preview, as they are processed in the same way.
-
-If you never want to see the embedded JPEG thumbnail in the lighttable view, for RAW files, you should set the
-option "use raw file instead of embedded JPEG from size" to "never" in preferences -> lighttable.
-
-Wiki
-----
-
-* [GitHub wiki](https://github.com/darktable-org/darktable/wiki "github wiki")
-* [Developer wiki](https://github.com/darktable-org/darktable/wiki/Developer's-guide "darktable developer wiki")
-
-
-Mailing lists
--------------
-
-* Users [[subscribe](mailto:darktable-user+subscribe@lists.darktable.org) | [archive](https://www.mail-archive.com/darktable-user@lists.darktable.org/)]
-* Developer [[subscribe](mailto:darktable-dev+subscribe@lists.darktable.org) | [archive](https://www.mail-archive.com/darktable-dev@lists.darktable.org/)]
-* CI (read-only, high traffic!) [[subscribe](mailto:darktable-ci+subscribe@lists.darktable.org) | [archive](https://www.mail-archive.com/darktable-ci@lists.darktable.org/)]
+Mac OS support is not active, the main reason is only 4% of the Darktable user base runs it
+while the continuous integration bot for Mac OS needs weekly maintenance (for breaking unexpectedly).
+It may or may not work, but if it doesn't, I don't own a Mac box to have a look, so don't expect anything.
+Mac OS is anyway not playing nice with Open-Source, having deprecated OpenCL and all.

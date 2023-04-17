@@ -448,7 +448,8 @@ static int _ellipse_get_points_border(dt_develop_t *dev, struct dt_masks_form_t 
 
 static int _ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up,
                                           uint32_t state, dt_masks_form_t *form, int parentid,
-                                          dt_masks_form_gui_t *gui, int index)
+                                          dt_masks_form_gui_t *gui, int index,
+                                          dt_masks_interaction_t interaction)
 {
   const float radius_limit = form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE) ? 0.5f : 1.0f;
   // add a preview when creating an ellipse
@@ -1504,7 +1505,6 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   // draw the source if any
   if(gpt->source_count > 10)
   {
-    const float pr_d = darktable.develop->preview_downsampling;
     // compute the dest inner ellipse intersection with the line from source center to dest center.
     const float cdx = gpt->source[0] - gpt->points[0];
     const float cdy = gpt->source[1] - gpt->points[1];
@@ -1579,7 +1579,7 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       cairo_move_to(cr, gpt->source[0], gpt->source[1]); // source center
       cairo_line_to(cr, arrowx, arrowy);                 // dest border
       // then draw to line for the arrow itself
-      const float arrow_scale = 6.0 * pr_d;
+      const float arrow_scale = 6.0;
 
       cairo_move_to(cr, arrowx + arrow_scale * cosf(cangle + (0.4)),
                     arrowy + arrow_scale * sinf(cangle + (0.4)));
@@ -2274,4 +2274,3 @@ const dt_masks_functions_t dt_masks_functions_ellipse = {
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

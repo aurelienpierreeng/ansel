@@ -372,6 +372,7 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
     if(gui) dt_masks_iop_update(module);
     //dt_dev_add_history_item(dev, module, TRUE);
   }
+
   // show the form if needed
   if(gui) dev->form_gui->formid = form->formid;
 }
@@ -1090,21 +1091,24 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
   pzx += 0.5f;
   pzy += 0.5f;
 
-  // allow to select a shape inside an iop
+  // allow to select a shape from the outside world, typically from IOPs
+  // but also mask GUI controls. Note that it doesn't work at mask creation time
+  // because it relies on gui->group_selected or gui->group_edited being properly
+  // set with the formid of the newly-created shape. But since opacity is set at
+  // the scope of the parent group
   if(gui && which == 1)
   {
     dt_masks_form_t *sel = NULL;
 
-    if((gui->form_selected || gui->source_selected || gui->point_selected || gui->seg_selected
-        || gui->feather_selected)
-       && !gui->creation && gui->group_edited >= 0)
+    // we try to get the selected form among what we can find
+    int group = (gui->group_edited) ? gui->group_edited : gui->group_selected;
+    dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)g_list_nth_data(form->points, group);
+    if(fpt)
     {
-      // we get the selected form
-      dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)g_list_nth_data(form->points, gui->group_edited);
-      if(fpt)
-      {
-        sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-      }
+      sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+
+      if(darktable.develop->mask_form_selected_id != sel->formid)
+        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, sel, fpt);
     }
 
     dt_masks_select_form(module, sel);
@@ -1134,7 +1138,7 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
   if(form->functions)
     ret = form->functions->mouse_scrolled(module, pzx, pzy,
                                           incr ? 1 : 0,
-                                          state, form, 0, gui, 0);
+                                          state, form, 0, gui, 0, DT_MASKS_INTERACTION_UNDEF);
 
   if(gui)
   {
@@ -1146,12 +1150,8 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
 
       opacity = CLAMP(opacity + amount, 0.05f, 1.0f);
       dt_conf_set_float("plugins/darkroom/masks/opacity", opacity);
-      const int opacitypercent = opacity * 100;
-      dt_toast_log(_("opacity: %d%%"), opacitypercent);
       ret = 1;
     }
-
-    _set_hinter_message(gui, form);
   }
 
   return ret;
@@ -1739,16 +1739,17 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *grp, 
   if(form_removed) dt_dev_add_masks_history_item(darktable.develop, module, TRUE);
 }
 
-void dt_masks_form_change_opacity(dt_masks_form_t *form, int parentid, int up)
+float dt_masks_form_get_opacity(dt_masks_form_t *form, int parentid)
 {
-  if(!form) return;
+  // Return -1.0f if we couldn't find the opacity of the parent group
+  // Note that opacity is not defined at the form level.
+  if(!form) return -1.f;
   dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, parentid);
-  if(!grp || !(grp->type & DT_MASKS_GROUP)) return;
+  if(!grp || !(grp->type & DT_MASKS_GROUP)) return - 1.f;
 
   // we first need to test if the opacity can be set to the form
-  if(form->type & DT_MASKS_GROUP) return;
+  if(form->type & DT_MASKS_GROUP) return -1.f;
   const int id = form->formid;
-  const float amount = up ? 0.05f : -0.05f;
 
   // so we change the value inside the group
   for(GList *fpts = grp->points; fpts; fpts = g_list_next(fpts))
@@ -1756,15 +1757,43 @@ void dt_masks_form_change_opacity(dt_masks_form_t *form, int parentid, int up)
     dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)fpts->data;
     if(fpt->formid == id)
     {
-      const float opacity = CLAMP(fpt->opacity + amount, 0.05f, 1.0f);
-      fpt->opacity = opacity;
-      const int opacitypercent = opacity * 100;
-      dt_toast_log(_("opacity: %d%%"), opacitypercent);
+      return fpt->opacity;
+    }
+  }
+  return -1.f;
+}
+
+void dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity, gboolean offset)
+{
+  // If offset == TRUE, opacity is treated as an offset to add on top of current mask opacity
+  // else it is set absolutely and directly
+  if(!form) return;
+  dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, parentid);
+  if(!grp || !(grp->type & DT_MASKS_GROUP)) return;
+
+  // we first need to test if the opacity can be set to the form
+  if(form->type & DT_MASKS_GROUP) return;
+  const int id = form->formid;
+
+  // so we change the value inside the group
+  for(GList *fpts = grp->points; fpts; fpts = g_list_next(fpts))
+  {
+    dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)fpts->data;
+    if(fpt->formid == id)
+    {
+      const float new_opacity = (offset) ? fpt->opacity + opacity : opacity;
+      fpt->opacity = CLAMP(new_opacity, 0.05f, 1.0f);
       dt_dev_add_masks_history_item(darktable.develop, NULL, TRUE);
       dt_masks_update_image(darktable.develop);
       break;
     }
   }
+}
+
+void dt_masks_form_change_opacity(dt_masks_form_t *form, int parentid, int up)
+{
+  const float amount = up ? 0.05f : -0.05f;
+  dt_masks_form_set_opacity(form, parentid, amount, TRUE);
 }
 
 void dt_masks_form_move(dt_masks_form_t *grp, int formid, int up)
@@ -2313,9 +2342,8 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mas
                                          float *py, const int adding)
 {
   float x = 0.0f, y = 0.0f;
-  const float pr_d = darktable.develop->preview_downsampling;
-  const float iwd = pr_d * darktable.develop->preview_pipe->iwidth;
-  const float iht = pr_d * darktable.develop->preview_pipe->iheight;
+  const float iwd = darktable.develop->preview_pipe->iwidth;
+  const float iht = darktable.develop->preview_pipe->iheight;
 
   if(gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE)
   {

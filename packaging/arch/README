@@ -1,15 +1,15 @@
-Archlinux
-=========
+Arch Linux
+==========
 
-To build the package under Archlinux, grab the package tarball from the current
-release[1] or the latest git version[2] and build the package with makepkg[3].
+To build the package under Arch Linux, grab the package tarball from the current
+release[1] (NEEDS UPDATE) or the latest git version[2] and build the package with makepkg[3].
 
 [1] http://aur.archlinux.org/packages.php?ID=31518
-[2] http://aur.archlinux.org/packages.php?ID=31515
-[3] http://wiki.archlinux.org/index.php/Makepkg
+[2] https://aur.archlinux.org/packages/ansel-git
+[3] https://wiki.archlinux.org/index.php/Makepkg
 
 
-To ease things you could also install yay[4], which should automatically
+To ease things you could also install paru or yay[4], which should automatically
 download, build and install the package.
 
 [4] https://wiki.archlinux.org/title/AUR_helpers

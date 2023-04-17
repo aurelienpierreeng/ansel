@@ -2,7 +2,7 @@
 
 # Get the name of the last two translators in the 2 past years for a
 # all languages. This is expected to be used to send reminder e-mail
-# for translating darktable.
+# for translating ansel.
 
 cd po
 

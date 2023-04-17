@@ -766,7 +766,7 @@ static void _piwigo_refresh_clicked(GtkButton *button, gpointer data)
 
 const char *name(const struct dt_imageio_module_storage_t *self)
 {
-  return _("piwigo");
+  return _("Piwigo website");
 }
 
 void gui_init(dt_imageio_module_storage_t *self)
@@ -1229,4 +1229,3 @@ void free_params(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *pa
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

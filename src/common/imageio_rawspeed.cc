@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2010-2022 darktable developers.
+    Copyright (C) 2010-2023 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -143,19 +143,16 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img, const char *filena
   snprintf(filen, sizeof(filen), "%s", filename);
   FileReader f(filen);
 
-  std::unique_ptr<RawDecoder> d;
-  std::unique_ptr<const Buffer> m;
-
   try
   {
     dt_rawspeed_load_meta();
 
     dt_pthread_mutex_lock(&darktable.readFile_mutex);
-    m = f.readFile();
+    auto [storage, storageBuf] = f.readFile();
     dt_pthread_mutex_unlock(&darktable.readFile_mutex);
 
-    RawParser t(*m.get());
-    d = t.getDecoder(meta);
+    RawParser t(storageBuf);
+    std::unique_ptr<RawDecoder> d = t.getDecoder(meta);
 
     if(!d.get()) return DT_IMAGEIO_FILE_CORRUPTED;
 
@@ -251,30 +248,26 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img, const char *filena
 
     /* free auto pointers on spot */
     d.reset();
-    m.reset();
+    storage.reset();
 
     // Grab the WB
     for(int i = 0; i < 4; i++)
       img->wb_coeffs[i] = r->metadata.wbCoeffs[i];
 
+    // Grab the Adobe coeffs
     const int msize = r->metadata.colorMatrix.size();
-    // Grab the adobe coeff
     for(int k = 0; k < 4; k++)
       for(int i = 0; i < 3; i++)
       {
         const int idx = k*3 + i;
         if(idx < msize)
-          img->adobe_XYZ_to_CAM[k][i] =
-            (float)r->metadata.colorMatrix[idx] / (float)ADOBE_COEFF_FACTOR;
+          img->adobe_XYZ_to_CAM[k][i] = float(r->metadata.colorMatrix[idx]);
         else
           img->adobe_XYZ_to_CAM[k][i] = 0.0f;
       }
 
-    // FIXME: grab r->metadata.colorMatrix.
-
     // Get additional exif tags that are not cached in the database
-    if (img->flags & DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS)
-      dt_exif_img_check_additional_tags(img, filename);
+    dt_exif_img_check_additional_tags(img, filename);
 
     if(r->getDataType() == TYPE_FLOAT32)
     {
@@ -392,12 +385,13 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img, const char *filena
     const size_t bufSize_rawspeed = (size_t)r->pitch * dimUncropped.y;
     if(bufSize_mipmap == bufSize_rawspeed)
     {
-      memcpy(buf, r->getDataUncropped(0, 0), bufSize_mipmap);
+      memcpy(buf, (char *)(&(r->getByteDataAsUncroppedArray2DRef()(0, 0))), bufSize_mipmap);
     }
     else
     {
-      dt_imageio_flip_buffers((char *)buf, (char *)r->getDataUncropped(0, 0), r->getBpp(), dimUncropped.x,
-                              dimUncropped.y, dimUncropped.x, dimUncropped.y, r->pitch, ORIENTATION_NONE);
+      dt_imageio_flip_buffers((char *)buf, (char *)(&(r->getByteDataAsUncroppedArray2DRef()(0, 0))), r->getBpp(),
+                              dimUncropped.x, dimUncropped.y, dimUncropped.x, dimUncropped.y, r->pitch,
+                              ORIENTATION_NONE);
     }
 
     //  Check if the camera is missing samples
@@ -474,14 +468,14 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img, RawImage r, d
 #endif
       for(int j = 0; j < img->height; j++)
       {
-        const uint16_t *in = (uint16_t *)r->getData(0, j);
+        const Array2DRef<uint16_t> in = r->getU16DataAsUncroppedArray2DRef();
         float *out = ((float *)buf) + (size_t)4 * j * img->width;
 
-        for(int i = 0; i < img->width; i++, in += cpp, out += 4)
+        for(int i = 0; i < img->width; i++, out += 4)
         {
           for(int k = 0; k < 3; k++)
           {
-            out[k] = (float)*in / (float)UINT16_MAX;
+            out[k] = (float)in(j, cpp * i + k) / (float)UINT16_MAX;
           }
         }
       }
@@ -493,14 +487,14 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img, RawImage r, d
 #endif
       for(int j = 0; j < img->height; j++)
       {
-        const float *in = (float *)r->getData(0, j);
+        const Array2DRef<float> in = r->getF32DataAsUncroppedArray2DRef();
         float *out = ((float *)buf) + (size_t)4 * j * img->width;
 
-        for(int i = 0; i < img->width; i++, in += cpp, out += 4)
+        for(int i = 0; i < img->width; i++, out += 4)
         {
           for(int k = 0; k < 3; k++)
           {
-            out[k] = *in;
+            out[k] = in(j, cpp * i + k);
           }
         }
       }
@@ -520,14 +514,14 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img, RawImage r, d
 #endif
       for(int j = 0; j < img->height; j++)
       {
-        const uint16_t *in = (uint16_t *)r->getData(0, j);
+        const Array2DRef<uint16_t> in = r->getU16DataAsUncroppedArray2DRef();
         float *out = ((float *)buf) + (size_t)4 * j * img->width;
 
-        for(int i = 0; i < img->width; i++, in += cpp, out += 4)
+        for(int i = 0; i < img->width; i++, out += 4)
         {
           for(int k = 0; k < 3; k++)
           {
-            out[k] = (float)in[k] / (float)UINT16_MAX;
+            out[k] = (float)in(j, cpp * i + k) / (float)UINT16_MAX;
           }
         }
       }
@@ -539,14 +533,14 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img, RawImage r, d
 #endif
       for(int j = 0; j < img->height; j++)
       {
-        const float *in = (float *)r->getData(0, j);
+        const Array2DRef<float> in = r->getF32DataAsUncroppedArray2DRef();
         float *out = ((float *)buf) + (size_t)4 * j * img->width;
 
-        for(int i = 0; i < img->width; i++, in += cpp, out += 4)
+        for(int i = 0; i < img->width; i++, out += 4)
         {
           for(int k = 0; k < 3; k++)
           {
-            out[k] = in[k];
+            out[k] = in(j, cpp * i + k);
           }
         }
       }

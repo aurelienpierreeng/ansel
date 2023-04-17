@@ -65,11 +65,12 @@ static void dt_bauhaus_widget_accept(dt_bauhaus_widget_t *w);
 static void dt_bauhaus_widget_reject(dt_bauhaus_widget_t *w);
 static void _bauhaus_combobox_set(dt_bauhaus_widget_t *w, const int pos, const gboolean mute);
 
-static void bauhaus_request_focus(dt_bauhaus_widget_t *w)
+void bauhaus_request_focus(dt_bauhaus_widget_t *w)
 {
   if(w->module && w->module->type == DT_ACTION_TYPE_IOP_INSTANCE)
       dt_iop_request_focus((dt_iop_module_t *)w->module);
   gtk_widget_set_state_flags(GTK_WIDGET(w), GTK_STATE_FLAG_FOCUSED, FALSE);
+  gtk_widget_grab_focus(GTK_WIDGET(w));
   darktable.gui->has_scroll_focus = GTK_WIDGET(w);
 }
 
@@ -1165,16 +1166,19 @@ static void _style_updated(GtkWidget *widget)
   dt_bauhaus_widget_t *w = (dt_bauhaus_widget_t *)widget;
   _margins_retrieve(w);
 
+  // gtk_widget_set_size_request is the minimal preferred, size.
+  // it NEEDS to be defined and will be contextually adapted, possibly overriden by CSS.
+  // Thing is Gtk CSS doesn't support min-width so this is how it should be done.
   if(w->type == DT_BAUHAUS_COMBOBOX)
   {
-    gtk_widget_set_size_request(widget, -1,
+    gtk_widget_set_size_request(widget, DT_PIXEL_APPLY_DPI(50),
                                 w->margin->top + w->padding->top + w->margin->bottom + w->padding->bottom
                                     + darktable.bauhaus->line_height);
   }
   else if(w->type == DT_BAUHAUS_SLIDER)
   {
     // the lower thing to draw is indicator. See dt_bauhaus_draw_baseline for compute details
-    gtk_widget_set_size_request(widget, -1,
+    gtk_widget_set_size_request(widget, DT_PIXEL_APPLY_DPI(180),
                                 w->margin->top + w->padding->top + w->margin->bottom + w->padding->bottom
                                     + INNER_PADDING + darktable.bauhaus->baseline_size
                                     + darktable.bauhaus->line_height + 1.5f * darktable.bauhaus->border_width);

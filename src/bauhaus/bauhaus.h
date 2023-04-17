@@ -372,6 +372,7 @@ void dt_bauhaus_combobox_entry_set_sensitive(GtkWidget *widget, int pos, gboolea
 void dt_bauhaus_combobox_set_entries_ellipsis(GtkWidget *widget, PangoEllipsizeMode ellipis);
 PangoEllipsizeMode dt_bauhaus_combobox_get_entries_ellipsis(GtkWidget *widget);
 void dt_bauhaus_combobox_mute_scrolling(GtkWidget *widget);
+void bauhaus_request_focus(dt_bauhaus_widget_t *w);
 
 static inline void set_color(cairo_t *cr, GdkRGBA color)
 {

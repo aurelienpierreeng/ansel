@@ -115,7 +115,7 @@ void dt_control_hinter_message(const struct dt_control_t *s, const char *message
 #define DT_CTL_LOG_TIMEOUT 5000
 #define DT_CTL_TOAST_SIZE 10
 #define DT_CTL_TOAST_MSG_SIZE 300
-#define DT_CTL_TOAST_TIMEOUT 1500
+#define DT_CTL_TOAST_TIMEOUT 3000
 /**
  * this manages everything time-consuming.
  * distributes the jobs on all processors,
@@ -176,7 +176,7 @@ typedef struct dt_control_t
   dt_pthread_mutex_t queue_mutex, cond_mutex, run_mutex;
   pthread_cond_t cond;
   int32_t num_threads;
-  pthread_t *thread, kick_on_workers_thread, update_gphoto_thread;
+  pthread_t *thread, kick_on_workers_thread;
   dt_job_t **job;
 
   GList *queues[DT_JOB_QUEUE_MAX];

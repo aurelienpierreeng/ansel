@@ -86,7 +86,8 @@ static void _gradient_get_distance(float x, float y, float as, dt_masks_form_gui
 
 static int _gradient_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up,
                                            uint32_t state, dt_masks_form_t *form, int parentid,
-                                           dt_masks_form_gui_t *gui, int index)
+                                           dt_masks_form_gui_t *gui, int index,
+                                           dt_masks_interaction_t interaction)
 {
   if(gui->creation)
   {
@@ -221,8 +222,7 @@ static void _gradient_init_values(float zoom_scale, dt_masks_form_gui_t *gui, fl
                                   float pzy, float *anchorx, float *anchory, float *rotation, float *compression,
                                   float *curvature)
 {
-  const float pr_d = darktable.develop->preview_downsampling;
-  const float diff = 3.0f * zoom_scale * (pr_d / 2.0);
+  const float diff = 3.0f * zoom_scale / 2.0;
   float x0 = 0.0f, y0 = 0.0f;
   float dx = 0.0f, dy = 0.0f;
 
@@ -541,8 +541,7 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, float pz
     const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
     const int closeup = dt_control_get_dev_closeup();
     const float zoom_scale = dt_dev_get_zoom_scale(darktable.develop, zoom, 1<<closeup, 1);
-    const float pr_d = darktable.develop->preview_downsampling;
-    const float as = DT_PIXEL_APPLY_DPI(20) / (pr_d * zoom_scale);  // transformed to backbuf dimensions
+    const float as = DT_PIXEL_APPLY_DPI(20) / zoom_scale;  // transformed to backbuf dimensions
     const float x = pzx * darktable.develop->preview_pipe->backbuf_width;
     const float y = pzy * darktable.develop->preview_pipe->backbuf_height;
     int in, inb, near, ins;
@@ -1507,4 +1506,3 @@ const dt_masks_functions_t dt_masks_functions_gradient = {
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

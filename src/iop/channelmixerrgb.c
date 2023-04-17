@@ -1816,41 +1816,6 @@ void validate_color_checker(const float *const restrict in,
   dt_free_align(patches);
 }
 
-static void _check_for_wb_issue_and_set_trouble_message(struct dt_iop_module_t *self)
-{
-  dt_iop_channelmixer_rgb_params_t *p = (dt_iop_channelmixer_rgb_params_t *)self->params;
-  if(self->enabled
-     && !(p->illuminant == DT_ILLUMINANT_PIPE || p->adaptation == DT_ADAPTATION_RGB))
-  {
-    // this module instance is doing chromatic adaptation
-    if(_is_another_module_cat_on_pipe(self))
-    {
-      // our second biggest problem : another channelmixerrgb instance is doing CAT
-      // earlier in the pipe.
-      dt_iop_set_module_trouble_message(self, _("double CAT applied"),
-                                        _("you have 2 instances or more of color calibration,\n"
-                                          "all performing chromatic adaptation.\n"
-                                          "this can lead to inconsistencies, unless you\n"
-                                          "use them with masks or know what you are doing."),
-                                        "double CAT applied");
-      return;
-    }
-    else if(!self->dev->proxy.wb_is_D65)
-    {
-      // our first and biggest problem : white balance module is being clever with WB coeffs
-      dt_iop_set_module_trouble_message(self, _("white balance module error"),
-                                        _("the white balance module is not using the camera\n"
-                                          "reference illuminant, which will cause issues here\n"
-                                          "with chromatic adaptation. either set it to reference\n"
-                                          "or disable chromatic adaptation here."),
-                                        "white balance error");
-      return;
-    }
-  }
-
-  dt_iop_set_module_trouble_message(self, NULL, NULL, NULL);
-}
-
 void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
              const void *const restrict ivoid, void *const restrict ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
@@ -1865,10 +1830,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     return; // image has been copied through to output and module's trouble flag has been updated
 
   declare_cat_on_pipe(self, FALSE);
-
-  // dt_iop_have_required_input_format() has reset the trouble message.
-  // we must set it again in case of any trouble.
-  _check_for_wb_issue_and_set_trouble_message(self);
 
   dt_colormatrix_t RGB_to_XYZ;
   dt_colormatrix_t XYZ_to_RGB;
@@ -2020,10 +1981,6 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   //dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
   declare_cat_on_pipe(self, FALSE);
-
-  // dt_iop_have_required_input_format() has reset the trouble message.
-  // we must set it again in case of any trouble.
-  _check_for_wb_issue_and_set_trouble_message(self);
 
   if(d->illuminant_type == DT_ILLUMINANT_CAMERA)
   {
@@ -3494,6 +3451,9 @@ void reload_defaults(dt_iop_module_t *module)
   d->illuminant = module->get_f("illuminant")->Enum.Default;
   d->adaptation = module->get_f("adaptation")->Enum.Default;
 
+  // Note : this is not an user param anymore, and is set to modern by default
+  // except for old histories using temperature without having an history entry for it.
+  // see develop/develop.c/_dev_auto_apply_presets()
   const gboolean is_modern =
     dt_conf_is_equal("plugins/darkroom/chromatic-adaptation", "modern");
 
@@ -3706,8 +3666,6 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   gtk_widget_set_sensitive(g->adaptation, p->illuminant != DT_ILLUMINANT_CAMERA);
 
   declare_cat_on_pipe(self, FALSE);
-
-  _check_for_wb_issue_and_set_trouble_message(self);
 
   --darktable.gui->reset;
 }

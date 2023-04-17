@@ -27,7 +27,7 @@ endforeach(module)
 
 foreach(module ${MODULES})
     if (WIN32)
-      _detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/ansel/views)
+      #_detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/ansel/views)
     else()
         set_target_properties(${module}
                               PROPERTIES

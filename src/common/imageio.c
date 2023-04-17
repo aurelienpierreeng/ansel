@@ -1220,6 +1220,39 @@ void dt_imageio_set_hdr_tag(dt_image_t *img)
   img->flags &= ~DT_IMAGE_LDR;
 }
 
+static gboolean _is_in_list(char *elem, char *list)
+{
+  // Search if elem is contained in the coma-separated list string
+  gboolean success = FALSE;
+  if(elem && list)
+  {
+    while(list != NULL && !success)
+    {
+      success = !g_ascii_strncasecmp(list, elem, strlen(elem));
+      list = strtok(NULL, ",");
+    }
+  }
+
+  return success;
+}
+
+gboolean dt_imageio_is_handled_by_libraw(dt_image_t *img, const char *filename)
+{
+  // Allow users to define some extensions, makers and models that should be handled by Libraw
+  gboolean is_handled = FALSE;
+
+  char *ext = g_strrstr(filename, ".") + 1; // move the pointer after the extension dot
+  is_handled |= _is_in_list(ext,             strtok(dt_conf_get_string("libraw/extensions"), ","));
+  is_handled |= _is_in_list(img->exif_maker, strtok(dt_conf_get_string("libraw/makers"), ","));
+  is_handled |= _is_in_list(img->exif_model, strtok(dt_conf_get_string("libraw/models"), ","));
+
+  const char *iolib = (is_handled) ? "Libraw" : "Rawspeed";
+  dt_print(DT_DEBUG_IMAGEIO, "[image I/O] image `%s` from camera `%s` of maker `%s` loaded with %s\n", filename,
+           img->exif_model, img->exif_maker, iolib);
+
+  return is_handled;
+}
+
 // =================================================
 //   combined reading
 // =================================================
@@ -1243,11 +1276,12 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
   if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL && dt_imageio_is_hdr(filename))
     ret = dt_imageio_open_hdr(img, filename, buf);
 
+  /* check if user wants to force processing through Libraw */
+  const gboolean force_libraw = dt_imageio_is_handled_by_libraw(img, filename);
+
   /* use rawspeed to load the raw */
-  if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL)
-  {
+  if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL && !force_libraw)
     ret = dt_imageio_open_rawspeed(img, filename, buf);
-  }
 
   /* fallback that tries to open file via LibRAW to support Canon CR3 */
   if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL)

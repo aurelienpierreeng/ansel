@@ -165,7 +165,7 @@ const char **description(struct dt_iop_module_t *self)
 
 int default_group()
 {
-  return IOP_GROUP_CORRECT | IOP_GROUP_TECHNICAL;
+  return IOP_GROUP_REPAIR;
 }
 
 int operation_tags()
@@ -1759,28 +1759,6 @@ static void delete_children(GtkWidget *widget, gpointer data)
   gtk_widget_destroy(widget);
 }
 
-static void _display_lens_error(struct dt_iop_module_t *self)
-{
-  dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
-
-  if(g->trouble && self->enabled)
-  {
-    dt_iop_set_module_trouble_message(self, _("camera/lens not found"),
-                                      _("please select your lens manually\n"
-                                        "you might also want to check if your lensfun database is up-to-date\n"
-                                        "by running lensfun_update_data"),
-                                      "camera/lens not found");
-
-  }
-  else
-  {
-    dt_iop_set_module_trouble_message(self, NULL, NULL, NULL);
-  }
-
-  gtk_widget_queue_draw(self->widget);
-
-}
-
 static void lens_set(dt_iop_module_t *self, const lfLens *lens)
 {
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
@@ -2134,8 +2112,6 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     // user did modify something with some widget
     p->modified = 1;
   }
-
-  _display_lens_error(self);
 }
 
 
@@ -2239,18 +2215,9 @@ static void corrections_done(gpointer instance, gpointer user_data)
   --darktable.gui->reset;
 }
 
-static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  _display_lens_error(self);
-}
-
 void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_lensfun_gui_data_t *g = IOP_GUI_ALLOC(lensfun);
-
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
-                            G_CALLBACK(_develop_ui_pipe_finished_callback), self);
 
   g->camera = NULL;
   g->camera_menu = NULL;
@@ -2434,12 +2401,6 @@ void gui_init(struct dt_iop_module_t *self)
                             G_CALLBACK(corrections_done), self);
 }
 
-void gui_focus(struct dt_iop_module_t *self, gboolean in)
-{
-  _display_lens_error(self);
-}
-
-
 void gui_update(struct dt_iop_module_t *self)
 {
   // let gui elements reflect params
@@ -2519,8 +2480,6 @@ void gui_cleanup(struct dt_iop_module_t *self)
   dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(corrections_done), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
-                                     G_CALLBACK(_develop_ui_pipe_finished_callback), self);
 
   while(g->modifiers)
   {

@@ -7,11 +7,11 @@
 
 # For local builds, purge and clean build pathes if any
 if [ -d "build" ];
-then rm -R build;
+then yes | rm -R build;
 fi;
 
 if [ -d "AppDir" ];
-then rm -R AppDir;
+then yes | rm -R AppDir;
 fi;
 
 mkdir build
@@ -22,10 +22,14 @@ export CXXFLAGS="-O3 -fno-strict-aliasing "
 export CFLAGS="$CXXFLAGS"
 
 ## AppImages require us to install everything in /usr, where root is the AppDir
-pushd ./build
 export DESTDIR=../AppDir
-cmake .. -DCMAKE_INSTALL_PREFIX=/usr -G Ninja -DCMAKE_BUILD_TYPE=Release -DBINARY_PACKAGE_BUILD=1
-cmake --build . --target install  -- -j$(nproc)
+cmake .. -DCMAKE_INSTALL_PREFIX=/usr -G Ninja -DCMAKE_BUILD_TYPE=Release -DBINARY_PACKAGE_BUILD=1 -DCMAKE_INSTALL_LIBDIR=lib64
+cmake --build . --target install
+
+# Grab lensfun database. You should run `sudo lensfun-update-data` before making
+# AppImage, we did this in CI.
+mkdir -p ../AppDir/usr/share/lensfun
+cp -a /var/lib/lensfun-updates/* ../AppDir/usr/share/lensfun
 
 ## Replace relative pathes to executable in ansel.desktop
 ## The pathes will be handled by AppImage.
@@ -37,5 +41,14 @@ wget -c "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous
 chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-gtk.sh
 
 export DEPLOY_GTK_VERSION="3"
+export VERSION=$(sh ../tools/get_git_version_string.sh)
 
-./linuxdeploy-x86_64.AppImage --appdir ../AppDir --plugin gtk --output appimage
+# Our plugins link against libansel, it's not in system, so tell linuxdeploy
+# where to find it. Don't use LD_PRELOAD here, linuxdeploy cannot see preloaded
+# libraries.
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:../AppDir/usr/lib64/ansel/"
+# Using `--deploy-deps-only` to tell linuxdeploy also collect dependencies for
+# libraries in this dir, but don't copy those libraries. On the contrary,
+# `--library` will copy both libraries and their dependencies, which is not what
+# we want, we already installed our plugins.
+./linuxdeploy-x86_64.AppImage --appdir ../AppDir --plugin gtk --deploy-deps-only ../AppDir/usr/lib64/ansel/plugins --output appimage

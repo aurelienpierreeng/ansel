@@ -161,7 +161,7 @@ static int write_image(lua_State *L)
   gboolean high_quality = dt_conf_get_bool("plugins/lighttable/export/high_quality_processing");
   gboolean export_masks = dt_conf_get_bool("plugins/lighttable/export/export_masks");
   // TODO: expose icc overwrites to the user!
-  dt_colorspaces_color_profile_type_t icc_type = dt_conf_get_int("plugins/lighttable/export/icctype");
+  dt_colorspaces_color_profile_type_t icc_type = sanitize_colorspaces(dt_conf_get_int("plugins/lighttable/export/icctype"));
   const char *icc_filename = dt_conf_get_string_const("plugins/lighttable/export/iccprofile");
   gboolean result = dt_imageio_export(imgid, filename, format, fdata, high_quality, upscale, FALSE, export_masks,
                                       icc_type, icc_filename, DT_INTENT_LAST, NULL, NULL, 1, 1, NULL);
@@ -225,4 +225,3 @@ int dt_lua_init_early_format(lua_State *L)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

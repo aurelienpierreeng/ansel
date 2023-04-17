@@ -160,7 +160,12 @@ const dt_action_element_def_t _action_elements_button[]
 const dt_action_element_def_t _action_elements_value_fallback[]
   = { { NULL, dt_action_effect_value } };
 
-static float _action_process_toggle(gpointer target, dt_action_element_t element, dt_action_effect_t effect, float move_size)
+void _cleanup_mods(dt_shortcut_t *s, gint keycode, gint level);
+static GdkModifierType _mods_fix_primary(GdkModifierType mods);
+
+
+static float _action_process_toggle(gpointer target, dt_action_element_t element, dt_action_effect_t effect,
+                                    float move_size)
 {
   float value = gtk_toggle_button_get_active(target);
 
@@ -532,7 +537,6 @@ static gchar *_shortcut_description(dt_shortcut_t *s)
 
   if(s->press & DT_SHORTCUT_LONG  ) add_hint(" %s", _("long"));
   if(s->press & DT_SHORTCUT_DOUBLE) add_hint(" %s", _("double-press")); else
-  if(s->press & DT_SHORTCUT_TRIPLE) add_hint(" %s", _("triple-press")); else
   if(s->press) add_hint(" %s", _("press"));
   if(s->button)
   {
@@ -541,9 +545,8 @@ static gchar *_shortcut_description(dt_shortcut_t *s)
     if(s->button & DT_SHORTCUT_RIGHT ) add_hint(" %s", C_("accel", "right"));
     if(s->button & DT_SHORTCUT_MIDDLE) add_hint(" %s", C_("accel", "middle"));
     if(s->click  & DT_SHORTCUT_LONG  ) add_hint(" %s", C_("accel", "long"));
-    if(s->click  & DT_SHORTCUT_DOUBLE) add_hint(" %s", C_("accel", "double-click")); else
-    if(s->click  & DT_SHORTCUT_TRIPLE) add_hint(" %s", C_("accel", "triple-click")); else
-      add_hint(" %s", _("click"));
+    if(s->click  & DT_SHORTCUT_DOUBLE) add_hint(" %s", C_("accel", "double-click"));
+    else add_hint(" %s", _("click"));
   }
 
   if(*move_name && (s->key_device || s->key))
@@ -690,21 +693,6 @@ gboolean dt_shortcut_tooltip_callback(GtkWidget *widget, gint x, gint y, gboolea
       action = g_hash_table_lookup(darktable.control->widgets, widget);
       show_element = -1;
     }
-
-    if(darktable.control->mapping_widget == widget)
-    {
-      const int add_remove_qap = darktable.develop
-        ? dt_dev_modulegroups_basics_module_toggle(darktable.develop, widget, FALSE)
-        : 0;
-
-      markup_text = g_markup_printf_escaped("%s\n%s\n%s%s\n%s",
-                                            _("press keys with mouse click and scroll or move combinations to create a shortcut"),
-                                            _("click to open shortcut configuration"),
-                                            add_remove_qap > 0 ? _("ctrl+click to add to quick access panel\n") :
-                                            add_remove_qap < 0 ? _("ctrl+click to remove from quick access panel\n")  : "",
-                                            _("scroll to change default speed"),
-                                            _("right click to exit mapping mode"));
-    }
   }
 
   const dt_action_def_t *def = _action_find_definition(action);
@@ -789,6 +777,36 @@ gboolean dt_shortcut_tooltip_callback(GtkWidget *widget, gint x, gint y, gboolea
   return strcmp(widget_name, "iop_description") ? FALSE : TRUE;
 }
 
+gboolean get_accel_from_widget(GtkWidget *widget, guint *key_val, GdkModifierType *mods)
+{
+  // Try to reconnect stupid "next-gen" accels to Gtk standard keyboard accels
+  // Return TRUE if we found something compatible.
+
+  dt_action_t *action = g_hash_table_lookup(darktable.control->widgets, widget);
+  if(action == NULL) return FALSE;
+
+  // Shitty API that forces us to crawl the whole list of shortcuts to find the action match.
+  // That's because actions can be mapped to more than one shortcut, a feature that maybe 0.1 % of users needed.
+  // In cleverland, you match action and shortcut 1:1, store a reference to shortcut in a pointer
+  // inside the widget and call it a day. But in darktableland, that doesn't cost enough CPU cycles.
+  // TODO: fuuuuuuuuck me.
+  for(GSequenceIter *iter = g_sequence_get_begin_iter(darktable.control->shortcuts);
+      !g_sequence_iter_is_end(iter);
+      iter = g_sequence_iter_next(iter))
+  {
+    dt_shortcut_t *shortcut = g_sequence_get(iter);
+    if(shortcut->action == action && shortcut->key_device == DT_SHORTCUT_DEVICE_KEYBOARD_MOUSE)
+    {
+      // This should be a vanilla keyboard shortcut. Hopefully ?
+      *mods = shortcut->mods;
+      *key_val = shortcut->key;
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
 static dt_view_type_flags_t _find_views(dt_action_t *action)
 {
   dt_view_type_flags_t vws = 0;
@@ -868,7 +886,6 @@ static dt_view_type_flags_t _find_views(dt_action_t *action)
 
 static GtkTreeStore *_shortcuts_store = NULL;
 static GtkTreeStore *_actions_store = NULL;
-static GtkWidget *_grab_widget = NULL, *_grab_window = NULL;
 
 #define NUM_CATEGORIES 4
 const gchar *category_label[NUM_CATEGORIES]
@@ -1436,18 +1453,18 @@ static void _instance_edited(GtkCellRendererText *cell, const gchar *path_string
 
 static void _grab_in_tree_view(GtkTreeView *tree_view)
 {
-  g_set_weak_pointer(&_grab_widget, gtk_widget_get_parent(gtk_widget_get_parent(GTK_WIDGET(tree_view)))); // static
-  gtk_widget_set_sensitive(_grab_widget, FALSE);
-  gtk_widget_set_tooltip_text(_grab_widget, _("define a shortcut by pressing a key, optionally combined with modifier keys (ctrl/shift/alt)\n"
+  g_set_weak_pointer(&darktable.gui->grab_widget, gtk_widget_get_parent(gtk_widget_get_parent(GTK_WIDGET(tree_view)))); // static
+  gtk_widget_set_sensitive(darktable.gui->grab_widget, FALSE);
+  gtk_widget_set_tooltip_text(darktable.gui->grab_widget, _("define a shortcut by pressing a key, optionally combined with modifier keys (ctrl/shift/alt)\n"
                                               "a key can be double or triple pressed, with a long last press\n"
                                               "while the key is held, a combination of mouse buttons can be (double/triple/long) clicked\n"
                                               "still holding the key (and modifiers and/or buttons) a scroll or mouse move can be added\n"
                                               "connected devices can send keys or moves using their physical controllers\n\n"
                                               "right-click to cancel"));
-  g_set_weak_pointer(&_grab_window, gtk_widget_get_toplevel(_grab_widget));
+  g_set_weak_pointer(&darktable.gui->grab_window, gtk_widget_get_toplevel(darktable.gui->grab_widget));
   if(_sc.action && _sc.action->type == DT_ACTION_TYPE_FALLBACK)
     dt_shortcut_key_press(DT_SHORTCUT_DEVICE_KEYBOARD_MOUSE, 0, 0);
-  g_signal_connect(_grab_window, "event", G_CALLBACK(dt_shortcut_dispatcher), NULL);
+  g_signal_connect(darktable.gui->grab_window, "event", G_CALLBACK(dt_shortcut_dispatcher), NULL);
 }
 
 static void _shortcut_row_activated(GtkTreeView *tree_view, GtkTreePath *path, GtkTreeViewColumn *column, gpointer user_data)
@@ -2384,13 +2401,11 @@ static void _shortcuts_save(const gchar *shortcuts_file, const dt_input_device_t
       }
 
       if(s->press  & DT_SHORTCUT_DOUBLE ) fprintf(f, ";%s", "double");
-      if(s->press  & DT_SHORTCUT_TRIPLE ) fprintf(f, ";%s", "triple");
       if(s->press  & DT_SHORTCUT_LONG   ) fprintf(f, ";%s", "long");
       if(s->button & DT_SHORTCUT_LEFT   ) fprintf(f, ";%s", "left");
       if(s->button & DT_SHORTCUT_MIDDLE ) fprintf(f, ";%s", "middle");
       if(s->button & DT_SHORTCUT_RIGHT  ) fprintf(f, ";%s", "right");
       if(s->click  & DT_SHORTCUT_DOUBLE ) fprintf(f, ";%s", "double");
-      if(s->click  & DT_SHORTCUT_TRIPLE ) fprintf(f, ";%s", "triple");
       if(s->click  & DT_SHORTCUT_LONG   ) fprintf(f, ";%s", "long");
 
       fprintf(f, "=");
@@ -2590,13 +2605,11 @@ static void _shortcuts_load(const gchar *shortcuts_file, dt_input_device_t file_
             if(s.button)
             {
               if(!strcmp(token, "double")) { s.click |= DT_SHORTCUT_DOUBLE; continue; }
-              if(!strcmp(token, "triple")) { s.click |= DT_SHORTCUT_TRIPLE; continue; }
               if(!strcmp(token, "long"  )) { s.click |= DT_SHORTCUT_LONG  ; continue; }
             }
             else
             {
               if(!strcmp(token, "double")) { s.press |= DT_SHORTCUT_DOUBLE; continue; }
-              if(!strcmp(token, "triple")) { s.press |= DT_SHORTCUT_TRIPLE; continue; }
               if(!strcmp(token, "long"  )) { s.press |= DT_SHORTCUT_LONG  ; continue; }
             }
 
@@ -3104,18 +3117,19 @@ static void _ungrab_grab_widget()
   g_slist_free_full(_pressed_keys, g_free);
   _pressed_keys = NULL;
 
-  if(_grab_widget)
+  if(darktable.gui->grab_widget)
   {
-    gtk_widget_set_sensitive(_grab_widget, TRUE);
-    gtk_widget_set_tooltip_text(_grab_widget, NULL);
-    g_signal_handlers_disconnect_by_func(gtk_widget_get_toplevel(_grab_widget), G_CALLBACK(dt_shortcut_dispatcher), NULL);
-    _grab_widget = NULL;
+    gtk_widget_set_sensitive(darktable.gui->grab_widget, TRUE);
+    g_signal_handlers_disconnect_by_func(gtk_widget_get_toplevel(darktable.gui->grab_widget),
+                                         G_CALLBACK(dt_shortcut_dispatcher), NULL);
+    darktable.gui->grab_widget = NULL;
+
   }
 }
 
 static void _ungrab_at_focus_loss()
 {
-  _grab_window = NULL;
+  darktable.gui->grab_window = NULL;
   _focus_loss_key = _sc.key;
   _focus_loss_press = _sc.press;
   _ungrab_grab_widget();
@@ -3250,7 +3264,7 @@ static guint _key_modifiers_clean(guint mods)
   GdkKeymap *keymap = gdk_keymap_get_for_display(gdk_display_get_default());
   mods &= GDK_SHIFT_MASK | GDK_CONTROL_MASK | GDK_MOD1_MASK | GDK_MOD5_MASK |
           gdk_keymap_get_modifier_mask(keymap, GDK_MODIFIER_INTENT_PRIMARY_ACCELERATOR);
-  return mods | dt_modifier_shortcuts;
+  return mods;
 }
 
 float dt_shortcut_move(dt_input_device_t id, guint time, guint move, double size)
@@ -3286,7 +3300,7 @@ float dt_shortcut_move(dt_input_device_t id, guint time, guint move, double size
     if(!key_or_button_released)
       _last_time = 0;
 
-    if(_grab_widget) // in mapping mode end grab immediately after first shortcut
+    if(darktable.gui->grab_widget) // in mapping mode end grab immediately after first shortcut
       _ungrab_grab_widget();
 
     dt_print(DT_DEBUG_INPUT,
@@ -3452,8 +3466,7 @@ void dt_shortcut_key_press(dt_input_device_t id, guint time, guint key)
     if((id || key)
         && id == _sc.key_device
         && key == _sc.key
-        && time < _last_time + delay
-        && !(_sc.press & DT_SHORTCUT_TRIPLE))
+        && time < _last_time + delay)
     {
       _interrupt_delayed_release(FALSE);
       _sc.press += DT_SHORTCUT_DOUBLE;
@@ -3466,8 +3479,8 @@ void dt_shortcut_key_press(dt_input_device_t id, guint time, guint key)
       _lookup_mapping_widget();
 
       gdk_seat_grab(gdk_display_get_default_seat(gdk_display_get_default()),
-                    gtk_widget_get_window(_grab_window ? _grab_window
-                                                       : dt_ui_main_window(darktable.gui->ui)),
+                    gtk_widget_get_window(darktable.gui->grab_window ? darktable.gui->grab_window
+                                                                     : dt_ui_main_window(darktable.gui->ui)),
                     GDK_SEAT_CAPABILITY_ALL, FALSE, NULL, NULL, NULL, NULL);
     }
     else
@@ -3527,8 +3540,6 @@ static void _delay_for_double_triple(guint time, guint is_key)
     dt_control_log("short key press resets stuck keys");
     return;
   }
-  else if((is_key ? _sc.press : _sc.click) & DT_SHORTCUT_TRIPLE)
-    passed_time += delay;
   else if(!_sc.action) // in mapping mode always wait for double/triple
   {
     // detect if any double or triple press shortcuts exist for this key; otherwise skip delay
@@ -3606,19 +3617,161 @@ gboolean dt_shortcut_key_active(dt_input_device_t id, guint key)
   return fmodf(value, 1) <= DT_VALUE_PATTERN_ACTIVE || fmodf(value, 2) > .5;
 }
 
-static guint _fix_keyval(GdkEvent *event)
+static guint _key_remap(guint keyval)
+{
+  // Force keypad alternatives to be treated based on their meaning instead of their position on keyboard.
+  // We don't care **where** the input is made, we care **what** input is made.
+  // This makes numeric keys and other keypad keys behave like the typical keys.
+  switch(keyval)
+  {
+    // Numbers
+    case(GDK_KEY_KP_0):
+      return GDK_KEY_0;
+    case(GDK_KEY_KP_1):
+      return GDK_KEY_1;
+    case(GDK_KEY_KP_2):
+      return GDK_KEY_2;
+    case(GDK_KEY_KP_3):
+      return GDK_KEY_3;
+    case(GDK_KEY_KP_4):
+      return GDK_KEY_4;
+    case(GDK_KEY_KP_5):
+      return GDK_KEY_5;
+    case(GDK_KEY_KP_6):
+      return GDK_KEY_6;
+    case(GDK_KEY_KP_7):
+      return GDK_KEY_7;
+    case(GDK_KEY_KP_8):
+      return GDK_KEY_8;
+    case(GDK_KEY_KP_9):
+      return GDK_KEY_9;
+
+    // Algebra
+    case(GDK_KEY_KP_Add):
+      return GDK_KEY_plus;
+    case(GDK_KEY_KP_Subtract):
+      return GDK_KEY_minus;
+    case(GDK_KEY_KP_Divide):
+      return GDK_KEY_slash;
+    case(GDK_KEY_KP_Multiply):
+      return GDK_KEY_asterisk;
+    case(GDK_KEY_KP_Equal):
+      return GDK_KEY_equal;
+    // Note : don't remap the decimal key because it can be interprated as . or ,
+    // depending on locale and it seems to be already decoded properly as dot by GDK.
+
+    // Controls
+    case(GDK_KEY_KP_Enter):
+      return GDK_KEY_Return;
+    case(GDK_KEY_KP_Insert):
+      return GDK_KEY_Insert;
+    case(GDK_KEY_KP_Delete):
+      return GDK_KEY_Delete;
+
+    // Navigation
+    case(GDK_KEY_KP_Begin):
+      return GDK_KEY_Begin;
+    case(GDK_KEY_KP_End):
+      return GDK_KEY_End;
+    case(GDK_KEY_KP_Home):
+      return GDK_KEY_Home;
+    case(GDK_KEY_KP_Page_Down):
+      return GDK_KEY_Page_Down;
+    case(GDK_KEY_KP_Page_Up):
+      return GDK_KEY_Page_Up;
+    case(GDK_KEY_KP_Left):
+      return GDK_KEY_Left;
+    case(GDK_KEY_KP_Right):
+      return GDK_KEY_Right;
+    case(GDK_KEY_KP_Up):
+      return GDK_KEY_Up;
+    case(GDK_KEY_KP_Down):
+      return GDK_KEY_Down;
+
+    // Spaces
+    case(GDK_KEY_KP_Tab):
+      return GDK_KEY_Tab;
+    case(GDK_KEY_KP_Space):
+      return GDK_KEY_space;
+
+    default:
+      return keyval;
+  }
+
+  return keyval;
+}
+
+static guint _fix_keyval(GdkEvent *event, guint *mods)
 {
   guint keyval = 0;
   GdkKeymap *keymap = gdk_keymap_get_for_display(gdk_display_get_default());
-  gdk_keymap_translate_keyboard_state(keymap, event->key.hardware_keycode, 0, 0,
-                                      &keyval, NULL, NULL, NULL);
-  return keyval;
+  GdkModifierType consumed;
+  *mods = _mods_fix_primary(*mods);
+
+  // Use the system keymap to decode key + modifier to a character
+  gdk_keymap_translate_keyboard_state(keymap, event->key.hardware_keycode, event->key.state,
+                                      event->key.group, // this ensures that numlock or shift are properly decoded
+                                      &keyval, NULL, NULL, &consumed);
+
+  // Remove the consumed modifiers for numbers, typically Shift
+  // Note : for French keyboards, numbers are accessed through Shift. E.g Shift + & = 1
+  if(gdk_keyval_to_lower(keyval) == gdk_keyval_to_upper(keyval))
+    *mods &= ~consumed;
+
+  // Remap numpad keys to their regular equivalent because we don't care what actual key was pushed
+  return _key_remap(keyval);
+}
+
+void _cleanup_mods(dt_shortcut_t *s, gint keycode, gint level)
+{
+  /*
+   * Decode the combination of key + modifiers using the system keymap
+   * Dispatch modifiers properly for later internal handling.
+   */
+
+  GdkKeymap *keymap = gdk_keymap_get_for_display(gdk_display_get_default());
+
+  // Remove the Ctrl modifier for some reason ???
+  s->mods = _mods_fix_primary(s->mods);
+
+  // For uppercase characters, we need to restore the shift mask
+  if(level & 1) s->mods |= GDK_SHIFT_MASK;
+
+  // For special characters, we need to restore the AltGr mask
+  if(level & 2) s->mods |= GDK_MOD5_MASK;
+
+  // Use the system keymap to decode key + modifier to a character
+  GdkModifierType consumed;
+  gdk_keymap_translate_keyboard_state(keymap, keycode, s->mods, 0, &s->key, NULL, NULL, &consumed);
+
+  // Remap numpad keys to their regular equivalent because we don't care what actual key was pushed
+  s->key = _key_remap(s->key);
+
+  // Remove the consumed modifiers for numbers, typically Shift
+  // Note : for French keyboards, numbers are accessed through Shift. E.g Shift + & = 1
+  if(gdk_keyval_to_lower(s->key) == gdk_keyval_to_upper(s->key))
+    s->mods &= ~consumed;
 }
 
 gboolean dt_shortcut_dispatcher(GtkWidget *w, GdkEvent *event, gpointer user_data)
 {
-  if((event->type ==  GDK_BUTTON_PRESS || event->type ==  GDK_BUTTON_RELEASE ||
-      event->type ==  GDK_DOUBLE_BUTTON_PRESS || event->type ==  GDK_TRIPLE_BUTTON_PRESS)
+  // Init focus with default Gtk events
+  // WHY THE FUCK DOES THAT BREAK SHORCUTS AT ALL ???
+  // FIXME: when entering the app, shortcuts won't work until you click somewhere.
+  // Yes, key shortcuts need a mouse to work. Brilliant !!!
+  /*
+  if(!darktable.gui->grab_window)
+    darktable.gui->grab_window = dt_ui_main_window(darktable.gui->ui);
+
+  if(!darktable.gui->grab_widget)
+    darktable.gui->grab_widget = gtk_window_get_focus(GTK_WINDOW(darktable.gui->grab_window));
+  */
+
+  // Let ALT be used by Gtk menu mnemonics. It is ugly, like the rest of this file.
+  if(event->key.state & GDK_MOD1_MASK) return FALSE;
+
+  if((event->type == GDK_BUTTON_PRESS || event->type == GDK_BUTTON_RELEASE
+      || event->type == GDK_DOUBLE_BUTTON_PRESS || event->type == GDK_TRIPLE_BUTTON_PRESS)
      && event->button.button > 7)
   {
     if(event->type == GDK_BUTTON_RELEASE)
@@ -3650,7 +3803,7 @@ gboolean dt_shortcut_dispatcher(GtkWidget *w, GdkEvent *event, gpointer user_dat
       return TRUE;
     }
 
-    if(_grab_widget && event->type == GDK_BUTTON_PRESS)
+    if(darktable.gui->grab_widget && event->type == GDK_BUTTON_PRESS)
     {
       _ungrab_grab_widget();
       _sc = (dt_shortcut_t) { 0 };
@@ -3691,7 +3844,7 @@ gboolean dt_shortcut_dispatcher(GtkWidget *w, GdkEvent *event, gpointer user_dat
 
     _sc.mods = _key_modifiers_clean(event->key.state);
 
-    dt_shortcut_key_press(DT_SHORTCUT_DEVICE_KEYBOARD_MOUSE, event->key.time, _fix_keyval(event));
+    dt_shortcut_key_press(DT_SHORTCUT_DEVICE_KEYBOARD_MOUSE, event->key.time, _fix_keyval(event, &_sc.mods));
     break;
   case GDK_KEY_RELEASE:
     if(event->key.is_modifier || event->key.keyval == GDK_KEY_ISO_Level3_Shift)
@@ -3705,7 +3858,7 @@ gboolean dt_shortcut_dispatcher(GtkWidget *w, GdkEvent *event, gpointer user_dat
       return FALSE;
     }
 
-    dt_shortcut_key_release(DT_SHORTCUT_DEVICE_KEYBOARD_MOUSE, event->key.time, _fix_keyval(event));
+    dt_shortcut_key_release(DT_SHORTCUT_DEVICE_KEYBOARD_MOUSE, event->key.time, _fix_keyval(event, &_sc.mods));
     break;
   case GDK_GRAB_BROKEN:
     if(!event->grab_broken.implicit)
@@ -3717,7 +3870,7 @@ gboolean dt_shortcut_dispatcher(GtkWidget *w, GdkEvent *event, gpointer user_dat
     return FALSE;
   case GDK_FOCUS_CHANGE: // dialog boxes and switch to other app release grab
     if(event->focus_change.in)
-      g_set_weak_pointer(&_grab_window, w);
+      g_set_weak_pointer(&darktable.gui->grab_window, w);
     else
       _ungrab_at_focus_loss();
     return FALSE;
@@ -3807,9 +3960,6 @@ gboolean dt_shortcut_dispatcher(GtkWidget *w, GdkEvent *event, gpointer user_dat
     break;
   case GDK_DOUBLE_BUTTON_PRESS:
     _sc.click |= DT_SHORTCUT_DOUBLE;
-    break;
-  case GDK_TRIPLE_BUTTON_PRESS:
-    _sc.click |= DT_SHORTCUT_TRIPLE;
     break;
   case GDK_BUTTON_RELEASE:
     _pressed_button &= ~(1 << (event->button.button - 1));
@@ -4047,11 +4197,6 @@ void dt_shortcut_register(dt_action_t *owner, guint element, guint effect, guint
     // find the first key in group 0, if any
     while(i < n_keys - 1 && (keys[i].group > 0 || keys[i].level > 1)) i++;
 
-    if(keys[i].level & 1) mods |= GDK_SHIFT_MASK;
-    if(keys[i].level & 2) mods |= GDK_MOD5_MASK;
-
-    mods = _mods_fix_primary(mods);
-
     dt_shortcut_t s = { .key_device = DT_SHORTCUT_DEVICE_KEYBOARD_MOUSE,
                         .mods = mods,
                         .speed = 1.0,
@@ -4059,8 +4204,7 @@ void dt_shortcut_register(dt_action_t *owner, guint element, guint effect, guint
                         .element = element,
                         .effect = effect };
 
-    gdk_keymap_translate_keyboard_state(keymap, keys[i].keycode, 0, 0, &s.key, NULL, NULL, NULL);
-
+    _cleanup_mods(&s, keys[i].keycode, keys[i].level);
     _insert_shortcut(&s, FALSE);
 
     g_free(keys);

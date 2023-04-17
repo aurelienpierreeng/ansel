@@ -307,7 +307,7 @@ int flags()
 
 int default_group()
 {
-  return IOP_GROUP_EFFECT | IOP_GROUP_EFFECTS;
+  return IOP_GROUP_EFFECTS;
 }
 
 int operation_tags()

@@ -27,16 +27,6 @@ static const gchar *bad_opencl_drivers[] =
 
   "beignet",
   "pocl",
-/*
-  Neo was originally blacklisted due to improper cache invalidation, but this has been fixed.
-  During the discussion of that issue in pull request 2033, it was hinted that Neo may be still be
-  problematic on Windows, so keep it blacklisted there for now
-
-  TODO:  Determine if Windows failures were due to the same cache invalidation issue.
-*/
-#if defined _WIN32
-  "neo",
-#endif
   NULL
 
   // clang-format on
@@ -66,4 +56,3 @@ gboolean dt_opencl_check_driver_blacklist(const char *device_version)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

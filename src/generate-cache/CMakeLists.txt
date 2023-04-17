@@ -5,7 +5,7 @@ set_target_properties(ansel-generate-cache PROPERTIES LINKER_LANGUAGE C)
 target_link_libraries(ansel-generate-cache lib_ansel whereami)
 
 if (WIN32)
-  _detach_debuginfo (ansel-generate-cache bin)
+  #_detach_debuginfo (ansel-generate-cache bin)
 else()
     set_target_properties(ansel-generate-cache
                           PROPERTIES

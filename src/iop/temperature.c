@@ -204,7 +204,7 @@ const char **description(struct dt_iop_module_t *self)
 
 int default_group()
 {
-  return IOP_GROUP_BASIC | IOP_GROUP_GRADING;
+  return IOP_GROUP_TECHNICAL;
 }
 
 int flags()
@@ -1099,39 +1099,6 @@ void color_temptint_sliders(struct dt_iop_module_t *self)
   }
 }
 
-static void _display_wb_error(struct dt_iop_module_t *self)
-{
-  // this module instance is doing chromatic adaptation
-  dt_iop_temperature_gui_data_t *g = (dt_iop_temperature_gui_data_t *)self->gui_data;
-  if(g == NULL) return;
-
-  ++darktable.gui->reset;
-
-  if(self->dev->proxy.chroma_adaptation != NULL && !self->dev->proxy.wb_is_D65)
-  {
-    // our second biggest problem : another module is doing CAT elsewhere in the pipe
-    dt_iop_set_module_trouble_message(self, _("white balance applied twice"),
-                                      _("the color calibration module is enabled,\n"
-                                        "and performing chromatic adaptation.\n"
-                                        "set the white balance here to camera reference (D65)\n"
-                                        "or disable chromatic adaptation in color calibration."),
-                                      "double application of white balance");
-  }
-  else
-  {
-    // no longer in trouble
-    dt_iop_set_module_trouble_message(self, NULL, NULL, NULL);
-  }
-
-  --darktable.gui->reset;
-}
-
-
-void gui_focus(struct dt_iop_module_t *self, gboolean in)
-{
-  _display_wb_error(self);
-}
-
 
 void gui_update(struct dt_iop_module_t *self)
 {
@@ -1302,8 +1269,6 @@ void gui_update(struct dt_iop_module_t *self)
   color_rgb_sliders(self);
   color_finetuning_slider(self);
 
-  _display_wb_error(self);
-
   dt_gui_update_collapsible_section(&g->cs);
 
   gtk_widget_queue_draw(self->widget);
@@ -1439,6 +1404,10 @@ void reload_defaults(dt_iop_module_t *module)
 
   const gboolean is_raw = dt_image_is_matrix_correction_supported(&module->dev->image_storage);
   const gboolean monochrome = dt_image_is_monochrome(&module->dev->image_storage);
+
+  // Note : this is not an user param anymore, and is set to modern by default
+  // except for old histories using temperature without having an history entry for it.
+  // see develop/develop.c/_dev_auto_apply_presets()
   const gboolean is_modern =
     dt_conf_is_equal("plugins/darkroom/chromatic-adaptation", "modern");
 
@@ -1608,8 +1577,6 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   mul2temp(self, p, &g->mod_temp, &g->mod_tint);
 
   dt_bauhaus_combobox_set(g->presets, DT_IOP_TEMP_USER);
-
-  _display_wb_error(self);
 }
 
 static gboolean btn_toggled(GtkWidget *togglebutton, GdkEventButton *event, dt_iop_module_t *self)
@@ -1884,18 +1851,9 @@ static void _preference_changed(gpointer instance, gpointer user_data)
   color_finetuning_slider(self);
 }
 
-static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_data)
-{
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  _display_wb_error(self);
-}
-
 void gui_init(struct dt_iop_module_t *self)
 {
   dt_iop_temperature_gui_data_t *g = IOP_GUI_ALLOC(temperature);
-
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
-                            G_CALLBACK(_develop_ui_pipe_finished_callback), self);
 
   const char *config = dt_conf_get_string_const("plugins/darkroom/temperature/colored_sliders");
   g->colored_sliders = g_strcmp0(config, "no color"); // true if config != "no color"
@@ -2026,8 +1984,6 @@ void gui_cleanup(struct dt_iop_module_t *self)
 {
   self->request_color_pick = DT_REQUEST_COLORPICK_OFF;
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_preference_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
-                                     G_CALLBACK(_develop_ui_pipe_finished_callback), self);
 
   IOP_GUI_FREE;
 }
@@ -2046,7 +2002,6 @@ void gui_reset(struct dt_iop_module_t *self)
   color_finetuning_slider(self);
   color_rgb_sliders(self);
   color_temptint_sliders(self);
-  _display_wb_error(self);
 }
 
 // clang-format off

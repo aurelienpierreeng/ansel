@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10.0)
+cmake_minimum_required(VERSION 3.18)
 
 cmake_policy(SET CMP0011 NEW)
 cmake_policy(SET CMP0025 NEW)
@@ -50,7 +50,10 @@ get_filename_component(CMAKE_INSTALL_BINDIR_ABS "${CMAKE_INSTALL_FULL_BINDIR}" R
 file(RELATIVE_PATH REL_BIN_TO_LIBDIR    ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_LIBDIR}/ansel")
 file(RELATIVE_PATH REL_BIN_TO_SHAREDIR  ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_DATADIR}")
 file(RELATIVE_PATH REL_BIN_TO_LOCALEDIR ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_LOCALEDIR}")
-set(REL_BIN_TO_DATADIR  "${REL_BIN_TO_SHAREDIR}/darktable") # Required by rawspeed-identify.cpp
+# The original comment is 'Required by rawspeed-identify.cpp', I don't see what
+# it means and I already changed the binary prefix in CMake. I have to change
+# `darktable` to `ansel` here to keep all things works.
+set(REL_BIN_TO_DATADIR  "${REL_BIN_TO_SHAREDIR}/ansel")
 set(DARKTABLE_BINDIR    "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
 set(DARKTABLE_LIBDIR    "${DARKTABLE_BINDIR}/${REL_BIN_TO_LIBDIR}")
 set(DARKTABLE_SHAREDIR  "${DARKTABLE_BINDIR}/${REL_BIN_TO_SHAREDIR}")
@@ -107,6 +110,10 @@ if(NOT EXISTS ${CMAKE_SOURCE_DIR}/.git)
   set(SOURCE_PACKAGE 1)
 else()
   set(SOURCE_PACKAGE 0)
+endif()
+
+if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(AMD64|amd64)|(X86|x86)|(^i.86$)")
+  set(BUILD_SSE2_CODEPATHS OFF)
 endif()
 
 if(BUILD_SSE2_CODEPATHS)
@@ -309,17 +316,13 @@ endif(VALIDATE_APPDATA_FILE)
 if(TESTBUILD_OPENCL_PROGRAMS)
   set(TESTBUILD_OPENCL_PROGRAMS OFF)
 
-  macro(find_llvm versions)
-    foreach(version ${versions})
-      find_package(LLVM ${version} CONFIG)
-      if(LLVM_FOUND)
-        break()
-      endif()
-    endforeach()
-  endmacro()
+  find_package(LLVM CONFIG)
 
-  # 3.9 is the first version with which this works.
-  find_llvm("15;14;13;12;11;10;9;8;7;6.0;5.0;4.0;3.9")
+  if(LLVM_FOUND)
+    if(${LLVM_VERSION} VERSION_LESS 7)
+      set(LLVM_FOUND FALSE)
+    endif()
+  endif()
 
   if (LLVM_FOUND)
     message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
@@ -349,7 +352,7 @@ if(TESTBUILD_OPENCL_PROGRAMS)
       message(WARNING "Test-compilation of OpenCL programs can not be done.")
     endif()
   else()
-    message(WARNING "Could not find LLVM 3.9+")
+    message(WARNING "Could not find LLVM 7 or above")
     message(WARNING "Test-compilation of OpenCL programs can not be done.")
   endif()
 endif()

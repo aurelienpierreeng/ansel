@@ -46,9 +46,7 @@ typedef enum dt_colorspaces_profile_type_t
   DT_COLORSPACES_PROFILE_TYPE_WORK = 2,
   DT_COLORSPACES_PROFILE_TYPE_EXPORT = 3,
   DT_COLORSPACES_PROFILE_TYPE_DISPLAY = 4,
-  DT_COLORSPACES_PROFILE_TYPE_SOFTPROOF = 5,
-  DT_COLORSPACES_PROFILE_TYPE_HISTOGRAM = 6,
-  DT_COLORSPACES_PROFILE_TYPE_DISPLAY2 = 7
+  DT_COLORSPACES_PROFILE_TYPE_SOFTPROOF = 5
 } dt_colorspaces_profile_type_t;
 
 typedef enum dt_colorspaces_color_profile_type_t
@@ -150,27 +148,17 @@ typedef struct dt_colorspaces_t
   uint8_t *xprofile_data;
   int xprofile_size;
 
-  gchar *colord_profile_file2;
-  uint8_t *xprofile_data2;
-  int xprofile_size2;
-
   // the current set of selected profiles
   dt_colorspaces_color_profile_type_t display_type;
-  dt_colorspaces_color_profile_type_t display2_type;
   dt_colorspaces_color_profile_type_t softproof_type;
-  dt_colorspaces_color_profile_type_t histogram_type;
   char display_filename[512];
-  char display2_filename[512];
   char softproof_filename[512];
-  char histogram_filename[512];
   dt_iop_color_intent_t display_intent;
-  dt_iop_color_intent_t display2_intent;
   dt_iop_color_intent_t softproof_intent;
 
   dt_colorspaces_color_mode_t mode;
 
   cmsHTRANSFORM transform_srgb_to_display, transform_adobe_rgb_to_display;
-  cmsHTRANSFORM transform_srgb_to_display2, transform_adobe_rgb_to_display2;
 
 } dt_colorspaces_t;
 
@@ -183,7 +171,6 @@ typedef struct dt_colorspaces_color_profile_t
   int in_pos;                               // position in input combo box, -1 if not applicable
   int out_pos;                              // position in output combo box, -1 if not applicable
   int display_pos;                          // position in display combo box, -1 if not applicable
-  int display2_pos;                         // position in display2 combo box, -1 if not applicable
   int category_pos;                         // position in category combo box, -1 if not applicable
   int work_pos;                             // position in working combo box, -1 if not applicable
 } dt_colorspaces_color_profile_t;
@@ -295,6 +282,16 @@ void dt_colorspaces_cygm_to_rgb(float *out, int num, double CAM_to_RGB[3][4]);
 
 /** convert RGB buffer to CYGM */
 void dt_colorspaces_rgb_to_cygm(float *out, int num, double RGB_to_CAM[4][3]);
+
+
+static inline dt_colorspaces_color_profile_type_t sanitize_colorspaces(dt_colorspaces_color_profile_type_t colorspace)
+{
+  // Remap unused colorspaces to valid ones
+  if(colorspace == DT_COLORSPACE_DISPLAY2)
+    return DT_COLORSPACE_DISPLAY;
+  else
+    return (dt_colorspaces_color_profile_type_t)MIN(colorspace, DT_COLORSPACE_LAST - 1);
+}
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -888,7 +888,8 @@ static void _setup_selected_images_list(dt_lib_module_t *self)
   if(d->imgs)
   {
 #ifdef HAVE_MAP
-    _remove_images_from_map(self);
+    if(dt_conf_get_bool("/views/map/enable"))
+      _remove_images_from_map(self);
 #endif
     g_list_free_full(d->imgs, g_free);
   }
@@ -962,7 +963,7 @@ static void _choose_gpx_callback(GtkWidget *widget, dt_lib_module_t *self)
     gchar *filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(filechooser));
 
 #ifdef HAVE_MAP
-    if(d->map.view)
+      if(dt_conf_get_bool("/views/map/enable") && d->map.view)
     {
       gtk_label_set_text(GTK_LABEL(d->map.gpx_file), filename);
       _show_gpx_tracks(self);
@@ -1237,7 +1238,8 @@ static void _display_offset(const GTimeSpan offset_int, const gboolean valid, dt
   gtk_widget_set_sensitive(d->lock_offset, locked || (d->imgid && valid && !off2 && offset_int));
   gtk_widget_set_sensitive(d->apply_datetime, d->imgid && !locked);
 #ifdef HAVE_MAP
-  _update_buttons(self);
+  if(dt_conf_get_bool("/views/map/enable"))
+    _update_buttons(self);
 #endif
 }
 
@@ -1304,7 +1306,7 @@ static void _new_datetime(GDateTime *datetime, dt_lib_module_t *self)
     d->offset = g_date_time_difference(d->datetime, d->datetime0);
     _display_offset(d->offset, d->datetime != NULL, self);
 #ifdef HAVE_MAP
-    if(d->map.view)
+      if(dt_conf_get_bool("/views/map/enable") && d->map.view)
       _refresh_track_list(self);
 #endif
   }
@@ -1378,7 +1380,7 @@ static void _image_info_changed(gpointer instance, gpointer imgs, dt_lib_module_
     }
   }
 #ifdef HAVE_MAP
-  if(d->map.view)
+  if(dt_conf_get_bool("/views/map/enable") && d->map.view)
   {
     _refresh_selected_images_datetime(self);
     _refresh_track_list(self);
@@ -1390,11 +1392,14 @@ static void _selection_changed_callback(gpointer instance, dt_lib_module_t *self
 {
   _refresh_image_datetime(self);
 #ifdef HAVE_MAP
-  dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)self->data;
-  if(d->map.view)
+  if(dt_conf_get_bool("/views/map/enable"))
   {
-    _setup_selected_images_list(self);
-    _refresh_track_list(self);
+    dt_lib_geotagging_t *d = (dt_lib_geotagging_t *)self->data;
+    if(d->map.view)
+    {
+      _setup_selected_images_list(self);
+      _refresh_track_list(self);
+    }
   }
 #endif
 }
@@ -1519,7 +1524,7 @@ static gboolean _datetime_key_pressed(GtkWidget *entry, GdkEventKey *event, dt_l
       // reset
       _refresh_image_datetime(self);
 #ifdef HAVE_MAP
-      if(d->map.view)
+      if(dt_conf_get_bool("/views/map/enable") && d->map.view)
         _refresh_track_list(self);
 #endif
       gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
@@ -1593,7 +1598,7 @@ static void _timezone_save(dt_lib_module_t *self)
 
   gtk_window_set_focus(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), NULL);
 #ifdef HAVE_MAP
-  if(d->map.view)
+  if(dt_conf_get_bool("/views/map/enable") && d->map.view)
     _refresh_track_list(self);
 #endif
 }
@@ -1805,108 +1810,111 @@ void gui_init(dt_lib_module_t *self)
   gtk_grid_attach(grid, d->gpx_button, 0, line++, 4, 1);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(grid), TRUE, TRUE, 0);
 #ifdef HAVE_MAP
-  grid = GTK_GRID(gtk_grid_new());
-  gtk_grid_set_column_spacing(grid, DT_PIXEL_APPLY_DPI(5));
-  line = 0;
+  if(dt_conf_get_bool("/views/map/enable"))
+  {
+    grid = GTK_GRID(gtk_grid_new());
+    gtk_grid_set_column_spacing(grid, DT_PIXEL_APPLY_DPI(5));
+    line = 0;
 
-  d->map.gpx_section = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->map.gpx_section), TRUE, TRUE, 0);
+    d->map.gpx_section = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->map.gpx_section), TRUE, TRUE, 0);
 
-  label = dt_ui_section_label_new(_("GPX file"));
-  gtk_grid_attach(grid, label, 0, line++, 4, 1);
+    label = dt_ui_section_label_new(_("GPX file"));
+    gtk_grid_attach(grid, label, 0, line++, 4, 1);
 
-  d->map.gpx_button = dtgtk_button_new(dtgtk_cairo_paint_directory, CPF_NONE, NULL);
-  gtk_widget_set_hexpand(d->map.gpx_button, FALSE);
-  gtk_widget_set_halign(d->map.gpx_button, GTK_ALIGN_START);
-  gtk_widget_set_name(d->map.gpx_button, "non-flat");
-  gtk_widget_set_tooltip_text(d->map.gpx_button, _("select a GPX track file..."));
-  gtk_grid_attach(grid, d->map.gpx_button, 0, line, 1, 1);
-  g_signal_connect(G_OBJECT(d->map.gpx_button), "clicked", G_CALLBACK(_choose_gpx_callback), self);
+    d->map.gpx_button = dtgtk_button_new(dtgtk_cairo_paint_directory, CPF_NONE, NULL);
+    gtk_widget_set_hexpand(d->map.gpx_button, FALSE);
+    gtk_widget_set_halign(d->map.gpx_button, GTK_ALIGN_START);
+    gtk_widget_set_name(d->map.gpx_button, "non-flat");
+    gtk_widget_set_tooltip_text(d->map.gpx_button, _("select a GPX track file..."));
+    gtk_grid_attach(grid, d->map.gpx_button, 0, line, 1, 1);
+    g_signal_connect(G_OBJECT(d->map.gpx_button), "clicked", G_CALLBACK(_choose_gpx_callback), self);
 
-  d->map.gpx_file = dt_ui_label_new("");
-  gtk_label_set_ellipsize(GTK_LABEL(d->map.gpx_file ), PANGO_ELLIPSIZE_MIDDLE);
-  gtk_widget_set_hexpand(d->map.gpx_file, TRUE);
-  gtk_grid_attach(grid, d->map.gpx_file, 1, line++, 3, 1);
-  gtk_box_pack_start(GTK_BOX(d->map.gpx_section), GTK_WIDGET(grid), TRUE, TRUE, 0);
+    d->map.gpx_file = dt_ui_label_new("");
+    gtk_label_set_ellipsize(GTK_LABEL(d->map.gpx_file ), PANGO_ELLIPSIZE_MIDDLE);
+    gtk_widget_set_hexpand(d->map.gpx_file, TRUE);
+    gtk_grid_attach(grid, d->map.gpx_file, 1, line++, 3, 1);
+    gtk_box_pack_start(GTK_BOX(d->map.gpx_section), GTK_WIDGET(grid), TRUE, TRUE, 0);
 
-  model = gtk_list_store_new(DT_GEO_TRACKS_NUM_COLS, G_TYPE_BOOLEAN, G_TYPE_STRING,
-                             G_TYPE_INT, G_TYPE_INT, G_TYPE_INT, G_TYPE_STRING);
+    model = gtk_list_store_new(DT_GEO_TRACKS_NUM_COLS, G_TYPE_BOOLEAN, G_TYPE_STRING,
+                              G_TYPE_INT, G_TYPE_INT, G_TYPE_INT, G_TYPE_STRING);
 
-  d->map.gpx_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(model));
-  g_object_unref(model);
-  gtk_widget_set_name(d->map.gpx_view, "gpx_list");
-  gtk_widget_set_tooltip_text(GTK_WIDGET(d->map.gpx_view),
-                              _("list of track segments in the GPX file, for each segment:"
-                                "\n- the start date/time in local time (LT)"
-                                "\n- the number of track points"
-                                "\n- the number of matching images"
-                                " based on images date/time, offset and time zone"
-                                "\n- more detailed time information hovering the row"));
-  renderer = gtk_cell_renderer_toggle_new();
-  g_signal_connect(renderer, "toggled", G_CALLBACK(_track_seg_toggled), self);
-  GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes("", renderer, "active", DT_GEO_TRACKS_ACTIVE, NULL);
-  gtk_tree_view_append_column(GTK_TREE_VIEW(d->map.gpx_view), column);
-  d->map.sel_tracks = column;
-  GtkWidget *button = gtk_check_button_new();
-  gtk_widget_show(button);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), FALSE);
-  gtk_tree_view_column_set_widget(column, button);
-  gtk_tree_view_column_set_alignment(column, 0.5);
-  g_signal_connect(column, "clicked", G_CALLBACK(_all_tracks_toggled), self);
+    d->map.gpx_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(model));
+    g_object_unref(model);
+    gtk_widget_set_name(d->map.gpx_view, "gpx_list");
+    gtk_widget_set_tooltip_text(GTK_WIDGET(d->map.gpx_view),
+                                _("list of track segments in the GPX file, for each segment:"
+                                  "\n- the start date/time in local time (LT)"
+                                  "\n- the number of track points"
+                                  "\n- the number of matching images"
+                                  " based on images date/time, offset and time zone"
+                                  "\n- more detailed time information hovering the row"));
+    renderer = gtk_cell_renderer_toggle_new();
+    g_signal_connect(renderer, "toggled", G_CALLBACK(_track_seg_toggled), self);
+    GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes("", renderer, "active", DT_GEO_TRACKS_ACTIVE, NULL);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(d->map.gpx_view), column);
+    d->map.sel_tracks = column;
+    GtkWidget *button = gtk_check_button_new();
+    gtk_widget_show(button);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), FALSE);
+    gtk_tree_view_column_set_widget(column, button);
+    gtk_tree_view_column_set_alignment(column, 0.5);
+    g_signal_connect(column, "clicked", G_CALLBACK(_all_tracks_toggled), self);
 
-  column = _new_tree_text_column(_("start time"), TRUE, 0.0, DT_GEO_TRACKS_DATETIME, PANGO_ELLIPSIZE_START);
-  gtk_tree_view_append_column(GTK_TREE_VIEW(d->map.gpx_view), column);
-  column = _new_tree_text_column(_("points"), FALSE, 1.0, DT_GEO_TRACKS_POINTS, PANGO_ELLIPSIZE_NONE);
-  gtk_tree_view_append_column(GTK_TREE_VIEW(d->map.gpx_view), column);
-  column = _new_tree_text_column(_("images"), FALSE, 1.0, DT_GEO_TRACKS_IMAGES, PANGO_ELLIPSIZE_NONE);
-  gtk_tree_view_append_column(GTK_TREE_VIEW(d->map.gpx_view), column);
+    column = _new_tree_text_column(_("start time"), TRUE, 0.0, DT_GEO_TRACKS_DATETIME, PANGO_ELLIPSIZE_START);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(d->map.gpx_view), column);
+    column = _new_tree_text_column(_("points"), FALSE, 1.0, DT_GEO_TRACKS_POINTS, PANGO_ELLIPSIZE_NONE);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(d->map.gpx_view), column);
+    column = _new_tree_text_column(_("images"), FALSE, 1.0, DT_GEO_TRACKS_IMAGES, PANGO_ELLIPSIZE_NONE);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(d->map.gpx_view), column);
 
-  g_object_set(G_OBJECT(d->map.gpx_view), "has-tooltip", TRUE, NULL);
-  g_signal_connect(G_OBJECT(d->map.gpx_view), "query-tooltip", G_CALLBACK(_row_tooltip_setup), self);
+    g_object_set(G_OBJECT(d->map.gpx_view), "has-tooltip", TRUE, NULL);
+    g_signal_connect(G_OBJECT(d->map.gpx_view), "query-tooltip", G_CALLBACK(_row_tooltip_setup), self);
 
-  // avoid ugly console pixman messages due to headers
-  gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(d->map.gpx_view), FALSE);
-  GtkWidget *w = dt_ui_scroll_wrap(GTK_WIDGET(d->map.gpx_view), 100, "plugins/lighttable/geotagging/heighttracklist");
-  gtk_widget_set_size_request(w, -1, 100);
-  gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(d->map.gpx_view), TRUE);
-  gtk_box_pack_start(GTK_BOX(d->map.gpx_section), w, TRUE, TRUE, 0);
+    // avoid ugly console pixman messages due to headers
+    gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(d->map.gpx_view), FALSE);
+    GtkWidget *w = dt_ui_scroll_wrap(GTK_WIDGET(d->map.gpx_view), 100, "plugins/lighttable/geotagging/heighttracklist");
+    gtk_widget_set_size_request(w, -1, 100);
+    gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(d->map.gpx_view), TRUE);
+    gtk_box_pack_start(GTK_BOX(d->map.gpx_section), w, TRUE, TRUE, 0);
 
-  grid = GTK_GRID(gtk_grid_new());
-  gtk_grid_set_column_spacing(grid, DT_PIXEL_APPLY_DPI(5));
-  line = 0;
+    grid = GTK_GRID(gtk_grid_new());
+    gtk_grid_set_column_spacing(grid, DT_PIXEL_APPLY_DPI(5));
+    line = 0;
 
-  d->map.preview_button = gtk_check_button_new_with_label(_("preview images"));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->map.preview_button), TRUE);
-  gtk_widget_set_sensitive(d->map.preview_button, FALSE);
-  gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->map.preview_button))), PANGO_ELLIPSIZE_END);
-  gtk_grid_attach(grid, d->map.preview_button, 0, line, 1, 1);
-  gtk_widget_set_tooltip_text(d->map.preview_button, _("show on map matching images"));
-  g_signal_connect(GTK_TOGGLE_BUTTON(d->map.preview_button), "toggled", G_CALLBACK(_images_preview_toggled), self);
+    d->map.preview_button = gtk_check_button_new_with_label(_("preview images"));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->map.preview_button), TRUE);
+    gtk_widget_set_sensitive(d->map.preview_button, FALSE);
+    gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->map.preview_button))), PANGO_ELLIPSIZE_END);
+    gtk_grid_attach(grid, d->map.preview_button, 0, line, 1, 1);
+    gtk_widget_set_tooltip_text(d->map.preview_button, _("show on map matching images"));
+    g_signal_connect(GTK_TOGGLE_BUTTON(d->map.preview_button), "toggled", G_CALLBACK(_images_preview_toggled), self);
 
-  d->map.select_button = dt_action_button_new(self, N_("select images"), _select_images, self,
-                                              _("select matching images"), 0, 0);
-  gtk_widget_set_hexpand(d->map.select_button, TRUE);
-  gtk_widget_set_sensitive(d->map.select_button, FALSE);
-  gtk_grid_attach(grid, d->map.select_button, 1, line, 1, 1);
+    d->map.select_button = dt_action_button_new(self, N_("select images"), _select_images, self,
+                                                _("select matching images"), 0, 0);
+    gtk_widget_set_hexpand(d->map.select_button, TRUE);
+    gtk_widget_set_sensitive(d->map.select_button, FALSE);
+    gtk_grid_attach(grid, d->map.select_button, 1, line, 1, 1);
 
-  d->map.nb_imgs_label = dt_ui_label_new("0/0");
-  gtk_widget_set_halign(d->map.nb_imgs_label, GTK_ALIGN_END);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(d->map.nb_imgs_label),
-                              _("number of matching images versus selected images"));
-  gtk_grid_attach(grid, d->map.nb_imgs_label, 2, line++, 1, 1);
+    d->map.nb_imgs_label = dt_ui_label_new("0/0");
+    gtk_widget_set_halign(d->map.nb_imgs_label, GTK_ALIGN_END);
+    gtk_widget_set_tooltip_text(GTK_WIDGET(d->map.nb_imgs_label),
+                                _("number of matching images versus selected images"));
+    gtk_grid_attach(grid, d->map.nb_imgs_label, 2, line++, 1, 1);
 
-  d->map.apply_gpx_button = dt_action_button_new(self, N_("apply geo-location"), _apply_gpx, self,
-                                                 _("apply geo-location to matching images"), 0, 0);
-  gtk_widget_set_hexpand(d->map.apply_gpx_button, TRUE);
-  gtk_widget_set_sensitive(d->map.apply_gpx_button, FALSE);
-  gtk_grid_attach(grid, d->map.apply_gpx_button, 0, line++, 3, 1);
+    d->map.apply_gpx_button = dt_action_button_new(self, N_("apply geo-location"), _apply_gpx, self,
+                                                  _("apply geo-location to matching images"), 0, 0);
+    gtk_widget_set_hexpand(d->map.apply_gpx_button, TRUE);
+    gtk_widget_set_sensitive(d->map.apply_gpx_button, FALSE);
+    gtk_grid_attach(grid, d->map.apply_gpx_button, 0, line++, 3, 1);
 
-  gtk_box_pack_start(GTK_BOX(d->map.gpx_section), GTK_WIDGET(grid), TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(d->map.gpx_section), GTK_WIDGET(grid), TRUE, TRUE, 0);
 
-  d->map.view = FALSE;
-  gtk_widget_show_all(self->widget);
-  gtk_widget_set_no_show_all(self->widget, TRUE);
-  _update_layout(self);
+    d->map.view = FALSE;
+    gtk_widget_show_all(self->widget);
+    gtk_widget_set_no_show_all(self->widget, TRUE);
+    _update_layout(self);
+  }
 #endif
   d->imgid = 0;
   d->datetime = d->datetime0 = _get_image_datetime(self);
@@ -1930,10 +1938,13 @@ void gui_init(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE,
                             G_CALLBACK(_dt_pref_change_callback), self);
 #ifdef HAVE_MAP
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
-                            G_CALLBACK(_view_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED,
-                            G_CALLBACK(_geotag_changed), self);
+  if(dt_conf_get_bool("/views/map/enable"))
+  {
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
+                              G_CALLBACK(_view_changed), self);
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED,
+                              G_CALLBACK(_geotag_changed), self);
+  }
 #endif
 
   _show_milliseconds(d);
@@ -1956,16 +1967,22 @@ void gui_cleanup(dt_lib_module_t *self)
   if(d->imgs)
   {
 #ifdef HAVE_MAP
+  if(dt_conf_get_bool("/views/map/enable"))
+  {
     _remove_images_from_map(self);
+  }
 #endif
     g_list_free_full(d->imgs, g_free);
   }
   d->imgs = NULL;
   d->imgs = 0;
 #ifdef HAVE_MAP
-  _remove_tracks_from_map(self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_changed), self);
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_geotag_changed), self);
+  if(dt_conf_get_bool("/views/map/enable"))
+  {
+    _remove_tracks_from_map(self);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_changed), self);
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_geotag_changed), self);
+  }
 #endif
   free(self->data);
   self->data = NULL;

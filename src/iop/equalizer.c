@@ -92,7 +92,7 @@ const char *name()
 
 int default_group()
 {
-  return IOP_GROUP_CORRECT | IOP_GROUP_EFFECTS;
+  return IOP_GROUP_SHARPNESS;
 }
 
 int flags()

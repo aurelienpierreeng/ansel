@@ -25,7 +25,7 @@ target_link_libraries(ansel-chart
                         m)
 if (WIN32)
   set_target_properties(ansel-chart PROPERTIES LINK_FLAGS "-mwindows -Wl,-subsystem,windows")
-  _detach_debuginfo (ansel-chart bin)
+  #_detach_debuginfo (ansel-chart bin)
 else()
     set_target_properties(ansel-chart
                           PROPERTIES

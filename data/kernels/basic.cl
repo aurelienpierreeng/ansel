@@ -664,7 +664,9 @@ interpolate_and_mask(read_only image2d_t input,
 
 
 kernel void
-remosaic_and_replace(read_only image2d_t interpolated,
+remosaic_and_replace(read_only image2d_t input,
+                     read_only image2d_t interpolated,
+                     read_only image2d_t clipping_mask,
                      write_only image2d_t output,
                      constant float *wb,
                      const int filters,
@@ -679,8 +681,10 @@ remosaic_and_replace(read_only image2d_t interpolated,
   const int c = FC(i, j, filters);
   const float4 center = read_imagef(interpolated, sampleri, (int2)(j, i));
   float *rgb = (float *)&center;
-
-  write_imagef(output, (int2)(j, i), fmax(rgb[c] * wb[c], 0.f));
+  const float opacity = read_imagef(clipping_mask, sampleri, (int2)(j, i)).w;
+  const float4 pix_in = read_imagef(input, sampleri, (int2)(j, i));
+  const float4 pix_out = opacity * fmax(rgb[c] * wb[c], 0.f) + (1.f - opacity) * pix_in;
+  write_imagef(output, (int2)(j, i), pix_out);
 }
 
 kernel void
@@ -707,7 +711,53 @@ box_blur_5x5(read_only image2d_t in,
 }
 
 
+kernel void
+interpolate_bilinear(read_only image2d_t in, const int width_in, const int height_in,
+                     write_only image2d_t out, const int width_out, const int height_out, const int RGBa)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
 
+  if(x >= width_out || y >= height_out) return;
+
+  // Relative coordinates of the pixel in output space
+  const float x_out = (float)x /(float)width_out;
+  const float y_out = (float)y /(float)height_out;
+
+  // Corresponding absolute coordinates of the pixel in input space
+  const float x_in = x_out * (float)width_in;
+  const float y_in = y_out * (float)height_in;
+
+  // Nearest neighbours coordinates in input space
+  int x_prev = (int)floor(x_in);
+  int x_next = x_prev + 1;
+  int y_prev = (int)floor(y_in);
+  int y_next = y_prev + 1;
+
+  x_prev = (x_prev < width_in) ? x_prev : width_in - 1;
+  x_next = (x_next < width_in) ? x_next : width_in - 1;
+  y_prev = (y_prev < height_in) ? y_prev : height_in - 1;
+  y_next = (y_next < height_in) ? y_next : height_in - 1;
+
+  // Nearest pixels in input array (nodes in grid)
+  const float4 Q_NW = read_imagef(in, samplerA, (int2)(x_prev, y_prev));
+  const float4 Q_NE = read_imagef(in, samplerA, (int2)(x_next, y_prev));
+  const float4 Q_SE = read_imagef(in, samplerA, (int2)(x_next, y_next));
+  const float4 Q_SW = read_imagef(in, samplerA, (int2)(x_prev, y_next));
+
+  // Spatial differences between nodes
+  const float Dy_next = (float)y_next - y_in;
+  const float Dy_prev = 1.f - Dy_next; // because next - prev = 1
+  const float Dx_next = (float)x_next - x_in;
+  const float Dx_prev = 1.f - Dx_next; // because next - prev = 1
+
+  // Interpolate
+  const float4 pix_out = Dy_prev * (Q_SW * Dx_next + Q_SE * Dx_prev) +
+                         Dy_next * (Q_NW * Dx_next + Q_NE * Dx_prev);
+
+  // Full RGBa copy - 4 channels
+  write_imagef(out, (int2)(x, y), pix_out);
+}
 
 
 enum wavelets_scale_t
@@ -916,6 +966,11 @@ diffuse_color(read_only image2d_t HF, read_only image2d_t LF,
 
   float4 high_frequency = read_imagef(HF, samplerA, (int2)(x, y));
 
+  // We use 4 floats SIMD instructions but we don't want to diffuse the norm, make sure to store and restore it later.
+  // This is not much of an issue when processing image at full-res, but more harmful since
+  // we reconstruct highlights on a downscaled variant
+  const float norm_backup = high_frequency.w;
+
   float4 out;
 
   if(alpha.w > 0.f) // reconstruct
@@ -959,6 +1014,8 @@ diffuse_color(read_only image2d_t HF, read_only image2d_t LF,
     // Diffuse
     const float4 multipliers_HF = { 1.f / B_SPLINE_TO_LAPLACIAN, 1.f / B_SPLINE_TO_LAPLACIAN, 1.f / B_SPLINE_TO_LAPLACIAN, 0.f };
     high_frequency += alpha * multipliers_HF * (laplacian_HF - first_order_factor * high_frequency);
+
+    high_frequency.w = norm_backup;
   }
 
   if((scale & FIRST_SCALE))
@@ -2657,7 +2714,7 @@ typedef enum dt_clipping_preview_mode_t
 } dt_clipping_preview_mode_t;
 
 kernel void
-overexposed (read_only image2d_t in, write_only image2d_t out, read_only image2d_t tmp, const int width, const int height,
+overexposed (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
              const float lower, const float upper, const float4 lower_color, const float4 upper_color,
              constant dt_colorspaces_iccprofile_info_cl_t *profile_info,
             read_only image2d_t lut, const int use_work_profile, dt_clipping_preview_mode_t mode)
@@ -2668,14 +2725,13 @@ overexposed (read_only image2d_t in, write_only image2d_t out, read_only image2d
   if(x >= width || y >= height) return;
 
   float4 pixel = read_imagef(in, sampleri, (int2)(x, y));
-  float4 pixel_tmp = read_imagef(tmp, sampleri, (int2)(x, y));
 
   if(mode == DT_CLIPPING_PREVIEW_ANYRGB)
   {
-    if(pixel_tmp.x >= upper || pixel_tmp.y >= upper || pixel_tmp.z >= upper)
+    if(pixel.x >= upper || pixel.y >= upper || pixel.z >= upper)
       pixel.xyz = upper_color.xyz;
 
-    else if(pixel_tmp.x <= lower && pixel_tmp.y <= lower && pixel_tmp.z <= lower)
+    else if(pixel.x <= lower && pixel.y <= lower && pixel.z <= lower)
       pixel.xyz = lower_color.xyz;
 
   }
@@ -2694,14 +2750,14 @@ overexposed (read_only image2d_t in, write_only image2d_t out, read_only image2d
     else
     {
       float4 saturation = { 0.f, 0.f, 0.f, 0.f};
-      saturation = pixel_tmp - (float4)luminance;
-      saturation = native_sqrt(saturation * saturation / ((float4)(luminance * luminance) + pixel_tmp * pixel_tmp));
+      saturation = pixel - (float4)luminance;
+      saturation = native_sqrt(saturation * saturation / ((float4)(luminance * luminance) + pixel * pixel));
 
       if(saturation.x > upper || saturation.y > upper || saturation.z > upper ||
-         pixel_tmp.x >= upper || pixel_tmp.y >= upper || pixel_tmp.z >= upper)
+         pixel.x >= upper || pixel.y >= upper || pixel.z >= upper)
         pixel.xyz = upper_color.xyz;
 
-      else if(pixel_tmp.x <= lower && pixel_tmp.y <= lower && pixel_tmp.z <= lower)
+      else if(pixel.x <= lower && pixel.y <= lower && pixel.z <= lower)
         pixel.xyz = lower_color.xyz;
     }
   }
@@ -2722,14 +2778,14 @@ overexposed (read_only image2d_t in, write_only image2d_t out, read_only image2d
     if(luminance < upper && luminance > lower)
     {
       float4 saturation = { 0.f, 0.f, 0.f, 0.f};
-      saturation = pixel_tmp - (float4)luminance;
-      saturation = native_sqrt(saturation * saturation / ((float4)(luminance * luminance) + pixel_tmp * pixel_tmp));
+      saturation = pixel - (float4)luminance;
+      saturation = native_sqrt(saturation * saturation / ((float4)(luminance * luminance) + pixel * pixel));
 
       if(saturation.x > upper || saturation.y > upper || saturation.z > upper ||
-         pixel_tmp.x >= upper || pixel_tmp.y >= upper || pixel_tmp.z >= upper)
+         pixel.x >= upper || pixel.y >= upper || pixel.z >= upper)
         pixel.xyz = upper_color.xyz;
 
-      else if(pixel_tmp.x <= lower && pixel_tmp.y <= lower && pixel_tmp.z <= lower)
+      else if(pixel.x <= lower && pixel.y <= lower && pixel.z <= lower)
         pixel.xyz = lower_color.xyz;
     }
   }

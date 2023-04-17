@@ -15,5 +15,5 @@ install(
   PROGRAMS
       ${TOOLS}
   DESTINATION
-      ${CMAKE_INSTALL_DATAROOTDIR}/darktable/tools
+      ${CMAKE_INSTALL_DATAROOTDIR}/ansel/tools
 )

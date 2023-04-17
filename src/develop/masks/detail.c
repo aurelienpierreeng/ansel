@@ -81,14 +81,8 @@
      as details mask)
   4. Thanks to rawfiner for pointing out how to use Y0 and scharr for better maths.
 
-  hanno@schwalm-bremen.de 21/04/29
+  hanno@schwalm-brmouseemen.de 21/04/29
 */
-
-// We don't want to use the SIMD version as we might access unaligned memory
-static inline float sqrf(float a)
-{
-  return a * a;
-}
 
 void dt_masks_extend_border(float *const restrict mask, const int width, const int height, const int border)
 {
@@ -129,16 +123,16 @@ void dt_masks_extend_border(float *const restrict mask, const int width, const i
 void _masks_blur_5x5_coeff(float *c, const float sigma)
 {
   float kernel[5][5];
-  const float temp = -2.0f * sqrf(sigma);
-  const float range = sqrf(3.0f * 0.84f);
+  const float temp = -2.0f * sqf(sigma);
+  const float range = sqf(3.0f * 0.84f);
   float sum = 0.0f;
   for(int k = -2; k <= 2; k++)
   {
     for(int j = -2; j <= 2; j++)
     {
-      if((sqrf(k) + sqrf(j)) <= range)
+      if((sqf(k) + sqf(j)) <= range)
       {
-        kernel[k + 2][j + 2] = expf((sqrf(k) + sqrf(j)) / temp);
+        kernel[k + 2][j + 2] = expf((sqf(k) + sqf(j)) / temp);
         sum += kernel[k + 2][j + 2];
       }
       else
@@ -169,16 +163,16 @@ void _masks_blur_5x5_coeff(float *c, const float sigma)
 void dt_masks_blur_9x9_coeff(float *c, const float sigma)
 {
   float kernel[9][9];
-  const float temp = -2.0f * sqrf(sigma);
-  const float range = sqrf(3.0f * 1.5f);
+  const float temp = -2.0f * sqf(sigma);
+  const float range = sqf(3.0f * 1.5f);
   float sum = 0.0f;
   for(int k = -4; k <= 4; k++)
   {
     for(int j = -4; j <= 4; j++)
     {
-      if((sqrf(k) + sqrf(j)) <= range)
+      if((sqf(k) + sqf(j)) <= range)
       {
-        kernel[k + 4][j + 4] = expf((sqrf(k) + sqrf(j)) / temp);
+        kernel[k + 4][j + 4] = expf((sqf(k) + sqf(j)) / temp);
         sum += kernel[k + 4][j + 4];
       }
       else
@@ -252,16 +246,16 @@ void dt_masks_blur_9x9(float *const restrict src, float *const restrict out, con
 void _masks_blur_13x13_coeff(float *c, const float sigma)
 {
   float kernel[13][13];
-  const float temp = -2.0f * sqrf(sigma);
-  const float range = sqrf(3.0f * 2.0f);
+  const float temp = -2.0f * sqf(sigma);
+  const float range = sqf(3.0f * 2.0f);
   float sum = 0.0f;
   for(int k = -6; k <= 6; k++)
   {
     for(int j = -6; j <= 6; j++)
     {
-      if((sqrf(k) + sqrf(j)) <= range)
+      if((sqf(k) + sqf(j)) <= range)
       {
-        kernel[k + 6][j + 6] = expf((sqrf(k) + sqrf(j)) / temp);
+        kernel[k + 6][j + 6] = expf((sqf(k) + sqf(j)) / temp);
         sum += kernel[k + 6][j + 6];
       }
       else
@@ -463,11 +457,11 @@ void dt_masks_calc_rawdetail_mask(float *const restrict src, float *const restri
       const float gy = 47.0f * (tmp[idx-width-1] - tmp[idx+width-1])
                     + 162.0f * (tmp[idx-width]   - tmp[idx+width])
                      + 47.0f * (tmp[idx-width+1] - tmp[idx+width+1]);
-      const float gradient_magnitude = sqrtf(sqrf(gx / 256.0f) + sqrf(gy / 256.0f));
+      const float gradient_magnitude = sqrtf(sqf(gx / 256.0f) + sqf(gy / 256.0f));
       mask[idx] = scale * gradient_magnitude;
       // Original code from rt
-      // tmp[idx] = scale * sqrtf(sqrf(src[idx+1] - src[idx-1]) + sqrf(src[idx + width]   - src[idx - width]) +
-      //                          sqrf(src[idx+2] - src[idx-2]) + sqrf(src[idx + 2*width] - src[idx - 2*width]));
+      // tmp[idx] = scale * sqrtf(sqf(src[idx+1] - src[idx-1]) + sqf(src[idx + width]   - src[idx - width]) +
+      //                          sqf(src[idx+2] - src[idx-2]) + sqf(src[idx + 2*width] - src[idx - 2*width]));
     }
   }
   dt_masks_extend_border(mask, width, height, 1);
@@ -505,4 +499,3 @@ void dt_masks_calc_detail_mask(float *const restrict src, float *const restrict 
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

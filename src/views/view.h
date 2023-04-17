@@ -57,7 +57,6 @@ typedef enum
   DT_VIEW_MAP = 8,
   DT_VIEW_SLIDESHOW = 16,
   DT_VIEW_PRINT = 32,
-  DT_VIEW_KNIGHT = 64
 } dt_view_type_flags_t;
 
 // flags that a view can set in flags()
@@ -66,15 +65,6 @@ typedef enum dt_view_flags_t
   VIEW_FLAGS_NONE = 0,
   VIEW_FLAGS_HIDDEN = 1 << 0,       // Hide the view from userinterface
 } dt_view_flags_t;
-
-typedef enum dt_lighttable_layout_t
-{
-  DT_LIGHTTABLE_LAYOUT_FIRST = -1,
-  DT_LIGHTTABLE_LAYOUT_FILEMANAGER = 0,
-  DT_LIGHTTABLE_LAYOUT_CULLING_DYNAMIC = 1,
-  DT_LIGHTTABLE_LAYOUT_PREVIEW = 2,
-  DT_LIGHTTABLE_LAYOUT_LAST = 3
-} dt_lighttable_layout_t;
 
 typedef enum dt_darkroom_layout_t
 {
@@ -115,10 +105,10 @@ typedef struct dt_mouse_action_t
 
 #define DT_VIEW_ALL                                                                              \
   (DT_VIEW_LIGHTTABLE | DT_VIEW_DARKROOM | DT_VIEW_TETHERING | DT_VIEW_MAP | DT_VIEW_SLIDESHOW | \
-   DT_VIEW_PRINT | DT_VIEW_KNIGHT)
+   DT_VIEW_PRINT)
 
 /* maximum zoom factor for the lighttable */
-#define DT_LIGHTTABLE_MAX_ZOOM 25
+#define DT_LIGHTTABLE_MAX_ZOOM 12
 
 /**
  * main dt view module (as lighttable or darkroom)
@@ -283,24 +273,7 @@ typedef struct dt_view_manager_t
       struct dt_view_t *view;
       void (*set_zoom)(struct dt_lib_module_t *module, gint zoom);
       gint (*get_zoom)(struct dt_lib_module_t *module);
-      dt_lighttable_layout_t (*get_layout)(struct dt_lib_module_t *module);
-      void (*set_layout)(struct dt_lib_module_t *module, dt_lighttable_layout_t layout);
-      void (*culling_init_mode)(struct dt_view_t *view);
-      void (*culling_preview_refresh)(struct dt_view_t *view);
-      void (*culling_preview_reload_overlays)(struct dt_view_t *view);
-      gboolean (*get_preview_state)(struct dt_view_t *view);
-      void (*set_preview_state)(struct dt_view_t *view, gboolean state, gboolean focus);
-      void (*change_offset)(struct dt_view_t *view, gboolean reset, gint imgid);
     } lighttable;
-
-    /* tethering view proxy object */
-    struct
-    {
-      struct dt_view_t *view;
-      const char *(*get_job_code)(const dt_view_t *view);
-      void (*set_job_code)(const dt_view_t *view, const char *name);
-      int32_t (*get_selected_imgid)(const dt_view_t *view);
-    } tethering;
 
 /* map view proxy object */
 #ifdef HAVE_MAP
@@ -400,8 +373,6 @@ void dt_view_active_images_reset(gboolean raise);
 void dt_view_active_images_add(int imgid, gboolean raise);
 GSList *dt_view_active_images_get();
 
-/** get the lighttable current layout */
-dt_lighttable_layout_t dt_view_lighttable_get_layout(dt_view_manager_t *vm);
 /** get the darkroom current layout */
 dt_darkroom_layout_t dt_view_darkroom_get_layout(dt_view_manager_t *vm);
 /** get the lighttable full preview state */
@@ -412,14 +383,6 @@ void dt_view_lighttable_set_preview_state(dt_view_manager_t *vm, gboolean state,
 void dt_view_lighttable_set_zoom(dt_view_manager_t *vm, gint zoom);
 /** gets the lighttable image in row zoom */
 gint dt_view_lighttable_get_zoom(dt_view_manager_t *vm);
-/** reinit culling for new mode */
-void dt_view_lighttable_culling_init_mode(dt_view_manager_t *vm);
-/** force refresh of culling and/or preview */
-void dt_view_lighttable_culling_preview_refresh(dt_view_manager_t *vm);
-/** force refresh of culling and/or preview overlays */
-void dt_view_lighttable_culling_preview_reload_overlays(dt_view_manager_t *vm);
-/** sets the offset image (for culling and full preview) */
-void dt_view_lighttable_change_offset(dt_view_manager_t *vm, gboolean reset, gint imgid);
 
 /* accel window */
 void dt_view_accels_show(dt_view_manager_t *vm);

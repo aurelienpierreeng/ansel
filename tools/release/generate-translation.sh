@@ -108,6 +108,9 @@ cd po
 
 echo "## Translations"
 
+# Check for new files that might be needed in translations
+intltool-update -m
+
 intltool-update -r 2>&1 | grep -e '[^:]: [0-9]' > ../INTL.OUT
 git restore *.po
 

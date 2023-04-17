@@ -5,24 +5,24 @@ find_library(M_LIBRARY m)
 find_package(Exiv2 REQUIRED)
 include_directories(${Exiv2_INCLUDE_DIR})
 
-add_executable(darktable-curve-tool darktable-curve-tool.c exif-wrapper.cpp)
+add_executable(ansel-curve-tool ansel-curve-tool.c exif-wrapper.cpp)
 if (OPENMP_FOUND)
-    set_target_properties(darktable-curve-tool PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
+    set_target_properties(ansel-curve-tool PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
     if(OpenMP_CXX_INCLUDE_DIRS)
         include_directories(${OpenMP_CXX_INCLUDE_DIRS})
     endif()
 endif()
-target_link_libraries(darktable-curve-tool ${Exiv2_LIBRARY} ${OpenMP_CXX_LIBRARIES} m)
+target_link_libraries(ansel-curve-tool ${Exiv2_LIBRARY} ${OpenMP_CXX_LIBRARIES} m)
 
 configure_file(README.cmake.md README.md)
 
 install(TARGETS
-            darktable-curve-tool
+            ansel-curve-tool
         RUNTIME DESTINATION
             ${CMAKE_INSTALL_LIBEXECDIR}/ansel/tools)
 
 install(PROGRAMS
-            darktable-curve-tool-helper
+            ansel-curve-tool-helper
         DESTINATION
             ${CMAKE_INSTALL_LIBEXECDIR}/ansel/tools)
 

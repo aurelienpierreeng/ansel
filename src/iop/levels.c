@@ -112,12 +112,12 @@ const char *name()
 
 int default_group()
 {
-  return IOP_GROUP_TONE | IOP_GROUP_GRADING | IOP_FLAGS_DEPRECATED;
+  return IOP_GROUP_TONES;
 }
 
 int flags()
 {
-  return IOP_FLAGS_SUPPORTS_BLENDING;
+  return IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_DEPRECATED;
 }
 
 int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

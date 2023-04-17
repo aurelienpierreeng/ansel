@@ -48,7 +48,7 @@ endif()
 foreach(module ${MODULES})
     target_link_libraries(${module} PUBLIC lib_ansel)
     if (WIN32)
-        _detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/ansel/plugins/imageio/format)
+        #_detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/ansel/plugins/imageio/format)
     else()
         set_target_properties(${module}
                               PROPERTIES

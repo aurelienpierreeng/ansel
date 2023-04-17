@@ -5,7 +5,7 @@ set_target_properties(ansel-cltest PROPERTIES LINKER_LANGUAGE C)
 target_link_libraries(ansel-cltest lib_ansel)
 
 if (WIN32)
-  _detach_debuginfo (ansel-cltest bin)
+  # (ansel-cltest bin)
 else()
     # Note that $ORIGIN is not a variable but has a special meaning at runtime.
     # The string "$ORIGIN" should end up in the executable as-is.

@@ -90,7 +90,6 @@ typedef enum dt_shortcut_flag_t
 {
   DT_SHORTCUT_LONG   = 1 << 0,
   DT_SHORTCUT_DOUBLE = 1 << 1,
-  DT_SHORTCUT_TRIPLE = 1 << 2,
   DT_SHORTCUT_LEFT   = 1 << 0,
   DT_SHORTCUT_MIDDLE = 1 << 1,
   DT_SHORTCUT_RIGHT  = 1 << 2,
@@ -190,9 +189,12 @@ float dt_accel_get_speed_multiplier(GtkWidget *widget, guint state);
 // create a shortcutable button with ellipsized label and tooltip
 GtkWidget *dt_action_button_new(dt_lib_module_t *self, const gchar *label, gpointer callback, gpointer data, const gchar *tooltip, guint accel_key, GdkModifierType mods);
 
+// Try to reconnect stupid "next-gen" accels to Gtk standard keyboard accels
+// Return TRUE if we found something compatible.
+gboolean get_accel_from_widget(GtkWidget *widget, guint *key_val, GdkModifierType *mods);
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

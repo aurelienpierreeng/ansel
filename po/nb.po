@@ -21,17 +21,17 @@ msgstr ""
 "X-Generator: Poedit 2.2.4\n"
 "X-Poedit-Bookmarks: -1,-1,-1,-1,-1,-1,-1,2362,1305,-1\n"
 
-#: ../build/data/ansel.desktop.in.h:1 ../data/ansel.desktop.in.h:1
+#: ../build/data/darktable.desktop.in.h:1 ../data/darktable.desktop.in.h:1
 msgid "Virtual Lighttable and Darkroom"
 msgstr "Virtuelt lysbord og mørkerom"
 
-#: ../build/data/ansel.desktop.in.h:2 ../data/photos.ansel.app.appdata.xml.in.h:1
-#: ../data/ansel.desktop.in.h:2
+#: ../build/data/darktable.desktop.in.h:2 ../data/darktable.appdata.xml.in.h:1
+#: ../data/darktable.desktop.in.h:2
 msgid "Organize and develop images from digital cameras"
 msgstr "Organiser og fremkall bilder fra digitale kamera"
 
 #. TRANSLATORS: Search terms to find this application. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
-#: ../build/data/ansel.desktop.in.h:4 ../data/ansel.desktop.in.h:4
+#: ../build/data/darktable.desktop.in.h:4 ../data/darktable.desktop.in.h:4
 msgid "graphics;photography;raw;"
 msgstr "grafikk;fotografering;raw;"
 
@@ -1176,7 +1176,7 @@ msgstr "navnemønster for filer"
 msgid "file naming pattern used for a import session"
 msgstr "navnemønster for filer i import-økt"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:2
+#: ../data/darktable.appdata.xml.in.h:2
 msgid ""
 "darktable manages your digital negatives in a database and lets you view "
 "them through a lighttable. It also enables you to develop raw images and "
@@ -1186,7 +1186,7 @@ msgstr ""
 "på et lysbord. Det lar deg også fremkalle RAW-bilder og forbedre dem i et "
 "mørkerom."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:3
+#: ../data/darktable.appdata.xml.in.h:3
 msgid ""
 "Other modes besides lighttable and darkroom are a map for geotagging, "
 "tethering, print and a slideshow."
@@ -1194,7 +1194,7 @@ msgstr ""
 "Andre verktøy i tillegg til lysbord og mørkerom er kart for geomerking, "
 "direktefotografering via fjernstyring, utskrift og lysbilde-show."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:4
+#: ../data/darktable.appdata.xml.in.h:4
 msgid ""
 "darktable supports most modern cameras' raw formats, and does all of its "
 "processing at very high precision."
@@ -1202,23 +1202,23 @@ msgstr ""
 "darktable støtter de fleste moderne kameraers RAW-formater, og foretar all "
 "sin prosessering med svært høy presisjon."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:5
+#: ../data/darktable.appdata.xml.in.h:5
 msgid "Virtual light table, showing a collection"
 msgstr "Virtuelt lysbord, viser en samling"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:6
+#: ../data/darktable.appdata.xml.in.h:6
 msgid "Virtual dark room with an opened image"
 msgstr "Virtuelt mørkerom med et åpnet bilde"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:7
+#: ../data/darktable.appdata.xml.in.h:7
 msgid "Virtual dark room, sharpening an image"
 msgstr "Virtuelt mørkerom, økt skarphet i et bilde"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:8
+#: ../data/darktable.appdata.xml.in.h:8
 msgid "Show images on a map"
 msgstr "Vis bilder på et kart"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:9
+#: ../data/darktable.appdata.xml.in.h:9
 msgid "Print your images"
 msgstr "Skriv ut bilder"
 
@@ -15256,3 +15256,4 @@ msgstr "Funksjon"
 
 #~ msgid "automatic in RGB"
 #~ msgstr "automatisk i RGB"
+

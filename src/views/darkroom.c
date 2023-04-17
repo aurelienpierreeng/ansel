@@ -85,7 +85,7 @@ static void _dev_change_image(dt_develop_t *dev, const int32_t imgid);
 
 const char *name(const dt_view_t *self)
 {
-  return _("darkroom");
+  return _("Darkroom");
 }
 
 #ifdef USE_LUA
@@ -160,11 +160,7 @@ static cairo_status_t _write_snapshot_data(void *closure, const unsigned char *d
 
 static dt_darkroom_layout_t _lib_darkroom_get_layout(dt_view_t *self)
 {
-  dt_develop_t *dev = (dt_develop_t *)self->data;
-  if(dev->iso_12646.enabled)
-    return DT_DARKROOM_LAYOUT_EDITING;
-  else
-    return DT_DARKROOM_LAYOUT_EDITING;
+  return DT_DARKROOM_LAYOUT_EDITING;
 }
 
 static cairo_filter_t _get_filtering_level(dt_develop_t *dev, dt_dev_zoom_t zoom, int closeup)
@@ -180,63 +176,6 @@ static cairo_filter_t _get_filtering_level(dt_develop_t *dev, dt_dev_zoom_t zoom
   else
     return darktable.gui->dr_filter_image;
 }
-
-void _display_module_trouble_message_callback(gpointer instance,
-                                              dt_iop_module_t *module,
-                                              const char *const trouble_msg,
-                                              const char *const trouble_tooltip)
-{
-  GtkWidget *label_widget = NULL;
-
-  if(module && module->has_trouble && module->widget)
-  {
-    label_widget = dt_gui_container_first_child(GTK_CONTAINER(gtk_widget_get_parent(module->widget)));
-    if(g_strcmp0(gtk_widget_get_name(label_widget), "iop-plugin-warning"))
-      label_widget = NULL;
-  }
-
-  if(trouble_msg && *trouble_msg)
-  {
-    if(module && module->widget)
-    {
-      if(label_widget)
-      {
-        // set the warning message in the module's message area just below the header
-        gtk_label_set_text(GTK_LABEL(label_widget), trouble_msg);
-      }
-      else
-      {
-        label_widget = gtk_label_new(trouble_msg);;
-        gtk_label_set_line_wrap(GTK_LABEL(label_widget), TRUE);
-        gtk_label_set_xalign(GTK_LABEL(label_widget), 0.0);
-        gtk_widget_set_name(label_widget, "iop-plugin-warning");
-        dt_gui_add_class(label_widget, "dt_warning");
-
-        GtkWidget *iopw = gtk_widget_get_parent(module->widget);
-        gtk_box_pack_start(GTK_BOX(iopw), label_widget, TRUE, TRUE, 0);
-        gtk_box_reorder_child(GTK_BOX(iopw), label_widget, 0);
-        gtk_widget_show(label_widget);
-      }
-
-      gtk_widget_set_tooltip_text(GTK_WIDGET(label_widget), trouble_tooltip);
-
-      // set the module's trouble flag
-      module->has_trouble = TRUE;
-
-      dt_iop_gui_update_header(module);
-    }
-  }
-  else if(module && module->has_trouble)
-  {
-    // no more trouble, so clear the trouble flag and remove the message area
-    module->has_trouble = FALSE;
-
-    dt_iop_gui_update_header(module);
-
-    if(label_widget) gtk_widget_destroy(label_widget);
-  }
-}
-
 
 static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
                                    int32_t width, int32_t height,
@@ -687,8 +626,7 @@ void expose(
 
   // display mask if we have a current module activated or if the masks manager module is expanded
 
-  const gboolean display_masks = (dev->gui_module && dev->gui_module->enabled
-                                  && dt_dev_modulegroups_get_activated(darktable.develop) != DT_MODULEGROUP_BASICS)
+  const gboolean display_masks = (dev->gui_module && dev->gui_module->enabled)
                                  || dt_lib_gui_get_expanded(dt_lib_get_module("masks"));
 
   // draw colorpicker for in focus module or execute module callback hook
@@ -704,8 +642,7 @@ void expose(
     if(dev->form_visible && display_masks)
       dt_masks_events_post_expose(dev->gui_module, cri, width, height, pointerx, pointery);
     // module
-    if(dev->gui_module && dev->gui_module->gui_post_expose
-       && dt_dev_modulegroups_get_activated(darktable.develop) != DT_MODULEGROUP_BASICS)
+    if(dev->gui_module && dev->gui_module->gui_post_expose)
       dev->gui_module->gui_post_expose(dev->gui_module, cri, width, height, pointerx, pointery);
   }
 
@@ -1225,20 +1162,6 @@ static void _darkroom_ui_pipe_finish_signal_callback(gpointer instance, gpointer
   dt_control_queue_redraw_center();
 }
 
-static void _darkroom_ui_favorite_presets_popupmenu(GtkWidget *w, gpointer user_data)
-{
-  /* create favorites menu and popup */
-  dt_gui_favorite_presets_menu_show();
-
-  /* if we got any styles, lets popup menu for selection */
-  if(darktable.gui->presets_popup_menu)
-  {
-    dt_gui_menu_popup(darktable.gui->presets_popup_menu, w, GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST);
-  }
-  else
-    dt_control_log(_("no userdefined presets for favorite modules were found"));
-}
-
 static void _darkroom_ui_apply_style_activate_callback(gchar *name)
 {
   dt_control_log(_("applied style `%s' on current image"), name);
@@ -1566,67 +1489,6 @@ static void _update_softproof_gamut_checking(dt_develop_t *d)
   g_signal_handlers_unblock_by_func(d->profile.gamut_button, _gamut_quickbutton_clicked, d);
 }
 
-static void display_intent_callback(GtkWidget *combo, gpointer user_data)
-{
-  dt_develop_t *d = (dt_develop_t *)user_data;
-  const int pos = dt_bauhaus_combobox_get(combo);
-
-  dt_iop_color_intent_t new_intent = darktable.color_profiles->display_intent;
-
-  // we are not using the int value directly so it's robust against changes on lcms' side
-  switch(pos)
-  {
-    case 0:
-      new_intent = DT_INTENT_PERCEPTUAL;
-      break;
-    case 1:
-      new_intent = DT_INTENT_RELATIVE_COLORIMETRIC;
-      break;
-    case 2:
-      new_intent = DT_INTENT_SATURATION;
-      break;
-    case 3:
-      new_intent = DT_INTENT_ABSOLUTE_COLORIMETRIC;
-      break;
-  }
-
-  if(new_intent != darktable.color_profiles->display_intent)
-  {
-    darktable.color_profiles->display_intent = new_intent;
-    dt_dev_reprocess_all(d);
-  }
-}
-
-static void display2_intent_callback(GtkWidget *combo, gpointer user_data)
-{
-  dt_develop_t *d = (dt_develop_t *)user_data;
-  const int pos = dt_bauhaus_combobox_get(combo);
-
-  dt_iop_color_intent_t new_intent = darktable.color_profiles->display2_intent;
-
-  // we are not using the int value directly so it's robust against changes on lcms' side
-  switch(pos)
-  {
-    case 0:
-      new_intent = DT_INTENT_PERCEPTUAL;
-      break;
-    case 1:
-      new_intent = DT_INTENT_RELATIVE_COLORIMETRIC;
-      break;
-    case 2:
-      new_intent = DT_INTENT_SATURATION;
-      break;
-    case 3:
-      new_intent = DT_INTENT_ABSOLUTE_COLORIMETRIC;
-      break;
-  }
-
-  if(new_intent != darktable.color_profiles->display2_intent)
-  {
-    darktable.color_profiles->display2_intent = new_intent;
-    dt_dev_reprocess_all(d);
-  }
-}
 
 static void softproof_profile_callback(GtkWidget *combo, gpointer user_data)
 {
@@ -1666,152 +1528,11 @@ end:
   }
 }
 
-static void display_profile_callback(GtkWidget *combo, gpointer user_data)
-{
-  dt_develop_t *d = (dt_develop_t *)user_data;
-  gboolean profile_changed = FALSE;
-  const int pos = dt_bauhaus_combobox_get(combo);
-  for(GList *profiles = darktable.color_profiles->profiles; profiles; profiles = g_list_next(profiles))
-  {
-    dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)profiles->data;
-    if(pp->display_pos == pos)
-    {
-      if(darktable.color_profiles->display_type != pp->type
-        || (darktable.color_profiles->display_type == DT_COLORSPACE_FILE
-            && strcmp(darktable.color_profiles->display_filename, pp->filename)))
-      {
-        darktable.color_profiles->display_type = pp->type;
-        g_strlcpy(darktable.color_profiles->display_filename, pp->filename,
-                  sizeof(darktable.color_profiles->display_filename));
-        profile_changed = TRUE;
-      }
-      goto end;
-    }
-  }
-
-  // profile not found, fall back to system display profile. shouldn't happen
-  fprintf(stderr, "can't find display profile `%s', using system display profile instead\n", dt_bauhaus_combobox_get_text(combo));
-  profile_changed = darktable.color_profiles->display_type != DT_COLORSPACE_DISPLAY;
-  darktable.color_profiles->display_type = DT_COLORSPACE_DISPLAY;
-  darktable.color_profiles->display_filename[0] = '\0';
-
-end:
-  if(profile_changed)
-  {
-    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
-    dt_colorspaces_update_display_transforms();
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
-    dt_dev_reprocess_all(d);
-  }
-}
-
-static void display2_profile_callback(GtkWidget *combo, gpointer user_data)
-{
-  dt_develop_t *d = (dt_develop_t *)user_data;
-  gboolean profile_changed = FALSE;
-  const int pos = dt_bauhaus_combobox_get(combo);
-  for(GList *profiles = darktable.color_profiles->profiles; profiles; profiles = g_list_next(profiles))
-  {
-    dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)profiles->data;
-    if(pp->display2_pos == pos)
-    {
-      if(darktable.color_profiles->display2_type != pp->type
-         || (darktable.color_profiles->display2_type == DT_COLORSPACE_FILE
-             && strcmp(darktable.color_profiles->display2_filename, pp->filename)))
-      {
-        darktable.color_profiles->display2_type = pp->type;
-        g_strlcpy(darktable.color_profiles->display2_filename, pp->filename,
-                  sizeof(darktable.color_profiles->display2_filename));
-        profile_changed = TRUE;
-      }
-      goto end;
-    }
-  }
-
-  // profile not found, fall back to system display2 profile. shouldn't happen
-  fprintf(stderr, "can't find preview display profile `%s', using system display profile instead\n",
-          dt_bauhaus_combobox_get_text(combo));
-  profile_changed = darktable.color_profiles->display2_type != DT_COLORSPACE_DISPLAY2;
-  darktable.color_profiles->display2_type = DT_COLORSPACE_DISPLAY2;
-  darktable.color_profiles->display2_filename[0] = '\0';
-
-end:
-  if(profile_changed)
-  {
-    pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
-    dt_colorspaces_update_display2_transforms();
-    pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
-                            DT_COLORSPACES_PROFILE_TYPE_DISPLAY2);
-    dt_dev_reprocess_all(d);
-  }
-}
-
-static void histogram_profile_callback(GtkWidget *combo, gpointer user_data)
-{
-  dt_develop_t *d = (dt_develop_t *)user_data;
-  gboolean profile_changed = FALSE;
-  const int pos = dt_bauhaus_combobox_get(combo);
-  for(GList *profiles = darktable.color_profiles->profiles; profiles; profiles = g_list_next(profiles))
-  {
-    dt_colorspaces_color_profile_t *pp = (dt_colorspaces_color_profile_t *)profiles->data;
-    if(pp->category_pos == pos)
-    {
-      if(darktable.color_profiles->histogram_type != pp->type
-        || (darktable.color_profiles->histogram_type == DT_COLORSPACE_FILE
-            && strcmp(darktable.color_profiles->histogram_filename, pp->filename)))
-      {
-        darktable.color_profiles->histogram_type = pp->type;
-        g_strlcpy(darktable.color_profiles->histogram_filename, pp->filename,
-                  sizeof(darktable.color_profiles->histogram_filename));
-        profile_changed = TRUE;
-      }
-      goto end;
-    }
-  }
-
-  // profile not found, fall back to export profile. shouldn't happen
-  fprintf(stderr, "can't find histogram profile `%s', using export profile instead\n", dt_bauhaus_combobox_get_text(combo));
-  profile_changed = darktable.color_profiles->histogram_type != DT_COLORSPACE_WORK;
-  darktable.color_profiles->histogram_type = DT_COLORSPACE_WORK;
-  darktable.color_profiles->histogram_filename[0] = '\0';
-
-end:
-  if(profile_changed)
-  {
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_HISTOGRAM);
-    dt_dev_reprocess_all(d);
-  }
-}
-
 // FIXME: turning off lcms2 in prefs hides the widget but leaves the window sized like before -> ugly-ish
 static void _preference_changed(gpointer instance, gpointer user_data)
 {
-  GtkWidget *display_intent = GTK_WIDGET(user_data);
-
-  const int force_lcms2 = dt_conf_get_bool("plugins/lighttable/export/force_lcms2");
-  if(force_lcms2)
-  {
-    gtk_widget_set_no_show_all(display_intent, FALSE);
-    gtk_widget_set_visible(display_intent, TRUE);
-  }
-  else
-  {
-    gtk_widget_set_no_show_all(display_intent, TRUE);
-    gtk_widget_set_visible(display_intent, FALSE);
-  }
   dt_get_sysresource_level();
   dt_configure_ppd_dpi(darktable.gui);
-}
-
-static void _preference_prev_downsample_change(gpointer instance, gpointer user_data)
-{
-  if(user_data != NULL)
-  {
-    float *ds_value = user_data;
-    *ds_value = dt_dev_get_preview_downsampling();
-  }
 }
 
 static void _preference_changed_button_hide(gpointer instance, dt_develop_t *dev)
@@ -1824,62 +1545,6 @@ static void _preference_changed_button_hide(gpointer instance, dt_develop_t *dev
       add_remove_mask_indicator(module, (module->blend_params->mask_mode != DEVELOP_MASK_DISABLED) &&
                                 (module->blend_params->mask_mode != DEVELOP_MASK_ENABLED));
   }
-}
-
-static void _update_display_profile_cmb(GtkWidget *cmb_display_profile)
-{
-  for(const GList *l = darktable.color_profiles->profiles; l; l = g_list_next(l))
-  {
-    dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
-    if(prof->display_pos > -1)
-    {
-      if(prof->type == darktable.color_profiles->display_type
-         && (prof->type != DT_COLORSPACE_FILE
-             || !strcmp(prof->filename, darktable.color_profiles->display_filename)))
-      {
-        if(dt_bauhaus_combobox_get(cmb_display_profile) != prof->display_pos)
-        {
-          dt_bauhaus_combobox_set(cmb_display_profile, prof->display_pos);
-          break;
-        }
-      }
-    }
-  }
-}
-
-static void _update_display2_profile_cmb(GtkWidget *cmb_display_profile)
-{
-  for(const GList *l = darktable.color_profiles->profiles; l; l = g_list_next(l))
-  {
-    dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
-    if(prof->display2_pos > -1)
-    {
-      if(prof->type == darktable.color_profiles->display2_type
-         && (prof->type != DT_COLORSPACE_FILE
-             || !strcmp(prof->filename, darktable.color_profiles->display2_filename)))
-      {
-        if(dt_bauhaus_combobox_get(cmb_display_profile) != prof->display2_pos)
-        {
-          dt_bauhaus_combobox_set(cmb_display_profile, prof->display2_pos);
-          break;
-        }
-      }
-    }
-  }
-}
-
-static void _display_profile_changed(gpointer instance, uint8_t profile_type, gpointer user_data)
-{
-  GtkWidget *cmb_display_profile = GTK_WIDGET(user_data);
-
-  _update_display_profile_cmb(cmb_display_profile);
-}
-
-static void _display2_profile_changed(gpointer instance, uint8_t profile_type, gpointer user_data)
-{
-  GtkWidget *cmb_display_profile = GTK_WIDGET(user_data);
-
-  _update_display2_profile_cmb(cmb_display_profile);
 }
 
 /** end of toolbox */
@@ -1969,16 +1634,6 @@ static void _toggle_mask_visibility_callback(dt_action_t *action)
   }
 }
 
-static void _darkroom_undo_callback(dt_action_t *action)
-{
-  dt_undo_do_undo(darktable.undo, DT_UNDO_DEVELOP);
-}
-
-static void _darkroom_redo_callback(dt_action_t *action)
-{
-  dt_undo_do_redo(darktable.undo, DT_UNDO_DEVELOP);
-}
-
 static void search_callback(dt_action_t *action)
 {
   // set focus to the search module text box
@@ -1989,18 +1644,19 @@ static void change_slider_accel_precision(dt_action_t *action);
 
 static float _action_process_skip_mouse(gpointer target, dt_action_element_t element, dt_action_effect_t effect, float move_size)
 {
+  // The key shortcut inverts the global mask lock defined in GUI
   if(!isnan(move_size))
   {
     switch(effect)
     {
     case DT_ACTION_EFFECT_ON:
-      darktable.develop->darkroom_skip_mouse_events = TRUE;
+      darktable.develop->darkroom_skip_mouse_events = !dt_masks_get_lock_mode(darktable.develop);
       break;
     case DT_ACTION_EFFECT_OFF:
-      darktable.develop->darkroom_skip_mouse_events = FALSE;
+      darktable.develop->darkroom_skip_mouse_events = dt_masks_get_lock_mode(darktable.develop);
       break;
     default:
-      darktable.develop->darkroom_skip_mouse_events ^= TRUE;
+      darktable.develop->darkroom_skip_mouse_events ^= !dt_masks_get_lock_mode(darktable.develop);
     }
   }
 
@@ -2157,6 +1813,115 @@ void connect_button_press_release(GtkWidget *w, GtkWidget *p)
   g_signal_connect(w, "button-release-event", G_CALLBACK(_quickbutton_press_release), p);
 }
 
+static void _focus_module(dt_iop_module_t *module)
+{
+  if(module && dt_iop_gui_module_is_visible(module))
+  {
+    dt_iop_request_focus(module);
+    dt_iop_gui_set_expanded(module, TRUE, TRUE);
+    darktable.gui->scroll_to[1] = module->expander;
+  }
+  else
+  {
+    // we reached the extremity of the list.
+    dt_iop_request_focus(NULL);
+  }
+}
+
+static void _focus_next_module()
+{
+  dt_iop_module_t *focused = darktable.develop->gui_module;
+  if(focused == NULL)
+  {
+    // No focused module : give focus to the first visible module of the stack
+    GList *modules = darktable.develop->iop;
+    if(modules)
+    {
+      modules = g_list_last(modules);
+      dt_iop_module_t *module = NULL;
+      do
+      {
+        dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+        if(mod && dt_iop_gui_module_is_visible(mod))
+        {
+          module = mod;
+          break;
+        }
+      } while((modules = g_list_previous(modules)) != NULL);
+      _focus_module(module);
+    }
+  }
+  else
+  {
+    dt_iop_gui_set_expanded(focused, FALSE, TRUE);
+    _focus_module(dt_iop_gui_get_previous_visible_module(focused));
+  }
+}
+
+static void _focus_previous_module()
+{
+  dt_iop_module_t *focused = darktable.develop->gui_module;
+  if(focused == NULL)
+  {
+    // No focused module : give focus to the last visible module of the stack
+    GList *modules = darktable.develop->iop;
+    if(modules)
+    {
+      modules = g_list_first(modules);
+      dt_iop_module_t *module = NULL;
+      do
+      {
+        dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+        if(mod && dt_iop_gui_module_is_visible(mod))
+        {
+          module = mod;
+          break;
+        }
+      } while((modules = g_list_next(modules)) != NULL);
+      _focus_module(module);
+    }
+  }
+  else
+  {
+    dt_iop_gui_set_expanded(focused, FALSE, TRUE);
+    _focus_module(dt_iop_gui_get_next_visible_module(focused));
+  }
+}
+
+static void _enable_module()
+{
+  dt_iop_module_t *focused = darktable.develop->gui_module;
+  if(focused != NULL && dt_iop_gui_module_is_visible(focused))
+  {
+    if(!focused->enabled)
+    {
+      focused->enabled = TRUE;
+      dt_iop_gui_set_enable_button(focused);
+    }
+    // else : don't change the enabled status but still grab focus on the internal widget
+
+    darktable.gui->scroll_to[1] = focused->expander;
+    gtk_widget_grab_focus(focused->widget);
+  }
+}
+
+static void _disable_module()
+{
+  dt_iop_module_t *focused = darktable.develop->gui_module;
+  if(focused != NULL && dt_iop_gui_module_is_visible(focused))
+  {
+    if(focused->enabled)
+    {
+      focused->enabled = FALSE;
+      dt_iop_gui_set_enable_button(focused);
+    }
+    // else : don't change the enabled status but still grab focus on the external widget
+
+    gtk_widget_grab_focus(focused->expander);
+  }
+}
+
+
 void gui_init(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
@@ -2166,14 +1931,6 @@ void gui_init(dt_view_t *self)
   /*
    * Add view specific tool buttons
    */
-
-  /* create favorite plugin preset popup tool */
-  GtkWidget *favorite_presets = dtgtk_button_new(dtgtk_cairo_paint_presets, 0, NULL);
-  gtk_widget_set_tooltip_text(favorite_presets, _("quick access to presets"));
-  g_signal_connect(G_OBJECT(favorite_presets), "clicked", G_CALLBACK(_darkroom_ui_favorite_presets_popupmenu),
-                   NULL);
-  dt_gui_add_help_link(favorite_presets, dt_get_help_url("favorite_presets"));
-  dt_view_manager_view_toolbox_add(darktable.view_manager, favorite_presets, DT_VIEW_DARKROOM);
 
   /* create quick styles popup menu tool */
   GtkWidget *styles = dtgtk_button_new(dtgtk_cairo_paint_styles, 0, NULL);
@@ -2351,79 +2108,15 @@ void gui_init(dt_view_t *self)
     char confdir[PATH_MAX] = { 0 };
     dt_loc_get_user_config_dir(confdir, sizeof(confdir));
     dt_loc_get_datadir(datadir, sizeof(datadir));
-    const int force_lcms2 = dt_conf_get_bool("plugins/lighttable/export/force_lcms2");
 
-    GtkWidget *display_intent = dt_bauhaus_combobox_new_action(DT_ACTION(self));
-    dt_bauhaus_widget_set_label(display_intent, N_("profiles"), N_("intent"));
-    dt_bauhaus_combobox_add(display_intent, _("perceptual"));
-    dt_bauhaus_combobox_add(display_intent, _("relative colorimetric"));
-    dt_bauhaus_combobox_add(display_intent, C_("rendering intent", "saturation"));
-    dt_bauhaus_combobox_add(display_intent, _("absolute colorimetric"));
-
-    GtkWidget *display2_intent = dt_bauhaus_combobox_new_action(DT_ACTION(self));
-    dt_bauhaus_widget_set_label(display2_intent, N_("profiles"), N_("preview intent"));
-    dt_bauhaus_combobox_add(display2_intent, _("perceptual"));
-    dt_bauhaus_combobox_add(display2_intent, _("relative colorimetric"));
-    dt_bauhaus_combobox_add(display2_intent, C_("rendering intent", "saturation"));
-    dt_bauhaus_combobox_add(display2_intent, _("absolute colorimetric"));
-
-    if(!force_lcms2)
-    {
-      gtk_widget_set_no_show_all(display_intent, TRUE);
-      gtk_widget_set_visible(display_intent, FALSE);
-      gtk_widget_set_no_show_all(display2_intent, TRUE);
-      gtk_widget_set_visible(display2_intent, FALSE);
-    }
-
-    GtkWidget *display_profile = dt_bauhaus_combobox_new_action(DT_ACTION(self));
-    GtkWidget *display2_profile = dt_bauhaus_combobox_new_action(DT_ACTION(self));
     GtkWidget *softproof_profile = dt_bauhaus_combobox_new_action(DT_ACTION(self));
-    GtkWidget *histogram_profile = dt_bauhaus_combobox_new_action(DT_ACTION(self));
-
-    dt_bauhaus_widget_set_label(display_profile, N_("profiles"), N_("display profile"));
-    dt_bauhaus_widget_set_label(display2_profile, N_("profiles"), N_("preview display profile"));
     dt_bauhaus_widget_set_label(softproof_profile, N_("profiles"), N_("softproof profile"));
-    dt_bauhaus_widget_set_label(histogram_profile, N_("profiles"), N_("histogram profile"));
-
-    dt_bauhaus_combobox_set_entries_ellipsis(display_profile, PANGO_ELLIPSIZE_MIDDLE);
-    dt_bauhaus_combobox_set_entries_ellipsis(display2_profile, PANGO_ELLIPSIZE_MIDDLE);
     dt_bauhaus_combobox_set_entries_ellipsis(softproof_profile, PANGO_ELLIPSIZE_MIDDLE);
-    dt_bauhaus_combobox_set_entries_ellipsis(histogram_profile, PANGO_ELLIPSIZE_MIDDLE);
-
-    gtk_box_pack_start(GTK_BOX(vbox), display_profile, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(vbox), display_intent, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(vbox), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), TRUE, TRUE, 0);
-
-    gtk_box_pack_start(GTK_BOX(vbox), display2_profile, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(vbox), display2_intent, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(vbox), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), TRUE, TRUE, 0);
-
     gtk_box_pack_start(GTK_BOX(vbox), softproof_profile, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(vbox), histogram_profile, TRUE, TRUE, 0);
 
     for(const GList *l = darktable.color_profiles->profiles; l; l = g_list_next(l))
     {
       dt_colorspaces_color_profile_t *prof = (dt_colorspaces_color_profile_t *)l->data;
-      if(prof->display_pos > -1)
-      {
-        dt_bauhaus_combobox_add(display_profile, prof->name);
-        if(prof->type == darktable.color_profiles->display_type
-          && (prof->type != DT_COLORSPACE_FILE
-              || !strcmp(prof->filename, darktable.color_profiles->display_filename)))
-        {
-          dt_bauhaus_combobox_set(display_profile, prof->display_pos);
-        }
-      }
-      if(prof->display2_pos > -1)
-      {
-        dt_bauhaus_combobox_add(display2_profile, prof->name);
-        if(prof->type == darktable.color_profiles->display2_type
-           && (prof->type != DT_COLORSPACE_FILE
-               || !strcmp(prof->filename, darktable.color_profiles->display2_filename)))
-        {
-          dt_bauhaus_combobox_set(display2_profile, prof->display2_pos);
-        }
-      }
       // the system display profile is only suitable for display purposes
       if(prof->out_pos > -1)
       {
@@ -2433,56 +2126,23 @@ void gui_init(dt_view_t *self)
               || !strcmp(prof->filename, darktable.color_profiles->softproof_filename)))
           dt_bauhaus_combobox_set(softproof_profile, prof->out_pos);
       }
-      if(prof->category_pos > -1)
-      {
-        dt_bauhaus_combobox_add(histogram_profile, prof->name);
-        if(prof->type == darktable.color_profiles->histogram_type
-          && (prof->type != DT_COLORSPACE_FILE
-              || !strcmp(prof->filename, darktable.color_profiles->histogram_filename)))
-        {
-          dt_bauhaus_combobox_set(histogram_profile, prof->category_pos);
-        }
-      }
     }
 
     char *system_profile_dir = g_build_filename(datadir, "color", "out", NULL);
     char *user_profile_dir = g_build_filename(confdir, "color", "out", NULL);
-    char *tooltip = g_strdup_printf(_("display ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
-    gtk_widget_set_tooltip_text(display_profile, tooltip);
-    g_free(tooltip);
-    tooltip = g_strdup_printf(_("preview display ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
-    gtk_widget_set_tooltip_text(display2_profile, tooltip);
-    g_free(tooltip);
-    tooltip = g_strdup_printf(_("softproof ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
+    char *tooltip = g_strdup_printf(_("softproof ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
     gtk_widget_set_tooltip_text(softproof_profile, tooltip);
-    g_free(tooltip);
-    tooltip = g_strdup_printf(_("histogram and color picker ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
-    gtk_widget_set_tooltip_text(histogram_profile, tooltip);
     g_free(tooltip);
     g_free(system_profile_dir);
     g_free(user_profile_dir);
 
-    g_signal_connect(G_OBJECT(display_intent), "value-changed", G_CALLBACK(display_intent_callback), dev);
-    g_signal_connect(G_OBJECT(display_profile), "value-changed", G_CALLBACK(display_profile_callback), dev);
-    g_signal_connect(G_OBJECT(display2_intent), "value-changed", G_CALLBACK(display2_intent_callback), dev);
-    g_signal_connect(G_OBJECT(display2_profile), "value-changed", G_CALLBACK(display2_profile_callback), dev);
     g_signal_connect(G_OBJECT(softproof_profile), "value-changed", G_CALLBACK(softproof_profile_callback), dev);
-    g_signal_connect(G_OBJECT(histogram_profile), "value-changed", G_CALLBACK(histogram_profile_callback), dev);
 
     _update_softproof_gamut_checking(dev);
 
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE,
-                              G_CALLBACK(_preference_prev_downsample_change), &(dev->preview_downsampling));
     // update the gui when the preferences changed (i.e. show intent when using lcms2)
     DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE,
-                              G_CALLBACK(_preference_changed), (gpointer)display_intent);
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_PREFERENCES_CHANGE, G_CALLBACK(_preference_changed),
-                              (gpointer)display2_intent);
-    // and when profiles change
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
-                              G_CALLBACK(_display_profile_changed), (gpointer)display_profile);
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED,
-                              G_CALLBACK(_display2_profile_changed), (gpointer)display2_profile);
+                                    G_CALLBACK(_preference_changed), NULL);
 
     gtk_widget_show_all(vbox);
   }
@@ -2515,7 +2175,7 @@ void gui_init(dt_view_t *self)
   dt_shortcut_register(ac, 0, DT_ACTION_EFFECT_HOLD, GDK_KEY_w, 0);
 
   // add an option to allow skip mouse events while editing masks
-  ac = dt_action_define(sa, NULL, N_("allow to pan & zoom while editing masks"), NULL, &dt_action_def_skip_mouse);
+  ac = dt_action_define(sa, NULL, N_("temporarily override global masks lock"), NULL, &dt_action_def_skip_mouse);
   dt_shortcut_register(ac, 0, DT_ACTION_EFFECT_HOLD, GDK_KEY_a, 0);
 
   // move left/right/up/down
@@ -2536,8 +2196,8 @@ void gui_init(dt_view_t *self)
   dt_action_register(DT_ACTION(self), N_("zoom out"), zoom_out_callback, GDK_KEY_minus, GDK_CONTROL_MASK);
 
   // Shortcut to skip images
-  dt_action_register(DT_ACTION(self), N_("image forward"), skip_f_key_accel_callback, GDK_KEY_space, 0);
-  dt_action_register(DT_ACTION(self), N_("image back"), skip_b_key_accel_callback, GDK_KEY_BackSpace, 0);
+  dt_action_register(DT_ACTION(self), N_("image forward"), skip_f_key_accel_callback, GDK_KEY_Right, GDK_MOD1_MASK);
+  dt_action_register(DT_ACTION(self), N_("image back"), skip_b_key_accel_callback, GDK_KEY_Left, GDK_MOD1_MASK);
 
   // cycle overlay colors
   dt_action_register(DT_ACTION(self), N_("cycle overlay colors"), _overlay_cycle_callback, GDK_KEY_o, GDK_CONTROL_MASK);
@@ -2557,15 +2217,18 @@ void gui_init(dt_view_t *self)
   dt_action_register(DT_ACTION(self), N_("increase brush opacity"), _brush_opacity_up_callback, GDK_KEY_greater, 0);
   dt_action_register(DT_ACTION(self), N_("decrease brush opacity"), _brush_opacity_down_callback, GDK_KEY_less, 0);
 
-  // undo/redo
-  dt_action_register(DT_ACTION(self), N_("undo"), _darkroom_undo_callback, GDK_KEY_z, GDK_CONTROL_MASK);
-  dt_action_register(DT_ACTION(self), N_("redo"), _darkroom_redo_callback, GDK_KEY_y, GDK_CONTROL_MASK);
-
   // set focus to the search modules text box
-  dt_action_register(DT_ACTION(self), N_("search modules"), search_callback, 0, 0);
+  dt_action_register(DT_ACTION(self), N_("search modules"), search_callback, GDK_KEY_f, GDK_CONTROL_MASK);
 
   // change the precision for adjusting sliders with keyboard shortcuts
   dt_action_register(DT_ACTION(self), N_("change keyboard shortcut slider precision"), change_slider_accel_precision, 0, 0);
+
+  // Focus on next/previous modules
+  dt_action_register(DT_ACTION(self), N_("focus on the next module"), _focus_next_module, GDK_KEY_Page_Down, 0);
+  dt_action_register(DT_ACTION(self), N_("focus on the previous module"), _focus_previous_module, GDK_KEY_Page_Up, 0);
+
+  dt_action_register(DT_ACTION(self), N_("enable focused module"), _enable_module, GDK_KEY_Return, 0);
+  dt_action_register(DT_ACTION(self), N_("disable focused module"), _disable_module, GDK_KEY_Return, GDK_SHIFT_MASK);
 }
 
 enum
@@ -2905,10 +2568,6 @@ void enter(dt_view_t *self)
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED,
                             G_CALLBACK(_darkroom_ui_pipe_finish_signal_callback), (gpointer)self);
 
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_TROUBLE_MESSAGE,
-                                  G_CALLBACK(_display_module_trouble_message_callback),
-                                  (gpointer)self);
-
   dt_print(DT_DEBUG_CONTROL, "[run_job+] 11 %f in darkroom mode\n", dt_get_wtime());
   dt_develop_t *dev = (dt_develop_t *)self->data;
   if(!dev->form_gui)
@@ -3049,10 +2708,6 @@ void leave(dt_view_t *self)
   /* disconnect from pipe finish signal */
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_darkroom_ui_pipe_finish_signal_callback),
                                (gpointer)self);
-
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals,
-                                     G_CALLBACK(_display_module_trouble_message_callback),
-                                     (gpointer)self);
 
   // store groups for next time:
   dt_conf_set_int("plugins/darkroom/groups", dt_dev_modulegroups_get(darktable.develop));
@@ -3288,8 +2943,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   handled = dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which);
   if(handled) return;
   // module
-  if(dev->gui_module && dev->gui_module->mouse_moved
-     && dt_dev_modulegroups_get_activated(darktable.develop) != DT_MODULEGROUP_BASICS)
+  if(dev->gui_module && dev->gui_module->mouse_moved)
     handled = dev->gui_module->mouse_moved(dev->gui_module, x, y, pressure, which);
   if(handled) return;
 
@@ -3345,8 +2999,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   if(dev->form_visible) handled = dt_masks_events_button_released(dev->gui_module, x, y, which, state);
   if(handled) return handled;
   // module
-  if(dev->gui_module && dev->gui_module->button_released
-     && dt_dev_modulegroups_get_activated(darktable.develop) != DT_MODULEGROUP_BASICS)
+  if(dev->gui_module && dev->gui_module->button_released)
     handled = dev->gui_module->button_released(dev->gui_module, x, y, which, state);
   if(handled) return handled;
   if(which == 1) dt_control_change_cursor(GDK_LEFT_PTR);
@@ -3497,8 +3150,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     handled = dt_masks_events_button_pressed(dev->gui_module, x, y, pressure, which, type, state);
   if(handled) return handled;
   // module
-  if(dev->gui_module && dev->gui_module->button_pressed
-     && dt_dev_modulegroups_get_activated(darktable.develop) != DT_MODULEGROUP_BASICS)
+  if(dev->gui_module && dev->gui_module->button_pressed)
     handled = dev->gui_module->button_pressed(dev->gui_module, x, y, pressure, which, type, state);
   if(handled) return handled;
 
@@ -3583,8 +3235,7 @@ void scrolled(dt_view_t *self, double x, double y, int up, int state)
   if(dev->form_visible) handled = dt_masks_events_mouse_scrolled(dev->gui_module, x, y, up, state);
   if(handled) return;
   // module
-  if(dev->gui_module && dev->gui_module->scrolled
-     && dt_dev_modulegroups_get_activated(darktable.develop) != DT_MODULEGROUP_BASICS)
+  if(dev->gui_module && dev->gui_module->scrolled)
     handled = dev->gui_module->scrolled(dev->gui_module, x, y, up, state);
   if(handled) return;
   // free zoom

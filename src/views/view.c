@@ -707,7 +707,7 @@ dt_view_surface_value_t dt_view_image_get_surface(int imgid, int width, int heig
         {
           fprintf(stderr, "oops, there seems to be a code path not setting the color space of thumbnails!\n");
         }
-        else if(buf.color_space != DT_COLORSPACE_DISPLAY && buf.color_space != DT_COLORSPACE_DISPLAY2)
+        else if(buf.color_space != DT_COLORSPACE_DISPLAY)
         {
           fprintf(stderr,
                   "oops, there seems to be a code path setting an unhandled color space of thumbnails (%s)!\n",
@@ -994,77 +994,10 @@ gint dt_view_lighttable_get_zoom(dt_view_manager_t *vm)
     return 10;
 }
 
-void dt_view_lighttable_culling_init_mode(dt_view_manager_t *vm)
-{
-  if(vm->proxy.lighttable.module) vm->proxy.lighttable.culling_init_mode(vm->proxy.lighttable.view);
-}
-
-void dt_view_lighttable_culling_preview_refresh(dt_view_manager_t *vm)
-{
-  if(vm->proxy.lighttable.module)
-    vm->proxy.lighttable.culling_preview_refresh(vm->proxy.lighttable.view);
-}
-
-void dt_view_lighttable_culling_preview_reload_overlays(dt_view_manager_t *vm)
-{
-  if(vm->proxy.lighttable.module)
-    vm->proxy.lighttable.culling_preview_reload_overlays(vm->proxy.lighttable.view);
-}
-
-dt_lighttable_layout_t dt_view_lighttable_get_layout(dt_view_manager_t *vm)
-{
-  if(vm->proxy.lighttable.module)
-    return vm->proxy.lighttable.get_layout(vm->proxy.lighttable.module);
-  else
-    return DT_LIGHTTABLE_LAYOUT_FILEMANAGER;
-}
-
-gboolean dt_view_lighttable_preview_state(dt_view_manager_t *vm)
-{
-  if(vm->proxy.lighttable.module)
-    return vm->proxy.lighttable.get_preview_state(vm->proxy.lighttable.view);
-  else
-    return FALSE;
-}
-
-void dt_view_lighttable_set_preview_state(dt_view_manager_t *vm, gboolean state, gboolean focus)
-{
-  if(vm->proxy.lighttable.module)
-    vm->proxy.lighttable.set_preview_state(vm->proxy.lighttable.view, state, focus);
-}
-
-void dt_view_lighttable_change_offset(dt_view_manager_t *vm, gboolean reset, gint imgid)
-{
-  if(vm->proxy.lighttable.module)
-    vm->proxy.lighttable.change_offset(vm->proxy.lighttable.view, reset, imgid);
-}
-
 void dt_view_collection_update(const dt_view_manager_t *vm)
 {
   if(vm->proxy.module_collect.module)
     vm->proxy.module_collect.update(vm->proxy.module_collect.module);
-}
-
-
-int32_t dt_view_tethering_get_selected_imgid(const dt_view_manager_t *vm)
-{
-  if(vm->proxy.tethering.view)
-    return vm->proxy.tethering.get_selected_imgid(vm->proxy.tethering.view);
-
-  return -1;
-}
-
-void dt_view_tethering_set_job_code(const dt_view_manager_t *vm, const char *name)
-{
-  if(vm->proxy.tethering.view)
-    vm->proxy.tethering.set_job_code(vm->proxy.tethering.view, name);
-}
-
-const char *dt_view_tethering_get_job_code(const dt_view_manager_t *vm)
-{
-  if(vm->proxy.tethering.view)
-    return vm->proxy.tethering.get_job_code(vm->proxy.tethering.view);
-  return NULL;
 }
 
 #ifdef HAVE_MAP
@@ -1236,10 +1169,10 @@ void dt_view_accels_show(dt_view_manager_t *vm)
 
   vm->accels_window.sticky = FALSE;
   vm->accels_window.prevent_refresh = FALSE;
-  vm->accels_window.window = gtk_window_new(GTK_WINDOW_POPUP);
-#ifdef GDK_WINDOWING_QUARTZ
-  dt_osx_disallow_fullscreen(vm->accels_window.window);
-#endif
+  vm->accels_window.window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  gtk_window_set_decorated(GTK_WINDOW(vm->accels_window.window), TRUE);
+  gtk_window_set_title(GTK_WINDOW(vm->accels_window.window), _("Shortcuts mapped to actions in Ansel"));
+
   dt_gui_add_class(vm->accels_window.window, "dt_accels_window");
 
   GtkWidget *sw = gtk_scrolled_window_new(NULL, NULL);
@@ -1278,7 +1211,6 @@ void dt_view_accels_show(dt_view_manager_t *vm)
                                GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
   gtk_window_set_keep_above(GTK_WINDOW(vm->accels_window.window), TRUE);
   // needed on macOS to avoid fullscreening the popup with newer GTK
-  gtk_window_set_type_hint(GTK_WINDOW(vm->accels_window.window), GDK_WINDOW_TYPE_HINT_POPUP_MENU);
 
   gtk_window_set_gravity(GTK_WINDOW(vm->accels_window.window), GDK_GRAVITY_STATIC);
   gtk_window_set_position(GTK_WINDOW(vm->accels_window.window), GTK_WIN_POS_CENTER_ON_PARENT);

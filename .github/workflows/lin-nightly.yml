@@ -5,9 +5,6 @@ on:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   Win64:
     if: github.repository == 'aurelienpierreeng/ansel' || github.event_name == 'workflow_dispatch'
@@ -26,7 +23,7 @@ jobs:
         generator:
           - Ninja
         branch:
-          - { code: master, label: stable }
+          - { code: "${{ github.ref_name }}", label: stable }
     env:
       CC: ${{ matrix.compiler.CC }}
       CXX: ${{ matrix.compiler.CXX }}
@@ -68,7 +65,6 @@ jobs:
             libcmocka-dev \
             libcups2-dev \
             libcurl4-gnutls-dev \
-            libexiv2-dev \
             libimage-exiftool-perl \
             libgdk-pixbuf2.0-dev \
             libglib2.0-dev \
@@ -113,43 +109,53 @@ jobs:
             gstreamer1.0-tools \
             debianutils;
       # squashfs, libfuse2, gstreamer are deps of AppImage builder, not Ansel
-      - uses: actions/checkout@v3
+      - name: Checkout ansel source
+        uses: actions/checkout@v3
         with:
           ref: ${{ env.BRANCH }}
           fetch-depth: 0
           submodules: true
           path: src
+      # Fetch exiv2 source, because the version in Ubuntu 20.04 is tooooooo old.
+      - name: Checkout exiv2 source
+        uses: actions/checkout@v3
+        with:
+          repository: 'Exiv2/exiv2'
+          # Exiv2 replaces AutoPtr with UniquePtr, before we update the base
+          # curve tool, stick to 0.27 branch.
+          ref: '0.27-maintenance'
+          path: 'exiv2-src'
+          fetch-depth: 1
+      # Install manually compiled dependencies into system, so ansel will link
+      # against it and AppImage will grab it.
+      - name: Manually build exiv2 dependency
+        run: |
+          cd exiv2-src
+          cmake -B build -GNinja \
+          -DCMAKE_INSTALL_PREFIX=/usr \
+          -DEXIV2_ENABLE_VIDEO=ON \
+          -DEXIV2_ENABLE_NLS=ON \
+          -DEXIV2_ENABLE_XMP=ON \
+          -DEXIV2_ENABLE_CURL=ON \
+          -DEXIV2_ENABLE_WEBREADY=ON \
+          -DEXIV2_ENABLE_BMFF=ON
+          ninja -C build
+          sudo ninja -C build install
+          cd ..
       - name: Update lensfun data for root
         if: ${{ success() }}
         run: |
           sudo lensfun-update-data
-      - name: List files
-        run: |
-          ls -R
       - name: Build and Install
         run: |
           cd src
           sh .ci/ci-script-appimage.sh
-      - name: Check if it runs
-        if: ${{ matrix.target != 'usermanual' }}
-        run: |
-          ${INSTALL_PREFIX}/bin/ansel --version || true
-          ${INSTALL_PREFIX}/bin/ansel-cli \
-                 --width 2048 --height 2048 \
-                 --hq true --apply-custom-presets false \
-                 "${SRC_DIR}/src/tests/integration/images/mire1.cr2" \
-                 "${SRC_DIR}/src/tests/integration/0000-nop/nop.xmp" \
-                 output.png \
-                 --core --disable-opencl --conf host_memory_limit=8192 \
-                 --conf worker_threads=4 -t 4 \
-                 --conf plugins/lighttable/export/force_lcms2=FALSE \
-                 --conf plugins/lighttable/export/iccintent=0
       - name: Package upload
         if: ${{ success() }}
         uses: actions/upload-artifact@v3
         with:
           name: ansel.${{ env.BUILD_NAME }}.AppImage
-          path: ${{ env.BUILD_DIR }}/ansel-*.AppImage
+          path: ${{ env.SRC_DIR }}/build/Ansel-*-x86_64.AppImage*
           retention-days: 90
 
   upload_to_release:
@@ -161,9 +167,9 @@ jobs:
         with:
           name: ansel.stable.AppImage
       - name: Update nightly release
-        uses: eine/tip@master
+        uses: aurelienpierreeng/tip@master
         with:
           tag: v0.0.0
           rm: false
           token: ${{ secrets.GITHUB_TOKEN }}
-          files: ansel-*.AppImage
+          files: Ansel-*.AppImage

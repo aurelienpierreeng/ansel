@@ -29,14 +29,12 @@ typedef struct dt_act_on_cache_t
   int image_over;
   gboolean inside_table;
   GSList *active_imgs;
-  gboolean image_over_inside_sel;
   gboolean ordered;
 } dt_act_on_cache_t;
 
 // get images to act on for globals change (via libs or accels)
 // The list needs to be freed by the caller
 GList *dt_act_on_get_images(const gboolean only_visible, const gboolean force, const gboolean ordered);
-gchar *dt_act_on_get_query(const gboolean only_visible);
 
 // get the main image to act on during global changes (libs, accels)
 int dt_act_on_get_main_image();
@@ -52,4 +50,3 @@ void dt_act_on_reset_cache(const gboolean only_visible);
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

@@ -190,13 +190,16 @@ int dt_gui_hist_dialog_new(dt_history_copy_item_t *d, int imgid, gboolean iscopy
   GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
 
   GtkDialog *dialog = GTK_DIALOG(gtk_dialog_new_with_buttons(
-                                   iscopy ? _("select parts to copy") : _("select parts to paste"),
+                                   iscopy ? _("Select development parts to copy") : _("Select development parts to paste"),
                                    GTK_WINDOW(window), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
                                    _("_cancel"),      GTK_RESPONSE_CANCEL,
                                    _("select _all"),  GTK_RESPONSE_YES,
                                    _("select _none"), GTK_RESPONSE_NONE,
                                    _("_ok"),          GTK_RESPONSE_OK,
                                    NULL));
+
+  gtk_dialog_set_default_response(dialog, GTK_RESPONSE_OK);
+
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(GTK_WIDGET(dialog));
 #endif
@@ -222,7 +225,7 @@ int dt_gui_hist_dialog_new(dt_history_copy_item_t *d, int imgid, gboolean iscopy
   g_object_set_data(G_OBJECT(renderer), "column", (gint *)DT_HIST_ITEMS_COL_ENABLED);
   g_signal_connect(renderer, "toggled", G_CALLBACK(_gui_hist_item_toggled), d);
 
-  gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(d->items), -1, _("include"), renderer, "active",
+  gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(d->items), -1, _("Include"), renderer, "active",
                                               DT_HIST_ITEMS_COL_ENABLED, NULL);
 
   /* active */
@@ -238,7 +241,7 @@ int dt_gui_hist_dialog_new(dt_history_copy_item_t *d, int imgid, gboolean iscopy
   renderer = gtk_cell_renderer_text_new();
   g_object_set_data(G_OBJECT(renderer), "column", (gint *)DT_HIST_ITEMS_COL_NAME);
   g_object_set(renderer, "xalign", 0.0, (gchar *)0);
-  gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(d->items), -1, _("item"), renderer, "text",
+  gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(d->items), -1, _("Module"), renderer, "text",
                                               DT_HIST_ITEMS_COL_NAME, NULL);
 
   gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(d->items)), GTK_SELECTION_SINGLE);
@@ -326,4 +329,3 @@ void dt_gui_hist_dialog_init(dt_history_copy_item_t *d)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

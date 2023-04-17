@@ -1088,7 +1088,8 @@ static float _brush_get_position_in_segment(float x, float y, dt_masks_form_t *f
 
 static int _brush_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up,
                                         uint32_t state, dt_masks_form_t *form, int parentid,
-                                        dt_masks_form_gui_t *gui, int index)
+                                        dt_masks_form_gui_t *gui, int index,
+                                        dt_masks_interaction_t interaction)
 {
   if(gui->creation)
   {
@@ -2215,10 +2216,9 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   // in creation mode
   if(gui->creation)
   {
-    const float pr_d = darktable.develop->preview_downsampling;
     const float iwd = darktable.develop->preview_pipe->iwidth;
     const float iht = darktable.develop->preview_pipe->iheight;
-    const float min_iwd_iht= pr_d * MIN(iwd,iht);
+    const float min_iwd_iht= MIN(iwd,iht);
 
     if(gui->guipoints_count == 0)
     {

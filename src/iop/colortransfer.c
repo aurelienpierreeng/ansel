@@ -105,12 +105,12 @@ const char *name()
 
 int default_group()
 {
-  return IOP_GROUP_COLOR | IOP_GROUP_EFFECTS;
+  return IOP_GROUP_COLOR;
 }
 
 int flags()
 {
-  return IOP_FLAGS_DEPRECATED | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_PREVIEW_NON_OPENCL;
+  return IOP_FLAGS_DEPRECATED | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_PREVIEW_NON_OPENCL | IOP_FLAGS_DEPRECATED;
 }
 
 const char *deprecated_msg()

@@ -998,7 +998,8 @@ static void _path_get_sizes(struct dt_iop_module_t *module, dt_masks_form_t *for
 
 static int _path_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up,
                                        uint32_t state, dt_masks_form_t *form, int parentid,
-                                       dt_masks_form_gui_t *gui, int index)
+                                       dt_masks_form_gui_t *gui, int index,
+                                       dt_masks_interaction_t interaction)
 {
   // resize a shape even if on a node or segment
   if(gui->form_selected || gui->point_selected >= 0 || gui->feather_selected >= 0 || gui->seg_selected >= 0
@@ -3221,4 +3222,3 @@ const dt_masks_functions_t dt_masks_functions_path = {
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

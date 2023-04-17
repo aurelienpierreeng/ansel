@@ -103,12 +103,12 @@ const char *name()
 
 int default_group()
 {
-  return IOP_GROUP_TONE | IOP_GROUP_GRADING | IOP_FLAGS_DEPRECATED;
+  return IOP_GROUP_COLOR;
 }
 
 int flags()
 {
-  return IOP_FLAGS_SUPPORTS_BLENDING;
+  return IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_DEPRECATED;
 }
 
 int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -1515,4 +1515,3 @@ cleanup:
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

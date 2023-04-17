@@ -15,7 +15,7 @@ static inline float normalize_laplacian(const float sigma)
 {
   // Normalize the wavelet scale to approximate a laplacian
   // see https://eng.aurelienpierre.com/2021/03/rotation-invariant-laplacian-for-2d-grids/#Scaling-coefficient
-  return 2.f * M_PI_F / (sqrtf(M_PI_F) * sqf(sigma));
+  return 2.f / sqf(sigma);
 }
 
 // Normalization scaling of the wavelet to approximate a laplacian
@@ -59,11 +59,11 @@ static inline void sparse_scalar_product(const dt_aligned_pixel_t buf, const siz
 {
   // scalar product of 2 3×5 vectors stored as RGB planes and B-spline filter,
   // e.g. RRRRR - GGGGG - BBBBB
-  const float filter[BSPLINE_FSIZE] = { 1.0f / 16.0f,
-                                        4.0f / 16.0f,
-                                        6.0f / 16.0f,
-                                        4.0f / 16.0f,
-                                        1.0f / 16.0f };
+  static const float filter[BSPLINE_FSIZE] = { 1.0f / 16.0f,
+                                               4.0f / 16.0f,
+                                               6.0f / 16.0f,
+                                               4.0f / 16.0f,
+                                               1.0f / 16.0f };
 
   if(clip_negatives)
   {
@@ -159,14 +159,16 @@ inline static void blur_2D_Bspline(const float *const restrict in, float *const 
   }
 }
 
-
-inline static void decompose_2D_Bspline(const float *const DT_ALIGNED_PIXEL restrict in,
-                                        float *const DT_ALIGNED_PIXEL restrict HF,
-                                        float *const DT_ALIGNED_PIXEL restrict LF,
+#ifdef _OPENMP
+#pragma omp declare simd aligned(in, HF, LF:64) aligned(tempbuf:16)
+#endif
+inline static void decompose_2D_Bspline(const float *const restrict in,
+                                        float *const restrict HF,
+                                        float *const restrict LF,
                                         const size_t width, const size_t height, const int mult,
                                         float *const tempbuf, size_t padded_size)
 {
-  // Blur and compute the decimated wavelet at once
+  // Blur and compute the wavelet at once
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(width, height, mult, padded_size) \

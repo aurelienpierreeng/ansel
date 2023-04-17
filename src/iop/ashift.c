@@ -143,7 +143,7 @@ int flags()
 
 int default_group()
 {
-  return IOP_GROUP_CORRECT | IOP_GROUP_TECHNICAL;
+  return IOP_GROUP_REPAIR;
 }
 
 int operation_tags()
@@ -2861,13 +2861,12 @@ static void _draw_save_lines_to_params(dt_iop_module_t *self)
   dt_iop_ashift_params_t *p = (dt_iop_ashift_params_t *)self->params;
   if(!g || !p) return;
 
-  const float pr_d = self->dev->preview_downsampling;
   // save quad lines (we only handle the 2 vertical lines)
   if(g->current_structure_method == ASHIFT_METHOD_QUAD && g->lines && g->lines_count >= 4)
   {
-    float pts[8] = { g->lines[0].p1[0] / pr_d, g->lines[0].p1[1] / pr_d, g->lines[0].p2[0] / pr_d,
-                     g->lines[0].p2[1] / pr_d, g->lines[1].p1[0] / pr_d, g->lines[1].p1[1] / pr_d,
-                     g->lines[1].p2[0] / pr_d, g->lines[1].p2[1] / pr_d };
+    float pts[8] = { g->lines[0].p1[0], g->lines[0].p1[1], g->lines[0].p2[0],
+                     g->lines[0].p2[1], g->lines[1].p1[0], g->lines[1].p1[1],
+                     g->lines[1].p2[0], g->lines[1].p2[1] };
     if(dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 4))
     {
@@ -2914,7 +2913,6 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
   if(!g || !p) return FALSE;
 
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
-  const float pr_d = self->dev->preview_downsampling;
 
   if(method == ASHIFT_METHOD_QUAD
      && p->last_quad_lines[0] > 0.0f && p->last_quad_lines[1] > 0.0f
@@ -2930,15 +2928,15 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
       if(g->lines) free(g->lines);
       g->lines = (dt_iop_ashift_line_t *)g_malloc0(sizeof(dt_iop_ashift_line_t) * 4);
       // vertical lines
-      _draw_basic_line(&g->lines[0], pts[0] * pr_d, pts[1] * pr_d, pts[2] * pr_d, pts[3] * pr_d,
+      _draw_basic_line(&g->lines[0], pts[0], pts[1], pts[2], pts[3],
                        ASHIFT_LINE_VERTICAL_SELECTED);
-      _draw_basic_line(&g->lines[1], pts[4] * pr_d, pts[5] * pr_d, pts[6] * pr_d, pts[7] * pr_d,
+      _draw_basic_line(&g->lines[1], pts[4], pts[5], pts[6], pts[7],
                        ASHIFT_LINE_VERTICAL_SELECTED);
 
       // horizontal lines
-      _draw_basic_line(&g->lines[2], pts[0] * pr_d, pts[1] * pr_d, pts[4] * pr_d, pts[5] * pr_d,
+      _draw_basic_line(&g->lines[2], pts[0], pts[1], pts[4], pts[5],
                        ASHIFT_LINE_HORIZONTAL_SELECTED);
-      _draw_basic_line(&g->lines[3], pts[2] * pr_d, pts[3] * pr_d, pts[6] * pr_d, pts[7] * pr_d,
+      _draw_basic_line(&g->lines[3], pts[2], pts[3], pts[6], pts[7],
                        ASHIFT_LINE_HORIZONTAL_SELECTED);
 
       g->lines_count = 4;
@@ -2946,8 +2944,8 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
       g->horizontal_count = 2;
       g->vertical_weight = 2.0;
       g->horizontal_weight = 2.0;
-      g->lines_in_width = piece->iwidth * pr_d;
-      g->lines_in_height = piece->iheight * pr_d;
+      g->lines_in_width = piece->iwidth;
+      g->lines_in_height = piece->iheight;
       g->current_structure_method = method;
       return TRUE;
     }
@@ -2987,8 +2985,8 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
       g->horizontal_count = hnb;
       g->vertical_weight = (float)vnb;
       g->horizontal_weight = (float)hnb;
-      g->lines_in_width = piece->iwidth * pr_d;
-      g->lines_in_height = piece->iheight * pr_d;
+      g->lines_in_width = piece->iwidth;
+      g->lines_in_height = piece->iheight;
       g->current_structure_method = method;
       return TRUE;
     }
@@ -3106,9 +3104,8 @@ static void _do_get_structure_lines(dt_iop_module_t *self)
 
   g->current_structure_method = ASHIFT_METHOD_LINES;
 
-  const float pr_d = self->dev->preview_downsampling;
-  g->lines_in_width = piece->iwidth * pr_d;
-  g->lines_in_height = piece->iheight * pr_d;
+  g->lines_in_width = piece->iwidth;
+  g->lines_in_height = piece->iheight;
   g->lines_x_off = 0;
   g->lines_y_off = 0;
 
@@ -3157,7 +3154,6 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
   }
   else
   {
-    const float pr_d = self->dev->preview_downsampling;
     const float wd = self->dev->preview_pipe->backbuf_width;
     const float ht = self->dev->preview_pipe->backbuf_height;
     float pts[8] = { wd * 0.2, ht * 0.2, wd * 0.2, ht * 0.8, wd * 0.8, ht * 0.2, wd * 0.8, ht * 0.8 };
@@ -3168,20 +3164,20 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
       g->lines = (dt_iop_ashift_line_t *)malloc(sizeof(dt_iop_ashift_line_t) * 4);
       g->lines_count = 4;
 
-      _draw_basic_line(&g->lines[0], pts[0] * pr_d, pts[1] * pr_d, pts[2] * pr_d, pts[3] * pr_d,
+      _draw_basic_line(&g->lines[0], pts[0], pts[1], pts[2], pts[3],
                        ASHIFT_LINE_VERTICAL_SELECTED);
-      _draw_basic_line(&g->lines[1], pts[4] * pr_d, pts[5] * pr_d, pts[6] * pr_d, pts[7] * pr_d,
+      _draw_basic_line(&g->lines[1], pts[4], pts[5], pts[6], pts[7],
                        ASHIFT_LINE_VERTICAL_SELECTED);
-      _draw_basic_line(&g->lines[2], pts[0] * pr_d, pts[1] * pr_d, pts[4] * pr_d, pts[5] * pr_d,
+      _draw_basic_line(&g->lines[2], pts[0], pts[1], pts[4], pts[5],
                        ASHIFT_LINE_HORIZONTAL_SELECTED);
-      _draw_basic_line(&g->lines[3], pts[2] * pr_d, pts[3] * pr_d, pts[6] * pr_d, pts[7] * pr_d,
+      _draw_basic_line(&g->lines[3], pts[2], pts[3], pts[6], pts[7],
                        ASHIFT_LINE_HORIZONTAL_SELECTED);
 
       // get real line type (they may be wrong due to image rotation)
       for(int i = 0; i < 4; i++) _draw_retrieve_line_type(&g->lines[i]);
 
-      g->lines_in_width = piece->iwidth * pr_d;
-      g->lines_in_height = piece->iheight * pr_d;
+      g->lines_in_width = piece->iwidth;
+      g->lines_in_height = piece->iheight;
       g->lines_x_off = 0;
       g->lines_y_off = 0;
       g->vertical_count = 2;
@@ -3254,12 +3250,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   {
     // we want to find out if the final output image is flipped in relation to this iop
     // so we can adjust the gui labels accordingly
-    const float pr_d = self->dev->preview_downsampling;
     const int width = roi_in->width;
     const int height = roi_in->height;
     const int x_off = roi_in->x;
     const int y_off = roi_in->y;
-    const float scale = roi_in->scale / pr_d;
+    const float scale = roi_in->scale;
 
     // origin of image and opposite corner as reference points
     dt_boundingbox_t points = { 0.0f, 0.0f, (float)piece->buf_in.width, (float)piece->buf_in.height };
@@ -3390,10 +3385,9 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   {
     // we want to find out if the final output image is flipped in relation to this iop
     // so we can adjust the gui labels accordingly
-    const float pr_d = self->dev->preview_downsampling;
     const int x_off = roi_in->x;
     const int y_off = roi_in->y;
-    const float scale = roi_in->scale / pr_d;
+    const float scale = roi_in->scale;
 
     // origin of image and opposite corner as reference points
     dt_boundingbox_t points = { 0.0f, 0.0f, (float)piece->buf_in.width, (float)piece->buf_in.height };
@@ -3813,8 +3807,7 @@ error:
 // does this gui have focus?
 static int gui_has_focus(struct dt_iop_module_t *self)
 {
-  return (self->dev->gui_module == self
-          && dt_dev_modulegroups_get_activated(darktable.develop) != DT_MODULEGROUP_BASICS);
+  return (self->dev->gui_module == self);
 }
 
 /* this function replaces this sentence, it calls distort_transform() for this module on the pipe
@@ -3850,7 +3843,6 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   const float wd = dev->preview_pipe->backbuf_width;
   const float ht = dev->preview_pipe->backbuf_height;
   if(wd < 1.0 || ht < 1.0) return;
-  const float pr_d = dev->preview_downsampling;
   const float zoom_y = dt_control_get_dev_zoom_y();
   const float zoom_x = dt_control_get_dev_zoom_x();
   const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
@@ -3863,10 +3855,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   {
     // roi data of the preview pipe input buffer
 
-    const float iwd = g->buf_width / pr_d;
-    const float iht = g->buf_height / pr_d;
-    const float ixo = g->buf_x_off / pr_d;
-    const float iyo = g->buf_y_off / pr_d;
+    const float iwd = g->buf_width;
+    const float iht = g->buf_height;
+    const float ixo = g->buf_x_off;
+    const float iyo = g->buf_y_off;
 
     // the four corners of the input buffer of this module
     float V[4][2] = { { ixo,        iyo       },
@@ -4042,9 +4034,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     layout = pango_cairo_create_layout(cr);
     pango_layout_set_font_description(layout, desc);
     const float bzx = g->straighten_x + .5f, bzy = g->straighten_y + .5f;
-    cairo_arc(cr, bzx * wd, bzy * ht, DT_PIXEL_APPLY_DPI(3) * pr_d, 0, 2.0 * M_PI);
+    cairo_arc(cr, bzx * wd, bzy * ht, DT_PIXEL_APPLY_DPI(3), 0, 2.0 * M_PI);
     cairo_stroke(cr);
-    cairo_arc(cr, pzx * wd, pzy * ht, DT_PIXEL_APPLY_DPI(3) * pr_d, 0, 2.0 * M_PI);
+    cairo_arc(cr, pzx * wd, pzy * ht, DT_PIXEL_APPLY_DPI(3), 0, 2.0 * M_PI);
     cairo_stroke(cr);
     cairo_move_to(cr, bzx * wd, bzy * ht);
     cairo_line_to(cr, pzx * wd, pzy * ht);
@@ -4108,7 +4100,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     g->points_lines_count = 0;
 
     if(!get_points(self, g->lines, g->lines_count, g->lines_version, &g->points, &g->draw_points, &g->points_idx,
-                   &g->points_lines_count, pr_d))
+                   &g->points_lines_count, 1.f))
       return;
 
     g->points_version = g->lines_version;
@@ -4315,7 +4307,6 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
   const float wd = self->dev->preview_pipe->backbuf_width;
   const float ht = self->dev->preview_pipe->backbuf_height;
-  const float pr_d = self->dev->preview_downsampling;
   if(wd < 1.0 || ht < 1.0) return 1;
 
   float pzx = 0.0f, pzy = 0.0f;
@@ -4330,11 +4321,6 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     dt_boundingbox_t pts = { pzx, pzy, 1.0f, 1.0f };
     dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 2);
-
-    pts[0] *= pr_d;
-    pts[1] *= pr_d;
-    pts[2] *= pr_d;
-    pts[3] *= pr_d;
 
     const float newx = g->crop_cx + (pts[0] - pts[2]) - g->lastx;
     const float newy = g->crop_cy + (pts[1] - pts[3]) - g->lasty;
@@ -4355,8 +4341,6 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     if(dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
-      pts[0] *= pr_d;
-      pts[1] *= pr_d;
       // first we move the point
       if(g->draw_near_point >= 0)
       {
@@ -4416,8 +4400,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     if(dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
-      const float dx = (pts[0] - g->draw_pointmove_x) * pr_d;
-      const float dy = (pts[1] - g->draw_pointmove_y) * pr_d;
+      const float dx = (pts[0] - g->draw_pointmove_x);
+      const float dy = (pts[1] - g->draw_pointmove_y);
       const int n = g->draw_line_move;
       g->draw_pointmove_x = pts[0];
       g->draw_pointmove_y = pts[1];
@@ -4582,18 +4566,12 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     dt_iop_ashift_params_t *p = (dt_iop_ashift_params_t *)self->params;
     if(p->cropmode == ASHIFT_CROP_ASPECT)
     {
-      const float pr_d = self->dev->preview_downsampling;
       dt_control_change_cursor(GDK_HAND1);
       g->adjust_crop = TRUE;
 
       dt_boundingbox_t pts = { pzx, pzy, 1.0f, 1.0f };
       dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
                                         DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 2);
-
-      pts[0] *= pr_d;
-      pts[1] *= pr_d;
-      pts[2] *= pr_d;
-      pts[3] *= pr_d;
 
       g->lastx = pts[0] - pts[2];
       g->lasty = pts[1] - pts[3];
@@ -4733,13 +4711,9 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 
     // we instantiate a new line with both extrema at the current position
     // and enable the "move point" mode with the second extrema
-    const float pr_d = self->dev->preview_downsampling;
     float pts[2] = { pzx * wd, pzy * ht };
     dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
-
-    pts[0] *= pr_d;
-    pts[1] *= pr_d;
     const int count = g->lines_count + 1;
     // if count > MAX_SAVED_LINES we alert that the next lines won't be saved in params
     // but they still may be used for the current section (that's why we still allow them)

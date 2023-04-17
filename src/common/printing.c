@@ -17,6 +17,7 @@
 */
 
 #include "common/printing.h"
+#include "common/math.h"
 
 void _clear_pos(dt_image_pos *pos)
 {
@@ -53,11 +54,6 @@ void dt_printing_clear_boxes(dt_images_box *imgs)
   imgs->imgid_to_load = -1;
 }
 
-static inline float sqrf(float a)
-{
-  return a * a;
-}
-
 int32_t dt_printing_get_image_box(const dt_images_box *imgs, const int x, const int y)
 {
   int box = -1;
@@ -76,10 +72,10 @@ int32_t dt_printing_get_image_box(const dt_images_box *imgs, const int x, const 
     if(x > x1 && x < x2 && y > y1 && y < y2)
     {
       // compute min dist
-      float dd = sqrf(x1 - x);
-      dd = fminf(dd, sqrf(x2 - x));
-      dd = fminf(dd, sqrf(y1 - y));
-      dd = fminf(dd, sqrf(y2 - y));
+      float dd = sqf(x1 - x);
+      dd = fminf(dd, sqf(x2 - x));
+      dd = fminf(dd, sqf(y1 - y));
+      dd = fminf(dd, sqf(y2 - y));
 
       if(dd < dist)
       {
@@ -337,4 +333,3 @@ void dt_printing_setup_image(dt_images_box *imgs, const int idx,
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

@@ -39,6 +39,11 @@ const dt_collection_t *dt_selection_get_collection(struct dt_selection_t *select
   return selection->collection;
 }
 
+uint32_t dt_selection_get_first_id(struct dt_selection_t *selection)
+{
+  return selection->last_single_id;
+}
+
 static void _selection_raise_signal()
 {
   // discard cached images_to_act_on list
@@ -107,6 +112,41 @@ void _selection_update_collection(gpointer instance, dt_collection_change_t quer
   dt_collection_set_query_flags(selection->collection, (dt_collection_get_query_flags(selection->collection)
                                                         & (~(COLLECTION_QUERY_USE_LIMIT))));
   dt_collection_update(selection->collection);
+}
+
+void dt_push_selection()
+{
+  // Backup current selection
+  if(!darktable.gui->selection_stacked)
+  {
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "DELETE FROM memory.selected_backup", NULL, NULL, NULL);
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "INSERT INTO memory.selected_backup"
+                                                         " SELECT * FROM main.selected_images", NULL, NULL, NULL);
+    darktable.gui->selection_stacked = TRUE;
+  }
+  else
+  {
+    // If we already have a backup, don't do anything.
+    // TODO: maybe store a full stack with history index so we can re-select back in time ?
+    // In that case, make darktable.gui->selection_stacked a uint32_t, increment it on each push
+    // and store it too in a column of the memory.selected_backup table for each row.
+  }
+}
+
+void dt_pop_selection()
+{
+  // Restore current selection
+  if(darktable.gui->selection_stacked)
+  {
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "DELETE FROM main.selected_images", NULL, NULL, NULL);
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "INSERT INTO main.selected_images"
+                                                         " SELECT * FROM memory.selected_backup", NULL, NULL, NULL);
+    darktable.gui->selection_stacked = FALSE;
+  }
+  else
+  {
+    // If we don't have a backup, nothing to pop
+  }
 }
 
 const dt_selection_t *dt_selection_new()

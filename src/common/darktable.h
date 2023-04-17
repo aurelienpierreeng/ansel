@@ -369,7 +369,6 @@ void dt_vprint(dt_debug_thread_t thread, const char *msg, ...) __attribute__((fo
 int dt_worker_threads();
 size_t dt_get_available_mem();
 size_t dt_get_singlebuffer_mem();
-size_t dt_get_iopcache_mem();
 
 void *dt_alloc_align(size_t alignment, size_t size);
 static inline void* dt_calloc_align(size_t alignment, size_t size)
@@ -432,7 +431,6 @@ static inline void dt_unlock_image_pair(int32_t imgid1, int32_t imgid2) RELEASE(
   dt_pthread_mutex_unlock(&(darktable.db_image[imgid2 & (DT_IMAGE_DBLOCKS-1)]));
 }
 
-extern GdkModifierType dt_modifier_shortcuts;
 
 // check whether the specified mask of modifier keys exactly matches, among the set Shift+Control+(Alt/Meta).
 // ignores the state of any other shifting keys
@@ -440,7 +438,7 @@ static inline gboolean dt_modifier_is(const GdkModifierType state, const GdkModi
 {
   const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
 //TODO: on Macs, remap the GDK_CONTROL_MASK bit in desired_modifier_mask to be the bit for the Cmd key
-  return ((state | dt_modifier_shortcuts) & modifiers) == desired_modifier_mask;
+  return (state & modifiers) == desired_modifier_mask;
 }
 
 // check whether the given modifier state includes AT LEAST the specified mask of modifier keys
@@ -449,7 +447,7 @@ static inline gboolean dt_modifiers_include(const GdkModifierType state, const G
 //TODO: on Macs, remap the GDK_CONTROL_MASK bit in desired_modifier_mask to be the bit for the Cmd key
   const GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask();
   // check whether all modifier bits of interest are turned on
-  return ((state | dt_modifier_shortcuts) & (modifiers & desired_modifier_mask)) == desired_modifier_mask;
+  return (state & (modifiers & desired_modifier_mask)) == desired_modifier_mask;
 }
 
 

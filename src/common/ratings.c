@@ -121,18 +121,6 @@ static void _ratings_apply(const GList *imgs, const int rating, GList **undo, co
       }
     }
   }
-  else if(!dt_conf_get_bool("rating_one_double_tap") && (rating == DT_VIEW_STAR_1))
-  {
-    toggle = TRUE;
-    for(const GList *images = imgs; images; images = g_list_next(images))
-    {
-      if(dt_ratings_get(GPOINTER_TO_INT(images->data)) != DT_VIEW_STAR_1)
-      {
-        toggle = FALSE;
-        break;
-      }
-    }
-  }
 
   for(const GList *images = imgs; images; images = g_list_next(images))
   {
@@ -327,4 +315,3 @@ const dt_action_def_t dt_action_def_rating
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

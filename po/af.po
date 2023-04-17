@@ -4043,23 +4043,23 @@ msgstr "medewerkers"
 msgid "rawspeed contributors"
 msgstr "rawspeed bydraers"
 
-#: ../build/share/darktable/ansel.desktop.in.h:1
-#: ../data/ansel.desktop.in.h:1
+#: ../build/share/darktable/darktable.desktop.in.h:1
+#: ../data/darktable.desktop.in.h:1
 msgid "Virtual Lighttable and Darkroom"
 msgstr "Virtuele Ligtafel en Donkerkamer"
 
-#: ../build/share/darktable/ansel.desktop.in.h:2
-#: ../data/photos.ansel.app.appdata.xml.in.h:1 ../data/ansel.desktop.in.h:2
+#: ../build/share/darktable/darktable.desktop.in.h:2
+#: ../data/darktable.appdata.xml.in.h:1 ../data/darktable.desktop.in.h:2
 msgid "Organize and develop images from digital cameras"
 msgstr "Organiseer en ontwikkel beelde van digitale kameras"
 
 #. TRANSLATORS: Search terms to find this application. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
-#: ../build/share/darktable/ansel.desktop.in.h:4
-#: ../data/ansel.desktop.in.h:4
+#: ../build/share/darktable/darktable.desktop.in.h:4
+#: ../data/darktable.desktop.in.h:4
 msgid "graphics;photography;raw;"
 msgstr "grafika;fotografie;raw;"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:2
+#: ../data/darktable.appdata.xml.in.h:2
 msgid ""
 "darktable manages your digital negatives in a database and lets you view "
 "them through a lighttable. It also enables you to develop raw images and "
@@ -4069,7 +4069,7 @@ msgstr ""
 "deur 'n lighttable sien. Dit stel jou ook in staat om rou beelde te "
 "ontwikkel en dit in 'n donkerkamer te verbeter."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:3
+#: ../data/darktable.appdata.xml.in.h:3
 msgid ""
 "Other modes besides lighttable and darkroom are a map for geotagging, "
 "tethering, print and a slideshow."
@@ -4077,7 +4077,7 @@ msgstr ""
 "Ander modusse behalwe ligtafel en donkerkamer is 'n kaart vir geotagging, "
 "tetering, druk en 'n skyfievertoning."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:4
+#: ../data/darktable.appdata.xml.in.h:4
 msgid ""
 "darktable supports most modern cameras' raw formats, and does all of its "
 "processing at very high precision."
@@ -4085,23 +4085,23 @@ msgstr ""
 "darktable ondersteun meeste moderne kameras se rou formate, en doen alle "
 "verwerking op 'n baie hoë akkuraatheid."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:5
+#: ../data/darktable.appdata.xml.in.h:5
 msgid "Virtual light table, showing a collection"
 msgstr "Virtuele ligtabel, wat 'n versameling wys"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:6
+#: ../data/darktable.appdata.xml.in.h:6
 msgid "Virtual dark room with an opened image"
 msgstr "Virtuele donker kamer met 'n oop beeld"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:7
+#: ../data/darktable.appdata.xml.in.h:7
 msgid "Virtual dark room, sharpening an image"
 msgstr "Virtuele donker kamer, slyp 'n beeld"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:8
+#: ../data/darktable.appdata.xml.in.h:8
 msgid "Show images on a map"
 msgstr "Wys beelde op 'n kaart"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:9
+#: ../data/darktable.appdata.xml.in.h:9
 msgid "Print your images"
 msgstr "Druk u beelde uit"
 

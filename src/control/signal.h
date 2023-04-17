@@ -217,11 +217,6 @@ typedef enum dt_signal_t
     */
   DT_SIGNAL_PREFERENCES_CHANGE,
 
-  /** \brief This signal is raised when new gphoto2 cameras might have been detected
-    no return
-   * */
-  DT_SIGNAL_CAMERA_DETECTED,
-
   /** \brief This signal is raised when dt_control_navigation_redraw() is called.
     no param, no returned value
   */
@@ -247,11 +242,11 @@ typedef enum dt_signal_t
   /* \brief This signal is raised when metadata view needs update */
   DT_SIGNAL_METADATA_UPDATE,
 
-  /* \brief This signal is raised when a module is in trouble and message is to be displayed */
-  DT_SIGNAL_TROUBLE_MESSAGE,
-
   /* \brief This signal is raised when the user choses a new location from map (module location)*/
   DT_SIGNAL_LOCATION_CHANGED,
+
+  /* Raised when a mask form is selected/deselected */
+  DT_SIGNAL_MASK_SELECTION_CHANGED,
 
   /* do not touch !*/
   DT_SIGNAL_COUNT

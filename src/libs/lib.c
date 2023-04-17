@@ -853,6 +853,7 @@ void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
     /* register to receive draw events */
     darktable.lib->gui_module = module;
     darktable.gui->scroll_to[1] = module->expander;
+    gtk_widget_grab_focus(GTK_WIDGET(module->expander));
   }
   else
   {
@@ -862,6 +863,7 @@ void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
 
       dt_control_queue_redraw();
     }
+    gtk_widget_grab_focus(dt_ui_main_window(darktable.gui->ui));
   }
 
   /* store expanded state of module */
@@ -902,16 +904,15 @@ static gboolean _lib_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
 
     // make gtk scroll to the module once it updated its allocation size
     uint32_t container = module->container(module);
-    if(dt_conf_get_bool("lighttable/ui/scroll_to_module"))
-    {
-      if(container == DT_UI_CONTAINER_PANEL_LEFT_CENTER)
-        darktable.gui->scroll_to[0] = module->expander;
-      else if(container == DT_UI_CONTAINER_PANEL_RIGHT_CENTER)
-        darktable.gui->scroll_to[1] = module->expander;
-    }
+    if(container == DT_UI_CONTAINER_PANEL_LEFT_CENTER)
+      darktable.gui->scroll_to[0] = module->expander;
+    else if(container == DT_UI_CONTAINER_PANEL_RIGHT_CENTER)
+      darktable.gui->scroll_to[1] = module->expander;
+
+    gtk_widget_grab_focus(GTK_WIDGET(module->expander));
 
     /* handle shiftclick on expander, hide all except this */
-    if(!dt_conf_get_bool("lighttable/ui/single_module") != !dt_modifier_is(e->state, GDK_SHIFT_MASK))
+    if(dt_modifier_is(e->state, GDK_SHIFT_MASK))
     {
       const dt_view_t *v = dt_view_manager_get_current_view(darktable.view_manager);
       gboolean all_other_closed = TRUE;
@@ -936,9 +937,6 @@ static gboolean _lib_plugin_header_button_press(GtkWidget *w, GdkEventButton *e,
       dt_lib_gui_set_expanded(module, !dtgtk_expander_get_expanded(DTGTK_EXPANDER(module->expander)));
     }
 
-    //ensure that any gtkentry fields lose focus
-    gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
-
     return TRUE;
   }
   else if(e->button == 3)
@@ -958,38 +956,12 @@ static void show_module_callback(dt_lib_module_t *module)
 
   // make gtk scroll to the module once it updated its allocation size
   uint32_t container = module->container(module);
-  if(dt_conf_get_bool("lighttable/ui/scroll_to_module"))
-  {
-    if(container == DT_UI_CONTAINER_PANEL_LEFT_CENTER)
-      darktable.gui->scroll_to[0] = module->expander;
-    else if(container == DT_UI_CONTAINER_PANEL_RIGHT_CENTER)
-      darktable.gui->scroll_to[1] = module->expander;
-  }
+  if(container == DT_UI_CONTAINER_PANEL_LEFT_CENTER)
+    darktable.gui->scroll_to[0] = module->expander;
+  else if(container == DT_UI_CONTAINER_PANEL_RIGHT_CENTER)
+    darktable.gui->scroll_to[1] = module->expander;
 
-  if(dt_conf_get_bool("lighttable/ui/single_module"))
-  {
-    const dt_view_t *v = dt_view_manager_get_current_view(darktable.view_manager);
-    gboolean all_other_closed = TRUE;
-    for(const GList *it = darktable.lib->plugins; it; it = g_list_next(it))
-    {
-      dt_lib_module_t *m = (dt_lib_module_t *)it->data;
-
-      if(m != module && container == m->container(m) && m->expandable(m) && dt_lib_is_visible_in_view(m, v))
-      {
-        all_other_closed = all_other_closed && !dtgtk_expander_get_expanded(DTGTK_EXPANDER(m->expander));
-        dt_lib_gui_set_expanded(m, FALSE);
-      }
-    }
-    if(all_other_closed)
-      dt_lib_gui_set_expanded(module, !dtgtk_expander_get_expanded(DTGTK_EXPANDER(module->expander)));
-    else
-      dt_lib_gui_set_expanded(module, TRUE);
-  }
-  else
-  {
-    /* else just toggle */
-    dt_lib_gui_set_expanded(module, !dtgtk_expander_get_expanded(DTGTK_EXPANDER(module->expander)));
-  }
+  dt_lib_gui_set_expanded(module, !dtgtk_expander_get_expanded(DTGTK_EXPANDER(module->expander)));
 }
 
 static gboolean _header_enter_notify_callback(GtkWidget *eventbox, GdkEventCrossing *event, gpointer user_data)
@@ -1017,9 +989,12 @@ GtkWidget *dt_lib_gui_get_expander(dt_lib_module_t *module)
   gtk_widget_set_name(GTK_WIDGET(header), "module-header");
 
   GtkWidget *expander = dtgtk_expander_new(header, module->widget);
+  dt_gui_add_class(expander, "dt_module_frame");
+
   GtkWidget *header_evb = dtgtk_expander_get_header_event_box(DTGTK_EXPANDER(expander));
   GtkWidget *body_evb = dtgtk_expander_get_body_event_box(DTGTK_EXPANDER(expander));
   GtkWidget *pluginui_frame = dtgtk_expander_get_frame(DTGTK_EXPANDER(expander));
+  dt_gui_add_class(pluginui_frame, "dt_plugin_ui");
 
   /* setup the header box */
   g_signal_connect(G_OBJECT(header_evb), "button-press-event", G_CALLBACK(_lib_plugin_header_button_press),
@@ -1076,7 +1051,6 @@ GtkWidget *dt_lib_gui_get_expander(dt_lib_module_t *module)
 
   gtk_widget_show_all(module->widget);
   dt_gui_add_class(module->widget, "dt_plugin_ui_main");
-  dt_gui_add_class(pluginui_frame, "dt_plugin_ui");
   module->expander = expander;
 
   gtk_widget_set_hexpand(module->widget, FALSE);
@@ -1150,10 +1124,7 @@ static gchar *_get_lib_view_path(dt_lib_module_t *module, char *suffix)
   char lay[32] = "";
   if(g_strcmp0(cv->module_name, "lighttable") == 0)
   {
-    if(dt_view_lighttable_preview_state(darktable.view_manager))
-      g_snprintf(lay, sizeof(lay), "preview/");
-    else
-      g_snprintf(lay, sizeof(lay), "%d/", dt_view_lighttable_get_layout(darktable.view_manager));
+    g_snprintf(lay, sizeof(lay), "%d/", 0);
   }
   else if(g_strcmp0(cv->module_name, "darkroom") == 0)
   {

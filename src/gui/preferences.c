@@ -525,6 +525,7 @@ void dt_gui_preferences_show()
   init_tab_general(_preferences_dialog, stack, tweak_widgets);
   init_tab_lighttable(_preferences_dialog, stack);
   init_tab_darkroom(_preferences_dialog, stack);
+  init_tab_otherviews(_preferences_dialog, stack);
   init_tab_processing(_preferences_dialog, stack);
   init_tab_security(_preferences_dialog, stack);
   init_tab_storage(_preferences_dialog, stack);

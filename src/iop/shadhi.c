@@ -182,7 +182,7 @@ int flags()
 
 int default_group()
 {
-  return IOP_GROUP_BASIC | IOP_GROUP_GRADING;
+  return IOP_GROUP_TONES;
 }
 
 int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

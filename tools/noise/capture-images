@@ -78,7 +78,7 @@ fi
 # If the user didn't specified a profiling shots directory, use a
 # default one.
 #
-# Defaults to /var/tmp/darktable-noise-profiling/$camera/profiling.
+# Defaults to /var/tmp/ansel-noise-profiling/$camera/profiling.
 
 auto_set_profiling_dir "-d"
 

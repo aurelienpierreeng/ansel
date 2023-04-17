@@ -6,76 +6,65 @@ labels: ''
 assignees: ''
 ---
 
-**Introduction**
-_This section is provided for information only. Please delete if no longer required._
+## Description of the bug
 
-Before raising a bug/issue please check that it has not already been reported
-by searching https://github.com/darktable-org/darktable/issues.
-
-Please be aware that most developers work on this project in their free time.
-The more information you can provide in the initial report the quicker we can help.
-Therefore please help by being as accurate and concise as possible!
-
-For further information, please see https://github.com/darktable-org/darktable/wiki#reporting-bugs.
----------------------------------------------------------------
-
-**Did you buy darktable from an application store ?**
-
-_darktable is free but selling it is technically allowed by the license, at the condition that 
-the seller provides extra services and assistance to users. 
-If you bought darktable on a store, it was not from the darktable team but from a third party.
-Support is therefore the sole responsibility of the third-party seller, 
-and the darktable team will not offer free support for licenses paid to a third-party.
-Please contact your seller, assistance is part of your after-sale rights._
-
-**Describe the bug/issue**
+<!-- Ensure it is not a new design first. -->
 
 
 **To Reproduce**
-_Please provide detailed steps to reproduce the behaviour, for example:_
+
+<!-- Please provide detailed steps to reproduce the behaviour, for example: -->
+
 1. Go to '...'
 2. Click on '...'
 3. Scroll down to '...'
 4. See error
 
-**Expected behavior**
+## Expected behavior
 
+
+## Context
+
+<!-- You may attach an affected RAW + XMP processing to help debugging -->
 
 **Screenshots**
-_(if applicable)_
+<!-- if applicable -->
 
 **Screencast**
-_(if applicable)_
-
-**Which commit introduced the error**
-_If possible, please try using `git bisect` to determine which commit introduced the issue and place the result here._
-
-_A bisect is much appreciated and can significantly simplify the developer's job._
-_HowTo: https://github.com/darktable-org/darktable/wiki#finding-bug-causes and https://www.youtube.com/watch?v=D7JJnLFOn4A_
+<!-- if applicable -->
 
 
+## Which commit introduced the error
+
+<!--
+If possible, please try using `git bisect` to determine which commit introduced the issue and place the result here.
+A bisect is much appreciated and can significantly simplify the developer's job.
+If you don't know how to do it and if you use pre-built packages, provide the name of the version/package name.
+-->
 
 
-**Platform**
-_Please fill as much information as possible in the list given below. Please state "unknown" where you do not know the answer and remove any sections that are not applicable _
+## System
+
+<!-- Please fill as much information as possible in the list given below. Please state "unknown" where you do not know the answer and remove any sections that are not applicable -->
 
 * darktable version : e.g. 3.5.0+250~gee17c5dcc
 * OS                : e.g. Linux - kernel 5.10.2 / Win10 (Patchlevel) / OSx
 * Linux - Distro    : e.g. Ubuntu 18.4
-* Memory            : 
-* Graphics card     : 
-* Graphics driver   : 
-* OpenCL installed  : 
-* OpenCL activated  : 
-* Xorg              : 
-* Desktop           : 
-* GTK+              : 
-* gcc               : 
-* cflags            : 
-* CMAKE_BUILD_TYPE  : 
+* Memory            :
+* Graphics card     :
+* Graphics driver   :
+* OpenCL installed  :
+* OpenCL activated  :
+* Xorg              :
+* Desktop           :
+* GTK+              :
+* gcc               :
+* cflags            :
+* CMAKE_BUILD_TYPE  :
 
 **Additional context**
-_Please provide any additional information you think may be useful, for example:_
+
+<!-- Please provide any additional information you think may be useful, for example: -->
 
  - Can you reproduce with another darktable version(s)? **yes with version x-y-z / no**
  - Can you reproduce with a RAW or Jpeg or both? **RAW-file-format/Jpeg/both**

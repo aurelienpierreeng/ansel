@@ -1206,7 +1206,7 @@ static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t 
     }
 
     // make sure that the duplicate doesn't have some magic darktable| tags
-    if(dt_tag_detach_by_string("ansel|changed", newid, FALSE, FALSE)
+    if(dt_tag_detach_by_string("darktable|changed", newid, FALSE, FALSE)
        || dt_tag_detach_by_string("darktable|exported", newid, FALSE, FALSE))
       DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
 

@@ -24,7 +24,7 @@
 
 static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up,
                                         uint32_t state, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
-                                        int unused)
+                                        int unused, dt_masks_interaction_t interaction)
 {
   if(gui->group_edited >= 0)
   {
@@ -32,7 +32,7 @@ static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, float pz
     dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)g_list_nth_data(form->points, gui->group_edited);
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
-      return sel->functions->mouse_scrolled(module, pzx, pzy, up, state, sel, fpt->parentid, gui, gui->group_edited);
+      return sel->functions->mouse_scrolled(module, pzx, pzy, up, state, sel, fpt->parentid, gui, gui->group_edited, interaction);
   }
   return 0;
 }
@@ -104,8 +104,7 @@ static int _group_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
   const int closeup = dt_control_get_dev_closeup();
   const float zoom_scale = dt_dev_get_zoom_scale(darktable.develop, zoom, 1<<closeup, 1);
-  const float pr_d = darktable.develop->preview_downsampling;
-  const float as = DT_PIXEL_APPLY_DPI(5) / (pr_d * zoom_scale);  // transformed to backbuf dimensions
+  const float as = DT_PIXEL_APPLY_DPI(5) / zoom_scale;  // transformed to backbuf dimensions
 
   // we first don't do anything if we are inside a scrolling session
 
@@ -743,4 +742,3 @@ const dt_masks_functions_t dt_masks_functions_group = {
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

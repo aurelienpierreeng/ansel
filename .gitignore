@@ -1,7 +1,6 @@
 build*/
 obj*/
 *~
-*.pot
 *.mo
 doc/usermanual/darktable-usermanual*.pdf
 doc/api/
@@ -27,3 +26,4 @@ AppDir
 *.AppImage*
 appimage-build
 linuxdeploy-plugin-gtk.sh
+src/tests/integration/*/*

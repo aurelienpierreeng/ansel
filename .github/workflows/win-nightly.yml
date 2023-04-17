@@ -94,7 +94,7 @@ jobs:
           submodules: true
           path: src
       - name: Update lensfun data
-        if: ${{ success() }}
+        if: ${{ false }} #${{ success() }} re-enable when lensfun servers renew the SSL certificate
         run: |
           lensfun-update-data
       - name: Build and Install
@@ -137,7 +137,7 @@ jobs:
         with:
           name: ansel.stable.win64
       - name: Update nightly release
-        uses: eine/tip@master
+        uses: aurelienpierreeng/tip@master
         with:
           tag: v0.0.0
           rm: false

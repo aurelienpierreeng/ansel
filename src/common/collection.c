@@ -24,6 +24,7 @@
 #include "common/utility.h"
 #include "common/map_locations.h"
 #include "common/datetime.h"
+#include "common/selection.h"
 #include "control/conf.h"
 #include "control/control.h"
 
@@ -570,6 +571,13 @@ int dt_collection_update(const dt_collection_t *collection)
   g_free(selq_post);
   g_free(query);
   g_free(query_no_group);
+
+  // Handle culling mode across re-queryings : re-restrict collection to selection
+  if(darktable.gui && darktable.gui->culling_mode)
+  {
+    dt_pop_selection();
+    dt_selection_to_culling_mode();
+  }
 
   /* update the cached count. collection isn't a real const anyway, we are writing to it in
    * _dt_collection_store, too. */
@@ -2391,6 +2399,64 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
                                   list, next);
   }
 }
+
+void dt_pop_collection()
+{
+  // Restore previous collection
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "DELETE FROM memory.collected_images", NULL, NULL, NULL);
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db),
+                        "INSERT INTO memory.collected_images"
+                        " SELECT * FROM memory.collected_backup",
+                        NULL, NULL, NULL);
+}
+
+void dt_push_collection()
+{
+  // Backup current collection
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "DELETE FROM memory.collected_backup", NULL, NULL, NULL);
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db),
+                        "INSERT INTO memory.collected_backup"
+                        " SELECT * FROM memory.collected_images",
+                        NULL, NULL, NULL);
+}
+
+void dt_selection_to_culling_mode()
+{
+  // Culling mode restricts the collection to the selection
+  sqlite3_stmt *stmt = NULL;
+
+  // Save the id of the first selected image
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                  "SELECT s.imgid"
+                                  " FROM main.selected_images as s, memory.collected_images as c"
+                                  " WHERE s.imgid=c.imgid"
+                                  " ORDER BY c.rowid LIMIT 1",
+                                  -1, &stmt, NULL);
+  if(sqlite3_step(stmt) == SQLITE_ROW && darktable.gui)
+    darktable.gui->anchor_imgid = sqlite3_column_int(stmt, 0);
+
+  sqlite3_finalize(stmt);
+
+  // Remove non-selected from collected images, aka culling mode
+  dt_push_collection();
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db),
+                        "DELETE FROM memory.collected_images"
+                        "  WHERE imgid NOT IN "
+                        "  (SELECT imgid FROM main.selected_images)",
+                        NULL, NULL, NULL);
+
+  // Backup and reset current selection
+  dt_push_selection();
+  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "DELETE FROM main.selected_images", NULL, NULL, NULL);
+}
+
+void dt_culling_mode_to_selection()
+{
+  // Restore everything as before
+  dt_pop_selection();
+  dt_pop_collection();
+}
+
 
 gboolean dt_collection_hint_message_internal(void *message)
 {

@@ -76,7 +76,6 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dt_pthread_mutex_init(&dev->preview_pipe_mutex, NULL);
   dev->histogram_pre_tonecurve = NULL;
   dev->histogram_pre_levels = NULL;
-  dev->preview_downsampling = dt_dev_get_preview_downsampling();
   dev->forms = NULL;
   dev->form_visible = NULL;
   dev->form_gui = NULL;
@@ -122,6 +121,10 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dev->overexposed.upper = dt_conf_get_float("darkroom/ui/overexposed/upper");
 
   dev->iso_12646.enabled = FALSE;
+
+  // Init the mask lock state
+  dev->mask_lock = 0;
+  dev->darkroom_skip_mouse_events = 0;
 }
 
 void dt_dev_cleanup(dt_develop_t *dev)
@@ -181,16 +184,6 @@ void dt_dev_cleanup(dt_develop_t *dev)
   dt_conf_set_int("darkroom/ui/overexposed/colorscheme", dev->overexposed.colorscheme);
   dt_conf_set_float("darkroom/ui/overexposed/lower", dev->overexposed.lower);
   dt_conf_set_float("darkroom/ui/overexposed/upper", dev->overexposed.upper);
-}
-
-float dt_dev_get_preview_downsampling()
-{
-  const char *preview_downsample = dt_conf_get_string_const("preview_downsampling");
-  const float downsample = (g_strcmp0(preview_downsample, "original") == 0) ? 1.0f
-        : (g_strcmp0(preview_downsample, "to 1/2")==0) ? 0.5f
-        : (g_strcmp0(preview_downsample, "to 1/3")==0) ? 1/3.0f
-        : 0.25f;
-  return downsample;
 }
 
 void dt_dev_process_image(dt_develop_t *dev)
@@ -298,8 +291,8 @@ restart:
   dt_get_times(&start);
   dt_dev_pixelpipe_change(dev->preview_pipe, dev);
   if(dt_dev_pixelpipe_process(
-         dev->preview_pipe, dev, 0, 0, dev->preview_pipe->processed_width * dev->preview_downsampling,
-         dev->preview_pipe->processed_height * dev->preview_downsampling, dev->preview_downsampling))
+         dev->preview_pipe, dev, 0, 0, dev->preview_pipe->processed_width,
+         dev->preview_pipe->processed_height, 1.f))
   {
     if(dev->preview_loading || dev->preview_input_changed)
     {
@@ -534,7 +527,6 @@ float dt_dev_get_zoom_scale(dt_develop_t *dev, dt_dev_zoom_t zoom, int closeup_f
       if(preview) zoom_scale *= ps;
       break;
   }
-  if (preview) zoom_scale /= dev->preview_downsampling;
 
   return zoom_scale;
 }
@@ -572,6 +564,11 @@ void dt_dev_configure(dt_develop_t *dev, int wd, int ht)
   const int32_t tb = dev->border_size;
   wd -= 2*tb;
   ht -= 2*tb;
+
+  // Ensure we have non-zero image surface
+  wd = MAX(wd, 32);
+  ht = MAX(ht, 32);
+
   if(dev->width != wd || dev->height != ht)
   {
     dev->width = wd;
@@ -1226,8 +1223,10 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
   if(!(image->flags & DT_IMAGE_AUTO_PRESETS_APPLIED)) run = TRUE;
 
   const gboolean is_raw = dt_image_is_raw(image);
-  const gboolean is_modern_chroma =
-    dt_conf_is_equal("plugins/darkroom/chromatic-adaptation", "modern");
+
+  // Force-reload modern chromatic adaptation
+  // Will be overriden below if we have no history for temperature
+  dt_conf_set_string("plugins/darkroom/chromatic-adaptation", "modern");
 
   // flag was already set? only apply presets once in the lifetime of a history stack.
   // (the flag will be cleared when removing it).
@@ -1244,7 +1243,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
 
     // So if the current mode is the modern chromatic-adaptation, do check the history.
 
-    if(is_modern_chroma && is_raw)
+    if(is_raw)
     {
       // loop over all modules and display a message for default-enabled modules that
       // are not found on the history.
@@ -1288,11 +1287,6 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
     return FALSE;
   }
 
-  const char *workflow = dt_conf_get_string_const("plugins/darkroom/workflow");
-  const gboolean is_scene_referred = strcmp(workflow, "scene-referred") == 0;
-  const gboolean is_display_referred = strcmp(workflow, "display-referred") == 0;
-  const gboolean is_workflow_none = strcmp(workflow, "none") == 0;
-
   //  Add scene-referred workflow
   //  Note that we cannot use a preset for FilmicRGB as the default values are
   //  dynamically computed depending on the actual exposure compensation
@@ -1300,19 +1294,16 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
 
   const gboolean has_matrix = dt_image_is_matrix_correction_supported(image);
 
-  const gboolean auto_apply_filmic = is_raw && is_scene_referred;
-  const gboolean auto_apply_cat = has_matrix && is_modern_chroma;
-  const gboolean auto_apply_sharpen = dt_conf_get_bool("plugins/darkroom/sharpen/auto_apply");
-
-  if(auto_apply_filmic || auto_apply_sharpen || auto_apply_cat)
+  if(is_raw)
   {
     for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
     {
       dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
 
-      if(((auto_apply_filmic && strcmp(module->op, "filmicrgb") == 0)
-          || (auto_apply_sharpen && strcmp(module->op, "sharpen") == 0)
-          || (auto_apply_cat && strcmp(module->op, "channelmixerrgb") == 0))
+      if((   (strcmp(module->op, "filmicrgb") == 0)
+          || (strcmp(module->op, "colorbalancergb") == 0)
+          || (strcmp(module->op, "lens") == 0)
+          || (has_matrix && strcmp(module->op, "channelmixerrgb") == 0) )
          && !dt_history_check_module_exists(imgid, module->op, FALSE)
          && !(module->flags() & IOP_FLAGS_NO_HISTORY_STACK))
       {
@@ -1320,6 +1311,8 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
       }
     }
   }
+
+  // FIXME : the following query seems duplicated from gui/presets.c/dt_gui_presets_autoapply_for_module()
 
   // select all presets from one of the following table and add them into memory.history. Note that
   // this is appended to possibly already present default modules.
@@ -1341,18 +1334,13 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
            "          AND (format = 0 OR (format&?11 != 0 AND ~format&?12 != 0)))"
            "        OR (name = ?13))"
            "   AND operation NOT IN"
-           "        ('ioporder', 'metadata', 'modulegroups', 'export', 'tagging', 'collect', '%s')"
+           "        ('ioporder', 'metadata', 'modulegroups', 'export', 'tagging', 'collect', 'basecurve')"
            " ORDER BY writeprotect DESC, LENGTH(model), LENGTH(maker), LENGTH(lens)",
-           preset_table[legacy],
-           is_display_referred?"":"basecurve");
+           preset_table[legacy]);
   // clang-format on
   // query for all modules at once:
   sqlite3_stmt *stmt;
-  const char *workflow_preset = has_matrix && is_display_referred
-                                ? _("display-referred default")
-                                : (has_matrix && is_scene_referred
-                                   ?_("scene-referred default")
-                                   :"\t\n");
+  const char *workflow_preset = has_matrix ? _("scene-referred default") : "\t\n";
   int iformat = 0;
   if(dt_image_is_rawprepare_supported(image)) iformat |= FOR_RAW;
   else iformat |= FOR_LDR;
@@ -1426,11 +1414,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
     else
     {
       // we have no auto-apply order, so apply iop order, depending of the workflow
-      GList *iop_list;
-      if(is_scene_referred || is_workflow_none)
-        iop_list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_V30);
-      else
-        iop_list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_LEGACY);
+      GList *iop_list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_V30);
       dt_ioppr_write_iop_order_list(iop_list, imgid);
       g_list_free_full(iop_list, free);
       dt_ioppr_set_default_iop_order(dev, imgid);
@@ -2039,7 +2023,7 @@ void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch)
   // fallback on preview pipe
   if(dev->preview_pipe && dev->preview_pipe->processed_width)
   {
-    const float scale = (dev->preview_pipe->iscale / dev->preview_downsampling);
+    const float scale = dev->preview_pipe->iscale;
     *procw = scale * dev->preview_pipe->processed_width;
     *proch = scale * dev->preview_pipe->processed_height;
     return;
@@ -2127,27 +2111,12 @@ void dt_dev_modulegroups_set(dt_develop_t *dev, uint32_t group)
     dev->proxy.modulegroups.set(dev->proxy.modulegroups.module, group);
 }
 
-uint32_t dt_dev_modulegroups_get_activated(dt_develop_t *dev)
-{
-  if(dev->proxy.modulegroups.module && dev->proxy.modulegroups.get_activated)
-    return dev->proxy.modulegroups.get_activated(dev->proxy.modulegroups.module);
-
-  return 0;
-}
-
 uint32_t dt_dev_modulegroups_get(dt_develop_t *dev)
 {
   if(dev->proxy.modulegroups.module && dev->proxy.modulegroups.get)
     return dev->proxy.modulegroups.get(dev->proxy.modulegroups.module);
 
   return 0;
-}
-
-gboolean dt_dev_modulegroups_test(dt_develop_t *dev, uint32_t group, dt_iop_module_t *module)
-{
-  if(dev->proxy.modulegroups.module && dev->proxy.modulegroups.test)
-    return dev->proxy.modulegroups.test(dev->proxy.modulegroups.module, group, module);
-  return FALSE;
 }
 
 void dt_dev_modulegroups_switch(dt_develop_t *dev, dt_iop_module_t *module)
@@ -2166,20 +2135,6 @@ void dt_dev_modulegroups_search_text_focus(dt_develop_t *dev)
 {
   if(dev->proxy.modulegroups.module && dev->proxy.modulegroups.search_text_focus && dev->first_load == 0)
     dev->proxy.modulegroups.search_text_focus(dev->proxy.modulegroups.module);
-}
-
-gboolean dt_dev_modulegroups_is_visible(dt_develop_t *dev, gchar *module)
-{
-  if(dev->proxy.modulegroups.module && dev->proxy.modulegroups.test_visible)
-    return dev->proxy.modulegroups.test_visible(dev->proxy.modulegroups.module, module);
-  return FALSE;
-}
-
-int dt_dev_modulegroups_basics_module_toggle(dt_develop_t *dev, GtkWidget *widget, gboolean doit)
-{
-  if(dev->proxy.modulegroups.module && dev->proxy.modulegroups.basics_module_toggle)
-    return dev->proxy.modulegroups.basics_module_toggle(dev->proxy.modulegroups.module, widget, doit);
-  return 0;
 }
 
 void dt_dev_masks_list_change(dt_develop_t *dev)
@@ -2474,16 +2429,7 @@ int dt_dev_distort_transform_plus(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, c
                                   float *points, size_t points_count)
 {
   dt_pthread_mutex_lock(&dev->history_mutex);
-  const int success = dt_dev_distort_transform_locked(dev,pipe,iop_order,transf_direction,points,points_count);
-
-  if (success
-      && (dev->preview_downsampling != 1.0f)
-      && (transf_direction == DT_DEV_TRANSFORM_DIR_ALL
-          || transf_direction == DT_DEV_TRANSFORM_DIR_FORW_EXCL
-          || transf_direction == DT_DEV_TRANSFORM_DIR_FORW_INCL))
-    for(size_t idx=0; idx < 2 * points_count; idx++)
-      points[idx] *= dev->preview_downsampling;
-
+  dt_dev_distort_transform_locked(dev, pipe, iop_order, transf_direction, points, points_count);
   dt_pthread_mutex_unlock(&dev->history_mutex);
   return 1;
 }
@@ -2523,12 +2469,6 @@ int dt_dev_distort_backtransform_plus(dt_develop_t *dev, dt_dev_pixelpipe_t *pip
                                       float *points, size_t points_count)
 {
   dt_pthread_mutex_lock(&dev->history_mutex);
-  if ((dev->preview_downsampling != 1.0f) && (transf_direction == DT_DEV_TRANSFORM_DIR_ALL
-    || transf_direction == DT_DEV_TRANSFORM_DIR_FORW_EXCL
-    || transf_direction == DT_DEV_TRANSFORM_DIR_FORW_INCL))
-      for(size_t idx=0; idx < 2 * points_count; idx++)
-        points[idx] /= dev->preview_downsampling;
-
   const int success = dt_dev_distort_backtransform_locked(dev, pipe, iop_order, transf_direction, points, points_count);
   dt_pthread_mutex_unlock(&dev->history_mutex);
   return success;
@@ -2783,6 +2723,28 @@ void dt_dev_undo_end_record(dt_develop_t *dev)
   if(dev->gui_attached && cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM)
   {
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+  }
+}
+
+gboolean dt_masks_get_lock_mode(dt_develop_t *dev)
+{
+  if(dev->gui_attached)
+  {
+    dt_pthread_mutex_lock(&darktable.gui->mutex);
+    const gboolean state = dev->mask_lock;
+    dt_pthread_mutex_unlock(&darktable.gui->mutex);
+    return state;
+  }
+  return FALSE;
+}
+
+void dt_masks_set_lock_mode(dt_develop_t *dev, gboolean mode)
+{
+  if(dev->gui_attached)
+  {
+    dt_pthread_mutex_lock(&darktable.gui->mutex);
+    dev->mask_lock = mode;
+    dt_pthread_mutex_unlock(&darktable.gui->mutex);
   }
 }
 

@@ -105,7 +105,6 @@
 #include "gui/color_picker_proxy.h"
 #include "iop/iop_api.h"
 #include "iop/choleski.h"
-#include "common/iop_group.h"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -311,7 +310,7 @@ const char **description(struct dt_iop_module_t *self)
 
 int default_group()
 {
-  return IOP_GROUP_BASIC | IOP_GROUP_GRADING;
+  return IOP_GROUP_TONES;
 }
 
 int flags()

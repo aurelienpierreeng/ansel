@@ -292,9 +292,13 @@ void dt_collection_move_before(const int32_t image_id, GList * selected_images);
 /* initialize memory table */
 void dt_collection_memory_update();
 
+/** restrict the collection to selected pictures */
+void dt_selection_to_culling_mode();
+/** restore initial collection and selection when exiting culling mode */
+void dt_culling_mode_to_selection();
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

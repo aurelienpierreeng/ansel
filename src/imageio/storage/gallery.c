@@ -69,7 +69,7 @@ typedef struct pair_t
 
 const char *name(const struct dt_imageio_module_storage_t *self)
 {
-  return _("website gallery");
+  return _("Static HTML gallery");
 }
 
 void *legacy_params(dt_imageio_module_storage_t *self, const void *const old_params,
@@ -608,4 +608,3 @@ int supported(dt_imageio_module_storage_t *storage, dt_imageio_module_format_t *
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

@@ -160,7 +160,6 @@ typedef struct dt_develop_t
   uint32_t average_delay;
   uint32_t preview_average_delay;
   struct dt_iop_module_t *gui_module; // this module claims gui expose/event callbacks.
-  float preview_downsampling;         // < 1.0: optionally downsample preview
 
   // width, height: dimensions of window
   int32_t width, height;
@@ -235,7 +234,7 @@ typedef struct dt_develop_t
       /* get activated module group */
       uint32_t (*get_activated)(struct dt_lib_module_t *self);
       /* test if iop group flags matches modulegroup */
-      gboolean (*test)(struct dt_lib_module_t *self, uint32_t group, struct dt_iop_module_t *module);
+      gboolean (*test)(struct dt_lib_module_t *self, uint32_t group, uint32_t iop_group);
       /* switch to modulegroup */
       void (*switch_group)(struct dt_lib_module_t *self, struct dt_iop_module_t *module);
       /* update modulegroup visibility */
@@ -318,12 +317,12 @@ typedef struct dt_develop_t
 
   int mask_form_selected_id; // select a mask inside an iop
   gboolean darkroom_skip_mouse_events; // skip mouse events for masks
+  gboolean mask_lock;
 } dt_develop_t;
 
 void dt_dev_init(dt_develop_t *dev, int32_t gui_attached);
 void dt_dev_cleanup(dt_develop_t *dev);
 
-float dt_dev_get_preview_downsampling();
 void dt_dev_process_image_job(dt_develop_t *dev);
 void dt_dev_process_preview_job(dt_develop_t *dev);
 // launch jobs above
@@ -396,16 +395,10 @@ void dt_dev_modulegroups_search_text_focus(dt_develop_t *dev);
 void dt_dev_modulegroups_set(dt_develop_t *dev, uint32_t group);
 /** get the active modulegroup */
 uint32_t dt_dev_modulegroups_get(dt_develop_t *dev);
-/** get the activated modulegroup */
-uint32_t dt_dev_modulegroups_get_activated(dt_develop_t *dev);
-/** test if iop group flags matches modulegroup */
-gboolean dt_dev_modulegroups_test(dt_develop_t *dev, uint32_t group, struct dt_iop_module_t *module);
 /** reorder the module list */
 void dt_dev_reorder_gui_module_list(dt_develop_t *dev);
 /** test if the iop is visible in current groups layout **/
 gboolean dt_dev_modulegroups_is_visible(dt_develop_t *dev, gchar *module);
-/** add or remove module or widget in current quick access list **/
-int dt_dev_modulegroups_basics_module_toggle(dt_develop_t *dev, GtkWidget *widget, gboolean doit);
 
 /** request snapshot */
 void dt_dev_snapshot_request(dt_develop_t *dev, const char *filename);
@@ -490,6 +483,12 @@ int dt_dev_sync_pixelpipe_hash_distort (dt_develop_t *dev, struct dt_dev_pixelpi
 /* all history change must be enclosed into a start / end call */
 void dt_dev_undo_start_record(dt_develop_t *dev);
 void dt_dev_undo_end_record(dt_develop_t *dev);
+
+// Getter and setter for global mask lock (GUI)
+// Can be overriden by key accels
+
+gboolean dt_masks_get_lock_mode(dt_develop_t *dev);
+void dt_masks_set_lock_mode(dt_develop_t *dev, gboolean mode);
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

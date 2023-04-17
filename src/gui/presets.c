@@ -30,13 +30,11 @@
 #include "gui/gtk.h"
 #include "gui/guides.h"
 #include "gui/presets.h"
-#include "libs/modulegroups.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
 #include <assert.h>
 #include <stdlib.h>
-
 
 const int dt_gui_presets_exposure_value_cnt = 24;
 const float dt_gui_presets_exposure_value[]
@@ -930,10 +928,6 @@ static void _menuitem_pick_preset(GtkMenuItem *menuitem, dt_iop_module_t *module
 gboolean dt_gui_presets_autoapply_for_module(dt_iop_module_t *module)
 {
   dt_image_t *image = &module->dev->image_storage;
-
-  const char *workflow = dt_conf_get_string_const("plugins/darkroom/workflow");
-  const gboolean is_display_referred = strcmp(workflow, "display-referred") == 0;
-  const gboolean is_scene_referred = strcmp(workflow, "scene-referred") == 0;
   const gboolean has_matrix = dt_image_is_matrix_correction_supported(image);
 
   char query[2024];
@@ -950,17 +944,12 @@ gboolean dt_gui_presets_autoapply_for_module(dt_iop_module_t *module)
      "           AND ?10 BETWEEN focal_length_min AND focal_length_max"
      "           AND (format = 0 OR (format&?11 != 0 AND ~format&?12 != 0))"
      "           AND operation NOT IN"
-     "               ('ioporder', 'metadata', 'export', 'tagging', 'collect', '%s'))"
-     "  OR (name = ?13)) AND op_version = ?14",
-     is_display_referred?"":"basecurve");
+     "               ('ioporder', 'metadata', 'export', 'tagging', 'collect', 'basecurve'))"
+     "  OR (name = ?13)) AND op_version = ?14");
   // clang-format on
 
   sqlite3_stmt *stmt;
-  const char *workflow_preset = has_matrix && is_display_referred
-                                ? _("display-referred default")
-                                : (has_matrix && is_scene_referred
-                                   ?_("scene-referred default")
-                                   :"\t\n");
+  const char *workflow_preset = (has_matrix) ? _("scene-referred default") : "\t\n";
   int iformat = 0;
   if(dt_image_is_rawprepare_supported(image)) iformat |= FOR_RAW;
   else iformat |= FOR_LDR;
@@ -1023,262 +1012,6 @@ static gboolean _menuitem_button_released_preset(GtkMenuItem *menuitem, GdkEvent
 
   return FALSE;
 }
-
-/* quick presets list
-  The list of presets to show is saved in anselrc 'plugins/darkroom/quick_preset_list' key
-  the content of the key is written in the form :
-    ꬹiop_name_0|preset_name_0ꬹꬹiop_name_1|preset_name_1ꬹ...
-*/
-
-static gboolean _menuitem_manage_quick_presets_traverse(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter,
-                                                        gpointer data)
-{
-  gchar **txt = (gchar **)data;
-  gchar *preset = NULL;
-  gchar *iop_name = NULL;
-  gboolean active = FALSE;
-  gtk_tree_model_get(model, iter, 1, &active, 3, &iop_name, 4, &preset, -1);
-
-  if(active && preset && iop_name)
-  {
-    *txt = dt_util_dstrcat(*txt, "ꬹ%s|%sꬹ", iop_name, preset);
-  }
-  g_free(iop_name);
-  g_free(preset);
-
-  return FALSE;
-}
-
-static void _menuitem_manage_quick_presets_toggle(GtkCellRendererToggle *cell_renderer, gchar *path,
-                                                  gpointer tree_view)
-{
-  GtkTreeIter iter;
-  GtkTreeModel *model = gtk_tree_view_get_model(tree_view);
-  if(gtk_tree_model_get_iter_from_string(model, &iter, path))
-  {
-    if(gtk_cell_renderer_toggle_get_active(cell_renderer))
-    {
-      gtk_tree_store_set(GTK_TREE_STORE(model), &iter, 1, FALSE, -1);
-    }
-    else
-    {
-      gtk_tree_store_set(GTK_TREE_STORE(model), &iter, 1, TRUE, -1);
-    }
-  }
-
-  // and we recreate the list of activated presets
-  gchar *txt = NULL;
-  gtk_tree_model_foreach(model, _menuitem_manage_quick_presets_traverse, &txt);
-
-  dt_conf_set_string("plugins/darkroom/quick_preset_list", txt);
-  g_free(txt);
-}
-
-static int _menuitem_manage_quick_presets_sort(gconstpointer a, gconstpointer b)
-{
-  const dt_iop_module_so_t *ma = (dt_iop_module_so_t *)a;
-  const dt_iop_module_so_t *mb = (dt_iop_module_so_t *)b;
-  gchar *s1 = g_utf8_normalize(ma->name(), -1, G_NORMALIZE_ALL);
-  gchar *sa = g_utf8_casefold(s1, -1);
-  g_free(s1);
-  s1 = g_utf8_normalize(mb->name(), -1, G_NORMALIZE_ALL);
-  gchar *sb = g_utf8_casefold(s1, -1);
-  g_free(s1);
-  const int res = g_strcmp0(sa, sb);
-  g_free(sa);
-  g_free(sb);
-  return res;
-}
-
-static void _menuitem_manage_quick_presets(GtkMenuItem *menuitem, gpointer data)
-{
-  sqlite3_stmt *stmt;
-  GtkWindow *win = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
-  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("manage module layouts"), win,
-                                                  GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, NULL, NULL);
-
-  gtk_window_set_default_size(GTK_WINDOW(dialog), DT_PIXEL_APPLY_DPI(400), DT_PIXEL_APPLY_DPI(500));
-#ifdef GDK_WINDOWING_QUARTZ
-  dt_osx_disallow_fullscreen(dialog);
-#endif
-  gtk_widget_set_name(dialog, "quick-presets-manager");
-  gtk_window_set_title(GTK_WINDOW(dialog), _("manage quick presets"));
-  GtkWidget *sw = gtk_scrolled_window_new(NULL, NULL);
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(sw), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-
-  GtkTreeViewColumn *col;
-  GtkCellRenderer *renderer;
-  GtkTreeModel *model;
-
-  GtkWidget *view = gtk_tree_view_new();
-  gtk_widget_set_name(view, "quick-presets-manager-list");
-  gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(view), FALSE);
-  gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)), GTK_SELECTION_NONE);
-
-  col = gtk_tree_view_column_new();
-  gtk_tree_view_append_column(GTK_TREE_VIEW(view), col);
-
-  renderer = gtk_cell_renderer_text_new();
-  gtk_tree_view_column_pack_start(col, renderer, TRUE);
-  gtk_tree_view_column_add_attribute(col, renderer, "markup", 0);
-
-  col = gtk_tree_view_column_new();
-  gtk_tree_view_append_column(GTK_TREE_VIEW(view), col);
-
-  renderer = gtk_cell_renderer_toggle_new();
-  g_signal_connect(renderer, "toggled", G_CALLBACK(_menuitem_manage_quick_presets_toggle), view);
-  gtk_tree_view_column_pack_start(col, renderer, TRUE);
-  gtk_tree_view_column_add_attribute(col, renderer, "active", 1);
-  gtk_tree_view_column_add_attribute(col, renderer, "visible", 2);
-
-  GtkTreeStore *treestore = gtk_tree_store_new(5, G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_STRING);
-
-  gchar *config = dt_conf_get_string("plugins/darkroom/quick_preset_list");
-
-  GList *m2 = g_list_sort(g_list_copy(darktable.iop), _menuitem_manage_quick_presets_sort);
-  for(const GList *modules = m2; modules; modules = g_list_next(modules))
-  {
-    dt_iop_module_so_t *iop = (dt_iop_module_so_t *)modules->data;
-    GtkTreeIter toplevel, child;
-
-    /* check if module is visible in current layout */
-    if(dt_dev_modulegroups_is_visible(darktable.develop, iop->op))
-    {
-      // create top entry
-      gtk_tree_store_append(treestore, &toplevel, NULL);
-      gchar *iopname = g_markup_escape_text(iop->name(), -1);
-      gtk_tree_store_set(treestore, &toplevel, 0, iopname, 1, FALSE, 2, FALSE, -1);
-      g_free(iopname);
-
-      /* query presets for module */
-      // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                  "SELECT name"
-                                  " FROM data.presets"
-                                  " WHERE operation=?1"
-                                  " ORDER BY writeprotect DESC, LOWER(name), rowid",
-                                  -1, &stmt, NULL);
-      // clang-format on
-      DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, iop->op, -1, SQLITE_TRANSIENT);
-
-      int nb = 0;
-      while(sqlite3_step(stmt) == SQLITE_ROW)
-      {
-        nb++;
-        const char *name = (char *)sqlite3_column_text(stmt, 0);
-        gchar *presetname = g_markup_escape_text(name, -1);
-        // is this preset part of the list ?
-        gchar *txt = g_strdup_printf("ꬹ%s|%sꬹ", iop->op, name);
-        const gboolean inlist = (config && strstr(config, txt));
-        g_free(txt);
-        gtk_tree_store_append(treestore, &child, &toplevel);
-        gtk_tree_store_set(treestore, &child, 0, presetname, 1, inlist, 2, TRUE, 3, iop->op, 4, name, -1);
-        g_free(presetname);
-      }
-
-      sqlite3_finalize(stmt);
-
-      // we don't show modules with no presets
-      if(nb == 0) gtk_tree_store_remove(treestore, &toplevel);
-    }
-  }
-  g_free(config);
-  g_list_free(m2);
-
-  model = GTK_TREE_MODEL(treestore);
-  gtk_tree_view_set_model(GTK_TREE_VIEW(view), model);
-  g_object_unref(model);
-
-  gtk_container_add(GTK_CONTAINER(sw), view);
-  gtk_widget_set_vexpand(sw, TRUE);
-  gtk_widget_set_hexpand(sw, TRUE);
-  gtk_container_add(GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(dialog))), sw);
-
-  gtk_window_set_resizable(GTK_WINDOW(dialog), TRUE);
-
-  gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ON_PARENT);
-  gtk_widget_show_all(dialog);
-}
-
-void dt_gui_favorite_presets_menu_show()
-{
-  sqlite3_stmt *stmt;
-  GtkMenu *menu = darktable.gui->presets_popup_menu;
-  if(menu) gtk_widget_destroy(GTK_WIDGET(menu));
-  darktable.gui->presets_popup_menu = GTK_MENU(gtk_menu_new());
-  menu = darktable.gui->presets_popup_menu;
-
-  const gboolean default_first = dt_conf_get_bool("plugins/darkroom/default_presets_first");
-
-  // clang-format off
-  gchar *query = g_strdup_printf("SELECT name"
-                                 " FROM data.presets"
-                                 " WHERE operation=?1"
-                                 " ORDER BY writeprotect %s, LOWER(name), rowid",
-                                 default_first ? "DESC" : "ASC"
-                                );
-  // clang-format on
-
-  gboolean retrieve_list = FALSE;
-  gchar *config = NULL;
-
-  if(!dt_conf_key_exists("plugins/darkroom/quick_preset_list"))
-    retrieve_list = TRUE;
-  else
-    config = dt_conf_get_string("plugins/darkroom/quick_preset_list");
-
-  for(const GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
-  {
-    dt_iop_module_t *iop = (dt_iop_module_t *)modules->data;
-
-    // check if module is visible in current layout
-    if(dt_dev_modulegroups_is_visible(darktable.develop, iop->so->op))
-    {
-      /* query presets for module */
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query,
-                                  -1, &stmt, NULL);
-      DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, iop->op, -1, SQLITE_TRANSIENT);
-
-      while(sqlite3_step(stmt) == SQLITE_ROW)
-      {
-        const char *name = (char *)sqlite3_column_text(stmt, 0);
-        if(retrieve_list)
-        {
-          // we only show it if module is in favorite
-          gchar *key = g_strdup_printf("plugins/darkroom/%s/favorite", iop->so->op);
-          const gboolean fav = dt_conf_get_bool(key);
-          g_free(key);
-          if(fav) config = dt_util_dstrcat(config, "ꬹ%s|%sꬹ", iop->so->op, name);
-        }
-
-        // check that this preset is in the config list
-        gchar *txt = g_strdup_printf("ꬹ%s|%sꬹ", iop->so->op, name);
-        if(config && strstr(config, txt))
-        {
-          GtkMenuItem *mi = (GtkMenuItem *)gtk_menu_item_new_with_label(name);
-          gchar *tt = g_markup_printf_escaped("<b>%s %s</b> %s", iop->name(), iop->multi_name, name);
-          gtk_label_set_markup(GTK_LABEL(gtk_bin_get_child(GTK_BIN(mi))), tt);
-          g_free(tt);
-          g_object_set_data_full(G_OBJECT(mi), "dt-preset-name", g_strdup(name), g_free);
-          g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_menuitem_pick_preset), iop);
-          gtk_menu_shell_append(GTK_MENU_SHELL(menu), GTK_WIDGET(mi));
-        }
-        g_free(txt);
-      }
-
-      sqlite3_finalize(stmt);
-    }
-  }
-  if(retrieve_list) dt_conf_set_string("plugins/darkroom/quick_preset_list", config);
-  g_free(config);
-  g_free(query);
-
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
-  GtkMenuItem *smi_manage = (GtkMenuItem *)gtk_menu_item_new_with_label(_("manage quick presets list..."));
-  g_signal_connect(G_OBJECT(smi_manage), "activate", G_CALLBACK(_menuitem_manage_quick_presets), NULL);
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), GTK_WIDGET(smi_manage));
-}
-
 
 static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t version,
                                                   dt_iop_params_t *params, int32_t params_size,

@@ -31,9 +31,15 @@
 @define-color grey_25 #3b3b3b;
 @define-color grey_30 #474747;
 @define-color grey_35 #525252;
+@define-color grey_38 #595959;
 @define-color grey_40 #5e5e5e;
+@define-color grey_42 #636363;
+@define-color grey_44 #686868;
 @define-color grey_45 #6a6a6a;
+@define-color grey_46 #6d6d6d;
+@define-color grey_48 #727272;
 @define-color grey_50 #777777;
+@define-color grey_52 #7c7c7c;
 @define-color grey_55 #848484;
 @define-color grey_60 #919191;
 @define-color grey_65 #9e9e9e;
@@ -121,7 +127,7 @@ Why that? Just because it's a developer choice and most classes use underscore i
 /* General */
 @define-color selected_bg_color @grey_55;       /* legacy stuff */
 @define-color border_color @grey_40;            /* border, when used */
-@define-color bg_color @grey_45;                /* general background */
+@define-color bg_color @grey_44;                /* general background */
 @define-color fg_color @grey_95;                /* general text */
 @define-color base_color @fg_color;             /* legacy stuff */
 @define-color text_color @grey_35;              /* same */
@@ -134,15 +140,15 @@ Why that? Just because it's a developer choice and most classes use underscore i
 @define-color scroll_bar_bg @grey_40;
 
 /* Modules box (plugins) */
-@define-color plugin_bg_color @grey_50;
+@define-color plugin_bg_color @grey_48;
 @define-color section_label @grey_95;
 @define-color plugin_label_color @grey_95;
 @define-color collapsible_bg_color @grey_55;
 
 /* Modules controls (sliders and comboboxes) */
-@define-color bauhaus_bg alpha(@bg_color, 0.55);
+@define-color bauhaus_bg alpha(@grey_10, 0.10);
 @define-color bauhaus_fg shade(@fg_color, 0.95);   /* needed to show color picker on bauhaus sliders */
-@define-color bauhaus_border shade(@plugin_bg_color, 0.5);
+@define-color bauhaus_border @grey_40;
 @define-color bauhaus_indicator_border @grey_50;
 @define-color bauhaus_fill @grey_70;
 @define-color bauhaus_bg_hover @grey_80;
@@ -235,7 +241,7 @@ Why that? Just because it's a developer choice and most classes use underscore i
   color: @fg_color;
   font-size: 1em;
   font-family: sans-serif;
-  font-weight: normal;
+  font-weight: 400;
   box-shadow:none;
   outline-style:none;
   text-shadow:none;
@@ -329,7 +335,7 @@ undershoot,
 /* Allow to resize all windows */
 decoration
 {
-  margin: 1px; /* need to remains as px as just minimum size needed, no need to be scalable */
+  margin: 0px; /* need to remains as px as just minimum size needed, no need to be scalable */
 }
 
 /* Default Gtk buttons and other entries */
@@ -343,7 +349,7 @@ textview,
   border: 0.07em solid @button_border;
   border-radius: 0.21em;
   background-color: @button_bg;
-  font-weight: normal;
+  font-weight: 400;
 }
 
 /* then set specific settings for all text zones and combo */
@@ -459,13 +465,49 @@ separator
 /*------------------------
   - Main header settings -
   ------------------------*/
-/* Labels in views */
-#view-label,
-#view-dropdown
+#top
 {
-  font-size: 1.5em;
-  border-radius: 0.14em;
-  color: @disabled_fg_color;
+  background-color: @grey_35;
+  border-bottom: 2px solid @grey_30;
+}
+
+#menu-bar menuitem
+{
+  padding: 0.25em 0.5em;
+}
+
+#menu-bar menuitem menu menuitem
+{
+  padding: 0.25em;
+}
+
+#menu-bar separator
+{
+  margin: 0.25em 0;
+  padding: 0;
+  border-top: 1px solid @grey_50;
+}
+
+#menu-bar menuitem label
+{
+  font-weight: 600;
+}
+
+#menu-bar menuitem menu menuitem label
+{
+  font-weight: 400;
+}
+
+#menu-bar menuitem menu menuitem.menu-active label
+{
+  font-weight: 800;
+  color: @grey_100;
+}
+
+menubar menuitem,
+menubar menuitem label
+{
+  border: none;
 }
 
 /*------------------------------
@@ -510,23 +552,65 @@ dialog .sidebar row:selected:hover label,
   background-color: @plugin_bg_color;
 }
 
+#mask-toolbar #bauhaus-slider
+{
+  background-color: @bg_color;
+}
+
+
 .dt_plugin_ui_main,
-#blending-box,
 #guides-module-combobox
 {
-  padding: 0.28em 0.65em;
+  padding: 1em 0.5em;
+  margin: 0;
+  border: none;
 }
 
-/* Frame around blending boxes */
-#blending-tabs + #blending-box /* set top margin below blending tabs */
+#blending-box
 {
-  margin-top: 0.14em;
+  padding: 0.5em;
+  border: none;
+  margin: 0;
 }
 
-/* Add some space to aerate if a notebook follows a widget (like for example in filmic rgb module */
-.dt_plugin_ui_main widget + notebook
+.dt_plugin_ui_main
 {
-  margin-top: 0.5em;
+  border-top: 2px solid @grey_46;
+}
+
+.dt_module_frame
+{
+  border-top: none;
+  border-bottom: none;
+  margin: 0;
+  padding: 0;
+}
+
+#right .dt_module_frame
+{
+  border-left: 3px solid @bg_color;
+}
+
+#left .dt_module_frame
+{
+  border-right: 3px solid @bg_color;
+}
+
+#right .dt_module_focus,
+#right .dt_module_frame:focus
+{
+  border-left-color: shade(@field_selected_fg, 0.85);
+}
+
+#left .dt_module_focus,
+#left .dt_module_frame:focus
+{
+  border-right-color: shade(@field_selected_fg, 0.85);
+}
+
+.dt_module_frame:first-child #module-header
+{
+  border-top:none;
 }
 
 /* Gradient sliders */
@@ -552,7 +636,9 @@ dialog .sidebar row:selected:hover label,
 /* Set modules name header */
 #module-header
 {
-  padding: 0.5em;
+  padding: 0.33em 0.25em;
+  border-top: 2px solid @grey_38;
+  margin: 0;
 }
 
 /* Labels in modules */
@@ -561,28 +647,24 @@ dialog .sidebar row:selected:hover label,
 {
   color: @plugin_label_color;
   padding: 0 0.14em 0.14em 0.45em;
-  font-weight: normal;
+  font-weight: 700;
   font-family: sans-serif;
   font-size: 1.1em;
 }
 
-.dt_module_focus #iop-panel-label/* set focus mode */
+.dt_module_focus #iop-panel-label,/* set focus mode */
+.dt_module_frame:focus #iop-panel-label
 {
   color: shade(@plugin_label_color, 1.2);
 }
 
 /* Labels of controls sections in modules */
 .dt_section_label,
-#blending-box .dt_section_label label  /* as those sections has icons on same line, we need to apply dt_section_label class on box above label and so separate what we apply on border and what we apply on box above */
+#blending-box .dt_section_label  /* as those sections has icons on same line, we need to apply dt_section_label class on box above label and so separate what we apply on border and what we apply on box above */
 {
   padding: 0.14em 0;
   color: @section_label;
-  font-family: sans-serif;
   font-weight: 500;
-}
-
-.dt_section_label
-{
   border-bottom: 0.05em solid @section_label;
   margin: 0.21em 0;
 }
@@ -612,7 +694,6 @@ dialog .sidebar row:selected:hover label,
   background-color: @collapsible_bg_color;
   border: none;
   margin-top: 0.14em;
-  padding: 0.07em 0;
 }
 
 /*-------------------
@@ -855,10 +936,14 @@ notebook tabs,
 }
 
 #modules-tabs,
-#blending-tabs,
 #guides-line
 {
   background-color: @field_active_bg;
+}
+
+#blending-tabs
+{
+  background-color: @grey_50;
 }
 
 /* set sizes of "buttons" in modules and blending tabs ; and guides lines too */
@@ -889,29 +974,101 @@ notebook tabs,
   padding: 0.3em;
 }
 
+#blending-tabs button
+{
+  border-bottom: 3px solid @bg_color;
+  border-top: 3px solid transparent;
+}
+
+#blending-tabs button:active,
+#blending-tabs button:checked,
+#blending-tabs button:selected
+{
+  background-color: transparent;
+  border-bottom: 3px solid @grey_90;
+}
+
+#blending-tabs button:hover
+{
+  border-bottom: 3px solid @grey_100;
+}
+
+
+#search-box entry placeholder {
+  color: @grey_25;
+}
+
 /* Set notebook tabs */
+notebook tab
+{
+  border: none;
+}
+
 notebook tab label
 {
-  color: shade(@field_selected_fg, 0.75);
+  color: @grey_80;
   padding: 0.28em 0.07em;
+  border-bottom: 3px solid @bg_color;
 }
 
 notebook tab:hover label
 {
-  border-bottom: 0.1em solid shade(@field_selected_fg, 0.7);
-  color: shade(@field_selected_fg, 0.9);
+  border-bottom: 3px solid @grey_100;
+  color: @grey_100;
 }
 
 notebook tab:checked label
 {
-  border-bottom: 0.1em solid @field_selected_fg;
-  color: @field_selected_fg;
+  border-bottom: 3px solid @grey_90;
+  color: @grey_95;
 }
 
 notebook header /* add space between notebook tabs and options below */
 {
   margin-bottom: 0.42em;
 }
+
+#modules-tabs notebook tab
+{
+  padding: 0;
+}
+
+#modules-tabs notebook tabs arrow
+{
+  border-bottom: 3px solid @bg_color;
+}
+
+#modules-tabs notebook tab label
+{
+  padding: 0.25em;
+  font-size: 1.25em;
+  color: @grey_85;
+}
+
+#modules-tabs notebook header, #modules-tabs notebook
+{
+  margin-bottom: 0;
+  color: @grey_65;
+}
+
+#modules-tabs notebook tab:hover label
+{
+  color: @grey_100;
+}
+
+
+#modules-tabs notebook tab:checked label
+{
+  color: @grey_100;
+}
+
+#modules-tabs notebook:disabled tab label
+{
+  border-bottom: none;
+  color: @grey_65;
+}
+
+
 
 /*--------------------------
   - GTK sliders and scales -
@@ -978,7 +1135,7 @@ filechooser widget treeview
 
 treeview header label
 {
-  font-weight: bold;
+  font-weight: 700;
   padding: 0.14em;
 }
 
@@ -1032,7 +1189,7 @@ treeview header label
 #preferences-notebook scrolledwindow #pref_section > label  /* sub-category title in main content */
 {
   font-size: 1.2em;
-  font-weight: bold;
+  font-weight: 700;
 }
 
 /* Just add spacing between label settings and setting beside */
@@ -1086,7 +1243,7 @@ treeview header label
 #modulegroups-groups-title label,
 #modulegroups-header-center entry
 {
-  font-weight: bold;
+  font-weight: 700;
   margin-right: 0.28em;
 }
 
@@ -1209,39 +1366,33 @@ filechooser row:hover .sidebar-icon
   padding: 0.14em 0.84em;
 }
 
-/*--------------------
-  - Quick access tab -
-  --------------------*/
-#basics-header-box
-{
-  border-top: 0.07em solid @darkroom_bg_color;
-}
-
-#basics-header-box,
-#basics-module-hbox > box
-{
-  padding: 0.21em 0.7em;
-}
-
-#basics-box-labels #basics-header-box:first-child,
-#basics-box-labels .dt_section_label
-{
-  border: none;
-}
-
-#basics-widget #toneeqgraph
-{
-  min-height: 18em;
-}
 
 /*--------------------------------------------------
   - Collect module and quick filters on header bar -
 --------------------------------------------------*/
 
 /* and adjust label and color buttons, especially in header bar */
-.quick_filter_box label
+.quick_filter_box
 {
   margin-right: 1.5em;
+}
+
+.quick_filter_box #quickfilter-culling label
+{
+  margin-left: 0.5em;
+  margin-right: 0.5em;
+}
+
+#quickfilter-culling
+{
+  background-color: @grey_45;
+}
+
+#quickfilter-culling:selected,
+#quickfilter-culling:active,
+#quickfilter-culling:checked
+{
+  background-color: @grey_65;
 }
 
 #quickfilter-search-box,
@@ -1723,6 +1874,14 @@ Details :
   border: 2px solid @lighttable_bg_color;
 }
 
+/* set selected image and/or focus one */
+/* selection supersedes hover */
+.thumb-main:active .thumb-back
+{
+  background-color: @grey_45;
+  border-color: @grey_45;
+}
+
 /* set hover effect */
 .thumb-main:hover .thumb-back
 {
@@ -1730,14 +1889,12 @@ Details :
   border-color: @thumbnail_hover_bg_color;
 }
 
-/* set selected image and/or focus one */
-/* selection supersedes hover */
-.thumb-main:active .thumb-back,
 .thumb-main:selected .thumb-back
 {
   background-color: @thumbnail_selected_bg_color;
   border-color: @thumbnail_selected_bg_color;
 }
+
 
 /*-----------------
   - Image options -
@@ -2205,9 +2362,9 @@ box *
                  "Ubuntu Light", "Ubuntu", "IPAPGothic",    /* Ubuntu default */
                  "Cantarell",                               /* Gnome default */
                   sans-serif;                                /* default default */
+    font-weight: 300;
 }
 
-button,
 .dt_section_label,
 .quickfilter-label,
 .dt_section_label *
@@ -2218,6 +2375,7 @@ button,
                  "Ubuntu Medium", "Ubuntu", "IPAPGothic",
                  "Cantarell",
                   sans-serif;
+    font-weight: 500;
 }
 
 #iop-panel-label,
@@ -2229,6 +2387,8 @@ button,
                  "Ubuntu Condensed", "Ubuntu", "IPAPGothic",
                  "Cantarell",
                   sans-serif;
+    font-weight: 400;
+    font-stretch: condensed;
 }
 
 notebook tabs,
@@ -2243,4 +2403,6 @@ tooltip label,
                  "Ubuntu", "IPAPGothic",
                  "Cantarell",
                   sans-serif;
+    font-weight: 400;
+    font-stretch: normal;
 }

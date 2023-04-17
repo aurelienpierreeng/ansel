@@ -41,7 +41,7 @@ set_target_properties(ansel-cmstest
                      RUNTIME_OUTPUT_DIRECTORY ${DARKTABLE_BINDIR})
 
 if (WIN32)
-  _detach_debuginfo (ansel-cmstest bin)
+  #_detach_debuginfo (ansel-cmstest bin)
 endif(WIN32)
 
 install(TARGETS ansel-cmstest DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT DTApplication)

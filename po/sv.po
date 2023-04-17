@@ -4319,23 +4319,23 @@ msgstr "* bidragsgivare *"
 msgid "rawspeed contributors"
 msgstr "* rawspeed bidragsgivare *"
 
-#: ../build/share/darktable/ansel.desktop.in.h:1
-#: ../data/ansel.desktop.in.h:1
+#: ../build/share/darktable/darktable.desktop.in.h:1
+#: ../data/darktable.desktop.in.h:1
 msgid "Virtual Lighttable and Darkroom"
 msgstr "Virtuellt ljusbord och mörkerrum"
 
-#: ../build/share/darktable/ansel.desktop.in.h:2
-#: ../data/photos.ansel.app.appdata.xml.in.h:1 ../data/ansel.desktop.in.h:2
+#: ../build/share/darktable/darktable.desktop.in.h:2
+#: ../data/darktable.appdata.xml.in.h:1 ../data/darktable.desktop.in.h:2
 msgid "Organize and develop images from digital cameras"
 msgstr "Organisera och utveckla bilder från digitalkameror"
 
 #. TRANSLATORS: Search terms to find this application. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
-#: ../build/share/darktable/ansel.desktop.in.h:4
-#: ../data/ansel.desktop.in.h:4
+#: ../build/share/darktable/darktable.desktop.in.h:4
+#: ../data/darktable.desktop.in.h:4
 msgid "graphics;photography;raw;"
 msgstr "grafik;fotografi;rå;"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:2
+#: ../data/darktable.appdata.xml.in.h:2
 msgid ""
 "darktable manages your digital negatives in a database and lets you view "
 "them through a lighttable. It also enables you to develop raw images and "
@@ -4345,7 +4345,7 @@ msgstr ""
 "dig se dem via ett ljusbord. Den ger också möjligheten att 'framkalla' "
 "råbilder och att förbättra dem i ett mörkrum."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:3
+#: ../data/darktable.appdata.xml.in.h:3
 msgid ""
 "Other modes besides lighttable and darkroom are a map for geotagging, "
 "tethering, print and a slideshow."
@@ -4353,7 +4353,7 @@ msgstr ""
 "Förutom ljusbordet och mörkrummet finner man också en kartvy för geotaggade "
 "bilder, kamerastyrning, utskrift och ett bildspel."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:4
+#: ../data/darktable.appdata.xml.in.h:4
 msgid ""
 "darktable supports most modern cameras' raw formats, and does all of its "
 "processing at very high precision."
@@ -4361,23 +4361,23 @@ msgstr ""
 "darktable stöder de flesta moderna kamerornas råformat, och gör alla "
 "beräkningar med mycket hög noggrannhet."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:5
+#: ../data/darktable.appdata.xml.in.h:5
 msgid "Virtual light table, showing a collection"
 msgstr "Virtuellt ljusbord, en bildsamling visas"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:6
+#: ../data/darktable.appdata.xml.in.h:6
 msgid "Virtual dark room with an opened image"
 msgstr "Virtuellt mörkerrum med en bild öppnad"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:7
+#: ../data/darktable.appdata.xml.in.h:7
 msgid "Virtual dark room, sharpening an image"
 msgstr "Virtuellt mörkerrum, skärpa läggs på en bild"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:8
+#: ../data/darktable.appdata.xml.in.h:8
 msgid "Show images on a map"
 msgstr "Visa bilder på karta"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:9
+#: ../data/darktable.appdata.xml.in.h:9
 msgid "Print your images"
 msgstr "Skriv ut dina bilder"
 
@@ -24668,8 +24668,8 @@ msgstr "Åtgärd"
 #~ msgid "do that from the top left expander."
 #~ msgstr "så gör det från modulen i vänster panel."
 
-#~ msgid "filename of your custom theme in share/ansel/"
-#~ msgstr "filnamn på ditt modifierade tema i share/ansel"
+#~ msgid "filename of your custom theme in share/darktable/"
+#~ msgstr "filnamn på ditt modifierade tema i share/darktable"
 
 #~ msgid "jpeg quality of on-disk thumbnails"
 #~ msgstr "jpeg kvalitet av miniatyrer på hårddisk"

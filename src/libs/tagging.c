@@ -1794,8 +1794,9 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
 
   gint flags = 0;
   GtkWidget *category;
-  GtkWidget *private;
+  GtkWidget *private = gtk_check_button_new_with_label(_("private"));
   GtkTextBuffer *buffer = NULL;
+
   if(tagid)
   {
     GtkWidget *vbox2 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -1804,7 +1805,6 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
     category = gtk_check_button_new_with_label(_("category"));
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(category), flags & DT_TF_CATEGORY);
     gtk_box_pack_end(GTK_BOX(vbox2), category, FALSE, TRUE, 0);
-    private = gtk_check_button_new_with_label(_("private"));
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(private), flags & DT_TF_PRIVATE);
     gtk_box_pack_end(GTK_BOX(vbox2), private, FALSE, TRUE, 0);
 

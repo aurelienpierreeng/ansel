@@ -5,7 +5,7 @@ include(manage-symbol-visibility)
 add_definitions(-include common/module_api.h)
 add_definitions(-include imageio/storage/imageio_storage_api.h)
 
-set(MODULES disk email gallery latex)
+set(MODULES disk gallery)
 
 find_package(CURL 7.56)
 if(CURL_FOUND)
@@ -22,7 +22,7 @@ endforeach(module)
 foreach(module ${MODULES})
     target_link_libraries(${module} lib_ansel)
     if (WIN32)
-        _detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/ansel/plugins/imageio/storage)
+        #_detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/ansel/plugins/imageio/storage)
     else()
         set_target_properties(${module}
                               PROPERTIES

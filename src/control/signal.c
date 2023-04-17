@@ -51,7 +51,6 @@ typedef struct dt_signal_description
 static GType uint_arg[] = { G_TYPE_UINT };
 static GType pointer_arg[] = { G_TYPE_POINTER };
 static GType pointer_2arg[] = { G_TYPE_POINTER, G_TYPE_POINTER };
-static GType pointer_trouble[] = { G_TYPE_POINTER, G_TYPE_STRING, G_TYPE_STRING };
 static GType collection_args[] = { G_TYPE_UINT, G_TYPE_UINT, G_TYPE_POINTER, G_TYPE_UINT };
 static GType image_export_arg[]
     = { G_TYPE_UINT, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_POINTER, G_TYPE_POINTER, G_TYPE_POINTER };
@@ -175,9 +174,6 @@ static dt_signal_description _signal_description[DT_SIGNAL_COUNT] = {
     FALSE }, // DT_SIGNAL_PREFERENCES_CHANGE
 
 
-  { "dt-camera-detected", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
-    FALSE }, // DT_SIGNAL_CAMERA_DETECTED,
-
   { "dt-control-navigation-redraw", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
     FALSE }, // DT_SIGNAL_CONTROL_NAVIGATION_REDRAW
 
@@ -193,11 +189,11 @@ static dt_signal_description _signal_description[DT_SIGNAL_COUNT] = {
   { "dt-metadata-update", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
     FALSE }, // DT_SIGNAL_METADATA_UPDATE
 
-  { "dt-trouble-message", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 3, pointer_trouble, NULL,
-    FALSE }, // DT_SIGNAL_TROUBLE_MESSAGE
-
   { "dt-location-changed", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 1, pointer_arg, NULL,
     TRUE }, // DT_SIGNAL_LOCATION_CHANGED
+
+  { "dt-mask-selection-changed", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 2, pointer_2arg, NULL,
+    TRUE }, // DT_SIGNAL_MASK_SELECTION_CHANGED
 
 };
 

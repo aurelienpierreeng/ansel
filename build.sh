@@ -19,7 +19,7 @@ BUILD_TYPE_DEFAULT="RelWithDebInfo"
 BUILD_TYPE="$BUILD_TYPE_DEFAULT"
 BUILD_DIR_DEFAULT="$DT_SRC_DIR/build"
 BUILD_DIR="$BUILD_DIR_DEFAULT"
-BUILD_GENERATOR_DEFAULT="Unix Makefiles"
+BUILD_GENERATOR_DEFAULT="Ninja"
 BUILD_GENERATOR="$BUILD_GENERATOR_DEFAULT"
 MAKE_TASKS=-1
 ADDRESS_SANITIZER=0
@@ -425,3 +425,7 @@ fi
 
 # install the binaries
 eval "$cmd_install"
+
+if [ $DO_INSTALL ] ; then
+	$SUDO ln -s $INSTALL_PREFIX/bin/ansel /usr/local/bin/ansel
+fi

@@ -17,6 +17,71 @@
 */
 
 #include "common/usermanual_url.h"
+#include "common/darktable.h"
+#include "common/l10n.h"
+
+
+// The base_url is: ansel.photos/
+// The full format for the documentation pages is:
+//    <base-url>/<lang>/doc[/path/to/page]
+// Where:
+//   <lang> = en / fr ...              (default = en)
+
+const char *base_url = "https://ansel.photos/";
+const char *doc_url = "doc/";
+
+
+const char *get_lang()
+{
+  char *lang = "en";
+
+  // array of languages the usermanual supports.
+  // NULL MUST remain the last element of the array
+  const char *supported_languages[] =
+    { "en", "fr", NULL };
+
+  int lang_index = 0;
+  gboolean is_language_supported = FALSE;
+
+  if(darktable.l10n != NULL)
+  {
+    dt_l10n_language_t *language = NULL;
+
+    if(darktable.l10n->selected != -1)
+        language = (dt_l10n_language_t *)g_list_nth(darktable.l10n->languages, darktable.l10n->selected)->data;
+
+    if (language != NULL)
+      lang = language->code;
+
+    while(supported_languages[lang_index])
+    {
+      gchar *nlang = g_strdup(lang);
+      is_language_supported = !g_ascii_strcasecmp(nlang, supported_languages[lang_index]);
+
+      if(!is_language_supported)
+      {
+        // keep only first part up to _
+        for(gchar *p = nlang; *p; p++)
+          if(*p == '_') *p = '\0';
+
+        if(!g_ascii_strcasecmp(nlang, supported_languages[lang_index]))
+        {
+          is_language_supported = TRUE;
+        }
+      }
+
+      g_free(nlang);
+      if(is_language_supported) break;
+
+      lang_index++;
+    }
+  }
+
+  // language not found, default to EN
+  if(!is_language_supported) lang_index = 0;
+
+  return supported_languages[lang_index];
+}
 
 typedef struct _help_url
 {
@@ -26,58 +91,57 @@ typedef struct _help_url
 
 dt_help_url urls_db[] =
 {
-  {"ratings",                    "lighttable/digital-asset-management/star-color/#star-ratings"},
-  {"layout_filemanager",         "lighttable/lighttable-modes/filemanager/"},
-  {"layout_zoomable",            "lighttable/lighttable-modes/zoomable-lighttable/"},
-  {"layout_culling",             "lighttable/lighttable-modes/culling/"},
-  {"layout_preview",             "lighttable/lighttable-modes/full-preview/"},
+  {"ratings",                    "views/lighttable/digital-asset-management/star-color/#star-ratings"},
+  {"layout_filemanager",         "views/lighttable/lighttable-modes/filemanager/"},
+  {"layout_zoomable",            "views/lighttable/lighttable-modes/zoomable-lighttable/"},
+  {"layout_preview",             "views/lighttable/lighttable-modes/full-preview/"},
   {"filter",                     NULL},
-  {"colorlabels",                "lighttable/digital-asset-management/star-color/#color-labels"},
-  {"import",                     "module-reference/utility-modules/lighttable/import/"},
-  {"select",                     "module-reference/utility-modules/lighttable/select/"},
-  {"image",                      "module-reference/utility-modules/lighttable/selected-image/"},
-  {"copy_history",               "module-reference/utility-modules/lighttable/history-stack/"},
-  {"styles",                     "module-reference/utility-modules/lighttable/styles/#module-controls"},
-  {"metadata",                   "module-reference/utility-modules/shared/metadata-editor/"},
-  {"tagging",                    "module-reference/utility-modules/shared/tagging/"},
-  {"geotagging",                 "module-reference/utility-modules/shared/geotagging/"},
-  {"collect",                    "module-reference/utility-modules/shared/collections/"},
-  {"recentcollect",              "module-reference/utility-modules/shared/recent-collections/"},
-  {"metadata_view",              "module-reference/utility-modules/shared/image-information/"},
-  {"export",                     "module-reference/utility-modules/shared/export/"},
-  {"histogram",                  "module-reference/utility-modules/shared/histogram/"},
-  {"navigation",                 "module-reference/utility-modules/darkroom/navigation/"},
-  {"snapshots",                  "module-reference/utility-modules/darkroom/snapshots/"},
-  {"modulegroups",               "module-reference/utility-modules/darkroom/manage-module-layouts/"},
-  {"history",                    "module-reference/utility-modules/darkroom/history-stack/"},
-  {"colorpicker",                "module-reference/utility-modules/darkroom/global-color-picker/"},
-  {"masks",                      "module-reference/utility-modules/darkroom/mask-manager/"},
-  {"masks_drawn",                "darkroom/masking-and-blending/masks/drawn/"},
-  {"masks_parametric",           "darkroom/masking-and-blending/masks/parametric/"},
-  {"masks_raster",               "darkroom/masking-and-blending/masks/raster/"},
-  {"masks_blending_op",          "darkroom/masking-and-blending/masks/drawn-and-parametric/"},
-  {"masks_blending",             "darkroom/masking-and-blending/overview/"},
-  {"masks_combined",             "darkroom/masking-and-blending/masks/drawn-and-parametric/"},
-  {"masks_refinement",           "darkroom/masking-and-blending/masks/refinement-controls/"},
-  {"duplicate",                  "module-reference/utility-modules/darkroom/duplicate-manager/"},
-  {"location",                   "module-reference/utility-modules/map/find-location/"},
-  {"map_settings",               "module-reference/utility-modules/map/map-settings/"},
-  {"print_settings",             "module-reference/utility-modules/print/print-settings/"},
-  {"print_settings_printer"      "module-reference/utility-modules/print/print-settings/#printer"},
-  {"print_settings_page"         "module-reference/utility-modules/print/print-settings/#page"},
-  {"print_settings_button"       "module-reference/utility-modules/print/print-settings/#print-button"},
+  {"colorlabels",                "views/lighttable/digital-asset-management/star-color/#color-labels"},
+  {"import",                     "modules/utility-modules/lighttable/import/"},
+  {"select",                     "modules/utility-modules/lighttable/select/"},
+  {"image",                      "modules/utility-modules/lighttable/selected-image/"},
+  {"copy_history",               "modules/utility-modules/lighttable/history-stack/"},
+  {"styles",                     "modules/utility-modules/lighttable/styles/#module-controls"},
+  {"metadata",                   "modules/utility-modules/shared/metadata-editor/"},
+  {"tagging",                    "modules/utility-modules/shared/tagging/"},
+  {"geotagging",                 "modules/utility-modules/shared/geotagging/"},
+  {"collect",                    "modules/utility-modules/shared/collections/"},
+  {"recentcollect",              "modules/utility-modules/shared/recent-collections/"},
+  {"metadata_view",              "modules/utility-modules/shared/image-information/"},
+  {"export",                     "modules/utility-modules/shared/export/"},
+  {"histogram",                  "modules/utility-modules/shared/histogram/"},
+  {"navigation",                 "modules/utility-modules/darkroom/navigation/"},
+  {"snapshots",                  "modules/utility-modules/darkroom/snapshots/"},
+  {"modulegroups",               "modules/utility-modules/darkroom/manage-module-layouts/"},
+  {"history",                    "modules/utility-modules/darkroom/history-stack/"},
+  {"colorpicker",                "modules/utility-modules/darkroom/global-color-picker/"},
+  {"masks",                      "modules/utility-modules/darkroom/mask-manager/"},
+  {"masks_drawn",                "views/darkroom/masking-and-blending/masks/drawn/"},
+  {"masks_parametric",           "views/darkroom/masking-and-blending/masks/parametric/"},
+  {"masks_raster",               "views/darkroom/masking-and-blending/masks/raster/"},
+  {"masks_blending_op",          "views/darkroom/masking-and-blending/masks/drawn-and-parametric/"},
+  {"masks_blending",             "views/darkroom/masking-and-blending/overview/"},
+  {"masks_combined",             "views/darkroom/masking-and-blending/masks/drawn-and-parametric/"},
+  {"masks_refinement",           "views/darkroom/masking-and-blending/masks/refinement-controls/"},
+  {"duplicate",                  "modules/utility-modules/darkroom/duplicate-manager/"},
+  {"location",                   "modules/utility-modules/map/find-location/"},
+  {"map_settings",               "modules/utility-modules/map/map-settings/"},
+  {"print_settings",             "modules/utility-modules/print/print-settings/"},
+  {"print_settings_printer"      "modules/utility-modules/print/print-settings/#printer"},
+  {"print_settings_page"         "modules/utility-modules/print/print-settings/#page"},
+  {"print_settings_button"       "modules/utility-modules/print/print-settings/#print-button"},
   {"print_overview",             "print/overview/"},
-  {"camera",                     "module-reference/utility-modules/tethering/camera-settings/"},
+  {"camera",                     "modules/utility-modules/tethering/camera-settings/"},
   {"import_camera",              "overview/workflow/import-rate-tag/"},
   {"import_fr",                  "overview/workflow/import-rate-tag/"},
   {"global_toolbox",             "overview/user-interface/top-panel/#on-the-right-hand-side"},
-  {"lighttable_mode",            "lighttable/overview/"},
-  {"lighttable_filemanager",     "lighttable/lighttable-modes/filemanager/"},
-  {"lighttable_zoomable",        "lighttable/lighttable-modes/zoomable-lighttable/"},
-  {"darkroom_bottom_panel",      "darkroom/darkroom-view-layout/#bottom-panel"},
-  {"module_header",              "darkroom/processing-modules/module-header/"},
-  {"session",                    "module-reference/utility-modules/tethering/session/"},
-  {"live_view",                  "module-reference/utility-modules/tethering/live-view/"},
+  {"views/lighttable_mode",            "views/lighttable/overview/"},
+  {"views/lighttable_filemanager",     "views/lighttable/lighttable-modes/filemanager/"},
+  {"views/lighttable_zoomable",        "views/lighttable/lighttable-modes/zoomable-lighttable/"},
+  {"views/darkroom_bottom_panel",      "views/darkroom/darkroom-view-layout/#bottom-panel"},
+  {"module_header",              "views/darkroom/processing-modules/module-header/"},
+  {"session",                    "modules/utility-modules/tethering/session/"},
+  {"live_view",                  "modules/utility-modules/tethering/live-view/"},
   {"module_toolbox",             NULL},
   {"view_toolbox",               NULL},
   {"backgroundjobs",             NULL},
@@ -85,99 +149,101 @@ dt_help_url urls_db[] =
   {"filter",                     NULL},
   {"filmstrip",                  "overview/user-interface/filmstrip/"},
   {"viewswitcher",               "overview/user-interface/views/"},
-  {"favorite_presets",           "darkroom/darkroom-view-layout/#bottom-panel"},
-  {"bottom_panel_styles",        "darkroom/darkroom-view-layout/#bottom-panel"},
-  {"rawoverexposed",             "module-reference/utility-modules/darkroom/raw-overexposed/"},
-  {"overexposed",                "module-reference/utility-modules/darkroom/clipping/"},
-  {"softproof",                  "module-reference/utility-modules/darkroom/soft-proof/"},
-  {"gamut",                      "module-reference/utility-modules/darkroom/gamut/"},
+  {"favorite_presets",           "views/darkroom/darkroom-view-layout/#bottom-panel"},
+  {"bottom_panel_styles",        "views/darkroom/darkroom-view-layout/#bottom-panel"},
+  {"rawoverexposed",             "modules/utility-modules/darkroom/raw-overexposed/"},
+  {"overexposed",                "modules/utility-modules/darkroom/clipping/"},
+  {"softproof",                  "modules/utility-modules/darkroom/soft-proof/"},
+  {"gamut",                      "modules/utility-modules/darkroom/gamut/"},
+  {"focuspeaking",               "modules/utility-modules/shared/focus-peaking/"},
 
   // iop links
-  {"ashift",                     "module-reference/processing-modules/rotate-perspective/"},
-  {"atrous",                     "module-reference/processing-modules/contrast-equalizer/"},
-  {"basecurve",                  "module-reference/processing-modules/base-curve/"},
-  {"bilateral",                  "module-reference/processing-modules/surface-blur/"},
-  {"bilat",                      "module-reference/processing-modules/local-contrast/"},
-  {"bloom",                      "module-reference/processing-modules/bloom/"},
-  {"borders",                    "module-reference/processing-modules/framing/"},
-  {"cacorrect",                  "module-reference/processing-modules/raw-chromatic-aberrations/"},
-  {"cacorrectrgb",               "module-reference/processing-modules/chromatic-aberrations/"},
-  {"censorize",                  "module-reference/processing-modules/censorize/"},
-  {"channelmixer",               "module-reference/processing-modules/channel-mixer/"},
-  {"channelmixerrgb",            "module-reference/processing-modules/color-calibration/"},
+  {"ashift",                     "modules/processing-modules/rotate-perspective/"},
+  {"atrous",                     "modules/processing-modules/contrast-equalizer/"},
+  {"basecurve",                  "modules/processing-modules/base-curve/"},
+  {"bilateral",                  "modules/processing-modules/surface-blur/"},
+  {"bilat",                      "modules/processing-modules/local-contrast/"},
+  {"bloom",                      "modules/processing-modules/bloom/"},
+  {"borders",                    "modules/processing-modules/framing/"},
+  {"cacorrect",                  "modules/processing-modules/raw-chromatic-aberrations/"},
+  {"cacorrectrgb",               "modules/processing-modules/chromatic-aberrations/"},
+  {"censorize",                  "modules/processing-modules/censorize/"},
+  {"channelmixer",               "modules/processing-modules/channel-mixer/"},
+  {"channelmixerrgb",            "modules/processing-modules/color-calibration/"},
   {"clahe",                      NULL}, // deprecated, replaced by bilat.
-  {"clipping",                   "module-reference/processing-modules/crop-rotate/"},
-  {"colisa",                     "module-reference/processing-modules/contrast-brightness-saturation/"},
-  {"colorbalance",               "module-reference/processing-modules/color-balance/"},
-  {"colorbalancergb",            "module-reference/processing-modules/color-balance-rgb/"},
-  {"colorchecker",               "module-reference/processing-modules/color-look-up-table/"},
-  {"colorcontrast",              "module-reference/processing-modules/color-contrast/"},
-  {"colorcorrection",            "module-reference/processing-modules/color-correction/"},
-  {"colorin",                    "module-reference/processing-modules/input-color-profile/"},
-  {"colorize",                   "module-reference/processing-modules/colorize/"},
-  {"colormapping",               "module-reference/processing-modules/color-mapping/"},
-  {"colorout",                   "module-reference/processing-modules/output-color-profile/"},
-  {"colorreconstruct",           "module-reference/processing-modules/color-reconstruction/"},
+  {"clipping",                   "modules/processing-modules/crop-rotate/"},
+  {"colisa",                     "modules/processing-modules/contrast-brightness-saturation/"},
+  {"colorbalance",               "modules/processing-modules/color-balance/"},
+  {"colorbalancergb",            "modules/processing-modules/color-balance-rgb/"},
+  {"colorchecker",               "modules/processing-modules/color-look-up-table/"},
+  {"colorcontrast",              "modules/processing-modules/color-contrast/"},
+  {"colorcorrection",            "modules/processing-modules/color-correction/"},
+  {"colorin",                    "modules/processing-modules/input-color-profile/"},
+  {"colorize",                   "modules/processing-modules/colorize/"},
+  {"colormapping",               "modules/processing-modules/color-mapping/"},
+  {"colorout",                   "modules/processing-modules/output-color-profile/"},
+  {"colorreconstruct",           "modules/processing-modules/color-reconstruction/"},
   {"colortransfer",              NULL}, // deprecate
-  {"colorzones",                 "module-reference/processing-modules/color-zones/"},
-  {"crop",                       "module-reference/processing-modules/crop/"},
-  {"defringe",                   "module-reference/processing-modules/defringe/"},
-  {"demosaic",                   "module-reference/processing-modules/demosaic/"},
-  {"denoiseprofile",             "module-reference/processing-modules/denoise-profiled/"},
-  {"dither",                     "module-reference/processing-modules/dithering/"},
+  {"colorzones",                 "modules/processing-modules/color-zones/"},
+  {"crop",                       "modules/processing-modules/crop/"},
+  {"defringe",                   "modules/processing-modules/defringe/"},
+  {"demosaic",                   "modules/processing-modules/demosaic/"},
+  {"denoiseprofile",             "modules/processing-modules/denoise-profiled/"},
+  {"dither",                     "modules/processing-modules/dithering/"},
   {"equalizer",                  NULL}, // deprecated, replaced by atrous
-  {"exposure",                   "module-reference/processing-modules/exposure/"},
-  {"filmic",                     "module-reference/processing-modules/filmic-rgb/"},
-  {"filmicrgb",                  "module-reference/processing-modules/filmic-rgb/"},
-  {"flip",                       "module-reference/processing-modules/orientation/"},
-  {"globaltonemap",              "module-reference/processing-modules/global-tonemap/"},
-  {"graduatednd",                "module-reference/processing-modules/graduated-density/"},
-  {"grain",                      "module-reference/processing-modules/grain/"},
-  {"hazeremoval",                "module-reference/processing-modules/haze-removal/"},
-  {"highlights",                 "module-reference/processing-modules/highlight-reconstruction/"},
-  {"highpass",                   "module-reference/processing-modules/highpass/"},
-  {"hotpixels",                  "module-reference/processing-modules/hot-pixels/"},
-  {"invert",                     "module-reference/processing-modules/invert/"},
-  {"lens",                       "module-reference/processing-modules/lens-correction/"},
-  {"levels",                     "module-reference/processing-modules/levels/"},
-  {"liquify",                    "module-reference/processing-modules/liquify/"},
-  {"lowlight",                   "module-reference/processing-modules/lowlight-vision/"},
-  {"lowpass",                    "module-reference/processing-modules/lowpass/"},
-  {"lut3d",                      "module-reference/processing-modules/lut-3d/"},
-  {"monochrome",                 "module-reference/processing-modules/monochrome/"},
-  {"negadoctor",                 "module-reference/processing-modules/negadoctor/"},
-  {"nlmeans",                    "module-reference/processing-modules/astrophoto-denoise/"},
-  {"profile_gamma",              "module-reference/processing-modules/unbreak-input-profile/"},
-  {"rawdenoise",                 "module-reference/processing-modules/raw-denoise/"},
-  {"rawprepare",                 "module-reference/processing-modules/raw-black-white-point/"},
-  {"relight",                    "module-reference/processing-modules/fill-light/"},
-  {"retouch",                    "module-reference/processing-modules/retouch/"},
-  {"rgbcurve",                   "module-reference/processing-modules/rgb-curve/"},
-  {"rgblevels",                  "module-reference/processing-modules/rgb-levels/"},
-  {"rotatepixels",               "module-reference/processing-modules/rotate-pixels/"},
-  {"scalepixels",                "module-reference/processing-modules/scale-pixels/"},
-  {"shadhi",                     "module-reference/processing-modules/shadows-and-highlights/"},
-  {"sharpen",                    "module-reference/processing-modules/sharpen/"},
-  {"soften",                     "module-reference/processing-modules/soften/"},
-  {"splittoning",                "module-reference/processing-modules/split-toning/"},
-  {"spots",                      "module-reference/processing-modules/spot-removal/"},
-  {"temperature",                "module-reference/processing-modules/white-balance/"},
-  {"tonecurve",                  "module-reference/processing-modules/tone-curve/"},
-  {"toneequal",                  "module-reference/processing-modules/tone-equalizer/"},
-  {"tonemap",                    "module-reference/processing-modules/tone-mapping/"},
-  {"velvia",                     "module-reference/processing-modules/velvia/"},
-  {"vibrance",                   "module-reference/processing-modules/vibrance/"},
-  {"vignette",                   "module-reference/processing-modules/vignetting/"},
-  {"watermark",                  "module-reference/processing-modules/watermark/"},
-  {"zonesystem",                 "module-reference/processing-modules/zone-system/"},
+  {"exposure",                   "modules/processing-modules/exposure/"},
+  {"filmic",                     "modules/processing-modules/filmic-rgb/"},
+  {"filmicrgb",                  "modules/processing-modules/filmic-rgb/"},
+  {"flip",                       "modules/processing-modules/orientation/"},
+  {"globaltonemap",              "modules/processing-modules/global-tonemap/"},
+  {"graduatednd",                "modules/processing-modules/graduated-density/"},
+  {"grain",                      "modules/processing-modules/grain/"},
+  {"hazeremoval",                "modules/processing-modules/haze-removal/"},
+  {"highlights",                 "modules/processing-modules/highlight-reconstruction/"},
+  {"highpass",                   "modules/processing-modules/highpass/"},
+  {"hotpixels",                  "modules/processing-modules/hot-pixels/"},
+  {"invert",                     "modules/processing-modules/invert/"},
+  {"lens",                       "modules/processing-modules/lens-correction/"},
+  {"levels",                     "modules/processing-modules/levels/"},
+  {"liquify",                    "modules/processing-modules/liquify/"},
+  {"lowlight",                   "modules/processing-modules/lowlight-vision/"},
+  {"lowpass",                    "modules/processing-modules/lowpass/"},
+  {"lut3d",                      "modules/processing-modules/lut-3d/"},
+  {"monochrome",                 "modules/processing-modules/monochrome/"},
+  {"negadoctor",                 "modules/processing-modules/negadoctor/"},
+  {"nlmeans",                    "modules/processing-modules/astrophoto-denoise/"},
+  {"profile_gamma",              "modules/processing-modules/unbreak-input-profile/"},
+  {"rawdenoise",                 "modules/processing-modules/raw-denoise/"},
+  {"rawprepare",                 "modules/processing-modules/raw-black-white-point/"},
+  {"relight",                    "modules/processing-modules/fill-light/"},
+  {"retouch",                    "modules/processing-modules/retouch/"},
+  {"rgbcurve",                   "modules/processing-modules/rgb-curve/"},
+  {"rgblevels",                  "modules/processing-modules/rgb-levels/"},
+  {"rotatepixels",               "modules/processing-modules/rotate-pixels/"},
+  {"scalepixels",                "modules/processing-modules/scale-pixels/"},
+  {"shadhi",                     "modules/processing-modules/shadows-and-highlights/"},
+  {"sharpen",                    "modules/processing-modules/sharpen/"},
+  {"soften",                     "modules/processing-modules/soften/"},
+  {"splittoning",                "modules/processing-modules/split-toning/"},
+  {"spots",                      "modules/processing-modules/spot-removal/"},
+  {"temperature",                "modules/processing-modules/white-balance/"},
+  {"tonecurve",                  "modules/processing-modules/tone-curve/"},
+  {"toneequal",                  "modules/processing-modules/tone-equalizer/"},
+  {"tonemap",                    "modules/processing-modules/tone-mapping/"},
+  {"velvia",                     "modules/processing-modules/velvia/"},
+  {"vibrance",                   "modules/processing-modules/vibrance/"},
+  {"vignette",                   "modules/processing-modules/vignetting/"},
+  {"watermark",                  "modules/processing-modules/watermark/"},
+  {"zonesystem",                 "modules/processing-modules/zone-system/"},
 };
 
 char *dt_get_help_url(char *name)
 {
-  if(name==NULL) return NULL;
+  if(name == NULL) return NULL;
 
   for(int k=0; k< sizeof(urls_db)/2/sizeof(char *); k++)
-    if(!strcmp(urls_db[k].name, name)) return urls_db[k].url;
+    if(!strcmp(urls_db[k].name, name))
+        return g_build_path("/", base_url, get_lang(), doc_url, urls_db[k].url, NULL);
 
   return NULL;
 }

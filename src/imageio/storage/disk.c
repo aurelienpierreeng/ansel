@@ -67,7 +67,7 @@ typedef struct dt_imageio_disk_t
 
 const char *name(const struct dt_imageio_module_storage_t *self)
 {
-  return _("file on disk");
+  return _("File on disk");
 }
 
 void *legacy_params(dt_imageio_module_storage_t *self, const void *const old_params,
@@ -402,4 +402,3 @@ char *ask_user_confirmation(dt_imageio_module_storage_t *self)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

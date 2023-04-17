@@ -23,6 +23,7 @@
 #include "common/metadata.h"
 #include "common/tags.h"
 #include "common/datetime.h"
+#include "common/selection.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
@@ -479,7 +480,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
     }
     else
     {
-      images = dt_act_on_get_query(FALSE);
+      images = dt_selection_get_list_query(darktable.selection, FALSE, FALSE);
       sqlite3_stmt *stmt;
       // clang-format off
       gchar *query = g_strdup_printf("SELECT id, COUNT(id) "
@@ -512,7 +513,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
 
   if(count > 1)
   {
-    if(!images) images = dt_act_on_get_query(FALSE);
+    if(!images) images = dt_selection_get_list_query(darktable.selection, FALSE, FALSE);;
     sqlite3_stmt *stmt = NULL;
     // clang-format off
     gchar *query = g_strdup_printf("SELECT COUNT(DISTINCT film_id), "
@@ -705,11 +706,11 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
         break;
 
       case md_exif_model:
-        _metadata_update_value(md_exif_model, img->camera_alias, self);
+        _metadata_update_value(md_exif_model, img->exif_model, self);
         break;
 
       case md_exif_maker:
-        _metadata_update_value(md_exif_maker, img->camera_maker, self);
+        _metadata_update_value(md_exif_maker, img->exif_maker, self);
         break;
 
       case md_exif_lens:
@@ -1360,22 +1361,32 @@ void gui_init(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_SELECTION_CHANGED,
                                   G_CALLBACK(_mouse_over_image_callback), self);
 
-  /* lets signup for develop image changed signals */
+  /*
+  We signup only for mouse over and selection changes. The rationale is all signals
+  seem to be fired at once whenever mouse moves, which shows 5 SQL queries per thumbnail
+  when using lighttable. In any case, mouse over and selection are the signals used the most
+  and triggered on user interaction, which means when user needs the info,
+  and the info here is not so critical that it needs refreshing when metadata are edited.
+
+  FIXME: in the future, find out why all signals are triggered on mouse over event in thumbtable
+
+  lets signup for develop image changed signals
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED,
                             G_CALLBACK(_mouse_over_image_callback), self);
 
-  /* signup for develop initialize to update info of current
-     image in darkroom when enter */
+  signup for develop initialize to update info of current
+     image in darkroom when enter
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_INITIALIZE,
                             G_CALLBACK(_mouse_over_image_callback), self);
 
-  /* signup for tags changes */
+  signup for tags changes
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_TAG_CHANGED,
                             G_CALLBACK(_mouse_over_image_callback), self);
 
-  /* signup for metadata changes */
+  signup for metadata changes
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_METADATA_UPDATE,
                             G_CALLBACK(_mouse_over_image_callback), self);
+  */
 
   dt_action_register(DT_ACTION(self), N_("jump to film roll"), _jump_to_accel, GDK_KEY_j, GDK_CONTROL_MASK);
 }

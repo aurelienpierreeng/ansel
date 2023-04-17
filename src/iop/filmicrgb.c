@@ -359,7 +359,7 @@ const char **description(struct dt_iop_module_t *self)
 
 int default_group()
 {
-  return IOP_GROUP_TONE | IOP_GROUP_TECHNICAL;
+  return IOP_GROUP_TONES;
 }
 
 int flags()
@@ -3141,9 +3141,7 @@ void reload_defaults(dt_iop_module_t *module)
 
   module->default_enabled = FALSE;
 
-  const gboolean is_scene_referred = dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred");
-
-  if(dt_image_is_matrix_correction_supported(&module->dev->image_storage) && is_scene_referred)
+  if(dt_image_is_matrix_correction_supported(&module->dev->image_storage))
   {
     // For scene-referred workflow, auto-enable and adjust based on exposure
     // TODO: fetch actual exposure in module, don't assume 1.
@@ -3152,8 +3150,8 @@ void reload_defaults(dt_iop_module_t *module)
     // As global exposure increases, white exposure increases faster than black
     // this is probably because raw black/white points offsets the lower bound of the dynamic range to 0
     // so exposure compensation actually increases the dynamic range too (stretches only white).
-    d->black_point_source += 0.5f * exposure;
-    d->white_point_source += 0.8f * exposure;
+    d->white_point_source = exposure + 2.45f;
+    d->black_point_source = d->white_point_source - 12.f; // 12 EV of dynamic range is a good default for modern cameras
     d->output_power = logf(d->grey_point_target / 100.0f)
                       / logf(-d->black_point_source / (d->white_point_source - d->black_point_source));
   }

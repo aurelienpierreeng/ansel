@@ -780,34 +780,24 @@ static void dt_lib_histogram_process(struct dt_lib_module_t *self, const float *
     }
   }
 
-  // Convert pixelpipe output in display RGB to histogram profile. If
-  // in tether view, then the image is already converted by the
-  // caller.
-  // FIXME: do conversion in-place in the processing to save an extra buffer? -- at least for waveform, which already has to touch each pixel -- will need logic from _transform_matrix_rgb() -- or better yet a per-pixel callback within _transform_matrix_rgb()-ish code
-  // FIXME: in case of vectorscope, it needs XYZ data, so skip this conversion and instead it's enough that it has input & profile_info_from -- though then we don't see the result of a relative colorimetric conversion to the histogram profile...
-  float *img_display = dt_alloc_align_float((size_t)4 * width * height);
-  if(!img_display) return;
-  dt_ioppr_transform_image_colorspace_rgb(input, img_display, width, height,
-                                          profile_info_from, profile_info_to, "final histogram");
   dt_pthread_mutex_lock(&d->lock);
   switch(d->scope_type)
   {
     case DT_LIB_HISTOGRAM_SCOPE_HISTOGRAM:
-      _lib_histogram_process_histogram(d, img_display, &roi);
+      _lib_histogram_process_histogram(d, input, &roi);
       break;
     case DT_LIB_HISTOGRAM_SCOPE_WAVEFORM:
     case DT_LIB_HISTOGRAM_SCOPE_PARADE:
-      _lib_histogram_process_waveform(d, img_display, &roi);
+      _lib_histogram_process_waveform(d, input, &roi);
       break;
     case DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE:
-      _lib_histogram_process_vectorscope(d, img_display, &roi, profile_info_to);
+      _lib_histogram_process_vectorscope(d, input, &roi, profile_info_to);
       break;
     case DT_LIB_HISTOGRAM_SCOPE_N:
       dt_unreachable_codepath();
       break;
   }
   dt_pthread_mutex_unlock(&d->lock);
-  dt_free_align(img_display);
 
   dt_show_times_f(&start, "[histogram]", "final %s", dt_lib_histogram_scope_type_names[d->scope_type]);
 }
@@ -1760,15 +1750,6 @@ void gui_init(dt_lib_module_t *self)
   ac = dt_action_define(dark, NULL, N_("switch histogram type"), d->scope_view_button, NULL);
   dt_action_register(ac, NULL, _lib_histogram_change_type_callback, 0, 0);
   gtk_box_pack_start(GTK_BOX(d->button_box), d->scope_view_button, FALSE, FALSE, 0);
-
-  dt_action_t *teth = &darktable.view_manager->proxy.tethering.view->actions;
-  if(teth)
-  {
-    dt_action_register(teth, N_("cycle histogram modes"), _lib_histogram_cycle_mode_callback, 0, 0);
-    dt_action_register(teth, N_("hide histogram"), _lib_histogram_collapse_callback, GDK_KEY_H, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
-    dt_action_register(teth, N_("switch histogram mode"), _lib_histogram_change_mode_callback, 0, 0);
-    dt_action_register(teth, N_("switch histogram type"), _lib_histogram_change_type_callback, 0, 0);
-  }
 
   // the red togglebutton turns into colorspace button in vectorscope
   d->button_stack = gtk_stack_new();

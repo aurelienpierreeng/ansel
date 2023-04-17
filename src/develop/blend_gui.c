@@ -1183,6 +1183,7 @@ static gboolean _blendop_masks_modes_none_clicked(GtkWidget *button, GdkEventBut
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->selected_mask_mode),
                                  FALSE); // unsets currently toggled if any
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button)));
 
     _blendop_masks_mode_callback(DEVELOP_MASK_DISABLED, data);
     data->selected_mask_mode = button;
@@ -1204,22 +1205,16 @@ static gboolean _blendop_masks_modes_toggle(GtkToggleButton *button, dt_iop_modu
 
   const gboolean was_toggled = !gtk_toggle_button_get_active(button);
   gtk_toggle_button_set_active(button, was_toggled);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->selected_mask_mode), FALSE);
 
-  // avoids trying to untoggle the cancel button
-  if(data->selected_mask_mode
-     != g_list_nth_data(data->masks_modes_toggles,
-                        g_list_index(data->masks_modes, GUINT_TO_POINTER(DEVELOP_MASK_DISABLED))))
-  {
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->selected_mask_mode), FALSE);
-  }
-
-  if(was_toggled)
+  if(mask_mode != DEVELOP_MASK_DISABLED)
   {
     _blendop_masks_mode_callback(mask_mode, data);
     data->selected_mask_mode = GTK_WIDGET(button);
   }
   else
   {
+    // FIXME: do we need to use gconstpointer here ? can't we reuse the previous statement and remove the check ?
     _blendop_masks_mode_callback(DEVELOP_MASK_DISABLED, data);
     data->selected_mask_mode = GTK_WIDGET(
       g_list_nth_data(data->masks_modes_toggles,
@@ -2609,24 +2604,11 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
   const unsigned int mode = g_list_index(bd->masks_modes, GUINT_TO_POINTER(module->blend_params->mask_mode));
 
   // unsets currently toggled if any, won't try to untoggle the cancel button
-  if(bd->selected_mask_mode
-     != g_list_nth_data(bd->masks_modes_toggles,
-                        g_list_index(bd->masks_modes, GUINT_TO_POINTER(DEVELOP_MASK_DISABLED))))
-  {
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->selected_mask_mode), FALSE);
-  }
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->selected_mask_mode), FALSE);
 
-  if(mode > 0)
-  {
-    GtkToggleButton *to_be_activated = GTK_TOGGLE_BUTTON(g_list_nth_data(bd->masks_modes_toggles, mode));
-    gtk_toggle_button_set_active(to_be_activated, TRUE);
-    bd->selected_mask_mode = GTK_WIDGET(to_be_activated);
-  }
-  else
-  {
-    bd->selected_mask_mode = g_list_nth_data(
-        bd->masks_modes_toggles, g_list_index(bd->masks_modes, GUINT_TO_POINTER(DEVELOP_MASK_DISABLED)));
-  }
+  GtkToggleButton *to_be_activated = GTK_TOGGLE_BUTTON(g_list_nth_data(bd->masks_modes_toggles, mode));
+  gtk_toggle_button_set_active(to_be_activated, TRUE);
+  bd->selected_mask_mode = GTK_WIDGET(to_be_activated);
 
   // (un)set the mask indicator
   add_remove_mask_indicator(module, (module->blend_params->mask_mode != DEVELOP_MASK_DISABLED) &&
@@ -3192,4 +3174,3 @@ void dt_iop_gui_init_blending(GtkWidget *iopw, dt_iop_module_t *module)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

@@ -20,6 +20,8 @@
 
 #include "common/darktable.h"
 #include "common/dtpthread.h"
+#include "dtgtk/thumbtable.h"
+
 
 #include <gtk/gtk.h>
 #include <stdint.h>
@@ -74,12 +76,6 @@ typedef enum dt_gui_color_t
   DT_GUI_COLOR_THUMBNAIL_BORDER,
   DT_GUI_COLOR_THUMBNAIL_SELECTED_BORDER,
   DT_GUI_COLOR_FILMSTRIP_BG,
-  DT_GUI_COLOR_TIMELINE_BG,
-  DT_GUI_COLOR_TIMELINE_FG,
-  DT_GUI_COLOR_TIMELINE_TEXT_BG,
-  DT_GUI_COLOR_TIMELINE_TEXT_FG,
-  DT_GUI_COLOR_CULLING_SELECTED_BORDER,
-  DT_GUI_COLOR_CULLING_FILMSTRIP_SELECTED_BORDER,
   DT_GUI_COLOR_PREVIEW_HOVER_BORDER,
   DT_GUI_COLOR_LOG_BG,
   DT_GUI_COLOR_LOG_FG,
@@ -89,11 +85,6 @@ typedef enum dt_gui_color_t
   DT_GUI_COLOR_MAP_LOC_SHAPE_HIGH,
   DT_GUI_COLOR_MAP_LOC_SHAPE_LOW,
   DT_GUI_COLOR_MAP_LOC_SHAPE_DEF,
-  DT_GUI_COLOR_RANGE_BG,
-  DT_GUI_COLOR_RANGE_GRAPH,
-  DT_GUI_COLOR_RANGE_SELECTION,
-  DT_GUI_COLOR_RANGE_CURSOR,
-  DT_GUI_COLOR_RANGE_ICONS,
   DT_GUI_COLOR_LAST
 } dt_gui_color_t;
 
@@ -118,6 +109,24 @@ typedef struct dt_gui_gtk_t
   gboolean grouping;
   int32_t expanded_group_id;
 
+  // Culling mode is a special case of collection filter that is restricted to user selection
+  gboolean culling_mode;
+
+  // Track if the current selection has pushed on the backup copy
+  // see common/selection.h:dt_push_selection()
+  gboolean selection_stacked;
+
+  // The ID of the image used as anchor for lighttable offsetting.
+  // Use it to remember where default lighttable was at when re-entering
+  // from another view & mode.
+  int32_t anchor_imgid;
+
+  // Global accelerators for main menu, needed for GtkMenu mnemonics.
+  // This duplicates the functionnality of the terrible "next gen" shortcuts
+  // handler, but works natively with GtkMenuItems… Need to discard ALT key
+  // from "next gen" handler to let them be captured by Gtk.
+  GtkAccelGroup * global_accels;
+
   gboolean show_overlays;
   gboolean show_focus_peaking;
   double overlay_red, overlay_blue, overlay_green, overlay_contrast;
@@ -140,6 +149,10 @@ typedef struct dt_gui_gtk_t
 
   cairo_filter_t filter_image;    // filtering used for all modules expect darkroom
   cairo_filter_t dr_filter_image; // filtering used in the darkroom
+
+  // Widgets capturing key shortcuts
+  GtkWidget *grab_widget;
+  GtkWidget *grab_window;
 
   dt_pthread_mutex_t mutex;
 } dt_gui_gtk_t;
@@ -316,6 +329,28 @@ typedef enum dt_ui_border_t
   DT_UI_BORDER_SIZE
 } dt_ui_border_t;
 
+typedef struct dt_ui_t
+{
+  /* container widgets */
+  GtkWidget *containers[DT_UI_CONTAINER_SIZE];
+
+  /* panel widgets */
+  GtkWidget *panels[DT_UI_PANEL_SIZE];
+
+  /* center widget */
+  GtkWidget *center;
+  GtkWidget *center_base;
+
+  /* main widget */
+  GtkWidget *main_window;
+
+  /* thumb table */
+  dt_thumbtable_t *thumbtable;
+
+  /* log msg and toast labels */
+  GtkWidget *log_msg, *toast_msg;
+} dt_ui_t;
+
 /** \brief add's a widget to a defined container */
 void dt_ui_container_add_widget(struct dt_ui_t *ui, const dt_ui_container_t c, GtkWidget *w);
 /** \brief gives a widget focus in the container */
@@ -422,10 +457,6 @@ void dt_gui_load_theme(const char *theme);
 
 // reload GUI scalings
 void dt_configure_ppd_dpi(dt_gui_gtk_t *gui);
-
-// translate key press events to remove any modifiers used to produce the keyval
-// for example when the shift key is used to create the asterisk character
-guint dt_gui_translated_key_state(GdkEventKey *event);
 
 // return modifier keys currently pressed, independent of any key event
 GdkModifierType dt_key_modifier_state();

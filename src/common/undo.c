@@ -272,6 +272,40 @@ void dt_undo_do_undo(dt_undo_t *self, uint32_t filter)
   _undo_do_undo_redo(self, filter, DT_ACTION_UNDO);
 }
 
+static gboolean _is_do_undo_list_populated(dt_undo_t *self, uint32_t filter, dt_undo_action_t action)
+{
+  if(!self) return FALSE;
+  gboolean found_something = FALSE;
+
+  LOCK;
+
+  GList **from = action == DT_ACTION_UNDO ? &self->undo_list : &self->redo_list;
+
+  for(GList *l = *from; l; l = g_list_next(l))
+  {
+    dt_undo_item_t *item = (dt_undo_item_t *)l->data;
+    if(item->type & filter)
+    {
+      found_something = TRUE;
+      break;
+    }
+  }
+
+  UNLOCK;
+
+  return found_something;
+}
+
+gboolean dt_is_undo_list_populated(dt_undo_t *self, uint32_t filter)
+{
+  return _is_do_undo_list_populated(self, filter, DT_ACTION_UNDO);
+}
+
+gboolean dt_is_redo_list_populated(dt_undo_t *self, uint32_t filter)
+{
+  return _is_do_undo_list_populated(self, filter, DT_ACTION_REDO);
+}
+
 static void _undo_clear_list(GList **list, uint32_t filter)
 {
   // check for first item that is matching the given pattern
@@ -345,4 +379,3 @@ void dt_undo_iterate(dt_undo_t *self, uint32_t filter, gpointer user_data,
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

@@ -88,10 +88,7 @@ static gchar *_conf_get_path(gchar *module_name, gchar *property_1, gchar *prope
   char lay[32] = "";
   if(g_strcmp0(cv->module_name, "lighttable") == 0)
   {
-    if(dt_view_lighttable_preview_state(darktable.view_manager))
-      g_snprintf(lay, sizeof(lay), "preview/");
-    else
-      g_snprintf(lay, sizeof(lay), "%d/", dt_view_lighttable_get_layout(darktable.view_manager));
+    g_snprintf(lay, sizeof(lay), "%d/", 0);
   }
   else if(g_strcmp0(cv->module_name, "darkroom") == 0)
   {
@@ -942,4 +939,3 @@ void dt_guides_update_popover_values()
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

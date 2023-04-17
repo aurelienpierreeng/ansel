@@ -71,7 +71,7 @@ const char *name()
 
 int default_group()
 {
-  return IOP_GROUP_BASIC | IOP_GROUP_TECHNICAL;
+  return IOP_GROUP_TECHNICAL;
 }
 
 int flags()
@@ -92,7 +92,7 @@ static void process_common_setup(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
   // 4BAYER is not supported by this module yet anyway.
   const int ch = (dev->image_storage.flags & DT_IMAGE_4BAYER) ? 4 : 3;
 
-  // the clipping is detected as (raw value > threshold) 
+  // the clipping is detected as (raw value > threshold)
   float threshold = dev->rawoverexposed.threshold;
 
   for(int k = 0; k < ch; k++)
@@ -486,4 +486,3 @@ void init(dt_iop_module_t *module)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

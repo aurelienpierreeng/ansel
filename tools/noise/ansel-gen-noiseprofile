@@ -121,7 +121,7 @@ profile_image() {
 	 noiseprofile pfm dat title fit pdf			\
 	 flat_dat curves_dat flat_pdf a0 a1 a2 b0 b1 b2
 
-	tool_installed darktable-cli
+	tool_installed ansel-cli
 	tool_installed gnuplot
 
 	image="$1"
@@ -133,9 +133,9 @@ profile_image() {
 	iso=$(get_image_iso "$image")
 
 	xmp="$scriptdir/profiling-shot.xmp"
-	noiseprofile="$scriptdir/darktable-noiseprofile"
-	if [ ! -x "$scriptdir/darktable-noiseprofile" ]; then
-		echo "ERROR: Could not find darktable-noiseprofile tool in $scriptdir"
+	noiseprofile="$scriptdir/ansel-noiseprofile"
+	if [ ! -x "$scriptdir/ansel-noiseprofile" ]; then
+		echo "ERROR: Could not find ansel-noiseprofile tool in $scriptdir"
 		exit 1
 	fi
 
@@ -146,12 +146,12 @@ profile_image() {
 	if [ ! -f "$pfm" -o "$image" -nt "$pfm" -o "$xmp" -nt "$pfm" -o "$0" -nt "$pfm" ]; then
 		echo "--> Converting $image (ISO $iso)"
 		rm -f "$pfm"
-		darktable-cli "$image" "$xmp" "$pfm" --core --conf plugins/lighttable/export/iccprofile=image --conf plugins/lighttable/export/style=none --apply-custom-presets false
+		ansel-cli "$image" "$xmp" "$pfm" --core --conf plugins/lighttable/export/iccprofile=image --conf plugins/lighttable/export/style=none --apply-custom-presets false
 	else
 		echo "--> Skip $image (ISO $iso); output up-to-date"
 	fi
 
-	echo "--> Run darktable-noiseprofile"
+	echo "--> Run ansel-noiseprofile"
 	dat="${pfm%.pfm}.dat"
 	"$noiseprofile" "$pfm" > "$dat"
 
@@ -248,7 +248,7 @@ ${color_error}ERROR: Incorrect green channel.
 
 Possible reason:
     o  The input RAW image is bad regarding lighting or exposure.
-    o  You may have set a default output profile in darktable which is
+    o  You may have set a default output profile in ansel which is
        unsuitable for noise profiling.
 
 If the latter reason applies to you, change it back to "image settings"
@@ -267,7 +267,7 @@ ${color_warning}WARNING: Incorrect red channel.
 
 Possible reason:
     o  The input RAW image is bad regarding lighting or exposure.
-    o  You may have set a default output profile in darktable which is
+    o  You may have set a default output profile in ansel which is
        unsuitable for noise profiling.
 
 If the latter reason applies to you, change it back to "image settings"
@@ -288,7 +288,7 @@ ${color_warning}WARNING: Incorrect blue channel.
 
 Possible reason:
     o  The input RAW image is bad regarding lighting or exposure.
-    o  You may have set a default output profile in darktable which is
+    o  You may have set a default output profile in ansel which is
        unsuitable for noise profiling.
 
 If the latter reason applies to you, change it back to "image settings"
@@ -390,7 +390,7 @@ EOF
 # If the user didn't specified a profiling shots directory, use a
 # default one.
 #
-# Defaults to /var/tmp/darktable-noise-profiling/$camera/profiling.
+# Defaults to /var/tmp/ansel-noise-profiling/$camera/profiling.
 
 auto_set_profiling_dir "-d"
 
@@ -520,10 +520,10 @@ if [ "$pdf_enabled" ]; then
 	pdfcat $resultpdf $flist
 fi
 
-# Prepare a tarball ready to be sent to the darktable team.
+# Prepare a tarball ready to be sent to the ansel team.
 echo
 echo "===> Prepare final tarball"
-tarball="$profiling_dir"/darktable-noiseprofile-$(date +'%Y%m%d').tar.gz
+tarball="$profiling_dir"/ansel-noiseprofile-$(date +'%Y%m%d').tar.gz
 cd "$profiling_dir"
 tar -cf - "$(basename "$presets_json")" $(cat "$(basename "$files_list")") "$(basename "$resultpdf")" | gzip > "$(basename "$tarball")"
 cd -
@@ -539,19 +539,19 @@ To test the noise profiles locally, run:
 
 EOF
 
-dt_version=$(get_darktable_version)
-if cmp_darktable_version "$dt_version" "-lt" "1.6.3"; then
+dt_version=$(get_ansel_version)
+if cmp_ansel_version "$dt_version" "-lt" "1.6.3"; then
 	cat <<EOF
-  /path/to/darktable-1.6.3-or-later/darktable --noiseprofiles $presets_json
+  /path/to/ansel-1.6.3-or-later/ansel --noiseprofiles $presets_json
 
-${color_warning}CAUTION: The "darktable" executable available from your system's \$PATH
+${color_warning}CAUTION: The "ansel" executable available from your system's \$PATH
 has version $dt_version. However, version 1.6.3 or later is required to
 test the profile. The command line shown above must be changed to point
-to your darktable 1.6.3+ binary.${color_reset}
+to your ansel 1.6.3+ binary.${color_reset}
 EOF
 else
 	cat <<EOF
-  darktable --noiseprofiles $presets_json
+  ansel --noiseprofiles $presets_json
 EOF
 fi
 

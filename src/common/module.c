@@ -23,6 +23,7 @@
 #include "config.h"
 #include "common/file_location.h"
 #include "common/module.h"
+#include "control/conf.h"
 
 GList *dt_module_load_modules(const char *subdir, size_t module_size,
                               int (*load_module_so)(void *module, const char *libname, const char *plugin_name),
@@ -46,14 +47,46 @@ GList *dt_module_load_modules(const char *subdir, size_t module_size,
     char *plugin_name = g_strndup(dir_name + name_offset, strlen(dir_name) - name_end);
     void *module = calloc(1, module_size);
     gchar *libname = g_module_build_path(plugindir, plugin_name);
-    int res = load_module_so(module, libname, plugin_name);
-    g_free(libname);
-    g_free(plugin_name);
+
+    int res = 1;
+
+    // Get the preference to enable/disable the plugin.
+    gchar *pref_line = g_strdup_printf("%s/%s/enable", subdir, plugin_name);
+    int load;
+
+    if(dt_conf_key_exists(pref_line))
+    {
+      // Disable plugins only if we have an explicit rule saying so.
+      load = dt_conf_get_bool(pref_line);
+      // fprintf(stdout, "%s exists : %i\n", pref_line, load);
+    }
+    else
+    {
+      // If no rule, then enable by default.
+      load = TRUE;
+      dt_conf_set_bool(pref_line, TRUE);
+      // fprintf(stdout, "%s does NOT exist\n", pref_line);
+    }
+
+    if(load) res = load_module_so(module, libname, plugin_name);
+
     if(res)
     {
+      //fprintf(stdout, "Plugin %s/%s NOT loaded\n", subdir, plugin_name);
       free(module);
+      g_free(libname);
+      g_free(plugin_name);
+      g_free(pref_line);
       continue;
     }
+    else
+    {
+      //fprintf(stdout, "%s loaded\n", pref_line);
+      g_free(libname);
+      g_free(plugin_name);
+      g_free(pref_line);
+    }
+
     plugin_list = g_list_prepend(plugin_list, module);
 
     if(init_module) init_module(module);
@@ -73,4 +106,3 @@ GList *dt_module_load_modules(const char *subdir, size_t module_size,
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

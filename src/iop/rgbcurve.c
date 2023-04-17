@@ -123,7 +123,7 @@ const char *name()
 
 int default_group()
 {
-  return IOP_GROUP_TONE | IOP_GROUP_GRADING | IOP_FLAGS_DEPRECATED;
+  return IOP_GROUP_COLOR;
 }
 
 int flags()
@@ -865,8 +865,8 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
       GSList *samples = darktable.lib->proxy.colorpicker.live_samples;
       if(samples)
       {
-        const dt_iop_order_iccprofile_info_t *const histogram_profile = dt_ioppr_get_histogram_profile_info(dev);
-        if(work_profile && histogram_profile)
+        const dt_iop_order_iccprofile_info_t *const display_profile = dt_ioppr_get_pipe_output_profile_info(dev->pipe);
+        if(work_profile && display_profile)
         {
           for(; samples; samples = g_slist_next(samples))
           {
@@ -881,11 +881,11 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
             }
             picker_mean[3] = picker_min[3] = picker_max[3] = 1.f;
 
-            dt_ioppr_transform_image_colorspace_rgb(picker_mean, picker_mean, 1, 1, histogram_profile,
+            dt_ioppr_transform_image_colorspace_rgb(picker_mean, picker_mean, 1, 1, display_profile,
                                                     work_profile, "rgb curve");
-            dt_ioppr_transform_image_colorspace_rgb(picker_min, picker_min, 1, 1, histogram_profile, work_profile,
+            dt_ioppr_transform_image_colorspace_rgb(picker_min, picker_min, 1, 1, display_profile, work_profile,
                                                     "rgb curve");
-            dt_ioppr_transform_image_colorspace_rgb(picker_max, picker_max, 1, 1, histogram_profile, work_profile,
+            dt_ioppr_transform_image_colorspace_rgb(picker_max, picker_max, 1, 1, display_profile, work_profile,
                                                     "rgb curve");
 
             picker_scale(picker_mean, picker_mean, p, work_profile);
@@ -1828,4 +1828,3 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

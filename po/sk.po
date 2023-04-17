@@ -20,19 +20,19 @@ msgstr ""
 "Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
 "X-Generator: Poedit 2.3\n"
 
-#: ../build/share/darktable/ansel.desktop.in.h:1
-#: ../data/ansel.desktop.in.h:1
+#: ../build/share/darktable/darktable.desktop.in.h:1
+#: ../data/darktable.desktop.in.h:1
 msgid "Virtual Lighttable and Darkroom"
 msgstr "Virtuálny presvetľovací pult a fotokomora"
 
-#: ../build/share/darktable/ansel.desktop.in.h:2
-#: ../data/photos.ansel.app.appdata.xml.in.h:1 ../data/ansel.desktop.in.h:2
+#: ../build/share/darktable/darktable.desktop.in.h:2
+#: ../data/darktable.appdata.xml.in.h:1 ../data/darktable.desktop.in.h:2
 msgid "Organize and develop images from digital cameras"
 msgstr "Organizuje a vyvoláva obrázky z digitálnych fotoaprátov"
 
 #. TRANSLATORS: Search terms to find this application. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
-#: ../build/share/darktable/ansel.desktop.in.h:4
-#: ../data/ansel.desktop.in.h:4
+#: ../build/share/darktable/darktable.desktop.in.h:4
+#: ../data/darktable.desktop.in.h:4
 msgid "graphics;photography;raw;"
 msgstr "grafika;fotografovanie;fotografie;raw;surový;"
 
@@ -1973,7 +1973,7 @@ msgstr ""
 "na disku (niekoľko Gigabytov pre 20 000 obrázkov) a nikdy už nebudú náhľady "
 "zmazané. Je možné ich zmazať manuálne ak chcete. Presvetľovací pult bude "
 "viac reaktívny počas prehliadania veľkého počtu náhľadov. Ak chcete vytvoriť "
-"náhľady pre celú vašu kolekciu offline, spustite  'ansel-cli --generate-"
+"náhľady pre celú vašu kolekciu offline, spustite  'darktable-cli --generate-"
 "cache --core --library ~/.config/darktable/library.db'."
 
 #: ../build/bin/preferences_gen.h:3184
@@ -2796,7 +2796,7 @@ msgstr ""
 "na disku (niekoľko Gigabytov pre 20 000 obrázkov) a nikdy už nebudú náhľady "
 "zmazané. Je možné ich zmazať manuálne ak chcete. Presvetľovací pult bude "
 "viac reaktívny počas prehliadania veľkého počtu náhľadov. Ak chcete vytvoriť "
-"náhľady pre celú vašu kolekciu offline, spustite  'ansel-cli --generate-"
+"náhľady pre celú vašu kolekciu offline, spustite  'darktable-cli --generate-"
 "cache --core --library ~/.config/darktable/library.db'."
 
 #: ../build/bin/preferences_gen.h:5420
@@ -3392,7 +3392,7 @@ msgstr "vzor názvy súborov"
 msgid "file naming pattern used for a import session"
 msgstr "vzor názvov súborov použitý pri importovaní"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:2
+#: ../data/darktable.appdata.xml.in.h:2
 msgid ""
 "darktable manages your digital negatives in a database and lets you view "
 "them through a lighttable. It also enables you to develop raw images and "
@@ -3402,7 +3402,7 @@ msgstr ""
 "zobraziť ich na presvetľovacom pulte. Tiež vám umožňuje vyvíjať obrázky raw "
 "a vylepšiť ich vo fotokomore."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:3
+#: ../data/darktable.appdata.xml.in.h:3
 msgid ""
 "Other modes besides lighttable and darkroom are a map for geotagging, "
 "tethering, print and a slideshow."
@@ -3410,7 +3410,7 @@ msgstr ""
 "Ostatné režimy okrem presvetľovacieho pultu a fotokomory sú mapa na "
 "geografické lokalizovanie, vzdialené snímanie, tlač a prezentácia."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:4
+#: ../data/darktable.appdata.xml.in.h:4
 msgid ""
 "darktable supports most modern cameras' raw formats, and does all of its "
 "processing at very high precision."
@@ -3418,23 +3418,23 @@ msgstr ""
 "program darktable podporuje raw formáty najnovších fotoaparátov a dokáže "
 "všetky z nich spracovať s veľkou presnosťou."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:5
+#: ../data/darktable.appdata.xml.in.h:5
 msgid "Virtual light table, showing a collection"
 msgstr "Virtuálny presvetľovací pult, zobrazenie zbierky"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:6
+#: ../data/darktable.appdata.xml.in.h:6
 msgid "Virtual dark room with an opened image"
 msgstr "Virtuálna fotokomora s otvorenou snímkou"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:7
+#: ../data/darktable.appdata.xml.in.h:7
 msgid "Virtual dark room, sharpening an image"
 msgstr "Virtuálna fotokomora, zaostrovanie snímky"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:8
+#: ../data/darktable.appdata.xml.in.h:8
 msgid "Show images on a map"
 msgstr "Ukázať snímky na mape"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:9
+#: ../data/darktable.appdata.xml.in.h:9
 msgid "Print your images"
 msgstr "Vytlačiť vaše obrázky"
 

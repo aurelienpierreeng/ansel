@@ -60,18 +60,14 @@ typedef enum dt_iop_module_header_icons_t
 typedef enum dt_iop_group_t
 {
   IOP_GROUP_NONE = 0,
-  // pre 3.4 layout
-  IOP_GROUP_BASIC = 1 << 0,
-  IOP_GROUP_TONE = 1 << 1,
-  IOP_GROUP_COLOR = 1 << 2,
-  IOP_GROUP_CORRECT = 1 << 3,
-  IOP_GROUP_EFFECT = 1 << 4,
-  // post 3.4 default layout
-  IOP_GROUP_TECHNICAL = 1 << 5,
-  IOP_GROUP_GRADING = 1 << 6,
-  IOP_GROUP_EFFECTS = 1 << 7,
-  // special group
-  IOP_SPECIAL_GROUP_ACTIVE_PIPE = 1 << 8
+  IOP_GROUP_TONES = 1,
+  IOP_GROUP_FILM = 2,
+  IOP_GROUP_COLOR = 3,
+  IOP_GROUP_REPAIR = 4,
+  IOP_GROUP_SHARPNESS = 5,
+  IOP_GROUP_EFFECTS = 6,
+  IOP_GROUP_TECHNICAL= 7,
+  IOP_GROUP_LAST
 } dt_iop_group_t;
 
 /** module tags */
@@ -108,19 +104,8 @@ typedef enum dt_iop_flags_t
   IOP_FLAGS_ALLOW_FAST_PIPE = 1 << 12,   // Module can work with a fast pipe
   IOP_FLAGS_UNSAFE_COPY = 1 << 13,       // Unsafe to copy as part of history
   IOP_FLAGS_GUIDES_SPECIAL_DRAW = 1 << 14, // handle the grid drawing directly
-  IOP_FLAGS_GUIDES_WIDGET = 1 << 15,       // require the guides widget
-  IOP_FLAGS_CACHE_IMPORTANT_NOW = 1 << 16, // hints for higher priority in iop cache
-  IOP_FLAGS_CACHE_IMPORTANT_NEXT = 1 << 17  
+  IOP_FLAGS_GUIDES_WIDGET = 1 << 15        // require the guides widget
 } dt_iop_flags_t;
-
-/** status of a module*/
-typedef enum dt_iop_module_state_t
-{
-  IOP_STATE_HIDDEN = 0, // keep first
-  IOP_STATE_ACTIVE,
-  IOP_STATE_FAVORITE,
-  IOP_STATE_LAST
-} dt_iop_module_state_t;
 
 typedef struct dt_iop_gui_data_t
 {
@@ -169,8 +154,6 @@ typedef struct dt_iop_module_so_t
   /** gui is also only inited once at startup. */
 //  dt_iop_gui_data_t *gui_data;
   /** which results in this widget here, too. */
-  /** button used to show/hide this module in the plugin list. */
-  dt_iop_module_state_t state;
 
   void (*process_plain)(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
                       const void *const i, void *const o, const struct dt_iop_roi_t *const roi_in,
@@ -280,8 +263,6 @@ typedef struct dt_iop_module_t
   GtkWidget *guides_toggle;
   GtkWidget *guides_combo;
 
-  /** flag in case the module has troubles (bad settings) - if TRUE, show a warning sign next to module label */
-  gboolean has_trouble;
   /** the corresponding SO object */
   dt_iop_module_so_t *so;
 
@@ -297,11 +278,13 @@ typedef struct dt_iop_module_t
   /** delayed-event handling */
   guint timeout_handle;
 
+  /** internal widget having the focus */
+  GtkWidget *focused;
+
   void (*process_plain)(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
                         const void *const i, void *const o, const struct dt_iop_roi_t *const roi_in,
                         const struct dt_iop_roi_t *const roi_out);
-  // hint for higher io cache priority
-  gboolean cache_next_important;
+
   // introspection related data
   gboolean have_introspection;
 } dt_iop_module_t;
@@ -330,8 +313,6 @@ void dt_iop_init_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe_t 
 /** checks if iop do have an ui */
 gboolean dt_iop_so_is_hidden(dt_iop_module_so_t *module);
 gboolean dt_iop_is_hidden(dt_iop_module_t *module);
-/** checks whether iop is shown in specified group */
-gboolean dt_iop_shown_in_group(dt_iop_module_t *module, uint32_t group);
 /** enter a GUI critical section by acquiring gui_data->lock **/
 static inline void dt_iop_gui_enter_critical_section(dt_iop_module_t *const module)
   ACQUIRE(&module->gui_lock)
@@ -356,9 +337,6 @@ void dt_iop_gui_reset(dt_iop_module_t *module);
 void dt_iop_gui_set_expanded(dt_iop_module_t *module, gboolean expanded, gboolean collapse_others);
 /** refresh iop according to set expanded state */
 void dt_iop_gui_update_expanded(dt_iop_module_t *module);
-/** change module state */
-void dt_iop_so_gui_set_state(dt_iop_module_so_t *module, dt_iop_module_state_t state);
-void dt_iop_gui_set_state(dt_iop_module_t *module, dt_iop_module_state_t state);
 /* duplicate module and return new instance */
 dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_params);
 
@@ -440,6 +418,8 @@ gboolean dt_iop_is_raster_mask_used(dt_iop_module_t *module, int id);
 dt_iop_module_t *dt_iop_gui_get_previous_visible_module(dt_iop_module_t *module);
 /** returns the next visible module on the module list */
 dt_iop_module_t *dt_iop_gui_get_next_visible_module(dt_iop_module_t *module);
+/** check if current module is visible **/
+gboolean dt_iop_gui_module_is_visible(dt_iop_module_t *module);
 
 // initializes memory.darktable_iop_names
 void dt_iop_set_darktable_iop_table();
@@ -469,14 +449,6 @@ gboolean dt_iop_show_hide_header_buttons(dt_iop_module_t *module, GdkEventCrossi
 
 /** add/remove mask indicator to iop module header */
 void add_remove_mask_indicator(dt_iop_module_t *module, gboolean add);
-
-/** Set the trouble message for the module.  If non-empty, also flag the module as being in trouble; if empty
- ** or NULL, clear the trouble flag.  If 'toast_message' is non-NULL/non-empty, pop up a toast with that
- ** message when the module does not have a warning-label widget (use %s for the module's name).  **/
-void dt_iop_set_module_trouble_message(dt_iop_module_t *module,
-                                       const char *const trouble_msg,
-                                       const char *const trouble_tooltip,
-                                       const char *stderr_message);
 
 // format modules description going in tooltips
 const char **dt_iop_set_description(dt_iop_module_t *module, const char *main_text,

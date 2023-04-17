@@ -157,6 +157,24 @@ typedef struct dt_masks_point_group_t
   float opacity;
 } dt_masks_point_group_t;
 
+
+/*
+* Type of user interaction to map with internal properties of masks.
+* Those were initially handled implicitly by Shift/Ctrl/Shift+Ctrl + mouse scroll
+* at the scope of each mask type, which is a shitty design when using Wacom tablets.
+* This case is now covered by the DT_MASK_INTERACTION_UNDEF.
+* Otherwise, when calling the mouse_scroll callback from GUI, we set the case
+* explicitly, along with a value.
+*/
+typedef enum dt_masks_interaction_t
+{
+  DT_MASKS_INTERACTION_UNDEF = 0,    // let it be deduced contextually from key modifiers, implicit
+  DT_MASKS_INTERACTION_SIZE = 1,     // property of the form (shape), explicit
+  DT_MASKS_INTERACTION_HARDNESS = 2, // property of the form (shape), explicit
+  DT_MASKS_INTERACTION_OPACITY = 3,  // property of the group in which the form is included, explicit
+  DT_MASKS_INTERACTION_LAST
+} dt_masks_interaction_t;
+
 /** structure used to store pointers to the functions implementing operations on a mask shape */
 /** plus a few per-class descriptive data items */
 typedef struct dt_masks_functions_t
@@ -189,7 +207,8 @@ typedef struct dt_masks_functions_t
   int (*mouse_moved)(struct dt_iop_module_t *module, float pzx, float pzy, double pressure, int which,
                      struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
   int (*mouse_scrolled)(struct dt_iop_module_t *module, float pzx, float pzy, int up, uint32_t state,
-                        struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
+                        struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index,
+                        dt_masks_interaction_t interaction);
   int (*button_pressed)(struct dt_iop_module_t *module, float pzx, float pzy,
                         double pressure, int which, int type, uint32_t state,
                         struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
@@ -429,6 +448,11 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mas
                                          const float initial_ypos, const float xpos, const float ypos, float *px,
                                          float *py, const int adding);
 
+/** Getters and setters for direct GUI interaction */
+int dt_masks_get_parent_id(dt_masks_form_gui_t *gui, const dt_masks_form_t *form);
+float dt_masks_form_get_opacity(dt_masks_form_t *form, int parentid);
+void dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity, gboolean offset);
+
 /** detail mask support */
 void dt_masks_extend_border(float *const mask, const int width, const int height, const int border);
 void dt_masks_blur_9x9_coeff(float *coeffs, const float sigma);
@@ -641,4 +665,3 @@ int dt_masks_roundup(int num, int mult)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

@@ -302,7 +302,7 @@ const char **description(struct dt_iop_module_t *self)
 
 int default_group()
 {
-  return IOP_GROUP_CORRECT | IOP_GROUP_EFFECTS;
+  return IOP_GROUP_EFFECTS;
 }
 
 int flags()
@@ -1771,11 +1771,9 @@ static void set_line_width(cairo_t *cr, double scale, dt_liquify_ui_width_enum_t
 
 static gboolean detect_drag(const dt_iop_liquify_gui_data_t *g, const double scale, const float complex pt)
 {
-  const float pr_d = darktable.develop->preview_downsampling;
-
   // g->last_button1_pressed_pos is valid only while BUTTON1 is down
   return g->last_button1_pressed_pos != -1.0 &&
-    cabsf(pt - g->last_button1_pressed_pos) >= (GET_UI_WIDTH(MIN_DRAG) * pr_d / scale);
+    cabsf(pt - g->last_button1_pressed_pos) >= (GET_UI_WIDTH(MIN_DRAG) / scale);
 }
 
 static void update_warp_count(const dt_iop_liquify_gui_data_t *g)
@@ -2776,8 +2774,7 @@ void gui_post_expose(struct dt_iop_module_t *module,
   const float bb_width = develop->preview_pipe->backbuf_width;
   const float bb_height = develop->preview_pipe->backbuf_height;
   const float iscale = develop->preview_pipe->iscale;
-  const float pr_d = develop->preview_downsampling;
-  const float scale = pr_d * MAX(bb_width, bb_height);
+  const float scale = MAX(bb_width, bb_height);
   if(bb_width < 1.0 || bb_height < 1.0)
     return;
 
@@ -2851,8 +2848,6 @@ static void sync_pipe(struct dt_iop_module_t *module, gboolean history)
 
 static void get_point_scale(struct dt_iop_module_t *module, float x, float y, float complex *pt, float *scale)
 {
-  const float pr_d = darktable.develop->preview_downsampling;
-
   float pzx = 0.0f, pzy = 0.0f;
   dt_dev_get_pointer_zoom_pos(darktable.develop, x, y, &pzx, &pzy);
   pzx += 0.5f;
@@ -2867,7 +2862,7 @@ static void get_point_scale(struct dt_iop_module_t *module, float x, float y, fl
   const float nx = pts[0] / darktable.develop->preview_pipe->iwidth;
   const float ny = pts[1] / darktable.develop->preview_pipe->iheight;
 
-  *scale = darktable.develop->preview_pipe->iscale * (pr_d * get_zoom_scale(module->dev));
+  *scale = darktable.develop->preview_pipe->iscale * (get_zoom_scale(module->dev));
   *pt = (nx * darktable.develop->pipe->iwidth) +  (ny * darktable.develop->pipe->iheight) * I;
 }
 
@@ -3068,8 +3063,7 @@ static void get_stamp_params(dt_iop_module_t *module, float *radius, float *r_st
   const dt_dev_pixelpipe_t *devpipe = darktable.develop->preview_pipe;
   const float iwd_min = MIN(devpipe->iwidth, devpipe->iheight);
   const float proc_wdht_min = MIN(devpipe->processed_width, devpipe->processed_height);
-  const float pr_d = darktable.develop->preview_downsampling;
-  const float scale = devpipe->iscale / (pr_d * get_zoom_scale(module->dev));
+  const float scale = devpipe->iscale / (get_zoom_scale(module->dev));
   const float im_scale = 0.09f * iwd_min * last_win_min * scale / proc_wdht_min;
 
   *radius = dt_conf_get_sanitize_float(CONF_RADIUS, 0.1f*im_scale, 3.0f*im_scale, im_scale);
@@ -3781,4 +3775,3 @@ static void _liquify_cairo_paint_node_tool(cairo_t *cr, const gint x, const gint
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

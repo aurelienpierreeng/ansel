@@ -94,12 +94,12 @@ const char **description(struct dt_iop_module_t *self)
 
 int default_group()
 {
-  return IOP_GROUP_COLOR | IOP_GROUP_TECHNICAL;
+  return IOP_GROUP_TECHNICAL;
 }
 
 int flags()
 {
-  return IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_HIDDEN | IOP_FLAGS_NO_HISTORY_STACK;
+  return IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_NO_HISTORY_STACK;
 }
 
 int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -625,14 +625,13 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   uint32_t transformFlags = 0;
 
   /* creating output profile */
-  if(out_type == DT_COLORSPACE_DISPLAY || out_type == DT_COLORSPACE_DISPLAY2)
+  if(out_type == DT_COLORSPACE_DISPLAY)
     pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
 
   const dt_colorspaces_color_profile_t *out_profile
       = dt_colorspaces_get_profile(out_type, out_filename,
                                    DT_PROFILE_DIRECTION_OUT
-                                   | DT_PROFILE_DIRECTION_DISPLAY
-                                   | DT_PROFILE_DIRECTION_DISPLAY2);
+                                   | DT_PROFILE_DIRECTION_DISPLAY);
   if(out_profile)
   {
     // Path for internal profile or external ICC file
@@ -651,8 +650,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   {
     output = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "",
                                         DT_PROFILE_DIRECTION_OUT
-                                        | DT_PROFILE_DIRECTION_DISPLAY
-                                        | DT_PROFILE_DIRECTION_DISPLAY2)
+                                        | DT_PROFILE_DIRECTION_DISPLAY)
                  ->profile;
     dt_control_log(_("missing output profile has been replaced by sRGB!"));
     fprintf(stderr, "missing output profile `%s' has been replaced by sRGB!\n",
@@ -665,7 +663,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     const dt_colorspaces_color_profile_t *prof = dt_colorspaces_get_profile
       (darktable.color_profiles->softproof_type,
        darktable.color_profiles->softproof_filename,
-       DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY | DT_PROFILE_DIRECTION_DISPLAY2);
+       DT_PROFILE_DIRECTION_OUT | DT_PROFILE_DIRECTION_DISPLAY);
 
     if(prof)
       softproof = prof->profile;
@@ -673,8 +671,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     {
       softproof = dt_colorspaces_get_profile(DT_COLORSPACE_SRGB, "",
                                              DT_PROFILE_DIRECTION_OUT
-                                             | DT_PROFILE_DIRECTION_DISPLAY
-                                             | DT_PROFILE_DIRECTION_DISPLAY2)
+                                             | DT_PROFILE_DIRECTION_DISPLAY)
                       ->profile;
       dt_control_log(_("missing softproof profile has been replaced by sRGB!"));
       fprintf(stderr, "missing softproof profile `%s' has been replaced by sRGB!\n",
@@ -735,7 +732,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     }
   }
 
-  if(out_type == DT_COLORSPACE_DISPLAY || out_type == DT_COLORSPACE_DISPLAY2)
+  if(out_type == DT_COLORSPACE_DISPLAY)
     pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
 
   // now try to initialize unbounded mode:
@@ -793,7 +790,21 @@ void init(dt_iop_module_t *module)
   module->default_enabled = 1;
 }
 
+typedef struct dt_iop_colorout_gui_data_t
+{ } dt_iop_colorout_gui_data_t;
 
+dt_iop_colorout_gui_data_t dummy;
+
+void gui_init(dt_iop_module_t *self)
+{
+  IOP_GUI_ALLOC(colorout);
+  self->widget = gtk_label_new(NULL);
+  gtk_label_set_markup(GTK_LABEL(self->widget),_("Convert images to the display or export RGB color space. "
+                                                 "The color profile is set in the export module or in the display preferences. "));
+  gtk_widget_set_halign(self->widget, GTK_ALIGN_START);
+  gtk_label_set_xalign (GTK_LABEL(self->widget), 0.0f);
+  gtk_label_set_line_wrap(GTK_LABEL(self->widget), TRUE);
+}
 
 
 // clang-format off

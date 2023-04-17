@@ -48,7 +48,7 @@ const char *name()
 
 int groups()
 {
-  return IOP_GROUP_BASIC | IOP_GROUP_TECHNICAL;
+  return IOP_GROUP_TECHNICAL;
 }
 
 int flags()
