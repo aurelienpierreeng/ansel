@@ -51,4 +51,4 @@ export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:../AppDir/usr/lib64/ansel/"
 # libraries in this dir, but don't copy those libraries. On the contrary,
 # `--library` will copy both libraries and their dependencies, which is not what
 # we want, we already installed our plugins.
-./linuxdeploy-x86_64.AppImage --appdir ../AppDir --plugin gtk --deploy-deps-only ../AppDir/usr/lib64/ansel/plugins --output appimage
+./linuxdeploy-x86_64.AppImage --appdir ../AppDir --plugin gtk --deploy-deps-only ../AppDir/usr/lib64/ansel/plugins --deploy-deps-only ../AppDir/usr/lib64/ansel/views --output appimage
