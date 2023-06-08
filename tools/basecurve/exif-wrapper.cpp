@@ -20,6 +20,7 @@
 #include <exiv2/exif.hpp>
 #include <exiv2/error.hpp>
 #include <exiv2/image.hpp>
+#include <exiv2/version.hpp>
 
 #include <cstdio>
 #include <cassert>
@@ -37,13 +38,21 @@ exif_get_ascii_datafield(
 
   try
   {
+#if EXIV2_TEST_VERSION(0,28,0)
+    Exiv2::Image::UniquePtr image = Exiv2::ImageFactory::open(filename);
+#else
     Exiv2::Image::AutoPtr image = Exiv2::ImageFactory::open(filename);
+#endif
     assert(image.get() != 0);
     image->readMetadata();
 
     Exiv2::ExifData &exifData = image->exifData();
 
+#if EXIV2_TEST_VERSION(0,28,0)
+    Exiv2::Value::UniquePtr val = exifData[key].getValue();
+#else
     Exiv2::Value::AutoPtr val = exifData[key].getValue();
+#endif
 
     if (val->typeId() != Exiv2::asciiString)
     {
