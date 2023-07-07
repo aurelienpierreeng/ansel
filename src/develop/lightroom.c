@@ -1091,7 +1091,7 @@ gboolean dt_lightroom_import(int imgid, dt_develop_t *dev, gboolean iauto)
 
   // Parse xml document
 
-  doc = xmlParseEntity(pathname);
+  doc = xmlReadFile(pathname, NULL, 0);
 
   if(doc == NULL)
   {
