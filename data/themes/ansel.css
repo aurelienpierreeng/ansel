@@ -534,6 +534,8 @@ menubar menuitem label
 #hinter /* label */
 {
   padding: 0.14em 0;
+  /* Some CJK fonts are taller than other fonts, this prevent size shaking. */
+  min-height: 1.75em;
 }
 
 /* Set toolbars buttons in lighttable and darkroom views ; and top right button in accels window */
