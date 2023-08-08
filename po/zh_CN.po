@@ -14,8 +14,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: darktable 3.6.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2023-03-17 13:05+0800\n"
-"PO-Revision-Date: 2023-03-17 13:05+0800\n"
+"POT-Creation-Date: 2023-08-08 22:25+0800\n"
+"PO-Revision-Date: 2023-08-08 23:27+0800\n"
 "Last-Translator: Alynx Zhou <alynx.zhou@gmail.com>\n"
 "Language-Team: Chinese - China <>\n"
 "Language: zh_CN\n"
@@ -23,7 +23,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
-"X-Generator: Poedit 3.2.2\n"
+"X-Generator: Poedit 3.3.2\n"
 "X-Poedit-SourceCharset: UTF-8\n"
 
 #: ../build/bin/conf_gen.h:176 ../build/bin/preferences_gen.h:6682
@@ -824,9 +824,8 @@ msgstr "滑动"
 msgid "this setting has been modified"
 msgstr "此设定已被更改"
 
-#: ../build/bin/preferences_gen.h:3152 ../src/gui/gtk.c:782
-#: ../src/gui/preferences.c:538 ../src/libs/tools/lighttable.c:67
-#: ../tools/generate_prefs.xsl:192
+#: ../build/bin/preferences_gen.h:3152 ../src/gui/preferences.c:538
+#: ../src/libs/tools/lighttable.c:58 ../tools/generate_prefs.xsl:192
 msgid "lighttable"
 msgstr "光台"
 
@@ -961,8 +960,8 @@ msgstr ""
 "尺寸类别用于根据缩略图的大小设置不同的重叠和css值，以 | 作为分隔符。例如，"
 "120 | 400表示3类缩略图：0px->120px、120px->400px和>400px"
 
-#: ../build/bin/preferences_gen.h:3491 ../src/gui/gtk.c:783
-#: ../src/gui/preferences.c:538 ../tools/generate_prefs.xsl:229
+#: ../build/bin/preferences_gen.h:3491 ../src/gui/preferences.c:538
+#: ../tools/generate_prefs.xsl:229
 msgid "darkroom"
 msgstr "暗房"
 
@@ -2013,7 +2012,7 @@ msgstr "指定"
 #: ../build/lib64/ansel/plugins/introspection_colorin.c:301
 #: ../build/lib64/ansel/plugins/introspection_vignette.c:263
 #: ../src/develop/blend_gui.c:101 ../src/develop/blend_gui.c:124
-#: ../src/develop/blend_gui.c:2956 ../src/develop/develop.c:2055
+#: ../src/develop/blend_gui.c:2956 ../src/develop/develop.c:2064
 #: ../src/gui/accelerators.c:121 ../src/gui/accelerators.c:130
 #: ../src/gui/accelerators.c:203 ../src/imageio/format/avif.c:825
 #: ../src/imageio/format/j2k.c:672
@@ -2066,7 +2065,7 @@ msgstr "保留颜色"
 #: ../src/gui/guides.c:709 ../src/iop/basecurve.c:2082
 #: ../src/iop/channelmixerrgb.c:4187 ../src/iop/clipping.c:1917
 #: ../src/iop/clipping.c:2110 ../src/iop/clipping.c:2125
-#: ../src/iop/lens.cc:2235 ../src/iop/retouch.c:460 ../src/libs/collect.c:1915
+#: ../src/iop/lens.cc:2235 ../src/iop/retouch.c:460 ../src/libs/collect.c:1896
 #: ../src/libs/colorpicker.c:51 ../src/libs/export.c:1026
 #: ../src/libs/print_settings.c:2668
 msgid "none"
@@ -2340,37 +2339,35 @@ msgstr "严重色差"
 
 #: ../build/lib64/ansel/plugins/introspection_cacorrectrgb.c:158
 #: ../src/common/collection.c:1661 ../src/common/color_vocabulary.c:232
-#: ../src/common/colorlabels.c:329 ../src/develop/blend_gui.c:1984
-#: ../src/develop/blend_gui.c:2011 ../src/develop/lightroom.c:834
-#: ../src/gui/gtk.c:2291 ../src/gui/guides.c:727 ../src/iop/bilateral.cc:305
-#: ../src/iop/channelmixer.c:625 ../src/iop/channelmixer.c:635
-#: ../src/iop/channelmixerrgb.c:4139 ../src/iop/colorzones.c:2302
-#: ../src/iop/temperature.c:1786 ../src/iop/temperature.c:1950
-#: ../src/libs/collect.c:1799
+#: ../src/develop/blend_gui.c:1984 ../src/develop/blend_gui.c:2011
+#: ../src/develop/lightroom.c:834 ../src/gui/gtk.c:1558 ../src/gui/guides.c:727
+#: ../src/iop/bilateral.cc:305 ../src/iop/channelmixer.c:625
+#: ../src/iop/channelmixer.c:635 ../src/iop/channelmixerrgb.c:4139
+#: ../src/iop/colorzones.c:2302 ../src/iop/temperature.c:1786
+#: ../src/iop/temperature.c:1950 ../src/libs/collect.c:1780
 msgid "red"
 msgstr "红"
 
 #: ../build/lib64/ansel/plugins/introspection_cacorrectrgb.c:159
 #: ../src/common/collection.c:1665 ../src/common/color_vocabulary.c:277
-#: ../src/common/colorlabels.c:331 ../src/develop/blend_gui.c:1987
-#: ../src/develop/blend_gui.c:2014 ../src/develop/lightroom.c:838
-#: ../src/gui/gtk.c:2292 ../src/gui/guides.c:728 ../src/iop/bilateral.cc:310
-#: ../src/iop/channelmixer.c:626 ../src/iop/channelmixer.c:641
-#: ../src/iop/channelmixerrgb.c:4140 ../src/iop/colorzones.c:2305
-#: ../src/iop/temperature.c:1770 ../src/iop/temperature.c:1788
-#: ../src/iop/temperature.c:1951 ../src/libs/collect.c:1799
+#: ../src/develop/blend_gui.c:1987 ../src/develop/blend_gui.c:2014
+#: ../src/develop/lightroom.c:838 ../src/gui/gtk.c:1559 ../src/gui/guides.c:728
+#: ../src/iop/bilateral.cc:310 ../src/iop/channelmixer.c:626
+#: ../src/iop/channelmixer.c:641 ../src/iop/channelmixerrgb.c:4140
+#: ../src/iop/colorzones.c:2305 ../src/iop/temperature.c:1770
+#: ../src/iop/temperature.c:1788 ../src/iop/temperature.c:1951
+#: ../src/libs/collect.c:1780
 msgid "green"
 msgstr "绿"
 
 #: ../build/lib64/ansel/plugins/introspection_cacorrectrgb.c:160
 #: ../src/common/collection.c:1667 ../src/common/color_vocabulary.c:324
-#: ../src/common/colorlabels.c:332 ../src/develop/blend_gui.c:1990
-#: ../src/develop/blend_gui.c:2017 ../src/develop/lightroom.c:840
-#: ../src/gui/gtk.c:2293 ../src/iop/bilateral.cc:315
-#: ../src/iop/channelmixer.c:627 ../src/iop/channelmixer.c:647
-#: ../src/iop/channelmixerrgb.c:4141 ../src/iop/colorzones.c:2307
-#: ../src/iop/temperature.c:1790 ../src/iop/temperature.c:1952
-#: ../src/libs/collect.c:1799
+#: ../src/develop/blend_gui.c:1990 ../src/develop/blend_gui.c:2017
+#: ../src/develop/lightroom.c:840 ../src/gui/gtk.c:1560
+#: ../src/iop/bilateral.cc:315 ../src/iop/channelmixer.c:627
+#: ../src/iop/channelmixer.c:647 ../src/iop/channelmixerrgb.c:4141
+#: ../src/iop/colorzones.c:2307 ../src/iop/temperature.c:1790
+#: ../src/iop/temperature.c:1952 ../src/libs/collect.c:1780
 msgid "blue"
 msgstr "蓝"
 
@@ -2829,7 +2826,7 @@ msgstr "对比度灰色支点"
 #: ../src/gui/guides.c:737 ../src/iop/basicadj.c:607 ../src/iop/bilat.c:451
 #: ../src/iop/colisa.c:305 ../src/iop/colorbalance.c:1895
 #: ../src/iop/colorbalance.c:1901 ../src/iop/filmic.c:1649
-#: ../src/iop/filmicrgb.c:4490 ../src/iop/lowpass.c:573
+#: ../src/iop/filmicrgb.c:4584 ../src/iop/lowpass.c:573
 msgid "contrast"
 msgstr "对比"
 
@@ -3140,7 +3137,7 @@ msgstr "Markesteijn 3-pass + VNG"
 
 #: ../build/lib64/ansel/plugins/introspection_demosaic.c:232
 #: ../src/common/collection.c:1686 ../src/common/collection.c:1694
-#: ../src/libs/collect.c:1753
+#: ../src/libs/collect.c:1734
 msgid "basic"
 msgstr "基础"
 
@@ -3426,7 +3423,7 @@ msgstr "硬度"
 
 #: ../build/lib64/ansel/plugins/introspection_filmicrgb.c:296
 #: ../build/lib64/ansel/plugins/introspection_filmicrgb.c:471
-#: ../src/iop/filmic.c:1687 ../src/iop/filmicrgb.c:4663
+#: ../src/iop/filmic.c:1687 ../src/iop/filmicrgb.c:4757
 msgid "extreme luminance saturation"
 msgstr "极端亮度饱和度"
 
@@ -3610,7 +3607,7 @@ msgstr "中间调偏色"
 
 #: ../build/lib64/ansel/plugins/introspection_highlights.c:133
 #: ../build/lib64/ansel/plugins/introspection_highlights.c:234
-#: ../src/views/darkroom.c:2003
+#: ../src/views/darkroom.c:1999
 msgid "clipping threshold"
 msgstr "限幅阈值"
 
@@ -3726,7 +3723,7 @@ msgstr "使用 3 个相邻像素检测"
 #: ../src/iop/levels.c:680 ../src/iop/profile_gamma.c:676
 #: ../src/libs/export.c:1292 ../src/libs/image.c:594
 #: ../src/libs/print_settings.c:2707 ../src/libs/styles.c:827
-#: ../src/views/darkroom.c:1979
+#: ../src/views/darkroom.c:1975
 msgid "mode"
 msgstr "模式"
 
@@ -3757,11 +3754,11 @@ msgstr "无效化"
 
 #. move left/right/up/down
 #: ../build/lib64/ansel/plugins/introspection_liquify.c:429
-#: ../src/views/darkroom.c:1785 ../src/views/darkroom.c:2186
-#: ../src/views/darkroom.c:2189 ../src/views/lighttable.c:298
-#: ../src/views/lighttable.c:307 ../src/views/lighttable.c:389
-#: ../src/views/lighttable.c:393 ../src/views/lighttable.c:397
-#: ../src/views/lighttable.c:401 ../src/views/lighttable.c:405
+#: ../src/views/darkroom.c:1781 ../src/views/darkroom.c:2182
+#: ../src/views/darkroom.c:2185 ../src/views/lighttable.c:298
+#: ../src/views/lighttable.c:307 ../src/views/lighttable.c:385
+#: ../src/views/lighttable.c:389 ../src/views/lighttable.c:393
+#: ../src/views/lighttable.c:397 ../src/views/lighttable.c:401
 msgid "move"
 msgstr "移动"
 
@@ -4295,10 +4292,20 @@ msgstr "集成贡献者"
 msgid "LibRaw contributors"
 msgstr "LibRaw 贡献者"
 
+#: ../build/share/ansel/ansel.desktop.in.h:1 ../data/ansel.desktop.in.h:1
+msgid "Virtual Lighttable and Darkroom"
+msgstr "虚拟的光台和暗房"
+
+#: ../build/share/ansel/ansel.desktop.in.h:2
 #: ../data/photos.ansel.app.appdata.xml.in.h:1 ../data/ansel.desktop.in.h:2
 #: ../src/gui/actions/help.h:18
 msgid "Organize and develop images from digital cameras"
 msgstr "组织并冲印来自数码相机的图片"
+
+#. TRANSLATORS: Search terms to find this application. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
+#: ../build/share/ansel/ansel.desktop.in.h:4 ../data/ansel.desktop.in.h:4
+msgid "graphics;photography;raw;"
+msgstr "graphics;photography;raw;图片;图像;摄影;"
 
 #: ../data/photos.ansel.app.appdata.xml.in.h:2
 msgid ""
@@ -4310,15 +4317,6 @@ msgstr "使用 Ansel 管理您的电子底片，在光台中浏览照片，在�
 #: ../data/photos.ansel.app.appdata.xml.in.h:3
 msgid "Virtual light table, showing a collection"
 msgstr "虚拟光台，用于展示照片集"
-
-#: ../data/ansel.desktop.in.h:1
-msgid "Virtual Lighttable and Darkroom"
-msgstr "虚拟的光台和暗房"
-
-#. TRANSLATORS: Search terms to find this application. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
-#: ../data/ansel.desktop.in.h:4
-msgid "graphics;photography;raw;"
-msgstr "graphics;photography;raw;图片;图像;摄影;"
 
 #: ../src/bauhaus/bauhaus.c:3200
 msgid "button on"
@@ -4361,7 +4359,7 @@ msgstr "下拉菜单"
 #: ../src/control/jobs/control_jobs.c:1739 ../src/gui/accelerators.c:1908
 #: ../src/gui/accelerators.c:1984 ../src/gui/accelerators.c:2035
 #: ../src/gui/accelerators.c:2063 ../src/gui/accelerators.c:2122
-#: ../src/gui/actions/edit.h:305 ../src/gui/hist_dialog.c:195
+#: ../src/gui/actions/edit.h:307 ../src/gui/hist_dialog.c:195
 #: ../src/gui/preferences.c:997 ../src/gui/preferences.c:1036
 #: ../src/gui/presets.c:374 ../src/gui/presets.c:474
 #: ../src/gui/styles_dialog.c:420 ../src/imageio/storage/disk.c:122
@@ -4559,9 +4557,8 @@ msgstr "打印时间"
 msgid "history"
 msgstr "历史"
 
-#: ../src/common/collection.c:832 ../src/common/colorlabels.c:337
-#: ../src/develop/lightroom.c:1550 ../src/dtgtk/thumbnail.c:1211
-#: ../src/libs/tools/colorlabels.c:94 ../src/libs/tools/filter.c:106
+#: ../src/common/collection.c:832 ../src/develop/lightroom.c:1550
+#: ../src/libs/tools/filter.c:106
 msgid "color label"
 msgstr "色彩标识"
 
@@ -4586,11 +4583,11 @@ msgstr "文件名"
 msgid "geotagging"
 msgstr "地理标签"
 
-#: ../src/common/collection.c:841 ../src/libs/tools/lighttable.c:275
+#: ../src/common/collection.c:841
 msgid "grouping"
 msgstr "分组"
 
-#: ../src/common/collection.c:842 ../src/dtgtk/thumbnail.c:1223
+#: ../src/common/collection.c:842 ../src/dtgtk/thumbnail.c:1220
 #: ../src/libs/metadata_view.c:130 ../src/libs/metadata_view.c:339
 msgid "local copy"
 msgstr "本地副本"
@@ -4605,42 +4602,38 @@ msgstr "模块"
 msgid "module order"
 msgstr "模块顺序"
 
-#. Register global rating shortcut, with regular numbers
-#: ../src/common/collection.c:845 ../src/common/ratings.c:309
-#: ../src/develop/lightroom.c:1525 ../src/gui/gtk.c:794
+#: ../src/common/collection.c:845 ../src/develop/lightroom.c:1525
 #: ../src/libs/tools/filter.c:104
 msgid "rating"
 msgstr "评级"
 
-#: ../src/common/collection.c:1663 ../src/common/colorlabels.c:330
-#: ../src/develop/lightroom.c:836 ../src/gui/guides.c:729
-#: ../src/iop/colorzones.c:2304 ../src/iop/temperature.c:1776
-#: ../src/libs/collect.c:1799
+#: ../src/common/collection.c:1663 ../src/develop/lightroom.c:836
+#: ../src/gui/guides.c:729 ../src/iop/colorzones.c:2304
+#: ../src/iop/temperature.c:1776 ../src/libs/collect.c:1780
 msgid "yellow"
 msgstr "黄"
 
 #: ../src/common/collection.c:1669 ../src/common/color_vocabulary.c:339
-#: ../src/common/colorlabels.c:333 ../src/iop/colorzones.c:2308
-#: ../src/libs/collect.c:1799
+#: ../src/iop/colorzones.c:2308 ../src/libs/collect.c:1780
 msgid "purple"
 msgstr "紫"
 
-#: ../src/common/collection.c:1688 ../src/libs/collect.c:1753
+#: ../src/common/collection.c:1688 ../src/libs/collect.c:1734
 msgid "auto applied"
 msgstr "已自动应用"
 
-#: ../src/common/collection.c:1690 ../src/libs/collect.c:1753
+#: ../src/common/collection.c:1690 ../src/libs/collect.c:1734
 msgid "altered"
 msgstr "已改变"
 
-#: ../src/common/collection.c:1703 ../src/common/collection.c:1792
-#: ../src/libs/collect.c:1214 ../src/libs/collect.c:1353
-#: ../src/libs/collect.c:1377 ../src/libs/collect.c:1496
-#: ../src/libs/collect.c:2657
+#: ../src/common/collection.c:1703 ../src/common/collection.c:1789
+#: ../src/libs/collect.c:1214 ../src/libs/collect.c:1334
+#: ../src/libs/collect.c:1358 ../src/libs/collect.c:1477
+#: ../src/libs/collect.c:2620
 msgid "not tagged"
 msgstr "无标签"
 
-#: ../src/common/collection.c:1704 ../src/libs/collect.c:1377
+#: ../src/common/collection.c:1704 ../src/libs/collect.c:1358
 #: ../src/libs/map_locations.c:765
 msgid "tagged"
 msgstr "已加标签"
@@ -4649,25 +4642,25 @@ msgstr "已加标签"
 msgid "tagged*"
 msgstr "已加标签*"
 
-#: ../src/common/collection.c:1740 ../src/libs/collect.c:1767
+#: ../src/common/collection.c:1740 ../src/libs/collect.c:1748
 msgid "not copied locally"
 msgstr "没有本地复制"
 
 #. grouping
-#: ../src/common/collection.c:2033 ../src/libs/collect.c:1887
+#: ../src/common/collection.c:2007 ../src/libs/collect.c:1868
 msgid "group leaders"
 msgstr "分组首张图像"
 
-#: ../src/common/collection.c:2141 ../src/libs/collect.c:1968
+#: ../src/common/collection.c:2115 ../src/libs/collect.c:1949
 msgid "not defined"
 msgstr "未定义"
 
-#: ../src/common/collection.c:2489
+#: ../src/common/collection.c:2535
 #, c-format
 msgid "%d image of %d (#%d) in current collection is selected"
 msgstr "已选 %d 张图像，当前集合共 %d  (#%d)张图像"
 
-#: ../src/common/collection.c:2495
+#: ../src/common/collection.c:2541
 #, c-format
 msgid "%d image of %d in current collection is selected"
 msgid_plural "%d images of %d in current collection are selected"
@@ -4968,19 +4961,6 @@ msgstr "淡紫色"
 msgid "color not found"
 msgstr "未找到此色彩"
 
-#: ../src/common/colorlabels.c:305
-#, c-format
-msgid "colorlabels set to %s"
-msgstr "色标设置为%s"
-
-#: ../src/common/colorlabels.c:307
-msgid "all colorlabels removed"
-msgstr "全部色标已删除"
-
-#: ../src/common/colorlabels.c:328 ../src/libs/image.c:589
-msgid "clear"
-msgstr "清空"
-
 #. init the category profile with NULL profile, the actual profile must be retrieved dynamically by the caller
 #: ../src/common/colorspaces.c:1401 ../src/common/colorspaces.c:1641
 msgid "work profile"
@@ -4991,7 +4971,7 @@ msgid "export profile"
 msgstr "输出配置"
 
 #: ../src/common/colorspaces.c:1408 ../src/common/colorspaces.c:1639
-#: ../src/views/darkroom.c:2117
+#: ../src/views/darkroom.c:2113
 msgid "softproof profile"
 msgstr "软打样配置"
 
@@ -5164,9 +5144,9 @@ msgstr "对于暗房模式下缩小的图片，见 首选项->暗房->去马赛�
 
 #: ../src/common/darktable.c:1694
 msgid ""
-"the user interface and the underlying internals for tuning darktable "
-"performance have changed."
-msgstr "关于调整 darktable 性能的用户界面和底层算法已改变。"
+"the user interface and the underlying internals for tuning Ansel performance "
+"have changed."
+msgstr "关于调整 Ansel 性能的用户界面和底层算法已改变。"
 
 #: ../src/common/darktable.c:1696
 msgid ""
@@ -5175,8 +5155,8 @@ msgid ""
 msgstr "内存预留和附属选项已被移除，请使用首选项->处理中使用以下选项替代:"
 
 #: ../src/common/darktable.c:1698
-msgid "1) darktable resources"
-msgstr "1) darktable 资源"
+msgid "1) Ansel resources"
+msgstr "1) Ansel 资源"
 
 #: ../src/common/darktable.c:1700
 msgid "2) tune OpenCL performance"
@@ -5211,22 +5191,22 @@ msgstr "除了'magic'选项您还可像以前一样调整。"
 #, c-format
 msgid ""
 "\n"
-"  Sorry, darktable could not be started (database is locked)\n"
+"  Sorry, Ansel could not be started (database is locked)\n"
 "\n"
 "  How to solve this problem?\n"
 "\n"
-"  1 - If another darktable instance is already open, \n"
+"  1 - If another Ansel instance is already open, \n"
 "      click cancel and either use that instance or close it before "
-"attempting to rerun darktable \n"
+"attempting to rerun Ansel \n"
 "      (process ID <i><b>%d</b></i> created the database locks)\n"
 "\n"
-"  2 - If you can't find a running instance of darktable, try restarting your "
+"  2 - If you can't find a running instance of Ansel, try restarting your "
 "session or your computer. \n"
 "      This will close all running programs and hopefully close the databases "
 "correctly. \n"
 "\n"
-"  3 - If you have done this or are certain that no other instances of "
-"darktable are running, \n"
+"  3 - If you have done this or are certain that no other instances of Ansel "
+"are running, \n"
 "      this probably means that the last instance was ended abnormally. \n"
 "      Click on the \"delete database lock files\" button to remove the files "
 "<i>data.db.lock</i> and <i>library.db.lock</i>.  \n"
@@ -5238,19 +5218,19 @@ msgid ""
 "</i>\n"
 msgstr ""
 "\n"
-"  抱歉，darktable 无法启动（数据库被锁定）\n"
+"  抱歉，Ansel 无法启动（数据库被锁定）\n"
 "\n"
 "  如何解决此问题？\n"
 "\n"
-"  1 - 若另一个 darktable 实例已在运行，\n"
+"  1 - 若另一个 Ansel 实例已在运行，\n"
 "      点击取消，并使用该已打开的实例或退出后再尝试启动\n"
 "      （进程号 <i><b>%d</b></i> 正在使用数据库）\n"
 "\n"
-"  2 - 若您找不到另一个 darktable 实例，请尝试重新登入或重新启动您的计算机。\n"
+"  2 - 若您找不到另一个 Ansel 实例，请尝试重新登入或重新启动您的计算机。\n"
 "      这有助于清理所有正在运行的程序，有可能可以正确关闭数据库。\n"
 "\n"
-"  3 - 若此问题依然存在或您确定系统上没有其他正在运行的 darktable 实例，\n"
-"      上次 darktable 可能未正确退出。\n"
+"  3 - 若此问题依然存在或您确定系统上没有其他正在运行的 Ansel 实例，\n"
+"      上次 Ansel 可能未正确退出。\n"
 "      点击“删除数据锁”按钮以移除 <i>data.db.lock</i> 及 <i>library.db.lock</"
 "i>。\n"
 "\n"
@@ -5261,14 +5241,13 @@ msgstr ""
 
 #. clang-format on
 #: ../src/common/database.c:2744
-msgid "error starting darktable"
-msgstr "darktable 启动失败"
+msgid "error starting Ansel"
+msgstr "Ansel 启动失败"
 
-#: ../src/common/database.c:2745 ../src/libs/collect.c:3170
+#: ../src/common/database.c:2745 ../src/libs/collect.c:3133
 #: ../src/libs/export_metadata.c:288 ../src/libs/import.c:1470
 #: ../src/libs/metadata.c:490 ../src/libs/metadata_view.c:1187
-#: ../src/libs/recentcollect.c:305 ../src/libs/styles.c:423
-#: ../src/libs/styles.c:606 ../src/libs/tagging.c:1464
+#: ../src/libs/styles.c:423 ../src/libs/styles.c:606 ../src/libs/tagging.c:1464
 #: ../src/libs/tagging.c:1552 ../src/libs/tagging.c:1633
 #: ../src/libs/tagging.c:1763 ../src/libs/tagging.c:2037
 #: ../src/libs/tagging.c:3452
@@ -5308,11 +5287,11 @@ msgstr "完成"
 msgid ""
 "\n"
 "successfully deleted the lock files.\n"
-"you can now restart darktable\n"
+"you can now restart Ansel\n"
 msgstr ""
 "\n"
 "删除数据库锁文件成功。\n"
-"请重新启动 darktable\n"
+"请重新启动 Ansel。\n"
 
 #: ../src/common/database.c:2769 ../src/common/database.c:2776
 msgid "ok"
@@ -5378,8 +5357,8 @@ msgstr "Ansel - 数据库版本迁移"
 #: ../src/common/database.c:2950 ../src/common/database.c:3263
 #: ../src/common/database.c:3281 ../src/common/database.c:3443
 #: ../src/common/database.c:3461
-msgid "close darktable"
-msgstr "关闭 darktable"
+msgid "close Ansel"
+msgstr "关闭 Ansel"
 
 #: ../src/common/database.c:2950
 msgid "upgrade database"
@@ -5410,22 +5389,22 @@ msgstr "删除数据库"
 
 #: ../src/common/database.c:3271 ../src/common/database.c:3451
 msgid ""
-"do you want to close darktable now to manually restore\n"
+"do you want to close Ansel now to manually restore\n"
 "the database from a backup, attempt an automatic restore\n"
 "from the most recent snapshot or delete the corrupted database\n"
 "and start with a new one?"
 msgstr ""
-"您希望关闭 darktable 以手动从备份恢复数据库？\n"
+"您希望关闭 Ansel 以手动从备份恢复数据库？\n"
 "还是尝试自动从最近快照恢复数据库，或者删除损坏的数据库并从头开始？"
 
 #: ../src/common/database.c:3287 ../src/common/database.c:3467
 msgid ""
-"do you want to close darktable now to manually restore\n"
+"do you want to close Ansel now to manually restore\n"
 "the database from a backup or delete the corrupted database\n"
 "and start with a new one?"
 msgstr ""
-"您希望现在关闭 darktable 并手动从备份恢复数据库\n"
-"还是删除损坏的数据库重新开始呢？"
+"您希望现在关闭 Ansel 并手动从备份恢复数据库，\n"
+"还是删除损坏的数据库重新开始？"
 
 #: ../src/common/database.c:3294 ../src/common/database.c:3472
 #, c-format
@@ -5449,12 +5428,12 @@ msgid "click later to be asked on next startup"
 msgstr "点击“以后”下次启动时将再次询问"
 
 #: ../src/common/database.c:3794
-msgid "click later to be asked when closing darktable"
-msgstr "点击“以后”关闭 darktable 时将再次询问"
+msgid "click later to be asked when closing Ansel"
+msgstr "点击“以后”以在关闭 Ansel 时再次询问。"
 
 #: ../src/common/database.c:3798
-msgid "click later to be asked next time when closing darktable"
-msgstr "点击“以后”下次关闭 darktable 时将再次询问"
+msgid "click later to be asked next time when closing Ansel"
+msgstr "点击“以后”以在下次关闭 Ansel 时再次询问。"
 
 #: ../src/common/database.c:3801
 #, c-format
@@ -5540,95 +5519,95 @@ msgstr "<h1>抱歉，</h1><p>似乎发生了错误。请重试。</p>"
 #: ../src/common/http_server.c:102
 msgid ""
 "<h1>Thank you,</h1><p>everything should have worked, you can <b>close</b> "
-"your browser now and <b>go back</b> to darktable.</p>"
+"your browser now and <b>go back</b> to Ansel.</p>"
 msgstr ""
 "<h1>谢谢，</h1><p>操作已完成。您现在可以<b>关闭</b>浏览器并<b>回到</b> "
-"darktable。</p>"
+"Ansel。</p>"
 
-#: ../src/common/image.c:296
+#: ../src/common/image.c:298
 msgid "orphaned image"
 msgstr "孤立图像"
 
-#: ../src/common/image.c:541
+#: ../src/common/image.c:543
 #, c-format
 msgid "geo-location undone for %d images"
 msgstr "已为 %d 张图像删除定位信息"
 
-#: ../src/common/image.c:542
+#: ../src/common/image.c:544
 #, c-format
 msgid "geo-location re-applied to %d images"
 msgstr "已为 %d 张图像应用定位信息"
 
-#: ../src/common/image.c:561
+#: ../src/common/image.c:563
 #, c-format
 msgid "date/time undone for %d images"
 msgstr "已为 %d 张图像删除时间信息"
 
-#: ../src/common/image.c:562
+#: ../src/common/image.c:564
 #, c-format
 msgid "date/time re-applied to %d images"
 msgstr "已为 %d 张图像应用时间信息"
 
-#: ../src/common/image.c:1992
+#: ../src/common/image.c:1996
 #, c-format
 msgid "cannot access local copy `%s'"
 msgstr "无法访问本地副本“%s”"
 
-#: ../src/common/image.c:1999
+#: ../src/common/image.c:2003
 #, c-format
 msgid "cannot write local copy `%s'"
 msgstr "无法写入本地副本“%s”！"
 
-#: ../src/common/image.c:2006
+#: ../src/common/image.c:2010
 #, c-format
 msgid "error moving local copy `%s' -> `%s'"
 msgstr "无法移动本地副本“%s”至“%s”"
 
-#: ../src/common/image.c:2022
+#: ../src/common/image.c:2026
 #, c-format
 msgid "error moving `%s': file not found"
 msgstr "无法移动“%s”：文件未找到"
 
-#: ../src/common/image.c:2032
+#: ../src/common/image.c:2036
 #, c-format
 msgid "error moving `%s' -> `%s': file exists"
 msgstr "无法移动“%s”至“%s”：目标位置已存在"
 
-#: ../src/common/image.c:2036
+#: ../src/common/image.c:2040
 #, c-format
 msgid "error moving `%s' -> `%s'"
 msgstr "无法移动“%s”至“%s”"
 
-#: ../src/common/image.c:2350
+#: ../src/common/image.c:2354
 msgid "cannot create local copy when the original file is not accessible."
 msgstr "当原件不可用时无法创建本地副本。"
 
-#: ../src/common/image.c:2364
+#: ../src/common/image.c:2368
 msgid "cannot create local copy."
 msgstr "无法创建本地副本。"
 
-#: ../src/common/image.c:2438 ../src/control/jobs/control_jobs.c:768
+#: ../src/common/image.c:2442 ../src/control/jobs/control_jobs.c:768
 msgid "cannot remove local copy when the original file is not accessible."
 msgstr "当原件不可用时无法删除本地副本。"
 
-#: ../src/common/image.c:2603
+#: ../src/common/image.c:2607
 #, c-format
 msgid "%d local copy has been synchronized"
 msgid_plural "%d local copies have been synchronized"
 msgstr[0] "已同步 %d 件本地副本"
 
-#: ../src/common/image.c:2792
+#: ../src/common/image.c:2796
 msgid "<b>WARNING</b>: camera is missing samples!"
 msgstr "<b>警告</b>: 相机缺少样片！"
 
-#: ../src/common/image.c:2793
+#: ../src/common/image.c:2797
 msgid ""
 "You must provide samples in <a href='https://raw.pixls.us/'>https://raw."
 "pixls.us/</a>"
 msgstr ""
 "您需要在<a href='https://raw.pixls.us/'>https://raw.pixls.us/</a>提供样片"
 
-#: ../src/common/image.c:2794
+#: ../src/common/image.c:2798
 #, c-format
 msgid ""
 "for `%s' `%s'\n"
@@ -5637,12 +5616,12 @@ msgstr ""
 "对于`%s' `%s'\n"
 "尽量和 格式->压缩->色彩深度的设置 一样"
 
-#: ../src/common/image.c:2797
+#: ../src/common/image.c:2801
 msgid "or the <b>RAW won't be readable</b> in next version."
 msgstr "或者在下一个版本中 <b>RAW不可读</b> 。"
 
-#: ../src/common/image.h:169 ../src/common/ratings.c:271
-#: ../src/libs/history.c:763 ../src/libs/snapshots.c:455
+#: ../src/common/image.h:169 ../src/libs/history.c:763
+#: ../src/libs/snapshots.c:455
 msgid "unknown"
 msgstr "未知"
 
@@ -5872,59 +5851,6 @@ msgstr[0] "应用评级 %d 到 %d 张图像"
 msgid "no images selected to apply rating"
 msgstr "没有选中任何图片应用评级"
 
-#: ../src/common/ratings.c:262 ../src/libs/metadata_view.c:354
-msgid "image rejected"
-msgstr "图像已被退稿"
-
-#: ../src/common/ratings.c:264
-msgid "image rated to 0 star"
-msgstr "图像已评级为 0 星"
-
-#: ../src/common/ratings.c:266
-#, c-format
-msgid "image rated to %s"
-msgstr "图像已评级为 %s"
-
-#: ../src/common/ratings.c:293 ../src/views/lighttable.c:299
-msgid "select"
-msgstr "选择"
-
-#: ../src/common/ratings.c:294
-msgid "upgrade"
-msgstr "升级"
-
-#: ../src/common/ratings.c:295
-msgid "downgrade"
-msgstr "降级"
-
-#: ../src/common/ratings.c:299
-msgid "zero"
-msgstr "零"
-
-#: ../src/common/ratings.c:300
-msgid "one"
-msgstr "一"
-
-#: ../src/common/ratings.c:301
-msgid "two"
-msgstr "二"
-
-#: ../src/common/ratings.c:302
-msgid "three"
-msgstr "三"
-
-#: ../src/common/ratings.c:303
-msgid "four"
-msgstr "四"
-
-#: ../src/common/ratings.c:304
-msgid "five"
-msgstr "五"
-
-#: ../src/common/ratings.c:305
-msgid "reject"
-msgstr "退稿"
-
 #: ../src/common/styles.c:225
 #, c-format
 msgid "style with name '%s' already exists"
@@ -6052,7 +5978,7 @@ msgstr "工作中……"
 #: ../src/control/crawler.c:426
 #, c-format
 msgid "ERROR: %s NOT synced XMP → DB"
-msgstr "错误：%s 张图像未从 XMP 同步至数据库"
+msgstr "错误：%s 张图像未从 XMP 同步至数据库。"
 
 #: ../src/control/crawler.c:427 ../src/control/crawler.c:493
 #: ../src/control/crawler.c:562
@@ -6064,12 +5990,12 @@ msgstr "错误：无法写入数据库。目标位置可能已满、离线或处
 #: ../src/control/crawler.c:434
 #, c-format
 msgid "SUCCESS: %s synced XMP → DB"
-msgstr "成功：%s 张图像已从 XMP 同步至数据库"
+msgstr "成功：%s 张图像已从 XMP 同步至数据库。"
 
 #: ../src/control/crawler.c:456
 #, c-format
 msgid "ERROR: %s NOT synced DB → XMP"
-msgstr "错误：%s 张图像未从数据库同步至 XMP"
+msgstr "错误：%s 张图像未从数据库同步至 XMP。"
 
 #: ../src/control/crawler.c:458 ../src/control/crawler.c:517
 #: ../src/control/crawler.c:583
@@ -6084,52 +6010,52 @@ msgstr ""
 #: ../src/control/crawler.c:464
 #, c-format
 msgid "SUCCESS: %s synced DB → XMP"
-msgstr "成功：%s 张图像已从数据库同步至 XMP"
+msgstr "成功：%s 张图像已从数据库同步至 XMP。"
 
 #: ../src/control/crawler.c:490
 #, c-format
 msgid "ERROR: %s NOT synced new (XMP) → old (DB)"
-msgstr "错误：%s 张图像的数据未从新 XMP 同步至旧数据库"
+msgstr "错误：%s 张图像的数据未从新 XMP 同步至旧数据库。"
 
 #: ../src/control/crawler.c:500
 #, c-format
 msgid "SUCCESS: %s synced new (XMP) → old (DB)"
-msgstr "成功：%s 张图像的数据已从新 XMP 同步至旧数据库"
+msgstr "成功：%s 张图像的数据已从新 XMP 同步至旧数据库。"
 
 #: ../src/control/crawler.c:514
 #, c-format
 msgid "ERROR: %s NOT synced new (DB) → old (XMP)"
-msgstr "错误：%s 张图像的数据未从新数据库同步至旧 XMP"
+msgstr "错误：%s 张图像的数据未从新数据库同步至旧 XMP。"
 
 #: ../src/control/crawler.c:522
 #, c-format
 msgid "SUCCESS: %s synced new (DB) → old (XMP)"
-msgstr "成功：%s 张图像的数据已从新数据库同步至旧 XMP"
+msgstr "成功：%s 张图像的数据已从新数据库同步至旧 XMP。"
 
 #: ../src/control/crawler.c:531 ../src/control/crawler.c:599
 #, c-format
 msgid "EXCEPTION: %s has inconsistent timestamps"
-msgstr "异常：%s 的时间戳不统一"
+msgstr "异常：%s 的时间戳不统一。"
 
 #: ../src/control/crawler.c:559
 #, c-format
 msgid "ERROR: %s NOT synced old (XMP) → new (DB)"
-msgstr "错误：%s 张图像的数据未从 旧XMP 同步至新数据库"
+msgstr "错误：%s 张图像的数据未从 旧XMP 同步至新数据库。"
 
 #: ../src/control/crawler.c:568
 #, c-format
 msgid "SUCCESS: %s synced old (XMP) → new (DB)"
-msgstr "成功：%s 张图像的数据已从旧 XMP 同步至新数据库"
+msgstr "成功：%s 张图像的数据已从旧 XMP 同步至新数据库。"
 
 #: ../src/control/crawler.c:580
 #, c-format
 msgid "ERROR: %s NOT synced old (DB) → new (XMP)"
-msgstr "错误：%s 张图像的数据未从旧数据库同步至新 XMP"
+msgstr "错误：%s 张图像的数据未从旧数据库同步至新 XMP。"
 
 #: ../src/control/crawler.c:589
 #, c-format
 msgid "SUCCESS: %s synced old (DB) → new (XMP)"
-msgstr "成功：%s 张图像的数据已从旧数据库同步至新 XMP"
+msgstr "成功：%s 张图像的数据已从旧数据库同步至新 XMP。"
 
 #: ../src/control/crawler.c:671
 #, c-format
@@ -6371,7 +6297,7 @@ msgstr "没有图像要导出"
 msgid "exporting %d / %d to %s"
 msgstr "正在导出 %d 张（共 %d 张）图像到 %s"
 
-#: ../src/control/jobs/control_jobs.c:1417 ../src/views/darkroom.c:707
+#: ../src/control/jobs/control_jobs.c:1417 ../src/views/darkroom.c:703
 #: ../src/views/print.c:337
 #, c-format
 msgid "image `%s' is currently unavailable"
@@ -6837,17 +6763,17 @@ msgid "uniformly"
 msgstr "均匀"
 
 #: ../src/develop/blend_gui.c:103 ../src/develop/blend_gui.c:2316
-#: ../src/develop/blend_gui.c:2969 ../src/develop/imageop.c:2201
+#: ../src/develop/blend_gui.c:2969 ../src/develop/imageop.c:2204
 msgid "drawn mask"
 msgstr "绘制蒙板"
 
 #: ../src/develop/blend_gui.c:104 ../src/develop/blend_gui.c:2124
-#: ../src/develop/blend_gui.c:2976 ../src/develop/imageop.c:2203
+#: ../src/develop/blend_gui.c:2976 ../src/develop/imageop.c:2206
 msgid "parametric mask"
 msgstr "参数蒙版"
 
 #: ../src/develop/blend_gui.c:105 ../src/develop/blend_gui.c:2496
-#: ../src/develop/blend_gui.c:2994 ../src/develop/imageop.c:2205
+#: ../src/develop/blend_gui.c:2994 ../src/develop/imageop.c:2208
 msgid "raster mask"
 msgstr "光栅蒙版"
 
@@ -6887,7 +6813,7 @@ msgstr "模糊后的输出"
 msgid "input after blur"
 msgstr "模糊后的输入"
 
-#: ../src/develop/blend_gui.c:125 ../src/develop/develop.c:2055
+#: ../src/develop/blend_gui.c:125 ../src/develop/develop.c:2064
 #: ../src/gui/accelerators.c:120 ../src/gui/accelerators.c:129
 #: ../src/gui/accelerators.c:203 ../src/imageio/format/avif.c:823
 msgid "on"
@@ -7143,8 +7069,8 @@ msgstr ""
 #: ../src/iop/basicadj.c:600 ../src/iop/colorbalancergb.c:2023
 #: ../src/iop/exposure.c:1001 ../src/iop/exposure.c:1014
 #: ../src/iop/filmic.c:1607 ../src/iop/filmic.c:1619 ../src/iop/filmic.c:1659
-#: ../src/iop/filmicrgb.c:4379 ../src/iop/filmicrgb.c:4389
-#: ../src/iop/filmicrgb.c:4424 ../src/iop/filmicrgb.c:4434
+#: ../src/iop/filmicrgb.c:4473 ../src/iop/filmicrgb.c:4483
+#: ../src/iop/filmicrgb.c:4518 ../src/iop/filmicrgb.c:4528
 #: ../src/iop/graduatednd.c:1096 ../src/iop/negadoctor.c:1034
 #: ../src/iop/profile_gamma.c:651 ../src/iop/profile_gamma.c:657
 #: ../src/iop/relight.c:267 ../src/iop/soften.c:404 ../src/iop/toneequal.c:3116
@@ -7153,7 +7079,7 @@ msgstr ""
 #: ../src/iop/toneequal.c:3131 ../src/iop/toneequal.c:3134
 #: ../src/iop/toneequal.c:3137 ../src/iop/toneequal.c:3140
 #: ../src/iop/toneequal.c:3234 ../src/iop/toneequal.c:3241
-#: ../src/iop/toneequal.c:3251 ../src/views/darkroom.c:2050
+#: ../src/iop/toneequal.c:3251 ../src/views/darkroom.c:2046
 msgid " EV"
 msgstr " EV"
 
@@ -7439,31 +7365,31 @@ msgstr "临时关闭混合蒙板。只对当前模块有效"
 #. For scene-referred workflow, since filmic doesn't brighten as base curve does,
 #. we need an initial exposure boost. This might be too much in some cases but…
 #. (the preset name is used in develop.c)
-#: ../src/develop/develop.c:1338 ../src/gui/presets.c:952
+#: ../src/develop/develop.c:1345 ../src/gui/presets.c:952
 #: ../src/iop/colorbalancergb.c:465 ../src/iop/colorbalancergb.c:466
 #: ../src/iop/exposure.c:276 ../src/iop/exposure.c:285
 msgid "scene-referred default"
 msgstr "场景引用默认值"
 
-#: ../src/develop/develop.c:1812
+#: ../src/develop/develop.c:1821
 #, c-format
 msgid "%s: module `%s' version mismatch: %d != %d"
 msgstr "%s：模块“%s”版本不匹配： %d != %d"
 
-#: ../src/develop/imageop.c:889
+#: ../src/develop/imageop.c:892
 msgid "new instance"
 msgstr "新的副本"
 
-#: ../src/develop/imageop.c:895
+#: ../src/develop/imageop.c:898
 msgid "duplicate instance"
 msgstr "复制副本"
 
-#: ../src/develop/imageop.c:901 ../src/develop/imageop.c:3039
+#: ../src/develop/imageop.c:904 ../src/develop/imageop.c:3042
 #: ../src/libs/masks.c:1098
 msgid "move up"
 msgstr "向上移动"
 
-#: ../src/develop/imageop.c:907 ../src/develop/imageop.c:3040
+#: ../src/develop/imageop.c:910 ../src/develop/imageop.c:3043
 #: ../src/libs/masks.c:1101
 msgid "move down"
 msgstr "向下移动"
@@ -7471,66 +7397,66 @@ msgstr "向下移动"
 #. delete button label and tooltip will be updated based on trash pref
 #. TODO??? this SHOULD be named "delete group" but because of string freeze for 3.8
 #. we can only do that after 3.8 is released.
-#: ../src/develop/imageop.c:913 ../src/develop/imageop.c:3042
+#: ../src/develop/imageop.c:916 ../src/develop/imageop.c:3045
 #: ../src/gui/accelerators.c:143 ../src/gui/presets.c:475
 #: ../src/libs/image.c:281 ../src/libs/image.c:477 ../src/libs/masks.c:1055
 #: ../src/libs/tagging.c:1464 ../src/libs/tagging.c:1552
 msgid "delete"
 msgstr "删除"
 
-#: ../src/develop/imageop.c:920 ../src/develop/imageop.c:3043
+#: ../src/develop/imageop.c:923 ../src/develop/imageop.c:3046
 msgid "rename"
 msgstr "重命名"
 
-#: ../src/develop/imageop.c:977 ../src/develop/imageop.c:2440
+#: ../src/develop/imageop.c:980 ../src/develop/imageop.c:2443
 #, c-format
 msgid "%s is switched on"
 msgstr "%s 已开"
 
-#: ../src/develop/imageop.c:977 ../src/develop/imageop.c:2440
+#: ../src/develop/imageop.c:980 ../src/develop/imageop.c:2443
 #, c-format
 msgid "%s is switched off"
 msgstr "%s 已关"
 
-#: ../src/develop/imageop.c:2195
+#: ../src/develop/imageop.c:2198
 msgid "unknown mask"
 msgstr "未知蒙版"
 
-#: ../src/develop/imageop.c:2199
+#: ../src/develop/imageop.c:2202
 msgid "drawn + parametric mask"
 msgstr "绘制 + 参数蒙版"
 
-#: ../src/develop/imageop.c:2208
+#: ../src/develop/imageop.c:2211
 #, c-format
 msgid "this module has a `%s'"
 msgstr "此模块有 `%s'"
 
-#: ../src/develop/imageop.c:2213
+#: ../src/develop/imageop.c:2216
 #, c-format
 msgid "taken from module %s"
 msgstr "来自模块 %s"
 
-#: ../src/develop/imageop.c:2218
+#: ../src/develop/imageop.c:2221
 msgid "click to display (module must be activated first)"
 msgstr "点击显示（模块必须先激活）"
 
-#: ../src/develop/imageop.c:2313
+#: ../src/develop/imageop.c:2316
 msgid "Purpose"
 msgstr "用途"
 
-#: ../src/develop/imageop.c:2313
+#: ../src/develop/imageop.c:2316
 msgid "Input"
 msgstr "输入"
 
-#: ../src/develop/imageop.c:2313
+#: ../src/develop/imageop.c:2316
 msgid "Process"
 msgstr "流程"
 
-#: ../src/develop/imageop.c:2313
+#: ../src/develop/imageop.c:2316
 msgid "Output"
 msgstr "输出"
 
-#: ../src/develop/imageop.c:2409
+#: ../src/develop/imageop.c:2412
 msgid ""
 "multiple instance actions\n"
 "right-click creates new instance"
@@ -7538,7 +7464,7 @@ msgstr ""
 "多个实例行为\n"
 "右键点击创建新的实例"
 
-#: ../src/develop/imageop.c:2420
+#: ../src/develop/imageop.c:2423
 msgid ""
 "reset parameters\n"
 "ctrl+click to reapply any automatic presets"
@@ -7546,7 +7472,7 @@ msgstr ""
 "重置参数\n"
 "按住 ctrl 并单击可重新应用任何自动预设"
 
-#: ../src/develop/imageop.c:2429
+#: ../src/develop/imageop.c:2432
 msgid ""
 "presets\n"
 "right-click to apply on new instance"
@@ -7554,45 +7480,44 @@ msgstr ""
 "预设\n"
 "单击鼠标右键可应用于新实例"
 
-#: ../src/develop/imageop.c:2639 ../src/develop/imageop.c:2661
+#: ../src/develop/imageop.c:2642 ../src/develop/imageop.c:2664
 msgid "ERROR"
 msgstr "错误"
 
-#: ../src/develop/imageop.c:3038 ../src/develop/imageop.c:3048
+#: ../src/develop/imageop.c:3041 ../src/develop/imageop.c:3051
 #: ../src/gui/accelerators.c:139 ../src/libs/lib.c:1276
 msgid "show"
 msgstr "显示"
 
-#: ../src/develop/imageop.c:3041 ../src/libs/tagging.c:3230
+#: ../src/develop/imageop.c:3044 ../src/libs/tagging.c:3230
 msgid "new"
 msgstr "新建"
 
-#: ../src/develop/imageop.c:3044 ../src/libs/duplicate.c:541
-#: ../src/libs/image.c:492
+#: ../src/develop/imageop.c:3047 ../src/libs/image.c:492
 msgid "duplicate"
 msgstr "复制"
 
-#: ../src/develop/imageop.c:3049
+#: ../src/develop/imageop.c:3052
 msgid "enable"
 msgstr "启用"
 
-#: ../src/develop/imageop.c:3050 ../src/gui/accelerators.c:2245
+#: ../src/develop/imageop.c:3053 ../src/gui/accelerators.c:2245
 msgid "instance"
 msgstr "实例"
 
-#: ../src/develop/imageop.c:3051 ../src/gui/accelerators.c:105
+#: ../src/develop/imageop.c:3054 ../src/gui/accelerators.c:105
 #: ../src/gui/accelerators.c:114 ../src/iop/atrous.c:1581
 #: ../src/libs/lib.c:1277
 msgid "reset"
 msgstr "重置"
 
 #. Adding the outer container
-#: ../src/develop/imageop.c:3052 ../src/gui/preferences.c:774
+#: ../src/develop/imageop.c:3055 ../src/gui/preferences.c:774
 #: ../src/libs/lib.c:1278
 msgid "presets"
 msgstr "预置"
 
-#: ../src/develop/imageop.c:3063
+#: ../src/develop/imageop.c:3067
 msgid "processing module"
 msgstr "处理模块"
 
@@ -7955,7 +7880,7 @@ msgstr ""
 msgid "grouped images"
 msgstr "分组的图像"
 
-#: ../src/dtgtk/thumbnail.c:1272 ../src/iop/ashift.c:5742
+#: ../src/dtgtk/thumbnail.c:1269 ../src/iop/ashift.c:5742
 #: ../src/iop/ashift.c:5809 ../src/iop/ashift.c:5810 ../src/iop/ashift.c:5811
 msgid "fit"
 msgstr "适应"
@@ -8140,7 +8065,7 @@ msgstr "夕阳"
 msgid "underwater"
 msgstr "水下"
 
-#: ../src/external/wb_presets.c:77 ../src/views/darkroom.c:2044
+#: ../src/external/wb_presets.c:77 ../src/views/darkroom.c:2040
 msgid "black & white"
 msgstr "黑白"
 
@@ -8189,12 +8114,12 @@ msgstr "警告：是否交换边界？\n"
 #, c-format
 msgid ""
 "warning: disk backend for thumbnail cache is disabled (cache_disk_backend)\n"
-"if you want to pre-generate thumbnails and for darktable to use them, you "
-"need to enable disk backend for thumbnail cache\n"
+"if you want to pre-generate thumbnails and for Ansel to use them, you need "
+"to enable disk backend for thumbnail cache\n"
 "no thumbnails to be generated, done.\n"
 msgstr ""
-"警告：缩略图磁盘缓存后端处于禁用状态（cache_disk_backend）\n"
-"若您想要预生成缩略图以供 darktable 使用，则需要启用缩略图磁盘缓存后端\n"
+"警告：缩略图磁盘缓存后端处于禁用状态（cache_disk_backend）。\n"
+"若您想要预生成缩略图以供 Ansel 使用，则需要启用缩略图磁盘缓存后端。\n"
 "操作完成，未生成任何缩略图。\n"
 
 #: ../src/generate-cache/main.c:238
@@ -8202,13 +8127,12 @@ msgstr ""
 msgid ""
 "warning: disk backend for full preview cache is disabled "
 "(cache_disk_backend_full)\n"
-"if you want to pre-generate full previews and for darktable to use them, you "
+"if you want to pre-generate full previews and for Ansel to use them, you "
 "need to enable disk backend for full preview cache\n"
 "no full previews to be generated, done.\n"
 msgstr ""
-"警告：完整预览图磁盘缓存后端处于禁用状态（cache_disk_backend_full）\n"
-"若您想要预生成完整预览图以供 darktable 使用，则需要启用完整预览图磁盘缓存后"
-"端\n"
+"警告：完整预览图磁盘缓存后端处于禁用状态（cache_disk_backend_full）。\n"
+"若您想要预生成完整预览图以供 Ansel 使用，则需要启用完整预览图磁盘缓存后端。\n"
 "操作完成，未生成任何缩略图。\n"
 
 #: ../src/generate-cache/main.c:248
@@ -8233,7 +8157,7 @@ msgstr "平移"
 #: ../src/iop/ashift.c:5398 ../src/iop/ashift.c:5500 ../src/iop/ashift.c:5501
 #: ../src/iop/ashift.c:5810 ../src/iop/clipping.c:1919
 #: ../src/iop/clipping.c:2111 ../src/iop/clipping.c:2127
-#: ../src/views/darkroom.c:2186 ../src/views/lighttable.c:393
+#: ../src/views/darkroom.c:2182 ../src/views/lighttable.c:389
 msgid "horizontal"
 msgstr "水平"
 
@@ -8241,7 +8165,7 @@ msgstr "水平"
 #: ../src/iop/ashift.c:5398 ../src/iop/ashift.c:5500 ../src/iop/ashift.c:5501
 #: ../src/iop/ashift.c:5809 ../src/iop/clipping.c:1918
 #: ../src/iop/clipping.c:2112 ../src/iop/clipping.c:2126
-#: ../src/views/darkroom.c:2189 ../src/views/lighttable.c:397
+#: ../src/views/darkroom.c:2185 ../src/views/lighttable.c:393
 msgid "vertical"
 msgstr "垂直"
 
@@ -8307,12 +8231,12 @@ msgid "popup"
 msgstr "弹出窗口"
 
 #: ../src/gui/accelerators.c:112 ../src/gui/accelerators.c:141
-#: ../src/gui/gtk.c:2240 ../src/views/lighttable.c:293
+#: ../src/gui/gtk.c:1507 ../src/views/lighttable.c:293
 msgid "next"
 msgstr "下一个"
 
 #: ../src/gui/accelerators.c:113 ../src/gui/accelerators.c:140
-#: ../src/gui/gtk.c:2241 ../src/views/lighttable.c:294
+#: ../src/gui/gtk.c:1508 ../src/views/lighttable.c:294
 msgid "previous"
 msgstr "前一个"
 
@@ -8326,8 +8250,8 @@ msgstr "第一个"
 
 #: ../src/gui/accelerators.c:119 ../src/gui/accelerators.c:131
 #: ../src/gui/accelerators.c:246 ../src/libs/tagging.c:3101
-#: ../src/views/darkroom.c:1961 ../src/views/darkroom.c:2016
-#: ../src/views/darkroom.c:2158
+#: ../src/views/darkroom.c:1957 ../src/views/darkroom.c:2012
+#: ../src/views/darkroom.c:2154
 msgid "toggle"
 msgstr "切换"
 
@@ -8347,11 +8271,11 @@ msgstr "右键切换"
 msgid "right-on"
 msgstr "右键打开"
 
-#: ../src/gui/accelerators.c:128 ../src/views/darkroom.c:1671
+#: ../src/gui/accelerators.c:128 ../src/views/darkroom.c:1667
 msgid "hold"
 msgstr "保持"
 
-#: ../src/gui/accelerators.c:134 ../src/gui/gtk.c:2239
+#: ../src/gui/accelerators.c:134 ../src/gui/gtk.c:1506
 msgid "activate"
 msgstr "启用"
 
@@ -8624,7 +8548,7 @@ msgstr ""
 "或仅导出特定设备的快捷键\n"
 
 #: ../src/gui/accelerators.c:1995 ../src/gui/accelerators.c:2074
-#: ../src/gui/gtk.c:2290 ../src/imageio/format/pdf.c:659
+#: ../src/gui/gtk.c:1557 ../src/imageio/format/pdf.c:659
 #: ../src/iop/denoiseprofile.c:3581 ../src/iop/lens.cc:2241
 #: ../src/iop/rawdenoise.c:904 ../src/libs/tools/filter.c:438
 msgid "all"
@@ -8781,128 +8705,181 @@ msgstr "%s 未分配"
 msgid "%s assigned to %s"
 msgstr "%s 已分配至 %s"
 
-#: ../src/gui/actions/file.h:21
+#: ../src/gui/actions/file.h:29
+msgid " and "
+msgstr " 以及 "
+
+#: ../src/gui/actions/file.h:34
+msgid " or "
+msgstr " 或者 "
+
+#. case DT_LIB_COLLECT_MODE_AND_NOT:
+#: ../src/gui/actions/file.h:39
+msgid " but not "
+msgstr " 但非 "
+
+#: ../src/gui/actions/file.h:114
 msgid "File"
 msgstr "文件"
 
-#: ../src/gui/actions/file.h:24
+#: ../src/gui/actions/file.h:117
+msgid "Recent collections"
+msgstr "最近用过的集合"
+
+#: ../src/gui/actions/file.h:136
+msgid "Copy files on disk…"
+msgstr "复制磁盘上的文件……"
+
+#: ../src/gui/actions/file.h:138
+msgid "Copy files on disk"
+msgstr "复制磁盘上的文件"
+
+#: ../src/gui/actions/file.h:141
+msgid "Move files on disk…"
+msgstr "移动磁盘上的文件……"
+
+#: ../src/gui/actions/file.h:143
+msgid "Move files on disk"
+msgstr "移动磁盘上的文件"
+
+#: ../src/gui/actions/file.h:146 ../src/gui/actions/file.h:148
+msgid "Create a blended HDR"
+msgstr "创建混合 HDR"
+
+#: ../src/gui/actions/file.h:153 ../src/gui/actions/file.h:155
+msgid "Copy distant images locally"
+msgstr "将远程图像复制到本地"
+
+#: ../src/gui/actions/file.h:158 ../src/gui/actions/file.h:160
+msgid "Resynchronize distant images"
+msgstr "重新同步远程图像"
+
+#: ../src/gui/actions/file.h:165
 msgid "Remove from library"
 msgstr "从照片库中移除"
 
-#: ../src/gui/actions/file.h:26
+#: ../src/gui/actions/file.h:167
 msgid "Remove files from library"
 msgstr "从照片库中移除"
 
-#: ../src/gui/actions/file.h:29
+#: ../src/gui/actions/file.h:170
 msgid "Delete on disk"
 msgstr "从磁盘上删除"
 
-#: ../src/gui/actions/file.h:31
+#: ../src/gui/actions/file.h:172
 msgid "Delete files on disk"
 msgstr "从磁盘上删除"
 
-#: ../src/gui/actions/file.h:34 ../src/gui/actions/file.h:35
+#: ../src/gui/actions/file.h:177 ../src/gui/actions/file.h:178
 msgid "Quit"
 msgstr "退出"
 
-#: ../src/gui/actions/edit.h:258
+#: ../src/gui/actions/edit.h:260
 msgid "Copy is allowed only with exactly one image selected"
 msgstr "只允许选择一张图像进行复制。"
 
-#: ../src/gui/actions/edit.h:278 ../src/gui/actions/edit.h:294
+#: ../src/gui/actions/edit.h:280 ../src/gui/actions/edit.h:296
 msgid "Paste needs selected images to work"
 msgstr "需要选中图像之后才能粘贴。"
 
-#: ../src/gui/actions/edit.h:304
+#: ../src/gui/actions/edit.h:306
 msgid "open sidecar file"
 msgstr "打开附属文件"
 
-#: ../src/gui/actions/edit.h:305 ../src/gui/preferences.c:997
+#: ../src/gui/actions/edit.h:307 ../src/gui/preferences.c:997
 #: ../src/libs/collect.c:463 ../src/libs/geotagging.c:931
 #: ../src/libs/import.c:1274 ../src/libs/import.c:1378 ../src/libs/styles.c:512
 msgid "_open"
 msgstr "打开(_o)"
 
-#: ../src/gui/actions/edit.h:337
+#: ../src/gui/actions/edit.h:339
 msgid "XMP sidecar files"
 msgstr "XMP 附属文件"
 
-#: ../src/gui/actions/edit.h:342 ../src/gui/preferences.c:1011
+#: ../src/gui/actions/edit.h:344 ../src/gui/preferences.c:1011
 #: ../src/iop/lut3d.c:1588 ../src/libs/geotagging.c:947
 #: ../src/libs/styles.c:526
 msgid "all files"
 msgstr "全部文件"
 
-#: ../src/gui/actions/edit.h:352
+#: ../src/gui/actions/edit.h:354
 #, c-format
 msgid "error loading file '%s'"
 msgstr "读取文件“%s”出错"
 
-#: ../src/gui/actions/edit.h:379
+#: ../src/gui/actions/edit.h:381
 msgid "Duplication needs selected images to work"
 msgstr "需要选中图像之后才能创建副本。"
 
-#: ../src/gui/actions/edit.h:387
+#: ../src/gui/actions/edit.h:389
 msgid "Creating new developments needs selected images to work"
 msgstr "需要选中图像之后才能创建新的副本。"
 
-#: ../src/gui/actions/edit.h:392
+#: ../src/gui/actions/edit.h:394
 msgid "Edit"
 msgstr "编辑"
 
-#: ../src/gui/actions/edit.h:395
+#: ../src/gui/actions/edit.h:397
 msgid "Undo"
 msgstr "撤消"
 
-#: ../src/gui/actions/edit.h:396
+#: ../src/gui/actions/edit.h:398
 msgid "Undo last action"
 msgstr "撤消上一个操作"
 
-#: ../src/gui/actions/edit.h:399
+#: ../src/gui/actions/edit.h:401
 msgid "Redo"
 msgstr "重做"
 
-#: ../src/gui/actions/edit.h:400
+#: ../src/gui/actions/edit.h:402
 msgid "Redo last action"
 msgstr "重做上一个操作"
 
-#: ../src/gui/actions/edit.h:405 ../src/gui/actions/edit.h:406
+#: ../src/gui/actions/edit.h:407 ../src/gui/actions/edit.h:408
 msgid "Copy development"
 msgstr "复制修改"
 
-#: ../src/gui/actions/edit.h:409 ../src/gui/actions/edit.h:411
+#: ../src/gui/actions/edit.h:411 ../src/gui/actions/edit.h:413
 msgid "Paste development (all)"
 msgstr "粘贴修改（全部）"
 
-#: ../src/gui/actions/edit.h:414 ../src/gui/actions/edit.h:416
+#: ../src/gui/actions/edit.h:416
+msgid "Paste development (parts)…"
+msgstr "粘贴修改（部分）……"
+
+#: ../src/gui/actions/edit.h:418
 msgid "Paste development (parts)"
 msgstr "粘贴修改（部分）"
 
-#: ../src/gui/actions/edit.h:421 ../src/gui/actions/edit.h:423
+#: ../src/gui/actions/edit.h:423
+msgid "Load development from XMP…"
+msgstr "从 XMP 文件中加载修改……"
+
+#: ../src/gui/actions/edit.h:425
 msgid "Load development from XMP"
 msgstr "从 XMP 文件中加载修改"
 
-#: ../src/gui/actions/edit.h:426 ../src/gui/actions/edit.h:428
+#: ../src/gui/actions/edit.h:428 ../src/gui/actions/edit.h:430
 msgid "Create new development"
 msgstr "创建全新的副本"
 
-#: ../src/gui/actions/edit.h:431 ../src/gui/actions/edit.h:433
+#: ../src/gui/actions/edit.h:433 ../src/gui/actions/edit.h:435
 msgid "Duplicate existing development"
 msgstr "创建带当前修改的副本"
 
-#: ../src/gui/actions/edit.h:436 ../src/gui/actions/edit.h:438
+#: ../src/gui/actions/edit.h:438 ../src/gui/actions/edit.h:440
 msgid "Compress development history"
 msgstr "压缩修改历史"
 
-#: ../src/gui/actions/edit.h:441 ../src/gui/actions/edit.h:443
+#: ../src/gui/actions/edit.h:443 ../src/gui/actions/edit.h:445
 msgid "Delete development"
 msgstr "删除修改"
 
-#: ../src/gui/actions/edit.h:448
+#: ../src/gui/actions/edit.h:450
 msgid "Key shortcuts"
 msgstr "快捷键"
 
-#: ../src/gui/actions/edit.h:449
+#: ../src/gui/actions/edit.h:451
 msgid "Preferences"
 msgstr "首选项"
 
@@ -8954,111 +8931,144 @@ msgstr "重新同步 XMP 文件与库"
 msgid "Save all developments to XMP"
 msgstr "将全部修改保存到 XMP 文件"
 
-#: ../src/gui/actions/display.h:34
+#: ../src/gui/actions/display.h:35
 msgid "Ansel - Darkroom preview"
 msgstr "Ansel - 暗房预览"
 
-#: ../src/gui/actions/display.h:229
+#: ../src/gui/actions/display.h:204
 msgid "To reactivate the header bar, use : Ctrl + H"
 msgstr "要重新激活顶栏，使用 Ctrl + H"
 
-#: ../src/gui/actions/display.h:336
+#: ../src/gui/actions/display.h:365
 msgid "Display"
 msgstr "显示"
 
 #. Parent sub-menu color profile
-#: ../src/gui/actions/display.h:340
+#: ../src/gui/actions/display.h:369
 msgid "Monitor color profile"
 msgstr "监视器颜色配置文件"
 
 #. Parent sub-menu profile intent
-#: ../src/gui/actions/display.h:355
-msgid "Color intent"
-msgstr "颜色意图"
+#: ../src/gui/actions/display.h:384
+msgid "Monitor color intent"
+msgstr "监视器颜色意图"
 
-#: ../src/gui/actions/display.h:358
+#: ../src/gui/actions/display.h:387
 msgid "Perceptual"
 msgstr "可感知度"
 
-#: ../src/gui/actions/display.h:358
+#: ../src/gui/actions/display.h:387
 msgid "Relative colorimetric"
 msgstr "相对色度"
 
-#: ../src/gui/actions/display.h:358
+#: ../src/gui/actions/display.h:387
 msgctxt "rendering intent"
 msgid "Saturation"
 msgstr "饱和度"
 
-#: ../src/gui/actions/display.h:359
+#: ../src/gui/actions/display.h:388
 msgid "Absolute colorimetric"
 msgstr "绝对色度"
 
 #. Parent sub-menu panels
-#: ../src/gui/actions/display.h:369
+#: ../src/gui/actions/display.h:398
 msgid "Panels"
 msgstr "面板"
 
 #. Children of sub-menu panels
-#: ../src/gui/actions/display.h:373
+#: ../src/gui/actions/display.h:402
 msgid "Left"
 msgstr "左侧面板"
 
-#: ../src/gui/actions/display.h:375
+#: ../src/gui/actions/display.h:404
 msgid "Toggle left panel visibility"
 msgstr "切换左侧面板的可见性"
 
-#: ../src/gui/actions/display.h:378
+#: ../src/gui/actions/display.h:407
 msgid "Right"
 msgstr "右侧面板"
 
-#: ../src/gui/actions/display.h:380
+#: ../src/gui/actions/display.h:409
 msgid "Toggle right panel visibility"
 msgstr "切换右侧面板的可见性"
 
-#: ../src/gui/actions/display.h:383
+#: ../src/gui/actions/display.h:412
 msgid "Top"
 msgstr "顶部面板"
 
-#: ../src/gui/actions/display.h:385
+#: ../src/gui/actions/display.h:414
 msgid "Toggle top bar visibility"
 msgstr "切换顶部面板的可见性"
 
-#: ../src/gui/actions/display.h:388
+#: ../src/gui/actions/display.h:417
 msgid "Bottom"
 msgstr "底部面板"
 
-#: ../src/gui/actions/display.h:390
+#: ../src/gui/actions/display.h:419
 msgid "Toggle bottom bar visibility"
 msgstr "切换底部面板的可见性"
 
-#: ../src/gui/actions/display.h:393
+#: ../src/gui/actions/display.h:422
 msgid "Filmstrip"
 msgstr "胶卷条"
 
-#: ../src/gui/actions/display.h:395
+#: ../src/gui/actions/display.h:424
 msgid "Toggle filmstrip visibility"
 msgstr "切换胶卷条的可见性"
 
-#: ../src/gui/actions/display.h:400
+#. Lighttable & Filmstrip options
+#: ../src/gui/actions/display.h:430
+msgid "Thumbnail overlays"
+msgstr "缩略图叠加层"
+
+#: ../src/gui/actions/display.h:433
+msgid "Always hide"
+msgstr "总是隐藏"
+
+#: ../src/gui/actions/display.h:435
+msgid "Always hide thumbnail overlays"
+msgstr "总是隐藏缩略图叠加层"
+
+#: ../src/gui/actions/display.h:438
+msgid "Show on hover"
+msgstr "鼠标悬停时显示"
+
+#: ../src/gui/actions/display.h:440
+msgid "Show thumbnail overlays on hover"
+msgstr "鼠标悬停时显示缩略图叠加层"
+
+#: ../src/gui/actions/display.h:443
+msgid "Always show"
+msgstr "总是显示"
+
+#: ../src/gui/actions/display.h:445
+msgid "Always show thumbnail overlays"
+msgstr "总是显示缩略图叠加层"
+
+#: ../src/gui/actions/display.h:448 ../src/gui/actions/display.h:449
+msgid "Collapse grouped images"
+msgstr "折叠分组的图像"
+
+#: ../src/gui/actions/display.h:452 ../src/gui/actions/display.h:453
+msgid "Overlay focus peaking"
+msgstr "叠加焦点峰值"
+
+#: ../src/gui/actions/display.h:458 ../src/gui/actions/display.h:460
 msgid "Full screen"
 msgstr "全屏"
 
-#: ../src/gui/actions/display.h:403
-msgid "Fullscreen window"
-msgstr "全屏"
-
 #. specific top/bottom toggles
-#: ../src/gui/actions/display.h:406
+#: ../src/gui/actions/display.h:465
 msgid "Toggle all panels visibility"
 msgstr "切换所有面板的可见性"
 
-#: ../src/gui/actions/display.h:407
+#: ../src/gui/actions/display.h:466
 msgid "Toggle header menu bar visibility"
 msgstr "切换菜单栏可见性"
 
-#: ../src/gui/actions/views.h:51
-msgid "Switch views"
-msgstr "切换视图"
+#: ../src/gui/actions/views.h:53
+msgid "Ateliers"
+msgstr "视图"
 
 #: ../src/gui/actions/help.h:14
 #, c-format
@@ -9066,6 +9076,8 @@ msgid ""
 "Copyright © darktable authors 2009-2022\n"
 "Copyright © Aurélien Pierre 2022-%s"
 msgstr ""
+"版权所有 © darktable 开发者 2009-2022\n"
+"版权所有 © Aurélien Pierre 2022-%s"
 
 #: ../src/gui/actions/help.h:20
 msgid "Website"
@@ -9083,111 +9095,240 @@ msgstr "与……"
 msgid "translator-credits"
 msgstr "翻译贡献者"
 
-#: ../src/gui/actions/help.h:115
+#: ../src/gui/actions/help.h:127
 msgid "do you want to access ansel.photos ?"
 msgstr "您是否要访问 ansel.photos？"
 
-#: ../src/gui/actions/help.h:120
+#: ../src/gui/actions/help.h:132
 msgid "access the online usermanual?"
 msgstr "查看在线用户文档？"
 
-#: ../src/gui/actions/help.h:132
+#: ../src/gui/actions/help.h:144
 msgid "help url opened in web browser"
 msgstr "在网页浏览器中打开的帮助链接"
 
-#: ../src/gui/actions/help.h:136
+#: ../src/gui/actions/help.h:148
 msgid "error while opening help url in web browser"
 msgstr "无法在浏览器中打开帮助文档 url"
 
-#: ../src/gui/actions/help.h:147
+#: ../src/gui/actions/help.h:159
 msgid "there is no help available for this element"
 msgstr "此元素没有可用的帮助"
 
-#: ../src/gui/actions/help.h:194
+#: ../src/gui/actions/help.h:206
 msgid "Online documentation"
 msgstr "在线文档"
 
-#: ../src/gui/actions/help.h:195
+#: ../src/gui/actions/help.h:207
 msgid "Book a training session"
 msgstr "订购教学课程"
 
-#: ../src/gui/actions/help.h:196
-msgid "Support chat"
-msgstr "聊天室"
+#: ../src/gui/actions/help.h:208
+msgid "Ask a question"
+msgstr "提问"
 
-#: ../src/gui/actions/help.h:198
+#: ../src/gui/actions/help.h:209
+msgid "Join the support chat"
+msgstr "加入聊天室"
+
+#: ../src/gui/actions/help.h:210
+msgid "Join the support forum"
+msgstr "加入用户支持论坛"
+
+#: ../src/gui/actions/help.h:212
 msgid "Open contextual help"
 msgstr "打开交互式帮助"
 
-#: ../src/gui/actions/help.h:199
+#: ../src/gui/actions/help.h:213
 msgid "Table of key shortcuts"
 msgstr "快捷键列表"
 
-#: ../src/gui/actions/help.h:201
+#: ../src/gui/actions/help.h:215
 msgid "Donate"
 msgstr "捐赠"
 
-#: ../src/gui/actions/help.h:202
+#: ../src/gui/actions/help.h:216
 msgid "About"
 msgstr "关于"
 
-#: ../src/gui/gtk.c:452
-msgid "closing darktable..."
-msgstr "正在关闭 darktable……"
+#: ../src/gui/actions/image.h:157
+msgid "Image"
+msgstr "图像"
 
-#. This is utterly broken and deeply messed-up as it breaks tooltips positionning while being generally ugly.
-#. TODO: 1. implement API `const char * get_shortcut_for_widget(GtkWidget *w)` in accelerators.c
-#. 2. call it in the tooltip constructor where relevant
-#. 3. append the shortcut path as text to the tooltip text content __BEFORE__ initialization of the widget.
-#. 4. Find out where Diederik Ter Rahe lives and ensure he never writes another line of code.
-#. g_signal_override_class_handler("query-tooltip", gtk_widget_get_type(), G_CALLBACK(dt_shortcut_tooltip_callback));
-#: ../src/gui/gtk.c:780
-msgid "switch views"
-msgstr "切换视图"
+#. Rotation
+#: ../src/gui/actions/image.h:161
+msgid "Rotate"
+msgstr "旋转"
 
-#: ../src/gui/gtk.c:781
-msgid "tethering"
-msgstr "连机拍摄"
+#: ../src/gui/actions/image.h:164
+msgid "⭯ 90° counter-clockwise"
+msgstr "⭯ 90° 逆时针"
 
-#: ../src/gui/gtk.c:784
-msgid "map"
-msgstr "地图"
+#: ../src/gui/actions/image.h:166
+msgid "Rotate 90° counter-clockwise"
+msgstr "逆时针旋转 90°"
 
-#: ../src/gui/gtk.c:785 ../src/views/slideshow.c:341
-msgid "slideshow"
-msgstr "幻灯片放映"
+#: ../src/gui/actions/image.h:169
+msgid "⭮ 90° clockwise"
+msgstr "⭮ 90° 顺时针"
 
-#. Print button
-#: ../src/gui/gtk.c:786 ../src/libs/print_settings.c:2725
-msgid "print"
-msgstr "打印"
+#: ../src/gui/actions/image.h:171
+msgid "Rotate 90° clockwise"
+msgstr "顺时针旋转 90°"
 
-#: ../src/gui/gtk.c:791
-msgid "reinitialise input devices"
+#: ../src/gui/actions/image.h:176 ../src/gui/actions/image.h:178
+msgid "Reset rotation"
+msgstr "重置旋转"
+
+#. Color labels
+#: ../src/gui/actions/image.h:182
+msgid "Color labels"
+msgstr "颜色标签"
+
+#: ../src/gui/actions/image.h:185
+msgid "<span foreground='#BB2222'>⬤</span> Red"
+msgstr "<span foreground='#BB2222'>⬤</span> 红色"
+
+#: ../src/gui/actions/image.h:187
+msgid "Toggle red label"
+msgstr "切换红色标签"
+
+#: ../src/gui/actions/image.h:190
+msgid "<span foreground='#BBBB22'>⬤</span> Yellow"
+msgstr "<span foreground='#BBBB22'>⬤</span> 黄色"
+
+#: ../src/gui/actions/image.h:192
+msgid "Toggle yellow label"
+msgstr "切换黄色标签"
+
+#: ../src/gui/actions/image.h:195
+msgid "<span foreground='#22BB22'>⬤</span> Green"
+msgstr "<span foreground='#22BB22'>⬤</span> 绿色"
+
+#: ../src/gui/actions/image.h:197
+msgid "Toggle green label"
+msgstr "切换绿色标签"
+
+#: ../src/gui/actions/image.h:200
+msgid "<span foreground='#2222BB'>⬤</span> Blue"
+msgstr "<span foreground='#2222BB'>⬤</span> 蓝色"
+
+#: ../src/gui/actions/image.h:202
+msgid "Toggle blue label"
+msgstr "切换蓝色标签"
+
+#: ../src/gui/actions/image.h:205
+msgid "<span foreground='#BB22BB'>⬤</span> Magenta"
+msgstr "<span foreground='#BB22BB'>⬤</span> 品红色"
+
+#: ../src/gui/actions/image.h:207
+msgid "Toggle magenta label"
+msgstr "切换品红色标签"
+
+#: ../src/gui/actions/image.h:212
+msgid "<span foreground='#BBBBBB'>⬤</span> Clear labels"
+msgstr "<span foreground='#BBBBBB'>⬤</span> 清除标签"
+
+#: ../src/gui/actions/image.h:214
+msgid "Clear color labels"
+msgstr "清除颜色标签"
+
+#. Ratings
+#: ../src/gui/actions/image.h:218
+msgid "Ratings"
+msgstr "评分"
+
+#: ../src/gui/actions/image.h:221
+msgid "⦻ Reject"
+msgstr "⦻ 拒绝"
+
+#: ../src/gui/actions/image.h:223
+msgid "Reject image"
+msgstr "拒绝图像"
+
+#: ../src/gui/actions/image.h:226
+msgid "★"
+msgstr "★"
+
+#: ../src/gui/actions/image.h:228
+msgid "Rate 1 star"
+msgstr "评为 1 星"
+
+#: ../src/gui/actions/image.h:231
+msgid "★★"
+msgstr "★★"
+
+#: ../src/gui/actions/image.h:233
+msgid "Rate 2 stars"
+msgstr "评为 2 星"
+
+#: ../src/gui/actions/image.h:236
+msgid "★★★"
+msgstr "★★★"
+
+#: ../src/gui/actions/image.h:238
+msgid "Rate 3 stars"
+msgstr "评为 3 星"
+
+#: ../src/gui/actions/image.h:241
+msgid "★★★★"
+msgstr "★★★★"
+
+#: ../src/gui/actions/image.h:243
+msgid "Rate 4 stars"
+msgstr "评为 4 星"
+
+#: ../src/gui/actions/image.h:246
+msgid "★★★★★"
+msgstr "★★★★★"
+
+#: ../src/gui/actions/image.h:248
+msgid "Rate 5 stars"
+msgstr "评为 5 星"
+
+#: ../src/gui/actions/image.h:253
+msgid "⭘ Clear rating"
+msgstr "⭘ 清除评分"
+
+#: ../src/gui/actions/image.h:255
+msgid "Clear rating"
+msgstr "清除评分"
+
+#. Reload EXIF
+#: ../src/gui/actions/image.h:261 ../src/gui/actions/image.h:263
+msgid "Reload EXIF from file"
+msgstr "从文件中重新加载 EXIF"
+
+#. Group/Ungroup
+#: ../src/gui/actions/image.h:269 ../src/gui/actions/image.h:271
+msgid "Group images"
+msgstr "合并图像到同一分组"
+
+#: ../src/gui/actions/image.h:274 ../src/gui/actions/image.h:276
+msgid "Ungroup images"
+msgstr "取消图像分组"
+
+#: ../src/gui/gtk.c:397
+msgid "closing Ansel..."
+msgstr "正在关闭 Ansel……"
+
+#: ../src/gui/gtk.c:721
+msgid "Reinitialise input devices"
 msgstr "重新初始化输入设备"
-
-#: ../src/gui/gtk.c:839
-msgid "toggle focus-peaking mode"
-msgstr "切换焦点峰值模式"
-
-#. toggle focus peaking everywhere
-#: ../src/gui/gtk.c:845
-msgid "toggle focus peaking"
-msgstr "切换焦点峰值"
 
 #. font name can only use period as decimal separator
 #. but printf format strings use comma for some locales, so replace comma with period
-#: ../src/gui/gtk.c:1996
+#: ../src/gui/gtk.c:1263
 #, c-format
 msgid "%.1f"
 msgstr "%.1f"
 
-#: ../src/gui/gtk.c:1998
+#: ../src/gui/gtk.c:1265
 #, c-format
 msgid "Sans %s"
 msgstr "Sans %s"
 
-#: ../src/gui/gtk.c:2297 ../src/gui/gtk.c:2302 ../src/gui/gtk.c:2307
+#: ../src/gui/gtk.c:1564 ../src/gui/gtk.c:1569 ../src/gui/gtk.c:1574
 msgid "tabs"
 msgstr "选项卡"
 
@@ -9478,12 +9619,12 @@ msgid "$(TAGS) - tags as set in metadata settings"
 msgstr "$(TAGS) - 元数据设定中的标签"
 
 #: ../src/gui/gtkentry.c:242
-msgid "$(DARKTABLE.NAME) - darktable name"
-msgstr "$(DARKTABLE.NAME) - darktable 名"
+msgid "$(DARKTABLE.NAME) - Ansel name"
+msgstr "$(DARKTABLE.NAME) - Ansel 名"
 
 #: ../src/gui/gtkentry.c:243
-msgid "$(DARKTABLE.VERSION) - current darktable version"
-msgstr "$(DARKTABLE.VERSION) - 当前 darktable 版本号"
+msgid "$(DARKTABLE.VERSION) - current Ansel version"
+msgstr "$(DARKTABLE.VERSION) - 当前 Ansel 版本号"
 
 #: ../src/gui/guides.c:30 ../src/iop/colorcorrection.c:263
 msgid "grid"
@@ -9555,7 +9696,7 @@ msgid "global guide overlay settings"
 msgstr "全局参考线叠加层设置"
 
 #: ../src/gui/guides.c:707 ../src/gui/guides.c:716 ../src/gui/guides.c:724
-#: ../src/gui/guides.c:737 ../src/views/darkroom.c:2158
+#: ../src/gui/guides.c:737 ../src/views/darkroom.c:2154
 msgid "guide lines"
 msgstr "参考线"
 
@@ -10077,7 +10218,7 @@ msgstr "不能从未改变的图像创建样式"
 msgid "Menu buttons"
 msgstr "菜单按钮"
 
-#: ../src/libs/tools/menu_buttons.c:79
+#: ../src/libs/tools/menu_buttons.c:80
 msgid "Close the current view and go back to lighttable"
 msgstr "关闭当前视图并回到光台"
 
@@ -10745,8 +10886,8 @@ msgid "send as email"
 msgstr "作为邮件发送"
 
 #: ../src/imageio/storage/example.c:198
-msgid "images exported from darktable"
-msgstr "从 darktable 导出的图像"
+msgid "images exported from Ansel"
+msgstr "从 Ansel 导出的图像"
 
 #: ../src/imageio/storage/example.c:251
 msgid "could not launch email client!"
@@ -10769,36 +10910,44 @@ msgstr "[rcd_demosaic] 区域太小"
 msgid "scan restore"
 msgstr "扫描恢复"
 
-#: ../src/libs/tools/menu.c:32
+#: ../src/libs/tools/menu.c:33
 msgid "Main menu"
 msgstr "主菜单"
 
 #. Init top-level menus
-#: ../src/libs/tools/menu.c:67
+#: ../src/libs/tools/menu.c:69
 msgid "_File"
 msgstr "文件（F）"
 
-#: ../src/libs/tools/menu.c:67
+#: ../src/libs/tools/menu.c:69
 msgid "_Edit"
 msgstr "编辑（E）"
 
-#: ../src/libs/tools/menu.c:67
+#: ../src/libs/tools/menu.c:69
 msgid "_Selection"
 msgstr "选择（S）"
 
-#: ../src/libs/tools/menu.c:67
+#: ../src/libs/tools/menu.c:69
+msgid "_Image"
+msgstr "图像（_I）"
+
+#: ../src/libs/tools/menu.c:69
+msgid "_Styles"
+msgstr "样式（_S）"
+
+#: ../src/libs/tools/menu.c:69
 msgid "_Run"
 msgstr "运行（R）"
 
-#: ../src/libs/tools/menu.c:67
+#: ../src/libs/tools/menu.c:69
 msgid "_Display"
 msgstr "显示（D）"
 
-#: ../src/libs/tools/menu.c:67
+#: ../src/libs/tools/menu.c:69
 msgid "_Ateliers"
 msgstr "视图（A）"
 
-#: ../src/libs/tools/menu.c:67
+#: ../src/libs/tools/menu.c:69
 msgid "_Help"
 msgstr "帮助（H）"
 
@@ -10806,11 +10955,11 @@ msgstr "帮助（H）"
 msgid "mask toolbar"
 msgstr "蒙版工具栏"
 
-#: ../src/libs/tools/mask_toolbar.c:107
+#: ../src/libs/tools/mask_toolbar.c:109
 msgid "Mask opacity"
 msgstr "蒙板透明度"
 
-#: ../src/libs/tools/mask_toolbar.c:114
+#: ../src/libs/tools/mask_toolbar.c:116
 msgid ""
 "Control the opacity of the currently-selected mask form.\n"
 "This works only after a mask has been selected by click."
@@ -10818,11 +10967,11 @@ msgstr ""
 "控制当前选择的蒙版形状的透明度。\n"
 "必须首先通过点击选择一个蒙版。"
 
-#: ../src/libs/tools/mask_toolbar.c:118
+#: ../src/libs/tools/mask_toolbar.c:120
 msgid "Lock masks"
 msgstr "锁定蒙版"
 
-#: ../src/libs/tools/mask_toolbar.c:120
+#: ../src/libs/tools/mask_toolbar.c:122
 msgid "Prevent accidental masks displacement when moving the view"
 msgstr "防止在移动视图时意外移动蒙版。"
 
@@ -11069,7 +11218,7 @@ msgid "add or remove local contrast, sharpness, acutance"
 msgstr "增加或消除局部对比度、清晰度、锐度"
 
 #: ../src/iop/atrous.c:139 ../src/iop/bilateral.cc:99 ../src/iop/diffuse.c:147
-#: ../src/iop/exposure.c:131 ../src/iop/filmicrgb.c:354
+#: ../src/iop/exposure.c:131 ../src/iop/filmicrgb.c:355
 #: ../src/iop/graduatednd.c:150 ../src/iop/negadoctor.c:156
 #: ../src/iop/rgbcurve.c:142 ../src/iop/rgblevels.c:122 ../src/iop/shadhi.c:197
 #: ../src/iop/tonecurve.c:213 ../src/iop/toneequal.c:305
@@ -11239,7 +11388,7 @@ msgid ""
 msgstr "更改每个特征尺寸的边缘光晕，仅当更改亮度和色度选项卡后才有效果"
 
 #: ../src/iop/atrous.c:1755 ../src/iop/colorbalancergb.c:1989
-#: ../src/iop/colorzones.c:2507 ../src/iop/filmicrgb.c:4346
+#: ../src/iop/colorzones.c:2507 ../src/iop/filmicrgb.c:4440
 #: ../src/iop/lowlight.c:836 ../src/iop/rawdenoise.c:932
 #: ../src/iop/toneequal.c:3161
 msgid "graph"
@@ -11358,7 +11507,7 @@ msgstr "线性、RGB、显示引用"
 
 #: ../src/iop/basecurve.c:341 ../src/iop/basicadj.c:149
 #: ../src/iop/colorbalance.c:161 ../src/iop/colorbalancergb.c:184
-#: ../src/iop/dither.c:105 ../src/iop/filmicrgb.c:356
+#: ../src/iop/dither.c:105 ../src/iop/filmicrgb.c:357
 #: ../src/iop/graduatednd.c:152 ../src/iop/negadoctor.c:158
 #: ../src/iop/profile_gamma.c:103 ../src/iop/rgbcurve.c:144
 #: ../src/iop/rgblevels.c:124 ../src/iop/vignette.c:160
@@ -11367,7 +11516,7 @@ msgid "non-linear, RGB"
 msgstr "非线性、RGB"
 
 #: ../src/iop/basecurve.c:342 ../src/iop/dither.c:104 ../src/iop/dither.c:106
-#: ../src/iop/filmicrgb.c:357 ../src/iop/graduatednd.c:153
+#: ../src/iop/filmicrgb.c:358 ../src/iop/graduatednd.c:153
 #: ../src/iop/negadoctor.c:159 ../src/iop/profile_gamma.c:104
 #: ../src/iop/rgblevels.c:125 ../src/iop/vignette.c:159
 #: ../src/iop/vignette.c:161 ../src/iop/watermark.c:298
@@ -11936,7 +12085,7 @@ msgid "censorize license plates and body parts for privacy"
 msgstr "对车牌或人体部分打码以保护隐私"
 
 #: ../src/iop/censorize.c:84 ../src/iop/colorin.c:137
-#: ../src/iop/filmicrgb.c:355 ../src/iop/graduatednd.c:151
+#: ../src/iop/filmicrgb.c:356 ../src/iop/graduatednd.c:151
 msgid "linear or non-linear, RGB, scene-referred"
 msgstr "线性或非线性、RGB、场景引用"
 
@@ -12305,10 +12454,10 @@ msgstr ""
 
 #. //////////////////////// PAGE SETTINGS
 #: ../src/iop/channelmixerrgb.c:3962 ../src/iop/clipping.c:2104
-#: ../src/iop/colorbalancergb.c:1807 ../src/iop/filmicrgb.c:4361
+#: ../src/iop/colorbalancergb.c:1807 ../src/iop/filmicrgb.c:4455
 #: ../src/iop/negadoctor.c:848 ../src/iop/toneequal.c:3109
-#: ../src/libs/collect.c:3242 ../src/libs/image.c:457
-#: ../src/libs/print_settings.c:2351 ../src/views/lighttable.c:401
+#: ../src/libs/collect.c:3205 ../src/libs/image.c:457
+#: ../src/libs/print_settings.c:2351 ../src/views/lighttable.c:397
 msgid "page"
 msgstr "页面"
 
@@ -13052,7 +13201,7 @@ msgstr "优化RGB曲线以移除色偏"
 
 #: ../src/iop/colorbalancergb.c:171
 msgid "color balance rgb"
-msgstr "rgb 色彩平衡"
+msgstr "色彩平衡 RGB"
 
 #: ../src/iop/colorbalancergb.c:176
 msgid ""
@@ -14743,7 +14892,7 @@ msgstr "映射后所期望的目标曝光"
 
 #: ../src/iop/filmic.c:179
 msgid "this module is deprecated. better use filmic rgb module instead."
-msgstr "此模块已弃用，请用“胶片 RGB（filmic RGB）”模块替代。"
+msgstr "此模块已弃用，请使用胶片 RGB 模块替代。"
 
 #: ../src/iop/filmic.c:306
 msgid "09 EV (low-key)"
@@ -14797,7 +14946,7 @@ msgstr ""
 "调整以符合被摄对象的正常亮度。\n"
 "除了在背光的情况下，该值应该是18%左右。"
 
-#: ../src/iop/filmic.c:1608 ../src/iop/filmicrgb.c:4381
+#: ../src/iop/filmic.c:1608 ../src/iop/filmicrgb.c:4475
 msgid ""
 "number of stops between middle gray and pure white.\n"
 "this is a reading a lightmeter would give you on the scene.\n"
@@ -14807,7 +14956,7 @@ msgstr ""
 "可以在拍摄现场使用光度计测量。\n"
 "调整以避免高光削色"
 
-#: ../src/iop/filmic.c:1620 ../src/iop/filmicrgb.c:4391
+#: ../src/iop/filmic.c:1620 ../src/iop/filmicrgb.c:4485
 msgid ""
 "number of stops between middle gray and pure black.\n"
 "this is a reading a lightmeter would give you on the scene.\n"
@@ -14827,8 +14976,8 @@ msgstr ""
 "放大或缩小计算获得的动态范围。\n"
 "请与“自动调整色阶”一同使用。"
 
-#: ../src/iop/filmic.c:1637 ../src/iop/filmicrgb.c:4404
-#: ../src/iop/filmicrgb.c:4407 ../src/iop/profile_gamma.c:667
+#: ../src/iop/filmic.c:1637 ../src/iop/filmicrgb.c:4498
+#: ../src/iop/filmicrgb.c:4501 ../src/iop/profile_gamma.c:667
 msgid "auto tune levels"
 msgstr "自动调整色阶"
 
@@ -14847,7 +14996,7 @@ msgstr ""
 msgid "filmic S curve"
 msgstr "胶片 S 曲线"
 
-#: ../src/iop/filmic.c:1651 ../src/iop/filmicrgb.c:4493
+#: ../src/iop/filmic.c:1651 ../src/iop/filmicrgb.c:4587
 msgid ""
 "slope of the linear part of the curve\n"
 "affects mostly the mid-tones"
@@ -14856,7 +15005,7 @@ msgstr ""
 "主要影响中间调"
 
 #. geotagging
-#: ../src/iop/filmic.c:1658 ../src/iop/filmicrgb.c:4502
+#: ../src/iop/filmic.c:1658 ../src/iop/filmicrgb.c:4596
 #: ../src/libs/metadata_view.c:158
 msgid "latitude"
 msgstr "纬度"
@@ -14875,7 +15024,7 @@ msgstr ""
 msgid "shadows/highlights balance"
 msgstr "阴影/高光平衡"
 
-#: ../src/iop/filmic.c:1671 ../src/iop/filmicrgb.c:4513
+#: ../src/iop/filmic.c:1671 ../src/iop/filmicrgb.c:4607
 msgid ""
 "slides the latitude along the slope\n"
 "to give more room to shadows or highlights.\n"
@@ -14951,13 +15100,13 @@ msgstr ""
 msgid "destination/display"
 msgstr "目标/显示器"
 
-#: ../src/iop/filmic.c:1741 ../src/iop/filmicrgb.c:4532
+#: ../src/iop/filmic.c:1741 ../src/iop/filmicrgb.c:4626
 msgid ""
 "luminance of output pure black, this should be 0%\n"
 "except if you want a faded look"
 msgstr "输出纯黑色的亮度，除非希望产生褪色效果，该值应当是 0%"
 
-#: ../src/iop/filmic.c:1750 ../src/iop/filmicrgb.c:4539
+#: ../src/iop/filmic.c:1750 ../src/iop/filmicrgb.c:4633
 msgid ""
 "middle gray value of the target display or color space.\n"
 "you should never touch that unless you know what you are doing."
@@ -14965,7 +15114,7 @@ msgstr ""
 "目标显示或颜色空间的中间灰度值。\n"
 "除非你知道自己在做什么，否则请勿更改此数值。"
 
-#: ../src/iop/filmic.c:1759 ../src/iop/filmicrgb.c:4546
+#: ../src/iop/filmic.c:1759 ../src/iop/filmicrgb.c:4640
 msgid ""
 "luminance of output pure white, this should be 100%\n"
 "except if you want a faded look"
@@ -14984,15 +15133,15 @@ msgstr ""
 "显示或颜色空间的传递函数的幂或伽马。\n"
 "除非你知道自己在做什么，否则请勿更改此数值。"
 
-#: ../src/iop/filmicrgb.c:341
+#: ../src/iop/filmicrgb.c:342
 msgid "filmic rgb"
-msgstr "胶片 RGB（filmic RGB）"
+msgstr "胶片 RGB"
 
-#: ../src/iop/filmicrgb.c:346
+#: ../src/iop/filmicrgb.c:347
 msgid "tone mapping|curve|view transform|contrast|saturation|highlights"
 msgstr "色调映射|曲线|视图转换|对比度|饱和度|高光"
 
-#: ../src/iop/filmicrgb.c:351
+#: ../src/iop/filmicrgb.c:352
 msgid ""
 "apply a view transform to prepare the scene-referred pipeline\n"
 "for display on SDR screens and paper prints\n"
@@ -15001,77 +15150,77 @@ msgstr ""
 "应用视图变换，以备将场景化管线的输出显示到 SDR 屏幕或打印至纸张，\n"
 "同时以无损的方式阻止削色产生"
 
-#: ../src/iop/filmicrgb.c:1211
+#: ../src/iop/filmicrgb.c:1212
 msgid ""
 "filmic highlights reconstruction failed to allocate memory, check your RAM "
 "settings"
 msgstr "filmic 高光重建未能分配内存，请检查 RAM 设置"
 
-#: ../src/iop/filmicrgb.c:1999 ../src/iop/filmicrgb.c:2288
+#: ../src/iop/filmicrgb.c:2085 ../src/iop/filmicrgb.c:2382
 msgid "filmic works only on RGB input"
 msgstr "胶片效果仅适用于 RGB 输入"
 
-#: ../src/iop/filmicrgb.c:2143
+#: ../src/iop/filmicrgb.c:2237
 msgid "filmic highlights reconstruction failed to allocate memory on GPU"
 msgstr "filmic 高光重建未能在 GPU 上分配内存"
 
-#: ../src/iop/filmicrgb.c:3385
+#: ../src/iop/filmicrgb.c:3479
 msgid "look only"
 msgstr "仅外观"
 
-#: ../src/iop/filmicrgb.c:3387
+#: ../src/iop/filmicrgb.c:3481
 msgid "look + mapping (lin)"
 msgstr "外观 + 映射（线性）"
 
-#: ../src/iop/filmicrgb.c:3389
+#: ../src/iop/filmicrgb.c:3483
 msgid "look + mapping (log)"
 msgstr "外观 + 映射（对数）"
 
-#: ../src/iop/filmicrgb.c:3391
+#: ../src/iop/filmicrgb.c:3485
 msgid "dynamic range mapping"
 msgstr "动态范围映射"
 
-#: ../src/iop/filmicrgb.c:3758
+#: ../src/iop/filmicrgb.c:3852
 #, c-format
 msgid "(%.0f %%)"
 msgstr "（%.0f %%）"
 
-#: ../src/iop/filmicrgb.c:3774
+#: ../src/iop/filmicrgb.c:3868
 #, no-c-format
 msgid "% display"
 msgstr "% 显示"
 
-#: ../src/iop/filmicrgb.c:3786
+#: ../src/iop/filmicrgb.c:3880
 msgid "EV scene"
 msgstr "EV 值 场景"
 
-#: ../src/iop/filmicrgb.c:3790
+#: ../src/iop/filmicrgb.c:3884
 #, no-c-format
 msgid "% camera"
 msgstr "% 相机"
 
 #. Page DISPLAY
-#: ../src/iop/filmicrgb.c:3826 ../src/iop/filmicrgb.c:4526
+#: ../src/iop/filmicrgb.c:3920 ../src/iop/filmicrgb.c:4620
 msgid "display"
 msgstr "显示"
 
 #. axis legend
-#: ../src/iop/filmicrgb.c:3835
+#: ../src/iop/filmicrgb.c:3929
 msgid "(%)"
 msgstr "(%)"
 
 #. Page SCENE
-#: ../src/iop/filmicrgb.c:3844 ../src/iop/filmicrgb.c:4364
+#: ../src/iop/filmicrgb.c:3938 ../src/iop/filmicrgb.c:4458
 msgid "scene"
 msgstr "场景"
 
 #. axis legend
-#: ../src/iop/filmicrgb.c:3853
+#: ../src/iop/filmicrgb.c:3947
 msgid "(EV)"
 msgstr "(EV)"
 
 #. we are over the graph area
-#: ../src/iop/filmicrgb.c:4282
+#: ../src/iop/filmicrgb.c:4376
 msgid ""
 "use the parameters below to set the nodes.\n"
 "the bright curve is the filmic tone mapping curve\n"
@@ -15081,11 +15230,11 @@ msgstr ""
 "亮曲线是胶片色调映射曲线。\n"
 "暗曲线是去饱和曲线。"
 
-#: ../src/iop/filmicrgb.c:4288
+#: ../src/iop/filmicrgb.c:4382
 msgid "toggle axis labels and values display"
 msgstr "切换轴标签和值显示"
 
-#: ../src/iop/filmicrgb.c:4292
+#: ../src/iop/filmicrgb.c:4386
 msgid ""
 "cycle through graph views.\n"
 "left click: cycle forward.\n"
@@ -15097,7 +15246,7 @@ msgstr ""
 "右键单击：向后循环。\n"
 "双击：重置为仅查看视图。"
 
-#: ../src/iop/filmicrgb.c:4371
+#: ../src/iop/filmicrgb.c:4465
 msgid ""
 "adjust to match the average luminance of the image's subject.\n"
 "the value entered here will then be remapped to 18.45%.\n"
@@ -15107,7 +15256,7 @@ msgstr ""
 "然后，此处输入的值将重新映射为18.45%。\n"
 "减小该值可增加整体亮度。"
 
-#: ../src/iop/filmicrgb.c:4399
+#: ../src/iop/filmicrgb.c:4493
 msgid ""
 "symmetrically enlarge or shrink the computed dynamic range.\n"
 "useful to give a safety margin to extreme luminances."
@@ -15115,7 +15264,7 @@ msgstr ""
 "对称地放大或缩小计算的动态范围。\n"
 "有助于为极端亮度提供安全界限。"
 
-#: ../src/iop/filmicrgb.c:4409
+#: ../src/iop/filmicrgb.c:4503
 msgid ""
 "try to optimize the settings with some statistical assumptions.\n"
 "this will fit the luminance range inside the histogram bounds.\n"
@@ -15131,15 +15280,15 @@ msgstr ""
 "因此，在使用之前了解这些估算是很重要的。"
 
 #. Page RECONSTRUCT
-#: ../src/iop/filmicrgb.c:4418
+#: ../src/iop/filmicrgb.c:4512
 msgid "reconstruct"
 msgstr "重建"
 
-#: ../src/iop/filmicrgb.c:4420
+#: ../src/iop/filmicrgb.c:4514
 msgid "highlights clipping"
 msgstr "高光断层"
 
-#: ../src/iop/filmicrgb.c:4426
+#: ../src/iop/filmicrgb.c:4520
 msgid ""
 "set the exposure threshold upon which\n"
 "clipped highlights get reconstructed.\n"
@@ -15155,7 +15304,7 @@ msgstr ""
 "减少以包含更多区域，\n"
 "增加以排除更多区域。"
 
-#: ../src/iop/filmicrgb.c:4436
+#: ../src/iop/filmicrgb.c:4530
 msgid ""
 "soften the transition between clipped highlights and valid pixels.\n"
 "decrease to make the transition harder and sharper,\n"
@@ -15165,15 +15314,15 @@ msgstr ""
 "减少以使过渡更加激烈和锐利，\n"
 "增加以使过渡更加柔和和模糊。"
 
-#: ../src/iop/filmicrgb.c:4442 ../src/iop/filmicrgb.c:4443
+#: ../src/iop/filmicrgb.c:4536 ../src/iop/filmicrgb.c:4537
 msgid "display highlight reconstruction mask"
 msgstr "显示高光修复蒙版"
 
-#: ../src/iop/filmicrgb.c:4450 ../src/iop/splittoning.c:527
+#: ../src/iop/filmicrgb.c:4544 ../src/iop/splittoning.c:527
 msgid "balance"
 msgstr "平衡"
 
-#: ../src/iop/filmicrgb.c:4457
+#: ../src/iop/filmicrgb.c:4551
 #, no-c-format
 msgid ""
 "decide which reconstruction strategy to favor,\n"
@@ -15189,7 +15338,7 @@ msgstr ""
 "如果至少有一个RGB通道未溢出，则增加。\n"
 "如果所有RGB通道大面积溢出，则减小。"
 
-#: ../src/iop/filmicrgb.c:4468
+#: ../src/iop/filmicrgb.c:4562
 #, no-c-format
 msgid ""
 "decide which reconstruction strategy to favor,\n"
@@ -15205,7 +15354,7 @@ msgstr ""
 "如果你想要更多细节，增加。\n"
 "如果你想要更多朦胧，减少。"
 
-#: ../src/iop/filmicrgb.c:4480
+#: ../src/iop/filmicrgb.c:4574
 #, no-c-format
 msgid ""
 "decide which reconstruction strategy to favor,\n"
@@ -15222,11 +15371,11 @@ msgstr ""
 "如果你看到品红或色域外的高光，就减少。"
 
 #. Page LOOK
-#: ../src/iop/filmicrgb.c:4488
+#: ../src/iop/filmicrgb.c:4582
 msgid "look"
 msgstr "外观"
 
-#: ../src/iop/filmicrgb.c:4498
+#: ../src/iop/filmicrgb.c:4592
 msgid ""
 "equivalent to paper grade in analog.\n"
 "increase to make highlights brighter and less compressed.\n"
@@ -15236,7 +15385,7 @@ msgstr ""
 "增加以使高光更亮和更少压缩。\n"
 "减少以减弱高光。"
 
-#: ../src/iop/filmicrgb.c:4506
+#: ../src/iop/filmicrgb.c:4600
 msgid ""
 "width of the linear domain in the middle of the curve,\n"
 "increase to get more contrast and less desaturation at extreme luminances,\n"
@@ -15248,7 +15397,7 @@ msgstr ""
 "在纬度范围内不会发生去饱和现象。\n"
 "这对中间调没有影响。"
 
-#: ../src/iop/filmicrgb.c:4521 ../src/iop/filmicrgb.c:4664
+#: ../src/iop/filmicrgb.c:4615 ../src/iop/filmicrgb.c:4758
 msgid ""
 "desaturates the output of the module\n"
 "specifically at extreme luminances.\n"
@@ -15258,11 +15407,11 @@ msgstr ""
 "如果阴影或高光欠饱和，请增加该值。"
 
 #. Page OPTIONS
-#: ../src/iop/filmicrgb.c:4550
+#: ../src/iop/filmicrgb.c:4644
 msgid "options"
 msgstr "选项"
 
-#: ../src/iop/filmicrgb.c:4555
+#: ../src/iop/filmicrgb.c:4649
 msgid ""
 "v3 is darktable 3.0 desaturation method, same as color balance.\n"
 "v4 is a newer desaturation method, based on spectral purity of light."
@@ -15270,7 +15419,7 @@ msgstr ""
 "v3 是 darktable 3.0 去饱和方法，和色彩平衡相同。\n"
 "v4 是一种新的去饱和方法，基于光的光谱纯度。"
 
-#: ../src/iop/filmicrgb.c:4559
+#: ../src/iop/filmicrgb.c:4653
 msgid ""
 "ensure the original color are preserved.\n"
 "may reinforce chromatic aberrations and chroma noise,\n"
@@ -15280,7 +15429,7 @@ msgstr ""
 "可能会加强色差和色度噪音。\n"
 "因此请确保它们在其他地方得到适当的纠正。\n"
 
-#: ../src/iop/filmicrgb.c:4565
+#: ../src/iop/filmicrgb.c:4659
 msgid ""
 "choose the desired curvature of the filmic spline in highlights.\n"
 "hard uses a high curvature resulting in more tonal compression.\n"
@@ -15290,7 +15439,7 @@ msgstr ""
 "‘强烈’使用高曲率，产生更多的色调压缩。\n"
 "‘柔和’使用低曲率，从而减少色调压缩。"
 
-#: ../src/iop/filmicrgb.c:4570
+#: ../src/iop/filmicrgb.c:4664
 msgid ""
 "choose the desired curvature of the filmic spline in shadows.\n"
 "hard uses a high curvature resulting in more tonal compression.\n"
@@ -15300,7 +15449,7 @@ msgstr ""
 "‘强烈’使用高曲率，产生更多的色调压缩。\n"
 "‘柔和’使用低曲率，从而减少色调压缩。"
 
-#: ../src/iop/filmicrgb.c:4575
+#: ../src/iop/filmicrgb.c:4669
 #, c-format
 msgid ""
 "enable to input custom middle-gray values.\n"
@@ -15312,7 +15461,7 @@ msgstr ""
 "一般不建议调整此值，您应使用曝光模块修正全局曝光。\n"
 "禁用此选项以使用标准 18.45%% 中间灰。"
 
-#: ../src/iop/filmicrgb.c:4582
+#: ../src/iop/filmicrgb.c:4676
 msgid ""
 "enable to auto-set the look hardness depending on the scene white and black "
 "points.\n"
@@ -15323,7 +15472,7 @@ msgstr ""
 "这将使中间灰色保持在标识线上，并改进快速调整。\n"
 "如果需要手动控制，请禁用。"
 
-#: ../src/iop/filmicrgb.c:4588
+#: ../src/iop/filmicrgb.c:4682
 msgid ""
 "run extra passes of chromaticity reconstruction.\n"
 "more iterations means more color propagation from neighbourhood.\n"
@@ -15335,7 +15484,7 @@ msgstr ""
 "运行起来更慢，但会产生更多的中和的高光。\n"
 "它也有助于解决品红高光的疑难问题。"
 
-#: ../src/iop/filmicrgb.c:4595
+#: ../src/iop/filmicrgb.c:4689
 msgid ""
 "add statistical noise in reconstructed highlights.\n"
 "this avoids highlights to look too smooth\n"
@@ -15346,7 +15495,7 @@ msgstr ""
 "这样可以避免高光看起来过于平滑，\n"
 "当图片整体有噪点效果时，它们会与图片的其他部分混合。"
 
-#: ../src/iop/filmicrgb.c:4602
+#: ../src/iop/filmicrgb.c:4696
 msgid ""
 "choose the statistical distribution of noise.\n"
 "this is useful to match natural sensor noise pattern.\n"
@@ -15354,11 +15503,11 @@ msgstr ""
 "选择噪声的统计分布。\n"
 "这有助于匹配自然的传感器噪声模式。\n"
 
-#: ../src/iop/filmicrgb.c:4670
+#: ../src/iop/filmicrgb.c:4764
 msgid "mid-tones saturation"
 msgstr "中间调饱和度"
 
-#: ../src/iop/filmicrgb.c:4671
+#: ../src/iop/filmicrgb.c:4765
 msgid ""
 "desaturates the output of the module\n"
 "specifically at medium luminances.\n"
@@ -15367,6 +15516,20 @@ msgstr ""
 "降低模块输出的饱和度\n"
 "特别是在中等亮度下。\n"
 "如果中间影调欠饱和，请增加该值。"
+
+#: ../src/iop/filmicrgb.c:4771
+msgid "highlights saturation mix"
+msgstr "高光饱和度混合"
+
+#: ../src/iop/filmicrgb.c:4772
+msgid ""
+"Positive values ensure saturation is kept unchanged over the whole range.\n"
+"Negative values bleache highlights at constant hue and luminance.\n"
+"Zero is an equal mix of both strategies."
+msgstr ""
+"正数值将在整个范围内保证饱和度不变。\n"
+"负数值将在恒定的色调和亮度下漂白高光。\n"
+"设置为零会等价混合两种策略。"
 
 #: ../src/iop/finalscale.c:41
 msgctxt "modulename"
@@ -15749,7 +15912,7 @@ msgstr "反转"
 
 #: ../src/iop/invert.c:116
 msgid "this module is deprecated. please use the negadoctor module instead."
-msgstr "此模块已弃用。请使用 Negadoctor 模块替代。"
+msgstr "此模块已弃用。请使用负片医生模块替代。"
 
 #: ../src/iop/invert.c:121
 msgid "invert film negatives"
@@ -16276,7 +16439,7 @@ msgid "invalid level in png file %d %d"
 msgstr "png 文件使用了不支持的色阶 %d %d"
 
 #: ../src/iop/lut3d.c:519
-msgid "this darktable build is not compatible with compressed clut"
+msgid "this Ansel build is not compatible with compressed clut"
 msgstr "此版本 Ansel 不支持压缩 CLUT。"
 
 #: ../src/iop/lut3d.c:536 ../src/iop/lut3d.c:785
@@ -16452,7 +16615,7 @@ msgstr "保持高亮的数量"
 
 #: ../src/iop/negadoctor.c:145
 msgid "negadoctor"
-msgstr "负片处理（negadoctor）"
+msgstr "负片医生"
 
 #: ../src/iop/negadoctor.c:150
 msgid "film|invert|negative|scan"
@@ -16697,9 +16860,9 @@ msgstr "平滑色彩的程度"
 #. * let's fill the encapsulating widgets
 #. preview mode
 #. color scheme
-#: ../src/iop/overexposed.c:73 ../src/views/darkroom.c:2016
-#: ../src/views/darkroom.c:2034 ../src/views/darkroom.c:2041
-#: ../src/views/darkroom.c:2051 ../src/views/darkroom.c:2068
+#: ../src/iop/overexposed.c:73 ../src/views/darkroom.c:2012
+#: ../src/views/darkroom.c:2030 ../src/views/darkroom.c:2037
+#: ../src/views/darkroom.c:2047 ../src/views/darkroom.c:2064
 msgid "overexposed"
 msgstr "曝光过度"
 
@@ -16797,9 +16960,9 @@ msgstr ""
 
 #. * let's fill the encapsulating widgets
 #. mode of operation
-#: ../src/iop/rawoverexposed.c:69 ../src/views/darkroom.c:1961
-#: ../src/views/darkroom.c:1979 ../src/views/darkroom.c:1988
-#: ../src/views/darkroom.c:2003
+#: ../src/iop/rawoverexposed.c:69 ../src/views/darkroom.c:1957
+#: ../src/views/darkroom.c:1975 ../src/views/darkroom.c:1984
+#: ../src/views/darkroom.c:1999
 msgid "raw overexposed"
 msgstr "raw 曝光过度"
 
@@ -17128,7 +17291,7 @@ msgstr "对于该图像尺寸，最大比例为 %i"
 
 #: ../src/iop/rgbcurve.c:121
 msgid "rgb curve"
-msgstr "rgb 曲线"
+msgstr "RGB 曲线"
 
 #: ../src/iop/rgbcurve.c:141
 msgid "alter an image’s tones using curves in RGB color space"
@@ -17964,7 +18127,7 @@ msgstr "高亮和阴影的量"
 msgid ""
 "this module is deprecated. please use the vibrance slider in the color "
 "balance rgb module instead."
-msgstr "此模块已弃用。请使用 rgb 色彩平衡模块中的鲜艳度滑动条替代。"
+msgstr "此模块已弃用。请使用色彩平衡 RGB 模块中的鲜艳度滑动条替代。"
 
 #: ../src/iop/vibrance.c:93
 msgid ""
@@ -18212,19 +18375,19 @@ msgstr "移除..."
 msgid "uncategorized"
 msgstr "未分类"
 
-#: ../src/libs/collect.c:1767
+#: ../src/libs/collect.c:1748
 msgid "copied locally"
 msgstr "有本地副本"
 
-#: ../src/libs/collect.c:1887
+#: ../src/libs/collect.c:1868
 msgid "group followers"
 msgstr "分组成员"
 
-#: ../src/libs/collect.c:2162
+#: ../src/libs/collect.c:2143
 msgid "use <, <=, >, >=, <>, =, [;] as operators"
 msgstr "可以使用以下操作符：<、<=、>、>=、<>、=、[;]"
 
-#: ../src/libs/collect.c:2166
+#: ../src/libs/collect.c:2147
 msgid ""
 "use <, <=, >, >=, <>, =, [;] as operators\n"
 "star rating: 0-5\n"
@@ -18234,7 +18397,7 @@ msgstr ""
 "星级：0-5\n"
 "退稿：-1"
 
-#: ../src/libs/collect.c:2173
+#: ../src/libs/collect.c:2154
 msgid ""
 "use <, <=, >, >=, <>, =, [;] as operators\n"
 "type dates in the form: YYYY:MM:DD hh:mm:ss.sss (only the year is mandatory)"
@@ -18242,12 +18405,12 @@ msgstr ""
 "可以使用以下操作符：<、<=、>、>=、<>、=、[;]\n"
 "请以 YYYY:MM:DD hh:mm:ss.sss 的形式输入日期 (仅年份为必须填写项)"
 
-#: ../src/libs/collect.c:2180
+#: ../src/libs/collect.c:2161
 #, no-c-format
 msgid "use `%' as wildcard and `,' to separate values"
 msgstr "使用“%”作为通配符，使用“,”分割多个值"
 
-#: ../src/libs/collect.c:2186
+#: ../src/libs/collect.c:2167
 #, no-c-format
 msgid ""
 "use `%' as wildcard\n"
@@ -18260,7 +18423,7 @@ msgstr ""
 "ctrl + 单击将只选中当前项目（无后缀）\n"
 "shift + 单击将只选中子项目（使用\"|%\"后缀）"
 
-#: ../src/libs/collect.c:2198
+#: ../src/libs/collect.c:2179
 #, no-c-format
 msgid ""
 "use `%' as wildcard\n"
@@ -18273,7 +18436,7 @@ msgstr ""
 "ctrl + 单击将只选中当前地点（无后缀）\n"
 "shift + 单击将只选中子地点（使用\"|%\"后缀）"
 
-#: ../src/libs/collect.c:2210
+#: ../src/libs/collect.c:2191
 #, no-c-format
 msgid ""
 "use `%' as wildcard\n"
@@ -18286,142 +18449,141 @@ msgstr ""
 "ctrl + 单击将只选中当前目录（无后缀）\n"
 "shift + 单击将只选中子目录（使用\"|%\"后缀）"
 
-#: ../src/libs/collect.c:2221
+#: ../src/libs/collect.c:2202
 #, no-c-format
 msgid "use `%' as wildcard"
 msgstr "使用“%”作为通配符"
 
-#: ../src/libs/collect.c:2244 ../src/libs/collect.c:2258
-#: ../src/libs/collect.c:3062
+#: ../src/libs/collect.c:2225 ../src/libs/collect.c:2239
+#: ../src/libs/collect.c:3025
 msgid "clear this rule"
 msgstr "清除规则"
 
-#: ../src/libs/collect.c:2249
+#: ../src/libs/collect.c:2230
 msgid "clear this rule or add new rules"
 msgstr "清除此规则或添加新规则"
 
-#: ../src/libs/collect.c:2255
+#: ../src/libs/collect.c:2236
 msgid "AND"
 msgstr "与"
 
-#: ../src/libs/collect.c:2256
+#: ../src/libs/collect.c:2237
 msgid "OR"
 msgstr "或"
 
-#: ../src/libs/collect.c:2257
+#: ../src/libs/collect.c:2238
 msgid "AND NOT"
 msgstr "与非"
 
 #. remove section title
-#: ../src/libs/collect.c:2307 ../src/libs/collect.c:2373
+#: ../src/libs/collect.c:2288 ../src/libs/collect.c:2353
 msgid "View"
 msgstr "显示方式"
 
-#: ../src/libs/collect.c:2309
+#: ../src/libs/collect.c:2290
 msgid "List"
 msgstr "列表"
 
-#: ../src/libs/collect.c:2311
+#: ../src/libs/collect.c:2292
 msgid "Tree"
 msgstr "树"
 
-#: ../src/libs/collect.c:2359
+#: ../src/libs/collect.c:2340
 msgid "Search a folder…"
 msgstr "搜索一个文件夹……"
 
-#: ../src/libs/collect.c:2375 ../src/libs/collect.c:3245
+#: ../src/libs/collect.c:2355 ../src/libs/collect.c:3208
 msgid "Collections"
 msgstr "集合"
 
-#: ../src/libs/collect.c:2381
+#: ../src/libs/collect.c:2362
 msgid "Search a collection…"
 msgstr "搜索一个集合……"
 
-#: ../src/libs/collect.c:2393 ../src/libs/collect.c:3279
+#: ../src/libs/collect.c:2374 ../src/libs/collect.c:3242
 msgid "Search…"
 msgstr "搜索……"
 
-#: ../src/libs/collect.c:3068
+#: ../src/libs/collect.c:3031
 msgid "narrow down search"
 msgstr "缩小搜索范围"
 
-#: ../src/libs/collect.c:3073
+#: ../src/libs/collect.c:3036
 msgid "add more images"
 msgstr "添加更多图片"
 
-#: ../src/libs/collect.c:3078
+#: ../src/libs/collect.c:3041
 msgid "exclude images"
 msgstr "排除图片"
 
-#: ../src/libs/collect.c:3085
+#: ../src/libs/collect.c:3048
 msgid "change to: and"
 msgstr "改为：添加"
 
-#: ../src/libs/collect.c:3090
+#: ../src/libs/collect.c:3053
 msgid "change to: or"
 msgstr "改为：分别"
 
-#: ../src/libs/collect.c:3095
+#: ../src/libs/collect.c:3058
 msgid "change to: except"
 msgstr "改为：排除"
 
-#: ../src/libs/collect.c:3114 ../src/libs/image.c:460
+#: ../src/libs/collect.c:3077 ../src/libs/image.c:460
 msgid "files"
 msgstr "文件"
 
-#: ../src/libs/collect.c:3119 ../src/libs/export_metadata.c:310
+#: ../src/libs/collect.c:3082 ../src/libs/export_metadata.c:310
 #: ../src/libs/image.c:461 ../src/libs/image.c:571 ../src/libs/image.c:579
 #: ../src/libs/metadata.c:531 ../src/libs/metadata_view.c:1219
 msgid "metadata"
 msgstr "元数据"
 
-#: ../src/libs/collect.c:3138
+#: ../src/libs/collect.c:3101
 msgid "times"
 msgstr "时间"
 
-#: ../src/libs/collect.c:3146
+#: ../src/libs/collect.c:3109
 msgid "capture details"
 msgstr "拍摄细节"
 
-#: ../src/libs/collect.c:3155
+#: ../src/libs/collect.c:3118
 msgid "darktable"
 msgstr "darktable"
 
-#: ../src/libs/collect.c:3168
+#: ../src/libs/collect.c:3131
 msgid "collections settings"
 msgstr "图片采集选项"
 
-#: ../src/libs/collect.c:3171 ../src/libs/export_metadata.c:288
+#: ../src/libs/collect.c:3134 ../src/libs/export_metadata.c:288
 #: ../src/libs/metadata.c:490 ../src/libs/metadata_view.c:1187
-#: ../src/libs/recentcollect.c:306 ../src/libs/tagging.c:1633
-#: ../src/libs/tagging.c:1763 ../src/libs/tagging.c:2037
-#: ../src/libs/tagging.c:3453
+#: ../src/libs/tagging.c:1633 ../src/libs/tagging.c:1763
+#: ../src/libs/tagging.c:2037 ../src/libs/tagging.c:3453
 msgid "save"
 msgstr "保存"
 
-#: ../src/libs/collect.c:3186 ../src/libs/export.c:1049
+#: ../src/libs/collect.c:3149 ../src/libs/export.c:1049
 #: ../src/libs/metadata.c:625 ../src/libs/metadata_view.c:1299
-#: ../src/libs/recentcollect.c:369 ../src/libs/tagging.c:3475
+#: ../src/libs/tagging.c:3475
 msgid "preferences..."
 msgstr "首选项……"
 
-#: ../src/libs/collect.c:3244
+#: ../src/libs/collect.c:3207
 msgid "Folders"
 msgstr "文件夹"
 
-#: ../src/libs/collect.c:3244
+#: ../src/libs/collect.c:3207
 msgid "Browse the content of folders known to Ansel"
 msgstr "浏览 Ansel 已知的文件夹的内容。"
 
-#: ../src/libs/collect.c:3245
+#: ../src/libs/collect.c:3208
 msgid "Query files by hierarchical tags"
 msgstr "按层级标签查询文件。"
 
-#: ../src/libs/collect.c:3246
+#: ../src/libs/collect.c:3209
 msgid "Queries"
 msgstr "查询"
 
-#: ../src/libs/collect.c:3246
+#: ../src/libs/collect.c:3209
 msgid "Perform advanced queries into Ansel library"
 msgstr "在 Ansel 照片库中进行高级查询。"
 
@@ -18512,23 +18674,10 @@ msgstr "将向量表分析区域限制到选择范围"
 msgid "duplicate manager"
 msgstr "副本管理器"
 
-#: ../src/libs/duplicate.c:263
+#: ../src/libs/duplicate.c:243
 #, no-c-format
 msgid "preview is only possible for zoom lower than 200%%"
 msgstr "只能在小于 200%% 的锁放下使用预览"
-
-#: ../src/libs/duplicate.c:538 ../src/libs/history.c:998
-#: ../src/libs/snapshots.c:447
-msgid "original"
-msgstr "原始色彩空间"
-
-#: ../src/libs/duplicate.c:539
-msgid "create a 'virgin' duplicate of the image without any development"
-msgstr "创建一个没有任何调整的初始图像副本"
-
-#: ../src/libs/duplicate.c:542
-msgid "create a duplicate of the image with same history stack"
-msgstr "创建一个具有相同历史记录的图像副本"
 
 #. Export button
 #: ../src/libs/export.c:154 ../src/libs/export.c:1325
@@ -18937,7 +19086,7 @@ msgstr "图像"
 msgid "open GPX file"
 msgstr "打开 GPX 文件"
 
-#: ../src/libs/geotagging.c:929 ../src/views/darkroom.c:1738
+#: ../src/libs/geotagging.c:929 ../src/views/darkroom.c:1734
 msgid "preview"
 msgstr "预览"
 
@@ -19229,6 +19378,10 @@ msgstr "参数输出蒙版："
 msgid "parametric input mask:"
 msgstr "参数输入蒙版："
 
+#: ../src/libs/history.c:998 ../src/libs/snapshots.c:447
+msgid "original"
+msgstr "原始色彩空间"
+
 #: ../src/libs/history.c:1209
 msgid "do you really want to clear history of current image?"
 msgstr "是否确实要清除当前图像的历史记录？"
@@ -19378,6 +19531,10 @@ msgstr "粘贴"
 #: ../src/libs/image.c:586
 msgid "paste selected metadata on selected images"
 msgstr "在选定的图像上粘贴选定的元数据"
+
+#: ../src/libs/image.c:589
+msgid "clear"
+msgstr "清空"
 
 #: ../src/libs/image.c:590
 msgid "clear selected metadata on selected images"
@@ -19912,6 +20069,10 @@ msgstr "含有 .txt"
 msgid "has .wav"
 msgstr "含有 .wav"
 
+#: ../src/libs/metadata_view.c:354
+msgid "image rejected"
+msgstr "图像已被退稿"
+
 #: ../src/libs/metadata_view.c:359
 #, c-format
 msgid "image has %d star"
@@ -19983,31 +20144,6 @@ msgstr ""
 #: ../src/libs/metadata_view.c:1391
 msgid "jump to film roll"
 msgstr "跳到胶卷"
-
-#: ../src/libs/recentcollect.c:67
-msgid "recent collections"
-msgstr "最近用过的集合"
-
-#: ../src/libs/recentcollect.c:118
-msgid " and "
-msgstr " 以及 "
-
-#: ../src/libs/recentcollect.c:123
-msgid " or "
-msgstr " 或者 "
-
-#. case DT_LIB_COLLECT_MODE_AND_NOT:
-#: ../src/libs/recentcollect.c:128
-msgid " but not "
-msgstr " 但非 "
-
-#: ../src/libs/recentcollect.c:303
-msgid "recent collections settings"
-msgstr "最近集合选项"
-
-#: ../src/libs/recentcollect.c:420
-msgid "jump back to previous collection"
-msgstr "回到上一个集合"
 
 #: ../src/libs/modulegroups.c:75
 msgid "modulegroups"
@@ -20371,6 +20507,11 @@ msgstr "图像设定"
 msgid "temporary style to use while printing"
 msgstr "打印时的临时样式"
 
+#. Print button
+#: ../src/libs/print_settings.c:2725
+msgid "print"
+msgstr "打印"
+
 #: ../src/libs/print_settings.c:2726
 msgid "print with current settings"
 msgstr "以当前设定打印"
@@ -20435,8 +20576,8 @@ msgid "select style"
 msgstr "选择风格"
 
 #: ../src/libs/styles.c:521
-msgid "darktable style files"
-msgstr "darktable 样式文件"
+msgid "Ansel style files"
+msgstr "Ansel 样式文件"
 
 #: ../src/libs/styles.c:798
 msgid ""
@@ -20750,8 +20891,8 @@ msgid "sort"
 msgstr "排序"
 
 #: ../src/libs/tagging.c:3115
-msgid "toggle show or not darktable tags"
-msgstr "开关 darktable 标签显示"
+msgid "toggle show or not Ansel tags"
+msgstr "开关 Ansel 标签显示"
 
 #: ../src/libs/tagging.c:3115
 msgid "dttags"
@@ -20834,19 +20975,6 @@ msgstr "标签树状视图内打标快捷键不可用。请切换至列表视图
 msgid "tagging settings"
 msgstr "标签设定"
 
-#: ../src/libs/tools/battery_indicator.c:38
-#: ../src/libs/tools/battery_indicator.c:71
-msgid "battery indicator"
-msgstr "电池电量指示"
-
-#: ../src/libs/tools/colorlabels.c:42
-msgid "colorlabels"
-msgstr "色彩标识"
-
-#: ../src/libs/tools/colorlabels.c:88
-msgid "toggle color label of selected images"
-msgstr "切换所选图像的颜色标签"
-
 #: ../src/libs/tools/filmstrip.c:45
 msgid "filmstrip"
 msgstr "胶卷条"
@@ -20889,8 +21017,8 @@ msgstr "过滤"
 
 #: ../src/libs/tools/filter.c:413
 msgctxt "quickfilter"
-msgid "View"
-msgstr "查看条件"
+msgid "Filter"
+msgstr "过滤器"
 
 #: ../src/libs/tools/filter.c:420
 msgid "comparator"
@@ -20934,7 +21062,7 @@ msgstr "在当前视图仅显示已选择的图片"
 
 #: ../src/libs/tools/filter.c:484
 msgctxt "quickfilter"
-msgid "Sort"
+msgid "Sort by"
 msgstr "排序依据"
 
 #: ../src/libs/tools/filter.c:489
@@ -20950,11 +21078,11 @@ msgctxt "quickfilter"
 msgid "Find"
 msgstr "查找"
 
-#: ../src/libs/tools/filter.c:522
+#: ../src/libs/tools/filter.c:523
 msgid "Search an image…"
 msgstr "搜索一张图片……"
 
-#: ../src/libs/tools/filter.c:529
+#: ../src/libs/tools/filter.c:530
 #, no-c-format
 msgid ""
 "filter by text from images metadata, tags, file path and name\n"
@@ -20977,143 +21105,6 @@ msgstr "搜索图片"
 msgid "reset filters"
 msgstr "重置过滤器"
 
-#: ../src/libs/tools/gamepad.c:37
-msgid "gamepad"
-msgstr "游戏手柄"
-
-#: ../src/libs/tools/gamepad.c:71
-msgid "button a"
-msgstr "按键 a"
-
-#: ../src/libs/tools/gamepad.c:71
-msgid "button b"
-msgstr "按键 b"
-
-#: ../src/libs/tools/gamepad.c:71
-msgid "button x"
-msgstr "按键 x"
-
-#: ../src/libs/tools/gamepad.c:71
-msgid "button y"
-msgstr "按键 y"
-
-#: ../src/libs/tools/gamepad.c:72
-msgid "button back"
-msgstr "按键 back"
-
-#: ../src/libs/tools/gamepad.c:72
-msgid "button guide"
-msgstr "按键 guide"
-
-#: ../src/libs/tools/gamepad.c:72
-msgid "button start"
-msgstr "按键 start"
-
-#: ../src/libs/tools/gamepad.c:73
-msgid "left stick"
-msgstr "左摇杆"
-
-#: ../src/libs/tools/gamepad.c:73
-msgid "right stick"
-msgstr "右摇杆"
-
-#: ../src/libs/tools/gamepad.c:73
-msgid "left shoulder"
-msgstr "左肩键"
-
-#: ../src/libs/tools/gamepad.c:73
-msgid "right shoulder"
-msgstr "右肩键"
-
-#: ../src/libs/tools/gamepad.c:74
-msgid "dpad up"
-msgstr "十字键 上"
-
-#: ../src/libs/tools/gamepad.c:74
-msgid "dpad down"
-msgstr "十字键 下"
-
-#: ../src/libs/tools/gamepad.c:74
-msgid "dpad left"
-msgstr "十字键 左"
-
-#: ../src/libs/tools/gamepad.c:74
-msgid "dpad right"
-msgstr "十字键 右"
-
-#: ../src/libs/tools/gamepad.c:75
-msgid "button misc1"
-msgstr "按键 misc1"
-
-#: ../src/libs/tools/gamepad.c:75
-msgid "paddle1"
-msgstr "paddle1"
-
-#: ../src/libs/tools/gamepad.c:75
-msgid "paddle2"
-msgstr "paddle2"
-
-#: ../src/libs/tools/gamepad.c:75
-msgid "paddle3"
-msgstr "paddle3"
-
-#: ../src/libs/tools/gamepad.c:75
-msgid "paddle4"
-msgstr "paddle4"
-
-#: ../src/libs/tools/gamepad.c:75
-msgid "touchpad"
-msgstr "触摸键"
-
-#: ../src/libs/tools/gamepad.c:76
-msgid "left trigger"
-msgstr "左扳机"
-
-#: ../src/libs/tools/gamepad.c:76
-msgid "right trigger"
-msgstr "右扳机"
-
-#: ../src/libs/tools/gamepad.c:81
-msgid "invalid gamepad button"
-msgstr "无效游戏手柄按键"
-
-#: ../src/libs/tools/gamepad.c:98
-msgid "left x"
-msgstr "左 x"
-
-#: ../src/libs/tools/gamepad.c:98
-msgid "left y"
-msgstr "左 y"
-
-#: ../src/libs/tools/gamepad.c:98
-msgid "right x"
-msgstr "右 x"
-
-#: ../src/libs/tools/gamepad.c:98
-msgid "right y"
-msgstr "右 y"
-
-#: ../src/libs/tools/gamepad.c:99
-msgid "left diagonal"
-msgstr "左对角线"
-
-#: ../src/libs/tools/gamepad.c:99
-msgid "left skew"
-msgstr "左倾斜"
-
-#: ../src/libs/tools/gamepad.c:99
-msgid "right diagonal"
-msgstr "右对角线"
-
-#: ../src/libs/tools/gamepad.c:99
-msgid "right skew"
-msgstr "右倾斜"
-
-#. diagonals
-#: ../src/libs/tools/gamepad.c:104
-msgid "invalid gamepad axis"
-msgstr "无效游戏手柄轴"
-
 #: ../src/libs/tools/hinter.c:42
 msgid "hinter"
 msgstr "意图"
@@ -21122,41 +21113,11 @@ msgstr "意图"
 msgid "image infos"
 msgstr "图像信息"
 
-#: ../src/libs/tools/lighttable.c:122 ../src/libs/tools/lighttable.c:278
-msgid "expand grouped images"
-msgstr "展开分组的图像"
-
-#: ../src/libs/tools/lighttable.c:124 ../src/libs/tools/lighttable.c:280
-msgid "collapse grouped images"
-msgstr "折叠分组的图像"
-
-#: ../src/libs/tools/lighttable.c:226
-msgid "overlays not available here..."
-msgstr "叠加层在此不可用……"
-
-#: ../src/libs/tools/lighttable.c:287
-msgid "thumbnail overlays options"
-msgstr "缩略图叠加层选项"
-
-#: ../src/libs/tools/lighttable.c:288
-msgid "click to change the type of overlays shown on thumbnails"
-msgstr "单击以更改在缩略图上显示评级的类型"
-
-#: ../src/libs/tools/lighttable.c:311
-msgid "thumbnail overlays"
-msgstr "缩略图叠加层"
-
-#: ../src/libs/tools/lighttable.c:313
-msgid "no overlays"
-msgstr "不显示"
-
-#: ../src/libs/tools/lighttable.c:314
-msgid "overlays on mouse hover"
-msgstr "鼠标悬停时显示"
-
-#: ../src/libs/tools/lighttable.c:315
-msgid "permanent overlays"
-msgstr "一直显示"
+#. Zoom
+#: ../src/libs/tools/lighttable.c:94
+msgctxt "quickfilter"
+msgid "Zoom"
+msgstr "缩放"
 
 #: ../src/libs/tools/midi.c:41
 msgid "midi"
@@ -21212,67 +21173,67 @@ msgstr "lua 选项"
 msgid "Darkroom"
 msgstr "暗房"
 
-#: ../src/views/darkroom.c:515
+#: ../src/views/darkroom.c:511
 #, c-format
 msgid ""
-"darktable could not load `%s', switching to lighttable now.\n"
+"Ansel could not load `%s', switching to lighttable now.\n"
 "\n"
 "please check that the camera model that produced the image is supported in "
-"darktable\n"
+"Ansel\n"
 "(list of supported cameras is at https://www.darktable.org/resources/camera-"
 "support/).\n"
 "if you are sure that the camera model is supported, please consider opening "
 "an issue\n"
 "at https://github.com/darktable-org/darktable"
 msgstr ""
-"darktable 无法加载“%s”，正在切换回光台模式。\n"
+"Ansel 无法加载“%s”，正在切换回光台模式。\n"
 "\n"
-"请确认 darktable 支持此相机型号及图像文件格式，参考 https://www.darktable."
-"org/resources/camera-support/\n"
-"若 darktable 确实支持此相机，请考虑在 https://github.com/darktable-org/"
-"darktable 报告问题"
+"请确认 Ansel 支持此相机型号及图像文件格式，参考 https://www.darktable.org/"
+"resources/camera-support/。\n"
+"若 Ansel 确实支持此相机，请考虑在 https://github.com/darktable-org/darktable "
+"报告问题。"
 
-#: ../src/views/darkroom.c:532
+#: ../src/views/darkroom.c:528
 #, c-format
 msgctxt "darkroom"
 msgid "loading `%s' ..."
 msgstr "正在加载“%s”……"
 
-#: ../src/views/darkroom.c:656 ../src/views/darkroom.c:2093
+#: ../src/views/darkroom.c:652 ../src/views/darkroom.c:2089
 msgid "gamut check"
 msgstr "色域检查"
 
-#: ../src/views/darkroom.c:656
+#: ../src/views/darkroom.c:652
 msgid "soft proof"
 msgstr "软打样"
 
 #. fail :(
-#: ../src/views/darkroom.c:694 ../src/views/print.c:324
+#: ../src/views/darkroom.c:690 ../src/views/print.c:324
 msgid "no image to open !"
 msgstr "没有要打开的图像！"
 
-#: ../src/views/darkroom.c:1171
+#: ../src/views/darkroom.c:1167
 #, c-format
 msgid "applied style `%s' on current image"
 msgstr "在当前图片使用样式 `%s'"
 
-#: ../src/views/darkroom.c:1296
+#: ../src/views/darkroom.c:1292
 msgid "no styles have been created yet"
 msgstr "还没有创建样式"
 
-#: ../src/views/darkroom.c:1942
+#: ../src/views/darkroom.c:1938
 msgid "quick access for applying any of your styles"
 msgstr "快速访问并应用您的样式"
 
-#: ../src/views/darkroom.c:1948
+#: ../src/views/darkroom.c:1944
 msgid "color assessment"
 msgstr "色彩评估"
 
-#: ../src/views/darkroom.c:1951
+#: ../src/views/darkroom.c:1947
 msgid "toggle ISO 12646 color assessment conditions"
 msgstr "切换ISO 12646颜色评估条件"
 
-#: ../src/views/darkroom.c:1964
+#: ../src/views/darkroom.c:1960
 msgid ""
 "toggle raw over exposed indication\n"
 "right click for options"
@@ -21280,47 +21241,47 @@ msgstr ""
 "切换RAW过曝的指示\n"
 "右键查看选项"
 
-#: ../src/views/darkroom.c:1980
+#: ../src/views/darkroom.c:1976
 msgid "select how to mark the clipped pixels"
 msgstr "选择如何标记划分出的过曝或欠曝像素"
 
-#: ../src/views/darkroom.c:1982
+#: ../src/views/darkroom.c:1978
 msgid "mark with CFA color"
 msgstr "用色彩滤波阵列来标记"
 
-#: ../src/views/darkroom.c:1982
+#: ../src/views/darkroom.c:1978
 msgid "mark with solid color"
 msgstr "用纯色来标记"
 
-#: ../src/views/darkroom.c:1982
+#: ../src/views/darkroom.c:1978
 msgid "false color"
 msgstr "用伪色来标记"
 
-#: ../src/views/darkroom.c:1988 ../src/views/darkroom.c:2041
+#: ../src/views/darkroom.c:1984 ../src/views/darkroom.c:2037
 msgid "color scheme"
 msgstr "配色方案"
 
-#: ../src/views/darkroom.c:1989
+#: ../src/views/darkroom.c:1985
 msgctxt "solidcolor"
 msgid "red"
 msgstr "红"
 
-#: ../src/views/darkroom.c:1990
+#: ../src/views/darkroom.c:1986
 msgctxt "solidcolor"
 msgid "green"
 msgstr "绿"
 
-#: ../src/views/darkroom.c:1991
+#: ../src/views/darkroom.c:1987
 msgctxt "solidcolor"
 msgid "blue"
 msgstr "蓝"
 
-#: ../src/views/darkroom.c:1992
+#: ../src/views/darkroom.c:1988
 msgctxt "solidcolor"
 msgid "black"
 msgstr "黑"
 
-#: ../src/views/darkroom.c:1996
+#: ../src/views/darkroom.c:1992
 msgid ""
 "select the solid color to indicate over exposure.\n"
 "will only be used if mode = mark with solid color"
@@ -21328,14 +21289,14 @@ msgstr ""
 "选择以纯色指示过曝\n"
 "仅当模式为‘用纯色来标记’时才有效果"
 
-#: ../src/views/darkroom.c:2005
+#: ../src/views/darkroom.c:2001
 msgid ""
 "threshold of what shall be considered overexposed\n"
 "1.0 - white level\n"
 "0.0 - black level"
 msgstr "应被作为曝光过度部分的阈值"
 
-#: ../src/views/darkroom.c:2019
+#: ../src/views/darkroom.c:2015
 msgid ""
 "toggle clipping indication\n"
 "right click for options"
@@ -21343,11 +21304,11 @@ msgstr ""
 "切换欠曝过曝提示\n"
 "右键查看选项"
 
-#: ../src/views/darkroom.c:2034
+#: ../src/views/darkroom.c:2030
 msgid "clipping preview mode"
 msgstr "裁剪预览模式"
 
-#: ../src/views/darkroom.c:2035
+#: ../src/views/darkroom.c:2031
 msgid ""
 "select the metric you want to preview\n"
 "full gamut is the combination of all other modes"
@@ -21355,39 +21316,39 @@ msgstr ""
 "选择要预览的度量\n"
 "“全色域”是所有其他模式的组合"
 
-#: ../src/views/darkroom.c:2037
+#: ../src/views/darkroom.c:2033
 msgid "full gamut"
 msgstr "全色域"
 
-#: ../src/views/darkroom.c:2037
+#: ../src/views/darkroom.c:2033
 msgid "any RGB channel"
 msgstr "任何RGB通道"
 
-#: ../src/views/darkroom.c:2037
+#: ../src/views/darkroom.c:2033
 msgid "luminance only"
 msgstr "仅亮度"
 
-#: ../src/views/darkroom.c:2037
+#: ../src/views/darkroom.c:2033
 msgid "saturation only"
 msgstr "仅饱和度"
 
-#: ../src/views/darkroom.c:2042
+#: ../src/views/darkroom.c:2038
 msgid "select colors to indicate clipping"
 msgstr "选择表现提示的颜色"
 
-#: ../src/views/darkroom.c:2044
+#: ../src/views/darkroom.c:2040
 msgid "red & blue"
 msgstr "红蓝"
 
-#: ../src/views/darkroom.c:2044
+#: ../src/views/darkroom.c:2040
 msgid "purple & green"
 msgstr "紫绿"
 
-#: ../src/views/darkroom.c:2051
+#: ../src/views/darkroom.c:2047
 msgid "lower threshold"
 msgstr "降低阈值"
 
-#: ../src/views/darkroom.c:2052
+#: ../src/views/darkroom.c:2048
 msgid ""
 "clipping threshold for the black point,\n"
 "in EV, relatively to white (0 EV).\n"
@@ -21406,11 +21367,11 @@ msgstr ""
 "典型的彩色光面印刷品，黑色定位为 -8.00 EV；\n"
 "典型的黑白光面印刷品，黑色定位为 -9.00 EV。"
 
-#: ../src/views/darkroom.c:2068
+#: ../src/views/darkroom.c:2064
 msgid "upper threshold"
 msgstr "增加阈值"
 
-#: ../src/views/darkroom.c:2070
+#: ../src/views/darkroom.c:2066
 #, no-c-format
 msgid ""
 "clipping threshold for the white point.\n"
@@ -21419,11 +21380,11 @@ msgstr ""
 "调整白点的划分阈值。\n"
 "100%为峰值中等亮度。"
 
-#: ../src/views/darkroom.c:2082
+#: ../src/views/darkroom.c:2078
 msgid "softproof"
 msgstr "软打样"
 
-#: ../src/views/darkroom.c:2085
+#: ../src/views/darkroom.c:2081
 msgid ""
 "toggle softproofing\n"
 "right click for profile options"
@@ -21431,7 +21392,7 @@ msgstr ""
 "切换软打样\n"
 "右键查看配置文件选项"
 
-#: ../src/views/darkroom.c:2096
+#: ../src/views/darkroom.c:2092
 msgid ""
 "toggle gamut checking\n"
 "right click for profile options"
@@ -21439,16 +21400,16 @@ msgstr ""
 "切换色域检查\n"
 "右键查看配置文件选项"
 
-#: ../src/views/darkroom.c:2117
+#: ../src/views/darkroom.c:2113
 msgid "profiles"
 msgstr "色彩配置文件"
 
-#: ../src/views/darkroom.c:2137
+#: ../src/views/darkroom.c:2133
 #, c-format
 msgid "softproof ICC profiles in %s or %s"
 msgstr "软打样的ICC配置文件在%s 或者 %s里"
 
-#: ../src/views/darkroom.c:2161
+#: ../src/views/darkroom.c:2157
 msgid ""
 "toggle guide lines\n"
 "right click for guides options"
@@ -21457,144 +21418,144 @@ msgstr ""
 "右键查看参考线选项"
 
 #. Fullscreen preview key
-#: ../src/views/darkroom.c:2178
+#: ../src/views/darkroom.c:2174
 msgid "full preview"
 msgstr "全屏预览"
 
 #. add an option to allow skip mouse events while editing masks
-#: ../src/views/darkroom.c:2182
+#: ../src/views/darkroom.c:2178
 msgid "temporarily override global masks lock"
 msgstr "临时覆盖全局蒙版锁"
 
 #. Zoom shortcuts
-#: ../src/views/darkroom.c:2194
+#: ../src/views/darkroom.c:2190
 msgid "zoom close-up"
 msgstr "拉近缩放"
 
-#: ../src/views/darkroom.c:2195
+#: ../src/views/darkroom.c:2191
 msgid "zoom fill"
 msgstr "填充缩放"
 
-#: ../src/views/darkroom.c:2196
+#: ../src/views/darkroom.c:2192
 msgid "zoom fit"
 msgstr "适应缩放"
 
 #. zoom in/out
 #. zoom in/out/min/max
-#: ../src/views/darkroom.c:2199 ../src/views/lighttable.c:413
+#: ../src/views/darkroom.c:2195 ../src/views/lighttable.c:409
 msgid "zoom in"
 msgstr "放大"
 
-#: ../src/views/darkroom.c:2200 ../src/views/lighttable.c:415
+#: ../src/views/darkroom.c:2196 ../src/views/lighttable.c:411
 msgid "zoom out"
 msgstr "缩小"
 
 #. Shortcut to skip images
-#: ../src/views/darkroom.c:2203
+#: ../src/views/darkroom.c:2199
 msgid "image forward"
 msgstr "前进一张图"
 
-#: ../src/views/darkroom.c:2204
+#: ../src/views/darkroom.c:2200
 msgid "image back"
 msgstr "后退一张图"
 
 #. cycle overlay colors
-#: ../src/views/darkroom.c:2207
+#: ../src/views/darkroom.c:2203
 msgid "cycle overlay colors"
 msgstr "循环覆盖颜色"
 
 #. toggle visibility of drawn masks for current gui module
-#: ../src/views/darkroom.c:2210
+#: ../src/views/darkroom.c:2206
 msgid "show drawn masks"
 msgstr "显示绘制的遮罩"
 
 #. brush size +/-
-#: ../src/views/darkroom.c:2213
+#: ../src/views/darkroom.c:2209
 msgid "increase brush size"
 msgstr "加大画笔尺寸"
 
-#: ../src/views/darkroom.c:2214
+#: ../src/views/darkroom.c:2210
 msgid "decrease brush size"
 msgstr "减小画笔尺寸"
 
 #. brush hardness +/-
-#: ../src/views/darkroom.c:2217
+#: ../src/views/darkroom.c:2213
 msgid "increase brush hardness"
 msgstr "增加笔刷硬度"
 
-#: ../src/views/darkroom.c:2218
+#: ../src/views/darkroom.c:2214
 msgid "decrease brush hardness"
 msgstr "降低笔刷硬度"
 
 #. brush opacity +/-
-#: ../src/views/darkroom.c:2221
+#: ../src/views/darkroom.c:2217
 msgid "increase brush opacity"
 msgstr "增加笔刷不透明度"
 
-#: ../src/views/darkroom.c:2222
+#: ../src/views/darkroom.c:2218
 msgid "decrease brush opacity"
 msgstr "降低笔刷不透明度"
 
 #. set focus to the search modules text box
-#: ../src/views/darkroom.c:2225
+#: ../src/views/darkroom.c:2221
 msgid "search modules"
 msgstr "搜索模块"
 
 #. change the precision for adjusting sliders with keyboard shortcuts
-#: ../src/views/darkroom.c:2228
+#: ../src/views/darkroom.c:2224
 msgid "change keyboard shortcut slider precision"
 msgstr "更改键盘快捷键滑块精度"
 
 #. Focus on next/previous modules
-#: ../src/views/darkroom.c:2231
+#: ../src/views/darkroom.c:2227
 msgid "focus on the next module"
 msgstr "聚焦到下一个模块"
 
-#: ../src/views/darkroom.c:2232
+#: ../src/views/darkroom.c:2228
 msgid "focus on the previous module"
 msgstr "聚焦到上一个模块"
 
-#: ../src/views/darkroom.c:2234
+#: ../src/views/darkroom.c:2230
 msgid "enable focused module"
 msgstr "启用聚焦的模块"
 
-#: ../src/views/darkroom.c:2235
+#: ../src/views/darkroom.c:2231
 msgid "disable focused module"
 msgstr "禁用聚焦的模块"
 
-#: ../src/views/darkroom.c:3375
+#: ../src/views/darkroom.c:3371
 msgid "keyboard shortcut slider precision: fine"
 msgstr "键盘快捷键滑块的精度：高"
 
-#: ../src/views/darkroom.c:3377
+#: ../src/views/darkroom.c:3373
 msgid "keyboard shortcut slider precision: normal"
 msgstr "键盘快捷键滑块的精度：中"
 
-#: ../src/views/darkroom.c:3379
+#: ../src/views/darkroom.c:3375
 msgid "keyboard shortcut slider precision: coarse"
 msgstr "键盘快捷键滑块的精度：低"
 
-#: ../src/views/darkroom.c:3394
+#: ../src/views/darkroom.c:3390
 msgid "switch to lighttable"
 msgstr "转到光台"
 
-#: ../src/views/darkroom.c:3395
+#: ../src/views/darkroom.c:3391
 msgid "zoom in the image"
 msgstr "放大图像"
 
-#: ../src/views/darkroom.c:3396
+#: ../src/views/darkroom.c:3392
 msgid "unbounded zoom in the image"
 msgstr "无限放大图像"
 
-#: ../src/views/darkroom.c:3397
+#: ../src/views/darkroom.c:3393
 msgid "zoom to 100% 200% and back"
 msgstr "缩放到 100% 200% 然后返回"
 
-#: ../src/views/darkroom.c:3399
+#: ../src/views/darkroom.c:3395
 msgid "[modules] expand module without closing others"
 msgstr "展开模块时不折叠其他模块"
 
-#: ../src/views/darkroom.c:3401
+#: ../src/views/darkroom.c:3397
 msgid "[modules] change module position in pipe"
 msgstr "更改模块在处理管线中的位置"
 
@@ -21605,6 +21566,10 @@ msgstr "光台"
 #: ../src/views/lighttable.c:292
 msgid "middle"
 msgstr "中键"
+
+#: ../src/views/lighttable.c:299
+msgid "select"
+msgstr "选择"
 
 #: ../src/views/lighttable.c:365
 msgid "open image in darkroom"
@@ -21622,45 +21587,37 @@ msgstr "改变每行显示的图像数量"
 msgid "change image order"
 msgstr "改变图像显示顺序"
 
-#: ../src/views/lighttable.c:389
+#: ../src/views/lighttable.c:385
 msgid "whole"
 msgstr "全部"
 
-#: ../src/views/lighttable.c:405
+#: ../src/views/lighttable.c:401
 msgid "leave"
 msgstr "退出"
 
-#: ../src/views/lighttable.c:408
+#: ../src/views/lighttable.c:404
 msgid "reset first image offset"
 msgstr "重置第一个图像偏移"
 
-#: ../src/views/lighttable.c:409
+#: ../src/views/lighttable.c:405
 msgid "select toggle image"
 msgstr "选择切换图像"
 
-#: ../src/views/lighttable.c:410
+#: ../src/views/lighttable.c:406
 msgid "open single image in darkroom"
 msgstr "在暗房中打开图像"
 
-#: ../src/views/lighttable.c:414
+#: ../src/views/lighttable.c:410
 msgid "zoom max"
 msgstr "最大缩放"
 
-#: ../src/views/lighttable.c:416
+#: ../src/views/lighttable.c:412
 msgid "zoom min"
 msgstr "最小缩放"
 
 #: ../src/views/map.c:197
 msgid "Map"
 msgstr "地图"
-
-#: ../src/views/map.c:2115
-msgid "undo"
-msgstr "撤销"
-
-#: ../src/views/map.c:2116
-msgid "redo"
-msgstr "重做"
 
 #: ../src/views/map.c:2812
 msgid "[on image] open in darkroom"
@@ -21686,6 +21643,10 @@ msgstr "图像放映结束"
 #: ../src/views/slideshow.c:327
 msgid "end of images. press any key to return to lighttable mode"
 msgstr "已播放全部图像。按任意按键回到光台模式"
+
+#: ../src/views/slideshow.c:341
+msgid "slideshow"
+msgstr "幻灯片放映"
 
 #: ../src/views/slideshow.c:449
 msgid "waiting to start slideshow"
@@ -21763,8 +21724,8 @@ msgid "right click+drag"
 msgstr "右键单击 + 拖动"
 
 #: ../src/views/view.c:1143
-msgid "darktable - accels window"
-msgstr "darktable - 快捷键窗口"
+msgid "Ansel - accels window"
+msgstr "Ansel - 快捷键窗口"
 
 #: ../src/views/view.c:1174
 msgid "Shortcuts mapped to actions in Ansel"
@@ -21793,6 +21754,235 @@ msgstr "双击以重置到“%.03f”"
 msgctxt "preferences"
 msgid "</xsl:text><xsl:value-of select="
 msgstr ""
+
+#, c-format
+#~ msgid "colorlabels set to %s"
+#~ msgstr "色标设置为%s"
+
+#~ msgid "all colorlabels removed"
+#~ msgstr "全部色标已删除"
+
+#~ msgid "1) darktable resources"
+#~ msgstr "1) darktable 资源"
+
+#~ msgid "close darktable"
+#~ msgstr "关闭 darktable"
+
+#~ msgid "image rated to 0 star"
+#~ msgstr "图像已评级为 0 星"
+
+#, c-format
+#~ msgid "image rated to %s"
+#~ msgstr "图像已评级为 %s"
+
+#~ msgid "upgrade"
+#~ msgstr "升级"
+
+#~ msgid "downgrade"
+#~ msgstr "降级"
+
+#~ msgid "zero"
+#~ msgstr "零"
+
+#~ msgid "one"
+#~ msgstr "一"
+
+#~ msgid "two"
+#~ msgstr "二"
+
+#~ msgid "three"
+#~ msgstr "三"
+
+#~ msgid "four"
+#~ msgstr "四"
+
+#~ msgid "five"
+#~ msgstr "五"
+
+#~ msgid "Color intent"
+#~ msgstr "颜色意图"
+
+#~ msgid "Fullscreen window"
+#~ msgstr "全屏"
+
+#~ msgid "Switch views"
+#~ msgstr "切换视图"
+
+#~ msgid "switch views"
+#~ msgstr "切换视图"
+
+#~ msgid "tethering"
+#~ msgstr "连机拍摄"
+
+#~ msgid "map"
+#~ msgstr "地图"
+
+#~ msgid "toggle focus-peaking mode"
+#~ msgstr "切换焦点峰值模式"
+
+#~ msgid "create a 'virgin' duplicate of the image without any development"
+#~ msgstr "创建一个没有任何调整的初始图像副本"
+
+#~ msgid "create a duplicate of the image with same history stack"
+#~ msgstr "创建一个具有相同历史记录的图像副本"
+
+#~ msgid "recent collections settings"
+#~ msgstr "最近集合选项"
+
+#~ msgid "jump back to previous collection"
+#~ msgstr "回到上一个集合"
+
+#~ msgid "darktable style files"
+#~ msgstr "darktable 样式文件"
+
+#~ msgid "battery indicator"
+#~ msgstr "电池电量指示"
+
+#~ msgid "colorlabels"
+#~ msgstr "色彩标识"
+
+#~ msgid "toggle color label of selected images"
+#~ msgstr "切换所选图像的颜色标签"
+
+#~ msgctxt "quickfilter"
+#~ msgid "View"
+#~ msgstr "查看条件"
+
+#~ msgctxt "quickfilter"
+#~ msgid "Sort"
+#~ msgstr "排序依据"
+
+#~ msgid "gamepad"
+#~ msgstr "游戏手柄"
+
+#~ msgid "button a"
+#~ msgstr "按键 a"
+
+#~ msgid "button b"
+#~ msgstr "按键 b"
+
+#~ msgid "button x"
+#~ msgstr "按键 x"
+
+#~ msgid "button y"
+#~ msgstr "按键 y"
+
+#~ msgid "button back"
+#~ msgstr "按键 back"
+
+#~ msgid "button guide"
+#~ msgstr "按键 guide"
+
+#~ msgid "button start"
+#~ msgstr "按键 start"
+
+#~ msgid "left stick"
+#~ msgstr "左摇杆"
+
+#~ msgid "right stick"
+#~ msgstr "右摇杆"
+
+#~ msgid "left shoulder"
+#~ msgstr "左肩键"
+
+#~ msgid "right shoulder"
+#~ msgstr "右肩键"
+
+#~ msgid "dpad up"
+#~ msgstr "十字键 上"
+
+#~ msgid "dpad down"
+#~ msgstr "十字键 下"
+
+#~ msgid "dpad left"
+#~ msgstr "十字键 左"
+
+#~ msgid "dpad right"
+#~ msgstr "十字键 右"
+
+#~ msgid "button misc1"
+#~ msgstr "按键 misc1"
+
+#~ msgid "paddle1"
+#~ msgstr "paddle1"
+
+#~ msgid "paddle2"
+#~ msgstr "paddle2"
+
+#~ msgid "paddle3"
+#~ msgstr "paddle3"
+
+#~ msgid "paddle4"
+#~ msgstr "paddle4"
+
+#~ msgid "touchpad"
+#~ msgstr "触摸键"
+
+#~ msgid "left trigger"
+#~ msgstr "左扳机"
+
+#~ msgid "right trigger"
+#~ msgstr "右扳机"
+
+#~ msgid "invalid gamepad button"
+#~ msgstr "无效游戏手柄按键"
+
+#~ msgid "left x"
+#~ msgstr "左 x"
+
+#~ msgid "left y"
+#~ msgstr "左 y"
+
+#~ msgid "right x"
+#~ msgstr "右 x"
+
+#~ msgid "right y"
+#~ msgstr "右 y"
+
+#~ msgid "left diagonal"
+#~ msgstr "左对角线"
+
+#~ msgid "left skew"
+#~ msgstr "左倾斜"
+
+#~ msgid "right diagonal"
+#~ msgstr "右对角线"
+
+#~ msgid "right skew"
+#~ msgstr "右倾斜"
+
+#~ msgid "invalid gamepad axis"
+#~ msgstr "无效游戏手柄轴"
+
+#~ msgid "expand grouped images"
+#~ msgstr "展开分组的图像"
+
+#~ msgid "overlays not available here..."
+#~ msgstr "叠加层在此不可用……"
+
+#~ msgid "thumbnail overlays options"
+#~ msgstr "缩略图叠加层选项"
+
+#~ msgid "click to change the type of overlays shown on thumbnails"
+#~ msgstr "单击以更改在缩略图上显示评级的类型"
+
+#~ msgid "no overlays"
+#~ msgstr "不显示"
+
+#~ msgid "overlays on mouse hover"
+#~ msgstr "鼠标悬停时显示"
+
+#~ msgid "permanent overlays"
+#~ msgstr "一直显示"
+
+#~ msgid "undo"
+#~ msgstr "撤销"
+
+#~ msgid "redo"
+#~ msgstr "重做"
+
+#~ msgid "darktable - accels window"
+#~ msgstr "darktable - 快捷键窗口"
 
 #~ msgid "Selected unedited"
 #~ msgstr "选择未改动的"
@@ -22394,9 +22584,6 @@ msgstr ""
 #~ msgid "capture date"
 #~ msgstr "拍摄日期"
 
-#~ msgid "range rating"
-#~ msgstr "评级范围"
-
 #~ msgid "search"
 #~ msgstr "搜索"
 
@@ -22446,9 +22633,6 @@ msgstr ""
 #~ msgctxt "accel"
 #~ msgid "<focused>"
 #~ msgstr "<聚焦>"
-
-#~ msgid "show accels window"
-#~ msgstr "显示快捷键窗口"
 
 #, c-format
 #~ msgid "capturing %d image"
@@ -23405,9 +23589,6 @@ msgstr ""
 #~ msgstr ""
 #~ "单击选择扩展名\n"
 #~ "ctrl + 单击以选择多个扩展名"
-
-#~ msgid "ungrouped images"
-#~ msgstr "未分组图像"
 
 #~ msgid "grouping filter"
 #~ msgstr "分组过滤器"
@@ -24800,10 +24981,6 @@ msgstr ""
 #~ msgstr "快捷键"
 
 #~ msgctxt "accel"
-#~ msgid "thumbnail overlays/no overlays"
-#~ msgstr "缩略图上的评级信息/不显示"
-
-#~ msgctxt "accel"
 #~ msgid "thumbnail overlays/overlays on mouse hover"
 #~ msgstr "缩略图上的评级信息/鼠标悬停时显示"
 
@@ -24920,10 +25097,6 @@ msgstr ""
 #~ msgstr "切换侧边框"
 
 #~ msgctxt "accel"
-#~ msgid "toggle left panel"
-#~ msgstr "切换左栏"
-
-#~ msgctxt "accel"
 #~ msgid "toggle top panel"
 #~ msgstr "切换顶栏"
 
@@ -24934,10 +25107,6 @@ msgstr ""
 #~ msgctxt "accel"
 #~ msgid "toggle header"
 #~ msgstr "切换头部"
-
-#~ msgctxt "accel"
-#~ msgid "toggle all top panels"
-#~ msgstr "切换所有顶部面板"
 
 #~ msgctxt "accel"
 #~ msgid "toggle all bottom panels"
@@ -25567,9 +25736,6 @@ msgstr ""
 #~ msgid "select parts"
 #~ msgstr "选择多个部分"
 
-#~ msgid "close"
-#~ msgstr "关闭"
-
 #~ msgid "press key combination to remap..."
 #~ msgstr "按下按键组合以重映射……"
 
@@ -26153,9 +26319,6 @@ msgstr ""
 
 #~ msgid "target power transfer function"
 #~ msgstr "目标功率传递函数"
-
-#~ msgid "rotate"
-#~ msgstr "旋转"
 
 #~ msgctxt "modulename"
 #~ msgid "gamma"
@@ -27080,10 +27243,6 @@ msgstr ""
 #~ msgid "do you want to access https://darktable.gitlab.io/doc/?"
 #~ msgstr "是否要访问https://darktable.gitlab.io/doc/?"
 
-#~ msgctxt "accel"
-#~ msgid "show overlays"
-#~ msgstr "显示覆盖层"
-
 #~ msgid "zoomable light table"
 #~ msgstr "可缩放的光台"
 
@@ -27139,10 +27298,6 @@ msgstr ""
 #~ msgid "you have reached the end of your selection (%d image)"
 #~ msgid_plural "you have reached the end of your selection (%d images)"
 #~ msgstr[0] "你已到达所选内容的终点（%d）"
-
-#~ msgctxt "accel"
-#~ msgid "clear color labels"
-#~ msgstr "清除色彩标签"
 
 #~ msgctxt "accel"
 #~ msgid "navigate up"
@@ -28363,21 +28518,6 @@ msgstr ""
 
 #~ msgid "more plugins"
 #~ msgstr "更多插件"
-
-#~ msgid "1 star"
-#~ msgstr "1星"
-
-#~ msgid "2 star"
-#~ msgstr "2星"
-
-#~ msgid "3 star"
-#~ msgstr "3星"
-
-#~ msgid "4 star"
-#~ msgstr "4星"
-
-#~ msgid "5 star"
-#~ msgstr "5星"
 
 #~ msgid "this collection is empty."
 #~ msgstr "这个集合是空的。"
