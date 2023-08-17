@@ -15,7 +15,7 @@ msgstr ""
 "Project-Id-Version: darktable 3.6.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2023-08-08 22:25+0800\n"
-"PO-Revision-Date: 2023-08-08 23:27+0800\n"
+"PO-Revision-Date: 2023-08-17 20:14+0800\n"
 "Last-Translator: Alynx Zhou <alynx.zhou@gmail.com>\n"
 "Language-Team: Chinese - China <>\n"
 "Language: zh_CN\n"
@@ -2647,7 +2647,7 @@ msgstr "输入饱和度"
 #: ../build/lib64/ansel/plugins/introspection_colorbalance.c:126
 #: ../build/lib64/ansel/plugins/introspection_colorbalance.c:211
 msgid "contrast fulcrum"
-msgstr "对比的中点"
+msgstr "对比度的中点"
 
 #: ../build/lib64/ansel/plugins/introspection_colorbalance.c:132
 #: ../build/lib64/ansel/plugins/introspection_colorbalance.c:215
@@ -2828,7 +2828,7 @@ msgstr "对比度灰色支点"
 #: ../src/iop/colorbalance.c:1901 ../src/iop/filmic.c:1649
 #: ../src/iop/filmicrgb.c:4584 ../src/iop/lowpass.c:573
 msgid "contrast"
-msgstr "对比"
+msgstr "对比度"
 
 #: ../build/lib64/ansel/plugins/introspection_colorbalancergb.c:418
 #: ../build/lib64/ansel/plugins/introspection_colorbalancergb.c:589
@@ -13453,7 +13453,7 @@ msgstr "全局饱和度"
 
 #: ../src/iop/colorbalancergb.c:2079
 msgid "global brilliance"
-msgstr "全局鲜艳度"
+msgstr "全局亮度"
 
 #: ../src/iop/colorbalancergb.c:2080 ../src/iop/colorbalancergb.c:2081
 #: ../src/iop/colorbalancergb.c:2082
