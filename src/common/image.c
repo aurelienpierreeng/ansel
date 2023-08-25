@@ -2493,16 +2493,7 @@ int dt_image_write_sidecar_file(const int32_t imgid)
     // FIRST: check if the original file is present
     gboolean from_cache = FALSE;
     dt_image_full_path(imgid, filename, sizeof(filename), &from_cache);
-
-    if(!g_file_test(filename, G_FILE_TEST_EXISTS))
-    {
-      // OTHERWISE: check if the local copy exists
-      from_cache = TRUE;
-      dt_image_full_path(imgid, filename, sizeof(filename), &from_cache);
-
-      //  nothing to do, the original is not accessible and there is no local copy
-      if(!from_cache) return 1;
-    }
+    if(!from_cache) return 1;
 
     dt_image_path_append_version(imgid, filename, sizeof(filename));
     g_strlcat(filename, ".xmp", sizeof(filename));
