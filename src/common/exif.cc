@@ -2739,7 +2739,6 @@ static void add_mask_entry_to_db(int imgid, mask_entry_t *entry)
   // add the mask entry only once
   if(entry->already_added)
     return;
-  entry->already_added = TRUE;
 
   const int mask_num = 0;
 
@@ -2767,8 +2766,14 @@ static void add_mask_entry_to_db(int imgid, mask_entry_t *entry)
   {
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 9, entry->mask_num);
   }
-  sqlite3_step(stmt);
+  int prepare_result = sqlite3_step(stmt);
   sqlite3_finalize(stmt);
+
+  // Mark entry to true only after confirmation the sql insert was successful
+  if(prepare_result == SQLITE_OK)
+  {
+    entry->already_added = TRUE;
+  }
 }
 
 static void add_non_clone_mask_entries_to_db(gpointer key, gpointer value, gpointer user_data)
