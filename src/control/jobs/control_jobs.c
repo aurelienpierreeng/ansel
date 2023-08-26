@@ -250,7 +250,7 @@ static int32_t dt_control_write_sidecar_files_job_run(dt_job_t *job)
     const int imgid = GPOINTER_TO_INT(t->data);
     const dt_image_t *img = dt_image_cache_get(darktable.image_cache, (int32_t)imgid, 'r');
     char dtfilename[PATH_MAX] = { 0 };
-    dt_image_full_path(img->id, dtfilename, sizeof(dtfilename), &from_cache);
+    dt_image_full_path(img->id,  dtfilename,  sizeof(dtfilename),  &from_cache, __FUNCTION__);
     dt_image_path_append_version(img->id, dtfilename, sizeof(dtfilename));
     g_strlcat(dtfilename, ".xmp", sizeof(dtfilename));
     if(!dt_exif_xmp_write(imgid, dtfilename))
@@ -527,7 +527,7 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
   uint8_t *exif = NULL;
   char pathname[PATH_MAX] = { 0 };
   gboolean from_cache = TRUE;
-  dt_image_full_path(d.first_imgid, pathname, sizeof(pathname), &from_cache);
+  dt_image_full_path(d.first_imgid,  pathname,  sizeof(pathname),  &from_cache, __FUNCTION__);
 
   // last param is dng mode
   const int exif_len = dt_exif_read_blob(&exif, pathname, d.first_imgid, 0, d.wd, d.ht, 1);
@@ -1033,7 +1033,7 @@ static int32_t dt_control_delete_images_job_run(dt_job_t *job)
     const int imgid = GPOINTER_TO_INT(t->data);
     char filename[PATH_MAX] = { 0 };
     gboolean from_cache = FALSE;
-    dt_image_full_path(imgid, filename, sizeof(filename), &from_cache);
+    dt_image_full_path(imgid,  filename,  sizeof(filename),  &from_cache, __FUNCTION__);
 
 #ifdef _WIN32
     char *dirname = g_path_get_dirname(filename);
@@ -1282,7 +1282,7 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
     {
       gboolean from_cache = TRUE;
       char sourcefile[PATH_MAX];
-      dt_image_full_path(imgid, sourcefile, sizeof(sourcefile), &from_cache);
+      dt_image_full_path(imgid,  sourcefile,  sizeof(sourcefile),  &from_cache, __FUNCTION__);
 
       dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
       if(img)
@@ -1412,7 +1412,7 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
     {
       char imgfilename[PATH_MAX] = { 0 };
       gboolean from_cache = TRUE;
-      dt_image_full_path(image->id, imgfilename, sizeof(imgfilename), &from_cache);
+      dt_image_full_path(image->id,  imgfilename,  sizeof(imgfilename),  &from_cache, __FUNCTION__);
       if(!g_file_test(imgfilename, G_FILE_TEST_IS_REGULAR))
       {
         dt_control_log(_("image `%s' is currently unavailable"), image->filename);

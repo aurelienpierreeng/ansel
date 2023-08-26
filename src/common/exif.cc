@@ -3889,7 +3889,7 @@ char *dt_exif_xmp_read_string(const int imgid)
   {
     char input_filename[PATH_MAX] = { 0 };
     gboolean from_cache = FALSE;
-    dt_image_full_path(imgid, input_filename, sizeof(input_filename), &from_cache);
+    dt_image_full_path(imgid,  input_filename,  sizeof(input_filename),  &from_cache, __FUNCTION__);
 
     // first take over the data from the source image
     Exiv2::XmpData xmpData;
@@ -4015,7 +4015,7 @@ int dt_exif_xmp_attach_export(const int imgid, const char *filename, void *metad
   {
     char input_filename[PATH_MAX] = { 0 };
     gboolean from_cache = TRUE;
-    dt_image_full_path(imgid, input_filename, sizeof(input_filename), &from_cache);
+    dt_image_full_path(imgid,  input_filename,  sizeof(input_filename),  &from_cache, __FUNCTION__);
 
     std::unique_ptr<Exiv2::Image> img(Exiv2::ImageFactory::open(WIDEN(filename)));
     // unfortunately it seems we have to read the metadata, to not erase the exif (which we just wrote).
@@ -4259,7 +4259,7 @@ int dt_exif_xmp_write(const int imgid, const char *filename)
   char imgfname[PATH_MAX] = { 0 };
   gboolean from_cache = TRUE;
 
-  dt_image_full_path(imgid, imgfname, sizeof(imgfname), &from_cache);
+  dt_image_full_path(imgid,  imgfname,  sizeof(imgfname),  &from_cache, __FUNCTION__);
   if(!g_file_test(imgfname, G_FILE_TEST_IS_REGULAR)) return 1;
 
   try

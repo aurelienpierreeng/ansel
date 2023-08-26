@@ -697,7 +697,7 @@ int try_enter(dt_view_t *self)
 
   char imgfilename[PATH_MAX] = { 0 };
   gboolean from_cache = TRUE;
-  dt_image_full_path(img->id, imgfilename, sizeof(imgfilename), &from_cache);
+  dt_image_full_path(img->id,  imgfilename,  sizeof(imgfilename),  &from_cache, __FUNCTION__);
   if(!g_file_test(imgfilename, G_FILE_TEST_IS_REGULAR))
   {
     dt_control_log(_("image `%s' is currently unavailable"), img->filename);

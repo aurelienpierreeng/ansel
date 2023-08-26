@@ -91,7 +91,7 @@ void _lib_imageinfo_update_message(gpointer instance, dt_lib_module_t *self)
   // we compute the info line (we reuse the function used in export to disk)
   char input_dir[512] = { 0 };
   gboolean from_cache = TRUE;
-  dt_image_full_path(imgid, input_dir, sizeof(input_dir), &from_cache);
+  dt_image_full_path(imgid,  input_dir,  sizeof(input_dir),  &from_cache, __FUNCTION__);
 
   dt_variables_params_t *vp;
   dt_variables_params_init(&vp);

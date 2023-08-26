@@ -1811,7 +1811,7 @@ void reload_defaults(dt_iop_module_t *module)
     // the image has not a profile inited
     char filename[PATH_MAX] = { 0 };
     gboolean from_cache = TRUE;
-    dt_image_full_path(img->id, filename, sizeof(filename), &from_cache);
+    dt_image_full_path(img->id,  filename,  sizeof(filename),  &from_cache, __FUNCTION__);
     const gchar *cc = filename + strlen(filename);
     for(; *cc != '.' && cc > filename; cc--)
       ;

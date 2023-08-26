@@ -295,7 +295,7 @@ int dt_image_monochrome_flags(const dt_image_t *img);
 gboolean dt_image_use_monochrome_workflow(const dt_image_t *img);
 /** returns the full path name where the image was imported from. from_cache=TRUE check and return local
  * cached filename if any. */
-void dt_image_full_path(const int32_t imgid, char *pathname, size_t pathname_len, gboolean *from_cache);
+void dt_image_full_path(const int32_t imgid, char *pathname, size_t pathname_len, gboolean *from_cache, const char *calling_func);
 /** returns the full directory of the associated film roll. */
 void dt_image_film_roll_directory(const dt_image_t *img, char *pathname, size_t pathname_len);
 /** returns the portion of the path used for the film roll name. */

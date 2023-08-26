@@ -160,7 +160,7 @@ static int sidecar_member(lua_State *L)
   const dt_image_t *my_image = checkreadimage(L, 1);
   gboolean from_cache = TRUE;
   char filename[PATH_MAX] = { 0 };
-  dt_image_full_path(my_image->id, filename, sizeof(filename), &from_cache);
+  dt_image_full_path(my_image->id,  filename,  sizeof(filename),  &from_cache, __FUNCTION__);
   dt_image_path_append_version(my_image->id, filename, sizeof(filename));
   g_strlcat(filename, ".xmp", sizeof(filename));
   lua_pushstring(L, filename);
@@ -406,7 +406,7 @@ static int image_tostring(lua_State *L)
   const dt_image_t *my_image = checkreadimage(L, -1);
   char image_name[PATH_MAX] = { 0 };
   gboolean from_cache = FALSE;
-  dt_image_full_path(my_image->id, image_name, sizeof(image_name), &from_cache);
+  dt_image_full_path(my_image->id,  image_name,  sizeof(image_name),  &from_cache, __FUNCTION__);
   dt_image_path_append_version(my_image->id, image_name, sizeof(image_name));
   lua_pushstring(L, image_name);
   releasereadimage(L, my_image);

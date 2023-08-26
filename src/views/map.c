@@ -2713,7 +2713,7 @@ static void _view_map_dnd_get_callback(GtkWidget *widget, GdkDragContext *contex
         const int imgid = GPOINTER_TO_INT(lib->selected_images->data);
         gchar pathname[PATH_MAX] = { 0 };
         gboolean from_cache = TRUE;
-        dt_image_full_path(imgid, pathname, sizeof(pathname), &from_cache);
+        dt_image_full_path(imgid,  pathname,  sizeof(pathname),  &from_cache, __FUNCTION__);
         gchar *uri = g_strdup_printf("file://%s", pathname); // TODO: should we add the host?
         gtk_selection_data_set(selection_data, gtk_selection_data_get_target(selection_data), _BYTE,
                                (guchar *)uri, strlen(uri));

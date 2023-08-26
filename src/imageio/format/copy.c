@@ -41,7 +41,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
   char *targetfile = NULL;
   char *xmpfile = NULL;
 
-  dt_image_full_path(imgid, sourcefile, sizeof(sourcefile), &from_cache);
+  dt_image_full_path(imgid,  sourcefile,  sizeof(sourcefile),  &from_cache, __FUNCTION__);
 
   char *extension = g_strrstr(sourcefile, ".");
   if(extension == NULL) goto END;

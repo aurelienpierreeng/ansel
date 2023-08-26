@@ -770,7 +770,7 @@ void dt_mipmap_cache_get_with_caller(
 
         char filename[PATH_MAX] = { 0 };
         gboolean from_cache = TRUE;
-        dt_image_full_path(buffered_image.id, filename, sizeof(filename), &from_cache);
+        dt_image_full_path(buffered_image.id,  filename,  sizeof(filename),  &from_cache, __FUNCTION__);
 
         buf->imgid = imgid;
         buf->size = mip;
@@ -1037,7 +1037,7 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
   /* do not even try to process file if it isn't available */
   char filename[PATH_MAX] = { 0 };
   gboolean from_cache = TRUE;
-  dt_image_full_path(imgid, filename, sizeof(filename), &from_cache);
+  dt_image_full_path(imgid,  filename,  sizeof(filename),  &from_cache, __FUNCTION__);
   if(!*filename || !g_file_test(filename, G_FILE_TEST_EXISTS))
   {
     *width = *height = 0;
@@ -1162,7 +1162,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
   gboolean from_cache = TRUE;
 
   /* do not even try to process file if it isn't available */
-  dt_image_full_path(imgid, filename, sizeof(filename), &from_cache);
+  dt_image_full_path(imgid,  filename,  sizeof(filename),  &from_cache, __FUNCTION__);
   if(!*filename || !g_file_test(filename, G_FILE_TEST_EXISTS))
   {
     *width = *height = 0;
@@ -1191,7 +1191,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
     // try to load the embedded thumbnail in raw
     from_cache = TRUE;
     memset(filename, 0, sizeof(filename));
-    dt_image_full_path(imgid, filename, sizeof(filename), &from_cache);
+    dt_image_full_path(imgid,  filename,  sizeof(filename),  &from_cache, __FUNCTION__);
 
     const char *c = filename + strlen(filename);
     while(*c != '.' && c > filename) c--;

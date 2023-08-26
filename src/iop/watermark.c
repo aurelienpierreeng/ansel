@@ -430,7 +430,7 @@ static gchar *_watermark_get_svgdoc(dt_iop_module_t *self, dt_iop_watermark_data
     dt_variables_params_init(&params);
     gboolean from_cache = FALSE;
     char image_path[PATH_MAX] = { 0 };
-    dt_image_full_path(image->id, image_path, sizeof(image_path), &from_cache);
+    dt_image_full_path(image->id,  image_path,  sizeof(image_path),  &from_cache, __FUNCTION__);
     params->filename = image_path;
     params->jobcode = "infos";
     params->sequence = 0;

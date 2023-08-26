@@ -1088,7 +1088,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                                   // happens when we write the image
     char pathname[PATH_MAX] = { 0 };
     gboolean from_cache = TRUE;
-    dt_image_full_path(imgid, pathname, sizeof(pathname), &from_cache);
+    dt_image_full_path(imgid,  pathname,  sizeof(pathname),  &from_cache, __FUNCTION__);
     // last param is dng mode, it's false here
     length = dt_exif_read_blob(&exif_profile, pathname, imgid, sRGB, processed_width, processed_height, 0);
 

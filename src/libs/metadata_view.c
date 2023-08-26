@@ -670,7 +670,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
       case md_internal_fullpath:
       {
         gboolean from_cache = FALSE;
-        dt_image_full_path(img->id, text, sizeof(text), &from_cache);
+        dt_image_full_path(img->id,  text,  sizeof(text),  &from_cache, __FUNCTION__);
         _metadata_update_value(md_internal_fullpath, text, self);
       }
       break;

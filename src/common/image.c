@@ -335,7 +335,7 @@ gboolean dt_image_safe_remove(const int32_t imgid)
   char pathname[PATH_MAX] = { 0 };
   gboolean from_cache = TRUE;
 
-  dt_image_full_path(imgid, pathname, sizeof(pathname), &from_cache);
+  dt_image_full_path(imgid,  pathname,  sizeof(pathname),  &from_cache, __FUNCTION__);
 
   if(!from_cache)
     return TRUE;
@@ -349,7 +349,18 @@ gboolean dt_image_safe_remove(const int32_t imgid)
   }
 }
 
-void dt_image_full_path(const int32_t imgid, char *pathname, size_t pathname_len, gboolean *from_cache)
+/**
+ * @brief Get the full path of an image out of the database.
+ * TODO: This gets called too many times and the output should be cached.
+ * TODO: Document where the pathname_len is being set.
+ * 
+ * @param imgid The image ID.
+ * @param pathname A pointer storing the returned value from the sql request.
+ * @param pathname_len Number of characters of the path set outside the function.
+ * @param from_cache Boolean, false returns the orgina file (file system), true tries to ge a local copy.
+ * @param calling_func Pass __FUNCTION__ for identifcation of callers of this function.
+ */
+void dt_image_full_path(const int32_t imgid, char *pathname, size_t pathname_len, gboolean *from_cache, const char *calling_func)
 {
   sqlite3_stmt *stmt;
   // clang-format off
@@ -369,12 +380,14 @@ void dt_image_full_path(const int32_t imgid, char *pathname, size_t pathname_len
   {
     char lc_pathname[PATH_MAX] = { 0 };
     _image_local_copy_full_path(imgid, lc_pathname, sizeof(lc_pathname));
-
     if(g_file_test(lc_pathname, G_FILE_TEST_EXISTS))
       g_strlcpy(pathname, (char *)lc_pathname, pathname_len);
     else
       *from_cache = FALSE;
   }
+
+  // NOTE: must come after sql as it sets the pointer pathname which is undefined otherwise.
+  dt_print(DT_DEBUG_SQL, "dt_image_full_path pathname (%s) called from %s, cache=%i\n", pathname, calling_func, *from_cache);
 }
 
 static void _image_local_copy_full_path(const int32_t imgid, char *pathname, size_t pathname_len)
@@ -1854,7 +1867,7 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
   gchar oldimg[PATH_MAX] = { 0 };
   gchar newimg[PATH_MAX] = { 0 };
   gboolean from_cache = FALSE;
-  dt_image_full_path(imgid, oldimg, sizeof(oldimg), &from_cache);
+  dt_image_full_path(imgid,  oldimg,  sizeof(oldimg),  &from_cache, __FUNCTION__);
   gchar *newdir = NULL;
 
   sqlite3_stmt *film_stmt;
@@ -2063,7 +2076,7 @@ int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gc
   GFile *src = NULL, *dest = NULL;
   if(newdir)
   {
-    dt_image_full_path(imgid, srcpath, sizeof(srcpath), &from_cache);
+    dt_image_full_path(imgid,  srcpath,  sizeof(srcpath),  &from_cache, __FUNCTION__);
     oldFilename = g_path_get_basename(srcpath);
     gchar *destpath;
     if(newname)
@@ -2333,7 +2346,7 @@ int dt_image_local_copy_set(const int32_t imgid)
   gchar destpath[PATH_MAX] = { 0 };
 
   gboolean from_cache = FALSE;
-  dt_image_full_path(imgid, srcpath, sizeof(srcpath), &from_cache);
+  dt_image_full_path(imgid,  srcpath,  sizeof(srcpath),  &from_cache, __FUNCTION__);
 
   _image_local_copy_full_path(imgid, destpath, sizeof(destpath));
 
@@ -2417,10 +2430,10 @@ int dt_image_local_copy_reset(const int32_t imgid)
   // check that the original file is accessible
 
   gboolean from_cache = FALSE;
-  dt_image_full_path(imgid, destpath, sizeof(destpath), &from_cache);
+  dt_image_full_path(imgid,  destpath,  sizeof(destpath),  &from_cache, __FUNCTION__);
 
   from_cache = TRUE;
-  dt_image_full_path(imgid, locppath, sizeof(locppath), &from_cache);
+  dt_image_full_path(imgid,  locppath,  sizeof(locppath),  &from_cache, __FUNCTION__);
   dt_image_path_append_version(imgid, locppath, sizeof(locppath));
   g_strlcat(locppath, ".xmp", sizeof(locppath));
 
@@ -2572,7 +2585,7 @@ void dt_image_local_copy_synch(void)
     const int32_t imgid = sqlite3_column_int(stmt, 0);
     gboolean from_cache = FALSE;
     char filename[PATH_MAX] = { 0 };
-    dt_image_full_path(imgid, filename, sizeof(filename), &from_cache);
+    dt_image_full_path(imgid,  filename,  sizeof(filename),  &from_cache, __FUNCTION__);
 
     if(g_file_test(filename, G_FILE_TEST_EXISTS))
     {
@@ -2716,7 +2729,7 @@ char *dt_image_get_audio_path(const int32_t imgid)
 {
   gboolean from_cache = FALSE;
   char image_path[PATH_MAX] = { 0 };
-  dt_image_full_path(imgid, image_path, sizeof(image_path), &from_cache);
+  dt_image_full_path(imgid,  image_path,  sizeof(image_path),  &from_cache, __FUNCTION__);
 
   return dt_image_get_audio_path_from_path(image_path);
 }
@@ -2748,7 +2761,7 @@ char *dt_image_get_text_path(const int32_t imgid)
 {
   gboolean from_cache = FALSE;
   char image_path[PATH_MAX] = { 0 };
-  dt_image_full_path(imgid, image_path, sizeof(image_path), &from_cache);
+  dt_image_full_path(imgid,  image_path,  sizeof(image_path),  &from_cache, __FUNCTION__);
 
   return dt_image_get_text_path_from_path(image_path);
 }

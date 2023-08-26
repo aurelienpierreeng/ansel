@@ -245,7 +245,7 @@ char *dt_get_lightroom_xmp(int imgid)
   gboolean from_cache = TRUE;
 
   // Get full pathname
-  dt_image_full_path(imgid, pathname, DT_MAX_FILENAME_LEN, &from_cache);
+  dt_image_full_path(imgid,  pathname,  DT_MAX_FILENAME_LEN,  &from_cache, __FUNCTION__);
 
   // Look for extension
   char *pos = strrchr(pathname, '.');

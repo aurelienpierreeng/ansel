@@ -619,7 +619,7 @@ static gboolean _event_image_draw(GtkWidget *widget, cairo_t *cr, gpointer user_
       dt_colorspaces_color_profile_type_t color_space;
       char path[PATH_MAX] = { 0 };
       gboolean from_cache = TRUE;
-      dt_image_full_path(thumb->imgid, path, sizeof(path), &from_cache);
+      dt_image_full_path(thumb->imgid,  path,  sizeof(path),  &from_cache, __FUNCTION__);
       if(!dt_imageio_large_thumbnail(path, &full_res_thumb, &full_res_thumb_wd, &full_res_thumb_ht, &color_space))
       {
         // we look for focus areas

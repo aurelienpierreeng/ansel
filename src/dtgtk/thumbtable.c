@@ -1316,7 +1316,7 @@ static void _event_dnd_get(GtkWidget *widget, GdkDragContext *context, GtkSelect
         gchar pathname[PATH_MAX] = { 0 };
         gboolean from_cache = TRUE;
         const int id = GPOINTER_TO_INT(l->data);
-        dt_image_full_path(id, pathname, sizeof(pathname), &from_cache);
+        dt_image_full_path(id,  pathname,  sizeof(pathname),  &from_cache, __FUNCTION__);
         gchar *uri = g_strdup_printf("file://%s", pathname); // TODO: should we add the host?
         gtk_selection_data_set(selection_data, gtk_selection_data_get_target(selection_data),
                                _BYTE, (guchar *)uri, strlen(uri));
@@ -1330,7 +1330,7 @@ static void _event_dnd_get(GtkWidget *widget, GdkDragContext *context, GtkSelect
           const int id = GPOINTER_TO_INT(l->data);
           gchar pathname[PATH_MAX] = { 0 };
           gboolean from_cache = TRUE;
-          dt_image_full_path(id, pathname, sizeof(pathname), &from_cache);
+          dt_image_full_path(id,  pathname,  sizeof(pathname),  &from_cache, __FUNCTION__);
           gchar *uri = g_strdup_printf("file://%s", pathname); // TODO: should we add the host?
           images = g_list_prepend(images, uri);
         }
