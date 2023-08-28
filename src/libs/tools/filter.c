@@ -695,7 +695,7 @@ static void _reset_stars_filter(dt_lib_module_t *self, gboolean smart_filter)
   if(smart_filter == TRUE)
   {
     /* initial import rating setting */
-    const int initial_rating = dt_conf_get_int("ui_last/import_initial_rating");
+    const int initial_rating = 0;
 
     /* current selection in filter dropdown */
     const int current_filter = dt_bauhaus_combobox_get(d->stars);

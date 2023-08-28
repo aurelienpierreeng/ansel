@@ -67,16 +67,6 @@ target_notest()
   cmake --build "$BUILD_DIR" --target install -- $MAKEFLAGS || cmake --build "$BUILD_DIR" --target install -- -j1 "$VERBOSE" "$KEEPGOING"
 }
 
-target_usermanual()
-{
-  cmake --build "$BUILD_DIR" -- -j1 -v -k0 validate_usermanual_xml
-
-  # # to get as much of the issues into the log as possible
-  # cmake --build "$BUILD_DIR" -- $PARALLEL -v ansel-usermanual || cmake --build "$BUILD_DIR" -- -j1 -v -k0 ansel-usermanual
-  # test -r doc/usermanual/ansel-usermanual.pdf
-  # ls -lah doc/usermanual/ansel-usermanual.pdf
-}
-
 diskspace()
 {
   df
@@ -105,8 +95,6 @@ case "$TARGET" in
       -DUSE_OPENMP=OFF \
       -DUSE_OPENCL=OFF \
       -DUSE_LUA=OFF \
-      -DUSE_GAME=OFF \
-      -DUSE_CAMERA_SUPPORT=OFF \
       -DUSE_NLS=OFF \
       -DUSE_GRAPHICSMAGICK=OFF \
       -DUSE_OPENJPEG=OFF \
@@ -130,8 +118,6 @@ case "$TARGET" in
       -DUSE_OPENMP=OFF \
       -DUSE_OPENCL=OFF \
       -DUSE_LUA=OFF \
-      -DUSE_GAME=OFF \
-      -DUSE_CAMERA_SUPPORT=OFF \
       -DUSE_NLS=OFF \
       -DUSE_GRAPHICSMAGICK=OFF \
       -DUSE_OPENJPEG=OFF \

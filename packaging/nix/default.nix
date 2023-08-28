@@ -21,7 +21,6 @@ in stdenv.mkDerivation rec {
     ];
 
   cmakeFlags = [
-    "-DBUILD_USERMANUAL=False"
   ];
 
   # ansel changed its rpath handling in commit

@@ -1812,7 +1812,6 @@ const struct
   {"session/base_directory_pattern",    "base_pattern",       DT_STRING},
   {"session/sub_directory_pattern",     "sub_pattern",        DT_STRING},
   {"session/filename_pattern",          "filename_pattern",   DT_STRING},
-  {"ui_last/import_initial_rating",     "rating",             DT_INT}
 };
 static const guint pref_n = G_N_ELEMENTS(_pref);
 
