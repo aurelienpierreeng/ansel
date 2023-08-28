@@ -920,13 +920,6 @@
     <longdescription/>
   </dtconfig>
   <dtconfig ui="yes">
-    <name>ui_last/import_initial_rating</name>
-    <type min="0" max="5">int</type>
-    <default>1</default>
-    <shortdescription>initial rating</shortdescription>
-    <longdescription>initial star rating for all images when importing a filmroll</longdescription>
-  </dtconfig>
-  <dtconfig ui="yes">
     <name>ui_last/ignore_exif_rating</name>
     <type>bool</type>
     <default>false</default>

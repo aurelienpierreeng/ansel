@@ -20,9 +20,6 @@
 #include "control/progress.h"
 #include "control/control.h"
 
-#ifdef HAVE_UNITY
-#include <unity/unity/unity.h>
-#endif
 #ifdef MAC_INTEGRATION
 #include <gtkosxapplication.h>
 #endif
@@ -53,10 +50,6 @@ typedef struct _dt_progress_t
   dt_progress_cancel_callback_t cancel;
   void *cancel_data;
 
-#ifdef HAVE_UNITY
-  UnityLauncherEntry *darktable_launcher;
-#endif
-
 } _dt_progress_t;
 
 static void global_progress_start(dt_control_t *control, dt_progress_t *progress)
@@ -64,15 +57,6 @@ static void global_progress_start(dt_control_t *control, dt_progress_t *progress
   control->progress_system.n_progress_bar++;
 
 #ifndef _WIN32
-
-#ifdef HAVE_UNITY
-
-  progress->darktable_launcher = unity_launcher_entry_get_for_desktop_id("photos.ansel.app.desktop");
-  unity_launcher_entry_set_progress(progress->darktable_launcher, 0.0);
-  unity_launcher_entry_set_progress_visible(progress->darktable_launcher, TRUE);
-
-#else
-
   // this should work for unity as well as kde
   // https://wiki.ubuntu.com/Unity/LauncherAPI#Low_level_DBus_API:_com.canonical.Unity.LauncherEntry
   if(darktable.dbus && darktable.dbus->dbus_connection)
@@ -99,8 +83,6 @@ static void global_progress_start(dt_control_t *control, dt_progress_t *progress
       g_error_free(error);
     }
   }
-
-#endif // HAVE_UNITY
 
 #else // _WIN32
 
@@ -131,12 +113,6 @@ static void global_progress_set(dt_control_t *control, dt_progress_t *progress, 
 
 #ifndef _WIN32
 
-#ifdef HAVE_UNITY
-
-  unity_launcher_entry_set_progress(progress->darktable_launcher, value);
-
-#else
-
   if(darktable.dbus && darktable.dbus->dbus_connection)
   {
     GError *error = NULL;
@@ -159,8 +135,6 @@ static void global_progress_set(dt_control_t *control, dt_progress_t *progress, 
       g_error_free(error);
     }
   }
-
-#endif // HAVE_UNITY
 
 #else // _WIN32
 
@@ -190,13 +164,6 @@ static void global_progress_end(dt_control_t *control, dt_progress_t *progress)
 
 #ifndef _WIN32
 
-#ifdef HAVE_UNITY
-
-  unity_launcher_entry_set_progress(progress->darktable_launcher, 1.0);
-  unity_launcher_entry_set_progress_visible(progress->darktable_launcher, FALSE);
-
-#else
-
   if(darktable.dbus && darktable.dbus->dbus_connection)
   {
     GError *error = NULL;
@@ -225,8 +192,6 @@ static void global_progress_end(dt_control_t *control, dt_progress_t *progress)
     darktable.dbus->dbus_connection = NULL;
   }
 
-#endif // HAVE_UNITY
-
 #else // _WIN32
 
   if(control->progress_system.taskbarlist)
@@ -251,13 +216,6 @@ static void global_progress_end(dt_control_t *control, dt_progress_t *progress)
 void dt_control_progress_init(struct dt_control_t *control)
 {
 #ifndef _WIN32
-
-#ifdef HAVE_UNITY
-
-  UnityLauncherEntry *darktable_launcher = unity_launcher_entry_get_for_desktop_id("photos.ansel.app.desktop");
-  unity_launcher_entry_set_progress_visible(darktable_launcher, FALSE);
-
-#else
 
   if(darktable.dbus->dbus_connection)
   {
@@ -284,8 +242,6 @@ void dt_control_progress_init(struct dt_control_t *control)
     g_object_unref(G_OBJECT(darktable.dbus->dbus_connection));
     darktable.dbus->dbus_connection = NULL;
   }
-
-#endif // HAVE_UNITY
 
 #else // _WIN32
 
