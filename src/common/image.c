@@ -2505,7 +2505,7 @@ int dt_image_write_sidecar_file(const int32_t imgid)
 
     // FIRST: check if the original file is present
     gboolean from_cache = FALSE;
-    dt_image_full_path(imgid, filename, sizeof(filename), &from_cache);
+    dt_image_full_path(imgid, filename, sizeof(filename), &from_cache, __FUNCTION__);
     if(!from_cache) return 1;
 
     dt_image_path_append_version(imgid, filename, sizeof(filename));
