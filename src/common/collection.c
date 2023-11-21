@@ -1986,14 +1986,14 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
       if(strcmp(operator, "[]") == 0)
       {
         if(number1 && number2)
-          query = g_strdup_printf("((%s >= %ld) AND (%s <= %ld))", colname, (long int)nb1, colname, (long int)nb2);
+          query = g_strdup_printf("((%s >= %" G_GINT64_FORMAT ") AND (%s <= %" G_GINT64_FORMAT "))", colname, nb1, colname, nb2);
       }
-      else if((strcmp(operator, "=") == 0 || strcmp(operator, "") == 0) && number1)
-        query = g_strdup_printf("((%s >= %ld) AND (%s <= %ld))", colname, (long int)nb1, colname, (long int)nb2);
+      else if((strcmp(operator, "=") == 0 || strcmp(operator, "") == 0) && number1 && number2)
+        query = g_strdup_printf("((%s >= %" G_GINT64_FORMAT ") AND (%s <= %" G_GINT64_FORMAT "))", colname, nb1, colname, nb2);
       else if(strcmp(operator, "<>") == 0 && number1 && number2)
-        query = g_strdup_printf("((%s < %ld) AND (%s > %ld))", colname, (long int)nb1, colname, (long int)nb2);
+        query = g_strdup_printf("((%s < %" G_GINT64_FORMAT ") AND (%s > %" G_GINT64_FORMAT "))", colname, nb1, colname, nb2);
       else if(number1)
-        query = g_strdup_printf("(%s %s %ld)", colname, operator, (long int)nb1);
+        query = g_strdup_printf("(%s %s %" G_GINT64_FORMAT ")", colname, operator, nb1);
       else
         query = g_strdup("1 = 1");
 
