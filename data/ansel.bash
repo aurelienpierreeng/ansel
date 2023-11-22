@@ -150,27 +150,6 @@ _ansel_cli()
   return 0
 } # _ansel_cli
 
-_ansel_chart()
-{
-  local cur prev words cword opts dopts
-  _get_comp_words_by_ref -n ":" cur prev words cword
-
-  COMPREPLY=()
-
-  # the possible options
-  opts="--csv --help"
-
-  # if the user started with a '-' suggest the possible command line options
-  if [[ "$cur" == -* ]]; then
-    COMPREPLY=($(compgen -W "${opts}" -- ${cur}))
-  else
-    # otherwise suggest a filename or directory
-    _filedir
-  fi
-
-  return 0
-} # _ansel_chart
-
 _ansel_generate_cache()
 {
   local cur prev words cword opts dopts
@@ -203,7 +182,6 @@ _ansel_generate_cache()
 } # _ansel_generate_cache
 
 complete -F _ansel ansel
-complete -F _ansel_chart ansel-chart
 complete -F _ansel_cli ansel-cli
 complete -F _ansel ansel-cltest
 complete -F _ansel_generate_cache ansel-generate-cache

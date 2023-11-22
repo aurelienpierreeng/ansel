@@ -15,21 +15,19 @@ jobs:
       matrix:
         btype:
           - Release
-        compiler:
-          - { compiler: GNU,  CC: gcc,   CXX: g++ }
-        eco: [-DBINARY_PACKAGE_BUILD=ON]
+        eco: [-DBINARY_PACKAGE_BUILD=ON -DUSE_XMLLINT=OFF]
         target:
           - skiptest
         generator:
           - Ninja
         branch:
           - { code: master, label: stable }
+        msystem:
+          - UCRT64
     defaults:
       run:
         shell: msys2 {0}
     env:
-      CC: ${{ matrix.compiler.CC }}
-      CXX: ${{ matrix.compiler.CXX }}
       SRC_DIR: ${{ github.workspace }}/src
       BUILD_DIR: ${{ github.workspace }}/build
       INSTALL_PREFIX: ${{ github.workspace }}/install
@@ -42,13 +40,13 @@ jobs:
     steps:
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: ucrt64
+          msystem: ${{ matrix.msystem }}
           install: >-
-            base-devel
             git
             intltool
+            po4a
           pacboy: >-
-            toolchain:p
+            cc:p
             cmake:p
             cmocka:p
             ninja:p
@@ -56,10 +54,13 @@ jobs:
             dbus-glib:p
             drmingw:p
             exiv2:p
+            gcc-libs:p
             gettext:p
             gmic:p
             graphicsmagick:p
             gtk3:p
+            icu:p
+            imath:p
             iso-codes:p
             lcms2:p
             lensfun:p
@@ -67,12 +68,17 @@ jobs:
             libexif:p
             libheif:p
             libjpeg-turbo:p
+            libjxl:p
+            librsvg:p
             libsecret:p
             libsoup:p
+            libwebp:p
+            libtiff:p
             libwebp:p
             libxml2:p
             libxslt:p
             lua:p
+            omp:p
             openexr:p
             openjpeg2:p
             osm-gps-map:p
@@ -84,17 +90,15 @@ jobs:
             python3-six:p
             sqlite3:p
             zlib:p
-            gmic:p
           update: true
       - name: Checkout ansel source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ env.BRANCH }}
           fetch-depth: 500
           submodules: true
           path: src
       - name: Update lensfun data
-        if: ${{ false }} #${{ success() }} re-enable when lensfun servers renew the SSL certificate
         run: |
           lensfun-update-data
       - name: Build and Install

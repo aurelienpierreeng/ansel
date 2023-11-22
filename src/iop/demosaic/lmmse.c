@@ -44,7 +44,6 @@
    The default is now 2 times slower than RCD and 2 times faster than AMaZE
 */
 
-
 #ifndef LMMSE_GRP
   #define LMMSE_GRP 136
 #endif
@@ -179,7 +178,7 @@ static void lmmse_demosaic(dt_dev_pixelpipe_iop_t *piece, float *const restrict 
     {
       qix[i] = qix[i - 1] + LMMSE_GRP * LMMSE_GRP;
     }
-    memset(buffer, 0, sizeof(float) * LMMSE_GRP * LMMSE_GRP * 6);
+    memset_zero(buffer, sizeof(float) * LMMSE_GRP * LMMSE_GRP * 6);
 
 #ifdef _OPENMP
   #pragma omp for schedule(simd:dynamic, 6) collapse(2)

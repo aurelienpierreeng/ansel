@@ -89,7 +89,7 @@ static inline int _align_close(int n, int a)
   return n + shift;
 }
 
-/* 
+/*
   _maximum_number_tiles is the assumed maximum sane number of tiles
   if during tiling this number is exceeded darktable assumes that tiling is not possible and falls back
   to untiled processing - with all system memory limits taking full effect.
@@ -200,7 +200,6 @@ static int _simplex(double (*objfunc)(double[], void *[]), double start[], int n
   int vg; /* vertex with largest value */
 
   int i, j = 0, m, row;
-  int k;   /* track the number of function evaluations */
   int itr; /* track the number of iterations */
 
   double **v;    /* holds vertices of simplex */
@@ -267,8 +266,6 @@ static int _simplex(double (*objfunc)(double[], void *[]), double start[], int n
   {
     f[j] = objfunc(v[j], rest);
   }
-
-  k = n + 1;
 
 #if 0
   /* print out the initial values */
@@ -340,7 +337,6 @@ static int _simplex(double (*objfunc)(double[], void *[]), double start[], int n
       constrain(vr, n);
     }
     fr = objfunc(vr, rest);
-    k++;
 
     if(fr < f[vh] && fr >= f[vs])
     {
@@ -364,7 +360,6 @@ static int _simplex(double (*objfunc)(double[], void *[]), double start[], int n
         constrain(ve, n);
       }
       fe = objfunc(ve, rest);
-      k++;
 
       /* by making fe < fr as opposed to fe < f[vs],
          Rosenbrocks function takes 63 iterations as opposed
@@ -404,7 +399,6 @@ static int _simplex(double (*objfunc)(double[], void *[]), double start[], int n
           constrain(vc, n);
         }
         fc = objfunc(vc, rest);
-        k++;
       }
       else
       {
@@ -419,7 +413,6 @@ static int _simplex(double (*objfunc)(double[], void *[]), double start[], int n
           constrain(vc, n);
         }
         fc = objfunc(vc, rest);
-        k++;
       }
 
 
@@ -453,13 +446,11 @@ static int _simplex(double (*objfunc)(double[], void *[]), double start[], int n
           constrain(v[vg], n);
         }
         f[vg] = objfunc(v[vg], rest);
-        k++;
         if(constrain != NULL)
         {
           constrain(v[vh], n);
         }
         f[vh] = objfunc(v[vh], rest);
-        k++;
       }
     }
 
@@ -2072,4 +2063,3 @@ int dt_tiling_piece_fits_host_memory(const size_t width, const size_t height, co
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

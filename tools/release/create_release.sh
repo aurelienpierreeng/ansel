@@ -42,10 +42,6 @@ tar xf "$DT_SRC_DIR/ansel-$dt_decoration.tar"
 echo "* creating version header"
 "$DT_SRC_DIR/tools/create_version_c.sh" "ansel-$dt_decoration/src/version_gen.c" "$dt_decoration"
 
-# drop regression_tests. for internal use, and need git anyway
-echo "* removing tools/regression_tests"
-rm -rf ansel-"$dt_decoration"/tools/regression_tests
-
 # drop integration tests
 echo "* removing src/tests/integration"
 rm -rf ansel-"$dt_decoration"/src/tests/integration

@@ -432,7 +432,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       for(int top = -border; top < height; top += ts - border2)
         for(int left = -border; left < width; left += ts - border2)
         {
-          memset(buffer, 0, buffersize);
+          memset_zero(buffer, buffersize);
           const int vblock = ((top + border) / (ts - border2)) + 1;
           const int hblock = ((left + border) / (ts - border2)) + 1;
           const int bottom = MIN(top + ts, height + border);

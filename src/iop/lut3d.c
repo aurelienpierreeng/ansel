@@ -58,6 +58,7 @@ typedef enum dt_iop_lut3d_colorspace_t
   DT_IOP_REC709,      // $DESCRIPTION: "gamma Rec709 RGB"
   DT_IOP_LIN_REC709,  // $DESCRIPTION: "linear Rec709 RGB"
   DT_IOP_LIN_REC2020, // $DESCRIPTION: "linear Rec2020 RGB"
+  DT_IOP_ITUR_BT1886, // $DESCRIPTION: "ITU-R BT.1886 (gamma 2.4 Rec709)"
 } dt_iop_lut3d_colorspace_t;
 
 typedef enum dt_iop_lut3d_interpolation_t
@@ -983,6 +984,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     : (d->params.colorspace == DT_IOP_REC709) ? DT_COLORSPACE_REC709
     : (d->params.colorspace == DT_IOP_ARGB) ? DT_COLORSPACE_ADOBERGB
     : (d->params.colorspace == DT_IOP_LIN_REC709) ? DT_COLORSPACE_LIN_REC709
+    : (d->params.colorspace == DT_IOP_ITUR_BT1886) ? DT_COLORSPACE_ITUR_BT1886
     : DT_COLORSPACE_LIN_REC2020;
   const dt_iop_order_iccprofile_info_t *const lut_profile
     = dt_ioppr_add_profile_info_to_list(self->dev, colorspace, "", INTENT_PERCEPTUAL);
@@ -1062,6 +1064,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     : (d->params.colorspace == DT_IOP_REC709) ? DT_COLORSPACE_REC709
     : (d->params.colorspace == DT_IOP_ARGB) ? DT_COLORSPACE_ADOBERGB
     : (d->params.colorspace == DT_IOP_LIN_REC709) ? DT_COLORSPACE_LIN_REC709
+    : (d->params.colorspace == DT_IOP_ITUR_BT1886) ? DT_COLORSPACE_ITUR_BT1886
     : DT_COLORSPACE_LIN_REC2020;
   const dt_iop_order_iccprofile_info_t *const lut_profile
     = dt_ioppr_add_profile_info_to_list(self->dev, colorspace, "", INTENT_PERCEPTUAL);

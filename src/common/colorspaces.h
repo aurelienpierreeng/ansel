@@ -78,7 +78,8 @@ typedef enum dt_colorspaces_color_profile_type_t
   DT_COLORSPACE_HLG_REC2020 = 23,
   DT_COLORSPACE_PQ_P3 = 24,
   DT_COLORSPACE_HLG_P3 = 25,
-  DT_COLORSPACE_LAST = 26
+  DT_COLORSPACE_ITUR_BT1886 = 26,
+  DT_COLORSPACE_LAST = 27
 } dt_colorspaces_color_profile_type_t;
 
 typedef enum dt_colorspaces_color_mode_t

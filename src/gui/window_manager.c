@@ -303,6 +303,10 @@ void dt_ui_restore_panels(dt_ui_t *ui)
 
       g_free(key);
     }
+
+    // Force main menu to remain visible. Many users hide the top header bar in Darktable.
+    // Coming to Ansel, they don't realize there is a menu there.
+    dt_ui_panel_show(ui, DT_UI_PANEL_TOP, TRUE, TRUE);
   }
 
   update_manager_sizes(ui);

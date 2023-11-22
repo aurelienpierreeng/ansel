@@ -1135,13 +1135,13 @@ static void _warn_about_history_overuse(dt_develop_t *dev)
 {
   /* History stores one entry per module, everytime a parameter is changed.
   *  For modules using masks, we also store a full snapshot of masks states.
-  *  All that is saved into database and XMP. When history entries × number of mask > 250, 
+  *  All that is saved into database and XMP. When history entries × number of mask > 250,
   *  we get a really bad performance penalty.
   */
   gint states = 0;
 
   GList *history = dev->history;
-  for(int i = 0; history; i++)
+  while(history)
   {
     dt_dev_history_item_t *hist_item = (dt_dev_history_item_t *)(history->data);
     states += g_list_length(hist_item->forms);

@@ -432,7 +432,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
       }
 
       /* Build homogeneity maps from the derivatives:                   */
-      memset(homo, 0, sizeof(uint8_t) * ndir * TS * TS);
+      memset_zero(homo, sizeof(uint8_t) * ndir * TS * TS);
       const int pad_homo = (passes == 1) ? 10 : 15;
       for(int row = pad_homo; row < mrow - pad_homo; row++)
         for(int col = pad_homo; col < mcol - pad_homo; col++)

@@ -218,15 +218,15 @@ static int set_grad_from_points(struct dt_iop_module_t *self, float xa, float ya
 
   // we first need to find the rotation angle
   // weird dichotomic solution : we may use something more cool ...
-  float v1 = -M_PI;
-  float v2 = M_PI;
+  float v1 = -M_PI_F;
+  float v2 = M_PI_F;
   float sinv, cosv, r1, r2, v, r;
 
   sinv = sinf(v1), cosv = cosf(v1);
   r1 = pts[1] * cosv - pts[0] * sinv + pts[2] * sinv - pts[3] * cosv;
 
   // we search v2 so r2 as not the same sign as r1
-  const float pas = M_PI / 16.0;
+  const float pas = M_PI_F / 16.0;
 
   do
   {
@@ -234,9 +234,9 @@ static int set_grad_from_points(struct dt_iop_module_t *self, float xa, float ya
     sinv = sinf(v2), cosv = cosf(v2);
     r2 = pts[1] * cosv - pts[0] * sinv + pts[2] * sinv - pts[3] * cosv;
     if(r1 * r2 < 0) break;
-  } while(v2 <= M_PI);
+  } while(v2 <= M_PI_F);
 
-  if(v2 == M_PI) return 9;
+  if(v2 == M_PI_F) return 9;
 
   // set precision for the iterative check
   const float eps = .0001f;

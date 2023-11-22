@@ -370,6 +370,22 @@ int dt_worker_threads();
 size_t dt_get_available_mem();
 size_t dt_get_singlebuffer_mem();
 
+/**
+ * @brief Set the memory buffer to zero as a pack of unsigned char
+ *
+ * @param buffer void buffer
+ * @param size size of the memory stride. NEEDS TO BE A MULTIPLE OF 8.
+ */
+static inline void memset_zero(void *const buffer, size_t size)
+{
+  // Same as memset_s in C11. memset might be optimized away by compilers, this will not.
+  // Not parallelized or vectorized since it's applied only on "small" tiles.
+  for(size_t k = 0; k < size / sizeof(unsigned char); k++) {
+    unsigned char *const item = (unsigned char *const)buffer + k;
+    *item = 0;
+  }
+}
+
 void *dt_alloc_align(size_t alignment, size_t size);
 static inline void* dt_calloc_align(size_t alignment, size_t size)
 {

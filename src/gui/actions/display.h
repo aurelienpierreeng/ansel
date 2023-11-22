@@ -194,18 +194,6 @@ static gboolean panel_bottom_checked_callback(GtkWidget *widget)
   return dt_ui_panel_visible(darktable.gui->ui, DT_UI_PANEL_CENTER_BOTTOM);
 }
 
-static void _toggle_header_accel_callback(dt_action_t *action)
-{
-  // Don't map it in the menu because it makes the menu itself disappear,
-  // so users who don't know the key shortcut to get it back will get stuck.
-  // Force users to toggle this one from the keyboard so they can recover it the same way.
-  // TODO: use currently-defined shortcut
-  if(_panel_is_visible(DT_UI_PANEL_TOP))
-    dt_toast_log(_("To reactivate the header bar, use : Ctrl + H"));
-
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_TOP, !_panel_is_visible(DT_UI_PANEL_TOP), TRUE);
-}
-
 static void filmstrip_callback()
 {
   dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_BOTTOM, !_panel_is_visible(DT_UI_PANEL_BOTTOM), TRUE);
@@ -460,8 +448,6 @@ void append_display(GtkWidget **menus, GList **lists, const dt_menus_t index)
   ac = dt_action_define(pnl, NULL, N_("Full screen"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, full_screen_callback, GDK_KEY_F11, 0);
 
-
   // specific top/bottom toggles
   dt_action_register(pnl, N_("Toggle all panels visibility"), _toggle_side_borders_accel_callback, GDK_KEY_Tab, 0);
-  dt_action_register(pnl, N_("Toggle header menu bar visibility"), _toggle_header_accel_callback, GDK_KEY_h, GDK_CONTROL_MASK);
 }

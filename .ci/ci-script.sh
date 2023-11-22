@@ -27,44 +27,38 @@
 
 set -ex
 
-VERBOSE="-v"
-KEEPGOING="-k0"
+if [ "$GENERATOR" = "Ninja" ];
+then
+  VERBOSE="-v"
+  KEEPGOING="-k0"
+  JOBS=""
+fi;
 
 if [ "$GENERATOR" = "Unix Makefiles" ];
 then
   VERBOSE="VERBOSE=1";
   KEEPGOING="-k"
+  JOBS="-j2"
 fi;
 
 if [ "$GENERATOR" = "MSYS Makefiles" ];
 then
   VERBOSE="VERBOSE=1";
   KEEPGOING="-k"
+  JOBS="-j2"
 fi;
-
-if [ -z "${MAKEFLAGS+x}" ];
-then
-  MAKEFLAGS="-j2 $VERBOSE"
-fi
 
 target_build()
 {
-  # to get as much of the issues into the log as possible
-  cmake --build "$BUILD_DIR" -- $MAKEFLAGS || cmake --build "$BUILD_DIR" -- -j1 "$VERBOSE" "$KEEPGOING"
-
+  cmake --build "$BUILD_DIR" -- $JOBS "$VERBOSE" "$KEEPGOING"
   ctest --output-on-failure || ctest --rerun-failed -V -VV
-
-  # and now check that it installs where told and only there.
-  cmake --build "$BUILD_DIR" --target install -- $MAKEFLAGS || cmake --build "$BUILD_DIR" --target install -- -j1 "$VERBOSE" "$KEEPGOING"
+  cmake --build "$BUILD_DIR" --target install -- $JOBS "$VERBOSE" "$KEEPGOING"
 }
 
 target_notest()
 {
-  # to get as much of the issues into the log as possible
-  cmake --build "$BUILD_DIR" -- $MAKEFLAGS || cmake --build "$BUILD_DIR" -- -j1 "$VERBOSE" "$KEEPGOING"
-
-  # and now check that it installs where told and only there.
-  cmake --build "$BUILD_DIR" --target install -- $MAKEFLAGS || cmake --build "$BUILD_DIR" --target install -- -j1 "$VERBOSE" "$KEEPGOING"
+  cmake --build "$BUILD_DIR" -- $JOBS "$VERBOSE" "$KEEPGOING"
+  cmake --build "$BUILD_DIR" --target install -- $JOBS "$VERBOSE" "$KEEPGOING"
 }
 
 diskspace()

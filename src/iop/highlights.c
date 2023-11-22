@@ -305,9 +305,10 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_highlights_4f_clip, sizes);
     if(err != CL_SUCCESS) goto error;
   }
-  else if(d->mode == DT_IOP_HIGHLIGHTS_CLIP)
+  else if(d->mode == DT_IOP_HIGHLIGHTS_CLIP || d->mode > DT_IOP_HIGHLIGHTS_LAPLACIAN)
   {
     // raw images with clip mode (both bayer and xtrans)
+    // This is also the fallback if d->mode is set with something invalid
     size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
     dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 0, sizeof(cl_mem), (void *)&dev_in);
     dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_1f_clip, 1, sizeof(cl_mem), (void *)&dev_out);

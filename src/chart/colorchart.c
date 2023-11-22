@@ -290,7 +290,7 @@ chart_t *parse_cht(const char *filename)
           x_min = MIN(x_min, xo);
           y_min = MIN(y_min, yo);
 
-          int x_steps = 1, y_steps = 1;
+          int y_steps = 1;
           size_t lxs_len = strlen(lxs), lxe_len = strlen(lxe), lys_len = strlen(lys), lye_len = strlen(lye);
           if(lxs_len > lxe_len || lys_len > lye_len) ERROR;
 
@@ -346,7 +346,6 @@ chart_t *parse_cht(const char *filename)
               // increment in x direction
               if(!g_strcmp0(x_label, lxe)) break;
               x += xi;
-              x_steps++;
               if(!strinc(x_label, x_label_size))
               {
                 free(y_label);
@@ -367,10 +366,11 @@ chart_t *parse_cht(const char *filename)
             }
           }
           y_max = MAX(y_max, y + h);
-          if(kl == 'X' || kl == 'Y')
+          if((kl == 'X' || kl == 'Y') && first_label && last_label)
             g_hash_table_insert(result->patch_sets, g_strdup_printf("%s .. %s", first_label, last_label), labels);
 
           g_free(last_label);
+          g_free(first_label);
           free(y_label);
           free(x_label);
         }
@@ -620,4 +620,3 @@ end:
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

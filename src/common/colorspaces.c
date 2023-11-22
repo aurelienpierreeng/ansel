@@ -458,6 +458,20 @@ static cmsHPROFILE dt_colorspaces_create_gamma_rec709_rgb_profile(void)
   return profile;
 }
 
+static cmsHPROFILE dt_colorspaces_create_itur_bt1886_rgb_profile(void)
+{
+  // https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.1886-0-201103-I!!PDF-E.pdf
+  cmsToneCurve *transferFunction = cmsBuildGamma(NULL, 2.19921875);
+
+  cmsHPROFILE profile = _create_lcms_profile("ITU-R BT.1886 (gamma 2.4 Rec709)", "ITU-R BT.1886 (gamma 2.4 Rec709)",
+                                             &D65xyY, &Rec709_Primaries, transferFunction, TRUE);
+
+  cmsFreeToneCurve(transferFunction);
+
+  return profile;
+}
+
+
 // Create the ICC virtual profile for adobe rgb space
 static cmsHPROFILE dt_colorspaces_create_adobergb_profile(void)
 {
@@ -1436,7 +1450,11 @@ dt_colorspaces_t *dt_colorspaces_init()
                                      ++work_pos));
 
   res->profiles = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_REC709, dt_colorspaces_create_gamma_rec709_rgb_profile(),
-                                     _("Rec709 RGB"), ++in_pos, ++out_pos, -1, -1,
+                                     _("gamma Rec709 RGB"), ++in_pos, ++out_pos, -1, -1,
+                                     ++work_pos));
+
+  res->profiles = g_list_append(res->profiles, _create_profile(DT_COLORSPACE_ITUR_BT1886, dt_colorspaces_create_itur_bt1886_rgb_profile(),
+                                     _("ITU-R BT.1886 (gamma 2.4 Rec709)"), ++in_pos, ++out_pos, -1, -1,
                                      ++work_pos));
 
   res->profiles = g_list_append(
@@ -1653,8 +1671,10 @@ const char *dt_colorspaces_get_name(dt_colorspaces_color_profile_type_t type,
        return _("PQ P3");
      case DT_COLORSPACE_HLG_P3:
        return _("HLG P3");
-     case DT_COLORSPACE_LAST:
-       break;
+     case DT_COLORSPACE_ITUR_BT1886:
+        return _("ITU-R BT.1886");
+      case DT_COLORSPACE_LAST:
+        break;
   }
 
   return NULL;

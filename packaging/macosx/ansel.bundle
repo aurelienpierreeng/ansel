@@ -9,7 +9,6 @@
   </meta>
   <plist>${project}/Info.plist</plist>
   <main-binary>${prefix:dt}/bin/ansel</main-binary>
-  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/ansel-chart</binary>
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/ansel-cli</binary>
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/ansel-cltest</binary>
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/ansel-generate-cache</binary>

@@ -353,7 +353,7 @@ gboolean dt_image_safe_remove(const int32_t imgid)
  * @brief Get the full path of an image out of the database.
  * TODO: This gets called too many times and the output should be cached.
  * TODO: Document where the pathname_len is being set.
- * 
+ *
  * @param imgid The image ID.
  * @param pathname A pointer storing the returned value from the sql request.
  * @param pathname_len Number of characters of the path set outside the function.
@@ -2506,7 +2506,16 @@ int dt_image_write_sidecar_file(const int32_t imgid)
     // FIRST: check if the original file is present
     gboolean from_cache = FALSE;
     dt_image_full_path(imgid, filename, sizeof(filename), &from_cache, __FUNCTION__);
-    if(!from_cache) return 1;
+
+    if(!g_file_test(filename, G_FILE_TEST_EXISTS))
+    {
+      // OTHERWISE: check if the local copy exists
+      from_cache = TRUE;
+      dt_image_full_path(imgid, filename, sizeof(filename), &from_cache, __FUNCTION__);
+
+      //  nothing to do, the original is not accessible and there is no local copy
+      if(!from_cache) return 1;
+    }
 
     dt_image_path_append_version(imgid, filename, sizeof(filename));
     g_strlcat(filename, ".xmp", sizeof(filename));

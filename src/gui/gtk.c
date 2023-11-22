@@ -326,8 +326,7 @@ static gboolean _scrollbar_release_event(GtkWidget *widget, gpointer user_data)
 
 int dt_gui_gtk_load_config()
 {
-  dt_pthread_mutex_lock(&darktable.gui->mutex);
-
+  // Warning : needs to be called within a dt_pthread_mutex_lock(&darktable.gui->mutex) section
   GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
   const int width = dt_conf_get_int("ui_last/window_w");
   const int height = dt_conf_get_int("ui_last/window_h");
@@ -336,21 +335,18 @@ int dt_gui_gtk_load_config()
 
   gtk_window_move(GTK_WINDOW(widget), x, y);
   gtk_window_resize(GTK_WINDOW(widget), width, height);
-  const gboolean fullscreen = dt_conf_get_bool("ui_last/fullscreen");
 
-  if(fullscreen)
+  if(dt_conf_get_bool("ui_last/fullscreen"))
     gtk_window_fullscreen(GTK_WINDOW(widget));
   else
   {
     gtk_window_unfullscreen(GTK_WINDOW(widget));
-    const gboolean maximized = dt_conf_get_bool("ui_last/maximized");
-    if(maximized)
+
+    if(dt_conf_get_bool("ui_last/maximized"))
       gtk_window_maximize(GTK_WINDOW(widget));
     else
       gtk_window_unmaximize(GTK_WINDOW(widget));
   }
-
-  dt_pthread_mutex_unlock(&darktable.gui->mutex);
 
   return 0;
 }
@@ -594,9 +590,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
 
   const char *css_theme = dt_conf_get_string_const("ui_last/theme");
   if(css_theme)
-  {
     g_strlcpy(gui->gtkrc, css_theme, sizeof(gui->gtkrc));
-  }
   else
     g_snprintf(gui->gtkrc, sizeof(gui->gtkrc), "ansel");
 
@@ -864,7 +858,6 @@ static gboolean _ui_toast_button_press_event(GtkWidget *widget, GdkEvent *event,
 
 static void _init_widgets(dt_gui_gtk_t *gui)
 {
-
   GtkWidget *container;
   GtkWidget *widget;
 
@@ -876,6 +869,7 @@ static void _init_widgets(dt_gui_gtk_t *gui)
   dt_configure_ppd_dpi(gui);
 
   gtk_window_set_default_size(GTK_WINDOW(widget), DT_PIXEL_APPLY_DPI(900), DT_PIXEL_APPLY_DPI(500));
+  dt_gui_gtk_load_config();
 
   gtk_window_set_icon_name(GTK_WINDOW(widget), "ansel");
   gtk_window_set_title(GTK_WINDOW(widget), "Ansel");
