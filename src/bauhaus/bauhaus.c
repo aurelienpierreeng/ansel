@@ -2777,7 +2777,7 @@ static void dt_bauhaus_slider_set_normalized(struct dt_bauhaus_widget_t *w, floa
   if(old_pos != new_pos || raise)
   {
     const float new_value = new_pos * (d->max - d->min) + d->min;
-    const float precision = (float)ipow(10, d->digits);
+    const float precision = (float)ipow(10, d->digits) * d->factor;
     const float rounded_value = roundf(new_value * precision) / precision;
     d->pos = (rounded_value - d->min) / (d->max - d->min);
     d->oldpos = d->pos;
