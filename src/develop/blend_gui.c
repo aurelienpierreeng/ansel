@@ -2952,7 +2952,7 @@ void dt_iop_gui_init_blending(GtkWidget *iopw, dt_iop_module_t *module)
                               NULL };
     bd->mask_mode_combo = dt_bauhaus_combobox_new_full(
         (dt_action_t *)module, NULL, N_("Blending"),
-        _("Define opacity masks and blinding modes to limit the spatial application of the module."), 0,
+        _("Define opacity masks and blending modes to limit the spatial application of the module."), 0,
         (GtkCallback)_blendop_masks_mode_changed, module, labels);
     GtkWidget *blend_modes_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 
