@@ -3065,7 +3065,7 @@ void dt_iop_gui_init_blending(GtkWidget *iopw, dt_iop_module_t *module)
     gtk_box_pack_start(GTK_BOX(bd->masks_modes_box), GTK_WIDGET(presets_button), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(bd->masks_modes_box), FALSE, FALSE, 0);
     dt_gui_add_help_link(GTK_WIDGET(bd->masks_modes_box), dt_get_help_url("masks_blending"));
-    gtk_widget_set_name(GTK_WIDGET(bd->masks_modes_box), "blending-tabs");
+    gtk_widget_set_name(GTK_WIDGET(bd->masks_modes_box), "blending-header");
 
     bd->top_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
     gtk_box_pack_start(GTK_BOX(bd->top_box), blend_modes_hbox, TRUE, TRUE, 0);

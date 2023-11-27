@@ -949,7 +949,7 @@ combobox separator
   ----------------------*/
 notebook tabs,
 #modules-tabs,
-#blending-tabs,
+#blending-header,
 #guides-line
 {
   font-family: sans-serif;
@@ -961,7 +961,7 @@ notebook tabs,
   background-color: @field_active_bg;
 }
 
-#blending-tabs
+#blending-header
 {
   padding: 0 0.25em;
   background-color: @grey_50;
@@ -973,14 +973,14 @@ notebook tabs,
   min-height: 2em;
 }
 
-.dt_plugin_ui #blending-tabs .dt_module_btn,
+.dt_plugin_ui #blending-header .dt_module_btn,
 #guides-line .toggle
 {
   min-height: 1.3em;
 }
 
 #modules-tabs .dt_module_btn,   /* This is needed separately to set a minimal width if panel is really narrow */
-.dt_plugin_ui #blending-tabs .dt_module_btn,
+.dt_plugin_ui #blending-header .dt_module_btn,
 #guides-line .dt_module_btn
 {
   border-radius: 0;
@@ -989,7 +989,7 @@ notebook tabs,
 }
 
 /* reduce and align now hamburger menu of modules and blending tabs */
-.dt_plugin_ui #blending-tabs .dt_module_btn,
+.dt_plugin_ui #blending-header .dt_module_btn,
 #modules-tabs .dt_module_btn
 {
   padding: 0.3em;
@@ -2402,7 +2402,7 @@ box *
 
 notebook tabs,
 #modules-tabs,
-#blending-tabs,
+#blending-header,
 tooltip label,
 .active_menu_item * /* needed for some Pango issues not rendering synthetic bold for all OS */
 {
