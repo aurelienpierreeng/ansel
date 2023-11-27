@@ -963,6 +963,7 @@ notebook tabs,
 
 #blending-tabs
 {
+  padding: 0 0.25em;
   background-color: @grey_50;
 }
 
