@@ -994,26 +994,6 @@ notebook tabs,
   padding: 0.3em;
 }
 
-#blending-tabs button
-{
-  border-bottom: 3px solid @bg_color;
-  border-top: 3px solid transparent;
-}
-
-#blending-tabs button:active,
-#blending-tabs button:checked,
-#blending-tabs button:selected
-{
-  background-color: transparent;
-  border-bottom: 3px solid @grey_90;
-}
-
-#blending-tabs button:hover
-{
-  border-bottom: 3px solid @grey_100;
-}
-
-
 #search-box entry placeholder {
   color: @grey_25;
 }
