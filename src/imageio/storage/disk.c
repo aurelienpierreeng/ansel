@@ -64,7 +64,6 @@ typedef struct dt_imageio_disk_t
   dt_variables_params_t *vp;
 } dt_imageio_disk_t;
 
-
 const char *name(const struct dt_imageio_module_storage_t *self)
 {
   return _("File on disk");
@@ -147,7 +146,9 @@ static void button_clicked(GtkWidget *widget, dt_imageio_module_storage_t *self)
 
 static void entry_changed_callback(GtkEntry *entry, gpointer user_data)
 {
-  dt_conf_set_string("plugins/imageio/storage/disk/file_directory", gtk_entry_get_text(entry));
+  gchar *text = g_strdup(gtk_entry_get_text(entry));
+  dt_conf_set_string("plugins/imageio/storage/disk/file_directory", g_strstrip(text));
+  g_free(text);
 }
 
 static void onsave_action_toggle_callback(GtkWidget *widget, gpointer user_data)

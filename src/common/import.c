@@ -353,12 +353,16 @@ static void _base_dir_changed(GtkFileChooserButton* self)
 
 static void _project_dir_changed(GtkWidget *widget, gpointer data)
 {
-  dt_conf_set_string("session/sub_directory_pattern", gtk_entry_get_text(GTK_ENTRY(widget)));
+  gchar *text = g_strdup(gtk_entry_get_text(GTK_ENTRY(widget)));
+  dt_conf_set_string("session/sub_directory_pattern", g_strstrip(text));
+  g_free(text);
 }
 
 static void _filename_changed(GtkWidget *widget, gpointer data)
 {
-  dt_conf_set_string("session/filename_pattern", gtk_entry_get_text(GTK_ENTRY(widget)));
+  gchar *text = g_strdup(gtk_entry_get_text(GTK_ENTRY(widget)));
+  dt_conf_set_string("session/filename_pattern", g_strstrip(text));
+  g_free(text);
 }
 
 static void _update_date(GtkCalendar *calendar, GtkWidget *entry)
