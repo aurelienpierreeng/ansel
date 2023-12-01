@@ -277,6 +277,7 @@ static gboolean _gradient_slider_button_press(GtkWidget *widget, GdkEventButton 
   g_return_val_if_fail(DTGTK_IS_GRADIENT_SLIDER(widget), FALSE);
 
   GtkDarktableGradientSlider *gslider = DTGTK_GRADIENT_SLIDER(widget);
+  darktable.gui->has_scroll_focus = widget;
 
   // reset slider
   if(event->button == 1 && event->type == GDK_2BUTTON_PRESS && gslider->is_resettable)
@@ -391,7 +392,7 @@ static gboolean _gradient_slider_scroll_event(GtkWidget *widget, GdkEventScroll 
 {
   g_return_val_if_fail(DTGTK_IS_GRADIENT_SLIDER(widget), TRUE);
 
-  if(dt_gui_ignore_scroll(event)) return FALSE;
+  if(darktable.gui->has_scroll_focus != widget) return FALSE;
 
   GtkDarktableGradientSlider *gslider = DTGTK_GRADIENT_SLIDER(widget);
   const gint selected = _get_active_marker(gslider);
@@ -1011,4 +1012,3 @@ void dtgtk_gradient_slider_set_increment(GtkDarktableGradientSlider *gslider, gd
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

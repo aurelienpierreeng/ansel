@@ -1550,6 +1550,7 @@ static void temp_tint_callback(GtkWidget *slider, dt_iop_module_t *self)
   if(darktable.gui->reset) return;
 
   dt_iop_temperature_gui_data_t *g = (dt_iop_temperature_gui_data_t *)self->gui_data;
+  dt_iop_temperature_params_t *p = (dt_iop_temperature_params_t *)self->params;
 
   dt_iop_color_picker_reset(self, TRUE);
 
@@ -1564,7 +1565,17 @@ static void temp_tint_callback(GtkWidget *slider, dt_iop_module_t *self)
   g->mod_coeff[3] /= g->mod_coeff[1];
   g->mod_coeff[1] = 1.0;
 
+  _temp_params_from_array(p, g->mod_coeff);
+
+  ++darktable.gui->reset;
+  dt_bauhaus_slider_set(g->scale_r, p->red);
+  dt_bauhaus_slider_set(g->scale_g, p->green);
+  dt_bauhaus_slider_set(g->scale_b, p->blue);
+  dt_bauhaus_slider_set(g->scale_g2, p->g2);
   dt_bauhaus_combobox_set(g->presets, DT_IOP_TEMP_USER);
+  --darktable.gui->reset;
+
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)

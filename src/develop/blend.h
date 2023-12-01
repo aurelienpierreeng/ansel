@@ -299,8 +299,7 @@ typedef struct dt_iop_gui_blend_data_t
   dt_develop_blend_colorspace_t csp;
   dt_iop_module_t *module;
 
-  GList *masks_modes;
-  GList *masks_modes_toggles;
+  GtkWidget *mask_mode_combo;
 
   GtkWidget *iopw;
   GtkBox *top_box;
@@ -310,7 +309,6 @@ typedef struct dt_iop_gui_blend_data_t
   GtkBox *masks_box;
   GtkBox *raster_box;
 
-  GtkWidget *selected_mask_mode;
   GtkWidget *colorpicker;
   GtkWidget *colorpicker_set_values;
   dt_iop_gui_blendif_filter_t filter[2];
@@ -483,4 +481,3 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

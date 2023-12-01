@@ -5538,34 +5538,6 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   }
 }
 
-static float log10_curve(float inval, dt_bauhaus_curve_t dir)
-{
-  float outval;
-  if(dir == DT_BAUHAUS_SET)
-  {
-    outval = log10f(inval * 999.0f + 1.0f) / 3.0f;
-  }
-  else
-  {
-    outval = (expf(M_LN10 * inval * 3.0f) - 1.0f) / 999.0f;
-  }
-  return outval;
-}
-
-static float log2_curve(float inval, dt_bauhaus_curve_t dir)
-{
-  float outval;
-  if(dir == DT_BAUHAUS_SET)
-  {
-      outval = log2f(inval * 1.5f + 0.5f) / 2.0f + 0.5f;
-  }
-  else
-  {
-    outval = (exp2f(inval * 2.0 - 1.0) - 0.5f) / 1.5f;
-  }
-  return outval;
-}
-
 static int _event_structure_quad_clicked(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
@@ -5696,7 +5668,6 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->f_length = dt_bauhaus_slider_from_params(self, "f_length");
   dt_bauhaus_slider_set_soft_range(g->f_length, 10.0f, 1000.0f);
-  dt_bauhaus_slider_set_curve(g->f_length, log10_curve);
   dt_bauhaus_slider_set_digits(g->f_length, 0);
   dt_bauhaus_slider_set_format(g->f_length, " mm");
 
@@ -5712,7 +5683,6 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_visible(g->orthocorr, FALSE);
 
   g->aspect = dt_bauhaus_slider_from_params(self, "aspect");
-  dt_bauhaus_slider_set_curve(g->aspect, log2_curve);
 
   gtk_box_pack_start(GTK_BOX(g->cs.container), g->specifics, TRUE, TRUE, 0);
 

@@ -1709,6 +1709,27 @@ void dt_iop_gui_update(dt_iop_module_t *module)
       if(module->params && module->gui_update)
         module->gui_update(module);
 
+      // Shitty dependency graph ahead !!!
+      // dt_bauhaus_update_module is in bauhaus.c
+      // 1. it calls dt_bauhaus_slider_set() and dt_bauhaus_combobox_set()
+      // 2. those call dt_iop_gui_changed() from here (imageop.c)
+      // 3. dt_iop_gui_changed() calls module->gui_changed() if available
+      //    BUT only if darktable.gui->reset is 0.
+      // So we have to call module->gui_update() which may or may not call module->gui_changed(),
+      // depending on modules, to init and reset sliders and comboboxes not linked to module params.
+      // Because those widgets directly declared from params introspection are added to the module->bh_widget_list
+      // (GSList *), which is updated in dt_bauhaus_update_module();
+      // TODO: fix this FUCKING mess:
+      // 1. the bauhaus lib should not change its behaviour based on the state of the global variable darktable.gui->reset,
+      //    instead the global variable should be checked upstream before dispatching bauhaus events (like set,
+      //    reset, update). Nesting dependencies across layers of libs to the state of a global variable is super unreliable and prone
+      //    to race conditions.
+      // 2. the bauhaus lib should be unaware of imageop.c lib (modules). If modules need to perform operations,
+      //    they should connect callbacks to the `value-changed` signal. The bauhaus lib should be treated as an
+      //    an extension of Gtk, implementation-agnostic.
+      // 3. Ideally, all sliders and comboboxes should be updated through an unified method to prevent
+      //    programmer errors in the future because, again, WE DON'T HAVE DEV DOC, so API need to be dummy-proof.
+
       dt_iop_gui_update_blending(module);
       dt_iop_gui_update_expanded(module);
     }
@@ -2953,6 +2974,8 @@ gboolean dt_iop_have_required_input_format(const int req_ch, struct dt_iop_modul
   }
 }
 
+// WARNING: this is called in bauhaus.c too when slider & comboboxes values are changed.
+// Mind that if any change is done here.
 void dt_iop_gui_changed(dt_action_t *action, GtkWidget *widget, gpointer data)
 {
   if(!action || action->type != DT_ACTION_TYPE_IOP_INSTANCE) return;

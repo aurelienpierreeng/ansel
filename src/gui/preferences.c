@@ -1370,7 +1370,7 @@ GtkWidget *dt_gui_preferences_string(GtkGrid *grid, const char *key, const guint
   gtk_widget_set_hexpand(w, TRUE);
 
   gtk_grid_attach(GTK_GRID(grid), labelev, col, line, 1, 1);
-  gtk_grid_attach(GTK_GRID(grid), w, col + 1, line, 1, 1);
+  gtk_grid_attach(GTK_GRID(grid), w, col, line + 1, 1, 1);
   g_signal_connect(G_OBJECT(w), "changed", G_CALLBACK(_gui_preferences_string_callback), (gpointer)key);
   g_signal_connect(G_OBJECT(labelev), "button-press-event", G_CALLBACK(_gui_preferences_string_reset), (gpointer)w);
   return w;

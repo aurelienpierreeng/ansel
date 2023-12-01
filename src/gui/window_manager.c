@@ -100,7 +100,8 @@ static void refresh_manager_sizes(dt_ui_t *ui)
   fprintf(stdout, "main window: %i x %i\n", manager->window.width, manager->window.height);
 #endif
 
-  gtk_window_get_position(GTK_WINDOW(window), &manager->window.x, &manager->window.y);
+  gdk_window_get_origin(gtk_widget_get_window(window), &manager->window.x, &manager->window.y);
+  //gtk_window_get_position(GTK_WINDOW(window), &manager->window.x, &manager->window.y);
 
 #if WINDOW_DEBUG
   fprintf(stdout, "position : %i, %i\n", manager->window.x, manager->window.y);

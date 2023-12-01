@@ -1206,8 +1206,14 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     darktable.lib = (dt_lib_t *)calloc(1, sizeof(dt_lib_t));
     dt_lib_init(darktable.lib);
 
+    // prevent bauhaus widgets from sending value-changed signals
+    // because some of them expect user interactions.
+    ++darktable.gui->reset;
+
     // init the gui part of views
     dt_view_manager_gui_init(darktable.view_manager);
+
+    --darktable.gui->reset;
 
     // Save the default shortcuts
     dt_shortcuts_save(".defaults", FALSE);

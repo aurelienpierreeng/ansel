@@ -193,7 +193,8 @@ static void dt_view_unload_module(dt_view_t *view)
 
 void dt_vm_remove_child(GtkWidget *widget, gpointer data)
 {
-  gtk_container_remove(GTK_CONTAINER(data), widget);
+  if(GTK_IS_CONTAINER(data))
+    gtk_container_remove(GTK_CONTAINER(data), widget);
 }
 
 /*
@@ -202,16 +203,18 @@ void dt_vm_remove_child(GtkWidget *widget, gpointer data)
    */
 static void _remove_child(GtkWidget *child,GtkContainer *container)
 {
-    if(DTGTK_IS_EXPANDER(child))
-    {
-      GtkWidget * evb = dtgtk_expander_get_body_event_box(DTGTK_EXPANDER(child));
-      gtk_container_remove(GTK_CONTAINER(evb),dtgtk_expander_get_body(DTGTK_EXPANDER(child)));
-      gtk_widget_destroy(child);
-    }
-    else
-    {
-      gtk_container_remove(container,child);
-    }
+  // some libs module can be used inside popups and not attached to panels, they have no container.
+  if(DTGTK_IS_EXPANDER(child))
+  {
+    GtkWidget *evb = dtgtk_expander_get_body_event_box(DTGTK_EXPANDER(child));
+    if(GTK_IS_CONTAINER(evb))
+      gtk_container_remove(GTK_CONTAINER(evb), dtgtk_expander_get_body(DTGTK_EXPANDER(child)));
+    gtk_widget_destroy(child);
+  }
+  else if(GTK_IS_CONTAINER(container))
+  {
+    gtk_container_remove(container, child);
+  }
 }
 
 int dt_view_manager_switch(dt_view_manager_t *vm, const char *view_name)

@@ -84,10 +84,8 @@ typedef struct dt_bauhaus_slider_data_t
   float factor;         // multiplication factor before printing
   float offset;         // addition before printing
 
-  int is_dragging : 1;  // indicates is mouse is dragging slider
-  int is_changed : 1;   // indicates new data
+  gboolean is_dragging;      // indicates is mouse is dragging slider
   guint timeout_handle; // used to store id of timeout routine
-  float (*curve)(float, dt_bauhaus_curve_t); // callback function
 } dt_bauhaus_slider_data_t;
 
 typedef enum dt_bauhaus_combobox_alignment_t
@@ -109,13 +107,14 @@ typedef struct dt_bauhaus_combobox_entry_t
 typedef struct dt_bauhaus_combobox_data_t
 {
   int active;           // currently active element
+  int hovered;          // currently hovered element, to be used by drawings until and if it is set to active
   int defpos;           // default position
   int editable;         // 1 if arbitrary text may be typed
   dt_bauhaus_combobox_alignment_t text_align; // if selected text in combo should be aligned to the left/right
   char *text;           // to hold arbitrary text if editable
   PangoEllipsizeMode entries_ellipsis;
   GPtrArray *entries;
-  gboolean mute_scrolling;   // if set, prevents to issue "data-changed"
+  guint timeout_handle; // used to store id of timeout routine
   void (*populate)(GtkWidget *w, struct dt_iop_module_t **module); // function to populate the combo list on the fly
 } dt_bauhaus_combobox_data_t;
 
@@ -169,11 +168,6 @@ typedef struct dt_bauhaus_widget_t
 
   // margin and padding structure, defined in css, retrieve on each draw
   GtkBorder *margin, *padding;
-  // gap to add to the top padding due to the vertical centering
-  int top_gap;
-
-  // is the popup not attached to the main widget (shortcuts)
-  gboolean detached_popup;
 
   // goes last, might extend past the end:
   dt_bauhaus_data_t data;
@@ -227,13 +221,6 @@ typedef struct dt_bauhaus_t
   float border_width;                    // width of the border of the slider marker
   float quad_width;                      // width of the quad area to paint icons
   PangoFontDescription *pango_font_desc; // no need to recreate this for every string we want to print
-  PangoFontDescription *pango_sec_font_desc; // as above but for section labels
-  GtkBorder *popup_padding;                  // padding of the popup. updated in show function
-
-  // the slider popup has a blinking cursor
-  guint cursor_timeout;
-  gboolean cursor_visible;
-  int cursor_blink_counter;
 
   // colors for sliders and comboboxes
   GdkRGBA color_fg, color_fg_insensitive, color_bg, color_border, indicator_border, color_fill;
@@ -326,7 +313,6 @@ void dt_bauhaus_slider_set_stop(GtkWidget *widget, float stop, float r, float g,
 void dt_bauhaus_slider_clear_stops(GtkWidget *widget);
 void dt_bauhaus_slider_set_default(GtkWidget *widget, float def);
 float dt_bauhaus_slider_get_default(GtkWidget *widget);
-void dt_bauhaus_slider_set_curve(GtkWidget *widget, float (*curve)(float value, dt_bauhaus_curve_t dir));
 
 // combobox:
 void dt_bauhaus_combobox_from_widget(struct dt_bauhaus_widget_t* widget,dt_iop_module_t *self);
@@ -370,8 +356,7 @@ void dt_bauhaus_combobox_add_list(GtkWidget *widget, dt_action_t *action, const 
 void dt_bauhaus_combobox_entry_set_sensitive(GtkWidget *widget, int pos, gboolean sensitive);
 void dt_bauhaus_combobox_set_entries_ellipsis(GtkWidget *widget, PangoEllipsizeMode ellipis);
 PangoEllipsizeMode dt_bauhaus_combobox_get_entries_ellipsis(GtkWidget *widget);
-void dt_bauhaus_combobox_mute_scrolling(GtkWidget *widget);
-void bauhaus_request_focus(dt_bauhaus_widget_t *w);
+void bauhaus_request_focus(struct dt_bauhaus_widget_t *w);
 
 static inline void set_color(cairo_t *cr, GdkRGBA color)
 {

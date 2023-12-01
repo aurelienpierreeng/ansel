@@ -423,7 +423,7 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   if(history)
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
-    dt_print(DT_DEBUG_PARAMS, "[pixelpipe] synch top history module `%s' for pipe %i\n", hist->module->op, pipe->type);
+    dt_print(DT_DEBUG_PARAMS, "[pixelpipe] synch top history module `%s` for pipe %i\n", hist->module->op, pipe->type);
     dt_dev_pixelpipe_synch(pipe, dev, history);
   }
   else
@@ -435,9 +435,26 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 
 void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 {
+  dt_times_t start;
+  dt_get_times(&start);
+
   dt_pthread_mutex_lock(&dev->history_mutex);
 
   dt_print(DT_DEBUG_PARAMS, "[pixelpipe] pipeline state changing for pipe %i, flag %i\n", pipe->type, pipe->changed);
+
+  /*
+  * Those cases seem mutually-exclusive but are not.
+  * Problems :
+  * 1. _sync_top() is a special case of _sync_all(). if DT_DEV_PIPE_TOP_CHANGED & DT_DEV_PIPE_SYNCH,
+  *    we should directly call *_sync_all() and bypass sync_top().
+  * 2. if DT_DEV_PIPE_SYNCH & DT_DEV_PIPE_REMOVE, then _sync_all() is called once for nothing, before pipeline is rebuilt.
+  * 3. this function takes between 0.12 and 0.25 s to run on Intel Xeon, whether a new module
+  *   was inserted (aka full pipeline cleanup + create + sync_all) or params got simply updated (sync_top).
+  *   The simple _sync_top() case should exhibit shorter runtimes than the full refresh, yet it doesn't.
+  *
+  * TODO: clean up this mess and remove superfluous calls.
+  */
+
   // case DT_DEV_PIPE_UNCHANGED: case DT_DEV_PIPE_ZOOMED:
   if(pipe->changed & DT_DEV_PIPE_TOP_CHANGED)
   {
@@ -460,6 +477,8 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   dt_pthread_mutex_unlock(&dev->history_mutex);
   dt_dev_pixelpipe_get_dimensions(pipe, dev, pipe->iwidth, pipe->iheight, &pipe->processed_width,
                                   &pipe->processed_height);
+
+  dt_show_times(&start, "[dt_dev_pixelpipe_change] pipeline resync on the current modules stack");
 }
 
 // TODO:

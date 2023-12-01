@@ -3239,8 +3239,6 @@ void gui_init(dt_lib_module_t *self)
     dt_bauhaus_combobox_set_selected_text_align(d->rule[i].combo, DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT);
     _populate_collect_combo(d->rule[i].combo);
 
-    dt_bauhaus_combobox_mute_scrolling(d->rule[i].combo);
-
     g_signal_connect(G_OBJECT(d->rule[i].combo), "value-changed", G_CALLBACK(combo_changed), d->rule + i);
     gtk_box_pack_start(box, d->rule[i].combo, FALSE, FALSE, 0);
 

@@ -517,65 +517,30 @@
   <dtconfig>
     <name>plugins/session/jobcode</name>
     <type>string</type>
-    <default>capture job</default>
-    <shortdescription>name of capture job</shortdescription>
+    <default>Project name (jobcode)</default>
+    <shortdescription>Name of the current session, used as the `$(JOBCODE)` variable.</shortdescription>
     <longdescription/>
   </dtconfig>
     <dtconfig>
     <name>session/base_directory_pattern</name>
     <type>string</type>
-    <default>$(PICTURES_FOLDER)/Darktable</default>
-    <shortdescription>base directory naming pattern</shortdescription>
+    <default></default>
+    <shortdescription>Base directory of projects</shortdescription>
     <longdescription>part of full import path for an import session</longdescription>
   </dtconfig>
   <dtconfig>
     <name>session/sub_directory_pattern</name>
     <type>string</type>
-    <default>$(YEAR)$(MONTH)$(DAY)_$(JOBCODE)</default>
-    <shortdescription>sub directory naming pattern</shortdescription>
+    <default>$(YEAR)-$(MONTH)-$(DAY)-$(JOBCODE)</default>
+    <shortdescription>Project directory naming pattern</shortdescription>
     <longdescription>part of full import path for an import session</longdescription>
-  </dtconfig>
-  <dtconfig>
-    <name>session/use_filename</name>
-    <type>bool</type>
-    <default>false</default>
-    <shortdescription>keep original filename</shortdescription>
-    <longdescription>keep original filename instead of a pattern while importing from camera or card</longdescription>
   </dtconfig>
   <dtconfig>
     <name>session/filename_pattern</name>
     <type>string</type>
-    <default>$(YEAR)$(MONTH)$(DAY)_$(SEQUENCE).$(FILE_EXTENSION)</default>
-    <shortdescription>file naming pattern</shortdescription>
+    <default>$(JOBCODE)-$(FILENAME)-$(SEQUENCE).$(FILE_EXTENSION)</default>
+    <shortdescription>Picture naming pattern</shortdescription>
     <longdescription>file naming pattern used for a import session</longdescription>
-  </dtconfig>
-  <dtconfig>
-    <name>plugins/capture/storage/basedirectory</name>
-    <type>string</type>
-    <default>$(PICTURES_FOLDER)/ansel</default>
-    <shortdescription>path of storage for captured images</shortdescription>
-    <longdescription/>
-  </dtconfig>
-  <dtconfig>
-    <name>plugins/capture/storage/subpath</name>
-    <type>string</type>
-    <default>$(YEAR)$(MONTH)$(DAY)_$(JOBCODE)</default>
-    <shortdescription>subpath pattern in storage for captured images</shortdescription>
-    <longdescription/>
-  </dtconfig>
-  <dtconfig>
-    <name>plugins/capture/storage/namepattern</name>
-    <type>string</type>
-    <default>$(YEAR)$(MONTH)$(DAY)_$(SEQUENCE).$(FILE_EXTENSION)</default>
-    <shortdescription>rename pattern for captured images</shortdescription>
-    <longdescription/>
-  </dtconfig>
-  <dtconfig>
-    <name>plugins/capture/camera/live_view_fps</name>
-    <type>int</type>
-    <default>15</default>
-    <shortdescription>maximum fps of live view update in tethering view</shortdescription>
-    <longdescription>going too fast will result in too many redraws without a real benefit</longdescription>
   </dtconfig>
   <dtconfig dialog="collect">
     <name>plugins/collect/filmroll_sort</name>
@@ -822,25 +787,11 @@
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>ui_last/modulegroups_dialog_height</name>
-    <type>int</type>
-    <default>700</default>
-    <shortdescription/>
-    <longdescription/>
-  </dtconfig>
-  <dtconfig>
     <name>ui_last/session_expander_import</name>
     <type>bool</type>
     <default>false</default>
     <shortdescription/>
     <longdescription/>
-  </dtconfig>
-  <dtconfig ui="yes">
-    <name>ui_last/import_recursive</name>
-    <type>bool</type>
-    <default>false</default>
-    <shortdescription>Import recursively</shortdescription>
-    <longdescription>Import images from the current folder, but also from the sub-folders.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>ui_last/import_last_directory</name>
@@ -850,31 +801,24 @@
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>ui_last/import_last_root</name>
-    <type>string</type>
-    <default/>
-    <shortdescription>last root folder</shortdescription>
-    <longdescription/>
-  </dtconfig>
-  <dtconfig>
-    <name>ui_last/import_last_folder_descending</name>
+    <name>ui_last/import_copy</name>
     <type>bool</type>
     <default>FALSE</default>
-    <shortdescription>folders display order in folder pane</shortdescription>
-    <longdescription/>
+    <shortdescription>Copy the files</shortdescription>
+    <longdescription>Duplicate the original files on the filesystem, using naming patterns. Useful when the original files are on a temporary storage, like a flash drive or a memory card.</longdescription>
   </dtconfig>
   <dtconfig ui="yes">
     <name>ui_last/import_jobcode</name>
     <type>string</type>
     <default>no_name</default>
-    <shortdescription>import job</shortdescription>
-    <longdescription>name of the import job</longdescription>
+    <shortdescription>Project name (jobcode)</shortdescription>
+    <longdescription>Name of the import job</longdescription>
   </dtconfig>
   <dtconfig ui="yes">
     <name>ui_last/import_datetime_override</name>
     <type>string</type>
     <default/>
-    <shortdescription>override today's date</shortdescription>
+    <shortdescription>Project date</shortdescription>
     <longdescription>type a date in the form: YYYY:MM:DD[ hh:mm:ss[.sss]] if you want to override the current date/time used when expanding variables:\n$(YEAR), $(MONTH), $(DAY), $(HOUR), $(MINUTE), $(SECONDS), $(MSEC).\nlet the field empty otherwise</longdescription>
   </dtconfig>
   <dtconfig ui="yes">
@@ -1774,13 +1718,6 @@
     <default>10</default>
     <shortdescription>border around image in darkroom mode</shortdescription>
     <longdescription>process the image in darkroom mode with a small border. set to 0 if you don't want any border.</longdescription>
-  </dtconfig>
-  <dtconfig prefs="misc" section="interface" restart="true">
-    <name>panel_scrollbars_always_visible</name>
-    <type>bool</type>
-    <default>true</default>
-    <shortdescription>always show panels' scrollbars</shortdescription>
-    <longdescription>defines whether the panel scrollbars should be always visible or activated only depending on the content.  (need a restart)</longdescription>
   </dtconfig>
   <dtconfig>
     <name>ui_last/expander_metadata</name>

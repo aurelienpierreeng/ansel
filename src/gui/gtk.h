@@ -153,6 +153,12 @@ typedef struct dt_gui_gtk_t
   GtkWidget *grab_widget;
   GtkWidget *grab_window;
 
+  // Export popup window
+  struct {
+    GtkWidget *window;
+    GtkWidget *module;
+  } export_popup;
+
   dt_pthread_mutex_t mutex;
 } dt_gui_gtk_t;
 
@@ -163,6 +169,7 @@ typedef struct _gui_collapsible_section_t
   GtkWidget *toggle;    // toggle button
   GtkWidget *expander;  // the expanded
   GtkBox *container;    // the container for all widgets into the section
+  GtkWidget *label;     // The section label
 } dt_gui_collapsible_section_t;
 
 static inline cairo_surface_t *dt_cairo_image_surface_create(cairo_format_t format, int width, int height) {
@@ -391,6 +398,31 @@ void dt_gui_update_collapsible_section(dt_gui_collapsible_section_t *cs);
 
 // routine to hide the collapsible section
 void dt_gui_hide_collapsible_section(dt_gui_collapsible_section_t *cs);
+
+/**
+ * Add an arbitrary button next to the widget that opens a popover with arbitrary content.
+ * @param widget the original widget next to which the popover button will be added. DON'T add it to a container.
+ * @param icon the Freedesktop icon name to put in the button
+ * @param content the widget that will fit inside the popover
+ * @return the GtkBox containing both the original widget and its popover button.
+ * That's what you will need to add it to your container.
+*/
+GtkBox *attach_popover(GtkWidget *widget, const char *icon, GtkWidget *content);
+
+/**
+ * Add an help button triggering a popover label next to an arbitrary widget, to document its action.
+ * This is a better take at help tooltips that most people don't see, unless they know about them.
+ * Also tooltips window positionning is wonky (can easily overflow viewport),
+ * line breaks are added manually (ugly hack),
+ * and they appear and disappear on hover (not available on touch screens),
+ * so it's flimsy UI.
+ * @param widget the original widget to document. DON'T add it to a container.
+ * @param label the in-app "docstring" for the widget
+ * @return the GtkBox containing both the original widget and its popover button.
+ * That's what you will need to add it to your container.
+*/
+GtkBox *attach_help_popover(GtkWidget *widget, const char *label);
+
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

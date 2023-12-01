@@ -20,7 +20,7 @@ add_custom_target(
 )
 
 # The modules
-set(MODULES import export styles tagging collect metadata metadata_view navigation histogram history snapshots modulegroups backgroundjobs colorpicker masks duplicate ioporder)
+set(MODULES export styles tagging collect metadata metadata_view navigation histogram history snapshots modulegroups backgroundjobs colorpicker masks duplicate ioporder)
 
 # The tools
 set(MODULES ${MODULES} filter)
@@ -35,7 +35,6 @@ set(MODULES ${MODULES} menubuttons)
 set(MODULES ${MODULES} masktoolbar)
 
 # modules
-add_library(import MODULE "import.c")
 add_library(export MODULE "export.c" "export_metadata.c")
 add_library(styles MODULE "styles.c")
 add_library(tagging MODULE "tagging.c")

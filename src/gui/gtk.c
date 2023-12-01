@@ -620,6 +620,8 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   gui->show_overlays = dt_conf_get_bool("lighttable/ui/expose_statuses");
   gui->presets_popup_menu = NULL;
   gui->last_preset = NULL;
+  gui->export_popup.window = NULL;
+  gui->export_popup.module = NULL;
 
   // load the style / theme
   GtkSettings *settings = gtk_settings_get_default();
@@ -1829,6 +1831,21 @@ void dt_gui_search_stop(GtkSearchEntry *entry, GtkWidget *widget)
   }
 }
 
+static void _collapsible_set_states(dt_gui_collapsible_section_t *cs, gboolean active)
+{
+  if(active)
+  {
+    // We don't apply the GTK_STATE_SELECTED flag to the container here because it would
+    // be inherited by all children, which would mess up the state of checkboxes and togglebuttons.
+    dt_gui_add_class(GTK_WIDGET(cs->expander), "active");
+  }
+  else
+  {
+    gtk_widget_set_state_flags(GTK_WIDGET(cs->expander), GTK_STATE_FLAG_NORMAL, TRUE);
+    dt_gui_remove_class(GTK_WIDGET(cs->expander), "active");
+  }
+}
+
 static void _coeffs_button_changed(GtkDarktableToggleButton *widget, gpointer user_data)
 {
   dt_gui_collapsible_section_t *cs = (dt_gui_collapsible_section_t *)user_data;
@@ -1838,6 +1855,7 @@ static void _coeffs_button_changed(GtkDarktableToggleButton *widget, gpointer us
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(cs->toggle), dtgtk_cairo_paint_solid_arrow,
                                (active ? CPF_DIRECTION_DOWN : CPF_DIRECTION_LEFT), NULL);
   dt_conf_set_bool(cs->confname, active);
+  _collapsible_set_states(cs, active);
 }
 
 static void _coeffs_expander_click(GtkWidget *widget, GdkEventButton *e, gpointer user_data)
@@ -1848,6 +1866,7 @@ static void _coeffs_expander_click(GtkWidget *widget, GdkEventButton *e, gpointe
 
   const gboolean active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cs->toggle));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cs->toggle), !active);
+  _collapsible_set_states(cs, !active);
 }
 
 void dt_gui_update_collapsible_section(dt_gui_collapsible_section_t *cs)
@@ -1861,12 +1880,15 @@ void dt_gui_update_collapsible_section(dt_gui_collapsible_section_t *cs)
     gtk_widget_show(GTK_WIDGET(cs->container));
   else
     gtk_widget_hide(GTK_WIDGET(cs->container));
+
+  _collapsible_set_states(cs, active);
 }
 
 void dt_gui_hide_collapsible_section(dt_gui_collapsible_section_t *cs)
 {
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cs->toggle), FALSE);
   gtk_widget_hide(GTK_WIDGET(cs->container));
+  _collapsible_set_states(cs, FALSE);
 }
 
 void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
@@ -1880,9 +1902,9 @@ void dt_gui_new_collapsible_section(dt_gui_collapsible_section_t *cs,
   // collapsible section header
   GtkWidget *destdisp_head = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_BAUHAUS_SPACE);
   GtkWidget *header_evb = gtk_event_box_new();
-  GtkWidget *destdisp = dt_ui_section_label_new(label);
+  cs->label = dt_ui_section_label_new(label);
   dt_gui_add_class(destdisp_head, "dt_section_expander");
-  gtk_container_add(GTK_CONTAINER(header_evb), destdisp);
+  gtk_container_add(GTK_CONTAINER(header_evb), cs->label);
 
   cs->toggle = dtgtk_togglebutton_new(dtgtk_cairo_paint_solid_arrow,
                                       (expanded ? CPF_DIRECTION_DOWN : CPF_DIRECTION_LEFT), NULL);
@@ -1911,6 +1933,44 @@ void dt_capitalize_label(gchar *text)
 {
   if(text)
     text[0] = g_unichar_toupper(text[0]);
+}
+
+GtkBox * attach_popover(GtkWidget *widget, const char *icon, GtkWidget *content)
+{
+  // Create the wrapping box and add the original widget to it
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_box_pack_start(GTK_BOX(box), widget, FALSE, FALSE, 0);
+
+  // Create the info icon button that will trigger the popover
+  GtkWidget *button = gtk_menu_button_new();
+  GtkWidget *image = gtk_image_new_from_icon_name(icon, GTK_ICON_SIZE_BUTTON);
+  gtk_button_set_image(GTK_BUTTON(button), image);
+  gtk_widget_set_hexpand(button, FALSE);
+  gtk_widget_set_vexpand(button, FALSE);
+  gtk_widget_set_size_request(button, DT_PIXEL_APPLY_DPI(16), DT_PIXEL_APPLY_DPI(16));
+  gtk_box_pack_start(GTK_BOX(box), button, FALSE, FALSE, 0);
+
+  // Create the content of the popover
+  GtkWidget *popover_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_box_pack_start(GTK_BOX(popover_box), content, FALSE, FALSE, 0);
+
+  // Wrap the content into a popover and attach it to the button
+  GtkWidget *popover = gtk_popover_new(button);
+  gtk_container_add(GTK_CONTAINER(popover), popover_box);
+  gtk_popover_set_modal(GTK_POPOVER(popover), FALSE);
+  gtk_menu_button_set_popover(GTK_MENU_BUTTON(button), popover);
+  gtk_widget_show_all(popover_box);
+
+  return GTK_BOX(box);
+}
+
+GtkBox * attach_help_popover(GtkWidget *widget, const char *label)
+{
+  // Create the content of the popover
+  GtkWidget *popover_label = gtk_label_new(label);
+  gtk_label_set_line_wrap(GTK_LABEL(popover_label), TRUE);
+  gtk_label_set_max_width_chars(GTK_LABEL(popover_label), 60);
+  return attach_popover(widget, "help-about", popover_label);
 }
 
 // clang-format off

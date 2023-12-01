@@ -156,17 +156,14 @@ const char *name(dt_lib_module_t *self)
 
 const char **views(dt_lib_module_t *self)
 {
-  static const char *v[] = {"lighttable", NULL};
+  // Not displayed in views, only in popup triggered from main menu
+  static const char *v[] = {NULL};
   return v;
 }
 
 uint32_t container(dt_lib_module_t *self)
 {
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM)
-    return DT_UI_CONTAINER_PANEL_LEFT_CENTER;
-  else
-    return DT_UI_CONTAINER_PANEL_LEFT_CENTER;
+  return DT_UI_CONTAINER_SIZE;
 }
 
 static void _update(dt_lib_module_t *self)
@@ -1099,6 +1096,7 @@ void gui_init(dt_lib_module_t *self)
   for(const GList *it = darktable.imageio->plugins_format; it; it = g_list_next(it))
   {
     const dt_imageio_module_format_t *module = (dt_imageio_module_format_t *)it->data;
+    dt_bauhaus_combobox_add(d->format, module->name());
     if(module->widget)
     {
       gtk_container_add(GTK_CONTAINER(d->format_extra_container), module->widget);
@@ -1359,6 +1357,11 @@ void gui_init(dt_lib_module_t *self)
   const int storage_index = dt_imageio_get_index_of_storage(dt_imageio_get_storage_by_name(setting));
   dt_bauhaus_combobox_set(d->storage, storage_index);
 
+  // Set format
+  setting = dt_conf_get_string_const(CONFIG_PREFIX "format_name");
+  const int format_index = dt_imageio_get_index_of_format(dt_imageio_get_format_by_name(setting));
+  dt_bauhaus_combobox_set(d->format, format_index);
+
   dt_bauhaus_combobox_set(d->upscale, dt_conf_get_bool(CONFIG_PREFIX "upscale") ? 1 : 0);
   dt_bauhaus_combobox_set(d->high_quality, dt_conf_get_bool(CONFIG_PREFIX "high_quality_processing") ? 1 : 0);
   dt_bauhaus_combobox_set(d->export_masks, dt_conf_get_bool(CONFIG_PREFIX "export_masks") ? 1 : 0);
@@ -1427,13 +1430,13 @@ void gui_cleanup(dt_lib_module_t *self)
   for(const GList *it = darktable.imageio->plugins_storage; it; it = g_list_next(it))
   {
     dt_imageio_module_storage_t *module = (dt_imageio_module_storage_t *)it->data;
-    if(module->widget) gtk_container_remove(GTK_CONTAINER(d->storage_extra_container), module->widget);
+    if(module->widget && GTK_IS_CONTAINER(d->storage_extra_container)) gtk_container_remove(GTK_CONTAINER(d->storage_extra_container), module->widget);
   }
 
   for(const GList *it = darktable.imageio->plugins_format; it; it = g_list_next(it))
   {
     dt_imageio_module_format_t *module = (dt_imageio_module_format_t *)it->data;
-    if(module->widget) gtk_container_remove(GTK_CONTAINER(d->format_extra_container), module->widget);
+    if(module->widget && GTK_IS_CONTAINER(d->format_extra_container)) gtk_container_remove(GTK_CONTAINER(d->format_extra_container), module->widget);
   }
 
   g_free(d->metadata_export);

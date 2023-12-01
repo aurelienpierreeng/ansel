@@ -204,6 +204,11 @@ void dt_dev_process_preview(dt_develop_t *dev)
 
 void dt_dev_invalidate(dt_develop_t *dev)
 {
+  dt_times_t start;
+  dt_get_times(&start);
+  dt_show_times(&start, "[dev_process_image] sending killswitch signal on running pipelines");
+
+  dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dev->image_status = DT_DEV_PIXELPIPE_DIRTY;
   dev->timestamp++;
   if(dev->preview_pipe) dev->preview_pipe->input_timestamp = dev->timestamp;
@@ -211,12 +216,25 @@ void dt_dev_invalidate(dt_develop_t *dev)
 
 void dt_dev_invalidate_all(dt_develop_t *dev)
 {
+  dt_times_t start;
+  dt_get_times(&start);
+  dt_show_times(&start, "[dev_process_all] sending killswitch signal on running pipelines");
+
+  dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
+  dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
+
   dev->image_status = dev->preview_status = DT_DEV_PIXELPIPE_DIRTY;
   dev->timestamp++;
 }
 
 void dt_dev_invalidate_preview(dt_develop_t *dev)
 {
+  dt_times_t start;
+  dt_get_times(&start);
+  dt_show_times(&start, "[dev_process_preview] sending killswitch signal on running pipelines");
+
+  dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
+
   dev->preview_status = DT_DEV_PIXELPIPE_DIRTY;
   dev->timestamp++;
   if(dev->pipe) dev->pipe->input_timestamp = dev->timestamp;
@@ -276,6 +294,10 @@ void dt_dev_process_preview_job(dt_develop_t *dev)
 
 // always process the whole downsampled mipf buffer, to allow for fast scrolling and mip4 write-through.
 restart:
+  dt_pthread_mutex_lock(&dev->preview_pipe->busy_mutex);
+  dt_atomic_set_int(&dev->preview_pipe->shutdown, FALSE);
+  dt_pthread_mutex_unlock(&dev->preview_pipe->busy_mutex);
+
   if(dev->gui_leaving)
   {
     dt_control_log_busy_leave();
@@ -294,6 +316,7 @@ restart:
          dev->preview_pipe, dev, 0, 0, dev->preview_pipe->processed_width,
          dev->preview_pipe->processed_height, 1.f))
   {
+    // interrupted because image changed?
     if(dev->preview_loading || dev->preview_input_changed)
     {
       dt_control_log_busy_leave();
@@ -303,8 +326,11 @@ restart:
       dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
       return;
     }
+    // or because the pipeline changed?
     else
+    {
       goto restart;
+    }
   }
 
   dev->preview_status = DT_DEV_PIXELPIPE_VALID;
@@ -382,6 +408,10 @@ void dt_dev_process_image_job(dt_develop_t *dev)
 
 // adjust pipeline according to changed flag set by {add,pop}_history_item.
 restart:
+  dt_pthread_mutex_lock(&dev->pipe->busy_mutex);
+  dt_atomic_set_int(&dev->pipe->shutdown, FALSE);
+  dt_pthread_mutex_unlock(&dev->pipe->busy_mutex);
+
   if(dev->gui_leaving)
   {
     dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
@@ -439,7 +469,9 @@ restart:
     }
     // or because the pipeline changed?
     else
+    {
       goto restart;
+    }
   }
   dt_show_times(&start, "[dev_process_image] pixel pipeline processing");
   dt_dev_average_delay_update(&start, &dev->average_delay);
@@ -787,7 +819,6 @@ const dt_dev_history_item_t *dt_dev_get_history_item(dt_develop_t *dev, const ch
       break;
     }
   }
-
   return NULL;
 }
 
@@ -833,6 +864,7 @@ void _dev_add_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolean 
 
   // invalidate buffers and force redraw of darkroom
   dt_dev_invalidate_all(dev);
+
   dt_pthread_mutex_unlock(&dev->history_mutex);
 
   if(dev->gui_attached)
@@ -899,6 +931,7 @@ void dt_dev_add_masks_history_item(dt_develop_t *dev, dt_iop_module_t *module, g
 
   // invalidate buffers and force redraw of darkroom
   dt_dev_invalidate_all(dev);
+
   dt_pthread_mutex_unlock(&dev->history_mutex);
 
   if(dev->gui_attached)
@@ -1107,7 +1140,9 @@ void dt_dev_pop_history_items(dt_develop_t *dev, int32_t cnt)
   }
 
   --darktable.gui->reset;
+
   dt_dev_invalidate_all(dev);
+
   dt_pthread_mutex_unlock(&dev->history_mutex);
 
   dt_dev_masks_list_change(dev);
@@ -1895,12 +1930,16 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int imgid, gboolean no_ima
 
   dt_masks_read_masks_history(dev, imgid);
 
-  // FIXME : this probably needs to capture dev thread lock
   if(dev->gui_attached && !no_image)
   {
+    dt_pthread_mutex_lock(&dev->history_mutex);
+
     dev->pipe->changed |= DT_DEV_PIPE_SYNCH;
     dev->preview_pipe->changed |= DT_DEV_PIPE_SYNCH; // again, fixed topology for now.
+
     dt_dev_invalidate_all(dev);
+
+    dt_pthread_mutex_unlock(&dev->history_mutex);
 
     /* signal history changed */
     dt_dev_undo_end_record(dev);
@@ -1954,6 +1993,8 @@ void dt_dev_reprocess_all(dt_develop_t *dev)
   if(darktable.gui->reset) return;
   if(dev && dev->gui_attached)
   {
+    dt_pthread_mutex_lock(&dev->history_mutex);
+
     dev->pipe->changed |= DT_DEV_PIPE_SYNCH;
     dev->preview_pipe->changed |= DT_DEV_PIPE_SYNCH;
     dev->pipe->cache_obsolete = 1;
@@ -1961,6 +2002,8 @@ void dt_dev_reprocess_all(dt_develop_t *dev)
 
     // invalidate buffers and force redraw of darkroom
     dt_dev_invalidate_all(dev);
+
+    dt_pthread_mutex_unlock(&dev->history_mutex);
 
     /* redraw */
     dt_control_queue_redraw_center();
@@ -1972,11 +2015,15 @@ void dt_dev_reprocess_center(dt_develop_t *dev)
   if(darktable.gui->reset) return;
   if(dev && dev->gui_attached)
   {
+    dt_pthread_mutex_lock(&dev->history_mutex);
+
     dev->pipe->changed |= DT_DEV_PIPE_SYNCH;
     dev->pipe->cache_obsolete = 1;
 
     // invalidate buffers and force redraw of darkroom
     dt_dev_invalidate_all(dev);
+
+    dt_pthread_mutex_unlock(&dev->history_mutex);
 
     /* redraw */
     dt_control_queue_redraw_center();
@@ -1987,10 +2034,15 @@ void dt_dev_reprocess_preview(dt_develop_t *dev)
 {
   if(darktable.gui->reset || !dev || !dev->gui_attached) return;
 
+  dt_pthread_mutex_lock(&dev->history_mutex);
+
   dev->preview_pipe->changed |= DT_DEV_PIPE_SYNCH;
   dev->preview_pipe->cache_obsolete = 1;
 
   dt_dev_invalidate_preview(dev);
+
+  dt_pthread_mutex_unlock(&dev->history_mutex);
+
   dt_control_queue_redraw_center();
 }
 

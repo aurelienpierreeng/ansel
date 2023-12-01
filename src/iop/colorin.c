@@ -1788,8 +1788,44 @@ void gui_update(struct dt_iop_module_t *self)
   dt_bauhaus_combobox_set(g->profile_combobox, 0);
 
   if(p->type != DT_COLORSPACE_ENHANCED_MATRIX)
+  {
     fprintf(stderr, "[colorin] could not find requested profile `%s'!\n",
             dt_colorspaces_get_name(p->type, p->filename));
+
+    const int last_id = dt_conf_get_int("colorin/profile_error/last_id");
+    const gint64 last_timestamp = dt_conf_get_int64("colorin/profile_error/last_timestamp");
+    GDateTime *now = g_date_time_new_now_local();
+    gint64 timestamp = g_date_time_to_unix(now);
+
+    if(last_id != self->dev->image_storage.id || (timestamp - last_timestamp) > 3600)
+    {
+      // Nag users about errors only once every hour for each image.
+      // Noticeably, because gui_update is fired twice on each darkroom init
+      dt_conf_set_int("colorin/profile_error/last_id", self->dev->image_storage.id);
+      dt_conf_set_int64("colorin/profile_error/last_timestamp", timestamp);
+
+      GtkWidget *dialog = gtk_message_dialog_new_with_markup(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+                                          GTK_DIALOG_DESTROY_WITH_PARENT,
+                                          GTK_MESSAGE_ERROR,
+                                          GTK_BUTTONS_CLOSE,
+                                          _("<span size='large'>Error on image <u>%s</u> (library id: <tt>%i</tt>)</span>"),
+                                          self->dev->image_storage.filename,
+                                          self->dev->image_storage.id);
+      gtk_message_dialog_format_secondary_markup(
+          GTK_MESSAGE_DIALOG(dialog),
+          _("The editing history references the following input color profile: \n"
+            "<tt>%s</tt>\n\n"
+            "<b>This file has not been found on your system</b> and Ansel will fall back to linear Rec709 color space. "
+            "It is a serious error that can lead to unpredictable color shifts and unexpected results.\n\n"
+            "If this file has moved, you should update its path in the <i>input color profile</i> module. "
+            "If you don't have it, then you may have to redo your color editing."),
+            dt_colorspaces_get_name(p->type, p->filename));
+      gtk_dialog_run(GTK_DIALOG(dialog));
+      gtk_widget_destroy(dialog);
+    }
+
+    g_date_time_unref(now);
+  }
 }
 
 // FIXME: update the gui when we add/remove the eprofile or ematrix

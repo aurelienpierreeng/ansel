@@ -2659,10 +2659,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
 
   if(g == NULL) return;
   if(p->illuminant != DT_ILLUMINANT_DETECT_EDGES && p->illuminant != DT_ILLUMINANT_DETECT_SURFACES)
-  {
-    gui_changed(self, NULL, NULL);
     return;
-  }
 
   dt_iop_gui_enter_critical_section(self);
   p->x = g->XYZ[0];
@@ -3668,12 +3665,6 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   declare_cat_on_pipe(self, FALSE);
 
   --darktable.gui->reset;
-}
-
-
-void gui_focus(struct dt_iop_module_t *self, gboolean in)
-{
-  gui_changed(self, NULL, NULL);
 }
 
 void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)

@@ -117,6 +117,7 @@ src/common/image.c
 src/common/image.h
 src/common/imagebuf.c
 src/common/imageio.c
+src/common/import.c
 src/common/import_session.c
 src/common/iop_order.c
 src/common/iop_profile.c
@@ -299,7 +300,6 @@ src/libs/geotagging.c
 src/libs/histogram.c
 src/libs/history.c
 src/libs/image.c
-src/libs/import.c
 src/libs/ioporder.c
 src/libs/lib.c
 src/libs/location.c

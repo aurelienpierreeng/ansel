@@ -1,6 +1,8 @@
 #include "gui/actions/menu.h"
 #include "common/collection.h"
 #include "libs/collect.h"
+#include "common/import.h"
+#include "libs/lib.h"
 
 
 static void pretty_print_collection(const char *buf, char *out, size_t outsize)
@@ -108,11 +110,82 @@ void init_collection_line(gpointer instance,
   }
 }
 
+void import_files_callback()
+{
+  dt_images_import();
+}
+
+void _close_export_popup(GtkWidget *dialog, gint response_id, gpointer data)
+{
+  // We need to increase the reference count of the module,
+  // then remove it from the popup before closing it,
+  // otherwise it gets destroyed along with it.
+  darktable.gui->export_popup.module = (GtkWidget *)g_object_ref(darktable.gui->export_popup.module);
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(darktable.gui->export_popup.window));
+  gtk_container_remove(GTK_CONTAINER(content), darktable.gui->export_popup.module);
+  darktable.gui->export_popup.window = NULL;
+}
+
+void export_files_callback()
+{
+  if(darktable.gui->export_popup.window)
+  {
+    // if not NULL, we already have a popup open and can't re-instanciate a live GtkWidget
+    return;
+  }
+
+  dt_lib_module_t *module = dt_lib_get_module("export");
+  if(!module) return;
+
+  // get_expander actually builds the expander, it's not a getter despite what the name suggests.
+  // On first run we need to build, an the following runs, just fetch it
+  GtkWidget *w = darktable.gui->export_popup.module
+                  ? darktable.gui->export_popup.module
+                  : dt_lib_gui_get_expander(module);
+  if(!w) return;
+
+  // Save the module
+  darktable.gui->export_popup.module = w;
+
+  // Prepare the popup
+  GtkWidget *dialog = gtk_dialog_new();
+  gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
+  gtk_window_set_title(GTK_WINDOW(dialog), _("Ansel — Export images"));
+  g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(_close_export_popup), NULL);
+
+  // Ensure the module is expanded
+  dt_lib_gui_set_expanded(module, TRUE);
+  dt_gui_add_help_link(w, dt_get_help_url(module->plugin_name));
+  gtk_widget_set_size_request(w, DT_PIXEL_APPLY_DPI(360), -1);
+
+  // Populate popup and fire everything
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  gtk_box_pack_start(GTK_BOX(content), w, FALSE, FALSE, 0);
+  gtk_widget_set_visible(w, TRUE);
+  gtk_widget_show_all(dialog);
+  gtk_widget_hide(module->arrow);
+
+  // Save the ref to the window. We don't reuse its content, we just need to know if it exists.
+  darktable.gui->export_popup.window = dialog;
+}
+
 
 void append_file(GtkWidget **menus, GList **lists, const dt_menus_t index)
 {
   dt_action_t *pnl = dt_action_section(&darktable.control->actions_global, N_("File"));
   dt_action_t *ac;
+
+  add_sub_menu_entry(menus, lists, _("Import…"), index, NULL, import_files_callback, NULL, NULL,
+                     NULL);
+  ac = dt_action_define(pnl, NULL, N_("Import images"), get_last_widget(lists), NULL);
+  dt_action_register(ac, NULL, import_files_callback, GDK_KEY_i, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+
+  add_sub_menu_entry(menus, lists, _("Export…"), index, NULL, export_files_callback, NULL, NULL,
+                     NULL);
+  ac = dt_action_define(pnl, NULL, N_("Export images"), get_last_widget(lists), NULL);
+  dt_action_register(ac, NULL, export_files_callback, GDK_KEY_e, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+
+  add_menu_separator(menus[index]);
 
   add_top_submenu_entry(menus, lists, _("Recent collections"), index);
   GtkWidget *parent = get_last_widget(lists);
