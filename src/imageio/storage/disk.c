@@ -144,11 +144,29 @@ static void button_clicked(GtkWidget *widget, dt_imageio_module_storage_t *self)
   g_object_unref(filechooser);
 }
 
+//remove trail and lead space of each folders and file name
+static inline char* entry_remove_trail_lead_space(gchar *text)
+{
+  gchar **split = g_strsplit(text, "/", -1);
+  for(int i = 0; i < g_strv_length(split); i++)
+    if(g_strdup(split[i]) != NULL ) g_strstrip(split[i]);
+  
+  char* result = g_strjoinv("/", split);
+  g_strfreev(split);
+
+  return result;
+}
+
 static void entry_changed_callback(GtkEntry *entry, gpointer user_data)
 {
   gchar *text = g_strdup(gtk_entry_get_text(entry));
-  dt_conf_set_string("plugins/imageio/storage/disk/file_directory", g_strstrip(text));
+  gchar *new_text = g_strdup(entry_remove_trail_lead_space(text));
   g_free(text);
+
+  dt_conf_set_string("plugins/imageio/storage/disk/file_directory", g_strstrip(new_text));
+  g_free(new_text);
+  
+  //dt_conf_set_string("plugins/imageio/s torage/disk/file_directory", gtk_entry_get_text(entry));
 }
 
 static void onsave_action_toggle_callback(GtkWidget *widget, gpointer user_data)
