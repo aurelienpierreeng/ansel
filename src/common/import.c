@@ -29,6 +29,7 @@
 #include "common/metadata.h"
 #include "common/datetime.h"
 #include "common/selection.h"
+#include "common/text_manipulation.h"
 #include "control/conf.h"
 #include "control/control.h"
 #include "dtgtk/button.h"
@@ -353,16 +354,12 @@ static void _base_dir_changed(GtkFileChooserButton* self)
 
 static void _project_dir_changed(GtkWidget *widget, gpointer data)
 {
-  gchar *text = g_strdup(gtk_entry_get_text(GTK_ENTRY(widget)));
-  dt_conf_set_string("session/sub_directory_pattern", g_strstrip(text));
-  g_free(text);
+  dt_conf_set_string("session/sub_directory_pattern", dt_remove_trail_lead_space(gtk_entry_get_text(GTK_ENTRY(widget))));
 }
 
 static void _filename_changed(GtkWidget *widget, gpointer data)
 {
-  gchar *text = g_strdup(gtk_entry_get_text(GTK_ENTRY(widget)));
-  dt_conf_set_string("session/filename_pattern", g_strstrip(text));
-  g_free(text);
+  dt_conf_set_string("session/filename_pattern", dt_remove_trail_lead_space(gtk_entry_get_text(GTK_ENTRY(widget))));
 }
 
 static void _update_date(GtkCalendar *calendar, GtkWidget *entry)
