@@ -348,35 +348,46 @@ if(USE_WEBP)
   endif(WebP_FOUND)
 endif(USE_WEBP)
 
-if (USE_AVIF)
-    find_package(libavif 0.8.2 CONFIG)
-    if (TARGET avif)
-        list(APPEND LIBS avif)
-        add_definitions(-DHAVE_LIBAVIF=1)
-        list(APPEND SOURCES "common/imageio_avif.c")
-        set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} avif CACHE INTERNAL "")
-    endif()
+if(USE_AVIF)
+  # libavif released stable version and we support it since 0.8.2, but its
+  # `config-version.cmake` requires exact match of major version, so we have to
+  # check the version manually.
+  find_package(libavif CONFIG)
+  if(libavif_FOUND AND libavif_VERSION VERSION_GREATER_EQUAL 0.8.2)
+    list(APPEND LIBS avif)
+    add_definitions(-DHAVE_LIBAVIF=1)
+    list(APPEND SOURCES "common/imageio_avif.c")
+    set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} avif CACHE INTERNAL "")
+  else()
+    # Version mismatched.
+    set(libavif_FOUND NOTFOUND)
+  endif()
 endif()
 
 if(USE_HEIF)
+  # libheif's `config-version.cmake` requires exact match of all version, so we
+  # have to check the version manually.
   find_package(libheif CONFIG)
-  if(NOT TARGET heif)
+  if(NOT libheif_FOUND)
     find_package(libheif 1.13.0 MODULE)
   endif()
-  if(TARGET heif AND libheif_VERSION VERSION_GREATER_EQUAL 1.13)
+  if(libheif_FOUND AND libheif_VERSION VERSION_GREATER_EQUAL 1.13.0)
     list(APPEND LIBS heif)
     add_definitions(-DHAVE_LIBHEIF=1)
     list(APPEND SOURCES "common/imageio_heif.c")
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} heif heic hif CACHE INTERNAL "")
-    if(NOT TARGET avif)
-      # libheif can handle avif, too
+    if(NOT libavif_FOUND)
+      # libheif can handle avif, too.
       set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} avif CACHE INTERNAL "")
     endif()
+  else()
+    # Version mismatched.
+    set(libheif_FOUND NOTFOUND)
   endif()
 endif()
 
 #  For now we use the LibRaw submodule
-if (USE_LIBRAW)
+if(USE_LIBRAW)
 #    find_package(libraw 0.20.2)
 #    if (libraw_FOUND)
 #        list(APPEND LIBS ${libraw_LIBRARY})
