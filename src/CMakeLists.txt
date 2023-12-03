@@ -214,7 +214,7 @@ include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/external)
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/external/OpenCL)
 
 # initial compiler flags
-add_definitions("-DHAVE_CONFIG_H")
+add_definitions(-DHAVE_CONFIG_H=1)
 
 CHECK_C_COMPILER_FLAG("-std=c99" COMPILER_SUPPORTS_C99)
 if(NOT COMPILER_SUPPORTS_C99)
@@ -318,7 +318,7 @@ if(LibSoup2_FOUND)
   include_directories(SYSTEM ${LibSoup2_INCLUDE_DIRS})
   list(APPEND LIBS ${LibSoup2_LIBRARIES})
   add_definitions(${LibSoup2_DEFINITIONS})
-  add_definitions("-DHAVE_HTTP_SERVER")
+  add_definitions(-DHAVE_HTTP_SERVER=1)
   list(APPEND SOURCES "common/http_server.c")
 endif(LibSoup2_FOUND)
 
@@ -333,6 +333,7 @@ if(USE_OPENEXR)
     include_directories(SYSTEM ${OpenEXR_INCLUDE_DIRS})
     list(APPEND LIBS ${OpenEXR_LIBRARIES})
     add_definitions(${OpenEXR_DEFINITIONS})
+    add_definitions(-DHAVE_OPENEXR=1)
     list(APPEND SOURCES "common/imageio_exr.cc")
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} exr CACHE INTERNAL "")
   endif(OpenEXR_FOUND)
@@ -344,6 +345,8 @@ if(USE_WEBP)
     include_directories(SYSTEM ${WebP_INCLUDE_DIRS})
     list(APPEND LIBS ${WebP_LIBRARIES})
     add_definitions(${WebP_DEFINITIONS})
+    add_definitions(-DHAVE_WEBP=1)
+    # FIXME: We don't really have a `common/imageio_webp.c`, do we really support it?
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} webp CACHE INTERNAL "")
   endif(WebP_FOUND)
 endif(USE_WEBP)
@@ -386,32 +389,19 @@ if(USE_HEIF)
   endif()
 endif()
 
-if(USE_LIBRAW)
-  if(USE_BUNDLED_LIBRAW)
-    add_definitions(-DHAVE_LIBRAW=1)
-    list(APPEND SOURCES "common/imageio_libraw.c")
-  else()
-    find_package(libraw 0.21.0)
-    if(libraw_FOUND)
-      list(APPEND LIBS ${libraw_LIBRARY})
-      add_definitions(-DHAVE_LIBRAW=1)
-      list(APPEND SOURCES "common/imageio_libraw.c")
-    endif()
-  endif()
-endif()
-
 if(USE_LENSFUN)
   find_package(LensFun)
   if(LensFun_FOUND)
     include_directories(SYSTEM ${LensFun_INCLUDE_DIRS})
     list(APPEND LIBS ${LensFun_LIBRARIES})
+    add_definitions(-DHAVE_LENSFUN=1)
     add_definitions(${LensFun_DEFINITIONS})
   endif()
 endif()
 
 find_package(Sqlite3 3.15 REQUIRED)
 if(NOT Sqlite3_VERSION VERSION_LESS 3.24)
-  add_definitions("-DHAVE_SQLITE_324_OR_NEWER")
+  add_definitions(-DHAVE_SQLITE_324_OR_NEWER=1)
   message(STATUS "Sqlite3 version 3.24 or newer")
 else()
   message(STATUS "Sqlite3 version older than 3.24, some features may be downgraded")
@@ -433,8 +423,12 @@ include_directories(SYSTEM ${Exiv2_INCLUDE_DIRS})
 list(APPEND LIBS ${Exiv2_LIBRARIES})
 add_definitions(${Exiv2_DEFINITIONS})
 
+find_package(Pugixml 1.2 REQUIRED)
+include_directories(SYSTEM ${Pugixml_INCLUDE_DIRS})
+list(APPEND LIBS ${Pugixml_LIBRARIES})
+
 # Optionally enable ISOBMFF support in Exiv2
-if (USE_ISOBMFF)
+if(USE_ISOBMFF)
   if(Exiv2_VERSION VERSION_GREATER_EQUAL "0.27.4")
     # exiv2 >= 0.27.4 provides optional support for ISOBMFF files.
     # This must be manually enabled during exiv2 build and can be checked with
@@ -457,7 +451,7 @@ endif()
 if(USE_OPENJPEG)
   find_package(OpenJPEG)
   if(OpenJPEG_FOUND)
-    add_definitions("-DHAVE_OPENJPEG")
+    add_definitions(-DHAVE_OPENJPEG=1)
     list(APPEND SOURCES "common/imageio_j2k.c")
 
     include_directories(SYSTEM ${OpenJPEG_INCLUDE_DIRS})
@@ -468,7 +462,7 @@ endif(USE_OPENJPEG)
 
 find_package(IsoCodes 3.66)
 if(IsoCodes_FOUND)
-  add_definitions("-DHAVE_ISO_CODES")
+  add_definitions(-DHAVE_ISO_CODES=1)
 else(IsoCodes_FOUND)
   message(STATUS "no suitable iso-codes, there will be no language names in the preferences")
 endif(IsoCodes_FOUND)
@@ -490,13 +484,13 @@ if(USE_LIBSECRET AND JsonGlib_FOUND)
       set(SOURCES ${SOURCES} "common/pwstorage/backend_libsecret.c")
       include_directories(SYSTEM ${Libsecret_INCLUDE_DIRS})
       list(APPEND LIBS ${Libsecret_LIBRARIES})
-      add_definitions("-DHAVE_LIBSECRET")
+      add_definitions(-DHAVE_LIBSECRET=1)
     endif()
   endif(Libsecret_FOUND)
 endif(USE_LIBSECRET AND JsonGlib_FOUND)
 
 if(USE_KWALLET)
-  add_definitions("-DHAVE_KWALLET")
+  add_definitions(-DHAVE_KWALLET=1)
 endif(USE_KWALLET)
 
 if(USE_MAC_INTEGRATION)
@@ -511,7 +505,7 @@ endif(USE_MAC_INTEGRATION)
 if(USE_GRAPHICSMAGICK)
   find_package(GraphicsMagick)
   if(GraphicsMagick_FOUND)
-    add_definitions(-DHAVE_GRAPHICSMAGICK)
+    add_definitions(-DHAVE_GRAPHICSMAGICK=1)
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} gif jpc jp2 bmp dcm jng miff mng pbm pnm ppm pgm CACHE INTERNAL "")
     include_directories(SYSTEM ${GraphicsMagick_INCLUDE_DIRS})
     list(APPEND LIBS ${GraphicsMagick_LIBRARIES})
@@ -526,7 +520,7 @@ if(USE_IMAGEMAGICK AND NOT GraphicsMagick_FOUND)
     if(NOT ImageMagick_VERSION VERSION_GREATER 7)
       message(FATAL_ERROR "ImageMagick version must be >= 7")
     endif(NOT ImageMagick_VERSION VERSION_GREATER 7)
-    add_definitions(-DHAVE_IMAGEMAGICK ${ImageMagick_CFLAGS_OTHER})
+    add_definitions(-DHAVE_IMAGEMAGICK=1 ${ImageMagick_CFLAGS_OTHER})
     include_directories(SYSTEM ${ImageMagick_INCLUDE_DIRS})
     find_library(ImageMagick_LIBRARY ${ImageMagick_LIBRARIES} HINTS ${ImageMagick_LIBDIR})
     list(APPEND LIBS ${ImageMagick_LIBRARY})
@@ -536,7 +530,7 @@ endif(USE_IMAGEMAGICK AND NOT GraphicsMagick_FOUND)
 if(USE_GMIC)
   find_package(GMIC)
   if(GMIC_FOUND)
-    add_definitions(-DHAVE_GMIC)
+    add_definitions(-DHAVE_GMIC=1)
     include_directories(SYSTEM ${GMIC_INCLUDE_DIRS})
     list(APPEND LIBS ${GMIC_LIBRARIES})
   endif(GMIC_FOUND)
@@ -545,27 +539,14 @@ endif(USE_GMIC)
 if(USE_ICU)
   find_package(ICU)
   if(ICU_FOUND)
-    add_definitions(-DHAVE_ICU -DSQLITE_CORE -DSQLITE_ENABLE_ICU)
+    add_definitions(-DHAVE_ICU=1 -DSQLITE_CORE -DSQLITE_ENABLE_ICU)
     list(APPEND LIBS ${ICU_LIBRARIES})
     set(SOURCES ${SOURCES} "common/sqliteicu.c")
   endif(ICU_FOUND)
 endif(USE_ICU)
 
-#
-# Add HAVE_xxx defines used by ansel
-#
-
-if(LensFun_FOUND)
-  add_definitions("-DHAVE_LENSFUN")
-endif(LensFun_FOUND)
-
-if(OpenEXR_FOUND)
-  add_definitions("-DHAVE_OPENEXR")
-  set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} exr CACHE INTERNAL "")
-endif(OpenEXR_FOUND)
-
 if(USE_OPENCL)
-  add_definitions("-DHAVE_OPENCL")
+  add_definitions(-DHAVE_OPENCL=1)
 endif(USE_OPENCL)
 
 # Check for __builtin_cpu_supports here due to a bug in clang/llvm. LLVM uses
@@ -579,7 +560,7 @@ int main() {
   printf(\"%d\", __builtin_cpu_supports(\"sse3\"));
 }" HAVE_BUILTIN_CPU_SUPPORTS)
 if(HAVE_BUILTIN_CPU_SUPPORTS)
-  add_definitions("-DHAVE_BUILTIN_CPU_SUPPORTS")
+  add_definitions(-DHAVE_BUILTIN_CPU_SUPPORTS=1)
 endif(HAVE_BUILTIN_CPU_SUPPORTS)
 MESSAGE(STATUS "Does the compiler support __builtin_cpu_supports(): ${HAVE_BUILTIN_CPU_SUPPORTS}")
 
@@ -648,6 +629,38 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.cmake.h" "${DARKTABLE_BINDIR}
 #
 # Build external deps
 #
+
+# Actual defination of the target is in `external/CMakeLists.txt`.
+list(APPEND STATIC_LIBS whereami)
+
+add_library(lib_ansel_imageio_rawspeed STATIC common/imageio_rawspeed.cc)
+target_link_libraries(lib_ansel_imageio_rawspeed PRIVATE rawspeed)
+list(APPEND STATIC_LIBS lib_ansel_imageio_rawspeed)
+
+# Don't do too much, if `USE_BUNDLED_LIBRAW=OFF` but `libraw_FOUND=NOTFOUND`,
+# it's considered as packager's mistake. Instead of using bundled LibRaw as
+# fallback, just build without LibRaw support in that case so the mistake could
+# be easily found.
+if(USE_LIBRAW)
+  if(USE_BUNDLED_LIBRAW)
+    add_definitions(-DHAVE_LIBRAW=1)
+    list(APPEND SOURCES "common/imageio_libraw.c")
+    set(LIBRAW_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/LibRaw" CACHE STRING "Relative path to libraw directory (default=CMAKE_CURRENT_SOURCE_DIR)")
+    if(NOT USE_OPENMP)
+      set(ENABLE_OPENMP OFF CACHE BOOL "")
+    endif()
+    add_subdirectory(external/LibRaw-cmake)
+    list(APPEND STATIC_LIBS libraw::libraw)
+  else()
+    find_package(libraw 0.21.0)
+    if(libraw_FOUND)
+      list(APPEND LIBS ${libraw_LIBRARY})
+      add_definitions(-DHAVE_LIBRAW=1)
+      list(APPEND SOURCES "common/imageio_libraw.c")
+    endif()
+  endif()
+endif()
+
 if(USE_LUA)
   find_package(Lua54 5.4)
   if(Lua54_FOUND)
@@ -729,10 +742,6 @@ if(USE_LUA)
   list(APPEND STATIC_LIBS lautoc_static)
 endif(USE_LUA)
 
-find_package(Pugixml 1.2 REQUIRED)
-include_directories(SYSTEM ${Pugixml_INCLUDE_DIRS})
-list(APPEND LIBS ${Pugixml_LIBRARIES})
-
 if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   # do not error out on "loop not vectorized" clang OpenMP warnings
   add_definitions("-Wno-error=pass-failed")
@@ -743,12 +752,12 @@ if(USE_MAP)
   find_package(OSMGpsMap)
   if(OSMGpsMap_FOUND)
     message(STATUS "Map mode: enabled")
-    add_definitions("-DHAVE_MAP")
+    add_definitions(-DHAVE_MAP=1)
     if(NOT OSMGpsMap_VERSION VERSION_LESS 1.1.0)
-      add_definitions("-DHAVE_OSMGPSMAP_110_OR_NEWER")
+      add_definitions(-DHAVE_OSMGPSMAP_110_OR_NEWER=1)
     endif()
     if(OSMGpsMap_VERSION VERSION_GREATER 1.1.0)
-      add_definitions("-DHAVE_OSMGPSMAP_NEWER_THAN_110")
+      add_definitions(-DHAVE_OSMGPSMAP_NEWER_THAN_110=1)
     endif()
     include_directories(SYSTEM ${OSMGpsMap_INCLUDE_DIRS})
     list(APPEND LIBS ${OSMGpsMap_LIBRARIES})
@@ -801,7 +810,7 @@ if(BUILD_PRINT)
       )
     set(SOURCES ${SOURCES} ${SOURCE_FILES_PRINT})
     list(APPEND LIBS ${CUPS_LIBRARIES})
-    add_definitions("-DHAVE_PRINT")
+    add_definitions(-DHAVE_PRINT=1)
     message(STATUS "Print mode: enabled")
   else(CUPS_FOUND)
     set(BUILD_PRINT OFF)
@@ -904,17 +913,12 @@ if(LIB_DEPS)
   add_dependencies(lib_ansel ${LIB_DEPS})
 endif()
 
-target_link_libraries(lib_ansel PUBLIC ${STATIC_LIBS})
-target_link_libraries(lib_ansel PRIVATE whereami)
+target_link_libraries(lib_ansel PRIVATE ${STATIC_LIBS})
 target_link_libraries(lib_ansel PUBLIC ${LIBS})
 
 unset(LIBS)
 unset(STATIC_LIBS)
 unset(LIB_DEPS)
-
-add_library(lib_ansel_imageio_rawspeed STATIC common/imageio_rawspeed.cc)
-target_link_libraries(lib_ansel_imageio_rawspeed PRIVATE rawspeed)
-target_link_libraries(lib_ansel PRIVATE lib_ansel_imageio_rawspeed)
 
 #
 # Install lib_ansel
@@ -985,18 +989,3 @@ InstallDependencyFiles()
 
 # Tell CPack about the components and group the data components together (CPACK_COMPONENT_${COMPONENT_NAME_ALL_CAPS}_GROUP).
 set(CPACK_COMPONENTS_ALL DTApplication DTDebugSymbols DTDocuments)
-
-# Don't do too much, if `USE_BUNDLED_LIBRAW=OFF` but `libraw_FOUND=NOTFOUND`,
-# it's considered as packager's mistake. Instead of using bundled LibRaw as
-# fallback, just build without LibRaw support in that case so the mistake could
-# be easily found.
-if(USE_LIBRAW AND USE_BUNDLED_LIBRAW)
-  set(LIBRAW_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/LibRaw" CACHE STRING "Relative path to libraw directory (default=CMAKE_CURRENT_SOURCE_DIR)")
-  if(NOT USE_OPENMP)
-    set(ENABLE_OPENMP OFF CACHE BOOL "")
-  endif()
-
-  # LibRaw sub-module
-  add_subdirectory(external/LibRaw-cmake)
-  target_link_libraries(lib_ansel PRIVATE libraw::libraw)
-endif()
