@@ -386,16 +386,18 @@ if(USE_HEIF)
   endif()
 endif()
 
-#  For now we use the LibRaw submodule
 if(USE_LIBRAW)
-#    find_package(libraw 0.20.2)
-#    if (libraw_FOUND)
-#        list(APPEND LIBS ${libraw_LIBRARY})
-#        add_definitions(-DHAVE_LIBRAW=1)
-#        list(APPEND SOURCES "common/imageio_libraw.c")
-#    endif()
-   add_definitions(-DHAVE_LIBRAW=1)
-   list(APPEND SOURCES "common/imageio_libraw.c")
+  if(USE_BUNDLED_LIBRAW)
+    add_definitions(-DHAVE_LIBRAW=1)
+    list(APPEND SOURCES "common/imageio_libraw.c")
+  else()
+    find_package(libraw 0.21.0)
+    if(libraw_FOUND)
+      list(APPEND LIBS ${libraw_LIBRARY})
+      add_definitions(-DHAVE_LIBRAW=1)
+      list(APPEND SOURCES "common/imageio_libraw.c")
+    endif()
+  endif()
 endif()
 
 if(USE_LENSFUN)
@@ -984,7 +986,11 @@ InstallDependencyFiles()
 # Tell CPack about the components and group the data components together (CPACK_COMPONENT_${COMPONENT_NAME_ALL_CAPS}_GROUP).
 set(CPACK_COMPONENTS_ALL DTApplication DTDebugSymbols DTDocuments)
 
-if (USE_LIBRAW)
+# Don't do too much, if `USE_BUNDLED_LIBRAW=OFF` but `libraw_FOUND=NOTFOUND`,
+# it's considered as packager's mistake. Instead of using bundled LibRaw as
+# fallback, just build without LibRaw support in that case so the mistake could
+# be easily found.
+if(USE_LIBRAW AND USE_BUNDLED_LIBRAW)
   set(LIBRAW_PATH "${CMAKE_CURRENT_SOURCE_DIR}/external/LibRaw" CACHE STRING "Relative path to libraw directory (default=CMAKE_CURRENT_SOURCE_DIR)")
   if(NOT USE_OPENMP)
     set(ENABLE_OPENMP OFF CACHE BOOL "")
