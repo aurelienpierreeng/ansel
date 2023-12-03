@@ -188,7 +188,7 @@ if(WIN32)
   list(APPEND HEADER_FILES "win/filepath.h")
 
   # Use mingw's sprintf instead of windows's
-  ADD_DEFINITIONS( -D__USE_MINGW_ANSI_STDIO=1 )
+  ADD_DEFINITIONS(-D__USE_MINGW_ANSI_STDIO=1)
 
   # add it to have proper time.h functions available
   ADD_DEFINITIONS(-D_POSIX_THREAD_SAFE_FUNCTIONS)
@@ -453,7 +453,6 @@ if(USE_OPENJPEG)
   if(OpenJPEG_FOUND)
     add_definitions(-DHAVE_OPENJPEG=1)
     list(APPEND SOURCES "common/imageio_j2k.c")
-
     include_directories(SYSTEM ${OpenJPEG_INCLUDE_DIRS})
     list(APPEND LIBS ${OpenJPEG_LIBRARIES})
     set(DT_SUPPORTED_EXTENSIONS ${DT_SUPPORTED_EXTENSIONS} j2c j2k jp2 jpc CACHE INTERNAL "")
@@ -661,85 +660,79 @@ if(USE_LIBRAW)
   endif()
 endif()
 
+# Check whether Lua is available.
+# Like what we did for LibRaw.
 if(USE_LUA)
-  find_package(Lua54 5.4)
-  if(Lua54_FOUND)
-    message(STATUS "Lua support: Enabled")
-    include_directories(SYSTEM ${Lua54_INCLUDE_DIRS})
-    list(APPEND LIBS ${Lua54_LDFLAGS})
-  else()
-    if(DONT_USE_INTERNAL_LUA)
-      message(STATUS "Lua support: System library for lua 5.4 not found (to use ansel's version use -DDONT_USE_INTERNAL_LUA=Off)")
-      set(USE_LUA OFF)
-    else(DONT_USE_INTERNAL_LUA)
-      message(STATUS "Lua support: System library not found (using ansel's version)")
-      include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/lua/src)
-      add_subdirectory(external/lua)
-      list(APPEND LIBS lua)
-    endif(DONT_USE_INTERNAL_LUA)
-  endif(Lua54_FOUND)
-
-  if(USE_LUA)
+  if(USE_BUNDLED_LUA)
     add_definitions("-DUSE_LUA")
-    FILE(GLOB SOURCE_FILES_LUA
-      "lua/cairo.c"
-      "lua/call.c"
-      "lua/configuration.c"
-      "lua/database.c"
-      "lua/events.c"
-      "lua/film.c"
-      "lua/format.c"
-      "lua/gettext.c"
-      "lua/glist.c"
-      "lua/gui.c"
-      "lua/guides.c"
-      "lua/image.c"
-      "lua/init.c"
-      "lua/lib.c"
-      "lua/lua.c"
-      "lua/lualib.c"
-      "lua/luastorage.c"
-      "lua/modules.c"
-      "lua/password.c"
-      "lua/preferences.c"
-      "lua/print.c"
-      "lua/storage.c"
-      "lua/styles.c"
-      "lua/tags.c"
-      "lua/types.c"
-      "lua/view.c"
-      "lua/widget/widget.c"
-      "lua/widget/box.c"
-      "lua/widget/button.c"
-      "lua/widget/check_button.c"
-      "lua/widget/combobox.c"
-      "lua/widget/container.c"
-      "lua/widget/entry.c"
-      "lua/widget/file_chooser.c"
-      "lua/widget/label.c"
-      "lua/widget/section_label.c"
-      "lua/widget/separator.c"
-      "lua/widget/slider.c"
-      "lua/widget/stack.c"
-      "lua/widget/text_view.c"
-      )
-    set(SOURCES ${SOURCES} ${SOURCE_FILES_LUA})
-  endif(USE_LUA)
-else(USE_LUA)
-  message(STATUS "Lua support: Disabled")
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/lua/src)
+    add_subdirectory(external/lua)
+    list(APPEND STATIC_LIBS lua)
+  else()
+    find_package(Lua54 5.4)
+    if(Lua54_FOUND)
+      add_definitions("-DUSE_LUA")
+      include_directories(SYSTEM ${Lua54_INCLUDE_DIRS})
+      list(APPEND LIBS ${Lua54_LDFLAGS})
+    else()
+      # Prevent further Lua-related sources from loading.
+      set(USE_LUA OFF)
+    endif()
+  endif()
+endif()
+
+# Load Lua-related sources.
+if(USE_LUA)
+  FILE(GLOB SOURCE_FILES_LUA
+    "lua/cairo.c"
+    "lua/call.c"
+    "lua/configuration.c"
+    "lua/database.c"
+    "lua/events.c"
+    "lua/film.c"
+    "lua/format.c"
+    "lua/gettext.c"
+    "lua/glist.c"
+    "lua/gui.c"
+    "lua/guides.c"
+    "lua/image.c"
+    "lua/init.c"
+    "lua/lib.c"
+    "lua/lua.c"
+    "lua/lualib.c"
+    "lua/luastorage.c"
+    "lua/modules.c"
+    "lua/password.c"
+    "lua/preferences.c"
+    "lua/print.c"
+    "lua/storage.c"
+    "lua/styles.c"
+    "lua/tags.c"
+    "lua/types.c"
+    "lua/view.c"
+    "lua/widget/widget.c"
+    "lua/widget/box.c"
+    "lua/widget/button.c"
+    "lua/widget/check_button.c"
+    "lua/widget/combobox.c"
+    "lua/widget/container.c"
+    "lua/widget/entry.c"
+    "lua/widget/file_chooser.c"
+    "lua/widget/label.c"
+    "lua/widget/section_label.c"
+    "lua/widget/separator.c"
+    "lua/widget/slider.c"
+    "lua/widget/stack.c"
+    "lua/widget/text_view.c"
+  )
+  set(SOURCES ${SOURCES} ${SOURCE_FILES_LUA})
 endif(USE_LUA)
 
+# LuaAutoC for Lua automated interface generation.
 if(USE_LUA)
-  if(NOT Lua54_FOUND)
-    list(APPEND LIB_DEPS lua) # 2nd half of the uglyness :/
-  endif(NOT Lua54_FOUND)
-  # liblautoc for lua automated interface generation
-  add_library(lautoc_static STATIC IMPORTED)
-  set_target_properties(lautoc_static PROPERTIES IMPORTED_LOCATION ${CMAKE_CURRENT_BINARY_DIR}/external/LuaAutoC/liblautoc.a POSITION_INDEPENDENT_CODE True)
   include_directories(${CMAKE_CURRENT_SOURCE_DIR}/external/LuaAutoC/)
   add_subdirectory(external/LuaAutoC)
-  list(APPEND LIB_DEPS lautoc)
-  list(APPEND STATIC_LIBS lautoc_static)
+  list(APPEND STATIC_LIBS lautoc)
 endif(USE_LUA)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -766,7 +759,6 @@ if(USE_MAP)
     set(USE_MAP OFF)
     message(STATUS "Map mode: disabled, please install libosmgpsmap")
   endif(OSMGpsMap_FOUND)
-
 else(USE_MAP)
   message(STATUS "Map mode: disabled")
 endif(USE_MAP)
@@ -908,17 +900,11 @@ set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
 #
 # Link external libs
 #
-
-if(LIB_DEPS)
-  add_dependencies(lib_ansel ${LIB_DEPS})
-endif()
-
 target_link_libraries(lib_ansel PRIVATE ${STATIC_LIBS})
 target_link_libraries(lib_ansel PUBLIC ${LIBS})
 
-unset(LIBS)
 unset(STATIC_LIBS)
-unset(LIB_DEPS)
+unset(LIBS)
 
 #
 # Install lib_ansel
