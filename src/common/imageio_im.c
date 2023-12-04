@@ -42,7 +42,7 @@
 static gboolean _supported_image(const gchar *filename)
 {
   const char *extensions_whitelist[] = { "tif",  "tiff", "gif", "jpc", "jp2", "bmp", "dcm", "jng",
-                                         "miff", "mng",  "pbm", "pnm", "ppm", "pgm", NULL };
+                                         "miff", "mng",  "pbm", "pnm", "ppm", "pgm", "webp", NULL };
   gboolean supported = FALSE;
   char *ext = g_strrstr(filename, ".");
   if(!ext) return FALSE;
@@ -111,6 +111,19 @@ dt_imageio_retval_t dt_imageio_open_im(dt_image_t *img, const char *filename, dt
     goto error;
   }
 
+  size_t profile_length;
+  uint8_t *profile_data = (uint8_t *)MagickGetImageProfile(image, "icc", &profile_length);
+  /* no alias support like GraphicsMagick, have to check both locations */
+  if(profile_data == NULL)
+    profile_data = (uint8_t *)MagickGetImageProfile(image, "icm", &profile_length);
+  if(profile_data)
+  {
+    img->profile_size = profile_length;
+    img->profile = (uint8_t *)g_malloc0(profile_length);
+    memcpy(img->profile, profile_data, profile_length);
+    MagickRelinquishMemory(profile_data);
+  }
+
   DestroyMagickWand(image);
 
   img->buf_dsc.cst = IOP_CS_RGB;
@@ -134,4 +147,3 @@ error:
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-
