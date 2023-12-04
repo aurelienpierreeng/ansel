@@ -22,31 +22,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
-/*
-static inline gchar* get_os_path_separator()
-{
-#if defined(__APPLE__)
-return "/";
-
-// #elif defined(_WIN32)
-// return "\\";
-
-#else
-return "/";
-
-#endif
-}
-*/
-
 // remove trail and lead space of each folders and file name. Result should be freed.
 static inline char* dt_remove_trail_lead_space(const gchar *text)
 {
-  gchar **split = g_strsplit(text, G_DIR_SEPARATOR, -1);
+  gchar **split = g_strsplit(text, G_DIR_SEPARATOR_S, -1);
   for(int i = 0; i < g_strv_length(split); i++)
     if(g_strdup(split[i]) != NULL ) g_strstrip(split[i]);
   
-  char* result = g_strjoinv(G_DIR_SEPARATOR, split);
+  char* result = g_strjoinv(G_DIR_SEPARATOR_S, split);
   g_strfreev(split);
 
   return result;
