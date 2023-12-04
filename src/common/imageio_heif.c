@@ -1,23 +1,28 @@
 /*
- * This file is part of darktable,
+ * This file is part of ansel,
  * Copyright (C) 2021 darktable developers.
+ * Copyright (C) 2023 ansel developers.
  *
- *  darktable is free software: you can redistribute it and/or modify
+ *  ansel is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  darktable is distributed in the hope that it will be useful,
+ *  ansel is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+ *  along with ansel.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "common/image.h"
 #include <libheif/heif.h>
+#if LIBHEIF_HAVE_VERSION(1, 17, 0)
+#include <libheif/heif_properties.h>
+#endif
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -55,7 +60,7 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
   }
 
   err = heif_context_read_from_file(ctx, filename, NULL);
-  if(err.code != 0)
+  if(err.code != heif_error_Ok)
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "Failed to read HEIF file [%s]\n",
@@ -87,7 +92,7 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
 
   // We can only process a single image
   err = heif_context_get_primary_image_handle(ctx, &handle);
-  if(err.code != 0)
+  if(err.code != heif_error_Ok)
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "Failed to read primary image from HEIF file [%s]\n",
@@ -98,7 +103,7 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
 
   // Darktable only supports LITTLE_ENDIAN systems, so RRGGBB_LE should be fine
   err = heif_decode_image(handle, &heif_img, heif_colorspace_RGB, heif_chroma_interleaved_RRGGBB_LE, NULL);
-  if(err.code != 0)
+  if(err.code != heif_error_Ok)
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "Failed to decode HEIF file [%s]\n",
@@ -180,7 +185,7 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
   img->loader = LOADER_HEIF;
   ret = DT_IMAGEIO_OK;
 
-  out:
+out:
   // cleanup handles
   if(heif_img)
   {
@@ -222,7 +227,7 @@ int dt_imageio_heif_read_profile(const char *filename,
   }
 
   err = heif_context_read_from_file(ctx, filename, NULL);
-  if(err.code != 0)
+  if(err.code != heif_error_Ok)
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "Failed to read HEIF file [%s]\n",
@@ -242,7 +247,7 @@ int dt_imageio_heif_read_profile(const char *filename,
 
   // We can only process a single image
   err = heif_context_get_primary_image_handle(ctx, &handle);
-  if(err.code != 0)
+  if(err.code != heif_error_Ok)
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "Failed to read primary image from HEIF file [%s]\n",
@@ -260,7 +265,7 @@ int dt_imageio_heif_read_profile(const char *filename,
              "Found NCLX color profile for HEIF file [%s]\n",
              filename);
       err = heif_image_handle_get_nclx_color_profile(handle, &profile_info_nclx);
-      if(err.code != 0)
+      if(err.code != heif_error_Ok)
       {
         dt_print(DT_DEBUG_IMAGEIO,
                 "Failed to get NCLX color profile data from HEIF file [%s]\n",
@@ -282,7 +287,7 @@ int dt_imageio_heif_read_profile(const char *filename,
       }
       icc_data = (uint8_t *)g_malloc0(sizeof(uint8_t) * icc_size);
       err = heif_image_handle_get_raw_color_profile(handle, icc_data);
-      if(err.code != 0)
+      if(err.code != heif_error_Ok)
       {
         dt_print(DT_DEBUG_IMAGEIO,
                 "Failed to read embedded ICC profile from HEIF image [%s]\n",
@@ -307,7 +312,7 @@ int dt_imageio_heif_read_profile(const char *filename,
       break;
   }
 
-  out:
+out:
   // cleanup handles
   if(profile_info_nclx)
   {

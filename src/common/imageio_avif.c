@@ -1,19 +1,20 @@
 /*
- * This file is part of darktable,
+ * This file is part of ansel,
  * Copyright (C) 2019-2021 darktable developers.
+ * Copyright (C) 2023 ansel developers.
  *
- *  darktable is free software: you can redistribute it and/or modify
+ *  ansel is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  darktable is distributed in the hope that it will be useful,
+ *  ansel is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+ *  along with ansel.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "common/image.h"
@@ -229,7 +230,7 @@ int dt_imageio_avif_read_profile(const char *filename, uint8_t **out, dt_colorsp
       {
         /* must be code value 5 (IEC 61966-2-1 sYCC) */
         cicp->matrix_coefficients = AVIF_MATRIX_COEFFICIENTS_BT470BG;
-        over =  TRUE;
+        over = TRUE;
       }
       /* mistagged Rec. 709 AVIFs exported before dt 3.6 */
       else if(avif_image.transferCharacteristics == AVIF_TRANSFER_CHARACTERISTICS_BT470M
@@ -237,7 +238,7 @@ int dt_imageio_avif_read_profile(const char *filename, uint8_t **out, dt_colorsp
       {
         /* must be actual Rec. 709 instead of 2.2 gamma*/
         cicp->transfer_characteristics = AVIF_TRANSFER_CHARACTERISTICS_BT709;
-        over =  TRUE;
+        over = TRUE;
       }
 
       if(over)

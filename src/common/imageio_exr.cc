@@ -1,19 +1,20 @@
 /*
-    This file is part of darktable,
+    This file is part of ansel,
     Copyright (C) 2010-2020 darktable developers.
+    Copyright (C) 2023 ansel developers.
 
-    darktable is free software: you can redistribute it and/or modify
+    ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    darktable is distributed in the hope that it will be useful,
+    ansel is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+    along with ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #define __STDC_FORMAT_MACROS
@@ -227,14 +228,14 @@ dt_imageio_retval_t dt_imageio_open_exr(dt_image_t *img, const char *filename, d
     }
 
 
-  /* cleanup and return... */
+  img->buf_dsc.cst = IOP_CS_RGB;
   img->buf_dsc.filters = 0u;
   img->flags &= ~DT_IMAGE_RAW;
   img->flags &= ~DT_IMAGE_S_RAW;
   img->flags &= ~DT_IMAGE_LDR;
   img->flags |= DT_IMAGE_HDR;
-
   img->loader = LOADER_EXR;
+
   return DT_IMAGEIO_OK;
 }
 

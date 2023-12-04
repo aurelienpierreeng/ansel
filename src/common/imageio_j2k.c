@@ -1,19 +1,20 @@
 /*
-    This file is part of darktable,
+    This file is part of ansel,
     Copyright (C) 2012-2020 darktable developers.
+    Copyright (C) 2023 ansel developers.
 
-    darktable is free software: you can redistribute it and/or modify
+    ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    darktable is distributed in the hope that it will be useful,
+    ansel is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+    along with ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -21,6 +22,7 @@
 #include "common/darktable.h"
 #include "common/exif.h"
 #include "common/imageio_j2k.h"
+#include "develop/imageop.h"         // for IOP_CS_RGB
 
 #include <assert.h>
 #include <math.h>
@@ -306,7 +308,14 @@ dt_imageio_retval_t dt_imageio_open_j2k(dt_image_t *img, const char *filename, d
         buf[i * 4 + k] = (float)(image->comps[k].data[i] + signed_offsets[k]) / float_divs[k];
   }
 
+  img->buf_dsc.cst = IOP_CS_RGB; // j2k is always RGB
+  img->buf_dsc.filters = 0u;
+  img->flags &= ~DT_IMAGE_RAW;
+  img->flags &= ~DT_IMAGE_HDR;
+  img->flags &= ~DT_IMAGE_S_RAW;
+  img->flags |= DT_IMAGE_LDR;
   img->loader = LOADER_J2K;
+
   ret = DT_IMAGEIO_OK;
 
 end_of_the_world:

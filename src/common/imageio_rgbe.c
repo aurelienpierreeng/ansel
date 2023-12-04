@@ -1,24 +1,26 @@
 /*
-    This file is part of darktable,
+    This file is part of ansel,
     Copyright (C) 2009-2020 darktable developers.
+    Copyright (C) 2023 ansel developers.
 
-    darktable is free software: you can redistribute it and/or modify
+    ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    darktable is distributed in the hope that it will be useful,
+    ansel is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+    along with ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 #include "common/imageio_rgbe.h"
+#include "develop/imageop.h"         // for IOP_CS_RGB
 #include <ctype.h>
 #include <math.h>
 #include <stdio.h>
@@ -600,6 +602,8 @@ dt_imageio_retval_t dt_imageio_open_rgbe(dt_image_t *img, const char *filename, 
   rgbe_header_info info;
   if(RGBE_ReadHeader(f, &img->width, &img->height, &info)) goto error_corrupt;
 
+  img->buf_dsc.channels = 4;
+  img->buf_dsc.datatype = TYPE_FLOAT;
   float *buf = (float *)dt_mipmap_cache_alloc(mbuf, img);
   if(!buf) goto error_cache_full;
   if(RGBE_ReadPixels_RLE(f, buf, img->width, img->height))
@@ -625,6 +629,12 @@ dt_imageio_retval_t dt_imageio_open_rgbe(dt_image_t *img, const char *filename, 
 
   mat3inv((float *)img->d65_color_matrix, (float *)mat);
 
+  img->buf_dsc.cst = IOP_CS_RGB;
+  img->buf_dsc.filters = 0u;
+  img->flags &= ~DT_IMAGE_LDR;
+  img->flags &= ~DT_IMAGE_RAW;
+  img->flags &= ~DT_IMAGE_S_RAW;
+  img->flags |= DT_IMAGE_HDR;
   img->loader = LOADER_RGBE;
   return DT_IMAGEIO_OK;
 

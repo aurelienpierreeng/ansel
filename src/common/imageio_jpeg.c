@@ -1,19 +1,20 @@
 /*
-    This file is part of darktable,
+    This file is part of ansel,
     Copyright (C) 2009-2020 darktable developers.
+    Copyright (C) 2023 ansel developers.
 
-    darktable is free software: you can redistribute it and/or modify
+    ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    darktable is distributed in the hope that it will be useful,
+    ansel is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+    along with ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 
@@ -24,6 +25,7 @@
 #include "common/exif.h"
 #include "common/imageio.h"
 #include "common/imageio_jpeg.h"
+#include "develop/imageop.h"         // for IOP_CS_RGB
 #include <setjmp.h>
 
 // error functions
@@ -758,7 +760,14 @@ dt_imageio_retval_t dt_imageio_open_jpeg(dt_image_t *img, const char *filename, 
 
   dt_free_align(tmp);
 
+  img->buf_dsc.cst = IOP_CS_RGB; // jpeg is always RGB
+  img->buf_dsc.filters = 0u;
+  img->flags &= ~DT_IMAGE_RAW;
+  img->flags &= ~DT_IMAGE_S_RAW;
+  img->flags &= ~DT_IMAGE_HDR;
+  img->flags |= DT_IMAGE_LDR;
   img->loader = LOADER_JPEG;
+
   return DT_IMAGEIO_OK;
 }
 
