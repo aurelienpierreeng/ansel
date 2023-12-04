@@ -139,16 +139,18 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
   img->flags &= ~DT_IMAGE_RAW;
   img->flags &= ~DT_IMAGE_S_RAW;
 
-  // Get pixel value bit depth (not storage bit depth)
-  const int bit_depth = heif_image_get_bits_per_pixel_range(heif_img, heif_channel_interleaved);
+  // Get decoded pixel values bit depth (this is used to scale values to [0..1] range)
+  const int decoded_values_bit_depth = heif_image_get_bits_per_pixel_range(heif_img, heif_channel_interleaved);
+  // Get original pixel values bit depth by querying the luma channel depth (this may differ from decoded values bit depth)
+  const int original_values_bit_depth = heif_image_handle_get_luma_bits_per_pixel(handle);
 
   dt_print(DT_DEBUG_IMAGEIO,
              "Bit depth: '%d' for HEIF image [%s]\n",
-             bit_depth,
+             original_values_bit_depth,
              filename);
 
   /* This can be LDR or HDR, it depends on the ICC profile. But if bit_depth <= 8 it must be LDR. */
-  if(bit_depth > 8)
+  if(original_values_bit_depth > 8)
   {
     img->flags |= DT_IMAGE_HDR;
     img->flags &= ~DT_IMAGE_LDR;
@@ -159,7 +161,7 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
     img->flags &= ~DT_IMAGE_HDR;
   }
 
-  float max_channel_f = (float)((1 << bit_depth) - 1);
+  float max_channel_f = (float)((1 << decoded_values_bit_depth) - 1);
 
   const uint8_t *const restrict in = (const uint8_t *)data;
 
@@ -328,9 +330,9 @@ out:
 
   return size;
 }
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-
