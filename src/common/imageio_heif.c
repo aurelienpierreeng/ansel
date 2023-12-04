@@ -186,6 +186,15 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
     }
   }
 
+  /* Get the ICC profile if available */
+  size_t icc_size = heif_image_handle_get_raw_color_profile_size(handle);
+  if(icc_size)
+  {
+    img->profile = (uint8_t *)g_malloc0(icc_size);
+    heif_image_handle_get_raw_color_profile(handle, img->profile);
+    img->profile_size = icc_size;
+  }
+
   img->loader = LOADER_HEIF;
   ret = DT_IMAGEIO_OK;
 

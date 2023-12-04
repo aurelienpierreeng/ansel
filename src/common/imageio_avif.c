@@ -171,6 +171,15 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
     goto out;
   }
 
+  /* Get the ICC profile if available */
+  avifRWData *icc = &(avif->icc);
+  if(icc->size && icc->data)
+  {
+    img->profile = (uint8_t *)g_malloc0(icc->size);
+    memcpy(img->profile, icc->data, icc->size);
+    img->profile_size = icc->size;
+  }
+
   img->loader = LOADER_AVIF;
   ret = DT_IMAGEIO_OK;
 out:
