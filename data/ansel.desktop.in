@@ -19,6 +19,6 @@ StartupNotify=true
 
 MimeType=application/x-ansel;image/x-dcraw;image/jpeg;image/jpg;image/jp2;image/png;image/tiff;image/x-portable-pixmap;image/x-portable-floatmap;image/x-exr;
 
-Icon=ansel
+Icon=${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/scalable/apps/ansel.svg
 
 X-Unity-IconBackgroundColor=#252525
