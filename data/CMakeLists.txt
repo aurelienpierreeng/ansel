@@ -46,27 +46,27 @@ if(NOT WIN32)
     set(DESKTOP_ANSEL_ICON "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps/ansel.svg")
   endif()
 
-  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/ansel.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/ansel.desktop.in)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop.in)
 
   file(GLOB PO_FILES "${CMAKE_SOURCE_DIR}/po/*.po")
   add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop
-    SOURCE ${CMAKE_CURRENT_BINARY_DIR}/ansel.desktop.in
-    COMMAND sh -c "${intltool_merge_BIN} --desktop-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_BINARY_DIR}/ansel.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop"
-    MAIN_DEPENDENCY ${CMAKE_CURRENT_BINARY_DIR}/ansel.desktop.in
+    SOURCE ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop.in
+    COMMAND sh -c "${intltool_merge_BIN} --desktop-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop"
+    MAIN_DEPENDENCY ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop.in
     DEPENDS ${PO_FILES}
   )
-  add_custom_target(photos.ansel.desktop_file ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop)
+  add_custom_target(ansel.desktop_file ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop)
 
   if(VALIDATE_DESKTOP_FILE)
     add_custom_target(
-      validate_photos.ansel.desktop ALL
+      validate_ansel.desktop_file ALL
       COMMAND ${desktop_file_validate_BIN} --warn-kde ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop
       DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       COMMENT "Checking validity of photos.ansel.app.desktop"
     )
-    add_dependencies(photos.ansel.desktop_file validate_photos.ansel.desktop)
+    add_dependencies(ansel.desktop_file validate_ansel.desktop_file)
   endif()
 
   install(FILES ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications COMPONENT DTApplication)
