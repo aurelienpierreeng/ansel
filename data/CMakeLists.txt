@@ -1,11 +1,10 @@
-add_subdirectory(pixmaps ${DARKTABLE_DATADIR}/pixmaps)
+add_subdirectory(pixmaps)
 
 if(USE_OPENCL)
-  add_subdirectory(kernels ${DARKTABLE_DATADIR}/kernels)
+  add_subdirectory(kernels)
 endif(USE_OPENCL)
 
 file(GLOB THEME_FILES "themes/*.css")
-file(COPY ${THEME_FILES} DESTINATION "${DARKTABLE_DATADIR}/themes")
 install(FILES ${THEME_FILES} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel/themes COMPONENT DTApplication)
 
 #
@@ -22,13 +21,12 @@ install(DIRECTORY "pswp" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONEN
 file(GLOB WEB_FILES "latex/*")
 install(FILES ${WEB_FILES} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel/latex COMPONENT DTApplication)
 
-if(USE_LUA)
 #
 # lua system scripts
 #
-file(COPY lua luarc DESTINATION "${DARKTABLE_DATADIR}")
-install(DIRECTORY "lua" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
-install(FILES luarc DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
+if(USE_LUA)
+  install(DIRECTORY "lua" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
+  install(FILES luarc DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
 endif(USE_LUA)
 
 #
@@ -92,42 +90,39 @@ if(NOT WIN32)
   install(FILES ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications COMPONENT DTApplication)
 endif(NOT WIN32)
 
+
 if(VALIDATE_APPDATA_FILE)
   add_custom_command(
-    OUTPUT ${DARKTABLE_SHAREDIR}/metainfo/photos.ansel.app.appdata.xml
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.appdata.xml
     SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${DARKTABLE_SHAREDIR}/metainfo
-    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in ${DARKTABLE_SHAREDIR}/metainfo/ansel.appdata.xml"
-    COMMAND ${appstream_util_BIN} validate --nonet ${DARKTABLE_SHAREDIR}/metainfo/photos.ansel.app.appdata.xml
+    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in ${CMAKE_CURRENT_BINARY_DIR}/ansel.appdata.xml"
+    COMMAND ${appstream_util_BIN} validate --nonet ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.appdata.xml
     MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in
     DEPENDS ${PO_FILES}
   )
 else()
   add_custom_command(
-    OUTPUT ${DARKTABLE_SHAREDIR}/metainfo/photos.ansel.app.appdata.xml
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.appdata.xml
     SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${DARKTABLE_SHAREDIR}/metainfo
-    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in ${DARKTABLE_SHAREDIR}/metainfo/photos.ansel.app.appdata.xml"
+    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.appdata.xml"
     MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in
     DEPENDS ${PO_FILES}
   )
 endif()
 
-add_custom_target(ansel.appdata_file ALL DEPENDS ${DARKTABLE_SHAREDIR}/metainfo/photos.ansel.app.appdata.xml)
+add_custom_target(ansel.appdata_file ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.appdata.xml)
 
-install(FILES ${DARKTABLE_SHAREDIR}/metainfo/photos.ansel.app.appdata.xml DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/metainfo COMPONENT DTApplication)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.appdata.xml DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/metainfo COMPONENT DTApplication)
 
 #
 # Install watermarks
 #
 file(GLOB WATERMARKS "watermarks/*.svg")
-file(COPY ${WATERMARKS} DESTINATION "${DARKTABLE_DATADIR}/watermarks")
 install(FILES ${WATERMARKS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel/watermarks COMPONENT DTApplication)
 
 #
 # Install gdb command file for backtrace generation
 #
-file(COPY gdb_commands DESTINATION "${DARKTABLE_DATADIR}")
 install(FILES gdb_commands DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
 
 #
@@ -142,7 +137,6 @@ if(${VALIDATE_JSON})
     COMMENT "Checking validity of noiseprofiles.json"
   )
 endif()
-file(COPY noiseprofiles.json DESTINATION "${DARKTABLE_DATADIR}")
 install(FILES noiseprofiles.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
 
 #
@@ -159,7 +153,9 @@ if(APPLE)
   # OS X doesn't have aplay, but afplay should do
   set(DEFCONFIG_AUDIOPLAYER "afplay")
 endif(APPLE)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/anselconfig.dtd ${DARKTABLE_DATADIR}/anselconfig.dtd COPYONLY)
+
+# The `anselconfig.xml` file has reference to this, so we need to copy it.
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/anselconfig.dtd ${CMAKE_CURRENT_BINARY_DIR}/anselconfig.dtd COPYONLY)
 
 # get_property(DT_PLUGIN_IOPS GLOBAL PROPERTY DT_PLUGIN_IOPS)
 get_property(DT_PLUGIN_IOPS_VISIBLE_BY_DEFAULT GLOBAL PROPERTY DT_PLUGIN_IOPS_VISIBLE_BY_DEFAULT)
@@ -183,21 +179,21 @@ if(USE_XMLLINT)
     validate_anselconfig_xml ALL
     COMMAND ${Xmllint_BIN} --nonet --valid --noout ${CMAKE_CURRENT_BINARY_DIR}/anselconfig.xml
     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/anselconfig.xml
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMENT "Checking validity of ${CMAKE_CURRENT_BINARY_DIR}/anselconfig.xml"
   )
 endif(USE_XMLLINT)
 
 if(NOT ${Xsltproc_BIN} STREQUAL "Xsltproc_BIN-NOTFOUND")
   add_custom_command(
-    DEPENDS ${CMAKE_SOURCE_DIR}/tools/generate_anselrc.xsl ${DARKTABLE_DATADIR}/anselconfig.dtd ${CMAKE_CURRENT_BINARY_DIR}/anselconfig.xml
+    DEPENDS ${CMAKE_SOURCE_DIR}/tools/generate_anselrc.xsl ${CMAKE_CURRENT_SOURCE_DIR}/anselconfig.dtd ${CMAKE_CURRENT_BINARY_DIR}/anselconfig.xml
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/anselrc
     COMMAND ${Xsltproc_BIN} --nonet ${CMAKE_SOURCE_DIR}/tools/generate_anselrc.xsl ${CMAKE_CURRENT_BINARY_DIR}/anselconfig.xml > ${CMAKE_CURRENT_BINARY_DIR}/anselrc
   )
 else(NOT ${Xsltproc_BIN} STREQUAL "Xsltproc_BIN-NOTFOUND")
   if(NOT ${Saxon_BIN} STREQUAL "Saxon_BIN-NOTFOUND")
     add_custom_command(
-      DEPENDS ${CMAKE_SOURCE_DIR}/tools/generate_anselrc.xsl ${DARKTABLE_DATADIR}/anselconfig.dtd ${CMAKE_CURRENT_BINARY_DIR}/anselconfig.xml
+      DEPENDS ${CMAKE_SOURCE_DIR}/tools/generate_anselrc.xsl ${CMAKE_CURRENT_SOURCE_DIR}/anselconfig.dtd ${CMAKE_CURRENT_BINARY_DIR}/anselconfig.xml
       OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/anselrc
       COMMAND ${Saxon_BIN} ${CMAKE_CURRENT_BINARY_DIR}/anselconfig.xml ${CMAKE_SOURCE_DIR}/tools/generate_anselrc.xsl > ${CMAKE_CURRENT_BINARY_DIR}/anselrc
     )
@@ -208,7 +204,7 @@ endif(NOT ${Xsltproc_BIN} STREQUAL "Xsltproc_BIN-NOTFOUND")
 
 add_custom_target(
   anselrc_file ALL
-  DEPENDS ${CMAKE_SOURCE_DIR}/tools/generate_anselrc.xsl ${DARKTABLE_DATADIR}/anselconfig.dtd ${CMAKE_CURRENT_BINARY_DIR}/anselconfig.xml ${CMAKE_CURRENT_BINARY_DIR}/anselrc
+  DEPENDS ${CMAKE_SOURCE_DIR}/tools/generate_anselrc.xsl ${CMAKE_CURRENT_SOURCE_DIR}/anselconfig.dtd ${CMAKE_CURRENT_BINARY_DIR}/anselconfig.xml ${CMAKE_CURRENT_BINARY_DIR}/anselrc
 )
 if(USE_XMLLINT)
   add_dependencies(anselrc_file validate_anselconfig_xml)
@@ -216,7 +212,7 @@ endif(USE_XMLLINT)
 
 # first of all install anselrc file into share as template
 # postinst script should copy this into users homedirectory
-# $HOME/.config/ansel/ansel.rc
+# $HOME/.config/ansel/anselrc
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/anselrc DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
 
 #

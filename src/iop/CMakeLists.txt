@@ -1,4 +1,4 @@
-include_directories("${DARKTABLE_BINDIR}")
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/..)
 
 include(manage-symbol-visibility)
 

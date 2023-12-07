@@ -44,9 +44,17 @@ include(DefineOptions.cmake)
 include(GNUInstallDirs)
 include(FeatureSummary)
 
-# See <https://github.com/darktable-org/darktable/pull/5086>.
+# Those are used to allow to copy program to other dir after installing. To
+# archieve this, 2 requirements are needed:
 #
-# Those are used to allow the program to run in build dir without installing.
+# 1. Binaries and libraries must be relocatable. We achieve this by using RPATH.
+# 2. Program must load libraries and resources relativly from where it is, so
+#    with Requirement 1 we could copy the installed files anywhere to run, just
+#    keep the strucrure. That's why we need such REL_* here.
+#
+# We will use REL_* in program to load files relatively, that is done by C code.
+# XXX(AZ): Some people may set `CMAKE_INSTALL_BINDIR` to absolute path, we
+#          should warn that this is not supported.
 get_filename_component(CMAKE_INSTALL_BINDIR_ABS "${CMAKE_INSTALL_FULL_BINDIR}" REALPATH "${CMAKE_INSTALL_PREFIX}")
 # Get relative dir name from system install dirs.
 file(RELATIVE_PATH REL_BIN_TO_LIBDIR    ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_LIBDIR}")
@@ -54,17 +62,9 @@ file(RELATIVE_PATH REL_BIN_TO_SHAREDIR  ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_IN
 file(RELATIVE_PATH REL_BIN_TO_LOCALEDIR ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_LOCALEDIR}")
 # PLUGINDIR is not for darkroom plugins (`${LIBDIR}/ansel/plugins`) only, we
 # treat all libs which are loaded at runtime as plugins in code, so it is
-# `${CMAKE_INSTALL_LIBDIR}/ansel`.
+# `${LIBDIR}/ansel`.
 set(REL_BIN_TO_PLUGINDIR "${REL_BIN_TO_LIBDIR}/ansel")
 set(REL_BIN_TO_DATADIR   "${REL_BIN_TO_SHAREDIR}/ansel")
-# XXX(AZ): Some people may set `CMAKE_INSTALL_BINDIR` to absolute path, do we
-#          need a `REL_PREFIX_TO_BINDIR`?
-set(DARKTABLE_BINDIR     "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
-set(DARKTABLE_LIBDIR     "${DARKTABLE_BINDIR}/${REL_BIN_TO_LIBDIR}")
-set(DARKTABLE_PLUGINDIR  "${DARKTABLE_BINDIR}/${REL_BIN_TO_PLUGINDIR}")
-set(DARKTABLE_SHAREDIR   "${DARKTABLE_BINDIR}/${REL_BIN_TO_SHAREDIR}")
-set(DARKTABLE_DATADIR    "${DARKTABLE_BINDIR}/${REL_BIN_TO_DATADIR}")
-set(DARKTABLE_LOCALEDIR  "${DARKTABLE_BINDIR}/${REL_BIN_TO_LOCALEDIR}")
 
 # https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
 if(FORCE_COLORED_OUTPUT)
@@ -184,7 +184,8 @@ endif(WIN32)
 #
 # Set package version
 #
-file(MAKE_DIRECTORY "${DARKTABLE_BINDIR}/") # the bin/ subdirectory won't exist yet
+# The src/ subdirectory in build dir won't exist yet.
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src)
 
 # adds custom command to generate header containing version info.
 # takes 1 optional parameter - version override.
@@ -201,7 +202,7 @@ function(generate_version_gen_c)
 
   add_custom_target(
     create_version_gen ALL
-    COMMAND sh ${CMAKE_SOURCE_DIR}/tools/create_version_c.sh ${DARKTABLE_BINDIR}/version_gen.c ${_VERSION}
+    COMMAND sh ${CMAKE_SOURCE_DIR}/tools/create_version_c.sh ${CMAKE_BINARY_DIR}/src/version_gen.c ${_VERSION}
     DEPENDS ${CMAKE_SOURCE_DIR}/tools/create_version_c.sh
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Updating version string (${_TYPE})"
@@ -210,7 +211,7 @@ function(generate_version_gen_c)
 endfunction(generate_version_gen_c)
 
 if(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
-  #project version is defined by -D on the cmake command line
+  # project version is defined by -D on the cmake command line
   # only use that value, do not update it at make time
   generate_version_gen_c(${PROJECT_VERSION} "version override")
 else(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
@@ -242,7 +243,7 @@ else(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
       # but generate_version target expects it to be in build dir, so we need to copy it
       add_custom_target(
         create_version_gen ALL
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/version_gen.c ${DARKTABLE_BINDIR}/version_gen.c
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/version_gen.c ${CMAKE_BINARY_DIR}/src/version_gen.c
         DEPENDS ${CMAKE_SOURCE_DIR}/src/version_gen.c
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         COMMENT "Updating version string (source package) - ${PROJECT_VERSION}"
@@ -253,7 +254,7 @@ endif(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
 
 # needed to make sure that version string is actually updated.
 add_custom_command(
-  OUTPUT ${DARKTABLE_BINDIR}/version_gen.c
+  OUTPUT ${CMAKE_BINARY_DIR}/src/version_gen.c
   COMMAND ${CMAKE_COMMAND} -E echo
   DEPENDS create_version_gen
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
@@ -262,7 +263,7 @@ add_custom_command(
 # WARNING: no target should reference version_gen.c directly. instead, they should add_dependencies(yourtarget generate_version)
 add_custom_target(
   generate_version ALL
-  DEPENDS ${DARKTABLE_BINDIR}/version_gen.c
+  DEPENDS ${CMAKE_BINARY_DIR}/src/version_gen.c
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
@@ -505,11 +506,13 @@ endif()
 set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME DTApplication)
 
 # lets continue into build directories
-include(data/supported_extensions.cmake) # this file needs to be included first as it gets amended in bin/
-add_subdirectory(src "${DARKTABLE_BINDIR}") # directory needs to be there before data directory so that the correct CSS file gets installed
-add_subdirectory(data "${DARKTABLE_DATADIR}")
+# this file needs to be included first as it gets amended in src/ in build dir
+include(data/supported_extensions.cmake)
+# directory needs to be there before data directory so that the correct CSS file gets installed
+add_subdirectory(src)
+add_subdirectory(data)
 add_subdirectory(doc)
-add_subdirectory(tools "${DARKTABLE_DATADIR}/tools")
+add_subdirectory(tools)
 
 # This contains fixup_bundle
 # And adding a separate subderectory as a last one will make sure

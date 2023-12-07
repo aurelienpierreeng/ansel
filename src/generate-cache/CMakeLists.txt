@@ -1,4 +1,5 @@
-include_directories(${DARKTABLE_BINDIR})
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/..)
+
 add_executable(ansel-generate-cache main.c)
 
 set_target_properties(ansel-generate-cache PROPERTIES LINKER_LANGUAGE C)
@@ -9,8 +10,7 @@ if(WIN32)
 else()
   set_target_properties(ansel-generate-cache
                         PROPERTIES
-                        INSTALL_RPATH ${RPATH_ORIGIN}/${REL_BIN_TO_LIBDIR}
-                        RUNTIME_OUTPUT_DIRECTORY ${DARKTABLE_BINDIR})
+                        INSTALL_RPATH ${RPATH_ORIGIN}/${REL_BIN_TO_LIBDIR})
 endif(WIN32)
 
 install(TARGETS ansel-generate-cache DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT DTApplication)
