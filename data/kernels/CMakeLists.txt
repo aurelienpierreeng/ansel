@@ -6,7 +6,7 @@ FILE(GLOB DT_OPENCL_EXTRA "programs.conf" "rgb_norms.h" "noise_generator.h" "col
 
 add_custom_target(testcompile_opencl_kernels ALL)
 
-macro (testcompile_opencl_kernel IN)
+macro(testcompile_opencl_kernel IN)
   get_filename_component(KERNAME ${IN} NAME)
 
   set(TOUCH "${CMAKE_CURRENT_BINARY_DIR}/${KERNAME}.touch")
@@ -28,9 +28,9 @@ macro (testcompile_opencl_kernel IN)
   )
 
   add_dependencies(testcompile_opencl_kernels ${KERNAME_OUT})
-endmacro (testcompile_opencl_kernel)
+endmacro(testcompile_opencl_kernel)
 
-if (TESTBUILD_OPENCL_PROGRAMS)
+if(TESTBUILD_OPENCL_PROGRAMS)
   foreach(KERNEL IN ITEMS ${DT_OPENCL_KERNELS})
     testcompile_opencl_kernel(${KERNEL})
   endforeach()

@@ -891,9 +891,7 @@ add_dependencies(lib_ansel generate_preferences)
 
 if(APPLE)
   set_target_properties(lib_ansel PROPERTIES MACOSX_RPATH TRUE)
-elseif(UNIX)
-  set_target_properties(lib_ansel PROPERTIES INSTALL_RPATH ${CMAKE_INSTALL_LIBDIR_RPATH})
-endif(APPLE)
+endif()
 set_target_properties(lib_ansel PROPERTIES OUTPUT_NAME ansel)
 set_target_properties(lib_ansel PROPERTIES LINKER_LANGUAGE C)
 
@@ -907,26 +905,26 @@ unset(STATIC_LIBS)
 unset(LIBS)
 
 #
-# Install lib_ansel
+# Install libansel
 #
 if(WIN32)
   # Windows needs its DLLs in the same directory as the executable to find them.
-  install(TARGETS lib_ansel DESTINATION bin COMPONENT DTApplication)
-else(WIN32)
-  install(TARGETS lib_ansel DESTINATION ${CMAKE_INSTALL_LIBDIR}/ansel)
-endif(WIN32)
+  install(TARGETS lib_ansel RUNTIME DESTINATION bin COMPONENT DTApplication)
+else()
+  install(TARGETS lib_ansel DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
 
 # Compile views modules
-add_subdirectory(views ${DARKTABLE_LIBDIR}/views)
+add_subdirectory(views ${DARKTABLE_PLUGINDIR}/views)
 
 # Compile lighttable modules
-add_subdirectory(libs ${DARKTABLE_LIBDIR}/plugins/lighttable)
+add_subdirectory(libs ${DARKTABLE_PLUGINDIR}/plugins/lighttable)
 
 # Compile darkroom modules
-add_subdirectory(iop ${DARKTABLE_LIBDIR}/plugins)
+add_subdirectory(iop ${DARKTABLE_PLUGINDIR}/plugins)
 
 # Compile export modules
-add_subdirectory(imageio ${DARKTABLE_LIBDIR}/plugins/imageio)
+add_subdirectory(imageio ${DARKTABLE_PLUGINDIR}/plugins/imageio)
 
 if(HAVE_OPENCL)
   # have a small test program, to be run as root on some systems to enable the driver to run cl stuff
@@ -959,15 +957,15 @@ if(APPLE)
 endif(APPLE)
 target_link_libraries(ansel lib_ansel)
 
-if (WIN32)
+if(WIN32)
   set_target_properties(ansel PROPERTIES LINK_FLAGS "-mconsole -mwindows -Wl,-subsystem,console")
-  #_detach_debuginfo (ansel bin)
-  #_detach_debuginfo (lib_ansel bin)
+  #_detach_debuginfo(ansel bin)
+  #_detach_debuginfo(lib_ansel bin)
 else()
-    set_target_properties(ansel
-                          PROPERTIES
-                          INSTALL_RPATH ${CMAKE_INSTALL_LIBDIR_RPATH})
-endif(WIN32)
+  set_target_properties(ansel
+                        PROPERTIES
+                        INSTALL_RPATH ${RPATH_ORIGIN}/${REL_BIN_TO_LIBDIR})
+endif()
 
 install(TARGETS ansel DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT DTApplication)
 

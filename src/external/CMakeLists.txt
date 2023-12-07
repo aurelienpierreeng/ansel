@@ -41,7 +41,7 @@ set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE_SAVE "${CMAKE_CXX_INCLUDE_WHAT_YOU_USE}")
 unset(CMAKE_CXX_CLANG_TIDY)
 unset(CMAKE_CXX_INCLUDE_WHAT_YOU_USE)
 
-add_subdirectory(rawspeed ${DARKTABLE_LIBDIR}/rawspeed)
+add_subdirectory(rawspeed ${DARKTABLE_PLUGINDIR}/rawspeed)
 # Copying rawspeed resources to where dt expects them
 add_custom_target("deploy" ALL)
 SET(RAWSPEED_DATADIR "${CMAKE_CURRENT_SOURCE_DIR}/rawspeed/data")

@@ -1,5 +1,5 @@
 # Only build on real unix system (excludes MingW, MSYS, etc.)
-if (UNIX AND NOT WIN32)
+if(UNIX AND NOT WIN32)
     add_executable(ansel-noiseprofile noiseprofile.c)
     target_link_libraries(ansel-noiseprofile m)
 

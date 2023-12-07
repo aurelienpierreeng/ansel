@@ -25,7 +25,7 @@
 gchar *dt_loc_get_home_dir(const gchar *user);
 
 /** initializes all dirs */
-void dt_loc_init(const char *datadir, const char *moduledir, const char *localedir, const char *configdir, const char *cachedir, const char *tmpdir);
+void dt_loc_init(const char *datadir, const char *plugindir, const char *localedir, const char *configdir, const char *cachedir, const char *tmpdir);
 /** init systemwide data dir */
 void dt_loc_init_datadir(const char *application_directory, const char *datadir);
 /** init the plugin dir */

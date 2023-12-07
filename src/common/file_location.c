@@ -40,7 +40,7 @@
 #include "file_location.h"
 #include "whereami.h"
 
-void dt_loc_init(const char *datadir, const char *moduledir, const char *localedir, const char *configdir, const char *cachedir, const char *tmpdir)
+void dt_loc_init(const char *datadir, const char *plugindir, const char *localedir, const char *configdir, const char *cachedir, const char *tmpdir)
 {
   // Assemble pathes
   char* application_directory = NULL;
@@ -60,7 +60,7 @@ void dt_loc_init(const char *datadir, const char *moduledir, const char *localed
 
   // set up absolute pathes based on their relative value
   dt_loc_init_datadir(application_directory, datadir);
-  dt_loc_init_plugindir(application_directory, moduledir);
+  dt_loc_init_plugindir(application_directory, plugindir);
   dt_loc_init_localedir(application_directory, localedir);
   dt_loc_init_user_config_dir(configdir);
   dt_loc_init_user_cache_dir(cachedir);
@@ -203,7 +203,7 @@ void dt_loc_init_user_cache_dir(const char *cachedir)
 
 void dt_loc_init_plugindir(const char* application_directory, const char *plugindir)
 {
-  darktable.plugindir = dt_loc_init_generic(plugindir, application_directory, DARKTABLE_LIBDIR);
+  darktable.plugindir = dt_loc_init_generic(plugindir, application_directory, DARKTABLE_PLUGINDIR);
   dt_check_opendir("ansel.plugindir", darktable.plugindir);
 }
 

@@ -1,7 +1,7 @@
-if (BUILD_CURVE_TOOLS)
+if(BUILD_CURVE_TOOLS)
     add_subdirectory(basecurve)
 endif()
-if (BUILD_NOISE_TOOLS)
+if(BUILD_NOISE_TOOLS)
     add_subdirectory(noise)
 endif()
 
