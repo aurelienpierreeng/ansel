@@ -1,17 +1,17 @@
 add_subdirectory(pixmaps ${DARKTABLE_DATADIR}/pixmaps)
 
 if(USE_OPENCL)
-	add_subdirectory(kernels ${DARKTABLE_DATADIR}/kernels)
+  add_subdirectory(kernels ${DARKTABLE_DATADIR}/kernels)
 endif(USE_OPENCL)
 
-FILE(GLOB THEME_FILES "themes/*.css")
-FILE(COPY ${THEME_FILES} DESTINATION "${DARKTABLE_DATADIR}/themes")
+file(GLOB THEME_FILES "themes/*.css")
+file(COPY ${THEME_FILES} DESTINATION "${DARKTABLE_DATADIR}/themes")
 install(FILES ${THEME_FILES} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel/themes COMPONENT DTApplication)
 
 #
 # web gallery export support files:
 #
-FILE(GLOB WEB_FILES "style/*")
+file(GLOB WEB_FILES "style/*")
 install(FILES ${WEB_FILES} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel/style COMPONENT DTApplication)
 
 install(DIRECTORY "pswp" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
@@ -19,14 +19,14 @@ install(DIRECTORY "pswp" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONEN
 #
 # latex book template support files:
 #
-FILE(GLOB WEB_FILES "latex/*")
+file(GLOB WEB_FILES "latex/*")
 install(FILES ${WEB_FILES} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel/latex COMPONENT DTApplication)
 
 if(USE_LUA)
 #
 # lua system scripts
 #
-FILE(COPY lua luarc DESTINATION "${DARKTABLE_DATADIR}")
+file(COPY lua luarc DESTINATION "${DARKTABLE_DATADIR}")
 install(DIRECTORY "lua" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
 install(FILES luarc DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
 endif(USE_LUA)
@@ -35,35 +35,49 @@ endif(USE_LUA)
 # Install (and generate when necessary) other system shares
 #
 if(NOT WIN32)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/ansel.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/ansel.desktop.in)
-file(GLOB PO_FILES "${CMAKE_CURRENT_SOURCE_DIR}/../po/*.po")
-add_custom_command(
-		OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop
-		SOURCE ${CMAKE_CURRENT_BINARY_DIR}/ansel.desktop.in
-		COMMAND sh -c "${intltool_merge_BIN} --desktop-style ${CMAKE_CURRENT_SOURCE_DIR}/../po ${CMAKE_CURRENT_BINARY_DIR}/ansel.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop"
-		MAIN_DEPENDENCY ${CMAKE_CURRENT_BINARY_DIR}/ansel.desktop.in
-		DEPENDS ${PO_FILES}
-)
-add_custom_target(photos.ansel.desktop_file ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop)
-if(${VALIDATE_DESKTOP_FILE})
-  add_custom_target(
-    validate_photos.ansel.desktop ALL
-    COMMAND ${desktop_file_validate_BIN} --warn-kde ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop
-    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/
-    COMMENT "Checking validity of photos.ansel.app.desktop"
+  # If we are not installing ansel to `/usr`, we use absolute path so it could
+  # find the correct binary and icon. Otherwise, use general name to let system
+  # find the correct file.
+  set(DESKTOP_ANSEL_BINARY "ansel")
+  set(DESKTOP_ANSEL_ICON "ansel")
+  if(NOT CMAKE_INSTALL_PREFIX STREQUAL "/usr")
+    set(DESKTOP_ANSEL_BINARY "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/ansel")
+    # `hicolor` is always available.
+    set(DESKTOP_ANSEL_ICON "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps/ansel.svg")
+  endif()
+
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/ansel.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/ansel.desktop.in)
+
+  file(GLOB PO_FILES "${CMAKE_SOURCE_DIR}/po/*.po")
+  add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop
+    SOURCE ${CMAKE_CURRENT_BINARY_DIR}/ansel.desktop.in
+    COMMAND sh -c "${intltool_merge_BIN} --desktop-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_BINARY_DIR}/ansel.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop"
+    MAIN_DEPENDENCY ${CMAKE_CURRENT_BINARY_DIR}/ansel.desktop.in
+    DEPENDS ${PO_FILES}
+  )
+  add_custom_target(photos.ansel.desktop_file ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop)
+
+  if(VALIDATE_DESKTOP_FILE)
+    add_custom_target(
+      validate_photos.ansel.desktop ALL
+      COMMAND ${desktop_file_validate_BIN} --warn-kde ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop
+      DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop
+      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+      COMMENT "Checking validity of photos.ansel.app.desktop"
     )
-  add_dependencies(photos.ansel.desktop_file validate_photos.ansel.desktop)
-endif()
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications COMPONENT DTApplication)
+    add_dependencies(photos.ansel.desktop_file validate_photos.ansel.desktop)
+  endif()
+
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications COMPONENT DTApplication)
 endif(NOT WIN32)
 
-if(${VALIDATE_APPDATA_FILE})
+if(VALIDATE_APPDATA_FILE)
   add_custom_command(
     OUTPUT ${DARKTABLE_SHAREDIR}/metainfo/photos.ansel.app.appdata.xml
     SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in
     COMMAND ${CMAKE_COMMAND} -E make_directory ${DARKTABLE_SHAREDIR}/metainfo
-    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_CURRENT_SOURCE_DIR}/../po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in ${DARKTABLE_SHAREDIR}/metainfo/ansel.appdata.xml"
+    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in ${DARKTABLE_SHAREDIR}/metainfo/ansel.appdata.xml"
     COMMAND ${appstream_util_BIN} validate --nonet ${DARKTABLE_SHAREDIR}/metainfo/photos.ansel.app.appdata.xml
     MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in
     DEPENDS ${PO_FILES}
@@ -73,7 +87,7 @@ else()
     OUTPUT ${DARKTABLE_SHAREDIR}/metainfo/photos.ansel.app.appdata.xml
     SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in
     COMMAND ${CMAKE_COMMAND} -E make_directory ${DARKTABLE_SHAREDIR}/metainfo
-    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_CURRENT_SOURCE_DIR}/../po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in ${DARKTABLE_SHAREDIR}/metainfo/photos.ansel.app.appdata.xml"
+    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in ${DARKTABLE_SHAREDIR}/metainfo/photos.ansel.app.appdata.xml"
     MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in
     DEPENDS ${PO_FILES}
   )
@@ -86,14 +100,14 @@ install(FILES ${DARKTABLE_SHAREDIR}/metainfo/photos.ansel.app.appdata.xml DESTIN
 #
 # Install watermarks
 #
-FILE(GLOB WATERMARKS "watermarks/*.svg")
-FILE(COPY ${WATERMARKS} DESTINATION "${DARKTABLE_DATADIR}/watermarks")
+file(GLOB WATERMARKS "watermarks/*.svg")
+file(COPY ${WATERMARKS} DESTINATION "${DARKTABLE_DATADIR}/watermarks")
 install(FILES ${WATERMARKS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel/watermarks COMPONENT DTApplication)
 
 #
 # Install gdb command file for backtrace generation
 #
-FILE(COPY gdb_commands DESTINATION "${DARKTABLE_DATADIR}")
+file(COPY gdb_commands DESTINATION "${DARKTABLE_DATADIR}")
 install(FILES gdb_commands DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
 
 #
@@ -108,7 +122,7 @@ if(${VALIDATE_JSON})
     COMMENT "Checking validity of noiseprofiles.json"
   )
 endif()
-FILE(COPY noiseprofiles.json DESTINATION "${DARKTABLE_DATADIR}")
+file(COPY noiseprofiles.json DESTINATION "${DARKTABLE_DATADIR}")
 install(FILES noiseprofiles.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
 
 #

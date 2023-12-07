@@ -12,11 +12,12 @@ Categories=Graphics;Photography;GTK;
 # TRANSLATORS: Search terms to find this application. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
 _Keywords=graphics;photography;raw;
 
-Exec=${CMAKE_INSTALL_PREFIX}/bin/ansel %U
-TryExec=${CMAKE_INSTALL_PREFIX}/bin/ansel
+Exec=${DESKTOP_ANSEL_BINARY} %U
+TryExec=${DESKTOP_ANSEL_BINARY}
 Terminal=false
 StartupNotify=true
 
 MimeType=application/x-ansel;image/x-dcraw;image/jpeg;image/jpg;image/jp2;image/png;image/tiff;image/x-portable-pixmap;image/x-portable-floatmap;image/x-exr;
 
-Icon=ansel
+Icon=${DESKTOP_ANSEL_ICON}
+StartupWMClass=ansel
