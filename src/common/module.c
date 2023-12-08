@@ -31,11 +31,11 @@ GList *dt_module_load_modules(const char *subdir, size_t module_size,
                               gint (*sort_modules)(gconstpointer a, gconstpointer b))
 {
   GList *plugin_list = NULL;
-  char plugindir[PATH_MAX] = { 0 };
+  char moduledir[PATH_MAX] = { 0 };
   const gchar *dir_name;
-  dt_loc_get_plugindir(plugindir, sizeof(plugindir));
-  g_strlcat(plugindir, subdir, sizeof(plugindir));
-  GDir *dir = g_dir_open(plugindir, 0, NULL);
+  dt_loc_get_moduledir(moduledir, sizeof(moduledir));
+  g_strlcat(moduledir, subdir, sizeof(moduledir));
+  GDir *dir = g_dir_open(moduledir, 0, NULL);
   if(!dir) return NULL;
   const int name_offset = strlen(SHARED_MODULE_PREFIX),
             name_end = strlen(SHARED_MODULE_PREFIX) + strlen(SHARED_MODULE_SUFFIX);
@@ -46,7 +46,7 @@ GList *dt_module_load_modules(const char *subdir, size_t module_size,
     if(!g_str_has_suffix(dir_name, SHARED_MODULE_SUFFIX)) continue;
     char *plugin_name = g_strndup(dir_name + name_offset, strlen(dir_name) - name_end);
     void *module = calloc(1, module_size);
-    gchar *libname = g_module_build_path(plugindir, plugin_name);
+    gchar *libname = g_module_build_path(moduledir, plugin_name);
 
     int res = 1;
 

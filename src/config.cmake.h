@@ -20,7 +20,7 @@ static const char *dt_supported_extensions[] __attribute__((unused)) = {"@DT_SUP
 
 // Those are used to find needed dirs runtime, so they needs to be relative.
 #define DARKTABLE_LOCALEDIR "@REL_BIN_TO_LOCALEDIR@"
-#define DARKTABLE_PLUGINDIR "@REL_BIN_TO_PLUGINDIR@"
+#define DARKTABLE_MODULEDIR "@REL_BIN_TO_MODULEDIR@"
 #define DARKTABLE_DATADIR   "@REL_BIN_TO_DATADIR@"
 #define DARKTABLE_SHAREDIR  "@REL_BIN_TO_SHAREDIR@"
 

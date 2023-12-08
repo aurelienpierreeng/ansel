@@ -60,10 +60,9 @@ get_filename_component(CMAKE_INSTALL_BINDIR_ABS "${CMAKE_INSTALL_FULL_BINDIR}" R
 file(RELATIVE_PATH REL_BIN_TO_LIBDIR    ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_LIBDIR}")
 file(RELATIVE_PATH REL_BIN_TO_SHAREDIR  ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_DATADIR}")
 file(RELATIVE_PATH REL_BIN_TO_LOCALEDIR ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_LOCALEDIR}")
-# PLUGINDIR is not for darkroom plugins (`${LIBDIR}/ansel/plugins`) only, we
-# treat all libs which are loaded at runtime as plugins in code, so it is
-# `${LIBDIR}/ansel`.
-set(REL_BIN_TO_PLUGINDIR "${REL_BIN_TO_LIBDIR}/ansel")
+# MODULEDIR is where we put all libraries that will be loaded dynamically at
+# runtime, so it is `${LIBDIR}/ansel`.
+set(REL_BIN_TO_MODULEDIR "${REL_BIN_TO_LIBDIR}/ansel")
 set(REL_BIN_TO_DATADIR   "${REL_BIN_TO_SHAREDIR}/ansel")
 
 # https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949

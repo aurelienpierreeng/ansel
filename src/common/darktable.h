@@ -332,7 +332,7 @@ typedef struct darktable_t
   char *progname;
   char *datadir;
   char *sharedir;
-  char *plugindir;
+  char *moduledir;
   char *localedir;
   char *tmpdir;
   char *configdir;
