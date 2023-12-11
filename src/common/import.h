@@ -16,42 +16,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "gui/gtk.h"
 
-typedef enum exif_fields_t {
-  EXIF_DATETIME_FIELD = 0,
-  EXIF_SEPARATOR1_FIELD,
-  EXIF_MODEL_FIELD,
-  EXIF_MAKER_FIELD,
-  EXIF_LENS_FIELD,
-  EXIF_FOCAL_LENS_FIELD,
-  EXIF_SEPARATOR2_FIELD,
-  EXIF_EXPOSURE_FIELD,
-  EXIF_SEPARATOR3_FIELD,
-  EXIF_INLIB_FIELD,
-  EXIF_PATH_FIELD,
-  EXIF_LAST_FIELD
-} exif_fields_t;
-
-
-typedef struct dt_lib_import_t
-{
-  GtkWidget *file_chooser;
-  GtkWidget *preview;
-  GtkWidget *exif;
-
-  GtkWidget *exif_info[EXIF_LAST_FIELD];
-  GtkWidget *datetime;
-  GtkWidget *dialog;
-  GtkWidget *grid;
-
-  GtkWidget *help_string;
-  GtkWidget *test_path;
-  GtkWidget *selected_files;
-} dt_lib_import_t;
-
-
-/** Open the image importer popup **/
+/** Open the image importer popup and process user input **/
 void dt_images_import();
 
 // clang-format off

@@ -325,7 +325,6 @@ typedef struct darktable_t
   struct dt_undo_t *undo;
   struct dt_colorspaces_t *color_profiles;
   struct dt_l10n_t *l10n;
-  dt_pthread_mutex_t db_image[DT_IMAGE_DBLOCKS];
   dt_pthread_mutex_t plugin_threadsafe;
   dt_pthread_mutex_t capabilities_threadsafe;
   dt_pthread_mutex_t exiv2_threadsafe;

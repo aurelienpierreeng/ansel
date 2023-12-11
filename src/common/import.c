@@ -18,6 +18,7 @@
 */
 
 #include "bauhaus/bauhaus.h"
+#include "common/atomic.h"
 #include "common/collection.h"
 #include "common/darktable.h"
 #include "common/import_session.h"
@@ -32,6 +33,7 @@
 #include "common/selection.h"
 #include "control/conf.h"
 #include "control/control.h"
+#include "control/signal.h"
 #include "dtgtk/button.h"
 #include "gui/accelerators.h"
 #include "gui/draw.h"
@@ -53,85 +55,214 @@
 #include <librsvg/rsvg-cairo.h>
 #endif
 
+typedef struct dt_import_t {
+  // File filter in use, from the Gtk file chooser.
+  GtkFileFilter *filter;
+
+  // User-selected folders and files from the Gtk file chooser,
+  // referenced by basename.
+  GSList *selection;
+
+  // List of GFiles to import, built recursively by traversing the user selection
+  GList *files;
+
+  // Kill-switch to stop the list building before it completed
+  gboolean *shutdown;
+
+  // Number of elements in the list
+  uint32_t elements;
+
+  // Reference to the main import thread lock
+  dt_pthread_mutex_t *lock;
+
+  guint timeout;
+
+} dt_import_t;
+
+static dt_import_t *dt_import_init();
+static void dt_import_cleanup(void *import);
+
+typedef enum exif_fields_t {
+  EXIF_DATETIME_FIELD = 0,
+  EXIF_SEPARATOR1_FIELD,
+  EXIF_MODEL_FIELD,
+  EXIF_MAKER_FIELD,
+  EXIF_LENS_FIELD,
+  EXIF_FOCAL_LENS_FIELD,
+  EXIF_SEPARATOR2_FIELD,
+  EXIF_EXPOSURE_FIELD,
+  EXIF_SEPARATOR3_FIELD,
+  EXIF_INLIB_FIELD,
+  EXIF_PATH_FIELD,
+  EXIF_LAST_FIELD
+} exif_fields_t;
+
+
+typedef struct dt_lib_import_t
+{
+  GtkWidget *file_chooser;
+  GtkWidget *preview;
+  GtkWidget *exif;
+
+  GtkWidget *exif_info[EXIF_LAST_FIELD];
+  GtkWidget *datetime;
+  GtkWidget *dialog;
+  GtkWidget *grid;
+
+  GtkWidget *help_string;
+  GtkWidget *test_path;
+  GtkWidget *selected_files;
+
+  GtkWidget *modal;
+
+  gboolean shutdown;
+
+  dt_pthread_mutex_t lock;
+
+} dt_lib_import_t;
+
+static dt_lib_import_t * _init();
+static void _cleanup(dt_lib_import_t *d);
+
+static void gui_init(dt_lib_import_t *d);
+static void gui_cleanup(dt_lib_import_t *d);
+
 static void _do_select_all(dt_lib_import_t *d);
 static void _do_select_none(dt_lib_import_t *d);
 static void _do_select_new(dt_lib_import_t *d);
 
-static GSList* _get_subfolder(GFile *folder)
+static void _recurse_folder(GFile *folder, dt_import_t *const import);
+
+static void _filter_document(GFile *document, dt_import_t *import)
+{
+  if(*(import->shutdown)) return;
+
+  gchar *pathname = g_file_get_path(document);
+  GtkFileFilterInfo filter_info = { gtk_file_filter_get_needed(import->filter),
+                                    g_file_get_parse_name(document),
+                                    g_file_get_uri(document),
+                                    g_file_get_parse_name(document), NULL };
+
+  // Check that document is a real file (not directory) and it passes the type check defined by user in GUI filters.
+  // gtk_file_chooser_get_files() applies the filters on the first level of recursivity,
+  // so this test is only useful for the next levels if folders are selected at the first level.
+  if(g_file_test(pathname, G_FILE_TEST_IS_REGULAR) && gtk_file_filter_filter(import->filter, &filter_info))
+  {
+    import->files = g_list_prepend(import->files, pathname);
+    // prepend is more efficient than append. Import control reorders alphabetically anyway.
+  }
+  else if(g_file_test(pathname, G_FILE_TEST_IS_DIR))
+  {
+    _recurse_folder(document, import);
+  }
+}
+
+static void _recurse_folder(GFile *folder, dt_import_t *const import)
 {
   // Get subfolders and files from current folder
-  // Put them in a GSList for compatibility with the rest of the API.
+  if(*(import->shutdown)) return;
+
   GFileEnumerator *files
       = g_file_enumerate_children(folder, G_FILE_ATTRIBUTE_STANDARD_NAME "," G_FILE_ATTRIBUTE_STANDARD_TYPE,
                                   G_FILE_QUERY_INFO_NONE, NULL, NULL);
 
   GFile *file = NULL;
-  GSList *files_list = NULL;
   while(g_file_enumerator_iterate(files, NULL, &file, NULL, NULL))
   {
     // g_file_enumerator_iterate returns FALSE only on errors, not on end of enumeration.
     // We need an ugly break here else infinite loop.
     if(!file) break;
-    // *file is destroyed with g_object_unref below, but GFile doesn't support memcpy.
-    // We create a new "file" from the path of the read one.
-    // Note that a GFile is the abstracted representation of an harddrive file, not the file itself.
-    // Creating a new GFile doesn't create I/O on the disk.
-    files_list = g_slist_append(files_list, g_file_new_for_path(g_file_get_path(file)));
+
+    // Shutdown ASAP
+    if(*(import->shutdown))
+    {
+      g_object_unref(files);
+      return;
+    }
+
+    _filter_document(file, import);
   }
 
   g_object_unref(files);
-
-  return files_list;
 }
 
-static GList* _recurse_folder(GSList *files, GList *items, GtkFileFilter *filter)
+static void _recurse_selection(GSList *selection, dt_import_t *const import)
 {
-  for(GSList *file = files; file; file = g_slist_next(file))
+  // Entry point of the file recursion : process user selection.
+  // GtkFileChooser gives us a GSList for selection, so we can't directly recurse from here
+  // since the import job expects a GList.
+
+  if(*(import->shutdown)) return;
+
+  for(GSList *file = selection; file; file = g_slist_next(file))
+    _filter_document((GFile *)file->data, import);
+}
+
+static gboolean _delayed_file_count(gpointer data)
+{
+  dt_import_t *import = (dt_import_t *)data;
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILELIST_CHANGED, import->files,
+                                g_list_length(import->files), 0);
+  return G_SOURCE_CONTINUE;
+}
+
+static int32_t dt_get_selected_files(dt_import_t *import)
+{
+  // Recurse through subfolders if any selected.
+  // Can be called directly from GUI thread without using a job,
+  // but that might freeze the GUI on large directories.
+
+  dt_pthread_mutex_lock(import->lock);
+  // Re-init flags
+  *import->shutdown = FALSE;
+
+  // Start the delayed file count update
+  import->timeout = g_timeout_add(1000, _delayed_file_count, import);
+
+  // Get the new list
+  _recurse_selection(import->selection, import);
+  import->elements = (import->files) ? g_list_length(import->files) : 0;
+  gboolean valid = !(*import->shutdown);
+
+  // Stop the delayed file count update
+  g_source_remove(import->timeout);
+  import->timeout = 0;
+
+  // If shutdown was triggered, we may already have no Gtk label widget to update through the callback.
+  // In that case, it will segfault. So don't raise the signal at all if shutdown was set.
+  if(valid)
   {
-    GFile *document = (GFile *)file->data;
-    gchar *pathname = g_file_get_path(document);
-    GtkFileFilterInfo filter_info = { gtk_file_filter_get_needed(filter),
-                                      g_file_get_parse_name(document),
-                                      g_file_get_uri(document),
-                                      g_file_get_parse_name(document), NULL };
-
-    // Check that document is a real file (not directory) and it passes the type check defined by user in GUI filters.
-    // gtk_file_chooser_get_files() applies the filters on the first level of recursivity,
-    // so this test is only useful for the next levels if folders are selected at the first level.
-    if(g_file_test(pathname, G_FILE_TEST_IS_REGULAR) && gtk_file_filter_filter(filter, &filter_info))
-    {
-      items = g_list_prepend(items, pathname);
-      // prepend is more efficient than append. Import control reorders alphabetically anyway.
-    }
-    else if(g_file_test(pathname, G_FILE_TEST_IS_DIR))
-    {
-      GSList *children = _get_subfolder(document);
-      items = _recurse_folder(children, items, filter);
-      g_slist_free_full(children, g_object_unref);
-    }
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILELIST_CHANGED, import->files, import->elements, 1);
+    // import->files needs to be freed in the callback capturing DT_SIGNAL_FILELIST_CHANGED if final == 1
+    // if passed to the import job, it will be freed there.
   }
-  return items;
+  else if(import->files)
+  {
+    g_list_free(import->files);
+    // no callback will be triggered. Free here.
+  }
+
+  dt_pthread_mutex_unlock(import->lock);
+
+  return valid; // TRUE if completed without interruption
 }
 
-static GList * _get_selected_files(dt_lib_import_t *d)
+static int32_t _get_selected_files_job(dt_job_t *job)
 {
-  // Warning : Need do free the output in the caller
-  GList *items = NULL;
-
-  // Get selected files and subfolders
-  GSList *files = gtk_file_chooser_get_files(GTK_FILE_CHOOSER(d->file_chooser));
-  if(g_slist_length(files) == 0) return NULL;
-
-  // Get the file filter in use
-  GtkFileFilter *filter = gtk_file_chooser_get_filter(GTK_FILE_CHOOSER(d->file_chooser));
-
-  // Get files and recurse through subfolders if any selected
-  items = _recurse_folder(files, items, filter);
-  g_slist_free(files);
-
-  return items;
+  return dt_get_selected_files((dt_import_t *)dt_control_job_get_params(job));
 }
 
+void dt_control_get_selected_files(dt_lib_import_t *d, gboolean destroy_window)
+{
+  dt_job_t *job = dt_control_job_create(&_get_selected_files_job, "recursively detect files to import");
+  if(job)
+  {
+    dt_import_t *import = dt_import_init(d);
+    dt_control_job_set_params(job, import, dt_import_cleanup);
+    // Note : we don't free import->files. It's returned with the signal.
+    dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, job);
+  }
+}
 
 static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, const int height)
 {
@@ -262,6 +393,9 @@ static void _file_filters(GtkWidget *file_chooser)
   }
   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_chooser), filter);
 
+  // Set ALL IMAGES as default
+  gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(file_chooser), filter);
+
   /* RAW ONLY */
   filter = gtk_file_filter_new();
   gtk_file_filter_set_name(filter, _("Raw image files"));
@@ -271,9 +405,6 @@ static void _file_filters(GtkWidget *file_chooser)
     gtk_file_filter_add_pattern(filter, g_utf8_strup(g_strdup_printf("*.%s", raw[i]), -1));
   }
   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(file_chooser), filter);
-
-  // Set RAW ONLY as default
-  gtk_file_chooser_set_filter(GTK_FILE_CHOOSER(file_chooser), filter);
 
   /* RASTER ONLY */
   filter = gtk_file_filter_new();
@@ -472,20 +603,31 @@ static void _set_test_path(dt_lib_import_t *d)
   g_free(selected);
   if(data) g_free(data);
   free(session);
+}
 
+static void _filelist_changed_callback(gpointer instance, GList *files, guint elements, guint finished, gpointer user_data)
+{
+  dt_lib_import_t *d = (dt_lib_import_t *)user_data;
+  if(!d || !d->selected_files) return;
+  gtk_label_set_text(GTK_LABEL(d->selected_files), (finished)
+                                                      ? g_strdup_printf(_("%i files selected"), elements)
+                                                      : g_strdup_printf(_("Detection in progress… (%i files found so far)"), elements));
+
+  // The list of files is not used in GUI. It's not freed in the job either.
+  if(finished)
+    g_list_free(files);
 }
 
 static void _selection_changed(GtkWidget *filechooser, dt_lib_import_t *d)
 {
   _set_test_path(d);
-  GList *items = _get_selected_files(d);
-  const int num_items = g_list_length(items);
+  gtk_label_set_text(GTK_LABEL(d->selected_files), _("Detecting candidate files for import…"));
 
-  // Technically, we could store it and use that when "import" is clicked,
-  // but this callback might interfere with the "activate" one, so go for the safe unefficient path.
-  g_list_free(items);
+  // Kill-switch recursive file detection
+  d->shutdown = TRUE;
 
-  gtk_label_set_text(GTK_LABEL(d->selected_files), g_strdup_printf(_("%i files selected"), num_items));
+  // Restart recursive file detection
+  dt_control_get_selected_files(d, FALSE);
 }
 
 static void _copy_toggled_callback(GtkWidget *combobox, dt_lib_import_t *d)
@@ -569,10 +711,121 @@ static void _file_activated(GtkFileChooser *chooser, GtkDialog *dialog)
   }
 }
 
+static void _import_set_collection(const char *dirname)
+{
+  if(dirname)
+  {
+    dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
+    dt_conf_set_int("plugins/lighttable/collect/item0", 1);
+    dt_conf_set_string("plugins/lighttable/collect/string0", g_strdup_printf("%s*", dirname));
+    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF,
+                               NULL);
+  }
+}
+
+static void _update_progress_message(gpointer instance, GList *files, int elements, gboolean finished, gpointer user_data)
+{
+  if(finished) return; // Should be fired only when detecting stuff
+
+  dt_lib_import_t *d = (dt_lib_import_t *)user_data;
+  gtk_message_dialog_set_markup(
+      GTK_MESSAGE_DIALOG(d->modal),
+      g_strdup_printf(_("Crawling your selection for recursive folder detection… %i pictures found so far. <i>(This "
+                        "can take some time for large folders)</i>"),
+                      elements));
+}
+
+static void _process_file_list(gpointer instance, GList *files, int elements, gboolean finished, gpointer user_data)
+{
+  if(!finished) return; // Should be fired only when we are done detecting stuff
+
+  dt_lib_import_t *d = (dt_lib_import_t *)user_data;
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_update_progress_message), (gpointer)d);
+
+  // Import params
+  const gboolean duplicate = dt_conf_get_bool("ui_last/import_copy");
+  char datetime_override[DT_DATETIME_LENGTH] = { 0 };
+
+  if(duplicate)
+  {
+    // Abort early if date format is wrong
+    const char *entry = gtk_entry_get_text(GTK_ENTRY(d->datetime));
+    if(entry[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), entry))
+    {
+      dt_control_log(_("invalid date/time format for import"));
+      g_list_free(files);
+      return;
+    }
+  }
+
+  if(elements > 0)
+  {
+    // WARNING: the GList files is freed in control import,
+    // everything needs to be accessed before.
+    dt_control_import(files, datetime_override, !duplicate);
+
+    if(!duplicate) _import_set_collection(dt_conf_get_string("ui_last/import_last_directory"));
+    // else : collection set by import job.
+
+    dt_view_filter_reset(darktable.view_manager, TRUE);
+
+    const int imgid = dt_conf_get_int("ui_last/import_last_image");
+    if(elements == 1 && imgid != -1)
+    {
+      dt_control_set_mouse_over_id(imgid);
+      dt_selection_select_single(darktable.selection, imgid);
+      dt_ctl_switch_mode_to("darkroom");
+    }
+  }
+  else
+  {
+    dt_control_log(_("No files to import. Check your selection."));
+  }
+
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_process_file_list), (gpointer)d);
+  gui_cleanup(d);
+  _cleanup(d);
+}
+
+void _file_chooser_response(GtkDialog *dialog, gint response_id, dt_lib_import_t *d)
+{
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_filelist_changed_callback), (gpointer)d);
+  d->shutdown = TRUE;
+
+  switch(response_id)
+  {
+    case GTK_RESPONSE_ACCEPT:
+    {
+      // It would be swell if we could just re-use the file list computed on "select" callback.
+      // However, it depends on the file filter used, and we can't refresh the list when
+      // filter is changed (no callback to connect to).
+      // To be safe, we need to start again here, from scratch.
+      d->modal = gtk_message_dialog_new_with_markup(
+          GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, GTK_MESSAGE_INFO,
+          GTK_BUTTONS_NONE,
+          _("Crawling your selection for recursive folder detection… <i>(This can take some time for large folders)</i>"));
+      gtk_widget_show_all(d->modal);
+
+      dt_control_get_selected_files(d, TRUE);
+      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_FILELIST_CHANGED, G_CALLBACK(_process_file_list), (gpointer)d);
+      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_FILELIST_CHANGED, G_CALLBACK(_update_progress_message), (gpointer)d);
+
+      break;
+    }
+
+    case GTK_RESPONSE_CANCEL:
+    default:
+      gui_cleanup(d);
+      _cleanup(d);
+      break;
+  }
+}
+
+
 static void gui_init(dt_lib_import_t *d)
 {
   d->dialog = gtk_dialog_new_with_buttons
-    ( _("Ansel — Open pictures"), NULL, GTK_DIALOG_MODAL,
+    ( _("Ansel — Open pictures"), NULL, GTK_DIALOG_DESTROY_WITH_PARENT,
       _("Cancel"), GTK_RESPONSE_CANCEL,
       _("Import"), GTK_RESPONSE_ACCEPT,
       NULL);
@@ -584,7 +837,7 @@ static void gui_init(dt_lib_import_t *d)
                               dt_conf_get_int("ui_last/import_dialog_width"),
                               dt_conf_get_int("ui_last/import_dialog_height"));
   gtk_window_set_modal(GTK_WINDOW(d->dialog), FALSE);
-
+  g_signal_connect(d->dialog, "response", G_CALLBACK(_file_chooser_response), d);
 
   GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(d->dialog));
   g_signal_connect(d->dialog, "check-resize", G_CALLBACK(_resize_dialog), NULL);
@@ -808,7 +1061,8 @@ static void gui_init(dt_lib_import_t *d)
   gtk_widget_set_visible(GTK_WIDGET(grid), dt_conf_get_bool("ui_last/import_copy"));
 
   // Update the number of selected files string because Gtk forces a default selection at opening time
-  _get_selected_files(d);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_FILELIST_CHANGED,
+                                  G_CALLBACK(_filelist_changed_callback), d);
 }
 
 static void _do_select_all(dt_lib_import_t *d)
@@ -860,79 +1114,70 @@ static void _do_select_new(dt_lib_import_t *d)
   g_free(folder);
 }
 
-
-static void _import_set_collection(const char *dirname)
+static void gui_cleanup(dt_lib_import_t *d)
 {
-  if(dirname)
-  {
-    dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
-    dt_conf_set_int("plugins/lighttable/collect/item0", 1);
-    dt_conf_set_string("plugins/lighttable/collect/string0", g_strdup_printf("%s*", dirname));
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF,
-                               NULL);
-  }
+  // Ensure the background recursive folder detection is finished before destroying widgets.
+  // Reason is, if a job is still running, it might send its signal upon completion,
+  // and then the widgets supposed to be updated in callback will be undefined (but not NULL… WTF Gtk ?)
+  dt_pthread_mutex_lock(&d->lock);
+  gtk_widget_destroy(d->dialog);
+  if(d->modal) gtk_widget_destroy(d->modal);
+  dt_pthread_mutex_unlock(&d->lock);
 }
 
-static void _import_from_dialog_run(dt_lib_import_t *d)
+static dt_lib_import_t * _init()
 {
-  // Import params
-  const gboolean duplicate = dt_conf_get_bool("ui_last/import_copy");
-  char datetime_override[DT_DATETIME_LENGTH] = { 0 };
+  dt_lib_import_t *d = malloc(sizeof(dt_lib_import_t));
+  d->shutdown = FALSE;
+  d->modal = NULL;
+  dt_pthread_mutex_init(&d->lock, NULL);
 
-  if(duplicate)
-  {
-    // Abort early if date format is wrong
-    const char *entry = gtk_entry_get_text(GTK_ENTRY(d->datetime));
-    if(entry[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), entry))
-    {
-      dt_control_log(_("invalid date/time format for import"));
-      return;
-    }
-  }
+  return d;
+}
 
-  GList *items = _get_selected_files(d);
-
-  if(items)
-  {
-    const int num_elem = g_list_length(items);
-
-    // WARNING: the GList items is freed in control import,
-    // everything needs to be accessed before.
-    dt_control_import(items, datetime_override, !duplicate);
-
-    if(!duplicate) _import_set_collection(dt_conf_get_string("ui_last/import_last_directory"));
-    // else : collection set by import job.
-
-    dt_view_filter_reset(darktable.view_manager, TRUE);
-
-    const int imgid = dt_conf_get_int("ui_last/import_last_image");
-    if(num_elem == 1 && imgid != -1)
-    {
-      dt_control_set_mouse_over_id(imgid);
-      dt_selection_select_single(darktable.selection, imgid);
-      dt_ctl_switch_mode_to("darkroom");
-    }
-  }
-  else
-  {
-    dt_control_log(_("No files to import. Check your selection."));
-  }
+static void _cleanup(dt_lib_import_t *d)
+{
+  dt_pthread_mutex_destroy(&d->lock);
+  g_free(d);
 }
 
 void dt_images_import()
 {
-  dt_lib_import_t *d = malloc(sizeof(dt_lib_import_t));
+  dt_lib_import_t *d = _init();
   gui_init(d);
-  switch(gtk_dialog_run(GTK_DIALOG(d->dialog)))
-  {
-    case GTK_RESPONSE_ACCEPT:
-      _import_from_dialog_run(d);
-      break;
-    default:
-      break;
-  }
-  gtk_widget_destroy(d->dialog);
-  free(d);
+}
+
+static dt_import_t * dt_import_init(dt_lib_import_t *d)
+{
+  dt_import_t *import = g_malloc(sizeof(dt_import_t));
+  import->shutdown = &d->shutdown;
+  import->files = NULL;
+  import->elements = 0;
+  import->lock = &d->lock;
+  import->timeout = 0;
+
+  // selection is owned here and will need to be freed.
+  import->selection = gtk_file_chooser_get_files(GTK_FILE_CHOOSER(d->file_chooser));
+
+  // Need to tell Gtk to not destroy the filter in case we close the file chooser widget,
+  // because we only capture a reference to the original (we don't own it).
+  import->filter = gtk_file_chooser_get_filter(GTK_FILE_CHOOSER(d->file_chooser));
+  g_object_ref_sink(import->filter);
+
+  return import;
+}
+
+static void dt_import_cleanup(void *data)
+{
+  // IMPORTANT:
+  // import->files needs to be freed manually
+  // it is freed by the import job if used
+  dt_import_t *import = (dt_import_t *)data;
+  g_slist_free(import->selection);
+  import->selection = NULL;
+  g_object_unref(import->filter);
+  g_free(import);
+  import = NULL;
 }
 
 // clang-format off

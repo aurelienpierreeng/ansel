@@ -248,6 +248,15 @@ typedef enum dt_signal_t
   /* Raised when a mask form is selected/deselected */
   DT_SIGNAL_MASK_SELECTION_CHANGED,
 
+  /** \brief Raised when the recursive file crawler returns.
+      no params,
+      return :
+       - GList* of filenames
+       - int : length of GList
+       - int : 1 if final update (crawling finished), 0 if intermediate result.
+  */
+  DT_SIGNAL_FILELIST_CHANGED,
+
   /* do not touch !*/
   DT_SIGNAL_COUNT
 } dt_signal_t;
