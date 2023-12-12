@@ -79,9 +79,6 @@ typedef struct dt_import_t {
 
 } dt_import_t;
 
-static dt_import_t *dt_import_init();
-static void dt_import_cleanup(void *import);
-
 typedef enum exif_fields_t {
   EXIF_DATETIME_FIELD = 0,
   EXIF_SEPARATOR1_FIELD,
@@ -120,6 +117,9 @@ typedef struct dt_lib_import_t
   dt_pthread_mutex_t lock;
 
 } dt_lib_import_t;
+
+static dt_import_t *dt_import_init(dt_lib_import_t *d);
+static void dt_import_cleanup(void *import);
 
 static dt_lib_import_t * _init();
 static void _cleanup(dt_lib_import_t *d);

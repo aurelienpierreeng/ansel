@@ -92,6 +92,8 @@ typedef struct dt_iop_crop_gui_data_t
   GtkWidget *cx, *cy, *cw, *ch;
   GList *aspect_list;
   GtkWidget *aspect_presets;
+  GtkWidget *edit_button;
+  GtkWidget *commit_button;
 
   float button_down_x, button_down_y;
   float button_down_zoom_x, button_down_zoom_y;
@@ -104,11 +106,22 @@ typedef struct dt_iop_crop_gui_data_t
   float clip_max_x, clip_max_y, clip_max_w, clip_max_h;
   //uint64_t clip_max_pipe_hash;
 
+  float wd;
+  float ht;
+  dt_dev_zoom_t zoom;
+  int closeup;
+  float zoom_scale;
+  float zoom_x;
+  float zoom_y;
+
   int cropping;
+  int editing;
   gboolean shift_hold;
   gboolean ctrl_hold;
-  gboolean preview_ready;
   dt_gui_collapsible_section_t cs;
+
+  dt_iop_crop_params_t previous_params;
+
 } dt_iop_crop_gui_data_t;
 
 typedef struct dt_iop_crop_data_t
@@ -167,23 +180,22 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_p
   return IOP_CS_RGB;
 }
 
-static int _gui_has_focus(struct dt_iop_module_t *self)
+static void _params_to_gui(dt_iop_crop_params_t *p, dt_iop_crop_gui_data_t *g)
 {
-  return (self->dev->gui_module == self);
+  g->clip_x = p->cx;
+  g->clip_w = p->cw - p->cx;
+  g->clip_y = p->cy;
+  g->clip_h = p->ch - p->cy;
 }
+
+/*
+* FIXME: Why do we set gui -> params bounding box going through distort_backtransform (below)
+* but we set params -> gui bounding box directly without using distort_transform (above) ???
+* Does that roundrip ? If so, distort_backtransform is actually a no-op ?
+*/
 
 static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop_crop_params_t *p)
 {
-  if(darktable.gui->reset) return;
-  if(self->dev->preview_status != DT_DEV_PIXELPIPE_VALID) return;
-
-  g->cropping = 0;
-  if(!self->enabled)
-  {
-    // first time crop, if any data is stored in p, it's obsolete:
-    p->cx = p->cy = 0.0f;
-    p->cw = p->ch = 1.0f;
-  }
   // we want value in iop space
   const float wd = self->dev->preview_pipe->backbuf_width;
   const float ht = self->dev->preview_pipe->backbuf_height;
@@ -195,15 +207,10 @@ static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop
     if(piece)
     {
       if(piece->buf_out.width < 1 || piece->buf_out.height < 1) return;
-      p->cx = points[0] / (float)piece->buf_out.width;
-      p->cy = points[1] / (float)piece->buf_out.height;
-      p->cw = points[2] / (float)piece->buf_out.width;
-      p->ch = points[3] / (float)piece->buf_out.height;
-      // verify that the crop area stay in the image area
-      p->cx = CLAMPF(p->cx, 0.0f, 0.9f);
-      p->cy = CLAMPF(p->cy, 0.0f, 0.9f);
-      p->cw = CLAMPF(p->cw, 0.1f, 1.0f);
-      p->ch = CLAMPF(p->ch, 0.1f, 1.0f);
+      p->cx = CLAMPF(points[0] / (float)piece->buf_out.width, 0.0f, 0.9f);
+      p->cy = CLAMPF(points[1] / (float)piece->buf_out.height, 0.0f, 0.9f);
+      p->cw = CLAMPF(points[2] / (float)piece->buf_out.width, 0.1f, 1.0f);
+      p->ch = CLAMPF(points[3] / (float)piece->buf_out.height, 0.1f, 1.0f);
     }
   }
   // fprintf(stderr, "[crop commit box] %i:  %e %e %e %e\n", changed, p->cx - old[0], p->cy - old[1], p->cw - old[2], p->ch - old[3]);
@@ -214,7 +221,6 @@ static int _set_max_clip(struct dt_iop_module_t *self)
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
 
-  //if(g->clip_max_pipe_hash == self->dev->preview_pipe->backbuf_hash) return 1;
   if(self->dev->preview_status != DT_DEV_PIXELPIPE_VALID) return 1;
 
   // we want to know the size of the actual buffer
@@ -238,7 +244,6 @@ static int _set_max_clip(struct dt_iop_module_t *self)
   g->clip_w = fminf((points[6] - points[4]) / self->dev->preview_pipe->backbuf_width, g->clip_max_w);
   g->clip_h = fminf((points[7] - points[5]) / self->dev->preview_pipe->backbuf_height, g->clip_max_h);
 
-  //g->clip_max_pipe_hash = self->dev->preview_pipe->backbuf_hash;
   return 1;
 }
 
@@ -363,9 +368,12 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 {
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)p1;
   dt_iop_crop_data_t *d = (dt_iop_crop_data_t *)piece->data;
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
 
-  if(_gui_has_focus(self))
+  if(g && g->editing)
   {
+    // In editing mode, we need to see the full uncropped image
+    // to setup the frame.
     d->cx = 0.0f;
     d->cy = 0.0f;
     d->cw = 1.0f;
@@ -378,59 +386,6 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     d->cw = CLAMPF(p->cw, 0.1f, 1.0f);
     d->ch = CLAMPF(p->ch, 0.1f, 1.0f);
   }
-}
-
-static void _event_preview_updated_callback(gpointer instance, dt_iop_module_t *self)
-{
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
-  if(!g) return; // seems that sometimes, g can be undefined for some reason...
-  g->preview_ready = TRUE;
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_preview_updated_callback), self);
-  if(self->dev->gui_module != self)
-  {
-    dt_image_update_final_size(self->dev->preview_pipe->output_imgid);
-  }
-  // force max size to be recomputed
-  //g->clip_max_pipe_hash = 0;
-}
-
-void gui_focus(struct dt_iop_module_t *self, gboolean in)
-{
-  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
-  dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
-  if(self->enabled)
-  {
-    // once the pipe is recomputed, we want to update final sizes
-    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED,
-                                    G_CALLBACK(_event_preview_updated_callback), self);
-    if(in)
-    {
-      // got focus, grab stuff to gui:
-      // need to get gui stuff for the first time for this image,
-      g->clip_x = CLAMPF(p->cx, 0.0f, 0.9f);
-      g->clip_y = CLAMPF(p->cy, 0.0f, 0.9f);
-      g->clip_w = CLAMPF(p->cw - p->cx, 0.1f, 1.0f - g->clip_x);
-      g->clip_h = CLAMPF(p->ch - p->cy, 0.1f, 1.0f - g->clip_y);
-      g->preview_ready = FALSE;
-    }
-    else if(g->preview_ready)
-    {
-      // hack : commit_box use distort_transform routines with gui values to get params
-      // but this values are accurate only if crop is the gui_module...
-      // so we temporary put back gui_module to crop and revert once finished
-      dt_iop_module_t *old_gui = self->dev->gui_module;
-      self->dev->gui_module = self;
-      _commit_box(self, g, p);
-      self->dev->gui_module = old_gui;
-      //g->clip_max_pipe_hash = 0;
-    }
-  }
-  else if(in)
-    g->preview_ready = TRUE;
-
-  dt_control_queue_redraw_center();
-  dt_dev_invalidate(self->dev, __FUNCTION__, __FILE__, __LINE__);
-  dt_dev_refresh_ui_images(self->dev);
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -970,10 +925,7 @@ void gui_update(struct dt_iop_module_t *self)
     dt_bauhaus_combobox_set(g->aspect_presets, act);
 
   // reset gui draw box to what we have in the parameters:
-  g->clip_x = p->cx;
-  g->clip_w = p->cw - p->cx;
-  g->clip_y = p->cy;
-  g->clip_h = p->ch - p->cy;
+  _params_to_gui(p, g);
 
   dt_gui_update_collapsible_section(&g->cs);
 }
@@ -986,13 +938,60 @@ static void _event_key_swap(dt_iop_module_t *self)
   dt_control_queue_redraw_center();
 }
 
+static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *self)
+{
+  dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
+
+  g->editing = gtk_toggle_button_get_active(button);
+  dt_control_change_cursor(GDK_LEFT_PTR);
+  dt_iop_request_focus(self);
+
+  if(g->editing)
+  {
+    // Take a backup of current params
+    memcpy(&g->previous_params, p, sizeof(dt_iop_crop_params_t));
+    g->cropping = GRAB_CENTER;
+    gtk_button_set_label(GTK_BUTTON(button), _("Cancel"));
+    gtk_widget_set_sensitive(g->commit_button, TRUE);
+  }
+  else
+  {
+    // Restore the params backup
+    memcpy(p, &g->previous_params, sizeof(dt_iop_crop_params_t));
+    g->cropping = GRAB_NONE;
+
+    // Commit the params backup
+    _params_to_gui(p, g);
+    gui_changed(self, NULL, NULL);
+
+    // Update GUI
+    gtk_button_set_label(GTK_BUTTON(button), _("Edit"));
+    gtk_widget_set_sensitive(g->commit_button, FALSE);
+  }
+
+  // It sucks that we need to invalidate the preview too but we need its final dimension.
+  dt_dev_invalidate_all(self->dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_control_queue_redraw_center();
+  dt_control_navigation_redraw();
+  dt_dev_refresh_ui_images(self->dev);
+}
+
 static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
 {
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
-  _commit_box(self, g, p);
+
+  // Close edit mode on commit
+  g->editing = FALSE;
+
+  // Commit history and refresh view
   dt_dev_add_history_item(darktable.develop, self, TRUE);
-  dt_dev_refresh_ui_images(darktable.develop);
+
+  // The following will de-activate the edit button and trigger the callback.
+  // Prevent the callback to revert the param change.
+  memcpy(&g->previous_params, p, sizeof(dt_iop_crop_params_t));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->edit_button), FALSE);
 }
 
 static void _event_aspect_flip(GtkWidget *button, dt_iop_module_t *self)
@@ -1042,7 +1041,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->cropping = GRAB_CENTER;
   g->shift_hold = FALSE;
   g->ctrl_hold = FALSE;
-  g->preview_ready = FALSE;
+  g->editing = FALSE;
 
   GtkWidget *box_enabled = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
 
@@ -1164,8 +1163,18 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->aspect_presets), "quad-pressed", G_CALLBACK(_event_aspect_flip), self);
   gtk_box_pack_start(GTK_BOX(box_enabled), g->aspect_presets, TRUE, TRUE, 0);
 
-  GtkWidget *commit = dt_action_button_new((dt_lib_module_t *)self, N_("commit"), _event_commit_clicked, self, _("commit changes"), 0, 0);
-  gtk_box_pack_end(GTK_BOX(box_enabled), commit, TRUE, TRUE, 0);
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+
+  g->edit_button = gtk_toggle_button_new_with_label(_("Edit"));
+  g_signal_connect(GTK_TOGGLE_BUTTON(g->edit_button), "toggled", G_CALLBACK(_enter_edit_mode), self);
+  gtk_box_pack_start(GTK_BOX(box), g->edit_button, TRUE, TRUE, 0);
+
+  g->commit_button = dt_action_button_new((dt_lib_module_t *)self, N_("Validate"), _event_commit_clicked, self, _("Validate changes"), 0, 0);
+  gtk_box_pack_start(GTK_BOX(box), g->commit_button, TRUE, TRUE, 0);
+  gtk_widget_set_sensitive(g->commit_button, FALSE);
+
+  gtk_box_pack_end(GTK_BOX(box_enabled), GTK_WIDGET(box), TRUE, TRUE, 0);
+
 
   // we put margins values under an expander
   dt_gui_new_collapsible_section
@@ -1250,25 +1259,23 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 {
   dt_develop_t *dev = self->dev;
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
-
-  // we don't do anything if the image is not ready
-  if(!g->preview_ready) return;
+  if(!g->editing) return;
 
   _aspect_apply(self, GRAB_HORIZONTAL);
 
-  const float wd = dev->preview_pipe->backbuf_width;
-  const float ht = dev->preview_pipe->backbuf_height;
-  const float zoom_y = dt_control_get_dev_zoom_y();
-  const float zoom_x = dt_control_get_dev_zoom_x();
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float zoom_scale = dt_dev_get_zoom_scale(dev, zoom, 1 << closeup, 1);
+  g->wd = dev->preview_pipe->backbuf_width;
+  g->ht = dev->preview_pipe->backbuf_height;
+  g->zoom_y = dt_control_get_dev_zoom_y();
+  g->zoom_x = dt_control_get_dev_zoom_x();
+  g->zoom = dt_control_get_dev_zoom();
+  g->closeup = dt_control_get_dev_closeup();
+  g->zoom_scale = dt_dev_get_zoom_scale(dev, g->zoom, 1 << g->closeup, 1);
 
   cairo_translate(cr, width / 2.0, height / 2.0);
-  cairo_scale(cr, zoom_scale, zoom_scale);
-  cairo_translate(cr, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
+  cairo_scale(cr, g->zoom_scale, g->zoom_scale);
+  cairo_translate(cr, -.5f * g->wd - g->zoom_x * g->wd, -.5f * g->ht - g->zoom_y * g->ht);
 
-  double dashes = DT_PIXEL_APPLY_DPI(5.0) / zoom_scale;
+  double dashes = DT_PIXEL_APPLY_DPI(5.0) / g->zoom_scale;
 
   // draw cropping window
   float pzx, pzy;
@@ -1279,16 +1286,16 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   {
     cairo_set_source_rgba(cr, .2, .2, .2, .8);
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
-    cairo_rectangle(cr, g->clip_max_x * wd, g->clip_max_y * ht,
-                        g->clip_max_w * wd, g->clip_max_h * ht);
-    cairo_rectangle(cr, g->clip_x * wd, g->clip_y * ht,
-                        g->clip_w * wd, g->clip_h * ht);
+    cairo_rectangle(cr, g->clip_max_x * g->wd, g->clip_max_y * g->ht,
+                        g->clip_max_w * g->wd, g->clip_max_h * g->ht);
+    cairo_rectangle(cr, g->clip_x * g->wd, g->clip_y * g->ht,
+                        g->clip_w * g->wd, g->clip_h * g->ht);
     cairo_fill(cr);
   }
   if(g->clip_x > .0f || g->clip_y > .0f || g->clip_w < 1.0f || g->clip_h < 1.0f)
   {
     cairo_set_line_width(cr, dashes / 2.0);
-    cairo_rectangle(cr, g->clip_x * wd, g->clip_y * ht, g->clip_w * wd, g->clip_h * ht);
+    cairo_rectangle(cr, g->clip_x * g->wd, g->clip_y * g->ht, g->clip_w * g->wd, g->clip_h * g->ht);
     dt_draw_set_color_overlay(cr, TRUE, 1.0);
     cairo_stroke(cr);
   }
@@ -1302,7 +1309,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     PangoRectangle ext;
     PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
     pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
-    pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(16) * PANGO_SCALE / zoom_scale);
+    pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(16) * PANGO_SCALE / g->zoom_scale);
     layout = pango_cairo_create_layout(cr);
     pango_layout_set_font_description(layout, desc);
 
@@ -1313,10 +1320,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     pango_layout_set_text(layout, dimensions, -1);
     pango_layout_get_pixel_extents(layout, NULL, &ext);
     const float text_w = ext.width;
-    const float text_h = DT_PIXEL_APPLY_DPI(16 + 2) / zoom_scale;
-    const float margin = DT_PIXEL_APPLY_DPI(6) / zoom_scale;
-    float xp = (g->clip_x + g->clip_w * .5f) * wd - text_w * .5f;
-    float yp = (g->clip_y + g->clip_h * .5f) * ht - text_h * .5f;
+    const float text_h = DT_PIXEL_APPLY_DPI(16 + 2) / g->zoom_scale;
+    const float margin = DT_PIXEL_APPLY_DPI(6) / g->zoom_scale;
+    float xp = (g->clip_x + g->clip_w * .5f) * g->wd - text_w * .5f;
+    float yp = (g->clip_y + g->clip_h * .5f) * g->ht - text_h * .5f;
 
     // ensure that the rendered string remains visible within the window bounds
     double x1, y1, x2, y2;
@@ -1335,52 +1342,45 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   }
 
   // draw crop area guides
-  dt_guides_draw(cr, g->clip_x * wd, g->clip_y * ht, g->clip_w * wd, g->clip_h * ht, zoom_scale);
+  dt_guides_draw(cr, g->clip_x * g->wd, g->clip_y * g->ht, g->clip_w * g->wd, g->clip_h * g->ht, g->zoom_scale);
 
-  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.0) / zoom_scale);
+  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.0) / g->zoom_scale);
   dt_draw_set_color_overlay(cr, FALSE, 1.0);
-  const int border = DT_PIXEL_APPLY_DPI(30.0) / zoom_scale;
+  const int border = DT_PIXEL_APPLY_DPI(30.0) / g->zoom_scale;
 
-  const _grab_region_t grab = g->cropping ? g->cropping : _gui_get_grab(pzx, pzy, g, border, wd, ht);
+  const _grab_region_t grab = g->cropping ? g->cropping : _gui_get_grab(pzx, pzy, g, border, g->wd, g->ht);
 
   if(grab == GRAB_LEFT)
-    cairo_rectangle(cr, g->clip_x * wd, g->clip_y * ht, border, g->clip_h * ht);
+    cairo_rectangle(cr, g->clip_x * g->wd, g->clip_y * g->ht, border, g->clip_h * g->ht);
   if(grab == GRAB_TOP)
-    cairo_rectangle(cr, g->clip_x * wd, g->clip_y * ht, g->clip_w * wd, border);
+    cairo_rectangle(cr, g->clip_x * g->wd, g->clip_y * g->ht, g->clip_w * g->wd, border);
   if(grab == GRAB_TOP_LEFT)
-    cairo_rectangle(cr, g->clip_x * wd, g->clip_y * ht, border, border);
+    cairo_rectangle(cr, g->clip_x * g->wd, g->clip_y * g->ht, border, border);
   if(grab == GRAB_RIGHT)
-    cairo_rectangle(cr, (g->clip_x + g->clip_w) * wd - border, g->clip_y * ht, border, g->clip_h * ht);
+    cairo_rectangle(cr, (g->clip_x + g->clip_w) * g->wd - border, g->clip_y * g->ht, border, g->clip_h * g->ht);
   if(grab == GRAB_BOTTOM)
-    cairo_rectangle(cr, g->clip_x * wd, (g->clip_y + g->clip_h) * ht - border, g->clip_w * wd, border);
+    cairo_rectangle(cr, g->clip_x * g->wd, (g->clip_y + g->clip_h) * g->ht - border, g->clip_w * g->wd, border);
   if(grab == GRAB_BOTTOM_RIGHT)
-    cairo_rectangle(cr, (g->clip_x + g->clip_w) * wd - border, (g->clip_y + g->clip_h) * ht - border, border,
+    cairo_rectangle(cr, (g->clip_x + g->clip_w) * g->wd - border, (g->clip_y + g->clip_h) * g->ht - border, border,
                     border);
   if(grab == GRAB_TOP_RIGHT)
-    cairo_rectangle(cr, (g->clip_x + g->clip_w) * wd - border, g->clip_y * ht, border, border);
+    cairo_rectangle(cr, (g->clip_x + g->clip_w) * g->wd - border, g->clip_y * g->ht, border, border);
   if(grab == GRAB_BOTTOM_LEFT)
-    cairo_rectangle(cr, g->clip_x * wd, (g->clip_y + g->clip_h) * ht - border, border, border);
+    cairo_rectangle(cr, g->clip_x * g->wd, (g->clip_y + g->clip_h) * g->ht - border, border, border);
   cairo_stroke(cr);
 }
 
 int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
 {
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
+  if(!g->editing) return 0;
 
-  // we don't do anything if the image is not ready
-  if(!g->preview_ready) return 0;
-
-  const float wd = self->dev->preview_pipe->backbuf_width;
-  const float ht = self->dev->preview_pipe->backbuf_height;
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float zoom_scale = dt_dev_get_zoom_scale(self->dev, zoom, 1 << closeup, 1);
   float pzx, pzy;
   dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
   pzx += 0.5f;
   pzy += 0.5f;
 
-  const _grab_region_t grab = _gui_get_grab(pzx, pzy, g, DT_PIXEL_APPLY_DPI(30.0) / zoom_scale, wd, ht);
+  const _grab_region_t grab = _gui_get_grab(pzx, pzy, g, DT_PIXEL_APPLY_DPI(30.0) / g->zoom_scale, g->wd, g->ht);
 
   _set_max_clip(self);
 
@@ -1476,24 +1476,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     }
 
     _aspect_apply(self, g->cropping);
-
-    // only update the sliders, not the dt_iop_cropping_params_t structure, so that the call to
-    // dt_control_queue_redraw_center below doesn't go rerun the pixelpipe because it thinks that
-    // the image has changed when it actually hasn't, yet.  The actual clipping parameters get set
-    // from the sliders when the iop loses focus, at which time the final selected crop is applied.
-    ++darktable.gui->reset;
-
-    dt_bauhaus_slider_set(g->cx, g->clip_x);
-    dt_bauhaus_slider_set_soft_min(g->cw, g->clip_x + 0.10);
-    dt_bauhaus_slider_set(g->cy, g->clip_y);
-    dt_bauhaus_slider_set_soft_min(g->ch, g->clip_y + 0.10);
-    dt_bauhaus_slider_set(g->cw, g->clip_x + g->clip_w);
-    dt_bauhaus_slider_set_soft_max(g->cx, g->clip_x + g->clip_w - 0.10);
-    dt_bauhaus_slider_set(g->ch, g->clip_y + g->clip_h);
-    dt_bauhaus_slider_set_soft_max(g->cy, g->clip_y + g->clip_h - 0.10);
-
-    --darktable.gui->reset;
-
+    gui_changed(self, NULL, NULL);
     dt_control_queue_redraw_center();
     return 1;
   }
@@ -1539,9 +1522,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 int button_released(struct dt_iop_module_t *self, double x, double y, int which, uint32_t state)
 {
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
-  dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
-  // we don't do anything if the image is not ready
-  if(!g->preview_ready) return 0;
+  if(!g->editing) return 0;
 
   /* reset internal ui states*/
   g->shift_hold = FALSE;
@@ -1551,7 +1532,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   dt_control_change_cursor(GDK_LEFT_PTR);
 
   // we save the crop into the params now so params are kept in synch with gui settings
-  _commit_box(self, g, p);
+  gui_changed(self, NULL, NULL);
   return 1;
 }
 
@@ -1559,9 +1540,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
                    uint32_t state)
 {
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
-  // we don't do anything if the image is not ready
-
-  if(!g->preview_ready) return 0;
+  if(!g->editing) return 0;
 
   // avoid unexpected back to lt mode:
   if(type == GDK_2BUTTON_PRESS && which == 1)
@@ -1569,17 +1548,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 
   if(which == 1)
   {
-    const float wd = self->dev->preview_pipe->backbuf_width;
-    const float ht = self->dev->preview_pipe->backbuf_height;
-    const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-    const int closeup = dt_control_get_dev_closeup();
-    const float zoom_scale = dt_dev_get_zoom_scale(self->dev, zoom, 1 << closeup, 1);
-
     float pzx, pzy;
     dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
-
-    // switch module on already, other code depends in this:
-    dt_dev_add_history_item(darktable.develop, self, TRUE);
 
     g->button_down_x = x;
     g->button_down_y = y;
@@ -1602,7 +1572,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     const float bzx = pzx + .5f;
     const float bzy = pzy + .5f;
 
-    g->cropping = _gui_get_grab(bzx, bzy, g, DT_PIXEL_APPLY_DPI(30.0) / zoom_scale, wd, ht);
+    g->cropping = _gui_get_grab(bzx, bzy, g, DT_PIXEL_APPLY_DPI(30.0) / g->zoom_scale, g->wd, g->ht);
 
     if(g->cropping == GRAB_CENTER)
     {
