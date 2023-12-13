@@ -95,13 +95,15 @@ void _lib_imageinfo_update_message(gpointer instance, dt_lib_module_t *self)
   gchar *pattern = dt_conf_get_string("plugins/darkroom/image_infos_pattern");
   gchar *msg = dt_variables_expand(vp, pattern, TRUE);
   g_free(pattern);
-
   dt_variables_params_destroy(vp);
 
-  // we change the label
-  gtk_label_set_markup(GTK_LABEL(d->tview), msg);
-
+  // Support escaped characters (`"\n"` => `'\n'`).
+  gchar *compressed = g_strcompress(msg);
   g_free(msg);
+
+  // we change the label
+  gtk_label_set_markup(GTK_LABEL(d->tview), compressed);
+  g_free(compressed);
 }
 
 static void _lib_imageinfo_update_message2(gpointer instance, gpointer imgs, dt_lib_module_t *self)
