@@ -106,6 +106,19 @@
 #define DT_DEBUG_SQLITE3_CLEAR_BINDINGS(a) __DT_DEBUG_ASSERT__(sqlite3_clear_bindings(a))
 #define DT_DEBUG_SQLITE3_RESET(a) __DT_DEBUG_ASSERT__(sqlite3_reset(a))
 
+// Use this to re-define a function to trace it, so you don't need to modify all
+// callers. `thread` should be `dt_debug_thread_t`. This requires verbose mode.
+//
+// Example:
+// void dt_dev_invalidate_real(dt_develop_t *dev);
+// #define dt_dev_invalidate(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_invalidate_real, (dev))
+#define DT_DEBUG_TRACE_WRAPPER(thread, function, ...)                    \
+  do {                                                                   \
+    dt_vprint((thread), "[debug_trace] %s is called from %s at %s:%d\n", \
+              #function, __FUNCTION__, __FILE__, __LINE__);              \
+    function(__VA_ARGS__);                                               \
+  } while (0)
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
