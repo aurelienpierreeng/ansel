@@ -2415,7 +2415,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     const gboolean was_mask = g->mask_display;
     g->mask_display = FALSE;
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_luminance_mask), FALSE);
-    if(was_mask) dt_dev_invalidate(self->dev, __FUNCTION__, __FILE__, __LINE__);
+    if(was_mask) dt_dev_invalidate(self->dev);
     dt_dev_refresh_ui_images(self->dev);
     dt_collection_hint_message(darktable.collection);
   }

@@ -1976,7 +1976,7 @@ void dt_masks_update_image(dt_develop_t *dev)
   // dt_similarity_image_dirty(dev->image_storage.id);
 
   // invalidate buffers and force redraw of darkroom
-  dt_dev_invalidate_all(dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate_all(dev);
   dt_dev_refresh_ui_images(dev);
 }
 

@@ -972,7 +972,7 @@ static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *se
   }
 
   // It sucks that we need to invalidate the preview too but we need its final dimension.
-  dt_dev_invalidate_all(self->dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate_all(self->dev);
   dt_control_queue_redraw_center();
   dt_control_navigation_redraw();
   dt_dev_refresh_ui_images(self->dev);

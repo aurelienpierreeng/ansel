@@ -505,7 +505,7 @@ static void _lib_snapshots_toggled_callback(GtkToggleButton *widget, gpointer us
     dt_control_set_dev_closeup(s->closeup);
     dt_control_set_dev_zoom_scale(s->zoom_scale);
 
-    dt_dev_invalidate(darktable.develop, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate(darktable.develop);
     dt_dev_refresh_ui_images(darktable.develop);
 
     d->snapshot_image = dt_cairo_image_surface_create_from_png(s->filename);

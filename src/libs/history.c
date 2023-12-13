@@ -1186,7 +1186,7 @@ static gboolean _lib_history_button_clicked_callback(GtkWidget *widget, GdkEvent
   dt_iop_connect_accels_all();
   dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
 
-  dt_dev_invalidate_all(darktable.develop, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate_all(darktable.develop);
   dt_dev_refresh_ui_images(darktable.develop);
   return FALSE;
 }

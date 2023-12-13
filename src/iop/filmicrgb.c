@@ -2801,7 +2801,7 @@ static void show_mask_callback(GtkToggleButton *button, GdkEventButton *event, g
   dt_iop_filmicrgb_gui_data_t *g = (dt_iop_filmicrgb_gui_data_t *)self->gui_data;
   g->show_mask = !(g->show_mask);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_highlight_mask), !g->show_mask);
-  dt_dev_invalidate(self->dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate(self->dev);
   dt_dev_refresh_ui_images(self->dev);
 }
 
@@ -3191,7 +3191,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     gint mask_was_shown = g->show_mask;
     g->show_mask = FALSE;
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_highlight_mask), FALSE);
-    if(mask_was_shown) dt_dev_invalidate(self->dev, __FUNCTION__, __FILE__, __LINE__);
+    if(mask_was_shown) dt_dev_invalidate(self->dev);
     dt_dev_refresh_ui_images(self->dev);
   }
 }

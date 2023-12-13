@@ -198,7 +198,7 @@ void dt_dev_process_preview(dt_develop_t *dev)
   if(err) fprintf(stderr, "[dev_process_preview] job queue exceeded!\n");
 }
 
-void dt_dev_refresh_ui_images_real(dt_develop_t *dev, const char *file, const int line)
+void dt_dev_refresh_ui_images_real(dt_develop_t *dev)
 {
   // We need to get the shutdown atomic set to TRUE,
   // which is handled everytime history is changed,
@@ -206,8 +206,6 @@ void dt_dev_refresh_ui_images_real(dt_develop_t *dev, const char *file, const in
   // Benefit is atomics are de-facto thread-safe.
   if(dt_atomic_get_int(&dev->pipe->shutdown)) dt_dev_process_image(dev);
   if(dt_atomic_get_int(&dev->preview_pipe->shutdown)) dt_dev_process_preview(dev);
-
-  dt_print(DT_DEBUG_DEV, "[dev_process_image] starting a pipeline process from %s:%i\n", file, line);
 }
 
 void dt_dev_pixelpipe_rebuild(dt_develop_t *dev)
@@ -216,12 +214,14 @@ void dt_dev_pixelpipe_rebuild(dt_develop_t *dev)
   dev->pipe->changed |= DT_DEV_PIPE_REMOVE;
   dev->preview_pipe->changed |= DT_DEV_PIPE_REMOVE;
   dt_pthread_mutex_unlock(&dev->history_mutex);
-  dt_dev_invalidate_all(dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate_all(dev);
 }
 
-void dt_dev_invalidate(dt_develop_t *dev, const char *caller, const char *file, const long line)
+void dt_dev_invalidate_real(dt_develop_t *dev)
 {
-  dt_print(DT_DEBUG_DEV, "[dev_process_image] sending killswitch signal from %s - in %s:%ld\n", caller, file, line);
+  dt_times_t start;
+  dt_get_times(&start);
+  dt_show_times(&start, "[dt_dev_invalidate] sending killswitch signal on running pipelines");
 
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
 
@@ -231,9 +231,11 @@ void dt_dev_invalidate(dt_develop_t *dev, const char *caller, const char *file, 
   dt_pthread_mutex_unlock(&dev->history_mutex);
 }
 
-void dt_dev_invalidate_zoom(dt_develop_t *dev, const char *caller, const char *file, const long line)
+void dt_dev_invalidate_zoom_real(dt_develop_t *dev)
 {
-  dt_print(DT_DEBUG_DEV, "[dev_process_image] sending killswitch signal from %s - in %s:%ld\n", caller, file, line);
+  dt_times_t start;
+  dt_get_times(&start);
+  dt_show_times(&start, "[dt_dev_invalidate_zoom] sending killswitch signal on running pipelines");
 
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
 
@@ -243,9 +245,11 @@ void dt_dev_invalidate_zoom(dt_develop_t *dev, const char *caller, const char *f
   dt_pthread_mutex_unlock(&dev->history_mutex);
 }
 
-void dt_dev_invalidate_preview(dt_develop_t *dev, const char *caller, const char *file, const long line)
+void dt_dev_invalidate_preview_real(dt_develop_t *dev)
 {
-  dt_print(DT_DEBUG_DEV, "[dev_process_preview] sending killswitch signal from %s - in %s:%ld\n", caller, file, line);
+  dt_times_t start;
+  dt_get_times(&start);
+  dt_show_times(&start, "[dt_dev_invalidate_preview] sending killswitch signal on running pipelines");
 
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
 
@@ -255,14 +259,14 @@ void dt_dev_invalidate_preview(dt_develop_t *dev, const char *caller, const char
   dt_pthread_mutex_unlock(&dev->history_mutex);
 }
 
-void dt_dev_invalidate_all(dt_develop_t *dev, const char *caller, const char *file, const long line)
+void dt_dev_invalidate_all_real(dt_develop_t *dev)
 {
   // Send killswitch ASAP
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
 
-  dt_dev_invalidate(dev, caller, file, line);
-  dt_dev_invalidate_preview(dev, caller, file, line);
+  dt_dev_invalidate(dev);
+  dt_dev_invalidate_preview(dev);
 }
 
 void dt_dev_process_preview_job(dt_develop_t *dev)
@@ -561,7 +565,7 @@ void dt_dev_configure(dt_develop_t *dev, int wd, int ht)
   {
     dev->width = wd;
     dev->height = ht;
-    dt_dev_invalidate_zoom(dev, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate_zoom(dev);
 
     if(dev->image_storage.id > -1 && darktable.mipmap_cache)
     {
@@ -846,11 +850,10 @@ void _dev_add_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolean 
 // This is why they directly start a pipeline recompute.
 // Otherwise, please keep GUI and pipeline fully separated.
 
-void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable, const char *file, const int line)
+void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable)
 {
-  dt_print(DT_DEBUG_DEV, "[dev_add_history_item] adding an history item from %s:%i\n", file, line);
   _dev_add_history_item(dev, module, enable, FALSE);
-  dt_dev_invalidate_all(dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate_all(dev);
   dt_control_queue_redraw_center();
   dt_dev_refresh_ui_images(dev);
 }
@@ -984,7 +987,7 @@ void dt_dev_reload_history_items(dt_develop_t *dev)
   // we update show params for multi-instances for each other instances
   dt_dev_modules_update_multishow(dev);
 
-  dt_dev_invalidate_all(dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate_all(dev);
 }
 
 void dt_dev_pop_history_items_ext(dt_develop_t *dev, int32_t cnt)
@@ -1947,7 +1950,7 @@ void dt_dev_reprocess_center(dt_develop_t *dev)
   // Flush the caches and recompute from scratch
   if(darktable.gui->reset || !dev || !dev->gui_attached) return;
   dt_dev_pixelpipe_cache_flush(&(dev->pipe->cache));
-  dt_dev_invalidate(dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate(dev);
 }
 
 void dt_dev_reprocess_preview(dt_develop_t *dev)
@@ -1955,7 +1958,7 @@ void dt_dev_reprocess_preview(dt_develop_t *dev)
   // Flush the caches and recompute from scratch
   if(darktable.gui->reset || !dev || !dev->gui_attached) return;
   dt_dev_pixelpipe_cache_flush(&(dev->preview_pipe->cache));
-  dt_dev_invalidate_preview(dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate_preview(dev);
 }
 
 void dt_dev_reprocess_all(dt_develop_t *dev)
@@ -2571,7 +2574,7 @@ int dt_dev_sync_pixelpipe_hash(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
   // timed out. let's see if history stack has changed
   if(pipe->changed & (DT_DEV_PIPE_TOP_CHANGED | DT_DEV_PIPE_REMOVE | DT_DEV_PIPE_SYNCH))
   {
-    dt_dev_invalidate(dev, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate(dev);
     // pretend that everything is fine
     return TRUE;
   }
