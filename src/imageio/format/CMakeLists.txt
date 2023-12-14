@@ -32,7 +32,7 @@ if(OpenJPEG_FOUND)
   add_library(j2k MODULE "j2k.c")
 endif(OpenJPEG_FOUND)
 
-if(avif_FOUND)
+if(libavif_FOUND)
   list(APPEND MODULES "avif_format")
   add_library(avif_format MODULE "avif.c")
   set_target_properties(avif_format PROPERTIES OUTPUT_NAME avif)
