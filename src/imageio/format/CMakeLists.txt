@@ -1,4 +1,4 @@
-include_directories("${DARKTABLE_BINDIR}")
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/../..)
 
 include_directories(SYSTEM "${PNG_PNG_INCLUDE_DIR}")
 
@@ -23,19 +23,19 @@ if(WebP_FOUND)
 endif(WebP_FOUND)
 
 if(OpenEXR_FOUND)
-	list(APPEND MODULES "exr")
-	add_library(exr MODULE "exr.cc")
+  list(APPEND MODULES "exr")
+  add_library(exr MODULE "exr.cc")
 endif(OpenEXR_FOUND)
 
 if(OpenJPEG_FOUND)
-	list(APPEND MODULES "j2k")
-	add_library(j2k MODULE "j2k.c")
+  list(APPEND MODULES "j2k")
+  add_library(j2k MODULE "j2k.c")
 endif(OpenJPEG_FOUND)
 
-if (TARGET avif)
-    list(APPEND MODULES "avif_format")
-    add_library(avif_format MODULE "avif.c")
-    set_target_properties(avif_format PROPERTIES OUTPUT_NAME avif)
+if(libavif_FOUND)
+  list(APPEND MODULES "avif_format")
+  add_library(avif_format MODULE "avif.c")
+  set_target_properties(avif_format PROPERTIES OUTPUT_NAME avif)
 endif()
 
 if(TARGET xcf)
@@ -46,13 +46,13 @@ if(TARGET xcf)
 endif()
 
 foreach(module ${MODULES})
-    target_link_libraries(${module} PUBLIC lib_ansel)
-    if (WIN32)
-        #_detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/ansel/plugins/imageio/format)
-    else()
-        set_target_properties(${module}
-                              PROPERTIES
-                              INSTALL_RPATH ${CMAKE_INSTALL_LIBDIR_RPATH})
-    endif(WIN32)
+  target_link_libraries(${module} PUBLIC lib_ansel)
+  if(WIN32)
+    # _detach_debuginfo(${module} ${CMAKE_INSTALL_LIBDIR}/ansel/plugins/imageio/format)
+  else()
+    set_target_properties(${module}
+                          PROPERTIES
+                          INSTALL_RPATH ${RPATH_ORIGIN}/../../../..)
+    endif()
     install(TARGETS ${module} DESTINATION ${CMAKE_INSTALL_LIBDIR}/ansel/plugins/imageio/format COMPONENT DTApplication)
 endforeach(module)

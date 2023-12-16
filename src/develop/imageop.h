@@ -480,6 +480,16 @@ void dt_iop_gui_rename_module(dt_iop_module_t *module);
 
 void dt_iop_gui_changed(dt_action_t *action, GtkWidget *widget, gpointer data);
 
+
+/** Uniform way of getting the full state hash of user-defined parameters, including masks and blending.
+* WARNING: doesn't take into account parameters dynamically set at runtime.
+*/
+uint64_t dt_iop_module_hash(dt_iop_module_t *module);
+
+// Use module fingerprints to determine if two instances are actually the same
+gboolean dt_iop_check_modules_equal(dt_iop_module_t *mod_1, dt_iop_module_t *mod_2);
+
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

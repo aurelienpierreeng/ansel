@@ -1,19 +1,20 @@
 /*
-    This file is part of darktable,
+    This file is part of ansel,
     Copyright (C) 2010-2022 darktable developers.
+    Copyright (C) 2023 ansel developers.
 
-    darktable is free software: you can redistribute it and/or modify
+    ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    darktable is distributed in the hope that it will be useful,
+    ansel is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+    along with ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "common/colorspaces.h"
@@ -802,6 +803,19 @@ static cmsHPROFILE dt_colorspaces_create_hlg_p3_rgb_profile(void)
   return profile;
 }
 
+static cmsHPROFILE dt_colorspaces_create_display_p3_rgb_profile(void)
+{
+  cmsFloat64Number srgb_parameters[5] = { 2.4, 1.0 / 1.055,  0.055 / 1.055, 1.0 / 12.92, 0.04045 };
+  cmsToneCurve *transferFunction = cmsBuildParametricToneCurve(NULL, 4, srgb_parameters);
+
+  cmsHPROFILE profile = _create_lcms_profile("Display P3 RGB", "Display P3 RGB",
+                                             &D65xyY, &P3_Primaries, transferFunction, TRUE);
+
+  cmsFreeToneCurve(transferFunction);
+
+  return profile;
+}
+
 static cmsHPROFILE dt_colorspaces_create_linear_prophoto_rgb_profile(void)
 {
   cmsToneCurve *transferFunction = cmsBuildGamma(NULL, 1.0);
@@ -1483,6 +1497,11 @@ dt_colorspaces_t *dt_colorspaces_init()
                                      ++work_pos));
 
   res->profiles = g_list_append(
+      res->profiles, _create_profile(DT_COLORSPACE_DISPLAY_P3, dt_colorspaces_create_display_p3_rgb_profile(),
+                                     _("Display P3 RGB"), ++in_pos, ++out_pos, ++display_pos, ++category_pos,
+                                     ++work_pos));
+
+  res->profiles = g_list_append(
      res->profiles, _create_profile(DT_COLORSPACE_PROPHOTO_RGB, dt_colorspaces_create_linear_prophoto_rgb_profile(),
                                     _("linear ProPhoto RGB"), ++in_pos, ++out_pos, ++display_pos, ++category_pos,
                                     ++work_pos));
@@ -1617,64 +1636,66 @@ const char *dt_colorspaces_get_name(dt_colorspaces_color_profile_type_t type,
 {
   switch (type)
   {
-     case DT_COLORSPACE_NONE:
-       return NULL;
-     case DT_COLORSPACE_FILE:
-       return filename;
-     case DT_COLORSPACE_SRGB:
-       return _("sRGB");
-     case DT_COLORSPACE_ADOBERGB:
-       return _("Adobe RGB (compatible)");
-     case DT_COLORSPACE_LIN_REC709:
-       return _("linear Rec709 RGB");
-     case DT_COLORSPACE_LIN_REC2020:
-       return _("linear Rec2020 RGB");
-     case DT_COLORSPACE_XYZ:
-       return _("linear XYZ");
-     case DT_COLORSPACE_LAB:
-       return _("Lab");
-     case DT_COLORSPACE_INFRARED:
-       return _("linear infrared BGR");
-     case DT_COLORSPACE_DISPLAY:
-       return _("System display profile (recommended)");
-     case DT_COLORSPACE_EMBEDDED_ICC:
-       return _("embedded ICC profile");
-     case DT_COLORSPACE_EMBEDDED_MATRIX:
-       return _("embedded matrix");
-     case DT_COLORSPACE_STANDARD_MATRIX:
-       return _("standard color matrix");
-     case DT_COLORSPACE_ENHANCED_MATRIX:
-       return _("enhanced color matrix");
-     case DT_COLORSPACE_VENDOR_MATRIX:
-       return _("vendor color matrix");
-     case DT_COLORSPACE_ALTERNATE_MATRIX:
-       return _("alternate color matrix");
-     case DT_COLORSPACE_BRG:
-       return _("BRG (experimental)");
-     case DT_COLORSPACE_EXPORT:
-       return _("export profile");
-     case DT_COLORSPACE_SOFTPROOF:
-       return _("softproof profile");
-     case DT_COLORSPACE_WORK:
-       return _("work profile");
-     case DT_COLORSPACE_DISPLAY2:
-       return _("Not used. Shouldn't be here.");
-     case DT_COLORSPACE_REC709:
-       return _("Rec709 RGB");
-     case DT_COLORSPACE_PROPHOTO_RGB:
-       return _("linear ProPhoto RGB");
-     case DT_COLORSPACE_PQ_REC2020:
-       return _("PQ Rec2020");
-     case DT_COLORSPACE_HLG_REC2020:
-       return _("HLG Rec2020");
-     case DT_COLORSPACE_PQ_P3:
-       return _("PQ P3");
-     case DT_COLORSPACE_HLG_P3:
-       return _("HLG P3");
-     case DT_COLORSPACE_ITUR_BT1886:
-        return _("ITU-R BT.1886");
-      case DT_COLORSPACE_LAST:
-        break;
+    case DT_COLORSPACE_NONE:
+      return NULL;
+    case DT_COLORSPACE_FILE:
+      return filename;
+    case DT_COLORSPACE_SRGB:
+      return _("sRGB");
+    case DT_COLORSPACE_ADOBERGB:
+      return _("Adobe RGB (compatible)");
+    case DT_COLORSPACE_LIN_REC709:
+      return _("linear Rec709 RGB");
+    case DT_COLORSPACE_LIN_REC2020:
+      return _("linear Rec2020 RGB");
+    case DT_COLORSPACE_XYZ:
+      return _("linear XYZ");
+    case DT_COLORSPACE_LAB:
+      return _("Lab");
+    case DT_COLORSPACE_INFRARED:
+      return _("linear infrared BGR");
+    case DT_COLORSPACE_DISPLAY:
+      return _("System display profile (recommended)");
+    case DT_COLORSPACE_EMBEDDED_ICC:
+      return _("embedded ICC profile");
+    case DT_COLORSPACE_EMBEDDED_MATRIX:
+      return _("embedded matrix");
+    case DT_COLORSPACE_STANDARD_MATRIX:
+      return _("standard color matrix");
+    case DT_COLORSPACE_ENHANCED_MATRIX:
+      return _("enhanced color matrix");
+    case DT_COLORSPACE_VENDOR_MATRIX:
+      return _("vendor color matrix");
+    case DT_COLORSPACE_ALTERNATE_MATRIX:
+      return _("alternate color matrix");
+    case DT_COLORSPACE_BRG:
+      return _("BRG (experimental)");
+    case DT_COLORSPACE_EXPORT:
+      return _("export profile");
+    case DT_COLORSPACE_SOFTPROOF:
+      return _("softproof profile");
+    case DT_COLORSPACE_WORK:
+      return _("work profile");
+    case DT_COLORSPACE_DISPLAY2:
+      return _("Not used. Shouldn't be here.");
+    case DT_COLORSPACE_REC709:
+      return _("Rec709 RGB");
+    case DT_COLORSPACE_PROPHOTO_RGB:
+      return _("linear ProPhoto RGB");
+    case DT_COLORSPACE_PQ_REC2020:
+      return _("PQ Rec2020");
+    case DT_COLORSPACE_HLG_REC2020:
+      return _("HLG Rec2020");
+    case DT_COLORSPACE_PQ_P3:
+      return _("PQ P3");
+    case DT_COLORSPACE_HLG_P3:
+      return _("HLG P3");
+    case DT_COLORSPACE_DISPLAY_P3:
+      return _("Display P3");
+    case DT_COLORSPACE_ITUR_BT1886:
+      return _("ITU-R BT.1886");
+    case DT_COLORSPACE_LAST:
+      break;
   }
 
   return NULL;
@@ -1946,6 +1967,7 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_cicp_to_type(const dt_colorsp
           switch(cicp->matrix_coefficients)
           {
             case DT_CICP_MATRIX_COEFFICIENTS_IDENTITY: /* support RGB (4:4:4 or lossless) */
+            case DT_CICP_MATRIX_COEFFICIENTS_REC709:
             case DT_CICP_MATRIX_COEFFICIENTS_SYCC:
             case DT_CICP_MATRIX_COEFFICIENTS_REC601: /* support equivalents just in case of mistagging */
             case DT_CICP_MATRIX_COEFFICIENTS_CHROMA_DERIVED_NCL: /* support incorrectly tagged files */
@@ -2068,6 +2090,9 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_cicp_to_type(const dt_colorsp
           switch(cicp->matrix_coefficients)
           {
             case DT_CICP_MATRIX_COEFFICIENTS_IDENTITY: /* support RGB (4:4:4 or lossless) */
+            case DT_CICP_MATRIX_COEFFICIENTS_REC709:
+            case DT_CICP_MATRIX_COEFFICIENTS_SYCC:
+            case DT_CICP_MATRIX_COEFFICIENTS_REC601:
             case DT_CICP_MATRIX_COEFFICIENTS_CHROMA_DERIVED_NCL:
             case DT_CICP_MATRIX_COEFFICIENTS_UNSPECIFIED:
               return DT_COLORSPACE_PQ_P3;
@@ -2083,6 +2108,9 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_cicp_to_type(const dt_colorsp
           switch(cicp->matrix_coefficients)
           {
             case DT_CICP_MATRIX_COEFFICIENTS_IDENTITY: /* support RGB (4:4:4 or lossless) */
+            case DT_CICP_MATRIX_COEFFICIENTS_REC709:
+            case DT_CICP_MATRIX_COEFFICIENTS_SYCC:
+            case DT_CICP_MATRIX_COEFFICIENTS_REC601:
             case DT_CICP_MATRIX_COEFFICIENTS_CHROMA_DERIVED_NCL:
             case DT_CICP_MATRIX_COEFFICIENTS_UNSPECIFIED:
               return DT_COLORSPACE_HLG_P3;
@@ -2091,6 +2119,24 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_cicp_to_type(const dt_colorsp
           }
 
           break; /* HLG P3 */
+
+        /* Display P3 */
+        case DT_CICP_TRANSFER_CHARACTERISTICS_SRGB:
+
+          switch(cicp->matrix_coefficients)
+          {
+            case DT_CICP_MATRIX_COEFFICIENTS_IDENTITY: /* support RGB (4:4:4 or lossless) */
+            case DT_CICP_MATRIX_COEFFICIENTS_REC709:
+            case DT_CICP_MATRIX_COEFFICIENTS_SYCC:
+            case DT_CICP_MATRIX_COEFFICIENTS_REC601:
+            case DT_CICP_MATRIX_COEFFICIENTS_CHROMA_DERIVED_NCL:
+            case DT_CICP_MATRIX_COEFFICIENTS_UNSPECIFIED:
+              return DT_COLORSPACE_DISPLAY_P3;
+            default:
+              break;
+          }
+
+          break; /* Display P3 */
 
         default:
           break;

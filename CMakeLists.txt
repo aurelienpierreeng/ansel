@@ -11,7 +11,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/")
 # These defaults need to be included before the project() call.
 include(DefineCMakeDefaults)
 
-If(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
   message(FATAL_ERROR "In-source builds are not permitted. Make a separate folder for building:\nmkdir build; cd build; cmake ..\nBefore that, remove the files already created:\nrm -rf CMakeCache.txt CMakeFiles")
 endif(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
 
@@ -27,10 +27,10 @@ endif()
 # the compiler for some reason breaks the initial cmake checks but works fine
 # for actually compiling ansel. This allows building ansel using
 # afl-clang-fast achieving a >4x speedup in fuzzing.
-IF(DEFINED DT_FORCE_C_COMPILER)
+if(DEFINED DT_FORCE_C_COMPILER)
   set(CMAKE_C_COMPILER ${DT_FORCE_C_COMPILER})
 endif()
-IF(DEFINED DT_FORCE_CXX_COMPILER)
+if(DEFINED DT_FORCE_CXX_COMPILER)
   set(CMAKE_CXX_COMPILER ${DT_FORCE_CXX_COMPILER})
 endif()
 
@@ -44,24 +44,29 @@ include(DefineOptions.cmake)
 include(GNUInstallDirs)
 include(FeatureSummary)
 
-# resolve symbolic links into real path?
+# Those are used to allow to copy program to other dir after installing. To
+# archieve this, 2 requirements are needed:
+#
+# 1. Binaries and libraries must be relocatable. We achieve this by using RPATH.
+# 2. Program must load libraries and resources relativly from where it is, so
+#    with Requirement 1 we could copy the installed files anywhere to run, just
+#    keep the strucrure. That's why we need such REL_* here.
+#
+# We will use REL_* in program to load files relatively, that is done by C code.
+# XXX(AZ): Some people may set `CMAKE_INSTALL_BINDIR` to absolute path, we
+#          should warn that this is not supported.
 get_filename_component(CMAKE_INSTALL_BINDIR_ABS "${CMAKE_INSTALL_FULL_BINDIR}" REALPATH "${CMAKE_INSTALL_PREFIX}")
-# get relative paths specific to the system
-file(RELATIVE_PATH REL_BIN_TO_LIBDIR    ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_LIBDIR}/ansel")
+# Get relative dir name from system install dirs.
+file(RELATIVE_PATH REL_BIN_TO_LIBDIR    ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_LIBDIR}")
 file(RELATIVE_PATH REL_BIN_TO_SHAREDIR  ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_DATADIR}")
 file(RELATIVE_PATH REL_BIN_TO_LOCALEDIR ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_LOCALEDIR}")
-# The original comment is 'Required by rawspeed-identify.cpp', I don't see what
-# it means and I already changed the binary prefix in CMake. I have to change
-# `darktable` to `ansel` here to keep all things works.
-set(REL_BIN_TO_DATADIR  "${REL_BIN_TO_SHAREDIR}/ansel")
-set(DARKTABLE_BINDIR    "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
-set(DARKTABLE_LIBDIR    "${DARKTABLE_BINDIR}/${REL_BIN_TO_LIBDIR}")
-set(DARKTABLE_SHAREDIR  "${DARKTABLE_BINDIR}/${REL_BIN_TO_SHAREDIR}")
-set(DARKTABLE_DATADIR   "${DARKTABLE_BINDIR}/${REL_BIN_TO_DATADIR}") # DATAROOTDIR == DATADIR # anselrc, themes, icons, ... Cannot use ${CMAKE_BINDIR}/data because not everything resides there. Like icons (pixmaps)
-set(DARKTABLE_LOCALEDIR "${DARKTABLE_BINDIR}/${REL_BIN_TO_LOCALEDIR}")
+# MODULEDIR is where we put all libraries that will be loaded dynamically at
+# runtime, so it is `${LIBDIR}/ansel`.
+set(REL_BIN_TO_MODULEDIR "${REL_BIN_TO_LIBDIR}/ansel")
+set(REL_BIN_TO_DATADIR   "${REL_BIN_TO_SHAREDIR}/ansel")
 
 # https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
-if(${FORCE_COLORED_OUTPUT})
+if(FORCE_COLORED_OUTPUT)
   if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     add_compile_options(-fdiagnostics-color=always)
   elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
@@ -69,27 +74,30 @@ if(${FORCE_COLORED_OUTPUT})
   endif()
 endif()
 
-# Whether to use relative paths for the build RPATH
-if (APPLE)
-    set(CMAKE_MACOSX_RPATH ON)
-    set(CMAKE_INSTALL_LIBDIR_RPATH @loader_path/../${CMAKE_INSTALL_LIBDIR}/ansel)
+# Unify the RPATH origin.
+# Those 2 vars need to be TRUE to let CMake obey the INSTALL_RPATH we set.
+set(CMAKE_SKIP_BUILD_RPATH TRUE)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+if(APPLE)
+  set(CMAKE_MACOSX_RPATH ON)
+  set(RPATH_ORIGIN @loader_path)
 else()
-    set(CMAKE_INSTALL_LIBDIR_RPATH $ORIGIN/../${CMAKE_INSTALL_LIBDIR}/ansel)
+  set(RPATH_ORIGIN $ORIGIN)
 endif()
 
-if (USE_OPENMP)
-    if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR
-        CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+if(USE_OPENMP)
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR
+      CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
 
-        # Clang has an option to specify the OpenMP standard to use. Specify it.
-        # FIXME: Implement this in FindOpenMP.cmake
-        set(OPENMP_VERSION_SPECIFIER "-fopenmp-version=45")
+    # Clang has an option to specify the OpenMP standard to use. Specify it.
+    # FIXME: Implement this in FindOpenMP.cmake
+    set(OPENMP_VERSION_SPECIFIER "-fopenmp-version=45")
 
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OPENMP_VERSION_SPECIFIER}")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OPENMP_VERSION_SPECIFIER}")
-    endif()
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OPENMP_VERSION_SPECIFIER}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OPENMP_VERSION_SPECIFIER}")
+  endif()
 
-    find_package(OpenMP 4.5 REQUIRED)
+  find_package(OpenMP 4.5 REQUIRED)
 endif()
 
 # Check for base threading library
@@ -97,8 +105,8 @@ set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)
 
 # Fail if returned library is not pthread
-if (NOT CMAKE_USE_PTHREADS_INIT)
-    message(FATAL_ERROR "POSIX threads: not found")
+if(NOT CMAKE_USE_PTHREADS_INIT)
+  message(FATAL_ERROR "POSIX threads: not found")
 endif()
 
 include(ConfigureChecks.cmake)
@@ -130,30 +138,30 @@ MESSAGE(STATUS "Building SSE2-optimized codepaths: ${BUILD_SSE2_CODEPATHS}")
 # Set platform defaults...
 #
 if(APPLE)
-	message("-- Mac OS X build detected, setting default features")
+  message("-- Mac OS X build detected, setting default features")
   find_program(HOMEBREW_EXISTS "brew")
   if(HOMEBREW_EXISTS)
     execute_process(COMMAND brew --prefix OUTPUT_VARIABLE HOMEBREW_PREFIX)
     string(STRIP "${HOMEBREW_PREFIX}" HOMEBREW_PREFIX)
     message("-- Homebrew detected, setting CMAKE_PREFIX_PATH to ${HOMEBREW_PREFIX}")
-    LIST(APPEND CMAKE_PREFIX_PATH ${HOMEBREW_PREFIX})
+    list(APPEND CMAKE_PREFIX_PATH ${HOMEBREW_PREFIX})
     # Explicitly add llvm, icu4c and libsoup@2 to prefix path
-    LIST(APPEND CMAKE_PREFIX_PATH ${HOMEBREW_PREFIX}/opt/llvm)
-    LIST(APPEND CMAKE_PREFIX_PATH ${HOMEBREW_PREFIX}/opt/icu4c)
-    LIST(APPEND CMAKE_PREFIX_PATH ${HOMEBREW_PREFIX}/opt/libsoup@2)
+    list(APPEND CMAKE_PREFIX_PATH ${HOMEBREW_PREFIX}/opt/llvm)
+    list(APPEND CMAKE_PREFIX_PATH ${HOMEBREW_PREFIX}/opt/icu4c)
+    list(APPEND CMAKE_PREFIX_PATH ${HOMEBREW_PREFIX}/opt/libsoup@2)
   else()
     message("-- Setting CMAKE_PREFIX_PATH to prefer MacPorts and/or user-installed libraries over system ones")
-    LIST(APPEND CMAKE_PREFIX_PATH /opt/local /usr/local)
+    list(APPEND CMAKE_PREFIX_PATH /opt/local /usr/local)
   endif()
-	set(CMAKE_FIND_FRAMEWORK "LAST")
-	# except libstdc++ (only one linked via -l flag, not full path)
-	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L/usr/lib")
-	set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L/usr/lib")
-	set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -L/usr/lib")
+  set(CMAKE_FIND_FRAMEWORK "LAST")
+  # except libstdc++ (only one linked via -l flag, not full path)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L/usr/lib")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L/usr/lib")
+  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -L/usr/lib")
 
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_DARWIN_C_SOURCE")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_DARWIN_C_SOURCE")
-	add_definitions("-DOS_OBJECT_USE_OBJC=0")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_DARWIN_C_SOURCE")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_DARWIN_C_SOURCE")
+  add_definitions("-DOS_OBJECT_USE_OBJC=0")
 endif(APPLE)
 
 include(compiler-versions)
@@ -175,7 +183,8 @@ endif(WIN32)
 #
 # Set package version
 #
-file(MAKE_DIRECTORY "${DARKTABLE_BINDIR}/") # the bin/ subdirectory won't exist yet
+# The src/ subdirectory in build dir won't exist yet.
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src)
 
 # adds custom command to generate header containing version info.
 # takes 1 optional parameter - version override.
@@ -192,7 +201,7 @@ function(generate_version_gen_c)
 
   add_custom_target(
     create_version_gen ALL
-    COMMAND sh ${CMAKE_SOURCE_DIR}/tools/create_version_c.sh ${DARKTABLE_BINDIR}/version_gen.c ${_VERSION}
+    COMMAND sh ${CMAKE_SOURCE_DIR}/tools/create_version_c.sh ${CMAKE_BINARY_DIR}/src/version_gen.c ${_VERSION}
     DEPENDS ${CMAKE_SOURCE_DIR}/tools/create_version_c.sh
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Updating version string (${_TYPE})"
@@ -201,7 +210,7 @@ function(generate_version_gen_c)
 endfunction(generate_version_gen_c)
 
 if(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
-  #project version is defined by -D on the cmake command line
+  # project version is defined by -D on the cmake command line
   # only use that value, do not update it at make time
   generate_version_gen_c(${PROJECT_VERSION} "version override")
 else(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
@@ -233,7 +242,7 @@ else(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
       # but generate_version target expects it to be in build dir, so we need to copy it
       add_custom_target(
         create_version_gen ALL
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/version_gen.c ${DARKTABLE_BINDIR}/version_gen.c
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/src/version_gen.c ${CMAKE_BINARY_DIR}/src/version_gen.c
         DEPENDS ${CMAKE_SOURCE_DIR}/src/version_gen.c
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         COMMENT "Updating version string (source package) - ${PROJECT_VERSION}"
@@ -244,7 +253,7 @@ endif(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
 
 # needed to make sure that version string is actually updated.
 add_custom_command(
-  OUTPUT ${DARKTABLE_BINDIR}/version_gen.c
+  OUTPUT ${CMAKE_BINARY_DIR}/src/version_gen.c
   COMMAND ${CMAKE_COMMAND} -E echo
   DEPENDS create_version_gen
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
@@ -253,14 +262,14 @@ add_custom_command(
 # WARNING: no target should reference version_gen.c directly. instead, they should add_dependencies(yourtarget generate_version)
 add_custom_target(
   generate_version ALL
-  DEPENDS ${DARKTABLE_BINDIR}/version_gen.c
+  DEPENDS ${CMAKE_BINARY_DIR}/src/version_gen.c
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
 # Add a sensible build type default and warning because empty means no optimization and no debug info.
 if(NOT CMAKE_BUILD_TYPE)
-	message("WARNING: CMAKE_BUILD_TYPE is not defined!\n         Defaulting to CMAKE_BUILD_TYPE=RelWithDebInfo. Use ccmake to set a proper value.")
-	SET(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel." FORCE)
+  message("WARNING: CMAKE_BUILD_TYPE is not defined!\n         Defaulting to CMAKE_BUILD_TYPE=RelWithDebInfo. Use ccmake to set a proper value.")
+  set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel." FORCE)
 endif(NOT CMAKE_BUILD_TYPE)
 
 if(CMAKE_BUILD_TYPE MATCHES "^[Dd][Ee][Bb][Uu][Gg]$" AND SOURCE_PACKAGE)
@@ -324,14 +333,14 @@ if(TESTBUILD_OPENCL_PROGRAMS)
     endif()
   endif()
 
-  if (LLVM_FOUND)
+  if(LLVM_FOUND)
     message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 
     find_program(CLANG_OPENCL_COMPILER
       NAMES clang-${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR} clang-${LLVM_PACKAGE_VERSION} clang${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR} clang-${LLVM_VERSION_MAJOR} clang${LLVM_VERSION_MAJOR}
     )
 
-    if (NOT ${CLANG_OPENCL_COMPILER} STREQUAL "CLANG_OPENCL_COMPILER-NOTFOUND")
+    if(NOT ${CLANG_OPENCL_COMPILER} STREQUAL "CLANG_OPENCL_COMPILER-NOTFOUND")
       message(STATUS "Found clang compiler - ${CLANG_OPENCL_COMPILER}")
 
       find_path(CLANG_OPENCL_INCLUDE_DIR opencl-c.h
@@ -340,7 +349,7 @@ if(TESTBUILD_OPENCL_PROGRAMS)
         NO_DEFAULT_PATH
       )
 
-      if (NOT ${CLANG_OPENCL_INCLUDE_DIR} STREQUAL "CLANG_OPENCL_INCLUDE_DIR-NOTFOUND")
+      if(NOT ${CLANG_OPENCL_INCLUDE_DIR} STREQUAL "CLANG_OPENCL_INCLUDE_DIR-NOTFOUND")
         message(STATUS "Found clang opencl-c.h header in ${CLANG_OPENCL_INCLUDE_DIR}")
         set(TESTBUILD_OPENCL_PROGRAMS ON)
       else()
@@ -418,20 +427,20 @@ endif(NOT EXTERNAL_PROGRAMS_FOUND)
 
 # The path can be modified by setting CMAKE_INSTALL_LOCALEDIR
 if(USE_NLS)
-    find_package(Gettext)
-    if(GETTEXT_MSGFMT_EXECUTABLE)
-        message(STATUS "Found msgfmt to convert .po file. Translation enabled")
-        add_subdirectory(po)
-    else()
-        message(STATUS "Cannot find msgfmt to convert .po file. Translation won't be enabled")
-    endif()
+  find_package(Gettext)
+  if(GETTEXT_MSGFMT_EXECUTABLE)
+    message(STATUS "Found msgfmt to convert .po file. Translation enabled")
+    add_subdirectory(po)
+  else()
+    message(STATUS "Cannot find msgfmt to convert .po file. Translation won't be enabled")
+  endif()
 endif(USE_NLS)
 
 # needed to generate file "preferences_gen.h" accordingly
 if(USE_OPENCL)
-	SET(HAVE_OPENCL 1)
+  set(HAVE_OPENCL 1)
 else()
-	SET(HAVE_OPENCL 0)
+  set(HAVE_OPENCL 0)
 endif(USE_OPENCL)
 
 if(NOT SOURCE_PACKAGE AND NOT (CMAKE_VERSION VERSION_LESS 3.3) AND DEFINED ENV{_DO_IWYU})
@@ -442,7 +451,7 @@ if(NOT SOURCE_PACKAGE AND NOT (CMAKE_VERSION VERSION_LESS 3.3) AND DEFINED ENV{_
   endif()
 
   find_program(iwyu_tool_path NAMES iwyu_tool.py)
-  if (iwyu_tool_path)
+  if(iwyu_tool_path)
     add_custom_command(
       OUTPUT "${CMAKE_BINARY_DIR}/iwyu.log"
       COMMAND "${iwyu_tool_path}" -v -p "${CMAKE_BINARY_DIR}"
@@ -460,7 +469,7 @@ if(NOT SOURCE_PACKAGE AND NOT (CMAKE_VERSION VERSION_LESS 3.3) AND DEFINED ENV{_
   endif()
 
   find_program(fix_includes_path NAMES fix_includes.py)
-  if (fix_includes_path)
+  if(fix_includes_path)
     add_custom_target(iwyu_fix
       COMMAND "${fix_includes_path}" --noblank_lines --comments
               --nosafe_headers < "${CMAKE_BINARY_DIR}/iwyu.log" || true
@@ -482,13 +491,13 @@ endif(BUILD_TESTING)
 
 # we need some specific functions:
 if(NOT WIN32)
-    if(CMAKE_SYSTEM MATCHES "SunOS.*")
-        add_definitions("-D_XOPEN_SOURCE=600")
-    else()
-        add_definitions("-D_XOPEN_SOURCE=700")
-    endif(CMAKE_SYSTEM MATCHES "SunOS.*")
+  if(CMAKE_SYSTEM MATCHES "SunOS.*")
+    add_definitions("-D_XOPEN_SOURCE=600")
+  else()
+    add_definitions("-D_XOPEN_SOURCE=700")
+  endif(CMAKE_SYSTEM MATCHES "SunOS.*")
 else()
-    add_definitions("-D_USE_MATH_DEFINES")
+  add_definitions("-D_USE_MATH_DEFINES")
 endif()
 
 # Set default component name - that way external modules like RawSpeed will install their
@@ -496,11 +505,13 @@ endif()
 set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME DTApplication)
 
 # lets continue into build directories
-include(data/supported_extensions.cmake) # this file needs to be included first as it gets amended in bin/
-add_subdirectory(src "${DARKTABLE_BINDIR}") # directory needs to be there before data directory so that the correct CSS file gets installed
-add_subdirectory(data "${DARKTABLE_DATADIR}")
+# this file needs to be included first as it gets amended in src/ in build dir
+include(data/supported_extensions.cmake)
+# directory needs to be there before data directory so that the correct CSS file gets installed
+add_subdirectory(src)
+add_subdirectory(data)
 add_subdirectory(doc)
-add_subdirectory(tools "${DARKTABLE_DATADIR}/tools")
+add_subdirectory(tools)
 
 # This contains fixup_bundle
 # And adding a separate subderectory as a last one will make sure
@@ -511,11 +522,11 @@ include(cmake/ansel-packaging.cmake)
 
 # uninstall target
 configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cmake_uninstall.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
-    IMMEDIATE @ONLY)
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cmake_uninstall.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
+  IMMEDIATE @ONLY)
 
 add_custom_target(uninstall
-    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
+                  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
 
 feature_summary(WHAT ALL)

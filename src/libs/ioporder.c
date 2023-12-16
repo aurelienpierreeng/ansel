@@ -48,12 +48,12 @@ const char **views(dt_lib_module_t *self)
 
 uint32_t container(dt_lib_module_t *self)
 {
-  return DT_UI_CONTAINER_PANEL_RIGHT_BOTTOM;
+  return DT_UI_CONTAINER_PANEL_LEFT_CENTER;
 }
 
 int position()
 {
-  return 880;
+  return 0;
 }
 
 void update(dt_lib_module_t *self)
@@ -264,4 +264,3 @@ gboolean preset_autoapply(dt_lib_module_t *self)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

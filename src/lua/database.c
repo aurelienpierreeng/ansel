@@ -303,6 +303,10 @@ int dt_lua_init_database(lua_State *L)
   lua_pushcfunction(L, collection_numindex);
   dt_lua_type_register_number_const_type(L, type_id);
 
+  /* Workaround a lua stack issue - this needs further analysis */
+  int ltop = lua_gettop(L);
+  if (ltop > 0) lua_pop(L, ltop);
+
   lua_pushcfunction(L, dt_lua_event_multiinstance_register);
   lua_pushcfunction(L, dt_lua_event_multiinstance_destroy);
   lua_pushcfunction(L, dt_lua_event_multiinstance_trigger);

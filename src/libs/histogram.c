@@ -148,12 +148,12 @@ const char **views(dt_lib_module_t *self)
 
 uint32_t container(dt_lib_module_t *self)
 {
-  return g_strcmp0(dt_conf_get_string("plugins/darkroom/histogram/panel_position"), "right") ? DT_UI_CONTAINER_PANEL_LEFT_TOP : DT_UI_CONTAINER_PANEL_RIGHT_TOP;
+  return DT_UI_CONTAINER_PANEL_LEFT_CENTER;
 }
 
 int expandable(dt_lib_module_t *self)
 {
-  return 0;
+  return 1;
 }
 
 int position()

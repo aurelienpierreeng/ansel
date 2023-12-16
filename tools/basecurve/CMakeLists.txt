@@ -6,7 +6,7 @@ find_package(Exiv2 REQUIRED)
 include_directories(${Exiv2_INCLUDE_DIR})
 
 add_executable(ansel-curve-tool ansel-curve-tool.c exif-wrapper.cpp)
-if (OPENMP_FOUND)
+if(OPENMP_FOUND)
     set_target_properties(ansel-curve-tool PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
     if(OpenMP_CXX_INCLUDE_DIRS)
         include_directories(${OpenMP_CXX_INCLUDE_DIRS})

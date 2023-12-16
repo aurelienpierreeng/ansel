@@ -198,7 +198,7 @@ void dt_dev_process_preview(dt_develop_t *dev)
   if(err) fprintf(stderr, "[dev_process_preview] job queue exceeded!\n");
 }
 
-void dt_dev_refresh_ui_images(dt_develop_t *dev)
+void dt_dev_refresh_ui_images_real(dt_develop_t *dev)
 {
   // We need to get the shutdown atomic set to TRUE,
   // which is handled everytime history is changed,
@@ -214,12 +214,14 @@ void dt_dev_pixelpipe_rebuild(dt_develop_t *dev)
   dev->pipe->changed |= DT_DEV_PIPE_REMOVE;
   dev->preview_pipe->changed |= DT_DEV_PIPE_REMOVE;
   dt_pthread_mutex_unlock(&dev->history_mutex);
-  dt_dev_invalidate_all(dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate_all(dev);
 }
 
-void dt_dev_invalidate(dt_develop_t *dev, const char *caller, const char *file, const long line)
+void dt_dev_invalidate_real(dt_develop_t *dev)
 {
-  dt_print(DT_DEBUG_DEV, "[dev_process_image] sending killswitch signal from %s - in %s:%ld\n", caller, file, line);
+  dt_times_t start;
+  dt_get_times(&start);
+  dt_show_times(&start, "[dt_dev_invalidate] sending killswitch signal on running pipelines");
 
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
 
@@ -229,9 +231,11 @@ void dt_dev_invalidate(dt_develop_t *dev, const char *caller, const char *file, 
   dt_pthread_mutex_unlock(&dev->history_mutex);
 }
 
-void dt_dev_invalidate_zoom(dt_develop_t *dev, const char *caller, const char *file, const long line)
+void dt_dev_invalidate_zoom_real(dt_develop_t *dev)
 {
-  dt_print(DT_DEBUG_DEV, "[dev_process_image] sending killswitch signal from %s - in %s:%ld\n", caller, file, line);
+  dt_times_t start;
+  dt_get_times(&start);
+  dt_show_times(&start, "[dt_dev_invalidate_zoom] sending killswitch signal on running pipelines");
 
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
 
@@ -241,9 +245,11 @@ void dt_dev_invalidate_zoom(dt_develop_t *dev, const char *caller, const char *f
   dt_pthread_mutex_unlock(&dev->history_mutex);
 }
 
-void dt_dev_invalidate_preview(dt_develop_t *dev, const char *caller, const char *file, const long line)
+void dt_dev_invalidate_preview_real(dt_develop_t *dev)
 {
-  dt_print(DT_DEBUG_DEV, "[dev_process_preview] sending killswitch signal from %s - in %s:%ld\n", caller, file, line);
+  dt_times_t start;
+  dt_get_times(&start);
+  dt_show_times(&start, "[dt_dev_invalidate_preview] sending killswitch signal on running pipelines");
 
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
 
@@ -253,20 +259,19 @@ void dt_dev_invalidate_preview(dt_develop_t *dev, const char *caller, const char
   dt_pthread_mutex_unlock(&dev->history_mutex);
 }
 
-void dt_dev_invalidate_all(dt_develop_t *dev, const char *caller, const char *file, const long line)
+void dt_dev_invalidate_all_real(dt_develop_t *dev)
 {
   // Send killswitch ASAP
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
 
-  dt_dev_invalidate(dev, caller, file, line);
-  dt_dev_invalidate_preview(dev, caller, file, line);
+  dt_dev_invalidate(dev);
+  dt_dev_invalidate_preview(dev);
 }
 
 void dt_dev_process_preview_job(dt_develop_t *dev)
 {
   if(dev->gui_leaving) return;
-  if(!dev->small_buf.buf) return;
 
   dt_pthread_mutex_lock(&dev->preview_pipe_mutex);
   dt_control_log_busy_enter();
@@ -274,8 +279,20 @@ void dt_dev_process_preview_job(dt_develop_t *dev)
   dev->preview_status = DT_DEV_PIXELPIPE_RUNNING;
 
   // init pixel pipeline for preview.
-  dt_dev_pixelpipe_set_input(dev->preview_pipe, dev, (float *)dev->small_buf.buf, dev->small_buf.width,
-                             dev->small_buf.height, dev->small_buf.iscale);
+  dt_mipmap_buffer_t buf;
+  dt_mipmap_cache_get(darktable.mipmap_cache, &buf, dev->image_storage.id, DT_MIPMAP_F, DT_MIPMAP_BLOCKING, 'r');
+
+  if(!buf.buf || !buf.width || !buf.height)
+  {
+    dt_control_log_busy_leave();
+    dt_control_toast_busy_leave();
+    dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+    dt_pthread_mutex_unlock(&dev->preview_pipe_mutex);
+    return;
+  }
+
+  dt_dev_pixelpipe_set_input(dev->preview_pipe, dev, (float *)buf.buf, buf.width,
+                             buf.height, buf.iscale);
 
 // always process the whole downsampled mipf buffer, to allow for fast scrolling and mip4 write-through.
 restart:
@@ -288,6 +305,7 @@ restart:
     dt_control_log_busy_leave();
     dt_control_toast_busy_leave();
     dev->preview_status = DT_DEV_PIXELPIPE_INVALID;
+    dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
     dt_pthread_mutex_unlock(&dev->preview_pipe_mutex);
     return;
   }
@@ -311,6 +329,7 @@ restart:
       dt_control_log_busy_leave();
       dt_control_toast_busy_leave();
       dev->preview_status = DT_DEV_PIXELPIPE_INVALID;
+      dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
       dt_pthread_mutex_unlock(&dev->preview_pipe_mutex);
       return;
     }
@@ -324,6 +343,7 @@ restart:
   // if a widget needs to be redraw there's the DT_SIGNAL_*_PIPE_FINISHED signals
   dt_control_log_busy_leave();
   dt_control_toast_busy_leave();
+  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
   dt_pthread_mutex_unlock(&dev->preview_pipe_mutex);
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
@@ -333,7 +353,6 @@ restart:
 void dt_dev_process_image_job(dt_develop_t *dev)
 {
   if(dev->gui_leaving) return;
-  if(!dev->full_buf.buf) return;
 
   dt_pthread_mutex_lock(&dev->pipe_mutex);
   dt_control_log_busy_enter();
@@ -343,7 +362,20 @@ void dt_dev_process_image_job(dt_develop_t *dev)
 
   dt_times_t start;
   dt_get_times(&start);
-  dt_dev_pixelpipe_set_input(dev->pipe, dev, (float *)dev->full_buf.buf, dev->full_buf.width, dev->full_buf.height, 1.0);
+
+  dt_mipmap_buffer_t buf;
+  dt_mipmap_cache_get(darktable.mipmap_cache, &buf, dev->image_storage.id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
+
+  if(!buf.buf || !buf.width || !buf.height)
+  {
+    dt_control_log_busy_leave();
+    dt_control_toast_busy_leave();
+    dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+    dt_pthread_mutex_unlock(&dev->pipe_mutex);
+    return;
+  }
+
+  dt_dev_pixelpipe_set_input(dev->pipe, dev, (float *)buf.buf, buf.width, buf.height, 1.0);
 
   dt_dev_zoom_t zoom;
   float zoom_x = 0.0f, zoom_y = 0.0f, scale = 0.0f;
@@ -361,6 +393,7 @@ restart:
     dt_control_log_busy_leave();
     dt_control_toast_busy_leave();
     dev->image_status = DT_DEV_PIXELPIPE_INVALID;
+    dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
     dt_pthread_mutex_unlock(&dev->pipe_mutex);
     return;
   }
@@ -410,6 +443,7 @@ restart:
       dt_control_log_busy_leave();
       dt_control_toast_busy_leave();
       dev->image_status = DT_DEV_PIXELPIPE_INVALID;
+      dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
       dt_pthread_mutex_unlock(&dev->pipe_mutex);
       return;
     }
@@ -431,6 +465,7 @@ restart:
   // if a widget needs to be redrawn there's the DT_SIGNAL_*_PIPE_FINISHED signals
   dt_control_log_busy_leave();
   dt_control_toast_busy_leave();
+  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
   dt_pthread_mutex_unlock(&dev->pipe_mutex);
 
   if(dev->gui_attached && !dev->gui_leaving)
@@ -454,8 +489,15 @@ static inline int _dt_dev_load_raw(dt_develop_t *dev, const uint32_t imgid)
   dt_times_t start;
   dt_get_times(&start);
 
-  dt_mipmap_cache_get(darktable.mipmap_cache, &(dev->full_buf), imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
-  dt_mipmap_cache_get(darktable.mipmap_cache, &(dev->small_buf), imgid, DT_MIPMAP_F, DT_MIPMAP_BLOCKING, 'r');
+  // Test we got images. Also that populates the cache for later.
+  dt_mipmap_buffer_t buf;
+  dt_mipmap_cache_get(darktable.mipmap_cache, &buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
+  gboolean no_valid_image = buf.buf == NULL;
+  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+
+  dt_mipmap_cache_get(darktable.mipmap_cache, &buf, imgid, DT_MIPMAP_F, DT_MIPMAP_BLOCKING, 'r');
+  gboolean no_valid_thumb = buf.buf == NULL;
+  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
 
   dt_show_times_f(&start, "[dev]", "to load the image.");
 
@@ -463,13 +505,11 @@ static inline int _dt_dev_load_raw(dt_develop_t *dev, const uint32_t imgid)
   dev->image_storage = *image;
   dt_image_cache_read_release(darktable.image_cache, image);
 
-  return (dev->small_buf.buf == NULL || dev->full_buf.buf == NULL);
+  return (no_valid_image || no_valid_thumb);
 }
 
 void dt_dev_unload_image(dt_develop_t *dev)
 {
-  dt_mipmap_cache_release(darktable.mipmap_cache, &dev->full_buf);
-  dt_mipmap_cache_release(darktable.mipmap_cache, &dev->small_buf);
 }
 
 void dt_dev_reload_image(dt_develop_t *dev, const uint32_t imgid)
@@ -559,13 +599,14 @@ void dt_dev_configure(dt_develop_t *dev, int wd, int ht)
   {
     dev->width = wd;
     dev->height = ht;
-    dt_dev_invalidate_zoom(dev, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate_zoom(dev);
 
     if(dev->image_storage.id > -1 && darktable.mipmap_cache)
     {
       // Only if it's not our initial configure call, aka if we already have an image
       dt_control_queue_redraw_center();
       dt_dev_refresh_ui_images(dev);
+      dt_dev_reprocess_center(dev);
     }
   }
 }
@@ -623,32 +664,29 @@ int dt_dev_write_history_item(const int imgid, dt_dev_history_item_t *h, int32_t
   return 0;
 }
 
+
+
 static void _dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable,
-                                      gboolean new_item, gboolean no_image, gboolean include_masks)
+                                      gboolean force_new_item, gboolean no_image, gboolean include_masks)
 {
-  int kept_module = 0;
-  GList *history = g_list_nth(dev->history, dev->history_end);
   // look for leaks on top of history in two steps
   // first remove obsolete items above history_end
   // but keep the always-on modules
-  while(history)
+  for(GList *history = g_list_nth(dev->history, dev->history_end); history; history = g_list_next(history))
   {
-    GList *next = g_list_next(history);
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
     // printf("removing obsoleted history item: %s\n", hist->module->op);
 
-    //check if an earlier instance of the module exists
+    // Check if an earlier instance of the module exists.
+    // FIXME: Why do we delete only non-existing instances ?
     gboolean earlier_entry = FALSE;
-    GList *prior_history = g_list_nth(dev->history, dev->history_end - 1);
-    while(prior_history)
+    for(GList *prior_history = g_list_previous(history);
+        prior_history && earlier_entry == FALSE;
+        prior_history = g_list_previous(prior_history))
     {
       dt_dev_history_item_t *prior_hist = (dt_dev_history_item_t *)(prior_history->data);
       if(prior_hist->module->so == hist->module->so)
-      {
         earlier_entry = TRUE;
-        break;
-      }
-      prior_history = g_list_previous(prior_history);
     }
 
     if((!hist->module->hide_enable_button && !hist->module->default_enabled)
@@ -657,121 +695,76 @@ static void _dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module
       dt_dev_free_history_item(hist);
       dev->history = g_list_delete_link(dev->history, history);
     }
-    else
-      kept_module++;
-    history = next;
   }
-  // then remove NIL items there
-  while ((dev->history_end>0) && (! g_list_nth(dev->history, dev->history_end - 1)))
-    dev->history_end--;
 
-  dev->history_end += kept_module;
-
-  history = g_list_nth(dev->history, dev->history_end - 1);
-  dt_dev_history_item_t *hist = history ? (dt_dev_history_item_t *)(history->data) : 0;
-
-  // FIXME: Seriously ?
-  // Beside the terrible code, WHY THE FUCK do we mix GUI states (focus_hash, which is not even a hash)
-  // with history content ?
-  // History params have either changed or they have not. Take the list from the end,
-  // move upstream until you find the first unchanged item, and then move back to update
-  // whatever needs updating until you reach the end.
-  if(!history                                                  // no history yet, push new item
-     || new_item                                               // a new item is requested
-     || module != hist->module
-     || module->instance != hist->module->instance             // add new item for different op
-     || module->multi_priority != hist->module->multi_priority // or instance
-     || ((dev->focus_hash != hist->focus_hash)                 // or if focused out and in
-         // but only add item if there is a difference at all for the same module
-         && ((module->params_size != hist->module->params_size)
-             || include_masks
-             || (module->params_size == hist->module->params_size
-                 && memcmp(hist->params, module->params, module->params_size)))))
+  // Check if the current module to append to history is actually the same as the last one in history.
+  GList *last = g_list_last(dev->history);
+  gboolean new_is_old = FALSE;
+  if(last && last->data)
   {
-    // new operation, push new item
-    // printf("adding new history item %d - %s\n", dev->history_end, module->op);
-    // if(history) printf("because item %d - %s is different operation.\n", dev->history_end-1,
-    // ((dt_dev_history_item_t *)history->data)->module->op);
-    dev->history_end++;
+    dt_dev_history_item_t *last_item = (dt_dev_history_item_t *)last->data;
+    dt_iop_module_t *last_module = last_item->module;
+    new_is_old = dt_iop_check_modules_equal(module, last_module);
+  }
 
+  dt_dev_history_item_t *hist;
+  if(force_new_item || !new_is_old)
+  {
     hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
-    if(enable)
-    {
-      module->enabled = TRUE;
-      if(!no_image)
-      {
-        if(module->off)
-        {
-          ++darktable.gui->reset;
-          dt_iop_gui_set_enable_button(module);
-          --darktable.gui->reset;
-        }
-      }
-    }
+
+    // Init name
     g_strlcpy(hist->op_name, module->op, sizeof(hist->op_name));
-    hist->focus_hash = dev->focus_hash;
-    hist->enabled = module->enabled;
-    hist->module = module;
+
+    // Init buffers
     hist->params = malloc(module->params_size);
+
+    // Init base params
+    hist->module = module;
     hist->iop_order = module->iop_order;
     hist->multi_priority = module->multi_priority;
-    g_strlcpy(hist->multi_name, module->multi_name, sizeof(hist->multi_name));
-    /* allocate and set hist blend_params */
+
     hist->blend_params = malloc(sizeof(dt_develop_blend_params_t));
-    memcpy(hist->params, module->params, module->params_size);
-    memcpy(hist->blend_params, module->blend_params, sizeof(dt_develop_blend_params_t));
-    if(include_masks)
-      hist->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
-    else
-      hist->forms = NULL;
 
     dev->history = g_list_append(dev->history, hist);
+
     if(!no_image)
     {
       dev->pipe->changed |= DT_DEV_PIPE_SYNCH;
-      dev->preview_pipe->changed |= DT_DEV_PIPE_SYNCH; // topology remains, as modules are fixed for now.
+      dev->preview_pipe->changed |= DT_DEV_PIPE_SYNCH;
     }
   }
   else
   {
-    // same operation, change params
-    // printf("changing same history item %d - %s\n", dev->history_end-1, module->op);
-    hist = (dt_dev_history_item_t *)history->data;
-    memcpy(hist->params, module->params, module->params_size);
+    hist = (dt_dev_history_item_t *)last->data;
 
-    if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
-      memcpy(hist->blend_params, module->blend_params, sizeof(dt_develop_blend_params_t));
-
-    // if the user changed stuff and the module is still not enabled, do it:
-    if(!hist->enabled && !module->enabled)
-    {
-      module->enabled = 1;
-      if(!no_image)
-      {
-        if(module->off)
-        {
-          ++darktable.gui->reset;
-          dt_iop_gui_set_enable_button(module);
-          --darktable.gui->reset;
-        }
-      }
-    }
-    hist->iop_order = module->iop_order;
-    hist->multi_priority = module->multi_priority;
-    memcpy(hist->multi_name, module->multi_name, sizeof(module->multi_name));
-    hist->enabled = module->enabled;
-
-    if(include_masks)
-    {
-      g_list_free_full(hist->forms, (void (*)(void *))dt_masks_free_form);
-      hist->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
-    }
     if(!no_image)
     {
       dev->pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
       dev->preview_pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
     }
   }
+
+  g_strlcpy(hist->multi_name, module->multi_name, sizeof(hist->multi_name));
+  memcpy(hist->params, module->params, module->params_size);
+
+  // We copy blending params even if the module doesn't support blending.
+  // It's stupid but other parts of the soft rely on that.
+  memcpy(hist->blend_params, module->blend_params, sizeof(dt_develop_blend_params_t));
+
+  if(include_masks)
+  {
+    if(hist->forms) g_list_free_full(hist->forms, (void (*)(void *))dt_masks_free_form);
+    hist->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+  }
+  else
+  {
+    hist->forms = NULL;
+  }
+
+  if(enable) hist->enabled = module->enabled = TRUE;
+  else       hist->enabled = module->enabled;
+
+  dev->history_end = g_list_length(dev->history);
 }
 
 const dt_dev_history_item_t *dt_dev_get_history_item(dt_develop_t *dev, const char *op)
@@ -843,10 +836,18 @@ void _dev_add_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolean 
 // This is why they directly start a pipeline recompute.
 // Otherwise, please keep GUI and pipeline fully separated.
 
-void dt_dev_add_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable)
+void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable)
 {
+  dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
+  dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
+
   _dev_add_history_item(dev, module, enable, FALSE);
-  dt_dev_invalidate_all(dev, __FUNCTION__, __FILE__, __LINE__);
+
+  dt_pthread_mutex_lock(&dev->history_mutex);
+  dev->image_status = DT_DEV_PIXELPIPE_DIRTY;
+  dev->preview_status = DT_DEV_PIXELPIPE_DIRTY;
+  dt_pthread_mutex_unlock(&dev->history_mutex);
+
   dt_control_queue_redraw_center();
   dt_dev_refresh_ui_images(dev);
 }
@@ -914,8 +915,7 @@ void dt_dev_free_history_item(gpointer data)
 
 void dt_dev_reload_history_items(dt_develop_t *dev)
 {
-  dev->focus_hash = 0;
-
+  // FIXME: [CRITICAL] should lock the image history at the app level
   dt_ioppr_set_default_iop_order(dev, dev->image_storage.id);
   dt_dev_pop_history_items(dev, 0);
 
@@ -979,7 +979,7 @@ void dt_dev_reload_history_items(dt_develop_t *dev)
   // we update show params for multi-instances for each other instances
   dt_dev_modules_update_multishow(dev);
 
-  dt_dev_invalidate_all(dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate_all(dev);
 }
 
 void dt_dev_pop_history_items_ext(dt_develop_t *dev, int32_t cnt)
@@ -1055,7 +1055,6 @@ void dt_dev_pop_history_items(dt_develop_t *dev, int32_t cnt)
   dt_pthread_mutex_lock(&dev->history_mutex);
   GList *dev_iop = g_list_copy(dev->iop);
   dt_dev_pop_history_items_ext(dev, cnt);
-  dt_pthread_mutex_unlock(&dev->history_mutex);
 
   // update all gui modules
   GList *modules = dev->iop;
@@ -1065,8 +1064,6 @@ void dt_dev_pop_history_items(dt_develop_t *dev, int32_t cnt)
     dt_iop_gui_update(module);
     modules = g_list_next(modules);
   }
-
-  dt_pthread_mutex_lock(&dev->history_mutex);
 
   // check if the order of modules has changed
   int dev_iop_changed = (g_list_length(dev_iop) != g_list_length(dev->iop));
@@ -1128,6 +1125,20 @@ static void _cleanup_history(const int imgid)
   sqlite3_finalize(stmt);
 }
 
+guint dt_dev_mask_history_overload(dt_develop_t *dev, guint threshold)
+{
+  // Count all the mask forms used × history entries, up to a certain threshold.
+  // Stop counting when the threshold is reached, for performance.
+  guint states = 0;
+  for(GList *history = g_list_first(dev->history); history; history = g_list_next(history))
+  {
+    dt_dev_history_item_t *hist_item = (dt_dev_history_item_t *)(history->data);
+    states += g_list_length(hist_item->forms);
+    if(states > threshold) break;
+  }
+  return states;
+}
+
 static void _warn_about_history_overuse(dt_develop_t *dev)
 {
   /* History stores one entry per module, everytime a parameter is changed.
@@ -1135,22 +1146,12 @@ static void _warn_about_history_overuse(dt_develop_t *dev)
   *  All that is saved into database and XMP. When history entries × number of mask > 250,
   *  we get a really bad performance penalty.
   */
-  gint states = 0;
-
-  GList *history = dev->history;
-  while(history)
-  {
-    dt_dev_history_item_t *hist_item = (dt_dev_history_item_t *)(history->data);
-    states += g_list_length(hist_item->forms);
-    history = g_list_next(history);
-  }
+  guint states = dt_dev_mask_history_overload(dev, 250);
 
   if(states > 250)
-  {
     dt_toast_log(_("Your history is storing %d mask states. To ensure smooth operation, consider compressing "
                    "history and removing unused masks."),
                  states);
-  }
 }
 
 void dt_dev_write_history_ext(dt_develop_t *dev, const int imgid)
@@ -1197,6 +1198,7 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int imgid)
 
 void dt_dev_write_history(dt_develop_t *dev)
 {
+  // FIXME: [CRITICAL] should lock the image history at the app level
   dt_pthread_mutex_lock(&dev->history_mutex);
   dt_dev_write_history_ext(dev, dev->image_storage.id);
   dt_pthread_mutex_unlock(&dev->history_mutex);
@@ -1455,27 +1457,14 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
 
 static void _dev_add_default_modules(dt_develop_t *dev, const int imgid)
 {
-  //start with those modules that cannot be disabled
+  // modules that cannot be disabled
+  // or modules that can be disabled but are auto-on
   for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
 
     if(!dt_history_check_module_exists(imgid, module->op, FALSE)
        && module->default_enabled
-       && module->hide_enable_button
-       && !(module->flags() & IOP_FLAGS_NO_HISTORY_STACK))
-    {
-      _dev_insert_module(dev, module, imgid);
-    }
-  }
-  //now modules that can be disabled but are auto-on
-  for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
-  {
-    dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
-
-    if(!dt_history_check_module_exists(imgid, module->op, FALSE)
-       && module->default_enabled
-       && !module->hide_enable_button
        && !(module->flags() & IOP_FLAGS_NO_HISTORY_STACK))
     {
       _dev_insert_module(dev, module, imgid);
@@ -1940,7 +1929,7 @@ void dt_dev_reprocess_center(dt_develop_t *dev)
   // Flush the caches and recompute from scratch
   if(darktable.gui->reset || !dev || !dev->gui_attached) return;
   dt_dev_pixelpipe_cache_flush(&(dev->pipe->cache));
-  dt_dev_invalidate(dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate(dev);
 }
 
 void dt_dev_reprocess_preview(dt_develop_t *dev)
@@ -1948,7 +1937,7 @@ void dt_dev_reprocess_preview(dt_develop_t *dev)
   // Flush the caches and recompute from scratch
   if(darktable.gui->reset || !dev || !dev->gui_attached) return;
   dt_dev_pixelpipe_cache_flush(&(dev->preview_pipe->cache));
-  dt_dev_invalidate_preview(dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate_preview(dev);
 }
 
 void dt_dev_reprocess_all(dt_develop_t *dev)
@@ -2564,7 +2553,7 @@ int dt_dev_sync_pixelpipe_hash(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
   // timed out. let's see if history stack has changed
   if(pipe->changed & (DT_DEV_PIPE_TOP_CHANGED | DT_DEV_PIPE_REMOVE | DT_DEV_PIPE_SYNCH))
   {
-    dt_dev_invalidate(dev, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate(dev);
     // pretend that everything is fine
     return TRUE;
   }

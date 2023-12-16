@@ -391,6 +391,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = malloc(sizeof(dt_iop_crop_data_t));
+  piece->data_size = sizeof(dt_iop_crop_data_t);
 }
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -790,8 +791,6 @@ static void _event_aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *sel
     dt_conf_set_int("plugins/darkroom/crop/ratio_d", abs(p->ratio_d));
     dt_conf_set_int("plugins/darkroom/crop/ratio_n", abs(p->ratio_n));
     if(darktable.gui->reset) return;
-    _aspect_apply(self, GRAB_HORIZONTAL);
-    dt_control_queue_redraw_center();
   }
 
   // Search if current aspect ratio matches something known
@@ -824,6 +823,8 @@ static void _event_aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *sel
     dt_bauhaus_combobox_set(g->aspect_presets, act);
 
   --darktable.gui->reset;
+
+  if(!darktable.gui->reset) gui_changed(self, g->aspect_presets, NULL);
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
@@ -855,6 +856,10 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     g->clip_h = p->ch - g->clip_y;
     _aspect_apply(self, GRAB_BOTTOM);
   }
+  else if(w == g->aspect_presets)
+  {
+    _aspect_apply(self, GRAB_ALL);
+  }
 
   // update all sliders, as their values may have change to keep aspect ratio
   dt_bauhaus_slider_set(g->cx, g->clip_x);
@@ -869,6 +874,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   --darktable.gui->reset;
 
   _commit_box(self, g, p);
+  dt_control_queue_redraw_center();
+  dt_control_navigation_redraw();
 }
 
 void gui_reset(struct dt_iop_module_t *self)
@@ -934,8 +941,8 @@ static void _event_key_swap(dt_iop_module_t *self)
 {
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
   p->ratio_d = -p->ratio_d;
-  _aspect_apply(self, GRAB_HORIZONTAL);
-  dt_control_queue_redraw_center();
+  _aspect_apply(self, GRAB_ALL);
+  gui_changed(self, NULL, NULL);
 }
 
 static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *self)
@@ -954,6 +961,8 @@ static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *se
     g->cropping = GRAB_CENTER;
     gtk_button_set_label(GTK_BUTTON(button), _("Cancel"));
     gtk_widget_set_sensitive(g->commit_button, TRUE);
+    dt_control_queue_redraw_center();
+    dt_control_navigation_redraw();
   }
   else
   {
@@ -971,27 +980,27 @@ static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *se
   }
 
   // It sucks that we need to invalidate the preview too but we need its final dimension.
-  dt_dev_invalidate_all(self->dev, __FUNCTION__, __FILE__, __LINE__);
-  dt_control_queue_redraw_center();
-  dt_control_navigation_redraw();
+  dt_dev_invalidate_all(self->dev);
   dt_dev_refresh_ui_images(self->dev);
 }
 
 static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
 {
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
-  dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
 
   // Close edit mode on commit
   g->editing = FALSE;
+  gtk_widget_set_sensitive(g->commit_button, FALSE);
 
   // Commit history and refresh view
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 
   // The following will de-activate the edit button and trigger the callback.
   // Prevent the callback to revert the param change.
-  memcpy(&g->previous_params, p, sizeof(dt_iop_crop_params_t));
+  g_signal_handlers_block_by_func(g->edit_button, _enter_edit_mode, self);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->edit_button), FALSE);
+  gtk_button_set_label(GTK_BUTTON(g->edit_button), _("Edit"));
+  g_signal_handlers_unblock_by_func(g->edit_button, _enter_edit_mode, self);
 }
 
 static void _event_aspect_flip(GtkWidget *button, dt_iop_module_t *self)
@@ -1049,7 +1058,9 @@ void gui_init(struct dt_iop_module_t *self)
     { _("freehand"), 0, 0 },
     { _("original image"), 1, 0 },
     { _("square"), 1, 1 },
+    { _("7:6, 6x7"), 7, 6 },
     { _("10:8 in print"), 2445, 2032 },
+    { _("6:5, 5x6"), 6, 5 },
     { _("5:4, 4x5, 8x10"), 5, 4 },
     { _("11x14"), 14, 11 },
     { _("8.5x11, letter"), 110, 85 },
@@ -1059,13 +1070,16 @@ void gui_init(struct dt_iop_module_t *self)
     { _("3:2, 4x6, 35mm"), 3, 2 },
     { _("16:10, 8x5"), 16, 10 },
     { _("golden cut"), 16180340, 10000000 },
+    { _("5:3, 12x20"), 5, 3 },
     { _("16:9, HDTV"), 16, 9 },
     { _("widescreen"), 185, 100 },
-    { _("2:1, univisium"), 2, 1 },
-    { _("cinemascope"), 235, 100 },
-    { _("21:9"), 237, 100 },
-    { _("anamorphic"), 239, 100 },
-    { _("3:1, panorama"), 300, 100 },
+    { _("2:1, Univisium"), 2, 1 },
+    { _("Cinemascope"), 235, 100 },
+    { _("21:9"), 7, 3 },
+    { _("Anamorphic"), 239, 100 },
+    { _("65:24, XPan"), 65, 24 },
+    { _("3:1, panorama"), 3, 1 },
+    { _("4:1, Polyvision"), 4, 1 },
   };
 
   const int aspects_count = sizeof(aspects) / sizeof(dt_iop_crop_aspect_t);
@@ -1169,7 +1183,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(GTK_TOGGLE_BUTTON(g->edit_button), "toggled", G_CALLBACK(_enter_edit_mode), self);
   gtk_box_pack_start(GTK_BOX(box), g->edit_button, TRUE, TRUE, 0);
 
-  g->commit_button = dt_action_button_new((dt_lib_module_t *)self, N_("Validate"), _event_commit_clicked, self, _("Validate changes"), 0, 0);
+  g->commit_button = dt_action_button_new((dt_lib_module_t *)self, N_("Apply"), _event_commit_clicked, self, _("Apply changes"), 0, 0);
   gtk_box_pack_start(GTK_BOX(box), g->commit_button, TRUE, TRUE, 0);
   gtk_widget_set_sensitive(g->commit_button, FALSE);
 
@@ -1276,26 +1290,30 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   cairo_translate(cr, -.5f * g->wd - g->zoom_x * g->wd, -.5f * g->ht - g->zoom_y * g->ht);
 
   double dashes = DT_PIXEL_APPLY_DPI(5.0) / g->zoom_scale;
+  double border_width = dashes / 2.;
 
   // draw cropping window
   float pzx, pzy;
   dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery, &pzx, &pzy);
   pzx += 0.5f;
   pzy += 0.5f;
+
+  cairo_set_line_width(cr, border_width);
+
   if(_set_max_clip(self))
   {
-    cairo_set_source_rgba(cr, .2, .2, .2, .8);
+    cairo_set_source_rgba(cr, .1, .1, .1, .8);
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
     cairo_rectangle(cr, g->clip_max_x * g->wd, g->clip_max_y * g->ht,
                         g->clip_max_w * g->wd, g->clip_max_h * g->ht);
-    cairo_rectangle(cr, g->clip_x * g->wd, g->clip_y * g->ht,
-                        g->clip_w * g->wd, g->clip_h * g->ht);
+    cairo_rectangle(cr, g->clip_x * g->wd - border_width / 2., g->clip_y * g->ht - border_width / 2.,
+                        g->clip_w * g->wd + border_width, g->clip_h * g->ht + border_width);
     cairo_fill(cr);
   }
   if(g->clip_x > .0f || g->clip_y > .0f || g->clip_w < 1.0f || g->clip_h < 1.0f)
   {
-    cairo_set_line_width(cr, dashes / 2.0);
-    cairo_rectangle(cr, g->clip_x * g->wd, g->clip_y * g->ht, g->clip_w * g->wd, g->clip_h * g->ht);
+    cairo_rectangle(cr, g->clip_x * g->wd - border_width / 2., g->clip_y * g->ht - border_width / 2.,
+                        g->clip_w * g->wd + border_width, g->clip_h * g->ht + border_width);
     dt_draw_set_color_overlay(cr, TRUE, 1.0);
     cairo_stroke(cr);
   }

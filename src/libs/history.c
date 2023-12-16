@@ -156,6 +156,7 @@ void gui_init(dt_lib_module_t *self)
 void gui_cleanup(dt_lib_module_t *self)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_history_change_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_history_will_change_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_history_module_remove_callback), self);
   g_free(self->data);
   self->data = NULL;
@@ -1068,6 +1069,8 @@ static void _lib_history_change_callback(gpointer instance, gpointer user_data)
 
 static void _lib_history_truncate(gboolean compress)
 {
+  // FIXME: [CRITICAL] should lock the image history at the app level
+
   const int32_t imgid = darktable.develop->image_storage.id;
   if(!imgid) return;
 
@@ -1183,7 +1186,7 @@ static gboolean _lib_history_button_clicked_callback(GtkWidget *widget, GdkEvent
   dt_iop_connect_accels_all();
   dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
 
-  dt_dev_invalidate_all(darktable.develop, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate_all(darktable.develop);
   dt_dev_refresh_ui_images(darktable.develop);
   return FALSE;
 }

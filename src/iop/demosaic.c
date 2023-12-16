@@ -1447,6 +1447,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = malloc(sizeof(dt_iop_demosaic_data_t));
+  piece->data_size = sizeof(dt_iop_demosaic_data_t);
 }
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -1542,7 +1543,7 @@ static void _visualize_callback(GtkWidget *quad, gpointer user_data)
   dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
 
   g->visual_mask = dt_bauhaus_widget_get_quad_active(quad);
-  dt_dev_invalidate(self->dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate(self->dev);
   dt_dev_refresh_ui_images(self->dev);
 }
 
@@ -1554,7 +1555,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     const gboolean was_dualmask = g->visual_mask;
     dt_bauhaus_widget_set_quad_active(g->dual_thrs, FALSE);
     g->visual_mask = FALSE;
-    if(was_dualmask) dt_dev_invalidate(self->dev, __FUNCTION__, __FILE__, __LINE__);
+    if(was_dualmask) dt_dev_invalidate(self->dev);
     dt_dev_refresh_ui_images(self->dev);
   }
 }

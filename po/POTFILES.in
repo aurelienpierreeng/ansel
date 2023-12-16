@@ -86,10 +86,10 @@ build/lib64/ansel/plugins/introspection_vignette.c
 build/lib64/ansel/plugins/introspection_watermark.c
 build/lib64/ansel/plugins/introspection_zonesystem.c
 build/lib64/ansel/plugins/lighttable/tools/darktable_authors.h
-build/share/ansel/ansel.desktop.in
+build/share/ansel/photos.ansel.app.desktop.in
 data/photos.ansel.app.appdata.xml.in
-data/build/ansel.desktop.in
-data/ansel.desktop.in
+data/build/photos.ansel.app.desktop.in
+data/photos.ansel.app.desktop.in
 data/anselconfig.dtd
 data/anselconfig.xml.in
 src/bauhaus/bauhaus.c

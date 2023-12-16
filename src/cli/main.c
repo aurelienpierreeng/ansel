@@ -1,19 +1,20 @@
 /*
-    This file is part of darktable,
+    This file is part of ansel,
     Copyright (C) 2012-2021 darktable developers.
+    Copyright (C) 2023 ansel developers.
 
-    darktable is free software: you can redistribute it and/or modify
+    ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    darktable is distributed in the hope that it will be useful,
+    ansel is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+    along with ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 /**
@@ -118,6 +119,7 @@ static void icc_types()
   fprintf(stderr, " HLG_REC2020\n");
   fprintf(stderr, " PQ_P3\n");
   fprintf(stderr, " HLG_P3\n");
+  fprintf(stderr, " DISPLAY_P3\n");
 }
 
 #define ICC_FROM_STR(name) if(!strcmp(option, #name)) return DT_COLORSPACE_ ## name;
@@ -149,6 +151,7 @@ static dt_colorspaces_color_profile_type_t get_icc_type(const char* option)
   ICC_FROM_STR(HLG_REC2020);
   ICC_FROM_STR(PQ_P3);
   ICC_FROM_STR(HLG_P3);
+  ICC_FROM_STR(DISPLAY_P3);
   return DT_COLORSPACE_LAST;
 }
 #undef ICC_FROM_STR

@@ -1,19 +1,20 @@
 /*
-    This file is part of darktable,
+    This file is part of ansel,
     Copyright (C) 2013-2021 darktable developers.
+    Copyright (C) 2023 ansel developers.
 
-    darktable is free software: you can redistribute it and/or modify
+    ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    darktable is distributed in the hope that it will be useful,
+    ansel is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+    along with ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #ifdef HAVE_CONFIG_H
@@ -30,6 +31,7 @@
 #include <stdlib.h>
 
 #include <webp/encode.h>
+#include <webp/mux.h>
 
 DT_MODULE(2)
 
@@ -90,7 +92,7 @@ const char *get_error_str(int err)
 {
   if (err < 0 || err >= sizeof(EncoderError)/sizeof(EncoderError[0]))
   {
-    return "unknown error (err=%d). consider filling a bug to DT to update the webp error list";
+    return "Unknown error. Consider open an issue to ansel to update the webp error list.";
   }
   return EncoderError[err];
 }
@@ -115,32 +117,31 @@ void cleanup(dt_imageio_module_format_t *self)
 {
 }
 
-static int FileWriter(const uint8_t *data, size_t data_size, const WebPPicture *const pic)
-{
-  FILE *const out = (FILE *)pic->custom_ptr;
-  return data_size ? (fwrite(data, data_size, 1, out) == 1) : 1;
-}
-
 int write_image(dt_imageio_module_data_t *webp, const char *filename, const void *in_tmp,
                 dt_colorspaces_color_profile_type_t over_type, const char *over_filename,
                 void *exif, int exif_len, int imgid, int num, int total, struct dt_dev_pixelpipe_t *pipe,
                 const gboolean export_masks)
 {
+  int res = 1;
   FILE *out = NULL;
+  uint8_t *buf = NULL;
   WebPPicture pic;
-  int pic_init = 0;
+  WebPMemoryWriter writer;
+  WebPMemoryWriterInit(&writer);
+  WebPData icc_profile;
+  WebPDataInit(&icc_profile);
+  WebPData bitstream;
+  WebPDataInit(&bitstream);
+  WebPData assembled_data;
+  WebPDataInit(&assembled_data);
+  WebPMux *mux = WebPMuxNew();
+  WebPMuxError err;
 
   dt_imageio_webp_t *webp_data = (dt_imageio_webp_t *)webp;
-  out = g_fopen(filename, "w+b");
-  if (!out)
-  {
-    fprintf(stderr, "[webp export] error saving to %s\n", filename);
-    goto error;
-  }
 
   // Create, configure and validate a WebPConfig instance
   WebPConfig config;
-  if(!WebPConfigPreset(&config, webp_data->hint, (float)webp_data->quality)) goto error;
+  if(!WebPConfigPreset(&config, webp_data->hint, (float)webp_data->quality)) goto out;
 
   // TODO(jinxos): expose more config options in the UI
   config.lossless = webp_data->comp_type;
@@ -154,16 +155,42 @@ int write_image(dt_imageio_module_data_t *webp, const char *filename, const void
   if(!WebPValidateConfig(&config))
   {
     fprintf(stderr, "[webp export] error validating encoder configuration\n");
-    goto error;
+    goto out;
   }
 
-  if(!WebPPictureInit(&pic)) goto error;
-  pic_init = 1;
+  // embed ICC profile
+  cmsHPROFILE out_profile = dt_colorspaces_get_output_profile(imgid, &over_type, over_filename)->profile;
+  uint32_t len = 0;
+  cmsSaveProfileToMem(out_profile, NULL, &len);
+  if(len > 0)
+  {
+    buf = (uint8_t *)g_malloc(len);
+    if(buf)
+    {
+      cmsSaveProfileToMem(out_profile, buf, &len);
+      icc_profile.bytes = buf;
+      icc_profile.size = len;
+      err = WebPMuxSetChunk(mux, "ICCP", &icc_profile, 0);
+      if(err != WEBP_MUX_OK)
+      {
+        fprintf(stderr, "[webp export] error adding ICC profile to WebP stream\n");
+        goto out;
+      }
+    }
+    else
+    {
+      fprintf(stderr, "[webp export] error allocating ICC profile buffer\n");
+      goto out;
+    }
+  }
+
+  // encode image data to memory and add to mux
+  if(!WebPPictureInit(&pic)) goto out;
   pic.width = webp_data->global.width;
   pic.height = webp_data->global.height;
   pic.use_argb = !!(config.lossless);
-  pic.writer = FileWriter;
-  pic.custom_ptr = out;
+  pic.writer = WebPMemoryWrite;
+  pic.custom_ptr = &writer;
 
   WebPPictureImportRGBX(&pic, (const uint8_t *)in_tmp, webp_data->global.width * 4);
   if(!config.lossless)
@@ -172,27 +199,57 @@ int write_image(dt_imageio_module_data_t *webp, const char *filename, const void
     // let the encoder where best to spend its bits instead of forcing it
     // to spend bits equally on RGB data that doesn't weight the same when
     // considering the human visual system.
-    WebPPictureARGBToYUVA(&pic, WEBP_YUV420A);
+    // use the slower, but better and sharper YUV conversion.
+    WebPPictureSharpARGBToYUVA(&pic);
   }
 
   if(!WebPEncode(&config, &pic))
   {
-    fprintf(stderr, "[webp export] error during encoding (err:%d - %s)\n",
+    fprintf(stderr, "[webp export] error during encoding (error: %d - %s)\n",
             pic.error_code, get_error_str(pic.error_code));
-    goto error;
+    goto out;
   }
 
+  bitstream.bytes = writer.mem;
+  bitstream.size = writer.size;
+  err = WebPMuxSetImage(mux, &bitstream, 0);
+  if(err != WEBP_MUX_OK)
+  {
+    fprintf(stderr, "[webp export] error adding image to WebP stream\n");
+    goto out;
+  }
+
+  // finally write out assembled data to file
+  err = WebPMuxAssemble(mux, &assembled_data);
+  if(err != WEBP_MUX_OK)
+  {
+    fprintf(stderr, "[webp export] error assembling the WebP file\n");
+    goto out;
+  }
+
+  out = g_fopen(filename, "w+b");
+  if(!out)
+  {
+    fprintf(stderr, "[webp export] error creating file %s\n", filename);
+    goto out;
+  }
+  if(fwrite(assembled_data.bytes, assembled_data.size, 1, out) != 1)
+  {
+    fprintf(stderr, "[webp export] error writing %zu bytes to file %s\n", assembled_data.size, filename);
+    goto out;
+  }
+
+  res = 0;
+
+out:
   WebPPictureFree(&pic);
+  WebPMemoryWriterClear(&writer); // no need to WebPDataClear(&bitstream) as well
+  g_free(buf); // instead of WebPDataClear(&icc_profile)
+  WebPDataClear(&assembled_data);
+  WebPMuxDelete(mux);
   fclose(out);
-
-  dt_exif_write_blob(exif, exif_len, filename, 1);
-
-  return 0;
-
-error:
-  if (pic_init) WebPPictureFree(&pic);
-  if(out) fclose(out);
-  return 1;
+  if(!res && exif) dt_exif_write_blob(exif, exif_len, filename, 1);
+  return res;
 }
 
 size_t params_size(dt_imageio_module_format_t *self)

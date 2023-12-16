@@ -2400,18 +2400,6 @@
     <shortdescription/>
     <longdescription/>
   </dtconfig>
-  <dtconfig prefs="misc" section="interface" restart="true">
-    <name>plugins/darkroom/histogram/panel_position</name>
-    <type>
-       <enum>
-          <option>left</option>
-          <option>right</option>
-       </enum>
-    </type>
-    <default>right</default>
-    <shortdescription>position of the scopes module</shortdescription>
-    <longdescription>position the scopes at the top-left or top-right of the screen</longdescription>
-  </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/histogram/histogram</name>
     <type>

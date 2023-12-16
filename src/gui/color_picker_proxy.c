@@ -214,7 +214,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     }
     // force applying the next incoming sample
     self->changed = TRUE;
-    dt_dev_invalidate_all(darktable.develop, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate_all(darktable.develop);
   }
   else
   {

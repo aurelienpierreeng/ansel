@@ -275,7 +275,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
       g->button_down = 0;
       g->call_auto_levels = 1;
 
-      dt_dev_invalidate_all(self->dev, __FUNCTION__, __FILE__, __LINE__);
+      dt_dev_invalidate_all(self->dev);
       dt_dev_refresh_ui_images(self->dev);
     }
     else
@@ -702,7 +702,7 @@ static void _auto_levels_callback(GtkButton *button, dt_iop_module_t *self)
   }
   dt_iop_gui_leave_critical_section(self);
 
-  dt_dev_invalidate_all(self->dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate_all(self->dev);
   dt_dev_refresh_ui_images(self->dev);
 }
 
@@ -861,6 +861,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = malloc(sizeof(dt_iop_rgblevels_data_t));
+  piece->data_size = sizeof(dt_iop_rgblevels_data_t);
 }
 
 void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

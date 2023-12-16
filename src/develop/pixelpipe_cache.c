@@ -202,7 +202,7 @@ void dt_dev_pixelpipe_cache_print(dt_dev_pixelpipe_cache_t *cache)
     if(cache->hash[k] == (uint64_t)-1)
       printf("pixelpipe cacheline %d unused\n", k);
     else
-      printf("pixelpipe cacheline %d used %d by %lu\n", k, cache->used[k], cache->hash[k]);
+      printf("pixelpipe cacheline %d used %d by %llu\n", k, cache->used[k], (long long unsigned int)cache->hash[k]);
   }
   printf("cache hit rate so far: %.3f\n", (cache->queries - cache->misses) / (float)cache->queries);
 }

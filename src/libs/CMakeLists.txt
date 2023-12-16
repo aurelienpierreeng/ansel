@@ -1,4 +1,4 @@
-include_directories("${DARKTABLE_BINDIR}/")
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/..)
 
 include(manage-symbol-visibility)
 
@@ -100,19 +100,19 @@ endif(CUPS_FOUND)
 
 # Add libs references
 foreach(module ${MODULES})
-	target_link_libraries(${module} lib_ansel)
+  target_link_libraries(${module} lib_ansel)
 endforeach(module)
 
 # Add installation target for each module
 # TODO: Modules are now not only lighttable related and should be placed
 #       in a better matching structure then just in lighttable directory.
 foreach(module ${MODULES})
-    if (WIN32)
-      #_detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/ansel/plugins/lighttable)
-    else()
-        set_target_properties(${module}
-                              PROPERTIES
-                              INSTALL_RPATH ${CMAKE_INSTALL_LIBDIR_RPATH})
-    endif(WIN32)
-    install(TARGETS ${module} DESTINATION ${CMAKE_INSTALL_LIBDIR}/ansel/plugins/lighttable COMPONENT DTApplication)
+  if(WIN32)
+    # _detach_debuginfo(${module} ${CMAKE_INSTALL_LIBDIR}/ansel/plugins/lighttable)
+  else()
+    set_target_properties(${module}
+                          PROPERTIES
+                          INSTALL_RPATH ${RPATH_ORIGIN}/../../..)
+  endif(WIN32)
+  install(TARGETS ${module} DESTINATION ${CMAKE_INSTALL_LIBDIR}/ansel/plugins/lighttable COMPONENT DTApplication)
 endforeach(module)

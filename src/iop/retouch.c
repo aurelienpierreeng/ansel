@@ -1538,7 +1538,7 @@ static gboolean rt_display_wavelet_scale_callback(GtkToggleButton *togglebutton,
   }
   dt_iop_gui_leave_critical_section(self);
 
-  dt_dev_invalidate(self->dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate(self->dev);
   dt_dev_refresh_ui_images(self->dev);
 
   gtk_toggle_button_set_active(togglebutton, g->display_wavelet_scale);
@@ -2058,6 +2058,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = malloc(sizeof(dt_iop_retouch_data_t));
+  piece->data_size = sizeof(dt_iop_retouch_data_t);
 }
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

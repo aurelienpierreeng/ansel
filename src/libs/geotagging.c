@@ -138,7 +138,7 @@ static void free_tz_tuple(gpointer data)
 
 const char *name(dt_lib_module_t *self)
 {
-  return _("edit geo tags");
+  return _("Datetime & GPS");
 }
 
 const char **views(dt_lib_module_t *self)
@@ -153,12 +153,12 @@ const char **views(dt_lib_module_t *self)
 
 uint32_t container(dt_lib_module_t *self)
 {
-  return DT_UI_CONTAINER_PANEL_RIGHT_CENTER;
+  return DT_UI_CONTAINER_PANEL_LEFT_CENTER;
 }
 
 int position()
 {
-  return 450;
+  return 2;
 }
 
 // modify the datetime_taken field in the db/cache of selected images

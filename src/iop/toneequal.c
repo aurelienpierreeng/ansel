@@ -1585,6 +1585,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = dt_calloc_align(64, sizeof(dt_iop_toneequalizer_data_t));
+  piece->data_size = sizeof(dt_iop_toneequalizer_data_t);
 }
 
 
@@ -2414,7 +2415,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     const gboolean was_mask = g->mask_display;
     g->mask_display = FALSE;
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_luminance_mask), FALSE);
-    if(was_mask) dt_dev_invalidate(self->dev, __FUNCTION__, __FILE__, __LINE__);
+    if(was_mask) dt_dev_invalidate(self->dev);
     dt_dev_refresh_ui_images(self->dev);
     dt_collection_hint_message(darktable.collection);
   }

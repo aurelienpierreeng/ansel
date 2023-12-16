@@ -165,7 +165,7 @@ if _scripts_install.dt.configuration.has_gui  then
 
           _scripts_install.backup_luarc()
           _scripts_install.dt.print(_("lua scripts installing"))
-          os.execute("\"" .. _scripts_install.git_bin .. "\" " .. "clone https://github.com/darktable-org/lua-scripts.git " .. _scripts_install.dt.configuration.config_dir .. "/lua")
+          os.execute("\"" .. _scripts_install.git_bin .. "\" " .. "clone https://github.com/aurelienpierreeng/lua-scripts.git " .. _scripts_install.dt.configuration.config_dir .. "/lua")
           os.execute("echo " .. _scripts_install.require_string .. " > " .. _scripts_install.dt.configuration.config_dir .. "/luarc")
           _scripts_install.dt.print(_("lua scripts are installed"))
           require "tools/script_manager"

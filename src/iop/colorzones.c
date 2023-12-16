@@ -2688,6 +2688,7 @@ void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
   dt_iop_colorzones_data_t *d = malloc(sizeof(dt_iop_colorzones_data_t));
   dt_iop_colorzones_params_t *default_params = (dt_iop_colorzones_params_t *)self->default_params;
   piece->data = d;
+  piece->data_size = sizeof(dt_iop_colorzones_data_t);
 
   for(int ch = 0; ch < DT_IOP_COLORZONES_MAX_CHANNELS; ch++)
   {

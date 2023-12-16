@@ -60,7 +60,7 @@ void dt_loc_init(const char *datadir, const char *moduledir, const char *localed
 
   // set up absolute pathes based on their relative value
   dt_loc_init_datadir(application_directory, datadir);
-  dt_loc_init_plugindir(application_directory, moduledir);
+  dt_loc_init_moduledir(application_directory, moduledir);
   dt_loc_init_localedir(application_directory, localedir);
   dt_loc_init_user_config_dir(configdir);
   dt_loc_init_user_cache_dir(cachedir);
@@ -201,10 +201,10 @@ void dt_loc_init_user_cache_dir(const char *cachedir)
   g_free(default_cache_dir);
 }
 
-void dt_loc_init_plugindir(const char* application_directory, const char *plugindir)
+void dt_loc_init_moduledir(const char* application_directory, const char *moduledir)
 {
-  darktable.plugindir = dt_loc_init_generic(plugindir, application_directory, DARKTABLE_LIBDIR);
-  dt_check_opendir("ansel.plugindir", darktable.plugindir);
+  darktable.moduledir = dt_loc_init_generic(moduledir, application_directory, DARKTABLE_MODULEDIR);
+  dt_check_opendir("ansel.moduledir", darktable.moduledir);
 }
 
 void dt_check_opendir(const char* context, const char* directory)
@@ -269,9 +269,9 @@ void dt_loc_get_kerneldir(char *kerneldir, size_t bufsize)
   snprintf(kerneldir, bufsize, "%s" G_DIR_SEPARATOR_S "kernels", datadir);
 }
 
-void dt_loc_get_plugindir(char *plugindir, size_t bufsize)
+void dt_loc_get_moduledir(char *moduledir, size_t bufsize)
 {
-  g_strlcpy(plugindir, darktable.plugindir, bufsize);
+  g_strlcpy(moduledir, darktable.moduledir, bufsize);
 }
 
 void dt_loc_get_localedir(char *localedir, size_t bufsize)

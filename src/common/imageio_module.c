@@ -121,11 +121,11 @@ static int dt_imageio_load_modules_format(dt_imageio_t *iio)
   iio->plugins_format = NULL;
   GList *res = NULL;
   dt_imageio_module_format_t *module;
-  char plugindir[PATH_MAX] = { 0 }, plugin_name[256];
+  char moduledir[PATH_MAX] = { 0 }, plugin_name[256];
   const gchar *d_name;
-  dt_loc_get_plugindir(plugindir, sizeof(plugindir));
-  g_strlcat(plugindir, "/plugins/imageio/format", sizeof(plugindir));
-  GDir *dir = g_dir_open(plugindir, 0, NULL);
+  dt_loc_get_moduledir(moduledir, sizeof(moduledir));
+  g_strlcat(moduledir, "/plugins/imageio/format", sizeof(moduledir));
+  GDir *dir = g_dir_open(moduledir, 0, NULL);
   if(!dir) return 1;
   const int name_offset = strlen(SHARED_MODULE_PREFIX),
             name_end = strlen(SHARED_MODULE_PREFIX) + strlen(SHARED_MODULE_SUFFIX);
@@ -136,7 +136,7 @@ static int dt_imageio_load_modules_format(dt_imageio_t *iio)
     if(!g_str_has_suffix(d_name, SHARED_MODULE_SUFFIX)) continue;
     g_strlcpy(plugin_name, d_name + name_offset, strlen(d_name) - name_end + 1);
     module = (dt_imageio_module_format_t *)malloc(sizeof(dt_imageio_module_format_t));
-    gchar *libname = g_module_build_path(plugindir, (const gchar *)plugin_name);
+    gchar *libname = g_module_build_path(moduledir, (const gchar *)plugin_name);
     if(dt_imageio_load_module_format(module, libname, plugin_name))
     {
       free(module);
@@ -221,11 +221,11 @@ static int dt_imageio_load_modules_storage(dt_imageio_t *iio)
 {
   iio->plugins_storage = NULL;
   dt_imageio_module_storage_t *module;
-  char plugindir[PATH_MAX] = { 0 }, plugin_name[256];
+  char moduledir[PATH_MAX] = { 0 }, plugin_name[256];
   const gchar *d_name;
-  dt_loc_get_plugindir(plugindir, sizeof(plugindir));
-  g_strlcat(plugindir, "/plugins/imageio/storage", sizeof(plugindir));
-  GDir *dir = g_dir_open(plugindir, 0, NULL);
+  dt_loc_get_moduledir(moduledir, sizeof(moduledir));
+  g_strlcat(moduledir, "/plugins/imageio/storage", sizeof(moduledir));
+  GDir *dir = g_dir_open(moduledir, 0, NULL);
   if(!dir) return 1;
   const int name_offset = strlen(SHARED_MODULE_PREFIX),
             name_end = strlen(SHARED_MODULE_PREFIX) + strlen(SHARED_MODULE_SUFFIX);
@@ -236,7 +236,7 @@ static int dt_imageio_load_modules_storage(dt_imageio_t *iio)
     if(!g_str_has_suffix(d_name, SHARED_MODULE_SUFFIX)) continue;
     g_strlcpy(plugin_name, d_name + name_offset, strlen(d_name) - name_end + 1);
     module = (dt_imageio_module_storage_t *)malloc(sizeof(dt_imageio_module_storage_t));
-    gchar *libname = g_module_build_path(plugindir, (const gchar *)plugin_name);
+    gchar *libname = g_module_build_path(moduledir, (const gchar *)plugin_name);
     if(dt_imageio_load_module_storage(module, libname, plugin_name))
     {
       free(module);

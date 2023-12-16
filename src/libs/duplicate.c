@@ -57,7 +57,7 @@ typedef struct dt_lib_duplicate_t
 
 const char *name(dt_lib_module_t *self)
 {
-  return _("duplicate manager");
+  return _("Duplicates");
 }
 
 const char **views(dt_lib_module_t *self)
@@ -133,7 +133,7 @@ static void _lib_duplicate_thumb_press_callback(GtkWidget *widget, GdkEventButto
       dt_develop_t *dev = darktable.develop;
       if(!dev) return;
 
-      dt_dev_invalidate(dev, __FUNCTION__, __FILE__, __LINE__);
+      dt_dev_invalidate(dev);
       dt_control_queue_redraw_center();
       dt_dev_refresh_ui_images(darktable.develop);
 

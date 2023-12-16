@@ -571,57 +571,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   }
 }
 
-#if defined(__SSE__)
-void process_sse2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-                  void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  const uint32_t filters = piece->pipe->dsc.filters;
-  dt_iop_temperature_data_t *d = (dt_iop_temperature_data_t *)piece->data;
-  if(filters)
-  { // xtrans float mosaiced or bayer float mosaiced
-    // plain C version is same speed for Bayer and actually a bit faster for Xtrans, so use it instead
-    process(self,piece,ivoid,ovoid,roi_in,roi_out);
-    return;
-  }
-  else
-  { // non-mosaiced
-    const size_t ch = piece->colors;
-
-    const __m128 coeffs = _mm_set_ps(1.0f, d->coeffs[2], d->coeffs[1], d->coeffs[0]);
-
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-    dt_omp_firstprivate(ch, coeffs, ivoid, ovoid, roi_out) \
-    shared(d) \
-    schedule(static)
-#endif
-    for(int k = 0; k < roi_out->height; k++)
-    {
-      const float *in = ((float *)ivoid) + ch * k * roi_out->width;
-      float *out = ((float *)ovoid) + ch * k * roi_out->width;
-      for(int j = 0; j < roi_out->width; j++, in += ch, out += ch)
-      {
-        const __m128 input = _mm_load_ps(in);
-        const __m128 multiplied = _mm_mul_ps(input, coeffs);
-        _mm_stream_ps(out, multiplied);
-      }
-    }
-    _mm_sfence();
-
-    if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
-      dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
-  }
-
-  piece->pipe->dsc.temperature.enabled = 1;
-  for(int k = 0; k < 4; k++)
-  {
-    piece->pipe->dsc.temperature.coeffs[k] = d->coeffs[k];
-    piece->pipe->dsc.processed_maximum[k] = d->coeffs[k] * piece->pipe->dsc.processed_maximum[k];
-    self->dev->proxy.wb_coeffs[k] = d->coeffs[k];
-  }
-}
-#endif
-
 #ifdef HAVE_OPENCL
 int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
@@ -730,6 +679,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = malloc(sizeof(dt_iop_temperature_data_t));
+  piece->data_size = sizeof(dt_iop_temperature_data_t);
 }
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

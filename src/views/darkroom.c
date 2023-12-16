@@ -798,7 +798,7 @@ static void zoom_key_accel(dt_action_t *action)
   dt_control_queue_redraw_center();
   dt_control_navigation_redraw();
 
-  dt_dev_invalidate(dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate(dev);
   dt_dev_refresh_ui_images(dev);
 }
 
@@ -1037,7 +1037,7 @@ static void _overexposed_quickbutton_clicked(GtkWidget *w, gpointer user_data)
 {
   dt_develop_t *d = (dt_develop_t *)user_data;
   d->overexposed.enabled = !d->overexposed.enabled;
-  dt_dev_invalidate(d, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate(d);
   dt_dev_refresh_ui_images(d);
 }
 
@@ -1048,7 +1048,7 @@ static void colorscheme_callback(GtkWidget *combo, gpointer user_data)
   if(d->overexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->overexposed.button));
   else
-    dt_dev_invalidate(d, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate(d);
 
   dt_dev_refresh_ui_images(d);
 }
@@ -1060,7 +1060,7 @@ static void lower_callback(GtkWidget *slider, gpointer user_data)
   if(d->overexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->overexposed.button));
   else
-    dt_dev_invalidate(d, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate(d);
 
   dt_dev_refresh_ui_images(d);
 }
@@ -1072,7 +1072,7 @@ static void upper_callback(GtkWidget *slider, gpointer user_data)
   if(d->overexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->overexposed.button));
   else
-    dt_dev_invalidate(d, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate(d);
 
   dt_dev_refresh_ui_images(d);
 }
@@ -1084,7 +1084,7 @@ static void mode_callback(GtkWidget *slider, gpointer user_data)
   if(d->overexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->overexposed.button));
   else
-    dt_dev_invalidate(d, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate(d);
 
   dt_dev_refresh_ui_images(d);
 }
@@ -1094,7 +1094,7 @@ static void _rawoverexposed_quickbutton_clicked(GtkWidget *w, gpointer user_data
 {
   dt_develop_t *d = (dt_develop_t *)user_data;
   d->rawoverexposed.enabled = !d->rawoverexposed.enabled;
-  dt_dev_invalidate(d, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate(d);
   dt_dev_refresh_ui_images(d);
 }
 
@@ -1105,7 +1105,7 @@ static void rawoverexposed_mode_callback(GtkWidget *combo, gpointer user_data)
   if(d->rawoverexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->rawoverexposed.button));
   else
-    dt_dev_invalidate(d, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate(d);
 
   dt_dev_refresh_ui_images(d);
 }
@@ -1117,7 +1117,7 @@ static void rawoverexposed_colorscheme_callback(GtkWidget *combo, gpointer user_
   if(d->rawoverexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->rawoverexposed.button));
   else
-    dt_dev_invalidate(d, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate(d);
 
   dt_dev_refresh_ui_images(d);
 }
@@ -1129,7 +1129,7 @@ static void rawoverexposed_threshold_callback(GtkWidget *slider, gpointer user_d
   if(d->rawoverexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->rawoverexposed.button));
   else
-    dt_dev_invalidate(d, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate(d);
 
   dt_dev_refresh_ui_images(d);
 }
@@ -1145,7 +1145,7 @@ static void _softproof_quickbutton_clicked(GtkWidget *w, gpointer user_data)
 
   _update_softproof_gamut_checking(d);
 
-  dt_dev_invalidate(d, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate(d);
   dt_dev_refresh_ui_images(d);
 }
 
@@ -1160,7 +1160,7 @@ static void _gamut_quickbutton_clicked(GtkWidget *w, gpointer user_data)
 
   _update_softproof_gamut_checking(d);
 
-  dt_dev_invalidate(d, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate(d);
   dt_dev_refresh_ui_images(d);
 }
 
@@ -1212,7 +1212,7 @@ end:
   if(profile_changed)
   {
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_SOFTPROOF);
-    dt_dev_invalidate_all(d, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate_all(d);
     dt_dev_refresh_ui_images(d);
   }
 }
@@ -1376,7 +1376,7 @@ static float _action_process_preview(gpointer target, dt_action_element_t elemen
         lib->full_preview = FALSE;
         dt_iop_request_focus(lib->full_preview_last_module);
         dt_masks_set_edit_mode(darktable.develop->gui_module, lib->full_preview_masks_state);
-        dt_dev_invalidate(darktable.develop, __FUNCTION__, __FILE__, __LINE__);
+        dt_dev_invalidate(darktable.develop);
         dt_control_queue_redraw_center();
         dt_control_navigation_redraw();
         dt_dev_refresh_ui_images(darktable.develop);
@@ -1411,7 +1411,7 @@ static float _action_process_preview(gpointer target, dt_action_element_t elemen
         lib->full_preview_last_module = darktable.develop->gui_module;
         dt_iop_request_focus(NULL);
         gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
-        dt_dev_invalidate(darktable.develop, __FUNCTION__, __FILE__, __LINE__);
+        dt_dev_invalidate(darktable.develop);
         dt_control_queue_redraw_center();
         dt_dev_refresh_ui_images(darktable.develop);
       }
@@ -1459,7 +1459,7 @@ static float _action_process_move(gpointer target, dt_action_element_t element, 
     dt_control_queue_redraw_center();
     dt_control_navigation_redraw();
 
-    dt_dev_invalidate(dev, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate(dev);
     dt_dev_refresh_ui_images(dev);
   }
 
@@ -2248,6 +2248,31 @@ static void _unregister_modules_drag_n_drop(dt_view_t *self)
   }
 }
 
+// Kinda ugly to store that as a static global var
+// but the scope is local and it's not super important.
+static guint auto_save_timeout = 0;
+
+static int _auto_save_edit(gpointer data)
+{
+  static int history_top = 0;
+
+  dt_develop_t *dev = (dt_develop_t *)data;
+  dt_pthread_mutex_lock(&dev->history_mutex);
+
+  // Save dev history to DB and XMP (if enabled) only if history changed since previous save
+  // and it's not too heavy. Too heavy would freeze the GUI in operation, not cool.
+  if(dev->history_end != history_top && dt_dev_mask_history_overload(dev, 200) < 200)
+  {
+    history_top = dev->history_end;
+    dt_dev_write_history_ext(dev, dev->image_storage.id);
+    dt_image_write_sidecar_file(dev->image_storage.id);
+  }
+
+  dt_pthread_mutex_unlock(&dev->history_mutex);
+
+  return G_SOURCE_CONTINUE;
+}
+
 void enter(dt_view_t *self)
 {
   // prevent accels_window to refresh
@@ -2387,14 +2412,25 @@ void enter(dt_view_t *self)
   dt_pthread_mutex_unlock(&dev->pipe_mutex);
   dt_pthread_mutex_unlock(&dev->preview_pipe_mutex);
 
-  // Notify history module that history has changed
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+  dt_dev_reprocess_preview(dev);
+
+  // Init the starting point of undo/redo
+  dt_dev_undo_start_record(dev);
+  dt_dev_undo_end_record(dev);
+
+  // Auto-save every 30 s
+  auto_save_timeout = g_timeout_add(30000, _auto_save_edit, dev);
 }
 
 void leave(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
   dev->gui_leaving = 1; // shutdown all running pipelines ASAP
+
+  // Remove the autosave timeout first thing because it locks the dev->history_mutex
+  // and could interfere with the following.
+  if(auto_save_timeout) g_source_remove(auto_save_timeout);
+  auto_save_timeout = 0;
 
   dt_iop_color_picker_cleanup();
   if(darktable.lib->proxy.colorpicker.picker_proxy)
@@ -2679,7 +2715,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     dt_control_queue_redraw_center();
     dt_control_navigation_redraw();
 
-    dt_dev_invalidate(dev, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate(dev);
     dt_dev_refresh_ui_images(dev);
   }
 }
@@ -2708,7 +2744,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
     dt_control_queue_redraw_center();
 
     // FIXME: use invalidate_top in the future
-    dt_dev_invalidate_preview(dev, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate_preview(dev);
     dt_dev_refresh_ui_images(dev);
     return 1;
   }
@@ -2717,7 +2753,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   {
     // Change on mask parameters and image output.
     // FIXME: use invalidate_top in the future
-    dt_dev_invalidate_all(dev, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate_all(dev);
     dt_control_queue_redraw_center();
     dt_dev_refresh_ui_images(dev);
     return 1;
@@ -2728,7 +2764,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
      && dev->gui_module->button_released(dev->gui_module, x, y, which, state))
   {
     // Click in modules should handle history changes internally. Only update zoom here.
-    dt_dev_invalidate_zoom(dev, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate_zoom(dev);
     dt_control_queue_redraw_center();
     dt_dev_refresh_ui_images(dev);
     return 1;
@@ -2790,7 +2826,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
 
     dt_control_queue_redraw_center();
     dt_control_navigation_redraw();
-    dt_dev_invalidate_zoom(dev, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate_zoom(dev);
     dt_dev_refresh_ui_images(dev);
     return 1;
   }
@@ -2961,7 +2997,7 @@ void scrolled(dt_view_t *self, double x, double y, int up, int state)
   {
     // Scroll on masks changes their size, therefore mask parameters and image output.
     // FIXME: use invalidate_top in the future
-    dt_dev_invalidate_all(dev, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate_all(dev);
     dt_control_queue_redraw_center();
     dt_dev_refresh_ui_images(dev);
     return;
@@ -2971,7 +3007,7 @@ void scrolled(dt_view_t *self, double x, double y, int up, int state)
   if(dev->gui_module && dev->gui_module->scrolled && dev->gui_module->scrolled(dev->gui_module, x, y, up, state))
   {
     // Scroll in modules should handle history changes internally. Only update zoom here.
-    dt_dev_invalidate_zoom(dev, __FUNCTION__, __FILE__, __LINE__);
+    dt_dev_invalidate_zoom(dev);
     dt_control_queue_redraw_center();
     dt_dev_refresh_ui_images(dev);
     return;
@@ -3098,7 +3134,7 @@ void scrolled(dt_view_t *self, double x, double y, int up, int state)
   dt_control_queue_redraw_center();
   dt_control_navigation_redraw();
 
-  dt_dev_invalidate_zoom(dev, __FUNCTION__, __FILE__, __LINE__);
+  dt_dev_invalidate_zoom(dev);
   dt_dev_refresh_ui_images(dev);
 }
 
