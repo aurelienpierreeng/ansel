@@ -53,7 +53,6 @@
 #include "gui/color_picker_proxy.h"
 #include "iop/iop_api.h"
 #include "iop/choleski.h"
-#include "common/iop_group.h"
 #include "common/colorspaces_inline_conversions.h"
 
 #ifdef _OPENMP
@@ -157,7 +156,7 @@ const char *aliases()
 
 int default_group()
 {
-  return IOP_GROUP_EFFECT | IOP_GROUP_GRADING;
+  return IOP_GROUP_COLOR;
 }
 
 int flags()
@@ -463,8 +462,8 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
     // Apply the corrections
     pix_out[0] += corrections_out[0]; // WARNING: hue is an offset
-    pix_out[1] *= 1.f + corrections_out[1]; // the brightness and saturation are gains
-    pix_out[2] *= exp2f(2.f * corrections_out[2]);
+    pix_out[1] *= corrections_out[1]; // the brightness and saturation are gains
+    pix_out[2] *= corrections_out[2];
 
     // Sanitize gamut
     gamut_map_HSB(pix_out, d->gamut_LUT, white);
