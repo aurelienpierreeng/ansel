@@ -1,23 +1,28 @@
 /*
- * This file is part of darktable,
+ * This file is part of ansel,
  * Copyright (C) 2021 darktable developers.
+ * Copyright (C) 2023 ansel developers.
  *
- *  darktable is free software: you can redistribute it and/or modify
+ *  ansel is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  darktable is distributed in the hope that it will be useful,
+ *  ansel is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+ *  along with ansel.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "common/image.h"
 #include <libheif/heif.h>
+#if LIBHEIF_HAVE_VERSION(1, 17, 0)
+#include <libheif/heif_properties.h>
+#endif
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -55,7 +60,7 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
   }
 
   err = heif_context_read_from_file(ctx, filename, NULL);
-  if(err.code != 0)
+  if(err.code != heif_error_Ok)
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "Failed to read HEIF file [%s]\n",
@@ -87,7 +92,7 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
 
   // We can only process a single image
   err = heif_context_get_primary_image_handle(ctx, &handle);
-  if(err.code != 0)
+  if(err.code != heif_error_Ok)
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "Failed to read primary image from HEIF file [%s]\n",
@@ -98,7 +103,7 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
 
   // Darktable only supports LITTLE_ENDIAN systems, so RRGGBB_LE should be fine
   err = heif_decode_image(handle, &heif_img, heif_colorspace_RGB, heif_chroma_interleaved_RRGGBB_LE, NULL);
-  if(err.code != 0)
+  if(err.code != heif_error_Ok)
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "Failed to decode HEIF file [%s]\n",
@@ -134,25 +139,29 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
   img->flags &= ~DT_IMAGE_RAW;
   img->flags &= ~DT_IMAGE_S_RAW;
 
-  // Get pixel value bit depth (not storage bit depth)
-  const int bit_depth = heif_image_get_bits_per_pixel_range(heif_img, heif_channel_interleaved);
+  // Get decoded pixel values bit depth (this is used to scale values to [0..1] range)
+  const int decoded_values_bit_depth = heif_image_get_bits_per_pixel_range(heif_img, heif_channel_interleaved);
+  // Get original pixel values bit depth by querying the luma channel depth (this may differ from decoded values bit depth)
+  const int original_values_bit_depth = heif_image_handle_get_luma_bits_per_pixel(handle);
 
   dt_print(DT_DEBUG_IMAGEIO,
              "Bit depth: '%d' for HEIF image [%s]\n",
-             bit_depth,
+             original_values_bit_depth,
              filename);
 
   /* This can be LDR or HDR, it depends on the ICC profile. But if bit_depth <= 8 it must be LDR. */
-  if(bit_depth > 8)
+  if(original_values_bit_depth > 8)
   {
     img->flags |= DT_IMAGE_HDR;
+    img->flags &= ~DT_IMAGE_LDR;
   }
   else
   {
+    img->flags |= DT_IMAGE_LDR;
     img->flags &= ~DT_IMAGE_HDR;
   }
 
-  float max_channel_f = (float)((1 << bit_depth) - 1);
+  float max_channel_f = (float)((1 << decoded_values_bit_depth) - 1);
 
   const uint8_t *const restrict in = (const uint8_t *)data;
 
@@ -177,10 +186,19 @@ dt_imageio_retval_t dt_imageio_open_heif(dt_image_t *img,
     }
   }
 
+  /* Get the ICC profile if available */
+  size_t icc_size = heif_image_handle_get_raw_color_profile_size(handle);
+  if(icc_size)
+  {
+    img->profile = (uint8_t *)g_malloc0(icc_size);
+    heif_image_handle_get_raw_color_profile(handle, img->profile);
+    img->profile_size = icc_size;
+  }
+
   img->loader = LOADER_HEIF;
   ret = DT_IMAGEIO_OK;
 
-  out:
+out:
   // cleanup handles
   if(heif_img)
   {
@@ -222,7 +240,7 @@ int dt_imageio_heif_read_profile(const char *filename,
   }
 
   err = heif_context_read_from_file(ctx, filename, NULL);
-  if(err.code != 0)
+  if(err.code != heif_error_Ok)
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "Failed to read HEIF file [%s]\n",
@@ -242,7 +260,7 @@ int dt_imageio_heif_read_profile(const char *filename,
 
   // We can only process a single image
   err = heif_context_get_primary_image_handle(ctx, &handle);
-  if(err.code != 0)
+  if(err.code != heif_error_Ok)
   {
     dt_print(DT_DEBUG_IMAGEIO,
              "Failed to read primary image from HEIF file [%s]\n",
@@ -260,7 +278,7 @@ int dt_imageio_heif_read_profile(const char *filename,
              "Found NCLX color profile for HEIF file [%s]\n",
              filename);
       err = heif_image_handle_get_nclx_color_profile(handle, &profile_info_nclx);
-      if(err.code != 0)
+      if(err.code != heif_error_Ok)
       {
         dt_print(DT_DEBUG_IMAGEIO,
                 "Failed to get NCLX color profile data from HEIF file [%s]\n",
@@ -270,6 +288,27 @@ int dt_imageio_heif_read_profile(const char *filename,
       cicp->color_primaries = (uint16_t)profile_info_nclx->color_primaries;
       cicp->transfer_characteristics = (uint16_t)profile_info_nclx->transfer_characteristics;
       cicp->matrix_coefficients = (uint16_t)profile_info_nclx->matrix_coefficients;
+
+      /* fix up mistagged legacy AVIFs */
+      if(profile_info_nclx->color_primaries == heif_color_primaries_ITU_R_BT_709_5)
+      {
+        gboolean over = FALSE;
+        /* mistagged Rec. 709 AVIFs exported before dt 3.6 */
+        if(profile_info_nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_470_6_System_M
+           && profile_info_nclx->matrix_coefficients == heif_matrix_coefficients_ITU_R_BT_709_5)
+        {
+          /* must be actual Rec. 709 instead of 2.2 gamma*/
+          cicp->transfer_characteristics = (uint16_t)heif_transfer_characteristic_ITU_R_BT_709_5;
+          over = TRUE;
+        }
+
+        if(over)
+        {
+          dt_print(DT_DEBUG_IMAGEIO, "Overriding nclx color profile for HEIF file `%s': 1/%d/%d to 1/%d/%d\n",
+                   filename, profile_info_nclx->transfer_characteristics, profile_info_nclx->matrix_coefficients,
+                   cicp->transfer_characteristics, cicp->matrix_coefficients);
+        }
+      }
       break; /* heif_color_profile_type_nclx */
 
     case heif_color_profile_type_rICC:
@@ -282,7 +321,7 @@ int dt_imageio_heif_read_profile(const char *filename,
       }
       icc_data = (uint8_t *)g_malloc0(sizeof(uint8_t) * icc_size);
       err = heif_image_handle_get_raw_color_profile(handle, icc_data);
-      if(err.code != 0)
+      if(err.code != heif_error_Ok)
       {
         dt_print(DT_DEBUG_IMAGEIO,
                 "Failed to read embedded ICC profile from HEIF image [%s]\n",
@@ -307,7 +346,7 @@ int dt_imageio_heif_read_profile(const char *filename,
       break;
   }
 
-  out:
+out:
   // cleanup handles
   if(profile_info_nclx)
   {
@@ -321,9 +360,9 @@ int dt_imageio_heif_read_profile(const char *filename,
 
   return size;
 }
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

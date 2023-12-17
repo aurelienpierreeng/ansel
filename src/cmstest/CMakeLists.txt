@@ -1,9 +1,10 @@
-include_directories(${DARKTABLE_BINDIR})
-add_executable(ansel-cmstest main.c ${DARKTABLE_BINDIR}/version_gen.c)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/..)
+
+add_executable(ansel-cmstest main.c ${CMAKE_CURRENT_BINARY_DIR}/../version_gen.c)
 
 # cmake implicitly sets GENERATED on the source file in the directory of the custom command
 # since this isn't the same directory we do have to manually set it
-set_source_files_properties(${DARKTABLE_BINDIR}/version_gen.c PROPERTIES GENERATED TRUE)
+set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/../version_gen.c PROPERTIES GENERATED TRUE)
 add_dependencies(ansel-cmstest generate_version)
 
 target_link_libraries(ansel-cmstest ${LCMS2_LIBRARIES})
@@ -35,13 +36,11 @@ else(Colord_FOUND AND NOT ${Colord_VERSION} VERSION_LESS "0.1.32")
   message(STATUS "no colord support for ansel-cmstest. not cool.")
 endif(Colord_FOUND AND NOT ${Colord_VERSION} VERSION_LESS "0.1.32")
 
-
 set_target_properties(ansel-cmstest
-                     PROPERTIES LINKER_LANGUAGE C
-                     RUNTIME_OUTPUT_DIRECTORY ${DARKTABLE_BINDIR})
+                      PROPERTIES LINKER_LANGUAGE C)
 
-if (WIN32)
-  #_detach_debuginfo (ansel-cmstest bin)
+if(WIN32)
+  # _detach_debuginfo(ansel-cmstest bin)
 endif(WIN32)
 
 install(TARGETS ansel-cmstest DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT DTApplication)

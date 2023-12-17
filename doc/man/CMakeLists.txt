@@ -31,7 +31,7 @@ macro(add_manpage pod)
   add_custom_target(manpage_${manpage} ALL DEPENDS ${target})
   add_dependencies(manpages manpage_${manpage})
   install(FILES ${target} DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 COMPONENT DTDocuments)
-endmacro (add_manpage)
+endmacro(add_manpage)
 
 foreach(manpage ${MANPAGES})
   add_manpage(${manpage})

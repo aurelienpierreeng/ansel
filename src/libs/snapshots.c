@@ -78,7 +78,7 @@ static void _lib_snapshots_toggled_callback(GtkToggleButton *widget, gpointer us
 
 const char *name(dt_lib_module_t *self)
 {
-  return _("snapshots");
+  return _("Snapshots");
 }
 
 const char **views(dt_lib_module_t *self)
@@ -94,7 +94,7 @@ uint32_t container(dt_lib_module_t *self)
 
 int position()
 {
-  return 1000;
+  return 800;
 }
 
 // draw snapshot sign
@@ -506,6 +506,7 @@ static void _lib_snapshots_toggled_callback(GtkToggleButton *widget, gpointer us
     dt_control_set_dev_zoom_scale(s->zoom_scale);
 
     dt_dev_invalidate(darktable.develop);
+    dt_dev_refresh_ui_images(darktable.develop);
 
     d->snapshot_image = dt_cairo_image_surface_create_from_png(s->filename);
   }

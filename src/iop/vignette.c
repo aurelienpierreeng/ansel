@@ -956,6 +956,7 @@ void init_presets(dt_iop_module_so_t *self)
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = malloc(sizeof(dt_iop_vignette_data_t));
+  piece->data_size = sizeof(dt_iop_vignette_data_t);
 }
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

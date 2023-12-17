@@ -1,20 +1,22 @@
 /*
-    This file is part of darktable,
+    This file is part of ansel,
     Copyright (C) 2009-2021 darktable developers.
+    Copyright (C) 2023 ansel developers.
 
-    darktable is free software: you can redistribute it and/or modify
+    ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    darktable is distributed in the hope that it will be useful,
+    ansel is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+    along with ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/image.h"
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -49,6 +51,9 @@
 #ifdef HAVE_LIBHEIF
 #include "common/imageio_heif.h"
 #endif
+#ifdef HAVE_WEBP
+#include "common/imageio_webp.h"
+#endif
 #include "common/imageio_libraw.h"
 #include "common/mipmap_cache.h"
 #include "common/styles.h"
@@ -58,10 +63,10 @@
 #include "develop/develop.h"
 #include "develop/imageop.h"
 
-#ifdef HAVE_GRAPHICSMAGICK
+#if defined(HAVE_GRAPHICSMAGICK)
 #include <magick/api.h>
 #include <magick/blob.h>
-#elif defined HAVE_IMAGEMAGICK
+#elif defined(HAVE_IMAGEMAGICK)
 #include <MagickWand/MagickWand.h>
 #endif
 
@@ -85,7 +90,8 @@ static const gchar *_supported_raw[]
         "orf", "pef", "raf", "raw", "rw2", "rwl", "sr2", "srf", "srw", "sti", "x3f", NULL };
 static const gchar *_supported_ldr[]
     = { "bmp",  "bmq", "cap", "cine", "cs1", "dcm", "gif", "gpr", "j2c", "j2k", "jng", "jp2", "jpc", "jpeg", "jpg",
-        "miff", "mng", "ori", "pbm",  "pfm", "pgm", "png", "pnm", "ppm", "pxn", "qtk", "rdc", "tif", "tiff", NULL };
+        "miff", "mng", "ori", "pbm",  "pfm", "pgm", "png", "pnm", "ppm", "pxn", "qtk", "rdc", "tif", "tiff", "webp",
+        NULL };
 static const gchar *_supported_hdr[] = { "avif", "exr", "hdr", "heic", "heif", "hif", "pfm", NULL };
 
 // get the type of image from its extension
@@ -153,7 +159,7 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
   }
   else
   {
-#ifdef HAVE_GRAPHICSMAGICK
+#if defined(HAVE_GRAPHICSMAGICK)
     ExceptionInfo exception;
     Image *image = NULL;
     ImageInfo *image_info = NULL;
@@ -202,7 +208,7 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
     if(image_info) DestroyImageInfo(image_info);
     DestroyExceptionInfo(&exception);
     if(res) goto error;
-#elif defined HAVE_IMAGEMAGICK
+#elif defined(HAVE_IMAGEMAGICK)
     MagickWand *image = NULL;
 	MagickBooleanType mret;
 
@@ -428,48 +434,38 @@ size_t dt_imageio_write_pos(int i, int j, int wd, int ht, float fwd, float fht,
 dt_imageio_retval_t dt_imageio_open_hdr(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf)
 {
   // if buf is NULL, don't proceed
-  if(!buf) return DT_IMAGEIO_OK;
-  // needed to alloc correct buffer size:
-  img->buf_dsc.channels = 4;
-  img->buf_dsc.datatype = TYPE_FLOAT;
-  img->buf_dsc.cst = IOP_CS_RGB;
+  if(!buf)
+    return DT_IMAGEIO_OK;
+
   dt_imageio_retval_t ret;
-  dt_image_loader_t loader;
+
 #ifdef HAVE_OPENEXR
-  loader = LOADER_EXR;
   ret = dt_imageio_open_exr(img, filename, buf);
-  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL) goto return_label;
+  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
+    return ret;
 #endif
-  loader = LOADER_RGBE;
+
   ret = dt_imageio_open_rgbe(img, filename, buf);
-  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL) goto return_label;
-  loader = LOADER_PFM;
+  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
+    return ret;
+
   ret = dt_imageio_open_pfm(img, filename, buf);
-  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL) goto return_label;
+  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
+    return ret;
 
 #ifdef HAVE_LIBAVIF
   ret = dt_imageio_open_avif(img, filename, buf);
-  loader = LOADER_AVIF;
-  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL) goto return_label;
+  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
+    return ret;
 #endif
 
 #ifdef HAVE_LIBHEIF
   ret = dt_imageio_open_heif(img, filename, buf);
-  loader = LOADER_HEIF;
-  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL) goto return_label;
+  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
+    return ret;
 #endif
 
-return_label:
-  if(ret == DT_IMAGEIO_OK)
-  {
-    img->buf_dsc.filters = 0u;
-    img->flags &= ~DT_IMAGE_LDR;
-    img->flags &= ~DT_IMAGE_RAW;
-    img->flags &= ~DT_IMAGE_S_RAW;
-    img->flags |= DT_IMAGE_HDR;
-    img->loader = loader;
-  }
-  return ret;
+  return DT_IMAGEIO_FILE_CORRUPTED;
 }
 
 /* magic data: exclusion,offset,length, xx, yy, ...
@@ -487,6 +483,9 @@ static const uint8_t _imageio_ldr_magic[] = {
   /* jpeg 2000, j2k format */
   0x00, 0x00, 0x05, 0xFF, 0x4F, 0xFF, 0x51, 0x00,
 #endif
+
+  /* webp image */
+  0x00, 0x08, 0x04, 'W', 'E', 'B', 'P',
 
   /* png image */
   0x00, 0x01, 0x03, 0x50, 0x4E, 0x47, // ASCII 'PNG'
@@ -591,7 +590,7 @@ int dt_imageio_is_hdr(const char *filename)
        || !strcasecmp(c, ".avif")
   #endif
 #endif
-           )
+      )
       return 1;
   return 0;
 }
@@ -600,74 +599,38 @@ int dt_imageio_is_hdr(const char *filename)
 dt_imageio_retval_t dt_imageio_open_ldr(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf)
 {
   // if buf is NULL, don't proceed
-  if(!buf) return DT_IMAGEIO_OK;
+  if(!buf)
+    return DT_IMAGEIO_OK;
+
   dt_imageio_retval_t ret;
 
   ret = dt_imageio_open_jpeg(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
-  {
-    img->buf_dsc.cst = IOP_CS_RGB; // jpeg is always RGB
-    img->buf_dsc.filters = 0u;
-    img->flags &= ~DT_IMAGE_RAW;
-    img->flags &= ~DT_IMAGE_S_RAW;
-    img->flags &= ~DT_IMAGE_HDR;
-    img->flags |= DT_IMAGE_LDR;
-    img->loader = LOADER_JPEG;
     return ret;
-  }
 
   ret = dt_imageio_open_tiff(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
-  {
-    // cst is set by dt_imageio_open_tiff()
-    img->buf_dsc.filters = 0u;
-    // TIFF can be HDR or LDR. corresponding flags are set in dt_imageio_open_tiff()
-    img->flags &= ~DT_IMAGE_RAW;
-    img->flags &= ~DT_IMAGE_S_RAW;
-    img->loader = LOADER_TIFF;
     return ret;
-  }
+
+#ifdef HAVE_WEBP
+  ret = dt_imageio_open_webp(img, filename, buf);
+  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
+    return ret;
+#endif
 
   ret = dt_imageio_open_png(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
-  {
-    img->buf_dsc.cst = IOP_CS_RGB; // png is always RGB
-    img->buf_dsc.filters = 0u;
-    img->flags &= ~DT_IMAGE_RAW;
-    img->flags &= ~DT_IMAGE_S_RAW;
-    img->flags &= ~DT_IMAGE_HDR;
-    img->flags |= DT_IMAGE_LDR;
-    img->loader = LOADER_PNG;
     return ret;
-  }
 
 #ifdef HAVE_OPENJPEG
   ret = dt_imageio_open_j2k(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
-  {
-    img->buf_dsc.cst = IOP_CS_RGB; // j2k is always RGB
-    img->buf_dsc.filters = 0u;
-    img->flags &= ~DT_IMAGE_RAW;
-    img->flags &= ~DT_IMAGE_HDR;
-    img->flags &= ~DT_IMAGE_S_RAW;
-    img->flags |= DT_IMAGE_LDR;
-    img->loader = LOADER_J2K;
     return ret;
-  }
 #endif
 
   ret = dt_imageio_open_pnm(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
-  {
-    img->buf_dsc.cst = IOP_CS_RGB; // pnm is always RGB
-    img->buf_dsc.filters = 0u;
-    img->flags &= ~DT_IMAGE_RAW;
-    img->flags &= ~DT_IMAGE_S_RAW;
-    img->flags &= ~DT_IMAGE_HDR;
-    img->flags |= DT_IMAGE_LDR;
-    img->loader = LOADER_PNM;
     return ret;
-  }
 
   return DT_IMAGEIO_FILE_CORRUPTED;
 }
@@ -724,10 +687,10 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   dt_develop_t dev;
   dt_dev_init(&dev, 0);
   dt_dev_load_image(&dev, imgid);
+  // TODO: reuse the darkroom opened pipe if any and imgid matches
 
-  const gboolean buf_is_downscaled = (thumbnail_export && dt_conf_get_bool("ui/performance"));
   dt_mipmap_buffer_t buf;
-  if(buf_is_downscaled)
+  if(thumbnail_export)
     dt_mipmap_cache_get(darktable.mipmap_cache, &buf, imgid, DT_MIPMAP_F, DT_MIPMAP_BLOCKING, 'r');
   else
     dt_mipmap_cache_get(darktable.mipmap_cache, &buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
@@ -1106,9 +1069,10 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   if(res)
     goto error;
 
-  dt_dev_pixelpipe_cleanup(&pipe);
-  dt_dev_cleanup(&dev);
   dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+  dt_dev_pixelpipe_cleanup(&pipe);
+  dt_dev_unload_image(&dev);
+  dt_dev_cleanup(&dev);
 
   /* now write xmp into that container, if possible */
   if(copy_metadata && (format->flags(format_params) & FORMAT_FLAGS_SUPPORT_XMP))
@@ -1163,34 +1127,20 @@ dt_imageio_retval_t dt_imageio_open_exotic(dt_image_t *img, const char *filename
                                            dt_mipmap_buffer_t *buf)
 {
   // if buf is NULL, don't proceed
-  if(!buf) return DT_IMAGEIO_OK;
-#ifdef HAVE_GRAPHICSMAGICK
-  dt_imageio_retval_t ret = dt_imageio_open_gm(img, filename, buf);
-  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
-  {
-    img->buf_dsc.cst = IOP_CS_RGB;
-    img->buf_dsc.filters = 0u;
-    img->flags &= ~DT_IMAGE_RAW;
-    img->flags &= ~DT_IMAGE_S_RAW;
-    img->flags &= ~DT_IMAGE_HDR;
-    img->flags |= DT_IMAGE_LDR;
-    img->loader = LOADER_GM;
-    return ret;
-  }
-#elif HAVE_IMAGEMAGICK
-  dt_imageio_retval_t ret = dt_imageio_open_im(img, filename, buf);
-  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
-  {
-    img->buf_dsc.filters = 0u;
-    img->flags &= ~DT_IMAGE_RAW;
-    img->flags &= ~DT_IMAGE_HDR;
-    img->flags |= DT_IMAGE_LDR;
-    img->loader = LOADER_IM;
-    return ret;
-  }
+  if(!buf)
+    return DT_IMAGEIO_OK;
+
+  dt_imageio_retval_t ret;
+
+#if defined(HAVE_GRAPHICSMAGICK)
+  ret = dt_imageio_open_gm(img, filename, buf);
+#elif defined(HAVE_IMAGEMAGICK)
+  ret = dt_imageio_open_im(img, filename, buf);
+#else
+  ret = DT_IMAGEIO_FILE_CORRUPTED;
 #endif
 
-  return DT_IMAGEIO_FILE_CORRUPTED;
+  return ret;
 }
 
 void dt_imageio_update_monochrome_workflow_tag(int32_t id, int mask)
@@ -1262,7 +1212,9 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
                                     dt_mipmap_buffer_t *buf)
 {
   /* first of all, check if file exists, don't bother to test loading if not exists */
-  if(!g_file_test(filename, G_FILE_TEST_IS_REGULAR)) return !DT_IMAGEIO_OK;
+  if(!g_file_test(filename, G_FILE_TEST_IS_REGULAR))
+    return !DT_IMAGEIO_OK;
+
   const int32_t was_hdr = (img->flags & DT_IMAGE_HDR);
   const int32_t was_bw = dt_image_monochrome_flags(img);
 
@@ -1270,7 +1222,8 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
   img->loader = LOADER_UNKNOWN;
 
   /* check if file is ldr using magic's */
-  if(dt_imageio_is_ldr(filename)) ret = dt_imageio_open_ldr(img, filename, buf);
+  if(dt_imageio_is_ldr(filename))
+    ret = dt_imageio_open_ldr(img, filename, buf);
 
   /* silly check using file extensions: */
   if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL && dt_imageio_is_hdr(filename))

@@ -214,6 +214,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     }
     // force applying the next incoming sample
     self->changed = TRUE;
+    dt_dev_invalidate_all(darktable.develop);
   }
   else
   {
@@ -232,6 +233,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
   }
 
   dt_control_queue_redraw_center();
+  dt_dev_refresh_ui_images(darktable.develop);
 
   return TRUE;
 }
@@ -268,13 +270,6 @@ static void _iop_color_picker_pickerdata_ready_callback(gpointer instance, dt_io
   // an iop colorpicker receives new data from the pixelpipe
   dt_iop_color_picker_t *picker = darktable.lib->proxy.colorpicker.picker_proxy;
   if(!picker) return;
-
-  // Invalidate the cache to ensure it will be fully recomputed.
-  // modules between colorin & colorout may need the work_profile
-  // to work properly. This will force colorin to be run and it
-  // will set the work_profile if needed.
-  piece->pipe->changed |= DT_DEV_PIPE_REMOVE;
-  piece->pipe->cache_obsolete = 1;
 
   // iops only need new picker data if the pointer has moved
   if(_record_point_area(picker))
@@ -377,4 +372,3 @@ GtkWidget *dt_color_picker_new_with_cst(dt_iop_module_t *module, dt_iop_color_pi
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

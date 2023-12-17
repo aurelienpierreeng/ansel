@@ -33,8 +33,6 @@ void dt_history_snapshot_undo_create(const int32_t imgid, int *snap_id, int *his
   sqlite3_stmt *stmt;
   gboolean all_ok = TRUE;
 
-  dt_lock_image(imgid);
-
   // get current history end
   *history_end = 0;
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
@@ -128,8 +126,6 @@ void dt_history_snapshot_undo_create(const int32_t imgid, int *snap_id, int *his
     dt_database_rollback_transaction(darktable.db);
     fprintf(stderr, "[dt_history_snapshot_undo_create] fails to create a snapshot for %d\n", imgid);
   }
-
-  dt_unlock_image(imgid);
 }
 
 static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_id, const int history_end)
@@ -137,8 +133,6 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
   // restore the given snapshot for imgid
   sqlite3_stmt *stmt;
   gboolean all_ok = TRUE;
-
-  dt_lock_image(imgid);
 
   dt_database_start_transaction(darktable.db);
 
@@ -214,7 +208,6 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
     dt_database_rollback_transaction(darktable.db);
     fprintf(stderr, "[_history_snapshot_undo_restore] fails to restore a snapshot for %d\n", imgid);
   }
-  dt_unlock_image(imgid);
 
   dt_history_hash_write_from_history(imgid, DT_HISTORY_HASH_CURRENT);
 }

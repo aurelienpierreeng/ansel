@@ -100,7 +100,7 @@ static void _save_last_tag_used(const char *tags, dt_lib_tagging_t *d);
 
 const char *name(dt_lib_module_t *self)
 {
-  return _("edit text tags");
+  return _("Tags");
 }
 
 const char **views(dt_lib_module_t *self)
@@ -111,11 +111,7 @@ const char **views(dt_lib_module_t *self)
 
 uint32_t container(dt_lib_module_t *self)
 {
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM)
-    return DT_UI_CONTAINER_PANEL_LEFT_CENTER;
-  else
-    return DT_UI_CONTAINER_PANEL_RIGHT_CENTER;
+  return DT_UI_CONTAINER_PANEL_LEFT_CENTER;
 }
 
 static gboolean _is_user_tag(GtkTreeModel *model, GtkTreeIter *iter)
@@ -2696,7 +2692,7 @@ void gui_reset(dt_lib_module_t *self)
 
 int position()
 {
-  return 500;
+  return 3;
 }
 
 static gboolean _match_selected_func(GtkEntryCompletion *completion, GtkTreeModel *model, GtkTreeIter *iter, gpointer user_data)

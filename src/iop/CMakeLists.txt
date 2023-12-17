@@ -1,4 +1,4 @@
-include_directories("${DARKTABLE_BINDIR}")
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/..)
 
 include(manage-symbol-visibility)
 
@@ -14,7 +14,7 @@ set(_iop_default_visible_list "")
 # and after that you may pass additional iop source files
 # and DEFAULT_VISIBLE keyword - which means that the iop will be visible/listed
 # by default (user can manipulate iop visibility via "more modules" lib)
-macro (add_iop _lib _src)
+macro(add_iop _lib _src)
   string(LENGTH ${_lib} _lib_namelength)
   if(${_lib_namelength} GREATER 19)
     message(FATAL_ERROR "IOP name \"${_lib}\" is too long (${_lib_namelength} symbols), it should not be greater than 19 symbols.")
@@ -39,12 +39,12 @@ macro (add_iop _lib _src)
   add_library(${_lib} MODULE ${_output} ${OPT_SRC} ${_input})
   target_link_libraries(${_lib} lib_ansel)
 
-  if (WIN32)
-    #_detach_debuginfo (${_lib} ${CMAKE_INSTALL_LIBDIR}/ansel/plugins)
+  if(WIN32)
+    # _detach_debuginfo(${_lib} ${CMAKE_INSTALL_LIBDIR}/ansel/plugins)
   else()
-      set_target_properties(${_lib}
-                            PROPERTIES
-                            INSTALL_RPATH ${CMAKE_INSTALL_LIBDIR_RPATH})
+    set_target_properties(${_lib}
+                          PROPERTIES
+                          INSTALL_RPATH ${RPATH_ORIGIN}/../..)
   endif(WIN32)
 
   install(TARGETS ${_lib} DESTINATION ${CMAKE_INSTALL_LIBDIR}/ansel/plugins COMPONENT DTApplication)
@@ -57,7 +57,7 @@ macro (add_iop _lib _src)
   if(${add_iop_DEFAULT_VISIBLE})
     list(APPEND _iop_default_visible_list ${_lib})
   endif(${add_iop_DEFAULT_VISIBLE})
-endmacro (add_iop)
+endmacro(add_iop)
 
 # @@_NEW_MODULE: when adding a new module here, please grep @@_NEW_MODULE in the code and adjust accordingly.
 

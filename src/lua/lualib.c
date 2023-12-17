@@ -89,6 +89,7 @@ static const char **view_wrapper(struct dt_lib_module_t *self)
 
 static position_description_t *get_position_description(lua_lib_data_t *gui_data, const dt_view_t *cur_view)
 {
+  if(!gui_data) return NULL;
   for(GList *iter = gui_data->position_descriptions; iter; iter = g_list_next(iter))
   {
     position_description_t *position_description = (position_description_t *)iter->data;
@@ -100,6 +101,7 @@ static position_description_t *get_position_description(lua_lib_data_t *gui_data
 uint32_t container_wrapper(struct dt_lib_module_t *self)
 {
   const dt_view_t *cur_view = dt_view_manager_get_current_view(darktable.view_manager);
+  if(!self || !self->data) return 0;
   lua_lib_data_t *gui_data = self->data;
   position_description_t *position_description = get_position_description(gui_data, cur_view);
   if(position_description) return position_description->container;
@@ -110,6 +112,7 @@ uint32_t container_wrapper(struct dt_lib_module_t *self)
 int position_wrapper(const struct dt_lib_module_t *self)
 {
   const dt_view_t *cur_view = dt_view_manager_get_current_view(darktable.view_manager);
+  if(!self || !self->data) return 0;
   lua_lib_data_t *gui_data = self->data;
   position_description_t *position_description = get_position_description(gui_data, cur_view);
   if(position_description) return position_description->position;
@@ -313,4 +316,3 @@ int dt_lua_init_lualib(lua_State *L)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

@@ -31,24 +31,20 @@ cmake --build . --target install
 mkdir -p ../AppDir/usr/share/lensfun
 cp -a /var/lib/lensfun-updates/* ../AppDir/usr/share/lensfun
 
-## Replace relative pathes to executable in ansel.desktop
-## The pathes will be handled by AppImage.
-sed -i 's/\/usr\/bin\///' ../AppDir/usr/share/applications/photos.ansel.app.desktop
-
 ## Get the latest Linuxdeploy and its Gtk plugin to package everything
 wget -c "https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh"
 wget -c "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
 chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-gtk.sh
 
 export DEPLOY_GTK_VERSION="3"
-export VERSION=$(sh ../tools/get_git_version_string.sh)
+export LINUXDEPLOY_OUTPUT_VERSION=$(sh ../tools/get_git_version_string.sh)
 
-export UPDATE_INFORMATION="gh-releases-zsync|aurelienpierreeng|ansel|v0.0.0|Ansel-*-x86_64.AppImage.zsync"
+export LDAI_UPDATE_INFORMATION="gh-releases-zsync|aurelienpierreeng|ansel|v0.0.0|Ansel-*-x86_64.AppImage.zsync"
 
 # Our plugins link against libansel, it's not in system, so tell linuxdeploy
 # where to find it. Don't use LD_PRELOAD here, linuxdeploy cannot see preloaded
 # libraries.
-export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:../AppDir/usr/lib64/ansel/"
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:../AppDir/usr/lib64/"
 # Using `--deploy-deps-only` to tell linuxdeploy also collect dependencies for
 # libraries in this dir, but don't copy those libraries. On the contrary,
 # `--library` will copy both libraries and their dependencies, which is not what

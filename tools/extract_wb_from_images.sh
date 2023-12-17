@@ -20,7 +20,7 @@ fi
 tmp_dir=$(mktemp -d -t dt-wb-XXXXXXXXXX)
 cur_dir=$(pwd)
 
-tarball="$cur_dir"/darktable-whitebalance-$(date +'%Y%m%d').tar.gz
+tarball="$cur_dir"/ansel-whitebalance-$(date +'%Y%m%d').tar.gz
 
 echo "Extracting WB presets."
 for image in "$@"

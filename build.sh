@@ -291,17 +291,25 @@ cmake_boolean_option()
 	esac
 }
 
-clean()
+clean_build()
 {
 	local force=$1
 	local path_to_clean=$2
 	local option="-I"
 
-	echo
-	log warn "Cleaning directory [$path_to_clean]: it will erase all the files in this path"
 	[ $force -eq 1 ] && option="-f"
 
-	rm -r "$option" "$path_to_clean" || log err "Failed to remove [$path_to_clean]"
+	${SUDO}rm -r "$option" "$path_to_clean" || log err "Failed to remove [$path_to_clean]"
+}
+
+clean_install()
+{
+	local force=$1
+	local file=$2
+	local option="-I"
+
+	[ $force -eq 1 ] && option="-f"
+	${SUDO}rm "$option" "$file" && log info "Removed: $file"
 }
 
 # ---------------------------------------------------------------------------
@@ -386,7 +394,7 @@ if [ $DO_CLEAN_INSTALL -gt 0 ] ; then
 	if [ -f $MANIFEST_FILE ]; then
 		for f in $(cat $MANIFEST_FILE); do
 			if [ -f "$f" ]; then
-				rm "$f" && log info "Removed: $f"
+				clean_install $FORCE_CLEAN "$f"
 			else
 				log warn "File not found: can't remove $f"
 			fi
@@ -397,7 +405,9 @@ if [ $DO_CLEAN_INSTALL -gt 0 ] ; then
 fi
 
 if [ $DO_CLEAN_BUILD -gt 0 ] ; then
-	clean $FORCE_CLEAN "$BUILD_DIR"
+	echo
+	log warn "Cleaning directory ["$BUILD_DIR"]: it will erase all the files in this path"
+	clean_build $FORCE_CLEAN "$BUILD_DIR"
 fi
 
 

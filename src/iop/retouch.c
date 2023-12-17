@@ -1538,7 +1538,8 @@ static gboolean rt_display_wavelet_scale_callback(GtkToggleButton *togglebutton,
   }
   dt_iop_gui_leave_critical_section(self);
 
-  dt_dev_reprocess_center(self->dev);
+  dt_dev_invalidate(self->dev);
+  dt_dev_refresh_ui_images(self->dev);
 
   gtk_toggle_button_set_active(togglebutton, g->display_wavelet_scale);
   return TRUE;
@@ -1977,7 +1978,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
 {
-  if(self->enabled && !darktable.develop->image_loading)
+  if(self->enabled)
   {
     dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)self->gui_data;
 
@@ -2057,6 +2058,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = malloc(sizeof(dt_iop_retouch_data_t));
+  piece->data_size = sizeof(dt_iop_retouch_data_t);
 }
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -2130,7 +2132,6 @@ void gui_update(dt_iop_module_t *self)
 
   // update edit shapes status
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
-  if(darktable.develop->history_updating) bd->masks_shown = DT_MASKS_EDIT_OFF;
 
   //only toggle shape show button if shapes exist
   if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)

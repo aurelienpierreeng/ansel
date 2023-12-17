@@ -1264,7 +1264,6 @@ void dt_masks_reset_form_gui(void)
 
 void dt_masks_reset_show_masks_icons(void)
 {
-  if(darktable.develop->first_load) return;
   for(GList *modules = darktable.develop->iop; modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *m = (dt_iop_module_t *)modules->data;
@@ -1898,52 +1897,15 @@ void dt_masks_group_ungroup(dt_masks_form_t *dest_grp, dt_masks_form_t *grp)
   }
 }
 
-int dt_masks_group_get_hash_buffer_length(dt_masks_form_t *form)
+uint64_t dt_masks_group_get_hash(uint64_t hash, dt_masks_form_t *form)
 {
-  if(!form) return 0;
-  int pos = 0;
-  // basic infos
-  pos += sizeof(dt_masks_type_t);
-  pos += sizeof(int);
-  pos += sizeof(int);
-  pos += 2 * sizeof(float);
+  if(!form) return hash;
 
-  for(GList *forms = form->points; forms; forms = g_list_next(forms))
-  {
-    if(form->type & DT_MASKS_GROUP)
-    {
-      dt_masks_point_group_t *grpt = (dt_masks_point_group_t *)forms->data;
-      dt_masks_form_t *f = dt_masks_get_from_id(darktable.develop, grpt->formid);
-      if(f)
-      {
-        // state & opacity
-        pos += sizeof(int);
-        pos += sizeof(float);
-        // the form itself
-        pos += dt_masks_group_get_hash_buffer_length(f);
-      }
-    }
-    else if(form->functions)
-    {
-      pos += form->functions->point_struct_size;
-    }
-  }
-  return pos;
-}
-
-char *dt_masks_group_get_hash_buffer(dt_masks_form_t *form, char *str)
-{
-  if(!form) return str;
-  int pos = 0;
   // basic infos
-  memcpy(str + pos, &form->type, sizeof(dt_masks_type_t));
-  pos += sizeof(dt_masks_type_t);
-  memcpy(str + pos, &form->formid, sizeof(int));
-  pos += sizeof(int);
-  memcpy(str + pos, &form->version, sizeof(int));
-  pos += sizeof(int);
-  memcpy(str + pos, &form->source, sizeof(float) * 2);
-  pos += 2 * sizeof(float);
+  hash = dt_hash(hash, (char *)&form->type, sizeof(dt_masks_type_t));
+  hash = dt_hash(hash, (char *)&form->formid, sizeof(int));
+  hash = dt_hash(hash, (char *)&form->version, sizeof(int));
+  hash = dt_hash(hash, (char *)&form->source, sizeof(float) * 2);
 
   for(const GList *forms = form->points; forms; forms = g_list_next(forms))
   {
@@ -1954,21 +1916,19 @@ char *dt_masks_group_get_hash_buffer(dt_masks_form_t *form, char *str)
       if(f)
       {
         // state & opacity
-        memcpy(str + pos, &grpt->state, sizeof(int));
-        pos += sizeof(int);
-        memcpy(str + pos, &grpt->opacity, sizeof(float));
-        pos += sizeof(float);
+        hash = dt_hash(hash, (char *)&grpt->state, sizeof(int));
+        hash = dt_hash(hash, (char *)&grpt->opacity, sizeof(float));
+
         // the form itself
-        str = dt_masks_group_get_hash_buffer(f, str + pos) - pos;
+        hash = dt_masks_group_get_hash(hash, f);
       }
     }
     else if(form->functions)
     {
-      memcpy(str + pos,forms->data, form->functions->point_struct_size);
-      pos += form->functions->point_struct_size;
+      hash = dt_hash(hash, (char *)forms->data, form->functions->point_struct_size);
     }
   }
-  return str + pos;
+  return hash;
 }
 
 void dt_masks_update_image(dt_develop_t *dev)
@@ -1977,9 +1937,8 @@ void dt_masks_update_image(dt_develop_t *dev)
   // dt_similarity_image_dirty(dev->image_storage.id);
 
   // invalidate buffers and force redraw of darkroom
-  dev->pipe->changed |= DT_DEV_PIPE_SYNCH;
-  dev->preview_pipe->changed |= DT_DEV_PIPE_SYNCH;
   dt_dev_invalidate_all(dev);
+  dt_dev_refresh_ui_images(dev);
 }
 
 // adds formid to used array

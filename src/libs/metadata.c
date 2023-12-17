@@ -58,7 +58,7 @@ typedef struct dt_lib_metadata_t
 
 const char *name(dt_lib_module_t *self)
 {
-  return _("edit metadata");
+  return _("Metadata");
 }
 
 const char **views(dt_lib_module_t *self)
@@ -69,7 +69,7 @@ const char **views(dt_lib_module_t *self)
 
 uint32_t container(dt_lib_module_t *self)
 {
-  return DT_UI_CONTAINER_PANEL_RIGHT_CENTER;
+  return DT_UI_CONTAINER_PANEL_LEFT_CENTER;
 }
 
 void _textbuffer_changed(GtkTextBuffer *textbuffer, dt_lib_module_t *self);
@@ -398,7 +398,7 @@ static gboolean _lost_focus(GtkWidget *textview, GdkEventFocus *event, dt_lib_mo
 
 int position()
 {
-  return 510;
+  return 4;
 }
 
 static void _update_layout(dt_lib_module_t *self)

@@ -54,18 +54,19 @@ const char *name(dt_lib_module_t *self)
 
 const char **views(dt_lib_module_t *self)
 {
-  static const char *v[] = {"lighttable", NULL};
+  // Goes in popup
+  static const char *v[] = {NULL};
   return v;
 }
 
 uint32_t container(dt_lib_module_t *self)
 {
-  return DT_UI_CONTAINER_PANEL_RIGHT_CENTER;
+  return DT_UI_CONTAINER_SIZE;
 }
 
 int position()
 {
-  return 599;
+  return 0;
 }
 
 typedef enum _styles_columns_t

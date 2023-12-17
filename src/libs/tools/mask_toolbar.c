@@ -31,7 +31,7 @@ const char **views(dt_lib_module_t *self)
 
 uint32_t container(dt_lib_module_t *self)
 {
-  return DT_UI_CONTAINER_PANEL_TOP_SECOND_ROW;
+  return DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_LEFT;
 }
 
 int expandable(dt_lib_module_t *self)

@@ -94,7 +94,7 @@ typedef struct dt_iop_channelmixer_rgb_params_t
   float blue[CHANNEL_SIZE];        // $MIN: COLOR_MIN $MAX: COLOR_MAX
   float saturation[CHANNEL_SIZE];  // $MIN: -1.0 $MAX: 1.0
   float lightness[CHANNEL_SIZE];   // $MIN: -1.0 $MAX: 1.0
-  float grey[CHANNEL_SIZE];        // $MIN: 0.0 $MAX: 1.0
+  float grey[CHANNEL_SIZE];        // $MIN: -2.0 $MAX: 2.0
   gboolean normalize_R, normalize_G, normalize_B, normalize_sat, normalize_light, normalize_grey; // $DESCRIPTION: "normalize channels"
   dt_illuminant_t illuminant;      // $DEFAULT: DT_ILLUMINANT_D
   dt_illuminant_fluo_t illum_fluo; // $DEFAULT: DT_ILLUMINANT_FLUO_F3 $DESCRIPTION: "F source"
@@ -2576,7 +2576,8 @@ static void run_profile_callback(GtkWidget *widget, GdkEventButton *event, gpoin
   g->run_profile = TRUE;
   dt_iop_gui_leave_critical_section(self);
 
-  dt_dev_reprocess_preview(self->dev);
+  dt_dev_invalidate_preview(self->dev);
+  dt_dev_refresh_ui_images(self->dev);
 }
 
 static void run_validation_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
@@ -2589,7 +2590,8 @@ static void run_validation_callback(GtkWidget *widget, GdkEventButton *event, gp
   g->run_validation = TRUE;
   dt_iop_gui_leave_critical_section(self);
 
-  dt_dev_reprocess_preview(self->dev);
+  dt_dev_invalidate_preview(self->dev);
+  dt_dev_refresh_ui_images(self->dev);
 }
 
 static void commit_profile_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
@@ -3334,6 +3336,7 @@ static void illum_xy_callback(GtkWidget *slider, gpointer user_data)
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = dt_calloc_align(64, sizeof(dt_iop_channelmixer_rbg_data_t));
+  piece->data_size = sizeof(dt_iop_channelmixer_rbg_data_t);
 }
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

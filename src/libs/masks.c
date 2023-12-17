@@ -52,7 +52,7 @@ typedef struct dt_lib_masks_t
 
 const char *name(dt_lib_module_t *self)
 {
-  return _("mask manager");
+  return _("Masks");
 }
 
 const char **views(dt_lib_module_t *self)
@@ -68,7 +68,7 @@ uint32_t container(dt_lib_module_t *self)
 
 int position()
 {
-  return 999;
+  return 850;
 }
 
 typedef enum dt_masks_tree_cols_t

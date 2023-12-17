@@ -2496,6 +2496,7 @@ int dt_image_local_copy_reset(const int32_t imgid)
 
 int dt_image_write_sidecar_file(const int32_t imgid)
 {
+  // FIXME: [CRITICAL] should lock the image history at the app level
   // TODO: compute hash and don't write if not needed!
   // write .xmp file
   if((imgid > 0) && (dt_image_get_xmp_mode() != DT_WRITE_XMP_NEVER))

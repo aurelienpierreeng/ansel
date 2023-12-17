@@ -18,10 +18,11 @@ static const char *dt_supported_extensions[] __attribute__((unused)) = {"@DT_SUP
 
 #define GETTEXT_PACKAGE "ansel"
 
-#cmakedefine DARKTABLE_LOCALEDIR "@REL_BIN_TO_LOCALEDIR@"
-#cmakedefine DARKTABLE_LIBDIR    "@REL_BIN_TO_LIBDIR@"
-#cmakedefine DARKTABLE_DATADIR   "@REL_BIN_TO_DATADIR@"
-#cmakedefine DARKTABLE_SHAREDIR  "@REL_BIN_TO_SHAREDIR@"
+// Those are used to find needed dirs runtime, so they needs to be relative.
+#define DARKTABLE_LOCALEDIR "@REL_BIN_TO_LOCALEDIR@"
+#define DARKTABLE_MODULEDIR "@REL_BIN_TO_MODULEDIR@"
+#define DARKTABLE_DATADIR   "@REL_BIN_TO_DATADIR@"
+#define DARKTABLE_SHAREDIR  "@REL_BIN_TO_SHAREDIR@"
 
 #define SHARED_MODULE_PREFIX "@CMAKE_SHARED_MODULE_PREFIX@"
 #define SHARED_MODULE_SUFFIX "@CMAKE_SHARED_MODULE_SUFFIX@"

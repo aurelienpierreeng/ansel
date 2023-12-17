@@ -89,7 +89,7 @@ static int on_screen_member(lua_State *L)
 static int position_member(lua_State*L)
 {
   dt_lib_module_t * module = *(dt_lib_module_t**)lua_touserdata(L, 1);
-  lua_pushinteger(L, module->position(module));
+  lua_pushinteger(L, module->position());
   return 1;
 }
 

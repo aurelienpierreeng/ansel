@@ -524,6 +524,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = malloc(sizeof(dt_iop_exposure_data_t));
+  piece->data_size = sizeof(dt_iop_exposure_data_t);
 }
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -547,8 +548,6 @@ void gui_update(struct dt_iop_module_t *self)
      || self->dev->image_storage.buf_dsc.datatype != TYPE_UINT16)
   {
     gtk_widget_set_sensitive(GTK_WIDGET(g->mode), FALSE);
-    p->mode = EXPOSURE_MODE_MANUAL;
-    dt_dev_add_history_item(darktable.develop, self, TRUE);
   }
   else
   {

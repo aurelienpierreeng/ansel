@@ -1,24 +1,28 @@
 /*
-    This file is part of Ansel.
-    Copyright (C) 2023 Aurélien Pierre.
+    This file is part of ansel,
+    Copyright (C) 2022 darktable developers.
+    Copyright (C) 2023 ansel developers.
 
-    darktable is free software: you can redistribute it and/or modify
+    ansel is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    darktable is distributed in the hope that it will be useful,
+    ansel is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 
     You should have received a copy of the GNU General Public License
-    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+    along with ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#pragma once
 
-/** Open the image importer popup and process user input **/
-void dt_images_import();
+#include "common/image.h"
+#include "common/mipmap_cache.h"
+
+dt_imageio_retval_t dt_imageio_open_webp(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf);
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

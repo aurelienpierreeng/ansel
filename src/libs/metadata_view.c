@@ -168,7 +168,7 @@ static gboolean _dndactive = FALSE;
 
 const char *name(dt_lib_module_t *self)
 {
-  return _("display metadata");
+  return _("EXIF & IPTC");
 }
 
 const char **views(dt_lib_module_t *self)
@@ -179,12 +179,12 @@ const char **views(dt_lib_module_t *self)
 
 uint32_t container(dt_lib_module_t *self)
 {
-  return DT_UI_CONTAINER_PANEL_LEFT_BOTTOM;
+  return DT_UI_CONTAINER_PANEL_LEFT_CENTER;
 }
 
 int position()
 {
-  return 999;
+  return 1;
 }
 
 static gboolean _is_metadata_ui(const int i)

@@ -57,17 +57,7 @@ const char **views(dt_lib_module_t *self)
 
 uint32_t container(dt_lib_module_t *self)
 {
-  const char *pos = dt_conf_get_string_const("plugins/darkroom/image_infos_position");
-  dt_ui_container_t cont = DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_CENTER; // default value
-
-  if(g_strcmp0(pos, "top left") == 0)
-    cont = DT_UI_CONTAINER_PANEL_LEFT_TOP;
-  else if(g_strcmp0(pos, "top right") == 0)
-    cont = DT_UI_CONTAINER_PANEL_RIGHT_TOP;
-  else if(g_strcmp0(pos, "top center") == 0)
-    cont = DT_UI_CONTAINER_PANEL_CENTER_TOP_CENTER;
-
-  return cont;
+  return DT_UI_CONTAINER_PANEL_LEFT_TOP;
 }
 
 int expandable(dt_lib_module_t *self)
@@ -77,7 +67,7 @@ int expandable(dt_lib_module_t *self)
 
 int position()
 {
-  return 1500;
+  return 1;
 }
 
 void _lib_imageinfo_update_message(gpointer instance, dt_lib_module_t *self)
@@ -172,4 +162,3 @@ void gui_cleanup(dt_lib_module_t *self)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

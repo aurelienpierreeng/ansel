@@ -6,6 +6,8 @@
 static void clear_caches_callback(GtkWidget *widget)
 {
   dt_dev_reprocess_all(darktable.develop);
+  dt_control_queue_redraw();
+  dt_dev_refresh_ui_images(darktable.develop);
 }
 
 static void optimize_database_callback(GtkWidget *widget)

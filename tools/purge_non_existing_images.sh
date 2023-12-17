@@ -7,17 +7,17 @@
 
 if ! command -v sqlite3 >/dev/null
 then
-    echo "error: please install sqlite3 binary".
+    echo "Error: please install sqlite3 binary".
     exit 1
 fi
 
-if pgrep -x "darktable" >/dev/null
+if pgrep -x "ansel" >/dev/null
 then
-    echo "error: darktable is running, please exit first"
+    echo "Error: Ansel is running, please exit first"
     exit 1
 fi
 
-configdir="${HOME}/.config/darktable"
+configdir="${HOME}/.config/ansel"
 DBFILE="${configdir}/library.db"
 dryrun=1
 library=""
@@ -31,11 +31,11 @@ do
     option="$1"
     case "$option" in
     -h | --help)
-        echo "Delete non existing images from darktable's database"
+        echo "Delete non existing images from Ansel's database"
         echo "Usage:   ${0} [options]"
         echo ""
         echo "Options:"
-        echo "  -c|--configdir <path>    path to the darktable config directory"
+        echo "  -c|--configdir <path>    path to the Ansel config directory"
         echo "                           (default: '${configdir}')"
         echo "  -l|--library <path>      path to the library.db"
         echo "                           (default: '${DBFILE}')"
@@ -54,7 +54,7 @@ do
         dryrun=0
         ;;
     *)
-        echo "warning: ignoring unknown option ${option}"
+        echo "Warning: ignoring unknown option ${option}"
         ;;
     esac
     shift
@@ -69,7 +69,7 @@ fi
 
 if [ ! -f "$DBFILE" ]
 then
-    echo "error: library db '${DBFILE}' doesn't exist"
+    echo "Error: library db '${DBFILE}' doesn't exist"
     exit 1
 fi
 

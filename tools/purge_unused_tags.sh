@@ -6,16 +6,16 @@
 #
 
 if ! which sqlite3 > /dev/null; then
-    echo "error: please install sqlite3 binary".
+    echo "Error: please install sqlite3 binary".
     exit 1
 fi
 
-if pgrep -x "darktable" > /dev/null ; then
-    echo "error: darktable is running, please exit first"
+if pgrep -x "ansel" > /dev/null ; then
+    echo "Error: Ansel is running, please exit first"
     exit 1
 fi
 
-configdir="$HOME/.config/darktable"
+configdir="$HOME/.config/ansel"
 LIBDB="$configdir/library.db"
 dryrun=1
 library=""
@@ -28,11 +28,11 @@ while [ "$#" -ge 1 ] ; do
   option="$1"
   case ${option} in
   -h|--help)
-    echo "Delete unused tags from darktable's database"
+    echo "Delete unused tags from Ansel's database"
     echo "Usage:   $0 [options]"
     echo ""
     echo "Options:"
-    echo "  -c|--configdir <path>    path to the darktable config directory"
+    echo "  -c|--configdir <path>    path to the Ansel config directory"
     echo "                           (default: '${configdir}')"
     echo "  -l|--library <path>      path to the library.db"
     echo "                           (default: '${LIBDB}')"
@@ -51,7 +51,7 @@ while [ "$#" -ge 1 ] ; do
     dryrun=0
     ;;
   *)
-    echo "warning: ignoring unknown option $option"
+    echo "Warning: ignoring unknown option $option"
     ;;
   esac
     shift
@@ -65,12 +65,12 @@ if [ "$library" != "" ]; then
 fi
 
 if [ ! -f "$LIBDB" ]; then
-    echo "error: library db '${LIBDB}' doesn't exist"
+    echo "Error: library db '${LIBDB}' doesn't exist"
     exit 1
 fi
 
 if [ ! -f "$DATADB" ]; then
-    echo "error: data db '${DATADB}' doesn't exist"
+    echo "Error: data db '${DATADB}' doesn't exist"
     exit 1
 fi
 

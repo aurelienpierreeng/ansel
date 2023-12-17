@@ -1,21 +1,22 @@
 /*
- * This file is part of darktable,
+ * This file is part of ansel,
  * Copyright (C) 2019-2021 darktable developers.
+ * Copyright (C) 2023 ansel developers.
  *
  *  Copyright (c) 2019      Andreas Schneider
  *
- *  darktable is free software: you can redistribute it and/or modify
+ *  ansel is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  darktable is distributed in the hope that it will be useful,
+ *  ansel is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+ *  along with ansel.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifdef HAVE_CONFIG_H
@@ -295,7 +296,7 @@ int write_image(struct dt_imageio_module_data_t *data,
       case DT_COLORSPACE_SRGB:
           image->colorPrimaries = AVIF_COLOR_PRIMARIES_BT709;
           image->transferCharacteristics = AVIF_TRANSFER_CHARACTERISTICS_SRGB;
-          image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_BT470BG;
+          image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_BT601;
           break;
       case DT_COLORSPACE_REC709:
           image->colorPrimaries = AVIF_COLOR_PRIMARIES_BT709;
@@ -330,6 +331,11 @@ int write_image(struct dt_imageio_module_data_t *data,
       case DT_COLORSPACE_HLG_P3:
           image->colorPrimaries = AVIF_COLOR_PRIMARIES_SMPTE432;
           image->transferCharacteristics = AVIF_TRANSFER_CHARACTERISTICS_HLG;
+          image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_CHROMA_DERIVED_NCL;
+        break;
+      case DT_COLORSPACE_DISPLAY_P3:
+          image->colorPrimaries = AVIF_COLOR_PRIMARIES_SMPTE432;
+          image->transferCharacteristics = AVIF_TRANSFER_CHARACTERISTICS_SRGB;
           image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_CHROMA_DERIVED_NCL;
         break;
       default:

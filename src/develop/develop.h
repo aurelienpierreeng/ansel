@@ -23,6 +23,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 
+#include "common/debug.h"
 #include "common/darktable.h"
 #include "common/dtpthread.h"
 #include "common/image.h"
@@ -43,7 +44,6 @@ typedef struct dt_dev_history_item_t
   char multi_name[128];
   GList *forms; // snapshot of dt_develop_t->forms
   int num; // num of history on database
-  int32_t focus_hash;             // used to determine whether or not to start a new item or to merge down
 } dt_dev_history_item_t;
 
 typedef enum dt_dev_overexposed_colorscheme_t
@@ -149,20 +149,20 @@ typedef struct dt_develop_t
   int32_t gui_attached; // != 0 if the gui should be notified of changes in hist stack and modules should be
                         // gui_init'ed.
   int32_t gui_leaving;  // set if everything is scheduled to shut down.
-  int32_t gui_synch;    // set by the render threads if gui_update should be called in the modules.
-  int32_t focus_hash;   // determines whether to start a new history item or to merge down.
-  gboolean preview_loading, image_loading, history_updating, image_force_reload, first_load;
-  gboolean preview_input_changed;
 
   dt_dev_pixelpipe_status_t image_status, preview_status;
   int32_t image_invalid_cnt;
-  uint32_t timestamp;
   uint32_t average_delay;
   uint32_t preview_average_delay;
   struct dt_iop_module_t *gui_module; // this module claims gui expose/event callbacks.
 
   // width, height: dimensions of window
   int32_t width, height;
+
+  // Contains the source image to work with. Shared between pipes to
+  // mutualize I/O
+  dt_mipmap_buffer_t full_buf;
+  dt_mipmap_buffer_t small_buf;
 
   // image processing pipeline with caching
   struct dt_dev_pixelpipe_t *pipe, *preview_pipe;
@@ -329,14 +329,22 @@ void dt_dev_process_preview_job(dt_develop_t *dev);
 void dt_dev_process_image(dt_develop_t *dev);
 void dt_dev_process_preview(dt_develop_t *dev);
 
-void dt_dev_load_image(dt_develop_t *dev, const uint32_t imgid);
+// Lazy helpers that will update GUI pipelines (main image and small preview)
+// only when needed, and only the one(s) needed.
+void dt_dev_refresh_ui_images_real(dt_develop_t *dev);
+#define dt_dev_refresh_ui_images(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_refresh_ui_images_real, (dev))
+
+int dt_dev_load_image(dt_develop_t *dev, const uint32_t imgid);
 void dt_dev_reload_image(dt_develop_t *dev, const uint32_t imgid);
+void dt_dev_unload_image(dt_develop_t *dev);
 /** checks if provided imgid is the image currently in develop */
 int dt_dev_is_current_image(dt_develop_t *dev, uint32_t imgid);
+
 const dt_dev_history_item_t *dt_dev_get_history_item(dt_develop_t *dev, const char *op);
 void dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable, gboolean no_image);
-void dt_dev_add_history_item(dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable);
-void dt_dev_add_new_history_item(dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable);
+void dt_dev_add_history_item_real(dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable);
+#define dt_dev_add_history_item(dev, module, enable) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_add_history_item_real, (dev), (module), (enable))
+
 void dt_dev_add_masks_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *_module, gboolean _enable, gboolean no_image);
 void dt_dev_add_masks_history_item(dt_develop_t *dev, struct dt_iop_module_t *_module, gboolean enable);
 void dt_dev_reload_history_items(dt_develop_t *dev);
@@ -349,9 +357,17 @@ void dt_dev_read_history(dt_develop_t *dev);
 void dt_dev_free_history_item(gpointer data);
 void dt_dev_invalidate_history_module(GList *list, struct dt_iop_module_t *module);
 
-void dt_dev_invalidate(dt_develop_t *dev);
-// also invalidates preview (which is unaffected by resize/zoom/pan)
-void dt_dev_invalidate_all(dt_develop_t *dev);
+// force a rebuild of the pipe, needed when a module order is changed for example
+void dt_dev_pixelpipe_rebuild(struct dt_develop_t *dev);
+
+void dt_dev_invalidate_real(dt_develop_t *dev);
+#define dt_dev_invalidate(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_invalidate_real, (dev))
+void dt_dev_invalidate_preview_real(dt_develop_t *dev);
+#define dt_dev_invalidate_preview(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_invalidate_preview_real, (dev))
+void dt_dev_invalidate_all_real(dt_develop_t *dev);
+#define dt_dev_invalidate_all(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_invalidate_all_real, (dev))
+void dt_dev_invalidate_zoom_real(dt_develop_t *dev);
+#define dt_dev_invalidate_zoom(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_invalidate_zoom_real, (dev))
 void dt_dev_set_histogram(dt_develop_t *dev);
 void dt_dev_set_histogram_pre(dt_develop_t *dev);
 void dt_dev_get_history_item_label(dt_dev_history_item_t *hist, char *label, const int cnt);
@@ -489,6 +505,10 @@ void dt_dev_undo_end_record(dt_develop_t *dev);
 
 gboolean dt_masks_get_lock_mode(dt_develop_t *dev);
 void dt_masks_set_lock_mode(dt_develop_t *dev, gboolean mode);
+
+// Count all the mask forms used × history entries, up to a certain threshold.
+// Stop counting when the threshold is reached, for performance.
+guint dt_dev_mask_history_overload(dt_develop_t *dev, guint threshold);
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

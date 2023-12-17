@@ -1409,6 +1409,7 @@ void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
 {
   // create part of the pixelpipe
   piece->data = calloc(1, sizeof(dt_iop_basecurve_data_t));
+  piece->data_size = sizeof(dt_iop_basecurve_data_t);
   self->commit_params(self, self->default_params, pipe, piece);
 }
 

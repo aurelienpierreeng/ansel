@@ -217,7 +217,7 @@ void dt_control_progress_init(struct dt_control_t *control)
 {
 #ifndef _WIN32
 
-  if(darktable.dbus->dbus_connection)
+  if(darktable.dbus && darktable.dbus->dbus_connection)
   {
     GError *error = NULL;
 

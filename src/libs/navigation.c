@@ -378,7 +378,7 @@ void _lib_navigation_set_position(dt_lib_module_t *self, double x, double y, int
     gtk_widget_queue_draw(self->widget);
 
     /* redraw pipe */
-    dt_dev_invalidate(darktable.develop);
+    dt_dev_invalidate_zoom(darktable.develop);
     dt_control_queue_redraw_center();
   }
 }
@@ -480,8 +480,9 @@ static void _zoom_preset_change(uint64_t val)
   dt_control_set_dev_closeup(closeup);
   dt_control_set_dev_zoom_x(zoom_x);
   dt_control_set_dev_zoom_y(zoom_y);
-  dt_dev_invalidate(dev);
+  dt_dev_invalidate_zoom(dev);
   dt_control_queue_redraw();
+  dt_dev_refresh_ui_images(dev);
 }
 
 static void _zoom_preset_callback(GtkButton *button, gpointer user_data)
@@ -553,6 +554,7 @@ static gboolean _lib_navigation_button_release_callback(GtkWidget *widget, GdkEv
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
   d->dragging = 0;
+  dt_dev_refresh_ui_images(darktable.develop);
 
   return TRUE;
 }
@@ -568,4 +570,3 @@ static gboolean _lib_navigation_leave_notify_callback(GtkWidget *widget, GdkEven
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

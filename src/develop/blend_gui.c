@@ -1081,8 +1081,8 @@ static void _blendop_blendif_tab_switch(GtkNotebook *notebook, GtkWidget *page, 
          || gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(data->colorpicker_set_values))))
   {
     dt_iop_color_picker_set_cst(data->module, _blendop_blendif_get_picker_colorspace(data));
-    dt_dev_reprocess_all(data->module->dev);
-    dt_control_queue_redraw();
+    dt_dev_invalidate_all(data->module->dev);
+    dt_dev_refresh_ui_images(data->module->dev);
   }
 
   _blendop_blendif_update_tab(data->module, data->tab);
@@ -1131,8 +1131,8 @@ static void _blendop_blendif_details_callback(GtkWidget *slider, dt_iop_gui_blen
 
   if((oldval == 0.0f) && (bp->details != 0.0f))
   {
-    dt_dev_reprocess_all(data->module->dev);
-    dt_control_queue_redraw();
+    dt_dev_invalidate_all(data->module->dev);
+    dt_dev_refresh_ui_images(data->module->dev);
   }
 }
 
@@ -1618,7 +1618,7 @@ static gboolean _blendif_change_blend_colorspace(dt_iop_module_t *module, dt_dev
 
     dt_iop_gui_blend_data_t *bd = module->blend_data;
     const int cst_old = _blendop_blendif_get_picker_colorspace(bd);
-    dt_dev_add_new_history_item(darktable.develop, module, FALSE);
+    dt_dev_add_history_item(darktable.develop, module, FALSE);
     dt_iop_gui_update(module);
 
     if(cst_old != _blendop_blendif_get_picker_colorspace(bd) &&
@@ -1626,8 +1626,8 @@ static gboolean _blendif_change_blend_colorspace(dt_iop_module_t *module, dt_dev
         gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->colorpicker_set_values))))
     {
       dt_iop_color_picker_set_cst(bd->module, _blendop_blendif_get_picker_colorspace(bd));
-      dt_dev_reprocess_all(bd->module->dev);
-      dt_control_queue_redraw();
+      dt_dev_invalidate_all(bd->module->dev);
+      dt_dev_refresh_ui_images(bd->module->dev);
     }
 
     return TRUE;
@@ -2045,7 +2045,8 @@ void dt_iop_gui_update_blendif(dt_iop_module_t *module)
     if(module->request_mask_display != (bd->save_for_leave & ~DT_DEV_PIXELPIPE_DISPLAY_STICKY))
     {
       module->request_mask_display = bd->save_for_leave & ~DT_DEV_PIXELPIPE_DISPLAY_STICKY;
-      dt_dev_reprocess_all(module->dev);//DBG
+      dt_dev_invalidate_all(module->dev);//DBG
+      dt_dev_refresh_ui_images(module->dev);
     }
   }
   dt_pthread_mutex_unlock(&bd->lock);
@@ -2443,7 +2444,10 @@ static void _raster_value_changed_callback(GtkWidget *widget, struct dt_iop_modu
   dt_dev_add_history_item(module->dev, module, TRUE);
 
   if(reprocess)
-    dt_dev_reprocess_all(module->dev);
+  {
+    dt_dev_invalidate_all(module->dev);
+    dt_dev_refresh_ui_images(module->dev);
+  }
 }
 
 void dt_iop_gui_update_raster(dt_iop_module_t *module)

@@ -25,6 +25,7 @@ static void full_screen_callback()
     gtk_window_fullscreen(GTK_WINDOW(widget));
 
   dt_dev_invalidate(darktable.develop);
+  dt_dev_refresh_ui_images(darktable.develop);
 
   /* redraw center view */
   gtk_widget_queue_draw(widget);
@@ -57,6 +58,7 @@ static void _toggle_side_borders_accel_callback(dt_action_t *action)
 
   /* trigger invalidation of centerview to reprocess pipe */
   dt_dev_invalidate(darktable.develop);
+  dt_dev_refresh_ui_images(darktable.develop);
   gtk_widget_queue_draw(dt_ui_center(darktable.gui->ui));
 }
 
@@ -249,7 +251,8 @@ static void profile_callback(GtkWidget *widget)
     dt_colorspaces_update_display_transforms();
     pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_DISPLAY);
-    dt_dev_reprocess_all(darktable.develop);
+    dt_dev_invalidate_all(darktable.develop);
+    dt_dev_refresh_ui_images(darktable.develop);
   }
 }
 
@@ -284,7 +287,8 @@ static void intent_callback(GtkWidget *widget)
     pthread_rwlock_rdlock(&darktable.color_profiles->xprofile_lock);
     dt_colorspaces_update_display_transforms();
     pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
-    dt_dev_reprocess_all(darktable.develop);
+    dt_dev_invalidate_all(darktable.develop);
+    dt_dev_refresh_ui_images(darktable.develop);
   }
 }
 

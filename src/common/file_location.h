@@ -29,7 +29,7 @@ void dt_loc_init(const char *datadir, const char *moduledir, const char *localed
 /** init systemwide data dir */
 void dt_loc_init_datadir(const char *application_directory, const char *datadir);
 /** init the plugin dir */
-void dt_loc_init_plugindir(const char *application_directory, const char *plugindir);
+void dt_loc_init_moduledir(const char *application_directory, const char *moduledir);
 /** init the locale dir */
 void dt_loc_init_localedir(const char *application_directory, const char *localedir);
 /** init share dir */
@@ -49,7 +49,7 @@ void dt_check_opendir(const char* text, const char* directory);
 void dt_loc_get_datadir(char *datadir, size_t bufsize);
 void dt_loc_get_sharedir(char *sharedir, size_t bufsize);
 void dt_loc_get_kerneldir(char *kerneldir, size_t bufsize);
-void dt_loc_get_plugindir(char *plugindir, size_t bufsize);
+void dt_loc_get_moduledir(char *moduledir, size_t bufsize);
 void dt_loc_get_localedir(char *localedir, size_t bufsize);
 void dt_loc_get_tmp_dir(char *tmpdir, size_t bufsize);
 void dt_loc_get_user_config_dir(char *configdir, size_t bufsize);

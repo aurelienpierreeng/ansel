@@ -107,18 +107,30 @@ error:
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
+  self->enabled = FALSE;
+  piece->enabled = FALSE;
   memcpy(piece->data, params, sizeof(dt_iop_mask_manager_params_t));
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = malloc(sizeof(dt_iop_mask_manager_data_t));
+  piece->data_size = sizeof(dt_iop_mask_manager_data_t);
+  piece->enabled = FALSE;
 }
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   free(piece->data);
   piece->data = NULL;
+}
+
+void init(dt_iop_module_t *module)
+{
+  dt_iop_default_init(module);
+
+  // module is disabled by default
+  module->default_enabled = 0;
 }
 
 

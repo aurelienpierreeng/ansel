@@ -118,6 +118,7 @@ static inline int dt_pthread_mutex_lock_with_caller(dt_pthread_mutex_t *mutex, c
   mutex->time_sum_wait += wait;
   char *name = mutex->name;
   snprintf(mutex->name, sizeof(mutex->name), "%s:%d (%s)", file, line, function);
+  fprintf(stdout, "Thread lock %s acquired\n", mutex->name);
   int min_wait_slot = 0;
   for(int k = 0; k < TOPN; k++)
   {
@@ -173,6 +174,7 @@ static inline int dt_pthread_mutex_unlock_with_caller(dt_pthread_mutex_t *mutex,
 
   char *name = mutex->name;
   snprintf(mutex->name, sizeof(mutex->name), "%s:%d (%s)", file, line, function);
+  fprintf(stdout, "Thread lock %s released\n", mutex->name);
   int min_locked_slot = 0;
   for(int k = 0; k < TOPN; k++)
   {

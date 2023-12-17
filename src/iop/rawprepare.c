@@ -96,7 +96,7 @@ typedef struct dt_iop_rawprepare_global_data_t
 
 const char *name()
 {
-  return C_("modulename", "raw black/white point");
+  return C_("modulename", "Raw settings");
 }
 
 int operation_tags()
@@ -720,6 +720,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = calloc(1, sizeof(dt_iop_rawprepare_data_t));
+  piece->data_size = sizeof(dt_iop_rawprepare_data_t);
 }
 
 void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -850,27 +851,24 @@ void gui_init(dt_iop_module_t *self)
   g->flat_field = dt_bauhaus_combobox_from_params(self, "flat_field");
   gtk_widget_set_tooltip_text(g->flat_field, _("flat field correction to compensate for lens shading"));
 
-  if(dt_conf_get_bool("plugins/darkroom/rawprepare/allow_editing_crop"))
-  {
-    gtk_box_pack_start(GTK_BOX(self->widget),
-                       dt_ui_section_label_new(_("crop")), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget),
+                      dt_ui_section_label_new(_("In-camera crop")), FALSE, FALSE, 0);
 
-    g->x = dt_bauhaus_slider_from_params(self, "x");
-    gtk_widget_set_tooltip_text(g->x, _("crop from left border"));
-    dt_bauhaus_slider_set_soft_max(g->x, 256);
+  g->x = dt_bauhaus_slider_from_params(self, "x");
+  gtk_widget_set_tooltip_text(g->x, _("crop from left border"));
+  dt_bauhaus_slider_set_soft_max(g->x, 256);
 
-    g->y = dt_bauhaus_slider_from_params(self, "y");
-    gtk_widget_set_tooltip_text(g->y, _("crop from top"));
-    dt_bauhaus_slider_set_soft_max(g->y, 256);
+  g->y = dt_bauhaus_slider_from_params(self, "y");
+  gtk_widget_set_tooltip_text(g->y, _("crop from top"));
+  dt_bauhaus_slider_set_soft_max(g->y, 256);
 
-    g->width = dt_bauhaus_slider_from_params(self, "width");
-    gtk_widget_set_tooltip_text(g->width, _("crop from right border"));
-    dt_bauhaus_slider_set_soft_max(g->width, 256);
+  g->width = dt_bauhaus_slider_from_params(self, "width");
+  gtk_widget_set_tooltip_text(g->width, _("crop from right border"));
+  dt_bauhaus_slider_set_soft_max(g->width, 256);
 
-    g->height = dt_bauhaus_slider_from_params(self, "height");
-    gtk_widget_set_tooltip_text(g->height, _("crop from bottom"));
-    dt_bauhaus_slider_set_soft_max(g->height, 256);
-  }
+  g->height = dt_bauhaus_slider_from_params(self, "height");
+  gtk_widget_set_tooltip_text(g->height, _("crop from bottom"));
+  dt_bauhaus_slider_set_soft_max(g->height, 256);
 
   // start building top level widget
   self->widget = gtk_stack_new();

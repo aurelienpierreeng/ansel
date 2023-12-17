@@ -164,6 +164,8 @@ void enter(dt_view_t *self)
   gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
   dt_collection_hint_message(darktable.collection);
   dt_lib_set_visible(darktable.view_manager->proxy.filmstrip.module, FALSE); // not available in this layouts
+  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_RIGHT, FALSE, TRUE);
+  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_BOTTOM, FALSE, TRUE);
   dt_ui_restore_panels(darktable.gui->ui);
 }
 

@@ -149,6 +149,7 @@ static void default_init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *
                               dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = calloc(1,self->params_size);
+  piece->data_size = self->params_size;
 }
 
 static void default_cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
@@ -1625,6 +1626,40 @@ gboolean _iop_validate_params(dt_introspection_field_t *field, gpointer params, 
   return all_ok;
 }
 
+
+gboolean dt_iop_check_modules_equal(dt_iop_module_t *mod_1, dt_iop_module_t *mod_2)
+{
+  // Use module fingerprints to determine if two instances are actually the same
+  return mod_1 == mod_2
+          && mod_1->instance == mod_2->instance
+          && mod_1->multi_priority == mod_2->multi_priority
+          && mod_1->iop_order == mod_2->iop_order;
+}
+
+uint64_t dt_iop_module_hash(dt_iop_module_t *module)
+{
+  // Uniform way of getting the full state hash of user-defined parameters,
+  // including masks and blending.
+  // WARNING: doesn't take into account parameters dynamically set at runtime.
+
+  uint64_t hash = dt_hash(5381, (char *)module->params, module->params_size);
+  hash = dt_hash(hash, (char *)&module->instance, sizeof(int32_t));
+  hash = dt_hash(hash, (char *)&module->multi_priority, sizeof(int));
+  hash = dt_hash(hash, (char *)&module->iop_order, sizeof(int));
+
+  if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
+  {
+    if(module->dev)
+    {
+      dt_masks_form_t *grp = dt_masks_get_from_id(module->dev, module->blend_params->mask_id);
+      hash = dt_masks_group_get_hash(hash, grp);
+    }
+    hash = dt_hash(hash, (char *)module->blend_params, sizeof(dt_develop_blend_params_t));
+  }
+
+  return hash;
+}
+
 void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
                           dt_develop_blend_params_t *blendop_params, dt_dev_pixelpipe_t *pipe,
                           dt_dev_pixelpipe_iop_t *piece)
@@ -1654,38 +1689,16 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   module->commit_params(module, params, pipe, piece);
 
   // 2. compute the hash
-  /* construct module params data for hash calc */
-  int length = module->params_size;
-  dt_masks_form_t *grp = NULL;
-  if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
-  {
-    length += sizeof(dt_develop_blend_params_t);
-    grp = dt_masks_get_from_id(darktable.develop, blendop_params->mask_id);
-    length += dt_masks_group_get_hash_buffer_length(grp);
-  }
-
-  char *str = malloc(length);
-  memcpy(str, module->params, module->params_size);
-  int pos = module->params_size;
-
-  /* if module supports blend op */
-  if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
-  {
-    /* add blend params into account */
-    memcpy(str + module->params_size, blendop_params, sizeof(dt_develop_blend_params_t));
-    pos += sizeof(dt_develop_blend_params_t);
-
-    /* and we add masks */
-    if(grp) dt_masks_group_get_hash_buffer(grp, str + pos);
-  }
-
-  // Get the hash
-  piece->hash = piece->global_hash = dt_hash(5381, str, length);
-
-  free(str);
+  /** Construct module internal representation for hash computation.
+  * We need both the user-defined params (module->params) and the pipeline params (piece->data),
+  * because some pipeline params may be defined or sanitized at runtime (color profiles),
+  * but some pipeline params are allocated on the stack (LUTs) from user params (graph nodes),
+  * meaning they are not written in piece->data struct.
+  */
+  uint64_t hash = dt_iop_module_hash(module);
+  piece->hash = piece->global_hash = dt_hash(hash, (char *)piece->data, piece->data_size);
 
   dt_print(DT_DEBUG_PARAMS, "[params] commit for %s in pipe %i with hash %lu\n", module->op, pipe->type, (long unsigned int)piece->hash);
-
 }
 
 void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
@@ -1800,7 +1813,6 @@ void dt_iop_request_focus(dt_iop_module_t *module)
   if(darktable.gui->reset || (out_focus_module == module)) return;
 
   darktable.develop->gui_module = module;
-  darktable.develop->focus_hash++;
 
   /* lets lose the focus of previous focus module*/
   if(out_focus_module)
@@ -2523,15 +2535,6 @@ GtkWidget *dt_iop_gui_get_pluginui(dt_iop_module_t *module)
   return dtgtk_expander_get_frame(DTGTK_EXPANDER(module->expander));
 }
 
-int dt_iop_breakpoint(struct dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe)
-{
-  if(pipe != dev->preview_pipe) sched_yield();
-  if(pipe != dev->preview_pipe && pipe->changed == DT_DEV_PIPE_ZOOMED) return 1;
-  if((pipe->changed != DT_DEV_PIPE_UNCHANGED && pipe->changed != DT_DEV_PIPE_ZOOMED) || dev->gui_leaving)
-    return 1;
-  return 0;
-}
-
 void dt_iop_nap(int32_t usec)
 {
   if(usec <= 0) return;
@@ -2870,9 +2873,8 @@ void dt_iop_refresh_center(dt_iop_module_t *module)
   dt_develop_t *dev = module->dev;
   if (dev && dev->gui_attached)
   {
-    dev->pipe->changed |= DT_DEV_PIPE_SYNCH; //ensure that commit_params gets called to pick up any GUI changes
     dt_dev_invalidate(dev);
-    dt_control_queue_redraw_center();
+    dt_dev_refresh_ui_images(dev);
   }
 }
 
@@ -2882,9 +2884,8 @@ void dt_iop_refresh_preview(dt_iop_module_t *module)
   dt_develop_t *dev = module->dev;
   if (dev && dev->gui_attached)
   {
-    dev->pipe->changed |= DT_DEV_PIPE_SYNCH; //ensure that commit_params gets called to pick up any GUI changes
-    dt_dev_invalidate_all(dev);
-    dt_control_queue_redraw();
+    dt_dev_invalidate_preview(dev);
+    dt_dev_refresh_ui_images(dev);
   }
 }
 

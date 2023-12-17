@@ -67,8 +67,6 @@ void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo)
     dt_history_snapshot_undo_create(hist->imgid, &hist->before, &hist->before_history_end);
   }
 
-  dt_lock_image(imgid);
-
   sqlite3_stmt *stmt;
 
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
@@ -129,8 +127,6 @@ void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo)
   // signal that the mipmap need to be updated
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MIPMAP_UPDATED, imgid);
 
-  dt_unlock_image(imgid);
-
   // update history hash
   dt_history_hash_write_from_history(imgid, DT_HISTORY_HASH_CURRENT);
 
@@ -153,7 +149,6 @@ void dt_history_delete_on_image(int32_t imgid)
 
 int dt_history_load_and_apply(const int imgid, gchar *filename, int history_only)
 {
-  dt_lock_image(imgid);
   dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
   if(img)
   {
@@ -166,7 +161,6 @@ int dt_history_load_and_apply(const int imgid, gchar *filename, int history_only
       dt_image_cache_write_release(darktable.image_cache, img,
                                    // ugly but if not history_only => called from crawler - do not write the xmp
                                    history_only ? DT_IMAGE_CACHE_SAFE : DT_IMAGE_CACHE_RELAXED);
-      dt_unlock_image(imgid);
       return 1;
     }
     dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
@@ -184,7 +178,6 @@ int dt_history_load_and_apply(const int imgid, gchar *filename, int history_only
     dt_mipmap_cache_remove(darktable.mipmap_cache, imgid);
     dt_image_update_final_size(imgid);
   }
-  dt_unlock_image(imgid);
   // signal that the mipmap need to be updated
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MIPMAP_UPDATED, imgid);
   return 0;
@@ -756,8 +749,6 @@ gboolean dt_history_copy_and_paste_on_image(const int32_t imgid, const int32_t d
     return 1;
   }
 
-  dt_lock_image_pair(imgid, dest_imgid);
-
   // be sure the current history is written before pasting some other history data
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
   if(cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM) dt_dev_write_history(darktable.develop);
@@ -813,8 +804,6 @@ gboolean dt_history_copy_and_paste_on_image(const int32_t imgid, const int32_t d
 
   // signal that the mipmap need to be updated
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MIPMAP_UPDATED, dest_imgid);
-
-  dt_unlock_image_pair(imgid, dest_imgid);
 
   return ret_val;
 }
@@ -956,7 +945,6 @@ static int dt_history_end_attop(const int32_t imgid)
 */
 void dt_history_compress_on_image(const int32_t imgid)
 {
-  dt_lock_image(imgid);
   sqlite3_stmt *stmt;
 
   // get history_end for image
@@ -972,7 +960,6 @@ void dt_history_compress_on_image(const int32_t imgid)
   if (my_history_end == 0)
   {
     dt_history_delete_on_image(imgid);
-    dt_unlock_image(imgid);
     return;
   }
 
@@ -1079,7 +1066,6 @@ void dt_history_compress_on_image(const int32_t imgid)
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
   }
-  dt_unlock_image(imgid);
   dt_history_hash_write_from_history(imgid, DT_HISTORY_HASH_CURRENT);
 
   dt_database_release_transaction(darktable.db);
@@ -1093,13 +1079,11 @@ void dt_history_compress_on_image(const int32_t imgid)
 */
 void dt_history_truncate_on_image(const int32_t imgid, const int32_t history_end)
 {
-  dt_lock_image(imgid);
   sqlite3_stmt *stmt;
 
   if (history_end == 0)
   {
     dt_history_delete_on_image(imgid);
-    dt_unlock_image(imgid);
     return;
   }
 
@@ -1140,7 +1124,6 @@ void dt_history_truncate_on_image(const int32_t imgid, const int32_t history_end
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
-  dt_unlock_image(imgid);
   dt_history_hash_write_from_history(imgid, DT_HISTORY_HASH_CURRENT);
 
   dt_database_release_transaction(darktable.db);
@@ -1156,7 +1139,6 @@ int dt_history_compress_on_list(const GList *imgs)
   for(const GList *l = imgs; l; l = g_list_next(l))
   {
     const int imgid = GPOINTER_TO_INT(l->data);
-    dt_lock_image(imgid);
     const int test = dt_history_end_attop(imgid);
     if(test == 1) // we do a compression and we know for sure history_end is at the top!
     {
@@ -1224,7 +1206,6 @@ int dt_history_compress_on_list(const GList *imgs)
     if(test == 0) // no compression as history_end is right in the middle of history
       uncompressed++;
 
-    dt_unlock_image(imgid);
     dt_history_hash_write_from_history(imgid, DT_HISTORY_HASH_CURRENT);
   }
 

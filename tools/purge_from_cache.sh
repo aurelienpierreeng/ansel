@@ -27,14 +27,14 @@ shopt -s expand_aliases
 
 . "$(dirname "$0")/common.sh"
 
-if pgrep -x "darktable" > /dev/null ; then
-    echo "error: darktable is running, please exit first"
+if pgrep -x "ansel" > /dev/null ; then
+    echo "Error: Ansel is running, please exit first"
     exit 1
 fi
 
 # default values
-configdir="$HOME/.config/darktable"
-cache_base="${HOME}/.cache/darktable"
+configdir="$HOME/.config/ansel"
+cache_base="${HOME}/.cache/ansel"
 library="$configdir/library.db"
 dryrun=1
 LIBDB=""
@@ -47,13 +47,13 @@ while [ "$#" -ge 1 ] ; do
   option="$1"
   case ${option} in
   -h|--help)
-    echo "Delete thumbnails of images that are no longer in darktable's library"
+    echo "Delete thumbnails of images that are no longer in Ansel's library"
     echo "Usage:   $0 [options]"
     echo ""
     echo "Options:"
-    echo "  -c|--cachedir <path>   path to the place where darktable's thumbnail caches are stored"
+    echo "  -c|--cachedir <path>   path to the place where Ansel's thumbnail caches are stored"
     echo "                           (default: '${cache_base}')"
-    echo "  -d|--configdir <path>    path to the darktable config directory"
+    echo "  -d|--configdir <path>    path to the Ansel config directory"
     echo "                           (default: '${configdir}')"
     echo "  -l|--library <path>      path to the library.db"
     echo "                           (default: '${library}')"
@@ -76,7 +76,7 @@ while [ "$#" -ge 1 ] ; do
     dryrun=0
     ;;
   *)
-    echo "warning: ignoring unknown option $option"
+    echo "Warning: ignoring unknown option $option"
     ;;
   esac
     shift
@@ -98,7 +98,7 @@ fi
 library=$($ReadLink "${library}")
 
 if [ ! -f "${library}" ]; then
-  echo "error: library db '${library}' doesn't exist"
+  echo "Error: library db '${library}' doesn't exist"
   exit 1
 fi
 
@@ -106,7 +106,7 @@ fi
 cache_dir="${cache_base}/mipmaps-$(printf "%s" "${library}" | sha1sum | cut --delimiter=" " --fields=1).d"
 
 if [ ! -d "${cache_dir}" ]; then
-  echo "error: cache directory '${cache_dir}' doesn't exist"
+  echo "Error: cache directory '${cache_dir}' doesn't exist"
   exit 1
 fi
 
