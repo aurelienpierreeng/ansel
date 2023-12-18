@@ -208,6 +208,63 @@ typedef struct dt_iop_colorequal_gui_data_t
 } dt_iop_colorequal_gui_data_t;
 
 
+// We already have 2 blurring libs :
+// - boxfilter.h, which has become obfuscated to the point that it's write-only code from now on,
+// - gaussian.h, that manages to write gaussian coeffs in a kernel without ever using an exponential.
+// Both those libs do things so clever that I don't understand them,
+// and they output NaN here when applied on UV chromaticity coordinates.
+static inline void blur_2D_bspline(float *input, float *output, const size_t width, const size_t height, const size_t chan, const int radius)
+{
+  // Temp buffer
+  float *temp = dt_alloc_align_float(width * height * chan);
+  const size_t kernel_size = 2 * radius + 1;
+
+  // horizontal pass
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(height, width, chan, radius, temp, input, output, kernel_size)  \
+  schedule(simd:static)
+#endif
+  for(int i = 0; i < height; i++)
+    for(int j = 0; j < width; j++)
+    {
+      // We are going to write the output transposed
+      float *const out = temp + (j * height + i) * chan;
+      for(size_t c = 0; c < chan; c++) out[c] = 0.f;
+
+      // Convolve over rows
+      for(int k = 0; k < kernel_size; k++)
+      {
+        const int index = (i * width + CLAMP(j + k - radius, 0, width - 1)) * chan;
+        for(int c = 0; c < chan; c++) out[c] += input[index + c] / (float)kernel_size;
+      }
+    }
+
+  // vertical pass on the tranposed buffer, aka horizontal again
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(height, width, chan, radius, temp, input, output, kernel_size)  \
+  schedule(simd:static)
+#endif
+  for(int i = 0; i < width; i++)
+    for(int j = 0; j < height; j++)
+    {
+      // We are going to write the output transposed
+      float *const out = output + (j * width + i) * chan;
+      for(size_t c = 0; c < chan; c++) out[c] = 0.f;
+
+      // Convolve over rows
+      for(int k = 0; k < kernel_size; k++)
+      {
+        const int index = (i * height + CLAMP(j + k - radius, 0, height - 1)) * chan;
+        for(int c = 0; c < chan; c++) out[c] += temp[index + c] / (float)kernel_size;
+      }
+    }
+
+  dt_free_align(temp);
+}
+
+
 void _prefilter_chromaticity(float *const restrict UV,
                               const size_t width, const size_t height,
                               const float sigma, const float epsilon)
@@ -223,7 +280,7 @@ void _prefilter_chromaticity(float *const restrict UV,
   // Downsample for speed-up
   const size_t pixels = width * height;
   const float scaling = fmaxf(fminf(sigma, 4.0f), 1.0f);
-  const float ds_sigma = fmaxf(sigma / scaling, 1.0f);
+  const size_t ds_sigma = fmaxf(roundf(sigma / scaling), 1);
   const size_t ds_height = height / scaling;
   const size_t ds_width = width / scaling;
   const size_t ds_pixels = ds_width * ds_height;
@@ -260,8 +317,8 @@ void _prefilter_chromaticity(float *const restrict UV,
   // as the by-the-book box blur (unweighted local average) would.
 
   // We use unbounded signals, so don't care for the internal value clipping
-  dt_box_mean(ds_UV, ds_height, ds_width, 2, ds_sigma, 8);
-  dt_box_mean(covariance, ds_height, ds_width, 4, ds_sigma, 8);
+  blur_2D_bspline(ds_UV, ds_UV, ds_width, ds_height, 2, ds_sigma);
+  blur_2D_bspline(covariance, covariance, ds_width, ds_height, 4, ds_sigma);
 
   // Finish the UV covariance matrix computation by subtracting avg(x) * avg(y)
   // to avg(x * y) already computed
@@ -282,41 +339,49 @@ void _prefilter_chromaticity(float *const restrict UV,
   }
 
   // Compute a and b the params of the guided filters
-  float *const restrict a_U = dt_alloc_align_float(2 * ds_pixels);
-  float *const restrict b_U = dt_alloc_align_float(ds_pixels);
-  float *const restrict a_V = dt_alloc_align_float(2 * ds_pixels);
-  float *const restrict b_V = dt_alloc_align_float(ds_pixels);
+  float *const restrict a = dt_alloc_align_float(4 * ds_pixels);
+  float *const restrict b = dt_alloc_align_float(2 * ds_pixels);
 
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(ds_pixels, ds_UV, covariance, a_U, a_V, b_U, b_V, epsilon, stdout)  \
-  schedule(simd:static) aligned(ds_UV, covariance, a_U, a_V, b_U, b_V: 64)
+  dt_omp_firstprivate(ds_pixels, ds_UV, covariance, a, b, epsilon, stdout)  \
+  schedule(simd:static) aligned(ds_UV, covariance, a, b: 64)
 #endif
   for(size_t k = 0; k < ds_pixels; k++)
   {
     // Extract the 2×2 covariance matrix sigma = cov(U, V) at current pixel
-    dt_aligned_pixel_t Sigma
-        = { covariance[4 * k + 0], covariance[4 * k + 1], covariance[4 * k + 2], covariance[4 * k + 3] };
+    dt_aligned_pixel_t Sigma = { covariance[4 * k + 0], covariance[4 * k + 1],
+                                 covariance[4 * k + 2], covariance[4 * k + 3] };
 
-    // Add the covariance threshold : sigma' = sigma + epsilon * Identity
+    // Add the variance threshold : sigma' = sigma + epsilon * Identity
     Sigma[0] += epsilon;
     Sigma[3] += epsilon;
 
     // Invert the 2×2 sigma matrix algebraically
     // see https://www.mathcentre.ac.uk/resources/uploaded/sigma-matrices7-2009-1.pdf
-    const float det = (Sigma[0] * Sigma[3] - Sigma[1] * Sigma[2]);
+    const float det = Sigma[0] * Sigma[3] - Sigma[1] * Sigma[2];
     dt_aligned_pixel_t sigma_inv = { Sigma[3] / det, -Sigma[1] / det,
                                     -Sigma[2] / det,  Sigma[0] / det };
-    // Note : epsilon prevents determinant == 0 so the invert exists all the time
 
     // a(chan) = dot_product(cov(chan, uv), sigma_inv)
-    a_U[2 * k + 0] = (covariance[4 * k + 0] * sigma_inv[0] + covariance[4 * k + 1] * sigma_inv[1]);
-    a_U[2 * k + 1] = (covariance[4 * k + 0] * sigma_inv[2] + covariance[4 * k + 1] * sigma_inv[3]);
-    a_V[2 * k + 0] = (covariance[4 * k + 2] * sigma_inv[0] + covariance[4 * k + 3] * sigma_inv[1]);
-    a_V[2 * k + 1] = (covariance[4 * k + 2] * sigma_inv[2] + covariance[4 * k + 3] * sigma_inv[3]);
+    if(fabsf(det) > 4.f * FLT_EPSILON)
+    {
+      // find a_1, a_2 s.t. U' = a_1 * U + a_2 * V
+      a[4 * k + 0] = (covariance[4 * k + 0] * sigma_inv[0] + covariance[4 * k + 1] * sigma_inv[1]);
+      a[4 * k + 1] = (covariance[4 * k + 0] * sigma_inv[2] + covariance[4 * k + 1] * sigma_inv[3]);
 
-    b_U[k] = ds_UV[2 * k + 0] - a_U[2 * k + 0] * ds_UV[2 * k + 0] - a_U[2 * k + 1] * ds_UV[2 * k + 1];
-    b_V[k] = ds_UV[2 * k + 1] - a_V[2 * k + 0] * ds_UV[2 * k + 0] - a_V[2 * k + 1] * ds_UV[2 * k + 1];
+      // find a_3, a_4 s.t. V' = a_3 * U + a_4 V
+      a[4 * k + 2] = (covariance[4 * k + 2] * sigma_inv[0] + covariance[4 * k + 3] * sigma_inv[1]);
+      a[4 * k + 3] = (covariance[4 * k + 2] * sigma_inv[2] + covariance[4 * k + 3] * sigma_inv[3]);
+    }
+    else
+    {
+      // determinant too close to 0: singular matrix
+      a[4 * k + 0] = a[4 * k + 1] = a[4 * k + 2] = a[4 * k + 3] = 0.f;
+    }
+
+    b[2 * k + 0] = ds_UV[2 * k + 0] - a[4 * k + 0] * ds_UV[2 * k + 0] - a[4 * k + 1] * ds_UV[2 * k + 1];
+    b[2 * k + 1] = ds_UV[2 * k + 1] - a[4 * k + 2] * ds_UV[2 * k + 0] - a[4 * k + 3] * ds_UV[2 * k + 1];
 
     /*
     fprintf(stdout, "sigma : %f - %f - %f - %f\n", Sigma[0], Sigma[1], Sigma[2], Sigma[3]);
@@ -330,43 +395,33 @@ void _prefilter_chromaticity(float *const restrict UV,
   dt_free_align(ds_UV);
 
   // Compute the averages of a and b for each filter
-  dt_box_mean(a_U, ds_height, ds_width, 2, ds_sigma, 8);
-  dt_box_mean(a_V, ds_height, ds_width, 2, ds_sigma, 8);
-  dt_box_mean(b_U, ds_height, ds_width, 1, ds_sigma, 8);
-  dt_box_mean(b_V, ds_height, ds_width, 1, ds_sigma, 8);
+  blur_2D_bspline(a, a, ds_width, ds_height, 4, ds_sigma);
+  blur_2D_bspline(b, b, ds_width, ds_height, 2, ds_sigma);
 
   // Upsample a and b to real-size image
-  float *const restrict a_U_full = dt_alloc_align_float(pixels * 2);
-  float *const restrict b_U_full = dt_alloc_align_float(pixels);
-  float *const restrict a_V_full = dt_alloc_align_float(pixels * 2);
-  float *const restrict b_V_full = dt_alloc_align_float(pixels);
-  interpolate_bilinear(a_U, ds_width, ds_height, a_U_full, width, height, 2);
-  interpolate_bilinear(b_U, ds_width, ds_height, b_U_full, width, height, 1);
-  interpolate_bilinear(a_V, ds_width, ds_height, a_V_full, width, height, 2);
-  interpolate_bilinear(b_V, ds_width, ds_height, b_V_full, width, height, 1);
-  dt_free_align(a_U);
-  dt_free_align(b_U);
-  dt_free_align(a_V);
-  dt_free_align(b_V);
+  float *const restrict a_full = dt_alloc_align_float(pixels * 4);
+  float *const restrict b_full = dt_alloc_align_float(pixels * 2);
+  interpolate_bilinear(a, ds_width, ds_height, a_full, width, height, 4);
+  interpolate_bilinear(b, ds_width, ds_height, b_full, width, height, 2);
+  dt_free_align(a);
+  dt_free_align(b);
 
   // Apply the guided filter
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(pixels, a_U_full, b_U_full, a_V_full, b_V_full, UV, stdout)  \
-  schedule(simd:static) aligned(a_U_full, b_U_full, a_V_full, b_V_full, UV: 64)
+  dt_omp_firstprivate(pixels, a_full, b_full, UV, stdout)  \
+  schedule(simd:static) aligned(a_full, b_full, UV: 64)
 #endif
   for(size_t k = 0; k < pixels; k++)
   {
     // For each correction factor, we re-express it as a[0] * U + a[1] * V + b
     float uv[2] = { UV[2 * k + 0], UV[2 * k + 1] };
-    UV[2 * k + 0] = a_U_full[2 * k + 0] * uv[0] + a_U_full[2 * k + 1] * uv[1] + b_U_full[k];
-    UV[2 * k + 1] = a_V_full[2 * k + 0] * uv[0] + a_V_full[2 * k + 1] * uv[1] + b_V_full[k];
+    UV[2 * k + 0] = a_full[4 * k + 0] * uv[0] + a_full[4 * k + 1] * uv[1] + b_full[2 * k + 0];
+    UV[2 * k + 1] = a_full[4 * k + 2] * uv[0] + a_full[4 * k + 3] * uv[1] + b_full[2 * k + 1];
   }
 
-  dt_free_align(a_U_full);
-  dt_free_align(b_U_full);
-  dt_free_align(a_V_full);
-  dt_free_align(b_V_full);
+  dt_free_align(a_full);
+  dt_free_align(b_full);
 }
 
 void _guide_with_chromaticity(float *const restrict UV, float *const restrict corrections,
@@ -405,7 +460,7 @@ void _guide_with_chromaticity(float *const restrict UV, float *const restrict co
 
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(ds_pixels, ds_UV, covariance)  \
+  dt_omp_firstprivate(ds_pixels, ds_UV, covariance, stdout)  \
   schedule(simd:static) aligned(ds_UV, covariance: 64)
 #endif
   for(size_t k = 0; k < ds_pixels; k++)
@@ -452,16 +507,16 @@ void _guide_with_chromaticity(float *const restrict UV, float *const restrict co
   // as the by-the-book box blur (unweighted local average) would.
 
   // We use unbounded signals, so don't care for the internal value clipping
-  dt_box_mean(ds_UV, ds_height, ds_width, 2, ds_sigma, 16);
-  dt_box_mean(covariance, ds_height, ds_width, 4, ds_sigma, 16);
-  dt_box_mean(ds_corrections, ds_height, ds_width, 4, ds_sigma, 16);
-  dt_box_mean(correlations, ds_height, ds_width, 4, ds_sigma, 16);
+  dt_box_mean(ds_UV, ds_height, ds_width, 2, ds_sigma, 1);
+  dt_box_mean(covariance, ds_height, ds_width, 4, ds_sigma, 1);
+  dt_box_mean(ds_corrections, ds_height, ds_width, 4, ds_sigma, 1);
+  dt_box_mean(correlations, ds_height, ds_width, 4, ds_sigma, 1);
 
   // Finish the UV covariance matrix computation by subtracting avg(x) * avg(y)
   // to avg(x * y) already computed
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(ds_pixels, ds_UV, covariance)  \
+  dt_omp_firstprivate(ds_pixels, ds_UV, covariance, stdout)  \
   schedule(simd:static) aligned(ds_UV, covariance: 64)
 #endif
   for(size_t k = 0; k < ds_pixels; k++)
@@ -473,6 +528,11 @@ void _guide_with_chromaticity(float *const restrict UV, float *const restrict co
     covariance[4 * k + 2] -= ds_UV[2 * k + 0] * ds_UV[2 * k + 1];
     // covar(V, V) = var(V)
     covariance[4 * k + 3] -= ds_UV[2 * k + 1] * ds_UV[2 * k + 1];
+
+    /*
+    fprintf(stdout, "covariance : %f - %f - %f - %f\n", covariance[4 * k + 0],
+            covariance[4 * k + 1], covariance[4 * k + 2], covariance[4 * k + 3]);
+    */
   }
 
   // Finish the guide * guided correlation computation
@@ -516,7 +576,7 @@ void _guide_with_chromaticity(float *const restrict UV, float *const restrict co
 
     // Invert the 2×2 sigma matrix algebraically
     // see https://www.mathcentre.ac.uk/resources/uploaded/sigma-matrices7-2009-1.pdf
-    const float det = (Sigma[0] * Sigma[3] - Sigma[1] * Sigma[2]);
+    const float det = fmax((Sigma[0] * Sigma[3] - Sigma[1] * Sigma[2]), 1e-15f);
     dt_aligned_pixel_t sigma_inv = { Sigma[3] / det, -Sigma[1] / det,
                                     -Sigma[2] / det,  Sigma[0] / det };
     // Note : epsilon prevents determinant == 0 so the invert exists all the time
@@ -526,13 +586,18 @@ void _guide_with_chromaticity(float *const restrict UV, float *const restrict co
     a[6 * k + 0] = (correlations[6 * k + 0] * sigma_inv[0] + correlations[6 * k + 1] * sigma_inv[1]);
     a[6 * k + 1] = (correlations[6 * k + 0] * sigma_inv[2] + correlations[6 * k + 1] * sigma_inv[3]);
     */
+    if(fabsf(det) > 4.f * FLT_EPSILON)
+    {
+      a[4 * k + 0] = (correlations[4 * k + 0] * sigma_inv[0] + correlations[4 * k + 1] * sigma_inv[1]);
+      a[4 * k + 1] = (correlations[4 * k + 0] * sigma_inv[2] + correlations[4 * k + 1] * sigma_inv[3]);
 
-    a[4 * k + 0] = (correlations[4 * k + 0] * sigma_inv[0] + correlations[4 * k + 1] * sigma_inv[1]);
-    a[4 * k + 1] = (correlations[4 * k + 0] * sigma_inv[2] + correlations[4 * k + 1] * sigma_inv[3]);
-
-    a[4 * k + 2] = (correlations[4 * k + 2] * sigma_inv[0] + correlations[4 * k + 3] * sigma_inv[1]);
-    a[4 * k + 3] = (correlations[4 * k + 2] * sigma_inv[2] + correlations[4 * k + 3] * sigma_inv[3]);
-
+      a[4 * k + 2] = (correlations[4 * k + 2] * sigma_inv[0] + correlations[4 * k + 3] * sigma_inv[1]);
+      a[4 * k + 3] = (correlations[4 * k + 2] * sigma_inv[2] + correlations[4 * k + 3] * sigma_inv[3]);
+    }
+    else
+    {
+      a[4 * k + 0] = a[4 * k + 1] = a[4 * k + 2] = a[4 * k + 3] = 0.f;
+    }
     // b = avg(chan) - dot_product(a_chan * avg(UV))
     b[2 * k + 0] = ds_corrections[4 * k + 1] - a[4 * k + 0] * ds_UV[2 * k + 0] - a[4 * k + 1] * ds_UV[2 * k + 1];
     b[2 * k + 1] = ds_corrections[4 * k + 2] - a[4 * k + 2] * ds_UV[2 * k + 0] - a[4 * k + 3] * ds_UV[2 * k + 1];
@@ -540,8 +605,8 @@ void _guide_with_chromaticity(float *const restrict UV, float *const restrict co
     /*
     fprintf(stdout, "sigma : %f - %f - %f - %f\n", Sigma[0], Sigma[1], Sigma[2], Sigma[3]);
     fprintf(stdout, "sigma inv : %f - %f - %f - %f\n", sigma_inv[0], sigma_inv[1], sigma_inv[2], sigma_inv[3]);
-    fprintf(stdout, "U : a, b : %f - %f - %f\n", a_U[2 * k + 0], a_U[2 * k + 1], b_U[k]);
-    fprintf(stdout, "V : a, b : %f - %f - %f\n", a_V[2 * k + 0], a_V[2 * k + 1], b_V[k]);
+    fprintf(stdout, "U : a, b : %f - %f - %f\n", a[4 * k + 0], a[4 * k + 1], b[2 * k + 0]);
+    fprintf(stdout, "V : a, b : %f - %f - %f\n", a[4 * k + 2], a[4 * k + 3], b[2 * k + 1]);
     */
   }
 
@@ -582,7 +647,14 @@ void _guide_with_chromaticity(float *const restrict UV, float *const restrict co
   dt_free_align(b_full);
 }
 
-
+/*
+void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
+             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+{
+  dt_iop_colorequal_data_t *d = (dt_iop_colorequal_data_t *)piece->data;
+  blur_2D_bspline((float *)i, (float *)o, roi_out->width, roi_out->height, 4, d->chroma_size);
+}
+*/
 
 void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
@@ -625,6 +697,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     // Convert to XYZ D65
     dt_aligned_pixel_t XYZ_D65 = { 0.f };
     dot_product(pix_in, input_matrix, XYZ_D65);
+    for_each_channel(c, aligned(XYZ_D65)) XYZ_D65[c] = fmaxf(XYZ_D65[c], 0.f);
 
     // Convert to dt UCS 22 UV and store UV
     dt_aligned_pixel_t xyY = { 0.f };
@@ -634,18 +707,14 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   }
 
   // STEP 2 : smoothen UV to avoid discontinuities in hue
-  float *const UV_control = dt_alloc_align_float(2 * npixels);
-  memcpy(UV_control, UV, npixels * 2);
   if(d->use_filter) _prefilter_chromaticity(UV, roi_out->width, roi_out->height, d->chroma_size, d->chroma_feathering);
-
-  fprintf(stdout, "use filter: %i, feathering: %f, size: %f\n", d->use_filter, d->chroma_feathering, d->chroma_size);
 
   // STEP 3 : carry-on with conversion from LUV to HSB
 
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(ch, npixels, in, out, UV, UV_control, L, corrections, input_matrix, d, white)  \
-  schedule(simd:static) aligned(in, out, UV, UV_control, L, corrections, input_matrix : 64)
+  dt_omp_firstprivate(ch, npixels, in, out, UV, L, corrections, input_matrix, d, white, stdout)  \
+  schedule(simd:static) aligned(in, out, UV, L, corrections, input_matrix : 64)
 #endif
   for(size_t k = 0; k < npixels; k++)
   {
@@ -653,18 +722,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     float *const restrict pix_out = __builtin_assume_aligned(out + k * ch, 16);
     float *const restrict corrections_out = __builtin_assume_aligned(corrections + k * ch, 16);
     float *const restrict uv = UV + k * 2;
-    float *const restrict uv_control = UV + k * 2;
 
     // Finish the conversion to dt UCS JCH then HSB
     dt_aligned_pixel_t JCH = { 0.f };
     dt_UCS_LUV_to_JCH(L[k], white, uv, JCH);
     dt_UCS_JCH_to_HSB(JCH, pix_out);
-
-    // Do it again for the chroma-prefiltered control color.
-    dt_aligned_pixel_t JCH_control = { 0.f };
-    dt_aligned_pixel_t HSB_control = { 0.f };
-    dt_UCS_LUV_to_JCH(L[k], white, uv_control, JCH_control);
-    dt_UCS_JCH_to_HSB(JCH_control, HSB_control);
 
     // Get the boosts - if chroma = 0, we have a neutral grey so set everything to 0
     corrections_out[0] = (JCH[1] > 0.f) ? lookup_gamut(d->LUT_hue, pix_out[0]) : 0.f;
@@ -679,7 +741,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   // spatially-contiguous corrections even though the hue is not perfectly constant
   // this will help avoiding chroma noise.
   if(d->use_filter) _guide_with_chromaticity(UV, corrections, roi_out->width, roi_out->height, d->param_size, d->param_feathering);
-
 
   // STEP 3: apply the corrections and convert back to RGB
 #ifdef _OPENMP
@@ -710,7 +771,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   dt_free_align(corrections);
   dt_free_align(UV);
-  dt_free_align(UV_control);
   dt_free_align(L);
 }
 
