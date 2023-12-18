@@ -667,9 +667,9 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     dt_UCS_JCH_to_HSB(JCH_control, HSB_control);
 
     // Get the boosts - if chroma = 0, we have a neutral grey so set everything to 0
-    corrections_out[0] = (JCH[1] > 0.f) ? lookup_gamut(d->LUT_hue, HSB_control[0])        : 0.f;
-    corrections_out[1] = (JCH[1] > 0.f) ? lookup_gamut(d->LUT_saturation, HSB_control[0]) : 0.f;
-    corrections_out[2] = (JCH[1] > 0.f) ? lookup_gamut(d->LUT_brightness, HSB_control[0]) : 0.f;
+    corrections_out[0] = (JCH[1] > 0.f) ? lookup_gamut(d->LUT_hue, pix_out[0]) : 0.f;
+    corrections_out[1] = (JCH[1] > 0.f) ? lookup_gamut(d->LUT_saturation, pix_out[0]) : 0.f;
+    corrections_out[2] = (JCH[1] > 0.f) ? 16.f * pix_out[1] * (lookup_gamut(d->LUT_brightness, pix_out[0]) - 1.f) + 1.f : 0.f;
 
     // Copy alpha
     pix_out[3] = pix_in[3];
