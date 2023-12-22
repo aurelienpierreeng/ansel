@@ -123,9 +123,9 @@ static gchar *_import_session_path_pattern()
   }
 
 #ifdef WIN32
-  gchar *s1 = dt_str_replace(base, "/", "\\\\");
-  gchar *s2 = dt_str_replace(sub, "/", "\\\\");
-  res = g_build_path("\\\\", s1, s2, (char *)NULL);
+  gchar *s1 = dt_str_replace(base, "/", G_DIR_SEPARATOR_S);
+  gchar *s2 = dt_str_replace(sub, "/", G_DIR_SEPARATOR_S);
+  res = g_build_path(G_DIR_SEPARATOR_S, s1, s2, (char *)NULL);
   g_free(s1);
   g_free(s2);
 #else
@@ -328,6 +328,8 @@ static const char *_import_session_path(struct dt_import_session_t *self, gboole
   }
 
   gchar *new_path = dt_variables_expand(self->vp, pattern, FALSE);
+  g_free(pattern);
+
 #ifdef WIN32
   if(new_path && (strlen(new_path) > 1))
   {
@@ -336,9 +338,9 @@ static const char *_import_session_path(struct dt_import_session_t *self, gboole
       new_path[0] = first;                                 // drive letter in uppercase looks nicer
   }
 #endif
-  g_free(pattern);
 
-  /* did the session path change ? */
+
+  /* did the session path change ?*/
   if(self->current_path && strcmp(self->current_path, new_path) == 0)
   {
     g_free(new_path);

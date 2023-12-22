@@ -592,7 +592,7 @@ static void _set_test_path(dt_lib_import_t *d)
       dt_import_session_set_exif_time(session, exif_time);
 
     dt_import_session_set_filename(session, g_path_get_basename(selected));
-
+    
     char *test_path = g_build_filename(
       dt_import_session_path(session, FALSE),
       dt_import_session_filename(session), NULL);
@@ -876,7 +876,7 @@ static void gui_init(dt_lib_import_t *d)
   // file extension filters
   _file_filters(d->file_chooser);
 
-  // File browser toolbox (extra widgets)
+  // File browser toolbox (extra widgets) 
   GtkWidget *toolbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_halign(toolbox, GTK_ALIGN_END);
 
@@ -1015,8 +1015,8 @@ static void gui_init(dt_lib_import_t *d)
   g_signal_connect(G_OBJECT(base_dir), "file-set", G_CALLBACK(_base_dir_changed), d);
   gtk_widget_set_hexpand(base_dir, TRUE);
 
-  GtkWidget *sep1 = gtk_label_new("/");
-  GtkWidget *sep2 = gtk_label_new("/");
+  GtkWidget *sep1 = gtk_label_new(G_DIR_SEPARATOR_S);
+  GtkWidget *sep2 = gtk_label_new(G_DIR_SEPARATOR_S);
 
   GtkWidget *project_dir = gtk_entry_new();
   gtk_entry_set_text(GTK_ENTRY(project_dir), dt_conf_get_string("session/sub_directory_pattern"));
