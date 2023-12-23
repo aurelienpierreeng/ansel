@@ -244,8 +244,7 @@ int main(int argc, char *arg[])
       {
         k++;
         bpp = MAX(atoi(arg[k]), 0);
-        fprintf(stderr, "%s %d\n",
-                _("TODO: sorry, due to API restrictions we currently cannot set the BPP to"), bpp);
+        fprintf(stderr, _("TODO: sorry, due to API restrictions we currently cannot set the BPP to %d.\n"), bpp);
       }
       else if(!strcmp(arg[k], "--hq") && argc > k + 1)
       {
@@ -257,7 +256,7 @@ int main(int argc, char *arg[])
           high_quality = TRUE;
         else
         {
-          fprintf(stderr, "%s: %s\n", _("unknown option for --hq"), arg[k]);
+          fprintf(stderr, _("unknown option for --hq: %s.\n"), arg[k]);
           usage(arg[0]);
           exit(1);
         }
@@ -273,7 +272,7 @@ int main(int argc, char *arg[])
           export_masks = TRUE;
         else
         {
-          fprintf(stderr, "%s: %s\n", _("unknown option for --export_masks"), arg[k]);
+          fprintf(stderr, _("unknown option for --export_masks: %s.\n"), arg[k]);
           usage(arg[0]);
           exit(1);
         }
@@ -289,7 +288,7 @@ int main(int argc, char *arg[])
           upscale= TRUE;
         else
         {
-          fprintf(stderr, "%s: %s\n", _("unknown option for --upscale"), arg[k]);
+          fprintf(stderr, _("unknown option for --upscale: %s.\n"), arg[k]);
           usage(arg[0]);
           exit(1);
         }
@@ -314,7 +313,7 @@ int main(int argc, char *arg[])
           custom_presets = TRUE;
         else
         {
-          fprintf(stderr, "%s: %s\n", _("unknown option for --apply-custom-presets"), arg[k]);
+          fprintf(stderr, _("unknown option for --apply-custom-presets: %s.\n"), arg[k]);
           usage(arg[0]);
           exit(1);
         }
@@ -325,7 +324,7 @@ int main(int argc, char *arg[])
         k++;
         if(strlen(arg[k])> DT_MAX_OUTPUT_EXT_LENGTH)
         {
-          fprintf(stderr, "%s: %s\n", _("too long ext for --out-ext"), arg[k]);
+          fprintf(stderr, _("too long ext for --out-ext: %s.\n"), arg[k]);
           usage(arg[0]);
           exit(1);
         }

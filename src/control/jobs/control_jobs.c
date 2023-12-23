@@ -845,10 +845,10 @@ static gboolean _dt_delete_dialog_main_thread(gpointer user_data)
       GTK_MESSAGE_QUESTION,
       GTK_BUTTONS_NONE,
       modal_dialog->send_to_trash
-        ? _("could not send %s to trash%s%s")
-        : _("could not physically delete %s%s%s"),
+        ? _("could not send %s to trash.%s%s")
+        : _("could not physically delete %s.%s%s"),
       modal_dialog->filename,
-      modal_dialog->error_message != NULL ? ": " : "",
+      modal_dialog->error_message != NULL ? "\n" : "",
       modal_dialog->error_message != NULL ? modal_dialog->error_message : "");
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(dialog);
