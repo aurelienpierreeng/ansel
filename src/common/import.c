@@ -105,6 +105,7 @@ typedef struct dt_lib_import_t
   GtkWidget *datetime;
   GtkWidget *dialog;
   GtkWidget *grid;
+  GtkWidget *jobcode;
 
   GtkWidget *help_string;
   GtkWidget *test_path;
@@ -640,6 +641,12 @@ static void _copy_toggled_callback(GtkWidget *combobox, dt_lib_import_t *d)
   _set_test_path(d);
 }
 
+static void _jobcode_changed(GtkFileChooserButton* widget, dt_lib_import_t *d)
+{
+  dt_conf_set_string("ui_last/import_jobcode", gtk_entry_get_text(GTK_ENTRY(widget)));
+  _set_test_path(d);
+}
+
 static void _base_dir_changed(GtkFileChooserButton* self, dt_lib_import_t *d)
 {
   dt_conf_set_string("session/base_directory_pattern", gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(self)));
@@ -1000,6 +1007,14 @@ static void gui_init(dt_lib_import_t *d)
   g_date_time_unref(now);
 
   // Base directory of projects
+  GtkWidget *jobcode = gtk_entry_new();
+  gtk_entry_set_text(GTK_ENTRY(jobcode), dt_conf_get_string("ui_last/import_jobcode"));
+  gtk_widget_set_hexpand(jobcode, TRUE);
+  g_signal_connect(G_OBJECT(jobcode), "changed", G_CALLBACK(_jobcode_changed), d);
+
+  GtkWidget *jobcode_label = gtk_label_new(_("Jobcode"));
+  gtk_widget_set_halign(jobcode_label, GTK_ALIGN_START);
+
   GtkWidget *base_label = gtk_label_new(_("Base directory of all projects"));
   gtk_widget_set_halign(base_label, GTK_ALIGN_START);
 
@@ -1037,10 +1052,12 @@ static void gui_init(dt_lib_import_t *d)
   // Row 1: text entries
   gtk_grid_attach(grid, calendar_label, 0, 0, 1, 1);
   gtk_grid_attach(grid, GTK_WIDGET(box_calendar), 0, 1, 1, 1);
+  gtk_grid_attach(grid, jobcode_label, 2, 0, 1, 1);
+  gtk_grid_attach(grid, jobcode, 2, 1, 1, 1);
 
   // create text box with label and attach on grid directly
-  dt_gui_preferences_string(grid, "ui_last/import_jobcode", 2, 0);
-
+  //dt_gui_preferences_string(grid, "ui_last/import_jobcode", 2, 0);
+  
   // Row 2: separator
   _attach_grid_separator(GTK_WIDGET(grid), 2, 5);
 
