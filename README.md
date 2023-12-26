@@ -15,7 +15,7 @@ that can't be systematically reproduced, and therefore will never be fixed,
 2. to break with the trend of making Darktable a Vim editor for image processing, truly usable
 only from (broken) keyboard shortcuts known only by the hardcore geeks that made them,
 3. to sanitize the code base in order to reduce the cost of maintenance, now and in the future,
-4. to make the general UI nicer to people who don't have a master's in computer science and
+4. to make the general UI nicer to people who don't have a master's in computer science and
 more efficient to use for people actually interested in photography, especially for folks
 using Wacom (and other brands) graphic tablets,
 5. optimize the GUI to streamline the scene-referred workflow and make it feel more natural.
@@ -69,11 +69,11 @@ __Ansel__ has an [explicit](https://github.com/aurelienpierreeng/ansel/wiki/Cont
 design process that mandatorily starts with defined problems met by defined users. Turns
 out the quantity of code to write is inversly proportionnal to the amount of thinking you
 have done on your solution, typically to spot the root problem out of what users tell you,
-and find the simplest path to solution (which is often not even a software solution…).
+and find the simplest path to solution (which is often not even a software solution...).
 
 But bugs don't wait for you in the thinking, they wait only in the code you wrote. So, the more
 you think, the less you code, the less maintainance burden you create for yourself in the future.
-But of course… you need to have enough time to think things through.
+But of course... you need to have enough time to think things through.
 Essentially, that means bye bye to Saturday-afternoon, amateur-driven hacking !
 
 ### Don't extend it if you can't simplify it first

@@ -1149,7 +1149,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // functions of the views depend on darktable.control->accels_* to register
   // their keyboard accelerators
 
-  // TODO : Make a single call to unified GUI API initializing everything graphical at once.
+  // TODO : Make a single call to unified GUI API initializing everything graphical at once.
   // The current tangled mess is a nightmare to maintain.
 
   if(init_gui)

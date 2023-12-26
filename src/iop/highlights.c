@@ -424,7 +424,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
       tiling->factor = 2.f + 2.f * 4 + 6.f * 4 / DS_FACTOR;
       tiling->factor_cl =  2.f + 3.f * 4 + 5.f * 4 / DS_FACTOR;
 
-      // The wavelets decomposition uses a temp buffer of size 4 × ds_width
+      // The wavelets decomposition uses a temp buffer of size 4 x ds_width
       tiling->maxbuf = 1.f / roi_in->height * 4.f / DS_FACTOR;
     }
     else
@@ -432,7 +432,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
       tiling->factor = 2.f + 2.f + 6.f / DS_FACTOR;
       tiling->factor_cl = 2.f + 3.f + 5.f / DS_FACTOR;
 
-      // The wavelets decomposition uses a temp buffer of size 4 × width
+      // The wavelets decomposition uses a temp buffer of size 4 x width
       tiling->maxbuf = 1.f / roi_in->height / DS_FACTOR;
     }
 
@@ -1156,9 +1156,9 @@ typedef enum diffuse_reconstruct_variant_t
 
 enum wavelets_scale_t
 {
-  ANY_SCALE   = 1 << 0, // any wavelets scale   : reconstruct += HF
-  FIRST_SCALE = 1 << 1, // first wavelets scale : reconstruct = 0
-  LAST_SCALE  = 1 << 2, // last wavelets scale  : reconstruct += residual
+  ANY_SCALE   = 1 << 0, // any wavelets scale   : reconstruct += HF
+  FIRST_SCALE = 1 << 1, // first wavelets scale : reconstruct = 0
+  LAST_SCALE  = 1 << 2, // last wavelets scale  : reconstruct += residual
 };
 
 
@@ -1307,7 +1307,7 @@ static inline void guide_laplacians(const float *const restrict high_freq, const
           out[index + c] = fmaxf(out[index + c] + LF[index + c], 0.f);
       }
 
-      // Last step of RGB reconstruct : add noise
+      // Last step of RGB reconstruct : add noise
       if((scale & LAST_SCALE) && salt && alpha > 0.f)
       {
         // Init random number generator
@@ -1469,7 +1469,7 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
             out[index + c] /= (c != ALPHA && norm > 1e-4f) ? norm : 1.f;
         }
 
-        // Last scale : reconstruct RGB from ratios and norm - norm stays in the 4th channel
+        // Last scale : reconstruct RGB from ratios and norm - norm stays in the 4th channel
         // we need it to evaluate the gradient
         for_four_channels(c, aligned(out))
           out[index + c] = (c == ALPHA) ? out[index + ALPHA] : out[index + c] * out[index + ALPHA];

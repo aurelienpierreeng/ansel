@@ -143,12 +143,12 @@ dt_color_checker_t xrite_24_2014 = { .name = "Xrite ColorChecker 24 after 2014",
                                               { "D6", { 20.64,   00.07,  -00.46 }, { 0.918, 0.875}} } };
 
 
-// dimensions between reference dots : 197 mm width × 135 mm height
-// patch width : 26×26 mm
+// dimensions between reference dots : 197 mm width x 135 mm height
+// patch width : 26x26 mm
 // outer gutter : 8 mm
-// internal gutters (gap between patches) : 5 mm
+// internal gutters (gap between patches) : 5 mm
 dt_color_checker_t spyder_24 = {  .name = "Datacolor SpyderCheckr 24 before 2018",
-                                  .author = "Aurélien PIERRE",
+                                  .author = "Aur\303\251lien PIERRE",
                                   .date = "dec, 9 2016",
                                   .manufacturer = "DataColor",
                                   .type = COLOR_CHECKER_SPYDER_24,
@@ -185,12 +185,12 @@ dt_color_checker_t spyder_24 = {  .name = "Datacolor SpyderCheckr 24 before 2018
                                               { "D6", { 36.13,	14.15,	15.78 }, { 0.893, 0.155 } } } };
 
 
-// dimensions between reference dots : 197 mm width × 135 mm height
-// patch width : 26×26 mm
+// dimensions between reference dots : 197 mm width x 135 mm height
+// patch width : 26x26 mm
 // outer gutter : 8 mm
-// internal gutters (gap between patches) : 5 mm
+// internal gutters (gap between patches) : 5 mm
 dt_color_checker_t spyder_24_v2 = {  .name = "Datacolor SpyderCheckr 24 after 2018",
-                                  .author = "Aurélien PIERRE",
+                                  .author = "Aur\303\251lien PIERRE",
                                   .date = "dec, 9 2016",
                                   .manufacturer = "DataColor",
                                   .type = COLOR_CHECKER_SPYDER_24_V2,
@@ -227,12 +227,12 @@ dt_color_checker_t spyder_24_v2 = {  .name = "Datacolor SpyderCheckr 24 after 20
                                               { "D6", { 36.13,  14.15,  15.78 }, { 0.893, 0.155 } } } };
 
 
-// dimensions between reference dots : 297 mm width × 197 mm height
-// patch width : 26×26 mm
+// dimensions between reference dots : 297 mm width x 197 mm height
+// patch width : 26x26 mm
 // outer gutter : 8 mm
-// internal gutters (gap between patches) : 5 mm
+// internal gutters (gap between patches) : 5 mm
 dt_color_checker_t spyder_48 = {  .name = "Datacolor SpyderCheckr 48 before 2018",
-                                  .author = "Aurélien PIERRE",
+                                  .author = "Aur\303\251lien PIERRE",
                                   .date = "dec, 9 2016",
                                   .manufacturer = "DataColor",
                                   .type = COLOR_CHECKER_SPYDER_48,
@@ -293,12 +293,12 @@ dt_color_checker_t spyder_48 = {  .name = "Datacolor SpyderCheckr 48 before 2018
                                               { "H6", { 36.13,	14.15,	15.78 }, { 0.929, 0.893 } } } };
 
 
-// dimensions between reference dots : 297 mm width × 197 mm height
-// patch width : 26×26 mm
+// dimensions between reference dots : 297 mm width x 197 mm height
+// patch width : 26x26 mm
 // outer gutter : 8 mm
-// internal gutters (gap between patches) : 5 mm
+// internal gutters (gap between patches) : 5 mm
 dt_color_checker_t spyder_48_v2 = {  .name = "Datacolor SpyderCheckr 48 after 2018",
-                                  .author = "Aurélien PIERRE",
+                                  .author = "Aur\303\251lien PIERRE",
                                   .date = "dec, 9 2016",
                                   .manufacturer = "DataColor",
                                   .type = COLOR_CHECKER_SPYDER_48_V2,
@@ -437,4 +437,3 @@ static inline const dt_color_checker_patch* dt_color_checker_get_patch_by_name(c
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

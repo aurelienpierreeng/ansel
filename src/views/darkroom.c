@@ -684,7 +684,7 @@ static void _dev_change_image(int32_t imgid)
 
   // Lazy trick to cleanup, reset, reinit, reload everything without
   // having to duplicate most of (but not all) the code in leave(),
-  // try_enter() and enter() : simulate a roundtrip through lighttable.
+  // try_enter() and enter() : simulate a roundtrip through lighttable.
   // This way, all images are loaded through the same path, handled at an higher level.
   // It's more robust, although slightly slower than re-initing only what is needed.
   dt_view_manager_switch(darktable.view_manager, "lighttable");
@@ -2742,7 +2742,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   if(dev->form_visible && dt_masks_events_button_released(dev->gui_module, x, y, which, state))
   {
     // Change on mask parameters and image output.
-    // FIXME: use invalidate_top in the future
+    // FIXME: use invalidate_top in the future
     dt_dev_invalidate_all(dev);
     dt_control_queue_redraw_center();
     dt_dev_refresh_ui_images(dev);
@@ -2984,7 +2984,7 @@ void scrolled(dt_view_t *self, double x, double y, int up, int state)
   if(dev->form_visible && dt_masks_events_mouse_scrolled(dev->gui_module, x, y, up, state))
   {
     // Scroll on masks changes their size, therefore mask parameters and image output.
-    // FIXME: use invalidate_top in the future
+    // FIXME: use invalidate_top in the future
     dt_dev_invalidate_all(dev);
     dt_control_queue_redraw_center();
     dt_dev_refresh_ui_images(dev);

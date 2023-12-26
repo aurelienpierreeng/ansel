@@ -92,7 +92,7 @@ static void _new_connection(SoupServer *server, SoupMessage *msg, const char *pa
     goto end;
   }
 
-  char *page_title = g_strdup_printf(_("ansel » %s"), params->id);
+  char *page_title = g_strdup_printf(_("ansel >> %s"), params->id);
   const char *title = _(params->id);
   const char *body = _("<h1>Sorry,</h1><p>something went wrong. Please try again.</p>");
 

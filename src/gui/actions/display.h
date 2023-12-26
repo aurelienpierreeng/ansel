@@ -37,7 +37,7 @@ static void full_screen_callback()
 #endif
 }
 
-/** SIDE PANELS COLLAPSE **/
+/** SIDE PANELS COLLAPSE **/
 static gboolean _panel_is_visible(dt_ui_panel_t panel)
 {
   gchar *key = panels_get_view_path("panel_collaps_state");
@@ -274,7 +274,7 @@ dt_iop_color_intent_t string_to_color_intent(const char *string)
   // Since most profiles don't have them, it falls back to something close to relative colorimetric.
   // Really not sure if it's our implementation or if it's LittleCMS2 that is faulty here.
   // This option just makes it look like pRoFESsional CoLoR mAnAgeMEnt®©.
-  // ICC intents are pretty much bogus in the first place… (gamut mapping by RGB clipping…)
+  // ICC intents are pretty much bogus in the first place... (gamut mapping by RGB clipping...)
 }
 
 static void intent_callback(GtkWidget *widget)

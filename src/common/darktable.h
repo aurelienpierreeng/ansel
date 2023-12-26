@@ -125,7 +125,7 @@ typedef unsigned int u_int;
 
 /* Create cloned functions for various CPU SSE generations */
 /* See for instructions https://hannes.hauswedell.net/post/2017/12/09/fmv/ */
-/* TL;DR : use only on SIMD functions containing low-level paralellized/vectorized loops */
+/* TL;DR : use only on SIMD functions containing low-level paralellized/vectorized loops */
 #if __has_attribute(target_clones) && !defined(_WIN32) && !defined(NATIVE_ARCH)
 # if defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64)
 #define __DT_CLONE_TARGETS__ __attribute__((target_clones("default", "sse2", "sse3", "sse4.1", "sse4.2", "popcnt", "avx", "avx2", "avx512f", "fma4")))
@@ -372,7 +372,7 @@ size_t dt_get_singlebuffer_mem();
  * @brief Set the memory buffer to zero as a pack of unsigned char
  *
  * @param buffer void buffer
- * @param size size of the memory stride. NEEDS TO BE A MULTIPLE OF 8.
+ * @param size size of the memory stride. NEEDS TO BE A MULTIPLE OF 8.
  */
 static inline void memset_zero(void *const buffer, size_t size)
 {

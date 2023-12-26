@@ -869,7 +869,7 @@ static gboolean _event_button_press(GtkWidget *widget, GdkEventButton *event, gp
 
 static gboolean _event_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpointer user_data)
 {
-  // AUREL FIXME: maybe remove this function at all ?
+  // AUREL FIXME: maybe remove this function at all ?
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
   table->mouse_inside = TRUE;
   table->last_x = ceil(event->x_root);

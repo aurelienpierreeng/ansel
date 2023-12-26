@@ -495,7 +495,7 @@ uint64_t dt_iop_module_hash(dt_iop_module_t *module);
 gboolean dt_iop_check_modules_equal(dt_iop_module_t *mod_1, dt_iop_module_t *mod_2);
 
 
-/** Set bypass to TRUE if the pipeline cache should be bypassed temporarily for
+/** Set bypass to TRUE if the pipeline cache should be bypassed temporarily for
  * this module and the next, for example doing interactive GUI operations.
  *
  * Pipeline cache consistency is ensured by hashing the internal module params

@@ -1707,7 +1707,7 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   * but some pipeline params are allocated on the stack (LUTs) from user params (graph nodes),
   * meaning they are not written in piece->data struct.
   *
-  * NOTE : 
+  * NOTE : 
   *   1. module->hash is set by history API and represents the internal state of user params with regard to history.
   *      It is computed from module->params and module->blend_params.
   *   2. piece->hash represents the internal state of params with regard to pipeline. It is computed from module->hash
@@ -1722,7 +1722,7 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   *      all the downstream modules will have their piece->global_hash changed too.
   *   4. in pixelpipe_hb.c, we compute the _node_hash() representing the external pipeline state with regard to pipeline cache lines.
   *      It is computed from piece->global_hash and takes into account the output buffer size of the pipeline,
-  *      along with preview bypasses (mask previews and such) for GUI pipelines.
+  *      along with preview bypasses (mask previews and such) for GUI pipelines.
   *      This high-level hash is used to synchronize pipeline states with pipeline cache lines.
   *      When no cache line matching this _node_hash() is found, the pipe is recomputed starting from the
   *      most-downstream module which _node_hash() is known in cache, to spare computations, or recomputed entirely if
@@ -1765,7 +1765,7 @@ void dt_iop_gui_update(dt_iop_module_t *module)
       // depending on modules, to init and reset sliders and comboboxes not linked to module params.
       // Because those widgets directly declared from params introspection are added to the module->bh_widget_list
       // (GSList *), which is updated in dt_bauhaus_update_module();
-      // TODO: fix this FUCKING mess:
+      // TODO: fix this FUCKING mess:
       // 1. the bauhaus lib should not change its behaviour based on the state of the global variable darktable.gui->reset,
       //    instead the global variable should be checked upstream before dispatching bauhaus events (like set,
       //    reset, update). Nesting dependencies across layers of libs to the state of a global variable is super unreliable and prone
@@ -1774,7 +1774,7 @@ void dt_iop_gui_update(dt_iop_module_t *module)
       //    they should connect callbacks to the `value-changed` signal. The bauhaus lib should be treated as an
       //    an extension of Gtk, implementation-agnostic.
       // 3. Ideally, all sliders and comboboxes should be updated through an unified method to prevent
-      //    programmer errors in the future because, again, WE DON'T HAVE DEV DOC, so API need to be dummy-proof.
+      //    programmer errors in the future because, again, WE DON'T HAVE DEV DOC, so API need to be dummy-proof.
 
       dt_iop_gui_update_blending(module);
       dt_iop_gui_update_expanded(module);
@@ -1801,7 +1801,7 @@ static void _gui_reset_callback(GtkButton *button, GdkEventButton *event, dt_iop
 
   //Ctrl is used to apply any auto-presets to the current module
   //If Ctrl was not pressed, or no auto-presets were applied, reset the module parameters
-  // FIXME: can we stop with all the easter-eggs key modifiers doing undocumented stuff all along ?
+  // FIXME: can we stop with all the easter-eggs key modifiers doing undocumented stuff all along ?
   if(!(event && dt_modifier_is(event->state, GDK_CONTROL_MASK)) || !dt_gui_presets_autoapply_for_module(module))
   {
     // if a drawn mask is set, remove it from the list
@@ -2373,10 +2373,10 @@ gboolean _iop_tooltip_callback(GtkWidget *widget, gint x, gint y, gboolean keybo
   gtk_widget_set_size_request(grid, DT_PIXEL_APPLY_DPI(300), -1);
   gtk_widget_set_size_request(vbox, DT_PIXEL_APPLY_DPI(300), -1);
 
-  const char *icon_purpose = "⟳";
-  const char *icon_input   = "⇥";
-  const char *icon_process = "⟴";
-  const char *icon_output  = "↦";
+  const char *icon_purpose = "\342\237\263";
+  const char *icon_input   = "\342\207\245";
+  const char *icon_process = "\342\237\264";
+  const char *icon_output  = "\342\206\246";
 
   const char *icons[4] = {icon_purpose, icon_input, icon_process, icon_output};
   const char *ilabs[4] = {_("Purpose"), _("Input"), _("Process"), _("Output")};

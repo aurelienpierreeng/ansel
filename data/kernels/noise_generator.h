@@ -92,7 +92,7 @@ static inline float4 gaussian_noise_simd(const float4 mu, const float4 sigma, ui
   const float4 flip = { 1.0f, 0.0f, 1.0f, 0.0f };
   const float4 flip_comp = { 0.0f, 1.0f, 0.0f, 0.0f };
 
-  // flip is a 4×1 boolean mask
+  // flip is a 4x1 boolean mask
   const float4 noise = flip * native_sqrt(-2.0f * native_log(u1)) * native_cos(2.f * M_PI_F * u2) +
                        flip_comp * native_sqrt(-2.0f * native_log(u1)) * native_sin(2.f * M_PI_F * u2);
   return noise * sigma + mu;
@@ -117,7 +117,7 @@ static inline float4 poisson_noise_simd(const float4 mu, const float4 sigma, uin
   const float4 flip = { 1.0f, 0.0f, 1.0f, 0.0f };
   const float4 flip_comp = { 0.0f, 1.0f, 0.0f, 0.0f };
 
-  // flip is a 4×1 boolean mask
+  // flip is a 4x1 boolean mask
   const float4 noise = flip * native_sqrt(-2.0f * native_log(u1)) * native_cos(2.f * M_PI_F * u2) +
                        flip_comp * native_sqrt(-2.0f * native_log(u1)) * native_sin(2.f * M_PI_F * u2);
 

@@ -38,9 +38,9 @@
  *
  * To solve A x = y, for x, with A a positive definite hermitian real matrix :
  *
- *  1) find L such that A = L × L' (Choleski decomposition)
- *  2) Second step : solve L × b = y for b (triangular descent)
- *  3) Third step : solve L' × x = b for x (triangular ascent)
+ *  1) find L such that A = L x L' (Choleski decomposition)
+ *  2) Second step : solve L x b = y for b (triangular descent)
+ *  3) Third step : solve L' x x = b for x (triangular ascent)
  *
  * L is a lower diagonal matrix such that :
  *
@@ -62,7 +62,7 @@
  * one succeed.
  *
  * We didn't bother to parallelize the code nor to make it use double floating point precision
- * because it's already fast enough (2 to 45 ms for 16×16 matrix on Xeon) and used for properly
+ * because it's already fast enough (2 to 45 ms for 16x16 matrix on Xeon) and used for properly
  * conditioned matrices.
  *
  * Vectorization leads to slow-downs here since we access matrices row-wise and column-wise,
@@ -84,7 +84,7 @@ __DT_CLONE_TARGETS__
 static inline int choleski_decompose_fast(const float *const restrict A,
                                           float *const restrict L, size_t n)
 {
-  // A is input n×n matrix, decompose it into L such that A = L × L'
+  // A is input nxn matrix, decompose it into L such that A = L x L'
   // fast variant : we don't check values for negatives in sqrt,
   // ensure you know the properties of your matrix.
 
@@ -111,7 +111,7 @@ __DT_CLONE_TARGETS__
 static inline int choleski_decompose_safe(const float *const restrict A,
                                           float *const restrict L, size_t n)
 {
-  // A is input n×n matrix, decompose it into L such that A = L × L'
+  // A is input nxn matrix, decompose it into L such that A = L x L'
   // slow and safe variant : we check values for negatives in sqrt and divisions by 0.
 
   if(A[0] <= 0.0f) return 0; // failure : non positive definite matrice
@@ -161,7 +161,7 @@ static inline int triangular_descent_fast(const float *const restrict L,
                                           const float *const restrict y, float *const restrict b,
                                           const size_t n)
 {
-  // solve L × b = y for b
+  // solve L x b = y for b
   // use the lower triangular part of L from top to bottom
 
   for(size_t i = 0; i < n; ++i)
@@ -182,7 +182,7 @@ static inline int triangular_descent_safe(const float *const restrict L,
                                           const float *const restrict y, float *const restrict b,
                                           const size_t n)
 {
-  // solve L × b = y for b
+  // solve L x b = y for b
   // use the lower triangular part of L from top to bottom
 
   int valid = 1;
@@ -213,7 +213,7 @@ static inline int triangular_ascent_fast(const float *const restrict L,
                               const float *const restrict b, float *const restrict x,
                               const size_t n)
 {
-  // solve L' × x = b for x
+  // solve L' x x = b for x
   // use the lower triangular part of L transposed from bottom to top
 
   for(int i = (n - 1); i > -1 ; --i)
@@ -234,7 +234,7 @@ static inline int triangular_ascent_safe(const float *const restrict L,
                               const float *const restrict b, float *const restrict x,
                               const size_t n)
 {
-  // solve L' × x = b for x
+  // solve L' x x = b for x
   // use the lower triangular part of L transposed from bottom to top
 
   int valid = 1;
@@ -264,7 +264,7 @@ static inline int solve_hermitian(const float *const restrict A,
                                   float *const restrict y,
                                   const size_t n, const int checks)
 {
-  // Solve A x = y where A an hermitian positive definite matrix n × n
+  // Solve A x = y where A an hermitian positive definite matrix n x n
   // x and y are n vectors. Output the result in y
 
   // A and y need to be 64-bits aligned, which is darktable's default memory alignment
@@ -366,7 +366,7 @@ static inline int pseudo_solve(float *const restrict A,
                                const size_t m, const size_t n, const int checks)
 {
   // Solve the linear problem A x = y with the over-constrained rectanguler matrice A
-  // of dimension m × n (m >= n) by the least squares method
+  // of dimension m x n (m >= n) by the least squares method
 
   //clock_t start = clock();
 
@@ -374,7 +374,7 @@ static inline int pseudo_solve(float *const restrict A,
   if(m < n)
   {
     valid = 0;
-    fprintf(stdout, "Pseudo solve: cannot cast %zu × %zu matrice\n", m, n);
+    fprintf(stdout, "Pseudo solve: cannot cast %zu \303\227 %zu matrice\n", m, n);
     return valid;
   }
 
@@ -428,4 +428,3 @@ static inline int pseudo_solve(float *const restrict A,
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

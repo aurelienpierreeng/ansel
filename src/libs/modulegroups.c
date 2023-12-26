@@ -227,7 +227,7 @@ void gui_init(dt_lib_module_t *self)
   /* search box */
   d->hbox_search_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   d->text_entry = gtk_search_entry_new();
-  gtk_entry_set_placeholder_text(GTK_ENTRY(d->text_entry), _("Search a module…"));
+  gtk_entry_set_placeholder_text(GTK_ENTRY(d->text_entry), _("Search a module..."));
   gtk_widget_add_events(d->text_entry, GDK_FOCUS_CHANGE_MASK);
   gtk_widget_add_events(d->text_entry, GDK_KEY_PRESS_MASK);
   g_signal_connect(G_OBJECT(d->text_entry), "search-changed", G_CALLBACK(_text_entry_changed_callback), self);
@@ -289,7 +289,7 @@ void gui_init(dt_lib_module_t *self)
   darktable.develop->proxy.modulegroups.switch_group = _lib_modulegroups_switch_group;
   darktable.develop->proxy.modulegroups.search_text_focus = _lib_modulegroups_search_text_focus;
 
-  /* Bloody accels from the great MIDI turducken */
+  /* Bloody accels from the great MIDI turducken */
   dt_action_register(DT_ACTION(self), N_("move to the next modules tab"), _modulegroups_switch_tab_next, GDK_KEY_Tab, GDK_CONTROL_MASK);
   dt_action_register(DT_ACTION(self), N_("move to the previous modules tab"), _modulegroups_switch_tab_previous, GDK_KEY_Tab, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
 

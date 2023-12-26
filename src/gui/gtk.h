@@ -123,7 +123,7 @@ typedef struct dt_gui_gtk_t
 
   // Global accelerators for main menu, needed for GtkMenu mnemonics.
   // This duplicates the functionnality of the terrible "next gen" shortcuts
-  // handler, but works natively with GtkMenuItems… Need to discard ALT key
+  // handler, but works natively with GtkMenuItems... Need to discard ALT key
   // from "next gen" handler to let them be captured by Gtk.
   GtkAccelGroup * global_accels;
 

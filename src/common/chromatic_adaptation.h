@@ -32,7 +32,7 @@ typedef enum dt_adaptation_t
 
 
 // modified LMS cone response space for Bradford transform
-// explanation here : https://onlinelibrary.wiley.com/doi/pdf/10.1002/9781119021780.app3
+// explanation here : https://onlinelibrary.wiley.com/doi/pdf/10.1002/9781119021780.app3
 // but coeffs are wrong in the above, so they come from :
 // http://www2.cmp.uea.ac.uk/Research/compvis/Papers/FinSuss_COL00.pdf
 // At any time, ensure XYZ_to_LMS is the exact matrice inverse of LMS_to_XYZ
@@ -49,7 +49,7 @@ const dt_colormatrix_t Bradford_LMS_to_XYZ = { {  0.9870f, -0.1471f,  0.1600f, 0
 #endif
 static inline void convert_XYZ_to_bradford_LMS(const dt_aligned_pixel_t XYZ, dt_aligned_pixel_t LMS)
 {
-  // Warning : needs XYZ normalized with Y - you need to downscale before
+  // Warning : needs XYZ normalized with Y - you need to downscale before
   dot_product(XYZ, XYZ_to_Bradford_LMS, LMS);
 }
 
@@ -58,13 +58,13 @@ static inline void convert_XYZ_to_bradford_LMS(const dt_aligned_pixel_t XYZ, dt_
 #endif
 static inline void convert_bradford_LMS_to_XYZ(const dt_aligned_pixel_t LMS, dt_aligned_pixel_t XYZ)
 {
-  // Warning : output XYZ normalized with Y - you need to upscale later
+  // Warning : output XYZ normalized with Y - you need to upscale later
   dot_product(LMS, Bradford_LMS_to_XYZ, XYZ);
 }
 
 
 // modified LMS cone response for CAT16, from CIECAM16
-// reference : https://ntnuopen.ntnu.no/ntnu-xmlui/bitstream/handle/11250/2626317/CCIW-23.pdf?sequence=1
+// reference : https://ntnuopen.ntnu.no/ntnu-xmlui/bitstream/handle/11250/2626317/CCIW-23.pdf?sequence=1
 // At any time, ensure XYZ_to_LMS is the exact matrice inverse of LMS_to_XYZ
 const dt_colormatrix_t XYZ_to_CAT16_LMS = { {  0.401288f, 0.650173f, -0.051461f, 0.f },
                                             { -0.250268f, 1.204414f,  0.045854f, 0.f },
@@ -79,7 +79,7 @@ const dt_colormatrix_t CAT16_LMS_to_XYZ = { {  1.862068f, -1.011255f,  0.149187f
 #endif
 static inline void convert_XYZ_to_CAT16_LMS(const dt_aligned_pixel_t XYZ, dt_aligned_pixel_t LMS)
 {
-  // Warning : needs XYZ normalized with Y - you need to downscale before
+  // Warning : needs XYZ normalized with Y - you need to downscale before
   dot_product(XYZ, XYZ_to_CAT16_LMS, LMS);
 }
 
@@ -88,7 +88,7 @@ static inline void convert_XYZ_to_CAT16_LMS(const dt_aligned_pixel_t XYZ, dt_ali
 #endif
 static inline void convert_CAT16_LMS_to_XYZ(const dt_aligned_pixel_t LMS, dt_aligned_pixel_t XYZ)
 {
-  // Warning : output XYZ normalized with Y - you need to upscale later
+  // Warning : output XYZ normalized with Y - you need to upscale later
   dot_product(LMS, CAT16_LMS_to_XYZ, XYZ);
 }
 
@@ -231,7 +231,7 @@ static inline void bradford_adapt_D50(const dt_aligned_pixel_t lms_in,
   // since it is independent from current pixel values
   // origin illuminant need also to be precomputed to LMS
 
-  // Precomputed D50 primaries in Bradford LMS for ICC transforms
+  // Precomputed D50 primaries in Bradford LMS for ICC transforms
   const dt_aligned_pixel_t D50 = { 0.996078f, 1.020646f, 0.818155f, 0.f };
 
   dt_aligned_pixel_t temp = { lms_in[0] / origin_illuminant[0],
@@ -398,7 +398,7 @@ static inline void chroma_adapt_pixel(const dt_aligned_pixel_t in, dt_aligned_pi
   dt_aligned_pixel_t temp_one;
   dt_aligned_pixel_t temp_two;
 
-  /* WE START IN XYZ */
+  /* WE START IN XYZ */
   const float Y = in[1];
 
   switch(adaptation)
@@ -497,4 +497,3 @@ static inline void convert_D50_to_LMS(const dt_adaptation_t adaptation, dt_align
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

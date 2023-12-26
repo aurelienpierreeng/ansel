@@ -1755,7 +1755,7 @@ var _gestureStartTime,
 			if(!_direction && !_moved && !_isZooming) {
 
 				if(_mainScrollPos.x !== _slideSize.x * _currPositionIndex) {
-					// if main scroll position is shifted – direction is always horizontal
+					// if main scroll position is shifted - direction is always horizontal
 					_direction = 'h';
 				} else {
 					var diff = Math.abs(touchesList[0].x - _currPoint.x) - Math.abs(touchesList[0].y - _currPoint.y);

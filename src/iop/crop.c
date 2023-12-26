@@ -736,7 +736,7 @@ static void _event_aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *sel
       }
 
       // simplify the fraction with binary GCD - https://en.wikipedia.org/wiki/Greatest_common_divisor
-      // search g and d such that g is odd and gcd(nn, dd) = g × 2^d
+      // search g and d such that g is odd and gcd(nn, dd) = g x 2^d
       int e = 0;
       int nn = abs(n);
       int dd = abs(d);

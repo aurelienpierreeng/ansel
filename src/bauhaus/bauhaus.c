@@ -59,7 +59,7 @@ enum
 // A lot of GUI setters/getters functions used to have type checking on input widgets
 // and silently returned early if the types were not ok (like trying to set a combobox using slider methods).
 // This only hides programmers mistakes in a way that prevents the soft to crash,
-// but it still leads to faulty GUI interactions and inconsistent widgets values that might be hard to spot.
+// but it still leads to faulty GUI interactions and inconsistent widgets values that might be hard to spot.
 // In november 2023, they got removed in order to fail explicitly and possibly crash.
 // If that's not enough, we can always add assertions in the code.
 
@@ -100,7 +100,7 @@ static void _margins_retrieve(struct dt_bauhaus_widget_t *w)
 }
 
 /**
- * @brief Get the total height of a GUI row containing a line of text + top and bottom padding.
+ * @brief Get the total height of a GUI row containing a line of text + top and bottom padding.
  *
  * This applies to comboboxes list elements only. Sliders text lines have only bottom padding.
  *
@@ -1644,7 +1644,7 @@ static gint _delayed_combobox_commit(gpointer data)
   d->timeout_handle = 0;
   g_signal_emit_by_name(G_OBJECT(w), "value-changed");
 
-  // TODO: make this a callback in module scope
+  // TODO: make this a callback in module scope
   if(w->field && w->module) {
     switch(w->field_type)
     {
@@ -1682,7 +1682,7 @@ static gint _delayed_combobox_commit(gpointer data)
  * @param widget
  * @param pos -1 for "custom" value in editable comboboxes, >= 0 for items in the list
  * @param timeout TRUE to apply an adaptative timeout preventing intermediate setting steps (e.g. while scrolling)
- * to emit too many value-changed signals and committing to pipeline. FALSE forces immediate dispatch of new value,
+ * to emit too many value-changed signals and committing to pipeline. FALSE forces immediate dispatch of new value,
  * when there is no ambiguity that the setting is final (e.g left click).
  */
 void _combobox_set(GtkWidget *widget, const int pos, gboolean timeout)
@@ -1717,13 +1717,13 @@ void _combobox_set(GtkWidget *widget, const int pos, gboolean timeout)
         g_source_remove(d->timeout_handle);
         d->timeout_handle = 0;
       }
-      // TODO: map the timeout to an user config ? Arguably, that value will be higher for senior citizen
+      // TODO: map the timeout to an user config ? Arguably, that value will be higher for senior citizen
       d->timeout_handle = g_timeout_add(350, _delayed_combobox_commit, w);
     }
   }
 }
 
-// Public API function, called from GUI init and update
+// Public API function, called from GUI init and update
 void dt_bauhaus_combobox_set(GtkWidget *widget, const int pos)
 {
   _combobox_set(widget, pos, FALSE);
@@ -2495,7 +2495,7 @@ void dt_bauhaus_show_popup(GtkWidget *widget)
   // For Wayland (and supposed to work on X11 too) and Gtk 3.24 this is how you do it
 
   // move_to_rect below needs visible widgets to compute sizing properly.
-  // That makes the GUI glitch but I have no better solution…
+  // That makes the GUI glitch but I have no better solution...
   gtk_widget_show(darktable.bauhaus->popup_window);
 
   gdk_window_move_to_rect(GDK_WINDOW(window), &tmp, GDK_GRAVITY_NORTH, GDK_GRAVITY_NORTH,
@@ -2732,8 +2732,8 @@ float dt_bauhaus_slider_get_step(GtkWidget *widget)
       const float log10step = log10f(step);
       const float fdigits = floorf(log10step + .1f);
 
-      // using ipow here makes the UI hang indefinitly.
-      // Why ? We have +/- inf in fdigits ?
+      // using ipow here makes the UI hang indefinitly.
+      // Why ? We have +/- inf in fdigits ?
       step = powf(10.f, fdigits);
       if(log10step - fdigits > .5f)
         step *= 5.f;
@@ -2846,14 +2846,14 @@ static gboolean _delayed_slider_commit(gpointer data)
 }
 
 /**
- * @brief Set the value of a slider as a ratio of the GUI slider width
+ * @brief Set the value of a slider as a ratio of the GUI slider width
  *
  * @param w Bauhaus widget
  * @param pos Relative position over the slider bar (ratio between 0 and 1)
  * @param raise Set to FALSE to redraw slider position without committing the actual value to pipeline
  * nor sending the `value-changed` event (e.g. in motion-notify events, while dragging).
  * Set to TRUE when the change is finished (e.g. in button-pressed events).
- * @param timeout TRUE to add a timeout preventing intermediate setting steps (e.g. while scrolling) to emit
+ * @param timeout TRUE to add a timeout preventing intermediate setting steps (e.g. while scrolling) to emit
  * value-changed signal and commit to pipeline too often. FALSE to set immediately, when there is no ambiguity
  * on the final setting (e.g. at init time and on click). Doesn't change anything if raise is FALSE.
  */
@@ -2890,7 +2890,7 @@ static void dt_bauhaus_slider_set_normalized(struct dt_bauhaus_widget_t *w, floa
         g_source_remove(d->timeout_handle);
         d->timeout_handle = 0;
       }
-      // TODO: map the timeout to an user config ? Arguably, that value will be higher for senior citizen
+      // TODO: map the timeout to an user config ? Arguably, that value will be higher for senior citizen
       d->timeout_handle = g_timeout_add(350, _delayed_slider_commit, w);
     }
   }
@@ -3052,7 +3052,7 @@ static gboolean dt_bauhaus_slider_button_press(GtkWidget *widget, GdkEventButton
         // but without committing results to pipeline yet.
         if(event_y < darktable.bauhaus->line_height)
         {
-          // single left click on the header name : do nothing (only give focus)
+          // single left click on the header name : do nothing (only give focus)
           d->is_dragging = 0;
         }
         else

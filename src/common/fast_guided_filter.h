@@ -58,9 +58,9 @@ typedef enum dt_iop_guided_filter_blending_t
  * Since the guided filter is a linear application, we can safely downscale
  * the guiding and the guided image by a factor of 4, using a bilinear interpolation,
  * compute the guidance at this scale, then upscale back to the original size
- * and get a free 10× speed-up.
+ * and get a free 10x speed-up.
  *
- * Then, the vectorization adds another substantial speed-up. Overall, it brings a ×50 to ×200
+ * Then, the vectorization adds another substantial speed-up. Overall, it brings a x50 to x200
  * speed-up compared to the guided_filter.h lib. Of course, it requires every buffer to be
  * 64-bits aligned.
  *
@@ -76,7 +76,7 @@ typedef enum dt_iop_guided_filter_blending_t
  *  - iterations : apply the guided filtering recursively, with kernel size increasing by sqrt(2)
  *    between each iteration, to diffuse the filter and soften edges transitions.
  *
- * Reference : 
+ * Reference : 
  *  Kaiming He, Jian Sun, Microsoft : https://arxiv.org/abs/1505.00996
  **/
 
@@ -174,7 +174,7 @@ static inline void variance_analyse(const float *const restrict guide, // I
   */
   float *const restrict input = dt_alloc_align_float(Ndimch);
 
-  // Pre-multiply guide and mask and pack all inputs into an array of 4×1 SIMD struct
+  // Pre-multiply guide and mask and pack all inputs into an array of 4x1 SIMD struct
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(guide, mask, Ndim, radius, input) \
@@ -223,7 +223,7 @@ schedule(simd:static) aligned(image, ab:64)
 #endif
   for(size_t k = 0; k < num_elem; k++)
   {
-    // Note : image[k] is positive at the outside of the luminance mask
+    // Note : image[k] is positive at the outside of the luminance mask
     image[k] = fmaxf(image[k] * ab[k * 2] + ab[k * 2 + 1], MIN_FLOAT);
   }
 }
@@ -241,7 +241,7 @@ schedule(simd:static) aligned(image, ab:64)
 #endif
   for(size_t k = 0; k < num_elem; k++)
   {
-    // Note : image[k] is positive at the outside of the luminance mask
+    // Note : image[k] is positive at the outside of the luminance mask
     image[k] = sqrtf(image[k] * fmaxf(image[k] * ab[k * 2] + ab[k * 2 + 1], MIN_FLOAT));
   }
 }
@@ -361,4 +361,3 @@ clean:
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

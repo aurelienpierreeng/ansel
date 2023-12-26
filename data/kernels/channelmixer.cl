@@ -128,7 +128,7 @@ static inline float4 luma_chroma(const float4 input, const float4 saturation, co
     if(version == CHANNELMIXERRGB_V_3) norm *= INVERSE_SQRT_3;
 
     // Ratios
-    // WARNING : dot product below uses all 4 channels, you need to make sure
+    // WARNING : dot product below uses all 4 channels, you need to make sure
     // input.w != NaN since saturation.w = 0.f
     output = input / norm;
 
@@ -348,7 +348,7 @@ static inline float4 chroma_adapt_RGB(const float4 RGB,
 
 /*
 * The following kernels are 100% copy-pasted with the exception of
-* the first line : const dt_adaptation_t kind = ...
+* the first line : const dt_adaptation_t kind = ...
 * This ensures to unswitch the color space conversions branches for performance
 * while keeping the same overall code structure for maintenance.
 *
@@ -385,10 +385,10 @@ channelmixerrgb_CAT16(read_only image2d_t in, write_only image2d_t out,
 
   if(clip) RGB = fmax(RGB, 0.f);
 
-  /* WE START IN PIPELINE RGB */
+  /* WE START IN PIPELINE RGB */
   unswitch_chroma_adapt(kind);
 
-  /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
+  /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
 
   // Gamut mapping happens in XYZ space no matter what
   XYZ = gamut_mapping(XYZ, gamut, clip);
@@ -396,7 +396,7 @@ channelmixerrgb_CAT16(read_only image2d_t in, write_only image2d_t out,
   // convert to LMS, XYZ or pipeline RGB
   unswitch_convert_XYZ_to_any_LMS(kind);
 
-  /* FROM HERE WE ARE IN LMS, XYZ OR PIPELINE RGB depending on user param */
+  /* FROM HERE WE ARE IN LMS, XYZ OR PIPELINE RGB depending on user param */
 
   // Clip in LMS
   if(clip) LMS = fmax(LMS, 0.0f);
@@ -421,7 +421,7 @@ channelmixerrgb_CAT16(read_only image2d_t in, write_only image2d_t out,
     // Convert back to XYZ
     unswitch_convert_any_LMS_to_XYZ(kind);
 
-    /* FROM HERE WE ARE MANDATORILY IN XYZ */
+    /* FROM HERE WE ARE MANDATORILY IN XYZ */
 
     // Clip in XYZ
     if(clip) XYZ = fmax(XYZ, 0.0f);
@@ -465,10 +465,10 @@ channelmixerrgb_bradford_linear(read_only image2d_t in, write_only image2d_t out
 
   if(clip) RGB = fmax(RGB, 0.f);
 
-  /* WE START IN PIPELINE RGB */
+  /* WE START IN PIPELINE RGB */
   unswitch_chroma_adapt(kind);
 
-  /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
+  /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
 
   // Gamut mapping happens in XYZ space no matter what
   XYZ = gamut_mapping(XYZ, gamut, clip);
@@ -476,7 +476,7 @@ channelmixerrgb_bradford_linear(read_only image2d_t in, write_only image2d_t out
   // convert to LMS, XYZ or pipeline RGB
   unswitch_convert_XYZ_to_any_LMS(kind);
 
-  /* FROM HERE WE ARE IN LMS, XYZ OR PIPELINE RGB depending on user param */
+  /* FROM HERE WE ARE IN LMS, XYZ OR PIPELINE RGB depending on user param */
 
   // Clip in LMS
   if(clip) LMS = fmax(LMS, 0.0f);
@@ -501,7 +501,7 @@ channelmixerrgb_bradford_linear(read_only image2d_t in, write_only image2d_t out
     // Convert back to XYZ
     unswitch_convert_any_LMS_to_XYZ(kind);
 
-    /* FROM HERE WE ARE MANDATORILY IN XYZ */
+    /* FROM HERE WE ARE MANDATORILY IN XYZ */
 
     // Clip in XYZ
     if(clip) XYZ = fmax(XYZ, 0.0f);
@@ -544,10 +544,10 @@ channelmixerrgb_bradford_full(read_only image2d_t in, write_only image2d_t out,
 
   if(clip) RGB = fmax(RGB, 0.f);
 
-  /* WE START IN PIPELINE RGB */
+  /* WE START IN PIPELINE RGB */
   unswitch_chroma_adapt(kind);
 
-  /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
+  /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
 
   // Gamut mapping happens in XYZ space no matter what
   XYZ = gamut_mapping(XYZ, gamut, clip);
@@ -555,7 +555,7 @@ channelmixerrgb_bradford_full(read_only image2d_t in, write_only image2d_t out,
   // convert to LMS, XYZ or pipeline RGB
   unswitch_convert_XYZ_to_any_LMS(kind);
 
-  /* FROM HERE WE ARE IN LMS, XYZ OR PIPELINE RGB depending on user param */
+  /* FROM HERE WE ARE IN LMS, XYZ OR PIPELINE RGB depending on user param */
 
   // Clip in LMS
   if(clip) LMS = fmax(LMS, 0.0f);
@@ -580,7 +580,7 @@ channelmixerrgb_bradford_full(read_only image2d_t in, write_only image2d_t out,
     // Convert back to XYZ
     unswitch_convert_any_LMS_to_XYZ(kind);
 
-    /* FROM HERE WE ARE MANDATORILY IN XYZ */
+    /* FROM HERE WE ARE MANDATORILY IN XYZ */
 
     // Clip in XYZ
     if(clip) XYZ = fmax(XYZ, 0.0f);
@@ -624,10 +624,10 @@ channelmixerrgb_XYZ(read_only image2d_t in, write_only image2d_t out,
 
   if(clip) RGB = fmax(RGB, 0.f);
 
-  /* WE START IN PIPELINE RGB */
+  /* WE START IN PIPELINE RGB */
   unswitch_chroma_adapt(kind);
 
-  /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
+  /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
 
   // Gamut mapping happens in XYZ space no matter what
   XYZ = gamut_mapping(XYZ, gamut, clip);
@@ -635,7 +635,7 @@ channelmixerrgb_XYZ(read_only image2d_t in, write_only image2d_t out,
   // convert to LMS, XYZ or pipeline RGB
   unswitch_convert_XYZ_to_any_LMS(kind);
 
-  /* FROM HERE WE ARE IN LMS, XYZ OR PIPELINE RGB depending on user param */
+  /* FROM HERE WE ARE IN LMS, XYZ OR PIPELINE RGB depending on user param */
 
   // Clip in LMS
   if(clip) LMS = fmax(LMS, 0.0f);
@@ -660,7 +660,7 @@ channelmixerrgb_XYZ(read_only image2d_t in, write_only image2d_t out,
     // Convert back to XYZ
     unswitch_convert_any_LMS_to_XYZ(kind);
 
-    /* FROM HERE WE ARE MANDATORILY IN XYZ */
+    /* FROM HERE WE ARE MANDATORILY IN XYZ */
 
     // Clip in XYZ
     if(clip) XYZ = fmax(XYZ, 0.0f);
@@ -703,10 +703,10 @@ channelmixerrgb_RGB(read_only image2d_t in, write_only image2d_t out,
 
   if(clip) RGB = fmax(RGB, 0.f);
 
-  /* WE START IN PIPELINE RGB */
+  /* WE START IN PIPELINE RGB */
   unswitch_chroma_adapt(kind);
 
-  /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
+  /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
 
   // Gamut mapping happens in XYZ space no matter what
   XYZ = gamut_mapping(XYZ, gamut, clip);
@@ -714,7 +714,7 @@ channelmixerrgb_RGB(read_only image2d_t in, write_only image2d_t out,
   // convert to LMS, XYZ or pipeline RGB
   unswitch_convert_XYZ_to_any_LMS(kind);
 
-  /* FROM HERE WE ARE IN LMS, XYZ OR PIPELINE RGB depending on user param */
+  /* FROM HERE WE ARE IN LMS, XYZ OR PIPELINE RGB depending on user param */
 
   // Clip in LMS
   if(clip) LMS = fmax(LMS, 0.0f);
@@ -739,7 +739,7 @@ channelmixerrgb_RGB(read_only image2d_t in, write_only image2d_t out,
     // Convert back to XYZ
     unswitch_convert_any_LMS_to_XYZ(kind);
 
-    /* FROM HERE WE ARE MANDATORILY IN XYZ */
+    /* FROM HERE WE ARE MANDATORILY IN XYZ */
 
     // Clip in XYZ
     if(clip) XYZ = fmax(XYZ, 0.0f);

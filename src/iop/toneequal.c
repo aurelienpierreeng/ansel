@@ -119,8 +119,8 @@ DT_MODULE_INTROSPECTION(2, dt_iop_toneequalizer_params_t)
 #define MIN_FLOAT exp2f(-16.0f)
 
 /**
- * Build the exposures octaves : 
- * band-pass filters with gaussian windows spaced by 1 EV
+ * Build the exposures octaves : 
+ * band-pass filters with gaussian windows spaced by 1 EV
 **/
 
 #define CHANNELS 9
@@ -135,7 +135,7 @@ static const float centers_ops[PIXEL_CHAN] DT_ALIGNED_ARRAY = {-56.0f / 7.0f, //
                                                                -24.0f / 7.0f,
                                                                -16.0f / 7.0f,
                                                                 -8.0f / 7.0f,
-                                                                 0.0f / 7.0f}; // split 8 EV into 7 evenly-spaced channels
+                                                                 0.0f / 7.0f}; // split 8 EV into 7 evenly-spaced channels
 
 static const float centers_params[CHANNELS] DT_ALIGNED_ARRAY = { -8.0f, -7.0f, -6.0f, -5.0f,
                                                                  -4.0f, -3.0f, -2.0f, -1.0f, 0.0f};
@@ -281,7 +281,7 @@ typedef struct dt_iop_toneequalizer_gui_data_t
   int luminance_valid;      // TRUE if the luminance cache is ready
   int histogram_valid;      // TRUE if the histogram cache and stats are ready
   int lut_valid;            // TRUE if the gui_lut is ready
-  int graph_valid;          // TRUE if the UI graph view is ready
+  int graph_valid;          // TRUE if the UI graph view is ready
   int user_param_valid;     // TRUE if users params set in interactive view are in bounds
   int factors_valid;        // TRUE if radial-basis coeffs are ready
 
@@ -456,11 +456,11 @@ void init_presets(dt_iop_module_so_t *self)
   p.details = DT_TONEEQ_EIGF;
   p.feathering = 20.0f;
   compress_shadows_highlight_preset_set_exposure_params(&p, 0.65f);
-  dt_gui_presets_add_generic(_("compress shadows/highlights (eigf): strong"), self->op,
+  dt_gui_presets_add_generic(_("compress shadows/highlights (eigf): strong"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
   p.details = DT_TONEEQ_GUIDED;
   p.feathering = 500.0f;
-  dt_gui_presets_add_generic(_("compress shadows/highlights (gf): strong"), self->op,
+  dt_gui_presets_add_generic(_("compress shadows/highlights (gf): strong"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
 
   p.details = DT_TONEEQ_EIGF;
@@ -480,7 +480,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.feathering = 1.0f;
   p.iterations = 1;
   compress_shadows_highlight_preset_set_exposure_params(&p, 0.25f);
-  dt_gui_presets_add_generic(_("compress shadows/highlights (eigf): soft"), self->op,
+  dt_gui_presets_add_generic(_("compress shadows/highlights (eigf): soft"), self->op,
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_SCENE);
   p.details = DT_TONEEQ_GUIDED;
   p.feathering = 500.0f;
@@ -572,8 +572,8 @@ static int sanity_check(dt_iop_module_t *self)
 
   if(position_self < position_min && self->enabled)
   {
-    dt_control_log(_("tone equalizer needs to be after distortion modules in the pipeline – disabled"));
-    fprintf(stdout, "tone equalizer needs to be after distortion modules in the pipeline – disabled\n");
+    dt_control_log(_("tone equalizer needs to be after distortion modules in the pipeline - disabled"));
+    fprintf(stdout, "tone equalizer needs to be after distortion modules in the pipeline - disabled\n");
     self->enabled = 0;
     dt_dev_add_history_item(darktable.develop, self, FALSE);
 
@@ -604,7 +604,7 @@ static float get_luminance_from_buffer(const float *const buffer,
                                        const size_t width, const size_t height,
                                        const size_t x, const size_t y)
 {
-  // Get the weighted average luminance of the 3×3 pixels region centered in (x, y)
+  // Get the weighted average luminance of the 3x3 pixels region centered in (x, y)
   // x and y are ratios in [0, 1] of the width and height
 
   if(y >= height || x >= width) return NAN;
@@ -1010,7 +1010,7 @@ void toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   }
   else
   {
-    // no interactive editing/caching : just allocate a local temp buffer
+    // no interactive editing/caching : just allocate a local temp buffer
     luminance = dt_alloc_sse_ps(num_elem);
   }
 
@@ -1024,7 +1024,7 @@ void toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   // Compute the luminance mask
   if(cached)
   {
-    // caching path : store the luminance mask for GUI access
+    // caching path : store the luminance mask for GUI access
 
     if((piece->pipe->type & DT_DEV_PIXELPIPE_FULL) == DT_DEV_PIXELPIPE_FULL)
     {
@@ -1288,7 +1288,7 @@ static void gui_cache_init(struct dt_iop_module_t *self)
   g->luminance_valid = FALSE;      // TRUE if the luminance cache is ready
   g->histogram_valid = FALSE;      // TRUE if the histogram cache and stats are ready
   g->lut_valid = FALSE;            // TRUE if the gui_lut is ready
-  g->graph_valid = FALSE;          // TRUE if the UI graph view is ready
+  g->graph_valid = FALSE;          // TRUE if the UI graph view is ready
   g->user_param_valid = FALSE;     // TRUE if users params set in interactive view are in bounds
   g->factors_valid = TRUE;         // TRUE if radial-basis coeffs are ready
 
@@ -1542,7 +1542,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   // but the actual regularization params applied in guided filter behaves the other way
   d->feathering = 1.f / (p->feathering);
 
-  // UI params are in log2 offsets (EV) : convert to linear factors
+  // UI params are in log2 offsets (EV) : convert to linear factors
   d->contrast_boost = exp2f(p->contrast_boost);
   d->exposure_boost = exp2f(p->exposure_boost);
 
@@ -1966,8 +1966,8 @@ static void switch_cursors(struct dt_iop_module_t *self)
 
 int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
 {
-  // Whenever the mouse moves over the picture preview, store its coordinates in the GUI struct
-  // for later use. This works only if dev->preview_pipe perfectly overlaps with the UI preview
+  // Whenever the mouse moves over the picture preview, store its coordinates in the GUI struct
+  // for later use. This works only if dev->preview_pipe perfectly overlaps with the UI preview
   // meaning all distortions, cropping, rotations etc. are applied before this module in the pipe.
 
   dt_develop_t *dev = self->dev;
@@ -2086,7 +2086,7 @@ static inline int set_new_params_interactive(const float control_exposure, const
   }
   else
   {
-    // Reset the GUI copy of user params
+    // Reset the GUI copy of user params
     get_channels_factors(factors, p);
     dt_simd_memcpy(factors, g->temp_user_params, CHANNELS);
     g->user_param_valid = 1;
@@ -2114,7 +2114,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   // add an option to allow skip mouse events while editing masks
   if(darktable.develop->darkroom_skip_mouse_events || in_mask_editing(self)) return 0;
 
-  // if GUI buffers not ready, exit but still handle the cursor
+  // if GUI buffers not ready, exit but still handle the cursor
   dt_iop_gui_enter_critical_section(self);
   const int fail = (!g->cursor_valid || !g->luminance_valid || !g->interpolation_valid || !g->user_param_valid || dev->pipe->processing || !g->has_focus);
   dt_iop_gui_leave_critical_section(self);
@@ -2192,7 +2192,7 @@ void cairo_draw_hatches(cairo_t *cr, double center[2], double span[2], int insta
 
 static void get_shade_from_luminance(cairo_t *cr, const float luminance, const float alpha)
 {
-  // TODO: fetch screen gamma from ICC display profile
+  // TODO: fetch screen gamma from ICC display profile
   const float gamma = 1.0f / 2.2f;
   const float shade = powf(luminance, gamma);
   cairo_set_source_rgba(cr, shade, shade, shade, alpha);
@@ -2591,7 +2591,7 @@ static gboolean area_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   //if(!g->graph_valid)
   if(!_init_drawing(self, widget, g)) return FALSE; // this can be cached and drawn just once, but too lazy to debug a cache invalidation for Cairo objects
 
-  // since the widget sizes are not cached and invalidated properly above (yet…)
+  // since the widget sizes are not cached and invalidated properly above (yet...)
   // force the invalidation of the nodes coordinates to account for possible widget resizing
   dt_iop_gui_enter_critical_section(self);
   g->valid_nodes_x = FALSE;

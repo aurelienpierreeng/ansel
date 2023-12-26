@@ -1092,7 +1092,7 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
   pzy += 0.5f;
 
   // allow to select a shape from the outside world, typically from IOPs
-  // but also mask GUI controls. Note that it doesn't work at mask creation time
+  // but also mask GUI controls. Note that it doesn't work at mask creation time
   // because it relies on gui->group_selected or gui->group_edited being properly
   // set with the formid of the newly-created shape. But since opacity is set at
   // the scope of the parent group

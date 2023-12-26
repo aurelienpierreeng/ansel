@@ -228,7 +228,7 @@ if [ ! -f "$_jpeg" ] ; then
     exit 1
 fi
 
-# generate PPM from JPEG file
+# generate PPM from JPEG file
 generate_ppm_jpeg "$_raw" "$_jpeg" "$_ppm8"
 if [ ! -f "$_ppm8" ] ; then
     printf "error: failed generating the PPM from the JPEG file\n"

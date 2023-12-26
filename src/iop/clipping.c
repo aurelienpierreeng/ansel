@@ -1739,7 +1739,7 @@ static void aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *self)
       }
 
       // simplify the fraction with binary GCD - https://en.wikipedia.org/wiki/Greatest_common_divisor
-      // search g and d such that g is odd and gcd(nn, dd) = g × 2^d
+      // search g and d such that g is odd and gcd(nn, dd) = g x 2^d
       int e = 0;
       int nn = abs(n);
       int dd = abs(d);
@@ -2118,7 +2118,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->angle = dt_bauhaus_slider_from_params(self, N_("angle"));
   dt_bauhaus_slider_set_factor(g->angle, -1.0);
-  dt_bauhaus_slider_set_format(g->angle, "°");
+  dt_bauhaus_slider_set_format(g->angle, "\302\260");
   gtk_widget_set_tooltip_text(g->angle, _("right-click and drag a line on the image to drag a straight line"));
 
   g->keystone_type = dt_bauhaus_combobox_new(self);
@@ -2325,7 +2325,7 @@ static void gui_draw_sym(cairo_t *cr, float x, float y, float scale, gboolean ac
   pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(16) * PANGO_SCALE * scale);
   layout = pango_cairo_create_layout(cr);
   pango_layout_set_font_description(layout, desc);
-  pango_layout_set_text(layout, "ꝏ", -1);
+  pango_layout_set_text(layout, "\352\235\217", -1);
   pango_layout_get_pixel_extents(layout, &ink, NULL);
   dt_draw_set_color_overlay(cr, TRUE, 0.5);
   dt_gui_draw_rounded_rectangle(
@@ -2470,7 +2470,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
     char view_angle[16];
     view_angle[0] = '\0';
-    snprintf(view_angle, sizeof(view_angle), "%.2f°", angle);
+    snprintf(view_angle, sizeof(view_angle), "%.2f\302\260", angle);
     pango_layout_set_text(layout, view_angle, -1);
     pango_layout_get_pixel_extents(layout, &ink, NULL);
     const float text_w = ink.width;
@@ -3084,12 +3084,12 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       }
       else if(g->k_selected_segment >= 0)
       {
-        dt_control_hinter_message(darktable.control, _("<b>move line</b>: drag, <b>toggle symmetry</b>: click <tt>ꝏ</tt>"));
+        dt_control_hinter_message(darktable.control, _("<b>move line</b>: drag, <b>toggle symmetry</b>: click <tt>\352\235\217</tt>"));
         dt_control_change_cursor(GDK_CROSS);
       }
       else
       {
-        dt_control_hinter_message(darktable.control, _("<b>apply</b>: click <tt>ok</tt>, <b>toggle symmetry</b>: click <tt>ꝏ</tt>\n"
+        dt_control_hinter_message(darktable.control, _("<b>apply</b>: click <tt>ok</tt>, <b>toggle symmetry</b>: click <tt>\352\235\217</tt>\n"
                                                        "<b>move line/control point</b>: drag"));
         dt_control_change_cursor(GDK_FLEUR);
       }

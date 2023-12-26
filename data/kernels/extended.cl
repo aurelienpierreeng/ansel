@@ -748,7 +748,7 @@ static inline float4 opacity_masks(const float x,
 }
 
 
-#define LUT_ELEM 360 // gamut LUT number of elements: resolution of 1°
+#define LUT_ELEM 360 // gamut LUT number of elements: resolution of 1°
 
 static inline float lookup_gamut(read_only image2d_t gamut_lut, const float x)
 {
@@ -856,7 +856,7 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
   if(Ych.z > M_PI_F) Ych.z -= 2.f * M_PI_F;
   else if(Ych.z < -M_PI_F) Ych.z += 2.f * M_PI_F;
 
-  // Linear chroma : distance to achromatic at constant luminance in scene-referred
+  // Linear chroma : distance to achromatic at constant luminance in scene-referred
   const float chroma_boost = chroma_global + dot(opacities, chroma);
   const float vib = vibrance * (1.0f - native_powr(Ych.y, fabs(vibrance)));
   const float chroma_factor = fmax(1.f + chroma_boost + vib, 0.f);
@@ -908,10 +908,10 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
 
     // Convert to JCh
     float JC[2] = { Jab.x, hypot(Jab.y, Jab.z) };               // brightness/chroma vector
-    const float h = atan2(Jab.z, Jab.y);  // hue : (a, b) angle
+    const float h = atan2(Jab.z, Jab.y);  // hue : (a, b) angle
 
     // Project JC onto S, the saturation eigenvector, with orthogonal vector O.
-    // Note : O should be = (C * cosf(T) - J * sinf(T)) = 0 since S is the eigenvector,
+    // Note : O should be = (C * cosf(T) - J * sinf(T)) = 0 since S is the eigenvector,
     // so we add the chroma projected along the orthogonal axis to get some control value
     const float T = atan2(JC[1], JC[0]); // angle of the eigenvector over the hue plane
     const float sin_T = native_sin(T);
@@ -1016,7 +1016,7 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
     JCH = dt_UCS_HCB_to_JCH(HCB);
 
     // Gamut mapping
-    const float max_colorfulness = lookup_gamut(gamut_lut, JCH.z); // WARNING : this is M²
+    const float max_colorfulness = lookup_gamut(gamut_lut, JCH.z); // WARNING : this is M²
     const float max_chroma = 15.932993652962535f * native_powr(JCH.x * L_white, 0.6523997524738018f) * native_powr(max_colorfulness, 0.6007557017508491f) / L_white;
     const float4 JCH_gamut_boundary = { JCH.x, max_chroma, JCH.z, 0.f };
     const float4 HSB_gamut_boundary = dt_UCS_JCH_to_HSB(JCH_gamut_boundary);

@@ -489,7 +489,7 @@ static int _ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, float 
       else
         dt_conf_set_float("plugins/darkroom/masks/ellipse/rotation", rotation);
 
-      dt_toast_log(_("rotation: %3.f°"), rotation);
+      dt_toast_log(_("rotation: %3.f\302\260"), rotation);
     }
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
     {
@@ -591,7 +591,7 @@ static int _ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, float 
           dt_conf_set_float("plugins/darkroom/spots/ellipse_rotation", ellipse->rotation);
         else
           dt_conf_set_float("plugins/darkroom/masks/ellipse/rotation", ellipse->rotation);
-        dt_toast_log(_("rotation: %3.f°"), ellipse->rotation);
+        dt_toast_log(_("rotation: %3.f\302\260"), ellipse->rotation);
       }
       // resize don't care where the mouse is inside a shape
       if(dt_modifier_is(state, GDK_SHIFT_MASK))

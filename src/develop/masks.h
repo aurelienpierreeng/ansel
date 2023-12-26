@@ -447,7 +447,7 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mas
                                          const float initial_ypos, const float xpos, const float ypos, float *px,
                                          float *py, const int adding);
 
-/** Getters and setters for direct GUI interaction */
+/** Getters and setters for direct GUI interaction */
 int dt_masks_get_parent_id(dt_masks_form_gui_t *gui, const dt_masks_form_t *form);
 float dt_masks_form_get_opacity(dt_masks_form_t *form, int parentid);
 void dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity, gboolean offset);

@@ -41,7 +41,7 @@ typedef enum dt_lib_modulegroup_t
 
 gboolean is_module_group_global(dt_lib_modulegroup_t group)
 {
-  // Is group a special "global module group : enabled modules or "all" ?
+  // Is group a special "global module group : enabled modules or "all" ?
   return (group == DT_MODULEGROUP_ACTIVE_PIPE || group == DT_MODULEGROUP_NONE);
 }
 

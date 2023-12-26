@@ -762,9 +762,9 @@ interpolate_bilinear(read_only image2d_t in, const int width_in, const int heigh
 
 enum wavelets_scale_t
 {
-  ANY_SCALE   = 1 << 0, // any wavelets scale   : reconstruct += HF
-  FIRST_SCALE = 1 << 1, // first wavelets scale : reconstruct = 0
-  LAST_SCALE  = 1 << 2, // last wavelets scale  : reconstruct += residual
+  ANY_SCALE   = 1 << 0, // any wavelets scale   : reconstruct += HF
+  FIRST_SCALE = 1 << 1, // first wavelets scale : reconstruct = 0
+  LAST_SCALE  = 1 << 2, // last wavelets scale  : reconstruct += residual
 };
 
 
@@ -919,7 +919,7 @@ guide_laplacians(read_only image2d_t HF, read_only image2d_t LF,
     out = fmax(out + read_imagef(LF, samplerA, (int2)(x, y)), (float4)0.f);
   }
 
-  // Last step of RGB reconstruct : add noise
+  // Last step of RGB reconstruct : add noise
   if((scale & LAST_SCALE) && salt && alpha > 0.f)
   {
     // Init random number generator
@@ -1042,7 +1042,7 @@ diffuse_color(read_only image2d_t HF, read_only image2d_t LF,
       if(norm > 1e-4f) out.xyz /= norm;
     }
 
-    // Last scale : reconstruct RGB from ratios and norm - norm stays in the 4th channel
+    // Last scale : reconstruct RGB from ratios and norm - norm stays in the 4th channel
     // we need it to evaluate the gradient
     out.xyz *= out.w;
   }

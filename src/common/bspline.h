@@ -38,7 +38,7 @@ static inline float equivalent_sigma_at_step(const float sigma, const unsigned i
 
 static inline unsigned int num_steps_to_reach_equivalent_sigma(const float sigma_filter, const float sigma_final)
 {
-  // The inverse of the above : compute the number of scales needed to reach the desired equivalent sigma_final
+  // The inverse of the above : compute the number of scales needed to reach the desired equivalent sigma_final
   // after sequential blurs of constant sigma_filter
   unsigned int s = 0;
   float radius = sigma_filter;
@@ -57,7 +57,7 @@ static inline unsigned int num_steps_to_reach_equivalent_sigma(const float sigma
 static inline void sparse_scalar_product(const dt_aligned_pixel_t buf, const size_t indices[BSPLINE_FSIZE],
                                          dt_aligned_pixel_t result, const gboolean clip_negatives)
 {
-  // scalar product of 2 3×5 vectors stored as RGB planes and B-spline filter,
+  // scalar product of 2 3x5 vectors stored as RGB planes and B-spline filter,
   // e.g. RRRRR - GGGGG - BBBBB
   static const float filter[BSPLINE_FSIZE] = { 1.0f / 16.0f,
                                                4.0f / 16.0f,

@@ -150,12 +150,12 @@ static inline int pseudo_solve_gaussian(double *const restrict A,
                                         const size_t m, const size_t n, const int checks)
 {
   // Solve the weighted linear problem w A'A x = w A' y with the over-constrained rectanguler matrix A
-  // of dimension m × n (m >= n) and w a vector of weights, by the least squares method
+  // of dimension m x n (m >= n) and w a vector of weights, by the least squares method
   int valid = 1;
 
   if(m < n)
   {
-    fprintf(stderr, "pseudo solve: cannot cast %zu x %zu matrix\n", m, n);
+    fprintf(stderr, "pseudo solve: cannot cast %zu \303\227 %zu matrix\n", m, n);
     return 0;
   }
 
@@ -197,4 +197,3 @@ static inline int pseudo_solve_gaussian(double *const restrict A,
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

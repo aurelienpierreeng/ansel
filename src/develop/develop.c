@@ -673,7 +673,7 @@ static void _dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module
   // but keep the always-on modules
   module->hash = dt_iop_module_hash(module);
 
-  // WARNING: dev->history_item refers to GUI index of history lib module ,
+  // WARNING: dev->history_item refers to GUI index of history lib module ,
   // where 0 is the original image.
   // It is offset by 1 compared to the history GList, aka last GUI index = length of GList.
   // So here, dev->history_item is the index of the new history entry to append
@@ -745,7 +745,7 @@ static void _dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module
 
     if(!no_image)
     {
-      // FIXME: if module was just enabled and is in default pipeline order,
+      // FIXME: if module was just enabled and is in default pipeline order,
       // do we need to rebuild ? Aka are disabled modules added to pipeline still ?
       dev->pipe->changed |= DT_DEV_PIPE_SYNCH;
       dev->preview_pipe->changed |= DT_DEV_PIPE_SYNCH;
@@ -789,7 +789,7 @@ static void _dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module
 
   hist->hash = module->hash;
 
-  // WARNING: dev->history_item refers to GUI index where 0 is the original image.
+  // WARNING: dev->history_item refers to GUI index where 0 is the original image.
   // It is offset by 1 compared to the history GList,
   // meaning dev->history_item is the index of the entry button in the history lib module GUI.
   dev->history_end = g_list_length(dev->history);
@@ -880,7 +880,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   dt_dev_refresh_ui_images(dev);
 }
 
-// FIXME : merge that with the generic add_history_item_ext()
+// FIXME : merge that with the generic add_history_item_ext()
 void dt_dev_add_masks_history_item_ext(dt_develop_t *dev, dt_iop_module_t *_module, gboolean _enable, gboolean no_image)
 {
   dt_iop_module_t *module = _module;
@@ -951,7 +951,7 @@ void dt_dev_reload_history_items(dt_develop_t *dev)
   dt_pthread_mutex_lock(&dev->history_mutex);
 
   // remove unused history items:
-  // FIXME: factorize with add_history_item cleaning
+  // FIXME: factorize with add_history_item cleaning
   GList *history = g_list_nth(dev->history, dev->history_end);
   while(history)
   {
@@ -1050,7 +1050,7 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev, int32_t cnt)
     if(hist->forms) forms = hist->forms;
 
     // this function is called on freshly-loaded histories, we don't necessarily have a hash yet
-    // FIXME: save the hash in DB and get it from there at this point.
+    // FIXME: save the hash in DB and get it from there at this point.
     hist->module->hash = hist->hash = dt_iop_module_hash(hist->module);
 
     //fprintf(stdout, "history has hash %lu, new module %s has %lu\n", hist->hash, hist->module->op, hist->module->hash);
@@ -1133,7 +1133,7 @@ static void _cleanup_history(const int imgid)
 
 guint dt_dev_mask_history_overload(dt_develop_t *dev, guint threshold)
 {
-  // Count all the mask forms used × history entries, up to a certain threshold.
+  // Count all the mask forms used x history entries, up to a certain threshold.
   // Stop counting when the threshold is reached, for performance.
   guint states = 0;
   for(GList *history = g_list_first(dev->history); history; history = g_list_next(history))
@@ -1149,7 +1149,7 @@ static void _warn_about_history_overuse(dt_develop_t *dev)
 {
   /* History stores one entry per module, everytime a parameter is changed.
   *  For modules using masks, we also store a full snapshot of masks states.
-  *  All that is saved into database and XMP. When history entries × number of mask > 250,
+  *  All that is saved into database and XMP. When history entries x number of mask > 250,
   *  we get a really bad performance penalty.
   */
   guint states = dt_dev_mask_history_overload(dev, 250);
@@ -1342,7 +1342,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
     }
   }
 
-  // FIXME : the following query seems duplicated from gui/presets.c/dt_gui_presets_autoapply_for_module()
+  // FIXME : the following query seems duplicated from gui/presets.c/dt_gui_presets_autoapply_for_module()
 
   // select all presets from one of the following table and add them into memory.history. Note that
   // this is appended to possibly already present default modules.
@@ -1930,7 +1930,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int imgid, gboolean no_ima
 
 void dt_dev_read_history(dt_develop_t *dev)
 {
-  // FIXME : This should be made thread-safe, but results in deadlock
+  // FIXME : This should be made thread-safe, but results in deadlock
   //dt_pthread_mutex_lock(&dev->history_mutex);
   dt_dev_read_history_ext(dev, dev->image_storage.id, FALSE);
   //dt_pthread_mutex_unlock(&dev->history_mutex);

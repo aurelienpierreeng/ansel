@@ -4051,7 +4051,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
     char view_angle[16];
     view_angle[0] = '\0';
-    snprintf(view_angle, sizeof(view_angle), "%.2f°", angle);
+    snprintf(view_angle, sizeof(view_angle), "%.2f\302\260", angle);
     pango_layout_set_text(layout, view_angle, -1);
     pango_layout_get_pixel_extents(layout, &ink, NULL);
     const float text_w = ink.width;
@@ -5632,7 +5632,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->draw_line_move = -1;
 
   g->rotation = dt_bauhaus_slider_from_params(self, N_("rotation"));
-  dt_bauhaus_slider_set_format(g->rotation, "°");
+  dt_bauhaus_slider_set_format(g->rotation, "\302\260");
   dt_bauhaus_slider_set_soft_range(g->rotation, -ROTATION_RANGE, ROTATION_RANGE);
 
   g->cropmode = dt_bauhaus_combobox_from_params(self, "cropmode");

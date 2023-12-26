@@ -209,7 +209,7 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_p
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("alter an image’s tones using curves"),
+  return dt_iop_set_description(self, _("alter an image's tones using curves"),
                                       _("corrective and creative"),
                                       _("linear or non-linear, Lab, display-referred"),
                                       _("non-linear, Lab"),
@@ -1482,7 +1482,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
         cairo_line_to(cr, width * picker_mean[ch], -height);
         cairo_stroke(cr);
 
-        snprintf(text, sizeof(text), "%.1f → %.1f", raw_mean[ch], raw_mean_output[ch]);
+        snprintf(text, sizeof(text), "%.1f \342\206\222 %.1f", raw_mean[ch], raw_mean_output[ch]);
 
         set_color(cr, darktable.bauhaus->graph_fg);
         cairo_set_font_size(cr, DT_PIXEL_APPLY_DPI(0.04) * height);

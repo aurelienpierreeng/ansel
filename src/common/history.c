@@ -810,7 +810,7 @@ gboolean dt_history_copy_and_paste_on_image(const int32_t imgid, const int32_t d
 
 char *dt_history_item_as_string(const char *name, gboolean enabled)
 {
-  return g_strconcat(enabled ? "●" : "○", "  ", name, NULL);
+  return g_strconcat(enabled ? "\342\227\217" : "\342\227\213", "  ", name, NULL);
 }
 
 GList *dt_history_get_items(const int32_t imgid, gboolean enabled)

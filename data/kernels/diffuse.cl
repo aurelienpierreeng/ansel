@@ -41,7 +41,7 @@ typedef enum dt_isotropy_t
 
 inline void find_gradient(const float4 pixels[9], float4 xy[2])
 {
-  // Compute the gradient with centered finite differences in a 3×3 stencil
+  // Compute the gradient with centered finite differences in a 3x3 stencil
   // warning : x is vertical, y is horizontal
   xy[0] = (pixels[7] - pixels[1]) / 2.f;
   xy[1] = (pixels[5] - pixels[3]) / 2.f;
@@ -49,7 +49,7 @@ inline void find_gradient(const float4 pixels[9], float4 xy[2])
 
 inline void find_laplacian(const float4 pixels[9], float4 xy[2])
 {
-  // Compute the laplacian with centered finite differences in a 3×3 stencil
+  // Compute the laplacian with centered finite differences in a 3x3 stencil
   // warning : x is vertical, y is horizontal
   xy[0] = (pixels[7] + pixels[1]) - 2.f * pixels[4];
   xy[1] = (pixels[5] + pixels[3]) - 2.f * pixels[4];

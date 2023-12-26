@@ -649,7 +649,7 @@ static void tree_insert_presets(GtkTreeStore *tree_model)
       if(iso_min == 0.0 && iso_max == FLT_MAX)
         iso = g_strdup("%");
       else
-        iso = g_strdup_printf("%zu – %zu", (size_t)iso_min, (size_t)iso_max);
+        iso = g_strdup_printf("%zu - %zu", (size_t)iso_min, (size_t)iso_max);
 
       for(min = 0; min < dt_gui_presets_exposure_value_cnt && exposure_min > dt_gui_presets_exposure_value[min]; min++)
         ;
@@ -658,7 +658,7 @@ static void tree_insert_presets(GtkTreeStore *tree_model)
       if(min == 0 && max == dt_gui_presets_exposure_value_cnt - 1)
         exposure = g_strdup("%");
       else
-        exposure = g_strdup_printf("%s – %s", dt_gui_presets_exposure_value_str[min],
+        exposure = g_strdup_printf("%s - %s", dt_gui_presets_exposure_value_str[min],
                                    dt_gui_presets_exposure_value_str[max]);
 
       for(min = 0; min < dt_gui_presets_aperture_value_cnt && aperture_min > dt_gui_presets_aperture_value[min]; min++)
@@ -668,13 +668,13 @@ static void tree_insert_presets(GtkTreeStore *tree_model)
       if(min == 0 && max == dt_gui_presets_aperture_value_cnt - 1)
         aperture = g_strdup("%");
       else
-        aperture = g_strdup_printf("%s – %s", dt_gui_presets_aperture_value_str[min],
+        aperture = g_strdup_printf("%s - %s", dt_gui_presets_aperture_value_str[min],
                                    dt_gui_presets_aperture_value_str[max]);
 
       if(focal_length_min == 0.0 && focal_length_max == 1000.0)
         focal_length = g_strdup("%");
       else
-        focal_length = g_strdup_printf("%d – %d", focal_length_min, focal_length_max);
+        focal_length = g_strdup_printf("%d - %d", focal_length_min, focal_length_max);
     }
 
     if(g_strcmp0(last_module, operation) != 0)

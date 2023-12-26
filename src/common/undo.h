@@ -96,7 +96,7 @@ void dt_undo_iterate(dt_undo_t *self, uint32_t filter, gpointer user_data,
 void dt_undo_disable_next(dt_undo_t *self);
 
 // Check if the undo/redo stack has at least one available element for the corresponding filter.
-// Mostly meant to disable GUI undo/redo controls if they wouldn't have any effect.
+// Mostly meant to disable GUI undo/redo controls if they wouldn't have any effect.
 gboolean dt_is_undo_list_populated(dt_undo_t *self, uint32_t filter);
 gboolean dt_is_redo_list_populated(dt_undo_t *self, uint32_t filter);
 

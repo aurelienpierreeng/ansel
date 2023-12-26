@@ -1146,7 +1146,7 @@ static gboolean _blendop_blendif_showmask_clicked(GtkToggleButton *button, GdkEv
   // but the global pipe->mask_display is set from *_blend_process() at runtime, so it's a pipe property
   // that changes over the pipe lifecycle.
   //
-  // This is a self-feeding loop of madness because it ties the pipeline to GUI states
+  // This is a self-feeding loop of madness because it ties the pipeline to GUI states
   // (but not all pipes are connected to a GUI, so you need to cover all cases all the time and don't forget to test everything),
   // and because the pipeline is executed recursively from the end, but pipe->mask_display is set in the middle,
   // when it reaches the process() method of the module capturing mask preview, so you don't have this info when
@@ -1784,7 +1784,7 @@ static void _blendop_blendif_channel_mask_view(GtkWidget *widget, dt_iop_module_
   // but the global pipe->mask_display is set from *_blend_process() at runtime, so it's a pipe property
   // that changes over the pipe lifecycle.
   //
-  // This is a self-feeding loop of madness because it ties the pipeline to GUI states
+  // This is a self-feeding loop of madness because it ties the pipeline to GUI states
   // (but not all pipes are connected to a GUI, so you need to cover all cases all the time and don't forget to test everything),
   // and because the pipeline is executed recursively from the end, but pipe->mask_display is set in the middle,
   // when it reaches the process() method of the module capturing mask preview, so you don't have this info when
@@ -1831,7 +1831,7 @@ static void _blendop_blendif_channel_mask_view_toggle(GtkWidget *widget, dt_iop_
   // but the global pipe->mask_display is set from *_blend_process() at runtime, so it's a pipe property
   // that changes over the pipe lifecycle.
   //
-  // This is a self-feeding loop of madness because it ties the pipeline to GUI states
+  // This is a self-feeding loop of madness because it ties the pipeline to GUI states
   // (but not all pipes are connected to a GUI, so you need to cover all cases all the time and don't forget to test everything),
   // and because the pipeline is executed recursively from the end, but pipe->mask_display is set in the middle,
   // when it reaches the process() method of the module capturing mask preview, so you don't have this info when
@@ -1894,7 +1894,7 @@ static gboolean _blendop_blendif_enter(GtkWidget *widget, GdkEventCrossing *even
   // but the global pipe->mask_display is set from *_blend_process() at runtime, so it's a pipe property
   // that changes over the pipe lifecycle.
   //
-  // This is a self-feeding loop of madness because it ties the pipeline to GUI states
+  // This is a self-feeding loop of madness because it ties the pipeline to GUI states
   // (but not all pipes are connected to a GUI, so you need to cover all cases all the time and don't forget to test everything),
   // and because the pipeline is executed recursively from the end, but pipe->mask_display is set in the middle,
   // when it reaches the process() method of the module capturing mask preview, so you don't have this info when
@@ -1956,7 +1956,7 @@ static gboolean _blendop_blendif_leave_delayed(gpointer data)
   // but the global pipe->mask_display is set from *_blend_process() at runtime, so it's a pipe property
   // that changes over the pipe lifecycle.
   //
-  // This is a self-feeding loop of madness because it ties the pipeline to GUI states
+  // This is a self-feeding loop of madness because it ties the pipeline to GUI states
   // (but not all pipes are connected to a GUI, so you need to cover all cases all the time and don't forget to test everything),
   // and because the pipeline is executed recursively from the end, but pipe->mask_display is set in the middle,
   // when it reaches the process() method of the module capturing mask preview, so you don't have this info when
@@ -2138,7 +2138,7 @@ void dt_iop_gui_update_blendif(dt_iop_module_t *module)
   // but the global pipe->mask_display is set from *_blend_process() at runtime, so it's a pipe property
   // that changes over the pipe lifecycle.
   //
-  // This is a self-feeding loop of madness because it ties the pipeline to GUI states
+  // This is a self-feeding loop of madness because it ties the pipeline to GUI states
   // (but not all pipes are connected to a GUI, so you need to cover all cases all the time and don't forget to test everything),
   // and because the pipeline is executed recursively from the end, but pipe->mask_display is set in the middle,
   // when it reaches the process() method of the module capturing mask preview, so you don't have this info when
@@ -2972,7 +2972,7 @@ void dt_iop_gui_blending_lose_focus(dt_iop_module_t *module)
   // but the global pipe->mask_display is set from *_blend_process() at runtime, so it's a pipe property
   // that changes over the pipe lifecycle.
   //
-  // This is a self-feeding loop of madness because it ties the pipeline to GUI states
+  // This is a self-feeding loop of madness because it ties the pipeline to GUI states
   // (but not all pipes are connected to a GUI, so you need to cover all cases all the time and don't forget to test everything),
   // and because the pipeline is executed recursively from the end, but pipe->mask_display is set in the middle,
   // when it reaches the process() method of the module capturing mask preview, so you don't have this info when

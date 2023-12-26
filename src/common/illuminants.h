@@ -39,25 +39,25 @@ typedef enum dt_illuminant_t
   DT_ILLUMINANT_LAST
 } dt_illuminant_t;
 
-// CIE fluorescent standards : https://en.wikipedia.org/wiki/Standard_illuminant
+// CIE fluorescent standards : https://en.wikipedia.org/wiki/Standard_illuminant
 typedef enum dt_illuminant_fluo_t
 {
-  DT_ILLUMINANT_FLUO_F1  = 0,  // $DESCRIPTION: "F1 (Daylight 6430 K) – medium CRI"
-  DT_ILLUMINANT_FLUO_F2  = 1,  // $DESCRIPTION: "F2 (Cool White 4230 K) – medium CRI"
-  DT_ILLUMINANT_FLUO_F3  = 2,  // $DESCRIPTION: "F3 (White 3450 K) – medium CRI"
-  DT_ILLUMINANT_FLUO_F4  = 3,  // $DESCRIPTION: "F4 (Warm White 2940 K) – medium CRI"
-  DT_ILLUMINANT_FLUO_F5  = 4,  // $DESCRIPTION: "F5 (Daylight 6350 K) – medium CRI"
-  DT_ILLUMINANT_FLUO_F6  = 5,  // $DESCRIPTION: "F6 (Lite White 4150 K) – medium CRI"
-  DT_ILLUMINANT_FLUO_F7  = 6,  // $DESCRIPTION: "F7 (D65 simulator 6500 K) – high CRI"
-  DT_ILLUMINANT_FLUO_F8  = 7,  // $DESCRIPTION: "F8 (D50 simulator 5000 K) – high CRI"
-  DT_ILLUMINANT_FLUO_F9  = 8,  // $DESCRIPTION: "F9 (Cool White Deluxe 4150 K) – high CRI"
-  DT_ILLUMINANT_FLUO_F10 = 9,  // $DESCRIPTION: "F10 (Tuned RGB 5000 K) – low CRI" Philips TL85, Ultralume 50
-  DT_ILLUMINANT_FLUO_F11 = 10, // $DESCRIPTION: "F11 (Tuned RGB 4000 K) – low CRI" Philips TL84, Ultralume 40
-  DT_ILLUMINANT_FLUO_F12 = 11, // $DESCRIPTION: "F12 (Tuned RGB 3000 K) – low CRI" Philips TL83, Ultralume 30
+  DT_ILLUMINANT_FLUO_F1  = 0,  // $DESCRIPTION: "F1 (Daylight 6430 K) - medium CRI"
+  DT_ILLUMINANT_FLUO_F2  = 1,  // $DESCRIPTION: "F2 (Cool White 4230 K) - medium CRI"
+  DT_ILLUMINANT_FLUO_F3  = 2,  // $DESCRIPTION: "F3 (White 3450 K) - medium CRI"
+  DT_ILLUMINANT_FLUO_F4  = 3,  // $DESCRIPTION: "F4 (Warm White 2940 K) - medium CRI"
+  DT_ILLUMINANT_FLUO_F5  = 4,  // $DESCRIPTION: "F5 (Daylight 6350 K) - medium CRI"
+  DT_ILLUMINANT_FLUO_F6  = 5,  // $DESCRIPTION: "F6 (Lite White 4150 K) - medium CRI"
+  DT_ILLUMINANT_FLUO_F7  = 6,  // $DESCRIPTION: "F7 (D65 simulator 6500 K) - high CRI"
+  DT_ILLUMINANT_FLUO_F8  = 7,  // $DESCRIPTION: "F8 (D50 simulator 5000 K) - high CRI"
+  DT_ILLUMINANT_FLUO_F9  = 8,  // $DESCRIPTION: "F9 (Cool White Deluxe 4150 K) - high CRI"
+  DT_ILLUMINANT_FLUO_F10 = 9,  // $DESCRIPTION: "F10 (Tuned RGB 5000 K) - low CRI" Philips TL85, Ultralume 50
+  DT_ILLUMINANT_FLUO_F11 = 10, // $DESCRIPTION: "F11 (Tuned RGB 4000 K) - low CRI" Philips TL84, Ultralume 40
+  DT_ILLUMINANT_FLUO_F12 = 11, // $DESCRIPTION: "F12 (Tuned RGB 3000 K) - low CRI" Philips TL83, Ultralume 30
   DT_ILLUMINANT_FLUO_LAST
 } dt_illuminant_fluo_t;
 
-// CIE LED standards : https://en.wikipedia.org/wiki/Standard_illuminant
+// CIE LED standards : https://en.wikipedia.org/wiki/Standard_illuminant
 typedef enum dt_illuminant_led_t
 {
   DT_ILLUMINANT_LED_B1  = 0,   // $DESCRIPTION: "B1 (Blue 2733 K)" phosphor-converted blue
@@ -78,7 +78,7 @@ typedef enum dt_illuminant_led_t
  *  https://en.wikipedia.org/wiki/Planckian_locus
  *  https://en.wikipedia.org/wiki/Standard_illuminant
  *
- * Note : 
+ * Note : 
  *  All values are x and y chromaticities for CIE 1931 2° observer
  **/
 
@@ -123,7 +123,7 @@ static inline float xy_to_CCT(const float x, const float y)
   // Try to find correlated color temperature from chromaticity
   // Valid for 3000 K to 50000 K
   // Reference : https://www.usna.edu/Users/oceano/raylee/papers/RLee_AO_CCTpaper.pdf
-  // Warning : we throw a number ever if it's grossly off. You need to check the error later.
+  // Warning : we throw a number ever if it's grossly off. You need to check the error later.
   const float n = (x - 0.3366f)/(y - 0.1735f);
   return -949.86315f + 6253.80338f * expf(-n / 0.92159f) + 28.70599f * expf(-n / 0.20039f) + 0.00004f * expf(-n / 0.07125f);
 }
@@ -333,7 +333,7 @@ static inline void WB_coeffs_to_illuminant_xy(const float CAM_to_XYZ[4][3], cons
   // Find the illuminant chromaticity x y from RAW WB coeffs and camera input matrice
   dt_aligned_pixel_t XYZ, LMS;
   // Simulate white point, aka convert (1, 1, 1) in camera space to XYZ
-  // warning : we multiply the transpose of CAM_to_XYZ  since the pseudoinverse transposes it
+  // warning : we multiply the transpose of CAM_to_XYZ  since the pseudoinverse transposes it
   XYZ[0] = CAM_to_XYZ[0][0] / WB[0] + CAM_to_XYZ[1][0] / WB[1] + CAM_to_XYZ[2][0] / WB[2];
   XYZ[1] = CAM_to_XYZ[0][1] / WB[0] + CAM_to_XYZ[1][1] / WB[1] + CAM_to_XYZ[2][1] / WB[2];
   XYZ[2] = CAM_to_XYZ[0][2] / WB[0] + CAM_to_XYZ[1][2] / WB[1] + CAM_to_XYZ[2][2] / WB[2];
@@ -444,7 +444,7 @@ static int find_temperature_from_raw_coeffs(const dt_image_t *img, const dt_alig
   if(isnan(XYZ_to_CAM[0][0])) return FALSE;
 
   // Bloody input matrices define XYZ -> CAM transform, as if we often needed camera profiles to output
-  // So we need to invert them. Here go your CPU cycles again.
+  // So we need to invert them. Here go your CPU cycles again.
   float CAM_to_XYZ[4][3];
   CAM_to_XYZ[0][0] = NAN;
   matrice_pseudoinverse(XYZ_to_CAM, CAM_to_XYZ, 3);
@@ -602,4 +602,3 @@ static inline float CCT_reverse_lookup(const float x, const float y)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

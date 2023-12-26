@@ -253,7 +253,7 @@ typedef enum dt_signal_t
       return :
        - GList* of filenames
        - int : length of GList
-       - int : 1 if final update (crawling finished), 0 if intermediate result.
+       - int : 1 if final update (crawling finished), 0 if intermediate result.
   */
   DT_SIGNAL_FILELIST_CHANGED,
 

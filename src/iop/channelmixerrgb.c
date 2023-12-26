@@ -677,7 +677,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
     for(size_t c = 0; c < DT_PIXEL_SIMD_CHANNELS; c++)
       temp_two[c] = (clip) ? fmaxf(in[k + c], 0.0f) : in[k + c];
 
-    /* WE START IN PIPELINE RGB */
+    /* WE START IN PIPELINE RGB */
 
     switch(kind)
     {
@@ -777,7 +777,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
       }
     }
 
-    /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
+    /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
 
     // Gamut mapping happens in XYZ space no matter what
     gamut_mapping(temp_one, gamut, clip, temp_two);
@@ -803,7 +803,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
       }
     }
 
-    /* FROM HERE WE ARE IN LMS, XYZ OR PIPELINE RGB depending on user param - DATA IS IN temp_one */
+    /* FROM HERE WE ARE IN LMS, XYZ OR PIPELINE RGB depending on user param - DATA IS IN temp_one */
 
     // Clip in LMS
     if(clip) for(size_t c = 0; c < DT_PIXEL_SIMD_CHANNELS; c++) temp_one[c] = fmaxf(temp_one[c], 0.0f);
@@ -846,7 +846,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
         }
       }
 
-      /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
+      /* FROM HERE WE ARE MANDATORILY IN XYZ - DATA IS IN temp_one */
 
       // Clip in XYZ
       if(clip) for(size_t c = 0; c < DT_PIXEL_SIMD_CHANNELS; c++) temp_one[c] = fmaxf(temp_one[c], 0.0f);
@@ -1095,7 +1095,7 @@ static void check_if_close_to_daylight(const float x, const float y, float *temp
    * If so, we enable the daylight GUI for better ergonomics
    * Otherwise, we default to direct x, y control for better accuracy
    *
-   * Note : The use of CCT is discouraged if dE > 5 % in CIE 1960 Yuv space
+   * Note : The use of CCT is discouraged if dE > 5 % in CIE 1960 Yuv space
    *        reference : https://onlinelibrary.wiley.com/doi/abs/10.1002/9780470175637.ch3
    */
 
@@ -1178,7 +1178,7 @@ static inline void compute_patches_delta_E(const float *const restrict patches,
 
     // Compute delta E 2000 to make your computer heat
     // ref: https://en.wikipedia.org/wiki/Color_difference#CIEDE2000
-    // note : it will only be luck if I didn't mess-up the computation somewhere
+    // note : it will only be luck if I didn't mess-up the computation somewhere
     const float DL = Lab_ref[0] - Lab_test[0];
     const float L_avg = (Lab_ref[0] + Lab_test[0]) / 2.f;
     const float C_ref = dt_fast_hypotf(Lab_ref[1], Lab_ref[2]);
@@ -1202,7 +1202,7 @@ static inline void compute_patches_delta_E(const float *const restrict patches,
     if(C_ref_prime == 0.f) h_ref_prime = 0.f;
     if(C_test_prime == 0.f) h_test_prime = 0.f;
 
-    // Get the hue angles from [-pi ; pi] back to [0 ; 2 pi],
+    // Get the hue angles from [-pi ; pi] back to [0 ; 2 pi],
     // again, to comply with specifications
     if(h_ref_prime < 0.f) h_ref_prime = 2.f * M_PI - h_ref_prime;
     if(h_test_prime < 0.f) h_test_prime = 2.f * M_PI - h_test_prime;
@@ -1248,7 +1248,7 @@ static inline void compute_patches_delta_E(const float *const restrict patches,
     const float R_T = -2.f * C_avg_7_ratio_sqrt
                       * sinf(DEG_TO_RAD(60.f) * expf(-sqf((H_avg_prime - 275.f) / 25.f)));
 
-    // roll the drum, here goes the Delta E, finally…
+    // roll the drum, here goes the Delta E, finally...
     const float DE = sqrtf(sqf(DL / S_L) + sqf(DC_prime / S_C) + sqf(DH_prime / S_H)
                            + R_T * (DC_prime / S_C) * (DH_prime / S_H));
 
@@ -1355,7 +1355,7 @@ static const extraction_result_t _extract_patches(const float *const restrict in
           {
             patches[k * 4 + c] += in[(j * width + i) * 4 + c];
 
-            // Debug : inpaint a black square in the preview to ensure the coordanites of
+            // Debug : inpaint a black square in the preview to ensure the coordanites of
             // overlay drawings and actual pixel processing match
             // out[(j * width + i) * 4 + c] = 0.f;
           }
@@ -1644,19 +1644,19 @@ void extract_color_checker(const float *const restrict in, float *const restrict
       w = sqrtf(1.f - hypotf(reference[1] / 128.f, reference[2] / 128.f));
     else if(g->optimization == DT_SOLVE_OPTIMIZE_SKIN)
     {
-      // average skin hue angle is 1.0 rad, hue range is [0.75 ; 1.25]
+      // average skin hue angle is 1.0 rad, hue range is [0.75 ; 1.25]
       const float ref_hue = 1.f;
       GET_WEIGHT;
     }
     else if(g->optimization == DT_SOLVE_OPTIMIZE_FOLIAGE)
     {
-      // average foliage hue angle is 2.23 rad, hue range is [1.94 ; 2.44]
+      // average foliage hue angle is 2.23 rad, hue range is [1.94 ; 2.44]
       const float ref_hue = 2.23f;
       GET_WEIGHT;
     }
     else if(g->optimization == DT_SOLVE_OPTIMIZE_SKY)
     {
-      // average sky/water hue angle is -1.93 rad, hue range is [-1.64 ; -2.41]
+      // average sky/water hue angle is -1.93 rad, hue range is [-1.64 ; -2.41]
       const float ref_hue = -1.93f;
       GET_WEIGHT;
     }
@@ -1760,9 +1760,9 @@ void extract_color_checker(const float *const restrict in, float *const restrict
   g_free(g->delta_E_label_text);
   g->delta_E_label_text
       = g_strdup_printf(_("\n<b>Profile quality report: %s</b>\n"
-                          "input ΔE: \tavg. %.2f ; \tmax. %.2f\n"
-                          "WB ΔE: \tavg. %.2f; \tmax. %.2f\n"
-                          "output ΔE: \tavg. %.2f; \tmax. %.2f\n\n"
+                          "input \316\224E: \tavg. %.2f ; \tmax. %.2f\n"
+                          "WB \316\224E: \tavg. %.2f; \tmax. %.2f\n"
+                          "output \316\224E: \tavg. %.2f; \tmax. %.2f\n\n"
                           "<b>Profile data</b>\n"
                           "illuminant:  \t%.0f K \t%s\n"
                           "matrix in adaptation space:\n"
@@ -1806,7 +1806,7 @@ void validate_color_checker(const float *const restrict in,
   // Update GUI label
   g_free(g->delta_E_label_text);
   g->delta_E_label_text = g_strdup_printf(_("\n<b>Profile quality report: %s</b>\n"
-                                            "output ΔE: \tavg. %.2f; \tmax. %.2f\n\n"
+                                            "output \316\224E: \tavg. %.2f; \tmax. %.2f\n\n"
                                             "<b>Normalization values</b>\n"
                                             "exposure compensation: \t%+.2f EV\n"
                                             "black offset: \t%+.4f"),
@@ -1891,7 +1891,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     // and needs to be updated accordingly, to give a consistent result.
     // We initialise the CAT defaults using the temperature coeffs at startup, but if temperature
     // is changed later, we get no notification of the change here, so we can't update the defaults.
-    // So we need to re-run the detection at runtime…
+    // So we need to re-run the detection at runtime...
     float x, y;
     dt_aligned_pixel_t custom_wb;
     get_white_balance_coeff(self, custom_wb);
@@ -1908,7 +1908,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     }
     else
     {
-      // just use whatever was defined in commit_params hoping the defaults work…
+      // just use whatever was defined in commit_params hoping the defaults work...
     }
   }
 
@@ -1989,7 +1989,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     // and needs to be updated accordingly, to give a consistent result.
     // We initialise the CAT defaults using the temperature coeffs at startup, but if temperature
     // is changed later, we get no notification of the change here, so we can't update the defaults.
-    // So we need to re-run the detection at runtime…
+    // So we need to re-run the detection at runtime...
     float x, y;
     dt_aligned_pixel_t custom_wb;
     get_white_balance_coeff(self, custom_wb);
@@ -2415,7 +2415,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   cairo_line_to(cr, right.x, right.y);
   cairo_stroke(cr);
 
-  /* For debug : display center of the image and center of the ideal target
+  /* For debug : display center of the image and center of the ideal target
   point_t new_target_center = apply_homography(target_center, g->homography);
   cairo_set_source_rgba(cr, 1., 1., 1., 1.);
   cairo_arc(cr, new_target_center.x, new_target_center.y, 7., 0, 2. * M_PI);
@@ -2749,7 +2749,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     d->saturation[2] = -p->saturation[0] + norm_sat;
   }
 
-  // just in case compiler feels clever and uses SSE 4×1 dot product
+  // just in case compiler feels clever and uses SSE 4x1 dot product
   d->saturation[CHANNEL_SIZE - 1] = 0.0f;
   d->lightness[CHANNEL_SIZE - 1] = 0.0f;
   d->grey[CHANNEL_SIZE - 1] = 0.0f;
@@ -2935,7 +2935,7 @@ static void update_illuminants(dt_iop_module_t *self)
  *
  * However, it's not a great GUI since x and y are not perceptually scaled. So the `g->illum_x` and `g->illum_y`
  * actually display respectively hue and chroma, in LCh color space, which is designed for illuminants
- * and preceptually spaced. This gives UI controls which effect feels more even to the user.
+ * and preceptually spaced. This gives UI controls which effect feels more even to the user.
  *
  * But that makes things a bit tricky, API-wise, since a set of (x, y) depends on a set of (hue, chroma),
  * so they always need to be handled together, but also because the back-and-forth computations
@@ -3551,7 +3551,7 @@ static void _spot_settings_changed_callback(GtkWidget *slider, dt_iop_module_t *
   const dt_spot_mode_t mode = dt_bauhaus_combobox_get(g->spot_mode);
   if(mode == DT_SPOT_MODE_CORRECT)
     _auto_set_illuminant(self, darktable.develop->pipe);
-  // else : just record new values and do nothing
+  // else : just record new values and do nothing
 }
 
 
@@ -3593,7 +3593,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
             || p->illuminant == DT_ILLUMINANT_DETECT_SURFACES)
     {
       // We need to recompute only the full preview
-      dt_control_log(_("auto-detection of white balance started…"));
+      dt_control_log(_("auto-detection of white balance started..."));
     }
   }
 
@@ -3689,7 +3689,7 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
   dot_product(RGB, work_profile->matrix_in, XYZ);
   dt_XYZ_to_sRGB(XYZ, g->spot_RGB);
 
-  // Convert to Lch for GUI feedback (input)
+  // Convert to Lch for GUI feedback (input)
   dt_aligned_pixel_t Lab;
   dt_aligned_pixel_t Lch;
   dt_XYZ_to_Lab(XYZ, Lab);
@@ -3698,7 +3698,7 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
   // Write report in GUI
   ++darktable.gui->reset;
   gtk_label_set_text(GTK_LABEL(g->Lch_origin),
-                     g_strdup_printf(_("L: \t%.1f %%\nh: \t%.1f °\nc: \t%.1f"),
+                     g_strdup_printf(_("L: \t%.1f %%\nh: \t%.1f \302\260\nc: \t%.1f"),
                                      Lch[0], Lch[2] * 360.f, Lch[1] ));
   --darktable.gui->reset;
 
@@ -3811,8 +3811,8 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
     // optionaly, apply the inverse mixing on the target
     if(use_mixing)
     {
-      // Repack the MIX matrix to 3×3 to support the pseudoinverse function
-      // I'm just too lazy to rewrite the pseudo-inverse for 3×4 padded input
+      // Repack the MIX matrix to 3x3 to support the pseudoinverse function
+      // I'm just too lazy to rewrite the pseudo-inverse for 3x4 padded input
       float MIX_3x3[9];
       pack_3xSSE_to_3x3(MIX, MIX_3x3);
 
@@ -3827,7 +3827,7 @@ void _auto_set_illuminant(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
       float MIX_INV_3x3[9];
       matrice_pseudoinverse((float (*)[3])MIX_3x3, (float (*)[3])MIX_INV_3x3, 3);
 
-      // Transpose and repack the inverse to SSE matrix because the inversion transposes too
+      // Transpose and repack the inverse to SSE matrix because the inversion transposes too
       dt_colormatrix_t MIX_INV;
       transpose_3x3_to_3xSSE(MIX_INV_3x3, MIX_INV);
 
@@ -3963,12 +3963,12 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->adaptation),
                               _("choose the method to adapt the illuminant\n"
                                 "and the colorspace in which the module works: \n"
-                                "• Linear Bradford (1985) is consistent with ICC v4 toolchain.\n"
-                                "• CAT16 (2016) is more robust and accurate.\n"
-                                "• Non-linear Bradford (1985) is the original Bradford,\n"
-                                "it can produce better results than the linear version, but is unreliable.\n"
-                                "• XYZ is a simple scaling in XYZ space. It is not recommended in general.\n"
-                                "• none disables any adaptation and uses pipeline working RGB."));
+                                "- Linear Bradford (1985) is consistent with ICC v4 toolchain.\n"
+                                "- CAT16 (2016) is more robust and accurate.\n"
+                                "- Non-linear Bradford (1985) is the original Bradford,\n"
+                                "  it can produce better results than the linear version, but is unreliable.\n"
+                                "- XYZ is a simple scaling in XYZ space. It is not recommended in general.\n"
+                                "- none disables any adaptation and uses pipeline working RGB."));
 
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 
@@ -4004,7 +4004,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->illum_x = dt_bauhaus_slider_new_with_range_and_feedback(self, 0., ILLUM_X_MAX, 0, 0, 1, 0);
   dt_bauhaus_widget_set_label(g->illum_x, NULL, N_("hue"));
-  dt_bauhaus_slider_set_format(g->illum_x, "°");
+  dt_bauhaus_slider_set_format(g->illum_x, "\302\260");
   g_signal_connect(G_OBJECT(g->illum_x), "value-changed", G_CALLBACK(illum_xy_callback), self);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->illum_x), FALSE, FALSE, 0);
 
@@ -4067,7 +4067,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->Lch_origin = gtk_label_new(_("L: \tN/A\nh: \tN/A\nc: \tN/A"));
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->Lch_origin),
-                              _("these LCh coordinates are computed from CIE Lab 1976 coordinates"));
+                              _("these LCh coordinates are computed from CIE Lab 1976 coordinates"));
   gtk_box_pack_start(GTK_BOX(vvbox), GTK_WIDGET(g->Lch_origin), FALSE, FALSE, 0);
 
   gtk_box_pack_start(GTK_BOX(hhbox), GTK_WIDGET(vvbox), FALSE, FALSE, DT_BAUHAUS_SPACE);
@@ -4094,7 +4094,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->hue_spot = dt_bauhaus_slider_new_with_range_and_feedback(self, 0., HUE_MAX, 0, 0, 1, 0);
   dt_bauhaus_widget_set_label(g->hue_spot, NULL, N_("hue"));
-  dt_bauhaus_slider_set_format(g->hue_spot, "°");
+  dt_bauhaus_slider_set_format(g->hue_spot, "\302\260");
   dt_bauhaus_slider_set_default(g->hue_spot, 0.f);
   gtk_box_pack_start(GTK_BOX(vvbox), GTK_WIDGET(g->hue_spot), TRUE, TRUE, 0);
   g_signal_connect(G_OBJECT(g->hue_spot), "value-changed", G_CALLBACK(_spot_settings_changed_callback), self);

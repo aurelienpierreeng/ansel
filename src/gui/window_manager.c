@@ -82,9 +82,9 @@ static void refresh_manager_sizes(dt_ui_t *ui)
   GdkWindow *win = gtk_widget_get_window(window);
   GdkMonitor *monitor = gdk_display_get_monitor_at_window(gdk_window_get_display(win), win);
 
-  // Note : all sizes are in viewport pixels, not physical pixels.
+  // Note : all sizes are in viewport pixels, not physical pixels.
   // physical pix = viewport pix * gdk_monitor_get_scale_factor(monitor);
-  // the scale factor is the highDPI factor set on desktop environment if any.
+  // the scale factor is the highDPI factor set on desktop environment if any.
 
   // Display in which the current window fits
   gdk_monitor_get_geometry(monitor, &manager->viewport);
@@ -148,7 +148,7 @@ static void sanitize_manager_size(dt_ui_t *ui)
 #if WINDOW_DEBUG
   fprintf(stdout, "new window size: %i x %i\n", manager->window.width, manager->window.height);
 #endif
-  // Warning : the window.height doesn't account for the titlebar/decoration set by desktop manager.
+  // Warning : the window.height doesn't account for the titlebar/decoration set by desktop manager.
   // The code above assumes zero titlebar height because Gtk doesn't have a way of retrieving this info.
   // Setting window.height to viewport.height doesn't guarantee it fits.
 }

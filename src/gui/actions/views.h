@@ -41,7 +41,7 @@ void view_switch_callback(GtkWidget *menu_item)
 }
 
 /* Need to pass-on void function because the shortcut API can't take a widget in input,
-*  and trigger its callback. You know… like a regular Gtk Accel would.
+*  and trigger its callback. You know... like a regular Gtk Accel would.
 */
 void view_switch_to_lighttable()
 {
@@ -87,5 +87,5 @@ void append_views(GtkWidget **menus, GList **lists, const dt_menus_t index)
 *
 * So the update happens as soon as the signal is emited, only for the relevant menuitems.
 *
-* To re-evaluate in the future…
+* To re-evaluate in the future...
 */

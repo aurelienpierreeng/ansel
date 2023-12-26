@@ -196,7 +196,7 @@ static inline void mul_mat_vec_2(const float *m, const float *p, float *o)
 #endif
 static inline float scalar_product(const dt_aligned_pixel_t v_1, const dt_aligned_pixel_t v_2)
 {
-  // specialized 3×1 dot products 2 4×1 RGB-alpha pixels.
+  // specialized 3x1 dot products 2 4x1 RGB-alpha pixels.
   // v_2 needs to be uniform along loop increments, e.g. independent from current pixel values
   // we force an order of computation similar to SSE4 _mm_dp_ps() hoping the compiler will get the clue
   float acc = 0.f;
@@ -215,7 +215,7 @@ static inline float scalar_product(const dt_aligned_pixel_t v_1, const dt_aligne
 #endif
 static inline void dot_product(const dt_aligned_pixel_t v_in, const dt_colormatrix_t M, dt_aligned_pixel_t v_out)
 {
-  // specialized 3×4 dot products of 4×1 RGB-alpha pixels
+  // specialized 3x4 dot products of 4x1 RGB-alpha pixels
   #ifdef _OPENMP
   #pragma omp simd aligned(M:64) aligned(v_in, v_out:16)
   #endif
