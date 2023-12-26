@@ -241,9 +241,6 @@ const char *dt_import_session_name(struct dt_import_session_t *self)
 /* This returns a unique filename using session path **and** the filename.
    If current is true we will use the original filename otherwise use the pattern.
 */
-
-//TODO: Check for other execution of this function and check if self->current_path is 
-//      correctly initialized and with a path.
 const char *dt_import_session_filename(struct dt_import_session_t *self)
 {
   gchar *result_fname = NULL;
@@ -261,8 +258,7 @@ const char *dt_import_session_filename(struct dt_import_session_t *self)
 
   /* verify that expanded path and filename yields a unique file */
   // NOTE: self->current_path is edited in dt_import_session_path()
-  const char *path = (self->current_path) ?
-    path = self->current_path : dt_import_session_path(self, TRUE);
+  const char *path = (self->current_path) ? self->current_path : dt_import_session_path(self, TRUE);
 
   result_fname = dt_variables_expand(self->vp, pattern, TRUE);
 
@@ -329,7 +325,7 @@ static const char *_import_session_path(struct dt_import_session_t *self, gboole
   g_free(pattern);
 
 #ifdef WIN32
-  if(new_path && (strlen(new_path) > 1))
+  if(new_path && (g_utf8_strlen(new_path, -1) > 1))
   {
     const char first = g_ascii_toupper(new_path[0]);
     if(first >= 'A' && first <= 'Z' && new_path[1] == ':') // path format is <drive letter>:\path\to\file
@@ -337,8 +333,7 @@ static const char *_import_session_path(struct dt_import_session_t *self, gboole
   }
 #endif
 
-
-  /* did the session path change ?*/
+  /* did the session path change ? */
   if(self->current_path && strcmp(self->current_path, new_path) == 0)
   {
     g_free(new_path);
@@ -373,7 +368,7 @@ const char *dt_import_session_path(struct dt_import_session_t *self, gboolean cu
 }
 
 
-static const char *_import_session_total(struct dt_import_session_t *self, gboolean current)
+static const char *_import_session_total(struct dt_import_session_t *self)
 {
   gchar *path_pattern = _import_session_path_pattern();
 
@@ -414,9 +409,9 @@ if(result_path == NULL)
   return self->current_path;
 }
 
-const char *dt_import_session_total(struct dt_import_session_t *self, gboolean current)
+const char *dt_import_session_total(struct dt_import_session_t *self)
 {
-  const char *path = _import_session_total(self, current);
+  const char *path = _import_session_total(self);
   if(path == NULL)
   {
     fprintf(stderr, "[import_session] Failed to get session path.\n");

@@ -600,7 +600,7 @@ static void _set_test_path(dt_lib_import_t *d)
 
     dt_import_session_set_filename(fake_session, g_path_get_basename(selected_file));
 
-    const char *fake_path = dt_import_session_total(fake_session, FALSE);
+    const char *fake_path = dt_import_session_total(fake_session);
 
     gtk_label_set_text(GTK_LABEL(d->test_path), (fake_path && fake_path != NULL) ? 
                 g_strdup_printf(_("Result of the pattern : %s"), fake_path) : 
@@ -889,7 +889,7 @@ static void gui_init(dt_lib_import_t *d)
   // file extension filters
   _file_filters(d->file_chooser);
 
-  // File browser toolbox (extra widgets) 
+  // File browser toolbox (extra widgets)
   GtkWidget *toolbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_widget_set_halign(toolbox, GTK_ALIGN_END);
 
