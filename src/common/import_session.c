@@ -112,28 +112,23 @@ static void _import_session_migrate_old_config()
 
 static gchar *_import_session_path_pattern()
 {
-  gchar *res = NULL;
+  gchar *result = NULL;
   const char *base = dt_conf_get_string_const("session/base_directory_pattern");
   const char *sub = dt_conf_get_string_const("session/sub_directory_pattern");
 
   if(!sub || !base)
-  {
     fprintf(stderr, "[import_session] No base or subpath configured...\n");
-    goto bail_out;
-  }
+  else
+  {
+    result = g_build_path(G_DIR_SEPARATOR_S, base, sub, (char *)NULL);
 
 #ifdef WIN32
-  gchar *s1 = dt_str_replace(base, "/", G_DIR_SEPARATOR_S);
-  gchar *s2 = dt_str_replace(sub, "/", G_DIR_SEPARATOR_S);
-  res = g_build_path(G_DIR_SEPARATOR_S, s1, s2, (char *)NULL);
-  g_free(s1);
-  g_free(s2);
-#else
-  res = g_build_path(G_DIR_SEPARATOR_S, base, sub, (char *)NULL);
+    dt_str_replace(result, "/", G_DIR_SEPARATOR_S);
 #endif
 
-bail_out:
-  return res;
+  }
+
+  return result;
 }
 
 
@@ -208,9 +203,6 @@ void dt_import_session_set_name(struct dt_import_session_t *self, const char *na
   g_free((void *)self->vp->jobcode);
 
   self->vp->jobcode = g_strdup(name);
-
-  /* setup new filmroll if path has changed */
-  dt_import_session_path(self, FALSE);
 }
 
 
@@ -249,6 +241,9 @@ const char *dt_import_session_name(struct dt_import_session_t *self)
 /* This returns a unique filename using session path **and** the filename.
    If current is true we will use the original filename otherwise use the pattern.
 */
+
+//TODO: Check for other execution of this function and check if self->current_path is 
+//      correctly initialized and with a path.
 const char *dt_import_session_filename(struct dt_import_session_t *self)
 {
   gchar *result_fname = NULL;
@@ -265,7 +260,10 @@ const char *dt_import_session_filename(struct dt_import_session_t *self)
   }
 
   /* verify that expanded path and filename yields a unique file */
-  const char *path = dt_import_session_path(self, TRUE);
+  // NOTE: self->current_path is edited in dt_import_session_path()
+  const char *path = (self->current_path) ?
+    path = self->current_path : dt_import_session_path(self, TRUE);
+
   result_fname = dt_variables_expand(self->vp, pattern, TRUE);
 
   char *fname = g_build_path(G_DIR_SEPARATOR_S, path, result_fname, (char *)NULL);
@@ -365,6 +363,60 @@ static const char *_import_session_path(struct dt_import_session_t *self, gboole
 const char *dt_import_session_path(struct dt_import_session_t *self, gboolean current)
 {
   const char *path = _import_session_path(self, current);
+  if(path == NULL)
+  {
+    fprintf(stderr, "[import_session] Failed to get session path.\n");
+    dt_control_log(_("requested session path not available. "
+                     "device not mounted?"));
+  }
+  return path;
+}
+
+
+static const char *_import_session_total(struct dt_import_session_t *self, gboolean current)
+{
+  gchar *path_pattern = _import_session_path_pattern();
+
+  if(path_pattern == NULL)
+  {
+    fprintf(stderr, "[import_session] Failed to get session path pattern.\n");
+    return NULL;
+  }
+
+  gchar *filename_pattern = _import_session_filename_pattern();
+  if(filename_pattern == NULL)
+  {
+    fprintf(stderr, "[import_session] Failed to get session file name pattern.\n");
+    return NULL;
+  }
+
+  gchar *pattern = g_build_filename(path_pattern, filename_pattern, NULL);
+  g_free(path_pattern);
+  g_free(filename_pattern);
+
+  char *result_path = dt_variables_expand(self->vp, pattern, FALSE);
+  g_free(pattern);
+
+if(result_path == NULL)
+  return NULL;
+
+#ifdef WIN32
+  if(result_path && (strlen(result_path) > 1))
+  {
+    const char first = g_ascii_toupper(result_path[0]);
+    if(first >= 'A' && first <= 'Z' && result_path[1] == ':') // path format is <drive letter>:\path\to\file
+      result_path[0] = first;                                 // drive letter in uppercase looks nicer
+  }
+#endif
+
+  self->current_path = result_path;
+
+  return self->current_path;
+}
+
+const char *dt_import_session_total(struct dt_import_session_t *self, gboolean current)
+{
+  const char *path = _import_session_total(self, current);
   if(path == NULL)
   {
     fprintf(stderr, "[import_session] Failed to get session path.\n");

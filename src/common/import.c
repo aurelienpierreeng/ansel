@@ -561,22 +561,28 @@ static void _set_help_string(dt_lib_import_t *d, gboolean copy)
 
 static void _set_test_path(dt_lib_import_t *d)
 {
-  gchar *selected = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(d->file_chooser));
-  if(!selected || !dt_supported_image(selected)) return;
+  gchar *selected_file = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(d->file_chooser));
+  
+  if(!selected_file || !dt_supported_image(selected_file))
+  {
+    //gtk_label_set_text(GTK_LABEL(d->test_path), _("Result of the pattern : please select a picture file"));
+    g_free(selected_file);
+    return;
+  }
 
   /* Create a new fake session */
-  struct dt_import_session_t *session = dt_import_session_new();
+  struct dt_import_session_t *fake_session = dt_import_session_new();
 
-  dt_import_session_set_name(session, dt_conf_get_string("ui_last/import_jobcode"));
+  dt_import_session_set_name(fake_session, dt_conf_get_string("ui_last/import_jobcode"));
 
   char datetime_override[DT_DATETIME_LENGTH] = { 0 };
   const char *entry = gtk_entry_get_text(GTK_ENTRY(d->datetime));
   if(entry[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), entry))
-    dt_import_session_set_time(session, datetime_override);
+    dt_import_session_set_time(fake_session, datetime_override);
 
   char *data = NULL;
   gsize size = 0;
-  if(g_file_get_contents(selected, &data, &size, NULL))
+  if(g_file_get_contents(selected_file, &data, &size, NULL))
   {
     char exif_time[DT_DATETIME_LENGTH];
     dt_exif_get_datetime_taken((uint8_t *)data, size, exif_time);
@@ -585,25 +591,25 @@ static void _set_test_path(dt_lib_import_t *d)
     {
       // if no exif datetime try file datetime
       struct stat statbuf;
-      if(!stat(selected, &statbuf))
+      if(!stat(selected_file, &statbuf))
         dt_datetime_unix_to_exif(exif_time, sizeof(exif_time), &statbuf.st_mtime);
     }
 
     if(exif_time[0])
-      dt_import_session_set_exif_time(session, exif_time);
+      dt_import_session_set_exif_time(fake_session, exif_time);
 
-    dt_import_session_set_filename(session, g_path_get_basename(selected));
-    
-    char *test_path = g_build_filename(
-      dt_import_session_path(session, FALSE),
-      dt_import_session_filename(session), NULL);
+    dt_import_session_set_filename(fake_session, g_path_get_basename(selected_file));
 
-    gtk_label_set_text(GTK_LABEL(d->test_path), g_strdup_printf(_("Result of the pattern : %s"), test_path));
-    g_free(test_path);
+    const char *fake_path = dt_import_session_total(fake_session, FALSE);
+
+    gtk_label_set_text(GTK_LABEL(d->test_path), (fake_path && fake_path != NULL) ? 
+                g_strdup_printf(_("Result of the pattern : %s"), fake_path) : 
+                g_strdup(_("Can't build a valid path.")));
   }
-  g_free(selected);
+
+  g_free(selected_file);
   if(data) g_free(data);
-  free(session);
+  g_free(fake_session);
 }
 
 static void _filelist_changed_callback(gpointer instance, GList *files, guint elements, guint finished, gpointer user_data)
