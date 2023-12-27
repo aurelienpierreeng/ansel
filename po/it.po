@@ -1157,7 +1157,7 @@ msgid ""
 "this folder (and sub-folders) contains Lut files used by lut3d modules. "
 "(need a restart)."
 msgstr ""
-"Questa cartella (e le sue sotto-cartelle) contengono i files lut utilizzati "
+"Questa cartella (e le sue sotto-cartelle) contengono i file lut utilizzati "
 "dal modulo lut 3D (riavvio necessario)."
 
 #: ../build/src/preferences_gen.h:4468
@@ -2459,64 +2459,52 @@ msgid "as shot in camera"
 msgstr "Come scattato dalla camera"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:522
-#, fuzzy
 msgid "F1 (Daylight 6430 K) - medium CRI"
 msgstr "F1 (luce diurna 6430 K) - CRI medio"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:523
-#, fuzzy
 msgid "F2 (Cool White 4230 K) - medium CRI"
-msgstr "F2 (Bianco freddo 4230 K) – CRI medio"
+msgstr "F2 (Bianco freddo 4230 K) - CRI medio"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:524
-#, fuzzy
 msgid "F3 (White 3450 K) - medium CRI"
-msgstr "F3 (Bianco 3450 K) – CRI medio"
+msgstr "F3 (Bianco 3450 K) - CRI medio"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:525
-#, fuzzy
 msgid "F4 (Warm White 2940 K) - medium CRI"
-msgstr "F4 (Bianco caldo 2940 K) – CRI medio"
+msgstr "F4 (Bianco caldo 2940 K) - CRI medio"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:526
-#, fuzzy
 msgid "F5 (Daylight 6350 K) - medium CRI"
-msgstr "F5 (Luce diurna 6350 K) – CRI medio"
+msgstr "F5 (Luce diurna 6350 K) - CRI medio"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:527
-#, fuzzy
 msgid "F6 (Lite White 4150 K) - medium CRI"
-msgstr "F6 (Bianco chiaro 4150 K) – CRI medio"
+msgstr "F6 (Bianco chiaro 4150 K) - CRI medio"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:528
-#, fuzzy
 msgid "F7 (D65 simulator 6500 K) - high CRI"
-msgstr "F7 (Simulator D65  6500 K) – CRI elevato"
+msgstr "F7 (Simulator D65  6500 K) - CRI elevato"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:529
-#, fuzzy
 msgid "F8 (D50 simulator 5000 K) - high CRI"
-msgstr "F8 (Simulator D50  5000 K) – CRI elevato"
+msgstr "F8 (Simulator D50  5000 K) - CRI elevato"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:530
-#, fuzzy
 msgid "F9 (Cool White Deluxe 4150 K) - high CRI"
-msgstr "F9 (Bianco freddo Deluxe 4150 K) – CRI elevato"
+msgstr "F9 (Bianco freddo Deluxe 4150 K) - CRI elevato"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:531
-#, fuzzy
 msgid "F10 (Tuned RGB 5000 K) - low CRI"
-msgstr "F10 (RGB regolato 5000 K) – CRI basso"
+msgstr "F10 (RGB regolato 5000 K) - CRI basso"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:532
-#, fuzzy
 msgid "F11 (Tuned RGB 4000 K) - low CRI"
-msgstr "F11 (RGB regolato 4000 K) – CRI basso"
+msgstr "F11 (RGB regolato 4000 K) - CRI basso"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:533
-#, fuzzy
 msgid "F12 (Tuned RGB 3000 K) - low CRI"
-msgstr "F12 (RGB regolato 3000 K) – CRI basso"
+msgstr "F12 (RGB regolato 3000 K) - CRI basso"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:538
 msgid "B1 (Blue 2733 K)"
@@ -3216,22 +3204,22 @@ msgstr "Sensibilità margine"
 #: ../build/src/iop/introspection_diffuse.c:147
 #: ../build/src/iop/introspection_diffuse.c:264
 msgid "1st order anisotropy"
-msgstr "1° ordine di anisotropia"
+msgstr "1° ordine"
 
 #: ../build/src/iop/introspection_diffuse.c:153
 #: ../build/src/iop/introspection_diffuse.c:268
 msgid "2nd order anisotropy"
-msgstr "2° ordine di anisotropia"
+msgstr "2° ordine"
 
 #: ../build/src/iop/introspection_diffuse.c:159
 #: ../build/src/iop/introspection_diffuse.c:272
 msgid "3rd order anisotropy"
-msgstr "3° ordine di anisotropia"
+msgstr "3° ordine"
 
 #: ../build/src/iop/introspection_diffuse.c:165
 #: ../build/src/iop/introspection_diffuse.c:276
 msgid "4th order anisotropy"
-msgstr "4° ordine di anisotropia"
+msgstr "4° ordine"
 
 #: ../build/src/iop/introspection_diffuse.c:171
 #: ../build/src/iop/introspection_diffuse.c:280
@@ -3241,22 +3229,22 @@ msgstr "Soglia per la maschera di luminanza"
 #: ../build/src/iop/introspection_diffuse.c:177
 #: ../build/src/iop/introspection_diffuse.c:284
 msgid "1st order speed"
-msgstr "Prima velocità d'ordine"
+msgstr "1° ordine"
 
 #: ../build/src/iop/introspection_diffuse.c:183
 #: ../build/src/iop/introspection_diffuse.c:288
 msgid "2nd order speed"
-msgstr "Seconda velocità d'ordine"
+msgstr "2° ordine"
 
 #: ../build/src/iop/introspection_diffuse.c:189
 #: ../build/src/iop/introspection_diffuse.c:292
 msgid "3rd order speed"
-msgstr "Terza velocità d'ordine"
+msgstr "3° ordine"
 
 #: ../build/src/iop/introspection_diffuse.c:195
 #: ../build/src/iop/introspection_diffuse.c:296
 msgid "4th order speed"
-msgstr "Quarta velocità d'ordine"
+msgstr "4° ordine"
 
 #: ../build/src/iop/introspection_diffuse.c:201
 #: ../build/src/iop/introspection_diffuse.c:300
@@ -4476,15 +4464,15 @@ msgstr "Data e ora importazione"
 
 #: ../src/common/collection.c:828 ../src/libs/metadata_view.c:132
 msgid "change timestamp"
-msgstr "Modifica data e ora"
+msgstr "Data e ora modifica"
 
 #: ../src/common/collection.c:829 ../src/libs/metadata_view.c:133
 msgid "export timestamp"
-msgstr "Esporta data e ora"
+msgstr "Data e ora esportazione"
 
 #: ../src/common/collection.c:830 ../src/libs/metadata_view.c:134
 msgid "print timestamp"
-msgstr "Stampa data e ora"
+msgstr "Data e ora stampa"
 
 #: ../src/common/collection.c:831 ../src/libs/history.c:85
 msgid "history"
@@ -4934,9 +4922,8 @@ msgid "HLG P3 RGB"
 msgstr "HLG P3 RGB"
 
 #: ../src/common/colorspaces.c:1501
-#, fuzzy
 msgid "Display P3 RGB"
-msgstr "Visualizza"
+msgstr "Display P3 RGB"
 
 #: ../src/common/colorspaces.c:1506 ../src/common/colorspaces.c:1684
 msgid "linear ProPhoto RGB"
@@ -5013,9 +5000,8 @@ msgid "HLG P3"
 msgstr "HLG P3"
 
 #: ../src/common/colorspaces.c:1694
-#, fuzzy
 msgid "Display P3"
-msgstr "Visualizza"
+msgstr "Display P3"
 
 #: ../src/common/colorspaces.c:1696
 msgid "ITU-R BT.1886"
@@ -5504,9 +5490,9 @@ msgstr ""
 "incollare in un'altra"
 
 #: ../src/common/http_server.c:95
-#, fuzzy, c-format
+#, c-format
 msgid "ansel >> %s"
-msgstr "Ansel » %s"
+msgstr "Ansel >> %s"
 
 #: ../src/common/http_server.c:97
 msgid "<h1>Sorry,</h1><p>something went wrong. Please try again.</p>"
@@ -5717,15 +5703,15 @@ msgstr "Impossibile trovare lo stile '%s' da applicare per l'esportazione."
 
 #: ../src/common/import.c:382
 msgid "All image files"
-msgstr "Tutti i files immagini"
+msgstr "Tutti i file immagine"
 
 #: ../src/common/import.c:401
 msgid "Raw image files"
-msgstr "Tutti i files raw"
+msgstr "Tutti i file raw"
 
 #: ../src/common/import.c:411
 msgid "Raster image files"
-msgstr "Tutti i files raster"
+msgstr "Tutti i file raster"
 
 #: ../src/common/import.c:489 ../src/common/import.c:533
 msgid "No"
@@ -5750,10 +5736,12 @@ msgid ""
 "<i>The files will be copied to the selected destination. You can rename them "
 "in batch below:</i>"
 msgstr ""
+"<i>I file saranno copiati nella destinatzione selezionata. Puoi rinominarli "
+"in batch di seguito:</i>"
 
 #: ../src/common/import.c:558
 msgid "<i>The files will stay at their original location</i>"
-msgstr ""
+msgstr "<i>I file rimarrano nella loro posizione originale</i>"
 
 #: ../src/common/import.c:600
 #, c-format
@@ -5761,19 +5749,18 @@ msgid "Result of the pattern : %s"
 msgstr ""
 
 #: ../src/common/import.c:613
-#, fuzzy, c-format
+#, c-format
 msgid "%i files selected"
-msgstr "Nessuno stile selezionato!"
+msgstr "%i file selezionati"
 
 #: ../src/common/import.c:614
 #, c-format
 msgid "Detection in progress... (%i files found so far)"
-msgstr ""
+msgstr "Rilevamento in corso... (%i file trovati fin'ora)"
 
 #: ../src/common/import.c:624
-#, fuzzy
 msgid "Detecting candidate files for import..."
-msgstr "Seleziona file da importare"
+msgstr "Rilevando file candidati per l'importazione..."
 
 #: ../src/common/import.c:686
 msgid ""
@@ -5810,16 +5797,14 @@ msgid ""
 msgstr ""
 
 #: ../src/common/import.c:828
-#, fuzzy
 msgid "Ansel - Open pictures"
-msgstr "Ansel - apri immagini"
+msgstr "Ansel - Apri immagini"
 
 #: ../src/common/import.c:829 ../src/iop/crop.c:962
 msgid "Cancel"
 msgstr "Annulla"
 
 #: ../src/common/import.c:830
-#, fuzzy
 msgid "Import"
 msgstr "Importa"
 
@@ -5833,7 +5818,6 @@ msgid "Select none"
 msgstr "Seleziona nessuna"
 
 #: ../src/common/import.c:883
-#, fuzzy
 msgid "Select new"
 msgstr "Seleziona nuovo"
 
@@ -5867,12 +5851,10 @@ msgid "Focal :"
 msgstr "Focale :"
 
 #: ../src/common/import.c:918
-#, fuzzy
 msgid "Imported"
 msgstr "Importate :"
 
 #: ../src/common/import.c:921
-#, fuzzy
 msgid ""
 "Images already in the library will not be imported again, selected or not. "
 "Remove them from the library first, or use the menu `Run → Resynchronize "
@@ -5892,10 +5874,10 @@ msgstr ""
 "puoi utilizzare il menu `Esegui` → `Sincronizza libreria e XMP` per "
 "aggiornare il database locale dagli XMP remoti.\n"
 "\n"
-"Ansel indicizza le immagini usando il nome dei files e delle cartelle "
+"Ansel indicizza le immagini usando il nome dei file e delle cartelle "
 "(percorso completo) e non il loro contenuto. Quindi, rinominando o spostando "
 "le immagini sul filesystem, o modificando il punto di montaggio del "
-"dispositivo esterno farà sì che Ansel interpreti questi files come immagini "
+"dispositivo esterno farà sì che Ansel interpreti questi file come immagini "
 "nuove/sconosciute.\n"
 "\n"
 "Se un file XMP è collegato ad un'immagine, verrà importato insieme "
@@ -5904,19 +5886,16 @@ msgstr ""
 "Luminoso."
 
 #: ../src/common/import.c:954
-#, fuzzy
 msgid "<b>File handling</b>"
-msgstr "Gestione della funzione spline"
+msgstr "<b>Gestione file</b>"
 
 #: ../src/common/import.c:958
-#, fuzzy
 msgid "Add to library"
 msgstr "Aggiungi alla libreria"
 
 #: ../src/common/import.c:959
-#, fuzzy
 msgid "Copy to disk"
-msgstr "Copia files su disco"
+msgstr "Copia file su disco"
 
 #. Base directory of projects
 #: ../src/common/import.c:995
@@ -5929,7 +5908,7 @@ msgstr "Modello nomi cartella progetti"
 
 #: ../src/common/import.c:1001
 msgid "File naming pattern"
-msgstr "Modello nomi files"
+msgstr "Modello denominazione file"
 
 #: ../src/common/import.c:1005
 msgid "Select a base directory"
@@ -6340,7 +6319,7 @@ msgstr "Differenza d'orario"
 
 #: ../src/control/crawler.c:778
 msgid "updated XMP sidecar files found"
-msgstr "Aggiornati i files XMP trovati"
+msgstr "Trovati file XMP aggiornati"
 
 #: ../src/control/crawler.c:779
 msgid "_close"
@@ -8073,9 +8052,9 @@ msgid "%s: mask version mismatch: %d != %d"
 msgstr "%s: mancata corrispondenza di versione della maschera: %d != %d"
 
 #: ../src/develop/masks/masks.c:1532
-#, fuzzy, c-format
+#, c-format
 msgid "reuse shapes from %s"
-msgstr "Usa la stessa forma di"
+msgstr "Usa la stessa forma di %s"
 
 #: ../src/develop/masks/masks.c:1842
 msgid "masks can not contain themselves"
@@ -9074,16 +9053,14 @@ msgid " but not "
 msgstr " ma non "
 
 #: ../src/gui/actions/file.h:153
-#, fuzzy
 msgid "Ansel - Export images"
-msgstr "Esporta immagini"
+msgstr "Ansel - Esporta immagini"
 
 #: ../src/gui/actions/file.h:175
 msgid "File"
 msgstr "File"
 
 #: ../src/gui/actions/file.h:178
-#, fuzzy
 msgid "Import..."
 msgstr "Importa..."
 
@@ -9092,12 +9069,10 @@ msgid "Import images"
 msgstr "Importa immagini"
 
 #: ../src/gui/actions/file.h:183
-#, fuzzy
 msgid "Export..."
 msgstr "Esporta..."
 
 #: ../src/gui/actions/file.h:185
-#, fuzzy
 msgid "Export images"
 msgstr "Esporta immagini"
 
@@ -9106,22 +9081,20 @@ msgid "Recent collections"
 msgstr "Raccolte usate recentemente"
 
 #: ../src/gui/actions/file.h:209
-#, fuzzy
 msgid "Copy files on disk..."
-msgstr "Copia files su disco"
+msgstr "Copia file su disco..."
 
 #: ../src/gui/actions/file.h:211
 msgid "Copy files on disk"
 msgstr "Copia files su disco"
 
 #: ../src/gui/actions/file.h:214
-#, fuzzy
 msgid "Move files on disk..."
-msgstr "Sposta files sul disco"
+msgstr "Sposta file sul disco..."
 
 #: ../src/gui/actions/file.h:216
 msgid "Move files on disk"
-msgstr "Sposta files sul disco"
+msgstr "Sposta file sul disco"
 
 #: ../src/gui/actions/file.h:219 ../src/gui/actions/file.h:221
 msgid "Create a blended HDR"
@@ -9141,7 +9114,7 @@ msgstr "Rimuovi dalla libreria"
 
 #: ../src/gui/actions/file.h:240
 msgid "Remove files from library"
-msgstr "Rimuovi i files dalla libreria"
+msgstr "Rimuovi i file dalla libreria"
 
 #: ../src/gui/actions/file.h:243
 msgid "Delete on disk"
@@ -9149,7 +9122,7 @@ msgstr "Rimuovi dal disco"
 
 #: ../src/gui/actions/file.h:245
 msgid "Delete files on disk"
-msgstr "Rimuovi i files dal disco"
+msgstr "Rimuovi i file dal disco"
 
 #: ../src/gui/actions/file.h:250 ../src/gui/actions/file.h:251
 msgid "Quit"
@@ -9227,18 +9200,16 @@ msgid "Paste development (all)"
 msgstr "Incolla sviluppo (tutto)"
 
 #: ../src/gui/actions/edit.h:282
-#, fuzzy
 msgid "Paste development (parts)..."
-msgstr "Incolla sviluppo (parziale)"
+msgstr "Incolla sviluppo (parziale)..."
 
 #: ../src/gui/actions/edit.h:284
 msgid "Paste development (parts)"
 msgstr "Incolla sviluppo (parziale)"
 
 #: ../src/gui/actions/edit.h:289
-#, fuzzy
 msgid "Load development from XMP..."
-msgstr "Carica sviluppo da XMP"
+msgstr "Carica sviluppo da XMP..."
 
 #: ../src/gui/actions/edit.h:291
 msgid "Load development from XMP"
@@ -9463,6 +9434,7 @@ msgstr "e..."
 #: ../src/gui/actions/help.h:31
 msgid "translator-credits"
 msgstr ""
+"Luca Zulberti (2023)\n"
 "Maurizio Paglia (2018-2022)\n"
 "Matteo Mardegan <matteo@mardegan.org> (2019-2022)\n"
 "Luca Cignoni (2022)\n"
@@ -9536,18 +9508,16 @@ msgid "Rotate"
 msgstr "Ruota"
 
 #: ../src/gui/actions/image.h:164
-#, fuzzy
 msgid "90° counter-clockwise"
-msgstr "⭯ 90° rotazione antioraria"
+msgstr "90° antiorari"
 
 #: ../src/gui/actions/image.h:166
 msgid "Rotate 90° counter-clockwise"
 msgstr "Ruota a 90° in senso antiorario"
 
 #: ../src/gui/actions/image.h:169
-#, fuzzy
 msgid "90° clockwise"
-msgstr "⭮ 90° rotazione oraria"
+msgstr "90° orari"
 
 #: ../src/gui/actions/image.h:171
 msgid "Rotate 90° clockwise"
@@ -9616,9 +9586,8 @@ msgid "Ratings"
 msgstr "Valutazione"
 
 #: ../src/gui/actions/image.h:221
-#, fuzzy
 msgid "Reject"
-msgstr "⦻ Rifiuta"
+msgstr "Rifiuta"
 
 #: ../src/gui/actions/image.h:223
 msgid "Reject image"
@@ -12903,7 +12872,6 @@ msgstr ""
 
 #. We need to recompute only the full preview
 #: ../src/iop/channelmixerrgb.c:3596
-#, fuzzy
 msgid "auto-detection of white balance started..."
 msgstr "Il calcolo del bilanciamento del bianco è iniziato..."
 
@@ -12916,14 +12884,14 @@ msgstr ""
 "normalizzazione verrà disabilitata."
 
 #: ../src/iop/channelmixerrgb.c:3701
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "L: \t%.1f %%\n"
 "h: \t%.1f °\n"
 "c: \t%.1f"
 msgstr ""
 "L: \t%.1f %%\n"
-"h: \t%.1f °\n"
+"h: \t%.1f °\n"
 "c: \t%.1f"
 
 #. //////////////////////// PAGE SETTINGS
@@ -12949,7 +12917,6 @@ msgid "adaptation"
 msgstr "Modifica"
 
 #: ../src/iop/channelmixerrgb.c:3964
-#, fuzzy
 msgid ""
 "choose the method to adapt the illuminant\n"
 "and the colorspace in which the module works: \n"
@@ -13055,9 +13022,8 @@ msgstr ""
 "c: \tN/A"
 
 #: ../src/iop/channelmixerrgb.c:4070 ../src/iop/exposure.c:1077
-#, fuzzy
 msgid "these LCh coordinates are computed from CIE Lab 1976 coordinates"
-msgstr "Queste coordinate LCh sono calcolate dalle coordinate CIE Lab 1976"
+msgstr "Queste coordinate LCh sono calcolate dalle coordinate CIE Lab 1976"
 
 #: ../src/iop/channelmixerrgb.c:4083
 msgid "the desired target color after mapping"
@@ -14635,36 +14601,32 @@ msgid "5:3, 12x20"
 msgstr ""
 
 #: ../src/iop/crop.c:1076
-#, fuzzy
 msgid "2:1, Univisium"
-msgstr "2:1, univisium"
+msgstr "2:1, Univisium"
 
 #: ../src/iop/crop.c:1077
-#, fuzzy
 msgid "Cinemascope"
 msgstr "Cinemascope"
 
 #: ../src/iop/crop.c:1079
-#, fuzzy
 msgid "Anamorphic"
 msgstr "Anamorfico"
 
 #: ../src/iop/crop.c:1080
 msgid "65:24, XPan"
-msgstr ""
+msgstr "65:24, XPan"
 
 #: ../src/iop/crop.c:1082
 msgid "4:1, Polyvision"
-msgstr ""
+msgstr "4:1, Polyvision"
 
 #: ../src/iop/crop.c:1186
-#, fuzzy
 msgid "Apply"
 msgstr "Applica"
 
 #: ../src/iop/crop.c:1186
 msgid "Apply changes"
-msgstr ""
+msgstr "Applica modifiche"
 
 #: ../src/iop/crop.c:1527
 msgid "<b>resize</b>: drag, <b>keep aspect ratio</b>: shift+drag"
@@ -15204,8 +15166,8 @@ msgid ""
 "positive values diffuse and blur, \n"
 "zero does nothing."
 msgstr ""
-"Velocità di diffusione del livello di bassa frequenza\n"
-"nella direzione del 1° ordine di anisotropia (impostato sotto).\n"
+"Velocità di diffusione delle wavelet di bassa frequenza\n"
+"nella direzione impostata dal 1° ordine di anisotropia (sotto).\n"
 "\n"
 "Valori negativi aumentano la nitidezza\n"
 "Valori positivi sfocano\n"
@@ -15220,8 +15182,8 @@ msgid ""
 "positive values diffuse and blur, \n"
 "zero does nothing."
 msgstr ""
-"Velocità di diffusione del livello di bassa frequenza\n"
-"nella direzione del 2° ordine di anisotropia (impostato sotto).\n"
+"Velocità di diffusione delle wavelet di bassa frequenza\n"
+"nella direzione impostata dal 2° ordine di anisotropia (sotto).\n"
 "\n"
 "Valori negativi aumentano la nitidezza\n"
 "Valori positivi sfocano\n"
@@ -15236,8 +15198,8 @@ msgid ""
 "positive values diffuse and blur, \n"
 "zero does nothing."
 msgstr ""
-"Velocità di diffusione del livello di alta frequenza\n"
-"nella direzione del 3° ordine di anisotropia (impostato sotto).\n"
+"Velocità di diffusione delle wavelet di alta frequenza\n"
+"nella direzione impostata dal 3° ordine di anisotropia (sotto).\n"
 "\n"
 "Valori negativi aumentano la nitidezza\n"
 "Valori positivi sfocano\n"
@@ -15252,8 +15214,8 @@ msgid ""
 "positive values diffuse and blur, \n"
 "zero does nothing."
 msgstr ""
-"Velocità di diffusione del livello di alta frequenza\n"
-"nella direzione del 4° ordine di anisotropia (impostato sotto).\n"
+"Velocità di diffusione delle wavelet di alta frequenza\n"
+"nella direzione impostata dal 4° ordine di anisotropia (sotto).\n"
 "\n"
 "Valori negativi aumentano la nitidezza\n"
 "Valori positivi sfocano\n"
@@ -15267,9 +15229,9 @@ msgid ""
 "positive values rather avoid edges (isophotes), \n"
 "zero affects both equally (isotropic)."
 msgstr ""
-"Direzione del 1° ordine di velocità (impostato sopra).\n"
+"Anisotropia della diffusione al 1° ordine di velocità (impostato sopra).\n"
 "\n"
-"Valori negativi seguono il gradiente con precisione\n"
+"Valori negativi seguono il gradiente con precisione (anisotropo)\n"
 "Valori positivi evitano i margini (isofoto)\n"
 "Zero li modifica entrambi allo stesso modo (isotropo)."
 
@@ -15281,9 +15243,9 @@ msgid ""
 "positive values rather avoid edges (isophotes), \n"
 "zero affects both equally (isotropic)."
 msgstr ""
-"Direzione del 2° ordine di velocità (impostato sopra).\n"
+"Anisotropia della diffusione al 2° ordine di velocità (impostato sopra).\n"
 "\n"
-"Valori negativi seguono il gradiente con precisione\n"
+"Valori negativi seguono il gradiente con precisione (anisotropo)\n"
 "Valori positivi evitano i margini (isofoto)\n"
 "Zero li modifica entrambi allo stesso modo (isotropo)."
 
@@ -15295,9 +15257,9 @@ msgid ""
 "positive values rather avoid edges (isophotes), \n"
 "zero affects both equally (isotropic)."
 msgstr ""
-"Direzione del 3° ordine di velocità (impostato sopra).\n"
+"Anisotropia della diffusione al 3° ordine di velocità (impostato sopra).\n"
 "\n"
-"Valori negativi seguono il gradiente con precisione\n"
+"Valori negativi seguono il gradiente con precisione (anisotropo)\n"
 "Valori positivi evitano i margini (isofoto)\n"
 "Zero li modifica entrambi allo stesso modo (isotropo)."
 
@@ -15309,9 +15271,9 @@ msgid ""
 "positive values rather avoid edges (isophotes), \n"
 "zero affects both equally (isotropic)."
 msgstr ""
-"Direzione del 4° ordine di velocità (impostato sopra).\n"
+"Anisotropia della diffusione al 4° ordine di velocità (impostato sopra).\n"
 "\n"
-"Valori negativi seguono il gradiente con precisione\n"
+"Valori negativi seguono il gradiente con precisione (anisotropo)\n"
 "Valori positivi evitano i margini (isofoto)\n"
 "Zero li modifica entrambi allo stesso modo (isotropo)."
 
@@ -16940,7 +16902,7 @@ msgstr ""
 
 #: ../src/iop/liquify.c:3654
 msgid "warps|nodes count:"
-msgstr "Numero di forme|nodi"
+msgstr "Numero di forme|nodi: "
 
 #: ../src/iop/liquify.c:3662
 msgid "edit, add and delete nodes"
@@ -17701,10 +17663,9 @@ msgid "raw overexposed"
 msgstr "RAW sovraesposto"
 
 #: ../src/iop/rawprepare.c:99
-#, fuzzy
 msgctxt "modulename"
 msgid "Raw settings"
-msgstr "Impostazioni mappa"
+msgstr "Impostazioni raw"
 
 #: ../src/iop/rawprepare.c:151
 msgid ""
@@ -17739,13 +17700,12 @@ msgid "flat field correction to compensate for lens shading"
 msgstr "Correzione di campo per compensare la vignettatura dell'obiettivo"
 
 #: ../src/iop/rawprepare.c:855
-#, fuzzy
 msgid "In-camera crop"
-msgstr "Controllo fotocamera"
+msgstr "Ritaglio in camera"
 
 #: ../src/iop/rawprepare.c:858
 msgid "crop from left border"
-msgstr "Taglia dal bordo sinistro"
+msgstr "Ritaglia dal bordo sinistro"
 
 #: ../src/iop/rawprepare.c:862
 msgid "crop from top"
@@ -17753,11 +17713,11 @@ msgstr "Ritaglia dall'alto"
 
 #: ../src/iop/rawprepare.c:866
 msgid "crop from right border"
-msgstr "Taglia dal bordo destro"
+msgstr "Ritaglia dal bordo destro"
 
 #: ../src/iop/rawprepare.c:870
 msgid "crop from bottom"
-msgstr "Taglio dal lato inferiore"
+msgstr "Ritaglia dal lato inferiore"
 
 #: ../src/iop/rawprepare.c:877
 msgid ""
@@ -17769,7 +17729,7 @@ msgstr ""
 
 #: ../src/iop/relight.c:54
 msgid "fill-light 0.25EV with 4 zones"
-msgstr "Luce di riempimento 0.25EV con 4 zone "
+msgstr "Luce di riempimento 0.25EV con 4 zone"
 
 #: ../src/iop/relight.c:58
 msgid "fill-shadow -0.25EV with 4 zones"
@@ -17982,7 +17942,7 @@ msgstr "Livelli automatici"
 
 #: ../src/iop/retouch.c:2362
 msgid "shape selected:"
-msgstr "Forma selezionata:"
+msgstr "Forma selezionata: "
 
 #: ../src/iop/retouch.c:2367
 msgid ""
@@ -17998,7 +17958,7 @@ msgstr "Cancella il dettaglio o riempi con il colore prescelto"
 
 #: ../src/iop/retouch.c:2381
 msgid "fill color: "
-msgstr "Colore riempimento:"
+msgstr "Colore riempimento: "
 
 #: ../src/iop/retouch.c:2386 ../src/iop/retouch.c:2387
 msgid "select fill color"
@@ -18033,7 +17993,7 @@ msgstr "Strumenti di ritocco"
 #. wavelet decompose
 #: ../src/iop/retouch.c:2431
 msgid "wavelet decompose"
-msgstr "Wavelet decompose"
+msgstr "Decomposizione wavelet"
 
 #: ../src/iop/retouch.c:3527 ../src/iop/retouch.c:4362
 #, c-format
@@ -18045,7 +18005,6 @@ msgid "rgb curve"
 msgstr "curva RGB"
 
 #: ../src/iop/rgbcurve.c:141
-#, fuzzy
 msgid "alter an image's tones using curves in RGB color space"
 msgstr ""
 "Modifica i toni dell'immagine utilizzando le curve nello spazio colore RGB"
@@ -18517,9 +18476,8 @@ msgid "tone curve"
 msgstr "curva di tono"
 
 #: ../src/iop/tonecurve.c:212
-#, fuzzy
 msgid "alter an image's tones using curves"
-msgstr "Modifica i toni dell'immagine con le curve"
+msgstr "Modifica i toni dell'immagine utilizzando le curve"
 
 #: ../src/iop/tonecurve.c:1151
 msgid ""
@@ -18580,12 +18538,10 @@ msgid "mask blending: people with backlight"
 msgstr "Fusione maschera: soggetto in controluce"
 
 #: ../src/iop/toneequal.c:459
-#, fuzzy
 msgid "compress shadows/highlights (eigf): strong"
 msgstr "Compressione ombre/alte luci (eigf): forte"
 
 #: ../src/iop/toneequal.c:463
-#, fuzzy
 msgid "compress shadows/highlights (gf): strong"
 msgstr "Compressione ombre/alte luci (gf): forte"
 
@@ -18598,7 +18554,6 @@ msgid "compress shadows/highlights (gf): medium"
 msgstr "Compressione ombre/alte luci (gf): media"
 
 #: ../src/iop/toneequal.c:483
-#, fuzzy
 msgid "compress shadows/highlights (eigf): soft"
 msgstr "Compressione ombre/alte luci (gf): leggera"
 
@@ -18623,13 +18578,12 @@ msgid "relight: fill-in"
 msgstr "Illumin.: luce riempimento"
 
 #: ../src/iop/toneequal.c:575
-#, fuzzy
 msgid ""
 "tone equalizer needs to be after distortion modules in the pipeline - "
 "disabled"
 msgstr ""
-"L'equalizzatore di tono nel processo di sviluppo deve trovarsi dopo i moduli "
-"di distorsione nel processo di sviluppo - disabilitato"
+"L'equalizzatore dei toni deve trovarsi dopo i moduli "
+"di distorsione nella pipeline di sviluppo - disabilitato"
 
 #. Pointers are not 64-bits aligned, and SSE code will segfault
 #: ../src/iop/toneequal.c:921
@@ -18744,7 +18698,7 @@ msgstr "Doppio click per ripristinare la curva"
 
 #: ../src/iop/toneequal.c:3180
 msgid "curve smoothing"
-msgstr "Addolcire la curva"
+msgstr "Morbidezza della curva"
 
 #: ../src/iop/toneequal.c:3181
 msgid ""
@@ -18842,7 +18796,7 @@ msgstr ""
 
 #: ../src/iop/toneequal.c:3225
 msgid "mask post-processing"
-msgstr "Post-produzione maschera"
+msgstr "Post-elaborazione della maschera"
 
 #: ../src/iop/toneequal.c:3232
 msgid ""
@@ -19297,7 +19251,6 @@ msgid "Tree"
 msgstr "Albero"
 
 #: ../src/libs/collect.c:2357
-#, fuzzy
 msgid "Search a folder..."
 msgstr "Cerca cartella..."
 
@@ -19306,12 +19259,10 @@ msgid "Collections"
 msgstr "Raccolte"
 
 #: ../src/libs/collect.c:2379
-#, fuzzy
 msgid "Search a collection..."
 msgstr "Cerca raccolta..."
 
 #: ../src/libs/collect.c:2391 ../src/libs/collect.c:3246
-#, fuzzy
 msgid "Search..."
 msgstr "Cerca..."
 
@@ -19366,7 +19317,7 @@ msgstr "Sfoglia il contenuto delle cartelle conosciute da Ansel"
 
 #: ../src/libs/collect.c:3214
 msgid "Query files by hierarchical tags"
-msgstr "Interroga i files per etichetta gerarchica"
+msgstr "Interroga i file per etichetta gerarchica"
 
 #: ../src/libs/collect.c:3215
 msgid "Queries"
@@ -19460,7 +19411,6 @@ msgid "restrict scope to selection"
 msgstr "Restringi l'ambito alla selezione"
 
 #: ../src/libs/duplicate.c:60
-#, fuzzy
 msgid "Duplicates"
 msgstr "Duplica"
 
@@ -19855,9 +19805,8 @@ msgid "delete metadata tag"
 msgstr "Elimina metadati etichetta"
 
 #: ../src/libs/geotagging.c:141
-#, fuzzy
 msgid "Datetime & GPS"
-msgstr "Data e ora"
+msgstr "Data e GPS"
 
 #: ../src/libs/geotagging.c:369
 msgid "apply offset and geo-location"
@@ -20544,7 +20493,6 @@ msgid "select the source of the map. some entries might not work"
 msgstr "Scegli la mappa sorgente. Alcune potrebbero non funzionare"
 
 #: ../src/libs/masks.c:55
-#, fuzzy
 msgid "Masks"
 msgstr "Maschere"
 
@@ -20602,7 +20550,6 @@ msgid "created shapes"
 msgstr "Forme create"
 
 #: ../src/libs/metadata.c:61
-#, fuzzy
 msgid "Metadata"
 msgstr "Metadati"
 
@@ -20774,7 +20721,7 @@ msgstr "Categorie"
 
 #: ../src/libs/metadata_view.c:171
 msgid "EXIF & IPTC"
-msgstr ""
+msgstr "EXIF e IPTC"
 
 #: ../src/libs/metadata_view.c:332
 msgid "unused/deprecated"
@@ -20892,7 +20839,6 @@ msgid "modulegroups"
 msgstr "Moduli di gruppo"
 
 #: ../src/libs/modulegroups.c:230
-#, fuzzy
 msgid "Search a module..."
 msgstr "Cerca un modulo..."
 
@@ -21266,7 +21212,6 @@ msgid "print with current settings"
 msgstr "Stampa con le impostazioni correnti"
 
 #: ../src/libs/snapshots.c:81
-#, fuzzy
 msgid "Snapshots"
 msgstr "Istantanee"
 
@@ -21846,7 +21791,6 @@ msgid "Find"
 msgstr "Trova"
 
 #: ../src/libs/tools/filter.c:523
-#, fuzzy
 msgid "Search an image..."
 msgstr "Cerca immagine..."
 
@@ -21984,14 +21928,12 @@ msgstr "Prova colore a monitor"
 
 #. fail :(
 #: ../src/views/darkroom.c:666
-#, fuzzy
 msgid "No image to open !"
 msgstr "Nessuna immagine da aprire!"
 
 #: ../src/views/darkroom.c:673
-#, fuzzy
 msgid "We could not load the image."
-msgstr "Impossibile caricare su piwigo!"
+msgstr "Impossibile caricare l'immagine!"
 
 #: ../src/views/darkroom.c:838
 #, c-format
