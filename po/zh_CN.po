@@ -15,7 +15,7 @@ msgstr ""
 "Project-Id-Version: darktable 3.6.0\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2023-12-24 02:54+0800\n"
-"PO-Revision-Date: 2023-12-26 00:24+0800\n"
+"PO-Revision-Date: 2023-12-29 02:59+0800\n"
 "Last-Translator: Alynx Zhou <alynx.zhou@gmail.com>\n"
 "Language-Team: Chinese - China <>\n"
 "Language: zh_CN\n"
@@ -13989,7 +13989,7 @@ msgstr "应优先于其他色调的色调。"
 #: ../src/iop/colorreconstruction.c:1310 ../src/iop/demosaic.c:1604
 #: ../src/iop/highlights.c:2290
 msgid "not applicable"
-msgstr "不可用"
+msgstr "不可用。"
 
 #: ../src/iop/colorreconstruction.c:1311 ../src/iop/highlights.c:2291
 msgid "no highlights reconstruction for monochrome images"
@@ -16037,8 +16037,8 @@ msgid ""
 "hot pixel correction\n"
 "only works for raw images."
 msgstr ""
-"自动热像素校正\n"
-"只作用于 RAW 图"
+"热像素校正。\n"
+"只适用于 RAW 图像。"
 
 #: ../src/iop/invert.c:95 ../src/iop/invert.c:527
 #, c-format
@@ -17156,8 +17156,8 @@ msgid ""
 "raw black/white point correction\n"
 "only works for the sensors that need it."
 msgstr ""
-"RAW 黑/白点校正\n"
-"只对需要它的传感器起作用"
+"RAW 黑/白点校正。\n"
+"只适用于需要它的传感器。"
 
 #: ../src/iop/relight.c:54
 msgid "fill-light 0.25EV with 4 zones"
