@@ -114,19 +114,15 @@ static gchar *_import_session_path_pattern()
 {
   gchar *result = NULL;
   const char *base = dt_conf_get_string_const("session/base_directory_pattern");
-  const char *sub = dt_conf_get_string_const("session/sub_directory_pattern");
+  const char *sub  = dt_conf_get_string_const("session/sub_directory_pattern");
 
   if(!sub || !base)
-    fprintf(stderr, "[import_session] No base or subpath configured...\n");
-  else
   {
-    result = g_build_path(G_DIR_SEPARATOR_S, base, sub, (char *)NULL);
-
-#ifdef WIN32
-    dt_str_replace(result, "/", G_DIR_SEPARATOR_S);
-#endif
-
+    fprintf(stderr, "[import_session] No base or subpath configured...\n");
+    return NULL;
   }
+  else
+    result = g_build_path(G_DIR_SEPARATOR_S, base, sub, (char *)NULL);
 
   return result;
 }
@@ -368,6 +364,16 @@ const char *dt_import_session_path(struct dt_import_session_t *self, gboolean cu
   return path;
 }
 
+// Checks for the opposite separator in a string and replace it by the needed one by the current OS
+void dt_str_replace_bad_separator(gchar **string)
+{
+#ifdef WIN32
+  *string = dt_str_replace(*string, "/", G_DIR_SEPARATOR_S);
+#else
+  *string = dt_str_replace(*string, "\\", G_DIR_SEPARATOR_S);
+#endif
+}
+
 
 static const char *_import_session_total(struct dt_import_session_t *self)
 {
@@ -390,11 +396,14 @@ static const char *_import_session_total(struct dt_import_session_t *self)
   g_free(path_pattern);
   g_free(filename_pattern);
 
-  char *result_path = dt_variables_expand(self->vp, pattern, FALSE);
+  gchar *result_path = dt_variables_expand(self->vp, pattern, FALSE);
   g_free(pattern);
 
-if(result_path == NULL)
-  return NULL;
+  if(result_path == NULL)
+    return NULL;
+
+  // this would need to be removed if we decide to do the correction on user's settings directly
+  dt_str_replace_bad_separator(&result_path);
 
 #ifdef WIN32
   if(result_path && (strlen(result_path) > 1))
@@ -407,6 +416,7 @@ if(result_path == NULL)
 
   self->current_path = result_path;
 
+  g_free(result_path);
   return self->current_path;
 }
 
