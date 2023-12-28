@@ -325,7 +325,7 @@ static const char *_import_session_path(struct dt_import_session_t *self, gboole
   g_free(pattern);
 
 #ifdef WIN32
-  if(new_path && (g_utf8_strlen(new_path, -1) > 1))
+  if(new_path && (strlen(new_path) > 1))
   {
     const char first = g_ascii_toupper(new_path[0]);
     if(first >= 'A' && first <= 'Z' && new_path[1] == ':') // path format is <drive letter>:\path\to\file
@@ -333,7 +333,8 @@ static const char *_import_session_path(struct dt_import_session_t *self, gboole
   }
 #endif
 
-  /* did the session path change ? */
+
+  /* did the session path change ?*/
   if(self->current_path && strcmp(self->current_path, new_path) == 0)
   {
     g_free(new_path);

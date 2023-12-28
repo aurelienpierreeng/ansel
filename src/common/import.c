@@ -117,6 +117,8 @@ typedef struct dt_lib_import_t
 
   dt_pthread_mutex_t lock;
 
+  char *path_file;
+
 } dt_lib_import_t;
 
 static dt_import_t *dt_import_init(dt_lib_import_t *d);
@@ -561,12 +563,11 @@ static void _set_help_string(dt_lib_import_t *d, gboolean copy)
 
 static void _set_test_path(dt_lib_import_t *d)
 {
-  gchar *selected_file = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(d->file_chooser));
+  //gchar *d->path_file = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(d->file_chooser));
   
-  if(!selected_file || !dt_supported_image(selected_file))
+  if(!d->path_file || !dt_supported_image(d->path_file))
   {
     //gtk_label_set_text(GTK_LABEL(d->test_path), _("Result of the pattern : please select a picture file"));
-    g_free(selected_file);
     return;
   }
 
@@ -582,7 +583,7 @@ static void _set_test_path(dt_lib_import_t *d)
 
   char *data = NULL;
   gsize size = 0;
-  if(g_file_get_contents(selected_file, &data, &size, NULL))
+  if(g_file_get_contents(d->path_file, &data, &size, NULL))
   {
     char exif_time[DT_DATETIME_LENGTH];
     dt_exif_get_datetime_taken((uint8_t *)data, size, exif_time);
@@ -591,23 +592,23 @@ static void _set_test_path(dt_lib_import_t *d)
     {
       // if no exif datetime try file datetime
       struct stat statbuf;
-      if(!stat(selected_file, &statbuf))
+      if(!stat(d->path_file, &statbuf))
         dt_datetime_unix_to_exif(exif_time, sizeof(exif_time), &statbuf.st_mtime);
     }
 
     if(exif_time[0])
       dt_import_session_set_exif_time(fake_session, exif_time);
 
-    dt_import_session_set_filename(fake_session, g_path_get_basename(selected_file));
+    //needed for variable expand functions
+    dt_import_session_set_filename(fake_session, g_path_get_basename(d->path_file));
 
     const char *fake_path = dt_import_session_total(fake_session);
 
-    gtk_label_set_text(GTK_LABEL(d->test_path), (fake_path && fake_path != NULL) ? 
-                g_strdup_printf(_("Result of the pattern : %s"), fake_path) : 
-                g_strdup(_("Can't build a valid path.")));
+    gtk_label_set_text(GTK_LABEL(d->test_path), (fake_path && fake_path != NULL)
+                ? g_strdup_printf(_("Result of the pattern : %s"), fake_path)
+                : g_strdup(_("Can't build a valid path.")));
   }
 
-  g_free(selected_file);
   if(data) g_free(data);
   g_free(fake_session);
 }
@@ -619,6 +620,12 @@ static void _filelist_changed_callback(gpointer instance, GList *files, guint el
   gtk_label_set_text(GTK_LABEL(d->selected_files), (finished)
                                                       ? g_strdup_printf(_("%i files selected"), elements)
                                                       : g_strdup_printf(_("Detection in progress... (%i files found so far)"), elements));
+
+  if(files != NULL)
+  {
+    d->path_file = g_strdup((char*)files->data);
+    _set_test_path(d);
+  }
 
   // The list of files is not used in GUI. It's not freed in the job either.
   if(finished)
@@ -1162,6 +1169,7 @@ static dt_lib_import_t * _init()
   d->shutdown = FALSE;
   d->modal = NULL;
   dt_pthread_mutex_init(&d->lock, NULL);
+  d->path_file = NULL;
 
   return d;
 }
