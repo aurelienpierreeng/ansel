@@ -697,51 +697,25 @@ static void _dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module
     }
   }
 
-  // Check if the current module to append to history is actually the same as the last one in history.
-  GList *last = g_list_last(dev->history);
-  gboolean new_is_old = FALSE;
-  if(last && last->data)
+  dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
+
+  // Init name
+  g_strlcpy(hist->op_name, module->op, sizeof(hist->op_name));
+
+  // Init buffers
+  hist->params = malloc(module->params_size);
+
+  // Init base params
+  hist->module = module;
+  hist->iop_order = module->iop_order;
+  hist->multi_priority = module->multi_priority;
+
+  hist->blend_params = malloc(sizeof(dt_develop_blend_params_t));
+
+  if(!no_image)
   {
-    dt_dev_history_item_t *last_item = (dt_dev_history_item_t *)last->data;
-    dt_iop_module_t *last_module = last_item->module;
-    new_is_old = dt_iop_check_modules_equal(module, last_module);
-  }
-
-  dt_dev_history_item_t *hist;
-  if(force_new_item || !new_is_old)
-  {
-    hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
-
-    // Init name
-    g_strlcpy(hist->op_name, module->op, sizeof(hist->op_name));
-
-    // Init buffers
-    hist->params = malloc(module->params_size);
-
-    // Init base params
-    hist->module = module;
-    hist->iop_order = module->iop_order;
-    hist->multi_priority = module->multi_priority;
-
-    hist->blend_params = malloc(sizeof(dt_develop_blend_params_t));
-
-    dev->history = g_list_append(dev->history, hist);
-
-    if(!no_image)
-    {
-      dev->pipe->changed |= DT_DEV_PIPE_SYNCH;
-      dev->preview_pipe->changed |= DT_DEV_PIPE_SYNCH;
-    }
-  }
-  else
-  {
-    hist = (dt_dev_history_item_t *)last->data;
-
-    if(!no_image)
-    {
-      dev->pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
-      dev->preview_pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
-    }
+    dev->pipe->changed |= DT_DEV_PIPE_SYNCH;
+    dev->preview_pipe->changed |= DT_DEV_PIPE_SYNCH;
   }
 
   g_strlcpy(hist->multi_name, module->multi_name, sizeof(hist->multi_name));
@@ -764,6 +738,7 @@ static void _dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module
   if(enable) hist->enabled = module->enabled = TRUE;
   else       hist->enabled = module->enabled;
 
+  dev->history = g_list_append(dev->history, hist);
   dev->history_end = g_list_length(dev->history);
 }
 

@@ -1221,7 +1221,7 @@ static uint32_t _mask_modes_combobox_to_flags(const int selected)
 static int _mask_modes_flags_to_combobox(uint32_t mask_mode)
 {
   if(mask_mode == DEVELOP_MASK_DISABLED) return 0;
-  if(mask_mode == DEVELOP_MASK_RASTER) return 5;
+  if(mask_mode & DEVELOP_MASK_RASTER) return 5;
   if(mask_mode & DEVELOP_MASK_CONDITIONAL & DEVELOP_MASK_MASK) return 4;
   if(mask_mode & DEVELOP_MASK_MASK) return 3;
   if(mask_mode & DEVELOP_MASK_CONDITIONAL) return 2;

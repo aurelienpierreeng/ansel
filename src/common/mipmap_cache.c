@@ -761,50 +761,58 @@ void dt_mipmap_cache_get_with_caller(
       {
         // load the image:
         // make sure we access the r/w lock as shortly as possible!
+        gboolean has_buffer = FALSE;
         dt_image_t buffered_image;
         const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-        buffered_image = *cimg;
+        if(cimg)
+        {
+          buffered_image = *cimg;
+          has_buffer = TRUE;
+        }
         // dt_image_t *img = dt_image_cache_write_get(darktable.image_cache, cimg);
         // dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
         dt_image_cache_read_release(darktable.image_cache, cimg);
 
-        char filename[PATH_MAX] = { 0 };
-        gboolean from_cache = TRUE;
-        dt_image_full_path(buffered_image.id,  filename,  sizeof(filename),  &from_cache, __FUNCTION__);
+        if(has_buffer)
+        {
+          char filename[PATH_MAX] = { 0 };
+          gboolean from_cache = TRUE;
+          dt_image_full_path(buffered_image.id,  filename,  sizeof(filename),  &from_cache, __FUNCTION__);
 
-        buf->imgid = imgid;
-        buf->size = mip;
-        buf->buf = 0;
-        buf->width = buf->height = 0;
-        buf->iscale = 0.0f;
-        buf->color_space = DT_COLORSPACE_NONE; // TODO: does the full buffer need to know this?
-        dt_imageio_retval_t ret = dt_imageio_open(&buffered_image, filename, buf); // TODO: color_space?
-        // might have been reallocated:
-        ASAN_UNPOISON_MEMORY_REGION(entry->data, dt_mipmap_buffer_dsc_size);
-        dsc = (struct dt_mipmap_buffer_dsc *)buf->cache_entry->data;
-        if(ret != DT_IMAGEIO_OK)
-        {
-          // fprintf(stderr, "[mipmap read get] error loading image: %d\n", ret);
-          //
-          // we can only return a zero dimension buffer if the buffer has been allocated.
-          // in case dsc couldn't be allocated and points to the static buffer, it contains
-          // a dead image already.
-          if((void *)dsc != (void *)dt_mipmap_cache_static_dead_image)
+          buf->imgid = imgid;
+          buf->size = mip;
+          buf->buf = 0;
+          buf->width = buf->height = 0;
+          buf->iscale = 0.0f;
+          buf->color_space = DT_COLORSPACE_NONE; // TODO: does the full buffer need to know this?
+          dt_imageio_retval_t ret = dt_imageio_open(&buffered_image, filename, buf); // TODO: color_space?
+          // might have been reallocated:
+          ASAN_UNPOISON_MEMORY_REGION(entry->data, dt_mipmap_buffer_dsc_size);
+          dsc = (struct dt_mipmap_buffer_dsc *)buf->cache_entry->data;
+          if(ret != DT_IMAGEIO_OK)
           {
-            dsc->width = dsc->height = 0;
-            buf->iscale = 0.0f;
-            dsc->color_space = DT_COLORSPACE_NONE;
+            // fprintf(stderr, "[mipmap read get] error loading image: %d\n", ret);
+            //
+            // we can only return a zero dimension buffer if the buffer has been allocated.
+            // in case dsc couldn't be allocated and points to the static buffer, it contains
+            // a dead image already.
+            if((void *)dsc != (void *)dt_mipmap_cache_static_dead_image)
+            {
+              dsc->width = dsc->height = 0;
+              buf->iscale = 0.0f;
+              dsc->color_space = DT_COLORSPACE_NONE;
+            }
           }
-        }
-        else
-        {
-          // swap back new image data:
-          dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-          *img = buffered_image;
-          // fprintf(stderr, "[mipmap read get] initializing full buffer img %u with %u %u -> %d %d (%p)\n",
-          // imgid, data[0], data[1], img->width, img->height, data);
-          // don't write xmp for this (we only changed db stuff):
-          dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
+          else
+          {
+            // swap back new image data:
+            dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+            *img = buffered_image;
+            // fprintf(stderr, "[mipmap read get] initializing full buffer img %u with %u %u -> %d %d (%p)\n",
+            // imgid, data[0], data[1], img->width, img->height, data);
+            // don't write xmp for this (we only changed db stuff):
+            dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
+          }
         }
       }
       else if(mip == DT_MIPMAP_F)
