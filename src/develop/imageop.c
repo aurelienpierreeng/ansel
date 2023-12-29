@@ -86,6 +86,7 @@ void dt_iop_load_default_params(dt_iop_module_t *module)
   dt_develop_blend_init_blend_parameters(module->default_blendop_params, cst);
   dt_iop_commit_blend_params(module, module->default_blendop_params);
   dt_iop_gui_blending_reload_defaults(module);
+  dt_iop_module_hash(module);
 }
 
 static void _iop_modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
@@ -363,6 +364,7 @@ int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, dt
   module->histogram_middle_grey = FALSE;
   module->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
   module->suppress_mask = 0;
+  module->bypass_cache = FALSE;
   module->enabled = module->default_enabled = 0; // all modules disabled by default.
   g_strlcpy(module->op, so->op, 20);
   module->raster_mask.source.users = g_hash_table_new(NULL, NULL);
@@ -389,6 +391,7 @@ int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, dt
 
   // now init the instance:
   module->init(module);
+  module->hash = 0;
 
   /* initialize blendop params and default values */
   module->blend_params = calloc(1, sizeof(dt_develop_blend_params_t));
@@ -543,10 +546,10 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
   // we update show params for multi-instances for each other instances
   dt_dev_modules_update_multishow(dev);
 
-  dt_dev_pixelpipe_rebuild(dev);
-
   /* redraw */
+  dt_dev_pixelpipe_rebuild(dev);
   dt_control_queue_redraw_center();
+  dt_dev_refresh_ui_images(dev);
 
   --darktable.gui->reset;
 }
@@ -721,10 +724,10 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
       }
     }
 
+    dt_iop_gui_update_blending(module);
+
     // we save the new instance creation
     dt_dev_add_history_item(module->dev, module, TRUE);
-
-    dt_iop_gui_update_blending(module);
   }
 
   // we update show params for multi-instances for each other instances
@@ -1096,6 +1099,7 @@ void dt_iop_reload_defaults(dt_iop_module_t *module)
     }
   }
   dt_iop_load_default_params(module);
+
   if(darktable.gui) --darktable.gui->reset;
 
   if(module->header) dt_iop_gui_update_header(module);
@@ -1487,7 +1491,9 @@ void dt_iop_commit_blend_params(dt_iop_module_t *module, const dt_develop_blend_
   if(module->raster_mask.sink.source)
     g_hash_table_remove(module->raster_mask.sink.source->raster_mask.source.users, module);
 
-  memcpy(module->blend_params, blendop_params, sizeof(dt_develop_blend_params_t));
+  if(module->blend_params != blendop_params)
+    memcpy(module->blend_params, blendop_params, sizeof(dt_develop_blend_params_t));
+
   if(blendop_params->blend_cst == DEVELOP_BLEND_CS_NONE)
   {
     module->blend_params->blend_cst = dt_develop_blend_default_module_blend_colorspace(module);
@@ -1654,8 +1660,15 @@ uint64_t dt_iop_module_hash(dt_iop_module_t *module)
       dt_masks_form_t *grp = dt_masks_get_from_id(module->dev, module->blend_params->mask_id);
       hash = dt_masks_group_get_hash(hash, grp);
     }
-    hash = dt_hash(hash, (char *)module->blend_params, sizeof(dt_develop_blend_params_t));
+    else
+    {
+      // This should not happen.
+      fprintf(stdout, "[dt_iop_module_hash] WARNING: function is called on %s without inited develop.\n", module->op);
+    }
   }
+
+  // Blend params are always inited even when module doesn't support blending
+  hash = dt_hash(hash, (char *)module->blend_params, sizeof(dt_develop_blend_params_t));
 
   return hash;
 }
@@ -1664,14 +1677,13 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
                           dt_develop_blend_params_t *blendop_params, dt_dev_pixelpipe_t *pipe,
                           dt_dev_pixelpipe_iop_t *piece)
 {
-  piece->hash = piece->global_hash = 0;
+  assert(piece->pipe == pipe);
+
+  piece->hash = piece->global_hash = module->hash;
   if(!piece->enabled) return;
 
   // 1. commit params
-
   memcpy(piece->blendop_data, blendop_params, sizeof(dt_develop_blend_params_t));
-  // this should be redundant! (but is not)
-  dt_iop_commit_blend_params(module, blendop_params);
 
 #ifdef HAVE_OPENCL
   // assume process_cl is ready, commit_params can overwrite this.
@@ -1694,9 +1706,29 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   * because some pipeline params may be defined or sanitized at runtime (color profiles),
   * but some pipeline params are allocated on the stack (LUTs) from user params (graph nodes),
   * meaning they are not written in piece->data struct.
+  *
+  * NOTE : 
+  *   1. module->hash is set by history API and represents the internal state of user params with regard to history.
+  *      It is computed from module->params and module->blend_params.
+  *   2. piece->hash represents the internal state of params with regard to pipeline. It is computed from module->hash
+  *      and adds the contribution of runtime-computed params (computed in module's commit_params() methods) into account.
+  *   3. piece->global_hash represents the external state of the module, with regard to pipeline.
+  *      It is computed from piece->hash of the current module, and from the piece->hash of the previous module in
+  *      in a recursive fashion. As such, it represents the pipe-wise state of the module :
+  *         - the internal state of the module (internal params),
+  *         - the position of the module in the pipe,
+  *         - the state of the module's input.
+  *      When one module has its internal params changed (module->hash and piece->hash),
+  *      all the downstream modules will have their piece->global_hash changed too.
+  *   4. in pixelpipe_hb.c, we compute the _node_hash() representing the external pipeline state with regard to pipeline cache lines.
+  *      It is computed from piece->global_hash and takes into account the output buffer size of the pipeline,
+  *      along with preview bypasses (mask previews and such) for GUI pipelines.
+  *      This high-level hash is used to synchronize pipeline states with pipeline cache lines.
+  *      When no cache line matching this _node_hash() is found, the pipe is recomputed starting from the
+  *      most-downstream module which _node_hash() is known in cache, to spare computations, or recomputed entirely if
+  *      the cache is empty or entirely out-of-sync.
   */
-  uint64_t hash = dt_iop_module_hash(module);
-  piece->hash = piece->global_hash = dt_hash(hash, (char *)piece->data, piece->data_size);
+  piece->hash = piece->global_hash = dt_hash(module->hash, (const char *)piece->data, piece->data_size);
 
   dt_print(DT_DEBUG_PARAMS, "[params] commit for %s in pipe %i with hash %lu\n", module->op, pipe->type, (long unsigned int)piece->hash);
 }
@@ -1769,6 +1801,7 @@ static void _gui_reset_callback(GtkButton *button, GdkEventButton *event, dt_iop
 
   //Ctrl is used to apply any auto-presets to the current module
   //If Ctrl was not pressed, or no auto-presets were applied, reset the module parameters
+  // FIXME: can we stop with all the easter-eggs key modifiers doing undocumented stuff all along ?
   if(!(event && dt_modifier_is(event->state, GDK_CONTROL_MASK)) || !dt_gui_presets_autoapply_for_module(module))
   {
     // if a drawn mask is set, remove it from the list
@@ -1826,7 +1859,6 @@ void dt_iop_request_focus(dt_iop_module_t *module)
 
     gtk_widget_set_state_flags(dt_iop_gui_get_pluginui(out_focus_module), GTK_STATE_FLAG_NORMAL, TRUE);
 
-    if(out_focus_module->operation_tags_filter()) dt_dev_invalidate_from_gui(darktable.develop);
 
     dt_iop_connect_accels_multi(out_focus_module->so);
 
@@ -1854,8 +1886,6 @@ void dt_iop_request_focus(dt_iop_module_t *module)
   if(module)
   {
     gtk_widget_set_state_flags(dt_iop_gui_get_pluginui(module), GTK_STATE_FLAG_SELECTED, TRUE);
-
-    if(module->operation_tags_filter()) dt_dev_invalidate_from_gui(darktable.develop);
 
     dt_iop_connect_accels_multi(module->so);
 
@@ -2214,6 +2244,8 @@ static void _display_mask_indicator_callback(GtkToggleButton *bt, dt_iop_module_
   module->request_mask_display &= ~DT_DEV_PIXELPIPE_DISPLAY_MASK;
   module->request_mask_display |= (is_active ? DT_DEV_PIXELPIPE_DISPLAY_MASK : 0);
 
+  dt_iop_set_cache_bypass(module, module->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE);
+
   // set the module show mask button too
   if(bd->showmask)
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->showmask), is_active);
@@ -2545,6 +2577,29 @@ void dt_iop_nap(int32_t usec)
   // additionally wait the given amount of time
   g_usleep(usec);
 }
+
+gboolean dt_iop_get_cache_bypass(dt_iop_module_t *module)
+{
+  return module->bypass_cache;
+}
+
+void dt_iop_set_cache_bypass(dt_iop_module_t *module, gboolean state)
+{
+  module->bypass_cache = state;
+
+  if(state && module->dev)
+  {
+    // Disable other modules bypass if set.
+    for(GList *iop = g_list_last(module->dev->iop);
+        iop;
+        iop = g_list_previous(iop))
+    {
+      dt_iop_module_t *current = (dt_iop_module_t *)iop->data;
+      if(current != module && current->bypass_cache) current->bypass_cache = FALSE;
+    }
+  }
+}
+
 
 dt_iop_module_t *dt_iop_get_colorout_module(void)
 {
@@ -2982,6 +3037,8 @@ void dt_iop_gui_changed(dt_action_t *action, GtkWidget *widget, gpointer data)
   dt_iop_color_picker_reset(module, TRUE);
 
   dt_dev_add_history_item(darktable.develop, module, TRUE);
+
+  dt_iop_gui_set_enable_button(module);
 }
 
 enum

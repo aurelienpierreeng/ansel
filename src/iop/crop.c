@@ -992,6 +992,8 @@ static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
   g->editing = FALSE;
   gtk_widget_set_sensitive(g->commit_button, FALSE);
 
+  dt_image_update_final_size(self->dev->preview_pipe->output_imgid);
+
   // Commit history and refresh view
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 

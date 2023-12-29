@@ -2290,7 +2290,6 @@ void enter(dt_view_t *self)
 
   // Make sure we don't start computing pipes until we have a proper history
   dt_pthread_mutex_lock(&dev->pipe_mutex);
-  dt_pthread_mutex_lock(&dev->preview_pipe_mutex);
 
   if(!dev->form_gui)
   {
@@ -2410,9 +2409,6 @@ void enter(dt_view_t *self)
   dt_image_check_camera_missing_sample(&dev->image_storage);
 
   dt_pthread_mutex_unlock(&dev->pipe_mutex);
-  dt_pthread_mutex_unlock(&dev->preview_pipe_mutex);
-
-  dt_dev_reprocess_preview(dev);
 
   // Init the starting point of undo/redo
   dt_dev_undo_start_record(dev);
@@ -2508,7 +2504,6 @@ void leave(dt_view_t *self)
 
   // clear gui.
 
-  dt_pthread_mutex_lock(&dev->preview_pipe_mutex);
   dt_pthread_mutex_lock(&dev->pipe_mutex);
 
   dt_dev_pixelpipe_cleanup_nodes(dev->pipe);
@@ -2528,10 +2523,6 @@ void leave(dt_view_t *self)
   {
     dt_iop_module_t *module = (dt_iop_module_t *)(dev->iop->data);
     if(!dt_iop_is_hidden(module)) dt_iop_gui_cleanup_module(module);
-
-    // force refresh if module has mask visualized
-    if (module->request_mask_display || module->suppress_mask) dt_iop_refresh_center(module);
-
     dt_action_cleanup_instance_iop(module);
     dt_iop_cleanup_module(module);
     free(module);
@@ -2547,7 +2538,6 @@ void leave(dt_view_t *self)
   dt_pthread_mutex_unlock(&dev->history_mutex);
 
   dt_pthread_mutex_unlock(&dev->pipe_mutex);
-  dt_pthread_mutex_unlock(&dev->preview_pipe_mutex);
 
   // cleanup visible masks
   if(dev->form_gui)
@@ -2763,10 +2753,8 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   if(dev->gui_module && dev->gui_module->button_released
      && dev->gui_module->button_released(dev->gui_module, x, y, which, state))
   {
-    // Click in modules should handle history changes internally. Only update zoom here.
-    dt_dev_invalidate_zoom(dev);
+    // Click in modules should handle history changes internally.
     dt_control_queue_redraw_center();
-    dt_dev_refresh_ui_images(dev);
     return 1;
   }
 
@@ -3006,10 +2994,8 @@ void scrolled(dt_view_t *self, double x, double y, int up, int state)
   // module
   if(dev->gui_module && dev->gui_module->scrolled && dev->gui_module->scrolled(dev->gui_module, x, y, up, state))
   {
-    // Scroll in modules should handle history changes internally. Only update zoom here.
-    dt_dev_invalidate_zoom(dev);
+    // Scroll in modules should handle history changes internally.
     dt_control_queue_redraw_center();
-    dt_dev_refresh_ui_images(dev);
     return;
   }
   // free zoom

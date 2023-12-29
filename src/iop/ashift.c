@@ -3278,7 +3278,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     const int isflipped = fabs(fmod(alpha + M_PI, M_PI) - M_PI / 2.0f) < M_PI / 4.0f ? 1 : 0;
 
     // did modules prior to this one in pixelpipe have changed? -> check via hash value
-    uint64_t hash = dt_dev_hash_plus(self->dev, self->dev->preview_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL);
+    uint64_t hash = dt_dev_hash(self->dev, self->dev->preview_pipe);
 
     dt_iop_gui_enter_critical_section(self);
     g->isflipped = isflipped;
@@ -3411,7 +3411,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     const int isflipped = fabs(fmod(alpha + M_PI, M_PI) - M_PI / 2.0f) < M_PI / 4.0f ? 1 : 0;
 
     // do modules coming before this one in pixelpipe have changed? -> check via hash value
-    uint64_t hash = dt_dev_hash_plus(self->dev, self->dev->preview_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL);
+    uint64_t hash = dt_dev_hash(self->dev, self->dev->preview_pipe);
 
     dt_iop_gui_enter_critical_section(self);
     g->isflipped = isflipped;
@@ -3618,15 +3618,7 @@ static uint64_t _get_lines_hash(const dt_iop_ashift_line_t *lines, const int lin
   for(int n = 0; n < lines_count; n++)
   {
     const dt_boundingbox_t v = { lines[n].p1[0], lines[n].p1[1], lines[n].p2[0], lines[n].p2[1] };
-    union {
-        float f;
-        uint32_t u;
-    } x;
-
-    for(size_t i = 0; i < 4; i++) {
-      x.f = v[i];
-      hash = ((hash << 5) + hash) ^ x.u;
-    }
+    hash = dt_hash(hash, (const char *)&v, sizeof(dt_boundingbox_t));
   }
   return hash;
 }
@@ -4084,7 +4076,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->lines == NULL || !gui_has_focus(self)) return;
 
   // get hash value that changes if distortions from here to the end of the pixelpipe changed
-  const uint64_t hash = dt_dev_hash_distort(dev);
+  const uint64_t hash = dt_dev_hash(dev, dev->preview_pipe);
   // get hash value that changes if coordinates of lines have changed
   const uint64_t lines_hash = _get_lines_hash(g->lines, g->lines_count);
 

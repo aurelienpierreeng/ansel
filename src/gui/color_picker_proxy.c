@@ -127,7 +127,10 @@ void dt_iop_color_picker_reset(dt_iop_module_t *module, gboolean keep)
       _color_picker_reset(picker);
       darktable.lib->proxy.colorpicker.picker_proxy = NULL;
       if(module)
+      {
         module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
+        dt_iop_set_cache_bypass(module, FALSE);
+      }
     }
   }
 }
@@ -164,7 +167,10 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
   {
     _color_picker_reset(prior_picker);
     if(prior_picker->module)
+    {
       prior_picker->module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
+      dt_iop_set_cache_bypass(prior_picker->module, FALSE);
+    }
   }
 
   if(module && module->off)
@@ -180,7 +186,10 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     darktable.lib->proxy.colorpicker.picker_proxy = self;
 
     if(module)
+    {
       module->request_color_pick = DT_REQUEST_COLORPICK_MODULE;
+      dt_iop_set_cache_bypass(module, TRUE);
+    }
 
     if(kind == DT_COLOR_PICKER_POINT_AREA)
     {
@@ -204,17 +213,11 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     --darktable.gui->reset;
 
     if(module)
-    {
-      module->dev->preview_status = DT_DEV_PIXELPIPE_DIRTY;
       dt_iop_request_focus(module);
-    }
-    else
-    {
-      dt_dev_invalidate_from_gui(darktable.develop);
-    }
+
     // force applying the next incoming sample
     self->changed = TRUE;
-    dt_dev_invalidate_all(darktable.develop);
+    dt_dev_invalidate_preview(darktable.develop);
   }
   else
   {
@@ -223,13 +226,11 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     if(module)
     {
       module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
+      dt_iop_set_cache_bypass(module, FALSE);
       // will turn off live sample button
       darktable.lib->proxy.colorpicker.update_panel(darktable.lib->proxy.colorpicker.module);
     }
-    else if(darktable.lib->proxy.colorpicker.restrict_histogram)
-    {
-      dt_dev_invalidate_from_gui(darktable.develop);
-    }
+    dt_dev_invalidate_preview(darktable.develop);
   }
 
   dt_control_queue_redraw_center();

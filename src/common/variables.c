@@ -186,6 +186,7 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
       }
     }
 
+    // FIXME: do we have a deadlock if params->img != NULL ??
     if(params->img == NULL) dt_image_cache_read_release(darktable.image_cache, img);
   }
   else if(params->data->exif_time[0])

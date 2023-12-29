@@ -1869,16 +1869,13 @@ static void show_luminance_mask_callback(GtkWidget *togglebutton, GdkEventButton
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
 
   // if blend module is displaying mask do not display it here
-  if(self->request_mask_display)
-  {
+  if(self->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE)
     self->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
-    g->mask_display = 0;
-  }
-  else
-  {
-    g->mask_display = !g->mask_display;
+
+  g->mask_display = !g->mask_display;
+
+  if(g->mask_display)
     self->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
-  }
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_luminance_mask), g->mask_display);
 //  dt_dev_reprocess_center(self->dev);

@@ -367,7 +367,7 @@ static void _file_filters(GtkWidget *file_chooser)
 
   const char *raster[] = {
     "jpg", "jpeg", "j2c", "jp2", "tif", "tiff", "png", "exr",
-    "dng", "heif", "heic", "avi", "avif", "webp", NULL };
+    "bmp", "dng", "heif", "heic", "avi", "avif", "webp", NULL };
 
   const char *raw[] = {
     "3fr", "ari", "arw", "bay", "bmq", "cap", "cine", "cr2",

@@ -3085,12 +3085,10 @@ static void _populate_collect_combo(GtkWidget *w)
   dt_bauhaus_combobox_add_full(w, dt_collection_name(value), DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT, \
                                GUINT_TO_POINTER(value + 1), NULL, TRUE)
 
-    dt_bauhaus_combobox_add_section(w, _("files"));
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_FILMROLL);
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_FOLDERS);
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_FILENAME);
 
-    dt_bauhaus_combobox_add_section(w, _("metadata"));
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_TAG);
     for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
     {
@@ -3109,7 +3107,6 @@ static void _populate_collect_combo(GtkWidget *w)
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_COLORLABEL);
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_GEOTAGGING);
 
-    dt_bauhaus_combobox_add_section(w, _("times"));
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_DAY);
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_TIME);
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_IMPORT_TIMESTAMP);
@@ -3117,7 +3114,6 @@ static void _populate_collect_combo(GtkWidget *w)
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_EXPORT_TIMESTAMP);
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_PRINT_TIMESTAMP);
 
-    dt_bauhaus_combobox_add_section(w, _("capture details"));
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_CAMERA);
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_LENS);
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_APERTURE);
@@ -3126,7 +3122,6 @@ static void _populate_collect_combo(GtkWidget *w)
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_ISO);
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_ASPECT_RATIO);
 
-    dt_bauhaus_combobox_add_section(w, _("darktable"));
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_GROUPING);
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_LOCAL_COPY);
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_HISTORY);

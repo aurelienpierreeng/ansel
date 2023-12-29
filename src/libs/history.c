@@ -1186,8 +1186,6 @@ static gboolean _lib_history_button_clicked_callback(GtkWidget *widget, GdkEvent
   dt_iop_connect_accels_all();
   dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
 
-  dt_dev_invalidate_all(darktable.develop);
-  dt_dev_refresh_ui_images(darktable.develop);
   return FALSE;
 }
 
@@ -1234,6 +1232,7 @@ void gui_reset(dt_lib_module_t *self)
     dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
 
     dt_control_queue_redraw_center();
+    dt_dev_refresh_ui_images(darktable.develop);
   }
 }
 

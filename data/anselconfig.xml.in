@@ -545,7 +545,7 @@
   <dtconfig>
     <name>session/filename_pattern</name>
     <type>string</type>
-    <default>$(JOBCODE)-$(FILENAME)-$(SEQUENCE).$(FILE_EXTENSION)</default>
+    <default>$(JOBCODE)-$(FILE.NAME)-$(SEQUENCE).$(FILE.EXTENSION)</default>
     <shortdescription>Picture naming pattern</shortdescription>
     <longdescription>file naming pattern used for a import session</longdescription>
   </dtconfig>
@@ -1936,7 +1936,7 @@
   <dtconfig>
     <name>plugins/imageio/storage/disk/file_directory</name>
     <type>string</type>
-    <default>$(FILE_FOLDER)/ansel_exported/$(FILE_NAME)</default>
+    <default>$(FILE.FOLDER)/ansel_exported/$(FILE.NAME)</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>

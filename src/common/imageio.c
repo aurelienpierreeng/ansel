@@ -920,6 +920,10 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
 
   const int bpp = format->bpp(format_params);
 
+  // Get the roi_out hash
+  dt_iop_roi_t roi_out = { .x = 0, .y = 0, .width = processed_width, .height = processed_height, .scale = scale };
+  pipe.hash = dt_hash(5381, (const char *)&roi_out, sizeof(dt_iop_roi_t));
+
   dt_get_times(&start);
   if(high_quality_processing)
   {

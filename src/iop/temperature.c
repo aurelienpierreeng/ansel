@@ -701,13 +701,6 @@ int generate_preset_combo(struct dt_iop_module_t *self)
       if(!strcmp(wb_preset[i].make, self->dev->image_storage.camera_maker)
          && !strcmp(wb_preset[i].model, self->dev->image_storage.camera_model))
       {
-        if(!wb_name) // This is first found preset for maker/model. add section.
-        {
-          char *section = g_strdup_printf("%s %s", self->dev->image_storage.camera_maker, self->dev->image_storage.camera_model);
-          dt_bauhaus_combobox_add_section(g->presets, section);
-          g_free(section);
-          g->preset_cnt++;
-        }
         if(!wb_name || strcmp(wb_name, wb_preset[i].name))
         {
           // new preset found
@@ -1717,7 +1710,24 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   p->g2   = fmaxf(0.0f, fminf(8.0f, (grayrgb[3] > 0.001f ? 1.0f / grayrgb[3] : 1.0f) / p->green));
   p->green = 1.0;
 
+  ++darktable.gui->reset;
   dt_bauhaus_combobox_set(g->presets, DT_IOP_TEMP_SPOT);
+
+  float tempK, tint;
+  mul2temp(self, p, &tempK, &tint);
+
+  dt_bauhaus_slider_set(g->scale_k, tempK);
+  dt_bauhaus_slider_set(g->scale_tint, tint);
+  dt_bauhaus_slider_set(g->scale_r, p->red);
+  dt_bauhaus_slider_set(g->scale_g, p->green);
+  dt_bauhaus_slider_set(g->scale_b, p->blue);
+  dt_bauhaus_slider_set(g->scale_g2, p->g2);
+
+  dt_bauhaus_combobox_set(g->presets, -1);
+  dt_bauhaus_slider_set(g->finetune, 0);
+  --darktable.gui->reset;
+
+  dt_dev_add_history_item(self->dev, self, TRUE);
 }
 
 

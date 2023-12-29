@@ -327,7 +327,6 @@ GtkWidget *dt_bauhaus_combobox_new_full(dt_action_t *action, const char *section
 }
 
 void dt_bauhaus_combobox_add(GtkWidget *widget, const char *text);
-void dt_bauhaus_combobox_add_section(GtkWidget *widget, const char *text);
 void dt_bauhaus_combobox_add_aligned(GtkWidget *widget, const char *text, dt_bauhaus_combobox_alignment_t align);
 void dt_bauhaus_combobox_add_full(GtkWidget *widget, const char *text, dt_bauhaus_combobox_alignment_t align,
                                   gpointer data, void (*free_func)(void *data), gboolean sensitive);

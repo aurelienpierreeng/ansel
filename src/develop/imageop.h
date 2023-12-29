@@ -188,6 +188,8 @@ typedef struct dt_iop_module_t
   int request_mask_display;
   /** set to 1 if you want the blendif mask to be suppressed in the module in focus. gui mode only. */
   int32_t suppress_mask;
+  /** set to 1 if the pipeline cache needs to be bypassed for downstream modules starting from this module*/
+  gboolean bypass_cache;
   /** place to store the picked color of module input. */
   dt_aligned_pixel_t picked_color, picked_color_min, picked_color_max;
   /** place to store the picked color of module output (before blending). */
@@ -287,6 +289,9 @@ typedef struct dt_iop_module_t
 
   // introspection related data
   gboolean have_introspection;
+
+  // parameters hash
+  uint64_t hash;
 } dt_iop_module_t;
 
 typedef struct dt_action_target_t
@@ -488,6 +493,33 @@ uint64_t dt_iop_module_hash(dt_iop_module_t *module);
 
 // Use module fingerprints to determine if two instances are actually the same
 gboolean dt_iop_check_modules_equal(dt_iop_module_t *mod_1, dt_iop_module_t *mod_2);
+
+
+/** Set bypass to TRUE if the pipeline cache should be bypassed temporarily for
+ * this module and the next, for example doing interactive GUI operations.
+ *
+ * Pipeline cache consistency is ensured by hashing the internal module params
+ * and comparing that hash with the previously-known one from the cache line.
+ * If something outside the module is making the cache temporarily invalid,
+ * this is the way to go. The previous module's output may be fetched from cache
+ * if available, which is faster than simply disabling cache at all.
+ *
+ * This is designed for mask previews, which have a special handling, in pipeline,
+ * where modules between the mask preview requesting module and the gamma.c
+ * module are bypassed, so the alpha channel is passed-through to be rendered by
+ * gamma.c without processing intermediate modules. This doesn't work if cache is
+ * enabled.
+ *
+ * The pixelpipe code will propagate the bypass state to downstream pipe->pieces,
+ * so all modules coming later than this one in the pipeline will also have their
+ * cache disabled. That's how mask preview can work, because the pipeline is called
+ * in a recursive way, starting from the end.
+ *
+ * Only one module from dev->iop list (modules tied to GUI) is allowed to bypass
+ * the cache at a time, other modules will lose their bypass flag if set.
+*/
+gboolean dt_iop_get_cache_bypass(dt_iop_module_t *module);
+void dt_iop_set_cache_bypass(dt_iop_module_t *module, gboolean state);
 
 
 // clang-format off

@@ -2788,10 +2788,10 @@ void gui_post_expose(struct dt_iop_module_t *module,
   dt_iop_gui_leave_critical_section(module);
 
   // distort all points
-  dt_pthread_mutex_lock(&develop->preview_pipe_mutex);
+  dt_pthread_mutex_lock(&develop->pipe_mutex);
   const distort_params_t d_params = { develop, develop->preview_pipe, iscale, 1.0 / scale, DT_DEV_TRANSFORM_DIR_ALL, FALSE };
   _distort_paths(module, &d_params, &copy_params);
-  dt_pthread_mutex_unlock(&develop->preview_pipe_mutex);
+  dt_pthread_mutex_unlock(&develop->pipe_mutex);
 
   // You're not supposed to understand this
   const float zoom_x = dt_control_get_dev_zoom_x();

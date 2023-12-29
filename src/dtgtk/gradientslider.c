@@ -62,22 +62,14 @@ static gboolean _gradient_slider_postponed_value_change(gpointer data)
 {
   if(!GTK_IS_WIDGET(data)) return 0;
 
-  if(DTGTK_GRADIENT_SLIDER(data)->is_changed == TRUE)
+  if(DTGTK_GRADIENT_SLIDER(data)->is_changed)
   {
     g_signal_emit_by_name(G_OBJECT(data), "value-changed");
     DTGTK_GRADIENT_SLIDER(data)->is_changed = FALSE;
   }
 
-  if(!DTGTK_GRADIENT_SLIDER(data)->is_dragging) DTGTK_GRADIENT_SLIDER(data)->timeout_handle = 0;
-  else
-  {
-    const int delay = CLAMP(darktable.develop->average_delay * 3 / 2,
-                            DTGTK_GRADIENT_SLIDER_VALUE_CHANGED_DELAY_MIN,
-                            DTGTK_GRADIENT_SLIDER_VALUE_CHANGED_DELAY_MAX);
-    DTGTK_GRADIENT_SLIDER(data)->timeout_handle = g_timeout_add(delay, _gradient_slider_postponed_value_change, data);
-  }
-
-  return FALSE; // This is called by the gtk mainloop and is threadsafe
+  DTGTK_GRADIENT_SLIDER(data)->timeout_handle = 0;
+  return G_SOURCE_REMOVE; // This is called by the gtk mainloop and is threadsafe
 }
 
 static inline gboolean _test_if_marker_is_upper_or_down(const gint marker, const gboolean up)
@@ -233,9 +225,16 @@ static gboolean _gradient_slider_add_delta_internal(GtkWidget *widget, gdouble d
 
   gslider->position[selected] = gslider->position[selected] + delta;
   _clamp_marker(gslider, selected);
+  gslider->is_changed = TRUE;
 
   gtk_widget_queue_draw(widget);
-  g_signal_emit_by_name(G_OBJECT(widget), "value-changed");
+
+  if(gslider->timeout_handle)
+  {
+    g_source_remove(gslider->timeout_handle);
+    gslider->timeout_handle = 0;
+  }
+  gslider->timeout_handle = g_timeout_add(350, _gradient_slider_postponed_value_change, widget);
 
   return TRUE;
 }
@@ -309,12 +308,6 @@ static gboolean _gradient_slider_button_press(GtkWidget *widget, GdkEventButton 
 
       gslider->is_changed = TRUE;
       gslider->is_dragging = TRUE;
-      // timeout_handle should always be zero here, but check just in case
-      const int delay = CLAMP(darktable.develop->average_delay * 3 / 2,
-                              DTGTK_GRADIENT_SLIDER_VALUE_CHANGED_DELAY_MIN,
-                              DTGTK_GRADIENT_SLIDER_VALUE_CHANGED_DELAY_MAX);
-      if(!gslider->timeout_handle)
-        gslider->timeout_handle = g_timeout_add(delay, _gradient_slider_postponed_value_change, widget);
     }
     else if(gslider->positions > 1) // right mouse button: switch on/off selection (only if we have more than one marker)
     {
@@ -341,8 +334,6 @@ static gboolean _gradient_slider_motion_notify(GtkWidget *widget, GdkEventMotion
 
   if(gslider->is_dragging == TRUE && gslider->selected != -1 && gslider->do_reset == FALSE)
   {
-    assert(gslider->timeout_handle > 0);
-
     const gdouble newposition = _get_position_from_screen(widget, event->x);
     const gint direction = gslider->position[gslider->selected] <= newposition ? MOVE_RIGHT : MOVE_LEFT;
 
@@ -351,6 +342,14 @@ static gboolean _gradient_slider_motion_notify(GtkWidget *widget, GdkEventMotion
     gslider->is_changed = TRUE;
 
     gtk_widget_queue_draw(widget);
+
+    // timeout_handle should always be zero here, but check just in case
+    if(gslider->timeout_handle)
+    {
+      g_source_remove(gslider->timeout_handle);
+      gslider->timeout_handle = 0;
+    }
+    gslider->timeout_handle = g_timeout_add(350, _gradient_slider_postponed_value_change, widget);
   }
   else
   {
@@ -379,10 +378,9 @@ static gboolean _gradient_slider_button_release(GtkWidget *widget, GdkEventButto
     _slider_move(widget, selected, newposition, direction);
 
     gtk_widget_queue_draw(widget);
+    _gradient_slider_postponed_value_change(widget);
 
     gslider->is_dragging = FALSE;
-    if(gslider->timeout_handle) g_source_remove(gslider->timeout_handle);
-    gslider->timeout_handle = 0;
     g_signal_emit_by_name(G_OBJECT(widget), "value-changed");
   }
   return TRUE;
@@ -525,9 +523,10 @@ static void _gradient_slider_destroy(GtkWidget *widget)
   GtkDarktableGradientSlider *gslider = DTGTK_GRADIENT_SLIDER(widget);
 
   if(gslider->timeout_handle)
+  {
     g_source_remove(gslider->timeout_handle);
-
-  gslider->timeout_handle = 0;
+    gslider->timeout_handle = 0;
+  }
 
   if(gslider->colors)
     g_list_free_full(gslider->colors, g_free);
