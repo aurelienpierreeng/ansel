@@ -414,7 +414,7 @@ static const char *_import_session_total(struct dt_import_session_t *self)
   }
 #endif
 
-  self->current_path = result_path;
+  self->current_path = g_strdup(result_path);
 
   g_free(result_path);
   return self->current_path;
