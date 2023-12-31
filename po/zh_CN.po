@@ -14,8 +14,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: darktable 3.6.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2023-12-24 02:54+0800\n"
-"PO-Revision-Date: 2023-12-29 02:59+0800\n"
+"POT-Creation-Date: 2024-01-01 01:41+0800\n"
+"PO-Revision-Date: 2024-01-01 01:45+0800\n"
 "Last-Translator: Alynx Zhou <alynx.zhou@gmail.com>\n"
 "Language-Team: Chinese - China <>\n"
 "Language: zh_CN\n"
@@ -1831,12 +1831,12 @@ msgstr "包含在推荐列表里的最近添加的标签个数。“-1”关闭�
 #: ../build/src/iop/introspection_ashift.c:130
 #: ../build/src/iop/introspection_ashift.c:279
 msgid "lens shift (vertical)"
-msgstr "镜头平移（垂直）"
+msgstr "镜头偏移（垂直）"
 
 #: ../build/src/iop/introspection_ashift.c:136
 #: ../build/src/iop/introspection_ashift.c:283
 msgid "lens shift (horizontal)"
-msgstr "镜头平移（水平）"
+msgstr "镜头偏移（水平）"
 
 #: ../build/src/iop/introspection_ashift.c:142
 #: ../build/src/iop/introspection_ashift.c:287
@@ -1889,7 +1889,7 @@ msgstr "指定"
 #: ../build/src/iop/introspection_ashift.c:366
 #: ../build/src/iop/introspection_colorin.c:307
 #: ../build/src/iop/introspection_vignette.c:263 ../src/develop/blend_gui.c:101
-#: ../src/develop/blend_gui.c:124 ../src/develop/develop.c:2039
+#: ../src/develop/blend_gui.c:124 ../src/develop/develop.c:2052
 #: ../src/gui/accelerators.c:121 ../src/gui/accelerators.c:130
 #: ../src/gui/accelerators.c:203 ../src/imageio/format/avif.c:831
 #: ../src/imageio/format/j2k.c:672
@@ -1952,7 +1952,7 @@ msgstr "无"
 #: ../build/src/iop/introspection_rgbcurve.c:252
 #: ../build/src/iop/introspection_rgblevels.c:154
 #: ../build/src/iop/introspection_tonecurve.c:271
-#: ../src/develop/blend_gui.c:2093 ../src/develop/blend_gui.c:2112
+#: ../src/develop/blend_gui.c:2094 ../src/develop/blend_gui.c:2113
 #: ../src/iop/colorbalancergb.c:2067 ../src/iop/colorbalancergb.c:2068
 #: ../src/iop/colorbalancergb.c:2069 ../src/iop/colorbalancergb.c:2070
 msgid "luminance"
@@ -2063,7 +2063,7 @@ msgstr "线性"
 #: ../build/src/iop/introspection_graduatednd.c:75
 #: ../build/src/iop/introspection_graduatednd.c:144
 #: ../build/src/iop/introspection_watermark.c:118
-#: ../build/src/iop/introspection_watermark.c:235 ../src/iop/ashift.c:5642
+#: ../build/src/iop/introspection_watermark.c:235 ../src/iop/ashift.c:5524
 msgid "rotation"
 msgstr "旋转"
 
@@ -2212,35 +2212,35 @@ msgstr "严重色差"
 
 #: ../build/src/iop/introspection_cacorrectrgb.c:158
 #: ../src/common/collection.c:1661 ../src/common/color_vocabulary.c:232
-#: ../src/develop/blend_gui.c:2075 ../src/develop/blend_gui.c:2102
+#: ../src/develop/blend_gui.c:2076 ../src/develop/blend_gui.c:2103
 #: ../src/develop/lightroom.c:834 ../src/gui/gtk.c:1554 ../src/gui/guides.c:727
 #: ../src/iop/bilateral.cc:305 ../src/iop/channelmixer.c:626
 #: ../src/iop/channelmixer.c:636 ../src/iop/channelmixerrgb.c:4134
-#: ../src/iop/colorzones.c:2302 ../src/iop/temperature.c:1740
-#: ../src/iop/temperature.c:1904 ../src/libs/collect.c:1797
+#: ../src/iop/colorzones.c:2302 ../src/iop/temperature.c:1757
+#: ../src/iop/temperature.c:1921 ../src/libs/collect.c:1797
 msgid "red"
 msgstr "红"
 
 #: ../build/src/iop/introspection_cacorrectrgb.c:159
 #: ../src/common/collection.c:1665 ../src/common/color_vocabulary.c:277
-#: ../src/develop/blend_gui.c:2078 ../src/develop/blend_gui.c:2105
+#: ../src/develop/blend_gui.c:2079 ../src/develop/blend_gui.c:2106
 #: ../src/develop/lightroom.c:838 ../src/gui/gtk.c:1555 ../src/gui/guides.c:728
 #: ../src/iop/bilateral.cc:310 ../src/iop/channelmixer.c:627
 #: ../src/iop/channelmixer.c:642 ../src/iop/channelmixerrgb.c:4135
-#: ../src/iop/colorzones.c:2305 ../src/iop/temperature.c:1724
-#: ../src/iop/temperature.c:1742 ../src/iop/temperature.c:1905
+#: ../src/iop/colorzones.c:2305 ../src/iop/temperature.c:1741
+#: ../src/iop/temperature.c:1759 ../src/iop/temperature.c:1922
 #: ../src/libs/collect.c:1797
 msgid "green"
 msgstr "绿"
 
 #: ../build/src/iop/introspection_cacorrectrgb.c:160
 #: ../src/common/collection.c:1667 ../src/common/color_vocabulary.c:324
-#: ../src/develop/blend_gui.c:2081 ../src/develop/blend_gui.c:2108
+#: ../src/develop/blend_gui.c:2082 ../src/develop/blend_gui.c:2109
 #: ../src/develop/lightroom.c:840 ../src/gui/gtk.c:1556
 #: ../src/iop/bilateral.cc:315 ../src/iop/channelmixer.c:628
 #: ../src/iop/channelmixer.c:648 ../src/iop/channelmixerrgb.c:4136
-#: ../src/iop/colorzones.c:2307 ../src/iop/temperature.c:1744
-#: ../src/iop/temperature.c:1906 ../src/libs/collect.c:1797
+#: ../src/iop/colorzones.c:2307 ../src/iop/temperature.c:1761
+#: ../src/iop/temperature.c:1923 ../src/libs/collect.c:1797
 msgid "blue"
 msgstr "蓝"
 
@@ -2796,8 +2796,8 @@ msgstr "饱和色"
 #: ../build/src/iop/introspection_splittoning.c:73
 #: ../build/src/iop/introspection_splittoning.c:134
 #: ../build/src/iop/introspection_splittoning.c:142
-#: ../src/develop/blend_gui.c:2066 ../src/develop/blend_gui.c:2085
-#: ../src/develop/blend_gui.c:2120 ../src/iop/channelmixer.c:623
+#: ../src/develop/blend_gui.c:2067 ../src/develop/blend_gui.c:2086
+#: ../src/develop/blend_gui.c:2121 ../src/iop/channelmixer.c:623
 #: ../src/iop/channelmixerrgb.c:4006 ../src/iop/channelmixerrgb.c:4096
 #: ../src/iop/colorbalance.c:1991 ../src/iop/colorbalancergb.c:2059
 #: ../src/iop/colorbalancergb.c:2060 ../src/iop/colorbalancergb.c:2061
@@ -2826,7 +2826,7 @@ msgid "process mode"
 msgstr "处理模式"
 
 #: ../build/src/iop/introspection_colorzones.c:255
-#: ../src/develop/blend_gui.c:2052 ../src/iop/channelmixer.c:625
+#: ../src/develop/blend_gui.c:2053 ../src/iop/channelmixer.c:625
 #: ../src/iop/channelmixerrgb.c:4089 ../src/iop/colorchecker.c:1359
 #: ../src/iop/colorize.c:364 ../src/iop/colorzones.c:2431
 #: ../src/iop/exposure.c:1096
@@ -2840,7 +2840,7 @@ msgstr "明度"
 #: ../build/src/iop/introspection_splittoning.c:79
 #: ../build/src/iop/introspection_splittoning.c:138
 #: ../build/src/iop/introspection_splittoning.c:146
-#: ../src/develop/blend_gui.c:2062 ../src/iop/basicadj.c:627
+#: ../src/develop/blend_gui.c:2063 ../src/iop/basicadj.c:627
 #: ../src/iop/channelmixer.c:624 ../src/iop/colisa.c:308
 #: ../src/iop/colorbalance.c:2008 ../src/iop/colorbalancergb.c:2077
 #: ../src/iop/colorbalancergb.c:2078 ../src/iop/colorbalancergb.c:2079
@@ -3078,7 +3078,7 @@ msgstr "升级分析变换"
 
 #: ../build/src/iop/introspection_denoiseprofile.c:257
 #: ../build/src/iop/introspection_denoiseprofile.c:388
-#: ../src/imageio/format/avif.c:806 ../src/libs/colorpicker.c:588
+#: ../src/imageio/format/avif.c:806 ../src/libs/colorpicker.c:581
 msgid "color mode"
 msgstr "色彩模式"
 
@@ -3350,7 +3350,7 @@ msgstr "样条处理"
 
 #: ../build/src/iop/introspection_filmicrgb.c:534
 #: ../build/src/iop/introspection_toneequal.c:371 ../src/common/database.c:2752
-#: ../src/common/variables.c:592 ../src/develop/imageop_gui.c:196
+#: ../src/common/variables.c:593 ../src/develop/imageop_gui.c:196
 #: ../src/imageio/format/pdf.c:647 ../src/imageio/format/pdf.c:672
 #: ../src/libs/export.c:1196 ../src/libs/export.c:1202
 #: ../src/libs/export.c:1209 ../src/libs/metadata_view.c:679
@@ -3892,7 +3892,7 @@ msgstr "高亮色彩调整"
 
 #: ../build/src/iop/introspection_temperature.c:66
 #: ../build/src/iop/introspection_temperature.c:121
-#: ../src/iop/temperature.c:1746
+#: ../src/iop/temperature.c:1763
 msgid "emerald"
 msgstr "祖母绿"
 
@@ -4432,7 +4432,7 @@ msgstr "评级"
 
 #: ../src/common/collection.c:1663 ../src/develop/lightroom.c:836
 #: ../src/gui/guides.c:729 ../src/iop/colorzones.c:2304
-#: ../src/iop/temperature.c:1730 ../src/libs/collect.c:1797
+#: ../src/iop/temperature.c:1747 ../src/libs/collect.c:1797
 msgid "yellow"
 msgstr "黄"
 
@@ -4489,8 +4489,8 @@ msgid "%d image of %d in current collection is selected"
 msgid_plural "%d images of %d in current collection are selected"
 msgstr[0] "已选 %d 张图像，当前集合共 %d 张图像。"
 
-#: ../src/common/color_vocabulary.c:38 ../src/develop/blend_gui.c:2072
-#: ../src/develop/blend_gui.c:2099 ../src/gui/guides.c:726
+#: ../src/common/color_vocabulary.c:38 ../src/develop/blend_gui.c:2073
+#: ../src/develop/blend_gui.c:2100 ../src/gui/guides.c:726
 #: ../src/iop/channelmixerrgb.c:4140 ../src/iop/levels.c:668
 #: ../src/iop/rgblevels.c:950
 msgid "gray"
@@ -4706,7 +4706,7 @@ msgid "aqua"
 msgstr "水蓝"
 
 #: ../src/common/color_vocabulary.c:298 ../src/gui/guides.c:730
-#: ../src/iop/temperature.c:1728
+#: ../src/iop/temperature.c:1745
 msgid "cyan"
 msgstr "青色"
 
@@ -4772,7 +4772,7 @@ msgid "dark magenta"
 msgstr "深洋红"
 
 #: ../src/common/color_vocabulary.c:341 ../src/gui/guides.c:731
-#: ../src/iop/colorzones.c:2309 ../src/iop/temperature.c:1726
+#: ../src/iop/colorzones.c:2309 ../src/iop/temperature.c:1743
 msgid "magenta"
 msgstr "品红"
 
@@ -4835,7 +4835,7 @@ msgid "linear XYZ"
 msgstr "线性 XYZ"
 
 #: ../src/common/colorspaces.c:1515 ../src/common/colorspaces.c:1654
-#: ../src/develop/blend_gui.c:95 ../src/develop/blend_gui.c:1720
+#: ../src/develop/blend_gui.c:95 ../src/develop/blend_gui.c:1721
 #: ../src/libs/colorpicker.c:51 ../src/libs/colorpicker.c:261
 msgid "Lab"
 msgstr "Lab"
@@ -5106,7 +5106,7 @@ msgstr ""
 "确定要删除数据库锁文件？\n"
 
 #: ../src/common/database.c:2752 ../src/common/database.c:3812
-#: ../src/common/variables.c:590 ../src/develop/imageop_gui.c:197
+#: ../src/common/variables.c:591 ../src/develop/imageop_gui.c:197
 #: ../src/imageio/format/pdf.c:648 ../src/imageio/format/pdf.c:673
 #: ../src/libs/export.c:1197 ../src/libs/export.c:1203
 #: ../src/libs/export.c:1210 ../src/libs/metadata_view.c:679
@@ -5656,7 +5656,7 @@ msgstr ""
 msgid "Ansel — Open pictures"
 msgstr "Ansel - 导入图片"
 
-#: ../src/common/import.c:829 ../src/iop/crop.c:962
+#: ../src/common/import.c:829 ../src/iop/ashift.c:5140 ../src/iop/crop.c:962
 msgid "Cancel"
 msgstr "取消"
 
@@ -6807,11 +6807,11 @@ msgstr "默认"
 msgid "RAW"
 msgstr "RAW"
 
-#: ../src/develop/blend_gui.c:96 ../src/develop/blend_gui.c:1732
+#: ../src/develop/blend_gui.c:96 ../src/develop/blend_gui.c:1733
 msgid "RGB (display)"
 msgstr "RGB（显示）"
 
-#: ../src/develop/blend_gui.c:97 ../src/develop/blend_gui.c:1743
+#: ../src/develop/blend_gui.c:97 ../src/develop/blend_gui.c:1744
 msgid "RGB (scene)"
 msgstr "RGB（场景）"
 
@@ -6819,18 +6819,18 @@ msgstr "RGB（场景）"
 msgid "uniformly"
 msgstr "均匀"
 
-#: ../src/develop/blend_gui.c:103 ../src/develop/blend_gui.c:2428
-#: ../src/develop/imageop.c:2271
+#: ../src/develop/blend_gui.c:103 ../src/develop/blend_gui.c:2429
+#: ../src/develop/imageop.c:2270
 msgid "drawn mask"
 msgstr "绘制蒙板"
 
-#: ../src/develop/blend_gui.c:104 ../src/develop/blend_gui.c:2235
-#: ../src/develop/imageop.c:2273
+#: ../src/develop/blend_gui.c:104 ../src/develop/blend_gui.c:2236
+#: ../src/develop/imageop.c:2272
 msgid "parametric mask"
 msgstr "参数蒙版"
 
-#: ../src/develop/blend_gui.c:105 ../src/develop/blend_gui.c:2610
-#: ../src/develop/imageop.c:2275
+#: ../src/develop/blend_gui.c:105 ../src/develop/blend_gui.c:2611
+#: ../src/develop/imageop.c:2274
 msgid "raster mask"
 msgstr "光栅蒙版"
 
@@ -6870,18 +6870,18 @@ msgstr "模糊后的输出"
 msgid "input after blur"
 msgstr "模糊后的输入"
 
-#: ../src/develop/blend_gui.c:125 ../src/develop/develop.c:2039
+#: ../src/develop/blend_gui.c:125 ../src/develop/develop.c:2052
 #: ../src/gui/accelerators.c:120 ../src/gui/accelerators.c:129
 #: ../src/gui/accelerators.c:203 ../src/imageio/format/avif.c:829
 msgid "on"
 msgstr "开"
 
-#: ../src/develop/blend_gui.c:856 ../src/develop/blend_gui.c:2296
+#: ../src/develop/blend_gui.c:856 ../src/develop/blend_gui.c:2297
 #: ../src/iop/channelmixerrgb.c:4057 ../src/iop/exposure.c:1064
 msgid "input"
 msgstr "输入"
 
-#: ../src/develop/blend_gui.c:856 ../src/develop/blend_gui.c:2296
+#: ../src/develop/blend_gui.c:856 ../src/develop/blend_gui.c:2297
 msgid "output"
 msgstr "输出"
 
@@ -6893,125 +6893,125 @@ msgstr " （缩放）"
 msgid " (log)"
 msgstr " （对数）"
 
-#: ../src/develop/blend_gui.c:1711
+#: ../src/develop/blend_gui.c:1712
 msgid "reset to default blend colorspace"
 msgstr "重置为默认混合颜色空间"
 
-#: ../src/develop/blend_gui.c:1758
+#: ../src/develop/blend_gui.c:1759
 msgid "reset and hide output channels"
 msgstr "重置和隐藏输出通道"
 
-#: ../src/develop/blend_gui.c:1764
+#: ../src/develop/blend_gui.c:1765
 msgid "show output channels"
 msgstr "显示输出通道"
 
-#: ../src/develop/blend_gui.c:2050 ../src/develop/blend_gui.c:2090
+#: ../src/develop/blend_gui.c:2051 ../src/develop/blend_gui.c:2091
 #: ../src/iop/tonecurve.c:1160
 msgid "L"
 msgstr "L"
 
-#: ../src/develop/blend_gui.c:2050
+#: ../src/develop/blend_gui.c:2051
 msgid "sliders for L channel"
 msgstr "滑块 - L 通道。"
 
-#: ../src/develop/blend_gui.c:2053 ../src/iop/tonecurve.c:1161
+#: ../src/develop/blend_gui.c:2054 ../src/iop/tonecurve.c:1161
 msgid "a"
 msgstr "a"
 
-#: ../src/develop/blend_gui.c:2053
+#: ../src/develop/blend_gui.c:2054
 msgid "sliders for a channel"
 msgstr "滑块 - a 通道。"
 
-#: ../src/develop/blend_gui.c:2055
+#: ../src/develop/blend_gui.c:2056
 msgid "green/red"
 msgstr "绿/红"
 
-#: ../src/develop/blend_gui.c:2056 ../src/iop/tonecurve.c:1162
+#: ../src/develop/blend_gui.c:2057 ../src/iop/tonecurve.c:1162
 msgid "b"
 msgstr "b"
 
-#: ../src/develop/blend_gui.c:2056
+#: ../src/develop/blend_gui.c:2057
 msgid "sliders for b channel"
 msgstr "滑块 - b 通道。"
 
-#: ../src/develop/blend_gui.c:2058
+#: ../src/develop/blend_gui.c:2059
 msgid "blue/yellow"
 msgstr "蓝/黄"
 
-#: ../src/develop/blend_gui.c:2059
+#: ../src/develop/blend_gui.c:2060
 msgid "C"
 msgstr "C"
 
-#: ../src/develop/blend_gui.c:2059
+#: ../src/develop/blend_gui.c:2060
 msgid "sliders for chroma channel (of LCh)"
 msgstr "色度通道滑块（LCh）。"
 
-#: ../src/develop/blend_gui.c:2063
+#: ../src/develop/blend_gui.c:2064
 msgid "h"
 msgstr "h"
 
-#: ../src/develop/blend_gui.c:2063
+#: ../src/develop/blend_gui.c:2064
 msgid "sliders for hue channel (of LCh)"
 msgstr "色相通道滑块（LCh）。"
 
-#: ../src/develop/blend_gui.c:2070 ../src/develop/blend_gui.c:2097
+#: ../src/develop/blend_gui.c:2071 ../src/develop/blend_gui.c:2098
 msgid "g"
 msgstr "g"
 
-#: ../src/develop/blend_gui.c:2070 ../src/develop/blend_gui.c:2097
+#: ../src/develop/blend_gui.c:2071 ../src/develop/blend_gui.c:2098
 msgid "sliders for gray value"
 msgstr "灰度值滑块。"
 
-#: ../src/develop/blend_gui.c:2073 ../src/develop/blend_gui.c:2100
+#: ../src/develop/blend_gui.c:2074 ../src/develop/blend_gui.c:2101
 #: ../src/iop/channelmixerrgb.c:4134 ../src/iop/denoiseprofile.c:3583
 #: ../src/iop/rawdenoise.c:906 ../src/iop/rgbcurve.c:1369
 #: ../src/iop/rgblevels.c:1016
 msgid "R"
 msgstr "红"
 
-#: ../src/develop/blend_gui.c:2073 ../src/develop/blend_gui.c:2100
+#: ../src/develop/blend_gui.c:2074 ../src/develop/blend_gui.c:2101
 msgid "sliders for red channel"
 msgstr "红色通道滑块。"
 
-#: ../src/develop/blend_gui.c:2076 ../src/develop/blend_gui.c:2103
+#: ../src/develop/blend_gui.c:2077 ../src/develop/blend_gui.c:2104
 #: ../src/iop/channelmixerrgb.c:4135 ../src/iop/denoiseprofile.c:3584
 #: ../src/iop/rawdenoise.c:907 ../src/iop/rgbcurve.c:1370
 #: ../src/iop/rgblevels.c:1017
 msgid "G"
 msgstr "绿"
 
-#: ../src/develop/blend_gui.c:2076 ../src/develop/blend_gui.c:2103
+#: ../src/develop/blend_gui.c:2077 ../src/develop/blend_gui.c:2104
 msgid "sliders for green channel"
 msgstr "绿色通道滑块。"
 
-#: ../src/develop/blend_gui.c:2079 ../src/develop/blend_gui.c:2106
+#: ../src/develop/blend_gui.c:2080 ../src/develop/blend_gui.c:2107
 #: ../src/iop/channelmixerrgb.c:4136 ../src/iop/denoiseprofile.c:3585
 #: ../src/iop/rawdenoise.c:908 ../src/iop/rgbcurve.c:1371
 #: ../src/iop/rgblevels.c:1018
 msgid "B"
 msgstr "蓝"
 
-#: ../src/develop/blend_gui.c:2079 ../src/develop/blend_gui.c:2106
+#: ../src/develop/blend_gui.c:2080 ../src/develop/blend_gui.c:2107
 msgid "sliders for blue channel"
 msgstr "蓝色通道滑块。"
 
-#: ../src/develop/blend_gui.c:2082
+#: ../src/develop/blend_gui.c:2083
 msgid "H"
 msgstr "H"
 
-#: ../src/develop/blend_gui.c:2082
+#: ../src/develop/blend_gui.c:2083
 msgid "sliders for hue channel (of HSL)"
 msgstr "色相通道滑块（HSL）。"
 
-#: ../src/develop/blend_gui.c:2086
+#: ../src/develop/blend_gui.c:2087
 msgid "S"
 msgstr "S"
 
-#: ../src/develop/blend_gui.c:2086
+#: ../src/develop/blend_gui.c:2087
 msgid "sliders for chroma channel (of HSL)"
 msgstr "饱和度通道滑块（HSL）。"
 
-#: ../src/develop/blend_gui.c:2089 ../src/develop/blend_gui.c:2116
+#: ../src/develop/blend_gui.c:2090 ../src/develop/blend_gui.c:2117
 #: ../src/iop/atrous.c:1737 ../src/iop/channelmixerrgb.c:4012
 #: ../src/iop/channelmixerrgb.c:4103 ../src/iop/colorbalancergb.c:2063
 #: ../src/iop/colorbalancergb.c:2064 ../src/iop/colorbalancergb.c:2065
@@ -7021,35 +7021,35 @@ msgstr "饱和度通道滑块（HSL）。"
 msgid "chroma"
 msgstr "色度"
 
-#: ../src/develop/blend_gui.c:2090
+#: ../src/develop/blend_gui.c:2091
 msgid "sliders for value channel (of HSL)"
 msgstr "值通道滑块（HSL）。"
 
-#: ../src/develop/blend_gui.c:2109
+#: ../src/develop/blend_gui.c:2110
 msgid "Jz"
 msgstr "Jz"
 
-#: ../src/develop/blend_gui.c:2109
+#: ../src/develop/blend_gui.c:2110
 msgid "sliders for value channel (of JzCzhz)"
 msgstr "值通道滑块（JzCzhz）。"
 
-#: ../src/develop/blend_gui.c:2113
+#: ../src/develop/blend_gui.c:2114
 msgid "Cz"
 msgstr "Cz"
 
-#: ../src/develop/blend_gui.c:2113
+#: ../src/develop/blend_gui.c:2114
 msgid "sliders for chroma channel (of JzCzhz)"
 msgstr "色度通道滑块（JzCzhz）。"
 
-#: ../src/develop/blend_gui.c:2117
+#: ../src/develop/blend_gui.c:2118
 msgid "hz"
 msgstr "hz"
 
-#: ../src/develop/blend_gui.c:2117
+#: ../src/develop/blend_gui.c:2118
 msgid "sliders for hue channel (of JzCzhz)"
 msgstr "色调通道滑块（JzCzhz）。"
 
-#: ../src/develop/blend_gui.c:2123
+#: ../src/develop/blend_gui.c:2124
 msgid ""
 "adjustment based on input received by this module:\n"
 "* range defined by upper markers: blend fully\n"
@@ -7061,7 +7061,7 @@ msgstr ""
 "* 由下标定义的范围：完全不混合。\n"
 "* 相邻的上/下标之间的范围：逐渐混合。"
 
-#: ../src/develop/blend_gui.c:2126
+#: ../src/develop/blend_gui.c:2127
 msgid ""
 "adjustment based on unblended output of this module:\n"
 "* range defined by upper markers: blend fully\n"
@@ -7073,18 +7073,18 @@ msgstr ""
 "* 由下标定义的范围：完全不混合。\n"
 "* 相邻的上/下标之间的范围：逐渐混合。"
 
-#: ../src/develop/blend_gui.c:2238
+#: ../src/develop/blend_gui.c:2239
 msgid "reset blend mask settings"
 msgstr "重置混合蒙板设置。"
 
-#: ../src/develop/blend_gui.c:2249 ../src/iop/atrous.c:1735
+#: ../src/develop/blend_gui.c:2250 ../src/iop/atrous.c:1735
 #: ../src/iop/colorzones.c:2429 ../src/iop/denoiseprofile.c:3581
 #: ../src/iop/rawdenoise.c:903 ../src/iop/rgbcurve.c:1368
 #: ../src/iop/rgblevels.c:1015 ../src/iop/tonecurve.c:1159
 msgid "channel"
 msgstr "通道"
 
-#: ../src/develop/blend_gui.c:2259 ../src/iop/colorzones.c:2443
+#: ../src/develop/blend_gui.c:2260 ../src/iop/colorzones.c:2443
 #: ../src/iop/rgbcurve.c:1378 ../src/iop/tonecurve.c:1168
 msgid ""
 "pick GUI color from image\n"
@@ -7093,7 +7093,7 @@ msgstr ""
 "从图像中选择 GUI 颜色。\n"
 "Ctrl + 单击或右键以选择区域。"
 
-#: ../src/develop/blend_gui.c:2266
+#: ../src/develop/blend_gui.c:2267
 msgid ""
 "set the range based on an area from the image\n"
 "drag to use the input image\n"
@@ -7102,15 +7102,15 @@ msgstr ""
 "以输入图像的方式从图像框选区域来设置范围。\n"
 "Ctrl + 框选，将以输出图像的方式来设置范围。"
 
-#: ../src/develop/blend_gui.c:2270
+#: ../src/develop/blend_gui.c:2271
 msgid "invert all channel's polarities"
 msgstr "切换所有通道的正反选择。"
 
-#: ../src/develop/blend_gui.c:2290
+#: ../src/develop/blend_gui.c:2291
 msgid "toggle polarity. best seen by enabling 'display mask'"
 msgstr "极性切换。启用“显示蒙板”以显示最好效果。"
 
-#: ../src/develop/blend_gui.c:2317
+#: ../src/develop/blend_gui.c:2318
 msgid ""
 "double-click to reset.\n"
 "press 'a' to toggle available slider modes.\n"
@@ -7122,7 +7122,7 @@ msgstr ""
 "按c键切换至通道数据视图。\n"
 "按m键切换至蒙版视图。"
 
-#: ../src/develop/blend_gui.c:2334 ../src/develop/blend_gui.c:3111
+#: ../src/develop/blend_gui.c:2335 ../src/develop/blend_gui.c:3112
 #: ../src/iop/basicadj.c:603 ../src/iop/colorbalancergb.c:2024
 #: ../src/iop/exposure.c:1000 ../src/iop/exposure.c:1013
 #: ../src/iop/filmic.c:1608 ../src/iop/filmic.c:1620 ../src/iop/filmic.c:1660
@@ -7140,152 +7140,152 @@ msgstr ""
 msgid " EV"
 msgstr " EV"
 
-#: ../src/develop/blend_gui.c:2335 ../src/develop/blend_gui.c:2428
-#: ../src/develop/blend_gui.c:2610 ../src/develop/blend_gui.c:2671
-#: ../src/develop/blend_gui.c:3093 ../src/develop/blend_gui.c:3110
-#: ../src/develop/blend_gui.c:3119 ../src/develop/blend_gui.c:3136
-#: ../src/develop/blend_gui.c:3150 ../src/develop/blend_gui.c:3156
-#: ../src/develop/blend_gui.c:3162 ../src/develop/blend_gui.c:3170
+#: ../src/develop/blend_gui.c:2336 ../src/develop/blend_gui.c:2429
+#: ../src/develop/blend_gui.c:2611 ../src/develop/blend_gui.c:2672
+#: ../src/develop/blend_gui.c:3094 ../src/develop/blend_gui.c:3111
+#: ../src/develop/blend_gui.c:3120 ../src/develop/blend_gui.c:3137
+#: ../src/develop/blend_gui.c:3151 ../src/develop/blend_gui.c:3157
+#: ../src/develop/blend_gui.c:3163 ../src/develop/blend_gui.c:3171
 msgid "blend"
 msgstr "混合"
 
-#: ../src/develop/blend_gui.c:2335
+#: ../src/develop/blend_gui.c:2336
 msgid "boost factor"
 msgstr "强化要素"
 
-#: ../src/develop/blend_gui.c:2337
+#: ../src/develop/blend_gui.c:2338
 msgid "adjust the boost factor of the channel mask"
 msgstr "调整通道蒙版的强化要素。"
 
-#: ../src/develop/blend_gui.c:2369
+#: ../src/develop/blend_gui.c:2370
 #, c-format
 msgid "%d shape used"
 msgid_plural "%d shapes used"
 msgstr[0] "已使用 %d 个形状"
 
-#: ../src/develop/blend_gui.c:2374 ../src/develop/blend_gui.c:2430
-#: ../src/develop/blend_gui.c:2496 ../src/develop/blend_gui.c:2611
+#: ../src/develop/blend_gui.c:2375 ../src/develop/blend_gui.c:2431
+#: ../src/develop/blend_gui.c:2497 ../src/develop/blend_gui.c:2612
 msgid "no mask used"
 msgstr "没有蒙版被使用"
 
-#: ../src/develop/blend_gui.c:2436
+#: ../src/develop/blend_gui.c:2437
 msgid "toggle polarity of drawn mask"
 msgstr "切换绘制遮罩的正反选择。"
 
-#: ../src/develop/blend_gui.c:2443
+#: ../src/develop/blend_gui.c:2444
 msgid "show and edit mask elements"
 msgstr "显示和编辑蒙版元素。"
 
-#: ../src/develop/blend_gui.c:2443
+#: ../src/develop/blend_gui.c:2444
 msgid "show and edit in restricted mode"
 msgstr "在受限模式中显示并编辑形状。"
 
-#: ../src/develop/blend_gui.c:2448 ../src/libs/masks.c:940
+#: ../src/develop/blend_gui.c:2449 ../src/libs/masks.c:940
 #: ../src/libs/masks.c:968 ../src/libs/masks.c:1634
 msgid "add gradient"
 msgstr "添加渐变。"
 
-#: ../src/develop/blend_gui.c:2448
+#: ../src/develop/blend_gui.c:2449
 msgid "add multiple gradients"
 msgstr "添加多个渐变。"
 
-#: ../src/develop/blend_gui.c:2453 ../src/iop/retouch.c:2200
+#: ../src/develop/blend_gui.c:2454 ../src/iop/retouch.c:2200
 #: ../src/libs/masks.c:952 ../src/libs/masks.c:1658
 msgid "add brush"
 msgstr "添加画笔。"
 
-#: ../src/develop/blend_gui.c:2453 ../src/iop/retouch.c:2200
+#: ../src/develop/blend_gui.c:2454 ../src/iop/retouch.c:2200
 msgid "add multiple brush strokes"
 msgstr "添加多个笔刷。"
 
-#: ../src/develop/blend_gui.c:2458 ../src/iop/retouch.c:2204
+#: ../src/develop/blend_gui.c:2459 ../src/iop/retouch.c:2204
 #: ../src/iop/spots.c:821 ../src/libs/masks.c:936 ../src/libs/masks.c:964
 #: ../src/libs/masks.c:1640
 msgid "add path"
 msgstr "添加路径。"
 
-#: ../src/develop/blend_gui.c:2458 ../src/iop/retouch.c:2204
+#: ../src/develop/blend_gui.c:2459 ../src/iop/retouch.c:2204
 #: ../src/iop/spots.c:821
 msgid "add multiple paths"
 msgstr "添加多个路径。"
 
-#: ../src/develop/blend_gui.c:2463 ../src/iop/retouch.c:2208
+#: ../src/develop/blend_gui.c:2464 ../src/iop/retouch.c:2208
 #: ../src/iop/spots.c:825 ../src/libs/masks.c:932 ../src/libs/masks.c:960
 #: ../src/libs/masks.c:1646
 msgid "add ellipse"
 msgstr "添加椭圆。"
 
-#: ../src/develop/blend_gui.c:2463 ../src/iop/retouch.c:2208
+#: ../src/develop/blend_gui.c:2464 ../src/iop/retouch.c:2208
 #: ../src/iop/spots.c:825
 msgid "add multiple ellipses"
 msgstr "添加多个椭圆。"
 
-#: ../src/develop/blend_gui.c:2468 ../src/iop/retouch.c:2212
+#: ../src/develop/blend_gui.c:2469 ../src/iop/retouch.c:2212
 #: ../src/iop/spots.c:829 ../src/libs/masks.c:928 ../src/libs/masks.c:956
 #: ../src/libs/masks.c:1652
 msgid "add circle"
 msgstr "添加圆。"
 
-#: ../src/develop/blend_gui.c:2468 ../src/iop/retouch.c:2212
+#: ../src/develop/blend_gui.c:2469 ../src/iop/retouch.c:2212
 #: ../src/iop/spots.c:829
 msgid "add multiple circles"
 msgstr "添加多个圆。"
 
-#: ../src/develop/blend_gui.c:2619
+#: ../src/develop/blend_gui.c:2620
 msgid "toggle polarity of raster mask"
 msgstr "切换光栅蒙版的正反选择。"
 
-#: ../src/develop/blend_gui.c:3069
+#: ../src/develop/blend_gui.c:3070
 msgid "blending options"
 msgstr "混合选项"
 
-#: ../src/develop/blend_gui.c:3079
+#: ../src/develop/blend_gui.c:3080
 msgid "None"
 msgstr "无"
 
-#: ../src/develop/blend_gui.c:3080
+#: ../src/develop/blend_gui.c:3081
 msgid "Uniform"
 msgstr "均匀"
 
-#: ../src/develop/blend_gui.c:3081
+#: ../src/develop/blend_gui.c:3082
 msgid "Parametric mask"
 msgstr "参数蒙版"
 
-#: ../src/develop/blend_gui.c:3082
+#: ../src/develop/blend_gui.c:3083
 msgid "Drawn mask"
 msgstr "绘制蒙板"
 
-#: ../src/develop/blend_gui.c:3083
+#: ../src/develop/blend_gui.c:3084
 msgid "Drawn & parametric mask"
 msgstr "绘制 & 参数蒙版"
 
-#: ../src/develop/blend_gui.c:3084
+#: ../src/develop/blend_gui.c:3085
 msgid "Reuse an existing mask"
 msgstr "复用已存在的模版"
 
-#: ../src/develop/blend_gui.c:3087
+#: ../src/develop/blend_gui.c:3088
 msgid "Blending"
 msgstr "蒙版混合"
 
-#: ../src/develop/blend_gui.c:3088
+#: ../src/develop/blend_gui.c:3089
 msgid ""
 "Define opacity masks and blending modes to limit the spatial application of "
 "the module."
 msgstr "设置不透明蒙版和混合模式以限制模块的应用范围。"
 
-#: ../src/develop/blend_gui.c:3093 ../src/libs/history.c:861
+#: ../src/develop/blend_gui.c:3094 ../src/libs/history.c:861
 msgid "blend mode"
 msgstr "混合模式"
 
-#: ../src/develop/blend_gui.c:3094
+#: ../src/develop/blend_gui.c:3095
 msgid "choose blending mode"
 msgstr "选择混合模式。"
 
-#: ../src/develop/blend_gui.c:3101
+#: ../src/develop/blend_gui.c:3102
 msgid "toggle blend order"
 msgstr "切换混合顺序"
 
-#: ../src/develop/blend_gui.c:3104
+#: ../src/develop/blend_gui.c:3105
 msgid ""
 "toggle the blending order between the input and the output of the module,\n"
 "by default the output will be blended on top of the input,\n"
@@ -7295,46 +7295,46 @@ msgstr ""
 "默认情况下，输出将在输入的上方混合，\n"
 "顺序可以通过点击图标逆转（输入在输出的上方）。"
 
-#: ../src/develop/blend_gui.c:3110 ../src/libs/history.c:863
+#: ../src/develop/blend_gui.c:3111 ../src/libs/history.c:863
 msgid "blend fulcrum"
 msgstr "混合支点"
 
-#: ../src/develop/blend_gui.c:3113
+#: ../src/develop/blend_gui.c:3114
 msgid "adjust the fulcrum used by some blending operations"
 msgstr "调整部分混合操作的支点。"
 
 #. Add opacity/scale sliders to table
-#: ../src/develop/blend_gui.c:3119 ../src/iop/watermark.c:1123
+#: ../src/develop/blend_gui.c:3120 ../src/iop/watermark.c:1123
 msgid "opacity"
 msgstr "不透明度"
 
-#: ../src/develop/blend_gui.c:3122
+#: ../src/develop/blend_gui.c:3123
 msgid "set the opacity of the blending"
 msgstr "设置混合模式的不透明度。"
 
-#: ../src/develop/blend_gui.c:3124 ../src/libs/history.c:865
+#: ../src/develop/blend_gui.c:3125 ../src/libs/history.c:865
 msgid "combine masks"
 msgstr "组合蒙版"
 
-#: ../src/develop/blend_gui.c:3125
+#: ../src/develop/blend_gui.c:3126
 msgid ""
 "how to combine individual drawn mask and different channels of parametric "
 "mask"
 msgstr "如何组合单独的绘制蒙版和参数蒙版的不同频道。"
 
-#: ../src/develop/blend_gui.c:3130 ../src/libs/history.c:873
+#: ../src/develop/blend_gui.c:3131 ../src/libs/history.c:873
 msgid "invert mask"
 msgstr "反转蒙版"
 
-#: ../src/develop/blend_gui.c:3131
+#: ../src/develop/blend_gui.c:3132
 msgid "apply mask in normal or inverted mode"
 msgstr "使用正常或反转模式应用蒙版。"
 
-#: ../src/develop/blend_gui.c:3136
+#: ../src/develop/blend_gui.c:3137
 msgid "details threshold"
 msgstr "细节阈值"
 
-#: ../src/develop/blend_gui.c:3138
+#: ../src/develop/blend_gui.c:3139
 msgid ""
 "adjust the threshold for the details mask (using raw data), \n"
 "positive values selects areas with strong details, \n"
@@ -7344,11 +7344,11 @@ msgstr ""
 "正值选择具有强烈细节的区域，\n"
 "负值选择平坦的区域。"
 
-#: ../src/develop/blend_gui.c:3143 ../src/libs/history.c:867
+#: ../src/develop/blend_gui.c:3144 ../src/libs/history.c:867
 msgid "feathering guide"
 msgstr "羽化引导"
 
-#: ../src/develop/blend_gui.c:3145
+#: ../src/develop/blend_gui.c:3146
 msgid ""
 "choose to guide mask by input or output image and\n"
 "choose to apply feathering before or after mask blur"
@@ -7356,52 +7356,52 @@ msgstr ""
 "选择通过输入或输出图像来引导蒙版。\n"
 "选择在蒙版模糊之前或之后应用羽化。"
 
-#: ../src/develop/blend_gui.c:3150 ../src/libs/history.c:866
+#: ../src/develop/blend_gui.c:3151 ../src/libs/history.c:866
 msgid "feathering radius"
 msgstr "羽化半径"
 
-#: ../src/develop/blend_gui.c:3152
+#: ../src/develop/blend_gui.c:3153
 msgid "spatial radius of feathering"
 msgstr "羽化的空间半径。"
 
-#: ../src/develop/blend_gui.c:3156
+#: ../src/develop/blend_gui.c:3157
 msgid "blurring radius"
 msgstr "模糊半径"
 
-#: ../src/develop/blend_gui.c:3158
+#: ../src/develop/blend_gui.c:3159
 msgid "radius for gaussian blur of blend mask"
 msgstr "混合蒙板的高斯模糊半径。"
 
-#: ../src/develop/blend_gui.c:3162 ../src/iop/retouch.c:2414
+#: ../src/develop/blend_gui.c:3163 ../src/iop/retouch.c:2414
 #: ../src/libs/history.c:864
 msgid "mask opacity"
 msgstr "蒙板透明度"
 
-#: ../src/develop/blend_gui.c:3164
+#: ../src/develop/blend_gui.c:3165
 msgid ""
 "shifts and tilts the tone curve of the blend mask to adjust its brightness "
 "without affecting fully transparent/fully opaque regions"
 msgstr ""
 "移动和倾斜混合蒙版的色调曲线以调整其亮度，而不影响完全透明/完全不透明区域。"
 
-#: ../src/develop/blend_gui.c:3170 ../src/libs/history.c:869
+#: ../src/develop/blend_gui.c:3171 ../src/libs/history.c:869
 msgid "mask contrast"
 msgstr "蒙板对比度"
 
-#: ../src/develop/blend_gui.c:3172
+#: ../src/develop/blend_gui.c:3173
 msgid ""
 "gives the tone curve of the blend mask an s-like shape to adjust its contrast"
 msgstr "将混合蒙版的色调曲线设置为 S 形以调整其对比度。"
 
-#: ../src/develop/blend_gui.c:3176
+#: ../src/develop/blend_gui.c:3177
 msgid "mask refinement"
 msgstr "蒙版改进"
 
-#: ../src/develop/blend_gui.c:3179
+#: ../src/develop/blend_gui.c:3180
 msgid "display mask and/or color channel"
 msgstr "显示蒙版及颜色通道。"
 
-#: ../src/develop/blend_gui.c:3181
+#: ../src/develop/blend_gui.c:3182
 msgid ""
 "display mask and/or color channel. ctrl+click to display mask, shift+click "
 "to display channel. hover over parametric mask slider to select channel for "
@@ -7410,15 +7410,15 @@ msgstr ""
 "显示蒙版及颜色通道。Ctrl + 单击可显示蒙版，Shift + 单击可显示通道。将鼠标悬停"
 "在“参数蒙版”滑块上以选择要显示的通道。"
 
-#: ../src/develop/blend_gui.c:3186
+#: ../src/develop/blend_gui.c:3187
 msgid "temporarily switch off blend mask"
 msgstr "临时关闭混合蒙板。"
 
-#: ../src/develop/blend_gui.c:3188
+#: ../src/develop/blend_gui.c:3189
 msgid "temporarily switch off blend mask. only for module in focus"
 msgstr "临时关闭混合蒙板。只对当前模块有效"
 
-#: ../src/develop/develop.c:1145
+#: ../src/develop/develop.c:1158
 #, c-format
 msgid ""
 "Your history is storing %d mask states. To ensure smooth operation, consider "
@@ -7431,31 +7431,31 @@ msgstr ""
 #. For scene-referred workflow, since filmic doesn't brighten as base curve does,
 #. we need an initial exposure boost. This might be too much in some cases but…
 #. (the preset name is used in develop.c)
-#: ../src/develop/develop.c:1360 ../src/gui/presets.c:952
+#: ../src/develop/develop.c:1373 ../src/gui/presets.c:952
 #: ../src/iop/colorbalancergb.c:465 ../src/iop/colorbalancergb.c:466
 #: ../src/iop/exposure.c:276 ../src/iop/exposure.c:285
 msgid "scene-referred default"
 msgstr "场景引用默认值"
 
-#: ../src/develop/develop.c:1820
+#: ../src/develop/develop.c:1833
 #, c-format
 msgid "%s: module `%s' version mismatch: %d != %d"
 msgstr "%s：模块“%s”版本不匹配： %d != %d。"
 
-#: ../src/develop/imageop.c:894
+#: ../src/develop/imageop.c:896
 msgid "new instance"
 msgstr "新的副本"
 
-#: ../src/develop/imageop.c:900
+#: ../src/develop/imageop.c:902
 msgid "duplicate instance"
 msgstr "复制副本"
 
-#: ../src/develop/imageop.c:906 ../src/develop/imageop.c:3111
+#: ../src/develop/imageop.c:908 ../src/develop/imageop.c:3110
 #: ../src/libs/masks.c:1098
 msgid "move up"
 msgstr "向上移动"
 
-#: ../src/develop/imageop.c:912 ../src/develop/imageop.c:3112
+#: ../src/develop/imageop.c:914 ../src/develop/imageop.c:3111
 #: ../src/libs/masks.c:1101
 msgid "move down"
 msgstr "向下移动"
@@ -7463,66 +7463,66 @@ msgstr "向下移动"
 #. delete button label and tooltip will be updated based on trash pref
 #. TODO??? this SHOULD be named "delete group" but because of string freeze for 3.8
 #. we can only do that after 3.8 is released.
-#: ../src/develop/imageop.c:918 ../src/develop/imageop.c:3114
+#: ../src/develop/imageop.c:920 ../src/develop/imageop.c:3113
 #: ../src/gui/accelerators.c:143 ../src/gui/presets.c:475
 #: ../src/libs/image.c:281 ../src/libs/image.c:477 ../src/libs/masks.c:1055
 #: ../src/libs/tagging.c:1460 ../src/libs/tagging.c:1548
 msgid "delete"
 msgstr "删除"
 
-#: ../src/develop/imageop.c:925 ../src/develop/imageop.c:3115
+#: ../src/develop/imageop.c:927 ../src/develop/imageop.c:3114
 msgid "rename"
 msgstr "重命名"
 
-#: ../src/develop/imageop.c:982
+#: ../src/develop/imageop.c:984
 #, c-format
 msgid "%s is switched on"
 msgstr "%s 已开。"
 
-#: ../src/develop/imageop.c:982
+#: ../src/develop/imageop.c:984
 #, c-format
 msgid "%s is switched off"
 msgstr "%s 已关。"
 
-#: ../src/develop/imageop.c:2265
+#: ../src/develop/imageop.c:2264
 msgid "unknown mask"
 msgstr "未知蒙版"
 
-#: ../src/develop/imageop.c:2269
+#: ../src/develop/imageop.c:2268
 msgid "drawn + parametric mask"
 msgstr "绘制 + 参数蒙版"
 
-#: ../src/develop/imageop.c:2278
+#: ../src/develop/imageop.c:2277
 #, c-format
 msgid "this module has a `%s'"
 msgstr "此模块有“%s”。"
 
-#: ../src/develop/imageop.c:2283
+#: ../src/develop/imageop.c:2282
 #, c-format
 msgid "taken from module %s"
 msgstr "来自模块 %s。"
 
-#: ../src/develop/imageop.c:2288
+#: ../src/develop/imageop.c:2287
 msgid "click to display (module must be activated first)"
 msgstr "点击显示（模块必须先激活）。"
 
-#: ../src/develop/imageop.c:2383
+#: ../src/develop/imageop.c:2382
 msgid "Purpose"
 msgstr "用途"
 
-#: ../src/develop/imageop.c:2383
+#: ../src/develop/imageop.c:2382
 msgid "Input"
 msgstr "输入"
 
-#: ../src/develop/imageop.c:2383
+#: ../src/develop/imageop.c:2382
 msgid "Process"
 msgstr "流程"
 
-#: ../src/develop/imageop.c:2383
+#: ../src/develop/imageop.c:2382
 msgid "Output"
 msgstr "输出"
 
-#: ../src/develop/imageop.c:2477
+#: ../src/develop/imageop.c:2476
 msgid ""
 "multiple instance actions\n"
 "right-click creates new instance"
@@ -7530,7 +7530,7 @@ msgstr ""
 "多个实例行为。\n"
 "右键点击创建新的实例。"
 
-#: ../src/develop/imageop.c:2488
+#: ../src/develop/imageop.c:2487
 msgid ""
 "reset parameters\n"
 "ctrl+click to reapply any automatic presets"
@@ -7538,7 +7538,7 @@ msgstr ""
 "重置参数。\n"
 "按住 ctrl 并单击可重新应用任何自动预设。"
 
-#: ../src/develop/imageop.c:2497
+#: ../src/develop/imageop.c:2496
 msgid ""
 "presets\n"
 "right-click to apply on new instance"
@@ -7546,44 +7546,44 @@ msgstr ""
 "预设。\n"
 "单击鼠标右键可应用于新实例。"
 
-#: ../src/develop/imageop.c:2715 ../src/develop/imageop.c:2737
+#: ../src/develop/imageop.c:2714 ../src/develop/imageop.c:2736
 msgid "ERROR"
 msgstr "错误"
 
-#: ../src/develop/imageop.c:3110 ../src/develop/imageop.c:3120
+#: ../src/develop/imageop.c:3109 ../src/develop/imageop.c:3119
 #: ../src/gui/accelerators.c:139 ../src/libs/lib.c:1276
 msgid "show"
 msgstr "显示"
 
-#: ../src/develop/imageop.c:3113 ../src/libs/tagging.c:3226
+#: ../src/develop/imageop.c:3112 ../src/libs/tagging.c:3226
 msgid "new"
 msgstr "新建"
 
-#: ../src/develop/imageop.c:3116 ../src/libs/image.c:492
+#: ../src/develop/imageop.c:3115 ../src/libs/image.c:492
 msgid "duplicate"
 msgstr "复制"
 
-#: ../src/develop/imageop.c:3121
+#: ../src/develop/imageop.c:3120
 msgid "enable"
 msgstr "启用"
 
-#: ../src/develop/imageop.c:3122 ../src/gui/accelerators.c:2245
+#: ../src/develop/imageop.c:3121 ../src/gui/accelerators.c:2245
 msgid "instance"
 msgstr "实例"
 
-#: ../src/develop/imageop.c:3123 ../src/gui/accelerators.c:105
+#: ../src/develop/imageop.c:3122 ../src/gui/accelerators.c:105
 #: ../src/gui/accelerators.c:114 ../src/iop/atrous.c:1581
 #: ../src/libs/lib.c:1277
 msgid "reset"
 msgstr "重置"
 
 #. Adding the outer container
-#: ../src/develop/imageop.c:3124 ../src/gui/preferences.c:772
+#: ../src/develop/imageop.c:3123 ../src/gui/preferences.c:772
 #: ../src/libs/lib.c:1278
 msgid "presets"
 msgstr "预置"
 
-#: ../src/develop/imageop.c:3136
+#: ../src/develop/imageop.c:3135
 msgid "processing module"
 msgstr "处理模块"
 
@@ -7902,7 +7902,7 @@ msgid ""
 "<b>add node</b>: ctrl+click"
 msgstr "<b>移动节点</b>：拖动，<b>添加节点</b>：Ctrl + 单击。"
 
-#: ../src/develop/pixelpipe_hb.c:2169
+#: ../src/develop/pixelpipe_hb.c:2145
 msgid ""
 "ansel discovered problems with your OpenCL setup; disabling OpenCL for this "
 "session!"
@@ -7938,8 +7938,8 @@ msgstr ""
 msgid "grouped images"
 msgstr "分组的图像。"
 
-#: ../src/dtgtk/thumbnail.c:1269 ../src/iop/ashift.c:5716
-#: ../src/iop/ashift.c:5783 ../src/iop/ashift.c:5784 ../src/iop/ashift.c:5785
+#: ../src/dtgtk/thumbnail.c:1269 ../src/iop/ashift.c:5664
+#: ../src/iop/ashift.c:5665 ../src/iop/ashift.c:5666
 msgid "fit"
 msgstr "适应"
 
@@ -8211,17 +8211,17 @@ msgstr "滚轮"
 msgid "pan"
 msgstr "平移"
 
-#: ../src/gui/accelerators.c:75 ../src/iop/ashift.c:5401
-#: ../src/iop/ashift.c:5402 ../src/iop/ashift.c:5504 ../src/iop/ashift.c:5505
-#: ../src/iop/ashift.c:5784 ../src/iop/clipping.c:1920
+#: ../src/gui/accelerators.c:75 ../src/iop/ashift.c:5339
+#: ../src/iop/ashift.c:5340 ../src/iop/ashift.c:5441 ../src/iop/ashift.c:5442
+#: ../src/iop/ashift.c:5665 ../src/iop/clipping.c:1920
 #: ../src/iop/clipping.c:2112 ../src/iop/clipping.c:2128
 #: ../src/views/darkroom.c:1874 ../src/views/lighttable.c:391
 msgid "horizontal"
 msgstr "水平"
 
-#: ../src/gui/accelerators.c:76 ../src/iop/ashift.c:5401
-#: ../src/iop/ashift.c:5402 ../src/iop/ashift.c:5504 ../src/iop/ashift.c:5505
-#: ../src/iop/ashift.c:5783 ../src/iop/clipping.c:1919
+#: ../src/gui/accelerators.c:76 ../src/iop/ashift.c:5339
+#: ../src/iop/ashift.c:5340 ../src/iop/ashift.c:5441 ../src/iop/ashift.c:5442
+#: ../src/iop/ashift.c:5664 ../src/iop/clipping.c:1919
 #: ../src/iop/clipping.c:2113 ../src/iop/clipping.c:2127
 #: ../src/views/darkroom.c:1877 ../src/views/lighttable.c:395
 msgid "vertical"
@@ -8901,8 +8901,9 @@ msgid "Creating new developments needs selected images to work"
 msgstr "需要选中图像之后才能创建新的副本。"
 
 #. Update GUI
-#: ../src/gui/actions/edit.h:260 ../src/iop/crop.c:978 ../src/iop/crop.c:1002
-#: ../src/iop/crop.c:1182
+#: ../src/gui/actions/edit.h:260 ../src/iop/ashift.c:5156
+#: ../src/iop/ashift.c:5189 ../src/iop/ashift.c:5504 ../src/iop/crop.c:978
+#: ../src/iop/crop.c:1004 ../src/iop/crop.c:1184
 msgid "Edit"
 msgstr "编辑"
 
@@ -9709,7 +9710,7 @@ msgstr "三分法"
 msgid "metering"
 msgstr "测光"
 
-#: ../src/gui/guides.c:33 ../src/iop/ashift.c:5695
+#: ../src/gui/guides.c:33
 msgid "perspective"
 msgstr "透视"
 
@@ -9787,7 +9788,7 @@ msgstr "水平地"
 msgid "vertically"
 msgstr "垂直地"
 
-#: ../src/gui/guides.c:712 ../src/iop/ashift.c:5785 ../src/iop/clipping.c:2114
+#: ../src/gui/guides.c:712 ../src/iop/ashift.c:5666 ../src/iop/clipping.c:2114
 #: ../src/iop/colorbalance.c:1866
 msgid "both"
 msgstr "两者"
@@ -9989,7 +9990,7 @@ msgstr "型号"
 msgid "maker"
 msgstr "厂商"
 
-#: ../src/gui/preferences.c:823 ../src/iop/ashift.c:5788
+#: ../src/gui/preferences.c:823 ../src/iop/ashift.c:5669
 #: ../src/iop/basicadj.c:635 ../src/iop/borders.c:1042 ../src/iop/levels.c:638
 #: ../src/iop/rgblevels.c:1069
 msgid "auto"
@@ -11047,12 +11048,12 @@ msgid "Prevent accidental masks displacement when moving the view"
 msgstr "防止在移动视图时意外移动蒙版。"
 
 #: ../src/iop/ashift.c:121
-msgid "rotate and perspective"
-msgstr "旋转与透视"
+msgid "Horizon and perspective"
+msgstr "水平与透视"
 
 #: ../src/iop/ashift.c:126
-msgid "rotation|keystone|distortion|crop|reframe"
-msgstr "旋转|平移|扭曲|裁剪|边框"
+msgid "rotation|keystone|distortion|crop|reframe|horizon"
+msgstr "旋转|平移|扭曲|裁剪|边框|水平"
 
 #: ../src/iop/ashift.c:131
 msgid "rotate or distort perspective"
@@ -11089,23 +11090,23 @@ msgstr "线性、RGB、场景引用"
 msgid "geometric, RGB"
 msgstr "几何、RGB"
 
-#: ../src/iop/ashift.c:2670
+#: ../src/iop/ashift.c:2672
 msgid "automatic cropping failed"
 msgstr "自动剪裁失败。"
 
-#: ../src/iop/ashift.c:3035 ../src/iop/ashift.c:3086 ../src/iop/ashift.c:3133
+#: ../src/iop/ashift.c:2901 ../src/iop/ashift.c:2952 ../src/iop/ashift.c:2988
 msgid "data pending - please repeat"
 msgstr "数据待定 - 请重复。"
 
-#: ../src/iop/ashift.c:3045
+#: ../src/iop/ashift.c:2909
 msgid "could not detect structural data in image"
 msgstr "无法检测出图像中的结构数据。"
 
-#: ../src/iop/ashift.c:3056
+#: ../src/iop/ashift.c:2920
 msgid "could not run outlier removal"
 msgstr "无法运行离群点移除。"
 
-#: ../src/iop/ashift.c:3218
+#: ../src/iop/ashift.c:3065
 #, c-format
 msgid ""
 "not enough structure for automatic correction\n"
@@ -11114,33 +11115,68 @@ msgstr ""
 "没有足够的结构进行自动校正。\n"
 "每个方向上最少需要 %d 条直线。"
 
-#: ../src/iop/ashift.c:3223
+#: ../src/iop/ashift.c:3070
 msgid "automatic correction failed, please correct manually"
 msgstr "自动校正失败，请手动校正。"
 
 #. if count > MAX_SAVED_LINES we alert that the next lines won't be saved in params
 #. but they still may be used for the current section (that's why we still allow them)
-#: ../src/iop/ashift.c:4723
+#: ../src/iop/ashift.c:4462
 #, c-format
 msgid "only %d lines can be saved in parameters"
 msgstr "参数内仅可保存 %d 行。"
 
-#: ../src/iop/ashift.c:5401 ../src/iop/ashift.c:5402 ../src/iop/ashift.c:5504
-#: ../src/iop/ashift.c:5505
+#: ../src/iop/ashift.c:5339 ../src/iop/ashift.c:5340 ../src/iop/ashift.c:5441
+#: ../src/iop/ashift.c:5442
 #, c-format
 msgid "lens shift (%s)"
-msgstr "镜头平移（%s）"
+msgstr "镜头偏移（%s）"
 
-#: ../src/iop/ashift.c:5654
-msgid "manual perspective"
-msgstr "人工视角"
+#: ../src/iop/ashift.c:5508 ../src/iop/crop.c:1188
+msgid "Apply"
+msgstr "应用"
 
-#: ../src/iop/ashift.c:5702 ../src/iop/ashift.c:5786 ../src/iop/ashift.c:5787
-#: ../src/iop/ashift.c:5788
-msgid "structure"
-msgstr "结构"
+#: ../src/iop/ashift.c:5508 ../src/iop/crop.c:1188
+msgid "Apply changes"
+msgstr "应用修改"
 
-#: ../src/iop/ashift.c:5735
+#: ../src/iop/ashift.c:5519
+msgid "Manual settings"
+msgstr "手动设置"
+
+#: ../src/iop/ashift.c:5568
+msgid "Mark reference lines"
+msgstr "标记参考线"
+
+#: ../src/iop/ashift.c:5582
+msgid "Fit perspective transform"
+msgstr "拟合透视变换"
+
+#: ../src/iop/ashift.c:5599
+msgid "Fitting options"
+msgstr "拟合选项"
+
+#: ../src/iop/ashift.c:5602
+msgid "rotation, lens shift, shear"
+msgstr "旋转，镜头偏移，剪切"
+
+#: ../src/iop/ashift.c:5603
+msgid "rotation, lens shift"
+msgstr "旋转，镜头偏移"
+
+#: ../src/iop/ashift.c:5604
+msgid "rotation only"
+msgstr "仅旋转"
+
+#: ../src/iop/ashift.c:5605
+msgid "lens shift only"
+msgstr "仅镜头偏移"
+
+#: ../src/iop/ashift.c:5607
+msgid "Fit for"
+msgstr "拟合于"
+
+#: ../src/iop/ashift.c:5616
 msgid ""
 "rotate image\n"
 "right-click and drag to define a horizontal or vertical line by drawing on "
@@ -11149,36 +11185,36 @@ msgstr ""
 "旋转图像。\n"
 "右键点击并拖动以在图像上绘制水平或垂直直线。"
 
-#: ../src/iop/ashift.c:5736 ../src/iop/ashift.c:5737
+#: ../src/iop/ashift.c:5617 ../src/iop/ashift.c:5618
 msgid "apply lens shift correction in one direction"
 msgstr "在一个方向上应用镜头偏移校正。"
 
-#: ../src/iop/ashift.c:5738
+#: ../src/iop/ashift.c:5619
 msgid "shear the image along one diagonal"
 msgstr "沿一条对角线剪切图像。"
 
-#: ../src/iop/ashift.c:5739 ../src/iop/clipping.c:2135
+#: ../src/iop/ashift.c:5620 ../src/iop/clipping.c:2135
 msgid "automatically crop to avoid black edges"
 msgstr "自动裁剪以避免黑边。"
 
-#: ../src/iop/ashift.c:5740
+#: ../src/iop/ashift.c:5621
 msgid ""
 "lens model of the perspective correction: generic or according to the focal "
 "length"
 msgstr "透视校正的镜头模块：通用还是按焦距。"
 
-#: ../src/iop/ashift.c:5742
+#: ../src/iop/ashift.c:5623
 msgid "focal length of the lens, default value set from EXIF data if available"
 msgstr "镜头的焦距，根据EXIF数据设置默认值（如果可获得）。"
 
-#: ../src/iop/ashift.c:5744
+#: ../src/iop/ashift.c:5625
 msgid ""
 "crop factor of the camera sensor, default value set from EXIF data if "
 "available, manual setting is often required"
 msgstr ""
 "相机传感器的裁剪系数，若可用，将从 EXIF 数据获取默认值。通常需要手动设置。"
 
-#: ../src/iop/ashift.c:5747
+#: ../src/iop/ashift.c:5628
 msgid ""
 "the level of lens dependent correction, set to maximum for full lens "
 "dependency, set to zero for the generic case"
@@ -11186,11 +11222,11 @@ msgstr ""
 "与镜头有关的校正水平，对于完全与镜头有关的情况设置为最大，对于一般情况设置为"
 "零。"
 
-#: ../src/iop/ashift.c:5749
+#: ../src/iop/ashift.c:5630
 msgid "adjust aspect ratio of image by horizontal and vertical scaling"
 msgstr "通过水平和垂直缩放调整图像的宽高比。"
 
-#: ../src/iop/ashift.c:5750
+#: ../src/iop/ashift.c:5631
 msgid ""
 "automatically correct for vertical perspective distortion\n"
 "ctrl+click to only fit rotation\n"
@@ -11200,7 +11236,7 @@ msgstr ""
 "Ctrl + 单击以仅拟合旋转。\n"
 "Shift + 单击以仅拟合镜头偏移。"
 
-#: ../src/iop/ashift.c:5753
+#: ../src/iop/ashift.c:5634
 msgid ""
 "automatically correct for horizontal perspective distortion\n"
 "ctrl+click to only fit rotation\n"
@@ -11210,7 +11246,7 @@ msgstr ""
 "Ctrl + 单击以仅拟合旋转。\n"
 "Shift + 单击以仅拟合镜头偏移。"
 
-#: ../src/iop/ashift.c:5756
+#: ../src/iop/ashift.c:5637
 msgid ""
 "automatically correct for vertical and horizontal perspective distortions; "
 "fitting rotation,lens shift in both directions, and shear\n"
@@ -11223,7 +11259,7 @@ msgstr ""
 "Shift + 单击以仅拟合镜头偏移。\n"
 "Ctrl + Shift + 单击以仅拟合旋转和镜头偏移。"
 
-#: ../src/iop/ashift.c:5762
+#: ../src/iop/ashift.c:5643
 msgid ""
 "automatically analyse line structure in image\n"
 "ctrl+click for an additional edge enhancement\n"
@@ -11235,43 +11271,47 @@ msgstr ""
 "Shift + 单击可获得额外的细节增强。\n"
 "Ctrl + Shift + 单击可同时获得额外的边缘和细节增强。"
 
-#: ../src/iop/ashift.c:5766
+#: ../src/iop/ashift.c:5647
 msgid "manually define perspective rectangle"
 msgstr "手动定义透视矩形。"
 
-#: ../src/iop/ashift.c:5767
+#: ../src/iop/ashift.c:5648
 msgid "manually draw structure lines"
 msgstr "手动绘制结构线。"
 
-#: ../src/iop/ashift.c:5786
+#: ../src/iop/ashift.c:5667 ../src/iop/ashift.c:5668 ../src/iop/ashift.c:5669
+msgid "structure"
+msgstr "结构"
+
+#: ../src/iop/ashift.c:5667
 msgid "rectangle"
 msgstr "矩形"
 
-#: ../src/iop/ashift.c:5787
+#: ../src/iop/ashift.c:5668
 msgid "lines"
 msgstr "线"
 
-#: ../src/iop/ashift.c:5811 ../src/iop/clipping.c:3359
+#: ../src/iop/ashift.c:5692 ../src/iop/clipping.c:3359
 #, c-format
 msgid "[%s] define/rotate horizon"
 msgstr "[%s] 定义/旋转水平线"
 
-#: ../src/iop/ashift.c:5812
+#: ../src/iop/ashift.c:5693
 #, c-format
 msgid "[%s on segment] select segment"
 msgstr "[线段 %s] 选择线段"
 
-#: ../src/iop/ashift.c:5814
+#: ../src/iop/ashift.c:5695
 #, c-format
 msgid "[%s on segment] unselect segment"
 msgstr "[线段 %s] 取消选择线段"
 
-#: ../src/iop/ashift.c:5816
+#: ../src/iop/ashift.c:5697
 #, c-format
 msgid "[%s] select all segments from zone"
 msgstr "[%s] 选择区域内的所有线段"
 
-#: ../src/iop/ashift.c:5818
+#: ../src/iop/ashift.c:5699
 #, c-format
 msgid "[%s] unselect all segments from zone"
 msgstr "[%s] 取消选择区域内的所有线段"
@@ -11905,7 +11945,7 @@ msgstr "2:1"
 msgid "16:9"
 msgstr "16:9"
 
-#: ../src/iop/borders.c:966 ../src/iop/clipping.c:2149 ../src/iop/crop.c:1072
+#: ../src/iop/borders.c:966 ../src/iop/clipping.c:2149 ../src/iop/crop.c:1074
 msgid "golden cut"
 msgstr "黄金分割"
 
@@ -11925,7 +11965,7 @@ msgstr "DIN"
 msgid "4:3"
 msgstr "4:3"
 
-#: ../src/iop/borders.c:971 ../src/iop/clipping.c:2139 ../src/iop/crop.c:1060
+#: ../src/iop/borders.c:971 ../src/iop/clipping.c:2139 ../src/iop/crop.c:1062
 #: ../src/libs/collect.c:295
 msgid "square"
 msgstr "正方形"
@@ -11962,7 +12002,7 @@ msgstr "2/3"
 msgid "size of the border in percent of the full image"
 msgstr "边框的尺寸（以全图尺寸百分比表示）。"
 
-#: ../src/iop/borders.c:1033 ../src/iop/clipping.c:2236 ../src/iop/crop.c:1161
+#: ../src/iop/borders.c:1033 ../src/iop/clipping.c:2236 ../src/iop/crop.c:1163
 msgid "aspect"
 msgstr "宽高比"
 
@@ -12577,7 +12617,7 @@ msgstr ""
 msgid "picker"
 msgstr "取色器"
 
-#: ../src/iop/channelmixerrgb.c:3990 ../src/iop/temperature.c:1834
+#: ../src/iop/channelmixerrgb.c:3990 ../src/iop/temperature.c:1851
 msgid "set white balance to detected from area"
 msgstr "将白平衡设置为从区域检测。"
 
@@ -12585,7 +12625,7 @@ msgstr "将白平衡设置为从区域检测。"
 msgid "illuminant"
 msgstr "光照"
 
-#: ../src/iop/channelmixerrgb.c:4000 ../src/iop/temperature.c:1886
+#: ../src/iop/channelmixerrgb.c:4000 ../src/iop/temperature.c:1903
 msgid "temperature"
 msgstr "色温"
 
@@ -12844,7 +12884,7 @@ msgid "change the framing and correct the perspective"
 msgstr "改变边框比例，纠正视角。"
 
 #: ../src/iop/clipping.c:1412 ../src/iop/clipping.c:2138 ../src/iop/crop.c:409
-#: ../src/iop/crop.c:1059
+#: ../src/iop/crop.c:1061
 msgid "original image"
 msgstr "原始图像"
 
@@ -12892,51 +12932,51 @@ msgstr "梯形畸变"
 msgid "set perspective correction for your image"
 msgstr "为您的图像设置透视校正。"
 
-#: ../src/iop/clipping.c:2137 ../src/iop/crop.c:1058
+#: ../src/iop/clipping.c:2137 ../src/iop/crop.c:1060
 msgid "freehand"
 msgstr "无限制"
 
-#: ../src/iop/clipping.c:2140 ../src/iop/crop.c:1062
+#: ../src/iop/clipping.c:2140 ../src/iop/crop.c:1064
 msgid "10:8 in print"
 msgstr "打印（10:8）"
 
-#: ../src/iop/clipping.c:2141 ../src/iop/crop.c:1064
+#: ../src/iop/clipping.c:2141 ../src/iop/crop.c:1066
 msgid "5:4, 4x5, 8x10"
 msgstr "5:4，4x5，8x10"
 
-#: ../src/iop/clipping.c:2142 ../src/iop/crop.c:1065
+#: ../src/iop/clipping.c:2142 ../src/iop/crop.c:1067
 msgid "11x14"
 msgstr "11x14"
 
-#: ../src/iop/clipping.c:2143 ../src/iop/crop.c:1066
+#: ../src/iop/clipping.c:2143 ../src/iop/crop.c:1068
 msgid "8.5x11, letter"
 msgstr "8.5x11，信纸"
 
-#: ../src/iop/clipping.c:2144 ../src/iop/crop.c:1067
+#: ../src/iop/clipping.c:2144 ../src/iop/crop.c:1069
 msgid "4:3, VGA, TV"
 msgstr "4:3，VGA，电视"
 
-#: ../src/iop/clipping.c:2145 ../src/iop/crop.c:1068
+#: ../src/iop/clipping.c:2145 ../src/iop/crop.c:1070
 msgid "5x7"
 msgstr "5x7"
 
-#: ../src/iop/clipping.c:2146 ../src/iop/crop.c:1069
+#: ../src/iop/clipping.c:2146 ../src/iop/crop.c:1071
 msgid "ISO 216, DIN 476, A4"
 msgstr "ISO 216，DIN 476，A4"
 
-#: ../src/iop/clipping.c:2147 ../src/iop/crop.c:1070
+#: ../src/iop/clipping.c:2147 ../src/iop/crop.c:1072
 msgid "3:2, 4x6, 35mm"
 msgstr "3:2，4x6，35mm"
 
-#: ../src/iop/clipping.c:2148 ../src/iop/crop.c:1071
+#: ../src/iop/clipping.c:2148 ../src/iop/crop.c:1073
 msgid "16:10, 8x5"
 msgstr "16:10，8x5"
 
-#: ../src/iop/clipping.c:2150 ../src/iop/crop.c:1074
+#: ../src/iop/clipping.c:2150 ../src/iop/crop.c:1076
 msgid "16:9, HDTV"
 msgstr "16:9，高清电视"
 
-#: ../src/iop/clipping.c:2151 ../src/iop/crop.c:1075
+#: ../src/iop/clipping.c:2151 ../src/iop/crop.c:1077
 msgid "widescreen"
 msgstr "宽屏（widescreen）"
 
@@ -12948,7 +12988,7 @@ msgstr "2:1，univisium"
 msgid "cinemascope"
 msgstr "宽银幕（cinemascope）"
 
-#: ../src/iop/clipping.c:2154 ../src/iop/crop.c:1078
+#: ../src/iop/clipping.c:2154 ../src/iop/crop.c:1080
 msgid "21:9"
 msgstr "21:9"
 
@@ -12956,17 +12996,17 @@ msgstr "21:9"
 msgid "anamorphic"
 msgstr "变形宽银幕（anamorphic）"
 
-#: ../src/iop/clipping.c:2156 ../src/iop/crop.c:1081
+#: ../src/iop/clipping.c:2156 ../src/iop/crop.c:1083
 msgid "3:1, panorama"
 msgstr "3:1，全景"
 
-#: ../src/iop/clipping.c:2188 ../src/iop/clipping.c:2200 ../src/iop/crop.c:1114
-#: ../src/iop/crop.c:1126
+#: ../src/iop/clipping.c:2188 ../src/iop/clipping.c:2200 ../src/iop/crop.c:1116
+#: ../src/iop/crop.c:1128
 #, c-format
 msgid "invalid ratio format for `%s'. it should be \"number:number\""
 msgstr "无效的比例格式“%s”。请以“数字:数字”输入。"
 
-#: ../src/iop/clipping.c:2247 ../src/iop/crop.c:1172
+#: ../src/iop/clipping.c:2247 ../src/iop/crop.c:1174
 msgid ""
 "set the aspect ratio\n"
 "the list is sorted: from most square to least square\n"
@@ -12977,23 +13017,23 @@ msgstr ""
 "该列表按照从最接近正方形到最扁/狭窄排序。\n"
 "要使用自定义的宽高比，请打开选择框并以 x:y 或小数形式输入。"
 
-#: ../src/iop/clipping.c:2254 ../src/iop/crop.c:1197
+#: ../src/iop/clipping.c:2254 ../src/iop/crop.c:1199
 msgid "margins"
 msgstr "边距"
 
-#: ../src/iop/clipping.c:2259 ../src/iop/crop.c:1205
+#: ../src/iop/clipping.c:2259 ../src/iop/crop.c:1207
 msgid "the left margin cannot overlap with the right margin"
 msgstr "左边距不能与右边距重叠。"
 
-#: ../src/iop/clipping.c:2266 ../src/iop/crop.c:1212
+#: ../src/iop/clipping.c:2266 ../src/iop/crop.c:1214
 msgid "the right margin cannot overlap with the left margin"
 msgstr "右边距不能与左边距重叠。"
 
-#: ../src/iop/clipping.c:2271 ../src/iop/crop.c:1217
+#: ../src/iop/clipping.c:2271 ../src/iop/crop.c:1219
 msgid "the top margin cannot overlap with the bottom margin"
 msgstr "顶边距不能与底边距重叠。"
 
-#: ../src/iop/clipping.c:2278 ../src/iop/crop.c:1224
+#: ../src/iop/clipping.c:2278 ../src/iop/crop.c:1226
 msgid "the bottom margin cannot overlap with the top margin"
 msgstr "底边距不能与顶边距重叠。"
 
@@ -13034,12 +13074,12 @@ msgstr ""
 "<b>移动</b>：拖动，<b>垂直移动</b>：Shift + 拖动，<b>水平移动</b>：Ctrl + 拖"
 "动。<b>拉直</b>：右键拖动，<b>完成</b>：双击。"
 
-#: ../src/iop/clipping.c:3356 ../src/iop/crop.c:1628
+#: ../src/iop/clipping.c:3356 ../src/iop/crop.c:1630
 #, c-format
 msgid "[%s on borders] crop"
 msgstr "[边缘 %s] 裁剪"
 
-#: ../src/iop/clipping.c:3358 ../src/iop/crop.c:1630
+#: ../src/iop/clipping.c:3358 ../src/iop/crop.c:1632
 #, c-format
 msgid "[%s on borders] crop keeping ratio"
 msgstr "[边缘 %s] 保持宽高比裁剪"
@@ -14151,51 +14191,43 @@ msgstr "边框|失真"
 msgid "change the framing"
 msgstr "更改尺寸。"
 
-#: ../src/iop/crop.c:1061
+#: ../src/iop/crop.c:1063
 msgid "7:6, 6x7"
 msgstr "7:6，6x7"
 
-#: ../src/iop/crop.c:1063
+#: ../src/iop/crop.c:1065
 msgid "6:5, 5x6"
 msgstr "6:5，5x6"
 
-#: ../src/iop/crop.c:1073
+#: ../src/iop/crop.c:1075
 msgid "5:3, 12x20"
 msgstr "5:3，12x20"
 
-#: ../src/iop/crop.c:1076
+#: ../src/iop/crop.c:1078
 msgid "2:1, Univisium"
 msgstr "2:1，Univisium"
 
-#: ../src/iop/crop.c:1077
+#: ../src/iop/crop.c:1079
 msgid "Cinemascope"
 msgstr "宽银幕（cinemascope）"
 
-#: ../src/iop/crop.c:1079
+#: ../src/iop/crop.c:1081
 msgid "Anamorphic"
 msgstr "变形宽银幕（anamorphic）"
 
-#: ../src/iop/crop.c:1080
+#: ../src/iop/crop.c:1082
 msgid "65:24, XPan"
 msgstr "65:24，XPan"
 
-#: ../src/iop/crop.c:1082
+#: ../src/iop/crop.c:1084
 msgid "4:1, Polyvision"
 msgstr "4:1，Polyvision"
 
-#: ../src/iop/crop.c:1186
-msgid "Apply"
-msgstr "应用"
-
-#: ../src/iop/crop.c:1186
-msgid "Apply changes"
-msgstr "应用修改"
-
-#: ../src/iop/crop.c:1527
+#: ../src/iop/crop.c:1529
 msgid "<b>resize</b>: drag, <b>keep aspect ratio</b>: shift+drag"
 msgstr "<b>调整大小</b>：拖动，<b>调整大小并保持纵横比</b>：Shift + 拖动。"
 
-#: ../src/iop/crop.c:1534
+#: ../src/iop/crop.c:1536
 msgid ""
 "<b>move</b>: drag, <b>move vertically</b>: shift+drag, <b>move horizontally</"
 "b>: ctrl+drag"
@@ -17775,65 +17807,65 @@ msgctxt "white balance"
 msgid "camera reference"
 msgstr "相机参考"
 
-#: ../src/iop/temperature.c:1725 ../src/iop/temperature.c:1743
+#: ../src/iop/temperature.c:1742 ../src/iop/temperature.c:1760
 msgid "green channel coefficient"
 msgstr "绿色通道系数。"
 
-#: ../src/iop/temperature.c:1727
+#: ../src/iop/temperature.c:1744
 msgid "magenta channel coefficient"
 msgstr "品红通道系数。"
 
-#: ../src/iop/temperature.c:1729
+#: ../src/iop/temperature.c:1746
 msgid "cyan channel coefficient"
 msgstr "青色通道系数。"
 
-#: ../src/iop/temperature.c:1731
+#: ../src/iop/temperature.c:1748
 msgid "yellow channel coefficient"
 msgstr "黄色通道系数。"
 
-#: ../src/iop/temperature.c:1741
+#: ../src/iop/temperature.c:1758
 msgid "red channel coefficient"
 msgstr "红色通道系数。"
 
-#: ../src/iop/temperature.c:1745
+#: ../src/iop/temperature.c:1762
 msgid "blue channel coefficient"
 msgstr "蓝色通道系数。"
 
-#: ../src/iop/temperature.c:1747
+#: ../src/iop/temperature.c:1764
 msgid "emerald channel coefficient"
 msgstr "青绿色通道系数"
 
-#: ../src/iop/temperature.c:1821 ../src/iop/temperature.c:1831
-#: ../src/iop/temperature.c:1836 ../src/iop/temperature.c:1842
-#: ../src/iop/temperature.c:1856
+#: ../src/iop/temperature.c:1838 ../src/iop/temperature.c:1848
+#: ../src/iop/temperature.c:1853 ../src/iop/temperature.c:1859
+#: ../src/iop/temperature.c:1873
 msgid "settings"
 msgstr "设置"
 
-#: ../src/iop/temperature.c:1821
+#: ../src/iop/temperature.c:1838
 msgid "as shot"
 msgstr "机身设置"
 
-#: ../src/iop/temperature.c:1824
+#: ../src/iop/temperature.c:1841
 msgid "set white balance to as shot"
 msgstr "将白平衡设置为拍摄时的设定。"
 
-#: ../src/iop/temperature.c:1831
+#: ../src/iop/temperature.c:1848
 msgid "from image area"
 msgstr "从图像区域"
 
-#: ../src/iop/temperature.c:1836
+#: ../src/iop/temperature.c:1853
 msgid "user modified"
 msgstr "用户调整"
 
-#: ../src/iop/temperature.c:1839
+#: ../src/iop/temperature.c:1856
 msgid "set white balance to user modified"
 msgstr "将白平衡设置为用户自定义设置。"
 
-#: ../src/iop/temperature.c:1842
+#: ../src/iop/temperature.c:1859
 msgid "camera reference"
 msgstr "相机参考"
 
-#: ../src/iop/temperature.c:1845
+#: ../src/iop/temperature.c:1862
 msgid ""
 "set white balance to camera reference point\n"
 "in most cases it should be D65"
@@ -17842,43 +17874,43 @@ msgstr ""
 "绝大多数情况下都是 D65 光源。"
 
 #. relabel to settings to remove confusion between module presets and white balance settings
-#: ../src/iop/temperature.c:1857
+#: ../src/iop/temperature.c:1874
 msgid "choose white balance setting"
 msgstr "选择白平衡设置。"
 
-#: ../src/iop/temperature.c:1861
+#: ../src/iop/temperature.c:1878
 msgid "finetune"
 msgstr "微调"
 
-#: ../src/iop/temperature.c:1863
+#: ../src/iop/temperature.c:1880
 msgid "fine tune camera's white balance setting"
 msgstr "微调相机白平衡设置。"
 
-#: ../src/iop/temperature.c:1874
+#: ../src/iop/temperature.c:1891
 msgid "scene illuminant temp"
 msgstr "场景光照色温"
 
-#: ../src/iop/temperature.c:1875
+#: ../src/iop/temperature.c:1892
 msgid "click to cycle color mode on sliders"
 msgstr "单击切换滑动条的色彩模式。"
 
-#: ../src/iop/temperature.c:1887
+#: ../src/iop/temperature.c:1904
 msgid "color temperature (in Kelvin)"
 msgstr "色温（开尔文）"
 
-#: ../src/iop/temperature.c:1892
+#: ../src/iop/temperature.c:1909
 msgid "tint"
 msgstr "色调"
 
-#: ../src/iop/temperature.c:1893
+#: ../src/iop/temperature.c:1910
 msgid "color tint of the image, from magenta (value < 1) to green (value > 1)"
 msgstr "图像的色调，从品红（值 < 1）到绿色（值 > 1）。"
 
-#: ../src/iop/temperature.c:1899
+#: ../src/iop/temperature.c:1916
 msgid "channel coefficients"
 msgstr "通道系数"
 
-#: ../src/iop/temperature.c:1929
+#: ../src/iop/temperature.c:1946
 msgid "white balance disabled for camera"
 msgstr "已禁用此相机的白平衡设置"
 
@@ -18725,7 +18757,7 @@ msgstr "最大"
 msgid "color picker"
 msgstr "取色工具"
 
-#: ../src/libs/colorpicker.c:463
+#: ../src/libs/colorpicker.c:456
 msgid ""
 "hover to highlight sample on canvas,\n"
 "click to lock sample,\n"
@@ -18735,23 +18767,23 @@ msgstr ""
 "点击以锁定样本。\n"
 "右键点击可以将样本区域加载到活跃的选色器中。"
 
-#: ../src/libs/colorpicker.c:565 ../src/libs/colorpicker.c:616
+#: ../src/libs/colorpicker.c:558 ../src/libs/colorpicker.c:609
 msgid "click to (un)hide large color patch"
 msgstr "单击以显示或隐藏大色块。"
 
-#: ../src/libs/colorpicker.c:579
+#: ../src/libs/colorpicker.c:572
 msgid "statistic"
 msgstr "统计数据"
 
-#: ../src/libs/colorpicker.c:580
+#: ../src/libs/colorpicker.c:573
 msgid "select which statistic to show"
 msgstr "选择要显示的统计数据。"
 
-#: ../src/libs/colorpicker.c:589
+#: ../src/libs/colorpicker.c:582
 msgid "select which color mode to use"
 msgstr "选择要使用的颜色模式。"
 
-#: ../src/libs/colorpicker.c:598
+#: ../src/libs/colorpicker.c:591
 msgid ""
 "turn on color picker\n"
 "ctrl+click or right-click to select an area"
@@ -18759,24 +18791,24 @@ msgstr ""
 "启用颜色选择器。\n"
 "按住 ctrl 键并单击或右键以选择区域。"
 
-#: ../src/libs/colorpicker.c:601
+#: ../src/libs/colorpicker.c:594
 msgid "pick color"
 msgstr "取色"
 
-#: ../src/libs/colorpicker.c:640
+#: ../src/libs/colorpicker.c:633
 msgid "add sample"
 msgstr "添加样本"
 
 #. Adding the live samples section
-#: ../src/libs/colorpicker.c:644
+#: ../src/libs/colorpicker.c:637
 msgid "live samples"
 msgstr "在线样本"
 
-#: ../src/libs/colorpicker.c:652
+#: ../src/libs/colorpicker.c:645
 msgid "display samples on image/vectorscope"
 msgstr "在图像和示波器上显示样本"
 
-#: ../src/libs/colorpicker.c:661
+#: ../src/libs/colorpicker.c:654
 msgid "restrict scope to selection"
 msgstr "将示波器分析区域限制到选择范围"
 
@@ -21767,6 +21799,9 @@ msgctxt "preferences"
 msgid "</xsl:text><xsl:value-of select="
 msgstr ""
 
+#~ msgid "manual perspective"
+#~ msgstr "人工视角"
+
 #, c-format
 #~ msgid "%d image (#%d) of %d in current collection is selected"
 #~ msgstr "已选 %d 张图像（#%d），当前集合共 %d 张图像。"
@@ -23209,9 +23244,6 @@ msgstr ""
 #, c-format
 #~ msgid "never show more than %d lines"
 #~ msgstr "从不显示超过 %d 行"
-
-#~ msgid "darktable preferences"
-#~ msgstr "darktable 首选项"
 
 #~ msgid "(first)"
 #~ msgstr "（第一个）"
@@ -26197,10 +26229,6 @@ msgstr ""
 #~ msgstr "旋转"
 
 #~ msgctxt "accel"
-#~ msgid "lens shift (v)"
-#~ msgstr "镜头平移（垂直）"
-
-#~ msgctxt "accel"
 #~ msgid "lens shift (h)"
 #~ msgstr "镜头平移（水平）"
 
@@ -27294,9 +27322,6 @@ msgstr ""
 #~ msgstr "导出图片"
 
 #~ msgctxt "accel"
-#~ msgid "import folder"
-#~ msgstr "导入文件夹"
-
 #~ msgid "import folder"
 #~ msgstr "导入文件夹"
 
