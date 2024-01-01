@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: darktable 3.9\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2023-12-24 02:54+0800\n"
-"PO-Revision-Date: 2023-12-31 15:18+0100\n"
+"PO-Revision-Date: 2024-01-01 10:56+0100\n"
 "Last-Translator: Aurélien PIERRE <contact@aurelienpierre.com>\n"
 "Language-Team: \n"
 "Language: fr_FR\n"
@@ -20604,10 +20604,8 @@ msgid "created shapes"
 msgstr "formes existantes"
 
 #: ../src/libs/metadata.c:61
-#, fuzzy
-#| msgid "metadata"
 msgid "Metadata"
-msgstr "métadonnées"
+msgstr "Métadonnées"
 
 #: ../src/libs/metadata.c:128 ../src/libs/metadata.c:393
 msgid "<leave unchanged>"
