@@ -14,8 +14,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: darktable 3.6.0\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-01-01 18:09+0100\n"
-"PO-Revision-Date: 2023-12-26 00:24+0800\n"
+"POT-Creation-Date: 2024-01-01 17:44+0100\n"
+"PO-Revision-Date: 2024-01-02 16:20+0800\n"
 "Last-Translator: Alynx Zhou <alynx.zhou@gmail.com>\n"
 "Language-Team: Chinese - China <>\n"
 "Language: zh_CN\n"
@@ -196,7 +196,7 @@ msgstr "否"
 #: ../build/src/preferences_gen.h:6787
 msgctxt "preferences"
 msgid "id"
-msgstr "id"
+msgstr "ID"
 
 #: ../build/src/conf_gen.h:595 ../build/src/preferences_gen.h:6768
 msgctxt "preferences"
@@ -1831,12 +1831,12 @@ msgstr "包含在推荐列表里的最近添加的标签个数。“-1”关闭�
 #: ../build/src/iop/introspection_ashift.c:130
 #: ../build/src/iop/introspection_ashift.c:279
 msgid "lens shift (vertical)"
-msgstr "镜头平移（垂直）"
+msgstr "镜头偏移（垂直）"
 
 #: ../build/src/iop/introspection_ashift.c:136
 #: ../build/src/iop/introspection_ashift.c:283
 msgid "lens shift (horizontal)"
-msgstr "镜头平移（水平）"
+msgstr "镜头偏移（水平）"
 
 #: ../build/src/iop/introspection_ashift.c:142
 #: ../build/src/iop/introspection_ashift.c:287
@@ -1907,7 +1907,7 @@ msgstr "原始格式"
 #: ../build/src/iop/introspection_basecurve.c:134
 #: ../build/src/iop/introspection_basecurve.c:231
 msgid "fusion"
-msgstr "融合（fusion）"
+msgstr "融合"
 
 #: ../build/src/iop/introspection_basecurve.c:140
 #: ../build/src/iop/introspection_basecurve.c:235
@@ -2365,64 +2365,52 @@ msgid "as shot in camera"
 msgstr "拍摄时的设定"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:522
-#, fuzzy
 msgid "F1 (Daylight 6430 K) - medium CRI"
-msgstr "F1（日光 6430 K）— 中显色性"
+msgstr "F1（日光 6430 K）- 中显色性"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:523
-#, fuzzy
 msgid "F2 (Cool White 4230 K) - medium CRI"
-msgstr "F2（冷光 4230 K）— 中显色性"
+msgstr "F2（冷光 4230 K）- 中显色性"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:524
-#, fuzzy
 msgid "F3 (White 3450 K) - medium CRI"
-msgstr "F3（白色 3450 K）— 中显色性"
+msgstr "F3（白色 3450 K）- 中显色性"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:525
-#, fuzzy
 msgid "F4 (Warm White 2940 K) - medium CRI"
-msgstr "F4（暖光 2940 K）— 中显色性"
+msgstr "F4（暖光 2940 K）- 中显色性"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:526
-#, fuzzy
 msgid "F5 (Daylight 6350 K) - medium CRI"
-msgstr "F5（日光 6350 K）— 中显色性"
+msgstr "F5（日光 6350 K）- 中显色性"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:527
-#, fuzzy
 msgid "F6 (Lite White 4150 K) - medium CRI"
-msgstr "F6（荧光 4150 K）— 中显色性"
+msgstr "F6（荧光 4150 K）- 中显色性"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:528
-#, fuzzy
 msgid "F7 (D65 simulator 6500 K) - high CRI"
-msgstr "F7（D65 模拟光源 6500 K）— 高显色性"
+msgstr "F7（D65 模拟光源 6500 K）- 高显色性"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:529
-#, fuzzy
 msgid "F8 (D50 simulator 5000 K) - high CRI"
-msgstr "F8（D50 模拟光源 5000 K）— 高显色性"
+msgstr "F8（D50 模拟光源 5000 K）- 高显色性"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:530
-#, fuzzy
 msgid "F9 (Cool White Deluxe 4150 K) - high CRI"
-msgstr "F9（冷光 4150 K）— 高显色性"
+msgstr "F9（冷光 4150 K）- 高显色性"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:531
-#, fuzzy
 msgid "F10 (Tuned RGB 5000 K) - low CRI"
-msgstr "F10（调和 RGB 5000K）— 低显色性"
+msgstr "F10（调和 RGB 5000K）- 低显色性"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:532
-#, fuzzy
 msgid "F11 (Tuned RGB 4000 K) - low CRI"
-msgstr "F11（调和 RGB 4000K）— 低显色性"
+msgstr "F11（调和 RGB 4000K）- 低显色性"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:533
-#, fuzzy
 msgid "F12 (Tuned RGB 3000 K) - low CRI"
-msgstr "F12（调和 RGB 3000K）— 低显色性"
+msgstr "F12（调和 RGB 3000K）- 低显色性"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:538
 msgid "B1 (Blue 2733 K)"
@@ -2462,7 +2450,7 @@ msgstr "V1（蓝紫色 4070 K）"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:551
 msgid "linear Bradford (ICC v4)"
-msgstr "线性布拉德福算法ICC v4）"
+msgstr "线性布拉德福算法（ICC v4）"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:552
 msgid "CAT16 (CIECAM16)"
@@ -2537,11 +2525,11 @@ msgstr "输出饱和度"
 
 #: ../build/src/iop/introspection_colorbalance.c:229
 msgid "lift, gamma, gain (ProPhoto RGB)"
-msgstr "提升、伽马、增益（ProPhotoRGB）"
+msgstr "提升、伽马、增益（ProPhoto RGB）"
 
 #: ../build/src/iop/introspection_colorbalance.c:230
 msgid "slope, offset, power (ProPhoto RGB)"
-msgstr "斜率、偏移、乘方（ProPhotoRGB）"
+msgstr "斜率、偏移、乘方（ProPhoto RGB）"
 
 #: ../build/src/iop/introspection_colorbalance.c:231
 msgid "lift, gamma, gain (sRGB)"
@@ -2560,7 +2548,7 @@ msgstr "提升色度"
 #: ../build/src/iop/introspection_colorbalancergb.c:238
 #: ../build/src/iop/introspection_colorbalancergb.c:469
 msgid "lift hue"
-msgstr "提升色调"
+msgstr "提升色相"
 
 #: ../build/src/iop/introspection_colorbalancergb.c:244
 #: ../build/src/iop/introspection_colorbalancergb.c:473
@@ -2575,7 +2563,7 @@ msgstr "乘方色度"
 #: ../build/src/iop/introspection_colorbalancergb.c:256
 #: ../build/src/iop/introspection_colorbalancergb.c:481
 msgid "power hue"
-msgstr "乘方色调"
+msgstr "乘方色相"
 
 #: ../build/src/iop/introspection_colorbalancergb.c:262
 #: ../build/src/iop/introspection_colorbalancergb.c:485
@@ -2590,7 +2578,7 @@ msgstr "增益色度"
 #: ../build/src/iop/introspection_colorbalancergb.c:274
 #: ../build/src/iop/introspection_colorbalancergb.c:493
 msgid "gain hue"
-msgstr "增益色调"
+msgstr "增益色相"
 
 #: ../build/src/iop/introspection_colorbalancergb.c:280
 #: ../build/src/iop/introspection_colorbalancergb.c:497
@@ -2605,7 +2593,7 @@ msgstr "偏移量色度"
 #: ../build/src/iop/introspection_colorbalancergb.c:292
 #: ../build/src/iop/introspection_colorbalancergb.c:505
 msgid "offset hue"
-msgstr "偏移量色调"
+msgstr "偏移量色相"
 
 #: ../build/src/iop/introspection_colorbalancergb.c:298
 #: ../build/src/iop/introspection_colorbalancergb.c:509
@@ -4195,12 +4183,12 @@ msgstr "虚拟光台，用于展示照片集。"
 #: ../src/libs/styles.c:378 ../src/libs/styles.c:513 ../src/libs/tagging.c:2465
 #: ../src/libs/tagging.c:2501
 msgid "_cancel"
-msgstr "取消 (_C)"
+msgstr "取消(_C)"
 
 #: ../src/chart/main.c:504 ../src/gui/preferences.c:1029
 #: ../src/gui/styles_dialog.c:423 ../src/libs/styles.c:378
 msgid "_save"
-msgstr "保存 (_S)"
+msgstr "保存(_S)"
 
 #. TODO: is the rank interesting, too?
 #: ../src/chart/main.c:1063
@@ -4299,7 +4287,7 @@ msgstr "错误：无法打开文件 %s。"
 #: ../src/cli/main.c:566
 #, c-format
 msgid "no images to export, aborting\n"
-msgstr "没有图像要导出，正在退出……\n"
+msgstr "没有图像要导出，正在退出…\n"
 
 #: ../src/cli/main.c:583
 #, c-format
@@ -4332,7 +4320,7 @@ msgstr "无法找到硬盘存储模块。请检查您的安装，有些部分似
 
 #: ../src/cli/main.c:673
 msgid "failed to get parameters from storage module, aborting export ..."
-msgstr "从存储模块获取参数失败，导出中断……"
+msgstr "从存储模块获取参数失败，导出中断…"
 
 #: ../src/cli/main.c:689
 #, c-format
@@ -4341,7 +4329,7 @@ msgstr "未知扩展名“.%s”。"
 
 #: ../src/cli/main.c:699
 msgid "failed to get parameters from format module, aborting export ..."
-msgstr "从格式模块获取参数失败，导出中断……"
+msgstr "从格式模块获取参数失败，导出中断…"
 
 #: ../src/common/collection.c:782
 msgid "too much time to update aspect ratio for the collection"
@@ -4552,7 +4540,7 @@ msgstr "面颊"
 #: ../src/common/color_vocabulary.c:202
 #, c-format
 msgid "average %s skin tone\n"
-msgstr "%s 皮肤色调均值\n"
+msgstr "%s皮肤色调均值。\n"
 
 #. 0° - pinkish red
 #: ../src/common/color_vocabulary.c:222
@@ -4942,7 +4930,7 @@ msgstr "打印“%s”到“%s”时发生错误。"
 #: ../src/common/cups_print.c:574
 #, c-format
 msgid "printing `%s' on `%s'"
-msgstr "正在打印“%s”至“%s”……"
+msgstr "正在打印“%s”至“%s”…"
 
 #: ../src/common/darktable.c:237
 #, c-format
@@ -5367,7 +5355,7 @@ msgstr "你需要复制一张图片的历史，然后才能用在另一张上。
 #: ../src/common/http_server.c:95
 #, c-format
 msgid "ansel >> %s"
-msgstr ""
+msgstr "Ansel >> %s"
 
 #: ../src/common/http_server.c:97
 msgid "<h1>Sorry,</h1><p>something went wrong. Please try again.</p>"
@@ -5619,12 +5607,11 @@ msgstr "已选择 %i 个文件。"
 #: ../src/common/import.c:614
 #, c-format
 msgid "Detection in progress... (%i files found so far)"
-msgstr ""
+msgstr "正在进行检测…（目前已找到 %i 个文件。）"
 
 #: ../src/common/import.c:624
-#, fuzzy
 msgid "Detecting candidate files for import..."
-msgstr "选择导入文件"
+msgstr "正在检测要导入的候选文件…"
 
 #: ../src/common/import.c:686
 msgid ""
@@ -5646,6 +5633,8 @@ msgid ""
 "Crawling your selection for recursive folder detection... %i pictures found "
 "so far. <i>(This can take some time for large folders)</i>"
 msgstr ""
+"正在对您选择的目录进行递归文件检测…已找到 %i 张图片。<i>（对于大的目录这可能"
+"需要花费一些时间。）</i>"
 
 #: ../src/common/import.c:755
 msgid "invalid date/time format for import"
@@ -5660,11 +5649,12 @@ msgid ""
 "Crawling your selection for recursive folder detection... <i>(This can take "
 "some time for large folders)</i>"
 msgstr ""
+"正在对您选择的目录进行递归文件检测…<i>（对于大的目录这可能需要花费一些时"
+"间。）</i>"
 
 #: ../src/common/import.c:828
-#, fuzzy
 msgid "Ansel - Open pictures"
-msgstr "Ansel 首选项"
+msgstr "Ansel - 导入图片"
 
 #: ../src/common/import.c:829 ../src/iop/ashift.c:5140 ../src/iop/crop.c:962
 msgid "Cancel"
@@ -5738,6 +5728,16 @@ msgid ""
 "including the metadata and settings stored in it. If it is not what you "
 "want, you can reset metadata in the lighttable."
 msgstr ""
+"已经位于照片库中的图片将不会被再次导入，无论是否被选中。如果想通过 XMP 文件更"
+"新本地数据库，需要先从照片库中移除图片，或者使用“运行”菜单中的“重新同步 XMP "
+"文件与照片库”。\n"
+"\n"
+"Ansel 使用文件名和所在目录（完整路径）来索引图片而不是使用文件内容。因此，重"
+"命名或者在文件系统上移动文件，或者改变了外置磁盘的挂载点将会使文件看起来像新"
+"（未知）图片。\n"
+"\n"
+"如果存在和图片对应的 XMP 文件，那么它将会被一起导入，这包括存储在里面的元数据"
+"和设置。如果您不想这样，可以在光台中重置元数据。"
 
 #: ../src/common/import.c:954
 msgid "<b>File handling</b>"
@@ -5906,13 +5906,13 @@ msgstr "GNOME 密钥环不再受支持。请配置其他后端。"
 #, c-format
 msgid "rejecting %d image"
 msgid_plural "rejecting %d images"
-msgstr[0] "正在退稿 %d 张图像……"
+msgstr[0] "正在退稿 %d 张图像…"
 
 #: ../src/common/ratings.c:195
 #, c-format
 msgid "applying rating %d to %d image"
 msgid_plural "applying rating %d to %d images"
-msgstr[0] "正在应用评级 %d 到 %d 张图像……"
+msgstr[0] "正在应用评级 %d 到 %d 张图像…"
 
 #: ../src/common/ratings.c:209
 msgid "no images selected to apply rating"
@@ -6026,7 +6026,7 @@ msgstr "处理模块"
 #: ../src/control/control.c:72
 msgctxt "accel"
 msgid "blending"
-msgstr "<混合>"
+msgstr "蒙版混合"
 
 #: ../src/control/control.c:73
 msgctxt "accel"
@@ -6040,7 +6040,7 @@ msgstr "备用"
 
 #: ../src/control/control.c:242
 msgid "working..."
-msgstr "工作中……"
+msgstr "工作中…"
 
 #: ../src/control/crawler.c:426
 #, c-format
@@ -6213,7 +6213,7 @@ msgstr "图像尺寸和方向必须相同！"
 #, c-format
 msgid "merging %d image"
 msgid_plural "merging %d images"
-msgstr[0] "正在合并 %d 张图像……"
+msgstr[0] "正在合并 %d 张图像…"
 
 #: ../src/control/jobs/control_jobs.c:553
 #, c-format
@@ -6224,13 +6224,13 @@ msgstr "已写入合并 HDR “%s”。"
 #, c-format
 msgid "duplicating %d image"
 msgid_plural "duplicating %d images"
-msgstr[0] "正在复制 %d 张图像……"
+msgstr[0] "正在复制 %d 张图像…"
 
 #: ../src/control/jobs/control_jobs.c:626
 #, c-format
 msgid "flipping %d image"
 msgid_plural "flipping %d images"
-msgstr[0] "正在翻转 %d 张图像……"
+msgstr[0] "正在翻转 %d 张图像…"
 
 #: ../src/control/jobs/control_jobs.c:657
 #, c-format
@@ -6248,7 +6248,7 @@ msgstr[0] "已将 %d 张图像设置为黑白。"
 #, c-format
 msgid "removing %d image"
 msgid_plural "removing %d images"
-msgstr[0] "正在移除 %d 张图像……"
+msgstr[0] "正在移除 %d 张图像…"
 
 #: ../src/control/jobs/control_jobs.c:848
 #, c-format
@@ -6292,13 +6292,13 @@ msgstr "删除错误"
 #, c-format
 msgid "trashing %d image"
 msgid_plural "trashing %d images"
-msgstr[0] "正在将 %d 张图片移动至回收站……"
+msgstr[0] "正在将 %d 张图片移动至回收站…"
 
 #: ../src/control/jobs/control_jobs.c:1014
 #, c-format
 msgid "deleting %d image"
 msgid_plural "deleting %d images"
-msgstr[0] "正在删除 %d 张图像……"
+msgstr[0] "正在删除 %d 张图像…"
 
 #: ../src/control/jobs/control_jobs.c:1140
 msgid "failed to parse GPX file"
@@ -6313,46 +6313,46 @@ msgstr[0] "已应用匹配的 GPX 位置到 %d 张图像。"
 #: ../src/control/jobs/control_jobs.c:1204
 #, c-format
 msgid "moving %d image"
-msgstr "正在移动 %d 张图像……"
+msgstr "正在移动 %d 张图像…"
 
 #: ../src/control/jobs/control_jobs.c:1205
 #, c-format
 msgid "moving %d images"
-msgstr "正在移动 %d 张图像……"
+msgstr "正在移动 %d 张图像…"
 
 #: ../src/control/jobs/control_jobs.c:1210
 #, c-format
 msgid "copying %d image"
-msgstr "正在复制 %d 张图像……"
+msgstr "正在复制 %d 张图像…"
 
 #: ../src/control/jobs/control_jobs.c:1211
 #, c-format
 msgid "copying %d images"
-msgstr "正在复制 %d 张图像……"
+msgstr "正在复制 %d 张图像…"
 
 #: ../src/control/jobs/control_jobs.c:1226
 #, c-format
 msgid "creating local copy of %d image"
 msgid_plural "creating local copies of %d images"
-msgstr[0] "正在创建 %d 张图像的本地副本……"
+msgstr[0] "正在创建 %d 张图像的本地副本…"
 
 #: ../src/control/jobs/control_jobs.c:1229
 #, c-format
 msgid "removing local copy of %d image"
 msgid_plural "removing local copies of %d images"
-msgstr[0] "正在删除 %d 张图像的本地副本……"
+msgstr[0] "正在删除 %d 张图像的本地副本…"
 
 #: ../src/control/jobs/control_jobs.c:1276
 #, c-format
 msgid "refreshing info for %d image"
 msgid_plural "refreshing info for %d images"
-msgstr[0] "正在刷新 %d 张图像的信息……"
+msgstr[0] "正在刷新 %d 张图像的信息…"
 
 #: ../src/control/jobs/control_jobs.c:1363
 #, c-format
 msgid "exporting %d image.."
 msgid_plural "exporting %d images.."
-msgstr[0] "正在导出 %d 张图像……"
+msgstr[0] "正在导出 %d 张图像…"
 
 #: ../src/control/jobs/control_jobs.c:1365
 msgid "no image to export"
@@ -6370,24 +6370,24 @@ msgstr "图像“%s”目前不可用。"
 
 #: ../src/control/jobs/control_jobs.c:1510
 msgid "merge hdr image"
-msgstr "合并 HDR 图像……"
+msgstr "合并 HDR 图像…"
 
 #: ../src/control/jobs/control_jobs.c:1524
 msgid "duplicate images"
-msgstr "复制图像……"
+msgstr "复制图像…"
 
 #: ../src/control/jobs/control_jobs.c:1530
 msgid "flip images"
-msgstr "翻转图像……"
+msgstr "翻转图像…"
 
 #: ../src/control/jobs/control_jobs.c:1537
 msgid "set monochrome images"
-msgstr "将图像设置为黑白……"
+msgstr "将图像设置为黑白…"
 
 #. get all selected images now, to avoid the set changing during ui interaction
 #: ../src/control/jobs/control_jobs.c:1544
 msgid "remove images"
-msgstr "移除图像……"
+msgstr "移除图像…"
 
 #: ../src/control/jobs/control_jobs.c:1561
 #, c-format
@@ -6411,7 +6411,7 @@ msgstr "从照片库中移除图像？"
 #: ../src/control/jobs/control_jobs.c:1584
 #: ../src/control/jobs/control_jobs.c:1625
 msgid "delete images"
-msgstr "删除图像……"
+msgstr "删除图像…"
 
 #: ../src/control/jobs/control_jobs.c:1603
 #, c-format
@@ -6448,7 +6448,7 @@ msgstr "删除图像？"
 
 #: ../src/control/jobs/control_jobs.c:1666
 msgid "move images"
-msgstr "移动图像……"
+msgstr "移动图像…"
 
 #: ../src/control/jobs/control_jobs.c:1678
 #: ../src/control/jobs/control_jobs.c:1740
@@ -6474,7 +6474,7 @@ msgstr[0] "移动图像？"
 
 #: ../src/control/jobs/control_jobs.c:1728
 msgid "copy images"
-msgstr "复制图像……"
+msgstr "复制图像…"
 
 #: ../src/control/jobs/control_jobs.c:1760
 #, c-format
@@ -6490,40 +6490,40 @@ msgstr[0] "复制图像？"
 #: ../src/control/jobs/control_jobs.c:1786
 #: ../src/control/jobs/control_jobs.c:1794
 msgid "local copy images"
-msgstr "本地复制图像……"
+msgstr "本地复制图像…"
 
 #: ../src/control/jobs/control_jobs.c:1801
 msgid "refresh exif"
-msgstr "刷新 EXIF……"
+msgstr "刷新 EXIF…"
 
 #: ../src/control/jobs/control_jobs.c:1865
 #, c-format
 msgid "failed to get parameters from storage module `%s', aborting export.."
-msgstr "从存储模块“%s”获取参数失败，导出中断……"
+msgstr "从存储模块“%s”获取参数失败，导出中断…"
 
 #: ../src/control/jobs/control_jobs.c:1881
 msgid "export images"
-msgstr "导出图像……"
+msgstr "导出图像…"
 
 #: ../src/control/jobs/control_jobs.c:1928
 #, c-format
 msgid "adding time offset to %d image"
-msgstr "正在向 %d 张图像添加时间偏移……"
+msgstr "正在向 %d 张图像添加时间偏移…"
 
 #: ../src/control/jobs/control_jobs.c:1928
 #, c-format
 msgid "setting date/time of %d image"
-msgstr "正在为 %d 张图像设置拍摄日期与时间……"
+msgstr "正在为 %d 张图像设置拍摄日期与时间…"
 
 #: ../src/control/jobs/control_jobs.c:1929
 #, c-format
 msgid "adding time offset to %d images"
-msgstr "正在向 %d 张图像添加时间偏移……"
+msgstr "正在向 %d 张图像添加时间偏移…"
 
 #: ../src/control/jobs/control_jobs.c:1929
 #, c-format
 msgid "setting date/time of %d images"
-msgstr "正在为 %d 张图像设置拍摄日期与时间……"
+msgstr "正在为 %d 张图像设置拍摄日期与时间…"
 
 #: ../src/control/jobs/control_jobs.c:1970
 #, c-format
@@ -6547,23 +6547,23 @@ msgstr "已为 %d 张图像设置拍摄日期与时间。"
 
 #: ../src/control/jobs/control_jobs.c:2012
 msgid "time offset"
-msgstr "时间偏移……"
+msgstr "时间偏移…"
 
 #: ../src/control/jobs/control_jobs.c:2040
 msgid "write sidecar files"
-msgstr "写入附属文件……"
+msgstr "写入附属文件…"
 
 #: ../src/control/jobs/control_jobs.c:2231 ../src/control/jobs/film_jobs.c:297
 #, c-format
 msgid "importing %d image"
 msgid_plural "importing %d images"
-msgstr[0] "正在导入 %d 张图像……"
+msgstr[0] "正在导入 %d 张图像…"
 
 #: ../src/control/jobs/control_jobs.c:2266
 #, c-format
 msgid "importing %d/%d image"
 msgid_plural "importing %d/%d images"
-msgstr[0] "正在导入 %d 张图像（共 %d 张）……"
+msgstr[0] "正在导入 %d 张图像（共 %d 张）…"
 
 #: ../src/control/jobs/control_jobs.c:2274
 #, c-format
@@ -6573,11 +6573,11 @@ msgstr[0] "已导入 %d 张图像。"
 
 #: ../src/control/jobs/control_jobs.c:2321
 msgid "import"
-msgstr "导入……"
+msgstr "导入…"
 
 #: ../src/control/jobs/film_jobs.c:73 ../src/control/jobs/film_jobs.c:109
 msgid "import images"
-msgstr "导入图像……"
+msgstr "导入图像…"
 
 #: ../src/control/jobs/film_jobs.c:239
 msgid "no supported images were found to be imported"
@@ -6586,11 +6586,11 @@ msgstr "没有发现可以导入的图像文件。"
 #: ../src/control/jobs/image_jobs.c:76
 #, c-format
 msgid "importing image %s"
-msgstr "正在导入图像 %s……"
+msgstr "正在导入图像 %s…"
 
 #: ../src/control/jobs/image_jobs.c:110
 msgid "import image"
-msgstr "导入图像……"
+msgstr "导入图像…"
 
 #: ../src/develop/blend.c:292
 msgid "detail mask blending error"
@@ -7054,7 +7054,7 @@ msgstr "hz"
 
 #: ../src/develop/blend_gui.c:2118
 msgid "sliders for hue channel (of JzCzhz)"
-msgstr "色调通道滑块（JzCzhz）。"
+msgstr "色相通道滑块（JzCzhz）。"
 
 #: ../src/develop/blend_gui.c:2124
 msgid ""
@@ -7389,7 +7389,7 @@ msgid ""
 "shifts and tilts the tone curve of the blend mask to adjust its brightness "
 "without affecting fully transparent/fully opaque regions"
 msgstr ""
-"移动和倾斜混合蒙版的色调曲线以调整其亮度，而不影响完全透明/完全不透明区域。"
+"移动和倾斜混合蒙版的影调曲线以调整其亮度，而不影响完全透明/完全不透明区域。"
 
 #: ../src/develop/blend_gui.c:3171 ../src/libs/history.c:869
 msgid "mask contrast"
@@ -7398,7 +7398,7 @@ msgstr "蒙板对比度"
 #: ../src/develop/blend_gui.c:3173
 msgid ""
 "gives the tone curve of the blend mask an s-like shape to adjust its contrast"
-msgstr "将混合蒙版的色调曲线设置为 S 形以调整其对比度。"
+msgstr "将混合蒙版的影调曲线设置为 S 形以调整其对比度。"
 
 #: ../src/develop/blend_gui.c:3177
 msgid "mask refinement"
@@ -7543,7 +7543,7 @@ msgid ""
 "ctrl+click to reapply any automatic presets"
 msgstr ""
 "重置参数。\n"
-"按住 ctrl 并单击可重新应用任何自动预设。"
+"按住 Ctrl 并单击可重新应用任何自动预设。"
 
 #: ../src/develop/imageop.c:2496
 msgid ""
@@ -8153,12 +8153,12 @@ msgstr "自动白平衡"
 #: ../src/generate-cache/main.c:50
 #, c-format
 msgid "creating cache directories\n"
-msgstr "正在创建缓存目录……\n"
+msgstr "正在创建缓存目录…\n"
 
 #: ../src/generate-cache/main.c:56
 #, c-format
 msgid "creating cache directory '%s'\n"
-msgstr "正在创建缓存目录“%s”……\n"
+msgstr "正在创建缓存目录“%s”…\n"
 
 #: ../src/generate-cache/main.c:59 ../src/lua/image.c:122
 #, c-format
@@ -8550,7 +8550,7 @@ msgid ""
 "\n"
 "right-click to cancel"
 msgstr ""
-"通过按键来定义一个快捷方式，可以与 ctrl/shift/alt 等修饰键结合使用。\n"
+"通过按键来定义一个快捷方式，可以与 Ctrl/Shift/Alt 等修饰键结合使用。\n"
 "按键可以双击或三击，最后一次点击可以长按。\n"
 "在按住键盘的同时，可以双击/三击/按住鼠标按钮。\n"
 "在按住键盘/鼠标的同时，您可以继续叠加滚轮动作或光标移动。\n"
@@ -8733,7 +8733,7 @@ msgstr "启用基本快捷键下额外按钮、修饰键或动作的默认行为
 
 #: ../src/gui/accelerators.c:2352
 msgid "restore..."
-msgstr "恢复……"
+msgstr "恢复…"
 
 #: ../src/gui/accelerators.c:2353
 msgid "restore default shortcuts or previous state"
@@ -8743,7 +8743,7 @@ msgstr "恢复快捷键为默认值或之前的状态。"
 #: ../src/gui/accelerators.c:2357 ../src/libs/styles.c:854
 #: ../src/libs/tagging.c:3229
 msgid "import..."
-msgstr "导入……"
+msgstr "导入…"
 
 #: ../src/gui/accelerators.c:2358
 msgid "fully or partially import shortcuts from file"
@@ -8753,7 +8753,7 @@ msgstr "从文件导入所有或部分快捷键。"
 #: ../src/gui/accelerators.c:2362 ../src/libs/styles.c:858
 #: ../src/libs/tagging.c:3232
 msgid "export..."
-msgstr "导出……"
+msgstr "导出…"
 
 #: ../src/gui/accelerators.c:2363
 msgid "fully or partially export shortcuts to file"
@@ -8791,27 +8791,24 @@ msgid " but not "
 msgstr " 但非 "
 
 #: ../src/gui/actions/file.h:153
-#, fuzzy
 msgid "Ansel - Export images"
-msgstr "导出图片"
+msgstr "Ansel - 导出图片"
 
 #: ../src/gui/actions/file.h:175
 msgid "File"
 msgstr "文件"
 
 #: ../src/gui/actions/file.h:178
-#, fuzzy
 msgid "Import..."
-msgstr "导入……"
+msgstr "导入…"
 
 #: ../src/gui/actions/file.h:180
 msgid "Import images"
 msgstr "导入图片"
 
 #: ../src/gui/actions/file.h:183
-#, fuzzy
 msgid "Export..."
-msgstr "导出……"
+msgstr "导出…"
 
 #: ../src/gui/actions/file.h:185
 msgid "Export images"
@@ -8822,18 +8819,16 @@ msgid "Recent collections"
 msgstr "最近用过的集合"
 
 #: ../src/gui/actions/file.h:209
-#, fuzzy
 msgid "Copy files on disk..."
-msgstr "复制磁盘上的文件"
+msgstr "复制磁盘上的文件…"
 
 #: ../src/gui/actions/file.h:211
 msgid "Copy files on disk"
 msgstr "复制磁盘上的文件"
 
 #: ../src/gui/actions/file.h:214
-#, fuzzy
 msgid "Move files on disk..."
-msgstr "移动磁盘上的文件"
+msgstr "移动磁盘上的文件…"
 
 #: ../src/gui/actions/file.h:216
 msgid "Move files on disk"
@@ -8944,18 +8939,16 @@ msgid "Paste development (all)"
 msgstr "粘贴修改（全部）"
 
 #: ../src/gui/actions/edit.h:282
-#, fuzzy
 msgid "Paste development (parts)..."
-msgstr "粘贴修改（部分）"
+msgstr "粘贴修改（部分）…"
 
 #: ../src/gui/actions/edit.h:284
 msgid "Paste development (parts)"
 msgstr "粘贴修改（部分）"
 
 #: ../src/gui/actions/edit.h:289
-#, fuzzy
 msgid "Load development from XMP..."
-msgstr "从 XMP 文件中加载修改"
+msgstr "从 XMP 文件中加载修改…"
 
 #: ../src/gui/actions/edit.h:291
 msgid "Load development from XMP"
@@ -9175,7 +9168,7 @@ msgstr "所有过去版本的贡献者"
 
 #: ../src/gui/actions/help.h:30
 msgid "and..."
-msgstr "与……"
+msgstr "与…"
 
 #: ../src/gui/actions/help.h:31
 msgid "translator-credits"
@@ -9247,18 +9240,16 @@ msgid "Rotate"
 msgstr "旋转"
 
 #: ../src/gui/actions/image.h:164
-#, fuzzy
 msgid "90° counter-clockwise"
-msgstr "逆时针旋转 90°"
+msgstr "90° 逆时针"
 
 #: ../src/gui/actions/image.h:166
 msgid "Rotate 90° counter-clockwise"
 msgstr "逆时针旋转 90°"
 
 #: ../src/gui/actions/image.h:169
-#, fuzzy
 msgid "90° clockwise"
-msgstr "顺时针旋转 90°"
+msgstr "90° 顺时针"
 
 #: ../src/gui/actions/image.h:171
 msgid "Rotate 90° clockwise"
@@ -9327,9 +9318,8 @@ msgid "Ratings"
 msgstr "评分"
 
 #: ../src/gui/actions/image.h:221
-#, fuzzy
 msgid "Reject"
-msgstr "拒绝图像"
+msgstr "退稿"
 
 #: ../src/gui/actions/image.h:223
 msgid "Reject image"
@@ -9395,7 +9385,7 @@ msgstr "取消图像分组"
 
 #: ../src/gui/gtk.c:393
 msgid "closing Ansel..."
-msgstr "正在关闭 Ansel……"
+msgstr "正在关闭 Ansel…"
 
 #: ../src/gui/gtk.c:717
 msgid "Reinitialise input devices"
@@ -10024,12 +10014,12 @@ msgstr ""
 #: ../src/gui/preferences.c:842
 msgctxt "preferences"
 msgid "import..."
-msgstr "导入……"
+msgstr "导入…"
 
 #: ../src/gui/preferences.c:846
 msgctxt "preferences"
 msgid "export..."
-msgstr "导出……"
+msgstr "导出…"
 
 #: ../src/gui/preferences.c:978
 #, c-format
@@ -10120,7 +10110,7 @@ msgstr "编辑模块“%1$s”中的“%2$s”"
 
 #: ../src/gui/presets.c:474
 msgid "_export..."
-msgstr "导出……(_E)"
+msgstr "导出…(_E)"
 
 #: ../src/gui/presets.c:492
 msgid "name of the preset"
@@ -10224,7 +10214,7 @@ msgstr "已禁用：错误的模块版本。"
 
 #: ../src/gui/presets.c:1190 ../src/libs/lib.c:531
 msgid "edit this preset.."
-msgstr "编辑此预置……"
+msgstr "编辑此预置…"
 
 #: ../src/gui/presets.c:1194 ../src/libs/lib.c:535
 msgid "delete this preset"
@@ -10232,7 +10222,7 @@ msgstr "删除此预置"
 
 #: ../src/gui/presets.c:1200 ../src/libs/lib.c:543
 msgid "store new preset.."
-msgstr "存为新的预设……"
+msgstr "存为新的预设…"
 
 #: ../src/gui/presets.c:1206 ../src/libs/lib.c:555
 msgid "update preset"
@@ -11061,14 +11051,12 @@ msgid "Prevent accidental masks displacement when moving the view"
 msgstr "防止在移动视图时意外移动蒙版。"
 
 #: ../src/iop/ashift.c:121
-#, fuzzy
 msgid "Horizon and perspective"
-msgstr "旋转与透视"
+msgstr "水平与透视"
 
 #: ../src/iop/ashift.c:126
-#, fuzzy
 msgid "rotation|keystone|distortion|crop|reframe|horizon"
-msgstr "旋转|平移|扭曲|裁剪|边框"
+msgstr "旋转|梯形|畸变|裁剪|边框|水平"
 
 #: ../src/iop/ashift.c:131
 msgid "rotate or distort perspective"
@@ -11145,7 +11133,7 @@ msgstr "参数内仅可保存 %d 行。"
 #: ../src/iop/ashift.c:5442
 #, c-format
 msgid "lens shift (%s)"
-msgstr "镜头平移（%s）"
+msgstr "镜头偏移（%s）"
 
 #: ../src/iop/ashift.c:5508 ../src/iop/crop.c:1188
 msgid "Apply"
@@ -11156,47 +11144,40 @@ msgid "Apply changes"
 msgstr "应用修改"
 
 #: ../src/iop/ashift.c:5519
-#, fuzzy
 msgid "Manual settings"
-msgstr "常规设置"
+msgstr "手动设置"
 
 #: ../src/iop/ashift.c:5568
-#, fuzzy
 msgid "Mark reference lines"
-msgstr "相机参考"
+msgstr "标记参考线"
 
 #: ../src/iop/ashift.c:5582
-#, fuzzy
 msgid "Fit perspective transform"
-msgstr "白平衡自适应变换"
+msgstr "拟合透视变换"
 
 #: ../src/iop/ashift.c:5599
-#, fuzzy
 msgid "Fitting options"
-msgstr "混合选项"
+msgstr "拟合选项"
 
 #: ../src/iop/ashift.c:5602
 msgid "rotation, lens shift, shear"
-msgstr ""
+msgstr "旋转，镜头偏移，剪切"
 
 #: ../src/iop/ashift.c:5603
-#, fuzzy
 msgid "rotation, lens shift"
-msgstr "旋转|翻转"
+msgstr "旋转，镜头偏移"
 
 #: ../src/iop/ashift.c:5604
-#, fuzzy
 msgid "rotation only"
-msgstr "仅饱和度"
+msgstr "仅旋转"
 
 #: ../src/iop/ashift.c:5605
-#, fuzzy
 msgid "lens shift only"
-msgstr "镜头平移（水平）"
+msgstr "仅镜头偏移"
 
 #: ../src/iop/ashift.c:5607
 msgid "Fit for"
-msgstr ""
+msgstr "拟合于"
 
 #: ../src/iop/ashift.c:5616
 msgid ""
@@ -11254,7 +11235,7 @@ msgid ""
 "ctrl+click to only fit rotation\n"
 "shift+click to only fit lens shift"
 msgstr ""
-"自动校正垂直透视失真。\n"
+"自动校正垂直透视畸变。\n"
 "Ctrl + 单击以仅拟合旋转。\n"
 "Shift + 单击以仅拟合镜头偏移。"
 
@@ -11264,7 +11245,7 @@ msgid ""
 "ctrl+click to only fit rotation\n"
 "shift+click to only fit lens shift"
 msgstr ""
-"自动校正水平透视失真。\n"
+"自动校正水平透视畸变。\n"
 "Ctrl + 单击以仅拟合旋转。\n"
 "Shift + 单击以仅拟合镜头偏移。"
 
@@ -11276,7 +11257,7 @@ msgid ""
 "shift+click to only fit lens shift\n"
 "ctrl+shift+click to only fit rotation and lens shift"
 msgstr ""
-"自动校正垂直和水平透视失真、拟合旋转、剪切、两个方向的镜头偏移和错切。\n"
+"自动校正垂直和水平透视畸变、拟合旋转、剪切、两个方向的镜头偏移和错切。\n"
 "Ctrl + 单击以仅拟合旋转。\n"
 "Shift + 单击以仅拟合镜头偏移。\n"
 "Ctrl + Shift + 单击以仅拟合旋转和镜头偏移。"
@@ -11821,7 +11802,7 @@ msgstr "非线性、Lab"
 
 #: ../src/iop/bilat.c:172
 msgid "HDR local tone-mapping"
-msgstr "HDR 局部色调映射"
+msgstr "HDR 局部影调映射"
 
 #: ../src/iop/bilat.c:429
 msgid ""
@@ -11998,7 +11979,7 @@ msgstr "定长边框"
 
 #: ../src/iop/borders.c:973 ../src/iop/borders.c:999 ../src/iop/borders.c:1005
 msgid "custom..."
-msgstr "自定义……"
+msgstr "自定义…"
 
 #: ../src/iop/borders.c:994 ../src/iop/borders.c:1000
 msgid "center"
@@ -12565,9 +12546,8 @@ msgstr "成功从 RAW 图像中提取白平衡。"
 
 #. We need to recompute only the full preview
 #: ../src/iop/channelmixerrgb.c:3596
-#, fuzzy
 msgid "auto-detection of white balance started..."
-msgstr "白平衡的自动检测已完成。"
+msgstr "已开始自动检测白平衡…"
 
 #: ../src/iop/channelmixerrgb.c:3662
 msgid ""
@@ -12582,6 +12562,9 @@ msgid ""
 "h: \t%.1f °\n"
 "c: \t%.1f"
 msgstr ""
+"L: \t%.1f %%\n"
+"h: \t%.1f °\n"
+"c: \t%.1f"
 
 #. //////////////////////// PAGE SETTINGS
 #: ../src/iop/channelmixerrgb.c:3957 ../src/iop/clipping.c:2105
@@ -12616,6 +12599,13 @@ msgid ""
 "- XYZ is a simple scaling in XYZ space. It is not recommended in general.\n"
 "- none disables any adaptation and uses pipeline working RGB."
 msgstr ""
+"选择适应光照的方式，以及模块工作的颜色空间：\n"
+"- “线性布拉德福算法（1985）”和 ICC v4 工具链保持一致。\n"
+"- “CAT16 (2016)”更普适也更精确。\n"
+"- “非线性布拉德福算法（1985）”是布拉德福算法的原始版本，它可以产生比线性版本"
+"更好的结果，但不可靠。\n"
+"- “XYZ”是 XYZ 空间的简单缩放。一般不推荐使用。\n"
+"- “无”禁用任何自适应并使用 RGB 流水线工作。"
 
 #: ../src/iop/channelmixerrgb.c:3982
 msgid ""
@@ -12643,7 +12633,7 @@ msgstr "色温"
 
 #: ../src/iop/channelmixerrgb.c:4028
 msgid "spot color mapping"
-msgstr "专色映射（Spot Color Mapping）"
+msgstr "专色映射"
 
 #: ../src/iop/channelmixerrgb.c:4031 ../src/iop/channelmixerrgb.c:4159
 msgid "use a color checker target to autoset CAT and channels"
@@ -12682,7 +12672,7 @@ msgid ""
 "compute the target by taking the channel mixing into account.\n"
 "if disabled, only the CAT is considered."
 msgstr ""
-"计算目标颜色时考虑通道混合（channel mixing）。\n"
+"计算目标颜色时考虑通道混合。\n"
 "若关闭此选项，仅有色彩适应变换（CAT）被用于计算。"
 
 #: ../src/iop/channelmixerrgb.c:4063 ../src/iop/exposure.c:1070
@@ -12701,7 +12691,7 @@ msgstr ""
 
 #: ../src/iop/channelmixerrgb.c:4070 ../src/iop/exposure.c:1077
 msgid "these LCh coordinates are computed from CIE Lab 1976 coordinates"
-msgstr ""
+msgstr "LCh 值基于 CIE Lab 1976 计算。"
 
 #: ../src/iop/channelmixerrgb.c:4083
 msgid "the desired target color after mapping"
@@ -12889,7 +12879,7 @@ msgstr "裁剪和旋转"
 
 #: ../src/iop/clipping.c:314
 msgid "reframe|perspective|keystone|distortion"
-msgstr "边框|透视|梯度|失真"
+msgstr "边框|透视|梯形|畸变"
 
 #: ../src/iop/clipping.c:319
 msgid "change the framing and correct the perspective"
@@ -13058,7 +13048,7 @@ msgid ""
 "<b>resize</b>: drag, <b>keep aspect ratio</b>: shift+drag\n"
 "<b>straighten</b>: right-drag"
 msgstr ""
-"<b>调整大小</b>：拖动，<b>调整大小并保持纵横比</b>：shift + 拖动。<b>取直</"
+"<b>调整大小</b>：拖动，<b>调整大小并保持纵横比</b>：Shift + 拖动。<b>取直</"
 "b>：右键拖动。"
 
 #: ../src/iop/clipping.c:3082
@@ -13114,7 +13104,7 @@ msgstr "颜色平衡"
 
 #: ../src/iop/colorbalance.c:153
 msgid "lift gamma gain|cdl|color grading|contrast|saturation|hue"
-msgstr "提升、伽玛、增益|CDL|调色|对比度|饱和度|色调"
+msgstr "提升、伽玛、增益|CDL|调色|对比度|饱和度|色相"
 
 #: ../src/iop/colorbalance.c:158 ../src/iop/colorbalancergb.c:181
 msgid "affect color, brightness and contrast"
@@ -13242,7 +13232,7 @@ msgstr "色彩平衡后的饱和度校正。"
 
 #: ../src/iop/colorbalance.c:1894
 msgid "adjust to match a neutral tone"
-msgstr "调整以匹配出中间调。"
+msgstr "调整以匹配出中性色调。"
 
 #. is set in _configure_slider_blocks
 #: ../src/iop/colorbalance.c:1952
@@ -13329,7 +13319,7 @@ msgstr "颜色平衡 RGB"
 msgid ""
 "offset power slope|cdl|color grading|contrast|chroma_highlights|hue|vibrance|"
 "saturation"
-msgstr "偏移、乘方、斜率|CDL|调色|对比度|色度|高光|色调|鲜艳度|饱和度"
+msgstr "偏移、乘方、斜率|CDL|调色|对比度|色度|高光|色相|鲜艳度|饱和度"
 
 #: ../src/iop/colorbalancergb.c:441
 msgid "add basic colorfulness (legacy)"
@@ -13362,7 +13352,7 @@ msgstr "全局调色。"
 
 #: ../src/iop/colorbalancergb.c:1815
 msgid "rotate all hues by an angle, at the same luminance"
-msgstr "在相同的亮度下，将所有色调旋转一个角度。"
+msgstr "在相同的亮度下，将所有色相旋转一个角度。"
 
 #: ../src/iop/colorbalancergb.c:1821
 msgid "increase colorfulness mostly on low-chroma colors"
@@ -13441,7 +13431,7 @@ msgstr "全局亮度偏移。"
 
 #: ../src/iop/colorbalancergb.c:1912
 msgid "hue of the global color offset"
-msgstr "全局颜色偏移的色调。"
+msgstr "全局颜色偏移的色相。"
 
 #: ../src/iop/colorbalancergb.c:1918
 msgid "chroma of the global color offset"
@@ -13457,7 +13447,7 @@ msgstr "阴影区域中的亮度增益。"
 
 #: ../src/iop/colorbalancergb.c:1931
 msgid "hue of the color gain in shadows"
-msgstr "阴影区域中颜色增益的色调。"
+msgstr "阴影区域中颜色增益的色相。"
 
 #: ../src/iop/colorbalancergb.c:1937
 msgid "chroma of the color gain in shadows"
@@ -13473,7 +13463,7 @@ msgstr "高光区域中的亮度增益。"
 
 #: ../src/iop/colorbalancergb.c:1950
 msgid "hue of the color gain in highlights"
-msgstr "高光区域中颜色增益的色调。"
+msgstr "高光区域中颜色增益的色相。"
 
 #: ../src/iop/colorbalancergb.c:1956
 msgid "chroma of the color gain in highlights"
@@ -13486,15 +13476,15 @@ msgstr "乘方"
 
 #: ../src/iop/colorbalancergb.c:1964
 msgid "luminance exponent in mid-tones"
-msgstr "中间色的亮度指数。"
+msgstr "中间调的亮度指数。"
 
 #: ../src/iop/colorbalancergb.c:1969
 msgid "hue of the color exponent in mid-tones"
-msgstr "中间色亮度指数的色调。"
+msgstr "中间调亮度指数的色相。"
 
 #: ../src/iop/colorbalancergb.c:1975
 msgid "chroma of the color exponent in mid-tones"
-msgstr "中间色亮度指数的色度。"
+msgstr "中间调亮度指数的色度。"
 
 #. Page masks
 #: ../src/iop/colorbalancergb.c:1980
@@ -13682,7 +13672,7 @@ msgstr ""
 
 #: ../src/iop/colorchecker.c:1363
 msgid "green-magenta offset"
-msgstr "绿色-品红对比"
+msgstr "绿色 - 品红对比"
 
 #: ../src/iop/colorchecker.c:1369
 msgid ""
@@ -13695,7 +13685,7 @@ msgstr ""
 
 #: ../src/iop/colorchecker.c:1370
 msgid "blue-yellow offset"
-msgstr "蓝色-黄色对比"
+msgstr "蓝色 - 黄色对比"
 
 #: ../src/iop/colorchecker.c:1376
 msgid ""
@@ -14036,7 +14026,7 @@ msgstr "是否给予或者如何给予特定替换颜色优先权。"
 
 #: ../src/iop/colorreconstruction.c:1308
 msgid "the hue tone which should be given precedence over other hue tones"
-msgstr "应优先于其他色调的色调。"
+msgstr "应优先于其他色相的色相。"
 
 #: ../src/iop/colorreconstruction.c:1310 ../src/iop/demosaic.c:1604
 #: ../src/iop/highlights.c:2290
@@ -14197,7 +14187,7 @@ msgstr "裁剪"
 
 #: ../src/iop/crop.c:146
 msgid "reframe|distortion"
-msgstr "边框|失真"
+msgstr "边框|畸变"
 
 #: ../src/iop/crop.c:151
 msgid "change the framing"
@@ -14368,11 +14358,11 @@ msgstr "去马赛克只能用于彩色 RAW 图像。"
 
 #: ../src/iop/denoiseprofile.c:707
 msgid "wavelets: chroma only"
-msgstr "小波：仅色度（chroma）"
+msgstr "小波：仅色度"
 
 #: ../src/iop/denoiseprofile.c:713
 msgid "denoise (profiled)"
-msgstr "降噪（图像分析）"
+msgstr "降噪（基于配置文件）"
 
 #: ../src/iop/denoiseprofile.c:719
 msgid "denoise using noise statistics profiled on sensors"
@@ -14860,7 +14850,7 @@ msgid ""
 "for standalone sharpening set speed to negative values."
 msgstr ""
 "增加或降低最高频的锐度\n"
-"可用于在晕光(blooming)后保留细节。\n"
+"可用于在晕光后保留细节。\n"
 "若希望单独使用，将速度设置为负值。"
 
 #: ../src/iop/diffuse.c:1591
@@ -15313,7 +15303,7 @@ msgstr "胶片 RGB"
 
 #: ../src/iop/filmicrgb.c:347
 msgid "tone mapping|curve|view transform|contrast|saturation|highlights"
-msgstr "色调映射|曲线|视图转换|对比度|饱和度|高光"
+msgstr "影调映射|曲线|视图转换|对比度|饱和度|高光"
 
 #: ../src/iop/filmicrgb.c:352
 msgid ""
@@ -15401,7 +15391,7 @@ msgid ""
 "the dark curve is the desaturation curve."
 msgstr ""
 "使用以下参数设置节点。\n"
-"亮曲线是胶片色调映射曲线。\n"
+"亮曲线是胶片影调映射曲线。\n"
 "暗曲线是去饱和曲线。"
 
 #: ../src/iop/filmicrgb.c:4386
@@ -15689,7 +15679,7 @@ msgid ""
 msgstr ""
 "降低模块输出的饱和度\n"
 "特别是在中等亮度下。\n"
-"如果中间影调欠饱和，请增加该值。"
+"如果中间调欠饱和，请增加该值。"
 
 #: ../src/iop/filmicrgb.c:4775
 msgid "highlights saturation mix"
@@ -15702,7 +15692,7 @@ msgid ""
 "Zero is an equal mix of both strategies."
 msgstr ""
 "正数值将在整个范围内保证饱和度不变。\n"
-"负数值将在恒定的色调和亮度下漂白高光。\n"
+"负数值将在恒定的色相和亮度下漂白高光。\n"
 "设置为零会等价混合两种策略。"
 
 #: ../src/iop/finalscale.c:41
@@ -15784,7 +15774,7 @@ msgstr "显示编码"
 
 #: ../src/iop/globaltonemap.c:100
 msgid "global tonemap"
-msgstr "全局色调映射"
+msgstr "全局影调映射"
 
 #: ../src/iop/globaltonemap.c:105
 msgid "this module is deprecated. please use the filmic rgb module instead."
@@ -15796,17 +15786,17 @@ msgstr "操作"
 
 #: ../src/iop/globaltonemap.c:639
 msgid "the global tonemap operator"
-msgstr "全局色调映射操作。"
+msgstr "全局影调映射操作。"
 
 #: ../src/iop/globaltonemap.c:642
 msgid ""
 "the bias for tonemapper controls the linearity, the higher the more details "
 "in blacks"
-msgstr "色调映射器的偏差为线性，越高则越多细节位于黑色区域。"
+msgstr "影调映射器的偏差为线性，越高则越多细节位于黑色区域。"
 
 #: ../src/iop/globaltonemap.c:646
 msgid "the target light for tonemapper specified as cd/m2"
-msgstr "色调映射器的明度单位为 cd/m2。"
+msgstr "影调映射器的明度单位为 cd/m2。"
 
 #: ../src/iop/graduatednd.c:71
 msgid "neutral gray ND2 (soft)"
@@ -16194,11 +16184,11 @@ msgstr "到主体的距离。"
 
 #: ../src/iop/lens.cc:2247
 msgid "distortion & TCA"
-msgstr "失真和横向色差"
+msgstr "畸变和横向色差"
 
 #: ../src/iop/lens.cc:2253
 msgid "distortion & vignetting"
-msgstr "失真和渐晕"
+msgstr "畸变和渐晕"
 
 #: ../src/iop/lens.cc:2259
 msgid "TCA & vignetting"
@@ -16206,7 +16196,7 @@ msgstr "横向色差和渐晕"
 
 #: ../src/iop/lens.cc:2265
 msgid "only distortion"
-msgstr "仅失真"
+msgstr "仅畸变"
 
 #: ../src/iop/lens.cc:2271
 msgid "only TCA"
@@ -16293,7 +16283,7 @@ msgstr "失真"
 
 #: ../src/iop/lens.cc:2374
 msgid "correct distortions or apply them"
-msgstr "修正失真或应用它们。"
+msgstr "修正畸变或应用它们。"
 
 #: ../src/iop/lens.cc:2381
 msgid "Transversal Chromatic Aberration red"
@@ -17112,7 +17102,7 @@ msgstr "通过一些估算来进行优化。"
 
 #: ../src/iop/profile_gamma.c:678
 msgid "tone mapping method"
-msgstr "色调映射方式。"
+msgstr "影调映射方式。"
 
 #: ../src/iop/rawdenoise.c:124
 msgid "raw denoise"
@@ -17218,7 +17208,7 @@ msgstr "曝光补偿"
 #: ../src/iop/relight.c:97 ../src/iop/zonesystem.c:122
 msgid ""
 "this module is deprecated. please use the tone equalizer module instead."
-msgstr "此模块已弃用。请使用色调均衡器替代。"
+msgstr "此模块已弃用。请使用影调均衡器替代。"
 
 #: ../src/iop/relight.c:269
 msgid "the fill-light in EV"
@@ -17230,7 +17220,7 @@ msgid ""
 "ctrl+click to select an area"
 msgstr ""
 "选择补光的中心位置。\n"
-"按住 ctrl 点击以选中区域。"
+"按住 Ctrl 点击以选中区域。"
 
 #: ../src/iop/relight.c:282
 msgid "toggle tool for picking median lightness in image"
@@ -17470,9 +17460,8 @@ msgid "rgb curve"
 msgstr "RGB 曲线"
 
 #: ../src/iop/rgbcurve.c:141
-#, fuzzy
 msgid "alter an image's tones using curves in RGB color space"
-msgstr "调整 RGB 色彩空间中的黑、白和中间灰点位置。"
+msgstr "在 RGB 颜色空间中使用曲线修改图片的影调。"
 
 #: ../src/iop/rgbcurve.c:192 ../src/iop/tonecurve.c:563
 msgid "gamma 1.0 (linear)"
@@ -17727,7 +17716,7 @@ msgstr "选择饱和度"
 
 #: ../src/iop/splittoning.c:491
 msgid "select tone color"
-msgstr "选择色调的色彩"
+msgstr "选择影调的色彩"
 
 #: ../src/iop/splittoning.c:535
 msgid "the balance of center of split-toning"
@@ -17929,11 +17918,11 @@ msgstr "已禁用此相机的白平衡设置"
 
 #: ../src/iop/tonecurve.c:192
 msgid "tone curve"
-msgstr "色调曲线"
+msgstr "影调曲线"
 
 #: ../src/iop/tonecurve.c:212
 msgid "alter an image's tones using curves"
-msgstr ""
+msgstr "使用曲线改变图片的影调。"
 
 #: ../src/iop/tonecurve.c:1151
 msgid ""
@@ -17946,23 +17935,23 @@ msgstr ""
 
 #: ../src/iop/tonecurve.c:1160
 msgid "tonecurve for L channel"
-msgstr "色调曲线 - L 通道"
+msgstr "影调曲线 - L 通道"
 
 #: ../src/iop/tonecurve.c:1161
 msgid "tonecurve for a channel"
-msgstr "色调曲线 - a 通道"
+msgstr "影调曲线 - a 通道"
 
 #: ../src/iop/tonecurve.c:1162
 msgid "tonecurve for b channel"
-msgstr "色调曲线 - b 通道"
+msgstr "影调曲线 - b 通道"
 
 #: ../src/iop/toneequal.c:293
 msgid "tone equalizer"
-msgstr "色调均衡器"
+msgstr "影调均衡器"
 
 #: ../src/iop/toneequal.c:298
 msgid "tone curve|tone mapping|relight|background light|shadows highlights"
-msgstr "色调曲线|色调映射|重新打光|背景光照|阴影高光"
+msgstr "影调曲线|影调映射|重新打光|背景光照|阴影高光"
 
 #: ../src/iop/toneequal.c:304
 msgid "relight the scene as if the lighting was done directly on the scene"
@@ -17979,7 +17968,7 @@ msgstr "准线性、RGB、场景引用"
 #. No blending
 #: ../src/iop/toneequal.c:424
 msgid "simple tone curve"
-msgstr "简单色调曲线"
+msgstr "简单影调曲线"
 
 #: ../src/iop/toneequal.c:437
 msgid "mask blending: all purposes"
@@ -17990,14 +17979,12 @@ msgid "mask blending: people with backlight"
 msgstr "蒙版混合：人物背光"
 
 #: ../src/iop/toneequal.c:459
-#, fuzzy
 msgid "compress shadows/highlights (eigf): strong"
-msgstr "压缩阴影/高光（gf）：柔和"
+msgstr "压缩阴影/高光（eigf）：强烈"
 
 #: ../src/iop/toneequal.c:463
-#, fuzzy
 msgid "compress shadows/highlights (gf): strong"
-msgstr "压缩阴影/高光（gf）：柔和"
+msgstr "压缩阴影/高光（gf）：强烈"
 
 #: ../src/iop/toneequal.c:471
 msgid "compress shadows/highlights (eigf): medium"
@@ -18008,9 +17995,8 @@ msgid "compress shadows/highlights (gf): medium"
 msgstr "压缩阴影/高光（gf）：中等"
 
 #: ../src/iop/toneequal.c:483
-#, fuzzy
 msgid "compress shadows/highlights (eigf): soft"
-msgstr "压缩阴影/高光（gf）：柔和"
+msgstr "压缩阴影/高光（eigf）：柔和"
 
 #: ../src/iop/toneequal.c:487
 msgid "compress shadows/highlights (gf): soft"
@@ -18036,18 +18022,18 @@ msgstr "重新打光：填充"
 msgid ""
 "tone equalizer needs to be after distortion modules in the pipeline - "
 "disabled"
-msgstr ""
+msgstr "在处理管线中，影调均衡器需要置于失真模块之后 - 已禁用。"
 
 #. Pointers are not 64-bits aligned, and SSE code will segfault
 #: ../src/iop/toneequal.c:921
 msgid ""
 "tone equalizer in/out buffer are ill-aligned, please report the bug to the "
 "developers"
-msgstr "色调均衡器输入输出缓冲区未正确对齐，请向开发者报告问题。"
+msgstr "影调均衡器输入输出缓冲区未正确对齐，请向开发者报告问题。"
 
 #: ../src/iop/toneequal.c:1020
 msgid "tone equalizer failed to allocate memory, check your RAM settings"
-msgstr "色调均衡器未能分配内存，请检查 RAM 设置。"
+msgstr "影调均衡器未能分配内存，请检查 RAM 设置。"
 
 #: ../src/iop/toneequal.c:1706 ../src/iop/toneequal.c:2067
 msgid "the interpolation is unstable, decrease the curve smoothing"
@@ -18062,7 +18048,7 @@ msgid ""
 "scroll over image to change tone exposure\n"
 "shift+scroll for large steps; ctrl+scroll for small steps"
 msgstr ""
-"在图像上滚动滚轮以更改曝光色调。Shift + 滚轮大幅度变化，Ctrl + 滚轮小幅度变"
+"在图像上滚动滚轮以更改曝光影调。Shift + 滚轮大幅度变化，Ctrl + 滚轮小幅度变"
 "化。"
 
 #: ../src/iop/toneequal.c:2072
@@ -18077,17 +18063,17 @@ msgstr "%+.1f EV"
 #: ../src/iop/toneequal.c:3033
 #, c-format
 msgid "[%s over image] change tone exposure"
-msgstr "[图像 %s] 更改色调曝光"
+msgstr "[图像 %s] 更改影调曝光"
 
 #: ../src/iop/toneequal.c:3035
 #, c-format
 msgid "[%s over image] change tone exposure in large steps"
-msgstr "[图像 %s] 大幅度更改色调曝光"
+msgstr "[图像 %s] 大幅度更改影调曝光"
 
 #: ../src/iop/toneequal.c:3037
 #, c-format
 msgid "[%s over image] change tone exposure in small steps"
-msgstr "[图像 %s] 小幅度更改色调曝光"
+msgstr "[图像 %s] 小幅度更改影调曝光"
 
 #. Simple view
 #: ../src/iop/toneequal.c:3116 ../src/iop/toneequal.c:3145
@@ -18154,8 +18140,8 @@ msgid ""
 "negative values will avoid oscillations and behave more robustly\n"
 "but may produce brutal tone transitions and damage local contrast."
 msgstr ""
-"正值将产生更稳定的色调过渡，但曲线在某些设置中可能会出现振荡。\n"
-"负值将避免振荡，表现更为稳健，但可能会产生变化激烈的色调过渡，并破坏局部对比"
+"正值将产生更稳定的影调过渡，但曲线在某些设置中可能会出现振荡。\n"
+"负值将避免振荡，表现更为稳健，但可能会产生变化激烈的影调过渡，并破坏局部对比"
 "度。"
 
 #. Masking options
@@ -18278,13 +18264,13 @@ msgstr "显示曝光蒙版"
 
 #: ../src/iop/tonemap.cc:74
 msgid "tone mapping"
-msgstr "色调映射"
+msgstr "影调映射"
 
 #: ../src/iop/tonemap.cc:90
 msgid ""
 "this module is deprecated. please use the local contrast or tone equalizer "
 "module instead."
-msgstr "此模块已弃用。请使用局部对比度或色调均衡器模块替代。"
+msgstr "此模块已弃用。请使用局部对比度或影调均衡器模块替代。"
 
 #: ../src/iop/velvia.c:79
 msgid "velvia"
@@ -18545,11 +18531,11 @@ msgstr "为 %s 中的胶卷选择新的路径时出现问题。"
 
 #: ../src/libs/collect.c:627
 msgid "search filmroll..."
-msgstr "搜索胶卷……"
+msgstr "搜索胶卷…"
 
 #: ../src/libs/collect.c:631
 msgid "remove..."
-msgstr "移除……"
+msgstr "移除…"
 
 #: ../src/libs/collect.c:1265
 msgid "uncategorized"
@@ -18669,22 +18655,20 @@ msgid "Tree"
 msgstr "树"
 
 #: ../src/libs/collect.c:2357
-#, fuzzy
 msgid "Search a folder..."
-msgstr "搜索胶卷……"
+msgstr "搜索一个目录…"
 
 #: ../src/libs/collect.c:2372 ../src/libs/collect.c:3214
 msgid "Collections"
 msgstr "集合"
 
 #: ../src/libs/collect.c:2379
-#, fuzzy
 msgid "Search a collection..."
-msgstr "最近用过的集合"
+msgstr "搜索一个集合…"
 
 #: ../src/libs/collect.c:2391 ../src/libs/collect.c:3246
 msgid "Search..."
-msgstr ""
+msgstr "搜索…"
 
 #: ../src/libs/collect.c:3042
 msgid "narrow down search"
@@ -18725,7 +18709,7 @@ msgstr "保存"
 #: ../src/libs/metadata.c:625 ../src/libs/metadata_view.c:1299
 #: ../src/libs/tagging.c:3471
 msgid "preferences..."
-msgstr "首选项……"
+msgstr "首选项…"
 
 #: ../src/libs/collect.c:3213
 msgid "Folders"
@@ -18807,7 +18791,7 @@ msgid ""
 "ctrl+click or right-click to select an area"
 msgstr ""
 "启用颜色选择器。\n"
-"按住 ctrl 键并单击或右键以选择区域。"
+"按住 Ctrl 键并单击或右键以选择区域。"
 
 #: ../src/libs/colorpicker.c:594
 msgid "pick color"
@@ -19012,14 +18996,14 @@ msgid ""
 "of the destination medium and do nothing else. mainly used when proofing "
 "colors. (not suited for photography)."
 msgstr ""
-"• 可感知度：平滑地从色域中移到色域中，保持渐变，但在此过程中色域中的颜色会发"
+"- 可感知度：平滑地从色域中移到色域中，保持渐变，但在此过程中色域中的颜色会发"
 "生扭曲。注意，感知通常是一个依赖于目的空间的专有 LUT。\n"
 "\n"
-"• 相对色度：保持亮度，同时尽可能减少饱和度，直到颜色适合色域。\n"
+"- 相对色度：保持亮度，同时尽可能减少饱和度，直到颜色适合色域。\n"
 "\n"
-"• 饱和度：通过保持饱和度来呈现引人注目的商业图形。（不适合于摄影。）\n"
+"- 饱和度：通过保持饱和度来呈现引人注目的商业图形。（不适合于摄影。）\n"
 "\n"
-"• 绝对色度：使图像的白点与目的介质的白点相适应，而不做其他任何事情。主要用于"
+"- 绝对色度：使图像的白点与目的介质的白点相适应，而不做其他任何事情。主要用于"
 "打样时的颜色。（不适合于摄影。）"
 
 #: ../src/libs/export.c:1282 ../src/libs/print_settings.c:2666
@@ -19317,7 +19301,7 @@ msgstr ""
 #. gpx
 #: ../src/libs/geotagging.c:1808
 msgid "apply GPX track file..."
-msgstr "应用 GPX 跟踪文件……"
+msgstr "应用 GPX 跟踪文件…"
 
 #: ../src/libs/geotagging.c:1809
 msgid "parses a GPX file and updates location of selected images"
@@ -19329,7 +19313,7 @@ msgstr "GPX 文件"
 
 #: ../src/libs/geotagging.c:1829
 msgid "select a GPX track file..."
-msgstr "选择 GPX 跟踪文件……"
+msgstr "选择 GPX 跟踪文件…"
 
 #: ../src/libs/geotagging.c:1846
 msgid ""
@@ -19757,7 +19741,7 @@ msgstr "正在删除已废弃模块的预置信息"
 
 #: ../src/libs/lib.c:522
 msgid "manage presets..."
-msgstr "管理预设……"
+msgstr "管理预设…"
 
 #: ../src/libs/lib.c:547
 msgid "nothing to save"
@@ -19832,9 +19816,9 @@ msgstr ""
 "用户设置的位置列表。\n"
 "单击可显示或隐藏地图上的位置：\n"
 " - 在形状内使用滚轮来调整区域大小。\n"
-" - 按住 <shift> 或 <ctrl> 并使用滚轮来调整宽度或高度。\n"
+" - 按住 <Shift> 或 <Ctrl> 并使用滚轮来调整宽度或高度。\n"
 " - 在区域内单击并拖动以移动位置。\n"
-"按住 ctrl 单击可以编辑位置名称。\n"
+"按住 Ctrl 单击可以编辑位置名称。\n"
 " - “|”可以将名称拆分为多个层级。\n"
 " - 清除名称以删除地点分组。\n"
 " - 按下 Enter 以确认该名称，按下 Escape 取消编辑。\n"
@@ -19976,8 +19960,8 @@ msgid ""
 "in that case, right-click gives the possibility to choose one of them.\n"
 "press escape to exit the popup window"
 msgstr ""
-"元数据文本。按住 ctrl 滚动以调整文本框大小。\n"
-"按下 Ctrl-Enter 以插入新的行（注意，这可能与标准元数据格式不兼容）。\n"
+"元数据文本。按住 Ctrl 滚动以调整文本框大小。\n"
+"按下 Ctrl + Enter 以插入新的行（注意，这可能与标准元数据格式不兼容）。\n"
 "若元数据 <保持不变> 且已选中的图像含有不同的元数据，右键可以从中选择一个。\n"
 "按下 Escape 关闭弹出窗口。"
 
@@ -20208,9 +20192,8 @@ msgid "modulegroups"
 msgstr "模块集合"
 
 #: ../src/libs/modulegroups.c:230
-#, fuzzy
 msgid "Search a module..."
-msgstr "搜索模块"
+msgstr "搜索一个模块…"
 
 #: ../src/libs/modulegroups.c:239
 msgid "clear text"
@@ -20222,7 +20205,7 @@ msgstr "管线"
 
 #: ../src/libs/modulegroups.c:246
 msgid "Tones"
-msgstr "色调"
+msgstr "影调"
 
 #: ../src/libs/modulegroups.c:247
 msgid "Film"
@@ -20669,7 +20652,7 @@ msgstr "如何处理已存在的历史记录。"
 #. create
 #: ../src/libs/styles.c:842
 msgid "create..."
-msgstr "创建……"
+msgstr "创建…"
 
 #: ../src/libs/styles.c:842
 msgid "create styles from history stack of selected images"
@@ -20678,7 +20661,7 @@ msgstr "从选中的图片的历史栈创建新的风格。"
 #. edit
 #: ../src/libs/styles.c:846 ../src/libs/tagging.c:2228
 msgid "edit..."
-msgstr "编辑……"
+msgstr "编辑…"
 
 #: ../src/libs/styles.c:846
 msgid "edit the selected styles in list above"
@@ -20834,7 +20817,7 @@ msgstr "附加标签"
 
 #: ../src/libs/tagging.c:2210
 msgid "create tag..."
-msgstr "创建标签……"
+msgstr "创建标签…"
 
 #: ../src/libs/tagging.c:2216
 msgid "delete tag"
@@ -20846,7 +20829,7 @@ msgstr "删除节点"
 
 #: ../src/libs/tagging.c:2236
 msgid "change path..."
-msgstr "更改路径……"
+msgstr "更改路径…"
 
 #: ../src/libs/tagging.c:2246
 msgid "set as a tag"
@@ -21133,9 +21116,8 @@ msgid "Find"
 msgstr "查找"
 
 #: ../src/libs/tools/filter.c:523
-#, fuzzy
 msgid "Search an image..."
-msgstr "搜索图片"
+msgstr "搜索一张图片…"
 
 #: ../src/libs/tools/filter.c:530
 #, no-c-format
@@ -21252,7 +21234,7 @@ msgstr ""
 #, c-format
 msgctxt "darkroom"
 msgid "loading `%s' ..."
-msgstr "正在加载“%s”……"
+msgstr "正在加载“%s”…"
 
 #: ../src/views/darkroom.c:627 ../src/views/darkroom.c:1781
 msgid "gamut check"
