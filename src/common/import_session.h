@@ -65,6 +65,10 @@ const char *dt_import_session_filename(struct dt_import_session_t *self);
 const char *dt_import_session_path(struct dt_import_session_t *self, gboolean current);
 
 /*load path and file patter, assemble them together, then expand all $() without doing unnecessarry checks */
+// Checks for the opposite separator in a string and replace it by the needed one by the current OS
+gchar *dt_str_replace_bad_separator(gchar *string);
+
+/*load path and file pattern, assemble them together, then expand all $() without doing unnecessarry checks */
 const char *dt_import_session_total(struct dt_import_session_t *self);
 
 // clang-format off

@@ -365,13 +365,14 @@ const char *dt_import_session_path(struct dt_import_session_t *self, gboolean cu
 }
 
 // Checks for the opposite separator in a string and replace it by the needed one by the current OS
-void dt_str_replace_bad_separator(gchar **string)
+gchar *dt_str_replace_bad_separator(gchar *string)
 {
 #ifdef WIN32
-  *string = dt_str_replace(*string, "/", G_DIR_SEPARATOR_S);
+  string = dt_str_replace(string, "/", G_DIR_SEPARATOR_S);
 #else
-  *string = dt_str_replace(*string, "\\", G_DIR_SEPARATOR_S);
+  string = dt_str_replace(string, "\\", G_DIR_SEPARATOR_S);
 #endif
+return string;
 }
 
 
@@ -396,14 +397,15 @@ static const char *_import_session_total(struct dt_import_session_t *self)
   g_free(path_pattern);
   g_free(filename_pattern);
 
-  gchar *result_path = dt_variables_expand(self->vp, pattern, FALSE);
+  gchar *expanded_path = dt_variables_expand(self->vp, pattern, FALSE);
   g_free(pattern);
 
-  if(result_path == NULL)
+  if(expanded_path == NULL)
     return NULL;
 
   // this would need to be removed if we decide to do the correction on user's settings directly
-  dt_str_replace_bad_separator(&result_path);
+  gchar *result_path = dt_str_replace_bad_separator(expanded_path);
+  g_free(expanded_path);
 
 #ifdef WIN32
   if(result_path && (strlen(result_path) > 1))
