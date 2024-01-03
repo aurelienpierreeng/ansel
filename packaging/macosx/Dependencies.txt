@@ -1,0 +1,216 @@
+$ otool -L
+github/ansel/build/macosx/package/Ansel.app/Contents/MacOS/ansel:
+	@rpath/libansel.dylib (compatibility version 0.0.0, current version 0.0.0)
+	@executable_path/../Resources/lib/libOpenEXR-3_1.30.dylib (compatibility version 30.0.0, current version 30.7.1)
+	@executable_path/../Resources/lib/libImath-3_1.30.dylib (compatibility version 30.0.0, current version 30.0.1)
+	/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1319.100.3)
+	@executable_path/../Resources/lib/libIlmThread-3_1.30.dylib (compatibility version 30.0.0, current version 30.7.1)
+	@executable_path/../Resources/lib/libIex-3_1.30.dylib (compatibility version 30.0.0, current version 30.7.1)
+	/usr/lib/libz.1.dylib (compatibility version 1.0.0, current version 1.2.11)
+	@executable_path/../Resources/lib/libavif.15.dylib (compatibility version 15.0.0, current version 15.0.1)
+	@executable_path/../Resources/lib/libheif.1.dylib (compatibility version 17.0.0, current version 17.2.0)
+	@executable_path/../Resources/lib/libomp.dylib (compatibility version 5.0.0, current version 5.0.0)
+	@executable_path/../Resources/lib/libglib-2.0.0.dylib (compatibility version 7601.0.0, current version 7601.2.0)
+	@executable_path/../Resources/lib/libgtk-3.0.dylib (compatibility version 2406.0.0, current version 2406.32.0)
+	@executable_path/../Resources/lib/libgdk-3.0.dylib (compatibility version 2406.0.0, current version 2406.32.0)
+	@executable_path/../Resources/lib/libpangocairo-1.0.0.dylib (compatibility version 5001.0.0, current version 5001.14.0)
+	@executable_path/../Resources/lib/libpango-1.0.0.dylib (compatibility version 5001.0.0, current version 5001.14.0)
+	@executable_path/../Resources/lib/libharfbuzz.0.dylib (compatibility version 60710.0.0, current version 60710.0.0)
+	@executable_path/../Resources/lib/libatk-1.0.0.dylib (compatibility version 23810.0.0, current version 23810.1.0)
+	@executable_path/../Resources/lib/libcairo-gobject.2.dylib (compatibility version 11603.0.0, current version 11603.0.0)
+	@executable_path/../Resources/lib/libcairo.2.dylib (compatibility version 11603.0.0, current version 11603.0.0)
+	@executable_path/../Resources/lib/libgdk_pixbuf-2.0.0.dylib (compatibility version 4201.0.0, current version 4201.10.0)
+	@executable_path/../Resources/lib/libgio-2.0.0.dylib (compatibility version 7601.0.0, current version 7601.2.0)
+	@executable_path/../Resources/lib/libgobject-2.0.0.dylib (compatibility version 7601.0.0, current version 7601.2.0)
+	@executable_path/../Resources/lib/libintl.8.dylib (compatibility version 12.0.0, current version 12.0.0)
+	/usr/lib/libxml2.2.dylib (compatibility version 10.0.0, current version 10.9.0)
+	@executable_path/../Resources/lib/libsoup-2.4.1.dylib (compatibility version 13.0.0, current version 13.2.0)
+	@executable_path/../Resources/lib/libgmodule-2.0.0.dylib (compatibility version 7601.0.0, current version 7601.2.0)
+	@executable_path/../Resources/lib/libwebp.7.dylib (compatibility version 9.0.0, current version 9.6.0)
+	@executable_path/../Resources/lib/liblensfun.1.dylib (compatibility version 1.0.0, current version 0.3.3)
+	/usr/lib/libsqlite3.dylib (compatibility version 9.0.0, current version 346.0.0)
+	@executable_path/../Resources/lib/libgthread-2.0.0.dylib (compatibility version 7601.0.0, current version 7601.2.0)
+	@executable_path/../Resources/lib/librsvg-2.2.dylib (compatibility version 51.0.0, current version 51.0.0)
+	/usr/lib/libcurl.4.dylib (compatibility version 7.0.0, current version 9.0.0)
+	@executable_path/../Resources/lib/libpng16.16.dylib (compatibility version 56.0.0, current version 56.0.0)
+	@executable_path/../Resources/lib/libjpeg.8.dylib (compatibility version 8.0.0, current version 8.2.2)
+	@executable_path/../Resources/lib/libtiff.6.dylib (compatibility version 7.0.0, current version 7.0.0)
+	@executable_path/../Resources/lib/liblcms2.2.dylib (compatibility version 3.0.0, current version 3.14.0)
+	@executable_path/../Resources/lib/libjson-glib-1.0.0.dylib (compatibility version 601.0.0, current version 601.6.0)
+	@executable_path/../Resources/lib/libexiv2.27.dylib (compatibility version 27.0.0, current version 0.27.6)
+	@executable_path/../Resources/lib/libopenjp2.7.dylib (compatibility version 7.0.0, current version 2.5.0)
+	@executable_path/../Resources/lib/libsecret-1.0.dylib (compatibility version 0.0.0, current version 0.0.0)
+	@executable_path/../Resources/lib/libgtkmacintegration-gtk3.4.dylib (compatibility version 5.0.0, current version 5.1.0)
+	@executable_path/../Resources/lib/libGraphicsMagick.3.dylib (compatibility version 28.0.0, current version 28.2.0)
+	@executable_path/../Resources/lib/libicui18n.72.dylib (compatibility version 72.0.0, current version 72.1.0)
+	@executable_path/../Resources/lib/libicuuc.72.dylib (compatibility version 72.0.0, current version 72.1.0)
+	@executable_path/../Resources/lib/libicudata.72.dylib (compatibility version 72.0.0, current version 72.1.0)
+	@executable_path/../Resources/lib/liblua.dylib (compatibility version 5.4.0, current version 5.4.4)
+	@executable_path/../Resources/lib/libpugixml.1.dylib (compatibility version 1.0.0, current version 1.13.0)
+	@executable_path/../Resources/lib/libosmgpsmap-1.0.1.dylib (compatibility version 3.0.0, current version 3.0.0)
+	/usr/lib/libcups.2.dylib (compatibility version 2.0.0, current version 2.14.0)
+
+--> adwaita-icon-theme
+--> cmake
+--> pkg-config
+--> cmocka
+--> curl
+--> desktop-file-utils
+--> exiv2
+--> gettext
+--> git
+--> glib
+--> gmic
+--> graphicsmagick
+--> gtk-mac-integration
+--> gtk+3
+--> icu4c
+--> intltool
+--> iso-codes
+--> jpeg
+--> jpeg-xl
+--> json-glib
+--> jsonschema
+--> lensfun
+--> libavif
+--> libheif
+--> libomp
+--> librsvg
+--> libsecret
+--> little-cms2
+--> llvm
+--> lua
+--> ninja
+--> openexr
+--> openjpeg
+--> osm-gps-map
+--> perl
+--> po4a
+--> portmidi
+--> pugixml
+--> sdl2
+--> webp
+
+$ rm /tmp/Deps.txt
+$ rm /tmp/Deps_output.txt
+$ for b in `grep '^-->' Dependencies.txt|cut -d " " -f2`; do echo $b >> /tmp/Deps.txt; brew deps --full-name $b >> /tmp/Deps.txt ; done
+$ for b in `cat /tmp/Deps.txt|sort|uniq`; do brew info $b|grep "==>"|grep $b >> /tmp/Deps_output.txt; done
+
+Deps_output.txt:
+==> adwaita-icon-theme: stable 44.0 (bottled)
+==> aom: stable 3.6.1 (bottled)
+==> atk: stable 2.38.0 (bottled)
+==> bash-completion: stable 1.3 (bottled)
+==> berkeley-db: stable 18.1.40 (bottled) [keg-only]
+==> brotli: stable 1.0.9 (bottled), HEAD
+==> ca-certificates: stable 2023-01-10 (bottled)
+==> cairo: stable 1.16.0 (bottled), HEAD
+==> cmake: stable 3.26.3 (bottled), HEAD
+==> cmocka: stable 1.1.7 (bottled), HEAD
+==> curl: stable 8.0.1 (bottled), HEAD [keg-only]
+==> desktop-file-utils: stable 0.26 (bottled)
+==> exiv2: stable 0.27.6 (bottled), HEAD
+==> fftw: stable 3.3.10 (bottled)
+==> fontconfig: stable 2.14.2 (bottled), HEAD
+==> freetype: stable 2.13.0 (bottled)
+==> fribidi: stable 1.0.12 (bottled)
+==> gcc: stable 13.1.0 (bottled), HEAD
+==> gdbm: stable 1.23 (bottled)
+==> gdk-pixbuf: stable 2.42.10 (bottled)
+==> gettext: stable 0.21.1 (bottled)
+==> giflib: stable 5.2.1 (bottled)
+==> git: stable 2.40.1 (bottled), HEAD
+==> glib: stable 2.76.2 (bottled)
+==> glib-networking: stable 2.76.0 (bottled)
+==> gmic: stable 3.2.4 (bottled), HEAD
+==> gmp: stable 6.2.1 (bottled), HEAD
+==> gnutls: stable 3.8.0 (bottled)
+==> graphicsmagick: stable 1.3.40 (bottled), HEAD
+==> graphite2: stable 1.3.14 (bottled), HEAD
+==> gsettings-desktop-schemas: stable 44.0 (bottled)
+==> gtk+3: stable 3.24.37 (bottled)
+==> gtk-mac-integration: stable 3.0.1 (bottled), HEAD
+==> harfbuzz: stable 7.3.0 (bottled), HEAD
+==> hicolor-icon-theme: stable 0.17 (bottled), HEAD
+==> highway: stable 1.0.4 (bottled), HEAD
+==> hwloc: stable 2.9.1 (bottled), HEAD
+==> icu4c: stable 72.1 (bottled) [keg-only]
+==> imath: stable 3.1.7 (bottled)
+==> intltool: stable 0.51.0 (bottled)
+==> isl: stable 0.26 (bottled), HEAD
+==> iso-codes: stable 4.15.0 (bottled), HEAD
+==> jasper: stable 4.0.0 (bottled)
+==> jpeg: stable 9e (bottled) [keg-only]
+==> jpeg-turbo: stable 2.1.5.1 (bottled), HEAD
+==> jpeg-xl: stable 0.8.1 (bottled)
+==> json-glib: stable 1.6.6 (bottled)
+==> jsonschema: stable 4.17.3 (bottled), HEAD
+==> lensfun: stable 0.3.3 (bottled), HEAD
+==> libavif: stable 0.11.1 (bottled)
+==> libde265: stable 1.0.11 (bottled)
+==> libepoxy: stable 1.5.10 (bottled)
+==> libevent: stable 2.1.12 (bottled)
+==> libgcrypt: stable 1.10.2 (bottled)
+==> libgpg-error: stable 1.47 (bottled)
+==> libheif: stable 1.16.1 (bottled)
+==> libidn2: stable 2.3.4 (bottled), HEAD
+==> libmpc: stable 1.3.1 (bottled), HEAD
+==> libnghttp2: stable 1.53.0 (bottled), HEAD
+==> libomp: stable 16.0.3 (bottled) [keg-only]
+==> libpng: stable 1.6.39 (bottled), HEAD
+==> libpsl: stable 0.21.2 (bottled)
+==> librsvg: stable 2.56.0 (bottled)
+==> libsecret: stable 0.20.5 (bottled)
+==> libsoup@2: stable 2.74.2 (bottled) [keg-only]
+==> libssh: stable 0.10.5 (bottled), HEAD
+==> libssh2: stable 1.10.0 (bottled), HEAD
+==> libtasn1: stable 4.19.0 (bottled)
+==> libtiff: stable 4.5.0 (bottled)
+==> libtool: stable 2.4.7 (bottled)
+==> libunistring: stable 1.1 (bottled)
+==> libvmaf: stable 2.3.1 (bottled)
+==> libx11: stable 1.8.4 (bottled)
+==> libxau: stable 1.0.11 (bottled)
+==> libxcb: stable 1.15 (bottled)
+==> libxdmcp: stable 1.1.4 (bottled)
+==> libxext: stable 1.3.5 (bottled)
+==> libxrender: stable 0.9.11 (bottled)
+==> little-cms2: stable 2.14 (bottled)
+==> llvm: stable 16.0.3 (bottled), HEAD [keg-only]
+==> lua: stable 5.4.5 (bottled)
+==> lz4: stable 1.9.4 (bottled), HEAD
+==> lzo: stable 2.10 (bottled)
+==> m4: stable 1.4.19 (bottled) [keg-only]
+==> mpdecimal: stable 2.5.1 (bottled)
+==> mpfr: stable 4.2.0-p7 (bottled), HEAD
+==> nettle: stable 3.8.1 (bottled)
+==> ninja: stable 1.11.1 (bottled), HEAD
+==> open-mpi: stable 4.1.5 (bottled), HEAD
+==> openexr: stable 3.1.7 (bottled)
+==> openjpeg: stable 2.5.0 (bottled), HEAD
+==> openldap: stable 2.6.4 (bottled) [keg-only]
+==> openssl@1.1: stable 1.1.1t (bottled) [keg-only]
+==> osm-gps-map: stable 1.2.0 (bottled), HEAD
+==> p11-kit: stable 0.24.1 (bottled), HEAD
+==> pango: stable 1.50.14 (bottled), HEAD
+==> pcre2: stable 10.42 (bottled), HEAD
+==> perl: stable 5.36.1 (bottled), HEAD
+==> pixman: stable 0.42.2 (bottled)
+==> pkg-config: stable 0.29.2 (bottled)
+==> po4a: stable 0.69 (bottled), HEAD
+==> portmidi: stable 2.0.4 (bottled)
+==> pugixml: stable 1.13 (bottled)
+==> python@3.11: stable 3.11.3 (bottled)
+==> readline: stable 8.2.1 (bottled) [keg-only]
+==> rtmpdump: stable 2.4+20151223 (bottled), HEAD
+==> sdl2: stable 2.26.5 (bottled), HEAD
+==> shared-mime-info: stable 2.2 (bottled), HEAD
+==> six: stable 1.16.0 (bottled)
+==> sqlite: stable 3.41.2 (bottled) [keg-only]
+==> unbound: stable 1.17.1 (bottled), HEAD
+==> webp: stable 1.3.0 (bottled), HEAD
+==> x265: stable 3.5 (bottled), HEAD
+==> xorgproto: stable 2022.2 (bottled)
+==> xz: stable 5.4.3 (bottled)
+==> z3: stable 4.12.2 (bottled), HEAD
+==> zstd: stable 1.5.5 (bottled), HEAD

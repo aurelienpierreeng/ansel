@@ -482,7 +482,7 @@ static void _size_in_px_update(dt_lib_export_t *d)
   {
     gtk_widget_show(d->size_in_px);
     gchar size_in_px_txt[120];
-    snprintf(size_in_px_txt, sizeof(size_in_px_txt) / sizeof(size_in_px_txt[0]), _("which is equal to %s × %s px"),
+    snprintf(size_in_px_txt, sizeof(size_in_px_txt) / sizeof(size_in_px_txt[0]), _("which is equal to %s \303\227 %s px"),
              gtk_entry_get_text(GTK_ENTRY(d->width)), gtk_entry_get_text(GTK_ENTRY(d->height)));
     gtk_label_set_text(GTK_LABEL(d->size_in_px), size_in_px_txt);
   }

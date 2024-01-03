@@ -11,7 +11,7 @@ static void show_about_dialog()
 #endif
   gtk_about_dialog_set_program_name(GTK_ABOUT_DIALOG(dialog), PACKAGE_NAME);
   gtk_about_dialog_set_version(GTK_ABOUT_DIALOG(dialog), darktable_package_version);
-  char *copyright = g_strdup_printf(_("Copyright © darktable authors 2009-2022\nCopyright © Aurélien Pierre 2022-%s"), darktable_last_commit_year);
+  char *copyright = g_strdup_printf(_("Copyright \302\251 darktable authors 2009-2022\nCopyright \302\251 Aur\303\251lien Pierre 2022-%s"), darktable_last_commit_year);
   gtk_about_dialog_set_copyright(GTK_ABOUT_DIALOG(dialog), copyright);
   g_free(copyright);
   gtk_about_dialog_set_comments(GTK_ABOUT_DIALOG(dialog),

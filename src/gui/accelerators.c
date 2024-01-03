@@ -785,11 +785,11 @@ gboolean get_accel_from_widget(GtkWidget *widget, guint *key_val, GdkModifierTyp
   dt_action_t *action = g_hash_table_lookup(darktable.control->widgets, widget);
   if(action == NULL) return FALSE;
 
-  // Shitty API that forces us to crawl the whole list of shortcuts to find the action match.
+  // Shitty API that forces us to crawl the whole list of shortcuts to find the action match.
   // That's because actions can be mapped to more than one shortcut, a feature that maybe 0.1 % of users needed.
   // In cleverland, you match action and shortcut 1:1, store a reference to shortcut in a pointer
-  // inside the widget and call it a day. But in darktableland, that doesn't cost enough CPU cycles.
-  // TODO: fuuuuuuuuck me.
+  // inside the widget and call it a day. But in darktableland, that doesn't cost enough CPU cycles.
+  // TODO: fuuuuuuuuck me.
   for(GSequenceIter *iter = g_sequence_get_begin_iter(darktable.control->shortcuts);
       !g_sequence_iter_is_end(iter);
       iter = g_sequence_iter_next(iter))
@@ -3657,7 +3657,7 @@ static guint _key_remap(guint keyval)
       return GDK_KEY_asterisk;
     case(GDK_KEY_KP_Equal):
       return GDK_KEY_equal;
-    // Note : don't remap the decimal key because it can be interprated as . or ,
+    // Note : don't remap the decimal key because it can be interprated as . or ,
     // depending on locale and it seems to be already decoded properly as dot by GDK.
 
     // Controls
@@ -3714,7 +3714,7 @@ static guint _fix_keyval(GdkEvent *event, guint *mods)
                                       &keyval, NULL, NULL, &consumed);
 
   // Remove the consumed modifiers for numbers, typically Shift
-  // Note : for French keyboards, numbers are accessed through Shift. E.g Shift + & = 1
+  // Note : for French keyboards, numbers are accessed through Shift. E.g Shift + & = 1
   if(gdk_keyval_to_lower(keyval) == gdk_keyval_to_upper(keyval))
     *mods &= ~consumed;
 
@@ -3748,7 +3748,7 @@ void _cleanup_mods(dt_shortcut_t *s, gint keycode, gint level)
   s->key = _key_remap(s->key);
 
   // Remove the consumed modifiers for numbers, typically Shift
-  // Note : for French keyboards, numbers are accessed through Shift. E.g Shift + & = 1
+  // Note : for French keyboards, numbers are accessed through Shift. E.g Shift + & = 1
   if(gdk_keyval_to_lower(s->key) == gdk_keyval_to_upper(s->key))
     s->mods &= ~consumed;
 }
@@ -3756,8 +3756,8 @@ void _cleanup_mods(dt_shortcut_t *s, gint keycode, gint level)
 gboolean dt_shortcut_dispatcher(GtkWidget *w, GdkEvent *event, gpointer user_data)
 {
   // Init focus with default Gtk events
-  // WHY THE FUCK DOES THAT BREAK SHORCUTS AT ALL ???
-  // FIXME: when entering the app, shortcuts won't work until you click somewhere.
+  // WHY THE FUCK DOES THAT BREAK SHORCUTS AT ALL ???
+  // FIXME: when entering the app, shortcuts won't work until you click somewhere.
   // Yes, key shortcuts need a mouse to work. Brilliant !!!
   /*
   if(!darktable.gui->grab_window)

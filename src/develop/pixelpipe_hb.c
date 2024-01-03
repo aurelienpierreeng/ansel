@@ -387,11 +387,11 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 
       if(pipe->type & DT_DEV_PIXELPIPE_FULL)
       {
-        // Full-preview-centric tweaks : mask display
+        // Full-preview-centric tweaks : mask display
         if(dev->gui_module && dev->gui_module != piece->module)
         {
           // Crop and perspective need a full ROI to set-up bounds in GUI, but only temporarily
-          // FIXME: this should probably use dt_iop_set_bypass_cache because there is no point
+          // FIXME: this should probably use dt_iop_set_bypass_cache because there is no point
           // caching setting intermediate steps.
           const int distort_tags = dev->gui_module->operation_tags_filter() & piece->module->operation_tags();
           hash = dt_hash(hash, (const char *)&distort_tags, sizeof(int));
@@ -543,7 +543,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   else if(pipe->changed & DT_DEV_PIPE_TOP_CHANGED)
   {
     // only top history item changed.
-    // FIXME: this seems to never be called.
+    // FIXME: this seems to never be called.
     dt_dev_pixelpipe_synch_top(pipe, dev);
   }
 
@@ -1462,14 +1462,14 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
       {
         /* Nice, everything went fine */
 
-        /* OLD COMMENT: 
+        /* OLD COMMENT: 
            this is reasonable on slow GPUs only, where it's more expensive to reprocess the whole pixelpipe
            than regularly copying device buffers back to host. This would slow down fast GPUs considerably.
            NEW COMMENT:
            did you ever met diffuse and sharpen ?
            Also, not caching GPU buffers results in broken mask previews, that darktable handles
            by invalidating the cache completely, which requires a full pipeline computation each time.
-           Also, since the cache actually works and can use a lot more memory, caching GPU output
+           Also, since the cache actually works and can use a lot more memory, caching GPU output
            enables to bypass a serious number of modules, so the memory I/O cost is a good overall investment.
         */
         /* write back input into cache for faster re-usal (not for export or thumbnails) */

@@ -185,9 +185,9 @@ typedef struct dt_iop_filmicrgb_params_t
   float white_point_source;    // $MIN: 0.1 $MAX: 16 $DEFAULT: 4.0 $DESCRIPTION: "white relative exposure"
   float reconstruct_threshold; // $MIN: -6.0 $MAX: 6.0 $DEFAULT: +3.0 $DESCRIPTION: "threshold"
   float reconstruct_feather;   // $MIN: 0.25 $MAX: 6.0 $DEFAULT: 3.0 $DESCRIPTION: "transition"
-  float reconstruct_bloom_vs_details; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "bloom ↔ reconstruct"
-  float reconstruct_grey_vs_color; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "gray ↔ colorful details"
-  float reconstruct_structure_vs_texture; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 0.0 $DESCRIPTION: "structure ↔ texture"
+  float reconstruct_bloom_vs_details; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "bloom \342\206\224 reconstruct"
+  float reconstruct_grey_vs_color; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "gray \342\206\224 colorful details"
+  float reconstruct_structure_vs_texture; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 0.0 $DESCRIPTION: "structure \342\206\224 texture"
   float security_factor;                  // $MIN: -50 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "dynamic range scaling"
   float grey_point_target;                // $MIN: 1 $MAX: 50 $DEFAULT: 18.45 $DESCRIPTION: "target middle gray"
   float black_point_target; // $MIN: 0.000 $MAX: 20.000 $DEFAULT: 0.01517634 $DESCRIPTION: "target black luminance"
@@ -196,7 +196,7 @@ typedef struct dt_iop_filmicrgb_params_t
   float latitude;           // $MIN: 0.01 $MAX: 99 $DEFAULT: 0.01
   float contrast;           // $MIN: 0 $MAX: 5 $DEFAULT: 1.0
   float saturation;         // $MIN: -200 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "extreme luminance saturation"
-  float balance;            // $MIN: -50 $MAX: 50 $DEFAULT: 0.0 $DESCRIPTION: "shadows ↔ highlights balance"
+  float balance;            // $MIN: -50 $MAX: 50 $DEFAULT: 0.0 $DESCRIPTION: "shadows \342\206\224 highlights balance"
   float noise_level;        // $MIN: 0.0 $MAX: 6.0 $DEFAULT: 0.2f $DESCRIPTION: "add noise in highlights"
   dt_iop_filmicrgb_methods_type_t preserve_color; // $DEFAULT: DT_FILMIC_METHOD_MAX_RGB $DESCRIPTION: "preserve chrominance"
   dt_iop_filmicrgb_colorscience_type_t version; // $DEFAULT: DT_FILMIC_COLORSCIENCE_V4 $DESCRIPTION: "color science"
@@ -654,9 +654,9 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
       float white_point_source;    // $MIN: 0 $MAX: 16 $DEFAULT: 4.0 $DESCRIPTION: "white relative exposure"
       float reconstruct_threshold; // $MIN: -6.0 $MAX: 6.0 $DEFAULT: +3.0 $DESCRIPTION: "threshold"
       float reconstruct_feather;   // $MIN: 0.25 $MAX: 6.0 $DEFAULT: 3.0 $DESCRIPTION: "transition"
-      float reconstruct_bloom_vs_details; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "bloom ↔ reconstruct"
-      float reconstruct_grey_vs_color; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "gray ↔ colorful details"
-      float reconstruct_structure_vs_texture; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 0.0 $DESCRIPTION: "structure ↔ texture"
+      float reconstruct_bloom_vs_details; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "bloom \342\206\224 reconstruct"
+      float reconstruct_grey_vs_color; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 100.0 $DESCRIPTION: "gray \342\206\224 colorful details"
+      float reconstruct_structure_vs_texture; // $MIN: -100.0 $MAX: 100.0 $DEFAULT: 0.0 $DESCRIPTION: "structure \342\206\224 texture"
       float security_factor;                  // $MIN: -50 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "dynamic range scaling"
       float grey_point_target;                // $MIN: 1 $MAX: 50 $DEFAULT: 18.45 $DESCRIPTION: "target middle gray"
       float black_point_target; // $MIN: 0.000 $MAX: 20.000 $DEFAULT: 0.01517634 $DESCRIPTION: "target black luminance"
@@ -665,7 +665,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
       float latitude;           // $MIN: 0.01 $MAX: 99 $DEFAULT: 50.0
       float contrast;           // $MIN: 0 $MAX: 5 $DEFAULT: 1.1
       float saturation;         // $MIN: -50 $MAX: 200 $DEFAULT: 0 $DESCRIPTION: "extreme luminance saturation"
-      float balance;            // $MIN: -50 $MAX: 50 $DEFAULT: 0.0 $DESCRIPTION: "shadows ↔ highlights balance"
+      float balance;            // $MIN: -50 $MAX: 50 $DEFAULT: 0.0 $DESCRIPTION: "shadows \342\206\224 highlights balance"
       float noise_level;        // $MIN: 0.0 $MAX: 6.0 $DEFAULT: 0.2f $DESCRIPTION: "add noise in highlights"
       dt_iop_filmicrgb_methods_type_t preserve_color; // $DEFAULT: DT_FILMIC_METHOD_POWER_NORM $DESCRIPTION: "preserve chrominance"
       dt_iop_filmicrgb_colorscience_type_t version; // $DEFAULT: DT_FILMIC_COLORSCIENCE_V3 $DESCRIPTION: "color science"
@@ -1021,7 +1021,7 @@ inline static void wavelets_reconstruct_RGB(const float *const restrict HF, cons
     const float *const restrict TT_c = __builtin_assume_aligned(texture + k, 16);
 
     // synthesize the max of all RGB channels texture as a flat texture term for the whole pixel
-    // this is useful if only 1 or 2 channels are clipped, so we transfer the valid/sharpest texture on the other
+    // this is useful if only 1 or 2 channels are clipped, so we transfer the valid/sharpest texture on the other
     // channels
     const float grey_texture = fmaxabsf(fmaxabsf(TT_c[0], TT_c[1]), TT_c[2]);
 
@@ -1071,7 +1071,7 @@ inline static void wavelets_reconstruct_ratios(const float *const restrict HF, c
  * The ratios represent the chromaticity in image and contain low frequencies in the absence of noise or
  * aberrations, so, here, we favor them instead.
  *
- * Consequences : 
+ * Consequences : 
  *  1. use min of interpolated channels details instead of max, to get smoother details
  *  4. use the max of low frequency channels instead of min, to favor achromatic solution.
  *
@@ -1094,7 +1094,7 @@ inline static void wavelets_reconstruct_ratios(const float *const restrict HF, c
     const float *const restrict TT_c = __builtin_assume_aligned(texture + k, 16);
 
     // synthesize the max of all RGB channels texture as a flat texture term for the whole pixel
-    // this is useful if only 1 or 2 channels are clipped, so we transfer the valid/sharpest texture on the other
+    // this is useful if only 1 or 2 channels are clipped, so we transfer the valid/sharpest texture on the other
     // channels
     const float grey_texture = fmaxabsf(fmaxabsf(TT_c[0], TT_c[1]), TT_c[2]);
 
@@ -1128,7 +1128,7 @@ static inline void init_reconstruct(const float *const restrict in, const float 
                                     float *const restrict reconstructed, const size_t width, const size_t height)
 {
 // init the reconstructed buffer with non-clipped and partially clipped pixels
-// Note : it's a simple multiplied alpha blending where mask = alpha weight
+// Note : it's a simple multiplied alpha blending where mask = alpha weight
 #ifdef _OPENMP
 #pragma omp parallel for default(none) dt_omp_firstprivate(in, mask, reconstructed, width, height) \
   schedule(static)
@@ -1227,7 +1227,7 @@ static inline gint reconstruct_highlights(const float *const restrict in, const 
     float *restrict LF;                 // output buffer for the current scale
     float *restrict HF_RGB_temp;        // temp buffer for HF_RBG terms before blurring
 
-    // swap buffers so we only need 2 LF buffers : the LF at scale (s-1) and the one at current scale (s)
+    // swap buffers so we only need 2 LF buffers : the LF at scale (s-1) and the one at current scale (s)
     if(s == 0)
     {
       detail = in;
@@ -1258,7 +1258,7 @@ static inline gint reconstruct_highlights(const float *const restrict in, const 
 
     // interpolate/blur/inpaint (same thing) the RGB high-frequency to fill holes
     blur_2D_Bspline(HF_RGB_temp, HF_RGB, temp, roi_out->width, roi_out->height, 1, TRUE); // clip negatives
-    // FIXME: HF have legitimate negatives, so clipping them is wrong, but compatibility…
+    // FIXME: HF have legitimate negatives, so clipping them is wrong, but compatibility...
 
     // Reconstruct clipped parts
     if(variant == DT_FILMIC_RECONSTRUCT_RGB)
@@ -1528,7 +1528,7 @@ static inline void Ych_to_pipe_RGB(const dt_aligned_pixel_t in, const dt_colorma
   // rewrite in cartesian coordinates
   Ych_to_Yrg(in, Yrg);
 
-  // go from Kirk/Filmlight Yrg to CIE LMS 2006
+  // go from Kirk/Filmlight Yrg to CIE LMS 2006
   Yrg_to_LMS(Yrg, LMS);
 
   // go from CIE LMS 2006 to pipeline RGB
@@ -1537,7 +1537,7 @@ static inline void Ych_to_pipe_RGB(const dt_aligned_pixel_t in, const dt_colorma
 
 static inline void filmic_desaturate_v4(const dt_aligned_pixel_t Ych_original, dt_aligned_pixel_t Ych_final, const float saturation)
 {
-  // Note : Ych is normalized trough the LMS conversion,
+  // Note : Ych is normalized trough the LMS conversion,
   // meaning c is actually a saturation (saturation ~= chroma / brightness).
   // So copy-pasting c and h from a different Y is equivalent to
   // tonemapping with a norm, which is equivalent to doing exposure compensation :
@@ -1982,7 +1982,7 @@ static inline void filmic_v5(const float *const restrict in, float *const restri
     RGB_tone_mapping_v4(pix_in, naive_rgb, data, spline, display_black, display_white);
     norm_tone_mapping_v4(pix_in, max_rgb, DT_FILMIC_METHOD_MAX_RGB, work_profile, data, spline, norm_min, norm_max, display_black, display_white);
 
-    // Mix max RGB with naive RGB
+    // Mix max RGB with naive RGB
     for_each_channel(c, aligned(pix_out, max_rgb, naive_rgb))
       pix_out[c] = (0.5f - data->saturation) * naive_rgb[c] + (0.5f + data->saturation) * max_rgb[c];
 
@@ -2263,7 +2263,7 @@ static inline cl_int reconstruct_highlights_cl(cl_mem in, cl_mem mask, cl_mem re
     cl_mem detail;
     cl_mem LF;
 
-    // swap buffers so we only need 2 LF buffers : the LF at scale (s-1) and the one at current scale (s)
+    // swap buffers so we only need 2 LF buffers : the LF at scale (s-1) and the one at current scale (s)
     if(s == 0)
     {
       detail = in;
@@ -2990,7 +2990,7 @@ inline static gboolean dt_iop_filmic_rgb_compute_spline(const dt_iop_filmicrgb_p
   // else if type rational :
   // y = M1 * (M2 * (x - x_0)² + (x - x_0)) / (M2 * (x - x_0)² + (x - x_0) + M3)
   // We then compute M1 to M5 coeffs using the imposed conditions over the curve.
-  // M1 to M5 are 3×1 vectors, where each element belongs to a part of the curve.
+  // M1 to M5 are 3x1 vectors, where each element belongs to a part of the curve.
 
   // solve the linear central part - affine function
   spline->M2[2] = contrast;                                    // * x¹ (slope)
@@ -3476,7 +3476,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
 
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 
-  // write the graph legend at GUI default size
+  // write the graph legend at GUI default size
   pango_font_description_set_size(desc, font_size);
   pango_layout_set_font_description(layout, desc);
   if(g->gui_mode == DT_FILMIC_GUI_LOOK)
@@ -3829,7 +3829,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       else if(g->gui_mode == DT_FILMIC_GUI_BASECURVE || g->gui_mode == DT_FILMIC_GUI_BASECURVE_LOG)
       {
         if(x_white > 1.f)
-          snprintf(text, sizeof(text), "%.0f →", 100.f); // this marks the bound of the graph, not the actual white
+          snprintf(text, sizeof(text), "%.0f \342\206\222", 100.f); // this marks the bound of the graph, not the actual white
         else
           snprintf(text, sizeof(text), "%.0f", exp2f(p->white_point_source) * p->grey_point_source);
       }
@@ -3903,7 +3903,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
     // draw the dynamic range of display
     // if white = 100%, assume -11.69 EV because of uint8 output + sRGB OETF.
     // for uint10 output, white should be set to 400%, so anything above 100% increases DR
-    // FIXME : if darktable becomes HDR-10bits compatible (for output), this needs to be updated
+    // FIXME : if darktable becomes HDR-10bits compatible (for output), this needs to be updated
     const float display_DR = 12.f + log2f(p->white_point_target / 100.f);
 
     const float y_display = g->allocation.height / 3.f + g->line_height;
@@ -3982,7 +3982,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
     const float max_DR = ceilf(fmaxf(display_HL_EV, scene_HL_EV)) + ceilf(fmaxf(display_LL_EV, scene_LL_EV));
     const float EV = (column_right) / max_DR;
 
-    // all greys are aligned vertically in GUI since they are the fulcrum of the transform
+    // all greys are aligned vertically in GUI since they are the fulcrum of the transform
     // so, get their coordinates
     const float grey_EV = fmaxf(ceilf(display_HL_EV), ceilf(scene_HL_EV));
     const float grey_x = g->allocation.width - (grey_EV)*EV - darktable.bauhaus->quad_width;

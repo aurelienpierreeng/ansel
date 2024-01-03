@@ -532,7 +532,7 @@ static inline void init_reconstruct(float *const restrict reconstructed, const s
 #endif
 static inline void find_gradients(const dt_aligned_pixel_t pixels[9], dt_aligned_pixel_t xy[2])
 {
-  // Compute the gradient with centered finite differences in a 3×3 stencil
+  // Compute the gradient with centered finite differences in a 3x3 stencil
   // warning : x is vertical, y is horizontal
   for_each_channel(c,aligned(pixels:64) aligned(xy))
   {
@@ -546,7 +546,7 @@ static inline void find_gradients(const dt_aligned_pixel_t pixels[9], dt_aligned
 #endif
 static inline void find_laplacians(const dt_aligned_pixel_t pixels[9], dt_aligned_pixel_t xy[2])
 {
-  // Compute the laplacian with centered finite differences in a 3×3 stencil
+  // Compute the laplacian with centered finite differences in a 3x3 stencil
   // warning : x is vertical, y is horizontal
   for_each_channel(c, aligned(xy) aligned(pixels:64))
   {
@@ -965,7 +965,7 @@ static inline gint wavelets_process(const float *const restrict in, float *const
     const float strength = data->sharpness * norm + 1.f;
 
     /* debug
-    fprintf(stdout, "PDE solve : scale %i : mult = %i ; current rad = %.0f ; real rad = %.0f ; norm = %f ; strength = %f\n", s,
+    fprintf(stdout, "PDE solve : scale %i : mult = %i ; current rad = %.0f ; real rad = %.0f ; norm = %f ; strength = %f\n", s,
             1 << s, current_radius, real_radius, norm, strength);
     */
 
@@ -1503,7 +1503,7 @@ void gui_init(struct dt_iop_module_t *self)
                    "if you plan on deblurring, \n"
                    "the radius should be around the width of your lens blur."));
 
-  GtkWidget *label_speed = dt_ui_section_label_new(_("speed (sharpen ↔ diffuse)"));
+  GtkWidget *label_speed = dt_ui_section_label_new(_("speed (sharpen \342\206\224 diffuse)"));
   gtk_box_pack_start(GTK_BOX(self->widget), label_speed, FALSE, FALSE, 0);
 
   g->first = dt_bauhaus_slider_from_params(self, "first");

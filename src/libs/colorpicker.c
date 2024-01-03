@@ -173,7 +173,7 @@ static void _update_sample_label(dt_lib_module_t *self, dt_colorpicker_sample_t 
 
     default:
     case DT_LIB_COLORPICKER_MODEL_NONE:
-      snprintf(text, sizeof(text), "◎");
+      snprintf(text, sizeof(text), "\342\227\216");
       break;
   }
 

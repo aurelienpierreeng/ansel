@@ -437,11 +437,11 @@ void gui_init(dt_lib_module_t *self)
                                _lib_filter_combobox_changed, self,
                                N_("all"),
                                N_("unstarred only"),
-                               "★",
-                               "★ ★",
-                               "★ ★ ★",
-                               "★ ★ ★ ★",
-                               "★ ★ ★ ★ ★",
+                               "\342\230\205",
+                               "\342\230\205 \342\230\205",
+                               "\342\230\205 \342\230\205 \342\230\205",
+                               "\342\230\205 \342\230\205 \342\230\205 \342\230\205",
+                               "\342\230\205 \342\230\205 \342\230\205 \342\230\205 \342\230\205",
                                N_("rejected only"),
                                N_("all except rejected"));
   dt_bauhaus_widget_set_label(d->stars, NULL, NULL);
@@ -520,7 +520,7 @@ void gui_init(dt_lib_module_t *self)
   dt_gui_add_class(GTK_WIDGET(d->text), "menu-text-entry");
   char *text = _decode_text_filter(dt_collection_get_text_filter(darktable.collection));
   gtk_entry_set_text(GTK_ENTRY(d->text), text);
-  gtk_entry_set_placeholder_text(GTK_ENTRY(d->text), _("Search an image…"));
+  gtk_entry_set_placeholder_text(GTK_ENTRY(d->text), _("Search an image..."));
   g_free(text);
   g_signal_connect(G_OBJECT(d->text), "search-changed", G_CALLBACK(_text_entry_changed), self);
   g_signal_connect(G_OBJECT(d->text), "stop-search", G_CALLBACK(_reset_text_entry), self);
@@ -569,11 +569,11 @@ static gboolean _lib_filter_sync_combobox_and_comparator(dt_lib_module_t *self)
 
   // 0 all
   // 1 unstarred only
-  // 2 ★
-  // 3 ★ ★
-  // 4 ★ ★ ★
-  // 5 ★ ★ ★ ★
-  // 6 ★ ★ ★ ★ ★
+  // 2 1 star
+  // 3 2 stars
+  // 4 3 stars
+  // 5 4 stars
+  // 6 5 stars
   // 7 rejected only
   // 8 all except rejected
 

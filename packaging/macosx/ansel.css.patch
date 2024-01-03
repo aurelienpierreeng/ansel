@@ -1,0 +1,10 @@
+--- ansel.css	2023-12-02 15:07:18
++++ ansel-macos.css	2023-12-02 22:14:23
+@@ -2397,7 +2397,6 @@
+                  "Cantarell",
+                   sans-serif;
+     font-weight: 400;
+-    font-stretch: condensed;
+ }
+ 
+ notebook tabs,

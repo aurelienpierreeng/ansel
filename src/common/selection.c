@@ -127,7 +127,7 @@ void dt_push_selection()
   else
   {
     // If we already have a backup, don't do anything.
-    // TODO: maybe store a full stack with history index so we can re-select back in time ?
+    // TODO: maybe store a full stack with history index so we can re-select back in time ?
     // In that case, make darktable.gui->selection_stacked a uint32_t, increment it on each push
     // and store it too in a column of the memory.selected_backup table for each row.
   }

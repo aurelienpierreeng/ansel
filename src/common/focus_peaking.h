@@ -240,7 +240,7 @@ schedule(static) collapse(2) aligned(focus_peaking, luma:64) reduction(+:sigma)
       }
       else
       {
-        // Not sharp enough : paint 0
+        // Not sharp enough : paint 0
         for_four_channels(c) focus_peaking[index + c] = 0;
       }
     }

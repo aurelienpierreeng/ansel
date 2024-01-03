@@ -54,13 +54,6 @@ void dt_guides_draw(cairo_t *cr, const float left, const float top, const float 
 void dt_guides_update_button_state();
 void dt_guides_button_toggled(gboolean active);
 
-// show the menuitem for modules
-void dt_guides_add_module_menuitem(void *menu, struct dt_iop_module_t *module);
-
-// show the line in UI modules
-void dt_guides_init_module_widget(GtkWidget *box, struct dt_iop_module_t *module);
-void dt_guides_update_module_widget(struct dt_iop_module_t *module);
-
 void dt_guides_set_overlay_colors();
 
 // clang-format off
@@ -68,4 +61,3 @@ void dt_guides_set_overlay_colors();
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

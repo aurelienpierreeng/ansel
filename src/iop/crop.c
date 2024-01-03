@@ -161,7 +161,7 @@ int default_group()
 int flags()
 {
   return IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_TILING_FULL_ROI | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_ALLOW_FAST_PIPE
-         | IOP_FLAGS_GUIDES_SPECIAL_DRAW | IOP_FLAGS_GUIDES_WIDGET;
+         | IOP_FLAGS_GUIDES_SPECIAL_DRAW;
 }
 
 int operation_tags()
@@ -736,7 +736,7 @@ static void _event_aspect_presets_changed(GtkWidget *combo, dt_iop_module_t *sel
       }
 
       // simplify the fraction with binary GCD - https://en.wikipedia.org/wiki/Greatest_common_divisor
-      // search g and d such that g is odd and gcd(nn, dd) = g × 2^d
+      // search g and d such that g is odd and gcd(nn, dd) = g x 2^d
       int e = 0;
       int nn = abs(n);
       int dd = abs(d);
@@ -1275,7 +1275,6 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 {
   dt_develop_t *dev = self->dev;
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
-  if(!g->editing) return;
 
   _aspect_apply(self, GRAB_HORIZONTAL);
 
@@ -1290,6 +1289,14 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   cairo_translate(cr, width / 2.0, height / 2.0);
   cairo_scale(cr, g->zoom_scale, g->zoom_scale);
   cairo_translate(cr, -.5f * g->wd - g->zoom_x * g->wd, -.5f * g->ht - g->zoom_y * g->ht);
+
+  // draw crop area guides
+  if(g->editing)
+    dt_guides_draw(cr, g->clip_x * g->wd, g->clip_y * g->ht, g->clip_w * g->wd, g->clip_h * g->ht, g->zoom_scale);
+  else
+    dt_guides_draw(cr, 0, 0, g->wd, g->ht, g->zoom_scale);
+
+  if(!g->editing) return;
 
   double dashes = DT_PIXEL_APPLY_DPI(5.0) / g->zoom_scale;
   double border_width = dashes / 2.;
@@ -1360,9 +1367,6 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     pango_font_description_free(desc);
     g_object_unref(layout);
   }
-
-  // draw crop area guides
-  dt_guides_draw(cr, g->clip_x * g->wd, g->clip_y * g->ht, g->clip_w * g->wd, g->clip_h * g->ht, g->zoom_scale);
 
   cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.0) / g->zoom_scale);
   dt_draw_set_color_overlay(cr, FALSE, 1.0);

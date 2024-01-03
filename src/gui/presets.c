@@ -1216,12 +1216,9 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
   }
 
   // and the parameters entry if needed
-  if(module && (module->set_preferences || module->flags() & IOP_FLAGS_GUIDES_WIDGET))
+  if(module && (module->set_preferences))
   {
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
-    // the guide checkbox
-    if(module->flags() & IOP_FLAGS_GUIDES_WIDGET) dt_guides_add_module_menuitem(menu, module);
-    // the specific parameters
     if(module->set_preferences) module->set_preferences(GTK_MENU_SHELL(menu), module);
   }
 }

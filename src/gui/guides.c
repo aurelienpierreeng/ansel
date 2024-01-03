@@ -769,22 +769,10 @@ void dt_guides_draw(cairo_t *cr, const float left, const float top, const float 
 {
   const double dashes = DT_PIXEL_APPLY_DPI(5.0) / zoom_scale;
 
-  dt_iop_module_t *module = darktable.develop->gui_module;
-
   // first, we check if we need to show the guides or not
   gchar *key = _conf_get_path("global", "show", NULL);
   gboolean show = dt_conf_get_bool(key);
   g_free(key);
-
-  // otherwise we try the module autoshow
-  if(!show && module)
-  {
-    key = _conf_get_path(module->op, "autoshow", NULL);
-    show = dt_conf_get_bool(key);
-    g_free(key);
-  }
-
-  // if it's still false, then nothing to draw
   if(!show) return;
 
   // let's get the guide to show
@@ -827,28 +815,6 @@ void dt_guides_draw(cairo_t *cr, const float left, const float top, const float 
   cairo_restore(cr);
 }
 
-static void _settings_autoshow_change(GtkWidget *mi, dt_iop_module_t *module)
-{
-  // we inverse the autoshow value for the module
-  gchar *key = _conf_get_path(module->op, "autoshow", NULL);
-  dt_conf_set_bool(key, !dt_conf_get_bool(key));
-  darktable.gui->reset++;
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->guides_combo), dt_conf_get_bool(key));
-  darktable.gui->reset--;
-  g_free(key);
-  dt_control_queue_redraw_center();
-}
-
-void dt_guides_add_module_menuitem(void *menu, struct dt_iop_module_t *module)
-{
-  GtkWidget *mi = gtk_check_menu_item_new_with_label(_("show guides"));
-  gchar *key = _conf_get_path(module->op, "autoshow", NULL);
-  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(mi), dt_conf_get_bool(key));
-  g_free(key);
-  g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_settings_autoshow_change), module);
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
-}
-
 static void free_guide(void *data)
 {
   dt_guides_t *guide = (dt_guides_t *)data;
@@ -859,65 +825,6 @@ static void free_guide(void *data)
 void dt_guides_cleanup(GList *guides)
 {
   g_list_free_full(guides, free_guide);
-}
-
-static void _settings_autoshow_change2(GtkWidget *combo, struct dt_iop_module_t *module)
-{
-  if(darktable.gui->reset) return;
-  gchar *key = _conf_get_path(module->op, "autoshow", NULL);
-  dt_conf_set_bool(key, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(combo)));
-  g_free(key);
-  dt_control_queue_redraw_center();
-}
-
-static void _settings_autoshow_menu(GtkWidget *button, struct dt_iop_module_t *module)
-{
-  GtkWidget *popover = darktable.view_manager->guides_popover;
-  gtk_popover_set_relative_to(GTK_POPOVER(popover), button);
-
-  g_object_set(G_OBJECT(popover), "transitions-enabled", FALSE, NULL);
-
-  dt_guides_update_popover_values();
-
-  gtk_widget_show_all(popover);
-}
-
-void dt_guides_init_module_widget(GtkWidget *iopw, struct dt_iop_module_t *module)
-{
-  if(!(module->flags() & IOP_FLAGS_GUIDES_WIDGET)) return;
-
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  GtkWidget *cb = module->guides_combo = gtk_check_button_new_with_label(_("show guides"));
-  gtk_widget_set_name(box, "guides-module-combobox");
-  gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(cb))), PANGO_ELLIPSIZE_START);
-
-  gchar *key = _conf_get_path(module->op, "autoshow", NULL);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cb), dt_conf_get_bool(key));
-  g_free(key);
-
-  g_signal_connect(G_OBJECT(cb), "toggled", G_CALLBACK(_settings_autoshow_change2), module);
-  gtk_widget_set_tooltip_text(cb, _("show guide overlay when this module has focus"));
-  GtkWidget *ic = dtgtk_button_new(dtgtk_cairo_paint_grid, 0, NULL);
-  gtk_widget_set_tooltip_text(ic, _("change global guide settings\nnote that these settings are applied globally "
-                                    "and will impact any module that shows guide overlays"));
-  g_signal_connect(G_OBJECT(ic), "clicked", G_CALLBACK(_settings_autoshow_menu), module);
-
-  // we hide it if the preference is set to "off"
-  gtk_widget_set_no_show_all(box, TRUE);
-  gtk_widget_show(cb);
-  gtk_widget_show(ic);
-
-  gtk_box_pack_start(GTK_BOX(box), cb, TRUE, TRUE, 0);
-  gtk_box_pack_end(GTK_BOX(box), ic, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(iopw), box, TRUE, TRUE, 0);
-}
-
-void dt_guides_update_module_widget(struct dt_iop_module_t *module)
-{
-  if(!module->guides_combo) return;
-
-  GtkWidget *box = gtk_widget_get_parent(module->guides_combo);
-  gtk_widget_set_visible(box, dt_conf_get_bool("plugins/darkroom/show_guides_in_ui"));
 }
 
 void dt_guides_update_popover_values()

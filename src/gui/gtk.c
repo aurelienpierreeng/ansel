@@ -326,7 +326,7 @@ static gboolean _scrollbar_release_event(GtkWidget *widget, gpointer user_data)
 
 int dt_gui_gtk_load_config()
 {
-  // Warning : needs to be called within a dt_pthread_mutex_lock(&darktable.gui->mutex) section
+  // Warning : needs to be called within a dt_pthread_mutex_lock(&darktable.gui->mutex) section
   GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
   const int width = dt_conf_get_int("ui_last/window_w");
   const int height = dt_conf_get_int("ui_last/window_h");
@@ -705,7 +705,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   g_signal_connect(G_OBJECT(widget), "event", G_CALLBACK(dt_shortcut_dispatcher), NULL);
 
   // This is utterly broken and deeply messed-up as it breaks tooltips positionning while being generally ugly.
-  // TODO: 1. implement API `const char * get_shortcut_for_widget(GtkWidget *w)` in accelerators.c
+  // TODO: 1. implement API `const char * get_shortcut_for_widget(GtkWidget *w)` in accelerators.c
   //       2. call it in the tooltip constructor where relevant
   //       3. append the shortcut path as text to the tooltip text content __BEFORE__ initialization of the widget.
   //       4. Find out where Diederik Ter Rahe lives and ensure he never writes another line of code.

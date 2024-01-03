@@ -311,7 +311,9 @@ void dt_dev_process_preview_job(dt_develop_t *dev)
     return;
   }
 
-restart:;
+  restart:;
+  // adjust pipeline according to changed flag set by {add,pop}_history_item.
+  // this locks dev->history_mutex.
   dt_times_t start;
   dt_get_times(&start);
 
@@ -673,7 +675,7 @@ static void _dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module
   // but keep the always-on modules
   module->hash = dt_iop_module_hash(module);
 
-  // WARNING: dev->history_item refers to GUI index of history lib module ,
+  // WARNING: dev->history_item refers to GUI index of history lib module ,
   // where 0 is the original image.
   // It is offset by 1 compared to the history GList, aka last GUI index = length of GList.
   // So here, dev->history_item is the index of the new history entry to append
@@ -745,7 +747,7 @@ static void _dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module
 
     if(!no_image)
     {
-      // FIXME: if module was just enabled and is in default pipeline order,
+      // FIXME: if module was just enabled and is in default pipeline order,
       // do we need to rebuild ? Aka are disabled modules added to pipeline still ?
       dev->pipe->changed |= DT_DEV_PIPE_SYNCH;
       dev->preview_pipe->changed |= DT_DEV_PIPE_SYNCH;
@@ -789,7 +791,7 @@ static void _dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module
 
   hist->hash = module->hash;
 
-  // WARNING: dev->history_item refers to GUI index where 0 is the original image.
+  // WARNING: dev->history_item refers to GUI index where 0 is the original image.
   // It is offset by 1 compared to the history GList,
   // meaning dev->history_item is the index of the entry button in the history lib module GUI.
   dev->history_end = g_list_length(dev->history);
@@ -816,29 +818,14 @@ void dt_dev_add_history_item_ext(dt_develop_t *dev, dt_iop_module_t *module, gbo
 
 void _dev_add_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable, gboolean new_item)
 {
-  if(!darktable.gui || darktable.gui->reset) return;
+  // FIXME: not quite sure why we could not add an history item without a GUI
+  if(!darktable.gui) return;
 
   dt_dev_undo_start_record(dev);
 
   dt_pthread_mutex_lock(&dev->history_mutex);
 
-  if(dev->gui_attached)
-  {
-    _dev_add_history_item_ext(dev, module, enable, new_item, FALSE, FALSE);
-  }
-#if 0
-  {
-    // debug:
-    printf("remaining %d history items:\n", dev->history_end);
-    int i = 0;
-    for(GList *history = dev->history; history; history = g_list_next(history))
-    {
-      dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
-      printf("%d %s\n", i, hist->module->op);
-      i++;
-    }
-  }
-#endif
+  _dev_add_history_item_ext(dev, module, enable, new_item, FALSE, FALSE);
 
   /* attach changed tag reflecting actual change */
   const int imgid = dev->image_storage.id;
@@ -851,13 +838,10 @@ void _dev_add_history_item(dt_develop_t *dev, dt_iop_module_t *module, gboolean 
 
   dt_pthread_mutex_unlock(&dev->history_mutex);
 
-  if(dev->gui_attached)
-  {
-    /* signal that history has changed */
-    dt_dev_undo_end_record(dev);
+  /* signal that history has changed */
+  dt_dev_undo_end_record(dev);
 
-    if(tag_change) DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
-  }
+  if(tag_change) DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
 }
 
 // The next 2 functions are always called from GUI controls setting parameters
@@ -876,11 +860,12 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   dev->preview_status = DT_DEV_PIXELPIPE_DIRTY;
   dt_pthread_mutex_unlock(&dev->history_mutex);
 
+  dt_dev_invalidate_all(dev);
   dt_control_queue_redraw_center();
   dt_dev_refresh_ui_images(dev);
 }
 
-// FIXME : merge that with the generic add_history_item_ext()
+// FIXME : merge that with the generic add_history_item_ext()
 void dt_dev_add_masks_history_item_ext(dt_develop_t *dev, dt_iop_module_t *_module, gboolean _enable, gboolean no_image)
 {
   dt_iop_module_t *module = _module;
@@ -951,7 +936,7 @@ void dt_dev_reload_history_items(dt_develop_t *dev)
   dt_pthread_mutex_lock(&dev->history_mutex);
 
   // remove unused history items:
-  // FIXME: factorize with add_history_item cleaning
+  // FIXME: factorize with add_history_item cleaning
   GList *history = g_list_nth(dev->history, dev->history_end);
   while(history)
   {
@@ -1012,13 +997,15 @@ void dt_dev_reload_history_items(dt_develop_t *dev)
   dt_dev_invalidate_all(dev);
 }
 
-void dt_dev_pop_history_items_ext(dt_develop_t *dev, int32_t cnt)
+static inline void _dt_dev_modules_reload_defaults(dt_develop_t *dev)
 {
-  dt_ioppr_check_iop_order(dev, 0, "dt_dev_pop_history_items_ext begin");
-  const int end_prev = dev->history_end;
-  dev->history_end = cnt;
-
-  // reset gui params for all modules
+  // The reason for this is modules mandatorily ON don't leave history.
+  // We therefore need to init modules containers to the defaults.
+  // This is of course shit because it relies on the fact that defaults will never change in the future.
+  // As a result, changing defaults needs to be handled on a case-by-case basis, by first adding the affected
+  // modules to history, then setting said history to the previous defaults.
+  // Worse, some modules (temperature.c) grabbed their params at runtime (WB as shot in camera),
+  // meaning the defaults were not even static values.
   for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
@@ -1029,10 +1016,18 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev, int32_t cnt)
     if(module->multi_priority == 0)
       module->iop_order = dt_ioppr_get_iop_order(dev->iop_order_list, module->op, module->multi_priority);
     else
-    {
       module->iop_order = INT_MAX;
-    }
   }
+}
+
+void dt_dev_pop_history_items_ext(dt_develop_t *dev, int32_t cnt)
+{
+  dt_ioppr_check_iop_order(dev, 0, "dt_dev_pop_history_items_ext begin");
+  const int end_prev = dev->history_end;
+  dev->history_end = cnt;
+
+  // reset gui params for all modules
+  _dt_dev_modules_reload_defaults(dev);
 
   // go through history and set gui params
   GList *forms = NULL;
@@ -1050,7 +1045,7 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev, int32_t cnt)
     if(hist->forms) forms = hist->forms;
 
     // this function is called on freshly-loaded histories, we don't necessarily have a hash yet
-    // FIXME: save the hash in DB and get it from there at this point.
+    // FIXME: save the hash in DB and get it from there at this point.
     hist->module->hash = hist->hash = dt_iop_module_hash(hist->module);
 
     //fprintf(stdout, "history has hash %lu, new module %s has %lu\n", hist->hash, hist->module->op, hist->module->hash);
@@ -1133,7 +1128,7 @@ static void _cleanup_history(const int imgid)
 
 guint dt_dev_mask_history_overload(dt_develop_t *dev, guint threshold)
 {
-  // Count all the mask forms used × history entries, up to a certain threshold.
+  // Count all the mask forms used x history entries, up to a certain threshold.
   // Stop counting when the threshold is reached, for performance.
   guint states = 0;
   for(GList *history = g_list_first(dev->history); history; history = g_list_next(history))
@@ -1149,7 +1144,7 @@ static void _warn_about_history_overuse(dt_develop_t *dev)
 {
   /* History stores one entry per module, everytime a parameter is changed.
   *  For modules using masks, we also store a full snapshot of masks states.
-  *  All that is saved into database and XMP. When history entries × number of mask > 250,
+  *  All that is saved into database and XMP. When history entries x number of mask > 250,
   *  we get a really bad performance penalty.
   */
   guint states = dt_dev_mask_history_overload(dev, 250);
@@ -1342,7 +1337,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
     }
   }
 
-  // FIXME : the following query seems duplicated from gui/presets.c/dt_gui_presets_autoapply_for_module()
+  // FIXME : the following query seems duplicated from gui/presets.c/dt_gui_presets_autoapply_for_module()
 
   // select all presets from one of the following table and add them into memory.history. Note that
   // this is appended to possibly already present default modules.
@@ -1930,7 +1925,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int imgid, gboolean no_ima
 
 void dt_dev_read_history(dt_develop_t *dev)
 {
-  // FIXME : This should be made thread-safe, but results in deadlock
+  // FIXME : This should be made thread-safe, but results in deadlock
   //dt_pthread_mutex_lock(&dev->history_mutex);
   dt_dev_read_history_ext(dev, dev->image_storage.id, FALSE);
   //dt_pthread_mutex_unlock(&dev->history_mutex);

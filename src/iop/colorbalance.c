@@ -1989,7 +1989,7 @@ void gui_init(dt_iop_module_t *self)
                    dt_bauhaus_slider_new_with_range_and_feedback(self,      \
                    0.0f, 360.0f, 0, 0.0f, 2, 0));                           \
   dt_bauhaus_widget_set_label(g->hue_##which, section, N_("hue"));          \
-  dt_bauhaus_slider_set_format(g->hue_##which, "°");                        \
+  dt_bauhaus_slider_set_format(g->hue_##which, "\302\260");                        \
   dt_bauhaus_slider_set_stop(g->hue_##which, 0.0f,   1.0f, 0.0f, 0.0f);     \
   dt_bauhaus_slider_set_stop(g->hue_##which, 0.166f, 1.0f, 1.0f, 0.0f);     \
   dt_bauhaus_slider_set_stop(g->hue_##which, 0.322f, 0.0f, 1.0f, 0.0f);     \

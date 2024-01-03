@@ -519,7 +519,7 @@ gchar *dt_util_latitude_str(float latitude)
 
   fractional = modff(latitude, &integral);
 
-  return g_strdup_printf("%s %02d° %06.3f'", c, (int)integral, fractional*60.0);
+  return g_strdup_printf("%s %02d\302\260 %06.3f'", c, (int)integral, fractional*60.0);
 }
 
 gchar *dt_util_longitude_str(float longitude)
@@ -537,7 +537,7 @@ gchar *dt_util_longitude_str(float longitude)
 
   fractional = modff(longitude, &integral);
 
-  return g_strdup_printf("%s %03d° %06.3f'", c, (int)integral, fractional*60.0);
+  return g_strdup_printf("%s %03d\302\260 %06.3f'", c, (int)integral, fractional*60.0);
 }
 
 gchar *dt_util_elevation_str(float elevation)
@@ -818,9 +818,9 @@ char *dt_util_format_exposure(const float exposuretime)
   if(exposuretime >= 1.0f)
   {
     if(nearbyintf(exposuretime) == exposuretime)
-      result = g_strdup_printf("%.0f″", exposuretime);
+      result = g_strdup_printf("%.0f\"", exposuretime);
     else
-      result = g_strdup_printf("%.1f″", exposuretime);
+      result = g_strdup_printf("%.1f\"", exposuretime);
   }
   /* want to catch everything below 0.3 seconds */
   else if(exposuretime < 0.29f)
@@ -835,7 +835,7 @@ char *dt_util_format_exposure(const float exposuretime)
     result = g_strdup_printf("1/%.1f", 1.0 / exposuretime);
 
   else
-    result = g_strdup_printf("%.1f″", exposuretime);
+    result = g_strdup_printf("%.1f\"", exposuretime);
 
   return result;
 }
@@ -999,4 +999,3 @@ gchar *dt_str_replace(const char *string, const char *search, const char *replac
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

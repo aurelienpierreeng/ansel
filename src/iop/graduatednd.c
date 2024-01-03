@@ -1103,13 +1103,13 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->hardness, _("hardness of graduation:\n0% = soft, 100% = hard"));
 
   g->rotation = dt_bauhaus_slider_from_params(self, "rotation");
-  dt_bauhaus_slider_set_format(g->rotation, "°");
+  dt_bauhaus_slider_set_format(g->rotation, "\302\260");
   gtk_widget_set_tooltip_text(g->rotation, _("rotation of filter -180 to 180 degrees"));
 
   g->hue = dt_color_picker_new(self, DT_COLOR_PICKER_POINT, dt_bauhaus_slider_from_params(self, "hue"));
   dt_bauhaus_slider_set_feedback(g->hue, 0);
   dt_bauhaus_slider_set_factor(g->hue, 360.0f);
-  dt_bauhaus_slider_set_format(g->hue, "°");
+  dt_bauhaus_slider_set_format(g->hue, "\302\260");
   dt_bauhaus_slider_set_stop(g->hue, 0.0f, 1.0f, 0.0f, 0.0f);
   dt_bauhaus_slider_set_stop(g->hue, 0.166f, 1.0f, 1.0f, 0.0f);
   dt_bauhaus_slider_set_stop(g->hue, 0.322f, 0.0f, 1.0f, 0.0f);

@@ -46,7 +46,7 @@ typedef struct dt_menu_entry_t
  *  2. re-use the action callback functions already used for global keyboard shortcuts (actions/accels).
  *  Again, all inputs and internal functions should be globally accessible, for example using proxies.
  *
- *  3. wire everything with the `set_menu_entry` function below. GUI states of the children menu items
+ *  3. wire everything with the `set_menu_entry` function below. GUI states of the children menu items
  *  will be updated automatically everytime a top-level menu is opened.
  **/
 
@@ -111,7 +111,7 @@ void update_entry(dt_menu_entry_t *entry)
   }
 
   // Get the key shortcut if any and add it to the accel label
-  // TODO: connect refresh on "accel changed" signal, here
+  // TODO: connect refresh on "accel changed" signal, here
   // it's refreshed at each display.
   guint key_val;
   GdkModifierType mods;
@@ -136,7 +136,7 @@ void update_menu_entries(GtkWidget *widget, gpointer user_data)
 
 void add_top_menu_entry(GtkWidget *menu_bar, GtkWidget **menus, GList **lists, const dt_menus_t index, gchar *label)
 {
-  // Top menus belong to menu bar : file, edit, display, etc.
+  // Top menus belong to menu bar : file, edit, display, etc.
   menus[index] = gtk_menu_new();
   gtk_menu_set_accel_group(GTK_MENU(menus[index]), darktable.gui->global_accels);
 

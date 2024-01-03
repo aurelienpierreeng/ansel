@@ -138,7 +138,7 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_p
 
 const char **description(struct dt_iop_module_t *self)
 {
-  return dt_iop_set_description(self, _("alter an image’s tones using curves in RGB color space"),
+  return dt_iop_set_description(self, _("alter an image's tones using curves in RGB color space"),
                                       _("corrective and creative"),
                                       _("linear, RGB, display-referred"),
                                       _("non-linear, RGB"),
@@ -946,7 +946,7 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
 
         picker_scale(self->picked_color, picker_mean, p, work_profile);
         picker_scale(self->picked_output_color, picker_min, p, work_profile);
-        snprintf(text, sizeof(text), "%.1f → %.1f", picker_mean[ch] * 255.f, picker_min[ch] * 255.f);
+        snprintf(text, sizeof(text), "%.1f \342\206\222 %.1f", picker_mean[ch] * 255.f, picker_min[ch] * 255.f);
 
         cairo_set_source_rgb(cr, 0.1, 0.1, 0.1);
         cairo_set_font_size(cr, DT_PIXEL_APPLY_DPI(0.04) * height);

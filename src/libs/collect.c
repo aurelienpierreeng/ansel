@@ -2354,7 +2354,7 @@ static void _update_collect_modes(dt_lib_collect_t *d, int variant)
       _combo_set_active_collection(d->rule[0].combo, prop);
 
       if(_clear_text_entry(prev_prop, prop, d->rule))
-        gtk_entry_set_placeholder_text(GTK_ENTRY(d->rule[0].text), _("Search a folder…"));
+        gtk_entry_set_placeholder_text(GTK_ENTRY(d->rule[0].text), _("Search a folder..."));
 
       break;
     }
@@ -2376,7 +2376,7 @@ static void _update_collect_modes(dt_lib_collect_t *d, int variant)
       _combo_set_active_collection(d->rule[0].combo, prop);
 
       if(_clear_text_entry(prev_prop, prop, d->rule))
-        gtk_entry_set_placeholder_text(GTK_ENTRY(d->rule[0].text), _("Search a collection…"));
+        gtk_entry_set_placeholder_text(GTK_ENTRY(d->rule[0].text), _("Search a collection..."));
 
       break;
     }
@@ -2388,7 +2388,7 @@ static void _update_collect_modes(dt_lib_collect_t *d, int variant)
       _repopulate_combo(d->rule[0].combo);
       _combo_set_active_collection(d->rule[0].combo, prop);
 
-      gtk_entry_set_placeholder_text(GTK_ENTRY(d->rule[0].text), _("Search…"));
+      gtk_entry_set_placeholder_text(GTK_ENTRY(d->rule[0].text), _("Search..."));
     }
   }
 }
@@ -3243,7 +3243,7 @@ void gui_init(dt_lib_module_t *self)
     w = gtk_search_entry_new();
     d->rule[i].text = w;
     gtk_widget_add_events(w, GDK_FOCUS_CHANGE_MASK);
-    gtk_entry_set_placeholder_text(GTK_ENTRY(d->rule[i].text), _("Search…"));
+    gtk_entry_set_placeholder_text(GTK_ENTRY(d->rule[i].text), _("Search..."));
     g_signal_connect(G_OBJECT(w), "focus-in-event", G_CALLBACK(entry_focus_in_callback), d->rule + i);
 
     /* xgettext:no-c-format */

@@ -301,6 +301,7 @@ static void dt_codepaths_init()
 
   memset(&(darktable.codepath), 0, sizeof(darktable.codepath));
 
+#ifndef __arm64__
   // first, enable whatever codepath this CPU supports
   {
 #ifdef HAVE_BUILTIN_CPU_SUPPORTS
@@ -310,6 +311,7 @@ static void dt_codepaths_init()
     darktable.codepath.SSE2 = ((flags & (CPU_FLAG_SSE)) && (flags & (CPU_FLAG_SSE2)));
 #endif
   }
+#endif
 
   // second, apply overrides from conf
   // NOTE: all intrinsics sets can only be overridden to OFF
@@ -428,7 +430,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   dt_set_signal_handlers();
 
   int sse2_supported = 0;
-
+#ifndef __arm64__
 #ifdef HAVE_BUILTIN_CPU_SUPPORTS
   // NOTE: _may_i_use_cpu_feature() looks better, but only available in ICC
   __builtin_cpu_init();
@@ -441,6 +443,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     fprintf(stderr, "[dt_init] SSE2 instruction set is unavailable.\n");
     fprintf(stderr, "[dt_init] expect a LOT of functionality to be broken. you have been warned.\n");
   }
+#endif
 
 #ifdef M_MMAP_THRESHOLD
   mallopt(M_MMAP_THRESHOLD, 128 * 1024); /* use mmap() for large allocations */
@@ -1149,7 +1152,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // functions of the views depend on darktable.control->accels_* to register
   // their keyboard accelerators
 
-  // TODO : Make a single call to unified GUI API initializing everything graphical at once.
+  // TODO : Make a single call to unified GUI API initializing everything graphical at once.
   // The current tangled mess is a nightmare to maintain.
 
   if(init_gui)

@@ -18,7 +18,7 @@
 
 #include "common/color_vocabulary.h"
 
-// get a range of 2 × factor × std centered in avg
+// get a range of 2 x factor x std centered in avg
 static range_t
 _compute_range(const gaussian_stats_t stats, const float factor)
 {
@@ -37,7 +37,7 @@ const char *Lch_to_color_name(dt_aligned_pixel_t color)
   if(color[1] < 2.0f)
     return _("gray");
 
-  // Start with special cases : skin tones
+  // Start with special cases : skin tones
 
   dt_aligned_pixel_t Lab;
   dt_LCH_2_Lab(color, Lab);

@@ -104,7 +104,6 @@ typedef enum dt_iop_flags_t
   IOP_FLAGS_ALLOW_FAST_PIPE = 1 << 12,   // Module can work with a fast pipe
   IOP_FLAGS_UNSAFE_COPY = 1 << 13,       // Unsafe to copy as part of history
   IOP_FLAGS_GUIDES_SPECIAL_DRAW = 1 << 14, // handle the grid drawing directly
-  IOP_FLAGS_GUIDES_WIDGET = 1 << 15        // require the guides widget
 } dt_iop_flags_t;
 
 typedef struct dt_iop_gui_data_t
@@ -495,7 +494,7 @@ uint64_t dt_iop_module_hash(dt_iop_module_t *module);
 gboolean dt_iop_check_modules_equal(dt_iop_module_t *mod_1, dt_iop_module_t *mod_2);
 
 
-/** Set bypass to TRUE if the pipeline cache should be bypassed temporarily for
+/** Set bypass to TRUE if the pipeline cache should be bypassed temporarily for
  * this module and the next, for example doing interactive GUI operations.
  *
  * Pipeline cache consistency is ensured by hashing the internal module params

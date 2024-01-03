@@ -505,13 +505,13 @@ void gui_init(struct dt_iop_module_t *self)
   GtkWidget *shadows_box = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   g->shadow_hue_gslider = dt_bauhaus_slider_from_params(self, "shadow_hue");
   dt_bauhaus_slider_set_factor(g->shadow_hue_gslider, 360.0f);
-  dt_bauhaus_slider_set_format(g->shadow_hue_gslider, "°");
+  dt_bauhaus_slider_set_format(g->shadow_hue_gslider, "\302\260");
   g->shadow_sat_gslider = dt_bauhaus_slider_from_params(self, "shadow_saturation");
 
   GtkWidget *highlights_box = self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   g->highlight_hue_gslider = dt_bauhaus_slider_from_params(self, "highlight_hue");
   dt_bauhaus_slider_set_factor(g->highlight_hue_gslider, 360.0f);
-  dt_bauhaus_slider_set_format(g->highlight_hue_gslider, "°");
+  dt_bauhaus_slider_set_format(g->highlight_hue_gslider, "\302\260");
   g->highlight_sat_gslider = dt_bauhaus_slider_from_params(self, "highlight_saturation");
   --darktable.bauhaus->skip_accel;
 

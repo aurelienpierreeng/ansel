@@ -1201,7 +1201,7 @@ static inline void box_mean_2ch(float *const restrict in, const size_t height, c
 {
   // Compute in-place a box average (filter) on a multi-channel image over a window of size 2*radius + 1
   // We make use of the separable nature of the filter kernel to speed-up the computation
-  // by convolving along columns and rows separately (complexity O(2 × radius) instead of O(radius²)).
+  // by convolving along columns and rows separately (complexity O(2 x radius) instead of O(radius²)).
 
   const size_t eff_height = _compute_effective_height(height, radius);
   const size_t Ndim = MAX(4*width,16*eff_height);
@@ -1580,4 +1580,3 @@ void dt_box_min(float *const buf, const size_t height, const size_t width, const
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

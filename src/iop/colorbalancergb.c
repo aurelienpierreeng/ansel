@@ -41,11 +41,11 @@
 
 //#include <gtk/gtk.h>
 #include <stdlib.h>
-#define LUT_ELEM 360     // gamut LUT number of elements: resolution of 1°
-#define STEPS 92         // so we test 92×92×92 combinations of RGB in [0; 1] to build the gamut LUT
+#define LUT_ELEM 360     // gamut LUT number of elements: resolution of 1°
+#define STEPS 92         // so we test 92x92x92 combinations of RGB in [0; 1] to build the gamut LUT
 
 // Filmlight Yrg puts red at 330°, while usual HSL wheels put it at 360/0°
-// so shift in GUI only it to not confuse people. User params are always degrees,
+// so shift in GUI only it to not confuse people. User params are always degrees,
 // pixel params are always radians.
 #define ANGLE_SHIFT -30.f
 #define DEG_TO_RAD(x) ((x + ANGLE_SHIFT) * M_PI / 180.f)
@@ -669,7 +669,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     if(Ych[2] > M_PI_F) Ych[2] -= 2.f * M_PI_F;
     else if(Ych[2] < -M_PI_F) Ych[2] += 2.f * M_PI_F;
 
-    // Linear chroma : distance to achromatic at constant luminance in scene-referred
+    // Linear chroma : distance to achromatic at constant luminance in scene-referred
     const float chroma_boost = d->chroma_global + scalar_product(opacities, chroma);
     const float vibrance = d->vibrance * (1.0f - powf(Ych[1], fabsf(d->vibrance)));
     const float chroma_factor = fmaxf(1.f + chroma_boost + vibrance, 0.f);
@@ -723,10 +723,10 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
       // Convert to JCh
       float JC[2] = { Jab[0], dt_fast_hypotf(Jab[1], Jab[2]) };   // brightness/chroma vector
-      const float h = atan2f(Jab[2], Jab[1]);  // hue : (a, b) angle
+      const float h = atan2f(Jab[2], Jab[1]);  // hue : (a, b) angle
 
       // Project JC onto S, the saturation eigenvector, with orthogonal vector O.
-      // Note : O should be = (C * cosf(T) - J * sinf(T)) = 0 since S is the eigenvector,
+      // Note : O should be = (C * cosf(T) - J * sinf(T)) = 0 since S is the eigenvector,
       // so we add the chroma projected along the orthogonal axis to get some control value
       const float T = atan2f(JC[1], JC[0]); // angle of the eigenvector over the hue plane
       const float sin_T = sinf(T);
@@ -831,7 +831,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       dt_UCS_HCB_to_JCH(HCB, JCH);
 
       // Gamut mapping
-      const float max_colorfulness = lookup_gamut(gamut_LUT, JCH[2]); // WARNING : this is M²
+      const float max_colorfulness = lookup_gamut(gamut_LUT, JCH[2]); // WARNING : this is M²
       const float max_chroma = 15.932993652962535f * powf(JCH[0] * L_white, 0.6523997524738018f) * powf(max_colorfulness, 0.6007557017508491f) / L_white;
       const dt_aligned_pixel_t JCH_gamut_boundary = { JCH[0], max_chroma, JCH[2], 0.f };
       dt_aligned_pixel_t HSB_gamut_boundary;
@@ -1296,7 +1296,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
           int index = (int)(H_round + 180);
           index += (index < 0) ? 360 : 0;
           index -= (index > 359) ? 360 : 0;
-          // Warning: we store M², the square of the colorfulness
+          // Warning: we store M², the square of the colorfulness
           dt_UCS_LUT[index] = UV_star_prime[0] * UV_star_prime[0] + UV_star_prime[1] * UV_star_prime[1];
         }
       }
@@ -1355,7 +1355,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   pipe_RGB_to_Ych(self, piece, (const float *)self->picked_color, Ych);
   pipe_RGB_to_Ych(self, piece, (const float *)self->picked_color_max, max_Ych);
   float hue = RAD_TO_DEG(Ych[2]) + 180.f;   // take the opponent color
-  hue = (hue > 360.f) ? hue - 360.f : hue;  // normalize in [0 ; 360]°
+  hue = (hue > 360.f) ? hue - 360.f : hue;  // normalize in [0 ; 360]°
 
   ++darktable.gui->reset;
   if(picker == g->global_H)
@@ -1811,7 +1811,7 @@ void gui_init(dt_iop_module_t *self)
   self->widget = dt_ui_notebook_page(g->notebook, N_("master"), _("global grading"));
 
   g->hue_angle = dt_bauhaus_slider_from_params(self, "hue_angle");
-  dt_bauhaus_slider_set_format(g->hue_angle, "°");
+  dt_bauhaus_slider_set_format(g->hue_angle, "\302\260");
   gtk_widget_set_tooltip_text(g->hue_angle, _("rotate all hues by an angle, at the same luminance"));
 
   g->vibrance = dt_bauhaus_slider_from_params(self, "vibrance");
@@ -1908,7 +1908,7 @@ void gui_init(dt_iop_module_t *self)
 
   g->global_H = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "global_H"));
   dt_bauhaus_slider_set_feedback(g->global_H, 0);
-  dt_bauhaus_slider_set_format(g->global_H, "°");
+  dt_bauhaus_slider_set_format(g->global_H, "\302\260");
   gtk_widget_set_tooltip_text(g->global_H, _("hue of the global color offset"));
 
   g->global_C = dt_bauhaus_slider_from_params(self, "global_C");
@@ -1927,7 +1927,7 @@ void gui_init(dt_iop_module_t *self)
 
   g->shadows_H = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "shadows_H"));
   dt_bauhaus_slider_set_feedback(g->shadows_H, 0);
-  dt_bauhaus_slider_set_format(g->shadows_H, "°");
+  dt_bauhaus_slider_set_format(g->shadows_H, "\302\260");
   gtk_widget_set_tooltip_text(g->shadows_H, _("hue of the color gain in shadows"));
 
   g->shadows_C = dt_bauhaus_slider_from_params(self, "shadows_C");
@@ -1946,7 +1946,7 @@ void gui_init(dt_iop_module_t *self)
 
   g->highlights_H = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "highlights_H"));
   dt_bauhaus_slider_set_feedback(g->highlights_H, 0);
-  dt_bauhaus_slider_set_format(g->highlights_H, "°");
+  dt_bauhaus_slider_set_format(g->highlights_H, "\302\260");
   gtk_widget_set_tooltip_text(g->highlights_H, _("hue of the color gain in highlights"));
 
   g->highlights_C = dt_bauhaus_slider_from_params(self, "highlights_C");
@@ -1965,7 +1965,7 @@ void gui_init(dt_iop_module_t *self)
 
   g->midtones_H = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "midtones_H"));
   dt_bauhaus_slider_set_feedback(g->midtones_H, 0);
-  dt_bauhaus_slider_set_format(g->midtones_H, "°");
+  dt_bauhaus_slider_set_format(g->midtones_H, "\302\260");
   gtk_widget_set_tooltip_text(g->midtones_H, _("hue of the color exponent in mid-tones"));
 
   g->midtones_C = dt_bauhaus_slider_from_params(self, "midtones_C");

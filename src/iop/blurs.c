@@ -211,7 +211,7 @@ static inline void create_motion_kernel(float *const restrict buffer,
   const float A = curvature / 2.f;
   const float B = 1.f;
   const float C = -A * offset * offset + B * offset;
-  // Note : C ensures the polynomial arc always goes through the central pixel
+  // Note : C ensures the polynomial arc always goes through the central pixel
   // so we don't shift pixels. This is meant to allow seamless connection
   // with unmasked areas when using masked blur.
 
@@ -269,7 +269,7 @@ static inline void create_gauss_kernel(float *const restrict buffer,
                                        const size_t width, const size_t height)
 {
   // This is not optimized. Gauss kernel is separable and can be turned into
-  // 2 × 1D convolutions.
+  // 2 x 1D convolutions.
   const float radius = (width - 1) / 2.f - 1;
 
 #ifdef _OPENMP
@@ -318,7 +318,7 @@ static inline void build_gui_kernel(unsigned char *const buffer, const size_t wi
     create_gauss_kernel(kernel_2, width, height);
   }
 
-  // Convert to Gtk/Cairo RGBA 8×4 bits
+  // Convert to Gtk/Cairo RGBA 8x4 bits
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) dt_omp_firstprivate(width, height, buffer, kernel_2) \
     schedule(simd: static) aligned(buffer, kernel_2:64)
@@ -817,11 +817,11 @@ void gui_init(dt_iop_module_t *self)
   g->linearity = dt_bauhaus_slider_from_params(self, "linearity");
   g->rotation = dt_bauhaus_slider_from_params(self, "rotation");
   dt_bauhaus_slider_set_factor(g->rotation, DEG_TO_RAD);
-  dt_bauhaus_slider_set_format(g->rotation, "°");
+  dt_bauhaus_slider_set_format(g->rotation, "\302\260");
 
   g->angle = dt_bauhaus_slider_from_params(self, "angle");
   dt_bauhaus_slider_set_factor(g->angle, DEG_TO_RAD);
-  dt_bauhaus_slider_set_format(g->angle, "°");
+  dt_bauhaus_slider_set_format(g->angle, "\302\260");
 
 
   g->curvature = dt_bauhaus_slider_from_params(self, "curvature");

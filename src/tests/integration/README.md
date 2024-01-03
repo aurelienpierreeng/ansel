@@ -22,7 +22,7 @@ nnnn-name/  : tests
 Needed tools : zopflipng
 
 
-# How to add a new test (using default driver)
+# How to add a new test (using default driver)
 
 1. Create a new directory
 

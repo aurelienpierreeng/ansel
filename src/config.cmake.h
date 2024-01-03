@@ -81,7 +81,7 @@ static const char *dt_supported_extensions[] __attribute__((unused)) = {"@DT_SUP
  *****************************************************************************/
 
 // OpenCL 1.2 is the highest version supported by Nvidia drivers as of end 2019
-// we force use it because we don't have time to support every (vendor driver × OpenCL version)
+// we force use it because we don't have time to support every (vendor driver x OpenCL version)
 #define CL_TARGET_OPENCL_VERSION 120
 
 // clang-format off

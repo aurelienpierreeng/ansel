@@ -169,7 +169,7 @@ static void _recurse_folder(GFile *folder, dt_import_t *const import)
   GFile *file = NULL;
   while(g_file_enumerator_iterate(files, NULL, &file, NULL, NULL))
   {
-    // g_file_enumerator_iterate returns FALSE only on errors, not on end of enumeration.
+    // g_file_enumerator_iterate returns FALSE only on errors, not on end of enumeration.
     // We need an ugly break here else infinite loop.
     if(!file) break;
 
@@ -209,8 +209,8 @@ static gboolean _delayed_file_count(gpointer data)
 static int32_t dt_get_selected_files(dt_import_t *import)
 {
   // Recurse through subfolders if any selected.
-  // Can be called directly from GUI thread without using a job,
-  // but that might freeze the GUI on large directories.
+  // Can be called directly from GUI thread without using a job,
+  // but that might freeze the GUI on large directories.
 
   dt_pthread_mutex_lock(import->lock);
   // Re-init flags
@@ -522,7 +522,7 @@ update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata)
   {
     char datetime[200];
     const gboolean valid = dt_datetime_img_to_local(datetime, sizeof(datetime), &img, FALSE);
-    const gchar *exposure_field = g_strdup_printf("%.0f ISO – f/%.1f – %s", img.exif_iso, img.exif_aperture,
+    const gchar *exposure_field = g_strdup_printf("%.0f ISO - f/%.1f - %s", img.exif_iso, img.exif_aperture,
                                                   dt_util_format_exposure(img.exif_exposure));
     gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_DATETIME_FIELD]), (valid) ? g_strdup(datetime) : _("N/A"));
     gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_MODEL_FIELD]), g_strdup(img.exif_model));
@@ -611,7 +611,7 @@ static void _filelist_changed_callback(gpointer instance, GList *files, guint el
   if(!d || !d->selected_files) return;
   gtk_label_set_text(GTK_LABEL(d->selected_files), (finished)
                                                       ? g_strdup_printf(_("%i files selected"), elements)
-                                                      : g_strdup_printf(_("Detection in progress… (%i files found so far)"), elements));
+                                                      : g_strdup_printf(_("Detection in progress... (%i files found so far)"), elements));
 
   // The list of files is not used in GUI. It's not freed in the job either.
   if(finished)
@@ -621,7 +621,7 @@ static void _filelist_changed_callback(gpointer instance, GList *files, guint el
 static void _selection_changed(GtkWidget *filechooser, dt_lib_import_t *d)
 {
   _set_test_path(d);
-  gtk_label_set_text(GTK_LABEL(d->selected_files), _("Detecting candidate files for import…"));
+  gtk_label_set_text(GTK_LABEL(d->selected_files), _("Detecting candidate files for import..."));
 
   // Kill-switch recursive file detection
   d->shutdown = TRUE;
@@ -730,7 +730,7 @@ static void _update_progress_message(gpointer instance, GList *files, int elemen
   dt_lib_import_t *d = (dt_lib_import_t *)user_data;
   gtk_message_dialog_set_markup(
       GTK_MESSAGE_DIALOG(d->modal),
-      g_strdup_printf(_("Crawling your selection for recursive folder detection… %i pictures found so far. <i>(This "
+      g_strdup_printf(_("Crawling your selection for recursive folder detection... %i pictures found so far. <i>(This "
                         "can take some time for large folders)</i>"),
                       elements));
 }
@@ -803,7 +803,7 @@ void _file_chooser_response(GtkDialog *dialog, gint response_id, dt_lib_import_t
       d->modal = gtk_message_dialog_new_with_markup(
           GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, GTK_MESSAGE_INFO,
           GTK_BUTTONS_NONE,
-          _("Crawling your selection for recursive folder detection… <i>(This can take some time for large folders)</i>"));
+          _("Crawling your selection for recursive folder detection... <i>(This can take some time for large folders)</i>"));
       gtk_widget_show_all(d->modal);
 
       dt_control_get_selected_files(d, TRUE);
@@ -825,14 +825,22 @@ void _file_chooser_response(GtkDialog *dialog, gint response_id, dt_lib_import_t
 static void gui_init(dt_lib_import_t *d)
 {
   d->dialog = gtk_dialog_new_with_buttons
-    ( _("Ansel — Open pictures"), NULL, GTK_DIALOG_DESTROY_WITH_PARENT,
+    ( _("Ansel - Open pictures"), NULL, GTK_DIALOG_DESTROY_WITH_PARENT,
       _("Cancel"), GTK_RESPONSE_CANCEL,
       _("Import"), GTK_RESPONSE_ACCEPT,
       NULL);
 
 #ifdef GDK_WINDOWING_QUARTZ
+// TODO: On MacOS (at least on version 13) the dialog windows doesn't behave as expected. The dialog
+// needs to have a parent window. "set_parent_window" wasn't working, so set_transient_for is 
+// the way to go. Still the window manager isn't dealing with the dialog properly, when the dialog 
+// is shifted outside its parent. The dialog isn't visible any longer but still listed as a window 
+// of the app.
   dt_osx_disallow_fullscreen(d->dialog);
+  gtk_window_set_transient_for(GTK_WINDOW(d->dialog), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+  gtk_window_set_position(GTK_WINDOW(d->dialog), GTK_WIN_POS_CENTER_ON_PARENT);
 #endif
+
   gtk_window_set_default_size(GTK_WINDOW(d->dialog),
                               dt_conf_get_int("ui_last/import_dialog_width"),
                               dt_conf_get_int("ui_last/import_dialog_height"));
@@ -850,7 +858,7 @@ static void gui_init(dt_lib_import_t *d)
   gtk_grid_set_column_homogeneous(grid, FALSE);
   gtk_grid_set_row_homogeneous(grid, FALSE);
 
-  /* BOTTOM PANEL */
+  /* BOTTOM PANEL */
   GtkWidget *rbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_box_pack_start(GTK_BOX(content), rbox, TRUE, TRUE, 0);
 
@@ -920,7 +928,7 @@ static void gui_init(dt_lib_import_t *d)
       imported_label,
       _("Images already in the library will not be imported again, selected or not. "
         "Remove them from the library first, or use the menu "
-        "`Run` → `Resynchronize library and XMP` to update the local database from distant XMP.\n\n"
+        "`Run \342\206\222 Resynchronize library and XMP` to update the local database from distant XMP.\n\n"
         "Ansel indexes images by their filename and parent folder (full path), "
         "not by their content. Therefore, renaming or moving images on the filesystem, "
         "or changing the mounting point of their external drive will make them "
@@ -1026,7 +1034,7 @@ static void gui_init(dt_lib_import_t *d)
   /* Create the grid of import params when using duplication */
 
   // Row 0: labels for text entries
-  // Row 1: text entries
+  // Row 1: text entries
   gtk_grid_attach(grid, calendar_label, 0, 0, 1, 1);
   gtk_grid_attach(grid, GTK_WIDGET(box_calendar), 0, 1, 1, 1);
 
@@ -1092,7 +1100,7 @@ static void _do_select_new(dt_lib_import_t *d)
   GFile *file = NULL;
   while(g_file_enumerator_iterate(files, NULL, &file, NULL, NULL))
   {
-    // g_file_enumerator_iterate returns FALSE only on errors, not on end of enumeration.
+    // g_file_enumerator_iterate returns FALSE only on errors, not on end of enumeration.
     // We need an ugly break here else infinite loop.
     if(!file) break;
 
@@ -1118,7 +1126,7 @@ static void gui_cleanup(dt_lib_import_t *d)
 {
   // Ensure the background recursive folder detection is finished before destroying widgets.
   // Reason is, if a job is still running, it might send its signal upon completion,
-  // and then the widgets supposed to be updated in callback will be undefined (but not NULL… WTF Gtk ?)
+  // and then the widgets supposed to be updated in callback will be undefined (but not NULL... WTF Gtk ?)
   dt_pthread_mutex_lock(&d->lock);
   gtk_widget_destroy(d->dialog);
   if(d->modal) gtk_widget_destroy(d->modal);

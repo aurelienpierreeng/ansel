@@ -487,19 +487,19 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
         result = g_strdup("X");
         break;
       case 1:
-        result = g_strdup("★");
+        result = g_strdup("\342\230\205");
         break;
       case 2:
-        result = g_strdup("★★");
+        result = g_strdup("\342\230\205\342\230\205");
         break;
       case 3:
-        result = g_strdup("★★★");
+        result = g_strdup("\342\230\205\342\230\205\342\230\205");
         break;
       case 4:
-        result = g_strdup("★★★★");
+        result = g_strdup("\342\230\205\342\230\205\342\230\205\342\230\205");
         break;
       case 5:
-        result = g_strdup("★★★★★");
+        result = g_strdup("\342\230\205\342\230\205\342\230\205\342\230\205\342\230\205");
         break;
       default:
         result = g_strdup("");
@@ -517,7 +517,7 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
       const int dot_index = GPOINTER_TO_INT(res_iter->data);
       const GdkRGBA c = darktable.bauhaus->colorlabels[dot_index];
       result = dt_util_dstrcat(result,
-                               "<span foreground='#%02x%02x%02x'>⬤ </span>",
+                               "<span foreground='#%02x%02x%02x'>\342\254\244 </span>",
                                (guint)(c.red*255), (guint)(c.green*255), (guint)(c.blue*255));
     }
     g_list_free(res);

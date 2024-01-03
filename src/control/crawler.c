@@ -423,7 +423,7 @@ static void sync_xmp_to_db(GtkTreeModel *model,
 
   if(error)
   {
-    _log_synchronization(gui, _("ERROR: %s NOT synced XMP → DB"), entry.image_path);
+    _log_synchronization(gui, _("ERROR: %s NOT synced XMP \342\206\222 DB"), entry.image_path);
     _log_synchronization(gui, _("ERROR: cannot write the database."
                                 " the destination may be full, offline or read-only."),
                          NULL);
@@ -431,7 +431,7 @@ static void sync_xmp_to_db(GtkTreeModel *model,
   else
   {
     _append_row_to_remove(model, path, &gui->rows_to_remove);
-    _log_synchronization(gui, _("SUCCESS: %s synced XMP → DB"), entry.image_path);
+    _log_synchronization(gui, _("SUCCESS: %s synced XMP \342\206\222 DB"), entry.image_path);
   }
 
   _free_crawler_result(&entry);
@@ -453,7 +453,7 @@ static void sync_db_to_xmp(GtkTreeModel *model,
 
   if(error)
   {
-    _log_synchronization(gui, _("ERROR: %s NOT synced DB → XMP"), entry.image_path);
+    _log_synchronization(gui, _("ERROR: %s NOT synced DB \342\206\222 XMP"), entry.image_path);
     _log_synchronization(gui,
                          _("ERROR: cannot write %s \nthe destination may be full,"
                            " offline or read-only."), entry.xmp_path);
@@ -461,7 +461,7 @@ static void sync_db_to_xmp(GtkTreeModel *model,
   else
   {
     _append_row_to_remove(model, path, &gui->rows_to_remove);
-    _log_synchronization(gui, _("SUCCESS: %s synced DB → XMP"), entry.image_path);
+    _log_synchronization(gui, _("SUCCESS: %s synced DB \342\206\222 XMP"), entry.image_path);
   }
 
   _free_crawler_result(&entry);
@@ -487,7 +487,7 @@ static void sync_newest_to_oldest(GtkTreeModel *model,
     {
       _log_synchronization
         (gui,
-         _("ERROR: %s NOT synced new (XMP) → old (DB)"), entry.image_path);
+         _("ERROR: %s NOT synced new (XMP) \342\206\222 old (DB)"), entry.image_path);
       _log_synchronization
         (gui,
          _("ERROR: cannot write the database. the destination may be full,"
@@ -497,7 +497,7 @@ static void sync_newest_to_oldest(GtkTreeModel *model,
     {
       _log_synchronization
         (gui,
-         _("SUCCESS: %s synced new (XMP) → old (DB)"), entry.image_path);
+         _("SUCCESS: %s synced new (XMP) \342\206\222 old (DB)"), entry.image_path);
     }
   }
   else if(entry.timestamp_xmp < entry.timestamp_db)
@@ -506,12 +506,12 @@ static void sync_newest_to_oldest(GtkTreeModel *model,
     error = dt_image_write_sidecar_file(entry.id);
     _set_modification_time(entry.xmp_path, entry.timestamp_db);
 
-    fprintf(stdout, "%s synced DB (new) → XMP (old)\n", entry.image_path);
+    fprintf(stdout, "%s synced DB (new) \342\206\222 XMP (old)\n", entry.image_path);
     if(error)
     {
       _log_synchronization
         (gui,
-         _("ERROR: %s NOT synced new (DB) → old (XMP)"), entry.image_path);
+         _("ERROR: %s NOT synced new (DB) \342\206\222 old (XMP)"), entry.image_path);
       _log_synchronization
         (gui,
          _("ERROR: cannot write %s \nthe destination may be full, offline or read-only."),
@@ -519,7 +519,7 @@ static void sync_newest_to_oldest(GtkTreeModel *model,
     }
     else
     {
-      _log_synchronization(gui, _("SUCCESS: %s synced new (DB) → old (XMP)"),
+      _log_synchronization(gui, _("SUCCESS: %s synced new (DB) \342\206\222 old (XMP)"),
                            entry.image_path);
     }
   }
@@ -556,7 +556,7 @@ static void sync_oldest_to_newest(GtkTreeModel *model,
     if(error)
     {
       _log_synchronization(gui,
-                           _("ERROR: %s NOT synced old (XMP) → new (DB)"),
+                           _("ERROR: %s NOT synced old (XMP) \342\206\222 new (DB)"),
                            entry.image_path);
     _log_synchronization(gui,
                          _("ERROR: cannot write the database."
@@ -565,7 +565,7 @@ static void sync_oldest_to_newest(GtkTreeModel *model,
     else
     {
       _log_synchronization(gui,
-                           _("SUCCESS: %s synced old (XMP) → new (DB)"),
+                           _("SUCCESS: %s synced old (XMP) \342\206\222 new (DB)"),
                            entry.image_path);
     }
   }
@@ -577,7 +577,7 @@ static void sync_oldest_to_newest(GtkTreeModel *model,
     if(error)
     {
       _log_synchronization(gui,
-                           _("ERROR: %s NOT synced old (DB) → new (XMP)"),
+                           _("ERROR: %s NOT synced old (DB) \342\206\222 new (XMP)"),
                            entry.image_path);
       _log_synchronization(gui,
                            _("ERROR: cannot write %s \nthe destination may be full,"
@@ -586,7 +586,7 @@ static void sync_oldest_to_newest(GtkTreeModel *model,
     else
     {
       _log_synchronization(gui,
-                           _("SUCCESS: %s synced old (DB) → new (XMP)"),
+                           _("SUCCESS: %s synced old (DB) \342\206\222 new (XMP)"),
                            entry.image_path);
     }
   }

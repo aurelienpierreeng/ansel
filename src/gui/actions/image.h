@@ -161,14 +161,14 @@ void append_image(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_top_submenu_entry(menus, lists, _("Rotate"), index);
   GtkWidget *parent = get_last_widget(lists);
 
-  add_sub_sub_menu_entry(parent, lists, _("⭯ 90° counter-clockwise"), index, NULL,
+  add_sub_sub_menu_entry(parent, lists, _("90\302\260 counter-clockwise"), index, NULL,
                          rotate_counterclockwise_callback, NULL, NULL, sensitive_if_selected);
-  ac = dt_action_define(pnl, NULL, N_("Rotate 90° counter-clockwise"), get_last_widget(lists), NULL);
+  ac = dt_action_define(pnl, NULL, N_("Rotate 90\302\260 counter-clockwise"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, rotate_counterclockwise_callback, 0, 0);
 
-  add_sub_sub_menu_entry(parent, lists, _("⭮ 90° clockwise"), index, NULL,
+  add_sub_sub_menu_entry(parent, lists, _("90\302\260 clockwise"), index, NULL,
                          rotate_clockwise_callback, NULL, NULL, sensitive_if_selected);
-  ac = dt_action_define(pnl, NULL, N_("Rotate 90° clockwise"), get_last_widget(lists), NULL);
+  ac = dt_action_define(pnl, NULL, N_("Rotate 90\302\260 clockwise"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, rotate_clockwise_callback, 0, 0);
 
   add_sub_menu_separator(parent);
@@ -182,34 +182,34 @@ void append_image(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_top_submenu_entry(menus, lists, _("Color labels"), index);
   parent = get_last_widget(lists);
 
-  add_sub_sub_menu_entry(parent, lists, _("<span foreground='#BB2222'>⬤</span> Red"), index, NULL,
+  add_sub_sub_menu_entry(parent, lists, _("<span foreground='#BB2222'>\342\254\244</span> Red"), index, NULL,
                          red_label_callback, NULL, NULL, sensitive_if_selected);
   ac = dt_action_define(pnl, NULL, N_("Toggle red label"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, red_label_callback, GDK_KEY_F1, 0);
 
-  add_sub_sub_menu_entry(parent, lists, _("<span foreground='#BBBB22'>⬤</span> Yellow"), index, NULL,
+  add_sub_sub_menu_entry(parent, lists, _("<span foreground='#BBBB22'>\342\254\244</span> Yellow"), index, NULL,
                          yellow_label_callback, NULL, NULL, sensitive_if_selected);
   ac = dt_action_define(pnl, NULL, N_("Toggle yellow label"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, yellow_label_callback, GDK_KEY_F2, 0);
 
-  add_sub_sub_menu_entry(parent, lists, _("<span foreground='#22BB22'>⬤</span> Green"), index, NULL,
+  add_sub_sub_menu_entry(parent, lists, _("<span foreground='#22BB22'>\342\254\244</span> Green"), index, NULL,
                          green_label_callback, NULL, NULL, sensitive_if_selected);
   ac = dt_action_define(pnl, NULL, N_("Toggle green label"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, green_label_callback, GDK_KEY_F3, 0);
 
-  add_sub_sub_menu_entry(parent, lists, _("<span foreground='#2222BB'>⬤</span> Blue"), index, NULL,
+  add_sub_sub_menu_entry(parent, lists, _("<span foreground='#2222BB'>\342\254\244</span> Blue"), index, NULL,
                          blue_label_callback, NULL, NULL, sensitive_if_selected);
   ac = dt_action_define(pnl, NULL, N_("Toggle blue label"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, blue_label_callback, GDK_KEY_F4, 0);
 
-  add_sub_sub_menu_entry(parent, lists, _("<span foreground='#BB22BB'>⬤</span> Magenta"), index, NULL,
+  add_sub_sub_menu_entry(parent, lists, _("<span foreground='#BB22BB'>\342\254\244</span> Magenta"), index, NULL,
                          magenta_label_callback, NULL, NULL, sensitive_if_selected);
   ac = dt_action_define(pnl, NULL, N_("Toggle magenta label"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, magenta_label_callback, GDK_KEY_F5, 0);
 
   add_sub_menu_separator(parent);
 
-  add_sub_sub_menu_entry(parent, lists, _("<span foreground='#BBBBBB'>⬤</span> Clear labels"), index, NULL,
+  add_sub_sub_menu_entry(parent, lists, _("<span foreground='#BBBBBB'>\342\254\244</span> Clear labels"), index, NULL,
                          reset_label_callback, NULL, NULL, sensitive_if_selected);
   ac = dt_action_define(pnl, NULL, N_("Clear color labels"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, reset_label_callback, GDK_KEY_F6, 0);
@@ -218,39 +218,39 @@ void append_image(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_top_submenu_entry(menus, lists, _("Ratings"), index);
   parent = get_last_widget(lists);
 
-  add_sub_sub_menu_entry(parent, lists, _("⦻ Reject"), index, NULL,
+  add_sub_sub_menu_entry(parent, lists, _("Reject"), index, NULL,
                          rating_reject_callback, NULL, NULL, sensitive_if_selected);
   ac = dt_action_define(pnl, NULL, N_("Reject image"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, rating_reject_callback, GDK_KEY_r, 0);
 
-  add_sub_sub_menu_entry(parent, lists, _("★"), index, NULL,
+  add_sub_sub_menu_entry(parent, lists, _("\342\230\205"), index, NULL,
                          rating_one_callback, NULL, NULL, sensitive_if_selected);
   ac = dt_action_define(pnl, NULL, N_("Rate 1 star"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, rating_one_callback, GDK_KEY_1, 0);
 
-  add_sub_sub_menu_entry(parent, lists, _("★★"), index, NULL,
+  add_sub_sub_menu_entry(parent, lists, _("\342\230\205\342\230\205"), index, NULL,
                          rating_two_callback, NULL, NULL, sensitive_if_selected);
   ac = dt_action_define(pnl, NULL, N_("Rate 2 stars"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, rating_two_callback, GDK_KEY_2, 0);
 
-  add_sub_sub_menu_entry(parent, lists, _("★★★"), index, NULL,
+  add_sub_sub_menu_entry(parent, lists, _("\342\230\205\342\230\205\342\230\205"), index, NULL,
                          rating_three_callback, NULL, NULL, sensitive_if_selected);
   ac = dt_action_define(pnl, NULL, N_("Rate 3 stars"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, rating_three_callback, GDK_KEY_3, 0);
 
-  add_sub_sub_menu_entry(parent, lists, _("★★★★"), index, NULL,
+  add_sub_sub_menu_entry(parent, lists, _("\342\230\205\342\230\205\342\230\205\342\230\205"), index, NULL,
                          rating_four_callback, NULL, NULL, sensitive_if_selected);
   ac = dt_action_define(pnl, NULL, N_("Rate 4 stars"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, rating_four_callback, GDK_KEY_4, 0);
 
-  add_sub_sub_menu_entry(parent, lists, _("★★★★★"), index, NULL,
+  add_sub_sub_menu_entry(parent, lists, _("\342\230\205\342\230\205\342\230\205\342\230\205\342\230\205"), index, NULL,
                          rating_five_callback, NULL, NULL, sensitive_if_selected);
   ac = dt_action_define(pnl, NULL, N_("Rate 5 stars"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, rating_five_callback, GDK_KEY_5, 0);
 
   add_sub_menu_separator(parent);
 
-  add_sub_sub_menu_entry(parent, lists, _("⭘ Clear rating"), index, NULL,
+  add_sub_sub_menu_entry(parent, lists, _("Clear rating"), index, NULL,
                          rating_reset_callback, NULL, NULL, sensitive_if_selected);
   ac = dt_action_define(pnl, NULL, N_("Clear rating"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, rating_reset_callback, GDK_KEY_0, 0);

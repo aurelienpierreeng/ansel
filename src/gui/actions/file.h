@@ -149,8 +149,18 @@ void export_files_callback()
 
   // Prepare the popup
   GtkWidget *dialog = gtk_dialog_new();
+#ifdef GDK_WINDOWING_QUARTZ
+// TODO: On MacOS (at least on version 13) the dialog windows doesn't behave as expected. The dialog
+// needs to have a parent window. "set_parent_window" wasn't working, so set_transient_for is 
+// the way to go. Still the window manager isn't dealing with the dialog properly, when the dialog 
+// is shifted outside its parent. The dialog isn't visible any longer but still listed as a window 
+// of the app.
+  dt_osx_disallow_fullscreen(dialog);
+  gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+  gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ON_PARENT);
+#endif
   gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
-  gtk_window_set_title(GTK_WINDOW(dialog), _("Ansel — Export images"));
+  gtk_window_set_title(GTK_WINDOW(dialog), _("Ansel - Export images"));
   g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(_close_export_popup), NULL);
 
   // Ensure the module is expanded
@@ -163,7 +173,6 @@ void export_files_callback()
   gtk_box_pack_start(GTK_BOX(content), w, FALSE, FALSE, 0);
   gtk_widget_set_visible(w, TRUE);
   gtk_widget_show_all(dialog);
-  gtk_widget_hide(module->arrow);
 
   // Save the ref to the window. We don't reuse its content, we just need to know if it exists.
   darktable.gui->export_popup.window = dialog;
@@ -175,12 +184,12 @@ void append_file(GtkWidget **menus, GList **lists, const dt_menus_t index)
   dt_action_t *pnl = dt_action_section(&darktable.control->actions_global, N_("File"));
   dt_action_t *ac;
 
-  add_sub_menu_entry(menus, lists, _("Import…"), index, NULL, import_files_callback, NULL, NULL,
+  add_sub_menu_entry(menus, lists, _("Import..."), index, NULL, import_files_callback, NULL, NULL,
                      NULL);
   ac = dt_action_define(pnl, NULL, N_("Import images"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, import_files_callback, GDK_KEY_i, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
 
-  add_sub_menu_entry(menus, lists, _("Export…"), index, NULL, export_files_callback, NULL, NULL,
+  add_sub_menu_entry(menus, lists, _("Export..."), index, NULL, export_files_callback, NULL, NULL,
                      NULL);
   ac = dt_action_define(pnl, NULL, N_("Export images"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, export_files_callback, GDK_KEY_e, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
@@ -206,12 +215,12 @@ void append_file(GtkWidget **menus, GList **lists, const dt_menus_t index)
 
   add_menu_separator(menus[index]);
 
-  add_sub_menu_entry(menus, lists, _("Copy files on disk…"), index, NULL, dt_control_copy_images, NULL, NULL,
+  add_sub_menu_entry(menus, lists, _("Copy files on disk..."), index, NULL, dt_control_copy_images, NULL, NULL,
                      sensitive_if_selected);
   ac = dt_action_define(pnl, NULL, N_("Copy files on disk"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, dt_control_copy_images, 0, 0);
 
-  add_sub_menu_entry(menus, lists, _("Move files on disk…"), index, NULL, dt_control_move_images, NULL, NULL,
+  add_sub_menu_entry(menus, lists, _("Move files on disk..."), index, NULL, dt_control_move_images, NULL, NULL,
                      sensitive_if_selected);
   ac = dt_action_define(pnl, NULL, N_("Move files on disk"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, dt_control_move_images, 0, 0);

@@ -574,7 +574,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     }
     else
     {
-      // No color space defined : save with input profile
+      // No color space defined : save with input profile
       dt_iop_order_iccprofile_info_t *icc_input = dt_ioppr_get_pipe_input_profile_info(pipe);
       if(icc_input)
       {
@@ -590,7 +590,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     }
     else
     {
-      // No intent defined : save with input intent
+      // No intent defined : save with input intent
       dt_iop_order_iccprofile_info_t *icc_input = dt_ioppr_get_pipe_input_profile_info(pipe);
       if(icc_input) p->intent = icc_input->intent;
     }

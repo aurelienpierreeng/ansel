@@ -1,7 +1,7 @@
 option(USE_NLS "Enable Native Language Support (using gettext)." ON)
 option(USE_COLORD "Enable colord support." ON)
 option(USE_MAP "Enable the map module." ON)
-option(USE_LUA "Enable Lua scripting support." ON)
+option(USE_LUA "Enable Lua scripting support." OFF)
 option(USE_BUNDLED_LUA "Use bundled Lua source instead of system library." OFF)
 option(USE_KWALLET "Enable kwallet password storage backend." ON)
 option(USE_LIBSECRET "Enable libsecret password storage backend." ON)

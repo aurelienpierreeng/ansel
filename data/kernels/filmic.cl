@@ -321,7 +321,7 @@ static inline float4 Ych_to_pipe_RGB(float4 in, constant const float *const matr
   // rewrite in cartesian coordinates
   const float4 Yrg = Ych_to_Yrg(in);
 
-  // go from Kirk/Filmlight Yrg to CIE LMS 2006
+  // go from Kirk/Filmlight Yrg to CIE LMS 2006
   const float4 LMS = Yrg_to_LMS(Yrg);
 
   // go from CIE LMS 2006 to pipeline RGB
@@ -331,7 +331,7 @@ static inline float4 Ych_to_pipe_RGB(float4 in, constant const float *const matr
 
 static inline float4 filmic_desaturate_v4(const float4 Ych_original, float4 Ych_final, const float saturation)
 {
-  // Note : Ych is normalized trough the LMS conversion,
+  // Note : Ych is normalized trough the LMS conversion,
   // meaning c is actually a saturation (saturation ~= chroma / brightness).
   // So copy-pasting c and h from a different Y is equivalent to
   // tonemapping with a norm, which is equivalent to doing exposure compensation :
@@ -701,7 +701,7 @@ static inline float4 filmic_chroma_v5(const float4 i,
   // Apply output power function afterwards.
   naive_rgb = native_powr(clamp(naive_rgb, (float4)0, (float4)y_max), output_power);
 
-  // Mix max RGB with naive RGB
+  // Mix max RGB with naive RGB
   float4 o = (0.5f - saturation) * naive_rgb + (0.5f + saturation) * max_rgb;
 
   // Save Ych in Kirk/Filmlight Yrg
@@ -853,7 +853,7 @@ filmicrgb_split (read_only image2d_t in, write_only image2d_t out,
     }
     case DT_FILMIC_COLORSCIENCE_V5:
     {
-      // v5 is handled as a chroma variant, it should not end up here
+      // v5 is handled as a chroma variant, it should not end up here
       o = (float4){1.f, 0.f, 0.f, 1.f};
       break;
     }
@@ -1105,7 +1105,7 @@ kernel void init_reconstruct(read_only image2d_t in, read_only image2d_t mask, w
                              const int width, const int height)
 {
   // init the reconstructed buffer with non-clipped and partially clipped pixels
-  // Note : it's a simple multiplied alpha blending where mask = alpha weight
+  // Note : it's a simple multiplied alpha blending where mask = alpha weight
   const int x = get_global_id(0);
   const int y = get_global_id(1);
   if(x >= width || y >= height) return;
