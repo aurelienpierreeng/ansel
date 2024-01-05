@@ -1,21 +1,21 @@
 # Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
 # This file is distributed under the same license as the PACKAGE package.
 #
-# SPDX-FileCopyrightText: 2022, 2023 Maurizio Paglia <mpaglia0@gmail.com>
+# SPDX-FileCopyrightText: 2022, 2023, 2024 Maurizio Paglia <mpaglia0@gmail.com>
 msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2024-01-01 18:09+0100\n"
-"PO-Revision-Date: 2023-12-09 16:53+0100\n"
-"Last-Translator: Maurizio Paglia <maurizio@mauriziopaglia.it>\n"
-"Language-Team: Italian <kde-i18n-it@kde.org>\n"
-"Language: it\n"
+"PO-Revision-Date: 2024-01-03 15:25+0100\n"
+"Last-Translator: Maurizio <maurizio@mauriziopaglia.it>\n"
+"Language-Team: mpaglia0\n"
+"Language: it_IT\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Lokalize 23.08.3\n"
+"X-Generator: Lokalize 23.08.4\n"
 
 #: ../build/src/conf_gen.h:176 ../build/src/preferences_gen.h:6474
 msgctxt "preferences"
@@ -242,7 +242,7 @@ msgstr "Max"
 
 #: ../build/src/conf_gen.h:818
 msgid "Project name (jobcode)"
-msgstr "Nome progetto (codice lavoro)"
+msgstr "Nome progetto (JOBCODE)"
 
 #: ../build/src/conf_gen.h:819
 msgid "Name of the import job"
@@ -1214,6 +1214,7 @@ msgstr ""
 #: ../build/src/preferences_gen.h:4583
 msgid "Number of image processing states to cache"
 msgstr ""
+"Numero di stati di elaborazione delle immagini da memorizzare nella cache"
 
 #: ../build/src/preferences_gen.h:4606
 msgid ""
@@ -1226,6 +1227,15 @@ msgid ""
 "screen).\n"
 " Increase with care and monitor your RAM use."
 msgstr ""
+"I risultati dei moduli vengono memorizzati nella cache per migliorare le"
+" prestazioni, finché questa non è piena. "
+"Per i moduli i cui parametri non sono stati modificati tra due ricomputazioni"
+" della pipeline possiamo recuperare l'output in cache invece di ricalcolarlo."
+" \n"
+"Le dimensioni effettive di ogni voce della cache dipendono dal modulo"
+" memorizzato nella cache stessa (alcuni utilizzano l'immagine a piena"
+" risoluzione, altri solo la parte visibile sullo schermo). \n"
+"Aumentare con attenzione e monitorare l'uso della RAM."
 
 #: ../build/src/preferences_gen.h:4628
 msgid "enable disk backend for thumbnail cache"
@@ -2460,7 +2470,7 @@ msgstr "Come scattato dalla camera"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:522
 msgid "F1 (Daylight 6430 K) - medium CRI"
-msgstr ""
+msgstr "F1 (Luce diurna 6430 K) - CRI medio"
 
 #: ../build/src/iop/introspection_channelmixerrgb.c:523
 msgid "F2 (Cool White 4230 K) - medium CRI"
@@ -4297,37 +4307,37 @@ msgstr ""
 "Massimo dE: %.02f"
 
 #: ../src/cli/main.c:247
-#, fuzzy, c-format
+#, c-format
 msgid ""
 "TODO: sorry, due to API restrictions we currently cannot set the BPP to %d.\n"
 msgstr ""
 "DA FARE: spiacenti, a causa delle restrizioni nelle api al momento non è "
-"possibile impostare il BPP a"
+"possibile impostare il BPP a %d.\n"
 
 #: ../src/cli/main.c:259
-#, fuzzy, c-format
+#, c-format
 msgid "unknown option for --hq: %s.\n"
-msgstr "Opzione sconosciuta per --hq"
+msgstr "Opzione sconosciuta per --hq: %s.\n"
 
 #: ../src/cli/main.c:275
-#, fuzzy, c-format
+#, c-format
 msgid "unknown option for --export_masks: %s.\n"
-msgstr "Opzione sconosciuta per --export_masks"
+msgstr "Opzione sconosciuta per --export_masks: %s.\n"
 
 #: ../src/cli/main.c:291
-#, fuzzy, c-format
+#, c-format
 msgid "unknown option for --upscale: %s.\n"
-msgstr "Opzione sconosciuta per --upscale"
+msgstr "Opzione sconosciuta per --upscale: %s.\n"
 
 #: ../src/cli/main.c:316
-#, fuzzy, c-format
+#, c-format
 msgid "unknown option for --apply-custom-presets: %s.\n"
-msgstr "Opzione sconosciuta per --apply-custom-presets"
+msgstr "Opzione sconosciuta per --apply-custom-presets: %s.\n"
 
 #: ../src/cli/main.c:327
-#, fuzzy, c-format
+#, c-format
 msgid "too long ext for --out-ext: %s.\n"
-msgstr "Il parametro di --out-ext è troppo lungo"
+msgstr "Il parametro di --out-ext: %s è troppo lungo\n"
 
 #: ../src/cli/main.c:344
 #, c-format
@@ -5449,6 +5459,9 @@ msgid ""
 "'%s'\n"
 " weighs %.2f MB. Writing it will take some time."
 msgstr ""
+"Il file XMP \n"
+"'%s'\n"
+"pesa %.2f MB. Per scriverlo servirà del tempo."
 
 #: ../src/common/exif.cc:4496
 #, c-format
@@ -5732,7 +5745,7 @@ msgstr "N/A"
 #: ../src/common/import.c:533
 #, c-format
 msgid "Yes (ID %i), in"
-msgstr ""
+msgstr "Sì (ID %i), in"
 
 #: ../src/common/import.c:536 ../src/libs/tagging.c:2437
 #, c-format
@@ -5754,7 +5767,7 @@ msgstr "<i>I file rimarrano nella loro posizione originale</i>"
 #: ../src/common/import.c:600
 #, c-format
 msgid "Result of the pattern : %s"
-msgstr ""
+msgstr "Risultato dello schema : %s"
 
 #: ../src/common/import.c:613
 #, c-format
@@ -5789,6 +5802,9 @@ msgid ""
 "Crawling your selection for recursive folder detection... %i pictures found "
 "so far. <i>(This can take some time for large folders)</i>"
 msgstr ""
+"Ricerca della selezione per il rilevamento delle cartelle ricorsive... "
+" %i immagini trovate finora. <i>(Occorrerà del tempo in caso di cartelle"
+" molto grandi)</i>"
 
 #: ../src/common/import.c:755
 msgid "invalid date/time format for import"
@@ -5803,6 +5819,8 @@ msgid ""
 "Crawling your selection for recursive folder detection... <i>(This can take "
 "some time for large folders)</i>"
 msgstr ""
+"Ricerca della selezione per il rilevamento delle cartelle ricorsive... "
+"<i>(Occorrerà del tempo in caso di cartelle molto grandi)</i>"
 
 #: ../src/common/import.c:828
 msgid "Ansel - Open pictures"
@@ -5819,15 +5837,15 @@ msgstr "Importa"
 #: ../src/common/import.c:875 ../src/gui/actions/select.h:41
 #: ../src/gui/actions/select.h:42
 msgid "Select all"
-msgstr "Seleziona tutte"
+msgstr "Seleziona tutti"
 
 #: ../src/common/import.c:879
 msgid "Select none"
-msgstr "Seleziona nessuna"
+msgstr "Seleziona nessuno"
 
 #: ../src/common/import.c:883
 msgid "Select new"
-msgstr "Seleziona nessuna"
+msgstr "Seleziona nuovi"
 
 #: ../src/common/import.c:887
 msgid ""
@@ -5837,6 +5855,13 @@ msgid ""
 "False-positive can arise if two pictures have been taken at the same time "
 "with the same name."
 msgstr ""
+"La selezione di nuovi file cercherà le immagini che non sono mai state"
+" aggiunte alla libreria. "
+"La ricerca viene effettuata cercando il nome del file originale e la sua"
+" data/ora."
+" Può rilevare file esistenti in un altro percorso, con un nome diverso. "
+"I falsi positivi possono verificarsi se due immagini sono state scattate"
+" contemporaneamente e hanno lo stesso nome. "
 
 #: ../src/common/import.c:908
 msgid "Shot :"
@@ -5895,7 +5920,7 @@ msgstr ""
 
 #: ../src/common/import.c:954
 msgid "<b>File handling</b>"
-msgstr "<b>Gestione file</b>"
+msgstr "<b>Gestione file</b> "
 
 #: ../src/common/import.c:958
 msgid "Add to library"
@@ -6433,14 +6458,14 @@ msgstr[0] "Rimuovo %d immagine"
 msgstr[1] "Rimuovo %d immagini"
 
 #: ../src/control/jobs/control_jobs.c:848
-#, fuzzy, c-format
+#, c-format
 msgid "could not send %s to trash.%s%s"
-msgstr "Impossibile spostare %s nel cestino%s%s"
+msgstr "Impossibile spostare %s nel cestino. %s%s"
 
 #: ../src/control/jobs/control_jobs.c:849
-#, fuzzy, c-format
+#, c-format
 msgid "could not physically delete %s.%s%s"
-msgstr "Impossibile eliminare fisicamente %s%s%s"
+msgstr "Impossibile eliminare fisicamente %s.%s%s"
 
 #: ../src/control/jobs/control_jobs.c:859
 msgid "physically delete"
@@ -11371,14 +11396,12 @@ msgstr ""
 "vista"
 
 #: ../src/iop/ashift.c:121
-#, fuzzy
 msgid "Horizon and perspective"
-msgstr "rotazione e prospettiva"
+msgstr "Orizzonte e prospettiva"
 
 #: ../src/iop/ashift.c:126
-#, fuzzy
 msgid "rotation|keystone|distortion|crop|reframe|horizon"
-msgstr "rotazione|poligono|distorsione|taglio|ritaglio"
+msgstr "Rotazione|poligono|distorsione|taglio|ritaglio|orizzonte"
 
 #: ../src/iop/ashift.c:131
 msgid "rotate or distort perspective"
@@ -11458,56 +11481,48 @@ msgid "lens shift (%s)"
 msgstr "Spostamento lente (%s)"
 
 #: ../src/iop/ashift.c:5508 ../src/iop/crop.c:1188
-#, fuzzy
 msgid "Apply"
 msgstr "Applica"
 
 #: ../src/iop/ashift.c:5508 ../src/iop/crop.c:1188
 msgid "Apply changes"
-msgstr ""
+msgstr "Applica modifiche"
 
 #: ../src/iop/ashift.c:5519
-#, fuzzy
 msgid "Manual settings"
-msgstr "Impostazioni generali"
+msgstr "Impostazioni manuali"
 
 #: ../src/iop/ashift.c:5568
-#, fuzzy
 msgid "Mark reference lines"
-msgstr "Riferimento fotocamera"
+msgstr "Contrassegnare le linee di riferimento"
 
 #: ../src/iop/ashift.c:5582
-#, fuzzy
 msgid "Fit perspective transform"
-msgstr "Trasformazione bilanciamento del bianco adattivo"
+msgstr "Adatta trasformazione prospettica"
 
 #: ../src/iop/ashift.c:5599
-#, fuzzy
 msgid "Fitting options"
-msgstr "Opzioni di fusione"
+msgstr "Opzioni di adattamento"
 
 #: ../src/iop/ashift.c:5602
 msgid "rotation, lens shift, shear"
-msgstr ""
+msgstr "Rotazione, spostamento dell'obiettivo, taglio"
 
 #: ../src/iop/ashift.c:5603
-#, fuzzy
 msgid "rotation, lens shift"
-msgstr "Rotazione|Rovesciamento"
+msgstr "Rotazione, spostamento dell'obiettivo"
 
 #: ../src/iop/ashift.c:5604
-#, fuzzy
 msgid "rotation only"
-msgstr "Solo saturazione"
+msgstr "Solo rotazione"
 
 #: ../src/iop/ashift.c:5605
-#, fuzzy
 msgid "lens shift only"
-msgstr "Allinea lente (orizzontale)"
+msgstr "Solo spostamento dell'obiettivo"
 
 #: ../src/iop/ashift.c:5607
 msgid "Fit for"
-msgstr ""
+msgstr "Adatta a"
 
 #: ../src/iop/ashift.c:5616
 msgid ""
@@ -12986,6 +13001,17 @@ msgid ""
 "- XYZ is a simple scaling in XYZ space. It is not recommended in general.\n"
 "- none disables any adaptation and uses pipeline working RGB."
 msgstr ""
+"Scegliere il metodo per adattare l'illuminante\n"
+"e lo spazio colore in cui lavora il modulo: \n"
+"- Bradford Lineare (1985) è coerente con la catena ICC v4.\n"
+"- CAT16 (2016) è più robusto e preciso."
+"- Bradford non lineare (1985) è il Bradford originale,\n"
+"  può produrre risultati migliori rispetto alla versione lineare, ma è"
+" inaffidabile.\n"
+"- XYZ è una semplice scalatura nello spazio XYZ. Non è consigliata in"
+" generale.\n"
+"- nessuno disabilita qualsiasi adattamento e utilizza la coda di sviluppo di"
+" lavoro RGB."
 
 #: ../src/iop/channelmixerrgb.c:3982
 msgid ""
@@ -14639,15 +14665,15 @@ msgstr "Modifica la cornice"
 
 #: ../src/iop/crop.c:1063
 msgid "7:6, 6x7"
-msgstr ""
+msgstr "7:6, 6x7"
 
 #: ../src/iop/crop.c:1065
 msgid "6:5, 5x6"
-msgstr ""
+msgstr "6:5, 5x6"
 
 #: ../src/iop/crop.c:1075
 msgid "5:3, 12x20"
-msgstr ""
+msgstr "5:3, 12x20"
 
 #: ../src/iop/crop.c:1076
 msgid "2:1, Univisium"
@@ -16290,22 +16316,18 @@ msgid "transform"
 msgstr "Trasforma"
 
 #: ../src/iop/flip.c:553
-#, fuzzy
 msgid "rotate 90 degrees CCW."
-msgstr "Ruota di 90° in senso orario"
+msgstr "Ruota di 90° in senso antiorario"
 
 #: ../src/iop/flip.c:557
-#, fuzzy
 msgid "rotate 90 degrees CW."
 msgstr "Ruota di 90° in senso orario"
 
 #: ../src/iop/flip.c:561
-#, fuzzy
 msgid "flip horizontally."
 msgstr "Rifletti orizzontalmente"
 
 #: ../src/iop/flip.c:564
-#, fuzzy
 msgid "flip vertically."
 msgstr "Rifletti verticalmente"
 
@@ -19316,7 +19338,7 @@ msgstr "Raccolte usate recentemente"
 
 #: ../src/libs/collect.c:2391 ../src/libs/collect.c:3246
 msgid "Search..."
-msgstr ""
+msgstr "Cerca..."
 
 #: ../src/libs/collect.c:3042
 msgid "narrow down search"
@@ -21397,7 +21419,7 @@ msgstr ""
 
 #: ../src/libs/tagging.c:103
 msgid "Tags"
-msgstr ""
+msgstr "Etichette"
 
 #: ../src/libs/tagging.c:1231
 msgid "attach tag to all"
@@ -22547,3 +22569,5 @@ msgstr "</xsl:text><xsl:value-of select="
 
 #~ msgid "manual perspective"
 #~ msgstr "Prospettiva manuale"
+
+
