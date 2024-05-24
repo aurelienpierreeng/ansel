@@ -199,6 +199,8 @@ static void _recurse_selection(GSList *selection, dt_import_t *const import)
 
   for(GSList *file = selection; file; file = g_slist_next(file))
     _filter_document((GFile *)file->data, import);
+  
+  import->files = g_list_sort(import->files, (GCompareFunc) g_strcmp0);
 }
 
 static gboolean _delayed_file_count(gpointer data)
@@ -765,11 +767,12 @@ static void _process_file_list(gpointer instance, GList *files, int elements, gb
   // Import params
   const gboolean duplicate = dt_conf_get_bool("ui_last/import_copy");
   char datetime_override[DT_DATETIME_LENGTH] = { 0 };
+  const char *entry = gtk_entry_get_text(GTK_ENTRY(d->datetime));
 
   if(duplicate)
   {
     // Abort early if date format is wrong
-    const char *entry = gtk_entry_get_text(GTK_ENTRY(d->datetime));
+
     if(entry[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), entry))
     {
       dt_control_log(_("invalid date/time format for import"));
@@ -778,18 +781,34 @@ static void _process_file_list(gpointer instance, GList *files, int elements, gb
     }
   }
 
+  fprintf(stdout, "Nb Elements: %i\n", elements);
+
   if(elements > 0)
   {
     // WARNING: the GList files is freed in control import,
     // everything needs to be accessed before.
-    dt_control_import(files, datetime_override, !duplicate);
-
+    gboolean wait = elements == 1 && duplicate;
+    dt_control_import_t data = {.imgs = files,
+                                .datetime = dt_string_to_datetime(entry),
+                                .copy = duplicate,
+                                .jobcode = dt_conf_get_string("ui_last/import_jobcode"),
+                                .target_folder = dt_conf_get_string("session/base_directory_pattern"),
+                                .target_subfolder_pattern = dt_conf_get_string("session/sub_directory_pattern"),
+                                .target_file_pattern = dt_conf_get_string("session/filename_pattern"),
+                                .elements = elements,
+                                .filmid = -1,
+                                .wait = wait ? &wait : NULL
+                                };
+                                
+    dt_control_import(data);
     if(!duplicate) _import_set_collection(dt_conf_get_string("ui_last/import_last_directory"));
     // else : collection set by import job.
 
     dt_view_filter_reset(darktable.view_manager, TRUE);
 
     const int imgid = dt_conf_get_int("ui_last/import_last_image");
+
+    // open file in Darkroom if one pic only.
     if(elements == 1 && imgid != -1)
     {
       dt_control_set_mouse_over_id(imgid);
@@ -797,11 +816,8 @@ static void _process_file_list(gpointer instance, GList *files, int elements, gb
       dt_ctl_switch_mode_to("darkroom");
     }
   }
-  else
-  {
-    dt_control_log(_("No files to import. Check your selection."));
-  }
-
+  else dt_control_log(_("No files to import. Check your selection."));
+  
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_process_file_list), (gpointer)d);
   gui_cleanup(d);
   _cleanup(d);

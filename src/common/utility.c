@@ -300,6 +300,7 @@ gboolean dt_util_test_image_file(const char *filename)
 
   const gboolean regular = (S_ISREG(stats.st_mode)) != 0;
   const gboolean size_ok = stats.st_size > 0;
+  //fprintf(stderr, "ERR: regular %i, size_ok %i.\n\tfor file: %s\n", regular, size_ok, filename);
   return regular && size_ok;
 }
 
@@ -992,6 +993,17 @@ gchar *dt_str_replace(const char *string, const char *search, const char *replac
   gchar *res = g_strjoinv(replace, split);
   g_strfreev(split);
   return res;
+}
+
+// Checks for the opposite separator in a string and replace it by the needed one by the current OS
+gchar *dt_cleanup_separators(gchar *string)
+{
+#ifdef WIN32
+  string = dt_str_replace(string, "/", G_DIR_SEPARATOR_S);
+#else
+  string = dt_str_replace(string, "\\", G_DIR_SEPARATOR_S);
+#endif
+return string;
 }
 
 // clang-format off

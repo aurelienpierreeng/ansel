@@ -30,6 +30,7 @@
 #include "common/tags.h"
 #include "common/datetime.h"
 #include "control/conf.h"
+#include "common/exif.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -133,11 +134,25 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
   params->data->latitude = NAN;
   params->data->elevation = NAN;
   params->data->show_msec = dt_conf_get_bool("lighttable/ui/milliseconds");
-  if(params->imgid)
+  
+  dt_image_t *img = NULL;
+  if(params->img)
+    img = (dt_image_t *) params->img;
+  
+  else if (params->filename)
   {
-    const dt_image_t *img = params->img ? (dt_image_t *)params->img
-                                        : dt_image_cache_get(darktable.image_cache, params->imgid, 'r');
+    img = malloc(sizeof(dt_image_t));
 
+    dt_exif_read(img, params->filename);
+    dt_exif_xmp_read(img, params->filename, 0);
+    params->img = img;
+  }
+
+  else if(params->imgid)
+    img = dt_image_cache_get(darktable.image_cache, params->imgid, 'r');
+
+  if(img)
+  {
     params->data->datetime = dt_datetime_img_to_gdatetime(img, darktable.utc_tz);
     if(params->data->datetime)
       params->data->have_exif_dt = TRUE;
@@ -185,16 +200,18 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
         params->data->export_width = roundf(img->final_width * scale);
       }
     }
-
-    // FIXME: do we have a deadlock if params->img != NULL ??
-    if(params->img == NULL) dt_image_cache_read_release(darktable.image_cache, img);
   }
-  else if(params->data->exif_time[0])
+  // FIXME: do we have a deadlock if params->img != NULL ??
+  if(params->img == NULL) dt_image_cache_read_release(darktable.image_cache, img);
+  
+/*
   {
     params->data->datetime = dt_datetime_exif_to_gdatetime(params->data->exif_time, darktable.utc_tz);
     if(params->data->datetime)
       params->data->have_exif_dt = TRUE;
   }
+*/
+//TODO: Check if img is freed when alloced from here.
 }
 
 static void _cleanup_expansion(dt_variables_params_t *params)

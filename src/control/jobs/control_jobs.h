@@ -26,6 +26,22 @@
 #include "common/cups_print.h"
 #endif
 
+typedef struct dt_control_import_t
+{
+  GList *imgs;
+  GDateTime *datetime;
+  gboolean copy;
+  char *jobcode;
+  char *target_folder;
+  char *target_subfolder_pattern;
+  char *target_file_pattern;
+  const int elements;
+
+  size_t filmid;
+
+  gboolean *wait;
+} dt_control_import_t;
+
 void dt_control_gpx_apply(const gchar *filename, int32_t filmid, const gchar *tz, GList *imgs);
 
 void dt_control_datetime(const GTimeSpan offset, const char *datetime, GList *imgs);
@@ -47,7 +63,7 @@ void dt_control_export(GList *imgid_list, int max_width, int max_height, int for
                        dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,
                        dt_iop_color_intent_t icc_intent, const gchar *metadata_export);
 void dt_control_merge_hdr();
-void dt_control_import(GList *imgs, const char *datetime_override, const gboolean inplace);
+void dt_control_import(dt_control_import_t data);
 void dt_control_seed_denoise();
 void dt_control_denoise();
 void dt_control_refresh_exif();

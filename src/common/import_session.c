@@ -23,6 +23,8 @@
 #include "common/variables.h"
 #include "control/conf.h"
 #include "control/control.h"
+#include "common/datetime.h"
+#include "common/utility.h"
 
 /* TODO: Investigate if we can make one import session instance thread safe
          eg. having several background jobs working with same instance.
@@ -30,6 +32,9 @@
 
 typedef struct dt_import_session_t
 {
+  gchar *dest_subfolder;
+  gchar *dest_filename;
+
   uint32_t ref;
 
   dt_film_t *film;
@@ -364,67 +369,72 @@ const char *dt_import_session_path(struct dt_import_session_t *self, gboolean cu
   return path;
 }
 
-// Checks for the opposite separator in a string and replace it by the needed one by the current OS
-gchar *dt_str_replace_bad_separator(gchar *string)
-{
-#ifdef WIN32
-  string = dt_str_replace(string, "/", G_DIR_SEPARATOR_S);
-#else
-  string = dt_str_replace(string, "\\", G_DIR_SEPARATOR_S);
-#endif
-return string;
-}
-
-
-static const char *_import_session_total(struct dt_import_session_t *self)
+static gchar *get_expanded_path(struct dt_import_session_t *session)
 {
   gchar *path_pattern = _import_session_path_pattern();
-
   if(path_pattern == NULL)
   {
     fprintf(stderr, "[import_session] Failed to get session path pattern.\n");
     return NULL;
   }
+  gchar *expanded_path = dt_variables_expand(session->vp, path_pattern, FALSE);
+  g_free(path_pattern);
 
+  #ifdef WIN32
+  if(expanded_path && (strlen(expanded_path) > 1))
+  {
+    const char first = g_ascii_toupper(expanded_path[0]);
+    if(first >= 'A' && first <= 'Z' && expanded_path[1] == ':') // path format is <drive letter>:\path\to\file
+      expanded_path[0] = first;                                 // drive letter in uppercase looks nicer
+  }
+  #endif
+
+  return expanded_path;
+}
+
+static gchar *get_expanded_filename(struct dt_import_session_t *session)
+{
   gchar *filename_pattern = _import_session_filename_pattern();
   if(filename_pattern == NULL)
   {
     fprintf(stderr, "[import_session] Failed to get session file name pattern.\n");
     return NULL;
   }
-
-  gchar *pattern = g_build_filename(path_pattern, filename_pattern, NULL);
-  g_free(path_pattern);
+  gchar *expanded_filename = dt_variables_expand(session->vp, filename_pattern, FALSE);
   g_free(filename_pattern);
 
-  gchar *expanded_path = dt_variables_expand(self->vp, pattern, FALSE);
-  g_free(pattern);
-
-  if(expanded_path == NULL)
-    return NULL;
-
-  // this would need to be removed if we decide to do the correction on user's settings directly
-  gchar *result_path = dt_str_replace_bad_separator(expanded_path);
-  g_free(expanded_path);
-
-#ifdef WIN32
-  if(result_path && (strlen(result_path) > 1))
-  {
-    const char first = g_ascii_toupper(result_path[0]);
-    if(first >= 'A' && first <= 'Z' && result_path[1] == ':') // path format is <drive letter>:\path\to\file
-      result_path[0] = first;                                 // drive letter in uppercase looks nicer
-  }
-#endif
-
-  self->current_path = g_strdup(result_path);
-
-  g_free(result_path);
-  return self->current_path;
+  return expanded_filename;
 }
 
-const char *dt_import_session_total(struct dt_import_session_t *self)
+// returns complete file path, checks for separators and win drive letter.
+static const char *_import_session_total(struct dt_import_session_t *self)
 {
-  const char *path = _import_session_total(self);
+  gchar *expanded_path     = get_expanded_path(self);
+  gchar *expanded_filename = get_expanded_filename(self);
+
+  if(expanded_path == NULL || expanded_filename == NULL)
+    return NULL;
+
+  self->current_path = self->dest_subfolder = g_strdup(expanded_path);
+  self->dest_filename  = g_strdup(expanded_filename);
+
+  gchar *complete_path = g_build_filename(expanded_path, expanded_filename, NULL);
+  g_free(expanded_path);
+  g_free(expanded_filename);
+
+  if(complete_path == NULL)
+    return NULL;
+
+  // remove this if we decide to do the correction on user's settings directly
+  gchar *result_filepath = dt_cleanup_separators(complete_path);
+  g_free(complete_path);
+
+  return result_filepath;
+  }
+
+const char *dt_import_session_total(struct dt_import_session_t *session)
+{
+  const char *path = _import_session_total(session);
   if(path == NULL)
   {
     fprintf(stderr, "[import_session] Failed to get session path.\n");
@@ -433,6 +443,89 @@ const char *dt_import_session_total(struct dt_import_session_t *self)
   }
   return path;
 }
+
+/*
+char *dt_import_read_file(struct dt_import_session_t *session, char **prev_source_filepath, char **prev_dest_filepath, char *source_filepath)
+{
+  // need to read metadata here !!! (exifs)
+
+  char *dest_filepath;
+  // make sure we keep the same output filename, changing only the extension
+  if(dt_has_same_path_basename(source_filepath, *prev_source_filepath))
+  {
+    dest_filepath = dt_copy_filename_extension(*prev_dest_filepath, source_filepath);
+  }
+  else dest_filepath = dt_import_session_total(session);
+    
+  // need to check path validity here !!!
+
+  return dest_filepath;
+}
+*/
+
+/*
+void init_session()
+{
+ 
+}
+
+gboolean create_dir(char *path)
+{
+  if(g_mkdir_with_parents(path, 0755) == -1)
+  {
+    fprintf(stderr, "failed to create session path %s.\n", path);
+    return TRUE;
+  }
+}
+
+gboolean import_session_init(dt_import_session_t *session)
+{
+
+  char *dest_path_pattern = _import_session_path_pattern();
+
+  if(dest_path_pattern == NULL)
+  {
+    fprintf(stderr, "[import_session] Failed to get session path pattern.\n");
+    return 1;
+  }
+
+  char *sub_dir = dt_variables_expand(session->vp, dest_path_pattern, FALSE);
+  g_free(dest_path_pattern);
+  session->dest_subfolder = g_strdup(sub_dir);
+}
+
+void copy_file(GFile *files, dt_import_session_t *session)
+{
+  char *target_dir = dt_cleanup_separators(session->dest_subfolder);
+  target_dir = dt_util_normalize_path(target_dir);
+  if(!target_dir || !dt_util_test_image_file(target_dir))
+  {
+    g_free(target_dir);
+    return;
+  }
+
+  if(!g_file_test(target_dir, G_FILE_TEST_IS_DIR))
+    create_dir(target_dir);
+
+  if(dt_util_test_writable_dir(target_dir))
+     g_file_copy(files, (GFile*)session->dest_subfolder, 0, 0, NULL, NULL, NULL);
+}
+
+void dt_import(dt_import_session_t *session, GList *files, gboolean copy)
+{
+  for(GList *file = files; file; file=g_list_next(file))
+  {
+      char *file_name = (char *)file->data;
+      if(session) //dt_conf_get_bool("ui_last/import_copy")
+      {
+        read_file(session, file_name); // récupère les métadonnées du fichier et développe le pattern  du nom de fichier
+        copy_file(files, session); // gère les I/O, incluant vérification des droits d'écriture et existence des dossiers
+      }
+      
+      add_to_library(session, file_name); // ajoute la référence de l'image en base de données 
+  }
+}
+*/
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

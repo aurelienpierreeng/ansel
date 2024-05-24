@@ -42,6 +42,8 @@ typedef struct dt_datetime_t
 // initialize datetime
 void dt_datetime_init(void);
 
+GDateTime *dt_string_to_datetime(const char *string);
+
 // exif datetime to numbers. Returns TRUE if OK.
 gboolean dt_datetime_exif_to_numbers(dt_datetime_t *dt, const char *exif);
 
