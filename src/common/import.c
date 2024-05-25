@@ -740,8 +740,6 @@ static void _import_set_collection(const char *dirname)
     dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
     dt_conf_set_int("plugins/lighttable/collect/item0", 1);
     dt_conf_set_string("plugins/lighttable/collect/string0", g_strdup_printf("%s*", dirname));
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF,
-                               NULL);
   }
 }
 
@@ -769,17 +767,13 @@ static void _process_file_list(gpointer instance, GList *files, int elements, gb
   char datetime_override[DT_DATETIME_LENGTH] = { 0 };
   const char *entry = gtk_entry_get_text(GTK_ENTRY(d->datetime));
 
-  if(duplicate)
+  if(duplicate && entry[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), entry))
   {
-    // Abort early if date format is wrong
-
-    if(entry[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), entry))
-    {
-      dt_control_log(_("invalid date/time format for import"));
-      g_list_free(files);
-      return;
-    }
+    dt_control_log(_("invalid date/time format for import"));
+    g_list_free(files);
+    return;
   }
+  
 
   fprintf(stdout, "Nb Elements: %i\n", elements);
 
@@ -796,25 +790,33 @@ static void _process_file_list(gpointer instance, GList *files, int elements, gb
                                 .target_subfolder_pattern = dt_conf_get_string("session/sub_directory_pattern"),
                                 .target_file_pattern = dt_conf_get_string("session/filename_pattern"),
                                 .elements = elements,
+                                .last_directory = dt_conf_get_string("ui_last/import_last_directory"), //can change later
+                                .total_imported_elements = 0,
                                 .filmid = -1,
                                 .wait = wait ? &wait : NULL
                                 };
                                 
     dt_control_import(data);
-    if(!duplicate) _import_set_collection(dt_conf_get_string("ui_last/import_last_directory"));
-    // else : collection set by import job.
+    
+    if(!duplicate) 
+      _import_set_collection(dt_conf_get_string("ui_last/import_last_directory"));
+    else if(data.total_imported_elements)
+      _import_set_collection(data.last_directory);
+    
+    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
 
     dt_view_filter_reset(darktable.view_manager, TRUE);
-
     const int imgid = dt_conf_get_int("ui_last/import_last_image");
-
     // open file in Darkroom if one pic only.
-    if(elements == 1 && imgid != -1)
+    if(data.total_imported_elements == 1 && imgid != -1)
     {
+      fprintf(stdout, "try to open image %i in darkroom...\n", imgid);
       dt_control_set_mouse_over_id(imgid);
       dt_selection_select_single(darktable.selection, imgid);
       dt_ctl_switch_mode_to("darkroom");
     }
+    
+
   }
   else dt_control_log(_("No files to import. Check your selection."));
   

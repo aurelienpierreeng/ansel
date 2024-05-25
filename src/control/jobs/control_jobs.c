@@ -2039,106 +2039,6 @@ void dt_control_write_sidecar_files()
                                                           FALSE));
 }
 
-/*static int _control_import_image_copy(const char *filename,
-                                      char **prev_filename, char **prev_output,
-                                      struct dt_import_session_t *session, GList **imgs)
-{
-  char *data = NULL;
-  gsize size = 0;
-  char exif_time[DT_DATETIME_LENGTH];
-  gboolean res = TRUE;
-  if(!g_file_get_contents(filename, &data, &size, NULL))
-  {
-    dt_print(DT_DEBUG_CONTROL, "[import_from] failed to read file `%s`\n", filename);
-    return -1;
-  }
-  char *output = NULL;
-  if(dt_has_same_path_basename(filename, *prev_filename))
-  {
-    // make sure we keep the same output filename, changing only the extension
-    output = dt_copy_filename_extension(*prev_output, filename);
-  }
-  else
-  {
-    char *basename = g_path_get_basename(filename);
-    dt_exif_get_datetime_taken((uint8_t *)data, size, exif_time);
-
-    if(!exif_time[0])
-    { // if no exif datetime try file datetime
-      struct stat statbuf;
-      if(!stat(filename, &statbuf))
-        dt_datetime_unix_to_exif(exif_time, sizeof(exif_time), &statbuf.st_mtime);
-    }
-
-    if(exif_time[0])
-      dt_import_session_set_exif_time(session, exif_time);
-    dt_import_session_set_filename(session, basename);
-    const char *output_path = dt_import_session_path(session, FALSE);
-    const char *fname = dt_import_session_filename(session);
-
-    output = g_build_filename(output_path, fname, NULL);
-    g_free(basename);
-  }
-
-  if(!g_file_set_contents(output, data, size, NULL))
-  {
-    dt_print(DT_DEBUG_CONTROL, "[import_from] failed to write file %s\n", output);
-    res = FALSE;
-  }
-  else
-  {
-    const int32_t imgid = dt_image_import(dt_import_session_film_id(session), output, FALSE);
-    if(!imgid) dt_control_log(_("error loading file `%s'"), output);
-    else
-    {
-      GError *error = NULL;
-      GFile *gfile = g_file_new_for_path(filename);
-      GFileInfo *info = g_file_query_info(gfile,
-                                G_FILE_ATTRIBUTE_STANDARD_NAME ","
-                                G_FILE_ATTRIBUTE_TIME_MODIFIED,
-                                G_FILE_QUERY_INFO_NONE, NULL, &error);
-      const char *fn = g_file_info_get_name(info);
-      // FIXME set a routine common with import.c
-      const time_t datetime = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
-      char dt_txt[DT_DATETIME_EXIF_LENGTH];
-      dt_datetime_unix_to_exif(dt_txt, sizeof(dt_txt), &datetime);
-      char *id = g_strconcat(fn, "-", dt_txt, NULL);
-      dt_metadata_set(imgid, "Xmp.darktable.image_id", id, FALSE);
-      g_free(id);
-      g_object_unref(info);
-      g_object_unref(gfile);
-      *imgs = g_list_prepend(*imgs, GINT_TO_POINTER(imgid));
-      if((imgid & 3) == 3)
-      {
-        dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
-                                   NULL);
-        dt_control_queue_redraw_center();
-      }
-    }
-  }
-  g_free(data);
-  g_free(*prev_output);
-  *prev_output = output;
-  *prev_filename = (char *)filename;
-  return res ? dt_import_session_film_id(session) : -1;
-}*/
-
-/*static void _collection_update(double *last_update, double *update_interval)
-{
-  const double currtime = dt_get_wtime();
-  if(currtime - *last_update > *update_interval)
-  {
-    *last_update = currtime;
-    // We want frequent updates at the beginning to make the import feel responsive, but large imports
-    // should use infrequent updates to get the fastest import.  So we gradually increase the interval
-    // between updates until it hits the pre-set maximum
-    if(*update_interval < MAX_UPDATE_INTERVAL)
-      *update_interval += 0.1;
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
-    dt_control_queue_redraw_center();
-  }
-}*/
-
 #ifdef USE_LUA
 static GList *_apply_lua_filter(GList *images)
 {
@@ -2233,7 +2133,6 @@ int32_t _import_image(GList *img, dt_control_import_t *data, const size_t index,
       const char first = g_ascii_toupper(target_dir[0]);
       if(first >= 'A' && first <= 'Z' && target_dir[1] == ':') // path format is <drive letter>:\path\to\file
         target_dir[0] = first;                                 // drive letter in uppercase looks nicer
-      g_free(first);
     }
     #endif
 
@@ -2286,22 +2185,21 @@ int32_t _import_image(GList *img, dt_control_import_t *data, const size_t index,
     }
     
 END_COPY:
-    g_free(target_dir);
     fprintf(stderr, "::End of copy.\n");
     
     if(res)
       fprintf(stderr, "The file has not been copied and wont be added to database.\n");
     else // only if the file has been copied.
+    {
       img_path_to_ddb = g_strdup(dest_file_path);
-
-    //dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
-    dt_conf_set_int("plugins/lighttable/collect/item0", 0);
-    dt_conf_set_string("plugins/lighttable/collect/string0", g_strdup_printf("%s*", img_path_to_ddb));
-    
+      data->last_directory = g_strdup(target_dir); //to load the collection at the end  
+    }
+     
+    g_free(target_dir);
     g_free(dest_file_path);
   }
 
-  else // copy is OFF
+  else // !copy , only import to DataBase
     img_path_to_ddb = g_strdup(filename);
 
   if(!img_path_to_ddb)
@@ -2309,7 +2207,7 @@ END_COPY:
   else
   {
     //import to collection
-    fprintf(stdout, "::IMPORT FILE::\n%s\n", img_path_to_ddb);
+    fprintf(stdout, "::IMPORT FILE::\n%s to DB\n", img_path_to_ddb);
     dt_conf_set_int("ui_last/import_last_image", -1);
     gchar *dirname = dt_util_path_get_dirname(img_path_to_ddb);
     fprintf(stdout, "dirname: %s\t", dirname);
@@ -2317,8 +2215,11 @@ END_COPY:
     const size_t filmid = data->filmid = dt_film_new(&film, dirname);
     fprintf(stdout, "filmid: %li\t", filmid);
     const int32_t imgid = dt_image_import(filmid, img_path_to_ddb, FALSE);
+    g_free(dirname);
+    g_free(img_path_to_ddb);
+
     if(!imgid)
-      dt_control_log(_("\nError loading file in database."));
+      dt_control_log(_("\nError loading file in database (imgid: %i)."), imgid);
     else
     {
       if(data->copy)
@@ -2343,12 +2244,10 @@ END_COPY:
       fprintf(stdout, "imgid: %i\n", imgid);
       data->imgs = g_list_prepend(data->imgs, GINT_TO_POINTER(imgid));
       //dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
-      dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
+      //dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
       dt_control_queue_redraw_center();
       dt_conf_set_int("ui_last/import_last_image", imgid);
     }
-    g_free(dirname);
-    g_free(img_path_to_ddb);
   }
   dt_variables_params_destroy(params);
   fprintf(stdout, "::End of import_image.\n");
@@ -2394,99 +2293,26 @@ static int32_t _control_import_job_run(dt_job_t *job)
 
   fprintf(stdout, ngettext("%li file imported in database.\n\n", "%li files imported in database.\n\n", total_imported_files),total_imported_files);
   
-  total_imported_files ? dt_control_log(ngettext("imported %ld image", "imported %ld images", total_imported_files), total_imported_files)
-                       : dt_control_log("No image imported!");
+  data->total_imported_elements = total_imported_files;
+
+  if(!total_imported_files)
+  {
+    dt_control_log("No image imported!");
+    fprintf(stdout,":::END OF IMPORT:::\n\n");
+    return 1;
+  }
+  else
+    dt_control_log(ngettext("imported %ld image", "imported %ld images", total_imported_files), total_imported_files);
+
 
   dt_control_queue_redraw_center();
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED, data->imgs, 0);
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_IMPORTED, data->filmid); // refresh lighttable
-  
-  dt_view_filter_reset(darktable.view_manager, TRUE);
-  const int imgid = dt_conf_get_int("ui_last/import_last_image");
-  // open file in Darkroom if one pic only.
-  if(data->elements == 1 && imgid != -1)
-  {
-    fprintf(stdout, "try to open image %i in darkroom...\n", imgid);
-    dt_control_set_mouse_over_id(imgid);
-    dt_selection_select_single(darktable.selection, imgid);
-    dt_ctl_switch_mode_to("darkroom");
-  }
 
   fprintf(stdout,":::END OF IMPORT:::\n\n");
   return 0;
 }
-
-/*static int32_t _control_import_job_run(dt_job_t *job)
-{
-  dt_control_image_enumerator_t *params = (dt_control_image_enumerator_t *)dt_control_job_get_params(job);
-  dt_control_import_t *data = params->data;
-  uint32_t cntr = 0;
-  char message[512] = { 0 };
-
-#ifdef USE_LUA
-  if(!data->session)
-  {
-    params->index = _apply_lua_filter(params->index);
-    if(!params->index) return 0;
-  }
-#endif
-
-  GList *t = params->index;
-  const guint total = g_list_length(t);
-  snprintf(message, sizeof(message), ngettext("importing %d image", "importing %d images", total), total);
-  dt_control_job_set_progress_message(job, message);
-
-  GList *imgs = NULL;
-  double fraction = 0.0f;
-  int filmid = -1;
-  int first_filmid = -1;
-  double last_coll_update = dt_get_wtime();
-  double last_prog_update = last_coll_update;
-  double update_interval = INIT_UPDATE_INTERVAL;
-  char *prev_filename = NULL;
-  char *prev_output = NULL;
-  for(GList *img = t; img; img = g_list_next(img))
-  {
-    if(data->session)
-    {
-      filmid = _control_import_image_copy((char *)img->data, &prev_filename, &prev_output, data->session, &imgs);
-      if(filmid != -1 && first_filmid == -1)
-      {
-        first_filmid = filmid;
-        const char *output_path = dt_import_session_path(data->session, FALSE);
-        dt_conf_set_int("plugins/lighttable/collect/item0", 0);
-        dt_conf_set_string("plugins/lighttable/collect/string0", output_path);
-        _collection_update(&last_coll_update, &update_interval);
-      }
-    }
-    else
-      filmid = _control_import_image_insitu((char *)img->data, &imgs, &last_coll_update, &update_interval);
-    if(filmid != -1)
-      cntr++;
-    fraction += 1.0 / total;
-    const double currtime  = dt_get_wtime();
-    if(currtime - last_prog_update > PROGRESS_UPDATE_INTERVAL)
-    {
-      last_prog_update = currtime;
-      snprintf(message, sizeof(message), ngettext("importing %d/%d image", "importing %d/%d images", cntr), cntr, total);
-      dt_control_job_set_progress_message(job, message);
-      dt_control_job_set_progress(job, fraction);
-      g_usleep(100);
-    }
-  }
-  g_free(prev_output);
-
-  dt_control_log(ngettext("imported %d image", "imported %d images", cntr), cntr);
-  dt_control_queue_redraw_center();
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_GEOTAG_CHANGED, imgs, 0);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FILMROLLS_IMPORTED, filmid);
-  if(data->wait)
-    *data->wait = FALSE;  // resume caller
-  return 0;
-}
-*/
 
 static void _control_import_job_cleanup(void *p)
 {
