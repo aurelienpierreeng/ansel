@@ -21,7 +21,6 @@
 #include "common/atomic.h"
 #include "common/collection.h"
 #include "common/darktable.h"
-#include "common/import_session.h"
 #include "common/file_location.h"
 #include "common/debug.h"
 #include "common/exif.h"
@@ -54,6 +53,7 @@
 #ifndef RSVG_CAIRO_H
 #include <librsvg/rsvg-cairo.h>
 #endif
+
 
 typedef struct dt_import_t {
   // File filter in use, from the Gtk file chooser.
@@ -471,8 +471,7 @@ static int _is_in_library_by_metadata(GFile *file)
   return res;
 }
 
-static void
-update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata)
+static void update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata)
 {
   dt_lib_import_t *d = (dt_lib_import_t *)userdata;
   char *filename = gtk_file_chooser_get_preview_filename(file_chooser);
@@ -529,13 +528,13 @@ update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata)
     const gboolean valid = dt_datetime_img_to_local(datetime, sizeof(datetime), &img, FALSE);
     const gchar *exposure_field = g_strdup_printf("%.0f ISO - f/%.1f - %s", img.exif_iso, img.exif_aperture,
                                                   dt_util_format_exposure(img.exif_exposure));
-    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_DATETIME_FIELD]), (valid) ? g_strdup(datetime) : _("N/A"));
-    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_MODEL_FIELD]), g_strdup(img.exif_model));
-    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_MAKER_FIELD]), g_strdup(img.exif_maker));
-    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_LENS_FIELD]), g_strdup(img.exif_lens));
-    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_FOCAL_LENS_FIELD]), g_strdup_printf("%0.f mm", img.exif_focal_length));
+    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_DATETIME_FIELD]), g_strdup_printf(" %s", valid ? datetime : "-"));
+    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_MODEL_FIELD]), g_strdup_printf(" %s", (img.exif_model[0] != '\0') ? img.exif_model : "-"));
+    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_MAKER_FIELD]), g_strdup_printf(" %s", (img.exif_maker[0] != '\0') ? img.exif_maker : "-"));
+    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_LENS_FIELD]),  g_strdup_printf(" %s", (img.exif_lens[0]  != '\0') ? img.exif_lens  : "-"));
+    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_FOCAL_LENS_FIELD]), g_strdup_printf(" %0.f mm", img.exif_focal_length));
     gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_EXPOSURE_FIELD]), exposure_field);
-    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_INLIB_FIELD]), (is_in_lib) ? g_strdup_printf(_("Yes (ID %i), in"), imgid) : _("No"));
+    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_INLIB_FIELD]), (is_in_lib) ? g_strdup_printf(_(" Yes (ID %i), in"), imgid) : _(" No"));
 
     if(is_in_lib)
       gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_PATH_FIELD]), g_strdup_printf(_("%s"), path));
@@ -565,54 +564,67 @@ static void _set_help_string(dt_lib_import_t *d, gboolean copy)
 
 static void _set_test_path(dt_lib_import_t *d)
 {
-  //gchar *d->path_file = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(d->file_chooser));
-  
-  if(!d->path_file || !dt_supported_image(d->path_file))
+  if(!d->path_file || d->path_file == NULL)
+    return;
+
+  const gboolean duplicate = dt_conf_get_bool("ui_last/import_copy");
+  if(!duplicate)
   {
-    //gtk_label_set_text(GTK_LABEL(d->test_path), _("Result of the pattern : please select a picture file"));
+    gtk_label_set_text(GTK_LABEL(d->test_path), g_strdup_printf("No copy."));
     return;
   }
 
-  /* Create a new fake session */
-  struct dt_import_session_t *fake_session = dt_import_session_new();
-
-  dt_import_session_set_name(fake_session, dt_conf_get_string("ui_last/import_jobcode"));
-
   char datetime_override[DT_DATETIME_LENGTH] = { 0 };
-  const char *entry = gtk_entry_get_text(GTK_ENTRY(d->datetime));
-  if(entry[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), entry))
-    dt_import_session_set_time(fake_session, datetime_override);
+  const char *date = gtk_entry_get_text(GTK_ENTRY(d->datetime));
+  const GList file = {.data = g_strdup(d->path_file),
+                      .next = NULL,
+                      .prev = NULL
+                     };
 
-  char *data = NULL;
-  gsize size = 0;
-  if(g_file_get_contents(d->path_file, &data, &size, NULL))
+  if(date[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), date))
   {
-    char exif_time[DT_DATETIME_LENGTH];
-    dt_exif_get_datetime_taken((uint8_t *)data, size, exif_time);
-
-    if(!exif_time[0])
-    {
-      // if no exif datetime try file datetime
-      struct stat statbuf;
-      if(!stat(d->path_file, &statbuf))
-        dt_datetime_unix_to_exif(exif_time, sizeof(exif_time), &statbuf.st_mtime);
-    }
-
-    if(exif_time[0])
-      dt_import_session_set_exif_time(fake_session, exif_time);
-
-    //needed for variable expand functions
-    dt_import_session_set_filename(fake_session, g_path_get_basename(d->path_file));
-
-    const char *fake_path = dt_import_session_total(fake_session);
-
-    gtk_label_set_text(GTK_LABEL(d->test_path), (fake_path && fake_path != NULL)
-                ? g_strdup_printf(_("Result of the pattern : %s"), fake_path)
-                : g_strdup(_("Can't build a valid path.")));
+    dt_control_log(_("invalid date/time format for import"));
+    return;
   }
 
-  if(data) g_free(data);
-  g_free(fake_session);
+  if(!file.data || !dt_supported_image(file.data))
+  {
+    gtk_label_set_text(GTK_LABEL(d->test_path), _("Result of the pattern : please select a picture file"));
+    return;
+  }
+  else
+  {
+    const gchar *target_dir = g_strrstr(dt_conf_get_string("session/base_directory_pattern"), G_DIR_SEPARATOR_S);
+    gboolean _wait = 1;
+    int _total_imported_elements = 0;
+    dt_control_import_t data = {.imgs = file.data,
+                                .datetime = dt_string_to_datetime(date),
+                                .copy = 0,
+                                .jobcode = dt_conf_get_string("ui_last/import_jobcode"),
+                                .target_folder = g_strdup(target_dir),
+                                .target_subfolder_pattern = dt_conf_get_string("session/sub_directory_pattern"),
+                                .target_file_pattern = dt_conf_get_string("session/filename_pattern"),
+                                .elements = 1,
+                                .total_imported_elements = &_total_imported_elements,
+                                .filmid = -1,
+                                .wait = &_wait
+                                };
+
+    dt_variables_params_t *params;
+    dt_variables_params_init(&params);
+
+    params->filename = g_strdup(file.data);
+    params->sequence = 1;
+    params->jobcode = g_strdup(data.jobcode);
+    
+    const gchar *fake_path = dt_build_filename_from_pattern(params, &data);
+
+    gtk_label_set_text(GTK_LABEL(d->test_path), (fake_path && fake_path != NULL)
+                  ? g_strdup_printf(_("Result of the pattern : ...%s"), fake_path)
+                  : g_strdup(_("Can't build a valid path.")));
+    
+    dt_variables_params_destroy(params);
+  }
 }
 
 static void _filelist_changed_callback(gpointer instance, GList *files, guint elements, guint finished, gpointer user_data)
@@ -970,17 +982,17 @@ static void gui_init(dt_lib_import_t *d)
   // 2. Exif metadata
   d->exif = gtk_grid_new();
   gtk_grid_set_column_spacing(GTK_GRID(d->exif), 1);
-  _attach_aligned_grid_item(d->exif, 0, 0, _("Shot :"), GTK_ALIGN_END, FALSE, FALSE);
+  _attach_aligned_grid_item(d->exif, 0, 0, _("Shot:"), GTK_ALIGN_END, FALSE, FALSE);
   _attach_grid_separator(   d->exif, 1, 2);
-  _attach_aligned_grid_item(d->exif, 2, 0, _("Camera :"), GTK_ALIGN_END, FALSE, FALSE);
-  _attach_aligned_grid_item(d->exif, 3, 0, _("Brand :"), GTK_ALIGN_END, FALSE, FALSE);
-  _attach_aligned_grid_item(d->exif, 4, 0, _("Lens :"), GTK_ALIGN_END, FALSE, FALSE);
-  _attach_aligned_grid_item(d->exif, 5, 0, _("Focal :"), GTK_ALIGN_END, FALSE, FALSE);
+  _attach_aligned_grid_item(d->exif, 2, 0, _("Camera:"), GTK_ALIGN_END, FALSE, FALSE);
+  _attach_aligned_grid_item(d->exif, 3, 0, _("Brand:"), GTK_ALIGN_END, FALSE, FALSE);
+  _attach_aligned_grid_item(d->exif, 4, 0, _("Lens:"), GTK_ALIGN_END, FALSE, FALSE);
+  _attach_aligned_grid_item(d->exif, 5, 0, _("Focal:"), GTK_ALIGN_END, FALSE, FALSE);
   _attach_grid_separator(   d->exif, 6, 2);
   // exposure trifecta
   _attach_grid_separator(   d->exif, 8, 2);
 
-  GtkWidget *imported_label = gtk_label_new(_("Imported"));
+  GtkWidget *imported_label = gtk_label_new(_("Imported:"));
   GtkBox *help_box_inlib = attach_help_popover(
       imported_label,
       _("Images already in the library will not be imported again, selected or not. "

@@ -20,6 +20,7 @@
 
 #include "common/imageio_module.h"
 #include "control/control.h"
+#include "common/variables.h"
 #include <inttypes.h>
 
 #ifdef HAVE_PRINT
@@ -69,6 +70,7 @@ void dt_control_import(dt_control_import_t data);
 void dt_control_seed_denoise();
 void dt_control_denoise();
 void dt_control_refresh_exif();
+gchar *dt_build_filename_from_pattern(dt_variables_params_t *params, dt_control_import_t *data);
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

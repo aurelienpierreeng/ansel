@@ -189,7 +189,14 @@ gboolean dt_datetime_unix_to_exif(char *exif, const size_t exif_size, const time
 
 void dt_datetime_now_to_exif(char *exif)
 {
-  
+  if(!exif) return;
+  exif[0] = '\0';
+  GDateTime *gdt = g_date_time_new_now_local();
+  if(gdt)
+  {
+    dt_datetime_gdatetime_to_exif(exif, DT_DATETIME_EXIF_LENGTH, gdt);
+    g_date_time_unref(gdt);
+  }
 }
 
 GTimeSpan dt_datetime_now_to_gtimespan()
@@ -278,12 +285,12 @@ GDateTime *dt_datetime_img_to_gdatetime(const dt_image_t *img, const GTimeZone *
 
 GDateTime *dt_string_to_datetime(const char *string)
 {
-  if(strlen(string) > DT_DATETIME_LENGTH - 1)
+  if(g_utf8_strlen(string, -1) > DT_DATETIME_LENGTH - 1)
     return FALSE;
 
   char idt[DT_DATETIME_LENGTH];
   g_strlcpy(idt, DT_DATETIME_ORIGIN, sizeof(idt));
-  memcpy(idt, string, strlen(string));
+  memcpy(idt, string, g_utf8_strlen(string, -1));
   idt[4] = idt[7] = '-';
   return g_date_time_new_from_iso8601(idt, darktable.utc_tz);  
 }

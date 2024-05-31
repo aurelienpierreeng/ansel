@@ -118,6 +118,8 @@ gchar *dt_str_replace(const char *string, const char *search, const char *replac
 // Checks for the opposite separator in a string and replace it by the needed one by the current OS
 gchar *dt_cleanup_separators(gchar *string);
 
+gchar *dt_util_remove_whitespace(const gchar *path);
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

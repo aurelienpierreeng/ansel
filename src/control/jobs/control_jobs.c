@@ -33,7 +33,6 @@
 #include "common/tags.h"
 #include "common/undo.h"
 #include "common/grouping.h"
-#include "common/import_session.h"
 #include "common/utility.h"
 #include "common/datetime.h"
 #include "control/conf.h"
@@ -55,7 +54,6 @@
 #ifdef _WIN32
 #include "win/dtwin.h"
 #endif
-#include "common/variables.h"
 
 // Control of the collection updates during an import.  Start with a short interval to feel responsive,
 // but use fairly infrequent updates for large imports to minimize overall time.
@@ -2094,34 +2092,40 @@ gboolean create_dir(const char *path)
   return FALSE;
 }
 
+gchar *_path_cleanup(gchar *path)
+{
+  const gchar *res = dt_cleanup_separators(path);
+  return dt_util_remove_whitespace(res);
+}
+
 gchar *dt_build_filename_from_pattern(dt_variables_params_t *params, dt_control_import_t *data)
 {
   gchar *file_expand = dt_variables_expand(params, data->target_file_pattern, FALSE);
   gchar *path_expand = dt_variables_expand(params, data->target_subfolder_pattern, FALSE);
-  // remove this if we decide to do the correction on user's settings directly
-  file_expand = dt_cleanup_separators(file_expand);
-  path_expand = dt_cleanup_separators(path_expand);
+
+  // remove this if we decide to do the correction on user's settings directly 
+  file_expand = _path_cleanup(file_expand);
+  path_expand = _path_cleanup(path_expand);
   fprintf(stdout, "+Path: %s\n", path_expand);
   fprintf(stdout, "+File: %s\n", file_expand);
 
   data->target_dir = g_build_path(G_DIR_SEPARATOR_S, data->target_folder, path_expand, (char *) NULL);
   g_free(path_expand);
 
-  #ifdef WIN32
+#ifdef WIN32
   if(data->target_dir && (strlen(data->target_dir) > 1))
   {
     const char first = g_ascii_toupper(data->target_dir[0]);
     if(first >= 'A' && first <= 'Z' && data->target_dir[1] == ':') // path format is <drive letter>:\path\to\file
-      target_dir[0] = first;                                 // drive letter in uppercase looks nicer
+      data->target_dir[0] = first;                                 // drive letter in uppercase looks nicer
   }
-  #endif
+#endif
 
   data->target_dir = dt_util_normalize_path(data->target_dir);
   gchar *res = g_build_path(G_DIR_SEPARATOR_S, data->target_dir, file_expand, (char *) NULL);
 
   return res;
 }
-
 
 gboolean _file_exist(const char *dest_file_path)
 {
@@ -2210,7 +2214,7 @@ int _import_job_copy(dt_variables_params_t *params, dt_control_import_t *data, g
   return !process;
 }
 
-size_t _import_image(const GList *img, dt_control_import_t *data, const int index)
+gboolean _import_image(const GList *img, dt_control_import_t *data, const int index)
 {
   dt_variables_params_t *params;
   dt_variables_params_init(&params);
@@ -2264,13 +2268,10 @@ size_t _import_image(const GList *img, dt_control_import_t *data, const int inde
       g_object_unref(info);
       g_object_unref(gfile);
     }
-
     fprintf(stdout, "imgid: %i\n", imgid);
     dt_control_queue_redraw_center();
     dt_conf_set_int("ui_last/import_last_image", imgid);
-    
   }
-
   dt_variables_params_destroy(params);
   fprintf(stdout, "::End of import_image.\n");
 
@@ -2349,7 +2350,7 @@ static void *_control_import_alloc()
   dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
   if(!params) return NULL;
 
-  params->data = g_malloc0(sizeof(dt_control_import_t)); // datas from gui
+  params->data = g_malloc0(sizeof(dt_control_import_t));
   if(!params->data)
   {
     _control_import_job_cleanup(params);
@@ -2372,22 +2373,12 @@ static dt_job_t *_control_import_job_create(dt_control_import_t data)
   dt_control_job_set_params(job, params, _control_import_job_cleanup);
 
   memcpy(params->data, &data, sizeof(dt_control_import_t));
- 
-  // dt_import_session_set_name(data->session, jobcode);
-
   fprintf(stdout, "END Job create.\n");
   return job;
 }
 
 /**
  * @brief Process a list of images to import with or without copying the files on an arbitrary hard-drive.
- * 
- * @param imgs GList of images referenced as absolute pathes (strings)
- * @param datetime User set datame for the whole collection
- * @param copy wether or not we duplicate the file on the target
- * @param target_folder root folder for all collection projects
- * @param target_subfolder_patern current collection subfolder within the target folder
- * @param target_file_pattern individual files naming pattern
  */
 void dt_control_import(dt_control_import_t data)
 {

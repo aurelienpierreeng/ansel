@@ -18,6 +18,7 @@
 
 
 /** Open the image importer popup and process user input **/
+struct dt_variables_params_t;
 void dt_images_import();
 
 // clang-format off
