@@ -479,7 +479,7 @@ update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata)
   gboolean have_file = (filename != NULL) && filename[0] && g_file_test(filename, G_FILE_TEST_IS_REGULAR);
 
   /* Get the thumbnail */
-  GdkPixbuf *pixbuf = _import_get_thumbnail(filename, DT_PIXEL_APPLY_DPI(180), DT_PIXEL_APPLY_DPI(180));
+  GdkPixbuf *pixbuf = _import_get_thumbnail(filename, (int) DT_PIXEL_APPLY_DPI(180), (int) DT_PIXEL_APPLY_DPI(180));
   gtk_image_set_from_pixbuf(GTK_IMAGE(d->preview), pixbuf);
   gtk_widget_show_all(d->preview);
   if(pixbuf) g_object_unref(pixbuf);
@@ -547,7 +547,7 @@ update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata)
 
 static void _update_directory(GtkWidget *file_chooser, dt_lib_import_t *d)
 {
-  char *path = gtk_file_chooser_get_current_folder(GTK_FILE_CHOOSER(file_chooser));
+  const char *path = gtk_file_chooser_get_current_folder(GTK_FILE_CHOOSER(file_chooser));
   dt_conf_set_string("ui_last/import_last_directory", path);
 }
 
@@ -737,7 +737,7 @@ static void _import_set_collection(const char *dirname)
 {
   if(dirname)
   {
-    dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
+    //dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
     dt_conf_set_int("plugins/lighttable/collect/item0", 1);
     dt_conf_set_string("plugins/lighttable/collect/string0", g_strdup_printf("%s*", dirname));
   }
@@ -755,6 +755,34 @@ static void _update_progress_message(gpointer instance, GList *files, int elemen
                       elements));
 }
 
+void _set_collection_focus_on_img(const int32_t imgid, const gboolean duplicate)
+{
+  gchar first_directory[PATH_MAX] = { 0 };
+  dt_get_dirname_from_imgid(first_directory, imgid);
+
+  const char* dir = duplicate && dt_util_dir_exist(first_directory) ?
+                    g_strdup(first_directory)
+                  : g_strdup(dt_conf_get_string("ui_last/import_last_directory"));
+
+  fprintf(stdout, "Try to focus collection on `%s`\n", dir);
+  _import_set_collection(dir);
+
+  dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
+  dt_view_filter_reset(darktable.view_manager, TRUE);
+}
+
+void _open_img(const int32_t imgid)
+{
+  if(imgid != -1)
+  {
+    fprintf(stdout, "Open image %i in darkroom...\n", imgid);
+    dt_control_set_mouse_over_id(imgid);
+    dt_selection_select_single(darktable.selection, imgid);
+    dt_ctl_switch_mode_to("darkroom");
+  }
+  else  fprintf(stdout, "Can't open image in darkroom... imgd: %i  \n", imgid);
+}
+
 static void _process_file_list(gpointer instance, GList *files, int elements, gboolean finished, gpointer user_data)
 {
   if(!finished) return; // Should be fired only when we are done detecting stuff
@@ -765,15 +793,14 @@ static void _process_file_list(gpointer instance, GList *files, int elements, gb
   // Import params
   const gboolean duplicate = dt_conf_get_bool("ui_last/import_copy");
   char datetime_override[DT_DATETIME_LENGTH] = { 0 };
-  const char *entry = gtk_entry_get_text(GTK_ENTRY(d->datetime));
+  const char *date = gtk_entry_get_text(GTK_ENTRY(d->datetime));
 
-  if(duplicate && entry[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), entry))
+  if(duplicate && date[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), date))
   {
     dt_control_log(_("invalid date/time format for import"));
     g_list_free(files);
     return;
   }
-  
 
   fprintf(stdout, "Nb Elements: %i\n", elements);
 
@@ -781,45 +808,37 @@ static void _process_file_list(gpointer instance, GList *files, int elements, gb
   {
     // WARNING: the GList files is freed in control import,
     // everything needs to be accessed before.
-    gboolean wait = elements == 1 && duplicate;
+
+    gboolean _wait = 1;
+    int _total_imported_elements = 0;
     dt_control_import_t data = {.imgs = files,
-                                .datetime = dt_string_to_datetime(entry),
+                                .datetime = dt_string_to_datetime(date),
                                 .copy = duplicate,
                                 .jobcode = dt_conf_get_string("ui_last/import_jobcode"),
                                 .target_folder = dt_conf_get_string("session/base_directory_pattern"),
                                 .target_subfolder_pattern = dt_conf_get_string("session/sub_directory_pattern"),
                                 .target_file_pattern = dt_conf_get_string("session/filename_pattern"),
                                 .elements = elements,
-                                .last_directory = dt_conf_get_string("ui_last/import_last_directory"), //can change later
-                                .total_imported_elements = 0,
+                                .total_imported_elements = &_total_imported_elements,
                                 .filmid = -1,
-                                .wait = wait ? &wait : NULL
+                                .wait = &_wait
                                 };
                                 
     dt_control_import(data);
-    
-    if(!duplicate) 
-      _import_set_collection(dt_conf_get_string("ui_last/import_last_directory"));
-    else if(data.total_imported_elements)
-      _import_set_collection(data.last_directory);
-    
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
 
-    dt_view_filter_reset(darktable.view_manager, TRUE);
-    const int imgid = dt_conf_get_int("ui_last/import_last_image");
-    // open file in Darkroom if one pic only.
-    if(data.total_imported_elements == 1 && imgid != -1)
-    {
-      fprintf(stdout, "try to open image %i in darkroom...\n", imgid);
-      dt_control_set_mouse_over_id(imgid);
-      dt_selection_select_single(darktable.selection, imgid);
-      dt_ctl_switch_mode_to("darkroom");
+    while(_total_imported_elements == 0) g_usleep(100);
+
+    if(_total_imported_elements >= 1)
+    { 
+      const int32_t imgid = dt_conf_get_int("ui_last/import_last_image");
+      
+      _set_collection_focus_on_img(imgid, duplicate);
+      if(elements == 1) _open_img(imgid);
     }
-    
-
   }
   else dt_control_log(_("No files to import. Check your selection."));
   
+  fprintf(stdout, ":END:\n\n");
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_process_file_list), (gpointer)d);
   gui_cleanup(d);
   _cleanup(d);

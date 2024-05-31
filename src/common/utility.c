@@ -327,6 +327,13 @@ gboolean dt_util_test_writable_dir(const char *path)
   return TRUE;
 }
 
+gboolean dt_util_dir_exist(const char *dir)
+{
+  if(!dir)
+    return 1;
+
+  return g_file_test(dir, G_FILE_TEST_IS_DIR);
+}
 
 gboolean dt_util_is_dir_empty(const char *dirname)
 {

@@ -475,7 +475,7 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
       nb_digit = (uint8_t)*variable[0] & 0b1111;
       (*variable) ++;
     }
-    result = g_strdup_printf("%.*d", nb_digit, params->sequence >= 0 ? params->sequence : params->data->sequence);
+    result = g_strdup_printf("%.*d", nb_digit, params->sequence);
   }
   else if(_has_prefix(variable, "USERNAME"))
     result = g_strdup(g_get_user_name());

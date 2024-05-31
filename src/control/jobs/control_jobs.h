@@ -35,9 +35,9 @@ typedef struct dt_control_import_t
   char *target_folder;
   char *target_subfolder_pattern;
   char *target_file_pattern;
+  char *target_dir;
   const int elements;
-  char *last_directory;
-  int total_imported_elements;
+  int *total_imported_elements;
 
   size_t filmid;
 
