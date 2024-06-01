@@ -27,4 +27,3 @@ AppDir
 appimage-build
 linuxdeploy-plugin-gtk.sh
 src/tests/integration/*/*
-src/control/jobs/import.md

@@ -95,6 +95,13 @@ typedef struct dt_variables_data_t
 
 } dt_variables_data_t;
 
+typedef enum _image_case
+{
+  NONE,
+  FILENAME,
+  IMGID
+}_image_case ;
+
 static char *_expand_source(dt_variables_params_t *params, char **source, char extra_stop);
 
 // gather some data that might be used for variable expansion
@@ -136,6 +143,8 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
   params->data->show_msec = dt_conf_get_bool("lighttable/ui/milliseconds");
   
   dt_image_t *img = NULL;
+  _image_case release = NONE;
+
   if(params->img)
     img = (dt_image_t *) params->img;
   
@@ -146,10 +155,14 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
     dt_exif_read(img, params->filename);
     dt_exif_xmp_read(img, params->filename, 0);
     params->img = img;
+    release = FILENAME;
   }
 
   else if(params->imgid)
+  {
     img = dt_image_cache_get(darktable.image_cache, params->imgid, 'r');
+    release = IMGID;
+  }
 
   if(img)
   {
@@ -202,9 +215,23 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
     }
   }
   // FIXME: do we have a deadlock if params->img != NULL ??
-  if(params->img == NULL) dt_image_cache_read_release(darktable.image_cache, img);
-  
-//TODO: Check if img is freed when alloced from here.
+
+  switch (release)
+  {
+    case NONE:
+    {
+      break;
+    }
+    case FILENAME:
+    {
+      free(params->img);
+      break;
+    }
+    case IMGID:
+    {
+      dt_image_cache_read_release(darktable.image_cache, img);
+    }
+  }
 }
 
 static void _cleanup_expansion(dt_variables_params_t *params)

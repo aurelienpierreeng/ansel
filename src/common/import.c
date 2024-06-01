@@ -594,20 +594,18 @@ static void _set_test_path(dt_lib_import_t *d)
   }
   else
   {
-    const gchar *target_dir = g_strrstr(dt_conf_get_string("session/base_directory_pattern"), G_DIR_SEPARATOR_S);
-    gboolean _wait = 1;
     int _total_imported_elements = 0;
     dt_control_import_t data = {.imgs = file.data,
                                 .datetime = dt_string_to_datetime(date),
                                 .copy = 0,
                                 .jobcode = dt_conf_get_string("ui_last/import_jobcode"),
-                                .target_folder = g_strdup(target_dir),
+                                .target_folder = g_strrstr(dt_conf_get_string("session/base_directory_pattern"), G_DIR_SEPARATOR_S),
                                 .target_subfolder_pattern = dt_conf_get_string("session/sub_directory_pattern"),
                                 .target_file_pattern = dt_conf_get_string("session/filename_pattern"),
+                                .target_dir = NULL,
                                 .elements = 1,
                                 .total_imported_elements = &_total_imported_elements,
                                 .filmid = -1,
-                                .wait = &_wait
                                 };
 
     dt_variables_params_t *params;
@@ -617,12 +615,13 @@ static void _set_test_path(dt_lib_import_t *d)
     params->sequence = 1;
     params->jobcode = g_strdup(data.jobcode);
     
-    const gchar *fake_path = dt_build_filename_from_pattern(params, &data);
+    gchar *fake_path = dt_build_filename_from_pattern(params, &data);
 
     gtk_label_set_text(GTK_LABEL(d->test_path), (fake_path && fake_path != NULL)
                   ? g_strdup_printf(_("Result of the pattern : ...%s"), fake_path)
                   : g_strdup(_("Can't build a valid path.")));
     
+    g_free(fake_path);
     dt_variables_params_destroy(params);
   }
 }
@@ -821,7 +820,6 @@ static void _process_file_list(gpointer instance, GList *files, int elements, gb
     // WARNING: the GList files is freed in control import,
     // everything needs to be accessed before.
 
-    gboolean _wait = 1;
     int _total_imported_elements = 0;
     dt_control_import_t data = {.imgs = files,
                                 .datetime = dt_string_to_datetime(date),
@@ -830,13 +828,13 @@ static void _process_file_list(gpointer instance, GList *files, int elements, gb
                                 .target_folder = dt_conf_get_string("session/base_directory_pattern"),
                                 .target_subfolder_pattern = dt_conf_get_string("session/sub_directory_pattern"),
                                 .target_file_pattern = dt_conf_get_string("session/filename_pattern"),
+                                .target_dir = NULL,
                                 .elements = elements,
                                 .total_imported_elements = &_total_imported_elements,
                                 .filmid = -1,
-                                .wait = &_wait
                                 };
                                 
-    dt_control_import(data);
+    dt_control_import(&data);
 
     while(_total_imported_elements == 0) g_usleep(100);
 

@@ -42,7 +42,6 @@ typedef struct dt_control_import_t
 
   size_t filmid;
 
-  gboolean *wait;
 } dt_control_import_t;
 
 void dt_control_gpx_apply(const gchar *filename, int32_t filmid, const gchar *tz, GList *imgs);
@@ -66,7 +65,7 @@ void dt_control_export(GList *imgid_list, int max_width, int max_height, int for
                        dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,
                        dt_iop_color_intent_t icc_intent, const gchar *metadata_export);
 void dt_control_merge_hdr();
-void dt_control_import(dt_control_import_t data);
+void dt_control_import(dt_control_import_t *data);
 void dt_control_seed_denoise();
 void dt_control_denoise();
 void dt_control_refresh_exif();

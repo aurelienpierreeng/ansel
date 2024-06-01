@@ -2082,6 +2082,13 @@ static GList *_apply_lua_filter(GList *images)
 }
 #endif
 
+/**
+ * @brief Creates folders from path.
+ * Returns TRUE if success.
+ * 
+ * @param path a valid folders path to create.
+ * @return gboolean 
+ */
 gboolean create_dir(const char *path)
 {
   if(g_mkdir_with_parents(path, 0755) == -1)
@@ -2092,10 +2099,19 @@ gboolean create_dir(const char *path)
   return FALSE;
 }
 
-gchar *_path_cleanup(gchar *path)
+/**
+ * @brief Replaces separator depending of the current OS
+ * and removes whitespaces.
+ * 
+ * @param path
+ * @return gchar* 
+ */
+gchar *_path_cleanup(gchar *path_in)
 {
-  const gchar *res = dt_cleanup_separators(path);
-  return dt_util_remove_whitespace(res);
+  gchar *clean = dt_cleanup_separators(path_in);
+  gchar *path_out = dt_util_remove_whitespace(clean);
+  g_free(clean);
+  return path_out;
 }
 
 gchar *dt_build_filename_from_pattern(dt_variables_params_t *params, dt_control_import_t *data)
@@ -2104,13 +2120,14 @@ gchar *dt_build_filename_from_pattern(dt_variables_params_t *params, dt_control_
   gchar *path_expand = dt_variables_expand(params, data->target_subfolder_pattern, FALSE);
 
   // remove this if we decide to do the correction on user's settings directly 
-  file_expand = _path_cleanup(file_expand);
-  path_expand = _path_cleanup(path_expand);
-  fprintf(stdout, "+Path: %s\n", path_expand);
-  fprintf(stdout, "+File: %s\n", file_expand);
-
-  data->target_dir = g_build_path(G_DIR_SEPARATOR_S, data->target_folder, path_expand, (char *) NULL);
+  gchar *file = _path_cleanup(file_expand);
+  gchar *path = _path_cleanup(path_expand);
+  g_free(file_expand);
   g_free(path_expand);
+  fprintf(stdout, "+Path: %s\n", path);
+  fprintf(stdout, "+File: %s\n", file);
+
+  gchar *dir = g_build_path(G_DIR_SEPARATOR_S, data->target_folder, path, (char *) NULL);
 
 #ifdef WIN32
   if(data->target_dir && (strlen(data->target_dir) > 1))
@@ -2121,9 +2138,12 @@ gchar *dt_build_filename_from_pattern(dt_variables_params_t *params, dt_control_
   }
 #endif
 
-  data->target_dir = dt_util_normalize_path(data->target_dir);
-  gchar *res = g_build_path(G_DIR_SEPARATOR_S, data->target_dir, file_expand, (char *) NULL);
+  data->target_dir = dt_util_normalize_path(dir);
+  gchar *res = g_build_path(G_DIR_SEPARATOR_S, data->target_dir, file, (char *) NULL);
 
+  g_free(file);
+  g_free(path);
+  g_free(dir);
   return res;
 }
 
@@ -2159,8 +2179,10 @@ gboolean _copy_file(const char *filename, const char *dest_file_path)
   GFile *out = g_file_new_for_path(dest_file_path);
 
   gboolean res = g_file_copy(in, out, G_FILE_COPY_NONE, 0, 0, 0, NULL);
-  res ? fprintf(stdout, "File copied successfully.\n")
-      : fprintf(stdout, "Error while copying file.\n");
+  if(res)
+    fprintf(stdout, "File copied successfully.\n");
+  else
+    fprintf(stdout, "Error while copying file.\n");
   
   g_object_unref(in);
   g_object_unref(out);
@@ -2359,7 +2381,7 @@ static void *_control_import_alloc()
   return params;
 }
 
-static dt_job_t *_control_import_job_create(dt_control_import_t data)
+static dt_job_t *_control_import_job_create(dt_control_import_t *data)
 {
   dt_job_t *job = dt_control_job_create(&_control_import_job_run, "import");
   if(!job) return NULL;
@@ -2372,7 +2394,7 @@ static dt_job_t *_control_import_job_create(dt_control_import_t data)
   dt_control_job_add_progress(job, _("import"), FALSE);
   dt_control_job_set_params(job, params, _control_import_job_cleanup);
 
-  memcpy(params->data, &data, sizeof(dt_control_import_t));
+  memcpy(params->data, data, sizeof(dt_control_import_t));
   fprintf(stdout, "END Job create.\n");
   return job;
 }
@@ -2380,7 +2402,7 @@ static dt_job_t *_control_import_job_create(dt_control_import_t data)
 /**
  * @brief Process a list of images to import with or without copying the files on an arbitrary hard-drive.
  */
-void dt_control_import(dt_control_import_t data)
+void dt_control_import(dt_control_import_t *data)
 {
   dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, _control_import_job_create(data));
 }
