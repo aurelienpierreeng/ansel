@@ -2147,6 +2147,12 @@ gchar *dt_build_filename_from_pattern(dt_variables_params_t *params, dt_control_
   return res;
 }
 
+/**
+ * @brief Tests if file exist. Returns 1 if so.
+ * 
+ * @param dest_file_path 
+ * @return gboolean 
+ */
 gboolean _file_exist(const char *dest_file_path)
 {
   if(!dest_file_path || g_file_test(dest_file_path, G_FILE_TEST_EXISTS))
@@ -2160,6 +2166,12 @@ gboolean _file_exist(const char *dest_file_path)
   return 0;
 }
 
+/**
+ * @brief just create a folder. Returns 0 if success.
+ * 
+ * @param target_dir 
+ * @return gboolean 
+ */
 gboolean _create_folder(const char *target_dir)
 {
   if(create_dir(target_dir))
@@ -2172,7 +2184,13 @@ gboolean _create_folder(const char *target_dir)
   return 0;
 }
 
-// returns TRUE if success
+/**
+ * @brief Just copy a file. Returns 1 if success.
+ * 
+ * @param filename 
+ * @param dest_file_path 
+ * @return gboolean 
+ */
 gboolean _copy_file(const char *filename, const char *dest_file_path)
 {
   GFile *in = g_file_new_for_path(filename);
@@ -2190,6 +2208,13 @@ gboolean _copy_file(const char *filename, const char *dest_file_path)
   return res;
 }
 
+/**
+ * @brief Add an image entry in the database and returns its imgID 
+ * 
+ * @param data informations from the import module
+ * @param img_path_to_db the file path to import
+ * @return const int32_t 
+ */
 const int32_t _import_job_inplace(dt_control_import_t *data, gchar *img_path_to_db)
 {
   fprintf(stdout, "::IMPORT FILE::\n%s to DB\n", img_path_to_db);
@@ -2207,6 +2232,15 @@ const int32_t _import_job_inplace(dt_control_import_t *data, gchar *img_path_to_
   return imgid;
 }
 
+/**
+ * @brief copy a file to a destination path after checking if everything is allright.
+ * 
+ * @param params job informations.
+ * @param data import module information.
+ * @param img_path_to_db will be set to the file path for import.
+ * @param pathname_len the `img_path_to_db` size.
+ * @return int 
+ */
 int _import_job_copy(dt_variables_params_t *params, dt_control_import_t *data, gchar *img_path_to_db, size_t pathname_len)
 {
   gchar *dest_file_path = dt_build_filename_from_pattern(params, data);
@@ -2236,6 +2270,14 @@ int _import_job_copy(dt_variables_params_t *params, dt_control_import_t *data, g
   return !process;
 }
 
+/**
+ * @brief process to copy (or not) and import an image to database. 
+ * 
+ * @param img the current image.
+ * @param data info from import module.
+ * @param index current loop's index.
+ * @return gboolean 
+ */
 gboolean _import_image(const GList *img, dt_control_import_t *data, const int index)
 {
   dt_variables_params_t *params;
@@ -2399,9 +2441,6 @@ static dt_job_t *_control_import_job_create(dt_control_import_t *data)
   return job;
 }
 
-/**
- * @brief Process a list of images to import with or without copying the files on an arbitrary hard-drive.
- */
 void dt_control_import(dt_control_import_t *data)
 {
   dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, _control_import_job_create(data));

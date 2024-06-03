@@ -65,6 +65,12 @@ void dt_control_export(GList *imgid_list, int max_width, int max_height, int for
                        dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,
                        dt_iop_color_intent_t icc_intent, const gchar *metadata_export);
 void dt_control_merge_hdr();
+
+/**
+ * @brief Process a list of images to import with or without copying the files on an arbitrary hard-drive.
+ * 
+ * @param data import informations to transmit through the functions
+ */
 void dt_control_import(dt_control_import_t *data);
 void dt_control_seed_denoise();
 void dt_control_denoise();

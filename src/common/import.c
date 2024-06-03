@@ -748,7 +748,7 @@ static void _import_set_collection(const char *dirname)
 {
   if(dirname)
   {
-    //dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
+    dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
     dt_conf_set_int("plugins/lighttable/collect/item0", 1);
     dt_conf_set_string("plugins/lighttable/collect/string0", g_strdup_printf("%s*", dirname));
   }
@@ -794,6 +794,15 @@ void _open_img(const int32_t imgid)
   else  fprintf(stdout, "Can't open image in darkroom... imgd: %i  \n", imgid);
 }
 
+/**
+ * @brief Import a list of file by copying them or not, and adding them to database.
+ * 
+ * @param instance not used here.
+ * @param files the GList of files.
+ * @param elements number of files to import.
+ * @param finished 
+ * @param user_data data from the module.
+ */
 static void _process_file_list(gpointer instance, GList *files, int elements, gboolean finished, gpointer user_data)
 {
   if(!finished) return; // Should be fired only when we are done detecting stuff
