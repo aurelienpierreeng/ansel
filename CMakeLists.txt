@@ -177,6 +177,7 @@ if(WIN32)
   if(BUILD_MSYS2_INSTALL)
     add_definitions(-DMSYS2_INSTALL)
   endif()
+  add_definitions(-DCURL_STATICLIB)
 endif(WIN32)
 
 
