@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.18)
 cmake_policy(SET CMP0011 NEW)
 cmake_policy(SET CMP0025 NEW)
 cmake_policy(SET CMP0048 NEW)
+cmake_policy(SET CMP0067 NEW)
+
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/")
@@ -78,6 +80,7 @@ endif()
 # Those 2 vars need to be TRUE to let CMake obey the INSTALL_RPATH we set.
 set(CMAKE_SKIP_BUILD_RPATH TRUE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+
 if(APPLE)
   set(CMAKE_MACOSX_RPATH ON)
   set(RPATH_ORIGIN @loader_path)
@@ -158,6 +161,13 @@ if(APPLE)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -L/usr/lib")
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -L/usr/lib")
   set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -L/usr/lib")
+  if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "arm64" AND CMAKE_C_COMPILER_ID STREQUAL "AppleClang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL 15)
+  # request classic linker for Xcode 15 for Apple Silicon Macs
+  message("-- Xcode >= 15 on arm64 detected, requesting classic linker")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -ld_classic")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -ld_classic")
+  set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -ld_classic")
+   endif()
 
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_DARWIN_C_SOURCE")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_DARWIN_C_SOURCE")
@@ -168,7 +178,6 @@ include(compiler-versions)
 
 if(WIN32)
   message("-- Win32 build detected, setting default features")
-  set(CMAKE_FIND_LIBRARY_SUFFIXES .dll ${CMAKE_FIND_LIBRARY_SUFFIXES})
   set(USE_COLORD OFF)
   set(USE_KWALLET OFF)
   set(BUILD_CMSTEST OFF)
