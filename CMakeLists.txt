@@ -187,7 +187,8 @@ if(WIN32)
     add_definitions(-DMSYS2_INSTALL)
   endif()
   add_definitions(-DCURL_STATICLIB)
-  add_compile_options(-lcurl)
+  #add_compile_options(-lcurl)
+  set(CURL_LIBRARY "-lcurl")
 endif(WIN32)
 
 
