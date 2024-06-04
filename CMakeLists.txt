@@ -187,6 +187,7 @@ if(WIN32)
     add_definitions(-DMSYS2_INSTALL)
   endif()
   add_definitions(-DCURL_STATICLIB)
+  add_compile_options(-lcurl)
 endif(WIN32)
 
 
