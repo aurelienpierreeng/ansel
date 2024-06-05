@@ -410,7 +410,24 @@ include_directories(SYSTEM ${Sqlite3_INCLUDE_DIR})
 list(APPEND LIBS ${Sqlite3_LIBRARIES})
 add_definitions(${Sqlite3_DEFINITIONS})
 
-foreach(lib ${OUR_LIBS} GIO GThread GModule PangoCairo Rsvg2 LibXml2 CURL PNG JPEG TIFF LCMS2 JsonGlib)
+# CMake provides a `FindCURL.cmake` module, which will set `CURL_LIBRARIES`,
+# however if cURL is built with CMake, it will generate a `CURLConfig.cmake`
+# config, which will not set `CURL_LIBRARIES`.
+#
+# MSYS2 currently build cURL with CMake, and if we do `find_package(CURL)`
+# directly, config will be used, so we need to keep compatibility。
+#
+# See <https://cmake.org/cmake/help/latest/module/FindCURL.html#curl-cmake>.
+# See <https://github.com/msys2/MINGW-packages/issues/21028>.
+find_package(CURL REQUIRED)
+if(TARGET CURL::libcurl)
+  set(CURL_LIBRARIES CURL::libcurl)
+endif()
+include_directories(SYSTEM ${CURL_INCLUDE_DIRS})
+list(APPEND LIBS ${CURL_LIBRARIES})
+add_definitions(${CURL_DEFINITIONS})
+
+foreach(lib ${OUR_LIBS} GIO GThread GModule PangoCairo Rsvg2 LibXml2 PNG JPEG TIFF LCMS2 JsonGlib)
   find_package(${lib} REQUIRED)
   include_directories(SYSTEM ${${lib}_INCLUDE_DIRS})
   list(APPEND LIBS ${${lib}_LIBRARIES})
