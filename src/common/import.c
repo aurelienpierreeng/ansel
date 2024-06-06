@@ -466,10 +466,11 @@ static int _is_in_library_by_metadata(GFile *file)
   return res;
 }
 
-static void update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata)
+static void update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata, const GList *files)
 {
   dt_lib_import_t *d = (dt_lib_import_t *)userdata;
-  char *filename = gtk_file_chooser_get_preview_filename(file_chooser);
+  if(files->data == NULL) return;
+  char *filename = g_strdup(files->data);
   gboolean have_file = (filename != NULL) && filename[0] && g_file_test(filename, G_FILE_TEST_IS_REGULAR);
 
   /* Get the thumbnail */
@@ -491,13 +492,14 @@ static void update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata)
   if(!have_file) return; // Nothing more we can do
 
   /* Do we already have this picture in library ? */
-  gchar *folder = gtk_file_chooser_get_current_folder(file_chooser);
+  gchar *folder = dt_util_path_get_dirname(files->data);
   GFile *in = g_file_new_for_path(filename);
   gchar *basename = g_file_get_basename(in);
   g_object_unref(in);
   const int is_path_in_lib = _is_in_library_by_path(folder, basename);
   const int is_metadata_in_lib = _is_in_library_by_metadata(gtk_file_chooser_get_file(file_chooser));
   const gboolean is_in_lib = (is_path_in_lib > -1) || (is_metadata_in_lib > -1);
+  g_free(filename);
   g_free(folder);
   g_free(basename);
 
@@ -628,14 +630,14 @@ static void _filelist_changed_callback(gpointer instance, GList *files, guint el
 {
   dt_lib_import_t *d = (dt_lib_import_t *)user_data;
   if(!d || !d->selected_files) return;
-  gtk_label_set_text(GTK_LABEL(d->selected_files), (finished)
-                                                      ? g_strdup_printf(_("%i files selected"), elements)
-                                                      : g_strdup_printf(_("Detection in progress... (%i files found so far)"), elements));
+  gtk_label_set_text(GTK_LABEL(d->selected_files), finished ? g_strdup_printf(_("%i files selected"), elements)
+                                                            : g_strdup_printf(_("Detection in progress... (%i files found so far)"), elements));
 
   if(files != NULL)
   {
     d->path_file = g_strdup((char*)files->data);
     _set_test_path(d);
+    update_preview_cb(GTK_FILE_CHOOSER(d->file_chooser), d, files);
   }
 
   // The list of files is not used in GUI. It's not freed in the job either.
@@ -950,8 +952,6 @@ static void gui_init(dt_lib_import_t *d)
   gtk_widget_show_all(d->exif);
 
   gtk_file_chooser_set_preview_widget(GTK_FILE_CHOOSER(d->file_chooser), preview_box);
-  g_signal_connect(GTK_FILE_CHOOSER(d->file_chooser), "update-preview", G_CALLBACK(update_preview_cb), d);
-
   /* BOTTOM PANEL */
 
   GtkWidget *files = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
