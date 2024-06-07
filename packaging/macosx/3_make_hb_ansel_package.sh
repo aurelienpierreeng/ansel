@@ -186,8 +186,8 @@ cp Info.plist "$dtWorkingDir"/Contents/
 echo "APPL$dtAppName" >>"$dtWorkingDir"/Contents/PkgInfo
 
 # Set version information
-sed -i '' 's|{VERSION}|'$(git describe --tags --long --match '*[0-9.][0-9.][0-9]' | cut -d- -f2 | sed 's/^\([0-9]*\.[0-9]*\)$/\1.0/')'|' "$dtWorkingDir"/Contents/Info.plist
-sed -i '' 's|{COMMITS}|'$(git describe --tags --long --match '*[0-9.][0-9.][0-9]' | cut -d- -f3)'|' "$dtWorkingDir"/Contents/Info.plist
+sed -i -e 's|{VERSION}|'$(git describe --tags --long --match '*[0-9.][0-9.][0-9]' | cut -d- -f2 | sed 's/^\([0-9]*\.[0-9]*\)$/\1.0/')'|' "$dtWorkingDir"/Contents/Info.plist
+sed -i -e 's|{COMMITS}|'$(git describe --tags --long --match '*[0-9.][0-9.][0-9]' | cut -d- -f3)'|' "$dtWorkingDir"/Contents/Info.plist
 
 # Generate settings.ini
 echo "[Settings]
@@ -254,14 +254,14 @@ glib-compile-schemas "$dtResourcesDir"/share/glib-2.0/schemas/
 # Define gtk-query-immodules-3.0
 immodulesCacheFile="$dtResourcesDir"/lib/gtk-3.0/3.0.0/immodules.cache
 hbGtk3Path=$(brew info gtk+3|grep "/`pkg-config --modversion gtk+-3.0`"|cut -f1 -d' ')
-sed -i '' "s#$hbGtk3Path/lib/gtk-3.0/3.0.0/immodules#@executable_path/../Resources/lib/gtk-3.0/3.0.0/immodules#g" "$immodulesCacheFile"
-sed -i '' "s#$hbGtk3Path/share/locale#@executable_path/../Resources/share/locale#g" "$immodulesCacheFile"
+sed -i -e "s#$hbGtk3Path/lib/gtk-3.0/3.0.0/immodules#@executable_path/../Resources/lib/gtk-3.0/3.0.0/immodules#g" "$immodulesCacheFile"
+sed -i -e "s#$hbGtk3Path/share/locale#@executable_path/../Resources/share/locale#g" "$immodulesCacheFile"
 # Rename and move it to the right place
 mv "$immodulesCacheFile" "$dtResourcesDir"/etc/gtk-3.0/gtk.immodules
 
 # Define gdk-pixbuf-query-loaders
 loadersCacheFile="$dtResourcesDir"/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
-sed -i '' "s#$homebrewHome/lib/gdk-pixbuf-2.0/2.10.0/loaders#@executable_path/../Resources/lib/gdk-pixbuf-2.0/2.10.0/loaders#g" "$loadersCacheFile"
+sed -i -e "s#$homebrewHome/lib/gdk-pixbuf-2.0/2.10.0/loaders#@executable_path/../Resources/lib/gdk-pixbuf-2.0/2.10.0/loaders#g" "$loadersCacheFile"
 # Move it to the right place
 mv "$loadersCacheFile" "$dtResourcesDir"/etc/gtk-3.0/
 
