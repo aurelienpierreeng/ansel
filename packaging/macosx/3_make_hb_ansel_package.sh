@@ -28,9 +28,13 @@ homebrewHome=$(brew --prefix)
 # Install direct and transitive dependencies
 function install_dependencies {
     local hbDependencies
+    local absolutePath=$(dirname $(realpath "$1"))
 
     # Get dependencies of current executable
-    oToolLDependencies=$(otool -L "$1" 2>/dev/null | grep compatibility | cut -d\( -f1 | sed 's/^[[:blank:]]*//;s/[[:blank:]]*$//' | uniq)
+    local oToolLDependencies=$(otool -L "$1" 2>/dev/null | grep compatibility | cut -d\( -f1 | sed 's/^[[:blank:]]*//;s/[[:blank:]]*$//' | uniq)
+    # Handle library relative paths
+    oToolLDependencies=$(echo "$oToolLDependencies" | sed "s#@loader_path#${absolutePath}#")
+    oToolLDependencies=$(echo "$oToolLDependencies" | sed "s#@rpath#${absolutePath}#")
 
     # Filter for homebrew dependencies
     if [[ "$oToolLDependencies" == *"$homebrewHome"* ]]; then
