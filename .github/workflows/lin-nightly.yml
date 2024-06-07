@@ -114,7 +114,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ env.BRANCH }}
-          fetch-depth: 500
+          fetch-depth: 800
+          fetch-tags: true
           submodules: true
           path: src
       # We manually build those dependencies because they are critical, so we

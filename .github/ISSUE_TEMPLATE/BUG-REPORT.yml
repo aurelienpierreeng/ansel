@@ -1,0 +1,172 @@
+name: Bug Report
+description: File a bug report
+title: "Bug: "
+body:
+  - type: markdown
+    attributes:
+      value: "## Introduction"
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report !
+        
+        Please use [Chantal search engine](https://chantal.aurelienpierre.com) to find out if another user has already faced, reported (and perhaps solved) your issue. Avoiding duplicates spares everybody's time. 
+        
+        If you find an older report for the same issue happening in the same context, and the suggested solution doesn't work for you, add your own info on it.
+
+        __What is a bug ?__
+
+        - the software __crashes__,
+        - the software __hangs indefinitely__,
+        - the software exports an image that __doesn't look like the preview__,
+        - the software displays __obviously inconsistent previews__ (ghosts, black blotches, full-black or full-white),
+        - the software has __become noticeably slower__ to process a specific module on a specific image than in the past (regression).
+
+        __What is not a bug ?__
+
+        - the software produces images that don't look like out-of-camera JPEG files,
+        - the software doesn't magically fix images that were damaged to begin with (clipped highlights, high-ISO noise),
+        - the software is slow to process some specific module on some specific hardware, with no proof that is has ever been faster on this hardware,
+        - insane module settings produce insane image results,
+        - __a feature has disappeared from GUI__: Ansel is currently undergoing UI redesign and simplification, documentation of changes may be delayed compared to the code. If you don't find anything documented, [ask on the chat](https://matrix.to/#/#ansel-en:matrix.org)
+
+        __What is not an _Ansel_ bug ?__
+
+        - camera support:
+          - RAW files decoding: report to [Rawspeed](https://github.com/darktable-org/rawspeed/issues),
+          - EXIF metadata decoding: report to [Exiv2](https://github.com/Exiv2/exiv2/issues),
+        - lens support: report to [Lensfun](https://github.com/lensfun/lensfun/issues)
+        
+        Ansel has a codebase of more than 300k lines. Chasing bugs in here requires proper methodology: __minimal reproducing examples__.
+
+        - if you are using custom ICC color profiles on your desktop, disable them or reset them to sRGB (default), and see if that fixes your issue.
+        - if you are using OpenCL, disable it, and see if that fixes your issue.
+        - if you are facing image/preview issues, disable all modules, then enable only one at a time, until you find the culprit. If you don't, re-enable them all, one by one, in pipeline order, until you find the culprit. Report here which one it was. 
+        _Modules that come late in the pipeline inherit earlier module's problems. Because a problem is made obvious/magnified at some late step doesn't mean it was created there._
+        - if you are facing inconsistencies between exports and previews, try to preview images zoomed it at 100% (1:1) and see if that fixes your issue.
+
+        __Bug reports need to be specific__: try to narrow down the smallest set of operations that recreate the bug (module, setting, GUI interaction).
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: Please read [A culture of problem solving in open-source projects](https://community.ansel.photos/view-discussion/a-culture-of-problem-solving-in).
+      options:
+        - label: I have read this document and I accept the conditions
+          required: true
+  - type: checkboxes
+    id: search
+    attributes:
+      label: Search previous report
+      description: Please search your symptoms with [Chantal search engine](https://chantal.aurelienpierre.com) to see if a previous report already exists.
+      options:
+        - label: I have searched my issue
+          required: true  
+  - type: markdown
+    attributes:
+      value: ---
+
+  - type: markdown
+    attributes:
+      value: "## Bug report"
+  - type: dropdown
+    id: os
+    attributes:
+      label: Computer's operating system
+      description: What OS are you using ?
+      options:
+        - Windows 7, 8, 10, or 11
+        - Linux
+        - MacOS Intel x86
+        - MacOS ARM64
+      default: 1
+  - type: dropdown
+    id: gpu
+    attributes:
+      label: What GPU do you have ?
+      description: If more than one GPU (embedded/discrete), report the brand of the discrete GPU.
+      options:
+        - No GPU
+        - I don't know
+        - Nvidia
+        - AMD/ATI
+        - Intel
+        - Other
+      default: 1
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Ansel version
+      description: You can find the version number or commit hash in the name of the [pre-built binary](https://github.com/aurelienpierreeng/ansel/releases/tag/v0.0.0), in the app global menu "Help" -> "About", or with `git rev-parse --short HEAD`
+    validations:
+      required: true
+  - type: dropdown
+    id: binary
+    attributes:
+      label: Type of binary
+      description: What kind of Ansel executable do you run ? Problems with packages from distributions's repositories need to be reported to package maintainers.
+      options:
+        - Self-compiled (GCC or Clang)
+        - Pre-built packages provided by the Ansel project (.AppImage, .EXE)
+        - Linux packages from distributions or third-party packagers (Suse, Fedora, etc.)
+      default: 1
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Also tell us, what did you expect to happen ?
+      placeholder: Tell us what you see!
+      value: "A bug happened!"
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: If you need to upload images and XMP files, please zip them together under a meaningful name and drop them above or on [Aurélien Pierre's private cloud](https://cloud.apmlt.net/s/YAdfYajPkE5nLyW). Files uploaded to AP's private cloud remain strictly confidential.
+  - type: dropdown
+    id: with-opencl
+    attributes:
+      label: Does your problem occur with OpenCL enabled ?
+      description: OpenCL use relies on a graphic card (GPU), proper GPU OpenCL drivers installed, and the software preference enabled.
+      options:
+        - "Yes"
+        - "No"
+        - I don't know
+      default: 1
+    validations:
+      required: true
+  - type: dropdown
+    id: without-opencl
+    attributes:
+      label: Does your problem occur with OpenCL disabled ?
+      description: OpenCL disabled means the software runs on CPU only. Ansel has an option in global menu "Edit" -> "Preferences" -> "Performance" to disable OpenCL. If you don't have a GPU, OpenCL is disabled by default.
+      options:
+        - "Yes"
+        - "No"
+        - I don't know
+      default: 1
+    validations:
+      required: true
+  - type: input
+    id: bisect
+    attributes:
+      label: Previous Ansel version that use to work
+      description: If you did not face this issue with a previous Ansel version, report here the last-working known version number. You can try [older packages](https://github.com/aurelienpierreeng/ansel/releases/tag/v0.0.0) or use `git bisect`.
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output of ansel -d all
+      description: Please copy and paste the output of Ansel started in command line with `ansel -d all`, if you can. This will be automatically formatted into code, so no need for backticks.
+      render: shell
+  - type: textarea
+    id: backtrace
+    attributes:
+      label: Backtrace
+      description: In case of a crash, please copy and paste the content of the backtrace file, usually stored in `/tmp/ansel_backtrace_xxxx_txt`. If no backtrace is produced, you can try to launch Ansel with `gdb ansel`, then type `run`. When it crashes, type `bt full` and copy-paste the output here. This will be automatically formatted into code, so no need for backticks.
+      render: shell
