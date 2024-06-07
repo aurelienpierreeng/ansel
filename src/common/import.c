@@ -470,7 +470,7 @@ static void update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata, 
 {
   dt_lib_import_t *d = (dt_lib_import_t *)userdata;
   if(files->data == NULL) return;
-  char *filename = g_strdup(files->data);
+  gchar *filename = g_strdup(files->data);
   gboolean have_file = (filename != NULL) && filename[0] && g_file_test(filename, G_FILE_TEST_IS_REGULAR);
 
   /* Get the thumbnail */
@@ -499,7 +499,6 @@ static void update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata, 
   const int is_path_in_lib = _is_in_library_by_path(folder, basename);
   const int is_metadata_in_lib = _is_in_library_by_metadata(gtk_file_chooser_get_file(file_chooser));
   const gboolean is_in_lib = (is_path_in_lib > -1) || (is_metadata_in_lib > -1);
-  g_free(filename);
   g_free(folder);
   g_free(basename);
 
