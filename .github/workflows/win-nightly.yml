@@ -49,6 +49,7 @@ jobs:
             cc:p
             cmake:p
             cmocka:p
+            curl:p
             ninja:p
             nsis:p
             dbus-glib:p
@@ -110,9 +111,13 @@ jobs:
           fetch-depth: 1
       # Install manually compiled dependencies into MingW's prefix, so ansel
       # will link against it and CPack will grab it.
-      - name: Manually build exiv2 dependency
+      #
+      # Exiv2 uses `CURL_LIBRARIES` which is only set by `FindCURL.cmake` module
+      # so we fix compatibility with `CURLConfig.cmake`.
+      - name: Manually build and install exiv2
         run: |
           cd exiv2-src
+          sed -i 's/find_package(CURL REQUIRED)/find_package(CURL REQUIRED)\nif(TARGET CURL::libcurl)\nset(CURL_LIBRARIES CURL::libcurl)\nendif()/g' cmake/findDependencies.cmake
           cmake -B build -G Ninja \
           -DCMAKE_INSTALL_PREFIX=${MINGW_PREFIX} \
           -DEXIV2_ENABLE_VIDEO=OFF \

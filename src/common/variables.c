@@ -30,6 +30,7 @@
 #include "common/tags.h"
 #include "common/datetime.h"
 #include "control/conf.h"
+#include "common/exif.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -94,6 +95,13 @@ typedef struct dt_variables_data_t
 
 } dt_variables_data_t;
 
+typedef enum _image_case
+{
+  NONE,
+  FILENAME,
+  IMGID
+}_image_case ;
+
 static char *_expand_source(dt_variables_params_t *params, char **source, char extra_stop);
 
 // gather some data that might be used for variable expansion
@@ -133,11 +141,29 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
   params->data->latitude = NAN;
   params->data->elevation = NAN;
   params->data->show_msec = dt_conf_get_bool("lighttable/ui/milliseconds");
-  if(params->imgid)
-  {
-    const dt_image_t *img = params->img ? (dt_image_t *)params->img
-                                        : dt_image_cache_get(darktable.image_cache, params->imgid, 'r');
 
+  dt_image_t *img = NULL;
+  _image_case release = NONE;
+
+  if(params->img)
+  {
+    img = (dt_image_t *) params->img;
+  }
+  else if(params->imgid > -1)
+  {
+    img = dt_image_cache_get(darktable.image_cache, params->imgid, 'r');
+    release = IMGID;
+  }
+  else if (params->filename)
+  {
+    img = malloc(sizeof(dt_image_t));
+    dt_exif_read(img, params->filename);
+    dt_exif_xmp_read(img, params->filename, 0);
+    release = FILENAME;
+  }
+
+  if(img)
+  {
     params->data->datetime = dt_datetime_img_to_gdatetime(img, darktable.utc_tz);
     if(params->data->datetime)
       params->data->have_exif_dt = TRUE;
@@ -185,15 +211,24 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
         params->data->export_width = roundf(img->final_width * scale);
       }
     }
-
-    // FIXME: do we have a deadlock if params->img != NULL ??
-    if(params->img == NULL) dt_image_cache_read_release(darktable.image_cache, img);
   }
-  else if(params->data->exif_time[0])
+
+  switch (release)
   {
-    params->data->datetime = dt_datetime_exif_to_gdatetime(params->data->exif_time, darktable.utc_tz);
-    if(params->data->datetime)
-      params->data->have_exif_dt = TRUE;
+    case NONE:
+    {
+      break;
+    }
+    case FILENAME:
+    {
+      free(img);
+      break;
+    }
+    case IMGID:
+    {
+      dt_image_cache_read_release(darktable.image_cache, img);
+      break;
+    }
   }
 }
 
@@ -465,7 +500,7 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
       nb_digit = (uint8_t)*variable[0] & 0b1111;
       (*variable) ++;
     }
-    result = g_strdup_printf("%.*d", nb_digit, params->sequence >= 0 ? params->sequence : params->data->sequence);
+    result = g_strdup_printf("%.*d", nb_digit, params->sequence);
   }
   else if(_has_prefix(variable, "USERNAME"))
     result = g_strdup(g_get_user_name());
@@ -975,9 +1010,7 @@ static char *_expand_source(dt_variables_params_t *params, char **source, char e
     while(*source_iter && *source_iter != extra_stop)
     {
       char c = *source_iter;
-      if(c == '\\' && source_iter[1])
-        c = *(++source_iter);
-      else if(c == '$' && source_iter[1] == '(')
+      if(c == '$' && source_iter[1] == '(')
         break;
 
       if(result_iter - result >= result_length)
@@ -1024,7 +1057,6 @@ char *dt_variables_expand(dt_variables_params_t *params, gchar *source, gboolean
   char *result = _expand_source(params, &source, '\0');
 
   _cleanup_expansion(params);
-
   return result;
 }
 

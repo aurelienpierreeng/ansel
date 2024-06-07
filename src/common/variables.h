@@ -30,7 +30,7 @@ typedef struct dt_variables_params_t
   const gchar *jobcode;
 
   /** used for expanding variables such as $(IMAGE_WIDTH) $(IMAGE_HEIGHT). */
-  uint32_t imgid;
+  int32_t imgid;
 
   /** used as thread-safe sequence number. only used if >= 0. */
   int sequence;
@@ -71,4 +71,3 @@ void dt_variables_reset_sequence(dt_variables_params_t *params);
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

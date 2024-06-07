@@ -2830,6 +2830,14 @@ void dt_image_check_camera_missing_sample(const struct dt_image_t *img)
   }
 }
 
+void dt_get_dirname_from_imgid(gchar *dir, const int32_t imgid)
+{
+  gchar path[PATH_MAX] = { 0 };
+  gboolean from_cache = FALSE;
+  dt_image_full_path(imgid, path, sizeof(path), &from_cache, __FUNCTION__);
+  g_strlcpy(dir, g_path_get_dirname(path), sizeof(path));
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

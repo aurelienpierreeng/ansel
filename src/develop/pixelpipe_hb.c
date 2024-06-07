@@ -1020,18 +1020,31 @@ static void collect_histogram_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
   return;
 }
 
-#define KILL_SWITCH_ABORT if(dt_atomic_get_int(&pipe->shutdown)) return 1;
+#define KILL_SWITCH_ABORT                                             \
+  if(dt_atomic_get_int(&pipe->shutdown))                              \
+  {                                                                   \
+    if (*cl_mem_output != NULL)                                       \
+    {                                                                 \
+      dt_opencl_release_mem_object(*cl_mem_output);                   \
+      *cl_mem_output = NULL;                                          \
+    }                                                                 \
+    return 1;                                                         \
+  }
 
 // Once we have a cache, stopping computation before full completion
 // has good chances of leaving it corrupted. So we invalidate it.
-#define KILL_SWITCH_AND_FLUSH_CACHE {                         \
-  if(dt_atomic_get_int(&pipe->shutdown))                      \
-  {                                                           \
-    dt_dev_pixelpipe_cache_invalidate(&(pipe->cache), input); \
-    dt_dev_pixelpipe_cache_invalidate(&(pipe->cache), *output);\
-    return 1;                                                 \
-  }                                                           \
-}
+#define KILL_SWITCH_AND_FLUSH_CACHE                                     \
+  if(dt_atomic_get_int(&pipe->shutdown))                                \
+  {                                                                     \
+    dt_dev_pixelpipe_cache_invalidate(&(pipe->cache), input);           \
+    dt_dev_pixelpipe_cache_invalidate(&(pipe->cache), *output);         \
+    if (*cl_mem_output != NULL)                                         \
+    {                                                                   \
+      dt_opencl_release_mem_object(*cl_mem_output);                     \
+      *cl_mem_output = NULL;                                            \
+    }                                                                   \
+    return 1;                                                           \
+  }                                                                     \
 
 static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                     float *input, dt_iop_buffer_dsc_t *input_format, const dt_iop_roi_t *roi_in,

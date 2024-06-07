@@ -300,6 +300,7 @@ gboolean dt_util_test_image_file(const char *filename)
 
   const gboolean regular = (S_ISREG(stats.st_mode)) != 0;
   const gboolean size_ok = stats.st_size > 0;
+  //fprintf(stderr, "ERR: regular %i, size_ok %i.\n\tfor file: %s\n", regular, size_ok, filename);
   return regular && size_ok;
 }
 
@@ -326,6 +327,13 @@ gboolean dt_util_test_writable_dir(const char *path)
   return TRUE;
 }
 
+gboolean dt_util_dir_exist(const char *dir)
+{
+  if(!dir)
+    return 1;
+
+  return g_file_test(dir, G_FILE_TEST_IS_DIR);
+}
 
 gboolean dt_util_is_dir_empty(const char *dirname)
 {
@@ -994,6 +1002,29 @@ gchar *dt_str_replace(const char *string, const char *search, const char *replac
   return res;
 }
 
+// Checks for the opposite separator in a string and replace it by the needed one by the current OS
+gchar *dt_cleanup_separators(gchar *string)
+{
+#ifdef WIN32
+  string = dt_str_replace(string, "/", G_DIR_SEPARATOR_S);
+#else
+  string = dt_str_replace(string, "\\", G_DIR_SEPARATOR_S);
+#endif
+return string;
+}
+
+// remove trail and lead space of each folders and file name. Result should be freed.
+gchar *dt_util_remove_whitespace(const gchar *path)
+{
+  gchar **split = g_strsplit(path, G_DIR_SEPARATOR_S, -1);
+  for(int i = 0; i < g_strv_length(split); i++)
+    if(g_strdup(split[i]) != NULL ) g_strstrip(split[i]);
+
+  char* result = g_strjoinv(G_DIR_SEPARATOR_S, split);
+  g_strfreev(split);
+
+  return result;
+}
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

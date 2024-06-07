@@ -186,6 +186,7 @@ gboolean dt_datetime_unix_to_exif(char *exif, const size_t exif_size, const time
   return FALSE;
 }
 
+
 void dt_datetime_now_to_exif(char *exif)
 {
   if(!exif) return;
@@ -282,24 +283,24 @@ GDateTime *dt_datetime_img_to_gdatetime(const dt_image_t *img, const GTimeZone *
   return NULL;
 }
 
+GDateTime *dt_string_to_datetime(const char *string)
+{
+  if(g_utf8_strlen(string, -1) > DT_DATETIME_LENGTH - 1)
+    return FALSE;
+
+  char idt[DT_DATETIME_LENGTH];
+  g_strlcpy(idt, DT_DATETIME_ORIGIN, sizeof(idt));
+  memcpy(idt, string, g_utf8_strlen(string, -1));
+  idt[4] = idt[7] = '-';
+  return g_date_time_new_from_iso8601(idt, darktable.utc_tz);  
+}
+
 gboolean dt_datetime_entry_to_exif(char *exif, const size_t exif_size, const char *entry)
 {
   if(!exif || !exif_size) return FALSE;
   exif[0] = '\0';
+  GDateTime *gdt = dt_string_to_datetime(entry);
 
-  if(strcmp(entry, "now") == 0)
-  {
-    dt_datetime_now_to_exif(exif);
-    return TRUE;
-  }
-
-  if(strlen(entry) > DT_DATETIME_LENGTH - 1)
-    return FALSE;
-  char idt[DT_DATETIME_LENGTH];
-  g_strlcpy(idt, DT_DATETIME_ORIGIN, sizeof(idt));
-  memcpy(idt, entry, strlen(entry));
-  idt[4] = idt[7] = '-';
-  GDateTime *gdt = g_date_time_new_from_iso8601(idt, darktable.utc_tz);
   if(gdt)
   {
     const gboolean res = dt_datetime_gdatetime_to_exif(exif, exif_size, gdt);
@@ -313,12 +314,6 @@ gboolean dt_datetime_entry_to_exif_upper_bound(char *exif, const size_t exif_siz
 {
   if(!exif || !exif_size) return FALSE;
   exif[0] = '\0';
-
-  if(strcmp(entry, "now") == 0)
-  {
-    dt_datetime_now_to_exif(exif);
-    return TRUE;
-  }
 
   const int len = strlen(entry);
   if(len > DT_DATETIME_LENGTH - 1)

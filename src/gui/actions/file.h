@@ -110,9 +110,19 @@ void init_collection_line(gpointer instance,
   }
 }
 
+gboolean _is_lighttable()
+{
+  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  return cv && !strcmp(cv->module_name, "lighttable");
+}
+
 void import_files_callback()
 {
-  dt_images_import();
+  // Workaround : Darkroom is not wired properly to manage importing. Disable import outsile of lighttable.
+  if(_is_lighttable())
+    dt_images_import();
+  else
+    dt_control_log(_("Import is not allowed yet outside of lighttable."));
 }
 
 void _close_export_popup(GtkWidget *dialog, gint response_id, gpointer data)
@@ -151,9 +161,9 @@ void export_files_callback()
   GtkWidget *dialog = gtk_dialog_new();
 #ifdef GDK_WINDOWING_QUARTZ
 // TODO: On MacOS (at least on version 13) the dialog windows doesn't behave as expected. The dialog
-// needs to have a parent window. "set_parent_window" wasn't working, so set_transient_for is 
-// the way to go. Still the window manager isn't dealing with the dialog properly, when the dialog 
-// is shifted outside its parent. The dialog isn't visible any longer but still listed as a window 
+// needs to have a parent window. "set_parent_window" wasn't working, so set_transient_for is
+// the way to go. Still the window manager isn't dealing with the dialog properly, when the dialog
+// is shifted outside its parent. The dialog isn't visible any longer but still listed as a window
 // of the app.
   dt_osx_disallow_fullscreen(dialog);
   gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
@@ -185,7 +195,7 @@ void append_file(GtkWidget **menus, GList **lists, const dt_menus_t index)
   dt_action_t *ac;
 
   add_sub_menu_entry(menus, lists, _("Import..."), index, NULL, import_files_callback, NULL, NULL,
-                     NULL);
+                     _is_lighttable);
   ac = dt_action_define(pnl, NULL, N_("Import images"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, import_files_callback, GDK_KEY_i, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
 

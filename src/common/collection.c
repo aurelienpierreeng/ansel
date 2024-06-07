@@ -61,8 +61,8 @@ static uint32_t _dt_collection_compute_count(const dt_collection_t *collection, 
 /* signal handlers to update the cached count when something interesting might have happened.
  * we need 2 different since there are different kinds of signals we need to listen to. */
 static void _dt_collection_recount_callback_1(gpointer instance, gpointer user_data);
-static void _dt_collection_recount_callback_2(gpointer instance, uint8_t id, gpointer user_data);
-static void _dt_collection_filmroll_imported_callback(gpointer instance, uint8_t id, gpointer user_data);
+static void _dt_collection_recount_callback_2(gpointer instance, const int32_t id, gpointer user_data);
+static void _dt_collection_filmroll_imported_callback(gpointer instance, const int32_t id, gpointer user_data);
 
 /* determine image offset of specified imgid for the given collection */
 static int dt_collection_image_offset_with_collection(const dt_collection_t *collection, int imgid);
@@ -2596,11 +2596,12 @@ static void _dt_collection_recount_callback_1(gpointer instance, gpointer user_d
   }
 }
 
-static void _dt_collection_recount_callback_2(gpointer instance, uint8_t id, gpointer user_data)
+static void _dt_collection_recount_callback_2(gpointer instance, const int32_t id, gpointer user_data)
 {
   _dt_collection_recount_callback_1(instance, user_data);
 }
-static void _dt_collection_filmroll_imported_callback(gpointer instance, uint8_t id, gpointer user_data)
+
+static void _dt_collection_filmroll_imported_callback(gpointer instance, const int32_t id, gpointer user_data)
 {
   dt_collection_t *collection = (dt_collection_t *)user_data;
   const int old_count = collection->count;
@@ -2608,8 +2609,34 @@ static void _dt_collection_filmroll_imported_callback(gpointer instance, uint8_t
   collection->count_no_group = _dt_collection_compute_count(collection, TRUE);
   if(!collection->clone)
   {
+    int last_image = dt_conf_get_int("ui_last/import_last_image");
+    gchar first_directory[PATH_MAX] = { 0 };
+    dt_get_dirname_from_imgid(first_directory, last_image);
+
+    const gboolean duplicate = dt_conf_get_bool("ui_last/import_copy");
+
+    char* dir = duplicate && dt_util_dir_exist(first_directory) ?
+                    g_strdup(first_directory)
+                  : g_strdup(dt_conf_get_string("ui_last/import_last_directory"));
+
+    dt_conf_set_string("plugins/lighttable/collect/string0", g_strdup_printf("%s*", dir));
+    free(dir);
+    dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
+    dt_conf_set_int("plugins/lighttable/collect/item0", 1);
+
     if(old_count != collection->count) dt_collection_hint_message(collection);
+
     dt_collection_update_query(collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF, NULL);
+    dt_view_filter_reset(darktable.view_manager, TRUE);
+    dt_thumbtable_set_offset_image(dt_ui_thumbtable(darktable.gui->ui), last_image, TRUE);
+
+    dt_control_set_mouse_over_id(last_image);
+    dt_selection_select_single(darktable.selection, last_image);
+
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+
+    if(dt_conf_get_int("ui_last/nb_imported") == 1)
+      dt_ctl_switch_mode_to("darkroom");
   }
 }
 

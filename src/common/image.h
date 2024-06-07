@@ -447,7 +447,8 @@ float dt_image_get_exposure_bias(const struct dt_image_t *image_storage);
 /** handle message for missing camera samples reported by rawspeed */
 char *dt_image_camera_missing_sample_message(const struct dt_image_t *img, gboolean logmsg);
 void dt_image_check_camera_missing_sample(const struct dt_image_t *img);
-
+/** get dirname from imgid */
+void dt_get_dirname_from_imgid(gchar *dir, const int32_t imgid);
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

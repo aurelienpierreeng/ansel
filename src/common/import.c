@@ -21,7 +21,6 @@
 #include "common/atomic.h"
 #include "common/collection.h"
 #include "common/darktable.h"
-#include "common/import_session.h"
 #include "common/file_location.h"
 #include "common/debug.h"
 #include "common/exif.h"
@@ -54,6 +53,7 @@
 #ifndef RSVG_CAIRO_H
 #include <librsvg/rsvg-cairo.h>
 #endif
+
 
 typedef struct dt_import_t {
   // File filter in use, from the Gtk file chooser.
@@ -105,16 +105,17 @@ typedef struct dt_lib_import_t
   GtkWidget *datetime;
   GtkWidget *dialog;
   GtkWidget *grid;
+  GtkWidget *jobcode;
 
   GtkWidget *help_string;
   GtkWidget *test_path;
   GtkWidget *selected_files;
 
-  GtkWidget *modal;
-
   gboolean shutdown;
 
   dt_pthread_mutex_t lock;
+
+  char *path_file;
 
 } dt_lib_import_t;
 
@@ -196,6 +197,8 @@ static void _recurse_selection(GSList *selection, dt_import_t *const import)
 
   for(GSList *file = selection; file; file = g_slist_next(file))
     _filter_document((GFile *)file->data, import);
+
+  import->files = g_list_sort(import->files, (GCompareFunc) g_strcmp0);
 }
 
 static gboolean _delayed_file_count(gpointer data)
@@ -445,10 +448,7 @@ static int _is_in_library_by_path(const gchar *folder, const char *filename)
 {
   int32_t filmroll_id = dt_film_get_id(folder);
   int32_t image_id = dt_image_get_id(filmroll_id, filename);
-  if(filmroll_id > -1 && image_id > -1)
-    return image_id;
-  else
-    return -1;
+  return image_id;
 }
 
 static int _is_in_library_by_metadata(GFile *file)
@@ -466,15 +466,15 @@ static int _is_in_library_by_metadata(GFile *file)
   return res;
 }
 
-static void
-update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata)
+static void update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata, const GList *files)
 {
   dt_lib_import_t *d = (dt_lib_import_t *)userdata;
-  char *filename = gtk_file_chooser_get_preview_filename(file_chooser);
+  if(files->data == NULL) return;
+  gchar *filename = g_strdup(files->data);
   gboolean have_file = (filename != NULL) && filename[0] && g_file_test(filename, G_FILE_TEST_IS_REGULAR);
 
   /* Get the thumbnail */
-  GdkPixbuf *pixbuf = _import_get_thumbnail(filename, DT_PIXEL_APPLY_DPI(180), DT_PIXEL_APPLY_DPI(180));
+  GdkPixbuf *pixbuf = _import_get_thumbnail(filename, (int) DT_PIXEL_APPLY_DPI(180), (int) DT_PIXEL_APPLY_DPI(180));
   gtk_image_set_from_pixbuf(GTK_IMAGE(d->preview), pixbuf);
   gtk_widget_show_all(d->preview);
   if(pixbuf) g_object_unref(pixbuf);
@@ -492,11 +492,15 @@ update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata)
   if(!have_file) return; // Nothing more we can do
 
   /* Do we already have this picture in library ? */
-  gchar *folder = gtk_file_chooser_get_current_folder(file_chooser);
-  const int is_path_in_lib = _is_in_library_by_path(folder, filename);
+  gchar *folder = dt_util_path_get_dirname(files->data);
+  GFile *in = g_file_new_for_path(filename);
+  gchar *basename = g_file_get_basename(in);
+  g_object_unref(in);
+  const int is_path_in_lib = _is_in_library_by_path(folder, basename);
   const int is_metadata_in_lib = _is_in_library_by_metadata(gtk_file_chooser_get_file(file_chooser));
   const gboolean is_in_lib = (is_path_in_lib > -1) || (is_metadata_in_lib > -1);
   g_free(folder);
+  g_free(basename);
 
   /* If alread imported, find out where */
   int imgid = -1;
@@ -524,13 +528,13 @@ update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata)
     const gboolean valid = dt_datetime_img_to_local(datetime, sizeof(datetime), &img, FALSE);
     const gchar *exposure_field = g_strdup_printf("%.0f ISO - f/%.1f - %s", img.exif_iso, img.exif_aperture,
                                                   dt_util_format_exposure(img.exif_exposure));
-    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_DATETIME_FIELD]), (valid) ? g_strdup(datetime) : _("N/A"));
-    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_MODEL_FIELD]), g_strdup(img.exif_model));
-    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_MAKER_FIELD]), g_strdup(img.exif_maker));
-    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_LENS_FIELD]), g_strdup(img.exif_lens));
-    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_FOCAL_LENS_FIELD]), g_strdup_printf("%0.f mm", img.exif_focal_length));
+    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_DATETIME_FIELD]), g_strdup_printf(" %s", valid ? datetime : "-"));
+    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_MODEL_FIELD]), g_strdup_printf(" %s", (img.exif_model[0] != '\0') ? img.exif_model : "-"));
+    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_MAKER_FIELD]), g_strdup_printf(" %s", (img.exif_maker[0] != '\0') ? img.exif_maker : "-"));
+    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_LENS_FIELD]),  g_strdup_printf(" %s", (img.exif_lens[0]  != '\0') ? img.exif_lens  : "-"));
+    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_FOCAL_LENS_FIELD]), g_strdup_printf(" %0.f mm", img.exif_focal_length));
     gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_EXPOSURE_FIELD]), exposure_field);
-    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_INLIB_FIELD]), (is_in_lib) ? g_strdup_printf(_("Yes (ID %i), in"), imgid) : _("No"));
+    gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_INLIB_FIELD]), (is_in_lib) ? g_strdup_printf(_(" Yes (ID %i), in"), imgid) : _(" No"));
 
     if(is_in_lib)
       gtk_label_set_text(GTK_LABEL(d->exif_info[EXIF_PATH_FIELD]), g_strdup_printf(_("%s"), path));
@@ -542,7 +546,7 @@ update_preview_cb (GtkFileChooser *file_chooser, gpointer userdata)
 
 static void _update_directory(GtkWidget *file_chooser, dt_lib_import_t *d)
 {
-  char *path = gtk_file_chooser_get_current_folder(GTK_FILE_CHOOSER(file_chooser));
+  const char *path = gtk_file_chooser_get_current_folder(GTK_FILE_CHOOSER(file_chooser));
   dt_conf_set_string("ui_last/import_last_directory", path);
 }
 
@@ -560,58 +564,80 @@ static void _set_help_string(dt_lib_import_t *d, gboolean copy)
 
 static void _set_test_path(dt_lib_import_t *d)
 {
-  gchar *selected = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(d->file_chooser));
-  if(!selected || !dt_supported_image(selected)) return;
+  if(!d->path_file || d->path_file == NULL)
+    return;
 
-  /* Create a new fake session */
-  struct dt_import_session_t *session = dt_import_session_new();
-
-  dt_import_session_set_name(session, dt_conf_get_string("ui_last/import_jobcode"));
+  const gboolean duplicate = dt_conf_get_bool("ui_last/import_copy");
+  if(!duplicate)
+  {
+    gtk_label_set_text(GTK_LABEL(d->test_path), g_strdup_printf("No copy."));
+    return;
+  }
 
   char datetime_override[DT_DATETIME_LENGTH] = { 0 };
-  const char *entry = gtk_entry_get_text(GTK_ENTRY(d->datetime));
-  if(entry[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), entry))
-    dt_import_session_set_time(session, datetime_override);
+  const char *date = gtk_entry_get_text(GTK_ENTRY(d->datetime));
+  const GList file = {.data = g_strdup(d->path_file),
+                      .next = NULL,
+                      .prev = NULL
+                     };
 
-  char *data = NULL;
-  gsize size = 0;
-  if(g_file_get_contents(selected, &data, &size, NULL))
+  if(date[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), date))
   {
-    char exif_time[DT_DATETIME_LENGTH];
-    dt_exif_get_datetime_taken((uint8_t *)data, size, exif_time);
-
-    if(!exif_time[0])
-    {
-      // if no exif datetime try file datetime
-      struct stat statbuf;
-      if(!stat(selected, &statbuf))
-        dt_datetime_unix_to_exif(exif_time, sizeof(exif_time), &statbuf.st_mtime);
-    }
-
-    if(exif_time[0])
-      dt_import_session_set_exif_time(session, exif_time);
-
-    dt_import_session_set_filename(session, g_path_get_basename(selected));
-
-    char *test_path = g_build_filename(
-      dt_import_session_path(session, FALSE),
-      dt_import_session_filename(session), NULL);
-
-    gtk_label_set_text(GTK_LABEL(d->test_path), g_strdup_printf(_("Result of the pattern : %s"), test_path));
-    g_free(test_path);
+    dt_control_log(_("invalid date/time format for import"));
+    return;
   }
-  g_free(selected);
-  if(data) g_free(data);
-  free(session);
+
+  if(!file.data || !dt_supported_image(file.data))
+  {
+    gtk_label_set_text(GTK_LABEL(d->test_path), _("Result of the pattern : please select a picture file"));
+    return;
+  }
+  else
+  {
+    dt_control_import_t data = {.imgs = file.data,
+                                .datetime = dt_string_to_datetime(date),
+                                .copy = 0,
+                                .jobcode = dt_conf_get_string("ui_last/import_jobcode"),
+                                .target_folder = g_strrstr(dt_conf_get_string("session/base_directory_pattern"), G_DIR_SEPARATOR_S),
+                                .target_subfolder_pattern = dt_conf_get_string("session/sub_directory_pattern"),
+                                .target_file_pattern = dt_conf_get_string("session/filename_pattern"),
+                                .target_dir = NULL,
+                                .elements = 1,
+                                .total_imported_elements = 0,
+                                .filmid = -1,
+                                };
+
+    dt_variables_params_t *params;
+    dt_variables_params_init(&params);
+
+    params->filename = g_strdup(file.data);
+    params->sequence = 1;
+    params->jobcode = g_strdup(data.jobcode);
+
+    gchar *fake_path = dt_build_filename_from_pattern(params, &data);
+
+    gtk_label_set_text(GTK_LABEL(d->test_path), (fake_path && fake_path != NULL)
+                  ? g_strdup_printf(_("Result of the pattern : ...%s"), fake_path)
+                  : g_strdup(_("Can't build a valid path.")));
+
+    g_free(fake_path);
+    dt_variables_params_destroy(params);
+  }
 }
 
 static void _filelist_changed_callback(gpointer instance, GList *files, guint elements, guint finished, gpointer user_data)
 {
   dt_lib_import_t *d = (dt_lib_import_t *)user_data;
   if(!d || !d->selected_files) return;
-  gtk_label_set_text(GTK_LABEL(d->selected_files), (finished)
-                                                      ? g_strdup_printf(_("%i files selected"), elements)
-                                                      : g_strdup_printf(_("Detection in progress... (%i files found so far)"), elements));
+  gtk_label_set_text(GTK_LABEL(d->selected_files), finished ? g_strdup_printf(_("%i files selected"), elements)
+                                                            : g_strdup_printf(_("Detection in progress... (%i files found so far)"), elements));
+
+  if(files != NULL)
+  {
+    d->path_file = g_strdup((char*)files->data);
+    _set_test_path(d);
+    update_preview_cb(GTK_FILE_CHOOSER(d->file_chooser), d, files);
+  }
 
   // The list of files is not used in GUI. It's not freed in the job either.
   if(finished)
@@ -637,6 +663,12 @@ static void _copy_toggled_callback(GtkWidget *combobox, dt_lib_import_t *d)
   gtk_widget_set_visible(GTK_WIDGET(d->grid), state);
   gtk_widget_set_visible(GTK_WIDGET(d->test_path), state);
   _set_help_string(d, state);
+  _set_test_path(d);
+}
+
+static void _jobcode_changed(GtkFileChooserButton* widget, dt_lib_import_t *d)
+{
+  dt_conf_set_string("ui_last/import_jobcode", gtk_entry_get_text(GTK_ENTRY(widget)));
   _set_test_path(d);
 }
 
@@ -711,77 +743,46 @@ static void _file_activated(GtkFileChooser *chooser, GtkDialog *dialog)
   }
 }
 
-static void _import_set_collection(const char *dirname)
-{
-  if(dirname)
-  {
-    dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
-    dt_conf_set_int("plugins/lighttable/collect/item0", 1);
-    dt_conf_set_string("plugins/lighttable/collect/string0", g_strdup_printf("%s*", dirname));
-    dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_UNDEF,
-                               NULL);
-  }
-}
 
-static void _update_progress_message(gpointer instance, GList *files, int elements, gboolean finished, gpointer user_data)
-{
-  if(finished) return; // Should be fired only when detecting stuff
-
-  dt_lib_import_t *d = (dt_lib_import_t *)user_data;
-  gtk_message_dialog_set_markup(
-      GTK_MESSAGE_DIALOG(d->modal),
-      g_strdup_printf(_("Crawling your selection for recursive folder detection... %i pictures found so far. <i>(This "
-                        "can take some time for large folders)</i>"),
-                      elements));
-}
-
+/**
+ * @brief Import a list of file by copying them or not, and adding them to database.
+ *
+ * @param instance not used here.
+ * @param files the GList of files.
+ * @param elements number of files to import.
+ * @param finished
+ * @param user_data data from the module.
+ */
 static void _process_file_list(gpointer instance, GList *files, int elements, gboolean finished, gpointer user_data)
 {
   if(!finished) return; // Should be fired only when we are done detecting stuff
 
   dt_lib_import_t *d = (dt_lib_import_t *)user_data;
-  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_update_progress_message), (gpointer)d);
 
-  // Import params
-  const gboolean duplicate = dt_conf_get_bool("ui_last/import_copy");
-  char datetime_override[DT_DATETIME_LENGTH] = { 0 };
-
-  if(duplicate)
-  {
-    // Abort early if date format is wrong
-    const char *entry = gtk_entry_get_text(GTK_ENTRY(d->datetime));
-    if(entry[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), entry))
-    {
-      dt_control_log(_("invalid date/time format for import"));
-      g_list_free(files);
-      return;
-    }
-  }
+  fprintf(stdout, "Nb Elements: %i\n", elements);
 
   if(elements > 0)
   {
-    // WARNING: the GList files is freed in control import,
-    // everything needs to be accessed before.
-    dt_control_import(files, datetime_override, !duplicate);
+    // TODO: copy data into the importer so we can kill this popup and *d
+    dt_control_import_t data = {.imgs = files,
+                                .datetime = dt_string_to_datetime(gtk_entry_get_text(GTK_ENTRY(d->datetime))),
+                                .copy = dt_conf_get_bool("ui_last/import_copy"),
+                                .jobcode = dt_conf_get_string("ui_last/import_jobcode"),
+                                .target_folder = dt_conf_get_string("session/base_directory_pattern"),
+                                .target_subfolder_pattern = dt_conf_get_string("session/sub_directory_pattern"),
+                                .target_file_pattern = dt_conf_get_string("session/filename_pattern"),
+                                .target_dir = NULL,
+                                .elements = elements,
+                                .total_imported_elements = 0,
+                                .filmid = -1,
+                                };
 
-    if(!duplicate) _import_set_collection(dt_conf_get_string("ui_last/import_last_directory"));
-    // else : collection set by import job.
-
-    dt_view_filter_reset(darktable.view_manager, TRUE);
-
-    const int imgid = dt_conf_get_int("ui_last/import_last_image");
-    if(elements == 1 && imgid != -1)
-    {
-      dt_control_set_mouse_over_id(imgid);
-      dt_selection_select_single(darktable.selection, imgid);
-      dt_ctl_switch_mode_to("darkroom");
-    }
+    // Prepare to catch the end of import signal
+    dt_control_import(data);
   }
-  else
-  {
-    dt_control_log(_("No files to import. Check your selection."));
-  }
+  else dt_control_log(_("No files to import. Check your selection."));
 
+  fprintf(stdout, ":END:\n\n");
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_process_file_list), (gpointer)d);
   gui_cleanup(d);
   _cleanup(d);
@@ -789,6 +790,7 @@ static void _process_file_list(gpointer instance, GList *files, int elements, gb
 
 void _file_chooser_response(GtkDialog *dialog, gint response_id, dt_lib_import_t *d)
 {
+  // Stop capturing the filelist changes for the in-popup label file counter.
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_filelist_changed_callback), (gpointer)d);
   d->shutdown = TRUE;
 
@@ -796,23 +798,18 @@ void _file_chooser_response(GtkDialog *dialog, gint response_id, dt_lib_import_t
   {
     case GTK_RESPONSE_ACCEPT:
     {
+      // The next file list change will now only fire the importer job
+      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_FILELIST_CHANGED, G_CALLBACK(_process_file_list), (gpointer)d);
+
       // It would be swell if we could just re-use the file list computed on "select" callback.
       // However, it depends on the file filter used, and we can't refresh the list when
       // filter is changed (no callback to connect to).
       // To be safe, we need to start again here, from scratch.
-      d->modal = gtk_message_dialog_new_with_markup(
-          GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, GTK_MESSAGE_INFO,
-          GTK_BUTTONS_NONE,
-          _("Crawling your selection for recursive folder detection... <i>(This can take some time for large folders)</i>"));
-      gtk_widget_show_all(d->modal);
-
       dt_control_get_selected_files(d, TRUE);
-      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_FILELIST_CHANGED, G_CALLBACK(_process_file_list), (gpointer)d);
-      DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_FILELIST_CHANGED, G_CALLBACK(_update_progress_message), (gpointer)d);
 
+      // TODO: print "pending" message on modal window
       break;
     }
-
     case GTK_RESPONSE_CANCEL:
     default:
       gui_cleanup(d);
@@ -832,9 +829,9 @@ static void gui_init(dt_lib_import_t *d)
 
 #ifdef GDK_WINDOWING_QUARTZ
 // TODO: On MacOS (at least on version 13) the dialog windows doesn't behave as expected. The dialog
-// needs to have a parent window. "set_parent_window" wasn't working, so set_transient_for is 
-// the way to go. Still the window manager isn't dealing with the dialog properly, when the dialog 
-// is shifted outside its parent. The dialog isn't visible any longer but still listed as a window 
+// needs to have a parent window. "set_parent_window" wasn't working, so set_transient_for is
+// the way to go. Still the window manager isn't dealing with the dialog properly, when the dialog
+// is shifted outside its parent. The dialog isn't visible any longer but still listed as a window
 // of the app.
   dt_osx_disallow_fullscreen(d->dialog);
   gtk_window_set_transient_for(GTK_WINDOW(d->dialog), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
@@ -913,17 +910,17 @@ static void gui_init(dt_lib_import_t *d)
   // 2. Exif metadata
   d->exif = gtk_grid_new();
   gtk_grid_set_column_spacing(GTK_GRID(d->exif), 1);
-  _attach_aligned_grid_item(d->exif, 0, 0, _("Shot :"), GTK_ALIGN_END, FALSE, FALSE);
+  _attach_aligned_grid_item(d->exif, 0, 0, _("Shot:"), GTK_ALIGN_END, FALSE, FALSE);
   _attach_grid_separator(   d->exif, 1, 2);
-  _attach_aligned_grid_item(d->exif, 2, 0, _("Camera :"), GTK_ALIGN_END, FALSE, FALSE);
-  _attach_aligned_grid_item(d->exif, 3, 0, _("Brand :"), GTK_ALIGN_END, FALSE, FALSE);
-  _attach_aligned_grid_item(d->exif, 4, 0, _("Lens :"), GTK_ALIGN_END, FALSE, FALSE);
-  _attach_aligned_grid_item(d->exif, 5, 0, _("Focal :"), GTK_ALIGN_END, FALSE, FALSE);
+  _attach_aligned_grid_item(d->exif, 2, 0, _("Camera:"), GTK_ALIGN_END, FALSE, FALSE);
+  _attach_aligned_grid_item(d->exif, 3, 0, _("Brand:"), GTK_ALIGN_END, FALSE, FALSE);
+  _attach_aligned_grid_item(d->exif, 4, 0, _("Lens:"), GTK_ALIGN_END, FALSE, FALSE);
+  _attach_aligned_grid_item(d->exif, 5, 0, _("Focal:"), GTK_ALIGN_END, FALSE, FALSE);
   _attach_grid_separator(   d->exif, 6, 2);
   // exposure trifecta
   _attach_grid_separator(   d->exif, 8, 2);
 
-  GtkWidget *imported_label = gtk_label_new(_("Imported"));
+  GtkWidget *imported_label = gtk_label_new(_("Imported:"));
   GtkBox *help_box_inlib = attach_help_popover(
       imported_label,
       _("Images already in the library will not be imported again, selected or not. "
@@ -948,13 +945,12 @@ static void gui_init(dt_lib_import_t *d)
   d->exif_info[EXIF_EXPOSURE_FIELD] = _attach_aligned_grid_item(d->exif, 7, 0, "", GTK_ALIGN_CENTER, TRUE, TRUE);
   d->exif_info[EXIF_INLIB_FIELD] = _attach_aligned_grid_item(d->exif, 9, 1, "", GTK_ALIGN_START, FALSE, TRUE);
   d->exif_info[EXIF_PATH_FIELD] = _attach_aligned_grid_item(d->exif, 10, 0, "", GTK_ALIGN_START, FALSE, TRUE);
+  gtk_label_set_ellipsize(GTK_LABEL(d->exif_info[EXIF_PATH_FIELD]), PANGO_ELLIPSIZE_MIDDLE);
 
   gtk_box_pack_start(GTK_BOX(preview_box), d->exif, TRUE, TRUE, 0);
   gtk_widget_show_all(d->exif);
 
   gtk_file_chooser_set_preview_widget(GTK_FILE_CHOOSER(d->file_chooser), preview_box);
-  g_signal_connect(GTK_FILE_CHOOSER(d->file_chooser), "update-preview", G_CALLBACK(update_preview_cb), d);
-
   /* BOTTOM PANEL */
 
   GtkWidget *files = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
@@ -1000,6 +996,14 @@ static void gui_init(dt_lib_import_t *d)
   g_date_time_unref(now);
 
   // Base directory of projects
+  GtkWidget *jobcode = gtk_entry_new();
+  gtk_entry_set_text(GTK_ENTRY(jobcode), dt_conf_get_string("ui_last/import_jobcode"));
+  gtk_widget_set_hexpand(jobcode, TRUE);
+  g_signal_connect(G_OBJECT(jobcode), "changed", G_CALLBACK(_jobcode_changed), d);
+
+  GtkWidget *jobcode_label = gtk_label_new(_("Jobcode"));
+  gtk_widget_set_halign(jobcode_label, GTK_ALIGN_START);
+
   GtkWidget *base_label = gtk_label_new(_("Base directory of all projects"));
   gtk_widget_set_halign(base_label, GTK_ALIGN_START);
 
@@ -1015,8 +1019,8 @@ static void gui_init(dt_lib_import_t *d)
   g_signal_connect(G_OBJECT(base_dir), "file-set", G_CALLBACK(_base_dir_changed), d);
   gtk_widget_set_hexpand(base_dir, TRUE);
 
-  GtkWidget *sep1 = gtk_label_new("/");
-  GtkWidget *sep2 = gtk_label_new("/");
+  GtkWidget *sep1 = gtk_label_new(G_DIR_SEPARATOR_S);
+  GtkWidget *sep2 = gtk_label_new(G_DIR_SEPARATOR_S);
 
   GtkWidget *project_dir = gtk_entry_new();
   gtk_entry_set_text(GTK_ENTRY(project_dir), dt_conf_get_string("session/sub_directory_pattern"));
@@ -1037,9 +1041,11 @@ static void gui_init(dt_lib_import_t *d)
   // Row 1: text entries
   gtk_grid_attach(grid, calendar_label, 0, 0, 1, 1);
   gtk_grid_attach(grid, GTK_WIDGET(box_calendar), 0, 1, 1, 1);
+  gtk_grid_attach(grid, jobcode_label, 2, 0, 1, 1);
+  gtk_grid_attach(grid, jobcode, 2, 1, 1, 1);
 
   // create text box with label and attach on grid directly
-  dt_gui_preferences_string(grid, "ui_last/import_jobcode", 2, 0);
+  //dt_gui_preferences_string(grid, "ui_last/import_jobcode", 2, 0);
 
   // Row 2: separator
   _attach_grid_separator(GTK_WIDGET(grid), 2, 5);
@@ -1129,7 +1135,6 @@ static void gui_cleanup(dt_lib_import_t *d)
   // and then the widgets supposed to be updated in callback will be undefined (but not NULL... WTF Gtk ?)
   dt_pthread_mutex_lock(&d->lock);
   gtk_widget_destroy(d->dialog);
-  if(d->modal) gtk_widget_destroy(d->modal);
   dt_pthread_mutex_unlock(&d->lock);
 }
 
@@ -1137,8 +1142,8 @@ static dt_lib_import_t * _init()
 {
   dt_lib_import_t *d = malloc(sizeof(dt_lib_import_t));
   d->shutdown = FALSE;
-  d->modal = NULL;
   dt_pthread_mutex_init(&d->lock, NULL);
+  d->path_file = NULL;
 
   return d;
 }

@@ -19,13 +19,6 @@ fi
 brew update
 brew upgrade
 
-# Ensure you still have the version 0.27.6 of exiv2
-# Procedure:
-# brew remove exiv2 (if already installed)
-# brew tap homebrew/core
-# brew tap-new $USER/local-exiv2
-# brew extract --version=0.27.6 exiv2 $USER/local-exiv2
-
 # Define homebrew dependencies
 hbDependencies="adwaita-icon-theme \
     cmake \
@@ -33,7 +26,7 @@ hbDependencies="adwaita-icon-theme \
     cmocka \
     curl \
     desktop-file-utils \
-    exiv2@0.27.6 \
+    exiv2 \
     gettext \
     git \
     glib \
