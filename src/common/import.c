@@ -591,11 +591,12 @@ static void _set_test_path(dt_lib_import_t *d)
   }
   else
   {
+    gchar *basedir = dt_conf_get_string("session/base_directory_pattern");
     dt_control_import_t data = {.imgs = file,
                                 .datetime = dt_string_to_datetime(date),
                                 .copy = 1,
                                 .jobcode = dt_conf_get_string("ui_last/import_jobcode"),
-                                .target_folder = g_strrstr(dt_conf_get_string("session/base_directory_pattern"), G_DIR_SEPARATOR_S),
+                                .target_folder = basedir,
                                 .target_subfolder_pattern = dt_conf_get_string("session/sub_directory_pattern"),
                                 .target_file_pattern = dt_conf_get_string("session/filename_pattern"),
                                 .target_dir = NULL,
@@ -613,12 +614,17 @@ static void _set_test_path(dt_lib_import_t *d)
     params->imgid = -1;
     dt_variables_set_datetime(params, data.datetime);
 
-    gchar *fake_path = dt_build_filename_from_pattern(params, &data);
+    gchar *_path = dt_build_filename_from_pattern(params, &data);
+    gchar * cut = g_strdup(g_strrstr(basedir, G_DIR_SEPARATOR_S));
+    gchar *fake_path = g_strdup(g_strrstr(_path, cut));
 
     gtk_label_set_text(GTK_LABEL(d->test_path), (fake_path && fake_path != NULL)
                   ? g_strdup_printf(_("Result of the pattern : ...%s"), fake_path)
                   : g_strdup(_("Can't build a valid path.")));
-
+    
+    g_free(basedir);
+    g_free(cut);
+    g_free(_path);
     g_free(fake_path);
     dt_variables_params_destroy(params);
     g_list_free_full(file, g_free);

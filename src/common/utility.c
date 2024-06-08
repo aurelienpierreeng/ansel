@@ -699,23 +699,6 @@ gchar *dt_util_normalize_path(const gchar *_input)
   // this handles filenames in the formats <drive letter>:\path\to\file or \\host-name\share-name\file
   // some other formats like \Device\... are not supported
 
-  // the Windows api expects wide chars and not utf8 :(
-  wchar_t *wfilename = g_utf8_to_utf16(filename, -1, NULL, NULL, NULL);
-  g_free(filename);
-  if(!wfilename)
-    return NULL;
-
-  wchar_t LongPath[MAX_PATH] = {0};
-  const DWORD size = GetLongPathNameW(wfilename, LongPath, MAX_PATH);
-  g_free(wfilename);
-  if(size == 0 || size > MAX_PATH)
-    return NULL;
-
-  // back to utf8!
-  filename = g_utf16_to_utf8(LongPath, -1, NULL, NULL, NULL);
-  if(!filename)
-    return NULL;
-
   GFile *gfile = g_file_new_for_path(filename);
   g_free(filename);
   if(!gfile)

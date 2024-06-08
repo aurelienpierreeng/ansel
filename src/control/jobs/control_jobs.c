@@ -2126,20 +2126,11 @@ gchar *dt_build_filename_from_pattern(dt_variables_params_t *params, dt_control_
   gchar *path = _path_cleanup(path_expand);
   g_free(file_expand);
   g_free(path_expand);
+  fprintf(stdout, "+Dir: %s\n", data->target_folder);
   fprintf(stdout, "+Path: %s\n", path);
   fprintf(stdout, "+File: %s\n", file);
 
   gchar *dir = g_build_path(G_DIR_SEPARATOR_S, data->target_folder, path, (char *) NULL);
-
-#ifdef WIN32
-  if(data->target_dir && (strlen(data->target_dir) > 1))
-  {
-    const char first = g_ascii_toupper(data->target_dir[0]);
-    if(first >= 'A' && first <= 'Z' && data->target_dir[1] == ':') // path format is <drive letter>:\path\to\file
-      data->target_dir[0] = first;                                 // drive letter in uppercase looks nicer
-  }
-#endif
-
   data->target_dir = dt_util_normalize_path(dir);
   gchar *res = g_build_path(G_DIR_SEPARATOR_S, data->target_dir, file, (char *) NULL);
 
