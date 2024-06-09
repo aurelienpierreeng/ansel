@@ -118,11 +118,7 @@ gboolean _is_lighttable()
 
 void import_files_callback()
 {
-  // Workaround : Darkroom is not wired properly to manage importing. Disable import outsile of lighttable.
-  if(_is_lighttable())
     dt_images_import();
-  else
-    dt_control_log(_("Import is not allowed yet outside of lighttable."));
 }
 
 void _close_export_popup(GtkWidget *dialog, gint response_id, gpointer data)
@@ -195,7 +191,7 @@ void append_file(GtkWidget **menus, GList **lists, const dt_menus_t index)
   dt_action_t *ac;
 
   add_sub_menu_entry(menus, lists, _("Import..."), index, NULL, import_files_callback, NULL, NULL,
-                     _is_lighttable);
+                     NULL);
   ac = dt_action_define(pnl, NULL, N_("Import images"), get_last_widget(lists), NULL);
   dt_action_register(ac, NULL, import_files_callback, GDK_KEY_i, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
 
