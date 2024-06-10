@@ -378,14 +378,11 @@ static gboolean _dt_ctl_switch_mode_to_by_view(gpointer user_data)
 void dt_ctl_switch_mode_to(const char *mode)
 {
   const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
-  // if we are not in lighttable and we want to switch to the same view as current view,
-  // we switch back to lighttable (kind of reloading)
-  if(current_view && !strcmp(mode, current_view->module_name) && strcmp(current_view->module_name, "lighttable"))
+  if(current_view && !strcmp(mode, current_view->module_name))
   {
-    dt_ctl_switch_mode_to("lighttable");
-    // no need to reswitch to lighttable again
-    if(!strcmp(mode, "lighttable"))
-      return;
+    // if we are not in lighttable, we switch back to that view
+    if(strcmp(current_view->module_name, "lighttable")) dt_ctl_switch_mode_to("lighttable");
+    return;
   }
   
   g_main_context_invoke(NULL, _dt_ctl_switch_mode_to, (gpointer)mode);
@@ -402,6 +399,14 @@ void dt_ctl_switch_mode()
   const dt_view_t *view = dt_view_manager_get_current_view(darktable.view_manager);
   const char *mode = (view && !strcmp(view->module_name, "lighttable")) ? "darkroom" : "lighttable";
   dt_ctl_switch_mode_to(mode);
+}
+
+void dt_ctl_reload_view(const char *mode)
+{
+  const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
+  if(current_view && g_strcmp0(current_view->module_name, "lighttable"))
+    dt_ctl_switch_mode_to("lighttable");
+  g_main_context_invoke(NULL, _dt_ctl_switch_mode_to, (gpointer)mode);
 }
 
 static gboolean _dt_ctl_log_message_timeout_callback(gpointer data)
