@@ -549,9 +549,9 @@ static void update_preview_cb(GtkFileChooser *file_chooser, gpointer userdata)
   /* Do we already have this picture in library ? */
   gchar *folder = dt_util_path_get_dirname(filename);
   gchar *basename = g_file_get_basename(in);
-  g_object_unref(in);
   const int is_path_in_lib = _is_in_library_by_path(folder, basename);
-  const int is_metadata_in_lib = _is_in_library_by_metadata(gtk_file_chooser_get_file(file_chooser));
+  const int is_metadata_in_lib = _is_in_library_by_metadata(in);
+  g_object_unref(in);
   const gboolean is_in_lib = (is_path_in_lib > -1) || (is_metadata_in_lib > -1);
   g_free(folder);
   g_free(basename);
