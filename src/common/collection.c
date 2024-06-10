@@ -2601,6 +2601,20 @@ static void _dt_collection_recount_callback_2(gpointer instance, const int32_t i
   _dt_collection_recount_callback_1(instance, user_data);
 }
 
+static inline void _dt_collection_change_view_after_import(const dt_view_t *current_view)
+{
+  const int nb = dt_conf_get_int("ui_last/nb_imported"); 
+  if(nb == 1)
+  {
+    if(!g_strcmp0(current_view->module_name, "darkroom")) // if current view IS "darkroom".
+      dt_ctl_reload_view("darkroom");
+    else
+      dt_ctl_switch_mode_to("darkroom");
+  }
+  else if(nb > 1 && g_strcmp0(current_view->module_name, "lighttable")) // if current view IS NOT "lighttable".
+    dt_ctl_switch_mode_to("lighttable");
+}
+
 static void _dt_collection_filmroll_imported_callback(gpointer instance, const int32_t id, gpointer user_data)
 {
   dt_collection_t *collection = (dt_collection_t *)user_data;
@@ -2635,8 +2649,8 @@ static void _dt_collection_filmroll_imported_callback(gpointer instance, const i
 
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
 
-    if(dt_conf_get_int("ui_last/nb_imported") == 1)
-      dt_ctl_switch_mode_to("darkroom");
+    const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
+    if(current_view) _dt_collection_change_view_after_import(current_view);
   }
 }
 
