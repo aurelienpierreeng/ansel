@@ -2342,7 +2342,7 @@ gboolean _import_image(const GList *img, dt_control_import_t *data, const int in
 
     if(imgid == -1)
     {
-      dt_control_log(_("\nError importing file in collection (imgid: %i)."), imgid);
+      dt_control_log(_("Error importing file in collection (imgid: %i)."), imgid);
       process_error = 1;
     }
     else
@@ -2399,7 +2399,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
 
   if(data->total_imported_elements == 0 && data->filmid == -1)
   {
-    dt_control_log("No image imported!");
+    dt_control_log(_("No image imported!"));
     fprintf(stderr, "No image imported!\n\n");
   }
   else if(data->filmid > -1)
