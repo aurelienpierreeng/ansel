@@ -117,7 +117,6 @@ src/common/image.h
 src/common/imagebuf.c
 src/common/imageio.c
 src/common/import.c
-src/common/import_session.c
 src/common/iop_order.c
 src/common/iop_profile.c
 src/common/map_locations.c
