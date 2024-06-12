@@ -147,7 +147,7 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
 
   if(params->img)
   {
-    img = (dt_image_t *) params->img;
+    img = (dt_image_t *)params->img;
   }
   else if(params->imgid > -1)
   {
@@ -1078,6 +1078,12 @@ void dt_variables_params_destroy(dt_variables_params_t *params)
   g_free(params);
 }
 
+void dt_variables_set_datetime(dt_variables_params_t *params, GDateTime *datetime)
+{
+  if(params->data->time) g_date_time_unref(params->data->time);
+  params->data->time = g_date_time_ref(datetime);
+}
+
 void dt_variables_set_max_width_height(dt_variables_params_t *params, int max_width, int max_height)
 {
   params->data->max_width = max_width;
@@ -1087,16 +1093,6 @@ void dt_variables_set_max_width_height(dt_variables_params_t *params, int max_wi
 void dt_variables_set_upscale(dt_variables_params_t *params, gboolean upscale)
 {
   params->data->upscale = upscale;
-}
-
-void dt_variables_set_time(dt_variables_params_t *params, const char *time)
-{
-  params->data->time = dt_datetime_exif_to_gdatetime(time, darktable.utc_tz);
-}
-
-void dt_variables_set_exif_time(dt_variables_params_t *params, const char *exif_time)
-{
-  g_strlcpy(params->data->exif_time, exif_time, sizeof(params->data->exif_time));
 }
 
 void dt_variables_reset_sequence(dt_variables_params_t *params)

@@ -576,10 +576,7 @@ static void _set_test_path(dt_lib_import_t *d)
 
   char datetime_override[DT_DATETIME_LENGTH] = { 0 };
   const char *date = gtk_entry_get_text(GTK_ENTRY(d->datetime));
-  const GList file = {.data = g_strdup(d->path_file),
-                      .next = NULL,
-                      .prev = NULL
-                     };
+  GList *file = g_list_prepend(NULL, g_strdup(d->path_file));
 
   if(date[0] && !dt_datetime_entry_to_exif(datetime_override, sizeof(datetime_override), date))
   {
@@ -587,41 +584,51 @@ static void _set_test_path(dt_lib_import_t *d)
     return;
   }
 
-  if(!file.data || !dt_supported_image(file.data))
+  if(!file->data || !dt_supported_image(file->data))
   {
     gtk_label_set_text(GTK_LABEL(d->test_path), _("Result of the pattern : please select a picture file"));
     return;
   }
   else
   {
-    dt_control_import_t data = {.imgs = file.data,
+    gchar *basedir = dt_conf_get_string("session/base_directory_pattern");
+    dt_control_import_t data = {.imgs = file,
                                 .datetime = dt_string_to_datetime(date),
-                                .copy = 0,
+                                .copy = 1,
                                 .jobcode = dt_conf_get_string("ui_last/import_jobcode"),
-                                .target_folder = g_strrstr(dt_conf_get_string("session/base_directory_pattern"), G_DIR_SEPARATOR_S),
+                                .target_folder = basedir,
                                 .target_subfolder_pattern = dt_conf_get_string("session/sub_directory_pattern"),
                                 .target_file_pattern = dt_conf_get_string("session/filename_pattern"),
                                 .target_dir = NULL,
                                 .elements = 1,
                                 .total_imported_elements = 0,
                                 .filmid = -1,
+                                .discarded = NULL,
                                 };
 
     dt_variables_params_t *params;
     dt_variables_params_init(&params);
 
-    params->filename = g_strdup(file.data);
+    params->filename = g_strdup(file->data);
     params->sequence = 1;
     params->jobcode = g_strdup(data.jobcode);
+    params->imgid = -1;
+    dt_variables_set_datetime(params, data.datetime);
 
-    gchar *fake_path = dt_build_filename_from_pattern(params, &data);
+    gchar *_path = dt_build_filename_from_pattern(params, &data);
+    gchar * cut = g_strdup(g_strrstr(basedir, G_DIR_SEPARATOR_S));
+    gchar *fake_path = g_strdup(g_strrstr(_path, cut));
 
     gtk_label_set_text(GTK_LABEL(d->test_path), (fake_path && fake_path != NULL)
                   ? g_strdup_printf(_("Result of the pattern : ...%s"), fake_path)
                   : g_strdup(_("Can't build a valid path.")));
 
+    g_free(basedir);
+    g_free(cut);
+    g_free(_path);
     g_free(fake_path);
     dt_variables_params_destroy(params);
+    g_list_free_full(file, g_free);
   }
 }
 
@@ -634,7 +641,8 @@ static void _filelist_changed_callback(gpointer instance, GList *files, guint el
 
   if(files != NULL)
   {
-    d->path_file = g_strdup((char*)files->data);
+    g_free(d->path_file);
+    d->path_file = g_strdup((char *)files->data);
     _set_test_path(d);
     update_preview_cb(GTK_FILE_CHOOSER(d->file_chooser), d, files);
   }
@@ -646,7 +654,6 @@ static void _filelist_changed_callback(gpointer instance, GList *files, guint el
 
 static void _selection_changed(GtkWidget *filechooser, dt_lib_import_t *d)
 {
-  _set_test_path(d);
   gtk_label_set_text(GTK_LABEL(d->selected_files), _("Detecting candidate files for import..."));
 
   // Kill-switch recursive file detection
@@ -775,6 +782,7 @@ static void _process_file_list(gpointer instance, GList *files, int elements, gb
                                 .elements = elements,
                                 .total_imported_elements = 0,
                                 .filmid = -1,
+                                .discarded = NULL
                                 };
 
     // Prepare to catch the end of import signal
@@ -1151,6 +1159,7 @@ static dt_lib_import_t * _init()
 static void _cleanup(dt_lib_import_t *d)
 {
   dt_pthread_mutex_destroy(&d->lock);
+  g_free(d->path_file);
   g_free(d);
 }
 

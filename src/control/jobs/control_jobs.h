@@ -41,6 +41,7 @@ typedef struct dt_control_import_t
   int total_imported_elements;
 
   int32_t filmid;
+  GList *discarded;
 
 } dt_control_import_t;
 

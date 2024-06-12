@@ -178,6 +178,7 @@ static void dt_control_image_enumerator_cleanup(void *p)
   // TODO: fix the fucking mess in jobs because each one cleans up its own way
   g_list_free(params->index);
   params->index = NULL;
+
   //FIXME: we need to free params->data to avoid a memory leak, but doing so here causes memory corruption....
 //  g_free(params->data);
 
@@ -2078,7 +2079,7 @@ static GList *_apply_lua_filter(GList *images)
   dt_lua_unlock();
 
   /* we got ourself a list of images, lets sort and start import */
-  images = g_list_sort(images, (GCompareFunc)_sort_filename);
+  images = g_list_sort(images, (GCompareFunc)g_strcmp0);
   return images;
 }
 #endif
@@ -2125,20 +2126,11 @@ gchar *dt_build_filename_from_pattern(dt_variables_params_t *params, dt_control_
   gchar *path = _path_cleanup(path_expand);
   g_free(file_expand);
   g_free(path_expand);
+  fprintf(stdout, "+Dir: %s\n", data->target_folder);
   fprintf(stdout, "+Path: %s\n", path);
   fprintf(stdout, "+File: %s\n", file);
 
   gchar *dir = g_build_path(G_DIR_SEPARATOR_S, data->target_folder, path, (char *) NULL);
-
-#ifdef WIN32
-  if(data->target_dir && (strlen(data->target_dir) > 1))
-  {
-    const char first = g_ascii_toupper(data->target_dir[0]);
-    if(first >= 'A' && first <= 'Z' && data->target_dir[1] == ':') // path format is <drive letter>:\path\to\file
-      data->target_dir[0] = first;                                 // drive letter in uppercase looks nicer
-  }
-#endif
-
   data->target_dir = dt_util_normalize_path(dir);
   gchar *res = g_build_path(G_DIR_SEPARATOR_S, data->target_dir, file, (char *) NULL);
 
@@ -2156,15 +2148,7 @@ gchar *dt_build_filename_from_pattern(dt_variables_params_t *params, dt_control_
  */
 gboolean _file_exist(const char *dest_file_path)
 {
-  if(!dest_file_path || g_file_test(dest_file_path, G_FILE_TEST_EXISTS))
-  {
-    fprintf(stderr, "Target file with that name already exist and will not be imported.\n");
-    return 1;
-  }
-  else
-    fprintf(stderr, "Target file doesn't exist yet.\n");
-
-  return 0;
+  return dest_file_path != NULL && dest_file_path[0] && g_file_test(dest_file_path, G_FILE_TEST_EXISTS);
 }
 
 /**
@@ -2240,32 +2224,44 @@ const int32_t _import_job(dt_control_import_t *data, gchar *img_path_to_db)
  * @param data import module information.
  * @param img_path_to_db will be set to the file path for import.
  * @param pathname_len the `img_path_to_db` size.
+ * @param discarded the list of file pathes discarded because the target already exists
  * @return int
  */
-int _import_copy_file(dt_variables_params_t *params, dt_control_import_t *data, gchar *img_path_to_db, size_t pathname_len)
+int _import_copy_file(dt_variables_params_t *params, dt_control_import_t *data, gchar *img_path_to_db, size_t pathname_len, GList **discarded)
 {
   gchar *dest_file_path = dt_build_filename_from_pattern(params, data);
   fprintf(stdout, "Pattern to path: %s\n", dest_file_path);
 
-  int process = !_file_exist(dest_file_path);
+  int process = TRUE;
 
-  if(process && !dt_util_dir_exist(data->target_dir))
-    process = !_create_folder(data->target_dir); // _create_folder returns 0 when OK
-  else if(process)
-    fprintf(stdout, "The folder already exist.\n");
+  if(!_file_exist(dest_file_path))
+  {
+    if(!dt_util_dir_exist(data->target_dir))
+      process = !_create_folder(data->target_dir); // _create_folder returns 0 when OK
+    else
+      fprintf(stdout, "The folder already exist.\n");
+
+    if(process)
+      process = dt_util_test_writable_dir(data->target_dir);
+    else
+      fprintf(stdout, "Unable to create the target folder.\n");
+
+    if(process)
+      process = _copy_file(params->filename, dest_file_path);
+    else
+      fprintf(stdout, "Not allowed to write in the folder.\n");
+
+    if(process)
+      g_strlcpy(img_path_to_db, dest_file_path, pathname_len);
+    else
+      fprintf(stderr, "Unable to copy the file.\n");
+  }
   else
   {
-    fprintf(stdout, "Skip.\n");
-    g_free(dest_file_path);
-    return 1;
+    *discarded = g_list_prepend(*discarded, g_strdup(params->filename));
+    g_strlcpy(img_path_to_db, dest_file_path, pathname_len);
+    fprintf(stderr, "File copy skipped, the target file already exist.\n");
   }
-
-  if(process) process = dt_util_test_writable_dir(data->target_dir);
-  if(!process) fprintf(stdout, "Not allowed to write in the folder.\n");
-  else process = _copy_file(params->filename, dest_file_path);
-
-  if(process) g_strlcpy(img_path_to_db, dest_file_path, pathname_len);
-  else fprintf(stderr, "The file has not been copied.\n");
 
   g_free(dest_file_path);
   return !process;
@@ -2307,7 +2303,7 @@ void _write_xmp_id(const char *filename, int32_t imgid)
  * @param index current loop's index.
  * @return gboolean
  */
-gboolean _import_image(const GList *img, dt_control_import_t *data, const int index)
+gboolean _import_image(const GList *img, dt_control_import_t *data, const int index, GList **discarded)
 {
   dt_variables_params_t *params;
   dt_variables_params_init(&params);
@@ -2322,13 +2318,15 @@ gboolean _import_image(const GList *img, dt_control_import_t *data, const int in
   params->filename = g_strdup(filename);
   params->sequence = index;
   params->jobcode = g_strdup(data->jobcode);
+  params->imgid = -1;
+  dt_variables_set_datetime(params, data->datetime);
 
   gchar img_path_to_db[PATH_MAX] = { 0 };
   gboolean process_error = 0;
 
   if(data->copy)
     // Copy the file to destination folder, expanding variables internally
-    process_error = _import_copy_file(params, data, img_path_to_db, sizeof(img_path_to_db));
+    process_error = _import_copy_file(params, data, img_path_to_db, sizeof(img_path_to_db), discarded);
   else
     // destination = origin, nothing to do
     g_strlcpy(img_path_to_db, filename, sizeof(img_path_to_db));
@@ -2387,7 +2385,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
 
     _refresh_progress_counter(job, data->elements, index);
 
-    if(_import_image(img, data, index))
+    if(_import_image(img, data, index, &data->discarded))
       fprintf(stderr, "Skipping this one.\n");
     else
     {
@@ -2422,6 +2420,75 @@ static void _control_import_job_cleanup(void *p)
 {
   dt_control_image_enumerator_t *params = (dt_control_image_enumerator_t *)p;
   dt_control_import_t *data = params->data;
+
+  // Display a recap of files that weren't copied
+  if(g_list_length(g_list_last(data->discarded)) > 0)
+  {
+    // Create the window
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Message",
+                                          GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+                                          GTK_DIALOG_DESTROY_WITH_PARENT,
+                                          _("_OK"),
+                                          GTK_RESPONSE_NONE,
+                                          NULL);
+    gtk_window_set_title(GTK_WINDOW(dialog), _("Some files have not been copied"));
+    gtk_window_set_default_size(GTK_WINDOW(dialog), DT_PIXEL_APPLY_DPI(800), DT_PIXEL_APPLY_DPI(800));
+
+    // Create the label
+    GtkWidget *label = gtk_label_new(_("The following source files have not been copied "
+                                       "because similarly-named files already exist on the destination. "
+                                       "This may be because the files have already been imported "
+                                       "or the naming pattern leads to non-unique file names."));
+    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+
+    // Create the scrolled window internal container
+    GtkWidget *scrolled_window = gtk_scrolled_window_new (NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_AUTOMATIC,
+                                   GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scrolled_window), TRUE);
+
+    // Create the treeview model from the list of discarded file pathes
+    GtkListStore *store = gtk_list_store_new(1, G_TYPE_STRING);
+    GtkTreeIter iter;
+    for(GList *file = g_list_first(data->discarded); file; file = g_list_next(file))
+    {
+      if(file->data)
+      {
+        gtk_list_store_append(store, &iter);
+        gtk_list_store_set(store, &iter, 0, g_strdup((char *)file->data), -1);
+      }
+    }
+
+    // Create the treeview view. Sooooo verbose... it's only a flat list.
+    GtkWidget *view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
+    GtkTreeViewColumn *col = gtk_tree_view_column_new();
+    gtk_tree_view_column_set_title(col, _("Origin path"));
+    GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+    gtk_tree_view_column_pack_start(col, renderer, TRUE);
+    gtk_tree_view_column_set_attributes(col, renderer, "text", 0, NULL);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(view), col);
+    g_object_unref(store);
+
+    // Pack widgets to an unified box
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(box), scrolled_window, TRUE, TRUE, 0);
+    gtk_container_add(GTK_CONTAINER(scrolled_window), view);
+
+    // Pack the box to the dialog internal container
+    GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_add(GTK_CONTAINER(content_area), box);
+    gtk_widget_show_all(dialog);
+
+#ifdef GDK_WINDOWING_QUARTZ
+    dt_osx_disallow_fullscreen(dialog);
+#endif
+
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+  }
+
+  g_list_free_full(data->discarded, g_free);
 
   for(GList *img = g_list_first(data->imgs); img; img = g_list_next(img))
     free(img->data);

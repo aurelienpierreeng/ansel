@@ -12,7 +12,7 @@ if ! [ -x "$(command -v brew)" ]; then
     echo 'Homebrew not found. Follow instructions as provided by https://brew.sh/ to install it.' >&2
     exit 1
 else
-    echo "Found homebrew running in $(arch)-based environment."
+    echo "Found homebrew running in $(uname -m)-based environment."
 fi
 
 # Make sure that homebrew is up-to-date
@@ -20,10 +20,11 @@ brew update
 brew upgrade
 
 # Define homebrew dependencies
+# Homebrew disabled jsonschema, which is only needed to verify json during build
+# so removed it.
 hbDependencies="adwaita-icon-theme \
     cmake \
     pkg-config \
-    cmocka \
     curl \
     desktop-file-utils \
     exiv2 \
@@ -37,14 +38,14 @@ hbDependencies="adwaita-icon-theme \
     icu4c \
     intltool \
     iso-codes \
-    jpeg \
+    jpeg-turbo \
     jpeg-xl \
     json-glib \
-    jsonschema \
     lensfun \
     libavif \
     libheif \
     libomp \
+    libraw \
     librsvg \
     libsecret \
     little-cms2 \
@@ -56,13 +57,20 @@ hbDependencies="adwaita-icon-theme \
     osm-gps-map \
     perl \
     po4a \
-    portmidi \
     pugixml \
     sdl2 \
     webp"
 
-# Dependencies that must be linked
-hbMustLink="libomp libsoup@2"
+function find_in_array() {
+    local element="${1}"
+    local array=(${@:2})
+    for i in ${array[@]}; do
+	if [[ "${i}" == "${element}" ]]; then
+	    return 0
+	fi
+    done
+    return 1
+}
 
 # Categorize dependency list
 standalone=
@@ -70,14 +78,13 @@ deps=
 notfound=
 hbInstalled=$( brew list --formula --quiet )
 hbLeaves=$( brew leaves --installed-on-request )
-for hbDependency in $hbDependencies; do
-    if [[ " ${hbInstalled[*]} " == *"${hbDependency}"* ]];
-    then
-      if [[ " ${hbLeaves[*]} " == *"${hbDependency}"* ]]; then
-        standalone="${hbDependency} ${standalone}"
-      else
-        deps="${hbDependency} ${deps}"
-      fi
+for hbDependency in ${hbDependencies}; do
+    if find_in_array "${hbDependency}" ${hbInstalled[@]}; then
+        if find_in_array "${hbDependency}" ${hbLeaves[@]}; then
+            standalone="${hbDependency} ${standalone}"
+        else
+            deps="${hbDependency} ${deps}"
+        fi
     else
       notfound="${hbDependency} ${notfound}"
     fi
@@ -102,30 +109,5 @@ if [ "${notfound}" ]; then
     brew install ${notfound}
 fi
 
-# Fix for unlinked keg-only dependencies
-echo
-echo "Checking for unlinked keg-only dependencies..."
-# This is a lot easier with jq...
-#unlinked=$( brew info --json=v1 ${hbMustLink}| jq "map(select(.linked_keg == null) | .name)" | jq -r '.[]' )
-mustlink=$(
-    name=
-    brew info --json=v1 $hbMustLink \
-        | grep -Eo '"(full_name|linked_keg)":.*' \
-        | sed -e 's/"//g;s/://g;s/,//g' \
-        | while read key value;
-        do
-            if [ "${key}" == "full_name" ]; then
-              name="${value}"
-            fi
-            if [ "${name}" -a "${key}" == "linked_keg" -a "${value}" == "null" ]; then
-              echo "${name}"
-            fi
-        done
-)
-if [ "${mustlink}" ]; then
-    echo
-    echo "Unlinked dependencies found! Attempting to relink..."
-    brew link --force ${mustlink}
-else
-    echo "None."
-fi
+# Dependencies that must be linked
+brew link --force libomp libsoup@2

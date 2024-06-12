@@ -28,9 +28,13 @@ homebrewHome=$(brew --prefix)
 # Install direct and transitive dependencies
 function install_dependencies {
     local hbDependencies
+    local absolutePath=$(dirname $(realpath "$1"))
 
     # Get dependencies of current executable
-    oToolLDependencies=$(otool -L "$1" 2>/dev/null | grep compatibility | cut -d\( -f1 | sed 's/^[[:blank:]]*//;s/[[:blank:]]*$//' | uniq)
+    local oToolLDependencies=$(otool -L "$1" 2>/dev/null | grep compatibility | cut -d\( -f1 | sed 's/^[[:blank:]]*//;s/[[:blank:]]*$//' | uniq)
+    # Handle library relative paths
+    oToolLDependencies=$(echo "$oToolLDependencies" | sed "s#@loader_path#${absolutePath}#")
+    oToolLDependencies=$(echo "$oToolLDependencies" | sed "s#@rpath#${absolutePath}#")
 
     # Filter for homebrew dependencies
     if [[ "$oToolLDependencies" == *"$homebrewHome"* ]]; then
@@ -174,13 +178,16 @@ mkdir -p "$dtResourcesDir"/share/applications
 mkdir -p "$dtResourcesDir"/etc/gtk-3.0
 mkdir -p "$dtResourcesDir"/fonts
 
+# exiv2 expects the localization files in '../share/locale'
+ln -s "Resources/share" "$dtWorkingDir"/Contents/share
+
 # Add basic elements
 cp Info.plist "$dtWorkingDir"/Contents/
 echo "APPL$dtAppName" >>"$dtWorkingDir"/Contents/PkgInfo
 
 # Set version information
-sed -i '' 's|{VERSION}|'$(git describe --tags --long --match '*[0-9.][0-9.][0-9]' | cut -d- -f2 | sed 's/^\([0-9]*\.[0-9]*\)$/\1.0/')'|' "$dtWorkingDir"/Contents/Info.plist
-sed -i '' 's|{COMMITS}|'$(git describe --tags --long --match '*[0-9.][0-9.][0-9]' | cut -d- -f3)'|' "$dtWorkingDir"/Contents/Info.plist
+sed -i -e 's|{VERSION}|'$(git describe --tags --long --match '*[0-9.][0-9.][0-9]' | cut -d- -f2 | sed 's/^\([0-9]*\.[0-9]*\)$/\1.0/')'|' "$dtWorkingDir"/Contents/Info.plist
+sed -i -e 's|{COMMITS}|'$(git describe --tags --long --match '*[0-9.][0-9.][0-9]' | cut -d- -f3)'|' "$dtWorkingDir"/Contents/Info.plist
 
 # Generate settings.ini
 echo "[Settings]
@@ -212,7 +219,7 @@ for dtSharedObj in $dtSharedObjDirs; do
 done
 
 # Add homebrew translations
-dtTranslations="gtk30 gtk30-properties gtk-mac-integration iso_639-2"
+dtTranslations="gtk30 gtk30-properties gtk-mac-integration iso_639-2 exiv2"
 for dtTranslation in $dtTranslations; do
     install_translations "$dtTranslation"
 done
@@ -247,16 +254,19 @@ glib-compile-schemas "$dtResourcesDir"/share/glib-2.0/schemas/
 # Define gtk-query-immodules-3.0
 immodulesCacheFile="$dtResourcesDir"/lib/gtk-3.0/3.0.0/immodules.cache
 hbGtk3Path=$(brew info gtk+3|grep "/`pkg-config --modversion gtk+-3.0`"|cut -f1 -d' ')
-sed -i '' "s#$hbGtk3Path/lib/gtk-3.0/3.0.0/immodules#@executable_path/../Resources/lib/gtk-3.0/3.0.0/immodules#g" "$immodulesCacheFile"
-sed -i '' "s#$hbGtk3Path/share/locale#@executable_path/../Resources/share/locale#g" "$immodulesCacheFile"
+sed -i -e "s#$hbGtk3Path/lib/gtk-3.0/3.0.0/immodules#@executable_path/../Resources/lib/gtk-3.0/3.0.0/immodules#g" "$immodulesCacheFile"
+sed -i -e "s#$hbGtk3Path/share/locale#@executable_path/../Resources/share/locale#g" "$immodulesCacheFile"
 # Rename and move it to the right place
 mv "$immodulesCacheFile" "$dtResourcesDir"/etc/gtk-3.0/gtk.immodules
 
 # Define gdk-pixbuf-query-loaders
 loadersCacheFile="$dtResourcesDir"/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache
-sed -i '' "s#$homebrewHome/lib/gdk-pixbuf-2.0/2.10.0/loaders#@executable_path/../Resources/lib/gdk-pixbuf-2.0/2.10.0/loaders#g" "$loadersCacheFile"
+sed -i -e "s#$homebrewHome/lib/gdk-pixbuf-2.0/2.10.0/loaders#@executable_path/../Resources/lib/gdk-pixbuf-2.0/2.10.0/loaders#g" "$loadersCacheFile"
 # Move it to the right place
 mv "$loadersCacheFile" "$dtResourcesDir"/etc/gtk-3.0/
+
+# ImageMagick config files
+cp -R $homebrewHome/Cellar/imagemagick/*/etc $dtResourcesDir
 
 # Install homebrew dependencies of lib subdirectories
 dtLibFiles=$(find -E "$dtResourcesDir"/lib/*/* -regex '.*\.(so|dylib)')
