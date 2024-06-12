@@ -76,21 +76,6 @@ typedef struct dt_control_gpx_apply_t
   gchar *tz;
 } dt_control_gpx_apply_t;
 
-typedef struct dt_control_export_t
-{
-  int max_width, max_height, format_index, storage_index;
-  dt_imageio_module_data_t *sdata; // needed since the gui thread resets things like overwrite once the export
-  // is dispatched, but we have to keep that information
-  gboolean export_masks;
-  char style[128];
-  gboolean style_append;
-  dt_colorspaces_color_profile_type_t icc_type;
-  gchar *icc_filename;
-  dt_iop_color_intent_t icc_intent;
-  gchar *metadata_export;
-} dt_control_export_t;
-
-
 typedef struct dt_control_image_enumerator_t
 {
   GList *index;
@@ -1313,38 +1298,60 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
 }
 
 
-static int32_t dt_control_export_job_run(dt_job_t *job)
+static int32_t _control_export_job_run(dt_job_t *job)
 {
   dt_control_image_enumerator_t *params = (dt_control_image_enumerator_t *)dt_control_job_get_params(job);
-  dt_control_export_t *settings = (dt_control_export_t *)params->data;
+  dt_control_export_t *data = (dt_control_export_t *)params->data;
   GList *t = params->index;
-  dt_imageio_module_format_t *mformat = dt_imageio_get_format_by_index(settings->format_index);
-  g_assert(mformat);
-  dt_imageio_module_storage_t *mstorage = dt_imageio_get_storage_by_index(settings->storage_index);
-  g_assert(mstorage);
-  dt_imageio_module_data_t *sdata = settings->sdata;
+  dt_imageio_module_format_t *module_format = dt_imageio_get_format_by_index(data->format_index);
+  g_assert(module_format);
+  dt_imageio_module_storage_t *module_storage = dt_imageio_get_storage_by_index(data->storage_index);
+  g_assert(module_storage);
+  dt_imageio_module_data_t *module_data = data->module_data;
 
   gboolean tag_change = FALSE;
 
-  // get a thread-safe fdata struct (one jpeg struct per thread etc):
-  dt_imageio_module_data_t *fdata = mformat->get_params(mformat);
+  fprintf(stdout, "\nEXPORT VAL:\n"
+                  "First imgID: %i\n"
+                  "max_width: %i, max_height: %i\n"
+                  "format_index: %i\n"
+                  "storage_index: %i\n"
+                  "high_quality: %i\n"
+                  "upscale: %i\n"
+                  "export_masks: %i\n"
+                  "style: %s\n"
+                  "style_append: %i\n"
+                  "icc_type: %i\n"
+                  "icc_filename: %s\n"
+                  "icc_intent: %i\n"
+                  "metadata_export: %s\n\n",
+                  GPOINTER_TO_INT(data->imgid_list->data),
+                  data->max_width, data->max_height,
+                  data->format_index, data->storage_index,
+                  data->high_quality, data->upscale, data->export_masks,
+                  data->style, data->style_append,
+                  data->icc_type, data->icc_filename, data->icc_intent,
+                  data->metadata_export);
 
-  if(mstorage->initialize_store)
+  // get a thread-safe fdata struct (one jpeg struct per thread etc):
+  dt_imageio_module_data_t *fdata = module_format->get_params(module_format);
+
+  if(module_storage->initialize_store)
   {
-    if(mstorage->initialize_store(mstorage, sdata, &mformat, &fdata, &t, TRUE))
+    if(module_storage->initialize_store(module_storage, module_data, &module_format, &fdata, &t, TRUE))
     {
       // bail out, something went wrong
       goto end;
     }
-    mformat->set_params(mformat, fdata, mformat->params_size(mformat));
-    mstorage->set_params(mstorage, sdata, mstorage->params_size(mstorage));
+    module_format->set_params(module_format, fdata, module_format->params_size(module_format));
+    module_storage->set_params(module_storage, module_data, module_storage->params_size(module_storage));
   }
 
   // Get max dimensions...
   uint32_t w, h, fw, fh, sw, sh;
   fw = fh = sw = sh = 0;
-  mstorage->dimension(mstorage, sdata, &sw, &sh);
-  mformat->dimension(mformat, fdata, &fw, &fh);
+  module_storage->dimension(module_storage, module_data, &sw, &sh);
+  module_format->dimension(module_format, fdata, &fw, &fh);
 
   if(sw == 0 || fw == 0)
     w = sw > fw ? sw : fw;
@@ -1365,10 +1372,10 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
   double fraction = 0;
 
   // set up the fdata struct
-  fdata->max_width = (settings->max_width != 0 && w != 0) ? MIN(w, settings->max_width) : MAX(w, settings->max_width);
-  fdata->max_height = (settings->max_height != 0 && h != 0) ? MIN(h, settings->max_height) : MAX(h, settings->max_height);
-  g_strlcpy(fdata->style, settings->style, sizeof(fdata->style));
-  fdata->style_append = settings->style_append;
+  fdata->max_width = (data->max_width != 0 && w != 0) ? MIN(w, data->max_width) : MAX(w, data->max_width);
+  fdata->max_height = (data->max_height != 0 && h != 0) ? MIN(h, data->max_height) : MAX(h, data->max_height);
+  g_strlcpy(fdata->style, data->style, sizeof(fdata->style));
+  fdata->style_append = data->style_append;
   // Invariant: the tagid for 'darktable|changed' will not change while this function runs. Is this a
   // sensible assumption?
   guint tagid = 0, etagid = 0;
@@ -1376,10 +1383,10 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
 
   dt_export_metadata_t metadata;
   metadata.flags = 0;
-  metadata.list = dt_util_str_to_glist("\1", settings->metadata_export);
+  metadata.list = dt_util_str_to_glist("\1", data->metadata_export);
   if(metadata.list)
   {
-    metadata.flags = strtol(metadata.list->data, NULL, 16);
+    metadata.flags = (int32_t) strtol(metadata.list->data, NULL, 16);
     metadata.list = g_list_remove(metadata.list, metadata.list->data);
   }
 
@@ -1391,7 +1398,7 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
 
     // progress message
     char message[512] = { 0 };
-    snprintf(message, sizeof(message), _("exporting %d / %d to %s"), num, total, mstorage->name(mstorage));
+    snprintf(message, sizeof(message), _("exporting %d / %d to %s"), num, total, module_storage->name(module_storage));
     // update the message. initialize_store() might have changed the number of images
     dt_control_job_set_progress_message(job, message);
 
@@ -1420,8 +1427,8 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
       else
       {
         dt_image_cache_read_release(darktable.image_cache, image);
-        if(mstorage->store(mstorage, sdata, imgid, mformat, fdata, num, total, TRUE,
-                           settings->export_masks, settings->icc_type, settings->icc_filename, settings->icc_intent,
+        if(module_storage->store(module_storage, module_data, imgid, module_format, fdata, num, total, TRUE,
+                           data->export_masks, data->icc_type, data->icc_filename, data->icc_intent,
                            &metadata) != 0)
           dt_control_job_cancel(job);
       }
@@ -1433,16 +1440,17 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
   }
   g_list_free_full(metadata.list, g_free);
 
-  if(mstorage->finalize_store) mstorage->finalize_store(mstorage, sdata);
+  if(module_storage->finalize_store) module_storage->finalize_store(module_storage, module_data);
 
 end:
   // all threads free their fdata
-  mformat->free_params(mformat, fdata);
+  module_format->free_params(module_format, fdata);
 
   // notify the user via the window manager
   dt_ui_notify_user();
 
   if(tag_change) DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+  fprintf(stdout,"end export run\n");
   return 0;
 }
 
@@ -1799,85 +1807,163 @@ void dt_control_refresh_exif()
                                                           NULL, PROGRESS_CANCELLABLE, FALSE));
 }
 
-static dt_control_image_enumerator_t *dt_control_export_alloc()
+static void _control_export_job_cleanup(void *p)
+{
+  dt_control_image_enumerator_t *params = (dt_control_image_enumerator_t *)p;
+  dt_control_export_t *data = (dt_control_export_t *)params->data;
+  dt_imageio_module_storage_t *mstorage = dt_imageio_get_storage_by_index(data->storage_index);
+  dt_imageio_module_data_t *sdata = data->module_data;
+  
+  mstorage->free_params(mstorage, sdata);
+
+  g_free(data->style);
+  g_free(data->icc_filename);
+  g_free(data->metadata_export);
+
+  g_list_free(data->imgid_list);
+  free(data);
+  dt_control_image_enumerator_cleanup(params);
+}
+
+static void _control_import_job_cleanup(void *p)
+{
+  dt_control_image_enumerator_t *params = (dt_control_image_enumerator_t *)p;
+  dt_control_import_t *data = (dt_control_import_t *)params->data;
+
+  // Display a recap of files that weren't copied
+  if(g_list_length(g_list_last(data->discarded)) > 0)
+  {
+    // Create the window
+    GtkWidget *dialog = gtk_dialog_new_with_buttons("Message",
+                                          GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+                                          GTK_DIALOG_DESTROY_WITH_PARENT,
+                                          _("_OK"),
+                                          GTK_RESPONSE_NONE,
+                                          NULL);
+    gtk_window_set_title(GTK_WINDOW(dialog), _("Some files have not been copied"));
+    gtk_window_set_default_size(GTK_WINDOW(dialog), DT_PIXEL_APPLY_DPI(800), DT_PIXEL_APPLY_DPI(800));
+
+    // Create the label
+    GtkWidget *label = gtk_label_new(_("The following source files have not been copied "
+                                       "because similarly-named files already exist on the destination. "
+                                       "This may be because the files have already been imported "
+                                       "or the naming pattern leads to non-unique file names."));
+    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+
+    // Create the scrolled window internal container
+    GtkWidget *scrolled_window = gtk_scrolled_window_new (NULL, NULL);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_AUTOMATIC,
+                                   GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scrolled_window), TRUE);
+
+    // Create the treeview model from the list of discarded file pathes
+    GtkListStore *store = gtk_list_store_new(1, G_TYPE_STRING);
+    GtkTreeIter iter;
+    for(GList *file = g_list_first(data->discarded); file; file = g_list_next(file))
+    {
+      if(file->data)
+      {
+        gtk_list_store_append(store, &iter);
+        gtk_list_store_set(store, &iter, 0, g_strdup((char *)file->data), -1);
+      }
+    }
+
+    // Create the treeview view. Sooooo verbose... it's only a flat list.
+    GtkWidget *view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
+    GtkTreeViewColumn *col = gtk_tree_view_column_new();
+    gtk_tree_view_column_set_title(col, _("Origin path"));
+    GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+    gtk_tree_view_column_pack_start(col, renderer, TRUE);
+    gtk_tree_view_column_set_attributes(col, renderer, "text", 0, NULL);
+    gtk_tree_view_append_column(GTK_TREE_VIEW(view), col);
+    g_object_unref(store);
+
+    // Pack widgets to an unified box
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(box), scrolled_window, TRUE, TRUE, 0);
+    gtk_container_add(GTK_CONTAINER(scrolled_window), view);
+
+    // Pack the box to the dialog internal container
+    GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_add(GTK_CONTAINER(content_area), box);
+    gtk_widget_show_all(dialog);
+
+#ifdef GDK_WINDOWING_QUARTZ
+    dt_osx_disallow_fullscreen(dialog);
+#endif
+
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+  }
+
+  g_list_free_full(data->discarded, g_free);
+
+  for(GList *img = g_list_first(data->imgs); img; img = g_list_next(img))
+    free(img->data);
+
+  free(data);
+  dt_control_image_enumerator_cleanup(params);
+}
+
+static void *_control_import_export_alloc(gboolean is_import)
 {
   dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
   if(!params) return NULL;
 
-  params->data = calloc(1, sizeof(dt_control_export_t));
+  params->data = g_malloc0(sizeof(dt_control_import_t));
   if(!params->data)
   {
-    dt_control_image_enumerator_cleanup(params);
+    if(is_import)
+      _control_import_job_cleanup(params);
+    else
+      _control_export_job_cleanup(params);
     return NULL;
   }
-
   return params;
 }
 
-static void dt_control_export_cleanup(void *p)
+/**
+ * @brief 
+ * @param data 
+ * which contains:
+ * @param imgid_list 
+ * @param max_width 
+ * @param max_height 
+ * @param format_index 
+ * @param storage_index 
+ * @param high_quality 
+ * @param upscale 
+ * @param export_masks 
+ * @param style 
+ * @param style_append 
+ * @param icc_type 
+ * @param icc_filename 
+ * @param icc_intent 
+ * @param metadata_export 
+ */
+static dt_job_t *_control_export_job_create(dt_control_export_t data)
 {
-  dt_control_image_enumerator_t *params = p;
-
-  dt_control_export_t *settings = (dt_control_export_t *)params->data;
-  dt_imageio_module_storage_t *mstorage = dt_imageio_get_storage_by_index(settings->storage_index);
-  dt_imageio_module_data_t *sdata = settings->sdata;
-
-  mstorage->free_params(mstorage, sdata);
-
-  g_free(settings->icc_filename);
-  g_free(settings->metadata_export);
-  free(params->data);
-
-  dt_control_image_enumerator_cleanup(params);
-}
-
-void dt_control_export(GList *imgid_list, int max_width, int max_height, int format_index, int storage_index,
-                       gboolean high_quality, gboolean export_masks, char *style, gboolean style_append,
-                       dt_colorspaces_color_profile_type_t icc_type, const gchar *icc_filename,
-                       dt_iop_color_intent_t icc_intent, const gchar *metadata_export)
-{
-  dt_job_t *job = dt_control_job_create(&dt_control_export_job_run, "export");
-  if(!job) return;
-  dt_control_image_enumerator_t *params = dt_control_export_alloc();
+  dt_job_t *job = dt_control_job_create(&_control_export_job_run, "export");
+  if(!job) return NULL;
+  dt_control_image_enumerator_t *params = _control_import_export_alloc(FALSE);
   if(!params)
   {
     dt_control_job_dispose(job);
-    return;
+    return NULL;
   }
-  dt_control_job_set_params(job, params, dt_control_export_cleanup);
-
-  params->index = imgid_list;
-
-  dt_control_export_t *data = params->data;
-  data->max_width = max_width;
-  data->max_height = max_height;
-  data->format_index = format_index;
-  data->storage_index = storage_index;
-  dt_imageio_module_storage_t *mstorage = dt_imageio_get_storage_by_index(storage_index);
-  g_assert(mstorage);
-  // get shared storage param struct (global sequence counter, one picasa connection etc)
-  dt_imageio_module_data_t *sdata = mstorage->get_params(mstorage);
-  if(sdata == NULL)
-  {
-    dt_control_log(_("failed to get parameters from storage module `%s', aborting export.."),
-                   mstorage->name(mstorage));
-    dt_control_job_dispose(job);
-    return;
-  }
-  data->sdata = sdata;
-  data->export_masks = export_masks;
-  g_strlcpy(data->style, style, sizeof(data->style));
-  data->style_append = style_append;
-  data->icc_type = icc_type;
-  data->icc_filename = g_strdup(icc_filename);
-  data->icc_intent = icc_intent;
-  data->metadata_export = g_strdup(metadata_export);
-
+  memcpy(params->data, &data, sizeof(dt_control_export_t));
+  params->index = ((dt_control_export_t *)params->data)->imgid_list;
   dt_control_job_add_progress(job, _("export images"), TRUE);
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_EXPORT, job);
+  dt_control_job_set_params(job, params, _control_export_job_cleanup);
+  fprintf(stdout,"end create export\n");
+  return job;
+}
 
-  // tell the storage that we got its params for an export so it can reset itself to a safe state
-  mstorage->export_dispatched(mstorage);
+void dt_control_export(dt_control_export_t data) 
+{
+  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_EXPORT, _control_export_job_create(data));
+  fprintf(stdout,"end dt_control_export\n");
 }
 
 static void _add_datetime_offset(const char *odt, const long int offset, char *ndt)
@@ -2410,106 +2496,11 @@ static int32_t _control_import_job_run(dt_job_t *job)
   return data->total_imported_elements >= 1 ? 0 : 1;
 }
 
-static void _control_import_job_cleanup(void *p)
-{
-  dt_control_image_enumerator_t *params = (dt_control_image_enumerator_t *)p;
-  dt_control_import_t *data = params->data;
-
-  // Display a recap of files that weren't copied
-  if(g_list_length(g_list_last(data->discarded)) > 0)
-  {
-    // Create the window
-    GtkWidget *dialog = gtk_dialog_new_with_buttons("Message",
-                                          GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
-                                          GTK_DIALOG_DESTROY_WITH_PARENT,
-                                          _("_OK"),
-                                          GTK_RESPONSE_NONE,
-                                          NULL);
-    gtk_window_set_title(GTK_WINDOW(dialog), _("Some files have not been copied"));
-    gtk_window_set_default_size(GTK_WINDOW(dialog), DT_PIXEL_APPLY_DPI(800), DT_PIXEL_APPLY_DPI(800));
-
-    // Create the label
-    GtkWidget *label = gtk_label_new(_("The following source files have not been copied "
-                                       "because similarly-named files already exist on the destination. "
-                                       "This may be because the files have already been imported "
-                                       "or the naming pattern leads to non-unique file names."));
-    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
-
-    // Create the scrolled window internal container
-    GtkWidget *scrolled_window = gtk_scrolled_window_new (NULL, NULL);
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_AUTOMATIC,
-                                   GTK_POLICY_AUTOMATIC);
-    gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scrolled_window), TRUE);
-
-    // Create the treeview model from the list of discarded file pathes
-    GtkListStore *store = gtk_list_store_new(1, G_TYPE_STRING);
-    GtkTreeIter iter;
-    for(GList *file = g_list_first(data->discarded); file; file = g_list_next(file))
-    {
-      if(file->data)
-      {
-        gtk_list_store_append(store, &iter);
-        gtk_list_store_set(store, &iter, 0, g_strdup((char *)file->data), -1);
-      }
-    }
-
-    // Create the treeview view. Sooooo verbose... it's only a flat list.
-    GtkWidget *view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
-    GtkTreeViewColumn *col = gtk_tree_view_column_new();
-    gtk_tree_view_column_set_title(col, _("Origin path"));
-    GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
-    gtk_tree_view_column_pack_start(col, renderer, TRUE);
-    gtk_tree_view_column_set_attributes(col, renderer, "text", 0, NULL);
-    gtk_tree_view_append_column(GTK_TREE_VIEW(view), col);
-    g_object_unref(store);
-
-    // Pack widgets to an unified box
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(box), scrolled_window, TRUE, TRUE, 0);
-    gtk_container_add(GTK_CONTAINER(scrolled_window), view);
-
-    // Pack the box to the dialog internal container
-    GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    gtk_container_add(GTK_CONTAINER(content_area), box);
-    gtk_widget_show_all(dialog);
-
-#ifdef GDK_WINDOWING_QUARTZ
-    dt_osx_disallow_fullscreen(dialog);
-#endif
-
-    gtk_dialog_run(GTK_DIALOG(dialog));
-    gtk_widget_destroy(dialog);
-  }
-
-  g_list_free_full(data->discarded, g_free);
-
-  for(GList *img = g_list_first(data->imgs); img; img = g_list_next(img))
-    free(img->data);
-
-  free(data);
-  dt_control_image_enumerator_cleanup(params);
-}
-
-static void *_control_import_alloc()
-{
-  dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
-  if(!params) return NULL;
-
-  params->data = g_malloc0(sizeof(dt_control_import_t));
-  if(!params->data)
-  {
-    _control_import_job_cleanup(params);
-    return NULL;
-  }
-  return params;
-}
-
 static dt_job_t *_control_import_job_create(dt_control_import_t data)
 {
   dt_job_t *job = dt_control_job_create(&_control_import_job_run, "import");
   if(!job) return NULL;
-  dt_control_image_enumerator_t *params = _control_import_alloc();
+  dt_control_image_enumerator_t *params = _control_import_export_alloc(TRUE);
   if(!params)
   {
     dt_control_job_dispose(job);
