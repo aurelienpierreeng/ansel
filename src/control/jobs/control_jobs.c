@@ -2331,8 +2331,7 @@ gboolean _import_image(const GList *img, dt_control_import_t *data, const int in
     // destination = origin, nothing to do
     g_strlcpy(img_path_to_db, filename, sizeof(img_path_to_db));
 
-  // TODO: valid way of checking if all chars are 0 ?
-  process_error |= !g_strcmp0(img_path_to_db, NULL);
+  process_error |= (*img_path_to_db == 0);
 
   if(process_error)
     fprintf(stdout, "Process Error\n");
