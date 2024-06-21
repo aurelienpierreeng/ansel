@@ -603,6 +603,7 @@ static void _set_test_path(dt_lib_import_t *d)
                                 .elements = 1,
                                 .total_imported_elements = 0,
                                 .filmid = -1,
+                                .discarded = NULL,
                                 };
 
     dt_variables_params_t *params;
@@ -621,7 +622,7 @@ static void _set_test_path(dt_lib_import_t *d)
     gtk_label_set_text(GTK_LABEL(d->test_path), (fake_path && fake_path != NULL)
                   ? g_strdup_printf(_("Result of the pattern : ...%s"), fake_path)
                   : g_strdup(_("Can't build a valid path.")));
-    
+
     g_free(basedir);
     g_free(cut);
     g_free(_path);
@@ -781,6 +782,7 @@ static void _process_file_list(gpointer instance, GList *files, int elements, gb
                                 .elements = elements,
                                 .total_imported_elements = 0,
                                 .filmid = -1,
+                                .discarded = NULL
                                 };
 
     // Prepare to catch the end of import signal
