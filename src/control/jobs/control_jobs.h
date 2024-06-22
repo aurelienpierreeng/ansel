@@ -54,6 +54,7 @@ typedef struct dt_control_export_t
   int max_height;
   int format_index;
   int storage_index;
+  int total;
 
   gboolean high_quality;
   gboolean upscale;
@@ -65,6 +66,9 @@ typedef struct dt_control_export_t
   dt_iop_color_intent_t icc_intent;
 
   gchar *metadata_export;
+
+  dt_imageio_module_format_t *module_format;
+  dt_imageio_module_storage_t *module_storage;
 
   /** 
   * Needed since the gui thread resets things like overwrite once the export
