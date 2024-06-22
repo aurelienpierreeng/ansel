@@ -341,8 +341,6 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
     return;
   }
 
-  GList *list = dt_act_on_get_images(TRUE, TRUE, TRUE);
-
   dt_imageio_module_storage_t *module_storage = dt_imageio_get_storage_by_index(storage_index);
   g_assert(module_storage);
   // get shared storage param struct (global sequence counter, one picasa connection etc)
@@ -367,13 +365,30 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
                                .icc_filename = dt_conf_get_string(CONFIG_PREFIX "iccprofile"),
                                .icc_intent = dt_conf_get_int(CONFIG_PREFIX "iccintent"),
                                .metadata_export = d->metadata_export,
-                               .module_data = sdata                               
+
+                               .module_format = dt_imageio_get_format_by_index(format_index),
+                               .module_storage = dt_imageio_get_storage_by_index(storage_index),
+                               .module_data = data.module_storage->get_params(data.module_storage)
                              };
+  // get shared storage param struct (global sequence counter, one picasa connection etc)
   
+  if(data.total > 0)
+    dt_control_log(ngettext("exporting %d image..", "exporting %d images..", data.total), data.total);
+  else
+    dt_control_log(_("no image to export"));
+
+
+  if(data.module_data == NULL)
+  {
+    dt_control_log(_("failed to get parameters from storage module `%s', aborting export.."),
+                   data.module_storage->name(data.module_storage));
+    return;
+  }
+
   dt_control_export(data);
 
   // tell the storage that we got its params for an export so it can reset itself to a safe state
-  module_storage->export_dispatched(module_storage);
+  data.module_storage->export_dispatched(data.module_storage);
 
   _scale_optim();
   gtk_entry_set_text(GTK_ENTRY(d->scale), dt_conf_get_string_const(CONFIG_PREFIX "resizing_factor"));

@@ -64,6 +64,15 @@
 // overall time for a large import.
 #define PROGRESS_UPDATE_INTERVAL 1
 
+typedef enum dt_job_type_t
+{
+  IMPORT = 0,
+  EXPORT = 1,
+}dt_job_type_t;
+
+const char *job_type_string[2] = { "importing", "exporting" };
+
+
 typedef struct dt_control_datetime_t
 {
   GTimeSpan offset;
@@ -171,6 +180,22 @@ static void dt_control_image_enumerator_cleanup(void *p)
 }
 
 typedef enum {PROGRESS_NONE, PROGRESS_SIMPLE, PROGRESS_CANCELLABLE} progress_type_t;
+
+void _refresh_progress_counter(dt_job_t *job, const int elements, const int index, const dt_job_type_t job_type)
+{
+  gchar message[64] = { 0 };
+  double fraction = 0.0f;
+  fraction += 1.0f / (double) elements;
+
+  gchar *type = g_strdup(job_type_string[job_type]);
+  dt_capitalize_label(type);
+  
+  snprintf(message, sizeof(message), ngettext("%s %i/%i image", "%s %i/%i images", index), type, index, elements);
+  dt_control_job_set_progress_message(job, message);
+  dt_control_job_set_progress(job, fraction);
+  g_free(type);
+  g_usleep(100);
+}
 
 static dt_job_t *dt_control_generic_images_job_create(dt_job_execute_callback execute, const char *message,
                                                       int flag, gpointer data, progress_type_t progress_type,
@@ -1297,21 +1322,75 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
   return 0;
 }
 
+void _get_max_dimensions(uint32_t *w, uint32_t *h, dt_control_export_t *data, dt_imageio_module_data_t *fdata)
+{
+  uint32_t fw, fh, sw, sh;
+  fw = fh = sw = sh = 0;
+  data->module_storage->dimension(data->module_storage, data->module_data, &sw, &sh);
+  data->module_format->dimension(data->module_format, fdata, &fw, &fh);
+
+  if(sw == 0 || fw == 0)
+    *w = sw > fw ? sw : fw;
+  else
+    *w = sw < fw ? sw : fw;
+
+  if(sh == 0 || fh == 0)
+    *h = sh > fh ? sh : fh;
+  else
+    *h = sh < fh ? sh : fh;
+}
+
+dt_export_metadata_t _export_init_metadata(const dt_control_export_t *data)
+{
+  dt_export_metadata_t metadata;
+  metadata.flags = 0;
+  metadata.list = dt_util_str_to_glist("\1", data->metadata_export);
+  if(metadata.list)
+  {
+    metadata.flags = (int32_t) strtol(metadata.list->data, NULL, 16);
+    metadata.list = g_list_remove(metadata.list, metadata.list->data);
+  }
+  return metadata;
+}
+
+gboolean _init_module_storage(GList **param_index, dt_control_export_t *data)
+{
+  dt_imageio_module_format_t *module_format = data->module_format;
+  dt_imageio_module_storage_t *module_storage = data->module_storage;
+  dt_imageio_module_data_t *module_data = data->module_data;
+  dt_imageio_module_data_t *fdata = data->module_format->get_params(data->module_format);
+  
+  if(module_storage->initialize_store)
+  {
+    if(module_storage->initialize_store(module_storage, module_data, &module_format, &fdata, param_index, data->high_quality, data->upscale))
+    {
+      // bail out, something went wrong
+      return 0;
+    }
+    module_format->set_params(module_format, fdata, (int)module_format->params_size(module_format));
+    module_storage->set_params(module_storage, module_data, (int)module_storage->params_size(module_storage));
+  }
+  return 1;
+}
 
 static int32_t _control_export_job_run(dt_job_t *job)
 {
   dt_control_image_enumerator_t *params = (dt_control_image_enumerator_t *)dt_control_job_get_params(job);
   dt_control_export_t *data = (dt_control_export_t *)params->data;
-  GList *t = params->index;
-  dt_imageio_module_format_t *module_format = dt_imageio_get_format_by_index(data->format_index);
-  g_assert(module_format);
-  dt_imageio_module_storage_t *module_storage = dt_imageio_get_storage_by_index(data->storage_index);
-  g_assert(module_storage);
+  GList *param_index = params->index;
+  dt_imageio_module_format_t *module_format = data->module_format;
+  dt_imageio_module_storage_t *module_storage = data->module_storage;
   dt_imageio_module_data_t *module_data = data->module_data;
+  g_assert(module_format);
+  g_assert(module_storage);
+  
+  dt_imageio_module_data_t *fdata = data->module_format->get_params(data->module_format);
+  dt_export_metadata_t metadata = _export_init_metadata(data);
 
   gboolean tag_change = FALSE;
 
   fprintf(stdout, "\nEXPORT VAL:\n"
+                  "Total img: %i\n"
                   "First imgID: %i\n"
                   "max_width: %i, max_height: %i\n"
                   "format_index: %i\n"
@@ -1325,55 +1404,33 @@ static int32_t _control_export_job_run(dt_job_t *job)
                   "icc_filename: %s\n"
                   "icc_intent: %i\n"
                   "metadata_export: %s\n\n",
+                  data->total,
                   GPOINTER_TO_INT(data->imgid_list->data),
                   data->max_width, data->max_height,
                   data->format_index, data->storage_index,
-                  data->high_quality, data->upscale, data->export_masks,
+                  data->high_quality, data->export_masks,
                   data->style, data->style_append,
                   data->icc_type, data->icc_filename, data->icc_intent,
                   data->metadata_export);
 
   // get a thread-safe fdata struct (one jpeg struct per thread etc):
-  dt_imageio_module_data_t *fdata = module_format->get_params(module_format);
 
-  if(module_storage->initialize_store)
+  const guint total = g_list_length(data->imgid_list);
+
+
+  if(!_init_module_storage(&param_index, data))
   {
-    if(module_storage->initialize_store(module_storage, module_data, &module_format, &fdata, &t, TRUE))
-    {
-      // bail out, something went wrong
-      goto end;
-    }
-    module_format->set_params(module_format, fdata, module_format->params_size(module_format));
-    module_storage->set_params(module_storage, module_data, module_storage->params_size(module_storage));
+    // bail out, something went wrong
+    goto end;
   }
-
+  
   // Get max dimensions...
-  uint32_t w, h, fw, fh, sw, sh;
-  fw = fh = sw = sh = 0;
-  module_storage->dimension(module_storage, module_data, &sw, &sh);
-  module_format->dimension(module_format, fdata, &fw, &fh);
-
-  if(sw == 0 || fw == 0)
-    w = sw > fw ? sw : fw;
-  else
-    w = sw < fw ? sw : fw;
-
-  if(sh == 0 || fh == 0)
-    h = sh > fh ? sh : fh;
-  else
-    h = sh < fh ? sh : fh;
-
-  const guint total = g_list_length(t);
-  if(total > 0)
-    dt_control_log(ngettext("exporting %d image..", "exporting %d images..", total), total);
-  else
-    dt_control_log(_("no image to export"));
-
-  double fraction = 0;
+  uint32_t img_width, img_height;
+  _get_max_dimensions(&img_width, &img_height, data, fdata);
 
   // set up the fdata struct
-  fdata->max_width = (data->max_width != 0 && w != 0) ? MIN(w, data->max_width) : MAX(w, data->max_width);
-  fdata->max_height = (data->max_height != 0 && h != 0) ? MIN(h, data->max_height) : MAX(h, data->max_height);
+  fdata->max_width = (data->max_width != 0 && img_width != 0) ? MIN(img_width, data->max_width) : MAX(img_width, data->max_width);
+  fdata->max_height = (data->max_height != 0 && img_height != 0) ? MIN(img_height, data->max_height) : MAX(img_height, data->max_height);
   g_strlcpy(fdata->style, data->style, sizeof(fdata->style));
   fdata->style_append = data->style_append;
   // Invariant: the tagid for 'darktable|changed' will not change while this function runs. Is this a
@@ -1381,27 +1438,14 @@ static int32_t _control_export_job_run(dt_job_t *job)
   guint tagid = 0, etagid = 0;
   dt_tag_new("darktable|exported", &etagid);
 
-  dt_export_metadata_t metadata;
-  metadata.flags = 0;
-  metadata.list = dt_util_str_to_glist("\1", data->metadata_export);
-  if(metadata.list)
+  int index = 0;
+
+  for(GList *img = g_list_first(data->imgid_list); img && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED; img = g_list_next(img))
   {
-    metadata.flags = (int32_t) strtol(metadata.list->data, NULL, 16);
-    metadata.list = g_list_remove(metadata.list, metadata.list->data);
-  }
+    const int imgid = GPOINTER_TO_INT(img->data);
 
-  while(t && dt_control_job_get_state(job) != DT_JOB_STATE_CANCELLED)
-  {
-    const int imgid = GPOINTER_TO_INT(t->data);
-    t = g_list_next(t);
-    const guint num = total - g_list_length(t);
-
-    // progress message
-    char message[512] = { 0 };
-    snprintf(message, sizeof(message), _("exporting %d / %d to %s"), num, total, module_storage->name(module_storage));
-    // update the message. initialize_store() might have changed the number of images
-    dt_control_job_set_progress_message(job, message);
-
+    _refresh_progress_counter(job, total, index, EXPORT);
+    
     // remove 'changed' tag from image
     if(dt_tag_detach(tagid, imgid, FALSE, FALSE)) tag_change = TRUE;
     // make sure the 'exported' tag is set on the image
@@ -1411,7 +1455,7 @@ static int32_t _control_export_job_run(dt_job_t *job)
     dt_image_cache_set_export_timestamp(darktable.image_cache, imgid);
 
     // check if image still exists:
-    const dt_image_t *image = dt_image_cache_get(darktable.image_cache, (int32_t)imgid, 'r');
+    const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
     if(image)
     {
       char imgfilename[PATH_MAX] = { 0 };
@@ -1427,29 +1471,29 @@ static int32_t _control_export_job_run(dt_job_t *job)
       else
       {
         dt_image_cache_read_release(darktable.image_cache, image);
-        if(module_storage->store(module_storage, module_data, imgid, module_format, fdata, num, total, TRUE,
-                           data->export_masks, data->icc_type, data->icc_filename, data->icc_intent,
-                           &metadata) != 0)
+        if(module_storage->store(module_storage, module_data, imgid, module_format, fdata, index, total, data->high_quality,
+           data->export_masks, data->icc_type, data->icc_filename, data->icc_intent,
+           &metadata) != 0)
           dt_control_job_cancel(job);
       }
     }
-
-    fraction += 1.0 / total;
-    if(fraction > 1.0) fraction = 1.0;
-    dt_control_job_set_progress(job, fraction);
+    index++;
   }
+
   g_list_free_full(metadata.list, g_free);
 
-  if(module_storage->finalize_store) module_storage->finalize_store(module_storage, module_data);
+  if(data->module_storage->finalize_store)
+    data->module_storage->finalize_store(data->module_storage, data->module_data);
 
 end:
   // all threads free their fdata
-  module_format->free_params(module_format, fdata);
+  data->module_format->free_params(data->module_format, fdata);
 
   // notify the user via the window manager
   dt_ui_notify_user();
 
-  if(tag_change) DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
+  if(tag_change)
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
   fprintf(stdout,"end export run\n");
   return 0;
 }
@@ -1906,18 +1950,23 @@ static void _control_import_job_cleanup(void *p)
   dt_control_image_enumerator_cleanup(params);
 }
 
-static void *_control_import_export_alloc(gboolean is_import)
+static void *_control_import_export_alloc(dt_job_type_t job_type)
 {
   dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
   if(!params) return NULL;
 
-  params->data = g_malloc0(sizeof(dt_control_import_t));
+  if(job_type == IMPORT)
+    params->data = g_malloc0(sizeof(dt_control_import_t));
+  else if(job_type == EXPORT)
+    params->data = g_malloc0(sizeof(dt_control_export_t));
+
   if(!params->data)
   {
-    if(is_import)
+    if(job_type == IMPORT)
       _control_import_job_cleanup(params);
-    else
+    else if(job_type == EXPORT)
       _control_export_job_cleanup(params);
+
     return NULL;
   }
   return params;
@@ -1946,7 +1995,7 @@ static dt_job_t *_control_export_job_create(dt_control_export_t data)
 {
   dt_job_t *job = dt_control_job_create(&_control_export_job_run, "export");
   if(!job) return NULL;
-  dt_control_image_enumerator_t *params = _control_import_export_alloc(FALSE);
+  dt_control_image_enumerator_t *params = _control_import_export_alloc(EXPORT);
   if(!params)
   {
     dt_control_job_dispose(job);
@@ -2440,17 +2489,6 @@ gboolean _import_image(const GList *img, dt_control_import_t *data, const int in
   return process_error;
 }
 
-void _refresh_progress_counter(dt_job_t *job, const int elements, const int index)
-{
-  gchar message[32] = { 0 };
-  double fraction = 0.0f;
-  fraction += 1.0f / (double) elements;
-  snprintf(message, sizeof(message), ngettext("importing %i/%i image", "importing %i/%i images", index), index, elements);
-  dt_control_job_set_progress_message(job, message);
-  dt_control_job_set_progress(job, fraction);
-  g_usleep(100);
-}
-
 static int32_t _control_import_job_run(dt_job_t *job)
 {
   fprintf(stdout,"\n:::Control_Job_run:::\n");
@@ -2463,7 +2501,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
   {
     fprintf(stdout, "\nIMG %i.\n", index + 1);
 
-    _refresh_progress_counter(job, data->elements, index);
+    _refresh_progress_counter(job, data->elements, index, IMPORT);
 
     if(_import_image(img, data, index, &data->discarded))
       fprintf(stderr, "Skipping this one.\n");
