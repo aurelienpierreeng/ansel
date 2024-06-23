@@ -2212,7 +2212,7 @@ const int32_t _import_job(dt_control_import_t *data, gchar *img_path_to_db)
 
   fprintf(stdout, "dirname: %s\tfilmid: %i\n", dirname, data->filmid);
 
-  const int32_t imgid = dt_image_import((int32_t)data->filmid, img_path_to_db, FALSE);
+  const int32_t imgid = dt_image_import(data->filmid, img_path_to_db, FALSE);
   g_free(dirname);
   return imgid;
 }

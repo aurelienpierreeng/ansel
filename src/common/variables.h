@@ -65,6 +65,16 @@ char *dt_variables_expand(dt_variables_params_t *params, gchar *source, gboolean
 /** reset sequence number */
 void dt_variables_reset_sequence(dt_variables_params_t *params);
 
+/**
+ * @brief Gets the path to the current OS pictures directory.
+ * 
+ * @param homedir the user's home directory
+ * @param picdir the gchar* to set to the path of the pictures directory
+ * @param picdir_size the size of `picdir`
+ * @return `gboolean` Returns TRUE if success.
+ */
+gboolean dt_get_user_pictures_dir(const gchar *homedir, gchar *picdir, size_t picdir_size);
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

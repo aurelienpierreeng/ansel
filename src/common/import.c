@@ -368,6 +368,15 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
   return pixbuf;
 }
 
+void _dt_check_basedir()
+{
+  gchar basedir[PATH_MAX] = { 0 };
+  g_strlcpy(basedir, dt_conf_get_string("session/base_directory_pattern"), sizeof(basedir));
+  
+  if(*basedir == 0 && dt_get_user_pictures_dir(dt_loc_get_home_dir(NULL), basedir, sizeof(basedir)))
+    dt_conf_set_string("session/base_directory_pattern", basedir);
+}
+
 static void _do_select_all_clicked(GtkWidget *widget, dt_lib_import_t *d)
 {
   _do_select_all(d);
@@ -867,6 +876,8 @@ void _file_chooser_response(GtkDialog *dialog, gint response_id, dt_lib_import_t
 
 static void gui_init(dt_lib_import_t *d)
 {
+  _dt_check_basedir();
+
   d->dialog = gtk_dialog_new_with_buttons
     ( _("Ansel - Open pictures"), NULL, GTK_DIALOG_DESTROY_WITH_PARENT,
       _("Cancel"), GTK_RESPONSE_CANCEL,

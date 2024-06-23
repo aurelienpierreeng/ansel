@@ -104,6 +104,25 @@ typedef enum _image_case
 
 static char *_expand_source(dt_variables_params_t *params, char **source, char extra_stop);
 
+gboolean dt_get_user_pictures_dir(const gchar *homedir, gchar *picdir, size_t picdir_size)
+{
+  if(!homedir)
+    return 0;
+
+  gchar dir[PATH_MAX] = { 0 };
+  if(g_get_user_special_dir(G_USER_DIRECTORY_PICTURES) == NULL)
+    g_strlcpy(dir, g_build_path(G_DIR_SEPARATOR_S, homedir, "Pictures", (char *)NULL), sizeof(dir));
+  else
+    g_strlcpy(dir, g_strdup(g_get_user_special_dir(G_USER_DIRECTORY_PICTURES)), sizeof(dir));
+
+  if(*dir == 0)
+    fprintf(stdout,"Error: Can't get user's pictures folder.\n");
+  else
+    return g_strlcpy(picdir, dir, picdir_size) >= 1; 
+
+  return 0;
+}
+
 // gather some data that might be used for variable expansion
 static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
 {
@@ -111,10 +130,9 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
 
   params->data->homedir = dt_loc_get_home_dir(NULL);
 
-  if(g_get_user_special_dir(G_USER_DIRECTORY_PICTURES) == NULL)
-    params->data->pictures_folder = g_build_path(G_DIR_SEPARATOR_S, params->data->homedir, "Pictures", (char *)NULL);
-  else
-    params->data->pictures_folder = g_strdup(g_get_user_special_dir(G_USER_DIRECTORY_PICTURES));
+  gchar picture_folder[PATH_MAX] = { 0 };
+  dt_get_user_pictures_dir(params->data->homedir, picture_folder, sizeof(picture_folder));
+  params->data->pictures_folder = g_strdup(picture_folder);
 
   if(params->filename)
   {
