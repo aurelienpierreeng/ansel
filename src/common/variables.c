@@ -106,7 +106,7 @@ static char *_expand_source(dt_variables_params_t *params, char **source, char e
 
 gboolean dt_get_user_pictures_dir(const gchar *homedir, gchar *picdir, size_t picdir_size)
 {
-  if(!homedir)
+  if(!homedir || picdir_size == 0 || !picdir)
     return 0;
 
   gchar dir[PATH_MAX] = { 0 };
@@ -116,7 +116,7 @@ gboolean dt_get_user_pictures_dir(const gchar *homedir, gchar *picdir, size_t pi
     g_strlcpy(dir, g_strdup(g_get_user_special_dir(G_USER_DIRECTORY_PICTURES)), sizeof(dir));
 
   if(*dir == 0)
-    fprintf(stdout,"Error: Can't get user's pictures folder.\n");
+    fprintf(stderr,"Error: Can't get user's pictures folder.\n");
   else
     return g_strlcpy(picdir, dir, picdir_size) >= 1; 
 
