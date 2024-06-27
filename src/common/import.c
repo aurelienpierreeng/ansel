@@ -652,7 +652,7 @@ static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
   const gboolean duplicate = dt_conf_get_bool("ui_last/import_copy");
   if(!duplicate)
   {
-    gtk_label_set_text(GTK_LABEL(d->test_path), g_strdup_printf("No copy."));
+    gtk_label_set_text(GTK_LABEL(d->test_path), g_strdup_printf(_("No copy.")));
     return;
   }
 
