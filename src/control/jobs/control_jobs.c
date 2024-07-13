@@ -2038,52 +2038,6 @@ void dt_control_write_sidecar_files()
                                                           FALSE));
 }
 
-#ifdef USE_LUA
-static GList *_apply_lua_filter(GList *images)
-{
-  // images list is assumed already sorted
-  int image_count = 1;
-
-  dt_lua_lock();
-  lua_State *L = darktable.lua_state.state;
-  {
-    lua_newtable(L);
-    for(GList *elt = images; elt; elt = g_list_next(elt))
-    {
-      lua_pushstring(L, elt->data);
-      lua_seti(L, -2, image_count);
-      image_count++;
-    }
-  }
-  lua_pushvalue(L, -1);
-  dt_lua_event_trigger(L, "pre-import", 1);
-  {
-    g_list_free_full(images, g_free);
-    // recreate list of images
-    images = NULL;
-    for(int i = 1; i < image_count; i++)
-    {
-      //get entry I from table at index -1.  Push the result on the stack
-      lua_geti(L, -1, i);
-      if(lua_isstring(L, -1)) //images to ignore are set to nil
-      {
-        void *filename = strdup(luaL_checkstring(L, -1));
-        images = g_list_prepend(images, filename);
-      }
-      lua_pop(L, 1);
-   }
-  }
-
-  lua_pop(L, 1); // remove the table again from the stack
-
-  dt_lua_unlock();
-
-  /* we got ourself a list of images, lets sort and start import */
-  images = g_list_sort(images, (GCompareFunc)g_strcmp0);
-  return images;
-}
-#endif
-
 /**
  * @brief Creates folders from path.
  * Returns TRUE if success.
