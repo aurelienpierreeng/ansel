@@ -1,7 +1,7 @@
 #
 # Install Doc files
 #
-set(DOC_FILES README.md ../AUTHORS TRANSLATORS.md ../LICENSE)
+set(DOC_FILES ../AUTHORS ../LICENSE)
 install(FILES ${DOC_FILES} DESTINATION ${CMAKE_INSTALL_DOCDIR} COMPONENT DTDocuments)
 
 # Build manual page
