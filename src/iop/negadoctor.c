@@ -87,9 +87,9 @@ typedef struct dt_iop_negadoctor_params_t
   float Dmin[4];                            /* color of film substrate
                                                $MIN: 0.00001 $MAX: 1.5 $DEFAULT: 1.0 */
   float wb_high[4];                         /* white balance RGB coeffs (illuminant)
-                                               $MIN: 0.25 $MAX: 2 $DEFAULT: 1.0 */
+                                               $MIN: 0.01 $MAX: 2 $DEFAULT: 1.0 */
   float wb_low[4];                          /* white balance RGB offsets (base light)
-                                               $MIN: 0.25 $MAX: 2 $DEFAULT: 1.0 */
+                                               $MIN: 0.01 $MAX: 2 $DEFAULT: 1.0 */
   float D_max;                              /* max density of film
                                                $MIN: 0.1 $MAX: 6 $DEFAULT: 2.046 */
   float offset;                             /* inversion offset
