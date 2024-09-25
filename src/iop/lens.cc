@@ -500,7 +500,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   {
     // acquire temp memory for image buffer
     const size_t bufsize = (size_t)roi_in->width * roi_in->height * ch * sizeof(float);
-    void *buf = dt_alloc_align(64, bufsize);
+    void *buf = dt_alloc_align(bufsize);
     memcpy(buf, ivoid, bufsize);
 
     if(modflags & LF_MODIFY_VIGNETTING)
@@ -665,7 +665,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
       return FALSE;
   }
 
-  tmpbuf = (float *)dt_alloc_align(64, tmpbuflen);
+  tmpbuf = (float *)dt_alloc_align(tmpbuflen);
   if(tmpbuf == NULL) goto error;
 
   dev_tmp = (cl_mem)dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
@@ -1042,7 +1042,7 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
     float xm = FLT_MAX, xM = -FLT_MAX, ym = FLT_MAX, yM = -FLT_MAX;
     const size_t nbpoints = 2 * awidth + 2 * aheight;
 
-    float *const buf = (float *)dt_alloc_align(64, sizeof(float) * nbpoints * 2 * 3);
+    float *const buf = (float *)dt_alloc_align(sizeof(float) * nbpoints * 2 * 3);
 
 #ifdef _OPENMP
 #pragma omp parallel default(none) \

@@ -59,7 +59,7 @@ static void vng_interpolate(float *out, const float *const in,
   if(only_vng_linear) return;
 
   char *buffer
-      = (char *)dt_alloc_align(64, sizeof(**brow) * width * 3 + sizeof(*ip) * prow * pcol * 320);
+      = (char *)dt_alloc_align(sizeof(**brow) * width * 3 + sizeof(*ip) * prow * pcol * 320);
   if(!buffer)
   {
     fprintf(stderr, "[demosaic] not able to allocate VNG buffer\n");

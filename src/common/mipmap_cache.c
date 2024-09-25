@@ -97,7 +97,7 @@ struct dt_mipmap_buffer_dsc
 #endif
 
   /* NB: sizeof must be a multiple of 4*sizeof(float) */
-} __attribute__((packed, aligned(64)));
+} __attribute__((packed, aligned(DT_CACHELINE_BYTES)));
 
 #if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
 static const size_t dt_mipmap_buffer_dsc_size __attribute__((unused))
@@ -109,7 +109,7 @@ static const size_t dt_mipmap_buffer_dsc_size __attribute__((unused)) = sizeof(s
 // last resort mem alloc for dead images. sizeof(dt_mipmap_buffer_dsc) + dead image pixels (8x8)
 // Must be alignment to 4 * sizeof(float).
 static float dt_mipmap_cache_static_dead_image[sizeof(struct dt_mipmap_buffer_dsc) / sizeof(float) + 64 * 4]
-    __attribute__((aligned(64)));
+    __attribute__((aligned(DT_CACHELINE_BYTES)));
 
 static inline void dead_image_8(dt_mipmap_buffer_t *buf)
 {
@@ -267,7 +267,7 @@ void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img)
 
     entry->data_size = 0;
 
-    entry->data = dt_alloc_align(64, buffer_size);
+    entry->data = dt_alloc_align(buffer_size);
 
     if(!entry->data)
     {
@@ -335,7 +335,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
       entry->data_size = sizeof(*dsc) + sizeof(float) * 4 * 64;
     }
 
-    entry->data = dt_alloc_align(64, entry->data_size);
+    entry->data = dt_alloc_align(entry->data_size);
 
     // fprintf(stderr, "[mipmap cache] alloc dynamic for key %u %p\n", key, *buf);
     if(!(entry->data))
@@ -383,7 +383,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
         fseek(f, 0, SEEK_END);
         const long len = ftell(f);
         if(len <= 0) goto read_error; // coverity madness
-        blob = (uint8_t *)dt_alloc_align(64, len);
+        blob = (uint8_t *)dt_alloc_align(len);
         if(!blob) goto read_error;
         fseek(f, 0, SEEK_SET);
         const int rd = fread(blob, sizeof(uint8_t), len, f);
@@ -1209,7 +1209,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
       dt_imageio_jpeg_t jpg;
       if(!dt_imageio_jpeg_read_header(filename, &jpg))
       {
-        uint8_t *tmp = (uint8_t *)malloc(sizeof(uint8_t) * jpg.width * jpg.height * 4);
+        uint8_t *tmp = (uint8_t *)dt_alloc_align(sizeof(uint8_t) * jpg.width * jpg.height * 4);
         *color_space = dt_imageio_jpeg_read_color_space(&jpg);
         if(!dt_imageio_jpeg_read(&jpg, tmp))
         {
@@ -1218,7 +1218,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
           dt_iop_flip_and_zoom_8(tmp, jpg.width, jpg.height, buf, wd, ht, orientation, width, height);
           res = 0;
         }
-        free(tmp);
+        dt_free_align(tmp);
       }
     }
     else

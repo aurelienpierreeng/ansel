@@ -664,9 +664,9 @@ static void guided_filter_cl_fallback(int devid, cl_mem guide, cl_mem in, cl_mem
 {
   // fall-back implementation: copy data from device memory to host memory and perform filter
   // by CPU until there is a proper OpenCL implementation
-  float *guide_host = dt_alloc_align(64, sizeof(*guide_host) * width * height * ch);
-  float *in_host = dt_alloc_align(64, sizeof(*in_host) * width * height);
-  float *out_host = dt_alloc_align(64, sizeof(*out_host) * width * height);
+  float *guide_host = dt_alloc_align(sizeof(*guide_host) * width * height * ch);
+  float *in_host = dt_alloc_align(sizeof(*in_host) * width * height);
+  float *out_host = dt_alloc_align(sizeof(*out_host) * width * height);
   int err;
   err = dt_opencl_read_host_from_device(devid, guide_host, guide, width, height, ch * sizeof(float));
   if(err != CL_SUCCESS) goto error;

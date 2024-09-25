@@ -112,7 +112,7 @@ define_patches(const dt_nlmeans_param_t *const params, const int stride, int *nu
     n_patches = (n_patches + 1) / 2;
   *num_patches = n_patches ;
   // allocate a cacheline-aligned buffer
-  struct patch_t* patches = dt_alloc_align(64, sizeof(struct patch_t) * n_patches);
+  struct patch_t* patches = dt_alloc_align(sizeof(struct patch_t) * n_patches);
   // set up the patch offsets
   int patch_num = 0;
   int shift = 0;

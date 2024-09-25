@@ -368,7 +368,7 @@ static void _paint_parade(cairo_t *cr, uint8_t *const restrict image, const int 
   // We need to isolate each channel, then paint it at a third of the nominal image width/height.
   for(int c = 0; c < 3; c++)
   {
-    uint8_t *const restrict channel = dt_alloc_align(64, img_width * img_height * 4 * sizeof(uint8_t));
+    uint8_t *const restrict channel = dt_alloc_align(img_width * img_height * 4 * sizeof(uint8_t));
     _mask_waveform(image, channel, img_width, img_height, c);
     cairo_surface_t *background = cairo_image_surface_create_for_data(channel, CAIRO_FORMAT_ARGB32, img_width, img_height, stride);
     const double x = (vertical) ? 0. : (double)c * img_width;
@@ -386,14 +386,14 @@ static void _process_waveform(dt_backbuf_t *backbuf, cairo_t *cr, const int widt
   const size_t binning_size = (vertical) ? 4 * TONES * backbuf->height : 4 * TONES * backbuf->width;
 
   // 1. Pixel binning along columns/rows, aka compute a column/row-wise histogram
-  uint32_t *const restrict bins = dt_alloc_align(64, binning_size * sizeof(uint32_t));
+  uint32_t *const restrict bins = dt_alloc_align(binning_size * sizeof(uint32_t));
   _bin_pixels_waveform(backbuf->buffer, bins, backbuf->width, backbuf->height, binning_size, vertical);
 
   // 2. Paint image.
   // In a 1D histogram, pixel frequencies are shown as height (y axis) for each RGB quantum (x axis).
   // Here, we do a sort of 2D histogram : pixel frequencies are shown as opacity ("z" axis),
   // for each image column (x axis), for each RGB quantum (y axis)
-  uint8_t *const restrict image = dt_alloc_align(64, binning_size * sizeof(uint8_t));
+  uint8_t *const restrict image = dt_alloc_align(binning_size * sizeof(uint8_t));
   const size_t img_width = (vertical) ? TONES : backbuf->width;
   const size_t img_height = (vertical) ? backbuf->height : TONES;
   const uint32_t overall_max_hist = _find_max_histogram(bins, binning_size);
@@ -527,11 +527,11 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, cairo_t *cr, const int w
   if(profile == NULL) return;
 
   // 1. Process data
-  uint32_t *const restrict vectorscope = dt_alloc_align(64, HISTOGRAM_BINS * HISTOGRAM_BINS * sizeof(uint32_t));
+  uint32_t *const restrict vectorscope = dt_alloc_align(HISTOGRAM_BINS * HISTOGRAM_BINS * sizeof(uint32_t));
   _bin_pixels_vectorscope(backbuf->buffer, vectorscope, profile, backbuf->width * backbuf->height, zoom);
 
   const uint32_t max_hist = _find_max_histogram(vectorscope, HISTOGRAM_BINS * HISTOGRAM_BINS);
-  uint8_t *const restrict image = dt_alloc_align(64, 4 * HISTOGRAM_BINS * HISTOGRAM_BINS * sizeof(uint8_t));
+  uint8_t *const restrict image = dt_alloc_align(4 * HISTOGRAM_BINS * HISTOGRAM_BINS * sizeof(uint8_t));
   _create_vectorscope_image(vectorscope, image, profile, max_hist, zoom);
 
   // 2. Draw
@@ -903,7 +903,7 @@ void gui_reset(dt_lib_module_t *self)
 void gui_init(dt_lib_module_t *self)
 {
   /* initialize ui widgets */
-  dt_lib_histogram_t *d = (dt_lib_histogram_t *)dt_calloc_align(64, sizeof(dt_lib_histogram_t));
+  dt_lib_histogram_t *d = (dt_lib_histogram_t *)dt_calloc_align(sizeof(dt_lib_histogram_t));
   self->data = (void *)d;
   d->cst = NULL;
 

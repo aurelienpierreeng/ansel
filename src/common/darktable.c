@@ -1524,8 +1524,9 @@ void dt_vprint(dt_debug_thread_t thread, const char *msg, ...)
   }
 }
 
-void *dt_alloc_align(size_t alignment, size_t size)
+void *dt_alloc_align(size_t size)
 {
+  const size_t alignment = DT_CACHELINE_BYTES;
   const size_t aligned_size = dt_round_size(size, alignment);
 #if defined(__FreeBSD_version) && __FreeBSD_version < 700013
   return malloc(aligned_size);

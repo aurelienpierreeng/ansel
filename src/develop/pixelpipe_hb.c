@@ -698,7 +698,7 @@ static void pixelpipe_get_histogram_backbuf(dt_dev_pixelpipe_t *pipe, dt_develop
   if(backbuf->buffer == NULL)
   {
     // Buffer uninited
-    backbuf->buffer = dt_alloc_align(64, roi->width * roi->height * bpp);
+    backbuf->buffer = dt_alloc_align(roi->width * roi->height * bpp);
     backbuf->height = roi->height;
     backbuf->width = roi->width;
     backbuf->bpp = bpp;
@@ -709,7 +709,7 @@ static void pixelpipe_get_histogram_backbuf(dt_dev_pixelpipe_t *pipe, dt_develop
     // There is no reason yet why this should happen because the preview pipe doesn't change size during its lifetime.
     // But let's future-proof it in case someone gets creative.
     dt_free_align(backbuf->buffer); // maybe write a dt_realloc_align routine ?
-    backbuf->buffer = dt_alloc_align(64, roi->width * roi->height * bpp);
+    backbuf->buffer = dt_alloc_align(roi->width * roi->height * bpp);
     backbuf->height = roi->height;
     backbuf->width = roi->width;
     backbuf->bpp = bpp;
@@ -750,7 +750,7 @@ static void pixelpipe_get_histogram_backbuf(dt_dev_pixelpipe_t *pipe, dt_develop
   if(!strcmp(module->op, "gamma") || bpp == 4 * sizeof(uint8_t))
   {
     // We got 8 bits data, we need to convert it back to float32 for uniform handling
-    float *new_buffer = dt_alloc_align(64, roi->width * roi->height * 4 * sizeof(float));
+    float *new_buffer = dt_alloc_align(roi->width * roi->height * 4 * sizeof(float));
     if(new_buffer == NULL) return;
 
     uint8_t *old_buffer = (uint8_t *)backbuf->buffer;
@@ -910,7 +910,7 @@ static void pixelpipe_picker_cl(int devid, dt_iop_module_t *module, dt_dev_pixel
   if(buffer && bufsize >= size * bpp)
     pixel = buffer;
   else
-    pixel = tmpbuf = dt_alloc_align(64, size * bpp);
+    pixel = tmpbuf = dt_alloc_align(size * bpp);
 
   if(pixel == NULL) return;
 

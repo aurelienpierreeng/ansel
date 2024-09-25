@@ -147,8 +147,8 @@ typedef unsigned int u_int;
 #define __DT_CLONE_TARGETS__
 #endif
 
-/* Helper to force stack vectors to be aligned on 64 bits blocks to enable AVX2 */
-#define DT_IS_ALIGNED(x) __builtin_assume_aligned(x, 64)
+/* Helper to force stack vectors to be aligned on DT_CACHELINE_BYTES blocks to enable AVX2 */
+#define DT_IS_ALIGNED(x) __builtin_assume_aligned(x, DT_CACHELINE_BYTES)
 
 #ifndef _RELEASE
 #include "common/poison.h"
@@ -392,22 +392,22 @@ static inline void memset_zero(void *const buffer, size_t size)
   }
 }
 
-void *dt_alloc_align(size_t alignment, size_t size);
-static inline void* dt_calloc_align(size_t alignment, size_t size)
+void *dt_alloc_align(size_t size);
+static inline void* dt_calloc_align(size_t size)
 {
-  void *buf = dt_alloc_align(alignment, size);
+  void *buf = dt_alloc_align(size);
   if(buf) memset(buf, 0, size);
   return buf;
 }
 static inline float *dt_alloc_align_float(size_t pixels)
 {
-  return (float*)__builtin_assume_aligned(dt_alloc_align(64, pixels * sizeof(float)), 64);
+  return (float*)__builtin_assume_aligned(dt_alloc_align(pixels * sizeof(float)), DT_CACHELINE_BYTES);
 }
 static inline float *dt_calloc_align_float(size_t pixels)
 {
-  float *const buf = (float*)dt_alloc_align(64, pixels * sizeof(float));
+  float *const buf = (float*)dt_alloc_align(pixels * sizeof(float));
   if(buf) memset(buf, 0, pixels * sizeof(float));
-  return (float*)__builtin_assume_aligned(buf, 64);
+  return (float*)__builtin_assume_aligned(buf, DT_CACHELINE_BYTES);
 }
 size_t dt_round_size(const size_t size, const size_t alignment);
 size_t dt_round_size_sse(const size_t size);
@@ -449,13 +449,13 @@ static inline gboolean dt_is_aligned(const void *pointer, size_t byte_count)
 
 static inline void * dt_alloc_sse_ps(size_t pixels)
 {
-  return __builtin_assume_aligned(dt_alloc_align(64, pixels * sizeof(float)), 64);
+  return __builtin_assume_aligned(dt_alloc_align(pixels * sizeof(float)), DT_CACHELINE_BYTES);
 }
 
 static inline void * dt_check_sse_aligned(void * pointer)
 {
-  if(dt_is_aligned(pointer, 64))
-    return __builtin_assume_aligned(pointer, 64);
+  if(dt_is_aligned(pointer, DT_CACHELINE_BYTES))
+    return __builtin_assume_aligned(pointer, DT_CACHELINE_BYTES);
   else
     return NULL;
 }
@@ -515,9 +515,9 @@ static inline int dt_get_thread_num()
 static inline void *dt_alloc_perthread(const size_t n, const size_t objsize, size_t* padded_size)
 {
   const size_t alloc_size = n * objsize;
-  const size_t cache_lines = (alloc_size+63)/64;
-  *padded_size = 64 * cache_lines / objsize;
-  return __builtin_assume_aligned(dt_alloc_align(64, 64 * cache_lines * dt_get_num_threads()), 64);
+  const size_t cache_lines = (alloc_size + DT_CACHELINE_BYTES - 1) / DT_CACHELINE_BYTES;
+  *padded_size = DT_CACHELINE_BYTES * cache_lines / objsize;
+  return __builtin_assume_aligned(dt_alloc_align(DT_CACHELINE_BYTES * cache_lines * dt_get_num_threads()), DT_CACHELINE_BYTES);
 }
 static inline void *dt_calloc_perthread(const size_t n, const size_t objsize, size_t* padded_size)
 {

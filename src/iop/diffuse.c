@@ -1073,7 +1073,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   float *restrict temp_in = NULL;
   float *restrict temp_out = NULL;
 
-  uint8_t *const restrict mask = dt_alloc_align(64, sizeof(uint8_t) * roi_out->width * roi_out->height);
+  uint8_t *const restrict mask = dt_alloc_align(sizeof(uint8_t) * roi_out->width * roi_out->height);
 
   const float scale = fmaxf(piece->iscale / roi_in->scale, 1.f);
   const float final_radius = (data->radius + data->radius_center) * 2.f / scale;

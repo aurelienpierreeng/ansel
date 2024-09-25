@@ -1620,8 +1620,8 @@ void extract_color_checker(const float *const restrict in, float *const restrict
   compute_patches_delta_E(patches, g->checker, g->delta_E_in, &post_wb_delta_E, &post_wb_max_delta_E);
 
   /* Compute the matrix of mix */
-  double *const restrict Y = dt_alloc_align(64, g->checker->patches * 3 * sizeof(double));
-  double *const restrict A = dt_alloc_align(64, g->checker->patches * 3 * 9 * sizeof(double));
+  double *const restrict Y = dt_alloc_align(g->checker->patches * 3 * sizeof(double));
+  double *const restrict A = dt_alloc_align(g->checker->patches * 3 * 9 * sizeof(double));
 
   for(size_t k = 0; k < g->checker->patches; k++)
   {
@@ -3335,7 +3335,7 @@ static void illum_xy_callback(GtkWidget *slider, gpointer user_data)
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  piece->data = dt_calloc_align(64, sizeof(dt_iop_channelmixer_rbg_data_t));
+  piece->data = dt_calloc_align(sizeof(dt_iop_channelmixer_rbg_data_t));
   piece->data_size = sizeof(dt_iop_channelmixer_rbg_data_t);
 }
 

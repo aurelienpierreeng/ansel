@@ -859,7 +859,7 @@ static gboolean _prepare_resampling_plan(const struct dt_interpolation *itor,
   const size_t metareq = dt_round_size(pmeta ? 4 * sizeof(int) * out : 0, DT_CACHELINE_BYTES);
 
   const size_t totalreq = kernelreq + lengthreq + indexreq + scratchreq + metareq;
-  void *blob = dt_alloc_align(DT_CACHELINE_BYTES, totalreq);
+  void *blob = dt_alloc_align(totalreq);
   if(!blob) return TRUE;
 
   int *lengths = (int *)blob;

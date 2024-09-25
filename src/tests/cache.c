@@ -19,7 +19,7 @@
 
 #define DT_UNIT_TEST
 // define dt alloc, so we don't need to include the rest of dt:
-#define dt_alloc_align(A, B) malloc(B)
+#define dt_alloc_align(B) malloc(B)
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 // unit test for the concurrent hopscotch hashmap and the LRU cache built on top of it.

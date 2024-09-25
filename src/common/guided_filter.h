@@ -48,7 +48,7 @@ typedef struct gray_image
 // allocate space for 1-component image of size width x height
 static inline gray_image new_gray_image(int width, int height)
 {
-  return (gray_image){ dt_alloc_align(64, sizeof(float) * width * height), width, height };
+  return (gray_image){ dt_alloc_align(sizeof(float) * width * height), width, height };
 }
 
 

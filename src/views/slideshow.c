@@ -180,7 +180,7 @@ static int process_image(dt_slideshow_t *d, dt_slideshow_slot_t slot)
   dat.head.height = dat.head.max_height = d->height;
   dat.head.style[0] = '\0';
   dat.rank = d->buf[slot].rank;
-  dat.buf.buf = dt_alloc_align(64, sizeof(uint32_t) * d->width * d->height);
+  dat.buf.buf = dt_alloc_align(sizeof(uint32_t) * d->width * d->height);
 
   d->exporting++;
 
@@ -408,7 +408,7 @@ void enter(dt_view_t *self)
 
   for(int k=S_LEFT; k<S_SLOT_LAST; k++)
   {
-    d->buf[k].buf = dt_alloc_align(64, sizeof(uint32_t) * d->width * d->height);
+    d->buf[k].buf = dt_alloc_align(sizeof(uint32_t) * d->width * d->height);
     d->buf[k].width =  d->width;
     d->buf[k].height = d->height;
     d->buf[k].invalidated = TRUE;
