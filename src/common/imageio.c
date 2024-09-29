@@ -794,59 +794,51 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   // find output color profile for this image:
   int sRGB = (icc_type == DT_COLORSPACE_SRGB);
 
-  int width = MAX(format_params->max_width, 0);
-  int height = MAX(format_params->max_height, 0);
-  double scale = 1.;
-
-  int processed_width = 0;
-  int processed_height = 0;
+  int width = 0;
+  int height = 0;
+  double _num, _denum;
+  dt_imageio_resizing_factor_get_and_parsing(&_num, &_denum);
+  double scale = _num / _denum;
+  int max_width = format_params->max_width;
+  int max_height = format_params->max_height;
   float origin[] = { 0.0f, 0.0f };
-
-  // Set to TRUE if width size is explicitly set by user
-  gboolean force_width;
-  // Set to TRUE if height size is explicitly set by user
-  gboolean force_height;
 
   if(dt_dev_distort_backtransform_plus(&dev, &pipe, 0.f, DT_DEV_TRANSFORM_DIR_ALL, origin, 1))
   {
+    // We resize either by scaling factor or by max size, not both.
     if(is_scaling)
     {
-      double _num, _denum;
-      dt_imageio_resizing_factor_get_and_parsing(&_num, &_denum);
-      const double scale_factor = _num / _denum;
-      scale = fmin(scale_factor, 1.);
-      force_width = TRUE;
-      force_height = TRUE;
+      // Setting scale <= 0 means don't resize.
+      if(scale <= 0)
+        scale = 1.;
+      // We don't upscale on exporting.
+      scale = MIN(scale, 1.);
+      // Ignore max size and calculate max size via scaling factor.
+      max_width = round(scale * pipe.processed_width);
+      max_height = round(scale * pipe.processed_height);
     }
     else
     {
-      double scalex = 1.;
-      double scaley = 1.;
-
-      if(width == 0)
-      {
-        force_width = FALSE;
-        width = pipe.processed_width;
-      }
+      // Setting max size <= 0 means don't resize.
+      if(max_width <= 0)
+        max_width = pipe.processed_width;
+      if(max_height <= 0)
+        max_height = pipe.processed_height;
+      // We don't upscale on exporting.
+      max_width = MIN(max_width, pipe.processed_width);
+      max_height = MIN(max_height, pipe.processed_height);
+      // Keep image ratio even if user does not set max size by ratio.
+      // We make sure the calculated size will be smaller than user's max size.
+      if((double)max_width / max_height > image_ratio)
+	max_width = MIN(round(max_height * image_ratio), max_width);
       else
-      {
-        force_width = TRUE;
-        scalex = fmin((double)width / (double)pipe.processed_width, 1.);
-      }
-
-      if(height == 0)
-      {
-        force_height = FALSE;
-        height = pipe.processed_height;
-      }
-      else
-      {
-        force_height = TRUE;
-        scaley = fmin((double)height / (double)pipe.processed_height, 1.);
-      }
-
-      scale = fmin(scalex, scaley);
+        max_height = MIN(round(max_width / image_ratio), max_height);
+      // Ignore scaling factor and calculate scaling factor via max size.
+      // NOTE: This is important because pixelpipe needs scaling factor.
+      scale = (double)max_width / pipe.processed_width;
     }
+    width = MIN(pipe.processed_width, max_width);
+    height = MIN(pipe.processed_height, max_height);
   }
   else
   {
@@ -854,47 +846,9 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     goto error;
   }
 
-  if(force_height && force_width)
-  {
-    // width and height both specified by user in pixels
-    if(pipe.processed_width > pipe.processed_height)
-    {
-      processed_width = MIN(round(scale * pipe.processed_width), width);
-      processed_height = round(processed_width / image_ratio);
-    }
-    else if(pipe.processed_width < pipe.processed_height)
-    {
-      processed_height = MIN(round(scale * pipe.processed_height), height);
-      processed_width = round(processed_height * image_ratio);
-    }
-    else
-    {
-      processed_width = MIN(round(scale * pipe.processed_width), width);
-      processed_height = MIN(round(scale * pipe.processed_height), height);
-    }
-  }
-  else if(force_width)
-  {
-    // width only specified by user in pixels, fluid height
-    processed_width = MIN(round(scale * pipe.processed_width), width);
-    processed_height = round(processed_width / image_ratio);
-  }
-  else if(force_height)
-  {
-    // height only specified by user in pixels, fluid width
-    processed_height = MIN(round(scale * pipe.processed_height), height);
-    processed_width = round(processed_height * image_ratio);
-  }
-  else
-  {
-    // nothing specified by user aka full resolution given cropping, lens and perspective distortions
-    processed_width = pipe.processed_width;
-    processed_height = pipe.processed_height;
-  }
-
-  dt_print(DT_DEBUG_IMAGEIO,"[dt_imageio_export] (direct) imgid %d, hq %i, pipe %ix%i, range %ix%i --> size %ix%i / %ix%i - ratio %.5f\n",
-            imgid, high_quality, pipe.processed_width, pipe.processed_height, format_params->max_width, format_params->max_height,
-            processed_width, processed_height, width, height, image_ratio);
+  dt_print(DT_DEBUG_IMAGEIO,"[dt_imageio_export] (direct) imgid %d, hq %i, pipe %ix%i, range %ix%i, scale %.5f --> size %ix%i - ratio %.5f\n",
+           imgid, high_quality, pipe.processed_width, pipe.processed_height, max_width, max_height, scale,
+            width, height, image_ratio);
 
 
   const int bpp = format->bpp(format_params);
@@ -906,7 +860,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
      * if high quality processing was requested, downsampling will be done
      * at the very end of the pipe (just before border and watermark)
      */
-    dt_dev_pixelpipe_process_no_gamma(&pipe, &dev, 0, 0, processed_width, processed_height, scale);
+    dt_dev_pixelpipe_process_no_gamma(&pipe, &dev, 0, 0, width, height, scale);
   }
   else
   {
@@ -932,9 +886,9 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
 
     // do the processing (8-bit with special treatment, to make sure we can use openmp further down):
     if(bpp == 8)
-      dt_dev_pixelpipe_process(&pipe, &dev, 0, 0, processed_width, processed_height, scale);
+      dt_dev_pixelpipe_process(&pipe, &dev, 0, 0, width, height, scale);
     else
-      dt_dev_pixelpipe_process_no_gamma(&pipe, &dev, 0, 0, processed_width, processed_height, scale);
+      dt_dev_pixelpipe_process_no_gamma(&pipe, &dev, 0, 0, width, height, scale);
 
     if(finalscale) finalscale->enabled = 1;
   }
@@ -956,7 +910,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
       if(high_quality)
       {
         const float *const inbuf = (float *)outbuf;
-        for(size_t k = 0; k < (size_t)processed_width * processed_height; k++)
+        for(size_t k = 0; k < (size_t)width * height; k++)
         {
           // convert in place, this is unfortunately very serial..
           const uint8_t r = roundf(CLAMP(inbuf[4 * k + 2] * 0xff, 0, 0xff));
@@ -975,7 +929,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
       if(high_quality)
       {
         const float *const inbuf = (float *)outbuf;
-        for(size_t k = 0; k < (size_t)processed_width * processed_height; k++)
+        for(size_t k = 0; k < (size_t)width * height; k++)
         {
           // convert in place, this is unfortunately very serial..
           const uint8_t r = roundf(CLAMP(inbuf[4 * k + 0] * 0xff, 0, 0xff));
@@ -991,11 +945,11 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
         uint8_t *const buf8 = pipe.backbuf;
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(processed_width, processed_height, buf8) \
+  dt_omp_firstprivate(width, height, buf8) \
   schedule(static)
 #endif
         // just flip byte order
-        for(size_t k = 0; k < (size_t)processed_width * processed_height; k++)
+        for(size_t k = 0; k < (size_t)width * height; k++)
         {
           uint8_t tmp = buf8[4 * k + 0];
           buf8[4 * k + 0] = buf8[4 * k + 2];
@@ -1009,17 +963,17 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     // uint16_t per color channel
     float *buff = (float *)outbuf;
     uint16_t *buf16 = (uint16_t *)outbuf;
-    for(int y = 0; y < processed_height; y++)
-      for(int x = 0; x < processed_width; x++)
+    for(int y = 0; y < height; y++)
+      for(int x = 0; x < width; x++)
       {
-        const size_t k = (size_t)processed_width * y + x;
+        const size_t k = (size_t)width * y + x;
         for(int i = 0; i < 3; i++) buf16[4 * k + i] = roundf(CLAMP(buff[4 * k + i] * 0xffff, 0, 0xffff));
       }
   }
   // else output float, no further harm done to the pixels :)
 
-  format_params->width = processed_width;
-  format_params->height = processed_height;
+  format_params->width = width;
+  format_params->height = height;
 
   if(!ignore_exif)
   {
@@ -1031,7 +985,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     gboolean from_cache = TRUE;
     dt_image_full_path(imgid,  pathname,  sizeof(pathname),  &from_cache, __FUNCTION__);
     // last param is dng mode, it's false here
-    length = dt_exif_read_blob(&exif_profile, pathname, imgid, sRGB, processed_width, processed_height, 0);
+    length = dt_exif_read_blob(&exif_profile, pathname, imgid, sRGB, width, height, 0);
 
     res = format->write_image(format_params, filename, outbuf, icc_type, icc_filename, exif_profile, length, imgid,
                               num, total, &pipe, export_masks);
