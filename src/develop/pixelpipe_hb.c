@@ -685,7 +685,7 @@ static void pixelpipe_get_histogram_backbuf(dt_dev_pixelpipe_t *pipe, dt_develop
                                             const uint64_t hash, const size_t bpp)
 {
   // Runs only on full image but downscaled for perf, aka preview pipe
-  if(((pipe->type & DT_DEV_PIXELPIPE_PREVIEW) != DT_DEV_PIXELPIPE_PREVIEW) || !piece->enabled) return;
+  if(((pipe->type & DT_DEV_PIXELPIPE_PREVIEW) != DT_DEV_PIXELPIPE_PREVIEW) || piece == NULL || !piece->enabled) return;
 
   // Not an RGBa float buffer ?
   if(!((bpp == 4 * sizeof(float)) || (bpp == 4 * sizeof(uint8_t)))) return;
