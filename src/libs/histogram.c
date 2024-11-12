@@ -779,6 +779,12 @@ gboolean _redraw_surface(dt_lib_histogram_t *d)
   return 0;
 }
 
+static void _destroy_surface(dt_lib_histogram_t *d)
+{
+  if(d->cst && cairo_surface_get_reference_count(d->cst) > 0) cairo_surface_destroy(d->cst);
+  if(d->cst && cairo_surface_get_reference_count(d->cst) == 0) d->cst = NULL;
+}
+
 gboolean _trigger_recompute(dt_lib_histogram_t *d)
 {
   int width, height;
@@ -786,7 +792,7 @@ gboolean _trigger_recompute(dt_lib_histogram_t *d)
 
   if(_is_backbuf_ready(d) && _needs_recompute(d, width, height))
   {
-    if(d->cst && cairo_surface_get_reference_count(d->cst) > 0) cairo_surface_destroy(d->cst);
+    _destroy_surface(d);
     // If width and height have changed, we need to recreate the surface.
     // Recreate it anyway.
     d->cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
@@ -898,7 +904,8 @@ void gui_reset(dt_lib_module_t *self)
   dt_lib_histogram_t *d = self->data;
   _reset_cache(d);
   _set_params(d);
-  if(d->cst && cairo_surface_get_reference_count(d->cst) > 0) cairo_surface_destroy(d->cst);
+  _destroy_surface(d);
+  _trigger_recompute(d);
 }
 
 void gui_init(dt_lib_module_t *self)
@@ -943,7 +950,7 @@ void gui_init(dt_lib_module_t *self)
 void gui_cleanup(dt_lib_module_t *self)
 {
   dt_lib_histogram_t *d = self->data;
-  if(d->cst && cairo_surface_get_reference_count(d->cst) > 0) cairo_surface_destroy(d->cst);
+  _destroy_surface(d);
   dt_free_align(self->data);
   self->data = NULL;
 }
