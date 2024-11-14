@@ -858,8 +858,9 @@ static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event
 {
   if(dt_bauhaus_combobox_get(d->display) != DT_LIB_HISTOGRAM_SCOPE_VECTORSCOPE) return FALSE;
 
-  int delta_y;
-  dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y);
+  int delta_y = 0;
+  if (!dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y)) return TRUE;
+
   const float new_value = 4.f * delta_y + d->zoom;
 
   if(new_value < 512.f && new_value > 32.f)
