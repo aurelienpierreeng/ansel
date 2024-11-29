@@ -1229,7 +1229,7 @@ void gui_init(dt_lib_module_t *self)
       dt_bauhaus_combobox_add(d->profile, prof->name);
   }
 
-  dt_bauhaus_combobox_set(d->profile, 0);
+  dt_bauhaus_combobox_set(d->profile, 1);
 
   char *system_profile_dir = g_build_filename(datadir, "color", "out", NULL);
   char *user_profile_dir = g_build_filename(confdir, "color", "out", NULL);
