@@ -181,7 +181,7 @@ Cleanup actions:
                               ignoring any errors
 
 Update actions:
-   --update                   Run `git pull` to update the source code and submodules
+   --update                   Run 'git pull' to update the source code and submodules
 	                            from the project master branch.
 	                            Git needs to be installed on the computer.
 															(default: disabled)
