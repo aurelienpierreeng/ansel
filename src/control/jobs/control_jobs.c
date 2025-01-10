@@ -1362,7 +1362,7 @@ gboolean _init_module_storage(GList **param_index, dt_control_export_t *data)
   
   if(module_storage->initialize_store)
   {
-    if(module_storage->initialize_store(module_storage, module_data, &module_format, &fdata, param_index, data->high_quality, data->upscale))
+    if(module_storage->initialize_store(module_storage, module_data, &module_format, &fdata, param_index, data->high_quality))
     {
       // bail out, something went wrong
       return 0;
@@ -1396,7 +1396,6 @@ static int32_t _control_export_job_run(dt_job_t *job)
                   "format_index: %i\n"
                   "storage_index: %i\n"
                   "high_quality: %i\n"
-                  "upscale: %i\n"
                   "export_masks: %i\n"
                   "style: %s\n"
                   "style_append: %i\n"
