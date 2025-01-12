@@ -994,6 +994,7 @@ static void _bauhaus_widget_init(struct dt_bauhaus_widget_t *w, dt_iop_module_t 
   w->quad_toggle = 0;
   w->show_quad = TRUE;
   w->show_label = TRUE;
+  w->timeout = dt_conf_get_int("processing/timeout");
 
   gtk_widget_add_events(GTK_WIDGET(w), GDK_POINTER_MOTION_MASK
                                        | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
@@ -2887,8 +2888,11 @@ static void dt_bauhaus_slider_set_normalized(struct dt_bauhaus_widget_t *w, floa
         g_source_remove(d->timeout_handle);
         d->timeout_handle = 0;
       }
-      // TODO: map the timeout to an user config ? Arguably, that value will be higher for senior citizen
-      d->timeout_handle = g_timeout_add(350, _delayed_slider_commit, w);
+
+      if (w->timeout > 0)
+        d->timeout_handle = g_timeout_add(w->timeout, _delayed_slider_commit, w);
+      else
+        _delayed_slider_commit(w);
     }
   }
 }

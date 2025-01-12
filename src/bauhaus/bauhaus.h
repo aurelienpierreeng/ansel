@@ -169,6 +169,8 @@ typedef struct dt_bauhaus_widget_t
   // margin and padding structure, defined in css, retrieve on each draw
   GtkBorder *margin, *padding;
 
+  int timeout;
+
   // goes last, might extend past the end:
   dt_bauhaus_data_t data;
 } dt_bauhaus_widget_t;

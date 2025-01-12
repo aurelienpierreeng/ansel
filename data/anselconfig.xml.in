@@ -231,6 +231,13 @@
     <shortdescription>Number of image processing states to cache</shortdescription>
     <longdescription>Module outputs are cached for improved performance, until the cache is full. For modules which parameters did not change between two pipeline recomputations, we can then fetch the cached output instead of recomputing it.\nThe actual size of each cache entry depends on what module is cached (some use the full-resolution image, some only the part that is visible on screen).\n Increase with care and monitor your RAM use.</longdescription>
   </dtconfig>
+    <dtconfig prefs="processing" section="cpugpu" restart="true">
+    <name>timeout</name>
+    <type min="0">int</type>
+    <default>100</default>
+    <shortdescription>Pipe recompute timeout (milliseconds)</shortdescription>
+    <longdescription>Timeout preventing intermediate setting steps (e.g. while scrolling) to recompute the pipeline too often. Set to 0 to recompute immediately on module change.</longdescription>
+  </dtconfig>
   <dtconfig prefs="processing" section="cpugpu">
     <name>cache_disk_backend</name>
     <type>bool</type>
