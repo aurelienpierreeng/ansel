@@ -1043,8 +1043,17 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->film_stock, _("toggle on or off the color controls"));
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(g->notebook), FALSE, FALSE, 0);
+  const int active_page = dt_conf_get_int("plugins/darkroom/negadoctor/gui_page");
+  gtk_widget_show(gtk_notebook_get_nth_page(g->notebook, active_page));
+  gtk_notebook_set_current_page(g->notebook, active_page);
+  
 }
 
+void gui_cleanup(struct dt_iop_module_t *self)
+{
+  dt_iop_negadoctor_gui_data_t *g = (dt_iop_negadoctor_gui_data_t *)self->gui_data;
+  dt_conf_set_int("plugins/darkroom/negadoctor/gui_page", gtk_notebook_get_current_page (g->notebook));
+}
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {

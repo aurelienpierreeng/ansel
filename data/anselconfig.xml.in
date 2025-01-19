@@ -1834,6 +1834,12 @@
     <default>0</default>
     <shortdescription>last page selected in channel mixer rgb notebook</shortdescription>
   </dtconfig>
+   <dtconfig>
+    <name>plugins/darkroom/negadoctor/gui_page</name>
+    <type>int</type>
+    <default>0</default>
+    <shortdescription>last page selected in negadoctor notebook</shortdescription>
+  </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/retouch/default_algo</name>
     <type>int</type>
