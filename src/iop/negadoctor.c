@@ -75,9 +75,9 @@ DT_MODULE_INTROSPECTION(2, dt_iop_negadoctor_params_t)
 typedef enum dt_iop_negadoctor_filmstock_t
 {
   // What kind of emulsion are we working on ?
-  DT_FILMSTOCK_NB_NEG = 0,  // $DESCRIPTION: "black and white negative film"
-  DT_FILMSTOCK_COLOR_NEG,   // $DESCRIPTION: "color negative film"
-  DT_FILMSTOCK_SLIDE        // $DESCRIPTION: "slide film"
+  DT_FILMSTOCK_NB_NEG = 0,  // $DESCRIPTION: "Black and white negative"
+  DT_FILMSTOCK_COLOR_NEG,   // $DESCRIPTION: "Color negative"
+  DT_FILMSTOCK_SLIDE        // $DESCRIPTION: "Positive"
 } dt_iop_negadoctor_filmstock_t;
 
 
@@ -97,11 +97,11 @@ typedef struct dt_iop_negadoctor_params_t
   float black;                              /* display black level
                                                $MIN: -0.5 $MAX: 0.5 $DEFAULT: 0.0755 $DESCRIPTION: "paper black (density correction)" */
   float gamma;                              /* display gamma
-                                               $MIN: 1.0 $MAX: 8.0 $DEFAULT: 4.0 $DESCRIPTION: "paper grade (gamma)" */
+                                               $MAX: 8.0 $DEFAULT: 4.0 $DESCRIPTION: "paper grade (gamma)" */
   float soft_clip;                          /* highlights roll-off
                                                $MIN: 0.0001 $MAX: 1.0 $DEFAULT: 0.75 $DESCRIPTION: "paper gloss (specular highlights)" */
   float exposure;                           /* extra exposure
-                                               $MIN: -2.0 $MAX: 2.0 $DEFAULT: 0.9245 $DESCRIPTION: "print exposure adjustment" */
+                                               $MIN: -2.0 $MAX: 4.0 $DEFAULT: 0.9245 $DESCRIPTION: "print exposure adjustment" */
 } dt_iop_negadoctor_params_t;
 
 
@@ -130,8 +130,9 @@ typedef struct dt_iop_negadoctor_gui_data_t
   GtkWidget *offset;
   GtkWidget *black, *gamma, *soft_clip, *exposure;
   GtkWidget *Dmin_picker, *Dmin_sampler;
-  GtkWidget *WB_high_picker, *WB_high_norm, *WB_high_sampler;
-  GtkWidget *WB_low_picker, *WB_low_norm, *WB_low_sampler;
+  GtkWidget *WB_high_label, *WB_high_picker, *WB_high_norm, *WB_high_sampler;
+  GtkWidget *WB_low_label, *WB_low_picker, *WB_low_norm, *WB_low_sampler;
+
 } dt_iop_negadoctor_gui_data_t;
 
 
@@ -404,7 +405,7 @@ void init_presets(dt_iop_module_so_t *self)
                                                                  .offset = -0.05f,
                                                                  .gamma = 4.0f,
                                                                  .soft_clip = 0.75f,
-                                                                 .exposure = 1.f,
+                                                                 .exposure = 1.0f,
                                                                  .black = 0.0755f };
 
 
@@ -426,16 +427,16 @@ void init_presets(dt_iop_module_so_t *self)
   dt_gui_presets_add_generic(_("black and white negative film"), self->op,
                              self->version(), &tmq, sizeof(tmq), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 
-  dt_iop_negadoctor_params_t slide = (dt_iop_negadoctor_params_t){  .film_stock = DT_FILMSTOCK_SLIDE,
-                                                                    .Dmin = { 1.0f, 1.0f, 1.0f, 0.0f},
-                                                                    .wb_high = { 1.0f, 1.0f, 1.0f, 0.0f },
-                                                                    .wb_low = { 1.0f, 1.0f, 1.0f, 0.0f },
-                                                                    .D_max = 1.0f,
-                                                                    .offset = -0.05f,
-                                                                    .gamma = 2.0f,
-                                                                    .soft_clip = 0.75f,
-                                                                    .exposure = 1.f,
-                                                                    .black = 0.0f };
+  dt_iop_negadoctor_params_t slide = (dt_iop_negadoctor_params_t){ .film_stock = DT_FILMSTOCK_SLIDE,
+                                                                   .Dmin = { 1.0f, 1.0f, 1.0f, 0.0f},
+                                                                   .wb_high = { 1.0f, 1.0f, 1.0f, 0.0f },
+                                                                   .wb_low = { 1.0f, 1.0f, 1.0f, 0.0f },
+                                                                   .D_max = 1.0f,
+                                                                   .offset = -0.05f,
+                                                                   .gamma = 0.0f,
+                                                                   .soft_clip = 0.75f,
+                                                                   .exposure = 1.f,
+                                                                   .black = 0.0f };
 
 
   dt_gui_presets_add_generic(_("slide film"), self->op,
@@ -1107,13 +1108,12 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->soft_clip, "%");
   gtk_widget_set_tooltip_text(g->soft_clip, _("gradually compress specular highlights past this value\n"
                                               "to avoid clipping while pushing the exposure for mid-tones.\n"
-                                              "this somewhat reproduces the behaviour of matte paper."));
+                                              "this somewhat reproduces the behavior of matte paper."));
 
   gtk_box_pack_start(GTK_BOX(page3), dt_ui_section_label_new(_("virtual print emulation")), FALSE, FALSE, 0);
 
   g->exposure = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_slider_from_params(self, "exposure"));
-  dt_bauhaus_slider_set_soft_min(g->exposure, -1.0);
-  dt_bauhaus_slider_set_soft_max(g->exposure, 1.0);
+  dt_bauhaus_slider_set_soft_range(g->exposure, -1.0, 1.0);
   dt_bauhaus_slider_set_default(g->exposure, 0.0);
   dt_bauhaus_slider_set_format(g->exposure, _(" EV"));
   gtk_widget_set_tooltip_text(g->exposure, _("correct the printing exposure after inversion to adjust\n"

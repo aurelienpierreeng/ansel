@@ -36,7 +36,7 @@ negadoctor (read_only image2d_t in, write_only image2d_t out, int width, int hei
   o = -native_log10(Dmin / fmax(i, (float4)2.3283064365386963e-10f)); // threshold to -32 EV
 
   // Correct density in log space
-  o = (float4)wb_high * o + (float4)offset;   
+  o = wb_high * o + offset;
 
   // Print density on paper : ((1 - 10^corrected_de + black) * exposure)^gamma rewritten for FMA
   o = (slide_film) ? (float4)1.0f - native_exp10(o)
