@@ -38,10 +38,10 @@ negadoctor (read_only image2d_t in, write_only image2d_t out, int width, int hei
   // Correct density in log space
   o = wb_high * o + offset;
 
-  // Print density on paper : ((1 - 10^corrected_de + black) * exposure)^gamma rewritten for FMA
-  o = (slide_film) ? (float4)1.0f - native_exp10(o)
-                   : native_exp10(o);
-  o = -((float4)exposure * o + (float4)black);
+  // Print density on paper (negative film) : ((1 - 10^corrected_de + black) * exposure)^gamma rewritten for FMA
+  o = native_exp10(o);
+  o = (slide_film) ? ((float4)exposure * o + (float4)black)
+                   : -((float4)exposure * o + (float4)black);
   o = native_powr(fmax(o, (float4)0.0f), gamma); // note : this is always > 0
 
   // Compress highlights and clip negatives. from https://lists.gnu.org/archive/html/openexr-devel/2005-03/msg00009.html
