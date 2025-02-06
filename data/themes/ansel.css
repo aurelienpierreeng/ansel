@@ -1391,7 +1391,7 @@ filechooser row:hover .sidebar-icon
 }
 
 #quickfilter-culling:selected,
-#quickfilter-culling:active,
+#quickfilter-culling:selected,
 #quickfilter-culling:checked
 {
   background-color: @grey_65;
@@ -1934,7 +1934,7 @@ Details :
 }
 
 /* Set top margin on active image in filmstrip */
-#thumbtable-filmstrip .thumb-main:active .thumb-back
+#thumbtable-filmstrip .thumb-main:selected .thumb-back
 {
   border-top: 0.105em solid @border_color;
 }
@@ -1946,7 +1946,7 @@ Details :
   color: transparent;
 }
 
-#thumbtable-filmstrip .thumb-main:active .thumb-cursor
+#thumbtable-filmstrip .thumb-main:selected .thumb-cursor
 {
   color: @border_color;
 }
@@ -2277,11 +2277,11 @@ Details :
 .dt_culling .thumb-back,
 .dt_culling .thumb-main:selected .thumb-back,
 .dt_culling .thumb-main:hover .thumb-back,
-.dt_culling .thumb-main:active .thumb-back,
+.dt_culling .thumb-main:selected .thumb-back,
 .dt_preview .thumb-back,
 .dt_preview .thumb-main:selected .thumb-back,
 .dt_preview .thumb-main:hover .thumb-back,
-.dt_preview .thumb-main:active .thumb-back
+.dt_preview .thumb-main:selected .thumb-back
 {
   background-color: transparent;
   border: 0;

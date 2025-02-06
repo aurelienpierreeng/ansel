@@ -155,9 +155,23 @@ void expose(dt_view_t *self, cairo_t *cr, int32_t width, int32_t height, int32_t
     dt_print(DT_DEBUG_LIGHTTABLE, "[lighttable] expose took %0.04f sec\n", end - start);
 }
 
+
+static void _view_lighttable_activate_callback(gpointer instance, int32_t imgid, gpointer user_data)
+{
+  if(imgid > -1)
+  {
+    dt_view_manager_switch(darktable.view_manager, "darkroom");
+  }
+}
+
+
 void enter(dt_view_t *self)
 {
   dt_view_active_images_reset(FALSE);
+
+  /* connect signal for thumbnail image activate */
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
+                            G_CALLBACK(_view_lighttable_activate_callback), self);
 
   dt_thumbtable_set_parent(dt_ui_thumbtable(darktable.gui->ui), dt_ui_center_base(darktable.gui->ui),
                             DT_THUMBTABLE_MODE_FILEMANAGER);
@@ -212,6 +226,10 @@ void leave(dt_view_t *self)
   // we remove the thumbtable from main view
   dt_thumbtable_set_parent(dt_ui_thumbtable(darktable.gui->ui), NULL, DT_THUMBTABLE_MODE_NONE);
   dt_ui_scrollbars_show(darktable.gui->ui, FALSE);
+
+  /* disconnect from filmstrip image activate */
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_lighttable_activate_callback),
+                                     (gpointer)self);
 }
 
 void reset(dt_view_t *self)

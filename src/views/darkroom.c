@@ -648,9 +648,8 @@ void reset(dt_view_t *self)
 
 int try_enter(dt_view_t *self)
 {
-  int32_t imgid = dt_selection_get_first_id(darktable.selection);
+  int32_t imgid = dt_control_get_mouse_over_id();
   dt_view_active_images_reset(FALSE);
-  dt_control_set_mouse_over_id(imgid);
 
   if(imgid < 0)
   {
@@ -2093,12 +2092,16 @@ void enter(dt_view_t *self)
 
 void leave(dt_view_t *self)
 {
+  // Detach the default callback for bauhaus widgets
   dt_accels_detach_scroll_handler(darktable.gui->accels);
 
   // Detach shortcuts
   dt_accels_disconnect_window(darktable.gui->accels, "active", TRUE);
 
   dt_develop_t *dev = (dt_develop_t *)self->data;
+
+  // Restore the selection
+  dt_selection_select_single(darktable.selection, dev->image_storage.id);
 
   // Send all shutdown signals
   dev->exit = 1;

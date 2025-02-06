@@ -63,17 +63,6 @@
  * NEW UI API
  */
 
-typedef enum dt_gui_view_switch_t
-{
-  DT_GUI_VIEW_SWITCH_TO_TETHERING = 1,
-  DT_GUI_VIEW_SWITCH_TO_LIGHTTABLE,
-  DT_GUI_VIEW_SWITCH_TO_DARKROOM,
-  DT_GUI_VIEW_SWITCH_TO_MAP,
-  DT_GUI_VIEW_SWITCH_TO_SLIDESHOW,
-  DT_GUI_VIEW_SWITCH_TO_PRINT
-} dt_gui_view_switch_to_t;
-
-
 /* generic callback for redraw widget signals */
 static void _ui_widget_redraw_callback(gpointer instance, GtkWidget *widget);
 /* callback for redraw log signals */
