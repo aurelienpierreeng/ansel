@@ -26,6 +26,8 @@
 #define MAX_STARS 5
 #define IMG_TO_FIT 0.0f
 
+struct dt_thumbtable_t;
+
 typedef enum dt_thumbnail_border_t
 {
   DT_THUMBNAIL_BORDER_NONE = 0,
@@ -113,10 +115,12 @@ typedef struct
 
   gboolean display_focus; // do we display rectangles to show focused part of the image
 
+  struct dt_thumbtable_t *table; // convenience reference to the parent
+
   gboolean busy; // should we show the busy message ?
 } dt_thumbnail_t;
 
-dt_thumbnail_t *dt_thumbnail_new(int width, int height, float zoom_ratio, int imgid, int rowid, dt_thumbnail_overlay_t over);
+dt_thumbnail_t *dt_thumbnail_new(int width, int height, float zoom_ratio, int imgid, int rowid, dt_thumbnail_overlay_t over, struct dt_thumbtable_t *table);
 void dt_thumbnail_destroy(dt_thumbnail_t *thumb);
 GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb, float zoom_ratio);
 void dt_thumbnail_resize(dt_thumbnail_t *thumb, int width, int height, gboolean force, float zoom_ratio);

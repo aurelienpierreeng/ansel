@@ -110,12 +110,6 @@ void init_collection_line(gpointer instance,
   }
 }
 
-gboolean _is_lighttable()
-{
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  return cv && !strcmp(cv->module_name, "lighttable");
-}
-
 void import_files_callback()
 {
     dt_images_import();
@@ -218,29 +212,29 @@ void append_file(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_menu_separator(menus[index]);
 
   add_sub_menu_entry(menus, lists, _("Copy files on disk..."), index, NULL, dt_control_copy_images, NULL, NULL,
-                     sensitive_if_selected, 0, 0);
+                     has_active_images, 0, 0);
 
   add_sub_menu_entry(menus, lists, _("Move files on disk..."), index, NULL, dt_control_move_images, NULL, NULL,
-                     sensitive_if_selected, 0, 0);
+                     has_active_images, 0, 0);
 
   add_sub_menu_entry(menus, lists, _("Create a blended HDR"), index, NULL, dt_control_merge_hdr, NULL, NULL,
-                     sensitive_if_selected, 0, 0);
+                     has_active_images, 0, 0);
 
   add_menu_separator(menus[index]);
 
   add_sub_menu_entry(menus, lists, _("Copy distant images locally"), index, NULL, dt_control_set_local_copy_images, NULL, NULL,
-                     sensitive_if_selected, 0, 0);
+                     has_active_images, 0, 0);
 
   add_sub_menu_entry(menus, lists, _("Resynchronize distant images"), index, NULL, dt_control_reset_local_copy_images, NULL, NULL,
-                     sensitive_if_selected, 0, 0);
+                     has_active_images, 0, 0);
 
   add_menu_separator(menus[index]);
 
   add_sub_menu_entry(menus, lists, _("Remove from library"), index, NULL, (void *)dt_control_remove_images, NULL, NULL,
-                     sensitive_if_selected, GDK_KEY_Delete, 0);
+                     has_active_images, GDK_KEY_Delete, 0);
 
   add_sub_menu_entry(menus, lists, _("Delete on disk"), index, NULL, dt_control_delete_images, NULL, NULL,
-                     sensitive_if_selected, GDK_KEY_Delete, GDK_SHIFT_MASK);
+                     has_active_images, GDK_KEY_Delete, GDK_SHIFT_MASK);
 
   add_menu_separator(menus[index]);
 

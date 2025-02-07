@@ -4614,7 +4614,7 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
 //       transaction routines. And it has been done to help further implementation for
 //       proper threading and nested transaction support.
 //
-void dt_database_start_transaction(const struct dt_database_t *db)
+void dt_database_start_transaction_debug(const struct dt_database_t *db)
 {
   const int trxid = dt_atomic_add_int(&_trxid, 1);
 
@@ -4625,6 +4625,8 @@ void dt_database_start_transaction(const struct dt_database_t *db)
   {
     // In theads application it may be safer to use an IMMEDIATE transaction:
     // "BEGIN IMMEDIATE TRANSACTION"
+    // This implies "BEGIN DEFERRED TRANSACTION", which means
+    // no write event is dispatched to DB until the first "COMMIT"
     DT_DEBUG_SQLITE3_EXEC(dt_database_get(db), "BEGIN TRANSACTION", NULL, NULL, NULL);
   }
 #ifdef USE_NESTED_TRANSACTIONS
@@ -4640,7 +4642,7 @@ void dt_database_start_transaction(const struct dt_database_t *db)
     fprintf(stderr, "[dt_database_start_transaction] more than %d nested transaction\n", MAX_NESTED_TRANSACTIONS);
 }
 
-void dt_database_release_transaction(const struct dt_database_t *db)
+void dt_database_release_transaction_debug(const struct dt_database_t *db)
 {
   const int trxid = dt_atomic_sub_int(&_trxid, 1);
 

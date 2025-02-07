@@ -40,6 +40,29 @@ typedef struct dt_undo_ratings_t
   int after;
 } dt_undo_ratings_t;
 
+char *dt_ratings_get_name(const int rating)
+{
+  switch(rating)
+  {
+    case 0:
+      return _("empty");
+    case 1:
+      return _("1 star");
+    case 2:
+      return _("2 stars");
+    case 3:
+      return _("3 stars");
+    case 4:
+      return _("4 stars");
+    case 5:
+      return _("5 stars");
+    case 6:
+      return _("rejected");
+    default:
+      return _("unknown/invalid");
+  }
+}
+
 int dt_ratings_get(const int imgid)
 {
   int stars = 0;
@@ -169,6 +192,7 @@ void dt_ratings_apply_on_list(GList *img, const int rating, const gboolean undo_
       dt_undo_end_group(darktable.undo);
     }
     dt_collection_hint_message(darktable.collection);
+    dt_toast_log(_("Rating set to %s"), dt_ratings_get_name(rating));
   }
 }
 

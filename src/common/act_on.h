@@ -22,7 +22,7 @@
 
 // get images to act on for globals change (via libs or accels)
 // The list needs to be freed by the caller
-GList *dt_act_on_get_images(const gboolean only_visible, const gboolean force, const gboolean ordered);
+GList *dt_act_on_get_images();
 
 // get only the number of images to act on
 int dt_act_on_get_images_nb(const gboolean only_visible, const gboolean force);

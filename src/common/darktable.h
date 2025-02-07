@@ -542,6 +542,7 @@ typedef struct darktable_t
   dt_pthread_mutex_t capabilities_threadsafe;
   dt_pthread_mutex_t exiv2_threadsafe;
   dt_pthread_mutex_t readFile_mutex;
+  dt_pthread_mutex_t pipeline_threadsafe;
   char *progname;
   char *datadir;
   char *sharedir;

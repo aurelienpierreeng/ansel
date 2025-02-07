@@ -601,7 +601,7 @@ void dt_metadata_set(const int imgid, const char *key, const char *value, const 
   {
     GList *imgs = NULL;
     if(imgid == -1)
-      imgs = dt_act_on_get_images(TRUE, TRUE, FALSE);
+      imgs = dt_act_on_get_images();
     else
       imgs = g_list_prepend(imgs, GINT_TO_POINTER(imgid));
     if(imgs)

@@ -201,7 +201,7 @@ static dt_job_t *dt_control_generic_images_job_create(dt_job_execute_callback ex
   }
   if(progress_type != PROGRESS_NONE)
     dt_control_job_add_progress(job, _(message), progress_type == PROGRESS_CANCELLABLE);
-  params->index = dt_act_on_get_images(only_visible, TRUE, FALSE);
+  params->index = dt_act_on_get_images();
 
   dt_control_job_set_params(job, params, dt_control_image_enumerator_cleanup);
 
@@ -1490,7 +1490,7 @@ static dt_job_t *_control_gpx_apply_job_create(const gchar *filename, int32_t fi
   if(filmid != -1)
     dt_control_image_enumerator_job_film_init(params, filmid);
   else if(!imgs)
-    params->index = dt_act_on_get_images(TRUE, TRUE, FALSE);
+    params->index = dt_act_on_get_images();
   else
     params->index = imgs;
   dt_control_gpx_apply_t *data = params->data;
@@ -2023,7 +2023,7 @@ static dt_job_t *dt_control_datetime_job_create(const GTimeSpan offset, const ch
   if(imgs)
     params->index = imgs;
   else
-    params->index = dt_act_on_get_images(TRUE, TRUE, FALSE);
+    params->index = dt_act_on_get_images();
 
   dt_control_datetime_t *data = params->data;
   data->offset = offset;
@@ -2371,8 +2371,7 @@ gboolean _import_image(const GList *img, dt_control_import_t *data, const int in
 void _refresh_progress_counter(dt_job_t *job, const int elements, const int index)
 {
   gchar message[32] = { 0 };
-  double fraction = 0.0f;
-  fraction += 1.0f / (double) elements;
+  double fraction = (double)index / (double)elements;
   snprintf(message, sizeof(message), ngettext("importing %i/%i image", "importing %i/%i images", index), index, elements);
   dt_control_job_set_progress_message(job, message);
   dt_control_job_set_progress(job, fraction);

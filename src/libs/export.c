@@ -331,7 +331,7 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
   gchar *icc_filename = dt_conf_get_string(CONFIG_PREFIX "iccprofile");
   const dt_iop_color_intent_t icc_intent = dt_conf_get_int(CONFIG_PREFIX "iccintent");
 
-  GList *list = dt_act_on_get_images(TRUE, TRUE, TRUE);
+  GList *list = dt_act_on_get_images();
   dt_control_export(list, max_width, max_height, format_index, storage_index, TRUE, export_masks,
                     style, icc_type, icc_filename, icc_intent, d->metadata_export);
 

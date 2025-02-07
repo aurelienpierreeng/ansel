@@ -6,14 +6,32 @@
 #include "common/image_cache.h"
 #include "develop/dev_history.h"
 
-static void preferences_callback(GtkWidget *widget)
+static void preferences_callback()
 {
   dt_gui_preferences_show();
 }
 
+static gboolean undo_sensitive_callback()
+{
+  if(!darktable.view_manager) return FALSE;
+  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  if(!cv) return FALSE;
+
+  gboolean sensitive = FALSE;
+
+  if(!strcmp(cv->module_name, "lighttable"))
+    sensitive = dt_is_undo_list_populated(darktable.undo, DT_UNDO_LIGHTTABLE);
+  else if(!strcmp(cv->module_name, "darkroom"))
+    sensitive = dt_is_undo_list_populated(darktable.undo, DT_UNDO_DEVELOP);
+  else if(!strcmp(cv->module_name, "darkroom"))
+    sensitive = dt_is_undo_list_populated(darktable.undo, DT_UNDO_MAP);
+
+  return sensitive;
+}
+
 static void undo_callback()
 {
-  if(!darktable.view_manager) return;
+  if(!darktable.view_manager || !undo_sensitive_callback()) return;
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
   if(!cv) return;
 
@@ -29,9 +47,29 @@ static void undo_callback()
   // For now we just ignore the peculiar stuff, no idea how annoying it is, seems it's only GUI candy.
 }
 
+
+static gboolean redo_sensitive_callback()
+{
+  if(!darktable.view_manager) return FALSE;
+  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  if(!cv) return FALSE;
+
+  gboolean sensitive = FALSE;
+
+  if(!strcmp(cv->module_name, "lighttable"))
+    sensitive = dt_is_redo_list_populated(darktable.undo, DT_UNDO_LIGHTTABLE);
+  else if(!strcmp(cv->module_name, "darkroom"))
+    sensitive = dt_is_redo_list_populated(darktable.undo, DT_UNDO_DEVELOP);
+  else if(!strcmp(cv->module_name, "darkroom"))
+    sensitive = dt_is_redo_list_populated(darktable.undo, DT_UNDO_MAP);
+
+  return sensitive;
+}
+
+
 static void redo_callback()
 {
-  if(!darktable.view_manager) return;
+  if(!darktable.view_manager || !redo_sensitive_callback()) return;
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
   if(!cv) return;
 
@@ -44,105 +82,112 @@ static void redo_callback()
   //   see undo_callback()
 }
 
-static gboolean undo_sensitive_callback(GtkWidget *w)
+
+static gboolean is_image_in_dev(GList *imgs)
 {
-  if(!darktable.view_manager) return FALSE;
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(!cv) return FALSE;
-
-  gboolean sensitive = FALSE;
-
-  if(!strcmp(cv->module_name, "lighttable"))
-    sensitive = dt_is_undo_list_populated(darktable.undo, DT_UNDO_LIGHTTABLE);
-  else if(!strcmp(cv->module_name, "darkroom"))
-    sensitive = dt_is_undo_list_populated(darktable.undo, DT_UNDO_DEVELOP);
-
-  return sensitive;
-}
-
-static gboolean redo_sensitive_callback(GtkWidget *w)
-{
-  if(!darktable.view_manager) return FALSE;
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(!cv) return FALSE;
-
-  gboolean sensitive = FALSE;
-
-  if(!strcmp(cv->module_name, "lighttable"))
-    sensitive = dt_is_redo_list_populated(darktable.undo, DT_UNDO_LIGHTTABLE);
-  else if(!strcmp(cv->module_name, "darkroom"))
-    sensitive = dt_is_redo_list_populated(darktable.undo, DT_UNDO_DEVELOP);
-
-  return sensitive;
-}
-
-static gboolean compress_history_sensitive_callback()
-{
-  return dt_collection_get_selected_count(darktable.collection) > 0;
+  return darktable.develop != NULL
+    && g_list_find(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
 }
 
 static void compress_history_callback()
 {
-  GList *imgs = g_list_copy(dt_selection_get_list(darktable.selection));
+  GList *imgs = dt_act_on_get_images();
   if(!imgs) return;
 
-  // As dt_history_compress_on_image does *not* use the history stack data at all
-  // make sure the current stack is in the database
-  dt_dev_write_history(darktable.develop);
+  gboolean is_darkroom_image_in_list = is_image_in_dev(imgs);
+
+  if(is_darkroom_image_in_list)
+  {
+    dt_dev_undo_start_record(darktable.develop);
+    dt_dev_write_history(darktable.develop);
+  }
 
   dt_history_compress_on_list(imgs);
+
+  if(is_darkroom_image_in_list)
+  {
+    dt_dev_undo_end_record(darktable.develop);
+    dt_dev_reload_history_items(darktable.develop);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+  }
+
   g_list_free(imgs);
+  dt_control_queue_redraw_center();
 
   // We should not need to raise signals here because lighttable
   // reloads the history from SQL at each redraw.
   // FIXME: for obvious perf reasons, history should be cached in thumbnails
   // and then raising signals will be needed here to refresh the cache.
-  dt_control_queue_redraw_center();
 }
 
 static void delete_history_callback()
 {
-  GList *imgs = g_list_copy(dt_selection_get_list(darktable.selection));
+  if(!has_selection()) return;
+  
+  GList *imgs = dt_act_on_get_images();
   if(!imgs) return;
+
+  gboolean is_darkroom_image_in_list = is_image_in_dev(imgs);
+
+  if(is_darkroom_image_in_list)
+  {
+    dt_dev_undo_start_record(darktable.develop);
+    dt_dev_write_history(darktable.develop);
+  }
 
   // We do not ask for confirmation because it can be undone by Ctrl + Z
   dt_history_delete_on_list(imgs, TRUE);
+
+  if(is_darkroom_image_in_list)
+  {
+    dt_dev_undo_end_record(darktable.develop);
+    dt_dev_reload_history_items(darktable.develop);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+  }
+
   dt_control_queue_redraw_center();
-
   g_list_free(imgs);
-}
-
-
-static gboolean copy_sensitive_callback()
-{
-  return dt_collection_get_selected_count(darktable.collection) == 1
-         && dt_selection_get_first_id(darktable.selection) != -1;
 }
 
 static void copy_callback()
 {
   // Allow copy only when exactly one file is selected
-  if(copy_sensitive_callback())
+  if(dt_selection_get_length(darktable.selection) != 1)
   {
-    // TODO: only when needed
-    dt_dev_write_history(darktable.develop);
-    dt_history_copy(dt_selection_get_first_id(darktable.selection));
-  }
-  else
     dt_control_log(_("Copy is allowed only with exactly one image selected"));
+    return;
+  }
+
+  GList *imgs = dt_selection_get_list(darktable.selection);
+  gboolean is_darkroom_image_in_list = is_image_in_dev(imgs);
+
+  if(is_darkroom_image_in_list)
+  {
+    dt_dev_write_history(darktable.develop);
+  }
+
+  dt_history_copy(dt_selection_get_first_id(darktable.selection));
 }
 
 
 static void copy_parts_callback()
 {
-  if(copy_sensitive_callback())
+  // Allow copy only when exactly one file is selected
+  if(dt_selection_get_length(darktable.selection) != 1)
   {
-    // TODO: only when needed
-    dt_dev_write_history(darktable.develop);
-    dt_history_copy_parts(dt_selection_get_first_id(darktable.selection));
-  }
-  else
     dt_control_log(_("Copy is allowed only with exactly one image selected"));
+    return;
+  }
+
+  GList *imgs = dt_selection_get_list(darktable.selection);
+  gboolean is_darkroom_image_in_list = is_image_in_dev(imgs);
+
+  if(is_darkroom_image_in_list)
+  {
+    dt_dev_write_history(darktable.develop);
+  }
+
+  dt_history_copy_parts(dt_selection_get_first_id(darktable.selection));
 }
 
 
@@ -153,40 +198,62 @@ static gboolean paste_sensitive_callback()
 
 static void paste_all_callback()
 {
-  if(paste_sensitive_callback())
+  if(!paste_sensitive_callback())
+  {
+    dt_control_log(_("Paste needs selected images to work"));
+    return;
+  }
+
+  GList *imgs = g_list_copy(dt_selection_get_list(darktable.selection));
+  gboolean is_darkroom_image_in_list = is_image_in_dev(imgs);
+
+  if(is_darkroom_image_in_list)
   {
     dt_dev_undo_start_record(darktable.develop);
-    GList *imgs = g_list_copy(dt_selection_get_list(darktable.selection));
-    dt_history_paste_on_list(imgs, TRUE);
-    g_list_free(imgs);
-    dt_dev_undo_end_record(darktable.develop);
-
-    // TODO: only when needed, check imgid
-    dt_dev_reload_history_items(darktable.develop);
-
-    dt_control_queue_redraw_center();
+    dt_dev_write_history(darktable.develop);
   }
-  else
-    dt_control_log(_("Paste needs selected images to work"));
+
+  dt_history_paste_on_list(imgs, TRUE);
+
+  if(is_darkroom_image_in_list)
+  {
+    dt_dev_undo_end_record(darktable.develop);
+    dt_dev_reload_history_items(darktable.develop);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+  }
+
+  dt_control_queue_redraw_center();
+  g_list_free(imgs);
 }
 
 static void paste_parts_callback()
 {
-  /* copy history from previously copied image and past onto selection */
-  if(paste_sensitive_callback())
+  if(!paste_sensitive_callback())
+  {
+    dt_control_log(_("Paste needs selected images to work"));
+    return;
+  }
+
+  GList *imgs = g_list_copy(dt_selection_get_list(darktable.selection));
+  gboolean is_darkroom_image_in_list = is_image_in_dev(imgs);
+
+  if(is_darkroom_image_in_list)
   {
     dt_dev_undo_start_record(darktable.develop);
-    GList *imgs = g_list_copy(dt_selection_get_list(darktable.selection));
-    dt_history_paste_parts_on_list(imgs, TRUE);
-    g_list_free(imgs);
-    dt_dev_undo_end_record(darktable.develop);
-    dt_control_queue_redraw_center();
-
-    // TODO: only when needed, check imgid
-    dt_dev_reload_history_items(darktable.develop);
+    dt_dev_write_history(darktable.develop);
   }
-  else
-    dt_control_log(_("Paste needs selected images to work"));
+
+  dt_history_paste_parts_on_list(imgs, TRUE);
+
+  if(is_darkroom_image_in_list)
+  {
+    dt_dev_undo_end_record(darktable.develop);
+    dt_dev_reload_history_items(darktable.develop);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+  }
+
+  dt_control_queue_redraw_center();
+  g_list_free(imgs);
 }
 
 static void load_xmp_callback()
@@ -271,7 +338,7 @@ static void load_xmp_callback()
 
 static void duplicate_callback()
 {
-  if(compress_history_sensitive_callback())
+  if(has_active_images())
     dt_control_duplicate_images(FALSE);
   else
     dt_control_log(_("Duplication needs selected images to work"));
@@ -279,7 +346,7 @@ static void duplicate_callback()
 
 static void new_history_callback()
 {
-  if(compress_history_sensitive_callback())
+  if(has_active_images())
     dt_control_duplicate_images(TRUE);
   else
     dt_control_log(_("Creating new historys needs selected images to work"));
@@ -293,9 +360,9 @@ void append_edit(GtkWidget **menus, GList **lists, const dt_menus_t index)
 
   add_menu_separator(menus[index]);
 
-  add_sub_menu_entry(menus, lists, _("Copy history (all)"), index, NULL, copy_callback, NULL, NULL, copy_sensitive_callback, GDK_KEY_c, GDK_CONTROL_MASK);
+  add_sub_menu_entry(menus, lists, _("Copy history (all)"), index, NULL, copy_callback, NULL, NULL, has_selection, GDK_KEY_c, GDK_CONTROL_MASK);
 
-  add_sub_menu_entry(menus, lists, _("Copy history (parts)..."), index, NULL, copy_parts_callback, NULL, NULL, copy_sensitive_callback, GDK_KEY_c, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+  add_sub_menu_entry(menus, lists, _("Copy history (parts)..."), index, NULL, copy_parts_callback, NULL, NULL, has_selection, GDK_KEY_c, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
 
   add_sub_menu_entry(menus, lists, _("Paste history (all)"), index, NULL, paste_all_callback, NULL, NULL,
                      paste_sensitive_callback, GDK_KEY_v, GDK_CONTROL_MASK);
@@ -306,19 +373,19 @@ void append_edit(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_menu_separator(menus[index]);
 
   add_sub_menu_entry(menus, lists, _("Load history from XMP..."), index, NULL,
-                     load_xmp_callback, NULL, NULL, compress_history_sensitive_callback, 0, 0);
+                     load_xmp_callback, NULL, NULL, has_active_images, 0, 0);
 
   add_sub_menu_entry(menus, lists, _("Create new history"), index, NULL,
-                    new_history_callback, NULL, NULL, compress_history_sensitive_callback, GDK_KEY_n, GDK_CONTROL_MASK);
+                    new_history_callback, NULL, NULL, has_active_images, GDK_KEY_n, GDK_CONTROL_MASK);
 
   add_sub_menu_entry(menus, lists, _("Duplicate existing history"), index, NULL,
-                     duplicate_callback, NULL, NULL, compress_history_sensitive_callback, GDK_KEY_d, GDK_CONTROL_MASK);
+                     duplicate_callback, NULL, NULL, has_active_images, GDK_KEY_d, GDK_CONTROL_MASK);
 
   add_sub_menu_entry(menus, lists, _("Compress history"), index, NULL,
-                     compress_history_callback, NULL, NULL, compress_history_sensitive_callback, 0, 0);
+                     compress_history_callback, NULL, NULL, has_active_images, 0, 0);
 
   add_sub_menu_entry(menus, lists, _("Delete history"), index, NULL,
-                     delete_history_callback, NULL, NULL, compress_history_sensitive_callback, 0, 0);
+                     delete_history_callback, NULL, NULL, has_active_images, 0, 0);
 
   add_menu_separator(menus[index]);
 

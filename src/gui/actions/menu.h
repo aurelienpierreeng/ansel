@@ -271,8 +271,19 @@ GtkWidget * get_last_widget(GList **list)
   return w;
 }
 
-gboolean sensitive_if_selected()
+gboolean has_selection()
 {
   // Can be used to set menu items sensitivity when image(s) is/are selected
-  return dt_collection_get_selected_count(darktable.collection) > 0;
+  return dt_selection_get_length(darktable.selection) > 0;
+}
+
+gboolean has_active_images()
+{
+  return dt_act_on_get_images_nb(FALSE, FALSE) > 0;
+}
+
+gboolean _is_lighttable()
+{
+  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  return cv && !g_strcmp0(cv->module_name, "lighttable");
 }

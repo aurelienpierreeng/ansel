@@ -95,9 +95,6 @@ typedef struct dt_thumbtable_t
   // are scrollbars shown ?
   gboolean scrollbars;
 
-  // let's remember previous thumbnail generation settings to detect if they change
-  int pref_embedded;
-  int pref_hq;
 } dt_thumbtable_t;
 
 dt_thumbtable_t *dt_thumbtable_new();

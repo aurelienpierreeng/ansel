@@ -996,7 +996,7 @@ gboolean dt_history_paste_on_list(const GList *list, gboolean undo)
     return FALSE;
 
   if(undo) dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
-  for(GList *l = (GList *)list; l; l = g_list_next(l))
+  for(GList *l = g_list_first((GList *)list); l; l = g_list_next(l))
   {
     const int dest = GPOINTER_TO_INT(l->data);
     dt_history_copy_and_paste_on_image(darktable.view_manager->copy_paste.copied_imageid,
@@ -1020,20 +1020,17 @@ gboolean dt_history_paste_parts_on_list(const GList *list, gboolean undo)
   // at the time the dialog is started, some signals are sent and this in turn call
   // back dt_view_get_images_to_act_on() which free list and create a new one.
 
-  GList *l_copy = g_list_copy((GList *)list);
-
   // we launch the dialog
   const int res = dt_gui_hist_dialog_new(&(darktable.view_manager->copy_paste),
                                          darktable.view_manager->copy_paste.copied_imageid, FALSE);
 
   if(res != GTK_RESPONSE_OK)
   {
-    g_list_free(l_copy);
     return FALSE;
   }
 
   if(undo) dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
-  for (const GList *l = l_copy; l; l = g_list_next(l))
+  for (const GList *l = g_list_first((GList *)list); l; l = g_list_next(l))
   {
     const int dest = GPOINTER_TO_INT(l->data);
     dt_history_copy_and_paste_on_image(darktable.view_manager->copy_paste.copied_imageid,
@@ -1043,8 +1040,6 @@ gboolean dt_history_paste_parts_on_list(const GList *list, gboolean undo)
                                        darktable.view_manager->copy_paste.full_copy);
   }
   if(undo) dt_undo_end_group(darktable.undo);
-
-  g_list_free(l_copy);
 
   return TRUE;
 }
@@ -1056,7 +1051,7 @@ gboolean dt_history_delete_on_list(const GList *list, gboolean undo)
 
   if(undo) dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
 
-  for(GList *l = (GList *)list; l; l = g_list_next(l))
+  for(GList *l = g_list_first((GList *)list); l; l = g_list_next(l))
   {
     const int imgid = GPOINTER_TO_INT(l->data);
     dt_undo_lt_history_t *hist = dt_history_snapshot_item_init();

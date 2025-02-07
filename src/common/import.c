@@ -273,7 +273,8 @@ static int32_t dt_get_selected_files(dt_import_t *import)
   }
   else if(import->files)
   {
-    g_list_free(import->files);
+    g_list_free_full(g_steal_pointer(&import->files), g_free);
+    import->files = NULL;
     // no callback will be triggered. Free here.
   }
 

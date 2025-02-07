@@ -455,7 +455,7 @@ gboolean dt_tag_attach(const guint tagid, const gint imgid, const gboolean undo_
   gboolean res = FALSE;
   if(imgid == -1)
   {
-    GList *imgs = dt_act_on_get_images(!group_on, TRUE, FALSE);
+    GList *imgs = dt_act_on_get_images();
     res = dt_tag_attach_images(tagid, imgs, undo_on);
     g_list_free(imgs);
   }
@@ -558,7 +558,7 @@ gboolean dt_tag_detach(const guint tagid, const gint imgid, const gboolean undo_
 {
   GList *imgs = NULL;
   if(imgid == -1)
-    imgs = dt_act_on_get_images(!group_on, TRUE, FALSE);
+    imgs = dt_act_on_get_images();
   else
     imgs = g_list_prepend(imgs, GINT_TO_POINTER(imgid));
   if(group_on) dt_grouping_add_grouped_images(&imgs);

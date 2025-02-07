@@ -654,7 +654,7 @@ void dt_image_set_location(const int32_t imgid, const dt_image_geoloc_t *geoloc,
 {
   GList *imgs = NULL;
   if(imgid == -1)
-    imgs = dt_act_on_get_images(TRUE, TRUE, FALSE);
+    imgs = dt_act_on_get_images();
   else
     imgs = g_list_prepend(imgs, GINT_TO_POINTER(imgid));
   if(group_on) dt_grouping_add_grouped_images(&imgs);
@@ -904,6 +904,8 @@ void dt_image_flip(const int32_t imgid, const int32_t cw)
                  dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
 
   dt_mipmap_cache_remove(darktable.mipmap_cache, imgid);
+
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MIPMAP_UPDATED, imgid);
 }
 
 /* About the image size ratio
@@ -2577,7 +2579,7 @@ void dt_image_synch_xmp(const int selected)
     // Hell, let's put a pomodoro timer there and call that a feature: 
     // take a mandatory break, go stretch your legs, it's good for you.
     // Fucking hell.
-    GList *imgs = dt_act_on_get_images(FALSE, TRUE, FALSE);
+    GList *imgs = dt_act_on_get_images();
     dt_image_synch_xmps(imgs);
     g_list_free(imgs);
   }

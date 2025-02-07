@@ -34,6 +34,27 @@ const char *dt_colorlabels_name[] = {
   NULL // termination
 };
 
+char * dt_colorlabels_get_name(const int label)
+{
+  switch(label)
+  {
+    case 0:
+      return _("red");
+    case 1:
+      return _("yellow");
+    case 2:
+      return _("green");
+    case 3:
+      return _("blue");
+    case 4:
+      return _("purple");
+    case 5:
+      return _("empty");
+    default:
+      return _("unknown/invalid");
+  }
+}
+
 typedef struct dt_undo_colorlabels_t
 {
   int imgid;
@@ -241,6 +262,7 @@ void dt_colorlabels_toggle_label_on_list(GList *list, const int color, const gbo
     dt_undo_end_group(darktable.undo);
   }
   dt_collection_hint_message(darktable.collection);
+  dt_toast_log(_("Color label set to %s"), dt_colorlabels_get_name(color));
 }
 
 int dt_colorlabels_check_label(const int imgid, const int color)

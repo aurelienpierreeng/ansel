@@ -946,44 +946,6 @@
     <longdescription/>
   </dtconfig>
   <dtconfig prefs="lighttable" section="thumbs">
-    <name>plugins/lighttable/thumbnail_raw_min_level</name>
-   <type>
-      <enum>
-        <option>always</option>
-        <option>small</option>
-        <option>VGA</option>
-        <option>720p</option>
-        <option>1080p</option>
-        <option>WQXGA</option>
-        <option>4K</option>
-        <option>5K</option>
-        <option>never</option>
-      </enum>
-    </type>
-    <default>never</default>
-    <shortdescription>use raw file instead of embedded JPEG from size</shortdescription>
-    <longdescription>if the thumbnail size is greater than this value, it will be processed using raw file instead of the embedded preview JPEG (better but slower).\nif you want all thumbnails and pre-rendered images in best quality you should choose the *always* option.\n(more comments in the manual)</longdescription>
-  </dtconfig>
-  <dtconfig prefs="lighttable" section="thumbs">
-    <name>plugins/lighttable/thumbnail_hq_min_level</name>
-    <type>
-      <enum>
-        <option>always</option>
-        <option>small</option>
-        <option>VGA</option>
-        <option>720p</option>
-        <option>1080p</option>
-        <option>WQXGA</option>
-        <option>4K</option>
-        <option>5K</option>
-        <option>never</option>
-      </enum>
-    </type>
-    <default>720p</default>
-    <shortdescription>high quality processing from size</shortdescription>
-    <longdescription>if the thumbnail size is greater than this value, it will be processed using the full quality rendering path (better but slower).\nif you want all thumbnails and pre-rendered images in best quality you should choose the *always* option.\n(more comments in the manual)</longdescription>
-  </dtconfig>
-  <dtconfig prefs="lighttable" section="thumbs">
     <name>plugins/lighttable/thumbnail_sizes</name>
     <type>string</type>
     <default>120|400</default>

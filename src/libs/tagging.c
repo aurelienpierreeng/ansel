@@ -1006,7 +1006,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
         entry++;
       }
       g_strfreev(tokens);
-      GList *imgs = dt_act_on_get_images(FALSE, FALSE, FALSE);
+      GList *imgs = dt_act_on_get_images();
       dt_tag_set_tags(tags, imgs, TRUE, FALSE, TRUE);
       g_list_free(imgs);
       gboolean change = FALSE;
@@ -1088,7 +1088,7 @@ static void _detach_selected_tag(GtkTreeView *view, dt_lib_module_t *self)
   gtk_tree_model_get(model, &iter, DT_LIB_TAGGING_COL_ID, &tagid, -1);
   if(tagid <= 0) return;
 
-  GList *imgs = dt_act_on_get_images(FALSE, TRUE, FALSE);
+  GList *imgs = dt_act_on_get_images();
   if(!imgs) return;
 
   GList *affected_images = dt_tag_get_images_from_list(imgs, tagid);
@@ -3315,7 +3315,7 @@ static void _lib_tagging_tag_redo(dt_action_t *action)
 
   if(d->last_tag)
   {
-    GList *imgs = dt_act_on_get_images(FALSE, TRUE, FALSE);
+    GList *imgs = dt_act_on_get_images();
     const gboolean res = dt_tag_attach_string_list(d->last_tag, imgs, TRUE);
     if(res) dt_image_synch_xmps(imgs);
     g_list_free(imgs);
@@ -3335,7 +3335,7 @@ static void _lib_tagging_tag_show(dt_action_t *action)
     return;  // doesn't work properly with tree treeview
   }
 
-  d->floating_tag_imgs = dt_act_on_get_images(FALSE, TRUE, FALSE);
+  d->floating_tag_imgs = dt_act_on_get_images();
   gint x, y;
   gint px, py, w, h;
   GtkWidget *window = dt_ui_main_window(darktable.gui->ui);

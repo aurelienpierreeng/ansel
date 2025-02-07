@@ -1188,11 +1188,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
   const int incompatible = !strncmp(cimg->exif_maker, "Phase One", 9);
   dt_image_cache_read_release(darktable.image_cache, cimg);
 
-  const char *min = dt_conf_get_string_const("plugins/lighttable/thumbnail_raw_min_level");
-  const dt_mipmap_size_t min_s = dt_mipmap_cache_get_min_mip_from_pref(min);
-  const gboolean use_embedded = (size <= min_s);
-
-  if(!altered && use_embedded && !incompatible)
+  if(!altered && !incompatible)
   {
     const dt_image_orientation_t orientation = dt_image_get_orientation(imgid);
 

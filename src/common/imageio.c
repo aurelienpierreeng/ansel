@@ -987,6 +987,13 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                                  dt_imageio_module_data_t *storage_params, int num, int total,
                                  dt_export_metadata_t *metadata)
 {
+  // We need to ensure only one pipeline at a time runs because writing to database is not thread-safe.
+  // In the case of generating image previews for the lighttable on freshly-imported images,
+  // new, default, histories are inited in separate threads leading to concurrent writes
+  // to main.history because that happens from here.
+  // Pending an elegant fix for all this mess, do the reasonable thing.
+  dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
+
   dt_develop_t dev;
   dt_dev_init(&dev, 0);
   dt_dev_load_image(&dev, imgid);
@@ -1014,8 +1021,6 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     res = dt_dev_pixelpipe_init_thumbnail(&pipe, buf.width, buf.height);
   else
     res = dt_dev_pixelpipe_init_export(&pipe, buf.width, buf.height, format->levels(format_params), export_masks);
-
-  dt_pthread_mutex_lock(&pipe.busy_mutex);
 
   if(!res)
   {
@@ -1135,7 +1140,6 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   if(res) goto error;
 
   dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
-  dt_pthread_mutex_unlock(&pipe.busy_mutex);
   dt_dev_pixelpipe_cleanup(&pipe);
   dt_dev_cleanup(&dev);
 
@@ -1154,12 +1158,13 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                             format_params, storage, storage_params);
   }
 
+  dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
   return 0; // success
 
 error:
-  dt_pthread_mutex_unlock(&pipe.busy_mutex);
   dt_dev_pixelpipe_cleanup(&pipe);
 error_early:
+  dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
   dt_dev_cleanup(&dev);
   dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
   return 1;

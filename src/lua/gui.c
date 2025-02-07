@@ -82,7 +82,7 @@ static int _act_on_cb(lua_State *L)
 {
   lua_newtable(L);
   int table_index = 1;
-  GList *l = dt_act_on_get_images(FALSE, TRUE, TRUE);
+  GList *l = dt_act_on_get_images();
   for(const GList *image = l; image; image = g_list_next(image))
   {
     luaA_push(L, dt_lua_image_t, &image->data);

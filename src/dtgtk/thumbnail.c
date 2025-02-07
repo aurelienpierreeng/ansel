@@ -700,6 +700,22 @@ static gboolean _event_main_press(GtkWidget *widget, GdkEventButton *event, gpoi
   dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
   dt_control_set_mouse_over_id(thumb->imgid);
 
+  // select on single or double click, whatever happens next
+  if(event->button == 1 && event->type == GDK_BUTTON_PRESS)
+  {
+    // Duplicate module uses that fucking thumbnail without a table...
+    if(thumb->table && thumb->table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
+    {
+      if(dt_modifier_is(event->state, 0))
+        dt_selection_select_single(darktable.selection, thumb->imgid);
+      else if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
+        dt_selection_toggle(darktable.selection, thumb->imgid);
+      else if(dt_modifier_is(event->state, GDK_SHIFT_MASK))
+        dt_selection_select_range(darktable.selection, thumb->imgid);
+    }
+  }
+
+  // raise signal on double click
   if(event->button == 1 && event->type == GDK_2BUTTON_PRESS)
   {
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE, thumb->imgid);
@@ -710,17 +726,6 @@ static gboolean _event_main_press(GtkWidget *widget, GdkEventButton *event, gpoi
 }
 static gboolean _event_main_release(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
-  dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
-
-  if(event->button == 1 && !thumb->moved)
-  {
-    if(dt_modifier_is(event->state, 0))
-      dt_selection_select_single(darktable.selection, thumb->imgid);
-    else if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
-      dt_selection_toggle(darktable.selection, thumb->imgid);
-    else if(dt_modifier_is(event->state, GDK_SHIFT_MASK))
-      dt_selection_select_range(darktable.selection, thumb->imgid);
-  }
   return FALSE;
 }
 
@@ -1233,7 +1238,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb, float zoom_ratio)
 }
 
 dt_thumbnail_t *dt_thumbnail_new(int width, int height, float zoom_ratio, int imgid, int rowid,
-                                 dt_thumbnail_overlay_t over)
+                                 dt_thumbnail_overlay_t over, dt_thumbtable_t *table)
 {
   dt_thumbnail_t *thumb = calloc(1, sizeof(dt_thumbnail_t));
   thumb->width = width;
@@ -1243,6 +1248,7 @@ dt_thumbnail_t *dt_thumbnail_new(int width, int height, float zoom_ratio, int im
   thumb->over = over;
   thumb->zoom = 1.0f;
   thumb->expose_again_timeout_id = 0;
+  thumb->table = table;
 
   // we read and cache all the infos from dt_image_t that we need
   const dt_image_t *img = dt_image_cache_get(darktable.image_cache, thumb->imgid, 'r');

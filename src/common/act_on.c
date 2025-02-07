@@ -32,7 +32,7 @@
 
 
 // get the list of images to act on during global changes (libs, accels)
-GList *dt_act_on_get_images(const gboolean only_visible, const gboolean force, const gboolean ordered)
+GList *dt_act_on_get_images()
 {
   if(dt_selection_get_length(darktable.selection) > 0)
     return g_list_copy(dt_selection_get_list(darktable.selection));

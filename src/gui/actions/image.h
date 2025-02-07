@@ -76,18 +76,18 @@ void ungroup_images_callback()
 
 static void _colorlabels_callback(int color)
 {
-  GList *imgs = g_list_copy(dt_selection_get_list(darktable.selection));
+  GList *imgs = dt_act_on_get_images(); // this yields a copy
   dt_colorlabels_toggle_label_on_list(imgs, color, TRUE);
   dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_COLORLABEL, imgs);
-  //g_list_free(imgs);
+  //g_list_free(imgs); // this segfaults sooner or later
 }
 
 static void _rating_callback(int value)
 {
-  GList *imgs = g_list_copy(dt_selection_get_list(darktable.selection));
+  GList *imgs = dt_act_on_get_images(); // this yields a copy
   dt_ratings_apply_on_list(imgs, value, TRUE);
   dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_RATING, imgs);
-  //g_list_free(imgs);
+  //g_list_free(imgs); // this segfaults sooner or later
 }
 
 void red_label_callback()
@@ -155,6 +155,11 @@ void rating_reject_callback()
   _rating_callback(6);
 }
 
+/* Rotation has a module in darkroom, don't support it there */
+gboolean _can_be_rotated()
+{
+  return has_active_images() && _is_lighttable();
+}
 
 void append_image(GtkWidget **menus, GList **lists, const dt_menus_t index)
 {
@@ -163,79 +168,79 @@ void append_image(GtkWidget **menus, GList **lists, const dt_menus_t index)
   GtkWidget *parent = get_last_widget(lists);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("90\302\260 counter-clockwise"), index, NULL,
-                         rotate_counterclockwise_callback, NULL, NULL, sensitive_if_selected, 0, 0);
+                         rotate_counterclockwise_callback, NULL, NULL, _can_be_rotated, 0, 0);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("90\302\260 clockwise"), index, NULL,
-                         rotate_clockwise_callback, NULL, NULL, sensitive_if_selected, 0, 0);
+                         rotate_clockwise_callback, NULL, NULL, _can_be_rotated, 0, 0);
 
   add_sub_menu_separator(parent);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Reset rotation"), index, NULL,
-                         reset_rotation_callback, NULL, NULL, sensitive_if_selected, 0, 0);
+                         reset_rotation_callback, NULL, NULL, _can_be_rotated, 0, 0);
 
   /* Color labels */
   add_top_submenu_entry(menus, lists, _("Color labels"), index);
   parent = get_last_widget(lists);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("<span foreground='#BB2222'>\342\254\244</span> Red"), index, NULL,
-                         red_label_callback, NULL, NULL, sensitive_if_selected, GDK_KEY_F1, 0);
+                         red_label_callback, NULL, NULL, has_active_images, GDK_KEY_F1, 0);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("<span foreground='#BBBB22'>\342\254\244</span> Yellow"), index, NULL,
-                         yellow_label_callback, NULL, NULL, sensitive_if_selected, GDK_KEY_F2, 0);
+                         yellow_label_callback, NULL, NULL, has_active_images, GDK_KEY_F2, 0);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("<span foreground='#22BB22'>\342\254\244</span> Green"), index, NULL,
-                         green_label_callback, NULL, NULL, sensitive_if_selected, GDK_KEY_F3, 0);
+                         green_label_callback, NULL, NULL, has_active_images, GDK_KEY_F3, 0);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("<span foreground='#2222BB'>\342\254\244</span> Blue"), index, NULL,
-                         blue_label_callback, NULL, NULL, sensitive_if_selected, GDK_KEY_F4, 0);
+                         blue_label_callback, NULL, NULL, has_active_images, GDK_KEY_F4, 0);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("<span foreground='#BB22BB'>\342\254\244</span> Magenta"), index, NULL,
-                         magenta_label_callback, NULL, NULL, sensitive_if_selected, GDK_KEY_F5, 0);
+                         magenta_label_callback, NULL, NULL, has_active_images, GDK_KEY_F5, 0);
 
   add_sub_menu_separator(parent);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("<span foreground='#BBBBBB'>\342\254\244</span> Clear labels"), index, NULL,
-                         reset_label_callback, NULL, NULL, sensitive_if_selected, GDK_KEY_F6, 0);
+                         reset_label_callback, NULL, NULL, has_active_images, GDK_KEY_F6, 0);
 
   /* Ratings */
   add_top_submenu_entry(menus, lists, _("Ratings"), index);
   parent = get_last_widget(lists);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Reject"), index, NULL,
-                         rating_reject_callback, NULL, NULL, sensitive_if_selected, GDK_KEY_r, 0);
+                         rating_reject_callback, NULL, NULL, has_active_images, GDK_KEY_r, 0);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("\342\230\205"), index, NULL,
-                         rating_one_callback, NULL, NULL, sensitive_if_selected, GDK_KEY_1, 0);
+                         rating_one_callback, NULL, NULL, has_active_images, GDK_KEY_1, 0);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("\342\230\205\342\230\205"), index, NULL,
-                         rating_two_callback, NULL, NULL, sensitive_if_selected, GDK_KEY_2, 0);
+                         rating_two_callback, NULL, NULL, has_active_images, GDK_KEY_2, 0);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("\342\230\205\342\230\205\342\230\205"), index, NULL,
-                         rating_three_callback, NULL, NULL, sensitive_if_selected, GDK_KEY_3, 0);
+                         rating_three_callback, NULL, NULL, has_active_images, GDK_KEY_3, 0);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("\342\230\205\342\230\205\342\230\205\342\230\205"), index, NULL,
-                         rating_four_callback, NULL, NULL, sensitive_if_selected, GDK_KEY_4, 0);
+                         rating_four_callback, NULL, NULL, has_active_images, GDK_KEY_4, 0);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("\342\230\205\342\230\205\342\230\205\342\230\205\342\230\205"), index, NULL,
-                         rating_five_callback, NULL, NULL, sensitive_if_selected, GDK_KEY_5, 0);
+                         rating_five_callback, NULL, NULL, has_active_images, GDK_KEY_5, 0);
 
   add_sub_menu_separator(parent);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Clear rating"), index, NULL,
-                         rating_reset_callback, NULL, NULL, sensitive_if_selected, GDK_KEY_0, 0);
+                         rating_reset_callback, NULL, NULL, has_active_images, GDK_KEY_0, 0);
 
   add_menu_separator(menus[index]);
 
   /* Reload EXIF */
   add_sub_menu_entry(menus, lists, _("Reload EXIF from file"), index, NULL, dt_control_refresh_exif, NULL, NULL,
-                     sensitive_if_selected, 0, 0);
+                     has_active_images, 0, 0);
 
   add_menu_separator(menus[index]);
 
   /* Group/Ungroup */
   add_sub_menu_entry(menus, lists, _("Group images"), index, NULL, group_images_callback, NULL, NULL,
-                     sensitive_if_selected, GDK_KEY_g, GDK_CONTROL_MASK);
+                     has_active_images, GDK_KEY_g, GDK_CONTROL_MASK);
 
   add_sub_menu_entry(menus, lists, _("Ungroup images"), index, NULL, ungroup_images_callback, NULL, NULL,
-                     sensitive_if_selected, GDK_KEY_g, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+                     has_active_images, GDK_KEY_g, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
 }
