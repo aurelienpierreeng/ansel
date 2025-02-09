@@ -304,12 +304,6 @@ static gboolean _thumbtable_update_scrollbars(dt_thumbtable_t *table)
   float lbefore = (table->offset - 1) / table->thumbs_per_row;
   if((table->offset - 1) % table->thumbs_per_row) lbefore++;
 
-  // if scrollbars are used, we can have partial row shown
-  if(table->thumbs_area.y != 0)
-  {
-    lbefore += -table->thumbs_area.y / (float)table->thumb_size;
-  }
-
   // the number of line after (including the current one)
   int lafter = (nbid - table->offset) / table->thumbs_per_row;
   if((nbid - table->offset) % table->thumbs_per_row) lafter++;
