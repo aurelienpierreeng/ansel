@@ -297,7 +297,6 @@ src/libs/export_metadata.c
 src/libs/geotagging.c
 src/libs/histogram.c
 src/libs/history.c
-src/libs/image.c
 src/libs/ioporder.c
 src/libs/lib.c
 src/libs/location.c
@@ -317,7 +316,6 @@ src/libs/tools/filter.c
 src/libs/tools/hinter.c
 src/libs/tools/image_infos.c
 src/libs/tools/lighttable.c
-src/libs/tools/midi.c
 src/libs/tools/module_toolbox.c
 src/libs/tools/view_toolbox.c
 src/lua/image.c
