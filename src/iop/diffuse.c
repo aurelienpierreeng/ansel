@@ -1607,6 +1607,7 @@ void gui_init(struct dt_iop_module_t *self)
 
   g->threshold = dt_bauhaus_slider_from_params(self, "threshold");
   dt_bauhaus_slider_set_format(g->threshold, "%");
+  dt_bauhaus_slider_set_digits(g->threshold, 2);
   gtk_widget_set_tooltip_text(g->threshold,
                               _("luminance threshold for the mask.\n"
                                 "0. disables the luminance masking and applies the module on the whole image.\n"
