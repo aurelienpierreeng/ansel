@@ -28,6 +28,7 @@
 #include "common/selection.h"
 #include "common/undo.h"
 #include "control/control.h"
+#include "control/jobs/control_jobs.h"
 
 #include "gui/drag_and_drop.h"
 #include "views/view.h"
@@ -943,6 +944,85 @@ static void _event_dnd_begin(GtkWidget *widget, GdkDragContext *context, gpointe
     dt_gui_add_class(table->grid, "dt_thumbtable_reorder");
 }
 
+GList *_thumbtable_dnd_import_check(GList *files, const char *pathname, int *elements)
+{
+  if (!pathname || pathname == NULL)
+  {
+    fprintf(stdout,"DND check: no pathname.\n");
+    return files;
+  }
+  fprintf(stdout,"DND check pathname: %s\n", pathname);
+
+  if(g_file_test(pathname, G_FILE_TEST_IS_REGULAR))
+  {
+    if (dt_supported_image(pathname))
+    {
+      files = g_list_prepend(files, g_strdup(pathname));
+      (*elements)++;
+    }
+    else
+      fprintf(stderr, "`%s`: Unkonwn format.", pathname);
+  }
+  else if(g_file_test(pathname, G_FILE_TEST_IS_DIR))
+  {
+    fprintf(stderr, "DND check: Folders are not allowed");
+    dt_control_log(_("'%s': Please use 'File > Import' to import a folder."), pathname);
+  }
+  else
+  {
+    fprintf(stderr, "DND check: `%s` not a file or folder.\n", pathname);
+  }
+
+  return files;
+}
+
+static gboolean _thumbtable_dnd_import(GtkSelectionData *selection_data)
+{
+  gchar **uris = gtk_selection_data_get_uris(selection_data);
+  int elements = 0;
+  GList *files = NULL; // must be freed in the job cleanup function
+
+  if(uris)
+  {
+    GVfs *vfs = g_vfs_get_default();
+    for (int i = 0; uris[i] != NULL; i++)
+    {
+      GFile *filepath = g_vfs_get_file_for_uri(vfs, uris[i]);
+      const gchar *pathname = g_strdup(g_file_get_path(filepath));
+      files = _thumbtable_dnd_import_check(files, pathname, &elements);
+      g_object_unref(filepath);
+    }
+
+    /*GList *check_list = NULL;
+    for (check_list = g_list_first(files); check_list; check_list = g_list_next(check_list)) 
+      fprintf(stdout,"dnd list check: %s\n", (char *)check_list->data);
+    g_list_free(check_list);*/
+
+    if(elements > 0)
+    {
+      dt_control_import_t data = {.imgs = files,
+                                  .datetime = g_date_time_new_now_local(),
+                                  .copy = FALSE, // we only import in place.
+                                  .jobcode = dt_conf_get_string("ui_last/import_jobcode"),
+                                  .target_folder = dt_conf_get_string("session/base_directory_pattern"),
+                                  .target_subfolder_pattern = dt_conf_get_string("session/sub_directory_pattern"),
+                                  .target_file_pattern = dt_conf_get_string("session/filename_pattern"),
+                                  .target_dir = NULL,
+                                  .elements = elements,
+                                  .total_imported_elements = 0,
+                                  .filmid = -1,
+                                  .discarded = NULL
+                                  };
+
+    dt_control_import(data);
+    }
+    else fprintf(stderr,"No files to import. Check your selection or use 'File > Import'.");
+  }
+
+  g_strfreev(uris);
+  return elements >= 0 ? TRUE : FALSE;
+}
+
 void dt_thumbtable_event_dnd_received(GtkWidget *widget, GdkDragContext *context, gint x, gint y,
                                 GtkSelectionData *selection_data, guint target_type, guint time,
                                 gpointer user_data)
@@ -953,22 +1033,7 @@ void dt_thumbtable_event_dnd_received(GtkWidget *widget, GdkDragContext *context
   if((target_type == DND_TARGET_URI) && (selection_data != NULL)
      && (gtk_selection_data_get_length(selection_data) >= 0))
   {
-    gchar **uri_list = g_strsplit_set((gchar *)gtk_selection_data_get_data(selection_data), "\r\n", 0);
-    if(uri_list)
-    {
-      gchar **image_to_load = uri_list;
-      while(*image_to_load)
-      {
-        if(**image_to_load)
-        {
-          dt_load_from_string(*image_to_load, FALSE, NULL); // TODO: do we want to open the image in darkroom mode?
-                                                            // If yes -> set to TRUE.
-        }
-        image_to_load++;
-      }
-    }
-    g_strfreev(uri_list);
-    success = TRUE;
+    success = _thumbtable_dnd_import(selection_data);
   }
   else if((target_type == DND_TARGET_IMGID) && (selection_data != NULL)
           && (gtk_selection_data_get_length(selection_data) >= 0))
