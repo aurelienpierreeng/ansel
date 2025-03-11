@@ -194,6 +194,12 @@ typedef enum dt_signal_t
     */
   DT_SIGNAL_IMAGE_IMPORT,
 
+  /** \brief This signal is raised when the first image of a list just been imported (not cloned).
+  1 uint32_t :  the new image id.
+  no return.
+  */
+  DT_SIGNAL_FIRST_IMAGE_IMPORTED,
+
   /** \brief This signal is raised after an image has been exported
     to a file, but before it is sent to facebook/picasa etc...
     export won't happen until this function returns

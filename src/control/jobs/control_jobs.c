@@ -2174,7 +2174,7 @@ const int32_t _import_job(dt_control_import_t *data, gchar *img_path_to_db)
 {
   fprintf(stdout, "::IMPORT FILE::\n%s to DB\n", img_path_to_db);
 
-  dt_conf_set_int("ui_last/import_last_image", -1);
+  dt_conf_set_int("ui_last/imported_last_image", -1);
   gchar *dirname = g_strdup(dt_util_path_get_dirname(img_path_to_db));
 
   dt_film_t film;
@@ -2354,7 +2354,8 @@ gboolean _import_image(const GList *img, dt_control_import_t *data, const int in
     {
       _write_xmp_id(filename, imgid);
       fprintf(stdout, "imgid: %i\n", imgid);
-      dt_conf_set_int("ui_last/import_last_image", imgid);
+
+      dt_conf_set_int("ui_last/imported_last_image", imgid);
     }
   }
 
@@ -2395,6 +2396,8 @@ static int32_t _control_import_job_run(dt_job_t *job)
       fprintf(stdout, "N: %i\n", data->total_imported_elements);
     }
     index++;
+    if(index == 1)
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_FIRST_IMAGE_IMPORTED);
 
     fprintf(stdout, "BOTTOM LOOP.\n\n");
   }

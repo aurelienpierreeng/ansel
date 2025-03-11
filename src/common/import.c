@@ -222,15 +222,30 @@ static void _recurse_selection(GSList *selection, dt_import_t *const import)
 
   if((import->shutdown)) return;
 
-  GVfs *vfs = g_vfs_get_default();
-  for(GSList *uri = selection; uri; uri = g_slist_next(uri))
+  if(selection != NULL)
   {
-    GFile *file = g_vfs_get_file_for_uri(vfs, (const char *)uri->data);
-    _filter_document(vfs, file, import);
-    g_object_unref(file);
+    GVfs *vfs = g_vfs_get_default();
+    for(GSList *uri = selection; uri; uri = g_slist_next(uri))
+    {
+      GFile *file = g_vfs_get_file_for_uri(vfs, (const char *)uri->data);
+      _filter_document(vfs, file, import);
+      g_object_unref(file);
+    }
+
+    GFile *filepath = g_vfs_get_file_for_uri(vfs, (const char *)selection->data);
+    const char *first_element = (const char*) g_file_get_path(filepath);
+    g_object_unref(filepath);
+    
+    if(first_element)
+    {
+      fprintf(stdout,"IMPORT: first element: %s\n", first_element);
+      dt_conf_set_string("ui_last/import_first_selected_str", first_element);
+    }
+    
+    dt_conf_set_int("ui_last/import_selection_nb", g_slist_length(selection));
+    import->files = g_list_sort(import->files, (GCompareFunc) g_strcmp0);
   }
 
-  import->files = g_list_sort(import->files, (GCompareFunc) g_strcmp0);
 }
 
 static gboolean _delayed_file_count(gpointer data)

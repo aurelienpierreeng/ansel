@@ -75,7 +75,7 @@ const dt_collection_t *dt_collection_new()
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_IMAGE_IMPORT,
                             G_CALLBACK(_dt_collection_recount_callback_2), collection);
-  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_FILMROLLS_IMPORTED,
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_FIRST_IMAGE_IMPORTED,
                             G_CALLBACK(_dt_collection_filmroll_imported_callback), collection);
   return collection;
 }
@@ -2084,24 +2084,57 @@ static inline void _dt_collection_change_view_after_import(const dt_view_t *curr
 
 static void _dt_collection_filmroll_imported_callback(gpointer instance, const int32_t id, gpointer user_data)
 {
+  // Go out if we are not in lighttable
+  const dt_view_t *current_atelier = dt_view_manager_get_current_view(darktable.view_manager);
+  if(current_atelier && g_strcmp0(current_atelier->module_name, "lighttable")) // current atelier IS NOT "lighttabke".
+    return;
+
+  fprintf(stdout,"COL: OK to open first image's folder\n");
+
+  int first_image = dt_conf_get_int("ui_last/imported_last_image");
+  gchar first_img_directory[PATH_MAX] = { 0 };
+  dt_get_dirname_from_imgid(first_img_directory, first_image);
+  gboolean copy = dt_conf_get_bool("ui_last/import_copy");
+  gchar dir[PATH_MAX] = { 0 };
+
+// Condition to choose which folder to open in lighttable:
+// copy == 1          -> First img's target folder 
+// 
+// else (copy == 0) 
+//  if (1 file) OR if (> 1 files/folders) -> directory showing in import popup
+//  else
+//  if (1 folder)                 -> the folder that has been selected dans dialogbox
+
+  if (copy)
+  {
+    if(dt_util_dir_exist(first_img_directory))
+      g_strlcpy(dir, g_strdup(first_img_directory), sizeof(dir));
+  }
+  else
+  {
+    const int nb = dt_conf_get_int("ui_last/import_selection_nb");
+    const gchar *first_selection = dt_conf_get_string_const("ui_last/import_first_selected_str");
+    const gchar *import_last_dir = dt_conf_get_string("ui_last/import_last_directory");
+
+    if(nb ==1 && g_file_test(first_selection, G_FILE_TEST_IS_DIR))
+    {
+      g_strlcpy(dir, g_strdup(first_selection), sizeof(dir));
+      fprintf(stdout,"IMPORT: 1 directory: dir = %s\n", dir);
+    }
+    else // all other cases
+    {
+      g_strlcpy(dir, g_strdup(import_last_dir), sizeof(dir));
+      fprintf(stdout,"IMPORT: 1 file or many elements: N = %d; dir = %s\n", nb, dir);
+    }
+  }
+
+  dt_conf_set_string("plugins/lighttable/collect/string0", g_strdup_printf("%s*", dir));
+  dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
+  dt_conf_set_int("plugins/lighttable/collect/item0", 1);
+
   dt_collection_t *collection = (dt_collection_t *)user_data;
   const int old_count = collection->count;
   collection->count = _dt_collection_compute_count(collection);
-
-  int last_image = dt_conf_get_int("ui_last/import_last_image");
-  gchar first_directory[PATH_MAX] = { 0 };
-  dt_get_dirname_from_imgid(first_directory, last_image);
-
-  const gboolean duplicate = dt_conf_get_bool("ui_last/import_copy");
-
-  char* dir = duplicate && dt_util_dir_exist(first_directory) ?
-                  g_strdup(first_directory)
-                : g_strdup(dt_conf_get_string("ui_last/import_last_directory"));
-
-  dt_conf_set_string("plugins/lighttable/collect/string0", g_strdup_printf("%s*", dir));
-  free(dir);
-  dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
-  dt_conf_set_int("plugins/lighttable/collect/item0", 1);
 
   if(old_count != collection->count) dt_collection_hint_message(collection);
 
@@ -2109,8 +2142,8 @@ static void _dt_collection_filmroll_imported_callback(gpointer instance, const i
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
 
-  const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
-  if(current_view) _dt_collection_change_view_after_import(current_view);
+  // switch the current atelier
+  _dt_collection_change_view_after_import(current_atelier);
 }
 
 int64_t dt_collection_get_image_position(const int32_t image_id, const int32_t tagid)

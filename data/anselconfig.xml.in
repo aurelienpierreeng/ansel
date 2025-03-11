@@ -726,10 +726,17 @@
     <longdescription>Duplicate the original files on the filesystem, using naming patterns. Useful when the original files are on a temporary storage, like a flash drive or a memory card.</longdescription>
   </dtconfig>
   <dtconfig>
-    <name>ui_last/import_last_image</name>
+    <name>ui_last/imported_last_image</name>
     <type>int</type>
     <default>-1</default>
     <shortdescription>Image ID of the last imported image</shortdescription>
+    <longdescription />
+  </dtconfig>
+  <dtconfig>
+    <name>ui_last/import_selection_nb</name>
+    <type>int</type>
+    <default>0</default>
+    <shortdescription>Number of elements selected in the import popup</shortdescription>
     <longdescription />
   </dtconfig>
   <dtconfig>
@@ -737,6 +744,13 @@
     <type>int</type>
     <default>0</default>
     <shortdescription>Number of images imported in the last fileroll</shortdescription>
+    <longdescription />
+  </dtconfig>
+  <dtconfig>
+    <name>ui_last/import_first_selected_str</name>
+    <type>string</type>
+    <default/>
+    <shortdescription>First selected item in import popup</shortdescription>
     <longdescription />
   </dtconfig>
   <dtconfig ui="yes">
