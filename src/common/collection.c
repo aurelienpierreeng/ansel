@@ -2128,9 +2128,10 @@ static void _dt_collection_filmroll_imported_callback(gpointer instance, const i
     }
   }
 
-  dt_conf_set_string("plugins/lighttable/collect/string0", g_strdup_printf("%s*", dir));
+  const char *opt = (dt_conf_get_int("plugins/lighttable/collect/item0") == 1) ? "*" : "" ;
+  dt_conf_set_string("plugins/lighttable/collect/string0", g_strdup_printf("%s%s", dir, opt));
+  
   dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
-  dt_conf_set_int("plugins/lighttable/collect/item0", 1);
 
   dt_collection_t *collection = (dt_collection_t *)user_data;
   const int old_count = collection->count;
