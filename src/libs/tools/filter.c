@@ -713,6 +713,9 @@ void gui_init(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_IMAGES_ORDER_CHANGE,
                             G_CALLBACK(_lib_filter_images_order_change), self);
 
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_IMAGE_IMPORT,
+                              G_CALLBACK(_refresh_collection_callback), NULL);
+
   // context menu
   d->menu = gtk_menu_new();
 

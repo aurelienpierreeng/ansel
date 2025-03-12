@@ -2394,6 +2394,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
     {
       data->total_imported_elements += 1;
       fprintf(stdout, "N: %i\n", data->total_imported_elements);
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_IMPORT);
     }
     index++;
     if(index == 1)

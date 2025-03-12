@@ -195,7 +195,6 @@ typedef enum dt_signal_t
   DT_SIGNAL_IMAGE_IMPORT,
 
   /** \brief This signal is raised when the first image of a list just been imported (not cloned).
-  1 uint32_t :  the new image id.
   no return.
   */
   DT_SIGNAL_FIRST_IMAGE_IMPORTED,
