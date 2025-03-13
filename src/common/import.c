@@ -220,7 +220,7 @@ static void _recurse_selection(GSList *selection, dt_import_t *const import)
   // GtkFileChooser gives us a GSList for selection, so we can't directly recurse from here
   // since the import job expects a GList.
 
-  if((import->shutdown)) return;
+  if((import->shutdown) || selection == NULL) return;
 
   GVfs *vfs = g_vfs_get_default();
   for(GSList *uri = selection; uri; uri = g_slist_next(uri))
@@ -229,6 +229,19 @@ static void _recurse_selection(GSList *selection, dt_import_t *const import)
     _filter_document(vfs, file, import);
     g_object_unref(file);
   }
+
+  // get the unsorted filtered path of the first selected element in file explorer.
+  GFile *filepath = g_vfs_get_file_for_uri(vfs, (const char *)selection->data);
+  const char *first_element = (const char*) g_file_get_path(filepath);
+  g_object_unref(filepath);
+  
+  if(first_element)
+  {
+    fprintf(stdout,"IMPORT: first element: %s\n", first_element);
+    dt_conf_set_string("ui_last/import_first_selected_str", first_element);
+  }
+  // get the number of selected elements
+  dt_conf_set_int("ui_last/import_selection_nb", g_slist_length(selection));
 
   import->files = g_list_sort(import->files, (GCompareFunc) g_strcmp0);
 }

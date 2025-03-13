@@ -2003,21 +2003,82 @@ static inline void _dt_collection_change_view_after_import(const dt_view_t *curr
     dt_ctl_switch_mode_to("lighttable");
 }
 
+static inline gboolean _collection_can_switch_folder(const int32_t imgid, const dt_view_t *current_atelier)
+{
+  // Go out if the image is unknown.
+  gboolean result = imgid == UNKNOWN_IMAGE;
+
+  // Go out if we are not in lighttable.
+  result |= current_atelier && g_strcmp0(current_atelier->module_name, "lighttable"); // current atelier IS NOT "lighttabke".
+
+  // Go out if the Collection module is not showing the "Folders" tab
+  // (should it switch to this tab instead ?)
+  result |= dt_conf_get_int("plugins/lighttable/collect/tab") != 0;
+  return result;
+}
+
 void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgid, gboolean open_single_image)
 {
+  const dt_view_t *current_atelier = dt_view_manager_get_current_view(darktable.view_manager);
+
+  // Go out if conditions are not reunited
+  if(_collection_can_switch_folder(imgid, current_atelier))
+    return;
+
   gchar first_directory[PATH_MAX] = { 0 };
   dt_get_dirname_from_imgid(first_directory, imgid);
 
-  const gboolean duplicate = dt_conf_get_bool("ui_last/import_copy");
+  const gboolean copy = dt_conf_get_bool("ui_last/import_copy");
+  const dt_collection_properties_t Collection_view = dt_conf_get_int("plugins/lighttable/collect/item0");
+  gchar dir[PATH_MAX] = { 0 };
 
-  char *dir = (duplicate && dt_util_dir_exist(first_directory))
-                  ? g_strdup(first_directory)
-                  : g_strdup(dt_conf_get_string("ui_last/import_last_directory"));
+  // - If user imports images in place and View mode is on "Tree":
+  // - if the user selecter 1 folder in Import:
+  //    - the lighttable displays the contents of that folder.
+  //    - else, the lighttable displays the contents of the folder
+  //        showing in the file explorer in Import.
+  //
+  // - In all other cases, the lighttable displays the first
+  //    imported image's folder.
 
+  if (Collection_view == DT_COLLECTION_PROP_FOLDERS && !copy)
+  {
+    int nb = dt_conf_get_int("ui_last/import_selection_nb");
+    const gchar *first_selection = dt_conf_get_string_const("ui_last/import_first_selected_str");
+
+    if(nb ==1 && dt_util_dir_exist(first_selection))
+    {
+      fprintf(stdout,"Collection: one folder.\n");
+      g_strlcpy(dir, g_strdup(first_selection), sizeof(dir));
+    }
+    else
+    {
+      fprintf(stdout,"Collection: files and folders.\n");
+      const gchar *import_last_dir = dt_conf_get_string("ui_last/import_last_directory");
+      if(dt_util_dir_exist(import_last_dir))
+        g_strlcpy(dir, g_strdup(import_last_dir), sizeof(dir));
+    }
+  }
+  else // in List view or we copy
+  {
+    fprintf(stdout,"Collection: copy or in List view.\n");
+
+    gchar first_img_path[PATH_MAX] = { 0 };
+    dt_get_dirname_from_imgid(first_img_path, imgid);
+
+    if(dt_util_dir_exist(first_img_path))
+    {
+      g_strlcpy(dir, first_img_path, sizeof(dir));
+      fprintf(stdout,"Collection: ID %d, last img path %s.\n", imgid, first_img_path);
+    }
+  }
+
+  fprintf(stdout,"Collection: view = %s\n", Collection_view ? "Tree" : "List");
+  const char *path = g_strdup_printf("%s%s", dir, Collection_view ? "*" : "");
+  fprintf(stdout,"Collection: path = %s\n", path);
+  
   dt_conf_set_string("plugins/lighttable/collect/string0", g_strdup_printf("%s*", dir));
   dt_conf_set_int("plugins/lighttable/collect/num_rules", 1);
-  dt_conf_set_int("plugins/lighttable/collect/item0", 1);
-  free(dir);
 
   // Reload the collection with the current filmroll
   dt_collection_update_query(collection, DT_COLLECTION_CHANGE_NEW_QUERY, DT_COLLECTION_PROP_FILMROLL, NULL);
@@ -2032,8 +2093,7 @@ void dt_collection_load_filmroll(dt_collection_t *collection, const int32_t imgi
   // New images are untagged, that may need an update of the collection module for untagged count
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
 
-  const dt_view_t *current_view = dt_view_manager_get_current_view(darktable.view_manager);
-  if(current_view) _dt_collection_change_view_after_import(current_view, open_single_image);
+  if(current_atelier) _dt_collection_change_view_after_import(current_atelier, open_single_image);
 }
 
 int64_t dt_collection_get_image_position(const int32_t image_id, const int32_t tagid)
