@@ -2338,9 +2338,9 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const int ind
     g_strlcpy(img_path_to_db, filename, sizeof(img_path_to_db));
 
   if(process_error)
-    fprintf(stdout, "Could not copy file on disk: %s\n", img_path_to_db);
+    fprintf(stderr, "Could not copy file on disk: %s\n", img_path_to_db);
   else if(img_path_to_db[0] == 0)
-    fprintf(stdout, "Could not copy file on disk: empty file path\n");
+    fprintf(stderr, "Could import file from disk: empty file path\n");
   else
   {
     imgid = _import_job(data, img_path_to_db);
