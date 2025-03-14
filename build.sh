@@ -499,7 +499,7 @@ eval "$cmd_install"
 if [ $DO_INSTALL ] ; then
 	if [ -f "$INSTALL_PREFIX/bin/ansel" ]; then
 		[ ! -d "/usr/local/bin/" ] && $SUDO mkdir -p /usr/local/bin/
-		[ -f "/usr/local/bin/ansel" ] && rm /usr/local/bin/ansel
+		[ -f "/usr/local/bin/ansel" ] && $SUDO rm /usr/local/bin/ansel
 
 		$SUDO ln -s "$INSTALL_PREFIX"/bin/ansel /usr/local/bin/ansel
 	fi
