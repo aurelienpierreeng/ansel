@@ -497,20 +497,19 @@ eval "$cmd_install"
 
 # install the desktop launcher and system-wide command
 if [ $DO_INSTALL ] ; then
-	if [ -f "/usr/local/bin/ansel" ]; then
-		$SUDO rm /usr/local/bin/ansel
+	if [ -f "$INSTALL_PREFIX/bin/ansel" ]; then
+		[ ! -d "/usr/local/bin/" ] && $SUDO mkdir -p /usr/local/bin/
+		[ -f "/usr/local/bin/ansel" ] && rm /usr/local/bin/ansel
+
+		$SUDO ln -s "$INSTALL_PREFIX"/bin/ansel /usr/local/bin/ansel
 	fi
 
-	$SUDO ln -s "$INSTALL_PREFIX"/bin/ansel /usr/local/bin/ansel
-
 	if [ -f "$INSTALL_PREFIX/share/applications/photos.ansel.app.desktop" ]; then
-		if [ -f "/usr/share/applications/ansel.desktop" ]; then
-			$SUDO rm /usr/share/applications/ansel.desktop
-		fi
+		[ ! -d "/usr/share/applications/" ] && $SUDO mkdir -p /usr/share/applications/
+		[ -f "/usr/share/applications/ansel.desktop" ] && $SUDO rm /usr/share/applications/ansel.desktop
 
 		$SUDO ln -s "$INSTALL_PREFIX"/share/applications/photos.ansel.app.desktop /usr/share/applications/ansel.desktop
 	fi
 fi
-
 # update Lensfun
 $SUDO lensfun-update-data
