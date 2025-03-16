@@ -48,7 +48,8 @@ int main(int argc, char *argv[])
   for(int k = 1; k < argc; k++)
   {
     // For simple arguments do not redirect stdout
-    if(!strcmp(argv[k], "--help") || !strcmp(argv[k], "-h") || !strcmp(argv[k], "/?") || !strcmp(argv[k], "--version"))
+    if(!strcmp(argv[k], "--help") || !strcmp(argv[k], "-h") || !strcmp(argv[k], "/?") || !strcmp(argv[k], "--version")
+    || !strcmp(argv[k], "-d") || !strcmp(argv[k], "--debug"))
     {
       redirect_output = FALSE;
       break;
