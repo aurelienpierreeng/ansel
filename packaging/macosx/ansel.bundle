@@ -21,6 +21,7 @@
   <binary>${prefix}/lib/gdk-pixbuf-2.0/${pkg:gdk-pixbuf-2.0:gdk_pixbuf_binary_version}/loaders</binary>
   <binary>${prefix}/lib/gio/modules/libgiognutls.so</binary>
   <binary>${prefix}/lib/gio/modules/libgiolibproxy.so</binary>
+  <binary>${prefix}/lib/pkcs11/p11-kit-trust.so</binary>
   <translations name="gtk30">${prefix}/share/locale</translations>
   <translations name="gtk-mac-integration">${prefix}/share/locale</translations>
   <translations name="iso_639-2">${prefix}/share/locale</translations>
@@ -33,9 +34,9 @@
   <data>${prefix}/share/mime</data>
   <data>${prefix}/share/curl/curl-ca-bundle.crt</data>
   <data>${prefix}/share/iso-codes/json/iso_639-2.json</data>
+  <data>${prefix}/share/themes/Mac/gtk-3.0/gtk-keys.css</data>
   <data dest="${bundle}/Contents/Resources/Icons.icns">${project}/Icons.icns</data>
   <data dest="${bundle}/Contents/Resources/share/applications/defaults.list">${project}/defaults.list</data>
   <data dest="${bundle}/Contents/Resources/share/applications/open.desktop">${project}/open.desktop</data>
   <icon-theme icons="all">Adwaita</icon-theme>
-  <icon-theme icons="all">Tango</icon-theme>
 </app-bundle>

@@ -128,8 +128,22 @@ function reset_exec_path {
         echo "Resetting library ID of <$1>"
 
         # Set correct library id
-        install_name_tool -id "@executable_path/../Resources/lib/$libraryOrigFile" "$1"
+        install_name_tool -id "@executable_path/../Resources/lib/$libraryOrigFile" "$1"  || true
+        # build the path relative to the package by cutting off $dtResourcesDir
+        execpath="@executable_path/../Resources${1#$dtResourcesDir}"
+        install_name_tool -id "$execpath" "$1"  || true
     fi
+
+    # Check for rpaths
+     oToolRpaths=$(otool -L "$1" 2>/dev/null | grep '@rpath' | cut -d\( -f1 | sed 's/^[[:blank:]]*//;s/[[:blank:]]*$//' ) || true
+     if [[ -n "$oToolRpaths" ]]; then
+         for oToolRpath in $oToolRpaths; do
+             oToolRpathNew=$(echo $oToolRpath | sed "s#@rpath/##")
+             if [[ "$oToolRpathNew" != "libdarktable.dylib" ]]; then
+                 install_name_tool -change "$oToolRpath" "@executable_path/../Resources/lib/$oToolRpathNew" "$1" || true
+             fi
+         done
+     fi
 }
 
 # Search and install any translation files
