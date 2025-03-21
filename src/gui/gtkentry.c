@@ -245,8 +245,8 @@ const dt_gtkentry_completion_spec *dt_gtkentry_get_default_path_compl_list()
           { "OPENCL.ACTIVATED", N_("$(OPENCL.ACTIVATED) - whether OpenCL is activated") },
           { "CATEGORY", N_("$(CATEGORY0(category)) - subtag of level 0 in hierarchical tags") },
           { "TAGS", N_("$(TAGS) - tags as set in metadata settings") },
-          { "DARKTABLE.NAME", N_("$(DARKTABLE.NAME) - Ansel name") },
-          { "DARKTABLE.VERSION", N_("$(DARKTABLE.VERSION) - current Ansel version") },
+          { "ANSEL.NAME", N_("$(ANSEL.NAME) - Ansel name") },
+          { "ANSEL.VERSION", N_("$(ANSEL.VERSION) - current Ansel version") },
           { NULL, NULL } };
 
   return default_path_compl_list;

@@ -709,9 +709,11 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
       g_free(path);
     }
   }
-  else if(_has_prefix(variable, "DARKTABLE.VERSION") || _has_prefix(variable, "DARKTABLE_VERSION"))
+  else if(_has_prefix(variable, "DARKTABLE.VERSION") || _has_prefix(variable, "DARKTABLE_VERSION")
+       || _has_prefix(variable, "ANSEL.VERSION"))
     result = g_strdup(darktable_package_version);
-  else if(_has_prefix(variable, "DARKTABLE.NAME") || _has_prefix(variable, "DARKTABLE_NAME"))
+  else if(_has_prefix(variable, "DARKTABLE.NAME") || _has_prefix(variable, "DARKTABLE_NAME")
+       || _has_prefix(variable, "ANSEL.NAME"))
     result = g_strdup(PACKAGE_NAME);
   else
   {
