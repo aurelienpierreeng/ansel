@@ -169,8 +169,8 @@ void dt_gtkentry_setup_completion(GtkEntry *entry, const dt_gtkentry_completion_
 const dt_gtkentry_completion_spec *dt_gtkentry_get_default_path_compl_list()
 {
   static dt_gtkentry_completion_spec default_path_compl_list[]
-      = { { "ROLL.NAME", N_("$(ROLL.NAME) - roll of the input image") },
-          { "FILE.FOLDER", N_("$(FILE.FOLDER) - folder containing the input image") },
+      = { { "FOLDER.NAME", N_("$(FOLDER.NAME) - name of the folder containing the input image") },
+          { "FILE.FOLDER", N_("$(FILE.FOLDER) - directory structure containing the input image") },
           { "FILE.NAME", N_("$(FILE.NAME) - basename of the input image") },
           { "FILE.EXTENSION", N_("$(FILE.EXTENSION) - extension of the input image") },
           { "FILE.YEAR", N_("$(FILE.YEAR) - year of modification of the input image") },

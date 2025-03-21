@@ -440,7 +440,8 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     result = g_strdup_printf("%d", params->data->version);
   else if(_has_prefix(variable, "JOBCODE"))
     result = g_strdup(params->jobcode);
-  else if(_has_prefix(variable, "ROLL.NAME") || _has_prefix(variable, "ROLL_NAME"))
+  else if(_has_prefix(variable, "ROLL.NAME") || _has_prefix(variable, "ROLL_NAME") // deprecated as unclear
+       || _has_prefix(variable, "FOLDER.NAME"))
   {
     if(params->filename)
     {
