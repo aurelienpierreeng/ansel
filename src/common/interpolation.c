@@ -1137,12 +1137,6 @@ void dt_interpolation_resample(const struct dt_interpolation *itor,
                                const float *const in,
                                const dt_iop_roi_t *const roi_in)
 {
-  if(out == NULL)
-  {
-    dt_print(DT_DEBUG_DEV, "[dt_interpolation_resample] no valid output buffer\n");
-    return;
-  }
-
   return _interpolation_resample_plain(itor, out, roi_out, in, roi_in);
 }
 
