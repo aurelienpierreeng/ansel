@@ -387,12 +387,16 @@ void dt_dev_process_preview_job(dt_develop_t *dev)
   const size_t buf_width = buf.width;
   const size_t buf_height = buf.height;
   const float buf_iscale = buf.iscale;
+  dt_mipmap_cache_release(cache, &buf);
 
   if(!finish_on_error)
   {
-    dt_mipmap_cache_release(cache, &buf);
     dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, buf_width, buf_height, buf_iscale, DT_MIPMAP_F);
     dt_print(DT_DEBUG_DEV, "[pixelpipe] Started thumbnail preview recompute at %lu×%lu px\n", buf_width, buf_height);
+  }
+  else
+  {
+    return;
   }
 
   pipe->processing = 1;
@@ -527,8 +531,6 @@ void dt_dev_process_image_job(dt_develop_t *dev)
   // Until then, don't bother computing garbage that will not be reused later.
   if(dev->width < 32 || dev->height < 32) return;
 
-  dt_print(DT_DEBUG_DEV, "[pixelpipe] Started main preview recompute at %i×%i px\n", dev->width, dev->height);
-
   dt_dev_pixelpipe_t *pipe = dev->pipe;
   pipe->running = 1;
 
@@ -543,11 +545,15 @@ void dt_dev_process_image_job(dt_develop_t *dev)
   // Take a local copy of the buffer so we can release the mipmap cache lock immediately
   const size_t buf_width = buf.width;
   const size_t buf_height = buf.height;
+  dt_mipmap_cache_release(cache, &buf);
+
   if(!finish_on_error)
   {
-    dt_mipmap_cache_release(cache, &buf);
     dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, buf_width, buf_height, 1.0, DT_MIPMAP_FULL);
+    dt_print(DT_DEBUG_DEV, "[pixelpipe] Started main preview recompute at %i×%i px\n", dev->width, dev->height);
   }
+  else
+    return;
 
   pipe->processing = 1;
 

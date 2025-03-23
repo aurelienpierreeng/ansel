@@ -1011,6 +1011,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   {
     fprintf(stderr, "[dt_imageio_export_with_flags] mipmap allocation for `%s' failed\n", filename);
     dt_control_log(_("image `%s' is not available!"), img->filename);
+    dt_mipmap_cache_release(cache, &buf);
     goto error_early;
   }
 
