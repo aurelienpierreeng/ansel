@@ -68,7 +68,7 @@ void dt_imageio_update_monochrome_workflow_tag(int32_t id, int mask);
 // opens the file using pfm, hdr, exr.
 dt_imageio_retval_t dt_imageio_open_hdr(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf);
 // opens file using imagemagick
-dt_imageio_retval_t dt_imageio_open_ldr(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf);
+dt_imageio_retval_t dt_imageio_open_raster(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf);
 // try all the options in sequence
 dt_imageio_retval_t dt_imageio_open(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf);
 // tries to open the files not opened by the other routines using GraphicsMagick (if supported)

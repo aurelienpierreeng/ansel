@@ -465,138 +465,144 @@ dt_imageio_retval_t dt_imageio_open_hdr(dt_image_t *img, const char *filename, d
     return ret;
 #endif
 
+  ret = dt_imageio_open_exotic(img, filename, buf);
+  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
+    return ret;
+
   return DT_IMAGEIO_FILE_CORRUPTED;
 }
 
-/* magic data: exclusion,offset,length, xx, yy, ...
-    just add magic bytes to match to this struct
-    to extend mathc on ldr formats.
-*/
-static const uint8_t _imageio_ldr_magic[] = {
-  /* jpeg magics */
-  0x00, 0x00, 0x02, 0xff, 0xd8, // SOI marker
+static const char *raster_formats[] = {
+  ".jpg",  ".jpeg", ".png", ".tiff", ".tif", ".pgm", ".pbm", ".ppm",
 
 #ifdef HAVE_OPENJPEG
-  /* jpeg 2000, jp2 format */
-  0x00, 0x00, 0x0c, 0x0,  0x0,  0x0,  0x0C, 0x6A, 0x50, 0x20, 0x20, 0x0D, 0x0A, 0x87, 0x0A,
-
-  /* jpeg 2000, j2k format */
-  0x00, 0x00, 0x05, 0xFF, 0x4F, 0xFF, 0x51, 0x00,
+  ".jp2",  ".j2k",
 #endif
 
-  /* webp image */
-  0x00, 0x08, 0x04, 'W', 'E', 'B', 'P',
+#ifdef HAVE_WEBP
+  ".webp",
+#endif
 
-  /* png image */
-  0x00, 0x01, 0x03, 0x50, 0x4E, 0x47, // ASCII 'PNG'
-
-
-  /* Canon CR2/CRW is like TIFF with additional magic numbers so must come
-     before tiff as an exclusion */
-
-  /* Most CR2 */
-  0x01, 0x00, 0x0a, 0x49, 0x49, 0x2a, 0x00, 0x10, 0x00, 0x00, 0x00, 0x43, 0x52,
-
-  /* CR3 (ISO Media) */
-  0x01, 0x00, 0x18, 0x00, 0x00, 0x00, 0x18, 'f', 't', 'y', 'p', 'c', 'r', 'x', ' ', 0x00, 0x00, 0x00, 0x01, 'c', 'r', 'x', ' ', 'i', 's', 'o', 'm',
-
-  // Older Canon RAW format with TIF Extension (i.e. 1Ds and 1D)
-  0x01, 0x00, 0x0a, 0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x10, 0xba, 0xb0,
-
-  // Older Canon RAW format with TIF Extension (i.e. D2000)
-  0x01, 0x00, 0x0a, 0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x11, 0x34, 0x00, 0x04,
-
-  // Older Canon RAW format with TIF Extension (i.e. DCS1)
-  0x01, 0x00, 0x0a, 0x49, 0x49, 0x2a, 0x00, 0x00, 0x03, 0x00, 0x00, 0xff, 0x01,
-
-  // Older Kodak RAW format with TIF Extension (i.e. DCS520C)
-  0x01, 0x00, 0x0a, 0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x11, 0xa8, 0x00, 0x04,
-
-  // Older Kodak RAW format with TIF Extension (i.e. DCS560C)
-  0x01, 0x00, 0x0a, 0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x11, 0x76, 0x00, 0x04,
-
-  // Older Kodak RAW format with TIF Extension (i.e. DCS460D)
-  0x01, 0x00, 0x0a, 0x49, 0x49, 0x2a, 0x00, 0x00, 0x03, 0x00, 0x00, 0x7c, 0x01,
-
-  /* IIQ raw images, may be either .IIQ, or .TIF */
-  0x01, 0x08, 0x04, 0x49, 0x49, 0x49, 0x49,
-
-  /* tiff image, intel */
-  0x00, 0x00, 0x04, 0x4d, 0x4d, 0x00, 0x2a,
-
-  /* tiff image, motorola */
-  0x00, 0x00, 0x04, 0x49, 0x49, 0x2a, 0x00,
-
-  /* binary NetPNM images: pbm, pgm and pbm */
-  0x00, 0x00, 0x02, 0x50, 0x34,
-  0x00, 0x00, 0x02, 0x50, 0x35,
-  0x00, 0x00, 0x02, 0x50, 0x36
+  NULL,
 };
 
-gboolean dt_imageio_is_ldr(const char *filename)
+gboolean dt_imageio_is_raster(const char *filename)
 {
-  FILE *fin = g_fopen(filename, "rb");
-  if(fin)
+  const char *c = filename + strlen(filename);
+  while(c > filename && *c != '.') c--;
+  if(*c != '.') return FALSE;
+
+  int i = 0;
+  while(raster_formats[i])
   {
-    size_t offset = 0;
-    uint8_t block[32] = { 0 }; // keep this big enough for whatever magic size we want to compare to!
-    /* read block from file */
-    size_t s = fread(block, sizeof(block), 1, fin);
-    fclose(fin);
-
-    /* compare magic's */
-    while(s)
-    {
-      if(_imageio_ldr_magic[offset + 2] > sizeof(block)
-        || offset + 3 + _imageio_ldr_magic[offset + 2] > sizeof(_imageio_ldr_magic))
-      {
-        fprintf(stderr, "error: buffer in %s is too small!\n", __FUNCTION__);
-        return FALSE;
-      }
-      if(memcmp(_imageio_ldr_magic + offset + 3, block + _imageio_ldr_magic[offset + 1],
-                _imageio_ldr_magic[offset + 2]) == 0)
-      {
-        if(_imageio_ldr_magic[offset] == 0x01)
-          return FALSE;
-        else
-          return TRUE;
-      }
-      offset += 3 + (_imageio_ldr_magic + offset)[2];
-
-      /* check if finished */
-      if(offset >= sizeof(_imageio_ldr_magic)) break;
-    }
+    if(!strcasecmp(c, raster_formats[i])) return TRUE;
+    i++;
   }
+
   return FALSE;
 }
+
+// We include DNG here since it's handled by raw libs
+static const char *raw_formats[] = {
+  ".3fr", ".ari", ".arw", ".bay", ".bmq", ".cap", ".cine", ".cr2", ".crw", ".cs1", ".dc2",
+  ".dcr", ".dng", ".gpr", ".erf", ".fff", ".ia",  ".iiq",  ".k25", ".kc2", ".kdc", ".mdc",
+  ".mef", ".mos", ".mrw", ".nef", ".nrw", ".orf", ".ori",  ".pef", ".pxn", ".qtk", ".raf",
+  ".raw", ".rdc", ".rw2", ".rwl", ".sr2", ".srf", ".srw",  ".x3f",
+
+#ifdef HAVE_LIBRAW
+  ".cr3",
+#endif
+
+  NULL
+};
+
+
+gboolean dt_imageio_is_raw(const char *filename)
+{
+  const char *c = filename + strlen(filename);
+  while(c > filename && *c != '.') c--;
+  if(*c != '.') return FALSE;
+
+  int i = 0;
+  while(raw_formats[i])
+  {
+    if(!strcasecmp(c, raw_formats[i])) return TRUE;
+    i++;
+  }
+
+  return FALSE;
+}
+
+static const char *hdr_formats[] = {
+  ".pfm",  ".hdr",
+
+#ifdef HAVE_OPENEXR
+  ".exr",
+#endif
+
+#ifdef HAVE_LIBAVIF
+  ".avif",
+#endif
+
+#ifdef HAVE_LIBHEIF
+  ".heif", ".heic", ".hif",
+#endif
+
+  NULL
+};
+
 
 int dt_imageio_is_hdr(const char *filename)
 {
   const char *c = filename + strlen(filename);
   while(c > filename && *c != '.') c--;
-  if(*c == '.')
-    if(!strcasecmp(c, ".pfm") || !strcasecmp(c, ".hdr")
-#ifdef HAVE_OPENEXR
-       || !strcasecmp(c, ".exr")
-#endif
-#ifdef HAVE_LIBAVIF
-       || !strcasecmp(c, ".avif")
-#endif
-#ifdef HAVE_LIBHEIF
-       || !strcasecmp(c, ".heif")
-       || !strcasecmp(c, ".heic")
-       || !strcasecmp(c, ".hif")
-  #ifndef HAVE_LIBAVIF
-       || !strcasecmp(c, ".avif")
-  #endif
-#endif
-      )
-      return 1;
-  return 0;
+  if(*c != '.') return FALSE;
+
+  int i = 0;
+  while(hdr_formats[i])
+  {
+    if(!strcasecmp(c, hdr_formats[i])) return TRUE;
+    i++;
+  }
+
+  return FALSE;
+}
+
+static gboolean _is_in_list(char *elem, char *list)
+{
+  // Search if elem is contained in the coma-separated list string
+  gboolean success = FALSE;
+  if(elem && list)
+  {
+    while(list != NULL && !success)
+    {
+      success = !g_ascii_strncasecmp(list, elem, strlen(elem));
+      list = strtok(NULL, ",");
+    }
+  }
+
+  return success;
+}
+
+gboolean dt_imageio_is_handled_by_libraw(dt_image_t *img, const char *filename)
+{
+  // Allow users to define some extensions, makers and models that should be handled by Libraw
+  gboolean is_handled = FALSE;
+
+  char *ext = g_strrstr(filename, ".") + 1; // move the pointer after the extension dot
+  is_handled |= _is_in_list(ext,             strtok(dt_conf_get_string("libraw/extensions"), ","));
+  is_handled |= _is_in_list(img->exif_maker, strtok(dt_conf_get_string("libraw/makers"), ","));
+  is_handled |= _is_in_list(img->exif_model, strtok(dt_conf_get_string("libraw/models"), ","));
+
+  const char *iolib = (is_handled) ? "Libraw" : "Rawspeed";
+  dt_print(DT_DEBUG_IMAGEIO, "[image I/O] image `%s` from camera `%s` of maker `%s` loaded with %s\n", filename,
+           img->exif_model, img->exif_maker, iolib);
+
+  return is_handled;
 }
 
 // transparent read method to load ldr image to dt_raw_image_t with exif and so on.
-dt_imageio_retval_t dt_imageio_open_ldr(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf)
+dt_imageio_retval_t dt_imageio_open_raster(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf)
 {
   // if buf is NULL, don't proceed
   if(!buf)
@@ -630,6 +636,52 @@ dt_imageio_retval_t dt_imageio_open_ldr(dt_image_t *img, const char *filename, d
 
   ret = dt_imageio_open_pnm(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
+    return ret;
+
+  ret = dt_imageio_open_exotic(img, filename, buf);
+  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
+    return ret;
+
+  return DT_IMAGEIO_FILE_CORRUPTED;
+}
+
+dt_imageio_retval_t dt_imageio_open_raw(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf)
+{
+  // if buf is NULL, don't proceed
+  if(!buf)
+    return DT_IMAGEIO_OK;
+
+  dt_imageio_retval_t ret;
+
+  /* check if user wants to force processing through Libraw */
+  const gboolean force_libraw = dt_imageio_is_handled_by_libraw(img, filename);
+
+  /* use rawspeed to load the raw */
+  if(!force_libraw)
+  {
+    ret = dt_imageio_open_rawspeed(img, filename, buf);
+    if(ret == DT_IMAGEIO_OK && ret == DT_IMAGEIO_CACHE_FULL)
+      return ret;
+  }
+
+#ifdef HAVE_LIBRAW
+  /* fallback that tries to open file via LibRAW to support Canon CR3 */
+  ret = dt_imageio_open_libraw(img, filename, buf);
+  if(ret == DT_IMAGEIO_OK && ret == DT_IMAGEIO_CACHE_FULL)
+    return ret;
+#endif
+
+  /* try Rawspeed again in case Libraw was forced but failed */
+  if(force_libraw)
+  {
+    ret = dt_imageio_open_rawspeed(img, filename, buf);
+    if(ret == DT_IMAGEIO_OK && ret == DT_IMAGEIO_CACHE_FULL)
+      return ret;
+  }
+
+  /* fallback that tries to open file via GraphicsMagick */
+  ret = dt_imageio_open_exotic(img, filename, buf);
+  if(ret == DT_IMAGEIO_OK && ret == DT_IMAGEIO_CACHE_FULL)
     return ret;
 
   return DT_IMAGEIO_FILE_CORRUPTED;
@@ -1233,39 +1285,6 @@ void dt_imageio_set_hdr_tag(dt_image_t *img)
   img->flags &= ~DT_IMAGE_LDR;
 }
 
-static gboolean _is_in_list(char *elem, char *list)
-{
-  // Search if elem is contained in the coma-separated list string
-  gboolean success = FALSE;
-  if(elem && list)
-  {
-    while(list != NULL && !success)
-    {
-      success = !g_ascii_strncasecmp(list, elem, strlen(elem));
-      list = strtok(NULL, ",");
-    }
-  }
-
-  return success;
-}
-
-gboolean dt_imageio_is_handled_by_libraw(dt_image_t *img, const char *filename)
-{
-  // Allow users to define some extensions, makers and models that should be handled by Libraw
-  gboolean is_handled = FALSE;
-
-  char *ext = g_strrstr(filename, ".") + 1; // move the pointer after the extension dot
-  is_handled |= _is_in_list(ext,             strtok(dt_conf_get_string("libraw/extensions"), ","));
-  is_handled |= _is_in_list(img->exif_maker, strtok(dt_conf_get_string("libraw/makers"), ","));
-  is_handled |= _is_in_list(img->exif_model, strtok(dt_conf_get_string("libraw/models"), ","));
-
-  const char *iolib = (is_handled) ? "Libraw" : "Rawspeed";
-  dt_print(DT_DEBUG_IMAGEIO, "[image I/O] image `%s` from camera `%s` of maker `%s` loaded with %s\n", filename,
-           img->exif_model, img->exif_maker, iolib);
-
-  return is_handled;
-}
-
 // =================================================
 //   combined reading
 // =================================================
@@ -1284,28 +1303,60 @@ dt_imageio_retval_t dt_imageio_open(dt_image_t *img,               // non-const 
   dt_imageio_retval_t ret = DT_IMAGEIO_FILE_CORRUPTED;
   img->loader = LOADER_UNKNOWN;
 
-  /* check if file is ldr using magic's */
-  if(dt_imageio_is_ldr(filename))
-    ret = dt_imageio_open_ldr(img, filename, buf);
+  // Start with extensions that are supposed to work.
+  // If they don't, they are corrupted.
 
-  /* silly check using file extensions: */
-  if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL && dt_imageio_is_hdr(filename))
+  if(dt_imageio_is_raster(filename))
+  {
+    ret = dt_imageio_open_raster(img, filename, buf);
+    if(ret != DT_IMAGEIO_OK)
+    {
+      fprintf(stderr, "[imageio] The file %s is corrupted. Abort.\n", filename);
+      dt_control_log(_("The file `%s` is corrupted."), filename);
+      return ret;
+    }
+  }
+
+  if(dt_imageio_is_raw(filename))
+  {
+    ret = dt_imageio_open_raw(img, filename, buf);
+    if(ret != DT_IMAGEIO_OK)
+    {
+      fprintf(stderr, "[imageio] The file %s is corrupted. Abort.\n", filename);
+      dt_control_log(_("The file `%s` is corrupted."), filename);
+      return ret;
+    }
+  }
+
+  if(dt_imageio_is_hdr(filename))
+  {
+    ret = dt_imageio_open_hdr(img, filename, buf);
+    if(ret != DT_IMAGEIO_OK)
+    {
+      fprintf(stderr, "[imageio] The file %s is corrupted. Abort.\n", filename);
+      dt_control_log(_("The file `%s` is corrupted."), filename);
+      return ret;
+    }
+  }
+
+  // fallback: bruteforce everything hoping for a miracle
+  // Most likely, it's a format we never heard of.
+  if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL)
+    ret = dt_imageio_open_raster(img, filename, buf);
+
+  if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL)
+    ret = dt_imageio_open_raw(img, filename, buf);
+
+  if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL)
     ret = dt_imageio_open_hdr(img, filename, buf);
 
-  /* check if user wants to force processing through Libraw */
-  const gboolean force_libraw = dt_imageio_is_handled_by_libraw(img, filename);
-
-  /* use rawspeed to load the raw */
-  if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL && !force_libraw)
-    ret = dt_imageio_open_rawspeed(img, filename, buf);
-
-  /* fallback that tries to open file via LibRAW to support Canon CR3 */
-  if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL)
-    ret = dt_imageio_open_libraw(img, filename, buf);
-
-  /* fallback that tries to open file via GraphicsMagick */
-  if(ret != DT_IMAGEIO_OK && ret != DT_IMAGEIO_CACHE_FULL)
-    ret = dt_imageio_open_exotic(img, filename, buf);
+  // Final check and abort
+  if(ret != DT_IMAGEIO_OK)
+  {
+    fprintf(stderr, "[imageio] The file %s is supported by none of our decoders.\n", filename);
+    dt_control_log(_("The file `%s` is supported by none of our decoders."), filename);
+    return ret;
+  }
 
   if((ret == DT_IMAGEIO_OK) && !was_hdr && (img->flags & DT_IMAGE_HDR))
     dt_imageio_set_hdr_tag(img);
