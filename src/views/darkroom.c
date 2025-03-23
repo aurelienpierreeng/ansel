@@ -2019,6 +2019,7 @@ void enter(dt_view_t *self)
 
 static void _free_module(gpointer data)
 {
+  if(!data) return;
   dt_iop_module_t *module = (dt_iop_module_t *)data;
 
   if(!dt_iop_is_hidden(module))
