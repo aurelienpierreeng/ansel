@@ -1471,7 +1471,8 @@ gboolean dt_ioppr_check_can_move_before_iop(GList *iop_list, dt_iop_module_t *mo
     return FALSE;
   }
 
-  if(module->raster_mask.sink.source == module_next)
+  // we should't be here if the next module is using a raster mask and and our module is that raster mask source
+  if(module_next->raster_mask.sink.source == module)
     return FALSE;
 
   gboolean can_move = FALSE;
@@ -1507,6 +1508,7 @@ gboolean dt_ioppr_check_can_move_before_iop(GList *iop_list, dt_iop_module_t *mo
           break;
         }
 
+        // moving a module that is the source for a raster mask ABOVE the module using it is forbidden
         if(mod->raster_mask.sink.source == module)
           break;
 
@@ -1586,6 +1588,7 @@ gboolean dt_ioppr_check_can_move_before_iop(GList *iop_list, dt_iop_module_t *mo
           break;
         }
 
+        // moving a module using a raster mask BELOW its raster source module is forbidden
         if(module->raster_mask.sink.source == mod)
           break;
 
@@ -1650,7 +1653,8 @@ gboolean dt_ioppr_check_can_move_before_iop(GList *iop_list, dt_iop_module_t *mo
 // this assumes that the order is always positive
 gboolean dt_ioppr_check_can_move_after_iop(GList *iop_list, dt_iop_module_t *module, dt_iop_module_t *module_prev)
 {
-  if(module_prev->raster_mask.sink.source == module)
+  // we shouldn't be here if the previous module is the a raster mask's source and our module is using it
+  if(module->raster_mask.sink.source == module_prev)
     return FALSE;
   
   gboolean can_move = FALSE;
