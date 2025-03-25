@@ -1471,6 +1471,9 @@ gboolean dt_ioppr_check_can_move_before_iop(GList *iop_list, dt_iop_module_t *mo
     return FALSE;
   }
 
+  if(module->raster_mask.sink.source == module_next)
+    return FALSE;
+
   gboolean can_move = FALSE;
 
   // module is before on the pipe
@@ -1503,6 +1506,9 @@ gboolean dt_ioppr_check_can_move_before_iop(GList *iop_list, dt_iop_module_t *mo
           mod2 = mod;
           break;
         }
+
+        if(mod->raster_mask.sink.source == module)
+          break;
 
         // check if module can be moved around this one
         if(mod->flags() & IOP_FLAGS_FENCE)
@@ -1580,6 +1586,9 @@ gboolean dt_ioppr_check_can_move_before_iop(GList *iop_list, dt_iop_module_t *mo
           break;
         }
 
+        if(module->raster_mask.sink.source == mod)
+          break;
+
         // check for rules
         // check if module can be moved around this one
         if(mod->flags() & IOP_FLAGS_FENCE)
@@ -1641,6 +1650,9 @@ gboolean dt_ioppr_check_can_move_before_iop(GList *iop_list, dt_iop_module_t *mo
 // this assumes that the order is always positive
 gboolean dt_ioppr_check_can_move_after_iop(GList *iop_list, dt_iop_module_t *module, dt_iop_module_t *module_prev)
 {
+  if(module_prev->raster_mask.sink.source == module)
+    return FALSE;
+  
   gboolean can_move = FALSE;
 
   // moving after module_prev is the same as moving before the very next one after module_prev
