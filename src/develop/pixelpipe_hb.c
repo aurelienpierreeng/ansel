@@ -2638,8 +2638,8 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece, 
   *current_piece, const dt_iop_module_t *target_module)
 {
   gboolean success = TRUE;
-  const gchar *clean_target_name = delete_underscore(target_module->name());
-  const gchar *target_name = g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name);
+  gchar *clean_target_name = delete_underscore(target_module->name());
+  gchar *target_name = g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name);
 
   if(source_piece == NULL || current_piece == NULL)
   {
@@ -2648,23 +2648,19 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece, 
     gchar *hint = NULL;
     if(source_piece == NULL)
     {
-      /**
-       * @brief The loop searching linked modules to the raster masks
-       * terminated without finding the source module. 
-       * that means the source module has been deleted.
-       */
+      // The loop searching linked modules to the raster masks
+      // terminated without finding the source module. 
+      // that means the source module has been deleted.
       hint = g_strdup_printf(
             _("\n- Check if the module providing the masks for the module %s has not been deleted.\n"),
             target_name);
     }
     else if(current_piece == NULL)
     {
-      /**
-       * @brief The loop searching linked modules to the raster masks
-       * has stopped when it finds the source module but before it has
-       * found the current module:
-       * That means the raster mask is above current module.
-       */
+      // The loop searching linked modules to the raster masks
+      // has stopped when it finds the source module but before it has
+      // found the current module:
+      // That means the raster mask is above current module.
       hint = g_strdup_printf(_("\n- Check if the module %s (%s) providing the masks has not been moved above %s.\n"), 
                       delete_underscore(source_piece->module->name()), source_piece->module->multi_name, clean_target_name);
     }
@@ -2681,8 +2677,8 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece, 
 
   if(success && !source_piece->enabled)
   {
-    const gchar *clean_source_name = delete_underscore(source_piece->module->name());
-    const gchar *source_name = g_strdup_printf("%s (%s)", clean_source_name, source_piece->module->multi_name);
+    gchar *clean_source_name = delete_underscore(source_piece->module->name());
+    gchar *source_name = g_strdup_printf("%s (%s)", clean_source_name, source_piece->module->multi_name);
     // there might be stale masks from disabled modules left over. don't use those!
     dt_control_log(_("The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
                      "Disabled modules cannot provide their masks to other modules.\n"
@@ -2691,10 +2687,14 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece, 
 
     fprintf(stderr, "[raster masks] module %s trying to reuse a mask from disabled instance of %s\n",
             target_name, source_name);
-    
+
+    g_free(clean_source_name);
+    g_free(source_name);
     success = FALSE;
   }
 
+  g_free(clean_target_name);
+  g_free(target_name);
   return success;
 }
 
@@ -2705,8 +2705,8 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
   // TODO: refactor this mess to limit for/if nesting
   if(error) *error = 0;
 
-  const gchar *clean_target_name = delete_underscore(target_module->name());
-  const gchar *target_name = g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name);
+  gchar *clean_target_name = delete_underscore(target_module->name());
+  gchar *target_name = g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name);
 
   if(!raster_mask_source)
   {
@@ -2743,8 +2743,8 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
         = current_piece->processed_roi_out.width * current_piece->processed_roi_out.height * sizeof(float);
     dt_iop_buffer_dsc_t *out_format = &current_piece->dsc_mask;
 
-    const gchar *clean_source_name = delete_underscore(source_piece->module->name());
-    const gchar *source_name = g_strdup_printf("%s (%s)", clean_source_name, source_piece->module->multi_name);
+    gchar *clean_source_name = delete_underscore(source_piece->module->name());
+    gchar *source_name = g_strdup_printf("%s (%s)", clean_source_name, source_piece->module->multi_name);
 
     gboolean cache = FALSE;
 
@@ -2832,7 +2832,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
       if(module->module == target_module)
       {
         dt_print(DT_DEBUG_MASKS, "[raster masks] found mask id %i from %s for module %s (%s) in pipe %i\n",
-                    raster_mask_id, source_name, module->module->op,
+                    raster_mask_id, source_name, delete_underscore(module->module->name()),
                     module->module->multi_name, pipe->type);
         break;
       }
