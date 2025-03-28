@@ -2625,6 +2625,79 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
   }
 }
 
+/**
+ * @brief Checks the validity of the raster mask source and target modules,
+ * outputs errors if necessary. Also tells the user what to do.
+ * 
+ * @param source_piece
+ * @param current_piece
+ * @param target_module
+ * @return gboolean TRUE when all is good, FALSE otherwise.
+ */
+static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece, dt_dev_pixelpipe_iop_t 
+  *current_piece, const dt_iop_module_t *target_module)
+{
+  gboolean success = TRUE;
+  gchar *clean_target_name = delete_underscore(target_module->name());
+  gchar *target_name = g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name);
+
+  if(source_piece == NULL || current_piece == NULL)
+  {
+    fprintf(stderr,"[raster masks] Source: %d, current: %d\n", source_piece != NULL , current_piece != NULL);
+
+    gchar *hint = NULL;
+    if(source_piece == NULL)
+    {
+      // The loop searching linked modules to the raster masks
+      // terminated without finding the source module. 
+      // that means the source module has been deleted.
+      hint = g_strdup_printf(
+            _("\n- Check if the module providing the masks for the module %s has not been deleted.\n"),
+            target_name);
+    }
+    else if(current_piece == NULL)
+    {
+      // The loop searching linked modules to the raster masks
+      // has stopped when it finds the source module but before it has
+      // found the current module:
+      // That means the raster mask is above current module.
+      hint = g_strdup_printf(_("\n- Check if the module %s (%s) providing the masks has not been moved above %s.\n"), 
+                      delete_underscore(source_piece->module->name()), source_piece->module->multi_name, clean_target_name);
+    }
+
+    dt_control_log(_("The %s module is trying to reuse a mask from a module but it can't be found.\n"
+                      "Masking in %s will be disabled until a mask is available.\n"
+                      "%s"),
+                      target_name, target_name, hint ? hint : "");
+    g_free(hint);
+
+    fprintf(stderr, "[raster masks] no source module for module %s could be found\n", target_name);
+    success = FALSE;
+  }
+
+  if(success && !source_piece->enabled)
+  {
+    gchar *clean_source_name = delete_underscore(source_piece->module->name());
+    gchar *source_name = g_strdup_printf("%s (%s)", clean_source_name, source_piece->module->multi_name);
+    // there might be stale masks from disabled modules left over. don't use those!
+    dt_control_log(_("The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
+                     "Disabled modules cannot provide their masks to other modules.\n"
+                     "Masking in `%s` will be disabled until `%s` is re-enabled."),
+                   target_name, source_name, target_name, source_name);
+
+    fprintf(stderr, "[raster masks] module %s trying to reuse a mask from disabled instance of %s\n",
+            target_name, source_name);
+
+    g_free(clean_source_name);
+    g_free(source_name);
+    success = FALSE;
+  }
+
+  g_free(clean_target_name);
+  g_free(target_name);
+  return success;
+}
+
 float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *raster_mask_source,
                               const int raster_mask_id, const dt_iop_module_t *target_module,
                               gboolean *free_mask, int *error)
@@ -2632,9 +2705,12 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
   // TODO: refactor this mess to limit for/if nesting
   if(error) *error = 0;
 
+  gchar *clean_target_name = delete_underscore(target_module->name());
+  gchar *target_name = g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name);
+
   if(!raster_mask_source)
   {
-    fprintf(stderr, "[raster masks] The source module of the mask for %s (%s) was not found\n", target_module->op, target_module->multi_name);
+    fprintf(stderr, "[raster masks] The source module of the mask for %s was not found\n", target_name);
     return NULL;
   }
 
@@ -2658,125 +2734,109 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
     }
   }
 
-  if(source_piece)
+  if(error) *error = !_dt_dev_raster_mask_check(source_piece, current_piece, target_module); 
+
+  if(error && *error == 0)
   {
-    if(!source_piece->enabled)
+    const uint64_t raster_hash = current_piece->global_mask_hash;
+    const size_t raster_size
+        = current_piece->processed_roi_out.width * current_piece->processed_roi_out.height * sizeof(float);
+    dt_iop_buffer_dsc_t *out_format = &current_piece->dsc_mask;
+
+    gchar *clean_source_name = delete_underscore(source_piece->module->name());
+    gchar *source_name = g_strdup_printf("%s (%s)", clean_source_name, source_piece->module->multi_name);
+
+    gboolean cache = FALSE;
+
+    if(dt_dev_pixelpipe_cache_available(&(pipe->cache), raster_hash))
     {
-      // there might be stale masks from disabled modules left over. don't use those!
-      dt_control_log(_("The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
-                       "Disabled modules cannot provide their masks to other modules.\n"
-                       "Masking in `%s` will be disabled until `%s` is re-enabled."),
-                     target_module->name(), source_piece->module->name(), target_module->name(),
-                     source_piece->module->name());
-      fprintf(stderr, "[raster masks] module %s (%s) trying to reuse a mask from disabled instance of %s (%s)\n",
-              target_module->op, target_module->multi_name, source_piece->module->op,
-              source_piece->module->multi_name);
+      // Try to get the mask from the global cache, in case the module flushed its reference
+      dt_dev_pixelpipe_cache_get(&(pipe->cache), raster_hash, raster_size, (void **)&raster_mask, &out_format);
+      cache = TRUE;
     }
     else
     {
-      const uint64_t raster_hash = current_piece->global_mask_hash;
-      const size_t raster_size
-          = current_piece->processed_roi_out.width * current_piece->processed_roi_out.height * sizeof(float);
-      dt_iop_buffer_dsc_t *out_format = &current_piece->dsc_mask;
+      // No luck on global cache, try internal reference.
+      raster_mask = g_hash_table_lookup(source_piece->raster_masks, GINT_TO_POINTER(raster_mask_id));
+    }
 
-      gboolean cache = FALSE;
+    // Print debug stuff
+    if(raster_mask)
+    {
+      dt_print(DT_DEBUG_MASKS,
+        "[raster masks] found in %s mask id %i from %s for module %s (%s) in pipe %i with hash %lu\n",
+        (cache) ? "cache" : "internal",
+        raster_mask_id, source_name, target_name, pipe->type, raster_hash);
 
-      if(dt_dev_pixelpipe_cache_available(&(pipe->cache), raster_hash))
+      // Disable re-entry if any
+      dt_dev_pixelpipe_unset_reentry(pipe, raster_hash);
+
+      // cached masks are already distorted
+      if(cache) return raster_mask;
+      // else : carry on with geometric distortions below
+    }
+    else
+    {
+      fprintf(stderr,
+        "[raster masks] mask id %i from %s for module %s could not be found in pipe %i. Pipe re-entry will be attempted.\n",
+        raster_mask_id, source_name, target_name, pipe->type);
+
+      // Ask for a pipeline re-entry and flush all cache
+      if(dt_dev_pixelpipe_set_reentry(pipe, raster_hash))
+        pipe->flush_cache = TRUE;
+
+      // This should terminate the pipeline now:
+      if(error) *error = 1;
+      return NULL;
+    }
+
+    // If we fetch the raster mask again, straight from its provider, we need to distort it
+    for(GList *iter = g_list_next(source_iter); iter; iter = g_list_next(iter))
+    {
+      // Pass the raster mask through all distortion steps between the provider and the consumer
+      dt_dev_pixelpipe_iop_t *module = (dt_dev_pixelpipe_iop_t *)iter->data;
+
+      if(module->enabled
+          && !dt_dev_pixelpipe_activemodule_disables_currentmodule(module->module->dev, module->module))
       {
-        // Try to get the mask from the global cache, in case the module flushed its reference
-        dt_dev_pixelpipe_cache_get(&(pipe->cache), raster_hash, raster_size, (void **)&raster_mask, &out_format);
-        cache = TRUE;
-      }
-      else
-      {
-        // No luck on global cache, try internal reference.
-        raster_mask = g_hash_table_lookup(source_piece->raster_masks, GINT_TO_POINTER(raster_mask_id));
-      }
-
-      // Print debug stuff
-      if(raster_mask)
-      {
-        dt_print(DT_DEBUG_MASKS,
-          "[raster masks] found in %s mask id %i from %s (%s) for module %s (%s) in pipe %i with hash %lu\n",
-          (cache) ? "cache" : "internal",
-          raster_mask_id, source_piece->module->op, source_piece->module->multi_name, target_module->op,
-          target_module->multi_name, pipe->type, raster_hash);
-
-        // Disable re-entry if any
-        dt_dev_pixelpipe_unset_reentry(pipe, raster_hash);
-
-        // cached masks are already distorted
-        if(cache) return raster_mask;
-        // else : carry on with geometric distortions below
-      }
-      else
-      {
-        fprintf(stderr,
-          "[raster masks] mask id %i from %s (%s) for module %s (%s) could not be found in pipe %i. Pipe re-entry will be attempted.\n",
-          raster_mask_id, source_piece->module->op, source_piece->module->multi_name, target_module->op,
-          target_module->multi_name, pipe->type);
-
-        // Ask for a pipeline re-entry and flush all cache
-        if(dt_dev_pixelpipe_set_reentry(pipe, raster_hash))
-          pipe->flush_cache = TRUE;
-
-        // This should terminate the pipeline now:
-        if(error) *error = 1;
-        return NULL;
-      }
-
-      // If we fetch the raster mask again, straight from its provider, we need to distort it
-      for(GList *iter = g_list_next(source_iter); iter; iter = g_list_next(iter))
-      {
-        // Pass the raster mask through all distortion steps between the provider and the consumer
-        dt_dev_pixelpipe_iop_t *module = (dt_dev_pixelpipe_iop_t *)iter->data;
-
-        if(module->enabled
-            && !dt_dev_pixelpipe_activemodule_disables_currentmodule(module->module->dev, module->module))
+        if(module->module->distort_mask
+          && !(!strcmp(module->module->op, "finalscale") // hack against pipes not using finalscale
+                && module->processed_roi_in.width == 0
+                && module->processed_roi_in.height == 0))
         {
-          if(module->module->distort_mask
-            && !(!strcmp(module->module->op, "finalscale") // hack against pipes not using finalscale
-                  && module->processed_roi_in.width == 0
-                  && module->processed_roi_in.height == 0))
-          {
-            float *transformed_mask = dt_alloc_align_float((size_t)module->processed_roi_out.width
-                                                            * module->processed_roi_out.height);
-            module->module->distort_mask(module->module,
-                                        module,
-                                        raster_mask,
-                                        transformed_mask,
-                                        &module->processed_roi_in,
-                                        &module->processed_roi_out);
-            if(*free_mask) dt_free_align(raster_mask);
-            *free_mask = TRUE;
-            raster_mask = transformed_mask;
-            fprintf(stdout, "doing transform\n");
-          }
-          else if(!module->module->distort_mask &&
-                  (module->processed_roi_in.width != module->processed_roi_out.width ||
-                    module->processed_roi_in.height != module->processed_roi_out.height ||
-                    module->processed_roi_in.x != module->processed_roi_out.x ||
-                    module->processed_roi_in.y != module->processed_roi_out.y))
-            fprintf(stderr, "FIXME: module `%s' changed the roi from %d x %d @ %d / %d to %d x %d | %d / %d but doesn't have "
-                    "distort_mask() implemented!\n", module->module->op, module->processed_roi_in.width,
-                    module->processed_roi_in.height, module->processed_roi_in.x, module->processed_roi_in.y,
-                    module->processed_roi_out.width, module->processed_roi_out.height, module->processed_roi_out.x,
-                    module->processed_roi_out.y);
+          float *transformed_mask = dt_alloc_align_float((size_t)module->processed_roi_out.width
+                                                          * module->processed_roi_out.height);
+          module->module->distort_mask(module->module,
+                                      module,
+                                      raster_mask,
+                                      transformed_mask,
+                                      &module->processed_roi_in,
+                                      &module->processed_roi_out);
+          if(*free_mask) dt_free_align(raster_mask);
+          *free_mask = TRUE;
+          raster_mask = transformed_mask;
+          fprintf(stdout, "doing transform\n");
         }
+        else if(!module->module->distort_mask &&
+                (module->processed_roi_in.width != module->processed_roi_out.width ||
+                  module->processed_roi_in.height != module->processed_roi_out.height ||
+                  module->processed_roi_in.x != module->processed_roi_out.x ||
+                  module->processed_roi_in.y != module->processed_roi_out.y))
+          fprintf(stderr, "FIXME: module `%s' changed the roi from %d x %d @ %d / %d to %d x %d | %d / %d but doesn't have "
+                  "distort_mask() implemented!\n", module->module->op, module->processed_roi_in.width,
+                  module->processed_roi_in.height, module->processed_roi_in.x, module->processed_roi_in.y,
+                  module->processed_roi_out.width, module->processed_roi_out.height, module->processed_roi_out.x,
+                  module->processed_roi_out.y);
+      }
 
-        if(module->module == target_module)
-        {
-          dt_print(DT_DEBUG_MASKS, "[raster masks] found mask id %i from %s (%s) for module %s (%s) in pipe %i\n",
-                      raster_mask_id, source_piece->module->op, source_piece->module->multi_name, module->module->op,
-                      module->module->multi_name, pipe->type);
-          break;
-        }
+      if(module->module == target_module)
+      {
+        dt_print(DT_DEBUG_MASKS, "[raster masks] found mask id %i from %s for module %s (%s) in pipe %i\n",
+                    raster_mask_id, source_name, delete_underscore(module->module->name()),
+                    module->module->multi_name, pipe->type);
+        break;
       }
     }
-  }
-  else
-  {
-    fprintf(stderr, "[raster masks] no source module for module %s (%s) could be found\n", target_module->op, target_module->multi_name);
   }
 
   return raster_mask;
