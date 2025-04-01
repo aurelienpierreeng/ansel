@@ -242,6 +242,7 @@ typedef struct dt_iop_toneequalizer_gui_data_t
   // Cache Pango and Cairo stuff for the equalizer drawing
   float line_height;
   float sign_width;
+  float graph_left_space; // used to center the circle on the mouse.
   float graph_width;
   float graph_height;
   float gradient_left_limit;
@@ -2465,6 +2466,7 @@ static inline gboolean _init_drawing(dt_iop_module_t *const restrict self, GtkWi
   // Set the sizes, margins and paddings
   g->inner_padding = INNER_PADDING;
   g->inset = g->inner_padding + darktable.bauhaus->quad_width;
+  g->graph_left_space = g->line_height + g->inner_padding;
   g->graph_width = g->allocation.width - g->inset - 2.0 * g->line_height; // align the right border on sliders
   g->graph_height = g->allocation.height - g->inset - 2.0 * g->line_height; // give room to nodes
   g->gradient_left_limit = 0.0;
@@ -2887,7 +2889,7 @@ static gboolean area_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpo
   }
 
   dt_iop_gui_enter_critical_section(self);
-  g->area_x = (event->x - g->inset);
+  g->area_x = (event->x - g->graph_left_space);
   g->area_y = event->y;
   g->area_cursor_valid = (g->area_x > 0.0f && g->area_x < g->graph_width && g->area_y > 0.0f && g->area_y < g->graph_height);
   g->area_active_node = -1;
