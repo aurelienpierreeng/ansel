@@ -2463,7 +2463,7 @@ static inline gboolean _init_drawing(dt_iop_module_t *const restrict self, GtkWi
   g->sign_width = g->ink.width / 2.0;
 
   // Set the sizes, margins and paddings
-  g->inner_padding = 4; // TODO: INNER_PADDING value as defined in bauhaus.c macros, sync them
+  g->inner_padding = INNER_PADDING;
   g->inset = g->inner_padding + darktable.bauhaus->quad_width;
   g->graph_width = g->allocation.width - g->inset - 2.0 * g->line_height; // align the right border on sliders
   g->graph_height = g->allocation.height - g->inset - 2.0 * g->line_height; // give room to nodes

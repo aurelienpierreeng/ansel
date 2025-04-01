@@ -49,6 +49,11 @@ extern GType DT_BAUHAUS_WIDGET_TYPE;
 #define DT_BAUHAUS_SLIDER_MAX_STOPS 20
 #define DT_BAUHAUS_COMBO_MAX_TEXT 180
 
+// INNER_PADDING is the horizontal space between slider and quad
+// and vertical space between labels and slider baseline
+#define INNER_PADDING DT_PIXEL_APPLY_DPI(4)
+#define INTERNAL_PADDING 2. * INNER_PADDING
+
 typedef struct dt_bauhaus_t dt_bauhaus_t;
 
 typedef enum dt_bauhaus_type_t

@@ -36,12 +36,6 @@
 
 G_DEFINE_TYPE(DtBauhausWidget, dt_bh, GTK_TYPE_DRAWING_AREA)
 
-
-// INNER_PADDING is the horizontal space between slider and quad
-// and vertical space between labels and slider baseline
-#define INNER_PADDING DT_PIXEL_APPLY_DPI(4)
-#define INTERNAL_PADDING 2. * INNER_PADDING
-
 // WARNING
 // A lot of GUI setters/getters functions used to have type checking on input widgets
 // and silently returned early if the types were not ok (like trying to set a combobox using slider methods).

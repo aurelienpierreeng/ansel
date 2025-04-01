@@ -854,9 +854,8 @@ static gboolean _target_color_draw(GtkWidget *widget, cairo_t *crf, gpointer use
   cairo_t *cr = cairo_create(cst);
 
   // Margins
-  const double INNER_PADDING = 4.0;
   const float margin = 2. * DT_PIXEL_APPLY_DPI(1.5);
-  width -= 2* INNER_PADDING;
+  width -= INTERNAL_PADDING;
   height -= 2 * margin;
 
   // Paint target color
@@ -899,9 +898,8 @@ static gboolean _origin_color_draw(GtkWidget *widget, cairo_t *crf, gpointer use
   cairo_t *cr = cairo_create(cst);
 
   // Margins
-  const double INNER_PADDING = 4.0;
   const float margin = 2. * DT_PIXEL_APPLY_DPI(1.5);
-  width -= 2* INNER_PADDING;
+  width -= INTERNAL_PADDING;
   height -= 2 * margin;
 
   cairo_set_source_rgb(cr, g->spot_RGB[0], g->spot_RGB[1], g->spot_RGB[2]);

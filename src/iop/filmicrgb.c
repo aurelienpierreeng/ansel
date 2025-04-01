@@ -286,7 +286,6 @@ typedef struct dt_iop_filmicrgb_gui_data_t
   float graph_width;
   float graph_height;
   int inset;
-  int inner_padding;
 
   GtkAllocation allocation;
   PangoRectangle ink;
@@ -3436,8 +3435,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   g->zero_width = g->ink.width;
 
   // Set the sizes, margins and paddings
-  g->inner_padding = DT_PIXEL_APPLY_DPI(4); // TODO: INNER_PADDING value as defined in bauhaus.c macros, sync them
-  g->inset = g->inner_padding;
+  g->inset = INNER_PADDING;
 
   float margin_left;
   float margin_bottom;
