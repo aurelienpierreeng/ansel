@@ -70,7 +70,7 @@ dt_imageio_retval_t dt_imageio_open_avif(dt_image_t *img,
 
   rgb.format = AVIF_RGB_FORMAT_RGB;
 
-  avifRGBImageAllocatePixels(&rgb);
+  result = avifRGBImageAllocatePixels(&rgb);
 
   result = avifImageYUVToRGB(avif, &rgb);
   if(result != AVIF_RESULT_OK)
