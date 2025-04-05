@@ -222,7 +222,14 @@ void dt_ui_container_add_widget(dt_ui_t *ui, const dt_ui_container_t c, GtkWidge
       gtk_box_pack_start(GTK_BOX(ui->containers[c]), w, TRUE, TRUE, 0);
       break;
 
-    case DT_UI_CONTAINER_PANEL_TOP_FIRST_ROW:
+    case DT_UI_CONTAINER_PANEL_TOP_FIRST_ROW_LEFT:
+      gtk_header_bar_pack_start(GTK_HEADER_BAR(ui->header), w);
+      break;
+
+    case DT_UI_CONTAINER_PANEL_TOP_FIRST_ROW_RIGHT:
+      gtk_header_bar_pack_end(GTK_HEADER_BAR(ui->header), w);
+      break;
+
     default:
       gtk_box_pack_start(GTK_BOX(ui->containers[c]), w, FALSE, FALSE, 0);
       break;
@@ -555,12 +562,6 @@ static void _ui_init_panel_top(dt_ui_t *ui, GtkWidget *container)
   gtk_widget_set_name(ui->panels[DT_UI_PANEL_TOP], "top");
   gtk_widget_set_hexpand(GTK_WIDGET(widget), TRUE);
   gtk_grid_attach(GTK_GRID(container), widget, 1, 0, 3, 1);
-
-  /* add container for top left */
-  ui->containers[DT_UI_CONTAINER_PANEL_TOP_FIRST_ROW] = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_widget_set_name(ui->containers[DT_UI_CONTAINER_PANEL_TOP_FIRST_ROW], "top-first-line");
-  gtk_box_pack_start(GTK_BOX(widget), ui->containers[DT_UI_CONTAINER_PANEL_TOP_FIRST_ROW], FALSE, TRUE,
-                     DT_UI_PANEL_MODULE_SPACING);
 
   /* add container for top center */
   ui->containers[DT_UI_CONTAINER_PANEL_TOP_SECOND_ROW] = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);

@@ -50,7 +50,7 @@ const char **views(dt_lib_module_t *self)
 
 uint32_t container(dt_lib_module_t *self)
 {
-  return DT_UI_CONTAINER_PANEL_TOP_FIRST_ROW;
+  return DT_UI_CONTAINER_PANEL_TOP_FIRST_ROW_RIGHT;
 }
 
 int expandable(dt_lib_module_t *self)
@@ -60,7 +60,7 @@ int expandable(dt_lib_module_t *self)
 
 int position()
 {
-  return 1;
+  return 0;
 }
 
 
@@ -76,12 +76,16 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), d->label, TRUE, TRUE, 0);
   gtk_widget_set_name(d->label, "hinter");
 
-  gtk_widget_set_halign(self->widget, GTK_ALIGN_CENTER);
+  gtk_widget_set_halign(self->widget, GTK_ALIGN_END);
   gtk_widget_set_hexpand(self->widget, TRUE);
-  gtk_widget_set_halign(d->label, GTK_ALIGN_CENTER);
+  gtk_widget_set_halign(d->label, GTK_ALIGN_END);
   gtk_widget_set_hexpand(d->label, FALSE);
-  gtk_label_set_justify(GTK_LABEL(d->label), GTK_JUSTIFY_CENTER);
+  gtk_label_set_justify(GTK_LABEL(d->label), GTK_JUSTIFY_RIGHT);
   gtk_label_set_line_wrap(GTK_LABEL(d->label), TRUE);
+
+  GtkWidget *spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+  gtk_widget_set_hexpand(spacer, TRUE);
+  gtk_box_pack_start(GTK_BOX(self->widget), spacer, FALSE, FALSE, 0);
 
   darktable.control->proxy.hinter.module = self;
   darktable.control->proxy.hinter.set_message = _lib_hinter_set_message;

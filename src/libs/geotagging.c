@@ -1596,7 +1596,7 @@ static void _timezone_save(dt_lib_module_t *self)
       name = tz_tuple->name;
   }
   if(d->tz_camera) g_time_zone_unref(d->tz_camera);
-  d->tz_camera = !name ? g_time_zone_new_utc() : g_time_zone_new_identifier(name);
+  d->tz_camera = !name ? g_time_zone_new_utc() : g_time_zone_new(name);
   dt_conf_set_string("plugins/lighttable/geotagging/tz", name ? name : "UTC");
   gtk_entry_set_text(GTK_ENTRY(d->timezone), name ? name : "UTC");
   gtk_label_set_text(GTK_LABEL (d->timezone_changed), "");
@@ -1787,7 +1787,7 @@ void gui_init(dt_lib_module_t *self)
   gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(tz_selection), renderer, "text", 0, NULL);
 
   gchar *tz = dt_conf_get_string("plugins/lighttable/geotagging/tz");
-  d->tz_camera = (tz == NULL) ? g_time_zone_new_utc() : g_time_zone_new_identifier(tz);
+  d->tz_camera = (tz == NULL) ? g_time_zone_new_utc() : g_time_zone_new(tz);
   for(GList *iter = d->timezones; iter; iter = g_list_next(iter))
   {
     tz_tuple_t *tz_tuple = (tz_tuple_t *)iter->data;

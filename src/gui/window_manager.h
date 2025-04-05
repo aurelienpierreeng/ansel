@@ -56,19 +56,24 @@ typedef enum dt_ui_container_t
   DT_UI_CONTAINER_PANEL_RIGHT_CENTER = 4,
   DT_UI_CONTAINER_PANEL_RIGHT_BOTTOM = 5,
 
-  /* the top header bar, left slot where darktable name is placed */
-  DT_UI_CONTAINER_PANEL_TOP_FIRST_ROW = 6,
   /* center which is expanded as wide it can */
-  DT_UI_CONTAINER_PANEL_TOP_SECOND_ROW = 7,
+  DT_UI_CONTAINER_PANEL_TOP_SECOND_ROW = 6,
   /* right side were the different views are accessed */
-  DT_UI_CONTAINER_PANEL_TOP_THIRD_ROW = 8,
+  DT_UI_CONTAINER_PANEL_TOP_THIRD_ROW = 7,
 
-  DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_LEFT = 9,
-  DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_CENTER = 10,
-  DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_RIGHT = 11,
+  DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_LEFT = 8,
+  DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_CENTER = 9,
+  DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_RIGHT = 10,
 
   /* Count of containers */
-  DT_UI_CONTAINER_SIZE
+  DT_UI_CONTAINER_SIZE,
+
+  // The following are special containers linked to the header bar,
+  // they will never be destroyed in loops, so put them after the container "size"
+
+  /* the top header bar, left slot where darktable name is placed */
+  DT_UI_CONTAINER_PANEL_TOP_FIRST_ROW_LEFT,
+  DT_UI_CONTAINER_PANEL_TOP_FIRST_ROW_RIGHT,
 } dt_ui_container_t;
 
 
@@ -96,6 +101,9 @@ typedef struct dt_ui_t
 
   /* main widget */
   GtkWidget *main_window;
+
+  /* header bar */
+  GtkWidget *header;
 
   /* thumb table */
   dt_thumbtable_t *thumbtable_lighttable;

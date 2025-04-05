@@ -52,7 +52,7 @@ const char **views(dt_lib_module_t *self)
 
 uint32_t container(dt_lib_module_t *self)
 {
-  return DT_UI_CONTAINER_PANEL_TOP_FIRST_ROW;
+  return DT_UI_CONTAINER_PANEL_TOP_FIRST_ROW_RIGHT;
 }
 
 int expandable(dt_lib_module_t *self)
@@ -62,30 +62,12 @@ int expandable(dt_lib_module_t *self)
 
 int position()
 {
-  return 0;
+  return 1;
 }
 
 void _home_callback()
 {
   dt_ctl_switch_mode_to("lighttable");
-}
-
-void _close_callback()
-{
-  gtk_window_close(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
-}
-
-void _iconify_callback()
-{
-  gtk_window_iconify(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
-}
-
-void _maximize_callback()
-{
-  if(gtk_window_is_maximized(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui))))
-    gtk_window_unmaximize(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
-  else
-    gtk_window_maximize(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
 }
 
 void gui_init(dt_lib_module_t *self)
@@ -98,29 +80,11 @@ void gui_init(dt_lib_module_t *self)
   gtk_widget_set_halign(self->widget, GTK_ALIGN_END);
   gtk_widget_set_hexpand(self->widget, FALSE);
 
-  d->home = gtk_button_new_from_icon_name("go-home", GTK_ICON_SIZE_LARGE_TOOLBAR);
+  d->home = gtk_button_new_from_icon_name("go-home", GTK_ICON_SIZE_SMALL_TOOLBAR);
   gtk_widget_set_tooltip_text(d->home, _("Go back to lighttable"));
   g_signal_connect(G_OBJECT(d->home), "clicked", _home_callback, NULL);
   dt_gui_add_class(d->home, "window-button");
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->home), FALSE, FALSE, 0);
-
-  d->iconify = gtk_button_new_from_icon_name("window-minimize", GTK_ICON_SIZE_LARGE_TOOLBAR);
-  gtk_widget_set_tooltip_text(d->iconify, _("Iconify window"));
-  g_signal_connect(G_OBJECT(d->iconify), "clicked", _iconify_callback, NULL);
-  dt_gui_add_class(d->iconify, "window-button");
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->iconify), FALSE, FALSE, 0);
-
-  d->maximize = gtk_button_new_from_icon_name("window-restore", GTK_ICON_SIZE_LARGE_TOOLBAR);
-  gtk_widget_set_tooltip_text(d->maximize, _("Maximize window"));
-  g_signal_connect(G_OBJECT(d->maximize), "clicked", _maximize_callback, NULL);
-  dt_gui_add_class(d->maximize, "window-button");
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->maximize), FALSE, FALSE, 0);
-
-  d->close = gtk_button_new_from_icon_name("window-close", GTK_ICON_SIZE_LARGE_TOOLBAR);
-  gtk_widget_set_tooltip_text(d->close, _("Close the application"));
-  g_signal_connect(G_OBJECT(d->close), "clicked", _close_callback, NULL);
-  dt_gui_add_class(d->close, "window-button");
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->close), FALSE, FALSE, 0);
 }
 
 void gui_cleanup(dt_lib_module_t *self)

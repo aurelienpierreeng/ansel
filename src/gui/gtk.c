@@ -783,7 +783,7 @@ void dt_configure_ppd_dpi(dt_gui_gtk_t *gui)
 
 static gboolean _focus_in_out_event(GtkWidget *widget, GdkEvent *event, gpointer user_data)
 {
-  gtk_window_set_urgency_hint(GTK_WINDOW(user_data), FALSE);
+  gtk_window_set_urgency_hint(GTK_WINDOW(widget), FALSE);
   return FALSE;
 }
 
@@ -805,28 +805,29 @@ static void _init_widgets(dt_gui_gtk_t *gui)
   GtkWidget *widget;
 
   // Creating the main window
-  widget = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-  gtk_widget_set_name(widget, "main_window");
-  gtk_window_set_role(GTK_WINDOW(widget), "main-app");
-  gtk_window_set_icon_name(GTK_WINDOW(widget), "ansel");
-  gtk_window_set_title(GTK_WINDOW(widget), "Ansel");
+  gui->ui->main_window  = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  gtk_widget_set_name(gui->ui->main_window , "main_window");
+  gtk_window_set_role(GTK_WINDOW(gui->ui->main_window ), "main-app");
+  gtk_window_set_icon_name(GTK_WINDOW(gui->ui->main_window ), "ansel");
+  gtk_window_set_title(GTK_WINDOW(gui->ui->main_window ), "Ansel");
 
   // Remove useless desktop environment titlebar. We will handle closing buttons internally
-  gtk_window_set_titlebar(GTK_WINDOW(widget), NULL);
-  gtk_window_set_hide_titlebar_when_maximized(GTK_WINDOW(widget), TRUE);
-
-  gui->ui->main_window = widget;
+  gui->ui->header = gtk_header_bar_new();
+  gtk_widget_set_name(gui->ui->header, "top-first-line");
+  gtk_widget_set_size_request(gui->ui->header, -1, -1);
+  gtk_window_set_titlebar(GTK_WINDOW(gui->ui->main_window), gui->ui->header);
+  gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(gui->ui->header), TRUE);
 
   dt_configure_ppd_dpi(gui);
 
-  gtk_window_set_default_size(GTK_WINDOW(widget), DT_PIXEL_APPLY_DPI(900), DT_PIXEL_APPLY_DPI(600));
+  gtk_window_set_default_size(GTK_WINDOW(gui->ui->main_window), DT_PIXEL_APPLY_DPI(900), DT_PIXEL_APPLY_DPI(600));
   dt_gui_gtk_load_config();
 
-  g_signal_connect(G_OBJECT(widget), "delete_event", G_CALLBACK(dt_gui_quit_callback), NULL);
-  g_signal_connect(G_OBJECT(widget), "focus-in-event", G_CALLBACK(_focus_in_out_event), widget);
-  g_signal_connect(G_OBJECT(widget), "focus-out-event", G_CALLBACK(_focus_in_out_event), widget);
+  g_signal_connect(G_OBJECT(gui->ui->main_window ), "delete_event", G_CALLBACK(dt_gui_quit_callback), NULL);
+  g_signal_connect(G_OBJECT(gui->ui->main_window ), "focus-in-event", G_CALLBACK(_focus_in_out_event), NULL);
+  g_signal_connect(G_OBJECT(gui->ui->main_window ), "focus-out-event", G_CALLBACK(_focus_in_out_event), NULL);
 
-  container = widget;
+  container = gui->ui->main_window;
 
   // Adding the outermost vbox
   widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);

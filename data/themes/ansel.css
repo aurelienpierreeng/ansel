@@ -488,7 +488,13 @@ separator
 /*------------------------
   - Main header settings -
   ------------------------*/
+
 #top
+{
+  border-bottom: 2px solid @grey_35;
+}
+
+#top-first-line
 {
   background-color: @grey_35;
   border-bottom: 2px solid @grey_35;
@@ -536,6 +542,10 @@ menuitem.menu-active label
   color: @grey_100;
 }
 
+#menu-bar {
+	margin-left: -1em;
+}
+
 menubar menuitem,
 menubar menuitem label
 {
@@ -581,7 +591,7 @@ menubar menuitem label
   margin: 12px; /* not real pixels. This is used as a percent extra space and couldn't be scalable */
 }
 
-.window-button
+#top-first-line button
 {
   border-radius: 50%;
   background-color: transparent;
@@ -589,6 +599,11 @@ menubar menuitem label
   color: white;
   caret-color: transparent;
   outline-offset: 0;
+}
+
+#top-first-line button:hover
+{
+  background-color: @button_hover_bg;
 }
 
 /*---------------------------
@@ -1464,6 +1479,13 @@ filechooser row:hover .sidebar-icon
 {
   margin: 2px 0.5em;
   border: 1px solid @grey_35;
+  padding: 0;
+}
+
+#top-first-line separator.horizontal
+{
+  margin: 2px 0.5em 2px 1em;
+  border: 1px solid @grey_45;
   padding: 0;
 }
 
