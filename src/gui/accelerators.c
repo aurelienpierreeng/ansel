@@ -149,13 +149,13 @@ gboolean _update_shortcut_state(dt_shortcut_t *shortcut, GtkAccelKey *key, gbool
 void _add_widget_accel(dt_shortcut_t *shortcut, const GtkAccelKey *key)
 {
   gtk_widget_add_accelerator(shortcut->widget, shortcut->signal, shortcut->accel_group, key->accel_key,
-                              key->accel_mods, GTK_ACCEL_VISIBLE);
+                              key->accel_mods, 0);
 
   // Numpad numbers register as different keys. Find the numpad equivalent key here, if any.
   guint alt_char = dt_keys_numpad_alternatives(key->accel_key);
   if(key->accel_key != alt_char)
     gtk_widget_add_accelerator(shortcut->widget, shortcut->signal, shortcut->accel_group, alt_char,
-                                key->accel_mods, GTK_ACCEL_VISIBLE);
+                                key->accel_mods, 0);
 }
 
 
@@ -177,7 +177,7 @@ void _remove_generic_accel(dt_shortcut_t *shortcut)
 
 void _add_generic_accel(dt_shortcut_t *shortcut, GtkAccelKey *key)
 {
-  gtk_accel_group_connect(shortcut->accel_group, key->accel_key, key->accel_mods, GTK_ACCEL_VISIBLE,
+  gtk_accel_group_connect(shortcut->accel_group, key->accel_key, key->accel_mods, 0,
                           shortcut->closure);
 }
 
@@ -230,7 +230,7 @@ void dt_accels_new_widget_shortcut(dt_accels_t *accels, GtkWidget *widget, const
 }
 
 
-void dt_accels_new_action_shortcut(dt_accels_t *accels, void(*action_callback), gpointer data,
+const dt_shortcut_t *dt_accels_new_action_shortcut(dt_accels_t *accels, void(*action_callback), gpointer data,
                                    GtkAccelGroup *accel_group, const gchar *action_scope, const gchar *action_name,
                                    guint key_val, GdkModifierType accel_mods, const gboolean lock)
 {
@@ -241,7 +241,7 @@ void dt_accels_new_action_shortcut(dt_accels_t *accels, void(*action_callback), 
   if(shortcut && shortcut->closure->data == data)
   {
     // reference is still up-to-date: nothing to do.
-    return;
+    return shortcut;
   }
   else if(shortcut && shortcut->type != DT_SHORTCUT_UNSET)
   {
@@ -272,6 +272,7 @@ void dt_accels_new_action_shortcut(dt_accels_t *accels, void(*action_callback), 
   }
 
   g_free(accel_path);
+  return shortcut;
 }
 
 
@@ -338,7 +339,10 @@ void dt_accels_connect_accels(dt_accels_t *accels)
 
 gchar *dt_accels_build_path(const gchar *scope, const gchar *feature)
 {
-  return g_strdup_printf("<Ansel>/%s/%s", scope, feature);
+  if(strncmp(scope, "<Ansel>/", strlen("<Ansel>/")) == 0)
+    return g_strdup_printf("%s/%s", scope, feature);
+  else
+    return g_strdup_printf("<Ansel>/%s/%s", scope, feature);
 }
 
 void _accels_keys_decode(dt_accels_t *accels, GdkEvent *event, guint *keyval, GdkModifierType *mods)
@@ -433,37 +437,39 @@ guint _find_path_for_keys(dt_accels_t *accels, guint key, GdkModifierType modifi
 
 gboolean _key_pressed(GtkWidget *w, GdkEvent *event, dt_accels_t *accels, guint keyval, GdkModifierType mods)
 {
-  gboolean found = FALSE;
-
   // Get the accelerator entry from the accel group
   gchar *accel_name = gtk_accelerator_name(keyval, mods);
   GQuark accel_quark = g_quark_from_string(accel_name);
   dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Combination of keys decoded: %s\n", accel_name);
   g_free(accel_name);
 
+  if(darktable.unmuted & DT_DEBUG_SHORTCUTS)
+  {
+    if(_find_path_for_keys(accels, keyval, mods, accels->active_group))
+      dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Action found in active accels group:\n");
+  }
+
   // Look into the active group first, aka darkroom, lighttable, etc.
   if(gtk_accel_group_activate(accels->active_group, accel_quark, G_OBJECT(w), keyval, mods))
   {
-    found = TRUE;
-    if(darktable.unmuted & DT_DEBUG_SHORTCUTS)
-    {
-      dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Action found in active accels group:\n");
-      _find_path_for_keys(accels, keyval, mods, accels->active_group);
-    }
+    dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Active group action executed\n");
+    return TRUE;
+  }
+
+  if(darktable.unmuted & DT_DEBUG_SHORTCUTS)
+  {
+    if(_find_path_for_keys(accels, keyval, mods, accels->global_accels))
+      dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Action found in global accels group:\n");
   }
 
   // If nothing found, try again with global accels.
-  if(!found && gtk_accel_group_activate(accels->global_accels, accel_quark, G_OBJECT(w), keyval, mods))
+  if(gtk_accel_group_activate(accels->global_accels, accel_quark, G_OBJECT(w), keyval, mods))
   {
-    found = TRUE;
-    if(darktable.unmuted & DT_DEBUG_SHORTCUTS)
-    {
-      dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Action found in global accels group:\n");
-      _find_path_for_keys(accels, keyval, mods, accels->global_accels);
-    }
+    dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Global group action executed\n");
+    return TRUE;
   }
 
-  return found;
+  return FALSE;
 }
 
 

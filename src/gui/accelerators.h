@@ -169,8 +169,10 @@ void dt_accels_new_widget_shortcut(dt_accels_t *accels, GtkWidget *widget, const
  * @param key_val
  * @param accel_mods
  * @param lock prevent user edition
+ *
+ * @return A reference to the newly-allocated or updated shortcut object
  */
-void dt_accels_new_action_shortcut(dt_accels_t *accels, void(*action_callback), gpointer data,
+const dt_shortcut_t *dt_accels_new_action_shortcut(dt_accels_t *accels, void(*action_callback), gpointer data,
                                    GtkAccelGroup *accel_group, const gchar *action_scope, const gchar *action_name,
                                    guint key_val, GdkModifierType accel_mods, const gboolean lock);
 
