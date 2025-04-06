@@ -444,7 +444,7 @@ static void _file_filters(GtkWidget *file_chooser)
   GtkFileFilter *filter;
 
   const char *raster[] = {
-    "jpg", "jpeg", "j2c", "jp2", "tif", "tiff", "png", "exr",
+    "jpg", "jpeg", "j2c", "jp2", "jxl", "tif", "tiff", "png", "exr",
     "bmp", "dng", "heif", "heic", "avi", "avif", "webp", NULL };
 
   const char *raw[] = {

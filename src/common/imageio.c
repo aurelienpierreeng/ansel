@@ -34,6 +34,9 @@
 #ifdef HAVE_OPENJPEG
 #include "common/imageio_j2k.h"
 #endif
+#ifdef HAVE_LIBJXL
+#include "common/imageio_jpegxl.h"
+#endif
 #include "common/image_compression.h"
 #include "common/imageio_gm.h"
 #include "common/imageio_im.h"
@@ -92,7 +95,7 @@ static const gchar *_supported_ldr[]
     = { "bmp",  "bmq", "cap", "cine", "cs1", "dcm", "gif", "gpr", "j2c", "j2k", "jng", "jp2", "jpc", "jpeg", "jpg",
         "miff", "mng", "ori", "pbm",  "pfm", "pgm", "png", "pnm", "ppm", "pxn", "qtk", "rdc", "tif", "tiff", "webp",
         NULL };
-static const gchar *_supported_hdr[] = { "avif", "exr", "hdr", "heic", "heif", "hif", "pfm", NULL };
+static const gchar *_supported_hdr[] = { "avif", "exr", "hdr", "heic", "heif", "hif", "jxl", "pfm", NULL };
 
 // get the type of image from its extension
 dt_image_flags_t dt_imageio_get_type_from_extension(const char *extension)
@@ -461,6 +464,12 @@ dt_imageio_retval_t dt_imageio_open_hdr(dt_image_t *img, const char *filename, d
 
 #ifdef HAVE_LIBHEIF
   ret = dt_imageio_open_heif(img, filename, buf);
+  if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
+    return ret;
+#endif
+
+#ifdef HAVE_LIBJXL
+  ret = dt_imageio_open_jpegxl(img, filename, buf);
   if(ret == DT_IMAGEIO_OK || ret == DT_IMAGEIO_CACHE_FULL)
     return ret;
 #endif
