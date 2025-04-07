@@ -1186,20 +1186,21 @@ static int _load_jpg(const char *filename, const int32_t imgid, const uint32_t w
 
 static int _find_sidecar_jpg(const char *filename, const char *ext, char *sidecar)
 {
-  const size_t filename_size = strlen(filename) - strlen(ext);
-  const char *exts[4] = { ".jpg\0", ".JPG\0", ".jpeg\0", ".JPEG\0" };
+  const size_t filename_len = strlen(filename) - strlen(ext); 
+  const char *exts[4] = { ".jpg", ".JPG", ".jpeg", ".JPEG" };
 
   for(int i = 0; i < 4; i++)
   {
     // Damage control. Should never happen.
-    if(filename_size + strlen(exts[i]) > PATH_MAX)
+    if(filename_len + strlen(exts[i]) >= PATH_MAX)
       continue;
 
-    // Copy the filename minus the extension
-    strncpy(sidecar, filename, filename_size);
+    // Construct the sidecar filename
+    const size_t str_copy = g_snprintf(sidecar, PATH_MAX, "%.*s%s", (int)filename_len, filename, exts[i]);
 
-    // Append one of our own extensions
-    strncpy(sidecar + filename_size, exts[i], strlen(exts[i]));
+    // Check if the filename was too long or if the copy failed.
+    if (str_copy == 0 || str_copy >= PATH_MAX)
+      continue;
 
     if(g_file_test(sidecar, G_FILE_TEST_EXISTS))
       return 1;
