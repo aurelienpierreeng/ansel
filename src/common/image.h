@@ -322,7 +322,7 @@ void dt_image_set_xmp_rating(dt_image_t *img, const int rating);
 int dt_image_get_xmp_rating(const dt_image_t *img);
 int dt_image_get_xmp_rating_from_flags(const int flags);
 /** finds all xmp duplicates for the given image in the database. */
-GList* dt_image_find_duplicates(const char* filename);
+GList* dt_image_find_xmps(const char* filename);
 /** get image id by filename */
 int32_t dt_image_get_id_full_path(const gchar *filename);
 /** get image id by film_id and filename */
@@ -441,6 +441,8 @@ char *dt_image_camera_missing_sample_message(const struct dt_image_t *img, gbool
 void dt_image_check_camera_missing_sample(const struct dt_image_t *img);
 /** get dirname from imgid */
 void dt_get_dirname_from_imgid(gchar *dir, const int32_t imgid);
+// Search for duplicate's sidecar files and import them if found and not in DB yet
+int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboolean clear_selection);
 
 #ifdef __cplusplus
 }

@@ -1055,7 +1055,7 @@ static int32_t dt_control_delete_images_job_run(dt_job_t *job)
       // left-overs can result when previously duplicates have been REMOVED;
       // no need to keep them as the source data file is gone.
 
-      GList *files = dt_image_find_duplicates(filename);
+      GList *files = dt_image_find_xmps(filename);
 
       for(GList *file_iter = files; file_iter; file_iter = g_list_next(file_iter))
       {
@@ -2183,37 +2183,73 @@ const int32_t _import_job(dt_control_import_t *data, gchar *img_path_to_db)
   return imgid;
 }
 
+/**
+ * @brief Gets the computed xmp file name with apropriate number for import copy.
+ * It computes a duplicate name based on the `counter` value.
+ * The first path in the list ALWAYS become the default xmp.
+ * So in case the default xmp was not found, the first one in the list is used as default.
+ * Else, it's a duplicate.
+ * 
+ * @param xmp_dest_name the destination name.
+ * @param dest_file_path the full filename path of the destination image.
+ * @param counter the number of duplicates.
+ * @return void
+ */
+void dt_import_duplicate_get_dest_name(char *xmp_dest_name, const char *dest_file_path, const int counter)
+{ 
+  char *norm_dest_file = dt_util_normalize_path(dest_file_path);
+  const char* ext = g_strrstr(norm_dest_file, ".");  // find dot
+  const size_t name_len = strlen(norm_dest_file) - strlen(ext);
+
+  if(counter == 0)
+    g_snprintf(xmp_dest_name, PATH_MAX, "%s.xmp", norm_dest_file);
+  else
+    g_snprintf(xmp_dest_name, PATH_MAX, "%.*s_%.2d%s.xmp", (int)name_len, norm_dest_file, counter, ext);
+
+  fprintf(stdout, "xmp_dest_name: %s\n", xmp_dest_name);
+
+  free(norm_dest_file);
+}
 
 /**
- * @brief Attempt to find a sidecar XMP file along an image file and import (copy) it to destination.
- * Warning: this does not support versions, so only the first version is imported.
+ * @brief Attempt to find all sidecar XMP files along an image file and import (copy) it to destination.
  *
  * @param filename full path of original image file
  * @param dest_file_path full path of destination image file
- * @return int TRUE if XMP imported
+ * @return int number of imported XMP
  */
 int _import_copy_xmp(const char *const filename, gchar *dest_file_path)
 {
-  char *xmp_source = g_strdup_printf("%s.xmp", dt_util_normalize_path(filename));
-  char *xmp_destination = g_strdup_printf("%s.xmp", dt_util_normalize_path(dest_file_path));
+  int xmp_cntr = 0;
 
-  if(!xmp_source || !xmp_destination || !dt_util_test_image_file(xmp_source))
+  GList *xmp_files = dt_image_find_xmps(filename); // the first xmp will be the original
+  if(g_list_length(xmp_files) > 0)
   {
-    g_free(xmp_source);
-    g_free(xmp_destination);
-    return 0;
+    fprintf(stdout, "xmp found\n");
+    
+    for(GList *current_xmp = xmp_files; current_xmp; current_xmp = g_list_next(current_xmp))
+    {
+      char *xmp_source = g_strdup((char*) current_xmp->data);
+      fprintf(stdout, "xmp_source: %s\n", xmp_source);
+
+      gchar xmp_dest_name[PATH_MAX] = { 0 };
+      dt_import_duplicate_get_dest_name(xmp_dest_name, dest_file_path, xmp_cntr);
+
+      // folder already created and writable, just copy.
+      int success = _copy_file(xmp_source, xmp_dest_name);
+      if(success)
+        fprintf(stdout, "Xmp copy success\n");
+      else
+        fprintf(stdout, "Xmp copy failed\n");
+
+      xmp_cntr++;
+      free(xmp_source);
+    }  
+    if(xmp_cntr > 1)
+    fprintf(stdout, "%d duplicate(s) have been found.\n", xmp_cntr - 1);
   }
-
-  int success = _copy_file(xmp_source, xmp_destination);
-
-  if(success)
-    fprintf(stdout, "Sidecar XMP found and copied\n");
-  else
-    fprintf(stdout, "Sidecar XMP found but copy failed");
-
-  g_free(xmp_source);
-  g_free(xmp_destination);
-  return success;
+  g_list_free(xmp_files);
+  return xmp_cntr;
 }
 
 /**
@@ -2318,7 +2354,7 @@ void _write_xmp_id(const char *filename, int32_t imgid)
  * @param index current loop's index.
  * @return int32_t the imgid of the imported image (or -1 if import failed)
  */
-int32_t _import_image(const GList *img, dt_control_import_t *data, const int index, GList **discarded)
+int32_t _import_image(const GList *img, dt_control_import_t *data, const int index, GList **discarded, int *xmps)
 {
   const char *filename = (const char*) img->data;
   fprintf(stdout, "Filename: %s\n", filename);
@@ -2337,7 +2373,7 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const int ind
   if(process_error)
     fprintf(stderr, "Could not copy file on disk: %s\n", img_path_to_db);
   else if(img_path_to_db[0] == 0)
-    fprintf(stderr, "Could import file from disk: empty file path\n");
+    fprintf(stderr, "Could not import file from disk: empty file path\n");
   else
   {
     imgid = _import_job(data, img_path_to_db);
@@ -2349,7 +2385,15 @@ int32_t _import_image(const GList *img, dt_control_import_t *data, const int ind
     }
     else
     {
-      _write_xmp_id(filename, imgid);
+      // read all sidecar files (including the original one) and import them if not found in db.
+      *xmps = dt_image_read_duplicates(imgid, img_path_to_db, FALSE);
+      if(*xmps == 0)
+      {
+        fprintf(stderr, "Error: no sidecare found.\n");
+      }
+      else
+        fprintf(stdout, "Imported %i xmp(s).\n", *xmps);   
+
       fprintf(stdout, "imgid: %i\n", imgid);
     }
   }
@@ -2376,6 +2420,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
   dt_control_import_t *data = params->data;
 
   int index = 0;
+  int xmps = 0; // number of xmps imported in db.
   int32_t imgid = UNKNOWN_IMAGE;
 
   for(GList *img = g_list_first(data->imgs); img; img = g_list_next(img))
@@ -2383,7 +2428,7 @@ static int32_t _control_import_job_run(dt_job_t *job)
     fprintf(stdout, "\nIMG %i.\n", index);
 
     _refresh_progress_counter(job, data->elements, index);
-    imgid = _import_image(img, data, index, &data->discarded);
+    imgid = _import_image(img, data, index, &data->discarded, &xmps);
 
     if(imgid > UNKNOWN_IMAGE)
     {
@@ -2407,7 +2452,8 @@ static int32_t _control_import_job_run(dt_job_t *job)
     dt_control_log(_("No image imported!"));
     fprintf(stderr, "No image imported!\n\n");
   }
-  else if(index == 1)
+  // don't open picture in darkroom if more than 1 xmps (= duplicates) have been imported.
+  else if(index == 1 && xmps == 1)
   {
     dt_collection_load_filmroll(darktable.collection, imgid, TRUE);
   }
