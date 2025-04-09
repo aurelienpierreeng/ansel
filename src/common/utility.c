@@ -55,6 +55,11 @@
 #include <librsvg/rsvg-cairo.h>
 #endif
 
+size_t safe_strlen(const char *str)
+{
+  return str ? strlen(str) : 0;
+}
+
 gchar *dt_util_dstrcat(gchar *str, const gchar *format, ...)
 {
   va_list args;

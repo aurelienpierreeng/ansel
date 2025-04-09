@@ -525,7 +525,7 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
 
   // last param is dng mode
   const int exif_len = dt_exif_read_blob(&exif, pathname, d.first_imgid, 0, d.wd, d.ht, 1);
-  char *c = pathname + strlen(pathname);
+  char *c = pathname + safe_strlen(pathname);
   while(*c != '.' && c > pathname) c--;
   g_strlcpy(c, "-hdr.dng", sizeof(pathname) - (c - pathname));
   dt_imageio_write_dng(pathname,
@@ -2199,7 +2199,7 @@ void dt_import_duplicate_get_dest_name(char *xmp_dest_name, const char *dest_fil
 { 
   char *norm_dest_file = dt_util_normalize_path(dest_file_path);
   const char* ext = g_strrstr(norm_dest_file, ".");  // find dot
-  const size_t name_len = strlen(norm_dest_file) - strlen(ext);
+  const size_t name_len = safe_strlen(norm_dest_file) - safe_strlen(ext);
 
   if(counter == 0)
     g_snprintf(xmp_dest_name, PATH_MAX, "%s.xmp", norm_dest_file);
