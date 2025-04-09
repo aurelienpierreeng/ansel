@@ -5,19 +5,6 @@ include(manage-symbol-visibility)
 add_definitions(-include common/module_api.h)
 add_definitions(-include libs/lib_api.h)
 
-add_custom_command(
-  DEPENDS ${CMAKE_SOURCE_DIR}/tools/authors_h.sh ${CMAKE_SOURCE_DIR}/AUTHORS
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/tools/darktable_authors.h
-  COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/tools/
-  COMMAND bash ${CMAKE_SOURCE_DIR}/tools/authors_h.sh ${CMAKE_SOURCE_DIR}/AUTHORS ${CMAKE_CURRENT_BINARY_DIR}/tools/darktable_authors.h
-  COMMENT "Generating authors.h for about dialog."
-)
-
-add_custom_target(
-  generate_authors_h ALL
-  DEPENDS ${CMAKE_SOURCE_DIR}/tools/authors_h.sh ${CMAKE_SOURCE_DIR}/AUTHORS ${CMAKE_CURRENT_BINARY_DIR}/tools/darktable_authors.h
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
 
 # The modules
 set(MODULES export styles tagging collect metadata metadata_view navigation histogram history snapshots modulegroups backgroundjobs colorpicker masks duplicate ioporder)
@@ -25,12 +12,8 @@ set(MODULES export styles tagging collect metadata metadata_view navigation hist
 # The tools
 set(MODULES ${MODULES} filter)
 set(MODULES ${MODULES} lighttable_mode)
-set(MODULES ${MODULES} view_toolbox)
 set(MODULES ${MODULES} module_toolbox)
-set(MODULES ${MODULES} hinter)
 set(MODULES ${MODULES} image_infos)
-set(MODULES ${MODULES} menu)
-set(MODULES ${MODULES} menubuttons)
 set(MODULES ${MODULES} masktoolbar)
 
 # modules
@@ -54,13 +37,8 @@ add_library(ioporder MODULE "ioporder.c")
 # tools
 add_library(filter MODULE "tools/filter.c")
 add_library(lighttable_mode MODULE "tools/lighttable.c")
-add_library(view_toolbox MODULE "tools/view_toolbox.c")
 add_library(module_toolbox MODULE "tools/module_toolbox.c")
-add_library(hinter MODULE "tools/hinter.c")
 add_library(image_infos MODULE "tools/image_infos.c")
-add_library(menu MODULE "tools/menu.c")
-add_dependencies(menu generate_authors_h)
-add_library(menubuttons MODULE "tools/menu_buttons.c")
 add_library(masktoolbar MODULE "tools/mask_toolbar.c")
 
 # the modules specific to map mode

@@ -34,7 +34,7 @@
                   cairo_translate(cr, x_offset, y_offset);                                   \
                   cairo_matrix_t matrix;                                                     \
                   cairo_get_matrix(cr, &matrix);                                             \
-                  cairo_set_line_width(cr, (line_scaling * 1.618) / hypot(matrix.xx, matrix.yy)); }
+                  cairo_set_line_width(cr, 1. / hypot(matrix.xx, matrix.yy)); }
 
 #define FINISH { cairo_identity_matrix(cr); \
                  cairo_restore(cr); }
@@ -1724,25 +1724,14 @@ void dtgtk_cairo_paint_unratestar(cairo_t *cr, gint x, gint y, gint w, gint h, g
 void dtgtk_cairo_paint_local_copy(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
   PREAMBLE(1, 1, 0, 0)
+  cairo_arc(cr, 0.5, 0.5, 0.25, 0, 2 * M_PI);
 
   if(flags & CPF_ACTIVE)
   {
-    cairo_move_to(cr, 0.45, 0);
-    cairo_line_to(cr, 0.85, 0);
-    cairo_line_to(cr, 0.85, 0.40);
-    cairo_close_path(cr);
-    cairo_fill_preserve(cr);
-    cairo_stroke(cr);
-    cairo_rectangle(cr, 0.15, 0, 0.7, 1.0);
     cairo_stroke(cr);
   }
   else
   {
-    /* fill base color */
-    cairo_move_to(cr, 0, 0);
-    cairo_line_to(cr, 1.0, 1.0);
-    cairo_line_to(cr, 1.0, 0);
-    cairo_close_path(cr);
     cairo_fill(cr);
   }
 
@@ -1751,7 +1740,7 @@ void dtgtk_cairo_paint_local_copy(cairo_t *cr, gint x, gint y, gint w, gint h, g
 
 void dtgtk_cairo_paint_altered(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
-  PREAMBLE(0.5 * 0.95, 1, 0.5, 0.5)
+  PREAMBLE(0.5 * 0.88, 1, 0.5, 0.5)
 
   cairo_push_group(cr);
 
@@ -1788,7 +1777,7 @@ void dtgtk_cairo_paint_altered(cairo_t *cr, gint x, gint y, gint w, gint h, gint
 
 void dtgtk_cairo_paint_unaltered(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
-  PREAMBLE(0.5 * 0.95, 1, 0.5, 0.5)
+  PREAMBLE(0.5 * 0.85, 1, 0.5, 0.5)
 
   cairo_push_group(cr);
 
@@ -1841,7 +1830,7 @@ void dtgtk_cairo_paint_audio(cairo_t *cr, gint x, gint y, gint w, gint h, gint f
 
 void dtgtk_cairo_paint_label_flower(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
-  PREAMBLE(1.1, 1, 0, 0)
+  PREAMBLE(1, 1, 0, 0)
 
   const float r = 0.18;
 
@@ -2019,7 +2008,7 @@ void dtgtk_cairo_paint_help(cairo_t *cr, gint x, gint y, gint w, gint h, gint fl
 
 void dtgtk_cairo_paint_grouping(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
-  PREAMBLE(1, 1, 0, 0)
+  PREAMBLE(1.08, 1, 0, 0)
 
   cairo_move_to(cr, 0.30, 0.15);
   cairo_line_to(cr, 0.95, 0.15);

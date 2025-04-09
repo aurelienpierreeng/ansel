@@ -1,6 +1,7 @@
 #include "gui/actions/menu.h"
 #include "control/crawler.h"
 #include "common/collection.h"
+#include "common/selection.h"
 #include "control/jobs.h"
 
 static void clear_caches_callback(GtkWidget *widget)

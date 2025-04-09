@@ -49,6 +49,14 @@ static gboolean _thumbnail_btn_draw(GtkWidget *widget, cairo_t *cr)
   GtkStyleContext *context = gtk_widget_get_style_context(widget);
   gtk_style_context_get(context, state, GTK_STYLE_PROPERTY_COLOR, &fg_color, GTK_STYLE_PROPERTY_BACKGROUND_COLOR,
                         &bg_color, NULL);
+
+  GtkBorder margin;
+  gtk_style_context_get_margin(context, state, &margin);
+  gtk_widget_set_margin_bottom(widget, margin.bottom);
+  gtk_widget_set_margin_top(widget, margin.top);
+  gtk_widget_set_margin_start(widget, margin.left);
+  gtk_widget_set_margin_end(widget, margin.right);
+
   if(fg_color->alpha == 0 && bg_color->alpha == 0)
   {
     DTGTK_THUMBNAIL_BTN(widget)->hidden = TRUE;
@@ -81,10 +89,10 @@ static gboolean _thumbnail_btn_draw(GtkWidget *widget, cairo_t *cr)
     GtkBorder padding;
     gtk_style_context_get_padding(context, state, &padding);
     // padding is a percent of the full size
-    const float icon_x = padding.left * allocation.width / 100.0f;
-    const float icon_y = padding.top * allocation.height / 100.0f;
-    const float icon_w = allocation.width - (padding.left + padding.right) * allocation.width / 100.0f;
-    const float icon_h = allocation.height - (padding.top + padding.bottom) * allocation.height / 100.0f;
+    const float icon_x = padding.left;
+    const float icon_y = padding.top;
+    const float icon_w = allocation.width - (padding.left + padding.right);
+    const float icon_h = allocation.height - (padding.top + padding.bottom);
     DTGTK_THUMBNAIL_BTN(widget)->icon(
         cr, icon_x, icon_y, icon_w, icon_h, flags,
         DTGTK_THUMBNAIL_BTN(widget)->icon_data ? DTGTK_THUMBNAIL_BTN(widget)->icon_data : bg_color);

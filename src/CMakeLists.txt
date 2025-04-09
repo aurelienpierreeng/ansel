@@ -5,6 +5,21 @@ include(CheckCXXCompilerFlag)
 include(CheckCSourceCompiles)
 include(CheckCXXSymbolExists)
 
+# Generate authors
+add_custom_command(
+  DEPENDS ${CMAKE_SOURCE_DIR}/tools/authors_h.sh ${CMAKE_SOURCE_DIR}/AUTHORS
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/tools/darktable_authors.h
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/tools/
+  COMMAND bash ${CMAKE_SOURCE_DIR}/tools/authors_h.sh ${CMAKE_SOURCE_DIR}/AUTHORS ${CMAKE_CURRENT_BINARY_DIR}/tools/darktable_authors.h
+  COMMENT "Generating authors.h for about dialog."
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_custom_target(
+  generate_authors_h ALL
+  DEPENDS ${CMAKE_SOURCE_DIR}/tools/authors_h.sh ${CMAKE_SOURCE_DIR}/AUTHORS ${CMAKE_CURRENT_BINARY_DIR}/tools/darktable_authors.h
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
 
 #
 # Add files for libansel
@@ -152,10 +167,12 @@ FILE(GLOB SOURCE_FILES
   "gui/color_picker_proxy.c"
   "gui/import_metadata.c"
   "gui/window_manager.c"
+  "gui/actions/*.c"
   "libs/lib.c"
   "views/view.c"
   )
 FILE(GLOB HEADER_FILES "*.h" "common/*.h" "external/OpenCL/CL/*.h" "control/*.h" "iop/*.h" "libs/*.h" "views/*.h")
+
 
 if(APPLE)
   list(APPEND SOURCE_FILES "osx/osx.mm")
@@ -932,6 +949,9 @@ endif(BUILD_CMSTEST)
 if(BUILD_TESTING)
   add_subdirectory(tests)
 endif(BUILD_TESTING)
+
+add_library(help_menu "gui/actions/help.c")
+add_dependencies(help_menu generate_authors_h)
 
 #
 # build ansel executable

@@ -18,7 +18,7 @@ static void _dt_mipmaps_updated_callback(gpointer instance, int32_t imgid, gpoin
 }
 
 
-void _close_export_popup(GtkWidget *dialog, gint response_id, gpointer data)
+void _close_preview_popup(GtkWidget *dialog, gint response_id, gpointer data)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_mipmaps_updated_callback), data);
 }
@@ -103,7 +103,7 @@ void dt_preview_window_spawn(const int32_t imgid)
   gtk_window_set_modal(GTK_WINDOW(dialog), FALSE);
   gtk_window_set_transient_for(GTK_WINDOW(dialog), GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
   gtk_window_set_default_size(GTK_WINDOW(dialog), 350, 350);
-  g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(_close_export_popup), dialog);
+  g_signal_connect(G_OBJECT(dialog), "response", G_CALLBACK(_close_preview_popup), dialog);
 
   GtkWidget *area = gtk_drawing_area_new();
   gtk_widget_set_hexpand(area, TRUE);

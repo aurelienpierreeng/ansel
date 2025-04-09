@@ -2,7 +2,8 @@
 #include "common/grouping.h"
 #include "common/colorlabels.h"
 #include "common/ratings.h"
-
+#include "control/control.h"
+#include "common/collection.h"
 
 void rotate_counterclockwise_callback()
 {

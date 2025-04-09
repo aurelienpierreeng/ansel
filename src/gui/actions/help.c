@@ -1,5 +1,6 @@
 #include "gui/actions/menu.h"
 #include "common/l10n.h"
+#include "control/control.h"
 
 
 static void show_about_dialog()

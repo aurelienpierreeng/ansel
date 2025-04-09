@@ -581,7 +581,7 @@ void dt_control_queue_redraw_widget(GtkWidget *widget)
 
 void dt_control_hinter_message(const struct dt_control_t *s, const char *message)
 {
-  if(s->proxy.hinter.module) return s->proxy.hinter.set_message(s->proxy.hinter.module, message);
+  dt_hinter_set_message(darktable.gui->ui, message);
 }
 
 int32_t dt_control_get_mouse_over_id()

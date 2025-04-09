@@ -354,8 +354,8 @@ void dt_image_set_images_locations(const GList *imgs, const GArray *gloc,
                                    const gboolean undo_on);
 /** get image location lon/lat/ele */
 void dt_image_get_location(const int32_t imgid, dt_image_geoloc_t *geoloc);
-/** returns TRUE if current hash is not basic nor auto_apply, FALSE otherwise. */
-gboolean dt_image_altered(const int32_t imgid);
+/** returns the number of history entries in library for this image */
+uint32_t dt_image_altered(const int32_t imgid);
 /** returns TRUE if if current has is basic, FALSE otherwise. */
 gboolean dt_image_basic(const int32_t imgid);
 

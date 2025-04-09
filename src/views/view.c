@@ -58,12 +58,6 @@ static void dt_view_unload_module(dt_view_t *view);
 
 void dt_view_manager_init(dt_view_manager_t *vm)
 {
-  /* prepare statements */
-  DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
-      "SELECT id FROM main.images WHERE group_id = (SELECT group_id FROM main.images WHERE id=?1) AND id != ?2",
-      -1, &vm->statements.get_grouped, NULL);
-
   dt_view_manager_load_modules(vm);
 
   // Modules loaded, let's handle specific cases
@@ -599,6 +593,10 @@ void dt_view_manager_configure(dt_view_manager_t *vm, int width, int height)
     v->height = height;
     if(v->configure) v->configure(v, width, height);
   }
+
+  // We need to resize the darkroom cache lines size too.
+  // Note that it will not affect running pipelines though.
+  dt_configure_runtime_performance(&darktable.dtresources, TRUE);
 }
 
 int dt_view_manager_scrolled(dt_view_manager_t *vm, double x, double y, int up, int state)
@@ -891,12 +889,6 @@ void dt_view_active_images_set(GList *images, gboolean raise)
 
   if(raise)
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_ACTIVE_IMAGES_CHANGE);
-}
-
-void dt_view_manager_view_toolbox_add(dt_view_manager_t *vm, GtkWidget *tool, dt_view_type_flags_t views)
-{
-  if(vm->proxy.view_toolbox.module)
-    vm->proxy.view_toolbox.add(vm->proxy.view_toolbox.module, tool, views);
 }
 
 void dt_view_manager_module_toolbox_add(dt_view_manager_t *vm, GtkWidget *tool, dt_view_type_flags_t views)

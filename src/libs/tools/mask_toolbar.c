@@ -25,13 +25,13 @@ const char *name(struct dt_lib_module_t *self)
 
 const char **views(dt_lib_module_t *self)
 {
-  static const char *v[] = {"darkroom", NULL};
+  static const char *v[] = { NULL };
   return v;
 }
 
 uint32_t container(dt_lib_module_t *self)
 {
-  return DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_LEFT;
+  return DT_UI_CONTAINER_PANEL_LEFT_TOP;
 }
 
 int expandable(dt_lib_module_t *self)

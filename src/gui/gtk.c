@@ -32,7 +32,6 @@
 #include "dtgtk/sidepanel.h"
 
 #include "gui/gtk.h"
-#include "gui/actions/display.h"
 
 #include "common/styles.h"
 #include "control/conf.h"
@@ -284,25 +283,12 @@ int dt_gui_gtk_load_config()
 {
   // Warning : needs to be called within a dt_pthread_mutex_lock(&darktable.gui->mutex) section
   GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
-  const int width = dt_conf_get_int("ui_last/window_w");
-  const int height = dt_conf_get_int("ui_last/window_h");
-  const gint x = MAX(0, dt_conf_get_int("ui_last/window_x"));
-  const gint y = MAX(0, dt_conf_get_int("ui_last/window_y"));
+  // NOTE: allowing full-screen on startup shits the bed with MacOS
 
-  gtk_window_move(GTK_WINDOW(widget), x, y);
-  gtk_window_resize(GTK_WINDOW(widget), width, height);
-
-  if(dt_conf_get_bool("ui_last/fullscreen"))
-    gtk_window_fullscreen(GTK_WINDOW(widget));
+  if(dt_conf_get_bool("ui_last/maximized"))
+    gtk_window_maximize(GTK_WINDOW(widget));
   else
-  {
-    gtk_window_unfullscreen(GTK_WINDOW(widget));
-
-    if(dt_conf_get_bool("ui_last/maximized"))
-      gtk_window_maximize(GTK_WINDOW(widget));
-    else
-      gtk_window_unmaximize(GTK_WINDOW(widget));
-  }
+    gtk_window_unmaximize(GTK_WINDOW(widget));
 
   return 0;
 }
@@ -312,19 +298,8 @@ int dt_gui_gtk_write_config()
   dt_pthread_mutex_lock(&darktable.gui->mutex);
 
   GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
-  GtkAllocation allocation;
-  gtk_widget_get_allocation(widget, &allocation);
-  gint x, y;
-  gtk_window_get_position(GTK_WINDOW(widget), &x, &y);
-  dt_conf_set_int("ui_last/window_x", x);
-  dt_conf_set_int("ui_last/window_y", y);
-  dt_conf_set_int("ui_last/window_w", allocation.width);
-  dt_conf_set_int("ui_last/window_h", allocation.height);
   dt_conf_set_bool("ui_last/maximized",
                    (gdk_window_get_state(gtk_widget_get_window(widget)) & GDK_WINDOW_STATE_MAXIMIZED));
-  dt_conf_set_bool("ui_last/fullscreen",
-                   (gdk_window_get_state(gtk_widget_get_window(widget)) & GDK_WINDOW_STATE_FULLSCREEN));
-
   dt_pthread_mutex_unlock(&darktable.gui->mutex);
 
   return 0;
@@ -350,6 +325,7 @@ void dt_gui_gtk_quit()
 
   g_list_free(darktable.gui->input_devices);
   dt_accels_cleanup(darktable.gui->accels);
+  dt_ui_cleanup_titlebar(darktable.gui->ui);
 
   // Write out windows dimension
   dt_gui_gtk_write_config();
@@ -445,11 +421,6 @@ static gboolean _window_configure(GtkWidget *da, GdkEvent *event, gpointer user_
     oldx = event->configure.x;
     oldy = event->configure.y;
   }
-
-  // In case window size changed, we need to resize the darkroom cache lines size too.
-  // Note that it will not affect running pipelines though.
-  dt_configure_runtime_performance(&darktable.dtresources, TRUE);
-
   return FALSE;
 }
 
@@ -607,6 +578,18 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   // The GtkWidget capturing scrolling events will write its address in this pointer
   gui->has_scroll_focus = NULL;
 
+  // Init global accels. We localize the config because accels pathes use translated GUI labels.
+  // User switching between languages may loose their custom shortcuts if we didn't localize them.
+  // NOTE: needs to be inited before widgets, more specifically before the global menu
+  gchar *keyboardrc = g_strdup_printf("keyboardrc.%s", dt_l10n_get_current_lang(darktable.l10n));
+  gchar *keyboardrc_path = g_build_filename(configdir, keyboardrc, NULL);
+
+  GtkAccelFlags flags = 0;
+  if(dt_conf_get_bool("accels/mask")) flags |= GTK_ACCEL_MASK;
+  gui->accels = dt_accels_init(keyboardrc_path, flags);
+  g_free(keyboardrc);
+  g_free(keyboardrc_path);
+
   // Initializing widgets
   _init_widgets(gui);
 
@@ -673,14 +656,6 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
     }
     dt_print(DT_DEBUG_INPUT, "\n");
   }
-
-  // Init global accels. We localize the config because accels pathes use translated GUI labels.
-  // User switching between languages may loose their custom shortcuts if we didn't localize them.
-  gchar *keyboardrc = g_strdup_printf("keyboardrc.%s", dt_l10n_get_current_lang(darktable.l10n));
-  gchar *keyboardrc_path = g_build_filename(configdir, keyboardrc, NULL);
-  gui->accels = dt_accels_init(keyboardrc_path);
-  g_free(keyboardrc);
-  g_free(keyboardrc_path);
 
   // Gtk seems to capture some reserved shortcuts (Tab). We need to bypass it entirely
   // by hacking all events.
@@ -811,16 +786,12 @@ static void _init_widgets(dt_gui_gtk_t *gui)
   gtk_window_set_icon_name(GTK_WINDOW(gui->ui->main_window ), "ansel");
   gtk_window_set_title(GTK_WINDOW(gui->ui->main_window ), "Ansel");
 
-  // Remove useless desktop environment titlebar. We will handle closing buttons internally
-  gui->ui->header = gtk_header_bar_new();
-  gtk_widget_set_name(gui->ui->header, "top-first-line");
-  gtk_widget_set_size_request(gui->ui->header, -1, -1);
-  gtk_window_set_titlebar(GTK_WINDOW(gui->ui->main_window), gui->ui->header);
-  gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(gui->ui->header), TRUE);
+  // Init the titlebar ASAP because we replace the desktop titlebar & decoration with ours
+  dt_ui_init_titlebar(gui->ui);
 
   dt_configure_ppd_dpi(gui);
 
-  gtk_window_set_default_size(GTK_WINDOW(gui->ui->main_window), DT_PIXEL_APPLY_DPI(900), DT_PIXEL_APPLY_DPI(600));
+  gtk_window_set_default_size(GTK_WINDOW(gui->ui->main_window), DT_PIXEL_APPLY_DPI(800), DT_PIXEL_APPLY_DPI(500));
   dt_gui_gtk_load_config();
 
   g_signal_connect(G_OBJECT(gui->ui->main_window ), "delete_event", G_CALLBACK(dt_gui_quit_callback), NULL);
@@ -841,7 +812,7 @@ static void _init_widgets(dt_gui_gtk_t *gui)
   container = widget;
 
   // Initializing the main table
-  dt_ui_init_main_table(container, darktable.gui->ui);
+  dt_ui_init_main_table(container, gui->ui);
 
   /* the log message */
   GtkWidget *eb = gtk_event_box_new();

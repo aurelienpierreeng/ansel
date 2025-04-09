@@ -209,6 +209,8 @@ typedef struct dt_control_t
   } progress_system;
 
   /* proxy */
+  // TODO: this is unused now, but deleting it makes free(darktable.control)
+  // segfault on double free or corruption. Find out why.
   struct
   {
 

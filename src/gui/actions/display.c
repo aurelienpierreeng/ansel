@@ -1,4 +1,5 @@
 #include "common/darktable.h"
+#include "common/collection.h"
 #include "control/control.h"
 #include "gui/actions/menu.h"
 #include "gui/gtk.h"
@@ -20,21 +21,33 @@ static void full_screen_callback()
   GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
 
   if(full_screen_checked_callback(widget))
+  {
     gtk_window_unfullscreen(GTK_WINDOW(widget));
+
+    // workaround for GTK Quartz backend bug
+    gtk_window_set_title(GTK_WINDOW(widget), "Ansel");
+  }
   else
+  {
     gtk_window_fullscreen(GTK_WINDOW(widget));
 
-  dt_dev_invalidate(darktable.develop);
+    // workaround for GTK Quartz backend bug
+    gtk_window_set_title(GTK_WINDOW(widget), "Ansel Preview");
+  }
+
+  // Mac OS workaround: always re-anchor the window to the bottom of the screen
+  GdkWindow *window = gtk_widget_get_window(widget);
+  GdkDisplay *display = gtk_widget_get_display(widget);
+  GdkMonitor *monitor = gdk_display_get_monitor_at_window(display, window);
+  GdkRectangle geometry;
+  gdk_monitor_get_geometry(monitor, &geometry);
+
+  int w, h;
+  gtk_window_get_size(GTK_WINDOW(widget), &w, &h);
+  gtk_window_move(GTK_WINDOW(widget), geometry.width - geometry.x - w, geometry.height - geometry.y - h);
+
+  dt_dev_invalidate_zoom(darktable.develop);
   dt_dev_refresh_ui_images(darktable.develop);
-
-  /* redraw center view */
-  gtk_widget_queue_draw(widget);
-
-#ifdef __APPLE__
-  // workaround for GTK Quartz backend bug
-  gtk_window_set_title(GTK_WINDOW(widget), widget == dt_ui_main_window(darktable.gui->ui)
-                                         ? "Ansel" : _("Ansel - Darkroom preview"));
-#endif
 }
 
 /** SIDE PANELS COLLAPSE **/
@@ -60,8 +73,6 @@ static gboolean _toggle_side_borders_accel_callback(GtkAccelGroup *accel_group, 
   /* trigger invalidation of centerview to reprocess pipe */
   dt_dev_invalidate_zoom(darktable.develop);
   dt_dev_refresh_ui_images(darktable.develop);
-  gtk_widget_queue_draw(dt_ui_center(darktable.gui->ui));
-
   return TRUE;
 }
 
@@ -169,6 +180,16 @@ static gboolean panel_left_checked_callback(GtkWidget *widget)
   return dt_ui_panel_visible(darktable.gui->ui, DT_UI_PANEL_LEFT);
 }
 
+void panel_top_callback()
+{
+  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_TOP, !_panel_is_visible(DT_UI_PANEL_TOP), TRUE);
+}
+
+static gboolean panel_top_checked_callback(GtkWidget *widget)
+{
+  return dt_ui_panel_visible(darktable.gui->ui, DT_UI_PANEL_TOP);
+}
+
 static gboolean available_in_lighttable_callback()
 {
   // Filmstrip is not visible in lighttable
@@ -186,28 +207,6 @@ void panel_right_callback()
 static gboolean panel_right_checked_callback(GtkWidget *widget)
 {
   return dt_ui_panel_visible(darktable.gui->ui, DT_UI_PANEL_RIGHT);
-}
-
-void panel_top_callback()
-{
-  if(available_in_lighttable_callback())
-    dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_CENTER_TOP, !_panel_is_visible(DT_UI_PANEL_CENTER_TOP), TRUE);
-}
-
-static gboolean panel_top_checked_callback(GtkWidget *widget)
-{
-  return dt_ui_panel_visible(darktable.gui->ui, DT_UI_PANEL_CENTER_TOP);
-}
-
-void panel_bottom_callback()
-{
-  if(available_in_lighttable_callback())
-    dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_CENTER_BOTTOM, !_panel_is_visible(DT_UI_PANEL_CENTER_BOTTOM), TRUE);
-}
-
-static gboolean panel_bottom_checked_callback(GtkWidget *widget)
-{
-  return dt_ui_panel_visible(darktable.gui->ui, DT_UI_PANEL_CENTER_BOTTOM);
 }
 
 static void filmstrip_callback()
@@ -305,6 +304,7 @@ static gboolean intent_checked_callback(GtkWidget *widget)
 static void always_hide_overlays_callback()
 {
   dt_thumbtable_set_overlays_mode(darktable.gui->ui->thumbtable_lighttable, DT_THUMBNAIL_OVERLAYS_NONE);
+  dt_thumbtable_set_overlays_mode(darktable.gui->ui->thumbtable_filmstrip, DT_THUMBNAIL_OVERLAYS_NONE);
 }
 
 static gboolean always_hide_overlays_checked_callback(GtkWidget *widget)
@@ -315,6 +315,7 @@ static gboolean always_hide_overlays_checked_callback(GtkWidget *widget)
 static void hover_overlays_callback()
 {
   dt_thumbtable_set_overlays_mode(darktable.gui->ui->thumbtable_lighttable, DT_THUMBNAIL_OVERLAYS_HOVER_NORMAL);
+  dt_thumbtable_set_overlays_mode(darktable.gui->ui->thumbtable_filmstrip, DT_THUMBNAIL_OVERLAYS_HOVER_NORMAL);
 }
 
 static gboolean hover_overlays_checked_callback(GtkWidget *widget)
@@ -325,11 +326,25 @@ static gboolean hover_overlays_checked_callback(GtkWidget *widget)
 static void always_show_overlays_callback()
 {
   dt_thumbtable_set_overlays_mode(darktable.gui->ui->thumbtable_lighttable, DT_THUMBNAIL_OVERLAYS_ALWAYS_NORMAL);
+  dt_thumbtable_set_overlays_mode(darktable.gui->ui->thumbtable_filmstrip, DT_THUMBNAIL_OVERLAYS_ALWAYS_NORMAL);
 }
 
 static gboolean always_show_overlays_checked_callback(GtkWidget *widget)
 {
   return dt_conf_get_int("plugins/lighttable/overlays/global") == DT_THUMBNAIL_OVERLAYS_ALWAYS_NORMAL;
+}
+
+static void group_borders_callback()
+{
+  gboolean borders = !dt_conf_get_bool("plugins/lighttable/group_borders");
+  dt_conf_set_bool("plugins/lighttable/group_borders", borders);
+  dt_thumbtable_set_draw_group_borders(darktable.gui->ui->thumbtable_lighttable, borders);
+  dt_thumbtable_set_draw_group_borders(darktable.gui->ui->thumbtable_filmstrip, borders);
+}
+
+static gboolean group_borders_checked_callback()
+{
+  return dt_conf_get_bool("plugins/lighttable/group_borders");
 }
 
 static void collapse_grouped_callback()
@@ -379,17 +394,14 @@ void append_display(GtkWidget **menus, GList **lists, const dt_menus_t index)
   parent = get_last_widget(lists);
 
   // Children of sub-menu panels
+  add_sub_sub_menu_entry(menus, parent, lists, _("Top"), index, NULL, panel_top_callback,
+                         panel_top_checked_callback, NULL, NULL, GDK_KEY_t, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
+
   add_sub_sub_menu_entry(menus, parent, lists, _("Left"), index, NULL,
                          panel_left_callback, panel_left_checked_callback, NULL, NULL, GDK_KEY_l, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Right"), index, NULL,
                          panel_right_callback, panel_right_checked_callback, NULL, available_in_lighttable_callback, GDK_KEY_r, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
-
-  add_sub_sub_menu_entry(menus, parent, lists, _("Top"), index, NULL,
-                         panel_top_callback, panel_top_checked_callback, NULL, available_in_lighttable_callback, GDK_KEY_t, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
-
-  add_sub_sub_menu_entry(menus, parent, lists, _("Bottom"), index, NULL,
-                         panel_bottom_callback, panel_bottom_checked_callback, NULL, available_in_lighttable_callback, GDK_KEY_b, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Filmstrip"), index, NULL,
                          filmstrip_callback, filmstrip_checked_callback, NULL, available_in_lighttable_callback, GDK_KEY_f, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
@@ -411,6 +423,8 @@ void append_display(GtkWidget **menus, GList **lists, const dt_menus_t index)
 
   add_sub_menu_entry(menus, lists, _("Collapse grouped images"), index, NULL, collapse_grouped_callback, collapse_grouped_checked_callback, NULL, NULL, 0, 0);
 
+  add_sub_menu_entry(menus, lists, _("Show group borders"), index, NULL, group_borders_callback,
+                     group_borders_checked_callback, NULL, NULL, GDK_KEY_p, GDK_CONTROL_MASK | GDK_SHIFT_MASK);
 
   add_menu_separator(menus[index]);
 

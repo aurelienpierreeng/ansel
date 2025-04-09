@@ -3,6 +3,7 @@
 #include "libs/collect.h"
 #include "common/import.h"
 #include "libs/lib.h"
+#include "control/control.h"
 
 
 static void pretty_print_collection(const char *buf, char *out, size_t outsize)

@@ -1,5 +1,6 @@
 #include "gui/actions/menu.h"
 #include "common/selection.h"
+#include "common/collection.h"
 
 // Select menu is unavailable in anything else than lighttable
 

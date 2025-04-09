@@ -38,6 +38,9 @@
 #include "osx/osx.h"
 #endif
 
+#include <glib-object.h>
+
+
 // 420 = 3*4*5*7, so we ensure full rows for 1-10 and 12 thumbs/row.
 #define MAX_THUMBNAILS 420
 
@@ -94,64 +97,6 @@ static int _grab_focus(dt_thumbtable_t *table)
   }
   dt_thumbtable_scroll_to_selection(table);
   return 0;
-}
-
-// get the class name associated with the overlays mode
-static gchar *_thumbs_get_overlays_class(dt_thumbnail_overlay_t over)
-{
-  switch(over)
-  {
-    case DT_THUMBNAIL_OVERLAYS_NONE:
-      return g_strdup("dt_overlays_none");
-    case DT_THUMBNAIL_OVERLAYS_ALWAYS_NORMAL:
-      return g_strdup("dt_overlays_always");
-    case DT_THUMBNAIL_OVERLAYS_HOVER_NORMAL:
-    default:
-      return g_strdup("dt_overlays_hover");
-  }
-}
-
-// update thumbtable class and overlays mode, depending on size category
-static void _thumbs_update_overlays_mode(dt_thumbtable_t *table)
-{
-  // we change the overlay mode
-  gchar *txt = g_strdup("plugins/lighttable/overlays/global");
-  dt_thumbnail_overlay_t over = sanitize_overlays(dt_conf_get_int(txt));
-  g_free(txt);
-
-  dt_thumbtable_set_overlays_mode(table, over);
-}
-
-// change the type of overlays that should be shown
-void dt_thumbtable_set_overlays_mode(dt_thumbtable_t *table, dt_thumbnail_overlay_t over)
-{
-  if(!table) return;
-  if(over == table->overlays) return;
-  dt_conf_set_int("plugins/lighttable/overlays/global", sanitize_overlays(over));
-  gchar *cl0 = _thumbs_get_overlays_class(table->overlays);
-  gchar *cl1 = _thumbs_get_overlays_class(over);
-
-  dt_gui_remove_class(table->grid, cl0);
-  dt_gui_add_class(table->grid, cl1);
-  dt_thumbtable_redraw(table);
-
-  // we need to change the overlay content if we pass from normal to extended overlays
-  // this is not done on the fly with css to avoid computing extended msg for nothing and to reserve space if needed
-  dt_pthread_mutex_lock(&table->lock);
-  for(GList *l = g_list_first(table->list); l; l = g_list_next(l))
-  {
-    dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
-    // and we resize the bottom area
-    dt_thumbnail_set_overlay(thumb, table->overlays);
-    dt_thumbnail_resize(thumb, thumb->width, thumb->height, TRUE);
-    dt_thumbnail_alternative_mode(thumb, table->alternate_mode);
-    gtk_widget_queue_draw(thumb->widget);
-  }
-  dt_pthread_mutex_unlock(&table->lock);
-
-  table->overlays = over;
-  g_free(cl0);
-  g_free(cl1);
 }
 
 // We can't trust the mouse enter/leave events on thumnbails to properly
@@ -463,7 +408,7 @@ void dt_thumbtable_configure(dt_thumbtable_t *table)
   else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
   {
     new_width = gtk_widget_get_allocated_width(table->parent_overlay);
-    new_height = dt_conf_get_int("darkroom/ui/0/bottom_size");
+    new_height = gtk_widget_get_allocated_height(table->parent_overlay);
     GtkWidget *h_scroll = gtk_scrolled_window_get_hscrollbar(GTK_SCROLLED_WINDOW(table->scroll_window));
     new_height -= gtk_widget_get_allocated_height(h_scroll);
     cols = table->thumbs_per_row; // whatever that doesn't make the next if think layout changed
@@ -482,6 +427,16 @@ void dt_thumbtable_configure(dt_thumbtable_t *table)
     table->thumbs_inited = FALSE;
     _grid_configure(table, new_width, new_height, cols);
     _update_grid_area(table);
+  }
+  else if(new_width < 32 || new_height < 32)
+  {
+    // Parent is not allocated or something went wrong:
+    // ensure to reset everything so no further code will run
+    table->thumbs_inited = FALSE;
+    table->configured = FALSE;
+    table->thumbs_per_row = 0;
+    table->thumb_height = 0;
+    table->thumb_width = 0;
   }
 }
 
@@ -535,6 +490,64 @@ dt_thumbnail_t *_find_thumb_by_imgid(dt_thumbtable_t *table, const int32_t imgid
   return NULL;
 }
 
+#define CLAMP_ROW(rowid) CLAMP(rowid, 0, table->collection_count - 1)
+#define IS_COLLECTION_EDGE(rowid) (rowid < 0 || rowid >= table->collection_count)
+
+void _add_thumbnail_group_borders(dt_thumbtable_t *table, dt_thumbnail_t *thumb)
+{
+  // Reset all CSS classes
+  dt_thumbnail_border_t borders = 0;
+  dt_thumbnail_set_group_border(thumb, borders);
+
+  const int32_t rowid = thumb->rowid;
+  const int32_t groupid = thumb->groupid;
+
+  // Ungrouped image: abort
+  if(table->lut[rowid].group_members < 2 || !table->draw_group_borders) return;
+
+  if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
+  {
+    if(table->lut[CLAMP_ROW(rowid - table->thumbs_per_row)].groupid != groupid
+      || IS_COLLECTION_EDGE(rowid - table->thumbs_per_row))
+      borders |= DT_THUMBNAIL_BORDER_TOP;
+
+    if(table->lut[CLAMP_ROW(rowid + table->thumbs_per_row)].groupid != groupid
+      || IS_COLLECTION_EDGE(rowid + table->thumbs_per_row))
+      borders |= DT_THUMBNAIL_BORDER_BOTTOM;
+
+    if(table->lut[CLAMP_ROW(rowid - 1)].groupid != groupid
+      || IS_COLLECTION_EDGE(rowid - 1))
+      borders |= DT_THUMBNAIL_BORDER_LEFT;
+
+    if(table->lut[CLAMP_ROW(rowid + 1)].groupid != groupid
+      || IS_COLLECTION_EDGE(rowid + 1))
+      borders |= DT_THUMBNAIL_BORDER_RIGHT;
+
+    // If the group spans over more than a full row,
+    // close the row ends. Otherwise, we leave orphans opened at the row ends.
+    if(table->lut[rowid].group_members > table->thumbs_per_row)
+    {
+      if(rowid % table->thumbs_per_row == 0)
+        borders |= DT_THUMBNAIL_BORDER_LEFT;
+      if(rowid % table->thumbs_per_row == table->thumbs_per_row - 1)
+        borders |= DT_THUMBNAIL_BORDER_RIGHT;
+    }
+  }
+  else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
+  {
+    borders |= DT_THUMBNAIL_BORDER_BOTTOM | DT_THUMBNAIL_BORDER_TOP;
+
+    if(table->lut[CLAMP_ROW(rowid - 1)].groupid != groupid
+      || IS_COLLECTION_EDGE(rowid - 1))
+      borders |= DT_THUMBNAIL_BORDER_LEFT;
+
+    if(table->lut[CLAMP_ROW(rowid + 1)].groupid != groupid
+      || IS_COLLECTION_EDGE(rowid + 1))
+      borders |= DT_THUMBNAIL_BORDER_RIGHT;
+  }
+
+  dt_thumbnail_set_group_border(thumb, borders);
+}
 
 void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const int32_t mouse_over)
 {
@@ -580,23 +593,22 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
 
   // Resize
   gboolean size_changed = (table->thumb_height != thumb->height || table->thumb_width != thumb->width);
-  if(new_item || size_changed)
+  if(new_item || size_changed || table->overlays != thumb->over)
   {
-    dt_thumbnail_resize(thumb, table->thumb_width, table->thumb_height, FALSE);
     dt_thumbnail_set_overlay(thumb, table->overlays);
+    dt_thumbnail_resize(thumb, table->thumb_width, table->thumb_height);
   }
-
-  // Reposition: cheap to recompute
-  _set_thumb_position(table, thumb);
 
   // Actually moving the widgets in the grid is more expensive, do it only if necessary
   if(new_item)
   {
+    _set_thumb_position(table, thumb);
     gtk_fixed_put(GTK_FIXED(table->grid), thumb->widget, thumb->x, thumb->y);
     //fprintf(stdout, "adding new thumb at #%lu: %i, %i\n", rowid, thumb->x, thumb->y);
   }
   else if(new_position || size_changed)
   {
+    _set_thumb_position(table, thumb);
     gtk_fixed_move(GTK_FIXED(table->grid), thumb->widget, thumb->x, thumb->y);
     //fprintf(stdout, "moving new thumb at #%lu: %i, %i\n", rowid, thumb->x, thumb->y);
   }
@@ -615,6 +627,9 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
     dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->imgid));
     thumb->disable_actions = FALSE;
   }
+
+  _add_thumbnail_group_borders(table, thumb);
+  dt_thumbnail_unblock_redraw(thumb);
 }
 
 
@@ -631,21 +646,105 @@ void _populate_thumbnails(dt_thumbtable_t *table)
 // Resize the thumbnails that are still existing but outside of visible viewport at current scroll level
 void _resize_thumbnails(dt_thumbtable_t *table)
 {
+  if(!table->configured) return;
+
   for(GList *link = g_list_first(table->list); link; link = g_list_next(link))
   {
     dt_thumbnail_t *thumb = (dt_thumbnail_t *)link->data;
     gboolean size_changed = (table->thumb_height != thumb->height || table->thumb_width != thumb->width);
 
-    if(size_changed)
+    if(size_changed || table->overlays != thumb->over)
     {
+      // Overlay modes may change the height of the image
+      // to accommodate buttons. We need to resize on overlay changes.
       dt_thumbnail_set_overlay(thumb, table->overlays);
-      dt_thumbnail_resize(thumb, table->thumb_width, table->thumb_height, FALSE);
-      _set_thumb_position(table, thumb);
-      gtk_fixed_move(GTK_FIXED(table->grid), thumb->widget, thumb->x, thumb->y);
+      dt_thumbnail_resize(thumb, table->thumb_width, table->thumb_height);
+      if(size_changed)
+      {
+        _set_thumb_position(table, thumb);
+        gtk_fixed_move(GTK_FIXED(table->grid), thumb->widget, thumb->x, thumb->y);
+      }
       dt_thumbnail_alternative_mode(thumb, table->alternate_mode);
-      gtk_widget_queue_draw(thumb->widget);
     }
+
+    _add_thumbnail_group_borders(table, thumb);
+    dt_thumbnail_update_infos(thumb);
+    gtk_widget_queue_draw(thumb->widget);
   }
+}
+
+#if 0
+// Don't redraw the visible thumbs while we allocate new ones,
+// because we allocate them out of the visible area.
+void _disable_redraws(dt_thumbtable_t *table)
+{
+  g_signal_handler_block(G_OBJECT(table->grid), table->draw_signal_id);
+  table->no_drawing = TRUE;
+}
+
+// Restore the redraw on allocate default behaviour to follow window resizing.
+void _enable_redraws(dt_thumbtable_t *table)
+{
+  g_signal_handler_unblock(G_OBJECT(table->grid), table->draw_signal_id);
+  table->no_drawing = FALSE;
+  gtk_widget_queue_draw(table->grid);
+}
+#endif
+
+unsigned long timeout_handle = 0;
+
+// Populate the immediate next and previous thumbs
+int dt_thumbtable_prefetch(dt_thumbtable_t *table)
+{
+  if(table->thumb_nb == table->collection_count || table->collection_count == MAX_THUMBNAILS)
+  {
+    timeout_handle = 0;
+    return G_SOURCE_REMOVE;
+  }
+
+  const int32_t mouse_over = dt_control_get_mouse_over_id();
+
+  dt_pthread_mutex_lock(&table->lock);
+
+  const int page_size = table->max_row_id - table->min_row_id + 1;
+
+  // We prefetch only up to 2 full pages before and after
+  const int min_range = table->min_row_id - 2 * page_size - 1;
+  const int max_range = table->max_row_id + 2 * page_size + 1;
+
+  // Populate the previous thumb
+  gboolean full_before = TRUE;
+  for(int rowid = CLAMP(table->min_row_id, 0, table->collection_count - 1);
+      rowid >= MAX(0, min_range); rowid--)
+    if(table->lut[rowid].thumb == NULL)
+    {
+      _add_thumbnail_at_rowid(table, rowid, mouse_over);
+      dt_thumbnail_get_image_buffer(table->lut[rowid].thumb);
+      full_before = FALSE;
+      break;
+    }
+
+  // Populate the next thumb
+  gboolean full_after = TRUE;
+  for(int rowid = CLAMP(table->max_row_id, 0, table->collection_count - 1);
+      rowid < MIN(table->collection_count, max_range); rowid++)
+    if(table->lut[rowid].thumb == NULL)
+    {
+      _add_thumbnail_at_rowid(table, rowid, mouse_over);
+      dt_thumbnail_get_image_buffer(table->lut[rowid].thumb);
+      full_after = FALSE;
+      break;
+    }
+
+  dt_pthread_mutex_unlock(&table->lock);
+
+  if(table->thumb_nb == table->collection_count || table->collection_count == MAX_THUMBNAILS || (full_before && full_after))
+  {
+    timeout_handle = 0;
+    return G_SOURCE_REMOVE;
+  }
+
+  return G_SOURCE_CONTINUE;
 }
 
 
@@ -661,6 +760,14 @@ void dt_thumbtable_update(dt_thumbtable_t *table)
   {
     _dt_thumbtable_empty_list(table);
     table->reset_collection = FALSE;
+  }
+
+  // Priority to live events: if a prefetch async job is running, kill it now
+  // to process scroll, resize or new collection events
+  if(timeout_handle != 0)
+  {
+    g_source_remove(timeout_handle);
+    timeout_handle = 0;
   }
 
   const double start = dt_get_wtime();
@@ -682,8 +789,10 @@ void dt_thumbtable_update(dt_thumbtable_t *table)
 
   dt_pthread_mutex_unlock(&table->lock);
 
+  timeout_handle = g_timeout_add(50, (GSourceFunc)dt_thumbtable_prefetch, table);
 
-  dt_print(DT_DEBUG_LIGHTTABLE, "Populated %d thumbs between %i and %i in %0.04f sec \n", table->thumb_nb, table->min_row_id, table->max_row_id, dt_get_wtime() - start);
+  dt_print(DT_DEBUG_LIGHTTABLE, "Populated %d thumbs between %i and %i in %0.04f sec \n", table->thumb_nb,
+           table->min_row_id, table->max_row_id, dt_get_wtime() - start);
 }
 
 
@@ -769,12 +878,36 @@ gboolean dt_thumbtable_get_focus_peaking(dt_thumbtable_t *table)
   return table->focus_peaking;
 }
 
+void dt_thumbtable_set_draw_group_borders(dt_thumbtable_t *table, gboolean enable)
+{
+  table->draw_group_borders = enable;
+  dt_pthread_mutex_lock(&table->lock);
+  _resize_thumbnails(table);
+  dt_pthread_mutex_unlock(&table->lock);
+}
+
+gboolean dt_thumbtable_get_draw_group_borders(dt_thumbtable_t *table)
+{
+  return table->draw_group_borders;
+}
+
 // can be called with imgid = -1, in that case we reload all mipmaps
 static void _dt_mipmaps_updated_callback(gpointer instance, int32_t imgid, gpointer user_data)
 {
   if(!user_data) return;
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
   dt_thumbtable_refresh_thumbnail(table, imgid, FALSE);
+}
+
+// Because dt_thumbnail_image_refresh_real calls a redraw and that redraw
+// calls dt_thumbnail_get_image_buffer later on, only if the thumb is visible,
+// we need to force the thumb to grap a Cairo source image ASAP so scrolling
+// over that thumbnail later will not induce latencies
+int _thumbnail_refresh(dt_thumbnail_t *thumb)
+{
+  dt_thumbnail_image_refresh_real(thumb);
+  dt_thumbnail_get_image_buffer(thumb);
+  return G_SOURCE_REMOVE;
 }
 
 // can be called with imgid = -1, in that case we reload all mipmaps
@@ -789,13 +922,13 @@ void dt_thumbtable_refresh_thumbnail_real(dt_thumbtable_t *table, int32_t imgid,
     if(thumb->imgid == imgid)
     {
       if(reinit) thumb->image_inited = FALSE;
-      g_idle_add((GSourceFunc)dt_thumbnail_image_refresh_real, thumb);
+      g_idle_add((GSourceFunc)_thumbnail_refresh, thumb);
       break;
     }
     else if(imgid == UNKNOWN_IMAGE)
     {
       if(reinit) thumb->image_inited = FALSE;
-      g_idle_add((GSourceFunc)dt_thumbnail_image_refresh_real, thumb);
+      g_idle_add((GSourceFunc)_thumbnail_refresh, thumb);
     }
   }
   dt_pthread_mutex_unlock(&table->lock);
@@ -817,6 +950,10 @@ static void _dt_image_info_changed_callback(gpointer instance, gpointer imgs, gp
       dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
       if(thumb->imgid == imgid_to_update)
       {
+        // Update infos reads the content of the LUT, for performance at init time,
+        // but then we need to keep it updated during the lifetime of the thumbnail.
+        table->lut[thumb->rowid].history_items = dt_image_altered(thumb->imgid);
+        // TODO: update group id too.
         dt_thumbnail_update_infos(thumb);
         gtk_widget_queue_draw(thumb->widget);
         break;
@@ -834,7 +971,9 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
   // In-memory collected images don't store group_id, so we need to fetch it again from DB
   sqlite3_stmt *stmt;
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-    "SELECT im.id, im.group_id, c.rowid"
+    "SELECT im.id, im.group_id, c.rowid, "
+    "(SELECT COUNT(id) FROM main.images WHERE group_id=im.group_id), "
+    "(SELECT COUNT(imgid) FROM main.history WHERE imgid=c.imgid) "
     " FROM main.images as im, memory.collected_images as c"
     " WHERE im.id=c.imgid"
     " ORDER BY c.rowid ASC",
@@ -843,6 +982,7 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
   // NOTE: non-grouped images have group_id equal to their own id
   // grouped images have group_id equal to the id of the "group leader".
   // In old database versions, it's possible that group_id may have been set to -1 for non-grouped images.
+  // That would actually make group detection much easier...
 
   // Convert SQL imgids into C objects we can work with
   GList *collection = NULL;
@@ -850,6 +990,8 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
   {
     int32_t imgid = sqlite3_column_int(stmt, 0);
     int32_t groupid = sqlite3_column_int(stmt, 1);
+    int32_t group_items = sqlite3_column_int(stmt, 3);
+    int32_t history_items = sqlite3_column_int(stmt, 4);
 
     if(table->collapse_groups && imgid != groupid)
     {
@@ -863,9 +1005,11 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
       continue;
     }
 
-      int32_t *data = malloc(2 * sizeof(int32_t));
+      int32_t *data = malloc(4 * sizeof(int32_t));
     data[0] = imgid;
     data[1] = groupid;
+    data[2] = group_items;
+    data[3] = history_items;
     collection = g_list_prepend(collection, data);
   }
   sqlite3_finalize(stmt);
@@ -903,6 +1047,8 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
     int32_t *data = (int32_t *)collection_item->data;
     table->lut[i].imgid = data[0];
     table->lut[i].groupid = data[1];
+    table->lut[i].group_members = data[2];
+    table->lut[i].history_items = data[3];
 
     // This will be updated when initing/freeing a new GUI thumbnail
     table->lut[i].thumb = NULL;
@@ -983,6 +1129,57 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
 
     g_idle_add((GSourceFunc)_grab_focus, table);
   }
+}
+
+// get the class name associated with the overlays mode
+static gchar *_thumbs_get_overlays_class(dt_thumbnail_overlay_t over)
+{
+  switch(over)
+  {
+    case DT_THUMBNAIL_OVERLAYS_NONE:
+      return g_strdup("dt_overlays_none");
+    case DT_THUMBNAIL_OVERLAYS_ALWAYS_NORMAL:
+      return g_strdup("dt_overlays_always");
+    case DT_THUMBNAIL_OVERLAYS_HOVER_NORMAL:
+    default:
+      return g_strdup("dt_overlays_hover");
+  }
+}
+
+// update thumbtable class and overlays mode, depending on size category
+static void _thumbs_update_overlays_mode(dt_thumbtable_t *table)
+{
+  // we change the overlay mode
+  gchar *txt = g_strdup("plugins/lighttable/overlays/global");
+  dt_thumbnail_overlay_t over = sanitize_overlays(dt_conf_get_int(txt));
+  g_free(txt);
+
+  dt_thumbtable_set_overlays_mode(table, over);
+}
+
+// change the type of overlays that should be shown
+void dt_thumbtable_set_overlays_mode(dt_thumbtable_t *table, dt_thumbnail_overlay_t over)
+{
+  if(!table) return;
+  if(over == table->overlays) return;
+
+  // Cleanup old Darktable stupid modes
+  dt_conf_set_int("plugins/lighttable/overlays/global", sanitize_overlays(over));
+
+  gchar *cl0 = _thumbs_get_overlays_class(table->overlays);
+  gchar *cl1 = _thumbs_get_overlays_class(over);
+  dt_gui_remove_class(table->grid, cl0);
+  dt_gui_add_class(table->grid, cl1);
+  g_free(cl0);
+  g_free(cl1);
+
+  table->thumbs_inited = FALSE;
+  table->overlays = over;
+
+  dt_pthread_mutex_lock(&table->lock);
+  _resize_thumbnails(table);
+  dt_pthread_mutex_unlock(&table->lock);
+  dt_thumbtable_redraw(table);
 }
 
 static void _event_dnd_get(GtkWidget *widget, GdkDragContext *context, GtkSelectionData *selection_data,
@@ -1513,7 +1710,7 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
   g_signal_connect(table->grid, "drag-data-received", G_CALLBACK(dt_thumbtable_event_dnd_received), table);
 
   gtk_widget_add_events(table->grid, GDK_STRUCTURE_MASK | GDK_EXPOSURE_MASK | GDK_KEY_PRESS_MASK | GDK_KEY_RELEASE_MASK);
-  g_signal_connect(table->grid, "draw", G_CALLBACK(_draw_callback), table);
+  table->draw_signal_id = g_signal_connect(table->grid, "draw", G_CALLBACK(_draw_callback), table);
   g_signal_connect(table->grid, "key-press-event", G_CALLBACK(dt_thumbtable_key_pressed_grid), table);
   g_signal_connect(table->grid, "key-release-event", G_CALLBACK(dt_thumbtable_key_released_grid), table);
   gtk_widget_show(table->grid);
@@ -1535,6 +1732,7 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
   table->alternate_mode = FALSE;
   table->rowid = -1;
   table->collapse_groups = dt_conf_get_bool("ui_last/grouping");
+  table->draw_group_borders = dt_conf_get_bool("plugins/lighttable/group_borders");
 
   dt_pthread_mutex_init(&table->lock, NULL);
 

@@ -244,8 +244,6 @@ void dt_ui_notify_user();
 gboolean dt_ui_panel_visible(dt_ui_t *ui, const dt_ui_panel_t);
 /**  \brief get width of right, left, or bottom panel */
 int dt_ui_panel_get_size(dt_ui_t *ui, const dt_ui_panel_t p);
-/**  \brief set width of right, left, or bottom panel */
-void dt_ui_panel_set_size(dt_ui_t *ui, const dt_ui_panel_t p, int s);
 /** \brief is the panel ancestor of widget */
 gboolean dt_ui_panel_ancestor(dt_ui_t *ui, const dt_ui_panel_t p, GtkWidget *w);
 /** \brief get the center drawable widget */

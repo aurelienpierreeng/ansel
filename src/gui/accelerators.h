@@ -57,6 +57,8 @@ typedef struct dt_accels_t
   // Temporarily disable accelerators
   gboolean disable_accels;
 
+  GtkAccelFlags flags;
+
   // Views can register a global callback to handle scroll events
   // for example while keystrokes are on.
   struct scroll
@@ -87,7 +89,7 @@ typedef struct dt_shortcut_t
 } dt_shortcut_t;
 
 
-dt_accels_t *dt_accels_init(char *config_file);
+dt_accels_t *dt_accels_init(char *config_file, GtkAccelFlags flags);
 void dt_accels_cleanup(dt_accels_t *accels);
 
 

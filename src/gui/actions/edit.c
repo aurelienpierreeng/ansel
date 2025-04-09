@@ -5,6 +5,7 @@
 #include "common/collection.h"
 #include "common/image_cache.h"
 #include "develop/dev_history.h"
+#include "control/control.h"
 
 static void preferences_callback()
 {

@@ -59,7 +59,6 @@ typedef struct
   int rating;
   int colorlabels;
   gchar *filename;
-  gchar *info_line;
   gboolean is_altered;
   gboolean has_audio;
   gboolean is_grouped;
@@ -71,19 +70,19 @@ typedef struct
   // all widget components
   GtkWidget *widget;               // GtkEventbox -- parent of all others
   GtkWidget *w_main;               // GtkOverlay --
+  GtkWidget *w_background;         // GtkBox, because a GtkOverlay can't get styling apparently
   GtkWidget *w_ext;                // GtkLabel -- thumbnail extension
 
   GtkWidget *w_image;        // GtkDrawingArea -- thumbnail image
-  GtkBorder *img_margin;     // in percentage of the main widget size
   cairo_surface_t *img_surf; // cached surface at exact dimensions to speed up redraw
 
   GtkWidget *w_cursor;    // GtkDrawingArea -- triangle to show current image(s) in filmstrip
   GtkWidget *w_bottom_eb; // GtkEventBox -- background of the bottom infos area (contains w_bottom)
-  GtkWidget *w_bottom;    // GtkLabel -- text of the bottom infos area, just with #thumb-bottom
   GtkWidget *w_reject;    // GtkDarktableThumbnailBtn -- Reject icon
   GtkWidget *w_stars[MAX_STARS];  // GtkDarktableThumbnailBtn -- Stars icons
   GtkWidget *w_color;     // GtkDarktableThumbnailBtn -- Colorlabels "flower" icon
 
+  GtkWidget *w_top_eb;
   GtkWidget *w_local_copy; // GtkDarktableThumbnailBtn -- localcopy triangle
   GtkWidget *w_altered;    // GtkDarktableThumbnailBtn -- Altered icon
   GtkWidget *w_group;      // GtkDarktableThumbnailBtn -- Grouping icon
@@ -134,12 +133,19 @@ typedef struct
   gboolean busy; // should we show the busy message ?
   gboolean drawn; // image already drawn, nothing more to do
 
+  // Gtk signal id for the redraw event
+  unsigned long draw_signal_id;
+  unsigned long img_draw_signal_id;
+
+  // Redraw events are blocked
+  gboolean no_draw;
+
 } dt_thumbnail_t;
 
 dt_thumbnail_t *dt_thumbnail_new(int32_t imgid, int rowid, int32_t groupid, dt_thumbnail_overlay_t over, struct dt_thumbtable_t *table);
 int dt_thumbnail_destroy(dt_thumbnail_t *thumb);
 GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb);
-void dt_thumbnail_resize(dt_thumbnail_t *thumb, int width, int height, gboolean force);
+void dt_thumbnail_resize(dt_thumbnail_t *thumb, int width, int height);
 void dt_thumbnail_set_group_border(dt_thumbnail_t *thumb, dt_thumbnail_border_t border);
 void dt_thumbnail_set_mouseover(dt_thumbnail_t *thumb, gboolean over);
 void dt_thumbnail_set_overlay(dt_thumbnail_t *thumb, dt_thumbnail_overlay_t mode);
@@ -161,7 +167,16 @@ int dt_thumbnail_image_refresh_real(dt_thumbnail_t *thumb);
 // force reloading image infos
 void dt_thumbnail_reload_infos(dt_thumbnail_t *thumb);
 
-void dt_thumbnail_alternative_mode(dt_thumbnail_t *thumb, gboolean nable);
+void dt_thumbnail_alternative_mode(dt_thumbnail_t *thumb, gboolean enable);
+
+// If prefetching, Gtk won't redraw the invisible thumbnails so we need to manually call this ahead.
+int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb);
+
+// temporarily block all redraw events
+int dt_thumbnail_block_redraw(dt_thumbnail_t *thumb);
+
+// unblock previously-blocked redraw events
+int dt_thumbnail_unblock_redraw(dt_thumbnail_t *thumb);
 
 static inline dt_thumbnail_overlay_t sanitize_overlays(dt_thumbnail_overlay_t overlays)
 {

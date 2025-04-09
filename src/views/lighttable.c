@@ -158,9 +158,6 @@ void enter(dt_view_t *self)
   dt_collection_hint_message(darktable.collection);
   dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_RIGHT, FALSE, TRUE);
   dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_BOTTOM, FALSE, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_CENTER_TOP, FALSE, TRUE);
-  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_CENTER_BOTTOM, FALSE, TRUE);
-  dt_ui_restore_panels(darktable.gui->ui);
 
   // Attach shortcuts
   dt_accels_connect_accels(darktable.gui->accels);

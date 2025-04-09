@@ -45,9 +45,11 @@ typedef enum dt_thumbtable_zoom_t
 
 typedef struct dt_thumbtable_cache_t
 {
-  int32_t imgid;
-  int32_t groupid;
-  dt_thumbnail_t *thumb;
+  int32_t imgid;          // image ID as found in database
+  int32_t groupid;        // image group ID as found in database
+  dt_thumbnail_t *thumb;  // reference to the thumbnail object
+  uint32_t group_members; // numbers of images in the same group
+  uint32_t history_items;
 } dt_thumbtable_cache_t;
 
 typedef struct dt_thumbtable_t
@@ -136,6 +138,12 @@ typedef struct dt_thumbtable_t
   gboolean focus_regions;
   gboolean focus_peaking;
 
+  gboolean draw_group_borders;
+
+  // Gtk signal id for the redraw event
+  unsigned long draw_signal_id;
+  gboolean no_drawing;
+
 } dt_thumbtable_t;
 
 
@@ -165,6 +173,8 @@ gboolean dt_thumbtable_get_focus_regions(dt_thumbtable_t *table);
 void dt_thumbtable_set_focus_peaking(dt_thumbtable_t *table, gboolean enable);
 gboolean dt_thumbtable_get_focus_peaking(dt_thumbtable_t *table);
 
+void dt_thumbtable_set_draw_group_borders(dt_thumbtable_t *table, gboolean enable);
+gboolean dt_thumbtable_get_draw_group_borders(dt_thumbtable_t *table);
 
 // signal that the current collection needs to be flushed entirely before being reloaded
 void dt_thumbtable_reset_collection(dt_thumbtable_t *table);

@@ -1183,6 +1183,10 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
     // initialize undo struct
     darktable.undo = dt_undo_init();
+
+    // Global menu inherits many parts of the GUI,
+    // so it should be inited last
+    dt_ui_init_global_menu(darktable.gui->ui);
   }
 
   if(darktable.unmuted & DT_DEBUG_MEMORY)
@@ -1533,7 +1537,7 @@ void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean in
 
     // The main darkroom image fits within window, meaning it's almost never fully covering it.
     // RGBA float32 images:
-    darkroom_pipe_size = width * height * 4 * sizeof(float) * 90 / 100;
+    darkroom_pipe_size = width * height * 4 * sizeof(float);
 
     // Preview pipe is 1440x900px for raster inputs
     preview_pipe_size = 1440 * 900 * 4 * sizeof(float);

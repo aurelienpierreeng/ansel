@@ -14,7 +14,7 @@ static void _clean_shortcut(gpointer data)
 }
 
 
-dt_accels_t * dt_accels_init(char *config_file)
+dt_accels_t * dt_accels_init(char *config_file, GtkAccelFlags flags)
 {
   dt_accels_t *accels = malloc(sizeof(dt_accels_t));
   accels->config_file = g_strdup(config_file);
@@ -33,6 +33,7 @@ dt_accels_t * dt_accels_init(char *config_file)
   accels->scroll.callback = NULL;
   accels->scroll.data = NULL;
   accels->disable_accels = FALSE;
+  accels->flags = flags;
   return accels;
 }
 
@@ -146,16 +147,16 @@ gboolean _update_shortcut_state(dt_shortcut_t *shortcut, GtkAccelKey *key, gbool
  * handling.
 */
 
-void _add_widget_accel(dt_shortcut_t *shortcut, const GtkAccelKey *key)
+void _add_widget_accel(dt_shortcut_t *shortcut, const GtkAccelKey *key, GtkAccelFlags flags)
 {
   gtk_widget_add_accelerator(shortcut->widget, shortcut->signal, shortcut->accel_group, key->accel_key,
-                              key->accel_mods, 0);
+                              key->accel_mods, flags);
 
   // Numpad numbers register as different keys. Find the numpad equivalent key here, if any.
   guint alt_char = dt_keys_numpad_alternatives(key->accel_key);
   if(key->accel_key != alt_char)
     gtk_widget_add_accelerator(shortcut->widget, shortcut->signal, shortcut->accel_group, alt_char,
-                                key->accel_mods, 0);
+                                key->accel_mods, flags);
 }
 
 
@@ -175,9 +176,9 @@ void _remove_generic_accel(dt_shortcut_t *shortcut)
   gtk_accel_group_disconnect(shortcut->accel_group, shortcut->closure);
 }
 
-void _add_generic_accel(dt_shortcut_t *shortcut, GtkAccelKey *key)
+void _add_generic_accel(dt_shortcut_t *shortcut, GtkAccelKey *key, GtkAccelFlags flags)
 {
-  gtk_accel_group_connect(shortcut->accel_group, key->accel_key, key->accel_mods, 0,
+  gtk_accel_group_connect(shortcut->accel_group, key->accel_key, key->accel_mods, flags,
                           shortcut->closure);
 }
 
@@ -207,7 +208,7 @@ void dt_accels_new_widget_shortcut(dt_accels_t *accels, GtkWidget *widget, const
     GtkAccelKey key = { .accel_key = shortcut->key, .accel_mods = shortcut->mods, .accel_flags = 0 };
     if(shortcut->key > 0) _remove_widget_accel(shortcut, &key);
     shortcut->widget = widget;
-    if(shortcut->key > 0) _add_widget_accel(shortcut, &key);
+    if(shortcut->key > 0) _add_widget_accel(shortcut, &key, accels->flags);
   }
   // else if shortcut && shortcut->type == DT_SHORTCUT_UNSET, we need to wait for the next call to dt_accels_connect_accels()
   else if(!shortcut)
@@ -249,7 +250,7 @@ const dt_shortcut_t *dt_accels_new_action_shortcut(dt_accels_t *accels, void(*ac
     GtkAccelKey key = { .accel_key = shortcut->key, .accel_mods = shortcut->mods, .accel_flags = 0 };
     if(shortcut->key > 0) _remove_generic_accel(shortcut);
     shortcut->closure = g_cclosure_new(G_CALLBACK(action_callback), data, NULL);
-    if(shortcut->key > 0) _add_generic_accel(shortcut, &key);
+    if(shortcut->key > 0) _add_generic_accel(shortcut, &key, accels->flags);
   }
   // else if shortcut && shortcut->type == DT_SHORTCUT_UNSET, we need to wait for the next call to dt_accels_connect_accels()
   else if(!shortcut)
@@ -308,7 +309,7 @@ void _connect_accel(gpointer _key, gpointer value, gpointer user_data)
   if(shortcut->widget)
   {
     if(needs_cleanup) _remove_widget_accel(shortcut, &oldkey);
-    if(needs_init) _add_widget_accel(shortcut, &key);
+    if(needs_init) _add_widget_accel(shortcut, &key, accels->flags);
   }
   else if(shortcut->closure)
   {
@@ -321,7 +322,7 @@ void _connect_accel(gpointer _key, gpointer value, gpointer user_data)
     }
 
     if(needs_init)
-      _add_generic_accel(shortcut, &key);
+      _add_generic_accel(shortcut, &key, accels->flags);
     // closures can be connected only at one accel at a time, so we don't handle keypad duplicates
   }
   else

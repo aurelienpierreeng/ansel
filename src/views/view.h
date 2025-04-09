@@ -51,12 +51,11 @@
 */
 typedef enum
 {
-  DT_VIEW_LIGHTTABLE = 1,
-  DT_VIEW_DARKROOM = 2,
-  DT_VIEW_TETHERING = 4,
-  DT_VIEW_MAP = 8,
-  DT_VIEW_SLIDESHOW = 16,
-  DT_VIEW_PRINT = 32,
+  DT_VIEW_LIGHTTABLE = 1 << 0,
+  DT_VIEW_DARKROOM = 1 << 2,
+  DT_VIEW_MAP = 1 << 3,
+  DT_VIEW_SLIDESHOW = 1 << 4,
+  DT_VIEW_PRINT = 1 << 5,
 } dt_view_type_flags_t;
 
 // flags that a view can set in flags()
@@ -74,19 +73,6 @@ typedef enum dt_darkroom_layout_t
   DT_DARKROOM_LAYOUT_LAST = 3
 } dt_darkroom_layout_t;
 
-// mouse actions struct
-typedef enum dt_mouse_action_type_t
-{
-  DT_MOUSE_ACTION_LEFT = 0,
-  DT_MOUSE_ACTION_RIGHT,
-  DT_MOUSE_ACTION_MIDDLE,
-  DT_MOUSE_ACTION_SCROLL,
-  DT_MOUSE_ACTION_DOUBLE_LEFT,
-  DT_MOUSE_ACTION_DOUBLE_RIGHT,
-  DT_MOUSE_ACTION_DRAG_DROP,
-  DT_MOUSE_ACTION_LEFT_DRAG,
-  DT_MOUSE_ACTION_RIGHT_DRAG
-} dt_mouse_action_type_t;
 
 // flags that a view can set in flags()
 typedef enum dt_view_surface_value_t
@@ -94,13 +80,6 @@ typedef enum dt_view_surface_value_t
   DT_VIEW_SURFACE_OK = 0,
   DT_VIEW_SURFACE_KO,
 } dt_view_surface_value_t;
-
-typedef struct dt_mouse_action_t
-{
-  GdkModifierType mods;
-  dt_mouse_action_type_t action;
-  gchar name[256];
-} dt_mouse_action_t;
 
 #define DT_VIEW_ALL                                                                              \
   (DT_VIEW_LIGHTTABLE | DT_VIEW_DARKROOM | DT_VIEW_TETHERING | DT_VIEW_MAP | DT_VIEW_SLIDESHOW | \
@@ -173,12 +152,6 @@ typedef struct dt_view_manager_t
    */
   struct
   {
-    /* select images in group from images where imgid=?1 (also bind to ?2) */
-    sqlite3_stmt *get_grouped;
-  } statements;
-
-  struct
-  {
     GPid audio_player_pid;   // the pid of the child process
     int32_t audio_player_id; // the imgid of the image the audio is played for
     guint audio_player_event_source;
@@ -192,14 +165,6 @@ typedef struct dt_view_manager_t
    */
   struct
   {
-
-    /* view toolbox proxy object */
-    struct
-    {
-      struct dt_lib_module_t *module;
-      void (*add)(struct dt_lib_module_t *, GtkWidget *, dt_view_type_flags_t );
-    } view_toolbox;
-
     /* module toolbox proxy object */
     struct
     {
@@ -285,12 +250,6 @@ void dt_view_manager_view_toolbox_add(dt_view_manager_t *vm, GtkWidget *tool, dt
 
 /** add widget to the current module toolbox */
 void dt_view_manager_module_toolbox_add(dt_view_manager_t *vm, GtkWidget *tool, dt_view_type_flags_t view);
-
-/** add mouse action record to list of mouse actions */
-GSList *dt_mouse_action_create_simple(GSList *actions, dt_mouse_action_type_t type, GdkModifierType accel,
-                                      const char *const description);
-GSList *dt_mouse_action_create_format(GSList *actions, dt_mouse_action_type_t type, GdkModifierType accel,
-                                      const char *const format_string, const char *const replacement);
 
 /*
  * Tethering View PROXY

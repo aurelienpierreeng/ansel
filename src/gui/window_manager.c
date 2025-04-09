@@ -1,10 +1,23 @@
 #include "control/control.h"
 #include "views/view.h"
 #include "gui/window_manager.h"
+#include "gui/actions/menu.h"
 #include "dtgtk/sidepanel.h"
 
 #define WINDOW_DEBUG 0
 
+typedef struct dt_header_t
+{
+  GtkWidget *titlebar;
+  GtkWidget *menu_bar;
+  GtkWidget *menus[DT_MENU_LAST];
+  GList *item_lists[DT_MENU_LAST];
+  GtkWidget *hinter;
+  GtkWidget *home;
+  GtkWidget *close;
+  GtkWidget *iconify;
+  GtkWidget *restore;
+} dt_header_t;
 
 const char *_ui_panel_config_names[]
     = { "header", "toolbar_top", "toolbar_bottom", "left", "right", "bottom" };
@@ -59,115 +72,6 @@ int dt_ui_panel_get_size(dt_ui_t *ui, const dt_ui_panel_t p)
   return -1;
 }
 
-void dt_ui_panel_set_size(dt_ui_t *ui, const dt_ui_panel_t p, int s)
-{
-  gchar *key = NULL;
-
-  if(p == DT_UI_PANEL_LEFT || p == DT_UI_PANEL_RIGHT || p == DT_UI_PANEL_BOTTOM)
-  {
-    const int width = CLAMP(s, dt_conf_get_int("min_panel_width"), dt_conf_get_int("max_panel_width"));
-    gtk_widget_set_size_request(ui->panels[p], width, -1);
-    key = panels_get_panel_path(p, "_size");
-    dt_conf_set_int(key, width);
-    g_free(key);
-  }
-}
-
-static void refresh_manager_sizes(dt_ui_t *ui)
-{
-  // GUI sizes to data representation
-
-  dt_window_manager_t *manager = &ui->manager;
-  GtkWidget *window = dt_ui_main_window(ui);
-  GdkWindow *win = gtk_widget_get_window(window);
-  GdkMonitor *monitor = gdk_display_get_monitor_at_window(gdk_window_get_display(win), win);
-
-  // Note : all sizes are in viewport pixels, not physical pixels.
-  // physical pix = viewport pix * gdk_monitor_get_scale_factor(monitor);
-  // the scale factor is the highDPI factor set on desktop environment if any.
-
-  // Display in which the current window fits
-  gdk_monitor_get_geometry(monitor, &manager->viewport);
-
-#if WINDOW_DEBUG
-  fprintf(stdout, "viewport: %i x %i\n", manager->viewport.width, manager->viewport.height);
-#endif
-
-  // Main window
-  gtk_window_get_size(GTK_WINDOW(window), &manager->window.width, &manager->window.height);
-
-#if WINDOW_DEBUG
-  fprintf(stdout, "main window: %i x %i\n", manager->window.width, manager->window.height);
-#endif
-
-  gdk_window_get_origin(gtk_widget_get_window(window), &manager->window.x, &manager->window.y);
-  //gtk_window_get_position(GTK_WINDOW(window), &manager->window.x, &manager->window.y);
-
-#if WINDOW_DEBUG
-  fprintf(stdout, "position : %i, %i\n", manager->window.x, manager->window.y);
-#endif
-
-  // Panels (sidebars, menubar, toolbars, filmstrip)
-  for(int i = 0; i < DT_UI_PANEL_SIZE; i++)
-  {
-    gtk_widget_get_allocation(GTK_WIDGET(ui->panels[i]), &manager->panels[i]);
-
-#if WINDOW_DEBUG
-    fprintf(stdout, "panel %i : %i x %i\n", i, manager->panels[i].width, manager->panels[i].height);
-#endif
-  }
-
-  // Center view
-  gtk_widget_get_allocation(dt_ui_center(ui), &manager->center);
-
-#if WINDOW_DEBUG
-  fprintf(stdout, "center: %i x %i\n", manager->center.width, manager->center.height);
-#endif
-
-}
-
-/*
-* Problem :
-*  Gtk sets the size of containers by adding the size of their children,
-*  with zero fuck given for the ability of the final window to fit within the screen area.
-*  When users resize sidebars, the window width may increase indefinitely.
-*  There is nothing we can do here, because widget_set_size_request defines a wish,
-*  and widget_get_allocation defines the finally rendered size, but nothing advertised the
-*  minimal size. So we can't fetch the min width of the central area and sanitize sidebars widths
-*  as to ensure `window width - min central width = left sidebar width + right sidebar width`.
-*/
-
-static void sanitize_manager_size(dt_ui_t *ui)
-{
-  dt_window_manager_t *manager = &ui->manager;
-
-  // Ensure window fits in viewport NOT taking top-left corner position into account
-  manager->window.width = MIN(manager->window.width, manager->viewport.width);
-  manager->window.height = MIN(manager->window.height, manager->viewport.height);
-
-#if WINDOW_DEBUG
-  fprintf(stdout, "new window size: %i x %i\n", manager->window.width, manager->window.height);
-#endif
-  // Warning : the window.height doesn't account for the titlebar/decoration set by desktop manager.
-  // The code above assumes zero titlebar height because Gtk doesn't have a way of retrieving this info.
-  // Setting window.height to viewport.height doesn't guarantee it fits.
-}
-
-static void reset_manager_sizes(dt_ui_t *ui)
-{
-  dt_window_manager_t *manager = &ui->manager;
-  gtk_window_resize(GTK_WINDOW(dt_ui_main_window(ui)), manager->window.width, manager->window.height);
-}
-
-
-static void update_manager_sizes(dt_ui_t *ui)
-{
-  refresh_manager_sizes(ui);
-  sanitize_manager_size(ui);
-  reset_manager_sizes(ui);
-}
-
-
 gboolean dt_ui_panel_ancestor(dt_ui_t *ui, const dt_ui_panel_t p, GtkWidget *w)
 {
   g_return_val_if_fail(GTK_IS_WIDGET(ui->panels[p]), FALSE);
@@ -211,23 +115,9 @@ void dt_ui_container_add_widget(dt_ui_t *ui, const dt_ui_container_t c, GtkWidge
     *  maybe because they will get added to boxes at the end, and Gtk heuristics to decide final width are weird.
     */
     /* if box is right lets pack at end for nicer alignment */
-    case DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_RIGHT:
-      gtk_box_pack_end(GTK_BOX(ui->containers[c]), w, FALSE, FALSE, 0);
-      break;
-
     /* if box is center we want it to fill as much as it can */
-    case DT_UI_CONTAINER_PANEL_TOP_THIRD_ROW:
-    case DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_CENTER:
     case DT_UI_CONTAINER_PANEL_TOP_SECOND_ROW:
       gtk_box_pack_start(GTK_BOX(ui->containers[c]), w, TRUE, TRUE, 0);
-      break;
-
-    case DT_UI_CONTAINER_PANEL_TOP_FIRST_ROW_LEFT:
-      gtk_header_bar_pack_start(GTK_HEADER_BAR(ui->header), w);
-      break;
-
-    case DT_UI_CONTAINER_PANEL_TOP_FIRST_ROW_RIGHT:
-      gtk_header_bar_pack_end(GTK_HEADER_BAR(ui->header), w);
       break;
 
     default:
@@ -237,25 +127,22 @@ void dt_ui_container_add_widget(dt_ui_t *ui, const dt_ui_container_t c, GtkWidge
   gtk_widget_show_all(w);
 }
 
-static void _ui_init_panel_size(GtkWidget *widget)
+static void _ui_init_panel_size(GtkWidget *widget, dt_ui_t *ui)
 {
   gchar *key = NULL;
-
-  int s = 128;
+  int s = DT_UI_PANEL_SIDE_DEFAULT_SIZE; // default panel size
   if(strcmp(gtk_widget_get_name(widget), "right") == 0)
   {
     key = panels_get_panel_path(DT_UI_PANEL_RIGHT, "_size");
-    s = DT_UI_PANEL_SIDE_DEFAULT_SIZE; // default panel size
     if(key && dt_conf_key_exists(key))
-      s = CLAMP(dt_conf_get_int(key), 120, darktable.gui->ui->manager.window.width / 3);
+      s = MAX(dt_conf_get_int(key), 120);
     if(key) gtk_widget_set_size_request(widget, s, -1);
   }
   else if(strcmp(gtk_widget_get_name(widget), "left") == 0)
   {
     key = panels_get_panel_path(DT_UI_PANEL_LEFT, "_size");
-    s = DT_UI_PANEL_SIDE_DEFAULT_SIZE; // default panel size
     if(key && dt_conf_key_exists(key))
-      s = CLAMP(dt_conf_get_int(key), 120, darktable.gui->ui->manager.window.width / 3);
+      s = MAX(dt_conf_get_int(key), 120);
     if(key) gtk_widget_set_size_request(widget, s, -1);
   }
   else if(strcmp(gtk_widget_get_name(widget), "bottom") == 0)
@@ -263,7 +150,7 @@ static void _ui_init_panel_size(GtkWidget *widget)
     key = panels_get_panel_path(DT_UI_PANEL_BOTTOM, "_size");
     s = DT_UI_PANEL_BOTTOM_DEFAULT_SIZE; // default panel size
     if(key && dt_conf_key_exists(key))
-      s = CLAMP(dt_conf_get_int(key), 64, darktable.gui->ui->manager.window.height / 3);
+      s = MAX(dt_conf_get_int(key), 48);
     if(key) gtk_widget_set_size_request(widget, -1, s);
   }
 
@@ -273,9 +160,9 @@ static void _ui_init_panel_size(GtkWidget *widget)
 void dt_ui_restore_panels(dt_ui_t *ui)
 {
   /* restore left & right panel size */
-  _ui_init_panel_size(ui->panels[DT_UI_PANEL_LEFT]);
-  _ui_init_panel_size(ui->panels[DT_UI_PANEL_RIGHT]);
-  _ui_init_panel_size(ui->panels[DT_UI_PANEL_BOTTOM]);
+  _ui_init_panel_size(ui->panels[DT_UI_PANEL_LEFT], ui);
+  _ui_init_panel_size(ui->panels[DT_UI_PANEL_RIGHT], ui);
+  _ui_init_panel_size(ui->panels[DT_UI_PANEL_BOTTOM], ui);
 
   /* restore from a previous collapse all panel state if enabled */
   gchar *key = panels_get_view_path("panel_collaps_state");
@@ -299,13 +186,7 @@ void dt_ui_restore_panels(dt_ui_t *ui)
 
       g_free(key);
     }
-
-    // Force main menu to remain visible. Many users hide the top header bar in Darktable.
-    // Coming to Ansel, they don't realize there is a menu there.
-    dt_ui_panel_show(ui, DT_UI_PANEL_TOP, TRUE, TRUE);
   }
-
-  update_manager_sizes(ui);
 }
 
 static gboolean _panel_handle_button_callback(GtkWidget *w, GdkEventButton *e, gpointer user_data)
@@ -351,6 +232,8 @@ static gboolean _panel_handle_motion_callback(GtkWidget *w, GdkEventButton *e, g
   {
     gint x, y, sx, sy;
     GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+    int win_w, win_h;
+    gtk_window_get_size(GTK_WINDOW(window), &win_w, &win_h);
 
     // FIXME: can work with the event x,y to skip the gdk_window_get_device_position() call?
     gdk_window_get_device_position(e->window,
@@ -363,19 +246,20 @@ static gboolean _panel_handle_motion_callback(GtkWidget *w, GdkEventButton *e, g
     gchar *key = NULL;
     if(strcmp(gtk_widget_get_name(w), "panel-handle-right") == 0)
     {
-      sx = CLAMP(sx + darktable.gui->widgets.panel_handle_x - x, 150, darktable.gui->ui->manager.window.width / 2);
+      sx = CLAMP(sx + darktable.gui->widgets.panel_handle_x - x, 150, win_w / 2);
       key = panels_get_panel_path(DT_UI_PANEL_RIGHT, "_size");
       gtk_widget_set_size_request(widget, sx, -1);
     }
     else if(strcmp(gtk_widget_get_name(w), "panel-handle-left") == 0)
     {
-      sx = CLAMP(sx - darktable.gui->widgets.panel_handle_x + x, 150, darktable.gui->ui->manager.window.width / 2);
+      sx = CLAMP(sx - darktable.gui->widgets.panel_handle_x + x, 150, win_w / 2);
       key = panels_get_panel_path(DT_UI_PANEL_LEFT, "_size");
       gtk_widget_set_size_request(widget, sx, -1);
     }
     else if(strcmp(gtk_widget_get_name(w), "panel-handle-bottom") == 0)
     {
-      sx = CLAMP((sy + darktable.gui->widgets.panel_handle_y - y), 64, darktable.gui->ui->manager.window.height / 2);
+      // yes, we write sx for uniformity with the others
+      sx = CLAMP((sy + darktable.gui->widgets.panel_handle_y - y), 48, win_h / 3.);
       key = panels_get_panel_path(DT_UI_PANEL_BOTTOM, "_size");
       gtk_widget_set_size_request(widget, -1, sx);
     }
@@ -383,8 +267,6 @@ static gboolean _panel_handle_motion_callback(GtkWidget *w, GdkEventButton *e, g
     // we store and apply the new value
     dt_conf_set_int(key, sx);
     g_free(key);
-
-    update_manager_sizes(darktable.gui->ui);
 
     return TRUE;
   }
@@ -479,7 +361,7 @@ static void _ui_init_panel_left(dt_ui_t *ui, GtkWidget *container)
   darktable.gui->widgets.panel_handle_dragging = FALSE;
   widget = ui->panels[DT_UI_PANEL_LEFT] = dtgtk_side_panel_new();
   gtk_widget_set_name(widget, "left");
-  _ui_init_panel_size(widget);
+  _ui_init_panel_size(widget, ui);
 
   GtkWidget *over = gtk_overlay_new();
   gtk_container_add(GTK_CONTAINER(over), widget);
@@ -520,7 +402,7 @@ static void _ui_init_panel_right(dt_ui_t *ui, GtkWidget *container)
   darktable.gui->widgets.panel_handle_dragging = FALSE;
   widget = ui->panels[DT_UI_PANEL_RIGHT] = dtgtk_side_panel_new();
   gtk_widget_set_name(widget, "right");
-  _ui_init_panel_size(widget);
+  _ui_init_panel_size(widget, ui);
 
   GtkWidget *over = gtk_overlay_new();
   gtk_container_add(GTK_CONTAINER(over), widget);
@@ -568,52 +450,8 @@ static void _ui_init_panel_top(dt_ui_t *ui, GtkWidget *container)
   gtk_widget_set_name(ui->containers[DT_UI_CONTAINER_PANEL_TOP_SECOND_ROW], "top-second-line");
   gtk_box_pack_start(GTK_BOX(widget), ui->containers[DT_UI_CONTAINER_PANEL_TOP_SECOND_ROW], FALSE, FALSE,
                      DT_UI_PANEL_MODULE_SPACING);
-
-  /* add container for top right */
-  ui->containers[DT_UI_CONTAINER_PANEL_TOP_THIRD_ROW] = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_widget_set_name(ui->containers[DT_UI_CONTAINER_PANEL_TOP_THIRD_ROW], "top-third-line");
-  gtk_box_pack_end(GTK_BOX(widget), ui->containers[DT_UI_CONTAINER_PANEL_TOP_THIRD_ROW], FALSE, FALSE,
-                   DT_UI_PANEL_MODULE_SPACING);
 }
 
-/* initialize the center top panel */
-static void _ui_init_panel_center_top(dt_ui_t *ui, GtkWidget *container)
-{
-  GtkWidget *widget;
-
-  /* create the panel box */
-  ui->panels[DT_UI_PANEL_CENTER_TOP] = widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_widget_set_name(widget, "header-toolbar");
-  dt_gui_add_class(widget, "dt_big_btn_canvas");
-  gtk_box_pack_start(GTK_BOX(container), widget, FALSE, FALSE, 0);
-}
-
-/* initialize the center bottom panel */
-static void _ui_init_panel_center_bottom(dt_ui_t *ui, GtkWidget *container)
-{
-  GtkWidget *widget;
-
-  /* create the panel box */
-  ui->panels[DT_UI_PANEL_CENTER_BOTTOM] = widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_widget_set_name(widget, "footer-toolbar");
-  dt_gui_add_class(widget, "dt_big_btn_canvas");
-  gtk_box_pack_start(GTK_BOX(container), widget, FALSE, TRUE, 0);
-
-  /* adding the center bottom left toolbox */
-  ui->containers[DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_LEFT] = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_box_pack_start(GTK_BOX(widget), ui->containers[DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_LEFT], TRUE, TRUE,
-                     DT_UI_PANEL_MODULE_SPACING);
-
-  /* adding the center box */
-  ui->containers[DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_CENTER] = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-  gtk_box_pack_start(GTK_BOX(widget), ui->containers[DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_CENTER], FALSE, TRUE,
-                     DT_UI_PANEL_MODULE_SPACING);
-
-  /* adding the right toolbox */
-  ui->containers[DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_RIGHT] = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_box_pack_start(GTK_BOX(widget), ui->containers[DT_UI_CONTAINER_PANEL_CENTER_BOTTOM_RIGHT], TRUE, TRUE,
-                     DT_UI_PANEL_MODULE_SPACING);
-}
 
 /* initialize the bottom panel */
 static void _ui_init_panel_bottom(dt_ui_t *ui, GtkWidget *container)
@@ -625,7 +463,7 @@ static void _ui_init_panel_bottom(dt_ui_t *ui, GtkWidget *container)
 
   ui->panels[DT_UI_PANEL_BOTTOM] = ui->thumbtable_filmstrip->parent_overlay;
   gtk_widget_set_name(ui->thumbtable_filmstrip->parent_overlay, "bottom");
-  _ui_init_panel_size(ui->thumbtable_filmstrip->parent_overlay);
+  _ui_init_panel_size(ui->thumbtable_filmstrip->parent_overlay, ui);
   gtk_grid_attach(GTK_GRID(container), over, 1, 2, 3, 1);
 
   // we add a transparent overlay over the modules margins to resize the panel
@@ -669,9 +507,6 @@ void dt_ui_init_main_table(GtkWidget *parent, dt_ui_t *ui)
   gtk_widget_set_vexpand(GTK_WIDGET(widget), TRUE);
   gtk_grid_attach(GTK_GRID(container), widget, 2, 1, 1, 1);
 
-  /* initialize the center top panel */
-  _ui_init_panel_center_top(ui, widget);
-
   /* initialize the thumb panel */
   ui->thumbtable_lighttable = dt_thumbtable_new(DT_THUMBTABLE_MODE_FILEMANAGER);
 
@@ -704,7 +539,6 @@ void dt_ui_init_main_table(GtkWidget *parent, dt_ui_t *ui)
                             G_CALLBACK(_ui_widget_redraw_callback), ui->center);
 
   /* initialize panels */
-  _ui_init_panel_center_bottom(ui, widget);
   _ui_init_panel_bottom(ui, container);
   _ui_init_panel_left(ui, container);
   _ui_init_panel_right(ui, container);
@@ -716,4 +550,143 @@ void dt_ui_cleanup_main_table(dt_ui_t *ui)
 {
   dt_thumbtable_cleanup(ui->thumbtable_filmstrip);
   dt_thumbtable_cleanup(ui->thumbtable_lighttable);
+}
+
+
+void dt_ui_init_titlebar(dt_ui_t *ui)
+{
+  ui->header = g_malloc0(sizeof(dt_header_t));
+
+  // Remove useless desktop environment titlebar. We will handle closing buttons internally
+  ui->header->titlebar = gtk_header_bar_new();
+  gtk_widget_set_name(ui->header->titlebar, "top-first-line");
+  gtk_widget_set_size_request(ui->header->titlebar, -1, -1);
+  gtk_window_set_titlebar(GTK_WINDOW(ui->main_window), ui->header->titlebar);
+
+  // Reset header bar properties
+  gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(ui->header->titlebar), FALSE);
+  gtk_header_bar_set_decoration_layout(GTK_HEADER_BAR(ui->header->titlebar), NULL);
+
+  // Gtk mandatorily adds an empty label that is still "visible" for the title.
+  // Since it's centered, it can collide with the hinter width.
+  // Plus it adds mandatory padding. AKA scrap that.
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_header_bar_set_custom_title(GTK_HEADER_BAR(ui->header->titlebar), box);
+  gtk_widget_set_no_show_all(box, TRUE);
+
+  ui->header->menu_bar = gtk_menu_bar_new();
+  gtk_widget_set_name(ui->header->menu_bar, "menu-bar");
+}
+
+void _home_callback()
+{
+  dt_ctl_switch_mode_to("lighttable");
+}
+
+void _close_callback(GtkWidget *w, gpointer data)
+{
+  gtk_window_close(GTK_WINDOW((GtkWidget *)data));
+}
+
+void _restore_callback(GtkWidget *w, gpointer data)
+{
+  GtkWindow *window = GTK_WINDOW((GtkWidget *)data);
+  if(gtk_window_is_maximized(window))
+    gtk_window_unmaximize(window);
+  else
+    gtk_window_maximize(window);
+}
+
+void _iconify_callback(GtkWidget *w, gpointer data)
+{
+  gtk_window_iconify(GTK_WINDOW((GtkWidget *)data));
+}
+
+void dt_ui_init_global_menu(dt_ui_t *ui)
+{
+
+  /* Init top-level menus */
+  gchar *labels [DT_MENU_LAST] = { _("_File"), _("_Edit"), _("_Selection"), _("_Image"), _("_Styles"), _("_Run"), _("_Display"), _("_Ateliers"), _("_Help") };
+  for(int i = 0; i < DT_MENU_LAST; i++)
+  {
+    ui->header->item_lists[i] = NULL;
+    add_top_menu_entry(ui->header->menu_bar, ui->header->menus, &ui->header->item_lists[i], i, labels[i]);
+  }
+
+  gtk_widget_set_halign(ui->header->menu_bar, GTK_ALIGN_START);
+  gtk_widget_set_hexpand(ui->header->menu_bar, FALSE);
+
+  /* Populate sub-menus */
+  append_file(ui->header->menus, &ui->header->item_lists[DT_MENU_FILE], DT_MENU_FILE);
+  append_edit(ui->header->menus, &ui->header->item_lists[DT_MENU_EDIT], DT_MENU_EDIT);
+  append_select(ui->header->menus, &ui->header->item_lists[DT_MENU_SELECTION], DT_MENU_SELECTION);
+  append_image(ui->header->menus, &ui->header->item_lists[DT_MENU_IMAGE], DT_MENU_IMAGE);
+  append_run(ui->header->menus, &ui->header->item_lists[DT_MENU_RUN], DT_MENU_RUN);
+  append_display(ui->header->menus, &ui->header->item_lists[DT_MENU_DISPLAY], DT_MENU_DISPLAY);
+  append_views(ui->header->menus, &ui->header->item_lists[DT_MENU_ATELIERS], DT_MENU_ATELIERS);
+  append_help(ui->header->menus, &ui->header->item_lists[DT_MENU_HELP], DT_MENU_HELP);
+
+  gtk_header_bar_pack_start(GTK_HEADER_BAR(ui->header->titlebar), ui->header->menu_bar);
+  gtk_widget_show_all(ui->header->menu_bar);
+
+  // From there, we pack_end meaning it should be done in reverse order of appearance
+  ui->header->close = gtk_button_new_from_icon_name("window-close", GTK_ICON_SIZE_LARGE_TOOLBAR);
+  g_signal_connect(G_OBJECT(ui->header->close), "clicked", G_CALLBACK(_close_callback), ui->main_window);
+  gtk_widget_set_size_request(ui->header->close, 24, 24);
+  dt_gui_add_class(ui->header->close, "window-button");
+  gtk_header_bar_pack_end(GTK_HEADER_BAR(ui->header->titlebar), ui->header->close);
+  gtk_widget_show(ui->header->close);
+
+  ui->header->restore = gtk_button_new_from_icon_name("window-restore", GTK_ICON_SIZE_LARGE_TOOLBAR);
+  g_signal_connect(G_OBJECT(ui->header->restore), "clicked", G_CALLBACK(_restore_callback), ui->main_window);
+  gtk_widget_set_size_request(ui->header->restore, 24, 24);
+  dt_gui_add_class(ui->header->restore, "window-button");
+  gtk_header_bar_pack_end(GTK_HEADER_BAR(ui->header->titlebar), ui->header->restore);
+  gtk_widget_show(ui->header->restore);
+
+  ui->header->iconify = gtk_button_new_from_icon_name("window-minimize", GTK_ICON_SIZE_LARGE_TOOLBAR);
+  g_signal_connect(G_OBJECT(ui->header->iconify), "clicked", G_CALLBACK(_iconify_callback), ui->main_window);
+  gtk_widget_set_size_request(ui->header->iconify, 24, 24);
+  dt_gui_add_class(ui->header->iconify, "window-button");
+  gtk_header_bar_pack_end(GTK_HEADER_BAR(ui->header->titlebar), ui->header->iconify);
+  gtk_widget_show(ui->header->iconify);
+
+  ui->header->home = gtk_button_new_from_icon_name("go-home", GTK_ICON_SIZE_LARGE_TOOLBAR);
+  gtk_widget_set_tooltip_text(ui->header->home, _("Go back to lighttable"));
+  g_signal_connect(G_OBJECT(ui->header->home), "clicked", _home_callback, NULL);
+  gtk_widget_set_size_request(ui->header->home, 24, 24);
+  dt_gui_add_class(ui->header->home, "window-button");
+  gtk_header_bar_pack_end(GTK_HEADER_BAR(ui->header->titlebar), ui->header->home);
+  gtk_widget_show(ui->header->home);
+
+  GtkWidget *spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+  gtk_header_bar_pack_end(GTK_HEADER_BAR(ui->header->titlebar), spacer);
+  gtk_widget_show(spacer);
+
+  /* Init hinter */
+  ui->header->hinter = gtk_label_new("");
+  gtk_label_set_ellipsize(GTK_LABEL(ui->header->hinter), PANGO_ELLIPSIZE_END);
+  gtk_widget_set_name(ui->header->hinter, "hinter");
+  gtk_widget_set_halign(ui->header->hinter, GTK_ALIGN_END);
+  gtk_label_set_justify(GTK_LABEL(ui->header->hinter), GTK_JUSTIFY_RIGHT);
+  gtk_label_set_line_wrap(GTK_LABEL(ui->header->hinter), TRUE);
+  gtk_header_bar_pack_end(GTK_HEADER_BAR(ui->header->titlebar), ui->header->hinter);
+  gtk_widget_show(ui->header->hinter);
+}
+
+void dt_hinter_set_message(dt_ui_t *ui, const char *message)
+{
+  // Remove hacky attempts of line wrapping with hardcoded newline :
+  // Line wrap is handled by Gtk at the label scope.
+  char **split = g_strsplit(message, "\n", -1);
+  gtk_label_set_markup(GTK_LABEL(ui->header->hinter), g_strjoinv(", ", split));
+  g_strfreev(split);
+}
+
+
+void dt_ui_cleanup_titlebar(dt_ui_t *ui)
+{
+  for(int i = 0; i < DT_MENU_LAST; i++)
+    g_list_free_full(ui->header->item_lists[i], g_free);
+  g_free(ui->header);
 }

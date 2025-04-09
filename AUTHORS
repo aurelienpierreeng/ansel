@@ -1,131 +1,555 @@
 * developers:
-Aurélien PIERRE
 Pascal Obry
-Aldric Renaudin
-parafin
+johannes hanika
+Aurélien PIERRE
+Tobias Ellinghaus
 Roman Lebedev
+Henrik Andersson
+Ulrich Pegelow
+Aldric Renaudin
+Pascal de Bruijn
+Pedro Côrte-Real
+Jérémy Rosen
+parafin
+José Carlos García Sogo
+Edouard Gomez
+Stefan Schöfegger
+Simon Spannagel
+Peter Budai
+Alexandre Prokoudine
+Christian Tellefsen
+James C. McPherson
 
 * translators:
 Pascal Obry
+Ger Siemerink
 Jeronimo Pellegrini
-Victor Forsiuk
-Ryo Shinozaki
+Michel Leblond
+EdgarLux
+Tobias Ellinghaus
+Richard Levitte
+johannes hanika
 Martin Straeten
-Guillaume Marty
-Alynx Zhou
+Henrik Andersson
+Timur Davletshin
+bartokk
+Alexandre Prokoudine
+tatica
+Olivier Tribout
+Simon Spannagel
+Victor Forsiuk
+Heiko Bauke
+Josep V. Moragues
+Thomas Pryds
+Matjaž Jeran
+Nicolas Auffray
+shlomi braitbart
+José Carlos Casimiro
+Matt Maguire
+Maurizio Paglia
 Aurélien PIERRE
+Jakub Filipowicz
+José Carlos García Sogo
+Ryo Shinozaki
+Ulrich Pegelow
+mepi0011
+Báthory Péter
+Guillaume Marty
+Jérémy Rosen
+Milan Knížek
+Victor Lamoine
+Alynx Zhou
+Guilherme Brondani Torri
+Novy Sawai
+Kevin Vermassen
+Marcus Gama
+Pascal de Bruijn
 Serkan ÖNDER
+Dimitrios Psychogios
+Matteo Mardegan
+Tomasz Golinski
+vertama
+Dušan Kazik
+thisnamewasnottaken
+篠崎亮　Ryo Shinozaki
+Artur de Sousa Rocha
+Cherrot Luo
+Mikko Ruohola
 Petr Stasiak
 Stephan Hoek
-EdgarLux
-Maurizio Paglia
+Germano Massullo
+Philippe Weyland
+Anocha Yimsiriwattana
+Marko Vertainen
+Miloš Komarčević
+Nazarii Vitak
+Arch Ont
+Bernhard
+Federico Bruni
 Luca Zulberti
-Matt Maguire
-Nicolas Auffray
+Miroslav Fikar
+Nameless-J
+Song Li
+chrisaga
+lkarcz
+maruncz
+Besmir Godole
+Jacques Le Clerc
+Ragnar Wisloff
+Shlomi Alon-Braitbart
+Tianhao Chai
 bajdero
+darktable
+miroslavfikar
 mmardegan
+Alberto Caso
+Alejandro Criado-Pérez
+Antony Dovgal
+Bogusław Ciastek
+Cyril Richard
+DWXXX
+Daniele Giorgis
+Danilo Bargen
+Denis Dyakov
+Denny Biasiolli
+Diederik ter Rahe
+Edgar De la Luz
+František Šidák
+Gustav Ernberg
+Hanno Schwalm
 Jan Friedrich
-Matjaž Jeran
+Jean-Luc Coulon (f5ibh)
+Julian J. M
+Laurent Guillier
+Magnus Claesson
+Marek Vančo
 MatteoVita
+Matthieu Moy
+Mattias Eriksson
+Michael Moese
+Michał Prędotka
+Mik-
+Pedro Côrte-Real
+PeterWem
+Ragnar Wisløff
+Robert Bieber
+Simon Raffeiner
+Tomasz Goliński
+Wiktor Nowak
+archont00
+asmolero
+chri
 cotacot
-篠崎亮　Ryo Shinozaki
+criadoperez
+igmerti
+jakubfi
+mrleemon
+parafin
+quovadit
+sbraitbart
+zerng07
+Łukasz Karcz
 
 * contributors (at least 4 commits):
-Hanno Schwalm
-Philippe Weyland
-Diederik ter Rahe
-Alynx Zhou
-Victor Forsiuk
-Nicolas Auffray
-Miloš Komarčević
-Jeronimo Pellegrini
-Chris Elston
-Sakari Kapanen
-Dan Torop
-Guillaume Stutin
-Ryo Shinozaki
-HansBull
-Guillaume Marty
-Martin Straeten
-Jiyone
-lologor
 Ralf Brown
-Serkan ÖNDER
-Maurizio Paglia
-Petr Stasiak
-Stephan Hoek
-solarer
-Luca Zulberti
-Philipp Lutz
-luz paz
-Alban Gruin
-Apfelkraut
+Dan Torop
+Diederik ter Rahe
+Philippe Weyland
+Hanno Schwalm
+Ger Siemerink
+Hubert Kowalski
+Michel Leblond
+Chris.Elston
+Jeronimo Pellegrini
+rawfiner
+Robert Bieber
+Nicolas Auffray
+Andreas Schneider
 EdgarLux
-Ricky Moon
+Richard Levitte
+Heiko Bauke
+edgardoh
+Miloš Komarčević
+Victor Forsiuk
+Bill Ferguson
+Alynx Zhou
+Jean-Sébastien Pédron
+Martin Straeten
+Olivier Tribout
+Mark-64
+Bruce Guenter
+Sakari Kapanen
+Timur Davletshin
+bartokk
+tatica
+Matthieu Moy
+Matthieu Volat
+Rostyslav Pidgornyi
+Chris Elston
+Josep V. Moragues
+Moritz Lipp
+Thomas Pryds
+Dennis Gnad
+Marco Carrarini
+José Carlos Casimiro
+Maurizio Paglia
+Matt Maguire
+Jakub Filipowicz
+Daniel Vogelbacher
+Guillaume Stutin
+GrahamByrnes
+David-Tillmann Schaefer
+Harold le Clément de Saint-Marcq
+Marco
+marcel
+wpferguson
+HansBull
+Kaminsky Andrey
+Matjaž Jeran
+shlomi braitbart
+Guilherme Brondani Torri
+Michal Babej
+mepi0011
+Richard Wonka
+lhietal
 quovadit
+Antony Dovgal
+Jacques Le Clerc
+Milan Knížek
+Sam Smith
+Ryo Shinozaki
+Victor Lamoine
+Jiyone
+Novy Sawai
+Rikard Öxler
+Wolfgang Goetz
+darkelectron
+Báthory Péter
+Guillaume Marty
+Alexis Mousset
+Dimitrios Psychogios
+U-DESKTOP-HQME86Jmarco
+Vasyl Tretiakov
+Vincent THOMAS
+Brian Teague
+Frédéric Grollier
+lologor
+luzpaz
+Kevin Vermassen
+Marcus Gama
+Philipp Lutz
+Robert Bridge
+Andrew Toskin
+Germano Massullo
+Eckhart Pedersen
+Felipe Contreras
+Mikko Ruohola
+Asma
+Bernd Steinhauser
+JohnnyRun
+Kanstantsin Shautsou
+Martin Burri
+Serkan ÖNDER
+Tomasz Golinski
+Victor Engmark
+Wyatt Olson
+junkyardsparkle
+thisnamewasnottaken
+Arnaud TANGUY
+Benoit Brummer
+Fabio Heer
+Loic Guibert
+Paolo DePetrillo
+Žilvinas Žaltiena
+Dušan Kazik
+Jan Kundrát
+Jochen Schroeder
+Matteo Mardegan
+Petr Styblo
+Robert William Hutton
+Roman Khatko
+Stuart Henderson
+itinerarium
+luz paz
+vertama
+vrnhgd
+Ammon Riley
+Chris Hodapp
+David Bremner
+Gaspard Jankowiak
+Ivan Tarozzi
+Jim Robinson
+Marcello Mamino
+Marcus Rückert
+Richard Hughes
+calca
+elstoc
+篠崎亮　Ryo Shinozaki
+Artur de Sousa Rocha
+Cherrot Luo
+Christian Himpel
+Denis Dyakov
+Dominik Markiewicz
+Guillaume Benny
+Harald
+Jesper Pedersen
+K. Adam Christensen
+Maximilian Trescher
+Petr Stasiak
+Pierre Lamot
+Sergey Pavlov
+Stephan Hoek
+Wolfgang Mader
+grand-piano
+piratenpanda
+solarer
+Alexander V. Smal
+Andrea Volpato
+August Schwerdfeger
+JP Verrue
+Johanes Schneider
+Karl Mikaelsson
+Luca Zulberti
+Matthias Gehre
+Matthias Vogelgesang
+Simon Legner
+Tianhao Chai
+Torsten Bronger
+matt-maguire
+Alban Gruin
+Alexander Clausen
+Anocha Yimsiriwattana
+Apfelkraut
+Bernhard
+Erik Gustavsson
+Federico Bruni
+Frank Loemker
+Jake Probst
+Joao Trindade
+Mario Lueder
+Marko Vertainen
+Nazarii Vitak
+Paolo Benvenuto
+Raphael Manfredi
+Ricky Moon
+Ronny Kahl
+Stéphane Gourichon
+Togan Muftuoglu
+Tom Vijlbrief
+Will Bennett
+hal
+maruncz
+sjjh
 
 * Sub-module rawspeed contributors (at least 1 commit):
 Roman Lebedev
+Klaus Post
+Pedro Côrte-Real
 Miloš Komarčević
+Axel Waggershauser
+Stefan Schöfegger
+Pascal de Bruijn
 Jordan Neumeyer
-Thomas Baumann
+Anders Brander
+Robert Bridge
+Stefan Löffler
+Pascal Obry
+Stefan Hoffmeister
+parafin
+Dan Torop
 Georg Lukas
-Philipp Lutz
+Thomas Baumann
 Daniel Vogelbacher
+Hanno Schwalm
+Matthieu Volat
+Philipp Lutz
+Tobias Ellinghaus
 Victor Forsiuk
+luz.paz
+Hubert Kowalski
+Louie Lu
+Virgile Bello
+bobobo1618
+johannes hanika
+Bill Ferguson
 Howard Liberty
+Marko Toplak
+Martijn Courteaux
+Matt Maguire
+Nathaniel Watson
+Robert Bieber
 Yattaro
+al
+luz paz
 maruncz
 -cr
 Alex Tutubalin
+Andreas Schneider
 Artemis Tosini
+Bastian Bechtold
+Benjamin Erb
 David Korczynski
+David-Tillmann Schaefer
+Elizeu Santos
+Frank Loemker
 Georg Niedrist
 Jan Šmucr
 Jorge Nerín
+Josef Raschen
+Julien Nabet
 LibRaw LLC
+Marcel Bollmann
+Marco Caimi
 Marco Ristuccia
-Marko Toplak
+Martin Straeten
 Massimo Paladin
+Matthias Gehre
 Michael Allman
+Michal Čihař
 Milos Komarcevic
 Omari Stephens
-Pascal Obry
+Peter Budai
 PeterWem
+Philipp Normann
+Ryan Gillette
+Shita Yuuma
 Simon Raffeiner
 Sprite
-luz paz
+Tino H. Seifert
+Uwe Müssel
+Vasily Khoruzhick
+Zanhard
+aferrero2707
+chrunchyjesus
+dllu
+frantic1048
+helloqiu
+jas01
+junkyardsparkle
+ponkotuy
 squid-f
 ubergeek801
 Šarūnas Burdulis
 
 * Sub-module OpenCL contributors (at least 1 commit):
 Ben Ashbaugh
+James Price
 Kévin Petit
+Lee Howes
+Jakub Szuppe
+bashbaug
+Bartosz Sochacki
+Rob Elliott
+=
+Kevin Petit
+affie
+Richard Ruigrok
+Jeremy Kemp
+Kedar Patil
+neheb
+patilkedar
+Alexei Bourd
+Nagy-Egri Máté Ferenc
+Rosen Penev
+robquill
+takanokage
+Ewan Crawford
 John Plate
-Brice Videau
 Jon Leech
+Martin Kelly
+Umair Ahmed
+abestephens
+Alastair Murray
+Alex Bourd
+Brice Videau
+Einar Hov
+Khronos Group Webmaster
+Mikhail Lychkov
 Milkey Mouse
+Nuno Fachada
+Pierre Moreau
+Sreelakshmi Haridas
+Timmy Liu
+XZiar
+fodinabor
+oddhack
+pkubaj
 y-novikov
 
 * Sub-module libxcf contributors (at least 1 commit):
+Tobias Ellinghaus
 
 * Sub-module whereami contributors (at least 1 commit):
 Gregory Pakosz
+Jan Beich
+Ian Burgan
+Jean-Michaël Celerier
+Sergey Agievich
+Thomas Willems
 
 * Sub-module LibRaw contributors (at least 1 commit):
 Alex Tutubalin
+Iliah Borg
+lexa
 LibRaw LLC
-Mark Reid
-Aleks L
+Alex Tutubalin, LibRaw LLC
+Jamie Pinheiro
+jabbervorx
+Joan Karadimov
 Miloš Komarčević
-Alex
+Tim Harder
 Dirk Lemstra
+Gilles Caulier
+Luca Falavigna
+Mark Reid
+maslbl4
+Aleks L
+Andreas K. Huettel (dilfridge)
+Daniel Kaneider
+Mario Emmenlauer
+Nuno Cruces
+Philip Ries
+Vincent Torri
+corec
+龙俊良
+Alex
+Alex Gaynor
+Alex Tutubalin @Mac
+Arkady Shapkin
+Artur
+Bernd Kuhls
+Daniel Martinez
+Daniel Rosser
+Dave Stevenson
+David C. Partridge
 Fabien Castan
+Fabrice Fontaine
+Haishan Zhong
+Heiko Becker
+John Hein
+Kevin Wojniak
+Pablo Sichert
+Paolo Barbolini
 Petr Minář
 Pino Toscano
+Přemysl Eric Janouch
+Rafael Sadowski
+Sam James
+Sam Whited
+TOMIKAWA Sotaro
+Thomas Petazzoni
+Tomi Aarnio
+Tracy Wadleigh
+Z. Liu
+iliah
+kapankov
+kmilos
 luz paz
+psykose
+robert hasson
 sashashura
+ssssota
+vladimirovich
 
 * Sub-module doxygen-awesome-css contributors (at least 1 commit):
 jothepro
@@ -137,9 +561,13 @@ Ayush Chamoli
 Bernd Riederer
 David Álvarez Rosa
 Eritque arcus
+Leger Charlie
 Liviu Ionescu
 Michael R. Crusoe
+Murillo Teixeira
 OkawaYusuke
+Thibaud Chupin
+Timo Koch
 Volker Enderlein
 William Roy
 patricklaf

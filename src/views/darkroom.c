@@ -1253,7 +1253,7 @@ void gui_init(dt_view_t *self)
   g_signal_connect(G_OBJECT(styles), "clicked", G_CALLBACK(_darkroom_ui_apply_style_popupmenu), NULL);
   gtk_widget_set_tooltip_text(styles, _("quick access for applying any of your styles"));
   dt_gui_add_help_link(styles, dt_get_help_url("bottom_panel_styles"));
-  dt_view_manager_view_toolbox_add(darktable.view_manager, styles, DT_VIEW_DARKROOM);
+  dt_view_manager_module_toolbox_add(darktable.view_manager, styles, DT_VIEW_DARKROOM);
 
   /* Enable ISO 12646-compliant colour assessment conditions */
   dev->iso_12646.button = dtgtk_togglebutton_new(dtgtk_cairo_paint_bulb, 0, NULL);
@@ -1492,7 +1492,7 @@ void gui_init(dt_view_t *self)
                      G_CALLBACK(_guides_quickbutton_clicked), dev);
     connect_button_press_release(darktable.view_manager->guides_toggle, darktable.view_manager->guides_popover);
     dt_view_manager_module_toolbox_add(darktable.view_manager, darktable.view_manager->guides_toggle,
-                                       DT_VIEW_DARKROOM | DT_VIEW_TETHERING);
+                                       DT_VIEW_DARKROOM);
     // we want to update button state each time the view change
     DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_VIEW_CHANGED,
                                     G_CALLBACK(_guides_view_changed), dev);
@@ -1896,6 +1896,8 @@ void enter(dt_view_t *self)
   dt_print(DT_DEBUG_CONTROL, "[run_job+] 11 %f in darkroom mode\n", dt_get_wtime());
   dt_develop_t *dev = (dt_develop_t *)self->data;
   dev->exit = 0;
+
+  dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_TOP, FALSE, TRUE);
 
   // We need to init forms before we init module blending GUI
   if(!dev->form_gui)

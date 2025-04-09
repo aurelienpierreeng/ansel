@@ -192,31 +192,6 @@ static int _panel_get_size_cb(lua_State *L)
   }
 }
 
-static int _panel_set_size_cb(lua_State *L)
-{
-  dt_ui_panel_t p;
-  int size;
-
-  if(lua_gettop(L) > 1)
-  {
-    luaA_to(L, dt_ui_panel_t, &p, 1);
-    luaA_to(L, int, &size, 2);
-    if(p == DT_UI_PANEL_LEFT || p == DT_UI_PANEL_RIGHT || p == DT_UI_PANEL_BOTTOM)
-    {
-      dt_ui_panel_set_size(darktable.gui->ui, p, size);
-      return 0;
-    }
-    else
-    {
-      return luaL_error(L, "changing size not supported for specified panel");
-    }
-  }
-  else
-  {
-    return luaL_error(L, "no panel specified");
-  }
-}
-
 typedef dt_progress_t *dt_lua_backgroundjob_t;
 
 static int _job_canceled(lua_State *L)
@@ -391,13 +366,11 @@ int dt_lua_init_gui(lua_State *L)
 
     luaA_enum(L, dt_ui_panel_t);
     luaA_enum_value(L, dt_ui_panel_t, DT_UI_PANEL_TOP);
-    luaA_enum_value(L, dt_ui_panel_t, DT_UI_PANEL_CENTER_TOP);
     luaA_enum_value(L, dt_ui_panel_t, DT_UI_PANEL_CENTER_BOTTOM);
     luaA_enum_value(L, dt_ui_panel_t, DT_UI_PANEL_LEFT);
     luaA_enum_value(L, dt_ui_panel_t, DT_UI_PANEL_RIGHT);
     luaA_enum_value(L, dt_ui_panel_t, DT_UI_PANEL_BOTTOM);
     luaA_enum_value(L, dt_ui_panel_t, DT_UI_PANEL_SIZE);
-
 
 
     // create a type describing a job object
