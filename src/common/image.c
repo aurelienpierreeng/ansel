@@ -1074,7 +1074,7 @@ static int _valid_glob_match(const char *const name, size_t offset)
 }
 #endif /* !_WIN32 */
 
-GList* dt_image_find_duplicates(const char* filename)
+GList* dt_image_find_xmps(const char* filename)
 {
   // find all duplicates of an image by looking for all possible sidecars for the file: file.ext.xmp, file_NN.ext.xmp,
   //   file_NNN.ext.xmp, and file_NNNN.ext.xmp
@@ -1136,12 +1136,12 @@ GList* dt_image_find_duplicates(const char* filename)
 }
 
 // Search for duplicate's sidecar files and import them if found and not in DB yet
-static int _image_read_duplicates(const uint32_t id, const char *filename, const gboolean clear_selection)
+int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboolean clear_selection)
 {
   int count_xmps_processed = 0;
   gchar pattern[PATH_MAX] = { 0 };
 
-  GList *files = dt_image_find_duplicates(filename);
+  GList *files = dt_image_find_xmps(filename);
 
   // we store the xmp filename without version part in pattern to speed up string comparison later
   g_snprintf(pattern, sizeof(pattern), "%s.xmp", filename);
@@ -1266,7 +1266,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
     dt_image_t *img = dt_image_cache_get(darktable.image_cache, id, 'w');
     img->flags &= ~DT_IMAGE_REMOVE & ~DT_IMAGE_AUTO_PRESETS_APPLIED;
     dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
-    _image_read_duplicates(id, normalized_filename, raise_signals);
+    dt_image_read_duplicates(id, normalized_filename, raise_signals);
     dt_image_synch_all_xmp(normalized_filename);
     g_free(ext);
     g_free(normalized_filename);
@@ -1434,7 +1434,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
 
   // read all sidecar files
-  const int nb_xmp = _image_read_duplicates(id, normalized_filename, raise_signals);
+  const int nb_xmp = dt_image_read_duplicates(id, normalized_filename, raise_signals);
 
   if((res != 0) && (nb_xmp == 0))
   {
