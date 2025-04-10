@@ -30,6 +30,7 @@ set(DT_SUPPORTED_EXTENSIONS
     "jp2"
     "jpeg"
     "jpg"
+    "jxl"
     "k25"
     "kc2"
     "kdc"
