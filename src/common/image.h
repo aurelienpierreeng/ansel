@@ -38,7 +38,8 @@ typedef enum dt_imageio_retval_t
   DT_IMAGEIO_OK = 0,         // all good :)
   DT_IMAGEIO_FILE_NOT_FOUND, // file has been lost
   DT_IMAGEIO_FILE_CORRUPTED, // file contains garbage
-  DT_IMAGEIO_CACHE_FULL      // dt's caches are full :(
+  DT_IMAGEIO_CACHE_FULL,     // dt's caches are full :(
+  DT_IMAGEIO_LOAD_FAILED     // file either corrupted or in a format not supported by the current loader
 } dt_imageio_retval_t;
 
 typedef enum dt_imageio_write_xmp_t
@@ -162,7 +163,8 @@ typedef enum dt_image_loader_t
   LOADER_HEIF     = 13,
   LOADER_LIBRAW   = 14,
   LOADER_WEBP     = 15,
-  LOADER_COUNT    = 16, // keep last
+  LOADER_JPEGXL   = 16,
+  LOADER_COUNT    = 17, // keep last
 } dt_image_loader_t;
 
 static const struct
@@ -186,7 +188,8 @@ static const struct
   { N_("ImageMagick"),     'i'},
   { N_("heif"),            'h'},
   { N_("libraw"),          'l'},
-  { N_("webp"),            'w'}
+  { N_("webp"),            'w'},
+  { N_("JPEG XL"),         'L'}
 };
 
 typedef struct dt_image_geoloc_t

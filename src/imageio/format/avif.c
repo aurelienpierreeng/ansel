@@ -371,7 +371,7 @@ int write_image(struct dt_imageio_module_data_t *data,
           goto out;
         }
         cmsSaveProfileToMem(out_profile, icc_profile_data, &icc_profile_len);
-        avifImageSetProfileICC(image,
+        rc = avifImageSetProfileICC(image,
                                icc_profile_data,
                                icc_profile_len);
       }
@@ -397,7 +397,7 @@ int write_image(struct dt_imageio_module_data_t *data,
   avifRGBImageSetDefaults(&rgb, image);
   rgb.format = AVIF_RGB_FORMAT_RGB;
 
-  avifRGBImageAllocatePixels(&rgb);
+  rc = avifRGBImageAllocatePixels(&rgb);
 
   const float max_channel_f = (float)((1 << bit_depth) - 1);
 
@@ -459,17 +459,17 @@ int write_image(struct dt_imageio_module_data_t *data,
       goto out;
   }
 
-  avifImageRGBToYUV(image, &rgb);
+  rc = avifImageRGBToYUV(image, &rgb);
 
   if(exif && exif_len > 0)
-    avifImageSetMetadataExif(image, exif, exif_len);
+    rc = avifImageSetMetadataExif(image, exif, exif_len);
 
   /* TODO: workaround; remove when exiv2 implements AVIF write support and update flags() */
   char *xmp_string = dt_exif_xmp_read_string(imgid);
   size_t xmp_len;
   if(xmp_string && (xmp_len = strlen(xmp_string)) > 0)
   {
-    avifImageSetMetadataXMP(image, (const uint8_t *)xmp_string, xmp_len);
+    rc = avifImageSetMetadataXMP(image, (const uint8_t *)xmp_string, xmp_len);
     g_free(xmp_string);
   }
 
