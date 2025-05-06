@@ -434,8 +434,7 @@ void dt_control_button_pressed(double x, double y, double pressure, int which, i
     }
   dt_pthread_mutex_unlock(&darktable.control->toast_mutex);
 
-  if(!dt_view_manager_button_pressed(darktable.view_manager, x, y, pressure, which, type, state))
-    if(type == GDK_2BUTTON_PRESS && which == 1) dt_ctl_switch_mode();
+  dt_view_manager_button_pressed(darktable.view_manager, x, y, pressure, which, type, state);
 }
 
 static gboolean _redraw_center(gpointer user_data)
