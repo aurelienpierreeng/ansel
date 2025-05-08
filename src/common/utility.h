@@ -26,6 +26,14 @@
 extern "C" {
 #endif
 
+/**
+ * @brief check if the string is empty or NULL before calling strlen()
+ * 
+ * @param str 
+ * @return size_t length of the string
+ */
+size_t safe_strlen(const char *str);
+
 /** dynamically allocate and concatenate string */
 gchar *dt_util_dstrcat(gchar *str, const gchar *format, ...) __attribute__((format(printf, 2, 3)));
 
