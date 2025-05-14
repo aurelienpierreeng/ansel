@@ -26,6 +26,8 @@
 #include "common/chromatic_adaptation.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/colorchecker.h"
+#include "common/colorchecker_it8.c"
+#include "common/file_location.h"
 #include "common/opencl.h"
 #include "common/illuminants.h"
 #include "common/imagebuf.h"
@@ -3412,7 +3414,13 @@ void gui_update(struct dt_iop_module_t *self)
 
   const int i = dt_conf_get_int("darkroom/modules/channelmixerrgb/colorchecker");
   dt_bauhaus_combobox_set(g->checkers_list, i);
-  g->checker = dt_get_color_checker(i);
+  //g->checker = dt_get_color_checker(i);
+  char confdir[PATH_MAX] = { 0 };
+  dt_loc_get_user_config_dir(confdir, sizeof(confdir));
+  const char *user_it8_dir = g_build_filename(confdir, "color", "it8", "E130401.txt", NULL);
+
+  g->checker = dt_colorchecker_it8_create(user_it8_dir);
+
 
   const int j = dt_conf_get_int("darkroom/modules/channelmixerrgb/optimization");
   dt_bauhaus_combobox_set(g->optimize, j);
