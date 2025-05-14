@@ -20,6 +20,8 @@
  * These are the CIELab values of Color Checker reference targets
  */
 
+ #pragma once
+
 // types of targets we support
 typedef enum dt_color_checker_targets
 {
@@ -29,6 +31,7 @@ typedef enum dt_color_checker_targets
   COLOR_CHECKER_SPYDER_24_V2  = 3,
   COLOR_CHECKER_SPYDER_48     = 4,
   COLOR_CHECKER_SPYDER_48_V2  = 5,
+  COLOR_CHECKER_IT8           = 6,
   COLOR_CHECKER_LAST
 } dt_color_checker_targets;
 
@@ -380,6 +383,9 @@ dt_color_checker_t * dt_get_color_checker(const dt_color_checker_targets target_
 
     case COLOR_CHECKER_SPYDER_48_V2:
       return &spyder_48_v2;
+
+    case COLOR_CHECKER_IT8:
+      return NULL;
 
     case COLOR_CHECKER_LAST:
       return &xrite_24_2014;
