@@ -26,8 +26,6 @@
 #include "common/chromatic_adaptation.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/colorchecker.h"
-#include "common/colorchecker_it8.c"
-#include "common/file_location.h"
 #include "common/opencl.h"
 #include "common/illuminants.h"
 #include "common/imagebuf.h"
@@ -44,6 +42,7 @@
 
 #include <assert.h>
 #include <gtk/gtk.h>
+#include <glib.h>
 #include <inttypes.h>
 #include <math.h>
 #include <stdlib.h>
@@ -171,6 +170,9 @@ typedef struct dt_iop_channelmixer_rgb_gui_data_t
   gboolean profile_ready;       // notify that a profile is ready to be applied
   gboolean checker_ready;       // notify that a checker bounding box is ready to be used
   dt_colormatrix_t mix;
+
+  GList *colorcheckers;
+  int n_colorcheckers;
 
   gboolean is_profiling_started;
   GtkWidget *checkers_list, *optimize, *safety, *label_delta_E, *button_profile, *button_validate, *button_commit;
@@ -2521,7 +2523,7 @@ static void checker_changed_callback(GtkWidget *widget, gpointer user_data)
 
   const int i = dt_bauhaus_combobox_get(widget);
   dt_conf_set_int("darkroom/modules/channelmixerrgb/colorchecker", i);
-  g->checker = dt_get_color_checker(i);
+  g->checker = dt_get_color_checker(i, &(g->colorcheckers));
 
   dt_develop_t *dev = self->dev;
   const float wd = dev->preview_pipe->backbuf_width;
@@ -3339,6 +3341,36 @@ static void illum_xy_callback(GtkWidget *slider, gpointer user_data)
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
+void update_colorchecker_list(dt_iop_module_t *self)
+{
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+
+  if(!g) return;
+
+  // clear and refill the colorchecker list
+  g_list_free_full(g->colorcheckers, dt_colorchecker_label_cleanup);
+  g->colorcheckers = NULL;
+
+  g->n_colorcheckers = 0;
+
+  int pos = -1;
+
+  pos += dt_colorchecker_find(&(g->colorcheckers));
+  
+  g->n_colorcheckers = pos;
+
+  // update the gui
+  dt_bauhaus_combobox_clear(g->checkers_list);
+
+  for(GList *l = g_list_first(g->colorcheckers); l; l = g_list_next(l))
+  {
+    const dt_colorchecker_label_t *checker_data = (dt_colorchecker_label_t *)l->data;
+    const char *checkername = checker_data->label;
+    dt_bauhaus_combobox_add(g->checkers_list, checkername);
+  }
+
+}
+
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = dt_calloc_align(sizeof(dt_iop_channelmixer_rbg_data_t));
@@ -3412,15 +3444,12 @@ void gui_update(struct dt_iop_module_t *self)
 
   dt_iop_gui_enter_critical_section(self);
 
+  update_colorchecker_list(self);
+
   const int i = dt_conf_get_int("darkroom/modules/channelmixerrgb/colorchecker");
   dt_bauhaus_combobox_set(g->checkers_list, i);
   //g->checker = dt_get_color_checker(i);
-  char confdir[PATH_MAX] = { 0 };
-  dt_loc_get_user_config_dir(confdir, sizeof(confdir));
-  const char *user_it8_dir = g_build_filename(confdir, "color", "it8", "E130401.txt", NULL);
-
-  g->checker = dt_colorchecker_it8_create(user_it8_dir);
-
+  g->checker = dt_get_color_checker(i, &(g->colorcheckers));
 
   const int j = dt_conf_get_int("darkroom/modules/channelmixerrgb/optimization");
   dt_bauhaus_combobox_set(g->optimize, j);
