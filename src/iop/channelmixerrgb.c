@@ -3633,7 +3633,6 @@ void gui_update(struct dt_iop_module_t *self)
 
   const int i = dt_conf_get_int("darkroom/modules/channelmixerrgb/colorchecker");
   dt_bauhaus_combobox_set(g->checkers_list, i);
-  //g->checker = dt_get_color_checker(i);
   g->checker = dt_get_color_checker(i, &(g->colorcheckers));
 
   const int j = dt_conf_get_int("darkroom/modules/channelmixerrgb/optimization");
@@ -4606,6 +4605,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->checker_ready = FALSE;
   g->delta_E_in = NULL;
   g->delta_E_label_text = NULL;
+  g->colorcheckers = NULL;
 
   g->XYZ[0] = NAN;
 
@@ -5083,7 +5083,15 @@ void gui_cleanup(struct dt_iop_module_t *self)
     g->delta_E_in = NULL;
   }
 
-  dt_free(g->delta_E_label_text);
+  g_free(g->delta_E_label_text);
+
+  while(g->colorcheckers)
+  {
+    dt_colorchecker_label_cleanup(g->colorcheckers->data);
+    g->colorcheckers = g_list_delete_link(g->colorcheckers, g->colorcheckers);
+  }
+
+  dt_color_checker_cleanup(g->colorcheckers);
 
   IOP_GUI_FREE;
 }
