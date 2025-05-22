@@ -17,18 +17,11 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "common/colorspaces.h"
-#include "common/file_location.h"
 #include "darktable.h"
-
-#include <glib.h>
-#include <inttypes.h>
-#include <lcms2.h>
 
 /**
  * These are the CIELab values of Color Checker reference targets
  */
-
 
 // types of targets we support
 typedef enum dt_color_checker_targets
@@ -46,10 +39,10 @@ typedef enum dt_color_checker_targets
 // helper to deal with patch color
 typedef struct dt_color_checker_patch
 {
-  char *name;             // mnemonic name for the patch
+  const char *name;       // mnemonic name for the patch
   dt_aligned_pixel_t Lab; // reference color in CIE Lab
 
-  // (x, y) position of the patch center, relatively to the guides (white dots)
+  // (x, y) position of the patch  center, relatively to the guides (white dots)
   // in ratio of the grid dimension along that axis
   struct
   {
@@ -298,6 +291,7 @@ dt_color_checker_t spyder_48_v2 = {
       { "H5", { 65.10, 18.14, 18.68 }, { 0.929, 0.736 } },   { "H6", { 36.13, 14.15, 15.78 }, { 0.929, 0.893 } } }
 };
 
+
 typedef struct dt_colorchecker_label_t
 {
   gchar *label;
@@ -306,14 +300,14 @@ typedef struct dt_colorchecker_label_t
 } dt_colorchecker_label_t;
 
 // Add other type of a CGATS.17 here
-static const char *CGATS_types[] = { "CGATS.17", "IT8.7/1" };
-
 typedef enum dt_colorchecker_CGATS_types
 {
-  CGATS_TYPE_CGATS_17,
   CGATS_TYPE_IT8_7_1,
+  CGATS_TYPE_CGATS_17,
   CGATS_TYPE_LAST
 } dt_colorchecker_CGATS_types;
+
+const char *CGATS_types[CGATS_TYPE_LAST] = { "IT8.7/1", "CGATS.17" };
 
 // This defines charts specifications
 typedef struct dt_colorchecker_CGATS_spec_t
@@ -325,8 +319,8 @@ typedef struct dt_colorchecker_CGATS_spec_t
   size_t white;
   size_t black;
 
-  size_t colums;
-  size_t rows;
+  int colums;
+  int rows;
   float patch_width;
   float patch_height;
   float patch_offset_x;
@@ -334,106 +328,100 @@ typedef struct dt_colorchecker_CGATS_spec_t
 } dt_colorchecker_CGATS_spec_t;
 
 // this type exist, but I don't know values to put yet
-dt_colorchecker_CGATS_spec_t CGATS_17 = { .radius = 0.035,
-                                          .ratio = 2.f / 3.f,
-                                          .size = { 4, 6 },
-                                          .middle_grey = 3,
+dt_colorchecker_CGATS_spec_t CGATS_17 = { .radius = 0.f,
+                                          .ratio = 1.f / 2.f,
+                                          .size = { 0, 0 },
+                                          .middle_grey = 0,
                                           .white = 0,
-                                          .black = 5,
-                                          .colums = 4,
-                                          .rows = 6,
-                                          .patch_width = 26.f,
-                                          .patch_height = 26.f,
-                                          .patch_offset_x = 8.f,
-                                          .patch_offset_y = 5.f };
+                                          .black = 0,
+                                          .colums = 0,
+                                          .rows = 0,
+                                          .patch_width = 0.f,
+                                          .patch_height = 0.f,
+                                          .patch_offset_x = 0.f,
+                                          .patch_offset_y = 0.f };
 
 dt_colorchecker_CGATS_spec_t IT8_7_1 = {
+  .radius = 0.0189f,
+  .ratio = 13.f / 23.f,
+  .size = { 23, 13 },
+  .middle_grey = 273, // GS09
+  .white = 263,       // Dmin or GS00
+  .black = 287,       // Dmax or GS23
+
   .colums = 22,
   .rows = 12,
   .patch_width = 0.04255f,   // 1.0f / (cols + 1.5f)
   .patch_height = 0.0740f,   // 1.0f / (rows + 1.5f)
   .patch_offset_x = 0.0531f, // 1.25f * patch_size_x
-  .patch_offset_y = 0.0925f, // 1.25f * patch_size_y
-  .radius = 0.0189f,
-  .ratio = 13.f / 23.f,
-  .size = { 23, 13 },
-  .middle_grey = 273, // GS09
-  .white = 263,       // Dmin or GS00)
-  .black = 287        // Dmax or GS23)
+  .patch_offset_y = 0.0925f  // 1.25f * patch_size_y
 };
 
-
-dt_colorchecker_CGATS_types dt_get_CGATS_type_val(const char *type)
-{
-  dt_colorchecker_CGATS_types t = CGATS_TYPE_CGATS_17;
-
-  while(type && t <= CGATS_TYPE_LAST)
-  {
-    if(!g_strcmp0(type, CGATS_types[t])) break;
-    t++;
-  }
-
-  return t;
-}
-
-dt_colorchecker_CGATS_spec_t *dt_get_CGATS_spec(const char *type)
-{
-  if(type)
-  {
-    dt_colorchecker_CGATS_types t = dt_get_CGATS_type_val(type);
-
-    switch(t)
-    {
-      case CGATS_TYPE_CGATS_17:
-        return &CGATS_17;
-      case CGATS_TYPE_IT8_7_1:
-        return &IT8_7_1;
-      case CGATS_TYPE_LAST:
-        fprintf(stderr, "Unknown CGATS type: %s\n", type);
-        return &CGATS_17;
-    }
-  }
-
-  return &CGATS_17;
-}
-
-dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets target_type, GList **reference_file_path);
+/**
+ * @brief Creates a color checker from a user reference file (CGATS format).
+ *
+ * @param filename the path to the CGATS file.
+ * @return dt_color_checker_t* the filled color checker.
+ */
+dt_color_checker_t *_dt_colorchecker_user_ref_create(const char *filename);
 
 /**
- * Cleanup functions
+ * @brief Find all CGAT files in the user config/color/it8 directory
+ *
+ * @param ref_colorcheckers_files NULL GList that will be populated with found IT8 files
+ * @return int Number of found files
  */
+int _dt_colorchecker_find_CGAT_reference_files(GList **ref_colorcheckers_files);
 
-static void dt_color_checker_cleanup(void *data)
+
+const dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets target_type,
+                                               GList **colorchecker_label)
 {
-  dt_color_checker_t *checker = (dt_color_checker_t *)data;
-  if(checker && checker->type == COLOR_CHECKER_USER_REF)
-  {
-    // Free ONLY if they were individually allocated.
-    // For built-in color checkers, patch names are static and must not be freed.
-    // For dynamically allocated (IT8) color checkers, patch names are duplicated and must be freed.
-    // Here, we assume that for COLOR_CHECKER_USER_REF, values[i].name was allocated.
-    fprintf(stderr, "Freeing color checker %s\n", checker->name);
-    fprintf(stderr, "first patch name %s\n", checker->values[0].name);
-    g_free(checker->name);
-    g_free(checker->author);
-    g_free(checker->date);
-    g_free(checker->manufacturer);
-    if(checker->patches)
-      for(size_t i = 0; i < checker->patches; i++) g_free(checker->values[i].name);
-  }
-}
+  fprintf(stdout, "dt_get_color_checker: colorchecker type %i.\n", target_type);
 
-static void dt_colorchecker_label_cleanup(gpointer data)
-{
-  dt_colorchecker_label_t *checker_label = (dt_colorchecker_label_t *)data;
-
-  // Only free if not NULL and if dynamically allocated (user reference)
-  if(checker_label && checker_label->type == COLOR_CHECKER_USER_REF)
+  dt_color_checker_targets nth_checker = COLOR_CHECKER_LAST;
+  dt_colorchecker_label_t *label_data = NULL;
+  if(target_type >= COLOR_CHECKER_USER_REF && colorchecker_label != NULL && *colorchecker_label != NULL)
   {
-    fprintf(stdout, "Freeing label %s\n", checker_label->label);
-    g_free(checker_label->label);
-    g_free(checker_label->path);
+    fprintf(stdout, "dt_get_color_checker: colorchecker type %i is a user reference.\n", target_type);
+
+    // Get the label data from the list
+    label_data = g_list_nth_data(*colorchecker_label, target_type);
+    nth_checker = COLOR_CHECKER_USER_REF;
   }
+  else // it's a builtin colorchecker
+    nth_checker = target_type;
+
+  switch(nth_checker)
+  {
+    case COLOR_CHECKER_XRITE_24_2000:
+      return &xrite_24_2000;
+
+    case COLOR_CHECKER_XRITE_24_2014:
+      return &xrite_24_2014;
+
+    case COLOR_CHECKER_SPYDER_24:
+      return &spyder_24;
+
+    case COLOR_CHECKER_SPYDER_24_V2:
+      return &spyder_24_v2;
+
+    case COLOR_CHECKER_SPYDER_48:
+      return &spyder_48;
+
+    case COLOR_CHECKER_SPYDER_48_V2:
+      return &spyder_48_v2;
+
+    case COLOR_CHECKER_USER_REF:
+      if(label_data)
+        return _dt_colorchecker_user_ref_create(label_data->path);
+      
+    case COLOR_CHECKER_LAST:
+      fprintf(stderr, "dt_get_color_checker: colorchecker type %i not found!\n", target_type);
+      return &xrite_24_2014;
+  }
+
+  return &xrite_24_2014;
 }
 
 /**
@@ -463,8 +451,8 @@ static inline void dt_color_checker_get_coordinates(const dt_color_checker_t *co
 }
 
 // find a patch matching a name
-static inline const dt_color_checker_patch *
-dt_color_checker_get_patch_by_name(const dt_color_checker_t *const target_checker, const char *name, size_t *index)
+static inline const dt_color_checker_patch *dt_color_checker_get_patch_by_name(const dt_color_checker_t *const target_checker,
+                                                                              const char *name, size_t *index)
 {
   size_t idx = -1;
   const dt_color_checker_patch *patch = NULL;
@@ -483,415 +471,19 @@ dt_color_checker_get_patch_by_name(const dt_color_checker_t *const target_checke
   return patch;
 }
 
-// find a colorchecker name
-static inline char *dt_get_builtin_colorchecker_name(const dt_color_checker_targets target_type)
+/**
+ * @brief Get the name of a built-in color checker.
+ *
+ * @param target_type The type of colorchecker
+ * @return char* The name of the colorchecker
+ */
+static inline const char *dt_get_builtin_colorchecker_name(const dt_color_checker_targets target_type)
 {
-  dt_color_checker_t *color_checker = dt_get_color_checker(target_type, NULL);
-  gchar *name = g_strdup(color_checker->name);
-  dt_color_checker_cleanup(color_checker);
+  const dt_color_checker_t *color_checker = dt_get_color_checker(target_type, NULL);
+  const char *name = color_checker->name;
   fprintf(stdout, "dt_get_builtin_colorchecker_name: %s\n", name);
   return name;
 }
-
-
-/**
- * ANSI CGATS.17 is THE standard text file format for exchanging color measurement data.
- * This standard text format (the ASCII version is by far the most common) is the format
- * accepted by most color measurement and profiling applications.
- * They can be used with lcms2.
- *
- * IT8 targets contain 288 patches in total.
- * At the bottom of the chart, there is a grey scale consisting of 22 patches (labeled GS01 to GS22),
- * flanked on each side by a Dmin and a Dmax patch, which are usually
- * labeled as Dmin or GS00, and Dmax or GS23.
- */
-
-/**
- * @brief Test if the file is a CGATS.17 file
- * and if it contains one table of patch only.
- *
- * @param data pointer to the cmsHANDLE
- * @return gboolean TRUE if the file is valid, FALSE otherwise.
- */
-gboolean dt_colorchecker_is_CGATS_valid(void *data)
-{
-  gboolean valid = TRUE;
-  cmsHANDLE hIT8 = *(cmsHANDLE *)data;
-
-  if(!hIT8)
-  {
-    fprintf(stderr, "Error loading IT8 file.\n");
-    valid = FALSE;
-  }
-  else
-  {
-    const char *CGATS_type = cmsIT8GetProperty(hIT8, "CGATS");
-    // Check if the data type can be found in our supported list of CGATS types
-    if(dt_get_CGATS_type_val(CGATS_type) == CGATS_TYPE_LAST)
-    {
-      fprintf(stderr, "Warning: %s is not a supported CGATS.17 type.\n", CGATS_types[CGATS_type]);
-      valid = FALSE;
-    }
-
-    uint32_t table_count = cmsIT8TableCount(hIT8);
-    if(table_count != 1)
-    {
-      fprintf(stderr,
-              "Warning: the CGATS.17 file contains %u table(s) but we only support files with one table at the "
-              "moment.\n",
-              table_count);
-      valid = FALSE;
-    }
-  }
-  return valid;
-}
-
-static inline const char *_dt_colorchecker_CGATS_get_author(const cmsHANDLE *hIT8)
-{
-  if(!hIT8)
-  {
-    fprintf(stderr, "Error: Invalid IT8 handle provided.\n");
-    return "Unknown Author";
-  }
-  const char *author = cmsIT8GetProperty(*hIT8, "ORIGINATOR");
-
-  return author ? author : "Unknown Author";
-}
-
-static inline char *_dt_colorchecker_CGATS_get_date(const cmsHANDLE *hIT8)
-{
-  // in CGATS.17, the production date is stored in the format YYYY:MM
-
-  if(!hIT8)
-  {
-    fprintf(stderr, "Error: Invalid IT8 handle provided.\n");
-    return "Unknown Date";
-  }
-
-  // in CGATS.17, the date in PROD_DATE is stored in the format YYYY:MM
-  const char *date = cmsIT8GetProperty(*hIT8, "PROD_DATE");
-
-  // we need date to continue.
-  if(!date) return "Unknown Date";
-
-  char *result = NULL;
-
-  gchar **parts = g_strsplit_set(date, ":", 0);
-  if(parts && parts[0] && parts[1])
-  {
-    const char *month[12]
-        = { "Jan ", "Feb ", "Mar ", "Apr ", "May ", "Jun ", "Jul ", "Aug ", "Sep ", "Oct ", "Nov ", "Dec " };
-    int month_num = atoi(parts[1]);
-    if(month_num >= 1 && month_num <= 12)
-      parts[1] = g_strdup(month[month_num - 1]);
-
-    // write a new date in the format "Month(short) YYYY"
-    gchar *date_fmt = g_strdup_printf("%s%s", parts[1], parts[0]);
-    result = g_strdup(date_fmt);
-    g_free(date_fmt);
-  }
-  else
-    result = g_strdup(date);
-
-  g_strfreev(parts);
-
-  return result;
-}
-
-static inline const char *_dt_colorchecker_CGATS_get_manufacturer(const cmsHANDLE *hIT8)
-{
-  if(!hIT8)
-  {
-    fprintf(stderr, "Error: Invalid IT8 handle provided.\n");
-    return "Unknown Manufacturer";
-  }
-  const char *manufacturer = cmsIT8GetProperty(*hIT8, "MANUFACTURER");
-  return manufacturer ? manufacturer : "Unknown Manufacturer";
-}
-
-
-/**
- * @brief build a name for the colorchecker.
- * The returned string must be freed by the caller.
- *
- * @param substitute the file name of the colorchecker with extension
- * @param originator the author of the CGATS file
- * @param date the date of the CGATS file
- * @return gchar* String with the name of the colorchecker
- */
-static inline gchar *_dt_colorchecker_ref_build_name(const char *substitute, const char *originator, const char *date)
-{
-  gchar *name = NULL;
-  if(substitute && g_strcmp0(substitute, ""))
-  {
-    // Find the last '.' for the extension
-    const char *dot = g_strrstr(substitute, ".");
-    size_t name_len = dot ? (size_t)(dot - substitute) : safe_strlen(substitute);
-    gchar *basename = g_strndup(substitute, name_len);
-
-    if(basename && originator && date)
-    {
-      // Build the name with the format: basename - author - date
-      gchar *tmp_originator = NULL;
-      gchar *tmp_date = NULL;
-
-      // author if any
-      if(originator && g_strcmp0(originator, "")) tmp_originator = g_strdup_printf(" - %s", originator);
-      // ate if any
-      if(date && g_strcmp0(date, "")) tmp_date = g_strdup_printf(" - %s", date);
-
-      // Compose: filename
-      name = g_strdup_printf("%s%s%s", basename, tmp_originator ? tmp_originator : "", tmp_date ? tmp_date : "");
-
-      if(tmp_originator) g_free(tmp_originator);
-      if(tmp_date) g_free(tmp_date);
-    }
-		else
-		{
-			// If no author or date, just use the substitute
-			name = g_strdup(substitute);
-		}
-    g_free(basename);
-  }
-  return name;
-}
-
-/**
- * @brief Get the name of the colorchecker from the CGATS file.
- * The resulting string must be freed by the caller.
- *
- * @param hIT8 the CGATS file handle
- * @param substitute other name to use if the CGATS file does not contain a name or if the function fails.
- * @return char* String with the name of the colorchecker
- */
-static inline char *_dt_colorchecker_CGATS_get_name(const cmsHANDLE *hIT8, const char *substitute)
-{
-  if(!hIT8)
-  {
-    fprintf(stderr, "Error: Invalid CGATS handle provided.\n");
-    return "Unnamed CGATS";
-  }
-
-  gchar *originator = g_strdup(_dt_colorchecker_CGATS_get_author(hIT8));
-  gchar *date = g_strdup(_dt_colorchecker_CGATS_get_date(hIT8));
-  gchar *name = _dt_colorchecker_ref_build_name(substitute, originator, date);
-
-  if(originator) free(originator);
-  if(date) free(date);
-
-  gchar *result = NULL;
-
-  if(!name)
-    result = g_strdup(substitute && g_strcmp0(substitute, "") ? substitute : "Unnamed IT8");
-  else
-  {
-    result = g_strdup(name);
-    g_free(name);
-  }
-
-  return result;
-}
-
-/**
- * @brief fills the patch values from the CGATS file, converts to Lab if needed.
- * The number of patches to be filled is given by the CGATS file.
- *
- * @param hIT8 the CGATS file handle
- * @param values the array of patches to be filled
- * @return NULL if error, dt_color_checker_patch* with the colors otherwise.
- */
-int _dt_colorchecker_CGATS_fill_patch_values(cmsHANDLE hIT8, dt_color_checker_patch *values)
-{
-  int error = 0;
-  if(!values) error = 1;
-
-  int column_SAMPLE_ID = -1;
-  int column_X = -1;
-  int column_Y = -1;
-  int column_Z = -1;
-  int column_L = -1;
-  int column_a = -1;
-  int column_b = -1;
-  char **sample_names = NULL;
-  int n_columns = cmsIT8EnumDataFormat(hIT8, &sample_names);
-  size_t num_patches = (size_t)cmsIT8GetPropertyDbl(hIT8, "NUMBER_OF_SETS");
-  const char *CGATS_type = cmsIT8GetSheetType(hIT8);
-  dt_colorchecker_CGATS_spec_t *CGATS_spec = dt_get_CGATS_spec(CGATS_type);
-
-  gboolean use_XYZ = FALSE;
-  if(n_columns == -1)
-  {
-    fprintf(stderr, "error with the IT8 file, can't get column types\n");
-    error = 1;
-  }
-
-  for(int i = 0; i < n_columns; i++)
-  {
-    if(!g_strcmp0(sample_names[i], "SAMPLE_ID"))
-      column_SAMPLE_ID = i;
-    else if(!g_strcmp0(sample_names[i], "XYZ_X"))
-      column_X = i;
-    else if(!g_strcmp0(sample_names[i], "XYZ_Y"))
-      column_Y = i;
-    else if(!g_strcmp0(sample_names[i], "XYZ_Z"))
-      column_Z = i;
-    else if(!g_strcmp0(sample_names[i], "LAB_L"))
-      column_L = i;
-    else if(!g_strcmp0(sample_names[i], "LAB_A"))
-      column_a = i;
-    else if(!g_strcmp0(sample_names[i], "LAB_B"))
-      column_b = i;
-  }
-
-  if(column_SAMPLE_ID == -1)
-  {
-    fprintf(stderr, "error with the IT8 file, can't find the SAMPLE_ID column\n");
-    error = 1;
-  }
-
-  int columns[3] = { -1, -1, -1 };
-  if(column_L != -1 && column_a != -1 && column_b != -1)
-  {
-    columns[0] = cmsIT8FindDataFormat(hIT8, "LAB_L");
-    columns[1] = cmsIT8FindDataFormat(hIT8, "LAB_A");
-    columns[2] = cmsIT8FindDataFormat(hIT8, "LAB_B");
-  }
-  // In case no Lab column is found, we assume the IT8 file has XYZ data
-  else if(column_X != -1 && column_Y != -1 && column_Z != -1)
-  {
-    use_XYZ = TRUE;
-    columns[0] = cmsIT8FindDataFormat(hIT8, "XYZ_X");
-    columns[1] = cmsIT8FindDataFormat(hIT8, "XYZ_Y");
-    columns[2] = cmsIT8FindDataFormat(hIT8, "XYZ_Z");
-  }
-  else
-  {
-    fprintf(stderr, "error with the IT8 file, can't find XYZ or Lab columns\n");
-    error = 1;
-  }
-
-  // IT8 chart dimensions
-  const int cols = CGATS_spec->colums;
-  const int rows = CGATS_spec->rows;
-  // Patch size in ratio of the chart size
-  const float patch_size_x = CGATS_spec->patch_width;
-  const float patch_size_y = CGATS_spec->patch_height;
-
-  // Offset ratio of the center of the patch from the border of the chart
-  const float patch_offset_x = CGATS_spec->patch_offset_x;
-  const float patch_offset_y = CGATS_spec->patch_offset_y;
-
-  for(int patch_iter = 0; patch_iter < num_patches; patch_iter++)
-  {
-    values[patch_iter].name = (char *)cmsIT8GetDataRowCol(hIT8, patch_iter, 0);
-    if(values[patch_iter].name == NULL)
-    {
-      {
-        fprintf(stderr, "error with the CGATS file, can't find sample '%d'\n", patch_iter);
-        error = 1;
-      }
-      continue;
-    }
-
-    // IT8 grey scale patches
-    if(g_strcmp0(CGATS_type, CGATS_types[CGATS_TYPE_IT8_7_1]) && patch_iter + 1 > cols * rows)
-    {
-      int grey_patch_iter = (patch_iter + 1) - cols * rows;
-      // calculate the patch's horizontal and vertical position in the guide
-      values[patch_iter].x = (grey_patch_iter - 0.75f) * patch_size_x;
-      values[patch_iter].y = 14.5f * patch_size_y;
-    }
-    else
-    {
-      // find the patch's horizontal position in the guide
-      values[patch_iter].x = (patch_iter % cols) * patch_size_x;
-      values[patch_iter].x += patch_offset_x;
-
-      // find the patch's vertical position in the guide
-      values[patch_iter].y = (int)patch_iter / cols; // The result must be an int
-      values[patch_iter].y *= patch_size_y;
-      values[patch_iter].y += patch_offset_y;
-    }
-
-    const double patchdbl[3] = { cmsIT8GetDataRowColDbl(hIT8, patch_iter, columns[0]),
-                                 cmsIT8GetDataRowColDbl(hIT8, patch_iter, columns[1]),
-                                 cmsIT8GetDataRowColDbl(hIT8, patch_iter, columns[2]) };
-
-    const dt_aligned_pixel_t patch_color = { (float)patchdbl[0], (float)patchdbl[1], (float)patchdbl[2], 0.0f };
-
-    // Convert to Lab when it's in XYZ
-    if(use_XYZ)
-      dt_XYZ_to_Lab(patch_color, values[patch_iter].Lab);
-    else
-    {
-      values[patch_iter].Lab[0] = patch_color[0];
-      values[patch_iter].Lab[1] = patch_color[1];
-      values[patch_iter].Lab[2] = patch_color[2];
-    }
-  }
-
-  return error;
-}
-
-dt_color_checker_t *dt_colorchecker_user_ref_create(const char *filename)
-{
-  int error = 0;
-  cmsHANDLE hIT8 = cmsIT8LoadFromFile(NULL, filename);
-
-  if(!dt_colorchecker_is_CGATS_valid(&hIT8))
-  {
-    fprintf(stderr, "Ansel cannot load the CGATS file '%s'\n", filename);
-    error = 1;
-    goto end;
-  }
-
-  const char *type = cmsIT8GetSheetType(hIT8);
-  dt_colorchecker_CGATS_spec_t *CGATS_spec = dt_get_CGATS_spec(type);
-  size_t num_patches = (size_t)cmsIT8GetPropertyDbl(hIT8, "NUMBER_OF_SETS");
-  size_t total_size = sizeof(dt_color_checker_t) + num_patches * sizeof(dt_color_checker_patch);
-
-  dt_color_checker_t *checker = malloc(total_size);
-  if(!checker)
-  {
-    fprintf(stderr, "Error: can't allocate memory for the color checker from IT8 chart\n");
-    error = 1;
-    goto end;
-  }
-
-  checker->name = _dt_colorchecker_CGATS_get_name(&hIT8, NULL);
-  checker->author = g_strdup(_dt_colorchecker_CGATS_get_author(&hIT8));
-  checker->date = g_strdup(_dt_colorchecker_CGATS_get_date(&hIT8));
-  checker->manufacturer = g_strdup(_dt_colorchecker_CGATS_get_manufacturer(&hIT8));
-  checker->type = COLOR_CHECKER_USER_REF;
-  checker->radius = CGATS_spec->radius;
-  checker->ratio = CGATS_spec->ratio;
-  checker->patches = num_patches;
-  checker->size[0] = CGATS_spec->size[0];
-  checker->size[1] = CGATS_spec->size[1];
-  checker->middle_grey = CGATS_spec->middle_grey;
-  checker->white = CGATS_spec->white;
-  checker->black = CGATS_spec->black;
-
-  _dt_colorchecker_CGATS_fill_patch_values(hIT8, checker->values);
-
-  // checker->middle_grey = le patch dont la valeur L est la plus proche de 50, a et b le plus proche de 0;
-
-  fprintf(stdout, "it8 '%s' done\n", filename);
-
-  /*if(!checker.values)
-  {
-    fprintf(stderr, "Error: can't allocate memory for the color checker from IT8 chart\n");
-    error = 1;
-  }*/
-
-end:
-  if(hIT8) cmsIT8Free(hIT8);
-  return error ? NULL : checker;
-}
-
-/*
- * Color Checker getter
- */
 
 int _dt_colorchecker_find_builtin(GList **colorcheckers_label)
 {
@@ -899,66 +491,13 @@ int _dt_colorchecker_find_builtin(GList **colorcheckers_label)
   for(int k = 0; k < COLOR_CHECKER_USER_REF; k++)
   {
     dt_colorchecker_label_t *builtin_label = malloc(sizeof(dt_colorchecker_label_t));
-    *builtin_label = (dt_colorchecker_label_t){ .label = dt_get_builtin_colorchecker_name(k), .type = k, .path = NULL };
+    *builtin_label = (dt_colorchecker_label_t){ .label = g_strdup(dt_get_builtin_colorchecker_name(k)),
+                                                .type = k,
+                                                .path = NULL };
 
     *colorcheckers_label = g_list_append(*colorcheckers_label, builtin_label);
     nb++;
   }
-  return nb;
-}
-
-/**
- * @brief Find all CGAT files in the user config/color/it8 directory
- *
- * ANSI CGATS.17 is THE standard text file format for exchanging color measurement data.
- * This standard text format (the ASCII version is by far the most common) is the format
- * accepted by most color measurement and profiling applications.
- *
- * @param ref_colorcheckers_files NULL GList that will be populated with found IT8 files
- * @return int Number of found files
- */
-int _dt_colorchecker_find_CGAT_reference_files(GList **ref_colorcheckers_files)
-{
-  int nb = 0;
-  char confdir[PATH_MAX] = { 0 };
-  dt_loc_get_user_config_dir(confdir, sizeof(confdir));
-  char *user_it8_dir = g_build_filename(confdir, "color", "it8", NULL);
-
-  GDir *dir = g_dir_open(user_it8_dir, 0, NULL);
-  if(dir)
-  {
-    const gchar *filename;
-    while((filename = g_dir_read_name(dir)) != NULL)
-    {
-      gchar *filepath = g_build_filename(user_it8_dir, filename, NULL);
-      if(g_file_test(filepath, G_FILE_TEST_IS_REGULAR))
-      {
-        cmsHANDLE hIT8 = cmsIT8LoadFromFile(NULL, filepath);
-
-        if(hIT8 && dt_colorchecker_is_CGATS_valid(&hIT8))
-        {
-          gchar *label = _dt_colorchecker_CGATS_get_name(&hIT8, filename);
-          size_t label_size = safe_strlen(label) + safe_strlen(filepath) + sizeof(dt_color_checker_targets);
-          dt_colorchecker_label_t *it8_label = malloc(label_size);
-
-          it8_label->label = g_strdup(label);
-          it8_label->path = g_strdup(filepath);
-          it8_label->type = COLOR_CHECKER_USER_REF;
-
-          g_free(label);
-
-          fprintf(stdout, "it8 '%s', '%s'\n", it8_label->label, it8_label->path);
-          *ref_colorcheckers_files = g_list_append(*ref_colorcheckers_files, it8_label);
-          nb++;
-        }
-        cmsIT8Free(hIT8);
-      }
-      g_free(filepath);
-    }
-    g_dir_close(dir);
-  }
-  free(user_it8_dir);
-
   return nb;
 }
 
@@ -970,83 +509,44 @@ int _dt_colorchecker_find_CGAT_reference_files(GList **ref_colorcheckers_files)
  */
 int dt_colorchecker_find(GList **colorcheckers_label)
 {
-  int nb = _dt_colorchecker_find_builtin(colorcheckers_label);
-  fprintf(stdout, "dt_colorchecker_find: found %d builtin colorcheckers\n", nb);
-  nb += _dt_colorchecker_find_CGAT_reference_files(colorcheckers_label);
-  fprintf(stdout, "dt_colorchecker_find: found %d CGAT references files\n", nb);
-  return nb;
+  int total = _dt_colorchecker_find_builtin(colorcheckers_label);
+  fprintf(stdout, "dt_colorchecker_find: found %d builtin colorcheckers\n", total);
+  int b_nb = total;
+  total += _dt_colorchecker_find_CGAT_reference_files(colorcheckers_label);
+  fprintf(stdout, "dt_colorchecker_find: found %d CGAT references files\n", total - b_nb);
+  return total;
 }
 
-/*static inline gboolean _dt_colorchecker_it8_check(const dt_color_checker_targets target_type, GList
-**reference_file_path)
+
+
+void dt_color_checker_cleanup(void *data)
 {
-  if(reference_file_path && *reference_file_path)
+  dt_color_checker_t *checker = (dt_color_checker_t *)data;
+  if(checker && checker->type == COLOR_CHECKER_USER_REF)
   {
-    gboolean is_a_user_ref = target_type >= COLOR_CHECKER_USER_REF;
-
-    int user_ref_list_len = g_list_length(*reference_file_path);
-    int nth_selected_user_ref = target_type - COLOR_CHECKER_USER_REF;
-
-    gboolean is_too_far = nth_selected_user_ref > user_ref_list_len;
-    return is_a_user_ref && !is_too_far;
+    // Free ONLY if they were individually allocated.
+    // For built-in color checkers, patch names are static and must not be freed.
+    // For dynamically allocated (CGATS) color checkers, patch names are duplicated and must be freed.
+    // Here, we assume that for COLOR_CHECKER_USER_REF, values[i].name was allocated.
+    g_free(checker->name);
+    g_free(checker->author);
+    g_free(checker->date);
+    g_free(checker->manufacturer);
+    if(checker->patches > 0)
+      for(size_t i = 0; i < checker->patches; i++) g_free((gchar*)checker->values[i].name);
   }
+}
 
-  return FALSE;
-}*/
-
-dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets target_type, GList **colorchecker_label)
+void dt_colorchecker_label_cleanup(gpointer data)
 {
-  fprintf(stdout, "dt_get_color_checker: colorchecker type %i.\n", target_type);
+  dt_colorchecker_label_t *checker_label = (dt_colorchecker_label_t *)data;
 
-  dt_color_checker_targets nth_checker = 0;
-  dt_colorchecker_label_t *label_data = NULL;
-	if(target_type >= COLOR_CHECKER_USER_REF && colorchecker_label != NULL && *colorchecker_label != NULL)
+  // Only free if not NULL and if dynamically allocated (user reference)
+  if(checker_label && checker_label->type == COLOR_CHECKER_USER_REF)
   {
-    fprintf(stdout, "dt_get_color_checker: colorchecker type %i is a user reference.\n", target_type);
-
-    // Get the label data from the list
-    label_data = g_list_nth_data(*colorchecker_label, target_type);
-    nth_checker = COLOR_CHECKER_USER_REF;
+    g_free(checker_label->label);
+    if(checker_label->path) g_free(checker_label->path); // Builtin checker doesn't use this char dynamically
   }
-  else // it's a builtin colorchecker
-    nth_checker = target_type;
-
-
-  switch(nth_checker)
-  {
-    case COLOR_CHECKER_XRITE_24_2000:
-      return &xrite_24_2000;
-
-    case COLOR_CHECKER_XRITE_24_2014:
-      return &xrite_24_2014;
-
-    case COLOR_CHECKER_SPYDER_24:
-      return &spyder_24;
-
-    case COLOR_CHECKER_SPYDER_24_V2:
-      return &spyder_24_v2;
-
-    case COLOR_CHECKER_SPYDER_48:
-      return &spyder_48;
-
-    case COLOR_CHECKER_SPYDER_48_V2:
-      return &spyder_48_v2;
-
-    case COLOR_CHECKER_USER_REF:
-      if(label_data)
-      {
-        fprintf(stdout, "COLOR_CHECKER_USER_REF type %i is %s.\n", target_type, label_data->path);
-        return dt_colorchecker_user_ref_create(label_data->path);
-      }
-      else
-        fprintf(stderr, "COLOR_CHECKER_USER_REF type %i not found!\n", target_type);
-
-    case COLOR_CHECKER_LAST:
-      fprintf(stderr, "dt_get_color_checker: colorchecker type %i not found!\n", target_type);
-      return &xrite_24_2014;
-  }
-
-  return &xrite_24_2014;
 }
 
 // clang-format off
