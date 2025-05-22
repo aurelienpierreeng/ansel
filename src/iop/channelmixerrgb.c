@@ -161,7 +161,7 @@ typedef struct dt_iop_channelmixer_rgb_gui_data_t
   gboolean drag_drop;       // are we currently dragging and dropping a node ?
   point_t click_start;      // the coordinates where the drag and drop started
   point_t click_end;        // the coordinates where the drag and drop started
-  dt_color_checker_t *checker;
+  const dt_color_checker_t *checker;
   dt_solving_strategy_t optimization;
   float safety_margin;
 
@@ -1636,7 +1636,7 @@ void extract_color_checker(const float *const restrict in, float *const restrict
     dt_aligned_pixel_t LMS_test;
     convert_any_XYZ_to_LMS(sample, LMS_test, kind);
 
-    float *const reference = g->checker->values[k].Lab;
+    const float *const reference = g->checker->values[k].Lab;
     dt_aligned_pixel_t XYZ_ref, LMS_ref;
     dt_Lab_to_XYZ(reference, XYZ_ref);
     convert_any_XYZ_to_LMS(XYZ_ref, LMS_ref, kind);
@@ -4198,16 +4198,28 @@ void gui_init(struct dt_iop_module_t *self)
 
   GtkWidget *collapsible = GTK_WIDGET(g->cs.container);
 
-  DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, g->checkers_list, DT_GUI_MODULE(self), N_("chart"),
-                                _("choose the vendor and the type of your chart"),
-                                0, checker_changed_callback, self,
-                                N_("Xrite ColorChecker 24 pre-2014"),
-                                N_("Xrite ColorChecker 24 post-2014"),
-                                N_("Datacolor SpyderCheckr 24 pre-2018"),
-                                N_("Datacolor SpyderCheckr 24 post-2018"),
-                                N_("Datacolor SpyderCheckr 48 pre-2018"),
-                                N_("Datacolor SpyderCheckr 48 post-2018"));
+  g->checkers_list = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  dt_bauhaus_combobox_set_label(g->checkers_list, N_("Chart"));
   gtk_box_pack_start(GTK_BOX(collapsible), GTK_WIDGET(g->checkers_list), TRUE, TRUE, 0);
+
+  dt_bauhaus_combobox_set(g->checkers_list, 0);
+  {
+    char datadir[PATH_MAX] = { 0 };
+    char confdir[PATH_MAX] = { 0 };
+    dt_loc_get_datadir(datadir, sizeof(datadir));
+    dt_loc_get_user_config_dir(confdir, sizeof(confdir));
+    
+    char *system_CGATS_dir = g_build_filename(datadir, "color", "it8", NULL);
+    char *user_CGATS_dir = g_build_filename(confdir, "color", "it8", NULL);
+    char *tooltip = g_strdup_printf(_("Choose the vendor and the type of your chart.\n"),
+                                    _("CGATS.17 references files must be placed in %s or %s"),
+                                     user_CGATS_dir, system_CGATS_dir);
+    gtk_widget_set_tooltip_text(g->checkers_list, tooltip);
+    g_free(system_CGATS_dir);
+    g_free(user_CGATS_dir);
+    g_free(tooltip);
+  }
+
 
   DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, g->optimize, DT_GUI_MODULE(self), N_("optimize for"),
                                 _("choose the colors that will be optimized with higher priority.\n"
