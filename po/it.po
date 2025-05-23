@@ -7,15 +7,15 @@ msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2025-05-21 17:44+0200\n"
-"PO-Revision-Date: 2025-05-05 19:27+0200\n"
-"Last-Translator: Maurizio <maurizio@mauriziopaglia.it>\n"
-"Language-Team: Italian <kde-i18n-it@kde.org>\n"
+"PO-Revision-Date: 2025-05-23 14:25+0200\n"
+"Last-Translator: Maurizio Paglia <maurizio@mauriziopaglia.it>\n"
+"Language-Team: Ansel ITA translation\n"
 "Language: it_IT\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Lokalize 25.04.0\n"
+"X-Generator: Lokalize 25.04.1\n"
 
 #: ../build/src/conf_gen.h:182 ../build/src/conf_gen.h:202
 #: ../build/src/conf_gen.h:374 ../build/src/preferences_gen.h:4606
@@ -504,9 +504,8 @@ msgid "this setting has been modified"
 msgstr "Questa impostazione è stata modificata"
 
 #: ../build/src/preferences_gen.h:2549 ../tools/generate_prefs.xsl:192
-#, fuzzy
 msgid "views"
-msgstr "Anteprima"
+msgstr "Viste"
 
 #. TODO: look for active view. Do we know it at init time ?
 #: ../build/src/preferences_gen.h:2552 ../src/libs/lib.c:826
@@ -632,7 +631,6 @@ msgstr ""
 "i menu preset e preferiti."
 
 #: ../build/src/preferences_gen.h:2924 ../tools/generate_prefs.xsl:224
-#, fuzzy
 msgid "Other views"
 msgstr "Altre viste"
 
@@ -693,7 +691,6 @@ msgstr ""
 "informazioni dell'immagine"
 
 #: ../build/src/preferences_gen.h:3084 ../tools/generate_prefs.xsl:253
-#, fuzzy
 msgid "Slideshow"
 msgstr "Presentazione"
 
@@ -1320,13 +1317,16 @@ msgstr ""
 
 #: ../build/src/preferences_gen.h:5187
 msgid "Disable thumbnail preview in import popup"
-msgstr ""
+msgstr "Disabilita le anteprime nella finestra di importazione"
 
 #: ../build/src/preferences_gen.h:5201
 msgid ""
 "Check this if you are impacted by extra-slow loading when accessing images "
 "on memory card through camera USB link and PTP/MTP drivers."
 msgstr ""
+"Seleziona se il caricamento delle immagini è molto lento se queste si "
+"trovano su di una memoria esterna o sulla fotocamera collegata via USB "
+"con l'utilizzo dei drivers PTP/MTP."
 
 #: ../build/src/preferences_gen.h:5223
 msgid "method to use for getting the display profile"
@@ -3575,9 +3575,8 @@ msgstr "Diametro omogeneizzazione"
 
 #: ../build/src/iop/introspection_toneequal.c:210
 #: ../build/src/iop/introspection_toneequal.c:333
-#, fuzzy
 msgid "edges refinement (feathering)"
-msgstr "Rifinitura/sfumatura margini"
+msgstr "Rifinitura bordi (feathering)"
 
 #: ../build/src/iop/introspection_toneequal.c:216
 #: ../build/src/iop/introspection_toneequal.c:337
@@ -3674,7 +3673,6 @@ msgstr "Rapporto automatico"
 
 #: ../build/src/iop/introspection_vignette.c:139
 #: ../build/src/iop/introspection_vignette.c:232
-#, fuzzy
 msgid "width vs. height ratio"
 msgstr "Rapporto larghezza/altezza"
 
@@ -3798,79 +3796,73 @@ msgstr "Tavolo luminoso virtuale, visualizza una raccolta"
 
 #: ../src/bauhaus/bauhaus.c:387
 msgid "The target widget of the action does not exist anymore"
-msgstr ""
+msgstr "L'oggetto obiettivo dell'azione non esiste più"
 
 #. Keys used by key-pressed event handler when the Bauhaus widget has the focus
 #: ../src/bauhaus/bauhaus.c:1002 ../src/bauhaus/bauhaus.c:1006
 #: ../src/bauhaus/bauhaus.c:1010 ../src/bauhaus/bauhaus.c:1014
 #: ../src/bauhaus/bauhaus.c:1018 ../src/bauhaus/bauhaus.c:1022
 #: ../src/bauhaus/bauhaus.c:1026
-#, fuzzy
 msgid "Darkroom/Controls/Sliders"
-msgstr "Selettori scorrevoli controllo colore"
+msgstr "Camera oscura/Controlli/Selettori"
 
 #: ../src/bauhaus/bauhaus.c:1002
 msgid "Increase value (normal step)"
-msgstr ""
+msgstr "Aumenta valore (regolazione normale)"
 
 #: ../src/bauhaus/bauhaus.c:1006
 msgid "Decrease value (normal step)"
-msgstr ""
+msgstr "Diminuisci valore (regolazione normale)"
 
 #: ../src/bauhaus/bauhaus.c:1010
 msgid "Increase value (fine step)"
-msgstr ""
+msgstr "Aumenta valore (regolazione fine)"
 
 #: ../src/bauhaus/bauhaus.c:1014
 msgid "Decrease value (fine step)"
-msgstr ""
+msgstr "Diminuisci valore (regolazione fine)"
 
 #: ../src/bauhaus/bauhaus.c:1018
 msgid "Increase value (coarse step)"
-msgstr ""
+msgstr "Aumenta valore (regolazione grossolana)"
 
 #: ../src/bauhaus/bauhaus.c:1022
 msgid "Decrease value (coarse step)"
-msgstr ""
+msgstr "Diminuisci valore (regolazione grossolana)"
 
 #: ../src/bauhaus/bauhaus.c:1026 ../src/bauhaus/bauhaus.c:1051
-#, fuzzy
 msgid "Toggle color-picker"
-msgstr "Selettore colore"
+msgstr "Commuta selettore colore"
 
 #: ../src/bauhaus/bauhaus.c:1031 ../src/bauhaus/bauhaus.c:1035
 #: ../src/bauhaus/bauhaus.c:1039 ../src/bauhaus/bauhaus.c:1043
 #: ../src/bauhaus/bauhaus.c:1047 ../src/bauhaus/bauhaus.c:1051
 msgid "Darkroom/Controls/Comboboxes"
-msgstr ""
+msgstr "Camera oscura/Controlli/Combo"
 
 #: ../src/bauhaus/bauhaus.c:1031
-#, fuzzy
 msgid "Open editing mode"
-msgstr "Seleziona il metodo di fusione"
+msgstr "Vai in modalità modifica"
 
 #: ../src/bauhaus/bauhaus.c:1035
-#, fuzzy
 msgid "Exit editing mode"
-msgstr "Clic per modificare i nodi"
+msgstr "Esci dalla modalità modifica"
 
 #: ../src/bauhaus/bauhaus.c:1039
 msgid "Select previous (in editing mode)"
-msgstr ""
+msgstr "Seleziona precedente (in modalità modifica)"
 
 #: ../src/bauhaus/bauhaus.c:1043
-#, fuzzy
 msgid "Select next (in editing mode)"
-msgstr "Seleziona il metodo di interpolazione"
+msgstr "Seleziona successivo (in modalità modifica)"
 
 #: ../src/bauhaus/bauhaus.c:1047
 msgid "Validate result (in editing mode)"
-msgstr ""
+msgstr "Conferma il risultato (in modalità modifica)"
 
 #: ../src/bauhaus/bauhaus.c:1262 ../src/libs/tools/filter.c:721
-#, fuzzy
 msgid "Focuses the control"
-msgstr "Focus sul controllo del modulo successivo"
+msgstr "Fuoco sul controllo"
 
 #: ../src/chart/main.c:504 ../src/control/jobs/control_jobs.c:1676
 #: ../src/control/jobs/control_jobs.c:1738 ../src/gui/hist_dialog.c:195
@@ -5134,7 +5126,7 @@ msgstr "Data/ora ri-applicata alle %d immagini"
 #: ../src/common/image.c:1259
 #, c-format
 msgid "Image %s is already in library and will not be re-imported.\n"
-msgstr ""
+msgstr "L'immagine %s è già nella libreria quindi non verrà re-importata.\n"
 
 #: ../src/common/image.c:1747
 #, c-format
@@ -6373,6 +6365,8 @@ msgid ""
 "Impossible to create directory %s.\n"
 "The target may be full or read-only.\n"
 msgstr ""
+"Impossibile creare la cartella %s.\n"
+"La destinazione potrebbe essere piena o di sola lettura.\n"
 
 #: ../src/control/jobs/import_jobs.c:324
 #, c-format
@@ -7330,17 +7324,15 @@ msgstr "%s è disabilitato"
 #: ../src/develop/imageop.c:1009 ../src/develop/imageop.c:1022
 #: ../src/develop/imageop.c:1806
 msgid "Darkroom/Modules/Instances"
-msgstr ""
+msgstr "Camera oscura/Moduli/Istanze"
 
 #: ../src/develop/imageop.c:1088 ../src/develop/imageop.c:1091
-#, fuzzy
 msgid "Darkroom/Modules"
-msgstr "Camera Oscura/Azioni"
+msgstr "Camera oscura/Moduli"
 
 #: ../src/develop/imageop.c:1088 ../src/libs/lib.c:859
-#, fuzzy
 msgid "Focuses the module"
-msgstr "Focus sul modulo successivo"
+msgstr "Fuoco sul modulo"
 
 #: ../src/develop/imageop.c:2160
 msgid "unknown mask"
@@ -7758,7 +7750,7 @@ msgstr "Assegna etichetta colore"
 
 #: ../src/dtgtk/thumbnail.c:239
 msgid "Open in preview window…"
-msgstr "Apro in finestra anteprima..."
+msgstr "Apri in finestra anteprima..."
 
 #: ../src/dtgtk/thumbnail.c:1052
 msgid "This picture is locally copied on your disk cache"
@@ -7785,68 +7777,61 @@ msgstr "'%s': Prego utilizzare 'File > Importa' per importare una cartella."
 #: ../src/dtgtk/thumbtable.c:1769 ../src/dtgtk/thumbtable.c:1773
 #: ../src/dtgtk/thumbtable.c:1777 ../src/dtgtk/thumbtable.c:1781
 #: ../src/dtgtk/thumbtable.c:1785
-#, fuzzy
 msgid "Lighttable/Thumbtable"
-msgstr "Tavolo Luminoso"
+msgstr "Tavolo luminoso/Anteprime"
 
 #: ../src/dtgtk/thumbtable.c:1737
-#, fuzzy
 msgid "Move up"
 msgstr "Sposta su"
 
 #: ../src/dtgtk/thumbtable.c:1741
-#, fuzzy
 msgid "Move down"
 msgstr "Sposta giù"
 
 #: ../src/dtgtk/thumbtable.c:1745
-#, fuzzy
 msgid "Move left"
-msgstr "Taglia a sinistra"
+msgstr "Sposta a sinistra"
 
 #: ../src/dtgtk/thumbtable.c:1749
-#, fuzzy
 msgid "Move right"
-msgstr "Taglia a destra"
+msgstr "Sposta a destra"
 
 #: ../src/dtgtk/thumbtable.c:1753
-#, fuzzy
 msgid "Go to previous page"
-msgstr "Vai all'immagine precedente"
+msgstr "Vai alla pagina precedente"
 
 #: ../src/dtgtk/thumbtable.c:1757
-#, fuzzy
 msgid "Go to next page"
-msgstr "Salta al file successivo"
+msgstr "Vai alla pagina seguente"
 
 #: ../src/dtgtk/thumbtable.c:1761
 msgid "Go to the start"
-msgstr ""
+msgstr "Vai all'inizio"
 
 #: ../src/dtgtk/thumbtable.c:1765
 msgid "Go to the end"
-msgstr ""
+msgstr "Vai alla fine"
 
 #: ../src/dtgtk/thumbtable.c:1769
-#, fuzzy
 msgid "Select the current thumbnail"
-msgstr "Seleziona la tonalità della tinta"
+msgstr "Seleziona l'anteprima corrente"
 
 #: ../src/dtgtk/thumbtable.c:1773
 msgid "Toogle the current thumbnail from selection"
-msgstr ""
+msgstr "Commuta l'anteprima corrente dalla selezione"
 
 #: ../src/dtgtk/thumbtable.c:1777
 msgid "Expand the current selection up to the hovered thumbnail"
 msgstr ""
+"Espandi la selezione corrente fino all'anteprima sotto il cursore del mouse"
 
 #: ../src/dtgtk/thumbtable.c:1781
 msgid "Open the current thumbnail in darkroom"
-msgstr ""
+msgstr "Apri l'anteprima corrente in Camera Oscura"
 
 #: ../src/dtgtk/thumbtable.c:1785
 msgid "Enable thumbnail transient alternative view"
-msgstr ""
+msgstr "Abilita la visualizzazione alternativa transitoria delle miniature"
 
 #: ../src/dtgtk/thumbtable.c:1870
 msgid ""
@@ -8056,105 +8041,106 @@ msgstr "Creazione cache anteprime Tavolo Luminoso in corso\n"
 
 #: ../src/gui/accelerators.c:412
 msgid "Contextual interaction on focus"
-msgstr ""
+msgstr "Interazione contestuale sul fuoco"
 
 #: ../src/gui/accelerators.c:446
-#, fuzzy
 msgid "Focuses the instance"
-msgstr "Distanza focale"
+msgstr "Fuoco sull'istanza"
 
 #: ../src/gui/accelerators.c:495
-#, fuzzy
 msgid "Trigger the action"
-msgstr "Orientamento"
+msgstr "Avvia l'azione"
 
 #: ../src/gui/accelerators.c:974
 msgid "The shortcut for"
-msgstr ""
+msgstr "La scorciatoia per"
 
 #: ../src/gui/accelerators.c:975
 msgid "is already using the key combination"
-msgstr ""
+msgstr "sta già usando questa combinazione"
 
 #: ../src/gui/accelerators.c:976
-#, fuzzy
 msgid "Delete it first."
-msgstr "Cancella sviluppo"
+msgstr "Cancellalo prima di tutto"
 
 #: ../src/gui/accelerators.c:1266
 msgid "<Primary> - Decoded as <Control> on Windows/Linux or <Meta> on Mac OS"
 msgstr ""
+"<Primary> - Decodificato come <Control> su Windows/Linux o <Meta> su Mac OS"
 
 #: ../src/gui/accelerators.c:1267
 msgid "<Control>"
-msgstr ""
+msgstr "<Control>"
 
 #: ../src/gui/accelerators.c:1268
 msgid "<Shift>"
-msgstr ""
+msgstr "<Shift>"
 
 #: ../src/gui/accelerators.c:1269
 msgid "<Alt>"
-msgstr ""
+msgstr "<Alt>"
 
 #: ../src/gui/accelerators.c:1270
 msgid "<Super> - The Windows key on PC"
-msgstr ""
+msgstr "<Super> - Il tasto Windows sul PC"
 
 #: ../src/gui/accelerators.c:1271
 msgid "<Hyper>"
-msgstr ""
+msgstr "<Hyper>"
 
 #: ../src/gui/accelerators.c:1272
 msgid "<Meta> - Decoded as <Command> on Mac OS"
-msgstr ""
+msgstr "<Meta> - Decodificato come <Command> su Mac OS"
 
 #: ../src/gui/accelerators.c:1275
 msgid ""
 "Look for keys and modifiers codes, as `<Modifier>Key`.\n"
 "Type `<` to start the auto-completion"
 msgstr ""
+"Cerca le chiavi e i codici dei modificatori tipo `<Modifier>Chiave`.\n"
+"Tipo `<` per iniziare l'auto-completamento"
 
 #: ../src/gui/accelerators.c:1278
 msgid ""
 "Case-insensitive search for keywords of full pathes.\n"
 "Ex: `darkroom/controls/sliders`"
 msgstr ""
+"Ricerca per parole chiave o percorsi\n(senza distinzione tra maiuscole e minus"
+"cole)\n"
+"Es.: `camera oscura/controlli/selettori`"
 
 #: ../src/gui/accelerators.c:1283
 msgid "Ansel - Keyboard shortcuts"
-msgstr ""
+msgstr "Ansel - Scorciatoie da tastiera"
 
 #. Add tree view columns
 #: ../src/gui/accelerators.c:1329
 msgid "View / Scope / Feature / Control"
-msgstr ""
+msgstr "Vista / Grafico / Caratteristiche / Controllo"
 
 #: ../src/gui/accelerators.c:1333
 msgid "Keys"
-msgstr ""
+msgstr "Chiavi"
 
 #: ../src/gui/accelerators.c:1343
 msgid "Clear"
-msgstr ""
+msgstr "Pulisci"
 
 #: ../src/gui/accelerators.c:1348
-#, fuzzy
 msgid "Description"
 msgstr "Descrizione"
 
 #: ../src/gui/accelerators.c:1356
-#, fuzzy
 msgid "Search by feature : "
-msgstr "Cerca immagine"
+msgstr "Cerca per caratteristica : "
 
 #: ../src/gui/accelerators.c:1358
 msgid "Search by keys : "
-msgstr ""
+msgstr "Cerca per chiave : "
 
 #: ../src/gui/accelerators.c:1528
 msgid "Ansel - Search accelerators"
-msgstr ""
+msgstr "Ansel - Cerca acceleratori"
 
 #: ../src/gui/gtk.c:322
 msgid "closing Ansel..."
@@ -9224,9 +9210,8 @@ msgstr "Commuta visibilità di tutti i pannelli"
 #: ../src/libs/modulegroups.c:465 ../src/libs/modulegroups.c:467
 #: ../src/libs/tools/lighttable.c:275 ../src/libs/tools/lighttable.c:277
 #: ../src/views/darkroom.c:1226 ../src/views/darkroom.c:1228
-#, fuzzy
 msgid "Triggers the action"
-msgstr "Orientamento"
+msgstr "Avvia l'azione"
 
 #: ../src/gui/actions/edit.c:156 ../src/gui/actions/edit.c:179
 msgid "Copy is allowed only with exactly one image selected"
@@ -9302,13 +9287,12 @@ msgid "Delete history"
 msgstr "Cancella sviluppo"
 
 #: ../src/gui/actions/edit.c:415
-#, fuzzy
 msgid "Preferences..."
 msgstr "Preferenze..."
 
 #: ../src/gui/actions/edit.c:416
 msgid "Keyboard shortcuts..."
-msgstr ""
+msgstr "Scorciatoie da tastiera..."
 
 #: ../src/gui/actions/file.c:32
 msgid " and "
@@ -9454,9 +9438,8 @@ msgid "Open contextual help"
 msgstr "Apri l'aiuto contestuale"
 
 #: ../src/gui/actions/help.c:223
-#, fuzzy
 msgid "Search actions..."
-msgstr "Raccolte usate recentemente"
+msgstr "Cerca azioni..."
 
 #: ../src/gui/actions/help.c:226
 msgid "Donate"
@@ -9604,9 +9587,8 @@ msgid "Invert selection"
 msgstr "Inverti selezione"
 
 #: ../src/gui/actions/select.c:61
-#, fuzzy
 msgid "Scroll back to selection"
-msgstr "Restringi alla selezione"
+msgstr "Torna alla selezione"
 
 #: ../src/gui/window_manager.c:631
 msgid "_File"
@@ -15563,9 +15545,8 @@ msgid "focal length (mm)"
 msgstr "Lunghezza focale (mm)"
 
 #: ../src/iop/lens.cc:1925
-#, fuzzy
 msgid "f"
-msgstr "f/"
+msgstr "f"
 
 #: ../src/iop/lens.cc:1926
 msgid "f-number (aperture)"
@@ -18628,9 +18609,8 @@ msgid "delete metadata tag"
 msgstr "Elimina metadati etichetta"
 
 #: ../src/libs/geotagging.c:141
-#, fuzzy
 msgid "Datetime and GPS"
-msgstr "Data e GPS"
+msgstr "Data/ora e GPS"
 
 #: ../src/libs/geotagging.c:369
 msgid "apply offset and geo-location"
@@ -19330,7 +19310,6 @@ msgid "categories"
 msgstr "Categorie"
 
 #: ../src/libs/metadata_view.c:176
-#, fuzzy
 msgid "EXIF and IPTC"
 msgstr "EXIF e IPTC"
 
@@ -20562,12 +20541,16 @@ msgid ""
 "The current selection contains more than one image, which is ambiguous.\n"
 "Select exactly one image to enter the darkroom."
 msgstr ""
+"La selezione corrente contiene più di un'immagine, il che è ambiguo.\n"
+"Seleziona solamente un'immagine per accedere alla Camera Oscura."
 
 #: ../src/views/darkroom.c:570
 msgid ""
 "There is no image selected.\n"
 "Select exactly one image to enter the darkroom."
 msgstr ""
+"Non c'è un'immagine selezionata.\n"
+"Seleziona un'immagine per accedere alla camera oscura."
 
 #. fail :(
 #: ../src/views/darkroom.c:585
