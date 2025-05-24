@@ -145,7 +145,7 @@ by 75%. Excluding the pixel operations (`cloc  --fullpath --not-match-d=/src/iop
 the C code volume has reduced by 15%.
 
 The [cyclomatic complexity](https://en.wikipedia.org/wiki/Cyclomatic_complexity) of the project
-has also been reduced reduced:
+has also been reduced:
 
 | Metric | Ansel Master | Darktable 4.0 | Darktable 5.0 |
 | ------ | -----------: | ------------: | ------------: |
