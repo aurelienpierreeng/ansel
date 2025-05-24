@@ -22,8 +22,6 @@
     change the sensitive state depending on the dialog response.  */
 int dt_gui_hist_dialog_new(dt_history_copy_item_t *d, int32_t imgid, gboolean iscopy);
 
-/** must be called to initialize the structure. */
-void dt_gui_hist_dialog_init(dt_history_copy_item_t *d);
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

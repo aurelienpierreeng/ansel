@@ -83,10 +83,7 @@ void dt_dev_write_history(struct dt_develop_t *dev);
 // get history (module params) and masks from DB,
 // apply default modules, auto-presets and mandatory modules,
 // then populate dev->history GList.
-void dt_dev_read_history_ext(struct dt_develop_t *dev, const int32_t imgid, gboolean no_image);
-
-// Locks dev->history_mutex and calls dt_dev_read_history_ext()
-void dt_dev_read_history(struct dt_develop_t *dev);
+void dt_dev_read_history_ext(struct dt_develop_t *dev, const int32_t imgid, gboolean no_image);;
 
 // Read dev->history state, up to dev->history_end,
 // and write it into the params/blendops of modules from dev->iop.
@@ -147,12 +144,7 @@ int32_t dt_dev_get_history_end(struct dt_develop_t *dev);
 // It needs to run after dev->history is fully populated
 void dt_dev_set_history_end(struct dt_develop_t *dev, const uint32_t index);
 
-
-void dt_dev_get_history_item_label(dt_dev_history_item_t *hist, char *label, const int cnt);
-
-
 gboolean dt_history_module_skip_copy(const int flags);
-
 
 /** adds to dev_dest module mod_src */
 int dt_history_merge_module_into_history(struct dt_develop_t *dev_dest, struct dt_develop_t *dev_src, struct dt_iop_module_t *mod_src, GList **_modules_used);

@@ -349,8 +349,6 @@ void dt_image_set_images_locations(const GList *imgs, const GArray *gloc,
 void dt_image_get_location(const int32_t imgid, dt_image_geoloc_t *geoloc);
 /** returns the number of history entries in library for this image */
 uint32_t dt_image_altered(const int32_t imgid);
-/** returns TRUE if if current has is basic, FALSE otherwise. */
-gboolean dt_image_basic(const int32_t imgid);
 
 /** returns the orientation bits of the image from exif. */
 static inline dt_image_orientation_t dt_image_orientation(const dt_image_t *img)
@@ -411,8 +409,6 @@ void dt_image_synch_all_xmp(const gchar *pathname);
 /** get the mode xmp sidecars are written */
 gboolean dt_image_get_xmp_mode();
 
-// add an offset to the exif_datetime_taken field
-void dt_image_add_time_offset(const int32_t imgid, const long int offset);
 // set datetime to exif_datetime_taken field
 void dt_image_set_datetime(const GList *imgs, const char *datetime, const gboolean undo_on);
 // set datetimeS to exif_datetime_taken field

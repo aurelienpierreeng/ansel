@@ -531,14 +531,6 @@ int dt_ioppr_get_iop_order(GList *iop_order_list, const char *op_name, const int
   return iop_order;
 }
 
-gboolean dt_ioppr_is_iop_before(GList *iop_order_list, const char *base_operation,
-                                const char *operation, const int multi_priority)
-{
-  const int base_order = dt_ioppr_get_iop_order(iop_order_list, base_operation, -1);
-  const int op_order = dt_ioppr_get_iop_order(iop_order_list, operation, multi_priority);
-  return op_order < base_order;
-}
-
 gint dt_sort_iop_list_by_order(gconstpointer a, gconstpointer b)
 {
   const dt_iop_order_entry_t *const restrict am = (const dt_iop_order_entry_t *)a;
@@ -1656,7 +1648,7 @@ gboolean dt_ioppr_check_can_move_after_iop(GList *iop_list, dt_iop_module_t *mod
   // we shouldn't be here if the previous module is the a raster mask's source and our module is using it
   if(module->raster_mask.sink.source == module_prev)
     return FALSE;
-  
+
   gboolean can_move = FALSE;
 
   // moving after module_prev is the same as moving before the very next one after module_prev

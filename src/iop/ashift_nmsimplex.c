@@ -24,8 +24,7 @@
  *      add additional argument to objfun for arbitrary parameters
  *      simplex() returns number of used iterations instead of min value
  *      maximum number of iterations as function parameter
- *      make interface function simplex() static
- *      initialize i and j to avoid compiler warnings
+ *      make interface function simplex() static  *      initialize i and j to avoid compiler warnings
  *      comment out printing of status inormation
  *      reformat according to darktable's clang standards
  */

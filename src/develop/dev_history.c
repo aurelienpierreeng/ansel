@@ -1623,19 +1623,6 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolean no
   dt_print(DT_DEBUG_HISTORY, "[history] dt_dev_read_history_ext completed\n");
 }
 
-void dt_dev_read_history(dt_develop_t *dev)
-{
-  dt_pthread_mutex_lock(&dev->history_mutex);
-  dt_dev_read_history_ext(dev, dev->image_storage.id, FALSE);
-  dt_pthread_mutex_unlock(&dev->history_mutex);
-}
-
-void dt_dev_get_history_item_label(dt_dev_history_item_t *hist, char *label, const int cnt)
-{
-  gchar *module_label = dt_history_item_get_name(hist->module);
-  g_snprintf(label, cnt, "%s (%s)", module_label, hist->enabled ? _("on") : _("off"));
-  g_free(module_label);
-}
 
 void dt_dev_invalidate_history_module(GList *list, dt_iop_module_t *module)
 {

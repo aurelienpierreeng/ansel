@@ -1046,12 +1046,6 @@ uint32_t dt_image_altered(const int32_t imgid)
   return found_it;
 }
 
-gboolean dt_image_basic(const int32_t imgid)
-{
-  dt_history_hash_t status = dt_history_hash_get_status(imgid);
-  return status & DT_HISTORY_HASH_BASIC;
-}
-
 #ifndef _WIN32
 static int _valid_glob_match(const char *const name, size_t offset)
 {

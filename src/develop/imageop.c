@@ -1124,15 +1124,6 @@ void dt_iop_reload_defaults(dt_iop_module_t *module)
   if(module->header) dt_iop_gui_update_header(module);
 }
 
-void dt_iop_cleanup_histogram(gpointer data, gpointer user_data)
-{
-  dt_iop_module_t *module = (dt_iop_module_t *)data;
-
-  free(module->histogram);
-  module->histogram = NULL;
-  module->histogram_stats.bins_count = 0;
-  module->histogram_stats.pixels = 0;
-}
 
 static void _init_presets(dt_iop_module_so_t *module_so)
 {
@@ -2748,22 +2739,6 @@ dt_iop_module_t *dt_iop_get_module_by_instance_name(GList *modules, const char *
   return mod_ret;
 }
 
-/** count instances of a module **/
-int dt_iop_count_instances(dt_iop_module_so_t *module)
-{
-  int inst_count = 0;
-
-  for(const GList *iop_mods = g_list_last(darktable.develop->iop); iop_mods; iop_mods = g_list_previous(iop_mods))
-  {
-    dt_iop_module_t *mod = (dt_iop_module_t *)iop_mods->data;
-    if(mod->so == module && mod->iop_order != INT_MAX)
-    {
-      inst_count++;
-    }
-  }
-  return inst_count;
-}
-
 gboolean dt_iop_is_first_instance(GList *modules, dt_iop_module_t *module)
 {
   gboolean is_first = TRUE;
@@ -2802,12 +2777,6 @@ void dt_iop_refresh_preview(dt_iop_module_t *module)
     dt_dev_invalidate_preview(dev);
     dt_dev_refresh_ui_images(dev);
   }
-}
-
-void dt_iop_refresh_all(dt_iop_module_t *module)
-{
-  dt_iop_refresh_preview(module);
-  dt_iop_refresh_center(module);
 }
 
 static gboolean _postponed_history_update(gpointer data)

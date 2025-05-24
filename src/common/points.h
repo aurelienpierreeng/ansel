@@ -344,36 +344,10 @@ typedef unsigned __int64 uint64_t;
 
 static inline uint32_t gen_rand32(struct sfmt_state_t *s);
 static inline uint64_t gen_rand64(struct sfmt_state_t *s);
-static inline void fill_array32(struct sfmt_state_t *s, uint32_t *array, int size) __attribute__((unused));
-static inline void fill_array64(struct sfmt_state_t *s, uint64_t *array, int size) __attribute__((unused));
 static inline void init_gen_rand(struct sfmt_state_t *s, uint32_t seed) __attribute__((unused));
 static inline void init_by_array(struct sfmt_state_t *s, uint32_t *init_key, int key_length)
     __attribute__((unused));
 static inline const char *get_idstring(void) __attribute__((unused));
-static inline int get_min_array_size32(void) __attribute__((unused));
-static inline int get_min_array_size64(void) __attribute__((unused));
-
-/* These real versions are due to Isaku Wada */
-/** generates a random number on [0,1]-real-interval */
-inline static double to_real1(uint32_t v)
-{
-  return v * (1.0 / 4294967295.0);
-  /* divided by 2^32-1 */
-}
-
-/** generates a random number on [0,1]-real-interval */
-inline static double genrand_real1(struct sfmt_state_t *s)
-{
-  return to_real1(gen_rand32(s));
-}
-
-/** generates a random number on [0,1)-real-interval */
-inline static double to_real2(uint32_t v)
-{
-  return v * (1.0 / 4294967296.0);
-  /* divided by 2^32 */
-}
-
 /** generates a random number on [0,1)-real-interval (float) */
 inline static float to_real2f(uint32_t v)
 {
@@ -385,63 +359,11 @@ inline static float to_real2f(uint32_t v)
   return x.f - 1.0f;
   /* divided by 2^32 */
 }
-
-/** generates a random number on [0,1)-real-interval */
-inline static double genrand_real2(struct sfmt_state_t *s)
-{
-  return to_real2(gen_rand32(s));
-}
-
 inline static float genrand_real2f(struct sfmt_state_t *s)
 {
   return to_real2f(gen_rand32(s));
 }
 
-/** generates a random number on (0,1)-real-interval */
-inline static double to_real3(uint32_t v)
-{
-  return (((double)v) + 0.5) * (1.0 / 4294967296.0);
-  /* divided by 2^32 */
-}
-
-/** generates a random number on (0,1)-real-interval */
-inline static double genrand_real3(struct sfmt_state_t *s)
-{
-  return to_real3(gen_rand32(s));
-}
-/** These real versions are due to Isaku Wada */
-
-/** generates a random number on [0,1) with 53-bit resolution*/
-inline static double to_res53(uint64_t v)
-{
-  return v * (1.0 / 18446744073709551616.0L);
-}
-
-/** generates a random number on [0,1) with 53-bit resolution from two
- * 32 bit integers */
-inline static double to_res53_mix(uint32_t x, uint32_t y)
-{
-  return to_res53(x | ((uint64_t)y << 32));
-}
-
-/** generates a random number on [0,1) with 53-bit resolution
-*/
-inline static double genrand_res53(struct sfmt_state_t *s)
-{
-  return to_res53(gen_rand64(s));
-}
-
-/** generates a random number on [0,1) with 53-bit resolution
-  using 32bit integer.
-  */
-inline static double genrand_res53_mix(struct sfmt_state_t *s)
-{
-  uint32_t x, y;
-
-  x = gen_rand32(s);
-  y = gen_rand32(s);
-  return to_res53_mix(x, y);
-}
 #endif
 /**
  * @file  SFMT-sse2.h
@@ -867,26 +789,6 @@ const char *get_idstring(void)
   return IDSTR;
 }
 
-/**
- * This function returns the minimum size of array used for \b
- * fill_array32() function.
- * @return minimum size of array used for fill_array32() function.
- */
-int get_min_array_size32(void)
-{
-  return N32;
-}
-
-/**
- * This function returns the minimum size of array used for \b
- * fill_array64() function.
- * @return minimum size of array used for fill_array64() function.
- */
-int get_min_array_size64(void)
-{
-  return N64;
-}
-
 #ifndef ONLY64
 /**
  * This function generates and returns 32-bit pseudorandom number.
@@ -942,83 +844,6 @@ uint64_t gen_rand64(sfmt_state_t *s)
 #endif
 }
 
-#ifndef ONLY64
-/**
- * This function generates pseudorandom 32-bit integers in the
- * specified array[] by one call. The number of pseudorandom integers
- * is specified by the argument size, which must be at least 624 and a
- * multiple of four.  The generation by this function is much faster
- * than the following gen_rand function.
- *
- * For initialization, init_gen_rand or init_by_array must be called
- * before the first call of this function. This function can not be
- * used after calling gen_rand function, without initialization.
- *
- * @param array an array where pseudorandom 32-bit integers are filled
- * by this function.  The pointer to the array must be \b "aligned"
- * (namely, must be a multiple of 16) in the SIMD version, since it
- * refers to the address of a 128-bit integer.  In the standard C
- * version, the pointer is arbitrary.
- *
- * @param size the number of 32-bit pseudorandom integers to be
- * generated.  size must be a multiple of 4, and greater than or equal
- * to (MEXP / 128 + 1) * 4.
- *
- * @note \b memalign or \b posix_memalign is available to get aligned
- * memory. Mac OSX doesn't have these functions, but \b malloc of OSX
- * returns the pointer to the aligned memory block.
- */
-void fill_array32(sfmt_state_t *s, uint32_t *array, int size)
-{
-  // assert(s->initialized);
-  // assert(s->idx == N32);
-  // assert(size % 4 == 0);
-  // assert(size >= N32);
-
-  gen_rand_array(s, (w128_t *)array, size / 4);
-  s->idx = N32;
-}
-#endif
-
-/**
- * This function generates pseudorandom 64-bit integers in the
- * specified array[] by one call. The number of pseudorandom integers
- * is specified by the argument size, which must be at least 312 and a
- * multiple of two.  The generation by this function is much faster
- * than the following gen_rand function.
- *
- * For initialization, init_gen_rand or init_by_array must be called
- * before the first call of this function. This function can not be
- * used after calling gen_rand function, without initialization.
- *
- * @param array an array where pseudorandom 64-bit integers are filled
- * by this function.  The pointer to the array must be "aligned"
- * (namely, must be a multiple of 16) in the SIMD version, since it
- * refers to the address of a 128-bit integer.  In the standard C
- * version, the pointer is arbitrary.
- *
- * @param size the number of 64-bit pseudorandom integers to be
- * generated.  size must be a multiple of 2, and greater than or equal
- * to (MEXP / 128 + 1) * 2
- *
- * @note \b memalign or \b posix_memalign is available to get aligned
- * memory. Mac OSX doesn't have these functions, but \b malloc of OSX
- * returns the pointer to the aligned memory block.
- */
-void fill_array64(sfmt_state_t *s, uint64_t *array, int size)
-{
-  // assert(s->initialized);
-  // assert(s->idx == N32);
-  // assert(size % 2 == 0);
-  // assert(size >= N64);
-
-  gen_rand_array(s, (w128_t *)array, size / 2);
-  s->idx = N32;
-
-#if defined(BIG_ENDIAN64) && !defined(ONLY64)
-  swap((w128_t *)array, size / 2);
-#endif
-}
 
 /**
  * This function initializes the internal state array with a 32-bit
@@ -1171,4 +996,3 @@ static inline float dt_points_get()
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

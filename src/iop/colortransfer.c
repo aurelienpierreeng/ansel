@@ -123,23 +123,6 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_p
   return IOP_CS_LAB;
 }
 
-#if 0
-void init_key_accels(dt_iop_module_so_t *self)
-{
-  dt_accel_register_iop(self, FALSE, NC_("accel", "acquire"), 0, 0);
-  dt_accel_register_iop(self, FALSE, NC_("accel", "apply"), 0, 0);
-}
-
-void connect_key_accels(dt_iop_module_t *self)
-{
-  dt_iop_colortransfer_gui_data_t *g =
-    (dt_iop_colortransfer_gui_data_t*)self->gui_data;
-
-  dt_accel_connect_button_iop(self, "acquire", g->acquire_button);
-  dt_accel_connect_button_iop(self, "apply", g->apply_button);
-}
-#endif
-
 static void capture_histogram(const float *col, const dt_iop_roi_t *roi, int *hist)
 {
   // build separate histogram

@@ -244,24 +244,8 @@ int dt_view_manager_key_pressed(dt_view_manager_t *vm, GdkEventKey *event);
 void dt_view_manager_configure(dt_view_manager_t *vm, int width, int height);
 int dt_view_manager_scrolled(dt_view_manager_t *vm, double x, double y, int up, int state);
 
-/** add widget to the current view toolbox */
-void dt_view_manager_view_toolbox_add(dt_view_manager_t *vm, GtkWidget *tool, dt_view_type_flags_t view);
-
 /** add widget to the current module toolbox */
 void dt_view_manager_module_toolbox_add(dt_view_manager_t *vm, GtkWidget *tool, dt_view_type_flags_t view);
-
-/*
- * Tethering View PROXY
- */
-/** get the current selected image id for tethering session */
-int32_t dt_view_tethering_get_selected_imgid(const dt_view_manager_t *vm);
-/** set the current jobcode for tethering session */
-void dt_view_tethering_set_job_code(const dt_view_manager_t *vm, const char *name);
-/** get the current jobcode for tethering session */
-const char *dt_view_tethering_get_job_code(const dt_view_manager_t *vm);
-
-/** update the collection module */
-void dt_view_collection_update(const dt_view_manager_t *vm);
 
 void dt_view_image_info_update(const int32_t imgid);
 

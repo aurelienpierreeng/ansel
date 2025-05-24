@@ -170,17 +170,11 @@ void dt_thumbnail_update_selection(dt_thumbnail_t *thumb, gboolean selected);
 int dt_thumbnail_image_refresh_real(dt_thumbnail_t *thumb);
 #define dt_thumbnail_image_refresh(thumb) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_LIGHTTABLE, dt_thumbnail_image_refresh_real, (thumb))
 
-// force reloading image infos
-void dt_thumbnail_reload_infos(dt_thumbnail_t *thumb);
-
 void dt_thumbnail_alternative_mode(dt_thumbnail_t *thumb, gboolean enable);
 
 // If prefetching, Gtk won't redraw the invisible thumbnails so we need to manually call this ahead.
 // Return 1 on error.
 int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb);
-
-// temporarily block all redraw events
-int dt_thumbnail_block_redraw(dt_thumbnail_t *thumb);
 
 // Get the number of background jobs currently running.
 // Shouldn't be more than 1 if everything goes well

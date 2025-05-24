@@ -468,9 +468,6 @@ void dt_iop_gui_blending_reload_defaults(dt_iop_module_t *module);
 
 gboolean blend_color_picker_apply(dt_iop_module_t *module, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece);
 
-/** routine to translate from mode id to sequence in option list */
-int dt_iop_gui_blending_mode_seq(dt_iop_gui_blend_data_t *bd, int mode);
-
 
 #ifdef HAVE_OPENCL
 /** apply blend for opencl modules. Return 0 if ok, 1 on error*/

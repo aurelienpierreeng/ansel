@@ -618,6 +618,11 @@ void _iconify_callback(GtkWidget *w, gpointer data)
   gtk_window_iconify(GTK_WINDOW((GtkWidget *)data));
 }
 
+void _open_accel_search_callback(GtkWidget *w, gpointer data)
+{
+  dt_accels_search(darktable.gui->accels, GTK_WINDOW(darktable.gui->ui->main_window));
+}
+
 void dt_ui_init_global_menu(dt_ui_t *ui)
 {
   /* if user_pref != merge menubar in titlebar */
@@ -650,6 +655,16 @@ void dt_ui_init_global_menu(dt_ui_t *ui)
 
   dt_ui_titlebar_pack_start(ui, ui->header->menu_bar);
   gtk_widget_show_all(ui->header->menu_bar);
+
+  GtkWidget *search_button = gtk_button_new_from_icon_name("edit-find", GTK_ICON_SIZE_SMALL_TOOLBAR);
+  gtk_button_set_label (GTK_BUTTON(search_button), _("Search actions..."));
+  gtk_widget_set_halign(search_button, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign(search_button, GTK_ALIGN_CENTER);
+  gtk_widget_set_hexpand(search_button, TRUE);
+  gtk_widget_set_name(search_button, "search-button");
+  g_signal_connect(G_OBJECT(search_button), "clicked", G_CALLBACK(_open_accel_search_callback), NULL);
+  dt_ui_titlebar_pack_start(ui, search_button);
+  gtk_widget_show(search_button);
 
   // From there, we pack_end meaning it should be done in reverse order of appearance
   ui->header->close = gtk_button_new_from_icon_name("window-close", GTK_ICON_SIZE_LARGE_TOOLBAR);

@@ -1983,11 +1983,6 @@ static int dt_collection_image_offset_with_collection(const dt_collection_t *col
   return offset;
 }
 
-int dt_collection_image_offset(int32_t imgid)
-{
-  return dt_collection_image_offset_with_collection(darktable.collection, imgid);
-}
-
 static inline void _dt_collection_change_view_after_import(const dt_view_t *current_view, gboolean open_single_image)
 {
   if(open_single_image)

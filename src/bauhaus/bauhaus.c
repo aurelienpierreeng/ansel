@@ -1088,7 +1088,6 @@ static void _bauhaus_widget_init(dt_bauhaus_t *bauhaus, dt_bauhaus_widget_t *w, 
   w->quad_paint_data = NULL;
   w->quad_toggle = 0;
   w->show_quad = TRUE;
-  w->show_label = TRUE;
   w->timeout = dt_conf_get_int("processing/timeout");
   w->expand = TRUE;
 
@@ -1115,12 +1114,6 @@ void dt_bauhaus_combobox_set_default(GtkWidget *widget, int def)
   d->defpos = def;
 }
 
-int dt_bauhaus_combobox_get_default(GtkWidget *widget)
-{
-  const struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
-  const dt_bauhaus_combobox_data_t *d = &w->data.combobox;
-  return d->defpos;
-}
 
 void dt_bauhaus_slider_set_hard_min(GtkWidget* widget, float val)
 {
@@ -1216,14 +1209,6 @@ void dt_bauhaus_slider_set_soft_range(GtkWidget *widget, float soft_min, float s
   dt_bauhaus_slider_set_soft_max(widget, soft_max);
 }
 
-float dt_bauhaus_slider_get_default(GtkWidget *widget)
-{
-  const struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
-  const dt_bauhaus_slider_data_t *d = &w->data.slider;
-  return d->defpos;
-}
-
-
 void dt_bauhaus_widget_set_label(GtkWidget *widget, const char *label)
 {
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
@@ -1231,10 +1216,6 @@ void dt_bauhaus_widget_set_label(GtkWidget *widget, const char *label)
   {
     g_strlcpy(w->label, label, sizeof(w->label));
     dt_capitalize_label(w->label);
-  }
-  else
-  {
-    w->show_label = FALSE;
   }
 
   if(w->module)
@@ -1501,20 +1482,6 @@ void dt_bauhaus_combobox_add_full(GtkWidget *widget, const char *text, dt_bauhau
   if(d->active < 0) d->active = 0;
 }
 
-gboolean dt_bauhaus_combobox_set_entry_label(GtkWidget *widget, const int pos, const gchar *label)
-{
-  // change the text to show for the entry
-  // note that this doesn't break shortcuts but their names in the shortcut panel will remain the initial one
-  struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
-  if(w->type != DT_BAUHAUS_COMBOBOX) return FALSE;
-  dt_bauhaus_combobox_data_t *d = &w->data.combobox;
-  if(!d || pos < 0 || pos >= d->entries->len) return FALSE;
-  dt_bauhaus_combobox_entry_t *entry = g_ptr_array_index(d->entries, pos);
-  g_free(entry->label);
-  entry->label = g_strdup(label);
-  return TRUE;
-}
-
 void dt_bauhaus_combobox_set_entries_ellipsis(GtkWidget *widget, PangoEllipsizeMode ellipis)
 {
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
@@ -1523,12 +1490,6 @@ void dt_bauhaus_combobox_set_entries_ellipsis(GtkWidget *widget, PangoEllipsizeM
   d->entries_ellipsis = ellipis;
 }
 
-PangoEllipsizeMode dt_bauhaus_combobox_get_entries_ellipsis(GtkWidget *widget)
-{
-  const dt_bauhaus_combobox_data_t *d = _combobox_data(widget);
-
-  return d ? d->entries_ellipsis : PANGO_ELLIPSIZE_END;
-}
 
 void dt_bauhaus_combobox_set_editable(GtkWidget *widget, int editable)
 {
@@ -2272,21 +2233,16 @@ static float _get_combobox_max_width(GtkWidget *widget)
   if(w->show_quad)
     width += w->bauhaus->quad_width + 2 * INNER_PADDING;
 
-  // Get label width if any
-  if(w->show_label)
-  {
-    float label_width = 0.f;
+  float label_width = 0.f;
+  GdkRectangle bounding_label = { .x = 0.,
+                                  .y = 0.,
+                                  .width = 999,
+                                  .height = 999 };
 
-    GdkRectangle bounding_label = { .x = 0.,
-                                    .y = 0.,
-                                    .width = 999,
-                                    .height = 999 };
+  show_pango_text(w, context, cr, &bounding_label, w->label, BH_ALIGN_LEFT, BH_ALIGN_MIDDLE,
+    PANGO_ELLIPSIZE_NONE, NULL, &label_width, NULL, state);
 
-    show_pango_text(w, context, cr, &bounding_label, w->label, BH_ALIGN_LEFT, BH_ALIGN_MIDDLE,
-      PANGO_ELLIPSIZE_NONE, NULL, &label_width, NULL, state);
-
-    if(label_width > 0.f) width += label_width + INNER_PADDING;
-  }
+  if(label_width > 0.f) width += label_width + INNER_PADDING;
 
   // Get width of the longest entry
   float max_entry = 0.f;
@@ -2299,12 +2255,12 @@ static float _get_combobox_max_width(GtkWidget *widget)
                                     .y = 0.,
                                     .width = 999,
                                     .height = 999 };
-    float label_width = 0.f;
+    float entry_label_width = 0.f;
 
     show_pango_text(w, context, cr, &bounding_value, entry->label, BH_ALIGN_RIGHT, BH_ALIGN_MIDDLE, PANGO_ELLIPSIZE_NONE, NULL,
-                    &label_width, NULL, state);
+                    &entry_label_width, NULL, state);
 
-    if(label_width + INNER_PADDING > max_entry) max_entry = label_width + INNER_PADDING;
+    if(entry_label_width + INNER_PADDING > max_entry) max_entry = entry_label_width + INNER_PADDING;
   }
 
   width += max_entry;
@@ -2382,9 +2338,8 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
                                       .y = 0.,
                                       .width = available_width,
                                       .height = inner_height };
-      if(w->show_label)
-        show_pango_text(w, context, cr, &bounding_label, w->label, BH_ALIGN_LEFT, BH_ALIGN_MIDDLE,
-                        combo_ellipsis, NULL, &label_width, &label_height, state);
+      show_pango_text(w, context, cr, &bounding_label, w->label, BH_ALIGN_LEFT, BH_ALIGN_MIDDLE,
+                      combo_ellipsis, NULL, &label_width, &label_height, state);
 
       // The value is shown right-aligned, ellipsized if needed.
       gchar *text = d->text;
@@ -2851,13 +2806,6 @@ void dt_bauhaus_slider_set_feedback(GtkWidget *widget, int feedback)
   gtk_widget_queue_draw(widget);
 }
 
-int dt_bauhaus_slider_get_feedback(GtkWidget *widget)
-{
-  struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
-  dt_bauhaus_slider_data_t *d = &w->data.slider;
-  return d->fill_feedback;
-}
-
 void dt_bauhaus_slider_reset(GtkWidget *widget)
 {
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
@@ -3216,18 +3164,6 @@ void dt_bauhaus_set_use_default_callback(GtkWidget *widget)
 {
   struct dt_bauhaus_widget_t *w = (struct dt_bauhaus_widget_t *)widget;
   w->use_default_callback = TRUE;
-}
-
-void dt_bauhaus_set_expand(GtkWidget *widget, gboolean expand)
-{
-  struct dt_bauhaus_widget_t *w = (struct dt_bauhaus_widget_t *)widget;
-  w->expand = expand;
-}
-
-void dt_bauhaus_set_show_label(GtkWidget *widget, gboolean show)
-{
-  struct dt_bauhaus_widget_t *w = (struct dt_bauhaus_widget_t *)widget;
-  w->show_label = show;
 }
 
 

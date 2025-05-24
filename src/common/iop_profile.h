@@ -136,9 +136,6 @@ void dt_ioppr_get_input_profile_type(struct dt_develop_t *dev,
 void dt_ioppr_get_export_profile_type(struct dt_develop_t *dev,
                                       dt_colorspaces_color_profile_type_t *profile_type,
                                       const char **profile_filename);
-/** returns the current setting of the histogram profile */
-void dt_ioppr_get_histogram_profile_type(dt_colorspaces_color_profile_type_t *profile_type,
-                                         const char **profile_filename);
 
 /** transforms image from cst_from to cst_to colorspace using profile_info */
 void dt_ioppr_transform_image_colorspace(struct dt_iop_module_t *self, const float *const image_in,
@@ -298,28 +295,6 @@ static inline void dt_ioppr_rgb_matrix_to_xyz(const dt_aligned_pixel_t rgb, dt_a
   else
     dt_apply_transposed_color_matrix(rgb, matrix_in_transposed, xyz);
 }
-
-#ifdef _OPENMP
-#pragma omp declare simd \
-  aligned(unbounded_coeffs_out:16) \
-  aligned(lut_out:64) \
-  uniform(lut_out, unbounded_coeffs_out)
-#endif
-static inline void dt_ioppr_xyz_to_rgb_matrix(const dt_aligned_pixel_t xyz, dt_aligned_pixel_t rgb,
-                                              const dt_colormatrix_t matrix_out_transposed, float *const lut_out[3],
-                                              const float unbounded_coeffs_out[3][3],
-                                              const int lutsize, const int nonlinearlut)
-{
-  if(nonlinearlut)
-  {
-    dt_aligned_pixel_t linear_rgb;
-    dt_apply_transposed_color_matrix(xyz, matrix_out_transposed, linear_rgb);
-    _apply_trc(linear_rgb, rgb, lut_out, unbounded_coeffs_out, lutsize);
-  }
-  else
-    dt_apply_transposed_color_matrix(xyz, matrix_out_transposed, rgb);
-}
-
 
 #ifdef _OPENMP
 #pragma omp declare simd \

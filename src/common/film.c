@@ -104,50 +104,6 @@ int32_t dt_film_get_id(const char *folder)
   return filmroll_id;
 }
 
-/** open film with given id. */
-int dt_film_open2(dt_film_t *film)
-{
-  /* check if we got a decent film id */
-  if(film->id < 0) return 1;
-
-  /* query database for id and folder */
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT id, folder"
-                              " FROM main.film_rolls"
-                              " WHERE id = ?1", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, film->id);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    /* fill out the film dirname */
-    g_strlcpy(film->dirname, (gchar *)sqlite3_column_text(stmt, 1), sizeof(film->dirname));
-    sqlite3_finalize(stmt);
-
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "UPDATE main.film_rolls"
-                                " SET access_timestamp = strftime('%s', 'now')"
-                                " WHERE id = ?1", -1, &stmt,
-                                NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, film->id);
-    sqlite3_step(stmt);
-
-    sqlite3_finalize(stmt);
-    dt_film_set_query(film->id);
-    dt_control_queue_redraw_center();
-    dt_view_manager_reset(darktable.view_manager);
-    return 0;
-  }
-  else
-    sqlite3_finalize(stmt);
-
-  /* failure */
-  return 1;
-}
-
 int dt_film_open(const int32_t id)
 {
   sqlite3_stmt *stmt;
@@ -180,37 +136,6 @@ int dt_film_open(const int32_t id)
   return 0;
 }
 
-// FIXME: needs a rewrite
-int dt_film_open_recent(const int num)
-{
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT id"
-                              " FROM main.film_rolls"
-                              " ORDER BY access_timestamp DESC LIMIT ?1,1", -1,
-                              &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, num);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    const int id = sqlite3_column_int(stmt, 0);
-    sqlite3_finalize(stmt);
-    if(dt_film_open(id)) return 1;
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "UPDATE main.film_rolls"
-                                " SET access_timestamp = strftime('%s', 'now')"
-                                " WHERE id = ?1", -1, &stmt,
-                                NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
-    sqlite3_step(stmt);
-  }
-  sqlite3_finalize(stmt);
-  // dt_control_update_recent_films();
-  return 0;
-}
 
 int dt_film_new(dt_film_t *film, const char *directory)
 {

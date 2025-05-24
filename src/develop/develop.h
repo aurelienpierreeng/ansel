@@ -376,9 +376,6 @@ void dt_dev_pixelpipe_resync_main(dt_develop_t *dev);
 
 void dt_dev_pixelpipe_resync_preview(dt_develop_t *dev);
 
-void dt_dev_set_histogram(dt_develop_t *dev);
-void dt_dev_set_histogram_pre(dt_develop_t *dev);
-
 // Flush caches of dev pipes and force a full recompute
 void dt_dev_reprocess_all(dt_develop_t *dev);
 
@@ -396,10 +393,6 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht);
  * exposure plugin hook, set the exposure and the black level
  */
 
-/** check if exposure iop hooks are available */
-gboolean dt_dev_exposure_hooks_available(dt_develop_t *dev);
-/** reset exposure to defaults */
-void dt_dev_exposure_reset_defaults(dt_develop_t *dev);
 /** get exposure */
 float dt_dev_exposure_get_exposure(dt_develop_t *dev);
 /** get exposure black level */
@@ -418,8 +411,6 @@ void dt_dev_modulegroups_set(dt_develop_t *dev, uint32_t group);
 uint32_t dt_dev_modulegroups_get(dt_develop_t *dev);
 /** reorder the module list */
 void dt_dev_reorder_gui_module_list(dt_develop_t *dev);
-/** test if the iop is visible in current groups layout **/
-gboolean dt_dev_modulegroups_is_visible(dt_develop_t *dev, gchar *module);
 
 /** request snapshot */
 void dt_dev_snapshot_request(dt_develop_t *dev, const char *filename);
@@ -445,8 +436,6 @@ void dt_dev_masks_update_hash(dt_develop_t *dev);
 struct dt_iop_module_t *dt_dev_module_duplicate(dt_develop_t *dev, struct dt_iop_module_t *base);
 /** remove an existent module */
 void dt_dev_module_remove(dt_develop_t *dev, struct dt_iop_module_t *module);
-/** update "show" values of the multi instance part (show_move, show_delete, ...) */
-void dt_dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *module);
 /** same, but for all modules */
 void dt_dev_modules_update_multishow(dt_develop_t *dev);
 

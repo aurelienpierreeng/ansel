@@ -317,13 +317,6 @@ int dt_gui_hist_dialog_new(dt_history_copy_item_t *d, int32_t imgid, gboolean is
   return res;
 }
 
-void dt_gui_hist_dialog_init(dt_history_copy_item_t *d)
-{
-  d->selops = NULL;
-  d->copied_imageid = -1;
-  d->copy_iop_order = FALSE;
-}
-
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

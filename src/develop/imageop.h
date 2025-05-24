@@ -392,12 +392,6 @@ void dt_iop_gui_init(dt_iop_module_t *module);
 /** reloads certain gui/param defaults when the image was switched. */
 void dt_iop_reload_defaults(dt_iop_module_t *module);
 
-/*
- * must be called in dt_dev_change_image() to fix wrong histogram in levels
- * just after switching images and before full redraw
- */
-void dt_iop_cleanup_histogram(gpointer data, gpointer user_data);
-
 /** allow plugins to relinquish CPU and go to sleep for some time */
 void dt_iop_nap(int32_t usec);
 
@@ -412,8 +406,7 @@ dt_iop_module_t *dt_iop_get_module_by_op_priority(GList *modules, const char *op
 /** returns module with op + multi_name or NULL if not found on the list,
     if multi_name == NULL do not check for it */
 dt_iop_module_t *dt_iop_get_module_by_instance_name(GList *modules, const char *operation, const char *multi_name);
-/** count instances of a module **/
-int dt_iop_count_instances(dt_iop_module_so_t *module);
+
 /** return preferred module instance for shortcuts **/
 dt_iop_module_t *dt_iop_get_module_preferred_instance(dt_iop_module_so_t *module);
 
@@ -448,7 +441,6 @@ void dt_iop_set_darktable_iop_table();
 /** the given module */
 void dt_iop_refresh_center(dt_iop_module_t *module);
 void dt_iop_refresh_preview(dt_iop_module_t *module);
-void dt_iop_refresh_all(dt_iop_module_t *module);
 
 /** queue a delayed call to dt_dev_add_history_item to capture module parameters */
 void dt_iop_queue_history_update(dt_iop_module_t *module, gboolean extend_prior);
@@ -475,9 +467,6 @@ static inline dt_iop_gui_data_t *_iop_gui_alloc(dt_iop_module_t *module, size_t 
 
 #define IOP_GUI_FREE \
   dt_pthread_mutex_destroy(&self->gui_lock);if(self->gui_data){dt_free_align(self->gui_data);} self->gui_data = NULL
-
-/* return a warning message, prefixed by the special character ⚠ */
-char *dt_iop_warning_message(const char *message);
 
 /** check whether we have the required number of channels in the input data; if not, copy the input buffer to the
  ** output buffer, set the module's trouble message, and return FALSE */
@@ -521,18 +510,6 @@ void dt_bauhaus_value_changed_default_callback(GtkWidget *widget);
  *
 */
 void dt_iop_compute_module_hash(dt_iop_module_t *module, GList *masks);
-
-/**
- * @brief Iterator function meant to be used with
- * `g_hash_table_foreach(module->raster_mask.source.users, (GHFunc)dt_iop_hash_raster_masks, (gpointer)&hash)`.
- * Hash and combine the blendop params of each module using
- * the raster masks provided by the current `module`.
- *
- * @param key `dt_iop_module_t *module`
- * @param value not used
- * @param hash hash to update
-*/
-void dt_iop_hash_raster_masks(gpointer key, gpointer value, uint64_t *hash);
 
 // Use module fingerprints to determine if two instances are actually the same
 gboolean dt_iop_check_modules_equal(dt_iop_module_t *mod_1, dt_iop_module_t *mod_2);

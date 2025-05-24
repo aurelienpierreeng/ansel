@@ -29,7 +29,6 @@ dt_job_t *dt_dev_process_preview_job_create(dt_develop_t *dev);
 /** process image */
 dt_job_t *dt_dev_process_image_job_create(dt_develop_t *dev);
 
-dt_job_t *dt_dev_export_create();
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

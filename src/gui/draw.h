@@ -188,33 +188,6 @@ static inline void dt_draw_semilog_y_grid(cairo_t *cr, const int num, const int 
 }
 
 
-static inline void dt_draw_waveform_lines(cairo_t *cr, const int left, const int top, const int right,
-                                          const int bottom, const gboolean horizontal)
-{
-  float width = right - left;
-  const float height = bottom - top;
-  const int num = 9, middle = 5, white = 1;
-  // FIXME: should this vary with ppd?
-  const double dashes = 4.0;
-
-  cairo_save(cr);
-
-  // FIXME: should be using DT_PIXEL_APPLY_DPI()?
-  const double wd = cairo_get_line_width(cr);
-  for(int k = 1; k < num; k++)
-  {
-    cairo_set_dash(cr, &dashes, k == white || k == middle, 0);
-    cairo_set_line_width(cr, k == white ? wd * 3 : k == middle ? wd * 2 : wd);
-    if(horizontal)
-      dt_draw_line(cr, left, top + k / (float)num * height, right, top + k / (float)num * height);
-    else
-      dt_draw_line(cr, right - k / (float)num * width, top, right - k / (float)num * width, bottom);
-    cairo_stroke(cr);
-  }
-
-  cairo_restore(cr);
-}
-
 static inline void dt_draw_vertical_lines(cairo_t *cr, const int num, const int left, const int top,
                                           const int right, const int bottom)
 {
@@ -239,28 +212,6 @@ static inline void dt_draw_horizontal_lines(cairo_t *cr, const int num, const in
     cairo_line_to(cr, right, top + k / (float)num * height);
     cairo_stroke(cr);
   }
-}
-
-static inline void dt_draw_endmarker(cairo_t *cr, const int width, const int height, const int left)
-{
-  // fibonacci spiral:
-  float v[14] = { -8., 3., -8., 0., -13., 0., -13, 3., -13., 8., -8., 8., 0., 0. };
-  for(int k = 0; k < 14; k += 2) v[k] = v[k] * 0.01 + 0.5;
-  for(int k = 1; k < 14; k += 2) v[k] = v[k] * 0.03 + 0.5;
-  for(int k = 0; k < 14; k += 2) v[k] *= width;
-  for(int k = 1; k < 14; k += 2) v[k] *= height;
-  if(left)
-    for(int k = 0; k < 14; k += 2) v[k] = width - v[k];
-  cairo_set_line_width(cr, 2.);
-  cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
-  cairo_move_to(cr, v[0], v[1]);
-  cairo_curve_to(cr, v[2], v[3], v[4], v[5], v[6], v[7]);
-  cairo_curve_to(cr, v[8], v[9], v[10], v[11], v[12], v[13]);
-  for(int k = 0; k < 14; k += 2) v[k] = width - v[k];
-  for(int k = 1; k < 14; k += 2) v[k] = height - v[k];
-  cairo_curve_to(cr, v[10], v[11], v[8], v[9], v[6], v[7]);
-  cairo_curve_to(cr, v[4], v[5], v[2], v[3], v[0], v[1]);
-  cairo_stroke(cr);
 }
 
 static inline dt_draw_curve_t *dt_draw_curve_new(const float min, const float max, unsigned int type)
@@ -534,4 +485,3 @@ static inline GdkPixbuf *dt_draw_paint_to_pixbuf
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

@@ -20,8 +20,7 @@
 /* For line detection we are using the LSD code as published below.
  * Changes versus the original code:
  *      do not include "lsd.h" (not needed)
- *      make all interface functions static
- *      comment out unused interface functions
+ *      make all interface functions static  *      comment out unused interface functions
  *      catch (unlikely) division by zero near line 2035
  *      rename rad1 and rad2 to radius1 and radius2 in reduce_region_radius()
  *        to avoid naming conflict in windows build
@@ -2076,8 +2075,7 @@ static int refine( struct point * reg, int * reg_size, image_double modgrad,
 /*----------------------------------------------------------------------------*/
 /** LSD full interface.
  */
-static
-double * LineSegmentDetection( int * n_out,
+static double * LineSegmentDetection( int * n_out,
                                double * img, int X, int Y,
                                double scale, double sigma_scale, double quant,
                                double ang_th, double log_eps, double density_th,
@@ -2264,8 +2262,7 @@ double * LineSegmentDetection( int * n_out,
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale and Region output.
  */
-static
-double * lsd_scale_region( int * n_out,
+static double * lsd_scale_region( int * n_out,
                            double * img, int X, int Y, double scale,
                            int ** reg_img, int * reg_x, int * reg_y )
 {
@@ -2288,8 +2285,7 @@ double * lsd_scale_region( int * n_out,
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale.
  */
-static
-double * lsd_scale(int * n_out, double * img, int X, int Y, double scale)
+static double * lsd_scale(int * n_out, double * img, int X, int Y, double scale)
 {
   return lsd_scale_region(n_out,img,X,Y,scale,NULL,NULL,NULL);
 }
@@ -2297,8 +2293,7 @@ double * lsd_scale(int * n_out, double * img, int X, int Y, double scale)
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface.
  */
-static
-double * lsd(int * n_out, double * img, int X, int Y)
+static double * lsd(int * n_out, double * img, int X, int Y)
 {
   /* LSD parameters */
   double scale = 0.8;       /* Scale the image by Gaussian filter to 'scale'. */
@@ -2324,4 +2319,3 @@ double * lsd(int * n_out, double * img, int X, int Y)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

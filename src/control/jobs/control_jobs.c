@@ -223,6 +223,7 @@ static dt_job_t *dt_control_generic_image_job_create(dt_job_execute_callback exe
   return job;
 }
 
+
 static int32_t dt_control_write_sidecar_files_job_run(dt_job_t *job)
 {
   dt_control_image_enumerator_t *params = dt_control_job_get_params(job);
@@ -254,6 +255,14 @@ static int32_t dt_control_write_sidecar_files_job_run(dt_job_t *job)
   }
   sqlite3_finalize(stmt);
   return 0;
+}
+
+void dt_control_write_sidecar_files()
+{
+  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
+                     dt_control_generic_images_job_create(&dt_control_write_sidecar_files_job_run,
+                                                          N_("write sidecar files"), 0, NULL, PROGRESS_NONE,
+                                                          FALSE));
 }
 
 typedef struct dt_control_merge_hdr_t
@@ -2024,14 +2033,6 @@ void dt_control_datetime(const GTimeSpan offset, const char *datetime, GList *im
 {
   dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
                      dt_control_datetime_job_create(offset, datetime, imgs));
-}
-
-void dt_control_write_sidecar_files()
-{
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
-                     dt_control_generic_images_job_create(&dt_control_write_sidecar_files_job_run,
-                                                          N_("write sidecar files"), 0, NULL, PROGRESS_NONE,
-                                                          FALSE));
 }
 
 // clang-format off

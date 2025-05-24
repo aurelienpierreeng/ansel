@@ -39,12 +39,6 @@ typedef enum dt_lib_modulegroup_t
   DT_MODULEGROUP_SIZE,
 } dt_lib_modulegroup_t;
 
-static inline gboolean dt_is_module_group_global(dt_lib_modulegroup_t group)
-{
-  // Is group a special "global module group : enabled modules or "all" ?
-  return (group == DT_MODULEGROUP_ACTIVE_PIPE || group == DT_MODULEGROUP_NONE);
-}
-
 static inline gboolean dt_is_module_in_group(dt_iop_module_t *module, dt_lib_modulegroup_t group)
 {
   // Does module belong to group ?

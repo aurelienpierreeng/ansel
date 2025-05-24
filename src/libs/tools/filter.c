@@ -417,7 +417,7 @@ static void _refresh_collection_callback(GtkButton *button, gpointer user_data)
 
 void _widget_align_left(GtkWidget *widget)
 {
-  gtk_widget_set_halign(widget, GTK_ALIGN_START);
+  gtk_widget_set_halign(widget, GTK_ALIGN_FILL);
   gtk_widget_set_hexpand(widget, TRUE);
 
   gtk_widget_set_valign(widget, GTK_ALIGN_CENTER);
@@ -557,8 +557,7 @@ void gui_init(dt_lib_module_t *self)
 
   // dumb empty flexible spacer at the end
   GtkWidget *spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
-  gtk_widget_set_hexpand(spacer, TRUE);
-  gtk_box_pack_start(GTK_BOX(self->widget), spacer, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget), spacer, FALSE, FALSE, 0);
 
   label = gtk_label_new(_("Include"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
@@ -653,8 +652,7 @@ void gui_init(dt_lib_module_t *self)
 
   // dumb empty flexible spacer at the end
   spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
-  gtk_widget_set_hexpand(spacer, TRUE);
-  gtk_box_pack_start(GTK_BOX(self->widget), spacer, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget), spacer, FALSE, FALSE, 0);
 
   label = gtk_label_new(_("Sort by"));
   gtk_box_pack_start(GTK_BOX(self->widget), label, FALSE, FALSE, 0);
@@ -688,12 +686,12 @@ void gui_init(dt_lib_module_t *self)
 
   // dumb empty flexible spacer at the end
   spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
-  gtk_widget_set_hexpand(spacer, TRUE);
-  gtk_box_pack_start(GTK_BOX(self->widget), spacer, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget), spacer, FALSE, FALSE, 0);
 
   // text filter
   d->text = gtk_search_entry_new();
   dt_accels_disconnect_on_text_input(d->text);
+  gtk_widget_set_hexpand(d->text, TRUE);
   dt_gui_add_class(GTK_WIDGET(d->text), "menu-text-entry");
   char *text = _decode_text_filter(dt_collection_get_text_filter(darktable.collection));
   gtk_entry_set_text(GTK_ENTRY(d->text), text);
@@ -714,7 +712,7 @@ void gui_init(dt_lib_module_t *self)
           /* xgettext:no-c-format */
                                 "\nis dimmed during the search execution"));
   //dt_gui_add_class(d->text, "dt_transparent_background");
-  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->text), FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->text), TRUE, TRUE, 0);
   gtk_widget_set_name(d->text, "quickfilter-search-box");
 
   dt_accels_new_lighttable_action(_focus_search_action, self, N_("Lighttable/Actions"), N_("Search a picture"),
@@ -722,8 +720,7 @@ void gui_init(dt_lib_module_t *self)
 
   // dumb empty flexible spacer at the end
   spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
-  gtk_widget_set_hexpand(spacer, TRUE);
-  gtk_box_pack_start(GTK_BOX(self->widget), spacer, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget), spacer, FALSE, FALSE, 0);
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_IMAGES_ORDER_CHANGE,
                             G_CALLBACK(_lib_filter_images_order_change), self);

@@ -245,6 +245,7 @@ void gui_init(dt_lib_module_t *self)
   self->widget = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   dt_gui_add_class(self->widget, "lighttable_box");
   gtk_widget_set_halign(self->widget, GTK_ALIGN_END);
+  gtk_widget_set_hexpand(self->widget, FALSE);
 
   // Thumbnail menu
   GtkAccelGroup *accel_group = darktable.gui->accels->lighttable_accels;
@@ -258,7 +259,6 @@ void gui_init(dt_lib_module_t *self)
 
   // dumb empty flexible spacer at the end
   GtkWidget *spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
-  gtk_widget_set_hexpand(spacer, TRUE);
   gtk_box_pack_start(GTK_BOX(self->widget), spacer, TRUE, TRUE, 0);
 
   GtkWidget *label = gtk_label_new(C_("quickfilter", "Columns"));

@@ -248,27 +248,6 @@ static void _colorlabels_execute(GList *imgs, const int labels, GList **undo, co
   }
 }
 
-void dt_colorlabels_set_labels_list(GList *img, const int labels, const gboolean clear_on,
-                                    const gboolean undo_on)
-{
-  if(img)
-  {
-    GList *undo = NULL;
-    if(undo_on) dt_undo_start_group(darktable.undo, DT_UNDO_COLORLABELS);
-
-    _colorlabels_execute(img, labels, &undo, undo_on, clear_on ? DT_CA_SET : DT_CA_ADD);
-
-    if(undo_on)
-    {
-      dt_undo_record(darktable.undo, NULL, DT_UNDO_COLORLABELS, undo, _pop_undo, _colorlabels_undo_data_free);
-      dt_undo_end_group(darktable.undo);
-    }
-    dt_collection_hint_message(darktable.collection);
-    dt_toast_log(_("Color label set to %s for %i image(s)"), dt_colorlabels_get_name(labels), g_list_length(img));
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_INFO_CHANGED, g_list_copy(img));
-  }
-}
-
 void dt_colorlabels_toggle_label_on_list(GList *list, const int color, const gboolean undo_on)
 {
   const int label = 1<<color;

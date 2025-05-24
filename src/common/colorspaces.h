@@ -193,7 +193,6 @@ typedef struct dt_colorspaces_cicp_t
 } dt_colorspaces_cicp_t;
 
 int mat3inv_float(float *const dst, const float *const src);
-int mat3inv_double(double *const dst, const double *const src);
 int mat3inv(float *const dst, const float *const src);
 
 /** populate the global color profile lists */
@@ -213,9 +212,6 @@ cmsHPROFILE dt_colorspaces_create_vendor_profile(const char *makermodel);
 
 /** create a ICC virtual profile from the shipped alternate matrices in darktable. */
 cmsHPROFILE dt_colorspaces_create_alternate_profile(const char *makermodel);
-
-/** just get the associated transformation matrix, for manual application. */
-int dt_colorspaces_get_darktable_matrix(const char *makermodel, float *matrix);
 
 /** return the work profile as set in colorin */
 const dt_colorspaces_color_profile_t *dt_colorspaces_get_work_profile(const int32_t imgid);
@@ -275,8 +271,6 @@ dt_colorspaces_color_profile_type_t dt_colorspaces_cicp_to_type(const dt_colorsp
 /** update the display transforms of srgb and adobergb to the display profile.
  * make sure that darktable.color_profiles->xprofile_lock is held when calling this! */
 void dt_colorspaces_update_display_transforms();
-/** same for display2 */
-void dt_colorspaces_update_display2_transforms();
 
 /** Calculate CAM->XYZ, XYZ->CAM matrices **/
 int dt_colorspaces_conversion_matrices_xyz(const float adobe_XYZ_to_CAM[4][3], float in_XYZ_to_CAM[9], double XYZ_to_CAM[4][3], double CAM_to_XYZ[3][4]);
@@ -285,6 +279,7 @@ int dt_colorspaces_conversion_matrices_xyz(const float adobe_XYZ_to_CAM[4][3], f
 int dt_colorspaces_conversion_matrices_rgb(const float adobe_XYZ_to_CAM[4][3], double RGB_to_CAM[4][3], double CAM_to_RGB[3][4], const float *embedded_matrix, double mul[4]);
 
 /** Applies CYGM WB coeffs to an image that's already been converted to RGB by dt_colorspaces_cygm_to_rgb */
+// FIXME: CRITICAL: why is this function NOT used anywhere ???
 void dt_colorspaces_cygm_apply_coeffs_to_rgb(float *out, const float *in, int num, double RGB_to_CAM[4][3], double CAM_to_RGB[3][4], dt_aligned_pixel_t coeffs);
 
 /** convert CYGM buffer to RGB */

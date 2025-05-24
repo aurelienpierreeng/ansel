@@ -43,11 +43,7 @@ void dt_film_init(dt_film_t *film);
 void dt_film_cleanup(dt_film_t *film);
 /** open film with given id. */
 int dt_film_open(const int32_t id);
-/** open film with given id. */
-int dt_film_open2(dt_film_t *film);
 
-/** open num-th most recently used film. */
-int dt_film_open_recent(const int32_t num);
 /** import new film and all images in this directory as a background task(non-recursive, existing films/images
  * are respected). */
 int dt_film_import(const char *dirname);
@@ -72,4 +68,3 @@ void dt_film_set_folder_status();
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

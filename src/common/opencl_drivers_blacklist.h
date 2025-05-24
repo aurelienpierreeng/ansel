@@ -33,7 +33,7 @@ static const gchar *bad_opencl_drivers[] =
 };
 
 // returns TRUE if blacklisted
-gboolean dt_opencl_check_driver_blacklist(const char *device_version)
+static gboolean dt_opencl_check_driver_blacklist(const char *device_version)
 {
   gchar *device = g_ascii_strdown(device_version, -1);
 

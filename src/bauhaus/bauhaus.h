@@ -156,7 +156,6 @@ typedef struct dt_bauhaus_widget_t
 
   // label text, short
   char label[256];
-  gboolean show_label;
   // callback function to draw the quad icon
   dt_bauhaus_quad_paint_f quad_paint;
   // minimal modifiers for paint function.
@@ -323,7 +322,6 @@ void dt_bauhaus_slider_set_step(GtkWidget *w, float val);
 float dt_bauhaus_slider_get_step(GtkWidget *w);
 
 void dt_bauhaus_slider_set_feedback(GtkWidget *w, int feedback);
-int dt_bauhaus_slider_get_feedback(GtkWidget *w);
 
 void dt_bauhaus_slider_reset(GtkWidget *widget);
 void dt_bauhaus_slider_set_format(GtkWidget *w, const char *format);
@@ -332,7 +330,6 @@ void dt_bauhaus_slider_set_offset(GtkWidget *w, float offset);
 void dt_bauhaus_slider_set_stop(GtkWidget *widget, float stop, float r, float g, float b);
 void dt_bauhaus_slider_clear_stops(GtkWidget *widget);
 void dt_bauhaus_slider_set_default(GtkWidget *widget, float def);
-float dt_bauhaus_slider_get_default(GtkWidget *widget);
 
 // combobox:
 void dt_bauhaus_combobox_from_widget(dt_bauhaus_t *bh, dt_bauhaus_widget_t* widget,dt_gui_module_t *self);
@@ -351,7 +348,6 @@ void dt_bauhaus_combobox_add(GtkWidget *widget, const char *text);
 void dt_bauhaus_combobox_add_aligned(GtkWidget *widget, const char *text, dt_bauhaus_combobox_alignment_t align);
 void dt_bauhaus_combobox_add_full(GtkWidget *widget, const char *text, dt_bauhaus_combobox_alignment_t align,
                                   gpointer data, void (*free_func)(void *data), gboolean sensitive);
-gboolean dt_bauhaus_combobox_set_entry_label(GtkWidget *widget, const int pos, const gchar *label);
 void dt_bauhaus_combobox_set(GtkWidget *w, int pos);
 gboolean dt_bauhaus_combobox_set_from_text(GtkWidget *w, const char *text);
 gboolean dt_bauhaus_combobox_set_from_value(GtkWidget *w, int value);
@@ -370,12 +366,10 @@ const char *dt_bauhaus_combobox_get_entry(GtkWidget *w, int pos);
 gpointer dt_bauhaus_combobox_get_data(GtkWidget *widget);
 void dt_bauhaus_combobox_clear(GtkWidget *w);
 void dt_bauhaus_combobox_set_default(GtkWidget *widget, int def);
-int dt_bauhaus_combobox_get_default(GtkWidget *widget);
 void dt_bauhaus_combobox_add_populate_fct(GtkWidget *widget, void (*fct)(GtkWidget *w, void *module));
 void dt_bauhaus_combobox_add_list(GtkWidget *widget, const char **texts);
 void dt_bauhaus_combobox_entry_set_sensitive(GtkWidget *widget, int pos, gboolean sensitive);
 void dt_bauhaus_combobox_set_entries_ellipsis(GtkWidget *widget, PangoEllipsizeMode ellipis);
-PangoEllipsizeMode dt_bauhaus_combobox_get_entries_ellipsis(GtkWidget *widget);
 
 /* Disable accels for this widget.
 * WARNING: accels are inited when setting the widget label. This function should be called before.
@@ -395,16 +389,6 @@ static inline void set_color(cairo_t *cr, GdkRGBA color)
  * @param widget
  */
 void dt_bauhaus_set_use_default_callback(GtkWidget *widget);
-
-/**
- * @brief Fill all the container's width or keep the widget minimal
- *
- * @param widget
- * @param expand
- */
-void dt_bauhaus_set_expand(GtkWidget *widget, gboolean expand);
-
-void dt_bauhaus_set_show_label(GtkWidget *widget, gboolean show);
 
 #ifdef __cplusplus
 }

@@ -256,7 +256,7 @@ static const char *nvidia_gpus[] = {
 };
 #endif
 
-int dt_nvidia_gpu_supports_sm_20(const char *model)
+static int dt_nvidia_gpu_supports_sm_20(const char *model)
 {
 #ifdef __APPLE__
   // on Mac OSX the OpenCL driver does not seem to support inline asm - even with recent NVIDIA GPUs
@@ -281,4 +281,3 @@ int dt_nvidia_gpu_supports_sm_20(const char *model)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

@@ -622,34 +622,6 @@ gboolean dt_history_check_module_exists(int32_t imgid, const char *operation, gb
   return result;
 }
 
-gboolean dt_history_check_module_exists_list(GList *hist, const char *operation, gboolean enabled)
-{
-  for(GList *h = g_list_first(hist); h; h = g_list_next(h))
-  {
-    const dt_history_item_t *item = (dt_history_item_t *)(h->data);
-
-    if(!g_strcmp0(item->op, operation) && (item->enabled || !enabled))
-      return TRUE;
-  }
-  return FALSE;
-}
-
-#if 0
-// for debug
-static gchar *_hash_history_to_string(guint8 *hash, const gsize checksum_len)
-{
-  char *hash_text = NULL;
-  guint8 *p = hash;
-  for(int i=0; i<checksum_len; i++)
-  {
-    uint8_t byte = p[0];
-    hash_text = dt_util_dstrcat(hash_text, "%02x", byte);
-    p++;
-  }
-  return hash_text;
-}
-#endif
-
 // if the image has no history return 0
 static gsize _history_hash_compute_from_db(const int32_t imgid, guint8 **hash)
 {
@@ -905,6 +877,7 @@ void dt_history_hash_set_mipmap(const int32_t imgid)
   sqlite3_finalize(stmt);
 }
 
+# if 0
 dt_history_hash_t dt_history_hash_get_status(const int32_t imgid)
 {
   dt_history_hash_t status = 0;
@@ -934,6 +907,7 @@ dt_history_hash_t dt_history_hash_get_status(const int32_t imgid)
   g_free(query);
   return status;
 }
+#endif
 
 gboolean dt_history_copy(int32_t imgid)
 {

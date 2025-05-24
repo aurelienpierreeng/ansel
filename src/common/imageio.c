@@ -34,7 +34,6 @@
 #ifdef HAVE_OPENJPEG
 #include "common/imageio_j2k.h"
 #endif
-#include "common/image_compression.h"
 #include "common/imageio_gm.h"
 #include "common/imageio_im.h"
 #include "common/imageio_jpeg.h"
@@ -410,23 +409,6 @@ void dt_imageio_flip_buffers_ui8_to_float(float *out, const uint8_t *in, const f
       out2 += si;
     }
   }
-}
-
-size_t dt_imageio_write_pos(int i, int j, int wd, int ht, float fwd, float fht,
-                            dt_image_orientation_t orientation)
-{
-  int ii = i, jj = j, w = wd, fw = fwd, fh = fht;
-  if(orientation & ORIENTATION_SWAP_XY)
-  {
-    w = ht;
-    ii = j;
-    jj = i;
-    fw = fht;
-    fh = fwd;
-  }
-  if(orientation & ORIENTATION_FLIP_X) ii = (int)fw - ii - 1;
-  if(orientation & ORIENTATION_FLIP_Y) jj = (int)fh - jj - 1;
-  return (size_t)jj * w + ii;
 }
 
 dt_imageio_retval_t dt_imageio_open_hdr(dt_image_t *img, const char *filename, dt_mipmap_buffer_t *buf)

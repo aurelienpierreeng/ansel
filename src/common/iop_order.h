@@ -185,9 +185,7 @@ gboolean dt_ioppr_has_multiple_instances(GList *iop_order_list);
 
 /** returns the iop_order from iop_order_list list with operation = op_name */
 int dt_ioppr_get_iop_order(GList *iop_order_list, const char *op_name, const int multi_priority);
-/** returns TRUE if operation/multi-priority is before base_operation (first in pipe) on the iop-list */
-gboolean dt_ioppr_is_iop_before(GList *iop_order_list, const char *base_operation,
-                                const char *operation, const int multi_priority);
+
 /* write iop-order list for the given image */
 gboolean dt_ioppr_write_iop_order_list(GList *iop_order_list, const int32_t imgid);
 gboolean dt_ioppr_write_iop_order(const dt_iop_order_t kind, GList *iop_order_list, const int32_t imgid);

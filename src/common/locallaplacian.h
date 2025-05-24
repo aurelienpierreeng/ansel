@@ -37,13 +37,15 @@ typedef struct local_laplacian_boundary_t
 }
 local_laplacian_boundary_t;
 
-void local_laplacian_boundary_free(
-    local_laplacian_boundary_t *b)
+#if 0
+// WARNING: CRITICAL: why is this not used anywhere ?
+static void local_laplacian_boundary_free(local_laplacian_boundary_t *b)
 {
   dt_free_align(b->pad0);
   for(int l=0;l<b->num_levels;l++) dt_free_align(b->output[l]);
   memset(b, 0, sizeof(*b));
 }
+#endif
 
 void local_laplacian_internal(
     const float *const input,   // input buffer in some Labx or yuvx format
@@ -100,4 +102,3 @@ void local_laplacian_sse2(
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

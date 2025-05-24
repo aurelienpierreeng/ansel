@@ -449,7 +449,8 @@ popover spinbutton  /* needed to set some margin on overlay popover between it a
 
 /* Default text fields and text boxes */
 entry,
-textview
+textview,
+#top-first-line button#search-button
 {
   padding: 2px;
   min-height: 1em;
@@ -617,6 +618,23 @@ menubar menuitem label
 #top-first-line button:hover
 {
   background-color: @button_hover_bg;
+}
+
+#top-first-line button#search-button
+{
+  padding: 2px 0.7em; /* this need to be kept as pixels for constant sizing and correct display with all font sizes */
+  border: 0;
+  border-radius: 0.21em;
+  background-color: alpha(@fg_color, 0.09);
+  font-weight: 400;
+  margin: 1px 1em 0 1em;
+}
+
+#top-first-line button#search-button label,
+#top-first-line button#search-button image
+{
+  color: @fg_color;
+  opacity: 0.6;
 }
 
 /*---------------------------
@@ -1441,16 +1459,21 @@ filechooser row:hover .sidebar-icon
   margin-right: 1em;
 }
 
-.menu-text-entry {
-  margin: 2px 0;
+.menu-text-entry,
+spinbutton entry {
+  margin: 2px;
   border: 0;
   padding: 0 0.5em;
   background-color: @grey_50;
 }
 
-#quickfilter-search-box,
-#lib-label-colors
-{
+spinbutton button {
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  margin: 2px 1px;
+  min-width: 1.7em;
+  min-height: 1em;
 }
 
 #lib-label-colors .dt_module_btn

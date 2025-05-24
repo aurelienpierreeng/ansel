@@ -692,15 +692,6 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   dt_show_times_f(&start, "[dt_dev_pixelpipe_change] pipeline resync on the current modules stack", "for pipe %i", pipe->type);
 }
 
-// TODO:
-void dt_dev_pixelpipe_add_node(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int n)
-{
-}
-// TODO:
-void dt_dev_pixelpipe_remove_node(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int n)
-{
-}
-
 static void get_output_format(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
                               dt_develop_t *dev, dt_iop_buffer_dsc_t *dsc)
 {
@@ -2492,7 +2483,7 @@ restart:;
 
   // terminate
   dt_dev_pixelpipe_cache_print(darktable.pixelpipe_cache);
-  
+
   // If an intermediate module set that, be sure to reset it at the end
   pipe->flush_cache = FALSE;
 

@@ -264,22 +264,6 @@ void *dt_control_expose(void *voidptr)
   return NULL;
 }
 
-gboolean dt_control_draw_endmarker(GtkWidget *widget, cairo_t *crf, gpointer user_data)
-{
-  GtkAllocation allocation;
-  gtk_widget_get_allocation(widget, &allocation);
-  const int width = allocation.width;
-  const int height = allocation.height;
-  cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
-  cairo_t *cr = cairo_create(cst);
-  dt_draw_endmarker(cr, width, height, GPOINTER_TO_INT(user_data));
-  cairo_destroy(cr);
-  cairo_set_source_surface(crf, cst, 0, 0);
-  cairo_paint(crf);
-  cairo_surface_destroy(cst);
-  return TRUE;
-}
-
 void dt_control_mouse_leave()
 {
   dt_view_manager_mouse_leave(darktable.view_manager);

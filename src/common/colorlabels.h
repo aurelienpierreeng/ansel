@@ -27,9 +27,6 @@ void dt_colorlabels_remove_labels(const int32_t imgid);
 void dt_colorlabels_set_label(const int32_t imgid, const int color);
 /** save all assigned color labels from cached dt_image_t to database */
 void dt_colorlabels_set_labels(const int32_t imgid, const int colors);
-/** assign a color label to a list of imgid */
-void dt_colorlabels_set_labels_list(GList *img, const int color, const gboolean clear_on,
-                                    const gboolean undo_on);
 /** assign a color label to the list of image*/
 void dt_colorlabels_toggle_label_on_list(GList *list, const int color, const gboolean undo_on);
 /** remove a color label from imgid */

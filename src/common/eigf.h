@@ -187,10 +187,9 @@ dt_omp_firstprivate(out, Ndim) \
   dt_free_align(in);
 }
 
-void eigf_blending(float *const restrict image, const float *const restrict mask,
-                  const float *const restrict av, const size_t Ndim,
-                  const dt_iop_guided_filter_blending_t filter,
-                  const float feathering)
+static inline void eigf_blending(float *const restrict image, const float *const restrict mask,
+                                 const float *const restrict av, const size_t Ndim,
+                                 const dt_iop_guided_filter_blending_t filter, const float feathering)
 {
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
@@ -224,10 +223,9 @@ void eigf_blending(float *const restrict image, const float *const restrict mask
 
 // same function as above, but specialized for the case where guide == mask
 // for increased performance
-void eigf_blending_no_mask(float *const restrict image,
-                  const float *const restrict av, const size_t Ndim,
-                  const dt_iop_guided_filter_blending_t filter,
-                  const float feathering)
+static inline void eigf_blending_no_mask(float *const restrict image, const float *const restrict av,
+                                         const size_t Ndim, const dt_iop_guided_filter_blending_t filter,
+                                         const float feathering)
 {
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
@@ -334,4 +332,3 @@ clean:
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

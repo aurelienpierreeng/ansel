@@ -351,8 +351,6 @@ static inline int dt_masks_get_mask_roi(const dt_iop_module_t *const module, con
   return form->functions ? form->functions->get_mask_roi(module, piece, form, roi, buffer) : 0;
 }
 
-int dt_masks_group_render(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
-                          float **buffer, int *roi, float scale);
 int dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
                               const dt_iop_roi_t *roi, float *buffer);
 
@@ -422,7 +420,6 @@ void dt_masks_group_ungroup(dt_masks_form_t *dest_grp, dt_masks_form_t *grp);
 void dt_masks_group_update_name(dt_iop_module_t *module);
 dt_masks_point_group_t *dt_masks_group_add_form(dt_masks_form_t *grp, dt_masks_form_t *form);
 
-void dt_masks_iop_edit_toggle_callback(GtkToggleButton *togglebutton, struct dt_iop_module_t *module);
 void dt_masks_iop_value_changed_callback(GtkWidget *widget, struct dt_iop_module_t *module);
 dt_masks_edit_mode_t dt_masks_get_edit_mode(struct dt_iop_module_t *module);
 void dt_masks_set_edit_mode(struct dt_iop_module_t *module, dt_masks_edit_mode_t value);
@@ -458,7 +455,6 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mas
                                          float *py, const int adding);
 
 /** Getters and setters for direct GUI interaction */
-int dt_masks_get_parent_id(dt_masks_form_gui_t *gui, const dt_masks_form_t *form);
 float dt_masks_form_get_opacity(dt_masks_form_t *form, int parentid);
 int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity, dt_masks_increment_t offset);
 
@@ -483,13 +479,6 @@ void dt_masks_blur_9x9(float *const src, float *const out, const int width, cons
 void dt_masks_calc_rawdetail_mask(float *const src, float *const out, float *const tmp, const int width,
                                   const int height, const dt_aligned_pixel_t wb);
 void dt_masks_calc_detail_mask(float *const src, float *const out, float *const tmp, const int width, const int height, const float threshold, const gboolean detail);
-
-void dt_masks_blur_approx_weighed(float *const src, float *const out, float *const weight, const int width, const int height);
-
-/** the output data are blurred-val * gain and are clipped to be within 0 to clip
-    The returned int might be used to expand the border as this depends on sigma */
-int dt_masks_blur_fast(float *const src, float *const out, const int width, const int height, const float sigma, const float gain, const float clip);
-
 
 void dt_group_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
                                  dt_masks_form_gui_t *gui);
@@ -517,8 +506,7 @@ static inline gboolean _dt_masks_dynbuf_growto(dt_masks_dynbuf_t *a, size_t size
   return TRUE;
 }
 
-static inline
-dt_masks_dynbuf_t *dt_masks_dynbuf_init(size_t size, const char *tag)
+static inline dt_masks_dynbuf_t *dt_masks_dynbuf_init(size_t size, const char *tag)
 {
   assert(size > 0);
   dt_masks_dynbuf_t *a = (dt_masks_dynbuf_t *)calloc(1, sizeof(dt_masks_dynbuf_t));
@@ -539,21 +527,7 @@ dt_masks_dynbuf_t *dt_masks_dynbuf_init(size_t size, const char *tag)
   return a;
 }
 
-static inline
-void dt_masks_dynbuf_add(dt_masks_dynbuf_t *a, float value)
-{
-  assert(a != NULL);
-  assert(a->pos <= a->size);
-  if(__builtin_expect(a->pos == a->size, 0))
-  {
-    if (a->size == 0 || !_dt_masks_dynbuf_growto(a, 2 * a->size))
-      return;
-  }
-  a->buffer[a->pos++] = value;
-}
-
-static inline
-void dt_masks_dynbuf_add_2(dt_masks_dynbuf_t *a, float value1, float value2)
+static inline void dt_masks_dynbuf_add_2(dt_masks_dynbuf_t *a, float value1, float value2)
 {
   assert(a != NULL);
   assert(a->pos <= a->size);
@@ -568,8 +542,7 @@ void dt_masks_dynbuf_add_2(dt_masks_dynbuf_t *a, float value1, float value2)
 
 // Return a pointer to N floats past the current end of the dynbuf's contents, marking them as already in use.
 // The caller should then fill in the reserved elements using the returned pointer.
-static inline
-float *dt_masks_dynbuf_reserve_n(dt_masks_dynbuf_t *a, const int n)
+static inline float *dt_masks_dynbuf_reserve_n(dt_masks_dynbuf_t *a, const int n)
 {
   assert(a != NULL);
   assert(a->pos <= a->size);
@@ -589,8 +562,7 @@ float *dt_masks_dynbuf_reserve_n(dt_masks_dynbuf_t *a, const int n)
   return reserved;
 }
 
-static inline
-void dt_masks_dynbuf_add_zeros(dt_masks_dynbuf_t *a, const int n)
+static inline void dt_masks_dynbuf_add_zeros(dt_masks_dynbuf_t *a, const int n)
 {
   assert(a != NULL);
   assert(a->pos <= a->size);
@@ -610,8 +582,7 @@ void dt_masks_dynbuf_add_zeros(dt_masks_dynbuf_t *a, const int n)
 }
 
 
-static inline
-float dt_masks_dynbuf_get(dt_masks_dynbuf_t *a, int offset)
+static inline float dt_masks_dynbuf_get(dt_masks_dynbuf_t *a, int offset)
 {
   assert(a != NULL);
   // offset: must be negative distance relative to end of buffer
@@ -620,8 +591,7 @@ float dt_masks_dynbuf_get(dt_masks_dynbuf_t *a, int offset)
   return (a->buffer[a->pos + offset]);
 }
 
-static inline
-void dt_masks_dynbuf_set(dt_masks_dynbuf_t *a, int offset, float value)
+static inline void dt_masks_dynbuf_set(dt_masks_dynbuf_t *a, int offset, float value)
 {
   assert(a != NULL);
   // offset: must be negative distance relative to end of buffer
@@ -630,29 +600,25 @@ void dt_masks_dynbuf_set(dt_masks_dynbuf_t *a, int offset, float value)
   a->buffer[a->pos + offset] = value;
 }
 
-static inline
-float *dt_masks_dynbuf_buffer(dt_masks_dynbuf_t *a)
+static inline float *dt_masks_dynbuf_buffer(dt_masks_dynbuf_t *a)
 {
   assert(a != NULL);
   return a->buffer;
 }
 
-static inline
-size_t dt_masks_dynbuf_position(dt_masks_dynbuf_t *a)
+static inline size_t dt_masks_dynbuf_position(dt_masks_dynbuf_t *a)
 {
   assert(a != NULL);
   return a->pos;
 }
 
-static inline
-void dt_masks_dynbuf_reset(dt_masks_dynbuf_t *a)
+static inline void dt_masks_dynbuf_reset(dt_masks_dynbuf_t *a)
 {
   assert(a != NULL);
   a->pos = 0;
 }
 
-static inline
-float *dt_masks_dynbuf_harvest(dt_masks_dynbuf_t *a)
+static inline float *dt_masks_dynbuf_harvest(dt_masks_dynbuf_t *a)
 {
   // take out data buffer and make dynamic buffer obsolete
   if(a == NULL) return NULL;
@@ -662,8 +628,7 @@ float *dt_masks_dynbuf_harvest(dt_masks_dynbuf_t *a)
   return r;
 }
 
-static inline
-void dt_masks_dynbuf_free(dt_masks_dynbuf_t *a)
+static inline void dt_masks_dynbuf_free(dt_masks_dynbuf_t *a)
 {
   if(a == NULL) return;
   dt_print(DT_DEBUG_MASKS, "[masks dynbuf '%s'] freed (was %p)\n", a->tag,
@@ -672,8 +637,7 @@ void dt_masks_dynbuf_free(dt_masks_dynbuf_t *a)
   free(a);
 }
 
-static inline
-int dt_masks_roundup(int num, int mult)
+static inline int dt_masks_roundup(int num, int mult)
 {
   const int rem = num % mult;
 

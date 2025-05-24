@@ -3,9 +3,8 @@
 @@ -101,7 +101,7 @@
  	return 0;
  }
- 
+
 -#if defined(DEFAULT_TRUST_STORE_FILE) || (defined(DEFAULT_TRUST_STORE_PKCS11) && defined(ENABLE_PKCS11))
 +#if 0
- static
- int
+ static  int
  add_system_trust(gnutls_x509_trust_list_t list,

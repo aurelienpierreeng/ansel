@@ -165,20 +165,6 @@ static int usage(const char *argv0)
   return 1;
 }
 
-gboolean dt_is_dev_version()
-{
-  // a dev version as an odd number after the first dot
-  char *p = (char *)darktable_package_string;
-  while(*p && (*p != '.')) p++;
-  if(p && (*p != '\0'))
-  {
-    p++;
-    const int val = *p - '0';
-    return val % 2 == 0 ? FALSE : TRUE;
-  }
-  return FALSE;
-}
-
 char *dt_version_major_minor()
 {
   char ver[100] = { 0 };
@@ -1315,6 +1301,9 @@ void dt_cleanup()
     dt_accels_cleanup(darktable.gui->accels);
     free(darktable.gui);
   }
+
+  dt_collection_free(darktable.collection);
+  dt_selection_free(darktable.selection);
 
   dt_dev_pixelpipe_cache_cleanup(darktable.pixelpipe_cache);
 

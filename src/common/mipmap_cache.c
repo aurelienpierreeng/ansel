@@ -702,6 +702,7 @@ void dt_mipmap_cache_init(dt_mipmap_cache_t *cache)
 
 void dt_mipmap_cache_cleanup(dt_mipmap_cache_t *cache)
 {
+  dt_mipmap_cache_print(cache);
   dt_cache_cleanup(&cache->mip_thumbs.cache);
   dt_cache_cleanup(&cache->mip_full.cache);
   dt_cache_cleanup(&cache->mip_f.cache);
@@ -1007,13 +1008,6 @@ void dt_mipmap_cache_remove(dt_mipmap_cache_t *cache, const int32_t imgid, const
 {
   for(dt_mipmap_size_t k = DT_MIPMAP_0; k < DT_MIPMAP_F; k++)
     dt_mipmap_cache_remove_at_size(cache, imgid, k, flush_disk);
-}
-
-// write thumbnail to disc if not existing there
-void dt_mipmap_cache_evict_at_size(dt_mipmap_cache_t *cache, const int32_t imgid, const dt_mipmap_size_t mip)
-{
-  const uint32_t key = get_key(imgid, mip);
-  dt_cache_remove(&_get_cache(cache, mip)->cache, key);
 }
 
 // write thumbnail to disc if not existing there

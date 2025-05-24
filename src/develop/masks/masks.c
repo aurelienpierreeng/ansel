@@ -1268,21 +1268,6 @@ void dt_masks_set_edit_mode(struct dt_iop_module_t *module, dt_masks_edit_mode_t
   dt_control_queue_redraw_center();
 }
 
-void dt_masks_iop_edit_toggle_callback(GtkToggleButton *togglebutton, dt_iop_module_t *module)
-{
-  if(!module) return;
-  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
-  if(module->blend_params->mask_id == 0)
-  {
-    bd->masks_shown = DT_MASKS_EDIT_OFF;
-    return;
-  }
-
-  // reset the gui
-  dt_masks_set_edit_mode(module,
-                         (bd->masks_shown == DT_MASKS_EDIT_OFF ? DT_MASKS_EDIT_FULL : DT_MASKS_EDIT_OFF));
-}
-
 static void _menu_no_masks(struct dt_iop_module_t *module)
 {
   // we drop all the forms in the iop

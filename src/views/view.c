@@ -905,12 +905,6 @@ dt_darkroom_layout_t dt_view_darkroom_get_layout(dt_view_manager_t *vm)
     return DT_DARKROOM_LAYOUT_EDITING;
 }
 
-void dt_view_collection_update(const dt_view_manager_t *vm)
-{
-  if(vm->proxy.module_collect.module)
-    vm->proxy.module_collect.update(vm->proxy.module_collect.module);
-}
-
 #ifdef HAVE_MAP
 void dt_view_map_center_on_location(const dt_view_manager_t *vm, gdouble lon, gdouble lat, gdouble zoom)
 {

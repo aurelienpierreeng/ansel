@@ -861,17 +861,6 @@ static dt_dev_proxy_exposure_t *find_last_exposure_instance(dt_develop_t *dev)
   return instance;
 };
 
-gboolean dt_dev_exposure_hooks_available(dt_develop_t *dev)
-{
-  dt_dev_proxy_exposure_t *instance = find_last_exposure_instance(dev);
-
-  /* check if exposure iop module has registered its hooks */
-  if(instance && instance->module && instance->get_black && instance->get_exposure)
-    return TRUE;
-
-  return FALSE;
-}
-
 float dt_dev_exposure_get_exposure(dt_develop_t *dev)
 {
   dt_dev_proxy_exposure_t *instance = find_last_exposure_instance(dev);

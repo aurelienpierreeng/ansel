@@ -1120,7 +1120,7 @@ static const char *sql_lines[] = {
 };
 static const int num_sql_lines = 99;
 
-void dt_legacy_presets_create(const struct dt_database_t *db)
+static void dt_legacy_presets_create(const struct dt_database_t *db)
 {
   // a bit stupid, deletes and re-inserts every time :(
   for(int i = 0; i < num_sql_lines; i++)
@@ -1132,4 +1132,3 @@ void dt_legacy_presets_create(const struct dt_database_t *db)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

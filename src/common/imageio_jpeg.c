@@ -261,6 +261,7 @@ int dt_imageio_jpeg_decompress(dt_imageio_jpeg_t *jpg, uint8_t *out)
   return 0;
 }
 
+// TODO: find out why this function is not used anymore. Where do we compress ???
 int dt_imageio_jpeg_compress(const uint8_t *in, uint8_t *out, const int width, const int height,
                              const int quality)
 {

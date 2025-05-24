@@ -904,8 +904,7 @@ static inline void display_luminance_mask(const float *const restrict in,
 
 
 __DT_CLONE_TARGETS__
-static
-void toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+static void toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
              const void *const restrict ivoid, void *const restrict ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {

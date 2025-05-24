@@ -38,7 +38,6 @@
 #include "dtgtk/button.h"
 
 #include "gui/draw.h"
-#include "gui/import_metadata.h"
 #include "gui/preferences.h"
 #include "gui/gtkentry.h"
 

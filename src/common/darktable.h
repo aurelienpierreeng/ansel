@@ -117,8 +117,6 @@ static inline int dt_version()
 #endif
 }
 
-// returns true if the running darktable corresponds to a dev version
-gboolean dt_is_dev_version();
 // returns the darktable version as <major>.<minor>
 char *dt_version_major_minor();
 

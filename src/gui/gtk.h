@@ -193,7 +193,6 @@ void dt_gui_remove_class(GtkWidget *widget, const gchar *class_name);
 
 int dt_gui_gtk_init(dt_gui_gtk_t *gui);
 void dt_gui_gtk_run(dt_gui_gtk_t *gui);
-void dt_gui_gtk_cleanup(dt_gui_gtk_t *gui);
 void dt_gui_gtk_quit();
 void dt_gui_store_last_preset(const char *name);
 int dt_gui_gtk_write_config();
@@ -315,9 +314,6 @@ gboolean dt_gui_show_standalone_yes_no_dialog(const char *title, const char *mar
 // similar to the one above. this one asks the user for some string. the hint is shown in the empty entry box
 char *dt_gui_show_standalone_string_dialog(const char *title, const char *markup, const char *placeholder,
                                            const char *no_text, const char *yes_text);
-
-void *dt_gui_show_splashscreen();
-void dt_gui_close_splashscreen(void *splashscreen);
 
 void dt_gui_add_help_link(GtkWidget *widget, const char *link);
 

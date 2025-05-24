@@ -27,3 +27,5 @@ AppDir
 appimage-build
 linuxdeploy-plugin-gtk.sh
 src/tests/integration/*/*
+tools/detect-unused-functions.py
+function_declarations.txt

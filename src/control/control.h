@@ -48,7 +48,6 @@ typedef GdkCursorType dt_cursor_t;
 
 // called from gui
 void *dt_control_expose(void *voidptr);
-gboolean dt_control_draw_endmarker(GtkWidget *widget, cairo_t *crf, gpointer user_data);
 void dt_control_button_pressed(double x, double y, double pressure, int which, int type, uint32_t state);
 void dt_control_button_released(double x, double y, int which, uint32_t state);
 void dt_control_mouse_moved(double x, double y, double pressure, int which);
@@ -257,19 +256,6 @@ void dt_control_set_dev_closeup(int value);
 
 dt_dev_zoom_t dt_control_get_dev_zoom();
 void dt_control_set_dev_zoom(dt_dev_zoom_t value);
-
-static inline int32_t dt_ctl_get_num_procs()
-{
-#ifdef _OPENMP
-  return omp_get_num_procs();
-#else
-#ifdef _SC_NPROCESSORS_ONLN
-  return sysconf(_SC_NPROCESSORS_ONLN);
-#else
-  return 1;
-#endif
-#endif
-}
 
 #ifdef __cplusplus
 }
