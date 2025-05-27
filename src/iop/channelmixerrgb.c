@@ -3350,8 +3350,7 @@ void update_colorchecker_list(dt_iop_module_t *self)
   if(!g) return;
 
   // clear and refill the colorchecker list
-  g_list_free_full(g->colorcheckers, dt_colorchecker_label_cleanup);
-  g->colorcheckers = NULL;
+  dt_colorchecker_label_list_cleanup(&(g->colorcheckers));
 
   g->n_colorcheckers = 0;
 
@@ -4292,13 +4291,8 @@ void gui_cleanup(struct dt_iop_module_t *self)
 
   g_free(g->delta_E_label_text);
 
-  while(g->colorcheckers)
-  {
-    dt_colorchecker_label_cleanup(g->colorcheckers->data);
-    g->colorcheckers = g_list_delete_link(g->colorcheckers, g->colorcheckers);
-  }
-
-  dt_color_checker_cleanup(g->colorcheckers);
+  dt_colorchecker_label_list_cleanup(&(g->colorcheckers));
+  dt_color_checker_cleanup(g->checker);
 
   IOP_GUI_FREE;
 }

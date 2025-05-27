@@ -134,7 +134,7 @@ FILE(GLOB SOURCE_FILES
   "develop/tiling.c"
   "common/dwt.c"
   "common/heal.c"
-  "common/colorchecker_CGATS.c"
+  "common/colorchecker.c"
   "develop/masks/brush.c"
   "develop/masks/circle.c"
   "develop/masks/group.c"
