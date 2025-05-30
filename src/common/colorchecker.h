@@ -369,19 +369,43 @@ typedef struct dt_colorchecker_label_t
   gchar *path;
 } dt_colorchecker_label_t;
 
-// Add other type of a CGATS.17 here
+// Add other supported type of CGATS here
 typedef enum dt_colorchecker_CGATS_types
 {
   CGATS_TYPE_IT8_7_1,
-  CGATS_TYPE_CGATS_17,
-  CGATS_TYPE_LAST
+  CGATS_TYPE_IT8_7_2,
+  CGATS_TYPE_UNKOWN
 } dt_colorchecker_CGATS_types;
 
-const char *CGATS_types[CGATS_TYPE_LAST] = { "IT8.7/1", "CGATS.17" };
+const char *CGATS_types[CGATS_TYPE_UNKOWN] = {
+  "IT8.7/1", // transparent 
+  "IT8.7/2"  // opaque
+};
+
+typedef enum dt_colorchecker_material_types
+{
+  COLOR_CHECKER_MATERIAL_TRANSPARENT,
+  COLOR_CHECKER_MATERIAL_OPAQUE,
+  COLOR_CHECKER_MATERIAL_UNKNOWN
+} dt_colorchecker_material_types;
+
+const char *colorchecker_material_types[COLOR_CHECKER_MATERIAL_UNKNOWN] = {
+  "Transparent",
+  "Opaque"
+};
+
+typedef struct dt_colorchecker_CGATS_label_name_t 
+{
+  const char *type;
+  const char *originator;
+  const char *date; // date in format 'Mon YYYY'
+  const char *material;
+} dt_colorchecker_CGATS_label_name_t;
 
 // This defines charts specifications
 typedef struct dt_colorchecker_CGATS_spec_t
 {
+  const gchar *type;
   float radius;
   float ratio;
   size_t size[2];
@@ -389,6 +413,7 @@ typedef struct dt_colorchecker_CGATS_spec_t
   size_t white;
   size_t black;
 
+  int patches; // total number of patches
   int colums;
   int rows;
   float patch_width;
@@ -397,22 +422,8 @@ typedef struct dt_colorchecker_CGATS_spec_t
   float patch_offset_y;
 } dt_colorchecker_CGATS_spec_t;
 
-// this type exist, but I don't know values to put yet
-const dt_colorchecker_CGATS_spec_t CGATS_17 = {
-  .radius = 0.f,
-  .ratio = 1.f / 2.f,
-  .size = { 0, 0 },
-  .middle_grey = 0,
-  .white = 0,
-  .black = 0,
-  .colums = 0,
-  .rows = 0,
-  .patch_width = 0.f,
-  .patch_height = 0.f,
-  .patch_offset_x = 0.f,
-  .patch_offset_y = 0.f };
-
-const dt_colorchecker_CGATS_spec_t IT8_7_1 = {
+const dt_colorchecker_CGATS_spec_t IT8_7 = {
+  .type = "IT8",
   .radius = 0.0189f,
   .ratio = 13.f / 23.f,
   .size = { 23, 13 },
@@ -420,6 +431,7 @@ const dt_colorchecker_CGATS_spec_t IT8_7_1 = {
   .white = 263,       // Dmin or GS0
   .black = 287,       // Dmax or GS23
 
+  .patches = 288,     // as specified in IT8.7/1 and IT8.7/2
   .colums = 22,
   .rows = 12,
   .patch_width = 0.04255f,   // 1.0f / (cols + 1.5f)
@@ -511,13 +523,13 @@ int dt_colorchecker_find_builtin(GList **colorcheckers_label);
 const dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets target_type,
                                                GList **colorchecker_label)
 {
-  fprintf(stdout, "dt_get_color_checker: colorchecker type %i.\n", target_type);
+  dt_print(DT_DEBUG_VERBOSE, _("dt_get_color_checker: colorchecker type %i.\n"), target_type);
 
   dt_color_checker_targets nth_checker = COLOR_CHECKER_LAST;
-  dt_colorchecker_label_t *label_data = NULL;
+  const dt_colorchecker_label_t *label_data = NULL;
   if(target_type >= COLOR_CHECKER_USER_REF && colorchecker_label != NULL && *colorchecker_label != NULL)
   {
-    fprintf(stdout, "dt_get_color_checker: colorchecker type %i is a user reference.\n", target_type);
+    dt_print(DT_DEBUG_VERBOSE, _("dt_get_color_checker: colorchecker type %i is a user reference.\n"), target_type);
 
     // Get the label data from the list
     label_data = g_list_nth_data(*colorchecker_label, target_type);
@@ -549,6 +561,7 @@ const dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets ta
     case COLOR_CHECKER_USER_REF:
       if(label_data)
         return dt_colorchecker_user_ref_create(label_data->path);
+      break;
       
     case COLOR_CHECKER_LAST:
       fprintf(stderr, "dt_get_color_checker: colorchecker type %i not found!\n", target_type);
@@ -611,10 +624,10 @@ static inline const dt_color_checker_patch *dt_color_checker_get_patch_by_name(c
 int dt_colorchecker_find(GList **colorcheckers_label)
 {
   int total = dt_colorchecker_find_builtin(colorcheckers_label);
-  fprintf(stdout, "dt_colorchecker_find: found %d builtin colorcheckers\n", total);
+  dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find: found %d builtin colorcheckers\n"), total);
   int b_nb = total;
   total += dt_colorchecker_find_CGAT_reference_files(colorcheckers_label);
-  fprintf(stdout, "dt_colorchecker_find: found %d CGAT references files\n", total - b_nb);
+  dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find: found %d CGAT references files\n"), total - b_nb);
   return total;
 }
 
