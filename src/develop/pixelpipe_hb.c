@@ -930,87 +930,6 @@ static void pixelpipe_picker(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *pi
   }
 }
 
-
-#ifdef HAVE_OPENCL
-// helper for OpenCL color picking
-//
-// this algorithm is inefficient as hell when it comes to larger images. it's only acceptable
-// as long as we work on small image sizes like in image preview
-static void pixelpipe_picker_cl(int devid, dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
-                                dt_iop_buffer_dsc_t *dsc, cl_mem img, const dt_iop_roi_t *roi,
-                                float *picked_color, float *picked_color_min, float *picked_color_max,
-                                float *buffer, size_t bufsize, const dt_iop_colorspace_type_t image_cst,
-                                dt_pixelpipe_picker_source_t picker_source)
-{
-  int box[4] = { 0 };
-
-  if(pixelpipe_picker_helper(module, roi, picked_color, picked_color_min, picked_color_max, picker_source, box))
-  {
-    for(int k = 0; k < 4; k++)
-    {
-      picked_color_min[k] = INFINITY;
-      picked_color_max[k] = -INFINITY;
-      picked_color[k] = 0.0f;
-    }
-
-    return;
-  }
-
-  const size_t origin[3] = { box[0], box[1], 0 };
-  const size_t region[3] = { box[2] - box[0], box[3] - box[1], 1 };
-
-  float *pixel = NULL;
-  float *tmpbuf = NULL;
-
-  const size_t size = region[0] * region[1];
-
-  const size_t bpp = dt_iop_buffer_dsc_to_bpp(dsc);
-
-  // if a buffer is supplied and if size fits let's use it
-  if(buffer && bufsize >= size * bpp)
-    pixel = buffer;
-  else
-    pixel = tmpbuf = dt_alloc_align(size * bpp);
-
-  if(pixel == NULL) return;
-
-  // get the required part of the image from opencl device
-  cl_int err = dt_opencl_read_host_from_device_raw(devid, pixel, img, origin, region, region[0] * bpp, CL_TRUE);
-
-  if(err != CL_SUCCESS) goto error;
-
-  dt_iop_roi_t roi_copy = (dt_iop_roi_t){.x = roi->x + box[0], .y = roi->y + box[1], .width = region[0], .height = region[1] };
-
-  box[0] = 0;
-  box[1] = 0;
-  box[2] = region[0];
-  box[3] = region[1];
-
-  dt_aligned_pixel_t min, max, avg;
-  for(int k = 0; k < 4; k++)
-  {
-    min[k] = INFINITY;
-    max[k] = -INFINITY;
-    avg[k] = 0.0f;
-  }
-
-  const dt_iop_order_iccprofile_info_t *const profile = dt_ioppr_get_pipe_current_profile_info(module, piece->pipe);
-  dt_color_picker_helper(dsc, pixel, &roi_copy, box, avg, min, max, image_cst,
-                         dt_iop_color_picker_get_active_cst(module), profile);
-
-  for(int k = 0; k < 4; k++)
-  {
-    picked_color_min[k] = min[k];
-    picked_color_max[k] = max[k];
-    picked_color[k] = avg[k];
-  }
-
-error:
-  dt_free_align(tmpbuf);
-}
-#endif
-
-
 // returns 1 if blend process need the module default colorspace
 static gboolean _transform_for_blend(const dt_iop_module_t *const self, const dt_dev_pixelpipe_iop_t *const piece)
 {
@@ -1394,40 +1313,6 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
 
     // and save the output colorspace
     pipe->dsc.cst = module->output_colorspace(module, pipe, piece);
-
-    // Lab color picking for module
-    if(_request_color_pick(pipe, dev, module))
-    {
-      // ensure that we are using the right color space
-      dt_iop_colorspace_type_t picker_cst = _transform_for_picker(module, pipe->dsc.cst);
-      success_opencl &= dt_ioppr_transform_image_colorspace_cl(
-          module, piece->pipe->devid, cl_mem_input, cl_mem_input, roi_in->width, roi_in->height,
-          input_cst_cl, picker_cst, &input_cst_cl, work_profile);
-      success_opencl &= dt_ioppr_transform_image_colorspace_cl(
-          module, piece->pipe->devid, *cl_mem_output, *cl_mem_output, roi_out->width, roi_out->height,
-          pipe->dsc.cst, picker_cst, &pipe->dsc.cst, work_profile);
-
-      if(!success_opencl)
-      {
-        dt_print(DT_DEBUG_OPENCL, "[opencl_pixelpipe] couldn't transform color-picker colorspace for module %s\n",
-                  module->op);
-        goto error;
-      }
-
-      // we abuse the empty output buffer on host for intermediate storage of data in
-      // pixelpipe_picker_cl()
-      const size_t outbufsize = bpp * roi_out->width * roi_out->height;
-
-      pixelpipe_picker_cl(pipe->devid, module, piece, &piece->dsc_in, cl_mem_input, roi_in,
-                          module->picked_color, module->picked_color_min, module->picked_color_max,
-                          *output, outbufsize, input_cst_cl, PIXELPIPE_PICKER_INPUT);
-      pixelpipe_picker_cl(pipe->devid, module, piece, &pipe->dsc, (*cl_mem_output), roi_out,
-                          module->picked_output_color, module->picked_output_color_min,
-                          module->picked_output_color_max, *output, outbufsize, pipe->dsc.cst,
-                          PIXELPIPE_PICKER_OUTPUT);
-
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PICKERDATA_READY, module, piece);
-    }
 
     // blend needs input/output images with default colorspace
     if(_transform_for_blend(module, piece))
