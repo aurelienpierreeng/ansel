@@ -126,11 +126,7 @@ void dt_iop_color_picker_reset(dt_iop_module_t *module, gboolean keep)
     {
       _color_picker_reset(picker);
       darktable.lib->proxy.colorpicker.picker_proxy = NULL;
-      if(module)
-      {
-        module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
-        dt_iop_set_cache_bypass(module, FALSE);
-      }
+      if(module) module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
     }
   }
 }
@@ -166,11 +162,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
   if(prior_picker && prior_picker != self)
   {
     _color_picker_reset(prior_picker);
-    if(prior_picker->module)
-    {
-      prior_picker->module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
-      dt_iop_set_cache_bypass(prior_picker->module, FALSE);
-    }
+    if(prior_picker->module) prior_picker->module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
   }
 
   if(module && module->off)
@@ -185,11 +177,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
   {
     darktable.lib->proxy.colorpicker.picker_proxy = self;
 
-    if(module)
-    {
-      module->request_color_pick = DT_REQUEST_COLORPICK_MODULE;
-      dt_iop_set_cache_bypass(module, TRUE);
-    }
+    if(module) module->request_color_pick = DT_REQUEST_COLORPICK_MODULE;
 
     if(kind == DT_COLOR_PICKER_POINT_AREA)
     {
@@ -226,7 +214,6 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     if(module)
     {
       module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
-      dt_iop_set_cache_bypass(module, FALSE);
       // will turn off live sample button
       darktable.lib->proxy.colorpicker.update_panel(darktable.lib->proxy.colorpicker.module);
     }
