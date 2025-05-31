@@ -1612,7 +1612,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   _gpu_clear_buffer(&cl_mem_input);
 
   // Wait for kernels and copies to complete before accessing the cache again and releasing the locks
-  dt_opencl_events_wait_for(pipe->devid);
+  dt_opencl_finish(pipe->devid);
 
   // don't free cl_mem_output here, as it will be the input for the next module
   // the last module in the pipe will need to be freed by the pipeline process function
@@ -1822,30 +1822,6 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
   return err;
 }
 
-static int _process_masks_preview(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_dev_pixelpipe_iop_t *piece,
-                                  void *input, void **output,
-                                  void *cl_mem_input, void **cl_mem_output, dt_iop_buffer_dsc_t **out_format,
-                                  const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
-                                  const size_t in_bpp, const size_t out_bpp, dt_iop_module_t *module)
-{
-  // special case: user requests to see channel data in the parametric mask of a module, or the blending
-  // mask. In that case we skip all modules manipulating pixel content and only process image distorting
-  // modules. Finally "gamma" is responsible for displaying channel/mask data accordingly.
-  if(strcmp(module->op, "gamma") != 0
-     && (pipe->mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE)
-     && !(module->operation_tags() & IOP_TAG_DISTORT)
-     && (in_bpp == out_bpp)
-     && !memcmp(roi_in, roi_out, sizeof(struct dt_iop_roi_t)))
-  {
-    // since we're not actually running the module, the output format is the same as the input format
-    //**out_format = pipe->dsc = piece->dsc_out = piece->dsc_in;
-    *output = input;
-    return 0;
-  }
-
-  return 1;
-}
-
 
 // recursive helper for process:
 static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void **output,
@@ -1945,11 +1921,20 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   // 3c) actually process this module BUT treat all bypasses first.
 
-  // Bypass processing and caching, and return early if we only want the pipe to display mask previews.
-  // Note: this references the input buffer as *output, no alloc, no copy, no color space conversion.
-  if(!_process_masks_preview(pipe, dev, piece, input, output, cl_mem_input, cl_mem_output, out_format, &roi_in, roi_out,
-                         in_bpp, out_bpp, module))
+  // special case: user requests to see channel data in the parametric mask of a module, or the blending
+  // mask. In that case we skip all modules manipulating pixel content and only process image distorting
+  // modules. Finally "gamma" is responsible for displaying channel/mask data accordingly.
+  if(strcmp(module->op, "gamma") != 0
+     && (pipe->mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE)
+     && !(module->operation_tags() & IOP_TAG_DISTORT)
+     && (in_bpp == out_bpp)
+     && !memcmp(&roi_in, roi_out, sizeof(struct dt_iop_roi_t)))
+  {
+    // since we're not actually running the module, the output format is the same as the input format
+    **out_format = pipe->dsc = piece->dsc_out = piece->dsc_in;
+    *output = input;
     return 0;
+  }
 
   // Get cache lines for input and output, possibly allocating a new one for output
   dt_pixel_cache_entry_t *input_entry = NULL;
