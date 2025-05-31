@@ -1325,7 +1325,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                     const size_t in_bpp, const size_t bpp)
 {
   // We don't have OpenCL or we couldn't lock a GPU: fallback to CPU processing
-  if(!(dt_opencl_is_inited() && pipe->opencl_enabled && pipe->devid >= 0))
+  if(!(dt_opencl_is_inited() && pipe->opencl_enabled && pipe->devid >= 0) || input == NULL || *output == NULL)
     goto error;
 
   // Fetch RGB working profile
@@ -1626,9 +1626,11 @@ error:;
   _gpu_clear_buffer(&cl_mem_input);
 
   dt_opencl_finish(pipe->devid);
-
-  return pixelpipe_process_on_CPU(pipe, dev, input, input_format, roi_in, output, out_format, roi_out, module,
-                                  piece, tiling, pixelpipe_flow);
+  if(input != NULL && *output != NULL)
+    return pixelpipe_process_on_CPU(pipe, dev, input, input_format, roi_in, output, out_format, roi_out, module,
+                                    piece, tiling, pixelpipe_flow);
+  else
+    return 1;
 }
 #endif
 
@@ -1944,7 +1946,12 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   gboolean new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
                                                   output, out_format, &output_entry);
   g_free(name);
-  if(*output == NULL) return 1;
+  if(*output == NULL || input == NULL)
+  {
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, FALSE, output_entry);
+    return 1;
+  }
 
   // If we found an existing cache entry for this hash (= !new_entry), and
   // bypassing the cache is not requested by the pipe, stop before processing.
