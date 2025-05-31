@@ -734,57 +734,6 @@ static void histogram_collect(dt_dev_pixelpipe_iop_t *piece, const void *pixel, 
   dt_histogram_max_helper(&piece->histogram_stats, cst, piece->module->histogram_cst, histogram, histogram_max);
 }
 
-#ifdef HAVE_OPENCL
-// helper to get per module histogram for OpenCL
-//
-// this algorithm is inefficient as hell when it comes to larger images. it's only acceptable
-// as long as we work on small image sizes like in image preview
-static void histogram_collect_cl(int devid, dt_dev_pixelpipe_iop_t *piece, cl_mem img,
-                                 const dt_iop_roi_t *roi, uint32_t **histogram, uint32_t *histogram_max,
-                                 float *buffer, size_t bufsize)
-{
-  float *tmpbuf = NULL;
-  float *pixel = NULL;
-
-  // if buffer is supplied and if size fits let's use it
-  if(buffer && bufsize >= (size_t)roi->width * roi->height * 4 * sizeof(float))
-    pixel = buffer;
-  else
-    pixel = tmpbuf = dt_alloc_align_float((size_t)4 * roi->width * roi->height);
-
-  if(!pixel) return;
-
-  cl_int err = dt_opencl_copy_device_to_host(devid, pixel, img, roi->width, roi->height, sizeof(float) * 4);
-  if(err != CL_SUCCESS)
-  {
-    if(tmpbuf) dt_free_align(tmpbuf);
-    return;
-  }
-
-  dt_dev_histogram_collection_params_t histogram_params = piece->histogram_params;
-
-  dt_histogram_roi_t histogram_roi;
-
-  // if the current module does did not specified its own ROI, use the full ROI
-  if(histogram_params.roi == NULL)
-  {
-    histogram_roi = (dt_histogram_roi_t){
-      .width = roi->width, .height = roi->height, .crop_x = 0, .crop_y = 0, .crop_width = 0, .crop_height = 0
-    };
-
-    histogram_params.roi = &histogram_roi;
-  }
-
-  const dt_iop_colorspace_type_t cst = piece->module->input_colorspace(piece->module, piece->pipe, piece);
-
-  dt_histogram_helper(&histogram_params, &piece->histogram_stats, cst, piece->module->histogram_cst, pixel, histogram,
-      piece->module->histogram_middle_grey, dt_ioppr_get_pipe_work_profile_info(piece->pipe));
-  dt_histogram_max_helper(&piece->histogram_stats, cst, piece->module->histogram_cst, histogram, histogram_max);
-
-  if(tmpbuf) dt_free_align(tmpbuf);
-}
-#endif
-
 dt_backbuf_t * _get_backuf(dt_develop_t *dev, const char *op)
 {
   if(!strcmp(op, "demosaic"))
@@ -1120,6 +1069,7 @@ static gboolean _request_color_pick(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
 
 static void collect_histogram_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                      float *input, const dt_iop_roi_t *roi_in,
+                                     dt_iop_buffer_dsc_t *input_format,
                                      dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
                                      dt_pixelpipe_flow_t *pixelpipe_flow)
 {
@@ -1127,6 +1077,14 @@ static void collect_histogram_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
   if((dev->gui_attached || !(piece->request_histogram & DT_REQUEST_ONLY_IN_GUI))
      && (piece->request_histogram & DT_REQUEST_ON))
   {
+    const dt_iop_order_iccprofile_info_t *const work_profile
+      = (input_format->cst != IOP_CS_RAW) ? dt_ioppr_get_pipe_work_profile_info(pipe) : NULL;
+
+    // transform to module input colorspace
+    dt_ioppr_transform_image_colorspace(module, input, input, roi_in->width, roi_in->height, input_format->cst,
+                                        module->input_colorspace(module, pipe, piece), &input_format->cst,
+                                        work_profile);
+
     histogram_collect(piece, input, roi_in, &(piece->histogram), piece->histogram_max);
     *pixelpipe_flow |= (PIXELPIPE_FLOW_HISTOGRAM_ON_CPU);
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_HISTOGRAM_NONE | PIXELPIPE_FLOW_HISTOGRAM_ON_GPU);
@@ -1193,9 +1151,6 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                       work_profile);
 
   //fprintf(stdout, "input color space for %s : %i\n", module->op, module->input_colorspace(module, pipe, piece));
-
-  collect_histogram_on_CPU(pipe, dev, input, roi_in, module, piece, pixelpipe_flow);
-
   const size_t in_bpp = dt_iop_buffer_dsc_to_bpp(input_format);
   const size_t bpp = dt_iop_buffer_dsc_to_bpp(*out_format);
 
@@ -1418,33 +1373,6 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
            module->input_colorspace(module, pipe, piece), &input_cst_cl, work_profile))
       goto error;
 
-    // histogram collection for module
-    if((dev->gui_attached || !(piece->request_histogram & DT_REQUEST_ONLY_IN_GUI))
-        && (piece->request_histogram & DT_REQUEST_ON))
-    {
-      // we abuse the empty output buffer on host for intermediate storage of data in
-      // histogram_collect_cl()
-      size_t outbufsize = bpp * roi_out->width * roi_out->height;
-
-      histogram_collect_cl(pipe->devid, piece, cl_mem_input, roi_in, &(piece->histogram),
-                            piece->histogram_max, *output, outbufsize);
-      *pixelpipe_flow |= (PIXELPIPE_FLOW_HISTOGRAM_ON_GPU);
-      *pixelpipe_flow &= ~(PIXELPIPE_FLOW_HISTOGRAM_NONE | PIXELPIPE_FLOW_HISTOGRAM_ON_CPU);
-
-      if(piece->histogram && (module->request_histogram & DT_REQUEST_ON)
-          && (pipe->type & DT_DEV_PIXELPIPE_PREVIEW) == DT_DEV_PIXELPIPE_PREVIEW)
-      {
-        const size_t buf_size = sizeof(uint32_t) * 4 * piece->histogram_stats.bins_count;
-        module->histogram = realloc(module->histogram, buf_size);
-        memcpy(module->histogram, piece->histogram, buf_size);
-        module->histogram_stats = piece->histogram_stats;
-        memcpy(module->histogram_max, piece->histogram_max, sizeof(piece->histogram_max));
-
-        // RANT: GUI code in pipeline code, nice one!
-        if(module->widget) dt_control_queue_redraw_widget(module->widget);
-      }
-    }
-
     /* now call process_cl of module; module should emit meaningful messages in case of error */
     if(!module->process_cl(module, piece, cl_mem_input, *cl_mem_output, roi_in, roi_out))
       goto error;
@@ -1515,7 +1443,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     *pixelpipe_flow |= (PIXELPIPE_FLOW_BLENDED_ON_GPU);
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_BLENDED_ON_CPU);
 
-    // Map/Unmap synchronizes device -> host output pixels if we have a zero-copy buffer.
+    // Map/Unmap synchronizes device -> host output pixels if we have a zero-copy buffer (pinned memory)
     // If we couldn't get a zero-copy buffer, we need to manually copy pixels from device to host.
     void *cl_mem_pinned_output = dt_opencl_map_image(pipe->devid, *cl_mem_output, TRUE, CL_MAP_READ, roi_out->width,
                                                      roi_out->height, bpp);
@@ -1534,6 +1462,28 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
         goto error;
       }
     }
+
+    // Because we color-converted the input several times in place,
+    // we need to update the colorspace metadata. But since it's shared
+    // between RAM pixel cache and GPU buffer, then we need to resync GPU buffer with cache.
+    input_format->cst = input_cst_cl;
+
+    void *cl_mem_pinned_input = dt_opencl_map_image(pipe->devid, cl_mem_input, TRUE, CL_MAP_READ, roi_in->width,
+                                                    roi_in->height, in_bpp);
+    dt_opencl_unmap_mem_object(pipe->devid, cl_mem_input, cl_mem_pinned_input);
+
+    // Map/Unmap synchronizes device -> host pixels if we have a zero-copy buffer (pinned memory)
+    // If we couldn't get a zero-copy buffer, we need to manually copy pixels from device to host.
+    if(!_check_zero_memory(cl_mem_pinned_input, input, module, "input"))
+    {
+      cl_int err = dt_opencl_read_host_from_device(pipe->devid, input, cl_mem_input, roi_in->width, roi_in->height, in_bpp);
+      if(err != CL_SUCCESS)
+      {
+        dt_print(DT_DEBUG_OPENCL, "[opencl_pixelpipe] couldn't copy image to opencl device for module %s\n",
+                  module->op);
+        goto error;
+      }
+    }
   }
   else if(piece->process_tiling_ready)
   {
@@ -1544,9 +1494,6 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     dt_ioppr_transform_image_colorspace(module, input, input, roi_in->width, roi_in->height, input_format->cst,
                                         module->input_colorspace(module, pipe, piece), &input_format->cst,
                                         work_profile);
-
-    // histogram collection for module
-    collect_histogram_on_CPU(pipe, dev, input, roi_in, module, piece, pixelpipe_flow);
 
     /* now call process_tiling_cl of module; module should emit meaningful messages in case of error */
     if(!module->process_tiling_cl(module, piece, input, *output, roi_in, roi_out, in_bpp))
@@ -2037,6 +1984,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   // in case we get this buffer from the cache in the future, cache some stuff:
   **out_format = piece->dsc_out = pipe->dsc;
+
+  // sample internal histogram on inputs
+  collect_histogram_on_CPU(pipe, dev, input, &roi_in, input_format, module, piece, &pixelpipe_flow);
 
   // Unlock read and write locks, decrease reference count on input
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, FALSE, output_entry);
