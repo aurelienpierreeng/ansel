@@ -1179,6 +1179,38 @@ static gboolean _check_zero_memory(void *cl_mem_pinned, void *host_ptr, dt_iop_m
   }
 }
 
+
+// mode : CL_MAP_WRITE = copy from host to device, CL_MAP_READ = copy from device to host
+static int _cl_pinned_memory_copy(const int devid, void *host_ptr, void *cl_mem_buffer, const dt_iop_roi_t *roi,
+                                  int cl_mode, size_t bpp, dt_iop_module_t *module, const char *message)
+{
+  void *cl_mem_pinned_input = dt_opencl_map_image(devid, cl_mem_buffer, TRUE, cl_mode, roi->width,
+                                                  roi->height, bpp);
+  dt_opencl_unmap_mem_object(devid, cl_mem_buffer, cl_mem_pinned_input);
+
+  // Map/Unmap synchronizes host <-> device  pixels if we have a zero-copy buffer.
+  // If we couldn't get a zero-copy buffer, we need to manually copy pixels
+  if(!_check_zero_memory(cl_mem_pinned_input, host_ptr, module, message))
+  {
+    cl_int err = CL_SUCCESS;
+
+    if(cl_mode == CL_MAP_WRITE)
+      err = dt_opencl_write_host_to_device(devid, host_ptr, cl_mem_buffer, roi->width, roi->height, bpp);
+    else if(cl_mode == CL_MAP_READ)
+      err = dt_opencl_read_host_from_device(devid, host_ptr, cl_mem_buffer, roi->width, roi->height, bpp);
+
+    if(err != CL_SUCCESS)
+    {
+      dt_print(DT_DEBUG_OPENCL, "[opencl_pixelpipe] couldn't copy image to opencl device for module %s (%s)\n",
+                module->op, message);
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+
 static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                     float *input, void *cl_mem_input, dt_iop_buffer_dsc_t *input_format, const dt_iop_roi_t *roi_in,
                                     void **output, void **cl_mem_output, dt_iop_buffer_dsc_t **out_format, const dt_iop_roi_t *roi_out,
@@ -1249,23 +1281,9 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     {
       cl_mem_input = _gpu_init_buffer(pipe->devid, input, roi_in, in_bpp, module, "input");
       if(cl_mem_input == NULL) goto error; // mem alloc failed
-
-      void *cl_mem_pinned_input = dt_opencl_map_image(pipe->devid, cl_mem_input, TRUE, CL_MAP_WRITE, roi_in->width,
-                                                      roi_in->height, in_bpp);
-      dt_opencl_unmap_mem_object(pipe->devid, cl_mem_input, cl_mem_pinned_input);
-
-      // Map/Unmap synchronizes host -> device input pixels if we have a zero-copy buffer.
-      // If we couldn't get a zero-copy buffer, we need to manually copy pixels from host to device
-      if(!_check_zero_memory(cl_mem_pinned_input, input, module, "input"))
-      {
-        cl_int err = dt_opencl_write_host_to_device(pipe->devid, input, cl_mem_input, roi_in->width, roi_in->height, in_bpp);
-        if(err != CL_SUCCESS)
-        {
-          dt_print(DT_DEBUG_OPENCL, "[opencl_pixelpipe] couldn't copy image to opencl device for module %s\n",
-                    module->op);
-          goto error;
-        }
-      }
+      if(_cl_pinned_memory_copy(pipe->devid, input, cl_mem_input, roi_in, CL_MAP_WRITE, in_bpp, module,
+                                "initial input"))
+        goto error;
     }
 
     // Allocate GPU memory for output
@@ -1273,8 +1291,6 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     if(*cl_mem_output == NULL) goto error;
 
     // transform to input colorspace if we got our input in a different colorspace
-    // cl_mem_input is supposed to be different than the host input, so this should be safe
-    // to do in place without messing up the cache.
     if(!dt_ioppr_transform_image_colorspace_cl(
            module, piece->pipe->devid, cl_mem_input, cl_mem_input, roi_in->width, roi_in->height, input_cst_cl,
            module->input_colorspace(module, pipe, piece), &input_cst_cl, work_profile))
@@ -1316,46 +1332,19 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     *pixelpipe_flow |= (PIXELPIPE_FLOW_BLENDED_ON_GPU);
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_BLENDED_ON_CPU);
 
-    // Map/Unmap synchronizes device -> host output pixels if we have a zero-copy buffer (pinned memory)
-    // If we couldn't get a zero-copy buffer, we need to manually copy pixels from device to host.
-    void *cl_mem_pinned_output = dt_opencl_map_image(pipe->devid, *cl_mem_output, TRUE, CL_MAP_READ, roi_out->width,
-                                                     roi_out->height, bpp);
-    dt_opencl_unmap_mem_object(pipe->devid, *cl_mem_output, cl_mem_pinned_output);
-
-    if(!_check_zero_memory(cl_mem_pinned_output, *output, module, "output"))
-    {
-      cl_int err = dt_opencl_read_host_from_device(pipe->devid, *output, *cl_mem_output, roi_out->width,
-                                                  roi_out->height, bpp);
-      if(err != CL_SUCCESS)
-      {
-        dt_print(DT_DEBUG_OPENCL,
-                "[opencl_pixelpipe (e)] late opencl error detected while copying "
-                "back to cpu buffer: %i\n",
-                err);
-        goto error;
-      }
-    }
+    if(_cl_pinned_memory_copy(pipe->devid, *output, *cl_mem_output, roi_out, CL_MAP_READ, bpp, module,
+                              "output input"))
+      goto error;
 
     // Because we color-converted the input several times in place,
     // we need to update the colorspace metadata. But since it's shared
     // between RAM pixel cache and GPU buffer, then we need to resync GPU buffer with cache.
-    input_format->cst = input_cst_cl;
-
-    void *cl_mem_pinned_input = dt_opencl_map_image(pipe->devid, cl_mem_input, TRUE, CL_MAP_READ, roi_in->width,
-                                                    roi_in->height, in_bpp);
-    dt_opencl_unmap_mem_object(pipe->devid, cl_mem_input, cl_mem_pinned_input);
-
-    // Map/Unmap synchronizes device -> host pixels if we have a zero-copy buffer (pinned memory)
-    // If we couldn't get a zero-copy buffer, we need to manually copy pixels from device to host.
-    if(!_check_zero_memory(cl_mem_pinned_input, input, module, "input"))
+    if(input_format->cst != input_cst_cl)
     {
-      cl_int err = dt_opencl_read_host_from_device(pipe->devid, input, cl_mem_input, roi_in->width, roi_in->height, in_bpp);
-      if(err != CL_SUCCESS)
-      {
-        dt_print(DT_DEBUG_OPENCL, "[opencl_pixelpipe] couldn't copy image to opencl device for module %s\n",
-                  module->op);
+      input_format->cst = input_cst_cl;
+      if(_cl_pinned_memory_copy(pipe->devid, input, cl_mem_input, roi_in, CL_MAP_READ, in_bpp, module,
+                                "color-converted input"))
         goto error;
-      }
     }
   }
   else if(piece->process_tiling_ready)
