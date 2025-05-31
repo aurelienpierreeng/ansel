@@ -1896,7 +1896,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   }
 
   // And throw away the current input if it was flagged before as in the above
-  dt_dev_pixel_pipe_cache_auto_destroy_apply(darktable.pixelpipe_cache, input_hash, pipe->type, input_entry);
+  // dt_dev_pixel_pipe_cache_auto_destroy_apply(darktable.pixelpipe_cache, input_hash, pipe->type, input_entry);
   // Note : for the last module of the pipeline, even if it's flagged for auto_destroy, it will not be
   // because it is the input of nothing (but the GUI backbuf). This is by design because we need something
   // to paint in UI.
