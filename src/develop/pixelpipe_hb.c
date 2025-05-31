@@ -970,7 +970,8 @@ static void collect_histogram_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
                                      dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece)
 {
   // histogram collection for module
-  if(piece->request_histogram)
+  if((dev->gui_attached || !(piece->request_histogram & DT_REQUEST_ONLY_IN_GUI))
+     && (piece->request_histogram & DT_REQUEST_ON))
   {
     const dt_iop_order_iccprofile_info_t *const work_profile
         = (input_format->cst != IOP_CS_RAW) ? dt_ioppr_get_pipe_work_profile_info(pipe) : NULL;
