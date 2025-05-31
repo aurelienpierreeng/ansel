@@ -1178,27 +1178,6 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   // and save the output colorspace
   pipe->dsc.cst = module->output_colorspace(module, pipe, piece);
 
-  // Lab color picking for module
-  if(_request_color_pick(pipe, dev, module))
-  {
-    // ensure that we are using the right color space
-    dt_iop_colorspace_type_t picker_cst = _transform_for_picker(module, pipe->dsc.cst);
-    dt_ioppr_transform_image_colorspace(module, input, input, roi_in->width, roi_in->height,
-                                        input_format->cst, picker_cst, &input_format->cst,
-                                        work_profile);
-    dt_ioppr_transform_image_colorspace(module, *output, *output, roi_out->width, roi_out->height,
-                                        pipe->dsc.cst, picker_cst, &pipe->dsc.cst,
-                                        work_profile);
-
-    pixelpipe_picker(module, piece, &piece->dsc_in, (float *)input, roi_in, module->picked_color,
-                     module->picked_color_min, module->picked_color_max, input_format->cst, PIXELPIPE_PICKER_INPUT);
-    pixelpipe_picker(module, piece, &pipe->dsc, (float *)(*output), roi_out, module->picked_output_color,
-                     module->picked_output_color_min, module->picked_output_color_max,
-                     pipe->dsc.cst, PIXELPIPE_PICKER_OUTPUT);
-
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PICKERDATA_READY, module, piece);
-  }
-
   // blend needs input/output images with default colorspace
   if(_transform_for_blend(module, piece))
   {
@@ -1229,6 +1208,39 @@ static dt_dev_pixelpipe_iop_t *_last_node_in_pipe(dt_dev_pixelpipe_t *pipe)
 
   return NULL;
 }
+
+static void _sample_color_picker(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, float *input,
+                                 dt_iop_buffer_dsc_t *input_format, const dt_iop_roi_t *roi_in, void **output,
+                                 dt_iop_buffer_dsc_t **out_format, const dt_iop_roi_t *roi_out,
+                                 dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece)
+{
+  // Lab color picking for module
+  if(!_request_color_pick(pipe, dev, module)) return;
+
+  // Fetch RGB working profile
+  // if input is RAW, we can't color convert because RAW is not in a color space
+  // so we send NULL to by-pass
+  const dt_iop_order_iccprofile_info_t *const work_profile
+      = (input_format->cst != IOP_CS_RAW) ? dt_ioppr_get_pipe_work_profile_info(pipe) : NULL;
+
+  // ensure that we are using the right color space
+  dt_iop_colorspace_type_t picker_cst = _transform_for_picker(module, pipe->dsc.cst);
+  dt_ioppr_transform_image_colorspace(module, input, input, roi_in->width, roi_in->height,
+                                      input_format->cst, picker_cst, &input_format->cst,
+                                      work_profile);
+  dt_ioppr_transform_image_colorspace(module, *output, *output, roi_out->width, roi_out->height,
+                                      pipe->dsc.cst, picker_cst, &pipe->dsc.cst,
+                                      work_profile);
+
+  pixelpipe_picker(module, piece, &piece->dsc_in, (float *)input, roi_in, module->picked_color,
+                    module->picked_color_min, module->picked_color_max, input_format->cst, PIXELPIPE_PICKER_INPUT);
+  pixelpipe_picker(module, piece, &pipe->dsc, (float *)(*output), roi_out, module->picked_output_color,
+                    module->picked_output_color_min, module->picked_output_color_max,
+                    pipe->dsc.cst, PIXELPIPE_PICKER_OUTPUT);
+
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PICKERDATA_READY, module, piece);
+}
+
 
 #ifdef HAVE_OPENCL
 
@@ -1504,29 +1516,6 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
 
     // and save the output colorspace
     pipe->dsc.cst = module->output_colorspace(module, pipe, piece);
-
-    // Lab color picking for module
-    if(_request_color_pick(pipe, dev, module))
-    {
-      // ensure that we are using the right color space
-      dt_iop_colorspace_type_t picker_cst = _transform_for_picker(module, pipe->dsc.cst);
-      // FIXME: don't need to transform entire image colorspace when just picking a point
-      dt_ioppr_transform_image_colorspace(module, input, input, roi_in->width, roi_in->height,
-                                          input_format->cst, picker_cst, &input_format->cst,
-                                          work_profile);
-      dt_ioppr_transform_image_colorspace(module, *output, *output, roi_out->width, roi_out->height,
-                                          pipe->dsc.cst, picker_cst, &pipe->dsc.cst,
-                                          work_profile);
-
-      pixelpipe_picker(module, piece, &piece->dsc_in, (float *)input, roi_in, module->picked_color,
-                        module->picked_color_min, module->picked_color_max, input_format->cst,
-                        PIXELPIPE_PICKER_INPUT);
-      pixelpipe_picker(module, piece, &pipe->dsc, (float *)(*output), roi_out, module->picked_output_color,
-                        module->picked_output_color_min, module->picked_output_color_max,
-                        pipe->dsc.cst, PIXELPIPE_PICKER_OUTPUT);
-
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PICKERDATA_READY, module, piece);
-    }
 
     // blend needs input/output images with default colorspace
     if(_transform_for_blend(module, piece))
@@ -1985,8 +1974,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // in case we get this buffer from the cache in the future, cache some stuff:
   **out_format = piece->dsc_out = pipe->dsc;
 
-  // sample internal histogram on inputs
+  // sample internal histogram on input
   collect_histogram_on_CPU(pipe, dev, input, &roi_in, input_format, module, piece, &pixelpipe_flow);
+
+  // sample color pickers if requested, on input and output
+  _sample_color_picker(pipe, dev, input, input_format, &roi_in, output, out_format, roi_out, module, piece);
 
   // Unlock read and write locks, decrease reference count on input
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, FALSE, output_entry);
