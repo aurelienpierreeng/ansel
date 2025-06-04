@@ -366,6 +366,8 @@ void dt_dev_invalidate_zoom_real(dt_develop_t *dev);
 // This doesn't resync history at all, only update the coordinates of the region of interest (ROI).
 #define dt_dev_invalidate_zoom(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_invalidate_zoom_real, (dev))
 
+void dt_dev_invalidate_zoom_preview(dt_develop_t *dev);
+
 // Invalidate the main image and the thumbnail in darkroom.
 // Resync the whole history, which may be expensive.
 void dt_dev_pixelpipe_resync_all(dt_develop_t *dev);

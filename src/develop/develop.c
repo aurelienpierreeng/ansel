@@ -331,6 +331,20 @@ void dt_dev_invalidate_zoom_real(dt_develop_t *dev)
   dt_show_times(&start, "[dt_dev_invalidate_zoom] sending killswitch signal on main image pipeline");
 }
 
+void dt_dev_invalidate_zoom_preview(dt_develop_t *dev)
+{
+  if(!dev || !dev->gui_attached || !dev->pipe) return;
+
+  dt_times_t start;
+  dt_get_times(&start);
+
+  _dev_pixelpipe_set_dirty(dev->preview_pipe);
+  dev->preview_pipe->changed |= DT_DEV_PIPE_ZOOMED;
+  dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
+
+  dt_show_times(&start, "[dt_dev_invalidate_zoom] sending killswitch signal on preview image pipeline");
+}
+
 void dt_dev_invalidate_preview_real(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached || !dev->preview_pipe) return;
@@ -420,37 +434,58 @@ static void _update_gui_backbuf(dt_dev_pixelpipe_t *pipe)
 }
 
 
+static void _update_preview_scale(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, int *wd, int *ht, float *scale)
+{
+  *scale = fminf((float)dev->width / (float)pipe->processed_width, (float)dev->height / (float)pipe->processed_height) * darktable.gui->ppd;
+  int window_width = dev->width * darktable.gui->ppd;
+  int window_height = dev->height * darktable.gui->ppd;
+  *wd = MIN(window_width, roundf((float)pipe->processed_width * *scale));
+  *ht = MIN(window_height, roundf((float)pipe->processed_height * *scale));
+  pipe->iscale = (float)pipe->processed_width / (float)pipe->backbuf_width;
+}
+
+
 void dt_dev_process_preview_job(dt_develop_t *dev)
 {
+  // -1×-1 px means the dimensions of the main preview in darkroom were not inited yet.
+  // 0×0 px is not feasible.
+  // Anything lower than 32 px might cause segfaults with blurs and local contrast.
+  // When the window size get inited, we will get a new order to recompute with a "zoom_changed" flag.
+  // Until then, don't bother computing garbage that will not be reused later.
+  if(dev->width < 32 || dev->height < 32) return;
+
   dt_dev_pixelpipe_t *pipe = dev->preview_pipe;
   pipe->running = 1;
 
   dt_pthread_mutex_lock(&pipe->busy_mutex);
 
   // init pixel pipeline for preview.
-  // always process the whole downsampled mipf buffer, to allow for fast scrolling and mip4 write-through.
   dt_mipmap_buffer_t buf;
   dt_mipmap_cache_t *cache = darktable.mipmap_cache;
-  dt_mipmap_cache_get(darktable.mipmap_cache, &buf, dev->image_storage.id, DT_MIPMAP_F, DT_MIPMAP_BLOCKING, 'r');
+  dt_mipmap_cache_get(darktable.mipmap_cache, &buf, dev->image_storage.id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
 
   gboolean finish_on_error = (!buf.buf || buf.width == 0 || buf.height == 0);
 
   // Take a local copy of the buffer so we can release the mipmap cache lock immediately
   const size_t buf_width = buf.width;
   const size_t buf_height = buf.height;
-  const float buf_iscale = buf.iscale;
   dt_mipmap_cache_release(cache, &buf);
 
   if(!finish_on_error)
   {
-    dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, buf_width, buf_height, buf_iscale, DT_MIPMAP_F);
-    dt_print(DT_DEBUG_DEV, "[pixelpipe] Started thumbnail preview recompute at %lu×%lu px\n", buf_width, buf_height);
+    dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, buf_width, buf_height, 1.0, DT_MIPMAP_FULL);
+    dt_print(DT_DEBUG_DEV, "[pixelpipe] Started thumbnail preview recompute at %d×%d px\n", dev->width, dev->height);
   }
 
   pipe->processing = 1;
 
   // Count the number of pipe re-entries and limit it to 2 to avoid infinite loops
   int reentries = 0;
+
+  // Keep track of ROI changes out of the loop
+  float scale = 1.f, zoom_x = 1.f, zoom_y = 1.f;
+  int x = 0, y = 0, wd = 0, ht = 0;
+
   while(!dev->exit && !finish_on_error && (pipe->status == DT_DEV_PIXELPIPE_DIRTY) && reentries < 2)
   {
     dt_times_t thread_start;
@@ -474,12 +509,12 @@ void dt_dev_process_preview_job(dt_develop_t *dev)
     dt_control_log_busy_enter();
     dt_control_toast_busy_enter();
 
+    _update_preview_scale(dev, pipe, &wd, &ht, &scale);
+
     // Signal that we are starting
     pipe->status = DT_DEV_PIXELPIPE_UNDEF;
 
-    // NOTE: preview size is constant: 720x450 px
-    int ret = dt_dev_pixelpipe_process(pipe, dev, 0, 0, pipe->processed_width,
-                                       pipe->processed_height, 1.f);
+    int ret = dt_dev_pixelpipe_process(pipe, dev, 0, 0, wd, ht, scale);
 
     dt_control_log_busy_leave();
     dt_control_toast_busy_leave();
@@ -710,9 +745,7 @@ float dt_dev_get_zoom_scale(dt_develop_t *dev, dt_dev_zoom_t zoom, int closeup_f
 
   const float w = preview ? dev->preview_pipe->processed_width : dev->pipe->processed_width;
   const float h = preview ? dev->preview_pipe->processed_height : dev->pipe->processed_height;
-  const float ps = dev->pipe->backbuf_width
-                       ? dev->pipe->processed_width / (float)dev->preview_pipe->processed_width
-                       : dev->preview_pipe->iscale;
+  const float ps = (float)dev->preview_pipe->processed_width / (float)dev->preview_pipe->backbuf_width;
 
   switch(zoom)
   {
@@ -775,6 +808,7 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
 
     dt_print(DT_DEBUG_DEV, "[pixelpipe] Darkroom requested a %i×%i px main preview\n", wd, ht);
     dt_dev_invalidate_zoom(dev);
+    dt_dev_invalidate_zoom_preview(dev);
 
     if(dev->image_storage.id > -1 && darktable.mipmap_cache)
     {
