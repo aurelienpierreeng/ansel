@@ -312,6 +312,21 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
 
   if(cache_entry)
   {
+    if(cache_entry_found)
+    {
+      // Block and wait for write events to finish, aka try to take a read lock
+      dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, TRUE, cache_entry);
+      dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, FALSE, cache_entry);
+    }
+    else
+    {
+      // Newly-allocated buffer: immediately lock in write mode until the caller
+      // populates the content, so other threads may not lock it in read mode
+      // before there is actually something to read.
+      dt_dev_pixelpipe_cache_wrlock_entry(cache, hash, TRUE, cache_entry);
+    }
+
+    // Set the time after we get the lock
     cache_entry->age = g_get_monotonic_time(); // this is the MRU entry
     *data = cache_entry->data;
     *dsc = &cache_entry->dsc;
@@ -343,6 +358,11 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
 
   if(cache_entry)
   {
+    // Block and wait for write events to finish, aka try to take a read lock
+    dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, TRUE, cache_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, FALSE, cache_entry);
+
+    // Set the time after we get the lock
     cache_entry->age = g_get_monotonic_time(); // this is the MRU entry
     *data = cache_entry->data;
     *dsc = &cache_entry->dsc;
@@ -471,9 +491,8 @@ void dt_dev_pixelpipe_cache_ref_count_entry(dt_dev_pixelpipe_cache_t *cache, con
 void dt_dev_pixelpipe_cache_wrlock_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, gboolean lock,
                                          dt_pixel_cache_entry_t *cache_entry)
 {
-  dt_pthread_mutex_lock(&cache->lock);
   if(cache_entry == NULL)
-    cache_entry = _non_threadsafe_cache_get_entry(cache, hash);
+    cache_entry = dt_dev_pixelpipe_cache_get_entry(cache, hash);
 
   if(cache_entry)
   {
@@ -488,16 +507,14 @@ void dt_dev_pixelpipe_cache_wrlock_entry(dt_dev_pixelpipe_cache_t *cache, const 
       dt_pixel_cache_message(cache_entry, "write unlock", TRUE);
     }
   }
-  dt_pthread_mutex_unlock(&cache->lock);
 }
 
 
 void dt_dev_pixelpipe_cache_rdlock_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, gboolean lock,
                                          dt_pixel_cache_entry_t *cache_entry)
 {
-  dt_pthread_mutex_lock(&cache->lock);
   if(cache_entry == NULL)
-    cache_entry = _non_threadsafe_cache_get_entry(cache, hash);
+    cache_entry = dt_dev_pixelpipe_cache_get_entry(cache, hash);
 
   if(cache_entry)
   {
@@ -512,7 +529,6 @@ void dt_dev_pixelpipe_cache_rdlock_entry(dt_dev_pixelpipe_cache_t *cache, const 
       dt_pixel_cache_message(cache_entry, "read unlock", TRUE);
     }
   }
-  dt_pthread_mutex_unlock(&cache->lock);
 }
 
 

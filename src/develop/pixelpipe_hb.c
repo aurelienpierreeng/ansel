@@ -1169,7 +1169,7 @@ static gboolean _check_zero_memory(void *cl_mem_pinned, void *host_ptr, dt_iop_m
 {
   if(cl_mem_pinned == host_ptr)
   {
-    printf("✅ Zero-copy: GPU is using your host memory directly for %s %s\n", module->op, message);
+    //printf("✅ Zero-copy: GPU is using your host memory directly for %s %s\n", module->op, message);
     return TRUE;
   }
   else
@@ -1691,7 +1691,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     // FIXME: on CPU path and GPU path with tiling, when 2 modules taking different color spaces are back to back,
     // the color conversion for the next is done in-place in the output of the previous. We should check
     // here if out_format->cst matches wathever we are expecting, and convert back if it doesn't.
-    dt_print(DT_DEBUG_PIPE, "[pipeline] found %lu (%s) for %s pipeline in cache\n", hash, (module) ? module->op : "noop",
+    dt_print(DT_DEBUG_PIPE, "[dev_pixelpipe] found %lu (%s) for %s pipeline in cache\n", hash, (module) ? module->op : "noop",
               _pipe_type_to_str(pipe->type));
     return 0;
   }
@@ -1757,17 +1757,14 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // Get cache lines for input and output, possibly allocating a new one for output
   dt_pixel_cache_entry_t *input_entry = NULL;
   uint64_t input_hash = dt_dev_pixelpipe_cache_get_hash_data(darktable.pixelpipe_cache, input, &input_entry);
+  if(input_entry == NULL) return 1;
+
   dt_pixel_cache_entry_t *output_entry = NULL;
   char *name = g_strdup_printf("module %s (%s) for pipe %i", module->op, module->multi_name, pipe->type);
   gboolean new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
                                                   output, out_format, &output_entry);
   g_free(name);
-  if(*output == NULL || input == NULL)
-  {
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, FALSE, output_entry);
-    return 1;
-  }
+  if(output_entry == NULL) return 1;
 
   dt_pixelpipe_flow_t pixelpipe_flow = (PIXELPIPE_FLOW_NONE | PIXELPIPE_FLOW_HISTOGRAM_NONE);
 
@@ -1784,6 +1781,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     _sample_all(pipe, dev, input, output, &roi_in, roi_out, input_format, out_format, module,
                 piece, input_hash, hash, in_bpp, bpp, input_entry, output_entry);
 
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
     return 0;
   }
 
@@ -1817,11 +1815,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   assert(tiling.factor > 0.0f);
   assert(tiling.factor_cl > 0.0f);
 
-  // Lock input in read-only, output in write-only
-  // Reference count is already increased from previous module
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, input_hash, TRUE, input_entry);
-  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, TRUE, output_entry);
+  // Lock input in read-only, output is already locked in write-only
+  // since allocation
 
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, input_hash, TRUE, input_entry);
   // Actual pixel processing for this module
   int error = 0;
 
@@ -1977,6 +1974,8 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
   }
 
   dt_dev_pixelpipe_cache_print(darktable.pixelpipe_cache);
+
+  dt_print(DT_DEBUG_DEV, "[pixelpipe] Started %s pipeline recompute at %i×%i px\n", _pipe_type_to_str(pipe->type), width, height);
 
   // get a snapshot of the mask list
   pipe->forms = dt_masks_dup_forms_deep(dev->forms, NULL);

@@ -68,9 +68,15 @@ struct dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry(dt_dev_pixelpipe
 
 
 /**
- * @brief Get a cache line from the cache. This internally increases the reference count,
+ * @brief Get a cache line from the cache.
+ *
+ * WARNING: This internally increases the reference count,
  * so you have to manually decrease it using `dt_dev_pixelpipe_ref_count_entry()` once
  * the cache line content has been consumed or it will never be freed.
+ *
+ * WARNING: if the cache line was newly allocated, a write lock is put on
+ * straight away. You will have to release it from the same calling thread next,
+ * to avoid dead locks.
  *
  * @param cache
  * @param hash State checksum of the cache line.
