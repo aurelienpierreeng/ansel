@@ -462,6 +462,11 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     local_hash = dt_hash(local_hash, (const char *)&piece->planned_roi_in, sizeof(dt_iop_roi_t));
     local_hash = dt_hash(local_hash, (const char *)&piece->planned_roi_out, sizeof(dt_iop_roi_t));
 
+    /*
+    fprintf(stdout, "%s: ROI in: %ix%i, ROI out: %ix%i\n", piece->module->op, piece->planned_roi_in.width,
+            piece->planned_roi_in.height, piece->planned_roi_out.width, piece->planned_roi_out.height);
+    */
+   
     // Mask preview display doesn't re-commit params, so we need to keep that of it here
     // Too much GUI stuff interleaved with pipeline stuff...
     // Note that mask display applies only to main preview in darkroom. We don't check it here.

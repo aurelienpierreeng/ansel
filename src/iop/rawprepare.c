@@ -253,8 +253,8 @@ void modify_roi_out(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, dt_iop
   const double x = d->x + d->width;
   const double y = d->y + d->height;
   const double scale = roi_in->scale / piece->iscale;
-  roi_out->width = (int)round((double)roi_out->width - x * scale - 0.5);
-  roi_out->height = (int)round((double)roi_out->height - y * scale - 0.5);
+  roi_out->width = (int)round((double)roi_out->width - x * scale);
+  roi_out->height = (int)round((double)roi_out->height - y * scale);
 }
 
 // see ../../doc/resizing-scaling.md for details
@@ -267,8 +267,8 @@ void modify_roi_in(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const d
   const double x = d->x + d->width;
   const double y = d->y + d->height;
   const double scale = roi_in->scale / piece->iscale;
-  roi_in->width = (int)round((double)roi_in->width + x * scale + 0.5);
-  roi_in->height = (int)round((double)roi_in->height + y * scale + 0.5);
+  roi_in->width = (int)round((double)roi_in->width + x * scale);
+  roi_in->height = (int)round((double)roi_in->height + y * scale);
 }
 
 void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,

@@ -65,8 +65,8 @@ void modify_roi_in(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const d
 
   roi_in->x /= roi_out->scale;
   roi_in->y /= roi_out->scale;
-  roi_in->width  = (int)ceil(roi_out->width / roi_out->scale);
-  roi_in->height = (int)ceil(roi_out->height / roi_out->scale);
+  roi_in->width  = (int)round(roi_out->width / roi_out->scale);
+  roi_in->height = (int)round(roi_out->height / roi_out->scale);
   roi_in->scale = 1.0f;
 }
 
