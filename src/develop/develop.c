@@ -434,123 +434,26 @@ static void _update_gui_backbuf(dt_dev_pixelpipe_t *pipe)
 }
 
 
-static void _update_preview_scale(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, int *wd, int *ht, float *scale)
+// Return TRUE if ROI changed since previous computation
+static gboolean _update_preview_scale(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, int *wd, int *ht, float *scale)
 {
+  // Store previous values
+  int wd_old = *wd;
+  int ht_old = *ht;
+
   *scale = fminf((float)dev->width / (float)pipe->processed_width, (float)dev->height / (float)pipe->processed_height) * darktable.gui->ppd;
   int window_width = dev->width * darktable.gui->ppd;
   int window_height = dev->height * darktable.gui->ppd;
   *wd = MIN(window_width, roundf((float)pipe->processed_width * *scale));
   *ht = MIN(window_height, roundf((float)pipe->processed_height * *scale));
   pipe->iscale = (float)pipe->processed_width / (float)pipe->backbuf_width;
-}
 
-
-void dt_dev_process_preview_job(dt_develop_t *dev)
-{
-  // -1×-1 px means the dimensions of the main preview in darkroom were not inited yet.
-  // 0×0 px is not feasible.
-  // Anything lower than 32 px might cause segfaults with blurs and local contrast.
-  // When the window size get inited, we will get a new order to recompute with a "zoom_changed" flag.
-  // Until then, don't bother computing garbage that will not be reused later.
-  if(dev->width < 32 || dev->height < 32) return;
-
-  dt_dev_pixelpipe_t *pipe = dev->preview_pipe;
-  pipe->running = 1;
-
-  dt_pthread_mutex_lock(&pipe->busy_mutex);
-
-  // init pixel pipeline for preview.
-  dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_t *cache = darktable.mipmap_cache;
-  dt_mipmap_cache_get(darktable.mipmap_cache, &buf, dev->image_storage.id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
-
-  gboolean finish_on_error = (!buf.buf || buf.width == 0 || buf.height == 0);
-
-  // Take a local copy of the buffer so we can release the mipmap cache lock immediately
-  const size_t buf_width = buf.width;
-  const size_t buf_height = buf.height;
-  dt_mipmap_cache_release(cache, &buf);
-
-  if(!finish_on_error)
-  {
-    dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, buf_width, buf_height, 1.0, DT_MIPMAP_FULL);
-    dt_print(DT_DEBUG_DEV, "[pixelpipe] Started thumbnail preview recompute at %d×%d px\n", dev->width, dev->height);
-  }
-
-  pipe->processing = 1;
-
-  // Count the number of pipe re-entries and limit it to 2 to avoid infinite loops
-  int reentries = 0;
-
-  // Keep track of ROI changes out of the loop
-  float scale = 1.f, zoom_x = 1.f, zoom_y = 1.f;
-  int x = 0, y = 0, wd = 0, ht = 0;
-
-  while(!dev->exit && !finish_on_error && (pipe->status == DT_DEV_PIXELPIPE_DIRTY) && reentries < 2)
-  {
-    dt_times_t thread_start;
-    dt_get_times(&thread_start);
-
-    // We are starting fresh, reset the killswitch signal
-    dt_atomic_set_int(&pipe->shutdown, FALSE);
-
-    // In case of re-entry, we will rerun the whole pipe, so we need
-    // to resynch it in full too before.
-    // Need to be before dt_dev_pixelpipe_change()
-    if(dt_dev_pixelpipe_has_reentry(pipe))
-    {
-      pipe->changed |= DT_DEV_PIPE_REMOVE;
-      dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, pipe->type);
-    }
-
-    // this locks dev->history_mutex.
-    dt_dev_pixelpipe_change(pipe, dev);
-
-    dt_control_log_busy_enter();
-    dt_control_toast_busy_enter();
-
-    _update_preview_scale(dev, pipe, &wd, &ht, &scale);
-
-    // Signal that we are starting
-    pipe->status = DT_DEV_PIXELPIPE_UNDEF;
-
-    int ret = dt_dev_pixelpipe_process(pipe, dev, 0, 0, wd, ht, scale);
-
-    dt_control_log_busy_leave();
-    dt_control_toast_busy_leave();
-
-    dt_show_times(&thread_start, "[dev_process_preview] pixel pipeline thread");
-    dt_dev_average_delay_update(&thread_start, &dev->preview_average_delay);
-
-    // If pipe is flagged for re-entry, we need to restart it right away
-    if(dt_dev_pixelpipe_has_reentry(pipe))
-    {
-      reentries++;
-      pipe->status = DT_DEV_PIXELPIPE_DIRTY;
-    }
-    else
-    {
-      _flag_pipe(pipe, ret);
-      _update_gui_backbuf(pipe);
-    }
-
-    if(pipe->status == DT_DEV_PIXELPIPE_VALID)
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
-
-    dt_iop_nap(200);
-  }
-  pipe->processing = 0;
-
-  dt_pthread_mutex_unlock(&pipe->busy_mutex);
-
-  pipe->running = 0;
-  dt_print(DT_DEBUG_DEV, "[pixelpipe] exiting preview pipe thread\n");
-  dt_control_queue_redraw();
+  return wd_old != *wd || ht_old != *ht;
 }
 
 // Return TRUE if ROI changed since previous computation
-gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, int *x, int *y, int *wd, int *ht,
-                              float *scale, float *zoom_x, float *zoom_y)
+static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, int *x, int *y, int *wd, int *ht,
+                                     float *scale, float *zoom_x, float *zoom_y)
 {
   // Store previous values
   int x_old = *x;
@@ -596,8 +499,7 @@ gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, int *
   return x_old != *x || y_old != *y || wd_old != *wd || ht_old != *ht;
 }
 
-
-void dt_dev_process_image_job(dt_develop_t *dev)
+void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 {
   // -1×-1 px means the dimensions of the main preview in darkroom were not inited yet.
   // 0×0 px is not feasible.
@@ -606,7 +508,6 @@ void dt_dev_process_image_job(dt_develop_t *dev)
   // Until then, don't bother computing garbage that will not be reused later.
   if(dev->width < 32 || dev->height < 32) return;
 
-  dt_dev_pixelpipe_t *pipe = dev->pipe;
   pipe->running = 1;
 
   dt_pthread_mutex_lock(&pipe->busy_mutex);
@@ -625,7 +526,7 @@ void dt_dev_process_image_job(dt_develop_t *dev)
   if(!finish_on_error)
   {
     dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, buf_width, buf_height, 1.0, DT_MIPMAP_FULL);
-    dt_print(DT_DEBUG_DEV, "[pixelpipe] Started main preview recompute at %i×%i px\n", dev->width, dev->height);
+    dt_print(DT_DEBUG_DEV, "[pixelpipe] Started darkroom pipe %i recompute at %i×%i px\n", pipe->type, dev->width, dev->height);
   }
 
   pipe->processing = 1;
@@ -668,7 +569,13 @@ void dt_dev_process_image_job(dt_develop_t *dev)
     // that captured it has changed too (because all hashes depend on ROI size & position too).
     // Since only the object that locked the re-entry flag can unlock it, and we now lost its reference,
     // nothing will unset it anymore, so we simply hard-reset it.
-    if(_update_darkroom_roi(dev, pipe, &x, &y, &wd, &ht, &scale, &zoom_x, &zoom_y))
+    gboolean reset_size = FALSE;
+    if(pipe->type == DT_DEV_PIXELPIPE_FULL)
+      reset_size = _update_darkroom_roi(dev, pipe, &x, &y, &wd, &ht, &scale, &zoom_x, &zoom_y);
+    else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+      reset_size = _update_preview_scale(dev, pipe, &wd, &ht, &scale);
+
+    if(reset_size)
       dt_dev_pixelpipe_reset_reentry(pipe);
 
     // Signal that we are starting
@@ -679,8 +586,10 @@ void dt_dev_process_image_job(dt_develop_t *dev)
     dt_control_log_busy_leave();
     dt_control_toast_busy_leave();
 
-    dt_show_times(&thread_start, "[dev_process_image] pixel pipeline thread");
-    dt_dev_average_delay_update(&thread_start, &dev->average_delay);
+    if(pipe->type == DT_DEV_PIXELPIPE_FULL)
+      dt_dev_average_delay_update(&thread_start, &dev->average_delay);
+    else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+      dt_dev_average_delay_update(&thread_start, &dev->preview_average_delay);
 
     // If pipe is flagged for re-entry, we need to restart it right away
     if(dt_dev_pixelpipe_has_reentry(pipe))
@@ -704,7 +613,12 @@ void dt_dev_process_image_job(dt_develop_t *dev)
     }
 
     if(pipe->status == DT_DEV_PIXELPIPE_VALID)
-      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
+    {
+      if(pipe->type == DT_DEV_PIXELPIPE_FULL)
+        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
+      else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
+    }
 
     dt_iop_nap(200);
   }
@@ -713,9 +627,25 @@ void dt_dev_process_image_job(dt_develop_t *dev)
   dt_pthread_mutex_unlock(&pipe->busy_mutex);
 
   pipe->running = 0;
-  dt_print(DT_DEBUG_DEV, "[pixelpipe] exiting main image pipe thread\n");
-  dt_control_queue_redraw_center();
+
+  if(pipe->type == DT_DEV_PIXELPIPE_FULL)
+    dt_control_queue_redraw_center();
+  else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+    dt_control_queue_redraw();
 }
+
+
+void dt_dev_process_preview_job(dt_develop_t *dev)
+{
+  dt_dev_darkroom_pipeline(dev, dev->preview_pipe);
+}
+
+
+void dt_dev_process_image_job(dt_develop_t *dev)
+{
+  dt_dev_darkroom_pipeline(dev, dev->pipe);
+}
+
 
 // load the raw and get the new image struct, blocking in gui thread
 static inline int _dt_dev_load_raw(dt_develop_t *dev, const int32_t imgid)

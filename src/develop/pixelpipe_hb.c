@@ -1245,8 +1245,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
 
   /* test for a possible opencl path after checking some module specific pre-requisites */
   gboolean possible_cl = (module->process_cl && piece->process_cl_ready
-      && !(((pipe->type & DT_DEV_PIXELPIPE_PREVIEW) == DT_DEV_PIXELPIPE_PREVIEW
-            || (pipe->type & DT_DEV_PIXELPIPE_PREVIEW2) == DT_DEV_PIXELPIPE_PREVIEW2)
+      && !((pipe->type & DT_DEV_PIXELPIPE_PREVIEW) == DT_DEV_PIXELPIPE_PREVIEW
           && (module->flags() & IOP_FLAGS_PREVIEW_NON_OPENCL))
       && (fits_on_device || piece->process_tiling_ready));
 
@@ -2026,7 +2025,9 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
     dt_times_t start;
     dt_get_times(&start);
     err = dt_dev_pixelpipe_process_rec(pipe, dev, &buf, &cl_mem_out, &out_format, &roi, modules, pieces, pos);
-    dt_show_times(&start, "[pixelpipe] pixel pipeline processing");
+    gchar *msg = g_strdup_printf("[pixelpipe] %s pipeline processing", _pipe_type_to_str(pipe->type));
+    dt_show_times(&start, msg);
+    g_free(msg);
 
     // The pipeline has copied cl_mem_out into buf, so we can release it now.
   #ifdef HAVE_OPENCL
