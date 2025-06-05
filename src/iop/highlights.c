@@ -412,7 +412,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   if(d->mode == DT_IOP_HIGHLIGHTS_LAPLACIAN && filters && filters != 9u)
   {
     // Bayer CFA and guided laplacian method : prepare for wavelets decomposition.
-    const float scale = fmaxf(DS_FACTOR * piece->iscale / roi_in->scale, 1.f);
+    const float scale = fmaxf(DS_FACTOR / roi_in->scale, 1.f);
     const float final_radius = (float)((int)(1 << d->scales)) / scale;
     const int scales = CLAMP((int)ceilf(log2f(final_radius)), 1, MAX_NUM_SCALES);
     const int max_filter_radius = (1 << scales);
@@ -1582,7 +1582,7 @@ static void process_laplacian_bayer(struct dt_iop_module_t *self, dt_dev_pixelpi
   float *const restrict LF_even = dt_alloc_align_float(ds_size * 4);
   float *const restrict temp = dt_alloc_align_float(ds_size * 4);
 
-  const float scale = fmaxf(DS_FACTOR * piece->iscale / (roi_in->scale), 1.f);
+  const float scale = fmaxf(DS_FACTOR / (roi_in->scale), 1.f);
   const float final_radius = (float)((int)(1 << data->scales)) / scale;
   const int scales = CLAMP((int)ceilf(log2f(final_radius)), 1, MAX_NUM_SCALES);
 
@@ -1790,7 +1790,7 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, dt_dev_pi
   cl_mem LF_even = dt_opencl_alloc_device(devid, ds_sizes[0], ds_sizes[1], sizeof(float) * 4);
   cl_mem temp = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(float) * 4); // need full size here for blurring
 
-  const float scale = fmaxf(DS_FACTOR * piece->iscale / (roi_in->scale), 1.f);
+  const float scale = fmaxf(DS_FACTOR / (roi_in->scale), 1.f);
   const float final_radius = (float)((int)(1 << data->scales)) / scale;
   const int scales = CLAMP((int)ceilf(log2f(final_radius)), 1, MAX_NUM_SCALES);
 

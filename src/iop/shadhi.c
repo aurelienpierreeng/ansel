@@ -314,7 +314,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   const int order = data->order;
   const float radius = fmaxf(0.1f, data->radius);
-  const float sigma = radius * roi_in->scale / piece->iscale;
+  const float sigma = radius * roi_in->scale;
   const float shadows = 2.0f * fmin(fmax(-1.0, (data->shadows / 100.0f)), 1.0f);
   const float highlights = 2.0f * fmin(fmax(-1.0, (data->highlights / 100.0f)), 1.0f);
   const float whitepoint = fmax(1.0f - data->whitepoint / 100.0f, 0.01f);
@@ -478,7 +478,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   const int order = d->order;
   const float radius = fmaxf(0.1f, d->radius);
-  const float sigma = radius * roi_in->scale / piece->iscale;
+  const float sigma = radius * roi_in->scale;
   const float shadows = 2.0f * fmin(fmax(-1.0f, (d->shadows / 100.0f)), 1.0f);
   const float highlights = 2.0f * fmin(fmax(-1.0f, (d->highlights / 100.0f)), 1.0f);
   const float whitepoint = fmax(1.0f - d->whitepoint / 100.0f, 0.01f);
@@ -591,7 +591,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   const int channels = piece->colors;
 
   const float radius = fmax(0.1f, d->radius);
-  const float sigma = radius * roi_in->scale / piece->iscale;
+  const float sigma = radius * roi_in->scale;
   const float sigma_r = 100.0f; // does not depend on scale
   const float sigma_s = sigma;
 

@@ -140,11 +140,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     hsl2rgb(&out[k], h, CLIP(s), CLIP(l));
   }
 
-  const float w = piece->iwidth * piece->iscale;
-  const float h = piece->iheight * piece->iscale;
+  const float w = piece->iwidth;
+  const float h = piece->iheight;
   const int mrad = sqrt(w * w + h * h) * 0.01;
   const int rad = mrad * (fmin(100.0, d->size + 1) / 100.0);
-  const int radius = MIN(mrad, ceilf(rad * roi_in->scale / piece->iscale));
+  const int radius = MIN(mrad, ceilf(rad * roi_in->scale));
 
   dt_box_mean(out, roi_out->height, roi_out->width, 4, radius, BOX_ITERATIONS);
 
@@ -172,12 +172,12 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   const float saturation = d->saturation / 100.0f;
   const float amount = d->amount / 100.0f;
 
-  const float w = piece->iwidth * piece->iscale;
-  const float h = piece->iheight * piece->iscale;
+  const float w = piece->iwidth;
+  const float h = piece->iheight;
   const int mrad = sqrt(w * w + h * h) * 0.01f;
 
   const int rad = mrad * (fmin(100.0f, d->size + 1) / 100.0f);
-  const int radius = MIN(mrad, ceilf(rad * roi_in->scale / piece->iscale));
+  const int radius = MIN(mrad, ceilf(rad * roi_in->scale));
 
   /* sigma-radius correlation to match opencl vs. non-opencl. identified by numerical experiments but
    * unproven. ask me if you need details. ulrich */
@@ -319,12 +319,12 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
 {
   dt_iop_soften_data_t *d = (dt_iop_soften_data_t *)piece->data;
 
-  const float w = piece->iwidth * piece->iscale;
-  const float h = piece->iheight * piece->iscale;
+  const float w = piece->iwidth;
+  const float h = piece->iheight;
   const int mrad = sqrt(w * w + h * h) * 0.01f;
 
   const int rad = mrad * (fmin(100.0f, d->size + 1) / 100.0f);
-  const int radius = MIN(mrad, ceilf(rad * roi_in->scale / piece->iscale));
+  const int radius = MIN(mrad, ceilf(rad * roi_in->scale));
 
   /* sigma-radius correlation to match opencl vs. non-opencl. identified by numerical experiments but
    * unproven. ask me if you need details. ulrich */

@@ -1025,7 +1025,6 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   // Take a local copy of the buffer so we can release the mipmap cache lock immediately
   const size_t buf_width = buf.width;
   const size_t buf_height = buf.height;
-  const float buf_iscale = buf.iscale;
   dt_mipmap_cache_release(cache, &buf);
 
   // Redo an actual pipe init with actual input sizes
@@ -1056,7 +1055,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   // Update the ICC type if DT_COLORSPACE_NONE is passed
   dt_colorspaces_get_output_profile(imgid, &icc_type, icc_filename);
   dt_dev_pixelpipe_set_icc(&pipe, icc_type, icc_filename, icc_intent);
-  dt_dev_pixelpipe_set_input(&pipe, &dev, imgid, buf_width, buf_height, buf_iscale, DT_MIPMAP_FULL);
+  dt_dev_pixelpipe_set_input(&pipe, &dev, imgid, buf_width, buf_height, DT_MIPMAP_FULL);
   dt_dev_pixelpipe_create_nodes(&pipe, &dev);
   dt_dev_pixelpipe_synch_all(&pipe, &dev);
 

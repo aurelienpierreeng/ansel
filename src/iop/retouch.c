@@ -2546,7 +2546,7 @@ static void rt_compute_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelp
           {
             if(index >= 0)
             {
-              const int overlap = ceilf(4 * (p->rt_forms[index].blur_radius * roi_in->scale / piece->iscale));
+              const int overlap = ceilf(4 * (p->rt_forms[index].blur_radius * roi_in->scale));
               if(roiy > ft) roiy = MAX(roiy - overlap, ft);
               if(roix > fl) roix = MAX(roix - overlap, fl);
               if(roir < fl + fw) roir = MAX(roir + overlap, fl + fw);
@@ -3191,7 +3191,7 @@ static void _retouch_blur(dt_iop_module_t *self, float *const in, dt_iop_roi_t *
 {
   if(fabsf(blur_radius) <= 0.1f) return;
 
-  const float sigma = blur_radius * roi_in->scale / piece->iscale;
+  const float sigma = blur_radius * roi_in->scale;
 
   float *img_dest = NULL;
 
@@ -3498,7 +3498,7 @@ static void process_internal(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
   dwt_p = dt_dwt_init(in_retouch, roi_rt->width, roi_rt->height, 4, p->num_scales,
                       (!display_wavelet_scale || (piece->pipe->type & DT_DEV_PIXELPIPE_FULL) != DT_DEV_PIXELPIPE_FULL) ? 0 : p->curr_scale,
                       p->merge_from_scale, &usr_data,
-                      roi_in->scale / piece->iscale, use_sse);
+                      roi_in->scale, use_sse);
   if(dwt_p == NULL) goto cleanup;
 
   // check if this module should expose mask.
@@ -3917,7 +3917,7 @@ static cl_int _retouch_blur_cl(const int devid, cl_mem dev_layer, dt_iop_roi_t *
 
   if(fabsf(blur_radius) <= 0.1f) return err;
 
-  const float sigma = blur_radius * roi_layer->scale / piece->iscale;
+  const float sigma = blur_radius * roi_layer->scale;
   const int ch = 4;
 
   const cl_mem dev_dest =
@@ -4322,7 +4322,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
                          (!display_wavelet_scale
                           || (piece->pipe->type & DT_DEV_PIXELPIPE_FULL) != DT_DEV_PIXELPIPE_FULL) ? 0 : p->curr_scale,
                          p->merge_from_scale, &usr_data,
-                         roi_in->scale / piece->iscale);
+                         roi_in->scale);
   if(dwt_p == NULL)
   {
     dt_print(DT_DEBUG_OPENCL, "[retouch process_cl] error initializing wavelet decompose on device %d\n", devid);

@@ -117,7 +117,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
 
   // Params
-  const int rad = data->radius * roi_in->scale / piece->iscale;
+  const int rad = data->radius * roi_in->scale;
 
 #define BINS (256)
 

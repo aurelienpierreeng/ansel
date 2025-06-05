@@ -446,7 +446,6 @@ static gboolean _update_preview_scale(dt_develop_t *dev, dt_dev_pixelpipe_t *pip
   int window_height = dev->height * darktable.gui->ppd;
   *wd = MIN(window_width, roundf((float)pipe->processed_width * *scale));
   *ht = MIN(window_height, roundf((float)pipe->processed_height * *scale));
-  pipe->iscale = (float)pipe->processed_width / (float)pipe->backbuf_width;
 
   return wd_old != *wd || ht_old != *ht;
 }
@@ -525,7 +524,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 
   if(!finish_on_error)
   {
-    dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, buf_width, buf_height, 1.0, DT_MIPMAP_FULL);
+    dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, buf_width, buf_height, DT_MIPMAP_FULL);
     dt_print(DT_DEBUG_DEV, "[pixelpipe] Started darkroom pipe %i recompute at %i×%i px\n", pipe->type, dev->width, dev->height);
   }
 
@@ -816,9 +815,8 @@ void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch)
   // fallback on preview pipe
   if(dev->preview_pipe && dev->preview_pipe->processed_width)
   {
-    const float scale = dev->preview_pipe->iscale;
-    *procw = scale * dev->preview_pipe->processed_width;
-    *proch = scale * dev->preview_pipe->processed_height;
+    *procw = dev->preview_pipe->processed_width;
+    *proch = dev->preview_pipe->processed_height;
     return;
   }
 
@@ -1477,7 +1475,7 @@ void dt_dev_get_final_size(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const in
     clean_pipe = TRUE;
     pipe = &temp_pipe;
     dt_dev_pixelpipe_init_dummy(pipe, input_width, input_height);
-    dt_dev_pixelpipe_set_input(pipe, dev, imgid, input_width, input_height, 1.0, DT_MIPMAP_NONE);
+    dt_dev_pixelpipe_set_input(pipe, dev, imgid, input_width, input_height, DT_MIPMAP_NONE);
     dt_dev_pixelpipe_create_nodes(pipe, dev);
     dt_dev_pixelpipe_synch_all(pipe, dev);
   }

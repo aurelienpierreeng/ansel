@@ -290,7 +290,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   dt_iop_useless_params_t *d = (dt_iop_useless_params_t *)piece->data;
   // the total scale is composed of scale before input to the pipeline (iscale),
   // and the scale of the roi.
-  const float scale = piece->iscale / roi_in->scale;
+  const float scale = 1.f / roi_in->scale;
   // how many colors in our buffer?
   const size_t ch = piece->colors;
 

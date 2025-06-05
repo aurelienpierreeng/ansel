@@ -153,7 +153,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   const int width = roi_in->width;
   const int height = roi_in->height;
 
-  const float scale = fminf(roi_in->scale, 2.0f) / fmaxf(piece->iscale, 1.0f);
+  const float scale = fminf(roi_in->scale, 2.0f);
   const int P = ceilf(d->radius * scale); // pixel filter size
   const int K = ceilf(7 * scale);         // nbhood
   const float sharpness = 3000.0f / (1.0f + d->strength);
@@ -218,7 +218,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   cl_int err = -999;
 
-  const float scale = fminf(roi_in->scale, 2.0f) / fmaxf(piece->iscale, 1.0f);
+  const float scale = fminf(roi_in->scale, 2.0f);
   const int P = ceilf(d->radius * scale); // pixel filter size
   const int K = ceilf(7 * scale);         // nbhood
   const float sharpness = 3000.0f / (1.0f + d->strength);
@@ -382,8 +382,8 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
                      struct dt_develop_tiling_t *tiling)
 {
   dt_iop_nlmeans_params_t *d = (dt_iop_nlmeans_params_t *)piece->data;
-  const int P = ceilf(d->radius * fmin(roi_in->scale, 2.0f) / fmax(piece->iscale, 1.0f)); // pixel filter size
-  const int K = ceilf(7 * fmin(roi_in->scale, 2.0f) / fmax(piece->iscale, 1.0f));         // nbhood
+  const int P = ceilf(d->radius * fmin(roi_in->scale, 2.0f)); // pixel filter size
+  const int K = ceilf(7 * fmin(roi_in->scale, 2.0f));         // nbhood
 
   tiling->factor = 2.0f + 1.0f + 0.25 * NUM_BUCKETS; // in + out + tmp
   tiling->maxbuf = 1.0f;
@@ -409,7 +409,7 @@ static void process_cpu(dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
     return; // image has been copied through to output and module's trouble flag has been updated
 
   // adjust to zoom size:
-  const float scale = fmin(roi_in->scale, 2.0f) / fmax(piece->iscale, 1.0f);
+  const float scale = fmin(roi_in->scale, 2.0f);
   const int P = ceilf(d->radius * scale); // pixel filter size
   const int K = ceilf(7 * scale);         // nbhood
   const float sharpness = 3000.0f / (1.0f + d->strength);

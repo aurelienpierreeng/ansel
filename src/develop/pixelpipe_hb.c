@@ -228,11 +228,10 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
 }
 
 void dt_dev_pixelpipe_set_input(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int32_t imgid, int width, int height,
-                                float iscale, dt_mipmap_size_t size)
+                                dt_mipmap_size_t size)
 {
   pipe->iwidth = width;
   pipe->iheight = height;
-  pipe->iscale = iscale;
   pipe->imgid = imgid;
   pipe->image = dev->image_storage;
   pipe->size = size;
@@ -376,7 +375,6 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
         = ((module->default_colorspace(module, pipe, NULL) == IOP_CS_RAW) && (dt_image_is_raw(&pipe->image)))
               ? 1
               : 4;
-    piece->iscale = pipe->iscale;
     piece->iwidth = pipe->iwidth;
     piece->iheight = pipe->iheight;
     piece->module = module;
@@ -462,10 +460,8 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     local_hash = dt_hash(local_hash, (const char *)&piece->planned_roi_in, sizeof(dt_iop_roi_t));
     local_hash = dt_hash(local_hash, (const char *)&piece->planned_roi_out, sizeof(dt_iop_roi_t));
 
-    /*
     fprintf(stdout, "%s: ROI in: %ix%i, ROI out: %ix%i\n", piece->module->op, piece->planned_roi_in.width,
             piece->planned_roi_in.height, piece->planned_roi_out.width, piece->planned_roi_out.height);
-    */
 
     // Mask preview display doesn't re-commit params, so we need to keep that of it here
     // Too much GUI stuff interleaved with pipeline stuff...

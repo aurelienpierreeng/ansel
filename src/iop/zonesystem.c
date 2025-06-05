@@ -218,7 +218,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, dt_dev_pixelpip
 
     /* setup gaussian kernel */
     const int radius = 8;
-    const float sigma = 2.5 * (radius * roi_in->scale / piece->iscale);
+    const float sigma = 2.5 * (radius * roi_in->scale);
 
     dt_gaussian_t *gauss = dt_gaussian_init(width, height, 1, Lmax, Lmin, sigma, DT_IOP_GAUSSIAN_ZERO);
 

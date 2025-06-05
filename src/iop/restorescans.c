@@ -141,7 +141,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_restorescans_data_t *d = (dt_iop_restorescans_data_t *)piece->data;
-  const float scale = piece->iscale / roi_in->scale;
+  const float scale = 1.f / roi_in->scale;
 
   if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
                                          ivoid, ovoid, roi_in, roi_out))

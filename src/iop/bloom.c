@@ -122,7 +122,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   /* gather light by threshold */
   const int rad = 256.0f * (fmin(100.0f, data->size + 1.0f) / 100.0f);
-  const float _r = ceilf(rad * roi_in->scale / piece->iscale);
+  const float _r = ceilf(rad * roi_in->scale);
   const int radius = MIN(256.0f, _r);
 
   const float scale = 1.0f / exp2f(-1.0f * (fmin(100.0f, data->strength + 1.0f) / 100.0f));
@@ -199,7 +199,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   const float threshold = d->threshold;
 
   const int rad = 256.0f * (fmin(100.0f, d->size + 1.0f) / 100.0f);
-  const float _r = ceilf(rad * roi_in->scale / piece->iscale);
+  const float _r = ceilf(rad * roi_in->scale);
   const int radius = MIN(256.0f, _r);
   const float scale = 1.0f / exp2f(-1.0f * (fmin(100.0f, d->strength + 1.0f) / 100.0f));
 
@@ -326,7 +326,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   const dt_iop_bloom_data_t *d = (dt_iop_bloom_data_t *)piece->data;
 
   const int rad = 256.0f * (fmin(100.0f, d->size + 1.0f) / 100.0f);
-  const float _r = ceilf(rad * roi_in->scale / piece->iscale);
+  const float _r = ceilf(rad * roi_in->scale);
   const int radius = MIN(256.0f, _r);
 
   tiling->factor = 2.0f + 0.25f + 0.05f; // in + out + blurlightness + slice for dt_box_mean

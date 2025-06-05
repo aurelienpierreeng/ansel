@@ -174,7 +174,7 @@ void process(struct dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, cons
     return; // image has been copied through to output and module's trouble flag has been updated
 
   const int order = 1; // 0,1,2
-  const float sigma = fmax(0.1f, fabs(d->radius)) * roi_in->scale / piece->iscale;
+  const float sigma = fmax(0.1f, fabs(d->radius)) * roi_in->scale;
   const float Labmax[] = { 100.0f, 128.0f, 128.0f, 1.0f };
   const float Labmin[] = { 0.0f, -128.0f, -128.0f, 0.0f };
   const int ch = 4;

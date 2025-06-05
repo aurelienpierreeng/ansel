@@ -470,7 +470,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   const int filter = fabs(roi_out->scale - 1.0f) > 0.01;
   // filter width depends on world space (i.e. reverse wd norm and roi->scale, as well as buffer input to
   // pixelpipe iscale)
-  const double filtermul = piece->iscale / (roi_out->scale * wd);
+  const double filtermul = 1.f / (roi_out->scale * wd);
   const float fib1 = 34.0, fib2 = 21.0;
   const float fib1div2 = fib1 / fib2;
 

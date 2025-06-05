@@ -753,8 +753,8 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
 
   if(d->mode == MODE_NLMEANS || d->mode == MODE_NLMEANS_AUTO)
   {
-    const int P = ceilf(d->radius * fminf(fminf(roi_in->scale, 2.0f) / fmaxf(piece->iscale, 1.0f), 1.0f)); // pixel filter size
-    const int K = ceilf(d->nbhood * fminf(fminf(roi_in->scale, 2.0f) / fmaxf(piece->iscale, 1.0f), 1.0f)); // nbhood
+    const int P = ceilf(d->radius * fminf(fminf(roi_in->scale, 2.0f), 1.0f)); // pixel filter size
+    const int K = ceilf(d->nbhood * fminf(fminf(roi_in->scale, 2.0f), 1.0f)); // nbhood
     const int K_scattered = ceilf(d->scattering * (K * K * K + 7.0 * K * sqrt(K)) / 6.0) + K;
 
     tiling->factor = 2.0f + 0.25f; // in + out + tmp
@@ -769,11 +769,11 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   {
     const int max_max_scale = DT_IOP_DENOISE_PROFILE_BANDS; // hard limit
     int max_scale = 0;
-    const float scale = fminf(roi_in->scale / piece->iscale, 1.0f);
+    const float scale = fminf(roi_in->scale, 1.0f);
     // largest desired filter on input buffer (20% of input dim)
     const float supp0
         = fminf(2 * (2u << (max_max_scale - 1)) + 1,
-              fmaxf(piece->buf_in.height * piece->iscale, piece->buf_in.width * piece->iscale) * 0.2f);
+              fmaxf(piece->buf_in.height, piece->buf_in.width) * 0.2f);
     const float i0 = dt_log2f((supp0 - 1.0f) * .5f);
     for(; max_scale < max_max_scale; max_scale++)
     {
@@ -1274,10 +1274,10 @@ static void process_wavelets(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
 #define MAX_MAX_SCALE DT_IOP_DENOISE_PROFILE_BANDS // hard limit
 
   int max_scale = 0;
-  const float in_scale = fminf(roi_in->scale / piece->iscale, 1.0f);
+  const float in_scale = fminf(roi_in->scale, 1.0f);
   // largest desired filter on input buffer (20% of input dim)
   const float supp0 = MIN(2 * (2u << (MAX_MAX_SCALE - 1)) + 1,
-                          MAX(piece->buf_in.height * piece->iscale, piece->buf_in.width * piece->iscale) * 0.2f);
+                          MAX(piece->buf_in.height, piece->buf_in.width) * 0.2f);
   const float i0 = dt_log2f((supp0 - 1.0f) * .5f);
   for(; max_scale < MAX_MAX_SCALE; max_scale++)
   {
@@ -1590,7 +1590,7 @@ static void process_nlmeans_cpu(dt_dev_pixelpipe_iop_t *piece,
     return;
 
   // adjust to zoom size:
-  const float scale = fminf(fminf(roi_in->scale, 2.0f) / fmaxf(piece->iscale, 1.0f), 1.0f);
+  const float scale = fminf(fminf(roi_in->scale, 2.0f), 1.0f);
   const int P = ceilf(d->radius * scale); // pixel filter size
   int K = d->nbhood; // nbhood
   const float scattering = nlmeans_scattering(&K,d,piece,scale);
@@ -1783,7 +1783,7 @@ static int process_nlmeans_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop
 
   cl_int err = -999;
 
-  const float scale = fminf(fminf(roi_in->scale, 2.0f) / fmaxf(piece->iscale, 1.0f), 1.0f);
+  const float scale = fminf(fminf(roi_in->scale, 2.0f), 1.0f);
   const int P = ceilf(d->radius * scale); // pixel filter size
   int K = d->nbhood; // nbhood
   const float scattering = nlmeans_scattering(&K,d,piece,scale);
@@ -1902,7 +1902,7 @@ static int process_nlmeans_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop
 
   cl_int err = -999;
 
-  const float scale = fminf(fminf(roi_in->scale, 2.0f) / fmaxf(piece->iscale, 1.0f), 1.0f);
+  const float scale = fminf(fminf(roi_in->scale, 2.0f), 1.0f);
   const int P = ceilf(d->radius * scale); // pixel filter size
   int K = d->nbhood; // nbhood
   const float scattering = nlmeans_scattering(&K,d,piece,scale);
@@ -2133,11 +2133,11 @@ static int process_wavelets_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
 
   const int max_max_scale = DT_IOP_DENOISE_PROFILE_BANDS; // hard limit
   int max_scale = 0;
-  const float scale = fminf(roi_in->scale / piece->iscale, 1.0f);
+  const float scale = fminf(roi_in->scale, 1.0f);
   // largest desired filter on input buffer (20% of input dim)
   const float supp0
       = MIN(2 * (2u << (max_max_scale - 1)) + 1,
-            MAX(piece->buf_in.height * piece->iscale, piece->buf_in.width * piece->iscale) * 0.2f);
+            MAX(piece->buf_in.height, piece->buf_in.width) * 0.2f);
   const float i0 = dt_log2f((supp0 - 1.0f) * .5f);
   for(; max_scale < max_max_scale; max_scale++)
   {

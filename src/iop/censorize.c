@@ -149,12 +149,12 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   float *const restrict temp = dt_alloc_align_float((size_t)width * height * ch);
   if(temp == NULL) return;
 
-  const float sigma_1 = data->radius_1 * roi_in->scale / piece->iscale;
-  const float sigma_2 = data->radius_2 * roi_in->scale / piece->iscale;
-  const size_t pixel_radius = data->pixelate * roi_in->scale / piece->iscale;
+  const float sigma_1 = data->radius_1 * roi_in->scale;
+  const float sigma_2 = data->radius_2 * roi_in->scale;
+  const size_t pixel_radius = data->pixelate * roi_in->scale;
 
   // used to adjuste blur level depending on size. Don't amplify noise if magnified > 100%
-  const float scale = fmaxf(piece->iscale / roi_in->scale, 1.f);
+  const float scale = fmaxf(1.f / roi_in->scale, 1.f);
   const float noise = data->noise / scale;
 
   dt_aligned_pixel_t RGBmax, RGBmin;
@@ -274,7 +274,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   const int channels = piece->colors;
 
   const float radius_1 = fmax(0.1f, d->radius_1);
-  const float sigma = radius_1 * roi_in->scale / piece->iscale;
+  const float sigma = radius_1 * roi_in->scale;
   const float saturation = d->saturation;
   const int order = d->order;
   const int unbound = d->unbound;

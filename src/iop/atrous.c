@@ -217,11 +217,11 @@ static int get_scales(float (*thrs)[4], float (*boost)[4], float *sharp, const d
   // . . . . .
   // .   .   .   .   .
   // cut off too fine ones, if image is not detailed enough (due to roi_in->scale)
-  const float scale = roi_in->scale / piece->iscale;
+  const float scale = roi_in->scale;
   // largest desired filter on input buffer (20% of input dim)
   const float supp0
       = MIN(2 * (2 << (MAX_NUM_SCALES - 1)) + 1,
-            MAX(piece->buf_in.height * piece->iscale, piece->buf_in.width * piece->iscale) * 0.2f);
+            MAX(piece->buf_in.height, piece->buf_in.width) * 0.2f);
   const float i0 = dt_log2f((supp0 - 1.0f) * .5f);
   int i = 0;
   for(; i < MAX_NUM_SCALES; i++)
@@ -722,7 +722,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
       dt_draw_curve_set_point(d->curve[ch], k, x, y);
     }
   int l = 0;
-  for(int k = (int)MIN(pipe->iwidth * pipe->iscale, pipe->iheight * pipe->iscale); k; k >>= 1) l++;
+  for(int k = (int)MIN(pipe->iwidth, pipe->iheight); k; k >>= 1) l++;
   d->octaves = MIN(BANDS, l);
 }
 
@@ -739,7 +739,7 @@ void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
       (void)dt_draw_curve_add_point(d->curve[ch], default_params->x[ch][k], default_params->y[ch][k]);
   }
   int l = 0;
-  for(int k = (int)MIN(pipe->iwidth * pipe->iscale, pipe->iheight * pipe->iscale); k; k >>= 1) l++;
+  for(int k = (int)MIN(pipe->iwidth, pipe->iheight); k; k >>= 1) l++;
   d->octaves = MIN(BANDS, l);
 }
 

@@ -598,7 +598,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
                                                      ch * owidth, ch * oheight);
         if(guide)
           _develop_blend_process_feather(guide, mask, owidth, oheight, ch, guide_weight,
-                                         d->feathering_radius, roi_out->scale / piece->iscale);
+                                         d->feathering_radius, roi_out->scale);
         if(!rois_equal)
           _develop_blend_process_free_region(guide);
       }
@@ -606,11 +606,11 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
       {
         const float guide_weight = cst == IOP_CS_RGB ? 100.0f : 1.0f;
         _develop_blend_process_feather((const float *const restrict)ovoid, mask, owidth, oheight, ch,
-                                       guide_weight, d->feathering_radius, roi_out->scale / piece->iscale);
+                                       guide_weight, d->feathering_radius, roi_out->scale);
       }
       else if(operation == DEVELOP_MASK_POST_BLUR)
       {
-        const float sigma = d->blur_radius * roi_out->scale / piece->iscale;
+        const float sigma = d->blur_radius * roi_out->scale;
         const float mmax[] = { 1.0f };
         const float mmin[] = { 0.0f };
 
@@ -1097,7 +1097,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
       _develop_mask_post_processing operation = post_operations[index];
       if(operation == DEVELOP_MASK_POST_FEATHER_IN)
       {
-        int w = (int)(2 * d->feathering_radius * roi_out->scale / piece->iscale + 0.5f);
+        int w = (int)(2 * d->feathering_radius * roi_out->scale + 0.5f);
         if (w < 1) w = 1;
         const float sqrt_eps = 1.0f;
         const float guide_weight = cst == IOP_CS_RGB ? 100.0f : 1.0f;
@@ -1124,7 +1124,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
       }
       else if(operation == DEVELOP_MASK_POST_FEATHER_OUT)
       {
-        int w = (int)(2 * d->feathering_radius * roi_out->scale / piece->iscale + 0.5f);
+        int w = (int)(2 * d->feathering_radius * roi_out->scale + 0.5f);
         if (w < 1) w = 1;
         const float sqrt_eps = 1.0f;
         const float guide_weight = cst == IOP_CS_RGB ? 100.0f : 1.0f;
@@ -1135,7 +1135,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
       }
       else if(operation == DEVELOP_MASK_POST_BLUR)
       {
-        const float sigma = d->blur_radius * roi_out->scale / piece->iscale;
+        const float sigma = d->blur_radius * roi_out->scale;
         const float mmax[] = { 1.0f };
         const float mmin[] = { 0.0f };
 

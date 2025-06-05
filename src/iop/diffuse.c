@@ -492,7 +492,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
 {
   dt_iop_diffuse_data_t *data = (dt_iop_diffuse_data_t *)piece->data;
 
-  const float scale = fmaxf(piece->iscale / roi_in->scale, 1.f);
+  const float scale = fmaxf(1.f / roi_in->scale, 1.f);
   const float final_radius = (data->radius + data->radius_center) * 2.f / scale;
   const int diffusion_scales = num_steps_to_reach_equivalent_sigma(B_SPLINE_SIGMA, final_radius);
   const int scales = CLAMP(diffusion_scales, 1, MAX_NUM_SCALES);
@@ -911,7 +911,7 @@ static inline gint wavelets_process(const float *const restrict in, float *const
   size_t padded_size;
   float *const DT_ALIGNED_ARRAY tempbuf = dt_alloc_perthread_float(4 * width, &padded_size); //TODO: alloc in caller
   if(tempbuf == NULL) return FALSE;
-  
+
   for(int s = 0; s < scales; ++s)
   {
     /* fprintf(stdout, "Wavelet decompose : scale %i\n", s); */
@@ -1077,7 +1077,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
 
   uint8_t *const restrict mask = dt_alloc_align(sizeof(uint8_t) * roi_out->width * roi_out->height);
 
-  const float scale = fmaxf(piece->iscale / roi_in->scale, 1.f);
+  const float scale = fmaxf(1.f / roi_in->scale, 1.f);
   const float final_radius = (data->radius + data->radius_center) * 2.f / scale;
 
   const int iterations = MAX(ceilf((float)data->iterations), 1);
@@ -1342,7 +1342,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   cl_mem mask = dt_opencl_alloc_device(devid, sizes[0], sizes[1], sizeof(uint8_t));
 
-  const float scale = fmaxf(piece->iscale / roi_in->scale, 1.f);
+  const float scale = fmaxf(1.f / roi_in->scale, 1.f);
   const float final_radius = (data->radius + data->radius_center) * 2.f / scale;
 
   const int iterations = MAX(ceilf((float)data->iterations), 1);

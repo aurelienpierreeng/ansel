@@ -598,7 +598,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   float *in = (float *)ivoid;
   float *out = (float *)ovoid;
 
-  const float scale = fmaxf(piece->iscale / roi_in->scale, 1.f);
+  const float scale = fmaxf(1.f / roi_in->scale, 1.f);
   const float sigma_r = fmax(data->range, 0.1f);
   const float sigma_s = fmax(data->spatial, 1.0f) / scale;
   const float hue = hue_conversion(data->hue); // convert to LCH hue which better fits to Lab colorspace
@@ -643,14 +643,14 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   }
   else
   {
-    b = dt_iop_colorreconstruct_bilateral_init(roi_in, piece->iscale, sigma_s, sigma_r);
+    b = dt_iop_colorreconstruct_bilateral_init(roi_in, 1.f, sigma_s, sigma_r);
     dt_iop_colorreconstruct_bilateral_splat(b, in, data->threshold, data->precedence, params);
     dt_iop_colorreconstruct_bilateral_blur(b);
   }
 
   if(!b) goto error;
 
-  dt_iop_colorreconstruct_bilateral_slice(b, in, out, data->threshold, roi_in, piece->iscale);
+  dt_iop_colorreconstruct_bilateral_slice(b, in, out, data->threshold, roi_in, 1.f);
 
   // here is where we generate the canned bilateral grid of the preview pipe for later use
   if(self->dev->gui_attached && g && (piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW) == DT_DEV_PIXELPIPE_PREVIEW)
@@ -1057,7 +1057,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   dt_iop_colorreconstruct_global_data_t *gd = (dt_iop_colorreconstruct_global_data_t *)self->global_data;
   dt_iop_colorreconstruct_gui_data_t *g = (dt_iop_colorreconstruct_gui_data_t *)self->gui_data;
 
-  const float scale = piece->iscale / roi_in->scale;
+  const float scale = 1.f / roi_in->scale;
   const float sigma_r = fmax(d->range, 0.1f); // does not depend on scale
   const float sigma_s = fmax(d->spatial, 1.0f) / scale;
   const float hue = hue_conversion(d->hue); // convert to LCH hue which better fits to Lab colorspace
@@ -1100,7 +1100,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   }
   else
   {
-    b = dt_iop_colorreconstruct_bilateral_init_cl(piece->pipe->devid, gd, roi_in, piece->iscale, sigma_s, sigma_r);
+    b = dt_iop_colorreconstruct_bilateral_init_cl(piece->pipe->devid, gd, roi_in, 1.f, sigma_s, sigma_r);
     if(!b) goto error;
     err = dt_iop_colorreconstruct_bilateral_splat_cl(b, dev_in, d->threshold, d->precedence, params);
     if(err != CL_SUCCESS) goto error;
@@ -1108,7 +1108,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     if(err != CL_SUCCESS) goto error;
   }
 
-  err = dt_iop_colorreconstruct_bilateral_slice_cl(b, dev_in, dev_out, d->threshold, roi_in, piece->iscale);
+  err = dt_iop_colorreconstruct_bilateral_slice_cl(b, dev_in, dev_out, d->threshold, roi_in, 1.f);
   if(err != CL_SUCCESS) goto error;
 
   if(self->dev->gui_attached && g && (piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW) == DT_DEV_PIXELPIPE_PREVIEW)
@@ -1170,7 +1170,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   dt_iop_colorreconstruct_data_t *d = (dt_iop_colorreconstruct_data_t *)piece->data;
   // the total scale is composed of scale before input to the pipeline (iscale),
   // and the scale of the roi.
-  const float scale = piece->iscale / roi_in->scale;
+  const float scale = 1.f / roi_in->scale;
   const float sigma_r = fmax(d->range, 0.1f);
   const float sigma_s = fmax(d->spatial, 1.0f) / scale;
 

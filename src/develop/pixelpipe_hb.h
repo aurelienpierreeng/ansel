@@ -67,7 +67,6 @@ typedef struct dt_dev_pixelpipe_iop_t
   dt_dev_histogram_stats_t histogram_stats; // stats of captured histogram
   uint32_t histogram_max[4];                // maximum levels in histogram, one per channel
 
-  double iscale;        // input actually just downscaled buffer? iscale*iwidth = actual width
   int iwidth, iheight; // width and height of input buffer
 
   // Hash representing the current state of the params, blend params and enabled state of this individual module
@@ -131,8 +130,7 @@ typedef struct dt_dev_pixelpipe_t
 
   // width and height of input buffer
   int iwidth, iheight;
-  // input actually just downscaled buffer? iscale*iwidth = actual width
-  float iscale;
+
   // dimensions of processed buffer
   int processed_width, processed_height;
 
@@ -253,7 +251,7 @@ int dt_dev_pixelpipe_init_dummy(dt_dev_pixelpipe_t *pipe, int32_t width, int32_t
 int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe);
 // constructs a new input buffer from given RGB float array.
 void dt_dev_pixelpipe_set_input(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, int32_t imgid, int width,
-                                int height, float iscale, dt_mipmap_size_t size);
+                                int height, dt_mipmap_size_t size);
 // set some metadata for colorout to avoid race conditions.
 void dt_dev_pixelpipe_set_icc(dt_dev_pixelpipe_t *pipe, dt_colorspaces_color_profile_type_t icc_type,
                               const gchar *icc_filename, dt_iop_color_intent_t icc_intent);

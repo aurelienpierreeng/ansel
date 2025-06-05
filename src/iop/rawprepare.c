@@ -177,7 +177,7 @@ void init_presets(dt_iop_module_so_t *self)
 
 static int compute_proper_crop(dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *const roi_in, int value)
 {
-  const double scale = roi_in->scale / piece->iscale;
+  const double scale = roi_in->scale;
   return (int)roundf((double)value * scale);
 }
 
@@ -188,7 +188,7 @@ int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, floa
   // nothing to be done if parameters are set to neutral values (no top/left crop)
   if (d->x == 0 && d->y == 0) return 1;
 
-  const double scale = piece->buf_in.scale / piece->iscale;
+  const double scale = piece->buf_in.scale;
   const double x = (double)d->x * scale;
   const double y = (double)d->y * scale;
 
@@ -215,7 +215,7 @@ int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, 
   // nothing to be done if parameters are set to neutral values (no top/left crop)
   if (d->x == 0 && d->y == 0) return 1;
 
-  const double scale = piece->buf_in.scale / piece->iscale;
+  const double scale = piece->buf_in.scale;
   const double x = (double)d->x * scale;
   const double y = (double)d->y * scale;
 
@@ -252,7 +252,7 @@ void modify_roi_out(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, dt_iop
 
   const double x = d->x + d->width;
   const double y = d->y + d->height;
-  const double scale = roi_in->scale / piece->iscale;
+  const double scale = roi_in->scale;
   roi_out->width = (int)round((double)roi_out->width - x * scale);
   roi_out->height = (int)round((double)roi_out->height - y * scale);
 }
@@ -266,7 +266,7 @@ void modify_roi_in(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const d
 
   const double x = d->x + d->width;
   const double y = d->y + d->height;
-  const double scale = roi_in->scale / piece->iscale;
+  const double scale = roi_in->scale;
   roi_in->width = (int)round((double)roi_in->width + x * scale);
   roi_in->height = (int)round((double)roi_in->height + y * scale);
 }

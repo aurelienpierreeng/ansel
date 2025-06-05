@@ -519,7 +519,7 @@ static int process_cl_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
   const int devid = piece->pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
-  const int rad = MIN(width, (int)ceilf(256 * roi_in->scale / piece->iscale));
+  const int rad = MIN(width, (int)ceilf(256 * roi_in->scale));
 
   cl_mem dev_profile_info = NULL;
   cl_mem dev_profile_lut = NULL;
@@ -913,7 +913,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
 
   if(d->exposure_fusion)
   {
-    const int rad = MIN(roi_in->width, (int)ceilf(256 * roi_in->scale / piece->iscale));
+    const int rad = MIN(roi_in->width, (int)ceilf(256 * roi_in->scale));
 
     tiling->factor = 6.666f;                 // in + out + col[] + comb[] + 2*tmp
     tiling->maxbuf = 1.0f;
@@ -1160,7 +1160,7 @@ void process_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   float **col = malloc(sizeof(float *) * num_levels);
   float **comb = malloc(sizeof(float *) * num_levels);
   int w = wd, h = ht;
-  const int rad = MIN(wd, (int)ceilf(256 * roi_in->scale / piece->iscale));
+  const int rad = MIN(wd, (int)ceilf(256 * roi_in->scale));
   int step = 1;
   for(int k = 0; k < num_levels; k++)
   {

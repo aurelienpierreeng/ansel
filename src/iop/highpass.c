@@ -106,7 +106,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   dt_iop_highpass_data_t *d = (dt_iop_highpass_data_t *)piece->data;
 
   const int rad = MAX_RADIUS * (fmin(100.0f, d->sharpness + 1) / 100.0f);
-  const int radius = MIN(MAX_RADIUS, ceilf(rad * roi_in->scale / piece->iscale));
+  const int radius = MIN(MAX_RADIUS, ceilf(rad * roi_in->scale));
 
   const float sigma = sqrtf((radius * (radius + 1) * BOX_ITERATIONS + 2) / 3.0f);
   const int wdh = ceilf(3.0f * sigma);
@@ -137,9 +137,8 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   const int width = roi_in->width;
   const int height = roi_in->height;
 
-
   const int rad = MAX_RADIUS * (fmin(100.0f, d->sharpness + 1) / 100.0f);
-  const int radius = MIN(MAX_RADIUS, ceilf(rad * roi_in->scale / piece->iscale));
+  const int radius = MIN(MAX_RADIUS, ceilf(rad * roi_in->scale));
 
   /* sigma-radius correlation to match opencl vs. non-opencl. identified by numerical experiments but
    * unproven. ask me if you need details. ulrich */
@@ -299,7 +298,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     out[k] = 100.0f - LCLIP(in[4 * k]); // only L in Lab space
 
   const int rad = MAX_RADIUS * (fmin(100.0, data->sharpness + 1) / 100.0);
-  const int radius = MIN(MAX_RADIUS, ceilf(rad * roi_in->scale / piece->iscale));
+  const int radius = MIN(MAX_RADIUS, ceilf(rad * roi_in->scale));
 
   /* horizontal blur out into out */
   const int range = 2 * radius + 1;

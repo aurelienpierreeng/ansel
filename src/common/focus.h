@@ -269,7 +269,7 @@ static void dt_focus_draw_clusters(cairo_t *cr, int width, int height, int32_t i
     if(res)
     {
       // set mem pointer to 0, won't be used.
-      dt_dev_pixelpipe_set_input(&pipe, &dev, UNKNOWN_IMAGE, wd, ht, 1.0f, DT_MIPMAP_NONE);
+      dt_dev_pixelpipe_set_input(&pipe, &dev, UNKNOWN_IMAGE, wd, ht, DT_MIPMAP_NONE);
       dt_dev_pixelpipe_create_nodes(&pipe, &dev);
       dt_dev_pixelpipe_synch_all(&pipe, &dev);
       dt_dev_pixelpipe_get_roi_out(&pipe, &dev, pipe.iwidth, pipe.iheight, &pipe.processed_width,

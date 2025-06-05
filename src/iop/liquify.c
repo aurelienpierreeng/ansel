@@ -649,7 +649,7 @@ static void distort_paths_raw_to_piece(const struct dt_iop_module_t *module,
                                         dt_iop_liquify_params_t *p,
                                         const gboolean from_distort_transform)
 {
-  const distort_params_t params = { module->dev, pipe, pipe->iscale, roi_in_scale, DT_DEV_TRANSFORM_DIR_BACK_EXCL, from_distort_transform };
+  const distort_params_t params = { module->dev, pipe, 1.f, roi_in_scale, DT_DEV_TRANSFORM_DIR_BACK_EXCL, from_distort_transform };
   _distort_paths(module, &params, p);
 }
 
@@ -1301,21 +1301,20 @@ void modify_roi_in(struct dt_iop_module_t *module,
 static int _distort_xtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, const size_t points_count,
                                const gboolean inverted)
 {
-  const float scale = piece->iscale;
 
   // compute the extent of all points (all computations are done in RAW coordinate)
   float xmin = FLT_MAX, xmax = FLT_MIN, ymin = FLT_MAX, ymax = FLT_MIN;
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(points_count, points, scale) \
+    dt_omp_firstprivate(points_count, points) \
     schedule(simd:static) if(points_count > 100)          \
     reduction(min:xmin, ymin) reduction(max:xmax, ymax)
 #endif
   for(size_t i = 0; i < points_count * 2; i += 2)
   {
-    const float x = points[i] * scale;
-    const float y = points[i + 1] * scale;
+    const float x = points[i];
+    const float y = points[i + 1];
     xmin = fmin(xmin, x);
     xmax = fmax(xmax, x);
     ymin = fmin(ymin, y);
@@ -1331,7 +1330,7 @@ static int _distort_xtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
     dt_iop_liquify_params_t copy_params;
     memcpy(&copy_params, (dt_iop_liquify_params_t *)piece->data, sizeof(dt_iop_liquify_params_t));
 
-    distort_paths_raw_to_piece(self, piece->pipe, scale, &copy_params, TRUE);
+    distort_paths_raw_to_piece(self, piece->pipe, 1.f, &copy_params, TRUE);
 
     // create the distortion map for this extent
 
@@ -1356,20 +1355,20 @@ static int _distort_xtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
     // apply distortion to all points (this is a simple displacement given by a vector at this same point in the map)
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(points_count, points, scale, extent, map, map_size, y_last, x_last) \
+    dt_omp_firstprivate(points_count, points, extent, map, map_size, y_last, x_last) \
     schedule(static) if(points_count > 100)
 #endif
     for(size_t i = 0; i < points_count; i++)
     {
       float *px = &points[i*2];
       float *py = &points[i*2+1];
-      const float x = *px * scale;
-      const float y = *py * scale;
+      const float x = *px;
+      const float y = *py;
       const int map_offset = ((int)(x - 0.5) - extent.x) + ((int)(y - 0.5) - extent.y) * extent.width;
 
       if(x >= extent.x && x < x_last && y >= extent.y && y < y_last && map_offset >= 0 && map_offset < map_size)
       {
-        const float complex dist = map[map_offset] / scale;
+        const float complex dist = map[map_offset];
         *px += crealf(dist);
         *py += cimagf(dist);
       }
@@ -2774,7 +2773,6 @@ void gui_post_expose(struct dt_iop_module_t *module,
 
   const float bb_width = develop->preview_pipe->backbuf_width;
   const float bb_height = develop->preview_pipe->backbuf_height;
-  const float iscale = develop->preview_pipe->iscale;
   const float scale = MAX(bb_width, bb_height);
   if(bb_width < 1.0 || bb_height < 1.0)
     return;
@@ -2789,7 +2787,7 @@ void gui_post_expose(struct dt_iop_module_t *module,
 
   // distort all points
   dt_pthread_mutex_lock(&develop->preview_pipe->busy_mutex);
-  const distort_params_t d_params = { develop, develop->preview_pipe, iscale, 1.0 / scale, DT_DEV_TRANSFORM_DIR_ALL, FALSE };
+  const distort_params_t d_params = { develop, develop->preview_pipe, 1.0, 1.0 / scale, DT_DEV_TRANSFORM_DIR_ALL, FALSE };
   _distort_paths(module, &d_params, &copy_params);
   dt_pthread_mutex_unlock(&develop->preview_pipe->busy_mutex);
 
@@ -2863,7 +2861,7 @@ static void get_point_scale(struct dt_iop_module_t *module, float x, float y, fl
   const float nx = pts[0] / darktable.develop->preview_pipe->iwidth;
   const float ny = pts[1] / darktable.develop->preview_pipe->iheight;
 
-  *scale = darktable.develop->preview_pipe->iscale * (get_zoom_scale(module->dev));
+  *scale = get_zoom_scale(module->dev);
   *pt = (nx * darktable.develop->pipe->iwidth) +  (ny * darktable.develop->pipe->iheight) * I;
 }
 
@@ -3064,7 +3062,7 @@ static void get_stamp_params(dt_iop_module_t *module, float *radius, float *r_st
   const dt_dev_pixelpipe_t *devpipe = darktable.develop->preview_pipe;
   const float iwd_min = MIN(devpipe->iwidth, devpipe->iheight);
   const float proc_wdht_min = MIN(devpipe->processed_width, devpipe->processed_height);
-  const float scale = devpipe->iscale / (get_zoom_scale(module->dev));
+  const float scale = 1.f / (get_zoom_scale(module->dev));
   const float im_scale = 0.09f * iwd_min * last_win_min * scale / proc_wdht_min;
 
   *radius = dt_conf_get_sanitize_float(CONF_RADIUS, 0.1f*im_scale, 3.0f*im_scale, im_scale);

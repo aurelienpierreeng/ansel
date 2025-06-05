@@ -111,8 +111,8 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   const int ch = piece->colors;
   float sigma[5];
-  sigma[0] = data->sigma[0] * roi_in->scale / piece->iscale;
-  sigma[1] = data->sigma[1] * roi_in->scale / piece->iscale;
+  sigma[0] = data->sigma[0] * roi_in->scale;
+  sigma[1] = data->sigma[1] * roi_in->scale;
   sigma[2] = data->sigma[2];
   sigma[3] = data->sigma[3];
   sigma[4] = data->sigma[4];
@@ -286,8 +286,8 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
 {
   dt_iop_bilateral_data_t *data = (dt_iop_bilateral_data_t *)piece->data;
   float sigma[5];
-  sigma[0] = data->sigma[0] * roi_in->scale / piece->iscale;
-  sigma[1] = data->sigma[1] * roi_in->scale / piece->iscale;
+  sigma[0] = data->sigma[0] * roi_in->scale;
+  sigma[1] = data->sigma[1] * roi_in->scale;
   const int rad = (int)(3.0 * fmaxf(sigma[0], sigma[1]) + 1.0);
   tiling->factor = 2.0 /*input+output*/ + 80.0/16/*worst-case hashtable*/ + 52.0/16/*replay buffer*/;
   tiling->overhead = 0;

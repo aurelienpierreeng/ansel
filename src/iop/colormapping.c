@@ -448,7 +448,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
                                          in, out, roi_in, roi_out))
     return; // image has been copied through to output and module's trouble flag has been updated
 
-  const float scale = piece->iscale / roi_in->scale;
+  const float scale = 1.f / roi_in->scale;
   const float sigma_s = 50.0f / scale;
   const float sigma_r = 8.0f; // does not depend on scale
 
@@ -593,7 +593,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   const int height = roi_in->height;
   const int ch = piece->colors;
 
-  const float scale = piece->iscale / roi_in->scale;
+  const float scale = 1.f / roi_in->scale;
   const float sigma_s = 50.0f / scale;
   const float sigma_r = 8.0f; // does not depend on scale
 
@@ -754,7 +754,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
                      const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
                      struct dt_develop_tiling_t *tiling)
 {
-  const float scale = piece->iscale / roi_in->scale;
+  const float scale = 1.f / roi_in->scale;
   const float sigma_s = 50.0f / scale;
   const float sigma_r = 8.0f; // does not depend on scale
 

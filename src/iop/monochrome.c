@@ -189,7 +189,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   }
 
   // second step: blur filter contribution:
-  const float scale = fmaxf(piece->iscale / roi_in->scale, 1.f);
+  const float scale = fmaxf(1.f / roi_in->scale, 1.f);
   const float sigma_r = 250.0f; // does not depend on scale
   const float sigma_s = 20.0f / scale;
   const float detail = -1.0f; // bilateral base layer
@@ -229,7 +229,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   const float sigma2 = (d->size * 128.0) * (d->size * 128.0f);
 
   // TODO: alloc new buffer, bilat filter, and go on with that
-  const float scale = piece->iscale / roi_in->scale;
+  const float scale = 1.f / roi_in->scale;
   const float sigma_r = 250.0f; // does not depend on scale
   const float sigma_s = 20.0f / scale;
   const float detail = -1.0f; // bilateral base layer
@@ -287,7 +287,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
                      const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
                      struct dt_develop_tiling_t *tiling)
 {
-  const float scale = piece->iscale / roi_in->scale;
+  const float scale = 1.f / roi_in->scale;
   const float sigma_s = 20.0f / scale;
   const float sigma_r = 250.0f;
 

@@ -215,7 +215,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   const int channels = piece->colors;
 
   const float radius = fmax(0.1f, d->radius);
-  const float sigma = radius * roi_in->scale / piece->iscale;
+  const float sigma = radius * roi_in->scale;
   const float saturation = d->saturation;
   const int order = d->order;
   const int unbound = d->unbound;
@@ -329,7 +329,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   dt_iop_lowpass_data_t *d = (dt_iop_lowpass_data_t *)piece->data;
 
   const float radius = fmax(0.1f, d->radius);
-  const float sigma = radius * roi_in->scale / piece->iscale;
+  const float sigma = radius * roi_in->scale;
   const float sigma_r = 100.0f; // does not depend on scale
   const float sigma_s = sigma;
 
@@ -375,7 +375,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   const int ch = piece->colors;
 
   const float radius = fmax(0.1f, data->radius);
-  const float sigma = radius * roi_in->scale / piece->iscale;
+  const float sigma = radius * roi_in->scale;
   const int order = data->order;
   const int unbound = data->unbound;
 

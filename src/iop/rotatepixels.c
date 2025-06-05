@@ -131,7 +131,7 @@ static void backtransform(const dt_dev_pixelpipe_iop_t *const piece, const float
 
 int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *const restrict points, size_t points_count)
 {
-  const float scale = piece->buf_in.scale / piece->iscale;
+  const float scale = piece->buf_in.scale;
 
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
@@ -157,7 +157,7 @@ int distort_transform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, floa
 int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, float *const restrict points,
                           size_t points_count)
 {
-  const float scale = piece->buf_in.scale / piece->iscale;
+  const float scale = piece->buf_in.scale;
 
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
@@ -217,7 +217,8 @@ void modify_roi_out(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, dt_iop
    *        -------
    */
 
-  const float scale = roi_in->scale / piece->iscale, T = (float)d->ry * scale;
+  const float scale = roi_in->scale;
+  const float T = (float)d->ry * scale;
 
   const float y = sqrtf(2.0f * T * T),
               x = sqrtf(2.0f * ((float)roi_in->width - T) * ((float)roi_in->width - T));
@@ -238,7 +239,7 @@ void modify_roi_in(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const d
 {
   *roi_in = *roi_out;
 
-  const float scale = roi_in->scale / piece->iscale;
+  const float scale = roi_in->scale;
 
   dt_boundingbox_t aabb = { roi_out->x, roi_out->y, roi_out->x + roi_out->width, roi_out->y + roi_out->height };
 
@@ -283,7 +284,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   const int ch = piece->colors;
   const int ch_width = ch * roi_in->width;
 
-  const float scale = roi_in->scale / piece->iscale;
+  const float scale = roi_in->scale;
 
   assert(ch == 4);
 

@@ -132,7 +132,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   const int devid = piece->pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
-  const int rad = MIN(MAXR, ceilf(d->radius * roi_in->scale / piece->iscale));
+  const int rad = MIN(MAXR, ceilf(d->radius * roi_in->scale));
   const int wd = 2 * rad + 1;
   float *mat = NULL;
 
@@ -156,8 +156,8 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     return TRUE;
   }
 
-  const float sigma2 = (1.0f / (2.5 * 2.5)) * (d->radius * roi_in->scale / piece->iscale)
-                       * (d->radius * roi_in->scale / piece->iscale);
+  const float sigma2 = (1.0f / (2.5 * 2.5)) * (d->radius * roi_in->scale)
+                       * (d->radius * roi_in->scale);
   mat = init_gaussian_kernel(rad, wd, sigma2);
 
   int hblocksize;
@@ -265,7 +265,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
                      struct dt_develop_tiling_t *tiling)
 {
   dt_iop_sharpen_data_t *d = (dt_iop_sharpen_data_t *)piece->data;
-  const int rad = MIN(MAXR, ceilf(d->radius * roi_in->scale / piece->iscale));
+  const int rad = MIN(MAXR, ceilf(d->radius * roi_in->scale));
 
   tiling->factor = 2.1f; // in + out + tmprow
   tiling->factor_cl = 3.0f; // in + out + tmp
@@ -284,7 +284,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
                                          ivoid, ovoid, roi_in, roi_out))
     return;
   const dt_iop_sharpen_data_t *const data = (dt_iop_sharpen_data_t *)piece->data;
-  const int rad = MIN(MAXR, ceilf(data->radius * roi_in->scale / piece->iscale));
+  const int rad = MIN(MAXR, ceilf(data->radius * roi_in->scale));
   // Special case handling: very small image with one or two dimensions below 2*rad+1 treat as no sharpening and just
   // pass through.  This avoids handling of all kinds of border cases below.
   if(rad == 0 ||
@@ -308,8 +308,8 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   const int wd4 = (wd & 3) ? (wd >> 2) + 1 : wd >> 2;
 
   const size_t mat_size = (size_t)4 * wd4;
-  const float sigma2 = (1.0f / (2.5 * 2.5)) * (data->radius * roi_in->scale / piece->iscale)
-                       * (data->radius * roi_in->scale / piece->iscale);
+  const float sigma2 = (1.0f / (2.5 * 2.5)) * (data->radius * roi_in->scale)
+                       * (data->radius * roi_in->scale);
   float *const mat = init_gaussian_kernel(rad, mat_size, sigma2);
 
   const float *const restrict in = (float*)ivoid;

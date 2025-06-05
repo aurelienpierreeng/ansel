@@ -126,9 +126,9 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   // dt_iop_equalizer_gui_data_t *c = (dt_iop_equalizer_gui_data_t *)self->gui_data;
 
   // 1 pixel in this buffer represents 1.0/scale pixels in original image:
-  const float l1 = 1.0f + dt_log2f(piece->iscale / scale); // finest level
+  const float l1 = 1.0f + dt_log2f(1.f / scale); // finest level
   float lm = 0;
-  for(int k = MIN(width, height) * piece->iscale / scale; k; k >>= 1) lm++; // coarsest level
+  for(int k = MIN(width, height) / scale; k; k >>= 1) lm++; // coarsest level
   lm = MIN(DT_IOP_EQUALIZER_MAX_LEVEL, l1 + lm);
   // level 1 => full resolution
   int numl = 0;
@@ -235,7 +235,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     for(int k = 0; k < DT_IOP_EQUALIZER_BANDS; k++)
       dt_draw_curve_set_point(d->curve[ch], k, p->equalizer_x[ch][k], p->equalizer_y[ch][k]);
   int l = 0;
-  for(int k = (int)MIN(pipe->iwidth * pipe->iscale, pipe->iheight * pipe->iscale); k; k >>= 1) l++;
+  for(int k = (int)MIN(pipe->iwidth, pipe->iheight); k; k >>= 1) l++;
   d->num_levels = MIN(DT_IOP_EQUALIZER_MAX_LEVEL, l);
 }
 
@@ -254,7 +254,7 @@ void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
                                     default_params->equalizer_y[ch][k]);
   }
   int l = 0;
-  for(int k = (int)MIN(pipe->iwidth * pipe->iscale, pipe->iheight * pipe->iscale); k; k >>= 1) l++;
+  for(int k = (int)MIN(pipe->iwidth, pipe->iheight); k; k >>= 1) l++;
   d->num_levels = MIN(DT_IOP_EQUALIZER_MAX_LEVEL, l);
 }
 

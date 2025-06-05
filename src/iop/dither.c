@@ -364,7 +364,7 @@ static void process_floyd_steinberg(struct dt_iop_module_t *self, dt_dev_pixelpi
 
   const int width = roi_in->width;
   const int height = roi_in->height;
-  const float scale = roi_in->scale / piece->iscale;
+  const float scale = roi_in->scale;
 
   const float *const restrict in = (const float *)ivoid;
   float *const restrict out = (float *)ovoid;
@@ -493,7 +493,7 @@ static void process_floyd_steinberg_sse2(struct dt_iop_module_t *self, dt_dev_pi
   const int width = roi_in->width;
   const int height = roi_in->height;
   assert(piece->colors == 4);
-  const float scale = roi_in->scale / piece->iscale;
+  const float scale = roi_in->scale;
 
   const float *const restrict in = (const float *)ivoid;
   float *const restrict out = (float *)ovoid;
