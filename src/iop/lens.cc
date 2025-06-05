@@ -1026,7 +1026,8 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
 
   if(!d->lens || !d->lens->Maker || d->crop <= 0.0f) return;
 
-  const float orig_w = roi_in->scale * piece->buf_in.width, orig_h = roi_in->scale * piece->buf_in.height;
+  const float orig_w = roi_in->scale * piece->buf_in.width;
+  const float orig_h = roi_in->scale * piece->buf_in.height;
   int modflags;
   const lfModifier *modifier = get_modifier(&modflags, orig_w, orig_h, d, LF_MODIFY_ALL, FALSE);
 
@@ -1109,10 +1110,10 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
     if(!isfinite(yM) || !(1 <= yM && yM < orig_h)) yM = orig_h;
 
     const struct dt_interpolation *interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
-    roi_in->x = fmaxf(0.0f, xm - interpolation->width);
-    roi_in->y = fmaxf(0.0f, ym - interpolation->width);
-    roi_in->width = fminf(orig_w - roi_in->x, xM - roi_in->x + interpolation->width);
-    roi_in->height = fminf(orig_h - roi_in->y, yM - roi_in->y + interpolation->width);
+    roi_in->x = fmaxf(0.0f, roundf(xm - interpolation->width));
+    roi_in->y = fmaxf(0.0f, roundf(ym - interpolation->width));
+    roi_in->width = roundf(fminf(orig_w - roi_in->x, xM - roi_in->x + interpolation->width));
+    roi_in->height = roundf(fminf(orig_h - roi_in->y, yM - roi_in->y + interpolation->width));
 
     // sanity check.
     roi_in->x = CLAMP(roi_in->x, 0, (int)floorf(orig_w));

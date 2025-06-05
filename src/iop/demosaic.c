@@ -426,14 +426,14 @@ void modify_roi_out(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t 
 void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
                    const dt_iop_roi_t *roi_out, dt_iop_roi_t *roi_in)
 {
-  // this op is disabled for preview pipe/filters == 0
-
+  // this op is disabled for filters == 0
   *roi_in = *roi_out;
-  // need 1:1, demosaic and then sub-sample. or directly sample half-size
-  roi_in->x /= roi_out->scale;
-  roi_in->y /= roi_out->scale;
-  roi_in->width = (int)ceil((double)roi_in->width / roi_out->scale + 1. / roi_out->scale);
-  roi_in->height = (int)ceil((double)roi_in->height / roi_out->scale + 1. / roi_out->scale);
+
+  // Always take full raw
+  roi_in->x = 0;
+  roi_in->y = 0;
+  roi_in->width = piece->pipe->image.width;
+  roi_in->height = piece->pipe->image.height;
   roi_in->scale = 1.0f;
 
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
@@ -453,13 +453,6 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
     roi_in->x = MAX(0, roi_in->x + shift_x);
     roi_in->y = MAX(0, roi_in->y + shift_y);
   }
-
-  // clamp numeric inaccuracies to full buffer, to avoid scaling/copying in pixelpipe:
-  if(abs(piece->pipe->image.width - roi_in->width) < MAX(ceilf(1.0f / roi_out->scale), 10))
-    roi_in->width = piece->pipe->image.width;
-
-  if(abs(piece->pipe->image.height - roi_in->height) < MAX(ceilf(1.0f / roi_out->scale), 10))
-    roi_in->height = piece->pipe->image.height;
 }
 
 

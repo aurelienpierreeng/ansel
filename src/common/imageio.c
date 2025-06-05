@@ -1012,33 +1012,9 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
 
   dt_mipmap_buffer_t buf;
   dt_mipmap_cache_t *cache = darktable.mipmap_cache;
-  dt_mipmap_size_t size = DT_MIPMAP_FULL;
   uint8_t *outbuf = NULL;
 
-  if(thumbnail_export && width <= 1440 && height <= 900)
-  {
-    // Use the 1440x900 downsized raw input for thumbnail exports only if, accounting for internal cropping,
-    // it still produces a final thumbnail at least as large as the requested dimensions.
-    // This takes 30-350 ms depending on how the image cache is locked.
-    // Still worth it in most cases.
-    int theoritical_width;
-    int theoritical_height;
-    dt_dev_get_final_size(&dev, NULL, imgid, width, height, &theoritical_width, &theoritical_height);
-    // NOTE: width and height may be set to 0 (aka full size) for non-thumbnail exports
-    if(theoritical_width <= 1440 && theoritical_height <= 900)
-    {
-      size = DT_MIPMAP_F;
-      //fprintf(stdout, "%i: using downscaled raw, output: %ix%i\n", imgid, theoritical_width, theoritical_height);
-    }
-    else
-    {
-      size = DT_MIPMAP_FULL;
-      //fprintf(stdout, "%i: using full-size raw, output: %ix%i\n", imgid, theoritical_width, theoritical_height);
-    }
-  }
-  // else size = DT_MIPMAP_FULL
-
-  dt_mipmap_cache_get(cache, &buf, imgid, size, DT_MIPMAP_BLOCKING, 'r');
+  dt_mipmap_cache_get(cache, &buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
 
   if(!buf.buf || buf.width == 0 || buf.height == 0)
   {
@@ -1080,7 +1056,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   // Update the ICC type if DT_COLORSPACE_NONE is passed
   dt_colorspaces_get_output_profile(imgid, &icc_type, icc_filename);
   dt_dev_pixelpipe_set_icc(&pipe, icc_type, icc_filename, icc_intent);
-  dt_dev_pixelpipe_set_input(&pipe, &dev, imgid, buf_width, buf_height, buf_iscale, size);
+  dt_dev_pixelpipe_set_input(&pipe, &dev, imgid, buf_width, buf_height, buf_iscale, DT_MIPMAP_FULL);
   dt_dev_pixelpipe_create_nodes(&pipe, &dev);
   dt_dev_pixelpipe_synch_all(&pipe, &dev);
 
