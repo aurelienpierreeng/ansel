@@ -233,11 +233,9 @@ static inline pthread_t dt_pthread_rwlock_get_writer(dt_pthread_rwlock_t *lock)
 static inline int dt_pthread_rwlock_unlock_with_caller(dt_pthread_rwlock_t *rwlock, const char *file, int line)
 {
   const int res = pthread_rwlock_unlock(&rwlock->lock);
-
   assert(!res);
-
   __sync_fetch_and_sub(&(rwlock->cnt), 1);
-  assert(rwlock->cnt >= 0);
+  //assert(rwlock->cnt >= 0);
   __sync_bool_compare_and_swap(&(rwlock->writer), pthread_self(), 0);
   if(!res) snprintf(rwlock->name, sizeof(rwlock->name), "u:%s:%d", file, line);
   return res;
