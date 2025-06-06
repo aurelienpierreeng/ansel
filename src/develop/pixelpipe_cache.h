@@ -196,8 +196,10 @@ void dt_dev_pixelpipe_cache_wrlock_entry(dt_dev_pixelpipe_cache_t *cache, const 
  * @brief Lock or release the read lock on the entry
  *
  * @param cache
- * @param hash
+ * @param hash checksum of the cache entry to fetch. Optional if `entry` is not NULL.
  * @param lock TRUE to lock, FALSE to release
+ * @param entry The cache entry object to lock, if a reference is already known. Can be NULL, but then you
+ * need to pass a hash.
  */
 void dt_dev_pixelpipe_cache_rdlock_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, gboolean lock,
                                          struct dt_pixel_cache_entry_t *entry);

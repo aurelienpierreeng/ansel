@@ -1030,7 +1030,8 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                     float *input, dt_iop_buffer_dsc_t *input_format, const dt_iop_roi_t *roi_in,
                                     void **output, dt_iop_buffer_dsc_t **out_format, const dt_iop_roi_t *roi_out,
                                     dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
-                                    dt_develop_tiling_t *tiling, dt_pixelpipe_flow_t *pixelpipe_flow)
+                                    dt_develop_tiling_t *tiling, dt_pixelpipe_flow_t *pixelpipe_flow,
+                                    dt_pixel_cache_entry_t *input_entry)
 {
   // Fetch RGB working profile
   // if input is RAW, we can't color convert because RAW is not in a color space
@@ -1039,9 +1040,11 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
       = (input_format->cst != IOP_CS_RAW) ? dt_ioppr_get_pipe_work_profile_info(pipe) : NULL;
 
   // transform to module input colorspace
+  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
   dt_ioppr_transform_image_colorspace(module, input, input, roi_in->width, roi_in->height, input_format->cst,
                                       module->input_colorspace(module, pipe, piece), &input_format->cst,
                                       work_profile);
+  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
 
   //fprintf(stdout, "input color space for %s : %i\n", module->op, module->input_colorspace(module, pipe, piece));
   const size_t in_bpp = dt_iop_buffer_dsc_to_bpp(input_format);
@@ -1052,6 +1055,7 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                           tiling->factor, tiling->overhead);
 
   /* process module on cpu. use tiling if needed and possible. */
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
   if(!fitting && piece->process_tiling_ready)
   {
     module->process_tiling(module, piece, input, *output, roi_in, roi_out, in_bpp);
@@ -1067,6 +1071,7 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     *pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_CPU);
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
   }
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
 
   // and save the output colorspace
   pipe->dsc.cst = module->output_colorspace(module, pipe, piece);
@@ -1075,9 +1080,12 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   if(_transform_for_blend(module, piece))
   {
     dt_iop_colorspace_type_t blend_cst = dt_develop_blend_colorspace(piece, pipe->dsc.cst);
+    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
     dt_ioppr_transform_image_colorspace(module, input, input, roi_in->width, roi_in->height,
                                         input_format->cst, blend_cst, &input_format->cst,
                                         work_profile);
+    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
+
     dt_ioppr_transform_image_colorspace(module, *output, *output, roi_out->width, roi_out->height,
                                         pipe->dsc.cst, blend_cst, &pipe->dsc.cst,
                                         work_profile);
@@ -1217,7 +1225,8 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                     void **output, void **cl_mem_output, dt_iop_buffer_dsc_t **out_format, const dt_iop_roi_t *roi_out,
                                     dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
                                     dt_develop_tiling_t *tiling, dt_pixelpipe_flow_t *pixelpipe_flow,
-                                    const size_t in_bpp, const size_t bpp)
+                                    const size_t in_bpp, const size_t bpp,
+                                    dt_pixel_cache_entry_t *input_entry)
 {
   // We don't have OpenCL or we couldn't lock a GPU: fallback to CPU processing
   if(!(dt_opencl_is_inited() && pipe->opencl_enabled && pipe->devid >= 0) || input == NULL || *output == NULL)
@@ -1279,11 +1288,17 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     /* input is not on gpu memory -> copy it there */
     if(cl_mem_input == NULL)
     {
+      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
       cl_mem_input = _gpu_init_buffer(pipe->devid, input, roi_in, in_bpp, module, "input");
-      if(cl_mem_input == NULL) goto error; // mem alloc failed
-      if(_cl_pinned_memory_copy(pipe->devid, input, cl_mem_input, roi_in, CL_MAP_WRITE, in_bpp, module,
+      int fail = (cl_mem_input == NULL);
+
+      if(!fail && _cl_pinned_memory_copy(pipe->devid, input, cl_mem_input, roi_in, CL_MAP_WRITE, in_bpp, module,
                                 "initial input"))
-        goto error;
+        fail = TRUE;
+
+      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
+
+      if(fail) goto error;
     }
 
     // Allocate GPU memory for output
@@ -1341,10 +1356,12 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     // between RAM pixel cache and GPU buffer, then we need to resync GPU buffer with cache.
     if(input_format->cst != input_cst_cl)
     {
+      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
       input_format->cst = input_cst_cl;
-      if(_cl_pinned_memory_copy(pipe->devid, input, cl_mem_input, roi_in, CL_MAP_READ, in_bpp, module,
-                                "color-converted input"))
-        goto error;
+      int fail = _cl_pinned_memory_copy(pipe->devid, input, cl_mem_input, roi_in, CL_MAP_READ, in_bpp, module,
+                                        "color-converted input");
+      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
+      if(fail) goto error;
     }
   }
   else if(piece->process_tiling_ready)
@@ -1353,13 +1370,18 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     _gpu_clear_buffer(&cl_mem_input);
 
     // transform to module input colorspace
+    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
     dt_ioppr_transform_image_colorspace(module, input, input, roi_in->width, roi_in->height, input_format->cst,
                                         module->input_colorspace(module, pipe, piece), &input_format->cst,
                                         work_profile);
+    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
 
     /* now call process_tiling_cl of module; module should emit meaningful messages in case of error */
-    if(!module->process_tiling_cl(module, piece, input, *output, roi_in, roi_out, in_bpp))
-      goto error;
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
+    int fail = !module->process_tiling_cl(module, piece, input, *output, roi_in, roi_out, in_bpp);
+    dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
+
+    if(fail) goto error;
 
     *pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_CPU);
@@ -1371,9 +1393,13 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     if(_transform_for_blend(module, piece))
     {
       dt_iop_colorspace_type_t blend_cst = dt_develop_blend_colorspace(piece, pipe->dsc.cst);
+
+      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
       dt_ioppr_transform_image_colorspace(module, input, input, roi_in->width, roi_in->height,
                                           input_format->cst, blend_cst, &input_format->cst,
                                           work_profile);
+      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
+
       dt_ioppr_transform_image_colorspace(module, *output, *output, roi_out->width, roi_out->height,
                                           pipe->dsc.cst, blend_cst, &pipe->dsc.cst,
                                           work_profile);
@@ -1414,7 +1440,7 @@ error:;
   dt_opencl_finish(pipe->devid);
   if(input != NULL && *output != NULL)
     return pixelpipe_process_on_CPU(pipe, dev, input, input_format, roi_in, output, out_format, roi_out, module,
-                                    piece, tiling, pixelpipe_flow);
+                                    piece, tiling, pixelpipe_flow, input_entry);
   else
     return 1;
 }
@@ -1815,10 +1841,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   assert(tiling.factor > 0.0f);
   assert(tiling.factor_cl > 0.0f);
 
-  // Lock input in read-only, output is already locked in write-only
-  // since allocation
-
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, input_hash, TRUE, input_entry);
   // Actual pixel processing for this module
   int error = 0;
 
@@ -1827,10 +1849,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
 #ifdef HAVE_OPENCL
   error = pixelpipe_process_on_GPU(pipe, dev, input, cl_mem_input, input_format, &roi_in, output, cl_mem_output,
-                                   out_format, roi_out, module, piece, &tiling, &pixelpipe_flow, in_bpp, bpp);
+                                   out_format, roi_out, module, piece, &tiling, &pixelpipe_flow, in_bpp, bpp, input_entry);
 #else
   error = pixelpipe_process_on_CPU(pipe, dev, input, input_format, &roi_in, output, out_format, roi_out, module,
-                                   piece, &tiling, &pixelpipe_flow);
+                                   piece, &tiling, &pixelpipe_flow, input_entry);
 #endif
 
   _print_perf_debug(pipe, pixelpipe_flow, piece, module, &start);
@@ -1847,7 +1869,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // Unlock read and write locks, decrease reference count on input
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, FALSE, output_entry);
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
 
   if(error)
   {
