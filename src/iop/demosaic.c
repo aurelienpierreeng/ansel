@@ -429,13 +429,6 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
   // this op is disabled for filters == 0
   *roi_in = *roi_out;
 
-  // Always take full raw
-  roi_in->x = 0;
-  roi_in->y = 0;
-  roi_in->width = piece->pipe->image.width;
-  roi_in->height = piece->pipe->image.height;
-  roi_in->scale = 1.0f;
-
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
   const int method = data->demosaicing_method;
   const gboolean passthrough = (method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME) ||
@@ -491,169 +484,123 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       demosaicing_method = DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME;
   }
 
-  if((qual_flags & DEMOSAIC_MEDIUM_QUAL)
-  // only overwrite setting if quality << requested and in dr mode and not a special method
-  && (demosaicing_method != DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME)
-  && (demosaicing_method != DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR)
-  // dual demosaicing with the show mask option on is also a special method for ui
-  && !((demosaicing_method & DEMOSAIC_DUAL) && showmask))
-    demosaicing_method = (piece->pipe->dsc.filters != 9u) ? DT_IOP_DEMOSAIC_RCD : DT_IOP_DEMOSAIC_MARKESTEIJN;
-
   const float *const pixels = (float *)i;
 
-  if(qual_flags & DEMOSAIC_FULL_SCALE)
+  // Full demosaic and then scaling if needed
+  if(info) dt_get_times(&start_time);
+
+  if(demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME)
   {
-    // Full demosaic and then scaling if needed
-    const int scaled = (roi_out->width != roi_in->width || roi_out->height != roi_in->height);
-    float *tmp = (float *) o;
-    if(scaled)
-    {
-      // demosaic and then clip and zoom
-      // we demosaic at 1:1 the size of input roi, so make sure
-      // we fit these bounds exactly, to avoid crashes..
-      roo.width = roi_in->width;
-      roo.height = roi_in->height;
-      roo.scale = 1.0f;
-      tmp = (float *)dt_alloc_align_float((size_t)4 * roo.width * roo.height);
-      if(tmp == NULL) return;
-    }
-    if(info) dt_get_times(&start_time);
-
-    if(demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME)
-    {
-      passthrough_monochrome(tmp, pixels, &roo, &roi);
-    }
-    else if(demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR)
-    {
-      passthrough_color(tmp, pixels, &roo, &roi, piece->pipe->dsc.filters, xtrans);
-    }
-    else if(piece->pipe->dsc.filters == 9u)
-    {
-      const int passes = (demosaicing_method == DT_IOP_DEMOSAIC_MARKESTEIJN) ? 1 : 3;
-      if(demosaicing_method == DT_IOP_DEMOSAIC_MARKEST3_VNG)
-        xtrans_markesteijn_interpolate(tmp, pixels, &roo, &roi, xtrans, passes);
-      else if(demosaicing_method == DT_IOP_DEMOSAIC_FDC && (qual_flags & DEMOSAIC_XTRANS_FULL))
-        xtrans_fdc_interpolate(self, tmp, pixels, &roo, &roi, xtrans);
-      else if(demosaicing_method >= DT_IOP_DEMOSAIC_MARKESTEIJN && (qual_flags & DEMOSAIC_XTRANS_FULL))
-        xtrans_markesteijn_interpolate(tmp, pixels, &roo, &roi, xtrans, passes);
-      else
-        vng_interpolate(tmp, pixels, &roo, &roi, piece->pipe->dsc.filters, xtrans, qual_flags & DEMOSAIC_ONLY_VNG_LINEAR);
-    }
+    passthrough_monochrome(o, pixels, &roo, &roi);
+  }
+  else if(demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR)
+  {
+    passthrough_color(o, pixels, &roo, &roi, piece->pipe->dsc.filters, xtrans);
+  }
+  else if(piece->pipe->dsc.filters == 9u)
+  {
+    const int passes = (demosaicing_method == DT_IOP_DEMOSAIC_MARKESTEIJN) ? 1 : 3;
+    if(demosaicing_method == DT_IOP_DEMOSAIC_MARKEST3_VNG)
+      xtrans_markesteijn_interpolate(o, pixels, &roo, &roi, xtrans, passes);
+    else if(demosaicing_method == DT_IOP_DEMOSAIC_FDC && (qual_flags & DEMOSAIC_XTRANS_FULL))
+      xtrans_fdc_interpolate(self, o, pixels, &roo, &roi, xtrans);
+    else if(demosaicing_method >= DT_IOP_DEMOSAIC_MARKESTEIJN && (qual_flags & DEMOSAIC_XTRANS_FULL))
+      xtrans_markesteijn_interpolate(o, pixels, &roo, &roi, xtrans, passes);
     else
-    {
-      float *in = (float *)pixels;
-      float *aux;
-
-      if(!(img->flags & DT_IMAGE_4BAYER) && data->green_eq != DT_IOP_GREEN_EQ_NO)
-      {
-        in = dt_alloc_align_float((size_t)roi_in->height * roi_in->width);
-        if(in)
-        {
-          switch(data->green_eq)
-          {
-            case DT_IOP_GREEN_EQ_FULL:
-              green_equilibration_favg(in, pixels, roi_in->width, roi_in->height, piece->pipe->dsc.filters,
-                                      roi_in->x, roi_in->y);
-              break;
-            case DT_IOP_GREEN_EQ_LOCAL:
-              green_equilibration_lavg(in, pixels, roi_in->width, roi_in->height, piece->pipe->dsc.filters,
-                                      roi_in->x, roi_in->y, threshold);
-              break;
-            case DT_IOP_GREEN_EQ_BOTH:
-              aux = dt_alloc_align_float((size_t)roi_in->height * roi_in->width);
-              if(aux)
-              {
-                green_equilibration_favg(aux, pixels, roi_in->width, roi_in->height, piece->pipe->dsc.filters,
-                                        roi_in->x, roi_in->y);
-                green_equilibration_lavg(in, aux, roi_in->width, roi_in->height, piece->pipe->dsc.filters, roi_in->x,
-                                        roi_in->y, threshold);
-                dt_free_align(aux);
-              }
-              break;
-          }
-        }
-      }
-
-      if(demosaicing_method == DT_IOP_DEMOSAIC_VNG4 || (img->flags & DT_IMAGE_4BAYER))
-      {
-        vng_interpolate(tmp, in, &roo, &roi, piece->pipe->dsc.filters, xtrans, qual_flags & DEMOSAIC_ONLY_VNG_LINEAR);
-        if(img->flags & DT_IMAGE_4BAYER)
-        {
-          dt_colorspaces_cygm_to_rgb(tmp, roo.width*roo.height, data->CAM_to_RGB);
-          dt_colorspaces_cygm_to_rgb(piece->pipe->dsc.processed_maximum, 1, data->CAM_to_RGB);
-        }
-      }
-      else if((demosaicing_method & ~DEMOSAIC_DUAL) == DT_IOP_DEMOSAIC_RCD)
-      {
-        rcd_demosaic(piece, tmp, in, &roo, &roi, piece->pipe->dsc.filters);
-      }
-      else if(demosaicing_method == DT_IOP_DEMOSAIC_LMMSE)
-      {
-        if(gd->lmmse_gamma_in == NULL)
-        {
-          gd->lmmse_gamma_in = dt_alloc_align_float(65536);
-          gd->lmmse_gamma_out = dt_alloc_align_float(65536);
-#ifdef _OPENMP
-    #pragma omp for
-#endif
-          for(int j = 0; j < 65536; j++)
-          {
-            const double x = (double)j / 65535.0;
-            gd->lmmse_gamma_in[j]  = (x <= 0.001867) ? x * 17.0 : 1.044445 * exp(log(x) / 2.4) - 0.044445;
-            gd->lmmse_gamma_out[j] = (x <= 0.031746) ? x / 17.0 : exp(log((x + 0.044445) / 1.044445) * 2.4);
-          }
-        }
-        lmmse_demosaic(piece, tmp, in, &roo, &roi, piece->pipe->dsc.filters, data->lmmse_refine, gd->lmmse_gamma_in, gd->lmmse_gamma_out);
-      }
-      else if((demosaicing_method & ~DEMOSAIC_DUAL) != DT_IOP_DEMOSAIC_AMAZE)
-        demosaic_ppg(tmp, in, &roo, &roi, piece->pipe->dsc.filters,
-                     data->median_thrs); // wanted ppg or zoomed out a lot and quality is limited to 1
-      else
-        amaze_demosaic_RT(piece, in, tmp, &roi, &roo, piece->pipe->dsc.filters);
-
-      if(!(img->flags & DT_IMAGE_4BAYER) && data->green_eq != DT_IOP_GREEN_EQ_NO) dt_free_align(in);
-    }
-
-    if(info)
-    {
-      const float mpixels = (roo.width * roo.height) / 1.0e6;
-      dt_get_times(&end_time);
-      const float tclock = end_time.clock - start_time.clock;
-      const float uclock = end_time.user - start_time.user;
-      fprintf(stderr," [demosaic] process CPU `%s' did %.2fmpix, %.4f secs (%.4f CPU), %.2f pix/us\n",
-        method2string(demosaicing_method & ~DEMOSAIC_DUAL), mpixels, tclock, uclock, mpixels / tclock);
-    }
-
-    dt_dev_write_rawdetail_mask(piece, tmp, roi_in, DT_DEV_DETAIL_MASK_DEMOSAIC);
-
-    if((demosaicing_method & DEMOSAIC_DUAL))
-    {
-      dual_demosaic(piece, tmp, pixels, &roo, &roi, piece->pipe->dsc.filters, xtrans, showmask, data->dual_thrs);
-    }
-
-    if(scaled)
-    {
-      roi = *roi_out;
-      dt_iop_clip_and_zoom_roi((float *)o, tmp, &roi, &roo, roi.width, roo.width);
-      dt_free_align(tmp);
-    }
+      vng_interpolate(o, pixels, &roo, &roi, piece->pipe->dsc.filters, xtrans, qual_flags & DEMOSAIC_ONLY_VNG_LINEAR);
   }
   else
   {
-    if(demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME)
-      dt_iop_clip_and_zoom_demosaic_passthrough_monochrome_f((float *)o, pixels, &roo, &roi, roo.width, roi.width);
-    else if(demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR)
-       dt_iop_clip_and_zoom_demosaic_passthrough_monochrome_f((float *)o, pixels, &roo, &roi, roo.width, roi.width);
-    else if(piece->pipe->dsc.filters == 9u)
-      dt_iop_clip_and_zoom_demosaic_third_size_xtrans_f((float *)o, pixels, &roo, &roi, roo.width, roi.width, xtrans);
-    else
-      dt_iop_clip_and_zoom_demosaic_half_size_f((float *)o, pixels, &roo, &roi, roo.width, roi.width,
-                                                piece->pipe->dsc.filters);
+    float *in = (float *)pixels;
+    float *aux;
 
-    // this is used for preview pipes, currently there is now writing mask implemented
-    // we just clear the mask data as we might have changed the preview downsampling
-    dt_dev_clear_rawdetail_mask(piece->pipe);
+    if(!(img->flags & DT_IMAGE_4BAYER) && data->green_eq != DT_IOP_GREEN_EQ_NO)
+    {
+      in = dt_alloc_align_float((size_t)roi_in->height * roi_in->width);
+      if(in)
+      {
+        switch(data->green_eq)
+        {
+          case DT_IOP_GREEN_EQ_FULL:
+            green_equilibration_favg(in, pixels, roi_in->width, roi_in->height, piece->pipe->dsc.filters,
+                                    roi_in->x, roi_in->y);
+            break;
+          case DT_IOP_GREEN_EQ_LOCAL:
+            green_equilibration_lavg(in, pixels, roi_in->width, roi_in->height, piece->pipe->dsc.filters,
+                                    roi_in->x, roi_in->y, threshold);
+            break;
+          case DT_IOP_GREEN_EQ_BOTH:
+            aux = dt_alloc_align_float((size_t)roi_in->height * roi_in->width);
+            if(aux)
+            {
+              green_equilibration_favg(aux, pixels, roi_in->width, roi_in->height, piece->pipe->dsc.filters,
+                                      roi_in->x, roi_in->y);
+              green_equilibration_lavg(in, aux, roi_in->width, roi_in->height, piece->pipe->dsc.filters, roi_in->x,
+                                      roi_in->y, threshold);
+              dt_free_align(aux);
+            }
+            break;
+        }
+      }
+    }
+
+    if(demosaicing_method == DT_IOP_DEMOSAIC_VNG4 || (img->flags & DT_IMAGE_4BAYER))
+    {
+      vng_interpolate(o, in, &roo, &roi, piece->pipe->dsc.filters, xtrans, qual_flags & DEMOSAIC_ONLY_VNG_LINEAR);
+      if(img->flags & DT_IMAGE_4BAYER)
+      {
+        dt_colorspaces_cygm_to_rgb(o, roo.width*roo.height, data->CAM_to_RGB);
+        dt_colorspaces_cygm_to_rgb(piece->pipe->dsc.processed_maximum, 1, data->CAM_to_RGB);
+      }
+    }
+    else if((demosaicing_method & ~DEMOSAIC_DUAL) == DT_IOP_DEMOSAIC_RCD)
+    {
+      rcd_demosaic(piece, o, in, &roo, &roi, piece->pipe->dsc.filters);
+    }
+    else if(demosaicing_method == DT_IOP_DEMOSAIC_LMMSE)
+    {
+      if(gd->lmmse_gamma_in == NULL)
+      {
+        gd->lmmse_gamma_in = dt_alloc_align_float(65536);
+        gd->lmmse_gamma_out = dt_alloc_align_float(65536);
+#ifdef _OPENMP
+  #pragma omp for
+#endif
+        for(int j = 0; j < 65536; j++)
+        {
+          const double x = (double)j / 65535.0;
+          gd->lmmse_gamma_in[j]  = (x <= 0.001867) ? x * 17.0 : 1.044445 * exp(log(x) / 2.4) - 0.044445;
+          gd->lmmse_gamma_out[j] = (x <= 0.031746) ? x / 17.0 : exp(log((x + 0.044445) / 1.044445) * 2.4);
+        }
+      }
+      lmmse_demosaic(piece, o, in, &roo, &roi, piece->pipe->dsc.filters, data->lmmse_refine, gd->lmmse_gamma_in, gd->lmmse_gamma_out);
+    }
+    else if((demosaicing_method & ~DEMOSAIC_DUAL) != DT_IOP_DEMOSAIC_AMAZE)
+      demosaic_ppg(o, in, &roo, &roi, piece->pipe->dsc.filters,
+                    data->median_thrs); // wanted ppg or zoomed out a lot and quality is limited to 1
+    else
+      amaze_demosaic_RT(piece, in, o, &roi, &roo, piece->pipe->dsc.filters);
+
+    if(!(img->flags & DT_IMAGE_4BAYER) && data->green_eq != DT_IOP_GREEN_EQ_NO) dt_free_align(in);
   }
+
+  if(info)
+  {
+    const float mpixels = (roo.width * roo.height) / 1.0e6;
+    dt_get_times(&end_time);
+    const float tclock = end_time.clock - start_time.clock;
+    const float uclock = end_time.user - start_time.user;
+    fprintf(stderr," [demosaic] process CPU `%s' did %.2fmpix, %.4f secs (%.4f CPU), %.2f pix/us\n",
+      method2string(demosaicing_method & ~DEMOSAIC_DUAL), mpixels, tclock, uclock, mpixels / tclock);
+  }
+
+  dt_dev_write_rawdetail_mask(piece, o, roi_in, DT_DEV_DETAIL_MASK_DEMOSAIC);
+
+  if((demosaicing_method & DEMOSAIC_DUAL))
+  {
+    dual_demosaic(piece, o, pixels, &roo, &roi, piece->pipe->dsc.filters, xtrans, showmask, data->dual_thrs);
+  }
+
   if(data->color_smoothing)
     color_smoothing(o, roi_out, data->color_smoothing);
 }
@@ -676,220 +623,149 @@ static int process_default_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop
   cl_mem dev_green_eq = NULL;
   cl_int err = -999;
 
-  if(qual_flags & DEMOSAIC_FULL_SCALE)
+  int width = roi_out->width;
+  int height = roi_out->height;
+
+  // green equilibration
+  if(data->green_eq != DT_IOP_GREEN_EQ_NO)
   {
-    // Full demosaic and then scaling if needed
-    const int scaled = (roi_out->width != roi_in->width || roi_out->height != roi_in->height);
+    dev_green_eq = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float));
+    if(dev_green_eq == NULL) goto error;
 
-    int width = roi_out->width;
-    int height = roi_out->height;
+    if(!green_equilibration_cl(self, piece, dev_in, dev_green_eq, roi_in))
+      goto error;
 
-    // green equilibration
-    if(data->green_eq != DT_IOP_GREEN_EQ_NO)
+    dev_in = dev_green_eq;
+  }
+
+  // need to reserve scaled auxiliary buffer or use dev_out
+  dev_aux = dev_out;
+
+  if(demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME)
+  {
+    size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+    dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_monochrome, 0, sizeof(cl_mem), &dev_in);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_monochrome, 1, sizeof(cl_mem), &dev_aux);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_monochrome, 2, sizeof(int), &width);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_monochrome, 3, sizeof(int), &height);
+    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_passthrough_monochrome, sizes);
+    if(err != CL_SUCCESS) goto error;
+  }
+  else if(demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR)
+  {
+    size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+    dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_color, 0, sizeof(cl_mem), &dev_in);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_color, 1, sizeof(cl_mem), &dev_aux);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_color, 2, sizeof(int), &width);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_color, 3, sizeof(int), &height);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_color, 4, sizeof(int), (void *)&roi_in->x);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_color, 5, sizeof(int), (void *)&roi_in->y);
+    dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_color, 6, sizeof(uint32_t), (void *)&piece->pipe->dsc.filters);
+
+    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_passthrough_color, sizes);
+    if(err != CL_SUCCESS) goto error;
+  }
+  else if(demosaicing_method == DT_IOP_DEMOSAIC_PPG)
+  {
+    dev_tmp = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float) * 4);
+    if(dev_tmp == NULL) goto error;
+
     {
-      dev_green_eq = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float));
-      if(dev_green_eq == NULL) goto error;
-
-      if(!green_equilibration_cl(self, piece, dev_in, dev_green_eq, roi_in))
-        goto error;
-
-      dev_in = dev_green_eq;
+      const int myborder = 3;
+      // manage borders
+      size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+      dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 0, sizeof(cl_mem), &dev_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 1, sizeof(cl_mem), &dev_tmp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 2, sizeof(int), (void *)&width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 3, sizeof(int), (void *)&height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 4, sizeof(uint32_t), (void *)&piece->pipe->dsc.filters);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 5, sizeof(int), (void *)&myborder);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_border_interpolate, sizes);
+      if(err != CL_SUCCESS) goto error;
     }
 
-    // need to reserve scaled auxiliary buffer or use dev_out
-    if(scaled)
+    if(data->median_thrs > 0.0f)
     {
-      dev_aux = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float) * 4);
-      if(dev_aux == NULL) goto error;
-      width = roi_in->width;
-      height = roi_in->height;
+      dev_med = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float) * 4);
+      if(dev_med == NULL) goto error;
+
+      dt_opencl_local_buffer_t locopt
+        = (dt_opencl_local_buffer_t){ .xoffset = 2*2, .xfactor = 1, .yoffset = 2*2, .yfactor = 1,
+                                      .cellsize = 1 * sizeof(float), .overhead = 0,
+                                      .sizex = 1 << 8, .sizey = 1 << 8 };
+
+      if(!dt_opencl_local_buffer_opt(devid, gd->kernel_pre_median, &locopt))
+      goto error;
+
+      size_t sizes[3] = { ROUNDUP(width, locopt.sizex), ROUNDUP(height, locopt.sizey), 1 };
+      size_t local[3] = { locopt.sizex, locopt.sizey, 1 };
+      dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 0, sizeof(cl_mem), &dev_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 1, sizeof(cl_mem), &dev_med);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 2, sizeof(int), &width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 3, sizeof(int), &height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 4, sizeof(uint32_t),
+                                (void *)&piece->pipe->dsc.filters);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 5, sizeof(float), (void *)&data->median_thrs);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 6,
+                            sizeof(float) * (locopt.sizex + 4) * (locopt.sizey + 4), NULL);
+      err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_pre_median, sizes, local);
+      if(err != CL_SUCCESS) goto error;
+      dev_in = dev_aux;
     }
     else
-      dev_aux = dev_out;
+      dev_med = dev_in;
 
-    if(demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME)
     {
-      size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-      dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_monochrome, 0, sizeof(cl_mem), &dev_in);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_monochrome, 1, sizeof(cl_mem), &dev_aux);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_monochrome, 2, sizeof(int), &width);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_monochrome, 3, sizeof(int), &height);
-      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_passthrough_monochrome, sizes);
+      dt_opencl_local_buffer_t locopt
+        = (dt_opencl_local_buffer_t){ .xoffset = 2*3, .xfactor = 1, .yoffset = 2*3, .yfactor = 1,
+                                      .cellsize = sizeof(float) * 1, .overhead = 0,
+                                      .sizex = 1 << 8, .sizey = 1 << 8 };
+
+      if(!dt_opencl_local_buffer_opt(devid, gd->kernel_ppg_green, &locopt))
+      goto error;
+
+      size_t sizes[3] = { ROUNDUP(width, locopt.sizex), ROUNDUP(height, locopt.sizey), 1 };
+      size_t local[3] = { locopt.sizex, locopt.sizey, 1 };
+      dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 0, sizeof(cl_mem), &dev_med);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 1, sizeof(cl_mem), &dev_tmp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 2, sizeof(int), &width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 3, sizeof(int), &height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 4, sizeof(uint32_t),
+                                (void *)&piece->pipe->dsc.filters);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 5,
+                            sizeof(float) * (locopt.sizex + 2*3) * (locopt.sizey + 2*3), NULL);
+
+      err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_ppg_green, sizes, local);
       if(err != CL_SUCCESS) goto error;
     }
-    else if(demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR)
+
     {
-      size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-      dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_color, 0, sizeof(cl_mem), &dev_in);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_color, 1, sizeof(cl_mem), &dev_aux);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_color, 2, sizeof(int), &width);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_color, 3, sizeof(int), &height);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_color, 4, sizeof(int), (void *)&roi_in->x);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_color, 5, sizeof(int), (void *)&roi_in->y);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_passthrough_color, 6, sizeof(uint32_t), (void *)&piece->pipe->dsc.filters);
+      dt_opencl_local_buffer_t locopt
+        = (dt_opencl_local_buffer_t){ .xoffset = 2*1, .xfactor = 1, .yoffset = 2*1, .yfactor = 1,
+                                      .cellsize = 4 * sizeof(float), .overhead = 0,
+                                      .sizex = 1 << 8, .sizey = 1 << 8 };
 
-      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_passthrough_color, sizes);
-      if(err != CL_SUCCESS) goto error;
-    }
-    else if(demosaicing_method == DT_IOP_DEMOSAIC_PPG)
-    {
-      dev_tmp = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float) * 4);
-      if(dev_tmp == NULL) goto error;
+      if(!dt_opencl_local_buffer_opt(devid, gd->kernel_ppg_redblue, &locopt))
+      goto error;
 
-      {
-        const int myborder = 3;
-        // manage borders
-        size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-        dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 0, sizeof(cl_mem), &dev_in);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 1, sizeof(cl_mem), &dev_tmp);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 2, sizeof(int), (void *)&width);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 3, sizeof(int), (void *)&height);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 4, sizeof(uint32_t), (void *)&piece->pipe->dsc.filters);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_border_interpolate, 5, sizeof(int), (void *)&myborder);
-        err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_border_interpolate, sizes);
-        if(err != CL_SUCCESS) goto error;
-      }
+      size_t sizes[3] = { ROUNDUP(width, locopt.sizex), ROUNDUP(height, locopt.sizey), 1 };
+      size_t local[3] = { locopt.sizex, locopt.sizey, 1 };
+      dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 0, sizeof(cl_mem), &dev_tmp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 1, sizeof(cl_mem), &dev_aux);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 2, sizeof(int), &width);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 3, sizeof(int), &height);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 4, sizeof(uint32_t),
+                                (void *)&piece->pipe->dsc.filters);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 5,
+                            sizeof(float) * 4 * (locopt.sizex + 2) * (locopt.sizey + 2), NULL);
 
-      if(data->median_thrs > 0.0f)
-      {
-        dev_med = dt_opencl_alloc_device(devid, roi_in->width, roi_in->height, sizeof(float) * 4);
-        if(dev_med == NULL) goto error;
-
-        dt_opencl_local_buffer_t locopt
-          = (dt_opencl_local_buffer_t){ .xoffset = 2*2, .xfactor = 1, .yoffset = 2*2, .yfactor = 1,
-                                        .cellsize = 1 * sizeof(float), .overhead = 0,
-                                        .sizex = 1 << 8, .sizey = 1 << 8 };
-
-        if(!dt_opencl_local_buffer_opt(devid, gd->kernel_pre_median, &locopt))
-        goto error;
-
-        size_t sizes[3] = { ROUNDUP(width, locopt.sizex), ROUNDUP(height, locopt.sizey), 1 };
-        size_t local[3] = { locopt.sizex, locopt.sizey, 1 };
-        dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 0, sizeof(cl_mem), &dev_in);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 1, sizeof(cl_mem), &dev_med);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 2, sizeof(int), &width);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 3, sizeof(int), &height);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 4, sizeof(uint32_t),
-                                 (void *)&piece->pipe->dsc.filters);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 5, sizeof(float), (void *)&data->median_thrs);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_pre_median, 6,
-                             sizeof(float) * (locopt.sizex + 4) * (locopt.sizey + 4), NULL);
-        err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_pre_median, sizes, local);
-        if(err != CL_SUCCESS) goto error;
-        dev_in = dev_aux;
-      }
-      else dev_med = dev_in;
-
-      {
-        dt_opencl_local_buffer_t locopt
-          = (dt_opencl_local_buffer_t){ .xoffset = 2*3, .xfactor = 1, .yoffset = 2*3, .yfactor = 1,
-                                        .cellsize = sizeof(float) * 1, .overhead = 0,
-                                        .sizex = 1 << 8, .sizey = 1 << 8 };
-
-        if(!dt_opencl_local_buffer_opt(devid, gd->kernel_ppg_green, &locopt))
-        goto error;
-
-        size_t sizes[3] = { ROUNDUP(width, locopt.sizex), ROUNDUP(height, locopt.sizey), 1 };
-        size_t local[3] = { locopt.sizex, locopt.sizey, 1 };
-        dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 0, sizeof(cl_mem), &dev_med);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 1, sizeof(cl_mem), &dev_tmp);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 2, sizeof(int), &width);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 3, sizeof(int), &height);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 4, sizeof(uint32_t),
-                                 (void *)&piece->pipe->dsc.filters);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_green, 5,
-                             sizeof(float) * (locopt.sizex + 2*3) * (locopt.sizey + 2*3), NULL);
-
-        err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_ppg_green, sizes, local);
-        if(err != CL_SUCCESS) goto error;
-      }
-
-      {
-        dt_opencl_local_buffer_t locopt
-          = (dt_opencl_local_buffer_t){ .xoffset = 2*1, .xfactor = 1, .yoffset = 2*1, .yfactor = 1,
-                                        .cellsize = 4 * sizeof(float), .overhead = 0,
-                                        .sizex = 1 << 8, .sizey = 1 << 8 };
-
-        if(!dt_opencl_local_buffer_opt(devid, gd->kernel_ppg_redblue, &locopt))
-        goto error;
-
-        size_t sizes[3] = { ROUNDUP(width, locopt.sizex), ROUNDUP(height, locopt.sizey), 1 };
-        size_t local[3] = { locopt.sizex, locopt.sizey, 1 };
-        dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 0, sizeof(cl_mem), &dev_tmp);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 1, sizeof(cl_mem), &dev_aux);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 2, sizeof(int), &width);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 3, sizeof(int), &height);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 4, sizeof(uint32_t),
-                                 (void *)&piece->pipe->dsc.filters);
-        dt_opencl_set_kernel_arg(devid, gd->kernel_ppg_redblue, 5,
-                             sizeof(float) * 4 * (locopt.sizex + 2) * (locopt.sizey + 2), NULL);
-
-        err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_ppg_redblue, sizes, local);
-        if(err != CL_SUCCESS) goto error;
-      }
-    }
-
-    dt_dev_write_rawdetail_mask_cl(piece, dev_aux, roi_in, DT_DEV_DETAIL_MASK_DEMOSAIC);
-
-    if(scaled)
-    {
-      // scale aux buffer to output buffer
-      err = dt_iop_clip_and_zoom_roi_cl(devid, dev_out, dev_aux, roi_out, roi_in);
+      err = dt_opencl_enqueue_kernel_2d_with_local(devid, gd->kernel_ppg_redblue, sizes, local);
       if(err != CL_SUCCESS) goto error;
     }
   }
-  else
-  {
-    if(demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME)
-    {
-      // sample image:
-      const int zero = 0;
-      cl_mem dev_pix = dev_in;
-      const int width = roi_out->width;
-      const int height = roi_out->height;
 
-      size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_passthrough_monochrome, 0, sizeof(cl_mem), &dev_pix);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_passthrough_monochrome, 1, sizeof(cl_mem), &dev_out);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_passthrough_monochrome, 2, sizeof(int), &width);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_passthrough_monochrome, 3, sizeof(int), &height);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_passthrough_monochrome, 4, sizeof(int), (void *)&zero);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_passthrough_monochrome, 5, sizeof(int), (void *)&zero);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_passthrough_monochrome, 6, sizeof(int),
-                               (void *)&roi_in->width);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_passthrough_monochrome, 7, sizeof(int),
-                               (void *)&roi_in->height);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_passthrough_monochrome, 8, sizeof(float),
-                               (void *)&roi_out->scale);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_passthrough_monochrome, 9, sizeof(uint32_t),
-                               (void *)&piece->pipe->dsc.filters);
-      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_zoom_passthrough_monochrome, sizes);
-      if(err != CL_SUCCESS) goto error;
-    }
-    else
-    {
-      // sample half-size image:
-      const int zero = 0;
-      cl_mem dev_pix = dev_in;
-      const int width = roi_out->width;
-      const int height = roi_out->height;
+  dt_dev_write_rawdetail_mask_cl(piece, dev_aux, roi_in, DT_DEV_DETAIL_MASK_DEMOSAIC);
 
-      size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 0, sizeof(cl_mem), &dev_pix);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 1, sizeof(cl_mem), &dev_out);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 2, sizeof(int), &width);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 3, sizeof(int), &height);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 4, sizeof(int), (void *)&zero);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 5, sizeof(int), (void *)&zero);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 6, sizeof(int), (void *)&roi_in->width);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 7, sizeof(int), (void *)&roi_in->height);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 8, sizeof(float), (void *)&roi_out->scale);
-      dt_opencl_set_kernel_arg(devid, gd->kernel_zoom_half_size, 9, sizeof(uint32_t),
-                               (void *)&piece->pipe->dsc.filters);
-      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_zoom_half_size, sizes);
-      if(err != CL_SUCCESS) goto error;
-    }
-  }
 
   if(dev_aux != dev_out) dt_opencl_release_mem_object(dev_aux);
   if(dev_med != dev_in) dt_opencl_release_mem_object(dev_med);

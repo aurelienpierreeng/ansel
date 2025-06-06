@@ -846,23 +846,6 @@ gboolean _get_export_size(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe,
   return 0;
 }
 
-void _export_disable_finalscale(dt_dev_pixelpipe_t *pipe)
-{
-  dt_dev_pixelpipe_iop_t *finalscale = NULL;
-
-  for(GList *nodes = g_list_last(pipe->nodes); nodes; nodes = g_list_previous(nodes))
-  {
-    dt_dev_pixelpipe_iop_t *node = (dt_dev_pixelpipe_iop_t *)(nodes->data);
-    if(!strcmp(node->module->op, "finalscale"))
-    {
-      finalscale = node;
-      break;
-    }
-  }
-
-  if(finalscale) finalscale->enabled = 0;
-}
-
 
 void _swap_byteorder_uint8_to_uint8(const uint8_t *const restrict inbuf, uint8_t *const restrict outbuf,
                                     const size_t processed_width, const size_t processed_height)
@@ -1098,30 +1081,11 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   // so the RAM usage can go out of control here.
   dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
 
-  /*
-    if high-quality processing was requested, downsampling will be done
-    at the very end of the pipe (just before border and watermark)
-    else, downsampling will be right after demosaic,
-    so we need to turn temporarily disable in-pipe late downsampling iop.
-  */
-  if(high_quality)
-  {
-    dt_dev_pixelpipe_process_no_gamma(&pipe, &dev, 0, 0, processed_width, processed_height, scale);
-  }
+  // do the processing (8-bit with special treatment, to make sure we can use openmp further down):
+  if(bpp == 8)
+    dt_dev_pixelpipe_process(&pipe, &dev, 0, 0, processed_width, processed_height, scale);
   else
-  {
-    // find the finalscale module and disable it.
-    _export_disable_finalscale(&pipe);
-
-    // do the processing (8-bit with special treatment, to make sure we can use openmp further down):
-    if(bpp == 8)
-      dt_dev_pixelpipe_process(&pipe, &dev, 0, 0, processed_width, processed_height, scale);
-    else
-      dt_dev_pixelpipe_process_no_gamma(&pipe, &dev, 0, 0, processed_width, processed_height, scale);
-
-    // Warning: finalscale is still disabled in pipeline. It's no issue for now since we don't re-use it
-    // before destroying it. Mind that if you extend the code.
-  }
+    dt_dev_pixelpipe_process_no_gamma(&pipe, &dev, 0, 0, processed_width, processed_height, scale);
 
   dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
 

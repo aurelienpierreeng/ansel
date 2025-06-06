@@ -93,6 +93,7 @@ const dt_iop_order_entry_t legacy_order[] = {
   { {14.0f }, "retouch", 0},
   { {15.0f }, "lens", 0},
   { {15.5f }, "cacorrectrgb", 0},
+  { {15.5f }, "initialscale", 0},
   { {16.0f }, "ashift", 0},
   { {17.0f }, "liquify", 0},
   { {18.0f }, "rotatepixels", 0},
@@ -183,6 +184,7 @@ const dt_iop_order_entry_t v30_order[] = {
   { {13.5f }, "cacorrectrgb", 0}, // correct chromatic aberrations after lens correction so that lensfun
                                   // does not reintroduce chromatic aberrations when trying to correct them
   { {14.0f }, "hazeremoval", 0},
+  { {14.0f }, "initialscale", 0},
   { {15.0f }, "ashift", 0},
   { {16.0f }, "flip", 0},
   { {17.0f }, "clipping", 0},
@@ -292,6 +294,7 @@ const dt_iop_order_entry_t v30_jpg_order[] = {
   { { 28.0f }, "cacorrectrgb", 0}, // correct chromatic aberrations after lens correction so that lensfun
                                   // does not reintroduce chromatic aberrations when trying to correct them
   { { 28.0f }, "hazeremoval", 0},
+  { { 28.0f }, "initialscale", 0 },
   { { 28.0f }, "ashift", 0},
   { { 28.0f }, "flip", 0},
   { { 28.0f }, "clipping", 0},
@@ -805,6 +808,7 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
           _insert_before(iop_order_list, "graduatednd", "crop");
           _insert_before(iop_order_list, "colorbalance", "diffuse");
           _insert_before(iop_order_list, "nlmeans", "blurs");
+          _insert_before(iop_order_list, "ashift", "initialscale");
         }
       }
       else if(version == DT_IOP_ORDER_LEGACY)
