@@ -686,6 +686,8 @@ gchar *dt_accels_build_path(const gchar *scope, const gchar *feature)
 
 static void _accels_keys_decode(dt_accels_t *accels, GdkEvent *event, guint *keyval, GdkModifierType *mods)
 {
+  if(accels == NULL) return;
+
   // Get modifiers
   gdk_event_get_state(event, mods);
 
@@ -877,6 +879,12 @@ void dt_accels_detach_scroll_handler(dt_accels_t *accels)
   accels->scroll.data = NULL;
 }
 
+// Ugly. Use that only for callbacks of the shortcuts GUI popup
+// when the user_data pointer is already used for something else.
+// This will be inited when opening the popup, so there is only
+// one place/thread accessing it and the reference is up to date
+// within the scope where it's used.
+static dt_accels_t *accels_global_ref = NULL;
 
 enum
 {
@@ -922,6 +930,32 @@ static void _make_column_clearable(GtkTreeViewColumn *col, GtkCellRenderer *rend
                 NULL);
 }
 
+
+static int guess_key_group(dt_accels_t *accels, guint keyval, guint hardware_keycode)
+{
+  GdkKeymapKey *keys;
+  guint *keyvals;
+  gint n_keys;
+
+  if(!gdk_keymap_get_entries_for_keycode(accels->keymap, hardware_keycode, &keys, &keyvals, &n_keys))
+    return 0;
+
+  for(int i = 0; i < n_keys; ++i)
+  {
+    if(keyvals[i] == keyval)
+    {
+      int group = keys[i].group;
+      g_free(keys);
+      g_free(keyvals);
+      return group; // found matching group
+    }
+  }
+
+  g_free(keys);
+  g_free(keyvals);
+  return 0; // not found, default
+}
+
 static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, guint keyval, GdkModifierType mods,
                              guint hardware_key, gpointer user_data)
 {
@@ -941,6 +975,23 @@ static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, gu
     gtk_tree_model_get(GTK_TREE_MODEL(filter), &f_iter, COL_SHORTCUT, &shortcut, -1);
 
   const char *shortcut_path = NULL;
+
+  // mods input arg doesn't record states (numlock, capslock), so we need to fetch it
+  // directly before decoding full key combinations
+  GdkDisplay *display = gdk_display_get_default();
+  GdkSeat *seat = gdk_display_get_default_seat(display);
+  GdkDevice *pointer = gdk_seat_get_pointer(seat);
+  GdkModifierType state;
+  gdk_device_get_state(pointer, gdk_get_default_root_window(), NULL, &state);
+
+  // Ensure modifiers, language-heuristics and numpad/keypad keys are uniformingly decoded
+  GdkEventKey event = { 0 };
+  event.type = GDK_KEY_PRESS;
+  event.state = mods | state;
+  event.keyval = keyval;
+  event.hardware_keycode = hardware_key;
+  event.group = guess_key_group(accels_global_ref, keyval, hardware_key);
+  _accels_keys_decode(accels_global_ref, (GdkEvent *)&event, &keyval, &mods);
 
   if(shortcut)
   {
@@ -1254,6 +1305,9 @@ static void search_changed(GtkEntry *entry, gpointer user_data)
 
 void dt_accels_window(dt_accels_t *accels, GtkWindow *main_window)
 {
+  // Update the ugly global variable referencing accels
+  accels_global_ref = accels;
+
   _accel_window_params_t *params = malloc(sizeof(_accel_window_params_t));
   params->keys_search = gtk_search_entry_new();
   params->path_search = gtk_search_entry_new();
