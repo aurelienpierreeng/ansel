@@ -1,6 +1,7 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2020 darktable developers.
+    Copyright (C) 2020 darktable developers,
+    Copyright (C) 2025 Guillaume Stutin.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,6 +17,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "darktable.h"
+
 /**
  * These are the CIELab values of Color Checker reference targets
  */
@@ -25,22 +28,24 @@ typedef enum dt_color_checker_targets
 {
   COLOR_CHECKER_XRITE_24_2000 = 0,
   COLOR_CHECKER_XRITE_24_2014 = 1,
-  COLOR_CHECKER_SPYDER_24     = 2,
-  COLOR_CHECKER_SPYDER_24_V2  = 3,
-  COLOR_CHECKER_SPYDER_48     = 4,
-  COLOR_CHECKER_SPYDER_48_V2  = 5,
+  COLOR_CHECKER_SPYDER_24 = 2,
+  COLOR_CHECKER_SPYDER_24_V2 = 3,
+  COLOR_CHECKER_SPYDER_48 = 4,
+  COLOR_CHECKER_SPYDER_48_V2 = 5,
+  COLOR_CHECKER_USER_REF = 6,
   COLOR_CHECKER_LAST
 } dt_color_checker_targets;
 
 // helper to deal with patch color
 typedef struct dt_color_checker_patch
 {
-  const char *name;        // mnemonic name for the patch
-  dt_aligned_pixel_t Lab;  // reference color in CIE Lab
+  const char *name;       // mnemonic name for the patch
+  dt_aligned_pixel_t Lab; // reference color in CIE Lab
 
-  // (x, y) position of the patch center, relatively to the guides (white dots)
+  // (x, y) position of the patch  center, relatively to the guides (white dots)
   // in ratio of the grid dimension along that axis
-  struct {
+  struct
+  {
     float x;
     float y;
   };
@@ -48,22 +53,21 @@ typedef struct dt_color_checker_patch
 
 typedef struct dt_color_checker_t
 {
-  const char *name;
-  const char *author;
-  const char *date;
-  const char *manufacturer;
+  char *name;
+  char *author;
+  char *date;
+  char *manufacturer;
   dt_color_checker_targets type;
 
-  float ratio;                        // format ratio of the chart, guide to guide (white dots)
-  float radius;                       // radius of a patch in ratio of the checker diagonal
-  size_t patches;                     // number of patches in target
-  size_t size[2];                     // dimension along x, y axes
-  size_t middle_grey;                 // index of the closest patch to 20% neutral grey
-  size_t white;                       // index of the closest patch to pure white
-  size_t black;                       // index of the closest patch to pure black
-  dt_color_checker_patch values[];    // array of colors
+  float ratio;                     // format ratio of the chart, guide to guide (white dots)
+  float radius;                    // radius of a patch in ratio of the checker diagonal
+  size_t patches;                  // number of patches in target
+  size_t size[2];                  // dimension along x, y axes
+  size_t middle_grey;              // index of the closest patch to 20% neutral grey
+  size_t white;                    // index of the closest patch to pure white
+  size_t black;                    // index of the closest patch to pure black
+  dt_color_checker_patch values[]; // array of colors
 } dt_color_checker_t;
-
 
 dt_color_checker_t xrite_24_2000 = { .name = "Xrite ColorChecker 24 before 2014",
                                     .author = "X-Rite",
@@ -358,10 +362,183 @@ dt_color_checker_t spyder_48_v2 = {  .name = "Datacolor SpyderCheckr 48 after 20
                                               { "H5", { 65.10,  18.14,  18.68 }, { 0.929, 0.736 } },
                                               { "H6", { 36.13,  14.15,  15.78 }, { 0.929, 0.893 } } } };
 
-
-dt_color_checker_t * dt_get_color_checker(const dt_color_checker_targets target_type)
+typedef struct dt_colorchecker_label_t
 {
-  switch(target_type)
+  gchar *label;
+  dt_color_checker_targets type;
+  gchar *path;
+} dt_colorchecker_label_t;
+
+// Add other supported type of CGATS here
+typedef enum dt_colorchecker_CGATS_types
+{
+  CGATS_TYPE_IT8_7_1,
+  CGATS_TYPE_IT8_7_2,
+  CGATS_TYPE_UNKOWN
+} dt_colorchecker_CGATS_types;
+
+const char *CGATS_types[CGATS_TYPE_UNKOWN] = {
+  "IT8.7/1", // transparent 
+  "IT8.7/2"  // opaque
+};
+
+typedef enum dt_colorchecker_material_types
+{
+  COLOR_CHECKER_MATERIAL_TRANSPARENT,
+  COLOR_CHECKER_MATERIAL_OPAQUE,
+  COLOR_CHECKER_MATERIAL_UNKNOWN
+} dt_colorchecker_material_types;
+
+const char *colorchecker_material_types[COLOR_CHECKER_MATERIAL_UNKNOWN] = {
+  "Transparent",
+  "Opaque"
+};
+
+typedef struct dt_colorchecker_CGATS_label_name_t 
+{
+  const char *type;
+  const char *originator;
+  const char *date; // date in format 'Mon YYYY'
+  const char *material;
+} dt_colorchecker_CGATS_label_name_t;
+
+// This defines charts specifications
+typedef struct dt_colorchecker_CGATS_spec_t
+{
+  const gchar *type;
+  float radius;
+  float ratio;
+  size_t size[2];
+  size_t middle_grey;
+  size_t white;
+  size_t black;
+
+  int patches; // total number of patches
+  int colums;
+  int rows;
+  float patch_width;
+  float patch_height;
+  float patch_offset_x;
+  float patch_offset_y;
+} dt_colorchecker_CGATS_spec_t;
+
+const dt_colorchecker_CGATS_spec_t IT8_7 = {
+  .type = "IT8",
+  .radius = 0.0189f,
+  .ratio = 13.f / 23.f,
+  .size = { 23, 13 },
+  .middle_grey = 273, // GS9
+  .white = 263,       // Dmin or GS0
+  .black = 287,       // Dmax or GS23
+
+  .patches = 288,     // as specified in IT8.7/1 and IT8.7/2
+  .colums = 22,
+  .rows = 12,
+  .patch_width = 0.04255f,   // 1.0f / (cols + 1.5f)
+  .patch_height = 0.0740f,   // 1.0f / (rows + 1.5f)
+  .patch_offset_x = 0.0531f, // 1.25f * patch_size_x
+  .patch_offset_y = 0.0925f  // 1.25f * patch_size_y
+};
+
+dt_colorchecker_label_t *dt_colorchecker_label_init(const char *label, const dt_color_checker_targets type, const char *path)
+{
+  size_t label_size = safe_strlen(label) + safe_strlen(path) + sizeof(dt_color_checker_targets);
+
+  dt_colorchecker_label_t *checker_label = malloc(label_size);
+  if(!checker_label) return NULL;
+
+  checker_label->label = g_strdup(label);
+  checker_label->type = type;
+  checker_label->path = path ? g_strdup(path) : NULL;
+
+  return checker_label;
+}
+
+dt_color_checker_t *dt_colorchecker_init(const size_t total_size)
+{
+    dt_color_checker_t *checker = malloc(total_size);
+    return checker ? checker : NULL;
+}
+
+void dt_color_checker_cleanup(const dt_color_checker_t *checker)
+{
+  if(!checker || checker->type != COLOR_CHECKER_USER_REF) return;
+  
+  // Free ONLY if they were individually allocated.
+  // For built-in color checkers, patch names are static and must not be freed.
+  // For dynamically allocated (CGATS) color checkers, patch names are duplicated and must be freed.
+  // Here, we assume that for COLOR_CHECKER_USER_REF, values[i].name was allocated.
+  g_free(checker->name);
+  g_free(checker->author);
+  g_free(checker->date);
+  g_free(checker->manufacturer);
+  if(checker->patches > 0)
+    for(size_t i = 0; i < checker->patches; i++) g_free((gchar*)checker->values[i].name);
+  
+  free((dt_color_checker_t*)checker);
+  checker = NULL;
+}
+
+void dt_colorchecker_label_free(gpointer data)
+{
+  dt_colorchecker_label_t *checker_label = (dt_colorchecker_label_t *)data;
+
+  if(!checker_label) return;
+
+  // Only free if not NULL and if dynamically allocated (user reference)
+  if(checker_label->type == COLOR_CHECKER_USER_REF)
+  {
+    g_free(checker_label->label);
+    if(checker_label->path) g_free(checker_label->path); // Builtin checker doesn't use this char dynamically
+  }
+}
+
+void dt_colorchecker_label_list_cleanup(GList **colorcheckers)
+{
+  if(!colorcheckers) return;
+
+  g_list_free_full(g_steal_pointer(colorcheckers), dt_colorchecker_label_free);
+  *colorcheckers = NULL;
+}
+
+/**
+ * @brief Creates a color checker from a user reference file (CGATS format).
+ *
+ * @param filename the path to the CGATS file.
+ * @return dt_color_checker_t* the filled color checker.
+ */
+dt_color_checker_t *dt_colorchecker_user_ref_create(const char *filename);
+
+/**
+ * @brief Find all CGAT files in the user config/color/it8 directory
+ *
+ * @param ref_colorcheckers_files NULL GList that will be populated with found IT8 files
+ * @return int Number of found files
+ */
+int dt_colorchecker_find_CGAT_reference_files(GList **ref_colorcheckers_files);
+
+int dt_colorchecker_find_builtin(GList **colorcheckers_label);
+
+
+const dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets target_type,
+                                               GList **colorchecker_label)
+{
+  dt_print(DT_DEBUG_VERBOSE, _("dt_get_color_checker: colorchecker type %i.\n"), target_type);
+
+  dt_color_checker_targets nth_checker = COLOR_CHECKER_LAST;
+  const dt_colorchecker_label_t *label_data = NULL;
+  if(target_type >= COLOR_CHECKER_USER_REF && colorchecker_label != NULL && *colorchecker_label != NULL)
+  {
+    dt_print(DT_DEBUG_VERBOSE, _("dt_get_color_checker: colorchecker type %i is a user reference.\n"), target_type);
+
+    // Get the label data from the list
+    label_data = g_list_nth_data(*colorchecker_label, target_type);
+    nth_checker = COLOR_CHECKER_USER_REF;
+  }
+  else // it's a builtin colorchecker
+    nth_checker = target_type;
+
+  switch(nth_checker)
   {
     case COLOR_CHECKER_XRITE_24_2000:
       return &xrite_24_2000;
@@ -381,7 +558,13 @@ dt_color_checker_t * dt_get_color_checker(const dt_color_checker_targets target_
     case COLOR_CHECKER_SPYDER_48_V2:
       return &spyder_48_v2;
 
+    case COLOR_CHECKER_USER_REF:
+      if(label_data)
+        return dt_colorchecker_user_ref_create(label_data->path);
+      break;
+      
     case COLOR_CHECKER_LAST:
+      fprintf(stderr, "dt_get_color_checker: colorchecker type %i not found!\n", target_type);
       return &xrite_24_2014;
   }
 
@@ -413,8 +596,7 @@ static inline void dt_color_checker_get_coordinates(const dt_color_checker_t *co
 }
 
 // find a patch matching a name
-static inline const dt_color_checker_patch* dt_color_checker_get_patch_by_name(const dt_color_checker_t *const target_checker,
-                                                                              const char *name, size_t *index)
+static inline const dt_color_checker_patch *dt_color_checker_get_patch_by_name(const dt_color_checker_t *const target_checker, const char *name, size_t *index)
 {
   size_t idx = -1;
   const dt_color_checker_patch *patch = NULL;
@@ -429,9 +611,26 @@ static inline const dt_color_checker_patch* dt_color_checker_get_patch_by_name(c
 
   if(patch == NULL) fprintf(stderr, "No patch matching name `%s` was found in %s\n", name, target_checker->name);
 
-  if(index ) *index = idx;
+  if(index) *index = idx;
   return patch;
 }
+
+/**
+ * @brief Find all builtin and CGATS colorcheckers.
+ *
+ * @param colorcheckers_label the NULL GList that will be populated with found colorcheckers.
+ * @return int Number of found colorcheckers.
+ */
+int dt_colorchecker_find(GList **colorcheckers_label)
+{
+  int total = dt_colorchecker_find_builtin(colorcheckers_label);
+  dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find: found %d builtin colorcheckers\n"), total);
+  int b_nb = total;
+  total += dt_colorchecker_find_CGAT_reference_files(colorcheckers_label);
+  dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find: found %d CGAT references files\n"), total - b_nb);
+  return total;
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
