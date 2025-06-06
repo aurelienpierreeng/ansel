@@ -508,12 +508,6 @@ static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
       dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
       GtkWidget *w = module->expander;
 
-      if((DT_IOP_ORDER_INFO) && (module->enabled))
-      {
-        fprintf(stderr, "\n%20s %d", module->op, module->iop_order);
-        if(dt_iop_is_hidden(module)) fprintf(stderr, ", hidden");
-      }
-
       /* skip modules without a gui */
       if(dt_iop_is_hidden(module)) continue;
 
@@ -531,8 +525,8 @@ static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
             if(darktable.develop->gui_module == module) dt_iop_request_focus(NULL);
             if(w) gtk_widget_hide(w);
           }
+          break;
         }
-        break;
 
         case DT_MODULEGROUP_NONE:
         {
@@ -546,8 +540,8 @@ static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
             if(darktable.develop->gui_module == module) dt_iop_request_focus(NULL);
             if(w) gtk_widget_hide(w);
           }
+          break;
         }
-        break;
 
         default:
         {
