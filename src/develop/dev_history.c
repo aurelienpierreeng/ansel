@@ -1192,9 +1192,16 @@ char * _print_validity(gboolean state)
 static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, const int32_t imgid, gboolean is_inited)
 {
   // Module already in history: don't prepend extra entries
-  // Module has no user params: no history: don't prepend either
-  if(dt_history_check_module_exists(imgid, module->op, FALSE) || (module->flags() & IOP_FLAGS_NO_HISTORY_STACK))
+  if(dt_history_check_module_exists(imgid, module->op, FALSE))
     return;
+
+  // Module has no user params: no history: don't prepend either
+  if((module->flags() & IOP_FLAGS_NO_HISTORY_STACK)
+     && (module->default_enabled || (module->force_enable && module->force_enable(module, FALSE))))
+  {
+    module->enabled = TRUE;
+    return;
+  }
 
   dt_image_t *image = &dev->image_storage;
   const gboolean has_matrix = dt_image_is_matrix_correction_supported(image);
@@ -1207,9 +1214,10 @@ static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, 
   // we insert them with OLD defaults.
   if(module->default_enabled || (module->force_enable && module->force_enable(module, FALSE)))
   {
+    module->enabled = TRUE;
     if(!strcmp(module->op, "temperature")
-        && (image->change_timestamp == -1) // change_timestamp is not defined for old pics
-        && is_raw && is_inited && has_matrix)
+       && (image->change_timestamp == -1) // change_timestamp is not defined for old pics
+       && is_raw && is_inited && has_matrix)
     {
       dt_print(DT_DEBUG_HISTORY, "[history] Image history seems older than Darktable 3.0, we will insert white balance.\n");
 
@@ -1230,6 +1238,7 @@ static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, 
   }
   else if(module->workflow_enabled && !is_inited)
   {
+    module->enabled = TRUE;
     dt_dev_add_history_item_ext(dev, module, TRUE, TRUE, TRUE, FALSE);
   }
 }
@@ -1297,6 +1306,8 @@ static void _find_so_for_history_entry(dt_develop_t *dev, dt_dev_history_item_t 
     }
   }
   // else we found an already-existing instance and it's in hist->module already
+
+  hist->module->enabled = hist->enabled;
 }
 
 
