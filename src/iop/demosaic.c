@@ -96,15 +96,6 @@ typedef enum dt_iop_demosaic_greeneq_t
   DT_IOP_GREEN_EQ_BOTH = 3   // $DESCRIPTION: "full and local average"
 } dt_iop_demosaic_greeneq_t;
 
-typedef enum dt_iop_demosaic_qual_flags_t
-{
-  // either perform full scale demosaicing or choose simple half scale
-  // or third scale interpolation instead
-  DEMOSAIC_FULL_SCALE              = 1 << 0,
-  DEMOSAIC_ONLY_VNG_LINEAR         = 1 << 1,
-  DEMOSAIC_XTRANS_FULL             = 1 << 2,
-  DEMOSAIC_MEDIUM_QUAL             = 1 << 3
-} dt_iop_demosaic_qual_flags_t;
 
 typedef enum dt_iop_demosaic_smooth_t
 {
@@ -233,15 +224,6 @@ typedef struct dt_iop_demosaic_gui_data_t
   GtkWidget *lmmse_refine;
   gboolean visual_mask;
 } dt_iop_demosaic_gui_data_t;
-
-// set flags for demosaic quality based on factors besides demosaic
-// method (e.g. config, scale, pixelpipe type)
-static int demosaic_qual_flags(const dt_dev_pixelpipe_iop_t *const piece,
-                               const dt_image_t *const img,
-                               const dt_iop_roi_t *const roi_out)
-{
-  return DEMOSAIC_FULL_SCALE | DEMOSAIC_XTRANS_FULL;
-}
 
 // Implemented on amaze_demosaic_RT.cc
 void amaze_demosaic_RT(
@@ -469,7 +451,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
   dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
 
-  const int qual_flags = demosaic_qual_flags(piece, img, roi_out);
   int demosaicing_method = data->demosaicing_method;
 
   gboolean showmask = FALSE;
@@ -502,12 +483,12 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     const int passes = (demosaicing_method == DT_IOP_DEMOSAIC_MARKESTEIJN) ? 1 : 3;
     if(demosaicing_method == DT_IOP_DEMOSAIC_MARKEST3_VNG)
       xtrans_markesteijn_interpolate(o, pixels, &roo, &roi, xtrans, passes);
-    else if(demosaicing_method == DT_IOP_DEMOSAIC_FDC && (qual_flags & DEMOSAIC_XTRANS_FULL))
+    else if(demosaicing_method == DT_IOP_DEMOSAIC_FDC)
       xtrans_fdc_interpolate(self, o, pixels, &roo, &roi, xtrans);
-    else if(demosaicing_method >= DT_IOP_DEMOSAIC_MARKESTEIJN && (qual_flags & DEMOSAIC_XTRANS_FULL))
+    else if(demosaicing_method >= DT_IOP_DEMOSAIC_MARKESTEIJN)
       xtrans_markesteijn_interpolate(o, pixels, &roo, &roi, xtrans, passes);
     else
-      vng_interpolate(o, pixels, &roo, &roi, piece->pipe->dsc.filters, xtrans, qual_flags & DEMOSAIC_ONLY_VNG_LINEAR);
+      vng_interpolate(o, pixels, &roo, &roi, piece->pipe->dsc.filters, xtrans, FALSE);
   }
   else
   {
@@ -546,7 +527,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
     if(demosaicing_method == DT_IOP_DEMOSAIC_VNG4 || (img->flags & DT_IMAGE_4BAYER))
     {
-      vng_interpolate(o, in, &roo, &roi, piece->pipe->dsc.filters, xtrans, qual_flags & DEMOSAIC_ONLY_VNG_LINEAR);
+      vng_interpolate(o, in, &roo, &roi, piece->pipe->dsc.filters, xtrans, FALSE);
       if(img->flags & DT_IMAGE_4BAYER)
       {
         dt_colorspaces_cygm_to_rgb(o, roo.width*roo.height, data->CAM_to_RGB);
@@ -612,10 +593,8 @@ static int process_default_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop
 {
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
   dt_iop_demosaic_global_data_t *gd = (dt_iop_demosaic_global_data_t *)self->global_data;
-  const dt_image_t *img = &self->dev->image_storage;
 
   const int devid = piece->pipe->devid;
-  const int qual_flags = demosaic_qual_flags(piece, img, roi_out);
 
   cl_mem dev_aux = NULL;
   cl_mem dev_tmp = NULL;
@@ -815,13 +794,12 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
       demosaicing_method = DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME;
   }
 
-  const int qual_flags = demosaic_qual_flags(piece, &self->dev->image_storage, roi_out);
   cl_mem high_image = NULL;
   cl_mem low_image = NULL;
   cl_mem blend = NULL;
   cl_mem details = NULL;
   cl_mem dev_aux = NULL;
-  const gboolean dual = ((demosaicing_method & DEMOSAIC_DUAL) && (qual_flags & DEMOSAIC_FULL_SCALE) && (data->dual_thrs > 0.0f));
+  const gboolean dual = ((demosaicing_method & DEMOSAIC_DUAL) && (data->dual_thrs > 0.0f));
   const int devid = piece->pipe->devid;
   gboolean retval = FALSE;
 
@@ -849,11 +827,6 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   else if(demosaicing_method ==  DT_IOP_DEMOSAIC_VNG4 || demosaicing_method == DT_IOP_DEMOSAIC_VNG)
   {
     if(!process_vng_cl(self, piece, dev_in, dev_out, roi_in, roi_out, TRUE, FALSE)) return FALSE;
-  }
-  else if((demosaicing_method == DT_IOP_DEMOSAIC_MARKESTEIJN || demosaicing_method == DT_IOP_DEMOSAIC_MARKESTEIJN_3) &&
-    !(qual_flags & DEMOSAIC_XTRANS_FULL))
-  {
-    if(!process_vng_cl(self, piece, dev_in, dev_out, roi_in, roi_out, TRUE, qual_flags & DEMOSAIC_ONLY_VNG_LINEAR)) return FALSE;
   }
   else if(((demosaicing_method & ~DEMOSAIC_DUAL) == DT_IOP_DEMOSAIC_MARKESTEIJN ) ||
           ((demosaicing_method & ~DEMOSAIC_DUAL) == DT_IOP_DEMOSAIC_MARKESTEIJN_3))
@@ -960,13 +933,6 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
       = ((piece->pipe->dsc.filters != 9u) && (data->green_eq != DT_IOP_GREEN_EQ_NO)) ? 0.25f : 0.0f;
   const dt_iop_demosaic_method_t demosaicing_method = data->demosaicing_method & ~DEMOSAIC_DUAL;
 
-  const int qual_flags = demosaic_qual_flags(piece, &self->dev->image_storage, roi_out);
-  const int full_scale_demosaicing = qual_flags & DEMOSAIC_FULL_SCALE;
-
-  // check if output buffer has same dimension as input buffer (thus avoiding one
-  // additional temporary buffer)
-  const int unscaled = (roi_out->width == roi_in->width && roi_out->height == roi_in->height);
-
   if((demosaicing_method == DT_IOP_DEMOSAIC_PPG) ||
       (demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME) ||
       (demosaicing_method == DT_IOP_DEMOSAIC_PASSTHROUGH_COLOR) ||
@@ -974,14 +940,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   {
     // Bayer pattern with PPG, Passthrough or Amaze
     tiling->factor = 1.0f + ioratio;         // in + out
-
-    if(full_scale_demosaicing && unscaled)
-      tiling->factor += fmax(1.0f + greeneq, smooth);  // + tmp + geeneq | + smooth
-    else if(full_scale_demosaicing)
-      tiling->factor += fmax(2.0f + greeneq, smooth);  // + tmp + aux + greeneq | + smooth
-    else
-      tiling->factor += smooth;                        // + smooth
-
+    tiling->factor += fmax(1.0f + greeneq, smooth);  // + tmp + geeneq | + smooth
     tiling->maxbuf = 1.0f;
     tiling->overhead = 0;
     tiling->xalign = 2;
@@ -990,8 +949,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   }
   else if(((demosaicing_method == DT_IOP_DEMOSAIC_MARKESTEIJN) ||
            (demosaicing_method == DT_IOP_DEMOSAIC_MARKESTEIJN_3) ||
-           (demosaicing_method == DT_IOP_DEMOSAIC_FDC)) &&
-          (qual_flags & DEMOSAIC_XTRANS_FULL))
+           (demosaicing_method == DT_IOP_DEMOSAIC_FDC)))
   {
     // X-Trans pattern full Markesteijn processing
     const int ndir = (demosaicing_method == DT_IOP_DEMOSAIC_MARKESTEIJN_3) ? 8 : 4;
@@ -1003,13 +961,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
                       + ndir * 0.125f  // homo + homosum
                       + 1.0f;          // aux
 
-    if(full_scale_demosaicing && unscaled)
-      tiling->factor += fmax(1.0f + greeneq, smooth);
-    else if(full_scale_demosaicing)
-      tiling->factor += fmax(2.0f + greeneq, smooth);
-    else
-      tiling->factor += smooth;
-
+    tiling->factor += fmax(1.0f + greeneq, smooth);
     tiling->maxbuf = 1.0f;
     tiling->overhead = 0;
     tiling->xalign = XTRANS_SNAPPER;
@@ -1019,12 +971,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   else if(demosaicing_method == DT_IOP_DEMOSAIC_RCD)
   {
     tiling->factor = 1.0f + ioratio;
-    if(full_scale_demosaicing && unscaled)
-      tiling->factor += fmax(1.0f + greeneq, smooth);  // + tmp + geeneq | + smooth
-    else if(full_scale_demosaicing)
-      tiling->factor += fmax(2.0f + greeneq, smooth);  // + tmp + aux + greeneq | + smooth
-    else
-      tiling->factor += smooth;                        // + smooth
+    tiling->factor += fmax(1.0f + greeneq, smooth);  // + tmp + geeneq | + smooth
     tiling->maxbuf = 1.0f;
     tiling->overhead = sizeof(float) * RCD_TILESIZE * RCD_TILESIZE * 8 * MAX(1, darktable.num_openmp_threads);
     tiling->xalign = 2;
@@ -1035,12 +982,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   else if(demosaicing_method == DT_IOP_DEMOSAIC_LMMSE)
   {
     tiling->factor = 1.0f + ioratio;
-    if(full_scale_demosaicing && unscaled)
-      tiling->factor += fmax(1.0f + greeneq, smooth);  // + tmp + geeneq | + smooth
-    else if(full_scale_demosaicing)
-      tiling->factor += fmax(2.0f + greeneq, smooth);  // + tmp + aux + greeneq | + smooth
-    else
-      tiling->factor += smooth;                        // + smooth
+    tiling->factor += fmax(1.0f + greeneq, smooth);  // + tmp + geeneq | + smooth
     tiling->maxbuf = 1.0f;
     tiling->overhead = sizeof(float) * LMMSE_GRP * LMMSE_GRP * 6 * MAX(1, darktable.num_openmp_threads);
     tiling->xalign = 2;
@@ -1051,14 +993,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   {
     // VNG
     tiling->factor = 1.0f + ioratio;
-
-    if(full_scale_demosaicing && unscaled)
-      tiling->factor += fmax(1.0f + greeneq, smooth);
-    else if(full_scale_demosaicing)
-      tiling->factor += fmax(2.0f + greeneq, smooth);
-    else
-      tiling->factor += smooth;
-
+    tiling->factor += fmax(1.0f + greeneq, smooth);
     tiling->maxbuf = 1.0f;
     tiling->overhead = 0;
     tiling->xalign = 6; // covering Bayer pattern for VNG4 as well as xtrans for VNG
