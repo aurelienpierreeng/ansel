@@ -1677,6 +1677,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // else recurse to the previous module n-1 to get a an input.
   KILL_SWITCH_ABORT;
 
+  if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+    dt_iop_nap(500);
+
   dt_iop_roi_t roi_in = *roi_out;
 
   void *input = NULL;
@@ -1808,6 +1811,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
                 piece, input_hash, hash, in_bpp, bpp, input_entry, output_entry);
 
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
+
+    if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+      dt_iop_nap(500);
+
     return 0;
   }
 
@@ -1900,6 +1907,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // to paint in UI.
 
   KILL_SWITCH_AND_FLUSH_CACHE;
+
+  if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+    dt_iop_nap(500);
+
   return 0;
 }
 

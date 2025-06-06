@@ -232,24 +232,12 @@ void dt_dev_process_preview(dt_develop_t *dev)
 
 void dt_dev_refresh_ui_images_real(dt_develop_t *dev)
 {
-  // We need to get the shutdown atomic set to TRUE,
-  // which is handled everytime history is changed,
-  // including when initing a new pipeline (from scratch or from user history).
-  // Benefit is atomics are de-facto thread-safe.
-  if(dt_atomic_get_int(&dev->preview_pipe->shutdown) && !dev->preview_pipe->processing)
-    dt_dev_process_preview(dev);
-  // else : join current pipe
-
-  // When entering darkroom, the GUI will size itself and call the
-  // configure() method of the view, which calls dev_configure() below.
-  // Problem is the GUI can be glitchy and reconfigure the pipe twice with different sizes,
-  // Each one starting a recompute. The shutdown mechanism should take care of stopping
-  // an ongoing pipe which output we don't care about anymore.
-  // But just in case, always start with the preview pipe, hoping
-  // the GUI will have figured out what size it really wants when we start
-  // the main preview pipe.
   if(dt_atomic_get_int(&dev->pipe->shutdown) && !dev->pipe->processing)
     dt_dev_process_image(dev);
+  // else : join current pipe
+
+  if(dt_atomic_get_int(&dev->preview_pipe->shutdown) && !dev->preview_pipe->processing)
+    dt_dev_process_preview(dev);
   // else : join current pipe
 }
 
@@ -506,6 +494,9 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
   // When the window size get inited, we will get a new order to recompute with a "zoom_changed" flag.
   // Until then, don't bother computing garbage that will not be reused later.
   if(dev->width < 32 || dev->height < 32) return;
+
+  if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+    dt_iop_nap(1000);
 
   pipe->running = 1;
 
