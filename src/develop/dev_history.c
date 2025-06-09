@@ -1307,7 +1307,7 @@ static void _find_so_for_history_entry(dt_develop_t *dev, dt_dev_history_item_t 
   }
   // else we found an already-existing instance and it's in hist->module already
 
-  hist->module->enabled = hist->enabled;
+  if(hist->module) hist->module->enabled = hist->enabled;
 }
 
 
