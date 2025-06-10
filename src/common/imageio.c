@@ -847,23 +847,7 @@ gboolean _get_export_size(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe,
 }
 
 
-void _swap_byteorder_uint8_to_uint8(const uint8_t *const restrict inbuf, uint8_t *const restrict outbuf,
-                                    const size_t processed_width, const size_t processed_height)
-{
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-  dt_omp_firstprivate(processed_width, processed_height, inbuf, outbuf) \
-  schedule(static)
-#endif
-  for(size_t k = 0; k < processed_width * processed_height; k++)
-  {
-    outbuf[4 * k + 0] = inbuf[4 * k + 2];
-    outbuf[4 * k + 1] = inbuf[4 * k + 1];
-    outbuf[4 * k + 2] = inbuf[4 * k + 0];
-  }
-}
-
-void _clamp_float_to_uint8(const float *const inbuf, uint8_t *const restrict outbuf, const size_t processed_width,
+void _clamp_float_to_uint8(const float *const inbuf, uint8_t *const outbuf, const size_t processed_width,
                            const size_t processed_height)
 {
 #ifdef _OPENMP
@@ -872,14 +856,12 @@ void _clamp_float_to_uint8(const float *const inbuf, uint8_t *const restrict out
   schedule(static)
 #endif
   for(size_t k = 0; k < processed_width * processed_height; k++)
-  {
-    outbuf[4 * k + 0] = roundf(CLAMP(inbuf[4 * k + 0] * 0xff, 0, 0xff));
-    outbuf[4 * k + 1] = roundf(CLAMP(inbuf[4 * k + 1] * 0xff, 0, 0xff));
-    outbuf[4 * k + 2] = roundf(CLAMP(inbuf[4 * k + 2] * 0xff, 0, 0xff));
-  }
+    for_four_channels(c)
+      outbuf[4 * k + c] = (uint8_t)CLAMPF(roundf(inbuf[4 * k + c] * 255.f), 0.f, 255.f);
 }
 
-void _swap_byteorder_float_to_uint8(const float *const restrict inbuf, uint8_t *const restrict outbuf,
+
+void _swap_byteorder_float_to_uint8(const float *const restrict inbuf, uint8_t *const outbuf,
                                     const size_t processed_width, const size_t processed_height)
 {
 #ifdef _OPENMP
@@ -889,60 +871,25 @@ void _swap_byteorder_float_to_uint8(const float *const restrict inbuf, uint8_t *
 #endif
   for(size_t k = 0; k < processed_width * processed_height; k++)
   {
-    outbuf[4 * k + 0] = roundf(CLAMP(inbuf[4 * k + 2] * 0xff, 0, 0xff));
-    outbuf[4 * k + 1] = roundf(CLAMP(inbuf[4 * k + 1] * 0xff, 0, 0xff));
-    outbuf[4 * k + 2] = roundf(CLAMP(inbuf[4 * k + 0] * 0xff, 0, 0xff));
+    outbuf[4 * k + 0] = (uint8_t)CLAMPF(roundf(inbuf[4 * k + 2] * 255.f), 0.f, 255.f);
+    outbuf[4 * k + 1] = (uint8_t)CLAMPF(roundf(inbuf[4 * k + 1] * 255.f), 0.f, 255.f);
+    outbuf[4 * k + 2] = (uint8_t)CLAMPF(roundf(inbuf[4 * k + 0] * 255.f), 0.f, 255.f);
+    outbuf[4 * k + 3] = (uint8_t)CLAMPF(roundf(inbuf[4 * k + 3] * 255.f), 0.f, 255.f);
   }
 }
 
 
-void _export_final_buffer_to_uint8(const float *const restrict inbuf, uint8_t **outbuf,
-                                   const gboolean display_byteorder, const gboolean high_quality,
-                                   const size_t processed_width, const size_t processed_height)
-{
-
-  *outbuf = dt_alloc_align(sizeof(uint8_t) * 4 * processed_width * processed_height);
-  if(*outbuf == NULL)
-  {
-    dt_print(DT_DEBUG_IMAGEIO, "[dt_imageio_export] failed to allocate output buffer for uint8_t");
-    return;
-  }
-
-  if(display_byteorder && high_quality)
-  {
-    _swap_byteorder_float_to_uint8(inbuf, *outbuf, processed_width, processed_height);
-    // else if display_byteorder but not high_quality,
-    // processing output was 8-bit already, and no need to swap order, so no-op
-  }
-  else // need to flip
-  {
-    if(high_quality) // ldr output: char
-      _clamp_float_to_uint8(inbuf, *outbuf, processed_width, processed_height);
-    else // need to swap:
-      _swap_byteorder_uint8_to_uint8((const uint8_t *const restrict)inbuf, *outbuf, processed_width, processed_height);
-  }
-}
-
-void _export_final_buffer_to_uint16(const float *const restrict inbuf, uint16_t **outbuf,
+void _export_final_buffer_to_uint16(const float *const restrict inbuf, uint16_t *const outbuf,
                                     const size_t processed_width, const size_t processed_height)
 {
-  *outbuf = dt_alloc_align(sizeof(uint16_t) * 4 * processed_width * processed_height);
-  if(*outbuf == NULL)
-  {
-    dt_print(DT_DEBUG_IMAGEIO, "[dt_imageio_export] failed to allocate output buffer for uint16_t");
-    return;
-  }
-
-  uint16_t *const restrict out = *outbuf;
-
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(processed_width, processed_height, inbuf, out) \
+  dt_omp_firstprivate(processed_width, processed_height, inbuf, outbuf) \
   schedule(static)
 #endif
   for(size_t k = 0; k < processed_width * processed_height; k++)
-    for_each_channel(c)
-      out[4 * k + c] = (uint16_t)roundf(CLAMP(inbuf[4 * k + c] * 0xffff, 0, 0xffff));
+    for_four_channels(c)
+      outbuf[4 * k + c] = (uint16_t)CLAMP(roundf(inbuf[4 * k + c] * 65535.f), 0.f, 65535.f);
 }
 
 void _export_apply_lua_actions(const int32_t imgid, const char *filename, dt_imageio_module_format_t *format,
@@ -995,7 +942,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
 
   dt_mipmap_buffer_t buf;
   dt_mipmap_cache_t *cache = darktable.mipmap_cache;
-  uint8_t *outbuf = NULL;
+  void *outbuf = NULL;
 
   dt_mipmap_cache_get(cache, &buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
 
@@ -1080,13 +1027,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   // This is because wavelets decompositions and such use 6 copies,
   // so the RAM usage can go out of control here.
   dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
-
-  // do the processing (8-bit with special treatment, to make sure we can use openmp further down):
-  if(bpp == 8)
-    dt_dev_pixelpipe_process(&pipe, &dev, 0, 0, processed_width, processed_height, scale);
-  else
-    dt_dev_pixelpipe_process_no_gamma(&pipe, &dev, 0, 0, processed_width, processed_height, scale);
-
+  dt_dev_pixelpipe_process(&pipe, &dev, 0, 0, processed_width, processed_height, scale);
   dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
 
   dt_show_times(&start, thumbnail_export ? "[dev_process_thumbnail] pixel pipeline processing"
@@ -1105,14 +1046,28 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   // NOTE: dt_dev_pixelpipe_cache_get_entry_from_data internally puts a read lock on the cache_entry
   // so everything following is guaranteed to be safe:
 
-  // Inplace downconversion to low-precision formats:
+  // Down-conversion to low-precision formats:
+  const size_t pixels = pipe.backbuf_width * pipe.backbuf_height * 4;
   if(bpp == 8)
-    _export_final_buffer_to_uint8((const float *const restrict)pipe.backbuf, &outbuf, display_byteorder,
-                                  high_quality, pipe.backbuf_width, pipe.backbuf_height);
+  {
+    outbuf = dt_alloc_align(sizeof(uint8_t) * pixels);
+    if(outbuf && display_byteorder)
+      _swap_byteorder_float_to_uint8(pipe.backbuf, outbuf, pipe.backbuf_width, pipe.backbuf_height);
+    else if(outbuf)
+      _clamp_float_to_uint8(pipe.backbuf, outbuf, pipe.backbuf_width, pipe.backbuf_height);
+  }
   else if(bpp == 16)
-    _export_final_buffer_to_uint16((const float *const restrict)pipe.backbuf, (uint16_t **)&outbuf,
-                                   pipe.backbuf_width, pipe.backbuf_height);
-  // else output float, no further harm done to the pixels :)
+  {
+    outbuf = dt_alloc_align(sizeof(uint16_t) * pixels);
+    if(outbuf)
+      _export_final_buffer_to_uint16(pipe.backbuf, outbuf, pipe.backbuf_width, pipe.backbuf_height);
+  }
+  else // output float, no further harm done to the pixels :)
+  {
+    outbuf = dt_alloc_align(sizeof(float_t) * pixels);
+    if(outbuf)
+      memcpy(outbuf, pipe.backbuf, sizeof(float_t) * pixels);
+  }
 
   // Decrease ref count on the cache entry and release the read lock
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, 0, FALSE, cache_entry);
