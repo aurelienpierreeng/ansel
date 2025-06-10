@@ -152,8 +152,8 @@ typedef struct dt_dev_pixelpipe_t
   // event flag
   dt_dev_pixelpipe_change_t changed;
   // backbuffer (output)
-  uint8_t *backbuf;
-  int backbuf_width, backbuf_height;
+  void *backbuf;
+  size_t backbuf_width, backbuf_height;
   float backbuf_scale;
   float backbuf_zoom_x, backbuf_zoom_y;
   uint64_t backbuf_hash;
