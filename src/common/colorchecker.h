@@ -501,6 +501,14 @@ void dt_colorchecker_label_list_cleanup(GList **colorcheckers)
   *colorcheckers = NULL;
 }
 
+void dt_colorchecker_def_list_cleanup(GList **cht)
+{
+  if(!cht) return;
+
+  g_list_free_full(g_steal_pointer(cht), dt_colorchecker_label_free);
+  *cht = NULL;
+}
+
 /**
  * @brief Creates a color checker from a user reference file (CGATS format).
  *
@@ -508,6 +516,14 @@ void dt_colorchecker_label_list_cleanup(GList **colorcheckers)
  * @return dt_color_checker_t* the filled color checker.
  */
 dt_color_checker_t *dt_colorchecker_user_ref_create(const char *filename);
+
+/**
+ * @brief Find all .cht files in the user config/color/it8 directory
+ * 
+ * @param chts NULL GList that will be populated with found IT8 files
+ * @return int Number of found files
+ */
+int dt_colorchecker_find_cht_files(GList **chts);
 
 /**
  * @brief Find all CGAT files in the user config/color/it8 directory
@@ -627,7 +643,19 @@ int dt_colorchecker_find(GList **colorcheckers_label)
   dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find: found %d builtin colorcheckers\n"), total);
   int b_nb = total;
   total += dt_colorchecker_find_CGAT_reference_files(colorcheckers_label);
-  dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find: found %d CGAT references files\n"), total - b_nb);
+  if (total) dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find: found %d CGAT references files\n"), total - b_nb);
+  return total;
+}
+
+int dt_colorchecker_find_cht(GList **cht)
+{
+  if(!cht) return 0;
+
+  // Find CGATS files
+  const int total = dt_colorchecker_find_cht_files(cht);
+
+  if (total) dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find_cht: found %d .cht files\n"), total);
+
   return total;
 }
 

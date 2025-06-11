@@ -161,7 +161,7 @@ typedef struct dt_iop_channelmixer_rgb_gui_data_t
   gboolean drag_drop;       // are we currently dragging and dropping a node ?
   point_t click_start;      // the coordinates where the drag and drop started
   point_t click_end;        // the coordinates where the drag and drop started
-  const dt_color_checker_t *checker;
+  dt_color_checker_t *checker;
   dt_solving_strategy_t optimization;
   float safety_margin;
 
@@ -176,8 +176,11 @@ typedef struct dt_iop_channelmixer_rgb_gui_data_t
   GList *colorcheckers;
   int n_colorcheckers;
 
+  GList *colorcheckers_cht; // list of cht files
+  int n_cht;
+
   gboolean is_profiling_started;
-  GtkWidget *checkers_list, *optimize, *safety, *label_delta_E, *button_profile, *button_validate, *button_commit;
+  GtkWidget *checkers_list, *checkers_cht_list, *optimize, *safety, *label_delta_E, *button_profile, *button_validate, *button_commit;
 
   float *delta_E_in;
 
@@ -2517,7 +2520,48 @@ static void optimize_changed_callback(GtkWidget *widget, gpointer user_data)
   dt_iop_gui_leave_critical_section(self);
 }
 
-static void checker_changed_callback(GtkWidget *widget, gpointer user_data)
+void cht_list_visibility(dt_iop_module_t *self, const int i)
+{
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+
+  if( i >= COLOR_CHECKER_USER_REF)
+    gtk_widget_show(GTK_WIDGET(g->checkers_cht_list));
+  
+  else
+    gtk_widget_hide(GTK_WIDGET(g->checkers_cht_list));
+}
+
+static void checker_cht_changed_callback(GtkWidget *widget, gpointer user_data)
+{
+  if(darktable.gui->reset) return;
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+
+  const int i = dt_bauhaus_combobox_get(widget);
+  dt_conf_set_int("darkroom/modules/channelmixerrgb/colorchecker_def", i);
+
+  const int n_chkr = dt_bauhaus_combobox_get(g->checkers_list);
+  
+  const dt_colorchecker_label_t *cht_label = (i >= 0 && g->colorcheckers_cht) ? g_list_nth_data(g->colorcheckers_cht, i - 1) : NULL;
+  const char *cht_path = cht_label ? cht_label->path : NULL;
+
+  dt_color_checker_cleanup(g->checker);
+  g->checker = dt_get_color_checker(n_chkr, &(g->colorcheckers), cht_path);
+
+  dt_develop_t *dev = self->dev;
+  const float wd = dev->preview_pipe->backbuf_width;
+  const float ht = dev->preview_pipe->backbuf_height;
+  if(wd == 0.f || ht == 0.f) return;
+
+  dt_iop_gui_enter_critical_section(self);
+  g->profile_ready = FALSE;
+  init_bounding_box(g, wd, ht);
+  dt_iop_gui_leave_critical_section(self);
+
+  dt_control_queue_redraw_center();
+}
+
+void checker_changed_callback(GtkWidget *widget, gpointer user_data)
 {
   if(darktable.gui->reset) return;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
@@ -2525,7 +2569,13 @@ static void checker_changed_callback(GtkWidget *widget, gpointer user_data)
 
   const int i = dt_bauhaus_combobox_get(widget);
   dt_conf_set_int("darkroom/modules/channelmixerrgb/colorchecker", i);
-  g->checker = dt_get_color_checker(i, &(g->colorcheckers));
+  const int n_cht = dt_bauhaus_combobox_get(g->checkers_cht_list) - 1;
+  const dt_colorchecker_label_t *cht_label = (n_cht >= 0 && g->colorcheckers_cht) ? g_list_nth_data(g->colorcheckers_cht, n_cht) : NULL;
+  const char *cht_path = cht_label ? cht_label->path : NULL;
+  dt_color_checker_cleanup(g->checker);
+  g->checker = dt_get_color_checker(i, &(g->colorcheckers), cht_path);
+
+  cht_list_visibility(self, i);
 
   dt_develop_t *dev = self->dev;
   const float wd = dev->preview_pipe->backbuf_width;
@@ -3343,6 +3393,35 @@ static void illum_xy_callback(GtkWidget *slider, gpointer user_data)
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
+void update_colorchecker_cht_list(dt_iop_module_t *self)
+{
+  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+
+  if(!g) return;
+
+  // clear and refill the chart definition list
+  dt_colorchecker_def_list_cleanup(&(g->colorcheckers_cht));
+
+  g->n_cht = 0;
+  int pos = -1;
+
+  pos += dt_colorchecker_find_cht(&(g->colorcheckers_cht));
+  
+  g->n_cht = pos;
+
+  // update the gui
+  dt_bauhaus_combobox_clear(g->checkers_cht_list);
+  dt_bauhaus_combobox_add(g->checkers_cht_list, _("Standard"));
+
+  for(GList *l = g_list_first(g->colorcheckers_cht); l; l = g_list_next(l))
+  {
+    const dt_colorchecker_label_t *cht_data = (dt_colorchecker_label_t *)l->data;
+    const char *cht_name = cht_data->label;
+    dt_bauhaus_combobox_add(g->checkers_cht_list, cht_name);
+  }
+
+}
+
 void update_colorchecker_list(dt_iop_module_t *self)
 {
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
@@ -3369,7 +3448,6 @@ void update_colorchecker_list(dt_iop_module_t *self)
     const char *checkername = checker_data->label;
     dt_bauhaus_combobox_add(g->checkers_list, checkername);
   }
-
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -3446,10 +3524,20 @@ void gui_update(struct dt_iop_module_t *self)
   dt_iop_gui_enter_critical_section(self);
 
   update_colorchecker_list(self);
+  update_colorchecker_cht_list(self);
 
   const int i = dt_conf_get_int("darkroom/modules/channelmixerrgb/colorchecker");
   dt_bauhaus_combobox_set(g->checkers_list, i);
-  g->checker = dt_get_color_checker(i, &(g->colorcheckers));
+
+  const int cht = dt_conf_get_int("darkroom/modules/channelmixerrgb/colorchecker_cht");
+  dt_bauhaus_combobox_set(g->checkers_cht_list, cht);
+
+  const dt_colorchecker_label_t *label = (cht > 0) && g->colorcheckers_cht ? g_list_nth_data(g->colorcheckers_cht, cht - 1) : NULL;
+  const char *cht_path = label ? label->path : NULL;
+  dt_color_checker_cleanup(g->checker);
+  g->checker = dt_get_color_checker(i, &(g->colorcheckers), cht_path);
+
+  cht_list_visibility(self, i);
 
   const int j = dt_conf_get_int("darkroom/modules/channelmixerrgb/optimization");
   dt_bauhaus_combobox_set(g->optimize, j);
@@ -4200,30 +4288,44 @@ void gui_init(struct dt_iop_module_t *self)
 
   GtkWidget *collapsible = GTK_WIDGET(g->cs.container);
 
-  g->checkers_list = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(g->checkers_list, N_("Chart"));
-  gtk_box_pack_start(GTK_BOX(collapsible), GTK_WIDGET(g->checkers_list), TRUE, TRUE, 0);
-
-  dt_bauhaus_combobox_set(g->checkers_list, 0);
+  gchar *tip_files_loc = NULL;
   {
     char datadir[PATH_MAX] = { 0 };
     char confdir[PATH_MAX] = { 0 };
     dt_loc_get_datadir(datadir, sizeof(datadir));
     dt_loc_get_user_config_dir(confdir, sizeof(confdir));
     
-    char *system_CGATS_dir = g_build_filename(datadir, "color", "it8", NULL);
-    char *user_CGATS_dir = g_build_filename(confdir, "color", "it8", NULL);
-    char *tooltip = g_strdup_printf(_("Choose the vendor and the type of your chart.\n"
-                                      "CGATS.17 references files must be placed in %s or %s"),
-                                    user_CGATS_dir, system_CGATS_dir);
-    gtk_widget_set_tooltip_text(g->checkers_list, tooltip);
+    gchar *system_CGATS_dir = g_build_filename(datadir, "color", "it8", NULL);
+    gchar *user_CGATS_dir = g_build_filename(confdir, "color", "it8", NULL);
+    tip_files_loc = g_strdup_printf(_("files must be placed in %s or %s"),
+                                    system_CGATS_dir, user_CGATS_dir);
+    
     g_free(system_CGATS_dir);
     g_free(user_CGATS_dir);
-    g_free(tooltip);
   }
 
+  g->checkers_list = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  dt_bauhaus_widget_set_label(g->checkers_list, N_("Chart"));
+  gtk_box_pack_start(GTK_BOX(collapsible), GTK_WIDGET(g->checkers_list), TRUE, TRUE, 0);
+  dt_bauhaus_combobox_set(g->checkers_list, 0);
+  gchar *tooltip = g_strdup_printf(_("Choose the vendor and the type of your chart.\n"
+                                      "CGATS.17 references %s."), tip_files_loc);
+  gtk_widget_set_tooltip_text(g->checkers_list, tooltip);
+  g_free(tooltip);
   g_signal_connect(G_OBJECT(g->checkers_list), "value-changed", G_CALLBACK(checker_changed_callback), (gpointer)self);
 
+  g->checkers_cht_list = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
+  dt_bauhaus_widget_set_label(g->checkers_cht_list, N_("Chart definition"));
+  gtk_box_pack_start(GTK_BOX(collapsible), GTK_WIDGET(g->checkers_cht_list), TRUE, TRUE, 0);
+
+  dt_bauhaus_combobox_set(g->checkers_cht_list, 0);
+  tooltip = g_strdup_printf(_("Choose the definition of your chart.\n"
+                                      ".cht references %s."), tip_files_loc);
+  gtk_widget_set_tooltip_text(g->checkers_cht_list, tooltip);
+  g_free(tip_files_loc);
+  g_free(tooltip);
+  g_signal_connect(G_OBJECT(g->checkers_cht_list), "value-changed", G_CALLBACK(checker_cht_changed_callback), (gpointer)self);
+  
   DT_BAUHAUS_COMBOBOX_NEW_FULL(darktable.bauhaus, g->optimize, DT_GUI_MODULE(self), N_("optimize for"),
                                 _("choose the colors that will be optimized with higher priority.\n"
                                   "neutral colors gives the lowest average delta E but a high maximum delta E\n"

@@ -29,6 +29,7 @@
  * labeled as Dmin or GS0, and Dmax or GS23.
  */
 
+#include "chart/colorchart.h"
 #include "colorchecker.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "darktable.h"
@@ -37,6 +38,13 @@
 #include <glib.h>
 #include <inttypes.h>
 #include <lcms2.h>
+
+static gboolean open_cht(chart_t *chart, const char *filename)
+{
+  if(chart) free_chart(chart);
+  const gboolean res = ((chart = parse_cht(filename)) != NULL);
+  return res;
+}
 
 static inline dt_colorchecker_material_types _dt_colorchecker_IT8_get_material_type(const cmsHANDLE *hIT8)
 {
@@ -620,6 +628,33 @@ error:
   return NULL;
 }
 
+static dt_colorchecker_label_t *_dt_colorchecker_cht_add_label(const gchar *filename, const gchar *user_it8_dir)
+{
+  dt_colorchecker_label_t *result = NULL;
+
+  gchar *filepath = g_build_filename(user_it8_dir, filename, NULL);
+  if(g_file_test(filepath, G_FILE_TEST_IS_REGULAR))
+  {
+    gchar *basename = g_path_get_basename(filename);
+    char *dot = g_strrstr(basename, ".");
+    if(dot) *dot = '\0'; // removes the file extension in basename
+    
+    dt_colorchecker_label_t *cht_label = dt_colorchecker_label_init(basename, COLOR_CHECKER_USER_REF, filepath);
+        
+    g_free(basename);
+
+    result = cht_label;
+    if(!result) goto error;
+  }
+  g_free(filepath);
+
+  return result;
+
+error:
+  free(result);
+  return NULL;
+}
+
 int dt_colorchecker_find_builtin(GList **colorcheckers_label)
 {
   int nb = 0;
@@ -663,7 +698,38 @@ int dt_colorchecker_find_CGAT_reference_files(GList **ref_colorcheckers_files)
       }
       else
         fprintf(stderr, "Error: failed to load CGATS file '%s' in %s\n", filename, user_it8_dir);
-      
+    }
+    g_dir_close(dir);
+  }
+  g_free(user_it8_dir);
+
+  return nb;
+}
+
+int dt_colorchecker_find_cht_files(GList **chts)
+{
+  int nb = 0;
+  char confdir[PATH_MAX] = { 0 };
+  dt_loc_get_user_config_dir(confdir, sizeof(confdir));
+  gchar *user_it8_dir = g_build_filename(confdir, "color", "it8", NULL);
+
+  GDir *dir = g_dir_open(user_it8_dir, 0, NULL);
+  if(dir)
+  {
+    const char *filename;
+    while((filename = g_dir_read_name(dir)) != NULL)
+    {
+      const char *dot = g_strrstr(filename, ".");
+      if(g_ascii_strcasecmp(dot, ".cht") != 0)
+        continue; // skip files that are not .cht
+
+      dt_colorchecker_label_t *cht_label = _dt_colorchecker_cht_add_label(filename, user_it8_dir);
+
+      if(cht_label)
+      {
+        *chts = g_list_append(*chts, cht_label);
+        nb++;
+      }
     }
     g_dir_close(dir);
   }
