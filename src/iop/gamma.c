@@ -30,6 +30,13 @@
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
 
+/**
+ * @brief This module converts float32 RGBA pixels to uint8 BGRA pixels, for
+ * GUI pipelines only (darkroom main preview and navigation thumbnail).
+ * It self-disables for export pipelines.
+ *
+ */
+
 DT_MODULE_INTROSPECTION(1, dt_iop_gamma_params_t)
 
 
@@ -316,6 +323,8 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     return; // image has been copied through to output and module's trouble flag has been updated
 
   // this module also expects the same size of input image as the output image
+  // This test is overkill since the only thing that could change roi_in/roi_out
+  // is a modify_roi_in/modify_roi_out that this module doesn't implement.
   if(roi_in->width != roi_out->width || roi_in->height != roi_out->height)
     return;
 
@@ -356,6 +365,16 @@ void init(dt_iop_module_t *module)
   module->gui_data = NULL;
   module->hide_enable_button = 1;
   module->default_enabled = 1;
+}
+
+void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
+                   dt_dev_pixelpipe_iop_t *piece)
+{
+  // Only GUI pipes return 8 bits unsigned integer BGRA
+  if(piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW || piece->pipe->type == DT_DEV_PIXELPIPE_FULL)
+    piece->enabled = 1;
+  else
+    piece->enabled = 0;
 }
 
 // clang-format off

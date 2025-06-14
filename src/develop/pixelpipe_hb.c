@@ -1915,25 +1915,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 }
 
 
-int dt_dev_pixelpipe_process_no_gamma(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x, int y, int width,
-                                      int height, double scale)
-{
-  // temporarily disable gamma mapping.
-  GList *gammap = g_list_last(pipe->nodes);
-  dt_dev_pixelpipe_iop_t *gamma = (dt_dev_pixelpipe_iop_t *)gammap->data;
-  while(strcmp(gamma->module->op, "gamma"))
-  {
-    gamma = NULL;
-    gammap = g_list_previous(gammap);
-    if(!gammap) break;
-    gamma = (dt_dev_pixelpipe_iop_t *)gammap->data;
-  }
-  if(gamma) gamma->enabled = 0;
-  const int ret = dt_dev_pixelpipe_process(pipe, dev, x, y, width, height, scale);
-  if(gamma) gamma->enabled = 1;
-  return ret;
-}
-
 void dt_dev_pixelpipe_disable_after(dt_dev_pixelpipe_t *pipe, const char *op)
 {
   GList *nodes = g_list_last(pipe->nodes);

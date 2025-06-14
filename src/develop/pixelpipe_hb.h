@@ -152,8 +152,8 @@ typedef struct dt_dev_pixelpipe_t
   // event flag
   dt_dev_pixelpipe_change_t changed;
   // backbuffer (output)
-  uint8_t *backbuf;
-  int backbuf_width, backbuf_height;
+  void *backbuf;
+  size_t backbuf_width, backbuf_height;
   float backbuf_scale;
   float backbuf_zoom_x, backbuf_zoom_y;
   uint64_t backbuf_hash;
@@ -291,9 +291,6 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *d
 // process region of interest of pixels. returns 1 if pipe was altered during processing.
 int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, int x, int y, int width,
                              int height, double scale);
-// convenience method that does not gamma-compress the image.
-int dt_dev_pixelpipe_process_no_gamma(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, int x, int y,
-                                      int width, int height, double scale);
 
 // disable given op and all that comes after it in the pipe:
 void dt_dev_pixelpipe_disable_after(dt_dev_pixelpipe_t *pipe, const char *op);
