@@ -38,15 +38,10 @@
 #include <inttypes.h>
 #include <lcms2.h>
 
-// In some environments ERROR is already defined, ie: WIN32
-#if defined(ERROR)
-#undef ERROR
-#endif // defined (ERROR)
-
-#define ERROR                                                                                                     \
-  {                                                                                                               \
-    lineno = __LINE__;                                                                                            \
-    goto error;                                                                                                   \
+#define ERROR           \
+  {                     \
+    lineno = __LINE__;  \ 
+    goto error;         \
   }
 
 typedef enum parser_state_t {
@@ -99,7 +94,7 @@ static void _dt_color_checker_patch_copy(dt_color_checker_patch *dest, const dt_
   dest->Lab[2] = src->Lab[2];
 }
 
-static void dt_color_checker_copy(dt_color_checker_t *dest, const dt_color_checker_t *src)
+void dt_color_checker_copy(dt_color_checker_t *dest, const dt_color_checker_t *src)
 {
   if(!dest || !src) return;
 
@@ -324,10 +319,9 @@ static inline const char *_remove_leading_zeros(const char *in)
  * @param cht_patch The structure containing the patch information.
  * @param chart The structure to populate with patches.
  * @param F_box The cht_box_F_t structure containing the frame values.
- * @param mark_size The sizes of the chart frame's marks.
  * @return gboolean Returns TRUE if the operation was successful, FALSE otherwise.
  */
-static gboolean _dt_cht_generate_patch_list(const cht_box_t *cht_patch, dt_colorchecker_chart_spec_t *chart, const cht_box_F_t *F_box, const float mark_size[2])
+static gboolean _dt_cht_generate_patch_list(const cht_box_t *cht_patch, dt_colorchecker_chart_spec_t *chart, const cht_box_F_t *F_box)
 {
   gboolean result = FALSE;
   int lineno = 0;
@@ -394,11 +388,11 @@ static gboolean _dt_cht_generate_patch_list(const cht_box_t *cht_patch, dt_color
       patch->name = g_strdup(label);
       if(!patch->name) ERROR
 
-      patch->x = cht_patch->x_origin - (mark_size[0] / 2) + patch_w + cht_patch->x_increment * index_x;
-      patch->x /= MAX(F_box->bx, F_box->cx) - mark_size[0]; // normalize to chart factor
+      patch->x = cht_patch->x_origin - (chart->guide_size[0] / 2) + patch_w + cht_patch->x_increment * index_x;
+      patch->x /= MAX(F_box->bx, F_box->cx) - chart->guide_size[0]; // normalize to chart factor
   
-      patch->y = cht_patch->y_origin - (mark_size[1] / 2) + patch_h + cht_patch->y_increment * index_y;
-      patch->y /= MAX(F_box->cy, F_box->dy) - mark_size[1]; // normalize to chart factor
+      patch->y = cht_patch->y_origin - (chart->guide_size[1] / 2) + patch_h + cht_patch->y_increment * index_y;
+      patch->y /= MAX(F_box->cy, F_box->dy) - chart->guide_size[1]; // normalize to chart factor
       
       // Add to the list
       chart->patches = g_slist_append(chart->patches, patch);
@@ -489,6 +483,7 @@ static GList *_parse_cht(const char *filename)
     }
     if(!g_strcmp0(line_tokens[0], "BOX_SHRINK") && last_block < BLOCK_BOX_SHRINK)
     {
+      skip_block = 1;
       break; // we don't care about blocks comming after, just skip them.
     }
 
@@ -523,14 +518,12 @@ static gboolean _dispatch_cht_data(GList **boxes, dt_colorchecker_chart_spec_t *
 
   float chart_radius = -1.f;
 
-  float mark_size[2] = { 0 }; // width, height
-
   for(GList *lines = *boxes; lines; lines = g_list_next(lines))
   {
     const char **tokens = (const char **)lines->data;
     if(!tokens) ERROR
 
-    const char *letter = tokens[0][0];
+    const char letter = tokens[0][0];
     if(letter == 'F')
     {
       F_box = _dt_cht_extract_F(tokens);
@@ -558,8 +551,8 @@ static gboolean _dispatch_cht_data(GList **boxes, dt_colorchecker_chart_spec_t *
     if(box->key_letter == 'D')
     {
       // Save the corner sizes when they are specified, to changes the patches area size in consequence. 
-      if(!g_strcmp0(box->label_x_start,"MARK")) mark_size[0] = box->width - box->x_origin;
-      if(!g_strcmp0(box->label_x_start,"MARK")) mark_size[1] = box->height - box->y_origin;
+      if(!g_strcmp0(box->label_x_start,"MARK")) chart_spec->guide_size[0] = box->width - box->x_origin;
+      if(!g_strcmp0(box->label_x_start,"MARK")) chart_spec->guide_size[1] = box->height - box->y_origin;
     }
 
     else if(box->key_letter == 'X' || box->key_letter == 'Y')
@@ -568,7 +561,7 @@ static gboolean _dispatch_cht_data(GList **boxes, dt_colorchecker_chart_spec_t *
       chart_spec->patch_height = MIN(chart_spec->patch_height, box->height);
       fprintf(stdout, "patch_width: %f, patch_height: %f\n", chart_spec->patch_width, chart_spec->patch_height);
       
-      if(!_dt_cht_generate_patch_list(box, chart_spec, F_box, mark_size))
+      if(!_dt_cht_generate_patch_list(box, chart_spec, F_box))
       {
         free(box->label_x_start);
         free(box->label_x_end);
@@ -714,7 +707,7 @@ static gboolean _dt_CGATS_is_supported(const cmsHANDLE *hIT8)
     goto end;
   }
   else
-  {
+  {    
     const char *CGATS_type = cmsIT8GetProperty(*hIT8, "CGATS");
     // Check if the data type can be found in our supported list of CGATS types
     if(_dt_CGATS_get_type_value(CGATS_type) == CGATS_TYPE_UNKOWN)
@@ -1069,9 +1062,7 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(cmsHANDL
         fprintf(stderr, "error: patch %lu not found in chart specification.\n", patch_iter);
         goto error;
       }
-      _dt_color_checker_patch_copy(&values[patch_iter], p);
-      fprintf(stdout, "Fill patch KEY: %s (%.5f, %.5f)\n", values[patch_iter].name, values[patch_iter].x, values[patch_iter].y); 
-      
+      _dt_color_checker_patch_copy(&values[patch_iter], p);      
     }
     else 
     { 
@@ -1187,14 +1178,6 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *filename, const 
     }
   }
   
-  fprintf(stdout, "CHART:\ttype: %s, radius: %f, ratio: %f, size: [%zu, %zu]\n"
-                        "\tpatches: %i, colums: %i, rows: %i\n"
-                        "\tpatch_width: %f, patch_height: %f, patch_offset_x: %f, patch_offset_y: %f\n",
-          chart_spec->type, chart_spec->radius, chart_spec->ratio, chart_spec->size[0], chart_spec->size[1],
-          chart_spec->num_patches, chart_spec->colums, chart_spec->rows,
-          chart_spec->patch_width, chart_spec->patch_height, chart_spec->patch_offset_x, chart_spec->patch_offset_y);
-
-
   // Check if the CGATS file contains the expected number of patches
   const int num_patches_it8 = (const int)cmsIT8GetPropertyDbl(hIT8, "NUMBER_OF_SETS");
   
@@ -1206,7 +1189,6 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *filename, const 
 
   // Limit the number of patches to the minimum between the CGATS file and the chart specification to avoid overflow.
   const int num_patches = MIN(num_patches_it8, chart_spec->num_patches);
-  fprintf(stdout, "\tFinal number of patches: %i\n", num_patches);
 
   checker = dt_colorchecker_init();
   if(!checker)
@@ -1347,6 +1329,10 @@ int dt_colorchecker_find_CGAT_reference_files(GList **ref_colorcheckers_files)
     const char *filename;
     while((filename = g_dir_read_name(dir)) != NULL)
     {
+      const char *dot = g_strrstr(filename, ".");
+      if(g_ascii_strcasecmp(dot, ".cht") == 0)
+        continue; // skip .cht files
+      
       dt_colorchecker_label_t *CGATS_label = _dt_colorchecker_user_ref_add_label(filename, user_it8_dir);
       if(CGATS_label)
       {
@@ -1354,7 +1340,7 @@ int dt_colorchecker_find_CGAT_reference_files(GList **ref_colorcheckers_files)
         nb++;
       }
       else
-        fprintf(stderr, "Error: failed to load CGATS file '%s' in %s\n", filename, user_it8_dir);
+        fprintf(stderr, "Warning: failed to load CGATS file '%s' in %s\n", filename, user_it8_dir);
     }
     g_dir_close(dir);
   }

@@ -3416,7 +3416,7 @@ void update_colorchecker_cht_list(dt_iop_module_t *self)
   if(!g) return;
 
   // clear and refill the chart definition list
-  dt_colorchecker_def_list_cleanup(&(g->colorcheckers_cht));
+  dt_colorchecker_cht_list_cleanup(&(g->colorcheckers_cht));
 
   g->n_cht = 0;
   int pos = -1;

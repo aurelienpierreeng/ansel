@@ -39,7 +39,7 @@ typedef enum dt_color_checker_targets
 // helper to deal with patch color
 typedef struct dt_color_checker_patch
 {
-  const char *name;       // mnemonic name for the patch
+  char *name;       // mnemonic name for the patch
   dt_aligned_pixel_t Lab; // reference color in CIE Lab
 
   // (x, y) position of the patch  center, relatively to the guides (white dots)
@@ -431,6 +431,7 @@ typedef struct dt_colorchecker_chart_spec_t
   float radius;       // radius of a patch in ratio of the checker diagonal
   float ratio;        // format ratio of the chart, guide to guide (white dots)
   size_t size[2];     // number of patch along x, y axes
+  float guide_size[2];// size of the guide area, specified by "MARK" data in cht files
   size_t middle_grey;
   size_t white;
   size_t black;
@@ -456,6 +457,7 @@ dt_colorchecker_chart_spec_t IT8_7 = {
   .radius = 0.0189f,
   .ratio = 6.f / 11.f,
   .size = { 22, 13 },
+  .guide_size = { 0, 0 },
   .middle_grey = 273, // GS09
   .white = 263,       // Dmin or GS00
   .black = 287,       // Dmax or GS23
@@ -499,7 +501,6 @@ dt_color_checker_patch *dt_color_checker_patch_array_init(const size_t num_patch
     patches[i].Lab[1] = 0.0f;
     patches[i].Lab[2] = 0.0f;
   }
-
   return patches;
 }
 
@@ -574,7 +575,7 @@ void dt_colorchecker_label_list_cleanup(GList **colorcheckers)
   *colorcheckers = NULL;
 }
 
-void dt_colorchecker_def_list_cleanup(GList **cht)
+void dt_colorchecker_cht_list_cleanup(GList **cht)
 {
   if(!cht) return;
 
@@ -609,6 +610,12 @@ int dt_colorchecker_find_CGAT_reference_files(GList **ref_colorcheckers_files);
 
 int dt_colorchecker_find_builtin(GList **colorcheckers_label);
 
+/**
+ * @brief Copy the content of a color checker from source to destination.
+ * 
+ * @param dest A pointer to the destination color checker.
+ * @param src A pointer to the source color checker.
+ */
 void dt_color_checker_copy(dt_color_checker_t *dest, const dt_color_checker_t *src);
 
 
@@ -643,7 +650,7 @@ static dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets t
       dt_color_checker_copy(checker_dest, &xrite_24_2014);
       break;
     case COLOR_CHECKER_SPYDER_24:
-      dt_color_checker_copy(checker_dest,&spyder_24);
+      dt_color_checker_copy(checker_dest, &spyder_24);
       break;
     case COLOR_CHECKER_SPYDER_24_V2:
       dt_color_checker_copy(checker_dest, &spyder_24_v2);
@@ -729,19 +736,25 @@ int dt_colorchecker_find(GList **colorcheckers_label)
   int total = dt_colorchecker_find_builtin(colorcheckers_label);
   dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find: found %d builtin colorcheckers\n"), total);
   int b_nb = total;
+  
   total += dt_colorchecker_find_CGAT_reference_files(colorcheckers_label);
   if (total) dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find: found %d CGAT references files\n"), total - b_nb);
   return total;
 }
 
+/**
+ * @brief Find all .cht files in the user it8 directory.
+ * 
+ * @param cht A NULL GList that will be populated with found .cht files.
+ * @return int The number of found .cht files.
+ */
 int dt_colorchecker_find_cht(GList **cht)
 {
   if(!cht) return 0;
 
-  // Find CGATS files
   const int total = dt_colorchecker_find_cht_files(cht);
 
-  if (total) dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find_cht: found %d .cht files\n"), total);
+  if(total) dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find_cht: found %d .cht files\n"), total);
 
   return total;
 }
