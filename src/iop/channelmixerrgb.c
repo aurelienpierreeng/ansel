@@ -2439,6 +2439,22 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   cairo_arc(cr, 0.5 * wd, 0.5 * ht, 7., 0, 2. * M_PI);
   cairo_stroke(cr);
   */
+  if(!g->checker->values)
+  {
+    const point_t target_center = { 0.5f, 0.5f };
+    point_t new_target_center = apply_homography(target_center, g->homography);
+
+    cairo_set_source_rgba(cr, 1., 0., 0., 1.);
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 40.0 / zoom_scale);
+
+    cairo_text_extents_t extents;
+    cairo_text_extents(cr, "Error", &extents);
+
+    cairo_move_to(cr, new_target_center.x - extents.width / 2.0, new_target_center.y + extents.height / 2.0);
+    cairo_show_text(cr, "Error");
+    return;
+  }
 
   const float radius_x = g->checker->radius * hypotf(1.f, g->checker->ratio) * g->safety_margin;
   const float radius_y = radius_x / g->checker->ratio;
