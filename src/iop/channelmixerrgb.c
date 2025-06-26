@@ -2554,7 +2554,7 @@ static void checker_cht_changed_callback(GtkWidget *widget, gpointer user_data)
   dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
 
   const int i = dt_bauhaus_combobox_get(widget);
-  dt_conf_set_int("darkroom/modules/channelmixerrgb/colorchecker_def", i);
+  dt_conf_set_int("darkroom/modules/channelmixerrgb/colorchecker_cht", i);
 
   const int n_chkr = dt_bauhaus_combobox_get(g->checkers_list);
   
