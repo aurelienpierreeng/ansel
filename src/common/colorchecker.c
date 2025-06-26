@@ -40,7 +40,7 @@
 
 #define ERROR           \
   {                     \
-    lineno = __LINE__;  \ 
+    lineno = __LINE__;  \
     goto error;         \
   }
 
@@ -77,6 +77,8 @@ typedef struct cht_box_F_t {
   float cy; // bottom left corner
   float dx; // bottom right corner
   float dy; // bottom right corner
+  float width; // width of the frame
+  float height; // height of the frame
 } cht_box_F_t;
 
 #define MAX_LINE_LENGTH 512
@@ -148,14 +150,16 @@ static cht_box_F_t *_dt_cht_extract_F(const char **tokens)
     }
   }
 
-  // normalize the values : shift to origin
-  frame_coordinates->ax = 0.f; frame_coordinates->ay = 0.f; // always start at [0, 0]
-  frame_coordinates->bx = extracted_coords[2] - extracted_coords[0];
-  frame_coordinates->by = extracted_coords[3] - extracted_coords[1];
-  frame_coordinates->cx = extracted_coords[4] - extracted_coords[0];
-  frame_coordinates->cy = extracted_coords[5] - extracted_coords[1];
-  frame_coordinates->dx = extracted_coords[6] - extracted_coords[0];
-  frame_coordinates->dy = extracted_coords[7] - extracted_coords[1];
+  frame_coordinates->ax = extracted_coords[0];
+  frame_coordinates->ay = extracted_coords[1];
+  frame_coordinates->bx = extracted_coords[2];
+  frame_coordinates->by = extracted_coords[3];
+  frame_coordinates->cx = extracted_coords[4];
+  frame_coordinates->cy = extracted_coords[5];
+  frame_coordinates->dx = extracted_coords[6];
+  frame_coordinates->dy = extracted_coords[7];
+  frame_coordinates->width = extracted_coords[2] - extracted_coords[0];
+  frame_coordinates->height = extracted_coords[5] - extracted_coords[1];
   
   return frame_coordinates;
 }
@@ -169,6 +173,8 @@ static dt_colorchecker_chart_spec_t *_dt_color_checker_chart_spec_init()
   result->patch_height = FLT_MAX;
   result->patches = NULL;
   result->address = NULL;
+  result->guide_size[0] = 0.f;
+  result->guide_size[1] = 0.f;
 
   return result;
 }
@@ -242,7 +248,7 @@ static cht_box_t *_dt_cht_box_extract(const char **tokens)
         case 8: box->y_origin      = value; index++; break;
         case 9: box->x_increment   = value; index++; break;
         case 10: box->y_increment  = value; index++; break;  
-      }      
+      }
     }
   }
 
@@ -315,6 +321,7 @@ static inline const char *_remove_leading_zeros(const char *in)
 
 /**
  * @brief Generates a list of patches from the provided cht_patch structure.
+ * Patche's positions are calculated by iterating over the labels alphanumerically.
  * 
  * @param cht_patch The structure containing the patch information.
  * @param chart The structure to populate with patches.
@@ -326,8 +333,8 @@ static gboolean _dt_cht_generate_patch_list(const cht_box_t *cht_patch, dt_color
   gboolean result = FALSE;
   int lineno = 0;
 
-  gchar *current_y = NULL;
-  gchar *current_x = NULL;
+  gchar *current_frst = NULL;
+  gchar *current_scnd = NULL;
   gchar *last_label = NULL;
 
   // Input validation
@@ -343,41 +350,51 @@ static gboolean _dt_cht_generate_patch_list(const cht_box_t *cht_patch, dt_color
     ERROR;
   }
 
+  // The key letter determines the axes to begin to iterate
+  gboolean swap_axes = (cht_patch->key_letter == 'Y') ? TRUE : FALSE;
+
   // Unpack strings from cht_patch
-  const char *start_x = cht_patch->label_x_start;
-  const char *start_y = cht_patch->label_y_start;
-  const char *end_x = cht_patch->label_x_end;
-  const char *end_y = cht_patch->label_y_end;
+  const char *start_colum = swap_axes ? cht_patch->label_y_start : cht_patch->label_x_start;
+  const char *end_colum = swap_axes ? cht_patch->label_y_end : cht_patch->label_x_end;
+
+  const char *start_row = swap_axes ? cht_patch->label_x_start : cht_patch->label_y_start;
+  const char *end_row = swap_axes ? cht_patch->label_x_end : cht_patch->label_y_end;
 
   // start shouldn't be greater than end
-  if(g_strcmp0(start_x, end_x) > 0 || g_strcmp0(start_y, end_y) > 0)
+  if(g_strcmp0(start_colum, end_colum) > 0 || g_strcmp0(start_row, end_row) > 0)
     ERROR
 
   // we want the center of the patch.
   const float patch_w = cht_patch->width / 2;
   const float patch_h = cht_patch->height / 2;
 
-  // build last label for comparison
-  const char *last_label_x = (end_x[0] != '_') ? _remove_leading_zeros(end_x) : NULL;
-  const char *last_label_y = (end_y[0] != '_') ? _remove_leading_zeros(end_y) : NULL;
-  last_label = g_strconcat(last_label_y ? last_label_y : "", last_label_x ? last_label_x : "", NULL);
+  // Prepare the initial x and y coordinates
+  float origin_x = cht_patch->x_origin - (chart->guide_size[0] / 2) + patch_w - F_box->ax;
+  float origin_y = cht_patch->y_origin - (chart->guide_size[1] / 2) + patch_h - F_box->ay;
+
+  // build last label, for comparison
+  const char *last_label_colum = (end_colum[0] != '_') ? _remove_leading_zeros(end_colum) : NULL;
+  const char *last_label_row = (end_row[0] != '_') ? _remove_leading_zeros(end_row) : NULL;
+  last_label = g_strconcat(last_label_colum ? last_label_colum : "", last_label_row ? last_label_row : "", NULL);
 
   // Copy string for manipulation
-  current_y = g_strdup(start_y);
-  if(!current_y) ERROR
+  current_frst = g_strdup(start_colum);
+  const char *end_frst = swap_axes ? cht_patch->label_y_end : cht_patch->label_x_end; 
+  const char *end_scnd = swap_axes ? cht_patch->label_x_end : cht_patch->label_y_end;
+  if(!current_frst) ERROR
 
-  for(int index_y = 0; g_strcmp0(current_y, end_y) <= 0; index_y++)
+  for(int index_frst = 0; g_strcmp0(current_frst, end_frst) <= 0; index_frst++)
   {
-    current_x = g_strdup(start_x);
-    if(!current_x) ERROR
+    current_scnd = g_strdup(start_row);
+    if(!current_scnd) ERROR
 
-    for(int index_x = 0; g_strcmp0(current_x, end_x) <= 0; index_x++)
+    for(int index_scnd = 0; g_strcmp0(current_scnd, end_scnd) <= 0; index_scnd++)
     {
       // Create the label
-      const char *label_x = current_x[0] != '_' ? _remove_leading_zeros(current_x) : NULL;
-      const char *label_y = current_y[0] != '_' ? _remove_leading_zeros(current_y) : NULL;
+      const char *label_frst = current_frst[0] != '_' ? _remove_leading_zeros(current_frst) : NULL;
+      const char *label_scnd = current_scnd[0] != '_' ? _remove_leading_zeros(current_scnd) : NULL;
 
-      const gchar *label = g_strconcat(label_y ? label_y : "", label_x ? label_x : "", NULL);
+      const gchar *label = g_strconcat(label_frst ? label_frst : "", label_scnd ? label_scnd : "", NULL);
       if(!label) ERROR
 
       // Create the patch
@@ -388,30 +405,38 @@ static gboolean _dt_cht_generate_patch_list(const cht_box_t *cht_patch, dt_color
       patch->name = g_strdup(label);
       if(!patch->name) ERROR
 
-      patch->x = cht_patch->x_origin - (chart->guide_size[0] / 2) + patch_w + cht_patch->x_increment * index_x;
-      patch->x /= MAX(F_box->bx, F_box->cx) - chart->guide_size[0]; // normalize to chart factor
-  
-      patch->y = cht_patch->y_origin - (chart->guide_size[1] / 2) + patch_h + cht_patch->y_increment * index_y;
-      patch->y /= MAX(F_box->cy, F_box->dy) - chart->guide_size[1]; // normalize to chart factor
+      int index_y = swap_axes ? index_frst : index_scnd;
+      int index_x = swap_axes ? index_scnd : index_frst;
+
+      float temp_x = origin_x + (cht_patch->x_increment * index_x);
+      temp_x /= F_box->width - chart->guide_size[0]; // normalize to the frame width
       
+      float temp_y = origin_y + (cht_patch->y_increment * index_y);
+      temp_y /= F_box->height - chart->guide_size[1]; // normalize to the frame height
+      
+      patch->x = temp_x;
+      patch->y = temp_y;
+
       // Add to the list
       chart->patches = g_slist_append(chart->patches, patch);
 
-      if (!g_strcmp0(label, last_label)) goto out;
-      
-      // increment x in a new string and pass the ownership to current_x
-      gchar *temp = _increment_string(current_x);
-      g_free(current_x);
-      current_x = temp;
-      
-      chart->colums = MAX(chart->colums, index_x + 1);
-    }
-    // increment y in a new string and pass the ownership to current_y
-    gchar *temp = _increment_string(current_y);
-    g_free(current_y);
-    current_y = temp;
+      if(!g_strcmp0(label, last_label)) goto out;
+      if(!g_strcmp0(current_scnd, "_")) break;
 
-    chart->rows = MAX(chart->rows, index_y + 1);
+      // increment x in a new string and pass the ownership to current_scnd
+      gchar *temp = _increment_string(current_scnd);
+      g_free(current_scnd);
+      current_scnd = temp;
+      
+      chart->colums = MAX(chart->colums, index_scnd + 1);
+    }
+
+    // increment y in a new string and pass the ownership to current_frst
+    gchar *temp = _increment_string(current_frst);
+    g_free(current_frst);
+    current_frst = temp;
+
+    chart->rows = MAX(chart->rows, index_frst + 1);
   }
 
 out:
@@ -423,8 +448,8 @@ error:
 
 end:
   g_free(last_label);
-  g_free(current_x);
-  g_free(current_y);
+  g_free(current_scnd);
+  g_free(current_frst);
   return result;
 }
 
@@ -436,7 +461,7 @@ static GList *_parse_cht(const char *filename)
   GIOChannel *fp = g_io_channel_new_file(filename, "r", NULL);
   if(!fp)
   {
-    fprintf(stderr, "error opening `%s'\n", filename);
+    fprintf(stderr, "Error opening '%s'\n", filename);
     return NULL;
   }
 
@@ -474,11 +499,8 @@ static GList *_parse_cht(const char *filename)
 
         gchar **box_tokens = g_strsplit(c, " ", 0); // g_strfreev me with the GList.
         if(!g_strcmp0(box_tokens[0], "F") || !g_strcmp0(box_tokens[0], "D") || !g_strcmp0(box_tokens[0], "X") || !g_strcmp0(box_tokens[0], "Y"))
-        {
           result = g_list_append(result, box_tokens);
-          fprintf(stderr, " -> Parsing line (BOXES): %s, it's a %s\n", line->str, box_tokens[0]);
-
-        }
+        
       }
     }
     if(!g_strcmp0(line_tokens[0], "BOX_SHRINK") && last_block < BLOCK_BOX_SHRINK)
@@ -527,7 +549,6 @@ static gboolean _dispatch_cht_data(GList **boxes, dt_colorchecker_chart_spec_t *
     if(letter == 'F')
     {
       F_box = _dt_cht_extract_F(tokens);
-      if(!F_box) ERROR
     }
  
     else if(letter == 'D' || letter == 'X' || letter == 'Y')
@@ -539,9 +560,11 @@ static gboolean _dispatch_cht_data(GList **boxes, dt_colorchecker_chart_spec_t *
     }
   }
 
+  if(!F_box) ERROR
+
   // Fill the colorchecker spec structure
-  chart_spec->ratio = MAX(F_box->cy, F_box->dy ) / MAX(F_box->bx, F_box->cx );
-  chart_radius = hypotf(MAX(F_box->cy, F_box->dy ), MAX(F_box->bx, F_box->cx ));
+  chart_spec->ratio = F_box->height / F_box->width;
+  chart_radius = hypotf(F_box->height, F_box->width);
 
   for(GList *iter = boxes_list; iter; iter = g_list_next(iter))
   {
@@ -550,7 +573,7 @@ static gboolean _dispatch_cht_data(GList **boxes, dt_colorchecker_chart_spec_t *
 
     if(box->key_letter == 'D')
     {
-      // Save the corner sizes when they are specified, to changes the patches area size in consequence. 
+      // Save the guide corner sizes when they are specified, to changes the patches area size in consequence. 
       if(!g_strcmp0(box->label_x_start,"MARK")) chart_spec->guide_size[0] = box->width - box->x_origin;
       if(!g_strcmp0(box->label_x_start,"MARK")) chart_spec->guide_size[1] = box->height - box->y_origin;
     }
@@ -559,7 +582,6 @@ static gboolean _dispatch_cht_data(GList **boxes, dt_colorchecker_chart_spec_t *
     {
       chart_spec->patch_width  = MIN(chart_spec->patch_width, box->width);
       chart_spec->patch_height = MIN(chart_spec->patch_height, box->height);
-      fprintf(stdout, "patch_width: %f, patch_height: %f\n", chart_spec->patch_width, chart_spec->patch_height);
       
       if(!_dt_cht_generate_patch_list(box, chart_spec, F_box))
       {
@@ -583,7 +605,7 @@ static gboolean _dispatch_cht_data(GList **boxes, dt_colorchecker_chart_spec_t *
   goto end;
 
 error:
-  fprintf(stderr, "error parsing CHT file, in %s %s:%d\n", __FUNCTION__, __FILE__, lineno);
+  fprintf(stderr, "Error dispatching CHT file, in %s %s:%d\n", __FUNCTION__, __FILE__, lineno);
 
 end:
   if(F_box) free(F_box);
@@ -592,20 +614,18 @@ end:
   return result;
 }
 
-#undef MAX_LINE_LENGTH
-
 static gboolean _dt_colorchecker_open_cht(const char *filename, dt_colorchecker_chart_spec_t *chart_spec)
 {
   GList *boxes = _parse_cht(filename);
   if(!boxes)
   {
-    fprintf(stderr, "error parsing CHT file `%s'\n", filename);
+    fprintf(stderr, "Error parsing CHT file '%s'\n", filename);
     return FALSE;
   }
 
   if(!_dispatch_cht_data(&boxes, chart_spec))
   {
-    fprintf(stderr, "error dispatching CHT data from `%s'\n", filename);
+    fprintf(stderr, "Error dispatching CHT data from '%s'\n", filename);
     g_list_free_full(boxes, (GDestroyNotify)g_strfreev);
     return FALSE;
   }
@@ -720,7 +740,7 @@ static gboolean _dt_CGATS_is_supported(const cmsHANDLE *hIT8)
     uint32_t table_count = cmsIT8TableCount(*hIT8);
     if(table_count != 1)
     {
-      fprintf(stderr, "Warning: the CGATS.17 file contains %u table(s) but we only support files"
+      fprintf(stderr, "Warning: the CGATS file contains %u tables but we only support files"
               "with one table at the moment.\n", table_count);
       valid = FALSE;
       goto end;
@@ -950,9 +970,10 @@ static inline void _dt_CGATS_find_whitest_blackest_greyest(const dt_color_checke
  * @param hIT8 the CGATS file handle
  * @param bwg the array of indices for the black, white, and grey patches
  * @param chart_spec the color checker chart specification, used to get the number of patches and patch size
+ * @param num_patches the number of patches to fill, should be the minimum between the CGATS file and the chart specification
  * @return dt_color_checker_patch* a pointer to the array of patches filled with values, or NULL on error.
  */
-static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(cmsHANDLE hIT8, size_t *bwg, const dt_colorchecker_chart_spec_t *chart_spec)
+static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(const cmsHANDLE hIT8, size_t *bwg, const dt_colorchecker_chart_spec_t *chart_spec, const size_t num_patches)
 {
   int column_SAMPLE_ID = -1;
   int column_X = -1;
@@ -963,17 +984,9 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(cmsHANDL
   int column_b = -1;
   char **sample_names = NULL;
   int n_columns = cmsIT8EnumDataFormat(hIT8, &sample_names);
-  int it8_num_patches = cmsIT8GetPropertyDbl(hIT8, "NUMBER_OF_SETS");
-
-  if(it8_num_patches != chart_spec->num_patches)
-  {
-    fprintf(stderr, "Warning: Number of patches in CGATS file (%i) does not match the expected number (%i).\n",
-            it8_num_patches, chart_spec->num_patches);
-  }
 
   // Limit the number of patches to the minimum between the CGATS file and the chart specification to avoid overflow.
-  size_t num_patches = (size_t) MIN(it8_num_patches, chart_spec->num_patches);
-  dt_color_checker_patch *values = dt_color_checker_patch_array_init(num_patches); //(dt_color_checker_patch *)dt_alloc_align(num_patches * sizeof(dt_color_checker_patch));
+  dt_color_checker_patch *values = dt_color_checker_patch_array_init(num_patches);
   if(!values)
   {
     fprintf(stderr, "Error: Memory allocation failed for values array.\n");
@@ -983,12 +996,12 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(cmsHANDL
   gboolean use_XYZ = FALSE;
   if(n_columns == -1)
   {
-    fprintf(stderr, "error with the CGATS file, can't get column types\n");
+    fprintf(stderr, "Error with the CGATS file, can't get column types\n");
   }
 
   for(int i = 0; i < n_columns; i++)
   {
-    if(!g_strcmp0(sample_names[i], "SAMPLE_ID"))
+    if(!g_strcmp0(sample_names[i], "SAMPLE_ID") || !g_strcmp0(sample_names[i], "SAMPLE_LOC"))
       column_SAMPLE_ID = i;
     else if(!g_strcmp0(sample_names[i], "XYZ_X"))
       column_X = i;
@@ -1006,7 +1019,7 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(cmsHANDL
 
   if(column_SAMPLE_ID == -1)
   {
-    fprintf(stderr, "error: can't find the SAMPLE_ID column in the CGATS file.\n");
+    fprintf(stderr, "Error: can't find the SAMPLE_ID column in the CGATS file.\n");
     goto error;
   }
 
@@ -1027,7 +1040,7 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(cmsHANDL
   }
   else
   {
-    fprintf(stderr, "error: can't find XYZ or Lab columns in the CGATS file\n");
+    fprintf(stderr, "Error: can't find XYZ or Lab columns in the CGATS file\n");
     goto error;
   }
 
@@ -1048,7 +1061,7 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(cmsHANDL
     values[patch_iter].name = g_strdup(cmsIT8GetDataRowCol(hIT8, patch_iter, 0));
     if(values[patch_iter].name == NULL)
     {
-      fprintf(stderr, "error : can't find sample '%lu' in CGATS file\n", patch_iter);
+      fprintf(stderr, "Error : can't find sample '%lu' in CGATS file\n", patch_iter);
       goto error;
     }
     
@@ -1059,7 +1072,7 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(cmsHANDL
       const dt_color_checker_patch *p = (dt_color_checker_patch*)g_slist_nth_data(chart_spec->patches, (guint)patch_iter);
       if(!p)
       {
-        fprintf(stderr, "error: patch %lu not found in chart specification.\n", patch_iter);
+        fprintf(stderr, "Error: patch %lu not found in chart specification.\n", patch_iter);
         goto error;
       }
       _dt_color_checker_patch_copy(&values[patch_iter], p);      
@@ -1093,16 +1106,17 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(cmsHANDL
                                  cmsIT8GetDataRowColDbl(hIT8, (int)patch_iter, columns[1]),
                                  cmsIT8GetDataRowColDbl(hIT8, (int)patch_iter, columns[2]) };
 
-    const dt_aligned_pixel_t patch_color = { (float)patchdbl[0], (float)patchdbl[1], (float)patchdbl[2], 0.0f };
-
     // Convert to Lab when it's in XYZ
     if(use_XYZ)
+    {
+      const dt_aligned_pixel_t patch_color = { (float)patchdbl[0] * 0.01, (float)patchdbl[1] *0.01, (float)patchdbl[2] * 0.01, 0.0f };
       dt_XYZ_to_Lab(patch_color, values[patch_iter].Lab);
+    }
     else
     {
-      values[patch_iter].Lab[0] = patch_color[0];
-      values[patch_iter].Lab[1] = patch_color[1];
-      values[patch_iter].Lab[2] = patch_color[2];
+      values[patch_iter].Lab[0] = (float)patchdbl[0];
+      values[patch_iter].Lab[1] = (float)patchdbl[1];
+      values[patch_iter].Lab[2] = (float)patchdbl[2];
     }
 
     _dt_CGATS_find_whitest_blackest_greyest(values, bwg, patch_iter);
@@ -1188,7 +1202,8 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *filename, const 
   }
 
   // Limit the number of patches to the minimum between the CGATS file and the chart specification to avoid overflow.
-  const int num_patches = MIN(num_patches_it8, chart_spec->num_patches);
+  const size_t num_patches = MIN(num_patches_it8, chart_spec->num_patches);
+  fprintf(stderr, "\tOnly %zu patches will be added to the chart\n", num_patches);
 
   checker = dt_colorchecker_init();
   if(!checker)
@@ -1213,7 +1228,7 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *filename, const 
 
   // blackest, whitest and greyest patches will be found while filling the color values
   size_t bwg[3] = { 0, 0, 0 };
-  checker->values = _dt_colorchecker_CGATS_fill_patch_values(hIT8, bwg, chart_spec);
+  checker->values = _dt_colorchecker_CGATS_fill_patch_values(hIT8, bwg, chart_spec, num_patches);
   if(!checker->values)
   {
     fprintf(stderr, "Error: cannot fill the color values from the CGATS file.\n");
@@ -1230,7 +1245,7 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *filename, const 
   goto end;
 
   error:
-  fprintf(stderr, "error creating user ref checker, in %s %s:%d\n", __FUNCTION__, __FILE__, lineno);
+  fprintf(stderr, "Error creating user ref checker, in %s %s:%d\n", __FUNCTION__, __FILE__, lineno);
 
   end:
   if(!cht_builtin && chart_spec) _dt_color_checker_chart_spec_cleanup(chart_spec); // only allocated chart will be freed
@@ -1304,7 +1319,7 @@ int dt_colorchecker_find_builtin(GList **colorcheckers_label)
 
     if(!builtin_label)
     {
-      fprintf(stderr, "dt_colorchecker_find: failed to allocate memory for builtin colorchecker label %d\n", k);
+      fprintf(stderr, "Error: failed to allocate memory for builtin colorchecker label %d\n", k);
       continue;
     }
     else
@@ -1380,6 +1395,8 @@ int dt_colorchecker_find_cht_files(GList **chts)
 
   return nb;
 }
+
+#undef MAX_LINE_LENGTH
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

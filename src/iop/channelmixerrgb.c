@@ -4331,7 +4331,7 @@ void gui_init(struct dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->checkers_list), "value-changed", G_CALLBACK(checker_changed_callback), (gpointer)self);
 
   g->checkers_cht_list = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(self));
-  dt_bauhaus_widget_set_label(g->checkers_cht_list, N_("Chart definition"));
+  dt_bauhaus_widget_set_label(g->checkers_cht_list, N_("Chart geometry"));
   gtk_box_pack_start(GTK_BOX(collapsible), GTK_WIDGET(g->checkers_cht_list), TRUE, TRUE, 0);
 
   dt_bauhaus_combobox_set(g->checkers_cht_list, 0);
