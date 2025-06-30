@@ -386,9 +386,10 @@ dt_color_checker_t spyder_48_v2 = {  .name = "Datacolor SpyderCheckr 48 after 20
 
 typedef struct dt_colorchecker_label_t
 {
-  gchar *label;
+  gchar *name;
   dt_color_checker_targets type;
   gchar *path;
+  int patch_nb;
 } dt_colorchecker_label_t;
 
 // Add other supported type of CGATS here
@@ -416,13 +417,12 @@ const char *colorchecker_material_types[COLOR_CHECKER_MATERIAL_UNKNOWN] = {
   "Opaque"
 };
 
-typedef struct dt_colorchecker_CGATS_label_name_t 
+typedef struct dt_colorchecker_CGATS_label_make_name_t 
 {
   const char *type;
-  const char *originator;
-  const char *date; // date in format 'Mon YYYY'
+  const char *description;
   const char *material;
-} dt_colorchecker_CGATS_label_name_t;
+} dt_colorchecker_CGATS_label_make_name_t;
 
 // This defines charts specifications
 typedef struct dt_colorchecker_chart_spec_t
@@ -446,42 +446,17 @@ typedef struct dt_colorchecker_chart_spec_t
 
   GSList *patches; // list of patches struct, data are dt_color_checker_patch
 
-  // pointer to the buildin chart definition.
-  // If set, the struct should not be freed because not allocated.
-  void *address;
-
 } dt_colorchecker_chart_spec_t;
 
-dt_colorchecker_chart_spec_t IT8_7 = {
-  .type = "IT8",
-  .radius = 0.0189f,
-  .ratio = 6.f / 11.f,
-  .size = { 22, 13 },
-  .guide_size = { 0, 0 },
-  .middle_grey = 273, // GS09
-  .white = 263,       // Dmin or GS00
-  .black = 287,       // Dmax or GS23
-
-  .num_patches = 288,     // as specified in IT8.7/1 and IT8.7/2
-  .colums = 22,
-  .rows = 12,
-  .patch_width = 0.04255f,   // 1.0f / (cols + 1.5f)
-  .patch_height = 0.0740f,   // 1.0f / (rows + 1.5f)
-  .patch_offset_x = 0.0531f, // 1.25f * patch_size_x
-  .patch_offset_y = 0.0925f,  // 1.25f * patch_size_y
-  .address = &IT8_7
-};
-
-dt_colorchecker_label_t *dt_colorchecker_label_init(const char *label, const dt_color_checker_targets type, const char *path)
+dt_colorchecker_label_t *dt_colorchecker_label_init(const char *label, const dt_color_checker_targets type, const char *path, const int patch_nb)
 {
-  size_t label_size = safe_strlen(label) + safe_strlen(path) + sizeof(dt_color_checker_targets);
-
-  dt_colorchecker_label_t *checker_label = malloc(label_size);
+  dt_colorchecker_label_t *checker_label = malloc(sizeof(dt_colorchecker_label_t));
   if(!checker_label) return NULL;
 
-  checker_label->label = g_strdup(label);
+  checker_label->name = label ? g_strdup(label) : NULL;
   checker_label->type = type;
   checker_label->path = path ? g_strdup(path) : NULL;
+  checker_label->patch_nb = patch_nb;
 
   return checker_label;
 }
@@ -519,7 +494,7 @@ void dt_color_checker_patch_cleanup_list(void *_patch)
   if(!patch) return;
 
   // Free the name if it was allocated
-  if(patch->name) g_free(patch->name);
+  SAFE_G_FREE(patch->name)
 
   free(patch);
 }
@@ -535,10 +510,10 @@ void dt_color_checker_cleanup(dt_color_checker_t *checker)
 {
   if (!checker) return;
 
-  if(checker->name) g_free(checker->name);
-  if(checker->author) g_free(checker->author);
-  if(checker->date) g_free(checker->date);
-  if(checker->manufacturer) g_free(checker->manufacturer);
+  SAFE_G_FREE(checker->name)
+  SAFE_G_FREE(checker->author)
+  SAFE_G_FREE(checker->date)
+  SAFE_G_FREE(checker->manufacturer)
 
   if(checker->patches > 0 && checker->values)
   {
@@ -556,14 +531,13 @@ void dt_color_checker_cleanup(dt_color_checker_t *checker)
 void dt_colorchecker_label_free(gpointer data)
 {
   dt_colorchecker_label_t *checker_label = (dt_colorchecker_label_t *)data;
-
   if(!checker_label) return;
 
   // Only free if not NULL and if dynamically allocated (user reference)
   if(checker_label->type == COLOR_CHECKER_USER_REF)
   {
-    g_free(checker_label->label);
-    if(checker_label->path) g_free(checker_label->path); // Builtin checker doesn't use this char dynamically
+    SAFE_G_FREE(checker_label->name)
+    SAFE_G_FREE(checker_label->path) // Builtin checker doesn't use this char dynamically
   }
 }
 
@@ -573,14 +547,6 @@ void dt_colorchecker_label_list_cleanup(GList **colorcheckers)
 
   g_list_free_full(g_steal_pointer(colorcheckers), dt_colorchecker_label_free);
   *colorcheckers = NULL;
-}
-
-void dt_colorchecker_cht_list_cleanup(GList **cht)
-{
-  if(!cht) return;
-
-  g_list_free_full(g_steal_pointer(cht), dt_colorchecker_label_free);
-  *cht = NULL;
 }
 
 /**
@@ -752,11 +718,16 @@ int dt_colorchecker_find_cht(GList **cht)
 {
   if(!cht) return 0;
 
-  const int total = dt_colorchecker_find_cht_files(cht);
+  // clear and refill the chart definition list
+  dt_colorchecker_label_list_cleanup(cht);
 
+  const int total = dt_colorchecker_find_cht_files(cht);
   if(total) dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find_cht: found %d .cht files\n"), total);
 
-  return total;
+  if(*cht == NULL)
+    fprintf(stderr, "[channelmixerrgb] no .cht file found\n");
+
+  return *cht ? total : 0;
 }
 
 // clang-format off
