@@ -395,9 +395,9 @@ typedef struct dt_colorchecker_label_t
 // Add other supported type of CGATS here
 typedef enum dt_colorchecker_CGATS_types
 {
-  CGATS_TYPE_IT8_7_1,
-  CGATS_TYPE_IT8_7_2,
-  CGATS_TYPE_UNKOWN
+  CGATS_TYPE_IT8_7_1 = 0,
+  CGATS_TYPE_IT8_7_2 = 1,
+  CGATS_TYPE_UNKOWN = 2
 } dt_colorchecker_CGATS_types;
 
 const char *CGATS_types[CGATS_TYPE_UNKOWN] = {
@@ -407,9 +407,9 @@ const char *CGATS_types[CGATS_TYPE_UNKOWN] = {
 
 typedef enum dt_colorchecker_material_types
 {
-  COLOR_CHECKER_MATERIAL_TRANSPARENT,
-  COLOR_CHECKER_MATERIAL_OPAQUE,
-  COLOR_CHECKER_MATERIAL_UNKNOWN
+  COLOR_CHECKER_MATERIAL_TRANSPARENT = 0,
+  COLOR_CHECKER_MATERIAL_OPAQUE = 1,
+  COLOR_CHECKER_MATERIAL_UNKNOWN = 2
 } dt_colorchecker_material_types;
 
 const char *colorchecker_material_types[COLOR_CHECKER_MATERIAL_UNKNOWN] = {
@@ -461,7 +461,7 @@ dt_colorchecker_label_t *dt_colorchecker_label_init(const char *label, const dt_
   return checker_label;
 }
 
-dt_color_checker_patch *dt_color_checker_patch_array_init(const size_t num_patches)
+dt_color_checker_patch *dt_colorchecker_patch_array_init(const size_t num_patches)
 {
   dt_color_checker_patch *patches = (dt_color_checker_patch *)dt_alloc_align(num_patches * sizeof(dt_color_checker_patch));
   if(!patches) return NULL;
@@ -479,7 +479,7 @@ dt_color_checker_patch *dt_color_checker_patch_array_init(const size_t num_patch
   return patches;
 }
 
-void dt_color_checker_patch_cleanup(const dt_color_checker_patch *patch)
+void dt_colorchecker_patch_cleanup(const dt_color_checker_patch *patch)
 {
   if(!patch) return;
   if(!patch->name) return;
@@ -488,7 +488,7 @@ void dt_color_checker_patch_cleanup(const dt_color_checker_patch *patch)
 }
 
 // This one is to fully free GSList of dt_color_checker_patch
-void dt_color_checker_patch_cleanup_list(void *_patch)
+void dt_colorchecker_patch_cleanup_list(gpointer *_patch)
 {
   dt_color_checker_patch *patch = (dt_color_checker_patch *)_patch;
   if(!patch) return;
@@ -506,7 +506,7 @@ dt_color_checker_t *dt_colorchecker_init()
   return checker ? checker : NULL;
 }
 
-void dt_color_checker_cleanup(dt_color_checker_t *checker)
+void dt_colorchecker_cleanup(dt_color_checker_t *checker)
 {
   if (!checker) return;
 
@@ -519,7 +519,7 @@ void dt_color_checker_cleanup(dt_color_checker_t *checker)
   {
     for(size_t i = 0; i < checker->patches; i++)
     {
-      dt_color_checker_patch_cleanup(&checker->values[i]);
+      dt_colorchecker_patch_cleanup(&checker->values[i]);
     }
 
     dt_free_align(checker->values);
@@ -550,7 +550,7 @@ void dt_colorchecker_label_list_cleanup(GList **colorcheckers)
 }
 
 /**
- * @brief Creates a color checker from a user reference file (CGATS format).
+ * @brief Creates a color checker from a reference file (CGATS format).
  *
  * @param filename the path to the CGATS file.
  * @param cht_filename the path to the .cht file (optional, can be NULL).
@@ -572,8 +572,14 @@ int dt_colorchecker_find_cht_files(GList **chts);
  * @param ref_colorcheckers_files NULL GList that will be populated with found IT8 files
  * @return int Number of found files
  */
-int dt_colorchecker_find_CGAT_reference_files(GList **ref_colorcheckers_files);
+int dt_colorchecker_find_CGATS_reference_files(GList **ref_colorcheckers_files);
 
+/**
+ * @brief Find all builtin colorcheckers
+ * 
+ * @param colorcheckers_label NULL GList that will be populated with found colorcheckers.
+ * @return int Number of found colorcheckers.
+ */
 int dt_colorchecker_find_builtin(GList **colorcheckers_label);
 
 /**
@@ -582,18 +588,18 @@ int dt_colorchecker_find_builtin(GList **colorcheckers_label);
  * @param dest A pointer to the destination color checker.
  * @param src A pointer to the source color checker.
  */
-void dt_color_checker_copy(dt_color_checker_t *dest, const dt_color_checker_t *src);
+void dt_colorchecker_copy(dt_color_checker_t *dest, const dt_color_checker_t *src);
 
 
 static dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets target_type, GList **colorchecker_label, const char *cht_filename)
 {
+  // initialize the destination checker
   dt_color_checker_t *checker_dest = NULL;
-  // cleanup and initialize the destination checker
   checker_dest = dt_colorchecker_init();
   if(!checker_dest) return NULL;
 
-  // check if the target type is a user reference
-  dt_color_checker_targets nth_checker = COLOR_CHECKER_LAST;
+  // check if the target type is a user reference and get the label data if available
+  dt_color_checker_targets checker_type = COLOR_CHECKER_LAST;
   const dt_colorchecker_label_t *label_data = NULL;
   if(target_type >= COLOR_CHECKER_USER_REF && colorchecker_label != NULL && *colorchecker_label != NULL)
   {
@@ -601,31 +607,31 @@ static dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets t
 
     // Get the label data from the list
     label_data = g_list_nth_data(*colorchecker_label, target_type);
-    nth_checker = COLOR_CHECKER_USER_REF;
+    checker_type = COLOR_CHECKER_USER_REF;
   }
   else // it's a builtin colorchecker
-    nth_checker = target_type;
+    checker_type = target_type;
 
-  // Copy the color checker data from the predefined checkers
-  switch(nth_checker)
+  // Copy the color checker data from the predefined checkers or from reference file
+  switch(checker_type)
   {
     case COLOR_CHECKER_XRITE_24_2000:
-      dt_color_checker_copy(checker_dest, &xrite_24_2000);
+      dt_colorchecker_copy(checker_dest, &xrite_24_2000);
       break;
     case COLOR_CHECKER_XRITE_24_2014:
-      dt_color_checker_copy(checker_dest, &xrite_24_2014);
+      dt_colorchecker_copy(checker_dest, &xrite_24_2014);
       break;
     case COLOR_CHECKER_SPYDER_24:
-      dt_color_checker_copy(checker_dest, &spyder_24);
+      dt_colorchecker_copy(checker_dest, &spyder_24);
       break;
     case COLOR_CHECKER_SPYDER_24_V2:
-      dt_color_checker_copy(checker_dest, &spyder_24_v2);
+      dt_colorchecker_copy(checker_dest, &spyder_24_v2);
       break;
     case COLOR_CHECKER_SPYDER_48:
-      dt_color_checker_copy(checker_dest, &spyder_48);
+      dt_colorchecker_copy(checker_dest, &spyder_48);
       break;
     case COLOR_CHECKER_SPYDER_48_V2:
-      dt_color_checker_copy(checker_dest, &spyder_48_v2);
+      dt_colorchecker_copy(checker_dest, &spyder_48_v2);
       break;
     case COLOR_CHECKER_USER_REF:
       if(label_data)
@@ -633,15 +639,15 @@ static dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets t
         dt_color_checker_t *p = dt_colorchecker_user_ref_create(label_data->path, cht_filename);
         if(p)
         {
-          dt_color_checker_copy(checker_dest, p);
-          dt_color_checker_cleanup(p);
+          dt_colorchecker_copy(checker_dest, p);
+          dt_colorchecker_cleanup(p);
         }
       }
       break;
       
     case COLOR_CHECKER_LAST:
       fprintf(stderr, "dt_get_color_checker: colorchecker type %i not found!\n", target_type);
-      dt_color_checker_copy(checker_dest, &xrite_24_2014);
+      dt_colorchecker_copy(checker_dest, &xrite_24_2014);
   }
 
   return checker_dest;
@@ -703,7 +709,7 @@ int dt_colorchecker_find(GList **colorcheckers_label)
   dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find: found %d builtin colorcheckers\n"), total);
   int b_nb = total;
   
-  total += dt_colorchecker_find_CGAT_reference_files(colorcheckers_label);
+  total += dt_colorchecker_find_CGATS_reference_files(colorcheckers_label);
   if (total) dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find: found %d CGAT references files\n"), total - b_nb);
   return total;
 }
@@ -711,16 +717,17 @@ int dt_colorchecker_find(GList **colorcheckers_label)
 /**
  * @brief Find all .cht files in the user it8 directory.
  * 
- * @param cht A NULL GList that will be populated with found .cht files.
+ * @param cht A GList that will be populated with found .cht files.
  * @return int The number of found .cht files.
  */
 int dt_colorchecker_find_cht(GList **cht)
 {
   if(!cht) return 0;
 
-  // clear and refill the chart definition list
+  // Clear cht file list
   dt_colorchecker_label_list_cleanup(cht);
 
+  // Refill the list 
   const int total = dt_colorchecker_find_cht_files(cht);
   if(total) dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find_cht: found %d .cht files\n"), total);
 

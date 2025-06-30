@@ -2567,7 +2567,7 @@ void update_colorchecker_cht_list(dt_iop_module_t *self)
   {
     for(GList *l = g_list_first(g->colorcheckers_all_cht); l; l = g_list_next(l))
     {
-      const dt_colorchecker_label_t *cht_label = (const dt_colorchecker_label_t *)l->data;
+      dt_colorchecker_label_t *cht_label = (dt_colorchecker_label_t *)l->data;
       // filter out colorcheckers with different patch number, this also needs a different GList
       if(cht_label->patch_nb == checker_patch_nb)
       {
@@ -2628,7 +2628,7 @@ static void checker_cht_changed_callback(GtkWidget *widget, gpointer user_data)
                                                 : NULL;
   const char *cht_path = cht_label ? cht_label->path : NULL;
 
-  dt_color_checker_cleanup(g->checker);
+  dt_colorchecker_cleanup(g->checker);
   g->checker = dt_get_color_checker(n_chkr, &(g->colorcheckers), cht_path);
 
   dt_develop_t *dev = self->dev;
@@ -2661,7 +2661,7 @@ void checker_changed_callback(GtkWidget *widget, gpointer user_data)
   const dt_colorchecker_label_t *cht_label = (n_cht >= 0 && g->colorcheckers_cht) ? (const dt_colorchecker_label_t*)g_list_nth_data(g->colorcheckers_cht, n_cht) : NULL;
   const char *cht_path = cht_label ? cht_label->path : NULL;
 
-  dt_color_checker_cleanup(g->checker);
+  dt_colorchecker_cleanup(g->checker);
   g->checker = dt_get_color_checker(checker_cmbbx_index, &(g->colorcheckers), cht_path);
 
   dt_develop_t *dev = self->dev;
@@ -3565,7 +3565,7 @@ void gui_update(struct dt_iop_module_t *self)
   const dt_colorchecker_label_t *label = ((selected_cht >= 0) && g->colorcheckers_cht) ? (const dt_colorchecker_label_t*)g_list_nth_data(g->colorcheckers_cht, selected_cht) : NULL;
   const char *cht_path = label ? label->path : NULL;
 
-  dt_color_checker_cleanup(g->checker);
+  dt_colorchecker_cleanup(g->checker);
   g->checker = dt_get_color_checker(selected_checker, &(g->colorcheckers), cht_path);
 
   cht_list_visibility(self, selected_checker);
@@ -4428,7 +4428,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
   dt_colorchecker_label_list_cleanup(&(g->colorcheckers_all_cht));
   g_list_free(g->colorcheckers_cht); // data pointers are already freed by the cleanup function for colorcheckers_all_cht
 
-  dt_color_checker_cleanup(g->checker);
+  dt_colorchecker_cleanup(g->checker);
 
   IOP_GUI_FREE;
 }
