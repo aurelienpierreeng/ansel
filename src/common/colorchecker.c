@@ -1341,7 +1341,7 @@ int dt_colorchecker_find_CGATS_reference_files(GList **ref_colorcheckers_files)
   int nb = 0;
   char confdir[PATH_MAX] = { 0 };
   dt_loc_get_user_config_dir(confdir, sizeof(confdir));
-  gchar *user_it8_dir = g_build_filename(confdir, "color", "it8", NULL);
+  gchar *user_it8_dir = g_build_filename(confdir, "color", "checker", NULL);
 
   GDir *dir = g_dir_open(user_it8_dir, 0, NULL);
   if(dir)
@@ -1374,7 +1374,7 @@ int dt_colorchecker_find_cht_files(GList **chts)
   int nb = 0;
   char confdir[PATH_MAX] = { 0 };
   dt_loc_get_user_config_dir(confdir, sizeof(confdir));
-  gchar *user_it8_dir = g_build_filename(confdir, "color", "it8", NULL);
+  gchar *user_it8_dir = g_build_filename(confdir, "color", "checker", NULL);
 
   GDir *dir = g_dir_open(user_it8_dir, 0, NULL);
   if(dir)
