@@ -4325,17 +4325,12 @@ void gui_init(struct dt_iop_module_t *self)
 
   gchar *tip_files_loc = NULL;
   {
-    char datadir[PATH_MAX] = { 0 };
     char confdir[PATH_MAX] = { 0 };
-    dt_loc_get_datadir(datadir, sizeof(datadir));
     dt_loc_get_user_config_dir(confdir, sizeof(confdir));
     
-    gchar *system_CGATS_dir = g_build_filename(datadir, "color", "it8", NULL);
-    gchar *user_CGATS_dir = g_build_filename(confdir, "color", "it8", NULL);
-    tip_files_loc = g_strdup_printf(_("files must be placed in %s or %s"),
-                                    system_CGATS_dir, user_CGATS_dir);
+    gchar *user_CGATS_dir = g_build_filename(confdir, "color", "checker", NULL);
+    tip_files_loc = g_strdup_printf(_("files must be placed in %s or %s"), user_CGATS_dir);
     
-    g_free(system_CGATS_dir);
     g_free(user_CGATS_dir);
   }
 
