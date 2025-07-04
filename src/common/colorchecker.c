@@ -1159,7 +1159,7 @@ end:
   return values;
 }
 
-dt_color_checker_t *dt_colorchecker_user_ref_create(const char *filename, const char *cht_filename)
+dt_color_checker_t *dt_colorchecker_user_ref_create(const char *color_filename, const char *cht_filename)
 {
   dt_colorchecker_chart_spec_t *chart_spec = NULL;
   gboolean cht_builtin = FALSE;
@@ -1167,17 +1167,17 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *filename, const 
 
   int lineno = 0;
 
-  if(!g_file_test(filename, G_FILE_TEST_IS_REGULAR))
+  if(!g_file_test(color_filename, G_FILE_TEST_IS_REGULAR))
   {
-    fprintf(stderr, "Error: the file '%s' does not exist or is not a regular file.\n", filename);
+    fprintf(stderr, "Error: the file '%s' does not exist or is not a regular file.\n", color_filename);
     return NULL;
   }
   
-  cmsHANDLE hIT8 = cmsIT8LoadFromFile(NULL, filename);
+  cmsHANDLE hIT8 = cmsIT8LoadFromFile(NULL, color_filename);
 
   if(!_dt_CGATS_is_supported(&hIT8))
   {
-    fprintf(stderr, "Ansel cannot load the CGATS file '%s'\n", filename);
+    fprintf(stderr, "Ansel cannot load the CGATS file '%s'\n", color_filename);
     ERROR
   }
 
@@ -1219,7 +1219,7 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *filename, const 
     ERROR
   }
 
-  checker->name = _dt_CGATS_get_name(&hIT8, filename);
+  checker->name = _dt_CGATS_get_name(&hIT8, color_filename);
   checker->author = g_strdup(_dt_CGATS_get_author(&hIT8));
   checker->date = g_strdup(_dt_CGATS_get_date(&hIT8));
   checker->manufacturer = g_strdup(_dt_CGATS_get_manufacturer(&hIT8));
@@ -1248,7 +1248,7 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *filename, const 
   dt_print(DT_DEBUG_VERBOSE, _("blackest patch: %s, middle grey patch: %s, white patch: %s\n"),
            checker->values[bwg[0]].name, checker->values[bwg[1]].name, checker->values[bwg[2]].name);
 
-  dt_print(DT_DEBUG_VERBOSE, _("it8 '%s' done\n"), filename);
+  dt_print(DT_DEBUG_VERBOSE, _("it8 '%s' done\n"), color_filename);
   goto end;
 
   error:
