@@ -509,7 +509,7 @@ dt_color_checker_t *dt_colorchecker_init()
   checker->author = NULL;
   checker->date = NULL;
   checker->manufacturer = NULL;
-
+  checker->values = NULL;
   checker->finished = FALSE;
 
   return checker;
