@@ -131,6 +131,7 @@ void dt_colorchecker_copy(dt_color_checker_t *dest, const dt_color_checker_t *sr
   {
     dest->values = NULL;
   }
+  dest->finished = TRUE;
 }
 
 /**
@@ -775,12 +776,10 @@ static gchar *_dt_colorchecker_get_standard_type(const char *type)
  */
 static gboolean _dt_CGATS_is_supported(const cmsHANDLE *hIT8)
 {
-  gboolean valid = TRUE;
-
   if(!hIT8)
   {
     fprintf(stderr, "Error loading IT8 file.\n");
-    valid = FALSE;
+    return FALSE;
   }
   else
   {    
@@ -789,8 +788,52 @@ static gboolean _dt_CGATS_is_supported(const cmsHANDLE *hIT8)
     if(_dt_CGATS_get_type_value(CGATS_type) == CGATS_TYPE_UNKOWN)
     {
       fprintf(stderr, "Warning: type '%s' is not supported by Ansel.\n", CGATS_type);
-      valid = FALSE;
-      goto end;
+      return FALSE;
+    }
+
+    int column_SAMPLE_ID = -1;
+    int column_X = -1;
+    int column_Y = -1;
+    int column_Z = -1;
+    int column_L = -1;
+    int column_a = -1;
+    int column_b = -1;
+    char **sample_names = NULL;
+    int n_columns = cmsIT8EnumDataFormat(*hIT8, &sample_names);
+
+    if(n_columns == -1)
+    {
+      fprintf(stderr, "Error with the CGATS file, can't get column types\n");
+      return FALSE;
+    }
+
+    for(int i = 0; i < n_columns; i++)
+    {
+      if(!g_strcmp0(sample_names[i], "SAMPLE_ID") || !g_strcmp0(sample_names[i], "SAMPLE_LOC"))
+        column_SAMPLE_ID = i;
+      else if(!g_strcmp0(sample_names[i], "XYZ_X"))
+        column_X = i;
+      else if(!g_strcmp0(sample_names[i], "XYZ_Y"))
+        column_Y = i;
+      else if(!g_strcmp0(sample_names[i], "XYZ_Z"))
+        column_Z = i;
+      else if(!g_strcmp0(sample_names[i], "LAB_L"))
+        column_L = i;
+      else if(!g_strcmp0(sample_names[i], "LAB_A"))
+        column_a = i;
+      else if(!g_strcmp0(sample_names[i], "LAB_B"))
+        column_b = i;
+    }
+    if(column_SAMPLE_ID == -1)
+    {
+      fprintf(stderr, "Error: can't find the SAMPLE_ID column in the CGATS file.\n");
+      return FALSE;
+    }
+
+    if(column_X + column_Y + column_Z + column_L + column_a + column_b == -1)
+    {
+      fprintf(stderr, "Error: No XYZ or Lab columns found in the CGATS file.\n");
+      return FALSE;
     }
 
     uint32_t table_count = cmsIT8TableCount(*hIT8);
@@ -798,12 +841,11 @@ static gboolean _dt_CGATS_is_supported(const cmsHANDLE *hIT8)
     {
       fprintf(stderr, "Warning: the CGATS file contains %u tables but we only support files"
               "with one table at the moment.\n", table_count);
-      valid = FALSE;
+      return FALSE;
     }
   }
 
-end:
-  return valid;
+  return TRUE;
 }
 
 static inline const char *_dt_CGATS_get_author(const cmsHANDLE *hIT8)
@@ -1043,7 +1085,6 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(const cm
   char **sample_names = NULL;
   int n_columns = cmsIT8EnumDataFormat(hIT8, &sample_names);
 
-  // Limit the number of patches to the minimum between the CGATS file and the chart specification to avoid overflow.
   dt_color_checker_patch *values = dt_colorchecker_patch_array_init(num_patches);
   if(!values)
   {
@@ -1078,6 +1119,12 @@ static dt_color_checker_patch *_dt_colorchecker_CGATS_fill_patch_values(const cm
   if(column_SAMPLE_ID == -1)
   {
     fprintf(stderr, "Error: can't find the SAMPLE_ID column in the CGATS file.\n");
+    goto error;
+  }
+
+  if(column_X + column_Y + column_Z + column_L + column_a + column_b == -1)
+  {
+    fprintf(stderr, "Error: No XYZ or Lab columns found in the CGATS file.\n");
     goto error;
   }
 
@@ -1162,14 +1209,13 @@ end:
 dt_color_checker_t *dt_colorchecker_user_ref_create(const char *color_filename, const char *cht_filename)
 {
   dt_colorchecker_chart_spec_t *chart_spec = NULL;
-  gboolean cht_builtin = FALSE;
   dt_color_checker_t *checker = NULL;
 
   int lineno = 0;
 
   if(!g_file_test(color_filename, G_FILE_TEST_IS_REGULAR))
   {
-    fprintf(stderr, "Error: the file '%s' does not exist or is not a regular file.\n", color_filename);
+    fprintf(stderr, "Error: the color file '%s' does not exist or is not a regular file.\n", color_filename);
     return NULL;
   }
   
@@ -1190,15 +1236,14 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *color_filename, 
   // load the cht file if any
   if(cht_filename && g_file_test(cht_filename, G_FILE_TEST_IS_REGULAR))
   {
-    if(_dt_colorchecker_open_cht(cht_filename, chart_spec))
-      cht_builtin = FALSE;
-    else
+    if(!_dt_colorchecker_open_cht(cht_filename, chart_spec))
     {
       fprintf(stderr, "Error: cannot open the cht file '%s'.\n", cht_filename);
       ERROR
     }
   }
-  
+  else fprintf(stderr, "Warning: invalid cht file '%s'.\n", cht_filename);
+
   // Check if the CGATS file contains the expected number of patches
   const int num_patches_it8 = (const int)cmsIT8GetPropertyDbl(hIT8, "NUMBER_OF_SETS");
   
@@ -1255,7 +1300,7 @@ dt_color_checker_t *dt_colorchecker_user_ref_create(const char *color_filename, 
   fprintf(stderr, "Error creating user ref checker, in %s %s:%d\n", __FUNCTION__, __FILE__, lineno);
 
   end:
-  if(!cht_builtin && chart_spec) _dt_colorchecker_chart_spec_cleanup(chart_spec); // only allocated chart will be freed
+  if(chart_spec) _dt_colorchecker_chart_spec_cleanup(chart_spec); // only allocated chart will be freed
   if(hIT8) cmsIT8Free(hIT8);
   return checker;
 }
