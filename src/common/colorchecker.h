@@ -67,6 +67,7 @@ typedef struct dt_color_checker_t
   size_t white;                    // index of the closest patch to pure white
   size_t black;                    // index of the closest patch to pure black
   dt_color_checker_patch *values;  // pointer to an array of colors
+  gboolean finished;               // whether the color checker is loaded or not
 } dt_color_checker_t;
 
 dt_color_checker_patch xrite_24_2000_patches[] = {
@@ -479,12 +480,12 @@ dt_color_checker_patch *dt_colorchecker_patch_array_init(const size_t num_patche
   return patches;
 }
 
-void dt_colorchecker_patch_cleanup(const dt_color_checker_patch *patch)
+void dt_colorchecker_patch_cleanup(dt_color_checker_patch *patch)
 {
   if(!patch) return;
   if(!patch->name) return;
 
-  g_free(patch->name);
+  SAFE_G_FREE(patch->name);
 }
 
 // This one is to fully free GSList of dt_color_checker_patch
@@ -502,8 +503,16 @@ void dt_colorchecker_patch_cleanup_list(void *_patch)
 dt_color_checker_t *dt_colorchecker_init()
 {                  
   dt_color_checker_t *checker = (dt_color_checker_t*)malloc(sizeof(dt_color_checker_t));
+  if(!checker) return NULL;
 
-  return checker ? checker : NULL;
+  checker->name = NULL;
+  checker->author = NULL;
+  checker->date = NULL;
+  checker->manufacturer = NULL;
+
+  checker->finished = FALSE;
+
+  return checker;
 }
 
 void dt_colorchecker_cleanup(dt_color_checker_t *checker)
@@ -552,11 +561,11 @@ void dt_colorchecker_label_list_cleanup(GList **colorcheckers)
 /**
  * @brief Creates a color checker from a reference file (CGATS format).
  *
- * @param filename the path to the CGATS file.
+ * @param color_filename the path to the CGATS file.
  * @param cht_filename the path to the .cht file (optional, can be NULL).
  * @return dt_color_checker_t* the filled color checker.
  */
-dt_color_checker_t *dt_colorchecker_user_ref_create(const char *filename, const char *cht_filename);
+dt_color_checker_t *dt_colorchecker_user_ref_create(const char *color_filename, const char *cht_filename);
 
 /**
  * @brief Find all .cht files in the user config/color/it8 directory
@@ -601,7 +610,7 @@ static dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets t
   // check if the target type is a user reference and get the label data if available
   dt_color_checker_targets checker_type = COLOR_CHECKER_LAST;
   const char *cht_filename = NULL;
-  if(target_type >= COLOR_CHECKER_USER_REF && colorchecker_label != NULL && *colorchecker_label != NULL)
+  if(target_type >= COLOR_CHECKER_USER_REF && colorchecker_label)
   {
     dt_print(DT_DEBUG_VERBOSE, _("dt_get_color_checker: colorchecker type %i is a user reference.\n"), target_type);
 
@@ -635,7 +644,7 @@ static dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets t
       dt_colorchecker_copy(checker_dest, &spyder_48_v2);
       break;
     case COLOR_CHECKER_USER_REF:
-      if(cht_filename)
+      if(color_filename)
       {
         dt_color_checker_t *p = dt_colorchecker_user_ref_create(color_filename, cht_filename);
         if(p)
@@ -644,6 +653,7 @@ static dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets t
           dt_colorchecker_cleanup(p);
         }
       }
+      else fprintf(stderr, "dt_get_color_checker: colorchecker %i is a user reference but no color filename was provided!\n", target_type);   
       break;
       
     case COLOR_CHECKER_LAST:
@@ -733,7 +743,7 @@ int dt_colorchecker_find_color(GList **color_label)
   if(total) dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find_color: found %d .cht files\n"), total);
 
   if(*color_label == NULL)
-    fprintf(stderr, "[channelmixerrgb] no .cht file found\n");
+    fprintf(stderr, "[channelmixerrgb] no CGATS file found\n");
 
   return *color_label ? total : 0;
 }
