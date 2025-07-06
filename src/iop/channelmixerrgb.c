@@ -4362,7 +4362,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(collapsible), GTK_WIDGET(g->checkers_list), TRUE, TRUE, 0);
   dt_bauhaus_combobox_set(g->checkers_list, 0);
   gchar *tooltip = g_strdup_printf(_("Choose the vendor and the type of your chart.\n"
-                                      ".cht references files should be placed in %s."), tip_files_loc);
+                                      ".cht files in %s."), tip_files_loc);
   gtk_widget_set_tooltip_text(g->checkers_list, tooltip);
   g_free(tooltip);
   g_signal_connect(G_OBJECT(g->checkers_list), "value-changed", G_CALLBACK(checker_changed_callback), (gpointer)self);
@@ -4373,12 +4373,12 @@ void gui_init(struct dt_iop_module_t *self)
 
   dt_bauhaus_combobox_set(g->checkers_color_list, 0);
   tooltip = g_strdup_printf(_("Choose the definition of your chart.\n"
-                                      "CGATS.17 references files should be placed in %s."), tip_files_loc);
+                                      "CGATS.17 files in %s."), tip_files_loc);
   gtk_widget_set_tooltip_text(g->checkers_color_list, tooltip);
   g_free(tooltip);
   g_signal_connect(G_OBJECT(g->checkers_color_list), "value-changed", G_CALLBACK(checker_color_changed_callback), (gpointer)self);
   
-  tooltip = g_strdup_printf(_("WARNING: No compatible CGATS.17 file found for the selected checker. CGATS files should be placed in %s"), tip_files_loc);
+  tooltip = g_strdup_printf(_("WARNING: No compatible CGATS.17 file found for the selected checker. Add your CGATS files in %s"), tip_files_loc);
   g->checker_msg = gtk_label_new(tooltip);
   gtk_label_set_line_wrap(GTK_LABEL(g->checker_msg), TRUE);
   gtk_label_set_line_wrap_mode(GTK_LABEL(g->checker_msg), PANGO_WRAP_WORD);
