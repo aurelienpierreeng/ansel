@@ -38,6 +38,11 @@
 #include <inttypes.h>
 #include <lcms2.h>
 
+// In some environments ERROR is already defined, ie: WIN32
+#if defined(ERROR)
+#undef ERROR
+#endif // defined (ERROR)
+
 #define ERROR           \
   {                     \
     lineno = __LINE__;  \

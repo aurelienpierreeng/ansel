@@ -616,6 +616,8 @@ static dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets t
 
     // Get the label data from the list
     const dt_colorchecker_label_t *label_data = (const dt_colorchecker_label_t*)g_list_nth_data(*colorchecker_label, target_type);
+    if(label_data == NULL) return NULL;
+    
     checker_type = COLOR_CHECKER_USER_REF;
     cht_filename = label_data->path;
   }
