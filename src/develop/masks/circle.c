@@ -25,6 +25,12 @@
 #include "develop/masks.h"
 #include "develop/openmp_maths.h"
 
+#define HARDNESS_MIN 0.0005f
+#define HARDNESS_MAX 1.0f
+
+#define BORDER_MIN 0.00005f
+#define BORDER_MAX 0.5f
+
 static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t *gui, int index,
                                  int num_points, int *inside, int *inside_border, int *near, int *inside_source, float *dist)
 {
@@ -71,61 +77,114 @@ static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t
   *inside_border = !(dt_masks_point_in_form_near(x, y, gpt->points, 1, gpt->points_count, as, near));
 }
 
+static int _init_hardness(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment)
+{
+  float mask_hardness = dt_masks_get_set_conf_value(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX, increment);
+  //if(gui->guipoints_count > 0) dt_masks_dynbuf_set(gui->guipoints_payload, -3, masks_hardness);
+  dt_toast_log(_("hardness: %3.2f%%"), mask_hardness * 100.0f);
+  return 1;
+}
+
+static int _init_size(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment)
+{
+
+  float mask_size = dt_masks_get_set_conf_value(form, "size", amount, BORDER_MIN, BORDER_MAX, increment);
+  //if(gui->guipoints_count > 0) dt_masks_dynbuf_set(gui->guipoints_payload, -4, masks_border);
+  dt_toast_log(_("size: %3.2f%%"), mask_size * 2.f * 100.f);
+  return 1;
+}
+
+static int _init_opacity(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment)
+{
+  float mask_opacity = dt_masks_get_set_conf_value(form, "opacity", amount, 0.f, 1.f, increment);
+  dt_toast_log(_("opacity: %3.2f%%"), mask_opacity*100.f);
+  return 1;
+}
+
+static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment)
+{
+  
+  dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)(form->points)->data;
+  if(!circle) return 0;
+
+  const float masks_hardness = circle->border;
+  if(increment)
+    circle->border = MAX(HARDNESS_MIN, MIN(masks_hardness * amount, HARDNESS_MAX));
+  else
+    circle->border = MAX(HARDNESS_MIN, MIN(amount, HARDNESS_MAX));
+
+
+  _init_hardness(form, amount, increment);
+
+  // we recreate the form points
+  dt_masks_gui_form_remove(form, gui, index);
+  dt_masks_gui_form_create(form, gui, index, module);
+
+  return 1;
+}
+
+static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment)
+{
+  //DebugBreak();
+
+  dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)(form->points)->data;
+  if(!circle) return 0;
+
+  // Sanitize
+  // do not exceed upper limit of 1.0 and lower limit of 0.004
+  if(amount > 1.0f && (circle->border > 1.0f ))
+    return 1;
+
+  // Growing/shrinking
+  if(gui->point_selected == -1 || gui->point_selected == 0)
+  {
+    switch(increment)
+    {
+      case(DT_MASKS_INCREMENT_SCALE):
+      {
+        circle->radius *= amount;
+        break;
+      }
+      case(DT_MASKS_INCREMENT_OFFSET):
+      {
+        circle->radius += amount;
+        break;
+      }
+      case(DT_MASKS_INCREMENT_ABSOLUTE):
+      {
+        circle->radius = amount;
+      }
+    }
+  }
+
+  _init_size(form, amount, DT_MASKS_INCREMENT_SCALE);
+
+  // we recreate the form points
+  dt_masks_gui_form_remove(form, gui, index);
+  dt_masks_gui_form_create(form, gui, index, module);
+
+  return 1;
+}
+
 static int _circle_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up,
                                          uint32_t state, dt_masks_form_t *form, int parentid,
                                          dt_masks_form_gui_t *gui, int index,
                                          dt_masks_interaction_t interaction)
 {
-  const float max_mask_border = form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE) ? 0.5f : 1.0f;
-  const float max_mask_size = form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE) ? 0.5f : 1.0f;
+  // const float max_mask_border = form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE) ? 0.5f : 1.0f;
+  // const float max_mask_size = form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE) ? 0.5f : 1.0f;
 
-  // add a preview when creating a circle
   if(gui->creation)
   {
-    float masks_size = 0.0f;
-
-    if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-      masks_size = dt_conf_get_float("plugins/darkroom/spots/circle_size");
-    else
-      masks_size = dt_conf_get_float("plugins/darkroom/masks/circle/size");
-
     if(dt_modifier_is(state, GDK_SHIFT_MASK))
-    {
-      float masks_border = 0.0f;
-
-      if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-        masks_border = dt_conf_get_float("plugins/darkroom/spots/circle_border");
-      else
-        masks_border = dt_conf_get_float("plugins/darkroom/masks/circle/border");
-
-      if(up && masks_border < max_mask_border)
-        masks_border *= 1.0f / 0.97f;
-      else if(!up && masks_border > 0.0005f)
-        masks_border *= 0.97f;
-
-      if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-        dt_conf_set_float("plugins/darkroom/spots/circle_border", masks_border);
-      else
-        dt_conf_set_float("plugins/darkroom/masks/circle/border", masks_border);
-      dt_toast_log(_("feather size: %3.2f%%"), (masks_border / masks_size)*100.0f);
-    }
-    else if(dt_modifier_is(state, 0))
-    {
-      if(up && masks_size < max_mask_size)
-        masks_size *= 1.0f / 0.97f;
-      else if(!up && masks_size > 0.001f)
-        masks_size *= 0.97f;
-
-      if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-        dt_conf_set_float("plugins/darkroom/spots/circle_size", masks_size);
-      else
-        dt_conf_set_float("plugins/darkroom/masks/circle/size", masks_size);
-      dt_toast_log(_("size: %3.2f%%"), masks_size*100.0f);
-    }
-    return 1;
+      return _init_hardness(form, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE);
+    else if(dt_modifier_is(state, GDK_CONTROL_MASK))
+      return _init_opacity(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET);
+    else    
+      return _init_size(form, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE);
   }
 
-  if(gui->form_selected)
+  else if(gui->form_selected)
   {
     // we register the current position
     if(gui->scrollx == 0.0f && gui->scrolly == 0.0f)
@@ -134,55 +193,11 @@ static int _circle_events_mouse_scrolled(struct dt_iop_module_t *module, float p
       gui->scrolly = pzy;
     }
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
-    {
-      // we try to change the opacity
-      dt_masks_form_change_opacity(form, parentid, up);
-    }
+      return dt_masks_form_set_opacity(form, parentid, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET);
+    else if(dt_modifier_is(state, GDK_SHIFT_MASK))
+      return _change_hardness(form, gui, module, index, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE);
     else
-    {
-      dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
-      // resize don't care where the mouse is inside a shape
-      if(dt_modifier_is(state, GDK_SHIFT_MASK))
-      {
-        if(up && circle->border < max_mask_border)
-          circle->border *= 1.0f / 0.97f;
-        else if(!up && circle->border > 0.0005f)
-          circle->border *= 0.97f;
-        else
-          return 1;
-
-        dt_masks_gui_form_remove(form, gui, index);
-        dt_masks_gui_form_create(form, gui, index, module);
-        if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
-          dt_conf_set_float("plugins/darkroom/spots/circle_border", circle->border);
-        else
-          dt_conf_set_float("plugins/darkroom/masks/circle/border", circle->border);
-        dt_toast_log(_("feather size: %3.2f%%"), (circle->border/circle->radius)*100.0f);
-      }
-      else if(gui->edit_mode == DT_MASKS_EDIT_FULL)
-      {
-        if(up && circle->radius < max_mask_size)
-          circle->radius *= 1.0f / 0.97f;
-        else if(!up && circle->radius > 0.001f)
-          circle->radius *= 0.97f;
-        else
-          return 1;
-
-        dt_masks_gui_form_remove(form, gui, index);
-        dt_masks_gui_form_create(form, gui, index, module);
-        if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
-          dt_conf_set_float("plugins/darkroom/spots/circle_size", circle->radius);
-        else
-          dt_conf_set_float("plugins/darkroom/masks/circle/size", circle->radius);
-        dt_toast_log(_("size: %3.2f%%"), circle->radius*100.0f);
-      }
-      else
-      {
-        return 0;
-      }
-
-    }
-    return 1;
+      return _change_size(form, gui, module, index, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE);
   }
   return 0;
 }
@@ -192,133 +207,145 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, float p
                                          dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, int index)
 {
   if(!gui) return 0;
-  if(gui->source_selected && !gui->creation && gui->edit_mode == DT_MASKS_EDIT_FULL)
+
+  fprintf(stdout,"CIRCLE: form_selected: %d, border_selected: %d, feather_selected: %d\n", gui->form_selected, gui->border_selected, gui->feather_selected);
+
+  if(gui->creation && which == 1
+    && ((dt_modifier_is(state, GDK_CONTROL_MASK | GDK_SHIFT_MASK)) || dt_modifier_is(state, GDK_SHIFT_MASK)))
   {
-    dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-    if(!gpt) return 0;
-    // we start the form dragging
-    gui->source_dragging = TRUE;
-    gui->dx = gpt->source[0] - gui->posx;
-    gui->dy = gpt->source[1] - gui->posy;
+    // set some absolute or relative position for the source of the clone mask
+    if(form->type & DT_MASKS_CLONE) dt_masks_set_source_pos_initial_state(gui, state, pzx, pzy);
     return 1;
   }
-  else if(gui->form_selected && !gui->creation && gui->edit_mode == DT_MASKS_EDIT_FULL)
+  
+  else if(which == 1)
   {
-    dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-    if(!gpt) return 0;
-    // we start the form dragging
-    gui->form_dragging = TRUE;
-    gui->dx = gpt->points[0] - gui->posx;
-    gui->dy = gpt->points[1] - gui->posy;
-    return 1;
+    if(gui->creation)
+    {
+      dt_iop_module_t *crea_module = gui->creation_module;
+      // we create the circle
+      dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)(malloc(sizeof(dt_masks_point_circle_t)));
+
+      // we change the center value
+      const float wd = darktable.develop->preview_pipe->backbuf_width;
+      const float ht = darktable.develop->preview_pipe->backbuf_height;
+      float pts[2] = { pzx * wd, pzy * ht };
+      dt_dev_distort_backtransform(darktable.develop, pts, 1);
+      circle->center[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
+      circle->center[1] = pts[1] / darktable.develop->preview_pipe->iheight;
+
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+      {
+        circle->radius = dt_conf_get_float("plugins/darkroom/spots/circle_size");
+        circle->border = dt_conf_get_float("plugins/darkroom/spots/circle_border");
+
+        // calculate the source position
+        if(form->type & DT_MASKS_CLONE)
+        {
+          dt_masks_set_source_pos_initial_value(gui, DT_MASKS_CIRCLE, form, pzx, pzy);
+        }
+        else
+        {
+          // not used by regular masks
+          form->source[0] = form->source[1] = 0.0f;
+        }
+      }
+      else
+      {
+        circle->radius = dt_conf_get_float("plugins/darkroom/masks/circle/size");
+        circle->border = dt_conf_get_float("plugins/darkroom/masks/circle/border");
+        // not used for masks
+        form->source[0] = form->source[1] = 0.0f;
+      }
+      form->points = g_list_append(form->points, circle);
+      dt_masks_gui_form_save_creation(darktable.develop, crea_module, form, gui);
+
+      if(crea_module)
+      {
+        // we save the move
+        dt_masks_set_edit_mode(crea_module, DT_MASKS_EDIT_FULL);
+        dt_masks_iop_update(crea_module);
+        dt_dev_masks_selection_change(darktable.develop, crea_module, form->formid, TRUE);
+        gui->creation_module = NULL;
+      }
+      else
+      {
+        // we select the new form
+        dt_dev_masks_selection_change(darktable.develop, NULL, form->formid, TRUE);
+      }
+
+      // if we draw a clone circle, we start now the source dragging
+      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
+      {
+        dt_masks_form_t *grp = darktable.develop->form_visible;
+        if(!grp || !(grp->type & DT_MASKS_GROUP)) return 1;
+        int pos3 = 0, pos2 = -1;
+        for(GList *fs = grp->points; fs; fs = g_list_next(fs))
+        {
+          dt_masks_point_group_t *pt = (dt_masks_point_group_t *)fs->data;
+          if(pt->formid == form->formid)
+          {
+            pos2 = pos3;
+            break;
+          }
+          pos3++;
+        }
+        if(pos2 < 0) return 1;
+        dt_masks_form_gui_t *gui2 = darktable.develop->form_gui;
+        if(!gui2) return 1;
+        if(form->type & DT_MASKS_CLONE)
+          gui2->source_dragging = TRUE;
+        else
+          gui2->form_dragging = TRUE;
+        gui2->group_selected = pos2;
+        gui2->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
+        gui2->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
+        gui2->dx = 0.0;
+        gui2->dy = 0.0;
+        gui2->scrollx = pzx;
+        gui2->scrolly = pzy;
+        gui2->form_selected = TRUE; // we also want to be selected after button released
+
+        dt_masks_select_form(module, dt_masks_get_from_id(darktable.develop, form->formid));
+      }
+      return 1;
+    }
+    else // creation is FALSE
+    {
+      dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
+      if(!gpt) return 0;
+
+      if(gui->source_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
+      {
+        // we start the form dragging
+        gui->source_dragging = TRUE;
+        gui->dx = gpt->source[0] - gui->posx;
+        gui->dy = gpt->source[1] - gui->posy;
+        return 1;
+      }
+      else if(gui->form_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
+      {
+        // we start the form dragging
+        gui->form_dragging = TRUE;
+        gui->dx = gpt->points[0] - gui->posx;
+        gui->dy = gpt->points[1] - gui->posy;
+        return 1;
+      }
+      else if(gui->feather_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
+      {
+        _change_size(form, gui, module, index, 1.02f, DT_MASKS_INCREMENT_SCALE);
+      }
+    }
   }
-  else if(gui->creation && (which == 3))
+
+  else if(gui->creation && which == 3)
   {
     dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
     dt_masks_iop_update(module);
 
     return 1;
   }
-  else if(gui->creation && which == 1
-          && ((dt_modifier_is(state, GDK_CONTROL_MASK | GDK_SHIFT_MASK))
-              || dt_modifier_is(state, GDK_SHIFT_MASK)))
-  {
-    // set some absolute or relative position for the source of the clone mask
-    if(form->type & DT_MASKS_CLONE) dt_masks_set_source_pos_initial_state(gui, state, pzx, pzy);
 
-    return 1;
-  }
-  else if(gui->creation)
-  {
-    dt_iop_module_t *crea_module = gui->creation_module;
-    // we create the circle
-    dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)(malloc(sizeof(dt_masks_point_circle_t)));
-
-    // we change the center value
-    const float wd = darktable.develop->preview_pipe->backbuf_width;
-    const float ht = darktable.develop->preview_pipe->backbuf_height;
-    float pts[2] = { pzx * wd, pzy * ht };
-    dt_dev_distort_backtransform(darktable.develop, pts, 1);
-    circle->center[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
-    circle->center[1] = pts[1] / darktable.develop->preview_pipe->iheight;
-
-    if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
-    {
-      circle->radius = dt_conf_get_float("plugins/darkroom/spots/circle_size");
-      circle->border = dt_conf_get_float("plugins/darkroom/spots/circle_border");
-
-      // calculate the source position
-      if(form->type & DT_MASKS_CLONE)
-      {
-        dt_masks_set_source_pos_initial_value(gui, DT_MASKS_CIRCLE, form, pzx, pzy);
-      }
-      else
-      {
-        // not used by regular masks
-        form->source[0] = form->source[1] = 0.0f;
-      }
-    }
-    else
-    {
-      circle->radius = dt_conf_get_float("plugins/darkroom/masks/circle/size");
-      circle->border = dt_conf_get_float("plugins/darkroom/masks/circle/border");
-      // not used for masks
-      form->source[0] = form->source[1] = 0.0f;
-    }
-    form->points = g_list_append(form->points, circle);
-    dt_masks_gui_form_save_creation(darktable.develop, crea_module, form, gui);
-
-    if(crea_module)
-    {
-      // we save the move
-
-      dt_masks_set_edit_mode(crea_module, DT_MASKS_EDIT_FULL);
-      dt_masks_iop_update(crea_module);
-      dt_dev_masks_selection_change(darktable.develop, crea_module, form->formid, TRUE);
-      gui->creation_module = NULL;
-    }
-    else
-    {
-      // we select the new form
-      dt_dev_masks_selection_change(darktable.develop, NULL, form->formid, TRUE);
-    }
-
-    // if we draw a clone circle, we start now the source dragging
-    if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
-    {
-      dt_masks_form_t *grp = darktable.develop->form_visible;
-      if(!grp || !(grp->type & DT_MASKS_GROUP)) return 1;
-      int pos3 = 0, pos2 = -1;
-      for(GList *fs = grp->points; fs; fs = g_list_next(fs))
-      {
-        dt_masks_point_group_t *pt = (dt_masks_point_group_t *)fs->data;
-        if(pt->formid == form->formid)
-        {
-          pos2 = pos3;
-          break;
-        }
-        pos3++;
-      }
-      if(pos2 < 0) return 1;
-      dt_masks_form_gui_t *gui2 = darktable.develop->form_gui;
-      if(!gui2) return 1;
-      if(form->type & DT_MASKS_CLONE)
-        gui2->source_dragging = TRUE;
-      else
-        gui2->form_dragging = TRUE;
-      gui2->group_selected = pos2;
-      gui2->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
-      gui2->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
-      gui2->dx = 0.0;
-      gui2->dy = 0.0;
-      gui2->scrollx = pzx;
-      gui2->scrolly = pzy;
-      gui2->form_selected = TRUE; // we also want to be selected after button released
-
-      dt_masks_select_form(module, dt_masks_get_from_id(darktable.develop, form->formid));
-    }
-    return 1;
-  }
   return 0;
 }
 
@@ -822,13 +849,13 @@ static int _circle_get_points_border(dt_develop_t *dev, struct dt_masks_form_t *
                                      const dt_iop_module_t *module)
 {
   dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
-  float x = 0.0f, y = 0.0f;
-  x = circle->center[0], y = circle->center[1];
+  float x = circle->center[0];
+  float y = circle->center[1];
   if(source)
   {
-    float xs = form->source[0], ys = form->source[1];
-    return _circle_get_points_source(dev, x, y, xs, ys, circle->radius, circle->radius, 0, points, points_count,
-                                     module);
+    float xs = form->source[0];
+    float ys = form->source[1];
+    return _circle_get_points_source(dev, x, y, xs, ys, circle->radius, circle->radius, 0, points, points_count, module);
   }
   else
   {
