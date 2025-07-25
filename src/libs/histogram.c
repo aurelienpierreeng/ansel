@@ -788,8 +788,16 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, cairo_t *cr, const int w
   {
     const size_t stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, HISTOGRAM_BINS);
     cairo_surface_t *background = cairo_image_surface_create_for_data(image, CAIRO_FORMAT_ARGB32, HISTOGRAM_BINS, HISTOGRAM_BINS, stride);
-    cairo_translate(cr, (double)(width - height) / 2., 0.);
-    cairo_scale(cr, (double)height / HISTOGRAM_BINS, (double)height / HISTOGRAM_BINS);
+    if (width > height)
+    {
+      cairo_translate(cr, (double)(width - height) / 2., 0.);
+      cairo_scale(cr, (double)height / HISTOGRAM_BINS, (double)height / HISTOGRAM_BINS);
+    }
+    else
+    {
+      cairo_translate(cr, 0., (double)(height - width) / 2.);
+      cairo_scale(cr, (double)width / HISTOGRAM_BINS, (double)width / HISTOGRAM_BINS);
+    }
 
     const double radius = (float)(HISTOGRAM_BINS - 1) / 2 - DT_PIXEL_APPLY_DPI(1.);
     const double x_center = (float)(HISTOGRAM_BINS - 1) / 2;
