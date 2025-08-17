@@ -34,7 +34,7 @@
                   cairo_translate(cr, x_offset, y_offset);                                   \
                   cairo_matrix_t matrix;                                                     \
                   cairo_get_matrix(cr, &matrix);                                             \
-                  cairo_set_line_width(cr, 1. / hypot(matrix.xx, matrix.yy)); }
+                  cairo_set_line_width(cr, line_scaling / hypot(matrix.xx, matrix.yy)); }
 
 #define FINISH { cairo_identity_matrix(cr); \
                  cairo_restore(cr); }
@@ -313,9 +313,9 @@ void dtgtk_cairo_paint_store(cairo_t *cr, gint x, gint y, gint w, gint h, gint f
 
 void dtgtk_cairo_paint_switch(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
-  PREAMBLE(1, 1, 0, 0)
+  PREAMBLE(1, 2, 0, 0)
 
-  cairo_arc(cr, 0.5, 0.5, 0.46, (-50 * 3.145 / 180), (230 * 3.145 / 180));
+  cairo_arc(cr, 0.5, 0.5, 0.46, (-50 * M_PI / 180), (230 * M_PI / 180));
   cairo_move_to(cr, 0.5, 0.0);
   cairo_line_to(cr, 0.5, 0.5);
   cairo_stroke(cr);
@@ -325,9 +325,9 @@ void dtgtk_cairo_paint_switch(cairo_t *cr, gint x, gint y, gint w, gint h, gint 
 
 void dtgtk_cairo_paint_switch_inactive(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
-  PREAMBLE(1, .3f, 0, 0)
+  PREAMBLE(1, 1, 0, 0)
 
-  cairo_arc(cr, 0.5, 0.5, 0.46, (-50 * 3.145 / 180), (230 * 3.145 / 180));
+  cairo_arc(cr, 0.5, 0.5, 0.46, (-50 * M_PI / 180), (230 * M_PI / 180));
   cairo_move_to(cr, 0.5, 0.0);
   cairo_line_to(cr, 0.5, 0.5);
   cairo_stroke(cr);
