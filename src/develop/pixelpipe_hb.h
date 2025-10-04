@@ -154,8 +154,7 @@ typedef struct dt_dev_pixelpipe_t
   // backbuffer (output)
   void *backbuf;
   size_t backbuf_width, backbuf_height;
-  float backbuf_scale;
-  float backbuf_zoom_x, backbuf_zoom_y;
+
   uint64_t backbuf_hash;
   dt_pthread_mutex_t backbuf_mutex, busy_mutex;
   // output buffer (for display)

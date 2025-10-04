@@ -320,42 +320,6 @@ static dt_iop_colorreconstruct_bilateral_frozen_t *dt_iop_colorreconstruct_bilat
   return bf;
 }
 
-static dt_iop_colorreconstruct_bilateral_t *dt_iop_colorreconstruct_bilateral_thaw(dt_iop_colorreconstruct_bilateral_frozen_t *bf)
-{
-  if(!bf) return NULL;
-
-  dt_iop_colorreconstruct_bilateral_t *b = (dt_iop_colorreconstruct_bilateral_t *)malloc(sizeof(dt_iop_colorreconstruct_bilateral_t));
-  if(!b)
-  {
-    fprintf(stderr, "[color reconstruction] not able to allocate buffer (e)\n");
-    return NULL;
-  }
-
-  b->size_x = bf->size_x;
-  b->size_y = bf->size_y;
-  b->size_z = bf->size_z;
-  b->width = bf->width;
-  b->height = bf->height;
-  b->x = bf->x;
-  b->y = bf->y;
-  b->scale = bf->scale;
-  b->sigma_s = bf->sigma_s;
-  b->sigma_r = bf->sigma_r;
-  b->buf = dt_alloc_align(sizeof(dt_iop_colorreconstruct_Lab_t) * b->size_x * b->size_y * b->size_z);
-  if(b->buf && bf->buf)
-  {
-    memcpy(b->buf, bf->buf, sizeof(dt_iop_colorreconstruct_Lab_t) * b->size_x * b->size_y * b->size_z);
-  }
-  else
-  {
-    fprintf(stderr, "[color reconstruction] not able to allocate buffer (f)\n");
-    dt_iop_colorreconstruct_bilateral_free(b);
-    return NULL;
-  }
-
-  return b;
-}
-
 
 static void dt_iop_colorreconstruct_bilateral_splat(dt_iop_colorreconstruct_bilateral_t *b, const float *const in, const float threshold,
                                                     dt_iop_colorreconstruct_precedence_t precedence, const float *params)
@@ -606,47 +570,10 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   const dt_aligned_pixel_t params = { hue, M_PI*M_PI/8, 0.0f, 0.0f };
 
   dt_iop_colorreconstruct_bilateral_t *b;
-  dt_iop_colorreconstruct_bilateral_frozen_t *can = NULL;
 
-  // color reconstruction often involves a massive spatial blur of the bilateral grid. this typically requires
-  // more or less the whole image to contribute to the grid. In pixelpipe FULL we can not rely on this
-  // as the pixelpipe might only see part of the image (region of interest). Therefore we "steal" the bilateral grid
-  // of the preview pipe if needed. However, the grid of the preview pipeline is coarser and may lead
-  // to other artifacts so we only want to use it when necessary. The threshold for data->spatial has been selected
-  // arbitrarily.
-  if(sigma_s > DT_COLORRECONSTRUCT_SPATIAL_APPROX
-     && self->dev->gui_attached
-     && g
-     && (piece->pipe->type & DT_DEV_PIXELPIPE_FULL) == DT_DEV_PIXELPIPE_FULL)
-  {
-    // check how far we are zoomed-in
-    dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-    int closeup = dt_control_get_dev_closeup();
-    const float min_scale = dt_dev_get_zoom_scale(self->dev, DT_ZOOM_FIT, 1<<closeup, 0);
-    const float cur_scale = dt_dev_get_zoom_scale(self->dev, zoom, 1<<closeup, 0);
-
-    // if we are zoomed in more than just a little bit, we try to use the canned grid of the preview pipeline
-    if(cur_scale > 1.05f * min_scale)
-    {
-      if(!dt_dev_sync_pixelpipe_hash(self->dev, piece->pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, &self->gui_lock, &g->hash))
-        dt_control_log(_("inconsistent output"));
-
-      dt_iop_gui_enter_critical_section(self);
-      can = g->can;
-      dt_iop_gui_leave_critical_section(self);
-    }
-  }
-
-  if(can)
-  {
-    b = dt_iop_colorreconstruct_bilateral_thaw(can);
-  }
-  else
-  {
-    b = dt_iop_colorreconstruct_bilateral_init(roi_in, 1.f, sigma_s, sigma_r);
-    dt_iop_colorreconstruct_bilateral_splat(b, in, data->threshold, data->precedence, params);
-    dt_iop_colorreconstruct_bilateral_blur(b);
-  }
+  b = dt_iop_colorreconstruct_bilateral_init(roi_in, 1.f, sigma_s, sigma_r);
+  dt_iop_colorreconstruct_bilateral_splat(b, in, data->threshold, data->precedence, params);
+  dt_iop_colorreconstruct_bilateral_blur(b);
 
   if(!b) goto error;
 
@@ -843,95 +770,6 @@ static dt_iop_colorreconstruct_bilateral_frozen_t *dt_iop_colorreconstruct_bilat
   return bf;
 }
 
-static dt_iop_colorreconstruct_bilateral_cl_t *dt_iop_colorreconstruct_bilateral_thaw_cl(dt_iop_colorreconstruct_bilateral_frozen_t *bf,
-                                                                                         const int devid,
-                                                                                         dt_iop_colorreconstruct_global_data_t *global)
-{
-  if(!bf || !bf->buf) return NULL;
-
-  int blocksizex, blocksizey;
-
-  dt_opencl_local_buffer_t locopt
-    = (dt_opencl_local_buffer_t){ .xoffset = 0, .xfactor = 1, .yoffset = 0, .yfactor = 1,
-                                  .cellsize = 4 * sizeof(float) + sizeof(int), .overhead = 0,
-                                  .sizex = 1 << 6, .sizey = 1 << 6 };
-
-  if(dt_opencl_local_buffer_opt(devid, global->kernel_colorreconstruct_splat, &locopt))
-  {
-    blocksizex = locopt.sizex;
-    blocksizey = locopt.sizey;
-  }
-  else
-    blocksizex = blocksizey = 1;
-
-  if(blocksizex * blocksizey < 16 * 16)
-  {
-    dt_print(DT_DEBUG_OPENCL,
-             "[opencl_colorreconstruction] device %d does not offer sufficient resources to run bilateral grid\n",
-             devid);
-    return NULL;
-  }
-
-  dt_iop_colorreconstruct_bilateral_cl_t *b = (dt_iop_colorreconstruct_bilateral_cl_t *)malloc(sizeof(dt_iop_colorreconstruct_bilateral_cl_t));
-  if(!b)
-  {
-    dt_print(DT_DEBUG_OPENCL, "[opencl_colorreconstruction] not able to allocate host buffer (f)\n");
-    return NULL;
-  }
-
-  b->devid = devid;
-  b->blocksizex = blocksizex;
-  b->blocksizey = blocksizey;
-  b->global = global;
-  b->size_x = bf->size_x;
-  b->size_y = bf->size_y;
-  b->size_z = bf->size_z;
-  b->width = bf->width;
-  b->height = bf->height;
-  b->x = bf->x;
-  b->y = bf->y;
-  b->scale = bf->scale;
-  b->sigma_s = bf->sigma_s;
-  b->sigma_r = bf->sigma_r;
-  b->dev_grid = NULL;
-  b->dev_grid_tmp = NULL;
-
-  // alloc grid buffer:
-  b->dev_grid
-      = dt_opencl_alloc_device_buffer(b->devid, sizeof(float) * 4 * b->size_x * b->size_y * b->size_z);
-  if(!b->dev_grid)
-  {
-    dt_print(DT_DEBUG_OPENCL, "[opencl_colorreconstruction] not able to allocate device buffer (g)\n");
-    dt_iop_colorreconstruct_bilateral_free_cl(b);
-    return NULL;
-  }
-
-  // alloc temporary grid buffer
-  b->dev_grid_tmp
-      = dt_opencl_alloc_device_buffer(b->devid, sizeof(float) * 4 * b->size_x * b->size_y * b->size_z);
-  if(!b->dev_grid_tmp)
-  {
-    dt_print(DT_DEBUG_OPENCL, "[opencl_colorreconstruction] not able to allocate device buffer (h)\n");
-    dt_iop_colorreconstruct_bilateral_free_cl(b);
-    return NULL;
-  }
-
-  if(bf->buf)
-  {
-    // write bilateral grid from host buffer to device memory (blocking)
-    cl_int err = dt_opencl_write_buffer_to_device(b->devid, bf->buf, b->dev_grid, 0,
-                                    bf->size_x * bf->size_y * bf->size_z * sizeof(dt_iop_colorreconstruct_Lab_t), CL_TRUE);
-    if(err != CL_SUCCESS)
-    {
-      dt_print(DT_DEBUG_OPENCL,
-           "[opencl_colorreconstruction] can not write bilateral grid to device %d\n", b->devid);
-      dt_iop_colorreconstruct_bilateral_free_cl(b);
-      return NULL;
-    }
-  }
-
-  return b;
-}
 
 static cl_int dt_iop_colorreconstruct_bilateral_splat_cl(dt_iop_colorreconstruct_bilateral_cl_t *b, cl_mem in, const float threshold,
                                                          dt_iop_colorreconstruct_precedence_t precedence, const float *params)
@@ -1067,46 +905,13 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   cl_int err = -666;
 
   dt_iop_colorreconstruct_bilateral_cl_t *b;
-  dt_iop_colorreconstruct_bilateral_frozen_t *can = NULL;
 
-  // see process() for more details on how we transfer a bilateral grid from the preview to the full pipeline
-  if(sigma_s > DT_COLORRECONSTRUCT_SPATIAL_APPROX
-     && self->dev->gui_attached
-     && g
-     && (piece->pipe->type & DT_DEV_PIXELPIPE_FULL) == DT_DEV_PIXELPIPE_FULL)
-  {
-    // check how far we are zoomed-in
-    dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-    int closeup = dt_control_get_dev_closeup();
-    const float min_scale = dt_dev_get_zoom_scale(self->dev, DT_ZOOM_FIT, 1<<closeup, 0);
-    const float cur_scale = dt_dev_get_zoom_scale(self->dev, zoom, 1<<closeup, 0);
-
-    // if we are zoomed in more than just a little bit, we try to use the canned grid of the preview pipeline
-    if(cur_scale > 1.05f * min_scale)
-    {
-      if(!dt_dev_sync_pixelpipe_hash(self->dev, piece->pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, &self->gui_lock, &g->hash))
-        dt_control_log(_("inconsistent output"));
-
-      dt_iop_gui_enter_critical_section(self);
-      can = g->can;
-      dt_iop_gui_leave_critical_section(self);
-    }
-  }
-
-  if(can)
-  {
-    b = dt_iop_colorreconstruct_bilateral_thaw_cl(can, piece->pipe->devid, gd);
-    if(!b) goto error;
-  }
-  else
-  {
-    b = dt_iop_colorreconstruct_bilateral_init_cl(piece->pipe->devid, gd, roi_in, 1.f, sigma_s, sigma_r);
-    if(!b) goto error;
-    err = dt_iop_colorreconstruct_bilateral_splat_cl(b, dev_in, d->threshold, d->precedence, params);
-    if(err != CL_SUCCESS) goto error;
-    err = dt_iop_colorreconstruct_bilateral_blur_cl(b);
-    if(err != CL_SUCCESS) goto error;
-  }
+  b = dt_iop_colorreconstruct_bilateral_init_cl(piece->pipe->devid, gd, roi_in, 1.f, sigma_s, sigma_r);
+  if(!b) goto error;
+  err = dt_iop_colorreconstruct_bilateral_splat_cl(b, dev_in, d->threshold, d->precedence, params);
+  if(err != CL_SUCCESS) goto error;
+  err = dt_iop_colorreconstruct_bilateral_blur_cl(b);
+  if(err != CL_SUCCESS) goto error;
 
   err = dt_iop_colorreconstruct_bilateral_slice_cl(b, dev_in, dev_out, d->threshold, roi_in, 1.f);
   if(err != CL_SUCCESS) goto error;

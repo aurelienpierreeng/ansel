@@ -1014,7 +1014,6 @@ int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double
   dt_masks_form_t *form = darktable.develop->form_visible;
   float pzx = 0.0f, pzy = 0.0f;
 
-  dt_dev_get_pointer_zoom_pos(darktable.develop, x, y, &pzx, &pzy);
   pzx += 0.5f;
   pzy += 0.5f;
 
@@ -1050,9 +1049,6 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
   dt_masks_form_t *form = darktable.develop->form_visible;
   dt_masks_form_gui_t *gui = darktable.develop->form_gui;
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_zoom_pos(darktable.develop, x, y, &pzx, &pzy);
-  pzx += 0.5f;
-  pzy += 0.5f;
 
   int ret = 0;
   if(form->functions)
@@ -1076,7 +1072,7 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
   dt_masks_form_t *form = darktable.develop->form_visible;
   dt_masks_form_gui_t *gui = darktable.develop->form_gui;
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_zoom_pos(darktable.develop, x, y, &pzx, &pzy);
+  dt_dev_get_pointer_zoom_pos(darktable.develop, x, y);
   pzx += 0.5f;
   pzy += 0.5f;
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);
@@ -1095,7 +1091,7 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
   dt_masks_form_t *form = darktable.develop->form_visible;
   dt_masks_form_gui_t *gui = darktable.develop->form_gui;
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_zoom_pos(darktable.develop, x, y, &pzx, &pzy);
+  dt_dev_get_pointer_zoom_pos(darktable.develop, x, y);
   pzx += 0.5f;
   pzy += 0.5f;
 
@@ -1121,22 +1117,11 @@ void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, in
   float wd = dev->preview_pipe->backbuf_width;
   float ht = dev->preview_pipe->backbuf_height;
   if(wd < 1.0 || ht < 1.0) return;
-  float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery, &pzx, &pzy);
-  pzx += 0.5f;
-  pzy += 0.5f;
-  float zoom_y = dt_control_get_dev_zoom_y();
-  float zoom_x = dt_control_get_dev_zoom_x();
-  dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  int closeup = dt_control_get_dev_closeup();
-  float zoom_scale = dt_dev_get_zoom_scale(dev, zoom, 1<<closeup, 1);
+  dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery);
+  float zoom_scale = 1.f;
 
   cairo_save(cr);
   cairo_set_source_rgb(cr, .3, .3, .3);
-
-  cairo_translate(cr, width / 2.0, height / 2.0f);
-  cairo_scale(cr, zoom_scale, zoom_scale);
-  cairo_translate(cr, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
 
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 

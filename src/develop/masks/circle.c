@@ -449,10 +449,7 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, float pzx,
   }
   else if(!gui->creation)
   {
-    const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-    const int closeup = dt_control_get_dev_closeup();
-    const float zoom_scale = dt_dev_get_zoom_scale(darktable.develop, zoom, 1<<closeup, 1);
-    const float as = DT_PIXEL_APPLY_DPI(5) / zoom_scale;
+    const float as = DT_PIXEL_APPLY_DPI(5);
     int in, inb, near, ins;
     float dist;
     _circle_get_distance(pzx * darktable.develop->preview_pipe->backbuf_width,
@@ -698,13 +695,6 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
       // we get the circle center
       float pzx = gui->posx;
       float pzy = gui->posy;
-      if((pzx == -1.f && pzy == -1.f) || gui->mouse_leaved_center)
-      {
-        const float zoom_x = dt_control_get_dev_zoom_x();
-        const float zoom_y = dt_control_get_dev_zoom_y();
-        pzx = (.5f + zoom_x) * darktable.develop->preview_pipe->backbuf_width;
-        pzy = (.5f + zoom_y) * darktable.develop->preview_pipe->backbuf_height;
-      }
       float pts[2] = { pzx, pzy };
       dt_dev_distort_backtransform(darktable.develop, pts, 1);
       float x = pts[0] / darktable.develop->preview_pipe->iwidth;

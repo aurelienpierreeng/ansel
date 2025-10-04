@@ -1508,7 +1508,7 @@ void extract_color_checker(const float *const restrict in, float *const restrict
 {
   float *const restrict patches = dt_alloc_sse_ps(g->checker->patches * 4);
   if(patches == NULL) return;
-  
+
   dt_simd_memcpy(in, out, (size_t)roi_in->width * roi_in->height * 4);
 
   extraction_result_t extraction_result = _extract_patches(out, roi_in, g, RGB_to_XYZ, XYZ_to_CAM,
@@ -2197,10 +2197,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   const float ht = dev->preview_pipe->backbuf_height;
   if(wd == 0.f || ht == 0.f) return 0;
 
-  float pzx, pzy;
-  dt_dev_get_pointer_zoom_pos(dev, x, y, &pzx, &pzy);
-  pzx += 0.5f;
-  pzy += 0.5f;
+  float pzx = 0.f, pzy = 0.f;
+  dt_dev_get_pointer_zoom_pos(dev, x, y);
   pzx *= wd;
   pzy *= ht;
 
@@ -2289,10 +2287,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   // cursor is not on a node, abort
   if(!g->is_cursor_close) return 0;
 
-  float pzx, pzy;
-  dt_dev_get_pointer_zoom_pos(dev, x, y, &pzx, &pzy);
-  pzx += 0.5f;
-  pzy += 0.5f;
+  float pzx = 0.f, pzy = 0.f;
+  dt_dev_get_pointer_zoom_pos(dev, x, y);
   pzx *= wd;
   pzy *= ht;
 
@@ -2321,10 +2317,8 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   const float ht = dev->preview_pipe->backbuf_height;
   if(wd == 0.f || ht == 0.f) return 0;
 
-  float pzx, pzy;
-  dt_dev_get_pointer_zoom_pos(dev, x, y, &pzx, &pzy);
-  pzx += 0.5f;
-  pzy += 0.5f;
+  float pzx = 0.f, pzy = 0.f;
+  dt_dev_get_pointer_zoom_pos(dev, x, y);
   pzx *= wd;
   pzy *= ht;
 
@@ -2351,19 +2345,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   // Rescale and shift Cairo drawing coordinates
   dt_develop_t *dev = self->dev;
-  const float wd = dev->preview_pipe->backbuf_width;
-  const float ht = dev->preview_pipe->backbuf_height;
-  if(wd == 0.f || ht == 0.f) return;
+  if(dt_dev_scale_roi(dev, cr, width, height)) return;
 
-  const float zoom_y = dt_control_get_dev_zoom_y();
-  const float zoom_x = dt_control_get_dev_zoom_x();
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float zoom_scale = dt_dev_get_zoom_scale(dev, zoom, 1<<closeup, 1);
-  cairo_translate(cr, width / 2.0, height / 2.0);
-  cairo_scale(cr, zoom_scale, zoom_scale);
-  cairo_translate(cr, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
-
+  const float zoom_scale = dt_dev_get_zoom_scale(dev,  1);
   cairo_set_line_width(cr, 2.0 / zoom_scale);
   const double origin = 9. / zoom_scale;
   const double destination = 18. / zoom_scale;

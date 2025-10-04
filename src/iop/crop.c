@@ -109,11 +109,6 @@ typedef struct dt_iop_crop_gui_data_t
 
   float wd;
   float ht;
-  dt_dev_zoom_t zoom;
-  int closeup;
-  float zoom_scale;
-  float zoom_x;
-  float zoom_y;
 
   int cropping;
   int editing;
@@ -1288,32 +1283,24 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   g->wd = dev->preview_pipe->backbuf_width;
   g->ht = dev->preview_pipe->backbuf_height;
-  g->zoom_y = dt_control_get_dev_zoom_y();
-  g->zoom_x = dt_control_get_dev_zoom_x();
-  g->zoom = dt_control_get_dev_zoom();
-  g->closeup = dt_control_get_dev_closeup();
-  g->zoom_scale = dt_dev_get_zoom_scale(dev, g->zoom, 1 << g->closeup, 1);
+  float zoom_scale = dt_dev_get_zoom_scale(dev,  1);
 
-  cairo_translate(cr, width / 2.0, height / 2.0);
-  cairo_scale(cr, g->zoom_scale, g->zoom_scale);
-  cairo_translate(cr, -.5f * g->wd - g->zoom_x * g->wd, -.5f * g->ht - g->zoom_y * g->ht);
+  dt_dev_scale_roi(dev, cr, width, height);
 
   // draw crop area guides
   if(g->editing)
-    dt_guides_draw(cr, g->clip_x * g->wd, g->clip_y * g->ht, g->clip_w * g->wd, g->clip_h * g->ht, g->zoom_scale);
+    dt_guides_draw(cr, g->clip_x * g->wd, g->clip_y * g->ht, g->clip_w * g->wd, g->clip_h * g->ht, zoom_scale);
   else
-    dt_guides_draw(cr, 0, 0, g->wd, g->ht, g->zoom_scale);
+    dt_guides_draw(cr, 0, 0, g->wd, g->ht, zoom_scale);
 
   if(!g->editing) return;
 
-  double dashes = DT_PIXEL_APPLY_DPI(5.0) / g->zoom_scale;
+  double dashes = DT_PIXEL_APPLY_DPI(5.0) / zoom_scale;
   double border_width = dashes / 2.;
 
   // draw cropping window
-  float pzx, pzy;
-  dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery, &pzx, &pzy);
-  pzx += 0.5f;
-  pzy += 0.5f;
+  float pzx = 0.f, pzy = 0.f;
+  dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery);
 
   cairo_set_line_width(cr, border_width);
 
@@ -1344,7 +1331,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     PangoRectangle ext;
     PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
     pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
-    pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(16) * PANGO_SCALE / g->zoom_scale);
+    pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(16) * PANGO_SCALE / zoom_scale);
     layout = pango_cairo_create_layout(cr);
     pango_layout_set_font_description(layout, desc);
 
@@ -1355,8 +1342,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     pango_layout_set_text(layout, dimensions, -1);
     pango_layout_get_pixel_extents(layout, NULL, &ext);
     const float text_w = ext.width;
-    const float text_h = DT_PIXEL_APPLY_DPI(16 + 2) / g->zoom_scale;
-    const float margin = DT_PIXEL_APPLY_DPI(6) / g->zoom_scale;
+    const float text_h = DT_PIXEL_APPLY_DPI(16 + 2) / zoom_scale;
+    const float margin = DT_PIXEL_APPLY_DPI(6) / zoom_scale;
     float xp = (g->clip_x + g->clip_w * .5f) * g->wd - text_w * .5f;
     float yp = (g->clip_y + g->clip_h * .5f) * g->ht - text_h * .5f;
 
@@ -1376,9 +1363,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     g_object_unref(layout);
   }
 
-  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.0) / g->zoom_scale);
+  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.0) / zoom_scale);
   dt_draw_set_color_overlay(cr, FALSE, 1.0);
-  const int border = DT_PIXEL_APPLY_DPI(30.0) / g->zoom_scale;
+  const int border = DT_PIXEL_APPLY_DPI(30.0) / zoom_scale;
 
   const _grab_region_t grab = g->cropping ? g->cropping : _gui_get_grab(pzx, pzy, g, border, g->wd, g->ht);
 
@@ -1407,12 +1394,11 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
   if(!g->editing) return 0;
 
-  float pzx, pzy;
-  dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
-  pzx += 0.5f;
-  pzy += 0.5f;
+  float pzx = 0.f, pzy = 0.f;
+  dt_dev_get_pointer_zoom_pos(self->dev, x, y);
+  float zoom_scale = 1.f;
 
-  const _grab_region_t grab = _gui_get_grab(pzx, pzy, g, DT_PIXEL_APPLY_DPI(30.0) / g->zoom_scale, g->wd, g->ht);
+  const _grab_region_t grab = _gui_get_grab(pzx, pzy, g, DT_PIXEL_APPLY_DPI(30.0) / zoom_scale, g->wd, g->ht);
 
   _set_max_clip(self);
 
@@ -1580,8 +1566,9 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 
   if(which == 1)
   {
-    float pzx, pzy;
-    dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
+    float pzx = 0.f, pzy = 0.f;
+    dt_dev_get_pointer_zoom_pos(self->dev, x, y);
+    float zoom_scale = 1.f;
 
     g->button_down_x = x;
     g->button_down_y = y;
@@ -1604,7 +1591,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     const float bzx = pzx + .5f;
     const float bzy = pzy + .5f;
 
-    g->cropping = _gui_get_grab(bzx, bzy, g, DT_PIXEL_APPLY_DPI(30.0) / g->zoom_scale, g->wd, g->ht);
+    g->cropping = _gui_get_grab(bzx, bzy, g, DT_PIXEL_APPLY_DPI(30.0) / zoom_scale, g->wd, g->ht);
 
     if(g->cropping == GRAB_CENTER)
     {

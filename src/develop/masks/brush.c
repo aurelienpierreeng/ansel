@@ -2163,8 +2163,8 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       if((gui->posx == -1.0f && gui->posy == -1.0f)
          || gui->mouse_leaved_center)
       {
-        xpos = (.5f + dt_control_get_dev_zoom_x()) * darktable.develop->preview_pipe->backbuf_width;
-        ypos = (.5f + dt_control_get_dev_zoom_y()) * darktable.develop->preview_pipe->backbuf_height;
+        xpos = 0.f;
+        ypos = 0.f;
       }
       else
       {

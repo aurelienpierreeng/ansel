@@ -296,8 +296,8 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
   // transform aabb back to roi_in
 
   // this aabb contains all valid points (thus the -1)
-  int32_t p[2], o[2],
-      aabb[4] = { roi_out->x, roi_out->y, roi_out->x + roi_out->width - 1, roi_out->y + roi_out->height - 1 };
+  int32_t p[2], o[2];
+  int32_t aabb[4] = { roi_out->x, roi_out->y, roi_out->x + roi_out->width - 1, roi_out->y + roi_out->height - 1 };
   int32_t aabb_in[4] = { INT_MAX, INT_MAX, INT_MIN, INT_MIN };
   for(int c = 0; c < 4; c++)
   {
@@ -318,7 +318,8 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
   roi_in->height = aabb_in[3] - aabb_in[1] + 1;
 
   // sanity check.
-  float w = piece->buf_in.width * roi_out->scale, h = piece->buf_in.height * roi_out->scale;
+  float w = piece->buf_in.width * roi_out->scale;
+  float h = piece->buf_in.height * roi_out->scale;
   roi_in->x = CLAMP(roi_in->x, 0, (int)floorf(w));
   roi_in->y = CLAMP(roi_in->y, 0, (int)floorf(h));
   roi_in->width = CLAMP(roi_in->width, 1, (int)ceilf(w) - roi_in->x);

@@ -144,13 +144,35 @@ typedef struct dt_develop_t
   int32_t gui_attached; // != 0 if the gui should be notified of changes in hist stack and modules should be
                         // gui_init'ed.
   int exit; // set to 1 to close background darkroom pipeline threads
-  int32_t image_invalid_cnt;
   uint32_t average_delay;
   uint32_t preview_average_delay;
   struct dt_iop_module_t *gui_module; // this module claims gui expose/event callbacks.
 
-  // width, height: dimensions of window
+  // darkroom border size: ISO 12646 borders or user-defined borders
+  int32_t border_size;
+
+  // Those are the darkroom main widget size, aka max paintable area.
+  // This size is allocated by Gtk from the window size minus all panels.
+  // It is NOT the size of the backbuffer/ROI.
+  int32_t orig_width, orig_height;
+
+  // width = orig_width - 2 * border_size,
+  // height = orig_height - 2 * border_size,
+  // aka the surface actually covered by an image backbuffer (ROI)
+  // set by `dt_dev_configure()`
   int32_t width, height;
+
+  // natural scaling = MIN(dev->width / dev->pipe->processed_width, dev->height / dev->pipe->processed_height)
+  // aka ensure that image fits into widget minus margins/borders.
+  float natural_scale;
+
+  // User-defined scaling factor, related to GUI zoom.
+  // Applies on top of natural scale
+  float scaling;
+
+  // Relative coordinates of the center of the ROI, expressed with
+  // regard to the complete image.
+  float x, y;
 
   // image processing pipeline with caching
   struct dt_dev_pixelpipe_t *pipe, *preview_pipe;
@@ -195,14 +217,6 @@ typedef struct dt_develop_t
   struct dt_masks_form_gui_t *form_gui;
   // all forms to be linked here for cleanup:
   GList *allforms;
-
-  // darkroom border size
-  int32_t border_size;
-
-  // Those are the darkroom main widget size, aka max available size to paint stuff.
-  // They are set by Gtk from the window size minus all panels.
-  // The actual image size has to be smaller or equal.
-  int32_t orig_width, orig_height;
 
   dt_backbuf_t raw_histogram; // backbuf to prepare the raw histogram (before white balance)
   dt_backbuf_t output_histogram;  // backbuf to prepare the display-agnostic output histogram (in the middle of colorout)
@@ -382,11 +396,9 @@ void dt_dev_pixelpipe_resync_preview(dt_develop_t *dev);
 void dt_dev_reprocess_all(dt_develop_t *dev);
 
 void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch);
-void dt_dev_check_zoom_bounds(dt_develop_t *dev, float *zoom_x, float *zoom_y, dt_dev_zoom_t zoom,
-                              int closeup, float *boxw, float *boxh);
-float dt_dev_get_zoom_scale(dt_develop_t *dev, dt_dev_zoom_t zoom, int closeup_factor, int mode);
-void dt_dev_get_pointer_zoom_pos(dt_develop_t *dev, const float px, const float py, float *zoom_x,
-                                 float *zoom_y);
+
+float dt_dev_get_zoom_scale(dt_develop_t *dev, gboolean preview);
+void dt_dev_get_pointer_zoom_pos(dt_develop_t *dev, const float px, const float py);
 
 void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht);
 #define dt_dev_configure(dev, wd, ht) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_configure_real, (dev), (wd), (ht))
@@ -524,6 +536,20 @@ void dt_dev_append_changed_tag(const int32_t imgid);
  * @param processed_height returned computed value
  */
 void dt_dev_get_final_size(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, const int32_t imgid, const int input_width, const int input_height, int *processed_width, int *processed_height);
+
+
+// This needs to run after `dt_dev_pixelpipe_get_roi_out()` so `pipe->processed_width`
+// and `pipe->processed_height` are defined.
+// Natural scale is the rescaling factor such that the full-res pipeline output
+// (real or virtual) fits within darkroom widget area (minus borders/margins)
+float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe);
+
+// Reset darkroom ROI scaling and position
+void dt_dev_reset_roi(dt_develop_t *dev);
+
+// Return TRUE if width/height are invalid or unavailable
+gboolean dt_dev_scale_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height);
+
 
 #ifdef __cplusplus
 }
