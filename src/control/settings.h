@@ -24,14 +24,6 @@
 
 #include <inttypes.h>
 
-typedef enum dt_dev_zoom_t
-{
-  DT_ZOOM_FIT = 0,
-  DT_ZOOM_FILL = 1,
-  DT_ZOOM_1 = 2,
-  DT_ZOOM_FREE = 3
-} dt_dev_zoom_t;
-
 typedef char dt_dev_operation_t[20];
 
 #define DEV_NUM_OP_PARAMS 10
@@ -59,4 +51,3 @@ typedef enum dt_lib_filter_t
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

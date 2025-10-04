@@ -476,15 +476,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   const float wd = dev->preview_pipe->backbuf_width;
   const float ht = dev->preview_pipe->backbuf_height;
-  const float zoom_y = dt_control_get_dev_zoom_y();
-  const float zoom_x = dt_control_get_dev_zoom_x();
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float zoom_scale = dt_dev_get_zoom_scale(dev, zoom, 1<<closeup, 1);
-
-  cairo_translate(cr, width / 2.0, height / 2.0f);
-  cairo_scale(cr, zoom_scale, zoom_scale);
-  cairo_translate(cr, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
+  const float zoom_scale = dt_dev_get_zoom_scale(dev,  1);
+  dt_dev_scale_roi(dev, cr, width, height);
 
   // we get the extremities of the line
   if(g->define == 0)
@@ -567,13 +560,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
 {
   dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float zoom_scale = dt_dev_get_zoom_scale(self->dev, zoom, 1<<closeup, 1);
-  float pzx, pzy;
-  dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
-  pzx += 0.5f;
-  pzy += 0.5f;
+  const float zoom_scale = dt_dev_get_zoom_scale(self->dev,  1);
+  float pzx = 0.f, pzy = 0.f;
+  dt_dev_get_pointer_zoom_pos(self->dev, x, y);
 
   // are we dragging something ?
   if(g->dragging > 0)
@@ -626,10 +615,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
                    uint32_t state)
 {
   dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
-  float pzx, pzy;
-  dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
-  pzx += 0.5f;
-  pzy += 0.5f;
+  float pzx = 0.f, pzy = 0.f;
+  dt_dev_get_pointer_zoom_pos(self->dev, x, y);
 
   if(which == 3)
   {
@@ -660,10 +647,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   dt_iop_graduatednd_params_t *p = (dt_iop_graduatednd_params_t *)self->params;
   if(g->dragging > 0)
   {
-    float pzx, pzy;
-    dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
-    pzx += 0.5f;
-    pzy += 0.5f;
+    dt_dev_get_pointer_zoom_pos(self->dev, x, y);
 
     float r = 0.0, o = 0.0;
     set_grad_from_points(self, g->xa, g->ya, g->xb, g->yb, &r, &o);

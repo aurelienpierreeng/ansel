@@ -319,10 +319,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
   if(g && g->draw_selected_region && g->button_down && self->enabled)
   {
-    float pzx, pzy;
-    dt_dev_get_pointer_zoom_pos(darktable.develop, x, y, &pzx, &pzy);
-    pzx += 0.5f;
-    pzy += 0.5f;
+    float pzx = 0.f, pzy = 0.f;
+    dt_dev_get_pointer_zoom_pos(darktable.develop, x, y);
 
     g->posx_to = pzx * darktable.develop->preview_pipe->backbuf_width;
     g->posy_to = pzy * darktable.develop->preview_pipe->backbuf_height;
@@ -383,10 +381,9 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     }
     else if(which == 1)
     {
-      float pzx, pzy;
-      dt_dev_get_pointer_zoom_pos(darktable.develop, x, y, &pzx, &pzy);
-      pzx += 0.5f;
-      pzy += 0.5f;
+      float pzx = 0.f;
+      float pzy = 0.f;
+      dt_dev_get_pointer_zoom_pos(darktable.develop, x, y);
 
       g->posx_from = g->posx_to = pzx * darktable.develop->preview_pipe->backbuf_width;
       g->posy_from = g->posy_to = pzy * darktable.develop->preview_pipe->backbuf_height;
@@ -409,13 +406,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->posx_from == g->posx_to && g->posy_from == g->posy_to) return;
 
   dt_develop_t *dev = darktable.develop;
-  const float wd = dev->preview_pipe->backbuf_width;
-  const float ht = dev->preview_pipe->backbuf_height;
-  const float zoom_y = dt_control_get_dev_zoom_y();
-  const float zoom_x = dt_control_get_dev_zoom_x();
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float zoom_scale = dt_dev_get_zoom_scale(dev, zoom, 1 << closeup, 1);
+  //const float wd = dev->preview_pipe->backbuf_width;
+  //const float ht = dev->preview_pipe->backbuf_height;
+  const float zoom_scale = dt_dev_get_zoom_scale(dev,  1);
 
   const float posx_from = fmin(g->posx_from, g->posx_to);
   const float posx_to = fmax(g->posx_from, g->posx_to);
@@ -428,7 +421,6 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   cairo_translate(cr, width / 2.0, height / 2.0f);
   cairo_scale(cr, zoom_scale, zoom_scale);
-  cairo_translate(cr, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
 
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 

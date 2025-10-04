@@ -2359,23 +2359,17 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   const float wd = dev->preview_pipe->backbuf_width;
   const float ht = dev->preview_pipe->backbuf_height;
-  const float zoom_y = dt_control_get_dev_zoom_y();
-  const float zoom_x = dt_control_get_dev_zoom_x();
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float zoom_scale = dt_dev_get_zoom_scale(dev, zoom, 1<<closeup, 1);
+  const float zoom_scale = dt_dev_get_zoom_scale(dev,  1);
 
   cairo_translate(cr, width / 2.0, height / 2.0);
   cairo_scale(cr, zoom_scale, zoom_scale);
-  cairo_translate(cr, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
 
   double dashes = DT_PIXEL_APPLY_DPI(5.0) / zoom_scale;
 
   // draw cropping window
-  float pzx, pzy;
-  dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery, &pzx, &pzy);
-  pzx += 0.5f;
-  pzy += 0.5f;
+  float pzx = 0.f, pzy = 0.f;
+  dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery);
+
   if(_iop_clipping_set_max_clip(self))
   {
     cairo_set_source_rgba(cr, .2, .2, .2, .8);
@@ -2757,11 +2751,10 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
   const float wd = self->dev->preview_pipe->backbuf_width;
   const float ht = self->dev->preview_pipe->backbuf_height;
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float zoom_scale = dt_dev_get_zoom_scale(self->dev, zoom, 1<<closeup, 1);
-  float pzx, pzy;
-  dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
+  const float zoom_scale = dt_dev_get_zoom_scale(self->dev,  1);
+  float pzx = 0.f;
+  float pzy = 0.f;
+  dt_dev_get_pointer_zoom_pos(self->dev, x, y);
   pzx += 0.5f;
   pzy += 0.5f;
   _iop_clipping_set_max_clip(self);
@@ -3214,13 +3207,10 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
         g->k_drag = TRUE; // if a keystone point is selected then we start to drag it
       else // if we click to the apply button
       {
-        const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-        const int closeup = dt_control_get_dev_closeup();
-        const float zoom_scale = dt_dev_get_zoom_scale(self->dev, zoom, 1<<closeup, 1);
-        float pzx, pzy;
-        dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
-        pzx += 0.5f;
-        pzy += 0.5f;
+        const float zoom_scale = dt_dev_get_zoom_scale(self->dev,  1);
+        float pzx = 0.f;
+        float pzy = 0.f;
+        dt_dev_get_pointer_zoom_pos(self->dev, x, y);
 
         dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
         const float wp = piece->buf_out.width, hp = piece->buf_out.height;
@@ -3315,8 +3305,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
                   // dragging a border ?
                   if(g->k_selected_segment >= 0)
                   {
-                    dt_dev_get_pointer_zoom_pos(self->dev, x, y, &g->button_down_zoom_x,
-                                                &g->button_down_zoom_y);
+                    dt_dev_get_pointer_zoom_pos(self->dev, x, y);
                     g->button_down_zoom_x += 0.5;
                     g->button_down_zoom_y += 0.5;
                     g->k_drag = TRUE;
@@ -3332,7 +3321,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     {
       g->button_down_x = x;
       g->button_down_y = y;
-      dt_dev_get_pointer_zoom_pos(self->dev, x, y, &g->button_down_zoom_x, &g->button_down_zoom_y);
+      dt_dev_get_pointer_zoom_pos(self->dev, x, y);
       g->button_down_angle = p->angle;
 
       /* update prev clip box with current */

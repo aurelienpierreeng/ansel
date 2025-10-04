@@ -138,12 +138,6 @@ typedef struct dt_control_t
   int32_t keyboard_over_id;
   gboolean lock_cursor_shape;
 
-  // TODO: move these to some darkroom struct
-  // synchronized navigation
-  float dev_zoom_x, dev_zoom_y, dev_zoom_scale;
-  dt_dev_zoom_t dev_zoom;
-  int dev_closeup;
-
   // message log
   int log_pos, log_ack;
   char log_message[DT_CTL_LOG_SIZE][DT_CTL_LOG_MSG_SIZE];
@@ -241,21 +235,6 @@ void dt_control_set_mouse_over_id(int32_t value);
 
 int32_t dt_control_get_keyboard_over_id();
 void dt_control_set_keyboard_over_id(int32_t value);
-
-float dt_control_get_dev_zoom_x();
-void dt_control_set_dev_zoom_x(float value);
-
-float dt_control_get_dev_zoom_y();
-void dt_control_set_dev_zoom_y(float value);
-
-float dt_control_get_dev_zoom_scale();
-void dt_control_set_dev_zoom_scale(float value);
-
-int dt_control_get_dev_closeup();
-void dt_control_set_dev_closeup(int value);
-
-dt_dev_zoom_t dt_control_get_dev_zoom();
-void dt_control_set_dev_zoom(dt_dev_zoom_t value);
 
 #ifdef __cplusplus
 }

@@ -38,6 +38,20 @@ typedef struct dt_lib_navigation_t
   int zoom_w, zoom_h;
 } dt_lib_navigation_t;
 
+typedef enum dt_lib_zoom_t
+{
+  LIB_ZOOM_SMALL = 0,
+  LIB_ZOOM_FIT,
+  LIB_ZOOM_25,
+  LIB_ZOOM_50,
+  LIB_ZOOM_100,
+  LIB_ZOOM_200,
+  LIB_ZOOM_400,
+  LIB_ZOOM_800,
+  LIB_ZOOM_1600,
+  LIB_ZOOM_LAST
+} dt_lib_zoom_t;
+
 
 /* expose function for navigation module */
 static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, gpointer user_data);
@@ -141,14 +155,16 @@ void gui_cleanup(dt_lib_module_t *self)
 
 static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
+  dt_develop_t *dev = darktable.develop;
+  if(!dev->preview_pipe->output_backbuf || dev->image_storage.id != dev->preview_pipe->output_imgid)
+    return TRUE;
+
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
 
   GtkAllocation allocation;
   gtk_widget_get_allocation(widget, &allocation);
   int width = allocation.width, height = allocation.height;
-
-  dt_develop_t *dev = darktable.develop;
 
   /* get the current style */
   cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
@@ -158,171 +174,167 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   gtk_render_background(context, cr, 0, 0, allocation.width, allocation.height);
 
   /* draw navigation image if available */
-  if(dev->preview_pipe->output_backbuf && dev->image_storage.id == dev->preview_pipe->output_imgid)
+  dt_pthread_mutex_t *mutex = &dev->preview_pipe->backbuf_mutex;
+  dt_pthread_mutex_lock(mutex);
+
+  cairo_save(cr);
+
+  const int wd = dev->preview_pipe->output_backbuf_width;
+  const int ht = dev->preview_pipe->output_backbuf_height;
+  const float scale = fminf(width / (float)wd, height / (float)ht);
+
+  const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
+  cairo_surface_t *surface
+      = cairo_image_surface_create_for_data(dev->preview_pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
+
+  cairo_translate(cr, width / 2., height / 2.);
+  cairo_scale(cr, scale, scale);
+  cairo_translate(cr, -wd / 2., -ht / 2.);
+
+  cairo_rectangle(cr, 0, 0, wd, ht);
+  cairo_set_source_surface(cr, surface, 0, 0);
+  cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
+  cairo_fill(cr);
+
+  // draw box where we are
+  // avoid numerical instability for small resolutions:
+  double h, w;
+  if(dev->scaling > 1.f)
   {
-    dt_pthread_mutex_t *mutex = &dev->preview_pipe->backbuf_mutex;
-    dt_pthread_mutex_lock(mutex);
-
-    cairo_save(cr);
-    const int wd = dev->preview_pipe->output_backbuf_width;
-    const int ht = dev->preview_pipe->output_backbuf_height;
-    const float scale = fminf(width / (float)wd, height / (float)ht);
-
-    const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
-    cairo_surface_t *surface
-        = cairo_image_surface_create_for_data(dev->preview_pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
-    cairo_translate(cr, width / 2.0, height / 2.0f);
-    cairo_scale(cr, scale, scale);
-    cairo_translate(cr, -.5f * wd, -.5f * ht);
-
+    // Add a dark overlay on the picture to make it fade
     cairo_rectangle(cr, 0, 0, wd, ht);
-    cairo_set_source_surface(cr, surface, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.5);
     cairo_fill(cr);
 
-    // draw box where we are
-    dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-    int closeup = dt_control_get_dev_closeup();
-    float zoom_x = dt_control_get_dev_zoom_x();
-    float zoom_y = dt_control_get_dev_zoom_y();
-    const float min_scale = dt_dev_get_zoom_scale(dev, DT_ZOOM_FIT, 1<<closeup, 0);
-    const float cur_scale = dt_dev_get_zoom_scale(dev, zoom, 1<<closeup, 0);
-    // avoid numerical instability for small resolutions:
-    double h, w;
-    if(cur_scale > min_scale)
-    {
-      // Add a dark overlay on the picture to make it fade
-      cairo_rectangle(cr, 0, 0, wd, ht);
-      cairo_set_source_rgba(cr, 0, 0, 0, 0.5);
-      cairo_fill(cr);
+    // Repaint the original image in the area of interest
+    cairo_set_source_surface(cr, surface, 0, 0);
 
-      float boxw = 1, boxh = 1;
-      dt_dev_check_zoom_bounds(darktable.develop, &zoom_x, &zoom_y, zoom, closeup, &boxw, &boxh);
+    double roi_w = width / dev->scaling;
+    double roi_h = height / dev->scaling;
+    double roi_x = dev->x * width;
+    double roi_y = dev->y * height;
 
-      // Repaint the original image in the area of interest
-      cairo_set_source_surface(cr, surface, 0, 0);
-      cairo_translate(cr, wd * (.5f + zoom_x), ht * (.5f + zoom_y));
-      boxw *= wd;
-      boxh *= ht;
-      cairo_rectangle(cr, -boxw / 2 - 1, -boxh / 2 - 1, boxw + 2, boxh + 2);
-      cairo_clip_preserve(cr);
-      cairo_fill_preserve(cr);
+    // Dig a hole into the overlay for the ROI
+    cairo_rectangle(cr, roi_x - roi_w / 2., roi_y - roi_h / 2., roi_w + 2, roi_h + 2);
+    cairo_clip_preserve(cr);
+    cairo_fill_preserve(cr);
 
-      // Paint the external border in black
-      cairo_set_source_rgb(cr, 0., 0., 0.);
-      cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1));
-      cairo_stroke(cr);
+    // Paint the external border in black
+    cairo_set_source_rgb(cr, 0., 0., 0.);
+    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1));
+    cairo_stroke(cr);
 
-      // Paint the internal border in white
-      cairo_set_source_rgb(cr, 1., 1., 1.);
-      cairo_rectangle(cr, -boxw / 2, -boxh / 2, boxw, boxh);
-      cairo_stroke(cr);
-    }
+    // Paint the internal border in white
+    cairo_set_source_rgb(cr, 1., 1., 1.);
+    cairo_rectangle(cr, roi_x - roi_w / 2., roi_y - roi_h / 2., roi_w, roi_h);
+    cairo_stroke(cr);
+  }
+
+  cairo_restore(cr);
+
+  if(dev->scaling > 1.f)
+  {
+    /* Zoom % */
+    PangoLayout *layout;
+    PangoRectangle ink;
+    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    layout = pango_cairo_create_layout(cr);
+    const float fontsize = DT_PIXEL_APPLY_DPI(14);
+    pango_font_description_set_absolute_size(desc, fontsize * PANGO_SCALE);
+    pango_layout_set_font_description(layout, desc);
+    cairo_translate(cr, 0, height);
+    cairo_set_source_rgba(cr, 1., 1., 1., 0.5);
+    cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+
+    char zoomline[5];
+    snprintf(zoomline, sizeof(zoomline), "%.0f%%", dev->scaling * dev->natural_scale * 100);
+
+    pango_layout_set_text(layout, zoomline, -1);
+    pango_layout_get_pixel_extents(layout, &ink, NULL);
+    h = d->zoom_h = ink.height;
+    w = d->zoom_w = ink.width;
+
+    cairo_move_to(cr, width - w - h * 1.1 - ink.x, - fontsize);
+
+    cairo_save(cr);
+    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1));
+
+    GdkRGBA *color;
+    gtk_style_context_get(context, gtk_widget_get_state_flags(widget), "background-color", &color, NULL);
+
+    gdk_cairo_set_source_rgba(cr, color);
+    pango_cairo_layout_path(cr, layout);
+    cairo_stroke_preserve(cr);
+    cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
+    cairo_fill(cr);
     cairo_restore(cr);
-    if(fabsf(cur_scale - min_scale) > 0.001f)
+
+    gdk_rgba_free(color);
+    pango_font_description_free(desc);
+    g_object_unref(layout);
+
+  }
+  else
+  {
+    // draw the zoom-to-fit icon
+    cairo_translate(cr, 0, height);
+    cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
+
+    static int font_height = -1;
+    if(font_height == -1)
     {
-      /* Zoom % */
       PangoLayout *layout;
       PangoRectangle ink;
       PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+      pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
       layout = pango_cairo_create_layout(cr);
-      const float fontsize = DT_PIXEL_APPLY_DPI(14);
-      pango_font_description_set_absolute_size(desc, fontsize * PANGO_SCALE);
+      pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(14) * PANGO_SCALE);
       pango_layout_set_font_description(layout, desc);
-      cairo_translate(cr, 0, height);
-      cairo_set_source_rgba(cr, 1., 1., 1., 0.5);
-      cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-
-      char zoomline[5];
-      snprintf(zoomline, sizeof(zoomline), "%.0f%%", cur_scale * 100 * darktable.gui->ppd);
-
-      pango_layout_set_text(layout, zoomline, -1);
+      pango_layout_set_text(layout, "100%", -1); // dummy text, just to get the height
       pango_layout_get_pixel_extents(layout, &ink, NULL);
-      h = d->zoom_h = ink.height;
-      w = d->zoom_w = ink.width;
-
-      cairo_move_to(cr, width - w - h * 1.1 - ink.x, - fontsize);
-
-      cairo_save(cr);
-      cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1));
-
-      GdkRGBA *color;
-      gtk_style_context_get(context, gtk_widget_get_state_flags(widget), "background-color", &color, NULL);
-
-      gdk_cairo_set_source_rgba(cr, color);
-      pango_cairo_layout_path(cr, layout);
-      cairo_stroke_preserve(cr);
-      cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
-      cairo_fill(cr);
-      cairo_restore(cr);
-
-      gdk_rgba_free(color);
+      font_height = ink.height;
       pango_font_description_free(desc);
       g_object_unref(layout);
-
-    }
-    else
-    {
-      // draw the zoom-to-fit icon
-      cairo_translate(cr, 0, height);
-      cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
-
-      static int font_height = -1;
-      if(font_height == -1)
-      {
-        PangoLayout *layout;
-        PangoRectangle ink;
-        PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
-        pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
-        layout = pango_cairo_create_layout(cr);
-        pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(14) * PANGO_SCALE);
-        pango_layout_set_font_description(layout, desc);
-        pango_layout_set_text(layout, "100%", -1); // dummy text, just to get the height
-        pango_layout_get_pixel_extents(layout, &ink, NULL);
-        font_height = ink.height;
-        pango_font_description_free(desc);
-        g_object_unref(layout);
-      }
-
-      h = d->zoom_h = font_height;
-      w = h * 1.5;
-      float sp = h * 0.6;
-      d->zoom_w = w + sp;
-
-      cairo_move_to(cr, width - w - h - sp, -1.0 * h);
-      cairo_rectangle(cr, width - w - h - sp, -1.0 * h, w, h);
-      cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
-      cairo_fill(cr);
-
-      cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2));
-
-      cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
-      cairo_move_to(cr, width - w * 0.8 - h - sp, -1.0 * h);
-      cairo_line_to(cr, width - w - h - sp, -1.0 * h);
-      cairo_line_to(cr, width - w - h - sp, -0.7 * h);
-      cairo_stroke(cr);
-      cairo_move_to(cr, width - w - h - sp, -0.3 * h);
-      cairo_line_to(cr, width - w - h - sp, 0);
-      cairo_line_to(cr, width - w * 0.8 - h - sp, 0);
-      cairo_stroke(cr);
-      cairo_move_to(cr, width - w * 0.2 - h - sp, 0);
-      cairo_line_to(cr, width - h - sp, 0);
-      cairo_line_to(cr, width - h - sp, -0.3 * h);
-      cairo_stroke(cr);
-      cairo_move_to(cr, width - h - sp, -0.7 * h);
-      cairo_line_to(cr, width - h - sp, -1.0 * h);
-      cairo_line_to(cr, width - w * 0.2 - h - sp, -1.0 * h);
-      cairo_stroke(cr);
     }
 
-    cairo_move_to(cr, width - 0.95 * h, -0.9 * h);
-    cairo_line_to(cr, width - 0.05 * h, -0.9 * h);
-    cairo_line_to(cr, width - 0.5 * h, -0.1 * h);
+    h = d->zoom_h = font_height;
+    w = h * 1.5;
+    float sp = h * 0.6;
+    d->zoom_w = w + sp;
+
+    cairo_move_to(cr, width - w - h - sp, -1.0 * h);
+    cairo_rectangle(cr, width - w - h - sp, -1.0 * h, w, h);
+    cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
     cairo_fill(cr);
-    cairo_surface_destroy(surface);
 
-    dt_pthread_mutex_unlock(mutex);
+    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2));
+
+    cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
+    cairo_move_to(cr, width - w * 0.8 - h - sp, -1.0 * h);
+    cairo_line_to(cr, width - w - h - sp, -1.0 * h);
+    cairo_line_to(cr, width - w - h - sp, -0.7 * h);
+    cairo_stroke(cr);
+    cairo_move_to(cr, width - w - h - sp, -0.3 * h);
+    cairo_line_to(cr, width - w - h - sp, 0);
+    cairo_line_to(cr, width - w * 0.8 - h - sp, 0);
+    cairo_stroke(cr);
+    cairo_move_to(cr, width - w * 0.2 - h - sp, 0);
+    cairo_line_to(cr, width - h - sp, 0);
+    cairo_line_to(cr, width - h - sp, -0.3 * h);
+    cairo_stroke(cr);
+    cairo_move_to(cr, width - h - sp, -0.7 * h);
+    cairo_line_to(cr, width - h - sp, -1.0 * h);
+    cairo_line_to(cr, width - w * 0.2 - h - sp, -1.0 * h);
+    cairo_stroke(cr);
   }
+
+  cairo_move_to(cr, width - 0.95 * h, -0.9 * h);
+  cairo_line_to(cr, width - 0.05 * h, -0.9 * h);
+  cairo_line_to(cr, width - 0.5 * h, -0.1 * h);
+  cairo_fill(cr);
+  cairo_surface_destroy(surface);
+
+  dt_pthread_mutex_unlock(mutex);
 
   /* blit memsurface into widget */
   cairo_destroy(cr);
@@ -335,37 +347,27 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
 
 void _lib_navigation_set_position(dt_lib_module_t *self, double x, double y, int wd, int ht)
 {
+  dt_develop_t *dev = darktable.develop;
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
 
-  dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  int closeup = dt_control_get_dev_closeup();
-  float zoom_x = dt_control_get_dev_zoom_x();
-  float zoom_y = dt_control_get_dev_zoom_y();
+  if(!(dev && d->dragging && dev->scaling > 1.f)) return;
 
-  if(d->dragging && zoom != DT_ZOOM_FIT)
-  {
-    const int inset = DT_NAVIGATION_INSET;
-    const float width = wd - 2 * inset, height = ht - 2 * inset;
-    const dt_develop_t *dev = darktable.develop;
-    int iwd, iht;
-    dt_dev_get_processed_size(dev, &iwd, &iht);
-    zoom_x = fmaxf(
-        -.5,
-        fminf(((x - inset) / width - .5f) / (iwd * fminf(wd / (float)iwd, ht / (float)iht) / (float)wd), .5));
-    zoom_y = fmaxf(
-        -.5, fminf(((y - inset) / height - .5f) / (iht * fminf(wd / (float)iwd, ht / (float)iht) / (float)ht),
-                   .5));
-    dt_dev_check_zoom_bounds(darktable.develop, &zoom_x, &zoom_y, zoom, closeup, NULL, NULL);
-    dt_control_set_dev_zoom_x(zoom_x);
-    dt_control_set_dev_zoom_y(zoom_y);
+  // Correct widget coordinates for margins
+  const float width = wd - 2.f * DT_NAVIGATION_INSET;
+  const float height = ht - 2.f * DT_NAVIGATION_INSET;
+  x -= DT_NAVIGATION_INSET;
+  y -= DT_NAVIGATION_INSET;
 
-    /* redraw myself */
-    gtk_widget_queue_draw(self->widget);
+  // Commit relative coordinates of the ROI center
+  dev->x = x / width;
+  dev->y = y / height;
 
-    /* redraw pipe */
-    dt_dev_invalidate_zoom(darktable.develop);
-    dt_control_queue_redraw_center();
-  }
+  /* redraw myself */
+  gtk_widget_queue_draw(self->widget);
+
+  /* redraw pipe */
+  dt_dev_invalidate_zoom(darktable.develop);
+  dt_control_queue_redraw_center();
 }
 
 static gboolean _lib_navigation_motion_notify_callback(GtkWidget *widget, GdkEventMotion *event,
@@ -378,93 +380,48 @@ static gboolean _lib_navigation_motion_notify_callback(GtkWidget *widget, GdkEve
   return TRUE;
 }
 
-static void _zoom_preset_change(uint64_t val)
+static void _zoom_preset_change(dt_lib_zoom_t zoom)
 {
   // dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_develop_t *dev = darktable.develop;
   if(!dev) return;
-  dt_dev_zoom_t zoom;
-  int closeup, procw, proch;
-  float zoom_x, zoom_y;
-  zoom = dt_control_get_dev_zoom();
-  closeup = dt_control_get_dev_closeup();
-  zoom_x = dt_control_get_dev_zoom_x();
-  zoom_y = dt_control_get_dev_zoom_y();
-  dt_dev_get_processed_size(dev, &procw, &proch);
-  float scale = 0;
-  const float ppd = darktable.gui->ppd;
-  const gboolean low_ppd = (darktable.gui->ppd == 1);
-  closeup = 0;
-  if(val == 0u)
+
+  switch(zoom)
   {
-    // small
-    scale = 0.5 * dt_dev_get_zoom_scale(dev, DT_ZOOM_FIT, 1.0, 0);
-    zoom = DT_ZOOM_FREE;
-  }
-  else if(val == 1u)
-  {
-    // fit to screen
-    zoom = DT_ZOOM_FIT;
-    scale = dt_dev_get_zoom_scale(dev, DT_ZOOM_FIT, 1.0, 0);
-  }
-  else if(val == 2u)
-  {
-    // 100%
-    if(low_ppd == 1)
-    {
-      scale = dt_dev_get_zoom_scale(dev, DT_ZOOM_1, 1.0, 0);
-      zoom = DT_ZOOM_1;
-    }
-    else
-    {
-      scale = 1.0f / ppd;
-      zoom = DT_ZOOM_FREE;
-    }
-  }
-  else if(val == 3u)
-  {
-    // 200%
-    scale = dt_dev_get_zoom_scale(dev, DT_ZOOM_1, 1.0, 0);
-    zoom = DT_ZOOM_1;
-    if(low_ppd) closeup = 1;
-  }
-  else if(val == 4u)
-  {
-    // 50%
-    scale = 0.5f / ppd;
-    zoom = DT_ZOOM_FREE;
-  }
-  else if(val == 5u)
-  {
-    // 1600%
-    scale = dt_dev_get_zoom_scale(dev, DT_ZOOM_1, 1.0, 0);
-    zoom = DT_ZOOM_1;
-    closeup = (low_ppd) ? 4 : 3;
-  }
-  else if(val == 6u)
-  {
-    // 400%
-    scale = dt_dev_get_zoom_scale(dev, DT_ZOOM_1, 1.0, 0);
-    zoom = DT_ZOOM_1;
-    closeup = (low_ppd) ? 2 : 1;
-  }
-  else if(val == 7u)
-  {
-    // 800%
-    scale = dt_dev_get_zoom_scale(dev, DT_ZOOM_1, 1.0, 0);
-    zoom = DT_ZOOM_1;
-    closeup = (low_ppd) ? 3 : 2;
+    case LIB_ZOOM_SMALL:
+      dev->scaling = 0.25;
+      break;
+    case LIB_ZOOM_FIT:
+    default:
+      dev->scaling = dev->natural_scale;
+      break;
+    case LIB_ZOOM_25:
+      dev->scaling = 0.25;
+      break;
+    case LIB_ZOOM_50:
+      dev->scaling = 0.50;
+      break;
+    case LIB_ZOOM_100:
+      dev->scaling = 1.;
+      break;
+    case LIB_ZOOM_200:
+      dev->scaling = 2.;
+      break;
+    case LIB_ZOOM_400:
+      dev->scaling = 4.;
+      break;
+    case LIB_ZOOM_800:
+      dev->scaling = 8.;
+      break;
+    case LIB_ZOOM_1600:
+      dev->scaling = 16.;
+      break;
   }
 
-  // zoom_x = (1.0/(scale*(1<<closeup)))*(zoom_x - .5f*dev->width )/procw;
-  // zoom_y = (1.0/(scale*(1<<closeup)))*(zoom_y - .5f*dev->height)/proch;
+  // Actual pixelpipe scaling is dev->scaling * dev->natural_scale,
+  // where dev->natural_scale ensures the images fits within viewport
+  dev->scaling /= dev->natural_scale;
 
-  dt_control_set_dev_zoom_scale(scale);
-  dt_dev_check_zoom_bounds(dev, &zoom_x, &zoom_y, zoom, closeup, NULL, NULL);
-  dt_control_set_dev_zoom(zoom);
-  dt_control_set_dev_closeup(closeup);
-  dt_control_set_dev_zoom_x(zoom_x);
-  dt_control_set_dev_zoom_y(zoom_y);
   dt_dev_invalidate_zoom(dev);
   dt_control_queue_redraw();
   dt_dev_refresh_ui_images(dev);
@@ -472,7 +429,7 @@ static void _zoom_preset_change(uint64_t val)
 
 static void _zoom_preset_callback(GtkButton *button, gpointer user_data)
 {
-  _zoom_preset_change((uint64_t)user_data);
+  _zoom_preset_change(GPOINTER_TO_INT(user_data));
 }
 
 static gboolean _lib_navigation_button_press_callback(GtkWidget *widget, GdkEventButton *event,
@@ -493,35 +450,39 @@ static gboolean _lib_navigation_button_press_callback(GtkWidget *widget, GdkEven
     GtkWidget *item;
 
     item = gtk_menu_item_new_with_label(_("small"));
-    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), (gpointer)0);
+    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), GINT_TO_POINTER(LIB_ZOOM_SMALL));
     gtk_menu_shell_append(menu, item);
 
     item = gtk_menu_item_new_with_label(_("fit to screen"));
-    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), (gpointer)1);
+    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), GINT_TO_POINTER(LIB_ZOOM_FIT));
+    gtk_menu_shell_append(menu, item);
+
+    item = gtk_menu_item_new_with_label(_("25%"));
+    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), GINT_TO_POINTER(LIB_ZOOM_25));
     gtk_menu_shell_append(menu, item);
 
     item = gtk_menu_item_new_with_label(_("50%"));
-    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), (gpointer)4);
+    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), GINT_TO_POINTER(LIB_ZOOM_50));
     gtk_menu_shell_append(menu, item);
 
     item = gtk_menu_item_new_with_label(_("100%"));
-    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), (gpointer)2);
+    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), GINT_TO_POINTER(LIB_ZOOM_100));
     gtk_menu_shell_append(menu, item);
 
     item = gtk_menu_item_new_with_label(_("200%"));
-    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), (gpointer)3);
+    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), GINT_TO_POINTER(LIB_ZOOM_200));
     gtk_menu_shell_append(menu, item);
 
     item = gtk_menu_item_new_with_label(_("400%"));
-    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), (gpointer)6);
+    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), GINT_TO_POINTER(LIB_ZOOM_400));
     gtk_menu_shell_append(menu, item);
 
     item = gtk_menu_item_new_with_label(_("800%"));
-    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), (gpointer)7);
+    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), GINT_TO_POINTER(LIB_ZOOM_800));
     gtk_menu_shell_append(menu, item);
 
     item = gtk_menu_item_new_with_label(_("1600%"));
-    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), (gpointer)5);
+    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), GINT_TO_POINTER(LIB_ZOOM_1600));
     gtk_menu_shell_append(menu, item);
 
     dt_gui_menu_popup(GTK_MENU(menu), NULL, 0, 0);

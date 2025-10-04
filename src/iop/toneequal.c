@@ -1984,10 +1984,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(g == NULL) return 0;
   if(wd < 1 || ht < 1) return 0;
 
-  float pzx, pzy;
-  dt_dev_get_pointer_zoom_pos(dev, x, y, &pzx, &pzy);
-  pzx += 0.5f;
-  pzy += 0.5f;
+  float pzx = 0.f, pzy = 0.f;
+  dt_dev_get_pointer_zoom_pos(dev, x, y);
 
   const int x_pointer = pzx * wd;
   const int y_pointer = pzy * ht;
@@ -2291,17 +2289,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(isnan(correction) || isnan(exposure_in)) return; // something went wrong
 
   // Rescale and shift Cairo drawing coordinates
-  const float wd = dev->preview_pipe->backbuf_width;
-  const float ht = dev->preview_pipe->backbuf_height;
-  const float zoom_y = dt_control_get_dev_zoom_y();
-  const float zoom_x = dt_control_get_dev_zoom_x();
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float zoom_scale = dt_dev_get_zoom_scale(dev, zoom, 1<<closeup, 1);
-  cairo_translate(cr, width / 2.0, height / 2.0);
-  cairo_scale(cr, zoom_scale, zoom_scale);
-  cairo_translate(cr, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
-
+  const float zoom_scale = dt_dev_get_zoom_scale(dev,  1);
+  dt_dev_scale_roi(dev, cr, width, height);
 
   // set custom cursor dimensions
   const double outer_radius = 16.;
