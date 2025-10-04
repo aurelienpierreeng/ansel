@@ -185,9 +185,6 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->processed_height = pipe->backbuf_height = pipe->iheight = 0;
   pipe->nodes = NULL;
   pipe->backbuf = NULL;
-  pipe->backbuf_scale = 0.0f;
-  pipe->backbuf_zoom_x = 0.0f;
-  pipe->backbuf_zoom_y = 0.0f;
 
   pipe->output_backbuf = NULL;
   pipe->output_backbuf_width = 0;
@@ -460,8 +457,12 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     local_hash = dt_hash(local_hash, (const char *)&piece->planned_roi_in, sizeof(dt_iop_roi_t));
     local_hash = dt_hash(local_hash, (const char *)&piece->planned_roi_out, sizeof(dt_iop_roi_t));
 
-    fprintf(stdout, "%s: ROI in: %ix%i, ROI out: %ix%i\n", piece->module->op, piece->planned_roi_in.width,
-            piece->planned_roi_in.height, piece->planned_roi_out.width, piece->planned_roi_out.height);
+    fprintf(stdout, "start->end : %s: ROI in: %ix%i@%f, ROI out: %ix%i@%f\n", piece->module->op,
+            piece->buf_in.width, piece->buf_in.height, piece->buf_in.scale, piece->buf_out.width,
+            piece->buf_out.height, piece->buf_out.scale);
+    fprintf(stdout, "end->start : %s: ROI in: %ix%i@%f, ROI out: %ix%i@%f\n", piece->module->op,
+            piece->planned_roi_in.width, piece->planned_roi_in.height, piece->planned_roi_in.scale,
+            piece->planned_roi_out.width, piece->planned_roi_out.height, piece->planned_roi_out.scale);
 
     // Mask preview display doesn't re-commit params, so we need to keep that of it here
     // Too much GUI stuff interleaved with pipeline stuff...
@@ -686,10 +687,6 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
     dt_dev_pixelpipe_synch_top(pipe, dev);
   }
   dt_pthread_mutex_unlock(&dev->history_mutex);
-
-  // Get the final output size of the pipe, for GUI coordinates mapping between image buffer and window
-  dt_dev_pixelpipe_get_roi_out(pipe, dev, pipe->iwidth, pipe->iheight, &pipe->processed_width,
-                                  &pipe->processed_height);
 
   dt_show_times_f(&start, "[dt_dev_pixelpipe_change] pipeline resync on the current modules stack", "for pipe %i", pipe->type);
 }

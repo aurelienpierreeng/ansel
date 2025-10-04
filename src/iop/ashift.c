@@ -3679,23 +3679,18 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   const float wd = dev->preview_pipe->backbuf_width;
   const float ht = dev->preview_pipe->backbuf_height;
   if(wd < 1.0 || ht < 1.0) return;
-  const float zoom_y = dt_control_get_dev_zoom_y();
-  const float zoom_x = dt_control_get_dev_zoom_x();
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float zoom_scale = dt_dev_get_zoom_scale(dev, zoom, 1<<closeup, 1);
+
+  const float zoom_scale = 1.f;
 
   cairo_save(cr);
-  cairo_translate(cr, width / 2.0, height / 2.0);
-  cairo_scale(cr, zoom_scale, zoom_scale);
-  cairo_translate(cr, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
 
   // draw crop area guides
+  /*
   if(g->editing)
     dt_guides_draw(cr, p->cl * wd, p->ct * ht, (p->cr - p->cl) * wd, (p->cb - p->ct) * ht, zoom_scale);
   else
     dt_guides_draw(cr, 0, 0, wd, ht, zoom_scale);
-
+  */
   cairo_restore(cr);
   dt_draw_set_color_overlay(cr, FALSE, 1.0);
 
@@ -3704,16 +3699,12 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->straightening && !g->editing)
   {
     cairo_save(cr);
-    cairo_translate(cr, width / 2.0, height / 2.0);
-    cairo_scale(cr, zoom_scale, zoom_scale);
-    cairo_translate(cr, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
+
     cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.0) / zoom_scale);
     dt_draw_set_color_overlay(cr, FALSE, 1.0);
 
-    float pzx, pzy;
-    dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery, &pzx, &pzy);
-    pzx += 0.5f;
-    pzy += 0.5f;
+    float pzx = 0.f, pzy = 0.f;
+    dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery);
 
     PangoRectangle ink;
     PangoLayout *layout;
@@ -3838,10 +3829,6 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // mask parts of image outside of clipping area in dark grey
   cairo_set_source_rgba(cr, .2, .2, .2, .8);
   cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
-  cairo_rectangle(cr, 0, 0, width, height);
-  cairo_translate(cr, width / 2.0, height / 2.0);
-  cairo_scale(cr, zoom_scale, zoom_scale);
-  cairo_translate(cr, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
 
   cairo_move_to(cr, C[0][0], C[0][1]);
   cairo_line_to(cr, C[1][0], C[1][1]);
@@ -3920,9 +3907,6 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   cairo_save(cr);
   cairo_rectangle(cr, 0, 0, width, height);
   cairo_clip(cr);
-  cairo_translate(cr, width / 2.0, height / 2.0);
-  cairo_scale(cr, zoom_scale, zoom_scale);
-  cairo_translate(cr, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
 
   // this must match the sequence of enum dt_iop_ashift_linecolor_t!
   const float line_colors[5][4] =
@@ -3998,7 +3982,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->isbounding != ASHIFT_BOUNDING_OFF)
   {
     float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery, &pzx, &pzy);
+    dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery);
     pzx += 0.5f;
     pzy += 0.5f;
 
@@ -4022,7 +4006,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->near_delta > 0)
   {
     float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery, &pzx, &pzy);
+    dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery);
     pzx += 0.5f;
     pzy += 0.5f;
 
@@ -4067,10 +4051,7 @@ static void _update_lines_count(const dt_iop_ashift_line_t *lines, const int lin
 // determine if we are near a drawn line extrema
 static int _draw_near_point(const float x, const float y, const float *points, const int limit)
 {
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float zoom_scale = dt_dev_get_zoom_scale(darktable.develop, zoom, 1 << closeup, 1);
-  const float delta = DT_PIXEL_APPLY_DPI(6) / zoom_scale;
+  const float delta = DT_PIXEL_APPLY_DPI(6);
 
   for(int i = 0; i < limit; i++)
   {
@@ -4104,7 +4085,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(wd < 1.0 || ht < 1.0) return 1;
 
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
+  dt_dev_get_pointer_zoom_pos(self->dev, x, y);
   pzx += 0.5f;
   pzy += 0.5f;
 
@@ -4317,7 +4298,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     return TRUE;
 
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
+  dt_dev_get_pointer_zoom_pos(self->dev, x, y);
   pzx += 0.5f;
   pzy += 0.5f;
 
@@ -4365,10 +4346,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     return TRUE;
   }
 
-  dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float min_scale = dt_dev_get_zoom_scale(self->dev, DT_ZOOM_FIT, 1<<closeup, 0);
-  const float cur_scale = dt_dev_get_zoom_scale(self->dev, zoom, 1<<closeup, 0);
+  const float min_scale = dt_dev_get_zoom_scale(self->dev,  0);
+  const float cur_scale = dt_dev_get_zoom_scale(self->dev,  0);
 
   // if we are zoomed out (no panning possible) and we have lines to display we take control
   const int take_control = (cur_scale == min_scale) && (g->points_lines_count > 0);
@@ -4623,7 +4602,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 
     // we compute the rectangle selection
     float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
+    dt_dev_get_pointer_zoom_pos(self->dev, x, y);
 
     pzx += 0.5f;
     pzy += 0.5f;
@@ -4691,7 +4670,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     gboolean handled = FALSE;
 
     float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_zoom_pos(self->dev, x, y, &pzx, &pzy);
+    dt_dev_get_pointer_zoom_pos(self->dev, x, y);
     pzx += 0.5f;
     pzy += 0.5f;
 

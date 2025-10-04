@@ -131,13 +131,9 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
 
   if(d->snapshot_image)
   {
-    const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-    const int closeup = dt_control_get_dev_closeup();
-    const float zoom_scale = dt_dev_get_zoom_scale(dev, zoom, 1<<closeup, 1);
-    float pzx, pzy;
-    dt_dev_get_pointer_zoom_pos(darktable.develop, 0, 0, &pzx, &pzy);
-    pzx = fmin(pzx + 0.5f, 0.0f);
-    pzy = fmin(pzy + 0.5f, 0.0f);
+    float pzx = 0.f;
+    float pzy = 0.f;
+    float zoom_scale = 1.f;
 
     d->vp_width = width;
     d->vp_height = height;
@@ -447,13 +443,6 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
   g_snprintf(label, sizeof(label), "%s (%d)", name, dt_dev_get_history_end(darktable.develop));
   gtk_label_set_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->snapshot[0].button))), label);
 
-  dt_lib_snapshot_t *s = d->snapshot + 0;
-  s->zoom_y = dt_control_get_dev_zoom_y();
-  s->zoom_x = dt_control_get_dev_zoom_x();
-  s->zoom = dt_control_get_dev_zoom();
-  s->closeup = dt_control_get_dev_closeup();
-  s->zoom_scale = dt_control_get_dev_zoom_scale();
-
   /* update slots used */
   if(d->num_snapshots != d->size) d->num_snapshots++;
 
@@ -489,12 +478,6 @@ static void _lib_snapshots_toggled_callback(GtkToggleButton *widget, gpointer us
     /* setup snapshot */
     d->selected = which;
     dt_lib_snapshot_t *s = d->snapshot + (which - 1);
-    dt_control_set_dev_zoom_y(s->zoom_y);
-    dt_control_set_dev_zoom_x(s->zoom_x);
-    dt_control_set_dev_zoom(s->zoom);
-    dt_control_set_dev_closeup(s->closeup);
-    dt_control_set_dev_zoom_scale(s->zoom_scale);
-
     dt_dev_invalidate(darktable.develop);
     dt_dev_refresh_ui_images(darktable.develop);
 

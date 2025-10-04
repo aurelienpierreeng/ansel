@@ -1679,11 +1679,8 @@ static int _path_events_mouse_moved(struct dt_iop_module_t *module, float pzx, f
                                     int which, dt_masks_form_t *form, int parentid,
                                     dt_masks_form_gui_t *gui, int index)
 {
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float zoom_scale = dt_dev_get_zoom_scale(darktable.develop, zoom, 1<<closeup, 1);
   // centre view will have zoom_scale * backbuf_width pixels, we want the handle offset to scale with DPI:
-  const float as = DT_PIXEL_APPLY_DPI(5) / zoom_scale;  // transformed to backbuf dimensions
+  const float as = DT_PIXEL_APPLY_DPI(5);  // transformed to backbuf dimensions
   if(!gui) return 0;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
@@ -2151,16 +2148,8 @@ static void _path_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_for
     else
     {
       float xpos, ypos;
-      if((gui->posx == -1.f && gui->posy == -1.f) || gui->mouse_leaved_center)
-      {
-        xpos = (.5f + dt_control_get_dev_zoom_x()) * darktable.develop->preview_pipe->backbuf_width;
-        ypos = (.5f + dt_control_get_dev_zoom_y()) * darktable.develop->preview_pipe->backbuf_height;
-      }
-      else
-      {
-        xpos = gui->posx;
-        ypos = gui->posy;
-      }
+      xpos = gui->posx;
+      ypos = gui->posy;
 
       float x = 0.0f, y = 0.0f;
       dt_masks_calculate_source_pos_value(gui, DT_MASKS_PATH, xpos, ypos, xpos, ypos, &x, &y, FALSE);

@@ -2754,9 +2754,7 @@ static void unselect_all(dt_iop_liquify_params_t *p)
 
 static float get_zoom_scale(dt_develop_t *develop)
 {
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  return dt_dev_get_zoom_scale(develop, zoom, 1<<closeup, 1);
+  return dt_dev_get_zoom_scale(develop,  1);
 }
 
 void gui_post_expose(struct dt_iop_module_t *module,
@@ -2792,15 +2790,9 @@ void gui_post_expose(struct dt_iop_module_t *module,
   dt_pthread_mutex_unlock(&develop->preview_pipe->busy_mutex);
 
   // You're not supposed to understand this
-  const float zoom_x = dt_control_get_dev_zoom_x();
-  const float zoom_y = dt_control_get_dev_zoom_y();
   const float zoom_scale = get_zoom_scale(develop);
 
-  // setup CAIRO coordinate system
-  cairo_translate(cr, 0.5 * width, 0.5 * height); // origin @ center of view
-  cairo_scale    (cr, zoom_scale, zoom_scale);    // the zoom
-  cairo_translate(cr, -bb_width * (0.5 + zoom_x), -bb_height * (0.5 + zoom_y));
-  cairo_scale(cr, scale, scale);
+  dt_dev_scale_roi(develop, cr, width, height);
 
   draw_paths(module, cr, 1.0 / (scale * zoom_scale), &copy_params);
 }
@@ -2848,7 +2840,7 @@ static void sync_pipe(struct dt_iop_module_t *module, gboolean history)
 static void get_point_scale(struct dt_iop_module_t *module, float x, float y, float complex *pt, float *scale)
 {
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_zoom_pos(darktable.develop, x, y, &pzx, &pzy);
+  dt_dev_get_pointer_zoom_pos(darktable.develop, x, y);
   pzx += 0.5f;
   pzy += 0.5f;
   const float wd = darktable.develop->preview_pipe->backbuf_width;
