@@ -84,7 +84,7 @@ static void _gradient_get_distance(float x, float y, float as, dt_masks_form_gui
 }
 
 
-static int _gradient_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up,
+static int _gradient_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up, const int flow,
                                            uint32_t state, dt_masks_form_t *form, int parentid,
                                            dt_masks_form_gui_t *gui, int index,
                                            dt_masks_interaction_t interaction)
@@ -125,7 +125,7 @@ static int _gradient_events_mouse_scrolled(struct dt_iop_module_t *module, float
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
     {
       // we try to change the opacity
-      dt_masks_form_change_opacity(form, parentid, up);
+      dt_masks_form_change_opacity(form, parentid, up, flow);
     }
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
     {

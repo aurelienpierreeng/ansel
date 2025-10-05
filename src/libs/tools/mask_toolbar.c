@@ -58,7 +58,7 @@ static void _opacity_changed_callback(GtkWidget *widget, gpointer data)
   dt_masks_form_t *sel = g_object_get_data(G_OBJECT(widget), "selected");
   if(parent_id && sel)
   {
-    dt_masks_form_set_opacity(sel, *parent_id, new_value, FALSE);
+    dt_masks_form_set_opacity(sel, *parent_id, new_value, FALSE, 1);
     dt_dev_add_history_item(darktable.develop, NULL, FALSE);
   }
 

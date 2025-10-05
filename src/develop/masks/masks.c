@@ -1082,7 +1082,7 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
   return 0;
 }
 
-int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, double y, int up, uint32_t state)
+int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, double y, int up, uint32_t state, int scrolling_delta)
 {
   // add an option to allow skip mouse events while editing masks
   if(darktable.develop->darkroom_skip_mouse_events) return 0;
@@ -1095,9 +1095,12 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
   int ret = 0;
   const gboolean incr = dt_mask_scroll_increases(up);
 
+  // we want delta_y to be an absolute scrolling speed
+  int flow = (scrolling_delta < 0) ? -scrolling_delta : scrolling_delta;
+
   if(form->functions)
     ret = form->functions->mouse_scrolled(module, pzx, pzy,
-                                          incr ? 1 : 0,
+                                          incr ? 1 : 0, flow,
                                           state, form, 0, gui, 0, DT_MASKS_INTERACTION_UNDEF);
 
   return ret;
@@ -1637,7 +1640,7 @@ const char * _get_mask_type(dt_masks_form_t *form)
     return "unknown";
 }
 
-float dt_masks_get_set_conf_value(dt_masks_form_t *form, char *feature, float new_value, float v_min, float v_max, dt_masks_increment_t increment)
+float dt_masks_get_set_conf_value(dt_masks_form_t *form, char *feature, float new_value, float v_min, float v_max, dt_masks_increment_t increment, int flow)
 {
   gchar *key;
   if(!strcmp(feature, "opacity"))
@@ -1645,18 +1648,26 @@ float dt_masks_get_set_conf_value(dt_masks_form_t *form, char *feature, float ne
   else
     key = g_strdup_printf("plugins/darkroom/%s/%s/%s", _get_mask_plugin(form), _get_mask_type(form), feature);
 
-  float value = (increment == DT_MASKS_INCREMENT_SCALE)    ? dt_conf_get_float(key) * new_value
-                : (increment == DT_MASKS_INCREMENT_OFFSET) ? dt_conf_get_float(key) + new_value
-                                                           : new_value; // DT_MASKS_INCREMENT_ABSOLUTE
+  if(!g_strcmp0(feature, "rotation")) flow = (flow > 1) ? (flow - 1) * 5 : flow;
 
-  value = MAX(v_min, MIN(value, v_max));
+  float value = (increment == DT_MASKS_INCREMENT_SCALE)    ? dt_conf_get_float(key) * powf(new_value, (float)flow)
+                : (increment == DT_MASKS_INCREMENT_OFFSET) ? dt_conf_get_float(key) + new_value * flow
+                                                           : new_value; // DT_MASKS_INCREMENT_ABSOLUTE
+  if(!g_strcmp0(feature, "rotation"))
+  {
+    // Ensure the rotation value stays within the interval [min, max)
+    if(value > v_max) value = fmodf(value, v_max);
+    else if(value < v_min) value = v_max - fmodf(v_min - value, v_max);
+  }
+  else value = MAX(v_min, MIN(value, v_max));
+
   dt_conf_set_float(key, value);
 
   g_free(key);
   return value;
 }
 
-int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity, dt_masks_increment_t offset)
+int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity, dt_masks_increment_t offset, const int flow)
 {
   // If offset == TRUE, opacity is treated as an offset to add on top of current mask opacity
   // else it is set absolutely and directly
@@ -1674,8 +1685,8 @@ int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity
     dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)fpts->data;
     if(fpt->formid == id)
     {
-      const float new_opacity = (offset == DT_MASKS_INCREMENT_OFFSET)  ? fpt->opacity + opacity
-                                : (offset == DT_MASKS_INCREMENT_SCALE) ? fpt->opacity * opacity
+      const float new_opacity = (offset == DT_MASKS_INCREMENT_OFFSET)  ? fpt->opacity + opacity * flow
+                                : (offset == DT_MASKS_INCREMENT_SCALE) ? fpt->opacity * powf(opacity, (float)flow)
                                                                        : opacity; // DT_MASKS_INCREMENT_ABSOLUTE
       fpt->opacity = CLAMP(new_opacity, 0.05f, 1.0f);
       return 1;
@@ -1684,10 +1695,10 @@ int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity
   return 0;
 }
 
-int dt_masks_form_change_opacity(dt_masks_form_t *form, int parentid, int up)
+int dt_masks_form_change_opacity(dt_masks_form_t *form, int parentid, int up, const int flow)
 {
   const float amount = up ? 0.05f : -0.05f;
-  return dt_masks_form_set_opacity(form, parentid, amount, DT_MASKS_INCREMENT_OFFSET);
+  return dt_masks_form_set_opacity(form, parentid, amount, DT_MASKS_INCREMENT_OFFSET, flow);
 }
 
 void dt_masks_form_move(dt_masks_form_t *grp, int formid, int up)

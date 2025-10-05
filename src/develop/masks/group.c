@@ -22,7 +22,7 @@
 #include "develop/imageop.h"
 #include "develop/masks.h"
 
-static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up,
+static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up, const int flow,
                                         uint32_t state, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
                                         int unused, dt_masks_interaction_t interaction)
 {
@@ -32,7 +32,7 @@ static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, float pz
     dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)g_list_nth_data(form->points, gui->group_selected);
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
-      return sel->functions->mouse_scrolled(module, pzx, pzy, up, state, sel, fpt->parentid, gui, gui->group_selected, interaction);
+      return sel->functions->mouse_scrolled(module, pzx, pzy, up, flow, state, sel, fpt->parentid, gui, gui->group_selected, interaction);
   }
   return 0;
 }

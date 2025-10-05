@@ -218,7 +218,7 @@ typedef struct dt_masks_functions_t
                          int *width, int *height, int *posx, int *posy);
   int (*mouse_moved)(struct dt_iop_module_t *module, float pzx, float pzy, double pressure, int which,
                      struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
-  int (*mouse_scrolled)(struct dt_iop_module_t *module, float pzx, float pzy, int up, uint32_t state,
+  int (*mouse_scrolled)(struct dt_iop_module_t *module, float pzx, float pzy, int up, const int delta_y, uint32_t state,
                         struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index,
                         dt_masks_interaction_t interaction);
   int (*button_pressed)(struct dt_iop_module_t *module, float pzx, float pzy,
@@ -403,7 +403,7 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
                                     uint32_t state);
 int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, double y, double pressure,
                                    int which, int type, uint32_t state);
-int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, double y, int up, uint32_t state);
+int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, double y, int up, uint32_t state, int delta_y);
 void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
                                  int32_t pointerx, int32_t pointery);
 int dt_masks_events_mouse_leave(struct dt_iop_module_t *module);
@@ -429,7 +429,7 @@ void dt_masks_iop_use_same_as(struct dt_iop_module_t *module, struct dt_iop_modu
 uint64_t dt_masks_group_get_hash(uint64_t hash, dt_masks_form_t *form);
 
 void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *grp, dt_masks_form_t *form);
-int dt_masks_form_change_opacity(dt_masks_form_t *form, int parentid, int up);
+int dt_masks_form_change_opacity(dt_masks_form_t *form, int parentid, int up, const int flow);
 void dt_masks_form_move(dt_masks_form_t *grp, int formid, int up);
 int dt_masks_form_duplicate(dt_develop_t *dev, int formid);
 /* returns a duplicate tof form, including the formid */
@@ -456,7 +456,7 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mas
 
 /** Getters and setters for direct GUI interaction */
 float dt_masks_form_get_opacity(dt_masks_form_t *form, int parentid);
-int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity, dt_masks_increment_t offset);
+int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity, dt_masks_increment_t offset, const int flow);
 
 /**
  * @brief Change a numerical property of a mask shape, either by in/de-crementing the current value
@@ -467,10 +467,11 @@ int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity
  * @param new_value if increment is set to absolute, this is directly the updated value. if increment is offset, the updated value is old_value + new_value. if increment is scale, the updated value is old value * new_value.
  * @param v_min minimum acceptable value of the property for sanitization
  * @param v_max maximum acceptable value of the property for sanitization
- * @param increment
+ * @param increment the increment type: absolute, offset or scale.
+ * @param flow the value of the scroll distance that can be postive or negative.
  */
 float dt_masks_get_set_conf_value(dt_masks_form_t *form, char *feature, float new_value, float v_min, float v_max,
-                                  dt_masks_increment_t increment);
+                                  dt_masks_increment_t increment, const int flow);
 
 /** detail mask support */
 void dt_masks_extend_border(float *const mask, const int width, const int height, const int border);

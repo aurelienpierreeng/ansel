@@ -61,7 +61,7 @@ OPTIONAL(int, button_pressed, struct dt_view_t *self, double x, double y, double
 OPTIONAL(int, key_pressed, struct dt_view_t *self, GdkEventKey *event);
 
 OPTIONAL(void, configure, struct dt_view_t *self, int width, int height);
-OPTIONAL(int, scrolled, struct dt_view_t *self, double x, double y, int up, int state); // mouse scrolled in view
+OPTIONAL(int, scrolled, struct dt_view_t *self, double x, double y, int up, int state, int delta_y); // mouse scrolled in view
 OPTIONAL(void, scrollbar_changed, struct dt_view_t *self, double x, double y); // scrollbars changed in view
 
 #ifdef FULL_API_H

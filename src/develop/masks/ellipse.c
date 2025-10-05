@@ -584,77 +584,8 @@ static int _ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, float 
           ellipse->rotation -= 10.f;
         ellipse->rotation = fmodf(ellipse->rotation, 360.0f);
 
-
-        dt_masks_gui_form_remove(form, gui, index);
-        dt_masks_gui_form_create(form, gui, index, module);
-        if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-          dt_conf_set_float("plugins/darkroom/spots/ellipse_rotation", ellipse->rotation);
-        else
-          dt_conf_set_float("plugins/darkroom/masks/ellipse/rotation", ellipse->rotation);
-        dt_toast_log(_("rotation: %3.f\302\260"), ellipse->rotation);
-      }
-      // resize don't care where the mouse is inside a shape
-      if(dt_modifier_is(state, GDK_SHIFT_MASK))
-      {
-        const float reference = (ellipse->flags & DT_MASKS_ELLIPSE_PROPORTIONAL ? 1.0f/fmin(ellipse->radius[0], ellipse->radius[1]) : 1.0f);
-        if(!up && ellipse->border > 0.001f * reference)
-          ellipse->border *= 0.97f;
-        else if(up && ellipse->border < radius_limit * reference)
-          ellipse->border *= 1.0f/0.97f;
-        else return 1;
-        ellipse->border = CLAMP(ellipse->border, 0.001f * reference, reference);
-
-        dt_masks_gui_form_remove(form, gui, index);
-        dt_masks_gui_form_create(form, gui, index, module);
-        if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
-          dt_conf_set_float("plugins/darkroom/spots/ellipse_border", ellipse->border);
-        else
-          dt_conf_set_float("plugins/darkroom/masks/ellipse/border", ellipse->border);
-        dt_toast_log(_("feather size: %3.2f%%"), ellipse->border*100.0f);
-      }
-      else if(gui->edit_mode == DT_MASKS_EDIT_FULL && dt_modifier_is(state, 0))
-      {
-        const float oldradius = ellipse->radius[0];
-
-        if(!up && ellipse->radius[0] > 0.001f)
-          ellipse->radius[0] *= 0.97f;
-        else if(up && ellipse->radius[0] < radius_limit)
-          ellipse->radius[0] *= 1.0f / 0.97f;
-        else return 1;
-
-        ellipse->radius[0] = CLAMP(ellipse->radius[0], 0.001f, radius_limit);
-
-        const float factor = ellipse->radius[0] / oldradius;
-        ellipse->radius[1] *= factor;
-
-
-        dt_masks_gui_form_remove(form, gui, index);
-        dt_masks_gui_form_create(form, gui, index, module);
-        if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
-        {
-          dt_conf_set_float("plugins/darkroom/spots/ellipse_radius_a", ellipse->radius[0]);
-          dt_conf_set_float("plugins/darkroom/spots/ellipse_radius_b", ellipse->radius[1]);
-        }
-        else
-        {
-          dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_a", ellipse->radius[0]);
-          dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_b", ellipse->radius[1]);
-        }
-        dt_toast_log(_("size: %3.2f%%"), fmaxf(ellipse->radius[0], ellipse->radius[1])*100);
-      }
-      else if (!dt_modifier_is(state, 0))
-      {
-        // user is holding down a modifier key, but we didn't handle that particular combination
-        // say we've processed the scroll event so that the image is not zoomed instead
-        return 1;
-      }
-      else
-      {
-        return 0;
-      }
-
-    }
-    return 1;
+static int _ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up, const int delta_y,
+                                          uint32_t state, dt_masks_form_t *form, int parentid,
   }
   return 0;
 }

@@ -996,7 +996,7 @@ static void _path_get_sizes(struct dt_iop_module_t *module, dt_masks_form_t *for
   if(feather_size) *feather_size = fmaxf((fp2[0] - fp1[0]) / wd, (fp2[1] - fp1[1]) / ht);
 }
 
-static int _path_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up,
+static int _path_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up, int flow,
                                        uint32_t state, dt_masks_form_t *form, int parentid,
                                        dt_masks_form_gui_t *gui, int index,
                                        dt_masks_interaction_t interaction)
@@ -1014,7 +1014,7 @@ static int _path_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
     {
       // we try to change the opacity
-      dt_masks_form_change_opacity(form, parentid, up);
+      dt_masks_form_change_opacity(form, parentid, up, flow);
     }
     else
     {

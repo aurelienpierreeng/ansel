@@ -281,7 +281,7 @@ static gboolean _scrolled(GtkWidget *widget, GdkEventScroll *event, gpointer use
   {
     return dt_view_manager_scrolled(darktable.view_manager, event->x, event->y,
                                     delta_y < 0,
-                                    event->state);
+                                    event->state, delta_y);
   }
 
   return FALSE;

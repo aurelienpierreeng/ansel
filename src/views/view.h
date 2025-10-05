@@ -242,7 +242,7 @@ int dt_view_manager_button_pressed(dt_view_manager_t *vm, double x, double y, do
                                    int type, uint32_t state);
 int dt_view_manager_key_pressed(dt_view_manager_t *vm, GdkEventKey *event);
 void dt_view_manager_configure(dt_view_manager_t *vm, int width, int height);
-int dt_view_manager_scrolled(dt_view_manager_t *vm, double x, double y, int up, int state);
+int dt_view_manager_scrolled(dt_view_manager_t *vm, double x, double y, int up, int state, int delta_y);
 
 /** add widget to the current module toolbox */
 void dt_view_manager_module_toolbox_add(dt_view_manager_t *vm, GtkWidget *tool, dt_view_type_flags_t view);

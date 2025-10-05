@@ -120,31 +120,29 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   return 0;
 }
 
-static int _init_hardness(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment)
+static int _init_hardness(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float mask_hardness = dt_masks_get_set_conf_value(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX, increment);
-  //if(gui->guipoints_count > 0) dt_masks_dynbuf_set(gui->guipoints_payload, -3, masks_hardness);
+  float mask_hardness = dt_masks_get_set_conf_value(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
   dt_toast_log(_("hardness: %3.2f%%"), mask_hardness * 100.0f);
   return 1;
 }
 
-static int _init_size(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment)
+static int _init_size(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
 
-  float mask_size = dt_masks_get_set_conf_value(form, "size", amount, BORDER_MIN, BORDER_MAX, increment);
-  //if(gui->guipoints_count > 0) dt_masks_dynbuf_set(gui->guipoints_payload, -4, masks_border);
+  float mask_size = dt_masks_get_set_conf_value(form, "size", amount, BORDER_MIN, BORDER_MAX, increment, flow);
   dt_toast_log(_("size: %3.2f%%"), mask_size * 2.f * 100.f);
   return 1;
 }
 
-static int _init_opacity(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment)
+static int _init_opacity(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float mask_opacity = dt_masks_get_set_conf_value(form, "opacity", amount, 0.f, 1.f, increment);
+  float mask_opacity = dt_masks_get_set_conf_value(form, "opacity", amount, 0.f, 1.f, increment, flow);
   dt_toast_log(_("opacity: %3.2f%%"), mask_opacity*100.f);
   return 1;
 }
 
-static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment)
+static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
   
   dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)(form->points)->data;
@@ -152,12 +150,12 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
 
   const float masks_hardness = circle->border;
   if(increment)
-    circle->border = MAX(HARDNESS_MIN, MIN(masks_hardness * amount, HARDNESS_MAX));
+    circle->border = MAX(HARDNESS_MIN, MIN(masks_hardness * powf(amount, (float)flow), HARDNESS_MAX));
   else
     circle->border = MAX(HARDNESS_MIN, MIN(amount, HARDNESS_MAX));
 
 
-  _init_hardness(form, amount, increment);
+  _init_hardness(form, amount, increment, flow);
 
   // we recreate the form points
   dt_masks_gui_form_remove(form, gui, index);
@@ -166,7 +164,7 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
   return 1;
 }
 
-static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment)
+static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
   //DebugBreak();
 
@@ -185,12 +183,12 @@ static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct 
     {
       case(DT_MASKS_INCREMENT_SCALE):
       {
-        circle->radius *= amount;
+        circle->radius *= powf(amount, (float)flow);
         break;
       }
       case(DT_MASKS_INCREMENT_OFFSET):
       {
-        circle->radius += amount;
+        circle->radius += amount * (float)flow;
         break;
       }
       case(DT_MASKS_INCREMENT_ABSOLUTE):
@@ -200,7 +198,7 @@ static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct 
     }
   }
 
-  _init_size(form, amount, DT_MASKS_INCREMENT_SCALE);
+  _init_size(form, amount, DT_MASKS_INCREMENT_SCALE, flow);
 
   // we recreate the form points
   dt_masks_gui_form_remove(form, gui, index);
@@ -209,7 +207,7 @@ static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct 
   return 1;
 }
 
-static int _circle_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up,
+static int _circle_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up, const int flow,
                                          uint32_t state, dt_masks_form_t *form, int parentid,
                                          dt_masks_form_gui_t *gui, int index,
                                          dt_masks_interaction_t interaction)
@@ -217,20 +215,20 @@ static int _circle_events_mouse_scrolled(struct dt_iop_module_t *module, float p
   if(gui->creation)
   {
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
-      return _init_opacity(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET);
+      return _init_opacity(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
-      return _init_hardness(form, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE);
-    else    
-      return _init_size(form, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE);
+      return _init_hardness(form, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
+    else
+      return _init_size(form, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
   }
   else if(gui->form_selected)
   {
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
-      return dt_masks_form_set_opacity(form, parentid, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET);
+      return dt_masks_form_set_opacity(form, parentid, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
-      return _change_hardness(form, gui, module, index, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE);
+      return _change_hardness(form, gui, module, index, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
     else
-      return _change_size(form, gui, module, index, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE);
+      return _change_size(form, gui, module, index, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
   }
   return 0;
 }

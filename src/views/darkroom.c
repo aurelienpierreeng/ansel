@@ -2459,7 +2459,7 @@ static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int 
 }
 
 
-int scrolled(dt_view_t *self, double x, double y, int up, int state)
+int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y)
 {
   if(_is_scroll_captured_by_widget()) return FALSE;
 
@@ -2468,7 +2468,7 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state)
   if(!mouse_in_actionarea(self, x, y)) return FALSE;
 
   // masks
-  if(dev->form_visible && dt_masks_events_mouse_scrolled(dev->gui_module, x, y, up, state))
+  if(dev->form_visible && dt_masks_events_mouse_scrolled(dev->gui_module, x, y, up, state, delta_y))
   {
     // Scroll on masks changes their size, therefore mask parameters and image output.
     // FIXME: use invalidate_top in the future
