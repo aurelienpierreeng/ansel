@@ -1294,7 +1294,7 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
   return 1;
 }
 
-static int _brush_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up, const int delta_y,
+static int _brush_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up, const int flow,
                                         uint32_t state, dt_masks_form_t *form, int parentid,
                                         dt_masks_form_gui_t *gui, int index,
                                         dt_masks_interaction_t interaction)
@@ -1302,21 +1302,21 @@ static int _brush_events_mouse_scrolled(struct dt_iop_module_t *module, float pz
   if(gui->creation)
   {
     if(dt_modifier_is(state, GDK_SHIFT_MASK))
-      return _init_hardness(form, parentid, gui, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, delta_y);
+      return _init_hardness(form, parentid, gui, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
     else if(dt_modifier_is(state, GDK_CONTROL_MASK))
-      return _init_opacity(form, parentid, gui, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, delta_y);
+      return _init_opacity(form, parentid, gui, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
     else
-      return _init_size(form, parentid, gui, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, delta_y);
+      return _init_size(form, parentid, gui, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
   }
   else if(gui->form_selected || gui->point_selected >= 0 || gui->feather_selected >= 0
           || gui->seg_selected >= 0)
   {
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
-      return dt_masks_form_set_opacity(form, parentid, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, delta_y);
+      return dt_masks_form_set_opacity(form, parentid, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
-      return _change_hardness(form, parentid, gui, module, index, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, delta_y);
+      return _change_hardness(form, parentid, gui, module, index, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
     else // resize don't care where the mouse is inside a shape
-      return _change_size(form, parentid, gui, module, index, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, delta_y);
+      return _change_size(form, parentid, gui, module, index, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
   }
   return 0;
 }

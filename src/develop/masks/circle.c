@@ -96,27 +96,25 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   float dist;
   
   _circle_get_distance(pzx, pzy, as, gui, index, 0, &in, &inside_border, &near, &inside_source, &dist);
-  
-  if(near <= 0)
+
+  if(inside_source)
   {
-    if(inside_source)
-    {
-      gui->form_selected = TRUE;
-      gui->source_selected = TRUE;
-      return 1;
-    }
-    else if(inside_border)
-    {
-      gui->form_selected = TRUE;
-      gui->border_selected = TRUE;
-      return 1;
-    }
-    else if(in)
-    {
-      gui->form_selected = TRUE;
-      return 1;
-    }
+    gui->form_selected = TRUE;
+    gui->source_selected = TRUE;
+    return 1;
   }
+  else if(inside_border)
+  {
+    gui->form_selected = TRUE;
+    gui->border_selected = TRUE;
+    return 1;
+  }
+  else if(in)
+  {
+    gui->form_selected = TRUE;
+    return 1;
+  }
+  
   return 0;
 }
 
@@ -166,8 +164,6 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
 
 static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  //DebugBreak();
-
   dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)(form->points)->data;
   if(!circle) return 0;
 
