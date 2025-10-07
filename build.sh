@@ -392,7 +392,6 @@ then
 	fi
 else
 	CMAKE_MORE_OPTIONS="${CMAKE_MORE_OPTIONS} -DBINARY_PACKAGE_BUILD=OFF"
-	fi
 fi
 
 # ---------------------------------------------------------------------------
