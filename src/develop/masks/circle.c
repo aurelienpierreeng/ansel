@@ -527,23 +527,24 @@ static void _circle_draw_lines(gboolean borders, gboolean source, cairo_t *cr, d
     cairo_set_dash(cr, dashed, len, 0);
   else
     cairo_set_dash(cr, dashed, 0, 0);
+  // HIGHLIGHT
   if(selected)
   {
     if(source)
-      cairo_set_line_width(cr, 2.5 / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_SOURCE_SELECTED / zoom_scale);
     else if(borders)
-      cairo_set_line_width(cr, 2.0 / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_SELECTED / zoom_scale);
     else
-      cairo_set_line_width(cr, 5.0 / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
   }
   else
   {
     if(source)
-      cairo_set_line_width(cr, 1.5 / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_SOURCE / zoom_scale);
     else if(borders)
-      cairo_set_line_width(cr, 1.0 / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER / zoom_scale);
     else
-      cairo_set_line_width(cr, 3.0 / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
   }
   dt_draw_set_color_overlay(cr, FALSE, 0.8);
 
@@ -558,16 +559,20 @@ static void _circle_draw_lines(gboolean borders, gboolean source, cairo_t *cr, d
   if(selected)
   {
     if(source)
-      cairo_set_line_width(cr, 1.0 / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_SOURCE_SELECTED / zoom_scale);
+    else if(borders)
+      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_SELECTED / zoom_scale);
     else
-      cairo_set_line_width(cr, 2.0 / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_GROUP_SELECTED / zoom_scale);
   }
   else
   {
     if(source)
-      cairo_set_line_width(cr, 0.5 / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_SOURCE / zoom_scale);
+    else if(borders)
+      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER / zoom_scale);
     else
-      cairo_set_line_width(cr, 1.0 / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
   }
   dt_draw_set_color_overlay(cr, TRUE, 0.8);
   cairo_stroke(cr);
@@ -681,8 +686,7 @@ static int _circle_get_points(dt_develop_t *dev, float x, float y, float radius,
   return 0;
 }
 
-static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index,
-                                       int num_points)
+static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int num_points)
 {
   if(!gui) return;
 
@@ -824,7 +828,7 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
       cairo_stroke(cr);
     }
 
-    // we only the main shape for the source, no borders
+    // we only draw the main shape for the source, no borders
     _circle_draw_lines(FALSE, TRUE, cr, dashed, len, selected, zoom_scale, gpt->source, gpt->source_count);
   }
 }

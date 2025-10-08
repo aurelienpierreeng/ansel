@@ -2079,16 +2079,16 @@ void dt_masks_select_form(struct dt_iop_module_t *module, dt_masks_form_t *sel)
 // draw a cross where the source position of a clone mask will be created
 void dt_masks_draw_clone_source_pos(cairo_t *cr, const float zoom_scale, const float x, const float y)
 {
-  const float dx = 3.5f / zoom_scale;
-  const float dy = 3.5f / zoom_scale;
+  const float dx = DT_MASKS_SIZE_CROSS / zoom_scale;
+  const float dy = DT_MASKS_SIZE_CROSS / zoom_scale;
 
-  double dashed[] = { 4.0, 4.0 };
+  double dashed[] = { DT_PIXEL_APPLY_DPI(4.0), DT_PIXEL_APPLY_DPI(4.0) };
   dashed[0] /= zoom_scale;
   dashed[1] /= zoom_scale;
 
   cairo_set_dash(cr, dashed, 0, 0);
-  cairo_set_line_width(cr, 3.0 / zoom_scale);
-  cairo_set_source_rgba(cr, .3, .3, .3, .8);
+  cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
+  dt_draw_set_color_overlay(cr, FALSE, 0.8);
 
   cairo_move_to(cr, x + dx, y);
   cairo_line_to(cr, x - dx, y);
@@ -2096,8 +2096,8 @@ void dt_masks_draw_clone_source_pos(cairo_t *cr, const float zoom_scale, const f
   cairo_line_to(cr, x, y - dy);
   cairo_stroke_preserve(cr);
 
-  cairo_set_line_width(cr, 1.0 / zoom_scale);
-  cairo_set_source_rgba(cr, .8, .8, .8, .8);
+  cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
+  dt_draw_set_color_overlay(cr, TRUE, 0.8);
   cairo_stroke(cr);
 }
 
