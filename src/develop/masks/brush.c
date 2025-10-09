@@ -2123,6 +2123,11 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   return 1;
 }
 
+static void _brush_draw_shape(cairo_t *cr, float *points, int points_count)
+{
+
+}
+
 static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int nb)
 {
   if(!gui) return;
@@ -2910,7 +2915,8 @@ const dt_masks_functions_t dt_masks_functions_brush = {
   .mouse_scrolled = _brush_events_mouse_scrolled,
   .button_pressed = _brush_events_button_pressed,
   .button_released = _brush_events_button_released,
-  .post_expose = _brush_events_post_expose
+  .post_expose = _brush_events_post_expose,
+  .draw_shape = _brush_draw_shape
 };
 
 

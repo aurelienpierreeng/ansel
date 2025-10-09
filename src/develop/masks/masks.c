@@ -1105,6 +1105,67 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
 
   return ret;
 }
+
+void dt_masks_draw_lines(gboolean borders, gboolean source, cairo_t *cr, double *dashed, const int len,
+                               const gboolean selected, const float zoom_scale, float *points,
+                               const int points_count, const dt_masks_functions_t *functions)
+{
+  // DASHED ?
+  if(borders && !source)
+    cairo_set_dash(cr, dashed, len, 0);
+  else
+    cairo_set_dash(cr, dashed, 0, 0);
+  // HIGHLIGHT
+  if(selected)
+  {
+    if(source)
+      cairo_set_line_width(cr, DT_MASKS_SIZE_SOURCE_SELECTED / zoom_scale);
+    else if(borders)
+      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_SELECTED / zoom_scale);
+    else
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
+  }
+  else
+  {
+    if(source)
+      cairo_set_line_width(cr, DT_MASKS_SIZE_SOURCE / zoom_scale);
+    else if(borders)
+      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER / zoom_scale);
+    else
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
+  }
+  dt_draw_set_color_overlay(cr, FALSE, 0.8);
+
+  // draw the shape
+  if(functions->draw_shape)
+    functions->draw_shape(cr, points, points_count);
+
+  // stroke it with normal size
+  cairo_stroke_preserve(cr);
+  if(selected)
+  {
+    if(source)
+      cairo_set_line_width(cr, DT_MASKS_SIZE_SOURCE_SELECTED / zoom_scale);
+    else if(borders)
+      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_SELECTED / zoom_scale);
+    else
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_GROUP_SELECTED / zoom_scale);
+  }
+  else
+  {
+    if(source)
+      cairo_set_line_width(cr, DT_MASKS_SIZE_SOURCE / zoom_scale);
+    else if(borders)
+      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER / zoom_scale);
+    else
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
+  }
+  dt_draw_set_color_overlay(cr, TRUE, 0.8);
+  
+  // stroke
+  cairo_stroke(cr);
+}
+
 void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
                                  int32_t pointerx, int32_t pointery)
 {

@@ -247,6 +247,9 @@ typedef struct dt_masks_functions_t
   int (*button_released)(struct dt_iop_module_t *module, float pzx, float pzy, int which, uint32_t state,
                          struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
   void (*post_expose)(cairo_t *cr, float zoom_scale, struct dt_masks_form_gui_t *gui, int index, int num_points);
+  // The function to draw the shape in question
+  void (*draw_shape)(cairo_t *cr, float *points, int points_count);
+
 } dt_masks_functions_t;
 
 /** structure used to define a form */
@@ -424,6 +427,25 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
 int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, double y, double pressure,
                                    int which, int type, uint32_t state);
 int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, double y, int up, uint32_t state, int delta_y);
+
+/**
+ * @brief Draw lines of a mask shape
+ * 
+ * @param borders TRUE to draw borders
+ * @param source TRUE to draw source position (for clone masks)
+ * @param cr the cairo context to draw into
+ * @param dashed TRUE to draw dashed lines
+ * @param len the length of the dashed line pattern
+ * @param selected TRUE if the shape is selected
+ * @param zoom_scale the current zoom scale of the image
+ * @param points the points of the shape to draw
+ * @param points_count the number of points in the points array
+ * @param functions the pointer to the function table for the shape to draw
+ */
+void dt_masks_draw_lines(gboolean borders, gboolean source, cairo_t *cr, double *dashed, const int len,
+                               const gboolean selected, const float zoom_scale, float *points,
+                               const int points_count, const dt_masks_functions_t *functions);
+
 void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
                                  int32_t pointerx, int32_t pointery);
 int dt_masks_events_mouse_leave(struct dt_iop_module_t *module);

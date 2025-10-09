@@ -517,65 +517,18 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, float pzx,
   return 1;
 }
 
-static void _circle_draw_lines(gboolean borders, gboolean source, cairo_t *cr, double *dashed, const int len,
-                               const gboolean selected, const float zoom_scale, float *points,
-                               const int points_count)
+static void _circle_draw_shape(cairo_t *cr, float *points, int points_count)
 {
+  // minimum number of points to draw a circle
   if(points_count <= 6) return;
 
-  if(borders && !source)
-    cairo_set_dash(cr, dashed, len, 0);
-  else
-    cairo_set_dash(cr, dashed, 0, 0);
-  // HIGHLIGHT
-  if(selected)
-  {
-    if(source)
-      cairo_set_line_width(cr, DT_MASKS_SIZE_SOURCE_SELECTED / zoom_scale);
-    else if(borders)
-      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_SELECTED / zoom_scale);
-    else
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
-  }
-  else
-  {
-    if(source)
-      cairo_set_line_width(cr, DT_MASKS_SIZE_SOURCE / zoom_scale);
-    else if(borders)
-      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER / zoom_scale);
-    else
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
-  }
-  dt_draw_set_color_overlay(cr, FALSE, 0.8);
-
+  // Draw the circle
   cairo_move_to(cr, points[2], points[3]);
   for(int i = 2; i < points_count; i++)
   {
     cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
   }
-  cairo_line_to(cr, points[2], points[3]);
-
-  cairo_stroke_preserve(cr);
-  if(selected)
-  {
-    if(source)
-      cairo_set_line_width(cr, DT_MASKS_SIZE_SOURCE_SELECTED / zoom_scale);
-    else if(borders)
-      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_SELECTED / zoom_scale);
-    else
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_GROUP_SELECTED / zoom_scale);
-  }
-  else
-  {
-    if(source)
-      cairo_set_line_width(cr, DT_MASKS_SIZE_SOURCE / zoom_scale);
-    else if(borders)
-      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER / zoom_scale);
-    else
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
-  }
-  dt_draw_set_color_overlay(cr, TRUE, 0.8);
-  cairo_stroke(cr);
+  cairo_line_to(cr, points[2], points[3]); // close the circle
 }
 
 static float *_points_to_transform(float x, float y, float radius, float wd, float ht, int *points_count)
@@ -747,9 +700,9 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
       // we draw the form and it's border
       cairo_save(cr);
       // we draw the main shape
-      _circle_draw_lines(FALSE, FALSE, cr, dashed, len, FALSE, zoom_scale, points, points_count);
+      dt_masks_draw_lines(FALSE, FALSE, cr, dashed, len, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle);
       // we draw the borders
-      _circle_draw_lines(TRUE, FALSE, cr, dashed, len, FALSE, zoom_scale, border, border_count);
+      dt_masks_draw_lines(TRUE, FALSE, cr, dashed, len, FALSE, zoom_scale, border, border_count, &dt_masks_functions_circle);
       cairo_restore(cr);
 
       // draw a cross where the source will be created
@@ -766,17 +719,17 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
     }
 
     return;
-  }
+  } // creation
 
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return;
   // we draw the main shape
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-  _circle_draw_lines(FALSE, FALSE, cr, dashed, len, selected, zoom_scale, gpt->points, gpt->points_count);
+  dt_masks_draw_lines(FALSE, FALSE, cr, dashed, len, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle);
   // we draw the borders
   if(gui->group_selected == index)
-    _circle_draw_lines(TRUE, FALSE, cr, dashed, len, (gui->border_selected), zoom_scale, gpt->border,
-                       gpt->border_count);
+    dt_masks_draw_lines(TRUE, FALSE, cr, dashed, len, (gui->border_selected), zoom_scale, gpt->border,
+                       gpt->border_count, &dt_masks_functions_circle);
 
   // draw the source if any
   if(gpt->source_count > 6)
@@ -829,7 +782,7 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
     }
 
     // we only draw the main shape for the source, no borders
-    _circle_draw_lines(FALSE, TRUE, cr, dashed, len, selected, zoom_scale, gpt->source, gpt->source_count);
+    dt_masks_draw_lines(FALSE, TRUE, cr, dashed, len, selected, zoom_scale, gpt->source, gpt->source_count, &dt_masks_functions_circle);
   }
 }
 
@@ -1375,7 +1328,8 @@ const dt_masks_functions_t dt_masks_functions_circle = {
   .mouse_scrolled = _circle_events_mouse_scrolled,
   .button_pressed = _circle_events_button_pressed,
   .button_released = _circle_events_button_released,
-  .post_expose = _circle_events_post_expose
+  .post_expose = _circle_events_post_expose,
+  .draw_shape = _circle_draw_shape
 };
 
 
