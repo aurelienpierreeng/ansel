@@ -83,8 +83,8 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
   gui->form_selected = gui->border_selected = FALSE;
   gui->source_selected = gui->source_dragging = FALSE;
   gui->pivot_selected = FALSE;
-  gui->feather_selected = -1;
-  gui->point_edited = gui->point_selected = -1;
+  gui->handle_selected = -1;
+  gui->node_edited = gui->node_selected = -1;
   gui->seg_selected = -1;
   gui->point_border_selected = -1;
   gui->group_selected = -1;

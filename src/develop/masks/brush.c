@@ -204,9 +204,9 @@ static void _brush_border_get_XY(float p0x, float p0y, float p1x, float p1y, flo
   *yb = (*yc) - rad * dx * l;
 }
 
-/** get feather extremity from the control point n°2 */
+/** get handle extremity from the control point n°2 */
 /** the values should be in orthonormal space */
-static void _brush_ctrl2_to_feather(float ptx, float pty, float ctrlx, float ctrly, float *fx, float *fy,
+static void _brush_ctrl2_to_handle(float ptx, float pty, float ctrlx, float ctrly, float *fx, float *fy,
                                     gboolean clockwise)
 {
   if(clockwise)
@@ -1081,6 +1081,12 @@ static float _brush_get_position_in_segment(float x, float y, dt_masks_form_t *f
   return tmin;
 }
 
+// return true if the node is a corner
+static gboolean _is_corner_node(const dt_masks_form_gui_points_t *gpt, const int index)
+{
+  return (gpt->points[index * 6 + 2] == gpt->points[index * 6 + 4]
+       && gpt->points[index * 6 + 3] == gpt->points[index * 6 + 5]);
+}
 
 static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float pzy, dt_masks_form_t *form, int parentid,
                                  dt_masks_form_gui_t *gui, int index)
@@ -1089,13 +1095,13 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
 
-  const float as = DT_PIXEL_APPLY_DPI(5);
+  const float dist_curs = DT_PIXEL_APPLY_DPI(5);
 
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
   gui->source_selected = FALSE;
-  gui->feather_selected = -1;
-  gui->point_selected = -1;
+  gui->handle_selected = -1;
+  gui->node_selected = -1;
   gui->seg_selected = -1;
   gui->point_border_selected = -1;
   // are we near a point or feather ?
@@ -1104,54 +1110,53 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   pzx *= darktable.develop->preview_pipe->backbuf_width;
   pzy *= darktable.develop->preview_pipe->backbuf_height;
 
-  if((gui->group_selected == index) && gui->point_edited >= 0)
+  if((gui->group_selected == index) && gui->node_edited >= 0)
   {
-    const int k = gui->point_edited;
-    // we only select feather if the point is not "sharp"
-    // FIXME: why ???
-    if(gpt->points[k * 6 + 2] != gpt->points[k * 6 + 4]
-       && gpt->points[k * 6 + 3] != gpt->points[k * 6 + 5])
+    const int k = gui->node_edited;
+    // we can select the handle only if the node is a curve
+    if(!_is_corner_node(gpt, k))
     {
       float ffx, ffy;
-      _brush_ctrl2_to_feather(gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], gpt->points[k * 6 + 4],
+      _brush_ctrl2_to_handle(gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], gpt->points[k * 6 + 4],
                               gpt->points[k * 6 + 5], &ffx, &ffy, TRUE);
-      if(pzx - ffx > -as && pzx - ffx < as && pzy - ffy > -as && pzy - ffy < as)
+      if((pzx - ffx > -dist_curs) && (pzx - ffx < dist_curs) && (pzy - ffy > -dist_curs) && (pzy - ffy < dist_curs))
       {
-        gui->feather_selected = k;
+        gui->handle_selected = k;
 
         return 1;
       }
     }
-    // corner ??
-    if(pzx - gpt->points[k * 6 + 2] > -as
-       && pzx - gpt->points[k * 6 + 2] < as
-       && pzy - gpt->points[k * 6 + 3] > -as
-       && pzy - gpt->points[k * 6 + 3] < as)
+    
+    // are we also close to the node ?
+    if(pzx - gpt->points[k * 6 + 2] > -dist_curs
+       && pzx - gpt->points[k * 6 + 2] < dist_curs
+       && pzy - gpt->points[k * 6 + 3] > -dist_curs
+       && pzy - gpt->points[k * 6 + 3] < dist_curs)
     {
-      gui->point_selected = k;
+      gui->node_selected = k;
 
       return 1;
     }
   }
 
+  // iterate all nodes and look for one that is close enough
   for(int k = 0; k < nb; k++)
   {
-    // corner ??
-    if(pzx - gpt->points[k * 6 + 2] > -as
-       && pzx - gpt->points[k * 6 + 2] < as
-       && pzy - gpt->points[k * 6 + 3] > -as
-       && pzy - gpt->points[k * 6 + 3] < as)
+    if(pzx - gpt->points[k * 6 + 2] > -dist_curs
+       && pzx - gpt->points[k * 6 + 2] < dist_curs
+       && pzy - gpt->points[k * 6 + 3] > -dist_curs
+       && pzy - gpt->points[k * 6 + 3] < dist_curs)
     {
-      gui->point_selected = k;
+      gui->node_selected = k;
 
       return 1;
     }
 
-    // border corner ??
-    if(pzx - gpt->border[k * 6] > -as
-       && pzx - gpt->border[k * 6] < as
-       && pzy - gpt->border[k * 6 + 1] > -as
-       && pzy - gpt->border[k * 6 + 1] < as)
+    // border
+    if(pzx - gpt->border[k * 6] > -dist_curs
+       && pzx - gpt->border[k * 6] < dist_curs
+       && pzy - gpt->border[k * 6 + 1] > -dist_curs
+       && pzy - gpt->border[k * 6 + 1] < dist_curs)
     {
       gui->point_border_selected = k;
 
@@ -1162,8 +1167,10 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   // are we inside the form or the borders or near a segment ???
   int in, inb, near, ins;
   float dist;
-  _brush_get_distance(pzx, pzy, as, gui, index, nb, &in, &inb, &near, &ins, &dist);
-  gui->seg_selected = near;
+  _brush_get_distance(pzx, pzy, dist_curs, gui, index, nb, &in, &inb, &near, &ins, &dist);
+  if(near < (g_list_length(form->points) - 1))
+    gui->seg_selected = near;
+
   if(near < 0)
   {
     if(ins)
@@ -1216,7 +1223,7 @@ static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_g
   int pts_number = 0;
   for(GList *l = form->points; l; l = g_list_next(l))
   {
-    if(gui->point_selected == -1 || gui->point_selected == pts_number)
+    if(gui->node_selected == -1 || gui->node_selected == pts_number)
     {
       dt_masks_point_brush_t *point = (dt_masks_point_brush_t *)l->data;
       const float masks_hardness = point->hardness;
@@ -1244,7 +1251,7 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
   int pts_number = 0;
   for(GList *l = form->points; l; l = g_list_next(l))
   {
-    if(gui->point_selected == -1 || gui->point_selected == pts_number)
+    if(gui->node_selected == -1 || gui->node_selected == pts_number)
     {
       dt_masks_point_brush_t *point = (dt_masks_point_brush_t *)l->data;
       if(amount > 1.0f && (point->border[0] > 1.0f || point->border[1] > 1.0f))
@@ -1257,7 +1264,7 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
   pts_number = 0;
   for(GList *l = form->points; l; l = g_list_next(l))
   {
-    if(gui->point_selected == -1 || gui->point_selected == pts_number)
+    if(gui->node_selected == -1 || gui->node_selected == pts_number)
     {
       dt_masks_point_brush_t *point = (dt_masks_point_brush_t *)l->data;
 
@@ -1308,7 +1315,7 @@ static int _brush_events_mouse_scrolled(struct dt_iop_module_t *module, float pz
     else
       return _init_size(form, parentid, gui, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
   }
-  else if(gui->form_selected || gui->point_selected >= 0 || gui->feather_selected >= 0
+  else if(gui->form_selected || gui->node_selected >= 0 || gui->handle_selected >= 0
           || gui->seg_selected >= 0)
   {
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
@@ -1341,32 +1348,32 @@ static void _get_pressure_sensitivity(dt_masks_form_gui_t *gui)
   }
 }
 
-static void _change_point_type(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
+static void _change_node_type(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
                                dt_masks_form_gui_t *gui, int index)
 {
-  dt_masks_point_brush_t *point = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->point_edited);
-  if(point->state != DT_MASKS_POINT_STATE_NORMAL)
+  dt_masks_point_brush_t *node = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->node_edited);
+  if(node->state != DT_MASKS_POINT_STATE_NORMAL)
   {
-    point->state = DT_MASKS_POINT_STATE_NORMAL;
+    node->state = DT_MASKS_POINT_STATE_NORMAL;
     _brush_init_ctrl_points(form);
   }
   else
   {
-    point->ctrl1[0] = point->ctrl2[0] = point->corner[0];
-    point->ctrl1[1] = point->ctrl2[1] = point->corner[1];
-    point->state = DT_MASKS_POINT_STATE_USER;
-  }
+    node->ctrl1[0] = node->ctrl2[0] = node->corner[0];
+    node->ctrl1[1] = node->ctrl2[1] = node->corner[1];
+    node->state = DT_MASKS_POINT_STATE_USER;
 
-  // we recreate the form points
+  }
+  // we recreate the form nodes
   dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 }
 
-static void _add_point_to_segment(struct dt_iop_module_t *module, float pzx, float pzy, dt_masks_form_t *form,
+static void _add_node_to_segment(struct dt_iop_module_t *module, float pzx, float pzy, dt_masks_form_t *form,
                                   int parentid, dt_masks_form_gui_t *gui, int index)
 {
-  // we add a new point to the brush
-  dt_masks_point_brush_t *bzpt = (dt_masks_point_brush_t *)(malloc(sizeof(dt_masks_point_brush_t)));
+  // we add a new node to the brush
+  dt_masks_point_brush_t *node = (dt_masks_point_brush_t *)(malloc(sizeof(dt_masks_point_brush_t)));
 
   const float wd = darktable.develop->preview_pipe->backbuf_width;
   const float ht = darktable.develop->preview_pipe->backbuf_height;
@@ -1374,30 +1381,30 @@ static void _add_point_to_segment(struct dt_iop_module_t *module, float pzx, flo
   dt_dev_distort_backtransform(darktable.develop, pts, 1);
 
   // set coordinates
-  bzpt->corner[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
-  bzpt->corner[1] = pts[1] / darktable.develop->preview_pipe->iheight;
-  bzpt->ctrl1[0] = bzpt->ctrl1[1] = bzpt->ctrl2[0] = bzpt->ctrl2[1] = -1.0;
-  bzpt->state = DT_MASKS_POINT_STATE_NORMAL;
+  node->corner[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
+  node->corner[1] = pts[1] / darktable.develop->preview_pipe->iheight;
+  node->ctrl1[0] = node->ctrl1[1] = node->ctrl2[0] = node->ctrl2[1] = -1.0;
+  node->state = DT_MASKS_POINT_STATE_NORMAL;
 
-  // set other attributes of the new point. we interpolate the starting and the end point of that
+  // set other attributes of the new node. we interpolate the starting and the end node of that
   // segment
-  const float t = _brush_get_position_in_segment(bzpt->corner[0], bzpt->corner[1], form, gui->seg_selected);
-  // start and end point of the segment
+  const float t = _brush_get_position_in_segment(node->corner[0], node->corner[1], form, gui->seg_selected);
+  // start and end node of the segment
   GList *pt = g_list_nth(form->points, gui->seg_selected);
   dt_masks_point_brush_t *point0 = (dt_masks_point_brush_t *)pt->data;
   dt_masks_point_brush_t *point1 = (dt_masks_point_brush_t *)g_list_next(pt)->data;
-  bzpt->border[0] = point0->border[0] * (1.0f - t) + point1->border[0] * t;
-  bzpt->border[1] = point0->border[1] * (1.0f - t) + point1->border[1] * t;
-  bzpt->hardness = point0->hardness * (1.0f - t) + point1->hardness * t;
-  bzpt->density = point0->density * (1.0f - t) + point1->density * t;
+  node->border[0] = point0->border[0] * (1.0f - t) + point1->border[0] * t;
+  node->border[1] = point0->border[1] * (1.0f - t) + point1->border[1] * t;
+  node->hardness = point0->hardness * (1.0f - t) + point1->hardness * t;
+  node->density = point0->density * (1.0f - t) + point1->density * t;
 
-  form->points = g_list_insert(form->points, bzpt, gui->seg_selected + 1);
+  form->points = g_list_insert(form->points, node, gui->seg_selected + 1);
   _brush_init_ctrl_points(form);
 
   dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 
-  gui->point_edited = gui->point_dragging = gui->point_selected = gui->seg_selected + 1;
+  gui->node_edited = gui->point_dragging = gui->node_selected = gui->seg_selected + 1;
   gui->seg_selected = -1;
 }
 
@@ -1435,14 +1442,14 @@ static void _remove_shape(struct dt_iop_module_t *module, dt_masks_form_t *form,
   // Not sure what difference it makes.
 }
 
-static void _remove_point(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
+static void _remove_node(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
                           dt_masks_form_gui_t *gui, int index)
 {
-  dt_masks_point_brush_t *point = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->point_selected);
-  form->points = g_list_remove(form->points, point);
-  free(point);
-  gui->point_selected = -1;
-  gui->point_edited = -1;
+  dt_masks_point_brush_t *node = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->node_selected);
+  form->points = g_list_remove(form->points, node);
+  free(node);
+  gui->node_selected = -1;
+  gui->node_edited = -1;
   _brush_init_ctrl_points(form);
 
   // we recreate the form points
@@ -1470,18 +1477,18 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
   // always start with a mask density of 100%, it will be adjusted with pen pressure if used.
   const float masks_density = 1.0f;
 
-  if(gui->creation && which == 1
-     && (dt_modifier_is(state, GDK_CONTROL_MASK | GDK_SHIFT_MASK) || dt_modifier_is(state, GDK_SHIFT_MASK)))
+  if(gui->creation)
   {
-    // set some absolute or relative position for the source of the clone mask
-    if(form->type & DT_MASKS_CLONE) dt_masks_set_source_pos_initial_state(gui, state, pzx, pzy);
-
-    return 1;
-  }
-  else if(which == 1)
-  {
-    if(gui->creation)
+    if(which == 1)
     {
+      if(dt_modifier_is(state, GDK_CONTROL_MASK | GDK_SHIFT_MASK) || dt_modifier_is(state, GDK_SHIFT_MASK))
+      {
+        // set some absolute or relative position for the source of the clone mask
+        if(form->type & DT_MASKS_CLONE) dt_masks_set_source_pos_initial_state(gui, state, pzx, pzy);
+
+        return 1;
+      }
+
       const float wd = darktable.develop->preview_pipe->backbuf_width;
       const float ht = darktable.develop->preview_pipe->backbuf_height;
 
@@ -1506,7 +1513,26 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
 
       return 1;
     }
-    else if(gui->source_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
+    else if(which == 3)
+    {
+      // Delete shape from current group
+      // TODO: map that to context menu
+      dt_masks_dynbuf_free(gui->guipoints);
+      dt_masks_dynbuf_free(gui->guipoints_payload);
+      gui->guipoints = NULL;
+      gui->guipoints_payload = NULL;
+      gui->guipoints_count = 0;
+
+      dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
+      dt_masks_iop_update(module);
+
+      return 1;
+    }
+  }
+
+  else if(which == 1)
+  {
+    if(gui->source_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
     {
       dt_masks_form_gui_points_t *guipt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
       if(!guipt) return 0;
@@ -1519,53 +1545,50 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
     else if(gui->form_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
     {
       gui->form_dragging = TRUE;
-      gui->point_edited = -1;
+      gui->node_edited = -1;
       gui->dx = gpt->points[2] - gui->posx;
       gui->dy = gpt->points[3] - gui->posy;
       return 1;
     }
-    else if(gui->point_selected >= 0)
+    else if(gui->node_selected >= 0)
     {
       // if ctrl is pressed, we change the type of point
-      if(gui->point_edited == gui->point_selected && dt_modifier_is(state, GDK_CONTROL_MASK))
+      if(gui->node_edited == gui->node_selected && dt_modifier_is(state, GDK_CONTROL_MASK))
       {
         // FIXME: handle that in context menu
-        _change_point_type(module, form, parentid, gui, index);
+        _change_node_type(module, form, parentid, gui, index);
         return 1;
       }
       // we register the current position to avoid accidental move
-      if(gui->point_edited < 0 && gui->scrollx == 0.0f && gui->scrolly == 0.0f)
+      if(gui->node_edited < 0 && gui->scrollx == 0.0f && gui->scrolly == 0.0f)
       {
         gui->scrollx = pzx;
         gui->scrolly = pzy;
       }
-      gui->point_edited = gui->point_dragging = gui->point_selected;
+      gui->node_edited = gui->point_dragging = gui->node_selected;
 
       return 1;
     }
-    else if(gui->feather_selected >= 0)
+    else if(gui->handle_selected >= 0)
     {
-      gui->feather_dragging = gui->feather_selected;
+      gui->handle_dragging = gui->handle_selected;
 
       return 1;
     }
     else if(gui->point_border_selected >= 0)
     {
-      gui->point_edited = -1;
+      gui->node_edited = -1;
       gui->point_border_dragging = gui->point_border_selected;
       gui->point_border_selected = -1; // reset
       return 1;
     }
     else if(gui->seg_selected >= 0)
     {
-      // FIXME: why do we allow selecting an invalid segment index ???
-      const gboolean valid_segment = (gui->seg_selected < (g_list_length(form->points) - 1));
-      gui->point_edited = -1;
-      if(!valid_segment) return 1;
+      gui->node_edited = -1;
 
       if(dt_modifier_is(state, GDK_CONTROL_MASK))
       {
-        _add_point_to_segment(module, pzx, pzy, form, parentid, gui, index);
+        _add_node_to_segment(module, pzx, pzy, form, parentid, gui, index);
       }
       else
       {
@@ -1576,60 +1599,47 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
       }
       return 1;
     }
-    gui->point_edited = -1;
+    gui->node_edited = -1;
   }
-  else if(gui->creation && which == 3)
-  {
-    // Delete shape from current group
-    // TODO: map that to context menu
-    dt_masks_dynbuf_free(gui->guipoints);
-    dt_masks_dynbuf_free(gui->guipoints_payload);
-    gui->guipoints = NULL;
-    gui->guipoints_payload = NULL;
-    gui->guipoints_count = 0;
 
-    dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
-    dt_masks_iop_update(module);
-
-    return 1;
-  }
-  else if(gui->point_selected >= 0 && which == 3)
+  else if(which == 3)
   {
-    // we remove the point (and the entire form if there is too few points)
-    if(g_list_shorter_than(form->points, 3))
+    if(gui->node_selected >= 0)
     {
-      // if the form doesn't below to a group, we don't delete it
-      if(parentid <= 0) return 1;
+      // we remove the point (and the entire form if there is too few points)
+      if(g_list_shorter_than(form->points, 3))
+      {
+        // if the form doesn't below to a group, we don't delete it
+        if(parentid <= 0) return 1;
+        _remove_shape(module, form, parentid, gui, index);
+        return 1;
+      }
+      _remove_node(module, form, parentid, gui, index);
+
+      return 1;
+    }
+    else if(gui->handle_selected >= 0)
+    {
+      // reset handle to default position
+      dt_masks_point_brush_t *point
+          = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->handle_selected);
+      if(point->state != DT_MASKS_POINT_STATE_NORMAL)
+      {
+        point->state = DT_MASKS_POINT_STATE_NORMAL;
+        _brush_init_ctrl_points(form);
+
+        // we recreate the form points
+        dt_masks_gui_form_remove(form, gui, index);
+        dt_masks_gui_form_create(form, gui, index, module);
+      }
+      return 1;
+    }
+    else if(parentid > 0 && gui->edit_mode == DT_MASKS_EDIT_FULL)
+    {
       _remove_shape(module, form, parentid, gui, index);
       return 1;
     }
-    _remove_point(module, form, parentid, gui, index);
-
-    return 1;
   }
-  else if(gui->feather_selected >= 0 && which == 3)
-  {
-    // FIXME: WTF does that do ?
-    // I can't get a feather selection, so right-click always remove the node
-    dt_masks_point_brush_t *point
-        = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->feather_selected);
-    if(point->state != DT_MASKS_POINT_STATE_NORMAL)
-    {
-      point->state = DT_MASKS_POINT_STATE_NORMAL;
-      _brush_init_ctrl_points(form);
-
-      // we recreate the form points
-      dt_masks_gui_form_remove(form, gui, index);
-      dt_masks_gui_form_create(form, gui, index, module);
-    }
-    return 1;
-  }
-  else if(which == 3 && parentid > 0 && gui->edit_mode == DT_MASKS_EDIT_FULL)
-  {
-    _remove_shape(module, form, parentid, gui, index);
-    return 1;
-  }
-
   return 0;
 }
 
@@ -1686,21 +1696,20 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, float p
                                          dt_masks_form_gui_t *gui, int index)
 {
   if(!gui) return 0;
-
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
 
   // The trick is to use the incremental setting, set to 1.0 to re-use the generic getter/setter without changing value
   float masks_border = dt_masks_get_set_conf_value(form, "border", 1.0f, BORDER_MIN, BORDER_MAX, TRUE, 1);
 
-  if(gui->creation && which == 1 &&
-     (dt_modifier_is(state, GDK_SHIFT_MASK) || dt_modifier_is(state, GDK_CONTROL_MASK | GDK_SHIFT_MASK)))
+  if(gui->creation && which == 1)
   {
-    // user just set the source position, so just return
-    return 1;
-  }
-  else if(gui->creation && which == 1)
-  {
+    if(dt_modifier_is(state, GDK_SHIFT_MASK) || dt_modifier_is(state, GDK_CONTROL_MASK | GDK_SHIFT_MASK))
+    {
+      // user just set the source position, so just return
+      return 1;
+    }
+
     dt_iop_module_t *crea_module = gui->creation_module;
 
     if(gui->guipoints && gui->guipoints_count > 0)
@@ -1808,127 +1817,130 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, float p
     }
     return 1;
   }
-  else if(gui->form_dragging)
+
+  else if(which == 1)
   {
-    // we end the form dragging
-    gui->form_dragging = FALSE;
-
-    // we get point0 new values
-    dt_masks_point_brush_t *point = (dt_masks_point_brush_t *)(form->points)->data;
-    float wd = darktable.develop->preview_pipe->backbuf_width;
-    float ht = darktable.develop->preview_pipe->backbuf_height;
-    float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
-    dt_dev_distort_backtransform(darktable.develop, pts, 1);
-    float dx = pts[0] / darktable.develop->preview_pipe->iwidth - point->corner[0];
-    float dy = pts[1] / darktable.develop->preview_pipe->iheight - point->corner[1];
-
-    // we move all points
-    for(GList *points = form->points; points; points = g_list_next(points))
+    if(gui->form_dragging)
     {
-      point = (dt_masks_point_brush_t *)points->data;
+      // we end the form dragging
+      gui->form_dragging = FALSE;
+
+      // we get point0 new values
+      dt_masks_point_brush_t *point = (dt_masks_point_brush_t *)(form->points)->data;
+      float wd = darktable.develop->preview_pipe->backbuf_width;
+      float ht = darktable.develop->preview_pipe->backbuf_height;
+      float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
+      dt_dev_distort_backtransform(darktable.develop, pts, 1);
+      float dx = pts[0] / darktable.develop->preview_pipe->iwidth - point->corner[0];
+      float dy = pts[1] / darktable.develop->preview_pipe->iheight - point->corner[1];
+
+      // we move all points
+      for(GList *points = form->points; points; points = g_list_next(points))
+      {
+        point = (dt_masks_point_brush_t *)points->data;
+        point->corner[0] += dx;
+        point->corner[1] += dy;
+        point->ctrl1[0] += dx;
+        point->ctrl1[1] += dy;
+        point->ctrl2[0] += dx;
+        point->ctrl2[1] += dy;
+      }
+
+      // we recreate the form points
+      dt_masks_gui_form_remove(form, gui, index);
+      dt_masks_gui_form_create(form, gui, index, module);
+      return 1;
+    }
+    else if(gui->source_dragging)
+    {
+      // we end the form dragging
+      gui->source_dragging = FALSE;
+
+      // we change the source value
+      float wd = darktable.develop->preview_pipe->backbuf_width;
+      float ht = darktable.develop->preview_pipe->backbuf_height;
+      float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
+      dt_dev_distort_backtransform(darktable.develop, pts, 1);
+      form->source[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
+      form->source[1] = pts[1] / darktable.develop->preview_pipe->iheight;
+
+      // we recreate the form points
+      dt_masks_gui_form_remove(form, gui, index);
+      dt_masks_gui_form_create(form, gui, index, module);
+      return 1;
+    }
+    else if(gui->seg_dragging >= 0)
+    {
+      gui->seg_dragging = -1;
+      return 1;
+    }
+    else if(gui->point_dragging >= 0)
+    {
+      dt_masks_point_brush_t *point
+          = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->point_dragging);
+      gui->point_dragging = -1;
+      if(gui->scrollx != 0.0f || gui->scrolly != 0.0f)
+      {
+        gui->scrollx = gui->scrolly = 0;
+        return 1;
+      }
+      gui->scrollx = gui->scrolly = 0;
+      float wd = darktable.develop->preview_pipe->backbuf_width;
+      float ht = darktable.develop->preview_pipe->backbuf_height;
+      float pts[2] = { pzx * wd, pzy * ht };
+      dt_dev_distort_backtransform(darktable.develop, pts, 1);
+      float dx = pts[0] / darktable.develop->preview_pipe->iwidth - point->corner[0];
+      float dy = pts[1] / darktable.develop->preview_pipe->iheight - point->corner[1];
+
       point->corner[0] += dx;
       point->corner[1] += dy;
       point->ctrl1[0] += dx;
       point->ctrl1[1] += dy;
       point->ctrl2[0] += dx;
       point->ctrl2[1] += dy;
-    }
 
-    // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
-    dt_masks_gui_form_create(form, gui, index, module);
-    return 1;
-  }
-  else if(gui->source_dragging)
-  {
-    // we end the form dragging
-    gui->source_dragging = FALSE;
+      _brush_init_ctrl_points(form);
 
-    // we change the source value
-    float wd = darktable.develop->preview_pipe->backbuf_width;
-    float ht = darktable.develop->preview_pipe->backbuf_height;
-    float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
-    dt_dev_distort_backtransform(darktable.develop, pts, 1);
-    form->source[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
-    form->source[1] = pts[1] / darktable.develop->preview_pipe->iheight;
-
-    // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
-    dt_masks_gui_form_create(form, gui, index, module);
-    return 1;
-  }
-  else if(gui->seg_dragging >= 0)
-  {
-    gui->seg_dragging = -1;
-    return 1;
-  }
-  else if(gui->point_dragging >= 0)
-  {
-    dt_masks_point_brush_t *point
-        = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->point_dragging);
-    gui->point_dragging = -1;
-    if(gui->scrollx != 0.0f || gui->scrolly != 0.0f)
-    {
-      gui->scrollx = gui->scrolly = 0;
+      // we recreate the form points
+      dt_masks_gui_form_remove(form, gui, index);
+      dt_masks_gui_form_create(form, gui, index, module);
       return 1;
     }
-    gui->scrollx = gui->scrolly = 0;
-    float wd = darktable.develop->preview_pipe->backbuf_width;
-    float ht = darktable.develop->preview_pipe->backbuf_height;
-    float pts[2] = { pzx * wd, pzy * ht };
-    dt_dev_distort_backtransform(darktable.develop, pts, 1);
-    float dx = pts[0] / darktable.develop->preview_pipe->iwidth - point->corner[0];
-    float dy = pts[1] / darktable.develop->preview_pipe->iheight - point->corner[1];
+    else if(gui->handle_dragging >= 0)
+    {
+      dt_masks_point_brush_t *point
+          = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->handle_dragging);
+      gui->handle_dragging = -1;
+      const float wd = darktable.develop->preview_pipe->backbuf_width;
+      const float ht = darktable.develop->preview_pipe->backbuf_height;
+      float pts[2] = { pzx * wd, pzy * ht };
+      dt_dev_distort_backtransform(darktable.develop, pts, 1);
 
-    point->corner[0] += dx;
-    point->corner[1] += dy;
-    point->ctrl1[0] += dx;
-    point->ctrl1[1] += dy;
-    point->ctrl2[0] += dx;
-    point->ctrl2[1] += dy;
+      float p1x, p1y, p2x, p2y;
+      _brush_feather_to_ctrl(point->corner[0] * darktable.develop->preview_pipe->iwidth,
+                            point->corner[1] * darktable.develop->preview_pipe->iheight,
+                            pts[0], pts[1],
+                            &p1x, &p1y, &p2x, &p2y, TRUE);
+      point->ctrl1[0] = p1x / darktable.develop->preview_pipe->iwidth;
+      point->ctrl1[1] = p1y / darktable.develop->preview_pipe->iheight;
+      point->ctrl2[0] = p2x / darktable.develop->preview_pipe->iwidth;
+      point->ctrl2[1] = p2y / darktable.develop->preview_pipe->iheight;
 
-    _brush_init_ctrl_points(form);
+      point->state = DT_MASKS_POINT_STATE_USER;
 
-    // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
-    dt_masks_gui_form_create(form, gui, index, module);
-    return 1;
+      _brush_init_ctrl_points(form);
+
+      // we recreate the form points
+      dt_masks_gui_form_remove(form, gui, index);
+      dt_masks_gui_form_create(form, gui, index, module);
+      return 1;
+    }
+    else if(gui->point_border_dragging >= 0)
+    {
+      gui->point_border_dragging = -1;
+      return 1;
+    }
   }
-  else if(gui->feather_dragging >= 0)
-  {
-    dt_masks_point_brush_t *point
-        = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->feather_dragging);
-    gui->feather_dragging = -1;
-    const float wd = darktable.develop->preview_pipe->backbuf_width;
-    const float ht = darktable.develop->preview_pipe->backbuf_height;
-    float pts[2] = { pzx * wd, pzy * ht };
-    dt_dev_distort_backtransform(darktable.develop, pts, 1);
-
-    float p1x, p1y, p2x, p2y;
-    _brush_feather_to_ctrl(point->corner[0] * darktable.develop->preview_pipe->iwidth,
-                           point->corner[1] * darktable.develop->preview_pipe->iheight,
-                           pts[0], pts[1],
-                           &p1x, &p1y, &p2x, &p2y, TRUE);
-    point->ctrl1[0] = p1x / darktable.develop->preview_pipe->iwidth;
-    point->ctrl1[1] = p1y / darktable.develop->preview_pipe->iheight;
-    point->ctrl2[0] = p2x / darktable.develop->preview_pipe->iwidth;
-    point->ctrl2[1] = p2y / darktable.develop->preview_pipe->iheight;
-
-    point->state = DT_MASKS_POINT_STATE_USER;
-
-    _brush_init_ctrl_points(form);
-
-    // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
-    dt_masks_gui_form_create(form, gui, index, module);
-    return 1;
-  }
-  else if(gui->point_border_dragging >= 0)
-  {
-    gui->point_border_dragging = -1;
-    return 1;
-  }
-
   return 0;
 }
 
@@ -1962,6 +1974,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
       return 1;
     }
   }
+  
   else if(gui->point_dragging >= 0)
   {
     const float wd = darktable.develop->preview_pipe->backbuf_width;
@@ -2021,14 +2034,14 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
 
     return 1;
   }
-  else if(gui->feather_dragging >= 0)
+  else if(gui->handle_dragging >= 0)
   {
     const float wd = darktable.develop->preview_pipe->backbuf_width;
     const float ht = darktable.develop->preview_pipe->backbuf_height;
     float pts[2] = { pzx * wd, pzy * ht };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
     dt_masks_point_brush_t *point
-        = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->feather_dragging);
+        = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->handle_dragging);
 
     float p1x, p1y, p2x, p2y;
     _brush_feather_to_ctrl(point->corner[0] * darktable.develop->preview_pipe->iwidth,
@@ -2109,7 +2122,6 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
       form->source[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
       form->source[1] = pts[1] / darktable.develop->preview_pipe->iheight;
     }
-
     // we recreate the form points
     dt_masks_gui_form_remove(form, gui, index);
     dt_masks_gui_form_create(form, gui, index, module);
@@ -2117,15 +2129,17 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     return 1;
   }
 
-
   if(_find_closest_handle(module, pzx, pzy, form, parentid, gui, index)) return 1;
   if(gui->edit_mode != DT_MASKS_EDIT_FULL) return 0;
   return 1;
 }
 
-static void _brush_draw_shape(cairo_t *cr, float *points, int points_count)
+void _brush_draw_source_shape(cairo_t *cr, const dt_masks_form_gui_points_t *gpt, const int nb)
 {
-
+  cairo_move_to(cr, gpt->source[nb * 6], gpt->source[nb * 6 + 1]);
+  for(int i = nb * 3; i < gpt->source_count; i++)
+    cairo_line_to(cr, gpt->source[i * 2], gpt->source[i * 2 + 1]);
+  cairo_line_to(cr, gpt->source[nb * 6], gpt->source[nb * 6 + 1]);
 }
 
 static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int nb)
@@ -2166,6 +2180,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
         ypos = 0.f;
       }
 
+      // draw brush circle at current mouse position
       cairo_save(cr);
       dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_CURSOR, opacity);
       cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3.0) / zoom_scale);
@@ -2312,13 +2327,13 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   } // creation
 
   // draw path
-  // FIXME: WTF are we checking there ?
-  if(gpt->points_count > nb * 3 + 2)
-  {
-    cairo_set_dash(cr, dashed, 0, 0);
+
+  // minimum points
+  if(gpt->points_count <= nb * 3 + 2) return;
 
     cairo_move_to(cr, gpt->points[nb * 6], gpt->points[nb * 6 + 1]);
     int seg = 1, seg2 = 0;
+
     for(int i = nb * 3; i < gpt->points_count; i++)
     {
       cairo_line_to(cr, gpt->points[i * 2], gpt->points[i * 2 + 1]);
@@ -2327,32 +2342,19 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
          && gpt->points[i * 2] == gpt->points[seg * 6 + 2])
       {
         // this is the end of the last segment, so we have to draw it
-        if((gui->group_selected == index)
-           && (gui->form_selected || gui->form_dragging || gui->seg_selected == seg2))
-          cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
-        else
-          cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
+        gboolean seg_selected = (gui->group_selected == index) && (gui->seg_selected == seg2);
+        gboolean action_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
+        // Highlight line
+        dt_masks_draw_lines(FALSE, FALSE, FALSE, cr, dashed, len, (seg_selected || action_selected), zoom_scale, gpt->points, gpt->points_count, NULL);
+        // Thin line
+        dt_masks_draw_lines(FALSE, FALSE, seg_selected, cr, dashed, len, (seg_selected || action_selected), zoom_scale, gpt->points, gpt->points_count, NULL);
 
-        dt_draw_set_color_overlay(cr, FALSE, 0.9);
-        cairo_stroke_preserve(cr);
-
-        if(gui->group_selected == index && gui->seg_selected == seg2)
-          cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_SEGMENT_SELECTED / zoom_scale);
-        else if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
-          cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_GROUP_SELECTED / zoom_scale);
-        else
-          cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
-
-        dt_draw_set_color_overlay(cr, TRUE, 0.8);
-        cairo_stroke(cr);
         // and we update the segment number
         seg = (seg + 1) % nb;
         seg2++;
         cairo_move_to(cr, gpt->points[i * 2], gpt->points[i * 2 + 1]);
       }
     }
-  }
-
 
   // draw borders
   if((gui->group_selected == index) && gpt->border_count > nb * 3 + 2)
@@ -2360,12 +2362,8 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     cairo_save(cr);
 
     cairo_move_to(cr, gpt->border[nb * 6], gpt->border[nb * 6 + 1]);
-
     for(int i = nb * 3 + 1; i < gpt->border_count; i++)
-    {
       cairo_line_to(cr, gpt->border[i * 2], gpt->border[i * 2 + 1]);
-    }
-
     cairo_close_path(cr);
 
     // Trick: fill with a transparent color to get only the outer shape
@@ -2374,13 +2372,14 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     cairo_fill_preserve(cr);
 
     // we execute the drawing
+    // Dark
     if(gui->border_selected)
       cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_SELECTED / zoom_scale);
     else
       cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER / zoom_scale);
     dt_draw_set_color_overlay(cr, FALSE, 0.8);
     cairo_stroke_preserve(cr);
-
+    // Light
     if(gui->border_selected)
       cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_SELECTED / zoom_scale);
     else
@@ -2390,139 +2389,38 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     cairo_stroke(cr);
 
     cairo_restore(cr);
-
-#if 0
-    //we draw the brush segment by segment
-    for (int k=0; k<nb; k++)
-    {
-      //draw the point
-      float anchor_size = 0.0f;
-
-      if (gui->point_border_selected == k)
-      {
-        anchor_size = 7.0f / zoom_scale;
-      }
-      else
-      {
-        anchor_size = 5.0f / zoom_scale;
-      }
-      cairo_set_source_rgba(cr, .8, .8, .8, .8);
-      cairo_rectangle(cr,
-                      gpt->border[k*6] - (anchor_size*0.5),
-                      gpt->border[k*6+1] - (anchor_size*0.5),
-                      anchor_size, anchor_size);
-      cairo_fill_preserve(cr);
-
-      if (gui->point_border_selected == k) cairo_set_line_width(cr, 2.0/zoom_scale);
-      else cairo_set_line_width(cr, 1.0/zoom_scale);
-      cairo_set_source_rgba(cr, .3, .3, .3, .8);
-      cairo_set_dash(cr, dashed, 0, 0);
-      cairo_stroke(cr);
-    }
-#endif
   }
 
-
-  // draw corners
-  if(gui->group_selected == index && gpt->points_count > nb * 3 + 2)
+  // draw nodes and attached stuff
+  if(gui->group_selected == index)
   {
     for(int k = 0; k < nb; k++)
     {
-      float anchor_size = 0.0f;
-      if(k == gui->point_dragging || k == gui->point_selected)
-        anchor_size = DT_MASKS_SIZE_ANCHOR_RECT_SELECTED / zoom_scale;
-      else
-        anchor_size = DT_MASKS_SIZE_ANCHOR_RECT / zoom_scale;
-      
-      dt_draw_set_color_overlay(cr, TRUE, 0.8);
-      cairo_rectangle(cr, gpt->points[k * 6 + 2] - (anchor_size * 0.5),
-                      gpt->points[k * 6 + 3] - (anchor_size * 0.5), anchor_size, anchor_size);
-      cairo_fill_preserve(cr);
+      const gboolean corner = _is_corner_node(gpt, k);
+      const float x = gpt->points[k * 6 + 2];
+      const float y = gpt->points[k * 6 + 3];
+      const gboolean selected = (k == gui->node_selected || k == gui->point_dragging);
+      const gboolean action = (k == gui->node_edited);
 
-      if((gui->group_selected == index) && (k == gui->point_dragging || k == gui->point_selected))
-        cairo_set_line_width(cr, DT_MASKS_SIZE_ANCHOR_SELECTED / zoom_scale);
-      else if((gui->group_selected == index)
-              && ((k == 0 || k == nb) && gui->creation && gui->creation_closing_form))
-        cairo_set_line_width(cr, DT_MASKS_SIZE_ANCHOR_SELECTED / zoom_scale);
-      else
-        cairo_set_line_width(cr, DT_MASKS_SIZE_ANCHOR / zoom_scale);
-      dt_draw_set_color_overlay(cr, FALSE, 0.8);
-      cairo_stroke(cr);
+      dt_masks_draw_node(cr, corner, action, selected, zoom_scale, x, y);
+    }
+
+    // draw the current node's handle if it's a curve node
+    if( gui->node_edited >= 0 && !_is_corner_node(gpt, gui->node_edited))
+    {
+      const int n = gui->node_edited;
+      float ffx, ffy;
+      _brush_ctrl2_to_handle(gpt->points[n * 6 + 2], gpt->points[n * 6 + 3], gpt->points[n * 6 + 4],
+                                gpt->points[n * 6 + 5], &ffx, &ffy, TRUE);
+      
+      dt_masks_draw_handle(cr, gui, zoom_scale, index, ffx, ffy);
     }
   }
 
-  // draw feathers
-  if((gui->group_selected == index) && gui->point_edited >= 0)
-  {
-    const int k = gui->point_edited;
-    // uncomment this part if you want to see "real" control points
-    /*cairo_move_to(cr, gui->points[k*6+2]+dx,gui->points[k*6+3]+dy);
-    cairo_line_to(cr, gui->points[k*6]+dx,gui->points[k*6+1]+dy);
-    cairo_stroke(cr);
-    cairo_move_to(cr, gui->points[k*6+2]+dx,gui->points[k*6+3]+dy);
-    cairo_line_to(cr, gui->points[k*6+4]+dx,gui->points[k*6+5]+dy);
-    cairo_stroke(cr);*/
-    float ffx, ffy;
-    _brush_ctrl2_to_feather(gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], gpt->points[k * 6 + 4],
-                            gpt->points[k * 6 + 5], &ffx, &ffy, TRUE);
-    cairo_move_to(cr, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3]);
-    cairo_line_to(cr, ffx, ffy);
-    cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_HIGHLIGHT / zoom_scale);
-    dt_draw_set_color_overlay(cr, FALSE, 0.8);
-    cairo_stroke_preserve(cr);
-    cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER / zoom_scale);
-    dt_draw_set_color_overlay(cr, TRUE, 0.8);
-    cairo_stroke(cr);
-
-    if((gui->group_selected == index) && (k == gui->feather_dragging || k == gui->feather_selected))
-      cairo_arc(cr, ffx, ffy, DT_MASKS_SIZE_BORDER_SELECTED, 0, 2.0 * M_PI);
-    else
-      cairo_arc(cr, ffx, ffy, DT_MASKS_SIZE_BORDER, 0, 2.0 * M_PI);
-    dt_draw_set_color_overlay(cr, TRUE, 0.8);
-    cairo_fill_preserve(cr);
-
-    cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER / zoom_scale);
-    dt_draw_set_color_overlay(cr, FALSE, 0.8);
-    cairo_stroke(cr);
-  }
-
   // draw the source if needed
-  if(!gui->creation && gpt->source_count > nb * 3 + 2)
+  if(gpt->source_count > nb * 3 + 2)
   {
-    // we draw the line between source and dest
-    cairo_move_to(cr, gpt->source[2], gpt->source[3]);
-    cairo_line_to(cr, gpt->points[2], gpt->points[3]);
-    cairo_set_dash(cr, dashed, 0, 0);
-    if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
-      cairo_set_line_width(cr, (5 * DT_MASKS_SIZE_SOURCE_CONNECT) / zoom_scale);
-    else
-      cairo_set_line_width(cr, (3 * DT_MASKS_SIZE_SOURCE_CONNECT) / zoom_scale);
-    dt_draw_set_color_overlay(cr, FALSE, 0.8);
-    cairo_stroke_preserve(cr);
-    if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
-      cairo_set_line_width(cr, (2 * DT_MASKS_SIZE_SOURCE_CONNECT) / zoom_scale);
-    else
-      cairo_set_line_width(cr, DT_MASKS_SIZE_SOURCE_CONNECT / zoom_scale);
-    dt_draw_set_color_overlay(cr, TRUE, 0.8);
-    cairo_stroke(cr);
-
-    // we draw the source
-    cairo_set_dash(cr, dashed, 0, 0);
-    if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
-      cairo_set_line_width(cr, (5 * DT_MASKS_SIZE_SOURCE) / zoom_scale);
-    else
-      cairo_set_line_width(cr, (3 * DT_MASKS_SIZE_SOURCE) / zoom_scale);
-    dt_draw_set_color_overlay(cr, FALSE, 0.8);
-    cairo_move_to(cr, gpt->source[nb * 6], gpt->source[nb * 6 + 1]);
-    for(int i = nb * 3; i < gpt->source_count; i++) cairo_line_to(cr, gpt->source[i * 2], gpt->source[i * 2 + 1]);
-    cairo_line_to(cr, gpt->source[nb * 6], gpt->source[nb * 6 + 1]);
-    cairo_stroke_preserve(cr);
-    if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
-      cairo_set_line_width(cr, (2 * DT_MASKS_SIZE_SOURCE) / zoom_scale);
-    else
-      cairo_set_line_width(cr, DT_MASKS_SIZE_SOURCE / zoom_scale);
-    dt_draw_set_color_overlay(cr, TRUE, 0.8);
-    cairo_stroke(cr);
+    dt_masks_draw_source(cr, gui, index, nb, zoom_scale, dashed, &_brush_draw_source_shape);
   }
 }
 
@@ -2915,8 +2813,8 @@ const dt_masks_functions_t dt_masks_functions_brush = {
   .mouse_scrolled = _brush_events_mouse_scrolled,
   .button_pressed = _brush_events_button_pressed,
   .button_released = _brush_events_button_released,
-  .post_expose = _brush_events_post_expose,
-  .draw_shape = _brush_draw_shape
+  .post_expose = _brush_events_post_expose
+  //.draw_shape = _brush_draw_shape
 };
 
 

@@ -1002,7 +1002,7 @@ static int _path_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx
                                        dt_masks_interaction_t interaction)
 {
   // resize a shape even if on a node or segment
-  if(gui->form_selected || gui->point_selected >= 0 || gui->feather_selected >= 0 || gui->seg_selected >= 0
+  if(gui->form_selected || gui->node_selected >= 0 || gui->handle_selected >= 0 || gui->seg_selected >= 0
      || gui->point_border_selected >= 0)
   {
     // we register the current position
@@ -1284,7 +1284,7 @@ static int _path_events_button_pressed(struct dt_iop_module_t *module, float pzx
       if(!gpt) return 0;
       // we start the form dragging
       gui->source_dragging = TRUE;
-      gui->point_edited = -1;
+      gui->node_edited = -1;
       gui->dx = gpt->source[2] - gui->posx;
       gui->dy = gpt->source[3] - gui->posy;
       return 1;
@@ -1292,21 +1292,21 @@ static int _path_events_button_pressed(struct dt_iop_module_t *module, float pzx
     else if(gui->form_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
     {
       gui->form_dragging = TRUE;
-      gui->point_edited = -1;
+      gui->node_edited = -1;
       gui->dx = gpt->points[2] - gui->posx;
       gui->dy = gpt->points[3] - gui->posy;
       return 1;
     }
-    else if(gui->point_selected >= 0)
+    else if(gui->node_selected >= 0)
     {
       // if ctrl is pressed, we change the type of point
-      if(gui->point_edited == gui->point_selected && dt_modifier_is(state, GDK_CONTROL_MASK))
+      if(gui->node_edited == gui->node_selected && dt_modifier_is(state, GDK_CONTROL_MASK))
       {
         dt_masks_point_path_t *point
-            = (dt_masks_point_path_t *)g_list_nth_data(form->points, gui->point_edited);
+            = (dt_masks_point_path_t *)g_list_nth_data(form->points, gui->node_edited);
         if(point == NULL)
         {
-          gui->point_selected = -1;
+          gui->node_selected = -1;
           return 1;
         }
         if(point->state != DT_MASKS_POINT_STATE_NORMAL)
@@ -1331,32 +1331,32 @@ static int _path_events_button_pressed(struct dt_iop_module_t *module, float pzx
         return 1;
       }
       // we register the current position to avoid accidental move
-      if(gui->point_edited < 0 && gui->scrollx == 0.0f && gui->scrolly == 0.0f)
+      if(gui->node_edited < 0 && gui->scrollx == 0.0f && gui->scrolly == 0.0f)
       {
         gui->scrollx = pzx;
         gui->scrolly = pzy;
       }
-      gui->point_edited = gui->point_dragging = gui->point_selected;
+      gui->node_edited = gui->point_dragging = gui->node_selected;
       gpt->clockwise = _path_is_clockwise(form);
 
       return 1;
     }
-    else if(gui->feather_selected >= 0)
+    else if(gui->handle_selected >= 0)
     {
-      gui->feather_dragging = gui->feather_selected;
+      gui->handle_dragging = gui->handle_selected;
 
       return 1;
     }
     else if(gui->point_border_selected >= 0)
     {
-      gui->point_edited = -1;
+      gui->node_edited = -1;
       gui->point_border_dragging = gui->point_border_selected;
 
       return 1;
     }
     else if(gui->seg_selected >= 0)
     {
-      gui->point_edited = -1;
+      gui->node_edited = -1;
       if(dt_modifier_is(state, GDK_CONTROL_MASK))
       {
         // we add a new point to the path
@@ -1384,7 +1384,7 @@ static int _path_events_button_pressed(struct dt_iop_module_t *module, float pzx
         _path_init_ctrl_points(form);
         dt_masks_gui_form_remove(form, gui, index);
         dt_masks_gui_form_create(form, gui, index, module);
-        gui->point_edited = gui->point_dragging = gui->point_selected = gui->seg_selected + 1;
+        gui->node_edited = gui->point_dragging = gui->node_selected = gui->seg_selected + 1;
         gui->seg_selected = -1;
 
       }
@@ -1397,9 +1397,9 @@ static int _path_events_button_pressed(struct dt_iop_module_t *module, float pzx
       }
       return 1;
     }
-    gui->point_edited = -1;
+    gui->node_edited = -1;
   }
-  else if(which == 3 && gui->point_selected >= 0)
+  else if(which == 3 && gui->node_selected >= 0)
   {
     // we remove the point (and the entire form if there is too few points)
     if(g_list_shorter_than(form->points, 4))
@@ -1436,16 +1436,16 @@ static int _path_events_button_pressed(struct dt_iop_module_t *module, float pzx
       return 1;
     }
     dt_masks_point_path_t *point
-        = (dt_masks_point_path_t *)g_list_nth_data(form->points, gui->point_selected);
+        = (dt_masks_point_path_t *)g_list_nth_data(form->points, gui->node_selected);
     if(point == NULL)
     {
-      gui->point_selected = -1;
+      gui->node_selected = -1;
       return 1;
     }
     form->points = g_list_remove(form->points, point);
     free(point);
-    // form->points = g_list_delete_link(form->points, g_list_nth(form->points, gui->point_selected));
-    gui->point_selected = -1;
+    // form->points = g_list_delete_link(form->points, g_list_nth(form->points, gui->node_selected));
+    gui->node_selected = -1;
     _path_init_ctrl_points(form);
 
 
@@ -1459,10 +1459,10 @@ static int _path_events_button_pressed(struct dt_iop_module_t *module, float pzx
 
     return 1;
   }
-  else if(which == 3 && gui->feather_selected >= 0)
+  else if(which == 3 && gui->handle_selected >= 0)
   {
     dt_masks_point_path_t *point
-        = (dt_masks_point_path_t *)g_list_nth_data(form->points, gui->feather_selected);
+        = (dt_masks_point_path_t *)g_list_nth_data(form->points, gui->handle_selected);
     if(point != NULL && point->state != DT_MASKS_POINT_STATE_NORMAL)
     {
       point->state = DT_MASKS_POINT_STATE_NORMAL;
@@ -1626,11 +1626,11 @@ static int _path_events_button_released(struct dt_iop_module_t *module, float pz
 
     return 1;
   }
-  else if(gui->feather_dragging >= 0)
+  else if(gui->handle_dragging >= 0)
   {
     dt_masks_point_path_t *point
-        = (dt_masks_point_path_t *)g_list_nth_data(form->points, gui->feather_dragging);
-    gui->feather_dragging = -1;
+        = (dt_masks_point_path_t *)g_list_nth_data(form->points, gui->handle_dragging);
+    gui->handle_dragging = -1;
     const float wd = darktable.develop->preview_pipe->backbuf_width;
     const float ht = darktable.develop->preview_pipe->backbuf_height;
     float pts[2] = { pzx * wd, pzy * ht };
@@ -1781,12 +1781,12 @@ static int _path_events_mouse_moved(struct dt_iop_module_t *module, float pzx, f
 
     return 1;
   }
-  else if(gui->feather_dragging >= 0)
+  else if(gui->handle_dragging >= 0)
   {
     float pts[2] = { pzx * wd, pzy * ht };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
     dt_masks_point_path_t *point
-        = (dt_masks_point_path_t *)g_list_nth_data(form->points, gui->feather_dragging);
+        = (dt_masks_point_path_t *)g_list_nth_data(form->points, gui->handle_dragging);
 
     float p1x, p1y, p2x, p2y;
     _path_feather_to_ctrl(point->corner[0] * darktable.develop->preview_pipe->iwidth,
@@ -1871,8 +1871,8 @@ static int _path_events_mouse_moved(struct dt_iop_module_t *module, float pzx, f
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
   gui->source_selected = FALSE;
-  gui->feather_selected = -1;
-  gui->point_selected = -1;
+  gui->handle_selected = -1;
+  gui->node_selected = -1;
   gui->seg_selected = -1;
   gui->point_border_selected = -1;
   // are we near a point or feather ?
@@ -1881,9 +1881,9 @@ static int _path_events_mouse_moved(struct dt_iop_module_t *module, float pzx, f
   pzx *= darktable.develop->preview_pipe->backbuf_width;
   pzy *= darktable.develop->preview_pipe->backbuf_height;
 
-  if((gui->group_selected == index) && gui->point_edited >= 0)
+  if((gui->group_selected == index) && gui->node_edited >= 0)
   {
-    const int k = gui->point_edited;
+    const int k = gui->node_edited;
     // we only select feather if the point is not "sharp"
     if(gpt->points[k * 6 + 2] != gpt->points[k * 6 + 4]
        && gpt->points[k * 6 + 3] != gpt->points[k * 6 + 5])
@@ -1893,7 +1893,7 @@ static int _path_events_mouse_moved(struct dt_iop_module_t *module, float pzx, f
                              gpt->points[k * 6 + 5], &ffx, &ffy, gpt->clockwise);
       if(pzx - ffx > -as && pzx - ffx < as && pzy - ffy > -as && pzy - ffy < as)
       {
-        gui->feather_selected = k;
+        gui->handle_selected = k;
 
         return 1;
       }
@@ -1902,7 +1902,7 @@ static int _path_events_mouse_moved(struct dt_iop_module_t *module, float pzx, f
     if(pzx - gpt->points[k * 6 + 2] > -as && pzx - gpt->points[k * 6 + 2] < as
        && pzy - gpt->points[k * 6 + 3] > -as && pzy - gpt->points[k * 6 + 3] < as)
     {
-      gui->point_selected = k;
+      gui->node_selected = k;
 
       return 1;
     }
@@ -1914,7 +1914,7 @@ static int _path_events_mouse_moved(struct dt_iop_module_t *module, float pzx, f
     if(pzx - gpt->points[k * 6 + 2] > -as && pzx - gpt->points[k * 6 + 2] < as
        && pzy - gpt->points[k * 6 + 3] > -as && pzy - gpt->points[k * 6 + 3] < as)
     {
-      gui->point_selected = k;
+      gui->node_selected = k;
 
       return 1;
     }
@@ -2010,7 +2010,7 @@ static void _path_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_for
   {
     for(int k = 0; k < nb; k++)
     {
-      if(k == gui->point_dragging || k == gui->point_selected)
+      if(k == gui->point_dragging || k == gui->node_selected)
       {
         anchor_size = 7.0f / zoom_scale;
       }
@@ -2023,7 +2023,7 @@ static void _path_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_for
                       gpt->points[k * 6 + 3] - (anchor_size * 0.5), anchor_size, anchor_size);
       cairo_fill_preserve(cr);
 
-      if(k == gui->point_dragging || k == gui->point_selected)
+      if(k == gui->point_dragging || k == gui->node_selected)
         cairo_set_line_width(cr, 2.0 / zoom_scale);
       else if((k == 0 || k == nb) && gui->creation && gui->creation_closing_form)
         cairo_set_line_width(cr, 2.0 / zoom_scale);
@@ -2035,9 +2035,9 @@ static void _path_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_for
   }
 
   // draw feathers
-  if((gui->group_selected == index) && gui->point_edited >= 0)
+  if((gui->group_selected == index) && gui->node_edited >= 0)
   {
-    const int k = gui->point_edited;
+    const int k = gui->node_edited;
     // uncomment this part if you want to see "real" control points
     /*cairo_move_to(cr, gui->points[k*6+2],gui->points[k*6+3]);
     cairo_line_to(cr, gui->points[k*6],gui->points[k*6+1]);
@@ -2057,7 +2057,7 @@ static void _path_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_for
     dt_draw_set_color_overlay(cr, TRUE, 0.8);
     cairo_stroke(cr);
 
-    if(k == gui->feather_dragging || k == gui->feather_selected)
+    if(k == gui->handle_dragging || k == gui->handle_selected)
       cairo_arc(cr, ffx, ffy, 3.0f / zoom_scale, 0, 2.0 * M_PI);
     else
       cairo_arc(cr, ffx, ffy, 1.5f / zoom_scale, 0, 2.0 * M_PI);
@@ -3098,10 +3098,10 @@ static void _path_set_hint_message(const dt_masks_form_gui_t *const gui, const d
   else if(gui->creation)
     g_strlcat(msgbuf, _("<b>add node</b>: click, <b>add sharp node</b>:ctrl+click\n"
                         "<b>finish path</b>: right-click"), msgbuf_len);
-  else if(gui->point_selected >= 0)
+  else if(gui->node_selected >= 0)
     g_strlcat(msgbuf, _("<b>move node</b>: drag, <b>remove node</b>: right-click\n"
                         "<b>switch smooth/sharp mode</b>: ctrl+click"), msgbuf_len);
-  else if(gui->feather_selected >= 0)
+  else if(gui->handle_selected >= 0)
     g_strlcat(msgbuf, _("<b>node curvature</b>: drag\n<b>reset curvature</b>: right-click"), msgbuf_len);
   else if(gui->seg_selected >= 0)
     g_strlcat(msgbuf, _("<b>move segment</b>: drag\n<b>add node</b>: ctrl+click"), msgbuf_len);

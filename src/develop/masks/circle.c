@@ -87,7 +87,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
   gui->source_selected = FALSE;
-  gui->feather_selected = -1;
+  gui->handle_selected = -1;
 
   pzx *= darktable.develop->preview_pipe->backbuf_width;
   pzy *= darktable.develop->preview_pipe->backbuf_height;
@@ -173,7 +173,7 @@ static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct 
     return 1;
 
   // Growing/shrinking
-  if(gui->point_selected == -1 || gui->point_selected == 0)
+  if(gui->node_selected == -1 || gui->node_selected == 0)
   {
     switch(increment)
     {
@@ -358,9 +358,9 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, float p
         gui->dy = gpt->points[1] - gui->posy;
         return 1;
       }
-      else if(gui->feather_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
+      else if(gui->handle_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
       {
-        gui->feather_dragging = gui->feather_selected;
+        gui->handle_dragging = gui->handle_selected;
 
         return 1;
       }
@@ -700,9 +700,9 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
       // we draw the form and it's border
       cairo_save(cr);
       // we draw the main shape
-      dt_masks_draw_lines(FALSE, FALSE, cr, dashed, len, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle);
+      dt_masks_draw_lines(FALSE, FALSE, FALSE, cr, dashed, len, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle);
       // we draw the borders
-      dt_masks_draw_lines(TRUE, FALSE, cr, dashed, len, FALSE, zoom_scale, border, border_count, &dt_masks_functions_circle);
+      dt_masks_draw_lines(TRUE, FALSE, FALSE, cr, dashed, len, FALSE, zoom_scale, border, border_count, &dt_masks_functions_circle);
       cairo_restore(cr);
 
       // draw a cross where the source will be created
@@ -725,10 +725,10 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
   if(!gpt) return;
   // we draw the main shape
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-  dt_masks_draw_lines(FALSE, FALSE, cr, dashed, len, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle);
+  dt_masks_draw_lines(FALSE, FALSE, FALSE, cr, dashed, len, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle);
   // we draw the borders
   if(gui->group_selected == index)
-    dt_masks_draw_lines(TRUE, FALSE, cr, dashed, len, (gui->border_selected), zoom_scale, gpt->border,
+    dt_masks_draw_lines(TRUE, FALSE, FALSE, cr, dashed, len, (gui->border_selected), zoom_scale, gpt->border,
                        gpt->border_count, &dt_masks_functions_circle);
 
   // draw the source if any
@@ -782,7 +782,7 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
     }
 
     // we only draw the main shape for the source, no borders
-    dt_masks_draw_lines(FALSE, TRUE, cr, dashed, len, selected, zoom_scale, gpt->source, gpt->source_count, &dt_masks_functions_circle);
+    dt_masks_draw_lines(FALSE, TRUE, FALSE, cr, dashed, len, selected, zoom_scale, gpt->source, gpt->source_count, &dt_masks_functions_circle);
   }
 }
 

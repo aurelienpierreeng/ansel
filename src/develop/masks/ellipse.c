@@ -393,7 +393,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
   gui->source_selected = FALSE;
-  gui->feather_selected = -1;
+  gui->handle_selected = -1;
 
   pzx *= darktable.develop->preview_pipe->backbuf_width;
   pzy *= darktable.develop->preview_pipe->backbuf_height;
@@ -715,10 +715,10 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
         gui->dy = gpt->source[1] - gui->posy;
         return 1;
       }
-      else if(gui->point_selected >= 1 && gui->edit_mode == DT_MASKS_EDIT_FULL)
+      else if(gui->node_selected >= 1 && gui->edit_mode == DT_MASKS_EDIT_FULL)
       {
         // we start the point dragging
-        gui->point_dragging = gui->point_selected;
+        gui->point_dragging = gui->node_selected;
         gui->dx = gpt->points[0] - gui->posx;
         gui->dy = gpt->points[1] - gui->posy;
         return 1;
@@ -1198,8 +1198,8 @@ static void _ellipse_draw_shape(cairo_t *cr, float *points, int points_count)
 static void _ellipse_draw_anchor(const dt_masks_form_gui_t *gui, cairo_t *cr, const double *dashed, const float zoom_scale,
                       const float *points, const int points_count, const int index)
 {
-  cairo_set_dash(cr, dashed, 0, 0);
-  float anchor_size;
+  //cairo_set_dash(cr, dashed, 0, 0);
+  //float anchor_size;
   float x, y;
 
   const float r = atan2f(points[3] - points[1], points[2] - points[0]);
@@ -1208,20 +1208,24 @@ static void _ellipse_draw_anchor(const dt_masks_form_gui_t *gui, cairo_t *cr, co
 
   for(int i = 1; i < 5; i++)
   {
-    dt_draw_set_color_overlay(cr, TRUE, 0.8);
-
-    if(i == gui->point_dragging || i == gui->point_selected)
-      anchor_size = DT_MASKS_SIZE_ANCHOR_RECT_SELECTED / zoom_scale;
-    else
-      anchor_size = DT_MASKS_SIZE_ANCHOR_RECT / zoom_scale;
-
     _ellipse_point_transform(points[0], points[1], points[i * 2], points[i * 2 + 1], sinr, cosr, &x, &y);
+
+    const gboolean selected = (i == gui->node_selected || i == gui->point_dragging);
+    const gboolean action = (i == gui->node_edited);
+    dt_masks_draw_node(cr, DT_MASKS_POINT_STATE_NORMAL, action, selected, zoom_scale, x, y);
+
+/*
+    if(i == gui->point_dragging || i == gui->node_selected)
+      anchor_size = DT_MASKS_WIDTH_ANCHOR_RECT_SELECTED / zoom_scale;
+    else
+      anchor_size = DT_MASKS_WIDTH_ANCHOR_RECT / zoom_scale;
+
     cairo_rectangle(cr, x - (anchor_size * 0.5), y - (anchor_size * 0.5), anchor_size, anchor_size);
     cairo_fill_preserve(cr);
 
     if(gui->group_selected == index)
     {
-      if (i == gui->point_dragging || i == gui->point_selected)
+      if (i == gui->point_dragging || i == gui->node_selected)
         cairo_set_line_width(cr, DT_MASKS_SIZE_ANCHOR_SELECTED / zoom_scale);
       else if (gui->form_dragging || gui->form_selected)
         cairo_set_line_width(cr, DT_MASKS_SIZE_ANCHOR_SELECTED / zoom_scale);
@@ -1231,6 +1235,7 @@ static void _ellipse_draw_anchor(const dt_masks_form_gui_t *gui, cairo_t *cr, co
 
     dt_draw_set_color_overlay(cr, FALSE, 0.8);
     cairo_stroke(cr);
+    */
   }
 }
 
@@ -1308,9 +1313,9 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       // we draw the form and it's border
       cairo_save(cr);
       // we draw the main shape
-      dt_masks_draw_lines(FALSE, FALSE, cr, dashed, len, FALSE, zoom_scale, points, points_count, &dt_masks_functions_ellipse);
+      dt_masks_draw_lines(FALSE, FALSE, FALSE, cr, dashed, len, FALSE, zoom_scale, points, points_count, &dt_masks_functions_ellipse);
       // we draw the borders
-      dt_masks_draw_lines(TRUE, FALSE, cr, dashed, len, FALSE, zoom_scale, border, border_count, &dt_masks_functions_ellipse);
+      dt_masks_draw_lines(TRUE, FALSE, FALSE, cr, dashed, len, FALSE, zoom_scale, border, border_count, &dt_masks_functions_ellipse);
       cairo_restore(cr);
 
 
@@ -1333,14 +1338,14 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   if(!gpt) return;
   // we draw the main shape
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-  dt_masks_draw_lines(FALSE, FALSE, cr, dashed, len, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_ellipse);
+  dt_masks_draw_lines(FALSE, FALSE, FALSE, cr, dashed, len, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_ellipse);
   
   if(gui->group_selected == index)
   {
     // draw anchor points
     _ellipse_draw_anchor(gui, cr, dashed, zoom_scale, gpt->points, gpt->points_count, index);
     // we draw the borders
-    dt_masks_draw_lines(TRUE, FALSE, cr, dashed, len, (gui->border_selected), zoom_scale, gpt->border,
+    dt_masks_draw_lines(TRUE, FALSE, FALSE, cr, dashed, len, (gui->border_selected), zoom_scale, gpt->border,
                         gpt->border_count, &dt_masks_functions_ellipse);
   }
   
@@ -2032,7 +2037,7 @@ static void _ellipse_set_hint_message(const dt_masks_form_gui_t *const gui, cons
     g_snprintf(msgbuf, msgbuf_len,
                _("<b>size</b>: scroll, <b>feather size</b>: shift+scroll\n"
                  "<b>rotation</b>: ctrl+shift+scroll, <b>opacity</b>: ctrl+scroll (%d%%)"), opacity);
-  else if(gui->point_selected >= 0)
+  else if(gui->node_selected >= 0)
     g_strlcat(msgbuf, _("<b>rotate</b>: ctrl+drag"), msgbuf_len);
   else if(gui->form_selected)
     g_snprintf(msgbuf, msgbuf_len,
