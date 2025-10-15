@@ -14,7 +14,7 @@ scriptDir=$(pwd)
 
 # Set variables
 buildDir="${scriptDir}/../../build"
-installDir="${buildDir}/macosx"
+installDir="${scriptDir}/../../install"
 
 homebrewHome=$(brew --prefix)
 
@@ -27,13 +27,23 @@ if [[ -d "$buildDir" ]]; then
     rm -rf "$buildDir"
 fi
 
+# Check for previous attempt and clean
+if [[ -d "$installDir" ]]; then
+    echo "Deleting directory $installDir ... "
+    rm -rf "$installDir"
+fi
+
 # Create directory
+mkdir "$installDir"
 mkdir "$buildDir"
 cd "$buildDir"
 
+# Version of MacOsX
+osx_target=$(sw_vers | grep ProductVersion | cut -d':' -f2 | tr -d '\t' | tr -d ' ')
+
 # Configure build
 cmake .. \
-    -DCMAKE_OSX_DEPLOYMENT_TARGET=13.5 \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET=$osx_target \
     -DCMAKE_CXX_FLAGS=-stdlib=libc++ \
     -DCMAKE_OBJCXX_FLAGS=-stdlib=libc++ \
     -DBINARY_PACKAGE_BUILD=ON \
@@ -44,8 +54,8 @@ cmake .. \
     -DUSE_BUNDLED_LUA=OFF \
     -DUSE_LIBRAW=ON \
     -DUSE_BUNDLED_LIBRAW=OFF \
-    -DUSE_GRAPHICSMAGICK=OFF \
-    -DUSE_IMAGEMAGICK=ON \
+    -DUSE_GRAPHICSMAGICK=ON \
+    -DUSE_IMAGEMAGICK=OFF \
     -DBUILD_SSE2_CODEPATHS=OFF \
     -DCMAKE_BUILD_TYPE=Release \
     -DUSE_COLORD=OFF \
