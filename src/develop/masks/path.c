@@ -1680,7 +1680,9 @@ static int _path_events_mouse_moved(struct dt_iop_module_t *module, float pzx, f
                                     dt_masks_form_gui_t *gui, int index)
 {
   // centre view will have zoom_scale * backbuf_width pixels, we want the handle offset to scale with DPI:
-  const float as = DT_PIXEL_APPLY_DPI(5);  // transformed to backbuf dimensions
+  const dt_develop_t *const dev = (const dt_develop_t *)darktable.develop;
+  const float zoom_scale = dev->scaling;
+  const float as = DT_MASKS_SELECTION_DISTANCE / zoom_scale;  // transformed to backbuf dimensions
   if(!gui) return 0;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;

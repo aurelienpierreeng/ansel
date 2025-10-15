@@ -519,7 +519,9 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, float pz
   }
   else if(!gui->creation)
   {
-    const float as = DT_PIXEL_APPLY_DPI(20);  // transformed to backbuf dimensions
+    const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
+    const float zoom_scale = dev->scaling;
+    const float as = DT_MASKS_SELECTION_DISTANCE / zoom_scale;  // transformed to backbuf dimensions
     const float x = pzx * darktable.develop->preview_pipe->backbuf_width;
     const float y = pzy * darktable.develop->preview_pipe->backbuf_height;
     int in, inb, near, ins;

@@ -1110,7 +1110,7 @@ void dt_masks_draw_node(cairo_t *cr, const gboolean corner, const gboolean group
 {
   float anchor_size = 0.0f;
   anchor_size = point_action ? DT_MASKS_WIDTH_ANCHOR_RECT_SELECTED / zoom_scale
-                             : DT_MASKS_WIDTH_ANCHOR_RECT / zoom_scale;
+                             : DT_MASKS_WIDTH_HANDLE / zoom_scale;
   if(corner)
     cairo_rectangle(cr, x - (anchor_size * 0.5), y - (anchor_size * 0.5), anchor_size, anchor_size);
   else
@@ -1141,7 +1141,7 @@ void dt_masks_draw_handle(cairo_t *cr, dt_masks_form_gui_t *gui, const float zoo
   float tail_len = sqrtf(delta_x * delta_x + delta_y * delta_y);
   // Draw only if the line is long enough
   // and shorten the line by the size of the nodes so it does not overlap with them
-  float shorten = (DT_MASKS_WIDTH_ANCHOR_RECT / zoom_scale) * 0.5f;
+  float shorten = (DT_MASKS_WIDTH_HANDLE / zoom_scale) * 0.5f;
   if(tail_len > (2 * shorten))
   {
     float start_x = gpt->points[n * 6 + 2] + delta_x * (shorten / tail_len);
@@ -1170,7 +1170,7 @@ void dt_masks_draw_handle(cairo_t *cr, dt_masks_form_gui_t *gui, const float zoo
   }
   else
   {
-    handle_width = (DT_MASKS_WIDTH_ANCHOR_RECT / zoom_scale) * 0.5f;
+    handle_width = (DT_MASKS_WIDTH_HANDLE / zoom_scale) * 0.5f;
     handle_size_selected = DT_MASKS_SIZE_LINE / zoom_scale;
   }
 

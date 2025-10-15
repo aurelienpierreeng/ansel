@@ -41,7 +41,6 @@ extern "C" {
 #define DT_MASKS_SIZE_BORDER_HIGHLIGHT  DT_PIXEL_APPLY_DPI(2.0f)
 #define DT_MASKS_SIZE_BORDER            DT_PIXEL_APPLY_DPI(1.0f)
 #define DT_MASKS_SIZE_ANCHOR            DT_PIXEL_APPLY_DPI(1.0f)
-#define DT_MASKS_WIDTH_ANCHOR_RECT      DT_PIXEL_APPLY_DPI(7.5f)
 #define DT_MASKS_SIZE_SOURCE_CONNECT    DT_PIXEL_APPLY_DPI(0.5f)
 #define DT_MASKS_SIZE_SOURCE            DT_PIXEL_APPLY_DPI(0.5f)
 #define DT_MASKS_SIZE_CROSS             DT_PIXEL_APPLY_DPI(3.5f)
@@ -53,6 +52,14 @@ extern "C" {
 #define DT_MASKS_SIZE_ANCHOR_SELECTED         DT_PIXEL_APPLY_DPI(2.0f)
 #define DT_MASKS_WIDTH_ANCHOR_RECT_SELECTED   DT_PIXEL_APPLY_DPI(10.0f)
 #define DT_MASKS_SIZE_SOURCE_SELECTED         DT_PIXEL_APPLY_DPI(2.0f)
+
+/** stuff's scale */
+#define DT_MASKS_SCALE_ARROW        DT_PIXEL_APPLY_DPI(4.0f)
+// distance handle & node size
+#define DT_MASKS_WIDTH_HANDLE       DT_PIXEL_APPLY_DPI(7.5f)
+// distance to the cursor for item selection
+#define DT_MASKS_SELECTION_DISTANCE DT_MASKS_WIDTH_HANDLE
+
 
 /**forms types */
 typedef enum dt_masks_type_t
