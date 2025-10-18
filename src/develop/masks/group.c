@@ -86,7 +86,7 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
   gui->handle_selected = -1;
   gui->node_edited = gui->node_selected = -1;
   gui->seg_selected = -1;
-  gui->point_border_selected = -1;
+  gui->handle_border_selected = -1;
   gui->group_selected = -1;
 
   dt_masks_form_t *sel = NULL;

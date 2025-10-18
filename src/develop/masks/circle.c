@@ -62,14 +62,12 @@ static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t
   }
 
   // distance from center
-
   const float cx = x - gpt->points[0];
   const float cy = y - gpt->points[1];
   *dist = sqf(cx) + sqf(cy);
 
   // we check if it's inside borders
   if(!dt_masks_point_in_form_exact(x, y, gpt->border, 1, gpt->border_count)) return;
-
   *inside = 1;
   *near = 0;
 
@@ -523,18 +521,12 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, float pzx,
   return 1;
 }
 
-static void _circle_draw_shape(cairo_t *cr, float *points, int points_count)
+static void _circle_draw_shape(cairo_t *cr, const float *nodes, const int nodes_count, const int nb, const gboolean border)
 {
-  // minimum number of points to draw a circle
-  if(points_count <= 6) return;
-
-  // Draw the circle
-  cairo_move_to(cr, points[2], points[3]);
-  for(int i = 2; i < points_count; i++)
-  {
-    cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
-  }
-  cairo_line_to(cr, points[2], points[3]); // close the circle
+  cairo_move_to(cr, nodes[2], nodes[3]);
+  for(int i = 2; i < nodes_count; i++)
+    cairo_line_to(cr, nodes[i * 2], nodes[i * 2 + 1]);
+  cairo_line_to(cr, nodes[2], nodes[3]); // close the circle
 }
 
 static float *_points_to_transform(float x, float y, float radius, float wd, float ht, int *points_count)
@@ -650,10 +642,6 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
   if(!gui) return;
 
   (void)num_points; // unused arg, keep compiler from complaining
-  double dashed[] = { DT_PIXEL_APPLY_DPI(4.0), DT_PIXEL_APPLY_DPI(4.0) };
-  dashed[0] /= zoom_scale;
-  dashed[1] /= zoom_scale;
-  const int len = sizeof(dashed) / sizeof(dashed[0]);
 
   // add a preview when creating a circle
   // in creation mode
@@ -706,9 +694,9 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
       // we draw the form and it's border
       cairo_save(cr);
       // we draw the main shape
-      dt_masks_draw_lines(FALSE, FALSE, FALSE, cr, dashed, len, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle);
+      dt_masks_draw_lines(FALSE, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle);
       // we draw the borders
-      dt_masks_draw_lines(TRUE, FALSE, FALSE, cr, dashed, len, FALSE, zoom_scale, border, border_count, &dt_masks_functions_circle);
+      dt_masks_draw_lines(TRUE, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_circle);
       cairo_restore(cr);
 
       // draw a cross where the source will be created
@@ -729,66 +717,25 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
 
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return;
+  
   // we draw the main shape
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-  dt_masks_draw_lines(FALSE, FALSE, FALSE, cr, dashed, len, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle);
+  dt_masks_draw_lines(FALSE, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle);
   // we draw the borders
   if(gui->group_selected == index)
-    dt_masks_draw_lines(TRUE, FALSE, FALSE, cr, dashed, len, (gui->border_selected), zoom_scale, gpt->border,
+  {
+    cairo_save(cr);
+    dt_masks_draw_lines(TRUE, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
                        gpt->border_count, &dt_masks_functions_circle);
+    cairo_restore(cr);
+  }
 
   // draw the source if any
   if(gpt->source_count > 6)
-  {
-    const float radius = fabs(gpt->points[2] - gpt->points[0]);
-
-    // compute the dest inner circle intersection with the line from source center to dest center.
-    const float cdx = gpt->source[0] - gpt->points[0];
-    const float cdy = gpt->source[1] - gpt->points[1];
-
-    // we don't draw the line if source==point
-    if(cdx != 0.0 && cdy != 0.0)
-    {
-      cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-      float cangle = atanf(cdx / cdy);
-
-      if(cdy > 0)
-        cangle = (M_PI / 2) - cangle;
-      else
-        cangle = -(M_PI / 2) - cangle;
-
-      // (arrowx,arrowy) is the point of intersection, we move it (factor 1.11) a bit farther than the
-      // inner circle to avoid superposition.
-      const float arrowx = gpt->points[0] + 1.11 * radius * cosf(cangle);
-      const float arrowy = gpt->points[1] + 1.11 * radius * sinf(cangle);
-
-      cairo_move_to(cr, gpt->source[0], gpt->source[1]); // source center
-      cairo_line_to(cr, arrowx, arrowy);                 // dest border
-      // then draw to line for the arrow itself
-      const float arrow_scale = 6.0f;
-      cairo_move_to(cr, arrowx + arrow_scale * cosf(cangle + (0.4f)),
-                    arrowy + arrow_scale * sinf(cangle + (0.4f)));
-      cairo_line_to(cr, arrowx, arrowy);
-      cairo_line_to(cr, arrowx + arrow_scale * cosf(cangle - (0.4f)),
-                    arrowy + arrow_scale * sinf(cangle - (0.4f)));
-
-      cairo_set_dash(cr, dashed, 0, 0);
-      if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
-        cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.5) / zoom_scale);
-      else
-        cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5) / zoom_scale);
-      dt_draw_set_color_overlay(cr, FALSE, 0.8);
-      cairo_stroke_preserve(cr);
-      if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
-        cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.0) / zoom_scale);
-      else
-        cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(0.5) / zoom_scale);
-      dt_draw_set_color_overlay(cr, TRUE, 0.8);
-      cairo_stroke(cr);
-    }
-
-    // we only draw the main shape for the source, no borders
-    dt_masks_draw_lines(FALSE, TRUE, FALSE, cr, dashed, len, selected, zoom_scale, gpt->source, gpt->source_count, &dt_masks_functions_circle);
+  { 
+    cairo_save(cr);
+    dt_masks_draw_source(cr, gui, index, num_points, zoom_scale, &dt_masks_functions_circle);
+    cairo_restore(cr);
   }
 }
 

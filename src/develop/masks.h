@@ -40,25 +40,27 @@ extern "C" {
 #define DT_MASKS_SIZE_LINE              DT_PIXEL_APPLY_DPI(1.0f)
 #define DT_MASKS_SIZE_BORDER_HIGHLIGHT  DT_PIXEL_APPLY_DPI(2.0f)
 #define DT_MASKS_SIZE_BORDER            DT_PIXEL_APPLY_DPI(1.0f)
-#define DT_MASKS_SIZE_ANCHOR            DT_PIXEL_APPLY_DPI(1.0f)
-#define DT_MASKS_SIZE_SOURCE_CONNECT    DT_PIXEL_APPLY_DPI(0.5f)
-#define DT_MASKS_SIZE_SOURCE            DT_PIXEL_APPLY_DPI(0.5f)
+#define DT_MASKS_SIZE_NODE              DT_PIXEL_APPLY_DPI(1.0f)
+#define DT_MASKS_SIZE_SOURCE_ARROW      DT_PIXEL_APPLY_DPI(1.0f)
+#define DT_MASKS_SIZE_SOURCE            DT_PIXEL_APPLY_DPI(1.0f)
 #define DT_MASKS_SIZE_CROSS             DT_PIXEL_APPLY_DPI(3.5f)
 // selected
 #define DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED DT_PIXEL_APPLY_DPI(5.0f)
 #define DT_MASKS_SIZE_LINE_SEGMENT_SELECTED   DT_PIXEL_APPLY_DPI(5.0f)
 #define DT_MASKS_SIZE_LINE_GROUP_SELECTED     DT_PIXEL_APPLY_DPI(2.0f)
 #define DT_MASKS_SIZE_BORDER_SELECTED         DT_PIXEL_APPLY_DPI(3.0f)
-#define DT_MASKS_SIZE_ANCHOR_SELECTED         DT_PIXEL_APPLY_DPI(2.0f)
-#define DT_MASKS_WIDTH_ANCHOR_RECT_SELECTED   DT_PIXEL_APPLY_DPI(10.0f)
+#define DT_MASKS_SIZE_NODE_SELECTED           DT_PIXEL_APPLY_DPI(2.0f)
 #define DT_MASKS_SIZE_SOURCE_SELECTED         DT_PIXEL_APPLY_DPI(2.0f)
 
 /** stuff's scale */
-#define DT_MASKS_SCALE_ARROW        DT_PIXEL_APPLY_DPI(4.0f)
-// distance handle & node size
-#define DT_MASKS_WIDTH_HANDLE       DT_PIXEL_APPLY_DPI(7.5f)
+#define DT_MASKS_SCALE_DASH          DT_PIXEL_APPLY_DPI(6.0f)
+#define DT_MASKS_SCALE_ARROW         DT_PIXEL_APPLY_DPI(12.0f)
+// radius/width of a handle & node
+#define DT_MASKS_WIDTH_NODE          DT_PIXEL_APPLY_DPI(4.0f)
+#define DT_MASKS_WIDTH_NODE_SELECTED DT_PIXEL_APPLY_DPI(6.0f)
+
 // distance to the cursor for item selection
-#define DT_MASKS_SELECTION_DISTANCE DT_MASKS_WIDTH_HANDLE
+#define DT_MASKS_SELECTION_DISTANCE (DT_MASKS_WIDTH_NODE * 2.0f)
 
 
 /**forms types */
@@ -255,7 +257,7 @@ typedef struct dt_masks_functions_t
                          struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
   void (*post_expose)(cairo_t *cr, float zoom_scale, struct dt_masks_form_gui_t *gui, int index, int num_points);
   // The function to draw the shape in question
-  void (*draw_shape)(cairo_t *cr, float *points, int points_count);
+  void (*draw_shape)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border);
 
 } dt_masks_functions_t;
 
@@ -320,7 +322,7 @@ typedef struct dt_masks_form_gui_t
   int node_edited;
   int handle_selected;
   int seg_selected;
-  int point_border_selected;
+  int handle_border_selected;
   int source_pos_type;
 
   gboolean form_dragging;
@@ -328,10 +330,10 @@ typedef struct dt_masks_form_gui_t
   gboolean form_rotating;
   gboolean border_toggling;
   gboolean gradient_toggling;
-  int point_dragging;
+  int node_dragging;
   int handle_dragging;
   int seg_dragging;
-  int point_border_dragging;
+  int handle_border_dragging;
 
   int group_selected;
 
@@ -436,8 +438,19 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
 int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, double y, int up, uint32_t state, int delta_y);
 
 /**
+ * @brief A node is a corner if its 2 handles are at the same position, else, it's a curve.
+ *
+ * @param gpt the GUI points of the mask form
+ * @param index the index of the node to test
+ * @param nb the number of coord by node
+ * @return TRUE if the node is a corner, FALSE otherwise
+ */
+gboolean dt_masks_is_corner_node(const dt_masks_form_gui_points_t *gpt, const int index, const int nb, const int coord_offset);
+
+/**
  * @brief Draw an node point of a mask
  * @param cr the cairo context to draw into
+ * @param round TRUE to draw a round node, FALSE to draw a square node
  * @param group_selected TRUE if the group is selected
  * @param point_action TRUE if the point is selected or dragged
  * @param zoom_scale the current zoom scale of the image
@@ -451,18 +464,16 @@ void dt_masks_draw_node(cairo_t *cr, const gboolean round, const gboolean group_
  * 
  * @param borders TRUE to draw borders
  * @param source TRUE to draw source position (for clone masks)
- * @param segment TRUE if we draw a segment (for brush masks)
  * @param cr the cairo context to draw into
- * @param dashed dashed lines size. pattern[0] and pattern[1] are the lengths of the "on" and "off" segments
- * @param len the length of the dashed line pattern
+ * @param nb the number of coord for that shape
  * @param selected TRUE if the shape is selected
  * @param zoom_scale the current zoom scale of the image
  * @param points the points of the shape to draw
  * @param points_count the number of points in the points array
  * @param functions the pointer to the function table for the shape to draw
  */
-void dt_masks_draw_lines(const gboolean borders, const gboolean source, const gboolean segment, cairo_t *cr, double *dashed, const int len,
-                               const gboolean selected, const float zoom_scale, float *points,
+void dt_masks_draw_lines(const gboolean borders, const gboolean source, cairo_t *cr,
+                               const int nb, const gboolean selected, const float zoom_scale, const float *points,
                                const int points_count, const dt_masks_functions_t *functions);
 /**
  * @brief Draw the handle of a node point
@@ -484,13 +495,12 @@ typedef void (*shape_draw_function_t)(cairo_t*, const dt_masks_form_gui_points_t
  * @param cr the cairo context to draw into
  * @param gui the GUI state of the mask form
  * @param index the index of the mask form
- * @param nb the index of the source point
+ * @param nb the number of coord for that shape
  * @param zoom_scale the current zoom scale of the image
- * @param dashed the dashed line pattern
  * @param shape_function the function to draw the shape
  */
 void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index, const int nb, 
-  const float zoom_scale, const double *dashed, shape_draw_function_t shape_function);
+  const float zoom_scale, const dt_masks_functions_t *functions);
 
 void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
                                  int32_t pointerx, int32_t pointery);
