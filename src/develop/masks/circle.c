@@ -35,14 +35,14 @@ static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t
                                  int num_points, int *inside, int *inside_border, int *near, int *inside_source, float *dist)
 {
   (void)num_points; // unused arg, keep compiler from complaining
+  if(!gui) return;
+
   // initialise returned values
   *inside_source = 0;
   *inside = 0;
   *inside_border = 0;
   *near = -1;
   *dist = FLT_MAX;
-
-  if(!gui) return;
 
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return;

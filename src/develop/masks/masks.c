@@ -1236,22 +1236,23 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
   const float bdx = cnt_x - rgt_x;
   const float bdy = cnt_y - rgt_y;
   const float radius_b = sqrtf(bdx * bdx + bdy * bdy);
+  // offset the index if the shape is a brush or path (single point center)
   const int idx = (nb <= 1) ? 0 : 2;
-  const float centerx = gpt->points[idx];
-  const float centery = gpt->points[idx + 1];
-
+  const float origin_x = gpt->points[idx];
+  const float origin_y = gpt->points[idx + 1];
   float sourcex = gpt->source[idx];
   float sourcey = gpt->source[idx + 1];
+  // fixed radius to 2.0 for multi-point shapes
   const float radius = (nb <= 1) ? fmaxf(radius_a, radius_b) : 2.0f;
   float arrowx = 0.0f, arrowy = 0.0f;
 
   // direction from center to source (use atan2 to avoid special cases)
-  const float cdx = sourcex - centerx;
-  const float cdy = sourcey - centery;
+  const float cdx = sourcex - origin_x;
+  const float cdy = sourcey - origin_y;
   const float distc = sqrtf(cdx * cdx + cdy * cdy);
   const float cangle = (distc > 1e-6f) ? atan2f(cdy, cdx) : 0.0f;
   const float cosc = cosf(cangle), sinc = sinf(cangle);
-
+  const float offset = DT_PIXEL_APPLY_DPI(8.0f)/ zoom_scale;
   if(nb <= 1) // the shape is a brush or path
   {
     // search along the radial line for the best attachment point (keeps original sampling idea)
@@ -1265,14 +1266,14 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
 
       for(float r = 0.01f; r < radius; r += step)
       {
-        const float epx = centerx + r * cosc;
-        const float epy = centery + r * sinc;
+        const float epx = origin_x + r * cosc;
+        const float epy = origin_y + r * sinc;
         const float ed = sqf(epx - px) + sqf(epy - py);
         if(ed < best_dist)
         {
           best_dist = ed;
-          arrowx = centerx + (r + 1.11f) * cosc;
-          arrowy = centery + (r + 1.11f) * sinc;
+          arrowx = origin_x + (r + offset) * cosc;
+          arrowy = origin_y + (r + offset) * sinc;
         }
       }
     }
@@ -1280,8 +1281,8 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
   else
   {
     // radial attachment for multi-point shapes
-    arrowx = centerx + (1.11f * radius) * cosc;
-    arrowy = centery + (1.11f * radius) * sinc;
+    arrowx = origin_x + (offset + radius) * cosc;
+    arrowy = origin_y + (offset + radius) * sinc;
   }
 
   // shift source back along the same direction so the arrow points from inside the shape
@@ -1330,22 +1331,24 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
   if (arrow_len > 1e-6f && !dt_masks_point_in_form_exact(sourcex, sourcey, gpt->points, 0, gpt->points_count))
   {
     // we draw the line between origin and source
-    cairo_move_to(cr, sourcex, sourcey);         // source border point
-    cairo_line_to(cr, arrow_bud_x, arrow_bud_y); // dest border point
+    cairo_move_to(cr, sourcex, sourcey);
+    cairo_line_to(cr, arrow_bud_x, arrow_bud_y);
+
     // dark line
     dt_draw_set_color_overlay(cr, FALSE, 0.6);
-    if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
-      cairo_set_line_width(cr, (6 * DT_MASKS_SIZE_SOURCE_ARROW) / zoom_scale);
-    else
-      cairo_set_line_width(cr, (3.5 * DT_MASKS_SIZE_SOURCE_ARROW) / zoom_scale);
-    cairo_set_dash(cr, link_dashes, dash_len, 0);
-    cairo_stroke_preserve(cr);
-    // bright line
     if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
       cairo_set_line_width(cr, (4 * DT_MASKS_SIZE_SOURCE_ARROW) / zoom_scale);
     else
       cairo_set_line_width(cr, (3 * DT_MASKS_SIZE_SOURCE_ARROW) / zoom_scale);
+    cairo_set_dash(cr, link_dashes, dash_len, 0);
+    cairo_stroke_preserve(cr);
+
+    // bright line
     dt_draw_set_color_overlay(cr, TRUE, 0.8);
+    if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
+      cairo_set_line_width(cr, (3 * DT_MASKS_SIZE_SOURCE_ARROW) / zoom_scale);
+    else
+      cairo_set_line_width(cr, (2 * DT_MASKS_SIZE_SOURCE_ARROW) / zoom_scale);
     cairo_stroke(cr);
   }
 
@@ -1381,6 +1384,8 @@ void dt_masks_draw_lines(const gboolean borders, const gboolean source, cairo_t 
   if(functions && functions->draw_shape)
     functions->draw_shape(cr, points, points_count, nb, borders);
 
+  cairo_save(cr);
+
   if(borders)
   {
     // Trick: fill with a transparent color to get only the outer shape
@@ -1399,18 +1404,18 @@ void dt_masks_draw_lines(const gboolean borders, const gboolean source, cairo_t 
   if(selected)
   {
     if(borders)
-      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_SELECTED / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_HIGHLIGHT_SELECTED / zoom_scale);
     else
       cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
   }
   else
   {
     if(borders)
-      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_HIGHLIGHT / zoom_scale);
     else
       cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
   }
-  dt_draw_set_color_overlay(cr, FALSE, 0.9);
+  dt_draw_set_color_overlay(cr, FALSE, borders ? 0.3f : 0.9f);
   cairo_stroke_preserve(cr);
 
   // NORMAL (bright)
@@ -1419,7 +1424,7 @@ void dt_masks_draw_lines(const gboolean borders, const gboolean source, cairo_t 
     if(borders)
       cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_SELECTED / zoom_scale);
     else
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_GROUP_SELECTED / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_SELECTED / zoom_scale);
   }
   else
   {
@@ -1428,8 +1433,11 @@ void dt_masks_draw_lines(const gboolean borders, const gboolean source, cairo_t 
     else
       cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
   }
+
   dt_draw_set_color_overlay(cr, TRUE, 0.8);
   cairo_stroke(cr);
+
+  cairo_restore(cr);
 }
 
 void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,

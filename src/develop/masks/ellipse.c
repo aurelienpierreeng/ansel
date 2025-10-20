@@ -50,13 +50,20 @@ static inline void _ellipse_point_transform(const float xref, const float yref, 
 // Jordan's point in polygon test
 static int _ellipse_cross_test(float x, float y, float *point_1, float *point_2)
 {
-  const float x_a = x;
-  const float y_a = y;
   float x_b = point_1[0];
   float y_b = point_1[1];
   float x_c = point_2[0];
   float y_c = point_2[1];
 
+  // Early exit : bounding box test
+  float min_y = fminf(y_b, y_c);
+  float max_y = fmaxf(y_b, y_c);
+  if (y <= min_y || y > max_y) return 1;
+
+  const float x_a = x;
+  const float y_a = y;
+
+  // special case : horizontal line
   if(y_a == y_b && y_b == y_c)
   {
     if((x_b <= x_a && x_a <= x_c) || (x_c <= x_a && x_a <= x_b))
@@ -65,6 +72,7 @@ static int _ellipse_cross_test(float x, float y, float *point_1, float *point_2)
       return 1;
   }
 
+  // order points b and c by y
   if(y_b > y_c)
   {
     float tmp;
