@@ -1170,9 +1170,9 @@ void dt_masks_draw_node(cairo_t *cr, const gboolean square, const gboolean point
 
   // draw dark border
   if(point_action && selected)
-    cairo_set_line_width(cr, DT_MASKS_SIZE_NODE_SELECTED / zoom_scale);
+    cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_SELECTED / zoom_scale);
   else
-    cairo_set_line_width(cr, DT_MASKS_SIZE_NODE / zoom_scale);
+    cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
   dt_draw_set_color_overlay(cr, FALSE, 0.8);
   cairo_stroke(cr);
 
@@ -1203,10 +1203,10 @@ void dt_masks_draw_handle(cairo_t *cr, dt_masks_form_gui_t *gui, const float zoo
     cairo_line_to(cr, end_x, end_y);
   }
 
-  cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_HIGHLIGHT / zoom_scale);
+  cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
   dt_draw_set_color_overlay(cr, FALSE, 0.8);
   cairo_stroke_preserve(cr);
-  cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER / zoom_scale);
+  cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
   dt_draw_set_color_overlay(cr, TRUE, 0.8);
   cairo_stroke(cr);
 
@@ -1331,80 +1331,85 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 
   // always draw the arrow head
-  cairo_move_to(cr, arrowx_a, arrowy_a);
-  cairo_line_to(cr, arrowx, arrowy);
-  cairo_line_to(cr, arrowx_b, arrowy_b);
-  cairo_line_to(cr, arrowx_a, arrowy_a); // close the arrow head
-  // configure the head line style
-  cairo_set_source_rgba(cr, 0., 0., 0., 0.);
-  cairo_fill_preserve(cr);
-  // dark
-  dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
-  dt_draw_set_color_overlay(cr, FALSE, 0.6);
-  if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
-    cairo_set_line_width(cr, (4 * DT_MASKS_SIZE_SOURCE_ARROW) / zoom_scale);
-  else
-    cairo_set_line_width(cr, (2 * DT_MASKS_SIZE_SOURCE_ARROW) / zoom_scale);
-  cairo_stroke_preserve(cr);
-  // bright
-  dt_draw_set_color_overlay(cr, TRUE, 0.8);
-  dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
-  if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
-    cairo_set_line_width(cr, (2 * DT_MASKS_SIZE_SOURCE_ARROW) / zoom_scale);
-  else
-    cairo_set_line_width(cr, DT_MASKS_SIZE_SOURCE_ARROW / zoom_scale);
-  cairo_stroke(cr);
+  {
+    cairo_move_to(cr, arrowx_a, arrowy_a);
+    cairo_line_to(cr, arrowx, arrowy);
+    cairo_line_to(cr, arrowx_b, arrowy_b);
+    cairo_line_to(cr, arrowx_a, arrowy_a); // close the arrow head
+    // configure the head line style
+    cairo_set_source_rgba(cr, 0., 0., 0., 0.);
+    cairo_fill_preserve(cr);
 
+    // dark
+    dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
+    dt_draw_set_color_overlay(cr, FALSE, 0.6);
+    if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
+      cairo_set_line_width(cr, (4 * DT_MASKS_SIZE_LINE) / zoom_scale);
+    else
+      cairo_set_line_width(cr, (2 * DT_MASKS_SIZE_LINE) / zoom_scale);
+    cairo_stroke_preserve(cr);
+
+    // bright
+    dt_draw_set_color_overlay(cr, TRUE, 0.8);
+    dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
+    if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
+      cairo_set_line_width(cr, (DT_MASKS_SIZE_LINE_SELECTED) / zoom_scale);
+    else
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
+    cairo_stroke(cr);
+  }
 
   // don't draw the line if the source is inside the shape
   float arrow_len = sqrtf((sourcex - arrow_bud_x) * (sourcex - arrow_bud_x) + (sourcey - arrow_bud_y) * (sourcey - arrow_bud_y));
   if (arrow_len > 1e-6f && !dt_masks_point_in_form_exact(sourcex, sourcey, gpt->points, 0, gpt->points_count))
   {
-    // we draw the line between origin and source
+    // we draw the link line
     cairo_move_to(cr, sourcex, sourcey);
     cairo_line_to(cr, arrow_bud_x, arrow_bud_y);
 
     // dark line
     dt_draw_set_color_overlay(cr, FALSE, 0.6);
     if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
-      cairo_set_line_width(cr, (4 * DT_MASKS_SIZE_SOURCE_ARROW) / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
     else
-      cairo_set_line_width(cr, (3 * DT_MASKS_SIZE_SOURCE_ARROW) / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
     dt_masks_set_dash(cr, DT_MASKS_DASH_ROUND, zoom_scale);
     cairo_stroke_preserve(cr);
 
     // bright line
     dt_draw_set_color_overlay(cr, TRUE, 0.8);
     if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
-      cairo_set_line_width(cr, (3 * DT_MASKS_SIZE_SOURCE_ARROW) / zoom_scale);
+      cairo_set_line_width(cr, (3 * DT_MASKS_SIZE_LINE) / zoom_scale);
     else
-      cairo_set_line_width(cr, (2 * DT_MASKS_SIZE_SOURCE_ARROW) / zoom_scale);
+      cairo_set_line_width(cr, (2 * DT_MASKS_SIZE_LINE) / zoom_scale);
     cairo_stroke(cr);
   }
 
   // draw the source shape
-  if(functions && functions->draw_shape)
-    functions->draw_shape(cr, gpt->source, gpt->source_count, nb, FALSE);
+  {
+    if(functions && functions->draw_shape)
+      functions->draw_shape(cr, gpt->source, gpt->source_count, nb, FALSE);
 
-  dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
+    dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
+    //dark line
+    if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
+    else
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
+    dt_draw_set_color_overlay(cr, FALSE, 0.6);
+    cairo_stroke_preserve(cr);
 
-  if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
-    cairo_set_line_width(cr, (4 * DT_MASKS_SIZE_SOURCE) / zoom_scale);
-  else
-    cairo_set_line_width(cr, (3 * DT_MASKS_SIZE_SOURCE) / zoom_scale);
-  dt_draw_set_color_overlay(cr, FALSE, 0.6);
-  cairo_stroke_preserve(cr);
+    //bright line
+    if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_SELECTED / zoom_scale);
+    else
+      cairo_set_line_width(cr, (1.5f * DT_MASKS_SIZE_LINE) / zoom_scale);
+    dt_draw_set_color_overlay(cr, TRUE, 0.8);
+    cairo_stroke(cr);
 
-  if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
-    cairo_set_line_width(cr, (2 * DT_MASKS_SIZE_SOURCE) / zoom_scale);
-  else
-    cairo_set_line_width(cr, (1.5f * DT_MASKS_SIZE_SOURCE) / zoom_scale);
-  dt_draw_set_color_overlay(cr, TRUE, 0.8);
-  cairo_stroke(cr);
-
-  cairo_restore(cr);
+    cairo_restore(cr);
+  }
 }
-
 void dt_masks_draw_lines(const dt_masks_dash_type_t dash_type, const gboolean source, cairo_t *cr, const int nb, const gboolean selected,
                 const float zoom_scale, const float *points, const int points_count, const dt_masks_functions_t *functions)
 {
@@ -1424,44 +1429,23 @@ void dt_masks_draw_lines(const dt_masks_dash_type_t dash_type, const gboolean so
 
   // dashed ?
   if(dash_type && !source)
-  dt_masks_set_dash(cr, dash_type, zoom_scale);
+    dt_masks_set_dash(cr, dash_type, zoom_scale);
   else
-  dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
+    dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
 
   // HIGHLIGHT (dark)
   if(selected)
-  {
-    if(dash_type)
-      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_HIGHLIGHT_SELECTED / zoom_scale);
-    else
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
-  }
+    cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
   else
-  {
-    if(dash_type)
-      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_HIGHLIGHT / zoom_scale);
-    else
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
-  }
+    cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
   dt_draw_set_color_overlay(cr, FALSE, dash_type ? 0.3f : 0.9f);
   cairo_stroke_preserve(cr);
 
   // NORMAL (bright)
   if(selected)
-  {
-    if(dash_type)
-      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER_SELECTED / zoom_scale);
-    else
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_SELECTED / zoom_scale);
-  }
+    cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_SELECTED / zoom_scale);
   else
-  {
-    if(dash_type)
-      cairo_set_line_width(cr, DT_MASKS_SIZE_BORDER / zoom_scale);
-    else
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
-  }
-
+    cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
   dt_draw_set_color_overlay(cr, TRUE, 0.8);
   cairo_stroke(cr);
 

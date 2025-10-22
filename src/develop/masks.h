@@ -34,26 +34,12 @@ extern "C" {
 
 #define DEVELOP_MASKS_VERSION (6)
 
-/** sizes for drawing */
-// normal
-#define DT_MASKS_SIZE_LINE              DT_PIXEL_APPLY_DPI(1.0f)
-#define DT_MASKS_SIZE_BORDER            DT_PIXEL_APPLY_DPI(1.0f)
-#define DT_MASKS_SIZE_NODE              DT_PIXEL_APPLY_DPI(1.0f)
-#define DT_MASKS_SIZE_SOURCE_ARROW      DT_PIXEL_APPLY_DPI(1.0f)
-#define DT_MASKS_SIZE_SOURCE            DT_PIXEL_APPLY_DPI(1.0f)
-#define DT_MASKS_SIZE_CROSS             DT_PIXEL_APPLY_DPI(3.5f)
-/// normal highlight
-#define DT_MASKS_SIZE_LINE_HIGHLIGHT    (DT_PIXEL_APPLY_DPI(2.0f) + DT_MASKS_SIZE_LINE)
-#define DT_MASKS_SIZE_BORDER_HIGHLIGHT  (DT_PIXEL_APPLY_DPI(2.0f) + DT_MASKS_SIZE_BORDER)
-
-// selected
+/** line sizes for drawing */
+#define DT_MASKS_SIZE_LINE                      DT_PIXEL_APPLY_DPI(1.0f)
 #define DT_MASKS_SIZE_LINE_SELECTED             DT_PIXEL_APPLY_DPI(2.0f)
-#define DT_MASKS_SIZE_BORDER_SELECTED           DT_PIXEL_APPLY_DPI(2.0f)
-#define DT_MASKS_SIZE_NODE_SELECTED             DT_PIXEL_APPLY_DPI(2.0f)
-#define DT_MASKS_SIZE_SOURCE_SELECTED           DT_PIXEL_APPLY_DPI(2.0f)
-/// selected highlight
+#define DT_MASKS_SIZE_LINE_HIGHLIGHT            (DT_PIXEL_APPLY_DPI(2.0f) + DT_MASKS_SIZE_LINE)
 #define DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED   (DT_PIXEL_APPLY_DPI(3.0f) + DT_MASKS_SIZE_LINE_SELECTED)
-#define DT_MASKS_SIZE_BORDER_HIGHLIGHT_SELECTED (DT_PIXEL_APPLY_DPI(3.0f) + DT_MASKS_SIZE_BORDER_SELECTED)
+#define DT_MASKS_SIZE_CROSS                     DT_PIXEL_APPLY_DPI(3.5f)
 
 /** stuff's scale */
 #define DT_MASKS_SCALE_DASH          DT_PIXEL_APPLY_DPI(6.0f)
@@ -62,10 +48,10 @@ extern "C" {
 #define DT_MASKS_SCALE_WHEEL         DT_PIXEL_APPLY_DPI(20.0f)
 // radius/width of a handle & node
 #define DT_MASKS_WIDTH_NODE          DT_PIXEL_APPLY_DPI(3.5f)
-#define DT_MASKS_WIDTH_NODE_SELECTED (DT_MASKS_WIDTH_NODE * 1.5f)
+#define DT_MASKS_WIDTH_NODE_SELECTED (1.5f * DT_MASKS_WIDTH_NODE)
 
 // distance to the cursor for item selection
-#define DT_MASKS_SELECTION_DISTANCE (DT_MASKS_WIDTH_NODE * 2.0f)
+#define DT_MASKS_SELECTION_DISTANCE (2.0f * DT_MASKS_WIDTH_NODE)
 
 /**dash type */
 typedef enum dt_masks_dash_type_t
@@ -463,6 +449,7 @@ gboolean dt_masks_is_corner_node(const dt_masks_form_gui_points_t *gpt, const in
 
 /**
  * @brief Draw an node point of a mask
+ * 
  * @param cr the cairo context to draw into
  * @param square TRUE to draw a square node, FALSE to draw a round node
  * @param group_selected TRUE if the group is selected
