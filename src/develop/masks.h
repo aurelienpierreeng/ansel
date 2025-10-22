@@ -58,6 +58,8 @@ extern "C" {
 /** stuff's scale */
 #define DT_MASKS_SCALE_DASH          DT_PIXEL_APPLY_DPI(6.0f)
 #define DT_MASKS_SCALE_ARROW         DT_PIXEL_APPLY_DPI(12.0f)
+// gradient wheel
+#define DT_MASKS_SCALE_WHEEL         DT_PIXEL_APPLY_DPI(20.0f)
 // radius/width of a handle & node
 #define DT_MASKS_WIDTH_NODE          DT_PIXEL_APPLY_DPI(3.5f)
 #define DT_MASKS_WIDTH_NODE_SELECTED (DT_MASKS_WIDTH_NODE * 1.5f)
@@ -194,9 +196,9 @@ typedef struct dt_masks_point_brush_t
 /** structure used to store anchor for a gradient */
 typedef struct dt_masks_point_gradient_t
 {
-  float anchor[2];
+  float center[2];
   float rotation;
-  float compression;
+  float extent;
   float steepness;
   float curvature;
   dt_masks_gradient_states_t state;

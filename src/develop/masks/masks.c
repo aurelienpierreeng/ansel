@@ -525,7 +525,7 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *dev, void *params)
     else if(m->type & DT_MASKS_GRADIENT)
     { // TODO: new ones have wrong rotation.
       dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)p->data;
-      module->distort_backtransform(module, &piece, gradient->anchor, 1);
+      module->distort_backtransform(module, &piece, gradient->center, 1);
 
       if(ori == ORIENTATION_ROTATE_180_DEG)
         gradient->rotation -= 180.0f;
@@ -648,7 +648,7 @@ static int dt_masks_legacy_params_v2_to_v3(dt_develop_t *dev, void *params)
     else if(m->type & DT_MASKS_GRADIENT)
     {
       dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)p->data;
-      dt_masks_legacy_params_v2_to_v3_transform(img, gradient->anchor);
+      dt_masks_legacy_params_v2_to_v3_transform(img, gradient->center);
     }
     else if(m->type & DT_MASKS_ELLIPSE)
     {

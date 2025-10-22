@@ -1857,8 +1857,8 @@ static void _ellipse_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *
 
 static void _ellipse_initial_source_pos(const float iwd, const float iht, float *x, float *y)
 {
-  const float radius_a = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_a");
-  const float radius_b = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_b");
+  const float radius_a = dt_conf_get_float("plugins/darkroom/spots/ellipse/radius_a");
+  const float radius_b = dt_conf_get_float("plugins/darkroom/spots/ellipse/radius_b");
 
   *x = (radius_a * iwd);
   *y = -(radius_b * iht);
