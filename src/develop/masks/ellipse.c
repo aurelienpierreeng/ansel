@@ -752,7 +752,7 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
       else if(gui->form_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
       {
         // we start the form dragging or rotating
-        if(dt_modifier_is(state, GDK_CONTROL_MASK)|| gui->border_selected)
+        if(gui->border_selected)
           gui->form_rotating = TRUE;
         else if(dt_modifier_is(state, GDK_SHIFT_MASK))
           gui->border_toggling = TRUE;
@@ -780,34 +780,6 @@ static int _ellipse_events_button_released(struct dt_iop_module_t *module, float
                                            uint32_t state, dt_masks_form_t *form, int parentid,
                                            dt_masks_form_gui_t *gui, int index)
 {
-  if(which == 3 && parentid > 0 && gui->edit_mode == DT_MASKS_EDIT_FULL)
-  {
-    // we hide the form
-    if(!(darktable.develop->form_visible->type & DT_MASKS_GROUP))
-      dt_masks_change_form_gui(NULL);
-    else if(g_list_shorter_than(darktable.develop->form_visible->points, 2))
-      dt_masks_change_form_gui(NULL);
-    else
-    {
-      dt_masks_clear_form_gui(darktable.develop);
-      for(GList *forms = darktable.develop->form_visible->points; forms; forms = g_list_next(forms))
-      {
-        dt_masks_point_group_t *gpt = (dt_masks_point_group_t *)forms->data;
-        if(gpt->formid == form->formid)
-        {
-          darktable.develop->form_visible->points
-              = g_list_remove(darktable.develop->form_visible->points, gpt);
-          free(gpt);
-          break;
-        }
-      }
-      gui->edit_mode = DT_MASKS_EDIT_FULL;
-    }
-
-    // we remove the shape
-    dt_masks_form_remove(module, dt_masks_get_from_id(darktable.develop, parentid), form);
-    return 1;
-  }
   if(gui->form_dragging && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
     // we get the ellipse

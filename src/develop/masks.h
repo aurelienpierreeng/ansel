@@ -258,7 +258,8 @@ typedef struct dt_masks_functions_t
   void (*post_expose)(cairo_t *cr, float zoom_scale, struct dt_masks_form_gui_t *gui, int index, int num_points);
   // The function to draw the shape in question
   void (*draw_shape)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border);
-
+  /** initialise all control points to eventually match a catmull-rom like spline */
+  void (*init_ctrl_points)(struct dt_masks_form_t *form);
 } dt_masks_functions_t;
 
 /** structure used to define a form */
@@ -513,6 +514,19 @@ int dt_masks_events_mouse_enter(struct dt_iop_module_t *module);
 /** functions used to manipulate gui data */
 void dt_masks_gui_form_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index,
                               struct dt_iop_module_t *module);
+
+/**
+ * @brief Delete a mask shape or node form from the GUI.
+ * This function is to be used with a popupmenu "Delete" action in the future.
+ * 
+ * @param module The module owning the mask
+ * @param form The form to delete
+ * @param gui The GUI state of the form
+ * @param parentid The parent ID of the form
+ * @return gboolean TRUE if the form was deleted, FALSE otherwise
+ */
+gboolean dt_masks_gui_delete(struct dt_iop_module_t *module, dt_masks_form_t *form, dt_masks_form_gui_t *gui, const int parentid);
+
 void dt_masks_gui_form_remove(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index);
 void dt_masks_gui_form_test_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module);
 void dt_masks_gui_form_save_creation(dt_develop_t *dev, struct dt_iop_module_t *module, dt_masks_form_t *form,

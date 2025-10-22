@@ -62,6 +62,12 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
     // we get the form
     dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)g_list_nth_data(form->points, gui->group_selected);
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+    
+    if(which == 3)
+    {
+      dt_masks_gui_delete(module, sel, gui, fpt->parentid);
+    }
+
     if(sel && sel->functions)
       if(sel->functions->button_released(module, pzx, pzy, which, state, sel, fpt->parentid, gui,
                                              gui->group_selected))

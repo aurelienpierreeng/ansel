@@ -1395,55 +1395,6 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, float pzx, floa
   gui->seg_selected = -1;
 }
 
-static void _remove_shape(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
-                               dt_masks_form_gui_t *gui, int index)
-{
-  // we hide the form
-  if(!(darktable.develop->form_visible->type & DT_MASKS_GROUP))
-    dt_masks_change_form_gui(NULL);
-  else if(g_list_shorter_than(darktable.develop->form_visible->points, 2))
-    dt_masks_change_form_gui(NULL);
-  else
-  {
-    const int emode = gui->edit_mode;
-    dt_masks_clear_form_gui(darktable.develop);
-    for(GList *forms = darktable.develop->form_visible->points; forms; forms = g_list_next(forms))
-    {
-      dt_masks_point_group_t *guipt = (dt_masks_point_group_t *)forms->data;
-      if(guipt->formid == form->formid)
-      {
-        darktable.develop->form_visible->points = g_list_remove(darktable.develop->form_visible->points, guipt);
-        free(guipt);
-        break;
-      }
-    }
-    gui->edit_mode = emode;
-  }
-
-  // we delete or remove the shape
-  // Called from node removal, if there was not enough nodes to keep the whole shape,
-  // that's how this was called:
-  // dt_masks_form_remove(module, NULL, form);
-  // Called from shape removal, this is how it was called:
-  dt_masks_form_remove(module, dt_masks_get_from_id(darktable.develop, parentid), form);
-  // Not sure what difference it makes.
-}
-
-static void _remove_node(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
-                          dt_masks_form_gui_t *gui, int index)
-{
-  dt_masks_point_brush_t *node = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->node_selected);
-  form->points = g_list_remove(form->points, node);
-  free(node);
-  gui->node_selected = -1;
-  gui->node_edited = -1;
-  _brush_init_ctrl_points(form);
-
-  // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
-  dt_masks_gui_form_create(form, gui, index, module);
-}
-
 static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pzx, float pzy,
                                         double pressure, int which, int type, uint32_t state,
                                         dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, int index)
@@ -1522,12 +1473,10 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
   {
     if(gui->source_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
     {
-      dt_masks_form_gui_points_t *guipt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-      if(!guipt) return 0;
       // we start the form dragging
       gui->source_dragging = TRUE;
-      gui->dx = guipt->source[0] - gui->posx;
-      gui->dy = guipt->source[1] - gui->posy;
+      gui->dx = gpt->source[0] - gui->posx;
+      gui->dy = gpt->source[1] - gui->posy;
       return 1;
     }
     else if(gui->form_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
@@ -1592,25 +1541,10 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
 
   else if(which == 3)
   {
-    if(gui->node_selected >= 0)
-    {
-      // we remove the point (and the entire form if there is too few points)
-      if(g_list_shorter_than(form->points, 3))
-      {
-        // if the form doesn't below to a group, we don't delete it
-        if(parentid <= 0) return 1;
-        _remove_shape(module, form, parentid, gui, index);
-        return 1;
-      }
-      _remove_node(module, form, parentid, gui, index);
-
-      return 1;
-    }
-    else if(gui->handle_selected >= 0)
+    if(gui->handle_selected >= 0)
     {
       // reset handle to default position
-      dt_masks_point_brush_t *point
-          = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->handle_selected);
+      dt_masks_point_brush_t *point = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->handle_selected);
       if(point->state != DT_MASKS_POINT_STATE_NORMAL)
       {
         point->state = DT_MASKS_POINT_STATE_NORMAL;
@@ -1622,15 +1556,10 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
       }
       return 1;
     }
-    else if(parentid > 0 && gui->edit_mode == DT_MASKS_EDIT_FULL)
-    {
-      _remove_shape(module, form, parentid, gui, index);
-      return 1;
-    }
   }
+
   return 0;
 }
-
 
 static float _get_brush_smoothing()
 {
@@ -2785,7 +2714,8 @@ const dt_masks_functions_t dt_masks_functions_brush = {
   .button_pressed = _brush_events_button_pressed,
   .button_released = _brush_events_button_released,
   .post_expose = _brush_events_post_expose,
-  .draw_shape = _brush_draw_shape
+  .draw_shape = _brush_draw_shape,
+  .init_ctrl_points = _brush_init_ctrl_points
 };
 
 

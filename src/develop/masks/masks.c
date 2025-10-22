@@ -226,6 +226,89 @@ void dt_masks_form_gui_points_free(gpointer data)
   free(gpt);
 }
 
+static void _masks_remove_node(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
+                          dt_masks_form_gui_t *gui, int index)
+{
+  dt_masks_point_brush_t *node = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->node_selected);
+  form->points = g_list_remove(form->points, node);
+  free(node);
+  gui->node_selected = -1;
+  gui->node_edited = -1;
+  if(form->functions && form->functions->init_ctrl_points)
+    form->functions->init_ctrl_points(form);
+    
+  // we recreate the form points
+  dt_masks_gui_form_remove(form, gui, index);
+  dt_masks_gui_form_create(form, gui, index, module);
+}
+
+
+/**
+ * @brief Remove a shape from the GUI and free its resources.
+ * 
+ * @param module The module owning the mask
+ * @param form The form to remove
+ * @param parentid The parent ID of the form
+ * @param gui The GUI state
+ * @param index The index of the form in the group
+ * 
+ * @return gboolean TRUE if the form was removed, FALSE otherwise.
+ */
+static gboolean _masks_remove_shape(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
+                               dt_masks_form_gui_t *gui, int index)
+{
+  // if the form doesn't below to a group, we don't delete it
+  if(parentid <= 0) return 1;
+
+  // we hide the form
+  if(!(darktable.develop->form_visible->type & DT_MASKS_GROUP))
+    dt_masks_change_form_gui(NULL);
+  else if(g_list_shorter_than(darktable.develop->form_visible->points, 2))
+    dt_masks_change_form_gui(NULL);
+  else
+  {
+    const int emode = gui->edit_mode;
+    dt_masks_clear_form_gui(darktable.develop);
+    for(GList *forms = darktable.develop->form_visible->points; forms; forms = g_list_next(forms))
+    {
+      dt_masks_point_group_t *guipt = (dt_masks_point_group_t *)forms->data;
+      if(guipt->formid == form->formid)
+      {
+        darktable.develop->form_visible->points = g_list_remove(darktable.develop->form_visible->points, guipt);
+        free(guipt);
+        break;
+      }
+    }
+    gui->edit_mode = emode;
+  }
+
+  // we delete or remove the shape
+  // Called from node removal, if there was not enough nodes to keep the whole shape,
+  // that's how this was called:
+  // dt_masks_form_remove(module, NULL, form);
+  // Called from shape removal, this is how it was called:
+  dt_masks_form_remove(module, dt_masks_get_from_id(darktable.develop, parentid), form);
+  // Not sure what difference it makes.
+
+  return 1;
+}
+
+gboolean dt_masks_gui_delete(struct dt_iop_module_t *module, dt_masks_form_t *form, dt_masks_form_gui_t *gui, const int parentid)
+{
+  if( ((form->type & DT_MASKS_BRUSH) || (form->type & DT_MASKS_PATH)) && gui->node_selected >= 0)
+      {
+        // we remove the point (and the entire form if there is too few points)
+        if(g_list_shorter_than(form->points, 3))
+          return _masks_remove_shape(module, form, parentid, gui, gui->group_selected);
+
+        _masks_remove_node(module, form, parentid, gui, gui->group_selected);
+
+        return 1;
+      }
+      else if(parentid > 0 && gui->edit_mode == DT_MASKS_EDIT_FULL)
+        return _masks_remove_shape(module, form, parentid, gui, gui->group_selected);
+}
+
 void dt_masks_gui_form_remove(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index)
 {
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
