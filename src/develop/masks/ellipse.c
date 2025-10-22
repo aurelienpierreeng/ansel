@@ -47,6 +47,7 @@ static inline void _ellipse_point_transform(const float xref, const float yref, 
   *ynew = yref + ytmp;
 }
 
+/*
 // Jordan's point in polygon test
 static int _ellipse_cross_test(float x, float y, float *point_1, float *point_2)
 {
@@ -105,6 +106,7 @@ static int _ellipse_point_in_polygon(float x, float y, float *points, int points
 
   return t;
 }
+*/
 
 // check if point is close to path - segment by segment
 static int _ellipse_point_close_to_path(float x, float y, float as, float *points, int points_count)
@@ -588,7 +590,7 @@ static int _ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, float 
   if(gui->creation)
   {
     if(dt_modifier_is(state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
-      return _init_rotation(form, (up ? 5.0f : -5.0f), DT_MASKS_INCREMENT_OFFSET, flow);
+      return _init_rotation(form, (up ? 2.0f : -2.0f), DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_CONTROL_MASK))
       return _init_opacity(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
@@ -646,11 +648,11 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
 
       if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
-        ellipse->radius[0] = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_a");
-        ellipse->radius[1] = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_b");
-        ellipse->border = dt_conf_get_float("plugins/darkroom/spots/ellipse_border");
-        ellipse->rotation = dt_conf_get_float("plugins/darkroom/spots/ellipse_rotation");
-        ellipse->flags = dt_conf_get_int("plugins/darkroom/spots/ellipse_flags");
+        ellipse->radius[0] = dt_conf_get_float("plugins/darkroom/spots/ellipse/radius_a");
+        ellipse->radius[1] = dt_conf_get_float("plugins/darkroom/spots/ellipse/radius_b");
+        ellipse->border = dt_conf_get_float("plugins/darkroom/spots/ellipse/border");
+        ellipse->rotation = dt_conf_get_float("plugins/darkroom/spots/ellipse/rotation");
+        ellipse->flags = dt_conf_get_int("plugins/darkroom/spots/ellipse/flags");
         if(form->type & DT_MASKS_CLONE)
         {
           dt_masks_set_source_pos_initial_value(gui, DT_MASKS_ELLIPSE, form, pzx, pzy);
@@ -859,8 +861,8 @@ static int _ellipse_events_button_released(struct dt_iop_module_t *module, float
 
     if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
     {
-      dt_conf_set_int("plugins/darkroom/spots/ellipse_flags", ellipse->flags);
-      dt_conf_set_float("plugins/darkroom/spots/ellipse_border", ellipse->border);
+      dt_conf_set_int("plugins/darkroom/spots/ellipse/flags", ellipse->flags);
+      dt_conf_set_float("plugins/darkroom/spots/ellipse/border", ellipse->border);
     }
     else
     {
@@ -913,7 +915,7 @@ static int _ellipse_events_button_released(struct dt_iop_module_t *module, float
       ellipse->rotation += dv / M_PI * 180.0f;
 
     if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
-      dt_conf_set_float("plugins/darkroom/spots/ellipse_rotation", ellipse->rotation);
+      dt_conf_set_float("plugins/darkroom/spots/ellipse/rotation", ellipse->rotation);
     else
       dt_conf_set_float("plugins/darkroom/masks/ellipse/rotation", ellipse->rotation);
 
@@ -958,7 +960,7 @@ static int _ellipse_events_button_released(struct dt_iop_module_t *module, float
     {
       ellipse->radius[0] = MAX(0.0002f, ellipse->radius[0] * s);
       if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
-        dt_conf_set_float("plugins/darkroom/spots/ellipse_radius_a", ellipse->radius[0]);
+        dt_conf_set_float("plugins/darkroom/spots/ellipse/radius_a", ellipse->radius[0]);
       else
         dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_a", ellipse->radius[0]);
     }
@@ -967,7 +969,7 @@ static int _ellipse_events_button_released(struct dt_iop_module_t *module, float
     {
       ellipse->radius[1] = MAX(0.0002f, ellipse->radius[1] * s);
       if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
-        dt_conf_set_float("plugins/darkroom/spots/ellipse_radius_b", ellipse->radius[1]);
+        dt_conf_set_float("plugins/darkroom/spots/ellipse/radius_b", ellipse->radius[1]);
       else
         dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_b", ellipse->radius[1]);
     }
@@ -1089,7 +1091,7 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
       {
         ellipse->radius[0] = MAX(0.0002f, ellipse->radius[0] * s);
         if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-          dt_conf_set_float("plugins/darkroom/spots/ellipse_radius_a", ellipse->radius[0]);
+          dt_conf_set_float("plugins/darkroom/spots/ellipse/radius_a", ellipse->radius[0]);
         else
           dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_a", ellipse->radius[0]);
       }
@@ -1097,7 +1099,7 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
       {
         ellipse->radius[1] = MAX(0.0002f, ellipse->radius[1] * s);
         if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-          dt_conf_set_float("plugins/darkroom/spots/ellipse_radius_b", ellipse->radius[1]);
+          dt_conf_set_float("plugins/darkroom/spots/ellipse/radius_b", ellipse->radius[1]);
         else
           dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_b", ellipse->radius[1]);
       }
@@ -1137,7 +1139,7 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
         ellipse->rotation += dv / M_PI * 180.0f;
 
       if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-        dt_conf_set_float("plugins/darkroom/spots/ellipse_rotation", ellipse->rotation);
+        dt_conf_set_float("plugins/darkroom/spots/ellipse/rotation", ellipse->rotation);
       else
         dt_conf_set_float("plugins/darkroom/masks/ellipse/rotation", ellipse->rotation);
 
@@ -1228,11 +1230,11 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
 
       if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
       {
-        masks_border = dt_conf_get_float("plugins/darkroom/spots/ellipse_border");
-        flags = dt_conf_get_int("plugins/darkroom/spots/ellipse_flags");
-        radius_a = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_a");
-        radius_b = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_b");
-        rotation = dt_conf_get_float("plugins/darkroom/spots/ellipse_rotation");
+        masks_border = dt_conf_get_float("plugins/darkroom/spots/ellipse/border");
+        flags = dt_conf_get_int("plugins/darkroom/spots/ellipse/flags");
+        radius_a = dt_conf_get_float("plugins/darkroom/spots/ellipse/radius_a");
+        radius_b = dt_conf_get_float("plugins/darkroom/spots/ellipse/radius_b");
+        rotation = dt_conf_get_float("plugins/darkroom/spots/ellipse/rotation");
       }
       else
       {
@@ -1885,15 +1887,15 @@ static void _ellipse_sanitize_config(dt_masks_type_t type)
   float border = 0.0f;
   if(type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
   {
-    dt_conf_get_and_sanitize_float("plugins/darkroom/spots/ellipse_rotation", 0.0f, 360.f);
-    flags = dt_conf_get_and_sanitize_int("plugins/darkroom/spots/ellipse_flags", DT_MASKS_ELLIPSE_EQUIDISTANT, DT_MASKS_ELLIPSE_PROPORTIONAL);
-    radius_a = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_a");
-    radius_b = dt_conf_get_float("plugins/darkroom/spots/ellipse_radius_b");
-    border = dt_conf_get_float("plugins/darkroom/spots/ellipse_border");
+    dt_conf_get_and_sanitize_float("plugins/darkroom/spots/ellipse/rotation", 0.0f, 360.f);
+    flags = dt_conf_get_and_sanitize_int("plugins/darkroom/spots/ellipse/flags", DT_MASKS_ELLIPSE_EQUIDISTANT, DT_MASKS_ELLIPSE_PROPORTIONAL);
+    radius_a = dt_conf_get_float("plugins/darkroom/spots/ellipse/radius_a");
+    radius_b = dt_conf_get_float("plugins/darkroom/spots/ellipse/radius_b");
+    border = dt_conf_get_float("plugins/darkroom/spots/ellipse/border");
   }
   else
   {
-    dt_conf_get_and_sanitize_float("plugins/darkroom/masks/ellipse_rotation", 0.0f, 360.f);
+    dt_conf_get_and_sanitize_float("plugins/darkroom/masks/ellipse/rotation", 0.0f, 360.f);
     flags = dt_conf_get_and_sanitize_int("plugins/darkroom/masks/ellipse/flags", DT_MASKS_ELLIPSE_EQUIDISTANT, DT_MASKS_ELLIPSE_PROPORTIONAL);
     radius_a = dt_conf_get_float("plugins/darkroom/masks/ellipse/radius_a");
     radius_b = dt_conf_get_float("plugins/darkroom/masks/ellipse/radius_b");
@@ -1918,9 +1920,9 @@ static void _ellipse_sanitize_config(dt_masks_type_t type)
 
   if(type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
   {
-    DT_CONF_SET_SANITIZED_FLOAT("plugins/darkroom/spots/ellipse_radius_a", radius_a, 0.001f, 0.5f)
-      DT_CONF_SET_SANITIZED_FLOAT("plugins/darkroom/spots/ellipse_radius_b", radius_b, 0.001f, 0.5f);
-    DT_CONF_SET_SANITIZED_FLOAT("plugins/darkroom/spots/ellipse_border", border, 0.001f, reference);
+    DT_CONF_SET_SANITIZED_FLOAT("plugins/darkroom/spots/ellipse/radius_a", radius_a, 0.001f, 0.5f)
+      DT_CONF_SET_SANITIZED_FLOAT("plugins/darkroom/spots/ellipse/radius_b", radius_b, 0.001f, 0.5f);
+    DT_CONF_SET_SANITIZED_FLOAT("plugins/darkroom/spots/ellipse/border", border, 0.001f, reference);
   }
   else
   {

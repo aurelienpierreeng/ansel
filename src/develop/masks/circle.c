@@ -125,7 +125,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
 static int _init_hardness(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
   float mask_hardness = dt_masks_get_set_conf_value(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
-  dt_toast_log(_("hardness: %3.2f%%"), mask_hardness * 100.0f);
+  dt_toast_log(_("Hardness: %3.2f%%"), mask_hardness * 100.0f);
   return 1;
 }
 
@@ -133,14 +133,14 @@ static int _init_size(dt_masks_form_t *form, const float amount, const dt_masks_
 {
 
   float mask_size = dt_masks_get_set_conf_value(form, "size", amount, BORDER_MIN, BORDER_MAX, increment, flow);
-  dt_toast_log(_("size: %3.2f%%"), mask_size * 2.f * 100.f);
+  dt_toast_log(_("Size: %3.2f%%"), mask_size * 2.f * 100.f);
   return 1;
 }
 
 static int _init_opacity(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
   float mask_opacity = dt_masks_get_set_conf_value(form, "opacity", amount, 0.f, 1.f, increment, flow);
-  dt_toast_log(_("opacity: %3.2f%%"), mask_opacity*100.f);
+  dt_toast_log(_("Opacity: %3.2f%%"), mask_opacity*100.f);
   return 1;
 }
 
@@ -267,8 +267,8 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, float p
 
       if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
-        circle->radius = dt_conf_get_float("plugins/darkroom/spots/circle_size");
-        circle->border = dt_conf_get_float("plugins/darkroom/spots/circle_border");
+        circle->radius = dt_conf_get_float("plugins/darkroom/spots/circle/size");
+        circle->border = dt_conf_get_float("plugins/darkroom/spots/circle/border");
 
         // calculate the source position
         if(form->type & DT_MASKS_CLONE)
@@ -496,6 +496,8 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, float pzx,
     const float ht = darktable.develop->preview_pipe->backbuf_height;
     float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
+
+    // we move all points
     if(gui->form_dragging)
     {
       dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
@@ -1210,8 +1212,8 @@ static void _circle_sanitize_config(dt_masks_type_t type)
 {
   if(type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
   {
-    dt_conf_get_and_sanitize_float("plugins/darkroom/spots/circle_size", 0.001f, 0.5f);
-    dt_conf_get_and_sanitize_float("plugins/darkroom/spots/circle_border", 0.0005f, 0.5f);
+    dt_conf_get_and_sanitize_float("plugins/darkroom/spots/circle/size", 0.001f, 0.5f);
+    dt_conf_get_and_sanitize_float("plugins/darkroom/spots/circle/border", 0.0005f, 0.5f);
   }
   else
   {
@@ -1248,7 +1250,7 @@ static void _circle_duplicate_points(dt_develop_t *dev, dt_masks_form_t *const b
 
 static void _circle_initial_source_pos(const float iwd, const float iht, float *x, float *y)
 {
-  const float radius = MIN(0.5f, dt_conf_get_float("plugins/darkroom/spots/circle_size"));
+  const float radius = MIN(0.5f, dt_conf_get_float("plugins/darkroom/spots/circle/size"));
 
   *x = (radius * iwd);
   *y = -(radius * iht);

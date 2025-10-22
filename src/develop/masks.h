@@ -462,14 +462,14 @@ gboolean dt_masks_is_corner_node(const dt_masks_form_gui_points_t *gpt, const in
 /**
  * @brief Draw an node point of a mask
  * @param cr the cairo context to draw into
- * @param round TRUE to draw a round node, FALSE to draw a square node
+ * @param square TRUE to draw a square node, FALSE to draw a round node
  * @param group_selected TRUE if the group is selected
  * @param point_action TRUE if the point is selected or dragged
  * @param zoom_scale the current zoom scale of the image
  * @param x the center x position of the anchor
  * @param y the center y position of the anchor
  */
-void dt_masks_draw_node(cairo_t *cr, const gboolean round, const gboolean group_selected, const gboolean point_action, const float zoom_scale, const float x, const float y);
+void dt_masks_draw_node(cairo_t *cr, const gboolean square, const gboolean group_selected, const gboolean point_action, const float zoom_scale, const float x, const float y);
 
 /**
  * @brief Draw lines of a mask shape

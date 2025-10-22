@@ -1249,9 +1249,6 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return;
 
-  double link_dashes[] = { (DT_MASKS_SCALE_DASH * 0.25) / zoom_scale, (DT_MASKS_SCALE_DASH) / zoom_scale };
-  const int dash_len = sizeof(link_dashes) / sizeof(link_dashes[0]);
-
   // compute raidus a & radius b. at this stage this must be computed from the list
   // of transformed point for drawing the shape.
   const float bot_x = gpt->points[2];
@@ -2011,7 +2008,7 @@ float dt_masks_get_set_conf_value(dt_masks_form_t *form, char *feature, float ne
 {
   gchar *key;
   if(!strcmp(feature, "opacity"))
-    key = g_strdup_printf("plugins/darkroom/%s/opacity", _get_mask_plugin(form));
+    key = g_strdup_printf("plugins/darkroom/%s_opacity", _get_mask_plugin(form));
   else
     key = g_strdup_printf("plugins/darkroom/%s/%s/%s", _get_mask_plugin(form), _get_mask_type(form), feature);
 
