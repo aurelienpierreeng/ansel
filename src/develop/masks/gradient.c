@@ -1221,7 +1221,9 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
   dt_masks_draw_lines(DT_MASKS_DASH_NONE, FALSE, cr, nb, (seg_selected), zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_gradient);
   // draw borders
   if(gui->group_selected == index)
+  {
     dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, (gui->border_selected), zoom_scale, gpt->border, gpt->border_count, &dt_masks_functions_gradient);
+  }
 
   _gradient_draw_arrow(cr, (seg_selected || all_selected), ((gui->group_selected == index) && (gui->border_selected)), gui->form_rotating,
                       zoom_scale, gpt->points, gpt->points_count);

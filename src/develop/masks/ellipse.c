@@ -1306,15 +1306,18 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   if(gui->group_selected == index)
   {
     // we draw the borders
-    cairo_save(cr);
+
     dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
                         gpt->border_count, &dt_masks_functions_ellipse);
-    cairo_restore(cr);
 
     // draw node
     _ellipse_draw_node(gui, cr, zoom_scale, gpt, index);
   }
-  
+
+  //draw the center point
+  if(gui->group_selected == index && gui->border_selected)
+    dt_masks_draw_node(cr, FALSE, FALSE, (gui->form_rotating), zoom_scale, gpt->points[0], gpt->points[1]);
+
   // draw the source if any
   if(gpt->source_count > 10)
   {

@@ -438,17 +438,20 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
 int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, double y, int up, uint32_t state, int delta_y);
 
 /**
- * @brief A node is a corner if its 2 handles are at the same position, else, it's a curve.
+ * @brief returns wether a node is a corner or not.
+ * A node is a corner if its 2 control handles are at the same position, else it's a curve.
  *
  * @param gpt the GUI points of the mask form
  * @param index the index of the node to test
  * @param nb the number of coord by node
- * @return TRUE if the node is a corner, FALSE otherwise
+ * @param coord_offset the offset of the coordinates in the points array
+ * 
+ * @return TRUE if the node is a corner, FALSE it's a curve.
  */
 gboolean dt_masks_is_corner_node(const dt_masks_form_gui_points_t *gpt, const int index, const int nb, const int coord_offset);
 
 /**
- * @brief Draw an node point of a mask
+ * @brief Draw an node point of a mask.
  * 
  * @param cr the cairo context to draw into
  * @param square TRUE to draw a square node, FALSE to draw a round node
@@ -461,23 +464,22 @@ gboolean dt_masks_is_corner_node(const dt_masks_form_gui_points_t *gpt, const in
 void dt_masks_draw_node(cairo_t *cr, const gboolean square, const gboolean group_selected, const gboolean point_action, const float zoom_scale, const float x, const float y);
 
 /**
- * @brief Draw lines of a mask shape
+ * @brief Draw the lines of a mask shape.
  * 
- * @param borders TRUE to draw borders
- * @param source TRUE to draw source position (for clone masks)
+ * @param dash_type the dash type to use
+ * @param source TRUE if we draw the source shape (clone mask)
  * @param cr the cairo context to draw into
- * @param nb the number of coord for that shape
+ * @param nb the number of coord by node
  * @param selected TRUE if the shape is selected
  * @param zoom_scale the current zoom scale of the image
  * @param points the points of the shape to draw
- * @param points_count the number of points in the points array
- * @param functions the pointer to the function table for the shape to draw
+ * @param points_count the number of points in the shape
+ * @param functions the functions table of the shape
  */
-void dt_masks_draw_lines(const dt_masks_dash_type_t dash_type, const gboolean borders, cairo_t *cr,
-                      const int nb, const gboolean selected, const float zoom_scale, const float *points,
-                      const int points_count, const dt_masks_functions_t *functions);
+void dt_masks_draw_lines(const dt_masks_dash_type_t dash_type, const gboolean source, cairo_t *cr, const int nb, const gboolean selected,
+                const float zoom_scale, const float *points, const int points_count, const dt_masks_functions_t *functions);
 /**
- * @brief Draw the handle of a node point
+ * @brief Draw the control handle of a curve node point.
  *
  * @param cr the cairo context to draw into
  * @param gui the GUI state of the mask form
@@ -491,7 +493,7 @@ void dt_masks_draw_handle(cairo_t *cr, dt_masks_form_gui_t *gui, const float zoo
 typedef void (*shape_draw_function_t)(cairo_t*, const dt_masks_form_gui_points_t*, const int);
 
 /**
- * @brief Draw the source for a duplication mask
+ * @brief Draw the source for a correction mask.
  *
  * @param cr the cairo context to draw into
  * @param gui the GUI state of the mask form
