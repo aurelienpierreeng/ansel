@@ -686,6 +686,7 @@ const dt_masks_functions_t dt_masks_functions_group = {
   .button_pressed = _group_events_button_pressed,
   .button_released = _group_events_button_released,
 //TODO:  .post_expose = _group_events_post_expose
+  .draw_shape = NULL
 };
 
 

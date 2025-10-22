@@ -1961,10 +1961,6 @@ static int _path_events_mouse_moved(struct dt_iop_module_t *module, float pzx, f
 
 static void _path_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int nb)
 {
-  double dashed[] = { 4.0, 4.0 };
-  dashed[0] /= zoom_scale;
-  dashed[1] /= zoom_scale;
-  const int len = sizeof(dashed) / sizeof(dashed[0]);
   if(!gui) return;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return;
@@ -1972,7 +1968,7 @@ static void _path_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_for
   // draw path
   if(gpt->points_count > nb * 3 + 6)
   {
-    cairo_set_dash(cr, dashed, 0, 0);
+    dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
 
     cairo_move_to(cr, gpt->points[nb * 6], gpt->points[nb * 6 + 1]);
     int seg = 1, seg2 = 0;
@@ -2097,14 +2093,14 @@ static void _path_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_for
     else
       cairo_set_line_width(cr, 1.0 / zoom_scale);
     dt_draw_set_color_overlay(cr, FALSE, 0.8);
-    cairo_set_dash(cr, dashed, len, 0);
+    dt_masks_set_dash(cr, DT_MASKS_DASH_STICK, zoom_scale);
     cairo_stroke_preserve(cr);
     if(gui->border_selected)
       cairo_set_line_width(cr, 2.0 / zoom_scale);
     else
       cairo_set_line_width(cr, 1.0 / zoom_scale);
     dt_draw_set_color_overlay(cr, TRUE, 0.8);
-    cairo_set_dash(cr, dashed, len, 4);
+    dt_masks_set_dash(cr, DT_MASKS_DASH_STICK, zoom_scale);
     cairo_stroke(cr);
 
     // we draw the path segment by segment
@@ -2129,7 +2125,7 @@ static void _path_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_for
       else
         cairo_set_line_width(cr, 1.0 / zoom_scale);
       dt_draw_set_color_overlay(cr, FALSE, 0.8);
-      cairo_set_dash(cr, dashed, 0, 0);
+      dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
       cairo_stroke(cr);
     }
   }
@@ -2165,7 +2161,7 @@ static void _path_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_for
     // we draw the line between source and dest
     cairo_move_to(cr, gpt->source[2], gpt->source[3]);
     cairo_line_to(cr, gpt->points[2], gpt->points[3]);
-    cairo_set_dash(cr, dashed, 0, 0);
+    dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
     if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
       cairo_set_line_width(cr, 2.5 / zoom_scale);
     else
@@ -2180,7 +2176,7 @@ static void _path_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_for
     cairo_stroke(cr);
 
     // we draw the source
-    cairo_set_dash(cr, dashed, 0, 0);
+    dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
     if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
       cairo_set_line_width(cr, 2.5 / zoom_scale);
     else

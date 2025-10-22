@@ -526,7 +526,8 @@ static void _circle_draw_shape(cairo_t *cr, const float *nodes, const int nodes_
   cairo_move_to(cr, nodes[2], nodes[3]);
   for(int i = 2; i < nodes_count; i++)
     cairo_line_to(cr, nodes[i * 2], nodes[i * 2 + 1]);
-  cairo_line_to(cr, nodes[2], nodes[3]); // close the circle
+  //cairo_line_to(cr, nodes[2], nodes[3]); // close the circle
+  cairo_close_path(cr);
 }
 
 static float *_points_to_transform(float x, float y, float radius, float wd, float ht, int *points_count)
@@ -641,76 +642,71 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
 {
   if(!gui) return;
 
-  (void)num_points; // unused arg, keep compiler from complaining
-
   // add a preview when creating a circle
   // in creation mode
   if(gui->creation)
   {
-    if(gui->guipoints_count == 0)
+    dt_masks_form_t *form = darktable.develop->form_visible;
+    if(!form) return;
+
+    // we get the default radius values
+    float radius_a = 0.0f;
+    float radius_b = 0.0f;
+    if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
     {
-      dt_masks_form_t *form = darktable.develop->form_visible;
-      if(!form) return;
-
-      // we get the default radius values
-      float radius_a = 0.0f;
-      float radius_b = 0.0f;
-      if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-      {
-        radius_a = dt_conf_get_float("plugins/darkroom/spots/circle_size");
-        radius_b = dt_conf_get_float("plugins/darkroom/spots/circle_border");
-      }
-      else
-      {
-        radius_a = dt_conf_get_float("plugins/darkroom/masks/circle/size");
-        radius_b = dt_conf_get_float("plugins/darkroom/masks/circle/border");
-      }
-      radius_b += radius_a;
-
-      // we get the circle center
-      float xpos = gui->posx;
-      float ypos = gui->posy;
-      if((xpos == -1.f && ypos == -1.f) || gui->mouse_leaved_center)
-      {
-        xpos = (.5f + dt_control_get_dev_zoom_x()) * darktable.develop->preview_pipe->backbuf_width;
-        ypos = (.5f + dt_control_get_dev_zoom_y()) * darktable.develop->preview_pipe->backbuf_height;
-      }
-      float pts[2] = { xpos, ypos };
-      dt_dev_distort_backtransform(darktable.develop, pts, 1);
-      float x = pts[0] / darktable.develop->preview_pipe->iwidth;
-      float y = pts[1] / darktable.develop->preview_pipe->iheight;
-
-      // we get all the points, distorted if needed of the sample form
-      float *points = NULL;
-      int points_count = 0;
-      float *border = NULL;
-      int border_count = 0;
-      int draw = _circle_get_points(darktable.develop, x, y, radius_a, 0.0, 0.0, &points, &points_count);
-      if(draw && radius_a != radius_b)
-      {
-        draw = _circle_get_points(darktable.develop, x, y, radius_b, 0.0, 0.0, &border, &border_count);
-      }
-
-      // we draw the form and it's border
-      cairo_save(cr);
-      // we draw the main shape
-      dt_masks_draw_lines(FALSE, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle);
-      // we draw the borders
-      dt_masks_draw_lines(TRUE, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_circle);
-      cairo_restore(cr);
-
-      // draw a cross where the source will be created
-      if(form->type & DT_MASKS_CLONE)
-      {
-        x = 0.0f;
-        y = 0.0f;
-        dt_masks_calculate_source_pos_value(gui, DT_MASKS_CIRCLE, xpos, ypos, xpos, ypos, &x, &y, FALSE);
-        dt_masks_draw_clone_source_pos(cr, zoom_scale, x, y);
-      }
-
-      if(points) dt_free_align(points);
-      if(border) dt_free_align(border);
+      radius_a = dt_conf_get_float("plugins/darkroom/spots/circle/size");
+      radius_b = dt_conf_get_float("plugins/darkroom/spots/circle/border");
+      fprintf(stderr, "Get mask config key %s to value %f\n", "plugins/darkroom/spots/circle/size", radius_a);
     }
+    else
+    {
+      radius_a = dt_conf_get_float("plugins/darkroom/masks/circle/size");
+      radius_b = dt_conf_get_float("plugins/darkroom/masks/circle/border");
+    }
+    radius_b += radius_a;
+
+    // we get the circle center
+    float xpos = gui->posx;
+    float ypos = gui->posy;
+    if((xpos == -1.f && ypos == -1.f) || gui->mouse_leaved_center)
+    {
+      xpos = (.5f + dt_control_get_dev_zoom_x()) * darktable.develop->preview_pipe->backbuf_width;
+      ypos = (.5f + dt_control_get_dev_zoom_y()) * darktable.develop->preview_pipe->backbuf_height;
+    }
+    float pts[2] = { xpos, ypos };
+    dt_dev_distort_backtransform(darktable.develop, pts, 1);
+    float x = pts[0] / darktable.develop->preview_pipe->iwidth;
+    float y = pts[1] / darktable.develop->preview_pipe->iheight;
+
+    // we get all the points, distorted if needed of the sample form
+    float *points = NULL;
+    int points_count = 0;
+    float *border = NULL;
+    int border_count = 0;
+    int draw = _circle_get_points(darktable.develop, x, y, radius_a, 0.0, 0.0, &points, &points_count);
+    if(draw && radius_a != radius_b)
+    {
+      draw = _circle_get_points(darktable.develop, x, y, radius_b, 0.0, 0.0, &border, &border_count);
+    }
+
+    // we draw the form and it's border
+    // we draw the main shape
+    dt_masks_draw_lines(DT_MASKS_DASH_NONE, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle);
+    // we draw the borders
+    dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_circle);
+
+    // draw a cross where the source will be created
+    if(form->type & DT_MASKS_CLONE)
+    {
+      x = 0.0f;
+      y = 0.0f;
+      dt_masks_calculate_source_pos_value(gui, DT_MASKS_CIRCLE, xpos, ypos, xpos, ypos, &x, &y, FALSE);
+      dt_masks_draw_clone_source_pos(cr, zoom_scale, x, y);
+    }
+
+    if(points) dt_free_align(points);
+    if(border) dt_free_align(border);
+  
 
     return;
   } // creation
@@ -720,22 +716,18 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
   
   // we draw the main shape
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-  dt_masks_draw_lines(FALSE, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle);
+  dt_masks_draw_lines(DT_MASKS_DASH_NONE, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle);
   // we draw the borders
   if(gui->group_selected == index)
-  {
-    cairo_save(cr);
-    dt_masks_draw_lines(TRUE, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
+  { 
+    dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
                        gpt->border_count, &dt_masks_functions_circle);
-    cairo_restore(cr);
   }
 
   // draw the source if any
   if(gpt->source_count > 6)
   { 
-    cairo_save(cr);
     dt_masks_draw_source(cr, gui, index, num_points, zoom_scale, &dt_masks_functions_circle);
-    cairo_restore(cr);
   }
 }
 

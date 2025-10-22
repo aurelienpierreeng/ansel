@@ -2144,11 +2144,6 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     const float iht = darktable.develop->preview_pipe->iheight;
     const float min_iwd_iht= MIN(iwd,iht);
 
-    double dashed[] = { DT_MASKS_SCALE_DASH, DT_MASKS_SCALE_DASH };
-    dashed[0] /= zoom_scale;
-    dashed[1] /= zoom_scale;
-    const int len = sizeof(dashed) / sizeof(dashed[0]);
-
     if(gui->guipoints_count == 0)
     {
       dt_masks_form_t *form = darktable.develop->form_visible;
@@ -2177,7 +2172,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       cairo_fill_preserve(cr);
       cairo_set_source_rgba(cr, .8, .8, .8, .8);
       cairo_stroke(cr);
-      cairo_set_dash(cr, dashed, len, 0);
+      dt_masks_set_dash(cr, DT_MASKS_DASH_STICK, zoom_scale);
       cairo_arc(cr, xpos, ypos, radius2, 0, 2.0 * M_PI);
       cairo_stroke(cr);
 
@@ -2294,7 +2289,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       cairo_fill_preserve(cr);
       cairo_set_source_rgba(cr, .8, .8, .8, .8);
       cairo_stroke(cr);
-      cairo_set_dash(cr, dashed, len, 0);
+      dt_masks_set_dash(cr, DT_MASKS_DASH_STICK, zoom_scale);
       cairo_arc(cr, guipoints[2 * (gui->guipoints_count - 1)],
                 guipoints[2 * (gui->guipoints_count - 1) + 1], masks_border * min_iwd_iht, 0,
                 2.0 * M_PI);
@@ -2346,7 +2341,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       {
         const gboolean seg_selected = (gui->group_selected == index) && (gui->seg_selected == seg2);
         const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-        dt_masks_draw_lines(FALSE, FALSE, cr, nb, (seg_selected || all_selected), zoom_scale, gpt->points, gpt->points_count, NULL);
+        dt_masks_draw_lines(DT_MASKS_DASH_NONE, FALSE, cr, nb, (seg_selected || all_selected), zoom_scale, gpt->points, gpt->points_count, NULL);
         seg = (seg + 1) % nb;
         seg2++;
         cairo_move_to(cr, x, y);
@@ -2357,10 +2352,8 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   // draw borders
   if((gui->group_selected == index) && gpt->border_count > nb * 3 + 2)
   {
-    cairo_save(cr);
-    dt_masks_draw_lines(TRUE, FALSE, cr, nb, (gui->border_selected), zoom_scale, gpt->border,
+    dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, (gui->border_selected), zoom_scale, gpt->border,
                        gpt->border_count, &dt_masks_functions_brush);
-    cairo_restore(cr);
   }
 
   // draw nodes and attached stuff

@@ -28,6 +28,38 @@
 
 #pragma GCC diagnostic ignored "-Wshadow"
 
+void dt_masks_set_dash(cairo_t *cr, dt_masks_dash_type_t type, float zoom_scale)
+{
+  // return early if no dash is needed
+  if(type == DT_MASKS_DASH_NONE)
+  {
+    cairo_set_dash(cr, NULL, 0, 0);
+    return;
+  }
+
+  double pattern[2];
+
+  switch(type)
+  {
+    case DT_MASKS_DASH_NONE:
+      pattern[0] = 0.0f;
+      pattern[1] = 0.0f;
+      break;
+
+    case DT_MASKS_DASH_STICK:
+      pattern[0] = DT_MASKS_SCALE_DASH / zoom_scale;
+      pattern[1] = DT_MASKS_SCALE_DASH / zoom_scale;
+      break;
+
+    case DT_MASKS_DASH_ROUND:
+      pattern[0] = (DT_MASKS_SCALE_DASH * 0.25f) / zoom_scale;
+      pattern[1] = DT_MASKS_SCALE_DASH / zoom_scale;
+      break;
+  }
+  const int pattern_len = 2;
+  cairo_set_dash(cr, pattern, pattern_len, 0);
+}
+
 dt_masks_form_t *dt_masks_dup_masks_form(const dt_masks_form_t *form)
 {
   if (!form) return NULL;
@@ -1309,7 +1341,7 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
   cairo_set_source_rgba(cr, 0., 0., 0., 0.);
   cairo_fill_preserve(cr);
   // dark
-  cairo_set_dash(cr, link_dashes, 0, 0);
+  dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
   dt_draw_set_color_overlay(cr, FALSE, 0.6);
   if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
     cairo_set_line_width(cr, (4 * DT_MASKS_SIZE_SOURCE_ARROW) / zoom_scale);
@@ -1318,7 +1350,7 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
   cairo_stroke_preserve(cr);
   // bright
   dt_draw_set_color_overlay(cr, TRUE, 0.8);
-  cairo_set_dash(cr, link_dashes, 0, 0);
+  dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
   if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
     cairo_set_line_width(cr, (2 * DT_MASKS_SIZE_SOURCE_ARROW) / zoom_scale);
   else
@@ -2453,11 +2485,7 @@ void dt_masks_draw_clone_source_pos(cairo_t *cr, const float zoom_scale, const f
   const float dx = DT_MASKS_SIZE_CROSS / zoom_scale;
   const float dy = DT_MASKS_SIZE_CROSS / zoom_scale;
 
-  double dashed[] = { DT_PIXEL_APPLY_DPI(4.0), DT_PIXEL_APPLY_DPI(4.0) };
-  dashed[0] /= zoom_scale;
-  dashed[1] /= zoom_scale;
-
-  cairo_set_dash(cr, dashed, 0, 0);
+  dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
   cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
   dt_draw_set_color_overlay(cr, FALSE, 0.8);
 

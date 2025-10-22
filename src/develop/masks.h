@@ -65,6 +65,15 @@ extern "C" {
 // distance to the cursor for item selection
 #define DT_MASKS_SELECTION_DISTANCE (DT_MASKS_WIDTH_NODE * 2.0f)
 
+/**dash type */
+typedef enum dt_masks_dash_type_t
+{
+  DT_MASKS_DASH_NONE = 0,
+  DT_MASKS_DASH_STICK = 1,
+  DT_MASKS_DASH_ROUND = 2
+} dt_masks_dash_type_t;
+
+void dt_masks_set_dash(cairo_t *cr, dt_masks_dash_type_t type, float zoom_scale);
 
 /**forms types */
 typedef enum dt_masks_type_t
@@ -475,9 +484,9 @@ void dt_masks_draw_node(cairo_t *cr, const gboolean round, const gboolean group_
  * @param points_count the number of points in the points array
  * @param functions the pointer to the function table for the shape to draw
  */
-void dt_masks_draw_lines(const gboolean borders, const gboolean source, cairo_t *cr,
-                               const int nb, const gboolean selected, const float zoom_scale, const float *points,
-                               const int points_count, const dt_masks_functions_t *functions);
+void dt_masks_draw_lines(const dt_masks_dash_type_t dash_type, const gboolean borders, cairo_t *cr,
+                      const int nb, const gboolean selected, const float zoom_scale, const float *points,
+                      const int points_count, const dt_masks_functions_t *functions);
 /**
  * @brief Draw the handle of a node point
  *
