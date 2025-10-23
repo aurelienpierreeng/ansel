@@ -145,41 +145,44 @@ void dt_opencl_write_device_config(const int devid)
   if(devid < 0) return;
   dt_opencl_t *cl = darktable.opencl;
   gchar buf[256] = { 0 };
-  g_snprintf(buf, sizeof(buf), "%s%s_avoid_atomics", DT_CLDEVICE_HEAD, cl->dev[devid].cname);
+  gchar key_device[256] = { 0 };
+  g_snprintf(key_device, 254, "%s/%i/%s", DT_CLDEVICE_HEAD, devid, cl->dev[devid].cname);
+
+  g_snprintf(buf, sizeof(buf), "%s/avoid_atomics", key_device);
   dt_conf_set_int(buf, cl->dev[devid].avoid_atomics);
 
-  g_snprintf(buf, sizeof(buf), "%s%s_micro_nap", DT_CLDEVICE_HEAD, cl->dev[devid].cname);
+  g_snprintf(buf, sizeof(buf), "%s/micro_nap", key_device);
   dt_conf_set_int(buf, cl->dev[devid].micro_nap);
 
-  g_snprintf(buf, sizeof(buf), "%s%s_pinned_memory", DT_CLDEVICE_HEAD, cl->dev[devid].cname);
+  g_snprintf(buf, sizeof(buf), "%s/pinned_memory", key_device);
   dt_conf_set_int(buf, cl->dev[devid].pinned_memory & (DT_OPENCL_PINNING_ON | DT_OPENCL_PINNING_DISABLED));
 
-  g_snprintf(buf, sizeof(buf), "%s%s_wd", DT_CLDEVICE_HEAD, cl->dev[devid].cname);
+  g_snprintf(buf, sizeof(buf), "%s/wd", key_device);
   dt_conf_set_int(buf, cl->dev[devid].clroundup_wd);
 
-  g_snprintf(buf, sizeof(buf), "%s%s_ht", DT_CLDEVICE_HEAD, cl->dev[devid].cname);
+  g_snprintf(buf, sizeof(buf), "%s/ht", key_device);
   dt_conf_set_int(buf, cl->dev[devid].clroundup_ht);
 
-  g_snprintf(buf, sizeof(buf), "%s%s_event_handles", DT_CLDEVICE_HEAD, cl->dev[devid].cname);
+  g_snprintf(buf, sizeof(buf), "%s/event_handles", key_device);
   dt_conf_set_int(buf, cl->dev[devid].event_handles);
 
-  g_snprintf(buf, sizeof(buf), "%s%s_disabled", DT_CLDEVICE_HEAD, cl->dev[devid].cname);
+  g_snprintf(buf, sizeof(buf), "%s/disabled", key_device);
   dt_conf_set_int(buf, cl->dev[devid].disabled & 1);
 
-  g_snprintf(buf, sizeof(buf), "%s%s_benchmark", DT_CLDEVICE_HEAD, cl->dev[devid].cname);
+  g_snprintf(buf, sizeof(buf), "%s/benchmark", key_device);
   dt_conf_set_float(buf, cl->dev[devid].benchmark);
 
   // Also take care of extended device data, these are not only device specific but also depend on the devid
   // to support systems with two similar cards.
 
-  g_snprintf(buf, sizeof(buf), "%s%s_id%i_forced_headroom", DT_CLDEVICE_HEAD, cl->dev[devid].cname, devid);
+  g_snprintf(buf, sizeof(buf), "%s/id%i/forced_headroom", key_device, devid);
   dt_conf_set_int(buf, cl->dev[devid].forced_headroom);
 }
 
 static int _dt_opencl_get_conf_int(const gchar *key_device, const gchar *conf_name, gboolean *safety_ok)
 {
   int res = 0;
-  gchar *key = g_strconcat(key_device, "_", conf_name, NULL);
+  gchar *key = g_strconcat(key_device, "/", conf_name, NULL);
   const gboolean existing_device = dt_conf_key_not_empty(key);
   if(existing_device)
     res = dt_conf_get_int(key);
@@ -196,7 +199,7 @@ static int _dt_opencl_get_conf_int(const gchar *key_device, const gchar *conf_na
 static float _dt_opencl_get_conf_float(const gchar *key_device, const gchar *conf_name, gboolean *safety_ok)
 {
   float res = 0.0f;
-  gchar *key = g_strconcat(key_device, "_", conf_name, NULL);
+  gchar *key = g_strconcat(key_device, "/", conf_name, NULL);
   const gboolean existing_device = dt_conf_key_not_empty(key);
   if(existing_device)
     res = dt_conf_get_float(key);
@@ -215,7 +218,7 @@ gboolean dt_opencl_read_device_config(const int devid)
   if(devid < 0) return FALSE;
   dt_opencl_t *cl = darktable.opencl;
   gchar key_device[256] = { 0 };
-  g_snprintf(key_device, 254, "%s%s", DT_CLDEVICE_HEAD, cl->dev[devid].cname);
+  g_snprintf(key_device, 254, "%s/%i/%s", DT_CLDEVICE_HEAD, devid, cl->dev[devid].cname);
   gboolean safety_ok = TRUE;
 
   int avoid_atomics = _dt_opencl_get_conf_int(key_device, "avoid_atomics", &safety_ok);
@@ -262,7 +265,7 @@ gboolean dt_opencl_read_device_config(const int devid)
   cl->dev[devid].disabled &= 1;
 
   // Also take care of extended device data, these are not only device specific but also depend on the devid
-  g_snprintf(key_device, 254, "%s%s_id%i_forced_headroom", DT_CLDEVICE_HEAD, cl->dev[devid].cname, devid);
+  g_snprintf(key_device, 254, "%s/%i/%s/id%i/forced_headroom", DT_CLDEVICE_HEAD, devid, cl->dev[devid].cname, devid);
   if(dt_conf_key_not_empty(key_device))
   {
     int forced_headroom = dt_conf_get_int(key_device);
@@ -641,7 +644,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   escapedkerneldir = dt_util_str_replace(kerneldir, " ", "\\ ");
 #endif
 
-  gchar* compile_option_name_cname = g_strdup_printf("%s%s_building", DT_CLDEVICE_HEAD, cl->dev[dev].cname);
+  gchar* compile_option_name_cname = g_strdup_printf("%s/%i/%s/building", DT_CLDEVICE_HEAD, dev, cl->dev[dev].cname);
   const char* compile_opt = NULL;
 
   if(dt_conf_key_exists(compile_option_name_cname))
