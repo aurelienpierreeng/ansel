@@ -172,8 +172,15 @@ void dt_group_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_t 
                                  dt_masks_form_gui_t *gui)
 {
   int pos = 0;
+  // draw all forms except the selected one so it will appear on top
   for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
   {
+    // skip drawing for the selected one
+    if(gui->group_selected == pos)
+    {
+      pos++;
+      continue;
+    }
     dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)fpts->data;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if (!sel) return;
@@ -181,6 +188,17 @@ void dt_group_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_t 
       sel->functions->post_expose(cr, zoom_scale, gui, pos, g_list_length(sel->points));
     pos++;
   }
+
+  // now draw the selected one on top, if any
+  if(gui->group_selected >= 0)
+  {
+    dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+    if (!sel) return;
+    if(sel->functions)
+      sel->functions->post_expose(cr, zoom_scale, gui, gui->group_selected, g_list_length(sel->points));
+  }
+
 }
 
 static void _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
