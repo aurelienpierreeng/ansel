@@ -283,6 +283,7 @@ jobs:
         compiler:
           - { compiler: XCode,   CC: cc, CXX: c++ }
         btype:
+          - Debug
           - Release
         target:
           - skiptest
