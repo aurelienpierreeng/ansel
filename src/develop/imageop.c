@@ -1774,7 +1774,7 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   piece->global_hash = piece->hash = hash;
   piece->global_mask_hash = piece->blendop_hash = module->blendop_hash;
 
-  dt_print(DT_DEBUG_PIPE, "[pixelpipe] params commit for %s (%s) in pipe %i with hash %lu\n", module->op, module->multi_name, pipe->type, (long unsigned int)piece->hash);
+  dt_print(DT_DEBUG_PIPE, "[pixelpipe] params commit for %s (%s) in pipe %i with hash %" PRIu64 "\n", module->op, module->multi_name, pipe->type, piece->hash);
 }
 
 void dt_iop_gui_cleanup_module(dt_iop_module_t *module)

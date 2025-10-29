@@ -2909,7 +2909,7 @@ static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t 
     dt_control_log(_("could not detect structural data in image"));
 #ifdef ASHIFT_DEBUG
     // find out more
-    printf("do_get_structure: buf %p, buf_hash %lu, buf_width %d, buf_height %d, lines %p, lines_count %d\n",
+    printf("do_get_structure: buf %p, buf_hash %" PRIu64 ", buf_width %d, buf_height %d, lines %p, lines_count %d\n",
            g->buf, g->buf_hash, g->buf_width, g->buf_height, g->lines, g->lines_count);
 #endif
     goto error;
@@ -2920,7 +2920,7 @@ static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t 
     dt_control_log(_("could not run outlier removal"));
 #ifdef ASHIFT_DEBUG
     // find out more
-    printf("_remove_outliers: buf %p, buf_hash %lu, buf_width %d, buf_height %d, lines %p, lines_count %d\n",
+    printf("_remove_outliers: buf %p, buf_hash %" PRIu64 ", buf_width %d, buf_height %d, lines %p, lines_count %d\n",
            g->buf, g->buf_hash, g->buf_width, g->buf_height, g->lines, g->lines_count);
 #endif
     goto error;

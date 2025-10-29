@@ -21,6 +21,7 @@
 #include "common/debug.h"
 #include "develop/format.h"
 #include "develop/pixelpipe_hb.h"
+#include <inttypes.h>
 #include <glib.h>
 #include <stdlib.h>
 
@@ -68,7 +69,7 @@ void dt_pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char *mes
 {
   if(!(darktable.unmuted & DT_DEBUG_PIPE)) return;
   if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
-  dt_print(DT_DEBUG_PIPE, "[pixelpipe] cache entry %lu: %s (%lu MiB - age %li) %s\n", cache_entry->hash,
+  dt_print(DT_DEBUG_PIPE, "[pixelpipe] cache entry %" PRIu64 ": %s (%lu MiB - age %" PRId64 ") %s\n", cache_entry->hash,
            cache_entry->name, dt_pixel_cache_get_size(cache_entry), cache_entry->age, message);
 }
 
@@ -103,7 +104,7 @@ int _non_thread_safe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const uint64_
   }
   else
   {
-    dt_print(DT_DEBUG_PIPE, "[pixelpipe] cache entry %lu not found, will not be removed\n", hash);
+    dt_print(DT_DEBUG_PIPE, "[pixelpipe] cache entry %" PRIu64 " not found, will not be removed\n", hash);
   }
   return 1;
 }
@@ -219,7 +220,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
 
   if(cache->current_memory + size > cache->max_memory)
   {
-    dt_print(DT_DEBUG_PIPE, "[pixelpipe] cache is full, cannot allocate new entry %lu (%s)\n", hash, name);
+    dt_print(DT_DEBUG_PIPE, "[pixelpipe] cache is full, cannot allocate new entry %" PRIu64 " (%s)\n", hash, name);
     return NULL; // not enough memory
   }
 
@@ -338,7 +339,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
   else
   {
     // Don't write on *dsc and *data here
-    dt_print(DT_DEBUG_PIPE, "couldn't allocate new cache entry %lu\n", hash);
+    dt_print(DT_DEBUG_PIPE, "couldn't allocate new cache entry %" PRIu64 "\n", hash);
   }
 
   if(entry) *entry = cache_entry;

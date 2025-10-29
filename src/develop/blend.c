@@ -26,6 +26,7 @@
 #include "develop/masks.h"
 #include "develop/tiling.h"
 #include "develop/imageop_math.h"
+#include <inttypes.h>
 #include <math.h>
 
 typedef enum _develop_mask_post_processing
@@ -664,7 +665,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
   {
     // The hash table does not survive to a pipeline restart...
     g_hash_table_replace(piece->raster_masks, GINT_TO_POINTER(0), _mask);
-    dt_print(DT_DEBUG_MASKS, "[raster masks] replacing raster mask id 0 for module %s (%s) for pipe %i with hash %lu\n", piece->module->op,
+    dt_print(DT_DEBUG_MASKS, "[raster masks] replacing raster mask id 0 for module %s (%s) for pipe %i with hash %" PRIu64 "\n", piece->module->op,
              piece->module->multi_name, piece->pipe->type, piece->global_mask_hash);
   }
   else
@@ -1244,7 +1245,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
   // TODO: should we skip raster masks?
   if(piece->pipe->store_all_raster_masks || dt_iop_is_raster_mask_used(self, 0))
   {
-    dt_print(DT_DEBUG_MASKS, "[raster masks] replacing raster mask id 0 for module %s (%s) for pipe %i with hash %lu\n", piece->module->op,
+    dt_print(DT_DEBUG_MASKS, "[raster masks] replacing raster mask id 0 for module %s (%s) for pipe %i with hash %" PRIu64 "\n", piece->module->op,
              piece->module->multi_name, piece->pipe->type, piece->global_mask_hash);
 
     //  get back final mask from the device to store it for later use
