@@ -39,6 +39,7 @@
 #include "gui/color_picker_proxy.h"
 
 #include <assert.h>
+#include <inttypes.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -285,7 +286,7 @@ gboolean dt_dev_pixelpipe_set_reentry(dt_dev_pixelpipe_t *pipe, uint64_t hash)
   {
     pipe->reentry = TRUE;
     pipe->reentry_hash = hash;
-    dt_print(DT_DEBUG_DEV, "[dev_pixelpipe] re-entry flag set for %lu\n", hash);
+    dt_print(DT_DEBUG_DEV, "[dev_pixelpipe] re-entry flag set for %" PRIu64 "\n", hash);
     return TRUE;
   }
 
@@ -299,7 +300,7 @@ gboolean dt_dev_pixelpipe_unset_reentry(dt_dev_pixelpipe_t *pipe, uint64_t hash)
   {
     pipe->reentry = FALSE;
     pipe->reentry_hash = 0;
-    dt_print(DT_DEBUG_DEV, "[dev_pixelpipe] re-entry flag unset for %lu\n", hash);
+    dt_print(DT_DEBUG_DEV, "[dev_pixelpipe] re-entry flag unset for %" PRIu64 "\n", hash);
     return TRUE;
   }
 
@@ -477,7 +478,7 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     hash = dt_hash(hash, (const char *)&local_hash, sizeof(uint64_t));
     piece->global_hash = hash;
 
-    dt_print(DT_DEBUG_PIPE, "[pixelpipe] global hash for %s (%s) in pipe %i with hash %lu\n", piece->module->op, piece->module->multi_name, pipe->type, (long unsigned int)hash);
+    dt_print(DT_DEBUG_PIPE, "[pixelpipe] global hash for %s (%s) in pipe %i with hash %" PRIu64 "\n", piece->module->op, piece->module->multi_name, pipe->type, hash);
 
     // Mask hash: raster masks are affected by ROI out size and distortions.
 
@@ -1720,7 +1721,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     // FIXME: on CPU path and GPU path with tiling, when 2 modules taking different color spaces are back to back,
     // the color conversion for the next is done in-place in the output of the previous. We should check
     // here if out_format->cst matches wathever we are expecting, and convert back if it doesn't.
-    dt_print(DT_DEBUG_PIPE, "[dev_pixelpipe] found %lu (%s) for %s pipeline in cache\n", hash, (module) ? module->op : "noop",
+    dt_print(DT_DEBUG_PIPE, "[dev_pixelpipe] found %" PRIu64 " (%s) for %s pipeline in cache\n", hash, (module) ? module->op : "noop",
               _pipe_type_to_str(pipe->type));
     return 0;
   }
@@ -1803,7 +1804,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // at the last-found cache line.
   if(!pipe->reentry && !new_entry)
   {
-    dt_print(DT_DEBUG_PIPE, "[pipeline] found %lu (%s) for %s pipeline in cache\n", hash, (module) ? module->op : "noop",
+    dt_print(DT_DEBUG_PIPE, "[pipeline] found %" PRIu64 " (%s) for %s pipeline in cache\n", hash, (module) ? module->op : "noop",
                _pipe_type_to_str(pipe->type));
 
     // Sample all color pickers and histograms
@@ -2333,7 +2334,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
     if(raster_mask)
     {
       dt_print(DT_DEBUG_MASKS,
-        "[raster masks] found in %s mask id %i from %s (%s) for module %s (%s) in pipe %i with hash %lu\n",
+        "[raster masks] found in %s mask id %i from %s (%s) for module %s (%s) in pipe %i with hash %" PRIu64 "\n",
         "internal",
         raster_mask_id, source_name, source_piece->module->multi_name, target_name, target_module->multi_name,
         pipe->type, raster_hash);
