@@ -115,7 +115,7 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
       // spots v1 was before raw orientation changes
       form->version = 1;
 
-      dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)(malloc(sizeof(dt_masks_point_circle_t)));
+      dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)(malloc(sizeof(dt_masks_node_circle_t)));
       circle->center[0] = o->spot[i].x;
       circle->center[1] = o->spot[i].y;
       circle->radius = o->spot[i].radius;
@@ -484,13 +484,13 @@ static int masks_get_delta(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   }
   else if(form->type & DT_MASKS_CIRCLE)
   {
-    dt_masks_point_circle_t *pt = (dt_masks_point_circle_t *)form->points->data;
+    dt_masks_node_circle_t *pt = (dt_masks_node_circle_t *)form->points->data;
 
     res = masks_point_calc_delta(self, piece, roi, pt->center, form->source, dx, dy);
   }
   else if(form->type & DT_MASKS_ELLIPSE)
   {
-    dt_masks_point_ellipse_t *pt = (dt_masks_point_ellipse_t *)form->points->data;
+    dt_masks_node_ellipse_t *pt = (dt_masks_node_ellipse_t *)form->points->data;
 
     res = masks_point_calc_delta(self, piece, roi, pt->center, form->source, dx, dy);
   }
@@ -541,7 +541,7 @@ void _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const
 
       if(d->clone_algo[pos] == 1 && (form->type & DT_MASKS_CIRCLE))
       {
-        dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)form->points->data;
+        dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)form->points->data;
 
         dt_boundingbox_t points;
         masks_point_denormalize(piece, roi_in, circle->center, 1, points);

@@ -147,7 +147,7 @@ static int _init_opacity(dt_masks_form_t *form, const float amount, const dt_mas
 static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
   
-  dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)(form->points)->data;
+  dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)(form->points)->data;
   if(!circle) return 0;
 
   const float masks_hardness = circle->border;
@@ -168,7 +168,7 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
 
 static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)(form->points)->data;
+  dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)(form->points)->data;
   if(!circle) return 0;
 
   // Sanitize
@@ -255,7 +255,7 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, float p
     {
       dt_iop_module_t *crea_module = gui->creation_module;
       // we create the circle
-      dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)(malloc(sizeof(dt_masks_point_circle_t)));
+      dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)(malloc(sizeof(dt_masks_node_circle_t)));
 
       // we change the center value
       const float wd = darktable.develop->preview_pipe->backbuf_width;
@@ -313,7 +313,7 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, float p
         int pos3 = 0, pos2 = -1;
         for(GList *fs = grp->points; fs; fs = g_list_next(fs))
         {
-          dt_masks_point_group_t *pt = (dt_masks_point_group_t *)fs->data;
+          dt_masks_form_group_t *pt = (dt_masks_form_group_t *)fs->data;
           if(pt->formid == form->formid)
           {
             pos2 = pos3;
@@ -389,7 +389,7 @@ static int _circle_events_button_released(struct dt_iop_module_t *module, float 
   if(gui->form_dragging)
   {
     // we get the circle
-    dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
+    dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
 
     // we end the form dragging
     gui->form_dragging = FALSE;
@@ -472,7 +472,7 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, float pzx,
     // we move all points
     if(gui->form_dragging)
     {
-      dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
+      dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
       if(!circle) return 0;
       circle->center[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
       circle->center[1] = pts[1] / darktable.develop->preview_pipe->iheight;
@@ -727,7 +727,7 @@ static int _circle_get_points_border(dt_develop_t *dev, struct dt_masks_form_t *
                                      int *points_count, float **border, int *border_count, int source,
                                      const dt_iop_module_t *module)
 {
-  dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
+  dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
   float x = circle->center[0];
   float y = circle->center[1];
   if(source)
@@ -756,7 +756,7 @@ static int _circle_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop
                                    dt_masks_form_t *form, int *width, int *height, int *posx, int *posy)
 {
   // we get the circle values
-  dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
+  dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
   float wd = piece->pipe->iwidth, ht = piece->pipe->iheight;
 
   // compute the points we need to transform (center and circumference of circle)
@@ -785,7 +785,7 @@ static int _circle_get_area(const dt_iop_module_t *const restrict module,
                             int *width, int *height, int *posx, int *posy)
 {
   // we get the circle values
-  dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
+  dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
   float wd = piece->pipe->iwidth, ht = piece->pipe->iheight;
 
   // compute the points we need to transform (center and circumference of circle)
@@ -826,7 +826,7 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module,
   }
 
   // we get the circle values
-  dt_masks_point_circle_t *const restrict circle = (dt_masks_point_circle_t *)((form->points)->data);
+  dt_masks_node_circle_t *const restrict circle = (dt_masks_node_circle_t *)((form->points)->data);
 
   // we create a buffer of points with all points in the area
   const int w = *width, h = *height;
@@ -931,7 +931,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module,
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = start1 = dt_get_wtime();
 
   // we get the circle parameters
-  dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)((form->points)->data);
+  dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)((form->points)->data);
   if(!circle) return 0;
   const int wi = piece->pipe->iwidth, hi = piece->pipe->iheight;
   const float centerx = circle->center[0] * wi;
@@ -1213,9 +1213,9 @@ static void _circle_duplicate_points(dt_develop_t *dev, dt_masks_form_t *const b
   (void)dev; // unused arg, keep compiler from complaining
   for(GList *pts = base->points; pts; pts = g_list_next(pts))
   {
-    dt_masks_point_circle_t *pt = (dt_masks_point_circle_t *)pts->data;
-    dt_masks_point_circle_t *npt = (dt_masks_point_circle_t *)malloc(sizeof(dt_masks_point_circle_t));
-    memcpy(npt, pt, sizeof(dt_masks_point_circle_t));
+    dt_masks_node_circle_t *pt = (dt_masks_node_circle_t *)pts->data;
+    dt_masks_node_circle_t *npt = (dt_masks_node_circle_t *)malloc(sizeof(dt_masks_node_circle_t));
+    memcpy(npt, pt, sizeof(dt_masks_node_circle_t));
     dest->points = g_list_append(dest->points, npt);
   }
 }
@@ -1230,7 +1230,7 @@ static void _circle_initial_source_pos(const float iwd, const float iht, float *
 
 // The function table for circles.  This must be public, i.e. no "static" keyword.
 const dt_masks_functions_t dt_masks_functions_circle = {
-  .point_struct_size = sizeof(struct dt_masks_point_circle_t),
+  .point_struct_size = sizeof(struct dt_masks_node_circle_t),
   .sanitize_config = _circle_sanitize_config,
   .set_form_name = _circle_set_form_name,
   .set_hint_message = _circle_set_hint_message,

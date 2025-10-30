@@ -229,7 +229,7 @@ void dt_masks_form_gui_points_free(gpointer data)
 static void _masks_remove_node(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
                           dt_masks_form_gui_t *gui, int index)
 {
-  dt_masks_point_brush_t *node = (dt_masks_point_brush_t *)g_list_nth_data(form->points, gui->node_selected);
+  dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)g_list_nth_data(form->points, gui->node_selected);
   form->points = g_list_remove(form->points, node);
   free(node);
   gui->node_selected = -1;
@@ -595,7 +595,7 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *dev, void *params)
 
     if(m->type & DT_MASKS_CIRCLE)
     {
-      dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)p->data;
+      dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)p->data;
       module->distort_backtransform(module, &piece, circle->center, 1);
     }
     else if(m->type & DT_MASKS_PATH)
@@ -610,7 +610,7 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *dev, void *params)
     }
     else if(m->type & DT_MASKS_GRADIENT)
     { // TODO: new ones have wrong rotation.
-      dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)p->data;
+      dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)p->data;
       module->distort_backtransform(module, &piece, gradient->center, 1);
 
       if(ori == ORIENTATION_ROTATE_180_DEG)
@@ -622,7 +622,7 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *dev, void *params)
     }
     else if(m->type & DT_MASKS_ELLIPSE)
     {
-      dt_masks_point_ellipse_t *ellipse = (dt_masks_point_ellipse_t *)p->data;
+      dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)p->data;
       module->distort_backtransform(module, &piece, ellipse->center, 1);
 
       if(ori & ORIENTATION_SWAP_XY)
@@ -636,8 +636,8 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *dev, void *params)
     {
       for(; p; p = g_list_next(p))
       {
-        dt_masks_point_brush_t *brush = (dt_masks_point_brush_t *)p->data;
-        module->distort_backtransform(module, &piece, brush->corner, 1);
+        dt_masks_node_brush_t *brush = (dt_masks_node_brush_t *)p->data;
+        module->distort_backtransform(module, &piece, brush->node, 1);
         module->distort_backtransform(module, &piece, brush->ctrl1, 1);
         module->distort_backtransform(module, &piece, brush->ctrl2, 1);
       }
@@ -715,7 +715,7 @@ static int dt_masks_legacy_params_v2_to_v3(dt_develop_t *dev, void *params)
 
     if(m->type & DT_MASKS_CIRCLE)
     {
-      dt_masks_point_circle_t *circle = (dt_masks_point_circle_t *)p->data;
+      dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)p->data;
       dt_masks_legacy_params_v2_to_v3_transform(img, circle->center);
       dt_masks_legacy_params_v2_to_v3_transform_only_rescale(img, &circle->radius, 1);
       dt_masks_legacy_params_v2_to_v3_transform_only_rescale(img, &circle->border, 1);
@@ -733,12 +733,12 @@ static int dt_masks_legacy_params_v2_to_v3(dt_develop_t *dev, void *params)
     }
     else if(m->type & DT_MASKS_GRADIENT)
     {
-      dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)p->data;
+      dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)p->data;
       dt_masks_legacy_params_v2_to_v3_transform(img, gradient->center);
     }
     else if(m->type & DT_MASKS_ELLIPSE)
     {
-      dt_masks_point_ellipse_t *ellipse = (dt_masks_point_ellipse_t *)p->data;
+      dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)p->data;
       dt_masks_legacy_params_v2_to_v3_transform(img, ellipse->center);
       dt_masks_legacy_params_v2_to_v3_transform_only_rescale(img, ellipse->radius, 2);
       dt_masks_legacy_params_v2_to_v3_transform_only_rescale(img, &ellipse->border, 1);
@@ -747,8 +747,8 @@ static int dt_masks_legacy_params_v2_to_v3(dt_develop_t *dev, void *params)
     {
       for(; p;  p = g_list_next(p))
       {
-        dt_masks_point_brush_t *brush = (dt_masks_point_brush_t *)p->data;
-        dt_masks_legacy_params_v2_to_v3_transform(img, brush->corner);
+        dt_masks_node_brush_t *brush = (dt_masks_node_brush_t *)p->data;
+        dt_masks_legacy_params_v2_to_v3_transform(img, brush->node);
         dt_masks_legacy_params_v2_to_v3_transform(img, brush->ctrl1);
         dt_masks_legacy_params_v2_to_v3_transform(img, brush->ctrl2);
         dt_masks_legacy_params_v2_to_v3_transform_only_rescale(img, brush->border, 2);
@@ -784,7 +784,7 @@ static int dt_masks_legacy_params_v3_to_v4(dt_develop_t *dev, void *params)
 
   if(m->type & DT_MASKS_ELLIPSE)
   {
-    dt_masks_point_ellipse_t *ellipse = (dt_masks_point_ellipse_t *)p->data;
+    dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)p->data;
     ellipse->flags = DT_MASKS_ELLIPSE_EQUIDISTANT;
   }
 
@@ -810,7 +810,7 @@ static int dt_masks_legacy_params_v4_to_v5(dt_develop_t *dev, void *params)
 
   if(m->type & DT_MASKS_GRADIENT)
   {
-    dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)p->data;
+    dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)p->data;
     gradient->curvature = 0.0f;
   }
 
@@ -835,7 +835,7 @@ static int dt_masks_legacy_params_v5_to_v6(dt_develop_t *dev, void *params)
 
   if(m->type & DT_MASKS_GRADIENT)
   {
-    dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)p->data;
+    dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)p->data;
     gradient->state = DT_MASKS_GRADIENT_STATE_LINEAR;
   }
 
@@ -1236,7 +1236,7 @@ void dt_masks_draw_node(cairo_t *cr, const gboolean square, const gboolean point
 
   // square for corner nodes, circle for others (curve)
   float node_width = selected ? DT_MASKS_WIDTH_NODE_SELECTED / zoom_scale
-                                  : DT_MASKS_WIDTH_NODE / zoom_scale;
+                              : DT_MASKS_WIDTH_NODE / zoom_scale;
   if(square)
   {
     const float pos = node_width;

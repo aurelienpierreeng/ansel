@@ -758,7 +758,7 @@ void post_history_commit(dt_iop_module_t *self)
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)self->gui_data;
   if(g == NULL) return;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), rt_shape_is_being_added(self, DT_MASKS_CIRCLE));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), rt_shape_is_being_added(self, DT_MASKS_PATH));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), rt_shape_is_being_added(self, DT_MASKS_POLYGON));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ellipse), rt_shape_is_being_added(self, DT_MASKS_ELLIPSE));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_brush), rt_shape_is_being_added(self, DT_MASKS_BRUSH));
 
@@ -867,21 +867,21 @@ static int rt_masks_get_delta_to_destination(dt_iop_module_t *self, dt_dev_pixel
   }
   else if(form->type & DT_MASKS_CIRCLE)
   {
-    const dt_masks_point_circle_t *pt = (dt_masks_point_circle_t *)form->points->data;
+    const dt_masks_node_circle_t *pt = (dt_masks_node_circle_t *)form->points->data;
 
     res = rt_masks_point_calc_delta(self, piece, roi, pt->center, form->source, dx, dy, distort_mode);
   }
   else if(form->type & DT_MASKS_ELLIPSE)
   {
-    const dt_masks_point_ellipse_t *pt = (dt_masks_point_ellipse_t *)form->points->data;
+    const dt_masks_node_ellipse_t *pt = (dt_masks_node_ellipse_t *)form->points->data;
 
     res = rt_masks_point_calc_delta(self, piece, roi, pt->center, form->source, dx, dy, distort_mode);
   }
   else if(form->type & DT_MASKS_BRUSH)
   {
-    const dt_masks_point_brush_t *pt = (dt_masks_point_brush_t *)form->points->data;
+    const dt_masks_node_brush_t *pt = (dt_masks_node_brush_t *)form->points->data;
 
-    res = rt_masks_point_calc_delta(self, piece, roi, pt->corner, form->source, dx, dy, distort_mode);
+    res = rt_masks_point_calc_delta(self, piece, roi, pt->node, form->source, dx, dy, distort_mode);
   }
 
   return res;

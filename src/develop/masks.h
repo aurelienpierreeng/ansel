@@ -139,48 +139,48 @@ typedef enum dt_masks_source_pos_type_t
   DT_MASKS_SOURCE_POS_ABSOLUTE = 2
 } dt_masks_source_pos_type_t;
 
-/** structure used to store 1 point for a circle */
-typedef struct dt_masks_point_circle_t
+/** structure used to store 1 node for a circle */
+typedef struct dt_masks_node_circle_t
 {
   float center[2];
   float radius;
   float border;
-} dt_masks_point_circle_t;
+} dt_masks_node_circle_t;
 
-/** structure used to store 1 point for an ellipse */
-typedef struct dt_masks_point_ellipse_t
+/** structure used to store 1 node for an ellipse */
+typedef struct dt_masks_node_ellipse_t
 {
   float center[2];
   float radius[2];
   float rotation;
   float border;
   dt_masks_ellipse_flags_t flags;
-} dt_masks_point_ellipse_t;
+} dt_masks_node_ellipse_t;
 
-/** structure used to store 1 point for a path form */
-typedef struct dt_masks_point_path_t
+/** structure used to store 1 node for a path form */
+typedef struct dt_masks_node_polygon_t
 {
-  float corner[2];
+  float node[2];
   float ctrl1[2];
   float ctrl2[2];
   float border[2];
   dt_masks_points_states_t state;
-} dt_masks_point_path_t;
+} dt_masks_node_polygon_t;
 
-/** structure used to store 1 point for a brush form */
-typedef struct dt_masks_point_brush_t
+/** structure used to store 1 node for a brush form */
+typedef struct dt_masks_node_brush_t
 {
-  float corner[2];
+  float node[2];
   float ctrl1[2];
   float ctrl2[2];
   float border[2];
   float density;
   float hardness;
   dt_masks_points_states_t state;
-} dt_masks_point_brush_t;
+} dt_masks_node_brush_t;
 
 /** structure used to store anchor for a gradient */
-typedef struct dt_masks_point_gradient_t
+typedef struct dt_masks_anchor_gradient_t
 {
   float center[2];
   float rotation;
@@ -188,7 +188,7 @@ typedef struct dt_masks_point_gradient_t
   float steepness;
   float curvature;
   dt_masks_gradient_states_t state;
-} dt_masks_point_gradient_t;
+} dt_masks_anchor_gradient_t;
 
 /** structure used to store all forms's id for a group */
 typedef struct dt_masks_form_group_t

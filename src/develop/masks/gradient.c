@@ -338,7 +338,7 @@ static int _init_rotation(dt_masks_form_t *form, const float amount, const dt_ma
 
 static int _change_extent(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)(form->points)->data;
+  dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(form->points)->data;
   if(!gradient) return 0;
 
   const float masks_extent = gradient->extent;
@@ -359,7 +359,7 @@ static int _change_extent(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struc
 
 static int _change_curvature(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)(form->points)->data;
+  dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(form->points)->data;
   if(!gradient) return 0;
 
   // Sanitize
@@ -400,7 +400,7 @@ static int _change_curvature(dt_masks_form_t *form, dt_masks_form_gui_t *gui, st
 
 static int _change_rotation(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)(form->points)->data;
+  dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(form->points)->data;
   if(!gradient) return 0;
 
   // Rotation
@@ -487,7 +487,7 @@ static int _gradient_events_button_pressed(struct dt_iop_module_t *module, float
 
       dt_iop_module_t *crea_module = gui->creation_module;
       // we create the gradient
-      dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)(malloc(sizeof(dt_masks_point_gradient_t)));
+      dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(malloc(sizeof(dt_masks_anchor_gradient_t)));
 
       // we change the center value
       const float wd = darktable.develop->preview_pipe->backbuf_width;
@@ -623,7 +623,7 @@ static int _gradient_events_button_released(struct dt_iop_module_t *module, floa
   if(gui->form_dragging && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
     // we get the gradient
-    dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)((form->points)->data);
+    dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)((form->points)->data);
 
     // we end the form dragging
     gui->form_dragging = FALSE;
@@ -651,7 +651,7 @@ static int _gradient_events_button_released(struct dt_iop_module_t *module, floa
   else if(gui->form_rotating && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
     // we get the gradient
-    dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)((form->points)->data);
+    dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)((form->points)->data);
 
     // we end the form rotating
     gui->form_rotating = FALSE;
@@ -694,7 +694,7 @@ static int _gradient_events_button_released(struct dt_iop_module_t *module, floa
   else if(gui->gradient_toggling)
   {
     // we get the gradient
-    dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)((form->points)->data);
+    dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)((form->points)->data);
 
     // we end the gradient toggling
     gui->gradient_toggling = FALSE;
@@ -736,7 +736,7 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, float pz
   else
   {
     // we get the gradient
-    dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)((form->points)->data);
+    dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)((form->points)->data);
     if(!gradient) return 0;
 
     // we need the reference points
@@ -1205,7 +1205,7 @@ static int _gradient_get_points_border(dt_develop_t *dev, dt_masks_form_t *form,
                                        const dt_iop_module_t *module)
 {
   (void)source;  // unused arg, keep compiler from complaining
-  dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)form->points->data;
+  dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)form->points->data;
   if(_gradient_get_points(dev, gradient->center[0], gradient->center[1], gradient->rotation, gradient->curvature,
                           points, points_count))
   {
@@ -1276,7 +1276,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
   }
 
   // we get the gradient values
-  dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)((form->points)->data);
+  dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)((form->points)->data);
 
   // we create a buffer of grid points for later interpolation. mainly in order to reduce memory footprint
   const int w = *width;
@@ -1451,7 +1451,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
   // we get the gradient values
-  const dt_masks_point_gradient_t *gradient = (dt_masks_point_gradient_t *)(form->points->data);
+  const dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(form->points->data);
 
   // we create a buffer of grid points for later interpolation. mainly in order to reduce memory footprint
   const int w = roi->width;
@@ -1647,16 +1647,16 @@ static void _gradient_duplicate_points(dt_develop_t *dev, dt_masks_form_t *const
   (void)dev; // unused arg, keep compiler from complaining
   for(GList *pts = base->points; pts; pts = g_list_next(pts))
   {
-    dt_masks_point_gradient_t *pt = (dt_masks_point_gradient_t *)pts->data;
-    dt_masks_point_gradient_t *npt = (dt_masks_point_gradient_t *)malloc(sizeof(dt_masks_point_gradient_t));
-    memcpy(npt, pt, sizeof(dt_masks_point_gradient_t));
+    dt_masks_anchor_gradient_t *pt = (dt_masks_anchor_gradient_t *)pts->data;
+    dt_masks_anchor_gradient_t *npt = (dt_masks_anchor_gradient_t *)malloc(sizeof(dt_masks_anchor_gradient_t));
+    memcpy(npt, pt, sizeof(dt_masks_anchor_gradient_t));
     dest->points = g_list_append(dest->points, npt);
   }
 }
 
 // The function table for gradients.  This must be public, i.e. no "static" keyword.
 const dt_masks_functions_t dt_masks_functions_gradient = {
-  .point_struct_size = sizeof(struct dt_masks_point_gradient_t),
+  .point_struct_size = sizeof(struct dt_masks_anchor_gradient_t),
   .sanitize_config = _gradient_sanitize_config,
   .set_form_name = _gradient_set_form_name,
   .set_hint_message = _gradient_set_hint_message,
