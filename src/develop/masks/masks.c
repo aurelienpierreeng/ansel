@@ -31,7 +31,7 @@
 void dt_masks_set_dash(cairo_t *cr, dt_masks_dash_type_t type, float zoom_scale)
 {
   // return early if no dash is needed
-  if(type == DT_MASKS_DASH_NONE)
+  if(type == DT_MASKS_NO_DASH)
   {
     cairo_set_dash(cr, NULL, 0, 0);
     return;
@@ -41,7 +41,7 @@ void dt_masks_set_dash(cairo_t *cr, dt_masks_dash_type_t type, float zoom_scale)
 
   switch(type)
   {
-    case DT_MASKS_DASH_NONE:
+    case DT_MASKS_NO_DASH:
       pattern[0] = 0.0f;
       pattern[1] = 0.0f;
       break;
@@ -107,7 +107,7 @@ GList *dt_masks_dup_forms_deep(GList *forms, dt_masks_form_t *form)
 
 static int _get_opacity(dt_masks_form_gui_t *gui, const dt_masks_form_t *form)
 {
-  const dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)g_list_nth_data(form->points, gui->group_selected);
+  const dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
   const dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
   if(!sel) return 0;
   const int formid = sel->formid;
@@ -119,7 +119,7 @@ static int _get_opacity(dt_masks_form_gui_t *gui, const dt_masks_form_t *form)
   int opacity = 0;
   for(GList *fpts = grp->points; fpts; fpts = g_list_next(fpts))
   {
-    const dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)fpts->data;
+    const dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
     if(fpt->formid == formid)
     {
       opacity = fpt->opacity * 100;
@@ -142,7 +142,7 @@ static void _set_hinter_message(dt_masks_form_gui_t *gui, const dt_masks_form_t 
   if((ftype & DT_MASKS_GROUP) && (gui->group_selected >= 0))
   {
     // we get the selected form
-    const dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    const dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
     sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(!sel) return;
 
@@ -271,7 +271,7 @@ static gboolean _masks_remove_shape(struct dt_iop_module_t *module, dt_masks_for
     dt_masks_clear_form_gui(darktable.develop);
     for(GList *forms = darktable.develop->form_visible->points; forms; forms = g_list_next(forms))
     {
-      dt_masks_point_group_t *guipt = (dt_masks_point_group_t *)forms->data;
+      dt_masks_form_group_t *guipt = (dt_masks_form_group_t *)forms->data;
       if(guipt->formid == form->formid)
       {
         darktable.develop->form_visible->points = g_list_remove(darktable.develop->form_visible->points, guipt);
@@ -295,18 +295,21 @@ static gboolean _masks_remove_shape(struct dt_iop_module_t *module, dt_masks_for
 
 gboolean dt_masks_gui_delete(struct dt_iop_module_t *module, dt_masks_form_t *form, dt_masks_form_gui_t *gui, const int parentid)
 {
-  if( ((form->type & DT_MASKS_BRUSH) || (form->type & DT_MASKS_PATH)) && gui->node_selected >= 0)
-      {
-        // we remove the point (and the entire form if there is too few points)
-        if(g_list_shorter_than(form->points, 3))
-          return _masks_remove_shape(module, form, parentid, gui, gui->group_selected);
+  // we remove the node (and the entire form if there is too few nodes left)
+  if( ((form->type & DT_MASKS_BRUSH) || (form->type & DT_MASKS_POLYGON)) && gui->node_selected >= 0)
+  {
+    if(g_list_shorter_than(form->points, 3))
+      return _masks_remove_shape(module, form, parentid, gui, gui->group_selected);
 
-        _masks_remove_node(module, form, parentid, gui, gui->group_selected);
+    _masks_remove_node(module, form, parentid, gui, gui->group_selected);
 
-        return 1;
-      }
-      else if(parentid > 0 && gui->edit_mode == DT_MASKS_EDIT_FULL)
-        return _masks_remove_shape(module, form, parentid, gui, gui->group_selected);
+    return 1;
+  }
+  // we remove the entire shape
+  else if(parentid > 0 && gui->edit_mode == DT_MASKS_EDIT_FULL)
+    return _masks_remove_shape(module, form, parentid, gui, gui->group_selected);
+  
+  return 0;
 }
 
 void dt_masks_gui_form_remove(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index)
@@ -347,7 +350,7 @@ void dt_masks_gui_form_test_create(dt_masks_form_t *form, dt_masks_form_gui_t *g
       int pos = 0;
       for(GList *fpts = form->points; fpts;  fpts = g_list_next(fpts))
       {
-        dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)fpts->data;
+        dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
         dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
         if (!sel) return;
         dt_masks_gui_form_create(sel, gui, pos, module);
@@ -463,7 +466,7 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
         grp = _group_create(dev, module, DT_MASKS_GROUP);
     }
     // we add the form in this group
-    dt_masks_point_group_t *grpt = malloc(sizeof(dt_masks_point_group_t));
+    dt_masks_form_group_t *grpt = malloc(sizeof(dt_masks_form_group_t));
     grpt->formid = form->formid;
     grpt->parentid = grp->formid;
     grpt->state = DT_MASKS_STATE_SHOW | DT_MASKS_STATE_USE;
@@ -642,7 +645,7 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *dev, void *params)
 
     if(m->type & DT_MASKS_CLONE)
     {
-      // NOTE: can be: DT_MASKS_CIRCLE, DT_MASKS_ELLIPSE, DT_MASKS_PATH
+      // NOTE: can be: DT_MASKS_CIRCLE, DT_MASKS_ELLIPSE, DT_MASKS_POLYGON
       module->distort_backtransform(module, &piece, m->source, 1);
     }
 
@@ -1264,6 +1267,7 @@ void dt_masks_draw_node(cairo_t *cr, const gboolean square, const gboolean point
 
 void dt_masks_draw_handle(cairo_t *cr, dt_masks_form_gui_t *gui, const float zoom_scale, const int index, const float ffx, const float ffy)
 {
+  cairo_save(cr);
   if(!gui) return;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return;
@@ -1323,6 +1327,8 @@ void dt_masks_draw_handle(cairo_t *cr, dt_masks_form_gui_t *gui, const float zoo
   cairo_move_to(cr, gpt->points[k*6+2],gpt->points[k*6+3]);
   cairo_line_to(cr, gpt->points[k*6+4],gpt->points[k*6+5]);
   cairo_stroke(cr);*/
+
+  cairo_restore(cr);
 }
 
 void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index, const int nb, 
@@ -1424,7 +1430,7 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
     cairo_fill_preserve(cr);
 
     // dark
-    dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
+    dt_masks_set_dash(cr, DT_MASKS_NO_DASH, zoom_scale);
     dt_draw_set_color_overlay(cr, FALSE, 0.6);
     if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
       cairo_set_line_width(cr, (4 * DT_MASKS_SIZE_LINE) / zoom_scale);
@@ -1434,7 +1440,7 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
 
     // bright
     dt_draw_set_color_overlay(cr, TRUE, 0.8);
-    dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
+    dt_masks_set_dash(cr, DT_MASKS_NO_DASH, zoom_scale);
     if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
       cairo_set_line_width(cr, (DT_MASKS_SIZE_LINE_SELECTED) / zoom_scale);
     else
@@ -1473,7 +1479,7 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
     if(functions && functions->draw_shape)
       functions->draw_shape(cr, gpt->source, gpt->source_count, nb, FALSE);
 
-    dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
+    dt_masks_set_dash(cr, DT_MASKS_NO_DASH, zoom_scale);
     //dark line
     if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
       cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
@@ -1514,7 +1520,7 @@ void dt_masks_draw_lines(const dt_masks_dash_type_t dash_type, const gboolean so
   if(dash_type && !source)
     dt_masks_set_dash(cr, dash_type, zoom_scale);
   else
-    dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
+    dt_masks_set_dash(cr, DT_MASKS_NO_DASH, zoom_scale);
 
   // HIGHLIGHT (dark)
   if(selected)
@@ -1756,11 +1762,11 @@ void dt_masks_iop_use_same_as(dt_iop_module_t *module, dt_iop_module_t *src)
   // we copy the src group in this group
   for(GList *points = src_grp->points; points; points = g_list_next(points))
   {
-    dt_masks_point_group_t *pt = (dt_masks_point_group_t *)points->data;
+    dt_masks_form_group_t *pt = (dt_masks_form_group_t *)points->data;
     dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, pt->formid);
     if(form)
     {
-      dt_masks_point_group_t *grpt = dt_masks_group_add_form(grp, form);
+      dt_masks_form_group_t *grpt = dt_masks_group_add_form(grp, form);
       if(grpt)
       {
         grpt->state = pt->state;
@@ -1814,7 +1820,7 @@ void dt_masks_iop_combo_populate(GtkWidget *w, void *m)
     {
       for(GList *pts = grp->points; pts; pts = g_list_next(pts))
       {
-        dt_masks_point_group_t *pt = (dt_masks_point_group_t *)pts->data;
+        dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
         if(pt->formid == form->formid)
         {
           used = 1;
@@ -1931,7 +1937,7 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *grp, 
     int ok = 0;
     for(GList *forms = grp->points; forms; forms = g_list_next(forms))
     {
-      dt_masks_point_group_t *grpt = (dt_masks_point_group_t *)forms->data;
+      dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
       if(grpt->formid == id)
       {
         ok = 1;
@@ -1956,7 +1962,7 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *grp, 
     // and are thus not accessible afterwards.
     while(form->points)
     {
-      dt_masks_point_group_t *group_child = (dt_masks_point_group_t *)form->points->data;
+      dt_masks_form_group_t *group_child = (dt_masks_form_group_t *)form->points->data;
       dt_masks_form_t *child = dt_masks_get_from_id(darktable.develop, group_child->formid);
       dt_masks_form_remove(module, form, child);
       // no need to do anything to form->points, the recursive call will have removed child from the list
@@ -1985,7 +1991,7 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *grp, 
           GList *forms = iopgrp->points;
           while(forms)
           {
-            dt_masks_point_group_t *grpt = (dt_masks_point_group_t *)forms->data;
+            dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
             if(grpt->formid == id)
             {
               ok = 1;
@@ -2033,7 +2039,7 @@ float dt_masks_form_get_opacity(dt_masks_form_t *form, int parentid)
   // so we change the value inside the group
   for(GList *fpts = grp->points; fpts; fpts = g_list_next(fpts))
   {
-    dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)fpts->data;
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
     if(fpt->formid == id)
     {
       return fpt->opacity;
@@ -2113,7 +2119,7 @@ int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity
   // so we change the value inside the group
   for(GList *fpts = grp->points; fpts; fpts = g_list_next(fpts))
   {
-    dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)fpts->data;
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
     if(fpt->formid == id)
     {
       const float new_opacity = (offset == DT_MASKS_INCREMENT_OFFSET)  ? fpt->opacity + opacity * flow
@@ -2137,11 +2143,11 @@ void dt_masks_form_move(dt_masks_form_t *grp, int formid, int up)
   if(!grp || !(grp->type & DT_MASKS_GROUP)) return;
 
   // we search the form in the group
-  dt_masks_point_group_t *grpt = NULL;
+  dt_masks_form_group_t *grpt = NULL;
   guint pos = 0;
   for(GList *fpts = grp->points; fpts; fpts = g_list_next(fpts))
   {
-    dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)fpts->data;
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
     if(fpt->formid == formid)
     {
       grpt = fpt;
@@ -2173,7 +2179,7 @@ static int _find_in_group(dt_masks_form_t *grp, int formid)
   int nb = 0;
   for(GList *forms = grp->points; forms; forms = g_list_next(forms))
   {
-    const dt_masks_point_group_t *grpt = (dt_masks_point_group_t *)forms->data;
+    const dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
     dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, grpt->formid);
     if(form)
     {
@@ -2183,7 +2189,7 @@ static int _find_in_group(dt_masks_form_t *grp, int formid)
   return nb;
 }
 
-dt_masks_point_group_t *dt_masks_group_add_form(dt_masks_form_t *grp, dt_masks_form_t *form)
+dt_masks_form_group_t *dt_masks_group_add_form(dt_masks_form_t *grp, dt_masks_form_t *form)
 {
   // add a form to group and check for self inclusion
 
@@ -2192,7 +2198,7 @@ dt_masks_point_group_t *dt_masks_group_add_form(dt_masks_form_t *grp, dt_masks_f
   // or we go through all points of form to see if we find a ref to grp->formid
   if(!(form->type & DT_MASKS_GROUP) || _find_in_group(form, grp->formid) == 0)
   {
-    dt_masks_point_group_t *grpt = malloc(sizeof(dt_masks_point_group_t));
+    dt_masks_form_group_t *grpt = malloc(sizeof(dt_masks_form_group_t));
     grpt->formid = form->formid;
     grpt->parentid = grp->formid;
     grpt->state = DT_MASKS_STATE_SHOW | DT_MASKS_STATE_USE;
@@ -2213,7 +2219,7 @@ void dt_masks_group_ungroup(dt_masks_form_t *dest_grp, dt_masks_form_t *grp)
 
   for(GList *forms = grp->points; forms; forms = g_list_next(forms))
   {
-    dt_masks_point_group_t *grpt = (dt_masks_point_group_t *)forms->data;
+    dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
     dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, grpt->formid);
     if(form)
     {
@@ -2223,7 +2229,7 @@ void dt_masks_group_ungroup(dt_masks_form_t *dest_grp, dt_masks_form_t *grp)
       }
       else
       {
-        dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)malloc(sizeof(dt_masks_point_group_t));
+        dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)malloc(sizeof(dt_masks_form_group_t));
         fpt->formid = grpt->formid;
         fpt->parentid = grpt->parentid;
         fpt->state = grpt->state;
@@ -2248,7 +2254,7 @@ uint64_t dt_masks_group_get_hash(uint64_t hash, dt_masks_form_t *form)
   {
     if(form->type & DT_MASKS_GROUP)
     {
-      dt_masks_point_group_t *grpt = (dt_masks_point_group_t *)forms->data;
+      dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
       dt_masks_form_t *f = dt_masks_get_from_id(darktable.develop, grpt->formid);
       if(f)
       {
@@ -2290,7 +2296,7 @@ static void _cleanup_unused_recurs(GList *forms, int formid, int *used, int nb)
   {
     for(GList *grpts = form->points; grpts; grpts = g_list_next(grpts))
     {
-      dt_masks_point_group_t *grpt = (dt_masks_point_group_t *)grpts->data;
+      dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)grpts->data;
       _cleanup_unused_recurs(forms, grpt->formid, used, nb);
     }
   }
@@ -2549,7 +2555,7 @@ void dt_masks_draw_clone_source_pos(cairo_t *cr, const float zoom_scale, const f
   const float dx = DT_MASKS_SIZE_CROSS / zoom_scale;
   const float dy = DT_MASKS_SIZE_CROSS / zoom_scale;
 
-  dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
+  dt_masks_set_dash(cr, DT_MASKS_NO_DASH, zoom_scale);
   cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
   dt_draw_set_color_overlay(cr, FALSE, 0.8);
 

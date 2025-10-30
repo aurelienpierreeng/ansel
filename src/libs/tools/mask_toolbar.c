@@ -73,7 +73,7 @@ static void _reset_opacity_slider(dt_lib_tool_mask_t *d)
   g_object_set_data(G_OBJECT(d->opacity), "selected", NULL);
 }
 
-static void _set_opacity_slider(dt_lib_tool_mask_t *d, dt_masks_form_t *sel, dt_masks_point_group_t *fpt)
+static void _set_opacity_slider(dt_lib_tool_mask_t *d, dt_masks_form_t *sel, dt_masks_form_group_t *fpt)
 {
   const float opacity = dt_masks_form_get_opacity(sel, fpt->parentid);
   if(opacity != -1.f)
@@ -97,7 +97,7 @@ static void give_control_to_form(gpointer instance, void *_s, void *_t, dt_lib_t
 
   // we try to get the selected form among what we can find
   int group = gui->group_selected;
-  dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)g_list_nth_data(form->points, group);
+  dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, group);
   if(!fpt) return;
 
   dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);

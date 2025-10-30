@@ -223,7 +223,7 @@ static void _brush_ctrl2_to_handle(float ptx, float pty, float ctrlx, float ctrl
 
 /** get bezier control points from feather extremity */
 /** the values should be in orthonormal space */
-static void _brush_feather_to_ctrl(float ptx, float pty, float fx, float fy,
+static void _brush_handle_to_ctrl(float ptx, float pty, float fx, float fy,
                                    float *ctrl1x, float *ctrl1y,
                                    float *ctrl2x, float *ctrl2y, gboolean clockwise)
 {
@@ -936,6 +936,8 @@ fail:
 static void _brush_get_distance(float x, float y, float as, dt_masks_form_gui_t *gui, int index,
                                 int corner_count, int *inside, int *inside_border, int *near, int *inside_source, float *dist)
 {
+  if(!gui) return;
+
   // initialise returned values
   *inside_source = 0;
   *inside = 0;
@@ -955,6 +957,7 @@ static void _brush_get_distance(float x, float y, float as, dt_masks_form_gui_t 
   // add support for clone masks
   if(gpt->points_count > 2 + corner_count * 3 && gpt->source_count > 2 + corner_count * 3)
   {
+    // distance from form origin and source origin
     const float dx = -gpt->points[2] + gpt->source[2];
     const float dy = -gpt->points[3] + gpt->source[3];
 
@@ -1192,7 +1195,7 @@ static int _init_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_gui
 
 static int _init_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float masks_border = dt_masks_get_set_conf_value(form, "border", amount, BORDER_MIN, BORDER_MAX, increment, flow);
+  float masks_border = dt_masks_get_set_conf_value(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
   if(gui->guipoints_count > 0) dt_masks_dynbuf_set(gui->guipoints_payload, -4, masks_border);
   dt_toast_log(_("size: %3.2f%%"), masks_border*2.f*100.f);
   return 1;
@@ -1279,7 +1282,7 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
     pts_number++;
   }
 
-  dt_masks_get_set_conf_value(form, "border", amount, BORDER_MIN, BORDER_MAX, increment, flow);
+  dt_masks_get_set_conf_value(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
 
   // we recreate the form points
   dt_masks_gui_form_remove(form, gui, index);
@@ -1349,7 +1352,6 @@ static void _change_node_type(struct dt_iop_module_t *module, dt_masks_form_t *f
     node->ctrl1[0] = node->ctrl2[0] = node->corner[0];
     node->ctrl1[1] = node->ctrl2[1] = node->corner[1];
     node->state = DT_MASKS_POINT_STATE_USER;
-
   }
   // we recreate the form points
   dt_masks_gui_form_remove(form, gui, index);
@@ -1410,7 +1412,7 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
   _find_closest_handle(module, pzx, pzy, form, parentid, gui, index);
 
   // The trick is to use the incremental setting, set to 1.0 to re-use the generic getter/setter without changing value
-  float masks_border = dt_masks_get_set_conf_value(form, "border", 1.0f, BORDER_MIN, BORDER_MAX, TRUE, 1);
+  float masks_border = dt_masks_get_set_conf_value(form, "border", 1.0f, HARDNESS_MIN, HARDNESS_MAX, TRUE, 1);
   float masks_hardness = dt_masks_get_set_conf_value(form, "hardness", 1.0f, HARDNESS_MIN, HARDNESS_MAX, TRUE, 1);
 
   // always start with a mask density of 100%, it will be adjusted with pen pressure if used.
@@ -1473,7 +1475,7 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
   {
     if(gui->source_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
     {
-      // we start the form dragging
+      // we start the source dragging
       gui->source_dragging = TRUE;
       gui->dx = gpt->source[0] - gui->posx;
       gui->dy = gpt->source[1] - gui->posy;
@@ -1481,6 +1483,7 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
     }
     else if(gui->form_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
     {
+      // we start the form dragging
       gui->form_dragging = TRUE;
       gui->node_edited = -1;
       gui->dx = gpt->points[2] - gui->posx;
@@ -1585,7 +1588,7 @@ static void _apply_pen_pressure(dt_masks_form_gui_t *gui, float *guipoints_paylo
     switch(gui->pressure_sensitivity)
     {
       case DT_MASKS_PRESSURE_BRUSHSIZE_REL:
-        payload[0] = MAX(BORDER_MIN, payload[0] * pressure);
+        payload[0] = MAX(HARDNESS_MIN, payload[0] * pressure);
         break;
       case DT_MASKS_PRESSURE_HARDNESS_ABS:
         payload[1] = MAX(HARDNESS_MIN, pressure);
@@ -1617,7 +1620,7 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, float p
   if(!gpt) return 0;
 
   // The trick is to use the incremental setting, set to 1.0 to re-use the generic getter/setter without changing value
-  float masks_border = dt_masks_get_set_conf_value(form, "border", 1.0f, BORDER_MIN, BORDER_MAX, TRUE, 1);
+  float masks_border = dt_masks_get_set_conf_value(form, "border", 1.0f, HARDNESS_MIN, HARDNESS_MAX, TRUE, 1);
 
   if(gui->creation && which == 1)
   {
@@ -1664,7 +1667,7 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, float p
       _apply_pen_pressure(gui, guipoints_payload);
 
       // accuracy level for node elimination, dependent on brush size
-      const float epsilon2 = _get_brush_smoothing() * sqf(MAX(BORDER_MIN, masks_border));
+      const float epsilon2 = _get_brush_smoothing() * sqf(MAX(HARDNESS_MIN, masks_border));
 
       // we simplify the path and generate the nodes
       form->points = _brush_ramer_douglas_peucker(guipoints, gui->guipoints_count, guipoints_payload, epsilon2);
@@ -1702,7 +1705,7 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, float p
         int pos3 = 0, pos2 = -1;
         for(GList *fs = grp->points; fs; fs = g_list_next(fs))
         {
-          dt_masks_point_group_t *pt = (dt_masks_point_group_t *)fs->data;
+          dt_masks_form_group_t *pt = (dt_masks_form_group_t *)fs->data;
           if(pt->formid == form->formid)
           {
             pos2 = pos3;
@@ -1869,6 +1872,9 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
 
+  const float wd = darktable.develop->preview_pipe->backbuf_width;
+  const float ht = darktable.develop->preview_pipe->backbuf_height;
+
   if(gui->creation)
   {
     if(gui->guipoints)
@@ -1881,8 +1887,6 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
       dt_masks_dynbuf_add_2(gui->guipoints_payload, border, hardness);
       dt_masks_dynbuf_add_2(gui->guipoints_payload, density, pressure);
       gui->guipoints_count++;
-      fprintf(stdout, "pressure: %f\n", pressure);
-
       return 1;
     }
     else
@@ -1894,8 +1898,6 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
 
   else if(gui->node_dragging >= 0)
   {
-    const float wd = darktable.develop->preview_pipe->backbuf_width;
-    const float ht = darktable.develop->preview_pipe->backbuf_height;
     float pts[2] = { pzx * wd, pzy * ht };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
     dt_masks_point_brush_t *bzpt
@@ -1953,8 +1955,6 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   }
   else if(gui->handle_dragging >= 0)
   {
-    const float wd = darktable.develop->preview_pipe->backbuf_width;
-    const float ht = darktable.develop->preview_pipe->backbuf_height;
     float pts[2] = { pzx * wd, pzy * ht };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
     dt_masks_point_brush_t *point
@@ -1980,9 +1980,6 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   }
   else if(gui->handle_border_dragging >= 0)
   {
-    const float wd = darktable.develop->preview_pipe->backbuf_width;
-    const float ht = darktable.develop->preview_pipe->backbuf_height;
-
     const int k = gui->handle_border_dragging;
 
     // now we want to know the position reflected on actual corner/border segment
@@ -2051,7 +2048,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   return 1;
 }
 
-void _brush_draw_shape(cairo_t *cr, const float *nodes, const int nodes_count, const int nb, const gboolean border)
+static void _brush_draw_shape(cairo_t *cr, const float *nodes, const int nodes_count, const int nb, const gboolean border)
 {
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 
@@ -2079,7 +2076,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       dt_masks_form_t *form = darktable.develop->form_visible;
       if(!form) return;
 
-      const float masks_border = dt_masks_get_set_conf_value(form, "border", 1.0f, BORDER_MIN, BORDER_MAX, DT_MASKS_INCREMENT_SCALE, 1);
+      const float masks_border = dt_masks_get_set_conf_value(form, "border", 1.0f, HARDNESS_MIN, HARDNESS_MAX, DT_MASKS_INCREMENT_SCALE, 1);
       const float masks_hardness = dt_masks_get_set_conf_value(form, "hardness", 1.0f, HARDNESS_MIN, HARDNESS_MAX, DT_MASKS_INCREMENT_SCALE, 1);
       const float opacity = dt_conf_get_float("plugins/darkroom/masks/opacity");
 
@@ -2148,7 +2145,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
           masks_density = MAX(0.05f, masks_density * pressure);
           break;
         case DT_MASKS_PRESSURE_BRUSHSIZE_REL:
-          masks_border = MAX(BORDER_MIN, masks_border * pressure);
+          masks_border = MAX(HARDNESS_MIN, masks_border * pressure);
           break;
         default:
         case DT_MASKS_PRESSURE_OFF:
@@ -2187,7 +2184,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
             masks_density = MAX(0.05f, masks_density * pressure);
             break;
           case DT_MASKS_PRESSURE_BRUSHSIZE_REL:
-            masks_border = MAX(BORDER_MIN, masks_border * pressure);
+            masks_border = MAX(HARDNESS_MIN, masks_border * pressure);
             break;
           default:
           case DT_MASKS_PRESSURE_OFF:
@@ -2246,7 +2243,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   if(gpt->points_count <= nb * 3 + 2) return;
 
   const int total_coords = (int)gpt->points_count * 2;
-  int seg = 1, seg2 = 0;
+  int seg = 1, current_seg = 0;
   const double EPS = 1e-6;
   const double eps2 = EPS * EPS;
 
@@ -2269,11 +2266,11 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       /* compare squared distance for robustness */
       if ((dx * dx + dy * dy) < eps2)
       {
-        const gboolean seg_selected = (gui->group_selected == index) && (gui->seg_selected == seg2);
+        const gboolean seg_selected = (gui->group_selected == index) && (gui->seg_selected == current_seg);
         const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-        dt_masks_draw_lines(DT_MASKS_DASH_NONE, FALSE, cr, nb, (seg_selected || all_selected), zoom_scale, gpt->points, gpt->points_count, NULL);
+        dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, (seg_selected || all_selected), zoom_scale, gpt->points, gpt->points_count, NULL);
         seg = (seg + 1) % nb;
-        seg2++;
+        current_seg++;
         cairo_move_to(cr, x, y);
       }
     }

@@ -56,7 +56,7 @@ extern "C" {
 /**dash type */
 typedef enum dt_masks_dash_type_t
 {
-  DT_MASKS_DASH_NONE = 0,
+  DT_MASKS_NO_DASH = 0,
   DT_MASKS_DASH_STICK = 1,
   DT_MASKS_DASH_ROUND = 2
 } dt_masks_dash_type_t;
@@ -191,13 +191,13 @@ typedef struct dt_masks_point_gradient_t
 } dt_masks_point_gradient_t;
 
 /** structure used to store all forms's id for a group */
-typedef struct dt_masks_point_group_t
+typedef struct dt_masks_form_group_t
 {
   int formid;
   int parentid;
   int state;
   float opacity;
-} dt_masks_point_group_t;
+} dt_masks_form_group_t;
 
 
 /*
@@ -265,11 +265,11 @@ typedef struct dt_masks_functions_t
 /** structure used to define a form */
 typedef struct dt_masks_form_t
 {
-  GList *points; // list of point structures
+  GList *points; // list of point structures (nodes)
   dt_masks_type_t type;
   const dt_masks_functions_t *functions;
 
-  // position of the source (used only for clone)
+  // position of the origin point of source (used only for clone)
   float source[2];
   // name of the form
   char name[128];
@@ -279,6 +279,7 @@ typedef struct dt_masks_form_t
   int version;
 } dt_masks_form_t;
 
+/** structure used to define all the gui points to draw in viewport*/
 typedef struct dt_masks_form_gui_points_t
 {
   float *points;
@@ -304,7 +305,7 @@ typedef struct dt_masks_dynbuf_t
 typedef struct dt_masks_form_gui_t
 {
   // points used to draw the form
-  GList *points; // list of dt_masks_form_gui_points_t
+  GList *points; // list of dt_masks_form_gui_points_t 
 
   // points used to sample mouse moves
   dt_masks_dynbuf_t *guipoints, *guipoints_payload;
@@ -533,7 +534,7 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, struct dt_iop_module_t *
                                      dt_masks_form_gui_t *gui);
 void dt_masks_group_ungroup(dt_masks_form_t *dest_grp, dt_masks_form_t *grp);
 void dt_masks_group_update_name(dt_iop_module_t *module);
-dt_masks_point_group_t *dt_masks_group_add_form(dt_masks_form_t *grp, dt_masks_form_t *form);
+dt_masks_form_group_t *dt_masks_group_add_form(dt_masks_form_t *grp, dt_masks_form_t *form);
 
 void dt_masks_iop_value_changed_callback(GtkWidget *widget, struct dt_iop_module_t *module);
 dt_masks_edit_mode_t dt_masks_get_edit_mode(struct dt_iop_module_t *module);

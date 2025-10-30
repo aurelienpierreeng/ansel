@@ -183,7 +183,7 @@ static void _resynch_params(struct dt_iop_module_t *self)
     int i = 0;
     for(GList *forms = grp->points; (i < 64) && forms; forms = g_list_next(forms))
     {
-      dt_masks_point_group_t *grpt = (dt_masks_point_group_t *)forms->data;
+      dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
       nid[i] = grpt->formid;
       for(int j = 0; j < 64; j++)
       {
@@ -249,7 +249,7 @@ static int _shape_is_being_added(dt_iop_module_t *self, const int shape_type)
       GList *forms = self->dev->form_visible->points;
       if(forms)
       {
-        dt_masks_point_group_t *grpt = (dt_masks_point_group_t *)forms->data;
+        dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
         if(grpt)
         {
           const dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, grpt->formid);
@@ -405,7 +405,7 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
   {
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
     {
-      dt_masks_point_group_t *grpt = (dt_masks_point_group_t *)forms->data;
+      dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
       // we get the spot
       dt_masks_form_t *form = dt_masks_get_from_id_ext(piece->pipe->forms, grpt->formid);
       if(form)
@@ -525,7 +525,7 @@ void _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const
   {
     for(const GList *forms = grp->points; (pos < 64) && forms; pos++, forms = g_list_next(forms))
     {
-      dt_masks_point_group_t *grpt = (dt_masks_point_group_t *)forms->data;
+      dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
       // we get the spot
       dt_masks_form_t *form = dt_masks_get_from_id_ext(piece->pipe->forms, grpt->formid);
       if(!form)

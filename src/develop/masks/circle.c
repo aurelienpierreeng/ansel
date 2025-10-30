@@ -132,7 +132,7 @@ static int _init_hardness(dt_masks_form_t *form, const float amount, const dt_ma
 static int _init_size(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
 
-  float mask_size = dt_masks_get_set_conf_value(form, "size", amount, BORDER_MIN, BORDER_MAX, increment, flow);
+  float mask_size = dt_masks_get_set_conf_value(form, "size", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
   dt_toast_log(_("Size: %3.2f%%"), mask_size * 2.f * 100.f);
   return 1;
 }
@@ -198,7 +198,7 @@ static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct 
     }
   }
 
-  _init_size(form, amount, DT_MASKS_INCREMENT_SCALE, flow);
+  _init_size(form, amount, increment, flow);
 
   // we recreate the form points
   dt_masks_gui_form_remove(form, gui, index);
@@ -665,7 +665,7 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
 
     // we draw the form and it's border
     // we draw the main shape
-    dt_masks_draw_lines(DT_MASKS_DASH_NONE, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle);
+    dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle);
     // we draw the borders
     dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_circle);
 
@@ -690,7 +690,7 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
   
   // we draw the main shape
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-  dt_masks_draw_lines(DT_MASKS_DASH_NONE, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle);
+  dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle);
   // we draw the borders
   if(gui->group_selected == index)
   { 

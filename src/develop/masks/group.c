@@ -29,7 +29,7 @@ static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, float pz
   if(gui->group_selected >= 0)
   {
     // we get the form
-    dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
       return sel->functions->mouse_scrolled(module, pzx, pzy, up, flow, state, sel, fpt->parentid, gui, gui->group_selected, interaction);
@@ -44,7 +44,7 @@ static int _group_events_button_pressed(struct dt_iop_module_t *module, float pz
   if(gui->group_selected >= 0)
   {
     // we get the form
-    dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
       return sel->functions->button_pressed(module, pzx, pzy, pressure, which, type, state, sel,
@@ -60,7 +60,7 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
   if(gui->group_selected >= 0)
   {
     // we get the form
-    dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     
     if(which == 3)
@@ -101,8 +101,11 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
 
   for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
   {
-    dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)fpts->data;
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
+    if(!fpt) continue;
     dt_masks_form_t *frm = dt_masks_get_from_id(darktable.develop, fpt->formid);
+    if(!frm) continue; // it means the form has been deleted meanwhile
+
     int inside, inside_border, near, inside_source;
     float dist = FLT_MAX;
     inside = inside_border = inside_source = 0;
@@ -140,10 +143,12 @@ static int _group_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
                                      int which, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
                                      int unused2)
 {
-  const float as = DT_PIXEL_APPLY_DPI(5);
+  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
+  const int closeup = dt_control_get_dev_closeup();
+  const float zoom_scale = dt_dev_get_zoom_scale(darktable.develop, zoom, 1<<closeup, 1);
+  const float as = DT_MASKS_SELECTION_DISTANCE / zoom_scale;
 
   // we first don't do anything if we are inside a scrolling session
-
   if(gui->scrollx != 0.0f && gui->scrolly != 0.0f)
   {
     if((gui->scrollx - pzx < as && gui->scrollx - pzx > -as)
@@ -152,11 +157,11 @@ static int _group_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     gui->scrollx = gui->scrolly = 0.0f;
   }
 
-  // if a form is in edit mode, capture scroll
+  // if a form is in edit mode, capture movement
   if(gui->group_selected >= 0)
   {
     // we get the form
-    dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
       return sel->functions->mouse_moved(module, pzx, pzy, pressure, which, sel, fpt->parentid, gui,
@@ -168,37 +173,34 @@ static int _group_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   return 0;
 }
 
+static void _group_events_post_expose_draw(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
+                                          dt_masks_form_gui_t *gui, int pos)
+{
+  // we get the form
+  dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, pos);
+  dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+  if (!sel) return;
+  if(sel && sel->functions)
+    sel->functions->post_expose(cr, zoom_scale, gui, pos, g_list_length(sel->points));
+}
+
 void dt_group_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
                                  dt_masks_form_gui_t *gui)
 {
   int pos = 0;
-  // draw all forms except the selected one so it will appear on top
+  // draw the selected form last so it's drawn on top of the others.
+  // we loop over all forms and skip the selected one
   for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
   {
     // skip drawing for the selected one
-    if(gui->group_selected == pos)
-    {
-      pos++;
-      continue;
-    }
-    dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)fpts->data;
-    dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-    if (!sel) return;
-    if(sel->functions)
-      sel->functions->post_expose(cr, zoom_scale, gui, pos, g_list_length(sel->points));
+    if(gui->group_selected != pos)
+      _group_events_post_expose_draw(cr, zoom_scale, form, gui, pos);
+    
     pos++;
   }
-
   // now draw the selected one on top, if any
   if(gui->group_selected >= 0)
-  {
-    dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)g_list_nth_data(form->points, gui->group_selected);
-    dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-    if (!sel) return;
-    if(sel->functions)
-      sel->functions->post_expose(cr, zoom_scale, gui, gui->group_selected, g_list_length(sel->points));
-  }
-
+    _group_events_post_expose_draw(cr, zoom_scale, form, gui, gui->group_selected);
 }
 
 static void _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
@@ -260,7 +262,7 @@ static int _group_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
   int nb_ok = 0;
   for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
   {
-    dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)fpts->data;
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
     dt_masks_form_t *sel = dt_masks_get_from_id(module->dev, fpt->formid);
     if(sel)
     {
@@ -598,7 +600,7 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module,
   // and we get all masks
   for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
   {
-    dt_masks_point_group_t *fpt = (dt_masks_point_group_t *)fpts->data;
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
     dt_masks_form_t *sel = dt_masks_get_from_id(module->dev, fpt->formid);
 
     if(sel)
@@ -679,8 +681,8 @@ static void _group_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *co
 {
   for(GList *pts = base->points; pts; pts = g_list_next(pts))
   {
-    dt_masks_point_group_t *pt = (dt_masks_point_group_t *)pts->data;
-    dt_masks_point_group_t *npt = (dt_masks_point_group_t *)malloc(sizeof(dt_masks_point_group_t));
+    dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
+    dt_masks_form_group_t *npt = (dt_masks_form_group_t *)malloc(sizeof(dt_masks_form_group_t));
 
     npt->formid = dt_masks_form_duplicate(dev, pt->formid);
     npt->parentid = dest->formid;
@@ -692,7 +694,7 @@ static void _group_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *co
 
 // The function table for groups.  This must be public, i.e. no "static" keyword.
 const dt_masks_functions_t dt_masks_functions_group = {
-  .point_struct_size = sizeof(struct dt_masks_point_group_t),
+  .point_struct_size = sizeof(struct dt_masks_form_group_t),
   .sanitize_config = NULL,
   .set_form_name = NULL,
   .set_hint_message = NULL,

@@ -1072,7 +1072,7 @@ static void _gradient_draw_arrow(cairo_t *cr, const gboolean selected, const gbo
     dt_draw_set_color_overlay(cr, FALSE, 0.8);
     cairo_fill_preserve(cr);
 
-    dt_masks_set_dash(cr, DT_MASKS_DASH_NONE, zoom_scale);
+    dt_masks_set_dash(cr, DT_MASKS_NO_DASH, zoom_scale);
     cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
     dt_draw_set_color_overlay(cr, TRUE, 0.8);
     cairo_stroke(cr);
@@ -1168,7 +1168,7 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
       draw = _gradient_get_pts_border(darktable.develop, x, y, rotation, extent, curvature, &border, &border_count);
 
     // draw main line
-    dt_masks_draw_lines(DT_MASKS_DASH_NONE, FALSE, cr, nb, FALSE, zoom_scale, points, points_count, &dt_masks_functions_gradient);
+    dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, FALSE, zoom_scale, points, points_count, &dt_masks_functions_gradient);
     _gradient_draw_arrow(cr, FALSE, FALSE, gui->form_rotating, zoom_scale, points, points_count);
 
     if(gui->group_selected == index)
@@ -1189,7 +1189,7 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
   const gboolean seg_selected = (gui->group_selected == index) && (gui->seg_selected >= 0);
   const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging); 
   // draw main line
-  dt_masks_draw_lines(DT_MASKS_DASH_NONE, FALSE, cr, nb, (seg_selected), zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_gradient);
+  dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, (seg_selected), zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_gradient);
   // draw borders
   if(gui->group_selected == index)
   {

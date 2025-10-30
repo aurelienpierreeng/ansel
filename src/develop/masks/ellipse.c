@@ -461,8 +461,8 @@ static int _init_hardness(dt_masks_form_t *form, const float amount, const dt_ma
 
 static int _init_size(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float mask_radius_a = dt_masks_get_set_conf_value(form, "radius_a", amount, BORDER_MIN, BORDER_MAX, increment, flow);
-  float mask_radius_b = dt_masks_get_set_conf_value(form, "radius_b", amount, BORDER_MIN, BORDER_MAX, increment, flow);
+  float mask_radius_a = dt_masks_get_set_conf_value(form, "radius_a", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
+  float mask_radius_b = dt_masks_get_set_conf_value(form, "radius_b", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
   dt_toast_log(_("Size: %3.2f%%"), fmaxf(mask_radius_a, mask_radius_b) * 2.f * 100.f);
   return 1;
 }
@@ -699,7 +699,7 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
         int pos3 = 0, pos2 = -1;
         for(GList *fs = grp->points; fs; fs = g_list_next(fs))
         {
-          dt_masks_point_group_t *pt = (dt_masks_point_group_t *)fs->data;
+          dt_masks_form_group_t *pt = (dt_masks_form_group_t *)fs->data;
           if(pt->formid == form->formid)
           {
             pos2 = pos3;
@@ -1247,7 +1247,7 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       // we draw the form and it's border
       cairo_save(cr);
       // we draw the main shape
-      dt_masks_draw_lines(DT_MASKS_DASH_NONE, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_ellipse);
+      dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_ellipse);
       // we draw the borders
       dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_ellipse);
       cairo_restore(cr);
@@ -1273,7 +1273,7 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
 
   // we draw the main shape
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-  dt_masks_draw_lines(DT_MASKS_DASH_NONE, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_ellipse);
+  dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_ellipse);
   
   if(gui->group_selected == index)
   {
