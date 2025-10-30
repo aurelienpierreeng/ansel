@@ -2013,14 +2013,14 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     // we move all points
     if(gui->form_dragging)
     {
-      dt_masks_point_path_t *point = (dt_masks_point_path_t *)(form->points)->data;
-      const float dx = pts[0] / darktable.develop->preview_pipe->iwidth - point->corner[0];
-      const float dy = pts[1] / darktable.develop->preview_pipe->iheight - point->corner[1];
+      dt_masks_node_polygon_t *point = (dt_masks_node_polygon_t *)(form->points)->data;
+      const float dx = pts[0] / darktable.develop->preview_pipe->iwidth - point->node[0];
+      const float dy = pts[1] / darktable.develop->preview_pipe->iheight - point->node[1];
       for(GList *points = form->points; points; points = g_list_next(points))
       {
-        point = (dt_masks_point_path_t *)points->data;
-        point->corner[0] += dx;
-        point->corner[1] += dy;
+        point = (dt_masks_node_polygon_t *)points->data;
+        point->node[0] += dx;
+        point->node[1] += dy;
         point->ctrl1[0] += dx;
         point->ctrl1[1] += dy;
         point->ctrl2[0] += dx;

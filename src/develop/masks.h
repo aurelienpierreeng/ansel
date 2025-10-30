@@ -68,7 +68,7 @@ typedef enum dt_masks_type_t
 {
   DT_MASKS_NONE = 0, // keep first
   DT_MASKS_CIRCLE = 1 << 0,
-  DT_MASKS_PATH = 1 << 1,
+  DT_MASKS_POLYGON = 1 << 1,
   DT_MASKS_GROUP = 1 << 2,
   DT_MASKS_CLONE = 1 << 3,
   DT_MASKS_GRADIENT = 1 << 4,
@@ -355,7 +355,7 @@ typedef struct dt_masks_form_gui_t
 extern const dt_masks_functions_t dt_masks_functions_circle;
 extern const dt_masks_functions_t dt_masks_functions_ellipse;
 extern const dt_masks_functions_t dt_masks_functions_brush;
-extern const dt_masks_functions_t dt_masks_functions_path;
+extern const dt_masks_functions_t dt_masks_functions_polygon;
 extern const dt_masks_functions_t dt_masks_functions_gradient;
 extern const dt_masks_functions_t dt_masks_functions_group;
 

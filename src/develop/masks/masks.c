@@ -598,14 +598,14 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *dev, void *params)
       dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)p->data;
       module->distort_backtransform(module, &piece, circle->center, 1);
     }
-    else if(m->type & DT_MASKS_PATH)
+    else if(m->type & DT_MASKS_POLYGON)
     {
       for(; p; p = g_list_next(p))
       {
-        dt_masks_point_path_t *path = (dt_masks_point_path_t *)p->data;
-        module->distort_backtransform(module, &piece, path->corner, 1);
-        module->distort_backtransform(module, &piece, path->ctrl1, 1);
-        module->distort_backtransform(module, &piece, path->ctrl2, 1);
+        dt_masks_node_polygon_t *polygone = (dt_masks_node_polygon_t *)p->data;
+        module->distort_backtransform(module, &piece, polygone->node, 1);
+        module->distort_backtransform(module, &piece, polygone->ctrl1, 1);
+        module->distort_backtransform(module, &piece, polygone->ctrl2, 1);
       }
     }
     else if(m->type & DT_MASKS_GRADIENT)
@@ -720,15 +720,15 @@ static int dt_masks_legacy_params_v2_to_v3(dt_develop_t *dev, void *params)
       dt_masks_legacy_params_v2_to_v3_transform_only_rescale(img, &circle->radius, 1);
       dt_masks_legacy_params_v2_to_v3_transform_only_rescale(img, &circle->border, 1);
     }
-    else if(m->type & DT_MASKS_PATH)
+    else if(m->type & DT_MASKS_POLYGON)
     {
       for(; p; p = g_list_next(p))
       {
-        dt_masks_point_path_t *path = (dt_masks_point_path_t *)p->data;
-        dt_masks_legacy_params_v2_to_v3_transform(img, path->corner);
-        dt_masks_legacy_params_v2_to_v3_transform(img, path->ctrl1);
-        dt_masks_legacy_params_v2_to_v3_transform(img, path->ctrl2);
-        dt_masks_legacy_params_v2_to_v3_transform_only_rescale(img, path->border, 2);
+        dt_masks_node_polygon_t *polygone = (dt_masks_node_polygon_t *)p->data;
+        dt_masks_legacy_params_v2_to_v3_transform(img, polygone->node);
+        dt_masks_legacy_params_v2_to_v3_transform(img, polygone->ctrl1);
+        dt_masks_legacy_params_v2_to_v3_transform(img, polygone->ctrl2);
+        dt_masks_legacy_params_v2_to_v3_transform_only_rescale(img, polygone->border, 2);
       }
     }
     else if(m->type & DT_MASKS_GRADIENT)
@@ -757,7 +757,7 @@ static int dt_masks_legacy_params_v2_to_v3(dt_develop_t *dev, void *params)
 
     if(m->type & DT_MASKS_CLONE)
     {
-      // NOTE: can be: DT_MASKS_CIRCLE, DT_MASKS_ELLIPSE, DT_MASKS_PATH
+      // NOTE: can be: DT_MASKS_CIRCLE, DT_MASKS_ELLIPSE, DT_MASKS_POLYGON
       dt_masks_legacy_params_v2_to_v3_transform(img, m->source);
     }
 
@@ -906,8 +906,8 @@ dt_masks_form_t *dt_masks_create(dt_masks_type_t type)
     form->functions = &dt_masks_functions_ellipse;
   else if (type & DT_MASKS_BRUSH)
     form->functions = &dt_masks_functions_brush;
-  else if (type & DT_MASKS_PATH)
-    form->functions = &dt_masks_functions_path;
+  else if (type & DT_MASKS_POLYGON)
+    form->functions = &dt_masks_functions_polygon;
   else if (type & DT_MASKS_GRADIENT)
     form->functions = &dt_masks_functions_gradient;
   else if (type & DT_MASKS_GROUP)
@@ -1881,7 +1881,7 @@ void dt_masks_iop_value_changed_callback(GtkWidget *widget, struct dt_iop_module
     else if(val == -2000002)
     {
       // add a path shape
-      _menu_add_shape(module, DT_MASKS_PATH);
+      _menu_add_shape(module, DT_MASKS_POLYGON);
     }
     else if(val == -2000016)
     {
@@ -2065,7 +2065,7 @@ const char * _get_mask_type(dt_masks_form_t *form)
   // why would we overlap mask types ?!?
   if(form->type & DT_MASKS_CIRCLE)
     return "circle";
-  else if(form->type & DT_MASKS_PATH)
+  else if(form->type & DT_MASKS_POLYGON)
     return "path";
   else if(form->type & DT_MASKS_ELLIPSE)
     return "ellipse";
@@ -2692,9 +2692,9 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mas
         x += xpos;
         y += ypos;
       }
-      else if(mask_type & DT_MASKS_PATH)
+      else if(mask_type & DT_MASKS_POLYGON)
       {
-        dt_masks_functions_path.initial_source_pos(iwd, iht, &x, &y);
+        dt_masks_functions_polygon.initial_source_pos(iwd, iht, &x, &y);
         x += xpos;
         y += ypos;
       }

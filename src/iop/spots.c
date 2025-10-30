@@ -281,7 +281,7 @@ static gboolean _add_shape(GtkWidget *widget, dt_iop_module_t *self)
   // we create the new form
   dt_masks_type_t type = DT_MASKS_CIRCLE;
   if(widget == g->bt_path)
-    type = DT_MASKS_PATH;
+    type = DT_MASKS_POLYGON;
   else if(widget == g->bt_circle)
     type = DT_MASKS_CIRCLE;
   else if(widget == g->bt_ellipse)
@@ -307,7 +307,7 @@ static gboolean _add_shape_callback(GtkWidget *widget, GdkEventButton *e, dt_iop
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), _shape_is_being_added(self, DT_MASKS_CIRCLE));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ellipse), _shape_is_being_added(self, DT_MASKS_ELLIPSE));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), _shape_is_being_added(self, DT_MASKS_PATH));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), _shape_is_being_added(self, DT_MASKS_POLYGON));
 
   return TRUE;
 }
@@ -476,11 +476,11 @@ static int masks_get_delta(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
 {
   int res = 0;
 
-  if(form->type & DT_MASKS_PATH)
+  if(form->type & DT_MASKS_POLYGON)
   {
-    dt_masks_point_path_t *pt = (dt_masks_point_path_t *)form->points->data;
+    dt_masks_node_polygon_t *pt = (dt_masks_node_polygon_t *)form->points->data;
 
-    res = masks_point_calc_delta(self, piece, roi, pt->corner, form->source, dx, dy);
+    res = masks_point_calc_delta(self, piece, roi, pt->node, form->source, dx, dy);
   }
   else if(form->type & DT_MASKS_CIRCLE)
   {
@@ -763,7 +763,7 @@ void gui_update(dt_iop_module_t *self)
 
   // enable/disable shapes toolbar
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), _shape_is_being_added(self, DT_MASKS_CIRCLE));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), _shape_is_being_added(self, DT_MASKS_PATH));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), _shape_is_being_added(self, DT_MASKS_POLYGON));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ellipse), _shape_is_being_added(self, DT_MASKS_ELLIPSE));
 
   // update edit shapes status

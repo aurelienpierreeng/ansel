@@ -183,7 +183,7 @@ static void _bt_add_ellipse(GtkWidget *widget, GdkEventButton *event, dt_lib_mod
 static void _tree_add_path(GtkButton *button, dt_iop_module_t *module)
 {
   // we create the new form
-  dt_masks_form_t *spot = dt_masks_create(DT_MASKS_PATH);
+  dt_masks_form_t *spot = dt_masks_create(DT_MASKS_POLYGON);
   dt_masks_change_form_gui(spot);
   darktable.develop->form_gui->creation = TRUE;
   darktable.develop->form_gui->creation_module = module;

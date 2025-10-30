@@ -2438,7 +2438,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
                                                   G_CALLBACK(_blendop_masks_add_shape),
                                                   FALSE, 0, 0, dtgtk_cairo_paint_masks_brush, abox);
 
-    bd->masks_type[1] = DT_MASKS_PATH;
+    bd->masks_type[1] = DT_MASKS_POLYGON;
     bd->masks_shapes[1] = dt_iop_togglebutton_new(module, "blend`shapes", N_("add path"), N_("add multiple paths"),
                                                   G_CALLBACK(_blendop_masks_add_shape),
                                                   FALSE, 0, 0, dtgtk_cairo_paint_masks_path, abox);

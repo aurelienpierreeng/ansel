@@ -859,11 +859,11 @@ static int rt_masks_get_delta_to_destination(dt_iop_module_t *self, dt_dev_pixel
 {
   int res = 0;
 
-  if(form->type & DT_MASKS_PATH)
+  if(form->type & DT_MASKS_POLYGON)
   {
-    const dt_masks_point_path_t *pt = (dt_masks_point_path_t *)form->points->data;
+    const dt_masks_node_polygon_t *pt = (dt_masks_node_polygon_t *)form->points->data;
 
-    res = rt_masks_point_calc_delta(self, piece, roi, pt->corner, form->source, dx, dy, distort_mode);
+    res = rt_masks_point_calc_delta(self, piece, roi, pt->node, form->source, dx, dy, distort_mode);
   }
   else if(form->type & DT_MASKS_CIRCLE)
   {
@@ -986,7 +986,7 @@ static gboolean rt_add_shape(GtkWidget *widget, dt_iop_module_t *self)
 
     dt_masks_type_t type = DT_MASKS_CIRCLE;
     if(widget == g->bt_path)
-      type = DT_MASKS_PATH;
+      type = DT_MASKS_POLYGON;
     else if(widget == g->bt_circle)
       type = DT_MASKS_CIRCLE;
     else if(widget == g->bt_ellipse)
@@ -1733,7 +1733,7 @@ static gboolean rt_add_shape_callback(GtkWidget *widget, GdkEventButton *e, dt_i
   rt_add_shape(widget, self);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), rt_shape_is_being_added(self, DT_MASKS_CIRCLE));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), rt_shape_is_being_added(self, DT_MASKS_PATH));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), rt_shape_is_being_added(self, DT_MASKS_POLYGON));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ellipse), rt_shape_is_being_added(self, DT_MASKS_ELLIPSE));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_brush), rt_shape_is_being_added(self, DT_MASKS_BRUSH));
 
@@ -1809,7 +1809,7 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
 
     dt_masks_type_t type = DT_MASKS_CIRCLE;
     if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->bt_path)))
-      type = DT_MASKS_PATH;
+      type = DT_MASKS_POLYGON;
     else if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->bt_circle)))
       type = DT_MASKS_CIRCLE;
     else if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->bt_ellipse)))
@@ -2105,7 +2105,7 @@ void gui_update(dt_iop_module_t *self)
 
   // enable/disable shapes toolbar
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), rt_shape_is_being_added(self, DT_MASKS_CIRCLE));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), rt_shape_is_being_added(self, DT_MASKS_PATH));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), rt_shape_is_being_added(self, DT_MASKS_POLYGON));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ellipse), rt_shape_is_being_added(self, DT_MASKS_ELLIPSE));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_brush), rt_shape_is_being_added(self, DT_MASKS_BRUSH));
 
