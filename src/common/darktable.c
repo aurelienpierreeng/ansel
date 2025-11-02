@@ -1066,6 +1066,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
       dt_gui_presets_init(); // init preset db schema.
     darktable.control->running = 0;
     dt_pthread_mutex_init(&darktable.control->run_mutex, NULL);
+    dt_pthread_mutex_init(&darktable.control->log_mutex, NULL);
   }
 
   // we initialize grouping early because it's needed for collection init
@@ -1329,9 +1330,14 @@ void dt_cleanup()
   if(init_gui)
   {
     dt_control_cleanup(darktable.control);
-    free(darktable.control);
     dt_undo_cleanup(darktable.undo);
   }
+  else
+  {
+    dt_pthread_mutex_destroy(&darktable.control->log_mutex);
+    dt_pthread_mutex_destroy(&darktable.control->run_mutex);
+  }
+  free(darktable.control);
   dt_colorspaces_cleanup(darktable.color_profiles);
   dt_conf_cleanup(darktable.conf);
   free(darktable.conf);
