@@ -279,7 +279,7 @@ jobs:
       fail-fast: true
       matrix:
         build:
-          - { os: macos-14,    xcode: 15.4,   deployment: 14.0 } # LLVM16, arm64
+          - { os: macos-14,    xcode: 15.4,   deployment: 14.0 } # AppleClang 15, arm64
         compiler:
           - { compiler: XCode,   CC: cc, CXX: c++ }
         btype:

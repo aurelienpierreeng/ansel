@@ -1721,7 +1721,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     // FIXME: on CPU path and GPU path with tiling, when 2 modules taking different color spaces are back to back,
     // the color conversion for the next is done in-place in the output of the previous. We should check
     // here if out_format->cst matches wathever we are expecting, and convert back if it doesn't.
-    dt_print(DT_DEBUG_PIPE, "[dev_pixelpipe] found %" PRIu64 " (%s) for %s pipeline in cache\n", hash, (module) ? module->op : "noop",
+    dt_print(DT_DEBUG_PIPE, "[dev_pixelpipe] found %" PRIu64 " (%s) for %s pipeline in cache\n", hash, module ? module->op : "noop",
               _pipe_type_to_str(pipe->type));
     return 0;
   }
@@ -1804,7 +1804,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // at the last-found cache line.
   if(!pipe->reentry && !new_entry)
   {
-    dt_print(DT_DEBUG_PIPE, "[pipeline] found %" PRIu64 " (%s) for %s pipeline in cache\n", hash, (module) ? module->op : "noop",
+    dt_print(DT_DEBUG_PIPE, "[pipeline] found %" PRIu64 " (%s) for %s pipeline in cache\n", hash, module ? module->op : "noop",
                _pipe_type_to_str(pipe->type));
 
     // Sample all color pickers and histograms
