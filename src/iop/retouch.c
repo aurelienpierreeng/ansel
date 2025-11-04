@@ -130,11 +130,11 @@ typedef struct dt_iop_retouch_gui_data_t
   float preview_levels[3];   // values for the levels
   int first_scale_visible;   // 1st scale visible at current zoom level
 
-  GtkLabel *label_form;                                                   // display number of forms
-  GtkLabel *label_form_selected;                                          // display number of forms selected
-  GtkWidget *bt_edit_masks, *bt_path, *bt_circle, *bt_ellipse, *bt_brush; // shapes
-  GtkWidget *bt_clone, *bt_heal, *bt_blur, *bt_fill;                      // algorithms
-  GtkWidget *bt_showmask, *bt_suppress;                                   // suppress & show masks
+  GtkLabel *label_form;                                                      // display number of forms
+  GtkLabel *label_form_selected;                                             // display number of forms selected
+  GtkWidget *bt_edit_masks, *bt_polygon, *bt_circle, *bt_ellipse, *bt_brush; // shapes
+  GtkWidget *bt_clone, *bt_heal, *bt_blur, *bt_fill;                         // algorithms
+  GtkWidget *bt_showmask, *bt_suppress;                                      // suppress & show masks
 
   GtkWidget *wd_bar; // wavelet decompose bar
   GtkLabel *lbl_num_scales;
@@ -582,7 +582,7 @@ static void rt_reset_form_creation(GtkWidget *widget, dt_iop_module_t *self)
 {
   const dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)self->gui_data;
 
-  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->bt_path))
+  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->bt_polygon))
      || gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->bt_circle))
      || gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->bt_ellipse))
      || gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->bt_brush)))
@@ -591,7 +591,7 @@ static void rt_reset_form_creation(GtkWidget *widget, dt_iop_module_t *self)
     dt_masks_change_form_gui(NULL);
   }
 
-  if(widget != g->bt_path) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), FALSE);
+  if(widget != g->bt_polygon) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_polygon), FALSE);
   if(widget != g->bt_circle) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), FALSE);
   if(widget != g->bt_ellipse) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ellipse), FALSE);
   if(widget != g->bt_brush) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_brush), FALSE);
@@ -758,7 +758,7 @@ void post_history_commit(dt_iop_module_t *self)
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)self->gui_data;
   if(g == NULL) return;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), rt_shape_is_being_added(self, DT_MASKS_CIRCLE));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), rt_shape_is_being_added(self, DT_MASKS_POLYGON));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_polygon), rt_shape_is_being_added(self, DT_MASKS_POLYGON));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ellipse), rt_shape_is_being_added(self, DT_MASKS_ELLIPSE));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_brush), rt_shape_is_being_added(self, DT_MASKS_BRUSH));
 
@@ -985,7 +985,7 @@ static gboolean rt_add_shape(GtkWidget *widget, dt_iop_module_t *self)
     dt_iop_request_focus(self);
 
     dt_masks_type_t type = DT_MASKS_CIRCLE;
-    if(widget == g->bt_path)
+    if(widget == g->bt_polygon)
       type = DT_MASKS_POLYGON;
     else if(widget == g->bt_circle)
       type = DT_MASKS_CIRCLE;
@@ -1674,7 +1674,7 @@ static gboolean rt_edit_masks_callback(GtkWidget *widget, GdkEventButton *event,
   if(darktable.develop->form_gui->creation && darktable.develop->form_gui->creation_module == self)
     dt_masks_change_form_gui(NULL);
 
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), FALSE);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_polygon), FALSE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), FALSE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ellipse), FALSE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_brush), FALSE);
@@ -1733,7 +1733,7 @@ static gboolean rt_add_shape_callback(GtkWidget *widget, GdkEventButton *e, dt_i
   rt_add_shape(widget, self);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), rt_shape_is_being_added(self, DT_MASKS_CIRCLE));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), rt_shape_is_being_added(self, DT_MASKS_POLYGON));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_polygon), rt_shape_is_being_added(self, DT_MASKS_POLYGON));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ellipse), rt_shape_is_being_added(self, DT_MASKS_ELLIPSE));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_brush), rt_shape_is_being_added(self, DT_MASKS_BRUSH));
 
@@ -1808,7 +1808,7 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
     dt_iop_request_focus(self);
 
     dt_masks_type_t type = DT_MASKS_CIRCLE;
-    if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->bt_path)))
+    if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->bt_polygon)))
       type = DT_MASKS_POLYGON;
     else if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->bt_circle)))
       type = DT_MASKS_CIRCLE;
@@ -2017,7 +2017,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
       if(darktable.develop->form_gui->creation && darktable.develop->form_gui->creation_module == self)
         dt_masks_change_form_gui(NULL);
 
-      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), FALSE);
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_polygon), FALSE);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), FALSE);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ellipse), FALSE);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_brush), FALSE);
@@ -2105,7 +2105,7 @@ void gui_update(dt_iop_module_t *self)
 
   // enable/disable shapes toolbar
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), rt_shape_is_being_added(self, DT_MASKS_CIRCLE));
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), rt_shape_is_being_added(self, DT_MASKS_POLYGON));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_polygon), rt_shape_is_being_added(self, DT_MASKS_POLYGON));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_ellipse), rt_shape_is_being_added(self, DT_MASKS_ELLIPSE));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_brush), rt_shape_is_being_added(self, DT_MASKS_BRUSH));
 
@@ -2198,7 +2198,7 @@ void gui_init(dt_iop_module_t *self)
                                         G_CALLBACK(rt_add_shape_callback), TRUE, 0, 0,
                                         dtgtk_cairo_paint_masks_brush, hbox_shapes);
 
-  g->bt_path = dt_iop_togglebutton_new(self, N_("shapes"), N_("add path"), N_("add multiple paths"),
+  g->bt_polygon = dt_iop_togglebutton_new(self, N_("shapes"), N_("add polygon"), N_("add multiple polygons"),
                                        G_CALLBACK(rt_add_shape_callback), TRUE, 0, 0,
                                        dtgtk_cairo_paint_masks_path, hbox_shapes);
 

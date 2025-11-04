@@ -1186,85 +1186,83 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   // in creation mode
   if(gui->creation)
   {
-    if(gui->guipoints_count == 0)
+    dt_masks_form_t *form = darktable.develop->form_visible;
+    if(!form) return;
+
+    float x = 0.0f, y = 0.0f;
+    float masks_border = 0.0f;
+    int flags = 0;
+    float radius_a = 0.0f;
+    float radius_b = 0.0f;
+    float rotation = 0.0f;
+    float border_a = 0.0f;
+    float border_b = 0.0f;
+
+    if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
     {
-      dt_masks_form_t *form = darktable.develop->form_visible;
-      if(!form) return;
-
-      float x = 0.0f, y = 0.0f;
-      float masks_border = 0.0f;
-      int flags = 0;
-      float radius_a = 0.0f;
-      float radius_b = 0.0f;
-      float rotation = 0.0f;
-      float border_a = 0.0f;
-      float border_b = 0.0f;
-
-      if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-      {
-        masks_border = dt_conf_get_float("plugins/darkroom/spots/ellipse/border");
-        flags = dt_conf_get_int("plugins/darkroom/spots/ellipse/flags");
-        radius_a = dt_conf_get_float("plugins/darkroom/spots/ellipse/radius_a");
-        radius_b = dt_conf_get_float("plugins/darkroom/spots/ellipse/radius_b");
-        rotation = dt_conf_get_float("plugins/darkroom/spots/ellipse/rotation");
-      }
-      else
-      {
-        masks_border = dt_conf_get_float("plugins/darkroom/masks/ellipse/border");
-        flags = dt_conf_get_int("plugins/darkroom/masks/ellipse/flags");
-        radius_a = dt_conf_get_float("plugins/darkroom/masks/ellipse/radius_a");
-        radius_b = dt_conf_get_float("plugins/darkroom/masks/ellipse/radius_b");
-        rotation = dt_conf_get_float("plugins/darkroom/masks/ellipse/rotation");
-      }
-      border_a = (flags & DT_MASKS_ELLIPSE_PROPORTIONAL) ? radius_a * (1.0f + masks_border) : radius_a + masks_border;
-      border_b = (flags & DT_MASKS_ELLIPSE_PROPORTIONAL) ? radius_b * (1.0f + masks_border) : radius_b + masks_border;
-
-      // we get the ellipse center
-      float xpos = gui->posx;
-      float ypos = gui->posy;
-
-      if((xpos == -1.f && ypos == -1.f) || gui->mouse_leaved_center)
-      {
-        xpos = (.5f + dt_control_get_dev_zoom_x()) * darktable.develop->preview_pipe->backbuf_width;
-        ypos = (.5f + dt_control_get_dev_zoom_y()) * darktable.develop->preview_pipe->backbuf_height;
-      }
-      float pts[2] = { xpos, ypos };
-      dt_dev_distort_backtransform(darktable.develop, pts, 1);
-      x = pts[0] / darktable.develop->preview_pipe->iwidth;
-      y = pts[1] / darktable.develop->preview_pipe->iheight;
-
-      // we get all the points, distorted if needed of the sample form
-      float *points = NULL;
-      int points_count = 0;
-      float *border = NULL;
-      int border_count = 0;
-      int draw = _ellipse_get_points(darktable.develop, x, y, radius_a, radius_b, rotation, &points, &points_count);
-      if(draw && masks_border > 0.f)
-      {
-        draw = _ellipse_get_points(
-            darktable.develop, x, y, border_a, border_b, rotation, &border, &border_count);
-      }
-      // we draw the form and it's border
-      cairo_save(cr);
-      // we draw the main shape
-      dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_ellipse);
-      // we draw the borders
-      dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_ellipse);
-      cairo_restore(cr);
-
-
-      // draw a cross where the source will be created
-      if(form->type & DT_MASKS_CLONE)
-      {
-        x = 0.0f;
-        y = 0.0f;
-        dt_masks_calculate_source_pos_value(gui, DT_MASKS_ELLIPSE, xpos, ypos, xpos, ypos, &x, &y, FALSE);
-        dt_masks_draw_clone_source_pos(cr, zoom_scale, x, y);
-      }
-
-      if(points) dt_free_align(points);
-      if(border) dt_free_align(border);
+      masks_border = dt_conf_get_float("plugins/darkroom/spots/ellipse/border");
+      flags = dt_conf_get_int("plugins/darkroom/spots/ellipse/flags");
+      radius_a = dt_conf_get_float("plugins/darkroom/spots/ellipse/radius_a");
+      radius_b = dt_conf_get_float("plugins/darkroom/spots/ellipse/radius_b");
+      rotation = dt_conf_get_float("plugins/darkroom/spots/ellipse/rotation");
     }
+    else
+    {
+      masks_border = dt_conf_get_float("plugins/darkroom/masks/ellipse/border");
+      flags = dt_conf_get_int("plugins/darkroom/masks/ellipse/flags");
+      radius_a = dt_conf_get_float("plugins/darkroom/masks/ellipse/radius_a");
+      radius_b = dt_conf_get_float("plugins/darkroom/masks/ellipse/radius_b");
+      rotation = dt_conf_get_float("plugins/darkroom/masks/ellipse/rotation");
+    }
+    border_a = (flags & DT_MASKS_ELLIPSE_PROPORTIONAL) ? radius_a * (1.0f + masks_border) : radius_a + masks_border;
+    border_b = (flags & DT_MASKS_ELLIPSE_PROPORTIONAL) ? radius_b * (1.0f + masks_border) : radius_b + masks_border;
+
+    // we get the ellipse center
+    float xpos = gui->posx;
+    float ypos = gui->posy;
+
+    if((xpos == -1.f && ypos == -1.f) || gui->mouse_leaved_center)
+    {
+      xpos = (.5f + dt_control_get_dev_zoom_x()) * darktable.develop->preview_pipe->backbuf_width;
+      ypos = (.5f + dt_control_get_dev_zoom_y()) * darktable.develop->preview_pipe->backbuf_height;
+    }
+    float pts[2] = { xpos, ypos };
+    dt_dev_distort_backtransform(darktable.develop, pts, 1);
+    x = pts[0] / darktable.develop->preview_pipe->iwidth;
+    y = pts[1] / darktable.develop->preview_pipe->iheight;
+
+    // we get all the points, distorted if needed of the sample form
+    float *points = NULL;
+    int points_count = 0;
+    float *border = NULL;
+    int border_count = 0;
+    int draw = _ellipse_get_points(darktable.develop, x, y, radius_a, radius_b, rotation, &points, &points_count);
+    if(draw && masks_border > 0.f)
+    {
+      draw = _ellipse_get_points(
+          darktable.develop, x, y, border_a, border_b, rotation, &border, &border_count);
+    }
+    // we draw the form and it's border
+    cairo_save(cr);
+    // we draw the main shape
+    dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_ellipse);
+    // we draw the borders
+    dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_ellipse);
+    cairo_restore(cr);
+
+
+    // draw a cross where the source will be created
+    if(form->type & DT_MASKS_CLONE)
+    {
+      x = 0.0f;
+      y = 0.0f;
+      dt_masks_calculate_source_pos_value(gui, DT_MASKS_ELLIPSE, xpos, ypos, xpos, ypos, &x, &y, FALSE);
+      dt_masks_draw_clone_source_pos(cr, zoom_scale, x, y);
+    }
+
+    if(points) dt_free_align(points);
+    if(border) dt_free_align(border);
+    
     return;
   } // gui->creation
 

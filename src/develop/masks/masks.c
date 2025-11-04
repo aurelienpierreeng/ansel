@@ -55,6 +55,11 @@ void dt_masks_set_dash(cairo_t *cr, dt_masks_dash_type_t type, float zoom_scale)
       pattern[0] = (DT_MASKS_SCALE_DASH * 0.25f) / zoom_scale;
       pattern[1] = DT_MASKS_SCALE_DASH / zoom_scale;
       break;
+
+    default:
+      cairo_set_dash(cr, NULL, 0, 0);
+      return;
+      
   }
   const int pattern_len = 2;
   cairo_set_dash(cr, pattern, pattern_len, 0);
@@ -112,7 +117,7 @@ static int _get_opacity(dt_masks_form_gui_t *gui, const dt_masks_form_t *form)
   if(!sel) return 0;
   const int formid = sel->formid;
 
-  // look for apacity
+  // look for opacity
   const dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, fpt->parentid);
   if(!grp || !(grp->type & DT_MASKS_GROUP)) return 0;
 
@@ -342,7 +347,7 @@ void dt_masks_gui_form_test_create(dt_masks_form_t *form, dt_masks_form_gui_t *g
     }
   }
 
-  // we create the spots if needed
+  // we create the form if needed
   if(gui->pipe_hash == 0)
   {
     if(form->type & DT_MASKS_GROUP)
@@ -1137,7 +1142,7 @@ int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double
 
   if(gui)
   {
-    // This assume that if this event is generated the mouse is over the center window
+    // This assume that if this event is generated, the mouse is over the center window
     gui->mouse_leaved_center = FALSE;
     gui->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
     gui->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
@@ -1321,11 +1326,11 @@ void dt_masks_draw_handle(cairo_t *cr, dt_masks_form_gui_t *gui, const float zoo
   cairo_fill(cr);
 
   // uncomment this part if you want to see "real" control points
-  /*cairo_move_to(cr, gpt->points[k*6+2],gpt->points[k*6+3]);
-  cairo_line_to(cr, gpt->points[k*6],gpt->points[k*6+1]);
+  /*cairo_move_to(cr, gpt->points[n*6+2],gpt->points[n*6+3]);
+  cairo_line_to(cr, gpt->points[n*6],gpt->points[n*6+1]);
   cairo_stroke(cr);
-  cairo_move_to(cr, gpt->points[k*6+2],gpt->points[k*6+3]);
-  cairo_line_to(cr, gpt->points[k*6+4],gpt->points[k*6+5]);
+  cairo_move_to(cr, gpt->points[n*6+2],gpt->points[n*6+3]);
+  cairo_line_to(cr, gpt->points[n*6+4],gpt->points[n*6+5]);
   cairo_stroke(cr);*/
 
   cairo_restore(cr);
@@ -1340,12 +1345,12 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
 
   // compute raidus a & radius b. at this stage this must be computed from the list
   // of transformed point for drawing the shape.
-  const float bot_x = gpt->points[2];
-  const float bot_y = gpt->points[3];
+  const float bot_x = gpt->points[2]; // first point x
+  const float bot_y = gpt->points[3]; // first point y
   const float rgt_x = gpt->points[6];
   const float rgt_y = gpt->points[7];
-  const float cnt_x = gpt->points[0];
-  const float cnt_y = gpt->points[1];
+  const float cnt_x = gpt->points[0]; // center x
+  const float cnt_y = gpt->points[1]; // center y
 
   const float adx = cnt_x - bot_x;
   const float ady = cnt_y - bot_y;
@@ -2662,7 +2667,7 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mas
   float x = 0.0f, y = 0.0f;
   const float iwd = darktable.develop->preview_pipe->iwidth;
   const float iht = darktable.develop->preview_pipe->iheight;
-
+  fprintf(stderr, "dt_masks_calculate_source_pos_value: source_pos_type=%d, posx_source=%f, posy_source=%f\n", gui->source_pos_type, gui->posx_source, gui->posy_source);
   if(gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE)
   {
     x = xpos + gui->posx_source;
@@ -2716,7 +2721,7 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mas
   }
   else if(gui->source_pos_type == DT_MASKS_SOURCE_POS_ABSOLUTE)
   {
-    // if the user is actually adding the mask follow the cursor
+    // if the user is actually adding, the mask follow the cursor
     if(adding)
     {
       x = xpos + gui->posx_source - initial_xpos;

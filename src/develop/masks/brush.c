@@ -1158,6 +1158,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   int in, inside_border, near, inside_source;
   float dist;
   _brush_get_distance(pzx, pzy, dist_curs, gui, index, nb, &in, &inside_border, &near, &inside_source, &dist);
+  // the maximum segment number is nb-1 (open brush)
   if(near < (g_list_length(form->points) - 1))
     gui->seg_selected = near;
 
@@ -2234,40 +2235,41 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   } // creation
 
   // draw path
-
-  // minimum points
-  if(gpt->points_count <= nb * 3 + 2) return;
-
-  const int total_coords = (int)gpt->points_count * 2;
-  int seg = 1, current_seg = 0;
-  const double EPS = 1e-6;
-  const double eps2 = EPS * EPS;
-
-  /* We draw the line to the next point in loop until we reach the next node, then stroke it */
-  cairo_move_to(cr, gpt->points[nb * 6], gpt->points[nb * 6 + 1]);
-  for (int i = nb * 3; i < (int)gpt->points_count; i++)
   {
-    double x = gpt->points[i * 2];
-    double y = gpt->points[i * 2 + 1];
-    cairo_line_to(cr, x, y);
+    // minimum points
+    if(gpt->points_count <= nb * 3 + 2) return;
 
-    int seg_idx = seg * 6;
-    /* ensure we won't read past the points array (points array length == points_count * 2) */
-    if ((seg_idx + 3) < total_coords)
+    const int total_coords = (int)gpt->points_count * 2;
+    int seg = 1, current_seg = 0;
+    const double EPS = 1e-6;
+    const double eps2 = EPS * EPS;
+
+    /* We draw the line to the next point in loop until we reach the next node, then stroke it */
+    cairo_move_to(cr, gpt->points[nb * 6], gpt->points[nb * 6 + 1]);
+    for (int i = nb * 3; i < (int)gpt->points_count; i++)
     {
-      double sx = gpt->points[seg_idx + 2];
-      double sy = gpt->points[seg_idx + 3];
-      double dx = x - sx;
-      double dy = y - sy;
-      /* compare squared distance for robustness */
-      if ((dx * dx + dy * dy) < eps2)
+      double x = gpt->points[i * 2];
+      double y = gpt->points[i * 2 + 1];
+      cairo_line_to(cr, x, y);
+
+      int seg_idx = seg * 6;
+      /* ensure we won't read past the points array (points array length == points_count * 2) */
+      if ((seg_idx + 3) < total_coords)
       {
-        const gboolean seg_selected = (gui->group_selected == index) && (gui->seg_selected == current_seg);
-        const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-        dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, (seg_selected || all_selected), zoom_scale, gpt->points, gpt->points_count, NULL);
-        seg = (seg + 1) % nb;
-        current_seg++;
-        cairo_move_to(cr, x, y);
+        double sx = gpt->points[seg_idx + 2];
+        double sy = gpt->points[seg_idx + 3];
+        double dx = x - sx;
+        double dy = y - sy;
+        /* compare squared distance for robustness */
+        if ((dx * dx + dy * dy) < eps2)
+        {
+          const gboolean seg_selected = (gui->group_selected == index) && (gui->seg_selected == current_seg);
+          const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
+          dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, (seg_selected || all_selected), zoom_scale, gpt->points, gpt->points_count, NULL);
+          seg = (seg + 1) % nb;
+          current_seg++;
+          cairo_move_to(cr, x, y);
+        }
       }
     }
   }
@@ -2311,9 +2313,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   // draw the source if needed
   if(gpt->source_count > nb * 3 + 2)
   {
-    cairo_save(cr);
     dt_masks_draw_source(cr, gui, index, nb, zoom_scale, &dt_masks_functions_brush);
-    cairo_restore(cr);
   }
 }
 
