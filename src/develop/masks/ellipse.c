@@ -655,7 +655,7 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
         ellipse->flags = dt_conf_get_int("plugins/darkroom/spots/ellipse/flags");
         if(form->type & DT_MASKS_CLONE)
         {
-          dt_masks_set_source_pos_initial_value(gui, DT_MASKS_ELLIPSE, form, pzx, pzy);
+          dt_masks_set_source_pos_initial_value(gui, form, pzx, pzy);
         }
         else
         {

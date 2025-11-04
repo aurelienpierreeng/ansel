@@ -1446,7 +1446,7 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
 
       // add support for clone masks
       if(form->type & DT_MASKS_CLONE)
-        dt_masks_set_source_pos_initial_value(gui, DT_MASKS_BRUSH, form, pzx, pzy);
+        dt_masks_set_source_pos_initial_value(gui, form, pzx, pzy);
       // not used by regular masks
       else
         form->source[0] = form->source[1] = 0.0f;

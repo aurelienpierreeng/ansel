@@ -515,8 +515,7 @@ int dt_masks_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, float *
 {
   if(form->functions && form->functions->get_points_border)
   {
-    return form->functions->get_points_border(dev, form, points, points_count, border, border_count, source,
-                                              module);
+    return form->functions->get_points_border(dev, form, points, points_count, border, border_count, source, module);
   }
   return 0;
 }
@@ -2595,7 +2594,7 @@ void dt_masks_set_source_pos_initial_state(dt_masks_form_gui_t *gui, const uint3
 }
 
 // set the initial source position value for a clone mask
-void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *gui, const int mask_type, dt_masks_form_t *form,
+void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
                                                    const float pzx, const float pzy)
 {
   const float wd = darktable.develop->preview_pipe->backbuf_width;
