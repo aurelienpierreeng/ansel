@@ -85,18 +85,20 @@ static void _polygon_border_get_XY(float p0x, float p0y, float p1x, float p1y, f
 
 /** get handle extremity from the control point n°2 */
 /** the values should be in orthonormal space */
-static void _polygon_ctrl2_to_handle(float ptx, float pty, float ctrlx, float ctrly, float *fx, float *fy,
-                                   gboolean clockwise)
+static void _polygon_ctrl2_to_handle(const float ptx, const float pty, const float ctrlx, const float ctrly,
+                              float *fx, float *fy, const gboolean clockwise)
 {
+  const float dy = ctrly - pty;
+  const float dx = ptx - ctrlx;
   if(clockwise)
   {
-    *fx = ptx + ctrly - pty;
-    *fy = pty + ptx - ctrlx;
+    *fx = ptx - dy;
+    *fy = pty - dx;
   }
   else
   {
-    *fx = ptx - ctrly + pty;
-    *fy = pty - ptx + ctrlx;
+    *fx = ptx + dy;
+    *fy = pty + dx;
   }
 }
 
@@ -106,19 +108,22 @@ static void _polygon_handle_to_ctrl(float ptx, float pty, float fx, float fy,
                                   float *ctrl1x, float *ctrl1y, float *ctrl2x, float *ctrl2y,
                                   gboolean clockwise)
 {
+  const float dy = fy - pty;
+  const float dx = ptx - fx;
+
   if(clockwise)
   {
-    *ctrl2x = ptx + pty - fy;
-    *ctrl2y = pty + fx - ptx;
-    *ctrl1x = ptx - pty + fy;
-    *ctrl1y = pty - fx + ptx;
+    *ctrl1x = ptx - dy;
+    *ctrl1y = pty - dx;
+    *ctrl2x = ptx + dy;
+    *ctrl2y = pty + dx;
   }
   else
   {
-    *ctrl1x = ptx + pty - fy;
-    *ctrl1y = pty + fx - ptx;
-    *ctrl2x = ptx - pty + fy;
-    *ctrl2y = pty - fx + ptx;
+    *ctrl1x = ptx + dy;
+    *ctrl1y = pty + dx;
+    *ctrl2x = ptx - dy;
+    *ctrl2y = pty - dx;
   }
 }
 
@@ -180,7 +185,7 @@ static void _polygon_init_ctrl_points(dt_masks_form_t *form)
 
 static gboolean _polygon_is_clockwise(dt_masks_form_t *form)
 {
-  if(!g_list_shorter_than(form->points,3)) // if we have at least three points...
+  if(!g_list_shorter_than(form->points, 3)) // if we have at least three points...
   {
     float sum = 0.0f;
     for(const GList *form_points = form->points; form_points; form_points = g_list_next(form_points))
@@ -1052,9 +1057,12 @@ static void _polygon_get_distance(float x, float y, float as, dt_masks_form_gui_
       const float dy = y - yy;
       const float dd = (dx * dx) + (dy * dy);
       *dist = fminf(*dist, dd);
-      if(*dist == dd && current_seg > 0 && dd < as2)
+      if(*dist == dd && current_seg >= 0 && dd < as2)
       {
-        *near = current_seg - 1;
+        if(current_seg == 0)
+          *near = node_count - 1;
+        else
+          *near = current_seg - 1;
       }
     }
   }
@@ -1105,7 +1113,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
     {
       float ffx, ffy;
       _polygon_ctrl2_to_handle(gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], gpt->points[k * 6 + 4],
-                              gpt->points[k * 6 + 5], &ffx, &ffy, TRUE);
+                              gpt->points[k * 6 + 5], &ffx, &ffy, gpt->clockwise);
       if((pzx - ffx > -dist_curs) && (pzx - ffx < dist_curs) && (pzy - ffy > -dist_curs) && (pzy - ffy < dist_curs))
       {
         gui->handle_selected = k;
@@ -1144,7 +1152,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   int inside, inside_border, near, inside_source;
   float dist;
   _polygon_get_distance(pzx, pzy, dist_curs, gui, index, nb, &inside, &inside_border, &near, &inside_source, &dist);
-  if(near < (g_list_length(form->points) - 1))
+  if(near < (g_list_length(form->points)))
     gui->seg_selected = near;
 
   if(near < 0)
@@ -1686,6 +1694,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
 
       return 1;
     }
+    /* unused
     else if(gui->handle_border_selected >= 0)
     {
       gui->node_edited = -1;
@@ -1693,6 +1702,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
       gui->handle_border_selected = -1; // reset
       return 1;
     }
+      */
     else if(gui->seg_selected >= 0)
     {
       gui->node_edited = -1;
@@ -1972,12 +1982,9 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
 
     _polygon_init_ctrl_points(form);
 
-
-
     // we recreate the form points
     dt_masks_gui_form_remove(form, gui, index);
     dt_masks_gui_form_create(form, gui, index, module);
-
 
     return 1;
   }
@@ -2055,7 +2062,8 @@ static void _polygon_draw_shape(cairo_t *cr, const float *nodes, const int nodes
   cairo_move_to(cr, nodes[nb * 6], nodes[nb * 6 + 1]);
   for (int i = nb * 3 + border; i < nodes_count; i++)
     cairo_line_to(cr, nodes[i * 2], nodes[i * 2 + 1]);
-  cairo_close_path(cr);
+  
+  //cairo_close_path(cr); // we don't close the path to allow open shape while creation
 }
 
 static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int node_count)
@@ -2135,12 +2143,15 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   {
     for(int k = 0; k < node_count; k++)
     {
+      // don't draw the last node while creating
+      if(gui->creation && k == node_count - 1) break;
+
       const gboolean corner = dt_masks_is_corner_node(gpt, k, 6, 2);
-      const float x = gpt->points[k * 6 + 2];
-      const float y = gpt->points[k * 6 + 3];
       const gboolean selected = (k == gui->node_selected || k == gui->node_dragging);
       const gboolean action = (k == gui->node_edited);
-
+      const float x = gpt->points[k * 6 + 2];
+      const float y = gpt->points[k * 6 + 3];
+     
       // draw the first node as big circle while creating the polygon
       if(gui->creation && k == 0)
         dt_masks_draw_node(cr, FALSE, TRUE, TRUE, zoom_scale, x, y);
@@ -2164,8 +2175,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       const int n = gui->node_edited;
       float ffx, ffy;
       _polygon_ctrl2_to_handle(gpt->points[n * 6 + 2], gpt->points[n * 6 + 3], gpt->points[n * 6 + 4],
-                                gpt->points[n * 6 + 5], &ffx, &ffy, TRUE);
-      
+                                gpt->points[n * 6 + 5], &ffx, &ffy, gpt->clockwise);
       dt_masks_draw_handle(cr, gui, zoom_scale, index, ffx, ffy);
     }
   }
@@ -2173,7 +2183,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   // draw the source if needed
   if(gpt->source_count > node_count * 3 + 2)
   {
-    dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, &dt_masks_functions_brush);
+    dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, &dt_masks_functions_polygon);
   }
 }
 
