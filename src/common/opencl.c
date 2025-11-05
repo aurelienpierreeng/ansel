@@ -144,72 +144,111 @@ void dt_opencl_write_device_config(const int devid)
 {
   if(devid < 0) return;
   dt_opencl_t *cl = darktable.opencl;
-  gchar key[256] = { 0 };
-  gchar dat[512] = { 0 };
-  g_snprintf(key, 254, "%s%s", DT_CLDEVICE_HEAD, cl->dev[devid].cname);
-  g_snprintf(dat, 510, "%i %i %i %i %i %i %i %f",
-    cl->dev[devid].avoid_atomics,
-    cl->dev[devid].micro_nap,
-    cl->dev[devid].pinned_memory & (DT_OPENCL_PINNING_ON | DT_OPENCL_PINNING_DISABLED),
-    cl->dev[devid].clroundup_wd,
-    cl->dev[devid].clroundup_ht,
-    cl->dev[devid].event_handles,
-    cl->dev[devid].disabled & 1,
-    cl->dev[devid].benchmark);
-  dt_vprint(DT_DEBUG_OPENCL, "[dt_opencl_write_device_config] writing data '%s' for '%s'\n", dat, key);
-  dt_conf_set_string(key, dat);
+  gchar buf[256] = { 0 };
+  gchar key_device[256] = { 0 };
+  g_snprintf(key_device, 254, "%s/%i/%s", DT_CLDEVICE_HEAD, devid, cl->dev[devid].cname);
+
+  g_snprintf(buf, sizeof(buf), "%s/avoid_atomics", key_device);
+  dt_conf_set_int(buf, cl->dev[devid].avoid_atomics);
+
+  g_snprintf(buf, sizeof(buf), "%s/micro_nap", key_device);
+  dt_conf_set_int(buf, cl->dev[devid].micro_nap);
+
+  g_snprintf(buf, sizeof(buf), "%s/pinned_memory", key_device);
+  dt_conf_set_int(buf, cl->dev[devid].pinned_memory & (DT_OPENCL_PINNING_ON | DT_OPENCL_PINNING_DISABLED));
+
+  g_snprintf(buf, sizeof(buf), "%s/wd", key_device);
+  dt_conf_set_int(buf, cl->dev[devid].clroundup_wd);
+
+  g_snprintf(buf, sizeof(buf), "%s/ht", key_device);
+  dt_conf_set_int(buf, cl->dev[devid].clroundup_ht);
+
+  g_snprintf(buf, sizeof(buf), "%s/event_handles", key_device);
+  dt_conf_set_int(buf, cl->dev[devid].event_handles);
+
+  g_snprintf(buf, sizeof(buf), "%s/disabled", key_device);
+  dt_conf_set_int(buf, cl->dev[devid].disabled & 1);
+
+  g_snprintf(buf, sizeof(buf), "%s/benchmark", key_device);
+  dt_conf_set_float(buf, cl->dev[devid].benchmark);
 
   // Also take care of extended device data, these are not only device specific but also depend on the devid
   // to support systems with two similar cards.
-  g_snprintf(key, 254, "%s%s_id%i", DT_CLDEVICE_HEAD, cl->dev[devid].cname, devid);
-  g_snprintf(dat, 510, "%lu", cl->dev[devid].forced_headroom);
-  dt_vprint(DT_DEBUG_OPENCL, "[dt_opencl_write_device_config] writing data '%s' for '%s'\n", dat, key);
-  dt_conf_set_string(key, dat);
+
+  g_snprintf(buf, sizeof(buf), "%s/id%i/forced_headroom", key_device, devid);
+  dt_conf_set_int(buf, cl->dev[devid].forced_headroom);
+}
+
+static int _dt_opencl_get_conf_int(const gchar *key_device, const gchar *conf_name, gboolean *safety_ok)
+{
+  int res = 0;
+  gchar *key = g_strconcat(key_device, "/", conf_name, NULL);
+  const gboolean existing_device = dt_conf_key_not_empty(key);
+  if(existing_device)
+    res = dt_conf_get_int(key);
+  else
+  {
+    dt_print(DT_DEBUG_OPENCL, "Warning: conf '%s' not found in anselrc.\n", key);
+    *safety_ok = FALSE;
+  }
+
+  g_free(key);
+  return res;
+}
+
+static float _dt_opencl_get_conf_float(const gchar *key_device, const gchar *conf_name, gboolean *safety_ok)
+{
+  float res = 0.0f;
+  gchar *key = g_strconcat(key_device, "/", conf_name, NULL);
+  const gboolean existing_device = dt_conf_key_not_empty(key);
+  if(existing_device)
+    res = dt_conf_get_float(key);
+  else
+  {
+    dt_print(DT_DEBUG_OPENCL, "Warning: conf '%s' not found in anselrc.\n", key);
+    *safety_ok = FALSE;
+  }
+
+  g_free(key);
+  return res;
 }
 
 gboolean dt_opencl_read_device_config(const int devid)
 {
   if(devid < 0) return FALSE;
   dt_opencl_t *cl = darktable.opencl;
-  gchar key[256] = { 0 };
-  g_snprintf(key, 254, "%s%s", DT_CLDEVICE_HEAD, cl->dev[devid].cname);
-
-  const gboolean existing_device = dt_conf_key_not_empty(key);
+  gchar key_device[256] = { 0 };
+  g_snprintf(key_device, 254, "%s/%i/%s", DT_CLDEVICE_HEAD, devid, cl->dev[devid].cname);
   gboolean safety_ok = TRUE;
-  if(existing_device)
+
+  int avoid_atomics = _dt_opencl_get_conf_int(key_device, "avoid_atomics", &safety_ok);
+  int micro_nap = _dt_opencl_get_conf_int(key_device, "micro_nap", &safety_ok);
+  int pinned_memory = _dt_opencl_get_conf_int(key_device, "pinned_memory", &safety_ok);
+  int wd = _dt_opencl_get_conf_int(key_device, "wd", &safety_ok);
+  int ht = _dt_opencl_get_conf_int(key_device, "ht", &safety_ok);
+  int event_handles = _dt_opencl_get_conf_int(key_device, "event_handles", &safety_ok);
+  int disabled = _dt_opencl_get_conf_int(key_device, "disabled", &safety_ok);
+  float benchmark = _dt_opencl_get_conf_float(key_device, "benchmark", &safety_ok);
+
+  // some rudimentary safety checking if string seems to be ok
+  safety_ok |= (wd > 1) && (wd < 513) && (ht > 1) && (ht < 513);
+
+  if(safety_ok)
   {
-    const gchar *dat = dt_conf_get_string_const(key);
-    int avoid_atomics;
-    int micro_nap;
-    int pinned_memory;
-    int wd;
-    int ht;
-    int event_handles;
-    int asyncmode;
-    int disabled;
-    float benchmark;
-    sscanf(dat, "%i %i %i %i %i %i %i %i %f",
-      &avoid_atomics, &micro_nap, &pinned_memory, &wd, &ht, &event_handles, &asyncmode, &disabled, &benchmark);
-
-    // some rudimentary safety checking if string seems to be ok
-    safety_ok = (wd > 1) && (wd < 513) && (ht > 1) && (ht < 513);
-
-    if(safety_ok)
-    {
-      cl->dev[devid].avoid_atomics = avoid_atomics;
-      cl->dev[devid].micro_nap = micro_nap;
-      cl->dev[devid].pinned_memory = pinned_memory;
-      cl->dev[devid].clroundup_wd = wd;
-      cl->dev[devid].clroundup_ht = ht;
-      cl->dev[devid].event_handles = event_handles;
-      cl->dev[devid].disabled = disabled;
-      cl->dev[devid].benchmark = benchmark;
-    }
-    else // if there is something wrong with the found conf key reset to defaults
-    {
-      dt_print(DT_DEBUG_OPENCL, "[dt_opencl_read_device_config] malformed data '%s' for '%s'\n", dat, key);
-    }
+    cl->dev[devid].avoid_atomics = avoid_atomics;
+    cl->dev[devid].micro_nap = micro_nap;
+    cl->dev[devid].pinned_memory = pinned_memory;
+    cl->dev[devid].clroundup_wd = wd;
+    cl->dev[devid].clroundup_ht = ht;
+    cl->dev[devid].event_handles = event_handles;
+    cl->dev[devid].disabled = disabled;
+    cl->dev[devid].benchmark = benchmark;
   }
+  else // if there is something wrong with the found conf key reset to defaults
+  {
+    dt_print(DT_DEBUG_OPENCL, "[dt_opencl_read_device_config] malformed data '%s'\n", key_device);
+  }
+
   // do some safety housekeeping
   cl->dev[devid].avoid_atomics &= 1;
   cl->dev[devid].pinned_memory &= (DT_OPENCL_PINNING_ON | DT_OPENCL_PINNING_DISABLED);
@@ -226,19 +265,17 @@ gboolean dt_opencl_read_device_config(const int devid)
   cl->dev[devid].disabled &= 1;
 
   // Also take care of extended device data, these are not only device specific but also depend on the devid
-  g_snprintf(key, 254, "%s%s_id%i", DT_CLDEVICE_HEAD, cl->dev[devid].cname, devid);
-  if(dt_conf_key_not_empty(key))
+  g_snprintf(key_device, 254, "%s/%i/%s/id%i/forced_headroom", DT_CLDEVICE_HEAD, devid, cl->dev[devid].cname, devid);
+  if(dt_conf_key_not_empty(key_device))
   {
-    const gchar *dat = dt_conf_get_string_const(key);
-    int forced_headroom;
-    sscanf(dat, "%i", &forced_headroom);
+    int forced_headroom = dt_conf_get_int(key_device);
     if(forced_headroom > 0) cl->dev[devid].forced_headroom = forced_headroom;
   }
   else // this is used if updating to 4.0 or fresh installs; see commenting _opencl_get_unused_device_mem()
     cl->dev[devid].forced_headroom = dt_conf_get_int64("memory_opencl_headroom");
 
   dt_opencl_write_device_config(devid);
-  return !existing_device || !safety_ok;
+  return !safety_ok;
 }
 
 static float dt_opencl_device_perfgain(const int devid)
@@ -548,6 +585,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
     res = -1;
     goto end;
   }
+  dt_print_nts(DT_DEBUG_OPENCL, "   *** Device enabled ***\n");
 
   dt_pthread_mutex_init(&cl->dev[dev].lock, NULL);
 
@@ -606,7 +644,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   escapedkerneldir = dt_util_str_replace(kerneldir, " ", "\\ ");
 #endif
 
-  gchar* compile_option_name_cname = g_strdup_printf("%s%s_building", DT_CLDEVICE_HEAD, cl->dev[dev].cname);
+  gchar* compile_option_name_cname = g_strdup_printf("%s/%i/%s/building", DT_CLDEVICE_HEAD, dev, cl->dev[dev].cname);
   const char* compile_opt = NULL;
 
   if(dt_conf_key_exists(compile_option_name_cname))
@@ -1699,15 +1737,15 @@ static void dt_opencl_update_priorities()
   dt_opencl_priority_parse(cl, dt_conf_get_string("opencl_devid_thumbnail"), cl->dev_priority_thumbnail, &cl->mandatory[3]);
 
   dt_print_nts(DT_DEBUG_OPENCL, "[dt_opencl_update_priorities] these are your device priorities:\n");
-  dt_print_nts(DT_DEBUG_OPENCL, "[dt_opencl_update_priorities] \tid |\t\timage\tpreview\texport\tthumbs\n");
+  dt_print_nts(DT_DEBUG_OPENCL, "[dt_opencl_update_priorities] \tid |\t\tIMAGE\tPREVIEW\tEXPORT\tTHUMBS\n");
   for(int i = 0; i < cl->num_devs; i++)
     dt_print_nts(DT_DEBUG_OPENCL, "[dt_opencl_update_priorities]\t%i |\t\t%d\t%d\t%d\t%d\n",
                  i, cl->dev_priority_image[i],
                  cl->dev_priority_preview[i], cl->dev_priority_export[i], cl->dev_priority_thumbnail[i]);
   dt_print_nts(DT_DEBUG_OPENCL, "[dt_opencl_update_priorities] show if opencl use is mandatory for a given pixelpipe:\n");
-  dt_print_nts(DT_DEBUG_OPENCL, "[dt_opencl_update_priorities] \t\timage\tpreview\texport\tthumbs\n");
-  dt_print_nts(DT_DEBUG_OPENCL, "[dt_opencl_update_priorities]\t\t%d\t%d\t%d\t%d\n", cl->mandatory[0],
-             cl->mandatory[1], cl->mandatory[2], cl->mandatory[3]);
+  dt_print_nts(DT_DEBUG_OPENCL, "[dt_opencl_update_priorities] \t\tIMAGE\tPREVIEW\tEXPORT\tTHUMBS\n");
+  dt_print_nts(DT_DEBUG_OPENCL, "[dt_opencl_update_priorities]\t\t%s\t%s\t%s\t%s\n", cl->mandatory[0] ? "yes" : "no",
+             cl->mandatory[1] ? "yes" : "no", cl->mandatory[2] ? "yes" : "no", cl->mandatory[3] ? "yes" : "no");
 }
 
 int dt_opencl_lock_device(const int pipetype)

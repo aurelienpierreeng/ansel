@@ -979,46 +979,60 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   dt_datetime_init();
 
   // initialize the database
-  darktable.db = dt_database_init(dbfilename_from_command, load_data, init_gui);
-  if(darktable.db == NULL)
+  gboolean recheck_needed = TRUE;
+  while (recheck_needed)
   {
-    printf("ERROR : cannot open database\n");
-    return 1;
-  }
-  else if(!dt_database_get_lock_acquired(darktable.db))
-  {
-    if (init_gui)
+    darktable.db = dt_database_init(dbfilename_from_command, load_data, init_gui);
+    if(darktable.db == NULL)
     {
-      gboolean image_loaded_elsewhere = FALSE;
-#ifndef MAC_INTEGRATION
-      // send the images to the other instance via dbus
-      fprintf(stderr, "trying to open the images in the running instance\n");
-
-      if(darktable.dbus && darktable.dbus->dbus_connection)
-      {
-        GDBusConnection *connection = NULL;
-        for(int i = 1; i < argc; i++)
-        {
-          // make the filename absolute ...
-          if(argv[i] == NULL || *argv[i] == '\0') continue;
-          gchar *filename = dt_util_normalize_path(argv[i]);
-          if(filename == NULL) continue;
-          if(!connection) connection = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, NULL);
-          // ... and send it to the running instance of darktable
-          image_loaded_elsewhere = g_dbus_connection_call_sync(connection, "org.darktable.service", "/darktable",
-                                                              "org.darktable.service.Remote", "Open",
-                                                              g_variant_new("(s)", filename), NULL,
-                                                              G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL) != NULL;
-          g_free(filename);
-        }
-        if(connection) g_object_unref(connection);
-      }
-#endif
-
-      if(!image_loaded_elsewhere) dt_database_show_error(darktable.db);
+      printf("ERROR : cannot open database\n");
+      return 1;
     }
-    fprintf(stderr, "ERROR: can't acquire database lock, aborting.\n");
-    return 1;
+    else if(!dt_database_get_lock_acquired(darktable.db))
+    {
+      gboolean error = FALSE;
+
+      if (init_gui)
+      {
+        gboolean image_loaded_elsewhere = FALSE;
+#ifndef MAC_INTEGRATION
+        // send the images to the other instance via dbus
+        fprintf(stderr, "trying to open the images in the running instance\n");
+
+        if(darktable.dbus && darktable.dbus->dbus_connection)
+        {
+          GDBusConnection *connection = NULL;
+          for(int i = 1; i < argc; i++)
+          {
+            // make the filename absolute ...
+            if(argv[i] == NULL || *argv[i] == '\0') continue;
+            gchar *filename = dt_util_normalize_path(argv[i]);
+            if(filename == NULL) continue;
+            if(!connection) connection = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, NULL);
+            // ... and send it to the running instance of darktable
+            image_loaded_elsewhere = g_dbus_connection_call_sync(connection, "org.darktable.service", "/darktable",
+                                                                "org.darktable.service.Remote", "Open",
+                                                                g_variant_new("(s)", filename), NULL,
+                                                                G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL) != NULL;
+            g_free(filename);
+          }
+          if(connection) g_object_unref(connection);
+        }
+#endif
+        if(!image_loaded_elsewhere) error = dt_database_show_error(darktable.db);
+      }
+      if(error)
+      {
+        fprintf(stderr, "ERROR: can't acquire database lock, aborting.\n");
+        return error;
+      }
+      else
+      {
+        // try again
+        continue;
+      }
+    }
+    recheck_needed = FALSE;
   }
 
   //db maintenance on startup (if configured to do so)
@@ -1052,6 +1066,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
       dt_gui_presets_init(); // init preset db schema.
     darktable.control->running = 0;
     dt_pthread_mutex_init(&darktable.control->run_mutex, NULL);
+    dt_pthread_mutex_init(&darktable.control->log_mutex, NULL);
   }
 
   // we initialize grouping early because it's needed for collection init
@@ -1315,9 +1330,14 @@ void dt_cleanup()
   if(init_gui)
   {
     dt_control_cleanup(darktable.control);
-    free(darktable.control);
     dt_undo_cleanup(darktable.undo);
   }
+  else
+  {
+    dt_pthread_mutex_destroy(&darktable.control->log_mutex);
+    dt_pthread_mutex_destroy(&darktable.control->run_mutex);
+  }
+  free(darktable.control);
   dt_colorspaces_cleanup(darktable.color_profiles);
   dt_conf_cleanup(darktable.conf);
   free(darktable.conf);

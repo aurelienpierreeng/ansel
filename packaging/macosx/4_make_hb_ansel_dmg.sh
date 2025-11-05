@@ -12,7 +12,7 @@ PROGN=Ansel
 
 # Go to directory of script
 scriptDir=$(dirname "$0")
-buildDir="${scriptDir}/../../build/macosx"
+buildDir="${scriptDir}/../../install"
 cd "$buildDir"/
 
 # Generate symlink to applications folder for easier drag & drop within dmg
@@ -48,6 +48,7 @@ chmod -Rf go-w /Volumes/"${PROGN}"
 sync
 hdiutil detach ${device}
 DMG="${PROGN}-$(git describe --tags | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/')-$(arch)"
+echo "Create DMG $DMG"
 hdiutil convert "pack.temp.dmg" -format UDZO -imagekey zlib-level=9 -o "${DMG}"
 rm -f pack.temp.dmg
 

@@ -273,14 +273,13 @@ jobs:
                  --conf plugins/lighttable/export/iccintent=0
 
   macOS:
-    if: ${{ false }}
     name: macOS.${{ matrix.compiler.compiler }}.${{ matrix.build.xcode }}.${{ matrix.target }}.${{ matrix.btype }}.${{ matrix.generator }}
     runs-on: ${{ matrix.build.os }}
     strategy:
       fail-fast: true
       matrix:
         build:
-          - { os: macos-12,    xcode: 14.2,   deployment: 12.5 } # LLVM14
+          - { os: macos-14,    xcode: 15.4,   deployment: 14.0 } # AppleClang 15, arm64
         compiler:
           - { compiler: XCode,   CC: cc, CXX: c++ }
         btype:
@@ -290,7 +289,7 @@ jobs:
           - skiptest
         generator:
           - Ninja
-        eco: [-DDONT_USE_INTERNAL_LIBRAW=ON]
+        eco: [-DBUILD_SSE2_CODEPATHS=OFF -DUSE_GRAPHICSMAGICK=ON -DUSE_IMAGEMAGICK=OFF]
     env:
       DEVELOPER_DIR: /Applications/Xcode_${{ matrix.build.xcode }}.app/Contents/Developer
       CC: ${{ matrix.compiler.CC }}
@@ -307,19 +306,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-          path: src
+          path: ${{ env.SRC_DIR }}
       - name: Install Base Dependencies
         run: |
           brew update > /dev/null || true
-          brew tap Homebrew/bundle
           cd src/.ci
           export HOMEBREW_NO_INSTALL_UPGRADE=1
           brew bundle --verbose || true
           # handle keg-only libs
-          brew link --force libomp
-          brew link --force libsoup@2
+          brew link --force libomp libsoup
       - name: Build and Install
-          # todo: use linker which supports --wrap, ld.bfd and ld.gold support it
         run: |
           cmake -E make_directory "${BUILD_DIR}";
           cmake -E make_directory "${INSTALL_PREFIX}";

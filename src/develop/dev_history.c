@@ -9,6 +9,8 @@
 
 #include "gui/presets.h"
 
+#include <inttypes.h>
+
 #include <glib.h>
 
 static void _process_history_db_entry(dt_develop_t *dev, sqlite3_stmt *stmt, const int32_t imgid,
@@ -639,7 +641,7 @@ uint64_t dt_dev_history_get_hash(dt_develop_t *dev)
     dt_dev_history_item_t *item = (dt_dev_history_item_t *)hist->data;
     hash = dt_hash(hash, (const char *)&item->hash, sizeof(uint64_t));
   }
-  dt_print(DT_DEBUG_HISTORY, "[dt_dev_history_get_hash] history hash: %lu, history end: %i, items %i\n", hash, dt_dev_get_history_end(dev), g_list_length(dev->history));
+  dt_print(DT_DEBUG_HISTORY, "[dt_dev_history_get_hash] history hash: %" PRIu64 ", history end: %i, items %i\n", hash, dt_dev_get_history_end(dev), g_list_length(dev->history));
   return hash;
 }
 
@@ -844,7 +846,7 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
     _history_to_module(hist, module);
 
     if(hist->hash != module->hash)
-      fprintf(stderr, "[dt_dev_pop_history_items] module hash is not consistent with history hash for %s : %lu != %lu \n",
+      fprintf(stderr, "[dt_dev_pop_history_items] module hash is not consistent with history hash for %s : %" PRIu64 " != %" PRIu64 " \n",
               module->op, module->hash, hist->hash);
 
     if(hist->forms) forms = hist->forms;

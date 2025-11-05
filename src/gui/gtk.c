@@ -1012,12 +1012,12 @@ gboolean dt_gui_show_standalone_yes_no_dialog(const char *title, const char *mar
     }
     else
     {
-      gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_MOUSE);
+      gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER);
     }
   }
   else
   {
-    gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_MOUSE);
+    gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER);
   }
 
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, padding);

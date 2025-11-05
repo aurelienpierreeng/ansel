@@ -139,63 +139,59 @@ GList *dt_control_crawler_run(void)
       continue;
     }
 
-    // no need to look for xmp files if none get written anyway.
-    if(dt_image_get_xmp_mode())
-    {
-      // construct the xmp filename for this image
-      gchar xmp_path[PATH_MAX] = { 0 };
-      g_strlcpy(xmp_path, image_path, sizeof(xmp_path));
-      dt_image_path_append_version_no_db(version, xmp_path, sizeof(xmp_path));
-      size_t len = strlen(xmp_path);
-      if(len + 4 >= PATH_MAX) continue;
-      xmp_path[len++] = '.';
-      xmp_path[len++] = 'x';
-      xmp_path[len++] = 'm';
-      xmp_path[len++] = 'p';
-      xmp_path[len] = '\0';
+    // construct the xmp filename for this image
+    gchar xmp_path[PATH_MAX] = { 0 };
+    g_strlcpy(xmp_path, image_path, sizeof(xmp_path));
+    dt_image_path_append_version_no_db(version, xmp_path, sizeof(xmp_path));
+    size_t len = strlen(xmp_path);
+    if(len + 4 >= PATH_MAX) continue;
+    xmp_path[len++] = '.';
+    xmp_path[len++] = 'x';
+    xmp_path[len++] = 'm';
+    xmp_path[len++] = 'p';
+    xmp_path[len] = '\0';
 
-      // on Windows the encoding might not be UTF8
-      gchar *xmp_path_locale = dt_util_normalize_path(xmp_path);
-      int stat_res = -1;
+    // on Windows the encoding might not be UTF8
+    gchar *xmp_path_locale = dt_util_normalize_path(xmp_path);
+    int stat_res = -1;
 #ifdef _WIN32
-      // UTF8 paths fail in this context, but converting to UTF16 works
-      struct _stati64 statbuf;
-      if(xmp_path_locale) // in Windows dt_util_normalize_path returns
-                          // NULL if file does not exist
-      {
-        wchar_t *wfilename = g_utf8_to_utf16(xmp_path_locale, -1, NULL, NULL, NULL);
-        stat_res = _wstati64(wfilename, &statbuf);
-        g_free(wfilename);
-      }
- #else
-      struct stat statbuf;
-      stat_res = stat(xmp_path_locale, &statbuf);
-#endif
-      g_free(xmp_path_locale);
-      if(stat_res) continue; // TODO: shall we report these?
-
-      // step 1: check if the xmp is newer than our db entry
-      // FIXME: allow for a few seconds difference?
-      if(timestamp < statbuf.st_mtime)
-      {
-        dt_control_crawler_result_t *item
-            = (dt_control_crawler_result_t *)malloc(sizeof(dt_control_crawler_result_t));
-        item->id = id;
-        item->timestamp_xmp = statbuf.st_mtime;
-        item->timestamp_db = timestamp;
-        item->image_path = g_strdup(image_path);
-        item->xmp_path = g_strdup(xmp_path);
-
-        result = g_list_prepend(result, item);
-        dt_print(DT_DEBUG_CONTROL,
-                 "[crawler] `%s' (id: %d) is a newer XMP file.\n", xmp_path, id);
-      }
-      // older timestamps are the case for all images after the db
-      // upgrade. better not report these
+    // UTF8 paths fail in this context, but converting to UTF16 works
+    struct _stati64 statbuf;
+    if(xmp_path_locale) // in Windows dt_util_normalize_path returns
+                        // NULL if file does not exist
+    {
+      wchar_t *wfilename = g_utf8_to_utf16(xmp_path_locale, -1, NULL, NULL, NULL);
+      stat_res = _wstati64(wfilename, &statbuf);
+      g_free(wfilename);
     }
+#else
+    struct stat statbuf;
+    stat_res = stat(xmp_path_locale, &statbuf);
+#endif
+    g_free(xmp_path_locale);
+    if(stat_res) continue; // TODO: shall we report these?
+
+    // step 1: check if the xmp is newer than our db entry
+    // FIXME: allow for a few seconds difference?
+    if(timestamp < statbuf.st_mtime)
+    {
+      dt_control_crawler_result_t *item
+          = (dt_control_crawler_result_t *)malloc(sizeof(dt_control_crawler_result_t));
+      item->id = id;
+      item->timestamp_xmp = statbuf.st_mtime;
+      item->timestamp_db = timestamp;
+      item->image_path = g_strdup(image_path);
+      item->xmp_path = g_strdup(xmp_path);
+
+      result = g_list_prepend(result, item);
+      dt_print(DT_DEBUG_CONTROL,
+                "[crawler] `%s' (id: %d) is a newer XMP file.\n", xmp_path, id);
+    }
+    // older timestamps are the case for all images after the db
+    // upgrade. better not report these
 
     // step 2: check if the image has associated files (.txt, .wav)
-    size_t len = strlen(image_path);
+    len = strlen(image_path);
     const char *c = image_path + len;
     while((c > image_path) && (*c != '.')) c--;
     len = c - image_path + 1;

@@ -379,9 +379,17 @@ fi
 # Generic package or customized build ?
 # ---------------------------------------------------------------------------
 
-if [ $BUILD_PACKAGE -eq 1 ] ;
+# We want to install by default
+TARGET="install"
+
+if [ $BUILD_PACKAGE -eq 1 ];
 then
-	CMAKE_MORE_OPTIONS="${CMAKE_MORE_OPTIONS} -DBINARY_PACKAGE_BUILD=ON"
+	if [[ "$(uname -s)" =~ MINGW|MSYS|CYGWIN ]];
+	then
+		TARGET="package"
+	else
+		CMAKE_MORE_OPTIONS="${CMAKE_MORE_OPTIONS} -DBINARY_PACKAGE_BUILD=ON"
+	fi
 else
 	CMAKE_MORE_OPTIONS="${CMAKE_MORE_OPTIONS} -DBINARY_PACKAGE_BUILD=OFF"
 fi
@@ -443,7 +451,7 @@ fi
 
 cmd_config="CXX=${CXX_COMPILER} CC=${CC_COMPILER} ${ASAN_FLAGS}cmake -G \"$BUILD_GENERATOR\" -DCMAKE_INSTALL_PREFIX=${INSTALL_PREFIX} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} ${CMAKE_MORE_OPTIONS} \"$DT_SRC_DIR\""
 cmd_build="cmake --build "$BUILD_DIR" -- -j$MAKE_TASKS"
-cmd_install="${SUDO}cmake --build \"$BUILD_DIR\" --target install -- -j$MAKE_TASKS"
+cmd_install="${SUDO}cmake --build \"$BUILD_DIR\" --target $TARGET -- -j$MAKE_TASKS"
 
 cat <<EOF
 
