@@ -213,7 +213,7 @@ void dt_masks_gui_form_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, i
                                 &gpt->border_count, 0, NULL))
   {
     if(form->type & DT_MASKS_CLONE)
-      dt_masks_get_points_border(darktable.develop, form, &gpt->source, &gpt->source_count, NULL, NULL, 1, module);
+      dt_masks_get_points_border(darktable.develop, form, &gpt->source, &gpt->source_count, NULL, NULL, TRUE, module);
     gui->pipe_hash = darktable.develop->preview_pipe->backbuf_hash;
     gui->formid = form->formid;
   }
@@ -1355,22 +1355,22 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
   const float ady = cnt_y - bot_y;
   const float radius_a = sqrtf(adx * adx + ady * ady);
 
-  const float bdx = cnt_x - rgt_x;
-  const float bdy = cnt_y - rgt_y;
-  const float radius_b = sqrtf(bdx * bdx + bdy * bdy);
+  const float border_x = cnt_x - rgt_x;
+  const float border_y = cnt_y - rgt_y;
+  const float radius_b = sqrtf(border_x * border_x + border_y * border_y);
   // offset the index if the shape is a brush or path (single point center)
   const int idx = (nb <= 1) ? 0 : 2;
   const float origin_x = gpt->points[idx];
   const float origin_y = gpt->points[idx + 1];
-  float sourcex = gpt->source[idx];
-  float sourcey = gpt->source[idx + 1];
+  float source_x = gpt->source[idx];
+  float source_y = gpt->source[idx + 1];
   // fixed radius to 2.0 for multi-point shapes
   const float radius = (nb <= 1) ? fmaxf(radius_a, radius_b) : 2.0f;
-  float arrowx = 0.0f, arrowy = 0.0f;
+  float arrow_x = 0.0f, arrow_y = 0.0f;
 
   // direction from center to source (use atan2 to avoid special cases)
-  const float cdx = sourcex - origin_x;
-  const float cdy = sourcey - origin_y;
+  const float cdx = source_x - origin_x;
+  const float cdy = source_y - origin_y;
   const float distc = sqrtf(cdx * cdx + cdy * cdy);
   const float cangle = (distc > 1e-6f) ? atan2f(cdy, cdx) : 0.0f;
   const float cosc = cosf(cangle), sinc = sinf(cangle);
@@ -1394,8 +1394,8 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
         if(ed < best_dist)
         {
           best_dist = ed;
-          arrowx = origin_x + (r + offset) * cosc;
-          arrowy = origin_y + (r + offset) * sinc;
+          arrow_x = origin_x + (r + offset) * cosc;
+          arrow_y = origin_y + (r + offset) * sinc;
         }
       }
     }
@@ -1403,32 +1403,32 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
   else
   {
     // radial attachment for multi-point shapes
-    arrowx = origin_x + (offset + radius) * cosc;
-    arrowy = origin_y + (offset + radius) * sinc;
+    arrow_x = origin_x + (offset + radius) * cosc;
+    arrow_y = origin_y + (offset + radius) * sinc;
   }
 
   // shift source back along the same direction so the arrow points from inside the shape
-  sourcex -= radius * cosc;
-  sourcey -= radius * sinc;
-  
+  const float arrow_source_x = source_x - radius * cosc;
+  const float arrow_source_y = source_y - radius * sinc;
+
   // calculate the coordinates of the two other points of the arrow head
-  const float arrowx_a = arrowx + (DT_MASKS_SCALE_ARROW / zoom_scale) * cosf(cangle + (0.4f));
-  const float arrowy_a = arrowy + (DT_MASKS_SCALE_ARROW / zoom_scale) * sinf(cangle + (0.4f));
-  const float arrowx_b = arrowx + (DT_MASKS_SCALE_ARROW / zoom_scale) * cosf(cangle - (0.4f));
-  const float arrowy_b = arrowy + (DT_MASKS_SCALE_ARROW / zoom_scale) * sinf(cangle - (0.4f));
-  // Calculate the coordinates of the midpoint between (arrowx_a, arrowy_a) and (arrowx_b, arrowy_b)
-  const float arrow_bud_x = (arrowx_a + arrowx_b) * 0.5f;
-  const float arrow_bud_y = (arrowy_a + arrowy_b) * 0.5f;
- 
+  const float arrow_x_a = arrow_x + (DT_MASKS_SCALE_ARROW / zoom_scale) * cosf(cangle + (0.4f));
+  const float arrow_y_a = arrow_y + (DT_MASKS_SCALE_ARROW / zoom_scale) * sinf(cangle + (0.4f));
+  const float arrow_x_b = arrow_x + (DT_MASKS_SCALE_ARROW / zoom_scale) * cosf(cangle - (0.4f));
+  const float arrow_y_b = arrow_y + (DT_MASKS_SCALE_ARROW / zoom_scale) * sinf(cangle - (0.4f));
+  // Calculate the coordinates of the midpoint between (arrow_x_a, arrow_y_a) and (arrow_x_b, arrow_y_b)
+  const float arrow_bud_x = (arrow_x_a + arrow_x_b) * 0.5f;
+  const float arrow_bud_y = (arrow_y_a + arrow_y_b) * 0.5f;
+
   cairo_save(cr);
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 
   // always draw the arrow head
   {
-    cairo_move_to(cr, arrowx_a, arrowy_a);
-    cairo_line_to(cr, arrowx, arrowy);
-    cairo_line_to(cr, arrowx_b, arrowy_b);
-    cairo_line_to(cr, arrowx_a, arrowy_a); // close the arrow head
+    cairo_move_to(cr, arrow_x_a, arrow_y_a);
+    cairo_line_to(cr, arrow_x, arrow_y);
+    cairo_line_to(cr, arrow_x_b, arrow_y_b);
+    cairo_line_to(cr, arrow_x_a, arrow_y_a); // close the arrow head
     // configure the head line style
     cairo_set_source_rgba(cr, 0., 0., 0., 0.);
     cairo_fill_preserve(cr);
@@ -1453,11 +1453,11 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
   }
 
   // don't draw the line if the source is inside the shape
-  float arrow_len = sqrtf((sourcex - arrow_bud_x) * (sourcex - arrow_bud_x) + (sourcey - arrow_bud_y) * (sourcey - arrow_bud_y));
-  if (arrow_len > 1e-6f && !dt_masks_point_in_form_exact(sourcex, sourcey, gpt->points, 0, gpt->points_count))
+  float arrow_len_sq = (source_x - arrow_bud_x) * (source_x - arrow_bud_x) + (source_y - arrow_bud_y) * (source_y - arrow_bud_y);
+  if (arrow_len_sq > 1e-12f && !dt_masks_point_in_form_exact(source_x, source_y, gpt->points, 0, gpt->points_count))
   {
     // we draw the link line
-    cairo_move_to(cr, sourcex, sourcey);
+    cairo_move_to(cr, arrow_source_x, arrow_source_y);
     cairo_line_to(cr, arrow_bud_x, arrow_bud_y);
 
     // dark line
@@ -2666,7 +2666,6 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mas
   float x = 0.0f, y = 0.0f;
   const float iwd = darktable.develop->preview_pipe->iwidth;
   const float iht = darktable.develop->preview_pipe->iheight;
-  fprintf(stderr, "dt_masks_calculate_source_pos_value: source_pos_type=%d, posx_source=%f, posy_source=%f\n", gui->source_pos_type, gui->posx_source, gui->posy_source);
   if(gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE)
   {
     x = xpos + gui->posx_source;
