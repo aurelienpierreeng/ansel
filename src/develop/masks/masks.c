@@ -2070,7 +2070,7 @@ const char * _get_mask_type(dt_masks_form_t *form)
   if(form->type & DT_MASKS_CIRCLE)
     return "circle";
   else if(form->type & DT_MASKS_POLYGON)
-    return "path";
+    return "polygon";
   else if(form->type & DT_MASKS_ELLIPSE)
     return "ellipse";
   else if(form->type & DT_MASKS_GRADIENT)
