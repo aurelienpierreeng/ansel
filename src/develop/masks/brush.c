@@ -1309,6 +1309,13 @@ static int _brush_events_mouse_scrolled(struct dt_iop_module_t *module, float pz
   else if(gui->form_selected || gui->node_selected >= 0 || gui->handle_selected >= 0
           || gui->seg_selected >= 0)
   {
+    // we register the current position
+    if(gui->scrollx == 0.0f && gui->scrolly == 0.0f)
+    {
+      gui->scrollx = pzx;
+      gui->scrolly = pzy;
+    }
+
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
       return dt_masks_form_set_opacity(form, parentid, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
@@ -2091,7 +2098,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       // draw brush circle at current mouse position
       cairo_save(cr);
       dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_CURSOR, opacity);
-      cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3.0) / zoom_scale);
+      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
       cairo_arc(cr, xpos, ypos, radius1, 0, 2.0 * M_PI);
       cairo_fill_preserve(cr);
       cairo_set_source_rgba(cr, .8, .8, .8, .8);
@@ -2153,7 +2160,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       radius = oldradius = masks_border * masks_hardness * min_iwd_iht;
       opacity = oldopacity = masks_density;
 
-      cairo_set_line_width(cr, (2 * radius) / zoom_scale);
+      cairo_set_line_width(cr,  DT_PIXEL_APPLY_DPI(2 * radius) / zoom_scale);
       dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_TRACE, opacity);
 
       cairo_move_to(cr, guipoints[0], guipoints[1]);
@@ -2196,7 +2203,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
         {
           cairo_stroke(cr);
           stroked = 1;
-          cairo_set_line_width(cr, (2 * radius) / zoom_scale);
+          cairo_set_line_width(cr,  DT_PIXEL_APPLY_DPI(2 * radius) / zoom_scale);
           dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_TRACE, opacity);
           oldradius = radius;
           oldopacity = opacity;
