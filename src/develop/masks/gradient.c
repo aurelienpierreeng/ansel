@@ -997,7 +997,7 @@ cleanup:
   return res;
 }
 
-static void _gradient_draw_shape(cairo_t *cr, const float *pts_line, const int pts_line_count, const int nb, const gboolean border)
+static void _gradient_draw_shape(cairo_t *cr, const float *pts_line, const int pts_line_count, const int nb, const gboolean border, const gboolean source)
 {
   // safeguard in case of malformed arrays of points
   if(border && pts_line_count <= 3) return;

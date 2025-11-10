@@ -495,12 +495,12 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, float pzx,
   return 1;
 }
 
-static void _circle_draw_shape(cairo_t *cr, const float *nodes, const int nodes_count, const int nb, const gboolean border)
+static void _circle_draw_shape(cairo_t *cr, const float *points, const int points_count, const int coord_nb, const gboolean border, const gboolean source)
 {
-  cairo_move_to(cr, nodes[2], nodes[3]);
-  for(int i = 2; i < nodes_count; i++)
-    cairo_line_to(cr, nodes[i * 2], nodes[i * 2 + 1]);
-  //cairo_line_to(cr, nodes[2], nodes[3]); // close the circle
+  cairo_move_to(cr, points[coord_nb * 2], points[coord_nb * 2 + 1]);
+  for(int i = 2; i < points_count; i++)
+    cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
+  //cairo_line_to(cr, points[2], points[3]); // close the circle
   cairo_close_path(cr);
 }
 

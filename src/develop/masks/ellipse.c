@@ -1132,7 +1132,7 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
   return 1;
 }
 
-static void _ellipse_draw_shape(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border)
+static void _ellipse_draw_shape(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source)
 {
   // minimum number of points to draw an ellipse
   if(points_count <= 10) return;

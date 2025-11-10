@@ -1335,56 +1335,32 @@ void dt_masks_draw_handle(cairo_t *cr, dt_masks_form_gui_t *gui, const float zoo
   cairo_restore(cr);
 }
 
-void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index, const int nb, 
-  const float zoom_scale, const dt_masks_functions_t *functions)
+/**
+ * @brief Find the best attachment point for the arrow's tip or arrow's base along shape outline
+ * 
+ * @param pos_x resulting x position
+ * @param pos_y resulting y position
+ * @param offset offset from the shape outline
+ * @param radius max radius of the shape
+ * @param origin_x x position of the shape's origin point
+ * @param origin_y y position of the shape's origin point
+ * @param cosc cosine of the angle
+ * @param sinc sine of the angle
+ * @param points array of points defining the shape outline
+ * @param points_count number of points in the shape outline
+ */
+void _dt_masks_find_best_attachment_point(float *pos_x, float *pos_y, const float offset, const float radius,
+                                    const float origin_x, const float origin_y,
+                                    const float cosc, const float sinc,
+                                    const float *points, const int points_count)
 {
-  if(!gui) return;
-  dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-  if(!gpt) return;
-
-  // compute raidus a & radius b. at this stage this must be computed from the list
-  // of transformed point for drawing the shape.
-  const float bot_x = gpt->points[2]; // first point x
-  const float bot_y = gpt->points[3]; // first point y
-  const float rgt_x = gpt->points[6];
-  const float rgt_y = gpt->points[7];
-  const float cnt_x = gpt->points[0]; // center x
-  const float cnt_y = gpt->points[1]; // center y
-
-  const float adx = cnt_x - bot_x;
-  const float ady = cnt_y - bot_y;
-  const float radius_a = sqrtf(adx * adx + ady * ady);
-
-  const float border_x = cnt_x - rgt_x;
-  const float border_y = cnt_y - rgt_y;
-  const float radius_b = sqrtf(border_x * border_x + border_y * border_y);
-  // offset the index if the shape is a brush or path (single point center)
-  const int idx = (nb <= 1) ? 0 : 2;
-  const float origin_x = gpt->points[idx];
-  const float origin_y = gpt->points[idx + 1];
-  float source_x = gpt->source[idx];
-  float source_y = gpt->source[idx + 1];
-  // fixed radius to 2.0 for multi-point shapes
-  const float radius = (nb <= 1) ? fmaxf(radius_a, radius_b) : 2.0f;
-  float arrow_x = 0.0f, arrow_y = 0.0f;
-
-  // direction from center to source (use atan2 to avoid special cases)
-  const float cdx = source_x - origin_x;
-  const float cdy = source_y - origin_y;
-  const float distc = sqrtf(cdx * cdx + cdy * cdy);
-  const float cangle = (distc > 1e-6f) ? atan2f(cdy, cdx) : 0.0f;
-  const float cosc = cosf(cangle), sinc = sinf(cangle);
-  const float offset = DT_PIXEL_APPLY_DPI(8.0f)/ zoom_scale;
-  if(nb <= 1) // the shape is a brush or path
-  {
-    // search along the radial line for the best attachment point (keeps original sampling idea)
     const float step = radius / 259.0f;
     float best_dist = FLT_MAX;
 
-    for(int k = 1; k < gpt->source_count; k += 2)
+    for(int k = 1; k < points_count; k += 2)
     {
-      const float px = gpt->points[k*2];
-      const float py = gpt->points[k*2 + 1];
+      const float px = points[k * 2];
+      const float py = points[k * 2 + 1];
 
       for(float r = 0.01f; r < radius; r += step)
       {
@@ -1394,28 +1370,88 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
         if(ed < best_dist)
         {
           best_dist = ed;
-          arrow_x = origin_x + (r + offset) * cosc;
-          arrow_y = origin_y + (r + offset) * sinc;
+          *pos_x = origin_x + (r + offset) * cosc;
+          *pos_y = origin_y + (r + offset) * sinc;
         }
       }
     }
+}
+
+void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index, const int nb, 
+  const float zoom_scale, const dt_masks_functions_t *functions)
+{
+  if(!gui) return;
+  dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
+  if(!gpt) return;
+
+  gboolean is_path = (nb > 1);// brush/polygon shapes have nb > 1
+  float radius = 2.0f;  // default values for brush/polygon shapes
+  // index offset starts differently for brush/polygon shapes and other shapes
+  size_t idx = is_path ? 2 : 0;
+  // For brush/polygon shapes, the source coordinates are at indices [2] and [3],
+  // while for other mask shapes they are at indices [0] and [1]
+  const float source_x = is_path ? gpt->source[2] : gpt->source[0];
+  const float source_y = is_path ? gpt->source[3] : gpt->source[1];
+
+  const float origin_x = gpt->points[idx];
+  const float origin_y = gpt->points[idx + 1];
+
+  // direction from center to source (use atan2 to avoid special cases)
+  const float center_delta_x = source_x - origin_x;
+  const float center_delta_y = source_y - origin_y;
+  const float center_dist = center_delta_x * center_delta_x + center_delta_y * center_delta_y;
+  const float center_angle = (center_dist > 1e-12f) ? atan2f(center_delta_y, center_delta_x) : 0.0f;
+  const float cosc = cosf(center_angle);
+  const float sinc = sinf(center_angle);
+  const float offset = DT_PIXEL_APPLY_DPI(8.0f)/ zoom_scale;
+  
+  float arrow_x = 0.0f, arrow_y = 0.0f;
+  float arrow_source_x = 0.0f, arrow_source_y = 0.0f;
+  if(is_path)
+  {
+    // radial attachment
+    arrow_x = origin_x + (offset + radius) * cosc;
+    arrow_y = origin_y + (offset + radius) * sinc;
+
+    arrow_source_x = source_x - radius * cosc;
+    arrow_source_y = source_y - radius * sinc;
   }
   else
   {
-    // radial attachment for multi-point shapes
-    arrow_x = origin_x + (offset + radius) * cosc;
-    arrow_y = origin_y + (offset + radius) * sinc;
+    // compute radius a & radius b.
+    const float cnt_x = gpt->points[0]; // center x
+    const float cnt_y = gpt->points[1]; // center y
+    const float bot_x = gpt->points[2]; // first point x
+    const float bot_y = gpt->points[3]; // first point y
+    const float rgt_x = gpt->points[6];
+    const float rgt_y = gpt->points[7];
+
+    const float delta_x = cnt_x - bot_x;
+    const float delta_y = cnt_y - bot_y;
+    const float radius_a = delta_x * delta_x + delta_y * delta_y;
+
+    const float border_x = cnt_x - rgt_x;
+    const float border_y = cnt_y - rgt_y;
+    const float radius_b = border_x * border_x + border_y * border_y;
+
+    radius = sqrtf(fmaxf(radius_a, radius_b));
+  
+    // find best attachment point for the arrow's tip along shape outline
+    _dt_masks_find_best_attachment_point(&arrow_x, &arrow_y, offset, radius,
+                                    origin_x, origin_y, cosc, sinc,
+                                    gpt->points, gpt->points_count);
+
+    // find best attachment point for the arrow's base along source's shape outline
+    _dt_masks_find_best_attachment_point(&arrow_source_x, &arrow_source_y, offset, radius,
+                                source_x, source_y, -cosc, -sinc, 
+                                gpt->source, gpt->source_count);
   }
 
-  // shift source back along the same direction so the arrow points from inside the shape
-  const float arrow_source_x = source_x - radius * cosc;
-  const float arrow_source_y = source_y - radius * sinc;
-
   // calculate the coordinates of the two other points of the arrow head
-  const float arrow_x_a = arrow_x + (DT_MASKS_SCALE_ARROW / zoom_scale) * cosf(cangle + (0.4f));
-  const float arrow_y_a = arrow_y + (DT_MASKS_SCALE_ARROW / zoom_scale) * sinf(cangle + (0.4f));
-  const float arrow_x_b = arrow_x + (DT_MASKS_SCALE_ARROW / zoom_scale) * cosf(cangle - (0.4f));
-  const float arrow_y_b = arrow_y + (DT_MASKS_SCALE_ARROW / zoom_scale) * sinf(cangle - (0.4f));
+  const float arrow_x_a = arrow_x + (DT_MASKS_SCALE_ARROW / zoom_scale) * cosf(center_angle + (0.4f));
+  const float arrow_y_a = arrow_y + (DT_MASKS_SCALE_ARROW / zoom_scale) * sinf(center_angle + (0.4f));
+  const float arrow_x_b = arrow_x + (DT_MASKS_SCALE_ARROW / zoom_scale) * cosf(center_angle - (0.4f));
+  const float arrow_y_b = arrow_y + (DT_MASKS_SCALE_ARROW / zoom_scale) * sinf(center_angle - (0.4f));
   // Calculate the coordinates of the midpoint between (arrow_x_a, arrow_y_a) and (arrow_x_b, arrow_y_b)
   const float arrow_bud_x = (arrow_x_a + arrow_x_b) * 0.5f;
   const float arrow_bud_y = (arrow_y_a + arrow_y_b) * 0.5f;
@@ -1481,7 +1517,7 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
   // draw the source shape
   {
     if(functions && functions->draw_shape)
-      functions->draw_shape(cr, gpt->source, gpt->source_count, nb, FALSE);
+      functions->draw_shape(cr, gpt->source, gpt->source_count, nb, FALSE, TRUE);
 
     dt_masks_set_dash(cr, DT_MASKS_NO_DASH, zoom_scale);
     //dark line
@@ -1508,9 +1544,10 @@ void dt_masks_draw_lines(const dt_masks_dash_type_t dash_type, const gboolean so
 {
   cairo_save(cr);
 
+  const gboolean border = dash_type;
   // draw the shape from the integrated function if any
   if(functions && functions->draw_shape)
-    functions->draw_shape(cr, points, points_count, nb, dash_type);
+    functions->draw_shape(cr, points, points_count, nb, border, FALSE);
 
   if(dash_type)
   {

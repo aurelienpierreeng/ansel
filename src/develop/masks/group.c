@@ -41,16 +41,22 @@ static int _group_events_button_pressed(struct dt_iop_module_t *module, float pz
                                         double pressure, int which, int type, uint32_t state,
                                         dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui, int unused2)
 {
+  gboolean return_value = FALSE;
+
   if(gui->group_selected >= 0)
   {
     // we get the form
     dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
-      return sel->functions->button_pressed(module, pzx, pzy, pressure, which, type, state, sel,
+      return_value = sel->functions->button_pressed(module, pzx, pzy, pressure, which, type, state, sel,
                                            fpt->parentid, gui, gui->group_selected);
+    if(which == 3 && !return_value)
+    {
+      return_value = dt_masks_gui_delete(module, sel, gui, fpt->parentid);
+    }
   }
-  return 0;
+  return return_value;
 }
 
 static int _group_events_button_released(struct dt_iop_module_t *module, float pzx, float pzy, int which,
@@ -62,11 +68,6 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
     // we get the form
     dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-    
-    if(which == 3)
-    {
-      dt_masks_gui_delete(module, sel, gui, fpt->parentid);
-    }
 
     if(sel && sel->functions)
       if(sel->functions->button_released(module, pzx, pzy, which, state, sel, fpt->parentid, gui,
