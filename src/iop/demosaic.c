@@ -410,8 +410,6 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
 {
   // this op is disabled for filters == 0
   *roi_in = *roi_out;
-  roi_in->x = 0;
-  roi_in->y = 0;
 
   dt_iop_demosaic_data_t *data = (dt_iop_demosaic_data_t *)piece->data;
   const int method = data->demosaicing_method;
@@ -430,9 +428,6 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
     roi_in->x = MAX(0, roi_in->x + shift_x);
     roi_in->y = MAX(0, roi_in->y + shift_y);
   }
-
-  roi_in->width -= roi_in->x;
-  roi_in->height -= roi_in->y;
 }
 
 

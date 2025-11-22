@@ -35,7 +35,7 @@ DT_MODULE(1)
 typedef struct dt_lib_navigation_t
 {
   int dragging;
-  int zoom_w, zoom_h;
+  int zoom_w, zoom_h; // size of the zoom button
 } dt_lib_navigation_t;
 
 typedef enum dt_lib_zoom_t
@@ -69,7 +69,7 @@ static gboolean _lib_navigation_leave_notify_callback(GtkWidget *widget, GdkEven
                                                       gpointer user_data);
 
 /* helper function for position set */
-static void _lib_navigation_set_position(struct dt_lib_module_t *self, double x, double y, int wd, int ht);
+static void _lib_navigation_set_position(struct dt_lib_module_t *self, double x, double y, int alloc_wd, int alloc_ht);
 
 const char *name(struct dt_lib_module_t *self)
 {
@@ -187,18 +187,26 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   cairo_surface_t *surface
       = cairo_image_surface_create_for_data(dev->preview_pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
 
+  // scale the surface to fit into the navigation area
   cairo_translate(cr, width / 2., height / 2.);
   cairo_scale(cr, scale, scale);
   cairo_translate(cr, -wd / 2., -ht / 2.);
 
+  // draw image
   cairo_rectangle(cr, 0, 0, wd, ht);
   cairo_set_source_surface(cr, surface, 0, 0);
   cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
   cairo_fill(cr);
+  
+  // Calculate the thickness in user space (not affected by scale)
+  double line_width = DT_PIXEL_APPLY_DPI(1);
+  {
+    double dx = line_width, dy = 0;
+    cairo_device_to_user_distance(cr, &dx, &dy);
+    line_width = dx;
+  }
 
   // draw box where we are
-  // avoid numerical instability for small resolutions:
-  double h, w;
   if(dev->scaling > 1.f)
   {
     // Add a dark overlay on the picture to make it fade
@@ -206,131 +214,99 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     cairo_set_source_rgba(cr, 0, 0, 0, 0.5);
     cairo_fill(cr);
 
+    float boxw = 1, boxh = 1;
+    dt_dev_check_zoom_pos_bounds(dev, &(dev->x), &(dev->y), &boxw, &boxh);
+    // clip dimensions to navigation area
+    const float roi_w = MIN(boxw * wd, wd);
+    const float roi_h = MIN(boxh * ht, ht);
+    const float roi_x = dev->x * wd - roi_w * 0.5f;
+    const float roi_y = dev->y * ht - roi_h * 0.5f;
+
     // Repaint the original image in the area of interest
     cairo_set_source_surface(cr, surface, 0, 0);
-
-    double roi_w = width / dev->scaling;
-    double roi_h = height / dev->scaling;
-    double roi_x = dev->x * width;
-    double roi_y = dev->y * height;
-
-    // Dig a hole into the overlay for the ROI
-    cairo_rectangle(cr, roi_x - roi_w / 2., roi_y - roi_h / 2., roi_w + 2, roi_h + 2);
-    cairo_clip_preserve(cr);
+    cairo_rectangle(cr, roi_x - 1, roi_y - 1, roi_w + 2, roi_h + 2);
     cairo_fill_preserve(cr);
 
     // Paint the external border in black
     cairo_set_source_rgb(cr, 0., 0., 0.);
-    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1));
+    cairo_set_line_width(cr, line_width);
     cairo_stroke(cr);
 
     // Paint the internal border in white
     cairo_set_source_rgb(cr, 1., 1., 1.);
-    cairo_rectangle(cr, roi_x - roi_w / 2., roi_y - roi_h / 2., roi_w, roi_h);
+    cairo_rectangle(cr, roi_x, roi_y, roi_w, roi_h);
+    cairo_stroke(cr);
+  }
+  else
+  {
+    // draw a simple border
+    cairo_set_source_rgb(cr, 1., 1., 1.);
+    cairo_set_line_width(cr, line_width);
+    cairo_rectangle(cr, 0.5, 0.5, wd - 1, ht - 1);
     cairo_stroke(cr);
   }
 
   cairo_restore(cr);
 
-  if(dev->scaling > 1.f)
+  /* Zoom % */
+  PangoLayout *layout;
+  PangoRectangle logic;
+  PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+  pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
+  layout = pango_cairo_create_layout(cr);
+  const float fontsize = DT_PIXEL_APPLY_DPI(14);
+  pango_font_description_set_absolute_size(desc, fontsize * PANGO_SCALE);
+  pango_layout_set_font_description(layout, desc);
+
+  // translate to left bottom corner
+  cairo_translate(cr, 0, height);
+  cairo_set_source_rgba(cr, 1., 1., 1., 0.5);
+  cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+
+  gchar *zoomline;
   {
-    /* Zoom % */
-    PangoLayout *layout;
-    PangoRectangle ink;
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
-    layout = pango_cairo_create_layout(cr);
-    const float fontsize = DT_PIXEL_APPLY_DPI(14);
-    pango_font_description_set_absolute_size(desc, fontsize * PANGO_SCALE);
-    pango_layout_set_font_description(layout, desc);
-    cairo_translate(cr, 0, height);
-    cairo_set_source_rgba(cr, 1., 1., 1., 0.5);
-    cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-
-    char zoomline[5];
-    snprintf(zoomline, sizeof(zoomline), "%.0f%%", dev->scaling * dev->natural_scale * 100);
-
-    pango_layout_set_text(layout, zoomline, -1);
-    pango_layout_get_pixel_extents(layout, &ink, NULL);
-    h = d->zoom_h = ink.height;
-    w = d->zoom_w = ink.width;
-
-    cairo_move_to(cr, width - w - h * 1.1 - ink.x, - fontsize);
-
-    cairo_save(cr);
-    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1));
-
-    GdkRGBA *color;
-    gtk_style_context_get(context, gtk_widget_get_state_flags(widget), "background-color", &color, NULL);
-
-    gdk_cairo_set_source_rgba(cr, color);
-    pango_cairo_layout_path(cr, layout);
-    cairo_stroke_preserve(cr);
-    cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
-    cairo_fill(cr);
-    cairo_restore(cr);
-
-    gdk_rgba_free(color);
-    pango_font_description_free(desc);
-    g_object_unref(layout);
-
-  }
-  else
-  {
-    // draw the zoom-to-fit icon
-    cairo_translate(cr, 0, height);
-    cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
-
-    static int font_height = -1;
-    if(font_height == -1)
-    {
-      PangoLayout *layout;
-      PangoRectangle ink;
-      PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
-      pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
-      layout = pango_cairo_create_layout(cr);
-      pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(14) * PANGO_SCALE);
-      pango_layout_set_font_description(layout, desc);
-      pango_layout_set_text(layout, "100%", -1); // dummy text, just to get the height
-      pango_layout_get_pixel_extents(layout, &ink, NULL);
-      font_height = ink.height;
-      pango_font_description_free(desc);
-      g_object_unref(layout);
-    }
-
-    h = d->zoom_h = font_height;
-    w = h * 1.5;
-    float sp = h * 0.6;
-    d->zoom_w = w + sp;
-
-    cairo_move_to(cr, width - w - h - sp, -1.0 * h);
-    cairo_rectangle(cr, width - w - h - sp, -1.0 * h, w, h);
-    cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
-    cairo_fill(cr);
-
-    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2));
-
-    cairo_set_source_rgb(cr, 0.6, 0.6, 0.6);
-    cairo_move_to(cr, width - w * 0.8 - h - sp, -1.0 * h);
-    cairo_line_to(cr, width - w - h - sp, -1.0 * h);
-    cairo_line_to(cr, width - w - h - sp, -0.7 * h);
-    cairo_stroke(cr);
-    cairo_move_to(cr, width - w - h - sp, -0.3 * h);
-    cairo_line_to(cr, width - w - h - sp, 0);
-    cairo_line_to(cr, width - w * 0.8 - h - sp, 0);
-    cairo_stroke(cr);
-    cairo_move_to(cr, width - w * 0.2 - h - sp, 0);
-    cairo_line_to(cr, width - h - sp, 0);
-    cairo_line_to(cr, width - h - sp, -0.3 * h);
-    cairo_stroke(cr);
-    cairo_move_to(cr, width - h - sp, -0.7 * h);
-    cairo_line_to(cr, width - h - sp, -1.0 * h);
-    cairo_line_to(cr, width - w * 0.2 - h - sp, -1.0 * h);
-    cairo_stroke(cr);
+    gchar *fit = NULL;
+    if(dev->scaling == 1.f)
+      fit = g_strdup(_("Fit"));
+  
+    zoomline = g_strdup_printf("%s %.0f%%", fit ? fit : "", dev->scaling * dev->natural_scale * 100);
+    if(fit) g_free(fit);
   }
 
-  cairo_move_to(cr, width - 0.95 * h, -0.9 * h);
-  cairo_line_to(cr, width - 0.05 * h, -0.9 * h);
-  cairo_line_to(cr, width - 0.5 * h, -0.1 * h);
+  pango_layout_set_text(layout, zoomline, -1);
+  g_free(zoomline);
+  pango_layout_get_pixel_extents(layout, NULL, &logic);
+  d->zoom_h = logic.height;
+  d->zoom_w = logic.width;
+  const double h = d->zoom_h;
+  const double w = d->zoom_w;
+  const int xp = width - w - h - logic.x;
+  const int yp = - logic.height;
+
+  cairo_move_to(cr, xp, yp);
+  cairo_save(cr);
+  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1));
+
+  GdkRGBA *color;
+  gtk_style_context_get(context, gtk_widget_get_state_flags(widget), "background-color", &color, NULL);
+
+  gdk_cairo_set_source_rgba(cr, color);
+  pango_cairo_layout_path(cr, layout);
+  cairo_stroke_preserve(cr);
+  cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
+  cairo_fill(cr);
+  cairo_restore(cr);
+
+  gdk_rgba_free(color);
+  pango_font_description_free(desc);
+  g_object_unref(layout);
+
+  const float arrow_h = fontsize;
+
+  /* draw the drop-down arrow for zoom menu */
+  cairo_move_to(cr, width - 0.95 * arrow_h, -0.9 * arrow_h - 2);
+  cairo_line_to(cr, width - 0.05 * arrow_h, -0.9 * arrow_h - 2);
+  cairo_line_to(cr, width - 0.5 * arrow_h, -0.1 * arrow_h - 2);
   cairo_fill(cr);
   cairo_surface_destroy(surface);
 
@@ -345,22 +321,31 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   return TRUE;
 }
 
-void _lib_navigation_set_position(dt_lib_module_t *self, double x, double y, int wd, int ht)
+static void _lib_navigation_set_position(dt_lib_module_t *self, double x, double y, int alloc_wd, int alloc_ht)
 {
   dt_develop_t *dev = darktable.develop;
-  dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
-
+  const dt_lib_navigation_t *d = (const dt_lib_navigation_t *)self->data;
   if(!(dev && d->dragging && dev->scaling > 1.f)) return;
 
+  // Compute size of navigation ROI in widget coordinates
+  int proc_wd, proc_ht;
+  dt_dev_get_processed_size(dev, &proc_wd, &proc_ht);
+  const float nav_img_scale = fminf(alloc_wd / (float)proc_wd, alloc_ht / (float)proc_ht);
+  const int nav_img_w = (int)((float)proc_wd * nav_img_scale);
+  const int nav_img_h = (int)((float)proc_ht * nav_img_scale);
+  
   // Correct widget coordinates for margins
-  const float width = wd - 2.f * DT_NAVIGATION_INSET;
-  const float height = ht - 2.f * DT_NAVIGATION_INSET;
-  x -= DT_NAVIGATION_INSET;
-  y -= DT_NAVIGATION_INSET;
+  float fx = x - (alloc_wd - nav_img_w) * 0.5f;
+  float fy = y - (alloc_ht - nav_img_h) * 0.5f;
 
-  // Commit relative coordinates of the ROI center
-  dev->x = x / width;
-  dev->y = y / height;
+  // Convert widget coordinates to relative coordinates within navigation ROI
+  // and commit relative coordinates of the ROI center
+  fx /= (float)nav_img_w;
+  fy /= (float)nav_img_h;
+  dt_dev_check_zoom_pos_bounds(dev, &fx, &fy, NULL, NULL);
+
+  dev->x = fx;
+  dev->y = fy;
 
   /* redraw myself */
   gtk_widget_queue_draw(self->widget);
@@ -382,17 +367,18 @@ static gboolean _lib_navigation_motion_notify_callback(GtkWidget *widget, GdkEve
 
 static void _zoom_preset_change(dt_lib_zoom_t zoom)
 {
-  // dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_develop_t *dev = darktable.develop;
   if(!dev) return;
 
   switch(zoom)
   {
+    default:
+      dev->scaling = dev->natural_scale;
+      break;
     case LIB_ZOOM_SMALL:
-      dev->scaling = 0.25;
+      dev->scaling = dev->natural_scale * 0.33;
       break;
     case LIB_ZOOM_FIT:
-    default:
       dev->scaling = dev->natural_scale;
       break;
     case LIB_ZOOM_25:
@@ -449,11 +435,11 @@ static gboolean _lib_navigation_button_press_callback(GtkWidget *widget, GdkEven
     GtkMenuShell *menu = GTK_MENU_SHELL(gtk_menu_new());
     GtkWidget *item;
 
-    item = gtk_menu_item_new_with_label(_("small"));
+    item = gtk_menu_item_new_with_label(_("Small"));
     g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), GINT_TO_POINTER(LIB_ZOOM_SMALL));
     gtk_menu_shell_append(menu, item);
 
-    item = gtk_menu_item_new_with_label(_("fit to screen"));
+    item = gtk_menu_item_new_with_label(_("Fit to screen"));
     g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), GINT_TO_POINTER(LIB_ZOOM_FIT));
     gtk_menu_shell_append(menu, item);
 
@@ -489,6 +475,7 @@ static gboolean _lib_navigation_button_press_callback(GtkWidget *widget, GdkEven
 
     return TRUE;
   }
+
   d->dragging = 1;
   _lib_navigation_set_position(self, event->x, event->y, w, h);
   return TRUE;

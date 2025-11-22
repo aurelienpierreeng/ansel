@@ -205,7 +205,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
     cache->max_memory
         = MIN(MAX((int64_t)remaining_mem - (int64_t)safety_margin, (int64_t)2 * dt_get_singlebuffer_mem()),
               remaining_mem);
-    fprintf(stdout, "new pipeline cache size : %lu MiB\n", cache->max_memory / (1024 * 1024));
+    //fprintf(stdout, "new pipeline cache size : %lu MiB\n", cache->max_memory / (1024 * 1024));
     if(cache->max_memory == 2 * dt_get_singlebuffer_mem())
       dt_control_log(_("Your system RAM is nearly saturated.\n"
                        "Processing full-resolution images may not "

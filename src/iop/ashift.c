@@ -2898,7 +2898,7 @@ static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t 
 
   if(b == NULL)
   {
-    dt_control_log(_("data pending - please repeat"));
+    dt_control_log(_("Data pending - Please repeat"));
     dt_dev_invalidate_preview(self->dev);
     dt_dev_refresh_ui_images(self->dev);
     goto error;
@@ -2949,7 +2949,7 @@ static void _do_get_structure_lines(dt_iop_module_t *self)
 
   if(b == NULL)
   {
-    dt_control_log(_("data pending - please repeat"));
+    dt_control_log(_("Data pending - Please repeat"));
     dt_dev_invalidate_preview(self->dev);
     dt_dev_refresh_ui_images(self->dev);
     return;
@@ -2985,7 +2985,7 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
 
   if(b == NULL)
   {
-    dt_control_log(_("data pending - please repeat"));
+    dt_control_log(_("Data pending - Please repeat"));
     dt_dev_invalidate_preview(self->dev);
     dt_dev_refresh_ui_images(self->dev);
     return;
@@ -3659,6 +3659,7 @@ static int call_distort_transform(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, s
   if(piece->module == self && /*piece->enabled && */  //see note below
      !dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, piece->module))
   {
+    if(piece->module->distort_transform)
     ret = piece->module->distort_transform(piece->module, piece, points, points_count);
   }
   return ret;
@@ -3680,50 +3681,52 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   const float ht = dev->preview_pipe->backbuf_height;
   if(wd < 1.0 || ht < 1.0) return;
 
-  const float zoom_scale = 1.f;
+  const float zoom_scale = dev->scaling;
 
   cairo_save(cr);
+  {
+    dt_dev_rescale_roi(dev, cr, width, height);
 
-  // draw crop area guides
-  /*
-  if(g->editing)
-    dt_guides_draw(cr, p->cl * wd, p->ct * ht, (p->cr - p->cl) * wd, (p->cb - p->ct) * ht, zoom_scale);
-  else
-    dt_guides_draw(cr, 0, 0, wd, ht, zoom_scale);
-  */
-  cairo_restore(cr);
-  dt_draw_set_color_overlay(cr, FALSE, 1.0);
-
+    // draw crop area guides
+    if(!g->editing) dt_guides_draw(cr, 0, 0, wd, ht, zoom_scale);
+    
+    cairo_restore(cr);
+  }
   // Fast path: rotation setting by inputting horizon line.
   // Conflicts with editing mode where painting with button pressed is understood as validating lines.
   if(g->straightening && !g->editing)
   {
     cairo_save(cr);
 
+    dt_dev_rescale_roi(dev, cr, width, height);
     cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.0) / zoom_scale);
     dt_draw_set_color_overlay(cr, FALSE, 1.0);
 
-    float pzx = 0.f, pzy = 0.f;
-    dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery);
+    float pzx = 0.f;
+    float pzy = 0.f;
+    dt_dev_get_pointer_full_pos(dev, pointerx, pointery, &pzx, &pzy);
 
     PangoRectangle ink;
     PangoLayout *layout;
     PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
+    const float fontsize = DT_PIXEL_APPLY_DPI(16);
     pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
-    pango_font_description_set_absolute_size(desc, DT_PIXEL_APPLY_DPI(16) * PANGO_SCALE / zoom_scale);
+    pango_font_description_set_absolute_size(desc, fontsize * PANGO_SCALE / zoom_scale);
     layout = pango_cairo_create_layout(cr);
     pango_layout_set_font_description(layout, desc);
-    const float bzx = g->straighten_x + .5f, bzy = g->straighten_y + .5f;
-    cairo_arc(cr, bzx * wd, bzy * ht, DT_PIXEL_APPLY_DPI(3), 0, 2.0 * M_PI);
+    const float bzx = g->straighten_x;
+    const float bzy = g->straighten_y;
+    cairo_arc(cr, bzx * wd, bzy * ht, DT_PIXEL_APPLY_DPI(3) / zoom_scale, 0, 2.0 * M_PI);
     cairo_stroke(cr);
-    cairo_arc(cr, pzx * wd, pzy * ht, DT_PIXEL_APPLY_DPI(3), 0, 2.0 * M_PI);
+    cairo_arc(cr, pzx * wd, pzy * ht, DT_PIXEL_APPLY_DPI(3) / zoom_scale, 0, 2.0 * M_PI);
     cairo_stroke(cr);
     cairo_move_to(cr, bzx * wd, bzy * ht);
     cairo_line_to(cr, pzx * wd, pzy * ht);
     cairo_stroke(cr);
 
     // show rotation angle
-    float dx = pzx * wd - bzx * wd, dy = pzy * ht - bzy * ht;
+    float dx = pzx * wd - bzx * wd;
+    float dy = pzy * ht - bzy * ht;
     if(dx < 0)
     {
       dx = -dx;
@@ -3734,18 +3737,26 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     if(angle > 45.0) angle -= 90;
     if(angle < -45.0) angle += 90;
 
-    char view_angle[16];
-    view_angle[0] = '\0';
-    snprintf(view_angle, sizeof(view_angle), "%.2f\302\260", angle);
-    pango_layout_set_text(layout, view_angle, -1);
-    pango_layout_get_pixel_extents(layout, &ink, NULL);
-    const float text_w = ink.width;
-    const float text_h = DT_PIXEL_APPLY_DPI(16 + 2) / zoom_scale;
+    gchar *view_angle = NULL;
+    view_angle = g_strdup_printf("%.2f\302\260", angle);
+    pango_layout_set_text(layout, view_angle ? view_angle : "-1\302\260", -1);
+    g_free(view_angle);
+
+    PangoRectangle logic;
+    pango_layout_get_pixel_extents(layout, &ink, &logic);
+    const float text_w = logic.width;
+    const float text_h = logic.height;
     const float margin = DT_PIXEL_APPLY_DPI(6) / zoom_scale;
     cairo_set_source_rgba(cr, .5, .5, .5, .9);
     const float xp = pzx * wd + DT_PIXEL_APPLY_DPI(20) / zoom_scale;
-    const float yp = pzy * ht - ink.height;
-    dt_gui_draw_rounded_rectangle(cr, text_w + 2 * margin, text_h + 2 * margin, xp - margin, yp - margin);
+    const float yp = pzy * ht - logic.height;
+
+    const double rectangle_x = xp - margin;
+    const double rectangle_y = yp - margin;
+    const double rectangle_w = text_w + 2 * margin;
+    const double rectangle_h = text_h + 2 * margin;
+    dt_gui_draw_rounded_rectangle(cr, rectangle_w, rectangle_h, rectangle_x, rectangle_y);
+
     cairo_set_source_rgba(cr, .7, .7, .7, .7);
     cairo_move_to(cr, xp, yp);
     pango_cairo_show_layout(cr, layout);
@@ -3755,18 +3766,19 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     return;
   }
 
-  // Not editing : nothing more to show
-  if(!g->editing) return;
+  cairo_save(cr);
+  dt_dev_clip_roi(dev, cr, width, height);
+  dt_dev_rescale_roi(dev, cr, width, height);
 
   // we draw the cropping area; we need x_off/y_off/width/height which is only available
   // after g->buf has been processed
   // roi data of the preview pipe input buffer
-  const float iwd = g->buf_width;
-  const float iht = g->buf_height;
-  const float ixo = g->buf_x_off;
-  const float iyo = g->buf_y_off;
+  const float iwd = dev->preview_pipe->iwidth;
+  const float iht = dev->preview_pipe->iheight;
+  const float ixo = 0;
+  const float iyo = 0;
 
-  // the four corners of the input buffer of this module
+  // The four corners of the inner image polygon
   float V[4][2] = { { ixo,        iyo       },
                     { ixo,        iyo + iht },
                     { ixo + iwd,  iyo + iht },
@@ -3785,10 +3797,39 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     ymin = MIN(ymin, V[n][1]);
     ymax = MAX(ymax, V[n][1]);
   }
+
+  // Not editing : nothing more to show
+  if(!g->editing)
+  {
+    // Only draw the black outside area before returning
+    if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+                                    DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)V, 4))
+      return;
+    const float scale_factor = dt_dev_get_natural_scale(dev, dev->preview_pipe);
+    for(size_t i = 0; i < 4; i++)
+    {
+      V[i][0] *= scale_factor;
+      V[i][1] *= scale_factor;
+    }
+    // force cover the outside area in black.
+    // This avoids to get an other color rendered outside the image because of nexts modules processing.
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    cairo_rectangle(cr, 0.0, 0.0, wd, ht);  // outer (full) area
+    cairo_move_to(cr, V[0][0], V[0][1]);    // inner image polygon
+    cairo_line_to(cr, V[1][0], V[1][1]);
+    cairo_line_to(cr, V[2][0], V[2][1]);
+    cairo_line_to(cr, V[3][0], V[3][1]);
+    cairo_close_path(cr);
+    cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
+    cairo_fill(cr);
+    cairo_restore(cr);
+    return;
+  }
+
   const float owd = xmax - xmin;
   const float oht = ymax - ymin;
 
-  // the four clipping corners
+  // The four inner clipping polygon
   float C[4][2] = { { xmin + p->cl * owd, ymin + p->ct * oht },
                     { xmin + p->cl * owd, ymin + p->cb * oht },
                     { xmin + p->cr * owd, ymin + p->cb * oht },
@@ -3798,53 +3839,52 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)C, 4))
     return;
-
-  cairo_save(cr);
+  if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+                                    DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)V, 4))
+    return;
 
   double dashes = DT_PIXEL_APPLY_DPI(5.0) / zoom_scale;
   cairo_set_dash(cr, &dashes, 0, 0);
-
-  float cl_x = 0.0f, cl_y = 0.0f, cl_width = 0.0f, cl_height = 0.0f;
-
-  if(wd / (float)width > ht / (float)height)
+  
+  // Resize the coordinates of the rectangles V and C according to the current zoom.
+  const float scale_factor = dt_dev_get_natural_scale(dev, dev->preview_pipe);
+  for(size_t i = 0; i < 4; i++)
   {
-    // more spaces top/bottom
-    cl_x      = self->dev->border_size;
-    cl_y      = ((float)height - (ht * zoom_scale)) / 2.0f;
-    cl_width  = width - 2.0f * self->dev->border_size;
-    cl_height = ht * zoom_scale;
-  }
-  else
-  {
-    // more spaces left/right
-    cl_y      = self->dev->border_size;
-    cl_x      = ((float)width - (wd * zoom_scale)) / 2.0f;
-    cl_height = height - (2.0f * self->dev->border_size);
-    cl_width  = wd * zoom_scale;
+    V[i][0] *= scale_factor;
+    V[i][1] *= scale_factor;
+    C[i][0] *= scale_factor;
+    C[i][1] *= scale_factor;
   }
 
-  cairo_rectangle(cr, cl_x, cl_y, cl_width, cl_height);
-  cairo_clip(cr);
-
-  // mask parts of image outside of clipping area in dark grey
+  // mask parts of image outside of clipping area in transparent dark grey
   cairo_set_source_rgba(cr, .2, .2, .2, .8);
   cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
-
-  cairo_move_to(cr, C[0][0], C[0][1]);
+  cairo_rectangle(cr, 0.0, 0.0, wd, ht);  // outer (full) area
+  cairo_move_to(cr, C[0][0], C[0][1]);    // inner clipping polygon
   cairo_line_to(cr, C[1][0], C[1][1]);
   cairo_line_to(cr, C[2][0], C[2][1]);
   cairo_line_to(cr, C[3][0], C[3][1]);
   cairo_close_path(cr);
   cairo_fill(cr);
-
+  // force cover the outside area in black.
+  // This avoids to get an other color rendered outside the image because of nexts modules processing.
+  cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+  cairo_rectangle(cr, 0.0, 0.0, wd, ht);  // outer (full) area
+  cairo_move_to(cr, V[0][0], V[0][1]);    // inner image polygon
+  cairo_line_to(cr, V[1][0], V[1][1]);
+  cairo_line_to(cr, V[2][0], V[2][1]);
+  cairo_line_to(cr, V[3][0], V[3][1]);
+  cairo_close_path(cr);
+  cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
+  cairo_fill(cr);
   // draw white outline around clipping area
-  dt_draw_set_color_overlay(cr, TRUE, 1.0);
-  cairo_set_line_width(cr, 2.0 / zoom_scale);
-  cairo_move_to(cr, C[0][0], C[0][1]);
+  cairo_move_to(cr, C[0][0], C[0][1]);    // inner clipping polygon
   cairo_line_to(cr, C[1][0], C[1][1]);
   cairo_line_to(cr, C[2][0], C[2][1]);
   cairo_line_to(cr, C[3][0], C[3][1]);
   cairo_close_path(cr);
+  dt_draw_set_color_overlay(cr, TRUE, 1.0);
+  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2) / zoom_scale);
   cairo_stroke(cr);
 
   // we draw the guides correctly scaled here instead of using the darkroom expose callback
@@ -3880,8 +3920,11 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     g->draw_points = NULL;
     g->points_lines_count = 0;
 
+    const float scale = 1.0f / dt_dev_get_natural_scale(dev, dev->preview_pipe);
+
+
     if(!get_points(self, g->lines, g->lines_count, g->lines_version, &g->points, &g->draw_points, &g->points_idx,
-                   &g->points_lines_count, 1.f))
+                   &g->points_lines_count, scale))
       return;
 
     g->points_version = g->lines_version;
@@ -3905,8 +3948,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->points == NULL || g->points_idx == NULL) return;
 
   cairo_save(cr);
-  cairo_rectangle(cr, 0, 0, width, height);
-  cairo_clip(cr);
+  dt_dev_rescale_roi(dev, cr, width, height);
 
   // this must match the sequence of enum dt_iop_ashift_linecolor_t!
   const float line_colors[5][4] =
@@ -3982,11 +4024,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->isbounding != ASHIFT_BOUNDING_OFF)
   {
     float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery);
-    pzx += 0.5f;
-    pzy += 0.5f;
+    dt_dev_get_pointer_full_pos(dev, pointerx, pointery, &pzx, &pzy);
 
-    double dashed[] = { 4.0, 4.0 };
+    double dashed[] = { DT_PIXEL_APPLY_DPI(4.0), DT_PIXEL_APPLY_DPI(4.0) };
     dashed[0] /= zoom_scale;
     dashed[1] /= zoom_scale;
     const int len = sizeof(dashed) / sizeof(dashed[0]);
@@ -4006,11 +4046,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->near_delta > 0)
   {
     float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery);
-    pzx += 0.5f;
-    pzy += 0.5f;
+    dt_dev_get_pointer_full_pos(dev, pointerx, pointery, &pzx, &pzy);
 
-    double dashed[] = { 4.0, 4.0 };
+    double dashed[] = { DT_PIXEL_APPLY_DPI(4.0), DT_PIXEL_APPLY_DPI(4.0) };
     dashed[0] /= zoom_scale;
     dashed[1] /= zoom_scale;
     const int len = sizeof(dashed) / sizeof(dashed[0]);
@@ -4085,9 +4123,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(wd < 1.0 || ht < 1.0) return 1;
 
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_zoom_pos(self->dev, x, y);
-  pzx += 0.5f;
-  pzy += 0.5f;
+  dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
 
   // if visibility of lines is switched off or no lines available, we have nothing to do
   if(!g->lines) return FALSE;
@@ -4298,9 +4334,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     return TRUE;
 
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_zoom_pos(self->dev, x, y);
-  pzx += 0.5f;
-  pzy += 0.5f;
+  dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
 
   const float wd = self->dev->preview_pipe->backbuf_width;
   const float ht = self->dev->preview_pipe->backbuf_height;
@@ -4313,8 +4347,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     g->straightening = TRUE;
     g->lastx = x;
     g->lasty = y;
-    g->straighten_x = pzx - 0.5f;
-    g->straighten_y = pzy - 0.5f;
+    g->straighten_x = pzx;
+    g->straighten_y = pzy;
     return TRUE;
   }
 
@@ -4602,7 +4636,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 
     // we compute the rectangle selection
     float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_zoom_pos(self->dev, x, y);
+    dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
 
     pzx += 0.5f;
     pzy += 0.5f;
@@ -4670,7 +4704,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     gboolean handled = FALSE;
 
     float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_zoom_pos(self->dev, x, y);
+    dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
     pzx += 0.5f;
     pzy += 0.5f;
 
@@ -4994,18 +5028,12 @@ static int _event_structure_auto_clicked(GtkWidget *widget, GdkEventButton *even
     _do_clean_structure(self, p, TRUE);
 
     const int control = dt_modifiers_include(event->state, GDK_CONTROL_MASK);
-    const int shift = dt_modifiers_include(event->state, GDK_SHIFT_MASK);
+    const int shift   = dt_modifiers_include(event->state, GDK_SHIFT_MASK);
 
-    dt_iop_ashift_enhance_t enhance;
+    dt_iop_ashift_enhance_t enhance =
+      (control ? ASHIFT_ENHANCE_EDGES : 0) | (shift   ? ASHIFT_ENHANCE_DETAIL : 0);
 
-    if(control && shift)
-      enhance = ASHIFT_ENHANCE_EDGES | ASHIFT_ENHANCE_DETAIL;
-    else if(shift)
-      enhance = ASHIFT_ENHANCE_DETAIL;
-    else if(control)
-      enhance = ASHIFT_ENHANCE_EDGES;
-    else
-      enhance = ASHIFT_ENHANCE_NONE;
+    if(!enhance) enhance = ASHIFT_ENHANCE_NONE;
 
     // if the button is unselected, we don't go further
     if(enhance == ASHIFT_ENHANCE_NONE && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget)))

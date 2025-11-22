@@ -320,7 +320,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(g && g->draw_selected_region && g->button_down && self->enabled)
   {
     float pzx = 0.f, pzy = 0.f;
-    dt_dev_get_pointer_zoom_pos(darktable.develop, x, y);
+    dt_dev_get_pointer_full_pos(darktable.develop, x, y, &pzx, &pzy);
 
     g->posx_to = pzx * darktable.develop->preview_pipe->backbuf_width;
     g->posy_to = pzy * darktable.develop->preview_pipe->backbuf_height;
@@ -383,7 +383,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     {
       float pzx = 0.f;
       float pzy = 0.f;
-      dt_dev_get_pointer_zoom_pos(darktable.develop, x, y);
+      dt_dev_get_pointer_full_pos(darktable.develop, x, y, &pzx, &pzy);
 
       g->posx_from = g->posx_to = pzx * darktable.develop->preview_pipe->backbuf_width;
       g->posy_from = g->posy_to = pzy * darktable.develop->preview_pipe->backbuf_height;
@@ -408,7 +408,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_develop_t *dev = darktable.develop;
   //const float wd = dev->preview_pipe->backbuf_width;
   //const float ht = dev->preview_pipe->backbuf_height;
-  const float zoom_scale = dt_dev_get_zoom_scale(dev,  1);
+  const float zoom_scale = dev->scaling;
 
   const float posx_from = fmin(g->posx_from, g->posx_to);
   const float posx_to = fmax(g->posx_from, g->posx_to);
@@ -419,8 +419,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   cairo_set_line_width(cr, 1.0 / zoom_scale);
   cairo_set_source_rgb(cr, .2, .2, .2);
 
-  cairo_translate(cr, width / 2.0, height / 2.0f);
-  cairo_scale(cr, zoom_scale, zoom_scale);
+  //cairo_translate(cr, width / 2.0, height / 2.0f);
+  //cairo_scale(cr, zoom_scale, zoom_scale);
+  //cairo_translate(cr, -.5f * wd - dev->x * wd, -.5f * ht - dev->y * ht);
+  dt_dev_rescale_roi(dev, cr, width, height);
 
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 

@@ -1072,9 +1072,8 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
   dt_masks_form_t *form = darktable.develop->form_visible;
   dt_masks_form_gui_t *gui = darktable.develop->form_gui;
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_zoom_pos(darktable.develop, x, y);
-  pzx += 0.5f;
-  pzy += 0.5f;
+  dt_dev_get_pointer_full_pos(darktable.develop, x, y, &pzx, &pzy);
+
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);
 
   if(form->functions)
@@ -1091,9 +1090,7 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
   dt_masks_form_t *form = darktable.develop->form_visible;
   dt_masks_form_gui_t *gui = darktable.develop->form_gui;
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_zoom_pos(darktable.develop, x, y);
-  pzx += 0.5f;
-  pzy += 0.5f;
+  dt_dev_get_pointer_full_pos(darktable.develop, x, y, &pzx, &pzy);
 
   int ret = 0;
   const gboolean incr = dt_mask_scroll_increases(up);
@@ -1117,7 +1114,6 @@ void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, in
   float wd = dev->preview_pipe->backbuf_width;
   float ht = dev->preview_pipe->backbuf_height;
   if(wd < 1.0 || ht < 1.0) return;
-  dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery);
   float zoom_scale = 1.f;
 
   cairo_save(cr);

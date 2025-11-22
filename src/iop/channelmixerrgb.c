@@ -2198,7 +2198,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(wd == 0.f || ht == 0.f) return 0;
 
   float pzx = 0.f, pzy = 0.f;
-  dt_dev_get_pointer_zoom_pos(dev, x, y);
+  dt_dev_get_pointer_full_pos(dev, x, y, &pzx, &pzy);
   pzx *= wd;
   pzy *= ht;
 
@@ -2288,7 +2288,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   if(!g->is_cursor_close) return 0;
 
   float pzx = 0.f, pzy = 0.f;
-  dt_dev_get_pointer_zoom_pos(dev, x, y);
+  dt_dev_get_pointer_full_pos(dev, x, y, &pzx, &pzy);
   pzx *= wd;
   pzy *= ht;
 
@@ -2318,7 +2318,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   if(wd == 0.f || ht == 0.f) return 0;
 
   float pzx = 0.f, pzy = 0.f;
-  dt_dev_get_pointer_zoom_pos(dev, x, y);
+  dt_dev_get_pointer_full_pos(dev, x, y, &pzx, &pzy);
   pzx *= wd;
   pzy *= ht;
 
@@ -2340,14 +2340,14 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_output_profile_info(self->dev->pipe);
   if(work_profile == NULL) return;
 
-  dt_iop_channelmixer_rgb_gui_data_t *g = (dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
+  const dt_iop_channelmixer_rgb_gui_data_t *g = (const dt_iop_channelmixer_rgb_gui_data_t *)self->gui_data;
   if(!g->is_profiling_started) return;
 
   // Rescale and shift Cairo drawing coordinates
   dt_develop_t *dev = self->dev;
-  if(dt_dev_scale_roi(dev, cr, width, height)) return;
+  if(dt_dev_rescale_roi(dev, cr, width, height)) return;
+  const float zoom_scale = dev->scaling;
 
-  const float zoom_scale = dt_dev_get_zoom_scale(dev,  1);
   cairo_set_line_width(cr, 2.0 / zoom_scale);
   const double origin = 9. / zoom_scale;
   const double destination = 18. / zoom_scale;

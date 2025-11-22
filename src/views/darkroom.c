@@ -75,6 +75,14 @@
 
 DT_MODULE(1)
 
+typedef struct coords_t
+{
+  double roi_coord[2];  // coordinates in ROI space
+  double roi_delta[2];  // delta in ROI space
+  double full_delta[2]; // delta in image space
+  double full[2];       // coordinates in image space
+}coords_t;
+
 static void _update_softproof_gamut_checking(dt_develop_t *d);
 
 /* signal handler for filmstrip image switching */
@@ -140,10 +148,8 @@ static dt_darkroom_layout_t _lib_darkroom_get_layout(dt_view_t *self)
   return DT_DARKROOM_LAYOUT_EDITING;
 }
 
-/*
 static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
-                                   int32_t width, int32_t height,
-                                   dt_dev_zoom_t zoom, int closeup, float zoom_x, float zoom_y,
+                                   int32_t width, int32_t height, int32_t pozx, int32_t pozy,
                                    GSList *samples, gboolean is_primary_sample)
 {
   if(!samples) return;
@@ -152,8 +158,8 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
 
   cairo_save(cri);
   // The colorpicker samples bounding rectangle should only be displayed inside the visible image
-  const int pwidth = (dev->pipe->output_backbuf_width<<closeup) / darktable.gui->ppd;
-  const int pheight = (dev->pipe->output_backbuf_height<<closeup) / darktable.gui->ppd;
+  const int pwidth = (dev->pipe->output_backbuf_width) / darktable.gui->ppd;
+  const int pheight = (dev->pipe->output_backbuf_height) / darktable.gui->ppd;
 
   const double hbar = (self->width - pwidth) * .5;
   const double tbar = (self->height - pheight) * .5;
@@ -162,13 +168,13 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
 
   const double wd = dev->preview_pipe->backbuf_width;
   const double ht = dev->preview_pipe->backbuf_height;
-  const double zoom_scale = dt_dev_get_zoom_scale(dev,  1);
+  const double zoom_scale = dt_dev_get_zoom_scale(dev, 1);
   const double lw = 1.0 / zoom_scale;
   const double dashes[1] = { lw * 4.0 };
 
   cairo_translate(cri, 0.5 * width, 0.5 * height);
   cairo_scale(cri, zoom_scale, zoom_scale);
-  cairo_translate(cri, -0.5 * wd - zoom_x * wd, -0.5 * ht - zoom_y * ht);
+  cairo_translate(cri, -0.5 * wd - pozx * wd, -0.5 * ht - pozy * ht);
 
   // makes point sample crosshair gap look nicer
   cairo_set_line_cap(cri, CAIRO_LINE_CAP_SQUARE);
@@ -285,7 +291,6 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
 
   cairo_restore(cri);
 }
-*/
 
 void _colormanage_ui_color(const float L, const float a, const float b, dt_aligned_pixel_t RGB)
 {
@@ -307,10 +312,7 @@ void expose(
   cairo_save(cri);
 
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  const int32_t tb = dev->border_size;
-  // account for border, make it transparent for other modules called below:
-  pointerx -= tb;
-  pointery -= tb;
+  const int32_t border = dev->border_size;
 
   dt_pthread_mutex_t *mutex = NULL;
   int stride;
@@ -343,24 +345,22 @@ void expose(
   cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
   cairo_paint(cr);
 
-  if(dev->pipe->output_backbuf && dev->pipe->output_imgid == dev->image_storage.id)
+  if(!dev->pipe->processing && dev->pipe->output_backbuf && dev->pipe->output_imgid == dev->image_storage.id)
   {
     // draw image
     mutex = &dev->pipe->backbuf_mutex;
     dt_pthread_mutex_lock(mutex);
-    float wd = dev->pipe->output_backbuf_width;
-    float ht = dev->pipe->output_backbuf_height;
+    const float wd = dev->pipe->output_backbuf_width;
+    const float ht = dev->pipe->output_backbuf_height;
     stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
     surface = dt_cairo_image_surface_create_for_data(dev->pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
-    wd /= darktable.gui->ppd;
-    ht /= darktable.gui->ppd;
 
     cairo_translate(cr, ceilf(.5f * (width - wd)), ceilf(.5f * (height - ht)));
 
     if(dev->iso_12646.enabled)
     {
       // draw the white frame around picture
-      cairo_rectangle(cr, -tb / 2, -tb / 2., wd + tb, ht + tb);
+      cairo_rectangle(cr, -border * .5f, -border * .5f, wd + border, ht + border);
       cairo_set_source_rgb(cr, 1., 1., 1.);
       cairo_fill(cr);
     }
@@ -374,36 +374,48 @@ void expose(
     dt_pthread_mutex_unlock(mutex);
     image_surface_imgid = dev->image_storage.id;
   }
+  
+  // fallback to preview pipe if main pipe is not ready
   else if(dev->preview_pipe->output_backbuf && dev->preview_pipe->output_imgid == dev->image_storage.id)
   {
     // draw preview
     mutex = &dev->preview_pipe->backbuf_mutex;
     dt_pthread_mutex_lock(mutex);
-
-    const float wd = dev->preview_pipe->output_backbuf_width;
-    const float ht = dev->preview_pipe->output_backbuf_height;
-    float zoom_scale = 1.f;
-
+    const float pr_wd = dev->preview_pipe->output_backbuf_width / darktable.gui->ppd;
+    const float pr_ht = dev->preview_pipe->output_backbuf_height / darktable.gui->ppd;
+    
     if(dev->iso_12646.enabled)
     {
-      // draw the white frame around picture
-      cairo_rectangle(cr, 2 * tb / 3., 2 * tb / 3.0, width - 4. * tb / 3., height - 4. * tb / 3.);
-      cairo_set_source_rgb(cr, 1., 1., 1.);
+      // Because the preview pipe renders an unclipped image, we need to find
+      // the preview's ROI (Region of Interest) dimensions in widget space, then
+      // draw a white rectangle around it.
+      const float wd = pr_wd * dev->scaling;
+      const float ht = pr_ht * dev->scaling;
+      const float roi_wd = fminf(wd, dev->width);
+      const float roi_ht = fminf(ht, dev->height);
+      
+      cairo_save(cr);
+      // Position surface at preview's ROI top-left corner.
+      cairo_translate(cr, ceilf(.5f * (width - roi_wd)), ceilf(.5f * (height - roi_ht)));
+
+      cairo_rectangle(cr, -border * .5f, -border * .5f, roi_wd + border, roi_ht + border);
+      cairo_set_source_rgb(cr, 1.f, 1.f, 1.f);
       cairo_fill(cr);
+      cairo_restore(cr);
     }
 
-    cairo_rectangle(cr, tb, tb, width-2*tb, height-2*tb);
-    cairo_clip(cr);
-    stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
-    surface
-        = cairo_image_surface_create_for_data(dev->preview_pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
-    cairo_translate(cr, width / 2.0, height / 2.0f);
-    cairo_scale(cr, zoom_scale, zoom_scale);
+    // clip to image area only
+    dt_dev_clip_roi(dev, cr, width, height);
+    dt_dev_rescale_roi(dev, cr, width, height);
+    
+    stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, pr_wd);
+    surface = cairo_image_surface_create_for_data(dev->preview_pipe->output_backbuf, CAIRO_FORMAT_RGB24, pr_wd, pr_ht, stride);
 
-    cairo_rectangle(cr, 0, 0, wd, ht);
+    cairo_rectangle(cr, 0, 0, pr_wd, pr_ht);
     cairo_set_source_surface(cr, surface, 0, 0);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_FAST);
     cairo_fill(cr);
+    
     cairo_surface_destroy(surface);
     dt_pthread_mutex_unlock(mutex);
     image_surface_imgid = dev->image_storage.id;
@@ -441,33 +453,51 @@ void expose(
          || (darktable.lib->proxy.colorpicker.selected_sample &&
              darktable.lib->proxy.colorpicker.selected_sample != darktable.lib->proxy.colorpicker.primary_sample)))
   {
-    /*_darkroom_pickers_draw(
-      self, cri, width, height, zoom, closeup, zoom_x, zoom_y,
-      darktable.lib->proxy.colorpicker.live_samples, FALSE);
-    */
+    _darkroom_pickers_draw(self, cri, width, height, pointerx, pointery, darktable.lib->proxy.colorpicker.live_samples, FALSE);
   }
 
   // draw guide lines if needed
   if(!dev->gui_module || !(dev->gui_module->flags() & IOP_FLAGS_GUIDES_SPECIAL_DRAW))
   {
-    /*
-    // we restrict the drawing to the image only
-    // the drawing is done on the preview pipe reference
-    const float wd = dev->preview_pipe->backbuf_width;
-    const float ht = dev->preview_pipe->backbuf_height;
-    const float zoom_scale = dt_dev_get_zoom_scale(dev,  1);
-
     cairo_save(cri);
     // don't draw guides on image margins
-    cairo_rectangle(cri, tb, tb, width - 2 * tb, height - 2 * tb);
+    cairo_rectangle(cri, border, border, (width - 2 * border), (height - 2 * border));
     cairo_clip(cri);
-    // switch to the preview reference
-    cairo_translate(cri, width / 2.0, height / 2.0);
-    cairo_scale(cri, zoom_scale, zoom_scale);
-    cairo_translate(cri, -.5f * wd - zoom_x * wd, -.5f * ht - zoom_y * ht);
-    dt_guides_draw(cri, 0.0f, 0.0f, wd, ht, zoom_scale);
+    
+    float guide_wd = 0.f, guide_ht = 0.f;
+    // Get image position - use same coordinates as image rendering
+    const float roi_cntr_x = dev->x - 0.5f;  // Convert from [0,1] to [-0.5, 0.5] centered coordinates
+    const float roi_cntr_y = dev->y - 0.5f;
+    
+    if(dev->pipe->output_backbuf && dev->pipe->output_imgid == dev->image_storage.id)
+    {
+      // Main pipe: use real image dimensions with zoom applied, not backbuf dimensions
+      guide_wd = dev->pipe->processed_width * dev->scaling * dev->natural_scale;
+      guide_ht = dev->pipe->processed_height * dev->scaling * dev->natural_scale;
+      
+      // Apply centering transformation, accounting for image position
+      cairo_translate(cri, ceilf(.5f * (width - guide_wd)) - roi_cntr_x * guide_wd, 
+                           ceilf(.5f * (height - guide_ht)) - roi_cntr_y * guide_ht);
+      // No scaling needed for main pipe, already at display size
+    }
+    else if(dev->preview_pipe->output_backbuf && dev->preview_pipe->output_imgid == dev->image_storage.id)
+    {
+      // Preview pipe
+      guide_wd = dev->preview_pipe->output_backbuf_width * darktable.gui->ppd;
+      guide_ht = dev->preview_pipe->output_backbuf_height * darktable.gui->ppd;
+      const float zoom_scale = dev->scaling;
+      
+      // Apply transformation
+      cairo_translate(cri, width * .5f, height * .5f);
+      cairo_scale(cri, zoom_scale, zoom_scale);
+      cairo_translate(cri, -.5f * (guide_wd) - roi_cntr_x * (guide_wd), 
+                          -.5f * (guide_ht) - roi_cntr_y * (guide_ht));
+    }
+
+
+    // draw guides with backbuffer dimensions, positioning and scaling handled by transformations
+    dt_guides_draw(cri, 0, 0, guide_wd, guide_ht, 1.0f);
     cairo_restore(cri);
-    */
   }
 
   // display mask if we have a current module activated or if the masks manager module is expanded
@@ -2113,27 +2143,14 @@ static void _do_delayed_history_commit(dt_develop_t *dev)
   dev->drawing_timeout = g_timeout_add(DRAWING_TIMEOUT, _delayed_history_commit, dev);
 }
 
-void _magic_schwalm_offset(dt_develop_t *dev, dt_view_t *self, float *offx, float *offy)
-{
-  // TODO: find out why this is necessary and fix it.
-  const int32_t tb = dev->border_size;
-  const int32_t capwd = self->width - 2 * tb;
-  const int32_t capht = self->height - 2 * tb;
-  const int32_t width_i = self->width;
-  const int32_t height_i = self->height;
-  if(width_i > capwd) *offx = (double)(capwd - width_i) * .5f;
-  if(height_i > capht) *offy = (double)(capht - height_i) * .5f;
-}
-
-
 void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  float offx = 0.0f, offy = 0.0f;
-  _magic_schwalm_offset(dev, self, &offx, &offy);
-
   dt_control_t *ctl = darktable.control;
 
+  //fprintf(stdout, "dev->xy (%2.2f, %2.2f)\n", dev->x, dev->y);
+
+  // change cursor appearance
   if(mouse_in_imagearea(self, x, y))
     dt_control_change_cursor(GDK_DOT);
   else if(mouse_in_actionarea(self, x, y))
@@ -2153,29 +2170,28 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       float delta_x = 1 / (float) dev->pipe->processed_width;
       float delta_y = 1 / (float) dev->pipe->processed_height;
 
-      float zoom_x = 0.f;
-      float zoom_y = 0.f;
-      dt_dev_get_pointer_zoom_pos(dev, x + offx, y + offy);
+      float mouse_x = 0.f;
+      float mouse_y = 0.f;
+      dt_dev_get_pointer_full_pos(dev, x, y, &mouse_x, &mouse_y);
 
       if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
       {
-        sample->box[0] = fmaxf(0.0, MIN(sample->point[0], .5f + zoom_x) - delta_x);
-        sample->box[1] = fmaxf(0.0, MIN(sample->point[1], .5f + zoom_y) - delta_y);
-        sample->box[2] = fminf(1.0, MAX(sample->point[0], .5f + zoom_x) + delta_x);
-        sample->box[3] = fminf(1.0, MAX(sample->point[1], .5f + zoom_y) + delta_y);
+        sample->box[0] = fmaxf(0.0, MIN(sample->point[0], .5f + mouse_x) - delta_x);
+        sample->box[1] = fmaxf(0.0, MIN(sample->point[1], .5f + mouse_y) - delta_y);
+        sample->box[2] = fminf(1.0, MAX(sample->point[0], .5f + mouse_x) + delta_x);
+        sample->box[3] = fminf(1.0, MAX(sample->point[1], .5f + mouse_y) + delta_y);
       }
       else if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
       {
-        sample->point[0] = .5f + zoom_x;
-        sample->point[1] = .5f + zoom_y;
+        sample->point[0] = .5f + mouse_x;
+        sample->point[1] = .5f + mouse_y;
       }
     }
 
     dt_control_queue_redraw_center();
     return;
   }
-  x += offx;
-  y += offy;
+
   // masks
   if(dev->form_visible && dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which))
   {
@@ -2192,9 +2208,38 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     return;
   }
 
-  if(darktable.control->button_down && darktable.control->button_down_which == 1)
+  // panning with left mouse button
+  if(darktable.control->button_down && darktable.control->button_down_which == 1 && dev->scaling > 1)
   {
+    const float nat_scale = dt_dev_get_natural_scale(dev, dev->pipe);
+    const float scale = nat_scale * dev->scaling;
+    const double clicked_x = ctl->button_x;
+    const double clicked_y = ctl->button_y;
+    // delta in roi scale
+    const double roi_dx = x - clicked_x;
+    const double roi_dy = y - clicked_y;
+    // convert to full image scale
+    const double img_dx = roi_dx / scale;
+    const double img_dy = roi_dy / scale;
 
+    // new roi position in full image scale
+    float new_x = dev->x - (img_dx / (float)dev->pipe->processed_width);
+    float new_y = dev->y - (img_dy / (float)dev->pipe->processed_height);
+  
+    //fprintf(stderr, "BOUNDS new_x: %2.2f, new_y: %2.2f\n", new_x, new_y);
+    dt_dev_check_zoom_pos_bounds(dev, &new_x, &new_y, NULL, NULL); 
+
+    dev->x = new_x;
+    dev->y = new_y;
+
+    // update clicked position
+    ctl->button_x = x;
+    ctl->button_y = y;
+
+    dt_control_queue_redraw_center();
+    dt_control_navigation_redraw();
+    dt_dev_invalidate_zoom(dev);
+    dt_dev_refresh_ui_images(dev);
   }
 }
 
@@ -2202,8 +2247,6 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 int button_released(dt_view_t *self, double x, double y, int which, uint32_t state)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  float offx = 0.0f, offy = 0.0f;
-  _magic_schwalm_offset(dev, self, &offx, &offy);
 
   if(!mouse_in_actionarea(self, x, y)) return 0;
 
@@ -2244,10 +2287,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
 int button_pressed(dt_view_t *self, double x, double y, double pressure, int which, int type, uint32_t state)
 {
   dt_colorpicker_sample_t *const sample = darktable.lib->proxy.colorpicker.primary_sample;
-
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  float offx = 0.0f, offy = 0.0f;
-  _magic_schwalm_offset(dev, self, &offx, &offy);
 
   if(!mouse_in_actionarea(self, x, y)) return 0;
 
@@ -2357,8 +2397,6 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     }
   }
 
-  x += offx;
-  y += offy;
   // masks
   if(dev->form_visible && dt_masks_events_button_pressed(dev->gui_module, x, y, pressure, which, type, state))
   {
@@ -2374,13 +2412,57 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   return 0;
 }
 
+static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int up, int state)
+{
+  int flow = 2; // to be wired to scroll flow control form the mask rework
+  dt_develop_t *dev = darktable.develop;
+  int proc_w = 0.f, proc_h = 0.f;
+  dt_dev_get_processed_size(dev, &proc_w, &proc_h);
+  const float ppd = darktable.gui->ppd;
+  const float old_dev_scaling = dev->scaling;
+  const float natural_scale = dt_dev_get_natural_scale(dev, dev->pipe);
+
+  // Commit the new scaling
+  const float step = (up ? 1.02f : 0.98f) / ppd;
+  dev->scaling *= powf(step, flow);
+
+  if(dt_dev_check_zoom_scale_bounds(dev)) return TRUE;
+
+  // Round scaling to 1.0 (fit) if close enough
+  const float epsilon = fabsf(old_dev_scaling - dev->scaling);
+  if(fabsf(dev->scaling - 1.0f) < epsilon)
+    dev->scaling = 1.0f;
+  
+  // Calculate zoom position offset to keep mouse position fixed during zoom (division-free)
+  const float mouse_off_x = x - 0.5f * dev->orig_width;
+  const float mouse_off_y = y - 0.5f * dev->orig_height;
+  const float base_scale = proc_w * natural_scale * dev->scaling;
+  const float scale_delta = dev->scaling - old_dev_scaling;
+  const float scale_denominator = base_scale * old_dev_scaling;
+  
+  // Single division for both coordinates
+  const float position_factor = scale_delta / scale_denominator;
+  
+  // Adjust center position to maintain mouse position
+  dev->x += mouse_off_x * position_factor;
+  dev->y += mouse_off_y * position_factor;
+  
+  dt_dev_check_zoom_pos_bounds(dev, &dev->x, &dev->y, NULL, NULL);
+
+  dt_control_queue_redraw_center();
+  dt_control_navigation_redraw();
+  dt_dev_invalidate_zoom(dev);
+  dt_dev_refresh_ui_images(dev);
+
+  return TRUE;
+}
+
+
 int scrolled(dt_view_t *self, double x, double y, int up, int state)
 {
   if(_is_scroll_captured_by_widget()) return FALSE;
 
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  float offx = 0.0f, offy = 0.0f;
-  _magic_schwalm_offset(dev, self, &offx, &offy);
 
   if(!mouse_in_actionarea(self, x, y)) return FALSE;
 
@@ -2402,7 +2484,8 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state)
     return TRUE;
   }
 
-  return TRUE;
+  // free zoom
+  return _center_view_free_zoom(self, x, y, up, state);
 }
 
 
