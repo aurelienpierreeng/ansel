@@ -2790,9 +2790,9 @@ void gui_post_expose(struct dt_iop_module_t *module,
   dt_pthread_mutex_unlock(&develop->preview_pipe->busy_mutex);
 
   // You're not supposed to understand this
-  const float zoom_scale = get_zoom_scale(develop);
+  const float zoom_scale = develop->scaling;
 
-  dt_dev_scale_roi(develop, cr, width, height);
+  dt_dev_rescale_roi(develop, cr, width, height);
 
   draw_paths(module, cr, 1.0 / (scale * zoom_scale), &copy_params);
 }
@@ -2840,7 +2840,7 @@ static void sync_pipe(struct dt_iop_module_t *module, gboolean history)
 static void get_point_scale(struct dt_iop_module_t *module, float x, float y, float complex *pt, float *scale)
 {
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_zoom_pos(darktable.develop, x, y);
+  dt_dev_get_pointer_full_pos(darktable.develop, x, y, &pzx, &pzy);
   pzx += 0.5f;
   pzy += 0.5f;
   const float wd = darktable.develop->preview_pipe->backbuf_width;

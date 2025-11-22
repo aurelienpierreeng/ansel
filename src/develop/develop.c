@@ -16,6 +16,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include <assert.h>
+#include <cairo/cairo.h>
 #include <glib/gprintf.h>
 #include <math.h>
 #include <stdint.h>
@@ -48,6 +49,30 @@
 #define DT_DEV_PREVIEW_AVERAGE_DELAY_START 50
 #define DT_DEV_AVERAGE_DELAY_COUNT 5
 #define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
+
+static gchar *_debug_get_pipe_type_str(dt_dev_pixelpipe_type_t pipe_type)
+{
+  gchar *type_str = NULL;
+
+  switch(pipe_type & DT_DEV_PIXELPIPE_ANY)
+  {
+    case DT_DEV_PIXELPIPE_PREVIEW:
+      type_str = g_strdup("PREVIEW");
+      break;
+    case DT_DEV_PIXELPIPE_FULL:
+      type_str = g_strdup("FULL");
+      break;
+    case DT_DEV_PIXELPIPE_THUMBNAIL:
+      type_str = g_strdup("THUMBNAIL");
+      break;
+    case DT_DEV_PIXELPIPE_EXPORT:
+      type_str = g_strdup("EXPORT");
+      break;
+    default:
+      type_str = g_strdup("UNKNOWN");
+  }
+  return type_str;
+}
 
 void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
 {
@@ -233,12 +258,12 @@ void dt_dev_process_preview(dt_develop_t *dev)
 
 void dt_dev_refresh_ui_images_real(dt_develop_t *dev)
 {
-  if(dt_atomic_get_int(&dev->pipe->shutdown) && !dev->pipe->processing)
-    dt_dev_process_image(dev);
-  // else : join current pipe
-
   if(dt_atomic_get_int(&dev->preview_pipe->shutdown) && !dev->preview_pipe->processing)
     dt_dev_process_preview(dev);
+  // else : join current pipe
+
+  if(dt_atomic_get_int(&dev->pipe->shutdown) && !dev->pipe->processing)
+    dt_dev_process_image(dev);
   // else : join current pipe
 }
 
@@ -441,21 +466,16 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
   *scale = dev->natural_scale = dt_dev_get_natural_scale(dev, pipe);
 
   // The full pipeline shows only the ROI, which may be zoomed in/out
-  if(pipe->type == DT_DEV_PIXELPIPE_FULL)
-    *scale *= dev->scaling;
+  if(pipe->type == DT_DEV_PIXELPIPE_FULL) *scale *= dev->scaling;
 
   // Backbuf size depends on GUI window size only
-  *wd = roundf(*scale * pipe->processed_width);
-  *ht = roundf(*scale * pipe->processed_height);
+  *wd = fminf(roundf(*scale * pipe->processed_width), dev->width);
+  *ht = fminf(roundf(*scale * pipe->processed_height), dev->height);
 
   // dev->x,y are the relative coordinates of the ROI center.
   // x,y here are the top-left corner. Translate:
   *x = roundf(dev->x * pipe->processed_width * *scale - *wd / 2.);
   *y = roundf(dev->y * pipe->processed_height * *scale - *ht / 2.);
-  fprintf(stdout, "x,y: (%i, %i)\n", *x, *y);
-
-  *x = CLAMP(*x, 0, pipe->processed_width - *wd - 1);
-  *y = CLAMP(*y, 0, pipe->processed_height - *ht - 1) ;
 
   return x_old != *x || y_old != *y || wd_old != *wd || ht_old != *ht || old_scale != *scale;
 }
@@ -490,7 +510,9 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
   if(!finish_on_error)
   {
     dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, buf_width, buf_height, DT_MIPMAP_FULL);
-    dt_print(DT_DEBUG_DEV, "[pixelpipe] Started darkroom pipe %i recompute at %i×%i px\n", pipe->type, dev->width, dev->height);
+    gchar *type = _debug_get_pipe_type_str(pipe->type);
+    dt_print(DT_DEBUG_DEV, "[pixelpipe] Started darkroom pipe %s recompute at %i×%i px\n", type, dev->width, dev->height);
+    g_free(type);
   }
 
   pipe->processing = 1;
@@ -618,6 +640,7 @@ static inline int _dt_dev_load_raw(dt_develop_t *dev, const int32_t imgid)
   return (no_valid_image);
 }
 
+// return the zoom scale to fit into the viewport
 float dt_dev_get_zoom_scale(dt_develop_t *dev, const gboolean preview)
 {
   const float w = preview ? dev->preview_pipe->processed_width : dev->pipe->processed_width;
@@ -676,6 +699,37 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
   }
 }
 
+void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h)
+{
+  int proc_w, proc_h;
+  dt_dev_get_processed_size(dev, &proc_w, &proc_h);
+  const float scale = dt_dev_get_natural_scale(dev, dev->pipe) * dev->scaling;
+
+  // find the box size
+  const float bw = dev->width / (proc_w * scale);
+  const float bh = dev->height / (proc_h * scale);
+
+  // calculate half-dimensions once
+  const float half_bw = bw * 0.5f;
+  const float half_bh = bh * 0.5f;
+
+  // clamp position using pre-calculated values
+  *dev_x = bw > 1.0f ? 0.5f : CLAMPF(*dev_x, half_bw, 1.0f - half_bw);
+  *dev_y = bh > 1.0f ? 0.5f : CLAMPF(*dev_y, half_bh, 1.0f - half_bh);
+  // return box size
+  if(box_w) *box_w = bw;
+  if(box_h) *box_h = bh;
+
+  /*
+  fprintf(stdout, "BOUNDS: box size: %2.2f x %2.2f\n", bw, bh);
+  fprintf(stdout, "BOUNDS: half box size: %2.2f x %2.2f\n", half_bw, half_bh);
+  fprintf(stdout, "BOUNDS: X pos: %2.2f -> %2.2f [%2.2f %2.2f]\n",
+    old_x, *dev_x, half_bw, 1.0f - half_bw);
+  fprintf(stdout, "BOUNDS: Y pos: %2.2f -> %2.2f [%2.2f %2.2f]\n",
+    old_y, *dev_y, half_bh, 1.0f - half_bh);
+*/
+}
+
 void dt_dev_reprocess_all(dt_develop_t *dev)
 {
   dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
@@ -711,8 +765,21 @@ void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch)
   return;
 }
 
-void dt_dev_get_pointer_zoom_pos(dt_develop_t *dev, const float px, const float py)
+// returns the position in full processed image coordinates [0..1]
+void dt_dev_get_pointer_full_pos(dt_develop_t *dev, const float px, const float py, float *mouse_x, float *mouse_y)
 {
+  const int wd = dev->pipe->processed_width;
+  const int ht = dev->pipe->processed_height;
+  if(wd == 0 || ht == 0) return; // avoid division by zero
+
+  const float scale = dt_dev_get_natural_scale(dev, dev->pipe) * dev->scaling;
+
+  // calculate delta from center in processed image coordinates
+  const float dx = px - 0.5f * dev->width - dev->border_size;
+  const float dy = py - 0.5f * dev->height - dev->border_size;
+
+  if(mouse_x) *mouse_x = dev->x + dx / (dev->pipe->processed_width * scale);
+  if(mouse_y) *mouse_y = dev->y + dy / (dev->pipe->processed_height * scale);
 }
 
 int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid)
@@ -904,7 +971,8 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
 
       if(module == hist->module)
       {
-        dt_print(DT_DEBUG_HISTORY, "[dt_module_remode] removing obsoleted history item: %s %s %p %p\n", hist->module->op, hist->module->multi_name, module, hist->module);
+        dt_print(DT_DEBUG_HISTORY, "[dt_module_remode] removing obsoleted history item: %s %s %p %p\n",
+                 hist->module->op, hist->module->multi_name, module, hist->module);
         dt_dev_free_history_item(hist);
         dev->history = g_list_delete_link(dev->history, elem);
         dt_dev_set_history_end(dev, dt_dev_get_history_end(dev) - 1);
@@ -951,8 +1019,12 @@ void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *mod
   dt_iop_module_t *mod_prev = dt_iop_gui_get_previous_visible_module(module);
   dt_iop_module_t *mod_next = dt_iop_gui_get_next_visible_module(module);
 
-  const gboolean move_next = (mod_next && mod_next->iop_order != INT_MAX) ? dt_ioppr_check_can_move_after_iop(dev->iop, module, mod_next) : -1.0;
-  const gboolean move_prev = (mod_prev && mod_prev->iop_order != INT_MAX) ? dt_ioppr_check_can_move_before_iop(dev->iop, module, mod_prev) : -1.0;
+  const gboolean move_next = (mod_next && mod_next->iop_order != INT_MAX)
+                                 ? dt_ioppr_check_can_move_after_iop(dev->iop, module, mod_next)
+                                 : -1.0;
+  const gboolean move_prev = (mod_prev && mod_prev->iop_order != INT_MAX)
+                                 ? dt_ioppr_check_can_move_before_iop(dev->iop, module, mod_prev)
+                                 : -1.0;
 
   module->multi_show_new = !(module->flags() & IOP_FLAGS_ONE_INSTANCE);
   module->multi_show_close = (nb_instances > 1);
@@ -1141,7 +1213,7 @@ int dt_dev_wait_hash(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, const d
   nloop = dt_conf_get_int("pixelpipe_synchronization_timeout");
 #endif
 
-  if(nloop <= 0) return TRUE;  // non-positive values omit pixelpipe synchronization
+  if(nloop <= 0) return TRUE; // non-positive values omit pixelpipe synchronization
 
   for(int n = 0; n < nloop; n++)
   {
@@ -1227,11 +1299,9 @@ void dt_dev_undo_start_record(dt_develop_t *dev)
   /* record current history state : before change (needed for undo) */
   if(dev->gui_attached && cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM)
   {
-    DT_DEBUG_CONTROL_SIGNAL_RAISE
-      (darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_WILL_CHANGE,
-       dt_history_duplicate(dev->history),
-       dt_dev_get_history_end(dev),
-       dt_ioppr_iop_order_copy_deep(dev->iop_order_list));
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_WILL_CHANGE,
+                                  dt_history_duplicate(dev->history), dt_dev_get_history_end(dev),
+                                  dt_ioppr_iop_order_copy_deep(dev->iop_order_list));
   }
 }
 
@@ -1360,9 +1430,6 @@ void dt_dev_get_final_size(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const in
 
 float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe)
 {
-  fprintf(stdout, "NATURAL SCALE: %ix%i / %ix%i\n", dev->width, dev->height, pipe->processed_width,
-          pipe->processed_height);
-
   if(!pipe || pipe->processed_width == 0 || pipe->processed_height == 0)
     return darktable.gui->ppd;
   else
@@ -1380,19 +1447,71 @@ void dt_dev_reset_roi(dt_develop_t *dev)
   dev->y = 0.5f;
 }
 
-gboolean dt_dev_scale_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height)
-{
-  const float wd = dev->preview_pipe->backbuf_width;
-  const float ht = dev->preview_pipe->backbuf_height;
+gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height)
+{ 
+  const float wd = dev->preview_pipe->backbuf_width * darktable.gui->ppd;
+  const float ht = dev->preview_pipe->backbuf_height * darktable.gui->ppd;
   if(wd == 0.f || ht == 0.f) return TRUE;
 
-  const float zoom_scale = dt_dev_get_zoom_scale(dev,  1);
-  cairo_translate(cr, width / 2.0, height / 2.0);
-  cairo_scale(cr, zoom_scale, zoom_scale);
-  cairo_translate(cr, -.5f * wd - dev->x * wd, -.5f * ht - dev->y * ht);
+  const float zoom_scale = dev->scaling;
+  const int32_t border = dev->border_size;
+  const float roi_width = fminf(width, wd * zoom_scale);
+  const float roi_height = fminf(height, ht * zoom_scale);
+  
+  const float rec_x = fmaxf(border, (width - roi_width) * 0.5f);
+  const float rec_y = fmaxf(border, (height - roi_height) * 0.5f);
+  const float rec_w = fminf(width - 2 * border, roi_width);
+  const float rec_h = fminf(height - 2 * border, roi_height);
+
+  cairo_rectangle(cr, rec_x, rec_y, rec_w, rec_h);
+  cairo_clip(cr);
+
   return FALSE;
 }
 
+gboolean dt_dev_rescale_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height)
+{
+  const float wd = dev->preview_pipe->backbuf_width / darktable.gui->ppd;
+  const float ht = dev->preview_pipe->backbuf_height / darktable.gui->ppd;
+  if(wd == 0.f || ht == 0.f) return TRUE;
+
+  // Get image position and scale
+  const float roi_cntr_x = dev->x - 0.5f; // Convert from [0,1] to [-0.5, 0.5] centered coordinates
+  const float roi_cntr_y = dev->y - 0.5f;
+  const float zoom_scale = dev->scaling;
+
+  cairo_translate(cr, width * .5f, height * .5f);
+  cairo_scale(cr, zoom_scale, zoom_scale);
+  cairo_translate(cr, (-.5f * wd - roi_cntr_x * wd), (-.5f * ht - roi_cntr_y * ht));
+
+  return FALSE;
+}
+
+gboolean dt_dev_check_zoom_scale_bounds(dt_develop_t *dev)
+{
+  const float natural_scale = dev->natural_scale;
+  const float ppd = darktable.gui->ppd;
+
+  // Limit zoom in to 16x the size of an apparent pixel on screen
+  const float pixel_actual_size = natural_scale * dev->scaling;
+  const float pixel_max_size = 16.f * ppd;
+  
+  if(pixel_actual_size >= pixel_max_size)
+  {
+    // Restore old scaling (caller should handle this)
+    dev->scaling = pixel_max_size / natural_scale;
+    return TRUE;
+  }
+  
+  // Limit zoom out to 1/3rd of the fit-to-window size
+  const float min_scaling = 0.33f;
+  if(dev->scaling < min_scaling)
+  {
+    dev->scaling = min_scaling;
+    return TRUE;
+  }
+  return FALSE;
+}
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

@@ -106,33 +106,40 @@ const char **description(struct dt_iop_module_t *self)
                                 _("linear, RGB, scene-referred"));
 }
 
+/** Merges raw camera orientation with user-specified orientation
+ *  @param raw_orientation  Camera/EXIF orientation (bits: Y=1, X=2, XY=4)
+ *  @param user_orientation User rotation/flip request (same bit format)
+ *  @return Combined orientation for final image transformation
+ *  
+ *  When user requests XY swap, we must swap the X/Y flip bits in raw orientation
+ *  before applying the XOR combination. This ensures proper coordinate transformation.
+ */
 static dt_image_orientation_t merge_two_orientations(dt_image_orientation_t raw_orientation,
                                                      dt_image_orientation_t user_orientation)
 {
-  dt_image_orientation_t raw_orientation_corrected = raw_orientation;
-  /*
-   * if user-specified orientation has ORIENTATION_SWAP_XY set, then we need
-   * to swap ORIENTATION_FLIP_Y and ORIENTATION_FLIP_X bits
-   * in raw orientation
-   */
-  if((user_orientation & ORIENTATION_SWAP_XY) == ORIENTATION_SWAP_XY)
+  // Fast path: no coordinate swap needed
+  if(!(user_orientation & ORIENTATION_SWAP_XY))
   {
-    if((raw_orientation & ORIENTATION_FLIP_Y) == ORIENTATION_FLIP_Y)
-      raw_orientation_corrected |= ORIENTATION_FLIP_X;
-    else
-      raw_orientation_corrected &= ~ORIENTATION_FLIP_X;
-
-    if((raw_orientation & ORIENTATION_FLIP_X) == ORIENTATION_FLIP_X)
-      raw_orientation_corrected |= ORIENTATION_FLIP_Y;
-    else
-      raw_orientation_corrected &= ~ORIENTATION_FLIP_Y;
-
-    if((raw_orientation & ORIENTATION_SWAP_XY) == ORIENTATION_SWAP_XY)
-      raw_orientation_corrected |= ORIENTATION_SWAP_XY;
+    return raw_orientation ^ user_orientation;
   }
-
-  // and now we can automagically compute new flip
-  return raw_orientation_corrected ^ user_orientation;
+  
+  // When user requests XY swap, we need to swap X/Y flip bits in raw orientation
+  // Use bit manipulation for optimal performance
+  dt_image_orientation_t corrected = raw_orientation;
+  
+  // Extract flip bits from raw orientation  
+  const dt_image_orientation_t raw_flip_x = raw_orientation & ORIENTATION_FLIP_X;
+  const dt_image_orientation_t raw_flip_y = raw_orientation & ORIENTATION_FLIP_Y;
+  
+  // Clear existing flip bits and set swapped versions
+  corrected &= ~(ORIENTATION_FLIP_X | ORIENTATION_FLIP_Y);
+  corrected |= (raw_flip_y << 1) | (raw_flip_x >> 1);  // Swap X↔Y bits efficiently
+  
+  // Preserve original XY swap bit if it was set
+  corrected |= (raw_orientation & ORIENTATION_SWAP_XY);
+  
+  // Apply user transformation via XOR
+  return corrected ^ user_orientation;
 }
 
 int legacy_params(dt_iop_module_t *self, const void *const old_params, const int old_version,

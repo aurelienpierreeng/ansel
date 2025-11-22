@@ -119,6 +119,11 @@ typedef enum dt_clipping_preview_mode_t
   DT_CLIPPING_PREVIEW_SATURATION = 3
 } dt_clipping_preview_mode_t;
 
+typedef enum dt_dev_pipe_type_t
+{
+  DT_DEV_PIPE = 0,
+  DT_DEV_PREVIEW_PIPE = 1
+} dt_dev_pipe_type_t;
 typedef struct dt_dev_proxy_exposure_t
 {
   struct dt_iop_module_t *module;
@@ -141,8 +146,10 @@ typedef struct dt_backbuf_t
 
 typedef struct dt_develop_t
 {
-  int32_t gui_attached; // != 0 if the gui should be notified of changes in hist stack and modules should be
-                        // gui_init'ed.
+  // != 0 if the gui should be notified of changes in hist stack and modules should be
+  // gui_init'ed.
+  int32_t gui_attached; 
+
   int exit; // set to 1 to close background darkroom pipeline threads
   uint32_t average_delay;
   uint32_t preview_average_delay;
@@ -398,10 +405,24 @@ void dt_dev_reprocess_all(dt_develop_t *dev);
 void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch);
 
 float dt_dev_get_zoom_scale(dt_develop_t *dev, gboolean preview);
-void dt_dev_get_pointer_zoom_pos(dt_develop_t *dev, const float px, const float py);
+
+/**
+ * @brief Get the pointer position in relation of processed image [0..1].
+ * This takes into account the borders around the image. The input mouse coordinates
+ * are in widget space, without border subtraction.
+ * 
+ * @param dev the develop instance
+ * @param px the x mouse coordinate in widget space, with no border subtraction.
+ * @param py the y mouse coordinate in widget space, with no border subtraction.
+ * @param mouse_x the returned x mouse coordinate relative to processed image [0..1].
+ * @param mouse_y the returned y mouse coordinate relative to processed image [0..1].
+ */
+void dt_dev_get_pointer_full_pos(dt_develop_t *dev, const float px, const float py, float *mouse_x, float *mouse_y);
 
 void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht);
 #define dt_dev_configure(dev, wd, ht) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_configure_real, (dev), (wd), (ht))
+
+void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h);
 
 /*
  * exposure plugin hook, set the exposure and the black level
@@ -547,9 +568,37 @@ float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
 // Reset darkroom ROI scaling and position
 void dt_dev_reset_roi(dt_develop_t *dev);
 
-// Return TRUE if width/height are invalid or unavailable
-gboolean dt_dev_scale_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height);
+/**
+ * @brief Clip the view to the ROI.
+ * WARNING: this must be done before any translation.
+ * 
+ * @param dev the develop instance
+ * @param cr the cairo context to clip on
+ * @param width the view width
+ * @param height the view height
+ * @return gboolean TRUE if the image dimension are 0x0
+ */
+gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height);
 
+/**
+ * @brief Scale the ROI to fit within given width/height, centered.
+ * 
+ * @param dev the develop instance
+ * @param cr the cairo context to draw on
+ * @param width the target width
+ * @param height the target height
+ * @param clip whether to clip to the visible area
+ * @return gboolean TRUE if the image dimension are 0x0
+ */
+gboolean dt_dev_rescale_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height);
+
+/**
+ * @brief Ensure that the current zoom level is within allowed bounds.
+ * 
+ * @param dev the develop instance
+ * @return gboolean TRUE if the zoom level was adjusted, FALSE otherwise
+ */
+gboolean dt_dev_check_zoom_scale_bounds(dt_develop_t *dev);
 
 #ifdef __cplusplus
 }

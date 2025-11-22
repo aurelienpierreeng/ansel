@@ -1890,7 +1890,7 @@ static void show_luminance_mask_callback(GtkWidget *togglebutton, GdkEventButton
  * GUI Interactivity
  **/
 
-static void switch_cursors(struct dt_iop_module_t *self)
+static void _switch_cursors(struct dt_iop_module_t *self)
 {
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
   if(!g || !self->dev->gui_attached) return;
@@ -1985,7 +1985,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(wd < 1 || ht < 1) return 0;
 
   float pzx = 0.f, pzy = 0.f;
-  dt_dev_get_pointer_zoom_pos(dev, x, y);
+  dt_dev_get_pointer_full_pos(dev, x, y, &pzx, &pzy);
 
   const int x_pointer = pzx * wd;
   const int y_pointer = pzy * ht;
@@ -2013,7 +2013,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
                                                          g->thumb_preview_buf_height,
                                                          (size_t)x_pointer, (size_t)y_pointer));
 
-  switch_cursors(self);
+  _switch_cursors(self);
   return 1;
 }
 
@@ -2289,14 +2289,14 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(isnan(correction) || isnan(exposure_in)) return; // something went wrong
 
   // Rescale and shift Cairo drawing coordinates
-  const float zoom_scale = dt_dev_get_zoom_scale(dev,  1);
-  dt_dev_scale_roi(dev, cr, width, height);
+  const float zoom_scale = dev->scaling;
+  dt_dev_rescale_roi(dev, cr, width, height);
 
   // set custom cursor dimensions
   const double outer_radius = 16.;
   const double inner_radius = outer_radius / 2.0;
   const double setting_offset_x = (outer_radius + 4. * g->inner_padding) / zoom_scale;
-  const double fill_width = DT_PIXEL_APPLY_DPI(4. / zoom_scale);
+  const double fill_width = DT_PIXEL_APPLY_DPI(4) / zoom_scale;
 
   // setting fill bars
   match_color_to_background(cr, exposure_out, 1.0);
@@ -2311,7 +2311,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   cairo_stroke(cr);
 
   // setting ground level
-  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5 / zoom_scale));
+  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5) / zoom_scale);
   cairo_move_to(cr, x_pointer + (outer_radius + 2. * g->inner_padding) / zoom_scale, y_pointer);
   cairo_line_to(cr, x_pointer + outer_radius / zoom_scale, y_pointer);
   cairo_move_to(cr, x_pointer - outer_radius / zoom_scale, y_pointer);
@@ -2319,7 +2319,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   cairo_stroke(cr);
 
   // setting cursor cross hair
-  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5 / zoom_scale));
+  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5) / zoom_scale);
   cairo_move_to(cr, x_pointer, y_pointer + setting_offset_x + fill_width);
   cairo_line_to(cr, x_pointer, y_pointer + outer_radius / zoom_scale);
   cairo_move_to(cr, x_pointer, y_pointer - outer_radius / zoom_scale);
@@ -2394,7 +2394,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   dt_iop_gui_enter_critical_section(self);
   g->has_focus = in;
   dt_iop_gui_leave_critical_section(self);
-  switch_cursors(self);
+  _switch_cursors(self);
   if(!in)
   {
     //lost focus - stop showing mask
@@ -2960,7 +2960,7 @@ static void _develop_ui_pipe_started_callback(gpointer instance, gpointer user_d
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
   if(g == NULL) return;
-  switch_cursors(self);
+  _switch_cursors(self);
 
   if(!self->expanded || !self->enabled)
   {
@@ -2984,7 +2984,7 @@ static void _develop_preview_pipe_finished_callback(gpointer instance, gpointer 
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
   if(g == NULL) return;
-  switch_cursors(self);
+  _switch_cursors(self);
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 
@@ -2994,7 +2994,7 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, gpointer user_
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_toneequalizer_gui_data_t *g = (dt_iop_toneequalizer_gui_data_t *)self->gui_data;
   if(g == NULL) return;
-  switch_cursors(self);
+  _switch_cursors(self);
 }
 
 

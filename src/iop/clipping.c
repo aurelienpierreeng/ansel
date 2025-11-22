@@ -2359,7 +2359,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   const float wd = dev->preview_pipe->backbuf_width;
   const float ht = dev->preview_pipe->backbuf_height;
-  const float zoom_scale = dt_dev_get_zoom_scale(dev,  1);
+  const float zoom_scale = dev->scaling;
 
   cairo_translate(cr, width / 2.0, height / 2.0);
   cairo_scale(cr, zoom_scale, zoom_scale);
@@ -2367,9 +2367,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   double dashes = DT_PIXEL_APPLY_DPI(5.0) / zoom_scale;
 
   // draw cropping window
-  float pzx = 0.f, pzy = 0.f;
-  dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery);
-
+  float pzx = 0.f;
+  float pzy = 0.f;
+  dt_dev_get_pointer_full_pos(dev, pointerx, pointery, &pzx, &pzy);
   if(_iop_clipping_set_max_clip(self))
   {
     cairo_set_source_rgba(cr, .2, .2, .2, .8);
@@ -2745,18 +2745,18 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 {
   dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
+  const dt_develop_t *dev = (const dt_develop_t *)self->dev;
 
   // we don't do anything if the image is not ready
   if(!g->preview_ready) return 0;
 
   const float wd = self->dev->preview_pipe->backbuf_width;
   const float ht = self->dev->preview_pipe->backbuf_height;
-  const float zoom_scale = dt_dev_get_zoom_scale(self->dev,  1);
+  const float zoom_scale = dev->scaling;
   float pzx = 0.f;
   float pzy = 0.f;
-  dt_dev_get_pointer_zoom_pos(self->dev, x, y);
-  pzx += 0.5f;
-  pzy += 0.5f;
+  dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
+
   _iop_clipping_set_max_clip(self);
   _grab_region_t grab = get_grab(pzx, pzy, g, DT_PIXEL_APPLY_DPI(30.0) / zoom_scale, wd, ht);
 
@@ -3186,6 +3186,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 
   dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
+  const dt_develop_t *dev = (const dt_develop_t *)self->dev;
+
   // we don't do anything if the image is not ready
   if(!g->preview_ready) return 0;
 
@@ -3207,10 +3209,10 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
         g->k_drag = TRUE; // if a keystone point is selected then we start to drag it
       else // if we click to the apply button
       {
-        const float zoom_scale = dt_dev_get_zoom_scale(self->dev,  1);
+        const float zoom_scale = dev->scaling;
         float pzx = 0.f;
         float pzy = 0.f;
-        dt_dev_get_pointer_zoom_pos(self->dev, x, y);
+        dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
 
         dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
         const float wp = piece->buf_out.width, hp = piece->buf_out.height;
@@ -3305,7 +3307,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
                   // dragging a border ?
                   if(g->k_selected_segment >= 0)
                   {
-                    dt_dev_get_pointer_zoom_pos(self->dev, x, y);
+                    dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
                     g->button_down_zoom_x += 0.5;
                     g->button_down_zoom_y += 0.5;
                     g->k_drag = TRUE;
@@ -3321,7 +3323,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     {
       g->button_down_x = x;
       g->button_down_y = y;
-      dt_dev_get_pointer_zoom_pos(self->dev, x, y);
+      dt_dev_get_pointer_full_pos(self->dev, x, y, &g->button_down_x, &g->button_down_y);
       g->button_down_angle = p->angle;
 
       /* update prev clip box with current */

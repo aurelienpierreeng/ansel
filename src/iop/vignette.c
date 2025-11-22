@@ -347,10 +347,11 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     bigger_side = ht;
     smaller_side = wd;
   }
-  const float zoom_scale = dt_dev_get_zoom_scale(dev,  1);
-  float pzx = 0.f, pzy = 0.f;
-  dt_dev_get_pointer_zoom_pos(dev, pointerx, pointery);
-  dt_dev_scale_roi(dev, cr, width, height);
+  const float zoom_scale = dev->scaling;
+  float pzx = 0.f;
+  float pzy = 0.f;
+  dt_dev_get_pointer_full_pos(dev, pointerx, pointery, &pzx, &pzy);
+  dt_dev_rescale_roi(dev, cr, width, height);
 
   float vignette_x = (p->center.x + 1.0) * 0.5 * wd;
   float vignette_y = (p->center.y + 1.0) * 0.5 * ht;
@@ -415,10 +416,11 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 // FIXME: Pumping of the opposite direction when changing width/height. See two FIXMEs further down.
 int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressure, int which)
 {
+  const dt_develop_t *dev = (const dt_develop_t *)self->dev;
   dt_iop_vignette_gui_data_t *g = (dt_iop_vignette_gui_data_t *)self->gui_data;
   dt_iop_vignette_params_t *p = (dt_iop_vignette_params_t *)self->params;
-  const float wd = self->dev->preview_pipe->backbuf_width;
-  const float ht = self->dev->preview_pipe->backbuf_height;
+  const float wd = dev->preview_pipe->backbuf_width;
+  const float ht = dev->preview_pipe->backbuf_height;
   float bigger_side, smaller_side;
   if(wd >= ht)
   {
@@ -431,9 +433,10 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     smaller_side = wd;
   }
 
-  const float zoom_scale = dt_dev_get_zoom_scale(self->dev,  1);
-  float pzx = 0.f, pzy = 0.f;
-  dt_dev_get_pointer_zoom_pos(self->dev, x, y);
+  const float zoom_scale = dev->scaling;
+  float pzx = 0.f;
+  float pzy = 0.f;
+  dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
   static int old_grab = -1;
   int grab = old_grab;
 

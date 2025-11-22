@@ -157,9 +157,9 @@ static void dt_guides_draw_grid(cairo_t *cr, const float x, const float y, const
 
   float right = x + w;
   float bottom = y + h;
-  double dashes = 5.0 / zoom_scale;
+  double dashes = DT_PIXEL_APPLY_DPI(5.0) / zoom_scale;
 
-  cairo_set_line_width(cr, 1.0 / zoom_scale);
+  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.0) / zoom_scale);
 
   cairo_set_dash(cr, &dashes, 1, 0);
   dt_draw_set_color_overlay(cr, FALSE, 0.3);
