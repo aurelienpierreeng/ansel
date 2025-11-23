@@ -137,6 +137,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          fetch-depth: 1
           path: src
       - name: Build and Install
         run: |
@@ -249,6 +250,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          fetch-depth: 1
           path: src
       - name: Build and Install
         run: |
@@ -306,6 +308,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          fetch-depth: 1
           path: ${{ env.SRC_DIR }}
       - name: Install Base Dependencies
         run: |

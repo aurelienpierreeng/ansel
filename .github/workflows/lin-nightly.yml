@@ -113,7 +113,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ env.BRANCH }}
-          fetch-depth: 2000
+          fetch-depth: 3000
           fetch-tags: true
           submodules: true
           path: src
