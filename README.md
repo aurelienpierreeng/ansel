@@ -31,39 +31,31 @@ pending a VKDT version usable by common folks.
 ## Download and test
 
 The virtual `0.0.0` [pre-release](https://github.com/aurelienpierreeng/ansel/releases/tag/v0.0.0)
-contains nightly builds, with Linux `.Appimage` and Windows `.exe`, compiled automatically
+contains nightly builds, with Linux `.Appimage`, Windows `.exe` and Mac OS `.dmg`, compiled automatically
 each night with the latest code, and containing all up-to-date dependencies.
+
+Ansel is in alpha version. The GUI is susceptible to change and the application may crash under some circumstances.
 
 ## OS support
 
-Ansel is developped on Fedora, heavily tested on Ubuntu and fairly tested on Windows.
+Ansel is developped on Ubuntu and Windows.
 
 Mac OS and, to a lesser extent, Windows have known GUI issues that come from using Gtk as
 a graphical toolkit. Not much can be done here, as Gtk suffers from a lack of Windows/Mac devs too.
 Go and support these projects so they can have more man-hours put on fixing those.
 
-Mac OS support is not active, because :
-
-- the continuous integration (CI) bot for Mac OS breaks on a weekly basis, which needs much more maintenance than Linux or even Windows,
-- only 4% of the Darktable user base runs it, and it's unfair to Linux and Windows users to allocate more resources to the minority OS,
-- I don't own a Mac box to debug,
-- I don't have an (expensive) developer key to sign .dmg packages,
-- even Windows is not _that much_ of a PITA to maintain.
-
-A couple of nice guys are trying their best to fix issues on Mac OS in a timely manner. They have jobs, families, hobbies and vacations too, so Mac OS may work or it may not, there is not much I can do about it.
-
 ## Useful links
 
 - [User documentation](https://ansel.photos/en/doc/), in particular:
     - [Build and test on Linux](https://ansel.photos/en/doc/install/linux)
-    - [Build and test on Windows](https://ansel.photos/en/doc/install/linux)
+    - [Build and test on Windows](https://ansel.photos/en/doc/install/windows)
 - [Contributing guidelines](https://ansel.photos/en/contribute/), in particular:
     - [Project organization](https://ansel.photos/en/contribute/organization/)
     - [Translating](https://ansel.photos/en/contribute/translating/)
     - [Coding style](https://ansel.photos/en/contribute/coding-style/)
-- [Developer documentation](https://dev.ansel.photos) (__NEW__)
+- [Developer documentation](https://dev.ansel.photos)
 - [Project news](https://ansel.photos/en/news/)
-- [Community forum](https://community.ansel.photos/)
+- Community forum - the community forum was hacked, we are looking into setting up a new one
 - [Matrix chatrooms](https://app.element.io/#/room/#ansel:matrix.org)
 - [Support](https://ansel.photos/en/support/)
 
