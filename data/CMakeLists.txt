@@ -64,55 +64,55 @@ if(NOT WIN32)
     list(APPEND DESKTOP_MIME_TYPES image/webp)
   endif()
 
-  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop.in)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.desktop.in)
 
   file(GLOB PO_FILES "${CMAKE_SOURCE_DIR}/po/*.po")
   add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop
-    SOURCE ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop.in
-    COMMAND sh -c "${intltool_merge_BIN} --desktop-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop"
-    MAIN_DEPENDENCY ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop.in
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.desktop
+    SOURCE ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.desktop.in
+    COMMAND sh -c "${intltool_merge_BIN} --desktop-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.desktop"
+    MAIN_DEPENDENCY ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.desktop.in
     DEPENDS ${PO_FILES}
   )
-  add_custom_target(ansel.desktop_file ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop)
+  add_custom_target(ansel.desktop_file ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.desktop)
 
   if(VALIDATE_DESKTOP_FILE)
     add_custom_target(
       validate_ansel.desktop_file ALL
-      COMMAND ${desktop_file_validate_BIN} --warn-kde ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop
-      DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop
+      COMMAND ${desktop_file_validate_BIN} --warn-kde ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.desktop
+      DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.desktop
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-      COMMENT "Checking validity of photos.ansel.app.desktop"
+      COMMENT "Checking validity of photos.ansel.ansel.desktop"
     )
     add_dependencies(ansel.desktop_file validate_ansel.desktop_file)
   endif()
 
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications COMPONENT DTApplication)
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications COMPONENT DTApplication)
 endif(NOT WIN32)
 
 
 if(VALIDATE_APPDATA_FILE)
   add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.appdata.xml
-    SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in
-    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in ${CMAKE_CURRENT_BINARY_DIR}/ansel.appdata.xml"
-    COMMAND ${appstream_util_BIN} validate --nonet ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.appdata.xml
-    MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml
+    SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
+    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in ${CMAKE_CURRENT_BINARY_DIR}/ansel.appdata.xml"
+    COMMAND ${appstream_util_BIN} validate --nonet ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml
+    MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
     DEPENDS ${PO_FILES}
   )
 else()
   add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.appdata.xml
-    SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in
-    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.appdata.xml"
-    MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.app.appdata.xml.in
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml
+    SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
+    COMMAND sh -c "${intltool_merge_BIN} --xml-style ${CMAKE_SOURCE_DIR}/po ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml"
+    MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/photos.ansel.ansel.appdata.xml.in
     DEPENDS ${PO_FILES}
   )
 endif()
 
-add_custom_target(ansel.appdata_file ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.appdata.xml)
+add_custom_target(ansel.appdata_file ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml)
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.app.appdata.xml DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/metainfo COMPONENT DTApplication)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/photos.ansel.ansel.appdata.xml DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/metainfo COMPONENT DTApplication)
 
 #
 # Install watermarks

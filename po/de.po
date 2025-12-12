@@ -3796,25 +3796,25 @@ msgstr "Mitwirkende bei LibRaw"
 msgid "doxygen-awesome-css contributors"
 msgstr "Mitwirkende bei doxygen-awesome-css"
 
-#: ../build/data/photos.ansel.app.desktop.in.h:1
-#: ../data/build/ansel.desktop.in.h:1 ../data/photos.ansel.app.desktop.in.h:1
+#: ../build/data/photos.ansel.ansel.desktop.in.h:1
+#: ../data/build/ansel.desktop.in.h:1 ../data/photos.ansel.ansel.desktop.in.h:1
 msgid "Virtual Lighttable and Darkroom"
 msgstr "Virtueller Leuchttisch und Dunkelkammer"
 
-#: ../build/data/photos.ansel.app.desktop.in.h:2
+#: ../build/data/photos.ansel.ansel.desktop.in.h:2
 #: ../data/build/ansel.desktop.in.h:2
-#: ../data/photos.ansel.app.appdata.xml.in.h:1
-#: ../data/photos.ansel.app.desktop.in.h:2 ../src/gui/actions/help.c:19
+#: ../data/photos.ansel.ansel.appdata.xml.in.h:1
+#: ../data/photos.ansel.ansel.desktop.in.h:2 ../src/gui/actions/help.c:19
 msgid "Organize and develop images from digital cameras"
 msgstr "Organisiere und entwickle Bilder von Digitalkameras"
 
 #. TRANSLATORS: Search terms to find this application. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
-#: ../build/data/photos.ansel.app.desktop.in.h:4
-#: ../data/build/ansel.desktop.in.h:4 ../data/photos.ansel.app.desktop.in.h:4
+#: ../build/data/photos.ansel.ansel.desktop.in.h:4
+#: ../data/build/ansel.desktop.in.h:4 ../data/photos.ansel.ansel.desktop.in.h:4
 msgid "graphics;photography;raw;"
 msgstr "Graphik;Grafik;Photographie;Fotografie;Raw;"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:2
+#: ../data/photos.ansel.ansel.appdata.xml.in.h:2
 msgid ""
 "Ansel manages your digital negatives in a database and lets you view them "
 "through a lighttable. It also enables you to develop raw images and enhance "
@@ -3824,7 +3824,7 @@ msgstr ""
 "Ihnen, sie über einen Leuchttisch zu betrachten. Außerdem können Sie "
 "Rohbilder entwickeln und in einer Dunkelkammer verbessern."
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:3
+#: ../data/photos.ansel.ansel.appdata.xml.in.h:3
 msgid "Virtual light table, showing a collection"
 msgstr "Der Leuchttisch zeigt eine Sammlung an"
 

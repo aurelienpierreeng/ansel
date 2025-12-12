@@ -542,7 +542,7 @@ dir  path=usr owner=root group=sys mode=755
 dir  path=usr/share owner=root group=sys mode=755
 dir  path=usr/share owner=root group=sys mode=755
 dir  path=usr/share/applications owner=root group=other mode=755
-file path=usr/share/applications/photos.ansel.app.desktop owner=root group=root \
+file path=usr/share/applications/photos.ansel.ansel.desktop owner=root group=root \
     mode=644
 dir  path=usr/share/icons owner=root group=other mode=755
 dir  path=usr/share/icons/hicolor owner=root group=other mode=755

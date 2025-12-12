@@ -88,7 +88,7 @@ find %{buildroot}%{_libdir} -name "*.la" -delete
 %{_bindir}/ansel
 %{_bindir}/ansel-cltest
 %{_libdir}/ansel
-%{_datadir}/applications/photos.ansel.app.desktop
+%{_datadir}/applications/photos.ansel.ansel.desktop
 %{_datadir}/ansel
 %{_datadir}/icons/hicolor/*/apps/ansel.*
 %{_mandir}/man1/ansel.1.*
