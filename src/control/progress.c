@@ -68,7 +68,7 @@ static void global_progress_start(dt_control_t *control, dt_progress_t *progress
     g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
     g_variant_builder_add(&builder, "{sv}", "progress", g_variant_new_double(control->progress_system.global_progress));
     g_variant_builder_add(&builder, "{sv}", "progress-visible", g_variant_new_boolean(TRUE));
-    GVariant *params = g_variant_new("(sa{sv})", "application://photos.ansel.app.desktop", &builder);
+    GVariant *params = g_variant_new("(sa{sv})", "application://photos.ansel.ansel.desktop", &builder);
 
     g_dbus_connection_emit_signal(darktable.dbus->dbus_connection,
                                   "com.canonical.Unity",
@@ -120,7 +120,7 @@ static void global_progress_set(dt_control_t *control, dt_progress_t *progress, 
     GVariantBuilder builder;
     g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
     g_variant_builder_add(&builder, "{sv}", "progress", g_variant_new_double(control->progress_system.global_progress));
-    GVariant *params = g_variant_new("(sa{sv})", "application://photos.ansel.app.desktop", &builder);
+    GVariant *params = g_variant_new("(sa{sv})", "application://photos.ansel.ansel.desktop", &builder);
 
     g_dbus_connection_emit_signal(darktable.dbus->dbus_connection,
                                   "com.canonical.Unity",
@@ -173,7 +173,7 @@ static void global_progress_end(dt_control_t *control, dt_progress_t *progress)
     if(control->progress_system.n_progress_bar == 0)
       g_variant_builder_add(&builder, "{sv}", "progress-visible", g_variant_new_boolean(FALSE));
     g_variant_builder_add(&builder, "{sv}", "progress", g_variant_new_double(control->progress_system.global_progress));
-    GVariant *params = g_variant_new("(sa{sv})", "application://photos.ansel.app.desktop", &builder);
+    GVariant *params = g_variant_new("(sa{sv})", "application://photos.ansel.ansel.desktop", &builder);
 
     g_dbus_connection_emit_signal(darktable.dbus->dbus_connection,
                                   "com.canonical.Unity",
@@ -224,7 +224,7 @@ void dt_control_progress_init(struct dt_control_t *control)
     GVariantBuilder builder;
     g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
     g_variant_builder_add(&builder, "{sv}", "progress-visible", g_variant_new_boolean(FALSE));
-    GVariant *params = g_variant_new("(sa{sv})", "application://photos.ansel.app.desktop", &builder);
+    GVariant *params = g_variant_new("(sa{sv})", "application://photos.ansel.ansel.desktop", &builder);
 
     g_dbus_connection_emit_signal(darktable.dbus->dbus_connection,
                                   "com.canonical.Unity",

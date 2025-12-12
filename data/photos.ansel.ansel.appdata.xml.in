@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>photos.ansel.app</id>
+  <id>photos.ansel.ansel</id>
   <name>Ansel</name>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0+</project_license>
@@ -13,7 +13,7 @@
       images and enhance them in a darkroom.
     </_p>
   </description>
-  <launchable type="desktop-id">photos.ansel.app.desktop</launchable>
+  <launchable type="desktop-id">photos.ansel.ansel.desktop</launchable>
   <screenshots>
     <screenshot width="1920" height="1080" type="default">
       <image>https://user-images.githubusercontent.com/45535283/148689197-e53dd75f-32f1-4297-9a0f-a9547fd4e7c7.jpg</image>
