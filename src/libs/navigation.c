@@ -408,6 +408,7 @@ static void _zoom_preset_change(dt_lib_zoom_t zoom)
   // where dev->natural_scale ensures the images fits within viewport
   dev->scaling /= dev->natural_scale;
 
+  dt_dev_check_zoom_pos_bounds(dev, &dev->x, &dev->y, NULL, NULL);
   dt_dev_invalidate_zoom(dev);
   dt_control_queue_redraw();
   dt_dev_refresh_ui_images(dev);
