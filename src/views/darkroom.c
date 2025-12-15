@@ -383,14 +383,15 @@ void expose(
     dt_pthread_mutex_lock(mutex);
     const float pr_wd = dev->preview_pipe->output_backbuf_width / darktable.gui->ppd;
     const float pr_ht = dev->preview_pipe->output_backbuf_height / darktable.gui->ppd;
+    const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
     
     if(dev->iso_12646.enabled)
     {
       // Because the preview pipe renders an unclipped image, we need to find
       // the preview's ROI (Region of Interest) dimensions in widget space, then
       // draw a white rectangle around it.
-      const float wd = pr_wd * dev->scaling;
-      const float ht = pr_ht * dev->scaling;
+      const float wd = pr_wd * zoom_scale;
+      const float ht = pr_ht * zoom_scale;
       const float roi_wd = fminf(wd, dev->width);
       const float roi_ht = fminf(ht, dev->height);
       

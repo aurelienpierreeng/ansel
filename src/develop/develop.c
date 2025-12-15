@@ -688,7 +688,7 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
 
     dt_print(DT_DEBUG_DEV, "[pixelpipe] Darkroom requested a %i×%i px main preview\n", wd, ht);
     dt_dev_invalidate_zoom(dev);
-    dt_dev_invalidate_zoom_preview(dev);
+    //dt_dev_invalidate_zoom_preview(dev); //it's either the macro line ot this one, not both
 
     if(dev->image_storage.id > -1 && darktable.mipmap_cache)
     {
@@ -1439,6 +1439,17 @@ float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
            * darktable.gui->ppd;
 }
 
+float dt_dev_get_preview_natural_scale(dt_develop_t *dev)
+{
+  if(!dev->preview_pipe || dev->preview_pipe->output_backbuf_width == 0 || dev->preview_pipe->output_backbuf_height == 0)
+    return darktable.gui->ppd;
+  else
+    return fminf(fminf((float)dev->width / (float)dev->preview_pipe->output_backbuf_width,
+                                (float)dev->height / (float)dev->preview_pipe->output_backbuf_height),
+                          1.f)
+                    * darktable.gui->ppd;
+}
+
 void dt_dev_reset_roi(dt_develop_t *dev)
 {
   dev->natural_scale = -1.f;
@@ -1453,7 +1464,7 @@ gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t 
   const float ht = dev->preview_pipe->backbuf_height * darktable.gui->ppd;
   if(wd == 0.f || ht == 0.f) return TRUE;
 
-  const float zoom_scale = dev->scaling;
+  const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
   const int32_t border = dev->border_size;
   const float roi_width = fminf(width, wd * zoom_scale);
   const float roi_height = fminf(height, ht * zoom_scale);
@@ -1471,18 +1482,19 @@ gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t 
 
 gboolean dt_dev_rescale_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height)
 {
-  const float wd = dev->preview_pipe->backbuf_width / darktable.gui->ppd;
+  const float wd = dev->preview_pipe->backbuf_width  / darktable.gui->ppd;
   const float ht = dev->preview_pipe->backbuf_height / darktable.gui->ppd;
   if(wd == 0.f || ht == 0.f) return TRUE;
 
   // Get image position and scale
   const float roi_cntr_x = dev->x - 0.5f; // Convert from [0,1] to [-0.5, 0.5] centered coordinates
   const float roi_cntr_y = dev->y - 0.5f;
-  const float zoom_scale = dev->scaling;
+  const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
 
   cairo_translate(cr, width * .5f, height * .5f);
   cairo_scale(cr, zoom_scale, zoom_scale);
-  cairo_translate(cr, (-.5f * wd - roi_cntr_x * wd), (-.5f * ht - roi_cntr_y * ht));
+  cairo_translate(cr, (-.5f * wd - roi_cntr_x * wd),
+                      (-.5f * ht - roi_cntr_y * ht));
 
   return FALSE;
 }

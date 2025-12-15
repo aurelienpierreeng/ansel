@@ -2359,7 +2359,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   const float wd = dev->preview_pipe->backbuf_width;
   const float ht = dev->preview_pipe->backbuf_height;
-  const float zoom_scale = dev->scaling;
+  const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
 
   cairo_translate(cr, width / 2.0, height / 2.0);
   cairo_scale(cr, zoom_scale, zoom_scale);

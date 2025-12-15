@@ -109,8 +109,7 @@ typedef enum dt_iop_flags_t
   IOP_FLAGS_DEPRECATED = 1 << 2,
   IOP_FLAGS_ALLOW_TILING = 1 << 3, // Does allow tile-wise processing (valid for CPU and GPU processing)
   IOP_FLAGS_HIDDEN = 1 << 4,       // Hide the iop from userinterface
-  IOP_FLAGS_TILING_FULL_ROI
-  = 1 << 5, // Tiling code has to expect arbitrary roi's for this module (incl. flipping, mirroring etc.)
+  IOP_FLAGS_TILING_FULL_ROI = 1 << 5, // Tiling code has to expect arbitrary roi's for this module (incl. flipping, mirroring etc.)
   IOP_FLAGS_ONE_INSTANCE = 1 << 6,       // The module doesn't support multiple instances
   IOP_FLAGS_PREVIEW_NON_OPENCL = 1 << 7, // Preview pixelpipe of this module must not run on GPU but always on CPU
   IOP_FLAGS_NO_HISTORY_STACK = 1 << 8,   // This iop will never show up in the history stack

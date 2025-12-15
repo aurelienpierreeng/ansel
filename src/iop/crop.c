@@ -1024,6 +1024,7 @@ static void _enter_edit_mode(GtkToggleButton *button, struct dt_iop_module_t *se
 
   // It sucks that we need to invalidate the preview too but we need its final dimension.
   dt_dev_invalidate_all(self->dev);
+  dt_dev_reprocess_all(self->dev); // FIXME: this fix the wrong roi issue, but is it the good way ?
   dt_dev_refresh_ui_images(self->dev);
 }
 
@@ -1330,7 +1331,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   g->ht = dev->preview_pipe->backbuf_height;
   if(g->wd < 1.0 || g->ht < 1.0) return;
 
-  const float zoom_scale = dev->scaling;
+  const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
 
   dt_dev_clip_roi(dev, cr, width, height);
   dt_dev_rescale_roi(dev, cr, width, height);
@@ -1637,7 +1638,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     float pzx = 0.f;
     float pzy = 0.f;
     dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
-    float zoom_scale = dev->scaling;
+    const float zoom_scale = dev->scaling;
 
     g->button_down_x = x;
     g->button_down_y = y;

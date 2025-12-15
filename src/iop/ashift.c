@@ -3681,7 +3681,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   const float ht = dev->preview_pipe->backbuf_height;
   if(wd < 1.0 || ht < 1.0) return;
 
-  const float zoom_scale = dev->scaling;
+  const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
 
   cairo_save(cr);
   {
@@ -3888,7 +3888,6 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   cairo_stroke(cr);
 
   // we draw the guides correctly scaled here instead of using the darkroom expose callback
-
   const float cx = fminf(C[0][0], fminf(C[1][0], fminf(C[2][0], C[3][0])));
   const float cy = fminf(C[0][1], fminf(C[1][1], fminf(C[2][1], C[3][1])));
   const float cw = fmaxf(C[0][0], fmaxf(C[1][0], fmaxf(C[2][0], C[3][0]))) - cx;
@@ -3920,7 +3919,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     g->draw_points = NULL;
     g->points_lines_count = 0;
 
-    const float scale = 1.0f / dt_dev_get_natural_scale(dev, dev->preview_pipe);
+    const float scale = 1.0f; // / dt_dev_get_natural_scale(dev, dev->preview_pipe);
 
 
     if(!get_points(self, g->lines, g->lines_count, g->lines_version, &g->points, &g->draw_points, &g->points_idx,

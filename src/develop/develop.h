@@ -408,7 +408,9 @@ float dt_dev_get_zoom_scale(dt_develop_t *dev, gboolean preview);
 
 /**
  * @brief Get the pointer position in relation of processed image [0..1].
- * This takes into account the borders around the image. The input mouse coordinates
+ * This takes into account the borders around the image.
+ * 
+ * The input mouse coordinates
  * are in widget space, without border subtraction.
  * 
  * @param dev the develop instance
@@ -564,6 +566,8 @@ void dt_dev_get_final_size(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, c
 // Natural scale is the rescaling factor such that the full-res pipeline output
 // (real or virtual) fits within darkroom widget area (minus borders/margins)
 float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe);
+// same as above, but for preview pipe
+float dt_dev_get_preview_natural_scale(dt_develop_t *dev);
 
 // Reset darkroom ROI scaling and position
 void dt_dev_reset_roi(dt_develop_t *dev);
