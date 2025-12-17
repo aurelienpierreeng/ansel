@@ -407,11 +407,9 @@ void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch);
 float dt_dev_get_zoom_scale(dt_develop_t *dev, gboolean preview);
 
 /**
- * @brief Get the pointer position in relation of processed image [0..1].
- * This takes into account the borders around the image.
+ * @brief Get the pointer position from widget space to preview buffer space [0..1].
  * 
- * The input mouse coordinates
- * are in widget space, without border subtraction.
+ * NOTE: The input mouse coordinates are without border subtraction.
  * 
  * @param dev the develop instance
  * @param px the x mouse coordinate in widget space, with no border subtraction.
@@ -419,11 +417,20 @@ float dt_dev_get_zoom_scale(dt_develop_t *dev, gboolean preview);
  * @param mouse_x the returned x mouse coordinate relative to processed image [0..1].
  * @param mouse_y the returned y mouse coordinate relative to processed image [0..1].
  */
-void dt_dev_get_pointer_full_pos(dt_develop_t *dev, const float px, const float py, float *mouse_x, float *mouse_y);
+void dt_dev_retrieve_full_pos(dt_develop_t *dev, const int px, const int py, float *mouse_x, float *mouse_y);
 
 void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht);
 #define dt_dev_configure(dev, wd, ht) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_configure_real, (dev), (wd), (ht))
 
+/**
+ * @brief Ensure that the current ROI position is within allowed bounds .
+ * 
+ * @param dev the develop instance
+ * @param dev_x the normalized x position of ROI
+ * @param dev_y the normalized y position of ROI
+ * @param box_w the width of navigation's box
+ * @param box_h the height of navigation's box
+ */
 void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h);
 
 /*
@@ -566,8 +573,10 @@ void dt_dev_get_final_size(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, c
 // Natural scale is the rescaling factor such that the full-res pipeline output
 // (real or virtual) fits within darkroom widget area (minus borders/margins)
 float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe);
-// same as above, but for preview pipe
+// same as above, but for preview pipe based on its output processed size
 float dt_dev_get_preview_natural_scale(dt_develop_t *dev);
+// Get the current zoom factor ( scaling * natural_scale )
+float dt_dev_get_zoom_level(const dt_develop_t *dev);
 
 // Reset darkroom ROI scaling and position
 void dt_dev_reset_roi(dt_develop_t *dev);
@@ -589,9 +598,8 @@ gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t 
  * 
  * @param dev the develop instance
  * @param cr the cairo context to draw on
- * @param width the target width
- * @param height the target height
- * @param clip whether to clip to the visible area
+ * @param width the widget width
+ * @param height the widget height
  * @return gboolean TRUE if the image dimension are 0x0
  */
 gboolean dt_dev_rescale_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height);

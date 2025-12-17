@@ -2198,7 +2198,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(wd == 0.f || ht == 0.f) return 0;
 
   float pzx = 0.f, pzy = 0.f;
-  dt_dev_get_pointer_full_pos(dev, x, y, &pzx, &pzy);
+  dt_dev_retrieve_full_pos(dev, x, y, &pzx, &pzy);
   pzx *= wd;
   pzy *= ht;
 
@@ -2288,7 +2288,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   if(!g->is_cursor_close) return 0;
 
   float pzx = 0.f, pzy = 0.f;
-  dt_dev_get_pointer_full_pos(dev, x, y, &pzx, &pzy);
+  dt_dev_retrieve_full_pos(dev, x, y, &pzx, &pzy);
   pzx *= wd;
   pzy *= ht;
 
@@ -2318,7 +2318,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   if(wd == 0.f || ht == 0.f) return 0;
 
   float pzx = 0.f, pzy = 0.f;
-  dt_dev_get_pointer_full_pos(dev, x, y, &pzx, &pzy);
+  dt_dev_retrieve_full_pos(dev, x, y, &pzx, &pzy);
   pzx *= wd;
   pzy *= ht;
 

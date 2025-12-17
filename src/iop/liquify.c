@@ -2840,7 +2840,7 @@ static void sync_pipe(struct dt_iop_module_t *module, gboolean history)
 static void get_point_scale(struct dt_iop_module_t *module, float x, float y, float complex *pt, float *scale)
 {
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_full_pos(darktable.develop, x, y, &pzx, &pzy);
+  dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
   pzx += 0.5f;
   pzy += 0.5f;
   const float wd = darktable.develop->preview_pipe->backbuf_width;

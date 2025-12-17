@@ -1985,7 +1985,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(wd < 1 || ht < 1) return 0;
 
   float pzx = 0.f, pzy = 0.f;
-  dt_dev_get_pointer_full_pos(dev, x, y, &pzx, &pzy);
+  dt_dev_retrieve_full_pos(dev, x, y, &pzx, &pzy);
 
   const int x_pointer = pzx * wd;
   const int y_pointer = pzy * ht;

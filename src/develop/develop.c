@@ -16,7 +16,6 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include <assert.h>
-#include <cairo/cairo.h>
 #include <glib/gprintf.h>
 #include <math.h>
 #include <stdint.h>
@@ -258,12 +257,12 @@ void dt_dev_process_preview(dt_develop_t *dev)
 
 void dt_dev_refresh_ui_images_real(dt_develop_t *dev)
 {
-  if(dt_atomic_get_int(&dev->preview_pipe->shutdown) && !dev->preview_pipe->processing)
-    dt_dev_process_preview(dev);
-  // else : join current pipe
-
   if(dt_atomic_get_int(&dev->pipe->shutdown) && !dev->pipe->processing)
     dt_dev_process_image(dev);
+  // else : join current pipe
+
+  if(dt_atomic_get_int(&dev->preview_pipe->shutdown) && !dev->preview_pipe->processing)
+    dt_dev_process_preview(dev);
   // else : join current pipe
 }
 
@@ -688,7 +687,7 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
 
     dt_print(DT_DEBUG_DEV, "[pixelpipe] Darkroom requested a %i×%i px main preview\n", wd, ht);
     dt_dev_invalidate_zoom(dev);
-    //dt_dev_invalidate_zoom_preview(dev); //it's either the macro line ot this one, not both
+    // dt_dev_invalidate_zoom_preview(dev); //it's either the macro line or this one, not both
 
     if(dev->image_storage.id > -1 && darktable.mipmap_cache)
     {
@@ -703,7 +702,7 @@ void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y,
 {
   int proc_w, proc_h;
   dt_dev_get_processed_size(dev, &proc_w, &proc_h);
-  const float scale = dt_dev_get_natural_scale(dev, dev->pipe) * dev->scaling;
+  const float scale = dt_dev_get_zoom_level(dev);
 
   // find the box size
   const float bw = dev->width / (proc_w * scale);
@@ -765,8 +764,7 @@ void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch)
   return;
 }
 
-// returns the position in full processed image coordinates [0..1]
-void dt_dev_get_pointer_full_pos(dt_develop_t *dev, const float px, const float py, float *mouse_x, float *mouse_y)
+void dt_dev_retrieve_full_pos(dt_develop_t *dev, const int px, const int py, float *mouse_x, float *mouse_y)
 {
   const int wd = dev->pipe->processed_width;
   const int ht = dev->pipe->processed_height;
@@ -1450,6 +1448,15 @@ float dt_dev_get_preview_natural_scale(dt_develop_t *dev)
                     * darktable.gui->ppd;
 }
 
+float dt_dev_get_zoom_level(const dt_develop_t *dev)
+{
+  if(!dev) return 1.f;
+  // if(!dev->pipe->processing)
+  return dev->scaling * dev->natural_scale;
+  // else
+  //   return dev->scaling * dev->preview_natural_scale;
+}
+
 void dt_dev_reset_roi(dt_develop_t *dev)
 {
   dev->natural_scale = -1.f;
@@ -1459,18 +1466,20 @@ void dt_dev_reset_roi(dt_develop_t *dev)
 }
 
 gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height)
-{ 
-  const float wd = dev->preview_pipe->backbuf_width * darktable.gui->ppd;
-  const float ht = dev->preview_pipe->backbuf_height * darktable.gui->ppd;
+{
+  // DO NOT MODIFIY !! //
+
+  const float wd = dev->preview_pipe->backbuf_width;
+  const float ht = dev->preview_pipe->backbuf_height;
   if(wd == 0.f || ht == 0.f) return TRUE;
 
   const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
   const int32_t border = dev->border_size;
   const float roi_width = fminf(width, wd * zoom_scale);
   const float roi_height = fminf(height, ht * zoom_scale);
-  
-  const float rec_x = fmaxf(border, (width - roi_width) * 0.5f);
-  const float rec_y = fmaxf(border, (height - roi_height) * 0.5f);
+
+  const float rec_x = fmaxf(border, ceilf((width - roi_width) * 0.5f));
+  const float rec_y = fmaxf(border, ceilf((height - roi_height) * 0.5f));
   const float rec_w = fminf(width - 2 * border, roi_width);
   const float rec_h = fminf(height - 2 * border, roi_height);
 
@@ -1482,14 +1491,40 @@ gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t 
 
 gboolean dt_dev_rescale_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height)
 {
-  const float wd = dev->preview_pipe->backbuf_width  / darktable.gui->ppd;
-  const float ht = dev->preview_pipe->backbuf_height / darktable.gui->ppd;
-  if(wd == 0.f || ht == 0.f) return TRUE;
+  // DO NOT MODIFIY !! //
+  // used by preview image scalling and guide //
+  int proc_wd, proc_ht;
+  dt_dev_get_processed_size(dev, &proc_wd, &proc_ht);
+  if(proc_wd == 0.f || proc_ht == 0.f) return TRUE;
 
   // Get image position and scale
-  const float roi_cntr_x = dev->x - 0.5f; // Convert from [0,1] to [-0.5, 0.5] centered coordinates
-  const float roi_cntr_y = dev->y - 0.5f;
-  const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
+
+  const float zoom_scale = dt_dev_get_zoom_level(dev);
+  const float scaling = dev->scaling * dev->preview_natural_scale;
+  
+  const float tx = ceilf(0.5f * width - dev->x * proc_wd * zoom_scale);
+  const float ty = ceilf(0.5f * height - dev->y * proc_ht * zoom_scale);
+
+  cairo_translate(cr, tx, ty);
+  cairo_scale(cr, scaling, scaling);
+  
+  return FALSE;
+}
+
+gboolean dt_dev_rescale_roi_to_input(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height)
+{
+  int wd, ht;
+  dt_dev_get_processed_size(dev, &wd, &ht);
+  if(wd == 0.f || ht == 0.f) return TRUE;
+
+  const float scaling = dev->scaling;
+  const float scale = scaling * dev->natural_scale;
+
+
+  float roi_to_origin[2] = { 0.f, 0.f };
+  _dev_delta_roi_to_origin(dev, roi_to_origin);
+
+  fprintf(stderr, "delta to origin: %f %f\n", roi_to_origin[0], roi_to_origin[1]);
 
   cairo_translate(cr, width * .5f, height * .5f);
   cairo_scale(cr, zoom_scale, zoom_scale);

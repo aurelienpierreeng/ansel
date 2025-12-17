@@ -320,7 +320,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(g && g->draw_selected_region && g->button_down && self->enabled)
   {
     float pzx = 0.f, pzy = 0.f;
-    dt_dev_get_pointer_full_pos(darktable.develop, x, y, &pzx, &pzy);
+    dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
 
     g->posx_to = pzx * darktable.develop->preview_pipe->backbuf_width;
     g->posy_to = pzy * darktable.develop->preview_pipe->backbuf_height;
@@ -383,7 +383,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     {
       float pzx = 0.f;
       float pzy = 0.f;
-      dt_dev_get_pointer_full_pos(darktable.develop, x, y, &pzx, &pzy);
+      dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
 
       g->posx_from = g->posx_to = pzx * darktable.develop->preview_pipe->backbuf_width;
       g->posy_from = g->posy_to = pzy * darktable.develop->preview_pipe->backbuf_height;

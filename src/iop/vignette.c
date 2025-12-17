@@ -350,7 +350,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
   float pzx = 0.f;
   float pzy = 0.f;
-  dt_dev_get_pointer_full_pos(dev, pointerx, pointery, &pzx, &pzy);
+  dt_dev_retrieve_full_pos(dev, pointerx, pointery, &pzx, &pzy);
   dt_dev_rescale_roi(dev, cr, width, height);
 
   float vignette_x = (p->center.x + 1.0) * 0.5 * wd;
@@ -436,7 +436,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   const float zoom_scale = dev->scaling;
   float pzx = 0.f;
   float pzy = 0.f;
-  dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
+  dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
   static int old_grab = -1;
   int grab = old_grab;
 

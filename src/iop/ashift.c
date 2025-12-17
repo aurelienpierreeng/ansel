@@ -3704,7 +3704,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
     float pzx = 0.f;
     float pzy = 0.f;
-    dt_dev_get_pointer_full_pos(dev, pointerx, pointery, &pzx, &pzy);
+    dt_dev_retrieve_full_pos(dev, pointerx, pointery, &pzx, &pzy);
 
     PangoRectangle ink;
     PangoLayout *layout;
@@ -4023,7 +4023,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->isbounding != ASHIFT_BOUNDING_OFF)
   {
     float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_full_pos(dev, pointerx, pointery, &pzx, &pzy);
+    dt_dev_retrieve_full_pos(dev, pointerx, pointery, &pzx, &pzy);
 
     double dashed[] = { DT_PIXEL_APPLY_DPI(4.0), DT_PIXEL_APPLY_DPI(4.0) };
     dashed[0] /= zoom_scale;
@@ -4045,7 +4045,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->near_delta > 0)
   {
     float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_full_pos(dev, pointerx, pointery, &pzx, &pzy);
+    dt_dev_retrieve_full_pos(dev, pointerx, pointery, &pzx, &pzy);
 
     double dashed[] = { DT_PIXEL_APPLY_DPI(4.0), DT_PIXEL_APPLY_DPI(4.0) };
     dashed[0] /= zoom_scale;
@@ -4122,7 +4122,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(wd < 1.0 || ht < 1.0) return 1;
 
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
+  dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
 
   // if visibility of lines is switched off or no lines available, we have nothing to do
   if(!g->lines) return FALSE;
@@ -4333,7 +4333,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     return TRUE;
 
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
+  dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
 
   const float wd = self->dev->preview_pipe->backbuf_width;
   const float ht = self->dev->preview_pipe->backbuf_height;
@@ -4635,7 +4635,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 
     // we compute the rectangle selection
     float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
+    dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
 
     pzx += 0.5f;
     pzy += 0.5f;
@@ -4703,7 +4703,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     gboolean handled = FALSE;
 
     float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
+    dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
     pzx += 0.5f;
     pzy += 0.5f;
 

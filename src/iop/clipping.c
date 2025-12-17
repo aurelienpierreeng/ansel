@@ -2369,7 +2369,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // draw cropping window
   float pzx = 0.f;
   float pzy = 0.f;
-  dt_dev_get_pointer_full_pos(dev, pointerx, pointery, &pzx, &pzy);
+  dt_dev_retrieve_full_pos(dev, pointerx, pointery, &pzx, &pzy);
   if(_iop_clipping_set_max_clip(self))
   {
     cairo_set_source_rgba(cr, .2, .2, .2, .8);
@@ -2755,7 +2755,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   const float zoom_scale = dev->scaling;
   float pzx = 0.f;
   float pzy = 0.f;
-  dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
+  dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
 
   _iop_clipping_set_max_clip(self);
   _grab_region_t grab = get_grab(pzx, pzy, g, DT_PIXEL_APPLY_DPI(30.0) / zoom_scale, wd, ht);
@@ -3212,7 +3212,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
         const float zoom_scale = dev->scaling;
         float pzx = 0.f;
         float pzy = 0.f;
-        dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
+        dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
 
         dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
         const float wp = piece->buf_out.width, hp = piece->buf_out.height;
@@ -3307,7 +3307,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
                   // dragging a border ?
                   if(g->k_selected_segment >= 0)
                   {
-                    dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
+                    dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
                     g->button_down_zoom_x += 0.5;
                     g->button_down_zoom_y += 0.5;
                     g->k_drag = TRUE;
@@ -3323,7 +3323,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     {
       g->button_down_x = x;
       g->button_down_y = y;
-      dt_dev_get_pointer_full_pos(self->dev, x, y, &g->button_down_x, &g->button_down_y);
+      dt_dev_retrieve_full_pos(self->dev, x, y, &g->button_down_x, &g->button_down_y);
       g->button_down_angle = p->angle;
 
       /* update prev clip box with current */

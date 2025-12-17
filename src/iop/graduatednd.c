@@ -564,7 +564,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   const float zoom_scale = dev->scaling;
   float pzx = 0.f;
   float pzy = 0.f;
-  dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
+  dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
 
   // are we dragging something ?
   if(g->dragging > 0)
@@ -618,7 +618,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 {
   dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
   float pzx = 0.f, pzy = 0.f;
-  dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
+  dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
 
   if(which == 3)
   {
@@ -650,7 +650,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   if(g->dragging > 0)
   {
     float pzx = 0.f, pzy = 0.f;
-    dt_dev_get_pointer_full_pos(self->dev, x, y, &pzx, &pzy);
+    dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
 
     float r = 0.0, o = 0.0;
     set_grad_from_points(self, g->xa, g->ya, g->xb, g->yb, &r, &o);
