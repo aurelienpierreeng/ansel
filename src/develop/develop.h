@@ -605,12 +605,50 @@ gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t 
 gboolean dt_dev_rescale_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height);
 
 /**
- * @brief Ensure that the current zoom level is within allowed bounds.
+ * @brief Scale the ROI to fit the input size within given width/height, centered.
+ * 
+ * @param dev the develop instance
+ * @param cr the cairo context to draw on
+ * @param width the widget width
+ * @param height the widget height
+ * @return gboolean TRUE if the image dimension are 0x0
+ */
+gboolean dt_dev_rescale_roi_to_input(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height);
+
+/**
+ * @brief Ensure that the current zoom level is within allowed bounds (for scrolling).
  * 
  * @param dev the develop instance
  * @return gboolean TRUE if the zoom level was adjusted, FALSE otherwise
  */
 gboolean dt_dev_check_zoom_scale_bounds(dt_develop_t *dev);
+
+/**
+ * @brief Get point in input image space from point in normalized ROI space.
+ * The function performs a distortion backtransform.
+ * 
+ * @param dev the develop instance
+ * @param normalize_out if TRUE, out_x and out_y will be normalized [0..1], if FALSE, they will be in pixel coordinates.
+ * @param in_x the x point in normalized ROI space [0..1].
+ * @param in_y the y point in normalized ROI space [0..1].
+ * @param out_x the returned x point in input image space, normalized or pixel depending on `normalize_out`.
+ * @param out_y the returned y point in input image space, normalized or pixel depending on `normalize_out`.
+ * @return gboolean TRUE on success, FALSE if image has 0 dimension.
+ */
+gboolean dt_dev_roi_to_input_space(dt_develop_t *dev, /*gboolean normalized_in,*/ gboolean normalize_out, const float in_x, const float in_y, float *out_x, float *out_y);
+
+/**
+ * @brief Convert a delta vector in ROI space to input image space.
+ * The function performs a distortion backtransform.
+ * 
+ * @param dev the develop instance
+ * @param delta the delta vector in anormalized ROI space.
+ * @param in the input point in normalized ROI space [0..1].
+ * @param points the returned two points in input image space, normalized or pixel depending on `normalize_out`.
+
+ * @return gboolean TRUE on success, FALSE if image has 0 dimension or fails.
+ */
+gboolean dt_dev_roi_delta_to_input_space(dt_develop_t *dev, const float delta[2],/* gboolean normalize_out,*/ const float in[2], float points[2]);
 
 #ifdef __cplusplus
 }

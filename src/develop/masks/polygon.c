@@ -1091,7 +1091,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   const dt_develop_t *const dev = (const dt_develop_t *)darktable.develop;
 
   // get the zoom scale
-  const float zoom_scale = dev->scaling;
+  const float zoom_scale = dt_dev_get_zoom_level(dev);
 
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
   const float dist_curs = DT_MASKS_SELECTION_DISTANCE / zoom_scale; // transformed to backbuf dimensions
@@ -1105,8 +1105,9 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->handle_border_selected = -1;
   const guint nb = g_list_length(form->points);
 
-  pzx *= darktable.develop->preview_pipe->backbuf_width;
-  pzy *= darktable.develop->preview_pipe->backbuf_height;
+  pzx *= darktable.develop->preview_pipe->backbuf_width / dev->natural_scale;
+  pzy *= darktable.develop->preview_pipe->backbuf_height / dev->natural_scale;
+
 
   if((gui->group_selected == index) && gui->node_edited >= 0)
   {
@@ -1439,7 +1440,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
         if(form->type & DT_MASKS_CLONE)
         {
           dt_masks_set_source_pos_initial_state(gui, state, pzx, pzy);
-          dt_masks_set_source_pos_initial_value(gui, form, form->source[0], form->source[1]);
+          return 1;
         }
       }
 
@@ -1449,14 +1450,10 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
 
         int nb = g_list_length(form->points);
         // change the values
-        const float wd = darktable.develop->preview_pipe->backbuf_width;
-        const float ht = darktable.develop->preview_pipe->backbuf_height;
-        float pts[2] = { pzx * wd, pzy * ht };
-        dt_dev_distort_backtransform(darktable.develop, pts, 1);
-
         dt_masks_node_polygon_t *polygon_node = (dt_masks_node_polygon_t *)(malloc(sizeof(dt_masks_node_polygon_t)));
-        polygon_node->node[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
-        polygon_node->node[1] = pts[1] / darktable.develop->preview_pipe->iheight;
+
+        dt_dev_roi_to_input_space(darktable.develop, TRUE, pzx, pzy, &polygon_node->node[0], &polygon_node->node[1]);
+
         polygon_node->ctrl1[0] = polygon_node->ctrl1[1] = polygon_node->ctrl2[0] = polygon_node->ctrl2[1] = -1.0;
         polygon_node->border[0] = polygon_node->border[1] = MAX(HARDNESS_MIN, masks_border);
         polygon_node->state = DT_MASKS_POINT_STATE_NORMAL;
@@ -1465,8 +1462,8 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
         {
           // create the first node
           dt_masks_node_polygon_t *polygon_first_node = (dt_masks_node_polygon_t *)(malloc(sizeof(dt_masks_node_polygon_t)));
-          polygon_first_node->node[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
-          polygon_first_node->node[1] = pts[1] / darktable.develop->preview_pipe->iheight;
+          polygon_first_node->node[0] = polygon_node->node[0];
+          polygon_first_node->node[1] = polygon_node->node[1];
           polygon_first_node->ctrl1[0] = polygon_first_node->ctrl1[1] = polygon_first_node->ctrl2[0] = polygon_first_node->ctrl2[1] = -1.0;
           polygon_first_node->border[0] = polygon_first_node->border[1] = MAX(HARDNESS_MIN, masks_border);
           polygon_first_node->state = DT_MASKS_POINT_STATE_NORMAL;
@@ -1513,8 +1510,8 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
       // we start the source dragging
       gui->source_dragging = TRUE;
       gui->node_edited = -1;
-      gui->dx = gpt->source[2] - gui->posx;
-      gui->dy = gpt->source[3] - gui->posy;
+      gui->delta[0] = gpt->source[2] - gui->pos[0];
+      gui->delta[1] = gpt->source[3] - gui->pos[1];
       return 1;
     }
     else if(gui->form_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
@@ -1522,8 +1519,8 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
       // we start the form dragging
       gui->form_dragging = TRUE;
       gui->node_edited = -1;
-      gui->dx = gpt->points[2] - gui->posx;
-      gui->dy = gpt->points[3] - gui->posy;
+      gui->delta[0] = gpt->points[2] - gui->pos[0];
+      gui->delta[1] = gpt->points[3] - gui->pos[1];
       return 1;
     }
     else if(gui->node_selected >= 0)
@@ -1543,8 +1540,8 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
       }*/
       gui->node_edited = gui->node_dragging = gui->node_selected;
 
-      gui->dx = gpt->points[gui->node_selected * 6 + 2] - gui->posx;
-      gui->dy = gpt->points[gui->node_selected * 6 + 3] - gui->posy;
+      gui->delta[0] = gpt->points[gui->node_selected * 6 + 2] - gui->pos[0];
+      gui->delta[1] = gpt->points[gui->node_selected * 6 + 3] - gui->pos[1];
 
       return 1;
     }
@@ -1561,8 +1558,8 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
                                 gpt->points[k * 6 + 4], gpt->points[k * 6 + 5],
                                 &handle_x, &handle_y, gpt->clockwise);
         // compute offsets
-        gui->dx = handle_x - gui->posx;
-        gui->dy = handle_y - gui->posy;
+        gui->delta[0] = handle_x - gui->pos[0];
+        gui->delta[1] = handle_y - gui->pos[1];
 
         return 1;
       }
@@ -1588,8 +1585,8 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
       {
         // we move the entire segment
         gui->seg_dragging = gui->seg_selected;
-        gui->dx = gpt->points[gui->seg_selected * 6 + 2] - gui->posx;
-        gui->dy = gpt->points[gui->seg_selected * 6 + 3] - gui->posy;
+        gui->delta[0] = gpt->points[gui->seg_selected * 6 + 2] - gui->pos[0];
+        gui->delta[1] = gpt->points[gui->seg_selected * 6 + 3] - gui->pos[1];
       }
       return 1;
     }
@@ -1637,8 +1634,6 @@ static int _polygon_events_button_released(struct dt_iop_module_t *module, float
 {
   if(!gui) return 0;
   if(gui->creation) return 1;
-  dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-  if(!gpt) return 0;
 
   if(which == 1)
   {
@@ -1684,15 +1679,14 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
                                     dt_masks_form_gui_t *gui, int index)
 {
   // centre view will have zoom_scale * backbuf_width pixels, we want the handle offset to scale with DPI:
-  const dt_develop_t *const dev = (const dt_develop_t *)darktable.develop;
-  const float zoom_scale = dev->scaling;
-  const float as = DT_MASKS_SELECTION_DISTANCE / zoom_scale;  // transformed to backbuf dimensions
+  dt_develop_t *const dev = (dt_develop_t *)darktable.develop;
+  const float zoom_scale = dt_dev_get_zoom_level(dev);
   if(!gui) return 0;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
 
-  const float wd = darktable.develop->preview_pipe->backbuf_width;
-  const float ht = darktable.develop->preview_pipe->backbuf_height;
+  const float wd = darktable.develop->preview_pipe->backbuf_width / dev->natural_scale;
+  const float ht = darktable.develop->preview_pipe->backbuf_height / dev->natural_scale;
 
   if(gui->node_dragging >= 0)
   {
@@ -1710,10 +1704,11 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     // update continuously the current node to mouse position
     dt_masks_node_polygon_t *dragged_node = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->node_dragging);
 
-    float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
-    dt_dev_distort_backtransform(darktable.develop, pts, 1);
-    const float dx = pts[0] / darktable.develop->preview_pipe->iwidth - dragged_node->node[0];
-    const float dy = pts[1] / darktable.develop->preview_pipe->iheight - dragged_node->node[1];
+    float pts[2] = { -1 , -1 };
+    const float pointer[2] = { pzx, pzy };
+    dt_dev_roi_delta_to_input_space(dev, gui->delta, pointer, pts);
+    const float dx = pts[0] - dragged_node->node[0];
+    const float dy = pts[1] - dragged_node->node[1];
 
     // we move all points
     dragged_node->ctrl1[0] += dx;
@@ -1739,6 +1734,11 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
 
     return 1;
   }
+  else if(gui->creation)
+  {
+    // Let the cursor motion be redrawn as it moves in GUI
+    return 1;
+  }
 
   else if(gui->seg_dragging >= 0)
   {
@@ -1747,10 +1747,12 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     const GList *const next_pt = g_list_next_wraparound(pt, form->points);
     dt_masks_node_polygon_t *point = (dt_masks_node_polygon_t *)pt->data;
     dt_masks_node_polygon_t *next_point = (dt_masks_node_polygon_t *)next_pt->data;
-    float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
-    dt_dev_distort_backtransform(darktable.develop, pts, 1);
-    const float dx = pts[0] / darktable.develop->preview_pipe->iwidth - point->node[0];
-    const float dy = pts[1] / darktable.develop->preview_pipe->iheight - point->node[1];
+
+    float pts[2] = { -1 , -1 };
+    const float pointer[2] = { pzx, pzy };
+    dt_dev_roi_delta_to_input_space(dev, gui->delta, pointer, pts);
+    const float dx = pts[0] - point->node[0];
+    const float dy = pts[1] - point->node[1];
 
     // if first or last segment, update the source accordingly
     // (the source point follows the first/last segment when moved)
@@ -1788,7 +1790,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     dt_masks_node_polygon_t *node
         = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->handle_dragging);
 
-    float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
+    float pts[2] = { pzx * wd + gui->delta[0], pzy * ht + gui->delta[1] };
 
     // compute ctrl points directly from new handle position
     float p[4]; 
@@ -1798,12 +1800,16 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     dt_dev_distort_backtransform(darktable.develop, p, 2);
     
     // set new ctrl points
-    const float iw = darktable.develop->preview_pipe->iwidth;
-    const float ih = darktable.develop->preview_pipe->iheight;
-    node->ctrl1[0] = p[0] / iw;
-    node->ctrl1[1] = p[1] / ih;
-    node->ctrl2[0] = p[2] / iw;
-    node->ctrl2[1] = p[3] / ih;
+    for(size_t i = 0; i < 4; i += 2)
+    {
+      p[i] /= darktable.develop->preview_pipe->iwidth;
+      p[i + 1] /= darktable.develop->preview_pipe->iheight;
+    }
+
+    node->ctrl1[0] = p[0];
+    node->ctrl1[1] = p[1];
+    node->ctrl2[0] = p[2];
+    node->ctrl2[1] = p[3];
     node->state = DT_MASKS_POINT_STATE_USER;
 
     _polygon_init_ctrl_points(form);
@@ -1816,15 +1822,17 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
   
   else if(gui->form_dragging || gui->source_dragging)
   {
-    float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
-    dt_dev_distort_backtransform(darktable.develop, pts, 1);
-    dt_masks_node_polygon_t *dragging_shape = (dt_masks_node_polygon_t *)(form->points)->data;
+
+    float pts[2] = { -1 , -1 };
+    const float pointer[2] = { pzx, pzy };
+    dt_dev_roi_delta_to_input_space(dev, gui->delta, pointer, pts);
 
     // we move all points
     if(gui->form_dragging)
     {
-      const float dx = pts[0] / darktable.develop->preview_pipe->iwidth - dragging_shape->node[0];
-      const float dy = pts[1] / darktable.develop->preview_pipe->iheight - dragging_shape->node[1];
+      dt_masks_node_polygon_t *dragging_shape = (dt_masks_node_polygon_t *)(form->points)->data;
+      const float dx = pts[0] - dragging_shape->node[0];
+      const float dy = pts[1] - dragging_shape->node[1];
       for(GList *nodes = form->points; nodes; nodes = g_list_next(nodes))
       {
         dragging_shape = (dt_masks_node_polygon_t *)nodes->data;
@@ -1838,8 +1846,8 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     }
     else
     {
-      form->source[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
-      form->source[1] = pts[1] / darktable.develop->preview_pipe->iheight;
+      form->source[0] = pts[0];
+      form->source[1] = pts[1];
     }
 
     // we recreate the form points
@@ -1858,11 +1866,30 @@ static void _polygon_draw_shape(cairo_t *cr, const float *points, const int poin
 {
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 
-  cairo_move_to(cr, points[coord_nb * 6], points[coord_nb * 6 + 1]);
+  // Find the first valid non-NaN point to start drawing
+  // FIXME: Why not just avoid having NaN points in the array?
+  int start_idx = -1;
   for (int i = coord_nb * 3 + border; i < points_count; i++)
-    cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
+  {
+    if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
+    {
+      start_idx = i;
+      break;
+    }
+  }
 
-  //cairo_close_path(cr); // we don't close the path to allow open shape while creation
+  // Only draw if we have at least one valid point
+  if(start_idx >= 0)
+  {
+    cairo_move_to(cr, points[start_idx * 2], points[start_idx * 2 + 1]);
+    for (int i = start_idx + 1; i < points_count; i++)
+    {
+      if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
+        cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
+    }
+  }
+
+  // we don't close the path to allow open shape while creation
 }
 
 static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int node_count)
@@ -1893,11 +1920,13 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     if(darktable.develop->form_visible
      && (darktable.develop->form_visible->type & DT_MASKS_CLONE))
     {
-      float x = 0.f, y = 0.f;
-      float posx = gpt->points[2];
-      float posy = gpt->points[3];
-      dt_masks_calculate_source_pos_value(gui, DT_MASKS_POLYGON, posx, posy, posx, posy, &x, &y, TRUE);
-      dt_masks_draw_clone_source_pos(cr, zoom_scale, x, y);
+
+      float node_posx = node_count ? gpt->points[2] : gui->pos[0];
+      float node_posy = node_count ? gpt->points[3] : gui->pos[1];
+
+      float pts[2] = { 0.0, 0.0 };
+      dt_masks_calculate_source_pos_value(gui, DT_MASKS_POLYGON, node_posx, node_posy, node_posx, node_posy, &pts[0], &pts[1], FALSE);
+      dt_masks_draw_clone_source_pos(cr, zoom_scale, pts[0], pts[1]);
     }
   }
   
@@ -1990,7 +2019,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     if(gpt->border_count > node_count * 3 + 2)
     {
       dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, node_count, (gui->border_selected), zoom_scale, gpt->border,
-                        gpt->border_count, &dt_masks_functions_brush);
+                        gpt->border_count, &dt_masks_functions_polygon);
     }
 
     // draw the current node's handle if it's a curve node

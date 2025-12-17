@@ -1092,9 +1092,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   if(!gpt) return 0;
 
   // get the zoom scale
-  dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  int closeup = dt_control_get_dev_closeup();
-  float zoom_scale = dt_dev_get_zoom_scale(darktable.develop, zoom, 1<<closeup, 1);
+  const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
+  const float zoom_scale = dt_dev_get_zoom_level(dev);
 
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
   const float dist_curs = DT_MASKS_SELECTION_DISTANCE / zoom_scale; // transformed to backbuf dimensions
@@ -1108,8 +1107,9 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->handle_border_selected = -1;
   const guint nb = g_list_length(form->points);
 
-  pzx *= darktable.develop->preview_pipe->backbuf_width;
-  pzy *= darktable.develop->preview_pipe->backbuf_height;
+  pzx *= darktable.develop->preview_pipe->backbuf_width / dev->natural_scale;
+  pzy *= darktable.develop->preview_pipe->backbuf_height / dev->natural_scale;
+
 
   if((gui->group_selected == index) && gui->node_edited >= 0)
   {
@@ -1372,14 +1372,8 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, float pzx, floa
   // we add a new node to the brush
   dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)(malloc(sizeof(dt_masks_node_brush_t)));
 
-  const float wd = darktable.develop->preview_pipe->backbuf_width;
-  const float ht = darktable.develop->preview_pipe->backbuf_height;
-  float pts[2] = { pzx * wd, pzy * ht };
-  dt_dev_distort_backtransform(darktable.develop, pts, 1);
+  dt_dev_roi_to_input_space(darktable.develop, TRUE, pzx, pzy, &node->node[0], &node->node[1]);
 
-  // set coordinates
-  node->node[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
-  node->node[1] = pts[1] / darktable.develop->preview_pipe->iheight;
   node->ctrl1[0] = node->ctrl1[1] = node->ctrl2[0] = node->ctrl2[1] = -1.0;
   node->state = DT_MASKS_POINT_STATE_NORMAL;
 
@@ -1415,6 +1409,8 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
 
+  dt_develop_t *dev = (dt_develop_t *)darktable.develop;
+
   // Do we need to refresh currently active node ?
   // Its requested to give back the focus when clicking outside current shape.
   _find_closest_handle(module, pzx, pzy, form, parentid, gui, index);
@@ -1438,8 +1434,8 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
         return 1;
       }
 
-      const float wd = darktable.develop->preview_pipe->backbuf_width;
-      const float ht = darktable.develop->preview_pipe->backbuf_height;
+      const float wd = darktable.develop->preview_pipe->backbuf_width / dev->natural_scale;
+      const float ht = darktable.develop->preview_pipe->backbuf_height / dev->natural_scale;
 
       if(!gui->guipoints) gui->guipoints = dt_masks_dynbuf_init(200000, "brush guipoints");
       if(!gui->guipoints) return 1;
@@ -1485,8 +1481,8 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
     {
       // we start the source dragging
       gui->source_dragging = TRUE;
-      gui->dx = gpt->source[2] - gui->posx;
-      gui->dy = gpt->source[3] - gui->posy;
+      gui->delta[0] = gpt->source[2] - gui->pos[0];
+      gui->delta[1] = gpt->source[3] - gui->pos[1];
       return 1;
     }
     else if(gui->form_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
@@ -1494,8 +1490,8 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
       // we start the form dragging
       gui->form_dragging = TRUE;
       gui->node_edited = -1;
-      gui->dx = gpt->points[2] - gui->posx;
-      gui->dy = gpt->points[3] - gui->posy;
+      gui->delta[0] = gpt->points[2] - gui->pos[0];
+      gui->delta[1] = gpt->points[3] - gui->pos[1];
       return 1;
     }
     else if(gui->node_selected >= 0)
@@ -1515,8 +1511,8 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
       }*/
       gui->node_edited = gui->node_dragging = gui->node_selected;
 
-      gui->dx = gpt->points[gui->node_selected * 6 + 2] - gui->posx;
-      gui->dy = gpt->points[gui->node_selected * 6 + 3] - gui->posy;
+      gui->delta[0] = gpt->points[gui->node_selected * 6 + 2] - gui->pos[0];
+      gui->delta[1] = gpt->points[gui->node_selected * 6 + 3] - gui->pos[1];
 
       return 1;
     }
@@ -1533,8 +1529,8 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
                                 gpt->points[k * 6 + 4], gpt->points[k * 6 + 5],
                                 &handle_x, &handle_y, TRUE);
         // compute offsets
-        gui->dx = handle_x - gui->posx;
-        gui->dy = handle_y - gui->posy;
+        gui->delta[0] = handle_x - gui->pos[0];
+        gui->delta[1] = handle_y - gui->pos[1];
 
         return 1;
       }
@@ -1559,8 +1555,8 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
       {
         // we move the entire segment
         gui->seg_dragging = gui->seg_selected;
-        gui->dx = gpt->points[gui->seg_selected * 6 + 2] - gui->posx;
-        gui->dy = gpt->points[gui->seg_selected * 6 + 3] - gui->posy;
+        gui->delta[0] = gpt->points[gui->seg_selected * 6 + 2] - gui->pos[0];
+        gui->delta[1] = gpt->points[gui->seg_selected * 6 + 3] - gui->pos[1];
       }
       return 1;
     }
@@ -1808,15 +1804,16 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   if(!gui) return 0;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
-  const float wd = darktable.develop->preview_pipe->backbuf_width;
-  const float ht = darktable.develop->preview_pipe->backbuf_height;
+
+  dt_develop_t *dev = (dt_develop_t *)darktable.develop;
+  const float wd = dev->preview_pipe->backbuf_width / dev->natural_scale;
+  const float ht = dev->preview_pipe->backbuf_height / dev->natural_scale;
 
   if(gui->creation)
   {
     if(gui->guipoints)
     {
-      dt_masks_dynbuf_add_2(gui->guipoints, pzx * darktable.develop->preview_pipe->backbuf_width,
-                            pzy * darktable.develop->preview_pipe->backbuf_height);
+      dt_masks_dynbuf_add_2(gui->guipoints, pzx * wd, pzy * ht);
       const float border = dt_masks_dynbuf_get(gui->guipoints_payload, -4);
       const float hardness = dt_masks_dynbuf_get(gui->guipoints_payload, -3);
       const float density = dt_masks_dynbuf_get(gui->guipoints_payload, -2);
@@ -1837,10 +1834,13 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     dt_masks_node_brush_t *dragged_node
         = (dt_masks_node_brush_t *)g_list_nth_data(form->points, gui->node_dragging);
 
-    float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
-    dt_dev_distort_backtransform(darktable.develop, pts, 1);
-    const float dx = pts[0] / darktable.develop->preview_pipe->iwidth - dragged_node->node[0];
-    const float dy = pts[1] / darktable.develop->preview_pipe->iheight - dragged_node->node[1];
+    // apply delta to the current mouse position
+    float pts[2] = { -1 , -1 };
+    const float pointer[2] = { pzx, pzy };
+    dt_dev_roi_delta_to_input_space(dev, gui->delta, pointer, pts);
+    
+    const float dx = pts[0] - dragged_node->node[0];
+    const float dy = pts[1] - dragged_node->node[1];
 
     // we move all points
     dragged_node->ctrl1[0] += dx;
@@ -1870,7 +1870,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     const GList *pt2 = g_list_next_wraparound(pt1, form->points);
     dt_masks_node_brush_t *point = (dt_masks_node_brush_t *)pt1->data;
     dt_masks_node_brush_t *point2 = (dt_masks_node_brush_t *)pt2->data;
-    float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
+    float pts[2] = { pzx * wd + gui->delta[0], pzy * ht + gui->delta[1] };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
     const float dx = pts[0] / darktable.develop->preview_pipe->iwidth - point->node[0];
     const float dy = pts[1] / darktable.develop->preview_pipe->iheight - point->node[1];
@@ -1900,7 +1900,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     dt_masks_node_brush_t *node
         = (dt_masks_node_brush_t *)g_list_nth_data(form->points, gui->handle_dragging);
 
-    float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
+    float pts[2] = { pzx * wd + gui->delta[0], pzy * ht + gui->delta[1] };
 
     // compute ctrl points directly from new handle position
     float p[4]; 
@@ -1957,7 +1957,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   }*/
   else if(gui->form_dragging || gui->source_dragging)
   {
-    float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
+    float pts[2] = { pzx * wd + gui->delta[0], pzy * ht + gui->delta[1] };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
     dt_masks_node_brush_t *dragging_shape = (dt_masks_node_brush_t *)(form->points)->data;
 
@@ -1997,13 +1997,30 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
 static void _brush_draw_shape(cairo_t *cr, const float *points, const int points_count, const int coord_nb, const gboolean border, const gboolean source)
 {
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-  size_t base = source ? 2 : coord_nb * 6;
-
-  cairo_move_to(cr, points[base], points[base + 1]);
-
+ // Find the first valid non-NaN point to start drawing
+ // FIXME: Why not just avoid having NaN points in the array?
+  int start_idx = -1;
   for (int i = coord_nb * 3 + border; i < points_count; i++)
-    cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
-  cairo_close_path(cr); //cairo_line_to(cr, nodes[nb * 6], nodes[nb * 6 + 1]);
+  {
+    if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
+    {
+      start_idx = i;
+      break;
+    }
+  }
+
+  // Only draw if we have at least one valid point
+  if(start_idx >= 0)
+  {
+    cairo_move_to(cr, points[start_idx * 2], points[start_idx * 2 + 1]);
+    for (int i = start_idx + 1; i < points_count; i++)
+    {
+      if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
+        cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
+    }
+  }
+
+  cairo_close_path(cr);
 }
 
 static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int nb)
@@ -2031,8 +2048,8 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       const float radius1 = masks_border * masks_hardness * min_iwd_iht;
       const float radius2 = masks_border * min_iwd_iht;
 
-      float xpos = gui->posx;
-      float ypos = gui->posy;
+      float xpos = gui->pos[0];
+      float ypos = gui->pos[1];
       if((xpos == -1.0f && ypos == -1.0f) || gui->mouse_leaved_center)
       {
         xpos = 0.f;
@@ -2104,7 +2121,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       radius = oldradius = masks_border * masks_hardness * min_iwd_iht;
       opacity = oldopacity = masks_density;
 
-      cairo_set_line_width(cr,  DT_PIXEL_APPLY_DPI(2 * radius) / zoom_scale);
+      cairo_set_line_width(cr,  DT_PIXEL_APPLY_DPI(2 * radius));
       dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_TRACE, opacity);
 
       cairo_move_to(cr, guipoints[0], guipoints[1]);
@@ -2147,7 +2164,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
         {
           cairo_stroke(cr);
           stroked = 1;
-          cairo_set_line_width(cr,  DT_PIXEL_APPLY_DPI(2 * radius) / zoom_scale);
+          cairo_set_line_width(cr,  DT_PIXEL_APPLY_DPI(2 * radius));
           dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_TRACE, opacity);
           oldradius = radius;
           oldopacity = opacity;

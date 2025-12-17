@@ -160,6 +160,7 @@ static void _ellipse_get_distance(float x, float y, float as, dt_masks_form_gui_
                                   int num_points, int *inside, int *inside_border, int *near, int *inside_source, float *dist)
 {
   (void)num_points; // unused arg, keep compiler from complaining
+  if(!gui) return;
 
  // initialise returned values
   *inside_source = 0;
@@ -167,8 +168,6 @@ static void _ellipse_get_distance(float x, float y, float as, dt_masks_form_gui_
   *inside_border = 0;
   *near = -1;
   *dist = FLT_MAX;
-
-  if(!gui) return;
 
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return;
@@ -378,10 +377,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   if(!gpt) return 0;
   const float *nodes = gpt->points;
 
-  // get the zoom scale
-  dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  int closeup = dt_control_get_dev_closeup();
-  float zoom_scale = dt_dev_get_zoom_scale(darktable.develop, zoom, 1<<closeup, 1);
+  const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
+  const float zoom_scale = dt_dev_get_zoom_level(dev);
 
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
   const float dist_curs = DT_MASKS_SELECTION_DISTANCE / zoom_scale; // transformed to backbuf dimensions
@@ -393,8 +390,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->node_selected = -1;
 
 
-  pzx *= darktable.develop->preview_pipe->backbuf_width;
-  pzy *= darktable.develop->preview_pipe->backbuf_height;
+  pzx *= darktable.develop->preview_pipe->backbuf_width / dev->natural_scale;
+  pzy *= darktable.develop->preview_pipe->backbuf_height / dev->natural_scale;
 
   const float r = atan2f(nodes[3] - nodes[1], nodes[2] - nodes[0]);
   const float sinr = sinf(r);
@@ -590,7 +587,7 @@ static int _ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, float 
   if(gui->creation)
   {
     if(dt_modifier_is(state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
-      return _init_rotation(form, (up ? 2.0f : -2.0f), DT_MASKS_INCREMENT_OFFSET, flow);
+      return _init_rotation(form, (up ? +2.0f : -2.0f), DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_CONTROL_MASK))
       return _init_opacity(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
@@ -639,12 +636,7 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
       dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)(malloc(sizeof(dt_masks_node_ellipse_t)));
 
       // we change the center value
-      const float wd = darktable.develop->preview_pipe->backbuf_width;
-      const float ht = darktable.develop->preview_pipe->backbuf_height;
-      float pts[2] = { pzx * wd, pzy * ht };
-      dt_dev_distort_backtransform(darktable.develop, pts, 1);
-      ellipse->center[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
-      ellipse->center[1] = pts[1] / darktable.develop->preview_pipe->iheight;
+      dt_dev_roi_to_input_space(darktable.develop, TRUE, pzx, pzy, &ellipse->center[0], &ellipse->center[1]);
 
       if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
@@ -715,10 +707,10 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
         else
           gui2->form_dragging = TRUE;
         gui2->group_selected = pos2;
-        gui2->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
-        gui2->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
-        gui2->dx = 0.0;
-        gui2->dy = 0.0;
+        gui2->pos[0] = pzx * darktable.develop->preview_pipe->backbuf_width;
+        gui2->pos[1] = pzy * darktable.develop->preview_pipe->backbuf_height;
+        gui2->delta[0] = 0.0;
+        gui2->delta[1] = 0.0;
         gui2->scrollx = pzx;
         gui2->scrolly = pzy;
         gui2->form_selected = TRUE; // we also want to be selected after button released
@@ -737,16 +729,16 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
       {
         // we start the source dragging
         gui->source_dragging = TRUE;
-        gui->dx = gpt->source[0] - gui->posx;
-        gui->dy = gpt->source[1] - gui->posy;
+        gui->delta[0] = gpt->source[0] - gui->pos[0];
+        gui->delta[1] = gpt->source[1] - gui->pos[1];
         return 1;
       }
       else if(gui->node_selected >= 1 && gui->edit_mode == DT_MASKS_EDIT_FULL)
       {
         // we start the point dragging
         gui->node_dragging = gui->node_selected;
-        gui->dx = gpt->points[0] - gui->posx;
-        gui->dy = gpt->points[1] - gui->posy;
+        gui->delta[0] = gpt->points[0] - gui->pos[0];
+        gui->delta[1] = gpt->points[1] - gui->pos[1];
         return 1;
       }
       else if(gui->form_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
@@ -758,8 +750,19 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
           gui->border_toggling = TRUE;
         else
           gui->form_dragging = TRUE;
-        gui->dx = gpt->points[0] - gui->posx;
-        gui->dy = gpt->points[1] - gui->posy;
+
+        // Pour la rotation: stocker position absolue du clic initial
+        // Pour le drag: stocker décalage
+        if(gui->form_rotating)
+        {
+          gui->delta[0] = gui->pos[0];
+          gui->delta[1] = gui->pos[1];
+        }
+        else
+        {
+          gui->delta[0] = gpt->points[0] - gui->pos[0];
+          gui->delta[1] = gpt->points[1] - gui->pos[1];
+        }
         return 1;
       }
     }
@@ -782,27 +785,8 @@ static int _ellipse_events_button_released(struct dt_iop_module_t *module, float
 {
   if(gui->form_dragging && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
-    // we get the ellipse
-    dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
-
     // we end the form dragging
     gui->form_dragging = FALSE;
-
-    // we change the center value
-    const float wd = darktable.develop->preview_pipe->backbuf_width;
-    const float ht = darktable.develop->preview_pipe->backbuf_height;
-    float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
-    dt_dev_distort_backtransform(darktable.develop, pts, 1);
-    ellipse->center[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
-    ellipse->center[1] = pts[1] / darktable.develop->preview_pipe->iheight;
-
-
-    // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
-    dt_masks_gui_form_create(form, gui, index, module);
-
-    // we save the move
-
     return 1;
   }
   else if(gui->border_toggling && gui->edit_mode == DT_MASKS_EDIT_FULL)
@@ -852,137 +836,21 @@ static int _ellipse_events_button_released(struct dt_iop_module_t *module, float
   }
   else if(gui->form_rotating && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
-    // we get the ellipse
-    dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
-
     // we end the form rotating
     gui->form_rotating = FALSE;
-
-    const float wd = darktable.develop->preview_pipe->backbuf_width;
-    const float ht = darktable.develop->preview_pipe->backbuf_height;
-    const float x = pzx * wd;
-    const float y = pzy * ht;
-
-    // we need the reference point
-    dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-    if(!gpt) return 0;
-
-    // ellipse center
-    const float xref = gpt->points[0];
-    const float yref = gpt->points[1];
-
-    const float pts[8] = { xref, yref, x , y, 0, 0, gui->dx, gui->dy };
-
-    const float dv = atan2f(pts[3] - pts[1], pts[2] - pts[0]) - atan2f(-(pts[7] - pts[5]), -(pts[6] - pts[4]));
-
-    float pts2[8] = { xref, yref, x , y, xref+10.0f, yref, xref, yref+10.0f };
-    dt_dev_distort_backtransform(darktable.develop, pts2, 4);
-
-    float check_angle = atan2f(pts2[7] - pts2[1], pts2[6] - pts2[0]) - atan2f(pts2[5] - pts2[1], pts2[4] - pts2[0]);
-    // Normalize to the range -180 to 180 degrees
-    check_angle = atan2f(sinf(check_angle), cosf(check_angle));
-    if (check_angle < 0)
-      ellipse->rotation -= dv / M_PI * 180.0f;
-    else
-      ellipse->rotation += dv / M_PI * 180.0f;
-
-    if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
-      dt_conf_set_float("plugins/darkroom/spots/ellipse/rotation", ellipse->rotation);
-    else
-      dt_conf_set_float("plugins/darkroom/masks/ellipse/rotation", ellipse->rotation);
-
-    // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
-    dt_masks_gui_form_create(form, gui, index, module);
-
-    // we save the rotation
-
     return 1;
   }
   else if(gui->node_dragging >= 1 && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
-    // we get the ellipse
-    dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
-
-    const int k = gui->node_dragging;
-
-    // we end the point dragging
+    // we end the node dragging
     gui->node_dragging = -1;
-
-    // we need the reference points
-    dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-    if(!gpt) return 0;
-
-    const float xref = gpt->points[0];
-    const float yref = gpt->points[1];
-    // dragging point position relative to ellipse center
-    const float rx = gpt->points[k * 2] - xref;
-    const float ry = gpt->points[k * 2 + 1] - yref;
-    // mouse displacement relative to ellipse center
-    const float deltax = gui->posx + gui->dx - xref;
-    const float deltay = gui->posy + gui->dy - yref;
-    // distance of the dragging point to the ellipse center
-    const float r = sqrtf(rx * rx + ry * ry);
-    // projection of the mouse displacement onto the radius vector
-    const float d = (rx * deltax + ry * deltay) / r;
-    // scaling factor (avoid negative or zero division)
-    const float s = fmaxf(r > 0.0f ? (r + d) / r : 0.0f, 0.0f);
-
-    if(k == 1 || k == 2)
-    {
-      ellipse->radius[0] = MAX(0.0002f, ellipse->radius[0] * s);
-      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
-        dt_conf_set_float("plugins/darkroom/spots/ellipse/radius_a", ellipse->radius[0]);
-      else
-        dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_a", ellipse->radius[0]);
-    }
-    //radius_b
-    else if(k == 3 || k == 4)
-    {
-      ellipse->radius[1] = MAX(0.0002f, ellipse->radius[1] * s);
-      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
-        dt_conf_set_float("plugins/darkroom/spots/ellipse/radius_b", ellipse->radius[1]);
-      else
-        dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_b", ellipse->radius[1]);
-    }
-
-
-    // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
-    dt_masks_gui_form_create(form, gui, index, module);
-
-    // we save the rotation
     return 1;
   }
   else if(gui->source_dragging)
   {
     // we end the form dragging
     gui->source_dragging = FALSE;
-    if(gui->scrollx != 0.0 || gui->scrolly != 0.0)
-    {
-      // if there's no dragging, the source is calculated in _ellipse_events_button_pressed()
-    }
-    else
-    {
-      // we change the center value
-      const float wd = darktable.develop->preview_pipe->backbuf_width;
-      const float ht = darktable.develop->preview_pipe->backbuf_height;
-      float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
-
-      dt_dev_distort_backtransform(darktable.develop, pts, 1);
-
-      form->source[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
-      form->source[1] = pts[1] / darktable.develop->preview_pipe->iheight;
-    }
-
-
-    // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
-    dt_masks_gui_form_create(form, gui, index, module);
-
-    // we save the move
-
-
+  
     // and select the source as default, if the mouse is not moved we are inside the
     // source and so want to move the source.
     gui->form_selected = TRUE;
@@ -1016,21 +884,22 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     if(!gpt) return 0;
     
     if(gui->form_dragging || gui->source_dragging)
-    {
-      const float wd = darktable.develop->preview_pipe->backbuf_width;
-      const float ht = darktable.develop->preview_pipe->backbuf_height;
-      float pts[2] = { pzx * wd + gui->dx, pzy * ht + gui->dy };
-      dt_dev_distort_backtransform(darktable.develop, pts, 1);
+      {
+      dt_develop_t *dev = (dt_develop_t *)darktable.develop;
+      // apply delta to the current mouse position
+      float pts[2] = { -1 , -1 };
+      const float pointer[2] = { pzx, pzy };
+      dt_dev_roi_delta_to_input_space(dev, gui->delta, pointer, pts);
 
       if(gui->form_dragging)
       {
-        ellipse->center[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
-        ellipse->center[1] = pts[1] / darktable.develop->preview_pipe->iheight;
+        ellipse->center[0] = pts[0];
+        ellipse->center[1] = pts[1];
       }
       else if(gui->source_dragging)
       {
-        form->source[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
-        form->source[1] = pts[1] / darktable.develop->preview_pipe->iheight;
+        form->source[0] = pts[0];
+        form->source[1] = pts[1];
       }
 
       // we recreate the form points
@@ -1048,12 +917,12 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
       const float yref = gpt->points[1];
       const float rx = gpt->points[k * 2] - xref;
       const float ry = gpt->points[k * 2 + 1] - yref;
-      const float deltax = gui->posx + gui->dx - xref;
-      const float deltay = gui->posy + gui->dy - yref;
+      const float deltax = gui->pos[0] + gui->delta[0] - xref;
+      const float deltay = gui->pos[1] + gui->delta[1] - yref;
 
       // we remap dx, dy to the right values, as it will be used in next movements
-      gui->dx = xref - gui->posx;
-      gui->dy = yref - gui->posy;
+      gui->delta[0] = xref - gui->pos[0];
+      gui->delta[1] = yref - gui->pos[1];
 
       const float r = sqrtf(rx * rx + ry * ry);
       const float d = (rx * deltax + ry * deltay) / r;
@@ -1086,29 +955,9 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     // rotation of the ellipse with the mouse
     else if(gui->form_rotating)
     {
-      const float wd = darktable.develop->preview_pipe->backbuf_width;
-      const float ht = darktable.develop->preview_pipe->backbuf_height;
-      const float x = pzx * wd;
-      const float y = pzy * ht;
 
-      // ellipse center
-      const float xref = gpt->points[0];
-      const float yref = gpt->points[1];
-
-      const float pts[8] = { xref, yref, x, y, 0, 0, gui->dx, gui->dy };
-
-      const float dv = atan2f(pts[3] - pts[1], pts[2] - pts[0]) - atan2f(-(pts[7] - pts[5]), -(pts[6] - pts[4]));
-
-      float pts2[8] = { xref, yref, x, y, xref + 10.0f, yref, xref, yref + 10.0f };
-      dt_dev_distort_backtransform(darktable.develop, pts2, 4);
-
-      float check_angle = atan2f(pts2[7] - pts2[1], pts2[6] - pts2[0]) - atan2f(pts2[5] - pts2[1], pts2[4] - pts2[0]);
-      // Normalize to the range -180 to 180 degrees
-      check_angle = atan2f(sinf(check_angle), cosf(check_angle));
-      if(check_angle < 0)
-        ellipse->rotation -= dv / M_PI * 180.0f;
-      else
-        ellipse->rotation += dv / M_PI * 180.0f;
+      const float origin_point[2] = { gpt->points[0], gpt->points[1] };
+      ellipse->rotation += dt_masks_rotate_with_anchor(darktable.develop, gui->pos, origin_point, gui);
 
       if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
         dt_conf_set_float("plugins/darkroom/spots/ellipse/rotation", ellipse->rotation);
@@ -1118,10 +967,6 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
       // we recreate the form points
       dt_masks_gui_form_remove(form, gui, index);
       dt_masks_gui_form_create(form, gui, index, module);
-
-      // we remap dx, dy to the right values, as it will be used in next movements
-      gui->dx = xref - gui->posx;
-      gui->dy = yref - gui->posy;
 
       return 1;
     }
@@ -1218,13 +1063,14 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     border_b = (flags & DT_MASKS_ELLIPSE_PROPORTIONAL) ? radius_b * (1.0f + masks_border) : radius_b + masks_border;
 
     // we get the ellipse center
-    float xpos = gui->posx;
-    float ypos = gui->posy;
+    float xpos = gui->pos[0];
+    float ypos = gui->pos[1];
 
     if((xpos == -1.f && ypos == -1.f) || gui->mouse_leaved_center)
     {
-      xpos = (.5f + dt_control_get_dev_zoom_x()) * darktable.develop->preview_pipe->backbuf_width;
-      ypos = (.5f + dt_control_get_dev_zoom_y()) * darktable.develop->preview_pipe->backbuf_height;
+      const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
+      xpos = (.5f + dev->x) * darktable.develop->preview_pipe->backbuf_width;
+      ypos = (.5f + dev->y) * darktable.develop->preview_pipe->backbuf_height;
     }
     float pts[2] = { xpos, ypos };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
@@ -1239,8 +1085,7 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     int draw = _ellipse_get_points(darktable.develop, x, y, radius_a, radius_b, rotation, &points, &points_count);
     if(draw && masks_border > 0.f)
     {
-      draw = _ellipse_get_points(
-          darktable.develop, x, y, border_a, border_b, rotation, &border, &border_count);
+      draw = _ellipse_get_points(darktable.develop, x, y, border_a, border_b, rotation, &border, &border_count);
     }
     // we draw the form and it's border
     cairo_save(cr);

@@ -700,7 +700,8 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
 
 void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h)
 {
-  int proc_w, proc_h;
+  int proc_w = 0;
+  int proc_h = 0;
   dt_dev_get_processed_size(dev, &proc_w, &proc_h);
   const float scale = dt_dev_get_zoom_level(dev);
 
@@ -770,14 +771,14 @@ void dt_dev_retrieve_full_pos(dt_develop_t *dev, const int px, const int py, flo
   const int ht = dev->pipe->processed_height;
   if(wd == 0 || ht == 0) return; // avoid division by zero
 
-  const float scale = dt_dev_get_natural_scale(dev, dev->pipe) * dev->scaling;
+  const float scale = dev->natural_scale * dev->scaling;
 
   // calculate delta from center in processed image coordinates
   const float dx = px - 0.5f * dev->width - dev->border_size;
   const float dy = py - 0.5f * dev->height - dev->border_size;
 
-  if(mouse_x) *mouse_x = dev->x + dx / (dev->pipe->processed_width * scale);
-  if(mouse_y) *mouse_y = dev->y + dy / (dev->pipe->processed_height * scale);
+  if(mouse_x) *mouse_x = dev->x + dx / (wd * scale);
+  if(mouse_y) *mouse_y = dev->y + dy / (ht * scale);
 }
 
 int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid)
@@ -1439,13 +1440,13 @@ float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
 
 float dt_dev_get_preview_natural_scale(dt_develop_t *dev)
 {
-  if(!dev->preview_pipe || dev->preview_pipe->output_backbuf_width == 0 || dev->preview_pipe->output_backbuf_height == 0)
+  if(!dev || !dev->preview_pipe || dev->preview_pipe->backbuf_width == 0 || dev->preview_pipe->backbuf_height == 0)
     return darktable.gui->ppd;
   else
-    return fminf(fminf((float)dev->width / (float)dev->preview_pipe->output_backbuf_width,
-                                (float)dev->height / (float)dev->preview_pipe->output_backbuf_height),
-                          1.f)
-                    * darktable.gui->ppd;
+    return fminf(fminf((float)dev->width / (float)dev->preview_pipe->backbuf_width,
+                       (float)dev->height / (float)dev->preview_pipe->backbuf_height),
+                 1.f)
+           * darktable.gui->ppd;
 }
 
 float dt_dev_get_zoom_level(const dt_develop_t *dev)
@@ -1489,48 +1490,42 @@ gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t 
   return FALSE;
 }
 
-gboolean dt_dev_rescale_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height)
+static gboolean _dev_translate_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height)
 {
   // DO NOT MODIFIY !! //
-  // used by preview image scalling and guide //
-  int proc_wd, proc_ht;
+  // used by preview image scalling, guide and modules //
+  int proc_wd = 0;
+  int proc_ht = 0;
   dt_dev_get_processed_size(dev, &proc_wd, &proc_ht);
   if(proc_wd == 0.f || proc_ht == 0.f) return TRUE;
 
-  // Get image position and scale
-
-  const float zoom_scale = dt_dev_get_zoom_level(dev);
-  const float scaling = dev->scaling * dev->preview_natural_scale;
-  
+  // Get image's origin position and scale
+  const float zoom_scale = dt_dev_get_zoom_level(dev);  
   const float tx = ceilf(0.5f * width - dev->x * proc_wd * zoom_scale);
   const float ty = ceilf(0.5f * height - dev->y * proc_ht * zoom_scale);
 
   cairo_translate(cr, tx, ty);
-  cairo_scale(cr, scaling, scaling);
+  
+  return FALSE;
+}
+
+gboolean dt_dev_rescale_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height)
+{
+  if(_dev_translate_roi(dev, cr, width, height))
+    return TRUE;
+  const float scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
+  cairo_scale(cr, scale, scale);
   
   return FALSE;
 }
 
 gboolean dt_dev_rescale_roi_to_input(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t height)
 {
-  int wd, ht;
-  dt_dev_get_processed_size(dev, &wd, &ht);
-  if(wd == 0.f || ht == 0.f) return TRUE;
-
-  const float scaling = dev->scaling;
-  const float scale = scaling * dev->natural_scale;
-
-
-  float roi_to_origin[2] = { 0.f, 0.f };
-  _dev_delta_roi_to_origin(dev, roi_to_origin);
-
-  fprintf(stderr, "delta to origin: %f %f\n", roi_to_origin[0], roi_to_origin[1]);
-
-  cairo_translate(cr, width * .5f, height * .5f);
-  cairo_scale(cr, zoom_scale, zoom_scale);
-  cairo_translate(cr, (-.5f * wd - roi_cntr_x * wd),
-                      (-.5f * ht - roi_cntr_y * ht));
-
+  if(_dev_translate_roi(dev, cr, width, height))
+    return TRUE;
+  const float scale = dt_dev_get_zoom_level(dev);
+  cairo_scale(cr, scale, scale);
+  
   return FALSE;
 }
 
@@ -1558,6 +1553,69 @@ gboolean dt_dev_check_zoom_scale_bounds(dt_develop_t *dev)
     return TRUE;
   }
   return FALSE;
+}
+
+gboolean dt_dev_roi_to_input_space(dt_develop_t *dev, /*gboolean normalized_in,*/ gboolean normalize_out,
+                                   const float in_x, const float in_y, float *point_x, float *point_y)
+{
+  if(!dev->preview_pipe || !point_x || !point_y) return FALSE;
+
+  const float scale = dev->natural_scale;
+  const int wd = dev->preview_pipe->backbuf_width;
+  const int ht = dev->preview_pipe->backbuf_height;
+  const int iwd = dev->preview_pipe->iwidth;
+  const int iht = dev->preview_pipe->iheight;
+  // avoid division by zero
+  if(wd == 0 || ht == 0 || iwd == 0 || iht == 0) return FALSE;
+
+  float pzx = in_x;
+  float pzy = in_y;
+
+  // if(normalized_in)
+  //{
+  //  De-normalize preview coordinate to pixel space
+  pzx *= dev->preview_pipe->backbuf_width;
+  pzy *= dev->preview_pipe->backbuf_height;
+  //}
+
+  pzx /= scale;
+  pzy /= scale;
+
+  // Now, the coordinate is in backbuf space.
+  float pts[2] = { pzx, pzy };
+
+  // We need to undistort them to get input space
+  if(!dt_dev_distort_backtransform(dev, pts, 1)) return FALSE;
+
+  // Finally normalize to input space, if needed
+  *point_x = normalize_out ? pts[0] / iwd : pts[0];
+  *point_y = normalize_out ? pts[1] / iht : pts[1];
+
+  return TRUE;
+}
+
+gboolean dt_dev_roi_delta_to_input_space(dt_develop_t *dev, const float delta[2],
+                                            const float in[2], float points[2])
+{
+  const float natural_scale = dev->natural_scale;
+  const int wd = dev->preview_pipe->backbuf_width;
+  const int ht = dev->preview_pipe->backbuf_height;
+  const int iwd = dev->preview_pipe->iwidth;
+  const int iht = dev->preview_pipe->iheight;
+  // avoid division by zero
+  if(wd == 0 || ht == 0 || iwd == 0 || iht == 0 || !points)
+    return FALSE;
+
+  float pts[2] = { in[0] * wd / natural_scale + delta[0],
+                   in[1] * ht / natural_scale + delta[1] };
+
+  if(!dt_dev_distort_backtransform(dev, pts, 1))
+    return FALSE;
+
+  points[0] = pts[0] / iwd;
+  points[1] = pts[1] / iht;
+
+  return TRUE;
 }
 
 // clang-format off

@@ -20,13 +20,10 @@
 #include "common/debug.h"
 #include "common/mipmap_cache.h"
 #include "control/conf.h"
-
 #include "common/undo.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
-
-#pragma GCC diagnostic ignored "-Wshadow"
 
 void dt_masks_set_dash(cairo_t *cr, dt_masks_dash_type_t type, float zoom_scale)
 {
@@ -124,10 +121,10 @@ static int _get_opacity(dt_masks_form_gui_t *gui, const dt_masks_form_t *form)
   int opacity = 0;
   for(GList *fpts = grp->points; fpts; fpts = g_list_next(fpts))
   {
-    const dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
-    if(fpt->formid == formid)
+    const dt_masks_form_group_t *form_pt = (dt_masks_form_group_t *)fpts->data;
+    if(form_pt->formid == formid)
     {
-      opacity = fpt->opacity * 100;
+      opacity = form_pt->opacity * 100;
       break;
     }
   }
@@ -170,9 +167,9 @@ void dt_masks_init_form_gui(dt_masks_form_gui_t *gui)
 {
   memset(gui, 0, sizeof(dt_masks_form_gui_t));
 
-  gui->posx = gui->posy = -1.0f;
+  gui->pos[0] = gui->pos[1] = -1.0f;
   gui->mouse_leaved_center = TRUE;
-  gui->posx_source = gui->posy_source = -1.0f;
+  gui->pos_source[0] = gui->pos_source[1] = -1.0f;
   gui->source_pos_type = DT_MASKS_SOURCE_POS_RELATIVE_TEMP;
   gui->form_selected = FALSE;
 }
@@ -187,7 +184,7 @@ void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *gui)
   gui->handle_border_selected = -1;
   gui->group_selected = -1;
   gui->group_selected = -1;
-  gui->dx = gui->dy = 0.0f;
+  gui->delta[0] = gui->delta[1] = 0.0f;
   gui->form_selected = gui->border_selected = gui->form_dragging = gui->form_rotating = FALSE;
   gui->pivot_selected = FALSE;
   gui->handle_border_selected = gui->seg_selected = gui->node_selected = gui->handle_selected = -1;
@@ -1134,17 +1131,19 @@ int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double
   // record mouse position even if there are no masks visible
   dt_masks_form_gui_t *gui = darktable.develop->form_gui;
   dt_masks_form_t *form = darktable.develop->form_visible;
+  const float scale = darktable.develop->natural_scale;
+
   float pzx = 0.0f, pzy = 0.0f;
-
-  pzx += 0.5f;
-  pzy += 0.5f;
-
+  dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
   if(gui)
   {
     // This assume that if this event is generated, the mouse is over the center window
     gui->mouse_leaved_center = FALSE;
-    gui->posx = pzx * darktable.develop->preview_pipe->backbuf_width;
-    gui->posy = pzy * darktable.develop->preview_pipe->backbuf_height;
+    gui->pos[0] = pzx * darktable.develop->preview_pipe->backbuf_width;
+    gui->pos[1] = pzy * darktable.develop->preview_pipe->backbuf_height;
+    // unscale
+    gui->pos[0] /= scale;
+    gui->pos[1] /= scale;
   }
 
   // do not process if no forms visible
@@ -1171,6 +1170,7 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
   dt_masks_form_t *form = darktable.develop->form_visible;
   dt_masks_form_gui_t *gui = darktable.develop->form_gui;
   float pzx = 0.0f, pzy = 0.0f;
+  dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
 
   int ret = 0;
   if(form->functions)
@@ -1193,8 +1193,9 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
 
   dt_masks_form_t *form = darktable.develop->form_visible;
   dt_masks_form_gui_t *gui = darktable.develop->form_gui;
+  
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_full_pos(darktable.develop, x, y, &pzx, &pzy);
+  dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);
 
@@ -1212,7 +1213,7 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
   dt_masks_form_t *form = darktable.develop->form_visible;
   dt_masks_form_gui_t *gui = darktable.develop->form_gui;
   float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_get_pointer_full_pos(darktable.develop, x, y, &pzx, &pzy);
+  dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
 
   int ret = 0;
   const gboolean incr = dt_mask_scroll_increases(up);
@@ -1544,9 +1545,10 @@ void dt_masks_draw_lines(const dt_masks_dash_type_t dash_type, const gboolean so
 {
   cairo_save(cr);
 
-  const gboolean border = dash_type;
+  // are we drawing a border ?
+  const gboolean border = dash_type != DT_MASKS_NO_DASH;
   // draw the shape from the integrated function if any
-  if(functions && functions->draw_shape)
+  if(functions && functions->draw_shape && points && points_count >= 2 )
     functions->draw_shape(cr, points, points_count, nb, border, FALSE);
 
   if(dash_type)
@@ -1592,14 +1594,23 @@ void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, in
   if(!gui) return;
   if(!form) return;
 
-  float wd = dev->preview_pipe->backbuf_width;
-  float ht = dev->preview_pipe->backbuf_height;
+  dt_pthread_mutex_t *mutex = &dev->preview_pipe->backbuf_mutex;
+  dt_pthread_mutex_lock(mutex);
+
+  int wd, ht;
+  dt_dev_get_processed_size(dev, &wd, &ht);
+
   if(wd < 1.0 || ht < 1.0) return;
-  float zoom_scale = 1.f;
+  const float zoom_scale = dt_dev_get_zoom_level(dev);
 
   cairo_save(cr);
-  cairo_set_source_rgb(cr, .3, .3, .3);
-
+  // We rescale to input space
+  if(dt_dev_rescale_roi_to_input(dev, cr, width, height))
+  {
+    cairo_restore(cr);
+    return;
+  }
+  
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 
   // we update the form if needed
@@ -1615,6 +1626,8 @@ void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, in
     form->functions->post_expose(cr, zoom_scale, gui, 0, g_list_length(form->points));
 
   cairo_restore(cr);
+  dt_pthread_mutex_unlock(mutex);
+
 }
 
 void dt_masks_clear_form_gui(dt_develop_t *dev)
@@ -1628,7 +1641,7 @@ void dt_masks_clear_form_gui(dt_develop_t *dev)
   dev->form_gui->guipoints_payload = NULL;
   dev->form_gui->guipoints_count = 0;
   dev->form_gui->pipe_hash = dev->form_gui->formid = 0;
-  dev->form_gui->dx = dev->form_gui->dy = 0.0f;
+  dev->form_gui->delta[0] = dev->form_gui->delta[1] = 0.0f;
   dev->form_gui->scrollx = dev->form_gui->scrolly = 0.0f;
   dev->form_gui->form_selected = dev->form_gui->border_selected = dev->form_gui->form_dragging
       = dev->form_gui->form_rotating = dev->form_gui->border_toggling = dev->form_gui->gradient_toggling = FALSE;
@@ -2595,6 +2608,7 @@ void dt_masks_draw_clone_source_pos(cairo_t *cr, const float zoom_scale, const f
 {
   const float dx = DT_MASKS_SIZE_CROSS / zoom_scale;
   const float dy = DT_MASKS_SIZE_CROSS / zoom_scale;
+  cairo_save(cr);
 
   dt_masks_set_dash(cr, DT_MASKS_NO_DASH, zoom_scale);
   cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
@@ -2609,6 +2623,8 @@ void dt_masks_draw_clone_source_pos(cairo_t *cr, const float zoom_scale, const f
   cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
   dt_draw_set_color_overlay(cr, TRUE, 0.8);
   cairo_stroke(cr);
+
+  cairo_restore(cr);
 }
 
 // sets if the initial source position for a clone mask will be absolute or relative,
@@ -2626,8 +2642,10 @@ void dt_masks_set_source_pos_initial_state(dt_masks_form_gui_t *gui, const uint3
   // both source types record an absolute position,
   // for the relative type, the first time is used the position is recorded,
   // the second time a relative position is calculated based on that one
-  gui->posx_source = pzx * darktable.develop->preview_pipe->backbuf_width;
-  gui->posy_source = pzy * darktable.develop->preview_pipe->backbuf_height;
+  const float scale = darktable.develop->natural_scale;
+  // normalize backbuf points
+  gui->pos_source[0] = pzx * darktable.develop->preview_pipe->backbuf_width / scale;
+  gui->pos_source[1] = pzy * darktable.develop->preview_pipe->backbuf_height / scale;
 }
 
 // set the initial source position value for a clone mask
@@ -2643,32 +2661,32 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *gui, dt_masks_fo
   if(gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE_TEMP)
   {
     // if it has not been defined by the user, set some default
-    if(gui->posx_source == -1.0f && gui->posy_source == -1.0f)
+    if(gui->pos_source[0] == -1.0f && gui->pos_source[1] == -1.0f)
     {
       if(form->functions && form->functions->initial_source_pos)
       {
-        form->functions->initial_source_pos(iwd, iht, &gui->posx_source, &gui->posy_source);
+        fprintf(stderr, "initial source pos from shape's function\n");
+        form->functions->initial_source_pos(iwd, iht, &gui->pos_source[0], &gui->pos_source[1]);
       }
       else
         fprintf(stderr, "[dt_masks_set_source_pos_initial_value] unsupported masks type when calculating source position initial value\n");
 
-      float pts[2] = { pzx * wd + gui->posx_source, pzy * ht + gui->posy_source };
-      dt_dev_distort_backtransform(darktable.develop, pts, 1);
+      // set offset to form->source
+      float pts[2] = { pzx, pzy };
+      dt_dev_roi_delta_to_input_space(darktable.develop, gui->pos_source, pts, form->source);
 
-      form->source[0] = pts[0] / iwd;
-      form->source[1] = pts[1] / iht;
     }
     else
     {
       // if a position was defined by the user, use the absolute value the first time
-      float pts[2] = { gui->posx_source, gui->posy_source };
+      float pts[2] = { gui->pos_source[0], gui->pos_source[1] };
       dt_dev_distort_backtransform(darktable.develop, pts, 1);
 
       form->source[0] = pts[0] / iwd;
       form->source[1] = pts[1] / iht;
 
-      gui->posx_source = gui->posx_source - pzx * wd;
-      gui->posy_source = gui->posy_source - pzy * ht;
+      gui->pos_source[0] = gui->pos_source[0] - pzx * wd / darktable.develop->natural_scale;
+      gui->pos_source[1] = gui->pos_source[1] - pzy * ht / darktable.develop->natural_scale;
     }
 
     gui->source_pos_type = DT_MASKS_SOURCE_POS_RELATIVE;
@@ -2676,16 +2694,13 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *gui, dt_masks_fo
   else if(gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE)
   {
     // original pos was already defined and relative value calculated, just use it
-    float pts[2] = { pzx * wd + gui->posx_source, pzy * ht + gui->posy_source };
-    dt_dev_distort_backtransform(darktable.develop, pts, 1);
-
-    form->source[0] = pts[0] / iwd;
-    form->source[1] = pts[1] / iht;
+    float pts[2] = { pzx, pzy };
+    dt_dev_roi_delta_to_input_space(darktable.develop, gui->pos_source, pts, form->source);
   }
   else if(gui->source_pos_type == DT_MASKS_SOURCE_POS_ABSOLUTE)
   {
     // an absolute position was defined by the user
-    float pts_src[2] = { gui->posx_source, gui->posy_source };
+    float pts_src[2] = { gui->pos_source[0], gui->pos_source[1] };
     dt_dev_distort_backtransform(darktable.develop, pts_src, 1);
 
     form->source[0] = pts_src[0] / iwd;
@@ -2705,12 +2720,12 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mas
   const float iht = darktable.develop->preview_pipe->iheight;
   if(gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE)
   {
-    x = xpos + gui->posx_source;
-    y = ypos + gui->posy_source;
+    x = xpos + gui->pos_source[0];
+    y = ypos + gui->pos_source[1];
   }
   else if(gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE_TEMP)
   {
-    if(gui->posx_source == -1.0f && gui->posy_source == -1.0f)
+    if(gui->pos_source[0] == -1.0f && gui->pos_source[1] == -1.0f)
     {
 #if 0 //TODO: replace individual cases with this generic one (will require passing 'form' through multiple layers...)
       if(form->functions && form->functions->initial_source_pos)
@@ -2750,8 +2765,8 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mas
     }
     else
     {
-      x = gui->posx_source;
-      y = gui->posy_source;
+      x = gui->pos_source[0];
+      y = gui->pos_source[1];
     }
   }
   else if(gui->source_pos_type == DT_MASKS_SOURCE_POS_ABSOLUTE)
@@ -2759,14 +2774,14 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mas
     // if the user is actually adding, the mask follow the cursor
     if(adding)
     {
-      x = xpos + gui->posx_source - initial_xpos;
-      y = ypos + gui->posy_source - initial_ypos;
+      x = xpos + gui->pos_source[0] - initial_xpos;
+      y = ypos + gui->pos_source[1] - initial_ypos;
     }
     else
     {
       // if not added yet set the start position
-      x = gui->posx_source;
-      y = gui->posy_source;
+      x = gui->pos_source[0];
+      y = gui->pos_source[1];
     }
   }
   else
@@ -2774,6 +2789,42 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mas
 
   *px = x;
   *py = y;
+}
+
+float dt_masks_rotate_with_anchor(dt_develop_t *dev, const float anchor[2], const float center[2], dt_masks_form_gui_t *gui)
+{
+  const float center_x = center[0];
+  const float center_y = center[1];
+
+  // get the current angle
+  const float anchor_x = anchor[0];
+  const float anchor_y = anchor[1];
+  const float angle_current = atan2f(anchor_y - center_y, anchor_x - center_x);
+
+  // get the previous angle
+  const float delta_x = gui->delta[0];
+  const float delta_y = gui->delta[1];
+  const float angle_prev = atan2f(delta_y - center_y, delta_x - center_x);
+
+  // calculate the angle difference an normalize to -180 to 180 degrees
+  float delta_angle = angle_current - angle_prev;
+  float angle = atan2f(sinf(delta_angle), cosf(delta_angle));
+
+  // check if distortion inverts the axes
+  float pts2[8] = { center_x, center_y, anchor_x , anchor_y, center_x+10.0f, center_y, center_x, center_y+10.0f };
+  dt_dev_distort_backtransform(dev, pts2, 4);
+  float check_angle = atan2f(pts2[7] - pts2[1], pts2[6] - pts2[0]) - atan2f(pts2[5] - pts2[1], pts2[4] - pts2[0]);
+  // Normalize to the range -180 to 180 degrees
+  check_angle = atan2f(sinf(check_angle), cosf(check_angle));
+
+  // Adjust the sign if the axes are inverted by distortion
+  if(check_angle < 0.0f) angle = -angle;
+
+  // Update the delta for the next frame (old position becomes the current one)
+  gui->delta[0] = anchor_x;
+  gui->delta[1] = anchor_y;
+
+  return angle / M_PI * 180.0f;
 }
 
 #include "detail.c"

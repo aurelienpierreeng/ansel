@@ -85,7 +85,8 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
   darktable.develop->mask_form_selected_id = -1;
 
   // now we check if we are near a new form
-  const float as = DT_PIXEL_APPLY_DPI(5);  // transformed to backbuf dimensions
+  const float zoom_scale = darktable.develop->scaling * dt_dev_get_natural_scale(darktable.develop, darktable.develop->preview_pipe);
+  const float as = DT_MASKS_SELECTION_DISTANCE / zoom_scale;  // transformed to backbuf dimensions
   int pos = 0;
   gui->form_selected = gui->border_selected = FALSE;
   gui->source_selected = gui->source_dragging = FALSE;
@@ -100,6 +101,10 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
   int sel_pos = 0;
   float sel_dist = FLT_MAX;
 
+  const float scale = darktable.develop->natural_scale;
+  const float xx = (pzx * darktable.develop->preview_pipe->backbuf_width)  / scale,
+              yy = (pzy * darktable.develop->preview_pipe->backbuf_height) / scale;
+
   for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
   {
     dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
@@ -111,8 +116,12 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
     float dist = FLT_MAX;
     inside = inside_border = inside_source = 0;
     near = -1;
-    const float xx = pzx * darktable.develop->preview_pipe->backbuf_width,
-                yy = pzy * darktable.develop->preview_pipe->backbuf_height;
+    
+
+    //float xx = -1, yy = -1;
+    //dt_dev_retrieve_full_pos(darktable.develop, pzx, pzy, &xx, &yy);
+    
+
     if(frm->functions && frm->functions->get_distance)
       frm->functions->get_distance(xx, yy, as, gui, pos, g_list_length(frm->points),
                                    &inside, &inside_border, &near, &inside_source, &dist);
@@ -144,9 +153,8 @@ static int _group_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
                                      int which, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
                                      int unused2)
 {
-  const dt_dev_zoom_t zoom = dt_control_get_dev_zoom();
-  const int closeup = dt_control_get_dev_closeup();
-  const float zoom_scale = dt_dev_get_zoom_scale(darktable.develop, zoom, 1<<closeup, 1);
+  const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
+  const float zoom_scale = dev->scaling;
   const float as = DT_MASKS_SELECTION_DISTANCE / zoom_scale;
 
   // we first don't do anything if we are inside a scrolling session

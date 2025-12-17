@@ -35,22 +35,22 @@ extern "C" {
 #define DEVELOP_MASKS_VERSION (6)
 
 /** line sizes for drawing */
-#define DT_MASKS_SIZE_LINE                      DT_PIXEL_APPLY_DPI(1.0f)
-#define DT_MASKS_SIZE_LINE_SELECTED             DT_PIXEL_APPLY_DPI(2.0f)
-#define DT_MASKS_SIZE_LINE_HIGHLIGHT            (DT_PIXEL_APPLY_DPI(2.0f) + DT_MASKS_SIZE_LINE)
-#define DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED   (DT_PIXEL_APPLY_DPI(3.0f) + DT_MASKS_SIZE_LINE_SELECTED)
+#define DT_MASKS_SIZE_LINE                      DT_PIXEL_APPLY_DPI(1.5f)
+#define DT_MASKS_SIZE_LINE_SELECTED             DT_PIXEL_APPLY_DPI(3.0f)
+#define DT_MASKS_SIZE_LINE_HIGHLIGHT            (DT_PIXEL_APPLY_DPI(4.0f) + DT_MASKS_SIZE_LINE)
+#define DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED   (DT_PIXEL_APPLY_DPI(5.0f) + DT_MASKS_SIZE_LINE_SELECTED)
 #define DT_MASKS_SIZE_CROSS                     DT_PIXEL_APPLY_DPI(7.0f)
 
 /** stuff's scale */
-#define DT_MASKS_SCALE_DASH          DT_PIXEL_APPLY_DPI(6.0f)
-#define DT_MASKS_SCALE_ARROW         DT_PIXEL_APPLY_DPI(12.0f)
+#define DT_MASKS_SCALE_DASH          DT_PIXEL_APPLY_DPI(12.0f)
+#define DT_MASKS_SCALE_ARROW         DT_PIXEL_APPLY_DPI(18.0f)
 // gradient wheel
 #define DT_MASKS_SCALE_WHEEL         DT_PIXEL_APPLY_DPI(20.0f)
 // radius/width of a handle & node
-#define DT_MASKS_WIDTH_NODE          DT_PIXEL_APPLY_DPI(3.5f)
+#define DT_MASKS_WIDTH_NODE          DT_PIXEL_APPLY_DPI(5.0f)
 #define DT_MASKS_WIDTH_NODE_SELECTED (1.5f * DT_MASKS_WIDTH_NODE)
 
-// distance to the cursor for item selection
+// detection area for hovering/selecting nodes, lines and handles
 #define DT_MASKS_SELECTION_DISTANCE (2.0f * DT_MASKS_WIDTH_NODE)
 
 /**dash type */
@@ -142,7 +142,7 @@ typedef enum dt_masks_source_pos_type_t
 /** structure used to store 1 node for a circle */
 typedef struct dt_masks_node_circle_t
 {
-  float center[2];
+  float center[2]; // point in normalized input space
   float radius;
   float border;
 } dt_masks_node_circle_t;
@@ -245,14 +245,18 @@ typedef struct dt_masks_functions_t
                   int *width, int *height, int *posx, int *posy);
   int (*get_source_area)(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, struct dt_masks_form_t *form,
                          int *width, int *height, int *posx, int *posy);
+  /* Mouse pzx and pzy are normalized coordinates in full image space */
   int (*mouse_moved)(struct dt_iop_module_t *module, float pzx, float pzy, double pressure, int which,
                      struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
+  /* Mouse pzx and pzy are normalized coordinates in full image space */
   int (*mouse_scrolled)(struct dt_iop_module_t *module, float pzx, float pzy, int up, const int delta_y, uint32_t state,
                         struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index,
                         dt_masks_interaction_t interaction);
+  /* Mouse pzx and pzy are normalized coordinates in full image space */
   int (*button_pressed)(struct dt_iop_module_t *module, float pzx, float pzy,
                         double pressure, int which, int type, uint32_t state,
                         struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
+  /* Mouse pzx and pzy are normalized coordinates in full image space */
   int (*button_released)(struct dt_iop_module_t *module, float pzx, float pzy, int which, uint32_t state,
                          struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
   void (*post_expose)(cairo_t *cr, float zoom_scale, struct dt_masks_form_gui_t *gui, int index, int num_points);
@@ -282,11 +286,11 @@ typedef struct dt_masks_form_t
 /** structure used to define all the gui points to draw in viewport*/
 typedef struct dt_masks_form_gui_points_t
 {
-  float *points;
+  float *points;   // points in anormalized out space
   int points_count;
-  float *border;
+  float *border;   // border points in anormalized out space
   int border_count;
-  float *source;
+  float *source;   // source point in anormalized out space
   int source_count;
   gboolean clockwise;
 } dt_masks_form_gui_points_t;
@@ -312,7 +316,16 @@ typedef struct dt_masks_form_gui_t
   int guipoints_count;
 
   // values for mouse positions, etc...
-  float posx, posy, dx, dy, scrollx, scrolly, posx_source, posy_source;
+
+  // Mouse position (in anormalized out space)
+  float pos[2];
+  // delta movement of the mouse (in anormalized out space)
+  float delta[2];
+  // scroll offset
+  float scrollx, scrolly;
+  // Position of a clone mask's source point
+  float pos_source[2];
+
   // TRUE if mouse has leaved the center window
   gboolean mouse_leaved_center;
   gboolean form_selected;
@@ -569,6 +582,17 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *gui, dt_masks_fo
 void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mask_type, const float initial_xpos,
                                          const float initial_ypos, const float xpos, const float ypos, float *px,
                                          float *py, const int adding);
+/**
+ * @brief Rotate a mask shape around its center.
+ * WARNING: gui->delta will be updated with the new position after rotation.
+ * 
+ * @param dev the develop structure
+ * @param anchor the array representing the anchor position (grabbing point) in normalized coordinates.
+ * @param center the array representing the origin point of rotation in normalized coordinates
+ * @param gui the GUI form structure
+ * @return * float : The signed angle to increment.
+ */
+float dt_masks_rotate_with_anchor(dt_develop_t *dev, const float anchor[2], const float center[2], dt_masks_form_gui_t *gui);
 
 /** Getters and setters for direct GUI interaction */
 float dt_masks_form_get_opacity(dt_masks_form_t *form, int parentid);
