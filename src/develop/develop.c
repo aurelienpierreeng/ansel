@@ -472,9 +472,10 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
   *ht = fminf(roundf(*scale * pipe->processed_height), dev->height);
 
   // dev->x,y are the relative coordinates of the ROI center.
-  // x,y here are the top-left corner. Translate:
-  *x = roundf(dev->x * pipe->processed_width * *scale - *wd / 2.);
-  *y = roundf(dev->y * pipe->processed_height * *scale - *ht / 2.);
+  // in preview pipe, we always render a full image, so x,y = 0,0 
+  // otherwise, x,y here are the top-left corner. Translate:
+  *x = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW) ? 0 : roundf(dev->x * pipe->processed_width * *scale - *wd * .5f);
+  *y = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW) ? 0 : roundf(dev->y * pipe->processed_height * *scale - *ht * .5f);
 
   return x_old != *x || y_old != *y || wd_old != *wd || ht_old != *ht || old_scale != *scale;
 }
@@ -532,7 +533,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
     dt_atomic_set_int(&pipe->shutdown, FALSE);
 
     // In case of re-entry, we will rerun the whole pipe, so we need
-    // too resynch it in full too before.
+    // to resynch it in full too before.
     // Need to be before dt_dev_pixelpipe_change()
     if(dt_dev_pixelpipe_has_reentry(pipe))
     {
