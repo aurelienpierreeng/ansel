@@ -125,8 +125,8 @@ jobs:
       - name: Notify Matrix
         if: ${{ success() }}
         run: |
-          FILENAME=$(tr '~' '.' <<< "$(find . -type f -iname "ansel-*.exe")")
-          MESSAGE="New Exe [${FILENAME}](${{ env.REPO }}/releases/download/${{ env.TAG }}/${FILENAME}) built"
+          FILENAME=$(tr '~' '.' <<< "$(find . -type f -iname "Ansel-*.dmg")")
+          MESSAGE="New dmg package [${FILENAME}](${{ env.REPO }}/releases/download/${{ env.TAG }}/${FILENAME}) built"
           python .ci/matrix.py \
           -m "$MESSAGE" \
           -s ${{ secrets.MATRIX_SERVER }} \
