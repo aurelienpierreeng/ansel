@@ -201,57 +201,57 @@ static gboolean _polygon_is_clockwise(dt_masks_form_t *form)
   return TRUE;
 }
 
-/** fill eventual gaps between 2 points with a line */
+/** fill eventual gaps between 2 points with a line using Bresenham algorithm
+    This avoids repeated floating-point division and rounding errors.
+ */
 static int _polygon_fill_gaps(int lastx, int lasty, int x, int y, dt_masks_dynbuf_t *points)
 {
   dt_masks_dynbuf_reset(points);
   dt_masks_dynbuf_add_2(points, x, y);
 
-  // now we want to be sure everything is continuous
-  if(x - lastx > 1)
+  const int dx = x - lastx;
+  const int dy = y - lasty;
+  const int abs_dx = abs(dx);
+  const int abs_dy = abs(dy);
+
+  // Only fill gaps if distance is > 1 in either axis
+  if(abs_dx <= 1 && abs_dy <= 1) return 1;
+
+  // Use Bresenham's line algorithm (integer-based)
+  int err = abs_dx > abs_dy ? (abs_dx / 2) : (abs_dy / 2);
+  int px = lastx;
+  int py = lasty;
+  const int sx = dx > 0 ? 1 : -1;
+  const int sy = dy > 0 ? 1 : -1;
+
+  if(abs_dx > abs_dy)
   {
-    for(int j = x - 1; j > lastx; j--)
+    // Major axis is X
+    while(px != x)
     {
-      const int yyy = (j - lastx) * (y - lasty) / (float)(x - lastx) + lasty;
-      const int lasty2 = dt_masks_dynbuf_get(points, -1);
-      if(lasty2 - yyy > 1)
+      px += sx;
+      err -= abs_dy;
+      if(err < 0)
       {
-        for(int jj = lasty2 + 1; jj < yyy; jj++)
-        {
-          dt_masks_dynbuf_add_2(points, j, jj);
-        }
+        py += sy;
+        err += abs_dx;
       }
-      else if(lasty2 - yyy < -1)
-      {
-        for(int jj = lasty2 - 1; jj > yyy; jj--)
-        {
-          dt_masks_dynbuf_add_2(points, j, jj);
-        }
-      }
-      dt_masks_dynbuf_add_2(points, j, yyy);
+      dt_masks_dynbuf_add_2(points, px, py);
     }
   }
-  else if(x - lastx < -1)
+  else
   {
-    for(int j = x + 1; j < lastx; j++)
+    // Major axis is Y
+    while(py != y)
     {
-      int yyy = (j - lastx) * (y - lasty) / (float)(x - lastx) + lasty;
-      int lasty2 = dt_masks_dynbuf_get(points, -1);
-      if(lasty2 - yyy > 1)
+      py += sy;
+      err -= abs_dx;
+      if(err < 0)
       {
-        for(int jj = lasty2 + 1; jj < yyy; jj++)
-        {
-          dt_masks_dynbuf_add_2(points, j, jj);
-        }
+        px += sx;
+        err += abs_dy;
       }
-      else if(lasty2 - yyy < -1)
-      {
-        for(int jj = lasty2 - 1; jj > yyy; jj--)
-        {
-          dt_masks_dynbuf_add_2(points, j, jj);
-        }
-      }
-      dt_masks_dynbuf_add_2(points, j, yyy);
+      dt_masks_dynbuf_add_2(points, px, py);
     }
   }
   return 1;
@@ -366,47 +366,72 @@ static void _polygon_points_recurs(float *p1, float *p2, double tmin, double tma
   _polygon_points_recurs(p1, p2, tx, tmax, rc, polygon_max, rb, border_max, rpolygon, rborder, dpoints, dborder, withborder);
 }
 
+// Maximum number of self-intersection portions to track;
+// helps limit detection complexity
+#define POLYGON_MAX_SELF_INTERSECTIONS(nb_nodes) ((nb_nodes) * 4)
+
 /** find all self intersections in a polygon */
-static int _polygon_find_self_intersection(dt_masks_dynbuf_t *inter, int nb_corners, float *border, int border_count)
+static int _polygon_find_self_intersection(dt_masks_dynbuf_t *inter, int nb_nodes, float *border, int border_count)
 {
-  if(nb_corners == 0 || border_count == 0) return 0;
+  if(nb_nodes == 0 || border_count == 0) return 0;
 
   int inter_count = 0;
 
   // we search extreme points in x and y
-  int xmin = INT_MAX, xmax = INT_MIN, ymin = INT_MAX, ymax = INT_MIN;
-  int posextr[4] = { -1 }; // xmin,xmax,ymin,ymax
+  float xmin_f = FLT_MAX, xmax_f = -FLT_MAX;
+  float ymin_f = FLT_MAX, ymax_f = -FLT_MAX;
+  int posextr[4] = { -1 };
 
-  for(int i = nb_corners * 3; i < border_count; i++)
+  for(int i = nb_nodes * 3; i < border_count; i++)
   {
     if(isnan(border[i * 2]) || isnan(border[i * 2 + 1]))
     {
-      border[i * 2] = border[i * 2 - 2];
-      border[i * 2 + 1] = border[i * 2 - 1];
+      // find nearest previous valid point; if at start, wrap to last valid point
+      int prev = i - 1;
+      while(prev >= nb_nodes * 3 && (isnan(border[prev * 2]) || isnan(border[prev * 2 + 1]))) prev--;
+      if(prev < nb_nodes * 3)
+      {
+        // wrap to last valid point in buffer
+        prev = border_count - 1;
+        while(prev >= nb_nodes * 3 && (isnan(border[prev * 2]) || isnan(border[prev * 2 + 1]))) prev--;
+      }
+      if(prev >= nb_nodes * 3)
+      {
+        border[i * 2] = border[prev * 2];
+        border[i * 2 + 1] = border[prev * 2 + 1];
+      }
+      else
+      {
+        continue; // skip if no valid point found
+      }
     }
-    if(xmin > border[i * 2])
+    if(xmin_f > border[i * 2])
     {
-      xmin = border[i * 2];
+      xmin_f = border[i * 2];
       posextr[0] = i;
     }
-    if(xmax < border[i * 2])
+    if(xmax_f < border[i * 2])
     {
-      xmax = border[i * 2];
+      xmax_f = border[i * 2];
       posextr[1] = i;
     }
-    if(ymin > border[i * 2 + 1])
+    if(ymin_f > border[i * 2 + 1])
     {
-      ymin = border[i * 2 + 1];
+      ymin_f = border[i * 2 + 1];
       posextr[2] = i;
     }
-    if(ymax < border[i * 2 + 1])
+    if(ymax_f < border[i * 2 + 1])
     {
-      ymax = border[i * 2 + 1];
+      ymax_f = border[i * 2 + 1];
       posextr[3] = i;
     }
   }
-  xmin -= 1, ymin -= 1;
-  xmax += 1, ymax += 1;
+
+  // Cast to int with explicit rounding for stable grid computation
+  int xmin = (int)floorf(xmin_f) - 1;
+  int xmax = (int)ceilf(xmax_f) + 1;
+  int ymin = (int)floorf(ymin_f) - 1;
+  int ymax = (int)ceilf(ymax_f) + 1;
   const int hb = ymax - ymin;
   const int wb = xmax - xmin;
 
@@ -429,16 +454,19 @@ static int _polygon_find_self_intersection(dt_masks_dynbuf_t *inter, int nb_corn
   // because it may be in a self-intersected section
   // so we choose a point where we are sure there's no intersection:
   // one from border shape extrema (here x_max)
-  int lastx = border[(posextr[1] - 1) * 2];
-  int lasty = border[(posextr[1] - 1) * 2 + 1];
+  // start from the point immediately before the x_max extremum, with safe wrap-around
+  int start_idx = posextr[1] - 1;
+  if(start_idx < nb_nodes * 3) start_idx = border_count - 1;
+  int lastx = border[start_idx * 2];
+  int lasty = border[start_idx * 2 + 1];
 
-  for(int ii = nb_corners * 3; ii < border_count; ii++)
+  for(int ii = nb_nodes * 3; ii < border_count; ii++)
   {
     // we want to loop from one border extremity
-    int i = ii - nb_corners * 3 + posextr[1];
-    if(i >= border_count) i = i - border_count + nb_corners * 3;
+    int i = ii - nb_nodes * 3 + posextr[1];
+    if(i >= border_count) i = i - border_count + nb_nodes * 3;
 
-    if(inter_count >= nb_corners * 4) break;
+    if(inter_count >= POLYGON_MAX_SELF_INTERSECTIONS(nb_nodes)) break;
 
     // we want to be sure everything is continuous
     _polygon_fill_gaps(lastx, lasty, border[i * 2], border[i * 2 + 1], extra);
@@ -454,7 +482,8 @@ static int _polygon_find_self_intersection(dt_masks_dynbuf_t *inter, int nb_corn
       // we check also 2 points around to be sure catching intersection
       int v[3] = { 0 };
       const int idx = (yy - ymin) * wb + (xx - xmin);
-      if(idx < 0 || idx > ss)
+      // ensure idx is within [0, ss)
+      if(idx < 0 || (size_t)idx >= ss)
       {
         dt_free_align(binter);
         return 0;
@@ -534,10 +563,10 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
                                    float **border, int *border_count, gboolean source)
 {
   double start2 = 0.0;
-
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
-  const float wd = pipe->iwidth, ht = pipe->iheight;
+  const float iwd = pipe->iwidth;
+  const float iht = pipe->iheight;
   const guint nb = g_list_length(form->points);
 
   dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *intersections = NULL;
@@ -575,8 +604,8 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
   if(source && nb > 0 && transf_direction != DT_DEV_TRANSFORM_DIR_ALL)
   {
     dt_masks_node_polygon_t *polygon = (dt_masks_node_polygon_t *)form->points->data;
-    dx = (polygon->node[0] - form->source[0]) * wd;
-    dy = (polygon->node[1] - form->source[1]) * ht;
+    dx = (polygon->node[0] - form->source[0]) * iwd;
+    dy = (polygon->node[1] - form->source[1]) * iht;
   }
   for(const GList *l = form->points; l; l = g_list_next(l))
   {
@@ -584,12 +613,12 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
     float *const buf = dt_masks_dynbuf_reserve_n(dpoints, 6);
     if(buf)
     {
-      buf[0] = pt->ctrl1[0] * wd - dx;
-      buf[1] = pt->ctrl1[1] * ht - dy;
-      buf[2] = pt->node[0] * wd - dx;
-      buf[3] = pt->node[1] * ht - dy;
-      buf[4] = pt->ctrl2[0] * wd - dx;
-      buf[5] = pt->ctrl2[1] * ht - dy;
+      buf[0] = pt->ctrl1[0] * iwd - dx;
+      buf[1] = pt->ctrl1[1] * iht - dy;
+      buf[2] = pt->node[0] * iwd - dx;
+      buf[3] = pt->node[1] * iht - dy;
+      buf[4] = pt->ctrl2[0] * iwd - dx;
+      buf[5] = pt->ctrl2[1] * iht - dy;
     }
   }
   // for the border, we store value too
@@ -620,14 +649,14 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
     dt_masks_node_polygon_t *point1 = (dt_masks_node_polygon_t *)form_points->data; // kth element of form->points
     dt_masks_node_polygon_t *point2 = (dt_masks_node_polygon_t *)pt2->data;
     dt_masks_node_polygon_t *point3 = (dt_masks_node_polygon_t *)pt3->data;
-    float p1[5] = { point1->node[0] * wd - dx, point1->node[1] * ht - dy, point1->ctrl2[0] * wd - dx,
-                    point1->ctrl2[1] * ht - dy, cw * point1->border[1] * MIN(wd, ht) };
-    float p2[5] = { point2->node[0] * wd - dx, point2->node[1] * ht - dy, point2->ctrl1[0] * wd - dx,
-                    point2->ctrl1[1] * ht - dy, cw * point2->border[0] * MIN(wd, ht) };
-    float p3[5] = { point2->node[0] * wd - dx, point2->node[1] * ht - dy, point2->ctrl2[0] * wd - dx,
-                    point2->ctrl2[1] * ht - dy, cw * point2->border[1] * MIN(wd, ht) };
-    float p4[5] = { point3->node[0] * wd - dx, point3->node[1] * ht - dy, point3->ctrl1[0] * wd - dx,
-                    point3->ctrl1[1] * ht - dy, cw * point3->border[0] * MIN(wd, ht) };
+    float p1[5] = { point1->node[0] * iwd - dx, point1->node[1] * iht - dy, point1->ctrl2[0] * iwd - dx,
+                    point1->ctrl2[1] * iht - dy, cw * point1->border[1] * MIN(iwd, iht) };
+    float p2[5] = { point2->node[0] * iwd - dx, point2->node[1] * iht - dy, point2->ctrl1[0] * iwd - dx,
+                    point2->ctrl1[1] * iht - dy, cw * point2->border[0] * MIN(iwd, iht) };
+    float p3[5] = { point2->node[0] * iwd - dx, point2->node[1] * iht - dy, point2->ctrl2[0] * iwd - dx,
+                    point2->ctrl2[1] * iht - dy, cw * point2->border[1] * MIN(iwd, iht) };
+    float p4[5] = { point3->node[0] * iwd - dx, point3->node[1] * iht - dy, point3->ctrl1[0] * iwd - dx,
+                    point3->ctrl1[1] * iht - dy, cw * point3->border[0] * MIN(iwd, iht) };
 
     // advance form_points for next iteration so that it tracks the kth element of form->points
     form_points = g_list_next(form_points);
@@ -733,7 +762,7 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
     {
       // now we move all the points by the shift
       // so we have now the SOURCE points in module input reference
-      float pts[2] = { form->source[0] * wd, form->source[1] * ht };
+      float pts[2] = { form->source[0] * iwd, form->source[1] * iht };
       if(!dt_dev_distort_transform_plus(dev, pipe, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1)) goto fail;
 
       dx = pts[0] - (*points)[2];

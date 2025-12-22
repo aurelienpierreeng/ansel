@@ -355,18 +355,20 @@ static void _brush_points_recurs_border_gaps(float *cmax, float *bmin, float *bm
   float r2 = sqrtf((bmax[1] - cmax[1]) * (bmax[1] - cmax[1]) + (bmax[0] - cmax[0]) * (bmax[0] - cmax[0]));
 
   // and the max length of the circle arc
-  int l;
-  if(a2 > a1)
-    l = (a2 - a1) * fmaxf(r1, r2);
-  else
-    l = (a1 - a2) * fmaxf(r1, r2);
+  const int l = fabsf(a2 - a1) * fmaxf(r1, r2);
   if(l < 2) return;
 
   // and now we add the points
-  float incra = (a2 - a1) / l;
-  float incrr = (r2 - r1) / l;
+  const float incra = (a2 - a1) / l;
+  const float incrr = (r2 - r1) / l;
+  
+  // Use incremental rotation to avoid repeated cosf/sinf calls
+  const float cos_incra = cosf(incra);
+  const float sin_incra = sinf(incra);
   float rr = r1 + incrr;
-  float aa = a1 + incra;
+  float cos_aa = cosf(a1 + incra);
+  float sin_aa = sinf(a1 + incra);
+  
   // allocate entries in the dynbufs
   float *dpoints_ptr = dt_masks_dynbuf_reserve_n(dpoints, 2*(l-1));
   float *dborder_ptr = dt_masks_dynbuf_reserve_n(dborder, 2*(l-1));
@@ -378,10 +380,15 @@ static void _brush_points_recurs_border_gaps(float *cmax, float *bmin, float *bm
     {
       *dpoints_ptr++ = cmax[0];
       *dpoints_ptr++ = cmax[1];
-      *dborder_ptr++ = cmax[0] + rr * cosf(aa);
-      *dborder_ptr++ = cmax[1] + rr * sinf(aa);
+      *dborder_ptr++ = cmax[0] + rr * cos_aa;
+      *dborder_ptr++ = cmax[1] + rr * sin_aa;
+      
+      // Incremental rotation: rotate by incra using addition formulas
+      const float new_cos = cos_aa * cos_incra - sin_aa * sin_incra;
+      const float new_sin = sin_aa * cos_incra + cos_aa * sin_incra;
+      cos_aa = new_cos;
+      sin_aa = new_sin;
       rr += incrr;
-      aa += incra;
     }
   }
 }
@@ -413,8 +420,14 @@ static void _brush_points_recurs_border_small_gaps(float *cmax, float *bmin, flo
   // and now we add the points
   const float incra = delta / l;
   const float incrr = (r2 - r1) / l;
+  
+  // Use incremental rotation to avoid repeated cosf/sinf calls
+  const float cos_incra = cosf(incra);
+  const float sin_incra = sinf(incra);
   float rr = r1 + incrr;
-  float aa = a1 + incra;
+  float cos_aa = cosf(a1 + incra);
+  float sin_aa = sinf(a1 + incra);
+  
   // allocate entries in the dynbufs
   float *dpoints_ptr = dt_masks_dynbuf_reserve_n(dpoints, 2*(l-1));
   float *dborder_ptr = dt_masks_dynbuf_reserve_n(dborder, 2*(l-1));
@@ -426,10 +439,15 @@ static void _brush_points_recurs_border_small_gaps(float *cmax, float *bmin, flo
     {
       *dpoints_ptr++ = cmax[0];
       *dpoints_ptr++ = cmax[1];
-      *dborder_ptr++ = cmax[0] + rr * cosf(aa);
-      *dborder_ptr++ = cmax[1] + rr * sinf(aa);
+      *dborder_ptr++ = cmax[0] + rr * cos_aa;
+      *dborder_ptr++ = cmax[1] + rr * sin_aa;
+      
+      // Incremental rotation: rotate by incra using addition formulas
+      const float new_cos = cos_aa * cos_incra - sin_aa * sin_incra;
+      const float new_sin = sin_aa * cos_incra + cos_aa * sin_incra;
+      cos_aa = new_cos;
+      sin_aa = new_sin;
       rr += incrr;
-      aa += incra;
     }
   }
 }
@@ -575,8 +593,8 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
-  const float wd = pipe->iwidth;
-  const float ht = pipe->iheight;
+  const float iwd = pipe->iwidth;
+  const float iht = pipe->iheight;
 
   *points = NULL;
   *points_count = 0;
@@ -617,8 +635,8 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
   if(source && form->points && transf_direction != DT_DEV_TRANSFORM_DIR_ALL)
   {
     dt_masks_node_brush_t *pt = (dt_masks_node_brush_t *)form->points->data;
-    dx = (pt->node[0] - form->source[0]) * wd;
-    dy = (pt->node[1] - form->source[1]) * ht;
+    dx = (pt->node[0] - form->source[0]) * iwd;
+    dy = (pt->node[1] - form->source[1]) * iht;
   }
 
   for(GList *form_points = form->points; form_points; form_points = g_list_next(form_points))
@@ -627,12 +645,12 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
     float *const buf = dt_masks_dynbuf_reserve_n(dpoints, 6);
     if (buf)
     {
-      buf[0] = pt->ctrl1[0] * wd - dx;
-      buf[1] = pt->ctrl1[1] * ht - dy;
-      buf[2] = pt->node[0] * wd - dx;
-      buf[3] = pt->node[1] * ht - dy;
-      buf[4] = pt->ctrl2[0] * wd - dx;
-      buf[5] = pt->ctrl2[1] * ht - dy;
+      buf[0] = pt->ctrl1[0] * iwd - dx;
+      buf[1] = pt->ctrl1[1] * iht - dy;
+      buf[2] = pt->node[0] * iwd - dx;
+      buf[3] = pt->node[1] * iht - dy;
+      buf[4] = pt->ctrl2[0] * iwd - dx;
+      buf[5] = pt->ctrl2[1] * iht - dy;
     }
   }
 
@@ -673,17 +691,17 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
     dt_masks_node_brush_t *point3 = (dt_masks_node_brush_t *)g_list_nth_data(form->points, k2);
     if(cw > 0)
     {
-      const float pa[7] = { point1->node[0] * wd - dx, point1->node[1] * ht - dy, point1->ctrl2[0] * wd - dx,
-                            point1->ctrl2[1] * ht - dy, point1->border[1] * MIN(wd, ht), point1->hardness,
+      const float pa[7] = { point1->node[0] * iwd - dx, point1->node[1] * iht - dy, point1->ctrl2[0] * iwd - dx,
+                            point1->ctrl2[1] * iht - dy, point1->border[1] * MIN(iwd, iht), point1->hardness,
                             point1->density };
-      const float pb[7] = { point2->node[0] * wd - dx, point2->node[1] * ht - dy, point2->ctrl1[0] * wd - dx,
-                            point2->ctrl1[1] * ht - dy, point2->border[0] * MIN(wd, ht), point2->hardness,
+      const float pb[7] = { point2->node[0] * iwd - dx, point2->node[1] * iht - dy, point2->ctrl1[0] * iwd - dx,
+                            point2->ctrl1[1] * iht - dy, point2->border[0] * MIN(iwd, iht), point2->hardness,
                             point2->density };
-      const float pc[7] = { point2->node[0] * wd - dx, point2->node[1] * ht - dy, point2->ctrl2[0] * wd - dx,
-                            point2->ctrl2[1] * ht - dy, point2->border[1] * MIN(wd, ht), point2->hardness,
+      const float pc[7] = { point2->node[0] * iwd - dx, point2->node[1] * iht - dy, point2->ctrl2[0] * iwd - dx,
+                            point2->ctrl2[1] * iht - dy, point2->border[1] * MIN(iwd, iht), point2->hardness,
                             point2->density };
-      const float pd[7] = { point3->node[0] * wd - dx, point3->node[1] * ht - dy, point3->ctrl1[0] * wd - dx,
-                            point3->ctrl1[1] * ht - dy, point3->border[0] * MIN(wd, ht), point3->hardness,
+      const float pd[7] = { point3->node[0] * iwd - dx, point3->node[1] * iht - dy, point3->ctrl1[0] * iwd - dx,
+                            point3->ctrl1[1] * iht - dy, point3->border[0] * MIN(iwd, iht), point3->hardness,
                             point3->density };
       memcpy(p1, pa, sizeof(float) * 7);
       memcpy(p2, pb, sizeof(float) * 7);
@@ -692,17 +710,17 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
     }
     else
     {
-      const float pa[7] = { point1->node[0] * wd - dx, point1->node[1] * ht - dy, point1->ctrl1[0] * wd - dx,
-                            point1->ctrl1[1] * ht - dy, point1->border[1] * MIN(wd, ht), point1->hardness,
+      const float pa[7] = { point1->node[0] * iwd - dx, point1->node[1] * iht - dy, point1->ctrl1[0] * iwd - dx,
+                            point1->ctrl1[1] * iht - dy, point1->border[1] * MIN(iwd, iht), point1->hardness,
                             point1->density };
-      const float pb[7] = { point2->node[0] * wd - dx, point2->node[1] * ht - dy, point2->ctrl2[0] * wd - dx,
-                            point2->ctrl2[1] * ht - dy, point2->border[0] * MIN(wd, ht), point2->hardness,
+      const float pb[7] = { point2->node[0] * iwd - dx, point2->node[1] * iht - dy, point2->ctrl2[0] * iwd - dx,
+                            point2->ctrl2[1] * iht - dy, point2->border[0] * MIN(iwd, iht), point2->hardness,
                             point2->density };
-      const float pc[7] = { point2->node[0] * wd - dx, point2->node[1] * ht - dy, point2->ctrl1[0] * wd - dx,
-                            point2->ctrl1[1] * ht - dy, point2->border[1] * MIN(wd, ht), point2->hardness,
+      const float pc[7] = { point2->node[0] * iwd - dx, point2->node[1] * iht - dy, point2->ctrl1[0] * iwd - dx,
+                            point2->ctrl1[1] * iht - dy, point2->border[1] * MIN(iwd, iht), point2->hardness,
                             point2->density };
-      const float pd[7] = { point3->node[0] * wd - dx, point3->node[1] * ht - dy, point3->ctrl2[0] * wd - dx,
-                            point3->ctrl2[1] * ht - dy, point3->border[0] * MIN(wd, ht), point3->hardness,
+      const float pd[7] = { point3->node[0] * iwd - dx, point3->node[1] * iht - dy, point3->ctrl2[0] * iwd - dx,
+                            point3->ctrl2[1] * iht - dy, point3->border[0] * MIN(iwd, iht), point3->hardness,
                             point3->density };
       memcpy(p1, pa, sizeof(float) * 7);
       memcpy(p2, pb, sizeof(float) * 7);
@@ -873,7 +891,7 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
     {
       // now we move all the points by the shift
       // so we have now the SOURCE points in module input reference
-      float pts[2] = { form->source[0] * wd, form->source[1] * ht };
+      float pts[2] = { form->source[0] * iwd, form->source[1] * iht };
       if(!dt_dev_distort_transform_plus(dev, pipe, iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1)) goto fail;
 
       dx = pts[0] - (*points)[2];
