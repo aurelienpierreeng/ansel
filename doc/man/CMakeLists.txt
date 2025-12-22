@@ -39,11 +39,11 @@ endforeach(manpage)
 
 
 # we also want to have translated manpages
-find_program(po4a-translate_BIN po4a-translate)
+find_program(po4a-translate_BIN po4a)
 
 # create and install translated manpages
 if(${po4a-translate_BIN} STREQUAL "po4a-translate_BIN-NOTFOUND")
-  message("Missing po4a-translate. Can NOT create translated manpages")
+  message("Missing po4a.  Can NOT create translated manpages")
 else()
   file(STRINGS "po/LINGUAS" LANGUAGES)
   foreach(language ${LANGUAGES})
@@ -57,7 +57,7 @@ else()
       # create translated .pod
       add_custom_command(
         OUTPUT ${tmppod}
-        COMMAND sh -c "${po4a-translate_BIN} -f pod -m ${pod} -p ${pofile} -l ${tmppod} -k 0"
+        COMMAND sh -c "${po4a-translate_BIN} -f pod -M utf-8 -m ${pod} -p ${pofile} -l ${tmppod} -k 0"
         DEPENDS ${pofile} ${pod}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
       )
