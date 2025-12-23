@@ -1,8 +1,8 @@
-find_program(po4a-updatepo_BIN po4a)
+find_program(po4a-updatepo_BIN po4a-updatepo)
 
-# target to update . po files
+# target to update .po files
 if(${po4a-updatepo_BIN} STREQUAL "po4a-updatepo_BIN-NOTFOUND")
-  message("Missing po4a.  Can NOT update manpage translations")
+  message("Missing po4a-updatepo. Can NOT update manpage translations")
 else()
   add_custom_target(update-manpages)
 
@@ -19,7 +19,7 @@ else()
     set(pofile "${language}.po")
     add_custom_command(
       OUTPUT ${pofile}
-      COMMAND sh -c "${po4a-updatepo_BIN} --updatepo -f pod ${files} -p po/${pofile}"
+      COMMAND sh -c "${po4a-updatepo_BIN} -f pod ${files} -p po/${pofile}"
       DEPENDS ${deps}
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../
     )
