@@ -1501,7 +1501,7 @@ static gboolean _dev_translate_roi(dt_develop_t *dev, cairo_t *cr, int32_t width
   if(proc_wd == 0.f || proc_ht == 0.f) return TRUE;
 
   // Get image's origin position and scale
-  const float zoom_scale = dt_dev_get_zoom_level(dev);  
+  const float zoom_scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
   const float tx = ceilf(0.5f * width - dev->x * proc_wd * zoom_scale);
   const float ty = ceilf(0.5f * height - dev->y * proc_ht * zoom_scale);
 

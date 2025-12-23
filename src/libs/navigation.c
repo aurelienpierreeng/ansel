@@ -376,31 +376,31 @@ static void _zoom_preset_change(dt_lib_zoom_t zoom)
       dev->scaling = dev->natural_scale;
       break;
     case LIB_ZOOM_SMALL:
-      dev->scaling = dev->natural_scale * 0.33 / darktable.gui->ppd;
+      dev->scaling = dev->natural_scale * 0.33;
       break;
     case LIB_ZOOM_FIT:
-      dev->scaling = dev->natural_scale / darktable.gui->ppd;
+      dev->scaling = dev->natural_scale;
       break;
     case LIB_ZOOM_25:
-      dev->scaling = 0.25 / darktable.gui->ppd;
+      dev->scaling = 0.25;
       break;
     case LIB_ZOOM_50:
-      dev->scaling = 0.50 / darktable.gui->ppd;
+      dev->scaling = 0.50;
       break;
     case LIB_ZOOM_100:
-      dev->scaling = 1. / darktable.gui->ppd;
+      dev->scaling = 1.;
       break;
     case LIB_ZOOM_200:
-      dev->scaling = 2. / darktable.gui->ppd;
+      dev->scaling = 2.;
       break;
     case LIB_ZOOM_400:
-      dev->scaling = 4. / darktable.gui->ppd;
+      dev->scaling = 4.;
       break;
     case LIB_ZOOM_800:
-      dev->scaling = 8. / darktable.gui->ppd;
+      dev->scaling = 8.;
       break;
     case LIB_ZOOM_1600:
-      dev->scaling = 16. / darktable.gui->ppd;
+      dev->scaling = 16.;
       break;
   }
 
