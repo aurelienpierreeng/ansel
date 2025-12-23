@@ -350,10 +350,13 @@ void expose(
     // draw image
     mutex = &dev->pipe->backbuf_mutex;
     dt_pthread_mutex_lock(mutex);
-    const float wd = dev->pipe->output_backbuf_width;
-    const float ht = dev->pipe->output_backbuf_height;
+    float wd = dev->pipe->output_backbuf_width;
+    float ht = dev->pipe->output_backbuf_height;
     stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
     surface = dt_cairo_image_surface_create_for_data(dev->pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
+
+    wd /= darktable.gui->ppd;
+    ht /= darktable.gui->ppd;
 
     cairo_translate(cr, ceilf(.5f * (width - wd)), ceilf(.5f * (height - ht)));
 
@@ -381,16 +384,21 @@ void expose(
     // draw preview
     mutex = &dev->preview_pipe->backbuf_mutex;
     dt_pthread_mutex_lock(mutex);
-    const float pr_wd = dev->preview_pipe->output_backbuf_width;
-    const float pr_ht = dev->preview_pipe->output_backbuf_height;
-    const float zoom_scale = dev->scaling;
+    float pr_wd = dev->preview_pipe->output_backbuf_width;
+    float pr_ht = dev->preview_pipe->output_backbuf_height;
     
+    stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, pr_wd);
+    surface = cairo_image_surface_create_for_data(dev->preview_pipe->output_backbuf, CAIRO_FORMAT_RGB24, pr_wd, pr_ht, stride);
+
+    pr_wd /= darktable.gui->ppd;
+    pr_ht /= darktable.gui->ppd;
+
     if(dev->iso_12646.enabled)
     {
       // Because the preview pipe renders an unclipped image, we need to find
       // the preview's ROI (Region of Interest) dimensions in widget space, then
       // draw a white rectangle around it.
-      const float scale = zoom_scale * dt_dev_get_preview_natural_scale(dev);
+      const float scale = dev->scaling * dt_dev_get_preview_natural_scale(dev) * darktable.gui->ppd;
       const float roi_wd = fminf(pr_wd * scale, dev->width);
       const float roi_ht = fminf(pr_ht * scale, dev->height);
       
@@ -408,9 +416,6 @@ void expose(
     // clip to image area only
     dt_dev_clip_roi(dev, cr, width, height); // GOOD !
     dt_dev_rescale_roi(dev, cr, width, height); // GOOD !
-
-    stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, pr_wd);
-    surface = cairo_image_surface_create_for_data(dev->preview_pipe->output_backbuf, CAIRO_FORMAT_RGB24, pr_wd, pr_ht, stride);
 
     cairo_rectangle(cr, 0, 0, pr_wd, pr_ht);
     cairo_set_source_surface(cr, surface, 0, 0);
@@ -2405,6 +2410,8 @@ static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int 
   const float epsilon = fabsf(old_dev_scaling - dev->scaling);
   if(fabsf(dev->scaling - 1.0f) < epsilon)
     dev->scaling = 1.0f;
+
+  //dev->scaling /= darktable.gui->ppd;
   
   // Calculate zoom position offset to keep mouse position fixed during zoom (division-free)
   const float mouse_off_x = x - 0.5f * dev->orig_width;

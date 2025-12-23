@@ -462,14 +462,14 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
                                 &pipe->processed_height);
 
   // Scale is inited to the value that would fit our full-res raw to GUI viewport size
-  *scale = dev->natural_scale = dt_dev_get_natural_scale(dev, pipe);
+  *scale = dev->natural_scale = dt_dev_get_natural_scale(dev, pipe) * darktable.gui->ppd;
 
   // The full pipeline shows only the ROI, which may be zoomed in/out
   if(pipe->type == DT_DEV_PIXELPIPE_FULL) *scale *= dev->scaling;
 
   // Backbuf size depends on GUI window size only
-  *wd = fminf(roundf(*scale * pipe->processed_width), dev->width);
-  *ht = fminf(roundf(*scale * pipe->processed_height), dev->height);
+  *wd = fminf(roundf(*scale * pipe->processed_width), dev->width * darktable.gui->ppd);
+  *ht = fminf(roundf(*scale * pipe->processed_height), dev->height * darktable.gui->ppd);
 
   // dev->x,y are the relative coordinates of the ROI center.
   // in preview pipe, we always render a full image, so x,y = 0,0 
@@ -1436,7 +1436,7 @@ float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
     return fminf(fminf((float)dev->width / (float)pipe->processed_width,
                        (float)dev->height / (float)pipe->processed_height),
                  1.f)
-           * darktable.gui->ppd;
+           ; //* darktable.gui->ppd;
 }
 
 float dt_dev_get_preview_natural_scale(dt_develop_t *dev)
@@ -1447,7 +1447,7 @@ float dt_dev_get_preview_natural_scale(dt_develop_t *dev)
     return fminf(fminf((float)dev->width / (float)dev->preview_pipe->backbuf_width,
                        (float)dev->height / (float)dev->preview_pipe->backbuf_height),
                  1.f)
-           * darktable.gui->ppd;
+           ; //* darktable.gui->ppd;
 }
 
 float dt_dev_get_zoom_level(const dt_develop_t *dev)
