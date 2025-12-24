@@ -379,7 +379,7 @@ void expose(
   }
   
   // fallback to preview pipe if main pipe is not ready
-  else if(dev->preview_pipe->output_backbuf && dev->preview_pipe->output_imgid == dev->image_storage.id)
+  else if(0 && dev->preview_pipe->output_backbuf && dev->preview_pipe->output_imgid == dev->image_storage.id)
   {
     // draw preview
     mutex = &dev->preview_pipe->backbuf_mutex;
@@ -390,8 +390,6 @@ void expose(
     stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, pr_wd);
     surface = cairo_image_surface_create_for_data(dev->preview_pipe->output_backbuf, CAIRO_FORMAT_RGB24, pr_wd, pr_ht, stride);
 
-    pr_wd /= darktable.gui->ppd;
-    pr_ht /= darktable.gui->ppd;
 
     if(dev->iso_12646.enabled)
     {
