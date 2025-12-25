@@ -354,10 +354,8 @@ void expose(
     float ht = dev->pipe->output_backbuf_height;
     stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
     surface = dt_cairo_image_surface_create_for_data(dev->pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
-
     wd /= darktable.gui->ppd;
     ht /= darktable.gui->ppd;
-
     cairo_translate(cr, ceilf(.5f * (width - wd)), ceilf(.5f * (height - ht)));
 
     if(dev->iso_12646.enabled)
@@ -2408,8 +2406,6 @@ static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int 
   const float epsilon = fabsf(old_dev_scaling - dev->scaling);
   if(fabsf(dev->scaling - 1.0f) < epsilon)
     dev->scaling = 1.0f;
-
-  //dev->scaling /= darktable.gui->ppd;
   
   // Calculate zoom position offset to keep mouse position fixed during zoom (division-free)
   const float mouse_off_x = x - 0.5f * dev->orig_width;

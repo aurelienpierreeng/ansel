@@ -462,24 +462,30 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
                                 &pipe->processed_height);
 
   // Scale is inited to the value that would fit our full-res raw to GUI viewport size
-  *scale = dev->natural_scale = dt_dev_get_natural_scale(dev, pipe);
-
+  *scale = dt_dev_get_natural_scale(dev, pipe);
+  dev->natural_scale = *scale * darktable.gui->ppd;
   // The full pipeline shows only the ROI, which may be zoomed in/out
-  if(pipe->type == DT_DEV_PIXELPIPE_FULL) *scale *= dev->scaling;
+  if(pipe->type == DT_DEV_PIXELPIPE_FULL) *scale = dev->natural_scale * dev->scaling;
 
   // Backbuf size depends on GUI window size only
-  *wd = fminf(roundf(*scale * pipe->processed_width), dev->width);
-  *ht = fminf(roundf(*scale * pipe->processed_height), dev->height);
+  int roi_width = roundf(*scale * pipe->processed_width);
+  int roi_height = roundf(*scale * pipe->processed_height);
+  int widget_wd = dev->width * darktable.gui->ppd;
+  int widget_ht = dev->height * darktable.gui->ppd;
+
+  *wd = fminf(roi_width, widget_wd);
+  *ht = fminf(roi_height, widget_ht);
 
   // dev->x,y are the relative coordinates of the ROI center.
   // in preview pipe, we always render a full image, so x,y = 0,0 
   // otherwise, x,y here are the top-left corner. Translate:
-  *x = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW) ? 0 : roundf(dev->x * pipe->processed_width * *scale - *wd * .5f);
-  *y = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW) ? 0 : roundf(dev->y * pipe->processed_height * *scale - *ht * .5f);
+  *x = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW) ? 0 : roundf(dev->x * roi_width - *wd * .5f);
+  *y = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW) ? 0 : roundf(dev->y * roi_height - *ht * .5f);
 
-  fprintf (stderr, "_update_darkroom_roi: dev %.2f %.2f  type=%s x=%d y=%d wd=%d ht=%d scale=%.4f\n",
-            dev->x, dev->y, _debug_get_pipe_type_str(pipe->type), *x, *y, *wd, *ht, *scale);
-
+/*  fprintf (stderr, "_update_darkroom_roi: dev %.2f %.2f  type %s  xy %d %d  dim %d %d"
+                   "   ppd:%.4f scale:%.4f nat_scale:%.4f * scaling:%.4f\n",
+            dev->x, dev->y, _debug_get_pipe_type_str(pipe->type), *x, *y, *wd, *ht, darktable.gui->ppd, *scale, dev->natural_scale, dev->scaling);
+*/
   return x_old != *x || y_old != *y || wd_old != *wd || ht_old != *ht || old_scale != *scale;
 }
 
@@ -704,10 +710,13 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
 
 void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h)
 {
+  // for the debug strings lower
+  //float old_x = *dev_x;
+  //float old_y = *dev_y;
   int proc_w = 0;
   int proc_h = 0;
   dt_dev_get_processed_size(dev, &proc_w, &proc_h);
-  const float scale = dt_dev_get_zoom_level(dev);
+  const float scale = dt_dev_get_zoom_level(dev)/ darktable.gui->ppd;
 
   // find the box size
   const float bw = dev->width / (proc_w * scale);
@@ -718,8 +727,8 @@ void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y,
   const float half_bh = bh * 0.5f;
 
   // clamp position using pre-calculated values
-  *dev_x = bw > 1.0f ? 0.5f : CLAMPF(*dev_x, half_bw, 1.0f - half_bw);
-  *dev_y = bh > 1.0f ? 0.5f : CLAMPF(*dev_y, half_bh, 1.0f - half_bh);
+  *dev_x = bw > 1.0f || dev->scaling <= 1.0f ? 0.5f : CLAMPF(*dev_x, half_bw, 1.0f - half_bw);
+  *dev_y = bh > 1.0f || dev->scaling <= 1.0f ? 0.5f : CLAMPF(*dev_y, half_bh, 1.0f - half_bh);
   // return box size
   if(box_w) *box_w = bw;
   if(box_h) *box_h = bh;
