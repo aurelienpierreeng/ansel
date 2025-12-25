@@ -377,7 +377,7 @@ void expose(
   }
   
   // fallback to preview pipe if main pipe is not ready
-  else if(0 && dev->preview_pipe->output_backbuf && dev->preview_pipe->output_imgid == dev->image_storage.id)
+  else if(dev->preview_pipe->output_backbuf && dev->preview_pipe->output_imgid == dev->image_storage.id)
   {
     // draw preview
     mutex = &dev->preview_pipe->backbuf_mutex;
