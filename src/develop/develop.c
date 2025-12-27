@@ -462,10 +462,9 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
                                 &pipe->processed_height);
 
   // Scale is inited to the value that would fit our full-res raw to GUI viewport size
-  *scale = dt_dev_get_natural_scale(dev, pipe);
-  dev->natural_scale = *scale * darktable.gui->ppd;
+  *scale = dev->natural_scale = dt_dev_get_natural_scale(dev, pipe) * darktable.gui->ppd;
   // The full pipeline shows only the ROI, which may be zoomed in/out
-  if(pipe->type == DT_DEV_PIXELPIPE_FULL) *scale = dev->natural_scale * dev->scaling;
+  if(pipe->type == DT_DEV_PIXELPIPE_FULL) *scale *= dev->scaling;
 
   // Backbuf size depends on GUI window size only
   int roi_width = roundf(*scale * pipe->processed_width);
