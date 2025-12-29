@@ -783,7 +783,7 @@ void dt_dev_retrieve_full_pos(dt_develop_t *dev, const int px, const int py, flo
   const int ht = dev->pipe->processed_height;
   if(wd == 0 || ht == 0) return; // avoid division by zero
 
-  const float scale = dev->natural_scale * dev->scaling;
+  const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
 
   // calculate delta from center in processed image coordinates
   const float dx = px - 0.5f * dev->width - dev->border_size;
@@ -1535,7 +1535,7 @@ gboolean dt_dev_rescale_roi_to_input(dt_develop_t *dev, cairo_t *cr, int32_t wid
 {
   if(_dev_translate_roi(dev, cr, width, height))
     return TRUE;
-  const float scale = dt_dev_get_zoom_level(dev);
+  const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
   cairo_scale(cr, scale, scale);
   
   return FALSE;
@@ -1593,7 +1593,7 @@ gboolean dt_dev_roi_to_input_space(dt_develop_t *dev, /*gboolean normalized_in,*
   pzx /= scale;
   pzy /= scale;
 
-  // Now, the coordinate is in backbuf space.
+  // Now, the coordinates are in preview backbuf size.
   float pts[2] = { pzx, pzy };
 
   // We need to undistort them to get input space
