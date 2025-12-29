@@ -19,17 +19,16 @@
 #include <glib/gi18n.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <libsoup/soup.h>
 
 #include "common/darktable.h"
 #include "common/http_server.h"
 
-#ifndef SOUP_CHECK_VERSION
-// SOUP_CHECK_VERSION was introduced only in 2.42
-#define SOUP_CHECK_VERSION(x, y, z) false
-#endif
-
-#if !SOUP_CHECK_VERSION(2, 48, 0)
-#define OLD_API
+// Detect libsoup3 vs libsoup2
+#if SOUP_MAJOR_VERSION >= 3
+#define LIBSOUP3
+#else
+#define LIBSOUP2
 #endif
 
 typedef struct _connection_t
@@ -73,13 +72,23 @@ static const char reply[]
       "</body>\n"
       "</html>";
 
+// Libsoup3: Delayed kill helper
+#ifdef LIBSOUP3
+static gboolean _delayed_kill(gpointer user_data)
+{
+  dt_http_server_kill((dt_http_server_t *)user_data);
+  return G_SOURCE_REMOVE;
+}
+#endif
+
+#ifdef LIBSOUP2
+// Libsoup2 callbacks
 static void _request_finished_callback(SoupServer *server, SoupMessage *message, SoupClientContext *client,
                                        gpointer user_data)
 {
   dt_http_server_kill((dt_http_server_t *)user_data);
 }
 
-// this is always in the gui thread
 static void _new_connection(SoupServer *server, SoupMessage *msg, const char *path, GHashTable *query,
                             SoupClientContext *client, gpointer user_data)
 {
@@ -102,7 +111,6 @@ static void _new_connection(SoupServer *server, SoupMessage *msg, const char *pa
     body = _("<h1>Thank you,</h1><p>everything should have worked, you can <b>close</b> your browser now and "
              "<b>go back</b> to Ansel.</p>");
 
-
   char *resp_body = g_strdup_printf(reply, page_title, res ? 0 : 1, title, body);
   size_t resp_length = strlen(resp_body);
   g_free(page_title);
@@ -118,6 +126,43 @@ end:
     g_signal_connect(G_OBJECT(server), "request-finished", G_CALLBACK(_request_finished_callback), http_server);
   }
 }
+#endif // LIBSOUP2
+
+#ifdef LIBSOUP3
+// Libsoup3 callbacks
+static void _new_connection(SoupServer *server, SoupServerMessage *msg, gpointer user_data)
+{
+  _connection_t *params = (_connection_t *)user_data;
+  
+  if(g_strcmp0(soup_server_message_get_method(msg), SOUP_METHOD_GET) != 0)
+  {
+    soup_server_message_set_status(msg, SOUP_STATUS_NOT_IMPLEMENTED, "Not Implemented");
+    return;
+  }
+
+  // Leere Query HashTable (libsoup3 hat keine automatische Query parsing)
+  GHashTable *query = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+  
+  gboolean res = params->callback(query, params->user_data);
+  g_hash_table_unref(query);
+
+  const char *body = res ? 
+    _("<h1>Thank you,</h1><p>everything should have worked, you can <b>close</b> your browser now and "
+      "<b>go back</b> to Ansel.</p>") :
+    _("<h1>Sorry,</h1><p>something went wrong. Please try again.</p>");
+
+  char *page_title = g_strdup_printf(_("ansel >> %s"), params->id);
+  char *resp_body = g_strdup_printf(reply, page_title, res ? 0 : 1, _(params->id), body);
+  g_free(page_title);
+
+  soup_server_message_set_status(msg, SOUP_STATUS_OK, "OK");
+  soup_server_message_set_response(msg, "text/html; charset=utf-8", 
+                                  SOUP_MEMORY_TAKE, resp_body, strlen(resp_body));
+
+  if(res)
+    g_timeout_add(100, _delayed_kill, params->server);
+}
+#endif // LIBSOUP3
 
 dt_http_server_t *dt_http_server_create(const int *ports, const int n_ports, const char *id,
                                         const dt_http_server_callback callback, gpointer user_data)
@@ -125,43 +170,9 @@ dt_http_server_t *dt_http_server_create(const int *ports, const int n_ports, con
   SoupServer *httpserver = NULL;
   int port = 0;
 
-#ifdef OLD_API
-  dt_print(DT_DEBUG_CONTROL, "[http server] using the old libsoup api\n");
-
-  for(int i = 0; i < n_ports; i++)
-  {
-    port = ports[i];
-
-    SoupAddress *httpaddress = soup_address_new("127.0.0.1", port);
-
-    if(!httpaddress)
-    {
-      fprintf(stderr, "couldn't create libsoup httpaddress on port %d\n", port);
-      return NULL;
-    }
-
-    if(soup_address_resolve_sync(httpaddress, NULL) != SOUP_STATUS_OK)
-    {
-      fprintf(stderr, "error: can't resolve 127.0.0.1:%d\n", port);
-      return NULL;
-    }
-
-    httpserver = soup_server_new(SOUP_SERVER_SERVER_HEADER, "ansel internal server", "interface",
-                                 httpaddress, NULL);
-
-    if(httpserver) break;
-
-    g_object_unref(httpaddress);
-  }
-
-  if(httpserver == NULL)
-  {
-    fprintf(stderr, "error: couldn't create libsoup httpserver\n");
-    return NULL;
-  }
-
-#else
-  dt_print(DT_DEBUG_CONTROL, "[http server] using the new libsoup api\n");
+#ifdef LIBSOUP2
+  // Libsoup2: Original code (vereinfacht)
+  dt_print(DT_DEBUG_CONTROL, "[http server] using libsoup2\n");
 
   httpserver = soup_server_new(SOUP_SERVER_SERVER_HEADER, "ansel internal server", NULL);
   if(httpserver == NULL)
@@ -173,56 +184,81 @@ dt_http_server_t *dt_http_server_create(const int *ports, const int n_ports, con
   for(int i = 0; i < n_ports; i++)
   {
     port = ports[i];
-
     if(soup_server_listen_local(httpserver, port, 0, NULL)) break;
-
     port = 0;
   }
   if(port == 0)
   {
+    g_object_unref(httpserver);
     fprintf(stderr, "error: can't bind to any port from our pool\n");
     return NULL;
   }
 
+  soup_server_run_async(httpserver);
+
+#elif defined(LIBSOUP3)
+  // Libsoup3
+  dt_print(DT_DEBUG_CONTROL, "[http server] using libsoup3\n");
+
+  httpserver = soup_server_new("server-header", "ansel internal server", NULL);
+  if(httpserver == NULL)
+  {
+    fprintf(stderr, "error: couldn't create libsoup httpserver\n");
+    return NULL;
+  }
+
+  for(int i = 0; i < n_ports; i++)
+  {
+    port = ports[i];
+    if(soup_server_listen_local(httpserver, port, SOUP_SERVER_LISTEN_IPV4_ONLY, NULL)) break;
+    port = 0;
+  }
+  if(port == 0)
+  {
+    g_object_unref(httpserver);
+    fprintf(stderr, "error: can't bind to any port from our pool\n");
+    return NULL;
+  }
 #endif
 
-  dt_http_server_t *server = (dt_http_server_t *)malloc(sizeof(dt_http_server_t));
+  dt_http_server_t *server = g_new0(dt_http_server_t, 1);
   server->server = httpserver;
 
-  _connection_t *params = (_connection_t *)malloc(sizeof(_connection_t));
+  _connection_t *params = g_new0(_connection_t, 1);
   params->id = id;
   params->server = server;
   params->callback = callback;
   params->user_data = user_data;
 
   char *path = g_strdup_printf("/%s", id);
-  server->url = g_strdup_printf("http://localhost:%d/%s", port, id);
+  server->url = g_strdup_printf("http://localhost:%d%s", port, path);
 
-  soup_server_add_handler(httpserver, path, _new_connection, params, free);
+#ifdef LIBSOUP2
+  soup_server_add_handler(httpserver, path, _new_connection, params, (GDestroyNotify)free);
+#else
+  soup_server_add_early_handler(httpserver, path, (SoupServerCallback)_new_connection, params, (GDestroyNotify)g_free);
+#endif
 
   g_free(path);
 
-#ifdef OLD_API
-  soup_server_run_async(httpserver);
-#endif
-
   dt_print(DT_DEBUG_CONTROL, "[http server] listening on %s\n", server->url);
-
   return server;
 }
 
 void dt_http_server_kill(dt_http_server_t *server)
 {
-  if(server->server)
+  if(server && server->server)
   {
     soup_server_disconnect(server->server);
     g_object_unref(server->server);
     server->server = NULL;
   }
   g_free(server->url);
-  server->url = NULL;
-  free(server);
+  g_free(server);
 }
+
+
+
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
