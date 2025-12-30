@@ -462,7 +462,7 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
                                 &pipe->processed_height);
 
   // Scale is inited to the value that would fit our full-res raw to GUI viewport size
-  *scale = dev->natural_scale = dt_dev_get_natural_scale(dev, pipe) * darktable.gui->ppd;
+  *scale = dev->natural_scale = dt_dev_get_natural_scale(dev, pipe);
   // The full pipeline shows only the ROI, which may be zoomed in/out
   if(pipe->type == DT_DEV_PIXELPIPE_FULL) *scale *= dev->scaling;
 
@@ -696,7 +696,7 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
 
     dt_print(DT_DEBUG_DEV, "[pixelpipe] Darkroom requested a %i×%i px main preview\n", wd, ht);
     dt_dev_invalidate_zoom(dev);
-    // dt_dev_invalidate_zoom_preview(dev); //it's either the macro line or this one, not both
+    dt_dev_invalidate_zoom_preview(dev);
 
     if(dev->image_storage.id > -1 && darktable.mipmap_cache)
     {
@@ -1447,7 +1447,7 @@ float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
     return fminf(fminf((float)dev->width / (float)pipe->processed_width,
                        (float)dev->height / (float)pipe->processed_height),
                  1.f)
-           ; //* darktable.gui->ppd;
+           * darktable.gui->ppd;
 }
 
 float dt_dev_get_preview_natural_scale(dt_develop_t *dev)

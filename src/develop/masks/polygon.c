@@ -1721,13 +1721,14 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
   {
     // check if we are near the first point to close the polygon on creation
     if(gui->creation && !g_list_shorter_than(form->points, 4)) // at least 3 points + the one being created 
-    {     
+    {
       const float dist_curs = DT_MASKS_SELECTION_DISTANCE / zoom_scale;  // transformed to backbuf dimensions
       
       float pt[2] = { pzx * wd, pzy * ht }; // no backtransform here
-      gui->creation_closing_form =
-                   (pt[0] - gpt->points[2] < dist_curs && pt[0] - gpt->points[2] > -dist_curs)
-                && (pt[1] - gpt->points[3] < dist_curs && pt[1] - gpt->points[3] > -dist_curs);
+      const float dx = pt[0] - gpt->points[2];
+      const float dy = pt[1] - gpt->points[3];
+      const float dist2 = dx * dx + dy * dy;
+      gui->creation_closing_form = dist2 <= dist_curs * dist_curs;
     }
 
     // update continuously the current node to mouse position
@@ -1929,22 +1930,6 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
 
   if(gui->creation)
   {
-    /* draw a small circle above the node to tell that we are closing the polygon */
-    if(gui->creation_closing_form && node_count >= 3 && gpt->points_count >= (node_count * 6))
-    {
-      const int last_idx = node_count - 1;
-
-      const float x1 = gpt->points[last_idx * 6 + 2];
-      const float y1 = gpt->points[last_idx * 6 + 3];
-
-      const float x = x1 + 12.5f / zoom_scale;
-      const float y = y1 - 12.5f / zoom_scale;
-      cairo_save(cr);
-      cairo_arc(cr, x, y, DT_PIXEL_APPLY_DPI(3.0f) / zoom_scale, 0, 2 * G_PI);
-      dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, 0, FALSE, zoom_scale, 0, 0, NULL);
-      cairo_restore(cr);
-    }
-
     // draw a cross where the source will be created
     if(darktable.develop->form_visible
      && (darktable.develop->form_visible->type & DT_MASKS_CLONE))
@@ -2066,6 +2051,27 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   if(gpt->source_count > node_count * 3 + 2)
   {
     dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, &dt_masks_functions_polygon);
+  }
+
+  //
+  if(gui->creation)
+  {
+   /* draw a small circle above the current node to tell that we are closing the polygon */
+   /* this have to be last, so the circle is drawn on top of the shape drawing */
+    if(gui->creation_closing_form && node_count >= 3 && gpt->points_count >= (node_count * 6))
+    {
+      const int last_idx = node_count - 1;
+
+      const float x1 = gpt->points[last_idx * 6 + 2];
+      const float y1 = gpt->points[last_idx * 6 + 3];
+
+      const float x = x1 + 12.5f / zoom_scale;
+      const float y = y1 - 12.5f / zoom_scale;
+      cairo_save(cr);
+      cairo_arc(cr, x, y, DT_PIXEL_APPLY_DPI(3.0f) / zoom_scale, 0, 2 * G_PI);
+      dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, 0, FALSE, zoom_scale, 0, 0, NULL);
+      cairo_restore(cr);
+    }
   }
 }
 

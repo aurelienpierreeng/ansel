@@ -577,7 +577,8 @@ float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
 // and `pipe->processed_height` are defined.
 // Natural scale is the rescaling factor such that the full-res preview pipeline output
 // (real or virtual) fits within darkroom widget area (minus borders/margins)
-// this is like dt_dev_get_natural_scale() but for preview pipe based on its output processed size
+// This function is mostly used to scale overlays drawn in central view
+// This is like dt_dev_get_natural_scale() but for preview pipe based on its output processed size
 float dt_dev_get_preview_natural_scale(dt_develop_t *dev);
 // Get the current zoom factor ( scaling * natural_scale )
 float dt_dev_get_zoom_level(const dt_develop_t *dev);
