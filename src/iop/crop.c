@@ -1461,7 +1461,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   float pzx = 0.f;
   float pzy = 0.f;
   dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
-  const float zoom_scale = dev->scaling;
+  const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
   const int border = DT_PIXEL_APPLY_DPI(30.0) / zoom_scale;
 
   const _grab_region_t grab = _gui_get_grab(pzx, pzy, g, border, g->wd, g->ht);
@@ -1638,7 +1638,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     float pzx = 0.f;
     float pzy = 0.f;
     dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
-    float zoom_scale = dev->scaling;
+    const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
 
     g->button_down_x = x;
     g->button_down_y = y;
