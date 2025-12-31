@@ -20,12 +20,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <libsoup/soup.h>
-
 #include "common/darktable.h"
 #include "common/http_server.h"
-
-// Detect libsoup3 vs libsoup2
-#if SOUP_MAJOR_VERSION >= 3
+#ifndef LIBSOUP_VERSION_MAJOR
+#error "LIBSOUP_VERSION_MAJOR not defined by CMake"
+#endif
+#if LIBSOUP_VERSION_MAJOR >= 3  
 #define LIBSOUP3
 #else
 #define LIBSOUP2
@@ -140,7 +140,6 @@ static void _new_connection(SoupServer *server, SoupServerMessage *msg, gpointer
     return;
   }
 
-  // Leere Query HashTable (libsoup3 hat keine automatische Query parsing)
   GHashTable *query = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
   
   gboolean res = params->callback(query, params->user_data);
@@ -171,7 +170,7 @@ dt_http_server_t *dt_http_server_create(const int *ports, const int n_ports, con
   int port = 0;
 
 #ifdef LIBSOUP2
-  // Libsoup2: Original code (vereinfacht)
+
   dt_print(DT_DEBUG_CONTROL, "[http server] using libsoup2\n");
 
   httpserver = soup_server_new(SOUP_SERVER_SERVER_HEADER, "ansel internal server", NULL);
@@ -194,7 +193,17 @@ dt_http_server_t *dt_http_server_create(const int *ports, const int n_ports, con
     return NULL;
   }
 
-  soup_server_run_async(httpserver);
+#ifdef LIBSOUP2
+
+#elif defined(LIBSOUP3)
+
+SoupServerListener *listener = soup_server_get_listener(httpserver);
+if (listener) {
+  GMainContext *ctx = g_main_context_default();
+  soup_server_listener_set_context(listener, ctx);
+}
+soup_server_run(httpserver);
+#endif
 
 #elif defined(LIBSOUP3)
   // Libsoup3
@@ -256,9 +265,6 @@ void dt_http_server_kill(dt_http_server_t *server)
   g_free(server->url);
   g_free(server);
 }
-
-
-
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
