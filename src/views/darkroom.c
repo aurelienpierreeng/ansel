@@ -394,7 +394,7 @@ void expose(
       // Because the preview pipe renders an unclipped image, we need to find
       // the preview's ROI (Region of Interest) dimensions in widget space, then
       // draw a white rectangle around it.
-      const float scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
+      const float scale = dt_dev_get_overlay_scale(dev);
       const float roi_wd = fminf(pr_wd * scale, dev->width);
       const float roi_ht = fminf(pr_ht * scale, dev->height);
       
@@ -463,7 +463,7 @@ void expose(
   {
     const float wd = dev->preview_pipe->output_backbuf_width;
     const float ht = dev->preview_pipe->output_backbuf_height;
-    const float scaling = dev->scaling * dt_dev_get_preview_natural_scale(dev);
+    const float scaling = dt_dev_get_overlay_scale(dev);
 
     cairo_save(cri);
     // don't draw guides on image margins

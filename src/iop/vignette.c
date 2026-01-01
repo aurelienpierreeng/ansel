@@ -347,7 +347,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     bigger_side = ht;
     smaller_side = wd;
   }
-  const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
+  const float zoom_scale = dt_dev_get_overlay_scale(dev);
   float pzx = 0.f;
   float pzy = 0.f;
   dt_dev_retrieve_full_pos(dev, pointerx, pointery, &pzx, &pzy);

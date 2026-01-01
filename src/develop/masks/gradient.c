@@ -254,10 +254,9 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   // get the zoom scale
 
   const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
-  const float zoom_scale = dt_dev_get_zoom_level(dev);
 
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
-  const float dist_curs = DT_MASKS_SELECTION_DISTANCE / zoom_scale; // transformed to backbuf dimensions
+  const float dist_curs = DT_MASKS_SELECTION_DISTANCE(dev); // transformed to backbuf dimensions
 
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;

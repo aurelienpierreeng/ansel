@@ -1119,11 +1119,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   if(!gpt) return 0;
   const dt_develop_t *const dev = (const dt_develop_t *)darktable.develop;
 
-  // get the zoom scale
-  const float zoom_scale = dt_dev_get_zoom_level(dev);
-
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
-  const float dist_curs = DT_MASKS_SELECTION_DISTANCE / zoom_scale; // transformed to backbuf dimensions
+  const float dist_curs = DT_MASKS_SELECTION_DISTANCE(dev); // transformed to backbuf dimensions
 
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
@@ -1709,20 +1706,19 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
 {
   // centre view will have zoom_scale * backbuf_width pixels, we want the handle offset to scale with DPI:
   dt_develop_t *const dev = (dt_develop_t *)darktable.develop;
-  const float zoom_scale = dt_dev_get_zoom_level(dev);
   if(!gui) return 0;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
 
-  const float wd = darktable.develop->preview_pipe->backbuf_width / dev->natural_scale;
-  const float ht = darktable.develop->preview_pipe->backbuf_height / dev->natural_scale;
+  const float wd = dev->preview_pipe->backbuf_width / dev->natural_scale;
+  const float ht = dev->preview_pipe->backbuf_height / dev->natural_scale;
 
   if(gui->node_dragging >= 0)
   {
     // check if we are near the first point to close the polygon on creation
     if(gui->creation && !g_list_shorter_than(form->points, 4)) // at least 3 points + the one being created 
     {
-      const float dist_curs = DT_MASKS_SELECTION_DISTANCE / zoom_scale;  // transformed to backbuf dimensions
+      const float dist_curs = DT_MASKS_SELECTION_DISTANCE_NO_UPSCALE(dev);
       
       float pt[2] = { pzx * wd, pzy * ht }; // no backtransform here
       const float dx = pt[0] - gpt->points[2];

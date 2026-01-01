@@ -2346,7 +2346,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // Rescale and shift Cairo drawing coordinates
   dt_develop_t *dev = self->dev;
   if(dt_dev_rescale_roi(dev, cr, width, height)) return;
-  const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
+  const float zoom_scale = dt_dev_get_overlay_scale(dev);
 
   cairo_set_line_width(cr, 2.0 / zoom_scale);
   const double origin = 9. / zoom_scale;

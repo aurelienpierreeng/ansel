@@ -51,7 +51,8 @@ extern "C" {
 #define DT_MASKS_WIDTH_NODE_SELECTED (1.5f * DT_MASKS_WIDTH_NODE)
 
 // detection area for hovering/selecting nodes, lines and handles
-#define DT_MASKS_SELECTION_DISTANCE (2.0f * DT_MASKS_WIDTH_NODE)
+#define DT_MASKS_SELECTION_DISTANCE_NO_UPSCALE(dev) (2.0f * DT_MASKS_WIDTH_NODE / dt_dev_get_zoom_level( (dt_develop_t *)dev))
+#define DT_MASKS_SELECTION_DISTANCE(dev) (2.0f * DT_MASKS_WIDTH_NODE * dt_dev_get_overlay_scale((dt_develop_t*)dev))
 
 /**dash type */
 typedef enum dt_masks_dash_type_t

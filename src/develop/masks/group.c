@@ -82,11 +82,11 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
 
   // reset selection
   dt_masks_soft_reset_form_gui(gui);
-  darktable.develop->mask_form_selected_id = -1;
+  dt_develop_t *dev = (dt_develop_t *)darktable.develop;
+  dev->mask_form_selected_id = -1;
 
   // now we check if we are near a new form
-  const float zoom_scale = darktable.develop->scaling * dt_dev_get_natural_scale(darktable.develop, darktable.develop->preview_pipe);
-  const float as = DT_MASKS_SELECTION_DISTANCE / zoom_scale;  // transformed to backbuf dimensions
+  const float as = DT_MASKS_SELECTION_DISTANCE(dev);  // transformed to backbuf dimensions
   int pos = 0;
   gui->form_selected = gui->border_selected = FALSE;
   gui->source_selected = gui->source_dragging = FALSE;
@@ -101,15 +101,15 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
   int sel_pos = 0;
   float sel_dist = FLT_MAX;
 
-  const float scale = darktable.develop->natural_scale;
-  const float xx = (pzx * darktable.develop->preview_pipe->backbuf_width)  / scale,
-              yy = (pzy * darktable.develop->preview_pipe->backbuf_height) / scale;
+  const float scale = dev->natural_scale;
+  const float xx = (pzx * dev->preview_pipe->backbuf_width)  / scale,
+              yy = (pzy * dev->preview_pipe->backbuf_height) / scale;
 
   for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
   {
     dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
     if(!fpt) continue;
-    dt_masks_form_t *frm = dt_masks_get_from_id(darktable.develop, fpt->formid);
+    dt_masks_form_t *frm = dt_masks_get_from_id(dev, fpt->formid);
     if(!frm) continue; // it means the form has been deleted meanwhile
 
     int inside, inside_border, near, inside_source;
@@ -142,7 +142,7 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
   if(sel && sel->functions)
   {
     gui->group_selected = sel_pos;
-    darktable.develop->mask_form_selected_id = sel->formid;
+    dev->mask_form_selected_id = sel->formid;
     return 1;
   }
 
@@ -154,8 +154,7 @@ static int _group_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
                                      int unused2)
 {
   const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
-  const float zoom_scale = dev->scaling;
-  const float as = DT_MASKS_SELECTION_DISTANCE / zoom_scale;
+  const float as = DT_MASKS_SELECTION_DISTANCE(dev);
 
   // we first don't do anything if we are inside a scrolling session
   if(gui->scrollx != 0.0f && gui->scrolly != 0.0f)
