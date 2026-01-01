@@ -1450,7 +1450,7 @@ float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
            * darktable.gui->ppd;
 }
 
-float dt_dev_get_overlay_scale(dt_develop_t *dev)
+float dt_dev_get_fit_scale(dt_develop_t *dev)
 {
   if(!dev || !dev->preview_pipe || dev->preview_pipe->backbuf_width == 0 || dev->preview_pipe->backbuf_height == 0)
     return dev->scaling * darktable.gui->ppd;
@@ -1458,7 +1458,12 @@ float dt_dev_get_overlay_scale(dt_develop_t *dev)
   const float nat_scale = fminf(fminf((float)dev->width / (float)dev->preview_pipe->backbuf_width,
                          (float)dev->height / (float)dev->preview_pipe->backbuf_height),
                           1.f);
-  return dev->scaling * nat_scale * darktable.gui->ppd;
+  return dev->scaling * nat_scale;
+}
+
+float dt_dev_get_overlay_scale(dt_develop_t *dev)
+{
+  return dt_dev_get_fit_scale(dev) * darktable.gui->ppd;
 }
 
 float dt_dev_get_zoom_level(const dt_develop_t *dev)
@@ -1525,7 +1530,7 @@ gboolean dt_dev_rescale_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32
 {
   if(_dev_translate_roi(dev, cr, width, height))
     return TRUE;
-  const float scale = dt_dev_get_overlay_scale(dev);
+  const float scale = dt_dev_get_fit_scale(dev);
   cairo_scale(cr, scale, scale);
   
   return FALSE;

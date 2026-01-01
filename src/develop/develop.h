@@ -575,12 +575,23 @@ void dt_dev_get_final_size(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, c
 float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe);
 
 /**
- * @brief  Get the overlay scale factor (scaling * natural_scale_on_processed_size * ppd)
+ * @brief  Get the overlay scale factor
+ * (scaling * natural_scale_on_processed_size * ppd)
  * 
  * @param dev the develop instance
  * @return float :the overlay scale factor
  */
 float dt_dev_get_overlay_scale(dt_develop_t *dev);
+
+/**
+ * @brief Get the scale factor to fit the image into the darkroom area.
+ * (scaling * natural_scale_on_processed_size)
+ * 
+ * @param dev the develop instance
+ * @return float : the fit scale factor
+ */
+float dt_dev_get_fit_scale(dt_develop_t *dev);
+
 // Get the current zoom factor ( scaling * natural_scale )
 float dt_dev_get_zoom_level(const dt_develop_t *dev);
 
