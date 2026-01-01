@@ -2507,6 +2507,11 @@ int dt_masks_point_in_form_exact(float x, float y, float *points, int points_sta
     if(isnan(x2))
     {
       next = (int)y2;
+      // validate the index to prevent out-of-bounds access
+      if(next < points_start || next >= points_count)
+      {
+        break; // invalid index, exit to prevent segfault
+      }
       continue;
     }
 
