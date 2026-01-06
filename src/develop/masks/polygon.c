@@ -2048,27 +2048,6 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   {
     dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, &dt_masks_functions_polygon);
   }
-
-  //
-  if(gui->creation)
-  {
-   /* draw a small circle above the current node to tell that we are closing the polygon */
-   /* this have to be last, so the circle is drawn on top of the shape drawing */
-    if(gui->creation_closing_form && node_count >= 3 && gpt->points_count >= (node_count * 6))
-    {
-      const int last_idx = node_count - 1;
-
-      const float x1 = gpt->points[last_idx * 6 + 2];
-      const float y1 = gpt->points[last_idx * 6 + 3];
-
-      const float x = x1 + 12.5f / zoom_scale;
-      const float y = y1 - 12.5f / zoom_scale;
-      cairo_save(cr);
-      cairo_arc(cr, x, y, DT_PIXEL_APPLY_DPI(3.0f) / zoom_scale, 0, 2 * G_PI);
-      dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, 0, FALSE, zoom_scale, 0, 0, NULL);
-      cairo_restore(cr);
-    }
-  }
 }
 
 static void _polygon_bounding_box_raw(const float *const points, const float *border, const int nb_corner, const int num_points, int num_borders,

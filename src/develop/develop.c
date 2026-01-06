@@ -1453,7 +1453,7 @@ float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
 float dt_dev_get_fit_scale(dt_develop_t *dev)
 {
   if(!dev || !dev->preview_pipe || dev->preview_pipe->backbuf_width == 0 || dev->preview_pipe->backbuf_height == 0)
-    return dev->scaling * darktable.gui->ppd;
+    return dev->scaling;
 
   const float nat_scale = fminf(fminf((float)dev->width / (float)dev->preview_pipe->backbuf_width,
                          (float)dev->height / (float)dev->preview_pipe->backbuf_height),

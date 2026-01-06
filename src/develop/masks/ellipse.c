@@ -387,7 +387,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->source_selected = FALSE;
   gui->handle_selected = -1;
   gui->node_selected = -1;
-
+  gui->pivot_selected = FALSE;
 
   pzx *= darktable.develop->preview_pipe->backbuf_width / dev->natural_scale;
   pzy *= darktable.develop->preview_pipe->backbuf_height / dev->natural_scale;
@@ -437,6 +437,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   {
     gui->form_selected = TRUE;
     gui->border_selected = TRUE;
+    gui->pivot_selected = TRUE;
     return 1;
   }
   else if(inside)
@@ -1129,7 +1130,7 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   }
 
   //draw the center point
-  if(gui->group_selected == index && gui->border_selected)
+  if(gui->group_selected == index && gui->pivot_selected)
     dt_masks_draw_node(cr, FALSE, FALSE, (gui->form_rotating), zoom_scale, gpt->points[0], gpt->points[1]);
 
   // draw the source if any
@@ -1690,8 +1691,8 @@ static void _ellipse_set_hint_message(const dt_masks_form_gui_t *const gui, cons
                  "<b>Rotate</b>: ctrl+shift+scroll, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
   else if(gui->border_selected)
     g_snprintf(msgbuf, msgbuf_len,
-               _("<b>Hardness mode</b>: shift+click, <b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"
-                 "<b>Rotate</b>: drag, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
+               _("<b>Hardness mode</b>: shift+click, <b>Size</b>: scroll\n"
+                 "<b>Hardness</b>: shift+scroll, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
   else if(gui->form_selected)
     g_snprintf(msgbuf, msgbuf_len,
                _("<b>Hardness mode</b>: shift+click, <b>Size</b>: scroll\n"

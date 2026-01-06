@@ -45,14 +45,17 @@ extern "C" {
 #define DT_MASKS_SCALE_DASH          DT_PIXEL_APPLY_DPI(12.0f)
 #define DT_MASKS_SCALE_ARROW         DT_PIXEL_APPLY_DPI(18.0f)
 // gradient wheel
-#define DT_MASKS_SCALE_WHEEL         DT_PIXEL_APPLY_DPI(20.0f)
+#define DT_MASKS_SCALE_WHEEL         DT_PIXEL_APPLY_DPI(75.0f)
 // radius/width of a handle & node
 #define DT_MASKS_WIDTH_NODE          DT_PIXEL_APPLY_DPI(5.0f)
 #define DT_MASKS_WIDTH_NODE_SELECTED (1.5f * DT_MASKS_WIDTH_NODE)
 
 // detection area for hovering/selecting nodes, lines and handles
-#define DT_MASKS_SELECTION_DISTANCE_NO_UPSCALE(dev) (2.0f * DT_MASKS_WIDTH_NODE / dt_dev_get_zoom_level( (dt_develop_t *)dev))
-#define DT_MASKS_SELECTION_DISTANCE(dev) (2.0f * DT_MASKS_WIDTH_NODE * dt_dev_get_overlay_scale((dt_develop_t*)dev))
+#define DT_MASKS_SELECTION_DISTANCE_NO_UPSCALE(dev) (2.0f * DT_MASKS_WIDTH_NODE / dt_dev_get_zoom_level((dt_develop_t *)dev))
+#define DT_MASKS_SELECTION_DISTANCE(dev)            (DT_MASKS_SELECTION_DISTANCE_NO_UPSCALE((dt_develop_t*)dev) * darktable.gui->ppd)
+
+#define DT_MASKS_SELECTION_ROTATION_AREA           DT_PIXEL_APPLY_DPI(50.0f)
+#define DT_MASKS_SELECTION_ROTATION_DISTANCE(dev) (DT_MASKS_SELECTION_ROTATION_AREA / dt_dev_get_zoom_level((dt_develop_t *)dev))  
 
 /**dash type */
 typedef enum dt_masks_dash_type_t
