@@ -404,7 +404,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
     _ellipse_point_transform(nodes[0], nodes[1], nodes[k * 2], nodes[k * 2 + 1], sinr, cosr, &x, &y);
 
     // are we also close to the node ?
-    if((pzx - x > -dist_curs && pzx - x <  dist_curs) && (pzy - y > -dist_curs && pzy - y <  dist_curs))
+    if(dt_masks_is_within_radius(pzx, pzy, x, y, dist_curs))
     {
       gui->node_selected = k;
       return 1;
@@ -415,7 +415,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   for(int i = 1; i < 5; i++)
   {
     _ellipse_point_transform(nodes[0], nodes[1], nodes[i * 2], nodes[i * 2 + 1], sinr, cosr, &x, &y);
-    if((pzx - x > -dist_curs && pzx - x <  dist_curs) && (pzy - y > -dist_curs && pzy - y <  dist_curs))
+    if(dt_masks_is_within_radius(pzx, pzy, x, y, dist_curs))
     {
       gui->node_selected = i;
       return 1;

@@ -271,11 +271,15 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   pzx *= darktable.develop->preview_pipe->backbuf_width / dev->natural_scale;
   pzy *= darktable.develop->preview_pipe->backbuf_height / dev->natural_scale;
 
-  if((gui->group_selected == index) && gui->node_edited >= 0)
+  if((gui->group_selected == index))
   {
-    // are we close to the pivot ?
-    if(pzx - gpt->points[0] > -DT_MASKS_SCALE_WHEEL && pzx - gpt->points[0] < DT_MASKS_SCALE_WHEEL
-       && pzy - gpt->points[1] > -DT_MASKS_SCALE_WHEEL && pzy - gpt->points[1] < DT_MASKS_SCALE_WHEEL)
+    // are we away enough from the pivot ?
+    const float dx = pzx - gpt->points[0];
+    const float dy = pzy - gpt->points[1];
+    const float distance_sq = dx * dx + dy * dy;
+    const float rotation_dist = DT_MASKS_SELECTION_ROTATION_DISTANCE(dev);
+    const float threshold_sq = rotation_dist * rotation_dist;
+    if(distance_sq >= threshold_sq && distance_sq <= (threshold_sq * 3.0f))
     {
       gui->pivot_selected = gui->form_selected = TRUE;
       return 1;

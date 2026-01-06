@@ -789,6 +789,20 @@ static inline int dt_masks_roundup(int num, int mult)
   return (rem == 0) ? num : num + mult - rem;
 }
 
+/**
+ * @brief Check if a point (px,py) is inside a radius from a center point (cx,cy)
+ * 
+ * @param px x coord of the point to test
+ * @param py y coord of the point to test
+ * @param cx center x coord
+ * @param cy center y coord
+ * @param radius the radius from center
+ * @return gboolean TRUE if the point is inside the radius from center, FALSE otherwise
+ */
+gboolean dt_masks_is_within_radius(const float px, const float py,
+                                        const float cx, const float cy,
+                                        const float radius);
+
 #ifdef __cplusplus
 }
 #endif

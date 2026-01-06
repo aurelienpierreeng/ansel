@@ -1137,19 +1137,16 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
       float ffx, ffy;
       _brush_ctrl2_to_handle(gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], gpt->points[k * 6 + 4],
                               gpt->points[k * 6 + 5], &ffx, &ffy, TRUE);
-      if((pzx - ffx > -dist_curs) && (pzx - ffx < dist_curs) && (pzy - ffy > -dist_curs) && (pzy - ffy < dist_curs))
+    if(dt_masks_is_within_radius(pzx, pzy, ffx, ffy, dist_curs))
       {
         gui->handle_selected = k;
 
         return 1;
       }
     }
-    
+
     // are we also close to the node ?
-    if(pzx - gpt->points[k * 6 + 2] > -dist_curs
-       && pzx - gpt->points[k * 6 + 2] < dist_curs
-       && pzy - gpt->points[k * 6 + 3] > -dist_curs
-       && pzy - gpt->points[k * 6 + 3] < dist_curs)
+    if(dt_masks_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], dist_curs))
     {
       gui->node_selected = k;
 
@@ -1160,10 +1157,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   // iterate all nodes and look for one that is close enough
   for(int k = 0; k < nb; k++)
   {
-    if(pzx - gpt->points[k * 6 + 2] > -dist_curs
-       && pzx - gpt->points[k * 6 + 2] < dist_curs
-       && pzy - gpt->points[k * 6 + 3] > -dist_curs
-       && pzy - gpt->points[k * 6 + 3] < dist_curs)
+    if(dt_masks_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], dist_curs))
     {
       gui->node_selected = k;
 

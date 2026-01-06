@@ -2851,6 +2851,18 @@ float dt_masks_rotate_with_anchor(dt_develop_t *dev, const float anchor[2], cons
   return angle / M_PI * 180.0f;
 }
 
+gboolean dt_masks_is_within_radius(const float px, const float py,
+                                        const float cx, const float cy,
+                                        const float radius)
+{
+  const float sq_radius = radius * radius;
+  const float dx = px - cx;
+  const float dy = py - cy;
+  const float sq_dist = dx * dx + dy * dy;
+  return sq_dist <= sq_radius;
+}
+
+
 #include "detail.c"
 
 // clang-format off
