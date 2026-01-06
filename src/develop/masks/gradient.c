@@ -920,7 +920,7 @@ static void _gradient_draw_arrow(cairo_t *cr, const gboolean selected, const gbo
   {
     cairo_move_to(cr, pivot_start_x, pivot_start_y);
     cairo_line_to(cr, pivot_end_x, pivot_end_y);
-    dt_masks_draw_lines(DT_MASKS_DASH_ROUND, FALSE, cr, 0, FALSE, zoom_scale, NULL, 0, NULL);
+    dt_masks_draw_line(DT_MASKS_DASH_ROUND, FALSE, cr, FALSE, zoom_scale);
   }
 
   // draw anchor circle
@@ -1031,11 +1031,11 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
       draw = _gradient_get_pts_border(darktable.develop, x, y, rotation, extent, curvature, &border, &border_count);
 
     // draw main line
-    dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, FALSE, zoom_scale, points, points_count, &dt_masks_functions_gradient);
+    dt_masks_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, FALSE, zoom_scale, points, points_count, &dt_masks_functions_gradient);
     _gradient_draw_arrow(cr, FALSE, FALSE, gui->form_rotating, zoom_scale, points, points_count);
 
     // draw borders
-    dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, FALSE, zoom_scale, border, border_count, &dt_masks_functions_gradient);
+    dt_masks_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, FALSE, zoom_scale, border, border_count, &dt_masks_functions_gradient);
 
     if(points) dt_free_align(points);
     if(border) dt_free_align(border);
@@ -1049,11 +1049,11 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
   const gboolean seg_selected = (gui->group_selected == index) && (gui->seg_selected >= 0);
   const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging); 
   // draw main line
-  dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, (seg_selected), zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_gradient);
+  dt_masks_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, (seg_selected), zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_gradient);
   // draw borders
   if(gui->group_selected == index)
   {
-    dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, (gui->border_selected), zoom_scale, gpt->border, gpt->border_count, &dt_masks_functions_gradient);
+    dt_masks_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, (gui->border_selected), zoom_scale, gpt->border, gpt->border_count, &dt_masks_functions_gradient);
   }
 
   _gradient_draw_arrow(cr, (seg_selected || all_selected), ((gui->group_selected == index) && gui->pivot_selected), gui->form_rotating,

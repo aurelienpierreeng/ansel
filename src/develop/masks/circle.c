@@ -620,9 +620,9 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
     // we draw the form and it's border
 
     // we draw the main shape
-    dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle);
+    dt_masks_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle);
     // we draw the borders
-    dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_circle);
+    dt_masks_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_circle);
 
     // draw a cross where the source will be created
     if(form->type & DT_MASKS_CLONE)
@@ -644,11 +644,11 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
   
   // we draw the main shape
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-  dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle);
+  dt_masks_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle);
   // we draw the borders
   if(gui->group_selected == index)
   { 
-    dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
+    dt_masks_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
                        gpt->border_count, &dt_masks_functions_circle);
   }
 

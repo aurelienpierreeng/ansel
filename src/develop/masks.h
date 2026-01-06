@@ -495,8 +495,20 @@ void dt_masks_draw_node(cairo_t *cr, const gboolean square, const gboolean group
  * @param points_count the number of points in the shape
  * @param functions the functions table of the shape
  */
-void dt_masks_draw_lines(const dt_masks_dash_type_t dash_type, const gboolean source, cairo_t *cr, const int nb, const gboolean selected,
+void dt_masks_draw_shape_lines(const dt_masks_dash_type_t dash_type, const gboolean source, cairo_t *cr, const int nb, const gboolean selected,
                 const float zoom_scale, const float *points, const int points_count, const dt_masks_functions_t *functions);
+/**
+ * @brief Draw a line of a previously drawn shape.
+ * It is similar to dt_masks_draw_shape_lines but it only apply stroke.
+ * 
+ * @param dash_type the dash type to use
+ * @param source TRUE if we draw the source shape (clone mask)
+ * @param cr the cairo context to draw into
+ * @param selected TRUE if the shape is selected
+ * @param zoom_scale the current zoom scale of the image
+ */
+void dt_masks_draw_line(const dt_masks_dash_type_t dash_type, const gboolean source, cairo_t *cr, const gboolean selected,
+                const float zoom_scale);
 /**
  * @brief Draw the control handle of a curve node point.
  *

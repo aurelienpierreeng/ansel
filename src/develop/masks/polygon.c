@@ -1981,9 +1981,9 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
           const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
           // creation mode: draw the current segment as round dotted line
           if(gui->creation && current_seg == node_count -2)
-            dt_masks_draw_lines(DT_MASKS_DASH_ROUND, FALSE, cr, 0, (seg_selected || all_selected), zoom_scale, 0, 0, NULL);
+            dt_masks_draw_line(DT_MASKS_DASH_ROUND, FALSE, cr, (seg_selected || all_selected), zoom_scale);
           else
-            dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, 0, (seg_selected || all_selected), zoom_scale, 0, 0, NULL);
+            dt_masks_draw_line(DT_MASKS_NO_DASH, FALSE, cr, (seg_selected || all_selected), zoom_scale);
           seg1 = (seg1 + 1) % node_count;
           current_seg++;
 
@@ -2023,7 +2023,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   {
     if(gpt->border_count > node_count * 3 + 2)
     {
-      dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, node_count, (gui->border_selected), zoom_scale, gpt->border,
+      dt_masks_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, node_count, (gui->border_selected), zoom_scale, gpt->border,
                         gpt->border_count, &dt_masks_functions_polygon);
     }
 

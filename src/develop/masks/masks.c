@@ -1557,7 +1557,8 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
     cairo_restore(cr);
   }
 }
-void dt_masks_draw_lines(const dt_masks_dash_type_t dash_type, const gboolean source, cairo_t *cr, const int nb, const gboolean selected,
+
+void dt_masks_draw_shape_lines(const dt_masks_dash_type_t dash_type, const gboolean source, cairo_t *cr, const int nb, const gboolean selected,
                 const float zoom_scale, const float *points, const int points_count, const dt_masks_functions_t *functions)
 {
   cairo_save(cr);
@@ -1599,6 +1600,12 @@ void dt_masks_draw_lines(const dt_masks_dash_type_t dash_type, const gboolean so
   cairo_stroke(cr);
 
   cairo_restore(cr);
+}
+
+void dt_masks_draw_line(const dt_masks_dash_type_t dash_type, const gboolean source, cairo_t *cr,
+                          const gboolean selected, const float zoom_scale)
+{
+  dt_masks_draw_shape_lines(dash_type, source, cr, 0, selected, zoom_scale, NULL, 0, NULL);
 }
 
 void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,

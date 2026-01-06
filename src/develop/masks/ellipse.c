@@ -1090,9 +1090,9 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     // we draw the form and it's border
     cairo_save(cr);
     // we draw the main shape
-    dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_ellipse);
+    dt_masks_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_ellipse);
     // we draw the borders
-    dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_ellipse);
+    dt_masks_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_ellipse);
     cairo_restore(cr);
 
 
@@ -1116,13 +1116,13 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
 
   // we draw the main shape
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-  dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_ellipse);
+  dt_masks_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_ellipse);
   
   if(gui->group_selected == index)
   {
     // we draw the borders
 
-    dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
+    dt_masks_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
                         gpt->border_count, &dt_masks_functions_ellipse);
 
     // draw node
