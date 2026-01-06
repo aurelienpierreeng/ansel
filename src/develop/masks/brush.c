@@ -1334,7 +1334,7 @@ static int _brush_events_mouse_scrolled(struct dt_iop_module_t *module, float pz
     }
 
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
-      return dt_masks_form_set_opacity(form, parentid, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
+      return dt_masks_form_change_opacity(form, parentid, up, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
       return _change_hardness(form, parentid, gui, module, index, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
     else // resize don't care where the mouse is inside a shape
@@ -2649,10 +2649,10 @@ static void _brush_set_hint_message(const dt_masks_form_gui_t *const gui, const 
   // TODO: check if it would be good idea to have same controls on creation and for selected brush
   if(gui->creation || gui->form_selected)
     g_snprintf(msgbuf, msgbuf_len,
-               _("<b>size</b>: scroll, <b>hardness</b>: shift+scroll\n"
-                 "<b>opacity</b>: ctrl+scroll (%d%%)"), opacity);
+               _("<b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"
+                 "<b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
   else if(gui->border_selected)
-    g_strlcat(msgbuf, _("<b>size</b>: scroll"), msgbuf_len);
+    g_strlcat(msgbuf, _("<b>Size</b>: scroll"), msgbuf_len);
 }
 
 static void _brush_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)

@@ -222,7 +222,7 @@ static int _circle_events_mouse_scrolled(struct dt_iop_module_t *module, float p
   else if(gui->form_selected)
   {
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
-      return dt_masks_form_set_opacity(form, parentid, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
+      return dt_masks_form_change_opacity(form, parentid, up, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
       return _change_hardness(form, gui, module, index, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
     else
@@ -1158,8 +1158,8 @@ static void _circle_set_hint_message(const dt_masks_form_gui_t *const gui, const
 {
   // circle has same controls on creation and on edit
   g_snprintf(msgbuf, msgbuf_len,
-             _("<b>size</b>: scroll, <b>feather size</b>: shift+scroll\n"
-               "<b>opacity</b>: ctrl+scroll (%d%%)"), opacity);
+             _("<b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"
+               "<b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
 }
 
 static void _circle_duplicate_points(dt_develop_t *dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)

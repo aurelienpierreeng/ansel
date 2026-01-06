@@ -1377,7 +1377,7 @@ static int _polygon_events_mouse_scrolled(struct dt_iop_module_t *module, float 
   else if(gui->edit_mode == DT_MASKS_EDIT_FULL && (gui->form_selected || gui->node_selected >= 0 || gui->handle_selected >= 0 || gui->seg_selected >= 0))
   {
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
-      return dt_masks_form_set_opacity(form, parentid, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
+      return dt_masks_form_change_opacity(form, parentid, up, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
       return _change_hardness(form, parentid, gui, module, index, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
     else
@@ -2966,21 +2966,21 @@ static void _polygon_set_hint_message(const dt_masks_form_gui_t *const gui, cons
                                      const int opacity, char *const restrict msgbuf, const size_t msgbuf_len)
 {
   if(gui->creation && g_list_length(form->points) < 4)
-    g_strlcat(msgbuf, _("<b>add node</b>: click, <b>add sharp node</b>:ctrl+click\n"
-                        "<b>cancel</b>: right-click"), msgbuf_len);
+    g_strlcat(msgbuf, _("<b>Add node</b>: click, <b>Add sharp node</b>:ctrl+click\n"
+                        "<b>Cancel</b>: right-click or Esc"), msgbuf_len);
   else if(gui->creation)
-    g_strlcat(msgbuf, _("<b>add node</b>: click, <b>add sharp node</b>:ctrl+click\n"
-                        "<b>finish polygon</b>: Enter or click on the first node"), msgbuf_len);
+    g_strlcat(msgbuf, _("<b>Add node</b>: click, <b>Add sharp node</b>:ctrl+click\n"
+                        "<b>Finish polygon</b>: Enter or click on the first node"), msgbuf_len);
   else if(gui->node_selected >= 0)
-    g_strlcat(msgbuf, _("<b>move node</b>: drag, <b>remove node</b>: right-click\n"
-                        "<b>switch smooth/sharp mode</b>: ctrl+click"), msgbuf_len);
+    g_strlcat(msgbuf, _("<b>Move node</b>: drag, <b>Remove node</b>: right-click\n"
+                        "<b>Switch smooth/sharp mode</b>: ctrl+click"), msgbuf_len);
   else if(gui->handle_selected >= 0)
-    g_strlcat(msgbuf, _("<b>node curvature</b>: drag\n<b>reset curvature</b>: right-click"), msgbuf_len);
+    g_strlcat(msgbuf, _("<b>Node curvature</b>: drag\n<b>Reset curvature</b>: right-click"), msgbuf_len);
   else if(gui->seg_selected >= 0)
-    g_strlcat(msgbuf, _("<b>move segment</b>: drag\n<b>add node</b>: ctrl+click"), msgbuf_len);
+    g_strlcat(msgbuf, _("<b>Move segment</b>: drag\n<b>Add node</b>: ctrl+click"), msgbuf_len);
   else if(gui->form_selected)
-    g_snprintf(msgbuf, msgbuf_len, _("<b>size</b>: scroll, <b>hardness size</b>: shift+scroll\n"
-                                     "<b>opacity</b>: ctrl+scroll (%d%%)"), opacity);
+    g_snprintf(msgbuf, msgbuf_len, _("<b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"
+                                     "<b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
 }
 
 static void _polygon_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)

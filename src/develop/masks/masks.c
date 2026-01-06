@@ -1226,6 +1226,7 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
                                           incr ? 1 : 0, flow,
                                           state, form, 0, gui, 0, DT_MASKS_INTERACTION_UNDEF);
 
+  if(ret && gui) _set_hinter_message(gui, form);
   return ret;
 }
 
@@ -2176,10 +2177,12 @@ int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity
     dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
     if(fpt->formid == id)
     {
-      const float new_opacity = (offset == DT_MASKS_INCREMENT_OFFSET)  ? fpt->opacity + opacity * flow
+      float new_opacity = (offset == DT_MASKS_INCREMENT_OFFSET)  ? fpt->opacity + opacity * flow
                                 : (offset == DT_MASKS_INCREMENT_SCALE) ? fpt->opacity * powf(opacity, (float)flow)
                                                                        : opacity; // DT_MASKS_INCREMENT_ABSOLUTE
-      fpt->opacity = CLAMP(new_opacity, 0.05f, 1.0f);
+      new_opacity = CLAMP(new_opacity, 0.0f, 1.0f);
+      fpt->opacity = new_opacity;
+      dt_toast_log(_("Opacity: %3.2f%%"), new_opacity * 100.f);
       return 1;
     }
   }
@@ -2188,7 +2191,7 @@ int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity
 
 int dt_masks_form_change_opacity(dt_masks_form_t *form, int parentid, int up, const int flow)
 {
-  const float amount = up ? 0.05f : -0.05f;
+  const float amount = up ? 0.02f : -0.02f;
   return dt_masks_form_set_opacity(form, parentid, amount, DT_MASKS_INCREMENT_OFFSET, flow);
 }
 

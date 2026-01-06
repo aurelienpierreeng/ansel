@@ -455,7 +455,7 @@ static int _gradient_events_mouse_scrolled(struct dt_iop_module_t *module, float
     if(dt_modifier_is(state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
       return _change_rotation(form, gui, module, index, (up ? +2.0f : -2.0f), DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_CONTROL_MASK))
-      dt_masks_form_change_opacity(form, parentid, up, flow);
+      return dt_masks_form_change_opacity(form, parentid, up, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
       return _change_curvature(form, gui, module, index, (up ? +0.02f : -0.02f), DT_MASKS_INCREMENT_OFFSET, flow);
     else
@@ -1491,15 +1491,14 @@ static void _gradient_set_hint_message(const dt_masks_form_gui_t *const gui, con
                                      const int opacity, char *const restrict msgbuf, const size_t msgbuf_len)
 {
   if(gui->creation)
-    g_snprintf(msgbuf, msgbuf_len,
-               _("<b>curvature</b>: scroll, <b>extent</b>: shift+scroll\n"
-                 "<b>rotation</b>: click+drag, <b>opacity</b>: ctrl+scroll (%d%%)"),
-               opacity);
-  else if(gui->form_selected)
-    g_snprintf(msgbuf, msgbuf_len, _("<b>curvature</b>: scroll, <b>extent</b>: shift+scroll\n"
-                                     "<b>opacity</b>: ctrl+scroll (%d%%)"), opacity);
-  else if(gui->pivot_selected)
-    g_strlcat(msgbuf, _("<b>rotate</b>: drag"), msgbuf_len);
+    g_snprintf(msgbuf, msgbuf_len, _("<b>Extent</b>: scroll, <b>Curvature</b>: shift+scroll\n"
+                                     "<b>Rotation</b>: shift+drag, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
+  else if(gui->seg_selected >= 0)
+    g_snprintf(msgbuf, msgbuf_len, _("<b>Move</b>: drag, <b>Extent</b>: scroll\n"
+                                     "<b>Curvature</b>: shift+scroll, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
+  else if(gui->border_selected)
+    g_snprintf(msgbuf, msgbuf_len, _("<b>Extent</b>: scroll, <b>Curvature</b>: shift+scroll\n"
+                                     "<b>Rotation</b>: drag, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
 }
 
 static void _gradient_duplicate_points(dt_develop_t *dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)

@@ -1686,14 +1686,16 @@ static void _ellipse_set_hint_message(const dt_masks_form_gui_t *const gui, cons
 {
   if(gui->creation)
     g_snprintf(msgbuf, msgbuf_len,
-               _("<b>size</b>: scroll, <b>feather size</b>: shift+scroll\n"
-                 "<b>rotation</b>: ctrl+shift+scroll, <b>opacity</b>: ctrl+scroll (%d%%)"), opacity);
-  else if(gui->node_selected >= 0)
-    g_strlcat(msgbuf, _("<b>rotate</b>: ctrl+drag"), msgbuf_len);
+               _("<b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"
+                 "<b>Rotate</b>: ctrl+shift+scroll, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
+  else if(gui->border_selected)
+    g_snprintf(msgbuf, msgbuf_len,
+               _("<b>Hardness mode</b>: shift+click, <b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"
+                 "<b>Rotate</b>: drag, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
   else if(gui->form_selected)
     g_snprintf(msgbuf, msgbuf_len,
-               _("<b>feather mode</b>: shift+click, <b>rotate</b>: ctrl+drag\n"
-                 "<b>size</b>: scroll, <b>feather size</b>: shift+scroll, <b>opacity</b>: ctrl+scroll (%d%%)"), opacity);
+               _("<b>Hardness mode</b>: shift+click, <b>Size</b>: scroll\n"
+                 "<b>Hardness</b>: shift+scroll, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
 }
 
 static void _ellipse_sanitize_config(dt_masks_type_t type)
