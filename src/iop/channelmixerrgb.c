@@ -2240,7 +2240,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   // if cursor is close from a node, remove the system pointer arrow to prevent hiding the spot behind it
   if(g->is_cursor_close)
   {
-    dt_control_change_cursor(GDK_BLANK_CURSOR);
+    dt_control_set_cursor(GDK_BLANK_CURSOR);
   }
   else
   {

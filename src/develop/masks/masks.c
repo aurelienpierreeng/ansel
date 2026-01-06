@@ -1126,6 +1126,19 @@ int dt_masks_events_mouse_enter(struct dt_iop_module_t *module)
   return 0;
 }
 
+static void _set_cursor_shape(dt_masks_form_gui_t *gui)
+{
+  if(!gui) return;
+
+  if(gui->pivot_selected)
+    dt_control_set_cursor(GDK_EXCHANGE);
+  else if(gui->creation_closing_form)
+    dt_control_set_cursor(GDK_CIRCLE);
+  else if(gui->form_selected || gui->node_selected >= 0
+          || gui->handle_selected >= 0 || gui->seg_selected >= 0)
+    dt_control_set_cursor(GDK_FLEUR);
+}
+
 int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double y, double pressure, int which)
 {
   // record mouse position even if there are no masks visible
@@ -1156,8 +1169,11 @@ int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double
   if(form->functions)
     rep = form->functions->mouse_moved(module, pzx, pzy, pressure, which, form, 0, gui, 0);
 
-  if(gui) _set_hinter_message(gui, form);
-
+  if(gui)
+  {
+    _set_hinter_message(gui, form);
+    _set_cursor_shape(gui);
+  }
   return rep;
 }
 

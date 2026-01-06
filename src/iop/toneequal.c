@@ -1936,6 +1936,8 @@ static void _switch_cursors(struct dt_iop_module_t *self)
     // if pipe is clean and idle and cursor is on preview,
     // hide GTK cursor because we display our custom one
     dt_control_change_cursor(GDK_BLANK_CURSOR);
+    // set it in control->cursor in case it's run from mouse_moved event
+    dt_control_set_cursor(GDK_BLANK_CURSOR);
     dt_control_hinter_message(darktable.control,
                               _("scroll over image to change tone exposure\n"
                                 "shift+scroll for large steps; "

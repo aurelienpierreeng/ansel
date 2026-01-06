@@ -2081,6 +2081,16 @@ static gboolean mouse_in_actionarea(dt_view_t *self, double x, double y)
   return _is_in_frame(self->width, self->height, round(x), round(y));
 }
 
+static void _set_default_cursor(dt_view_t *self, double x, double y)
+{
+  if(mouse_in_imagearea(self, x, y))
+    dt_control_set_cursor(GDK_DOT);
+  else if(mouse_in_actionarea(self, x, y))
+    dt_control_set_cursor(GDK_CROSSHAIR);
+  else
+    dt_control_set_cursor(GDK_LEFT_PTR);
+}
+
 void mouse_enter(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
@@ -2124,14 +2134,10 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   dt_control_t *ctl = darktable.control;
 
   //fprintf(stdout, "dev->xy (%2.2f, %2.2f)\n", dev->x, dev->y);
+  gboolean ret = FALSE;
 
-  // change cursor appearance
-  if(mouse_in_imagearea(self, x, y))
-    dt_control_change_cursor(GDK_DOT);
-  else if(mouse_in_actionarea(self, x, y))
-    dt_control_change_cursor(GDK_CROSSHAIR);
-  else
-    dt_control_change_cursor(GDK_LEFT_PTR);
+  // change cursor appearance by default
+  _set_default_cursor(self, x, y);
 
   if(!mouse_in_actionarea(self, x, y)) return;
 
@@ -2164,30 +2170,33 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     }
 
     dt_control_queue_redraw_center();
-    return;
+    ret = TRUE;
   }
 
   // masks
-  if(dev->form_visible && dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which))
+  if(!ret && dev->form_visible && dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which))
   {
     dt_control_queue_redraw_center();
     _do_delayed_history_commit(dev);
-    return;
+    ret = TRUE;
   }
 
   // module
-  if(dev->gui_module && dev->gui_module->mouse_moved
+  if(!ret && dev->gui_module && dev->gui_module->mouse_moved
     &&dev->gui_module->mouse_moved(dev->gui_module, x, y, pressure, which))
   {
     dt_control_queue_redraw_center();
-    return;
+    ret = TRUE;
   }
+
+  // Apply cursor change and return if needed
+  dt_control_commit_cursor();
+  if(ret) return;
 
   // panning with left mouse button
   if(darktable.control->button_down && darktable.control->button_down_which == 1 && dev->scaling > 1)
   {
-    const float nat_scale = dev->natural_scale;
-    const float scale = nat_scale * dev->scaling;
+    const float scale = dt_dev_get_zoom_level(dev);
     const double clicked_x = ctl->button_x;
     const double clicked_y = ctl->button_y;
     // delta in roi scale

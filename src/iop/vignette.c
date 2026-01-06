@@ -497,7 +497,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   {
     if(grab == 0) // pan the image
     {
-      dt_control_change_cursor(GDK_HAND1);
+      dt_control_set_cursor(GDK_HAND1);
       return 0;
     }
     else if(grab == 1) // move the center
@@ -590,19 +590,19 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   else if(grab)
   {
     if(grab == 1)
-      dt_control_change_cursor(GDK_FLEUR);
+      dt_control_set_cursor(GDK_FLEUR);
     else if(grab == 2)
-      dt_control_change_cursor(GDK_SB_H_DOUBLE_ARROW);
+      dt_control_set_cursor(GDK_SB_H_DOUBLE_ARROW);
     else if(grab == 4)
-      dt_control_change_cursor(GDK_SB_V_DOUBLE_ARROW);
+      dt_control_set_cursor(GDK_SB_V_DOUBLE_ARROW);
     else if(grab == 8)
-      dt_control_change_cursor(GDK_SB_H_DOUBLE_ARROW);
+      dt_control_set_cursor(GDK_SB_H_DOUBLE_ARROW);
     else if(grab == 16)
-      dt_control_change_cursor(GDK_SB_V_DOUBLE_ARROW);
+      dt_control_set_cursor(GDK_SB_V_DOUBLE_ARROW);
   }
   else
   {
-    if(old_grab != grab) dt_control_change_cursor(GDK_LEFT_PTR);
+    if(old_grab != grab) dt_control_set_cursor(GDK_LEFT_PTR);
   }
   old_grab = grab;
   dt_control_queue_redraw_center();
