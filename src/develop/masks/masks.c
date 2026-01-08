@@ -1132,8 +1132,8 @@ static void _set_cursor_shape(dt_masks_form_gui_t *gui)
 
   if(gui->pivot_selected)
     dt_control_set_cursor(GDK_EXCHANGE);
-  else if(gui->creation_closing_form)
-    dt_control_set_cursor(GDK_CIRCLE);
+  // else if(gui->creation_closing_form)
+  //  dt_control_set_cursor(GDK_CIRCLE);
   else if(gui->form_selected || gui->node_selected >= 0
           || gui->handle_selected >= 0 || gui->seg_selected >= 0)
     dt_control_set_cursor(GDK_FLEUR);

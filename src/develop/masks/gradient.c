@@ -156,6 +156,13 @@ static void _closest_point_on_line(float px, float py, const float *border, int 
 #endif
 }
 
+static float _gradient_get_border_len_sq(const dt_masks_form_gui_points_t *gpt)
+{
+  const float gradient_dx = gpt->points[2] - gpt->points[0];
+  const float gradient_dy = gpt->points[3] - gpt->points[1];
+  return gradient_dx * gradient_dx + gradient_dy * gradient_dy;
+}
+
 static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_form_gui_t *gui, int index,
                                    int num_points, int *inside, int *inside_border, int *near, int *inside_source, float *dist)
 {
@@ -168,6 +175,7 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
   *inside_border = 0;
   *near = -1;
   *dist = FLT_MAX;
+  const float sqr_dist_mouse = dist_mouse * dist_mouse;
 
   const dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return;
@@ -179,9 +187,7 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
     if(separator_idx > 0 && separator_idx < gpt->border_count - 1)
     {
       // Get gradient direction from segment (points[0],points[1]) to (points[2],points[3])
-      const float gradient_dx = gpt->points[2] - gpt->points[0];
-      const float gradient_dy = gpt->points[3] - gpt->points[1];
-      const float gradient_len_sq = gradient_dx * gradient_dx + gradient_dy * gradient_dy;
+      const float gradient_len_sq = _gradient_get_border_len_sq(gpt);
       
       if(gradient_len_sq > 1e-12f)
       {
@@ -204,6 +210,8 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
           const float to_line2_x = closest_x2 - x;
           const float to_line2_y = closest_y2 - y;
           
+          const float gradient_dx = gpt->points[2] - gpt->points[0];
+          const float gradient_dy = gpt->points[3] - gpt->points[1];
           // Project these vectors onto the (unnormalized) gradient direction.
           // Using the unnormalized direction preserves sign, so we avoid sqrt().
           const float proj1 = to_line1_x * gradient_dx + to_line1_y * gradient_dy;
@@ -213,8 +221,12 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
           if(proj1 * proj2 < 0.0f)
           {
             *inside_border = 1;
-            *inside = 1;
-            //return;
+
+            const float min_dist_sq = fminf(dist1_sq, dist2_sq);
+            if(min_dist_sq <= sqr_dist_mouse * 10)
+            {
+              *inside = 1;
+            }
           }
         }
       }
@@ -224,7 +236,6 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
   // and we check if we are near a segment (single continuous segment starting at gpt->points[3])
   if(gpt->points_count > 3)
   {
-    const float sqr_dist_mouse = dist_mouse * dist_mouse;
     for(int i = 3; i < gpt->points_count; i++)
     {
       const float xx = gpt->points[i * 2];
@@ -271,7 +282,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   pzx *= darktable.develop->preview_pipe->backbuf_width / dev->natural_scale;
   pzy *= darktable.develop->preview_pipe->backbuf_height / dev->natural_scale;
 
-  if((gui->group_selected == index))
+  // This allow to rotate if the mouse is at a certain distance from center
+  /*if((gui->group_selected == index))
   {
     // are we away enough from the pivot ?
     const float dx = pzx - gpt->points[0];
@@ -284,7 +296,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
       gui->pivot_selected = gui->form_selected = TRUE;
       return 1;
     }
-  }
+  }*/
 
   // are we inside the form or the borders or near a segment ???
   int inside, inside_border, near, inside_source;
@@ -294,15 +306,15 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
     gui->seg_selected = near;
   else
   {
-    if(inside_border)
+    if(inside)
+    {
+      gui->pivot_selected = gui->form_selected = TRUE;
+      return 1;
+    }
+    else if(inside_border)
     {
       gui->form_selected = TRUE;
       gui->border_selected = TRUE;
-      return 1;
-    }
-    else if(inside)
-    {
-      gui->form_selected = TRUE;
       return 1;
     }
   }
@@ -923,23 +935,18 @@ static void _gradient_draw_arrow(cairo_t *cr, const gboolean selected, const gbo
     dt_masks_draw_line(DT_MASKS_DASH_ROUND, FALSE, cr, FALSE, zoom_scale);
   }
 
+  /*
   // draw anchor circle
   if(pivot_selected)
   {
     const float anchor_size = DT_MASKS_SCALE_WHEEL / zoom_scale;
     cairo_arc(cr, anchor_x, anchor_y, anchor_size, 0, 2.0f * M_PI);
 
-    /*cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
-    cairo_fill_preserve(cr);*/
-
-    /*dt_draw_set_color_overlay(cr, FALSE, 0.8);
-    cairo_fill_preserve(cr);*/
-
     dt_masks_set_dash(cr, DT_MASKS_NO_DASH, zoom_scale);
     cairo_set_line_width(cr, DT_MASKS_SELECTION_ROTATION_AREA / zoom_scale);
     dt_draw_set_color_overlay(cr, FALSE, 0.5);
     cairo_stroke(cr);
-  }
+  }*/
 
   // always draw arrow to clearly display the direction
   {
@@ -1493,12 +1500,9 @@ static void _gradient_set_hint_message(const dt_masks_form_gui_t *const gui, con
   if(gui->creation)
     g_snprintf(msgbuf, msgbuf_len, _("<b>Extent</b>: scroll, <b>Curvature</b>: shift+scroll\n"
                                      "<b>Rotate</b>: shift+drag, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
-  else if(gui->seg_selected >= 0)
+  else if(gui->form_selected)
     g_snprintf(msgbuf, msgbuf_len, _("<b>Extent</b>: scroll, <b>Curvature</b>: shift+scroll\n"
-                                     "<b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
-  else if(gui->border_selected)
-    g_snprintf(msgbuf, msgbuf_len, _("<b>Extent</b>: scroll, <b>Curvature</b>: shift+scroll\n"
-                                     "<b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
+                                     "<b>Reset curvature</b>: double-click, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
 }
 
 static void _gradient_duplicate_points(dt_develop_t *dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)
