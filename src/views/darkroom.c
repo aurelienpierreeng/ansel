@@ -2407,7 +2407,7 @@ static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int 
 
   // Commit the new scaling
   const float step = 1.02f;
-  dev->scaling *= powf(step, (float)flow);
+  dev->scaling *= powf(step, (float)-flow);
 
   if(dt_dev_check_zoom_scale_bounds(dev)) return TRUE;
 

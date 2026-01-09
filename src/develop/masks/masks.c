@@ -1130,12 +1130,20 @@ static void _set_cursor_shape(dt_masks_form_gui_t *gui)
 {
   if(!gui) return;
 
+  // circular arrows
   if(gui->pivot_selected)
     dt_control_set_cursor(GDK_EXCHANGE);
-  // else if(gui->creation_closing_form)
-  //  dt_control_set_cursor(GDK_CIRCLE);
-  else if(gui->form_selected || gui->node_selected >= 0
-          || gui->handle_selected >= 0 || gui->seg_selected >= 0)
+  // pointing hand
+  else if((gui->node_selected >= 0 && (gui->node_edited != gui->node_selected))
+          || (gui->handle_selected >= 0 && (gui->handle_dragging != gui->handle_selected))
+          || gui->creation_closing_form)
+    dt_control_set_cursor(GDK_HAND2);
+
+  else if(gui->handle_dragging >= 0)
+    dt_control_set_cursor(GDK_HAND1);
+  // crosshair
+  else if(!gui->creation && (gui->form_selected || gui->node_selected >= 0
+                            || gui->handle_selected >= 0 || gui->seg_selected >= 0))
     dt_control_set_cursor(GDK_FLEUR);
 }
 

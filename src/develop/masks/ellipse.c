@@ -587,7 +587,7 @@ static int _ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, float 
   if(gui->creation)
   {
     if(dt_modifier_is(state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
-      return _init_rotation(form, (up ? +2.0f : -2.0f), DT_MASKS_INCREMENT_OFFSET, flow);
+      return _init_rotation(form, (up ? +0.2f : -0.2f), DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_CONTROL_MASK))
       return _init_opacity(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
@@ -598,7 +598,7 @@ static int _ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, float 
   else if(gui->form_selected)
   {
     if(dt_modifier_is(state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
-      return _change_rotation(form, gui, module, index, (up ? +2.0f : -2.0f), DT_MASKS_INCREMENT_OFFSET, flow);
+      return _change_rotation(form, gui, module, index, (up ? +0.2f : -0.2f), DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_CONTROL_MASK))
       return dt_masks_form_set_opacity(form, parentid, (up ? +0.02f : -0.02f), DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
@@ -957,12 +957,9 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     {
 
       const float origin_point[2] = { gpt->points[0], gpt->points[1] };
-      ellipse->rotation += dt_masks_rotate_with_anchor(darktable.develop, gui->pos, origin_point, gui);
+      const float angle = dt_masks_rotate_with_anchor(darktable.develop, gui->pos, origin_point, gui);
 
-      if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-        dt_conf_set_float("plugins/darkroom/spots/ellipse/rotation", ellipse->rotation);
-      else
-        dt_conf_set_float("plugins/darkroom/masks/ellipse/rotation", ellipse->rotation);
+      _change_rotation(form, gui, module, index, angle , DT_MASKS_INCREMENT_OFFSET, 1);
 
       // we recreate the form points
       dt_masks_gui_form_remove(form, gui, index);

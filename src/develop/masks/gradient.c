@@ -209,7 +209,7 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
           const float to_line1_y = closest_y1 - y;
           const float to_line2_x = closest_x2 - x;
           const float to_line2_y = closest_y2 - y;
-          
+
           const float gradient_dx = gpt->points[2] - gpt->points[0];
           const float gradient_dy = gpt->points[3] - gpt->points[1];
           // Project these vectors onto the (unnormalized) gradient direction.
@@ -458,7 +458,7 @@ static int _gradient_events_mouse_scrolled(struct dt_iop_module_t *module, float
   if(gui->creation)
   {
     if(dt_modifier_is(state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
-      return _init_rotation(form, (up ? +2.0f : -2.0f), DT_MASKS_INCREMENT_OFFSET, flow);
+      return _init_rotation(form, (up ? +0.2f : -0.2f), DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_CONTROL_MASK))
       return _init_opacity(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
@@ -469,7 +469,7 @@ static int _gradient_events_mouse_scrolled(struct dt_iop_module_t *module, float
   else if(gui->form_selected  || gui->seg_selected >= 0 || gui->pivot_selected)
   {
     if(dt_modifier_is(state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
-      return _change_rotation(form, gui, module, index, (up ? +2.0f : -2.0f), DT_MASKS_INCREMENT_OFFSET, flow);
+      return _change_rotation(form, gui, module, index, (up ? +0.2f : -0.2f), DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_CONTROL_MASK))
       return dt_masks_form_change_opacity(form, parentid, up, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
@@ -669,9 +669,8 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, float pz
     if(gui->form_rotating)
     {
       const float origin_point[2] = { gpt->points[0], gpt->points[1] };
-      gradient->rotation -= dt_masks_rotate_with_anchor(darktable.develop, gui->pos, origin_point, gui);
-     
-      dt_conf_set_float("plugins/darkroom/masks/gradient/rotation", gradient->rotation);
+      const float angle = - dt_masks_rotate_with_anchor(darktable.develop, gui->pos, origin_point, gui);
+      _change_rotation(form, gui, module, index, angle , DT_MASKS_INCREMENT_OFFSET, 1);
 
       // we recreate the form points
       dt_masks_gui_form_remove(form, gui, index);
@@ -1500,7 +1499,7 @@ static void _gradient_set_hint_message(const dt_masks_form_gui_t *const gui, con
   if(gui->creation)
     g_snprintf(msgbuf, msgbuf_len, _("<b>Extent</b>: scroll, <b>Curvature</b>: shift+scroll\n"
                                      "<b>Rotate</b>: shift+drag, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
-  else if(gui->form_selected)
+  else if(gui->form_selected || gui->seg_selected >= 0)
     g_snprintf(msgbuf, msgbuf_len, _("<b>Extent</b>: scroll, <b>Curvature</b>: shift+scroll\n"
                                      "<b>Reset curvature</b>: double-click, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
 }
