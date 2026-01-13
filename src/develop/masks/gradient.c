@@ -929,23 +929,20 @@ static void _gradient_draw_arrow(cairo_t *cr, const gboolean selected, const gbo
   // draw a dotted line across the gradient for better visibility while dragging
   if(is_rotating)
   {
-    cairo_move_to(cr, pivot_start_x, pivot_start_y);
-    cairo_line_to(cr, pivot_end_x, pivot_end_y);
+    // extend the axis line beyond the pivot points
+    const float scale = 1 / zoom_scale;
+    const float dx = pivot_end_x - pivot_start_x;
+    const float dy = pivot_end_y - pivot_start_y;
+
+    const float new_x1 = pivot_start_x - (dx * scale * 0.5f);
+    const float new_y1 = pivot_start_y - (dy * scale * 0.5f);
+    const float new_x2 = pivot_end_x + (dx * scale * 0.5f);
+    const float new_y2 = pivot_end_y + (dy * scale * 0.5f);
+    cairo_move_to(cr, new_x1, new_y1);
+    cairo_line_to(cr, new_x2, new_y2);
+
     dt_masks_draw_line(DT_MASKS_DASH_ROUND, FALSE, cr, FALSE, zoom_scale);
   }
-
-  /*
-  // draw anchor circle
-  if(pivot_selected)
-  {
-    const float anchor_size = DT_MASKS_SCALE_WHEEL / zoom_scale;
-    cairo_arc(cr, anchor_x, anchor_y, anchor_size, 0, 2.0f * M_PI);
-
-    dt_masks_set_dash(cr, DT_MASKS_NO_DASH, zoom_scale);
-    cairo_set_line_width(cr, DT_MASKS_SELECTION_ROTATION_AREA / zoom_scale);
-    dt_draw_set_color_overlay(cr, FALSE, 0.5);
-    cairo_stroke(cr);
-  }*/
 
   // always draw arrow to clearly display the direction
   {
@@ -979,7 +976,6 @@ static void _gradient_draw_arrow(cairo_t *cr, const gboolean selected, const gbo
     cairo_move_to(cr, tip_x, tip_y);
     cairo_line_to(cr, arrow_x1, arrow_y1);
     cairo_line_to(cr, arrow_x2, arrow_y2);
-    //cairo_line_to(cr, tip_x, tip_y);
     cairo_close_path(cr);
 
     dt_draw_set_color_overlay(cr, TRUE, 0.8);
