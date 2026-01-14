@@ -47,11 +47,11 @@ extern "C" {
 // gradient wheel
 #define DT_MASKS_SCALE_WHEEL         DT_PIXEL_APPLY_DPI(75.0f)
 // radius/width of a handle & node
-#define DT_MASKS_WIDTH_NODE          DT_PIXEL_APPLY_DPI(5.0f)
-#define DT_MASKS_WIDTH_NODE_SELECTED (1.5f * DT_MASKS_WIDTH_NODE)
+#define DT_MASKS_RADIUS_NODE          DT_PIXEL_APPLY_DPI(5.0f)
+#define DT_MASKS_RADIUS_NODE_SELECTED (1.5f * DT_MASKS_RADIUS_NODE)
 
 // detection area for hovering/selecting nodes, lines and handles
-#define DT_MASKS_SELECTION_DISTANCE_NO_UPSCALE(dev) (2.0f * DT_MASKS_WIDTH_NODE / dt_dev_get_zoom_level((dt_develop_t *)dev))
+#define DT_MASKS_SELECTION_DISTANCE_NO_UPSCALE(dev) (2.0f * DT_MASKS_RADIUS_NODE / dt_dev_get_zoom_level((dt_develop_t *)dev))
 #define DT_MASKS_SELECTION_DISTANCE(dev)            (DT_MASKS_SELECTION_DISTANCE_NO_UPSCALE((dt_develop_t*)dev) * darktable.gui->ppd)
 
 #define DT_MASKS_SELECTION_ROTATION_AREA           DT_PIXEL_APPLY_DPI(50.0f)
@@ -474,8 +474,8 @@ gboolean dt_masks_is_corner_node(const dt_masks_form_gui_points_t *gpt, const in
  * 
  * @param cr the cairo context to draw into
  * @param square TRUE to draw a square node, FALSE to draw a round node
- * @param group_selected TRUE if the group is selected
  * @param point_action TRUE if the point is selected or dragged
+ * @param selected TRUE if the shape is selected
  * @param zoom_scale the current zoom scale of the image
  * @param x the center x position of the anchor
  * @param y the center y position of the anchor

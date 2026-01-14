@@ -178,11 +178,10 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
 
   const double wd = dev->preview_pipe->backbuf_width;
   const double ht = dev->preview_pipe->backbuf_height;
-  const double zoom_scale = dt_dev_get_fit_scale(dev);
-  const double lw = 1.0 / zoom_scale;
+  const double scale = dt_dev_get_fit_scale(dev);
+  const double lw = 1.0 / scale;
   const double dashes[1] = { lw * 4.0 };
 
-  const float scale = dt_dev_get_fit_scale(dev);
   dt_dev_rescale_roi(dev, cri, width, height);
 
   // makes point sample crosshair gap look nicer
@@ -223,7 +222,7 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
       if(is_primary_sample)
       {
         // handles
-        const double hw = 5. / zoom_scale;
+        const double hw = 5. / scale;
         cairo_rectangle(cri, x - hw, y - hw, 2. * hw, 2. * hw);
         cairo_rectangle(cri, x - hw, h - hw, 2. * hw, 2. * hw);
         cairo_rectangle(cri, w - hw, y - hw, 2. * hw, 2. * hw);
@@ -239,7 +238,7 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
       x=round(x+0.5)-0.5;
       y=round(y+0.5)-0.5;
       // render picker center a reasonable size in device pixels
-      half_px = round(half_px * zoom_scale);
+      half_px = round(half_px * scale);
       if(half_px < min_half_px_device)
       {
         half_px = min_half_px_device;

@@ -2264,17 +2264,6 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   {
     cairo_save(cr);
 
-    for(int k = 0; k < nb; k++)
-    {
-      const gboolean corner = dt_masks_is_corner_node(gpt, k, 6, 2);
-      const float x = gpt->points[k * 6 + 2];
-      const float y = gpt->points[k * 6 + 3];
-      const gboolean selected = (k == gui->node_selected || k == gui->node_dragging);
-      const gboolean action = (k == gui->node_edited);
-
-      dt_masks_draw_node(cr, corner, action, selected, zoom_scale, x, y);
-    }
-
     // draw the current node's handle if it's a curve node
     if( gui->node_edited >= 0 && !dt_masks_is_corner_node(gpt, gui->node_edited, 6, 2))
     {
@@ -2284,6 +2273,18 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
                                 gpt->points[n * 6 + 5], &ffx, &ffy, TRUE);
       
       dt_masks_draw_handle(cr, gui, zoom_scale, index, ffx, ffy);
+    }
+
+    // draw all nodes
+    for(int k = 0; k < nb; k++)
+    {
+      const gboolean corner = dt_masks_is_corner_node(gpt, k, 6, 2);
+      const float x = gpt->points[k * 6 + 2];
+      const float y = gpt->points[k * 6 + 3];
+      const gboolean selected = (k == gui->node_selected || k == gui->node_dragging);
+      const gboolean action = (k == gui->node_edited);
+
+      dt_masks_draw_node(cr, corner, action, selected, zoom_scale, x, y);
     }
     cairo_restore(cr);
   }

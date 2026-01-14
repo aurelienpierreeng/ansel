@@ -1996,6 +1996,26 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     }
   }
 
+  // draw borders
+  if(gui->group_selected == index)
+  {
+    if(gpt->border_count > node_count * 3 + 2)
+    {
+      dt_masks_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, node_count, (gui->border_selected), zoom_scale, gpt->border,
+                        gpt->border_count, &dt_masks_functions_polygon);
+    }
+
+    // draw the current node's handle if it's a curve node
+    if( gui->node_edited >= 0 && !dt_masks_is_corner_node(gpt, gui->node_edited, 6, 2))
+    {
+      const int n = gui->node_edited;
+      float ffx, ffy;
+      _polygon_ctrl2_to_handle(gpt->points[n * 6 + 2], gpt->points[n * 6 + 3], gpt->points[n * 6 + 4],
+                                gpt->points[n * 6 + 5], &ffx, &ffy, gpt->clockwise);
+      dt_masks_draw_handle(cr, gui, zoom_scale, index, ffx, ffy);
+    }
+  }
+
   // draw nodes
   if(gui->group_selected == index || gui->creation)
   {
@@ -2015,26 +2035,6 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
         dt_masks_draw_node(cr, FALSE, TRUE, TRUE, zoom_scale, x, y);
       else
         dt_masks_draw_node(cr, corner, action, selected, zoom_scale, x, y);
-    }
-  }
-
-  // draw borders
-  if(gui->group_selected == index)
-  {
-    if(gpt->border_count > node_count * 3 + 2)
-    {
-      dt_masks_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, node_count, (gui->border_selected), zoom_scale, gpt->border,
-                        gpt->border_count, &dt_masks_functions_polygon);
-    }
-
-    // draw the current node's handle if it's a curve node
-    if( gui->node_edited >= 0 && !dt_masks_is_corner_node(gpt, gui->node_edited, 6, 2))
-    {
-      const int n = gui->node_edited;
-      float ffx, ffy;
-      _polygon_ctrl2_to_handle(gpt->points[n * 6 + 2], gpt->points[n * 6 + 3], gpt->points[n * 6 + 4],
-                                gpt->points[n * 6 + 5], &ffx, &ffy, gpt->clockwise);
-      dt_masks_draw_handle(cr, gui, zoom_scale, index, ffx, ffy);
     }
   }
 
