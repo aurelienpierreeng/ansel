@@ -2054,6 +2054,7 @@ void mouse_leave(dt_view_t *self)
     dt_control_queue_redraw_center();
 
   // reset any changes the selected plugin might have made.
+  dt_control_set_cursor(GDK_LEFT_PTR);
   dt_control_change_cursor(GDK_LEFT_PTR);
 }
 
@@ -2138,9 +2139,6 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   dt_develop_t *dev = (dt_develop_t *)self->data;
   dt_control_t *ctl = darktable.control;
 
-  //fprintf(stdout, "dev->xy (%2.2f, %2.2f)\n", dev->x, dev->y);
-  gboolean ret = FALSE;
-
   // change cursor appearance by default
   _set_default_cursor(self, x, y);
 
@@ -2175,28 +2173,24 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     }
 
     dt_control_queue_redraw_center();
-    ret = TRUE;
+    return;
   }
 
   // masks
-  if(!ret && dev->form_visible && dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which))
+  if(dev->form_visible && dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which))
   {
     dt_control_queue_redraw_center();
     _do_delayed_history_commit(dev);
-    ret = TRUE;
+    return;
   }
 
   // module
-  if(!ret && dev->gui_module && dev->gui_module->mouse_moved
+  if(dev->gui_module && dev->gui_module->mouse_moved
     &&dev->gui_module->mouse_moved(dev->gui_module, x, y, pressure, which))
   {
     dt_control_queue_redraw_center();
-    ret = TRUE;
+    return;
   }
-
-  // Apply cursor change and return if needed
-  dt_control_commit_cursor();
-  if(ret) return;
 
   // panning with left mouse button
   if(darktable.control->button_down && darktable.control->button_down_which == 1 && dev->scaling > 1)
@@ -2243,7 +2237,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   {
     // only sample box picker at end, for speed
     if(darktable.lib->proxy.colorpicker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
-      dt_control_change_cursor(GDK_LEFT_PTR);
+      dt_control_set_cursor(GDK_LEFT_PTR);
 
     dt_control_queue_redraw_center();
 
@@ -2339,7 +2333,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
             sample->box[2] = fminf(1.0, pzx + delta_x);
             sample->box[3] = fminf(1.0, pzy + delta_y);
           }
-          dt_control_change_cursor(GDK_FLEUR);
+          dt_control_set_cursor(GDK_FLEUR);
         }
       }
       dt_control_queue_redraw_center();

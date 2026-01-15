@@ -256,7 +256,11 @@ void *dt_control_expose(void *voidptr)
   if(darktable.control->log_busy > 0)
   {
     dt_control_draw_busy_msg(cr, width, height);
+    dt_control_change_cursor(GDK_CLOCK);
   }
+  else // Apply cursor change
+    dt_control_commit_cursor();
+
   dt_pthread_mutex_unlock(&darktable.control->log_mutex);
 
   cairo_destroy(cr);

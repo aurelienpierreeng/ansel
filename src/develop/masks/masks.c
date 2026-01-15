@@ -1139,12 +1139,11 @@ static void _set_cursor_shape(dt_masks_form_gui_t *gui)
 
   /*else if(gui->handle_dragging >= 0)
     dt_control_set_cursor(GDK_HAND1);*/
-  // no cursor
-  else if(!gui->creation &&
-          (gui->node_selected >= 0 || gui->handle_selected >= 0))
-    dt_control_set_cursor(GDK_BLANK_CURSOR);
+
   // crosshair
-  else if(!gui->creation && (gui->form_selected || gui->seg_selected >= 0))
+  else if(!gui->creation && (gui->handle_selected >= 0
+                            || (gui->node_selected >= 0 && gui->node_edited == gui->node_selected)
+                            || ((gui->form_selected || gui->seg_selected >= 0) && gui->node_edited < 0)))
     dt_control_set_cursor(GDK_FLEUR);
 }
 
@@ -1206,6 +1205,7 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
                                   darktable.develop->mask_form_selected_id, FALSE);
 
   // DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);
+  if(gui) _set_cursor_shape(gui);
 
   return ret;
 }
