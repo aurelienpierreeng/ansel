@@ -86,7 +86,6 @@ jobs:
             pugixml:p
             python:p
             python-jsonschema:p
-            python-lensfun:p
             python-setuptools:p
             python-six:p
             sqlite3:p
@@ -131,6 +130,10 @@ jobs:
           ninja -C build
           ninja -C build install
           cd ..
+      - name: Install Python lensfun module
+        # shell: msys2 {0}
+        run: |
+          pip install lensfun || echo "lensfun not available via pip"
       - name: Update lensfun data
         run: |
           lensfun-update-data
