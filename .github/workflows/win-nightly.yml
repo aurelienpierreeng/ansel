@@ -86,6 +86,7 @@ jobs:
             pugixml:p
             python:p
             python-jsonschema:p
+            python-lensfun:p
             python-setuptools:p
             python-six:p
             sqlite3:p
