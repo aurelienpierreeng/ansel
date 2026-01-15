@@ -43,6 +43,7 @@ typedef enum dt_lib_zoom_t
   LIB_ZOOM_SMALL = 0,
   LIB_ZOOM_FIT,
   LIB_ZOOM_25,
+  LIB_ZOOM_33,
   LIB_ZOOM_50,
   LIB_ZOOM_100,
   LIB_ZOOM_200,
@@ -353,6 +354,7 @@ static void _lib_navigation_set_position(dt_lib_module_t *self, double x, double
   /* redraw pipe */
   dt_dev_invalidate_zoom(darktable.develop);
   dt_control_queue_redraw_center();
+  dt_dev_refresh_ui_images(dev);
 }
 
 static gboolean _lib_navigation_motion_notify_callback(GtkWidget *widget, GdkEventMotion *event,
@@ -383,6 +385,9 @@ static void _zoom_preset_change(dt_lib_zoom_t zoom)
       break;
     case LIB_ZOOM_25:
       dev->scaling = 0.25;
+      break;
+    case LIB_ZOOM_33:
+      dev->scaling = 0.33;
       break;
     case LIB_ZOOM_50:
       dev->scaling = 0.50;
@@ -448,6 +453,10 @@ static gboolean _lib_navigation_button_press_callback(GtkWidget *widget, GdkEven
     g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), GINT_TO_POINTER(LIB_ZOOM_25));
     gtk_menu_shell_append(menu, item);
 
+    item = gtk_menu_item_new_with_label(_("33%"));
+    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), GINT_TO_POINTER(LIB_ZOOM_33));
+    gtk_menu_shell_append(menu, item);
+
     item = gtk_menu_item_new_with_label(_("50%"));
     g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_zoom_preset_callback), GINT_TO_POINTER(LIB_ZOOM_50));
     gtk_menu_shell_append(menu, item);
@@ -488,7 +497,6 @@ static gboolean _lib_navigation_button_release_callback(GtkWidget *widget, GdkEv
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
   d->dragging = 0;
-  dt_dev_refresh_ui_images(darktable.develop);
 
   return TRUE;
 }
