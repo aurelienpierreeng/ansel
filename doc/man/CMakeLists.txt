@@ -57,7 +57,8 @@ else()
       # create translated . pod (suppress deprecation warning to stderr)
       add_custom_command(
         OUTPUT ${tmppod}
-        COMMAND sh -c "${po4a-translate_BIN} -f pod -m ${pod} -p ${pofile} -l ${tmppod} -k 0 || true"
+        # the "true" avoids the build to stop because of a po4a deprecation warning
+        COMMAND sh -c "${po4a-translate_BIN} -f pod -m ${pod} -p ${pofile} -l ${tmppod} -k 0 2>/dev/null || true"
         DEPENDS ${pofile} ${pod}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
       )
