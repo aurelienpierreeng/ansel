@@ -54,10 +54,10 @@ else()
       string(REPLACE ".pod" ".1" manpage ${pod})
       set(target "${CMAKE_CURRENT_BINARY_DIR}/${language}/${manpage}")
       set(tmppod "${CMAKE_CURRENT_BINARY_DIR}/${language}/${pod}")
-      # create translated .pod
+      # create translated . pod (suppress deprecation warning to stderr)
       add_custom_command(
         OUTPUT ${tmppod}
-        COMMAND sh -c "${po4a-translate_BIN} -f pod -m ${pod} -p ${pofile} -l ${tmppod} -k 0"
+        COMMAND sh -c "${po4a-translate_BIN} -f pod -m ${pod} -p ${pofile} -l ${tmppod} -k 0 2>/dev/null || ${po4a-translate_BIN} -f pod -m ${pod} -p ${pofile} -l ${tmppod} -k 0"
         DEPENDS ${pofile} ${pod}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
       )
