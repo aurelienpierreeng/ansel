@@ -19,7 +19,6 @@
 #include "common/debug.h"
 #include "common/undo.h"
 #include "control/conf.h"
-
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
@@ -84,7 +83,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   dt_develop_t *dev = (dt_develop_t *)darktable.develop;
 
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
-  const float dist_curs = DT_MASKS_SELECTION_DISTANCE(dev); // transformed to backbuf dimensions
+  const float dist_curs = DT_DRAW_SELECTION_RADIUS(dev); // transformed to backbuf dimensions
 
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
@@ -620,9 +619,9 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
     // we draw the form and it's border
 
     // we draw the main shape
-    dt_masks_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle);
+    dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle.draw_shape);
     // we draw the borders
-    dt_masks_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_circle);
+    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_circle.draw_shape);
 
     // draw a cross where the source will be created
     if(form->type & DT_MASKS_CLONE)
@@ -644,18 +643,18 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
   
   // we draw the main shape
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-  dt_masks_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle);
+  dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle.draw_shape);
   // we draw the borders
   if(gui->group_selected == index)
   { 
-    dt_masks_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
-                       gpt->border_count, &dt_masks_functions_circle);
+    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
+                       gpt->border_count, &dt_masks_functions_circle.draw_shape);
   }
 
   // draw the source if any
   if(gpt->source_count > 6)
   { 
-    dt_masks_draw_source(cr, gui, index, num_points, zoom_scale, &dt_masks_functions_circle);
+    dt_masks_draw_source(cr, gui, index, num_points, zoom_scale, &dt_masks_functions_circle.draw_shape);
   }
 }
 

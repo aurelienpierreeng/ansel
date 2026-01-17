@@ -20,7 +20,6 @@
 #include "common/imagebuf.h"
 #include "common/undo.h"
 #include "control/conf.h"
-
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
@@ -1120,7 +1119,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   const dt_develop_t *const dev = (const dt_develop_t *)darktable.develop;
 
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
-  const float dist_curs = DT_MASKS_SELECTION_DISTANCE(dev); // transformed to backbuf dimensions
+  const float dist_curs = DT_DRAW_SELECTION_RADIUS(dev); // transformed to backbuf dimensions
 
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
@@ -1713,7 +1712,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     // check if we are near the first point to close the polygon on creation
     if(gui->creation && !g_list_shorter_than(form->points, 4)) // at least 3 points + the one being created 
     {
-      const float dist_curs = DT_MASKS_SELECTION_DISTANCE_NO_UPSCALE(dev);
+      const float dist_curs = DT_DRAW_SELECTION_RADIUS_NO_UPSCALE(dev);
       
       float pt[2] = { pzx * wd, pzy * ht }; // no backtransform here
       const float dx = pt[0] - gpt->points[2];
@@ -1981,9 +1980,9 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
           const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
           // creation mode: draw the current segment as round dotted line
           if(gui->creation && current_seg == node_count -2)
-            dt_masks_draw_line(DT_MASKS_DASH_ROUND, FALSE, cr, (seg_selected || all_selected), zoom_scale);
+            dt_draw_stroke_line(DT_MASKS_DASH_ROUND, FALSE, cr, (seg_selected || all_selected), zoom_scale);
           else
-            dt_masks_draw_line(DT_MASKS_NO_DASH, FALSE, cr, (seg_selected || all_selected), zoom_scale);
+            dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, (seg_selected || all_selected), zoom_scale);
           seg1 = (seg1 + 1) % node_count;
           current_seg++;
 
@@ -2001,18 +2000,21 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   {
     if(gpt->border_count > node_count * 3 + 2)
     {
-      dt_masks_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, node_count, (gui->border_selected), zoom_scale, gpt->border,
-                        gpt->border_count, &dt_masks_functions_polygon);
+      dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, node_count, (gui->border_selected), zoom_scale, gpt->border,
+                        gpt->border_count, &dt_masks_functions_polygon.draw_shape);
     }
 
     // draw the current node's handle if it's a curve node
     if( gui->node_edited >= 0 && !dt_masks_is_corner_node(gpt, gui->node_edited, 6, 2))
     {
       const int n = gui->node_edited;
-      float ffx, ffy;
+      float handle_x, handle_y;
       _polygon_ctrl2_to_handle(gpt->points[n * 6 + 2], gpt->points[n * 6 + 3], gpt->points[n * 6 + 4],
-                                gpt->points[n * 6 + 5], &ffx, &ffy, gpt->clockwise);
-      dt_masks_draw_handle(cr, gui, zoom_scale, index, ffx, ffy);
+                                gpt->points[n * 6 + 5], &handle_x, &handle_y, gpt->clockwise);
+      const float pt_x = gpt->points[n * 6 + 2];
+      const float pt_y = gpt->points[n * 6 + 3];
+      const gboolean selected = gui->node_selected == gui->handle_dragging || gui->node_selected == gui->handle_selected;
+      dt_draw_handle(cr, pt_x, pt_y, zoom_scale, handle_x, handle_y, selected);
     }
   }
 
@@ -2032,16 +2034,16 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
      
       // draw the first node as big circle while creating the polygon
       if(gui->creation && k == 0)
-        dt_masks_draw_node(cr, FALSE, TRUE, TRUE, zoom_scale, x, y);
+        dt_draw_node(cr, FALSE, TRUE, TRUE, zoom_scale, x, y);
       else
-        dt_masks_draw_node(cr, corner, action, selected, zoom_scale, x, y);
+        dt_draw_node(cr, corner, action, selected, zoom_scale, x, y);
     }
   }
 
   // draw the source if needed
   if(gpt->source_count > node_count * 3 + 2)
   {
-    dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, &dt_masks_functions_polygon);
+    dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, &dt_masks_functions_polygon.draw_shape);
   }
 }
 

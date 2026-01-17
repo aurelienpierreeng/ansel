@@ -20,7 +20,6 @@
 #include "common/imagebuf.h"
 #include "common/undo.h"
 #include "control/conf.h"
-
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
@@ -1113,7 +1112,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
 
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
-  const float dist_curs = DT_MASKS_SELECTION_DISTANCE(dev); // transformed to backbuf dimensions
+  const float dist_curs = DT_DRAW_SELECTION_RADIUS(dev); // transformed to backbuf dimensions
 
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
@@ -2070,13 +2069,13 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       // draw brush circle at current mouse position
       cairo_save(cr);
       dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_CURSOR, opacity);
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
+      cairo_set_line_width(cr, DT_DRAW_SIZE_LINE / zoom_scale);
       cairo_arc(cr, xpos, ypos, radius1, 0, 2.0 * M_PI);
       cairo_fill_preserve(cr);
       cairo_set_source_rgba(cr, .8, .8, .8, .8);
       cairo_stroke(cr);
       cairo_arc(cr, xpos, ypos, radius2, 0, 2.0 * M_PI);
-      dt_masks_draw_line(DT_MASKS_DASH_STICK, FALSE, cr, FALSE, zoom_scale);
+      dt_draw_stroke_line(DT_MASKS_DASH_STICK, FALSE, cr, FALSE, zoom_scale);
 
       if(form->type & DT_MASKS_CLONE)
       {
@@ -2183,7 +2182,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       }
       if(!stroked) cairo_stroke(cr);
 
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
+      cairo_set_line_width(cr, DT_DRAW_SIZE_LINE / zoom_scale);
       dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BRUSH_CURSOR, opacity);
       cairo_arc(cr, guipoints[2 * (gui->guipoints_count - 1)],
                 guipoints[2 * (gui->guipoints_count - 1) + 1],
@@ -2191,7 +2190,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       cairo_fill_preserve(cr);
       cairo_set_source_rgba(cr, .8, .8, .8, .8);
       cairo_stroke(cr);
-      dt_masks_set_dash(cr, DT_MASKS_DASH_STICK, zoom_scale);
+      dt_draw_set_dash_style(cr, DT_MASKS_DASH_STICK, zoom_scale);
       cairo_arc(cr, guipoints[2 * (gui->guipoints_count - 1)],
                 guipoints[2 * (gui->guipoints_count - 1) + 1], masks_border * min_iwd_iht, 0,
                 2.0 * M_PI);
@@ -2243,7 +2242,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
         {
           const gboolean seg_selected = (gui->group_selected == index) && (gui->seg_selected == current_seg);
           const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-          dt_masks_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, (seg_selected || all_selected), zoom_scale, gpt->points, gpt->points_count, NULL);
+          dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, (seg_selected || all_selected), zoom_scale, gpt->points, gpt->points_count, NULL);
           seg = (seg + 1) % nb;
           current_seg++;
           cairo_move_to(cr, x, y);
@@ -2255,8 +2254,8 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   // draw borders
   if((gui->group_selected == index) && gpt->border_count > nb * 3 + 2)
   {
-    dt_masks_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, (gui->border_selected), zoom_scale, gpt->border,
-                       gpt->border_count, &dt_masks_functions_brush);
+    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, (gui->border_selected), zoom_scale, gpt->border,
+                       gpt->border_count, &dt_masks_functions_brush.draw_shape);
   }
 
   // draw nodes and attached stuff
@@ -2268,11 +2267,13 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     if( gui->node_edited >= 0 && !dt_masks_is_corner_node(gpt, gui->node_edited, 6, 2))
     {
       const int n = gui->node_edited;
-      float ffx, ffy;
+      float handle_x, handle_y;
       _brush_ctrl2_to_handle(gpt->points[n * 6 + 2], gpt->points[n * 6 + 3], gpt->points[n * 6 + 4],
-                                gpt->points[n * 6 + 5], &ffx, &ffy, TRUE);
-      
-      dt_masks_draw_handle(cr, gui, zoom_scale, index, ffx, ffy);
+                                gpt->points[n * 6 + 5], &handle_x, &handle_y, TRUE);
+      const float pt_x = gpt->points[n * 6 + 2];
+      const float pt_y = gpt->points[n * 6 + 3];
+      const gboolean selected = gui->node_selected == gui->handle_dragging || gui->node_selected == gui->handle_selected;
+      dt_draw_handle(cr, pt_x, pt_y, zoom_scale, handle_x, handle_y, selected);
     }
 
     // draw all nodes
@@ -2284,7 +2285,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       const gboolean selected = (k == gui->node_selected || k == gui->node_dragging);
       const gboolean action = (k == gui->node_edited);
 
-      dt_masks_draw_node(cr, corner, action, selected, zoom_scale, x, y);
+      dt_draw_node(cr, corner, action, selected, zoom_scale, x, y);
     }
     cairo_restore(cr);
   }
@@ -2292,7 +2293,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   // draw the source if needed
   if(gpt->source_count > nb * 3 + 2)
   {
-    dt_masks_draw_source(cr, gui, index, nb, zoom_scale, &dt_masks_functions_brush);
+    dt_masks_draw_source(cr, gui, index, nb, zoom_scale, &dt_masks_functions_brush.draw_shape);
   }
 }
 
