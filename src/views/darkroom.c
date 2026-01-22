@@ -2141,10 +2141,11 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 
   // change cursor appearance by default
   _set_default_cursor(self, x, y);
+  gboolean ret = FALSE;
 
-  if(!mouse_in_actionarea(self, x, y)) return;
+  if(!mouse_in_actionarea(self, x, y)) ret = TRUE;
 
-  if(dt_iop_color_picker_is_visible(dev) && ctl->button_down && ctl->button_down_which == 1)
+  else if(dt_iop_color_picker_is_visible(dev) && ctl->button_down && ctl->button_down_which == 1)
   {
     // module requested a color box
     if(mouse_in_imagearea(self, x, y))
@@ -2173,24 +2174,27 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     }
 
     dt_control_queue_redraw_center();
-    return;
+    ret = TRUE;
   }
 
   // masks
-  if(dev->form_visible && dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which))
+  else if(dev->form_visible && dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which))
   {
     dt_control_queue_redraw_center();
     _do_delayed_history_commit(dev);
-    return;
+    ret = TRUE;
   }
 
   // module
-  if(dev->gui_module && dev->gui_module->mouse_moved
+  else if(dev->gui_module && dev->gui_module->mouse_moved
     &&dev->gui_module->mouse_moved(dev->gui_module, x, y, pressure, which))
   {
     dt_control_queue_redraw_center();
-    return;
+    ret = TRUE;
   }
+
+  dt_control_commit_cursor();
+  if(ret) return;
 
   // panning with left mouse button
   if(darktable.control->button_down && darktable.control->button_down_which == 1 && dev->scaling > 1)

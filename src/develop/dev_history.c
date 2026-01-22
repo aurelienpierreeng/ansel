@@ -653,11 +653,14 @@ int dt_dev_history_auto_save(dt_develop_t *dev)
     dev->auto_save_timeout = 0;
   }
 
+  dt_toast_log(_("autosaving changes..."));
   dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_control_change_cursor(GDK_WATCH);
   const uint64_t new_hash = dt_dev_history_get_hash(dev);
   if(new_hash == dev->history_hash)
   {
     dt_pthread_mutex_unlock(&dev->history_mutex);
+    dt_control_change_cursor(GDK_LEFT_PTR);
     return G_SOURCE_REMOVE;
   }
   else
@@ -667,10 +670,10 @@ int dt_dev_history_auto_save(dt_develop_t *dev)
 
   dt_times_t start;
   dt_get_times(&start);
-  dt_toast_log(_("autosaving changes..."));
 
   dt_dev_write_history_ext(dev, dev->image_storage.id);
   dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_control_change_cursor(GDK_LEFT_PTR);
 
   dt_control_save_xmp(dev->image_storage.id);
 

@@ -98,6 +98,17 @@ void dt_control_change_cursor(dt_cursor_t curs)
   }
 }
 
+void dt_control_change_cursor_from_name(const char *curs_str)
+{
+  if (!darktable.control->lock_cursor_shape)
+  {
+      GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
+      GdkCursor *cursor = gdk_cursor_new_from_name(gdk_display_get_default(), curs_str);
+    gdk_window_set_cursor(gtk_widget_get_window(widget), cursor);
+    g_object_unref(cursor);
+  }
+}
+
 void dt_control_set_cursor(dt_cursor_t cursor)
 {
   darktable.control->cursor = cursor;
@@ -256,7 +267,9 @@ void *dt_control_expose(void *voidptr)
   if(darktable.control->log_busy > 0)
   {
     dt_control_draw_busy_msg(cr, width, height);
-    dt_control_change_cursor(GDK_CLOCK);
+    // set the cursor to arrow with busy indicator
+    const char *curs_str = "progress";
+    dt_control_change_cursor_from_name(curs_str);
   }
   else // Apply cursor change
     dt_control_commit_cursor();
