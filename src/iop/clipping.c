@@ -2359,7 +2359,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   const float wd = dev->preview_pipe->backbuf_width;
   const float ht = dev->preview_pipe->backbuf_height;
-  const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
+  const float zoom_scale = dt_dev_get_overlay_scale(dev);
 
   cairo_translate(cr, width / 2.0, height / 2.0);
   cairo_scale(cr, zoom_scale, zoom_scale);
@@ -2764,7 +2764,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   {
     // second mouse button, straighten activated:
     g->straightening = 1;
-    dt_control_change_cursor(GDK_CROSSHAIR);
+    dt_control_set_cursor(GDK_CROSSHAIR);
     dt_control_queue_redraw_center();
   }
   else if(darktable.control->button_down && darktable.control->button_down_which == 1)
@@ -3011,25 +3011,25 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     // hover over active borders, no button pressed
     // change mouse pointer
     if(grab == GRAB_LEFT)
-      dt_control_change_cursor(GDK_LEFT_SIDE);
+      dt_control_set_cursor(GDK_LEFT_SIDE);
     else if(grab == GRAB_TOP)
-      dt_control_change_cursor(GDK_TOP_SIDE);
+      dt_control_set_cursor(GDK_TOP_SIDE);
     else if(grab == GRAB_RIGHT)
-      dt_control_change_cursor(GDK_RIGHT_SIDE);
+      dt_control_set_cursor(GDK_RIGHT_SIDE);
     else if(grab == GRAB_BOTTOM)
-      dt_control_change_cursor(GDK_BOTTOM_SIDE);
+      dt_control_set_cursor(GDK_BOTTOM_SIDE);
     else if(grab == GRAB_TOP_LEFT)
-      dt_control_change_cursor(GDK_TOP_LEFT_CORNER);
+      dt_control_set_cursor(GDK_TOP_LEFT_CORNER);
     else if(grab == GRAB_TOP_RIGHT)
-      dt_control_change_cursor(GDK_TOP_RIGHT_CORNER);
+      dt_control_set_cursor(GDK_TOP_RIGHT_CORNER);
     else if(grab == GRAB_BOTTOM_RIGHT)
-      dt_control_change_cursor(GDK_BOTTOM_RIGHT_CORNER);
+      dt_control_set_cursor(GDK_BOTTOM_RIGHT_CORNER);
     else if(grab == GRAB_BOTTOM_LEFT)
-      dt_control_change_cursor(GDK_BOTTOM_LEFT_CORNER);
+      dt_control_set_cursor(GDK_BOTTOM_LEFT_CORNER);
     else if(grab == GRAB_NONE)
     {
       dt_control_hinter_message(darktable.control, _("<b>commit</b>: double-click, <b>straighten</b>: right-drag"));
-      dt_control_change_cursor(GDK_LEFT_PTR);
+      dt_control_set_cursor(GDK_LEFT_PTR);
     }
     if(grab != GRAB_NONE)
       dt_control_hinter_message(darktable.control, _("<b>resize</b>: drag, <b>keep aspect ratio</b>: shift+drag\n"
@@ -3039,7 +3039,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   else
   {
     // somewhere besides borders. maybe rotate?
-    dt_control_change_cursor(GDK_FLEUR);
+    dt_control_set_cursor(GDK_FLEUR);
     g->straightening = g->cropping = 0;
     // or maybe keystone
     // slightly adjust the size of keystone control area depending on the downsampling
@@ -3075,18 +3075,18 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
       if(g->k_selected >= 0)
       {
         dt_control_hinter_message(darktable.control, _("<b>move control point</b>: drag"));
-        dt_control_change_cursor(GDK_CROSS);
+        dt_control_set_cursor(GDK_CROSS);
       }
       else if(g->k_selected_segment >= 0)
       {
         dt_control_hinter_message(darktable.control, _("<b>move line</b>: drag, <b>toggle symmetry</b>: click <tt>\352\235\217</tt>"));
-        dt_control_change_cursor(GDK_CROSS);
+        dt_control_set_cursor(GDK_CROSS);
       }
       else
       {
         dt_control_hinter_message(darktable.control, _("<b>apply</b>: click <tt>ok</tt>, <b>toggle symmetry</b>: click <tt>\352\235\217</tt>\n"
                                                        "<b>move line/control point</b>: drag"));
-        dt_control_change_cursor(GDK_FLEUR);
+        dt_control_set_cursor(GDK_FLEUR);
       }
     }
     else

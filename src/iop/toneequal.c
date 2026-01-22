@@ -1936,6 +1936,8 @@ static void _switch_cursors(struct dt_iop_module_t *self)
     // if pipe is clean and idle and cursor is on preview,
     // hide GTK cursor because we display our custom one
     dt_control_change_cursor(GDK_BLANK_CURSOR);
+    // set it in control->cursor in case it's run from mouse_moved event
+    dt_control_set_cursor(GDK_BLANK_CURSOR);
     dt_control_hinter_message(darktable.control,
                               _("scroll over image to change tone exposure\n"
                                 "shift+scroll for large steps; "
@@ -2289,7 +2291,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(isnan(correction) || isnan(exposure_in)) return; // something went wrong
 
   // Rescale and shift Cairo drawing coordinates
-  const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
+  const float zoom_scale = dt_dev_get_overlay_scale(dev);
   dt_dev_rescale_roi(dev, cr, width, height);
 
   // set custom cursor dimensions

@@ -19,11 +19,11 @@
 #include "common/debug.h"
 #include "common/undo.h"
 #include "control/conf.h"
-
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
 #include "develop/openmp_maths.h"
+
 
 #define HARDNESS_MIN 0.0005f
 #define HARDNESS_MAX 1.0f
@@ -378,17 +378,16 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   const float *nodes = gpt->points;
 
   const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
-  const float zoom_scale = dt_dev_get_zoom_level(dev);
 
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
-  const float dist_curs = DT_MASKS_SELECTION_DISTANCE / zoom_scale; // transformed to backbuf dimensions
+  const float dist_curs = DT_DRAW_SELECTION_RADIUS(dev); // transformed to backbuf dimensions
 
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
   gui->source_selected = FALSE;
   gui->handle_selected = -1;
   gui->node_selected = -1;
-
+  gui->pivot_selected = FALSE;
 
   pzx *= darktable.develop->preview_pipe->backbuf_width / dev->natural_scale;
   pzy *= darktable.develop->preview_pipe->backbuf_height / dev->natural_scale;
@@ -405,7 +404,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
     _ellipse_point_transform(nodes[0], nodes[1], nodes[k * 2], nodes[k * 2 + 1], sinr, cosr, &x, &y);
 
     // are we also close to the node ?
-    if((pzx - x > -dist_curs && pzx - x <  dist_curs) && (pzy - y > -dist_curs && pzy - y <  dist_curs))
+    if(dt_masks_is_within_radius(pzx, pzy, x, y, dist_curs))
     {
       gui->node_selected = k;
       return 1;
@@ -416,7 +415,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   for(int i = 1; i < 5; i++)
   {
     _ellipse_point_transform(nodes[0], nodes[1], nodes[i * 2], nodes[i * 2 + 1], sinr, cosr, &x, &y);
-    if((pzx - x > -dist_curs && pzx - x <  dist_curs) && (pzy - y > -dist_curs && pzy - y <  dist_curs))
+    if(dt_masks_is_within_radius(pzx, pzy, x, y, dist_curs))
     {
       gui->node_selected = i;
       return 1;
@@ -438,6 +437,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   {
     gui->form_selected = TRUE;
     gui->border_selected = TRUE;
+    gui->pivot_selected = TRUE;
     return 1;
   }
   else if(inside)
@@ -587,7 +587,7 @@ static int _ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, float 
   if(gui->creation)
   {
     if(dt_modifier_is(state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
-      return _init_rotation(form, (up ? +2.0f : -2.0f), DT_MASKS_INCREMENT_OFFSET, flow);
+      return _init_rotation(form, (up ? +0.2f : -0.2f), DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_CONTROL_MASK))
       return _init_opacity(form, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
@@ -598,7 +598,7 @@ static int _ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, float 
   else if(gui->form_selected)
   {
     if(dt_modifier_is(state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
-      return _change_rotation(form, gui, module, index, (up ? +2.0f : -2.0f), DT_MASKS_INCREMENT_OFFSET, flow);
+      return _change_rotation(form, gui, module, index, (up ? +0.2f : -0.2f), DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_CONTROL_MASK))
       return dt_masks_form_set_opacity(form, parentid, (up ? +0.02f : -0.02f), DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
@@ -957,12 +957,9 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     {
 
       const float origin_point[2] = { gpt->points[0], gpt->points[1] };
-      ellipse->rotation += dt_masks_rotate_with_anchor(darktable.develop, gui->pos, origin_point, gui);
+      const float angle = dt_masks_rotate_with_anchor(darktable.develop, gui->pos, origin_point, gui);
 
-      if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-        dt_conf_set_float("plugins/darkroom/spots/ellipse/rotation", ellipse->rotation);
-      else
-        dt_conf_set_float("plugins/darkroom/masks/ellipse/rotation", ellipse->rotation);
+      _change_rotation(form, gui, module, index, angle , DT_MASKS_INCREMENT_OFFSET, 1);
 
       // we recreate the form points
       dt_masks_gui_form_remove(form, gui, index);
@@ -1018,7 +1015,7 @@ static void _ellipse_draw_node(const dt_masks_form_gui_t *gui, cairo_t *cr, cons
     const gboolean corner = dt_masks_is_corner_node(gpt, i, 2, 0);
     const gboolean selected = (i == gui->node_selected || i == gui->node_dragging);
     const gboolean action = (i == gui->node_edited);
-    dt_masks_draw_node(cr, corner, action, selected, zoom_scale, x, y);
+    dt_draw_node(cr, corner, action, selected, zoom_scale, x, y);
   }
 }
 
@@ -1090,9 +1087,9 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     // we draw the form and it's border
     cairo_save(cr);
     // we draw the main shape
-    dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_ellipse);
+    dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_ellipse.draw_shape);
     // we draw the borders
-    dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_ellipse);
+    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_ellipse.draw_shape);
     cairo_restore(cr);
 
 
@@ -1116,28 +1113,28 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
 
   // we draw the main shape
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-  dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_ellipse);
+  dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_ellipse.draw_shape);
   
   if(gui->group_selected == index)
   {
     // we draw the borders
 
-    dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
-                        gpt->border_count, &dt_masks_functions_ellipse);
+    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
+                        gpt->border_count, &dt_masks_functions_ellipse.draw_shape);
 
     // draw node
     _ellipse_draw_node(gui, cr, zoom_scale, gpt, index);
   }
 
   //draw the center point
-  if(gui->group_selected == index && gui->border_selected)
-    dt_masks_draw_node(cr, FALSE, FALSE, (gui->form_rotating), zoom_scale, gpt->points[0], gpt->points[1]);
+  if(gui->group_selected == index && gui->pivot_selected)
+    dt_draw_node(cr, FALSE, FALSE, (gui->form_rotating), zoom_scale, gpt->points[0], gpt->points[1]);
 
   // draw the source if any
   if(gpt->source_count > 10)
   {
     cairo_save(cr);
-    dt_masks_draw_source(cr, gui, index, num_points, zoom_scale, &dt_masks_functions_ellipse);
+    dt_masks_draw_source(cr, gui, index, num_points, zoom_scale, &dt_masks_functions_ellipse.draw_shape);
     cairo_restore(cr);
   } 
 }
@@ -1687,14 +1684,16 @@ static void _ellipse_set_hint_message(const dt_masks_form_gui_t *const gui, cons
 {
   if(gui->creation)
     g_snprintf(msgbuf, msgbuf_len,
-               _("<b>size</b>: scroll, <b>feather size</b>: shift+scroll\n"
-                 "<b>rotation</b>: ctrl+shift+scroll, <b>opacity</b>: ctrl+scroll (%d%%)"), opacity);
-  else if(gui->node_selected >= 0)
-    g_strlcat(msgbuf, _("<b>rotate</b>: ctrl+drag"), msgbuf_len);
+               _("<b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"
+                 "<b>Rotate</b>: ctrl+shift+scroll, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
+  else if(gui->border_selected)
+    g_snprintf(msgbuf, msgbuf_len,
+               _("<b>Hardness mode</b>: shift+click, <b>Size</b>: scroll\n"
+                 "<b>Hardness</b>: shift+scroll, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
   else if(gui->form_selected)
     g_snprintf(msgbuf, msgbuf_len,
-               _("<b>feather mode</b>: shift+click, <b>rotate</b>: ctrl+drag\n"
-                 "<b>size</b>: scroll, <b>feather size</b>: shift+scroll, <b>opacity</b>: ctrl+scroll (%d%%)"), opacity);
+               _("<b>Hardness mode</b>: shift+click, <b>Size</b>: scroll\n"
+                 "<b>Hardness</b>: shift+scroll, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
 }
 
 static void _ellipse_sanitize_config(dt_masks_type_t type)

@@ -1549,7 +1549,7 @@ BINARY_TOC             = NO
 # The TOC_EXPAND flag can be set to YES to add extra items for group members to
 # the table of contents of the HTML help documentation and to the tree view.
 # The default value is: NO.
-# This tag requires that the tag GENERATE_HTMLHELP is set to YES.
+# This tag requires that the tag GENERATE_HTMLHELP is set to YES.HTML_OUTPUT
 
 TOC_EXPAND             = YES
 
@@ -1561,7 +1561,7 @@ TOC_EXPAND             = YES
 # protocol see https://www.sitemaps.org
 # This tag requires that the tag GENERATE_HTML is set to YES.
 
-SITEMAP_URL            = https://dev.ansel.photos/sitemap.xml
+SITEMAP_URL            = https://dev.ansel.photos/
 
 # If the GENERATE_QHP tag is set to YES and both QHP_NAMESPACE and
 # QHP_VIRTUAL_FOLDER are set, an additional index file will be generated that

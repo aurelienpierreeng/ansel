@@ -408,7 +408,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_develop_t *dev = darktable.develop;
   //const float wd = dev->preview_pipe->backbuf_width;
   //const float ht = dev->preview_pipe->backbuf_height;
-  const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
+  const float zoom_scale = dt_dev_get_overlay_scale(dev);
 
   const float posx_from = fmin(g->posx_from, g->posx_to);
   const float posx_to = fmax(g->posx_from, g->posx_to);

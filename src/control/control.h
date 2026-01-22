@@ -68,6 +68,10 @@ void dt_control_forbid_change_cursor();
 // enable the possibility to change the cursor shape with dt_control_change_cursor
 void dt_control_allow_change_cursor();
 void dt_control_change_cursor(dt_cursor_t cursor);
+// set darktable.control->cursor to the desired cursor shape
+void dt_control_set_cursor(dt_cursor_t cursor);
+// commit the currently set cursor shape from darktable.control->cursor
+void dt_control_commit_cursor();
 void dt_control_write_sidecar_files();
 void dt_control_delete_images();
 
@@ -137,6 +141,7 @@ typedef struct dt_control_t
   int32_t mouse_over_id;
   int32_t keyboard_over_id;
   gboolean lock_cursor_shape;
+  dt_cursor_t cursor; // cursor to draw at the end of mouse_moved
 
   // message log
   int log_pos, log_ack;

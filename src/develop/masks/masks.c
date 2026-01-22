@@ -25,43 +25,6 @@
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 
-void dt_masks_set_dash(cairo_t *cr, dt_masks_dash_type_t type, float zoom_scale)
-{
-  // return early if no dash is needed
-  if(type == DT_MASKS_NO_DASH)
-  {
-    cairo_set_dash(cr, NULL, 0, 0);
-    return;
-  }
-
-  double pattern[2];
-
-  switch(type)
-  {
-    case DT_MASKS_NO_DASH:
-      pattern[0] = 0.0f;
-      pattern[1] = 0.0f;
-      break;
-
-    case DT_MASKS_DASH_STICK:
-      pattern[0] = DT_MASKS_SCALE_DASH / zoom_scale;
-      pattern[1] = DT_MASKS_SCALE_DASH / zoom_scale;
-      break;
-
-    case DT_MASKS_DASH_ROUND:
-      pattern[0] = (DT_MASKS_SCALE_DASH * 0.25f) / zoom_scale;
-      pattern[1] = DT_MASKS_SCALE_DASH / zoom_scale;
-      break;
-
-    default:
-      cairo_set_dash(cr, NULL, 0, 0);
-      return;
-      
-  }
-  const int pattern_len = 2;
-  cairo_set_dash(cr, pattern, pattern_len, 0);
-}
-
 dt_masks_form_t *dt_masks_dup_masks_form(const dt_masks_form_t *form)
 {
   if (!form) return NULL;
@@ -1126,6 +1089,27 @@ int dt_masks_events_mouse_enter(struct dt_iop_module_t *module)
   return 0;
 }
 
+static void _set_cursor_shape(dt_masks_form_gui_t *gui)
+{
+  if(!gui) return;
+
+  // circular arrows
+  if(gui->pivot_selected)
+    dt_control_set_cursor(GDK_EXCHANGE);
+  // pointing hand
+  else if(gui->creation_closing_form)
+    dt_control_set_cursor(GDK_HAND2);
+
+  /*else if(gui->handle_dragging >= 0)
+    dt_control_set_cursor(GDK_HAND1);*/
+
+  // crosshair
+  else if(!gui->creation && (gui->handle_selected >= 0
+                            || (gui->node_selected >= 0 && gui->node_edited == gui->node_selected)
+                            || ((gui->form_selected || gui->seg_selected >= 0) && gui->node_edited < 0)))
+    dt_control_set_cursor(GDK_FLEUR);
+}
+
 int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double y, double pressure, int which)
 {
   // record mouse position even if there are no masks visible
@@ -1156,8 +1140,11 @@ int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double
   if(form->functions)
     rep = form->functions->mouse_moved(module, pzx, pzy, pressure, which, form, 0, gui, 0);
 
-  if(gui) _set_hinter_message(gui, form);
-
+  if(gui)
+  {
+    _set_hinter_message(gui, form);
+    _set_cursor_shape(gui);
+  }
   return rep;
 }
 
@@ -1181,6 +1168,7 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
                                   darktable.develop->mask_form_selected_id, FALSE);
 
   // DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);
+  if(gui) _set_cursor_shape(gui);
 
   return ret;
 }
@@ -1226,6 +1214,7 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
                                           incr ? 1 : 0, flow,
                                           state, form, 0, gui, 0, DT_MASKS_INTERACTION_UNDEF);
 
+  if(ret && gui) _set_hinter_message(gui, form);
   return ret;
 }
 
@@ -1233,107 +1222,6 @@ gboolean dt_masks_is_corner_node(const dt_masks_form_gui_points_t *gpt, const in
 {
   const float *p = &gpt->points[index * nb];
   return (p[0 + coord_offset] == p[2 + coord_offset] && p[1 + coord_offset] == p[3 + coord_offset]);
-}
-
-void dt_masks_draw_node(cairo_t *cr, const gboolean square, const gboolean point_action, const gboolean selected, const float zoom_scale, const float x, const float y)
-{
-   cairo_save(cr);
-
-  // square for corner nodes, circle for others (curve)
-  float node_width = selected ? DT_MASKS_WIDTH_NODE_SELECTED / zoom_scale
-                              : DT_MASKS_WIDTH_NODE / zoom_scale;
-  if(square)
-  {
-    const float pos = node_width;
-    node_width *= 2.0f;
-    cairo_rectangle(cr, x - pos, y - pos, node_width, node_width);
-  }
-  else
-    cairo_arc(cr, x, y, node_width * 1.2f, 0.0, 2.0 * G_PI);
-  
-  // fill with transparent to erase underlying parts
-  //cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
-  //cairo_fill_preserve(cr);
-
-  // fill with the overlay color
-  dt_draw_set_color_overlay(cr, TRUE, 0.8);
-  cairo_fill_preserve(cr);
-
-  // draw dark border
-  if(point_action && selected)
-    cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_SELECTED / zoom_scale);
-  else
-    cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
-  dt_draw_set_color_overlay(cr, FALSE, 0.8);
-  cairo_stroke(cr);
-
-  cairo_restore(cr);
-}
-
-void dt_masks_draw_handle(cairo_t *cr, dt_masks_form_gui_t *gui, const float zoom_scale, const int index, const float ffx, const float ffy)
-{
-  cairo_save(cr);
-  if(!gui) return;
-  dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-  if(!gpt) return;
-  const int n = gui->node_edited;
-
-  // draw handle's tail
-  float delta_x = ffx - gpt->points[n * 6 + 2];
-  float delta_y = ffy - gpt->points[n * 6 + 3];
-  float tail_len = sqrtf(delta_x * delta_x + delta_y * delta_y);
-  // Draw only if the line is long enough
-  // and shorten the line by the size of the nodes so it does not overlap with them
-  float shorten = (DT_MASKS_WIDTH_NODE / zoom_scale) * 0.5f;
-  if(tail_len > (2 * shorten))
-  {
-    float start_x = gpt->points[n * 6 + 2] + delta_x * (shorten / tail_len);
-    float start_y = gpt->points[n * 6 + 3] + delta_y * (shorten / tail_len);
-    float end_x = ffx - delta_x * (shorten / tail_len);
-    float end_y = ffy - delta_y * (shorten / tail_len);
-    cairo_move_to(cr, start_x, start_y);
-    cairo_line_to(cr, end_x, end_y);
-  }
-
-  cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
-  dt_draw_set_color_overlay(cr, FALSE, 0.8);
-  cairo_stroke_preserve(cr);
-  cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
-  dt_draw_set_color_overlay(cr, TRUE, 0.8);
-  cairo_stroke(cr);
-
-  //draw the control handle
-  cairo_move_to(cr, ffx, ffy);
-  float handle_width = 0.0f;
-  float handle_size_selected = 0.0f;
-  if(n == gui->handle_dragging || n == gui->handle_selected)
-  {
-    handle_width = DT_MASKS_WIDTH_NODE_SELECTED / zoom_scale;
-    handle_size_selected = (DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale) * 0.5f;
-  }
-  else
-  {
-    handle_width = DT_MASKS_WIDTH_NODE / zoom_scale;
-    handle_size_selected = DT_MASKS_SIZE_LINE / zoom_scale;
-  }
-
-  cairo_arc(cr, ffx, ffy, handle_width, 0, 2.0 * M_PI);
-
-  cairo_set_line_width(cr, handle_size_selected);
-  dt_draw_set_color_overlay(cr, TRUE, 0.8);
-  cairo_stroke_preserve(cr);
-  dt_draw_set_color_overlay(cr, FALSE, 0.8);
-  cairo_fill(cr);
-
-  // uncomment this part if you want to see "real" control points
-  /*cairo_move_to(cr, gpt->points[n*6+2],gpt->points[n*6+3]);
-  cairo_line_to(cr, gpt->points[n*6],gpt->points[n*6+1]);
-  cairo_stroke(cr);
-  cairo_move_to(cr, gpt->points[n*6+2],gpt->points[n*6+3]);
-  cairo_line_to(cr, gpt->points[n*6+4],gpt->points[n*6+5]);
-  cairo_stroke(cr);*/
-
-  cairo_restore(cr);
 }
 
 /**
@@ -1379,7 +1267,7 @@ void _dt_masks_find_best_attachment_point(float *pos_x, float *pos_y, const floa
 }
 
 void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index, const int nb, 
-  const float zoom_scale, const dt_masks_functions_t *functions)
+  const float zoom_scale, const shape_draw_function_t *draw_shape_func)
 {
   if(!gui) return;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
@@ -1393,15 +1281,11 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
   // while for other mask shapes they are at indices [0] and [1]
   const float source_x = is_path ? gpt->source[2] : gpt->source[0];
   const float source_y = is_path ? gpt->source[3] : gpt->source[1];
-
   const float origin_x = gpt->points[idx];
   const float origin_y = gpt->points[idx + 1];
 
   // direction from center to source (use atan2 to avoid special cases)
-  const float center_delta_x = source_x - origin_x;
-  const float center_delta_y = source_y - origin_y;
-  const float center_dist = center_delta_x * center_delta_x + center_delta_y * center_delta_y;
-  const float center_angle = (center_dist > 1e-12f) ? atan2f(center_delta_y, center_delta_x) : 0.0f;
+  const float center_angle = atan2f(source_y - origin_y, source_x - origin_x);
   const float cosc = cosf(center_angle);
   const float sinc = sinf(center_angle);
   const float offset = DT_PIXEL_APPLY_DPI(8.0f)/ zoom_scale;
@@ -1448,140 +1332,39 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
                                 gpt->source, gpt->source_count);
   }
 
-  // calculate the coordinates of the two other points of the arrow head
-  const float arrow_x_a = arrow_x + (DT_MASKS_SCALE_ARROW / zoom_scale) * cosf(center_angle + (0.4f));
-  const float arrow_y_a = arrow_y + (DT_MASKS_SCALE_ARROW / zoom_scale) * sinf(center_angle + (0.4f));
-  const float arrow_x_b = arrow_x + (DT_MASKS_SCALE_ARROW / zoom_scale) * cosf(center_angle - (0.4f));
-  const float arrow_y_b = arrow_y + (DT_MASKS_SCALE_ARROW / zoom_scale) * sinf(center_angle - (0.4f));
-  // Calculate the coordinates of the midpoint between (arrow_x_a, arrow_y_a) and (arrow_x_b, arrow_y_b)
-  const float arrow_bud_x = (arrow_x_a + arrow_x_b) * 0.5f;
-  const float arrow_bud_y = (arrow_y_a + arrow_y_b) * 0.5f;
-
-  cairo_save(cr);
-  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-
-  // always draw the arrow head
-  {
-    cairo_move_to(cr, arrow_x_a, arrow_y_a);
-    cairo_line_to(cr, arrow_x, arrow_y);
-    cairo_line_to(cr, arrow_x_b, arrow_y_b);
-    cairo_line_to(cr, arrow_x_a, arrow_y_a); // close the arrow head
-    // configure the head line style
-    cairo_set_source_rgba(cr, 0., 0., 0., 0.);
-    cairo_fill_preserve(cr);
-
-    // dark
-    dt_masks_set_dash(cr, DT_MASKS_NO_DASH, zoom_scale);
-    dt_draw_set_color_overlay(cr, FALSE, 0.6);
-    if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
-      cairo_set_line_width(cr, (4 * DT_MASKS_SIZE_LINE) / zoom_scale);
-    else
-      cairo_set_line_width(cr, (2 * DT_MASKS_SIZE_LINE) / zoom_scale);
-    cairo_stroke_preserve(cr);
-
-    // bright
-    dt_draw_set_color_overlay(cr, TRUE, 0.8);
-    dt_masks_set_dash(cr, DT_MASKS_NO_DASH, zoom_scale);
-    if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
-      cairo_set_line_width(cr, (DT_MASKS_SIZE_LINE_SELECTED) / zoom_scale);
-    else
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
-    cairo_stroke(cr);
-  }
-
+  const gboolean selected = (gui->group_selected == index) && (gui->source_selected || gui->source_dragging);
   // don't draw the line if the source is inside the shape
-  float arrow_len_sq = (source_x - arrow_bud_x) * (source_x - arrow_bud_x) + (source_y - arrow_bud_y) * (source_y - arrow_bud_y);
-  if (arrow_len_sq > 1e-12f && !dt_masks_point_in_form_exact(source_x, source_y, gpt->points, 0, gpt->points_count))
-  {
-    // we draw the link line
-    cairo_move_to(cr, arrow_source_x, arrow_source_y);
-    cairo_line_to(cr, arrow_bud_x, arrow_bud_y);
-
-    // dark line
-    dt_draw_set_color_overlay(cr, FALSE, 0.6);
-    if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
-    else
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
-    dt_masks_set_dash(cr, DT_MASKS_DASH_ROUND, zoom_scale);
-    cairo_stroke_preserve(cr);
-
-    // bright line
-    dt_draw_set_color_overlay(cr, TRUE, 0.8);
-    if((gui->group_selected == index) && (gui->source_selected || gui->source_dragging))
-      cairo_set_line_width(cr, (3 * DT_MASKS_SIZE_LINE) / zoom_scale);
-    else
-      cairo_set_line_width(cr, (2 * DT_MASKS_SIZE_LINE) / zoom_scale);
-    cairo_stroke(cr);
-  }
+  float arrow_len_sq = sqf(source_x - arrow_x) + sqf(source_y - arrow_y);
+  const gboolean draw_tail = (arrow_len_sq > 1e-12f && !dt_masks_point_in_form_exact(arrow_source_x, arrow_source_y, gpt->points, 0, gpt->points_count));
+  
+  const float arrow[2] = {arrow_x, arrow_y};
+  const float source[2] = {arrow_source_x, arrow_source_y};
+  dt_draw_arrow(cr, zoom_scale, selected, draw_tail, DT_MASKS_DASH_ROUND, arrow, source);
 
   // draw the source shape
   {
-    if(functions && functions->draw_shape)
-      functions->draw_shape(cr, gpt->source, gpt->source_count, nb, FALSE, TRUE);
+    if(draw_shape_func)
+      (*draw_shape_func)(cr, gpt->source, gpt->source_count, nb, FALSE, TRUE);
 
-    dt_masks_set_dash(cr, DT_MASKS_NO_DASH, zoom_scale);
+    dt_draw_set_dash_style(cr, DT_MASKS_NO_DASH, zoom_scale);
     //dark line
     if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
+      cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
     else
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
+      cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_HIGHLIGHT / zoom_scale);
     dt_draw_set_color_overlay(cr, FALSE, 0.6);
     cairo_stroke_preserve(cr);
 
     //bright line
     if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
-      cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_SELECTED / zoom_scale);
+      cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_SELECTED / zoom_scale);
     else
-      cairo_set_line_width(cr, (1.5f * DT_MASKS_SIZE_LINE) / zoom_scale);
+      cairo_set_line_width(cr, (1.5f * DT_DRAW_SIZE_LINE) / zoom_scale);
     dt_draw_set_color_overlay(cr, TRUE, 0.8);
     cairo_stroke(cr);
 
     cairo_restore(cr);
   }
-}
-void dt_masks_draw_lines(const dt_masks_dash_type_t dash_type, const gboolean source, cairo_t *cr, const int nb, const gboolean selected,
-                const float zoom_scale, const float *points, const int points_count, const dt_masks_functions_t *functions)
-{
-  cairo_save(cr);
-
-  // are we drawing a border ?
-  const gboolean border = dash_type != DT_MASKS_NO_DASH;
-  // draw the shape from the integrated function if any
-  if(functions && functions->draw_shape && points && points_count >= 2 )
-    functions->draw_shape(cr, points, points_count, nb, border, FALSE);
-
-  if(dash_type)
-  {
-    // Trick: fill with a transparent color to get only the outer shape
-    // because when using varying widths on nodes, there are self-intersecting border lines
-    cairo_set_source_rgba(cr, 0., 0., 0., 0.);
-    cairo_fill_preserve(cr);
-  }
-
-  // dashed ?
-  if(dash_type && !source)
-    dt_masks_set_dash(cr, dash_type, zoom_scale);
-  else
-    dt_masks_set_dash(cr, DT_MASKS_NO_DASH, zoom_scale);
-
-  // HIGHLIGHT (dark)
-  if(selected)
-    cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
-  else
-    cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
-  dt_draw_set_color_overlay(cr, FALSE, dash_type ? 0.3f : 0.9f);
-  cairo_stroke_preserve(cr);
-
-  // NORMAL (bright)
-  if(selected)
-    cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_SELECTED / zoom_scale);
-  else
-    cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
-  dt_draw_set_color_overlay(cr, TRUE, 0.8);
-  cairo_stroke(cr);
-
-  cairo_restore(cr);
 }
 
 void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
@@ -2176,10 +1959,12 @@ int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity
     dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
     if(fpt->formid == id)
     {
-      const float new_opacity = (offset == DT_MASKS_INCREMENT_OFFSET)  ? fpt->opacity + opacity * flow
+      float new_opacity = (offset == DT_MASKS_INCREMENT_OFFSET)  ? fpt->opacity + opacity * flow
                                 : (offset == DT_MASKS_INCREMENT_SCALE) ? fpt->opacity * powf(opacity, (float)flow)
                                                                        : opacity; // DT_MASKS_INCREMENT_ABSOLUTE
-      fpt->opacity = CLAMP(new_opacity, 0.05f, 1.0f);
+      new_opacity = CLAMP(new_opacity, 0.0f, 1.0f);
+      fpt->opacity = new_opacity;
+      dt_toast_log(_("Opacity: %3.2f%%"), new_opacity * 100.f);
       return 1;
     }
   }
@@ -2188,7 +1973,7 @@ int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity
 
 int dt_masks_form_change_opacity(dt_masks_form_t *form, int parentid, int up, const int flow)
 {
-  const float amount = up ? 0.05f : -0.05f;
+  const float amount = up ? 0.02f : -0.02f;
   return dt_masks_form_set_opacity(form, parentid, amount, DT_MASKS_INCREMENT_OFFSET, flow);
 }
 
@@ -2507,6 +2292,11 @@ int dt_masks_point_in_form_exact(float x, float y, float *points, int points_sta
     if(isnan(x2))
     {
       next = (int)y2;
+      // validate the index to prevent out-of-bounds access
+      if(next < points_start || next >= points_count)
+      {
+        break; // invalid index, exit to prevent segfault
+      }
       continue;
     }
 
@@ -2606,12 +2396,12 @@ void dt_masks_select_form(struct dt_iop_module_t *module, dt_masks_form_t *sel)
 // draw a cross where the source position of a clone mask will be created
 void dt_masks_draw_clone_source_pos(cairo_t *cr, const float zoom_scale, const float x, const float y)
 {
-  const float dx = DT_MASKS_SIZE_CROSS / zoom_scale;
-  const float dy = DT_MASKS_SIZE_CROSS / zoom_scale;
+  const float dx = DT_DRAW_SIZE_CROSS / zoom_scale;
+  const float dy = DT_DRAW_SIZE_CROSS / zoom_scale;
   cairo_save(cr);
 
-  dt_masks_set_dash(cr, DT_MASKS_NO_DASH, zoom_scale);
-  cairo_set_line_width(cr, DT_MASKS_SIZE_LINE_HIGHLIGHT / zoom_scale);
+  dt_draw_set_dash_style(cr, DT_MASKS_NO_DASH, zoom_scale);
+  cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_HIGHLIGHT / zoom_scale);
   dt_draw_set_color_overlay(cr, FALSE, 0.8);
 
   cairo_move_to(cr, x + dx, y);
@@ -2620,7 +2410,7 @@ void dt_masks_draw_clone_source_pos(cairo_t *cr, const float zoom_scale, const f
   cairo_line_to(cr, x, y - dy);
   cairo_stroke_preserve(cr);
 
-  cairo_set_line_width(cr, DT_MASKS_SIZE_LINE / zoom_scale);
+  cairo_set_line_width(cr, DT_DRAW_SIZE_LINE / zoom_scale);
   dt_draw_set_color_overlay(cr, TRUE, 0.8);
   cairo_stroke(cr);
 
@@ -2826,6 +2616,18 @@ float dt_masks_rotate_with_anchor(dt_develop_t *dev, const float anchor[2], cons
 
   return angle / M_PI * 180.0f;
 }
+
+gboolean dt_masks_is_within_radius(const float px, const float py,
+                                        const float cx, const float cy,
+                                        const float radius)
+{
+  const float sq_radius = radius * radius;
+  const float dx = px - cx;
+  const float dy = py - cy;
+  const float sq_dist = dx * dx + dy * dy;
+  return sq_dist <= sq_radius;
+}
+
 
 #include "detail.c"
 

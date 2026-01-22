@@ -20,7 +20,6 @@
 #include "common/imagebuf.h"
 #include "common/undo.h"
 #include "control/conf.h"
-
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
@@ -1119,11 +1118,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   if(!gpt) return 0;
   const dt_develop_t *const dev = (const dt_develop_t *)darktable.develop;
 
-  // get the zoom scale
-  const float zoom_scale = dt_dev_get_zoom_level(dev);
-
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
-  const float dist_curs = DT_MASKS_SELECTION_DISTANCE / zoom_scale; // transformed to backbuf dimensions
+  const float dist_curs = DT_DRAW_SELECTION_RADIUS(dev); // transformed to backbuf dimensions
 
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
@@ -1147,7 +1143,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
       float ffx, ffy;
       _polygon_ctrl2_to_handle(gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], gpt->points[k * 6 + 4],
                               gpt->points[k * 6 + 5], &ffx, &ffy, gpt->clockwise);
-      if((pzx - ffx > -dist_curs) && (pzx - ffx < dist_curs) && (pzy - ffy > -dist_curs) && (pzy - ffy < dist_curs))
+      if(dt_masks_is_within_radius(pzx, pzy, ffx, ffy, dist_curs))
       {
         gui->handle_selected = k;
 
@@ -1156,10 +1152,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
     }
     
     // are we also close to the node ?
-    if(pzx - gpt->points[k * 6 + 2] > -dist_curs
-       && pzx - gpt->points[k * 6 + 2] < dist_curs
-       && pzy - gpt->points[k * 6 + 3] > -dist_curs
-       && pzy - gpt->points[k * 6 + 3] < dist_curs)
+    if(dt_masks_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3],
+                                              dist_curs))
     {
       gui->node_selected = k;
 
@@ -1170,10 +1164,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   // iterate all nodes and look for one that is close enough
   for(int k = 0; k < nb; k++)
   {
-    if(pzx - gpt->points[k * 6 + 2] > -dist_curs
-       && pzx - gpt->points[k * 6 + 2] < dist_curs
-       && pzy - gpt->points[k * 6 + 3] > -dist_curs
-       && pzy - gpt->points[k * 6 + 3] < dist_curs)
+    if(dt_masks_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], dist_curs))
     {
       gui->node_selected = k;
 
@@ -1380,7 +1371,7 @@ static int _polygon_events_mouse_scrolled(struct dt_iop_module_t *module, float 
   else if(gui->edit_mode == DT_MASKS_EDIT_FULL && (gui->form_selected || gui->node_selected >= 0 || gui->handle_selected >= 0 || gui->seg_selected >= 0))
   {
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
-      return dt_masks_form_set_opacity(form, parentid, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
+      return dt_masks_form_change_opacity(form, parentid, up, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
       return _change_hardness(form, parentid, gui, module, index, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
     else
@@ -1709,25 +1700,25 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
 {
   // centre view will have zoom_scale * backbuf_width pixels, we want the handle offset to scale with DPI:
   dt_develop_t *const dev = (dt_develop_t *)darktable.develop;
-  const float zoom_scale = dt_dev_get_zoom_level(dev);
   if(!gui) return 0;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
 
-  const float wd = darktable.develop->preview_pipe->backbuf_width / dev->natural_scale;
-  const float ht = darktable.develop->preview_pipe->backbuf_height / dev->natural_scale;
+  const float wd = dev->preview_pipe->backbuf_width / dev->natural_scale;
+  const float ht = dev->preview_pipe->backbuf_height / dev->natural_scale;
 
   if(gui->node_dragging >= 0)
   {
     // check if we are near the first point to close the polygon on creation
     if(gui->creation && !g_list_shorter_than(form->points, 4)) // at least 3 points + the one being created 
-    {     
-      const float dist_curs = DT_MASKS_SELECTION_DISTANCE / zoom_scale;  // transformed to backbuf dimensions
+    {
+      const float dist_curs = DT_DRAW_SELECTION_RADIUS_NO_UPSCALE(dev);
       
       float pt[2] = { pzx * wd, pzy * ht }; // no backtransform here
-      gui->creation_closing_form =
-                   (pt[0] - gpt->points[2] < dist_curs && pt[0] - gpt->points[2] > -dist_curs)
-                && (pt[1] - gpt->points[3] < dist_curs && pt[1] - gpt->points[3] > -dist_curs);
+      const float dx = pt[0] - gpt->points[2];
+      const float dy = pt[1] - gpt->points[3];
+      const float dist2 = dx * dx + dy * dy;
+      gui->creation_closing_form = dist2 <= dist_curs * dist_curs;
     }
 
     // update continuously the current node to mouse position
@@ -1929,22 +1920,6 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
 
   if(gui->creation)
   {
-    /* draw a small circle above the node to tell that we are closing the polygon */
-    if(gui->creation_closing_form && node_count >= 3 && gpt->points_count >= (node_count * 6))
-    {
-      const int last_idx = node_count - 1;
-
-      const float x1 = gpt->points[last_idx * 6 + 2];
-      const float y1 = gpt->points[last_idx * 6 + 3];
-
-      const float x = x1 + 12.5f / zoom_scale;
-      const float y = y1 - 12.5f / zoom_scale;
-      cairo_save(cr);
-      cairo_arc(cr, x, y, DT_PIXEL_APPLY_DPI(3.0f) / zoom_scale, 0, 2 * G_PI);
-      dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, 0, FALSE, zoom_scale, 0, 0, NULL);
-      cairo_restore(cr);
-    }
-
     // draw a cross where the source will be created
     if(darktable.develop->form_visible
      && (darktable.develop->form_visible->type & DT_MASKS_CLONE))
@@ -2005,9 +1980,9 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
           const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
           // creation mode: draw the current segment as round dotted line
           if(gui->creation && current_seg == node_count -2)
-            dt_masks_draw_lines(DT_MASKS_DASH_ROUND, FALSE, cr, 0, (seg_selected || all_selected), zoom_scale, 0, 0, NULL);
+            dt_draw_stroke_line(DT_MASKS_DASH_ROUND, FALSE, cr, (seg_selected || all_selected), zoom_scale);
           else
-            dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, 0, (seg_selected || all_selected), zoom_scale, 0, 0, NULL);
+            dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, (seg_selected || all_selected), zoom_scale);
           seg1 = (seg1 + 1) % node_count;
           current_seg++;
 
@@ -2017,6 +1992,29 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
           cairo_move_to(cr, x, y);
         }
       }
+    }
+  }
+
+  // draw borders
+  if(gui->group_selected == index)
+  {
+    if(gpt->border_count > node_count * 3 + 2)
+    {
+      dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, node_count, (gui->border_selected), zoom_scale, gpt->border,
+                        gpt->border_count, &dt_masks_functions_polygon.draw_shape);
+    }
+
+    // draw the current node's handle if it's a curve node
+    if( gui->node_edited >= 0 && !dt_masks_is_corner_node(gpt, gui->node_edited, 6, 2))
+    {
+      const int n = gui->node_edited;
+      float handle_x, handle_y;
+      _polygon_ctrl2_to_handle(gpt->points[n * 6 + 2], gpt->points[n * 6 + 3], gpt->points[n * 6 + 4],
+                                gpt->points[n * 6 + 5], &handle_x, &handle_y, gpt->clockwise);
+      const float pt_x = gpt->points[n * 6 + 2];
+      const float pt_y = gpt->points[n * 6 + 3];
+      const gboolean selected = gui->node_selected == gui->handle_dragging || gui->node_selected == gui->handle_selected;
+      dt_draw_handle(cr, pt_x, pt_y, zoom_scale, handle_x, handle_y, selected);
     }
   }
 
@@ -2036,36 +2034,16 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
      
       // draw the first node as big circle while creating the polygon
       if(gui->creation && k == 0)
-        dt_masks_draw_node(cr, FALSE, TRUE, TRUE, zoom_scale, x, y);
+        dt_draw_node(cr, FALSE, TRUE, TRUE, zoom_scale, x, y);
       else
-        dt_masks_draw_node(cr, corner, action, selected, zoom_scale, x, y);
-    }
-  }
-
-  // draw borders
-  if(gui->group_selected == index)
-  {
-    if(gpt->border_count > node_count * 3 + 2)
-    {
-      dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, node_count, (gui->border_selected), zoom_scale, gpt->border,
-                        gpt->border_count, &dt_masks_functions_polygon);
-    }
-
-    // draw the current node's handle if it's a curve node
-    if( gui->node_edited >= 0 && !dt_masks_is_corner_node(gpt, gui->node_edited, 6, 2))
-    {
-      const int n = gui->node_edited;
-      float ffx, ffy;
-      _polygon_ctrl2_to_handle(gpt->points[n * 6 + 2], gpt->points[n * 6 + 3], gpt->points[n * 6 + 4],
-                                gpt->points[n * 6 + 5], &ffx, &ffy, gpt->clockwise);
-      dt_masks_draw_handle(cr, gui, zoom_scale, index, ffx, ffy);
+        dt_draw_node(cr, corner, action, selected, zoom_scale, x, y);
     }
   }
 
   // draw the source if needed
   if(gpt->source_count > node_count * 3 + 2)
   {
-    dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, &dt_masks_functions_polygon);
+    dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, &dt_masks_functions_polygon.draw_shape);
   }
 }
 
@@ -2964,21 +2942,21 @@ static void _polygon_set_hint_message(const dt_masks_form_gui_t *const gui, cons
                                      const int opacity, char *const restrict msgbuf, const size_t msgbuf_len)
 {
   if(gui->creation && g_list_length(form->points) < 4)
-    g_strlcat(msgbuf, _("<b>add node</b>: click, <b>add sharp node</b>:ctrl+click\n"
-                        "<b>cancel</b>: right-click"), msgbuf_len);
+    g_strlcat(msgbuf, _("<b>Add node</b>: click, <b>Add sharp node</b>:ctrl+click\n"
+                        "<b>Cancel</b>: right-click or Esc"), msgbuf_len);
   else if(gui->creation)
-    g_strlcat(msgbuf, _("<b>add node</b>: click, <b>add sharp node</b>:ctrl+click\n"
-                        "<b>finish polygon</b>: Enter or click on the first node"), msgbuf_len);
+    g_strlcat(msgbuf, _("<b>Add node</b>: click, <b>Add sharp node</b>:ctrl+click\n"
+                        "<b>Finish polygon</b>: Enter or click on the first node"), msgbuf_len);
   else if(gui->node_selected >= 0)
-    g_strlcat(msgbuf, _("<b>move node</b>: drag, <b>remove node</b>: right-click\n"
-                        "<b>switch smooth/sharp mode</b>: ctrl+click"), msgbuf_len);
+    g_strlcat(msgbuf, _("<b>Move node</b>: drag, <b>Remove node</b>: right-click\n"
+                        "<b>Switch smooth/sharp mode</b>: ctrl+click"), msgbuf_len);
   else if(gui->handle_selected >= 0)
-    g_strlcat(msgbuf, _("<b>node curvature</b>: drag\n<b>reset curvature</b>: right-click"), msgbuf_len);
+    g_strlcat(msgbuf, _("<b>Node curvature</b>: drag\n<b>Reset curvature</b>: right-click"), msgbuf_len);
   else if(gui->seg_selected >= 0)
-    g_strlcat(msgbuf, _("<b>move segment</b>: drag\n<b>add node</b>: ctrl+click"), msgbuf_len);
+    g_strlcat(msgbuf, _("<b>Move segment</b>: drag\n<b>Add node</b>: ctrl+click"), msgbuf_len);
   else if(gui->form_selected)
-    g_snprintf(msgbuf, msgbuf_len, _("<b>size</b>: scroll, <b>hardness size</b>: shift+scroll\n"
-                                     "<b>opacity</b>: ctrl+scroll (%d%%)"), opacity);
+    g_snprintf(msgbuf, msgbuf_len, _("<b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"
+                                     "<b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
 }
 
 static void _polygon_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)

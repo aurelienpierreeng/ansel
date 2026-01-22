@@ -1331,7 +1331,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   g->ht = dev->preview_pipe->backbuf_height;
   if(g->wd < 1.0 || g->ht < 1.0) return;
 
-  const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
+  const float zoom_scale = dt_dev_get_overlay_scale(dev);
 
   dt_dev_clip_roi(dev, cr, width, height);
   dt_dev_rescale_roi(dev, cr, width, height);
@@ -1461,7 +1461,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   float pzx = 0.f;
   float pzy = 0.f;
   dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
-  const float zoom_scale = dev->scaling;
+  const float zoom_scale = dt_dev_get_overlay_scale(dev);
   const int border = DT_PIXEL_APPLY_DPI(30.0) / zoom_scale;
 
   const _grab_region_t grab = _gui_get_grab(pzx, pzy, g, border, g->wd, g->ht);
@@ -1569,25 +1569,25 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     // hover over active borders, no button pressed
     // change mouse pointer
     if(grab == GRAB_LEFT)
-      dt_control_change_cursor(GDK_LEFT_SIDE);
+      dt_control_set_cursor(GDK_LEFT_SIDE);
     else if(grab == GRAB_TOP)
-      dt_control_change_cursor(GDK_TOP_SIDE);
+      dt_control_set_cursor(GDK_TOP_SIDE);
     else if(grab == GRAB_RIGHT)
-      dt_control_change_cursor(GDK_RIGHT_SIDE);
+      dt_control_set_cursor(GDK_RIGHT_SIDE);
     else if(grab == GRAB_BOTTOM)
-      dt_control_change_cursor(GDK_BOTTOM_SIDE);
+      dt_control_set_cursor(GDK_BOTTOM_SIDE);
     else if(grab == GRAB_TOP_LEFT)
-      dt_control_change_cursor(GDK_TOP_LEFT_CORNER);
+      dt_control_set_cursor(GDK_TOP_LEFT_CORNER);
     else if(grab == GRAB_TOP_RIGHT)
-      dt_control_change_cursor(GDK_TOP_RIGHT_CORNER);
+      dt_control_set_cursor(GDK_TOP_RIGHT_CORNER);
     else if(grab == GRAB_BOTTOM_RIGHT)
-      dt_control_change_cursor(GDK_BOTTOM_RIGHT_CORNER);
+      dt_control_set_cursor(GDK_BOTTOM_RIGHT_CORNER);
     else if(grab == GRAB_BOTTOM_LEFT)
-      dt_control_change_cursor(GDK_BOTTOM_LEFT_CORNER);
+      dt_control_set_cursor(GDK_BOTTOM_LEFT_CORNER);
     else if(grab == GRAB_NONE)
     {
       dt_control_hinter_message(darktable.control, "");
-      dt_control_change_cursor(GDK_LEFT_PTR);
+      dt_control_set_cursor(GDK_LEFT_PTR);
     }
     if(grab != GRAB_NONE)
       dt_control_hinter_message(darktable.control, _("<b>resize</b>: drag, <b>keep aspect ratio</b>: shift+drag"));
@@ -1595,7 +1595,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   }
   else
   {
-    dt_control_change_cursor(GDK_FLEUR);
+    dt_control_set_cursor(GDK_FLEUR);
     g->cropping = GRAB_CENTER;
     dt_control_hinter_message(darktable.control, _("<b>move</b>: drag, <b>move vertically</b>: shift+drag, <b>move horizontally</b>: ctrl+drag"));
     dt_control_queue_redraw_center();
@@ -1638,7 +1638,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     float pzx = 0.f;
     float pzy = 0.f;
     dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
-    float zoom_scale = dev->scaling;
+    const float zoom_scale = dt_dev_get_overlay_scale(dev);
 
     g->button_down_x = x;
     g->button_down_y = y;

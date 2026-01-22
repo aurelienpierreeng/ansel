@@ -19,7 +19,6 @@
 #include "common/debug.h"
 #include "common/undo.h"
 #include "control/conf.h"
-
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
@@ -82,10 +81,9 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
 
   // get the zoom scale
   dt_develop_t *dev = (dt_develop_t *)darktable.develop;
-  const float zoom_scale = dt_dev_get_zoom_level(dev);
 
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
-  const float dist_curs = DT_MASKS_SELECTION_DISTANCE / zoom_scale; // transformed to backbuf dimensions
+  const float dist_curs = DT_DRAW_SELECTION_RADIUS(dev); // transformed to backbuf dimensions
 
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
@@ -223,7 +221,7 @@ static int _circle_events_mouse_scrolled(struct dt_iop_module_t *module, float p
   else if(gui->form_selected)
   {
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
-      return dt_masks_form_set_opacity(form, parentid, up ? +0.02f : -0.02f, DT_MASKS_INCREMENT_OFFSET, flow);
+      return dt_masks_form_change_opacity(form, parentid, up, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
       return _change_hardness(form, gui, module, index, up ? +1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
     else
@@ -621,9 +619,9 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
     // we draw the form and it's border
 
     // we draw the main shape
-    dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle);
+    dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle.draw_shape);
     // we draw the borders
-    dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_circle);
+    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_circle.draw_shape);
 
     // draw a cross where the source will be created
     if(form->type & DT_MASKS_CLONE)
@@ -645,18 +643,18 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
   
   // we draw the main shape
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-  dt_masks_draw_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle);
+  dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle.draw_shape);
   // we draw the borders
   if(gui->group_selected == index)
   { 
-    dt_masks_draw_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
-                       gpt->border_count, &dt_masks_functions_circle);
+    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
+                       gpt->border_count, &dt_masks_functions_circle.draw_shape);
   }
 
   // draw the source if any
   if(gpt->source_count > 6)
   { 
-    dt_masks_draw_source(cr, gui, index, num_points, zoom_scale, &dt_masks_functions_circle);
+    dt_masks_draw_source(cr, gui, index, num_points, zoom_scale, &dt_masks_functions_circle.draw_shape);
   }
 }
 
@@ -1159,8 +1157,8 @@ static void _circle_set_hint_message(const dt_masks_form_gui_t *const gui, const
 {
   // circle has same controls on creation and on edit
   g_snprintf(msgbuf, msgbuf_len,
-             _("<b>size</b>: scroll, <b>feather size</b>: shift+scroll\n"
-               "<b>opacity</b>: ctrl+scroll (%d%%)"), opacity);
+             _("<b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"
+               "<b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
 }
 
 static void _circle_duplicate_points(dt_develop_t *dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)

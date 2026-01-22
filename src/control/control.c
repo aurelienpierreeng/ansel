@@ -47,7 +47,7 @@ void dt_control_init(dt_control_t *s)
 {
   // same thread as init
   s->gui_thread = pthread_self();
-
+  s->cursor = GDK_LEFT_PTR;
   // s->last_expose_time = dt_get_wtime();
   s->log_pos = s->log_ack = 0;
   s->log_busy = 0;
@@ -96,6 +96,16 @@ void dt_control_change_cursor(dt_cursor_t curs)
     gdk_window_set_cursor(gtk_widget_get_window(widget), cursor);
     g_object_unref(cursor);
   }
+}
+
+void dt_control_set_cursor(dt_cursor_t cursor)
+{
+  darktable.control->cursor = cursor;
+}
+
+void dt_control_commit_cursor()
+{
+  dt_control_change_cursor(darktable.control->cursor);
 }
 
 int dt_control_running()
@@ -246,7 +256,11 @@ void *dt_control_expose(void *voidptr)
   if(darktable.control->log_busy > 0)
   {
     dt_control_draw_busy_msg(cr, width, height);
+    dt_control_change_cursor(GDK_CLOCK);
   }
+  else // Apply cursor change
+    dt_control_commit_cursor();
+
   dt_pthread_mutex_unlock(&darktable.control->log_mutex);
 
   cairo_destroy(cr);

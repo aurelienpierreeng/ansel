@@ -463,20 +463,28 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
 
   // Scale is inited to the value that would fit our full-res raw to GUI viewport size
   *scale = dev->natural_scale = dt_dev_get_natural_scale(dev, pipe);
-
   // The full pipeline shows only the ROI, which may be zoomed in/out
   if(pipe->type == DT_DEV_PIXELPIPE_FULL) *scale *= dev->scaling;
 
   // Backbuf size depends on GUI window size only
-  *wd = fminf(roundf(*scale * pipe->processed_width), dev->width);
-  *ht = fminf(roundf(*scale * pipe->processed_height), dev->height);
+  int roi_width = roundf(*scale * pipe->processed_width);
+  int roi_height = roundf(*scale * pipe->processed_height);
+  int widget_wd = dev->width * darktable.gui->ppd;
+  int widget_ht = dev->height * darktable.gui->ppd;
+
+  *wd = fminf(roi_width, widget_wd);
+  *ht = fminf(roi_height, widget_ht);
 
   // dev->x,y are the relative coordinates of the ROI center.
   // in preview pipe, we always render a full image, so x,y = 0,0 
   // otherwise, x,y here are the top-left corner. Translate:
-  *x = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW) ? 0 : roundf(dev->x * pipe->processed_width * *scale - *wd * .5f);
-  *y = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW) ? 0 : roundf(dev->y * pipe->processed_height * *scale - *ht * .5f);
+  *x = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW) ? 0 : roundf(dev->x * roi_width - *wd * .5f);
+  *y = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW) ? 0 : roundf(dev->y * roi_height - *ht * .5f);
 
+/*  fprintf (stderr, "_update_darkroom_roi: dev %.2f %.2f  type %s  xy %d %d  dim %d %d"
+                   "   ppd:%.4f scale:%.4f nat_scale:%.4f * scaling:%.4f\n",
+            dev->x, dev->y, _debug_get_pipe_type_str(pipe->type), *x, *y, *wd, *ht, darktable.gui->ppd, *scale, dev->natural_scale, dev->scaling);
+*/
   return x_old != *x || y_old != *y || wd_old != *wd || ht_old != *ht || old_scale != *scale;
 }
 
@@ -688,7 +696,7 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
 
     dt_print(DT_DEBUG_DEV, "[pixelpipe] Darkroom requested a %i×%i px main preview\n", wd, ht);
     dt_dev_invalidate_zoom(dev);
-    // dt_dev_invalidate_zoom_preview(dev); //it's either the macro line or this one, not both
+    dt_dev_invalidate_zoom_preview(dev);
 
     if(dev->image_storage.id > -1 && darktable.mipmap_cache)
     {
@@ -701,10 +709,13 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
 
 void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h)
 {
+  // for the debug strings lower
+  //float old_x = *dev_x;
+  //float old_y = *dev_y;
   int proc_w = 0;
   int proc_h = 0;
   dt_dev_get_processed_size(dev, &proc_w, &proc_h);
-  const float scale = dt_dev_get_zoom_level(dev);
+  const float scale = dt_dev_get_zoom_level(dev)/ darktable.gui->ppd;
 
   // find the box size
   const float bw = dev->width / (proc_w * scale);
@@ -715,8 +726,8 @@ void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y,
   const float half_bh = bh * 0.5f;
 
   // clamp position using pre-calculated values
-  *dev_x = bw > 1.0f ? 0.5f : CLAMPF(*dev_x, half_bw, 1.0f - half_bw);
-  *dev_y = bh > 1.0f ? 0.5f : CLAMPF(*dev_y, half_bh, 1.0f - half_bh);
+  *dev_x = bw > 1.0f || dev->scaling <= 1.0f ? 0.5f : CLAMPF(*dev_x, half_bw, 1.0f - half_bw);
+  *dev_y = bh > 1.0f || dev->scaling <= 1.0f ? 0.5f : CLAMPF(*dev_y, half_bh, 1.0f - half_bh);
   // return box size
   if(box_w) *box_w = bw;
   if(box_h) *box_h = bh;
@@ -772,7 +783,7 @@ void dt_dev_retrieve_full_pos(dt_develop_t *dev, const int px, const int py, flo
   const int ht = dev->pipe->processed_height;
   if(wd == 0 || ht == 0) return; // avoid division by zero
 
-  const float scale = dev->natural_scale * dev->scaling;
+  const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
 
   // calculate delta from center in processed image coordinates
   const float dx = px - 0.5f * dev->width - dev->border_size;
@@ -1439,15 +1450,20 @@ float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
            * darktable.gui->ppd;
 }
 
-float dt_dev_get_preview_natural_scale(dt_develop_t *dev)
+float dt_dev_get_fit_scale(dt_develop_t *dev)
 {
   if(!dev || !dev->preview_pipe || dev->preview_pipe->backbuf_width == 0 || dev->preview_pipe->backbuf_height == 0)
-    return darktable.gui->ppd;
-  else
-    return fminf(fminf((float)dev->width / (float)dev->preview_pipe->backbuf_width,
-                       (float)dev->height / (float)dev->preview_pipe->backbuf_height),
-                 1.f)
-           * darktable.gui->ppd;
+    return dev->scaling;
+
+  const float nat_scale = fminf(fminf((float)dev->width / (float)dev->preview_pipe->backbuf_width,
+                         (float)dev->height / (float)dev->preview_pipe->backbuf_height),
+                          1.f);
+  return dev->scaling * nat_scale;
+}
+
+float dt_dev_get_overlay_scale(dt_develop_t *dev)
+{
+  return dt_dev_get_fit_scale(dev) * darktable.gui->ppd;
 }
 
 float dt_dev_get_zoom_level(const dt_develop_t *dev)
@@ -1475,7 +1491,7 @@ gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t 
   const float ht = dev->preview_pipe->backbuf_height;
   if(wd == 0.f || ht == 0.f) return TRUE;
 
-  const float zoom_scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
+  const float zoom_scale = dt_dev_get_overlay_scale(dev);
   const int32_t border = dev->border_size;
   const float roi_width = fminf(width, wd * zoom_scale);
   const float roi_height = fminf(height, ht * zoom_scale);
@@ -1501,7 +1517,7 @@ static gboolean _dev_translate_roi(dt_develop_t *dev, cairo_t *cr, int32_t width
   if(proc_wd == 0.f || proc_ht == 0.f) return TRUE;
 
   // Get image's origin position and scale
-  const float zoom_scale = dt_dev_get_zoom_level(dev);  
+  const float zoom_scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
   const float tx = ceilf(0.5f * width - dev->x * proc_wd * zoom_scale);
   const float ty = ceilf(0.5f * height - dev->y * proc_ht * zoom_scale);
 
@@ -1514,7 +1530,7 @@ gboolean dt_dev_rescale_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32
 {
   if(_dev_translate_roi(dev, cr, width, height))
     return TRUE;
-  const float scale = dev->scaling * dt_dev_get_preview_natural_scale(dev);
+  const float scale = dt_dev_get_fit_scale(dev);
   cairo_scale(cr, scale, scale);
   
   return FALSE;
@@ -1524,7 +1540,7 @@ gboolean dt_dev_rescale_roi_to_input(dt_develop_t *dev, cairo_t *cr, int32_t wid
 {
   if(_dev_translate_roi(dev, cr, width, height))
     return TRUE;
-  const float scale = dt_dev_get_zoom_level(dev);
+  const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
   cairo_scale(cr, scale, scale);
   
   return FALSE;
@@ -1582,7 +1598,7 @@ gboolean dt_dev_roi_to_input_space(dt_develop_t *dev, /*gboolean normalized_in,*
   pzx /= scale;
   pzy /= scale;
 
-  // Now, the coordinate is in backbuf space.
+  // Now, the coordinates are in preview backbuf size.
   float pts[2] = { pzx, pzy };
 
   // We need to undistort them to get input space

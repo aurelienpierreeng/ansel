@@ -20,7 +20,6 @@ else()
     add_custom_command(
       OUTPUT ${pofile}
       COMMAND sh -c "${po4a-updatepo_BIN} -f pod ${files} -p po/${pofile}"
-      DEPENDS ${deps}
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../
     )
     add_custom_target(update-manpage-${language} DEPENDS ${pofile})

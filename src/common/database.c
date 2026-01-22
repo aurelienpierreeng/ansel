@@ -2868,19 +2868,32 @@ lock_again:
       char buf[64];
       memset(buf, 0, sizeof(buf));
       fd = g_open(*lockfile, O_RDWR | O_CREAT, 0666);
-      if(fd != -1)
+      
+      if(fd == -1)
       {
-        int foo;
-        if((foo = read(fd, buf, sizeof(buf) - 1)) > 0)
+        // failed to open the lock file
+        const int err = errno;
+        fprintf(stderr, "[init] error opening the database lock file for reading: %s\n", strerror(err));
+        db->error_message = g_strdup_printf(_("error opening the database lock file for reading: %s"), strerror(err));
+      }
+      else
+      {
+        // successfully opened the lock file, read the PID
+        const int bytes_read = read(fd, buf, sizeof(buf) - 1);
+        
+        if(bytes_read > 0)
         {
+          // lock file contains a PID
           db->error_other_pid = atoi(buf);
+          
           if(!pid_is_alive(db->error_other_pid))
           {
-            // the other process seems to no longer exist. unlink the .lock file and try again
+            // stale lock file - close fd before unlinking (required on Windows)
+            close(fd);
             g_unlink(*lockfile);
+            
             if(lock_tries < 5)
             {
-              close(fd);
               goto lock_again;
             }
             else
@@ -2891,25 +2904,21 @@ lock_again:
           }
           else
           {
-            fprintf(
-              stderr,
-              "[init] the database lock file contains a pid that seems to be alive in your system: %d\n",
-              db->error_other_pid);
-            db->error_message = g_strdup_printf(_("the database lock file contains a pid that seems to be alive in your system: %d"), db->error_other_pid);
+            // lock file contains a live PID
+            close(fd);
+            fprintf(stderr, "[init] the database lock file contains a pid that seems to be alive in your system: %d\n",
+                    db->error_other_pid);
+            db->error_message = g_strdup_printf(_("the database lock file contains a pid that seems to be alive in your system: %d"), 
+                                                db->error_other_pid);
           }
         }
         else
         {
+          // lock file is empty or unreadable
+          close(fd);
           fprintf(stderr, "[init] the database lock file seems to be empty\n");
           db->error_message = g_strdup_printf(_("the database lock file seems to be empty"));
         }
-        close(fd);
-      }
-      else
-      {
-        int err = errno;
-        fprintf(stderr, "[init] error opening the database lock file for reading: %s\n", strerror(err));
-        db->error_message = g_strdup_printf(_("error opening the database lock file for reading: %s"), strerror(err));
       }
     }
   }

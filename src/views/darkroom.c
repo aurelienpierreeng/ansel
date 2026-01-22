@@ -148,6 +148,23 @@ static dt_darkroom_layout_t _lib_darkroom_get_layout(dt_view_t *self)
   return DT_DARKROOM_LAYOUT_EDITING;
 }
 
+static gboolean _darkroom_is_only_selected_sample(gboolean is_primary_sample, dt_colorpicker_sample_t *selected_sample, gboolean display_samples)
+{
+  return !is_primary_sample && selected_sample && !darktable.lib->proxy.colorpicker.display_samples;
+}
+
+/**
+ * @brief Draw colorpicker samples overlays in darkroom view
+ * 
+ * @param self actual view
+ * @param cri cairo context
+ * @param width width of the widget
+ * @param height height of the widget
+ * @param pozx x pointer
+ * @param pozy y pointer
+ * @param samples list of samples to draw
+ * @param is_primary_sample whether we are drawing the primary sample or live samples
+ */
 static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
                                    int32_t width, int32_t height, int32_t pozx, int32_t pozy,
                                    GSList *samples, gboolean is_primary_sample)
@@ -158,31 +175,21 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
 
   cairo_save(cri);
   // The colorpicker samples bounding rectangle should only be displayed inside the visible image
-  const int pwidth = (dev->pipe->output_backbuf_width) / darktable.gui->ppd;
-  const int pheight = (dev->pipe->output_backbuf_height) / darktable.gui->ppd;
-
-  const double hbar = (self->width - pwidth) * .5;
-  const double tbar = (self->height - pheight) * .5;
-  cairo_rectangle(cri, hbar, tbar, pwidth, pheight);
-  cairo_clip(cri);
 
   const double wd = dev->preview_pipe->backbuf_width;
   const double ht = dev->preview_pipe->backbuf_height;
-  const double zoom_scale = dt_dev_get_zoom_scale(dev, 1);
-  const double lw = 1.0 / zoom_scale;
+  const double scale = dt_dev_get_fit_scale(dev);
+  const double lw = 1.0 / scale;
   const double dashes[1] = { lw * 4.0 };
 
-  cairo_translate(cri, 0.5 * width, 0.5 * height);
-  cairo_scale(cri, zoom_scale, zoom_scale);
-  cairo_translate(cri, -0.5 * wd - pozx * wd, -0.5 * ht - pozy * ht);
+  dt_dev_rescale_roi(dev, cri, width, height);
 
   // makes point sample crosshair gap look nicer
   cairo_set_line_cap(cri, CAIRO_LINE_CAP_SQUARE);
 
   dt_colorpicker_sample_t *selected_sample = darktable.lib->proxy.colorpicker.selected_sample;
-  const gboolean only_selected_sample = !is_primary_sample && selected_sample
-    && !darktable.lib->proxy.colorpicker.display_samples;
-
+  const gboolean only_selected_sample = _darkroom_is_only_selected_sample(is_primary_sample, selected_sample, darktable.lib->proxy.colorpicker.display_samples);
+  
   for( ; samples; samples = g_slist_next(samples))
   {
     dt_colorpicker_sample_t *sample = samples->data;
@@ -215,7 +222,7 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
       if(is_primary_sample)
       {
         // handles
-        const double hw = 5. / zoom_scale;
+        const double hw = 5. / scale;
         cairo_rectangle(cri, x - hw, y - hw, 2. * hw, 2. * hw);
         cairo_rectangle(cri, x - hw, h - hw, 2. * hw, 2. * hw);
         cairo_rectangle(cri, w - hw, y - hw, 2. * hw, 2. * hw);
@@ -225,31 +232,32 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
     else if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
     {
       // FIXME: to be really accurate, the colorpicker should render precisely over the nearest pixelpipe pixel, but this gets particularly tricky to do with iop pickers with transformations after them in the pipeline
-      double x = sample->point[0] * wd, y = sample->point[1] * ht;
+      double x = sample->point[0] * wd;
+      double y = sample->point[1] * ht;
       cairo_user_to_device(cri, &x, &y);
       x=round(x+0.5)-0.5;
       y=round(y+0.5)-0.5;
       // render picker center a reasonable size in device pixels
-      half_px = round(half_px * zoom_scale);
+      half_px = round(half_px * scale);
       if(half_px < min_half_px_device)
       {
         half_px = min_half_px_device;
         show_preview_pixel_scale = FALSE;
       }
       // crosshair radius
-      double cr = (is_primary_sample ? 4. : 5.) * half_px;
-      if(sample == selected_sample) cr *= 2;
+      double crosshair = (is_primary_sample ? 4. : 5.) * half_px;
+      if(sample == selected_sample) crosshair *= 2;
       cairo_device_to_user(cri, &x, &y);
-      cairo_device_to_user_distance(cri, &cr, &half_px);
+      cairo_device_to_user_distance(cri, &crosshair, &half_px);
 
       // "handles"
       if(is_primary_sample)
-        cairo_arc(cri, x, y, cr, 0., 2. * M_PI);
+        cairo_arc(cri, x, y, crosshair, 0., 2. * M_PI);
       // crosshair
-      cairo_move_to(cri, x - cr, y);
-      cairo_line_to(cri, x + cr, y);
-      cairo_move_to(cri, x, y - cr);
-      cairo_line_to(cri, x, y + cr);
+      cairo_move_to(cri, x - crosshair, y);
+      cairo_line_to(cri, x + crosshair, y);
+      cairo_move_to(cri, x, y - crosshair);
+      cairo_line_to(cri, x, y + crosshair);
     }
 
     // default is to draw 1 (logical) pixel light lines with 1
@@ -259,12 +267,12 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
     cairo_set_source_rgba(cri, 0.0, 0.0, 0.0, 0.4);
     cairo_stroke_preserve(cri);
 
-    cairo_set_line_width(cri, lw * line_scale);
-    cairo_set_dash(cri, dashes,
-                   !is_primary_sample
+    const gboolean draw_dashed = !is_primary_sample
                    && sample != selected_sample
-                   && sample->size == DT_LIB_COLORPICKER_SIZE_BOX,
-                   0.0);
+                   && sample->size == DT_LIB_COLORPICKER_SIZE_BOX;
+    cairo_set_line_width(cri, lw * line_scale);
+    cairo_set_dash(cri, dashes, draw_dashed, 0.0);
+
     cairo_set_source_rgba(cri, 1.0, 1.0, 1.0, 0.8);
     cairo_stroke(cri);
 
@@ -350,11 +358,12 @@ void expose(
     // draw image
     mutex = &dev->pipe->backbuf_mutex;
     dt_pthread_mutex_lock(mutex);
-    const float wd = dev->pipe->output_backbuf_width;
-    const float ht = dev->pipe->output_backbuf_height;
+    float wd = dev->pipe->output_backbuf_width;
+    float ht = dev->pipe->output_backbuf_height;
     stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
     surface = dt_cairo_image_surface_create_for_data(dev->pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
-
+    wd /= darktable.gui->ppd;
+    ht /= darktable.gui->ppd;
     cairo_translate(cr, ceilf(.5f * (width - wd)), ceilf(.5f * (height - ht)));
 
     if(dev->iso_12646.enabled)
@@ -381,16 +390,19 @@ void expose(
     // draw preview
     mutex = &dev->preview_pipe->backbuf_mutex;
     dt_pthread_mutex_lock(mutex);
-    const float pr_wd = dev->preview_pipe->output_backbuf_width;
-    const float pr_ht = dev->preview_pipe->output_backbuf_height;
-    const float zoom_scale = dev->scaling;
+    float pr_wd = dev->preview_pipe->output_backbuf_width;
+    float pr_ht = dev->preview_pipe->output_backbuf_height;
     
+    stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, pr_wd);
+    surface = cairo_image_surface_create_for_data(dev->preview_pipe->output_backbuf, CAIRO_FORMAT_RGB24, pr_wd, pr_ht, stride);
+
+
     if(dev->iso_12646.enabled)
     {
       // Because the preview pipe renders an unclipped image, we need to find
       // the preview's ROI (Region of Interest) dimensions in widget space, then
       // draw a white rectangle around it.
-      const float scale = zoom_scale * dt_dev_get_preview_natural_scale(dev);
+      const float scale = dt_dev_get_fit_scale(dev);
       const float roi_wd = fminf(pr_wd * scale, dev->width);
       const float roi_ht = fminf(pr_ht * scale, dev->height);
       
@@ -406,11 +418,8 @@ void expose(
     }
 
     // clip to image area only
-    dt_dev_clip_roi(dev, cr, width, height); // GOOD !
-    dt_dev_rescale_roi(dev, cr, width, height); // GOOD !
-
-    stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, pr_wd);
-    surface = cairo_image_surface_create_for_data(dev->preview_pipe->output_backbuf, CAIRO_FORMAT_RGB24, pr_wd, pr_ht, stride);
+    dt_dev_clip_roi(dev, cr, width, height);
+    dt_dev_rescale_roi(dev, cr, width, height);
 
     cairo_rectangle(cr, 0, 0, pr_wd, pr_ht);
     cairo_set_source_surface(cr, surface, 0, 0);
@@ -462,7 +471,7 @@ void expose(
   {
     const float wd = dev->preview_pipe->output_backbuf_width;
     const float ht = dev->preview_pipe->output_backbuf_height;
-    const float scaling = dev->scaling * dt_dev_get_preview_natural_scale(dev);
+    const float scaling = dt_dev_get_overlay_scale(dev);
 
     cairo_save(cri);
     // don't draw guides on image margins
@@ -479,11 +488,8 @@ void expose(
   // FIXME: draw picker in gui_post_expose() hook in libs/colorpicker.c -- catch would be that live samples would appear over guides, softproof/gamut text overlay would be hidden by picker
   if(dt_iop_color_picker_is_visible(dev))
   {
-    /*
     GSList samples = { .data = darktable.lib->proxy.colorpicker.primary_sample, .next = NULL };
-    _darkroom_pickers_draw(self, cri, width, height, zoom, closeup, zoom_x, zoom_y,
-                           &samples, TRUE);
-    */
+    _darkroom_pickers_draw(self, cri, width, height, pointerx, pointery, &samples, TRUE);
   }
   else
   {
@@ -2048,6 +2054,7 @@ void mouse_leave(dt_view_t *self)
     dt_control_queue_redraw_center();
 
   // reset any changes the selected plugin might have made.
+  dt_control_set_cursor(GDK_LEFT_PTR);
   dt_control_change_cursor(GDK_LEFT_PTR);
 }
 
@@ -2078,6 +2085,16 @@ static gboolean mouse_in_imagearea(dt_view_t *self, double x, double y)
 static gboolean mouse_in_actionarea(dt_view_t *self, double x, double y)
 {
   return _is_in_frame(self->width, self->height, round(x), round(y));
+}
+
+static void _set_default_cursor(dt_view_t *self, double x, double y)
+{
+  if(mouse_in_imagearea(self, x, y))
+    dt_control_set_cursor(GDK_DOT);
+  else if(mouse_in_actionarea(self, x, y))
+    dt_control_set_cursor(GDK_CROSSHAIR);
+  else
+    dt_control_set_cursor(GDK_LEFT_PTR);
 }
 
 void mouse_enter(dt_view_t *self)
@@ -2122,15 +2139,8 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   dt_develop_t *dev = (dt_develop_t *)self->data;
   dt_control_t *ctl = darktable.control;
 
-  //fprintf(stdout, "dev->xy (%2.2f, %2.2f)\n", dev->x, dev->y);
-
-  // change cursor appearance
-  if(mouse_in_imagearea(self, x, y))
-    dt_control_change_cursor(GDK_DOT);
-  else if(mouse_in_actionarea(self, x, y))
-    dt_control_change_cursor(GDK_CROSSHAIR);
-  else
-    dt_control_change_cursor(GDK_LEFT_PTR);
+  // change cursor appearance by default
+  _set_default_cursor(self, x, y);
 
   if(!mouse_in_actionarea(self, x, y)) return;
 
@@ -2150,15 +2160,15 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
 
       if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
       {
-        sample->box[0] = fmaxf(0.0, MIN(sample->point[0], .5f + mouse_x) - delta_x);
-        sample->box[1] = fmaxf(0.0, MIN(sample->point[1], .5f + mouse_y) - delta_y);
-        sample->box[2] = fminf(1.0, MAX(sample->point[0], .5f + mouse_x) + delta_x);
-        sample->box[3] = fminf(1.0, MAX(sample->point[1], .5f + mouse_y) + delta_y);
+        sample->box[0] = fmaxf(0.0, MIN(sample->point[0], mouse_x) - delta_x);
+        sample->box[1] = fmaxf(0.0, MIN(sample->point[1], mouse_y) - delta_y);
+        sample->box[2] = fminf(1.0, MAX(sample->point[0], mouse_x) + delta_x);
+        sample->box[3] = fminf(1.0, MAX(sample->point[1], mouse_y) + delta_y);
       }
       else if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
       {
-        sample->point[0] = .5f + mouse_x;
-        sample->point[1] = .5f + mouse_y;
+        sample->point[0] = mouse_x;
+        sample->point[1] = mouse_y;
       }
     }
 
@@ -2185,8 +2195,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   // panning with left mouse button
   if(darktable.control->button_down && darktable.control->button_down_which == 1 && dev->scaling > 1)
   {
-    const float nat_scale = dev->natural_scale;
-    const float scale = nat_scale * dev->scaling;
+    const float scale = dt_dev_get_zoom_level(dev);
     const double clicked_x = ctl->button_x;
     const double clicked_y = ctl->button_y;
     // delta in roi scale
@@ -2228,7 +2237,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   {
     // only sample box picker at end, for speed
     if(darktable.lib->proxy.colorpicker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
-      dt_control_change_cursor(GDK_LEFT_PTR);
+      dt_control_set_cursor(GDK_LEFT_PTR);
 
     dt_control_queue_redraw_center();
 
@@ -2267,8 +2276,10 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 
   if(dt_iop_color_picker_is_visible(dev))
   {
-    float zoom_x = 0.f;
-    float zoom_y = 0.f;
+    float pzx = 0.f;
+    float pzy = 0.f;
+    dt_dev_retrieve_full_pos(dev, x, y, &pzx, &pzy);
+
     float zoom_scale = dev->scaling;
     const int procw = dev->preview_pipe->backbuf_width;
     const int proch = dev->preview_pipe->backbuf_height;
@@ -2283,8 +2294,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 
         // FIXME: here and in mouse move use to dt_lib_colorpicker_set_{box_area,point} interface? -- would require a different hack for figuring out base of the drag
         // hack: for box pickers, these represent the "base" point being dragged
-        sample->point[0] = zoom_x;
-        sample->point[1] = zoom_y;
+        sample->point[0] = pzx;
+        sample->point[1] = pzy;
 
         if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
         {
@@ -2296,16 +2307,16 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
           // initialized to calm gcc-11
           float opposite_x = 0.f, opposite_y = 0.f;
 
-          if(fabsf(zoom_x - sample->box[0]) <= hx)
+          if(fabsf(pzx - sample->box[0]) <= hx)
             opposite_x = sample->box[2];
-          else if(fabsf(zoom_x - sample->box[2]) <= hx)
+          else if(fabsf(pzx - sample->box[2]) <= hx)
             opposite_x = sample->box[0];
           else
             on_corner_prev_box = FALSE;
 
-          if(fabsf(zoom_y - sample->box[1]) <= hy)
+          if(fabsf(pzy - sample->box[1]) <= hy)
             opposite_y = sample->box[3];
-          else if(fabsf(zoom_y - sample->box[3]) <= hy)
+          else if(fabsf(pzy - sample->box[3]) <= hy)
             opposite_y = sample->box[1];
           else
             on_corner_prev_box = FALSE;
@@ -2317,12 +2328,12 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
           }
           else
           {
-            sample->box[0] = fmaxf(0.0, zoom_x - delta_x);
-            sample->box[1] = fmaxf(0.0, zoom_y - delta_y);
-            sample->box[2] = fminf(1.0, zoom_x + delta_x);
-            sample->box[3] = fminf(1.0, zoom_y + delta_y);
+            sample->box[0] = fmaxf(0.0, pzx - delta_x);
+            sample->box[1] = fmaxf(0.0, pzy - delta_y);
+            sample->box[2] = fminf(1.0, pzx + delta_x);
+            sample->box[3] = fminf(1.0, pzy + delta_y);
           }
-          dt_control_change_cursor(GDK_FLEUR);
+          dt_control_set_cursor(GDK_FLEUR);
         }
       }
       dt_control_queue_redraw_center();
@@ -2340,8 +2351,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
           dt_colorpicker_sample_t *live_sample = samples->data;
           if(live_sample->size == DT_LIB_COLORPICKER_SIZE_BOX && picker->kind != DT_COLOR_PICKER_POINT)
           {
-            if(zoom_x < live_sample->box[0] || zoom_x > live_sample->box[2]
-               || zoom_y < live_sample->box[1] || zoom_y > live_sample->box[3])
+            if(pzx < live_sample->box[0] || pzx > live_sample->box[2]
+               || pzy < live_sample->box[1] || pzy > live_sample->box[3])
               continue;
             dt_lib_colorpicker_set_box_area(darktable.lib, live_sample->box);
           }
@@ -2351,7 +2362,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
             float slop_px = MAX(26.0f, roundf(3.0f * zoom_scale));
             const float slop_x = slop_px / (procw * zoom_scale);
             const float slop_y = slop_px / (proch * zoom_scale);
-            if(fabsf(zoom_x - live_sample->point[0]) > slop_x || fabsf(zoom_y - live_sample->point[1]) > slop_y)
+            if(fabsf(pzx - live_sample->point[0]) > slop_x || fabsf(pzy - live_sample->point[1]) > slop_y)
               continue;
             dt_lib_colorpicker_set_point(darktable.lib, live_sample->point);
           }
@@ -2397,7 +2408,7 @@ static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int 
 
   // Commit the new scaling
   const float step = 1.02f;
-  dev->scaling *= powf(step, (float)flow);
+  dev->scaling *= powf(step, (float)-flow);
 
   if(dt_dev_check_zoom_scale_bounds(dev)) return TRUE;
 
