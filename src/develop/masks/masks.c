@@ -1377,9 +1377,6 @@ void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, in
   if(!gui) return;
   if(!form) return;
 
-  dt_pthread_mutex_t *mutex = &dev->preview_pipe->backbuf_mutex;
-  dt_pthread_mutex_lock(mutex);
-
   int wd, ht;
   dt_dev_get_processed_size(dev, &wd, &ht);
 
@@ -1409,8 +1406,6 @@ void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, in
     form->functions->post_expose(cr, zoom_scale, gui, 0, g_list_length(form->points));
 
   cairo_restore(cr);
-  dt_pthread_mutex_unlock(mutex);
-
 }
 
 void dt_masks_clear_form_gui(dt_develop_t *dev)
