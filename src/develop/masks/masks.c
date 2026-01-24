@@ -1343,8 +1343,11 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
 
   // draw the source shape
   {
+    // trick to draw only the current polygon while editing but the full shaope when not
+    const int nodes_nb = nb + !gui->creation;
+    
     if(draw_shape_func)
-      (*draw_shape_func)(cr, gpt->source, gpt->source_count, nb, FALSE, TRUE);
+      (*draw_shape_func)(cr, gpt->source, gpt->source_count, nodes_nb, FALSE, TRUE);
 
     dt_draw_set_dash_style(cr, DT_MASKS_NO_DASH, zoom_scale);
     //dark line
