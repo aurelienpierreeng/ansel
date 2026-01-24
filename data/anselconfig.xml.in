@@ -1922,77 +1922,77 @@
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/spots/circle_size</name>
+    <name>plugins/darkroom/spots/circle/size</name>
     <type>float</type>
     <default>0.02</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/spots/circle_border</name>
+    <name>plugins/darkroom/spots/circle/border</name>
     <type>float</type>
     <default>0.02</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/spots/ellipse_radius_a</name>
+    <name>plugins/darkroom/spots/ellipse/radius_a</name>
     <type>float</type>
     <default>0.02</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/spots/ellipse_radius_b</name>
+    <name>plugins/darkroom/spots/ellipse/radius_b</name>
     <type>float</type>
     <default>0.01414</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/spots/ellipse_border</name>
+    <name>plugins/darkroom/spots/ellipse/border</name>
     <type>float</type>
     <default>0.02</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/spots/ellipse_rotation</name>
+    <name>plugins/darkroom/spots/ellipse/rotation</name>
     <type>float</type>
     <default>90.0</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/spots/ellipse_flags</name>
+    <name>plugins/darkroom/spots/ellipse/flags</name>
     <type>int</type>
     <default>0</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/spots/path_border</name>
+    <name>plugins/darkroom/spots/polygon/border</name>
     <type>float</type>
     <default>0.05</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/spots/brush_border</name>
+    <name>plugins/darkroom/spots/brush/border</name>
     <type>float</type>
     <default>0.05</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/spots/brush_density</name>
+    <name>plugins/darkroom/spots/brush/density</name>
     <type>float</type>
     <default>1.0</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/spots/brush_hardness</name>
+    <name>plugins/darkroom/spots/brush/hardness</name>
     <type>float</type>
     <default>0.66</default>
     <shortdescription/>
@@ -2160,7 +2160,7 @@
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/masks/path/border</name>
+    <name>plugins/darkroom/masks/polygon/border</name>
     <type>float</type>
     <default>0.05</default>
     <shortdescription/>

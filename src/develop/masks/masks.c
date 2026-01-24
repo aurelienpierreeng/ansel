@@ -2453,7 +2453,6 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *gui, dt_masks_fo
     {
       if(form->functions && form->functions->initial_source_pos)
       {
-        fprintf(stderr, "initial source pos from shape's function\n");
         form->functions->initial_source_pos(iwd, iht, &gui->pos_source[0], &gui->pos_source[1]);
       }
       else

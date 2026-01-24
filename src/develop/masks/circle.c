@@ -580,7 +580,6 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
     {
       radius_shape = dt_conf_get_float("plugins/darkroom/spots/circle/size");
       radius_border = dt_conf_get_float("plugins/darkroom/spots/circle/border");
-      fprintf(stderr, "Get mask config key %s to value %f\n", "plugins/darkroom/spots/circle/size", radius_shape);
     }
     else
     {
