@@ -422,31 +422,6 @@ static uint64_t _node_hash(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_
   }
 }
 
-static gchar *_debug_get_pipe_type_str(dt_dev_pixelpipe_type_t pipe_type)
-{
-  gchar *type_str = NULL;
-
-  switch(pipe_type & DT_DEV_PIXELPIPE_ANY)
-  {
-    case DT_DEV_PIXELPIPE_PREVIEW:
-      type_str = g_strdup("PREVIEW");
-      break;
-    case DT_DEV_PIXELPIPE_FULL:
-      type_str = g_strdup("FULL");
-      break;
-    case DT_DEV_PIXELPIPE_THUMBNAIL:
-      type_str = g_strdup("THUMBNAIL");
-      break;
-    case DT_DEV_PIXELPIPE_EXPORT:
-      type_str = g_strdup("EXPORT");
-      break;
-    default:
-      type_str = g_strdup("UNKNOWN");
-  }
-  return type_str;
-}
-
-
 void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   /* Traverse the pipeline node by node and compute the cumulative (global) hash of each module.
@@ -502,10 +477,8 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     hash = dt_hash(hash, (const char *)&local_hash, sizeof(uint64_t));
     piece->global_hash = hash;
 
-    gchar *type = _debug_get_pipe_type_str(pipe->type);
+    gchar *type = _pipe_type_to_str(pipe->type);
     dt_print(DT_DEBUG_PIPE, "[pixelpipe] global hash for %20s (%s) in pipe %s with hash %lu\n", piece->module->op, piece->module->multi_name, type, (long unsigned int)hash);
-    g_free(type);
-
     // Mask hash: raster masks are affected by ROI out size and distortions.
 
     // This could be achieved upon (piece->module->operation_tags() & IOP_TAG_CLIPPING) only
@@ -569,10 +542,9 @@ void dt_dev_pixelpipe_synch(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, GList *
  */
 void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, const char *caller_func)
 {
-  gchar *type = _debug_get_pipe_type_str(pipe->type);
+  gchar *type = _pipe_type_to_str(pipe->type);
   dt_print(DT_DEBUG_DEV, "[pixelpipe] synch all modules with defaults_params for pipe %s called from %s\n", type, caller_func);
   dt_print(DT_DEBUG_DEV, "[pixelpipe] synch all modules with history for pipe %s called from %s\n", type, caller_func);
-  g_free(type);
   // go through all history items and adjust params
   // note that we don't necessarily process the whole history, history_end is an user param.
   const uint32_t history_end = dt_dev_get_history_end(dev);
@@ -604,10 +576,8 @@ void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
     {
       dt_iop_commit_params(piece->module, piece->module->default_params, piece->module->default_blendop_params,
                            pipe, piece);
-      
-      gchar *pipe_type = _debug_get_pipe_type_str(pipe->type);
-      dt_print(DT_DEBUG_PIPE, "[pixelpipe] info: committed default params for %s (%s) in pipe %s \n", piece->module->op, piece->module->multi_name, pipe_type);
-      g_free(pipe_type);
+    
+      dt_print(DT_DEBUG_PIPE, "[pixelpipe] info: committed default params for %s (%s) in pipe %s \n", piece->module->op, piece->module->multi_name, type);
     }
   }
 
@@ -628,6 +598,7 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   // Note however that the sync_top method is only used when adding new history items
   // on top. So we need to resync every history item from end to start, until
   // we find the previously synchronized one. This uses history hashes.
+  gchar *type = _pipe_type_to_str(pipe->type);
   GList *last_item = g_list_nth(dev->history, dt_dev_get_history_end(dev) - 1);
   if(last_item)
   {
@@ -657,9 +628,7 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     for(GList *history = first_item; history && history != fence_item; history = g_list_next(history))
     {
       dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
-      gchar *type = _debug_get_pipe_type_str(pipe->type);
       dt_print(DT_DEBUG_DEV, "[pixelpipe] synch top history module `%s` (%s) for pipe %s\n", hist->module->op, hist->module->multi_name, type);
-      g_free(type);
       dt_dev_pixelpipe_synch(pipe, dev, history);
     }
 
@@ -669,9 +638,7 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   }
   else
   {
-    gchar *type = _debug_get_pipe_type_str(pipe->type);
     dt_print(DT_DEBUG_DEV, "[pixelpipe] synch top history module missing error for pipe %s\n", type);
-    g_free(type);
   }
 }
 
@@ -685,7 +652,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   const dt_dev_pixelpipe_change_t status = pipe->changed;
   pipe->changed = DT_DEV_PIPE_UNCHANGED;
 
-  gchar *type = _debug_get_pipe_type_str(pipe->type);
+  gchar *type = _pipe_type_to_str(pipe->type);
   char *status_str = g_strdup_printf("%s%s%s%s%s",
                                   (status & DT_DEV_PIPE_UNCHANGED) ? "UNCHANGED " : "",
                                   (status & DT_DEV_PIPE_REMOVE) ? "REMOVE " : "",
@@ -697,7 +664,6 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
      type, status_str);
 
   g_free(status_str);
-  g_free(type);
 
   // mask display off as a starting point
   pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
@@ -734,9 +700,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   }
   dt_pthread_mutex_unlock(&dev->history_mutex);
 
-  gchar *pipe_type = _debug_get_pipe_type_str(pipe->type);
-  dt_show_times_f(&start, "[dt_dev_pixelpipe_change] pipeline resync on the current modules stack", "for pipe %s", pipe_type);
-  g_free(pipe_type);
+  dt_show_times_f(&start, "[dt_dev_pixelpipe_change] pipeline resync on the current modules stack", "for pipe %s", type);
 }
 
 static void get_output_format(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
@@ -1833,12 +1797,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(input_entry == NULL) return 1;
 
   dt_pixel_cache_entry_t *output_entry = NULL;
-  gchar *type = _debug_get_pipe_type_str(pipe->type);
-  char *name = g_strdup_printf("module %s (%s) for pipe %s", module->op, module->multi_name, type);
+  gchar *type = _pipe_type_to_str(pipe->type);
+  gchar *name = g_strdup_printf("module %s (%s) for pipe %s", module->op, module->multi_name, type);
   gboolean new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
                                                   output, out_format, &output_entry);
   g_free(name);
-  g_free(type);
   if(output_entry == NULL) return 1;
 
   dt_pixelpipe_flow_t pixelpipe_flow = (PIXELPIPE_FLOW_NONE | PIXELPIPE_FLOW_HISTOGRAM_NONE);
@@ -1849,8 +1812,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // at the last-found cache line.
   if(!pipe->reentry && !new_entry)
   {
-    dt_print(DT_DEBUG_PIPE, "[pipeline] found %" PRIu64 " (%s) for %s pipeline in cache\n", hash, module ? module->op : "noop",
-               _pipe_type_to_str(pipe->type));
+    dt_print(DT_DEBUG_PIPE, "[pipeline] found %" PRIu64 " (%s) for %s pipeline in cache\n", hash, module ? module->op : "noop", type);
 
     // Sample all color pickers and histograms
     _sample_all(pipe, dev, input, output, &roi_in, roi_out, input_format, out_format, module,
@@ -1922,7 +1884,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // Unlock read and write locks, decrease reference count on input
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, FALSE, output_entry);
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
-
+  
   if(error)
   {
     // No point in keeping garbled output
@@ -2327,8 +2289,9 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
                               const int raster_mask_id, const dt_iop_module_t *target_module,
                               gboolean *free_mask, int *error)
 {
+  if(!error) return NULL;
   // TODO: refactor this mess to limit for/if nesting
-  if(error) *error = 0;
+  *error = 0;
 
   gchar *clean_target_name = delete_underscore(target_module->name());
   gchar *target_name = g_strdup_printf("%s (%s)", clean_target_name, target_module->multi_name);
@@ -2365,7 +2328,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
   int err_ret = !_dt_dev_raster_mask_check(source_piece, current_piece, target_module);
 
   // Pass on the error to the returning pointer
-  if(error) *error = err_ret;
+  *error = err_ret;
 
   if(!err_ret)
   {
@@ -2375,19 +2338,14 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
     gchar *source_name = g_strdup_printf("%s (%s)", clean_source_name, source_piece->module->multi_name);
     raster_mask = dt_pixelpipe_raster_get(source_piece->raster_masks, raster_mask_id);
     
-    #ifdef _DEBUG
-    if(!raster_mask) raise(SIGTRAP);
-    #endif
-    
+
     // Print debug stuff
-    gchar *type = _debug_get_pipe_type_str(pipe->type);
+    gchar *type = _pipe_type_to_str(pipe->type);
     if(raster_mask)
     {
       dt_print(DT_DEBUG_MASKS,
-        "[raster masks] found in %s mask id %i from %s (%s) for module %s (%s) in pipe %s with hash %" PRIu64 "\n",
-        "internal",
-        raster_mask_id, source_name, source_piece->module->multi_name, target_name, target_module->multi_name,
-        type, raster_hash);
+        "[raster masks] found in %s mask id %i from %s for module %s in pipe %s with hash %" PRIu64 "\n",
+        "internal", raster_mask_id, source_name, target_name, type, raster_hash);
 
       // Disable re-entry if any
       dt_dev_pixelpipe_unset_reentry(pipe, raster_hash);
@@ -2443,7 +2401,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
           if(*free_mask) dt_free_align(raster_mask);
           *free_mask = TRUE;
           raster_mask = transformed_mask;
-          fprintf(stdout, "doing transform\n");
+          dt_print(DT_DEBUG_MASKS, "[raster masks] doing transform\n");
         }
         else if(!module->module->distort_mask &&
                 (module->processed_roi_in.width != module->processed_roi_out.width ||
@@ -2461,11 +2419,10 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
       {
         dt_print(DT_DEBUG_MASKS, "[raster masks] found mask id %i from %s for module %s (%s) in pipe %s\n",
                     raster_mask_id, source_name, delete_underscore(module->module->name()),
-                    module->module->multi_name, _debug_get_pipe_type_str(pipe->type));
+                    module->module->multi_name, _pipe_type_to_str(pipe->type));
         break;
       }
     }
-    g_free(type);
   }
 
   g_free(clean_target_name);
