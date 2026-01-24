@@ -35,6 +35,39 @@ const char *dt_pixelpipe_name(dt_dev_pixelpipe_type_t pipe)
   }
 }
 
+
+GHashTable *dt_pixelpipe_raster_alloc()
+{
+  return g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, dt_free_align_ptr);
+}
+
+void dt_pixelpipe_raster_cleanup(GHashTable *raster_masks)
+{
+  g_hash_table_destroy(raster_masks);
+  raster_masks = NULL;
+}
+
+gboolean dt_pixelpipe_raster_replace(GHashTable *raster_masks, float *mask)
+{
+  return g_hash_table_replace(raster_masks, GINT_TO_POINTER(0), mask);
+}
+
+gboolean dt_pixelpipe_raster_remove(GHashTable *raster_masks)
+{
+  return g_hash_table_remove(raster_masks, GINT_TO_POINTER(0));
+}
+
+float *dt_pixelpipe_raster_get(GHashTable *raster_masks, const int raster_mask_id)
+{
+  if(!raster_masks) return NULL;
+  
+  float *result = g_hash_table_lookup(raster_masks, GINT_TO_POINTER(raster_mask_id));
+  if(result == NULL)
+    fprintf(stderr, "WARNING: The mask #%i could not be found in the raster mask hashtable", raster_mask_id);
+  
+  return result;
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

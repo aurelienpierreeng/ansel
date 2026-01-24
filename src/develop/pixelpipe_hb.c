@@ -329,8 +329,7 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
     piece->blendop_data = NULL;
     free(piece->histogram);
     piece->histogram = NULL;
-    g_hash_table_destroy(piece->raster_masks);
-    piece->raster_masks = NULL;
+    dt_pixelpipe_raster_cleanup(piece->raster_masks);
     free(piece);
   }
   g_list_free(pipe->nodes);
@@ -385,7 +384,7 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     piece->bypass_cache = FALSE;
     piece->process_cl_ready = 0;
     piece->process_tiling_ready = 0;
-    piece->raster_masks = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, dt_free_align_ptr);
+    piece->raster_masks = dt_pixelpipe_raster_alloc();
     memset(&piece->processed_roi_in, 0, sizeof(piece->processed_roi_in));
     memset(&piece->processed_roi_out, 0, sizeof(piece->processed_roi_out));
 
@@ -2374,8 +2373,12 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
 
     gchar *clean_source_name = delete_underscore(source_piece->module->name());
     gchar *source_name = g_strdup_printf("%s (%s)", clean_source_name, source_piece->module->multi_name);
-    raster_mask = g_hash_table_lookup(source_piece->raster_masks, GINT_TO_POINTER(raster_mask_id));
-
+    raster_mask = dt_pixelpipe_raster_get(source_piece->raster_masks, raster_mask_id);
+    
+    #ifdef _DEBUG
+    if(!raster_mask) raise(SIGTRAP);
+    #endif
+    
     // Print debug stuff
     gchar *type = _debug_get_pipe_type_str(pipe->type);
     if(raster_mask)

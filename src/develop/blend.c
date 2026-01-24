@@ -664,7 +664,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
   if(piece->pipe->store_all_raster_masks || dt_iop_is_raster_mask_used(self, 0))
   {
     // The hash table does not survive to a pipeline restart...
-    g_hash_table_replace(piece->raster_masks, GINT_TO_POINTER(0), _mask);
+    dt_pixelpipe_raster_replace(piece->raster_masks, _mask);
     dt_print(DT_DEBUG_MASKS, "[raster masks] replacing raster mask id 0 for module %s (%s) for pipe %i with hash %" PRIu64 "\n", piece->module->op,
              piece->module->multi_name, piece->pipe->type, piece->global_mask_hash);
   }
@@ -672,7 +672,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
   {
     dt_print(DT_DEBUG_MASKS, "[raster masks] destroying raster mask id 0 for module %s (%s) for pipe %i\n", piece->module->op,
              piece->module->multi_name, piece->pipe->type);
-    g_hash_table_remove(piece->raster_masks, GINT_TO_POINTER(0));
+    dt_pixelpipe_raster_remove(piece->raster_masks);
     dt_free_align(_mask);
   }
   // raster error is the only one we catch
@@ -1256,13 +1256,13 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
     }
 
     // The hash table does not survive to a pipeline restart...
-    g_hash_table_replace(piece->raster_masks, GINT_TO_POINTER(0), _mask);
+    dt_pixelpipe_raster_replace(piece->raster_masks, _mask);
   }
   else
   {
     dt_print(DT_DEBUG_MASKS, "[raster masks] destroying raster mask id 0 for module %s (%s) for pipe %i\n", piece->module->op,
              piece->module->multi_name, piece->pipe->type);
-    g_hash_table_remove(piece->raster_masks, GINT_TO_POINTER(0));
+    dt_pixelpipe_raster_remove(piece->raster_masks);
     dt_free_align(_mask);
   }
 

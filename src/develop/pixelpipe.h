@@ -74,6 +74,36 @@ const char *dt_pixelpipe_name(dt_dev_pixelpipe_type_t pipe);
 
 #include "develop/pixelpipe_hb.h"
 
+GHashTable *dt_pixelpipe_raster_alloc();
+void dt_pixelpipe_raster_cleanup(GHashTable *raster_masks);
+
+/**
+ * @brief Replace a raster mask in the raster masks hashtable of the pixelpipe.
+ * 
+ * @param raster_masks the raster masks hashtable of the pixelpipe
+ * @param mask the pointer to the mask
+ * @return gboolean TRUE if the key did not exist and was added, FALSE if it existed and was replaced.
+ */
+gboolean dt_pixelpipe_raster_replace(GHashTable *raster_masks, float *mask);
+
+/**
+ * @brief Remove the raster mask with id 0 from the raster masks hashtable of the pixelpipe.
+ * 
+ * @param raster_masks the raster masks hashtable of the pixelpipe
+ * @return gboolean TRUE if the key existed and was removed, FALSE if it did not exist and nothing changed.
+ */
+gboolean dt_pixelpipe_raster_remove(GHashTable *raster_masks);
+
+/**
+ * @brief Get the raster mask with given id from the raster masks hashtable of the pixelpipe.
+ * 
+ * @param raster_masks the raster masks hashtable of the pixelpipe
+ * @param raster_mask_id the raster mask id
+ * @return float* the pointer to the raster mask, or NULL if not found
+ */
+float *dt_pixelpipe_raster_get(GHashTable *raster_masks, const int raster_mask_id);
+
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
