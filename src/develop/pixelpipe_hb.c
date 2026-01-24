@@ -1825,6 +1825,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
     return 0;
   }
+  if(!new_entry)
+  {
+    // We have an output cache entry already, lock it for writing
+    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, TRUE, output_entry);
+  }
 
   /* get tiling requirement of module */
   dt_develop_tiling_t tiling = { 0 };
