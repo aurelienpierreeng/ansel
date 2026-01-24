@@ -98,7 +98,7 @@ void dt_control_change_cursor(dt_cursor_t curs)
   }
 }
 
-void dt_control_change_cursor_from_name(const char *curs_str)
+void dt_control_change_cursor_with_name(const char *curs_str)
 {
   if (!darktable.control->lock_cursor_shape)
   {
@@ -116,6 +116,7 @@ void dt_control_set_cursor(dt_cursor_t cursor)
 
 void dt_control_commit_cursor()
 {
+  if(darktable.control->log_busy > 0) return;
   dt_control_change_cursor(darktable.control->cursor);
 }
 
@@ -268,8 +269,7 @@ void *dt_control_expose(void *voidptr)
   {
     dt_control_draw_busy_msg(cr, width, height);
     // set the cursor to arrow with busy indicator
-    const char *curs_str = "progress";
-    dt_control_change_cursor_from_name(curs_str);
+    dt_control_change_cursor_with_name("progress");
   }
   else // Apply cursor change
     dt_control_commit_cursor();
