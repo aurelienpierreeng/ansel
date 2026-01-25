@@ -324,6 +324,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
       // Newly-allocated buffer: immediately lock in write mode until the caller
       // populates the content, so other threads may not lock it in read mode
       // before there is actually something to read.
+      fprintf(stderr, "[dev_pixelpipe] Lock entry (new cache entry %" PRIu64 " for %s pipeline)\n", hash, name);
       dt_dev_pixelpipe_cache_wrlock_entry(cache, hash, TRUE, cache_entry);
     }
 

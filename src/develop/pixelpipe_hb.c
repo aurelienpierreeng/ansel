@@ -78,19 +78,19 @@ static char *_pipe_type_to_str(int pipe_type)
   switch(pipe_type & DT_DEV_PIXELPIPE_ANY)
   {
     case DT_DEV_PIXELPIPE_PREVIEW:
-      r = "preview";
+      r = "PREVIEW";
       break;
     case DT_DEV_PIXELPIPE_FULL:
-      r = "full";
+      r = "FULL";
       break;
     case DT_DEV_PIXELPIPE_THUMBNAIL:
-      r = "thumbnail";
+      r = "THUMBNAIL";
       break;
     case DT_DEV_PIXELPIPE_EXPORT:
-      r = "export";
+      r = "EXPORT";
       break;
     default:
-      r = "unknown";
+      r = "UNKNOWN";
   }
   return r;
 }
@@ -1828,6 +1828,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(!new_entry)
   {
     // We have an output cache entry already, lock it for writing
+    fprintf(stderr, "[dev_pixelpipe] Lock entry (reusing cache entry %" PRIu64 " for '%s' pipeline)\n", hash, type);
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, TRUE, output_entry);
   }
 
@@ -1887,6 +1888,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   **out_format = piece->dsc_out = pipe->dsc;
 
   // Unlock read and write locks, decrease reference count on input
+  fprintf(stderr, "[dev_pixelpipe] Unlock entry %" PRIu64 " (finished processing module '%s' for '%s' pipeline)\n", hash, module->op, type);
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, FALSE, output_entry);
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
   
