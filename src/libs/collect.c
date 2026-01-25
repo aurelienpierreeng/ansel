@@ -625,8 +625,7 @@ static gboolean view_onButtonPressed(GtkWidget *treeview, GdkEventButton *event,
   if(item_is_folder_collection(d->view_rule) &&
       event->type == GDK_BUTTON_PRESS &&
       event->button == 3 &&
-      gtk_tree_selection_path_is_selected(selection, path) &&
-      FALSE)
+      gtk_tree_selection_path_is_selected(selection, path))
   {
     // Single right-click on filmroll/folder: open contextual menu
     view_popup_menu(treeview, event, d);
