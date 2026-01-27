@@ -66,6 +66,31 @@ typedef struct dt_iop_gui_simple_callback_t
   int index;
 } dt_iop_gui_simple_callback_t;
 
+
+static char *_pipe_get_pipe_name(int pipe_type)
+{
+  char *r = NULL;
+
+  switch(pipe_type & DT_DEV_PIXELPIPE_ANY)
+  {
+    case DT_DEV_PIXELPIPE_PREVIEW:
+      r = "PREVIEW";
+      break;
+    case DT_DEV_PIXELPIPE_FULL:
+      r = "FULL";
+      break;
+    case DT_DEV_PIXELPIPE_THUMBNAIL:
+      r = "THUMBNAIL";
+      break;
+    case DT_DEV_PIXELPIPE_EXPORT:
+      r = "EXPORT";
+      break;
+    default:
+      r = "UNKNOWN";
+  }
+  return r;
+}
+
 static gboolean _iop_plugin_focus_accel(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                                         GdkModifierType modifier, gpointer data);
 
@@ -1774,7 +1799,7 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   piece->global_hash = piece->hash = hash;
   piece->global_mask_hash = piece->blendop_hash = module->blendop_hash;
 
-  dt_print(DT_DEBUG_PIPE, "[pixelpipe] params commit for %s (%s) in pipe %i with hash %" PRIu64 "\n", module->op, module->multi_name, pipe->type, piece->hash);
+  dt_print(DT_DEBUG_PIPE, "[pixelpipe] params commit for %s (%s) in pipe %s with hash %" PRIu64 "\n", module->op, module->multi_name, _pipe_get_pipe_name(pipe->type), piece->hash);
 }
 
 void dt_iop_gui_cleanup_module(dt_iop_module_t *module)

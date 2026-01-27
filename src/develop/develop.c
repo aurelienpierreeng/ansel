@@ -49,7 +49,7 @@
 #define DT_DEV_AVERAGE_DELAY_COUNT 5
 #define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
 
-static gchar *_pipe_type_to_str(dt_dev_pixelpipe_type_t pipe_type)
+static gchar *dt_pipe_type_to_str(dt_dev_pixelpipe_type_t pipe_type)
 {
   gchar *type_str = NULL;
 
@@ -483,7 +483,7 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
 
 /*  fprintf (stderr, "_update_darkroom_roi: dev %.2f %.2f  type %s  xy %d %d  dim %d %d"
                    "   ppd:%.4f scale:%.4f nat_scale:%.4f * scaling:%.4f\n",
-            dev->x, dev->y, _pipe_type_to_str(pipe->type), *x, *y, *wd, *ht, darktable.gui->ppd, *scale, dev->natural_scale, dev->scaling);
+            dev->x, dev->y, dt_pipe_type_to_str(pipe->type), *x, *y, *wd, *ht, darktable.gui->ppd, *scale, dev->natural_scale, dev->scaling);
 */
   return x_old != *x || y_old != *y || wd_old != *wd || ht_old != *ht || old_scale != *scale;
 }
@@ -518,7 +518,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
   if(!finish_on_error)
   {
     dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, buf_width, buf_height, DT_MIPMAP_FULL);
-    gchar *type = _pipe_type_to_str(pipe->type);
+    gchar *type = dt_pipe_type_to_str(pipe->type);
     dt_print(DT_DEBUG_DEV, "[pixelpipe] Started darkroom pipe %s recompute at %i×%i px\n", type, dev->width, dev->height);
     g_free(type);
   }

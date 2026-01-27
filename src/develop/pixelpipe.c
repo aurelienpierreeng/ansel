@@ -61,11 +61,7 @@ float *dt_pixelpipe_raster_get(GHashTable *raster_masks, const int raster_mask_i
 {
   if(!raster_masks) return NULL;
   
-  float *result = g_hash_table_lookup(raster_masks, GINT_TO_POINTER(raster_mask_id));
-  if(result == NULL)
-    fprintf(stderr, "WARNING: The mask #%i could not be found in the raster mask hashtable", raster_mask_id);
-  
-  return result;
+  return g_hash_table_lookup(raster_masks, GINT_TO_POINTER(raster_mask_id));
 }
 
 // clang-format off

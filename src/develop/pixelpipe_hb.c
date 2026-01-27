@@ -71,7 +71,7 @@ typedef enum dt_pixelpipe_picker_source_t
 static void get_output_format(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
                               dt_develop_t *dev, dt_iop_buffer_dsc_t *dsc);
 
-static char *_pipe_type_to_str(int pipe_type)
+static char *_pipe_get_pipe_name(int pipe_type)
 {
   char *r = NULL;
 
@@ -477,7 +477,7 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     hash = dt_hash(hash, (const char *)&local_hash, sizeof(uint64_t));
     piece->global_hash = hash;
 
-    gchar *type = _pipe_type_to_str(pipe->type);
+    gchar *type = _pipe_get_pipe_name(pipe->type);
     dt_print(DT_DEBUG_PIPE, "[pixelpipe] global hash for %20s (%s) in pipe %s with hash %lu\n", piece->module->op, piece->module->multi_name, type, (long unsigned int)hash);
     // Mask hash: raster masks are affected by ROI out size and distortions.
 
@@ -542,7 +542,7 @@ void dt_dev_pixelpipe_synch(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, GList *
  */
 void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, const char *caller_func)
 {
-  gchar *type = _pipe_type_to_str(pipe->type);
+  gchar *type = _pipe_get_pipe_name(pipe->type);
   dt_print(DT_DEBUG_DEV, "[pixelpipe] synch all modules with defaults_params for pipe %s called from %s\n", type, caller_func);
   dt_print(DT_DEBUG_DEV, "[pixelpipe] synch all modules with history for pipe %s called from %s\n", type, caller_func);
   // go through all history items and adjust params
@@ -598,7 +598,7 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   // Note however that the sync_top method is only used when adding new history items
   // on top. So we need to resync every history item from end to start, until
   // we find the previously synchronized one. This uses history hashes.
-  gchar *type = _pipe_type_to_str(pipe->type);
+  gchar *type = _pipe_get_pipe_name(pipe->type);
   GList *last_item = g_list_nth(dev->history, dt_dev_get_history_end(dev) - 1);
   if(last_item)
   {
@@ -652,7 +652,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   const dt_dev_pixelpipe_change_t status = pipe->changed;
   pipe->changed = DT_DEV_PIPE_UNCHANGED;
 
-  gchar *type = _pipe_type_to_str(pipe->type);
+  gchar *type = _pipe_get_pipe_name(pipe->type);
   char *status_str = g_strdup_printf("%s%s%s%s%s",
                                   (status & DT_DEV_PIPE_UNCHANGED) ? "UNCHANGED " : "",
                                   (status & DT_DEV_PIPE_REMOVE) ? "REMOVE " : "",
@@ -1480,7 +1480,7 @@ static void _print_perf_debug(dt_dev_pixelpipe_t *pipe, const dt_pixelpipe_flow_
       pixelpipe_flow & PIXELPIPE_FLOW_BLENDED_ON_GPU
           ? "GPU"
           : pixelpipe_flow & PIXELPIPE_FLOW_BLENDED_ON_CPU ? "CPU" : "",
-      _pipe_type_to_str(pipe->type));
+      _pipe_get_pipe_name(pipe->type));
   g_free(module_label);
 }
 
@@ -1515,12 +1515,12 @@ static void _print_nan_debug(dt_dev_pixelpipe_t *pipe, void *cl_mem_output, void
       }
       if(hasnan)
         fprintf(stderr, "[dev_pixelpipe] module `%s' outputs NaNs! [%s]\n", module_label,
-                _pipe_type_to_str(pipe->type));
+                _pipe_get_pipe_name(pipe->type));
       if(hasinf)
         fprintf(stderr, "[dev_pixelpipe] module `%s' outputs non-finite floats! [%s]\n", module_label,
-                _pipe_type_to_str(pipe->type));
+                _pipe_get_pipe_name(pipe->type));
       fprintf(stderr, "[dev_pixelpipe] module `%s' min: (%f; %f; %f) max: (%f; %f; %f) [%s]\n", module_label,
-              min[0], min[1], min[2], max[0], max[1], max[2], _pipe_type_to_str(pipe->type));
+              min[0], min[1], min[2], max[0], max[1], max[2], _pipe_get_pipe_name(pipe->type));
     }
     else if(out_format->datatype == TYPE_FLOAT && out_format->channels == 1)
     {
@@ -1543,12 +1543,12 @@ static void _print_nan_debug(dt_dev_pixelpipe_t *pipe, void *cl_mem_output, void
       }
       if(hasnan)
         fprintf(stderr, "[dev_pixelpipe] module `%s' outputs NaNs! [%s]\n", module_label,
-                _pipe_type_to_str(pipe->type));
+                _pipe_get_pipe_name(pipe->type));
       if(hasinf)
         fprintf(stderr, "[dev_pixelpipe] module `%s' outputs non-finite floats! [%s]\n", module_label,
-                _pipe_type_to_str(pipe->type));
+                _pipe_get_pipe_name(pipe->type));
       fprintf(stderr, "[dev_pixelpipe] module `%s' min: (%f) max: (%f) [%s]\n", module_label, min, max,
-              _pipe_type_to_str(pipe->type));
+              _pipe_get_pipe_name(pipe->type));
     }
 
     g_free(module_label);
@@ -1639,8 +1639,10 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
   }
   // else found in cache.
   if(new_entry)
+  {
+    fprintf(stderr, "[dev_pixelpipe] Unlock entry %" PRIu64 " (finished processing '%s')\n", hash, "Base buffer");
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, FALSE, cache_entry);
-
+  }
   return err;
 }
 
@@ -1729,7 +1731,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     // the color conversion for the next is done in-place in the output of the previous. We should check
     // here if out_format->cst matches wathever we are expecting, and convert back if it doesn't.
     dt_print(DT_DEBUG_PIPE, "[dev_pixelpipe] found %" PRIu64 " (%s) for %s pipeline in cache\n", hash, module ? module->op : "noop",
-              _pipe_type_to_str(pipe->type));
+              _pipe_get_pipe_name(pipe->type));
     return 0;
   }
 
@@ -1743,7 +1745,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
                       bpp))
       return 1;
 
-    dt_show_times_f(&start, "[dev_pixelpipe]", "initing base buffer [%s]", _pipe_type_to_str(pipe->type));
+    dt_show_times_f(&start, "[dev_pixelpipe]", "initing base buffer [%s]", _pipe_get_pipe_name(pipe->type));
     return 0;
   }
 
@@ -1797,7 +1799,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(input_entry == NULL) return 1;
 
   dt_pixel_cache_entry_t *output_entry = NULL;
-  gchar *type = _pipe_type_to_str(pipe->type);
+  gchar *type = _pipe_get_pipe_name(pipe->type);
   gchar *name = g_strdup_printf("module %s (%s) for pipe %s", module->op, module->multi_name, type);
   gboolean new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
                                                   output, out_format, &output_entry);
@@ -1978,8 +1980,8 @@ static void _print_opencl_errors(int error, dt_dev_pixelpipe_t *pipe)
   switch(error)
   {
     case 1:
-      dt_print(DT_DEBUG_OPENCL, "[opencl] Opencl errors; disabling opencl for %s pipeline!\n", _pipe_type_to_str(pipe->type));
-      dt_control_log(_("Ansel discovered problems with your OpenCL setup; disabling OpenCL for %s pipeline!"), _pipe_type_to_str(pipe->type));
+      dt_print(DT_DEBUG_OPENCL, "[opencl] Opencl errors; disabling opencl for %s pipeline!\n", _pipe_get_pipe_name(pipe->type));
+      dt_control_log(_("Ansel discovered problems with your OpenCL setup; disabling OpenCL for %s pipeline!"), _pipe_get_pipe_name(pipe->type));
       break;
     case 2:
       dt_print(DT_DEBUG_OPENCL,
@@ -2003,7 +2005,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
 
   dt_dev_pixelpipe_cache_print(darktable.pixelpipe_cache);
 
-  dt_print(DT_DEBUG_DEV, "[pixelpipe] Started %s pipeline recompute at %i×%i px\n", _pipe_type_to_str(pipe->type), width, height);
+  dt_print(DT_DEBUG_DEV, "[pixelpipe] Started %s pipeline recompute at %i×%i px\n", _pipe_get_pipe_name(pipe->type), width, height);
 
   // get a snapshot of the mask list
   pipe->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
@@ -2025,7 +2027,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
                                        : -1; // try to get/lock opencl resource
 
   if(pipe->devid > -1) dt_opencl_events_reset(pipe->devid);
-  dt_print(DT_DEBUG_OPENCL, "[pixelpipe_process] [%s] using device %d\n", _pipe_type_to_str(pipe->type),
+  dt_print(DT_DEBUG_OPENCL, "[pixelpipe_process] [%s] using device %d\n", _pipe_get_pipe_name(pipe->type),
            pipe->devid);
 
   KILL_SWITCH_PIPE
@@ -2054,7 +2056,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
     dt_times_t start;
     dt_get_times(&start);
     err = dt_dev_pixelpipe_process_rec(pipe, dev, &buf, &cl_mem_out, &out_format, &roi, modules, pieces, pos);
-    gchar *msg = g_strdup_printf("[pixelpipe] %s pipeline processing", _pipe_type_to_str(pipe->type));
+    gchar *msg = g_strdup_printf("[pixelpipe] %s pipeline processing", _pipe_get_pipe_name(pipe->type));
     dt_show_times(&start, msg);
     g_free(msg);
 
@@ -2347,7 +2349,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
     
 
     // Print debug stuff
-    gchar *type = _pipe_type_to_str(pipe->type);
+    gchar *type = _pipe_get_pipe_name(pipe->type);
     if(raster_mask)
     {
       dt_print(DT_DEBUG_MASKS,
@@ -2426,7 +2428,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
       {
         dt_print(DT_DEBUG_MASKS, "[raster masks] found mask id %i from %s for module %s (%s) in pipe %s\n",
                     raster_mask_id, source_name, delete_underscore(module->module->name()),
-                    module->module->multi_name, _pipe_type_to_str(pipe->type));
+                    module->module->multi_name, _pipe_get_pipe_name(pipe->type));
         break;
       }
     }
