@@ -313,6 +313,12 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
 
   if(cache_entry)
   {
+    // Increment refcount while we still hold cache->lock
+    _non_thread_safe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, TRUE, cache_entry);
+    
+    // IMPORTANT: Release cache->lock BEFORE trying to acquire entry locks to avoid deadlock
+    dt_pthread_mutex_unlock(&cache->lock);
+
     if(cache_entry_found)
     {
       // Block and wait for write events to finish, aka try to take a read lock
@@ -333,19 +339,15 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
     *data = cache_entry->data;
     *dsc = &cache_entry->dsc;
     dt_pixel_cache_message(cache_entry, (cache_entry_found) ? "found" : "created", FALSE);
-
-    // This will become the input for the next module, lock it until next module process ends
-    _non_thread_safe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, TRUE, cache_entry);
   }
   else
   {
     // Don't write on *dsc and *data here
     dt_print(DT_DEBUG_PIPE, "couldn't allocate new cache entry %" PRIu64 "\n", hash);
+    dt_pthread_mutex_unlock(&cache->lock);
   }
 
   if(entry) *entry = cache_entry;
-
-  dt_pthread_mutex_unlock(&cache->lock);
   return !cache_entry_found;
 }
 
@@ -360,6 +362,12 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
 
   if(cache_entry)
   {
+    // Increment refcount while we still hold cache->lock
+    _non_thread_safe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, TRUE, cache_entry);
+    
+    // IMPORTANT: Release cache->lock BEFORE trying to acquire entry locks to avoid deadlock
+    dt_pthread_mutex_unlock(&cache->lock);
+
     // Block and wait for write events to finish, aka try to take a read lock
     dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, TRUE, cache_entry);
     dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, FALSE, cache_entry);
@@ -369,14 +377,13 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
     *data = cache_entry->data;
     *dsc = &cache_entry->dsc;
     dt_pixel_cache_message(cache_entry, "found", FALSE);
-
-    // This will become the input for the next module, lock it until next module process ends
-    _non_thread_safe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, TRUE, cache_entry);
+  }
+  else
+  {
+    dt_pthread_mutex_unlock(&cache->lock);
   }
 
   if(entry) *entry = cache_entry;
-
-  dt_pthread_mutex_unlock(&cache->lock);
   return cache_entry != NULL;
 }
 
