@@ -3698,32 +3698,32 @@ msgstr "közreműködők"
 msgid "doxygen-awesome-css contributors"
 msgstr "rawspeed közreműködők"
 
-#: ../build/data/photos.ansel.app.desktop.in.h:1
-#: ../data/build/ansel.desktop.in.h:1 ../data/photos.ansel.app.desktop.in.h:1
+#: ../build/data/photos.ansel.ansel.desktop.in.h:1
+#: ../data/build/ansel.desktop.in.h:1 ../data/photos.ansel.ansel.desktop.in.h:1
 msgid "Virtual Lighttable and Darkroom"
 msgstr "Virtuális átvilágító és sötétkamra"
 
-#: ../build/data/photos.ansel.app.desktop.in.h:2
+#: ../build/data/photos.ansel.ansel.desktop.in.h:2
 #: ../data/build/ansel.desktop.in.h:2
-#: ../data/photos.ansel.app.appdata.xml.in.h:1
-#: ../data/photos.ansel.app.desktop.in.h:2 ../src/gui/actions/help.c:19
+#: ../data/photos.ansel.ansel.appdata.xml.in.h:1
+#: ../data/photos.ansel.ansel.desktop.in.h:2 ../src/gui/actions/help.c:19
 msgid "Organize and develop images from digital cameras"
 msgstr "Digitális fényképező képeinek rendezése, kidolgozása"
 
 #. TRANSLATORS: Search terms to find this application. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
-#: ../build/data/photos.ansel.app.desktop.in.h:4
-#: ../data/build/ansel.desktop.in.h:4 ../data/photos.ansel.app.desktop.in.h:4
+#: ../build/data/photos.ansel.ansel.desktop.in.h:4
+#: ../data/build/ansel.desktop.in.h:4 ../data/photos.ansel.ansel.desktop.in.h:4
 msgid "graphics;photography;raw;"
 msgstr "grafika;fénykép;fotó;raw;"
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:2
+#: ../data/photos.ansel.ansel.appdata.xml.in.h:2
 msgid ""
 "Ansel manages your digital negatives in a database and lets you view them "
 "through a lighttable. It also enables you to develop raw images and enhance "
 "them in a darkroom."
 msgstr ""
 
-#: ../data/photos.ansel.app.appdata.xml.in.h:3
+#: ../data/photos.ansel.ansel.appdata.xml.in.h:3
 msgid "Virtual light table, showing a collection"
 msgstr "Virtuális átvilágító, egy gyűjtemény megjelenítése"
 
