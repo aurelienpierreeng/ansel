@@ -433,8 +433,6 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 
   // bernstein hash (djb2)
   uint64_t hash = _default_pipe_hash(pipe);
-  uint64_t distort_hash = _default_pipe_hash(pipe);
-  distort_hash = dt_hash(distort_hash, (const char *)&distort_hash, sizeof(uint64_t));
 
   // Bypassing cache contaminates downstream modules.
   gboolean bypass_cache = FALSE;
@@ -464,10 +462,17 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
             piece->planned_roi_out.width, piece->planned_roi_out.height, piece->planned_roi_out.scale);
 */
     // Mask preview display doesn't re-commit params, so we need to keep that of it here
-    // Too much GUI stuff interleaved with pipeline stuff...
-    // Note that mask display applies only to main preview in darkroom. We don't check it here.
-    // Just ensure to not call a preview pipe recompute on GUI toggle state...
-    local_hash = dt_hash(local_hash, (const char *)&piece->module->request_mask_display, sizeof(int));
+    // Too much GUIÂstuff interleaved with pipeline stuff...
+    // Mask display applies only to main preview in darkroom.
+    if(pipe->type == DT_DEV_PIXELPIPE_FULL)
+    {
+      local_hash = dt_hash(local_hash, (const char *)&piece->module->request_mask_display, sizeof(int));
+    }
+    else 
+    {
+      const int zero = 0;
+      local_hash = dt_hash(local_hash, (const char *)&zero, sizeof(int));
+    }
 
     // If the cache bypass is on, the corresponding cache lines will be freed immediately after use,
     // we need to track that. It somewhat overlaps module->request_mask_display, but...
@@ -475,22 +480,22 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 
     // Update global hash for this stage
     hash = dt_hash(hash, (const char *)&local_hash, sizeof(uint64_t));
-    piece->global_hash = hash;
 
     gchar *type = _pipe_get_pipe_name(pipe->type);
     dt_print(DT_DEBUG_PIPE, "[pixelpipe] global hash for %20s (%s) in pipe %s with hash %lu\n", piece->module->op, piece->module->multi_name, type, (long unsigned int)hash);
-    // Mask hash: raster masks are affected by ROI out size and distortions.
 
-    // This could be achieved upon (piece->module->operation_tags() & IOP_TAG_CLIPPING) only
-    // but let's pretend that programmers are the idiots they are and assume mistakes were made.
-    distort_hash = dt_hash(distort_hash, (const char *)&piece->planned_roi_out, sizeof(dt_iop_roi_t));
+    // In case of drawn masks, we would need to account only for the distortions of previous modules.
+    // Aka conditional to: if((piece->module->operation_tags() & IOP_TAG_DISTORT) == IOP_TAG_DISTORT)
+    // But in case of parametric masks, they depend on previous modules parameters.
+    // So, all in all, (parametric | drawn | raster) masking depends on everything :
+    // - if masking on output, internal params + blendop params + all previous modules internal params + ROI size,
+    // - if masking on input, blendop params + all previous modules internal params + ROI size
+    // So we use all that ot once : 
+    piece->global_mask_hash = dt_hash(hash, (const char *)&piece->blendop_hash, sizeof(uint64_t));
 
-    // Distortions are not limited to changing ROI out (liquify)
-    // In this case, the nature of the distortion is represented by the internal params of the module.
-    if((piece->module->operation_tags() & IOP_TAG_DISTORT) == IOP_TAG_DISTORT)
-      distort_hash = dt_hash(distort_hash, (const char *)&piece->hash, sizeof(uint64_t));
-
-    piece->global_mask_hash = dt_hash(distort_hash, (const char *)&piece->blendop_hash, sizeof(uint64_t));
+    // Finally, the output of the module also depends on the mask:
+    hash = dt_hash(hash, (const char *)&piece->global_mask_hash, sizeof(uint64_t));
+    piece->global_hash = hash;
   }
 }
 
