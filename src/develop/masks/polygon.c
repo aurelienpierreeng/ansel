@@ -911,8 +911,7 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, float pzx, floa
   dt_dev_distort_backtransform(darktable.develop, pts, 1);
 
   // set coordinates
-  node->node[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
-  node->node[1] = pts[1] / darktable.develop->preview_pipe->iheight;
+  dt_dev_roi_to_input_space(darktable.develop, TRUE, pzx, pzy, &node->node[0], &node->node[1]);
   node->ctrl1[0] = node->ctrl1[1] = node->ctrl2[0] = node->ctrl2[1] = -1.0;
   node->state = DT_MASKS_POINT_STATE_NORMAL;
 
