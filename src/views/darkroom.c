@@ -2417,7 +2417,7 @@ static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int 
   const float step = 1.02f;
   dev->scaling *= powf(step, (float)-flow);
 
-  if(!dt_dev_check_zoom_scale_bounds(dev));
+  if(!dt_dev_check_zoom_scale_bounds(dev))
   {
     // Round scaling to 1.0 (fit) if close enough
     const float epsilon = fabsf(old_dev_scaling - dev->scaling);
