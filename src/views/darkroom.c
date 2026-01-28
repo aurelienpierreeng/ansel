@@ -2410,42 +2410,42 @@ static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int 
   dt_develop_t *dev = darktable.develop;
   int proc_w = 0.f, proc_h = 0.f;
   dt_dev_get_processed_size(dev, &proc_w, &proc_h);
-  //const float ppd = darktable.gui->ppd;
   const float old_dev_scaling = dev->scaling;
-  const float natural_scale = dev->natural_scale;
+  const float scale = dt_dev_get_zoom_level(dev);
 
   // Commit the new scaling
   const float step = 1.02f;
   dev->scaling *= powf(step, (float)-flow);
 
-  if(dt_dev_check_zoom_scale_bounds(dev)) return TRUE;
+  if(!dt_dev_check_zoom_scale_bounds(dev));
+  {
+    // Round scaling to 1.0 (fit) if close enough
+    const float epsilon = fabsf(old_dev_scaling - dev->scaling);
+    if(fabsf(dev->scaling - 1.0f) < epsilon)
+      dev->scaling = 1.0f;
+    
+    // Calculate zoom position offset to keep mouse position fixed during zoom
+    const float mouse_off_x = x - 0.5f * dev->orig_width;
+    const float mouse_off_y = y - 0.5f * dev->orig_height;
+    
+    // To keep the point under the mouse fixed, calculate the adjustment
+    const float ppd = darktable.gui->ppd;
+    const float scaling = dev->scaling;
+    const float scale_delta = scaling - old_dev_scaling;
+    const float scale_product = old_dev_scaling * scale;
+    
+    // Adjust the center to compensate for the scale change
+    dev->x += mouse_off_x * scale_delta * ppd / (proc_w * scale_product);
+    dev->y += mouse_off_y * scale_delta * ppd / (proc_h * scale_product);
+    
+    dt_dev_check_zoom_pos_bounds(dev, &dev->x, &dev->y, NULL, NULL);
 
-  // Round scaling to 1.0 (fit) if close enough
-  const float epsilon = fabsf(old_dev_scaling - dev->scaling);
-  if(fabsf(dev->scaling - 1.0f) < epsilon)
-    dev->scaling = 1.0f;
+    dt_control_queue_redraw_center();
+    dt_control_navigation_redraw();
+    dt_dev_invalidate_zoom(dev);
+    dt_dev_refresh_ui_images(dev);
+  }
   
-  // Calculate zoom position offset to keep mouse position fixed during zoom (division-free)
-  const float mouse_off_x = x - 0.5f * dev->orig_width;
-  const float mouse_off_y = y - 0.5f * dev->orig_height;
-  const float base_scale = proc_w * natural_scale * dev->scaling;
-  const float scale_delta = dev->scaling - old_dev_scaling;
-  const float scale_denominator = base_scale * old_dev_scaling;
-  
-  // Single division for both coordinates
-  const float position_factor = scale_delta / scale_denominator;
-  
-  // Adjust center position to maintain mouse position
-  dev->x += mouse_off_x * position_factor;
-  dev->y += mouse_off_y * position_factor;
-  
-  dt_dev_check_zoom_pos_bounds(dev, &dev->x, &dev->y, NULL, NULL);
-
-  dt_control_queue_redraw_center();
-  dt_control_navigation_redraw();
-  dt_dev_invalidate_zoom(dev);
-  dt_dev_refresh_ui_images(dev);
-
   return TRUE;
 }
 
