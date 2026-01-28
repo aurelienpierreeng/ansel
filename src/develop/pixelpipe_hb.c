@@ -1868,7 +1868,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   {
     gchar *module_label = dt_history_item_get_name(module);
     g_free(darktable.main_message);
-    darktable.main_message = g_strdup_printf(_("Processing module %s for pipeline %s..."), module_label, _pipe_get_pipe_name(pipe->type)); 
+    darktable.main_message = g_strdup_printf(_("Processing module `%s` for pipeline %s (%ix%i px @ %.3fx)..."), 
+                                             module_label, _pipe_get_pipe_name(pipe->type), 
+                                             roi_out->width, roi_out->height, roi_out->scale);
     g_free(module_label);
     dt_control_queue_redraw_center();
   }
