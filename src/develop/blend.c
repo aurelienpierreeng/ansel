@@ -38,6 +38,30 @@ typedef enum _develop_mask_post_processing
   DEVELOP_MASK_POST_TONE_CURVE = 4,
 } _develop_mask_post_processing;
 
+static gchar *dt_pipe_type_to_str(dt_dev_pixelpipe_type_t pipe_type)
+{
+  gchar *type_str = NULL;
+
+  switch(pipe_type & DT_DEV_PIXELPIPE_ANY)
+  {
+    case DT_DEV_PIXELPIPE_PREVIEW:
+      type_str = g_strdup("PREVIEW");
+      break;
+    case DT_DEV_PIXELPIPE_FULL:
+      type_str = g_strdup("FULL");
+      break;
+    case DT_DEV_PIXELPIPE_THUMBNAIL:
+      type_str = g_strdup("THUMBNAIL");
+      break;
+    case DT_DEV_PIXELPIPE_EXPORT:
+      type_str = g_strdup("EXPORT");
+      break;
+    default:
+      type_str = g_strdup("UNKNOWN");
+  }
+  return type_str;
+}
+
 static dt_develop_blend_params_t _default_blendop_params
     = { DEVELOP_MASK_DISABLED,
         DEVELOP_BLEND_CS_NONE,
@@ -1245,8 +1269,8 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
   // TODO: should we skip raster masks?
   if(piece->pipe->store_all_raster_masks || dt_iop_is_raster_mask_used(self, 0))
   {
-    dt_print(DT_DEBUG_MASKS, "[raster masks] replacing raster mask id 0 for module %s (%s) for pipe %i with hash %" PRIu64 "\n", piece->module->op,
-             piece->module->multi_name, piece->pipe->type, piece->global_mask_hash);
+    dt_print(DT_DEBUG_MASKS, "[raster masks] replacing raster mask id 0 in module '%s (%s)' for pipe %s with hash %" PRIu64 "\n", piece->module->op,
+             piece->module->multi_name, dt_pipe_type_to_str(piece->pipe->type), piece->global_mask_hash);
 
     //  get back final mask from the device to store it for later use
     if(!(mask_mode & DEVELOP_MASK_RASTER))
@@ -1260,8 +1284,8 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
   }
   else
   {
-    dt_print(DT_DEBUG_MASKS, "[raster masks] destroying raster mask id 0 for module %s (%s) for pipe %i\n", piece->module->op,
-             piece->module->multi_name, piece->pipe->type);
+    dt_print(DT_DEBUG_MASKS, "[raster masks] destroying raster mask id 0 in module '%s (%s)' for pipe %s\n", piece->module->op,
+             piece->module->multi_name, dt_pipe_type_to_str(piece->pipe->type));
     dt_pixelpipe_raster_remove(piece->raster_masks);
     dt_free_align(_mask);
   }
