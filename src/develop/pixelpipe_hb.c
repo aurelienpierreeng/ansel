@@ -2248,7 +2248,7 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece, 
       // terminated without finding the source module.
       // that means the source module has been deleted.
       hint = g_strdup_printf(
-            _("\n- Check if the module providing the masks for the module %s has not been deleted.\n"),
+            _("- Check if the module providing the masks for the module %s has not been deleted.\n"),
             target_name);
     }
     else if(current_piece == NULL)
@@ -2257,14 +2257,13 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece, 
       // has stopped when it finds the source module but before it has
       // found the current module:
       // That means the raster mask is above current module.
-      hint = g_strdup_printf(_("\n- Check if the module %s (%s) providing the masks has not been moved above %s.\n"),
+      hint = g_strdup_printf(_("- Check if the module %s (%s) providing the masks has not been moved above %s.\n"),
                       delete_underscore(source_piece->module->name()), source_piece->module->multi_name, clean_target_name);
     }
 
     dt_control_log(_("The %s module is trying to reuse a mask from a module but it can't be found.\n"
-                      "Masking in %s will be disabled until a mask is available.\n"
-                      "%s"),
-                      target_name, target_name, hint ? hint : "");
+                      "\n%s"),
+                      target_name, hint ? hint : "");
     g_free(hint);
 
     fprintf(stderr, "[raster masks] no source module for module %s could be found\n", target_name);
@@ -2278,8 +2277,8 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece, 
     // there might be stale masks from disabled modules left over. don't use those!
     dt_control_log(_("The `%s` module is trying to reuse a mask from disabled module `%s`.\n"
                      "Disabled modules cannot provide their masks to other modules.\n"
-                     "Masking in `%s` will be disabled until `%s` is re-enabled."),
-                   target_name, source_name, target_name, source_name);
+                     "\n- Please enable `%s` or change the raster mask in `%s`."),
+                   target_name, source_name, source_name, target_name);
 
     fprintf(stderr, "[raster masks] module %s trying to reuse a mask from disabled instance of %s\n",
             target_name, source_name);
