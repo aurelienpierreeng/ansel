@@ -45,20 +45,6 @@ static gboolean open_doc_callback(GtkAccelGroup *group, GObject *acceleratable, 
   return TRUE;
 }
 
-static gboolean open_booking_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
-{
-  gtk_show_uri_on_window(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
-  "https://ansel.photos/en/support/#individual-user-training", GDK_CURRENT_TIME, NULL);
-  return TRUE;
-}
-
-static gboolean open_donate_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
-{
-  // TODO: use translated URL when doc gets translated
-  gtk_show_uri_on_window(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), "https://liberapay.com/aurelienpierre", GDK_CURRENT_TIME, NULL);
-  return TRUE;
-}
-
 static gboolean open_chat_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   gtk_show_uri_on_window(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
@@ -214,7 +200,6 @@ static gboolean search_accels_callback(GtkAccelGroup *group, GObject *accelerata
 void append_help(GtkWidget **menus, GList **lists, const dt_menus_t index)
 {
   add_sub_menu_entry(menus, lists, _("Online documentation"), index, NULL, open_doc_callback, NULL, NULL, NULL, 0, 0);
-  add_sub_menu_entry(menus, lists, _("Book a training session"), index, NULL, open_booking_callback, NULL, NULL, NULL, 0, 0);
   add_sub_menu_entry(menus, lists, _("Ask a question"), index, NULL, open_search_callback, NULL, NULL, NULL, 0, 0);
   add_sub_menu_entry(menus, lists, _("Join the support chat"), index, NULL, open_chat_callback, NULL, NULL, NULL, 0, 0);
   add_sub_menu_entry(menus, lists, _("Join the support forum"), index, NULL, open_forum_callback, NULL, NULL, NULL, 0, 0);
@@ -223,6 +208,5 @@ void append_help(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_sub_menu_entry(menus, lists, _("Search actions..."), index, NULL, search_accels_callback, NULL, NULL,
                      NULL, GDK_KEY_p, GDK_CONTROL_MASK);
   add_menu_separator(menus[index]);
-  add_sub_menu_entry(menus, lists, _("Donate"), index, NULL, open_donate_callback, NULL, NULL, NULL, 0, 0);
   add_sub_menu_entry(menus, lists, _("About"), index, NULL, show_about_dialog, NULL, NULL, NULL, 0, 0);
 }
