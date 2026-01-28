@@ -689,13 +689,13 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
   {
     // The hash table does not survive to a pipeline restart...
     dt_pixelpipe_raster_replace(piece->raster_masks, _mask);
-    dt_print(DT_DEBUG_MASKS, "[raster masks] replacing raster mask id 0 for module %s (%s) for pipe %i with hash %" PRIu64 "\n", piece->module->op,
-             piece->module->multi_name, piece->pipe->type, piece->global_mask_hash);
+    dt_print(DT_DEBUG_MASKS, "[raster masks] replacing raster mask id 0 for module %s (%s) for pipe %s with hash %" PRIu64 "\n", piece->module->op,
+             piece->module->multi_name, dt_pipe_type_to_str(piece->pipe->type), piece->global_mask_hash);
   }
   else
   {
-    dt_print(DT_DEBUG_MASKS, "[raster masks] destroying raster mask id 0 for module %s (%s) for pipe %i\n", piece->module->op,
-             piece->module->multi_name, piece->pipe->type);
+    dt_print(DT_DEBUG_MASKS, "[raster masks] destroying raster mask id 0 for module %s (%s) for pipe %s\n", piece->module->op,
+             piece->module->multi_name, dt_pipe_type_to_str(piece->pipe->type));
     dt_pixelpipe_raster_remove(piece->raster_masks);
     dt_free_align(_mask);
   }
