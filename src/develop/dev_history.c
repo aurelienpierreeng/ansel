@@ -742,7 +742,13 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 
   if(darktable.gui && dev->gui_attached)
   {
-    if(module) dt_iop_gui_set_enable_button(module);
+    
+    if(module) 
+    { 
+      ++darktable.gui->reset; // don't run GUI callbacks when setting GUI state
+      dt_iop_gui_set_enable_button(module);
+      --darktable.gui->reset;
+    }
 
     // Auto-save N s after the last change.
     // If another change is made during that delay,
