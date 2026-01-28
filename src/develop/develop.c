@@ -497,8 +497,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
   // Until then, don't bother computing garbage that will not be reused later.
   if(dev->width < 32 || dev->height < 32) return;
 
-  if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-    dt_iop_nap(1000);
+  dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
 
   pipe->running = 1;
 
@@ -606,6 +605,8 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
   dt_pthread_mutex_unlock(&pipe->busy_mutex);
 
   pipe->running = 0;
+
+  dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
 
   if(pipe->type == DT_DEV_PIXELPIPE_FULL)
     dt_control_queue_redraw_center();
