@@ -1691,9 +1691,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // else recurse to the previous module n-1 to get a an input.
   KILL_SWITCH_ABORT;
 
-  if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-    dt_iop_nap(500);
-
   dt_iop_roi_t roi_in = *roi_out;
 
   void *input = NULL;
@@ -1816,7 +1813,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // bypassing the cache is not requested by the pipe, stop before processing.
   // This is mostly for the preview pipe since we didn't stop the recursion earlier
   // at the last-found cache line.
-  if(!pipe->reentry && !new_entry)
+  if(!pipe->reentry && !new_entry && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
   {
     dt_print(DT_DEBUG_PIPE, "[pipeline] found %" PRIu64 " (%s) for %s pipeline in cache\n", hash, module ? module->op : "noop", type);
 
@@ -1923,9 +1920,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // to paint in UI.
 
   KILL_SWITCH_AND_FLUSH_CACHE;
-
-  if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-    dt_iop_nap(500);
 
   return 0;
 }
