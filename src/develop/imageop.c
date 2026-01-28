@@ -641,11 +641,10 @@ static void _gui_movedown_callback(GtkButton *button, dt_iop_module_t *module)
   // we update the headers
   dt_dev_modules_update_multishow(prev->dev);
 
+  dt_dev_pixelpipe_rebuild(module->dev);
   dt_dev_add_history_item(prev->dev, module, TRUE, TRUE);
 
   dt_ioppr_check_iop_order(module->dev, 0, "dt_iop_gui_movedown_callback end");
-
-  dt_dev_pixelpipe_rebuild(module->dev);
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
 }
@@ -674,11 +673,10 @@ static void _gui_moveup_callback(GtkButton *button, dt_iop_module_t *module)
   // we update the headers
   dt_dev_modules_update_multishow(next->dev);
 
+  dt_dev_pixelpipe_rebuild(next->dev);
   dt_dev_add_history_item(next->dev, module, TRUE, TRUE);
 
   dt_ioppr_check_iop_order(module->dev, 0, "dt_iop_gui_moveup_callback end");
-
-  dt_dev_pixelpipe_rebuild(next->dev);
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_MOVED);
 }
@@ -748,6 +746,9 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
 
     dt_iop_gui_update_blending(module);
 
+    if(module->dev->gui_attached)
+      dt_dev_pixelpipe_rebuild(module->dev);
+
     // we save the new instance creation
     dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
   }
@@ -757,11 +758,6 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
 
   // and we refresh the pipe
   dt_iop_request_focus(module);
-
-  if(module->dev->gui_attached)
-  {
-    dt_dev_pixelpipe_rebuild(module->dev);
-  }
 
   /* update ui to new parameters */
   dt_iop_gui_update(module);
