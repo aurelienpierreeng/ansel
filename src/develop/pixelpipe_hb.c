@@ -78,19 +78,19 @@ static char *_pipe_get_pipe_name(int pipe_type)
   switch(pipe_type & DT_DEV_PIXELPIPE_ANY)
   {
     case DT_DEV_PIXELPIPE_PREVIEW:
-      r = "PREVIEW";
+      r = _("PREVIEW");
       break;
     case DT_DEV_PIXELPIPE_FULL:
-      r = "FULL";
+      r = _("FULL");
       break;
     case DT_DEV_PIXELPIPE_THUMBNAIL:
-      r = "THUMBNAIL";
+      r = _("THUMBNAIL");
       break;
     case DT_DEV_PIXELPIPE_EXPORT:
-      r = "EXPORT";
+      r = _("EXPORT");
       break;
     default:
-      r = "UNKNOWN";
+      r = _("UNKNOWN");
   }
   return r;
 }
@@ -1864,6 +1864,15 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // Actual pixel processing for this module
   int error = 0;
 
+  if(dev->gui_attached)
+  {
+    gchar *module_label = dt_history_item_get_name(module);
+    g_free(darktable.main_message);
+    darktable.main_message = g_strdup_printf(_("Processing module %s for pipeline %s..."), module_label, _pipe_get_pipe_name(pipe->type)); 
+    g_free(module_label);
+    dt_control_queue_redraw_center();
+  }
+
   dt_times_t start;
   dt_get_times(&start);
 
@@ -1876,6 +1885,13 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 #endif
 
   _print_perf_debug(pipe, pixelpipe_flow, piece, module, &start);
+
+  if(dev->gui_attached)
+  {
+    g_free(darktable.main_message);
+    darktable.main_message = NULL;
+    dt_control_queue_redraw_center();
+  }
 
   // Flag to throw away the output as soon as we are done consuming it in this thread, at the next module.
   // Cache bypass is requested by modules like crop/perspective, when they show the full image,

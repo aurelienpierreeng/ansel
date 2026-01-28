@@ -210,7 +210,7 @@ void dt_control_draw_busy_msg(cairo_t *cr, int width, int height)
   pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
   layout = pango_cairo_create_layout(cr);
   pango_layout_set_font_description(layout, desc);
-  pango_layout_set_text(layout, _("working..."), -1);
+  pango_layout_set_text(layout, darktable.main_message ? darktable.main_message : _("Working..."), -1);
   pango_layout_get_pixel_extents(layout, &ink, NULL);
   if(ink.width > width * 0.98)
   {
@@ -257,6 +257,7 @@ void *dt_control_expose(void *voidptr)
   gdk_cairo_set_source_rgba(cr, &bg_color);
   cairo_save(cr);
   cairo_rectangle(cr, 0, 0, width, height);
+  cairo_paint(cr);
   cairo_clip(cr);
   cairo_new_path(cr);
   // draw view

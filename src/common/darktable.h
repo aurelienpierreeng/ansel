@@ -599,6 +599,9 @@ typedef struct darktable_t
   GTimeZone *utc_tz;
   GDateTime *origin_gdt;
   struct dt_sys_resources_t dtresources;
+
+  // Working message displayed over the main preview when working
+  char *main_message;
 } darktable_t;
 
 typedef struct

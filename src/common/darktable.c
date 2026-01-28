@@ -433,6 +433,8 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
   darktable.progname = argv[0];
 
+  darktable.main_message = NULL;
+
   // FIXME: move there into dt_database_t
   pthread_mutexattr_t recursive_locking;
   pthread_mutexattr_init(&recursive_locking);
