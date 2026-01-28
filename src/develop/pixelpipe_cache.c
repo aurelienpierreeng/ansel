@@ -68,9 +68,9 @@ size_t dt_pixel_cache_get_size(dt_pixel_cache_entry_t *cache_entry)
 
 void dt_pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char *message, gboolean verbose)
 {
-  if(!(darktable.unmuted & DT_DEBUG_PIPE)) return;
+  if(!(darktable.unmuted & DT_DEBUG_CACHE)) return;
   if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
-  dt_print(DT_DEBUG_PIPE, "[pixelpipe] cache entry %" PRIu64 ": %s (%lu MiB - age %" PRId64 ") %s\n", cache_entry->hash,
+  dt_print(DT_DEBUG_CACHE, "[pixelpipe] cache entry %" PRIu64 ": %s (%lu MiB - age %" PRId64 ") %s\n", cache_entry->hash,
            cache_entry->name, dt_pixel_cache_get_size(cache_entry), cache_entry->age, message);
 }
 
@@ -343,7 +343,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
     // Release cache lock AFTER acquiring entry locks to prevent other threads to capture it in-between
     dt_pthread_mutex_unlock(&cache->lock);
 
-    fprintf(stderr, "[dev_pixelpipe] Lock entry (new cache entry %" PRIu64 " for %s pipeline)\n", hash, name);
+    dt_print(DT_DEBUG_CACHE,"[pixelpipe_cache] Write-lock on entry (new cache entry %" PRIu64 " for %s pipeline)\n", hash, name);
   }
 
   // Finalize and return

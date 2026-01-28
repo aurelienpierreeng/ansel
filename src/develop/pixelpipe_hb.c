@@ -1645,7 +1645,6 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
   // else found in cache.
   if(new_entry)
   {
-    fprintf(stderr, "[dev_pixelpipe] Unlock entry %" PRIu64 " (finished processing '%s')\n", hash, "Base buffer");
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, FALSE, cache_entry);
   }
   return err;
@@ -1827,15 +1826,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
 
-    if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-      dt_iop_nap(500);
-
     return 0;
   }
   if(!new_entry)
   {
     // We have an output cache entry already, lock it for writing
-    fprintf(stderr, "[dev_pixelpipe] Lock entry (reusing cache entry %" PRIu64 " for '%s' pipeline)\n", hash, type);
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, TRUE, output_entry);
   }
 
@@ -1895,7 +1890,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   **out_format = piece->dsc_out = pipe->dsc;
 
   // Unlock read and write locks, decrease reference count on input
-  fprintf(stderr, "[dev_pixelpipe] Unlock entry %" PRIu64 " (finished processing module '%s' for '%s' pipeline)\n", hash, module->op, type);
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, FALSE, output_entry);
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
   
