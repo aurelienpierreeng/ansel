@@ -2203,7 +2203,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   // panning with left mouse button
   if(darktable.control->button_down && darktable.control->button_down_which == 1 && dev->scaling > 1)
   {
-    const float scale = dt_dev_get_zoom_level(dev);
+    const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
     const double clicked_x = ctl->button_x;
     const double clicked_y = ctl->button_y;
     // delta in roi scale
@@ -2431,12 +2431,12 @@ static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int 
     // To keep the point under the mouse fixed, calculate the adjustment
     const float ppd = darktable.gui->ppd;
     const float scaling = dev->scaling;
-    const float scale_delta = scaling - old_dev_scaling;
+    const float scale_delta = ppd * (scaling - old_dev_scaling);
     const float scale_product = old_dev_scaling * scale;
     
     // Adjust the center to compensate for the scale change
-    dev->x += mouse_off_x * scale_delta * ppd / (proc_w * scale_product);
-    dev->y += mouse_off_y * scale_delta * ppd / (proc_h * scale_product);
+    dev->x += mouse_off_x * scale_delta / (proc_w * scale_product);
+    dev->y += mouse_off_y * scale_delta / (proc_h * scale_product);
     
     dt_dev_check_zoom_pos_bounds(dev, &dev->x, &dev->y, NULL, NULL);
 
