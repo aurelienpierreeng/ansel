@@ -16,6 +16,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "control/control.h"
 #include "develop/pixelpipe_cache.h"
 #include "common/darktable.h"
 #include "common/debug.h"
@@ -298,54 +299,58 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
                                void **data, dt_iop_buffer_dsc_t **dsc,
                                dt_pixel_cache_entry_t **entry)
 {
+  // Search or create cache entry (under cache lock)
   dt_pthread_mutex_lock(&cache->lock);
-
   cache->queries++;
 
-  // Find the cache entry for this hash, if any
   dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, hash);
-  gboolean cache_entry_found = (cache_entry != NULL);
+  const gboolean cache_entry_found = (cache_entry != NULL);
 
-  if(cache_entry)
-    cache->hits++;
-  else
-    cache_entry = dt_pixel_cache_new_entry(hash, size, **dsc, name, id, cache);
-
-  if(cache_entry)
+  if(cache_entry_found)
   {
-    // Increment refcount while we still hold cache->lock
+    // Existing entry: increment hit counter
+    cache->hits++;
+
+    // Increase ref_count, consumer will have to decrease it
     _non_thread_safe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, TRUE, cache_entry);
     
-    // IMPORTANT: Release cache->lock BEFORE trying to acquire entry locks to avoid deadlock
+    // Release cache lock BEFORE acquiring entry locks to avoid deadlock
     dt_pthread_mutex_unlock(&cache->lock);
 
-    if(cache_entry_found)
-    {
-      // Block and wait for write events to finish, aka try to take a read lock
-      dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, TRUE, cache_entry);
-      dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, FALSE, cache_entry);
-    }
-    else
-    {
-      // Newly-allocated buffer: immediately lock in write mode until the caller
-      // populates the content, so other threads may not lock it in read mode
-      // before there is actually something to read.
-      fprintf(stderr, "[dev_pixelpipe] Lock entry (new cache entry %" PRIu64 " for %s pipeline)\n", hash, name);
-      dt_dev_pixelpipe_cache_wrlock_entry(cache, hash, TRUE, cache_entry);
-    }
-
-    // Set the time after we get the lock
-    cache_entry->age = g_get_monotonic_time(); // this is the MRU entry
-    *data = cache_entry->data;
-    *dsc = &cache_entry->dsc;
-    dt_pixel_cache_message(cache_entry, (cache_entry_found) ? "found" : "created", FALSE);
+    // Acquire read lock (wait for any write to complete)
+    dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, TRUE, cache_entry);
+    dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, FALSE, cache_entry);
   }
   else
   {
-    // Don't write on *dsc and *data here
-    dt_print(DT_DEBUG_PIPE, "couldn't allocate new cache entry %" PRIu64 "\n", hash);
+    // New entry: create and allocate
+    cache_entry = dt_pixel_cache_new_entry(hash, size, **dsc, name, id, cache);
+    
+    if(!cache_entry)
+    {
+      dt_print(DT_DEBUG_PIPE, "couldn't allocate new cache entry %" PRIu64 "\n", hash);
+      dt_pthread_mutex_unlock(&cache->lock);
+      if(entry) *entry = NULL;
+      return 1;
+    }
+
+    // Increase ref_count, consumer will have to decrease it
+    _non_thread_safe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, TRUE, cache_entry);
+    
+    // Acquire write lock so caller can populate data safely
+    dt_dev_pixelpipe_cache_wrlock_entry(cache, hash, TRUE, cache_entry);
+
+    // Release cache lock AFTER acquiring entry locks to prevent other threads to capture it in-between
     dt_pthread_mutex_unlock(&cache->lock);
+
+    fprintf(stderr, "[dev_pixelpipe] Lock entry (new cache entry %" PRIu64 " for %s pipeline)\n", hash, name);
   }
+
+  // Finalize and return
+  cache_entry->age = g_get_monotonic_time(); // Update MRU timestamp
+  *data = cache_entry->data;
+  *dsc = &cache_entry->dsc;
+  dt_pixel_cache_message(cache_entry, cache_entry_found ? "found" : "created", FALSE);
 
   if(entry) *entry = cache_entry;
   return !cache_entry_found;
@@ -358,10 +363,10 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
   dt_pthread_mutex_lock(&cache->lock);
   cache->queries++;
   dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, hash);
-  if(cache_entry) cache->hits++;
 
   if(cache_entry)
   {
+    cache->hits++;
     // Increment refcount while we still hold cache->lock
     _non_thread_safe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, TRUE, cache_entry);
     
