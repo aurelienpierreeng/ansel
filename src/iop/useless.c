@@ -421,7 +421,7 @@ static void extra_callback(GtkWidget *w, dt_iop_module_t *self)
 
   // If any params updated directly, not via a callback, then
   // let core know of the changes
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 /** optional gui callbacks. */
@@ -459,7 +459,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     p->factor = self->picked_color[1];
   }
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
   dt_control_queue_redraw_widget(self->widget);
 }
 

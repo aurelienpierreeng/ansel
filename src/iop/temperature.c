@@ -1518,7 +1518,7 @@ static void temp_tint_callback(GtkWidget *slider, dt_iop_module_t *self)
   dt_bauhaus_combobox_set(g->presets, DT_IOP_TEMP_USER);
   --darktable.gui->reset;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
@@ -1689,7 +1689,7 @@ static void preset_tune_callback(GtkWidget *widget, dt_iop_module_t *self)
   color_rgb_sliders(self);
   color_finetuning_slider(self);
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece)
@@ -1727,7 +1727,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
   dt_bauhaus_slider_set(g->finetune, 0);
   --darktable.gui->reset;
 
-  dt_dev_add_history_item(self->dev, self, TRUE);
+  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 }
 
 

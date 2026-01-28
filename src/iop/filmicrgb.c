@@ -2685,7 +2685,7 @@ static void apply_auto_grey(dt_iop_module_t *self)
   --darktable.gui->reset;
 
   gtk_widget_queue_draw(self->widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void apply_auto_black(dt_iop_module_t *self)
@@ -2712,7 +2712,7 @@ static void apply_auto_black(dt_iop_module_t *self)
   --darktable.gui->reset;
 
   gtk_widget_queue_draw(self->widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 
@@ -2740,7 +2740,7 @@ static void apply_auto_white_point_source(dt_iop_module_t *self)
   --darktable.gui->reset;
 
   gtk_widget_queue_draw(self->widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void apply_autotune(dt_iop_module_t *self)
@@ -2780,7 +2780,7 @@ static void apply_autotune(dt_iop_module_t *self)
   --darktable.gui->reset;
 
   gtk_widget_queue_draw(self->widget);
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece)

@@ -1412,7 +1412,7 @@ static void filepath_callback(GtkWidget *widget, dt_iop_module_t *self)
 #else
     g_strlcpy(p->filepath, filepath, sizeof(p->filepath));
 #endif // HAVE_GMIC
-    dt_dev_add_history_item(darktable.develop, self, TRUE);
+    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
   }
 }
 
@@ -1438,7 +1438,7 @@ static void lutname_callback(GtkTreeSelection *selection, dt_iop_module_t *self)
     {
       g_strlcpy(p->lutname, lutname, sizeof(p->lutname));
       get_compressed_clut(self, TRUE);
-      dt_dev_add_history_item(darktable.develop, self, TRUE);
+      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
     }
     g_free(lutname);
   }
@@ -1612,7 +1612,7 @@ static void button_clicked(GtkWidget *widget, dt_iop_module_t *self)
     g_free(filepath);
     gtk_widget_set_sensitive(g->filepath, p->filepath[0]);
     g_strlcpy(p->filepath, dt_bauhaus_combobox_get_text(g->filepath), sizeof(p->filepath));
-    dt_dev_add_history_item(darktable.develop, self, TRUE);
+    dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
   }
   g_free(lutfolder);
   g_object_unref(filechooser);

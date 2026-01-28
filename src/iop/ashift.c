@@ -4576,7 +4576,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
     else
       g->jobcode = ASHIFT_JOBCODE_DO_CROP;
 
-    dt_dev_add_history_item(self->dev, self, FALSE);
+    dt_dev_add_history_item(self->dev, self, FALSE, TRUE);
     return TRUE;
   }
 
@@ -4861,7 +4861,7 @@ static void cropmode_callback(GtkWidget *widget, gpointer user_data)
   else
   {
     // Update params directly
-    dt_dev_add_history_item(self->dev, self, TRUE);
+    dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   }
 }
 
@@ -5130,7 +5130,7 @@ static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *se
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = (dt_iop_ashift_params_t *)self->params;
-  if(!self->enabled) dt_dev_add_history_item(self->dev, self, TRUE);
+  if(!self->enabled) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
   g->editing = gtk_toggle_button_get_active(button);
   dt_control_change_cursor(GDK_LEFT_PTR);
@@ -5186,7 +5186,7 @@ static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
   memcpy(p, &g->new_params, sizeof(dt_iop_ashift_params_t));
 
   // Commit history and refresh view
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 
   // The following will de-activate the edit button and trigger the callback.
   // Prevent the callback to revert the param change.

@@ -1715,7 +1715,7 @@ static void _on_drag_data_received(GtkWidget *widget, GdkDragContext *dc, gint x
     // add_history_item recomputes a pipeline
     // so we need to flag it for rebuild before
     dt_dev_pixelpipe_rebuild(module_src->dev);
-    dt_dev_add_history_item(module_src->dev, module_src, TRUE);
+    dt_dev_add_history_item(module_src->dev, module_src, TRUE, TRUE);
 
     dt_ioppr_check_iop_order(module_src->dev, 0, "_on_drag_data_received end");
 
@@ -2119,7 +2119,7 @@ static int _delayed_history_commit(gpointer data)
   dt_pthread_mutex_unlock(&dev->history_mutex);
 
   if(dev->forms_changed)
-    dt_dev_add_history_item(dev, dev->gui_module, FALSE);
+    dt_dev_add_history_item(dev, dev->gui_module, FALSE, TRUE);
 
   return G_SOURCE_REMOVE;
 }

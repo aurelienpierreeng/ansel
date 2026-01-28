@@ -632,7 +632,7 @@ static void _exposure_set_white(struct dt_iop_module_t *self, const float white)
   ++darktable.gui->reset;
   dt_bauhaus_slider_set(g->exposure, p->exposure);
   --darktable.gui->reset;
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static float _exposure_proxy_get_exposure(struct dt_iop_module_t *self)
@@ -665,7 +665,7 @@ static void _exposure_set_black(struct dt_iop_module_t *self, const float black)
   ++darktable.gui->reset;
   dt_bauhaus_slider_set(g->black, p->black);
   --darktable.gui->reset;
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static float _exposure_proxy_get_black(struct dt_iop_module_t *self)

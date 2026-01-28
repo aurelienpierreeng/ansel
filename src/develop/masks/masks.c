@@ -1757,7 +1757,7 @@ void dt_masks_iop_value_changed_callback(GtkWidget *widget, struct dt_iop_module
   }
   // we update the combo line
   dt_masks_iop_update(module);
-  dt_dev_add_history_item(module->dev, module, TRUE);
+  dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
 }
 
 void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *grp, dt_masks_form_t *form)

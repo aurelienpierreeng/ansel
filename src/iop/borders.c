@@ -772,7 +772,7 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpi
     gtk_color_chooser_set_rgba(GTK_COLOR_CHOOSER(g->colorpick), &c);
   }
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void aspect_changed(GtkWidget *combo, dt_iop_module_t *self)
@@ -794,7 +794,7 @@ static void aspect_changed(GtkWidget *combo, dt_iop_module_t *self)
     --darktable.gui->reset;
   }
   dt_iop_color_picker_reset(self, TRUE);
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void position_h_changed(GtkWidget *combo, dt_iop_module_t *self)
@@ -816,7 +816,7 @@ static void position_h_changed(GtkWidget *combo, dt_iop_module_t *self)
     --darktable.gui->reset;
   }
   dt_iop_color_picker_reset(self, TRUE);
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void position_v_changed(GtkWidget *combo, dt_iop_module_t *self)
@@ -838,7 +838,7 @@ static void position_v_changed(GtkWidget *combo, dt_iop_module_t *self)
     --darktable.gui->reset;
   }
   dt_iop_color_picker_reset(self, TRUE);
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
@@ -873,7 +873,7 @@ static void colorpick_color_set(GtkColorButton *widget, dt_iop_module_t *self)
   p->color[1] = c.green;
   p->color[2] = c.blue;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 
@@ -891,7 +891,7 @@ static void frame_colorpick_color_set(GtkColorButton *widget, dt_iop_module_t *s
   p->frame_color[1] = c.green;
   p->frame_color[2] = c.blue;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 void gui_update(struct dt_iop_module_t *self)

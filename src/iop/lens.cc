@@ -1611,7 +1611,7 @@ static void camera_menu_select(GtkMenuItem *menuitem, gpointer user_data)
   if(darktable.gui->reset) return;
   dt_iop_lensfun_params_t *p = (dt_iop_lensfun_params_t *)self->params;
   p->modified = 1;
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void camera_menu_fill(dt_iop_module_t *self, const lfCamera *const *camlist)
@@ -1743,7 +1743,7 @@ static void lens_comboentry_focal_update(GtkWidget *widget, dt_iop_module_t *sel
   const char *text = dt_bauhaus_combobox_get_text(widget);
   if(text) (void)sscanf(text, "%f", &p->focal);
   p->modified = 1;
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void lens_comboentry_aperture_update(GtkWidget *widget, dt_iop_module_t *self)
@@ -1752,7 +1752,7 @@ static void lens_comboentry_aperture_update(GtkWidget *widget, dt_iop_module_t *
   const char *text = dt_bauhaus_combobox_get_text(widget);
   if(text) (void)sscanf(text, "%f", &p->aperture);
   p->modified = 1;
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void lens_comboentry_distance_update(GtkWidget *widget, dt_iop_module_t *self)
@@ -1761,7 +1761,7 @@ static void lens_comboentry_distance_update(GtkWidget *widget, dt_iop_module_t *
   const char *text = dt_bauhaus_combobox_get_text(widget);
   if(text) (void)sscanf(text, "%f", &p->distance);
   p->modified = 1;
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void delete_children(GtkWidget *widget, gpointer data)
@@ -1973,7 +1973,7 @@ static void lens_menu_select(GtkMenuItem *menuitem, gpointer user_data)
   p->modified = 1;
   const float scale = get_autoscale(self, p, g->camera);
   dt_bauhaus_slider_set(g->scale, scale);
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void lens_menu_fill(dt_iop_module_t *self, const lfLens *const *lenslist)
@@ -2081,7 +2081,7 @@ static void target_geometry_changed(GtkWidget *widget, gpointer user_data)
   int pos = dt_bauhaus_combobox_get(widget);
   p->target_geom = (lfLensType)(pos + LF_UNKNOWN + 1);
   p->modified = 1;
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void modflags_changed(GtkWidget *widget, gpointer user_data)
@@ -2098,7 +2098,7 @@ static void modflags_changed(GtkWidget *widget, gpointer user_data)
     {
       p->modify_flags = (p->modify_flags & ~LENSFUN_MODFLAG_MASK) | mm->modflag;
       p->modified = 1;
-      dt_dev_add_history_item(darktable.develop, self, TRUE);
+      dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
       break;
     }
   }
@@ -2196,7 +2196,7 @@ static void autoscale_pressed(GtkWidget *button, gpointer user_data)
   const float scale = get_autoscale(self, p, g->camera);
   p->modified = 1;
   dt_bauhaus_slider_set(g->scale, scale);
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void corrections_done(gpointer instance, gpointer user_data)

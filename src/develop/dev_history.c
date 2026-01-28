@@ -691,7 +691,7 @@ int dt_dev_history_auto_save(dt_develop_t *dev)
 // This is why they directly start a pipeline recompute.
 // Otherwise, please keep GUI and pipeline fully separated.
 
-void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable)
+void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gboolean enable, gboolean redraw)
 {
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
@@ -738,10 +738,10 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   }
 
   dt_dev_masks_list_update(dev);
-  dt_dev_refresh_ui_images(dev);
 
   if(darktable.gui && dev->gui_attached)
   {
+    if(redraw) dt_dev_refresh_ui_images(dev);
     
     if(module) 
     { 

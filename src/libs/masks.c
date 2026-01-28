@@ -262,7 +262,7 @@ static void _tree_add_exist(GtkButton *button, dt_masks_form_t *grp)
   if(form && dt_masks_group_add_form(grp, form))
   {
     // we save the group
-    dt_dev_add_history_item(darktable.develop, NULL, FALSE);
+    dt_dev_add_history_item(darktable.develop, NULL, FALSE, TRUE);
 
     // and we apply the change
 
@@ -312,7 +312,7 @@ static void _tree_group(GtkButton *button, dt_lib_module_t *self)
   darktable.develop->forms = g_list_append(darktable.develop->forms, grp);
 
   // add we save
-  dt_dev_add_history_item(darktable.develop, NULL, FALSE);
+  dt_dev_add_history_item(darktable.develop, NULL, FALSE, TRUE);
   _lib_masks_recreate_list(self);
   // dt_masks_change_form_gui(grp);
 }
@@ -358,7 +358,7 @@ static void _add_masks_history_item(dt_lib_masks_t *lm)
 {
   const int reset = lm->gui_reset;
   lm->gui_reset = 1;
-  dt_dev_add_history_item(darktable.develop, NULL, FALSE);
+  dt_dev_add_history_item(darktable.develop, NULL, FALSE, TRUE);
   lm->gui_reset = reset;
 }
 
@@ -786,7 +786,7 @@ static void _tree_cell_edited(GtkCellRendererText *cell, gchar *path_string, gch
   // first, we need to update the mask name
 
   g_strlcpy(form->name, text, sizeof(form->name));
-  dt_dev_add_history_item(darktable.develop, NULL, FALSE);
+  dt_dev_add_history_item(darktable.develop, NULL, FALSE, TRUE);
 }
 
 static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *self)

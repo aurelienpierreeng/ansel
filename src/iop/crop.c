@@ -990,7 +990,7 @@ static void _enter_edit_mode(GtkToggleButton *button, struct dt_iop_module_t *se
 {
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
-  if(!self->enabled) dt_dev_add_history_item(self->dev, self, TRUE);
+  if(!self->enabled) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
 
   g->editing = gtk_toggle_button_get_active(button);
   dt_control_change_cursor(GDK_LEFT_PTR);
@@ -1037,7 +1037,7 @@ static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
   gtk_widget_set_sensitive(g->commit_button, FALSE);
 
   // Commit history and refresh view
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 
   // The following will de-activate the edit button and trigger the callback.
   // Prevent the callback to revert the param change.

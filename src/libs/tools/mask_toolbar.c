@@ -59,7 +59,7 @@ static void _opacity_changed_callback(GtkWidget *widget, gpointer data)
   if(parent_id && sel)
   {
     dt_masks_form_set_opacity(sel, *parent_id, new_value, FALSE, 1);
-    dt_dev_add_history_item(darktable.develop, NULL, FALSE);
+    dt_dev_add_history_item(darktable.develop, NULL, FALSE, TRUE);
   }
 
   dt_conf_set_float("plugins/darkroom/masks/opacity", new_value);

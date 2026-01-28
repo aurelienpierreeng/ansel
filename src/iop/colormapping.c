@@ -816,7 +816,7 @@ static void acquire_source_button_pressed(GtkButton *button, dt_iop_module_t *se
   p->flag |= GET_SOURCE;
   p->flag &= ~HAS_SOURCE;
   dt_iop_request_focus(self);
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void acquire_target_button_pressed(GtkButton *button, dt_iop_module_t *self)
@@ -827,7 +827,7 @@ static void acquire_target_button_pressed(GtkButton *button, dt_iop_module_t *se
   p->flag |= GET_TARGET;
   p->flag &= ~HAS_TARGET;
   dt_iop_request_focus(self);
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -1021,7 +1021,7 @@ static void process_clusters(gpointer instance, gpointer user_data)
   p->flag &= ~(GET_TARGET | GET_SOURCE | ACQUIRE);
   --darktable.gui->reset;
 
-  if(p->flag & HAS_SOURCE) dt_dev_add_history_item(darktable.develop, self, TRUE);
+  if(p->flag & HAS_SOURCE) dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 
   dt_control_queue_redraw();
 }

@@ -347,7 +347,7 @@ static void apply_auto_grey(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->grey_point, p->grey_point);
   --darktable.gui->reset;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void apply_auto_black(dt_iop_module_t *self)
@@ -369,7 +369,7 @@ static void apply_auto_black(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->shadows_range, p->shadows_range);
   --darktable.gui->reset;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void apply_auto_dynamic_range(dt_iop_module_t *self)
@@ -394,7 +394,7 @@ static void apply_auto_dynamic_range(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->dynamic_range, p->dynamic_range);
   --darktable.gui->reset;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 static void apply_autotune(dt_iop_module_t *self)
@@ -427,7 +427,7 @@ static void apply_autotune(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->dynamic_range, p->dynamic_range);
   --darktable.gui->reset;
 
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
 

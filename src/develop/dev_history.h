@@ -66,10 +66,10 @@ gboolean dt_dev_add_history_item_ext(struct dt_develop_t *dev, struct dt_iop_mod
 
 // Locks dev->history_mutex, calls `dt_dev_add_history_item_ext()`, invalidates darkroom pipelines,
 // triggers pipe recomputation and queue an history auto-save for the next 15 seconds.
-void dt_dev_add_history_item_real(struct dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable);
+void dt_dev_add_history_item_real(struct dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable, gboolean redraw);
 
 // Debug helper to follow calls to `dt_dev_add_history_item_real()`, but mostly to follow useless pipe recomputations.
-#define dt_dev_add_history_item(dev, module, enable) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_add_history_item_real, (dev), (module), (enable))
+#define dt_dev_add_history_item(dev, module, enable, redraw) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_add_history_item_real, (dev), (module), (enable), (redraw))
 
 
 // Locks darktable.database_threadsafe in write mode,
