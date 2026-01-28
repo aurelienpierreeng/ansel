@@ -355,6 +355,10 @@ void expose(
 
   if(!dev->pipe->processing && dev->pipe->output_backbuf && dev->pipe->output_imgid == dev->image_storage.id)
   {
+    // When zoomed-in more than 100%, it's common practice to not smoothen the main view.
+    // Also we already scale the image 1:1 wrt GUI size.
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+
     // draw image
     mutex = &dev->pipe->backbuf_mutex;
     dt_pthread_mutex_lock(mutex);
@@ -376,7 +380,6 @@ void expose(
 
     cairo_rectangle(cr, 0, 0, wd, ht);
     cairo_set_source_surface(cr, surface, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_FAST);
     cairo_paint(cr);
 
     cairo_surface_destroy(surface);
@@ -387,6 +390,9 @@ void expose(
   // fallback to preview pipe if main pipe is not ready
   else if(dev->preview_pipe->output_backbuf && dev->preview_pipe->output_imgid == dev->image_storage.id)
   {
+    // When using downscaled fallback, make it smooth to limit discrepancies with the real thing
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
+
     // draw preview
     mutex = &dev->preview_pipe->backbuf_mutex;
     dt_pthread_mutex_lock(mutex);
@@ -395,7 +401,6 @@ void expose(
     
     stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, pr_wd);
     surface = cairo_image_surface_create_for_data(dev->preview_pipe->output_backbuf, CAIRO_FORMAT_RGB24, pr_wd, pr_ht, stride);
-
 
     if(dev->iso_12646.enabled)
     {
@@ -423,7 +428,6 @@ void expose(
 
     cairo_rectangle(cr, 0, 0, pr_wd, pr_ht);
     cairo_set_source_surface(cr, surface, 0, 0);
-    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_FAST);
     cairo_fill(cr);
     
     cairo_surface_destroy(surface);
