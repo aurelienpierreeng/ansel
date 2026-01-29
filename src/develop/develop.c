@@ -169,6 +169,8 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dev->mask_lock = 0;
   dev->darkroom_skip_mouse_events = 0;
 
+  dev->loading_cache = FALSE;
+
   dt_dev_reset_roi(dev);
 }
 

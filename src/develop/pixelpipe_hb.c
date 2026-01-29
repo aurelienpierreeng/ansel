@@ -1578,6 +1578,12 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
 
   if(bypass_cache || new_entry)
   {
+    if(dev->gui_attached) 
+    {
+      dev->loading_cache = TRUE;
+      dt_toast_log(_("Loading full-resolution image in cache. This may take some time..."));
+    }
+
     // Grab input buffer from mipmap cache.
     // We will have to copy it here and in pixelpipe cache because it can get evicted from mipmap cache
     // anytime after we release the lock, so it would not be thread-safe to just use a reference
@@ -1782,6 +1788,17 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     return 0;
   }
 
+  if(dev->gui_attached)
+  {
+    gchar *module_label = dt_history_item_get_name(module);
+    g_free(darktable.main_message);
+    darktable.main_message = g_strdup_printf(_("Processing module `%s` for pipeline %s (%ix%i px @ %0.f%%)..."), 
+                                             module_label, _pipe_get_pipe_name(pipe->type), 
+                                             roi_out.width, roi_out.height, roi_out.scale * 100.f);
+    g_free(module_label);
+    dt_control_queue_redraw_center();
+  }
+
   // Get cache lines for input and output, possibly allocating a new one for output
   dt_pixel_cache_entry_t *input_entry = NULL;
   uint64_t input_hash = dt_dev_pixelpipe_cache_get_hash_data(darktable.pixelpipe_cache, input, &input_entry);
@@ -1851,18 +1868,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   // Actual pixel processing for this module
   int error = 0;
-
-  if(dev->gui_attached)
-  {
-    gchar *module_label = dt_history_item_get_name(module);
-    g_free(darktable.main_message);
-    darktable.main_message = g_strdup_printf(_("Processing module `%s` for pipeline %s (%ix%i px @ %.3fx)..."), 
-                                             module_label, _pipe_get_pipe_name(pipe->type), 
-                                             roi_out.width, roi_out.height, roi_out.scale);
-    g_free(module_label);
-    dt_control_queue_redraw_center();
-  }
-
   dt_times_t start;
   dt_get_times(&start);
 
@@ -1876,13 +1881,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   _print_perf_debug(pipe, pixelpipe_flow, piece, module, &start);
 
-  if(dev->gui_attached)
-  {
-    g_free(darktable.main_message);
-    darktable.main_message = NULL;
-    dt_control_queue_redraw_center();
-  }
-
   // Flag to throw away the output as soon as we are done consuming it in this thread, at the next module.
   // Cache bypass is requested by modules like crop/perspective, when they show the full image,
   // and when doing anything transient.
@@ -1895,6 +1893,19 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // Unlock read and write locks, decrease reference count on input
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, FALSE, output_entry);
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
+
+  if(dev->gui_attached)
+  {
+    g_free(darktable.main_message);
+    darktable.main_message = NULL;
+    dt_control_queue_redraw_center();
+
+    if(dev->loading_cache && strcmp(module->op, "initialscale") == 0)
+    {
+      dt_toast_log(_("Full-resolution image loaded in cache !"));
+      dev->loading_cache = FALSE;
+    }
+  }
   
   if(error)
   {
