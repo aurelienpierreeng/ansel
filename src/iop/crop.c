@@ -1024,7 +1024,6 @@ static void _enter_edit_mode(GtkToggleButton *button, struct dt_iop_module_t *se
 
   // It sucks that we need to invalidate the preview too but we need its final dimension.
   dt_dev_invalidate_all(self->dev);
-  dt_dev_reprocess_all(self->dev); // FIXME: this fix the wrong roi issue, but is it the good way ?
   dt_dev_refresh_ui_images(self->dev);
 }
 
