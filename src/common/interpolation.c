@@ -1152,7 +1152,7 @@ void dt_interpolation_resample_roi(const struct dt_interpolation *itor,
                                    const dt_iop_roi_t *const roi_in)
 {
   dt_iop_roi_t oroi = *roi_out;
-  oroi.x = oroi.y = 0;
+  //oroi.x = oroi.y = 0;
 
   dt_iop_roi_t iroi = *roi_in;
   iroi.x = iroi.y = 0;
@@ -1384,7 +1384,7 @@ int dt_interpolation_resample_roi_cl(const struct dt_interpolation *itor,
                                      const dt_iop_roi_t *const roi_in)
 {
   dt_iop_roi_t oroi = *roi_out;
-  oroi.x = oroi.y = 0;
+  //oroi.x = oroi.y = 0;
 
   dt_iop_roi_t iroi = *roi_in;
   iroi.x = iroi.y = 0;
