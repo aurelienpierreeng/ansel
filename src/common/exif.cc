@@ -4643,8 +4643,9 @@ void dt_exif_init()
   // preface the exiv2 messages with "[exiv2] "
   Exiv2::LogMsg::setHandler(&dt_exif_log_handler);
 
-  // Exiv2::enableBMFF() is deprecated and no longer needed in recent Exiv2 versions
-  // BMFF (ISO Base Media File Format) support is now automatic
+  #ifdef HAVE_LIBEXIV2_WITH_ISOBMFF
+  Exiv2::enableBMFF();
+  #endif
 
   Exiv2::XmpParser::initialize();
   // this has to stay with the old url (namespace already propagated outside dt)
