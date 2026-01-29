@@ -4643,8 +4643,12 @@ void dt_exif_init()
   // preface the exiv2 messages with "[exiv2] "
   Exiv2::LogMsg::setHandler(&dt_exif_log_handler);
 
+  // enable isobmff support if exiv2 was built with it
+  // the enableBMFF function is deprecated from exiv2 0.28.0
+  #if !EXIV2_TEST_VERSION(0,28,0)
   #ifdef HAVE_LIBEXIV2_WITH_ISOBMFF
   Exiv2::enableBMFF();
+  #endif
   #endif
 
   Exiv2::XmpParser::initialize();
