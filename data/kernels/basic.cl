@@ -2607,53 +2607,6 @@ colisa (read_only image2d_t in, write_only image2d_t out, unsigned int width, un
   write_imagef(out, (int2)(x, y), o);
 }
 
-/* kernel for the unbreak input profile module - gamma version */
-
-kernel void
-profilegamma (read_only image2d_t in, write_only image2d_t out, int width, int height,
-        read_only image2d_t table, constant float *ta)
-{
-  const unsigned int x = get_global_id(0);
-  const unsigned int y = get_global_id(1);
-
-  if(x >= width || y >= height) return;
-
-  float4 i = read_imagef(in, sampleri, (int2)(x, y));
-  float4 o;
-
-  o.x = lookup_unbounded(table, i.x, ta);
-  o.y = lookup_unbounded(table, i.y, ta);
-  o.z = lookup_unbounded(table, i.z, ta);
-  o.w = i.w;
-
-  write_imagef(out, (int2)(x, y), o);
-}
-
-/* kernel for the unbreak input profile module - log version */
-kernel void
-profilegamma_log (read_only image2d_t in, write_only image2d_t out, int width, int height, const float dynamic_range, const float shadows_range, const float grey)
-{
-  const unsigned int x = get_global_id(0);
-  const unsigned int y = get_global_id(1);
-
-  if(x >= width || y >= height) return;
-
-  float4 i = read_imagef(in, sampleri, (int2)(x, y));
-  const float4 noise = pow((float4)2.0f, (float4)-16.0f);
-  const float4 dynamic4 = dynamic_range;
-  const float4 shadows4 = shadows_range;
-  const float4 grey4 = grey;
-
-  float4 o;
-
-  o = (i < noise) ? noise : i / grey4;
-  o = (log2(o) - shadows4) / dynamic4;
-  o = (o < noise) ? noise : o;
-  i.xyz = o.xyz;
-
-  write_imagef(out, (int2)(x, y), i);
-}
-
 /* kernel for the interpolation resample helper */
 kernel void
 interpolation_resample (read_only image2d_t in, write_only image2d_t out, const int width, const int height,

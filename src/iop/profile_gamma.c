@@ -83,13 +83,6 @@ typedef struct dt_iop_profilegamma_data_t
   float security_factor;
 } dt_iop_profilegamma_data_t;
 
-typedef struct dt_iop_profilegamma_global_data_t
-{
-  int kernel_profilegamma;
-  int kernel_profilegamma_log;
-} dt_iop_profilegamma_global_data_t;
-
-
 const char *name()
 {
   return _("unbreak input profile");
@@ -185,75 +178,6 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   }
   return 1;
 }
-
-
-#ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  dt_iop_profilegamma_data_t *d = (dt_iop_profilegamma_data_t *)piece->data;
-  dt_iop_profilegamma_global_data_t *gd = (dt_iop_profilegamma_global_data_t *)self->global_data;
-
-  cl_int err = -999;
-  const int devid = piece->pipe->devid;
-  const int width = roi_in->width;
-  const int height = roi_in->height;
-  cl_mem dev_table = NULL;
-  cl_mem dev_coeffs = NULL;
-
-
-  size_t sizes[3] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-
-  if(d->mode == PROFILEGAMMA_LOG)
-  {
-    const float dynamic_range = d->dynamic_range;
-    const float shadows_range = d->shadows_range;
-    const float grey = d->grey_point / 100.0f;
-    dt_opencl_set_kernel_arg(devid, gd->kernel_profilegamma_log, 0, sizeof(cl_mem), (void *)&dev_in);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_profilegamma_log, 1, sizeof(cl_mem), (void *)&dev_out);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_profilegamma_log, 2, sizeof(int), (void *)&width);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_profilegamma_log, 3, sizeof(int), (void *)&height);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_profilegamma_log, 4, sizeof(float), (void *)&dynamic_range);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_profilegamma_log, 5, sizeof(float), (void *)&shadows_range);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_profilegamma_log, 6, sizeof(float), (void *)&grey);
-
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_profilegamma_log, sizes);
-    if(err != CL_SUCCESS) goto error;
-    return TRUE;
-  }
-  else if(d->mode == PROFILEGAMMA_GAMMA)
-  {
-    dev_table = dt_opencl_copy_host_to_device(devid, d->table, 256, 256, sizeof(float));
-    if(dev_table == NULL) goto error;
-
-    dev_coeffs = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3, d->unbounded_coeffs);
-    if(dev_coeffs == NULL) goto error;
-
-    dt_opencl_set_kernel_arg(devid, gd->kernel_profilegamma, 0, sizeof(cl_mem), (void *)&dev_in);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_profilegamma, 1, sizeof(cl_mem), (void *)&dev_out);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_profilegamma, 2, sizeof(int), (void *)&width);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_profilegamma, 3, sizeof(int), (void *)&height);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_profilegamma, 4, sizeof(cl_mem), (void *)&dev_table);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_profilegamma, 5, sizeof(cl_mem), (void *)&dev_coeffs);
-
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_profilegamma, sizes);
-    if(err != CL_SUCCESS)
-    {
-      dt_opencl_release_mem_object(dev_table);
-      dt_opencl_release_mem_object(dev_coeffs);
-      goto error;
-    }
-
-    dt_opencl_release_mem_object(dev_table);
-    dt_opencl_release_mem_object(dev_coeffs);
-    return TRUE;
-  }
-
-error:
-  dt_print(DT_DEBUG_OPENCL, "[opencl_profilegamma] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
-}
-#endif
 
 void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
@@ -593,27 +517,6 @@ void gui_update(dt_iop_module_t *self)
 
   gui_changed(self, g->mode, 0);
 }
-
-void init_global(dt_iop_module_so_t *module)
-{
-  const int program = 2; // basic.cl, from programs.conf
-  dt_iop_profilegamma_global_data_t *gd
-      = (dt_iop_profilegamma_global_data_t *)malloc(sizeof(dt_iop_profilegamma_global_data_t));
-
-  module->data = gd;
-  gd->kernel_profilegamma = dt_opencl_create_kernel(program, "profilegamma");
-  gd->kernel_profilegamma_log = dt_opencl_create_kernel(program, "profilegamma_log");
-}
-
-void cleanup_global(dt_iop_module_so_t *module)
-{
-  dt_iop_profilegamma_global_data_t *gd = (dt_iop_profilegamma_global_data_t *)module->data;
-  dt_opencl_free_kernel(gd->kernel_profilegamma);
-  dt_opencl_free_kernel(gd->kernel_profilegamma_log);
-  free(module->data);
-  module->data = NULL;
-}
-
 
 void gui_init(dt_iop_module_t *self)
 {
