@@ -124,8 +124,6 @@ static gboolean dt_noiseprofile_verify(JsonParser *parser)
 
   if(!json_reader_is_array(reader)) _ERROR("`noiseprofiles' is supposed to be an array");
 
-  size_t n_profiles_total = 0;
-
   // go through all makers
   const int n_makers = json_reader_count_elements(reader);
 
