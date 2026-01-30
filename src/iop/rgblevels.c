@@ -93,11 +93,6 @@ typedef struct dt_iop_rgblevels_data_t
   float lut[DT_IOP_RGBLEVELS_MAX_CHANNELS][0x10000];
 } dt_iop_rgblevels_data_t;
 
-typedef struct dt_iop_rgblevels_global_data_t
-{
-  int kernel_levels;
-} dt_iop_rgblevels_global_data_t;
-
 const char *name()
 {
   return _("rgb levels");
@@ -784,23 +779,6 @@ void init(dt_iop_module_t *self)
   }
 }
 
-void init_global(dt_iop_module_so_t *self)
-{
-  const int program = 29; // rgblevels.cl, from programs.conf
-  dt_iop_rgblevels_global_data_t *gd
-      = (dt_iop_rgblevels_global_data_t *)malloc(sizeof(dt_iop_rgblevels_global_data_t));
-  self->data = gd;
-  gd->kernel_levels = dt_opencl_create_kernel(program, "rgblevels");
-}
-
-void cleanup_global(dt_iop_module_so_t *self)
-{
-  dt_iop_rgblevels_global_data_t *gd = (dt_iop_rgblevels_global_data_t *)self->data;
-  dt_opencl_free_kernel(gd->kernel_levels);
-  free(self->data);
-  self->data = NULL;
-}
-
 void change_image(struct dt_iop_module_t *self)
 {
   dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
@@ -1158,168 +1136,6 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   }
 }
 
-#ifdef HAVE_OPENCL
-int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(piece->pipe);
-
-  const int ch = piece->colors;
-  dt_iop_rgblevels_data_t *d = (dt_iop_rgblevels_data_t *)piece->data;
-  dt_iop_rgblevels_params_t *p = (dt_iop_rgblevels_params_t *)&d->params;
-  dt_iop_rgblevels_gui_data_t *g = (dt_iop_rgblevels_gui_data_t *)self->gui_data;
-  dt_iop_rgblevels_global_data_t *gd = (dt_iop_rgblevels_global_data_t *)self->global_data;
-
-  cl_int err = CL_SUCCESS;
-
-  float *src_buffer = NULL;
-
-  cl_mem dev_lutr = NULL;
-  cl_mem dev_lutg = NULL;
-  cl_mem dev_lutb = NULL;
-
-  cl_mem dev_levels = NULL;
-  cl_mem dev_inv_gamma = NULL;
-
-  cl_mem dev_profile_info = NULL;
-  cl_mem dev_profile_lut = NULL;
-  dt_colorspaces_iccprofile_info_cl_t *profile_info_cl;
-  cl_float *profile_lut_cl = NULL;
-
-  const int use_work_profile = (work_profile == NULL) ? 0 : 1;
-
-  const int devid = piece->pipe->devid;
-
-  const int width = roi_out->width;
-  const int height = roi_out->height;
-
-  // process auto levels
-  if(g && (piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW) == DT_DEV_PIXELPIPE_PREVIEW)
-  {
-    dt_iop_gui_enter_critical_section(self);
-    if(g->call_auto_levels == 1 && !darktable.gui->reset)
-    {
-      g->call_auto_levels = -1;
-
-      dt_iop_gui_leave_critical_section(self);
-
-      // get the image, this works only in C
-      src_buffer = dt_alloc_align_float((size_t)ch * width * height);
-      if(src_buffer == NULL)
-      {
-        fprintf(stderr, "[rgblevels process_cl] error allocating memory for temp table 1\n");
-        err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-        goto cleanup;
-      }
-
-      err = dt_opencl_copy_device_to_host(devid, src_buffer, dev_in, width, height, ch * sizeof(float));
-      if(err != CL_SUCCESS)
-      {
-        fprintf(stderr, "[rgblevels process_cl] error allocating memory for temp table 2\n");
-        goto cleanup;
-      }
-
-      memcpy(&g->params, p, sizeof(dt_iop_rgblevels_params_t));
-
-      int box[4] = { 0 };
-      _get_selected_area(self, piece, g, roi_in, box);
-      _auto_levels(src_buffer, roi_in->width, roi_in->height, box, &(g->params), g->channel, work_profile);
-
-      dt_free_align(src_buffer);
-      src_buffer = NULL;
-
-      dt_iop_gui_enter_critical_section(self);
-      g->call_auto_levels = 2;
-      dt_iop_gui_leave_critical_section(self);
-    }
-    else
-    {
-      dt_iop_gui_leave_critical_section(self);
-    }
-  }
-
-  const int autoscale = d->params.autoscale;
-  const int preserve_colors = d->params.preserve_colors;
-
-  dev_lutr = dt_opencl_copy_host_to_device(devid, d->lut[0], 256, 256, sizeof(float));
-  if(dev_lutr == NULL)
-  {
-    fprintf(stderr, "[rgblevels process_cl] error allocating memory 1\n");
-    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-    goto cleanup;
-  }
-  dev_lutg = dt_opencl_copy_host_to_device(devid, d->lut[1], 256, 256, sizeof(float));
-  if(dev_lutg == NULL)
-  {
-    fprintf(stderr, "[rgblevels process_cl] error allocating memory 2\n");
-    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-    goto cleanup;
-  }
-  dev_lutb = dt_opencl_copy_host_to_device(devid, d->lut[2], 256, 256, sizeof(float));
-  if(dev_lutb == NULL)
-  {
-    fprintf(stderr, "[rgblevels process_cl] error allocating memory 3\n");
-    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-    goto cleanup;
-  }
-
-  dev_levels = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3 * 3, (float *)d->params.levels);
-  if(dev_levels == NULL)
-  {
-    fprintf(stderr, "[rgblevels process_cl] error allocating memory 4\n");
-    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-    goto cleanup;
-  }
-
-  dev_inv_gamma = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3, (float *)d->inv_gamma);
-  if(dev_inv_gamma == NULL)
-  {
-    fprintf(stderr, "[rgblevels process_cl] error allocating memory 5\n");
-    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-    goto cleanup;
-  }
-
-  err = dt_ioppr_build_iccprofile_params_cl(work_profile, devid, &profile_info_cl, &profile_lut_cl,
-                                            &dev_profile_info, &dev_profile_lut);
-  if(err != CL_SUCCESS) goto cleanup;
-
-  size_t sizes[2] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid) };
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 0, sizeof(cl_mem), &dev_in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 1, sizeof(cl_mem), &dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 2, sizeof(int), &width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 3, sizeof(int), &height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 4, sizeof(int), (void *)&autoscale);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 5, sizeof(int), (void *)&preserve_colors);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 6, sizeof(cl_mem), &dev_lutr);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 7, sizeof(cl_mem), &dev_lutg);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 8, sizeof(cl_mem), &dev_lutb);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 9, sizeof(cl_mem), (void *)&dev_levels);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 10, sizeof(cl_mem), (void *)&dev_inv_gamma);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 11, sizeof(cl_mem), (void *)&dev_profile_info);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 12, sizeof(cl_mem), (void *)&dev_profile_lut);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 13, sizeof(int), (void *)&use_work_profile);
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_levels, sizes);
-  if(err != CL_SUCCESS)
-  {
-    fprintf(stderr, "[rgblevels process_cl] error %i enqueue kernel\n", err);
-    goto cleanup;
-  }
-
-cleanup:
-  if(dev_lutr) dt_opencl_release_mem_object(dev_lutr);
-  if(dev_lutg) dt_opencl_release_mem_object(dev_lutg);
-  if(dev_lutb) dt_opencl_release_mem_object(dev_lutb);
-  if(dev_levels) dt_opencl_release_mem_object(dev_levels);
-  if(dev_inv_gamma) dt_opencl_release_mem_object(dev_inv_gamma);
-  dt_ioppr_free_iccprofile_params_cl(&profile_info_cl, &profile_lut_cl, &dev_profile_info, &dev_profile_lut);
-
-  if(src_buffer) dt_free_align(src_buffer);
-
-  if(err != CL_SUCCESS) dt_print(DT_DEBUG_OPENCL, "[opencl_rgblevels] couldn't enqueue kernel! %d\n", err);
-
-  return (err == CL_SUCCESS) ? TRUE : FALSE;
-}
-#endif
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

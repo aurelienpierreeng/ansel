@@ -71,11 +71,6 @@ typedef struct dt_iop_splittoning_data_t
   float compress; // Compress range
 } dt_iop_splittoning_data_t;
 
-typedef struct dt_iop_splittoning_global_data_t
-{
-  int kernel_splittoning;
-} dt_iop_splittoning_global_data_t;
-
 const char *name()
 {
   return _("split-toning");
@@ -201,66 +196,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     }
 
   }
-}
-
-#ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  dt_iop_splittoning_data_t *d = (dt_iop_splittoning_data_t *)piece->data;
-  dt_iop_splittoning_global_data_t *gd = (dt_iop_splittoning_global_data_t *)self->global_data;
-
-  cl_int err = -999;
-  const int devid = piece->pipe->devid;
-
-  const int width = roi_out->width;
-  const int height = roi_out->height;
-
-  const float compress = (d->compress / 110.0) / 2.0; // Don't allow 100% compression..
-  const float balance = d->balance;
-  const float shadow_hue = d->shadow_hue;
-  const float shadow_saturation = d->shadow_saturation;
-  const float highlight_hue = d->highlight_hue;
-  const float highlight_saturation = d->highlight_saturation;
-
-  size_t sizes[2] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid) };
-  dt_opencl_set_kernel_arg(devid, gd->kernel_splittoning, 0, sizeof(cl_mem), &dev_in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_splittoning, 1, sizeof(cl_mem), &dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_splittoning, 2, sizeof(int), &width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_splittoning, 3, sizeof(int), &height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_splittoning, 4, sizeof(float), &compress);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_splittoning, 5, sizeof(float), &balance);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_splittoning, 6, sizeof(float), &shadow_hue);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_splittoning, 7, sizeof(float), &shadow_saturation);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_splittoning, 8, sizeof(float), &highlight_hue);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_splittoning, 9, sizeof(float), &highlight_saturation);
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_splittoning, sizes);
-  if(err != CL_SUCCESS) goto error;
-  return TRUE;
-
-error:
-  dt_print(DT_DEBUG_OPENCL, "[opencl_splittoning] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
-}
-#endif
-
-
-void init_global(dt_iop_module_so_t *module)
-{
-  const int program = 8; // extended.cl from programs.conf
-  dt_iop_splittoning_global_data_t *gd
-      = (dt_iop_splittoning_global_data_t *)malloc(sizeof(dt_iop_splittoning_global_data_t));
-  module->data = gd;
-  gd->kernel_splittoning = dt_opencl_create_kernel(program, "splittoning");
-}
-
-
-void cleanup_global(dt_iop_module_so_t *module)
-{
-  dt_iop_splittoning_global_data_t *gd = (dt_iop_splittoning_global_data_t *)module->data;
-  dt_opencl_free_kernel(gd->kernel_splittoning);
-  free(module->data);
-  module->data = NULL;
 }
 
 static inline void update_colorpicker_color(GtkWidget *colorpicker, float hue, float sat)

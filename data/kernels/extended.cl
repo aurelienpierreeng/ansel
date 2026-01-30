@@ -155,37 +155,6 @@ vignette (read_only image2d_t in, write_only image2d_t out, const int width, con
   write_imagef (out, (int2)(x, y), pixel);
 }
 
-
-/* kernel for the splittoning plugin. */
-kernel void
-splittoning (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
-            const float compress, const float balance, const float shadow_hue, const float shadow_saturation,
-            const float highlight_hue, const float highlight_saturation)
-{
-  const int x = get_global_id(0);
-  const int y = get_global_id(1);
-
-  if(x >= width || y >= height) return;
-
-  float4 pixel = read_imagef(in, sampleri, (int2)(x, y));
-
-  float4 hsl = RGB_2_HSL(pixel);
-
-  if(hsl.z < balance - compress || hsl.z > balance + compress)
-  {
-    hsl.x = hsl.z < balance ? shadow_hue : highlight_hue;
-    hsl.y = hsl.z < balance ? shadow_saturation : highlight_saturation;
-    float ra = hsl.z < balance ? clamp(2.0f*fabs(-balance + compress + hsl.z), 0.0f, 1.0f) :
-               clamp(2.0f*fabs(-balance - compress + hsl.z), 0.0f, 1.0f);
-
-    float4 mixrgb = HSL_2_RGB(hsl);
-
-    pixel.xyz = clamp(pixel * (1.0f - ra) + mixrgb * ra, (float4)0.0f, (float4)1.0f).xyz;
-  }
-
-  write_imagef (out, (int2)(x, y), pixel);
-}
-
 /* kernel for the colorbalance module */
 kernel void
 colorbalance (read_only image2d_t in, write_only image2d_t out, const int width, const int height,

@@ -68,12 +68,6 @@ typedef struct dt_iop_colisa_data_t
   float lunbounded_coeffs[3]; // approximation for extrapolation of brightness curve
 } dt_iop_colisa_data_t;
 
-typedef struct dt_iop_colisa_global_data_t
-{
-  int kernel_colisa;
-} dt_iop_colisa_global_data_t;
-
-
 const char *name()
 {
   return _("contrast brightness saturation");
@@ -102,68 +96,6 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_p
 {
   return IOP_CS_LAB;
 }
-
-#ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  dt_iop_colisa_data_t *d = (dt_iop_colisa_data_t *)piece->data;
-  dt_iop_colisa_global_data_t *gd = (dt_iop_colisa_global_data_t *)self->global_data;
-
-  cl_int err = -999;
-  const int devid = piece->pipe->devid;
-
-  const int width = roi_in->width;
-  const int height = roi_in->height;
-
-  const float saturation = d->saturation;
-
-  cl_mem dev_cm = NULL;
-  cl_mem dev_ccoeffs = NULL;
-  cl_mem dev_lm = NULL;
-  cl_mem dev_lcoeffs = NULL;
-
-  dev_cm = dt_opencl_copy_host_to_device(devid, d->ctable, 256, 256, sizeof(float));
-  if(dev_cm == NULL) goto error;
-  dev_ccoeffs = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3, d->cunbounded_coeffs);
-  if(dev_ccoeffs == NULL) goto error;
-  dev_lm = dt_opencl_copy_host_to_device(devid, d->ltable, 256, 256, sizeof(float));
-  if(dev_lm == NULL) goto error;
-  dev_lcoeffs = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3, d->lunbounded_coeffs);
-  if(dev_lcoeffs == NULL) goto error;
-
-  size_t sizes[3];
-  sizes[0] = ROUNDUPDWD(width, devid);
-  sizes[1] = ROUNDUPDHT(height, devid);
-  sizes[2] = 1;
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colisa, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colisa, 1, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colisa, 2, sizeof(int), (void *)&width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colisa, 3, sizeof(int), (void *)&height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colisa, 4, sizeof(float), (void *)&saturation);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colisa, 5, sizeof(cl_mem), (void *)&dev_cm);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colisa, 6, sizeof(cl_mem), (void *)&dev_ccoeffs);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colisa, 7, sizeof(cl_mem), (void *)&dev_lm);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colisa, 8, sizeof(cl_mem), (void *)&dev_lcoeffs);
-
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_colisa, sizes);
-  if(err != CL_SUCCESS) goto error;
-
-  dt_opencl_release_mem_object(dev_lcoeffs);
-  dt_opencl_release_mem_object(dev_lm);
-  dt_opencl_release_mem_object(dev_ccoeffs);
-  dt_opencl_release_mem_object(dev_cm);
-  return TRUE;
-
-error:
-  dt_opencl_release_mem_object(dev_lcoeffs);
-  dt_opencl_release_mem_object(dev_lm);
-  dt_opencl_release_mem_object(dev_ccoeffs);
-  dt_opencl_release_mem_object(dev_cm);
-  dt_print(DT_DEBUG_OPENCL, "[opencl_colisa] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
-}
-#endif
 
 void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
@@ -279,25 +211,6 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
   free(piece->data);
   piece->data = NULL;
 }
-
-void init_global(dt_iop_module_so_t *module)
-{
-  const int program = 2; // basic.cl, from programs.conf
-  dt_iop_colisa_global_data_t *gd
-      = (dt_iop_colisa_global_data_t *)malloc(sizeof(dt_iop_colisa_global_data_t));
-  module->data = gd;
-  gd->kernel_colisa = dt_opencl_create_kernel(program, "colisa");
-}
-
-
-void cleanup_global(dt_iop_module_so_t *module)
-{
-  dt_iop_colisa_global_data_t *gd = (dt_iop_colisa_global_data_t *)module->data;
-  dt_opencl_free_kernel(gd->kernel_colisa);
-  free(module->data);
-  module->data = NULL;
-}
-
 
 void gui_init(struct dt_iop_module_t *self)
 {
