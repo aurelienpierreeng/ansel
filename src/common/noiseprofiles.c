@@ -139,7 +139,7 @@ static gboolean dt_noiseprofile_verify(JsonParser *parser)
     if(!json_reader_read_member(reader, "models")) _ERROR("missing `models`");
 
     const int n_models = json_reader_count_elements(reader);
-    n_profiles_total += n_models;
+
     for(int j = 0; j < n_models; j++)
     {
       if(!json_reader_read_element(reader, j)) _ERROR("can't access model at position %d / %d", j+1, n_models);
