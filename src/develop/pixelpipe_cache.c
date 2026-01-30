@@ -316,10 +316,6 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
     
     // Release cache lock BEFORE acquiring entry locks to avoid deadlock
     dt_pthread_mutex_unlock(&cache->lock);
-
-    // Acquire read lock (wait for any write to complete)
-    dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, TRUE, cache_entry);
-    dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, FALSE, cache_entry);
   }
   else
   {
@@ -369,13 +365,6 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
     cache->hits++;
     // Increment refcount while we still hold cache->lock
     _non_thread_safe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, TRUE, cache_entry);
-    
-    // IMPORTANT: Release cache->lock BEFORE trying to acquire entry locks to avoid deadlock
-    dt_pthread_mutex_unlock(&cache->lock);
-
-    // Block and wait for write events to finish, aka try to take a read lock
-    dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, TRUE, cache_entry);
-    dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, FALSE, cache_entry);
 
     // Set the time after we get the lock
     cache_entry->age = g_get_monotonic_time(); // this is the MRU entry
@@ -383,10 +372,8 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
     *dsc = &cache_entry->dsc;
     dt_pixel_cache_message(cache_entry, "found", FALSE);
   }
-  else
-  {
-    dt_pthread_mutex_unlock(&cache->lock);
-  }
+
+  dt_pthread_mutex_unlock(&cache->lock);
 
   if(entry) *entry = cache_entry;
   return cache_entry != NULL;
