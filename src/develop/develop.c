@@ -171,6 +171,9 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
 
   dev->loading_cache = FALSE;
 
+  dev->progress.completed = 0;
+  dev->progress.total = 0;
+
   dt_dev_reset_roi(dev);
 }
 
@@ -571,7 +574,11 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       pipe->status = DT_DEV_PIXELPIPE_UNDEF;
 
       dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
+      dev->progress.completed = 0;
+      dev->progress.total = 0;
       int ret = dt_dev_pixelpipe_process(pipe, dev, x, y, wd, ht, scale);
+      dev->progress.completed = 0;
+      dev->progress.total = 0;
       dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
 
       dt_control_log_busy_leave();

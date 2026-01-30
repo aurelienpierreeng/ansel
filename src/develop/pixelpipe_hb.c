@@ -1713,6 +1713,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     if(!piece->enabled)
       return dt_dev_pixelpipe_process_rec(pipe, dev, output, cl_mem_output, out_format, roi_in,
                                           g_list_previous(modules), g_list_previous(pieces), pos - 1);
+
+    if(dev->gui_attached) dev->progress.total++;
   }
 
   KILL_SWITCH_ABORT;
@@ -1885,6 +1887,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 #endif
 
   _print_perf_debug(pipe, pixelpipe_flow, piece, module, &start);
+
+  if(dev->gui_attached) dev->progress.completed++;   
 
   // Flag to throw away the output as soon as we are done consuming it in this thread, at the next module.
   // Cache bypass is requested by modules like crop/perspective, when they show the full image,

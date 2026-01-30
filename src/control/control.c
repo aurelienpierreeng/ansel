@@ -266,6 +266,7 @@ void *dt_control_expose(void *voidptr)
 
   // draw busy indicator
   dt_pthread_mutex_lock(&darktable.control->log_mutex);
+
   if(darktable.control->log_busy > 0)
   {
     dt_control_draw_busy_msg(cr, width, height);
@@ -276,6 +277,12 @@ void *dt_control_expose(void *voidptr)
     dt_control_commit_cursor();
 
   dt_pthread_mutex_unlock(&darktable.control->log_mutex);
+
+  const float progress_h = DT_PIXEL_APPLY_DPI(5);
+  cairo_rectangle(cr, 0, height - progress_h, 
+    width * (float)darktable.develop->progress.completed / (float)darktable.develop->progress.total, 
+    progress_h);
+  cairo_fill(cr);
 
   cairo_destroy(cr);
 
