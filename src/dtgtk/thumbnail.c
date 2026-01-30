@@ -341,8 +341,6 @@ int _main_context_draw(dt_thumbnail_t *thumb)
 static void _finish_buffer_thread(dt_thumbnail_t *thumb, gboolean success)
 
 {
-  dt_pthread_mutex_unlock(&thumb->lock);
-
   thumb->image_inited = success;
 
   // Redraw events need to be sent from the main GUI thread
@@ -376,6 +374,7 @@ int32_t _get_image_buffer(dt_job_t *job)
   }
   else
   {
+    dt_pthread_mutex_unlock(&thumb->lock);
     _finish_buffer_thread(thumb, FALSE);
     return 0;
   }
@@ -430,6 +429,7 @@ int32_t _get_image_buffer(dt_job_t *job)
     dt_free_align(full_res_thumb);
   }
 
+  dt_pthread_mutex_unlock(&thumb->lock);
   _finish_buffer_thread(thumb, TRUE);
   return 0;
 }
