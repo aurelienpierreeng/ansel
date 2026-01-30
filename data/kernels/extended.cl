@@ -103,36 +103,6 @@ GAUSS(float center, float wings, float x)
   return exp(-(x-b)*(x-b)/(c*c));
 }
 
-
-__kernel void
-relight (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
-         const float center, const float wings, const float ev)
-{
-  const int x = get_global_id(0);
-  const int y = get_global_id(1);
-
-  if(x >= width || y >= height) return;
-
-  float4 pixel = read_imagef(in, sampleri, (int2)(x, y));
-
-  const float lightness = pixel.x/100.0f;
-  const float value = -1.0f+(lightness*2.0f);
-  float gauss = GAUSS(center, wings, value);
-
-  if(isnan(gauss) || isinf(gauss))
-    gauss = 0.0f;
-
-  float relight = 1.0f / exp2(-ev * clamp(gauss, 0.0f, 1.0f));
-
-  if(isnan(relight) || isinf(relight))
-    relight = 1.0f;
-
-  pixel.x = 100.0f * clamp(lightness*relight, 0.0f, 1.0f);
-
-  write_imagef (out, (int2)(x, y), pixel);
-}
-
-
 typedef enum _channelmixer_operation_mode_t
 {
   OPERATION_MODE_RGB = 0,
@@ -185,7 +155,35 @@ channelmixer (read_only image2d_t in, write_only image2d_t out, const int width,
 
       opixel.x = clamp(pixel.x * rgb_matrix[0] + pixel.y * rgb_matrix[1] + pixel.z * rgb_matrix[2], 0.0f, 1.0f);
       opixel.y = clamp(pixel.x * rgb_matrix[3] + pixel.y * rgb_matrix[4] + pixel.z * rgb_matrix[5], 0.0f, 1.0f);
-      opixel.z = clamp(pixel.x * rgb_matrix[6] + pixel.y * rgb_matrix[7] + pixel.z * rgb_matrix[8], 0.0f, 1.0f);
+      opixel.z = clamp(pixel.x * rgb_matrix[6] + pixel.y * rgb_m
+typedef enum _channelmixer_operation_mode_t
+{
+  OPERATION_MODE_RGB = 0,
+  OPERATION_MODE_GRAY = 1,
+  OPERATION_MODE_HSL_V1 = 2,
+  OPERATION_MODE_HSL_V2 = 3,
+} _channelmixer_operation_mode_t;
+
+
+__kernel void
+channelmixer (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
+              const int operation_mode, global const float *hsl_matrix,
+              global const float *rgb_matrix)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+
+  if(x >= width || y >= height) return;
+
+  float4 pixel = read_imagef(in, sampleri, (int2)(x, y));
+  float4 opixel = (float4)(0.0f, 0.0f, 0.0f, pixel.w);
+  float gray, hmix, smix, lmix;
+
+  switch(operation_mode)
+  {
+    case OPERATION_MODE_RGB:
+      opixel.x = fmax(pixel.x * rgb_matrix[0] + pixel.y * rgb_matrix[1] + pixel.z * rgb_matrix[2], 0.0f);
+atrix[7] + pixel.z * rgb_matrix[8], 0.0f, 1.0f);
       break;
 
     case OPERATION_MODE_HSL_V2:
