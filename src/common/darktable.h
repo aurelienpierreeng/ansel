@@ -620,21 +620,16 @@ void dt_print_nts(dt_debug_thread_t thread, const char *msg, ...) __attribute__(
 /* same as above but requires additional DT_DEBUG_VERBOSE flag to be true */
 void dt_vprint(dt_debug_thread_t thread, const char *msg, ...) __attribute__((format(printf, 2, 3)));
 
-// Maximum number of workers for background threads, depending on
-// CPU number of cores and available memory.
-// Note that we allow at most 2 pixelpipes running concurrently
-// (when in darkroom: (preview or main) and export),
-// because all pipelines share the CPU at some point, so parallelizing
-// pipelines only increases memory contention at the CPU bottleneck,
-// and leads to no performance increase (quite the opposite).
-// There is also the issue of SQL database locking: SQLite errors
-// when trying to write several image histories at once, which happens
-// on refreshing the thumbnails when entering a newly imported lighttable collection. So we allow
-// only one thumbnail export to run at a time (and again, pixel ops don't go faster
-// with parallel pipelines anyway).
-// Parallel workers are mostly useful to defer expensive I/O, like writing XMP
-// or copying files on remote storages, where the bottleneck is filesystem or network I/O
-// rather than CPU or RAM I/O.
+// Number of workers, on top of reserved workers (1 for main preview, 1 for thumbnail in darkroom)
+// This is currently set to 2, so 4 workers total, without user config.
+// Workers will process a queue of jobs that they share together (except for reserved ones). 
+// It is useless to use more than 2 workers
+// since those jobs very often lock some mutex that prevents concurrent running.
+// All jobs finding an idle worker will "start" immediately, as far as the OS knows from outside the program,
+// but may do nothing internally except for waiting a mutex locked by another worker/thread.
+// In that situation, we loose the ability to flush the queue, since jobs are "running".
+// So it's better to have few workers with long queues, rather
+// than many workers, to be able to control queued jobs.
 int dt_worker_threads();
 
 // Get the remaining memory available for pipeline allocations,

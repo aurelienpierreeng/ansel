@@ -337,10 +337,10 @@ int _main_context_draw(dt_thumbnail_t *thumb)
   return G_SOURCE_REMOVE;
 }
 
+// Warning: unlock thumbnail mutex
 static void _finish_buffer_thread(dt_thumbnail_t *thumb, gboolean success)
+
 {
-  dt_pthread_mutex_lock(&thumb->lock);
-  thumb->background_jobs--;
   dt_pthread_mutex_unlock(&thumb->lock);
 
   thumb->image_inited = success;
@@ -356,7 +356,6 @@ int32_t _get_image_buffer(dt_job_t *job)
 {
   dt_thumbnail_t *thumb = dt_control_job_get_params(job);
   thumb_return_if_fails(thumb, 1);
-  _free_image_surface(thumb);
 
   int image_w = 0;
   int image_h = 0;
@@ -365,6 +364,7 @@ int32_t _get_image_buffer(dt_job_t *job)
   image_h = MAX(image_h, 32);
 
   int zoom = (thumb->table) ? thumb->table->zoom : DT_THUMBTABLE_ZOOM_FIT;
+  dt_pthread_mutex_lock(&thumb->lock);
 
   dt_view_surface_value_t res = dt_view_image_get_surface(thumb->imgid, image_w, image_h, &thumb->img_surf, zoom);
 
@@ -438,27 +438,22 @@ int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb)
 {
   thumb_return_if_fails(thumb, 1);
 
-  // A job that will free/recreate the cairo surface is already running.
-  // Since those recreations are not thread-safe, we can't have more than one concurrent job per thumbnail.
-  if(dt_thumbnail_get_background_jobs(thumb) > 0)
-    return 0;
-
   // - image inited: the cached buffer has a valid size. Invalid this flag when size changes.
   // - img_surf: we have a cached buffer (cairo surface), regardless of its validity.
   if(thumb->image_inited && thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
     return 0;
 
+  // Nuke the image surface in GUI mainthread.
+  // Note: if background thumbnail thread gets ditched,
+  // this may never be recreated.
+  _free_image_surface(thumb);
+
   // Drawing the focus peaking and doing the color conversions
   // can be expensive on large thumbnails. Do it in a background job,
   // so the thumbtable stays responsive.
-  dt_pthread_mutex_lock(&thumb->lock);
-  thumb->background_jobs++;
-  dt_pthread_mutex_unlock(&thumb->lock);
-
-  dt_job_t *job = dt_control_job_create(&_get_image_buffer, "get image");
+  dt_job_t *job = dt_control_job_create(&_get_image_buffer, "get image %i", thumb->imgid);
   dt_control_job_set_params(job, thumb, NULL);
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, job);
-
+  dt_control_add_job(darktable.control, DT_JOB_QUEUE_SYSTEM_FG, job);
   return 0;
 }
 
@@ -1165,10 +1160,7 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
   ;
 
   // Wait for background jobs to finish before deleting the buffers they write in
-  while(dt_thumbnail_get_background_jobs(thumb))
-    g_usleep(20000);
-
-  dt_pthread_mutex_destroy(&thumb->lock);
+  dt_pthread_mutex_lock(&thumb->lock);
 
   if(thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
     cairo_surface_destroy(thumb->img_surf);
@@ -1180,6 +1172,10 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
 
   if(thumb->filename) g_free(thumb->filename);
   thumb->filename = NULL;
+
+  dt_pthread_mutex_unlock(&thumb->lock);
+
+  dt_pthread_mutex_destroy(&thumb->lock);
 
   free(thumb);
   thumb = NULL;

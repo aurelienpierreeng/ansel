@@ -1826,6 +1826,9 @@ gboolean _scroll_on_focus(GdkEventScroll event, void *data)
 
 void enter(dt_view_t *self)
 {
+  // Flush all background jobs (thumbnails generation) to spare resources for interactivity
+  dt_control_flush_jobs_queue(darktable.control, DT_JOB_QUEUE_SYSTEM_FG);
+  
   dt_print(DT_DEBUG_CONTROL, "[run_job+] 11 %f in darkroom mode\n", dt_get_wtime());
   dt_develop_t *dev = (dt_develop_t *)self->data;
   dev->exit = 0;

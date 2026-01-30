@@ -520,7 +520,7 @@ int _garbage_collection(dt_thumbtable_t *table)
 
     // Don't delete thumbnails that still have a background job running,
     // because it would return its output buffer to a NULL pointer.
-    if((collect_garbage || !is_in_collection) && dt_thumbnail_get_background_jobs(thumb) == 0)
+    if(collect_garbage || !is_in_collection)
     {
       // Hide now, delete when we can
       gtk_widget_hide(thumb->widget);

@@ -26,7 +26,7 @@
 // reserved workers
 #define DT_CTL_WORKER_RESERVED 2
 #define DT_CTL_WORKER_DARKROOM_THUMB 0    // dev zoom 1
-#define DT_CTL_WORKER_DARKROOM_MAIN 1 // dev zoom fill
+#define DT_CTL_WORKER_DARKROOM_MAIN 1     // dev zoom fill
 
 typedef enum dt_job_state_t
 {
@@ -88,6 +88,9 @@ int dt_control_add_job(struct dt_control_t *control, dt_job_queue_t queue_id, dt
 int32_t dt_control_add_job_res(struct dt_control_t *s, dt_job_t *job, int32_t res);
 
 int32_t dt_control_get_threadid();
+
+// Flush all non-running jobs queued in the queue matching the ID
+void dt_control_flush_jobs_queue(struct dt_control_t *control, dt_job_queue_t queue_id);
 
 #include "control/jobs/control_jobs.h"
 #include "control/jobs/develop_jobs.h"

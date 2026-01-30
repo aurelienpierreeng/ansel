@@ -30,7 +30,7 @@
 // so the RAM usage will not explode here : at any time, we have at most
 // 2 concurrent pipes running ((darkroow preview OR darkroom main) AND (thumbnail OR export)).
 // Crazy threading here is to hide disk & network I/O latency while fetching files.
-#define DT_CONTROL_MAX_JOBS 840
+#define DT_CONTROL_MAX_JOBS 64
 
 /* the queue can have scheduled jobs but all
     the workers are sleeping, so this kicks the workers
@@ -219,9 +219,8 @@ static int32_t dt_control_run_job_res(dt_control_t *control, int32_t res)
     dt_control_job_print(job);
     dt_print(DT_DEBUG_CONTROL, "\n");
 
-    dt_control_job_set_state(job, DT_JOB_STATE_RUNNING);
-
     /* execute job */
+    dt_control_job_set_state(job, DT_JOB_STATE_RUNNING);
     job->result = job->execute(job);
 
     dt_control_job_set_state(job, DT_JOB_STATE_FINISHED);
@@ -377,6 +376,28 @@ int32_t dt_control_add_job_res(dt_control_t *control, _dt_job_t *job, int32_t re
   return 0;
 }
 
+void dt_control_flush_jobs_queue(dt_control_t *control, dt_job_queue_t queue_id)
+{
+  dt_pthread_mutex_lock(&control->queue_mutex);
+
+  int count = 0;
+
+  for(int k = 0; k < control->num_threads; k++)
+  {
+    _dt_job_t *job = (_dt_job_t *)control->job[k];
+    if(job->state != DT_JOB_STATE_RUNNING)
+    {
+      dt_control_job_set_state(job, DT_JOB_STATE_DISCARDED);
+      dt_control_job_dispose(job);
+      count++;
+    }
+  }
+
+  dt_print(DT_DEBUG_CONTROL, "[jobs] flushed %i pending jobs from queue %i\n", count, queue_id);
+
+  dt_pthread_mutex_unlock(&control->queue_mutex);
+}
+
 int dt_control_add_job(dt_control_t *control, dt_job_queue_t queue_id, _dt_job_t *job)
 {
   if(((unsigned int)queue_id) >= DT_JOB_QUEUE_MAX || !job)
@@ -405,7 +426,7 @@ int dt_control_add_job(dt_control_t *control, dt_job_queue_t queue_id, _dt_job_t
   GList **queue = &control->queues[queue_id];
   size_t length = control->queue_length[queue_id];
 
-  dt_print(DT_DEBUG_CONTROL, "[add_job] %zu | ", length);
+  dt_print(DT_DEBUG_CONTROL, "[add_job] %02ld | ", length);
   dt_control_job_print(job);
   dt_print(DT_DEBUG_CONTROL, "\n");
 

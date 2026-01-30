@@ -130,17 +130,6 @@ typedef struct
   GtkWidget *w_focal;
   GtkWidget *w_folder;
 
-  // TRUE when the mipmap cache is generating a new thumbnail for us,
-  // and there is nothing yet to paint in the surface.
-  // In that case, don't send more requests to the mipmap cache,
-  // listen and wait for the MIPMAP_UPDATED signal.
-
-  // Number of background jobs handling the backbuf Cairo surface.
-  // Those will fetch a mipmap thumbnail and possibly repaint focus regions on top.
-  // Because they all free/recreate the Cairo buffer internally, we need
-  // at most one job running at a time per thumbnail.
-  int background_jobs;
-
   dt_pthread_mutex_t lock;
 
 } dt_thumbnail_t;
@@ -175,17 +164,6 @@ void dt_thumbnail_alternative_mode(dt_thumbnail_t *thumb, gboolean enable);
 // If prefetching, Gtk won't redraw the invisible thumbnails so we need to manually call this ahead.
 // Return 1 on error.
 int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb);
-
-// Get the number of background jobs currently running.
-// Shouldn't be more than 1 if everything goes well
-static inline int dt_thumbnail_get_background_jobs(dt_thumbnail_t *thumb)
-{
-  dt_pthread_mutex_lock(&thumb->lock);
-  const int value = thumb->background_jobs;
-  dt_pthread_mutex_unlock(&thumb->lock);
-  assert(value == 0 || value == 1);
-  return value;
-}
 
 static inline dt_thumbnail_overlay_t sanitize_overlays(dt_thumbnail_overlay_t overlays)
 {
