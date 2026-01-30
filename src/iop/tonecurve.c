@@ -183,7 +183,6 @@ typedef struct dt_iop_tonecurve_global_data_t
   float picked_color_min[3];
   float picked_color_max[3];
   float picked_output_color[3];
-  int kernel_tonecurve;
 } dt_iop_tonecurve_global_data_t;
 
 
@@ -275,98 +274,6 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
   return 1;
 }
 
-#ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  dt_iop_tonecurve_data_t *d = (dt_iop_tonecurve_data_t *)piece->data;
-  dt_iop_tonecurve_global_data_t *gd = (dt_iop_tonecurve_global_data_t *)self->global_data;
-  cl_mem dev_L = NULL;
-  cl_mem dev_a = NULL;
-  cl_mem dev_b = NULL;
-  cl_mem dev_coeffs_L = NULL;
-  cl_mem dev_coeffs_ab = NULL;
-  cl_int err = -999;
-
-  const int devid = piece->pipe->devid;
-  const int width = roi_in->width;
-  const int height = roi_in->height;
-  const int autoscale_ab = d->autoscale_ab;
-  const int unbound_ab = d->unbound_ab;
-  const float low_approximation = d->table[0][(int)(0.01f * 0x10000ul)];
-  const int preserve_colors = d->preserve_colors;
-
-  const dt_iop_order_iccprofile_info_t *const work_profile
-    = dt_ioppr_add_profile_info_to_list(self->dev, DT_COLORSPACE_PROPHOTO_RGB, "", INTENT_PERCEPTUAL);
-
-  cl_mem dev_profile_info = NULL;
-  cl_mem dev_profile_lut = NULL;
-  dt_colorspaces_iccprofile_info_cl_t *profile_info_cl;
-  cl_float *profile_lut_cl = NULL;
-
-  err = dt_ioppr_build_iccprofile_params_cl(work_profile, devid, &profile_info_cl, &profile_lut_cl,
-                                            &dev_profile_info, &dev_profile_lut);
-  if(err != CL_SUCCESS) goto error;
-
-  dev_L = dt_opencl_copy_host_to_device(devid, d->table[ch_L], 256, 256, sizeof(float));
-  if(dev_L == NULL) goto error;
-
-  dev_a = dt_opencl_copy_host_to_device(devid, d->table[ch_a], 256, 256, sizeof(float));
-  if(dev_a == NULL) goto error;
-
-  dev_b = dt_opencl_copy_host_to_device(devid, d->table[ch_b], 256, 256, sizeof(float));
-  if(dev_b == NULL) goto error;
-
-  dev_coeffs_L = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3, d->unbounded_coeffs_L);
-  if(dev_coeffs_L == NULL) goto error;
-
-  dev_coeffs_ab = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 12, d->unbounded_coeffs_ab);
-  if(dev_coeffs_ab == NULL) goto error;
-
-  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-  dt_opencl_set_kernel_arg(devid, gd->kernel_tonecurve, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_tonecurve, 1, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_tonecurve, 2, sizeof(int), (void *)&width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_tonecurve, 3, sizeof(int), (void *)&height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_tonecurve, 4, sizeof(cl_mem), (void *)&dev_L);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_tonecurve, 5, sizeof(cl_mem), (void *)&dev_a);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_tonecurve, 6, sizeof(cl_mem), (void *)&dev_b);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_tonecurve, 7, sizeof(int), (void *)&autoscale_ab);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_tonecurve, 8, sizeof(int), (void *)&unbound_ab);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_tonecurve, 9, sizeof(cl_mem), (void *)&dev_coeffs_L);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_tonecurve, 10, sizeof(cl_mem), (void *)&dev_coeffs_ab);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_tonecurve, 11, sizeof(float), (void *)&low_approximation);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_tonecurve, 12, sizeof(int), (void *)&preserve_colors);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_tonecurve, 13, sizeof(cl_mem), (void *)&dev_profile_info);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_tonecurve, 14, sizeof(cl_mem), (void *)&dev_profile_lut);
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_tonecurve, sizes);
-
-  if(err != CL_SUCCESS) goto error;
-  dt_opencl_release_mem_object(dev_L);
-  dt_opencl_release_mem_object(dev_a);
-  dt_opencl_release_mem_object(dev_b);
-  dt_opencl_release_mem_object(dev_coeffs_L);
-  dt_opencl_release_mem_object(dev_coeffs_ab);
-  dt_ioppr_free_iccprofile_params_cl(&profile_info_cl, &profile_lut_cl, &dev_profile_info, &dev_profile_lut);
-  return TRUE;
-
-error:
-  dt_opencl_release_mem_object(dev_L);
-  dt_opencl_release_mem_object(dev_a);
-  dt_opencl_release_mem_object(dev_b);
-  dt_opencl_release_mem_object(dev_coeffs_L);
-  dt_opencl_release_mem_object(dev_coeffs_ab);
-  dt_ioppr_free_iccprofile_params_cl(&profile_info_cl, &profile_lut_cl, &dev_profile_info, &dev_profile_lut);
-  dt_print(DT_DEBUG_OPENCL, "[opencl_tonecurve] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
-}
-#endif
-/*
-static inline float dt_prophoto_rgb_luminance(const float *const rgb)
-{
-  return (rgb[0] * 0.2880402f + rgb[1] * 0.7118741f + rgb[2] * 0.0000857f);
-}
-*/
 void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
@@ -852,11 +759,9 @@ void init(dt_iop_module_t *module)
 
 void init_global(dt_iop_module_so_t *module)
 {
-  const int program = 2; // basic.cl, from programs.conf
   dt_iop_tonecurve_global_data_t *gd
       = (dt_iop_tonecurve_global_data_t *)malloc(sizeof(dt_iop_tonecurve_global_data_t));
   module->data = gd;
-  gd->kernel_tonecurve = dt_opencl_create_kernel(program, "tonecurve");
   for(int k=0; k<3; k++)
   {
     gd->picked_color[k] = .0f;
@@ -868,8 +773,6 @@ void init_global(dt_iop_module_so_t *module)
 
 void cleanup_global(dt_iop_module_so_t *module)
 {
-  dt_iop_tonecurve_global_data_t *gd = (dt_iop_tonecurve_global_data_t *)module->data;
-  dt_opencl_free_kernel(gd->kernel_tonecurve);
   free(module->data);
   module->data = NULL;
 }
