@@ -994,9 +994,9 @@ static gboolean _prepare_resampling_plan(const struct dt_interpolation *itor,
 }
 
 static void _interpolation_resample_plain(const struct dt_interpolation *itor,
-                                          float *out,
+                                          float *const restrict out,
                                           const dt_iop_roi_t *const roi_out,
-                                          const float *const in,
+                                          const float *const restrict in,
                                           const dt_iop_roi_t *const roi_in)
 {
   int *hindex = NULL;
@@ -1021,8 +1021,8 @@ static void _interpolation_resample_plain(const struct dt_interpolation *itor,
 #endif
     for(int y = 0; y < roi_out->height; y++)
     {
-      memcpy((char *)out + (size_t)out_stride_floats * sizeof(float) * y,
-             (char *)in + (size_t)in_stride_floats * sizeof(float) * (y + roi_out->y) + x0,
+      memcpy((char *)__builtin_assume_aligned(out, 64) + (size_t)out_stride_floats * sizeof(float) * y,
+             (char *)__builtin_assume_aligned(in, 64) + (size_t)in_stride_floats * sizeof(float) * (y + roi_out->y) + x0,
              out_stride_floats * sizeof(float));
     }
 
