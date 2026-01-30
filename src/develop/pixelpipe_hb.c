@@ -106,8 +106,8 @@ inline static void _copy_buffer(const char *const restrict input, char *const re
           schedule(static)
 #endif
   for(size_t j = 0; j < height; j++)
-    memcpy(output + bpp * j * o_width,
-           input + bpp * (x_offset + (y_offset + j) * i_width),
+    memcpy(__builtin_assume_aligned(output, 64) + bpp * j * o_width,
+           __builtin_assume_aligned(input, 64) + bpp * (x_offset + (y_offset + j) * i_width),
            stride);
 }
 
@@ -1316,8 +1316,11 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     }
 
     // Allocate GPU memory for output
-    *cl_mem_output = _gpu_init_buffer(pipe->devid, *output, roi_out, bpp, module, "output");
-    if(*cl_mem_output == NULL) goto error;
+    if(*cl_mem_output == NULL)
+    {
+      *cl_mem_output = _gpu_init_buffer(pipe->devid, *output, roi_out, bpp, module, "output");
+      if(*cl_mem_output == NULL) goto error;
+    }
 
     // transform to input colorspace if we got our input in a different colorspace
     if(!dt_ioppr_transform_image_colorspace_cl(
@@ -1361,6 +1364,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     *pixelpipe_flow |= (PIXELPIPE_FLOW_BLENDED_ON_GPU);
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_BLENDED_ON_CPU);
 
+    // Resync OpenCL output buffer with CPU/RAM cache
     if(_cl_pinned_memory_copy(pipe->devid, *output, *cl_mem_output, roi_out, CL_MAP_READ, bpp, module,
                               "output input"))
       goto error;
@@ -1434,11 +1438,11 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
 
   // if (rand() % 20 == 0) success_opencl = FALSE; // Test code: simulate spurious failures
 
-  // clean up OpenCL input memory and resync pipeline
-  _gpu_clear_buffer(&cl_mem_input);
-
   // Wait for kernels and copies to complete before accessing the cache again and releasing the locks
   dt_opencl_finish(pipe->devid);
+
+  // clean up OpenCL input memory and resync pipeline
+  _gpu_clear_buffer(&cl_mem_input);
 
   // don't free cl_mem_output here, as it will be the input for the next module
   // the last module in the pipe will need to be freed by the pipeline process function
@@ -1448,10 +1452,11 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   // free everything and fall back to CPU processing
 error:;
 
+  dt_opencl_finish(pipe->devid);
+
   _gpu_clear_buffer(cl_mem_output);
   _gpu_clear_buffer(&cl_mem_input);
 
-  dt_opencl_finish(pipe->devid);
   if(input != NULL && *output != NULL)
     return pixelpipe_process_on_CPU(pipe, dev, input, input_format, roi_in, output, out_format, roi_out, module,
                                     piece, tiling, pixelpipe_flow, input_entry);
