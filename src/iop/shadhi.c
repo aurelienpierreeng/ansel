@@ -164,12 +164,6 @@ typedef struct dt_iop_shadhi_data_t
   dt_iop_shadhi_algo_t shadhi_algo;
 } dt_iop_shadhi_data_t;
 
-typedef struct dt_iop_shadhi_global_data_t
-{
-  int kernel_shadows_highlights_mix;
-} dt_iop_shadhi_global_data_t;
-
-
 const char *name()
 {
   return _("shadows and highlights");
@@ -461,125 +455,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 }
 
 
-
-#ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  dt_iop_shadhi_data_t *d = (dt_iop_shadhi_data_t *)piece->data;
-  dt_iop_shadhi_global_data_t *gd = (dt_iop_shadhi_global_data_t *)self->global_data;
-
-  cl_int err = -999;
-  const int devid = piece->pipe->devid;
-
-  const int width = roi_in->width;
-  const int height = roi_in->height;
-  const int channels = piece->colors;
-
-  const int order = d->order;
-  const float radius = fmaxf(0.1f, d->radius);
-  const float sigma = radius * roi_in->scale;
-  const float shadows = 2.0f * fmin(fmax(-1.0f, (d->shadows / 100.0f)), 1.0f);
-  const float highlights = 2.0f * fmin(fmax(-1.0f, (d->highlights / 100.0f)), 1.0f);
-  const float whitepoint = fmax(1.0f - d->whitepoint / 100.0f, 0.01f);
-  const float compress
-      = fmin(fmax(0.0f, (d->compress / 100.0f)), 0.99f); // upper limit 0.99f to avoid division by zero later
-  const float shadows_ccorrect = (fmin(fmax(0.0f, (d->shadows_ccorrect / 100.0f)), 1.0f) - 0.5f) * sign(shadows)
-                                 + 0.5f;
-  const float highlights_ccorrect = (fmin(fmax(0.0f, (d->highlights_ccorrect / 100.0f)), 1.0f) - 0.5f)
-                                    * sign(-highlights) + 0.5f;
-  const float low_approximation = d->low_approximation;
-  const unsigned int flags = d->flags;
-  const int unbound_mask = ((d->shadhi_algo == SHADHI_ALGO_BILATERAL) && (flags & UNBOUND_BILATERAL))
-                           || ((d->shadhi_algo == SHADHI_ALGO_GAUSSIAN) && (flags & UNBOUND_GAUSSIAN));
-
-  size_t sizes[3];
-
-  dt_gaussian_cl_t *g = NULL;
-  dt_bilateral_cl_t *b = NULL;
-  cl_mem dev_tmp = NULL;
-
-  if(d->shadhi_algo == SHADHI_ALGO_GAUSSIAN)
-  {
-    dt_aligned_pixel_t Labmax = { 100.0f, 128.0f, 128.0f, 1.0f };
-    dt_aligned_pixel_t Labmin = { 0.0f, -128.0f, -128.0f, 0.0f };
-
-    if(unbound_mask)
-    {
-      for(int k = 0; k < 4; k++) Labmax[k] = INFINITY;
-      for(int k = 0; k < 4; k++) Labmin[k] = -INFINITY;
-    }
-
-    g = dt_gaussian_init_cl(devid, width, height, channels, Labmax, Labmin, sigma, order);
-    if(!g) goto error;
-    err = dt_gaussian_blur_cl(g, dev_in, dev_out);
-    if(err != CL_SUCCESS) goto error;
-    dt_gaussian_free_cl(g);
-    g = NULL;
-  }
-  else
-  {
-    const float sigma_r = 100.0f; // does not depend on scale
-    const float sigma_s = sigma;
-    const float detail = -1.0f; // we want the bilateral base layer
-
-    b = dt_bilateral_init_cl(devid, width, height, sigma_s, sigma_r);
-    if(!b) goto error;
-    err = dt_bilateral_splat_cl(b, dev_in);
-    if(err != CL_SUCCESS) goto error;
-    err = dt_bilateral_blur_cl(b);
-    if(err != CL_SUCCESS) goto error;
-    err = dt_bilateral_slice_cl(b, dev_in, dev_out, detail);
-    if(err != CL_SUCCESS) goto error;
-    dt_bilateral_free_cl(b);
-    b = NULL; // make sure we don't clean it up twice
-  }
-
-  dev_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
-  if(dev_tmp == NULL) goto error;
-
-  size_t origin[] = { 0, 0, 0 };
-  size_t region[] = { width, height, 1 };
-  err = dt_opencl_enqueue_copy_image(devid, dev_out, dev_tmp, origin, origin, region);
-  if(err != CL_SUCCESS) goto error;
-
-  // final mixing step
-  sizes[0] = ROUNDUPDWD(width, devid);
-  sizes[1] = ROUNDUPDHT(height, devid);
-  sizes[2] = 1;
-  dt_opencl_set_kernel_arg(devid, gd->kernel_shadows_highlights_mix, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_shadows_highlights_mix, 1, sizeof(cl_mem), (void *)&dev_tmp);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_shadows_highlights_mix, 2, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_shadows_highlights_mix, 3, sizeof(int), (void *)&width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_shadows_highlights_mix, 4, sizeof(int), (void *)&height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_shadows_highlights_mix, 5, sizeof(float), (void *)&shadows);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_shadows_highlights_mix, 6, sizeof(float), (void *)&highlights);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_shadows_highlights_mix, 7, sizeof(float), (void *)&compress);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_shadows_highlights_mix, 8, sizeof(float),
-                           (void *)&shadows_ccorrect);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_shadows_highlights_mix, 9, sizeof(float),
-                           (void *)&highlights_ccorrect);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_shadows_highlights_mix, 10, sizeof(unsigned int), (void *)&flags);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_shadows_highlights_mix, 11, sizeof(int), (void *)&unbound_mask);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_shadows_highlights_mix, 12, sizeof(float),
-                           (void *)&low_approximation);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_shadows_highlights_mix, 13, sizeof(float),
-                           (void *)&whitepoint);
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_shadows_highlights_mix, sizes);
-  if(err != CL_SUCCESS) goto error;
-
-  dt_opencl_release_mem_object(dev_tmp);
-  return TRUE;
-
-error:
-  if(g) dt_gaussian_free_cl(g);
-  if(b) dt_bilateral_free_cl(b);
-  dt_opencl_release_mem_object(dev_tmp);
-  dt_print(DT_DEBUG_OPENCL, "[opencl_shadows&highlights] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
-}
-#endif
-
 void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
                      const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
                      struct dt_develop_tiling_t *tiling)
@@ -608,9 +483,6 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   {
     // gaussian blur
     tiling->factor = 2.0f + fmax(1.0f, (float)dt_gaussian_memory_use(width, height, channels) / basebuffer);
-#ifdef HAVE_OPENCL
-    tiling->factor_cl = 2.0f + fmax(1.0f, (float)dt_gaussian_memory_use_cl(width, height, channels) / basebuffer);
-#endif
     tiling->maxbuf = fmax(1.0f, (float)dt_gaussian_singlebuffer_size(width, height, channels) / basebuffer);
   }
 
@@ -638,11 +510,6 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->flags = p->flags;
   d->low_approximation = p->low_approximation;
   d->shadhi_algo = p->shadhi_algo;
-
-#ifdef HAVE_OPENCL
-  if(d->shadhi_algo == SHADHI_ALGO_BILATERAL)
-    piece->process_cl_ready = (piece->process_cl_ready && !dt_opencl_avoid_atomics(pipe->devid));
-#endif
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
@@ -655,23 +522,6 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 {
   free(piece->data);
   piece->data = NULL;
-}
-
-void init_global(dt_iop_module_so_t *module)
-{
-  const int program = 6; // gaussian.cl, from programs.conf
-  dt_iop_shadhi_global_data_t *gd
-      = (dt_iop_shadhi_global_data_t *)malloc(sizeof(dt_iop_shadhi_global_data_t));
-  module->data = gd;
-  gd->kernel_shadows_highlights_mix = dt_opencl_create_kernel(program, "shadows_highlights_mix");
-}
-
-void cleanup_global(dt_iop_module_so_t *module)
-{
-  dt_iop_shadhi_global_data_t *gd = (dt_iop_shadhi_global_data_t *)module->data;
-  dt_opencl_free_kernel(gd->kernel_shadows_highlights_mix);
-  free(module->data);
-  module->data = NULL;
 }
 
 void gui_init(struct dt_iop_module_t *self)
