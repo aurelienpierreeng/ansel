@@ -99,12 +99,6 @@ typedef struct dt_iop_levels_data_t
   float lut[0x10000];
 } dt_iop_levels_data_t;
 
-typedef struct dt_iop_levels_global_data_t
-{
-  int kernel_levels;
-} dt_iop_levels_global_data_t;
-
-
 const char *name()
 {
   return _("levels");
@@ -405,51 +399,6 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
 }
 
-#ifdef HAVE_OPENCL
-int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  dt_iop_levels_data_t *d = (dt_iop_levels_data_t *)piece->data;
-  dt_iop_levels_global_data_t *gd = (dt_iop_levels_global_data_t *)self->global_data;
-
-  if(d->mode == LEVELS_MODE_AUTOMATIC)
-  {
-    commit_params_late(self, piece);
-  }
-
-  cl_mem dev_lut = NULL;
-  cl_int err = -999;
-  const int devid = piece->pipe->devid;
-
-  const int width = roi_out->width;
-  const int height = roi_out->height;
-
-  dev_lut = dt_opencl_copy_host_to_device(devid, d->lut, 256, 256, sizeof(float));
-  if(dev_lut == NULL) goto error;
-
-  size_t sizes[2] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid) };
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 0, sizeof(cl_mem), &dev_in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 1, sizeof(cl_mem), &dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 2, sizeof(int), &width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 3, sizeof(int), &height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 4, sizeof(cl_mem), &dev_lut);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 5, sizeof(float), &d->levels[0]);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 6, sizeof(float), &d->levels[2]);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_levels, 7, sizeof(float), &d->in_inv_gamma);
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_levels, sizes);
-  if(err != CL_SUCCESS) goto error;
-
-  dt_opencl_release_mem_object(dev_lut);
-
-  return TRUE;
-
-error:
-  dt_opencl_release_mem_object(dev_lut);
-  dt_print(DT_DEBUG_OPENCL, "[opencl_levels] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
-}
-#endif
-
 // void init_presets (dt_iop_module_so_t *self)
 //{
 //  dt_iop_levels_params_t p;
@@ -575,23 +524,6 @@ void init(dt_iop_module_t *module)
   d->levels[0] = 0.0f;
   d->levels[1] = 0.5f;
   d->levels[2] = 1.0f;
-}
-
-void init_global(dt_iop_module_so_t *self)
-{
-  const int program = 2; // basic.cl, from programs.conf
-  dt_iop_levels_global_data_t *gd
-      = (dt_iop_levels_global_data_t *)malloc(sizeof(dt_iop_levels_global_data_t));
-  self->data = gd;
-  gd->kernel_levels = dt_opencl_create_kernel(program, "levels");
-}
-
-void cleanup_global(dt_iop_module_so_t *self)
-{
-  dt_iop_levels_global_data_t *gd = (dt_iop_levels_global_data_t *)self->data;
-  dt_opencl_free_kernel(gd->kernel_levels);
-  free(self->data);
-  self->data = NULL;
 }
 
 void gui_init(dt_iop_module_t *self)
