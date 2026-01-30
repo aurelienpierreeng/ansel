@@ -52,12 +52,6 @@ typedef struct dt_iop_invert_gui_data_t
   double CAM_to_RGB[3][4];
 } dt_iop_invert_gui_data_t;
 
-typedef struct dt_iop_invert_global_data_t
-{
-  int kernel_invert_1f;
-  int kernel_invert_4f;
-} dt_iop_invert_global_data_t;
-
 typedef struct dt_iop_invert_data_t
 {
   float color[4]; // color of film material
@@ -443,62 +437,6 @@ void process_sse2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, c
 }
 #endif
 
-#ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  dt_iop_invert_data_t *d = (dt_iop_invert_data_t *)piece->data;
-  dt_iop_invert_global_data_t *gd = (dt_iop_invert_global_data_t *)self->global_data;
-
-  const int devid = piece->pipe->devid;
-  const uint32_t filters = piece->pipe->dsc.filters;
-  cl_mem dev_color = NULL;
-  cl_int err = -999;
-  int kernel = -1;
-
-  dt_aligned_pixel_t film_rgb_f = { d->color[0], d->color[1], d->color[2], d->color[3] };
-
-  if(filters)
-  {
-    kernel = gd->kernel_invert_1f;
-
-    const float *const m = piece->pipe->dsc.processed_maximum;
-    for(int c = 0; c < 4; c++) film_rgb_f[c] *= m[c];
-  }
-  else
-  {
-    kernel = gd->kernel_invert_4f;
-  }
-
-  dev_color = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3, film_rgb_f);
-  if(dev_color == NULL) goto error;
-
-  const int width = roi_in->width;
-  const int height = roi_in->height;
-
-  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-  dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), (void *)&width);
-  dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), (void *)&height);
-  dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(cl_mem), (void *)&dev_color);
-  dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(uint32_t), (void *)&filters);
-  dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(uint32_t), (void *)&roi_out->x);
-  dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(uint32_t), (void *)&roi_out->y);
-  err = dt_opencl_enqueue_kernel_2d(devid, kernel, sizes);
-  if(err != CL_SUCCESS) goto error;
-
-  dt_opencl_release_mem_object(dev_color);
-  for(int k = 0; k < 4; k++) piece->pipe->dsc.processed_maximum[k] = 1.0f;
-  return TRUE;
-
-error:
-  dt_opencl_release_mem_object(dev_color);
-  dt_print(DT_DEBUG_OPENCL, "[opencl_invert] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
-}
-#endif
-
 void reload_defaults(dt_iop_module_t *self)
 {
   dt_iop_invert_gui_data_t *const g = (dt_iop_invert_gui_data_t*)self->gui_data;
@@ -531,24 +469,6 @@ void reload_defaults(dt_iop_module_t *self)
   }
 }
 
-void init_global(dt_iop_module_so_t *module)
-{
-  const int program = 2; // basic.cl, from programs.conf
-  module->data = malloc(sizeof(dt_iop_invert_global_data_t));
-
-  dt_iop_invert_global_data_t *gd = module->data;
-  gd->kernel_invert_1f = dt_opencl_create_kernel(program, "invert_1f");
-  gd->kernel_invert_4f = dt_opencl_create_kernel(program, "invert_4f");
-}
-
-void cleanup_global(dt_iop_module_so_t *module)
-{
-  dt_iop_invert_global_data_t *gd = (dt_iop_invert_global_data_t *)module->data;
-  dt_opencl_free_kernel(gd->kernel_invert_4f);
-  dt_opencl_free_kernel(gd->kernel_invert_1f);
-  free(module->data);
-  module->data = NULL;
-}
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
