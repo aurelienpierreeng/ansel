@@ -79,12 +79,6 @@ void init_presets (dt_iop_module_so_t *self)
 }
 */
 
-typedef struct dt_iop_zonesystem_global_data_t
-{
-  int kernel_zonesystem;
-} dt_iop_zonesystem_global_data_t;
-
-
 typedef struct dt_iop_zonesystem_gui_data_t
 {
   guchar *in_preview_buffer;
@@ -114,7 +108,7 @@ const char *name()
 int flags()
 {
   return IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_ALLOW_TILING
-         | IOP_FLAGS_PREVIEW_NON_OPENCL | IOP_FLAGS_DEPRECATED;
+         | IOP_FLAGS_DEPRECATED;
 }
 
 const char *deprecated_msg()
@@ -316,82 +310,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   process_common_cleanup(self, piece, ivoid, ovoid, roi_in, roi_out);
 }
-
-#ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  dt_iop_zonesystem_data_t *data = (dt_iop_zonesystem_data_t *)piece->data;
-  dt_iop_zonesystem_global_data_t *gd = (dt_iop_zonesystem_global_data_t *)self->global_data;
-  cl_mem dev_zmo, dev_zms = NULL;
-  cl_int err = -999;
-
-  const int devid = piece->pipe->devid;
-  const int width = roi_in->width;
-  const int height = roi_in->height;
-
-  /* calculate zonemap */
-  const int size = data->params.size;
-  float zonemap[MAX_ZONE_SYSTEM_SIZE] = { -1 };
-  float zonemap_offset[ROUNDUP(MAX_ZONE_SYSTEM_SIZE, 16)] = { -1 };
-  float zonemap_scale[ROUNDUP(MAX_ZONE_SYSTEM_SIZE, 16)] = { -1 };
-
-  _iop_zonesystem_calculate_zonemap(&(data->params), zonemap);
-
-  /* precompute scale and offset */
-  for(int k = 0; k < size - 1; k++) zonemap_scale[k] = (zonemap[k + 1] - zonemap[k]) * (size - 1);
-  for(int k = 0; k < size - 1; k++) zonemap_offset[k] = 100.0f * ((k + 1) * zonemap[k] - k * zonemap[k + 1]);
-
-  dev_zmo = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * ROUNDUP(MAX_ZONE_SYSTEM_SIZE, 16),
-                                                   zonemap_offset);
-  if(dev_zmo == NULL) goto error;
-  dev_zms = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * ROUNDUP(MAX_ZONE_SYSTEM_SIZE, 16),
-                                                   zonemap_scale);
-  if(dev_zms == NULL) goto error;
-
-  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-
-  dt_opencl_set_kernel_arg(devid, gd->kernel_zonesystem, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_zonesystem, 1, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_zonesystem, 2, sizeof(int), (void *)&width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_zonesystem, 3, sizeof(int), (void *)&height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_zonesystem, 4, sizeof(int), (void *)&size);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_zonesystem, 5, sizeof(cl_mem), (void *)&dev_zmo);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_zonesystem, 6, sizeof(cl_mem), (void *)&dev_zms);
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_zonesystem, sizes);
-
-  if(err != CL_SUCCESS) goto error;
-  dt_opencl_release_mem_object(dev_zmo);
-  dt_opencl_release_mem_object(dev_zms);
-  return TRUE;
-
-error:
-  dt_opencl_release_mem_object(dev_zmo);
-  dt_opencl_release_mem_object(dev_zms);
-  dt_print(DT_DEBUG_OPENCL, "[opencl_zonesystem] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
-}
-#endif
-
-
-
-void init_global(dt_iop_module_so_t *module)
-{
-  const int program = 2; // basic.cl, from programs.conf
-  dt_iop_zonesystem_global_data_t *gd
-      = (dt_iop_zonesystem_global_data_t *)malloc(sizeof(dt_iop_zonesystem_global_data_t));
-  module->data = gd;
-  gd->kernel_zonesystem = dt_opencl_create_kernel(program, "zonesystem");
-}
-
-void cleanup_global(dt_iop_module_so_t *module)
-{
-  dt_iop_zonesystem_global_data_t *gd = (dt_iop_zonesystem_global_data_t *)module->data;
-  dt_opencl_free_kernel(gd->kernel_zonesystem);
-  free(module->data);
-  module->data = NULL;
-}
-
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
