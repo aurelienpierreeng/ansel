@@ -128,21 +128,19 @@ static gboolean dt_noiseprofile_verify(JsonParser *parser)
 
   // go through all makers
   const int n_makers = json_reader_count_elements(reader);
-  dt_print(DT_DEBUG_CONTROL, "[noiseprofile] found %d makers\n", n_makers);
+
   for(int i = 0; i < n_makers; i++)
   {
     if(!json_reader_read_element(reader, i)) _ERROR("can't access maker at position %d / %d", i+1, n_makers);
 
     if(!json_reader_read_member(reader, "maker")) _ERROR("missing `maker`");
 
-    dt_print(DT_DEBUG_CONTROL, "[noiseprofile] found maker `%s'\n", json_reader_get_string_value(reader));
     // go through all models and check those
     json_reader_end_member(reader);
 
     if(!json_reader_read_member(reader, "models")) _ERROR("missing `models`");
 
     const int n_models = json_reader_count_elements(reader);
-    dt_print(DT_DEBUG_CONTROL, "[noiseprofile] found %d models\n", n_models);
     n_profiles_total += n_models;
     for(int j = 0; j < n_models; j++)
     {
@@ -150,13 +148,11 @@ static gboolean dt_noiseprofile_verify(JsonParser *parser)
 
       if(!json_reader_read_member(reader, "model")) _ERROR("missing `model`");
 
-      dt_print(DT_DEBUG_CONTROL, "[noiseprofile] found %s\n", json_reader_get_string_value(reader));
       json_reader_end_member(reader);
 
       if(!json_reader_read_member(reader, "profiles")) _ERROR("missing `profiles`");
 
       const int n_profiles = json_reader_count_elements(reader);
-      dt_print(DT_DEBUG_CONTROL, "[noiseprofile] found %d profiles\n", n_profiles);
       for(int k = 0; k < n_profiles; k++)
       {
         if(!json_reader_read_element(reader, k)) _ERROR("can't access profile at position %d / %d", k+1, n_profiles);
@@ -220,9 +216,6 @@ static gboolean dt_noiseprofile_verify(JsonParser *parser)
 
   json_reader_end_member(reader);
 
-  dt_print(DT_DEBUG_CONTROL, "[noiseprofile] verifying noiseprofile completed\n");
-  dt_print(DT_DEBUG_CONTROL, "[noiseprofile] found %zu profiles total\n", n_profiles_total);
-
 end:
   if(reader) g_object_unref(reader);
   return valid;
@@ -237,8 +230,6 @@ GList *dt_noiseprofile_get_matching(const dt_image_t *cimg)
 
   if(!parser) goto end;
 
-  dt_print(DT_DEBUG_CONTROL, "[noiseprofile] looking for maker `%s', model `%s'\n", cimg->camera_maker, cimg->camera_model);
-
   JsonNode *root = json_parser_get_root(parser);
 
   reader = json_reader_new(root);
@@ -247,7 +238,6 @@ GList *dt_noiseprofile_get_matching(const dt_image_t *cimg)
 
   // go through all makers
   const int n_makers = json_reader_count_elements(reader);
-  dt_print(DT_DEBUG_CONTROL, "[noiseprofile] found %d makers\n", n_makers);
   for(int i = 0; i < n_makers; i++)
   {
     json_reader_read_element(reader, i);
@@ -256,14 +246,12 @@ GList *dt_noiseprofile_get_matching(const dt_image_t *cimg)
 
     if(g_strstr_len(cimg->camera_maker, -1, json_reader_get_string_value(reader)))
     {
-      dt_print(DT_DEBUG_CONTROL, "[noiseprofile] found `%s' as `%s'\n", cimg->camera_maker, json_reader_get_string_value(reader));
       // go through all models and check those
       json_reader_end_member(reader);
 
       json_reader_read_member(reader, "models");
 
       const int n_models = json_reader_count_elements(reader);
-      dt_print(DT_DEBUG_CONTROL, "[noiseprofile] found %d models\n", n_models);
       for(int j = 0; j < n_models; j++)
       {
         json_reader_read_element(reader, j);
@@ -272,14 +260,12 @@ GList *dt_noiseprofile_get_matching(const dt_image_t *cimg)
 
         if(!g_strcmp0(cimg->camera_model, json_reader_get_string_value(reader)))
         {
-          dt_print(DT_DEBUG_CONTROL, "[noiseprofile] found %s\n", cimg->camera_model);
           // we got a match, return at most bufsize elements
           json_reader_end_member(reader);
 
           json_reader_read_member(reader, "profiles");
 
           const int n_profiles = json_reader_count_elements(reader);
-          dt_print(DT_DEBUG_CONTROL, "[noiseprofile] found %d profiles\n", n_profiles);
           for(int k = 0; k < n_profiles; k++)
           {
             dt_noiseprofile_t tmp_profile = { 0 };
