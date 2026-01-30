@@ -385,7 +385,7 @@ void dt_control_flush_jobs_queue(dt_control_t *control, dt_job_queue_t queue_id)
   for(int k = 0; k < control->num_threads; k++)
   {
     _dt_job_t *job = (_dt_job_t *)control->job[k];
-    if(job->state != DT_JOB_STATE_RUNNING)
+    if(job && job->state != DT_JOB_STATE_RUNNING)
     {
       dt_control_job_set_state(job, DT_JOB_STATE_DISCARDED);
       dt_control_job_dispose(job);
