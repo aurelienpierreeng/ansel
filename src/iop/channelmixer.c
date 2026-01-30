@@ -115,12 +115,6 @@ typedef struct dt_iop_channelmixer_data_t
   _channelmixer_operation_mode_t operation_mode;
 } dt_iop_channelmixer_data_t;
 
-typedef struct dt_iop_channelmixer_global_data_t
-{
-  int kernel_channelmixer;
-} dt_iop_channelmixer_global_data_t;
-
-
 const char *name()
 {
   return _("channel mixer");
@@ -378,71 +372,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       break;
   }
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
-}
-
-#ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  dt_iop_channelmixer_data_t *data = (dt_iop_channelmixer_data_t *)piece->data;
-  dt_iop_channelmixer_global_data_t *gd = (dt_iop_channelmixer_global_data_t *)self->global_data;
-
-  cl_mem dev_hsl_matrix = NULL;
-  cl_mem dev_rgb_matrix = NULL;
-
-  cl_int err = -999;
-
-  const int devid = piece->pipe->devid;
-  const int width = roi_in->width;
-  const int height = roi_in->height;
-
-  const _channelmixer_operation_mode_t operation_mode = data->operation_mode;
-
-  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-
-  dev_hsl_matrix = dt_opencl_copy_host_to_device_constant(devid, sizeof(data->hsl_matrix), data->hsl_matrix);
-  if(dev_hsl_matrix == NULL) goto error;
-  dev_rgb_matrix = dt_opencl_copy_host_to_device_constant(devid, sizeof(data->rgb_matrix), data->rgb_matrix);
-  if(dev_rgb_matrix == NULL) goto error;
-
-  dt_opencl_set_kernel_arg(devid, gd->kernel_channelmixer, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_channelmixer, 1, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_channelmixer, 2, sizeof(int), (void *)&width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_channelmixer, 3, sizeof(int), (void *)&height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_channelmixer, 4, sizeof(int), (void *)&operation_mode);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_channelmixer, 5, sizeof(cl_mem), (void *)&dev_hsl_matrix);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_channelmixer, 6, sizeof(cl_mem), (void *)&dev_rgb_matrix);
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_channelmixer, sizes);
-  if(err != CL_SUCCESS) goto error;
-
-  dt_opencl_release_mem_object(dev_hsl_matrix);
-  dt_opencl_release_mem_object(dev_rgb_matrix);
-
-  return TRUE;
-
-error:
-  dt_opencl_release_mem_object(dev_hsl_matrix);
-  dt_opencl_release_mem_object(dev_rgb_matrix);
-  dt_print(DT_DEBUG_OPENCL, "[opencl_channelmixer] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
-}
-#endif
-
-void init_global(dt_iop_module_so_t *module)
-{
-  const int program = 8; // extended.cl, from programs.conf
-  dt_iop_channelmixer_global_data_t *gd
-      = (dt_iop_channelmixer_global_data_t *)malloc(sizeof(dt_iop_channelmixer_global_data_t));
-  module->data = gd;
-  gd->kernel_channelmixer = dt_opencl_create_kernel(program, "channelmixer");
-}
-
-void cleanup_global(dt_iop_module_so_t *module)
-{
-  dt_iop_channelmixer_global_data_t *gd = (dt_iop_channelmixer_global_data_t *)module->data;
-  dt_opencl_free_kernel(gd->kernel_channelmixer);
-  free(module->data);
-  module->data = NULL;
 }
 
 static void red_callback(GtkWidget *slider, gpointer user_data)

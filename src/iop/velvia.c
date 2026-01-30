@@ -68,12 +68,6 @@ typedef struct dt_iop_velvia_data_t
   float bias;
 } dt_iop_velvia_data_t;
 
-typedef struct dt_iop_velvia_global_data_t
-{
-  int kernel_velvia;
-} dt_iop_velvia_global_data_t;
-
-
 const char *name()
 {
   return _("velvia");
@@ -166,68 +160,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   }
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
-}
-
-#ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  dt_iop_velvia_data_t *data = (dt_iop_velvia_data_t *)piece->data;
-  dt_iop_velvia_global_data_t *gd = (dt_iop_velvia_global_data_t *)self->global_data;
-
-  cl_int err = -999;
-
-  const int devid = piece->pipe->devid;
-  const int width = roi_in->width;
-  const int height = roi_in->height;
-
-  const float strength = data->strength / 100.0f;
-  const float bias = data->bias;
-
-  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-
-  if(strength <= 0.0f)
-  {
-    size_t origin[] = { 0, 0, 0 };
-    size_t region[] = { width, height, 1 };
-    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, region);
-    if(err != CL_SUCCESS) goto error;
-  }
-  else
-  {
-    dt_opencl_set_kernel_arg(devid, gd->kernel_velvia, 0, sizeof(cl_mem), (void *)&dev_in);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_velvia, 1, sizeof(cl_mem), (void *)&dev_out);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_velvia, 2, sizeof(int), (void *)&width);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_velvia, 3, sizeof(int), (void *)&height);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_velvia, 4, sizeof(float), (void *)&strength);
-    dt_opencl_set_kernel_arg(devid, gd->kernel_velvia, 5, sizeof(float), (void *)&bias);
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_velvia, sizes);
-    if(err != CL_SUCCESS) goto error;
-  }
-
-  return TRUE;
-
-error:
-  dt_print(DT_DEBUG_OPENCL, "[opencl_velvia] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
-}
-#endif
-
-void init_global(dt_iop_module_so_t *module)
-{
-  const int program = 8; // extended.cl, from programs.conf
-  dt_iop_velvia_global_data_t *gd
-      = (dt_iop_velvia_global_data_t *)malloc(sizeof(dt_iop_velvia_global_data_t));
-  module->data = gd;
-  gd->kernel_velvia = dt_opencl_create_kernel(program, "velvia");
-}
-
-void cleanup_global(dt_iop_module_so_t *module)
-{
-  dt_iop_velvia_global_data_t *gd = (dt_iop_velvia_global_data_t *)module->data;
-  dt_opencl_free_kernel(gd->kernel_velvia);
-  free(module->data);
-  module->data = NULL;
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,

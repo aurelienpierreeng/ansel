@@ -78,12 +78,6 @@ typedef struct dt_iop_colorcontrast_data_t
   int unbound;
 } dt_iop_colorcontrast_data_t;
 
-typedef struct dt_iop_colorcontrast_global_data_t
-{
-  int kernel_colorcontrast;
-} dt_iop_colorcontrast_global_data_t;
-
-
 const char *name()
 {
   return _("color contrast");
@@ -254,62 +248,6 @@ void process_sse2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, c
   _mm_sfence();
 }
 #endif
-
-
-#ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  dt_iop_colorcontrast_data_t *data = (dt_iop_colorcontrast_data_t *)piece->data;
-  dt_iop_colorcontrast_global_data_t *gd = (dt_iop_colorcontrast_global_data_t *)self->global_data;
-  cl_int err = -999;
-
-  const int devid = piece->pipe->devid;
-  const int width = roi_in->width;
-  const int height = roi_in->height;
-
-  const float scale[4] = { 1.0f, data->a_steepness, data->b_steepness, 1.0f };
-  const float offset[4] = { 0.0f, data->a_offset, data->b_offset, 0.0f };
-  const int unbound = data->unbound;
-
-  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorcontrast, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorcontrast, 1, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorcontrast, 2, sizeof(int), (void *)&width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorcontrast, 3, sizeof(int), (void *)&height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorcontrast, 4, 4 * sizeof(float), (void *)&scale);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorcontrast, 5, 4 * sizeof(float), (void *)&offset);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_colorcontrast, 6, sizeof(int), (void *)&unbound);
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_colorcontrast, sizes);
-
-  if(err != CL_SUCCESS) goto error;
-  return TRUE;
-
-error:
-  dt_print(DT_DEBUG_OPENCL, "[opencl_colorcontrast] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
-}
-#endif
-
-
-void init_global(dt_iop_module_so_t *module)
-{
-  const int program = 8; // extended.cl, from programs.conf
-  dt_iop_colorcontrast_global_data_t *gd
-      = (dt_iop_colorcontrast_global_data_t *)malloc(sizeof(dt_iop_colorcontrast_global_data_t));
-  module->data = gd;
-  gd->kernel_colorcontrast = dt_opencl_create_kernel(program, "colorcontrast");
-}
-
-void cleanup_global(dt_iop_module_so_t *module)
-{
-  dt_iop_colorcontrast_global_data_t *gd = (dt_iop_colorcontrast_global_data_t *)module->data;
-  dt_opencl_free_kernel(gd->kernel_colorcontrast);
-  free(module->data);
-  module->data = NULL;
-}
-
 
 /** commit is the synch point between core and gui, so it copies params to pipe data. */
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
