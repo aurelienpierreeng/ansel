@@ -112,11 +112,6 @@ typedef struct dt_iop_exposure_data_t
   float scale;
 } dt_iop_exposure_data_t;
 
-typedef struct dt_iop_exposure_global_data_t
-{
-  int kernel_exposure;
-} dt_iop_exposure_global_data_t;
-
 
 const char *name()
 {
@@ -415,39 +410,6 @@ static void _process_common_setup(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
   d->scale = 1.0 / (white - d->black);
 }
 
-#ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  dt_iop_exposure_data_t *d = (dt_iop_exposure_data_t *)piece->data;
-  dt_iop_exposure_global_data_t *gd = (dt_iop_exposure_global_data_t *)self->global_data;
-
-  _process_common_setup(self, piece);
-
-  cl_int err = -999;
-  const int devid = piece->pipe->devid;
-  const int width = roi_in->width;
-  const int height = roi_in->height;
-
-  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 1, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 2, sizeof(int), (void *)&width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 3, sizeof(int), (void *)&height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 4, sizeof(float), (void *)&(d->black));
-  dt_opencl_set_kernel_arg(devid, gd->kernel_exposure, 5, sizeof(float), (void *)&(d->scale));
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_exposure, sizes);
-  if(err != CL_SUCCESS) goto error;
-  for(int k = 0; k < 3; k++) piece->pipe->dsc.processed_maximum[k] *= d->scale;
-
-  return TRUE;
-
-error:
-  dt_print(DT_DEBUG_OPENCL, "[opencl_exposure] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
-}
-#endif
-
 void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
@@ -598,23 +560,6 @@ void gui_update(struct dt_iop_module_t *self)
   }
 
   dt_gui_update_collapsible_section(&g->cs);
-}
-
-void init_global(dt_iop_module_so_t *module)
-{
-  const int program = 2; // from programs.conf: basic.cl
-  dt_iop_exposure_global_data_t *gd
-      = (dt_iop_exposure_global_data_t *)malloc(sizeof(dt_iop_exposure_global_data_t));
-  module->data = gd;
-  gd->kernel_exposure = dt_opencl_create_kernel(program, "exposure");
-}
-
-void cleanup_global(dt_iop_module_so_t *module)
-{
-  dt_iop_exposure_global_data_t *gd = (dt_iop_exposure_global_data_t *)module->data;
-  dt_opencl_free_kernel(gd->kernel_exposure);
-  free(module->data);
-  module->data = NULL;
 }
 
 static void _exposure_set_white(struct dt_iop_module_t *self, const float white)
