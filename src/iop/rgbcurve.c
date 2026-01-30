@@ -113,11 +113,6 @@ typedef struct dt_iop_rgbcurve_data_t
 typedef float (*_curve_table_ptr)[0x10000];
 typedef float (*_coeffs_table_ptr)[3];
 
-typedef struct dt_iop_rgbcurve_global_data_t
-{
-  int kernel_rgbcurve;
-} dt_iop_rgbcurve_global_data_t;
-
 const char *name()
 {
   return _("rgb curve");
@@ -1508,24 +1503,6 @@ void init(dt_iop_module_t *module)
   module->histogram_middle_grey = d->compensate_middle_grey;
 }
 
-void init_global(dt_iop_module_so_t *module)
-{
-  const int program = 25; // rgbcurve.cl, from programs.conf
-  dt_iop_rgbcurve_global_data_t *gd
-      = (dt_iop_rgbcurve_global_data_t *)malloc(sizeof(dt_iop_rgbcurve_global_data_t));
-  module->data = gd;
-
-  gd->kernel_rgbcurve = dt_opencl_create_kernel(program, "rgbcurve");
-}
-
-void cleanup_global(dt_iop_module_so_t *module)
-{
-  dt_iop_rgbcurve_global_data_t *gd = (dt_iop_rgbcurve_global_data_t *)module->data;
-  dt_opencl_free_kernel(gd->kernel_rgbcurve);
-  free(module->data);
-  module->data = NULL;
-}
-
 // this will be called from process*()
 // it must be executed only if profile info has changed
 static void _generate_curve_lut(dt_dev_pixelpipe_t *pipe, dt_iop_rgbcurve_data_t *d)
@@ -1615,128 +1592,6 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   d->filename_work[0] = '\0';
 }
 
-#ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_work_profile_info(piece->pipe);
-
-  dt_iop_rgbcurve_data_t *d = (dt_iop_rgbcurve_data_t *)piece->data;
-  dt_iop_rgbcurve_global_data_t *gd = (dt_iop_rgbcurve_global_data_t *)self->global_data;
-
-  _generate_curve_lut(piece->pipe, d);
-
-  cl_int err = CL_SUCCESS;
-
-  cl_mem dev_r = NULL;
-  cl_mem dev_g = NULL;
-  cl_mem dev_b = NULL;
-  cl_mem dev_coeffs_r = NULL;
-  cl_mem dev_coeffs_g = NULL;
-  cl_mem dev_coeffs_b = NULL;
-
-  cl_mem dev_profile_info = NULL;
-  cl_mem dev_profile_lut = NULL;
-  dt_colorspaces_iccprofile_info_cl_t *profile_info_cl;
-  cl_float *profile_lut_cl = NULL;
-
-  const int use_work_profile = (work_profile == NULL) ? 0 : 1;
-
-  const int devid = piece->pipe->devid;
-  const int width = roi_in->width;
-  const int height = roi_in->height;
-  const int autoscale = d->params.curve_autoscale;
-  const int preserve_colors = d->params.preserve_colors;
-
-  err = dt_ioppr_build_iccprofile_params_cl(work_profile, devid, &profile_info_cl, &profile_lut_cl,
-                                            &dev_profile_info, &dev_profile_lut);
-  if(err != CL_SUCCESS) goto cleanup;
-
-  dev_r = dt_opencl_copy_host_to_device(devid, d->table[DT_IOP_RGBCURVE_R], 256, 256, sizeof(float));
-  if(dev_r == NULL)
-  {
-    fprintf(stderr, "[rgbcurve process_cl] error allocating memory 1\n");
-    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-    goto cleanup;
-  }
-
-  dev_g = dt_opencl_copy_host_to_device(devid, d->table[DT_IOP_RGBCURVE_G], 256, 256, sizeof(float));
-  if(dev_g == NULL)
-  {
-    fprintf(stderr, "[rgbcurve process_cl] error allocating memory 2\n");
-    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-    goto cleanup;
-  }
-
-  dev_b = dt_opencl_copy_host_to_device(devid, d->table[DT_IOP_RGBCURVE_B], 256, 256, sizeof(float));
-  if(dev_b == NULL)
-  {
-    fprintf(stderr, "[rgbcurve process_cl] error allocating memory 3\n");
-    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-    goto cleanup;
-  }
-
-  dev_coeffs_r = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3, d->unbounded_coeffs[0]);
-  if(dev_coeffs_r == NULL)
-  {
-    fprintf(stderr, "[rgbcurve process_cl] error allocating memory 4\n");
-    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-    goto cleanup;
-  }
-
-  dev_coeffs_g = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3, d->unbounded_coeffs[1]);
-  if(dev_coeffs_g == NULL)
-  {
-    fprintf(stderr, "[rgbcurve process_cl] error allocating memory 5\n");
-    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-    goto cleanup;
-  }
-
-  dev_coeffs_b = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 12, d->unbounded_coeffs[2]);
-  if(dev_coeffs_b == NULL)
-  {
-    fprintf(stderr, "[rgbcurve process_cl] error allocating memory 6\n");
-    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
-    goto cleanup;
-  }
-
-  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-  dt_opencl_set_kernel_arg(devid, gd->kernel_rgbcurve, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_rgbcurve, 1, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_rgbcurve, 2, sizeof(int), (void *)&width);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_rgbcurve, 3, sizeof(int), (void *)&height);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_rgbcurve, 4, sizeof(cl_mem), (void *)&dev_r);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_rgbcurve, 5, sizeof(cl_mem), (void *)&dev_g);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_rgbcurve, 6, sizeof(cl_mem), (void *)&dev_b);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_rgbcurve, 7, sizeof(cl_mem), (void *)&dev_coeffs_r);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_rgbcurve, 8, sizeof(cl_mem), (void *)&dev_coeffs_g);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_rgbcurve, 9, sizeof(cl_mem), (void *)&dev_coeffs_b);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_rgbcurve, 10, sizeof(int), (void *)&autoscale);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_rgbcurve, 11, sizeof(int), (void *)&preserve_colors);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_rgbcurve, 12, sizeof(cl_mem), (void *)&dev_profile_info);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_rgbcurve, 13, sizeof(cl_mem), (void *)&dev_profile_lut);
-  dt_opencl_set_kernel_arg(devid, gd->kernel_rgbcurve, 14, sizeof(int), (void *)&use_work_profile);
-  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_rgbcurve, sizes);
-  if(err != CL_SUCCESS)
-  {
-    fprintf(stderr, "[rgbcurve process_cl] error %i enqueue kernel\n", err);
-    goto cleanup;
-  }
-
-cleanup:
-  if(dev_r) dt_opencl_release_mem_object(dev_r);
-  if(dev_g) dt_opencl_release_mem_object(dev_g);
-  if(dev_b) dt_opencl_release_mem_object(dev_b);
-  if(dev_coeffs_r) dt_opencl_release_mem_object(dev_coeffs_r);
-  if(dev_coeffs_g) dt_opencl_release_mem_object(dev_coeffs_g);
-  if(dev_coeffs_b) dt_opencl_release_mem_object(dev_coeffs_b);
-  dt_ioppr_free_iccprofile_params_cl(&profile_info_cl, &profile_lut_cl, &dev_profile_info, &dev_profile_lut);
-
-  if(err != CL_SUCCESS) dt_print(DT_DEBUG_OPENCL, "[opencl_rgbcurve] couldn't enqueue kernel! %d\n", err);
-
-  return (err == CL_SUCCESS) ? TRUE : FALSE;
-}
-#endif
 
 void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
