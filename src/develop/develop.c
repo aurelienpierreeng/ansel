@@ -259,11 +259,11 @@ void dt_dev_process_preview(dt_develop_t *dev)
 
 void dt_dev_refresh_ui_images_real(dt_develop_t *dev)
 {
-  if(dt_atomic_get_int(&dev->pipe->shutdown) && !dev->pipe->processing)
+  if(!dev->pipe->running)
     dt_dev_process_image(dev);
   // else : join current pipe
 
-  if(dt_atomic_get_int(&dev->preview_pipe->shutdown) && !dev->preview_pipe->processing)
+  if(!dev->preview_pipe->running)
     dt_dev_process_preview(dev);
   // else : join current pipe
 }
@@ -501,8 +501,6 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 
   pipe->running = 1;
 
-  dt_pthread_mutex_lock(&pipe->busy_mutex);
-
   dt_mipmap_buffer_t buf;
   dt_mipmap_cache_t *cache = darktable.mipmap_cache;
   dt_mipmap_cache_get(cache, &buf, dev->image_storage.id, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
@@ -522,96 +520,106 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
     g_free(type);
   }
 
-  pipe->processing = 1;
-
-  // Count the number of pipe re-entries and limit it to 2 to avoid infinite loops
-  int reentries = 0;
-
-  // Keep track of ROI changes out of the loop
-  float scale = 1.f;
-  int x = 0, y = 0, wd = 0, ht = 0;
-
-  while(!dev->exit && !finish_on_error && (pipe->status == DT_DEV_PIXELPIPE_DIRTY) && reentries < 2)
+  while(!dev->exit)
   {
-    dt_times_t thread_start;
-    dt_get_times(&thread_start);
+    // Keep track of ROI changes out of the loop
+    float scale = 1.f;
+    int x = 0, y = 0, wd = 0, ht = 0;
 
-    // We are starting fresh, reset the killswitch signal
-    dt_atomic_set_int(&pipe->shutdown, FALSE);
+    // Count the number of pipe re-entries and limit it to 2 to avoid infinite loops
+    int reentries = 0;
 
-    // In case of re-entry, we will rerun the whole pipe, so we need
-    // to resynch it in full too before.
-    // Need to be before dt_dev_pixelpipe_change()
-    if(dt_dev_pixelpipe_has_reentry(pipe))
+    dt_pthread_mutex_lock(&pipe->busy_mutex);
+
+    while(!finish_on_error && (pipe->status == DT_DEV_PIXELPIPE_DIRTY) && reentries < 2)
     {
-      pipe->changed |= DT_DEV_PIPE_REMOVE;
-      dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, pipe->type);
-    }
+      pipe->processing = 1;
 
-    // Resynch history with pipeline. NB: this locks dev->history_mutex
-    dt_dev_pixelpipe_change(pipe, dev);
+      dt_times_t thread_start;
+      dt_get_times(&thread_start);
 
-    // If user zoomed/panned in darkroom during the previous loop of recomputation,
-    // the kill-switch event was sent, which terminated the pipeline before completion in the previous run,
-    // but the coordinates of the ROI changed since then, and we will handle the new coordinates right away,
-    // without exiting the thread to avoid the overhead of restarting a new one.
-    // However, if the pipe re-entry flag was set, now the hash ID of the object (mask or module)
-    // that captured it has changed too (because all hashes depend on ROI size & position too).
-    // Since only the object that locked the re-entry flag can unlock it, and we now lost its reference,
-    // nothing will unset it anymore, so we simply hard-reset it.
-    if(_update_darkroom_roi(dev, pipe, &x, &y, &wd, &ht, &scale))
-      dt_dev_pixelpipe_reset_reentry(pipe);
+      // We are starting fresh, reset the killswitch signal
+      dt_atomic_set_int(&pipe->shutdown, FALSE);
 
-    dt_control_log_busy_enter();
-    dt_control_toast_busy_enter();
+      // In case of re-entry, we will rerun the whole pipe, so we need
+      // to resynch it in full too before.
+      // Need to be before dt_dev_pixelpipe_change()
+      if(dt_dev_pixelpipe_has_reentry(pipe))
+      {
+        pipe->changed |= DT_DEV_PIPE_REMOVE;
+        dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, pipe->type);
+      }
 
-    // Signal that we are starting
-    pipe->status = DT_DEV_PIXELPIPE_UNDEF;
+      // Resynch history with pipeline. NB: this locks dev->history_mutex
+      dt_dev_pixelpipe_change(pipe, dev);
 
-    dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
-    int ret = dt_dev_pixelpipe_process(pipe, dev, x, y, wd, ht, scale);
-    dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
+      // If user zoomed/panned in darkroom during the previous loop of recomputation,
+      // the kill-switch event was sent, which terminated the pipeline before completion in the previous run,
+      // but the coordinates of the ROI changed since then, and we will handle the new coordinates right away,
+      // without exiting the thread to avoid the overhead of restarting a new one.
+      // However, if the pipe re-entry flag was set, now the hash ID of the object (mask or module)
+      // that captured it has changed too (because all hashes depend on ROI size & position too).
+      // Since only the object that locked the re-entry flag can unlock it, and we now lost its reference,
+      // nothing will unset it anymore, so we simply hard-reset it.
+      if(_update_darkroom_roi(dev, pipe, &x, &y, &wd, &ht, &scale))
+        dt_dev_pixelpipe_reset_reentry(pipe);
 
-    dt_control_log_busy_leave();
-    dt_control_toast_busy_leave();
+      dt_control_log_busy_enter();
+      dt_control_toast_busy_enter();
 
-    if(pipe->type == DT_DEV_PIXELPIPE_FULL)
-      dt_dev_average_delay_update(&thread_start, &dev->average_delay);
-    else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-      dt_dev_average_delay_update(&thread_start, &dev->preview_average_delay);
+      // Signal that we are starting
+      pipe->status = DT_DEV_PIXELPIPE_UNDEF;
 
-    // If pipe is flagged for re-entry, we need to restart it right away
-    if(dt_dev_pixelpipe_has_reentry(pipe))
-    {
-      reentries++;
-      pipe->status = DT_DEV_PIXELPIPE_DIRTY;
-    }
-    else
-    {
-      _flag_pipe(pipe, ret);
-      _update_gui_backbuf(pipe);
-    }
+      dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
+      int ret = dt_dev_pixelpipe_process(pipe, dev, x, y, wd, ht, scale);
+      dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
 
-    if(pipe->status == DT_DEV_PIXELPIPE_VALID)
-    {
+      dt_control_log_busy_leave();
+      dt_control_toast_busy_leave();
+
       if(pipe->type == DT_DEV_PIXELPIPE_FULL)
-        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
+        dt_dev_average_delay_update(&thread_start, &dev->average_delay);
       else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
+        dt_dev_average_delay_update(&thread_start, &dev->preview_average_delay);
+
+      // If pipe is flagged for re-entry, we need to restart it right away
+      if(dt_dev_pixelpipe_has_reentry(pipe))
+      {
+        reentries++;
+        pipe->status = DT_DEV_PIXELPIPE_DIRTY;
+      }
+      else
+      {
+        _flag_pipe(pipe, ret);
+        _update_gui_backbuf(pipe);
+      }
+
+      if(pipe->status == DT_DEV_PIXELPIPE_VALID)
+      {
+        if(pipe->type == DT_DEV_PIXELPIPE_FULL)
+          DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
+        else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+          DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
+      }
+    
+      dt_iop_nap(200);
+
+      pipe->processing = 0;
+
+      if(pipe->status == DT_DEV_PIXELPIPE_VALID)
+      {
+        if(pipe->type == DT_DEV_PIXELPIPE_FULL)
+          dt_control_queue_redraw_center();
+        else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+          dt_control_queue_redraw();
+      }
     }
 
-    dt_iop_nap(200);
+    dt_pthread_mutex_unlock(&pipe->busy_mutex);
+    dt_iop_nap(100000); // wait 100 ms
   }
-  pipe->processing = 0;
-
-  dt_pthread_mutex_unlock(&pipe->busy_mutex);
 
   pipe->running = 0;
-
-  if(pipe->type == DT_DEV_PIXELPIPE_FULL)
-    dt_control_queue_redraw_center();
-  else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-    dt_control_queue_redraw();
 }
 
 
