@@ -479,6 +479,13 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
       local_hash = dt_hash(local_hash, (const char *)&zero, sizeof(int));
     }
 
+    // Keep track of distortion bypass in GUI. That may affect upstream modules in the stack,
+    // while bypass_cache only affects downstream ones.
+    // In theory, distortion bypass should already affect planned ROI in/out, but it depends whether
+    // internal params are committed. Anyway, make it more reliable.
+    int bypass_distort = dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, piece->module);
+    local_hash = dt_hash(local_hash, (const char *)&bypass_distort, sizeof(int));
+
     // If the cache bypass is on, the corresponding cache lines will be freed immediately after use,
     // we need to track that. It somewhat overlaps module->request_mask_display, but...
     local_hash = dt_hash(local_hash, (const char *)&piece->bypass_cache, sizeof(gboolean));
@@ -555,8 +562,8 @@ void dt_dev_pixelpipe_synch(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, GList *
 void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, const char *caller_func)
 {
   gchar *type = _pipe_get_pipe_name(pipe->type);
-  dt_print(DT_DEBUG_DEV, "[pixelpipe] synch all modules with defaults_params for pipe %s called from %s\n", type, caller_func);
   dt_print(DT_DEBUG_DEV, "[pixelpipe] synch all modules with history for pipe %s called from %s\n", type, caller_func);
+
   // go through all history items and adjust params
   // note that we don't necessarily process the whole history, history_end is an user param.
   const uint32_t history_end = dt_dev_get_history_end(dev);
@@ -611,6 +618,9 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   // on top. So we need to resync every history item from end to start, until
   // we find the previously synchronized one. This uses history hashes.
   gchar *type = _pipe_get_pipe_name(pipe->type);
+
+  dt_print(DT_DEBUG_DEV, "[pixelpipe] synch top modules with history for pipe %s\n", type);
+
   GList *last_item = g_list_nth(dev->history, dt_dev_get_history_end(dev) - 1);
   if(last_item)
   {
@@ -2165,8 +2175,9 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
 
 gboolean dt_dev_pixelpipe_activemodule_disables_currentmodule(struct dt_develop_t *dev, struct dt_iop_module_t *current_module)
 {
-  return (dev                 // don't segfault
-          && dev->gui_module  // don't segfault
+  return (dev                  // don't segfault
+          && dev->gui_attached // don't run on background/export pipes
+          && dev->gui_module   // don't segfault
           && dev->gui_module != current_module 
           // current_module is not the active one (capturing edit mode)
           && dev->gui_module->operation_tags_filter() & current_module->operation_tags())
@@ -2190,17 +2201,16 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t 
 
     piece->buf_in = roi_in;
 
-    // skip this module?
-    if(piece->enabled
-       && !dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, module))
-    {
+    // If in GUI and using a module that needs a full, undistorterted image,
+    // we need to shutdown temporarily any module distorting the image.
+    if(dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, module))
+      piece->enabled = FALSE;
+
+    // If module is disabled, modify_roi_in() is a no-op
+    if(piece->enabled)
       module->modify_roi_out(module, piece, &roi_out, &roi_in);
-    }
     else
-    {
-      // pass through regions of interest for gui post expose events
       roi_out = roi_in;
-    }
 
     piece->buf_out = roi_out;
     roi_in = roi_out;

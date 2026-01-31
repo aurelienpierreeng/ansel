@@ -5167,7 +5167,8 @@ static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *se
     gtk_widget_set_sensitive(g->commit_button, FALSE);
   }
 
-  dt_dev_invalidate_zoom(self->dev);
+  // It sucks that we need to invalidate the preview too but we need its final dimension.
+  dt_dev_pixelpipe_resync_all(self->dev);
   dt_dev_refresh_ui_images(self->dev);
 }
 

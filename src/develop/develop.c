@@ -335,34 +335,6 @@ void dt_dev_invalidate_real(dt_develop_t *dev)
   dt_show_times(&start, "[dt_dev_invalidate] sending killswitch signal on main image pipeline");
 }
 
-void dt_dev_invalidate_zoom_real(dt_develop_t *dev)
-{
-  if(!dev || !dev->gui_attached || !dev->pipe) return;
-
-  dt_times_t start;
-  dt_get_times(&start);
-
-  _dev_pixelpipe_set_dirty(dev->pipe);
-  dev->pipe->changed |= DT_DEV_PIPE_ZOOMED;
-  dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
-
-  dt_show_times(&start, "[dt_dev_invalidate_zoom] sending killswitch signal on main image pipeline");
-}
-
-void dt_dev_invalidate_zoom_preview(dt_develop_t *dev)
-{
-  if(!dev || !dev->gui_attached || !dev->pipe) return;
-
-  dt_times_t start;
-  dt_get_times(&start);
-
-  _dev_pixelpipe_set_dirty(dev->preview_pipe);
-  dev->preview_pipe->changed |= DT_DEV_PIPE_ZOOMED;
-  dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
-
-  dt_show_times(&start, "[dt_dev_invalidate_zoom] sending killswitch signal on preview image pipeline");
-}
-
 void dt_dev_invalidate_preview_real(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached || !dev->preview_pipe) return;
@@ -385,6 +357,33 @@ void dt_dev_invalidate_all_real(dt_develop_t *dev)
   dt_dev_invalidate_preview(dev);
 }
 
+void dt_dev_invalidate_zoom_preview(dt_develop_t *dev)
+{
+  if(!dev || !dev->gui_attached || !dev->pipe) return;
+
+  dt_times_t start;
+  dt_get_times(&start);
+
+  _dev_pixelpipe_set_dirty(dev->preview_pipe);
+  dev->preview_pipe->changed |= DT_DEV_PIPE_ZOOMED;
+  dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
+
+  dt_show_times(&start, "[dt_dev_invalidate_zoom] sending killswitch signal on preview image pipeline");
+}
+
+void dt_dev_invalidate_zoom_real(dt_develop_t *dev)
+{
+  if(!dev || !dev->gui_attached || !dev->pipe) return;
+
+  dt_times_t start;
+  dt_get_times(&start);
+
+  _dev_pixelpipe_set_dirty(dev->pipe);
+  dev->pipe->changed |= DT_DEV_PIPE_ZOOMED;
+  dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
+
+  dt_show_times(&start, "[dt_dev_invalidate_zoom] sending killswitch signal on main image pipeline");
+}
 
 static void _flag_pipe(dt_dev_pixelpipe_t *pipe, gboolean error)
 {
