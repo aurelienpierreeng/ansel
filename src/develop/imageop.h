@@ -406,9 +406,6 @@ dt_iop_module_t *dt_iop_get_module_by_op_priority(GList *modules, const char *op
     if multi_name == NULL do not check for it */
 dt_iop_module_t *dt_iop_get_module_by_instance_name(GList *modules, const char *operation, const char *multi_name);
 
-/** return preferred module instance for shortcuts **/
-dt_iop_module_t *dt_iop_get_module_preferred_instance(dt_iop_module_so_t *module);
-
 /** returns true if module is the first instance of this operation in the pipe */
 gboolean dt_iop_is_first_instance(GList *modules, dt_iop_module_t *module);
 
