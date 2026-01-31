@@ -1661,8 +1661,8 @@ void gui_reset(dt_lib_module_t *self)
   _destroy_surface(d);
   _trigger_recompute(d);
 
-  dt_dev_invalidate_preview(darktable.develop);
-  dt_dev_refresh_ui_images(darktable.develop);
+  dt_dev_pixelpipe_update_preview(darktable.develop);
+  dt_dev_process_all(darktable.develop);
 }
 
 void gui_init(dt_lib_module_t *self)

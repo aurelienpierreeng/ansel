@@ -478,8 +478,8 @@ static void _lib_snapshots_toggled_callback(GtkToggleButton *widget, gpointer us
     /* setup snapshot */
     d->selected = which;
     dt_lib_snapshot_t *s = d->snapshot + (which - 1);
-    dt_dev_invalidate(darktable.develop);
-    dt_dev_refresh_ui_images(darktable.develop);
+    dt_dev_pixelpipe_update_main(darktable.develop);
+    dt_dev_process_all(darktable.develop);
 
     d->snapshot_image = dt_cairo_image_surface_create_from_png(s->filename);
   }

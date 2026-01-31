@@ -260,7 +260,7 @@ void dt_dev_process_preview(dt_develop_t *dev)
   if(err) fprintf(stderr, "[dev_process_preview] job queue exceeded!\n");
 }
 
-void dt_dev_refresh_ui_images_real(dt_develop_t *dev)
+void dt_dev_process_all_real(dt_develop_t *dev)
 {
   if(!dev->pipe->running)
     dt_dev_process_image(dev);
@@ -276,7 +276,7 @@ void _dev_pixelpipe_set_dirty(dt_dev_pixelpipe_t *pipe)
   pipe->status = DT_DEV_PIXELPIPE_DIRTY;
 }
 
-void dt_dev_pixelpipe_rebuild(dt_develop_t *dev)
+void dt_dev_pixelpipe_rebuild_all(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached || !dev->pipe || !dev->preview_pipe) return;
 
@@ -292,7 +292,7 @@ void dt_dev_pixelpipe_rebuild(dt_develop_t *dev)
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
 
-  dt_show_times(&start, "[dt_dev_invalidate] sending killswitch signal on all pipelines");
+  dt_show_times(&start, "[dt_dev_pixelpipe_update_main] sending killswitch signal on all pipelines");
 }
 
 void dt_dev_pixelpipe_resync_main(dt_develop_t *dev)
@@ -321,7 +321,7 @@ void dt_dev_pixelpipe_resync_all(dt_develop_t *dev)
   dt_dev_pixelpipe_resync_main(dev);
 }
 
-void dt_dev_invalidate_real(dt_develop_t *dev)
+void dt_dev_pixelpipe_update_main_real(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached || !dev->pipe) return;
 
@@ -332,10 +332,10 @@ void dt_dev_invalidate_real(dt_develop_t *dev)
   dev->pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
 
-  dt_show_times(&start, "[dt_dev_invalidate] sending killswitch signal on main image pipeline");
+  dt_show_times(&start, "[dt_dev_pixelpipe_update_main] sending killswitch signal on main image pipeline");
 }
 
-void dt_dev_invalidate_preview_real(dt_develop_t *dev)
+void dt_dev_pixelpipe_update_preview_real(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached || !dev->preview_pipe) return;
 
@@ -346,18 +346,18 @@ void dt_dev_invalidate_preview_real(dt_develop_t *dev)
   dev->preview_pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
 
-  dt_show_times(&start, "[dt_dev_invalidate_preview] sending killswitch signal on preview pipeline");
+  dt_show_times(&start, "[dt_dev_pixelpipe_update_preview] sending killswitch signal on preview pipeline");
 }
 
-void dt_dev_invalidate_all_real(dt_develop_t *dev)
+void dt_dev_pixelpipe_update_all_real(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached || !dev->pipe || !dev->preview_pipe) return;
 
-  dt_dev_invalidate(dev);
-  dt_dev_invalidate_preview(dev);
+  dt_dev_pixelpipe_update_main(dev);
+  dt_dev_pixelpipe_update_preview(dev);
 }
 
-void dt_dev_invalidate_zoom_preview(dt_develop_t *dev)
+void dt_dev_pixelpipe_change_zoom_preview(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached || !dev->pipe) return;
 
@@ -368,10 +368,10 @@ void dt_dev_invalidate_zoom_preview(dt_develop_t *dev)
   dev->preview_pipe->changed |= DT_DEV_PIPE_ZOOMED;
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
 
-  dt_show_times(&start, "[dt_dev_invalidate_zoom] sending killswitch signal on preview image pipeline");
+  dt_show_times(&start, "[dt_dev_pixelpipe_change_zoom_main] sending killswitch signal on preview image pipeline");
 }
 
-void dt_dev_invalidate_zoom_real(dt_develop_t *dev)
+void dt_dev_pixelpipe_change_zoom_main_real(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached || !dev->pipe) return;
 
@@ -382,7 +382,7 @@ void dt_dev_invalidate_zoom_real(dt_develop_t *dev)
   dev->pipe->changed |= DT_DEV_PIPE_ZOOMED;
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
 
-  dt_show_times(&start, "[dt_dev_invalidate_zoom] sending killswitch signal on main image pipeline");
+  dt_show_times(&start, "[dt_dev_pixelpipe_change_zoom_main] sending killswitch signal on main image pipeline");
 }
 
 static void _flag_pipe(dt_dev_pixelpipe_t *pipe, gboolean error)
@@ -693,7 +693,7 @@ int dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
   }
   dt_pthread_mutex_unlock(&dev->history_mutex);
 
-  dt_dev_pixelpipe_rebuild(dev);
+  dt_dev_pixelpipe_rebuild_all(dev);
 
   return 0;
 }
@@ -710,14 +710,14 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
     dev->height = ht;
 
     dt_print(DT_DEBUG_DEV, "[pixelpipe] Darkroom requested a %i×%i px main preview\n", wd, ht);
-    dt_dev_invalidate_zoom(dev);
-    dt_dev_invalidate_zoom_preview(dev);
+    dt_dev_pixelpipe_change_zoom_main(dev);
+    dt_dev_pixelpipe_change_zoom_preview(dev);
 
     if(dev->image_storage.id > -1 && darktable.mipmap_cache)
     {
       // Only if it's not our initial configure call, aka if we already have an image
       dt_control_queue_redraw_center();
-      dt_dev_refresh_ui_images(dev);
+      dt_dev_process_all(dev);
     }
   }
 }
@@ -764,7 +764,7 @@ void dt_dev_reprocess_all(dt_develop_t *dev)
   dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
 
   if(darktable.gui->reset || !dev || !dev->gui_attached) return;
-  dt_dev_pixelpipe_rebuild(dev);
+  dt_dev_pixelpipe_rebuild_all(dev);
 }
 
 void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch)
@@ -1276,7 +1276,7 @@ int dt_dev_sync_pixelpipe_hash(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
   // timed out. let's see if history stack has changed
   if(pipe->changed & (DT_DEV_PIPE_TOP_CHANGED | DT_DEV_PIPE_REMOVE | DT_DEV_PIPE_SYNCH))
   {
-    dt_dev_invalidate(dev);
+    dt_dev_pixelpipe_update_main(dev);
     // pretend that everything is fine
     return TRUE;
   }

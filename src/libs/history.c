@@ -263,7 +263,7 @@ static void _history_invalidate_cb(gpointer user_data, dt_undo_type_t type, dt_u
   dt_iop_module_t *module = (dt_iop_module_t *)user_data;
   dt_undo_history_t *hist = (dt_undo_history_t *)item;
   dt_dev_invalidate_history_module(hist->after_snapshot, module);
-  dt_dev_refresh_ui_images(darktable.develop);
+  dt_dev_process_all(darktable.develop);
 }
 
 static void _add_module_expander(GList *iop_list, dt_iop_module_t *module)
@@ -587,7 +587,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
     // topology has changed
     if(pipe_remove)
     {
-      dt_dev_pixelpipe_rebuild(dev);
+      dt_dev_pixelpipe_rebuild_all(dev);
     }
 
     dt_pthread_mutex_unlock(&dev->history_mutex);
@@ -1245,7 +1245,7 @@ void gui_reset(dt_lib_module_t *self)
     dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
 
     dt_control_queue_redraw_center();
-    dt_dev_refresh_ui_images(darktable.develop);
+    dt_dev_process_all(darktable.develop);
   }
 }
 

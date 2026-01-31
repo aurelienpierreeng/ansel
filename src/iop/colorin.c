@@ -509,7 +509,7 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
 
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_WORK);
 
-    dt_dev_pixelpipe_rebuild(self->dev);
+    dt_dev_pixelpipe_rebuild_all(self->dev);
   }
   else
   {

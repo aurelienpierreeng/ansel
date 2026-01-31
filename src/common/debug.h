@@ -114,8 +114,8 @@ extern "C" {
 // callers. `thread` should be `dt_debug_thread_t`. This requires verbose mode.
 //
 // Example:
-// void dt_dev_invalidate_real(dt_develop_t *dev);
-// #define dt_dev_invalidate(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_invalidate_real, (dev))
+// void dt_dev_pixelpipe_update_main_real(dt_develop_t *dev);
+// #define dt_dev_pixelpipe_update_main(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_pixelpipe_update_main_real, (dev))
 #define DT_DEBUG_TRACE_WRAPPER(thread, function, ...)                    \
   do {                                                                   \
     dt_vprint((thread), "[debug_trace] %s is called from %s at %s:%d\n", \

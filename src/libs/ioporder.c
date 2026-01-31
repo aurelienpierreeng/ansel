@@ -188,7 +188,7 @@ void gui_reset (dt_lib_module_t *self)
 
     dt_ioppr_change_iop_order(darktable.develop, imgid, iop_order_list);
 
-    dt_dev_pixelpipe_rebuild(darktable.develop);
+    dt_dev_pixelpipe_rebuild_all(darktable.develop);
 
     d->current_mode = DT_IOP_ORDER_V30;
     if(d->widget)
@@ -232,7 +232,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
 
     dt_ioppr_change_iop_order(darktable.develop, imgid, iop_order_list);
 
-    dt_dev_pixelpipe_rebuild(darktable.develop);
+    dt_dev_pixelpipe_rebuild_all(darktable.develop);
 
     update(self);
 

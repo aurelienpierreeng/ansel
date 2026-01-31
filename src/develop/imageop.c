@@ -575,9 +575,9 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
   dt_dev_modules_update_multishow(dev);
 
   /* redraw */
-  dt_dev_pixelpipe_rebuild(dev);
+  dt_dev_pixelpipe_rebuild_all(dev);
   dt_control_queue_redraw_center();
-  dt_dev_refresh_ui_images(dev);
+  dt_dev_process_all(dev);
 
   --darktable.gui->reset;
 }
@@ -641,7 +641,7 @@ static void _gui_movedown_callback(GtkButton *button, dt_iop_module_t *module)
   // we update the headers
   dt_dev_modules_update_multishow(prev->dev);
 
-  dt_dev_pixelpipe_rebuild(module->dev);
+  dt_dev_pixelpipe_rebuild_all(module->dev);
   dt_dev_add_history_item(prev->dev, module, TRUE, TRUE);
 
   dt_ioppr_check_iop_order(module->dev, 0, "dt_iop_gui_movedown_callback end");
@@ -673,7 +673,7 @@ static void _gui_moveup_callback(GtkButton *button, dt_iop_module_t *module)
   // we update the headers
   dt_dev_modules_update_multishow(next->dev);
 
-  dt_dev_pixelpipe_rebuild(next->dev);
+  dt_dev_pixelpipe_rebuild_all(next->dev);
   dt_dev_add_history_item(next->dev, module, TRUE, TRUE);
 
   dt_ioppr_check_iop_order(module->dev, 0, "dt_iop_gui_moveup_callback end");
@@ -747,7 +747,7 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
     dt_iop_gui_update_blending(module);
 
     if(module->dev->gui_attached)
-      dt_dev_pixelpipe_rebuild(module->dev);
+      dt_dev_pixelpipe_rebuild_all(module->dev);
 
     // we save the new instance creation
     dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
@@ -2158,8 +2158,8 @@ static void _display_mask_indicator_callback(GtkToggleButton *bt, dt_iop_module_
   dt_iop_request_focus(module);
 
   // We don't want to re-read the history here
-  dt_dev_invalidate_zoom(module->dev);
-  dt_dev_refresh_ui_images(module->dev);
+  dt_dev_pixelpipe_change_zoom_main(module->dev);
+  dt_dev_process_all(module->dev);
 }
 
 static gboolean _mask_indicator_tooltip(GtkWidget *treeview, gint x, gint y, gboolean kb_mode,
@@ -2733,8 +2733,8 @@ void dt_iop_refresh_center(dt_iop_module_t *module)
   dt_develop_t *dev = module->dev;
   if (dev && dev->gui_attached)
   {
-    dt_dev_invalidate(dev);
-    dt_dev_refresh_ui_images(dev);
+    dt_dev_pixelpipe_update_main(dev);
+    dt_dev_process_all(dev);
   }
 }
 
@@ -2744,8 +2744,8 @@ void dt_iop_refresh_preview(dt_iop_module_t *module)
   dt_develop_t *dev = module->dev;
   if (dev && dev->gui_attached)
   {
-    dt_dev_invalidate_preview(dev);
-    dt_dev_refresh_ui_images(dev);
+    dt_dev_pixelpipe_update_preview(dev);
+    dt_dev_process_all(dev);
   }
 }
 

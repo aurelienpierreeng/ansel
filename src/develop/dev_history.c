@@ -723,7 +723,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   {
     // If we have a module and it doesn't use drawn or raster masks,
     // we only need to resync the top-most history item with pipeline
-    dt_dev_invalidate_all(dev);
+    dt_dev_pixelpipe_update_all(dev);
   }
   else
   {
@@ -741,7 +741,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 
   if(darktable.gui && dev->gui_attached)
   {
-    if(redraw) dt_dev_refresh_ui_images(dev);
+    if(redraw) dt_dev_process_all(dev);
     
     if(module) 
     { 
@@ -891,8 +891,8 @@ void dt_dev_pop_history_items(dt_develop_t *dev)
 
   --darktable.gui->reset;
 
-  dt_dev_pixelpipe_rebuild(dev);
-  dt_dev_refresh_ui_images(dev);
+  dt_dev_pixelpipe_rebuild_all(dev);
+  dt_dev_process_all(dev);
 }
 
 static void _cleanup_history(const int32_t imgid)

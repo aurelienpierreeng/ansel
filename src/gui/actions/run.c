@@ -8,7 +8,7 @@ static gboolean clear_caches_callback(GtkAccelGroup *group, GObject *acceleratab
 {
   dt_dev_reprocess_all(darktable.develop);
   dt_control_queue_redraw();
-  dt_dev_refresh_ui_images(darktable.develop);
+  dt_dev_process_all(darktable.develop);
   return TRUE;
 }
 

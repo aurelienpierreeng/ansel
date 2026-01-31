@@ -2264,8 +2264,8 @@ static void _visualize_callback(GtkWidget *quad, gpointer user_data)
     self->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
 
   dt_iop_set_cache_bypass(self, g->show_visualize);
-  dt_dev_invalidate(self->dev);
-  dt_dev_refresh_ui_images(self->dev);
+  dt_dev_pixelpipe_update_main(self->dev);
+  dt_dev_process_all(self->dev);
 }
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
@@ -2276,8 +2276,8 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     const gboolean was_visualize = g->show_visualize;
     dt_bauhaus_widget_set_quad_active(g->clip, FALSE);
     g->show_visualize = FALSE;
-    if(was_visualize) dt_dev_invalidate(self->dev);
-    dt_dev_refresh_ui_images(self->dev);
+    if(was_visualize) dt_dev_pixelpipe_update_main(self->dev);
+    dt_dev_process_all(self->dev);
   }
 }
 
