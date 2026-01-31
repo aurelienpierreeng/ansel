@@ -26,11 +26,7 @@
 // until it finishes and we get the final buffer.
 // If jobs are flushed from the queue before completion,
 // those thumbnails will never be redrawn.
-// We prevent thumbnail & exports pipelines from running concurrently,
-// so the RAM usage will not explode here : at any time, we have at most
-// 2 concurrent pipes running ((darkroow preview OR darkroom main) AND (thumbnail OR export)).
-// Crazy threading here is to hide disk & network I/O latency while fetching files.
-#define DT_CONTROL_MAX_JOBS 64
+#define DT_CONTROL_MAX_JOBS 840
 
 /* the queue can have scheduled jobs but all
     the workers are sleeping, so this kicks the workers
@@ -385,10 +381,9 @@ void dt_control_flush_jobs_queue(dt_control_t *control, dt_job_queue_t queue_id)
   for(int k = 0; k < control->num_threads; k++)
   {
     _dt_job_t *job = (_dt_job_t *)control->job[k];
-    if(job && job->state != DT_JOB_STATE_RUNNING)
+    if(job)
     {
-      dt_control_job_set_state(job, DT_JOB_STATE_DISCARDED);
-      dt_control_job_dispose(job);
+      dt_control_job_cancel(job);
       count++;
     }
   }
