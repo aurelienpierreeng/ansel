@@ -431,10 +431,15 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   *  It is to be called at pipe init, not at runtime.
   */
 
+  dt_times_t start;
+  dt_get_times(&start);
+
   // bernstein hash (djb2)
   uint64_t hash = _default_pipe_hash(pipe);
 
-  // Bypassing cache contaminates downstream modules.
+  // Bypassing cache contaminates downstream modules, starting at the module requesting it.
+  // Usecase : crop, clip, ashift, etc. that need the uncropped image ;
+  // mask displays ; overexposed/clipping alerts and all other transient previews.
   gboolean bypass_cache = FALSE;
 
   for(GList *node = g_list_first(pipe->nodes); node; node = g_list_next(node))
@@ -462,7 +467,7 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
             piece->planned_roi_out.width, piece->planned_roi_out.height, piece->planned_roi_out.scale);
 */
     // Mask preview display doesn't re-commit params, so we need to keep that of it here
-    // Too much GUIÂstuff interleaved with pipeline stuff...
+    // Too much GUI stuff interleaved with pipeline stuff...
     // Mask display applies only to main preview in darkroom.
     if(pipe->type == DT_DEV_PIXELPIPE_FULL)
     {
@@ -497,6 +502,8 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     hash = dt_hash(hash, (const char *)&piece->global_mask_hash, sizeof(uint64_t));
     piece->global_hash = hash;
   }
+
+  dt_show_times(&start, "[dt_pixelpipe_get_global_hash] computing pipe hashes");
 }
 
 gboolean _commit_history_to_node(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, dt_dev_history_item_t *hist)
@@ -701,6 +708,10 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   else if(status & DT_DEV_PIPE_TOP_CHANGED)
   {
     // only top history item changed.
+    // This path might never be used again since raster masks require
+    // the mask provider (lower in the stack) to update its internal reference to the
+    // consumer (higher in the stack), so we need to traverse the whole pipe all the time
+    // to account for possible raster mask, or make an exception for them.
     dt_dev_pixelpipe_synch_top(pipe, dev);
   }
   dt_pthread_mutex_unlock(&dev->history_mutex);
@@ -2156,9 +2167,12 @@ gboolean dt_dev_pixelpipe_activemodule_disables_currentmodule(struct dt_develop_
 {
   return (dev                 // don't segfault
           && dev->gui_module  // don't segfault
-          && dev->gui_module != current_module // current_module is not capturing editing mode
-          && dev->gui_module->operation_tags_filter() & current_module->operation_tags());
+          && dev->gui_module != current_module 
+          // current_module is not the active one (capturing edit mode)
+          && dev->gui_module->operation_tags_filter() & current_module->operation_tags())
           // current_module does operation(s) that active module doesn't want
+          && dt_iop_get_cache_bypass(dev->gui_module); 
+          // cache bypass is our hint that the active module is in "editing" mode
 }
 
 void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev,
@@ -2208,6 +2222,9 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
   // upstream in the pipeline for proper pipeline cache invalidation, so we need to browse the pipeline
   // backwards.
 
+  dt_times_t start;
+  dt_get_times(&start);
+
   dt_iop_roi_t roi_out_temp = roi_out;
   dt_iop_roi_t roi_in;
   GList *modules = g_list_last(pipe->iop);
@@ -2219,16 +2236,16 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
 
     piece->planned_roi_out = roi_out_temp;
 
-    // skip this module?
-    if(piece->enabled && !dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, module))
-    {
+    // If in GUI and using a module that needs a full, undistorterted image,
+    // we need to shutdown temporarily any module distorting the image.
+    if(dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, module))
+      piece->enabled = FALSE;
+
+    // If module is disabled, modify_roi_in() is a no-op
+    if(piece->enabled)
       module->modify_roi_in(module, piece, &roi_out_temp, &roi_in);
-    }
     else
-    {
-      // pass through regions of interest for gui post expose events
       roi_in = roi_out_temp;
-    }
 
     piece->planned_roi_in = roi_in;
     roi_out_temp = roi_in;
@@ -2236,6 +2253,9 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
     modules = g_list_previous(modules);
     pieces = g_list_previous(pieces);
   }
+
+  dt_show_times(&start, "[dt_pixelpipe_get_roi_in] planning ROI");
+
 }
 
 /**
