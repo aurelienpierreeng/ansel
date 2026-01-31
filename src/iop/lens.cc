@@ -118,6 +118,11 @@ typedef struct dt_iop_lensfun_gui_data_t
 typedef struct dt_iop_lensfun_global_data_t
 {
   lfDatabase *db;
+  int kernel_lens_distort_bilinear;
+  int kernel_lens_distort_bicubic;
+  int kernel_lens_distort_lanczos2;
+  int kernel_lens_distort_lanczos3;
+  int kernel_lens_vignette;
 } dt_iop_lensfun_global_data_t;
 
 typedef struct dt_iop_lensfun_data_t
@@ -590,6 +595,276 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   }
 }
 
+#ifdef HAVE_OPENCL
+int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+{
+  dt_iop_lensfun_data_t *d = (dt_iop_lensfun_data_t *)piece->data;
+  dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)self->global_data;
+  dt_iop_lensfun_gui_data_t *g = (dt_iop_lensfun_gui_data_t *)self->gui_data;
+
+  const gboolean raw_monochrome = dt_image_is_monochrome(&self->dev->image_storage);
+  const int used_lf_mask = (raw_monochrome) ? LF_MODIFY_ALL & ~LF_MODIFY_TCA : LF_MODIFY_ALL;
+
+  cl_mem dev_tmpbuf = NULL;
+  cl_mem dev_tmp = NULL;
+  cl_int err = -999;
+
+  float *tmpbuf = NULL;
+  lfModifier *modifier = NULL;
+
+  const int devid = piece->pipe->devid;
+  const int iwidth = roi_in->width;
+  const int iheight = roi_in->height;
+  const int owidth = roi_out->width;
+  const int oheight = roi_out->height;
+  const int roi_in_x = roi_in->x;
+  const int roi_in_y = roi_in->y;
+  const int width = MAX(iwidth, owidth);
+  const int height = MAX(iheight, oheight);
+  const int ch = piece->colors;
+  const int tmpbufwidth = owidth * 2 * 3;
+  const size_t tmpbuflen = d->inverse ? (size_t)oheight * owidth * 2 * 3 * sizeof(float)
+                                      : MAX((size_t)oheight * owidth * 2 * 3, (size_t)iheight * iwidth * ch)
+                                        * sizeof(float);
+  const unsigned int pixelformat = ch == 3 ? LF_CR_3(RED, GREEN, BLUE) : LF_CR_4(RED, GREEN, BLUE, UNKNOWN);
+
+  const float orig_w = roi_in->scale * piece->buf_in.width, orig_h = roi_in->scale * piece->buf_in.height;
+
+  size_t origin[] = { 0, 0, 0 };
+  size_t iregion[] = { (size_t)iwidth, (size_t)iheight, 1 };
+  size_t oregion[] = { (size_t)owidth, (size_t)oheight, 1 };
+  size_t isizes[] = { (size_t)ROUNDUPDWD(iwidth, devid), (size_t)ROUNDUPDHT(iheight, devid), 1 };
+  size_t osizes[] = { (size_t)ROUNDUPDWD(owidth, devid), (size_t)ROUNDUPDHT(oheight, devid), 1 };
+
+  int modflags;
+  int ldkernel = -1;
+  const struct dt_interpolation *interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
+
+  if(!d->lens || !d->lens->Maker || d->crop <= 0.0f)
+  {
+    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, oregion);
+    if(err != CL_SUCCESS) goto error;
+    return TRUE;
+  }
+
+  switch(interpolation->id)
+  {
+    case DT_INTERPOLATION_BILINEAR:
+      ldkernel = gd->kernel_lens_distort_bilinear;
+      break;
+    case DT_INTERPOLATION_BICUBIC:
+      ldkernel = gd->kernel_lens_distort_bicubic;
+      break;
+    case DT_INTERPOLATION_LANCZOS2:
+      ldkernel = gd->kernel_lens_distort_lanczos2;
+      break;
+    case DT_INTERPOLATION_LANCZOS3:
+      ldkernel = gd->kernel_lens_distort_lanczos3;
+      break;
+    default:
+      return FALSE;
+  }
+
+  tmpbuf = (float *)dt_alloc_align(tmpbuflen);
+  if(tmpbuf == NULL) goto error;
+
+  dev_tmp = (cl_mem)dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
+  if(dev_tmp == NULL) goto error;
+
+  dev_tmpbuf = (cl_mem)dt_opencl_alloc_device_buffer(devid, tmpbuflen);
+  if(dev_tmpbuf == NULL) goto error;
+
+  dt_pthread_mutex_lock(&darktable.plugin_threadsafe);
+  modifier = get_modifier(&modflags, orig_w, orig_h, d, used_lf_mask, FALSE);
+  dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+
+  if(d->inverse)
+  {
+    // reverse direction (useful for renderings)
+    if(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE))
+    {
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+      dt_omp_firstprivate(tmpbufwidth, roi_out) \
+      dt_omp_sharedconst(raw_monochrome) \
+      shared(tmpbuf, d, modifier) \
+      schedule(static)
+#endif
+      for(int y = 0; y < roi_out->height; y++)
+      {
+        float *pi = tmpbuf + (size_t)y * tmpbufwidth;
+        modifier->ApplySubpixelGeometryDistortion(roi_out->x, roi_out->y + y, roi_out->width, 1, pi);
+      }
+
+      /* _blocking_ memory transfer: host tmpbuf buffer -> opencl dev_tmpbuf */
+      err = dt_opencl_write_buffer_to_device(devid, tmpbuf, dev_tmpbuf, 0,
+                                             (size_t)owidth * oheight * 2 * 3 * sizeof(float), CL_TRUE);
+      if(err != CL_SUCCESS) goto error;
+
+      dt_opencl_set_kernel_arg(devid, ldkernel, 0, sizeof(cl_mem), (void *)&dev_in);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 1, sizeof(cl_mem), (void *)&dev_tmp);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 2, sizeof(int), (void *)&owidth);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 3, sizeof(int), (void *)&oheight);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 4, sizeof(int), (void *)&iwidth);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 5, sizeof(int), (void *)&iheight);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 6, sizeof(int), (void *)&roi_in_x);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 7, sizeof(int), (void *)&roi_in_y);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 8, sizeof(cl_mem), (void *)&dev_tmpbuf);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 9, sizeof(int), (void *)&(d->do_nan_checks));
+      dt_opencl_set_kernel_arg(devid, ldkernel, 10, sizeof(int), (void *)&(raw_monochrome));
+      err = dt_opencl_enqueue_kernel_2d(devid, ldkernel, osizes);
+      if(err != CL_SUCCESS) goto error;
+    }
+    else
+    {
+      err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_tmp, origin, origin, oregion);
+      if(err != CL_SUCCESS) goto error;
+    }
+
+    if(modflags & LF_MODIFY_VIGNETTING)
+    {
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+      dt_omp_firstprivate(ch, pixelformat, roi_out) \
+      shared(tmpbuf, modifier, d) \
+      schedule(static)
+#endif
+      for(int y = 0; y < roi_out->height; y++)
+      {
+        /* Colour correction: vignetting */
+        // actually this way row stride does not matter.
+        float *buf = tmpbuf + (size_t)y * ch * roi_out->width;
+        for(int k = 0; k < ch * roi_out->width; k++) buf[k] = 0.5f;
+        modifier->ApplyColorModification(buf, roi_out->x, roi_out->y + y, roi_out->width, 1,
+                                         pixelformat, ch * roi_out->width);
+      }
+
+      /* _blocking_ memory transfer: host tmpbuf buffer -> opencl dev_tmpbuf */
+      err = dt_opencl_write_buffer_to_device(devid, tmpbuf, dev_tmpbuf, 0,
+                                             (size_t)ch * roi_out->width * roi_out->height * sizeof(float),
+                                             CL_TRUE);
+      if(err != CL_SUCCESS) goto error;
+
+      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 0, sizeof(cl_mem), (void *)&dev_tmp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 1, sizeof(cl_mem), (void *)&dev_out);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 2, sizeof(int), (void *)&owidth);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 3, sizeof(int), (void *)&oheight);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 4, sizeof(cl_mem), (void *)&dev_tmpbuf);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_lens_vignette, osizes);
+      if(err != CL_SUCCESS) goto error;
+    }
+    else
+    {
+      err = dt_opencl_enqueue_copy_image(devid, dev_tmp, dev_out, origin, origin, oregion);
+      if(err != CL_SUCCESS) goto error;
+    }
+  }
+
+  else // correct distortions:
+  {
+
+    if(modflags & LF_MODIFY_VIGNETTING)
+    {
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+      dt_omp_firstprivate(ch, pixelformat, roi_in) \
+      shared(tmpbuf, modifier, d) \
+      schedule(static)
+#endif
+      for(int y = 0; y < roi_in->height; y++)
+      {
+        /* Colour correction: vignetting */
+        // actually this way row stride does not matter.
+        float *buf = tmpbuf + (size_t)y * ch * roi_in->width;
+        for(int k = 0; k < ch * roi_in->width; k++) buf[k] = 0.5f;
+        modifier->ApplyColorModification(buf, roi_in->x, roi_in->y + y, roi_in->width, 1,
+                                         pixelformat, ch * roi_in->width);
+      }
+
+      /* _blocking_ memory transfer: host tmpbuf buffer -> opencl dev_tmpbuf */
+      err = dt_opencl_write_buffer_to_device(
+          devid, tmpbuf, dev_tmpbuf, 0, (size_t)ch * roi_in->width * roi_in->height * sizeof(float), CL_TRUE);
+      if(err != CL_SUCCESS) goto error;
+
+      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 0, sizeof(cl_mem), (void *)&dev_in);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 1, sizeof(cl_mem), (void *)&dev_tmp);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 2, sizeof(int), (void *)&iwidth);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 3, sizeof(int), (void *)&iheight);
+      dt_opencl_set_kernel_arg(devid, gd->kernel_lens_vignette, 4, sizeof(cl_mem), (void *)&dev_tmpbuf);
+      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_lens_vignette, isizes);
+      if(err != CL_SUCCESS) goto error;
+    }
+    else
+    {
+      err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_tmp, origin, origin, iregion);
+      if(err != CL_SUCCESS) goto error;
+    }
+
+    if(modflags & (LF_MODIFY_TCA | LF_MODIFY_DISTORTION | LF_MODIFY_GEOMETRY | LF_MODIFY_SCALE))
+    {
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+      dt_omp_firstprivate(tmpbufwidth, roi_out) \
+      dt_omp_sharedconst(raw_monochrome) \
+      shared(tmpbuf, d, modifier) \
+      schedule(static)
+#endif
+      for(int y = 0; y < roi_out->height; y++)
+      {
+        float *pi = tmpbuf + (size_t)y * tmpbufwidth;
+        modifier->ApplySubpixelGeometryDistortion(roi_out->x, roi_out->y + y, roi_out->width, 1, pi);
+      }
+
+      /* _blocking_ memory transfer: host tmpbuf buffer -> opencl dev_tmpbuf */
+      err = dt_opencl_write_buffer_to_device(devid, tmpbuf, dev_tmpbuf, 0,
+                                             (size_t)owidth * oheight * 2 * 3 * sizeof(float), CL_TRUE);
+      if(err != CL_SUCCESS) goto error;
+
+      dt_opencl_set_kernel_arg(devid, ldkernel, 0, sizeof(cl_mem), (void *)&dev_tmp);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 1, sizeof(cl_mem), (void *)&dev_out);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 2, sizeof(int), (void *)&owidth);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 3, sizeof(int), (void *)&oheight);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 4, sizeof(int), (void *)&iwidth);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 5, sizeof(int), (void *)&iheight);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 6, sizeof(int), (void *)&roi_in_x);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 7, sizeof(int), (void *)&roi_in_y);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 8, sizeof(cl_mem), (void *)&dev_tmpbuf);
+      dt_opencl_set_kernel_arg(devid, ldkernel, 9, sizeof(int), (void *)&(d->do_nan_checks));
+      dt_opencl_set_kernel_arg(devid, ldkernel, 10, sizeof(int), (void *)&(raw_monochrome));
+      err = dt_opencl_enqueue_kernel_2d(devid, ldkernel, osizes);
+      if(err != CL_SUCCESS) goto error;
+    }
+    else
+    {
+      err = dt_opencl_enqueue_copy_image(devid, dev_tmp, dev_out, origin, origin, oregion);
+      if(err != CL_SUCCESS) goto error;
+    }
+  }
+
+  if(self->dev->gui_attached && g && (piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW) == DT_DEV_PIXELPIPE_PREVIEW)
+  {
+    dt_iop_gui_enter_critical_section(self);
+    g->corrections_done = (modflags & LENSFUN_MODFLAG_MASK);
+    dt_iop_gui_leave_critical_section(self);
+  }
+
+  dt_opencl_release_mem_object(dev_tmpbuf);
+  dt_opencl_release_mem_object(dev_tmp);
+  if(tmpbuf != NULL) dt_free_align(tmpbuf);
+  if(modifier != NULL) delete modifier;
+  return TRUE;
+
+error:
+  dt_opencl_release_mem_object(dev_tmp);
+  dt_opencl_release_mem_object(dev_tmpbuf);
+  if(tmpbuf != NULL) dt_free_align(tmpbuf);
+  if(modifier != NULL) delete modifier;
+  dt_print(DT_DEBUG_OPENCL, "[opencl_lens] couldn't enqueue kernel! %d\n", err);
+  return FALSE;
+}
+#endif
+
 void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
                      const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
                      struct dt_develop_tiling_t *tiling)
@@ -981,9 +1256,16 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 
 void init_global(dt_iop_module_so_t *module)
 {
+  const int program = 2; // basic.cl, from programs.conf
   dt_iop_lensfun_global_data_t *gd
       = (dt_iop_lensfun_global_data_t *)calloc(1, sizeof(dt_iop_lensfun_global_data_t));
   module->data = gd;
+  gd->kernel_lens_distort_bilinear = dt_opencl_create_kernel(program, "lens_distort_bilinear");
+  gd->kernel_lens_distort_bicubic = dt_opencl_create_kernel(program, "lens_distort_bicubic");
+  gd->kernel_lens_distort_lanczos2 = dt_opencl_create_kernel(program, "lens_distort_lanczos2");
+  gd->kernel_lens_distort_lanczos3 = dt_opencl_create_kernel(program, "lens_distort_lanczos3");
+  gd->kernel_lens_vignette = dt_opencl_create_kernel(program, "lens_vignette");
+
   lfDatabase *dt_iop_lensfun_db = new lfDatabase;
   gd->db = (lfDatabase *)dt_iop_lensfun_db;
 
@@ -1158,6 +1440,12 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_iop_lensfun_global_data_t *gd = (dt_iop_lensfun_global_data_t *)module->data;
   lfDatabase *dt_iop_lensfun_db = (lfDatabase *)gd->db;
   delete dt_iop_lensfun_db;
+
+  dt_opencl_free_kernel(gd->kernel_lens_distort_bilinear);
+  dt_opencl_free_kernel(gd->kernel_lens_distort_bicubic);
+  dt_opencl_free_kernel(gd->kernel_lens_distort_lanczos2);
+  dt_opencl_free_kernel(gd->kernel_lens_distort_lanczos3);
+  dt_opencl_free_kernel(gd->kernel_lens_vignette);
   free(module->data);
   module->data = NULL;
 }
