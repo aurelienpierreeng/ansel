@@ -2412,13 +2412,15 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 
   if(which == 2)
   {
-    // Incremental zoom-in on middle button click, from fit to 400% 
-    // by full increments (100%, 200%, 300%).
+    // Incremental zoom-in on middle button click, from fit to 800% 
+    // by power of 2 increments (100%, 200%, 400%, 800%).
     float new_scale = 1.f;
-    if(dev->scaling < dev->natural_scale || dev->scaling > 8.f)
-      new_scale = dev->natural_scale;
+    if(dev->scaling < dev->natural_scale || dev->scaling > 7.f / dev->natural_scale)
+      new_scale = dev->natural_scale; // zoom to fit
+    else if(dev->scaling * dev->natural_scale < 1.f)
+      new_scale = 1.f; // 100 %
     else
-      new_scale = floorf(dev->scaling * dev->natural_scale) + 1.f;
+      new_scale = floorf(dev->scaling * dev->natural_scale) * 2.f;
 
     // Actual pixelpipe scaling is dev->scaling * dev->natural_scale,
     // where dev->natural_scale ensures the images fits within viewport
