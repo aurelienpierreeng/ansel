@@ -535,8 +535,6 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
     // Count the number of pipe re-entries and limit it to 2 to avoid infinite loops
     int reentries = 0;
 
-    dt_pthread_mutex_lock(&pipe->busy_mutex);
-
     if(pipe->timeout)
     {
       g_usleep(pipe->timeout);
@@ -545,6 +543,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 
     while(!finish_on_error && (pipe->status == DT_DEV_PIXELPIPE_DIRTY) && reentries < 2)
     {
+      dt_pthread_mutex_lock(&pipe->busy_mutex);
       pipe->processing = 1;
 
       dt_times_t thread_start;
@@ -610,6 +609,10 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
         _update_gui_backbuf(pipe);
       }
 
+      pipe->processing = 0;
+      dt_pthread_mutex_unlock(&pipe->busy_mutex);
+      dt_iop_nap(200);
+
       if(pipe->status == DT_DEV_PIXELPIPE_VALID)
       {
         if(pipe->type == DT_DEV_PIXELPIPE_FULL)
@@ -617,11 +620,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
         else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
           DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
       }
-
-      pipe->processing = 0;
     
-      dt_iop_nap(200);
-
       if(pipe->status == DT_DEV_PIXELPIPE_VALID)
       {
         if(pipe->type == DT_DEV_PIXELPIPE_FULL)
@@ -631,8 +630,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       }
     }
 
-    dt_pthread_mutex_unlock(&pipe->busy_mutex);
-    dt_iop_nap(100000); // wait 100 ms
+    dt_iop_nap(50000); // wait 50 ms
   }
 
   pipe->running = 0;
