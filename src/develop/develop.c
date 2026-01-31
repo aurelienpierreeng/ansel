@@ -608,10 +608,10 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
         else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
           DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
       }
-    
-      dt_iop_nap(200);
 
       pipe->processing = 0;
+    
+      dt_iop_nap(200);
 
       if(pipe->status == DT_DEV_PIXELPIPE_VALID)
       {
