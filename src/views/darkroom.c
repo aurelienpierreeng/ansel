@@ -370,7 +370,7 @@ void expose(
     surface = dt_cairo_image_surface_create_for_data(dev->pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
     wd /= darktable.gui->ppd;
     ht /= darktable.gui->ppd;
-    cairo_translate(cr, ceilf(.5f * (width - wd)), ceilf(.5f * (height - ht)));
+    cairo_translate(cr, .5f * (width - wd), .5f * (height - ht));
 
     if(dev->iso_12646.enabled)
     {
@@ -415,8 +415,8 @@ void expose(
       
       cairo_save(cr);
       // Position surface at preview's ROI top-left corner.
-      cairo_translate(cr, ceilf(.5f * (width - roi_wd)),
-                          ceilf(.5f * (height - roi_ht)));
+      cairo_translate(cr, .5f * (width - roi_wd),
+                          .5f * (height - roi_ht));
 
       cairo_rectangle(cr, -border * .5f, -border * .5f, roi_wd + border, roi_ht + border);
       cairo_set_source_rgb(cr, 1.f, 1.f, 1.f);

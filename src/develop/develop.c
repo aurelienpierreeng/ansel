@@ -1475,8 +1475,8 @@ gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t 
   const float roi_width = fminf(width, wd * zoom_scale);
   const float roi_height = fminf(height, ht * zoom_scale);
 
-  const float rec_x = fmaxf(border, ceilf((width - roi_width) * 0.5f));
-  const float rec_y = fmaxf(border, ceilf((height - roi_height) * 0.5f));
+  const float rec_x = fmaxf(border, (width - roi_width) * 0.5f);
+  const float rec_y = fmaxf(border, (height - roi_height) * 0.5f);
   const float rec_w = fminf(width - 2 * border, roi_width);
   const float rec_h = fminf(height - 2 * border, roi_height);
 
@@ -1497,8 +1497,8 @@ static gboolean _dev_translate_roi(dt_develop_t *dev, cairo_t *cr, int32_t width
 
   // Get image's origin position and scale
   const float zoom_scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
-  const float tx = ceilf(0.5f * width - dev->x * proc_wd * zoom_scale);
-  const float ty = ceilf(0.5f * height - dev->y * proc_ht * zoom_scale);
+  const float tx = 0.5f * width - dev->x * proc_wd * zoom_scale;
+  const float ty = 0.5f * height - dev->y * proc_ht * zoom_scale;
 
   cairo_translate(cr, tx, ty);
   
