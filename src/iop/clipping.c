@@ -2357,11 +2357,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // reapply box aspect to be sure that the ratio has not been modified by the keystone transform
   apply_box_aspect(self, GRAB_HORIZONTAL);
 
-  const float natural_scale = dt_dev_get_natural_scale(dev, dev->preview_pipe);
-  int proc_iwd, proc_iht;
-  dt_dev_pixelpipe_get_roi_out(dev->preview_pipe, dev, dev->preview_pipe->iwidth, dev->preview_pipe->iheight, &proc_iwd, &proc_iht);
-  const float wd = proc_iwd * natural_scale;
-  const float ht = proc_iht * natural_scale;
+  const float wd = dev->preview_pipe->backbuf_width;
+  const float ht = dev->preview_pipe->backbuf_height;
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
 
   cairo_translate(cr, width / 2.0, height / 2.0);
