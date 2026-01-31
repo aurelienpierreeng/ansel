@@ -421,9 +421,8 @@ static float _aspect_ratio_get(dt_iop_module_t *self, GtkWidget *combo)
   const char *text = dt_bauhaus_combobox_get_text(combo);
   if(text && !g_strcmp0(text, _("original image")))
   {
-    dt_develop_t *dev = darktable.develop;
-    int proc_iwd, proc_iht;
-    dt_dev_pixelpipe_get_roi_out(dev->preview_pipe, dev, dev->preview_pipe->iwidth, dev->preview_pipe->iheight, &proc_iwd, &proc_iht);
+    int proc_iwd = 0, proc_iht = 0;
+    dt_dev_get_processed_size(darktable.develop, &proc_iwd, &proc_iht);
 
     if(!(proc_iwd > 0 && proc_iht > 0)) return 0.0f;
 
@@ -557,8 +556,7 @@ static void _aspect_apply(dt_iop_module_t *self, _grab_region_t grab)
   if(aspect <= 0) return;
 
   int iwd, iht;
-  dt_develop_t *dev = darktable.develop;
-  dt_dev_pixelpipe_get_roi_out(dev->preview_pipe, dev, dev->preview_pipe->iwidth, dev->preview_pipe->iheight, &iwd, &iht);
+  dt_dev_get_processed_size(darktable.develop, &iwd, &iht);
 
   // since one rarely changes between portrait and landscape by cropping,
   // long side of the crop box should match the long side of the image.
@@ -1382,8 +1380,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     layout = pango_cairo_create_layout(cr);
     pango_layout_set_font_description(layout, desc);
 
-    int procw, proch;
-    dt_dev_pixelpipe_get_roi_out(dev->preview_pipe, dev, dev->preview_pipe->iwidth, dev->preview_pipe->iheight, &procw, &proch);
+    int procw;
+    int proch;
+    dt_dev_get_processed_size(dev, &procw, &proch);
     snprintf(dimensions, sizeof(dimensions), "%.0f x %.0f", (float)procw * g->clip_w, (float)proch * g->clip_h);
 
     pango_layout_set_text(layout, dimensions, -1);
