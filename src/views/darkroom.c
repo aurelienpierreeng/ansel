@@ -90,6 +90,8 @@ static void _view_darkroom_filmstrip_activate_callback(gpointer instance, int32_
 
 static void _dev_change_image(dt_view_t *self, const int32_t imgid);
 
+static int _change_scaling(dt_develop_t *dev, const float x, const float y, const float new_scaling);
+
 const char *name(const dt_view_t *self)
 {
   return _("Darkroom");
@@ -2408,39 +2410,53 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
      && dev->gui_module->button_pressed(dev->gui_module, x, y, pressure, which, type, state))
      return 1;
 
+  if(which == 2)
+  {
+    // Incremental zoom-in on middle button click, from fit to 400% 
+    // by full increments (100%, 200%, 300%).
+    float new_scale = 1.f;
+    if(dev->scaling < dev->natural_scale || dev->scaling > 8.f)
+      new_scale = dev->natural_scale;
+    else
+      new_scale = floorf(dev->scaling * dev->natural_scale) + 1.f;
+
+    // Actual pixelpipe scaling is dev->scaling * dev->natural_scale,
+    // where dev->natural_scale ensures the images fits within viewport
+    new_scale /= dev->natural_scale;
+
+    return _change_scaling(dev, x, y, new_scale);
+  }
+
   return 0;
 }
 
-static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int up, int state, int flow)
+static int _change_scaling(dt_develop_t *dev, const float x, const float y, const float new_scaling)
 {
-  dt_develop_t *dev = darktable.develop;
-  int proc_w = 0.f, proc_h = 0.f;
-  dt_dev_get_processed_size(dev, &proc_w, &proc_h);
-  const float old_dev_scaling = dev->scaling;
-  const float scale = dt_dev_get_zoom_level(dev);
+  const float old_scaling = dev->scaling;
 
-  // Commit the new scaling
-  const float step = 1.02f;
-  dev->scaling *= powf(step, (float)-flow);
+  // Round scaling to 1.0 (fit) if close enough
+  const float epsilon = fabsf(old_scaling - new_scaling);
+  if(fabsf(new_scaling - 1.0f) < epsilon)
+    dev->scaling = 1.0f;
+  else
+    dev->scaling = new_scaling;
 
   if(!dt_dev_check_zoom_scale_bounds(dev))
-  {
-    // Round scaling to 1.0 (fit) if close enough
-    const float epsilon = fabsf(old_dev_scaling - dev->scaling);
-    if(fabsf(dev->scaling - 1.0f) < epsilon)
-      dev->scaling = 1.0f;
-    
+  { 
     // Calculate zoom position offset to keep mouse position fixed during zoom
     const float mouse_off_x = x - 0.5f * dev->orig_width;
     const float mouse_off_y = y - 0.5f * dev->orig_height;
     
     // To keep the point under the mouse fixed, calculate the adjustment
+    const float scale = dt_dev_get_zoom_level(dev);
     const float ppd = darktable.gui->ppd;
     const float scaling = dev->scaling;
-    const float scale_delta = ppd * (scaling - old_dev_scaling);
-    const float scale_product = old_dev_scaling * scale;
+    const float scale_delta = ppd * (scaling - old_scaling);
+    const float scale_product = old_scaling * scale;
     
     // Adjust the center to compensate for the scale change
+    int proc_w = 0.f, proc_h = 0.f;
+    dt_dev_get_processed_size(dev, &proc_w, &proc_h);
     dev->x += mouse_off_x * scale_delta / (proc_w * scale_product);
     dev->y += mouse_off_y * scale_delta / (proc_h * scale_product);
     
@@ -2450,9 +2466,24 @@ static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int 
     dt_control_navigation_redraw();
     dt_dev_pixelpipe_change_zoom_main(dev);
     dt_dev_process_all(dev);
+    return 1;
   }
-  
-  return TRUE;
+  else
+  {
+    // Invalid zoom level, keep previous value
+    dev->scaling = old_scaling;
+    return 0;
+  }
+}
+
+static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int up, int state, int flow)
+{
+  dt_develop_t *dev = darktable.develop;
+
+  // Commit the new scaling
+  const float step = 1.02f;
+  const float new_scaling = dev->scaling * powf(step, (float)-flow);
+  return _change_scaling(dev, x, y, new_scaling);
 }
 
 
