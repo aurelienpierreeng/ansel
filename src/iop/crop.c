@@ -1310,9 +1310,11 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   _aspect_apply(self, GRAB_HORIZONTAL);
 
-  g->wd = dev->preview_pipe->backbuf_width;
-  g->ht = dev->preview_pipe->backbuf_height;
-  if(g->wd < 1.0 || g->ht < 1.0) return;
+  const float natural_scale = dt_dev_get_natural_scale(dev, dev->preview_pipe);
+  int proc_iwd, proc_iht;
+  dt_dev_pixelpipe_get_roi_out(dev->preview_pipe, dev, dev->preview_pipe->iwidth, dev->preview_pipe->iheight, &proc_iwd, &proc_iht);
+  g->wd = proc_iwd * natural_scale;
+  g->ht = proc_iht * natural_scale;
 
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
 
