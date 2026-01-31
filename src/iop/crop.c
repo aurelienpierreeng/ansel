@@ -1308,6 +1308,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_develop_t *dev = self->dev;
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
 
+  if((dev->preview_pipe->status != DT_DEV_PIXELPIPE_VALID || dev->preview_pipe->processing))
+    return;
+
   _aspect_apply(self, GRAB_HORIZONTAL);
 
   g->wd = dev->preview_pipe->backbuf_width;
