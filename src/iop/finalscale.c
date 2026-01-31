@@ -63,11 +63,18 @@ void modify_roi_in(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const d
 {
   *roi_in = *roi_out;
 
-  roi_in->x /= roi_out->scale;
-  roi_in->y /= roi_out->scale;
-  roi_in->width  = (int)round(roi_out->width / roi_out->scale);
-  roi_in->height = (int)round(roi_out->height / roi_out->scale);
-  roi_in->scale = 1.0f;
+  // Use cases :
+  // 1. we run an export pipeline. We mandatorily get a 1:1 image, process it whole, downscale at the end.
+  // 2. we run a GUI (darkroom) pipeline. If we upsample it, we want it done at the end of the pipe,
+  // so sharpening and blurring is at most 1:1.
+  if(piece->pipe->type == DT_DEV_PIXELPIPE_EXPORT || roi_out->scale > 1.f)
+  {
+    roi_in->x /= roi_out->scale;
+    roi_in->y /= roi_out->scale;
+    roi_in->width  = (int)round(roi_out->width / roi_out->scale);
+    roi_in->height = (int)round(roi_out->height / roi_out->scale);
+    roi_in->scale = 1.0f;
+  }
 }
 
 void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const float *const in,
@@ -76,31 +83,6 @@ void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *p
   const struct dt_interpolation *itor = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
   dt_interpolation_resample_roi_1c(itor, out, roi_out, in, roi_in);
 }
-
-#ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  if(roi_out->scale >= 1.00001f)
-  {
-    dt_print(DT_DEBUG_OPENCL,
-             "[opencl_finalscale] finalscale with upscaling not yet supported by opencl code\n");
-    return FALSE;
-  }
-
-  const int devid = piece->pipe->devid;
-  cl_int err = -999;
-
-  err = dt_iop_clip_and_zoom_roi_cl(devid, dev_out, dev_in, roi_out, roi_in);
-  if(err != CL_SUCCESS) goto error;
-
-  return TRUE;
-
-error:
-  dt_print(DT_DEBUG_OPENCL, "[opencl_finalscale] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
-}
-#endif
 
 void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
@@ -111,7 +93,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
 void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
-  if(piece->pipe->type != DT_DEV_PIXELPIPE_EXPORT) piece->enabled = 0;
+  piece->enabled = (piece->pipe->type != DT_DEV_PIXELPIPE_THUMBNAIL);
 }
 
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

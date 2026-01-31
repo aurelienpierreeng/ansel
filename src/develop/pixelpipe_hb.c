@@ -2253,6 +2253,17 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
     else
       roi_in = roi_out_temp;
 
+    /*
+    if(piece->enabled)
+    {
+      fprintf(stdout, "%s : scale : in %f out %f - (x, y) : (%i, %i) to (%i, %i)\n",
+        module->op, 
+        roi_in.scale, roi_out.scale, 
+        roi_in.x, roi_in.y,
+        roi_out.x, roi_out.y);
+    }
+    */
+
     piece->planned_roi_in = roi_in;
     roi_out_temp = roi_in;
 
