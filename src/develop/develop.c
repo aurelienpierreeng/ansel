@@ -677,7 +677,7 @@ int dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
   if(_dt_dev_load_raw(dev, imgid)) return 1;
 
   // we need a global lock as the dev->iop set must not be changed until read history is terminated
-  dt_pthread_rwlock_rdlock(&dev->history_mutex);
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dev->iop = dt_iop_load_modules(dev);
 
   dt_dev_read_history_ext(dev, dev->image_storage.id, FALSE);
@@ -1204,7 +1204,7 @@ int dt_dev_distort_backtransform_locked(dt_develop_t *dev, dt_dev_pixelpipe_t *p
 int dt_dev_distort_backtransform_plus(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
                                       float *points, size_t points_count)
 {
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
   const int success = dt_dev_distort_backtransform_locked(dev, pipe, iop_order, transf_direction, points, points_count);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   return success;
