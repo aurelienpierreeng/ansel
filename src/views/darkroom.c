@@ -2285,6 +2285,9 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 
   if(!mouse_in_actionarea(self, x, y)) return 0;
 
+  // Grab focus on any click so we can interact from keyboard
+  gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
+
   if(dt_iop_color_picker_is_visible(dev))
   {
     float pzx = 0.f;
@@ -2486,6 +2489,14 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
 
 int key_pressed(dt_view_t *self, GdkEventKey *event)
 {
+  /* Convert to readable name */
+  const gchar *keyname = gdk_keyval_name(event->keyval);
+  if (!keyname)
+      keyname = "(unknown)";
+
+  printf("Key: %s (0x%x)\n", keyname, event->keyval);
+
+  // Not handled yet
   return 0;
 }
 
