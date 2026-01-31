@@ -1422,50 +1422,6 @@ void dt_dev_masks_update_hash(dt_develop_t *dev)
   dt_show_times(&start, "[masks_update_hash] computing forms hash");
 }
 
-void dt_dev_get_final_size(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const int32_t imgid, const int input_width, const int input_height, int *processed_width, int *processed_height)
-{
-  dt_times_t start;
-  dt_get_times(&start);
-
-  gboolean clean_dev = FALSE;
-  gboolean clean_pipe = FALSE;
-  dt_develop_t temp_dev;
-  dt_dev_pixelpipe_t temp_pipe;
-
-  if(dev == NULL)
-  {
-    clean_dev = TRUE;
-    dev = &temp_dev;
-
-    dt_dev_init(dev, 0);
-
-    // Needed for some module's default params init/reload
-    const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-    dev->image_storage = *image;
-    dt_image_cache_read_release(darktable.image_cache, image);
-
-    dev->iop = dt_iop_load_modules(dev);
-    dt_dev_read_history_ext(dev, imgid, FALSE);
-  }
-
-  if(pipe == NULL)
-  {
-    clean_pipe = TRUE;
-    pipe = &temp_pipe;
-    dt_dev_pixelpipe_init_dummy(pipe, input_width, input_height);
-    dt_dev_pixelpipe_set_input(pipe, dev, imgid, input_width, input_height, DT_MIPMAP_NONE);
-    dt_dev_pixelpipe_create_nodes(pipe, dev);
-    dt_dev_pixelpipe_synch_all(pipe, dev);
-  }
-
-  dt_dev_pixelpipe_get_roi_out(pipe, dev, input_width, input_height, processed_width, processed_height);
-
-  if(clean_pipe) dt_dev_pixelpipe_cleanup(&temp_pipe);
-  if(clean_dev) dt_dev_cleanup(&temp_dev);
-
-  dt_show_times(&start, "[dt_dev_get_final_size] computing test final size");
-}
-
 float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe)
 {
   if(!pipe || pipe->processed_width == 0 || pipe->processed_height == 0)

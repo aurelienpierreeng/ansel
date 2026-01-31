@@ -564,23 +564,6 @@ guint dt_dev_mask_history_overload(GList *dev_history, guint threshold);
 // Write the `darktable|changed` tag on the current picture upon history modification
 void dt_dev_append_changed_tag(const int32_t imgid);
 
-/**
- * @brief Compute the theoritical final size of a pipeline taking the full-resolution image at input.
- *
- * Note: this creates a dummy pipeline and develop but doesn't trigger file I/O.
- *
- * @param dev An inited develop object, with `dev->iop` and `dev->history` already populated. Can be NULL, in which case a temporary develop is created from scratch (slower).
- * @param pipe An inited pipeline object, with `pipe->iwidth` and `pipe->iheight` already set and pipeline pieces params already synchronized.
- * Can be NULL, in which case a temporary pipeline is created from scratch (slower).
- * @param imgid
- * @param input_width Not used if `pipe` is not NULL, will use `pipe->iwidth`
- * @param input_height Not used if `pipe` is not NULL, will use `pipe->iheight`
- * @param processed_width returned computed value
- * @param processed_height returned computed value
- */
-void dt_dev_get_final_size(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, const int32_t imgid, const int input_width, const int input_height, int *processed_width, int *processed_height);
-
-
 // This needs to run after `dt_dev_pixelpipe_get_roi_out()` so `pipe->processed_width`
 // and `pipe->processed_height` are defined.
 // Natural scale is the rescaling factor such that the full-res pipeline output
