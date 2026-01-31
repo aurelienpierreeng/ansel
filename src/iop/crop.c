@@ -375,24 +375,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   dt_iop_copy_image_roi(ovoid, ivoid, 4, roi_in, roi_out, TRUE);
 }
 
-#ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  cl_int err = -999;
-
-  size_t origin[] = { 0, 0, 0 };
-  size_t region[] = { roi_out->width, roi_out->height, 1 };
-  err = dt_opencl_enqueue_copy_image(piece->pipe->devid, dev_in, dev_out, origin, origin, region);
-  if(err != CL_SUCCESS) goto error;
-
-  return TRUE;
-
-error:
-  dt_print(DT_DEBUG_OPENCL, "[opencl_crop] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
-}
-#endif
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
