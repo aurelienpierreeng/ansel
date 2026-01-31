@@ -896,7 +896,7 @@ static gboolean _prepare_resampling_plan(const struct dt_interpolation *itor,
       }
 
       // Projected position in input samples
-      float fx = (float)(out_x0 + x) / scale;
+      float fx = (float)(out_x0 + x) / scale - in_x0;
 
       // Compute the filter kernel at that position
       int first;
@@ -1011,18 +1011,19 @@ static void _interpolation_resample_plain(const struct dt_interpolation *itor,
   const int32_t out_stride_floats = roi_out->width * 4;
 
   // Fast code path for 1:1 copy, only cropping area can change
-  if(roi_out->scale == 1.f)
+  if(roi_out->scale == 1.f || roi_out->scale == roi_in->scale)
   {
-    const int x0 = roi_out->x * 4 * sizeof(float);
+    const size_t x0 = (roi_out->x - roi_in->x) * 4 * sizeof(float);
+    const size_t y0 = (roi_out->y - roi_in->y);
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) schedule(static) \
-   dt_omp_firstprivate(in, out, x0, roi_out, out_stride_floats, in_stride_floats)
+   dt_omp_firstprivate(in, out, x0, y0, roi_out, out_stride_floats, in_stride_floats)
 #endif
     for(int y = 0; y < roi_out->height; y++)
     {
       memcpy((char *)__builtin_assume_aligned(out, 64) + (size_t)out_stride_floats * sizeof(float) * y,
-             (char *)__builtin_assume_aligned(in, 64) + (size_t)in_stride_floats * sizeof(float) * (y + roi_out->y) + x0,
+             (char *)__builtin_assume_aligned(in, 64) + (size_t)in_stride_floats * sizeof(float) * (y + y0) + x0,
              out_stride_floats * sizeof(float));
     }
 
@@ -1155,7 +1156,7 @@ void dt_interpolation_resample_roi(const struct dt_interpolation *itor,
   //oroi.x = oroi.y = 0;
 
   dt_iop_roi_t iroi = *roi_in;
-  iroi.x = iroi.y = 0;
+  //iroi.x = iroi.y = 0;
 
   dt_interpolation_resample(itor, out, &oroi, in, &iroi);
 }
@@ -1223,9 +1224,9 @@ int dt_interpolation_resample_cl(const struct dt_interpolation *itor,
   cl_mem dev_vmeta = NULL;
 
   // Fast code path for 1:1 copy, only cropping area can change
-  if(roi_out->scale == 1.f)
+  if(roi_out->scale == 1.f || roi_out->scale == roi_in->scale)
   {
-    size_t iorigin[] = { roi_out->x, roi_out->y, 0 };
+    size_t iorigin[] = { roi_out->x - roi_in->x, roi_out->y - roi_in->y, 0 };
     size_t oorigin[] = { 0, 0, 0 };
     size_t region[] = { roi_out->width, roi_out->height, 1 };
 
@@ -1387,7 +1388,7 @@ int dt_interpolation_resample_roi_cl(const struct dt_interpolation *itor,
   //oroi.x = oroi.y = 0;
 
   dt_iop_roi_t iroi = *roi_in;
-  iroi.x = iroi.y = 0;
+  //iroi.x = iroi.y = 0;
 
   return dt_interpolation_resample_cl(itor, devid, dev_out, &oroi, dev_in, &iroi);
 }
@@ -1412,16 +1413,18 @@ static void _interpolation_resample_1c_plain(const struct dt_interpolation *itor
   const size_t in_stride = roi_in->width * sizeof(float);
 
   // Fast code path for 1:1 copy, only cropping area can change
-  if(roi_out->scale == 1.f)
+  if(roi_out->scale == 1.f || roi_out->scale == roi_in->scale)
   {
-    const int x0 = roi_out->x * sizeof(float);
+    const size_t x0 = (roi_out->x - roi_in->x) * sizeof(float);
+    const size_t y0 = (roi_out->y - roi_in->y); 
+
 #ifdef _OPENMP
 #pragma omp parallel for default(none) schedule(static) \
-  dt_omp_firstprivate(in, out, in_stride, out_stride, roi_out, x0)
+  dt_omp_firstprivate(in, out, in_stride, out_stride, roi_out, x0, y0)
 #endif
     for(int y = 0; y < roi_out->height; y++)
     {
-      float *i = (float *)((char *)in + in_stride * (y + roi_out->y) + x0);
+      float *i = (float *)((char *)in + in_stride * (y + y0) + x0);
       float *o = (float *)((char *)out + out_stride * y);
       memcpy(o, i, out_stride);
     }
@@ -1541,10 +1544,10 @@ void dt_interpolation_resample_roi_1c(const struct dt_interpolation *itor,
                                       const dt_iop_roi_t *const roi_in)
 {
   dt_iop_roi_t oroi = *roi_out;
-  oroi.x = oroi.y = 0;
+  //oroi.x = oroi.y = 0;
 
   dt_iop_roi_t iroi = *roi_in;
-  iroi.x = iroi.y = 0;
+  //iroi.x = iroi.y = 0;
 
   dt_interpolation_resample_1c(itor, out, &oroi, in, &iroi);
 }
