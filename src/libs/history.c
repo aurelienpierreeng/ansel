@@ -573,7 +573,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
     // disable recording undo as the _lib_history_change_callback will be triggered by the calls below
     d->record_undo = FALSE;
 
-    dt_pthread_mutex_lock(&dev->history_mutex);
+    dt_pthread_rwlock_wrlock(&dev->history_mutex);
 
     // set history and modules to dev
     GList *history_temp2 = dev->history;
@@ -590,7 +590,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
       dt_dev_pixelpipe_rebuild_all(dev);
     }
 
-    dt_pthread_mutex_unlock(&dev->history_mutex);
+    dt_pthread_rwlock_unlock(&dev->history_mutex);
 
     // if dev->iop has changed reflect that on module list
     if(pipe_remove) _reorder_gui_module_list(dev);
@@ -1081,7 +1081,7 @@ static void _lib_history_change_callback(gpointer instance, gpointer user_data)
     d->record_undo = TRUE;
 
   /* lock history mutex */
-  dt_pthread_mutex_lock(&darktable.develop->history_mutex);
+  dt_pthread_rwlock_wrlock(&darktable.develop->history_mutex);
 
   /* iterate over history items and add them to list*/
   for(const GList *history = darktable.develop->history; history; history = g_list_next(history))
@@ -1124,7 +1124,7 @@ static void _lib_history_change_callback(gpointer instance, gpointer user_data)
   /* show all widgets */
   gtk_widget_show_all(d->history_box);
 
-  dt_pthread_mutex_unlock(&darktable.develop->history_mutex);
+  dt_pthread_rwlock_unlock(&darktable.develop->history_mutex);
 }
 
 static void _lib_history_truncate(gboolean compress)

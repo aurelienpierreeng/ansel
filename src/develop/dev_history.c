@@ -654,12 +654,12 @@ int dt_dev_history_auto_save(dt_develop_t *dev)
   }
 
   dt_toast_log(_("autosaving changes..."));
-  dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
   dt_control_change_cursor(GDK_WATCH);
   const uint64_t new_hash = dt_dev_history_get_hash(dev);
   if(new_hash == dev->history_hash)
   {
-    dt_pthread_mutex_unlock(&dev->history_mutex);
+    dt_pthread_rwlock_unlock(&dev->history_mutex);
     dt_control_change_cursor(GDK_LEFT_PTR);
     return G_SOURCE_REMOVE;
   }
@@ -672,7 +672,7 @@ int dt_dev_history_auto_save(dt_develop_t *dev)
   dt_get_times(&start);
 
   dt_dev_write_history_ext(dev, dev->image_storage.id);
-  dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
   dt_control_change_cursor(GDK_LEFT_PTR);
 
   dt_control_save_xmp(dev->image_storage.id);
@@ -701,9 +701,9 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   // Run the delayed post-commit actions if implemented
   if(module && module->post_history_commit) module->post_history_commit(module);
 
-  dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_add_history_item_ext(dev, module, enable, FALSE, FALSE, FALSE);
-  dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   /* signal that history has changed */
   dt_dev_undo_end_record(dev);
@@ -786,10 +786,10 @@ void dt_dev_history_free_history(dt_develop_t *dev)
 void dt_dev_reload_history_items(dt_develop_t *dev)
 {
   // Recreate the whole history from scratch
-  dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_history_free_history(dev);
   dt_dev_read_history_ext(dev, dev->image_storage.id, FALSE);
-  dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
   dt_dev_pop_history_items(dev);
 }
 
@@ -871,9 +871,9 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
 
 void dt_dev_pop_history_items(dt_develop_t *dev)
 {
-  dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
-  dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   ++darktable.gui->reset;
 
@@ -1060,11 +1060,12 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_INFO_CHANGED, g_list_append(NULL, GINT_TO_POINTER(imgid)));
 }
 
+// Write TO XMP, so from the dev perspective, it's a read
 void dt_dev_write_history(dt_develop_t *dev)
 {
-  dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
   dt_dev_write_history_ext(dev, dev->image_storage.id);
-  dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 }
 
 static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
@@ -1672,7 +1673,7 @@ void dt_dev_history_compress(dt_develop_t *dev)
 {
   if(!dev->iop) return;
 
-  dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
 
   // Cleanup old history
   dt_dev_history_free_history(dev);
@@ -1727,7 +1728,7 @@ void dt_dev_history_compress(dt_develop_t *dev)
   // Commit to DB
   dt_dev_write_history_ext(dev, dev->image_storage.id);
 
-  dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   // Reload to sanitize mandatory/incompatible modules
   dt_dev_reload_history_items(dev);

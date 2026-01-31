@@ -193,7 +193,7 @@ typedef struct dt_develop_t
   dt_image_t image_storage;
 
   // history stack
-  dt_pthread_mutex_t history_mutex;
+  dt_pthread_rwlock_t history_mutex;
   int32_t history_end;
   GList *history;
 

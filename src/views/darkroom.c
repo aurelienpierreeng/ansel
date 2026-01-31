@@ -1847,7 +1847,7 @@ void enter(dt_view_t *self)
   // Add IOP modules to the plugin list
   char option[1024];
   const char *active_plugin = dt_conf_get_string_const("plugins/darkroom/active");
-  dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
   for(const GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
@@ -1869,7 +1869,7 @@ void enter(dt_view_t *self)
       }
     }
   }
-  dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 
 #ifdef USE_LUA
 
@@ -1999,9 +1999,9 @@ void leave(dt_view_t *self)
   dt_dev_pixelpipe_cleanup_nodes(dev->preview_pipe);
   dt_pthread_mutex_unlock(&dev->preview_pipe->busy_mutex);
 
-  dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_history_free_history(dev);
-  dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   // Not sure why using g_list_free_full() here shits the bed
   while(dev->iop)
@@ -2121,9 +2121,9 @@ static int _delayed_history_commit(gpointer data)
   // aka drawn masks have changed somehow. This is more expensive
   // but more reliable than handling individually all editing operations
   // in all callbacks in all possible mask types.
-  dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_masks_update_hash(dev);
-  dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   if(dev->forms_changed)
     dt_dev_add_history_item(dev, dev->gui_module, FALSE, TRUE);

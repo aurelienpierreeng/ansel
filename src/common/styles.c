@@ -640,7 +640,7 @@ void dt_styles_create_from_list(const GList *list)
 
 void dt_styles_apply_style_item(dt_develop_t *dev, dt_style_item_t *style_item, GList **modules_used)
 {
-  dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
 
   // get any instance of the same operation so we can copy it
   dt_iop_module_t *mod_src = dt_iop_get_module_by_op_priority(dev->iop, style_item->operation, -1);
@@ -735,7 +735,7 @@ void dt_styles_apply_style_item(dt_develop_t *dev, dt_style_item_t *style_item, 
       free(module);
     }
   }
-  dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 }
 
 void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const int32_t imgid)

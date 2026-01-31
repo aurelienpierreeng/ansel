@@ -79,7 +79,7 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dev->gui_module = NULL;
   dev->average_delay = DT_DEV_AVERAGE_DELAY_START;
   dev->preview_average_delay = DT_DEV_PREVIEW_AVERAGE_DELAY_START;
-  dt_pthread_mutex_init(&dev->history_mutex, NULL);
+  dt_pthread_rwlock_init(&dev->history_mutex, NULL);
   dev->history_end = 0;
   dev->history = NULL; // empty list
   dev->history_hash = 0;
@@ -226,7 +226,8 @@ void dt_dev_cleanup(dt_develop_t *dev)
     dt_free_align(dev->allprofile_info->data);
     dev->allprofile_info = g_list_delete_link(dev->allprofile_info, dev->allprofile_info);
   }
-  dt_pthread_mutex_destroy(&dev->history_mutex);
+
+  dt_pthread_rwlock_destroy(&dev->history_mutex);
 
   free(dev->histogram_pre_tonecurve);
   free(dev->histogram_pre_levels);
@@ -676,7 +677,7 @@ int dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
   if(_dt_dev_load_raw(dev, imgid)) return 1;
 
   // we need a global lock as the dev->iop set must not be changed until read history is terminated
-  dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
   dev->iop = dt_iop_load_modules(dev);
 
   dt_dev_read_history_ext(dev, dev->image_storage.id, FALSE);
@@ -691,7 +692,7 @@ int dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
     dev->preview_pipe->processed_width = 0;
     dev->preview_pipe->processed_height = 0;
   }
-  dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   dt_dev_pixelpipe_rebuild_all(dev);
 
@@ -982,7 +983,7 @@ dt_iop_module_t *dt_dev_module_duplicate(dt_develop_t *dev, dt_iop_module_t *bas
 void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
 {
   // if(darktable.gui->reset) return;
-  dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
   int del = 0;
 
   if(dev->gui_attached)
@@ -1020,7 +1021,7 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
     }
   }
 
-  dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   if(dev->gui_attached && del)
   {
@@ -1164,9 +1165,9 @@ int dt_dev_distort_transform_locked(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe,
 int dt_dev_distort_transform_plus(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
                                   float *points, size_t points_count)
 {
-  dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
   dt_dev_distort_transform_locked(dev, pipe, iop_order, transf_direction, points, points_count);
-  dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
   return 1;
 }
 
@@ -1203,9 +1204,9 @@ int dt_dev_distort_backtransform_locked(dt_develop_t *dev, dt_dev_pixelpipe_t *p
 int dt_dev_distort_backtransform_plus(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
                                       float *points, size_t points_count)
 {
-  dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
   const int success = dt_dev_distort_backtransform_locked(dev, pipe, iop_order, transf_direction, points, points_count);
-  dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
   return success;
 }
 

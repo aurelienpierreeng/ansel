@@ -700,7 +700,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   else if(dt_image_is_rawprepare_supported(img))
     pipe->want_detail_mask |= DT_DEV_DETAIL_MASK_RAWPREPARE;
 
-  dt_pthread_mutex_lock(&dev->history_mutex);
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
 
   // case DT_DEV_PIPE_UNCHANGED: case DT_DEV_PIPE_ZOOMED:
   if(status & DT_DEV_PIPE_REMOVE)
@@ -717,14 +717,10 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   }
   else if(status & DT_DEV_PIPE_TOP_CHANGED)
   {
-    // only top history item changed.
-    // This path might never be used again since raster masks require
-    // the mask provider (lower in the stack) to update its internal reference to the
-    // consumer (higher in the stack), so we need to traverse the whole pipe all the time
-    // to account for possible raster mask, or make an exception for them.
+    // only top history item(s) changed.
     dt_dev_pixelpipe_synch_top(pipe, dev);
   }
-  dt_pthread_mutex_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   dt_show_times_f(&start, "[dt_dev_pixelpipe_change] pipeline resync on the current modules stack", "for pipe %s", type);
 }
