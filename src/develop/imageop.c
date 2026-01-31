@@ -2734,7 +2734,7 @@ void dt_iop_refresh_center(dt_iop_module_t *module)
   if (dev && dev->gui_attached)
   {
     dt_dev_pixelpipe_update_main(dev);
-    dt_dev_process_all(dev);
+    dt_dev_process_image(dev);
   }
 }
 
@@ -2745,7 +2745,7 @@ void dt_iop_refresh_preview(dt_iop_module_t *module)
   if (dev && dev->gui_attached)
   {
     dt_dev_pixelpipe_update_preview(dev);
-    dt_dev_process_all(dev);
+    dt_dev_process_preview(dev);
   }
 }
 
