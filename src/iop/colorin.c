@@ -96,12 +96,6 @@ typedef struct dt_iop_colorin_gui_data_t
   int n_image_profiles;
 } dt_iop_colorin_gui_data_t;
 
-typedef struct dt_iop_colorin_global_data_t
-{
-  int kernel_colorin_unbound;
-  int kernel_colorin_clipping;
-} dt_iop_colorin_global_data_t;
-
 typedef struct dt_iop_colorin_data_t
 {
   int clear_input;
@@ -432,25 +426,6 @@ int legacy_params(dt_iop_module_t *self, const void *const old_params, const int
 #undef DT_IOP_COLOR_ICC_LEN_V5
 }
 
-void init_global(dt_iop_module_so_t *module)
-{
-  const int program = 2; // basic.cl, from programs.conf
-  dt_iop_colorin_global_data_t *gd
-      = (dt_iop_colorin_global_data_t *)malloc(sizeof(dt_iop_colorin_global_data_t));
-  module->data = gd;
-  gd->kernel_colorin_unbound = dt_opencl_create_kernel(program, "colorin_unbound");
-  gd->kernel_colorin_clipping = dt_opencl_create_kernel(program, "colorin_clipping");
-}
-
-void cleanup_global(dt_iop_module_so_t *module)
-{
-  dt_iop_colorin_global_data_t *gd = (dt_iop_colorin_global_data_t *)module->data;
-  dt_opencl_free_kernel(gd->kernel_colorin_unbound);
-  dt_opencl_free_kernel(gd->kernel_colorin_clipping);
-  free(module->data);
-  module->data = NULL;
-}
-
 #if 0
 static void intent_changed (GtkWidget *widget, gpointer user_data)
 {
@@ -554,93 +529,6 @@ static float lerp_lut(const float *const lut, const float v)
   const float l2 = lut[t + 1];
   return l1 * (1.0f - f) + l2 * f;
 }
-
-#ifdef HAVE_OPENCL
-int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
-               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  dt_iop_colorin_data_t *d = (dt_iop_colorin_data_t *)piece->data;
-  dt_iop_colorin_global_data_t *gd = (dt_iop_colorin_global_data_t *)self->global_data;
-  cl_mem dev_m = NULL, dev_l = NULL, dev_r = NULL, dev_g = NULL, dev_b = NULL, dev_coeffs = NULL;
-
-  int kernel;
-  float cmat[9], lmat[9];
-
-  if(d->nrgb)
-  {
-    kernel = gd->kernel_colorin_clipping;
-    pack_3xSSE_to_3x3(d->nmatrix, cmat);
-    pack_3xSSE_to_3x3(d->lmatrix, lmat);
-  }
-  else
-  {
-    kernel = gd->kernel_colorin_unbound;
-    pack_3xSSE_to_3x3(d->cmatrix, cmat);
-    pack_3xSSE_to_3x3(d->lmatrix, lmat);
-  }
-
-  cl_int err = -999;
-  const int blue_mapping = d->blue_mapping && dt_image_is_matrix_correction_supported(&piece->pipe->image);
-  const int devid = piece->pipe->devid;
-  const int width = roi_in->width;
-  const int height = roi_in->height;
-
-  if(d->type == DT_COLORSPACE_LAB)
-  {
-    size_t origin[] = { 0, 0, 0 };
-    size_t region[] = { roi_in->width, roi_in->height, 1 };
-    err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, region);
-    if(err != CL_SUCCESS) goto error;
-    return TRUE;
-  }
-
-  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-  dev_m = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 9, cmat);
-  if(dev_m == NULL) goto error;
-  dev_l = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 9, lmat);
-  if(dev_l == NULL) goto error;
-  dev_r = dt_opencl_copy_host_to_device(devid, d->lut[0], 256, 256, sizeof(float));
-  if(dev_r == NULL) goto error;
-  dev_g = dt_opencl_copy_host_to_device(devid, d->lut[1], 256, 256, sizeof(float));
-  if(dev_g == NULL) goto error;
-  dev_b = dt_opencl_copy_host_to_device(devid, d->lut[2], 256, 256, sizeof(float));
-  if(dev_b == NULL) goto error;
-  dev_coeffs
-      = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3 * 3, (float *)d->unbounded_coeffs);
-  if(dev_coeffs == NULL) goto error;
-  dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), (void *)&dev_in);
-  dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), (void *)&dev_out);
-  dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), (void *)&width);
-  dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), (void *)&height);
-  dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(cl_mem), (void *)&dev_m);
-  dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(cl_mem), (void *)&dev_l);
-  dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(cl_mem), (void *)&dev_r);
-  dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(cl_mem), (void *)&dev_g);
-  dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(cl_mem), (void *)&dev_b);
-  dt_opencl_set_kernel_arg(devid, kernel, 9, sizeof(cl_int), (void *)&blue_mapping);
-  dt_opencl_set_kernel_arg(devid, kernel, 10, sizeof(cl_mem), (void *)&dev_coeffs);
-  err = dt_opencl_enqueue_kernel_2d(devid, kernel, sizes);
-  if(err != CL_SUCCESS) goto error;
-  dt_opencl_release_mem_object(dev_m);
-  dt_opencl_release_mem_object(dev_l);
-  dt_opencl_release_mem_object(dev_r);
-  dt_opencl_release_mem_object(dev_g);
-  dt_opencl_release_mem_object(dev_b);
-  dt_opencl_release_mem_object(dev_coeffs);
-
-  return TRUE;
-
-error:
-  dt_opencl_release_mem_object(dev_m);
-  dt_opencl_release_mem_object(dev_l);
-  dt_opencl_release_mem_object(dev_r);
-  dt_opencl_release_mem_object(dev_g);
-  dt_opencl_release_mem_object(dev_b);
-  dt_opencl_release_mem_object(dev_coeffs);
-  dt_print(DT_DEBUG_OPENCL, "[opencl_colorin] couldn't enqueue kernel! %d\n", err);
-  return FALSE;
-}
-#endif
 
 static inline void apply_blue_mapping(const float *const in, float *const out)
 {
