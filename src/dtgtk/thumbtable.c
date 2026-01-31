@@ -42,9 +42,6 @@
 #include <glib-object.h>
 
 
-// 420 = 4*3*5*7, so we ensure full rows for 1-10 and 12 thumbs/row.
-#define MAX_THUMBNAILS 420
-
 /**
  * @file thumbtable.c
  *
@@ -379,7 +376,7 @@ gboolean _is_rowid_visible(dt_thumbtable_t *table, int rowid)
 gboolean _update_row_ids(dt_thumbtable_t *table)
 {
   int rowid_min = 0;
-  int rowid_max = MAX_THUMBNAILS;
+  int rowid_max = 0;
   _get_row_ids(table, &rowid_min, &rowid_max);
   if(rowid_min != table->min_row_id || rowid_max != table->max_row_id)
   {
@@ -486,53 +483,6 @@ void dt_thumbtable_configure(dt_thumbtable_t *table)
     table->thumb_height = 0;
     table->thumb_width = 0;
   }
-}
-
-// Remove invisible thumbs at current scrolling level, only when we have more than we can manage.
-// That's because freeing widgets slows down the scrolling.
-int _garbage_collection(dt_thumbtable_t *table)
-{
-  GList *link = g_list_last(table->list);
-  int count = 0;
-  while(link)
-  {
-    dt_thumbnail_t *thumb = (dt_thumbnail_t *)link->data;
-    if(!thumb) continue;
-
-    GList *l = link;
-    link = g_list_previous(link);
-
-    gboolean collect_garbage = (table->thumb_nb > MAX_THUMBNAILS)
-                                && (thumb->rowid < table->min_row_id || thumb->rowid > table->max_row_id);
-
-    // if current imgid stored at previously-known position in LUT doesn't match our imgid:
-    // this thumb belongs to a previous collection
-    int32_t new_rowid = _find_rowid_from_imgid(table, thumb->imgid);
-    gboolean is_in_collection = new_rowid != UNKNOWN_IMAGE;
-    gboolean is_moved = (thumb->imgid != table->lut[thumb->rowid].imgid);
-
-    if(collect_garbage && is_in_collection) table->lut[thumb->rowid].thumb = NULL;
-    // else if(collect_garbage && !is_incollection)
-    // the cache was reinited when loading the new collection, so it's NULL already
-
-    // Update the position if it moved
-    if(is_moved) thumb->rowid = new_rowid;
-
-    // Don't delete thumbnails that still have a background job running,
-    // because it would return its output buffer to a NULL pointer.
-    if(collect_garbage || !is_in_collection)
-    {
-      // Hide now, delete when we can
-      gtk_widget_hide(thumb->widget);
-      g_idle_add((GSourceFunc)dt_thumbnail_destroy, thumb);
-      table->list = g_list_delete_link(table->list, l);
-      table->thumb_nb -= 1;
-      count++;
-    }
-  }
-
-  dt_print(DT_DEBUG_LIGHTTABLE, "Removed %d thumbs outside %i and %i\n", count, table->min_row_id, table->max_row_id);
-  return G_SOURCE_REMOVE;
 }
 
 dt_thumbnail_t *_find_thumb_by_imgid(dt_thumbtable_t *table, const int32_t imgid)
@@ -753,12 +703,8 @@ void dt_thumbtable_update(dt_thumbtable_t *table)
 
   _populate_thumbnails(table);
 
-  // Remove unneeded thumbnails: out of viewport or out of current collection
   if(!empty_list && table->list)
-  {
-    _garbage_collection(table);
     _resize_thumbnails(table);
-  }
 
   table->thumbs_inited = TRUE;
 
@@ -1089,10 +1035,10 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
     _dt_collection_lut(table);
 
     table->thumbs_inited = FALSE;
+    _dt_thumbtable_empty_list(table);
 
     if(table->collection_count == 0)
     {
-      _dt_thumbtable_empty_list(table);
       dt_control_log(_(
           "The current filtered collection contains no image. Relax your filters or fetch a non-empty collection"));
     }
@@ -1804,7 +1750,8 @@ void _dt_thumbtable_empty_list(dt_thumbtable_t *table)
     for(GList *l = g_list_first(table->list); l; l = g_list_next(l))
     {
       dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
-      dt_thumbnail_destroy(thumb);
+      gtk_widget_hide(thumb->widget);
+      g_idle_add((GSourceFunc)dt_thumbnail_destroy, thumb);
     }
 
     g_list_free(g_steal_pointer(&table->list));
