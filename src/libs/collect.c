@@ -109,6 +109,7 @@ typedef enum dt_lib_collect_cols_t
   DT_LIB_COLLECT_COL_UNREACHABLE,
   DT_LIB_COLLECT_COL_COUNT,
   DT_LIB_COLLECT_COL_INDEX,
+  DT_LIB_COLLECT_COL_FONT,
   DT_LIB_COLLECT_NUM_COLS
 } dt_lib_collect_cols_t;
 
@@ -609,6 +610,82 @@ static void view_popup_menu(GtkWidget *treeview, GdkEventButton *event, dt_lib_c
   gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)event);
 }
 
+/**
+ * Traverse down the tree from the node referred by the specified iterator in the given model in order to set to the 
+ * default font the name of each child node.
+ * We walk down the tree by recursion. If the library is made up of millions collections, the recursion should be 
+ * replaced by a stack-based iteration for better performance.
+ */
+static void _reset_tree_font(GtkTreeModel *model, GtkTreeIter *tree_iter)
+{
+  do 
+  {
+    gtk_tree_store_set(GTK_TREE_STORE(model), tree_iter, DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_NORMAL, -1);
+
+    if(gtk_tree_model_iter_has_child(model, tree_iter))
+    {
+      GtkTreeIter child;
+      if(gtk_tree_model_iter_children(model, &child, tree_iter))
+      {
+       _reset_tree_font(model, &child);
+      }
+    }
+
+  } while(gtk_tree_model_iter_next(model, tree_iter));
+}
+
+/**
+ * Updates the font of the name of each node in the collection treeview according it is or not selected. 
+ */
+static void _update_tree_view_nodes_font(GtkTreeSelection *selection)
+{
+  // then we browse the treeview in order to set the default font of each node
+  GtkTreeModel *model = NULL;
+  GtkTreeIter path_iter;
+  if(gtk_tree_selection_get_selected(selection, &model, &path_iter))
+  {
+    // there is a selection and we got both the model and the GtkTreeIter on this selection
+    if(!GTK_IS_LIST_STORE(model) && !GTK_IS_TREE_STORE(model)) 
+    {
+      // the model is a GtkTreeModelFilter wrapping a list store or a tree store (implementation of a GtkTreeModel)
+      // so cast both the model and the iterator on the selection in order to be able to set column attributes for
+      // the nodes in the model
+      GtkTreeIter *copy = gtk_tree_iter_copy(&path_iter);
+      gtk_tree_model_filter_convert_iter_to_child_iter(GTK_TREE_MODEL_FILTER(model), &path_iter, copy);
+      gtk_tree_iter_free(copy);
+      model = gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(model));
+    }
+      
+    // first all the name of all the nodes in the GtkTreeModel are set in their normal font
+    // second, the name of the selected node is set in bold font
+    GtkTreeIter it;
+    gboolean valid = gtk_tree_model_get_iter_first(model, &it);
+    // the model is a GTk list store (filmroll)
+    if(GTK_IS_LIST_STORE(model))
+    {
+      // we reset the font of all tree nodes
+      while(valid)
+      {
+        gtk_list_store_set(GTK_LIST_STORE(model), &it, DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_NORMAL, -1);
+        valid = gtk_tree_model_iter_next(model, &it);
+      }
+      // the font of the selection is set in bold
+      gtk_list_store_set(GTK_LIST_STORE(model), &path_iter, DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_BOLD, -1);
+    } 
+    // the model is a Gtk tree store (folder, tags, ...)
+    else if(GTK_IS_TREE_STORE(model))
+    {
+      // we reset the font of all tree nodes
+      if(valid)
+      {
+        _reset_tree_font(model, &it);
+      }
+      // the font of the selection is set in bold
+      gtk_tree_store_set(GTK_TREE_STORE(model), &path_iter, DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_BOLD, -1);
+    }
+  }
+}
+
 static gboolean view_onButtonPressed(GtkWidget *treeview, GdkEventButton *event, dt_lib_collect_t *d)
 {
   /* Get tree path for row that was clicked */
@@ -624,9 +701,15 @@ static gboolean view_onButtonPressed(GtkWidget *treeview, GdkEventButton *event,
 
   if(item_is_folder_collection(d->view_rule) &&
       event->type == GDK_BUTTON_PRESS &&
-      event->button == 3 &&
-      gtk_tree_selection_path_is_selected(selection, path))
+      event->button == 3)
   {
+    // In case not yet selected, select it
+    if (!gtk_tree_selection_path_is_selected(selection, path))
+    {
+      gtk_tree_selection_unselect_all(selection);
+      gtk_tree_selection_select_path(selection, path);
+    }
+
     // Single right-click on filmroll/folder: open contextual menu
     view_popup_menu(treeview, event, d);
     gtk_tree_path_free(path);
@@ -656,6 +739,10 @@ static gboolean view_onButtonPressed(GtkWidget *treeview, GdkEventButton *event,
         gtk_tree_view_collapse_row(GTK_TREE_VIEW(treeview), path);
       else
         gtk_tree_view_expand_row(GTK_TREE_VIEW(treeview), path, FALSE);
+
+      // Select the folder
+      gtk_tree_selection_unselect_all(selection);
+      gtk_tree_selection_select_path(selection, path);
     }
 
     gtk_tree_path_free(path);
@@ -663,9 +750,13 @@ static gboolean view_onButtonPressed(GtkWidget *treeview, GdkEventButton *event,
   }
   else if(event->type == GDK_2BUTTON_PRESS)
   {
-    // Double click alone : single selection
+    // Double click alone : single selection and open it
+    
+    // set selection to the path
     gtk_tree_selection_unselect_all(selection);
     gtk_tree_selection_select_path(selection, path);
+    
+    _update_tree_view_nodes_font(selection);
 
     row_activated_with_event(GTK_TREE_VIEW(treeview), path, NULL, event, d);
     gtk_tree_path_free(path);
@@ -722,6 +813,11 @@ static gboolean list_select(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
   if(strcmp(haystack, needle) == 0)
   {
     gtk_tree_selection_select_path(gtk_tree_view_get_selection(d->view), path);
+    // we set in bold font the name of the selected node
+    GtkTreeIter childIter;
+    gtk_tree_model_filter_convert_iter_to_child_iter(GTK_TREE_MODEL_FILTER(model),&childIter, iter);
+    GtkTreeModel *store = gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(model));
+    gtk_list_store_set(GTK_LIST_STORE(store), &childIter, DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_BOLD, -1);
     gtk_tree_view_scroll_to_cell(d->view, path, NULL, FALSE, 0.2, 0);
   }
 
@@ -830,6 +926,13 @@ static gboolean tree_expand(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
   {
     gtk_tree_view_expand_to_path(d->view, path);
     gtk_tree_selection_select_path(gtk_tree_view_get_selection(d->view), path);
+    
+    // we set in bold font the name of the selected node
+    GtkTreeIter childIter;
+    gtk_tree_model_filter_convert_iter_to_child_iter(GTK_TREE_MODEL_FILTER(model),&childIter, iter);
+    GtkTreeModel *store = gtk_tree_model_filter_get_model(GTK_TREE_MODEL_FILTER(model));
+    gtk_tree_store_set(GTK_TREE_STORE(store), &childIter, DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_BOLD, -1);
+    
     gtk_tree_view_scroll_to_cell(d->view, path, NULL, FALSE, 0.2, 0);
     expanded = TRUE;
   }
@@ -1454,15 +1557,16 @@ static void tree_view(dt_lib_collect_rule_t *dr)
             gtk_tree_store_insert_with_values(GTK_TREE_STORE(model), &uncategorized, NULL, -1,
                                               DT_LIB_COLLECT_COL_TEXT, _(UNCATEGORIZED_TAG),
                                               DT_LIB_COLLECT_COL_PATH, "", DT_LIB_COLLECT_COL_VISIBLE, TRUE,
-                                              DT_LIB_COLLECT_COL_INDEX, index, -1);
+                                              DT_LIB_COLLECT_COL_INDEX, index, 
+                                              DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_NORMAL,-1);
             index++;
           }
-
           /* adding an uncategorized tag */
           gtk_tree_store_insert_with_values(GTK_TREE_STORE(model), &temp, &uncategorized, 0,
                                             DT_LIB_COLLECT_COL_TEXT, name,
                                             DT_LIB_COLLECT_COL_PATH, name, DT_LIB_COLLECT_COL_VISIBLE, TRUE,
-                                            DT_LIB_COLLECT_COL_COUNT, count, DT_LIB_COLLECT_COL_INDEX, index, -1);
+                                            DT_LIB_COLLECT_COL_COUNT, count, DT_LIB_COLLECT_COL_INDEX, index, 
+                                            DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_NORMAL, -1);
           uncategorized_found = TRUE;
           index++;
         }
@@ -1528,7 +1632,8 @@ static void tree_view(dt_lib_collect_rule_t *dr)
                                               DT_LIB_COLLECT_COL_PATH, pth2, DT_LIB_COLLECT_COL_VISIBLE, TRUE,
                                               DT_LIB_COLLECT_COL_COUNT, (*(token + 1)?0:count),
                                               DT_LIB_COLLECT_COL_INDEX, index,
-                                              DT_LIB_COLLECT_COL_UNREACHABLE, (*(token + 1) ? 0 : !status), -1);
+                                              DT_LIB_COLLECT_COL_UNREACHABLE, (*(token + 1) ? 0 : !status), 
+                                              DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_NORMAL, -1);
             index++;
             // also add the item count to parents
             if((property == DT_COLLECTION_PROP_DAY
@@ -1673,13 +1778,12 @@ static void list_view(dt_lib_collect_rule_t *dr)
           const int count = sqlite3_column_int(stmt, 2);
 
           gchar *value =  dt_collection_get_makermodel(exif_maker, exif_model);
-
           gtk_list_store_append(GTK_LIST_STORE(model), &iter);
           gtk_list_store_set(GTK_LIST_STORE(model), &iter, DT_LIB_COLLECT_COL_TEXT, value,
                              DT_LIB_COLLECT_COL_ID, index, DT_LIB_COLLECT_COL_TOOLTIP, value,
                              DT_LIB_COLLECT_COL_PATH, value, DT_LIB_COLLECT_COL_VISIBLE, TRUE,
                              DT_LIB_COLLECT_COL_COUNT, count,
-                             -1);
+                             DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_NORMAL, -1);
 
           g_free(value);
           index++;
@@ -1975,7 +2079,7 @@ static void list_view(dt_lib_collect_rule_t *dr)
                            DT_LIB_COLLECT_COL_ID, sqlite3_column_int(stmt, 1), DT_LIB_COLLECT_COL_TOOLTIP,
                            escaped_text, DT_LIB_COLLECT_COL_PATH, value, DT_LIB_COLLECT_COL_VISIBLE, TRUE,
                            DT_LIB_COLLECT_COL_COUNT, count, DT_LIB_COLLECT_COL_UNREACHABLE, status,
-                           -1);
+                           DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_NORMAL, -1);
 
         g_free(text);
         g_free(escaped_text);
@@ -3227,12 +3331,14 @@ void gui_init(dt_lib_module_t *self)
   GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
   gtk_tree_view_column_pack_start(col, renderer, TRUE);
   gtk_tree_view_column_set_cell_data_func(col, renderer, tree_count_show, NULL, NULL);
+  gtk_tree_view_column_add_attribute(col, renderer, "weight", DT_LIB_COLLECT_COL_FONT);
   g_object_set(renderer, "strikethrough", TRUE, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, (gchar *)0);
   gtk_tree_view_column_add_attribute(col, renderer, "strikethrough-set", DT_LIB_COLLECT_COL_UNREACHABLE);
 
   GtkTreeModel *listmodel
       = GTK_TREE_MODEL(gtk_list_store_new(DT_LIB_COLLECT_NUM_COLS, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_STRING,
-                                          G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_UINT, G_TYPE_UINT));
+                                          G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_UINT, 
+                                          G_TYPE_UINT, G_TYPE_INT));
   gtk_tree_sortable_set_sort_func(GTK_TREE_SORTABLE(listmodel), DT_LIB_COLLECT_COL_INDEX,
                   (GtkTreeIterCompareFunc)_sort_model_func, self, NULL);
   d->listfilter = gtk_tree_model_filter_new(listmodel, NULL);
@@ -3240,7 +3346,8 @@ void gui_init(dt_lib_module_t *self)
 
   GtkTreeModel *treemodel
       = GTK_TREE_MODEL(gtk_tree_store_new(DT_LIB_COLLECT_NUM_COLS, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_STRING,
-                                          G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_UINT, G_TYPE_UINT));
+                                          G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_UINT, 
+                                          G_TYPE_UINT, G_TYPE_INT));
   d->treefilter = gtk_tree_model_filter_new(treemodel, NULL);
   gtk_tree_model_filter_set_visible_column(GTK_TREE_MODEL_FILTER(d->treefilter), DT_LIB_COLLECT_COL_VISIBLE);
   g_object_unref(treemodel);
