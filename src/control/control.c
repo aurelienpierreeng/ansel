@@ -278,12 +278,13 @@ void *dt_control_expose(void *voidptr)
 
   dt_pthread_mutex_unlock(&darktable.control->log_mutex);
 
+  // Draw progress bar
   const float progress_h = DT_PIXEL_APPLY_DPI(5);
   cairo_rectangle(cr, 0, height - progress_h, 
     width * (float)darktable.develop->progress.completed / (float)darktable.develop->progress.total, 
     progress_h);
+  cairo_set_source_rgba(cr, 0., 0., 0., 0.33);
   cairo_fill(cr);
-
   cairo_destroy(cr);
 
   cairo_t *cr_pixmap = cairo_create(darktable.gui->surface);
