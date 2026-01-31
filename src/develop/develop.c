@@ -265,9 +265,7 @@ void dt_dev_process_all_real(dt_develop_t *dev)
 {
   // Try to make the preview pipe runs first, we need it for many output sizes computations
   // aka give a timeout to main pipe. No guaranty though, we don't control threads.
-  dt_pthread_mutex_lock(&dev->pipe->busy_mutex);
   dev->pipe->timeout = 150000; // 150 ms
-  dt_pthread_mutex_unlock(&dev->pipe->busy_mutex);
 
   if(!dev->preview_pipe->running)
     dt_dev_process_preview(dev);
