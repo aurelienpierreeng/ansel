@@ -131,6 +131,11 @@ typedef struct
   GtkWidget *w_folder;
 
   dt_pthread_mutex_t lock;
+  struct _dt_job_t *job;
+
+  // Thumbnail actual image sizes (bounding box of GUI widget)
+  int img_w;
+  int img_h;
 
 } dt_thumbnail_t;
 

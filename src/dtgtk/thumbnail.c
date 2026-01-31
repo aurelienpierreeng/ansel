@@ -51,7 +51,7 @@
  * some callbacks/handlers can be left hanging, still record events, but send them
  * to non-existing objects. This is why we need to ensure user_data is not NULL everywhere.
  */
-#define thumb_return_if_fails(thumb, ...) { if(!thumb || !thumb->widget) return  __VA_ARGS__; }
+#define thumb_return_if_fails(thumb, ...) { if(!thumb || !thumb->widget || !thumb->w_main) return  __VA_ARGS__; }
 
 
 static void _set_flag(GtkWidget *w, GtkStateFlags flag, gboolean activate)
@@ -323,97 +323,119 @@ static gboolean _event_cursor_draw(GtkWidget *widget, cairo_t *cr, gpointer user
 
 static void _free_image_surface(dt_thumbnail_t *thumb)
 {
-  if(thumb->img_surf)
-  {
-    if(cairo_surface_get_reference_count(thumb->img_surf) > 0)
-      cairo_surface_destroy(thumb->img_surf);
-  }
+  if(thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
+    cairo_surface_destroy(thumb->img_surf);
+
   thumb->img_surf = NULL;
 }
 
 int _main_context_draw(dt_thumbnail_t *thumb)
 {
-  gtk_widget_queue_draw(thumb->w_image);
+  if(thumb && thumb->widget && thumb->w_image)
+    gtk_widget_queue_draw(thumb->w_image);
   return G_SOURCE_REMOVE;
 }
 
-// Warning: unlock thumbnail mutex
-static void _finish_buffer_thread(dt_thumbnail_t *thumb, gboolean success)
+static int _finish_buffer_thread(dt_thumbnail_t *thumb, gboolean success)
 
 {
+  thumb_return_if_fails(thumb, 1);
+
+  dt_pthread_mutex_lock(&thumb->lock);
   thumb->image_inited = success;
+  thumb->job = NULL;
 
   // Redraw events need to be sent from the main GUI thread
   // though we may not have a target widget anymore...
-  if(thumb->widget && thumb->w_image)
+  if(thumb && thumb->widget && thumb->w_image)
     g_main_context_invoke(NULL, (GSourceFunc)_main_context_draw, thumb);
+
+  dt_pthread_mutex_unlock(&thumb->lock);
+
+  return 0;
 }
 
 
 int32_t _get_image_buffer(dt_job_t *job)
 {
+  // WARNING: the target thumbnail GUI widget can be destroyed at any time during this
+  // control flow in the GUI mainthread.
   dt_thumbnail_t *thumb = dt_control_job_get_params(job);
   thumb_return_if_fails(thumb, 1);
 
-  int image_w = 0;
-  int image_h = 0;
-  gtk_widget_get_size_request(thumb->w_image, &image_w, &image_h);
-  image_w = MAX(image_w, 32);
-  image_h = MAX(image_h, 32);
-
-  int zoom = (thumb->table) ? thumb->table->zoom : DT_THUMBTABLE_ZOOM_FIT;
+  // Read and cache the thumb data now, while we have it. And lock it.
   dt_pthread_mutex_lock(&thumb->lock);
 
-  dt_view_surface_value_t res = dt_view_image_get_surface(thumb->imgid, image_w, image_h, &thumb->img_surf, zoom);
+  // These are the sizes of the widget bounding box
+  int img_w = thumb->img_w;
+  int img_h = thumb->img_h;
 
-  if(thumb->img_surf && res == DT_VIEW_SURFACE_OK)
+  const int zoom = (thumb->table) ? thumb->table->zoom : DT_THUMBTABLE_ZOOM_FIT;
+  const gboolean show_focus_peaking = (thumb->table && thumb->table->focus_peaking);
+  const gboolean show_focus_clusters = (thumb->table && thumb->table->focus_regions);
+  const gboolean zoom_in = (thumb->table && thumb->table->zoom > DT_THUMBTABLE_ZOOM_FIT);
+  const int32_t imgid = thumb->imgid;
+
+  dt_pthread_mutex_unlock(&thumb->lock);
+
+  // These are the sizes of the actual image. Can be larger than the widget bounding box.
+  int img_width = 0;
+  int img_height = 0;
+
+  double zoomx = 0.;
+  double zoomy = 0.;
+  float x_center = 0.f;
+  float y_center = 0.f;
+
+  // From there, never read thumb->... directly since it might get destroyed in mainthread anytime.
+
+  // Get the actual image content. This typically triggers a rendering pipeline,
+  // and can possibly take a long time.
+  cairo_surface_t *surface = NULL;
+  dt_view_surface_value_t res = dt_view_image_get_surface(imgid, img_w, img_h, &surface, zoom);
+  if(surface && res == DT_VIEW_SURFACE_OK)
   {
     // The image is immediately available
-    thumb->img_width = cairo_image_surface_get_width(thumb->img_surf);
-    thumb->img_height = cairo_image_surface_get_height(thumb->img_surf);
+    img_width = cairo_image_surface_get_width(surface);
+    img_height = cairo_image_surface_get_height(surface);
   }
   else
   {
-    dt_pthread_mutex_unlock(&thumb->lock);
     _finish_buffer_thread(thumb, FALSE);
     return 0;
   }
 
-  gboolean show_focus_peaking = (thumb->table && thumb->table->focus_peaking);
   if(zoom > DT_THUMBTABLE_ZOOM_FIT || show_focus_peaking)
   {
     // Note: we compute the "sharpness density" unconditionnaly if the image is zoomed-in
     // in order to get the details barycenter to init centering.
     // Actual density are drawn only if the focus peaking mode is enabled.
-    float x_center = 0.f;
-    float y_center = 0.f;
-    cairo_t *cri = cairo_create(thumb->img_surf);
-    unsigned char *rgbbuf = cairo_image_surface_get_data(thumb->img_surf);
+    cairo_t *cri = cairo_create(surface);
+    unsigned char *rgbbuf = cairo_image_surface_get_data(surface);
     if(rgbbuf)
-      dt_focuspeaking(cri, rgbbuf, thumb->img_width, thumb->img_height, show_focus_peaking, &x_center, &y_center);
+      dt_focuspeaking(cri, rgbbuf, img_width, img_height, show_focus_peaking, &x_center, &y_center);
     cairo_destroy(cri);
 
     // Init the zoom offset using the barycenter of details, to center
     // the zoomed-in image on content that matters: details.
     // Offset is expressed from the center of the image
-    if(thumb->table && thumb->table->zoom > DT_THUMBTABLE_ZOOM_FIT
-      && x_center > 0.f && y_center > 0.f)
+    if(zoom_in && x_center > 0.f && y_center > 0.f && thumb)
     {
-      thumb->zoomx = (double)thumb->img_width / 2. - x_center;
-      thumb->zoomy = (double)thumb->img_height / 2. - y_center;
+      zoomx = (double)img_width / 2. - x_center;
+      zoomy = (double)img_height / 2. - y_center;
     }
   }
 
   // if needed we compute and draw here the big rectangle to show focused areas
-  if(thumb->table && thumb->table->focus_regions)
+  if(show_focus_clusters)
   {
     uint8_t *full_res_thumb = NULL;
     int32_t full_res_thumb_wd, full_res_thumb_ht;
     dt_colorspaces_color_profile_type_t color_space;
     char path[PATH_MAX] = { 0 };
     gboolean from_cache = TRUE;
-    dt_image_full_path(thumb->imgid,  path,  sizeof(path),  &from_cache, __FUNCTION__);
-    if(!dt_imageio_large_thumbnail(path, &full_res_thumb, &full_res_thumb_wd, &full_res_thumb_ht, &color_space, thumb->img_width, thumb->img_height))
+    dt_image_full_path(imgid,  path,  sizeof(path),  &from_cache, __FUNCTION__);
+    if(!dt_imageio_large_thumbnail(path, &full_res_thumb, &full_res_thumb_wd, &full_res_thumb_ht, &color_space, img_width, img_height))
     {
       // we look for focus areas
       dt_focus_cluster_t full_res_focus[49];
@@ -421,16 +443,33 @@ int32_t _get_image_buffer(dt_job_t *job)
       dt_focus_create_clusters(full_res_focus, frows, fcols, full_res_thumb, full_res_thumb_wd,
                                 full_res_thumb_ht);
       // and we draw them on the image
-      cairo_t *cri = cairo_create(thumb->img_surf);
-      dt_focus_draw_clusters(cri, thumb->img_width, thumb->img_height, thumb->imgid, full_res_thumb_wd,
+      cairo_t *cri = cairo_create(surface);
+      dt_focus_draw_clusters(cri, img_width, img_height, imgid, full_res_thumb_wd,
                               full_res_thumb_ht, full_res_focus, frows, fcols, 1.0, 0, 0);
       cairo_destroy(cri);
     }
     dt_free_align(full_res_thumb);
   }
 
-  dt_pthread_mutex_unlock(&thumb->lock);
-  _finish_buffer_thread(thumb, TRUE);
+  // Write temporary surface into actual image surface if we still have a widget to paint on
+  if(thumb && thumb->widget && thumb->w_main)
+  {
+    dt_pthread_mutex_lock(&thumb->lock);
+    thumb->img_width = img_width;
+    thumb->img_height = img_height;
+    thumb->zoomx = zoomx;
+    thumb->zoomy = zoomy;
+    thumb->img_surf = surface;
+    dt_pthread_mutex_unlock(&thumb->lock);
+
+    _finish_buffer_thread(thumb, TRUE);
+  }
+  else 
+  {
+    // Lost thumbnail to paint on
+    cairo_surface_destroy(surface);
+  }
+
   return 0;
 }
 
@@ -440,7 +479,8 @@ int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb)
 
   // - image inited: the cached buffer has a valid size. Invalid this flag when size changes.
   // - img_surf: we have a cached buffer (cairo surface), regardless of its validity.
-  if(thumb->image_inited && thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
+  // - a rendering job has already been started
+  if((thumb->image_inited && thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0) || thumb->job)
     return 0;
 
   // Nuke the image surface in GUI mainthread.
@@ -448,12 +488,18 @@ int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb)
   // this may never be recreated.
   _free_image_surface(thumb);
 
+  // Get thumbnail GUI requested size now (in GUI mainthread). 
+  gtk_widget_get_size_request(thumb->w_image, &thumb->img_w, &thumb->img_h);
+  thumb->img_w = MAX(thumb->img_w, 32);
+  thumb->img_h = MAX(thumb->img_h, 32);
+
   // Drawing the focus peaking and doing the color conversions
   // can be expensive on large thumbnails. Do it in a background job,
   // so the thumbtable stays responsive.
-  dt_job_t *job = dt_control_job_create(&_get_image_buffer, "get image %i", thumb->imgid);
-  dt_control_job_set_params(job, thumb, NULL);
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_SYSTEM_FG, job);
+  thumb->job = dt_control_job_create(&_get_image_buffer, "get image %i", thumb->imgid);
+  dt_control_job_set_params(thumb->job, thumb, NULL);
+  dt_control_add_job(darktable.control, DT_JOB_QUEUE_SYSTEM_FG, thumb->job);
+
   return 0;
 }
 
@@ -1131,6 +1177,9 @@ dt_thumbnail_t *dt_thumbnail_new(int32_t imgid, int rowid, int32_t groupid,
   thumb->table = table;
   thumb->zoomx = 0.;
   thumb->zoomy = 0.;
+  thumb->job = NULL;
+  thumb->img_h = 0;
+  thumb->img_w = 0;
 
   dt_pthread_mutex_init(&thumb->lock, NULL);
 
@@ -1151,16 +1200,18 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
 {
   thumb_return_if_fails(thumb, 0);
 
+  // Wait for background jobs to finish before deleting the buffers they write in
+  dt_pthread_mutex_lock(&thumb->lock);
+
   // remove multiple delayed gtk_widget_queue_draw triggers
-  while(g_idle_remove_by_data(thumb))
-  ;
   while(g_idle_remove_by_data(thumb->widget))
   ;
   while(g_idle_remove_by_data(thumb->w_image))
   ;
 
-  // Wait for background jobs to finish before deleting the buffers they write in
-  dt_pthread_mutex_lock(&thumb->lock);
+  // Kill background jobs rendering this thumbnail
+  if(thumb->job && dt_control_job_get_state(thumb->job) < DT_JOB_STATE_FINISHED) 
+    dt_control_job_cancel(thumb->job);
 
   if(thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
     cairo_surface_destroy(thumb->img_surf);
