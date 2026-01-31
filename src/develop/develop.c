@@ -263,12 +263,18 @@ void dt_dev_process_preview(dt_develop_t *dev)
 
 void dt_dev_process_all_real(dt_develop_t *dev)
 {
-  if(!dev->pipe->running)
-    dt_dev_process_image(dev);
-  // else : join current pipe
+  // Try to make the preview pipe runs first, we need it for many output sizes computations
+  // aka give a timeout to main pipe. No guaranty though, we don't control threads.
+  dt_pthread_mutex_lock(&dev->pipe->busy_mutex);
+  dev->pipe->timeout = 150000; // 150 ms
+  dt_pthread_mutex_unlock(&dev->pipe->busy_mutex);
 
   if(!dev->preview_pipe->running)
     dt_dev_process_preview(dev);
+  // else : join current pipe
+
+  if(!dev->pipe->running)
+    dt_dev_process_image(dev);
   // else : join current pipe
 }
 
@@ -284,14 +290,13 @@ void dt_dev_pixelpipe_rebuild_all(dt_develop_t *dev)
   dt_times_t start;
   dt_get_times(&start);
 
-  _dev_pixelpipe_set_dirty(dev->pipe);
   _dev_pixelpipe_set_dirty(dev->preview_pipe);
-
-  dev->pipe->changed |= DT_DEV_PIPE_REMOVE;
   dev->preview_pipe->changed |= DT_DEV_PIPE_REMOVE;
-
-  dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
+
+  _dev_pixelpipe_set_dirty(dev->pipe);
+  dev->pipe->changed |= DT_DEV_PIPE_REMOVE;
+  dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
 
   dt_show_times(&start, "[dt_dev_pixelpipe_update_main] sending killswitch signal on all pipelines");
 }
@@ -354,8 +359,8 @@ void dt_dev_pixelpipe_update_all_real(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached || !dev->pipe || !dev->preview_pipe) return;
 
-  dt_dev_pixelpipe_update_main(dev);
   dt_dev_pixelpipe_update_preview(dev);
+  dt_dev_pixelpipe_update_main(dev);
 }
 
 void dt_dev_pixelpipe_change_zoom_preview(dt_develop_t *dev)
@@ -533,6 +538,12 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
     int reentries = 0;
 
     dt_pthread_mutex_lock(&pipe->busy_mutex);
+
+    if(pipe->timeout)
+    {
+      g_usleep(pipe->timeout);
+      pipe->timeout = 0;
+    }
 
     while(!finish_on_error && (pipe->status == DT_DEV_PIXELPIPE_DIRTY) && reentries < 2)
     {

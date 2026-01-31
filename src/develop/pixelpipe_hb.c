@@ -220,6 +220,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->status = DT_DEV_PIXELPIPE_DIRTY;
   pipe->last_history_hash = 0;
   pipe->flush_cache = FALSE;
+  pipe->timeout = 0;
 
   dt_dev_pixelpipe_reset_reentry(pipe);
   return 1;
