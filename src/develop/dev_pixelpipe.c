@@ -352,6 +352,7 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 
   // The pipe hash is the hash of its last module.
   pipe->hash = hash;
+  pipe->bypass_cache = bypass_cache;
 
   dt_show_times(&start, "[dt_pixelpipe_get_global_hash] computing pipe hashes");
 }

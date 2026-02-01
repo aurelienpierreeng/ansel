@@ -106,6 +106,8 @@ static void _color_picker_reset(dt_iop_color_picker_t *picker)
 {
   if(picker)
   {
+    //if(picker->module) dt_iop_set_cache_bypass(picker->module, FALSE);
+
     ++darktable.gui->reset;
 
     if(DTGTK_IS_TOGGLEBUTTON(picker->colorpick))
@@ -175,6 +177,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
   if (prior_picker != self || (kind == DT_COLOR_PICKER_POINT_AREA &&
       (ctrl_key_pressed ^ (darktable.lib->proxy.colorpicker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_BOX))))
   {
+    //dt_iop_set_cache_bypass(module, TRUE);
     darktable.lib->proxy.colorpicker.picker_proxy = self;
 
     if(module) module->request_color_pick = DT_REQUEST_COLORPICK_MODULE;
@@ -205,7 +208,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
 
     // force applying the next incoming sample
     self->changed = TRUE;
-    dt_dev_pixelpipe_refresh_preview(darktable.develop, FALSE);
+    dt_dev_pixelpipe_refresh_preview(darktable.develop, TRUE);
   }
   else
   {
@@ -217,10 +220,9 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
       // will turn off live sample button
       darktable.lib->proxy.colorpicker.update_panel(darktable.lib->proxy.colorpicker.module);
     }
-    dt_dev_pixelpipe_refresh_preview(darktable.develop, FALSE);
+    dt_dev_pixelpipe_refresh_preview(darktable.develop, TRUE);
   }
 
-  dt_control_queue_redraw_center();
   return TRUE;
 }
 

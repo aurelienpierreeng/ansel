@@ -192,6 +192,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->backbuf_hist_hash = 0;
   pipe->backbuf_timestamp = 0;
   pipe->resync_timestamp = 0;
+  pipe->bypass_cache = 0;
 
   pipe->output_backbuf = NULL;
   pipe->output_backbuf_width = 0;
@@ -1748,7 +1749,10 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
 
   // If the last backbuf image is still valid with regard to current pipe topology 
   // and history, and we still have an entry cache, abort now. Nothing to do.
-  if(dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe->hash, &buf, NULL, NULL))
+  // For preview pipe, if using color pickers, we still need to traverse the pipeline.
+  if(!pipe->reentry && !pipe->bypass_cache 
+     && !(darktable.lib->proxy.colorpicker.picker_proxy && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+     && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe->hash, &buf, NULL, NULL))
   {
     // Remember that dt_dev_pixelpipe_cache_get_existing()
     // increases the ref_count of the cache entry, so it won't be

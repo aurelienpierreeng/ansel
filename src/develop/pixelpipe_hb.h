@@ -256,6 +256,9 @@ typedef struct dt_dev_pixelpipe_t
   // whether on success or on error.
   gboolean flush_cache;
 
+  // TRUE if at least one module is bypassing the cache
+  gboolean bypass_cache;
+
   // Timeout in usec to delay the start of the pipeline
   // Use for example if you want to ensure one pipe starts after another.
   // Timeout is reset to 0 after the pipeline has run.
