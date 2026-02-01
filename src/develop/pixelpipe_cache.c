@@ -368,8 +368,8 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
 
     // Set the time after we get the lock
     cache_entry->age = g_get_monotonic_time(); // this is the MRU entry
-    *data = cache_entry->data;
-    *dsc = &cache_entry->dsc;
+    if(data) *data = cache_entry->data;
+    if(dsc) *dsc = &cache_entry->dsc;
     dt_pixel_cache_message(cache_entry, "found", FALSE);
   }
 

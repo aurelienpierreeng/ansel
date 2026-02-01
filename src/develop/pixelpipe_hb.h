@@ -155,7 +155,25 @@ typedef struct dt_dev_pixelpipe_t
   void *backbuf;
   size_t backbuf_width, backbuf_height;
 
+  // Validity checksum of the last produced image backbuffer
   uint64_t backbuf_hash;
+
+  // Validity checksum of the last node (module) after the last
+  // synchronization between dev history and pipe nodes.
+  // This is computed in dt_dev_pixelpipe_get_global_hash
+  // ahead of processing image.
+  uint64_t hash;
+
+  // NOTE: if backbuf_hash == hash, then there is nothing to compute.
+  // if backbuf_hash != hash, either the last pipe couldn't finish (errors or interruption),
+  // or a new resync happened in-between.
+
+  // Timestamp of the last resynchronization between pipe nodes and history
+  time_t resync_timestamp;
+
+  // Timestamp of the last backbuffer generation
+  time_t backbuf_timestamp;
+
   dt_pthread_mutex_t backbuf_mutex, busy_mutex;
   // output buffer (for display)
   uint8_t *output_backbuf;

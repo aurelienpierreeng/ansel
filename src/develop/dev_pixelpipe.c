@@ -360,6 +360,9 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     piece->global_hash = hash;
   }
 
+  // The pipe hash is the hash of its last module.
+  pipe->hash = hash;
+
   dt_show_times(&start, "[dt_pixelpipe_get_global_hash] computing pipe hashes");
 }
 
@@ -457,6 +460,8 @@ void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
     dt_dev_history_item_t *last_hist = (dt_dev_history_item_t *)last_item->data;
     pipe->last_history_hash = last_hist->hash;
   }
+
+  pipe->resync_timestamp = time(NULL);
 }
 
 void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
@@ -512,6 +517,8 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   {
     dt_print(DT_DEBUG_DEV, "[pixelpipe] synch top history module missing error for pipe %s\n", type);
   }
+
+  pipe->resync_timestamp = time(NULL);
 }
 
 void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)

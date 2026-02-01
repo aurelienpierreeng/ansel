@@ -186,6 +186,10 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->processed_height = pipe->backbuf_height = pipe->iheight = 0;
   pipe->nodes = NULL;
   pipe->backbuf = NULL;
+  pipe->hash = 0;
+  pipe->backbuf_hash = 0;
+  pipe->backbuf_timestamp = 0;
+  pipe->resync_timestamp = 0;
 
   pipe->output_backbuf = NULL;
   pipe->output_backbuf_width = 0;
@@ -1704,6 +1708,20 @@ static void _print_opencl_errors(int error, dt_dev_pixelpipe_t *pipe)
   }
 }
 
+static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, void *buf, dt_iop_roi_t roi, int pos)
+{
+  const dt_dev_pixelpipe_iop_t *last_module = _last_node_in_pipe(pipe);
+  pipe->backbuf_hash = dt_dev_pixelpipe_node_hash(pipe, last_module, roi, pos);
+  pipe->backbuf = buf;
+  pipe->backbuf_width = roi.width;
+  pipe->backbuf_height = roi.height;
+  pipe->backbuf_timestamp = time(NULL);
+
+  // Note: when we know this is always true, we can use pipe->hash directly
+  if(pipe->hash != pipe->backbuf_hash)
+    fprintf(stdout, "inconsistency in pipe backbuf hash. Please report it\n");
+}
+
 
 int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x, int y, int width, int height,
                              double scale)
@@ -1716,21 +1734,39 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
 
   dt_dev_pixelpipe_cache_print(darktable.pixelpipe_cache);
 
+  // Get the roi_out hash of all nodes.
+  // Get the previous output size of the module, for cache invalidation.
+  const guint pos = g_list_length(pipe->iop);
+  dt_iop_roi_t roi = (dt_iop_roi_t){ x, y, width, height, scale };
+  dt_dev_pixelpipe_get_roi_in(pipe, dev, roi);
+  dt_pixelpipe_get_global_hash(pipe, dev);
+
+  void *buf = NULL;
+
+  // If the last backbuf image is still valid with regard to current pipe topology 
+  // and history, and we still have an entry cache, abort now. Nothing to do.
+  if(dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe->hash, &buf, NULL, NULL))
+  {
+    // Remember that dt_dev_pixelpipe_cache_get_existing()
+    // increases the ref_count of the cache entry, so it won't be
+    // deleted from the cache until you manually decrease it 
+    // when you are done consuming it.
+
+    if(pipe->backbuf_hash != pipe->hash)
+      _update_backbuf_cache_reference(pipe, buf, roi, pos);
+    // else : backbuf ref is still up-to-date
+
+    return 0;
+  }
+
   dt_print(DT_DEBUG_DEV, "[pixelpipe] Started %s pipeline recompute at %i×%i px\n", dt_pixelpipe_get_pipe_name(pipe->type), width, height);
 
   // get a snapshot of the mask list
   pipe->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
 
   // go through the list of modules from the end:
-  const guint pos = g_list_length(pipe->iop);
   GList *modules = g_list_last(pipe->iop);
   GList *pieces = g_list_last(pipe->nodes);
-
-  // Get the roi_out hash
-  // Get the previous output size of the module, for cache invalidation.
-  dt_iop_roi_t roi = (dt_iop_roi_t){ x, y, width, height, scale };
-  dt_dev_pixelpipe_get_roi_in(pipe, dev, roi);
-  dt_pixelpipe_get_global_hash(pipe, dev);
 
   pipe->backbuf = NULL;
   pipe->opencl_enabled = dt_opencl_update_settings(); // update enabled flag and profile from preferences
@@ -1756,7 +1792,6 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
 
     // WARNING: buf will actually be a reference to a pixelpipe cache line, so it will be freed
     // when the cache line is flushed or invalidated.
-    void *buf = NULL;
     void *cl_mem_out = NULL;
 
     dt_iop_buffer_dsc_t _out_format = { 0 };
@@ -1811,13 +1846,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
     else if(!dt_atomic_get_int(&pipe->shutdown))
     {
       // No opencl errors, no killswitch triggered: we should have a valid output buffer now.
-
-      // Store the back buffer hash and reference
-      const dt_dev_pixelpipe_iop_t *last_module = _last_node_in_pipe(pipe);
-      pipe->backbuf_hash = dt_dev_pixelpipe_node_hash(pipe, last_module, roi, pos);
-      pipe->backbuf = buf;
-      pipe->backbuf_width = width;
-      pipe->backbuf_height = height;
+      _update_backbuf_cache_reference(pipe, buf, roi, pos);
 
       // Note : the last output (backbuf) of the pixelpipe cache is internally locked
       // Whatever consuming it will need to unlock it.
