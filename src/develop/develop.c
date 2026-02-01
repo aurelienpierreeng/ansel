@@ -77,8 +77,6 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
 {
   memset(dev, 0, sizeof(dt_develop_t));
   dev->gui_module = NULL;
-  dev->average_delay = DT_DEV_AVERAGE_DELAY_START;
-  dev->preview_average_delay = DT_DEV_PREVIEW_AVERAGE_DELAY_START;
   dt_pthread_rwlock_init(&dev->history_mutex, NULL);
   dev->history_end = 0;
   dev->history = NULL; // empty list
@@ -479,11 +477,6 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       dt_control_log_busy_leave();
       dt_control_toast_busy_leave();
 
-      if(pipe->type == DT_DEV_PIXELPIPE_FULL)
-        dt_dev_average_delay_update(&thread_start, &dev->average_delay);
-      else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
-        dt_dev_average_delay_update(&thread_start, &dev->preview_average_delay);
-
       // If pipe is flagged for re-entry, we need to restart it right away
       if(dt_dev_pixelpipe_has_reentry(pipe))
       {
@@ -777,16 +770,6 @@ void dt_dev_snapshot_request(dt_develop_t *dev, const char *filename)
   dev->proxy.snapshot.request = TRUE;
   dt_control_queue_redraw_center();
 }
-
-void dt_dev_average_delay_update(const dt_times_t *start, uint32_t *average_delay)
-{
-  dt_times_t end;
-  dt_get_times(&end);
-
-  *average_delay += ((end.clock - start->clock) * 1000 / DT_DEV_AVERAGE_DELAY_COUNT
-                     - *average_delay / DT_DEV_AVERAGE_DELAY_COUNT);
-}
-
 
 /** duplicate a existent module */
 dt_iop_module_t *dt_dev_module_duplicate(dt_develop_t *dev, dt_iop_module_t *base)

@@ -1281,9 +1281,8 @@ void dt_lib_queue_postponed_update(dt_lib_module_t *mod, void (*update_fn)(dt_li
     // and we won't have avalanche of events in the mean time.
     g_source_remove(mod->timeout_handle);
   }
-  const int delay = CLAMP(darktable.develop->average_delay / 2, 10, 250);
   mod->_postponed_update = update_fn;
-  mod->timeout_handle = g_timeout_add(delay, _postponed_update, mod);
+  mod->timeout_handle = g_timeout_add(dt_conf_get_int("processing/timeout"), _postponed_update, mod);
 }
 
 void dt_lib_cancel_postponed_update(dt_lib_module_t *mod)

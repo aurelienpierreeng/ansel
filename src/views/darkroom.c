@@ -2096,8 +2096,6 @@ void mouse_enter(dt_view_t *self)
   dt_masks_events_mouse_enter(dev->gui_module);
 }
 
-#define DRAWING_TIMEOUT 200
-
 static int _delayed_history_commit(gpointer data)
 {
   dt_develop_t *dev = (dt_develop_t *)data;
@@ -2124,7 +2122,7 @@ static void _do_delayed_history_commit(dt_develop_t *dev)
     g_source_remove(dev->drawing_timeout);
     dev->drawing_timeout = 0;
   }
-  dev->drawing_timeout = g_timeout_add(DRAWING_TIMEOUT, _delayed_history_commit, dev);
+  dev->drawing_timeout = g_timeout_add(dt_conf_get_int("processing/timeout"), _delayed_history_commit, dev);
 }
 
 void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which)

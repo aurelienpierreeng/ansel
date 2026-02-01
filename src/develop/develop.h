@@ -153,8 +153,6 @@ typedef struct dt_develop_t
   int32_t gui_attached; 
 
   int exit; // set to 1 to close background darkroom pipeline threads
-  uint32_t average_delay;
-  uint32_t preview_average_delay;
   struct dt_iop_module_t *gui_module; // this module claims gui expose/event callbacks.
 
   // darkroom border size: ISO 12646 borders or user-defined borders
@@ -428,9 +426,6 @@ void dt_dev_reorder_gui_module_list(dt_develop_t *dev);
 
 /** request snapshot */
 void dt_dev_snapshot_request(dt_develop_t *dev, const char *filename);
-
-/** update gliding average for pixelpipe delay */
-void dt_dev_average_delay_update(const dt_times_t *start, uint32_t *average_delay);
 
 /*
  * masks plugin hooks

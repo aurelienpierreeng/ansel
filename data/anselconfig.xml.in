@@ -212,9 +212,9 @@
     <longdescription>This is the maximum resolution for your RAW images. It will be used to compute the required pixelpipe memory.</longdescription>
   </dtconfig>
   <dtconfig prefs="processing" section="cpugpu" restart="true">
-    <name>timeout</name>
+    <name>processing/timeout</name>
     <type min="0">int</type>
-    <default>100</default>
+    <default>200</default>
     <shortdescription>Pipe recompute timeout (milliseconds)</shortdescription>
     <longdescription>Timeout preventing intermediate setting steps (e.g. while scrolling) to recompute the pipeline too often. Set to 0 to recompute immediately on module change.</longdescription>
   </dtconfig>
