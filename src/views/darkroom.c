@@ -2237,7 +2237,11 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   }
 
   dt_control_commit_cursor();
-  if(ret) return;
+  if(ret)
+  {
+    dt_control_queue_redraw_center();
+    return;
+  }
 
   // panning with left mouse button
   if(darktable.control->button_down && darktable.control->button_down_which == 1 && dev->scaling > 1)
