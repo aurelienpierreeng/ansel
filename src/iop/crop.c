@@ -252,7 +252,7 @@ static gboolean _set_max_clip(struct dt_iop_module_t *self)
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
 
-  if(self->dev->preview_pipe->status != DT_DEV_PIXELPIPE_VALID) return TRUE;
+  if(!dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe, self->dev)) return TRUE;
   // we want to know the size of the actual buffer
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
   if(!piece) return FALSE;
@@ -1305,7 +1305,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_develop_t *dev = self->dev;
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
 
-  if((dev->preview_pipe->status != DT_DEV_PIXELPIPE_VALID || dev->preview_pipe->processing))
+  if(!dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe, self->dev))
     return;
 
   _aspect_apply(self, GRAB_HORIZONTAL);

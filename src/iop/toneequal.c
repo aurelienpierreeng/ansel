@@ -1919,9 +1919,7 @@ static void _switch_cursors(struct dt_iop_module_t *self)
     // do nothing and let the app decide
     return;
   }
-  else if( ((self->dev->pipe->processing) ||
-          (self->dev->pipe->status == DT_DEV_PIXELPIPE_DIRTY) ||
-          (self->dev->preview_pipe->status == DT_DEV_PIXELPIPE_DIRTY)) && g->cursor_valid)
+  else if((self->dev->pipe->processing || self->dev->preview_pipe->processing) && g->cursor_valid)
   {
     // if pipe is busy or dirty but cursor is on preview,
     // display waiting cursor while pipe reprocesses
