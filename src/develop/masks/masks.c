@@ -2244,19 +2244,9 @@ void dt_masks_cleanup_unused(dt_develop_t *dev)
 /**
  * @brief Check whether the 2D point (x, y) lies inside the polygon (mask) described by `points`.
  *
- * - Algorithm: ray-casting (even-odd rule). Cast a horizontal ray to +X from the test point
- *   and count segment crossings; odd => inside, even => outside.
- * 
- * - y is rounded using yf = floorf(y + 0.5f) to reduce problems caused by intersections with
- *   horizontal edges / vertex coordinates.
- * 
- * - The function supports "deleted" vertices encoded as (NaN, next_index): when a vertex's x is NaN,
- *   its y stores the integer index of the next valid vertex to jump to (used for self-intersections).
- * 
- * - To avoid double-counting intersections on segment endpoints the test uses:
- *     (yf > min(y1,y2)) && (yf <= max(y1,y2))
- * 
- * - For each crossing, the intersection X coordinate is computed and compared to the test x.
+ * we use ray casting algorithm
+ * to avoid most problems with horizontal segments, y should be rounded as int
+ * so that there's very little chance than y==points...
  * 
  * @param x The x-coordinate of the point to test.
  * @param y The y-coordinate of the point to test.
@@ -2267,51 +2257,31 @@ void dt_masks_cleanup_unused(dt_develop_t *dev)
  */
 int dt_masks_point_in_form_exact(float x, float y, float *points, int points_start, int points_count)
 {
-  if(points_count <= points_start + 2) return 0;
-
-  int start = points_start;
-  if(isnan(points[points_start * 2]) && !isnan(points[points_start * 2 + 1]))
-    start = (int)points[points_start * 2 + 1]; // cast explicite
-
-  float yf = floorf(y + 0.5f); // round y
   int nb = 0;
-  int i = start;
-  int next = start + 1;
-  while (1)
+
+  if(points_count > 2 + points_start)
   {
-    if(next >= points_count) next = start; // wrap around
+    int start = isnan(points[points_start * 2]) && !isnan(points[points_start * 2 + 1])
+                    ? points[points_start * 2 + 1]
+                    : points_start;
 
-    float x1 = points[i * 2];
-    float y1 = points[i * 2 + 1];
-    float x2 = points[next * 2];
-    float y2 = points[next * 2 + 1];
-
-    // if next is a "deleted" point (x = NaN), retrieve the following index from y2
-    if(isnan(x2))
+    float yf = (float)y;
+    for(int i = start, next = start + 1; i < points_count;)
     {
-      next = (int)y2;
-      // validate the index to prevent out-of-bounds access
-      if(next < points_start || next >= points_count)
+      float y1 = points[i * 2 + 1];
+      float y2 = points[next * 2 + 1];
+      //if we need to skip points (in case of deleted point, because of self-intersection)
+      if(isnan(points[next * 2]))
       {
-        break; // invalid index, exit to prevent segfault
+        next = isnan(y2) ? start : (int)y2;
+        continue;
       }
-      continue;
-    }
+      if(((yf <= y2 && yf > y1) || (yf >= y2 && yf < y1)) && (points[i * 2] > x)) nb++;
 
-    // test whether the horizontal line at yf crosses the segment:
-    // use the rule (yf > min(y1,y2)) && (yf <= max(y1,y2)) to avoid double-counting
-    if((yf > fminf(y1, y2)) && (yf <= fmaxf(y1, y2)))
-    {
-      if(y1 != y2) // protect against division by zero
-      {
-        float xint = x1 + (yf - y1) * (x2 - x1) / (y2 - y1);
-        if(xint > x) nb++;
-      }
+      if(next == start) break;
+      i = next++;
+      if(next >= points_count) next = start;
     }
-
-    if(next == start) break;
-    i = next;
-    next = i + 1;
   }
 
   return (nb & 1);
