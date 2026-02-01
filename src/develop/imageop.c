@@ -2156,10 +2156,7 @@ static void _display_mask_indicator_callback(GtkToggleButton *bt, dt_iop_module_
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->showmask), is_active);
 
   dt_iop_request_focus(module);
-
-  // We don't want to re-read the history here
-  dt_dev_pixelpipe_change_zoom_main(module->dev);
-  dt_dev_process_all(module->dev);
+  dt_dev_pixelpipe_refresh_main(module->dev, FALSE);
 }
 
 static gboolean _mask_indicator_tooltip(GtkWidget *treeview, gint x, gint y, gboolean kb_mode,

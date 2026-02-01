@@ -1476,8 +1476,7 @@ static void mask_callback(GtkWidget *togglebutton, dt_iop_module_t *self)
   dt_bauhaus_widget_set_quad_active(GTK_WIDGET(g->highlights_weight), g->mask_type == MASK_HIGHLIGHTS);
 
   dt_iop_set_cache_bypass(self, g->mask_display);
-  dt_dev_pixelpipe_update_main(self->dev);
-  dt_dev_process_all(self->dev);
+  dt_dev_pixelpipe_refresh_main(self->dev, FALSE);
 }
 
 

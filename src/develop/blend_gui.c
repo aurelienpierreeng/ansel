@@ -1075,8 +1075,7 @@ static void _blendop_blendif_tab_switch(GtkNotebook *notebook, GtkWidget *page, 
          || gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(data->colorpicker_set_values))))
   {
     dt_iop_color_picker_set_cst(data->module, _blendop_blendif_get_picker_colorspace(data));
-    dt_dev_pixelpipe_update_all(data->module->dev);
-    dt_dev_process_all(data->module->dev);
+    dt_dev_pixelpipe_refresh_all(data->module->dev, FALSE);
   }
 
   _blendop_blendif_update_tab(data->module, data->tab);
@@ -1125,8 +1124,7 @@ static void _blendop_blendif_details_callback(GtkWidget *slider, dt_iop_gui_blen
 
   if((oldval == 0.0f) && (bp->details != 0.0f))
   {
-    dt_dev_pixelpipe_update_all(data->module->dev);
-    dt_dev_process_all(data->module->dev);
+    dt_dev_pixelpipe_refresh_all(data->module->dev, FALSE);
   }
 }
 
@@ -1184,7 +1182,7 @@ static gboolean _blendop_blendif_showmask_clicked(GtkToggleButton *button, GdkEv
     dt_iop_request_focus(module);
 
     // We don't want to re-read the history here
-    dt_dev_pixelpipe_change_zoom_main(module->dev);
+    dt_dev_pixelpipe_update_zoom_main(module->dev);
     dt_dev_process_all(module->dev);
   }
 
@@ -1625,8 +1623,7 @@ static gboolean _blendif_change_blend_colorspace(dt_iop_module_t *module, dt_dev
         gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bd->colorpicker_set_values))))
     {
       dt_iop_color_picker_set_cst(bd->module, _blendop_blendif_get_picker_colorspace(bd));
-      dt_dev_pixelpipe_update_all(bd->module->dev);
-      dt_dev_process_all(bd->module->dev);
+      dt_dev_pixelpipe_refresh_all(bd->module->dev, FALSE);
     }
 
     return TRUE;
@@ -2142,8 +2139,7 @@ void dt_iop_gui_update_blendif(dt_iop_module_t *module)
     {
       module->request_mask_display = bd->save_for_leave & ~DT_DEV_PIXELPIPE_DISPLAY_STICKY;
       dt_iop_set_cache_bypass(module, module->request_mask_display != DT_DEV_PIXELPIPE_DISPLAY_NONE);
-      dt_dev_pixelpipe_update_all(module->dev);//DBG
-      dt_dev_process_all(module->dev);
+      dt_dev_pixelpipe_refresh_all(module->dev, FALSE);
     }
   }
   dt_pthread_mutex_unlock(&bd->lock);

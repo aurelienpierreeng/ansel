@@ -652,7 +652,7 @@ static void _darkroom_ui_apply_style_activate_callback(gchar *name)
   darktable.develop->exit = 0;
 
   // Recompute the view
-  dt_dev_process_all(darktable.develop);
+  dt_dev_pixelpipe_refresh_all(darktable.develop, TRUE);
 }
 
 static void _darkroom_ui_apply_style_popupmenu(GtkWidget *w, gpointer user_data)
@@ -862,9 +862,7 @@ static void display_borders_callback(GtkWidget *slider, gpointer user_data)
   dt_develop_t *d = (dt_develop_t *)user_data;
   dt_conf_set_int("plugins/darkroom/ui/border_size", (int)dt_bauhaus_slider_get(slider));
   _get_final_size_with_iso_12646(d);
-  dt_control_queue_redraw_center();
   dt_dev_pixelpipe_change_zoom_main(d);
-  dt_dev_process_all(d);
 }
 
 /* overexposed */
@@ -872,8 +870,7 @@ static void _overexposed_quickbutton_clicked(GtkWidget *w, gpointer user_data)
 {
   dt_develop_t *d = (dt_develop_t *)user_data;
   d->overexposed.enabled = !d->overexposed.enabled;
-  dt_dev_pixelpipe_resync_main(d);
-  dt_dev_process_all(d);
+  dt_dev_pixelpipe_refresh_main(d, TRUE);
 }
 
 static void colorscheme_callback(GtkWidget *combo, gpointer user_data)
@@ -883,8 +880,7 @@ static void colorscheme_callback(GtkWidget *combo, gpointer user_data)
   if(d->overexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->overexposed.button));
 
-  dt_dev_pixelpipe_resync_main(d);
-  dt_dev_process_all(d);
+  dt_dev_pixelpipe_refresh_main(d, TRUE);
 }
 
 static void lower_callback(GtkWidget *slider, gpointer user_data)
@@ -894,8 +890,7 @@ static void lower_callback(GtkWidget *slider, gpointer user_data)
   if(d->overexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->overexposed.button));
 
-  dt_dev_pixelpipe_resync_main(d);
-  dt_dev_process_all(d);
+  dt_dev_pixelpipe_refresh_main(d, TRUE);
 }
 
 static void upper_callback(GtkWidget *slider, gpointer user_data)
@@ -905,8 +900,7 @@ static void upper_callback(GtkWidget *slider, gpointer user_data)
   if(d->overexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->overexposed.button));
 
-  dt_dev_pixelpipe_resync_main(d);
-  dt_dev_process_all(d);
+  dt_dev_pixelpipe_refresh_main(d, TRUE);
 }
 
 static void mode_callback(GtkWidget *slider, gpointer user_data)
@@ -915,10 +909,8 @@ static void mode_callback(GtkWidget *slider, gpointer user_data)
   d->overexposed.mode = dt_bauhaus_combobox_get(slider);
   if(d->overexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->overexposed.button));
-  else
-    dt_dev_pixelpipe_update_main(d);
 
-  dt_dev_process_all(d);
+  dt_dev_pixelpipe_refresh_main(d, FALSE);
 }
 
 /* rawoverexposed */
@@ -926,8 +918,7 @@ static void _rawoverexposed_quickbutton_clicked(GtkWidget *w, gpointer user_data
 {
   dt_develop_t *d = (dt_develop_t *)user_data;
   d->rawoverexposed.enabled = !d->rawoverexposed.enabled;
-  dt_dev_pixelpipe_resync_main(d);
-  dt_dev_process_all(d);
+  dt_dev_pixelpipe_refresh_main(d, TRUE);
 }
 
 static void rawoverexposed_mode_callback(GtkWidget *combo, gpointer user_data)
@@ -937,8 +928,7 @@ static void rawoverexposed_mode_callback(GtkWidget *combo, gpointer user_data)
   if(d->rawoverexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->rawoverexposed.button));
 
-  dt_dev_pixelpipe_resync_main(d);
-  dt_dev_process_all(d);
+  dt_dev_pixelpipe_refresh_main(d, TRUE);
 }
 
 static void rawoverexposed_colorscheme_callback(GtkWidget *combo, gpointer user_data)
@@ -948,8 +938,7 @@ static void rawoverexposed_colorscheme_callback(GtkWidget *combo, gpointer user_
   if(d->rawoverexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->rawoverexposed.button));
 
-  dt_dev_pixelpipe_resync_main(d);
-  dt_dev_process_all(d);
+  dt_dev_pixelpipe_refresh_main(d, TRUE);
 }
 
 static void rawoverexposed_threshold_callback(GtkWidget *slider, gpointer user_data)
@@ -959,8 +948,7 @@ static void rawoverexposed_threshold_callback(GtkWidget *slider, gpointer user_d
   if(d->rawoverexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->rawoverexposed.button));
 
-  dt_dev_pixelpipe_resync_main(d);
-  dt_dev_process_all(d);
+  dt_dev_pixelpipe_refresh_main(d, TRUE);
 }
 
 /* softproof */
@@ -973,9 +961,7 @@ static void _softproof_quickbutton_clicked(GtkWidget *w, gpointer user_data)
     darktable.color_profiles->mode = DT_PROFILE_SOFTPROOF;
 
   _update_softproof_gamut_checking(d);
-
-  dt_dev_pixelpipe_resync_main(d);
-  dt_dev_process_all(d);
+  dt_dev_pixelpipe_refresh_main(d, TRUE);
 }
 
 /* gamut */
@@ -989,8 +975,7 @@ static void _gamut_quickbutton_clicked(GtkWidget *w, gpointer user_data)
 
   _update_softproof_gamut_checking(d);
 
-  dt_dev_pixelpipe_resync_main(d);
-  dt_dev_process_all(d);
+  dt_dev_pixelpipe_refresh_main(d, TRUE);
 }
 
 /* set the gui state for both softproof and gamut checking */
@@ -1041,8 +1026,7 @@ end:
   if(profile_changed)
   {
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_SOFTPROOF);
-    dt_dev_pixelpipe_resync_main(d);
-    dt_dev_process_all(d);
+    dt_dev_pixelpipe_refresh_main(d, TRUE);
   }
 }
 
@@ -2235,7 +2219,6 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     dt_control_queue_redraw_center();
     dt_control_navigation_redraw();
     dt_dev_pixelpipe_change_zoom_main(dev);
-    dt_dev_process_all(dev);
   }
 }
 
@@ -2252,10 +2235,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
     if(darktable.lib->proxy.colorpicker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
       dt_control_set_cursor(GDK_LEFT_PTR);
 
-    dt_control_queue_redraw_center();
-
-    dt_dev_pixelpipe_update_preview(dev);
-    dt_dev_process_all(dev);
+    dt_dev_pixelpipe_refresh_preview(dev, FALSE);
     return 1;
   }
   // masks
@@ -2463,11 +2443,7 @@ static int _change_scaling(dt_develop_t *dev, const float x, const float y, cons
     dev->y += mouse_off_y * scale_delta / (proc_h * scale_product);
     
     dt_dev_check_zoom_pos_bounds(dev, &dev->x, &dev->y, NULL, NULL);
-
-    dt_control_queue_redraw_center();
-    dt_control_navigation_redraw();
     dt_dev_pixelpipe_change_zoom_main(dev);
-    dt_dev_process_all(dev);
     return 1;
   }
   else

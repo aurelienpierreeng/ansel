@@ -2525,9 +2525,7 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
   if(p->cropmode == ASHIFT_CROP_OFF)
   {
     _clear_shadow_crop_box(g);
-    dt_control_queue_redraw_center();
-    dt_dev_pixelpipe_update_all(self->dev);
-    dt_dev_process_all(self->dev);
+    dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
     return;
   }
 
@@ -2654,10 +2652,7 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
          iter, cropfit.x, cropfit.y, cropfit.alpha, p->cl, p->cr, p->ct, p->cb, wd, ht);
 #endif
 
-  dt_control_queue_redraw_center();
-  dt_dev_pixelpipe_update_all(self->dev);
-  dt_dev_process_all(self->dev);
-
+  dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
   return;
 
 failed:
@@ -2671,9 +2666,7 @@ failed:
   g->fitting = 0;
   dt_control_log(_("automatic cropping failed"));
 
-  dt_control_queue_redraw_center();
-  dt_dev_pixelpipe_update_all(self->dev);
-  dt_dev_process_all(self->dev);
+  dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
   return;
 }
 
@@ -2899,8 +2892,7 @@ static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t 
   if(b == NULL)
   {
     dt_control_log(_("Data pending - Please repeat"));
-    dt_dev_pixelpipe_update_preview(self->dev);
-    dt_dev_process_all(self->dev);
+    dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
     goto error;
   }
 
@@ -2950,8 +2942,7 @@ static void _do_get_structure_lines(dt_iop_module_t *self)
   if(b == NULL)
   {
     dt_control_log(_("Data pending - Please repeat"));
-    dt_dev_pixelpipe_update_preview(self->dev);
-    dt_dev_process_all(self->dev);
+    dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
     return;
   }
 
@@ -2986,8 +2977,7 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
   if(b == NULL)
   {
     dt_control_log(_("Data pending - Please repeat"));
-    dt_dev_pixelpipe_update_preview(self->dev);
-    dt_dev_process_all(self->dev);
+    dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
     return;
   }
 
@@ -4813,9 +4803,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   else
     g->jobcode = ASHIFT_JOBCODE_DO_CROP;
 
-  dt_control_queue_redraw_center();
-  dt_dev_pixelpipe_update_all(self->dev);
-  dt_dev_process_all(self->dev);
+  dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
 }
 
 void gui_reset(struct dt_iop_module_t *self)
@@ -4855,8 +4843,7 @@ static void cropmode_callback(GtkWidget *widget, gpointer user_data)
   if(g->editing)
   {
     // Update temporary copy
-    dt_dev_pixelpipe_update_preview(self->dev);
-    dt_dev_process_all(self->dev);
+    dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
   }
   else
   {
@@ -4905,9 +4892,7 @@ static int _event_fit_v_button_clicked(GtkWidget *widget, GdkEventButton *event,
       // the preview image is ready
       g->jobcode = ASHIFT_JOBCODE_FIT;
       g->jobparams = g->lastfit = fitaxis;
-      dt_control_queue_redraw_center();
-      dt_dev_pixelpipe_update_preview(self->dev);
-      dt_dev_process_all(self->dev);
+      dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
     }
     return TRUE;
   }
@@ -4954,9 +4939,7 @@ static int _event_fit_h_button_clicked(GtkWidget *widget, GdkEventButton *event,
       // the preview image is ready
       g->jobcode = ASHIFT_JOBCODE_FIT;
       g->jobparams = g->lastfit = fitaxis;
-      dt_control_queue_redraw_center();
-      dt_dev_pixelpipe_update_preview(self->dev);
-      dt_dev_process_all(self->dev);
+      dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
     }
     return TRUE;
   }
@@ -5005,9 +4988,7 @@ static int _event_fit_both_button_clicked(GtkWidget *widget, GdkEventButton *eve
       // the preview image is ready
       g->jobcode = ASHIFT_JOBCODE_FIT;
       g->jobparams = g->lastfit = fitaxis;
-      dt_control_queue_redraw_center();
-      dt_dev_pixelpipe_update_preview(self->dev);
-      dt_dev_process_all(self->dev);
+      dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
     }
     return TRUE;
   }
@@ -5063,9 +5044,7 @@ static int _event_structure_auto_clicked(GtkWidget *widget, GdkEventButton *even
       g->jobparams = enhance;
     }
 
-    dt_control_queue_redraw_center();
-    dt_dev_pixelpipe_update_preview(self->dev);
-    dt_dev_process_all(self->dev);
+    dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
     return TRUE;
   }
   return FALSE;
@@ -5090,9 +5069,7 @@ static int _event_structure_quad_clicked(GtkWidget *widget, GdkEventButton *even
     // module is not enabled -> invoke it and queue the job to be processed once
     // the preview image is ready
     g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE_QUAD;
-    dt_control_queue_redraw_center();
-    dt_dev_pixelpipe_update_preview(self->dev);
-    dt_dev_process_all(self->dev);
+    dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
   }
 
   return TRUE;
@@ -5119,10 +5096,7 @@ static int _event_structure_lines_clicked(GtkWidget *widget, GdkEventButton *eve
     g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE_LINES;
   }
 
-  dt_control_queue_redraw_center();
-  dt_dev_pixelpipe_update_preview(self->dev);
-  dt_dev_process_all(self->dev);
-
+  dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
   return TRUE;
 }
 
@@ -5149,8 +5123,7 @@ static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *se
 
     gtk_button_set_label(GTK_BUTTON(button), _("Cancel"));
     gtk_widget_set_sensitive(g->commit_button, TRUE);
-    dt_control_queue_redraw_center();
-    dt_control_navigation_redraw();
+    dt_control_queue_redraw();
   }
   else
   {
@@ -5168,8 +5141,7 @@ static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *se
   }
 
   // It sucks that we need to invalidate the preview too but we need its final dimension.
-  dt_dev_pixelpipe_resync_all(self->dev);
-  dt_dev_process_all(self->dev);
+  dt_dev_pixelpipe_refresh_all(self->dev, TRUE);
 }
 
 static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)

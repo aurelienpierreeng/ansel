@@ -53,7 +53,6 @@ static gboolean full_screen_callback(GtkAccelGroup *group, GObject *acceleratabl
   gtk_window_move(GTK_WINDOW(window), geometry.width - geometry.x - w, geometry.height - geometry.y - h);
 
   dt_dev_pixelpipe_change_zoom_main(darktable.develop);
-  dt_dev_process_all(darktable.develop);
 
   return TRUE;
 }
@@ -80,7 +79,6 @@ static gboolean _toggle_side_borders_accel_callback(GtkAccelGroup *accel_group, 
 
   /* trigger invalidation of centerview to reprocess pipe */
   dt_dev_pixelpipe_change_zoom_main(darktable.develop);
-  dt_dev_process_all(darktable.develop);
   return TRUE;
 }
 

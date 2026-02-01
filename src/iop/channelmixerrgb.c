@@ -2565,9 +2565,7 @@ static void run_profile_callback(GtkWidget *widget, GdkEventButton *event, gpoin
   g->run_profile = TRUE;
   dt_iop_set_cache_bypass(self, TRUE);
   dt_iop_gui_leave_critical_section(self);
-
-  dt_dev_pixelpipe_resync_preview(self->dev);
-  dt_dev_process_all(self->dev);
+  dt_dev_pixelpipe_refresh_preview(self->dev, TRUE);
 }
 
 static void run_validation_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
@@ -2580,9 +2578,7 @@ static void run_validation_callback(GtkWidget *widget, GdkEventButton *event, gp
   g->run_validation = TRUE;
   dt_iop_set_cache_bypass(self, TRUE);
   dt_iop_gui_leave_critical_section(self);
-
-  dt_dev_pixelpipe_resync_preview(self->dev);
-  dt_dev_process_all(self->dev);
+  dt_dev_pixelpipe_refresh_preview(self->dev, TRUE);
 }
 
 static void commit_profile_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)

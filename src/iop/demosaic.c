@@ -1364,8 +1364,7 @@ static void _visualize_callback(GtkWidget *quad, gpointer user_data)
   dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
 
   g->visual_mask = dt_bauhaus_widget_get_quad_active(quad);
-  dt_dev_pixelpipe_update_main(self->dev);
-  dt_dev_process_all(self->dev);
+  dt_dev_pixelpipe_refresh_main(self->dev, FALSE);
 }
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
@@ -1376,8 +1375,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     const gboolean was_dualmask = g->visual_mask;
     dt_bauhaus_widget_set_quad_active(g->dual_thrs, FALSE);
     g->visual_mask = FALSE;
-    if(was_dualmask) dt_dev_pixelpipe_update_main(self->dev);
-    dt_dev_process_all(self->dev);
+    if(was_dualmask) dt_dev_pixelpipe_refresh_main(self->dev, FALSE);
   }
 }
 

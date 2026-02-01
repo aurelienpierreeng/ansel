@@ -353,8 +353,6 @@ static void _lib_navigation_set_position(dt_lib_module_t *self, double x, double
 
   /* redraw pipe */
   dt_dev_pixelpipe_change_zoom_main(darktable.develop);
-  dt_control_queue_redraw_center();
-  dt_dev_process_all(dev);
 }
 
 static gboolean _lib_navigation_motion_notify_callback(GtkWidget *widget, GdkEventMotion *event,
@@ -415,8 +413,6 @@ static void _zoom_preset_change(dt_lib_zoom_t zoom)
 
   dt_dev_check_zoom_pos_bounds(dev, &dev->x, &dev->y, NULL, NULL);
   dt_dev_pixelpipe_change_zoom_main(dev);
-  dt_control_queue_redraw();
-  dt_dev_process_all(dev);
 }
 
 static void _zoom_preset_callback(GtkButton *button, gpointer user_data)

@@ -723,7 +723,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   {
     // If we have a module and it doesn't use drawn or raster masks,
     // we only need to resync the top-most history item with pipeline
-    dt_dev_pixelpipe_update_all(dev);
+    dt_dev_pixelpipe_update_history_all(dev);
   }
   else
   {
@@ -734,7 +734,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
     // Note that the blendop params (thus their hash) references the raster mask provider
     // in its consumer, and the consumer in its provider. So updating the whole pipe
     // resyncs the cumulative hashes too, and triggers a new recompute from the provider on update.
-    dt_dev_pixelpipe_resync_all(dev);
+    dt_dev_pixelpipe_resync_history_all(dev);
   }
 
   dt_dev_masks_list_update(dev);

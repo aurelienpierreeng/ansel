@@ -523,18 +523,15 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
   pipe->running = 0;
 }
 
-
 void dt_dev_process_preview_job(dt_develop_t *dev)
 {
   dt_dev_darkroom_pipeline(dev, dev->preview_pipe);
 }
 
-
 void dt_dev_process_image_job(dt_develop_t *dev)
 {
   dt_dev_darkroom_pipeline(dev, dev->pipe);
 }
-
 
 // load the raw and get the new image struct, blocking in gui thread
 static inline int _dt_dev_load_raw(dt_develop_t *dev, const int32_t imgid)
@@ -605,8 +602,8 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
     dev->height = ht;
 
     dt_print(DT_DEBUG_DEV, "[pixelpipe] Darkroom requested a %i×%i px main preview\n", wd, ht);
-    dt_dev_pixelpipe_change_zoom_main(dev);
-    dt_dev_pixelpipe_change_zoom_preview(dev);
+    dt_dev_pixelpipe_update_zoom_main(dev);
+    dt_dev_pixelpipe_update_zoom_preview(dev);
 
     if(dev->image_storage.id > -1 && darktable.mipmap_cache)
     {
@@ -1151,6 +1148,7 @@ int dt_dev_wait_hash(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, const d
   return FALSE;
 }
 
+// This needs a rewrite to use modern pipeline hashes
 int dt_dev_sync_pixelpipe_hash(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction, dt_pthread_mutex_t *lock,
                                const volatile uint64_t *const hash)
 {
@@ -1161,7 +1159,7 @@ int dt_dev_sync_pixelpipe_hash(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
   // timed out. let's see if history stack has changed
   if(pipe->changed & (DT_DEV_PIPE_TOP_CHANGED | DT_DEV_PIPE_REMOVE | DT_DEV_PIPE_SYNCH))
   {
-    dt_dev_pixelpipe_update_main(dev);
+    dt_dev_pixelpipe_update_history_main(dev);
     // pretend that everything is fine
     return TRUE;
   }

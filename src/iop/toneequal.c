@@ -558,7 +558,7 @@ static void invalidate_luminance_cache(dt_iop_module_t *const self)
   g->thumb_preview_hash = 0;
   g->ui_preview_hash = 0;
   dt_iop_gui_leave_critical_section(self);
-  dt_dev_pixel_pipe_refresh_preview(self->dev, FALSE);
+  dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
 }
 
 
@@ -2403,8 +2403,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     const gboolean was_mask = g->mask_display;
     g->mask_display = FALSE;
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_luminance_mask), FALSE);
-    if(was_mask) dt_dev_pixelpipe_update_main(self->dev);
-    dt_dev_process_all(self->dev);
+    if(was_mask) dt_dev_pixelpipe_refresh_main(self->dev, FALSE);
     dt_collection_hint_message(darktable.collection);
   }
   else
