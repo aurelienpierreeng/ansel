@@ -320,7 +320,7 @@ void expose(
     int32_t pointery)
 {
   cairo_save(cri);
-
+  
   dt_develop_t *dev = (dt_develop_t *)self->data;
   const int32_t border = dev->border_size;
 
@@ -2219,15 +2219,12 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
         sample->point[1] = mouse_y;
       }
     }
-
-    dt_control_queue_redraw_center();
     ret = TRUE;
   }
 
   // masks
   else if(dev->form_visible && dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which))
   {
-    dt_control_queue_redraw_center();
     _do_delayed_history_commit(dev);
     ret = TRUE;
   }
@@ -2236,7 +2233,6 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   else if(dev->gui_module && dev->gui_module->mouse_moved
     &&dev->gui_module->mouse_moved(dev->gui_module, x, y, pressure, which))
   {
-    dt_control_queue_redraw_center();
     ret = TRUE;
   }
 
@@ -2270,7 +2266,6 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     ctl->button_x = x;
     ctl->button_y = y;
 
-    dt_control_queue_redraw_center();
     dt_control_navigation_redraw();
     dt_dev_pixelpipe_change_zoom_main(dev);
   }
@@ -2296,7 +2291,6 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   if(dev->form_visible && dt_masks_events_button_released(dev->gui_module, x, y, which, state))
   {
     // Change on mask parameters and image output.
-    dt_control_queue_redraw_center();
     _do_delayed_history_commit(dev);
     return 1;
   }
@@ -2306,7 +2300,6 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
      && dev->gui_module->button_released(dev->gui_module, x, y, which, state))
   {
     // Click in modules should handle history changes internally.
-    dt_control_queue_redraw_center();
     return 1;
   }
 
@@ -2386,7 +2379,6 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
           dt_control_set_cursor(GDK_FLEUR);
         }
       }
-      dt_control_queue_redraw_center();
       return 1;
     }
 
@@ -2435,7 +2427,6 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   // masks
   if(dev->form_visible && dt_masks_events_button_pressed(dev->gui_module, x, y, pressure, which, type, state))
   {
-    dt_control_queue_redraw_center();
     _do_delayed_history_commit(dev);
     return 1;
   }
@@ -2531,8 +2522,6 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
   if(dev->form_visible && dt_masks_events_mouse_scrolled(dev->gui_module, x, y, up, state, delta_y))
   {
     // Scroll on masks changes their size, therefore mask parameters and image output.
-    // FIXME: use invalidate_top in the future
-    dt_control_queue_redraw_center();
     _do_delayed_history_commit(dev);
     return TRUE;
   }
@@ -2541,7 +2530,6 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
   if(dev->gui_module && dev->gui_module->enabled && dev->gui_module->scrolled && dev->gui_module->scrolled(dev->gui_module, x, y, up, state))
   {
     // Scroll in modules should handle history changes internally.
-    dt_control_queue_redraw_center();
     return TRUE;
   }
 
