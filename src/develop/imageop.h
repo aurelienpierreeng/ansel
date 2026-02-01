@@ -433,11 +433,6 @@ gboolean dt_iop_gui_module_is_visible(dt_iop_module_t *module);
 // initializes memory.darktable_iop_names
 void dt_iop_set_darktable_iop_table();
 
-/** queue a refresh of the center (FULL), preview, or second-preview windows, rerunning the pixelpipe from */
-/** the given module */
-void dt_iop_refresh_center(dt_iop_module_t *module);
-void dt_iop_refresh_preview(dt_iop_module_t *module);
-
 /** queue a delayed call to dt_dev_add_history_item to capture module parameters */
 void dt_iop_queue_history_update(dt_iop_module_t *module, gboolean extend_prior);
 /** cancel any previously-queued history update */

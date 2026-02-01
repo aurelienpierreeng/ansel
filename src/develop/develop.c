@@ -276,119 +276,6 @@ void dt_dev_process_all_real(dt_develop_t *dev)
   // else : join current pipe
 }
 
-void _dev_pixelpipe_set_dirty(dt_dev_pixelpipe_t *pipe)
-{
-  pipe->status = DT_DEV_PIXELPIPE_DIRTY;
-}
-
-void dt_dev_pixelpipe_rebuild_all(dt_develop_t *dev)
-{
-  if(!dev || !dev->gui_attached || !dev->pipe || !dev->preview_pipe) return;
-
-  dt_times_t start;
-  dt_get_times(&start);
-
-  _dev_pixelpipe_set_dirty(dev->preview_pipe);
-  dev->preview_pipe->changed |= DT_DEV_PIPE_REMOVE;
-  dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
-
-  _dev_pixelpipe_set_dirty(dev->pipe);
-  dev->pipe->changed |= DT_DEV_PIPE_REMOVE;
-  dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
-
-  dt_show_times(&start, "[dt_dev_pixelpipe_update_main] sending killswitch signal on all pipelines");
-}
-
-void dt_dev_pixelpipe_resync_main(dt_develop_t *dev)
-{
-  if(!dev || !dev->gui_attached || !dev->pipe) return;
-
-  _dev_pixelpipe_set_dirty(dev->pipe);
-  dev->pipe->changed |= DT_DEV_PIPE_SYNCH;
-  dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
-}
-
-void dt_dev_pixelpipe_resync_preview(dt_develop_t *dev)
-{
-  if(!dev || !dev->gui_attached || !dev->preview_pipe) return;
-
-  _dev_pixelpipe_set_dirty(dev->preview_pipe);
-  dev->preview_pipe->changed |= DT_DEV_PIPE_SYNCH;
-  dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
-}
-
-void dt_dev_pixelpipe_resync_all(dt_develop_t *dev)
-{
-  if(!dev || !dev->gui_attached || !dev->pipe || !dev->preview_pipe) return;
-
-  dt_dev_pixelpipe_resync_preview(dev);
-  dt_dev_pixelpipe_resync_main(dev);
-}
-
-void dt_dev_pixelpipe_update_main_real(dt_develop_t *dev)
-{
-  if(!dev || !dev->gui_attached || !dev->pipe) return;
-
-  dt_times_t start;
-  dt_get_times(&start);
-
-  _dev_pixelpipe_set_dirty(dev->pipe);
-  dev->pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
-  dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
-
-  dt_show_times(&start, "[dt_dev_pixelpipe_update_main] sending killswitch signal on main image pipeline");
-}
-
-void dt_dev_pixelpipe_update_preview_real(dt_develop_t *dev)
-{
-  if(!dev || !dev->gui_attached || !dev->preview_pipe) return;
-
-  dt_times_t start;
-  dt_get_times(&start);
-
-  _dev_pixelpipe_set_dirty(dev->preview_pipe);
-  dev->preview_pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
-  dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
-
-  dt_show_times(&start, "[dt_dev_pixelpipe_update_preview] sending killswitch signal on preview pipeline");
-}
-
-void dt_dev_pixelpipe_update_all_real(dt_develop_t *dev)
-{
-  if(!dev || !dev->gui_attached || !dev->pipe || !dev->preview_pipe) return;
-
-  dt_dev_pixelpipe_update_preview(dev);
-  dt_dev_pixelpipe_update_main(dev);
-}
-
-void dt_dev_pixelpipe_change_zoom_preview(dt_develop_t *dev)
-{
-  if(!dev || !dev->gui_attached || !dev->pipe) return;
-
-  dt_times_t start;
-  dt_get_times(&start);
-
-  _dev_pixelpipe_set_dirty(dev->preview_pipe);
-  dev->preview_pipe->changed |= DT_DEV_PIPE_ZOOMED;
-  dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
-
-  dt_show_times(&start, "[dt_dev_pixelpipe_change_zoom_main] sending killswitch signal on preview image pipeline");
-}
-
-void dt_dev_pixelpipe_change_zoom_main_real(dt_develop_t *dev)
-{
-  if(!dev || !dev->gui_attached || !dev->pipe) return;
-
-  dt_times_t start;
-  dt_get_times(&start);
-
-  _dev_pixelpipe_set_dirty(dev->pipe);
-  dev->pipe->changed |= DT_DEV_PIPE_ZOOMED;
-  dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
-
-  dt_show_times(&start, "[dt_dev_pixelpipe_change_zoom_main] sending killswitch signal on main image pipeline");
-}
-
 static void _flag_pipe(dt_dev_pixelpipe_t *pipe, gboolean error)
 {
   // If dt_dev_pixelpipe_process() returned with a state int == 1
@@ -763,16 +650,6 @@ void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y,
   fprintf(stdout, "BOUNDS: Y pos: %2.2f -> %2.2f [%2.2f %2.2f]\n",
     old_y, *dev_y, half_bh, 1.0f - half_bh);
 */
-}
-
-void dt_dev_reprocess_all(dt_develop_t *dev)
-{
-  dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
-  dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, -1);
-  dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
-
-  if(darktable.gui->reset || !dev || !dev->gui_attached) return;
-  dt_dev_pixelpipe_rebuild_all(dev);
 }
 
 void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch)

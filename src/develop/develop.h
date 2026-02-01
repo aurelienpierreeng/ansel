@@ -1,6 +1,7 @@
 /*
     This file is part of darktable,
     Copyright (C) 2009-2021 darktable developers.
+    Copyright (C) 2022-2026 Ansel developers
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -30,6 +31,7 @@
 #include "control/settings.h"
 #include "develop/imageop.h"
 #include "develop/dev_history.h"
+#include "develop/dev_pixelpipe.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -369,51 +371,6 @@ void dt_dev_process_all_real(dt_develop_t *dev);
 int dt_dev_load_image(dt_develop_t *dev, const int32_t imgid);
 /** checks if provided imgid is the image currently in develop */
 int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid);
-
-
-// Force a full rebuild of the pipe, needed when module order is changed.
-// Resync the full history, which may be expensive.
-// Pixelpipe cache will need to be flushed too when this is called,
-// for raster masks to work properly.
-void dt_dev_pixelpipe_rebuild_all(struct dt_develop_t *dev);
-
-void dt_dev_pixelpipe_update_main_real(dt_develop_t *dev);
-// Invalidate the main image preview in darkroom, resync only the last history item(s)
-// with pipeline nodes.
-// This is the most common usecase when interacting with modules and masks.
-#define dt_dev_pixelpipe_update_main(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_pixelpipe_update_main_real, (dev))
-
-void dt_dev_pixelpipe_update_preview_real(dt_develop_t *dev);
-// Invalidate the thumbnail preview in darkroom, resync only the last history item.
-#define dt_dev_pixelpipe_update_preview(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_pixelpipe_update_preview_real, (dev))
-
-void dt_dev_pixelpipe_update_all_real(dt_develop_t *dev);
-// Invalidate the main image and the thumbnail in darkroom, resync only the last history item.
-#define dt_dev_pixelpipe_update_all(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_pixelpipe_update_all_real, (dev))
-
-void dt_dev_pixelpipe_change_zoom_main_real(dt_develop_t *dev);
-// Invalidate the main image preview in darkroom.
-// This doesn't resync history at all, only update the coordinates of the region of interest (ROI).
-#define dt_dev_pixelpipe_change_zoom_main(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_pixelpipe_change_zoom_main_real, (dev))
-
-// Invalidate the preview in darkroom.
-// This doesn't resync history at all, only update the coordinates of the region of interest (ROI).
-void dt_dev_pixelpipe_change_zoom_preview(dt_develop_t *dev);
-
-// Invalidate the main image and the thumbnail in darkroom.
-// Resync the whole history with the pipeline nodes, which may be expensive.
-void dt_dev_pixelpipe_resync_all(dt_develop_t *dev);
-
-// Invalidate the main image in darkroom.
-// Resync the whole history with the pipeline nodes, which may be expensive.
-void dt_dev_pixelpipe_resync_main(dt_develop_t *dev);
-
-// Invalidate the thumbnail in darkroom.
-// Resync the whole history with the pipeline nodes, which may be expensive.
-void dt_dev_pixelpipe_resync_preview(dt_develop_t *dev);
-
-// Flush caches of dev pipes and force a full recompute
-void dt_dev_reprocess_all(dt_develop_t *dev);
 
 void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch);
 

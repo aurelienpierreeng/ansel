@@ -2727,28 +2727,6 @@ gboolean dt_iop_is_first_instance(GList *modules, dt_iop_module_t *module)
   return is_first;
 }
 
-void dt_iop_refresh_center(dt_iop_module_t *module)
-{
-  if(darktable.gui->reset) return;
-  dt_develop_t *dev = module->dev;
-  if (dev && dev->gui_attached)
-  {
-    dt_dev_pixelpipe_update_main(dev);
-    dt_dev_process_image(dev);
-  }
-}
-
-void dt_iop_refresh_preview(dt_iop_module_t *module)
-{
-  if(darktable.gui->reset) return;
-  dt_develop_t *dev = module->dev;
-  if (dev && dev->gui_attached)
-  {
-    dt_dev_pixelpipe_update_preview(dev);
-    dt_dev_process_preview(dev);
-  }
-}
-
 static gboolean _postponed_history_update(gpointer data)
 {
   dt_iop_module_t *self = (dt_iop_module_t*)data;

@@ -6,7 +6,7 @@
 
 static gboolean clear_caches_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
-  dt_dev_reprocess_all(darktable.develop);
+  dt_dev_pixelpipe_reset_all(darktable.develop);
   dt_control_queue_redraw();
   dt_dev_process_all(darktable.develop);
   return TRUE;

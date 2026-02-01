@@ -120,6 +120,7 @@ FILE(GLOB SOURCE_FILES
   "control/signal.c"
   "develop/develop.c"
   "develop/dev_history.c"
+  "develop/dev_pixelpipe.c"
   "develop/imageop.c"
   "develop/imageop_math.c"
   "develop/imageop_gui.c"

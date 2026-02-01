@@ -1617,7 +1617,7 @@ static gboolean rt_auto_levels_callback(GtkToggleButton *togglebutton, GdkEventB
   }
   dt_iop_gui_leave_critical_section(self);
 
-  dt_iop_refresh_center(self);
+  dt_dev_pixelpipe_refresh_main(self->dev, FALSE);
 
   return TRUE;
 }
@@ -1871,7 +1871,7 @@ static gboolean rt_showmask_callback(GtkToggleButton *togglebutton, GdkEventButt
   if(module->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), 1);
   dt_iop_request_focus(module);
 
-  dt_iop_refresh_center(module);
+  dt_dev_pixelpipe_refresh_main(module->dev, FALSE);
 
   gtk_toggle_button_set_active(togglebutton, g->mask_display);
   return TRUE;
@@ -1887,7 +1887,7 @@ static gboolean rt_suppress_callback(GtkToggleButton *togglebutton, GdkEventButt
   if(module->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), 1);
   dt_iop_request_focus(module);
 
-  dt_iop_refresh_center(module);
+  dt_dev_pixelpipe_refresh_main(module->dev, FALSE);
 
   gtk_toggle_button_set_active(togglebutton, g->suppress_mask);
   return TRUE;
@@ -2028,7 +2028,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 
     // if we are switching between display modes we have to reprocess the main image
     if(g->display_wavelet_scale || g->mask_display || g->suppress_mask)
-      dt_iop_refresh_center(self);
+      dt_dev_pixelpipe_refresh_main(self->dev, FALSE);
   }
 }
 
