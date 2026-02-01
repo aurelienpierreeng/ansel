@@ -358,7 +358,7 @@ void dt_dev_cleanup(dt_develop_t *dev);
 void dt_dev_process_image_job(dt_develop_t *dev);
 void dt_dev_process_preview_job(dt_develop_t *dev);
 // launch jobs above
-void dt_dev_process_image(dt_develop_t *dev);
+void dt_dev_process_main(dt_develop_t *dev);
 void dt_dev_process_preview(dt_develop_t *dev);
 
 // Lazy helpers that will update GUI pipelines (main image and small preview)

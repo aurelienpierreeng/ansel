@@ -243,11 +243,11 @@ void dt_dev_cleanup(dt_develop_t *dev)
   dt_conf_set_float("darkroom/ui/overexposed/upper", dev->overexposed.upper);
 }
 
-void dt_dev_process_image(dt_develop_t *dev)
+void dt_dev_process_main(dt_develop_t *dev)
 {
   if(!dev->gui_attached) return;
   const int err
-      = dt_control_add_job_res(darktable.control, dt_dev_process_image_job_create(dev), DT_CTL_WORKER_DARKROOM_THUMB);
+      = dt_control_add_job_res(darktable.control, dt_dev_process_image_job_create(dev), DT_CTL_WORKER_DARKROOM_MAIN);
   if(err) fprintf(stderr, "[dev_process_image] job queue exceeded!\n");
 }
 
@@ -255,7 +255,7 @@ void dt_dev_process_preview(dt_develop_t *dev)
 {
   if(!dev->gui_attached) return;
   const int err
-      = dt_control_add_job_res(darktable.control, dt_dev_process_preview_job_create(dev), DT_CTL_WORKER_DARKROOM_MAIN);
+      = dt_control_add_job_res(darktable.control, dt_dev_process_preview_job_create(dev), DT_CTL_WORKER_DARKROOM_THUMB);
   if(err) fprintf(stderr, "[dev_process_preview] job queue exceeded!\n");
 }
 
@@ -270,7 +270,7 @@ void dt_dev_process_all_real(dt_develop_t *dev)
   // else : join current pipe
 
   if(!dev->pipe->running)
-    dt_dev_process_image(dev);
+    dt_dev_process_main(dev);
   // else : join current pipe
 }
 

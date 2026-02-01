@@ -89,7 +89,7 @@ void dt_dev_pixelpipe_refresh_main(dt_develop_t *dev, gboolean full)
   else
     dt_dev_pixelpipe_update_history_main(dev);
 
-  dt_dev_process_image(dev);
+  dt_dev_process_main(dev);
 
   dt_control_queue_redraw_center();
 }
@@ -138,6 +138,6 @@ void dt_dev_pixelpipe_change_zoom_main(dt_develop_t *dev)
 {
   if (!dev || !dev->gui_attached) return;
   dt_dev_pixelpipe_update_zoom_main(dev);
-  dt_dev_process_image(dev);
+  dt_dev_process_main(dev);
   dt_control_queue_redraw();
 }
