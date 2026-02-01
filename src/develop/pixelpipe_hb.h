@@ -238,6 +238,8 @@ typedef struct dt_dev_pixelpipe_t
 
 struct dt_develop_t;
 
+char *dt_pixelpipe_get_pipe_name(dt_dev_pixelpipe_type_t pipe_type);
+
 // inits the pixelpipe with plain passthrough input/output and empty input and default caching settings.
 int dt_dev_pixelpipe_init(dt_dev_pixelpipe_t *pipe);
 // inits the preview pixelpipe with plain passthrough input/output and empty input and default caching
@@ -259,29 +261,8 @@ void dt_dev_pixelpipe_set_input(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *d
 // set some metadata for colorout to avoid race conditions.
 void dt_dev_pixelpipe_set_icc(dt_dev_pixelpipe_t *pipe, dt_colorspaces_color_profile_type_t icc_type,
                               const gchar *icc_filename, dt_iop_color_intent_t icc_intent);
-
-// returns the dimensions of the full image after processing.
-void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, const int width_in,
-                                  const int height_in, int *width, int *height);
-void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, const struct dt_iop_roi_t roi_out);
-
-// Check if current_module is performing operations that dev->gui_module (active GUI module)
-// wants disabled. Use that to disable some features of current_module.
-// This is used mostly with distortion operations when the active GUI module
-// needs a full-ROI/undistorted input for its own editing mode,
-// like moving the framing on the full image.
-// WARNING: this doesn't check WHAT particular operations are performed and
-// and what operations should be cancelled (nor if they should all be cancelled).
-// So far, all the code uses that to prevent distortions on module output, masks and roi_out changes (cropping).
-// Meaning ANY of these operations will disable ALL of these operations.
-gboolean dt_dev_pixelpipe_activemodule_disables_currentmodule(struct dt_develop_t *dev,
-                                                              struct dt_iop_module_t *current_module);
 // destroys all allocated data.
 void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe);
-
-// wrapper for cleanup_nodes, create_nodes, synch_all and synch_top, decides upon changed event which one to
-// take on. also locks dev->history_mutex.
-void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
 // cleanup all nodes except clean input/output
 void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe);
 // sync with develop_t history stack from scratch (new node added, have to pop old ones)
@@ -320,10 +301,6 @@ gboolean dt_dev_write_rawdetail_mask_cl(dt_dev_pixelpipe_iop_t *piece, cl_mem in
 
 // helper function writing the pipe-processed ctmask data to dest
 float *dt_dev_distort_detail_mask(const dt_dev_pixelpipe_t *pipe, float *src, const struct dt_iop_module_t *target_module);
-
-// Compute the sequential hash over the pipeline for each module.
-// Need to run after dt_dev_pixelpipe_get_roi_in() has updated processed ROI in/out
-void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
 
 
 /**
