@@ -962,8 +962,6 @@ static void _brush_get_distance(float x, float y, float as, dt_masks_form_gui_t 
   *near = -1;
   *dist = FLT_MAX;
 
-  if(!gui) return;
-
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return;
 
