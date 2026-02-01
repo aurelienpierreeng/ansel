@@ -174,7 +174,7 @@ void dt_masks_gui_form_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, i
   {
     if(form->type & DT_MASKS_CLONE)
       dt_masks_get_points_border(darktable.develop, form, &gpt->source, &gpt->source_count, NULL, NULL, TRUE, module);
-    gui->pipe_hash = darktable.develop->preview_pipe->backbuf_hash;
+    gui->pipe_hash = darktable.develop->preview_pipe->backbuf_pipe_hash;
     gui->formid = form->formid;
   }
 }
@@ -299,7 +299,7 @@ void dt_masks_gui_form_test_create(dt_masks_form_t *form, dt_masks_form_gui_t *g
   // we test if the image has changed
   if(gui->pipe_hash > 0)
   {
-    if(gui->pipe_hash != darktable.develop->preview_pipe->backbuf_hash)
+    if(gui->pipe_hash != darktable.develop->preview_pipe->backbuf_pipe_hash)
     {
       gui->pipe_hash = gui->formid = 0;
       g_list_free_full(gui->points, dt_masks_form_gui_points_free);

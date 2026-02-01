@@ -665,7 +665,7 @@ static int _iop_clipping_set_max_clip(struct dt_iop_module_t *self)
   dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
 
-  if(g->clip_max_pipe_hash == self->dev->preview_pipe->backbuf_hash) return 1;
+  if(g->clip_max_pipe_hash == self->dev->preview_pipe->backbuf_pipe_hash) return 1;
 
   // we want to know the size of the actual buffer
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
@@ -692,7 +692,7 @@ static int _iop_clipping_set_max_clip(struct dt_iop_module_t *self)
   g->clip_w = fminf((points[6] - points[4]) / self->dev->preview_pipe->backbuf_width, g->clip_max_w);
   g->clip_h = fminf((points[7] - points[5]) / self->dev->preview_pipe->backbuf_height, g->clip_max_h);
 
-  g->clip_max_pipe_hash = self->dev->preview_pipe->backbuf_hash;
+  g->clip_max_pipe_hash = self->dev->preview_pipe->backbuf_pipe_hash;
   return 1;
 }
 

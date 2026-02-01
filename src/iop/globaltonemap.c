@@ -179,7 +179,7 @@ static inline void process_drago(struct dt_iop_module_t *self, dt_dev_pixelpipe_
     // is NAN which initiates special handling below to avoid inconsistent results. in all
     // other cases we make sure that the preview pipe has left us with proper readings for
     // lwmax. if data are not yet there we need to wait (with timeout).
-    if(hash != 0 && !dt_dev_sync_pixelpipe_hash(self->dev, piece->pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, &self->gui_lock, &g->hash))
+    if(hash != piece->global_hash)
       dt_control_log(_("inconsistent output"));
 
     dt_iop_gui_enter_critical_section(self);
@@ -210,7 +210,7 @@ static inline void process_drago(struct dt_iop_module_t *self, dt_dev_pixelpipe_
   // PREVIEW pixelpipe stores lwmax
   if(self->dev->gui_attached && g && (piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW) == DT_DEV_PIXELPIPE_PREVIEW)
   {
-    uint64_t hash = dt_dev_hash(self->dev, piece->pipe);
+    uint64_t hash = piece->global_hash;
     dt_iop_gui_enter_critical_section(self);
     g->lwmax = lwmax;
     g->hash = hash;

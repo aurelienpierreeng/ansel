@@ -443,8 +443,9 @@ void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
       }
     }
 
-    // No history found, commit default params if module is enabled by default
-    if(!found_history && piece->enabled)
+    // No history found, commit default params even if module is disabled because some
+    // may self-enable conditionnaly there
+    if(!found_history)
     {
       dt_iop_commit_params(piece->module, piece->module->default_params, piece->module->default_blendop_params,
                            pipe, piece);
@@ -462,6 +463,7 @@ void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
   }
 
   pipe->resync_timestamp = time(NULL);
+  pipe->history_hash = dt_dev_history_get_hash(dev);
 }
 
 void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
@@ -519,6 +521,7 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   }
 
   pipe->resync_timestamp = time(NULL);
+  pipe->history_hash = dt_dev_history_get_hash(dev);
 }
 
 void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
@@ -580,4 +583,14 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   dt_show_times_f(&start, "[dt_dev_pixelpipe_change] pipeline resync on the current modules stack", "for pipe %s", type);
+}
+
+gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
+{
+  return dt_dev_history_get_hash(dev) == pipe->backbuf_hist_hash;
+}
+
+gboolean dt_dev_pixelpipe_is_pipeline_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
+{
+  return dt_dev_history_get_hash(dev) == pipe->history_hash;
 }

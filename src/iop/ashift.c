@@ -3115,7 +3115,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     const int isflipped = fabs(fmod(alpha + M_PI, M_PI) - M_PI / 2.0f) < M_PI / 4.0f ? 1 : 0;
 
     // did modules prior to this one in pixelpipe have changed? -> check via hash value
-    uint64_t hash = dt_dev_hash(self->dev, self->dev->preview_pipe);
+    uint64_t hash = piece->global_hash;
 
     dt_iop_gui_enter_critical_section(self);
     g->isflipped = isflipped;
@@ -3248,7 +3248,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     const int isflipped = fabs(fmod(alpha + M_PI, M_PI) - M_PI / 2.0f) < M_PI / 4.0f ? 1 : 0;
 
     // do modules coming before this one in pixelpipe have changed? -> check via hash value
-    uint64_t hash = dt_dev_hash(self->dev, self->dev->preview_pipe);
+    uint64_t hash = piece->global_hash;
 
     dt_iop_gui_enter_critical_section(self);
     g->isflipped = isflipped;
@@ -3891,7 +3891,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->fitting || g->lines == NULL || !g->buf || !self->enabled) return;
 
   // get hash value that changes if distortions from here to the end of the pixelpipe changed
-  const uint64_t hash = dt_dev_hash(dev, dev->preview_pipe);
+  const uint64_t hash = dev->preview_pipe->hash;
   // get hash value that changes if coordinates of lines have changed
   const uint64_t lines_hash = _get_lines_hash(g->lines, g->lines_count);
 

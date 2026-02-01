@@ -155,18 +155,22 @@ typedef struct dt_dev_pixelpipe_t
   void *backbuf;
   size_t backbuf_width, backbuf_height;
 
-  // Validity checksum of the last produced image backbuffer
-  uint64_t backbuf_hash;
+  // Validity checksum of the last produced image backbuffer, 
+  // with regard to the pipeline (topology & history) that produced it.
+  // It is set to pipe->hash once the pipeline returns with no error.
+  uint64_t backbuf_pipe_hash;
 
-  // Validity checksum of the last node (module) after the last
-  // synchronization between dev history and pipe nodes.
+  // Validity checksum of the last produced image backbuffe,
+  // with regard to the history that produced it.
+  // It is set to pipe->last_history_hash once the pipeline returns with no error.
+  uint64_t backbuf_hist_hash;
+
+  // Validity checksum of whole pipeline, 
+  // taken as the global hash of the last pipe node (module),
+  // after the last synchronization between dev history and pipe nodes completed.
   // This is computed in dt_dev_pixelpipe_get_global_hash
   // ahead of processing image.
   uint64_t hash;
-
-  // NOTE: if backbuf_hash == hash, then there is nothing to compute.
-  // if backbuf_hash != hash, either the last pipe couldn't finish (errors or interruption),
-  // or a new resync happened in-between.
 
   // Timestamp of the last resynchronization between pipe nodes and history
   time_t resync_timestamp;
@@ -228,6 +232,11 @@ typedef struct dt_dev_pixelpipe_t
   // that's because the sync_top option can't assume only one history
   // item was added since the last synchronization.
   uint64_t last_history_hash;
+
+  // hash of the whole history stack at the time of synchonization
+  // between pipe and history. This is a local copy of 
+  // dev_history_get_hash()
+  uint64_t history_hash;
 
   // Modules can set this to TRUE internally so the pipeline will
   // restart right away, in the same thread.

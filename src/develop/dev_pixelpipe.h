@@ -122,6 +122,12 @@ uint64_t dt_dev_pixelpipe_node_hash(struct dt_dev_pixelpipe_t *pipe,
 // Need to run after dt_dev_pixelpipe_get_roi_in() has updated processed ROI in/out
 void dt_pixelpipe_get_global_hash(struct dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
 
+// Return TRUE if the current backbuffer for the current pipe is in sync with current dev history stack.
+gboolean dt_dev_pixelpipe_is_backbufer_valid(struct dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
+
+// Return TRUE if the current pipeline (topology and node parameters) is in sync with current dev history stack.
+gboolean dt_dev_pixelpipe_is_pipeline_valid(struct dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
+
 
 #ifdef __cplusplus
 }

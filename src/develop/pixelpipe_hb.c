@@ -187,7 +187,9 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->nodes = NULL;
   pipe->backbuf = NULL;
   pipe->hash = 0;
-  pipe->backbuf_hash = 0;
+  pipe->history_hash = 0;
+  pipe->backbuf_pipe_hash = 0;
+  pipe->backbuf_hist_hash = 0;
   pipe->backbuf_timestamp = 0;
   pipe->resync_timestamp = 0;
 
@@ -1711,14 +1713,15 @@ static void _print_opencl_errors(int error, dt_dev_pixelpipe_t *pipe)
 static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, void *buf, dt_iop_roi_t roi, int pos)
 {
   const dt_dev_pixelpipe_iop_t *last_module = _last_node_in_pipe(pipe);
-  pipe->backbuf_hash = dt_dev_pixelpipe_node_hash(pipe, last_module, roi, pos);
+  pipe->backbuf_pipe_hash = dt_dev_pixelpipe_node_hash(pipe, last_module, roi, pos);
+  pipe->backbuf_hist_hash = pipe->history_hash;
   pipe->backbuf = buf;
   pipe->backbuf_width = roi.width;
   pipe->backbuf_height = roi.height;
   pipe->backbuf_timestamp = time(NULL);
 
   // Note: when we know this is always true, we can use pipe->hash directly
-  if(pipe->hash != pipe->backbuf_hash)
+  if(pipe->hash != pipe->backbuf_pipe_hash)
     fprintf(stdout, "inconsistency in pipe backbuf hash. Please report it\n");
 }
 
@@ -1752,7 +1755,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
     // deleted from the cache until you manually decrease it 
     // when you are done consuming it.
 
-    if(pipe->backbuf_hash != pipe->hash)
+    if(pipe->backbuf_pipe_hash != pipe->hash)
       _update_backbuf_cache_reference(pipe, buf, roi, pos);
     // else : backbuf ref is still up-to-date
 
