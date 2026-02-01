@@ -324,6 +324,11 @@ void expose(
   dt_develop_t *dev = (dt_develop_t *)self->data;
   const int32_t border = dev->border_size;
 
+  // Nothing to draw at all, meaning we just opened darkroom. 
+  // Exit now to avoid useless surface allocs
+  if(dev->preview_pipe->backbuf == NULL && dev->pipe->backbuf == NULL) 
+    return;
+
   dt_pthread_mutex_t *mutex = NULL;
   int stride;
 
@@ -331,8 +336,21 @@ void expose(
   static int image_surface_width = 0;
   static int image_surface_height = 0;
   static int32_t image_surface_imgid = UNKNOWN_IMAGE;
+  static uint64_t main_hash = 0;
+  static uint64_t preview_hash = 0;
 
-  if(image_surface_width != width || image_surface_height != height || image_surface == NULL)
+  // Valid means : 
+  // 1. up to date with current history stack (don't paint transient renderings if any)
+  // 2. buffer exists
+  // 3. ROI (size and zoom) are ok -> that's especially important to limit glitches 
+  // If all these conditions are not met, try to keep the previous image_surface unchanged
+  const gboolean has_main_image = dt_dev_pixelpipe_is_backbufer_valid(dev->pipe, dev);
+  const gboolean has_preview_image = dt_dev_pixelpipe_is_backbufer_valid(dev->preview_pipe, dev);
+
+  if(image_surface_width != width 
+    || image_surface_height != height 
+    || image_surface == NULL 
+    || image_surface_imgid != dev->image_storage.id)
   {
     // create double-buffered image to draw on, to make modules draw more fluently.
     image_surface_width = width;
@@ -340,7 +358,9 @@ void expose(
     if(image_surface) cairo_surface_destroy(image_surface);
     image_surface = dt_cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
     image_surface_imgid = UNKNOWN_IMAGE; // invalidate old stuff
+    fprintf(stdout, "nuking surface\n");
   }
+
   cairo_surface_t *surface;
   cairo_t *cr = cairo_create(image_surface);
 
@@ -351,15 +371,18 @@ void expose(
   else
     _colormanage_ui_color((float)dt_conf_get_int("display/brightness"), 0., 0., bg_color);
 
-  // Paint background color
-  cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
-  cairo_paint(cr);
-
-  if(!dev->pipe->processing && dev->pipe->output_backbuf && dev->pipe->output_imgid == dev->image_storage.id)
+  if(has_main_image && main_hash != dev->pipe->hash)
   {
+    // If we have a valid image use it, except if it's still the same as previously.
+    // In this case, we will reuse the buffered surface.
+
     // When zoomed-in more than 100%, it's common practice to not smoothen the main view.
     // Also we already scale the image 1:1 wrt GUI size.
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+
+    // Paint background color
+    cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
+    cairo_paint(cr);
 
     // draw image
     mutex = &dev->pipe->backbuf_mutex;
@@ -387,13 +410,27 @@ void expose(
     cairo_surface_destroy(surface);
     dt_pthread_mutex_unlock(mutex);
     image_surface_imgid = dev->image_storage.id;
+    main_hash = dev->pipe->hash;
+
+    // fprintf(stdout, "printing darkroom from the real thing\n");
   }
   
   // fallback to preview pipe if main pipe is not ready
-  else if(dev->preview_pipe->output_backbuf && dev->preview_pipe->output_imgid == dev->image_storage.id)
+  else if(!has_main_image 
+           && main_hash != dev->pipe->hash 
+           && has_preview_image 
+           && preview_hash != dev->preview_pipe->hash)
   {
+    // If we don't have a valid image but we have a preview placeholder, use it, 
+    // except if it's still the same as previously.
+    // In this case, we will reuse the buffered surface.
+
     // When using downscaled fallback, make it smooth to limit discrepancies with the real thing
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
+
+    // Paint background color
+    cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
+    cairo_paint(cr);
 
     // draw preview
     mutex = &dev->preview_pipe->backbuf_mutex;
@@ -435,6 +472,20 @@ void expose(
     cairo_surface_destroy(surface);
     dt_pthread_mutex_unlock(mutex);
     image_surface_imgid = dev->image_storage.id;
+    preview_hash = dev->preview_pipe->hash;
+
+    //fprintf(stdout, "printing darkroom from preview placeholder\n");
+  }
+  else if(image_surface && image_surface_imgid == dev->image_storage.id)
+  {
+    // try to keep buffered image_surface from previous run
+    //fprintf(stdout, "printing darkroom from buffered surface\n");
+  }
+  else
+  {
+    // nothing to draw
+    //fprintf(stdout, "nothing to draw\n");
+    return;
   }
 
   cairo_restore(cri);

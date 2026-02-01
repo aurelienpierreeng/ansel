@@ -3666,6 +3666,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
 
+  if(!dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe, self->dev))
+    return;
+
   // the usual rescaling stuff
   const float wd = dev->preview_pipe->backbuf_width;
   const float ht = dev->preview_pipe->backbuf_height;
@@ -3682,9 +3685,12 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     
     cairo_restore(cr);
   }
+
+  if(!g->editing) return; // nothing to draw
+
   // Fast path: rotation setting by inputting horizon line.
   // Conflicts with editing mode where painting with button pressed is understood as validating lines.
-  if(g->straightening && !g->editing)
+  if(g->straightening)
   {
     cairo_save(cr);
 

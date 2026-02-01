@@ -1,5 +1,4 @@
 
-#include "control/control.h"
 #include "common/debug.h"
 #include "common/darktable.h"
 #include "common/dtpthread.h"
@@ -91,8 +90,6 @@ void dt_dev_pixelpipe_refresh_main(dt_develop_t *dev, gboolean full)
     dt_dev_pixelpipe_update_history_main(dev);
 
   dt_dev_process_main(dev);
-
-  dt_control_queue_redraw_center();
 }
 
 void dt_dev_pixelpipe_refresh_preview(dt_develop_t *dev, gboolean full)
@@ -105,10 +102,6 @@ void dt_dev_pixelpipe_refresh_preview(dt_develop_t *dev, gboolean full)
     dt_dev_pixelpipe_update_preview(dev);
 
   dt_dev_process_preview(dev);
-
-  // Note: since preview pipe provides data to many GUI overlays
-  // on the main image, we need to redraw everything
-  dt_control_queue_redraw();
 }
 
 void dt_dev_pixelpipe_refresh_all(dt_develop_t *dev, gboolean full)
@@ -131,8 +124,6 @@ void dt_dev_pixelpipe_refresh_all(dt_develop_t *dev, gboolean full)
   }
 
   dt_dev_process_all(dev);
-
-  dt_control_queue_redraw();
 }
 
 void dt_dev_pixelpipe_change_zoom_main(dt_develop_t *dev)
@@ -140,7 +131,6 @@ void dt_dev_pixelpipe_change_zoom_main(dt_develop_t *dev)
   if (!dev || !dev->gui_attached) return;
   dt_dev_pixelpipe_update_zoom_main(dev);
   dt_dev_process_main(dev);
-  dt_control_queue_redraw();
 }
 
 gboolean dt_dev_pixelpipe_activemodule_disables_currentmodule(struct dt_develop_t *dev, struct dt_iop_module_t *current_module)
@@ -587,7 +577,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 
 gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 {
-  return dt_dev_history_get_hash(dev) == pipe->backbuf_hist_hash;
+  return dt_dev_history_get_hash(dev) == pipe->backbuf_hist_hash && pipe->backbuf != NULL;
 }
 
 gboolean dt_dev_pixelpipe_is_pipeline_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
