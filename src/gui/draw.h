@@ -562,8 +562,7 @@ static inline void dt_draw_node(cairo_t *cr, const gboolean square, const gboole
 {
   cairo_save(cr);
 
-  const float node_width = DT_DRAW_RADIUS_NODE / zoom_scale;
-
+  const float node_width = (selected || point_action) ? DT_DRAW_RADIUS_NODE_SELECTED / zoom_scale : DT_DRAW_RADIUS_NODE / zoom_scale;
   // square for corner nodes, circle for others (curve)
   if(square)
   {
