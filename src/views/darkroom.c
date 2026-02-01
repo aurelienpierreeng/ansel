@@ -371,110 +371,115 @@ void expose(
   else
     _colormanage_ui_color((float)dt_conf_get_int("display/brightness"), 0., 0., bg_color);
 
-  if(has_main_image && main_hash != dev->pipe->hash)
+  if(has_main_image)
   {
-    // If we have a valid image use it, except if it's still the same as previously.
-    // In this case, we will reuse the buffered surface.
-
-    // When zoomed-in more than 100%, it's common practice to not smoothen the main view.
-    // Also we already scale the image 1:1 wrt GUI size.
-    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
-
-    // Paint background color
-    cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
-    cairo_paint(cr);
-
-    // draw image
-    mutex = &dev->pipe->backbuf_mutex;
-    dt_pthread_mutex_lock(mutex);
-    float wd = dev->pipe->output_backbuf_width;
-    float ht = dev->pipe->output_backbuf_height;
-    stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
-    surface = dt_cairo_image_surface_create_for_data(dev->pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
-    wd /= darktable.gui->ppd;
-    ht /= darktable.gui->ppd;
-    cairo_translate(cr, .5f * (width - wd), .5f * (height - ht));
-
-    if(dev->iso_12646.enabled)
+    if(main_hash != dev->pipe->hash)
     {
-      // draw the white frame around picture
-      cairo_rectangle(cr, -border * .5f, -border * .5f, wd + border, ht + border);
-      cairo_set_source_rgb(cr, 1., 1., 1.);
-      cairo_fill(cr);
+      // If we have a valid image use it, except if it's still the same as previously.
+      // In this case, we will reuse the buffered surface.
+
+      // When zoomed-in more than 100%, it's common practice to not smoothen the main view.
+      // Also we already scale the image 1:1 wrt GUI size.
+      cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+
+      // Paint background color
+      cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
+      cairo_paint(cr);
+
+      // draw image
+      mutex = &dev->pipe->backbuf_mutex;
+      dt_pthread_mutex_lock(mutex);
+      float wd = dev->pipe->output_backbuf_width;
+      float ht = dev->pipe->output_backbuf_height;
+      stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
+      surface = dt_cairo_image_surface_create_for_data(dev->pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
+      wd /= darktable.gui->ppd;
+      ht /= darktable.gui->ppd;
+      cairo_translate(cr, .5f * (width - wd), .5f * (height - ht));
+
+      if(dev->iso_12646.enabled)
+      {
+        // draw the white frame around picture
+        cairo_rectangle(cr, -border * .5f, -border * .5f, wd + border, ht + border);
+        cairo_set_source_rgb(cr, 1., 1., 1.);
+        cairo_fill(cr);
+      }
+
+      cairo_rectangle(cr, 0, 0, wd, ht);
+      cairo_set_source_surface(cr, surface, 0, 0);
+      cairo_paint(cr);
+
+      cairo_surface_destroy(surface);
+      dt_pthread_mutex_unlock(mutex);
+      image_surface_imgid = dev->image_storage.id;
+      main_hash = dev->pipe->hash;
+
+      // fprintf(stdout, "printing darkroom from the real thing\n");
     }
-
-    cairo_rectangle(cr, 0, 0, wd, ht);
-    cairo_set_source_surface(cr, surface, 0, 0);
-    cairo_paint(cr);
-
-    cairo_surface_destroy(surface);
-    dt_pthread_mutex_unlock(mutex);
-    image_surface_imgid = dev->image_storage.id;
-    main_hash = dev->pipe->hash;
-
-    // fprintf(stdout, "printing darkroom from the real thing\n");
   }
   
   // fallback to preview pipe if main pipe is not ready
-  else if(!has_main_image 
-           && main_hash != dev->pipe->hash 
-           && has_preview_image 
-           && preview_hash != dev->preview_pipe->hash)
+  else if(has_preview_image)
   {
-    // If we don't have a valid image but we have a preview placeholder, use it, 
-    // except if it's still the same as previously.
-    // In this case, we will reuse the buffered surface.
-
-    // When using downscaled fallback, make it smooth to limit discrepancies with the real thing
-    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
-
-    // Paint background color
-    cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
-    cairo_paint(cr);
-
-    // draw preview
-    mutex = &dev->preview_pipe->backbuf_mutex;
-    dt_pthread_mutex_lock(mutex);
-    float pr_wd = dev->preview_pipe->output_backbuf_width;
-    float pr_ht = dev->preview_pipe->output_backbuf_height;
-    
-    stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, pr_wd);
-    surface = cairo_image_surface_create_for_data(dev->preview_pipe->output_backbuf, CAIRO_FORMAT_RGB24, pr_wd, pr_ht, stride);
-
-    if(dev->iso_12646.enabled)
+    if(preview_hash != dev->preview_pipe->hash 
+      || main_hash != dev->pipe->hash) // main hash also contains ROI changes, aka zoom & pan in GUI
     {
-      // Because the preview pipe renders an unclipped image, we need to find
-      // the preview's ROI (Region of Interest) dimensions in widget space, then
-      // draw a white rectangle around it.
-      const float scale = dt_dev_get_fit_scale(dev);
-      const float roi_wd = fminf(pr_wd * scale, dev->width);
-      const float roi_ht = fminf(pr_ht * scale, dev->height);
+      // Cases in which we want the refresh placeholder preview in the surface :
+      // 1. main image needs a refresh but we have no candidate
+      // 2. the buffered surface still contains an outdated main image
+      // 3. the buffered surface contains an outdated preview placeholder
+
+      // When using downscaled fallback, make it smooth to limit discrepancies with the real thing
+      cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
+
+      // Paint background color
+      cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
+      cairo_paint(cr);
+
+      // draw preview
+      mutex = &dev->preview_pipe->backbuf_mutex;
+      dt_pthread_mutex_lock(mutex);
+      float pr_wd = dev->preview_pipe->output_backbuf_width;
+      float pr_ht = dev->preview_pipe->output_backbuf_height;
       
-      cairo_save(cr);
-      // Position surface at preview's ROI top-left corner.
-      cairo_translate(cr, .5f * (width - roi_wd),
-                          .5f * (height - roi_ht));
+      stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, pr_wd);
+      surface = cairo_image_surface_create_for_data(dev->preview_pipe->output_backbuf, CAIRO_FORMAT_RGB24, pr_wd, pr_ht, stride);
 
-      cairo_rectangle(cr, -border * .5f, -border * .5f, roi_wd + border, roi_ht + border);
-      cairo_set_source_rgb(cr, 1.f, 1.f, 1.f);
+      if(dev->iso_12646.enabled)
+      {
+        // Because the preview pipe renders an unclipped image, we need to find
+        // the preview's ROI (Region of Interest) dimensions in widget space, then
+        // draw a white rectangle around it.
+        const float scale = dt_dev_get_fit_scale(dev);
+        const float roi_wd = fminf(pr_wd * scale, dev->width);
+        const float roi_ht = fminf(pr_ht * scale, dev->height);
+        
+        cairo_save(cr);
+        // Position surface at preview's ROI top-left corner.
+        cairo_translate(cr, .5f * (width - roi_wd),
+                            .5f * (height - roi_ht));
+
+        cairo_rectangle(cr, -border * .5f, -border * .5f, roi_wd + border, roi_ht + border);
+        cairo_set_source_rgb(cr, 1.f, 1.f, 1.f);
+        cairo_fill(cr);
+        cairo_restore(cr);
+      }
+
+      // clip to image area only
+      dt_dev_clip_roi(dev, cr, width, height);
+      dt_dev_rescale_roi(dev, cr, width, height);
+
+      cairo_rectangle(cr, 0, 0, pr_wd, pr_ht);
+      cairo_set_source_surface(cr, surface, 0, 0);
       cairo_fill(cr);
-      cairo_restore(cr);
+      
+      cairo_surface_destroy(surface);
+      dt_pthread_mutex_unlock(mutex);
+      image_surface_imgid = dev->image_storage.id;
+      preview_hash = dev->preview_pipe->hash;
+
+      //fprintf(stdout, "printing darkroom from preview placeholder\n");
     }
-
-    // clip to image area only
-    dt_dev_clip_roi(dev, cr, width, height);
-    dt_dev_rescale_roi(dev, cr, width, height);
-
-    cairo_rectangle(cr, 0, 0, pr_wd, pr_ht);
-    cairo_set_source_surface(cr, surface, 0, 0);
-    cairo_fill(cr);
-    
-    cairo_surface_destroy(surface);
-    dt_pthread_mutex_unlock(mutex);
-    image_surface_imgid = dev->image_storage.id;
-    preview_hash = dev->preview_pipe->hash;
-
-    //fprintf(stdout, "printing darkroom from preview placeholder\n");
   }
   else if(image_surface && image_surface_imgid == dev->image_storage.id)
   {
