@@ -363,6 +363,9 @@ int32_t _get_image_buffer(dt_job_t *job)
   dt_thumbnail_t *thumb = dt_control_job_get_params(job);
   thumb_return_if_fails(thumb, 1);
 
+  // The job was cancelled on the queue. Good chances of having thumb destroyed anytime soon.
+  if(dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED) return 1;
+
   // Read and cache the thumb data now, while we have it. And lock it.
   dt_pthread_mutex_lock(&thumb->lock);
 
@@ -450,6 +453,9 @@ int32_t _get_image_buffer(dt_job_t *job)
     }
     dt_free_align(full_res_thumb);
   }
+
+  // The job was cancelled on the queue. Good chances of having thumb destroyed anytime soon.
+  if(dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED) return 1;
 
   // Write temporary surface into actual image surface if we still have a widget to paint on
   if(thumb && thumb->widget && thumb->w_main)

@@ -1750,6 +1750,11 @@ void _dt_thumbtable_empty_list(dt_thumbtable_t *table)
     for(GList *l = g_list_first(table->list); l; l = g_list_next(l))
     {
       dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
+      
+      // Kill ASAP background jobs rendering this thumbnail
+      if(thumb->job && dt_control_job_get_state(thumb->job) < DT_JOB_STATE_FINISHED) 
+        dt_control_job_cancel(thumb->job);
+
       gtk_widget_hide(thumb->widget);
       g_idle_add((GSourceFunc)dt_thumbnail_destroy, thumb);
     }
