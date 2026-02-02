@@ -185,8 +185,16 @@ void dt_dev_cleanup(dt_develop_t *dev)
   if(dev->display_histogram.buffer) dt_free_align(dev->display_histogram.buffer);
 
   // On dev cleanup, it is expected to force an history save
-  if(dev->auto_save_timeout) g_source_remove(dev->auto_save_timeout);
-  if(dev->drawing_timeout) g_source_remove(dev->drawing_timeout);
+  if(dev->auto_save_timeout) 
+  {
+    g_source_remove(dev->auto_save_timeout);
+    dev->auto_save_timeout = 0;
+  }
+  if(dev->drawing_timeout) 
+  {
+    g_source_remove(dev->drawing_timeout);
+    dev->drawing_timeout = 0;
+  }
 
   dev->proxy.chroma_adaptation = NULL;
   dev->proxy.wb_coeffs[0] = 0.f;
@@ -431,6 +439,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
     g_free(type);
   }
 
+  // Infinite loop: run for as long as the thread is running
   while(!dev->exit)
   {
     // Keep track of ROI changes out of the loop
@@ -446,6 +455,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       pipe->timeout = 0;
     }
 
+    // Updating loop: run for as long as the output image is invalid/unavailable
     while(!finish_on_error && (pipe->status == DT_DEV_PIXELPIPE_DIRTY) && reentries < 2)
     {
       dt_pthread_mutex_lock(&pipe->busy_mutex);
@@ -511,7 +521,6 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 
       pipe->processing = 0;
       dt_pthread_mutex_unlock(&pipe->busy_mutex);
-      dt_iop_nap(200);
 
       if(pipe->status == DT_DEV_PIXELPIPE_VALID)
       {
@@ -519,18 +528,15 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
           DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_UI_PIPE_FINISHED);
         else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
           DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_PREVIEW_PIPE_FINISHED);
-      }
-    
-      if(pipe->status == DT_DEV_PIXELPIPE_VALID)
-      {
+
         if(pipe->type == DT_DEV_PIXELPIPE_FULL)
           dt_control_queue_redraw_center();
         else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
           dt_control_queue_redraw();
       }
+      dt_iop_nap(250000); // wait 250 ms
     }
-
-    dt_iop_nap(50000); // wait 50 ms
+    dt_iop_nap(100000); // wait 100 ms
   }
 
   pipe->running = 0;
