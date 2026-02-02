@@ -364,7 +364,7 @@ int32_t _get_image_buffer(dt_job_t *job)
   thumb_return_if_fails(thumb, 1);
 
   // The job was cancelled on the queue. Good chances of having thumb destroyed anytime soon.
-  if(dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED) return 1;
+  if(!thumb->job || dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED) return 1;
 
   // Read and cache the thumb data now, while we have it. And lock it.
   dt_pthread_mutex_lock(&thumb->lock);
@@ -1216,8 +1216,11 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
   ;
 
   // Kill background jobs rendering this thumbnail
-  if(thumb->job && dt_control_job_get_state(thumb->job) < DT_JOB_STATE_FINISHED) 
+  if(thumb->job && dt_control_job_get_state(thumb->job) < DT_JOB_STATE_FINISHED)
+  {
     dt_control_job_cancel(thumb->job);
+    thumb->job = NULL;
+  }
 
   if(thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
     cairo_surface_destroy(thumb->img_surf);
