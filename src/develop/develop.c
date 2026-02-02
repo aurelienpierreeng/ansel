@@ -490,6 +490,14 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       if(_update_darkroom_roi(dev, pipe, &x, &y, &wd, &ht, &scale))
         dt_dev_pixelpipe_reset_reentry(pipe);
 
+      // Catch early killswitch. dt_dev_pixelpipe_change() can be lengthy with huge masks stacks
+      if(dt_atomic_get_int(&pipe->shutdown))
+      {
+        pipe->processing = 0;
+        dt_pthread_mutex_unlock(&pipe->busy_mutex);
+        break;
+      }
+
       dt_control_log_busy_enter();
       dt_control_toast_busy_enter();
 
