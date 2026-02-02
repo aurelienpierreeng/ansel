@@ -1295,22 +1295,26 @@ void dt_cleanup()
 
   if(init_gui)
   {
+    // Ensure we stop dangling jobs before deleting GUI stuff that may use them
+    dt_control_shutdown(darktable.control);
+
     // hide main window and do rest of the cleanup in the background
     gtk_widget_hide(dt_ui_main_window(darktable.gui->ui));
 
     dt_ctl_switch_mode_to("");
     //dt_dbus_destroy(darktable.dbus);
 
-    dt_control_shutdown(darktable.control);
-
     dt_lib_cleanup(darktable.lib);
     free(darktable.lib);
   }
+
 #ifdef USE_LUA
   dt_lua_finalize();
 #endif
+
   dt_view_manager_cleanup(darktable.view_manager);
   free(darktable.view_manager);
+
   if(init_gui)
   {
     dt_imageio_cleanup(darktable.imageio);
@@ -1329,17 +1333,7 @@ void dt_cleanup()
   free(darktable.image_cache);
   dt_mipmap_cache_cleanup(darktable.mipmap_cache);
   free(darktable.mipmap_cache);
-  if(init_gui)
-  {
-    dt_control_cleanup(darktable.control);
-    dt_undo_cleanup(darktable.undo);
-  }
-  else
-  {
-    dt_pthread_mutex_destroy(&darktable.control->log_mutex);
-    dt_pthread_mutex_destroy(&darktable.control->run_mutex);
-  }
-  free(darktable.control);
+
   dt_colorspaces_cleanup(darktable.color_profiles);
   dt_conf_cleanup(darktable.conf);
   free(darktable.conf);
@@ -1401,6 +1395,18 @@ void dt_cleanup()
     g_object_unref(darktable.noiseprofile_parser);
     darktable.noiseprofile_parser = NULL;
   }
+
+  if(init_gui)
+  {
+    dt_control_cleanup(darktable.control);
+    dt_undo_cleanup(darktable.undo);
+  }
+  else
+  {
+    dt_pthread_mutex_destroy(&darktable.control->log_mutex);
+    dt_pthread_mutex_destroy(&darktable.control->run_mutex);
+  }
+  free(darktable.control);
 
   dt_capabilities_cleanup();
 
