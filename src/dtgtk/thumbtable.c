@@ -1752,11 +1752,7 @@ void _dt_thumbtable_empty_list(dt_thumbtable_t *table)
       dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
       
       // Kill ASAP background jobs rendering this thumbnail
-      if(thumb->job && dt_control_job_get_state(thumb->job) < DT_JOB_STATE_FINISHED) 
-      {
-        dt_control_job_cancel(thumb->job);
-        thumb->job = NULL;
-      }
+      if(thumb->job) thumb->job = NULL;
 
       gtk_widget_hide(thumb->widget);
       g_idle_add((GSourceFunc)dt_thumbnail_destroy, thumb);
