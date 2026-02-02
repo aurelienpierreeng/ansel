@@ -126,12 +126,6 @@ typedef enum dt_dev_pipe_type_t
   DT_DEV_PIPE = 0,
   DT_DEV_PREVIEW_PIPE = 1
 } dt_dev_pipe_type_t;
-typedef struct dt_dev_proxy_exposure_t
-{
-  struct dt_iop_module_t *module;
-  float (*get_exposure)(struct dt_iop_module_t *exp);
-  float (*get_black)(struct dt_iop_module_t *exp);
-} dt_dev_proxy_exposure_t;
 
 struct dt_dev_pixelpipe_t;
 
@@ -244,10 +238,6 @@ typedef struct dt_develop_t
   /* proxy for communication between plugins and develop/darkroom */
   struct
   {
-    // list of exposure iop instances, with plugin hooks, used by histogram dragging functions
-    // each element is dt_dev_proxy_exposure_t
-    dt_dev_proxy_exposure_t exposure;
-
     // modulegroups plugin hooks
     struct
     {
@@ -406,15 +396,6 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht);
  * @param box_h the height of navigation's box
  */
 void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h);
-
-/*
- * exposure plugin hook, set the exposure and the black level
- */
-
-/** get exposure */
-float dt_dev_exposure_get_exposure(dt_develop_t *dev);
-/** get exposure black level */
-float dt_dev_exposure_get_black(dt_develop_t *dev);
 
 /*
  * modulegroups plugin hooks

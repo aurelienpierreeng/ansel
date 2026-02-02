@@ -146,7 +146,6 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dev->iop_order_version = 0;
   dev->iop_order_list = NULL;
 
-  dev->proxy.exposure.module = NULL;
   dev->proxy.chroma_adaptation = NULL;
   dev->proxy.wb_is_D65 = TRUE; // don't display error messages until we know for sure it's FALSE
   dev->proxy.wb_coeffs[0] = 0.f;
@@ -201,7 +200,7 @@ void dt_dev_cleanup(dt_develop_t *dev)
     dt_dev_pixelpipe_cleanup(dev->preview_pipe);
     free(dev->preview_pipe);
   }
-  
+
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   while(dev->history)
   {
@@ -694,34 +693,6 @@ void dt_dev_retrieve_full_pos(dt_develop_t *dev, const int px, const int py, flo
 int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid)
 {
   return (dev->image_storage.id == imgid) ? 1 : 0;
-}
-
-static dt_dev_proxy_exposure_t *find_last_exposure_instance(dt_develop_t *dev)
-{
-  if(!dev->proxy.exposure.module) return NULL;
-
-  dt_dev_proxy_exposure_t *instance = &dev->proxy.exposure;
-
-  return instance;
-};
-
-float dt_dev_exposure_get_exposure(dt_develop_t *dev)
-{
-  dt_dev_proxy_exposure_t *instance = find_last_exposure_instance(dev);
-
-  if(instance && instance->module && instance->get_exposure) return instance->get_exposure(instance->module);
-
-  return 0.0;
-}
-
-
-float dt_dev_exposure_get_black(dt_develop_t *dev)
-{
-  dt_dev_proxy_exposure_t *instance = find_last_exposure_instance(dev);
-
-  if(instance && instance->module && instance->get_black) return instance->get_black(instance->module);
-
-  return 0.0;
 }
 
 void dt_dev_modulegroups_set(dt_develop_t *dev, uint32_t group)

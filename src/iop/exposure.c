@@ -1051,22 +1051,11 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_box_pack_start(GTK_BOX(g->cs.container), GTK_WIDGET(hhbox), FALSE, FALSE, 0);
 
   g_signal_connect(G_OBJECT(self->widget), "draw", G_CALLBACK(_draw), self);
-
-  /* register hooks with current dev so that  histogram
-     can interact with this module.
-  */
-  dt_dev_proxy_exposure_t *instance = &darktable.develop->proxy.exposure;
-  instance->module = self;
-  instance->get_exposure = _exposure_proxy_get_exposure;
-  instance->get_black = _exposure_proxy_get_black;
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)
 {
   dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
-
-  if(darktable.develop->proxy.exposure.module == self)
-    darktable.develop->proxy.exposure.module = NULL;
 
   free(g->deflicker_histogram);
   g->deflicker_histogram = NULL;

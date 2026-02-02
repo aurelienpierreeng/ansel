@@ -1417,8 +1417,6 @@ static const extraction_result_t _extract_patches(const float *const restrict in
   // so we convert back the patches to camera RGB space and search the best fit of
   // RGB_ref = exposure * (RGB_test - offset) for offset.
   float black = 0.f;
-  const float user_exposure = exp2f(dt_dev_exposure_get_exposure(darktable.develop));
-  const float user_black = dt_dev_exposure_get_black(darktable.develop);
 
   if(XYZ_to_CAM)
   {
@@ -1435,12 +1433,6 @@ static const extraction_result_t _extract_patches(const float *const restrict in
 
       dot_product(XYZ_test, XYZ_to_CAM, RGB_test);
       dot_product(XYZ_ref, XYZ_to_CAM, RGB_ref);
-
-      // Undo exposure module settings
-      for(int c = 0; c < 3; c++)
-      {
-        RGB_test[c] = RGB_test[c] / user_exposure / exposure + user_black;
-      }
 
       // From now on, we have all the reference and test data in camera RGB space
       // where exposure and black level are applied
@@ -1467,12 +1459,6 @@ static const extraction_result_t _extract_patches(const float *const restrict in
 
       dot_product(XYZ_test, XYZ_to_CAM, RGB_test);
       dot_product(XYZ_ref, XYZ_to_CAM, RGB_ref);
-
-      // Undo exposure module settings
-      for(int c = 0; c < 3; c++)
-      {
-        RGB_test[c] = RGB_test[c] / user_exposure / exposure + user_black;
-      }
 
       for(int c = 0; c < 3; c++)
       {
