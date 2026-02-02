@@ -573,7 +573,7 @@ static inline int _dt_dev_load_raw(dt_develop_t *dev, const int32_t imgid)
   gboolean no_valid_image = (buf.buf == NULL) || buf.width == 0 || buf.height == 0;
   dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
 
-  dt_show_times_f(&start, "[dev]", "to load the image.");
+  dt_show_times_f(&start, "[dev_pixelpipe]", "to load the image.");
 
   const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
   dev->image_storage = *image;
@@ -1184,9 +1184,6 @@ void dt_dev_append_changed_tag(const int32_t imgid)
 
 void dt_dev_masks_update_hash(dt_develop_t *dev)
 {
-  dt_times_t start;
-  dt_get_times(&start);
-
   uint64_t hash = 5381;
   for(GList *form = g_list_first(dev->forms); form; form = g_list_next(form))
   {
@@ -1199,8 +1196,6 @@ void dt_dev_masks_update_hash(dt_develop_t *dev)
   uint64_t old_hash = dev->forms_hash;
   dev->forms_changed |= (old_hash != hash);
   dev->forms_hash = hash;
-
-  dt_show_times(&start, "[masks_update_hash] computing forms hash");
 }
 
 float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe)

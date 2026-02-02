@@ -203,9 +203,6 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
   // upstream in the pipeline for proper pipeline cache invalidation, so we need to browse the pipeline
   // backwards.
 
-  dt_times_t start;
-  dt_get_times(&start);
-
   dt_iop_roi_t roi_out_temp = roi_out;
   dt_iop_roi_t roi_in;
   GList *modules = g_list_last(pipe->iop);
@@ -245,9 +242,6 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
     modules = g_list_previous(modules);
     pieces = g_list_previous(pieces);
   }
-
-  dt_show_times(&start, "[dt_pixelpipe_get_roi_in] planning ROI");
-
 }
 
 static uint64_t _default_pipe_hash(dt_dev_pixelpipe_t *pipe)
@@ -281,9 +275,6 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   *  It represents the state of internal modules params as well as their position in the pipe and their output size.
   *  It is to be called at pipe init, not at runtime.
   */
-
-  dt_times_t start;
-  dt_get_times(&start);
 
   // bernstein hash (djb2)
   uint64_t hash = _default_pipe_hash(pipe);
@@ -364,8 +355,6 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   // The pipe hash is the hash of its last module.
   pipe->hash = hash;
   pipe->bypass_cache = bypass_cache;
-
-  dt_show_times(&start, "[dt_pixelpipe_get_global_hash] computing pipe hashes");
 }
 
 gboolean _commit_history_to_node(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece, dt_dev_history_item_t *hist)
@@ -584,7 +573,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   }
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
-  dt_show_times_f(&start, "[dt_dev_pixelpipe_change] pipeline resync on the current modules stack", "for pipe %s", type);
+  dt_show_times_f(&start, "[dev_pixelpipe] pipeline resync with history", "for pipe %s", type);
 }
 
 gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
