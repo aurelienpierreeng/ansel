@@ -400,16 +400,14 @@ void expose(
   else
     _colormanage_ui_color((float)dt_conf_get_int("display/brightness"), 0., 0., bg_color);
 
+  cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+
   if(has_main_image)
   {
     if(main_hash != dev->pipe->hash)
     {
       // If we have a valid image use it, except if it's still the same as previously.
       // In this case, we will reuse the buffered surface.
-
-      // When zoomed-in more than 100%, it's common practice to not smoothen the main view.
-      // Also we already scale the image 1:1 wrt GUI size.
-      cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
 
       // Paint background color
       cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
@@ -450,9 +448,6 @@ void expose(
       // 1. main image needs a refresh but we have no candidate
       // 2. the buffered surface still contains an outdated main image
       // 3. the buffered surface contains an outdated preview placeholder
-
-      // When using downscaled fallback, make it smooth to limit discrepancies with the real thing
-      cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_BILINEAR);
 
       // Paint background color
       cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
