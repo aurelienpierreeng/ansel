@@ -2496,7 +2496,7 @@ static void rt_compute_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelp
   int roiy = *_roiy;
 
   // We iterate through all forms
-  const dt_masks_form_t *grp = dt_masks_get_from_id_ext(piece->pipe->forms, bp->mask_id);
+  const dt_masks_form_t *grp = dt_masks_get_from_id_ext(self->dev->forms, bp->mask_id);
   if(grp && (grp->type & DT_MASKS_GROUP))
   {
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
@@ -2512,7 +2512,7 @@ static void rt_compute_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelp
         }
 
         // we get the spot
-        dt_masks_form_t *form = dt_masks_get_from_id_ext(piece->pipe->forms, formid);
+        dt_masks_form_t *form = dt_masks_get_from_id_ext(self->dev->forms, formid);
         if(form)
         {
           // if the form is outside the roi, we just skip it
@@ -2593,7 +2593,7 @@ static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, st
   int roiy = *_roiy;
 
   // We iterate through all forms
-  const dt_masks_form_t *grp = dt_masks_get_from_id_ext(piece->pipe->forms, bp->mask_id);
+  const dt_masks_form_t *grp = dt_masks_get_from_id_ext(self->dev->forms, bp->mask_id);
   if(grp && (grp->type & DT_MASKS_GROUP))
   {
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
@@ -2616,7 +2616,7 @@ static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, st
         }
 
         // we get the spot
-        dt_masks_form_t *form = dt_masks_get_from_id_ext(piece->pipe->forms, formid);
+        dt_masks_form_t *form = dt_masks_get_from_id_ext(self->dev->forms, formid);
         if(form)
         {
           // we get the source area
@@ -2681,7 +2681,7 @@ static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, struct dt_d
   int roiy = *_roiy;
 
   // go through all clone and heal forms
-  const dt_masks_form_t *grp = dt_masks_get_from_id_ext(piece->pipe->forms, bp->mask_id);
+  const dt_masks_form_t *grp = dt_masks_get_from_id_ext(self->dev->forms, bp->mask_id);
   if(grp && (grp->type & DT_MASKS_GROUP))
   {
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
@@ -2699,7 +2699,7 @@ static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, struct dt_d
         }
 
         // we get the spot
-        dt_masks_form_t *form = dt_masks_get_from_id_ext(piece->pipe->forms, formid);
+        dt_masks_form_t *form = dt_masks_get_from_id_ext(self->dev->forms, formid);
         if(form == NULL)
         {
           continue;
@@ -3317,7 +3317,7 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
   // iterate through all forms
   if(!usr_d->suppress_mask)
   {
-    const dt_masks_form_t *grp = dt_masks_get_from_id_ext(piece->pipe->forms, bp->mask_id);
+    const dt_masks_form_t *grp = dt_masks_get_from_id_ext(self->dev->forms, bp->mask_id);
     if(grp && (grp->type & DT_MASKS_GROUP))
     {
       for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
@@ -3350,7 +3350,7 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
         }
 
         // get the spot
-        dt_masks_form_t *form = dt_masks_get_from_id_ext(piece->pipe->forms, formid);
+        dt_masks_form_t *form = dt_masks_get_from_id_ext(self->dev->forms, formid);
         if(form == NULL)
         {
           fprintf(stderr, "rt_process_forms: missing form=%i from masks\n", formid);
@@ -4113,7 +4113,7 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
   // iterate through all forms
   if(!usr_d->suppress_mask)
   {
-    dt_masks_form_t *grp = dt_masks_get_from_id_ext(piece->pipe->forms, bp->mask_id);
+    dt_masks_form_t *grp = dt_masks_get_from_id_ext(self->dev->forms, bp->mask_id);
     if(grp && (grp->type & DT_MASKS_GROUP))
     {
       for(const GList *forms = grp->points; forms && err == CL_SUCCESS; forms = g_list_next(forms))
@@ -4146,7 +4146,7 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
         }
 
         // get the spot
-        dt_masks_form_t *form = dt_masks_get_from_id_ext(piece->pipe->forms, formid);
+        dt_masks_form_t *form = dt_masks_get_from_id_ext(self->dev->forms, formid);
         if(form == NULL)
         {
           fprintf(stderr, "rt_process_forms: missing form=%i from masks\n", formid);

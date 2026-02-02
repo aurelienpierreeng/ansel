@@ -560,7 +560,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
     // we blend with a drawn and/or parametric mask
 
     // get the drawn mask if there is one
-    dt_masks_form_t *form = dt_masks_get_from_id_ext(piece->pipe->forms, d->mask_id);
+    dt_masks_form_t *form = dt_masks_get_from_id_ext(self->dev->forms, d->mask_id);
 
     if(form && (!(self->flags() & IOP_FLAGS_NO_MASKS)) && (d->mask_mode & DEVELOP_MASK_MASK))
     {
@@ -1047,7 +1047,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
     // we blend with a drawn and/or parametric mask
 
     // get the drawn mask if there is one
-    dt_masks_form_t *form = dt_masks_get_from_id_ext(piece->pipe->forms, d->mask_id);
+    dt_masks_form_t *form = dt_masks_get_from_id_ext(self->dev->forms, d->mask_id);
 
     if(form && (!(self->flags() & IOP_FLAGS_NO_MASKS)) && (d->mask_mode & DEVELOP_MASK_MASK))
     {
