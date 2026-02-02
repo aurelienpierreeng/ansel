@@ -578,20 +578,6 @@ static void _exposure_set_white(struct dt_iop_module_t *self, const float white)
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
-static float _exposure_proxy_get_exposure(struct dt_iop_module_t *self)
-{
-  dt_iop_exposure_params_t *p = (dt_iop_exposure_params_t *)self->params;
-
-  if(p->mode == EXPOSURE_MODE_DEFLICKER)
-  {
-    return p->deflicker_target_level;
-  }
-  else
-  {
-    return p->exposure;
-  }
-}
-
 static void _exposure_set_black(struct dt_iop_module_t *self, const float black)
 {
   dt_iop_exposure_params_t *p = (dt_iop_exposure_params_t *)self->params;
