@@ -1690,7 +1690,11 @@ void dt_dev_pixelpipe_disable_before(dt_dev_pixelpipe_t *pipe, const char *op)
       pipe->devid = -1;                                                                                           \
     }                                                                                                             \
     pipe->status = DT_DEV_PIXELPIPE_DIRTY;                                                                        \
-    if(pipe->forms) g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_free_form);                          \
+    if(pipe->forms)                                                                                               \
+    {                                                                                                             \
+      g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_free_form);                                        \
+      pipe->forms = NULL;                                                                                         \
+    }                                                                                                             \
     dt_iop_nap(5000);                                                                                             \
     return 1;                                                                                                     \
   }
