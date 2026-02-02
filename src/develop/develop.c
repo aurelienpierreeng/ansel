@@ -298,6 +298,20 @@ static void _flag_pipe(dt_dev_pixelpipe_t *pipe, gboolean error)
   // In that case, do nothing and do another loop
 }
 
+inline static void _copy_buffer(const uint8_t *const restrict input, uint8_t *const restrict output,
+                                const size_t height, const size_t width)
+{
+  const size_t stride = width * sizeof(char) * 4;
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+          dt_omp_firstprivate(input, output, stride, height) \
+          schedule(static)
+#endif
+  for(size_t j = 0; j < height; j++)
+    memcpy(__builtin_assume_aligned(output, 64) + j * stride,
+           __builtin_assume_aligned(input, 64) + j * stride,
+           stride);
+}
 
 static void _update_gui_backbuf(dt_dev_pixelpipe_t *pipe)
 {
@@ -334,7 +348,7 @@ static void _update_gui_backbuf(dt_dev_pixelpipe_t *pipe)
   }
 
   if(pipe->output_backbuf)
-    memcpy(pipe->output_backbuf, pipe->backbuf, sizeof(uint8_t) * 4 * pipe->output_backbuf_width * pipe->output_backbuf_height);
+    _copy_buffer((const uint8_t *const restrict)pipe->backbuf, pipe->output_backbuf, pipe->output_backbuf_width, pipe->output_backbuf_height);
 
   pipe->output_imgid = pipe->image.id;
 
