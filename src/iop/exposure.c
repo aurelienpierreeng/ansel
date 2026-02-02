@@ -144,8 +144,6 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_p
   return IOP_CS_RGB;
 }
 
-static float _exposure_proxy_get_exposure(struct dt_iop_module_t *self);
-static float _exposure_proxy_get_black(struct dt_iop_module_t *self);
 static void _paint_hue(dt_iop_module_t *self);
 static void _exposure_set_black(struct dt_iop_module_t *self, const float black);
 
@@ -611,12 +609,6 @@ static void _exposure_set_black(struct dt_iop_module_t *self, const float black)
   dt_bauhaus_slider_set(g->black, p->black);
   --darktable.gui->reset;
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
-}
-
-static float _exposure_proxy_get_black(struct dt_iop_module_t *self)
-{
-  dt_iop_exposure_params_t *p = (dt_iop_exposure_params_t *)self->params;
-  return p->black;
 }
 
 static void _auto_set_exposure(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe)
