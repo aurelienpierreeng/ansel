@@ -2618,7 +2618,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
   const float wd = self->dev->preview_pipe->backbuf_width;
   const float ht = self->dev->preview_pipe->backbuf_height;
-  const float zoom_scale = dev->scaling;
+  const float zoom_scale = dev->roi.scaling;
   float pzx = 0.f;
   float pzy = 0.f;
   dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
@@ -3075,7 +3075,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
         g->k_drag = TRUE; // if a keystone point is selected then we start to drag it
       else // if we click to the apply button
       {
-        const float zoom_scale = dev->scaling;
+        const float zoom_scale = dev->roi.scaling;
         float pzx = 0.f;
         float pzy = 0.f;
         dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);

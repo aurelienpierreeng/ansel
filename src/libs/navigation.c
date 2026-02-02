@@ -208,7 +208,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   }
 
   // draw box where we are
-  if(dev->scaling > 1.f)
+  if(dev->roi.scaling > 1.f)
   {
     // Add a dark overlay on the picture to make it fade
     cairo_rectangle(cr, 0, 0, wd, ht);
@@ -216,12 +216,12 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     cairo_fill(cr);
 
     float boxw = 1, boxh = 1;
-    dt_dev_check_zoom_pos_bounds(dev, &(dev->x), &(dev->y), &boxw, &boxh);
+    dt_dev_check_zoom_pos_bounds(dev, &(dev->roi.x), &(dev->roi.y), &boxw, &boxh);
     // clip dimensions to navigation area
     const float roi_w = MIN(boxw * wd, wd);
     const float roi_h = MIN(boxh * ht, ht);
-    const float roi_x = dev->x * wd - roi_w * 0.5f;
-    const float roi_y = dev->y * ht - roi_h * 0.5f;
+    const float roi_x = dev->roi.x * wd - roi_w * 0.5f;
+    const float roi_y = dev->roi.y * ht - roi_h * 0.5f;
 
     // Repaint the original image in the area of interest
     cairo_set_source_surface(cr, surface, 0, 0);
@@ -267,10 +267,10 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   gchar *zoomline;
   {
     gchar *fit = NULL;
-    if(dev->scaling == 1.f)
+    if(dev->roi.scaling == 1.f)
       fit = g_strdup(_("Fit"));
   
-    zoomline = g_strdup_printf("%s %.0f%%", fit ? fit : "", dev->scaling * dev->natural_scale * 100);
+    zoomline = g_strdup_printf("%s %.0f%%", fit ? fit : "", dev->roi.scaling * dev->natural_scale * 100);
     if(fit) g_free(fit);
   }
 
@@ -326,7 +326,7 @@ static void _lib_navigation_set_position(dt_lib_module_t *self, double x, double
 {
   dt_develop_t *dev = darktable.develop;
   const dt_lib_navigation_t *d = (const dt_lib_navigation_t *)self->data;
-  if(!(dev && d->dragging && dev->scaling > 1.f)) return;
+  if(!(dev && d->dragging && dev->roi.scaling > 1.f)) return;
 
   // Compute size of navigation ROI in widget coordinates
   int proc_wd, proc_ht;
@@ -345,8 +345,8 @@ static void _lib_navigation_set_position(dt_lib_module_t *self, double x, double
   fy /= (float)nav_img_h;
   dt_dev_check_zoom_pos_bounds(dev, &fx, &fy, NULL, NULL);
 
-  dev->x = fx;
-  dev->y = fy;
+  dev->roi.x = fx;
+  dev->roi.y = fy;
 
   /* redraw myself */
   gtk_widget_queue_draw(self->widget);
@@ -373,45 +373,45 @@ static void _zoom_preset_change(dt_lib_zoom_t zoom)
   switch(zoom)
   {
     default:
-      dev->scaling = dev->natural_scale;
+      dev->roi.scaling = dev->natural_scale;
       break;
     case LIB_ZOOM_SMALL:
-      dev->scaling = dev->natural_scale * 0.33;
+      dev->roi.scaling = dev->natural_scale * 0.33;
       break;
     case LIB_ZOOM_FIT:
-      dev->scaling = dev->natural_scale;
+      dev->roi.scaling = dev->natural_scale;
       break;
     case LIB_ZOOM_25:
-      dev->scaling = 0.25;
+      dev->roi.scaling = 0.25;
       break;
     case LIB_ZOOM_33:
-      dev->scaling = 0.33;
+      dev->roi.scaling = 0.33;
       break;
     case LIB_ZOOM_50:
-      dev->scaling = 0.50;
+      dev->roi.scaling = 0.50;
       break;
     case LIB_ZOOM_100:
-      dev->scaling = 1.;
+      dev->roi.scaling = 1.;
       break;
     case LIB_ZOOM_200:
-      dev->scaling = 2.;
+      dev->roi.scaling = 2.;
       break;
     case LIB_ZOOM_400:
-      dev->scaling = 4.;
+      dev->roi.scaling = 4.;
       break;
     case LIB_ZOOM_800:
-      dev->scaling = 8.;
+      dev->roi.scaling = 8.;
       break;
     case LIB_ZOOM_1600:
-      dev->scaling = 16.;
+      dev->roi.scaling = 16.;
       break;
   }
 
-  // Actual pixelpipe scaling is dev->scaling * dev->natural_scale,
+  // Actual pixelpipe scaling is dev->roi.scaling * dev->natural_scale,
   // where dev->natural_scale ensures the images fits within viewport
-  dev->scaling /= dev->natural_scale;
+  dev->roi.scaling /= dev->natural_scale;
 
-  dt_dev_check_zoom_pos_bounds(dev, &dev->x, &dev->y, NULL, NULL);
+  dt_dev_check_zoom_pos_bounds(dev, &dev->roi.x, &dev->roi.y, NULL, NULL);
   dt_dev_pixelpipe_change_zoom_main(dev);
 }
 

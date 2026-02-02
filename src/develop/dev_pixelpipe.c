@@ -4,6 +4,7 @@
 #include "common/dtpthread.h"
 #include "develop/pixelpipe.h"
 #include "develop/blend.h"
+#include "control/control.h"
 
 static void _change_pipe(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_change_t flag)
 {
@@ -131,6 +132,8 @@ void dt_dev_pixelpipe_change_zoom_main(dt_develop_t *dev)
   if (!dev || !dev->gui_attached) return;
   dt_dev_pixelpipe_update_zoom_main(dev);
   dt_dev_process(dev, dev->pipe);
+  dt_control_navigation_redraw(darktable.control);
+  gtk_widget_queue_draw(dt_ui_center(darktable.gui->ui));
 }
 
 gboolean dt_dev_pixelpipe_activemodule_disables_currentmodule(struct dt_develop_t *dev, struct dt_iop_module_t *current_module)

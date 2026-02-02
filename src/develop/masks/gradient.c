@@ -1014,8 +1014,8 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
     if((xpos == -1.f && ypos == -1.f) || gui->mouse_leaved_center)
     {
       const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
-      xpos = (.5f + dev->x) * darktable.develop->preview_pipe->backbuf_width;
-      ypos = (.5f + dev->y) * darktable.develop->preview_pipe->backbuf_height;
+      xpos = (.5f + dev->roi.x) * darktable.develop->preview_pipe->backbuf_width;
+      ypos = (.5f + dev->roi.y) * darktable.develop->preview_pipe->backbuf_height;
     }
     float pts[2] = { xpos, ypos };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);

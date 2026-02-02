@@ -157,23 +157,25 @@ typedef struct dt_develop_t
   // It is NOT the size of the backbuffer/ROI.
   int32_t orig_width, orig_height;
 
-  // width = orig_width - 2 * border_size,
-  // height = orig_height - 2 * border_size,
-  // aka the surface actually covered by an image backbuffer (ROI)
-  // set by `dt_dev_configure()`
-  int32_t width, height;
-
   // natural scaling = MIN(dev->width / dev->pipe->processed_width, dev->height / dev->pipe->processed_height)
   // aka ensure that image fits into widget minus margins/borders.
   float natural_scale;
+  struct {
+    // width = orig_width - 2 * border_size,
+    // height = orig_height - 2 * border_size,
+    // aka the surface actually covered by an image backbuffer (ROI)
+    // set by `dt_dev_configure()`
+    int32_t width, height;
 
-  // User-defined scaling factor, related to GUI zoom.
-  // Applies on top of natural scale
-  float scaling;
+    // User-defined scaling factor, related to GUI zoom.
+    // Applies on top of natural scale
+    float scaling;
 
-  // Relative coordinates of the center of the ROI, expressed with
-  // regard to the complete image.
-  float x, y;
+    // Relative coordinates of the center of the ROI, expressed with
+    // regard to the complete image.
+    float x, y;
+
+  } roi;
 
   // image processing pipeline with caching
   struct dt_dev_pixelpipe_t *pipe, *preview_pipe;

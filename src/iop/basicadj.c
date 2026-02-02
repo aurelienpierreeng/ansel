@@ -414,7 +414,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   //cairo_translate(cr, width / 2.0, height / 2.0f);
   //cairo_scale(cr, zoom_scale, zoom_scale);
-  //cairo_translate(cr, -.5f * wd - dev->x * wd, -.5f * ht - dev->y * ht);
+  //cairo_translate(cr, -.5f * wd - dev->roi.x * wd, -.5f * ht - dev->roi.y * ht);
   dt_dev_rescale_roi(dev, cr, width, height);
 
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);

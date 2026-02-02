@@ -594,8 +594,8 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
     // fallback to center of the current view
     if((xpos == -1.f && ypos == -1.f) || gui->mouse_leaved_center)
     {
-      xpos = (.5f + dev->x) * dev->preview_pipe->backbuf_width;
-      ypos = (.5f + dev->y) * dev->preview_pipe->backbuf_height;
+      xpos = (.5f + dev->roi.x) * dev->preview_pipe->backbuf_width;
+      ypos = (.5f + dev->roi.y) * dev->preview_pipe->backbuf_height;
     }
     // we backtransform the point to get them in input space
     float back_pts[2] = { xpos, ypos };

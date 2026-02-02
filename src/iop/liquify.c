@@ -2790,7 +2790,7 @@ void gui_post_expose(struct dt_iop_module_t *module,
   dt_pthread_mutex_unlock(&develop->preview_pipe->busy_mutex);
 
   // You're not supposed to understand this
-  const float zoom_scale = develop->scaling;
+  const float zoom_scale = develop->roi.scaling;
 
   dt_dev_rescale_roi(develop, cr, width, height);
 
@@ -3251,7 +3251,7 @@ static void _start_new_shape(dt_iop_module_t *module)
   //  create initial shape at the center
   float complex pt = 0.0f;
   float scale = 1.0f;
-  get_point_scale(module, 0.5f * module->dev->width, 0.5f * module->dev->height, &pt, &scale);
+  get_point_scale(module, 0.5f * module->dev->roi.width, 0.5f * module->dev->roi.height, &pt, &scale);
   float radius = 0.0f, r = 1.0f, phi = 0.0f;
   get_stamp_params(module, &radius, &r, &phi);
   //  start a new path

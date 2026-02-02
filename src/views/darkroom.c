@@ -310,6 +310,35 @@ void _colormanage_ui_color(const float L, const float a, const float b, dt_align
   cmsDoTransform(darktable.color_profiles->transform_xyz_to_display, XYZ, RGB, 1);
 }
 
+static void _render_iso12646(cairo_t *cr, int width, int height, int border)
+{
+  // draw the white frame around picture
+  cairo_rectangle(cr, -border * .5f, -border * .5f, width + border, height + border);
+  cairo_set_source_rgb(cr, 1., 1., 1.);
+  cairo_fill(cr);
+}
+
+static int32_t _render_image(cairo_t *cr, cairo_surface_t *surface, int width, int height, dt_develop_t *dev)
+{
+  cairo_rectangle(cr, 0, 0, width, height);
+  cairo_set_source_surface(cr, surface, 0, 0);
+  cairo_fill(cr);
+  cairo_surface_destroy(surface);
+  return dev->image_storage.id;
+}
+
+static cairo_surface_t *_get_surface(dt_dev_pixelpipe_t *pipe, float *width, float *height)
+{
+  dt_pthread_mutex_lock(&pipe->backbuf_mutex);
+  const int wd = pipe->output_backbuf_width;
+  const int ht = pipe->output_backbuf_height;
+  *width = (float)wd;
+  *height = (float)ht;
+  const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
+  cairo_surface_t *surface = cairo_image_surface_create_for_data(pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
+  dt_pthread_mutex_unlock(&pipe->backbuf_mutex);
+  return surface;
+}
 
 void expose(
     dt_view_t *self,
@@ -329,15 +358,15 @@ void expose(
   if(dev->preview_pipe->backbuf == NULL && dev->pipe->backbuf == NULL) 
     return;
 
-  dt_pthread_mutex_t *mutex = NULL;
-  int stride;
-
   static cairo_surface_t *image_surface = NULL;
   static int image_surface_width = 0;
   static int image_surface_height = 0;
   static int32_t image_surface_imgid = UNKNOWN_IMAGE;
   static uint64_t main_hash = 0;
   static uint64_t preview_hash = 0;
+  static uint64_t zoom_hash = 0;
+
+  const uint64_t new_zoom_hash = dt_hash(5381, (char *)&dev->roi, sizeof(dev->roi));
 
   // Valid means : 
   // 1. up to date with current history stack (don't paint transient renderings if any)
@@ -358,7 +387,7 @@ void expose(
     if(image_surface) cairo_surface_destroy(image_surface);
     image_surface = dt_cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
     image_surface_imgid = UNKNOWN_IMAGE; // invalidate old stuff
-    fprintf(stdout, "nuking surface\n");
+    //fprintf(stdout, "nuking surface\n");
   }
 
   cairo_surface_t *surface;
@@ -387,42 +416,35 @@ void expose(
       cairo_paint(cr);
 
       // draw image
-      mutex = &dev->pipe->backbuf_mutex;
-      dt_pthread_mutex_lock(mutex);
-      float wd = dev->pipe->output_backbuf_width;
-      float ht = dev->pipe->output_backbuf_height;
-      stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
-      surface = dt_cairo_image_surface_create_for_data(dev->pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
+      // FIXME: why does that not work ???
+      //float wd, ht;
+      //surface = _get_surface(dev->pipe, &wd, &ht);
+      
+      dt_dev_pixelpipe_t *pipe = dev->pipe;
+      dt_pthread_mutex_lock(&pipe->backbuf_mutex);
+      float wd = pipe->output_backbuf_width;
+      float ht = pipe->output_backbuf_height;
+      int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
+      surface = dt_cairo_image_surface_create_for_data(pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
+      dt_pthread_mutex_unlock(&pipe->backbuf_mutex);
+
       wd /= darktable.gui->ppd;
       ht /= darktable.gui->ppd;
       cairo_translate(cr, .5f * (width - wd), .5f * (height - ht));
 
       if(dev->iso_12646.enabled)
-      {
-        // draw the white frame around picture
-        cairo_rectangle(cr, -border * .5f, -border * .5f, wd + border, ht + border);
-        cairo_set_source_rgb(cr, 1., 1., 1.);
-        cairo_fill(cr);
-      }
+        _render_iso12646(cr, wd, ht, border);
 
-      cairo_rectangle(cr, 0, 0, wd, ht);
-      cairo_set_source_surface(cr, surface, 0, 0);
-      cairo_paint(cr);
-
-      cairo_surface_destroy(surface);
-      dt_pthread_mutex_unlock(mutex);
-      image_surface_imgid = dev->image_storage.id;
+      image_surface_imgid = _render_image(cr, surface, wd, ht, dev);
       main_hash = dev->pipe->hash;
 
-      // fprintf(stdout, "printing darkroom from the real thing\n");
+      //fprintf(stdout, "printing darkroom from the real thing\n");
     }
   }
-  
-  // fallback to preview pipe if main pipe is not ready
   else if(has_preview_image)
   {
     if(preview_hash != dev->preview_pipe->hash 
-      || main_hash != dev->pipe->hash) // main hash also contains ROI changes, aka zoom & pan in GUI
+      || zoom_hash != new_zoom_hash)
     {
       // Cases in which we want the refresh placeholder preview in the surface :
       // 1. main image needs a refresh but we have no candidate
@@ -437,13 +459,8 @@ void expose(
       cairo_paint(cr);
 
       // draw preview
-      mutex = &dev->preview_pipe->backbuf_mutex;
-      dt_pthread_mutex_lock(mutex);
-      float pr_wd = dev->preview_pipe->output_backbuf_width;
-      float pr_ht = dev->preview_pipe->output_backbuf_height;
-      
-      stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, pr_wd);
-      surface = cairo_image_surface_create_for_data(dev->preview_pipe->output_backbuf, CAIRO_FORMAT_RGB24, pr_wd, pr_ht, stride);
+      float wd, ht;
+      surface = _get_surface(dev->preview_pipe, &wd, &ht);
 
       if(dev->iso_12646.enabled)
       {
@@ -451,32 +468,26 @@ void expose(
         // the preview's ROI (Region of Interest) dimensions in widget space, then
         // draw a white rectangle around it.
         const float scale = dt_dev_get_fit_scale(dev);
-        const float roi_wd = fminf(pr_wd * scale, dev->width);
-        const float roi_ht = fminf(pr_ht * scale, dev->height);
+        const float roi_wd = fminf(wd * scale, dev->roi.width);
+        const float roi_ht = fminf(ht * scale, dev->roi.height);
         
         cairo_save(cr);
+
         // Position surface at preview's ROI top-left corner.
         cairo_translate(cr, .5f * (width - roi_wd),
                             .5f * (height - roi_ht));
 
-        cairo_rectangle(cr, -border * .5f, -border * .5f, roi_wd + border, roi_ht + border);
-        cairo_set_source_rgb(cr, 1.f, 1.f, 1.f);
-        cairo_fill(cr);
+        _render_iso12646(cr, roi_wd, roi_ht, border);
+
         cairo_restore(cr);
       }
 
       // clip to image area only
       dt_dev_clip_roi(dev, cr, width, height);
       dt_dev_rescale_roi(dev, cr, width, height);
-
-      cairo_rectangle(cr, 0, 0, pr_wd, pr_ht);
-      cairo_set_source_surface(cr, surface, 0, 0);
-      cairo_fill(cr);
-      
-      cairo_surface_destroy(surface);
-      dt_pthread_mutex_unlock(mutex);
-      image_surface_imgid = dev->image_storage.id;
+      image_surface_imgid = _render_image(cr, surface, wd, ht, dev);
       preview_hash = dev->preview_pipe->hash;
+      zoom_hash = new_zoom_hash;
 
       //fprintf(stdout, "printing darkroom from preview placeholder\n");
     }
@@ -675,7 +686,7 @@ static void zoom_in_callback(dt_action_t *action)
   dt_view_t *self = dt_action_view(action);
   dt_develop_t *dev = self->data;
 
-  scrolled(self, dev->width / 2, dev->height / 2, 1, GDK_CONTROL_MASK);
+  scrolled(self, dev->roi.width / 2, dev->roi.height / 2, 1, GDK_CONTROL_MASK);
 }
 
 static void zoom_out_callback(dt_action_t *action)
@@ -683,7 +694,7 @@ static void zoom_out_callback(dt_action_t *action)
   dt_view_t *self = dt_action_view(action);
   dt_develop_t *dev = self->data;
 
-  scrolled(self, dev->width / 2, dev->height / 2, 0, GDK_CONTROL_MASK);
+  scrolled(self, dev->roi.width / 2, dev->roi.height / 2, 0, GDK_CONTROL_MASK);
 }
 
 #endif
@@ -2246,7 +2257,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   }
 
   // panning with left mouse button
-  if(darktable.control->button_down && darktable.control->button_down_which == 1 && dev->scaling > 1)
+  if(darktable.control->button_down && darktable.control->button_down_which == 1 && dev->roi.scaling > 1)
   {
     const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
     const double clicked_x = ctl->button_x;
@@ -2259,20 +2270,19 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
     const double img_dy = roi_dy / scale;
 
     // new roi position in full image scale
-    float new_x = dev->x - (img_dx / (float)dev->pipe->processed_width);
-    float new_y = dev->y - (img_dy / (float)dev->pipe->processed_height);
+    float new_x = dev->roi.x - (img_dx / (float)dev->pipe->processed_width);
+    float new_y = dev->roi.y - (img_dy / (float)dev->pipe->processed_height);
   
     //fprintf(stderr, "BOUNDS new_x: %2.2f, new_y: %2.2f\n", new_x, new_y);
     dt_dev_check_zoom_pos_bounds(dev, &new_x, &new_y, NULL, NULL); 
 
-    dev->x = new_x;
-    dev->y = new_y;
+    dev->roi.x = new_x;
+    dev->roi.y = new_y;
 
     // update clicked position
     ctl->button_x = x;
     ctl->button_y = y;
 
-    dt_control_navigation_redraw();
     dt_dev_pixelpipe_change_zoom_main(dev);
   }
 }
@@ -2329,7 +2339,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     float pzy = 0.f;
     dt_dev_retrieve_full_pos(dev, x, y, &pzx, &pzy);
 
-    float zoom_scale = dev->scaling;
+    float zoom_scale = dev->roi.scaling;
     const int procw = dev->preview_pipe->backbuf_width;
     const int proch = dev->preview_pipe->backbuf_height;
 
@@ -2446,14 +2456,14 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     // Incremental zoom-in on middle button click, from fit to 800% 
     // by power of 2 increments (100%, 200%, 400%, 800%).
     float new_scale = 1.f;
-    if(dev->scaling < dev->natural_scale || dev->scaling > 7.f / dev->natural_scale)
+    if(dev->roi.scaling < dev->natural_scale || dev->roi.scaling > 7.f / dev->natural_scale)
       new_scale = dev->natural_scale; // zoom to fit
-    else if(dev->scaling * dev->natural_scale < 1.f)
+    else if(dev->roi.scaling * dev->natural_scale < 1.f)
       new_scale = 1.f; // 100 %
     else
-      new_scale = floorf(dev->scaling * dev->natural_scale) * 2.f;
+      new_scale = floorf(dev->roi.scaling * dev->natural_scale) * 2.f;
 
-    // Actual pixelpipe scaling is dev->scaling * dev->natural_scale,
+    // Actual pixelpipe scaling is dev->roi.scaling * dev->natural_scale,
     // where dev->natural_scale ensures the images fits within viewport
     new_scale /= dev->natural_scale;
 
@@ -2465,14 +2475,14 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 
 static int _change_scaling(dt_develop_t *dev, const float x, const float y, const float new_scaling)
 {
-  const float old_scaling = dev->scaling;
+  const float old_scaling = dev->roi.scaling;
 
   // Round scaling to 1.0 (fit) if close enough
   const float epsilon = fabsf(old_scaling - new_scaling);
   if(fabsf(new_scaling - 1.0f) < epsilon)
-    dev->scaling = 1.0f;
+    dev->roi.scaling = 1.0f;
   else
-    dev->scaling = new_scaling;
+    dev->roi.scaling = new_scaling;
 
   if(!dt_dev_check_zoom_scale_bounds(dev))
   { 
@@ -2483,24 +2493,24 @@ static int _change_scaling(dt_develop_t *dev, const float x, const float y, cons
     // To keep the point under the mouse fixed, calculate the adjustment
     const float scale = dt_dev_get_zoom_level(dev);
     const float ppd = darktable.gui->ppd;
-    const float scaling = dev->scaling;
+    const float scaling = dev->roi.scaling;
     const float scale_delta = ppd * (scaling - old_scaling);
     const float scale_product = old_scaling * scale;
     
     // Adjust the center to compensate for the scale change
     int proc_w = 0.f, proc_h = 0.f;
     dt_dev_get_processed_size(dev, &proc_w, &proc_h);
-    dev->x += mouse_off_x * scale_delta / (proc_w * scale_product);
-    dev->y += mouse_off_y * scale_delta / (proc_h * scale_product);
+    dev->roi.x += mouse_off_x * scale_delta / (proc_w * scale_product);
+    dev->roi.y += mouse_off_y * scale_delta / (proc_h * scale_product);
     
-    dt_dev_check_zoom_pos_bounds(dev, &dev->x, &dev->y, NULL, NULL);
+    dt_dev_check_zoom_pos_bounds(dev, &dev->roi.x, &dev->roi.y, NULL, NULL);
     dt_dev_pixelpipe_change_zoom_main(dev);
     return 1;
   }
   else
   {
     // Invalid zoom level, keep previous value
-    dev->scaling = old_scaling;
+    dev->roi.scaling = old_scaling;
     return 0;
   }
 }
@@ -2511,7 +2521,7 @@ static gboolean _center_view_free_zoom(dt_view_t *self, double x, double y, int 
 
   // Commit the new scaling
   const float step = 1.02f;
-  const float new_scaling = dev->scaling * powf(step, (float)-flow);
+  const float new_scaling = dev->roi.scaling * powf(step, (float)-flow);
   return _change_scaling(dev, x, y, new_scaling);
 }
 

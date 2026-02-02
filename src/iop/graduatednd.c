@@ -476,7 +476,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   const float wd = dev->preview_pipe->backbuf_width;
   const float ht = dev->preview_pipe->backbuf_height;
-  const float zoom_scale = dev->scaling;
+  const float zoom_scale = dev->roi.scaling;
   dt_dev_rescale_roi(dev, cr, width, height);
 
   // we get the extremities of the line
@@ -561,7 +561,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 {
   dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
   const dt_develop_t *dev = (const dt_develop_t *)self->dev;
-  const float zoom_scale = dev->scaling;
+  const float zoom_scale = dev->roi.scaling;
   float pzx = 0.f;
   float pzy = 0.f;
   dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);

@@ -433,7 +433,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     smaller_side = wd;
   }
 
-  const float zoom_scale = dev->scaling;
+  const float zoom_scale = dev->roi.scaling;
   float pzx = 0.f;
   float pzy = 0.f;
   dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
