@@ -2073,10 +2073,12 @@ void leave(dt_view_t *self)
   }
 
   // clear masks
+  dt_pthread_rwlock_wrlock(&dev->masks_mutex);
   g_list_free_full(dev->forms, (void (*)(void *))dt_masks_free_form);
   dev->forms = NULL;
   g_list_free_full(dev->allforms, (void (*)(void *))dt_masks_free_form);
   dev->allforms = NULL;
+  dt_pthread_rwlock_unlock(&dev->masks_mutex);
 
   // Fetch the new thumbnail if needed. Ensure it runs after we save history.
   dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, darktable.develop->image_storage.id, TRUE);

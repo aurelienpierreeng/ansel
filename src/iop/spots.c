@@ -400,14 +400,14 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
   dt_develop_blend_params_t *bp = self->blend_params;
 
   // We iterate through all spots or polygons
-  dt_masks_form_t *grp = dt_masks_get_from_id_ext(self->dev->forms, bp->mask_id);
+  dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
   if(grp && (grp->type & DT_MASKS_GROUP))
   {
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
     {
       dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
       // we get the spot
-      dt_masks_form_t *form = dt_masks_get_from_id_ext(self->dev->forms, grpt->formid);
+      dt_masks_form_t *form = dt_masks_get_from_id(self->dev, grpt->formid);
       if(form)
       {
         // if the form is outside the roi, we just skip it
@@ -519,7 +519,7 @@ void _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const
   }
 
   // iterate through all forms
-  dt_masks_form_t *grp = dt_masks_get_from_id_ext(self->dev->forms, bp->mask_id);
+  dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
   int pos = 0;
   if(grp && (grp->type & DT_MASKS_GROUP))
   {
@@ -527,7 +527,7 @@ void _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const
     {
       dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
       // we get the spot
-      dt_masks_form_t *form = dt_masks_get_from_id_ext(self->dev->forms, grpt->formid);
+      dt_masks_form_t *form = dt_masks_get_from_id(self->dev, grpt->formid);
       if(!form)
       {
         continue;

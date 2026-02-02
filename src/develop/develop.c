@@ -78,6 +78,7 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   memset(dev, 0, sizeof(dt_develop_t));
   dev->gui_module = NULL;
   dt_pthread_rwlock_init(&dev->history_mutex, NULL);
+  dt_pthread_rwlock_init(&dev->masks_mutex, NULL);
   dev->history_end = 0;
   dev->history = NULL; // empty list
   dev->history_hash = 0;
@@ -200,11 +201,16 @@ void dt_dev_cleanup(dt_develop_t *dev)
     dt_dev_pixelpipe_cleanup(dev->preview_pipe);
     free(dev->preview_pipe);
   }
+  
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
   while(dev->history)
   {
     dt_dev_free_history_item(((dt_dev_history_item_t *)dev->history->data));
     dev->history = g_list_delete_link(dev->history, dev->history);
   }
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
+  dt_pthread_rwlock_destroy(&dev->history_mutex);
+
   while(dev->iop)
   {
     dt_iop_cleanup_module((dt_iop_module_t *)dev->iop->data);
@@ -225,13 +231,15 @@ void dt_dev_cleanup(dt_develop_t *dev)
     dev->allprofile_info = g_list_delete_link(dev->allprofile_info, dev->allprofile_info);
   }
 
-  dt_pthread_rwlock_destroy(&dev->history_mutex);
-
   free(dev->histogram_pre_tonecurve);
   free(dev->histogram_pre_levels);
 
+  dt_pthread_rwlock_wrlock(&dev->masks_mutex);
   g_list_free_full(dev->forms, (void (*)(void *))dt_masks_free_form);
   g_list_free_full(dev->allforms, (void (*)(void *))dt_masks_free_form);
+  dt_pthread_rwlock_unlock(&dev->masks_mutex);
+
+  dt_pthread_rwlock_destroy(&dev->masks_mutex);
 
   dt_conf_set_int("darkroom/ui/rawoverexposed/mode", dev->rawoverexposed.mode);
   dt_conf_set_int("darkroom/ui/rawoverexposed/colorscheme", dev->rawoverexposed.colorscheme);

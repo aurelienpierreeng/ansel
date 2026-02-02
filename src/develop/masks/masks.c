@@ -367,12 +367,16 @@ static dt_masks_form_t *_group_from_module(dt_develop_t *dev, dt_iop_module_t *m
 
 void dt_masks_append_form(dt_develop_t *dev, dt_masks_form_t *form)
 {
+  dt_pthread_rwlock_wrlock(&dev->masks_mutex);
   dev->forms = g_list_append(dev->forms, form);
+  dt_pthread_rwlock_unlock(&dev->masks_mutex);
 }
 
 void dt_masks_remove_form(dt_develop_t *dev, dt_masks_form_t *form)
 {
+  dt_pthread_rwlock_wrlock(&dev->masks_mutex);
   dev->forms = g_list_remove(dev->forms, form);
+  dt_pthread_rwlock_unlock(&dev->masks_mutex);
 }
 
 void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module, dt_masks_form_t *form,
@@ -387,11 +391,13 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
   guint nb = 0;
 
   // count only the same forms to have a clean numbering
+  dt_pthread_rwlock_rdlock(&dev->masks_mutex);
   for(GList *l = dev->forms; l; l = g_list_next(l))
   {
     dt_masks_form_t *f = (dt_masks_form_t *)l->data;
     if(f->type == form->type) nb++;
   }
+  dt_pthread_rwlock_unlock(&dev->masks_mutex);
 
   gboolean exist = FALSE;
 
@@ -405,6 +411,7 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
     if(form->functions && form->functions->set_form_name)
       form->functions->set_form_name(form, nb);
 
+    dt_pthread_rwlock_rdlock(&dev->masks_mutex);
     for(GList *l = dev->forms; l; l = g_list_next(l))
     {
       dt_masks_form_t *f = (dt_masks_form_t *)l->data;
@@ -414,6 +421,8 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
         break;
       }
     }
+    dt_pthread_rwlock_unlock(&dev->masks_mutex);
+
   } while(exist);
 
   dt_masks_append_form(dev, form);
@@ -885,17 +894,21 @@ dt_masks_form_t *dt_masks_create(dt_masks_type_t type)
 
 dt_masks_form_t *dt_masks_create_ext(dt_masks_type_t type)
 {
+  dt_pthread_rwlock_wrlock(&darktable.develop->masks_mutex);
   dt_masks_form_t *form = dt_masks_create(type);
 
   // all forms created here are registered in darktable.develop->allforms for later cleanup
   if(form)
     darktable.develop->allforms = g_list_append(darktable.develop->allforms, form);
 
+  dt_pthread_rwlock_unlock(&darktable.develop->masks_mutex);
+
   return form;
 }
 
 void dt_masks_replace_current_forms(dt_develop_t *dev, GList *forms)
 {
+  dt_pthread_rwlock_wrlock(&dev->masks_mutex);
   GList *forms_tmp = dt_masks_dup_forms_deep(forms, NULL);
 
   while(dev->forms)
@@ -905,6 +918,7 @@ void dt_masks_replace_current_forms(dt_develop_t *dev, GList *forms)
   }
 
   dev->forms = forms_tmp;
+  dt_pthread_rwlock_unlock(&dev->masks_mutex);
 }
 
 dt_masks_form_t *dt_masks_get_from_id_ext(GList *forms, int id)
@@ -919,7 +933,10 @@ dt_masks_form_t *dt_masks_get_from_id_ext(GList *forms, int id)
 
 dt_masks_form_t *dt_masks_get_from_id(dt_develop_t *dev, int id)
 {
-  return dt_masks_get_from_id_ext(dev->forms, id);
+  dt_pthread_rwlock_rdlock(&dev->masks_mutex);
+  dt_masks_form_t *result = dt_masks_get_from_id_ext(dev->forms, id);
+  dt_pthread_rwlock_unlock(&dev->masks_mutex);
+  return result;
 }
 
 void dt_masks_read_masks_history(dt_develop_t *dev, const int32_t imgid)
@@ -1640,6 +1657,7 @@ void dt_masks_iop_combo_populate(GtkWidget *w, void *m)
   pos++;
 
   // add existing shapes
+  dt_pthread_rwlock_rdlock(&module->dev->masks_mutex);
   for(GList *forms = module->dev->forms; forms; forms = g_list_next(forms))
   {
     dt_masks_form_t *form = (dt_masks_form_t *)forms->data;
@@ -1670,6 +1688,7 @@ void dt_masks_iop_combo_populate(GtkWidget *w, void *m)
       pos++;
     }
   }
+  dt_pthread_rwlock_unlock(&module->dev->masks_mutex);
 
   // masks from other iops
   int pos2 = 1;

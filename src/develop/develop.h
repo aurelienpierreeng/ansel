@@ -193,6 +193,7 @@ typedef struct dt_develop_t
   dt_image_t image_storage;
 
   // history stack
+  // Protect read & write to dev->history
   dt_pthread_rwlock_t history_mutex;
   int32_t history_end;
   GList *history;
@@ -216,6 +217,7 @@ typedef struct dt_develop_t
 
   // list of forms iop can use for masks or whatever
   GList *forms;
+
   // integrity hash of forms
   uint64_t forms_hash;
   // forms have been added or removed or changed and need to be committed to history
@@ -224,6 +226,10 @@ typedef struct dt_develop_t
   struct dt_masks_form_gui_t *form_gui;
   // all forms to be linked here for cleanup:
   GList *allforms;
+
+  // Mutex lock protecting masks, shapes, etc.
+  // aka dev->forms and dev->all_forms
+  dt_pthread_rwlock_t masks_mutex;
 
   dt_backbuf_t raw_histogram; // backbuf to prepare the raw histogram (before white balance)
   dt_backbuf_t output_histogram;  // backbuf to prepare the display-agnostic output histogram (in the middle of colorout)

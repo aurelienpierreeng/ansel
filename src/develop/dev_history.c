@@ -231,7 +231,7 @@ int dt_history_merge_module_into_history(dt_develop_t *dev_dest, dt_develop_t *d
         // now copy masks
         for(int i = 0; i < nbf && forms_used_replace[i] > 0; i++)
         {
-          dt_masks_form_t *form = dt_masks_get_from_id_ext(dev_src->forms, forms_used_replace[i]);
+          dt_masks_form_t *form = dt_masks_get_from_id(dev_src, forms_used_replace[i]);
           if(form)
           {
             // check if the form already exists in dest image
@@ -602,7 +602,10 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
     dt_print(DT_DEBUG_HISTORY, "[dt_dev_add_history_item_ext] committing masks for module %s at history position %i\n", module->name(), hist->num);
     // FIXME: this copies ALL drawn masks AND masks groups used by all modules to any module history using masks.
     // Kudos to the idiots who thought it would be reasonable. Expect database bloating and perf penalty.
+    dt_pthread_rwlock_rdlock(&dev->masks_mutex);
     hist->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+    dt_pthread_rwlock_unlock(&dev->masks_mutex);
+
     dev->forms_changed = FALSE; // reset
   }
   else

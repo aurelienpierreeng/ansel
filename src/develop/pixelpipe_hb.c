@@ -1772,7 +1772,9 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
   dt_print(DT_DEBUG_DEV, "[pixelpipe] Started %s pipeline recompute at %i×%i px\n", dt_pixelpipe_get_pipe_name(pipe->type), width, height);
 
   // get a snapshot of the mask list
+  dt_pthread_rwlock_rdlock(&dev->masks_mutex);
   pipe->forms = dt_masks_dup_forms_deep(dev->forms, NULL);
+  dt_pthread_rwlock_unlock(&dev->masks_mutex);
 
   // go through the list of modules from the end:
   GList *modules = g_list_last(pipe->iop);
