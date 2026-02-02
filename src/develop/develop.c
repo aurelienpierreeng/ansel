@@ -250,23 +250,7 @@ void dt_dev_cleanup(dt_develop_t *dev)
   dt_conf_set_float("darkroom/ui/overexposed/upper", dev->overexposed.upper);
 }
 
-static void dt_dev_process_main(dt_develop_t *dev)
-{
-  if(!dev->gui_attached) return;
-  const int err
-      = dt_control_add_job_res(darktable.control, dt_dev_process_image_job_create(dev), DT_CTL_WORKER_DARKROOM_MAIN);
-  if(err) fprintf(stderr, "[dev_process_image] job queue exceeded!\n");
-}
-
-static void dt_dev_process_preview(dt_develop_t *dev)
-{
-  if(!dev->gui_attached) return;
-  const int err
-      = dt_control_add_job_res(darktable.control, dt_dev_process_preview_job_create(dev), DT_CTL_WORKER_DARKROOM_THUMB);
-  if(err) fprintf(stderr, "[dev_process_preview] job queue exceeded!\n");
-}
-
-void dt_dev_force_reprocess(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe)
+void dt_dev_process(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe)
 {
   pipe->status = DT_DEV_PIXELPIPE_DIRTY;
 
@@ -275,10 +259,10 @@ void dt_dev_force_reprocess(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe)
     switch(pipe->type)
     {
       case DT_DEV_PIXELPIPE_PREVIEW:
-        dt_dev_process_preview(dev);
+        dt_control_add_job_res(darktable.control, dt_dev_process_preview_job_create(dev), DT_CTL_WORKER_DARKROOM_THUMB);
         break;
       case DT_DEV_PIXELPIPE_FULL:
-        dt_dev_process_main(dev);
+        dt_control_add_job_res(darktable.control, dt_dev_process_image_job_create(dev), DT_CTL_WORKER_DARKROOM_MAIN);
         break;
       default:
         break;
@@ -292,8 +276,8 @@ void dt_dev_process_all_real(dt_develop_t *dev)
   // Try to make the preview pipe runs first, we need it for many output sizes computations
   // aka give a timeout to main pipe. No guaranty though, we don't control threads.
   dev->pipe->timeout = 150000; // 150 ms
-  dt_dev_force_reprocess(dev, dev->preview_pipe);
-  dt_dev_force_reprocess(dev, dev->pipe);
+  dt_dev_process(dev, dev->preview_pipe);
+  dt_dev_process(dev, dev->pipe);
 }
 
 static void _flag_pipe(dt_dev_pixelpipe_t *pipe, gboolean error)
