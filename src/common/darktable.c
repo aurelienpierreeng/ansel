@@ -1295,9 +1295,6 @@ void dt_cleanup()
 
   if(init_gui)
   {
-    // Ensure we stop dangling jobs before deleting GUI stuff that may use them
-    dt_control_shutdown(darktable.control);
-
     // hide main window and do rest of the cleanup in the background
     gtk_widget_hide(dt_ui_main_window(darktable.gui->ui));
 
@@ -1317,6 +1314,9 @@ void dt_cleanup()
 
   if(init_gui)
   {
+    // Ensure we stop dangling jobs before deleting GUI stuff that may use them
+    dt_control_shutdown(darktable.control);
+
     dt_imageio_cleanup(darktable.imageio);
     free(darktable.imageio);
 
