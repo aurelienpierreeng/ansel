@@ -316,8 +316,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     float pzx = 0.f, pzy = 0.f;
     dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
 
-    g->posx_to = pzx * darktable.develop->preview_pipe->backbuf_width;
-    g->posy_to = pzy * darktable.develop->preview_pipe->backbuf_height;
+    g->posx_to = pzx * self->dev->preview_pipe->backbuf_width;
+    g->posy_to = pzy * self->dev->preview_pipe->backbuf_height;
 
     dt_control_queue_redraw_center();
 
@@ -340,10 +340,10 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
       g->box_cood[2] = g->posx_to;
       g->box_cood[3] = g->posy_to;
       dt_dev_distort_backtransform(darktable.develop, g->box_cood, 2);
-      g->box_cood[0] /= darktable.develop->preview_pipe->iwidth;
-      g->box_cood[1] /= darktable.develop->preview_pipe->iheight;
-      g->box_cood[2] /= darktable.develop->preview_pipe->iwidth;
-      g->box_cood[3] /= darktable.develop->preview_pipe->iheight;
+      g->box_cood[0] /= self->dev->preview_pipe->iwidth;
+      g->box_cood[1] /= self->dev->preview_pipe->iheight;
+      g->box_cood[2] /= self->dev->preview_pipe->iwidth;
+      g->box_cood[3] /= self->dev->preview_pipe->iheight;
 
       g->button_down = 0;
       g->call_auto_exposure = 1;
@@ -378,8 +378,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
       float pzy = 0.f;
       dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
 
-      g->posx_from = g->posx_to = pzx * darktable.develop->preview_pipe->backbuf_width;
-      g->posy_from = g->posy_to = pzy * darktable.develop->preview_pipe->backbuf_height;
+      g->posx_from = g->posx_to = pzx * self->dev->preview_pipe->backbuf_width;
+      g->posy_from = g->posy_to = pzy * self->dev->preview_pipe->backbuf_height;
 
       g->button_down = 1;
 

@@ -2110,7 +2110,7 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     if(self->off) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(self->off), 1);
 
   // add an option to allow skip mouse events while editing masks
-  if(darktable.develop->darkroom_skip_mouse_events || in_mask_editing(self)) return 0;
+  if(self->dev->darkroom_skip_mouse_events || in_mask_editing(self)) return 0;
 
   // if GUI buffers not ready, exit but still handle the cursor
   dt_iop_gui_enter_critical_section(self);

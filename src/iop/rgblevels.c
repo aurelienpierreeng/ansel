@@ -460,7 +460,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
   // set active point
   if(event->button == 1)
   {
-    if(darktable.develop->gui_module != self) dt_iop_request_focus(self);
+    if(self->dev->gui_module != self) dt_iop_request_focus(self);
 
     if(event->type == GDK_2BUTTON_PRESS)
     {
@@ -529,7 +529,7 @@ static gboolean _area_scroll_callback(GtkWidget *widget, GdkEventScroll *event, 
     return FALSE;
   }
 
-  if(darktable.develop->gui_module != self) dt_iop_request_focus(self);
+  if(self->dev->gui_module != self) dt_iop_request_focus(self);
 
   const float interval = 0.002; // Distance moved for each scroll event
   if(dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y))

@@ -362,11 +362,6 @@ static int rt_get_index_from_formid(dt_iop_retouch_params_t *p, const int formid
   return index;
 }
 
-static int rt_get_selected_shape_id()
-{
-  return darktable.develop->mask_form_selected_id;
-}
-
 static dt_masks_form_group_t *rt_get_mask_point_group(dt_iop_module_t *self, int formid)
 {
   dt_masks_form_group_t *form_point_group = NULL;
@@ -443,7 +438,7 @@ static void rt_show_hide_controls(const dt_iop_module_t *self)
   else
     gtk_widget_hide(GTK_WIDGET(g->vbox_preview_scale));
 
-  const dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, rt_get_selected_shape_id());
+  const dt_masks_form_t *form = dt_masks_get_from_id(self->dev, self->dev->mask_form_selected_id);
   if(form)
     gtk_widget_show(GTK_WIDGET(g->sl_mask_opacity));
   else
@@ -452,7 +447,7 @@ static void rt_show_hide_controls(const dt_iop_module_t *self)
 
 static void rt_display_selected_shapes_lbl(dt_iop_retouch_gui_data_t *g)
 {
-  const dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, rt_get_selected_shape_id());
+  const dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, darktable.develop->mask_form_selected_id);
   if(form)
     gtk_label_set_text(g->label_form_selected, form->name);
   else
@@ -461,7 +456,7 @@ static void rt_display_selected_shapes_lbl(dt_iop_retouch_gui_data_t *g)
 
 static int rt_get_selected_shape_index(dt_iop_retouch_params_t *p)
 {
-  return rt_get_index_from_formid(p, rt_get_selected_shape_id());
+  return rt_get_index_from_formid(p, darktable.develop->mask_form_selected_id);
 }
 
 static void rt_shape_selection_changed(dt_iop_module_t *self)
@@ -604,7 +599,7 @@ static void rt_reset_form_creation(GtkWidget *widget, dt_iop_module_t *self)
 
 static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
 {
-  if(!self->enabled || darktable.develop->gui_module != self || darktable.develop->form_gui->creation)
+  if(!self->enabled || self->dev->gui_module != self || self->dev->form_gui->creation)
     return;
 
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
@@ -632,7 +627,7 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
     if(g)
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
                                    (bd->masks_shown != DT_MASKS_EDIT_OFF)
-                                       && (darktable.develop->gui_module == self));
+                                       && (self->dev->gui_module == self));
 
     dt_control_queue_redraw_center();
     return;
@@ -663,11 +658,11 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
   grp2->formid = 0;
   dt_masks_group_ungroup(grp2, grp);
   dt_masks_change_form_gui(grp2);
-  darktable.develop->form_gui->edit_mode = bd->masks_shown;
+  self->dev->form_gui->edit_mode = bd->masks_shown;
 
   if(g)
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
-                                 (bd->masks_shown != DT_MASKS_EDIT_OFF) && (darktable.develop->gui_module == self));
+                                 (bd->masks_shown != DT_MASKS_EDIT_OFF) && (self->dev->gui_module == self));
 
   dt_control_queue_redraw_center();
 }
@@ -776,7 +771,7 @@ void post_history_commit(dt_iop_module_t *self)
   if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
-                                 (bd->masks_shown != DT_MASKS_EDIT_OFF) && (darktable.develop->gui_module == self));
+                                 (bd->masks_shown != DT_MASKS_EDIT_OFF) && (self->dev->gui_module == self));
   }
   else
   {
@@ -1002,8 +997,8 @@ static gboolean rt_add_shape(GtkWidget *widget, dt_iop_module_t *self)
       spot = dt_masks_create(type | DT_MASKS_NON_CLONE);
 
     dt_masks_change_form_gui(spot);
-    darktable.develop->form_gui->creation = TRUE;
-    darktable.develop->form_gui->creation_module = self;
+    self->dev->form_gui->creation = TRUE;
+    self->dev->form_gui->creation_module = self;
 
     dt_control_queue_redraw_center();
   }
@@ -1625,7 +1620,7 @@ static void rt_mask_opacity_callback(GtkWidget *slider, dt_iop_module_t *self)
 {
   if(darktable.gui->reset) return;
 
-  const int shape_id = rt_get_selected_shape_id();
+  const int shape_id = self->dev->mask_form_selected_id;
 
   if(shape_id > 0)
   {
@@ -1645,7 +1640,7 @@ void gui_post_expose (struct dt_iop_module_t *self,
 {
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)self->gui_data;
 
-  const int shape_id = rt_get_selected_shape_id();
+  const int shape_id = self->dev->mask_form_selected_id;
 
   if(shape_id > 0)
   {
@@ -1660,7 +1655,7 @@ static gboolean rt_edit_masks_callback(GtkWidget *widget, GdkEventButton *event,
   if(darktable.gui->reset) return FALSE;
 
   // if we don't have the focus, request for it and quit, gui_focus() do the rest
-  if(darktable.develop->gui_module != self)
+  if(self->dev->gui_module != self)
   {
     dt_iop_request_focus(self);
     return FALSE;
@@ -1670,7 +1665,7 @@ static gboolean rt_edit_masks_callback(GtkWidget *widget, GdkEventButton *event,
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)self->gui_data;
 
   //hide all shapes and free if some are in creation
-  if(darktable.develop->form_gui->creation && darktable.develop->form_gui->creation_module == self)
+  if(self->dev->form_gui->creation && self->dev->form_gui->creation_module == self)
     dt_masks_change_form_gui(NULL);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_polygon), FALSE);
@@ -1711,7 +1706,7 @@ static gboolean rt_edit_masks_callback(GtkWidget *widget, GdkEventButton *event,
     rt_show_forms_for_current_scale(self);
 
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
-                                 (bd->masks_shown != DT_MASKS_EDIT_OFF) && (darktable.develop->gui_module == self));
+                                 (bd->masks_shown != DT_MASKS_EDIT_OFF) && (self->dev->gui_module == self));
 
     --darktable.gui->reset;
 
@@ -1802,7 +1797,7 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
       dt_control_queue_redraw_center();
     }
   }
-  else if(darktable.develop->form_gui->creation && (darktable.develop->form_gui->creation_module == self))
+  else if(self->dev->form_gui->creation && (self->dev->form_gui->creation_module == self))
   {
     dt_iop_request_focus(self);
 
@@ -1823,8 +1818,8 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
       spot = dt_masks_create(type | DT_MASKS_NON_CLONE);
     dt_masks_change_form_gui(spot);
 
-    darktable.develop->form_gui->creation = TRUE;
-    darktable.develop->form_gui->creation_module = self;
+    self->dev->form_gui->creation = TRUE;
+    self->dev->form_gui->creation_module = self;
     dt_control_queue_redraw_center();
   }
 
@@ -2007,13 +2002,13 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
                                      (bd->masks_shown != DT_MASKS_EDIT_OFF)
-                                         && (darktable.develop->gui_module == self));
+                                         && (self->dev->gui_module == self));
       }
     }
     else
     {
       // lost focus, hide all shapes and free if some are in creation
-      if(darktable.develop->form_gui->creation && darktable.develop->form_gui->creation_module == self)
+      if(self->dev->form_gui->creation && self->dev->form_gui->creation_module == self)
         dt_masks_change_form_gui(NULL);
 
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_polygon), FALSE);
@@ -2133,7 +2128,7 @@ void gui_update(dt_iop_module_t *self)
   if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
-                                 (bd->masks_shown != DT_MASKS_EDIT_OFF) && (darktable.develop->gui_module == self));
+                                 (bd->masks_shown != DT_MASKS_EDIT_OFF) && (self->dev->gui_module == self));
   }
   else
   {

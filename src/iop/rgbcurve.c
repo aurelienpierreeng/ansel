@@ -591,7 +591,7 @@ static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event
 
   gdouble delta_y;
 
-  if(darktable.develop->darkroom_skip_mouse_events)
+  if(self->dev->darkroom_skip_mouse_events)
   {
     if(dt_gui_get_scroll_deltas(event, NULL, &delta_y))
     {
@@ -639,7 +639,7 @@ static gboolean _area_key_press_callback(GtkWidget *widget, GdkEventKey *event, 
   dt_iop_rgbcurve_params_t *p = (dt_iop_rgbcurve_params_t *)self->params;
   dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
 
-  if(darktable.develop->darkroom_skip_mouse_events) return FALSE;
+  if(self->dev->darkroom_skip_mouse_events) return FALSE;
 
   // if autoscale is on: do not modify g and b curves
   if((p->curve_autoscale != DT_S_SCALE_MANUAL_RGB) && g->channel != DT_IOP_RGBCURVE_R) return TRUE;
@@ -953,7 +953,7 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
   }
 
   // draw zoom info
-  if(darktable.develop->darkroom_skip_mouse_events)
+  if(self->dev->darkroom_skip_mouse_events)
   {
     PangoLayout *layout;
     PangoRectangle ink;
@@ -1070,7 +1070,7 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *
   const int inset = DT_GUI_CURVE_EDITOR_INSET;
 
   // drag the draw area
-  if(darktable.develop->darkroom_skip_mouse_events)
+  if(self->dev->darkroom_skip_mouse_events)
   {
     GtkAllocation allocation;
     gtk_widget_get_allocation(widget, &allocation);
@@ -1175,7 +1175,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
   dt_iop_rgbcurve_params_t *d = (dt_iop_rgbcurve_params_t *)self->default_params;
   dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
 
-  if(darktable.develop->darkroom_skip_mouse_events) return TRUE;
+  if(self->dev->darkroom_skip_mouse_events) return TRUE;
 
   const int ch = g->channel;
   const int autoscale = p->curve_autoscale;

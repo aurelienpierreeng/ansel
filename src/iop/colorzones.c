@@ -1228,7 +1228,7 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
   cairo_translate(cr, 0, height);
 
   // draw zoom info
-  if(darktable.develop->darkroom_skip_mouse_events)
+  if(self->dev->darkroom_skip_mouse_events)
   {
     char text[256];
     PangoLayout *layout;
@@ -1698,7 +1698,7 @@ static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event
 
   int delta_y;
 
-  if(darktable.develop->darkroom_skip_mouse_events)
+  if(self->dev->darkroom_skip_mouse_events)
   {
     if(dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y))
     {
@@ -1774,7 +1774,7 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *
   const int width = allocation.width - 2 * inset;
 
   // drag the draw area
-  if(darktable.develop->darkroom_skip_mouse_events)
+  if(self->dev->darkroom_skip_mouse_events)
   {
     const float mx = c->mouse_x;
     const float my = c->mouse_y;
@@ -1916,7 +1916,7 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
   dt_iop_colorzones_params_t *p = (dt_iop_colorzones_params_t *)self->params;
   dt_iop_colorzones_params_t *d = (dt_iop_colorzones_params_t *)self->default_params;
 
-  if(darktable.develop->darkroom_skip_mouse_events) return TRUE;
+  if(self->dev->darkroom_skip_mouse_events) return TRUE;
 
   int ch = c->channel;
   int nodes = p->curve_num_nodes[ch];
@@ -2054,7 +2054,7 @@ static gboolean _area_button_release_callback(GtkWidget *widget, GdkEventButton 
 
 static gboolean _area_enter_notify_callback(GtkWidget *widget, GdkEventCrossing *event, dt_iop_module_t *self)
 {
-  if(darktable.develop->darkroom_skip_mouse_events) return TRUE;
+  if(self->dev->darkroom_skip_mouse_events) return TRUE;
 
   dt_iop_colorzones_gui_data_t *c = (dt_iop_colorzones_gui_data_t *)self->gui_data;
   c->mouse_y = fabs(c->mouse_y);
@@ -2064,7 +2064,7 @@ static gboolean _area_enter_notify_callback(GtkWidget *widget, GdkEventCrossing 
 
 static gboolean _area_leave_notify_callback(GtkWidget *widget, GdkEventCrossing *event, dt_iop_module_t *self)
 {
-  if(darktable.develop->darkroom_skip_mouse_events) return TRUE;
+  if(self->dev->darkroom_skip_mouse_events) return TRUE;
 
   dt_iop_colorzones_gui_data_t *c = (dt_iop_colorzones_gui_data_t *)self->gui_data;
   // for fluxbox
@@ -2088,7 +2088,7 @@ static gboolean _area_key_press_callback(GtkWidget *widget, GdkEventKey *event, 
 {
   dt_iop_colorzones_gui_data_t *c = (dt_iop_colorzones_gui_data_t *)self->gui_data;
 
-  if(darktable.develop->darkroom_skip_mouse_events) return FALSE;
+  if(self->dev->darkroom_skip_mouse_events) return FALSE;
 
   if(c->selected < 0) return FALSE;
 

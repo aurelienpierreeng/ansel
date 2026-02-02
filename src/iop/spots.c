@@ -290,8 +290,8 @@ static gboolean _add_shape(GtkWidget *widget, dt_iop_module_t *self)
 
   dt_masks_form_t *form = dt_masks_create(type | DT_MASKS_CLONE);
   dt_masks_change_form_gui(form);
-  darktable.develop->form_gui->creation = TRUE;
-  darktable.develop->form_gui->creation_module = self;
+  self->dev->form_gui->creation = TRUE;
+  self->dev->form_gui->creation_module = self;
 
   dt_control_queue_redraw_center();
   return FALSE;
@@ -317,7 +317,7 @@ static gboolean _edit_masks(GtkWidget *widget, GdkEventButton *e, dt_iop_module_
   if(darktable.gui->reset) return FALSE;
 
   // if we don't have the focus, request for it and quit, gui_focus() do the rest
-  if(darktable.develop->gui_module != self)
+  if(self->dev->gui_module != self)
   {
     dt_iop_request_focus(self);
     return FALSE;
@@ -327,7 +327,7 @@ static gboolean _edit_masks(GtkWidget *widget, GdkEventButton *e, dt_iop_module_
   dt_iop_spots_gui_data_t *g = (dt_iop_spots_gui_data_t *)self->gui_data;
 
   //hide all shapes and free if some are in creation
-  if(darktable.develop->form_gui->creation && darktable.develop->form_gui->creation_module == self)
+  if(self->dev->form_gui->creation && self->dev->form_gui->creation_module == self)
     dt_masks_change_form_gui(NULL);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), FALSE);
@@ -347,7 +347,7 @@ static gboolean _edit_masks(GtkWidget *widget, GdkEventButton *e, dt_iop_module_
   if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
-                                 (bd->masks_shown != DT_MASKS_EDIT_OFF) && (darktable.develop->gui_module == self));
+                                 (bd->masks_shown != DT_MASKS_EDIT_OFF) && (self->dev->gui_module == self));
   }
   else
   {
@@ -708,7 +708,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
 
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
                                      (bd->masks_shown != DT_MASKS_EDIT_OFF)
-                                     && (darktable.develop->gui_module == self));
+                                     && (self->dev->gui_module == self));
       }
       else
       {
@@ -718,7 +718,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     else
     {
       // lost focus, hide all shapes
-      if (darktable.develop->form_gui->creation && darktable.develop->form_gui->creation_module == self)
+      if (self->dev->form_gui->creation && self->dev->form_gui->creation_module == self)
         dt_masks_change_form_gui(NULL);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_path), FALSE);
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), FALSE);
@@ -773,7 +773,7 @@ void gui_update(dt_iop_module_t *self)
   if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
   {
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_edit_masks),
-                                 (bd->masks_shown != DT_MASKS_EDIT_OFF) && (darktable.develop->gui_module == self));
+                                 (bd->masks_shown != DT_MASKS_EDIT_OFF) && (self->dev->gui_module == self));
   }
   else
   {
