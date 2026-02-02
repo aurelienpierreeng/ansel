@@ -584,6 +584,8 @@ static inline int _brush_cyclic_cursor(int n, int nb)
 
 /** get all points of the brush and the border */
 /** this takes care of gaps and iop distortions */
+// Brush points are stored in a cyclic way because the border goes around the main line.
+// This means that it record the main line twice (up and down) while the border only once (around).
 static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const double iop_order, const int transf_direction,
                                     dt_dev_pixelpipe_t *pipe, float **points, int *points_count,
                                     float **border, int *border_count, float **payload, int *payload_count,
@@ -2002,13 +2004,12 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   return 1;
 }
 
-static void _brush_draw_shape(cairo_t *cr, const float *points, const int points_count, const int coord_nb, const gboolean border, const gboolean source)
+static void _brush_draw_shape(cairo_t *cr, const float *points, const int points_count, const int node_nb, const gboolean border, const gboolean source)
 {
-  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
  // Find the first valid non-NaN point to start drawing
  // FIXME: Why not just avoid having NaN points in the array?
   int start_idx = -1;
-  for (int i = coord_nb * 3 + border; i < points_count; i++)
+  for (int i = node_nb * 3 + border; i < points_count; i++)
   {
     if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
     {
@@ -2021,17 +2022,19 @@ static void _brush_draw_shape(cairo_t *cr, const float *points, const int points
   if(start_idx >= 0)
   {
     cairo_move_to(cr, points[start_idx * 2], points[start_idx * 2 + 1]);
-    for (int i = start_idx + 1; i < points_count; i++)
+
+    // We don't want to draw the plain line twice, adapt the end index accordingly
+    const int end_idx = border ? points_count : 0.5 * points_count;
+    
+    for (int i = start_idx + 1; i < end_idx; i++)
     {
       if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
         cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
     }
   }
-
-  cairo_close_path(cr);
 }
 
-static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int nb)
+static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int node_count)
 {
   if(!gui) return;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
@@ -2209,50 +2212,64 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     return;
   } // creation
 
+  // minimum points
+  if(gpt->points_count <= node_count * 3 + 2) return;
+
   // draw path
   {
-    // minimum points
-    if(gpt->points_count <= nb * 3 + 2) return;
-
-    const int total_coords = (int)gpt->points_count * 2;
+    const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
+    const int total_points = gpt->points_count * 0.5;
+    
+    // Step 1: Draw the entire curve and track selected segment boundaries
     int seg = 1, current_seg = 0;
-    const double EPS = 1e-6;
-    const double eps2 = EPS * EPS;
-
-    /* We draw the line to the next point in loop until we reach the next node, then stroke it */
-    cairo_move_to(cr, gpt->points[nb * 6], gpt->points[nb * 6 + 1]);
-    for (int i = nb * 3; i < (int)gpt->points_count; i++)
+    int seg_start_idx = node_count * 3;
+    // Track current segment start and end index for later
+    int sel_start = -1, sel_end = -1;
+    
+    cairo_move_to(cr, gpt->points[node_count * 6], gpt->points[node_count * 6 + 1]);
+    
+    for(int i = node_count * 3; i < total_points; i++)
     {
       double x = gpt->points[i * 2];
       double y = gpt->points[i * 2 + 1];
       cairo_line_to(cr, x, y);
 
       int seg_idx = seg * 6;
-      /* ensure we won't read past the points array (points array length == points_count * 2) */
-      if ((seg_idx + 3) < total_coords)
+      double segment_x = gpt->points[seg_idx + 2];
+      double segment_y = gpt->points[seg_idx + 3];
+
+      // End of current segment reached
+      if(x == segment_x && y == segment_y)
       {
-        double sx = gpt->points[seg_idx + 2];
-        double sy = gpt->points[seg_idx + 3];
-        double dx = x - sx;
-        double dy = y - sy;
-        /* compare squared distance for robustness */
-        if ((dx * dx + dy * dy) < eps2)
+        // Is this segment the user selected segment?
+        if((gui->group_selected == index) && (gui->seg_selected == current_seg))
         {
-          const gboolean seg_selected = (gui->group_selected == index) && (gui->seg_selected == current_seg);
-          const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-          dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, (seg_selected || all_selected), zoom_scale, gpt->points, gpt->points_count, NULL);
-          seg = (seg + 1) % nb;
-          current_seg++;
-          cairo_move_to(cr, x, y);
+          sel_start = seg_start_idx;
+          sel_end = i;
         }
+        seg = (seg + 1) % node_count;
+        current_seg++;
+        seg_start_idx = i;  // Next segment starts here
       }
+    }
+    dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, all_selected, zoom_scale);
+    
+    // Step 2: Draw selected segment on top if needed
+    if(sel_start >= 0 && sel_end >= 0)
+    {      
+      cairo_move_to(cr, gpt->points[sel_start * 2], gpt->points[sel_start * 2 + 1]);
+      for(int i = sel_start; i <= sel_end; i++)
+      {
+        cairo_line_to(cr, gpt->points[i * 2], gpt->points[i * 2 + 1]);
+      }
+      dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, TRUE, zoom_scale);
     }
   }
 
   // draw borders
-  if((gui->group_selected == index) && gpt->border_count > nb * 3 + 2)
+  if((gui->group_selected == index) && gpt->border_count > node_count * 3 + 2)
   {
-    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, (gui->border_selected), zoom_scale, gpt->border,
+    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, node_count, (gui->border_selected), zoom_scale, gpt->border,
                        gpt->border_count, &dt_masks_functions_brush.draw_shape);
   }
 
@@ -2262,7 +2279,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     cairo_save(cr);
 
     // draw the current node's handle if it's a curve node
-    if( gui->node_edited >= 0 && !dt_masks_is_corner_node(gpt, gui->node_edited, 6, 2))
+    if(gui->node_edited >= 0 && !dt_masks_is_corner_node(gpt, gui->node_edited, 6, 2))
     {
       const int n = gui->node_edited;
       float handle_x, handle_y;
@@ -2275,7 +2292,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     }
 
     // draw all nodes
-    for(int k = 0; k < nb; k++)
+    for(int k = 0; k < node_count; k++)
     {
       const gboolean corner = dt_masks_is_corner_node(gpt, k, 6, 2);
       const float x = gpt->points[k * 6 + 2];
@@ -2289,9 +2306,9 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   }
 
   // draw the source if needed
-  if(gpt->source_count > nb * 3 + 2)
+  if(gpt->source_count > node_count * 3 + 2)
   {
-    dt_masks_draw_source(cr, gui, index, nb, zoom_scale, &dt_masks_functions_brush.draw_shape);
+    dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, &dt_masks_functions_brush.draw_shape);
   }
 }
 

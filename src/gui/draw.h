@@ -691,21 +691,12 @@ static inline void dt_draw_shape_lines(const dt_masks_dash_type_t dash_type, con
                 const float zoom_scale, const float *points, const int points_count, const shape_draw_function_t *draw_shape_func)
 {
   cairo_save(cr);
-
-  // are we drawing a border ?
-  const gboolean border = dash_type != DT_MASKS_NO_DASH;
   // draw the shape from the integrated function if any
-  if(draw_shape_func && points && points_count >= 2)
+  if(nb > 0 && points && points_count >= 2 && draw_shape_func)
   {
+    // are we drawing a border ?
+    const gboolean border = (dash_type != DT_MASKS_NO_DASH);
     (*draw_shape_func)(cr, points, points_count, nb, border, FALSE);
-  }
-
-  if(dash_type)
-  {
-    // Trick: fill with a transparent color to get only the outer shape
-    // because when using varying widths on nodes, there are self-intersecting border lines
-    cairo_set_source_rgba(cr, 0., 0., 0., 0.);
-    cairo_fill_preserve(cr);
   }
 
   // dashed ?
@@ -729,7 +720,7 @@ static inline void dt_draw_shape_lines(const dt_masks_dash_type_t dash_type, con
     cairo_set_line_width(cr, DT_DRAW_SIZE_LINE / zoom_scale);
   dt_draw_set_color_overlay(cr, TRUE, 0.8);
   cairo_stroke(cr);
-
+  
   cairo_restore(cr);
 }
 

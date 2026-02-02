@@ -1883,8 +1883,6 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
 
 static void _polygon_draw_shape(cairo_t *cr, const float *points, const int points_count, const int node_nb, const gboolean border, const gboolean source)
 {
-  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-
   // Find the first valid non-NaN point to start drawing
   // FIXME: Why not just avoid having NaN points in the array?
   int start_idx = -1;
@@ -1900,41 +1898,13 @@ static void _polygon_draw_shape(cairo_t *cr, const float *points, const int poin
   // Only draw if we have at least one valid point
   if(start_idx >= 0)
   {
-    int seg1 = 1;
-    int current_seg = 0;
-    const double eps2 = 1e-12;
-
     cairo_move_to(cr, points[start_idx * 2], points[start_idx * 2 + 1]);
     for (int i = start_idx + 1; i < points_count; i++)
     {
-      double x = points[i * 2];
-      double y = points[i * 2 + 1];
-
-      if(current_seg == node_nb -1) break; // stop before last segment for open shapes
-      
-      if(!isnan(x) && !isnan(y))
-        cairo_line_to(cr, x, y);
-      
-      int seg_idx = seg1 * 6;
-      if ((seg_idx + 3) < points_count * 2)
-      {
-        double sx = points[seg_idx + 2];
-        double sy = points[seg_idx + 3];
-        double dx = x - sx;
-        double dy = y - sy;
-
-        /* is the next node at the same place as the current node ? */
-        /* compare squared distance for robustness */
-        if ((dx * dx + dy * dy) < eps2)
-        {
-          seg1 = (seg1 + 1) % node_nb;
-          current_seg++;
-        }
-      }
+      if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
+        cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
     }
   }
-
-  // we don't close the path to allow open shape while creation
 }
 
 static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int node_count)
@@ -1977,28 +1947,22 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     const int total_points = gpt->points_count * 2;
     int seg1 = 1;
     int current_seg = 0;
-    const double eps2 = 1e-12;
-
     /* Draw the line point-by-point up to the next node, then stroke it; repeat in a loop. */
     cairo_move_to(cr, gpt->points[node_count * 6], gpt->points[node_count * 6 + 1]);
-    for (int i = node_count * 3; i < gpt->points_count; i++)
+    for(int i = node_count * 3; i < gpt->points_count; i++)
     {
-      double x = gpt->points[i * 2];
-      double y = gpt->points[i * 2 + 1];
-
+      const double x = gpt->points[i * 2];
+      const double y = gpt->points[i * 2 + 1];
       cairo_line_to(cr, x, y);
 
       int seg_idx = seg1 * 6;
-      if ((seg_idx + 3) < total_points)
+      if((seg_idx + 3) < total_points)
       {
-        double sx = gpt->points[seg_idx + 2];
-        double sy = gpt->points[seg_idx + 3];
-        double dx = x - sx;
-        double dy = y - sy;
+        const double segment_x = gpt->points[seg_idx + 2];
+        const double segment_y = gpt->points[seg_idx + 3];
 
-        /* is the next node at the same place as the current node ? */
-        /* compare squared distance for robustness */
-        if ((dx * dx + dy * dy) < eps2)
+        /* Is this point the next node? */
+        if(x == segment_x && y == segment_y)
         {
           const gboolean seg_selected = (gui->group_selected == index) && (gui->seg_selected == current_seg);
           const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
@@ -2012,16 +1976,14 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
 
           // stop drawing on the last segment if we are creating
           if(gui->creation && current_seg >= node_count -1 ) break;
-
-          cairo_move_to(cr, x, y);
         }
       }
     }
   }
 
-  // draw borders
   if(gui->group_selected == index)
   {
+    // draw borders
     if(gpt->border_count > node_count * 3 + 2)
     {
       dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, node_count, (gui->border_selected), zoom_scale, gpt->border,
