@@ -250,7 +250,7 @@ void dt_dev_cleanup(dt_develop_t *dev)
   dt_conf_set_float("darkroom/ui/overexposed/upper", dev->overexposed.upper);
 }
 
-void dt_dev_process_main(dt_develop_t *dev)
+static void dt_dev_process_main(dt_develop_t *dev)
 {
   if(!dev->gui_attached) return;
   const int err
@@ -258,7 +258,7 @@ void dt_dev_process_main(dt_develop_t *dev)
   if(err) fprintf(stderr, "[dev_process_image] job queue exceeded!\n");
 }
 
-void dt_dev_process_preview(dt_develop_t *dev)
+static void dt_dev_process_preview(dt_develop_t *dev)
 {
   if(!dev->gui_attached) return;
   const int err
@@ -266,19 +266,34 @@ void dt_dev_process_preview(dt_develop_t *dev)
   if(err) fprintf(stderr, "[dev_process_preview] job queue exceeded!\n");
 }
 
+void dt_dev_force_reprocess(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe)
+{
+  pipe->status = DT_DEV_PIXELPIPE_DIRTY;
+
+  if(!pipe->running)
+  {
+    switch(pipe->type)
+    {
+      case DT_DEV_PIXELPIPE_PREVIEW:
+        dt_dev_process_preview(dev);
+        break;
+      case DT_DEV_PIXELPIPE_FULL:
+        dt_dev_process_main(dev);
+        break;
+      default:
+        break;
+    }
+  }
+  // else : join currently-running threads
+}
+
 void dt_dev_process_all_real(dt_develop_t *dev)
 {
   // Try to make the preview pipe runs first, we need it for many output sizes computations
   // aka give a timeout to main pipe. No guaranty though, we don't control threads.
   dev->pipe->timeout = 150000; // 150 ms
-
-  if(!dev->preview_pipe->running)
-    dt_dev_process_preview(dev);
-  // else : join current pipe
-
-  if(!dev->pipe->running)
-    dt_dev_process_main(dev);
-  // else : join current pipe
+  dt_dev_force_reprocess(dev, dev->preview_pipe);
+  dt_dev_force_reprocess(dev, dev->pipe);
 }
 
 static void _flag_pipe(dt_dev_pixelpipe_t *pipe, gboolean error)

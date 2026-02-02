@@ -89,7 +89,7 @@ void dt_dev_pixelpipe_refresh_main(dt_develop_t *dev, gboolean full)
   else
     dt_dev_pixelpipe_update_history_main(dev);
 
-  dt_dev_process_main(dev);
+  dt_dev_force_reprocess(dev, dev->pipe);
 }
 
 void dt_dev_pixelpipe_refresh_preview(dt_develop_t *dev, gboolean full)
@@ -101,7 +101,7 @@ void dt_dev_pixelpipe_refresh_preview(dt_develop_t *dev, gboolean full)
   else
     dt_dev_pixelpipe_update_preview(dev);
 
-  dt_dev_process_preview(dev);
+  dt_dev_force_reprocess(dev, dev->preview_pipe);
 }
 
 void dt_dev_pixelpipe_refresh_all(dt_develop_t *dev, gboolean full)
@@ -130,7 +130,7 @@ void dt_dev_pixelpipe_change_zoom_main(dt_develop_t *dev)
 {
   if (!dev || !dev->gui_attached) return;
   dt_dev_pixelpipe_update_zoom_main(dev);
-  dt_dev_process_main(dev);
+  dt_dev_force_reprocess(dev, dev->pipe);
 }
 
 gboolean dt_dev_pixelpipe_activemodule_disables_currentmodule(struct dt_develop_t *dev, struct dt_iop_module_t *current_module)
@@ -584,4 +584,17 @@ gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe, struct dt
 gboolean dt_dev_pixelpipe_is_pipeline_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 {
   return dt_dev_history_get_hash(dev) == pipe->history_hash;
+}
+
+void *dt_dev_pixelpipe_get_backbuf(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
+{
+  void *out = NULL;
+
+  if(pipe->backbuf 
+     && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe->backbuf_pipe_hash, &out, NULL, NULL))
+    return out;
+  else
+    dt_dev_force_reprocess(dev, pipe);
+
+  return out;
 }
