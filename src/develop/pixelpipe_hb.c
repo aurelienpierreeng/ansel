@@ -1754,7 +1754,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
   // and history, and we still have an entry cache, abort now. Nothing to do.
   // For preview pipe, if using color pickers, we still need to traverse the pipeline.
   if(!pipe->reentry && !pipe->bypass_cache 
-     && !(darktable.lib->proxy && darktable.lib->proxy.colorpicker.picker_proxy && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+     && !(dev->gui_attached && darktable.lib->proxy.colorpicker.picker_proxy && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
      && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe->hash, &buf, NULL, NULL))
   {
     // Remember that dt_dev_pixelpipe_cache_get_existing()
