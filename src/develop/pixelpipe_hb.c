@@ -1638,6 +1638,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, hash, FALSE, output_entry);
   }
 
+  // Flush the input cache if flagged for auto destroy
+  dt_dev_pixel_pipe_cache_auto_destroy_apply(darktable.pixelpipe_cache, input_hash, pipe->type, input_entry);
+
   // And throw away the current input if it was flagged before as in the above
   // dt_dev_pixel_pipe_cache_auto_destroy_apply(darktable.pixelpipe_cache, input_hash, pipe->type, input_entry);
   // Note : for the last module of the pipeline, even if it's flagged for auto_destroy, it will not be
@@ -1821,9 +1824,6 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
     // get status summary of opencl queue by checking the eventlist
     const int oclerr = (pipe->devid > -1) ? dt_opencl_events_flush(pipe->devid, TRUE) != 0 : 0;
 
-    // Relinquish the CPU because we are in a realtime thread
-    dt_iop_nap(5000);
-
     // Check if we had opencl errors ....
     // remark: opencl errors can come in two ways: pipe->opencl_error is TRUE (and err is TRUE) OR oclerr is
     // TRUE
@@ -1849,6 +1849,9 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
       }
 
       _print_opencl_errors(opencl_error, pipe);
+
+      // Relinquish the CPU because we are in a realtime thread
+      dt_iop_nap(5000);
     }
     else if(!dt_atomic_get_int(&pipe->shutdown))
     {
