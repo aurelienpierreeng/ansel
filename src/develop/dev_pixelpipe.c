@@ -132,7 +132,7 @@ void dt_dev_pixelpipe_change_zoom_main(dt_develop_t *dev)
   if (!dev || !dev->gui_attached) return;
   dt_dev_pixelpipe_update_zoom_main(dev);
   dt_dev_process(dev, dev->pipe);
-  dt_control_navigation_redraw(darktable.control);
+  dt_control_navigation_redraw();
   gtk_widget_queue_draw(dt_ui_center(darktable.gui->ui));
 }
 
