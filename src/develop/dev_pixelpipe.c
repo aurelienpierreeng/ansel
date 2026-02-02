@@ -130,10 +130,18 @@ void dt_dev_pixelpipe_refresh_all(dt_develop_t *dev, gboolean full)
 void dt_dev_pixelpipe_change_zoom_main(dt_develop_t *dev)
 {
   if (!dev || !dev->gui_attached) return;
-  dt_dev_pixelpipe_update_zoom_main(dev);
-  dt_dev_process(dev, dev->pipe);
+  // Slightly different logic: killswitch ASAP,
+  // then redraw UI ASAP for feedback,
+  // finally flag the pipe as dirty for later recompute.
+  // Remember GUI responsiveness is paramount, since a laggy UI
+  // will make user repeat their order for lack of feedback, 
+  // meaning relaunching a pipe recompute, meaning working more
+  // for the same contract.
+  dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_control_navigation_redraw();
   gtk_widget_queue_draw(dt_ui_center(darktable.gui->ui));
+  dt_dev_pixelpipe_update_zoom_main(dev);
+  dt_dev_process(dev, dev->pipe);
 }
 
 gboolean dt_dev_pixelpipe_activemodule_disables_currentmodule(struct dt_develop_t *dev, struct dt_iop_module_t *current_module)
