@@ -14,6 +14,11 @@ body:
         
         If you find an older report for the same issue happening in the same context, and the suggested solution doesn't work for you, add your own info on it.
 
+        __Don't duplicate issues__: if another issue already describes the problem you face, add your info to it, don't create a new one.
+
+        __Don't add more than one bug/problem to a single issue__: issues are __project management__ items, one bug leads to one task, tasks appear on the project dashboard, so we know what remains to be done.
+        Issues are not a helpdesk or a therapy were you can express your frustrations.
+
         __What is a bug ?__
 
         - the software __crashes__,
@@ -25,10 +30,10 @@ body:
         __What is not a bug ?__
 
         - the software produces images that don't look like out-of-camera JPEG files,
-        - the software doesn't magically fix images that were damaged to begin with (clipped highlights, high-ISO noise),
+        - the software doesn't magically fix images that were damaged to begin with (clipped highlights, high-ISO noise),
         - the software is slow to process some specific module on some specific hardware, with no proof that is has ever been faster on this hardware,
         - insane module settings produce insane image results,
-        - __a feature has disappeared from GUI__: Ansel is currently undergoing UI redesign and simplification, documentation of changes may be delayed compared to the code. If you don't find anything documented, [ask on the chat](https://matrix.to/#/#ansel-en:matrix.org)
+        - __a feature has disappeared from GUI__: Ansel is currently undergoing UI redesign and simplification, documentation of changes may be delayed compared to the code. If you don't find anything documented, [ask on the chat](https://matrix.to/#/#ansel-en:matrix.org)
 
         __What is not an _Ansel_ bug ?__
 
