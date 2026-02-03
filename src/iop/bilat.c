@@ -282,6 +282,8 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 #endif
   if(d->mode == s_mode_local_laplacian)
     piece->process_tiling_ready = 0; // can't deal with tiles, sorry.
+
+  piece->force_opencl_cache = TRUE;
 }
 
 

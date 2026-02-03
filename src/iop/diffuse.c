@@ -102,6 +102,13 @@ typedef struct dt_iop_diffuse_global_data_t
 // only copy params struct to avoid a commit_params()
 typedef struct dt_iop_diffuse_params_t dt_iop_diffuse_data_t;
 
+void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params,
+                  dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+{
+  memcpy(piece->data, params, self->params_size);
+  piece->force_opencl_cache = TRUE;
+}
+
 
 typedef enum dt_isotropy_t
 {
