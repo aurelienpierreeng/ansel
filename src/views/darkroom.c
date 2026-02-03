@@ -2233,7 +2233,6 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   // masks
   else if(dev->form_visible && dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which))
   {
-    _do_delayed_history_commit(dev);
     ret = TRUE;
   }
 
