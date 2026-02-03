@@ -692,7 +692,7 @@ static inline void dt_draw_shape_lines(const dt_masks_dash_type_t dash_type, con
 {
   cairo_save(cr);
   // draw the shape from the integrated function if any
-  if(nb > 0 && points && points_count >= 2 && draw_shape_func)
+  if(points && points_count >= 2 && draw_shape_func)
   {
     // are we drawing a border ?
     const gboolean border = (dash_type != DT_MASKS_NO_DASH);
