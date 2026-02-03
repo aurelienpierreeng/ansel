@@ -3686,11 +3686,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     cairo_restore(cr);
   }
 
-  if(!g->editing) return; // nothing to draw
-
   // Fast path: rotation setting by inputting horizon line.
   // Conflicts with editing mode where painting with button pressed is understood as validating lines.
-  if(g->straightening)
+  if(g->straightening && !g->editing)
   {
     cairo_save(cr);
 
@@ -3762,6 +3760,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     return;
   }
 
+  if(!g->editing) return; // nothing else to draw
+
   cairo_save(cr);
   dt_dev_clip_roi(dev, cr, width, height);
   dt_dev_rescale_roi(dev, cr, width, height);
@@ -3794,10 +3794,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     ymax = MAX(ymax, V[n][1]);
   }
 
-  // Not editing : nothing more to show
+  /*
+  // Paint black outside area when not in editing mode then returns.
   if(!g->editing)
   {
-    // Only draw the black outside area before returning
     if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)V, 4))
       return;
@@ -3821,7 +3821,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     cairo_restore(cr);
     return;
   }
-
+*/
   const float owd = xmax - xmin;
   const float oht = ymax - ymin;
 
@@ -3852,7 +3852,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     C[i][1] *= scale_factor;
   }
 
-  // mask parts of image outside of clipping area in transparent dark grey
+  // Paint image outside of clipping area in transparent dark grey
   cairo_set_source_rgba(cr, .2, .2, .2, .8);
   cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
   cairo_rectangle(cr, 0.0, 0.0, wd, ht);  // outer (full) area
@@ -3862,8 +3862,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   cairo_line_to(cr, C[3][0], C[3][1]);
   cairo_close_path(cr);
   cairo_fill(cr);
-  // force cover the outside area in black.
-  // This avoids to get an other color rendered outside the image because of nexts modules processing.
+  // Paint outside area in black.
+  // This avoids to get an other color rendered outside the image because of nexts modules preview.
   cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
   cairo_rectangle(cr, 0.0, 0.0, wd, ht);  // outer (full) area
   cairo_move_to(cr, V[0][0], V[0][1]);    // inner image polygon
