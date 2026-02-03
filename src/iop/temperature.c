@@ -106,6 +106,12 @@ typedef struct dt_iop_temperature_data_t
   float coeffs[4];
 } dt_iop_temperature_data_t;
 
+typedef struct dt_iop_temperature_global_data_t
+{
+  int kernel_whitebalance_4f;
+  int kernel_whitebalance_1f;
+  int kernel_whitebalance_1f_xtrans;
+} dt_iop_temperature_global_data_t;
 
 typedef struct dt_iop_temperature_preset_data_t
 {
@@ -564,6 +570,79 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     self->dev->proxy.wb_coeffs[k] = d->coeffs[k];
   }
 }
+
+#ifdef HAVE_OPENCL
+int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+{
+  dt_iop_temperature_data_t *d = (dt_iop_temperature_data_t *)piece->data;
+  dt_iop_temperature_global_data_t *gd = (dt_iop_temperature_global_data_t *)self->global_data;
+
+  const int devid = piece->pipe->devid;
+  const uint32_t filters = piece->pipe->dsc.filters;
+  cl_mem dev_coeffs = NULL;
+  cl_mem dev_xtrans = NULL;
+  cl_int err = -999;
+  int kernel = -1;
+
+  if(filters == 9u)
+  {
+    kernel = gd->kernel_whitebalance_1f_xtrans;
+  }
+  else if(filters)
+  {
+    kernel = gd->kernel_whitebalance_1f;
+  }
+  else
+  {
+    kernel = gd->kernel_whitebalance_4f;
+  }
+
+  if(filters == 9u)
+  {
+    dev_xtrans
+        = dt_opencl_copy_host_to_device_constant(devid, sizeof(piece->pipe->dsc.xtrans), piece->pipe->dsc.xtrans);
+    if(dev_xtrans == NULL) goto error;
+  }
+
+  dev_coeffs = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 3, d->coeffs);
+  if(dev_coeffs == NULL) goto error;
+
+  const int width = roi_in->width;
+  const int height = roi_in->height;
+
+  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+  dt_opencl_set_kernel_arg(devid, kernel, 0, sizeof(cl_mem), (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, kernel, 1, sizeof(cl_mem), (void *)&dev_out);
+  dt_opencl_set_kernel_arg(devid, kernel, 2, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, kernel, 3, sizeof(int), (void *)&height);
+  dt_opencl_set_kernel_arg(devid, kernel, 4, sizeof(cl_mem), (void *)&dev_coeffs);
+  dt_opencl_set_kernel_arg(devid, kernel, 5, sizeof(uint32_t), (void *)&filters);
+  dt_opencl_set_kernel_arg(devid, kernel, 6, sizeof(uint32_t), (void *)&roi_out->x);
+  dt_opencl_set_kernel_arg(devid, kernel, 7, sizeof(uint32_t), (void *)&roi_out->y);
+  dt_opencl_set_kernel_arg(devid, kernel, 8, sizeof(cl_mem), (void *)&dev_xtrans);
+  err = dt_opencl_enqueue_kernel_2d(devid, kernel, sizes);
+  if(err != CL_SUCCESS) goto error;
+
+  dt_opencl_release_mem_object(dev_coeffs);
+  dt_opencl_release_mem_object(dev_xtrans);
+
+  piece->pipe->dsc.temperature.enabled = 1;
+  for(int k = 0; k < 4; k++)
+  {
+    piece->pipe->dsc.temperature.coeffs[k] = d->coeffs[k];
+    piece->pipe->dsc.processed_maximum[k] = d->coeffs[k] * piece->pipe->dsc.processed_maximum[k];
+    self->dev->proxy.wb_coeffs[k] = d->coeffs[k];
+  }
+  return TRUE;
+
+error:
+  dt_opencl_release_mem_object(dev_coeffs);
+  dt_opencl_release_mem_object(dev_xtrans);
+  dt_print(DT_DEBUG_OPENCL, "[opencl_white_balance] couldn't enqueue kernel! %d\n", err);
+  return FALSE;
+}
+#endif
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
@@ -1388,6 +1467,26 @@ void reload_defaults(dt_iop_module_t *module)
   }
 }
 
+void init_global(dt_iop_module_so_t *module)
+{
+  const int program = 2; // basic.cl, from programs.conf
+  dt_iop_temperature_global_data_t *gd
+      = (dt_iop_temperature_global_data_t *)malloc(sizeof(dt_iop_temperature_global_data_t));
+  module->data = gd;
+  gd->kernel_whitebalance_4f = dt_opencl_create_kernel(program, "whitebalance_4f");
+  gd->kernel_whitebalance_1f = dt_opencl_create_kernel(program, "whitebalance_1f");
+  gd->kernel_whitebalance_1f_xtrans = dt_opencl_create_kernel(program, "whitebalance_1f_xtrans");
+}
+
+void cleanup_global(dt_iop_module_so_t *module)
+{
+  dt_iop_temperature_global_data_t *gd = (dt_iop_temperature_global_data_t *)module->data;
+  dt_opencl_free_kernel(gd->kernel_whitebalance_4f);
+  dt_opencl_free_kernel(gd->kernel_whitebalance_1f);
+  dt_opencl_free_kernel(gd->kernel_whitebalance_1f_xtrans);
+  free(module->data);
+  module->data = NULL;
+}
 
 static void temp_tint_callback(GtkWidget *slider, dt_iop_module_t *self)
 {
