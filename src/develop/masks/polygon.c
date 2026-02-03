@@ -315,6 +315,13 @@ static void _polygon_points_recurs_border_gaps(float *cmax, float *bmin, float *
   }
 }
 
+static inline gboolean _is_within_pxl_threshold(float *min, float *max, int pixel_threshold)
+{
+  return fabsf((int)min[0] - (int)max[0]) < pixel_threshold && 
+         fabsf((int)min[1] - (int)max[1]) < pixel_threshold;
+}
+
+
 /** recursive function to get all points of the polygon AND all point of the border */
 /** the function take care to avoid big gaps between points */
 static void _polygon_points_recurs(float *p1, float *p2, double tmin, double tmax, float *polygon_min,
@@ -335,14 +342,13 @@ static void _polygon_points_recurs(float *p1, float *p2, double tmin, double tma
                         p1[4] + (p2[4] - p1[4]) * tmax * tmax * (3.0 - 2.0 * tmax), polygon_max, polygon_max + 1,
                         border_max, border_max + 1);
   }
+
+  const int pixel_threshold = 2 * darktable.gui->ppd;
+
   // are the points near ?
   if((tmax - tmin < 0.0001)
-     || ((int)polygon_min[0] - (int)polygon_max[0] < 1 && (int)polygon_min[0] - (int)polygon_max[0] > -1
-         && (int)polygon_min[1] - (int)polygon_max[1] < 1 && (int)polygon_min[1] - (int)polygon_max[1] > -1
-         && (!withborder
-             || ((int)border_min[0] - (int)border_max[0] < 1 && (int)border_min[0] - (int)border_max[0] > -1
-                 && (int)border_min[1] - (int)border_max[1] < 1
-                 && (int)border_min[1] - (int)border_max[1] > -1))))
+       || (_is_within_pxl_threshold(polygon_min, polygon_max, pixel_threshold)
+          && (!withborder || (_is_within_pxl_threshold(border_min, border_max, pixel_threshold)))))
   {
     dt_masks_dynbuf_add_2(dpoints, polygon_max[0], polygon_max[1]);
     rpolygon[0] = polygon_max[0];

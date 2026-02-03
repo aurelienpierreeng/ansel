@@ -488,6 +488,12 @@ static void _brush_points_stamp(float *cmax, float *bmin, dt_masks_dynbuf_t *dpo
   }
 }
 
+static inline gboolean _is_within_pxl_threshold(float *min, float *max, int pixel_threshold)
+{
+  return fabsf((int)min[0] - (int)max[0]) < pixel_threshold && 
+         fabsf((int)min[1] - (int)max[1]) < pixel_threshold;
+}
+
 /** recursive function to get all points of the brush AND all point of the border */
 /** the function takes care to avoid big gaps between points */
 static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax, float *points_min,
@@ -511,14 +517,13 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
                          p1[4] + (p2[4] - p1[4]) * tmax * tmax * (3.0 - 2.0 * tmax), points_max,
                          points_max + 1, border_max, border_max + 1);
   }
+
+  const int pixel_threshold = 2 * darktable.gui->ppd;
+
   // are the points near ?
   if((tmax - tmin < 0.0001f)
-     || ((int)points_min[0] - (int)points_max[0] < 1 && (int)points_min[0] - (int)points_max[0] > -1
-         && (int)points_min[1] - (int)points_max[1] < 1 && (int)points_min[1] - (int)points_max[1] > -1
-         && (!withborder
-             || ((int)border_min[0] - (int)border_max[0] < 1 && (int)border_min[0] - (int)border_max[0] > -1
-                 && (int)border_min[1] - (int)border_max[1] < 1
-                 && (int)border_min[1] - (int)border_max[1] > -1))))
+     || (_is_within_pxl_threshold(points_min, points_max, pixel_threshold)
+         && (!withborder || (_is_within_pxl_threshold(border_min, border_max, pixel_threshold)))))
   {
     rpoints[0] = points_max[0];
     rpoints[1] = points_max[1];
