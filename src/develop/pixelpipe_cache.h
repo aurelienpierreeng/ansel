@@ -219,7 +219,7 @@ void dt_dev_pixelpipe_cache_flag_auto_destroy(dt_dev_pixelpipe_cache_t *cache, u
                                               struct dt_pixel_cache_entry_t *entry);
 
 /**
- * @brief Free the entry matching hash if it has the flag "auto_destroy" and its pipe id matches.
+ * @brief Free the entry matching hash if it has the flag "auto_destroy".
  * See `dt_dev_pixelpipe_cache_flag_auto_destroy()`.
  * This will not check reference count nor read/write locks, so it has to happen in the thread that created the
  * entry, flagged it and owns it. Ensure your hashes are truly unique and not shared between pipelines to ensure
@@ -228,7 +228,7 @@ void dt_dev_pixelpipe_cache_flag_auto_destroy(dt_dev_pixelpipe_cache_t *cache, u
  * @param cache
  * @param hash
  */
-void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, const int id,
+void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
                                                struct dt_pixel_cache_entry_t *entry);
 
 // clang-format off

@@ -95,6 +95,11 @@ typedef struct dt_dev_pixelpipe_iop_t
   // bypass the cache for this module
   gboolean bypass_cache;
 
+  // Set to TRUE for modules that should mandatorily cache their output to the RAM
+  // even when running on OpenCL. This is counter-productive for lightweight pixel ops
+  // like scalar operations, due to memory copy overhead. Not for diffuse & sharpen
+  gboolean force_opencl_cache;
+
   GHashTable *raster_masks; // GList* of dt_dev_pixelpipe_raster_mask_t
 } dt_dev_pixelpipe_iop_t;
 

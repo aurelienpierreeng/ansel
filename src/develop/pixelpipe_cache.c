@@ -545,14 +545,14 @@ void dt_dev_pixelpipe_cache_flag_auto_destroy(dt_dev_pixelpipe_cache_t *cache, u
 }
 
 
-void dt_dev_pixel_pipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, const int id,
+void dt_dev_pixel_pipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
                                                 dt_pixel_cache_entry_t *cache_entry)
 {
   dt_pthread_mutex_lock(&cache->lock);
   if(cache_entry == NULL)
     cache_entry = _non_threadsafe_cache_get_entry(cache, hash);
 
-  if(cache_entry && cache_entry->auto_destroy && id == cache_entry->id)
+  if(cache_entry && cache_entry->auto_destroy)
   {
     cache->current_memory -= cache_entry->size;
     g_hash_table_remove(cache->entries, GINT_TO_POINTER(hash));

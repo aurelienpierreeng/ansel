@@ -94,13 +94,6 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
 int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  if(roi_out->scale >= 1.0000f)
-  {
-    dt_print(DT_DEBUG_OPENCL,
-             "[opencl_finalscale] finalscale with upscaling not yet supported by opencl code\n");
-    return FALSE;
-  }
-
   const int devid = piece->pipe->devid;
   cl_int err = -999;
 
