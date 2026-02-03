@@ -235,6 +235,19 @@ whitebalance_4f(read_only image2d_t in, write_only image2d_t out, const int widt
   write_imagef (out, (int2)(x, y), (float4)(pixel.x * coeffs[0], pixel.y * coeffs[1], pixel.z * coeffs[2], pixel.w));
 }
 
+/* kernel for the exposure plugin. should work transparently with float4 and float image2d. */
+kernel void
+exposure (read_only image2d_t in, write_only image2d_t out, const int width, const int height, const float black, const float scale)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+
+  if(x >= width || y >= height) return;
+  float4 pixel = read_imagef(in, sampleri, (int2)(x, y));
+  pixel.xyz = ((pixel - black ) * scale).xyz;
+  write_imagef (out, (int2)(x, y), pixel);
+}
+
 /* kernel for the highlights plugin. */
 kernel void
 highlights_4f_clip (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
