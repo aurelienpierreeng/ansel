@@ -1014,18 +1014,33 @@ static void _brush_get_distance(float x, float y, float as, dt_masks_form_gui_t 
     }
   }
 
-  // we check if it's inside borders
+ // we check if it's inside borders
   if(gpt->border_count > 2 + corner_count * 3)
   {
-    float last = gpt->border[gpt->border_count * 2 - 1];
-    int nb = 0;
-    for(int i = corner_count * 3; i < gpt->border_count; i++)
+    int nearest = -1;
+
+    const int start = corner_count * 3;
+    const float *const border = gpt->border;
+    float last_y = border[gpt->border_count * 2 - 1];
+    int crossings = 0;
+
+    for(int i = start; i < gpt->border_count; i++)
     {
-      const float yy = gpt->border[i * 2 + 1];
-      if (((y<=yy && y>last) || (y>=yy && y<last)) && (gpt->border[i * 2] > x)) nb++;
-      last = yy;
+      const int idx = i * 2;
+      const float xx = border[idx];
+      const float yy = border[idx + 1];
+
+      const float dx = x - xx;
+      const float dy = y - yy;
+      if(dx * dx + dy * dy < as2) nearest = idx;
+
+      if(((y <= yy && y > last_y) || (y >= yy && y < last_y)) && (xx > x))
+        crossings++;
+
+      last_y = yy;
     }
-    *inside = *inside_border = (nb & 1);
+
+    *inside = *inside_border = (nearest != -1 || (crossings & 1));
   }
 
   // and we check if we are near a segment
