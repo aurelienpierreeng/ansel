@@ -490,8 +490,8 @@ static void _brush_points_stamp(float *cmax, float *bmin, dt_masks_dynbuf_t *dpo
 
 static inline gboolean _is_within_pxl_threshold(float *min, float *max, int pixel_threshold)
 {
-  return fabsf((int)min[0] - (int)max[0]) < pixel_threshold && 
-         fabsf((int)min[1] - (int)max[1]) < pixel_threshold;
+  return abs((int)min[0] - (int)max[0]) < pixel_threshold && 
+         abs((int)min[1] - (int)max[1]) < pixel_threshold;
 }
 
 /** recursive function to get all points of the brush AND all point of the border */

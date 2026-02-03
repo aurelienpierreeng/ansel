@@ -317,8 +317,8 @@ static void _polygon_points_recurs_border_gaps(float *cmax, float *bmin, float *
 
 static inline gboolean _is_within_pxl_threshold(float *min, float *max, int pixel_threshold)
 {
-  return fabsf((int)min[0] - (int)max[0]) < pixel_threshold && 
-         fabsf((int)min[1] - (int)max[1]) < pixel_threshold;
+  return abs((int)min[0] - (int)max[0]) < pixel_threshold && 
+         abs((int)min[1] - (int)max[1]) < pixel_threshold;
 }
 
 
