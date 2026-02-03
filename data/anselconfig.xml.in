@@ -1950,7 +1950,7 @@
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/spots/ellipse/border</name>
+    <name>plugins/darkroom/spots/ellipse/hardness</name>
     <type>float</type>
     <default>0.02</default>
     <shortdescription/>
@@ -2160,7 +2160,7 @@
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/masks/polygon/border</name>
+    <name>plugins/darkroom/masks/polygon/hardness</name>
     <type>float</type>
     <default>0.05</default>
     <shortdescription/>
@@ -2174,14 +2174,14 @@
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/masks/gradient/compression</name>
+    <name>plugins/darkroom/masks/gradient/extent</name>
     <type>float</type>
     <default>0.5</default>
     <shortdescription/>
     <longdescription/>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/masks/gradient/steepness</name>
+    <name>plugins/darkroom/masks/gradient/curvature</name>
     <type>float</type>
     <default>0.0</default>
     <shortdescription/>

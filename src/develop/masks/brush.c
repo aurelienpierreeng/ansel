@@ -1445,10 +1445,6 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
   // Its requested to give back the focus when clicking outside current shape.
   _find_closest_handle(module, pzx, pzy, form, parentid, gui, index);
 
-  // The trick is to use the incremental setting, set to 1.0 to re-use the generic getter/setter without changing value
-  float masks_border = dt_masks_get_set_conf_value(form, "border", 1.0f, HARDNESS_MIN, HARDNESS_MAX, TRUE, 1);
-  float masks_hardness = dt_masks_get_set_conf_value(form, "hardness", 1.0f, HARDNESS_MIN, HARDNESS_MAX, TRUE, 1);
-
   // always start with a mask density of 100%, it will be adjusted with pen pressure if used.
   const float masks_density = 1.0f;
 
@@ -1456,6 +1452,10 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
   {
     if(which == 1)
     {
+      // The trick is to use the incremental setting, set to 1.0 to re-use the generic getter/setter without changing value
+      float masks_border = dt_masks_get_set_conf_value(form, "border", 1.0f, HARDNESS_MIN, HARDNESS_MAX, TRUE, 1);
+      float masks_hardness = dt_masks_get_set_conf_value(form, "hardness", 1.0f, HARDNESS_MIN, HARDNESS_MAX, TRUE, 1);
+    
       if(dt_modifier_is(state, GDK_CONTROL_MASK | GDK_SHIFT_MASK) || dt_modifier_is(state, GDK_SHIFT_MASK))
       {
         // set some absolute or relative position for the source of the clone mask
