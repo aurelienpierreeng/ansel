@@ -1669,9 +1669,13 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
     return 0;
   }
+
   if(!new_entry)
   {
-    // We have an output cache entry already, lock it for writing
+    // We have an output cache entry already, lock it for writing. 
+    // There is no reason why this should happen except if another thread created an entry
+    // with the same hash just before us and is not done writing in it.
+    // But in this case, we could just wait for it to finish writing, and process nothin here.
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, TRUE, output_entry);
   }
 
