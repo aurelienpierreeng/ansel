@@ -141,6 +141,7 @@ void dt_dev_pixelpipe_change_zoom_main(dt_develop_t *dev)
   dt_control_navigation_redraw();
   gtk_widget_queue_draw(dt_ui_center(darktable.gui->ui));
   dt_dev_pixelpipe_update_zoom_main(dev);
+  dt_dev_update_mouse_effect_radius(dev);
   dt_dev_process(dev, dev->pipe);
 }
 

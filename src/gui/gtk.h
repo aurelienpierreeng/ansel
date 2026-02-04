@@ -116,6 +116,14 @@ typedef struct dt_gui_gtk_t
 
   double dpi, dpi_factor, ppd;
 
+
+  struct {
+    // distance to the cursor for handle detection (in backbuf reference)
+    float effect_radius;
+    // distance to the cursor for handle detection (in screen reference)
+    float effect_radius_screen;
+  } mouse;
+
   int icon_size; // size of top panel icons
 
   // store which gtkrc we loaded:

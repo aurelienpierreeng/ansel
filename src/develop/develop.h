@@ -589,6 +589,9 @@ gboolean dt_dev_roi_to_input_space(dt_develop_t *dev, /*gboolean normalized_in,*
  */
 gboolean dt_dev_roi_delta_to_input_space(dt_develop_t *dev, const float delta[2],/* gboolean normalize_out,*/ const float in[2], float points[2]);
 
+// Update the mouse bounding box size according to current zoom level, dpp and DPI.
+void dt_dev_update_mouse_effect_radius(dt_develop_t *dev);
+
 #ifdef __cplusplus
 }
 #endif

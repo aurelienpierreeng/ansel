@@ -1228,10 +1228,7 @@ float dt_dev_get_overlay_scale(dt_develop_t *dev)
 float dt_dev_get_zoom_level(const dt_develop_t *dev)
 {
   if(!dev) return 1.f;
-  // if(!dev->pipe->processing)
   return dev->roi.scaling * dev->natural_scale;
-  // else
-  //   return dev->roi.scaling * dev->preview_natural_scale;
 }
 
 void dt_dev_reset_roi(dt_develop_t *dev)
@@ -1392,6 +1389,20 @@ gboolean dt_dev_roi_delta_to_input_space(dt_develop_t *dev, const float delta[2]
   points[1] = pts[1] / iht;
 
   return TRUE;
+}
+
+void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
+{
+  const int radius = DT_PIXEL_APPLY_DPI(10.0f);
+  float zoom_level = dt_dev_get_zoom_level(dev);
+  
+  // TODO: this should not be necessary if there is a way to execute this function
+  // after dev->natural_scale is properly initialized the first time we enter the darkroom.
+  // If dev->natural_scale is not ready, fallback to a generic value
+  if(zoom_level == -1.f) zoom_level = 0.1f;
+
+  darktable.gui->mouse.effect_radius = radius / zoom_level;
+  darktable.gui->mouse.effect_radius_screen = darktable.gui->mouse.effect_radius * darktable.gui->ppd;
 }
 
 // clang-format off

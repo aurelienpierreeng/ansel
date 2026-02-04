@@ -60,10 +60,6 @@ extern "C" {
 #define DT_DRAW_RADIUS_NODE          DT_PIXEL_APPLY_DPI(5.0f)
 #define DT_DRAW_RADIUS_NODE_SELECTED (1.5f * DT_DRAW_RADIUS_NODE)
 
-// mouse radius to change overlay elements
-#define DT_DRAW_SELECTION_RADIUS_NO_UPSCALE(dev) (2.0f * DT_DRAW_RADIUS_NODE / dt_dev_get_zoom_level((dt_develop_t *)dev))
-#define DT_DRAW_SELECTION_RADIUS(dev)            (DT_DRAW_SELECTION_RADIUS_NO_UPSCALE((dt_develop_t*)dev) * darktable.gui->ppd)
-
 // used to detect the area where rotation of a shape is possible
 #define DT_DRAW_SELECTION_ROTATION_AREA           DT_PIXEL_APPLY_DPI(50.0f)
 #define DT_DRAW_SELECTION_ROTATION_RADIUS(dev)   (DT_DRAW_SELECTION_ROTATION_AREA / dt_dev_get_zoom_level((dt_develop_t *)dev))  

@@ -86,7 +86,7 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
   dev->mask_form_selected_id = -1;
 
   // now we check if we are near a new form
-  const float as = DT_DRAW_SELECTION_RADIUS(dev);  // transformed to backbuf dimensions
+  const float as = darktable.gui->mouse.effect_radius_screen;  // transformed to backbuf dimensions
   int pos = 0;
   gui->form_selected = gui->border_selected = FALSE;
   gui->source_selected = gui->source_dragging = FALSE;
@@ -153,8 +153,7 @@ static int _group_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
                                      int which, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
                                      int unused2)
 {
-  const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
-  const float as = DT_DRAW_SELECTION_RADIUS(dev);
+  const float as = darktable.gui->mouse.effect_radius_screen;
 
   // we first don't do anything if we are inside a scrolling session
   if(gui->scrollx != 0.0f && gui->scrolly != 0.0f)

@@ -1124,7 +1124,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   const dt_develop_t *const dev = (const dt_develop_t *)darktable.develop;
 
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
-  const float dist_curs = DT_DRAW_SELECTION_RADIUS(dev); // transformed to backbuf dimensions
+  const float dist_curs = darktable.gui->mouse.effect_radius_screen; // transformed to backbuf dimensions
 
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
@@ -1704,7 +1704,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     // check if we are near the first point to close the polygon on creation
     if(gui->creation && !g_list_shorter_than(form->points, 4)) // at least 3 points + the one being created 
     {
-      const float dist_curs = DT_DRAW_SELECTION_RADIUS_NO_UPSCALE(dev);
+      const float dist_curs = darktable.gui->mouse.effect_radius;
       
       float pt[2] = { pzx * wd, pzy * ht }; // no backtransform here
       const float dx = pt[0] - gpt->points[2];

@@ -1984,6 +1984,7 @@ void enter(dt_view_t *self)
                             G_CALLBACK(_view_darkroom_filmstrip_activate_callback), self);
 
   dt_view_image_info_update(dev->image_storage.id);
+  dt_dev_update_mouse_effect_radius(dev);
 }
 
 void leave(dt_view_t *self)
