@@ -971,6 +971,9 @@ static int _resync_input_gpu_to_cache(dt_dev_pixelpipe_t *pipe, float *input, vo
   int fail = _cl_pinned_memory_copy(pipe->devid, input, cl_mem_input, roi_in, CL_MAP_READ, in_bpp, module,
                                     message);
 
+  // Color conversions happen inplace, so we need to ensure colorspace metadata are up-to-date
+  if(!fail) input_format->cst = input_cst_cl;
+
   // We need to enforce the OpenCL pipe to run in sync with CPU RAM cache
   // to ensure the validaty of the locks
   dt_opencl_events_wait_for(pipe->devid);
