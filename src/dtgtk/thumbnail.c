@@ -357,7 +357,7 @@ static int _finish_buffer_thread(dt_thumbnail_t *thumb, gboolean success)
 
 
 int32_t _get_image_buffer(dt_job_t *job)
-{
+{  
   // WARNING: the target thumbnail GUI widget can be destroyed at any time during this
   // control flow in the GUI mainthread.
   dt_thumbnail_t *thumb = dt_control_job_get_params(job);
@@ -391,6 +391,7 @@ int32_t _get_image_buffer(dt_job_t *job)
   float y_center = 0.f;
 
   // From there, never read thumb->... directly since it might get destroyed in mainthread anytime.
+  dt_print(DT_DEBUG_LIGHTTABLE, "[lighttable] fetching or computing thumbnail %i\n", thumb->imgid);
 
   // Get the actual image content. This typically triggers a rendering pipeline,
   // and can possibly take a long time.
