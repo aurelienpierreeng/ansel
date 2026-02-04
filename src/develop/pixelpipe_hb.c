@@ -961,6 +961,24 @@ static int _is_opencl_supported(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t
   return dt_opencl_is_inited() && piece->process_cl_ready && module->process_cl;
 }
 
+static int _resync_input_gpu_to_cache(dt_dev_pixelpipe_t *pipe, float *input, void *cl_mem_input,
+                                      dt_iop_buffer_dsc_t *input_format, const dt_iop_roi_t *roi_in,
+                                      dt_iop_module_t *module, dt_iop_colorspace_type_t input_cst_cl,
+                                      const size_t in_bpp, dt_pixel_cache_entry_t *input_entry,
+                                      const char *message)
+{
+  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
+  int fail = _cl_pinned_memory_copy(pipe->devid, input, cl_mem_input, roi_in, CL_MAP_READ, in_bpp, module,
+                                    message);
+
+  // We need to enforce the OpenCL pipe to run in sync with CPU RAM cache
+  // to ensure the validaty of the locks
+  dt_opencl_events_wait_for(pipe->devid);
+  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
+
+  return fail;
+}
+
 
 static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                     float *input, void *cl_mem_input, dt_iop_buffer_dsc_t *input_format, const dt_iop_roi_t *roi_in,
@@ -1079,7 +1097,14 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
 
     /* now call process_cl of module; module should emit meaningful messages in case of error */
     if(!module->process_cl(module, piece, cl_mem_input, *cl_mem_output, roi_in, roi_out))
+    {
+      // If process_cl() failed, we will fallback to CPU path, but we have no guaranty that our
+      // input is in cache. Force resync just to be safe.
+      _resync_input_gpu_to_cache(pipe, input, cl_mem_input, input_format, roi_in,
+                                 module, input_cst_cl, in_bpp, input_entry,
+                                 "fallback input copy to cache");
       goto error;
+    }
 
     *pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_GPU);
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_CPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
@@ -1108,7 +1133,14 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
 
     /* process blending */
     if(dt_develop_blend_process_cl(module, piece, cl_mem_input, *cl_mem_output, roi_in, roi_out))
+    {
+      // If process_cl() failed, we will fallback to CPU path, but we have no guaranty that our
+      // input is in cache. Force resync just to be safe.
+      _resync_input_gpu_to_cache(pipe, input, cl_mem_input, input_format, roi_in,
+                                 module, input_cst_cl, in_bpp, input_entry,
+                                 "fallback input copy to cache");
       goto error;
+    }
 
     *pixelpipe_flow |= (PIXELPIPE_FLOW_BLENDED_ON_GPU);
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_BLENDED_ON_CPU);
@@ -1126,19 +1158,16 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     // Because we color-converted the input several times in place,
     // we need to update the colorspace metadata. But since it's shared
     // between RAM pixel cache and GPU buffer, then we need to resync GPU buffer with cache.
-    if(input_format->cst != input_cst_cl && piece->force_opencl_cache)
+    /* Still needed ?
+    if(input_format->cst != input_cst_cl && piece->force_opencl_cache && FALSE)
     {
-      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
-      input_format->cst = input_cst_cl;
-      int fail = _cl_pinned_memory_copy(pipe->devid, input, cl_mem_input, roi_in, CL_MAP_READ, in_bpp, module,
-                                        "color-converted input to cache");
-      // We need to enforce the OpenCL pipe to run in sync with CPU RAM cache
-      // to ensure the validaty of the locks
-      dt_opencl_events_wait_for(pipe->devid);
-      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
-      
+      int fail = _resync_input_gpu_to_cache(pipe, input, cl_mem_input, input_format, roi_in,
+                                             module, input_cst_cl, in_bpp, input_entry,
+                                             "color-converted input to cache");
       if(fail) goto error;
+      input_format->cst = input_cst_cl;
     }
+    */
   }
   else if(piece->process_tiling_ready)
   {
@@ -1186,6 +1215,20 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     dt_develop_blend_process(module, piece, input, *output, roi_in, roi_out);
     *pixelpipe_flow |= (PIXELPIPE_FLOW_BLENDED_ON_CPU);
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_BLENDED_ON_GPU);
+    
+    // Because we color-converted the input several times in place,
+    // we need to update the colorspace metadata. But since it's shared
+    // between RAM pixel cache and GPU buffer, then we need to resync GPU buffer with cache.
+    /* Still needed ?
+    if(input_format->cst != input_cst_cl && piece->force_opencl_cache && FALSE)
+    {
+      int fail = _resync_input_gpu_to_cache(pipe, input, cl_mem_input, input_format, roi_in,
+                                             module, input_cst_cl, in_bpp, input_entry,
+                                             "color-converted input to cache");
+      if(fail) goto error;
+      input_format->cst = input_cst_cl;
+    }
+    */
   }
   else
   {
