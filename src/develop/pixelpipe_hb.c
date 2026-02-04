@@ -863,12 +863,18 @@ static void _sample_color_picker(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, fl
 
 #ifdef HAVE_OPENCL
 
+// if host_ptr is NULL, we use an unpinned device buffer
 static void *_gpu_init_buffer(int devid, void *const host_ptr, const dt_iop_roi_t *roi, const size_t bpp,
                               dt_iop_module_t *module, const char *message)
 {
   // Need to use read-write mode because of in-place color space conversions
-  void *cl_mem_input = dt_opencl_alloc_device_use_host_pointer(devid, roi->width, roi->height, bpp, host_ptr,
+  void *cl_mem_input = NULL;
+  
+  if(host_ptr)
+    cl_mem_input = dt_opencl_alloc_device_use_host_pointer(devid, roi->width, roi->height, bpp, host_ptr,
                                                                CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR);
+  else
+    cl_mem_input = dt_opencl_alloc_device(devid, roi->width, roi->height, bpp);
 
   if(cl_mem_input == NULL)
   {
@@ -1056,10 +1062,12 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
       dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s will use its input directly from vRAM\n", module->name());
     }
 
-    // Allocate GPU memory for output
+    // Allocate GPU memory for output: pinned memory if copying to cache, else device memory.
     if(*cl_mem_output == NULL)
     {
-      *cl_mem_output = _gpu_init_buffer(pipe->devid, *output, roi_out, bpp, module, "output");
+      *cl_mem_output = _gpu_init_buffer(pipe->devid, 
+                                        (piece->force_opencl_cache) ? *output : NULL, 
+                                        roi_out, bpp, module, "output");
       if(*cl_mem_output == NULL) goto error;
     }
 
