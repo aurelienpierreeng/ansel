@@ -1185,7 +1185,11 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
                                   darktable.develop->mask_form_selected_id, FALSE);
 
   // DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);
-  if(gui) _set_cursor_shape(gui);
+  if(gui)
+  {
+    _set_hinter_message(gui, form);
+    _set_cursor_shape(gui);
+  }
 
   return ret;
 }

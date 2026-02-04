@@ -1313,42 +1313,29 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
 static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
    int index, const float amount, const dt_masks_increment_t increment, int flow)
 {
-  flow *= 2.f;
-  // Sanitize loop
-  int node_index = 0;
-  for(GList *l = form->points; l; l = g_list_next(l))
-  {
-    if(gui->node_selected == -1 || gui->node_selected == node_index)
-    {
-      dt_masks_node_polygon_t *point = (dt_masks_node_polygon_t *)l->data;
-      if(amount > HARDNESS_MAX && (point->border[0] > HARDNESS_MAX || point->border[1] > HARDNESS_MAX))
-        return 1;
-    }
-    node_index++;
-  }
-
   // Growing/shrinking loop
-  node_index = 0;
+  int node_index = 0;
+  const float flowed_amount = powf(amount, (float)flow);
   for(GList *l = form->points; l; l = g_list_next(l))
   {
-    if(gui->node_selected == -1 || gui->node_selected == node_index)
+    if(gui->node_edited == -1 || gui->node_edited == node_index)
     {
       dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)l->data;
 
       if(increment)
       {
-        const float flowed_amount = powf(amount, (float)flow);
-        node->border[0] = CLAMP(node->border[0] * flowed_amount, HARDNESS_MIN, HARDNESS_MAX);
-        node->border[1] = CLAMP(node->border[1] * flowed_amount, HARDNESS_MIN, HARDNESS_MAX);
+        node->border[0] = CLAMPF(node->border[0] * flowed_amount, HARDNESS_MIN, HARDNESS_MAX);
+        node->border[1] = CLAMPF(node->border[1] * flowed_amount, HARDNESS_MIN, HARDNESS_MAX);
       }
       else
       {
-        node->border[0] = CLAMP(amount, HARDNESS_MIN, HARDNESS_MAX);
-        node->border[1] = CLAMP(amount, HARDNESS_MIN, HARDNESS_MAX);
+        node->border[0] = CLAMPF(amount, HARDNESS_MIN, HARDNESS_MAX);
+        node->border[1] = CLAMPF(amount, HARDNESS_MIN, HARDNESS_MAX);
       }
     }
     node_index++;
   }
+
   // grab sizes for the toast log
   float masks_size = 1.0f, border_size = 0.0f;
   _polygon_get_sizes(module, form, gui, index, &masks_size, &border_size);
@@ -1377,7 +1364,7 @@ static int _polygon_events_mouse_scrolled(struct dt_iop_module_t *module, float 
   {
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
       return dt_masks_form_change_opacity(form, parentid, up, flow);
-    else if(dt_modifier_is(state, GDK_SHIFT_MASK))
+    else if(dt_modifier_is(state, GDK_SHIFT_MASK) || gui->node_edited >= 0)
       return _change_hardness(form, parentid, gui, module, index, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
     else
       return _change_size(form, parentid, gui, module, index, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
@@ -1971,10 +1958,10 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
         if(x == segment_x && y == segment_y)
         {
           const gboolean seg_selected = (gui->group_selected == index) && (gui->seg_selected == current_seg);
-          const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
+          const gboolean all_selected = (gui->group_selected == index) && gui->node_edited == -1 && (gui->form_selected || gui->form_dragging);
           // creation mode: draw the current segment as round dotted line
           if(gui->creation && current_seg == node_count -2)
-            dt_draw_stroke_line(DT_MASKS_DASH_ROUND, FALSE, cr, (seg_selected || all_selected), zoom_scale);
+            dt_draw_stroke_line(DT_MASKS_DASH_ROUND, FALSE, cr, all_selected, zoom_scale);
           else
             dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, (seg_selected || all_selected), zoom_scale);
           seg1 = (seg1 + 1) % node_count;
@@ -1997,7 +1984,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     }
 
     // draw the current node's handle if it's a curve node
-    if( gui->node_edited >= 0 && !dt_masks_is_corner_node(gpt, gui->node_edited, 6, 2))
+    if(gui->node_edited >= 0 && !dt_masks_is_corner_node(gpt, gui->node_edited, 6, 2))
     {
       const int n = gui->node_edited;
       float handle_x, handle_y;
@@ -2005,7 +1992,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
                                 gpt->points[n * 6 + 5], &handle_x, &handle_y, gpt->clockwise);
       const float pt_x = gpt->points[n * 6 + 2];
       const float pt_y = gpt->points[n * 6 + 3];
-      const gboolean selected = gui->node_selected == gui->handle_dragging || gui->node_selected == gui->handle_selected;
+      const gboolean selected = (gui->node_edited == gui->handle_selected) && gui->handle_selected >= 0;
       dt_draw_handle(cr, pt_x, pt_y, zoom_scale, handle_x, handle_y, selected);
     }
   }
@@ -2938,12 +2925,15 @@ static void _polygon_set_hint_message(const dt_masks_form_gui_t *const gui, cons
                         "<b>Cancel</b>: right-click or Esc"), msgbuf_len);
   else if(gui->creation)
     g_strlcat(msgbuf, _("<b>Add node</b>: click, <b>Add sharp node</b>:ctrl+click\n"
-                        "<b>Finish polygon</b>: Enter or click on the first node"), msgbuf_len);
-  else if(gui->node_selected >= 0)
-    g_strlcat(msgbuf, _("<b>Move node</b>: drag, <b>Remove node</b>: right-click\n"
-                        "<b>Switch smooth/sharp mode</b>: ctrl+click"), msgbuf_len);
+                        "<b>Finish polygon</b>: Enter or click on first node"), msgbuf_len);
   else if(gui->handle_selected >= 0)
     g_strlcat(msgbuf, _("<b>Node curvature</b>: drag\n<b>Reset curvature</b>: right-click"), msgbuf_len);
+  else if(gui->node_edited >= 0)
+    g_strlcat(msgbuf, _("<b>NODE:</b> <b>Move</b>: drag, <b>Delete</b>: right-click or Del\n"
+                        "<b>Hardness</b>: scroll, <b>Switch smooth/sharp</b>: ctrl+click"), msgbuf_len);
+  else if(gui->node_selected >= 0)
+    g_strlcat(msgbuf, _("<b>Move node</b>: drag\n<b>Delete node</b>: right-click\n"
+                        "<b>Hardness</b>: scroll, <b>Switch smooth/sharp</b>: ctrl+click"), msgbuf_len);
   else if(gui->seg_selected >= 0)
     g_strlcat(msgbuf, _("<b>Move segment</b>: drag\n<b>Add node</b>: ctrl+click"), msgbuf_len);
   else if(gui->form_selected)

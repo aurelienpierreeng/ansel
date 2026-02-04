@@ -1241,22 +1241,23 @@ static int _init_opacity(dt_masks_form_t *form, int parentid, dt_masks_form_gui_
 
 static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  int pts_number = 0;
+  int node_index = 0;
+  const float flowed_amount = powf(amount, (float)flow);
+  float res_amount = 0;
   for(GList *l = form->points; l; l = g_list_next(l))
   {
-    if(gui->node_selected == -1 || gui->node_selected == pts_number)
+    if(gui->node_selected == -1 || gui->node_selected == node_index)
     {
       dt_masks_node_brush_t *point = (dt_masks_node_brush_t *)l->data;
       const float masks_hardness = point->hardness;
-      if(increment)
-        point->hardness = MAX(HARDNESS_MIN, MIN(masks_hardness * amount, HARDNESS_MAX));
-      else
-        point->hardness = MAX(HARDNESS_MIN, MIN(amount, HARDNESS_MAX));
+      res_amount = increment ? masks_hardness * flowed_amount : amount; 
+
+      point->hardness = CLAMPF(res_amount, HARDNESS_MIN, HARDNESS_MAX);
     }
-    pts_number++;
+    node_index++;
   }
 
-  dt_masks_get_set_conf_value(form, "hardness", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
+  dt_masks_get_set_conf_value(form, "hardness", res_amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
 
   // we recreate the form points
   dt_masks_gui_form_remove(form, gui, index);
@@ -2307,7 +2308,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
                                 gpt->points[n * 6 + 5], &handle_x, &handle_y, TRUE);
       const float pt_x = gpt->points[n * 6 + 2];
       const float pt_y = gpt->points[n * 6 + 3];
-      const gboolean selected = gui->node_selected == gui->handle_dragging || gui->node_selected == gui->handle_selected;
+      const gboolean selected = (gui->node_edited == gui->handle_selected) && gui->handle_selected >= 0;
       dt_draw_handle(cr, pt_x, pt_y, zoom_scale, handle_x, handle_y, selected);
     }
 
@@ -2676,7 +2677,6 @@ static void _brush_set_form_name(struct dt_masks_form_t *const form, const size_
 static void _brush_set_hint_message(const dt_masks_form_gui_t *const gui, const dt_masks_form_t *const form,
                                      const int opacity, char *const restrict msgbuf, const size_t msgbuf_len)
 {
-  // TODO: check if it would be good idea to have same controls on creation and for selected brush
   if(gui->creation || gui->form_selected)
     g_snprintf(msgbuf, msgbuf_len,
                _("<b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"

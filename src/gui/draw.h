@@ -580,7 +580,7 @@ static inline void dt_draw_node(cairo_t *cr, const gboolean square, const gboole
   cairo_set_line_width(cr, line_width);
   //if(selected) cairo_set_source_rgba(cr, 1., 1., 1., 0.8);
   //else dt_draw_set_color_overlay(cr, TRUE, 0.8);
-  dt_draw_set_color_overlay(cr, TRUE, selected ? 1 : 0.8);
+  dt_draw_set_color_overlay(cr, TRUE, selected || point_action ? 1 : 0.8);
 
   cairo_fill_preserve(cr);
 
@@ -651,7 +651,7 @@ static inline void dt_draw_handle(cairo_t *cr, const float pt_x, const float pt_
     line_width = DT_DRAW_SIZE_LINE / zoom_scale;
   }
 
-  cairo_arc(cr, handle_x, handle_y, handle_radius * 0.75f, 0, 2.0 * M_PI);
+  cairo_arc(cr, handle_x, handle_y, handle_radius, 0, 2.0 * M_PI);
   // Erase all drawings below
   cairo_fill_preserve(cr);
   
@@ -699,7 +699,7 @@ static inline void dt_draw_shape_lines(const dt_masks_dash_type_t dash_type, con
     (*draw_shape_func)(cr, points, points_count, nb, border, FALSE);
   }
 
-  // dashed ?
+  // dashed line and not source ?
   if(dash_type && !source)
     dt_draw_set_dash_style(cr, dash_type, zoom_scale);
   else
