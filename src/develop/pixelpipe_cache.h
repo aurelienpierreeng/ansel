@@ -134,6 +134,15 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
  */
 void dt_dev_pixelpipe_cache_flush(dt_dev_pixelpipe_cache_t *cache, const int id);
 
+
+/**
+ * @brief Free cache entries older than 3 min, that are not locked and have been used
+ * 3 times or less.
+ * 
+ * @param cache 
+ */
+int dt_dev_pixelpipe_cache_flush_old(dt_dev_pixelpipe_cache_t *cache);
+
 /**
  * @brief Arbitrarily remove the cache entry matching hash. Entries
  * having a reference count > 0 (inter-thread locked) or being having their read/write lock
