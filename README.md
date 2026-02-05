@@ -220,8 +220,10 @@ The following have been measured on battery, in powersave mode, with the applica
 
 | View | Ansel Master | Darktable 5.0 |
 | ---- | ------------ | ------------- |
-| Lighttable | 1.8 % CPU, power: 6.8 mW | 2.7 % CPU, power: 103 mW |
-| Darkroom   | 1.8 % CPU, power: 10.3 mW | 1.8 % CPU, power: 22 mW |
+| Lighttable | 1.8 % CPU, power: 0.85 mW | 2.7 % CPU, power: 103 mW |
+| Darkroom   | 1.8 % CPU, power: 7.65 mW | 1.8 % CPU, power: 22 mW |
+
+These figures represent the baseline power consumption of the GUI alone (Gtk, background workers, scheduled timers, etc.).
 
 TL;DR: Darktable is leaking performance by the GUI, and the tedious work done in 2023-2024 on optimizing pixel processing modules for an extra 15-50 ms is completely irrelevant.
 
