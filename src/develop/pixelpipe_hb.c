@@ -943,7 +943,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                     dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
                                     dt_develop_tiling_t *tiling, dt_pixelpipe_flow_t *pixelpipe_flow,
                                     const size_t in_bpp, const size_t bpp,
-                                    dt_pixel_cache_entry_t *input_entry)
+                                    dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t *output_entry)
 {
   // Not properly speaking an error, but go to CPU fallback straight away
   gboolean no_opencl = !_is_opencl_supported(pipe, piece, module) || !pipe->opencl_enabled;
@@ -954,7 +954,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   }
 
   // We don't have OpenCL or we couldn't lock a GPU: fallback to CPU processing
-  if(!(pipe->devid >= 0) || input == NULL || *output == NULL)
+  if(!(pipe->devid >= 0) || (input == NULL && cl_mem_input == NULL))
     goto error;
 
   // Fetch RGB working profile
@@ -1040,9 +1040,9 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     // Allocate GPU memory for output: pinned memory if copying to cache, else device memory.
     if(*cl_mem_output == NULL)
     {
-      *cl_mem_output = _gpu_init_buffer(pipe->devid, 
-                                        (piece->force_opencl_cache) ? *output : NULL, 
-                                        roi_out, bpp, module, "output");
+      // Note : *output will be NULL unless piece->force_opencl_cache is TRUE
+      // In this case, we start a pinned memory alloc. If NULL, it's device alloc.
+      *cl_mem_output = _gpu_init_buffer(pipe->devid, *output, roi_out, bpp, module, "output");
       if(*cl_mem_output == NULL) goto error;
     }
 
@@ -1140,6 +1140,10 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
 
     /* now call process_tiling_cl of module; module should emit meaningful messages in case of error */
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
+    
+    // Ensure the data buffer of the output cache is allocated
+    *output = dt_pixel_cache_alloc(darktable.pixelpipe_cache, output_entry);
+
     int fail = !module->process_tiling_cl(module, piece, input, *output, roi_in, roi_out, in_bpp);
     dt_opencl_events_wait_for(pipe->devid);
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
@@ -1215,6 +1219,9 @@ error:;
   _gpu_clear_buffer(cl_mem_output);
   _gpu_clear_buffer(&cl_mem_input);
   dt_opencl_finish(pipe->devid);
+
+  // Ensure the data buffer of the output cache is allocated
+  *output = dt_pixel_cache_alloc(darktable.pixelpipe_cache, output_entry);
 
   if(input != NULL && *output != NULL)
     return pixelpipe_process_on_CPU(pipe, dev, input, input_format, roi_in, output, out_format, roi_out, module,
@@ -1335,7 +1342,7 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
   // Note: dt_dev_pixelpipe_cache_get actually init/alloc *output
   dt_pixel_cache_entry_t *cache_entry;
   int new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, "base buffer", pipe->type,
-                                             output, out_format, &cache_entry);
+                                             output, out_format, &cache_entry, TRUE);
   if(cache_entry == NULL) return 1;
 
   int err = 0;
@@ -1617,8 +1624,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   dt_pixel_cache_entry_t *output_entry = NULL;
   gchar *type = dt_pixelpipe_get_pipe_name(pipe->type);
   gchar *name = g_strdup_printf("module %s (%s) for pipe %s", module->op, module->multi_name, type);
+
+  // Immediately alloc output buffer only if we know we force the use of the cache.
+  // Otherwise, it's handled in OpenCL fallbacks.
   gboolean new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
-                                                  output, out_format, &output_entry);
+                                                  output, out_format, &output_entry, piece->force_opencl_cache);
   g_free(name);
   if(output_entry == NULL) return 1;
 
@@ -1688,7 +1698,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
 #ifdef HAVE_OPENCL
   error = pixelpipe_process_on_GPU(pipe, dev, input, cl_mem_input, input_format, &roi_in, output, cl_mem_output,
-                                   out_format, &roi_out, module, piece, &tiling, &pixelpipe_flow, in_bpp, bpp, input_entry);
+                                   out_format, &roi_out, module, piece, &tiling, &pixelpipe_flow, in_bpp, bpp, 
+                                   input_entry, output_entry);
 #else
   error = pixelpipe_process_on_CPU(pipe, dev, input, input_format, &roi_in, output, out_format, &roi_out, module,
                                    piece, &tiling, &pixelpipe_flow, input_entry);

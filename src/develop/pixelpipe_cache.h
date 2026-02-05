@@ -85,13 +85,28 @@ struct dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry(dt_dev_pixelpipe
  * @param id ID of the pipeline owning the cache line.
  * @param data Pointer to the buffer pointer (returned).
  * @param dsc Pointer to the buffer descriptor (returned).
+ * @param alloc Whether or not we should actually alloc the buffer, or simply reserve it. If FALSE
+ * use `dt_pixel_cache_alloc()` when you actually need the buffer.
  * @param cache_entry a reference to the cache entry, to be reused later. Can be NULL. The caller
   doesn't own the data and shouldn't free it.
  * @return int 1 if the cache line was freshly allocated, 0 if it was found in the cache.
  */
 int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, const size_t size,
                                const char *name, const int id, void **data, struct dt_iop_buffer_dsc_t **dsc,
-                               struct dt_pixel_cache_entry_t **entry);
+                               struct dt_pixel_cache_entry_t **entry, const gboolean alloc);
+
+                    
+/**
+ * @brief Actually allocate the memory buffer attached to the cache entry once you create it with
+ * `dt_dev_pixelpipe_cache_get()`. Sizes and everything are already saved in the entry, and the 
+ * cache will have the needed space reserved. 
+ * 
+ * @param cache 
+ * @param entry the cache entry 
+ * @return void* Pointer to the allocated data buffer.
+ */
+void *dt_pixel_cache_alloc(dt_dev_pixelpipe_cache_t *cache, struct dt_pixel_cache_entry_t *entry);
+
 
 /**
  * @brief Get an existing cache line from the cache. This is similar to `dt_dev_pixelpipe_cache_get`,

@@ -193,10 +193,21 @@ int dt_dev_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t *cache)
   return error;
 }
 
+
+void *dt_pixel_cache_alloc(dt_dev_pixelpipe_cache_t *cache, dt_pixel_cache_entry_t *cache_entry)
+{
+  // allocate the data buffer
+  if(!cache_entry->data)
+    cache_entry->data = dt_alloc_align(cache_entry->size);
+    
+  return cache_entry->data;
+}
+
+
 // WARNING: not thread-safe, protect its calls with mutex lock
 static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, const size_t size,
                                                         const dt_iop_buffer_dsc_t dsc, const char *name, const int id,
-                                                        dt_dev_pixelpipe_cache_t *cache)
+                                                        dt_dev_pixelpipe_cache_t *cache, gboolean alloc)
 {
   // Dynamically update the max cache size depending on remaining free memory on system
   const size_t remaining_mem = dt_get_available_mem();
@@ -228,33 +239,34 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
   dt_pixel_cache_entry_t *cache_entry = (dt_pixel_cache_entry_t *)malloc(sizeof(dt_pixel_cache_entry_t));
   if(!cache_entry) return NULL;
 
-  // allocate the data buffer
-  cache_entry->data = dt_alloc_align(size);
-
-  // if allocation failed, remove the least recently used cache entry, then try again
-  while(cache_entry->data == NULL && g_hash_table_size(cache->entries) > 0)
-  {
-    _non_thread_safe_pixel_pipe_cache_remove_lru(cache);
-    cache_entry->data = dt_alloc_align(size);
-  }
-
-  if(!cache_entry->data)
-  {
-    free(cache_entry);
-    return NULL;
-  }
-
+  // Metadata, easy to free in batch if need be
   cache_entry->size = size;
   cache_entry->age = 0;
   cache_entry->dsc = dsc;
   cache_entry->hash = hash;
   cache_entry->id = id;
-  cache_entry->name = g_strdup(name);
   cache_entry->refcount = 0;
   cache_entry->auto_destroy = FALSE;
+  cache_entry->data = NULL;
+
+  // Optionally alloc the actual buffer, but still record its size in cache
+  if(alloc) dt_pixel_cache_alloc(cache, cache_entry);
+
+  if(alloc && !cache_entry->data)
+  {
+    free(cache_entry);
+    return NULL;
+  }
+  
+  // Metadata that need alloc
+  cache_entry->name = g_strdup(name);
   dt_pthread_rwlock_init(&cache_entry->lock, NULL);
 
+  // Add this entry to the table
   g_hash_table_insert(cache->entries, GINT_TO_POINTER(hash), cache_entry);
+
+  // Note : we grow the cache size even though the data buffer is not yet allocated
+  // This is planning
   cache->current_memory += size;
 
   return cache_entry;
@@ -265,7 +277,7 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
 {
   if(!cache_entry) return;
   dt_pixel_cache_message(cache_entry, "freed", FALSE);
-  dt_free_align(cache_entry->data);
+  if(cache_entry->data) dt_free_align(cache_entry->data);
   cache_entry->data = NULL;
   dt_pthread_rwlock_destroy(&cache_entry->lock);
   g_free(cache_entry->name);
@@ -297,7 +309,7 @@ void dt_dev_pixelpipe_cache_cleanup(dt_dev_pixelpipe_cache_t *cache)
 int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
                                const size_t size, const char *name, const int id,
                                void **data, dt_iop_buffer_dsc_t **dsc,
-                               dt_pixel_cache_entry_t **entry)
+                               dt_pixel_cache_entry_t **entry, const gboolean alloc)
 {
   // Search or create cache entry (under cache lock)
   dt_pthread_mutex_lock(&cache->lock);
@@ -320,9 +332,9 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
   else
   {
     // New entry: create and allocate
-    cache_entry = dt_pixel_cache_new_entry(hash, size, **dsc, name, id, cache);
+    cache_entry = dt_pixel_cache_new_entry(hash, size, **dsc, name, id, cache, alloc);
     
-    if(!cache_entry)
+    if(alloc && !cache_entry)
     {
       dt_print(DT_DEBUG_PIPE, "couldn't allocate new cache entry %" PRIu64 "\n", hash);
       dt_pthread_mutex_unlock(&cache->lock);
