@@ -312,7 +312,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
     cache->hits++;
 
     // Increase ref_count, consumer will have to decrease it
-    _non_thread_safe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, TRUE, cache_entry);
+    _non_thread_safe_cache_ref_count_entry(cache, hash, TRUE, cache_entry);
     
     // Release cache lock BEFORE acquiring entry locks to avoid deadlock
     dt_pthread_mutex_unlock(&cache->lock);
@@ -331,7 +331,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
     }
 
     // Increase ref_count, consumer will have to decrease it
-    _non_thread_safe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, TRUE, cache_entry);
+    _non_thread_safe_cache_ref_count_entry(cache, hash, TRUE, cache_entry);
     
     // Acquire write lock so caller can populate data safely
     dt_dev_pixelpipe_cache_wrlock_entry(cache, hash, TRUE, cache_entry);
@@ -364,7 +364,7 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
   {
     cache->hits++;
     // Increment refcount while we still hold cache->lock
-    _non_thread_safe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, TRUE, cache_entry);
+    _non_thread_safe_cache_ref_count_entry(cache, hash, TRUE, cache_entry);
 
     // Set the time after we get the lock
     cache_entry->age = g_get_monotonic_time(); // this is the MRU entry
