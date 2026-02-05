@@ -1557,7 +1557,7 @@ size_t get_usable_memory_bytes()
 
 int dt_worker_threads()
 {
-  return 2;
+  return 4;
 }
 
 size_t dt_get_available_mem()
