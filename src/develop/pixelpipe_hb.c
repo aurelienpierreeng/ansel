@@ -461,64 +461,36 @@ dt_backbuf_t * _get_backuf(dt_develop_t *dev, const char *op)
     return NULL;
 }
 
-static char *pixelpipe_get_histogram_backbuf(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
-                                              void *output, const dt_iop_roi_t roi,
+static void pixelpipe_get_histogram_backbuf(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
+                                              void *output, const dt_iop_roi_t roi, dt_pixel_cache_entry_t *entry,
                                               dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
                                               const uint64_t hash, const size_t bpp)
 {
   // Runs only on full image but downscaled for perf, aka preview pipe
   // Not an RGBa float buffer ?
-  if(!(bpp == 4 * sizeof(float))) return NULL;
+  if(!(bpp == 4 * sizeof(float))) return;
 
   dt_backbuf_t *backbuf = _get_backuf(dev, module->op);
-  if(backbuf == NULL) return NULL; // This module is not wired to global histograms
-  if(backbuf->hash == hash) return NULL; // Hash didn't change, nothing to update.
+  if(backbuf == NULL) return; // This module is not wired to global histograms
+  if(backbuf->hash == hash) return; // Hash didn't change, nothing to update.
 
-  // Prepare the buffer if needed
-  if(backbuf->buffer == NULL)
-  {
-    // Buffer uninited
-    backbuf->buffer = dt_alloc_align(roi.width * roi.height * bpp);
-    if(backbuf->buffer == NULL)
-    {
-      // Out of memory to allocate. Notify histogram
-      backbuf->hash = -1;
-      return NULL;
-    }
+  // Hash has changed, our previous stored entry is obsolete.
+  // Mark it for future deletion:
+  if(backbuf->entry)
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, FALSE, backbuf->entry);
 
-    backbuf->height = roi.height;
-    backbuf->width = roi.width;
-    backbuf->bpp = bpp;
-  }
-  else if((backbuf->height != roi.height) || (backbuf->width != roi.width) || (backbuf->bpp != bpp))
-  {
-    // Cached buffer size doesn't match current one.
-    // There is no reason yet why this should happen because the preview pipe doesn't change size during its lifetime.
-    // But let's future-proof it in case someone gets creative.
-    if(backbuf->buffer) dt_free_align(backbuf->buffer); // maybe write a dt_realloc_align routine ?
-    backbuf->buffer = dt_alloc_align(roi.width * roi.height * bpp);
-    if(backbuf->buffer == NULL)
-    {
-      // Out of memory to allocate. Notify histogram
-      backbuf->hash = -1;
-      return NULL;
-    }
+  // Buffer uninited
+  backbuf->entry = entry;
 
-    backbuf->height = roi.height;
-    backbuf->width = roi.width;
-    backbuf->bpp = bpp;
-  }
-
-  if(backbuf->buffer == NULL)
-  {
-    // Out of memory to allocate. Notify histogram
-    backbuf->hash = -1;
-    return NULL;
-  }
-
-  // Integrity hash, mixing interal module params state, and params states of previous modules in pipe.
+  // All the rest is kinda redundant with entry, but let's keep our own copy.
+  backbuf->buffer = output; // pointer to entry->data
+  backbuf->height = roi.height;
+  backbuf->width = roi.width;
+  backbuf->bpp = bpp;
   backbuf->hash = hash;
-  return backbuf->buffer;
+  
+  // Increase the refcount on current entry so nobody removes it while we need it.
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, TRUE, entry);
 }
 
 
@@ -1460,7 +1432,7 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
   return err;
 }
 
-static void _sample_global_histogram(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input, void **output,
+static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input, void **output,
                         const dt_iop_roi_t roi_in, const dt_iop_roi_t roi_out, dt_iop_buffer_dsc_t *input_format,
                         dt_iop_buffer_dsc_t **output_format, dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
                         const uint64_t input_hash, const uint64_t hash, const size_t in_bpp, const size_t bpp,
@@ -1477,46 +1449,25 @@ static void _sample_global_histogram(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
   int buf_bpp;
   dt_iop_roi_t roi;
   char *source;
+  dt_pixel_cache_entry_t *entry;
 
   if(strcmp(module->op, "gamma") == 0)
   {
     buf_bpp = in_bpp;
     roi = roi_in;
     source = input;
+    entry = input_entry;
   }
   else
   {
     buf_bpp = bpp;
     roi = roi_out;
     source = *output;
+    entry = output_entry;
   }
 
-  // Copy to histogram cache
-  char *buf = pixelpipe_get_histogram_backbuf(pipe, dev, source, roi, module, piece, hash, buf_bpp);
-  
-  if(buf)
-  {
-    dt_times_t start;
-    dt_get_times(&start);
-    _copy_buffer(source, buf, roi.height, roi.width, roi.width, 0, 0, roi.width * buf_bpp, buf_bpp);
-    dt_show_times_f(&start, "[dev_pixelpipe]", "copying global histogram for %s", module->op);
-  }
-
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, hash, FALSE, output_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
-}
-
-static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input, void **output,
-                        const dt_iop_roi_t roi_in, const dt_iop_roi_t roi_out, dt_iop_buffer_dsc_t *input_format,
-                        dt_iop_buffer_dsc_t **output_format, dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
-                        const uint64_t input_hash, const uint64_t hash, const size_t in_bpp, const size_t bpp,
-                        dt_pixel_cache_entry_t *const input_entry, dt_pixel_cache_entry_t *const output_entry)
-{
-  if(!(dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_PREVIEW))
-    return;
-
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, hash, TRUE, output_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, input_hash, TRUE, input_entry);
+  // Copy the cache entry reference to histogram cache
+  pixelpipe_get_histogram_backbuf(pipe, dev, source, roi, entry, module, piece, hash, buf_bpp);
 
   // sample internal histogram on input and color pickers
   collect_histogram_on_CPU(pipe, dev, input, roi_in, input_format, module, piece);
@@ -1685,9 +1636,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     _sample_gui(pipe, dev, input, output, roi_in, roi_out, input_format, out_format, module,
                 piece, input_hash, hash, in_bpp, bpp, input_entry, output_entry);
 
-    _sample_global_histogram(pipe, dev, input, output, roi_in, roi_out, input_format, out_format, module,
-                piece, input_hash, hash, in_bpp, bpp, input_entry, output_entry);
-
     // Note: the write lock is not held here since it's not a new entry.
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
 
@@ -1791,11 +1739,9 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   KILL_SWITCH_AND_FLUSH_CACHE;
 
   // Sample all color pickers and histograms
-  _sample_gui(pipe, dev, input, output, roi_in, roi_out, input_format, out_format, module, piece, input_hash,
-              hash, in_bpp, bpp, input_entry, output_entry);
-
-  _sample_global_histogram(pipe, dev, input, output, roi_in, roi_out, input_format, out_format, module,
-                piece, input_hash, hash, in_bpp, bpp, input_entry, output_entry);
+  if(piece->force_opencl_cache)
+    _sample_gui(pipe, dev, input, output, roi_in, roi_out, input_format, out_format, module, piece, input_hash,
+                hash, in_bpp, bpp, input_entry, output_entry);
 
   // Print min/max/Nan in debug mode only
   if((darktable.unmuted & DT_DEBUG_NAN) && strcmp(module->op, "gamma") != 0 && *output)

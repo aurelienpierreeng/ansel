@@ -31,6 +31,7 @@
 #include "control/conf.h"
 #include "control/control.h"
 #include "develop/develop.h"
+#include "develop/pixelpipe_cache.h"
 #include "dtgtk/drawingarea.h"
 #include "dtgtk/button.h"
 #include "gui/color_picker_proxy.h"
@@ -335,6 +336,10 @@ static void _process_histogram(dt_backbuf_t *backbuf, cairo_t *cr, const int wid
   uint32_t *bins = calloc(4 * HISTOGRAM_BINS, sizeof(uint32_t));
   if(bins == NULL) return;
 
+  // Check if the cache entry we know is still active on the cache
+  if(!dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, backbuf->hash, NULL, NULL, NULL)) return;
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, backbuf->hash, TRUE, backbuf->entry);
+
   if(dt_conf_get_bool("ui_last/colorpicker_restrict_histogram"))
   {
     // Bin only areas within color pickers
@@ -355,6 +360,9 @@ static void _process_histogram(dt_backbuf_t *backbuf, cairo_t *cr, const int wid
   {
     _bin_pixels_histogram_in_roi(backbuf->buffer, bins, 0, backbuf->width, 0, backbuf->height, width);
   }
+
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, backbuf->hash, FALSE, backbuf->entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, backbuf->hash, FALSE, backbuf->entry);
 
   uint32_t overall_histogram_max = _find_max_histogram(bins, 4 * HISTOGRAM_BINS);
 
@@ -584,8 +592,14 @@ static void _process_waveform(dt_backbuf_t *backbuf, cairo_t *cr, const int widt
   uint8_t *const restrict image = dt_alloc_align(binning_size * sizeof(uint8_t));
   if(image == NULL || bins == NULL) goto error;
 
+  if(!dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, backbuf->hash, NULL, NULL, NULL)) return;
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, backbuf->hash, TRUE, backbuf->entry);
+
   // 1. Pixel binning along columns/rows, aka compute a column/row-wise histogram
   _bin_pixels_waveform(backbuf->buffer, bins, backbuf->width, backbuf->height, binning_size, vertical);
+  
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, backbuf->hash, FALSE, backbuf->entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, backbuf->hash, FALSE, backbuf->entry);
 
   // 2. Paint image.
   // In a 1D histogram, pixel frequencies are shown as height (y axis) for each RGB quantum (x axis).
@@ -779,7 +793,14 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, cairo_t *cr, const int w
   uint8_t *const restrict image = dt_alloc_align(4 * HISTOGRAM_BINS * HISTOGRAM_BINS * sizeof(uint8_t));
   if(vectorscope == NULL || image == NULL) goto error;
 
+  if(!dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, backbuf->hash, NULL, NULL, NULL)) return;
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, backbuf->hash, TRUE, backbuf->entry);
+
   _bin_vectorscope(backbuf->buffer, vectorscope, backbuf->width, backbuf->height, zoom, d);
+
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, backbuf->hash, FALSE, backbuf->entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, backbuf->hash, FALSE, backbuf->entry);
+
   const uint32_t max_hist = _find_max_histogram(vectorscope, HISTOGRAM_BINS * HISTOGRAM_BINS);
   _create_vectorscope_image(vectorscope, image, max_hist, zoom);
 
@@ -1057,6 +1078,9 @@ gboolean _trigger_recompute(dt_lib_histogram_t *d)
 static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
                                        dt_colorpicker_sample_t *const sample, dt_lib_histogram_t *d)
 {
+  if(!dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, backbuf->hash, NULL, NULL, NULL)) return;
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, backbuf->hash, TRUE, backbuf->entry);
+
   const float *const pixel = backbuf->buffer;
 
   if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
@@ -1117,6 +1141,9 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
       dt_XYZ_to_Lab(XYZ, sample->lab[k]);
     }
   }
+
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, backbuf->hash, FALSE, backbuf->entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, backbuf->hash, FALSE, backbuf->entry);
 
   memcpy(sample->display, sample->scope, sizeof(lib_colorpicker_sample_statistics));
 }

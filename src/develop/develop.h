@@ -131,12 +131,13 @@ struct dt_dev_pixelpipe_t;
 
 typedef struct dt_backbuf_t
 {
-  void *buffer;         // image data
+  void *buffer;          // reference to image data, do not free
   size_t width;          // pixel size of image
   size_t height;         // pixel size of image
   uint64_t hash;         // checksum/integrity hash, for example to connect to a cacheline
   const char *op;        // name of the backbuf
   size_t bpp;            // bits per pixels
+  struct dt_pixel_cache_entry_t *entry; // entry ref to pipeline cache
 } dt_backbuf_t;
 
 
