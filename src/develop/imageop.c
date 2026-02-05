@@ -1748,7 +1748,7 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   module->commit_params(module, params, pipe, piece);
 
   gchar *string = g_strdup_printf("/plugins/%s/opencl", module->op);
-  
+
   if(!dt_conf_key_exists(string) || !dt_conf_key_not_empty(string)) 
       dt_conf_set_bool(string, TRUE);
 
@@ -1781,7 +1781,7 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   piece->global_hash = piece->hash = hash;
   piece->global_mask_hash = piece->blendop_hash = module->blendop_hash;
 
-  dt_print(DT_DEBUG_PIPE, "[pixelpipe] params commit for %s (%s) in pipe %s with hash %" PRIu64 "\n", 
+  dt_print(DT_DEBUG_PARAMS, "[pixelpipe] params commit for %s (%s) in pipe %s with hash %" PRIu64 "\n", 
            module->op, module->multi_name, 
            dt_pixelpipe_get_pipe_name(pipe->type), piece->hash);
 }

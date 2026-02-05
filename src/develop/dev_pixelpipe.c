@@ -442,7 +442,7 @@ void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
       dt_iop_commit_params(piece->module, piece->module->default_params, piece->module->default_blendop_params,
                            pipe, piece);
     
-      dt_print(DT_DEBUG_PIPE, "[pixelpipe] info: committed default params for %s (%s) in pipe %s \n", piece->module->op, piece->module->multi_name, type);
+      dt_print(DT_DEBUG_PARAMS, "[pixelpipe] info: committed default params for %s (%s) in pipe %s \n", piece->module->op, piece->module->multi_name, type);
     }
   }
 
@@ -499,7 +499,7 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     for(GList *history = first_item; history && history != fence_item; history = g_list_next(history))
     {
       dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
-      dt_print(DT_DEBUG_DEV, "[pixelpipe] synch top history module `%s` (%s) for pipe %s\n", hist->module->op, hist->module->multi_name, type);
+      dt_print(DT_DEBUG_PARAMS, "[pixelpipe] synch top history module `%s` (%s) for pipe %s\n", hist->module->op, hist->module->multi_name, type);
       dt_dev_pixelpipe_synch(pipe, dev, history);
     }
 
