@@ -308,7 +308,7 @@ static void commit_params_late(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
 
   if(d->mode == LEVELS_MODE_AUTOMATIC)
   {
-    if(g && (piece->pipe->type & DT_DEV_PIXELPIPE_FULL) == DT_DEV_PIXELPIPE_FULL)
+    if(g && piece->pipe->type == DT_DEV_PIXELPIPE_FULL)
     {
       dt_iop_gui_enter_critical_section(self);
       const uint64_t hash = g->hash;
@@ -330,14 +330,14 @@ static void commit_params_late(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
       compute_lut(piece);
     }
 
-    if((piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW) == DT_DEV_PIXELPIPE_PREVIEW || isnan(d->levels[0]) || isnan(d->levels[1])
+    if(piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW || isnan(d->levels[0]) || isnan(d->levels[1])
        || isnan(d->levels[2]))
     {
       dt_iop_levels_compute_levels_automatic(piece);
       compute_lut(piece);
     }
 
-    if(g && (piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW) == DT_DEV_PIXELPIPE_PREVIEW && d->mode == LEVELS_MODE_AUTOMATIC)
+    if(g && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW && d->mode == LEVELS_MODE_AUTOMATIC)
     {
       uint64_t hash = piece->global_hash;
       dt_iop_gui_enter_critical_section(self);
@@ -416,7 +416,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
   dt_iop_levels_data_t *d = (dt_iop_levels_data_t *)piece->data;
   dt_iop_levels_params_t *p = (dt_iop_levels_params_t *)p1;
 
-  if((pipe->type & DT_DEV_PIXELPIPE_PREVIEW) == DT_DEV_PIXELPIPE_PREVIEW)
+  if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
     piece->request_histogram |= (DT_REQUEST_ON);
   else
     piece->request_histogram &= ~(DT_REQUEST_ON);

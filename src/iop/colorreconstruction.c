@@ -580,7 +580,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   dt_iop_colorreconstruct_bilateral_slice(b, in, out, data->threshold, roi_in, 1.f);
 
   // here is where we generate the canned bilateral grid of the preview pipe for later use
-  if(self->dev->gui_attached && g && (piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW) == DT_DEV_PIXELPIPE_PREVIEW)
+  if(self->dev->gui_attached && g && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
   {
     uint64_t hash = piece->global_hash;
     dt_iop_gui_enter_critical_section(self);
@@ -916,7 +916,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   err = dt_iop_colorreconstruct_bilateral_slice_cl(b, dev_in, dev_out, d->threshold, roi_in, 1.f);
   if(err != CL_SUCCESS) goto error;
 
-  if(self->dev->gui_attached && g && (piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW) == DT_DEV_PIXELPIPE_PREVIEW)
+  if(self->dev->gui_attached && g && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
   {
     uint64_t hash = piece->global_hash;
     dt_iop_gui_enter_critical_section(self);

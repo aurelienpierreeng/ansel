@@ -53,7 +53,7 @@ static gchar *dt_pipe_type_to_str(dt_dev_pixelpipe_type_t pipe_type)
 {
   gchar *type_str = NULL;
 
-  switch(pipe_type & DT_DEV_PIXELPIPE_ANY)
+  switch(pipe_type)
   {
     case DT_DEV_PIXELPIPE_PREVIEW:
       type_str = g_strdup("PREVIEW");

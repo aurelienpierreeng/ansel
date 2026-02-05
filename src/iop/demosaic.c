@@ -454,7 +454,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   int demosaicing_method = data->demosaicing_method;
 
   gboolean showmask = FALSE;
-  if(self->dev->gui_attached && (piece->pipe->type & DT_DEV_PIXELPIPE_FULL) == DT_DEV_PIXELPIPE_FULL)
+  if(self->dev->gui_attached && piece->pipe->type == DT_DEV_PIXELPIPE_FULL)
   {
     dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
     if(g) showmask = (g->visual_mask);
@@ -783,7 +783,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   int demosaicing_method = data->demosaicing_method;
 
   gboolean showmask = FALSE;
-  if(self->dev->gui_attached && (piece->pipe->type & DT_DEV_PIXELPIPE_FULL) == DT_DEV_PIXELPIPE_FULL)
+  if(self->dev->gui_attached && piece->pipe->type == DT_DEV_PIXELPIPE_FULL)
   {
     dt_iop_demosaic_gui_data_t *g = (dt_iop_demosaic_gui_data_t *)self->gui_data;
     if(g) showmask = (g->visual_mask);

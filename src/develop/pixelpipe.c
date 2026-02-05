@@ -30,7 +30,6 @@ const char *dt_pixelpipe_name(dt_dev_pixelpipe_type_t pipe)
     case DT_DEV_PIXELPIPE_FULL: return "FULL";
     case DT_DEV_PIXELPIPE_PREVIEW: return "PREVIEW";
     case DT_DEV_PIXELPIPE_THUMBNAIL: return "THUMBNAIL";
-    case DT_DEV_PIXELPIPE_ANY: return "ANY";
     default: return "(unknown)";
   }
 }

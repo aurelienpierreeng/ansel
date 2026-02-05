@@ -549,7 +549,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   cmsHPROFILE softproof = NULL;
   cmsUInt32Number output_format = TYPE_RGBA_FLT;
 
-  d->mode = (pipe->type & DT_DEV_PIXELPIPE_FULL) == DT_DEV_PIXELPIPE_FULL ? darktable.color_profiles->mode : DT_PROFILE_NORMAL;
+  d->mode = (pipe->type== DT_DEV_PIXELPIPE_FULL) ? darktable.color_profiles->mode : DT_PROFILE_NORMAL;
 
   // Softproof and gamut check take input from GUI and don't write it in internal parameters.
   // The cacheline integrity hash will not be meaningful in this scenario,
@@ -568,7 +568,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   piece->process_cl_ready = 1;
 
   /* if we are exporting then check and set usage of override profile */
-  if((pipe->type & DT_DEV_PIXELPIPE_EXPORT) == DT_DEV_PIXELPIPE_EXPORT)
+  if(pipe->type == DT_DEV_PIXELPIPE_EXPORT)
   {
     if(pipe->icc_type != DT_COLORSPACE_NONE)
     {
@@ -604,7 +604,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     out_filename = p->filename;
     out_intent = p->intent;
   }
-  else if((pipe->type & DT_DEV_PIXELPIPE_THUMBNAIL) == DT_DEV_PIXELPIPE_THUMBNAIL)
+  else if(pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL)
   {
     out_type = DT_COLORSPACE_ADOBERGB;
     out_filename = "";
@@ -643,7 +643,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     output = out_profile->profile;
     if(out_type == DT_COLORSPACE_XYZ) output_format = TYPE_XYZA_FLT;
   }
-  else if((pipe->type & DT_DEV_PIXELPIPE_EXPORT) == DT_DEV_PIXELPIPE_EXPORT)
+  else if(pipe->type == DT_DEV_PIXELPIPE_EXPORT)
   {
     // Export with no explicit profile specified : use input file embedded profile
     gboolean new_profile;
@@ -664,7 +664,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   }
 
   /* creating softproof profile if softproof is enabled */
-  if(d->mode != DT_PROFILE_NORMAL && (pipe->type & DT_DEV_PIXELPIPE_FULL) == DT_DEV_PIXELPIPE_FULL)
+  if(d->mode != DT_PROFILE_NORMAL && pipe->type == DT_DEV_PIXELPIPE_FULL)
   {
     const dt_colorspaces_color_profile_t *prof = dt_colorspaces_get_profile
       (darktable.color_profiles->softproof_type,

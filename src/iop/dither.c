@@ -280,7 +280,7 @@ static int get_dither_parameters(const dt_iop_dither_data_t *const data, const d
   int graymode = -1;
   *levels = 65536;
   const int l1 = floorf(1.0f + dt_log2f(1.0f / scale));
-  const int bds = ((piece->pipe->type & DT_DEV_PIXELPIPE_EXPORT) != DT_DEV_PIXELPIPE_EXPORT) ? l1 * l1 : 1;
+  const int bds = (piece->pipe->type != DT_DEV_PIXELPIPE_EXPORT) ? l1 * l1 : 1;
 
   switch(data->dither_type)
   {
@@ -330,12 +330,6 @@ static int get_dither_parameters(const dt_iop_dither_data_t *const data, const d
         default:
           graymode = -1;
           break;
-      }
-      // no automatic dithering for preview and thumbnail
-      if((piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW) == DT_DEV_PIXELPIPE_PREVIEW
-         || (piece->pipe->type & DT_DEV_PIXELPIPE_THUMBNAIL) == DT_DEV_PIXELPIPE_THUMBNAIL)
-      {
-        graymode = -1;
       }
       break;
     case DITHER_RANDOM:
