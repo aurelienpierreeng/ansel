@@ -73,9 +73,7 @@ void dt_dev_pixelpipe_update_zoom_main_real(dt_develop_t *dev)
 
 void dt_dev_pixelpipe_reset_all(dt_develop_t *dev)
 {
-  dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
   dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, -1);
-  dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
 
   if(darktable.gui->reset || !dev || !dev->gui_attached) return;
   dt_dev_pixelpipe_rebuild_all(dev);
