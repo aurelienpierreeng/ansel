@@ -2289,6 +2289,9 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
 
   if(!mouse_in_actionarea(self, x, y)) return 0;
 
+  dt_print(DT_DEBUG_INPUT, "[darkroom] button released which: %d state: %d x: %.2f y: %.2f\n",
+           which, state, x, y);
+
   if(dt_iop_color_picker_is_visible(dev) && which == 1)
   {
     // only sample box picker at end, for speed
@@ -2324,6 +2327,9 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
   if(!mouse_in_actionarea(self, x, y)) return 0;
+
+  dt_print(DT_DEBUG_INPUT, "[darkroom] button pressed  which: %d  type: %d x: %.2f y: %.2f pressure: %f\n",
+           which, type, x, y, pressure);
 
   // Grab focus on any click so we can interact from keyboard
   gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
@@ -2528,6 +2534,9 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
   if(!mouse_in_actionarea(self, x, y)) return FALSE;
+
+  dt_print(DT_DEBUG_INPUT, "[darkroom] scrolled: up: %i x: %.2f y: %.2f state: %i flow: %i\n",
+           up, x, y, state, delta_y);
 
   // masks
   if(dev->form_visible && dt_masks_events_mouse_scrolled(dev->gui_module, x, y, up, state, delta_y))
