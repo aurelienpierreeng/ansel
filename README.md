@@ -210,7 +210,7 @@ All runtimes computed on a Lenovo Thinkpad P51 laptop (Intel Xeon CPU E3-1505M v
 
 | Description | Ansel Master | Darktable 5.0 |
 | ----------- | ------------ | ------------- |
-| Time from app startup to last lighttable thumbnail drawing (same collection) | 2.75 s | 7.49 s |
+| Time from app startup to last lighttable thumbnail drawing (same collection) | 2.59 s | 7.49 s |
 | Time to switch from lighttable to darkroom (same image) | 0.2 s | 1.2 s |
 | Time to scroll (start->end) through the same collection of 471 images* | 0.7 s | 5.0 s |
 
