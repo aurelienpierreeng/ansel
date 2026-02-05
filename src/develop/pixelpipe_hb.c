@@ -106,8 +106,9 @@ inline static void _copy_buffer(const char *const restrict input, char *const re
           schedule(static)
 #endif
   for(size_t j = 0; j < height; j++)
-    memcpy(__builtin_assume_aligned(output, 64) + bpp * j * o_width,
-           __builtin_assume_aligned(input, 64) + bpp * (x_offset + (y_offset + j) * i_width),
+    // Since we crop 1-channel RAW arbitrarily here, alignment is never guaranteed
+    memcpy(output + bpp * j * o_width,
+           input + bpp * (x_offset + (y_offset + j) * i_width),
            stride);
 }
 
