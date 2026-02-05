@@ -1379,8 +1379,16 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
       // fast branch for 1:1 pixel copies.
       if(roi_out.width > 0 && roi_out.height > 0)
       {
-        _copy_buffer((const char *const)buf.buf, (char *const)*output, roi_out.height, roi_out.width,
-                      pipe->iwidth, roi_out.x, roi_out.y, bpp * roi_out.width, bpp);
+        // last minute clamping to catch potential out-of-bounds in roi_in and roi_out
+        // FIXME: this is too late to catch this. Find out why it's needed here and fix upstream.
+        const int in_x = MAX(roi_in.x, 0);
+        const int in_y = MAX(roi_in.y, 0);
+        const int cp_width = MIN(roi_out.width, pipe->iwidth - in_x);
+        const int cp_height = MIN(roi_out.height, pipe->iheight - in_y);
+
+        _copy_buffer((const char *const)buf.buf, (char *const)*output, cp_height, roi_out.width,
+                      pipe->iwidth, in_x, in_y, bpp * cp_width, bpp);
+
         dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
         err = 0;
 
