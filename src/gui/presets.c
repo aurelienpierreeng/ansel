@@ -1202,7 +1202,7 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
   {
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
 
-    GtkWidget *item = gtk_check_menu_item_new_with_label(_("Use OpenCL"));
+    GtkWidget *item = gtk_check_menu_item_new_with_label(_("Use OpenCL (GPU computing)"));
     gtk_widget_set_tooltip_text(item, _("Run this module on GPU if possible.\n"
                                         "Disable if you face recurring issues on GPU with this module.\n"
                                         "Does not require a restart."));
