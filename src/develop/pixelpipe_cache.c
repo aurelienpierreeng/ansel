@@ -301,8 +301,8 @@ dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
   cache->current_memory = 0;
   cache->queries = cache->hits = 0;
 
-  // Run every 5 minutes
-  garbage_collection = g_timeout_add(3 * 60 * 1000, (GSourceFunc)dt_dev_pixelpipe_cache_flush_old, cache);
+  // Run every 2 minutes
+  garbage_collection = g_timeout_add(2 * 60 * 1000, (GSourceFunc)dt_dev_pixelpipe_cache_flush_old, cache);
   return cache;
 }
 
@@ -313,6 +313,12 @@ void dt_dev_pixelpipe_cache_cleanup(dt_dev_pixelpipe_cache_t *cache)
   dt_pthread_mutex_destroy(&cache->lock);
   g_hash_table_destroy(cache->entries);
   cache->entries = NULL;
+
+  if(garbage_collection != 0)
+  {
+    g_source_remove(garbage_collection);
+    garbage_collection = 0;
+  }
 }
 
 
