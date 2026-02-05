@@ -972,6 +972,22 @@ static gboolean _menuitem_button_released_preset(GtkMenuItem *menuitem, GdkEvent
   return FALSE;
 }
 
+static void _opencl_disable_callback(GtkButton *button, dt_iop_module_t *module)
+{
+  gboolean active = gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(button));
+  gchar *string = g_strdup_printf("/plugins/%s/opencl", module->op);
+  dt_conf_set_bool(string, active);
+  g_free(string);
+}
+
+static void _cache_disable_callback(GtkButton *button, dt_iop_module_t *module)
+{
+  gboolean active = gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(button));
+  gchar *string = g_strdup_printf("/plugins/%s/cache", module->op);
+  dt_conf_set_bool(string, active);
+  g_free(string);
+}
+
 static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t version,
                                                   dt_iop_params_t *params, int32_t params_size,
                                                   dt_develop_blend_params_t *bl_params, dt_iop_module_t *module,
@@ -1179,6 +1195,36 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
   {
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
     if(module->set_preferences) module->set_preferences(GTK_MENU_SHELL(menu), module);
+  }
+
+  // OpenCL prefs
+  if(module && module->process_cl)
+  {
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+
+    GtkWidget *item = gtk_check_menu_item_new_with_label(_("Use OpenCL"));
+    gtk_widget_set_tooltip_text(item, _("Run this module on GPU if possible.\n"
+                                        "Disable if you face recurring issues on GPU with this module.\n"
+                                        "Does not require a restart."));
+    gchar *string = g_strdup_printf("/plugins/%s/opencl", module->op);
+
+    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), dt_conf_get_bool(string));
+    g_free(string);
+
+    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_opencl_disable_callback), module);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+    item = gtk_check_menu_item_new_with_label(_("Cache the GPU output"));
+    gtk_widget_set_tooltip_text(item, _("Store the output of this module in cache when running on GPU.\n"
+                                        "This may prevent some recomputations, at the cost of more memory I/O.\n"
+                                        "The trade-off is worth it only for slow modules."));
+    string = g_strdup_printf("/plugins/%s/cache", module->op);
+
+    gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), dt_conf_get_bool(string));
+    g_free(string);
+
+    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_cache_disable_callback), module);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
   }
 }
 

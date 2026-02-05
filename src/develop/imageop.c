@@ -904,6 +904,7 @@ static gboolean _gui_multiinstance_callback(GtkButton *button, GdkEventButton *e
   gtk_menu_shell_append(menu, item);
 
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+
   item = gtk_menu_item_new_with_label(_("rename"));
   g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_gui_rename_callback), module);
   gtk_menu_shell_append(menu, item);
@@ -1745,6 +1746,14 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
     _iop_validate_params(module->so->get_introspection()->field, params, TRUE);
 
   module->commit_params(module, params, pipe, piece);
+
+  gchar *string = g_strdup_printf("/plugins/%s/opencl", module->op);
+  
+  if(!dt_conf_key_exists(string) || !dt_conf_key_not_empty(string)) 
+      dt_conf_set_bool(string, TRUE);
+
+  piece->process_cl_ready &= dt_conf_get_bool(string);
+  g_free(string);
 
   //uint64_t old_hash = module->hash;
 

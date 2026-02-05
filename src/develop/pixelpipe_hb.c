@@ -1894,6 +1894,16 @@ static void _set_opencl_cache(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
       supports_opencl = _is_opencl_supported(pipe, piece, module);
 #endif
 
+      // Get user caching requirements
+      gchar *string = g_strdup_printf("/plugins/%s/cache", module->op);
+      
+      if(!dt_conf_key_exists(string) || !dt_conf_key_not_empty(string)) 
+          dt_conf_set_bool(string, piece->force_opencl_cache);
+
+      piece->force_opencl_cache = dt_conf_get_bool(string);
+
+      g_free(string);
+
       gboolean color_picker_on
           = (dev->gui_module && darktable.lib->proxy.colorpicker.picker_proxy 
              && module == dev->gui_module && dev->gui_module->enabled
