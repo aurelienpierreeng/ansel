@@ -22,6 +22,9 @@
 #include <string.h>
 #include <librsvg/rsvg.h>
 
+#define SAFE_G_FREE(p) if(p) { g_free(p); p = NULL; }
+#define SAFE_FREE(p) if(p) { free(p); p = NULL; }
+
 #ifdef __cplusplus
 extern "C" {
 #endif
