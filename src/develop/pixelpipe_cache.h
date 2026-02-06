@@ -278,6 +278,14 @@ void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, cons
 void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, 
                                             struct dt_pixel_cache_entry_t *cache_entry);
 
+/**
+ * @brief Find the entry matching hash, and decrease its ref_count if found.
+ * 
+ * @param cache 
+ * @param hash 
+ */
+void dt_dev_pixelpipe_cache_unref_hash(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash);
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

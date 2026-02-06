@@ -2091,6 +2091,16 @@ void leave(dt_view_t *self)
   dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, darktable.develop->image_storage.id, TRUE);
   darktable.develop->image_storage.id = -1;
 
+  // Release the cache entries for histogram buffers
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dev->raw_histogram.hash);
+  dev->raw_histogram.hash = -1;
+
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dev->output_histogram.hash);
+  dev->output_histogram.hash = -1;
+
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dev->display_histogram.hash);
+  dev->display_histogram.hash = -1;  
+
   dt_print(DT_DEBUG_CONTROL, "[run_job-] 11 %f in darkroom mode\n", dt_get_wtime());
 }
 

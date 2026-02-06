@@ -633,6 +633,17 @@ void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, con
   dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, FALSE, cache_entry);
 }
 
+void dt_dev_pixelpipe_cache_unref_hash(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash)
+{
+  dt_pthread_mutex_lock(&cache->lock);
+  cache->queries++;
+  dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, hash);
+  dt_pthread_mutex_unlock(&cache->lock);
+
+  if(cache_entry)
+    dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, FALSE, cache_entry);
+}
+
 
 void dt_dev_pixelpipe_cache_print(dt_dev_pixelpipe_cache_t *cache)
 {
