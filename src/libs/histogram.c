@@ -408,17 +408,10 @@ static inline void _bin_pixels_waveform_in_roi(const float *const restrict image
 {
   // Process
 #ifdef _OPENMP
-#ifndef _WIN32
-#pragma omp parallel for default(none) \
-        dt_omp_firstprivate(image, binning_size, vertical, min_x, min_y, max_x, max_y, width) \
-        reduction(+: bins[0: binning_size]) \
-        schedule(static) collapse(3)
-#else
 #pragma omp parallel for default(none) \
         dt_omp_firstprivate(image, binning_size, vertical, min_x, min_y, max_x, max_y, width) \
         shared(bins) \
         schedule(static) collapse(3)
-#endif
 #endif
   for(size_t i = min_y; i < max_y; i++)
     for(size_t j = min_x; j < max_x; j++)
