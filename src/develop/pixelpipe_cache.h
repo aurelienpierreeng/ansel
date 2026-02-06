@@ -255,6 +255,29 @@ void dt_dev_pixelpipe_cache_flag_auto_destroy(dt_dev_pixelpipe_cache_t *cache, u
 void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
                                                struct dt_pixel_cache_entry_t *entry);
 
+
+/**
+* @brief Find the existing cache entry linked to hash if any, lock it in read mode and increase its ref_count
+* all at once. 
+* 
+* @param cache 
+* @param hash 
+* @param cache_entry Found cache entry if any, this is written by the function 
+* @return void* Data buffer associated with the cache entry, or NULL.
+*/
+void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, 
+                                           struct dt_pixel_cache_entry_t **cache_entry);
+
+/**
+ * @brief Decrease the ref_count and release the read lock over cache_entry all at once.
+ * 
+ * @param cache 
+ * @param hash 
+ * @param cache_entry 
+ */
+void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, 
+                                            struct dt_pixel_cache_entry_t *cache_entry);
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

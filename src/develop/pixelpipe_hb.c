@@ -462,32 +462,22 @@ dt_backbuf_t * _get_backuf(dt_develop_t *dev, const char *op)
     return NULL;
 }
 
-static void pixelpipe_get_histogram_backbuf(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
-                                              void *output, const dt_iop_roi_t roi, dt_pixel_cache_entry_t *entry,
-                                              dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
-                                              const uint64_t hash, const size_t bpp)
+static void pixelpipe_get_histogram_backbuf(dt_develop_t *dev, const dt_iop_roi_t roi, dt_pixel_cache_entry_t *entry,
+                                            dt_iop_module_t *module, const uint64_t hash)
 {
-  // Runs only on full image but downscaled for perf, aka preview pipe
-  // Not an RGBa float buffer ?
-  if(!(bpp == 4 * sizeof(float))) return;
-
   dt_backbuf_t *backbuf = _get_backuf(dev, module->op);
   if(backbuf == NULL) return; // This module is not wired to global histograms
   if(backbuf->hash == hash) return; // Hash didn't change, nothing to update.
 
   // Hash has changed, our previous stored entry is obsolete.
   // Mark it for future deletion:
-  if(backbuf->entry)
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, FALSE, backbuf->entry);
+  dt_pixel_cache_entry_t *previous_entry;
+  if(dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, backbuf->hash, NULL, NULL, &previous_entry))
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, backbuf->hash, FALSE, previous_entry);
 
-  // Buffer uninited
-  backbuf->entry = entry;
-
-  // All the rest is kinda redundant with entry, but let's keep our own copy.
-  backbuf->buffer = output; // pointer to entry->data
+  // Update our metadata
   backbuf->height = roi.height;
   backbuf->width = roi.width;
-  backbuf->bpp = bpp;
   backbuf->hash = hash;
   
   // Increase the refcount on current entry so nobody removes it while we need it.
@@ -1462,28 +1452,25 @@ static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input
 
   // Need to go first because we want module output RGB without color conversion.
   // Gamma outputs uint8_t so we take its input. We want float32.
-  int buf_bpp;
   dt_iop_roi_t roi;
-  char *source;
   dt_pixel_cache_entry_t *entry;
+  int64_t buf_hash;
 
   if(strcmp(module->op, "gamma") == 0)
   {
-    buf_bpp = in_bpp;
     roi = roi_in;
-    source = input;
     entry = input_entry;
+    buf_hash = input_hash;
   }
   else
   {
-    buf_bpp = bpp;
     roi = roi_out;
-    source = *output;
     entry = output_entry;
+    buf_hash = hash;
   }
 
   // Copy the cache entry reference to histogram cache
-  pixelpipe_get_histogram_backbuf(pipe, dev, source, roi, entry, module, piece, hash, buf_bpp);
+  pixelpipe_get_histogram_backbuf(dev, roi, entry, module, buf_hash);
 
   // sample internal histogram on input and color pickers
   collect_histogram_on_CPU(pipe, dev, input, roi_in, input_format, module, piece);

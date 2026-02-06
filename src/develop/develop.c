@@ -113,29 +113,17 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
     dev->histogram_pre_levels_max = -1;
   }
 
-  dev->raw_histogram.buffer = NULL;
-  dev->raw_histogram.op = "demosaic";
   dev->raw_histogram.height = 0;
   dev->raw_histogram.width = 0;
   dev->raw_histogram.hash = -1;
-  dev->raw_histogram.bpp = 0;
-  dev->raw_histogram.entry = NULL;
 
-  dev->output_histogram.buffer = NULL;
-  dev->output_histogram.op = "colorout";
   dev->output_histogram.width = 0;
   dev->output_histogram.height = 0;
   dev->output_histogram.hash = -1;
-  dev->output_histogram.bpp = 0;
-  dev->output_histogram.entry = NULL;
 
-  dev->display_histogram.buffer = NULL;
-  dev->display_histogram.op = "gamma";
   dev->display_histogram.width = 0;
   dev->display_histogram.height = 0;
   dev->display_histogram.hash = -1;
-  dev->display_histogram.bpp = 0;
-  dev->display_histogram.entry = NULL;
 
   dev->auto_save_timeout = 0;
   dev->drawing_timeout = 0;

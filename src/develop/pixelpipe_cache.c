@@ -74,8 +74,9 @@ void dt_pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char *mes
 {
   if(!(darktable.unmuted & DT_DEBUG_CACHE)) return;
   if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
-  dt_print(DT_DEBUG_CACHE, "[pixelpipe] cache entry %" PRIu64 ": %s (%lu MiB - age %" PRId64 " - hits %i) %s\n", cache_entry->hash,
-           cache_entry->name, dt_pixel_cache_get_size(cache_entry), cache_entry->age, cache_entry->hits, message);
+  dt_print(DT_DEBUG_CACHE, "[pixelpipe] cache entry %" PRIu64 ": %s (%lu MiB - age %" PRId64 " - hits %i - refs %i) %s\n", 
+           cache_entry->hash, cache_entry->name, dt_pixel_cache_get_size(cache_entry), 
+           cache_entry->age, cache_entry->hits, dt_atomic_get_int(&cache_entry->refcount), message);
 }
 
 
@@ -447,7 +448,7 @@ gboolean _for_each_remove_old(gpointer key, gpointer value, gpointer user_data)
   // 3 min in microseconds
   const int64_t ten_min = 3 * 60 * 1000 * 1000;
 
-  gboolean too_old = (delta > ten_min) && cache_entry->hits < 4;
+  gboolean too_old = (delta > ten_min) && (cache_entry->hits < 4);
 
   return too_old && !used && !locked;
 }
@@ -615,6 +616,21 @@ void dt_dev_pixel_pipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache,
     g_hash_table_remove(cache->entries, GINT_TO_POINTER(hash));
   
   dt_pthread_mutex_unlock(&cache->lock);
+}
+
+void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, dt_pixel_cache_entry_t **cache_entry)
+{
+  // this increases ref_count internally:
+  void *data = NULL;
+  if(!dt_dev_pixelpipe_cache_get_existing(cache, hash, &data, NULL, cache_entry)) return NULL;
+  dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, TRUE, *cache_entry);
+  return data;
+}
+
+void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, dt_pixel_cache_entry_t *cache_entry)
+{
+  dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, FALSE, cache_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, FALSE, cache_entry);
 }
 
 
