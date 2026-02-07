@@ -397,9 +397,6 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
         break;
       }
 
-      dt_control_log_busy_enter();
-      dt_control_toast_busy_enter();
-
       // Signal that we are starting
       pipe->status = DT_DEV_PIXELPIPE_UNDEF;
 
@@ -408,16 +405,29 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       dt_dev_pixelpipe_get_roi_in(pipe, dev, roi);
       dt_pixelpipe_get_global_hash(pipe, dev);
 
-      dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
-      dev->progress.completed = 0;
-      dev->progress.total = 0;
-      int ret = dt_dev_pixelpipe_process(pipe, dev, roi);
-      dev->progress.completed = 0;
-      dev->progress.total = 0;
-      dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
+      int ret = 0;
 
-      dt_control_log_busy_leave();
-      dt_control_toast_busy_leave();
+      // Only if pipeline has changed
+      if(pipe->hash != pipe->backbuf.hash)
+      {
+        // Flag backbuf as invalid
+        dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, pipe->backbuf.hash);
+        pipe->backbuf.hash = -1;
+
+        dt_control_log_busy_enter();
+        dt_control_toast_busy_enter();
+
+        dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
+        dev->progress.completed = 0;
+        dev->progress.total = 0;
+        ret = dt_dev_pixelpipe_process(pipe, dev, roi);
+        dev->progress.completed = 0;
+        dev->progress.total = 0;
+        dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
+
+        dt_control_log_busy_leave();
+        dt_control_toast_busy_leave();
+      }
 
       // If pipe is flagged for re-entry, we need to restart it right away
       if(dt_dev_pixelpipe_has_reentry(pipe))
