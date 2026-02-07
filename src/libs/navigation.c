@@ -170,10 +170,22 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   static uint64_t image_hash = -1;
   static int wd = 0;
   static int ht = 0;
+  static float scale = 1.f;
+
+  GtkAllocation allocation;
+  gtk_widget_get_allocation(widget, &allocation);
+  int width = allocation.width, height = allocation.height;
+
+  cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+  cairo_t *cr = cairo_create(cst);
+  GtkStyleContext *context = gtk_widget_get_style_context(widget);
+  gtk_render_background(context, cr, 0, 0, allocation.width, allocation.height);
+  cairo_save(cr);
   
   if(has_preview_image && (!image_surface || image_hash != dev->preview_pipe->backbuf.hash))
   {
     if(image_surface) cairo_surface_destroy(image_surface);
+    image_surface = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
 
     // Fetch the backbuffer
     struct dt_pixel_cache_entry_t *cache_entry;
@@ -181,41 +193,38 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
                                                       &cache_entry, darktable.develop, dev->preview_pipe);
     if(!data) return TRUE;
 
-    wd = dev->preview_width;
-    ht = dev->preview_height;
+    wd = dev->preview_pipe->backbuf.width;
+    ht = dev->preview_pipe->backbuf.height;
+    scale = fminf(width / (float)wd, height / (float)ht);
     const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
-    image_surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, wd, ht, stride);
+    cairo_surface_t *tmp_surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, wd, ht, stride);
 
     dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, dev->preview_pipe->backbuf.hash, cache_entry);
     image_hash = dev->preview_pipe->backbuf.hash;
+
+    cairo_t *cri = cairo_create(image_surface);
+    cairo_rectangle(cri, 0, 0, width, height);
+    cairo_translate(cri, width / 2., height / 2.);
+    cairo_scale(cri, scale, scale);
+    cairo_translate(cri, -wd / 2., -ht / 2.);
+    cairo_set_source_surface(cri, tmp_surface, 0, 0);
+    cairo_fill(cri);
+    cairo_surface_destroy(tmp_surface);
+    cairo_destroy(cri);
   }
 
-  // Draw the actual thing
-  GtkAllocation allocation;
-  gtk_widget_get_allocation(widget, &allocation);
-  int width = allocation.width, height = allocation.height;
-  const float scale = fminf(width / (float)wd, height / (float)ht);
+  if(image_surface)
+  {
+    cairo_rectangle(cr, 0, 0, width, height);
+    cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+    cairo_set_source_surface(cr, image_surface, 0, 0);
+    cairo_fill(cr);
+  }
 
-  /* get the current style */
-  cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
-  cairo_t *cr = cairo_create(cst);
-  cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
-
-  GtkStyleContext *context = gtk_widget_get_style_context(widget);
-  gtk_render_background(context, cr, 0, 0, allocation.width, allocation.height);
-
-  cairo_save(cr);
-
-  // scale the surface to fit into the navigation area
   cairo_translate(cr, width / 2., height / 2.);
   cairo_scale(cr, scale, scale);
   cairo_translate(cr, -wd / 2., -ht / 2.);
 
-  // draw image
-  cairo_rectangle(cr, 0, 0, wd, ht);
-  cairo_set_source_surface(cr, image_surface, 0, 0);
-  cairo_fill(cr);
-  
   // Calculate the thickness in user space (not affected by scale)
   double line_width = DT_PIXEL_APPLY_DPI(1);
   {
@@ -242,7 +251,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
 
     /* Use even–odd rule to punch the hole */
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
-    cairo_fill_preserve(cr);
+    cairo_fill(cr);
 
     cairo_set_fill_rule(cr, CAIRO_FILL_RULE_WINDING);
 
@@ -314,6 +323,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   cairo_stroke_preserve(cr);
   cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
   cairo_fill(cr);
+
   cairo_restore(cr);
 
   gdk_rgba_free(color);
