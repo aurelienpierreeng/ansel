@@ -128,15 +128,6 @@ gboolean dt_dev_pixelpipe_is_backbufer_valid(struct dt_dev_pixelpipe_t *pipe, st
 // Return TRUE if the current pipeline (topology and node parameters) is in sync with current dev history stack.
 gboolean dt_dev_pixelpipe_is_pipeline_valid(struct dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
 
-// Get the outbut backbuffer associated with the specified pipeline from the pixelpipe cache.
-// If no cache entry is found, we restart a new pipeline recomputation.
-// If a cache entry is found, remember that the cache line has its ref_count increased
-// and will to be manually decreased once the output is consumed, otherwise it will
-// never be freed.
-// Note that we don't check if the backup is valid (up-to-date), only if it exists.
-// Return the pointer reference to the pixel data. It doesn't belong to the caller and should not be freed.
-void *dt_dev_pixelpipe_get_backbuf(struct dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
-
 
 #ifdef __cplusplus
 }

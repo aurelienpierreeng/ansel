@@ -263,10 +263,12 @@ void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache, 
 * @param cache 
 * @param hash 
 * @param cache_entry Found cache entry if any, this is written by the function 
+* @param pipe Pixelpipe to recompute if we fail to find the cacheline associated to the hash
 * @return void* Data buffer associated with the cache entry, or NULL.
 */
 void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, 
-                                           struct dt_pixel_cache_entry_t **cache_entry);
+                                           struct dt_pixel_cache_entry_t **cache_entry, 
+                                           struct dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe);
 
 /**
  * @brief Decrease the ref_count and release the read lock over cache_entry all at once.

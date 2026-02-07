@@ -584,16 +584,3 @@ gboolean dt_dev_pixelpipe_is_pipeline_valid(dt_dev_pixelpipe_t *pipe, struct dt_
 {
   return dt_dev_history_get_hash(dev) == pipe->history_hash;
 }
-
-void *dt_dev_pixelpipe_get_backbuf(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
-{
-  void *out = NULL;
-
-  if(pipe->backbuf 
-     && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe->backbuf_pipe_hash, &out, NULL, NULL))
-    return out;
-  else
-    dt_dev_process(dev, pipe);
-
-  return out;
-}

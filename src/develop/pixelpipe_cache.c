@@ -618,16 +618,25 @@ void dt_dev_pixel_pipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache,
   dt_pthread_mutex_unlock(&cache->lock);
 }
 
-void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, dt_pixel_cache_entry_t **cache_entry)
+void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, 
+                                           dt_pixel_cache_entry_t **cache_entry, 
+                                           dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 {
   // this increases ref_count internally:
   void *data = NULL;
-  if(!dt_dev_pixelpipe_cache_get_existing(cache, hash, &data, NULL, cache_entry)) return NULL;
+  if(!dt_dev_pixelpipe_cache_get_existing(cache, hash, &data, NULL, cache_entry))
+  {
+    // Ask for a new recompute if cacheline is missing
+    dt_dev_process(dev, pipe);
+    return NULL;
+  } 
+
   dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, TRUE, *cache_entry);
   return data;
 }
 
-void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, dt_pixel_cache_entry_t *cache_entry)
+void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, 
+                                            dt_pixel_cache_entry_t *cache_entry)
 {
   dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, FALSE, cache_entry);
   dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, FALSE, cache_entry);
