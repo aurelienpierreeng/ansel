@@ -131,10 +131,11 @@ struct dt_dev_pixelpipe_t;
 
 typedef struct dt_backbuf_t
 {
-  // Backbufs are expected to be float32 RGBa
+  size_t bpp;            // bits per pixel
   size_t width;          // pixel size of image
   size_t height;         // pixel size of image
-  uint64_t hash;         // checksum/integrity hash, for example to connect to a cacheline
+  uint64_t hash;         // data checksum/integrity hash, for example to connect to a cacheline
+  uint64_t history_hash; // arbitrary state hash
 } dt_backbuf_t;
 
 
@@ -369,6 +370,10 @@ int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid);
 void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch);
 
 float dt_dev_get_zoom_scale(dt_develop_t *dev, gboolean preview);
+
+// Set all the params of a backbuffer at once
+void dt_dev_set_backbuf(dt_backbuf_t *backbuf, const int width, const int height, const size_t bpp, 
+                        const int64_t hash, const int64_t history_hash);
 
 /**
  * @brief Get the pointer position from widget space to preview buffer space [0..1].

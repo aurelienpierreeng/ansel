@@ -1392,6 +1392,16 @@ void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
   darktable.gui->mouse.effect_radius_screen = darktable.gui->mouse.effect_radius * darktable.gui->ppd;
 }
 
+void dt_dev_set_backbuf(dt_backbuf_t *backbuf, const int width, const int height, const size_t bpp, 
+                        const int64_t hash, const int64_t history_hash)
+{
+  backbuf->height = height;
+  backbuf->width = width;
+  backbuf->hash = hash;
+  backbuf->bpp = bpp;
+  backbuf->history_hash = history_hash;
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

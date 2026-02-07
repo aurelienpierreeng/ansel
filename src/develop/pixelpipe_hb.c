@@ -480,9 +480,7 @@ static void pixelpipe_get_histogram_backbuf(dt_develop_t *dev, const dt_iop_roi_
   }
 
   // Update our metadata
-  backbuf->height = roi.height;
-  backbuf->width = roi.width;
-  backbuf->hash = hash;
+  dt_dev_set_backbuf(backbuf, roi.width, roi.height, entry->size / (roi.width * roi.height), hash, -1);
   
   // Increase the refcount on current entry so nobody removes it while we need it.
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, TRUE, entry);
