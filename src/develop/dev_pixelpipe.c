@@ -520,7 +520,6 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   // Read and write immediately to ensure cross-thread consistency of the value
   // in case the GUI overwrites that while we are syncing history and nodes
   const dt_dev_pixelpipe_change_t status = pipe->changed;
-  pipe->changed = DT_DEV_PIPE_UNCHANGED;
 
   gchar *type = dt_pixelpipe_get_pipe_name(pipe->type);
   char *status_str = g_strdup_printf("%s%s%s%s%s",
@@ -570,12 +569,18 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   }
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
+  pipe->changed = DT_DEV_PIPE_UNCHANGED;
+
   dt_show_times_f(&start, "[dev_pixelpipe] pipeline resync with history", "for pipe %s", type);
 }
 
 gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 {
-  return dt_dev_history_get_hash(dev) == pipe->backbuf.history_hash && pipe->backbuf.hash != -1;
+  return pipe->backbuf.hash != -1 
+         && pipe->status == DT_DEV_PIXELPIPE_VALID 
+         && pipe->changed == DT_DEV_PIPE_UNCHANGED
+         && !pipe->processing 
+         && dt_dev_history_get_hash(dev) == pipe->backbuf.history_hash;
 }
 
 gboolean dt_dev_pixelpipe_is_pipeline_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)

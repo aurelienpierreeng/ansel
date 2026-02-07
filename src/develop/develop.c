@@ -394,6 +394,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       {
         pipe->processing = 0;
         dt_pthread_mutex_unlock(&pipe->busy_mutex);
+        pipe->status = DT_DEV_PIXELPIPE_DIRTY;
         break;
       }
 
@@ -441,6 +442,10 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       }
 
       pipe->processing = 0;
+      gchar *msg = g_strdup_printf("[pixelpipe] %s pipeline thread", dt_pixelpipe_get_pipe_name(pipe->type));
+      dt_show_times(&thread_start, msg);
+      g_free(msg);
+
       dt_pthread_mutex_unlock(&pipe->busy_mutex);
 
       if(pipe->status == DT_DEV_PIXELPIPE_VALID)

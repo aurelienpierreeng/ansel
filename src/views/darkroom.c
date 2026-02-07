@@ -344,6 +344,13 @@ static cairo_surface_t *_get_surface(dt_dev_pixelpipe_t *pipe, int *width, int *
   return surface;
 }
 
+static void _paint_all(cairo_t *cri, cairo_t *cr, cairo_surface_t *image_surface)
+{
+  cairo_destroy(cr);
+  cairo_set_source_surface(cri, image_surface, 0, 0);
+  cairo_paint(cri);
+}
+
 void expose(
     dt_view_t *self,
     cairo_t *cri,
@@ -386,7 +393,6 @@ void expose(
     if(image_surface) cairo_surface_destroy(image_surface);
     image_surface = dt_cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
     image_surface_imgid = UNKNOWN_IMAGE; // invalidate old stuff
-    //fprintf(stdout, "nuking surface\n");
   }
 
   cairo_surface_t *surface;
@@ -403,7 +409,7 @@ void expose(
 
   if(has_main_image)
   {
-    if(main_hash != dev->pipe->hash)
+    if(main_hash != dev->pipe->backbuf.hash)
     {
       // If we have a valid image use it, except if it's still the same as previously.
       // In this case, we will reuse the buffered surface.
@@ -429,15 +435,14 @@ void expose(
       if(surface)
       {
         image_surface_imgid = _render_image(cr, surface, wd, ht, dev);
-        main_hash = dev->pipe->hash;
+        main_hash = dev->pipe->backbuf.hash;
       }
-
-      //fprintf(stdout, "printing darkroom from the real thing\n");
     }
+    _paint_all(cri, cr, image_surface);
   }
   else if(has_preview_image)
   {
-    if(preview_hash != dev->preview_pipe->hash 
+    if(preview_hash != dev->preview_pipe->backbuf.hash
       || zoom_hash != new_zoom_hash)
     {
       // Cases in which we want the refresh placeholder preview in the surface :
@@ -479,33 +484,24 @@ void expose(
         dt_dev_clip_roi(dev, cr, width, height);
         dt_dev_rescale_roi(dev, cr, width, height);
         image_surface_imgid = _render_image(cr, surface, wd, ht, dev);
-        preview_hash = dev->preview_pipe->hash;
+        preview_hash = dev->preview_pipe->backbuf.hash;
         zoom_hash = new_zoom_hash;
       }
-
-      //fprintf(stdout, "printing darkroom from preview placeholder\n");
     }
+    _paint_all(cri, cr, image_surface);
   }
   else if(image_surface && image_surface_imgid == dev->image_storage.id)
   {
     // try to keep buffered image_surface from previous run
-    //fprintf(stdout, "printing darkroom from buffered surface\n");
+    _paint_all(cri, cr, image_surface);
   }
   else
   {
     // nothing to draw
-    //fprintf(stdout, "nothing to draw\n");
     return;
   }
 
   cairo_restore(cri);
-
-  if(image_surface_imgid == dev->image_storage.id)
-  {
-    cairo_destroy(cr);
-    cairo_set_source_surface(cri, image_surface, 0, 0);
-    cairo_paint(cri);
-  }
 
   /* check if we should create a snapshot of view */
   if(darktable.develop->proxy.snapshot.request)
