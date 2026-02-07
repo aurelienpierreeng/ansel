@@ -416,9 +416,8 @@ gboolean _for_each_remove(gpointer key, gpointer value, gpointer user_data)
   // 0 if WE capture the lock, and then need to release it
   gboolean locked = dt_pthread_rwlock_trywrlock(&cache_entry->lock);
   if(!locked) dt_pthread_rwlock_unlock(&cache_entry->lock);
-  gboolean used = dt_atomic_get_int(&cache_entry->refcount) > 0;
 
-  return (cache_entry->id == id || id == -1) && !used && !locked;
+  return (cache_entry->id == id || id == -1) && !locked;
 }
 
 
