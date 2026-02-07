@@ -158,6 +158,13 @@ void gui_cleanup(dt_lib_module_t *self)
   self->data = NULL;
 }
 
+void gui_reset(dt_lib_module_t *self)
+{
+  dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
+  if(d->image_surface) cairo_surface_destroy(d->image_surface);
+  d->image_surface = NULL;
+}
+
 static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
   dt_times_t start;
@@ -173,6 +180,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   static int wd = 0;
   static int ht = 0;
   static float scale = 1.f;
+  static int32_t imgid = UNKNOWN_IMAGE;
 
   GtkAllocation allocation;
   gtk_widget_get_allocation(widget, &allocation);
@@ -214,9 +222,16 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     cairo_destroy(cri);
 
     dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, dev->preview_pipe->backbuf.hash, cache_entry);
+
+    imgid = dev->image_storage.id;
+  }
+  else
+  {
+    wd = dev->preview_width;
+    ht = dev->preview_height;
   }
 
-  if(d->image_surface)
+  if(d->image_surface && imgid == dev->image_storage.id)
   {
     cairo_rectangle(cr, 0, 0, width, height);
     cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
