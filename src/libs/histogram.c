@@ -1165,9 +1165,10 @@ static void _update_everything(dt_lib_module_t *self)
 
   if(_trigger_recompute(d))
   {
-    _pixelpipe_pick_samples(d);
     _redraw_scopes(d);
   }
+
+  _pixelpipe_pick_samples(d);
 
   for(GSList *samples = darktable.lib->proxy.colorpicker.live_samples;
       samples;

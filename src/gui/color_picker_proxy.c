@@ -208,7 +208,6 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
 
     // force applying the next incoming sample
     self->changed = TRUE;
-    dt_dev_pixelpipe_refresh_preview(darktable.develop, TRUE);
   }
   else
   {
@@ -217,11 +216,11 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
     if(module)
     {
       module->request_color_pick = DT_REQUEST_COLORPICK_OFF;
-      // will turn off live sample button
-      darktable.lib->proxy.colorpicker.update_panel(darktable.lib->proxy.colorpicker.module);
     }
-    dt_dev_pixelpipe_refresh_preview(darktable.develop, TRUE);
   }
+
+  darktable.lib->proxy.colorpicker.update_panel(darktable.lib->proxy.colorpicker.module);
+  dt_dev_pixelpipe_refresh_preview(darktable.develop, TRUE);
 
   return TRUE;
 }
