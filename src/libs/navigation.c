@@ -143,35 +143,52 @@ void gui_init(dt_lib_module_t *self)
   darktable.lib->proxy.navigation.module = self;
 }
 
+static cairo_surface_t *image_surface = NULL;
+
 void gui_cleanup(dt_lib_module_t *self)
 {
   /* disconnect from signal */
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_navigation_control_redraw_callback), self);
 
+  if(image_surface) cairo_surface_destroy(image_surface);
+
   g_free(self->data);
   self->data = NULL;
 }
 
-
-
 static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
+  dt_times_t start;
+  dt_get_times(&start);
+
   dt_develop_t *dev = darktable.develop;
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
 
-  // Fetch the backbuffer
-  struct dt_pixel_cache_entry_t *cache_entry;
-  void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, dev->preview_pipe->backbuf.hash, 
-                                                    &cache_entry, darktable.develop, dev->preview_pipe);
-  if(!data) return TRUE;
+  const gboolean has_preview_image = dt_dev_pixelpipe_is_backbufer_valid(dev->preview_pipe, dev);
 
-  const int wd = dev->preview_width;
-  const int ht = dev->preview_height;
-  const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
-  cairo_surface_t *surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, wd, ht, stride);
+  static uint64_t image_hash = -1;
+  static int wd = 0;
+  static int ht = 0;
+  
+  if(has_preview_image && (!image_surface || image_hash != dev->preview_pipe->backbuf.hash))
+  {
+    if(image_surface) cairo_surface_destroy(image_surface);
 
-  dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, dev->preview_pipe->backbuf.hash, cache_entry);
+    // Fetch the backbuffer
+    struct dt_pixel_cache_entry_t *cache_entry;
+    void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, dev->preview_pipe->backbuf.hash, 
+                                                      &cache_entry, darktable.develop, dev->preview_pipe);
+    if(!data) return TRUE;
+
+    wd = dev->preview_width;
+    ht = dev->preview_height;
+    const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
+    image_surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, wd, ht, stride);
+
+    dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, dev->preview_pipe->backbuf.hash, cache_entry);
+    image_hash = dev->preview_pipe->backbuf.hash;
+  }
 
   // Draw the actual thing
   GtkAllocation allocation;
@@ -182,6 +199,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   /* get the current style */
   cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
   cairo_t *cr = cairo_create(cst);
+  cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
 
   GtkStyleContext *context = gtk_widget_get_style_context(widget);
   gtk_render_background(context, cr, 0, 0, allocation.width, allocation.height);
@@ -195,8 +213,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
 
   // draw image
   cairo_rectangle(cr, 0, 0, wd, ht);
-  cairo_set_source_surface(cr, surface, 0, 0);
-  cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
+  cairo_set_source_surface(cr, image_surface, 0, 0);
   cairo_fill(cr);
   
   // Calculate the thickness in user space (not affected by scale)
@@ -213,20 +230,21 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     // Add a dark overlay on the picture to make it fade
     cairo_rectangle(cr, 0, 0, wd, ht);
     cairo_set_source_rgba(cr, 0, 0, 0, 0.5);
-    cairo_fill(cr);
 
+    // clip dimensions to navigation area
     float boxw = 1, boxh = 1;
     dt_dev_check_zoom_pos_bounds(dev, &(dev->roi.x), &(dev->roi.y), &boxw, &boxh);
-    // clip dimensions to navigation area
     const float roi_w = MIN(boxw * wd, wd);
     const float roi_h = MIN(boxh * ht, ht);
     const float roi_x = dev->roi.x * wd - roi_w * 0.5f;
     const float roi_y = dev->roi.y * ht - roi_h * 0.5f;
-
-    // Repaint the original image in the area of interest
-    cairo_set_source_surface(cr, surface, 0, 0);
     cairo_rectangle(cr, roi_x - 1, roi_y - 1, roi_w + 2, roi_h + 2);
+
+    /* Use even–odd rule to punch the hole */
+    cairo_set_fill_rule(cr, CAIRO_FILL_RULE_EVEN_ODD);
     cairo_fill_preserve(cr);
+
+    cairo_set_fill_rule(cr, CAIRO_FILL_RULE_WINDING);
 
     // Paint the external border in black
     cairo_set_source_rgb(cr, 0., 0., 0.);
@@ -309,13 +327,14 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   cairo_line_to(cr, width - 0.05 * arrow_h, -0.9 * arrow_h - 2);
   cairo_line_to(cr, width - 0.5 * arrow_h, -0.1 * arrow_h - 2);
   cairo_fill(cr);
-  cairo_surface_destroy(surface);
 
   /* blit memsurface into widget */
   cairo_destroy(cr);
   cairo_set_source_surface(crf, cst, 0, 0);
   cairo_paint(crf);
   cairo_surface_destroy(cst);
+
+  dt_show_times_f(&start, "[navigation]", "redraw");
 
   return TRUE;
 }
