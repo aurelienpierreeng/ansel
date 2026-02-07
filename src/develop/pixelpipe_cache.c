@@ -631,7 +631,18 @@ void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, cons
     return NULL;
   } 
 
-  dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, TRUE, *cache_entry);
+  // Assuming this function is called from GUI, we don't want to make it hang
+  // if our entry data is getting written by something heavy in a pipe thread.
+  // It should be tried again when the pipeline returns and emits "finished" signal.
+  // Meanwhile, abort for now.
+  gboolean locked = dt_pthread_rwlock_tryrdlock(&((*cache_entry)->lock));
+  if(locked)
+  {
+    dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, FALSE, *cache_entry);
+    return NULL;
+  }
+  // else: trylock also locks it.
+
   return data;
 }
 
