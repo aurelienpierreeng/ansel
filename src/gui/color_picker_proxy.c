@@ -177,7 +177,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
   if (prior_picker != self || (kind == DT_COLOR_PICKER_POINT_AREA &&
       (ctrl_key_pressed ^ (darktable.lib->proxy.colorpicker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_BOX))))
   {
-    dt_iop_set_cache_bypass(module, TRUE);
+    if(module) dt_iop_set_cache_bypass(module, TRUE);
     darktable.lib->proxy.colorpicker.picker_proxy = self;
 
     if(module) module->request_color_pick = DT_REQUEST_COLORPICK_MODULE;
