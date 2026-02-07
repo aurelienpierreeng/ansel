@@ -457,11 +457,7 @@ static void pixelpipe_get_histogram_backbuf(dt_develop_t *dev, const dt_iop_roi_
   // Mark it for future deletion:
   dt_pixel_cache_entry_t *previous_entry;
   if(dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, backbuf->hash, NULL, NULL, &previous_entry))
-  {
-    // dt_dev_pixelpipe_cache_get_existing() increases ref_count too, so we need to decrease it twice
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, backbuf->hash, FALSE, previous_entry);
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, backbuf->hash, FALSE, previous_entry);
-  }
 
   // Update our metadata
   dt_dev_set_backbuf(backbuf, roi.width, roi.height, entry->size / (roi.width * roi.height), hash, -1);
@@ -1511,9 +1507,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(!bypass_cache && !pipe->reentry
      && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, hash, output, out_format, &existing_cache))
   {
-    // FIXME: on CPU path and GPU path with tiling, when 2 modules taking different color spaces are back to back,
-    // the color conversion for the next is done in-place in the output of the previous. We should check
-    // here if out_format->cst matches wathever we are expecting, and convert back if it doesn't.
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, TRUE, existing_cache);
     dt_print(DT_DEBUG_PIPE, "[dev_pixelpipe] found %" PRIu64 " (%s) for %s pipeline in cache\n", hash, module ? module->op : "noop",
              dt_pixelpipe_get_pipe_name(pipe->type));
     return 0;
@@ -1915,7 +1909,6 @@ static gboolean _resync_global_histograms(dt_dev_pixelpipe_t *pipe, dt_develop_t
           return 0;
 
         pixelpipe_get_histogram_backbuf(dev, roi, entry, piece->module, buf_hash);
-        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, buf_hash, FALSE, entry);
       }
       input_hash = hash;
     }
@@ -1949,14 +1942,12 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
   // If the last backbuf image is still valid with regard to current pipe topology 
   // and history, and we still have an entry cache, abort now. Nothing to do.
   // For preview pipe, if using color pickers, we still need to traverse the pipeline.
+  dt_pixel_cache_entry_t *entry = NULL;
   if(!pipe->reentry && !pipe->bypass_cache 
-     && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe->hash, &buf, NULL, NULL)
+     && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe->hash, &buf, NULL, &entry)
      && _resync_global_histograms(pipe, dev))
   {
-    // Remember that dt_dev_pixelpipe_cache_get_existing()
-    // increases the ref_count of the cache entry, so it won't be
-    // deleted from the cache until you manually decrease it 
-    // when you are done consuming it.
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, pipe->hash, TRUE, entry);
 
     if(pipe->backbuf.hash != pipe->hash)
       _update_backbuf_cache_reference(pipe, buf, roi, pos);

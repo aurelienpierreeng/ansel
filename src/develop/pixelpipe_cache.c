@@ -392,8 +392,6 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
   if(cache_entry)
   {
     cache->hits++;
-    // Increment refcount while we still hold cache->lock
-    _non_thread_safe_cache_ref_count_entry(cache, hash, TRUE, cache_entry);
 
     // Set the time after we get the lock
     cache_entry->age = g_get_monotonic_time(); // this is the MRU entry
@@ -605,7 +603,6 @@ void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, cons
                                            dt_pixel_cache_entry_t **cache_entry, 
                                            dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 {
-  // this increases ref_count internally:
   void *data = NULL;
   if(!dt_dev_pixelpipe_cache_get_existing(cache, hash, &data, NULL, cache_entry))
   {
@@ -619,12 +616,10 @@ void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, cons
   // It should be tried again when the pipeline returns and emits "finished" signal.
   // Meanwhile, abort for now.
   gboolean locked = dt_pthread_rwlock_tryrdlock(&((*cache_entry)->lock));
-  if(locked)
-  {
-    dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, FALSE, *cache_entry);
-    return NULL;
-  }
+  if(locked) return NULL;
   // else: trylock also locks it.
+
+  dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, TRUE, *cache_entry);
 
   return data;
 }

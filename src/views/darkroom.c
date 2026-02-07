@@ -340,7 +340,6 @@ static cairo_surface_t *_get_surface(dt_dev_pixelpipe_t *pipe, int *width, int *
   cairo_surface_t *surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, *width, *height, stride);
 
   dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, pipe->backbuf.hash, cache_entry);
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, pipe->backbuf.hash, FALSE, cache_entry);
 
   return surface;
 }
@@ -414,7 +413,7 @@ void expose(
       cairo_paint(cr);
 
       // draw image
-      int wd, ht;
+      int wd = 0, ht = 0;
       surface = _get_surface(dev->pipe, &wd, &ht);
 
       // Tell Cairo this surface is possibly HiDPI
@@ -451,7 +450,7 @@ void expose(
       cairo_paint(cr);
 
       // draw preview
-      int wd, ht;
+      int wd = 0, ht = 0;
       surface = _get_surface(dev->preview_pipe, &wd, &ht);
 
       if(dev->iso_12646.enabled)
@@ -2100,6 +2099,13 @@ void leave(dt_view_t *self)
 
   dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dev->display_histogram.hash);
   dev->display_histogram.hash = -1;  
+
+  // Release the cache entries for GUI backbufs
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dev->pipe->backbuf.hash);
+  dev->pipe->backbuf.hash = -1;
+
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dev->preview_pipe->backbuf.hash);
+  dev->preview_pipe->backbuf.hash = -1;
 
   dt_print(DT_DEBUG_CONTROL, "[run_job-] 11 %f in darkroom mode\n", dt_get_wtime());
 }

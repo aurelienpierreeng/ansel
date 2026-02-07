@@ -1071,7 +1071,6 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
 
   // Decrease ref count on the cache entry and release the read lock
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, 0, FALSE, cache_entry);
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, 0, FALSE, cache_entry);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, FALSE, cache_entry);
 
   if(outbuf == NULL) goto error;
