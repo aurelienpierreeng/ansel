@@ -118,8 +118,8 @@ void _mouse_over_image_callback(gpointer instance, gpointer user_data)
   int32_t group_id = UNKNOWN_IMAGE;
 
   // We iterate and update only over the visible range of thumbs + 2 rows as a safety margin
-  int32_t row_start = CLAMP(table->min_row_id - table->thumbs_per_row, 0, table->collection_count - 1);
-  int32_t row_end = CLAMP(table->max_row_id + table->thumbs_per_row, 0, table->collection_count - 1);
+  int32_t row_start = CLAMP(table->min_row_id - 2 * table->thumbs_per_row, 0, table->collection_count - 1);
+  int32_t row_end = CLAMP(table->max_row_id + 2 * table->thumbs_per_row, 0, table->collection_count - 1);
   for(int rowid = row_start; rowid <= row_end; rowid++)
   {
     dt_thumbnail_t *thumb = table->lut[rowid].thumb;
