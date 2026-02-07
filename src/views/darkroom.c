@@ -347,6 +347,7 @@ static cairo_surface_t *_get_surface(dt_dev_pixelpipe_t *pipe, int *width, int *
 static void _paint_all(cairo_t *cri, cairo_t *cr, cairo_surface_t *image_surface)
 {
   cairo_destroy(cr);
+  if(!image_surface) return;
   cairo_set_source_surface(cri, image_surface, 0, 0);
   cairo_paint(cri);
 }
@@ -424,9 +425,6 @@ void expose(
       int wd = 0, ht = 0;
       surface = _get_surface(dev->pipe, &wd, &ht);
 
-      // Tell Cairo this surface is possibly HiDPI
-      cairo_surface_set_device_scale(surface, darktable.gui->ppd, darktable.gui->ppd);
-
       wd /= darktable.gui->ppd;
       ht /= darktable.gui->ppd;
       cairo_translate(cr, .5f * (width - wd), .5f * (height - ht));
@@ -436,6 +434,8 @@ void expose(
 
       if(surface)
       {
+        // Tell Cairo this surface is possibly HiDPI
+        cairo_surface_set_device_scale(surface, darktable.gui->ppd, darktable.gui->ppd);
         image_surface_imgid = _render_image(cr, surface, wd, ht, dev);
         main_hash = dev->pipe->backbuf.hash;
       }
