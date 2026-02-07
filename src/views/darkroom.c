@@ -483,6 +483,7 @@ void expose(
       // clip to image area only
       if(surface)
       {
+        cairo_surface_set_device_scale(surface, 1., 1.);
         dt_dev_clip_roi(dev, cr, width, height);
         dt_dev_rescale_roi(dev, cr, width, height);
         image_surface_imgid = _render_image(cr, surface, wd, ht, dev);
@@ -1174,6 +1175,13 @@ void connect_button_press_release(GtkWidget *w, GtkWidget *p)
   g_signal_connect(w, "button-release-event", G_CALLBACK(_quickbutton_press_release), p);
 }
 
+gboolean _focus_main_image(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
+                           GdkModifierType modifier, gpointer data)
+{
+  gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
+  return TRUE;
+}
+
 gboolean _switch_to_next_picture(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                                  GdkModifierType modifier, gpointer data)
 {
@@ -1222,9 +1230,42 @@ void gui_init(dt_view_t *self)
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
   dt_accels_new_darkroom_action(_switch_to_next_picture, self, N_("Darkroom/Actions"),
-                                N_("switch to the next picture"), GDK_KEY_Right, GDK_MOD1_MASK, _("Triggers the action"));
+                                N_("Switch to the next picture"), GDK_KEY_Right, GDK_MOD1_MASK, _("Triggers the action"));
   dt_accels_new_darkroom_action(_switch_to_prev_picture, self, N_("Darkroom/Actions"),
-                                N_("switch to the previous picture"), GDK_KEY_Left, GDK_MOD1_MASK, _("Triggers the action"));
+                                N_("Switch to the previous picture"), GDK_KEY_Left, GDK_MOD1_MASK, _("Triggers the action"));
+
+  dt_accels_new_darkroom_action(_focus_main_image, self, N_("Darkroom/Actions"),
+                                N_("Give focus to the main image"), GDK_KEY_Return, 0, _("Triggers the action"));
+
+  gchar *path = dt_accels_build_path(_("Darkroom/Main image"), _("Move up"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
+                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Up, 0);
+  g_free(path);
+
+  path = dt_accels_build_path(_("Darkroom/Main image"), _("Move up (coarse step)"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
+                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Up, GDK_SHIFT_MASK);
+  g_free(path);
+
+  path = dt_accels_build_path(_("Darkroom/Main image"), _("Move up (fine step)"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
+                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Up, GDK_CONTROL_MASK);
+  g_free(path);
+
+  path = dt_accels_build_path(_("Darkroom/Main image"), _("Move down"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
+                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Down, 0);
+  g_free(path);
+
+  path = dt_accels_build_path(_("Darkroom/Main image"), _("Move down (coarse step)"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
+                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Down, GDK_SHIFT_MASK);
+  g_free(path);
+
+  path = dt_accels_build_path(_("Darkroom/Main image"), _("Move down (fine step)"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
+                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Down, GDK_CONTROL_MASK);
+  g_free(path);
   /*
    * Add view specific tool buttons
    */
@@ -2218,9 +2259,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   _set_default_cursor(self, x, y);
   gboolean ret = FALSE;
 
-  if(!mouse_in_actionarea(self, x, y)) ret = TRUE;
-
-  else if(dt_iop_color_picker_is_visible(dev) && ctl->button_down && ctl->button_down_which == 1)
+  if(dt_iop_color_picker_is_visible(dev) && ctl->button_down && ctl->button_down_which == 1)
   {
     // module requested a color box
     if(mouse_in_imagearea(self, x, y))
@@ -2265,6 +2304,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   }
 
   dt_control_commit_cursor();
+
   if(ret)
   {
     dt_control_queue_redraw_center();
@@ -2307,8 +2347,6 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
-  if(!mouse_in_actionarea(self, x, y)) return 0;
-
   dt_print(DT_DEBUG_INPUT, "[darkroom] button released which: %d state: %d x: %.2f y: %.2f\n",
            which, state, x, y);
 
@@ -2345,8 +2383,6 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 {
   dt_colorpicker_sample_t *const sample = darktable.lib->proxy.colorpicker.primary_sample;
   dt_develop_t *dev = (dt_develop_t *)self->data;
-
-  if(!mouse_in_actionarea(self, x, y)) return 0;
 
   dt_print(DT_DEBUG_INPUT, "[darkroom] button pressed  which: %d  type: %d x: %.2f y: %.2f pressure: %f\n",
            which, type, x, y, pressure);
@@ -2553,8 +2589,6 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
 
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
-  if(!mouse_in_actionarea(self, x, y)) return FALSE;
-
   dt_print(DT_DEBUG_INPUT, "[darkroom] scrolled: up: %i x: %.2f y: %.2f state: %i flow: %i\n",
            up, x, y, state, delta_y);
 
@@ -2577,17 +2611,62 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
   return _center_view_free_zoom(self, x, y, up, state, delta_y);
 }
 
+static void _key_scroll(dt_develop_t *dev)
+{
+  dt_dev_check_zoom_pos_bounds(dev, &dev->roi.x, &dev->roi.y, NULL, NULL);
+  dt_control_queue_redraw_center();
+  dt_dev_pixelpipe_change_zoom_main(dev);
+}
+
 
 int key_pressed(dt_view_t *self, GdkEventKey *event)
 {
-  /* Convert to readable name */
-  const gchar *keyname = gdk_keyval_name(event->keyval);
-  if (!keyname)
-      keyname = "(unknown)";
+  if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
 
-  printf("Key: %s (0x%x)\n", keyname, event->keyval);
+  dt_develop_t *dev = (dt_develop_t *)self->data;
+  const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
 
-  // Not handled yet
+  const gboolean shift = dt_modifier_is(event->state, GDK_SHIFT_MASK);
+  const gboolean ctrl = dt_modifier_is(event->state, GDK_CONTROL_MASK);
+
+  float multiplier = (shift) ? 4.f :
+                     (ctrl) ? 0.5f :
+                     1.f;
+
+  float delta = 10.f / scale * multiplier;
+
+  switch(event->keyval)
+  {
+    case GDK_KEY_Up:
+    case GDK_KEY_KP_Up:
+    {
+      dev->roi.y -= delta / (float)dev->pipe->processed_height;
+      _key_scroll(dev);
+      return 1;
+    }
+    case GDK_KEY_Down:
+    case GDK_KEY_KP_Down:
+    {
+      dev->roi.y += delta / (float)dev->pipe->processed_height;
+      _key_scroll(dev);
+      return 1;
+    }
+    case GDK_KEY_Left:
+    case GDK_KEY_KP_Left:
+    {
+      dev->roi.x -= delta / (float)dev->pipe->processed_height;
+      _key_scroll(dev);
+      return 1;
+    }
+    case GDK_KEY_Right:
+    case GDK_KEY_KP_Right:
+    {
+      dev->roi.x += delta / (float)dev->pipe->processed_height;
+      _key_scroll(dev);
+      return 1;
+    }
+  }
+
   return 0;
 }
 

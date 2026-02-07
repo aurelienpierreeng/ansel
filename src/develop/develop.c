@@ -579,8 +579,8 @@ void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y,
   const float half_bh = bh * 0.5f;
 
   // clamp position using pre-calculated values
-  *dev_x = bw > 1.0f || dev->roi.scaling <= 1.0f ? 0.5f : CLAMPF(*dev_x, half_bw, 1.0f - half_bw);
-  *dev_y = bh > 1.0f || dev->roi.scaling <= 1.0f ? 0.5f : CLAMPF(*dev_y, half_bh, 1.0f - half_bh);
+  *dev_x = (bw > 1.0f || dev->roi.scaling <= 1.0f) ? 0.5f : CLAMPF(*dev_x, half_bw, 1.0f - half_bw);
+  *dev_y = (bh > 1.0f || dev->roi.scaling <= 1.0f) ? 0.5f : CLAMPF(*dev_y, half_bh, 1.0f - half_bh);
   // return box size
   if(box_w) *box_w = bw;
   if(box_h) *box_h = bh;
