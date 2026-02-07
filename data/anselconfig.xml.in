@@ -160,7 +160,7 @@
   <dtconfig prefs="processing" section="cpugpu" restart="true">
     <name>worker_threads</name>
     <type min="2">int</type>
-    <default>8</default>
+    <default>4</default>
     <shortdescription>Background workers</shortdescription>
     <longdescription>Number of concurrent background threads that can run in parallel, for example to export images, resynchronize XMP, fetch thumbnails, etc. Increasing this number will increase the memory consumption.</longdescription>
   </dtconfig>
