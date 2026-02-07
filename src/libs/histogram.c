@@ -947,17 +947,16 @@ error:;
   dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, backbuf->hash, entry);
 }
 
-
 gboolean _needs_recompute(dt_lib_histogram_t *d, const int width, const int height)
 {
   // Check if cache is up-to-date
   dt_lib_histogram_scope_type_t view = dt_bauhaus_combobox_get(d->display);
-  return !(d->cache.hash == d->backbuf->hash &&
-           d->cache.width == width &&
-           d->cache.height == height &&
-           d->cache.view == view &&
-           d->cache.zoom == d->zoom &&
-           d->cst == NULL);
+  gboolean hash_match = (d->cache.hash == d->backbuf->hash);
+  gboolean size_match = (d->cache.width == width && d->cache.height == height);
+  gboolean zoom_match = (d->cache.zoom == d->zoom);
+  gboolean view_match = (d->cache.view == view);
+  gboolean has_surface = (d->cst != NULL);
+  return !(hash_match && size_match && zoom_match && view_match && has_surface);
 }
 
 
@@ -980,7 +979,6 @@ void _get_allocation_size(dt_lib_histogram_t *d, int *width, int *height)
   *width = allocation.width;
   *height = allocation.height;
 }
-
 
 gboolean _redraw_surface(dt_lib_histogram_t *d)
 {
