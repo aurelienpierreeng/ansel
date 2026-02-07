@@ -657,7 +657,7 @@ static int _iop_clipping_set_max_clip(struct dt_iop_module_t *self)
   dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
 
-  if(g->clip_max_pipe_hash == self->dev->preview_pipe->backbuf_pipe_hash) return 1;
+  if(g->clip_max_pipe_hash == self->dev->preview_pipe->backbuf.hash) return 1;
 
   // we want to know the size of the actual buffer
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
@@ -673,18 +673,18 @@ static int _iop_clipping_set_max_clip(struct dt_iop_module_t *self)
   if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 4))
     return 0;
 
-  g->clip_max_x = fmaxf(points[0] / self->dev->preview_pipe->backbuf_width, 0.0f);
-  g->clip_max_y = fmaxf(points[1] / self->dev->preview_pipe->backbuf_height, 0.0f);
-  g->clip_max_w = fminf((points[2] - points[0]) / self->dev->preview_pipe->backbuf_width, 1.0f);
-  g->clip_max_h = fminf((points[3] - points[1]) / self->dev->preview_pipe->backbuf_height, 1.0f);
+  g->clip_max_x = fmaxf(points[0] / self->dev->preview_pipe->backbuf.width, 0.0f);
+  g->clip_max_y = fmaxf(points[1] / self->dev->preview_pipe->backbuf.height, 0.0f);
+  g->clip_max_w = fminf((points[2] - points[0]) / self->dev->preview_pipe->backbuf.width, 1.0f);
+  g->clip_max_h = fminf((points[3] - points[1]) / self->dev->preview_pipe->backbuf.height, 1.0f);
 
   // if clipping values are not null, this is undistorted values...
-  g->clip_x = fmaxf(points[4] / self->dev->preview_pipe->backbuf_width, g->clip_max_x);
-  g->clip_y = fmaxf(points[5] / self->dev->preview_pipe->backbuf_height, g->clip_max_y);
-  g->clip_w = fminf((points[6] - points[4]) / self->dev->preview_pipe->backbuf_width, g->clip_max_w);
-  g->clip_h = fminf((points[7] - points[5]) / self->dev->preview_pipe->backbuf_height, g->clip_max_h);
+  g->clip_x = fmaxf(points[4] / self->dev->preview_pipe->backbuf.width, g->clip_max_x);
+  g->clip_y = fmaxf(points[5] / self->dev->preview_pipe->backbuf.height, g->clip_max_y);
+  g->clip_w = fminf((points[6] - points[4]) / self->dev->preview_pipe->backbuf.width, g->clip_max_w);
+  g->clip_h = fminf((points[7] - points[5]) / self->dev->preview_pipe->backbuf.height, g->clip_max_h);
 
-  g->clip_max_pipe_hash = self->dev->preview_pipe->backbuf_pipe_hash;
+  g->clip_max_pipe_hash = self->dev->preview_pipe->backbuf.hash;
   return 1;
 }
 
@@ -2223,8 +2223,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // reapply box aspect to be sure that the ratio has not been modified by the keystone transform
   apply_box_aspect(self, GRAB_HORIZONTAL);
 
-  const float wd = dev->preview_pipe->backbuf_width;
-  const float ht = dev->preview_pipe->backbuf_height;
+  const float wd = dev->preview_pipe->backbuf.width;
+  const float ht = dev->preview_pipe->backbuf.height;
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
 
   cairo_translate(cr, width / 2.0, height / 2.0);
@@ -2616,8 +2616,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   // we don't do anything if the image is not ready
   if(!g->preview_ready) return 0;
 
-  const float wd = self->dev->preview_pipe->backbuf_width;
-  const float ht = self->dev->preview_pipe->backbuf_height;
+  const float wd = self->dev->preview_pipe->backbuf.width;
+  const float ht = self->dev->preview_pipe->backbuf.height;
   const float zoom_scale = dev->roi.scaling;
   float pzx = 0.f;
   float pzy = 0.f;
@@ -2979,8 +2979,8 @@ static void commit_box(dt_iop_module_t *self, dt_iop_clipping_gui_data_t *g, dt_
     p->cw = p->ch = 1.0f;
   }
   // we want value in iop space
-  const float wd = self->dev->preview_pipe->backbuf_width;
-  const float ht = self->dev->preview_pipe->backbuf_height;
+  const float wd = self->dev->preview_pipe->backbuf.width;
+  const float ht = self->dev->preview_pipe->backbuf.height;
   float points[4]
       = { g->clip_x * wd, g->clip_y * ht, (g->clip_x + g->clip_w) * wd, (g->clip_y + g->clip_h) * ht };
   if(dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
@@ -3086,8 +3086,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
                          p->kxc * wp, p->kyc * hp, p->kxd * wp, p->kyd * hp };
         dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 4);
 
-        const float xx = pzx * self->dev->preview_pipe->backbuf_width,
-                    yy = pzy * self->dev->preview_pipe->backbuf_height;
+        const float xx = pzx * self->dev->preview_pipe->backbuf.width,
+                    yy = pzy * self->dev->preview_pipe->backbuf.height;
         float c[2] = { (MIN(pts[4], pts[2]) + MAX(pts[0], pts[6])) / 2.0f,
                        (MIN(pts[5], pts[7]) + MAX(pts[1], pts[3])) / 2.0f };
         const float ext = DT_PIXEL_APPLY_DPI(10.0) / (zoom_scale);

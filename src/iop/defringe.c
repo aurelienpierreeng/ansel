@@ -23,6 +23,7 @@
 #include "common/gaussian.h"
 #include "common/imagebuf.h"
 #include "common/math.h"
+#include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"

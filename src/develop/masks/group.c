@@ -102,8 +102,8 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
   float sel_dist = FLT_MAX;
 
   const float scale = dev->natural_scale;
-  const float xx = (pzx * dev->preview_pipe->backbuf_width)  / scale,
-              yy = (pzy * dev->preview_pipe->backbuf_height) / scale;
+  const float xx = (pzx * dev->preview_pipe->backbuf.width)  / scale,
+              yy = (pzy * dev->preview_pipe->backbuf.height) / scale;
 
   for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
   {

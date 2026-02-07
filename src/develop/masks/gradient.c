@@ -278,8 +278,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->pivot_selected = FALSE;
   const guint nb = g_list_length(form->points);
 
-  pzx *= darktable.develop->preview_pipe->backbuf_width / dev->natural_scale;
-  pzy *= darktable.develop->preview_pipe->backbuf_height / dev->natural_scale;
+  pzx *= darktable.develop->preview_pipe->backbuf.width / dev->natural_scale;
+  pzy *= darktable.develop->preview_pipe->backbuf.height / dev->natural_scale;
 
   // This allow to rotate if the mouse is at a certain distance from center
   /*if((gui->group_selected == index))
@@ -1014,8 +1014,8 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
     if((xpos == -1.f && ypos == -1.f) || gui->mouse_leaved_center)
     {
       const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
-      xpos = (.5f + dev->roi.x) * darktable.develop->preview_pipe->backbuf_width;
-      ypos = (.5f + dev->roi.y) * darktable.develop->preview_pipe->backbuf_height;
+      xpos = (.5f + dev->roi.x) * darktable.develop->preview_pipe->backbuf.width;
+      ypos = (.5f + dev->roi.y) * darktable.develop->preview_pipe->backbuf.height;
     }
     float pts[2] = { xpos, ypos };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);

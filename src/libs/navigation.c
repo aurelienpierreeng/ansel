@@ -157,15 +157,27 @@ void gui_cleanup(dt_lib_module_t *self)
 static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, gpointer user_data)
 {
   dt_develop_t *dev = darktable.develop;
-  if(!dev->preview_pipe->output_backbuf || dev->image_storage.id != dev->preview_pipe->output_imgid)
-    return TRUE;
-
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_navigation_t *d = (dt_lib_navigation_t *)self->data;
 
+  // Fetch the backbuffer
+  struct dt_pixel_cache_entry_t *cache_entry;
+  void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, dev->preview_pipe->backbuf.hash, 
+                                                    &cache_entry, darktable.develop, dev->preview_pipe);
+  if(!data) return TRUE;
+
+  const int wd = dev->preview_pipe->backbuf.width;
+  const int ht = dev->preview_pipe->backbuf.height;
+  const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
+  cairo_surface_t *surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, wd, ht, stride);
+
+  dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, dev->preview_pipe->backbuf.hash, cache_entry);
+
+  // Draw the actual thing
   GtkAllocation allocation;
   gtk_widget_get_allocation(widget, &allocation);
   int width = allocation.width, height = allocation.height;
+  const float scale = fminf(width / (float)wd, height / (float)ht);
 
   /* get the current style */
   cairo_surface_t *cst = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
@@ -174,19 +186,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   GtkStyleContext *context = gtk_widget_get_style_context(widget);
   gtk_render_background(context, cr, 0, 0, allocation.width, allocation.height);
 
-  /* draw navigation image if available */
-  dt_pthread_mutex_t *mutex = &dev->preview_pipe->backbuf_mutex;
-  dt_pthread_mutex_lock(mutex);
-
   cairo_save(cr);
-
-  const int wd = dev->preview_pipe->output_backbuf_width;
-  const int ht = dev->preview_pipe->output_backbuf_height;
-  const float scale = fminf(width / (float)wd, height / (float)ht);
-
-  const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
-  cairo_surface_t *surface
-      = cairo_image_surface_create_for_data(dev->preview_pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
 
   // scale the surface to fit into the navigation area
   cairo_translate(cr, width / 2., height / 2.);
@@ -310,8 +310,6 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   cairo_line_to(cr, width - 0.5 * arrow_h, -0.1 * arrow_h - 2);
   cairo_fill(cr);
   cairo_surface_destroy(surface);
-
-  dt_pthread_mutex_unlock(mutex);
 
   /* blit memsurface into widget */
   cairo_destroy(cr);

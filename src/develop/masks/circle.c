@@ -90,8 +90,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->source_selected = FALSE;
   gui->handle_selected = -1;
 
-  pzx *= darktable.develop->preview_pipe->backbuf_width / dev->natural_scale;
-  pzy *= darktable.develop->preview_pipe->backbuf_height / dev->natural_scale;
+  pzx *= darktable.develop->preview_pipe->backbuf.width / dev->natural_scale;
+  pzy *= darktable.develop->preview_pipe->backbuf.height / dev->natural_scale;
 
   int in, inside_border, near, inside_source;
   float dist;
@@ -321,8 +321,8 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, float p
         else
           gui2->form_dragging = TRUE;
         gui2->group_selected = pos2;
-        gui2->pos[0] = pzx * darktable.develop->preview_pipe->backbuf_width;
-        gui2->pos[1] = pzy * darktable.develop->preview_pipe->backbuf_height;
+        gui2->pos[0] = pzx * darktable.develop->preview_pipe->backbuf.width;
+        gui2->pos[1] = pzy * darktable.develop->preview_pipe->backbuf.height;
         gui2->delta[0] = 0.0;
         gui2->delta[1] = 0.0;
         gui2->scrollx = pzx;
@@ -594,8 +594,8 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
     // fallback to center of the current view
     if((xpos == -1.f && ypos == -1.f) || gui->mouse_leaved_center)
     {
-      xpos = (.5f + dev->roi.x) * dev->preview_pipe->backbuf_width;
-      ypos = (.5f + dev->roi.y) * dev->preview_pipe->backbuf_height;
+      xpos = (.5f + dev->roi.x) * dev->preview_pipe->backbuf.width;
+      ypos = (.5f + dev->roi.y) * dev->preview_pipe->backbuf.height;
     }
     // we backtransform the point to get them in input space
     float back_pts[2] = { xpos, ypos };

@@ -208,8 +208,8 @@ static int set_grad_from_points(struct dt_iop_module_t *self, float xa, float ya
 {
   // we want absolute positions
   float pts[4]
-      = { xa * self->dev->preview_pipe->backbuf_width, ya * self->dev->preview_pipe->backbuf_height,
-          xb * self->dev->preview_pipe->backbuf_width, yb * self->dev->preview_pipe->backbuf_height };
+      = { xa * self->dev->preview_pipe->backbuf.width, ya * self->dev->preview_pipe->backbuf.height,
+          xb * self->dev->preview_pipe->backbuf.width, yb * self->dev->preview_pipe->backbuf.height };
   dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
   pts[0] /= (float)piece->buf_out.width;
@@ -421,10 +421,10 @@ static int set_points_from_grad(struct dt_iop_module_t *self, float *xa, float *
 
   if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2))
     return 0;
-  *xa = pts[0] / self->dev->preview_pipe->backbuf_width;
-  *ya = pts[1] / self->dev->preview_pipe->backbuf_height;
-  *xb = pts[2] / self->dev->preview_pipe->backbuf_width;
-  *yb = pts[3] / self->dev->preview_pipe->backbuf_height;
+  *xa = pts[0] / self->dev->preview_pipe->backbuf.width;
+  *ya = pts[1] / self->dev->preview_pipe->backbuf.height;
+  *xb = pts[2] / self->dev->preview_pipe->backbuf.width;
+  *yb = pts[3] / self->dev->preview_pipe->backbuf.height;
   return 1;
 }
 
@@ -474,8 +474,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
   dt_iop_graduatednd_params_t *p = (dt_iop_graduatednd_params_t *)self->params;
 
-  const float wd = dev->preview_pipe->backbuf_width;
-  const float ht = dev->preview_pipe->backbuf_height;
+  const float wd = dev->preview_pipe->backbuf.width;
+  const float ht = dev->preview_pipe->backbuf.height;
   const float zoom_scale = dev->roi.scaling;
   dt_dev_rescale_roi(dev, cr, width, height);
 

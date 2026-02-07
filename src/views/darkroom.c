@@ -178,8 +178,8 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
   cairo_save(cri);
   // The colorpicker samples bounding rectangle should only be displayed inside the visible image
 
-  const double wd = dev->preview_pipe->backbuf_width;
-  const double ht = dev->preview_pipe->backbuf_height;
+  const double wd = dev->preview_pipe->backbuf.width;
+  const double ht = dev->preview_pipe->backbuf.height;
   const double scale = dt_dev_get_fit_scale(dev);
   const double lw = 1.0 / scale;
   const double dashes[1] = { lw * 4.0 };
@@ -327,16 +327,21 @@ static int32_t _render_image(cairo_t *cr, cairo_surface_t *surface, int width, i
   return dev->image_storage.id;
 }
 
-static cairo_surface_t *_get_surface(dt_dev_pixelpipe_t *pipe, float *width, float *height)
+static cairo_surface_t *_get_surface(dt_dev_pixelpipe_t *pipe, int *width, int *height)
 {
-  dt_pthread_mutex_lock(&pipe->backbuf_mutex);
-  const int wd = pipe->output_backbuf_width;
-  const int ht = pipe->output_backbuf_height;
-  *width = (float)wd;
-  *height = (float)ht;
-  const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
-  cairo_surface_t *surface = cairo_image_surface_create_for_data(pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
-  dt_pthread_mutex_unlock(&pipe->backbuf_mutex);
+  struct dt_pixel_cache_entry_t *cache_entry;
+  void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, pipe->backbuf.hash, 
+                                                    &cache_entry, darktable.develop, pipe);
+  if(!data) return NULL;
+
+  *width = pipe->backbuf.width;
+  *height = pipe->backbuf.height;
+  const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, *width);
+  cairo_surface_t *surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, *width, *height, stride);
+
+  dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, pipe->backbuf.hash, cache_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, pipe->backbuf.hash, FALSE, cache_entry);
+
   return surface;
 }
 
@@ -352,11 +357,6 @@ void expose(
   
   dt_develop_t *dev = (dt_develop_t *)self->data;
   const int32_t border = dev->border_size;
-
-  // Nothing to draw at all, meaning we just opened darkroom. 
-  // Exit now to avoid useless surface allocs
-  if(dev->preview_pipe->backbuf == NULL && dev->pipe->backbuf == NULL) 
-    return;
 
   static cairo_surface_t *image_surface = NULL;
   static int image_surface_width = 0;
@@ -414,27 +414,24 @@ void expose(
       cairo_paint(cr);
 
       // draw image
-      // FIXME: why does that not work ???
-      //float wd, ht;
-      //surface = _get_surface(dev->pipe, &wd, &ht);
-      
-      dt_dev_pixelpipe_t *pipe = dev->pipe;
-      dt_pthread_mutex_lock(&pipe->backbuf_mutex);
-      float wd = pipe->output_backbuf_width;
-      float ht = pipe->output_backbuf_height;
-      int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
-      surface = dt_cairo_image_surface_create_for_data(pipe->output_backbuf, CAIRO_FORMAT_RGB24, wd, ht, stride);
-      dt_pthread_mutex_unlock(&pipe->backbuf_mutex);
+      int wd, ht;
+      surface = _get_surface(dev->pipe, &wd, &ht);
+
+      // Tell Cairo this surface is possibly HiDPI
+      cairo_surface_set_device_scale(surface, darktable.gui->ppd, darktable.gui->ppd);
 
       wd /= darktable.gui->ppd;
       ht /= darktable.gui->ppd;
       cairo_translate(cr, .5f * (width - wd), .5f * (height - ht));
-
+      
       if(dev->iso_12646.enabled)
         _render_iso12646(cr, wd, ht, border);
 
-      image_surface_imgid = _render_image(cr, surface, wd, ht, dev);
-      main_hash = dev->pipe->hash;
+      if(surface)
+      {
+        image_surface_imgid = _render_image(cr, surface, wd, ht, dev);
+        main_hash = dev->pipe->hash;
+      }
 
       //fprintf(stdout, "printing darkroom from the real thing\n");
     }
@@ -454,7 +451,7 @@ void expose(
       cairo_paint(cr);
 
       // draw preview
-      float wd, ht;
+      int wd, ht;
       surface = _get_surface(dev->preview_pipe, &wd, &ht);
 
       if(dev->iso_12646.enabled)
@@ -478,11 +475,14 @@ void expose(
       }
 
       // clip to image area only
-      dt_dev_clip_roi(dev, cr, width, height);
-      dt_dev_rescale_roi(dev, cr, width, height);
-      image_surface_imgid = _render_image(cr, surface, wd, ht, dev);
-      preview_hash = dev->preview_pipe->hash;
-      zoom_hash = new_zoom_hash;
+      if(surface)
+      {
+        dt_dev_clip_roi(dev, cr, width, height);
+        dt_dev_rescale_roi(dev, cr, width, height);
+        image_surface_imgid = _render_image(cr, surface, wd, ht, dev);
+        preview_hash = dev->preview_pipe->hash;
+        zoom_hash = new_zoom_hash;
+      }
 
       //fprintf(stdout, "printing darkroom from preview placeholder\n");
     }
@@ -537,8 +537,8 @@ void expose(
   // draw guide lines if needed
   if(!dev->gui_module || !(dev->gui_module->flags() & IOP_FLAGS_GUIDES_SPECIAL_DRAW))
   {
-    const float wd = dev->preview_pipe->output_backbuf_width;
-    const float ht = dev->preview_pipe->output_backbuf_height;
+    const float wd = dev->preview_pipe->backbuf.width;
+    const float ht = dev->preview_pipe->backbuf.height;
     const float scaling = dt_dev_get_overlay_scale(dev);
 
     cairo_save(cri);
@@ -2141,8 +2141,8 @@ static gboolean mouse_in_imagearea(dt_view_t *self, double x, double y)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
-  const double pwidth = (double)(dev->pipe->output_backbuf_width) / (double)darktable.gui->ppd;
-  const double pheight = (double)(dev->pipe->output_backbuf_height) / (double)darktable.gui->ppd;
+  const double pwidth = (double)(dev->pipe->backbuf.width) / (double)darktable.gui->ppd;
+  const double pheight = (double)(dev->pipe->backbuf.height) / (double)darktable.gui->ppd;
 
   x -= (double)(self->width - pwidth) / 2.;
   y -= (double)(self->height - pheight) / 2.;
@@ -2352,8 +2352,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     dt_dev_retrieve_full_pos(dev, x, y, &pzx, &pzy);
 
     float zoom_scale = dev->roi.scaling;
-    const int procw = dev->preview_pipe->backbuf_width;
-    const int proch = dev->preview_pipe->backbuf_height;
+    const int procw = dev->preview_pipe->backbuf.width;
+    const int proch = dev->preview_pipe->backbuf.height;
 
     if(which == 1)
     {

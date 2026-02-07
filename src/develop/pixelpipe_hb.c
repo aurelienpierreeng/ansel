@@ -183,21 +183,14 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
 {
   pipe->devid = -1;
   pipe->changed = DT_DEV_PIPE_UNCHANGED;
-  pipe->processed_width = pipe->backbuf_width = pipe->iwidth = 0;
-  pipe->processed_height = pipe->backbuf_height = pipe->iheight = 0;
+  pipe->processed_width = pipe->iwidth = 0;
+  pipe->processed_height = pipe->iheight = 0;
   pipe->nodes = NULL;
-  pipe->backbuf = NULL;
   pipe->hash = 0;
   pipe->history_hash = 0;
-  pipe->backbuf_pipe_hash = 0;
-  pipe->backbuf_hist_hash = 0;
-  pipe->backbuf_timestamp = 0;
-  pipe->resync_timestamp = 0;
   pipe->bypass_cache = 0;
+  dt_dev_set_backbuf(&pipe->backbuf, 0, 0, 0, -1, -1);
 
-  pipe->output_backbuf = NULL;
-  pipe->output_backbuf_width = 0;
-  pipe->output_backbuf_height = 0;
   pipe->output_imgid = UNKNOWN_IMAGE;
 
   pipe->rawdetail_mask_data = NULL;
@@ -212,7 +205,6 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->bypass_blendif = 0;
   pipe->input_timestamp = 0;
   pipe->levels = IMAGEIO_RGB | IMAGEIO_INT8;
-  dt_pthread_mutex_init(&(pipe->backbuf_mutex), NULL);
   dt_pthread_mutex_init(&(pipe->busy_mutex), NULL);
   pipe->icc_type = DT_COLORSPACE_NONE;
   pipe->icc_filename = NULL;
@@ -258,22 +250,14 @@ void dt_dev_pixelpipe_set_icc(dt_dev_pixelpipe_t *pipe, dt_colorspaces_color_pro
 
 void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
 {
-  dt_pthread_mutex_lock(&pipe->backbuf_mutex);
-  pipe->backbuf = NULL;
   // blocks while busy and sets shutdown bit:
   dt_dev_pixelpipe_cleanup_nodes(pipe);
   // so now it's safe to clean up cache:
-  dt_pthread_mutex_unlock(&pipe->backbuf_mutex);
-  dt_pthread_mutex_destroy(&(pipe->backbuf_mutex));
   dt_pthread_mutex_destroy(&(pipe->busy_mutex));
   pipe->icc_type = DT_COLORSPACE_NONE;
   g_free(pipe->icc_filename);
   pipe->icc_filename = NULL;
 
-  g_free(pipe->output_backbuf);
-  pipe->output_backbuf = NULL;
-  pipe->output_backbuf_width = 0;
-  pipe->output_backbuf_height = 0;
   pipe->output_imgid = UNKNOWN_IMAGE;
 
   dt_dev_clear_rawdetail_mask(pipe);
@@ -492,8 +476,8 @@ static int pixelpipe_picker_helper(dt_iop_module_t *module, const dt_iop_roi_t r
                                    dt_aligned_pixel_t picked_color_min, dt_aligned_pixel_t picked_color_max,
                                    dt_pixelpipe_picker_source_t picker_source, int *box)
 {
-  const float wd = darktable.develop->preview_pipe->backbuf_width;
-  const float ht = darktable.develop->preview_pipe->backbuf_height;
+  const float wd = darktable.develop->preview_pipe->backbuf.width;
+  const float ht = darktable.develop->preview_pipe->backbuf.height;
   const int width = roi.width;
   const int height = roi.height;
   const dt_colorpicker_sample_t *const sample = darktable.lib->proxy.colorpicker.primary_sample;
@@ -759,17 +743,6 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   *pixelpipe_flow &= ~(PIXELPIPE_FLOW_BLENDED_ON_GPU);
 
   return err; //no errors
-}
-
-static dt_dev_pixelpipe_iop_t *_last_node_in_pipe(dt_dev_pixelpipe_t *pipe)
-{
-  for(GList *node = g_list_last(pipe->nodes); node; node = g_list_previous(node))
-  {
-    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)node->data;
-    if(piece->enabled) return piece;
-  }
-
-  return NULL;
 }
 
 static void _sample_color_picker(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, float *input,
@@ -1832,17 +1805,7 @@ static void _print_opencl_errors(int error, dt_dev_pixelpipe_t *pipe)
 
 static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, void *buf, dt_iop_roi_t roi, int pos)
 {
-  const dt_dev_pixelpipe_iop_t *last_module = _last_node_in_pipe(pipe);
-  pipe->backbuf_pipe_hash = dt_dev_pixelpipe_node_hash(pipe, last_module, roi, pos);
-  pipe->backbuf_hist_hash = pipe->history_hash;
-  pipe->backbuf = buf;
-  pipe->backbuf_width = roi.width;
-  pipe->backbuf_height = roi.height;
-  pipe->backbuf_timestamp = time(NULL);
-
-  // Note: when we know this is always true, we can use pipe->hash directly
-  if(pipe->hash != pipe->backbuf_pipe_hash)
-    fprintf(stdout, "inconsistency in pipe backbuf hash. Please report it\n");
+  dt_dev_set_backbuf(&pipe->backbuf, roi.width, roi.height, 0, pipe->hash, pipe->history_hash);
 }
 
 static void _set_opencl_cache(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
@@ -1995,7 +1958,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
     // deleted from the cache until you manually decrease it 
     // when you are done consuming it.
 
-    if(pipe->backbuf_pipe_hash != pipe->hash)
+    if(pipe->backbuf.hash != pipe->hash)
       _update_backbuf_cache_reference(pipe, buf, roi, pos);
     // else : backbuf ref is still up-to-date
 
@@ -2013,7 +1976,6 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
   GList *modules = g_list_last(pipe->iop);
   GList *pieces = g_list_last(pipe->nodes);
 
-  pipe->backbuf = NULL;
   pipe->opencl_enabled = dt_opencl_update_settings(); // update enabled flag and profile from preferences
   pipe->devid = (pipe->opencl_enabled) ? dt_opencl_lock_device(pipe->type)
                                        : -1; // try to get/lock opencl resource

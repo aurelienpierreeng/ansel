@@ -452,7 +452,6 @@ void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
     pipe->last_history_hash = last_hist->hash;
   }
 
-  pipe->resync_timestamp = time(NULL);
   pipe->history_hash = dt_dev_history_get_hash(dev);
 }
 
@@ -510,7 +509,6 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     dt_print(DT_DEBUG_DEV, "[pixelpipe] synch top history module missing error for pipe %s\n", type);
   }
 
-  pipe->resync_timestamp = time(NULL);
   pipe->history_hash = dt_dev_history_get_hash(dev);
 }
 
@@ -577,7 +575,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 
 gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 {
-  return dt_dev_history_get_hash(dev) == pipe->backbuf_hist_hash && pipe->backbuf != NULL;
+  return dt_dev_history_get_hash(dev) == pipe->backbuf.history_hash && pipe->backbuf.hash != -1;
 }
 
 gboolean dt_dev_pixelpipe_is_pipeline_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)

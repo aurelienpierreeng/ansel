@@ -113,17 +113,9 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
     dev->histogram_pre_levels_max = -1;
   }
 
-  dev->raw_histogram.height = 0;
-  dev->raw_histogram.width = 0;
-  dev->raw_histogram.hash = -1;
-
-  dev->output_histogram.width = 0;
-  dev->output_histogram.height = 0;
-  dev->output_histogram.hash = -1;
-
-  dev->display_histogram.width = 0;
-  dev->display_histogram.height = 0;
-  dev->display_histogram.hash = -1;
+  dt_dev_set_backbuf(&dev->raw_histogram, 0, 0, 0, -1, -1);
+  dt_dev_set_backbuf(&dev->output_histogram, 0, 0, 0, -1, -1);
+  dt_dev_set_backbuf(&dev->display_histogram, 0, 0, 0, -1, -1);
 
   dev->auto_save_timeout = 0;
   dev->drawing_timeout = 0;
@@ -285,73 +277,12 @@ static void _flag_pipe(dt_dev_pixelpipe_t *pipe, gboolean error)
 
   // Before calling dt_dev_pixelpipe_process(), we set the status to DT_DEV_PIXELPIPE_UNDEF.
   // If it's still set to this value and we have a backbuf, everything went well.
-  else if(pipe->backbuf && pipe->status == DT_DEV_PIXELPIPE_UNDEF)
+  else if(pipe->status == DT_DEV_PIXELPIPE_UNDEF && !dt_atomic_get_int(&pipe->shutdown))
     pipe->status = DT_DEV_PIXELPIPE_VALID;
 
   // Otherwise, the main thread will have reset the status to DT_DEV_PIXELPIPE_DIRTY
   // and the pipe->shutdown to TRUE because history has changed in the middle of a process.
   // In that case, do nothing and do another loop
-}
-
-inline static void _copy_buffer(const uint8_t *const restrict input, uint8_t *const restrict output,
-                                const size_t height, const size_t width)
-{
-  const size_t stride = width * sizeof(char) * 4;
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-          dt_omp_firstprivate(input, output, stride, height) \
-          schedule(static)
-#endif
-  for(size_t j = 0; j < height; j++)
-    memcpy(__builtin_assume_aligned(output, 64) + j * stride,
-           __builtin_assume_aligned(input, 64) + j * stride,
-           stride);
-}
-
-static void _update_gui_backbuf(dt_dev_pixelpipe_t *pipe)
-{
-  // The pipeline backbuffer belongs to the pixelpipe cache, so we have to communicate with it
-  struct dt_pixel_cache_entry_t *cache_entry = dt_dev_pixelpipe_cache_get_entry_from_data(darktable.pixelpipe_cache, pipe->backbuf);
-
-  // NOTE: dt_dev_pixelpipe_cache_get_entry_from_data internally puts a read lock on the cache_entry
-  // so everything following is guaranteed to be safe:
-
-  if(pipe->status != DT_DEV_PIXELPIPE_VALID || cache_entry == NULL)
-  {
-    // invalid pipeline either means error during processing or killswitch triggered before completion.
-    // either way, the backbuf is unusable.
-    if(cache_entry)
-    {
-      // Unref and attempt deletion on a useless cache entry
-      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, 0, FALSE, cache_entry);
-      dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, FALSE, cache_entry);
-      dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, 0, FALSE, cache_entry);
-    }
-    return;
-  }
-
-  dt_pthread_mutex_lock(&pipe->backbuf_mutex);
-
-  if(pipe->output_backbuf == NULL ||
-      pipe->output_backbuf_width != pipe->backbuf_width ||
-      pipe->output_backbuf_height != pipe->backbuf_height)
-  {
-    g_free(pipe->output_backbuf);
-    pipe->output_backbuf_width = pipe->backbuf_width;
-    pipe->output_backbuf_height = pipe->backbuf_height;
-    pipe->output_backbuf = malloc(sizeof(uint8_t) * 4 * pipe->output_backbuf_width * pipe->output_backbuf_height);
-  }
-
-  if(pipe->output_backbuf)
-    _copy_buffer((const uint8_t *const restrict)pipe->backbuf, pipe->output_backbuf, pipe->output_backbuf_width, pipe->output_backbuf_height);
-
-  pipe->output_imgid = pipe->image.id;
-
-  dt_pthread_mutex_unlock(&pipe->backbuf_mutex);
-
-  // We are done with pipe->backbuf, the pipe cache can now delete it, unlock it.
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, 0, FALSE, cache_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, FALSE, cache_entry);
 }
 
 // Return TRUE if ROI changed since previous computation
@@ -511,7 +442,6 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       else
       {
         _flag_pipe(pipe, ret);
-        _update_gui_backbuf(pipe);
       }
 
       pipe->processing = 0;
@@ -608,7 +538,7 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
 {
   // Called only from Darkroom to init and update drawing size
   // depending on sidebars and main window resizing.
-  if(dev->roi.width != wd || dev->roi.height != ht || !dev->pipe->output_backbuf)
+  if(dev->roi.width != wd || dev->roi.height != ht || dev->pipe->backbuf.hash == -1)
   {
     // If dimensions didn't change or we don't have a valid output image to display
 
@@ -1198,11 +1128,11 @@ float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
 
 float dt_dev_get_fit_scale(dt_develop_t *dev)
 {
-  if(!dev->preview_pipe || dev->preview_pipe->backbuf_width == 0 || dev->preview_pipe->backbuf_height == 0)
+  if(!dev->preview_pipe || dev->preview_pipe->backbuf.width == 0 || dev->preview_pipe->backbuf.height == 0)
     return dev->roi.scaling;
 
-  const float nat_scale = fminf(fminf((float)dev->roi.width / (float)dev->preview_pipe->backbuf_width,
-                         (float)dev->roi.height / (float)dev->preview_pipe->backbuf_height),
+  const float nat_scale = fminf(fminf((float)dev->roi.width / (float)dev->preview_pipe->backbuf.width,
+                         (float)dev->roi.height / (float)dev->preview_pipe->backbuf.height),
                           1.f);
   return dev->roi.scaling * nat_scale;
 }
@@ -1230,8 +1160,8 @@ gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t 
 {
   // DO NOT MODIFIY !! //
 
-  const float wd = dev->preview_pipe->backbuf_width;
-  const float ht = dev->preview_pipe->backbuf_height;
+  const float wd = dev->preview_pipe->backbuf.width;
+  const float ht = dev->preview_pipe->backbuf.height;
   if(wd == 0.f || ht == 0.f) return TRUE;
 
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
@@ -1321,8 +1251,8 @@ gboolean dt_dev_roi_to_input_space(dt_develop_t *dev, /*gboolean normalized_in,*
   if(!dev->preview_pipe || !point_x || !point_y) return FALSE;
 
   const float scale = dev->natural_scale;
-  const int wd = dev->preview_pipe->backbuf_width;
-  const int ht = dev->preview_pipe->backbuf_height;
+  const int wd = dev->preview_pipe->backbuf.width;
+  const int ht = dev->preview_pipe->backbuf.height;
   const int iwd = dev->preview_pipe->iwidth;
   const int iht = dev->preview_pipe->iheight;
   // avoid division by zero
@@ -1334,8 +1264,8 @@ gboolean dt_dev_roi_to_input_space(dt_develop_t *dev, /*gboolean normalized_in,*
   // if(normalized_in)
   //{
   //  De-normalize preview coordinate to pixel space
-  pzx *= dev->preview_pipe->backbuf_width;
-  pzy *= dev->preview_pipe->backbuf_height;
+  pzx *= dev->preview_pipe->backbuf.width;
+  pzy *= dev->preview_pipe->backbuf.height;
   //}
 
   pzx /= scale;
@@ -1358,8 +1288,8 @@ gboolean dt_dev_roi_delta_to_input_space(dt_develop_t *dev, const float delta[2]
                                             const float in[2], float points[2])
 {
   const float natural_scale = dev->natural_scale;
-  const int wd = dev->preview_pipe->backbuf_width;
-  const int ht = dev->preview_pipe->backbuf_height;
+  const int wd = dev->preview_pipe->backbuf.width;
+  const int ht = dev->preview_pipe->backbuf.height;
   const int iwd = dev->preview_pipe->iwidth;
   const int iht = dev->preview_pipe->iheight;
   // avoid division by zero

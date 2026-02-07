@@ -29,6 +29,7 @@
 
 #include <gtk/gtk.h>
 #include "develop/imageop.h"
+#include "develop/develop.h"
 
 typedef enum _iop_color_picker_kind_t
 {

@@ -19,6 +19,7 @@
 #include "common/darktable.h"
 #include "common/debug.h"
 #include "control/signal.h"
+#include "develop/develop.h"
 #include "bauhaus/bauhaus.h"
 #include "gui/gtk.h"
 #include "libs/lib.h"

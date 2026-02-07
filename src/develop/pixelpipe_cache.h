@@ -190,21 +190,6 @@ void dt_dev_pixelpipe_cache_ref_count_entry(dt_dev_pixelpipe_cache_t *cache, con
 uint64_t dt_dev_pixelpipe_cache_get_hash_data(dt_dev_pixelpipe_cache_t *cache, void *data,
                                               struct dt_pixel_cache_entry_t **entry);
 
-
-/**
- * @brief Return a reference to the cache entry holding the data buffer, or NULL if not found.
- *
- * WARNING: this immediately puts a read lock on the entry cache, if found. You will
- * need to manually release it later with `dt_dev_pixelpipe_cache_rdlock_entry()`
- * or you will get a deadlock and this entry will never be deleted.
- *
- * @param cache
- * @param data
- * @return dt_pixel_cache_entry_t*
- */
-struct dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry_from_data(dt_dev_pixelpipe_cache_t *cache, void *data);
-
-
 /**
  * @brief Lock or release the write lock on the entry
  *

@@ -27,6 +27,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/pixelpipe.h"
+#include "develop/develop.h"
 
 #include <stdio.h>
 #include <stdlib.h>

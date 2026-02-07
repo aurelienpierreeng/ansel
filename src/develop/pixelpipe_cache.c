@@ -501,23 +501,6 @@ uint64_t dt_dev_pixelpipe_cache_get_hash_data(dt_dev_pixelpipe_cache_t *cache, v
 }
 
 
-dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry_from_data(dt_dev_pixelpipe_cache_t *cache, void *data)
-{
-  dt_pixel_cache_entry_t *cache_entry;
-  dt_pthread_mutex_lock(&cache->lock);
-
-  _non_thread_safe_cache_get_hash_data(cache, data, &cache_entry);
-  if(cache_entry)
-  {
-    dt_pthread_rwlock_rdlock(&cache_entry->lock);
-    dt_pixel_cache_message(cache_entry, "read lock", TRUE);
-  }
-
-  dt_pthread_mutex_unlock(&cache->lock);
-  return cache_entry;
-}
-
-
 void _non_thread_safe_cache_ref_count_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, gboolean lock,
                                             dt_pixel_cache_entry_t *cache_entry)
 {

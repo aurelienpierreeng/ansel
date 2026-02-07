@@ -316,8 +316,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
     float pzx = 0.f, pzy = 0.f;
     dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
 
-    g->posx_to = pzx * self->dev->preview_pipe->backbuf_width;
-    g->posy_to = pzy * self->dev->preview_pipe->backbuf_height;
+    g->posx_to = pzx * self->dev->preview_pipe->backbuf.width;
+    g->posy_to = pzy * self->dev->preview_pipe->backbuf.height;
 
     dt_control_queue_redraw_center();
 
@@ -378,8 +378,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
       float pzy = 0.f;
       dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
 
-      g->posx_from = g->posx_to = pzx * self->dev->preview_pipe->backbuf_width;
-      g->posy_from = g->posy_to = pzy * self->dev->preview_pipe->backbuf_height;
+      g->posx_from = g->posx_to = pzx * self->dev->preview_pipe->backbuf.width;
+      g->posy_from = g->posy_to = pzy * self->dev->preview_pipe->backbuf.height;
 
       g->button_down = 1;
 
@@ -399,8 +399,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->posx_from == g->posx_to && g->posy_from == g->posy_to) return;
 
   dt_develop_t *dev = darktable.develop;
-  //const float wd = dev->preview_pipe->backbuf_width;
-  //const float ht = dev->preview_pipe->backbuf_height;
+  //const float wd = dev->preview_pipe->backbuf.width;
+  //const float ht = dev->preview_pipe->backbuf.height;
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
 
   const float posx_from = fmin(g->posx_from, g->posx_to);

@@ -22,10 +22,9 @@
 #include "common/image.h"
 #include "common/imageio.h"
 #include "common/iop_order.h"
-#include "control/conf.h"
-#include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/pixelpipe_cache.h"
+
 
 /**
  * struct used by iop modules to connect to pixelpipe.
@@ -127,16 +126,25 @@ typedef enum dt_dev_pixelpipe_status_t
  * for previews and full blits to cairo and for
  * the export function.
  */
+typedef struct dt_backbuf_t
+{
+  size_t bpp;            // bits per pixel
+  size_t width;          // pixel size of image
+  size_t height;         // pixel size of image
+  uint64_t hash;         // data checksum/integrity hash, for example to connect to a cacheline
+  uint64_t history_hash; // arbitrary state hash
+} dt_backbuf_t;
+
 typedef struct dt_dev_pixelpipe_t
 {
   // input image. Will be fetched directly from mipmap cache
   int32_t imgid;
   dt_mipmap_size_t size;
 
-  // width and height of input buffer
+  // width and height of full-resolution input buffer
   int iwidth, iheight;
 
-  // dimensions of processed buffer
+  // dimensions of processed buffer assuming we take full-resolution input
   int processed_width, processed_height;
 
   // this one actually contains the expected output format,
@@ -156,19 +164,9 @@ typedef struct dt_dev_pixelpipe_t
   GList *nodes;
   // event flag
   dt_dev_pixelpipe_change_t changed;
+
   // backbuffer (output)
-  void *backbuf;
-  size_t backbuf_width, backbuf_height;
-
-  // Validity checksum of the last produced image backbuffer, 
-  // with regard to the pipeline (topology & history) that produced it.
-  // It is set to pipe->hash once the pipeline returns with no error.
-  uint64_t backbuf_pipe_hash;
-
-  // Validity checksum of the last produced image backbuffe,
-  // with regard to the history that produced it.
-  // It is set to pipe->last_history_hash once the pipeline returns with no error.
-  uint64_t backbuf_hist_hash;
+  dt_backbuf_t backbuf;
 
   // Validity checksum of whole pipeline, 
   // taken as the global hash of the last pipe node (module),
@@ -177,16 +175,7 @@ typedef struct dt_dev_pixelpipe_t
   // ahead of processing image.
   uint64_t hash;
 
-  // Timestamp of the last resynchronization between pipe nodes and history
-  time_t resync_timestamp;
-
-  // Timestamp of the last backbuffer generation
-  time_t backbuf_timestamp;
-
-  dt_pthread_mutex_t backbuf_mutex, busy_mutex;
-  // output buffer (for display)
-  uint8_t *output_backbuf;
-  int output_backbuf_width, output_backbuf_height;
+  dt_pthread_mutex_t busy_mutex;
 
   // the data for the luminance mask are kept in a buffer written by demosaic or rawprepare
   // as we have to scale the mask later ke keep roi at that stage
@@ -272,6 +261,10 @@ typedef struct dt_dev_pixelpipe_t
 } dt_dev_pixelpipe_t;
 
 struct dt_develop_t;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 char *dt_pixelpipe_get_pipe_name(dt_dev_pixelpipe_type_t pipe_type);
 
@@ -376,6 +369,10 @@ gboolean dt_dev_pixelpipe_has_reentry(dt_dev_pixelpipe_t *pipe);
 // Force-reset pipeline re-entry flag, for example if we lost the unique ID of the object
 // in a re-entry loop.
 void dt_dev_pixelpipe_reset_reentry(dt_dev_pixelpipe_t *pipe);
+
+#ifdef __cplusplus
+}
+#endif
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

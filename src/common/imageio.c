@@ -1033,50 +1033,51 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   dt_show_times(&start, thumbnail_export ? "[dev_process_thumbnail] pixel pipeline processing"
                                          : "[dev_process_export] pixel pipeline processing");
 
-  if(pipe.backbuf == NULL)
+  if(pipe.backbuf.hash == -1)
   {
     dt_print(DT_DEBUG_IMAGEIO, "[dt_imageio_export_with_flags] no valid output buffer\n");
     goto error;
   }
 
-  // pipe.backbuf belongs to the pixelpipe cache, so we have to lock it there while we use it
-  struct dt_pixel_cache_entry_t *cache_entry = dt_dev_pixelpipe_cache_get_entry_from_data(darktable.pixelpipe_cache, pipe.backbuf);
-  if(cache_entry == NULL) goto error;
-
-  // NOTE: dt_dev_pixelpipe_cache_get_entry_from_data internally puts a read lock on the cache_entry
-  // so everything following is guaranteed to be safe:
+  struct dt_pixel_cache_entry_t *cache_entry;
+  void *data = NULL;
+  if(!dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe.backbuf.hash, &data, NULL, &cache_entry))
+    goto error;
+  
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, TRUE, cache_entry);
 
   // Down-conversion to low-precision formats:
-  const size_t pixels = pipe.backbuf_width * pipe.backbuf_height * 4;
+  const size_t pixels = pipe.backbuf.width * pipe.backbuf.height * 4;
   if(bpp == 8)
   {
     outbuf = dt_alloc_align(sizeof(uint8_t) * pixels);
     if(outbuf && display_byteorder)
-      _swap_byteorder_float_to_uint8(pipe.backbuf, outbuf, pipe.backbuf_width, pipe.backbuf_height);
+      _swap_byteorder_float_to_uint8(data, outbuf, pipe.backbuf.width, pipe.backbuf.height);
     else if(outbuf)
-      _clamp_float_to_uint8(pipe.backbuf, outbuf, pipe.backbuf_width, pipe.backbuf_height);
+      _clamp_float_to_uint8(data, outbuf, pipe.backbuf.width, pipe.backbuf.height);
   }
   else if(bpp == 16)
   {
     outbuf = dt_alloc_align(sizeof(uint16_t) * pixels);
     if(outbuf)
-      _export_final_buffer_to_uint16(pipe.backbuf, outbuf, pipe.backbuf_width, pipe.backbuf_height);
+      _export_final_buffer_to_uint16(data, outbuf, pipe.backbuf.width, pipe.backbuf.height);
   }
   else // output float, no further harm done to the pixels :)
   {
     outbuf = dt_alloc_align(sizeof(float_t) * pixels);
     if(outbuf)
-      memcpy(outbuf, pipe.backbuf, sizeof(float_t) * pixels);
+      memcpy(outbuf, data, sizeof(float_t) * pixels);
   }
 
   // Decrease ref count on the cache entry and release the read lock
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, 0, FALSE, cache_entry);
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, 0, FALSE, cache_entry);
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, FALSE, cache_entry);
 
   if(outbuf == NULL) goto error;
 
-  format_params->width = pipe.backbuf_width;
-  format_params->height = pipe.backbuf_height;
+  format_params->width = pipe.backbuf.width;
+  format_params->height = pipe.backbuf.height;
 
   // Exif data should be 65536 bytes max, but if original size is close to that,
   // adding new tags could make it go over that... so let it be and see what
@@ -1092,7 +1093,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     // find output color profile for this image:
     int sRGB = (icc_type == DT_COLORSPACE_SRGB);
     // last param is dng mode, it's false here
-    length = dt_exif_read_blob(&exif_profile, pathname, imgid, sRGB, pipe.backbuf_width, pipe.backbuf_height, 0);
+    length = dt_exif_read_blob(&exif_profile, pathname, imgid, sRGB, pipe.backbuf.width, pipe.backbuf.height, 0);
   }
 
   // Finally: write image buffer to target container

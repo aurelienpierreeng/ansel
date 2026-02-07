@@ -33,9 +33,6 @@
 #include "develop/dev_history.h"
 #include "develop/dev_pixelpipe.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 struct dt_iop_module_t;
 
@@ -121,14 +118,9 @@ typedef enum dt_clipping_preview_mode_t
   DT_CLIPPING_PREVIEW_SATURATION = 3
 } dt_clipping_preview_mode_t;
 
-typedef enum dt_dev_pipe_type_t
-{
-  DT_DEV_PIPE = 0,
-  DT_DEV_PREVIEW_PIPE = 1
-} dt_dev_pipe_type_t;
-
 struct dt_dev_pixelpipe_t;
 
+/*
 typedef struct dt_backbuf_t
 {
   size_t bpp;            // bits per pixel
@@ -137,7 +129,7 @@ typedef struct dt_backbuf_t
   uint64_t hash;         // data checksum/integrity hash, for example to connect to a cacheline
   uint64_t history_hash; // arbitrary state hash
 } dt_backbuf_t;
-
+*/
 
 typedef struct dt_develop_t
 {
@@ -348,6 +340,10 @@ typedef struct dt_develop_t
 
   gboolean loading_cache;
 } dt_develop_t;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 void dt_dev_init(dt_develop_t *dev, int32_t gui_attached);
 void dt_dev_cleanup(dt_develop_t *dev);
