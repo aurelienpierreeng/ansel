@@ -473,7 +473,11 @@ static void pixelpipe_get_histogram_backbuf(dt_develop_t *dev, const dt_iop_roi_
   // Mark it for future deletion:
   dt_pixel_cache_entry_t *previous_entry;
   if(dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, backbuf->hash, NULL, NULL, &previous_entry))
+  {
+    // dt_dev_pixelpipe_cache_get_existing() increases ref_count too, so we need to decrease it twice
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, backbuf->hash, FALSE, previous_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, backbuf->hash, FALSE, previous_entry);
+  }
 
   // Update our metadata
   backbuf->height = roi.height;
@@ -1470,7 +1474,7 @@ static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input
   }
 
   // Copy the cache entry reference to histogram cache
-  pixelpipe_get_histogram_backbuf(dev, roi, entry, module, buf_hash);
+  pixelpipe_get_histogram_backbuf(dev, roi, entry, piece->module, buf_hash);
 
   // sample internal histogram on input and color pickers
   collect_histogram_on_CPU(pipe, dev, input, roi_in, input_format, module, piece);
@@ -1763,7 +1767,6 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   return 0;
 }
 
-
 void dt_dev_pixelpipe_disable_after(dt_dev_pixelpipe_t *pipe, const char *op)
 {
   GList *nodes = g_list_last(pipe->nodes);
@@ -1914,6 +1917,53 @@ static void _set_opencl_cache(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   }
 }
 
+// Return 0 if a required cacheline was not found, therefore we need to recompte a pipe
+static gboolean _resync_global_histograms(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
+{
+  if(pipe->type != DT_DEV_PIXELPIPE_PREVIEW) return 1;
+
+  GList *pieces = g_list_first(pipe->nodes);
+  int64_t input_hash = -1;
+
+  while(pieces)
+  {
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
+    if(piece->enabled)
+    {
+      int64_t hash = piece->global_hash;
+
+      if(_get_backuf(dev, piece->module->op))
+      {
+        // Gamma outputs uint8_t so we take its input. We want float32.
+        dt_iop_roi_t roi;
+        dt_pixel_cache_entry_t *entry;
+        int64_t buf_hash;
+
+        if(strcmp(piece->module->op, "gamma") == 0)
+        {
+          roi = piece->planned_roi_in;
+          buf_hash = input_hash;
+        }
+        else
+        {
+          roi = piece->planned_roi_out;
+          buf_hash = hash;
+        }
+
+        if(!dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, buf_hash, NULL, NULL, &entry)) 
+          return 0;
+
+        pixelpipe_get_histogram_backbuf(dev, roi, entry, piece->module, buf_hash);
+        dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, buf_hash, FALSE, entry);
+      }
+      input_hash = hash;
+    }
+    pieces = g_list_next(pieces);
+  }
+
+  return 1;
+}
+
 int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x, int y, int width, int height,
                              double scale)
 {
@@ -1939,7 +1989,8 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
   // and history, and we still have an entry cache, abort now. Nothing to do.
   // For preview pipe, if using color pickers, we still need to traverse the pipeline.
   if(!pipe->reentry && !pipe->bypass_cache 
-     && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe->hash, &buf, NULL, NULL))
+     && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe->hash, &buf, NULL, NULL)
+     && _resync_global_histograms(pipe, dev))
   {
     // Remember that dt_dev_pixelpipe_cache_get_existing()
     // increases the ref_count of the cache entry, so it won't be
