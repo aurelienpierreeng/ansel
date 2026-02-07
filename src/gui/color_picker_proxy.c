@@ -106,7 +106,7 @@ static void _color_picker_reset(dt_iop_color_picker_t *picker)
 {
   if(picker)
   {
-    //if(picker->module) dt_iop_set_cache_bypass(picker->module, FALSE);
+    if(picker->module) dt_iop_set_cache_bypass(picker->module, FALSE);
 
     ++darktable.gui->reset;
 
@@ -177,7 +177,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
   if (prior_picker != self || (kind == DT_COLOR_PICKER_POINT_AREA &&
       (ctrl_key_pressed ^ (darktable.lib->proxy.colorpicker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_BOX))))
   {
-    //dt_iop_set_cache_bypass(module, TRUE);
+    dt_iop_set_cache_bypass(module, TRUE);
     darktable.lib->proxy.colorpicker.picker_proxy = self;
 
     if(module) module->request_color_pick = DT_REQUEST_COLORPICK_MODULE;

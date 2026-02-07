@@ -1533,8 +1533,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // the global histograms, so we will need to recurse through pipeline anyway.
   // This case is handled below.
   dt_pixel_cache_entry_t *existing_cache;
-  if(pipe->type != DT_DEV_PIXELPIPE_PREVIEW
-     && !bypass_cache && !pipe->reentry
+  if(!bypass_cache && !pipe->reentry
      && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, hash, output, out_format, &existing_cache))
   {
     // FIXME: on CPU path and GPU path with tiling, when 2 modules taking different color spaces are back to back,
@@ -1592,6 +1591,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     // since we're not actually running the module, the output format is the same as the input format
     **out_format = pipe->dsc = piece->dsc_out = piece->dsc_in;
     *output = input;
+    *cl_mem_output = cl_mem_input;
     return 0;
   }
 
@@ -1939,7 +1939,6 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
   // and history, and we still have an entry cache, abort now. Nothing to do.
   // For preview pipe, if using color pickers, we still need to traverse the pipeline.
   if(!pipe->reentry && !pipe->bypass_cache 
-     && pipe->type != DT_DEV_PIXELPIPE_PREVIEW
      && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe->hash, &buf, NULL, NULL))
   {
     // Remember that dt_dev_pixelpipe_cache_get_existing()
