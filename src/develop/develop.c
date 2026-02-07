@@ -84,6 +84,7 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dev->gui_attached = gui_attached;
   dev->roi.width = -1;
   dev->roi.height = -1;
+  dev->image_surface = NULL;
 
   dt_image_init(&dev->image_storage);
   dev->pipe = dev->preview_pipe = NULL;

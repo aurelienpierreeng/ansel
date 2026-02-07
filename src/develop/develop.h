@@ -344,6 +344,8 @@ typedef struct dt_develop_t
   gboolean mask_lock;
   gint drawing_timeout;
 
+  cairo_surface_t *image_surface;
+
   gboolean loading_cache;
 } dt_develop_t;
 

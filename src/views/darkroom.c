@@ -351,8 +351,6 @@ static void _paint_all(cairo_t *cri, cairo_t *cr, cairo_surface_t *image_surface
   cairo_paint(cri);
 }
 
-static cairo_surface_t *image_surface = NULL;
-
 void expose(
     dt_view_t *self,
     cairo_t *cri,
@@ -388,19 +386,19 @@ void expose(
 
   if(image_surface_width != width 
     || image_surface_height != height 
-    || image_surface == NULL 
+    || dev->image_surface == NULL 
     || image_surface_imgid != dev->image_storage.id)
   {
     // create double-buffered image to draw on, to make modules draw more fluently.
     image_surface_width = width;
     image_surface_height = height;
-    if(image_surface) cairo_surface_destroy(image_surface);
-    image_surface = dt_cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
+    if(dev->image_surface) cairo_surface_destroy(dev->image_surface);
+    dev->image_surface = dt_cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
     image_surface_imgid = UNKNOWN_IMAGE; // invalidate old stuff
   }
 
   cairo_surface_t *surface;
-  cairo_t *cr = cairo_create(image_surface);
+  cairo_t *cr = cairo_create(dev->image_surface);
 
   // user param is Lab lightness/brightness (which is they same for greys)
   dt_aligned_pixel_t bg_color;
@@ -442,7 +440,7 @@ void expose(
         main_hash = dev->pipe->backbuf.hash;
       }
     }
-    _paint_all(cri, cr, image_surface);
+    _paint_all(cri, cr, dev->image_surface);
   }
   else if(has_preview_image)
   {
@@ -492,12 +490,12 @@ void expose(
         zoom_hash = new_zoom_hash;
       }
     }
-    _paint_all(cri, cr, image_surface);
+    _paint_all(cri, cr, dev->image_surface);
   }
-  else if(image_surface && image_surface_imgid == dev->image_storage.id)
+  else if(dev->image_surface && image_surface_imgid == dev->image_storage.id)
   {
     // try to keep buffered image_surface from previous run
-    _paint_all(cri, cr, image_surface);
+    _paint_all(cri, cr, dev->image_surface);
   }
   else
   {
@@ -520,7 +518,7 @@ void expose(
        FIXME: add checks so that we don't make snapshots of preview pipe image surface.
     */
     const int fd = g_open(darktable.develop->proxy.snapshot.filename, O_CREAT | O_WRONLY | O_BINARY, 0600);
-    cairo_surface_write_to_png_stream(image_surface, _write_snapshot_data, GINT_TO_POINTER(fd));
+    cairo_surface_write_to_png_stream(dev->image_surface, _write_snapshot_data, GINT_TO_POINTER(fd));
     close(fd);
   }
 
@@ -1992,7 +1990,8 @@ void leave(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
-  if(image_surface) cairo_surface_destroy(image_surface);
+  if(dev->image_surface) cairo_surface_destroy(dev->image_surface);
+  dev->image_surface = NULL;
 
   // Send all pipeline shutdown signals first
   dev->exit = 1;
