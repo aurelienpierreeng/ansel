@@ -2115,6 +2115,10 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   memcpy(d, p, sizeof(*p));
 
+  // No code path for monochrome or JPEG/TIFF
+  if(dt_image_is_monochrome(&self->dev->image_storage) || !dt_image_is_rawprepare_supported(&self->dev->image_storage))
+    piece->enabled = FALSE;
+
   // no OpenCL for DT_IOP_HIGHLIGHTS_INPAINT
   piece->process_cl_ready = (d->mode == DT_IOP_HIGHLIGHTS_INPAINT) ? 0 : 1;
 
@@ -2215,8 +2219,12 @@ void gui_update(struct dt_iop_module_t *self)
   const gboolean monochrome = dt_image_is_monochrome(&self->dev->image_storage);
   // enable this per default if raw or sraw if not real monochrome
   self->default_enabled = dt_image_is_rawprepare_supported(&self->dev->image_storage) && !monochrome;
-  self->hide_enable_button = monochrome;
+
+  // Neuter the on/off button only if not already enabled.
+  // It can be enabled by history copy & paste from a RAW image.
+  self->hide_enable_button = monochrome && !self->enabled;
   gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->default_enabled ? "default" : "monochrome");
+
   dt_bauhaus_widget_set_quad_active(g->clip, FALSE);
   g->show_visualize = FALSE;
   gui_changed(self, NULL, NULL);
