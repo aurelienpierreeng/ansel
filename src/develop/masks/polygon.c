@@ -911,8 +911,8 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, float pzx, floa
   // we add a new node to the brush
   dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)(malloc(sizeof(dt_masks_node_polygon_t)));
 
-  const float wd = darktable.develop->preview_pipe->backbuf.width;
-  const float ht = darktable.develop->preview_pipe->backbuf.height;
+  const float wd = darktable.develop->preview_width;
+  const float ht = darktable.develop->preview_height;
   float pts[2] = { pzx * wd, pzy * ht };
   dt_dev_distort_backtransform(darktable.develop, pts, 1);
 
@@ -978,8 +978,8 @@ static void _polygon_get_sizes(struct dt_iop_module_t *module, dt_masks_form_t *
   if(!gpt) return;
 
   const int nb = g_list_length(form->points);
-  const float wd = darktable.develop->preview_pipe->backbuf.width;
-  const float ht = darktable.develop->preview_pipe->backbuf.height;
+  const float wd = darktable.develop->preview_width;
+  const float ht = darktable.develop->preview_height;
 
   float p1[2] = { FLT_MAX, FLT_MAX };
   float p2[2] = { FLT_MIN, FLT_MIN };
@@ -1135,8 +1135,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->handle_border_selected = -1;
   const guint nb = g_list_length(form->points);
 
-  pzx *= darktable.develop->preview_pipe->backbuf.width / dev->natural_scale;
-  pzy *= darktable.develop->preview_pipe->backbuf.height / dev->natural_scale;
+  pzx *= darktable.develop->preview_width / dev->natural_scale;
+  pzy *= darktable.develop->preview_height / dev->natural_scale;
 
 
   if((gui->group_selected == index) && gui->node_edited >= 0)
@@ -1696,8 +1696,8 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
 
-  const float wd = dev->preview_pipe->backbuf.width / dev->natural_scale;
-  const float ht = dev->preview_pipe->backbuf.height / dev->natural_scale;
+  const float wd = dev->preview_width / dev->natural_scale;
+  const float ht = dev->preview_height / dev->natural_scale;
 
   if(gui->node_dragging >= 0)
   {

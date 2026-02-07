@@ -302,8 +302,7 @@ void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, struct dt_develop
 void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
 
 // process region of interest of pixels. returns 1 if pipe was altered during processing.
-int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, int x, int y, int width,
-                             int height, double scale);
+int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, dt_iop_roi_t roi);
 
 // disable given op and all that comes after it in the pipe:
 void dt_dev_pixelpipe_disable_after(dt_dev_pixelpipe_t *pipe, const char *op);

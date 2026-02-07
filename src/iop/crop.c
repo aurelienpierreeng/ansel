@@ -196,8 +196,8 @@ static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
   if(!piece) return;
   // we want value in iop space
-  const float wd = (float)piece->buf_out.width; //self->dev->preview_pipe->backbuf.width;
-  const float ht = (float)piece->buf_out.height; //self->dev->preview_pipe->backbuf.height;
+  const float wd = (float)piece->buf_out.width; //self->dev->preview_width;
+  const float ht = (float)piece->buf_out.height; //self->dev->preview_height;
 
   const float bbox_left   = g->clip_x * wd;
   const float bbox_top    = g->clip_y * ht;
@@ -264,16 +264,16 @@ static gboolean _set_max_clip(struct dt_iop_module_t *self)
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 4))
     return FALSE;
 
-  g->clip_max_x = fmaxf(points[0] / self->dev->preview_pipe->backbuf.width, 0.0f);
-  g->clip_max_y = fmaxf(points[1] / self->dev->preview_pipe->backbuf.height, 0.0f);
-  g->clip_max_w = fminf((points[2] - points[0]) / self->dev->preview_pipe->backbuf.width, 1.0f);
-  g->clip_max_h = fminf((points[3] - points[1]) / self->dev->preview_pipe->backbuf.height, 1.0f);
+  g->clip_max_x = fmaxf(points[0] / self->dev->preview_width, 0.0f);
+  g->clip_max_y = fmaxf(points[1] / self->dev->preview_height, 0.0f);
+  g->clip_max_w = fminf((points[2] - points[0]) / self->dev->preview_width, 1.0f);
+  g->clip_max_h = fminf((points[3] - points[1]) / self->dev->preview_height, 1.0f);
 
   /*// if clipping values are not null, this is undistorted values...
-  g->clip_x = fmaxf(points[4] / self->dev->preview_pipe->backbuf.width, g->clip_max_x);
-  g->clip_y = fmaxf(points[5] / self->dev->preview_pipe->backbuf.height, g->clip_max_y);
-  g->clip_w = fminf((points[6] - points[4]) / self->dev->preview_pipe->backbuf.width, g->clip_max_w);
-  g->clip_h = fminf((points[7] - points[5]) / self->dev->preview_pipe->backbuf.height, g->clip_max_h);
+  g->clip_x = fmaxf(points[4] / self->dev->preview_width, g->clip_max_x);
+  g->clip_y = fmaxf(points[5] / self->dev->preview_height, g->clip_max_y);
+  g->clip_w = fminf((points[6] - points[4]) / self->dev->preview_width, g->clip_max_w);
+  g->clip_h = fminf((points[7] - points[5]) / self->dev->preview_height, g->clip_max_h);
 */
   return TRUE;
 }
@@ -1310,8 +1310,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 
   _aspect_apply(self, GRAB_HORIZONTAL);
 
-  g->wd = dev->preview_pipe->backbuf.width;
-  g->ht = dev->preview_pipe->backbuf.height;
+  g->wd = dev->preview_width;
+  g->ht = dev->preview_height;
   if(g->wd < 1.0 || g->ht < 1.0) return;
 
   const float zoom_scale = dt_dev_get_overlay_scale(dev);

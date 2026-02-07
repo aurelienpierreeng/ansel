@@ -1140,8 +1140,8 @@ int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double
   {
     // This assume that if this event is generated, the mouse is over the center window
     gui->mouse_leaved_center = FALSE;
-    gui->pos[0] = pzx * darktable.develop->preview_pipe->backbuf.width;
-    gui->pos[1] = pzy * darktable.develop->preview_pipe->backbuf.height;
+    gui->pos[0] = pzx * darktable.develop->preview_width;
+    gui->pos[1] = pzy * darktable.develop->preview_height;
     // unscale
     gui->pos[0] /= scale;
     gui->pos[1] /= scale;
@@ -2425,16 +2425,16 @@ void dt_masks_set_source_pos_initial_state(dt_masks_form_gui_t *gui, const uint3
   // the second time a relative position is calculated based on that one
   const float scale = darktable.develop->natural_scale;
   // normalize backbuf points
-  gui->pos_source[0] = pzx * darktable.develop->preview_pipe->backbuf.width / scale;
-  gui->pos_source[1] = pzy * darktable.develop->preview_pipe->backbuf.height / scale;
+  gui->pos_source[0] = pzx * darktable.develop->preview_width / scale;
+  gui->pos_source[1] = pzy * darktable.develop->preview_height / scale;
 }
 
 // set the initial source position value for a clone mask
 void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
                                                    const float pzx, const float pzy)
 {
-  const float wd = darktable.develop->preview_pipe->backbuf.width;
-  const float ht = darktable.develop->preview_pipe->backbuf.height;
+  const float wd = darktable.develop->preview_width;
+  const float ht = darktable.develop->preview_height;
   const float iwd = darktable.develop->preview_pipe->iwidth;
   const float iht = darktable.develop->preview_pipe->iheight;
 

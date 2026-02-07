@@ -1143,8 +1143,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->handle_border_selected = -1;
   const guint nb = g_list_length(form->points);
 
-  pzx *= darktable.develop->preview_pipe->backbuf.width / dev->natural_scale;
-  pzy *= darktable.develop->preview_pipe->backbuf.height / dev->natural_scale;
+  pzx *= darktable.develop->preview_width / dev->natural_scale;
+  pzy *= darktable.develop->preview_height / dev->natural_scale;
 
 
   if((gui->group_selected == index) && gui->node_edited >= 0)
@@ -1465,8 +1465,8 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
         return 1;
       }
 
-      const float wd = darktable.develop->preview_pipe->backbuf.width / dev->natural_scale;
-      const float ht = darktable.develop->preview_pipe->backbuf.height / dev->natural_scale;
+      const float wd = darktable.develop->preview_width / dev->natural_scale;
+      const float ht = darktable.develop->preview_height / dev->natural_scale;
 
       if(!gui->guipoints) gui->guipoints = dt_masks_dynbuf_init(200000, "brush guipoints");
       if(!gui->guipoints) return 1;
@@ -1837,8 +1837,8 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   if(!gpt) return 0;
 
   dt_develop_t *dev = (dt_develop_t *)darktable.develop;
-  const float wd = dev->preview_pipe->backbuf.width / dev->natural_scale;
-  const float ht = dev->preview_pipe->backbuf.height / dev->natural_scale;
+  const float wd = dev->preview_width / dev->natural_scale;
+  const float ht = dev->preview_height / dev->natural_scale;
 
   if(gui->creation)
   {

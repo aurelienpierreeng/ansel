@@ -166,8 +166,8 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
                                                     &cache_entry, darktable.develop, dev->preview_pipe);
   if(!data) return TRUE;
 
-  const int wd = dev->preview_pipe->backbuf.width;
-  const int ht = dev->preview_pipe->backbuf.height;
+  const int wd = dev->preview_width;
+  const int ht = dev->preview_height;
   const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
   cairo_surface_t *surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, wd, ht, stride);
 

@@ -148,6 +148,12 @@ typedef struct dt_develop_t
   // It is NOT the size of the backbuffer/ROI.
   int32_t orig_width, orig_height;
 
+  // Dimensions of the preview backbuffer, depending on the 
+  // darkroom main widget size and DPI factor.
+  // These are computed early, before we have the actual buffer.
+  // Use them everywhere in GUI
+  int32_t preview_width, preview_height;
+
   // natural scaling = MIN(dev->width / dev->pipe->processed_width, dev->height / dev->pipe->processed_height)
   // aka ensure that image fits into widget minus margins/borders.
   float natural_scale;

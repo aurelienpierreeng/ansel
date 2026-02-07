@@ -178,8 +178,8 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
   cairo_save(cri);
   // The colorpicker samples bounding rectangle should only be displayed inside the visible image
 
-  const double wd = dev->preview_pipe->backbuf.width;
-  const double ht = dev->preview_pipe->backbuf.height;
+  const double wd = dev->preview_width;
+  const double ht = dev->preview_height;
   const double scale = dt_dev_get_fit_scale(dev);
   const double lw = 1.0 / scale;
   const double dashes[1] = { lw * 4.0 };
@@ -536,8 +536,8 @@ void expose(
   // draw guide lines if needed
   if(!dev->gui_module || !(dev->gui_module->flags() & IOP_FLAGS_GUIDES_SPECIAL_DRAW))
   {
-    const float wd = dev->preview_pipe->backbuf.width;
-    const float ht = dev->preview_pipe->backbuf.height;
+    const float wd = dev->preview_width;
+    const float ht = dev->preview_height;
     const float scaling = dt_dev_get_overlay_scale(dev);
 
     cairo_save(cri);
@@ -2358,8 +2358,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     dt_dev_retrieve_full_pos(dev, x, y, &pzx, &pzy);
 
     float zoom_scale = dev->roi.scaling;
-    const int procw = dev->preview_pipe->backbuf.width;
-    const int proch = dev->preview_pipe->backbuf.height;
+    const int procw = dev->preview_width;
+    const int proch = dev->preview_height;
 
     if(which == 1)
     {

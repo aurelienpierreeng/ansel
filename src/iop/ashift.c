@@ -2993,8 +2993,8 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
   else
   {
     // Create new lines
-    const float wd = self->dev->preview_pipe->backbuf.width;
-    const float ht = self->dev->preview_pipe->backbuf.height;
+    const float wd = self->dev->preview_width;
+    const float ht = self->dev->preview_height;
     float pts[8] = { wd * 0.2, ht * 0.2, wd * 0.2, ht * 0.8, wd * 0.8, ht * 0.2, wd * 0.8, ht * 0.8 };
     if(dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 4))
@@ -3670,8 +3670,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     return;
 
   // the usual rescaling stuff
-  const float wd = dev->preview_pipe->backbuf.width;
-  const float ht = dev->preview_pipe->backbuf.height;
+  const float wd = dev->preview_width;
+  const float ht = dev->preview_height;
   if(wd < 1.0 || ht < 1.0) return;
 
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
@@ -4113,8 +4113,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
   gboolean handled = FALSE;
 
-  const float wd = self->dev->preview_pipe->backbuf.width;
-  const float ht = self->dev->preview_pipe->backbuf.height;
+  const float wd = self->dev->preview_width;
+  const float ht = self->dev->preview_height;
   if(wd < 1.0 || ht < 1.0) return 1;
 
   float pzx = 0.0f, pzy = 0.0f;
@@ -4331,8 +4331,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   float pzx = 0.0f, pzy = 0.0f;
   dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
 
-  const float wd = self->dev->preview_pipe->backbuf.width;
-  const float ht = self->dev->preview_pipe->backbuf.height;
+  const float wd = self->dev->preview_width;
+  const float ht = self->dev->preview_height;
   if(wd < 1.0 || ht < 1.0) return 1;
 
   // if we start to draw a straightening line
@@ -4525,8 +4525,8 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 {
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
-  const float wd = self->dev->preview_pipe->backbuf.width;
-  const float ht = self->dev->preview_pipe->backbuf.height;
+  const float wd = self->dev->preview_width;
+  const float ht = self->dev->preview_height;
 
   dt_control_change_cursor(GDK_LEFT_PTR);
 
@@ -4703,8 +4703,8 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
     pzx += 0.5f;
     pzy += 0.5f;
 
-    const float wd = self->dev->preview_pipe->backbuf.width;
-    const float ht = self->dev->preview_pipe->backbuf.height;
+    const float wd = self->dev->preview_width;
+    const float ht = self->dev->preview_height;
 
     float near_delta = 5.0f;
     if(g->current_structure_method == ASHIFT_METHOD_QUAD || g->current_structure_method == ASHIFT_METHOD_LINES)

@@ -1978,8 +1978,8 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   dt_iop_gui_leave_critical_section(self);
   if(fail) return 0;
 
-  const int wd = dev->preview_pipe->backbuf.width;
-  const int ht = dev->preview_pipe->backbuf.height;
+  const int wd = dev->preview_width;
+  const int ht = dev->preview_height;
 
   if(g == NULL) return 0;
   if(wd < 1 || ht < 1) return 0;

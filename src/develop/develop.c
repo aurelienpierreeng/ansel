@@ -79,14 +79,11 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dev->gui_module = NULL;
   dt_pthread_rwlock_init(&dev->history_mutex, NULL);
   dt_pthread_rwlock_init(&dev->masks_mutex, NULL);
-  dev->history_end = 0;
   dev->history = NULL; // empty list
-  dev->history_hash = 0;
 
   dev->gui_attached = gui_attached;
   dev->roi.width = -1;
   dev->roi.height = -1;
-  dev->exit = 0;
 
   dt_image_init(&dev->image_storage);
   dev->pipe = dev->preview_pipe = NULL;
@@ -96,8 +93,6 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dev->form_visible = NULL;
   dev->form_gui = NULL;
   dev->allforms = NULL;
-  dev->forms_hash = 0;
-  dev->forms_changed = FALSE;
 
   if(dev->gui_attached)
   {
@@ -117,43 +112,23 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dt_dev_set_backbuf(&dev->output_histogram, 0, 0, 0, -1, -1);
   dt_dev_set_backbuf(&dev->display_histogram, 0, 0, 0, -1, -1);
 
-  dev->auto_save_timeout = 0;
-  dev->drawing_timeout = 0;
-
-  dev->iop_instance = 0;
   dev->iop = NULL;
   dev->alliop = NULL;
-
   dev->allprofile_info = NULL;
-
-  dev->iop_order_version = 0;
   dev->iop_order_list = NULL;
 
   dev->proxy.chroma_adaptation = NULL;
   dev->proxy.wb_is_D65 = TRUE; // don't display error messages until we know for sure it's FALSE
   dev->proxy.wb_coeffs[0] = 0.f;
 
-  dev->rawoverexposed.enabled = FALSE;
   dev->rawoverexposed.mode = dt_conf_get_int("darkroom/ui/rawoverexposed/mode");
   dev->rawoverexposed.colorscheme = dt_conf_get_int("darkroom/ui/rawoverexposed/colorscheme");
   dev->rawoverexposed.threshold = dt_conf_get_float("darkroom/ui/rawoverexposed/threshold");
 
-  dev->overexposed.enabled = FALSE;
   dev->overexposed.mode = dt_conf_get_int("darkroom/ui/overexposed/mode");
   dev->overexposed.colorscheme = dt_conf_get_int("darkroom/ui/overexposed/colorscheme");
   dev->overexposed.lower = dt_conf_get_float("darkroom/ui/overexposed/lower");
   dev->overexposed.upper = dt_conf_get_float("darkroom/ui/overexposed/upper");
-
-  dev->iso_12646.enabled = FALSE;
-
-  // Init the mask lock state
-  dev->mask_lock = 0;
-  dev->darkroom_skip_mouse_events = 0;
-
-  dev->loading_cache = FALSE;
-
-  dev->progress.completed = 0;
-  dev->progress.total = 0;
 
   dt_dev_reset_roi(dev);
 }
@@ -314,6 +289,12 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
   *wd = fminf(roi_width, widget_wd);
   *ht = fminf(roi_height, widget_ht);
 
+  if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+  {
+    dev->preview_width = *wd;
+    dev->preview_height = *ht;
+  }
+
   // dev->roi.x,y are the relative coordinates of the ROI center.
   // in preview pipe, we always render a full image, so x,y = 0,0 
   // otherwise, x,y here are the top-left corner. Translate:
@@ -422,10 +403,15 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       // Signal that we are starting
       pipe->status = DT_DEV_PIXELPIPE_UNDEF;
 
+      // Update ROI and hashes ASAP because GUI need them.
+      dt_iop_roi_t roi = (dt_iop_roi_t){ x, y, wd, ht, scale };
+      dt_dev_pixelpipe_get_roi_in(pipe, dev, roi);
+      dt_pixelpipe_get_global_hash(pipe, dev);
+
       dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
       dev->progress.completed = 0;
       dev->progress.total = 0;
-      int ret = dt_dev_pixelpipe_process(pipe, dev, x, y, wd, ht, scale);
+      int ret = dt_dev_pixelpipe_process(pipe, dev, roi);
       dev->progress.completed = 0;
       dev->progress.total = 0;
       dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
@@ -1128,11 +1114,11 @@ float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
 
 float dt_dev_get_fit_scale(dt_develop_t *dev)
 {
-  if(!dev->preview_pipe || dev->preview_pipe->backbuf.width == 0 || dev->preview_pipe->backbuf.height == 0)
+  if(!dev->preview_pipe || dev->preview_width == 0 || dev->preview_height == 0)
     return dev->roi.scaling;
 
-  const float nat_scale = fminf(fminf((float)dev->roi.width / (float)dev->preview_pipe->backbuf.width,
-                         (float)dev->roi.height / (float)dev->preview_pipe->backbuf.height),
+  const float nat_scale = fminf(fminf((float)dev->roi.width / (float)dev->preview_width,
+                         (float)dev->roi.height / (float)dev->preview_height),
                           1.f);
   return dev->roi.scaling * nat_scale;
 }
@@ -1160,8 +1146,8 @@ gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t 
 {
   // DO NOT MODIFIY !! //
 
-  const float wd = dev->preview_pipe->backbuf.width;
-  const float ht = dev->preview_pipe->backbuf.height;
+  const float wd = dev->preview_width;
+  const float ht = dev->preview_height;
   if(wd == 0.f || ht == 0.f) return TRUE;
 
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
@@ -1251,8 +1237,8 @@ gboolean dt_dev_roi_to_input_space(dt_develop_t *dev, /*gboolean normalized_in,*
   if(!dev->preview_pipe || !point_x || !point_y) return FALSE;
 
   const float scale = dev->natural_scale;
-  const int wd = dev->preview_pipe->backbuf.width;
-  const int ht = dev->preview_pipe->backbuf.height;
+  const int wd = dev->preview_width;
+  const int ht = dev->preview_height;
   const int iwd = dev->preview_pipe->iwidth;
   const int iht = dev->preview_pipe->iheight;
   // avoid division by zero
@@ -1264,8 +1250,8 @@ gboolean dt_dev_roi_to_input_space(dt_develop_t *dev, /*gboolean normalized_in,*
   // if(normalized_in)
   //{
   //  De-normalize preview coordinate to pixel space
-  pzx *= dev->preview_pipe->backbuf.width;
-  pzy *= dev->preview_pipe->backbuf.height;
+  pzx *= dev->preview_width;
+  pzy *= dev->preview_height;
   //}
 
   pzx /= scale;
@@ -1288,8 +1274,8 @@ gboolean dt_dev_roi_delta_to_input_space(dt_develop_t *dev, const float delta[2]
                                             const float in[2], float points[2])
 {
   const float natural_scale = dev->natural_scale;
-  const int wd = dev->preview_pipe->backbuf.width;
-  const int ht = dev->preview_pipe->backbuf.height;
+  const int wd = dev->preview_width;
+  const int ht = dev->preview_height;
   const int iwd = dev->preview_pipe->iwidth;
   const int iht = dev->preview_pipe->iheight;
   // avoid division by zero

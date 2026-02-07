@@ -472,8 +472,8 @@ static int pixelpipe_picker_helper(dt_iop_module_t *module, const dt_iop_roi_t r
                                    dt_aligned_pixel_t picked_color_min, dt_aligned_pixel_t picked_color_max,
                                    dt_pixelpipe_picker_source_t picker_source, int *box)
 {
-  const float wd = darktable.develop->preview_pipe->backbuf.width;
-  const float ht = darktable.develop->preview_pipe->backbuf.height;
+  const float wd = darktable.develop->preview_width;
+  const float ht = darktable.develop->preview_height;
   const int width = roi.width;
   const int height = roi.height;
   const dt_colorpicker_sample_t *const sample = darktable.lib->proxy.colorpicker.primary_sample;
@@ -1918,8 +1918,7 @@ static gboolean _resync_global_histograms(dt_dev_pixelpipe_t *pipe, dt_develop_t
   return 1;
 }
 
-int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x, int y, int width, int height,
-                             double scale)
+int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop_roi_t roi)
 {
   if(darktable.unmuted & DT_DEBUG_MEMORY)
   {
@@ -1932,10 +1931,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
   // Get the roi_out hash of all nodes.
   // Get the previous output size of the module, for cache invalidation.
   const guint pos = g_list_length(pipe->iop);
-  dt_iop_roi_t roi = (dt_iop_roi_t){ x, y, width, height, scale };
-  dt_dev_pixelpipe_get_roi_in(pipe, dev, roi);
   _set_opencl_cache(pipe, dev);
-  dt_pixelpipe_get_global_hash(pipe, dev);
 
   void *buf = NULL;
 
@@ -1956,7 +1952,8 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int x,
     return 0;
   }
 
-  dt_print(DT_DEBUG_DEV, "[pixelpipe] Started %s pipeline recompute at %i×%i px\n", dt_pixelpipe_get_pipe_name(pipe->type), width, height);
+  dt_print(DT_DEBUG_DEV, "[pixelpipe] Started %s pipeline recompute at %i×%i px\n", 
+           dt_pixelpipe_get_pipe_name(pipe->type), roi.width, roi.height);
 
   // get a snapshot of the mask list
   dt_pthread_rwlock_rdlock(&dev->masks_mutex);

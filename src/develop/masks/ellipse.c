@@ -389,8 +389,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->node_selected = -1;
   gui->pivot_selected = FALSE;
 
-  pzx *= darktable.develop->preview_pipe->backbuf.width / dev->natural_scale;
-  pzy *= darktable.develop->preview_pipe->backbuf.height / dev->natural_scale;
+  pzx *= darktable.develop->preview_width / dev->natural_scale;
+  pzy *= darktable.develop->preview_height / dev->natural_scale;
 
   const float r = atan2f(nodes[3] - nodes[1], nodes[2] - nodes[0]);
   const float sinr = sinf(r);
@@ -707,8 +707,8 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
         else
           gui2->form_dragging = TRUE;
         gui2->group_selected = pos2;
-        gui2->pos[0] = pzx * darktable.develop->preview_pipe->backbuf.width;
-        gui2->pos[1] = pzy * darktable.develop->preview_pipe->backbuf.height;
+        gui2->pos[0] = pzx * darktable.develop->preview_width;
+        gui2->pos[1] = pzy * darktable.develop->preview_height;
         gui2->delta[0] = 0.0;
         gui2->delta[1] = 0.0;
         gui2->scrollx = pzx;
@@ -1066,8 +1066,8 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     if((xpos == -1.f && ypos == -1.f) || gui->mouse_leaved_center)
     {
       const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
-      xpos = (.5f + dev->roi.x) * darktable.develop->preview_pipe->backbuf.width;
-      ypos = (.5f + dev->roi.y) * darktable.develop->preview_pipe->backbuf.height;
+      xpos = (.5f + dev->roi.x) * darktable.develop->preview_width;
+      ypos = (.5f + dev->roi.y) * darktable.develop->preview_height;
     }
     float pts[2] = { xpos, ypos };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
