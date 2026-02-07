@@ -1319,7 +1319,7 @@ void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
   if(zoom_level == -1.f) zoom_level = 0.1f;
 
   darktable.gui->mouse.effect_radius = radius / zoom_level;
-  darktable.gui->mouse.effect_radius_screen = darktable.gui->mouse.effect_radius * darktable.gui->ppd;
+  darktable.gui->mouse.effect_radius_scaled = darktable.gui->mouse.effect_radius * darktable.gui->ppd;
 }
 
 void dt_dev_set_backbuf(dt_backbuf_t *backbuf, const int width, const int height, const size_t bpp, 

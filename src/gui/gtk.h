@@ -32,6 +32,8 @@ extern "C" {
 #endif
 
 #define DT_GUI_IOP_MODULE_CONTROL_SPACING 0
+#define DT_GUI_MOUSE_EFFECT_RADIUS darktable.gui->mouse.effect_radius
+#define DT_GUI_MOUSE_EFFECT_RADIUS_SCALED darktable.gui->mouse.effect_radius_scaled
 
 /* helper macro that applies the DPI transformation to fixed pixel values. input should be defaulting to 96
  * DPI */
@@ -121,7 +123,7 @@ typedef struct dt_gui_gtk_t
     // distance to the cursor for handle detection (in backbuf reference)
     float effect_radius;
     // distance to the cursor for handle detection (in screen reference)
-    float effect_radius_screen;
+    float effect_radius_scaled;
   } mouse;
 
   int icon_size; // size of top panel icons

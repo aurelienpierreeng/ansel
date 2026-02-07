@@ -266,7 +266,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
 
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
-  const float dist_curs = darktable.gui->mouse.effect_radius_screen; // transformed to backbuf dimensions
+  const float dist_curs = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED; // transformed to backbuf dimensions
 
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
