@@ -351,6 +351,8 @@ static void _paint_all(cairo_t *cri, cairo_t *cr, cairo_surface_t *image_surface
   cairo_paint(cri);
 }
 
+static cairo_surface_t *image_surface = NULL;
+
 void expose(
     dt_view_t *self,
     cairo_t *cri,
@@ -359,12 +361,14 @@ void expose(
     int32_t pointerx,
     int32_t pointery)
 {
+  dt_times_t start;
+  dt_get_times(&start);
+
   cairo_save(cri);
   
   dt_develop_t *dev = (dt_develop_t *)self->data;
   const int32_t border = dev->border_size;
 
-  static cairo_surface_t *image_surface = NULL;
   static int image_surface_width = 0;
   static int image_surface_height = 0;
   static int32_t image_surface_imgid = UNKNOWN_IMAGE;
@@ -591,6 +595,8 @@ void expose(
     pango_font_description_free(desc);
     g_object_unref(layout);
   }
+
+  dt_show_times_f(&start, "[darkroom]", "redraw");
 }
 
 void reset(dt_view_t *self)
@@ -1985,6 +1991,8 @@ void enter(dt_view_t *self)
 void leave(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
+
+  if(image_surface) cairo_surface_destroy(image_surface);
 
   // Send all pipeline shutdown signals first
   dev->exit = 1;
