@@ -1,27 +1,36 @@
 # Picture resizing and scaling
 
-The pipeline has 2 ways of defining the final size of the output buffer :
+This document describes how ROI (Region of Interest) sizes are computed in the pixelpipe, what assumptions are made, and which modules affect the ROI.
 
-- from input to output, by chaining the calls to the `modify_roi_out()` method of each module, through the higher-level method `dt_dev_pixelpipe_get_roi_out()`,
-- from output to input, by chaining the calls to the `modify_roi_in()` method of each module, through the higher-level method `dt_dev_pixelpipe_get_roi_in()`.
+**ROI model**
+- `dt_iop_roi_t` fields are `x`, `y`, `width`, `height`, `scale` (see `src/develop/imageop.h`).
+- `x,y` are the top-left pixel of the ROI in the current buffer, `width/height` are in pixels.
+- `scale` is the global factor between the full-resolution input and the current ROI. `1.0` means 1:1.
+- ROI values are integers; rounding occurs whenever a float scale is applied.
 
-Export, thumbnail and darkroom main preview use the output to input, because the constraint lies on the output. The darkroom thumbnail preview, uses the input to output. The modules automatically affecting sizes are :
+**Two ROI passes**
+- Forward (input → output): `dt_dev_pixelpipe_get_roi_out()` walks the modules in order and calls each `modify_roi_out()`. It starts from the full input `(0,0,width_in,height_in,1.0)` and computes the full-image processed size. It also fills `piece->buf_in/buf_out` for modules. This pass is only used to compute `pipe->processed_width/height` for GUI sizing and export sizing.
+- Backward (output → input): `dt_dev_pixelpipe_get_roi_in()` walks the modules in reverse and calls each `modify_roi_in()`. It starts from the requested output ROI and computes the minimal upstream ROI needed for that request. It stores `piece->planned_roi_out/in`, which are then used for cache hashing and for actual processing in `dt_dev_pixelpipe_process_rec()`.
 
-- `iop/rawprepare.c` : trim the sensor edges, as defined by rawspeed,
-- `iop/demosaic.c` : performs early rescaling to final size for thumbnail pipeline only,
-- `iop/lens.cc` : crops to fit the rectangular frame when heavy distortions are corrected,
-- `iop/finalsize.c` : performs late rescaling to final size for export pipeline only (so early pipe stages run at full resolution).
+If a module is disabled, or temporarily bypassed while editing (distortion bypass), both passes treat it as a no-op.
 
-Other modules affect size in more unpredictable ways :
-- `iop/crop.c`/`iop/ashift.c`/`iop/clipping.c` : user-defined cropping and perspective correction,
-- `iop/borders.c` : add a frame.
+**Where the requested ROI comes from**
+- Darkroom main preview (`DT_DEV_PIXELPIPE_FULL`): `_update_darkroom_roi()` first calls `dt_dev_pixelpipe_get_roi_out()` to compute full-image processed size. It then computes `scale = natural_scale * dev->roi.scaling`, where `natural_scale` fits the full image into the viewport and `dev->roi.scaling` is the zoom factor. The requested ROI is the visible window: `width/height = min(processed * scale, viewport)` and `x,y` are computed from the normalized ROI center `dev->roi.x/y`. Only that ROI is processed; the base buffer is cropped to it before any module runs.
+- Darkroom preview pipe (`DT_DEV_PIXELPIPE_PREVIEW`): the same processed size and `natural_scale` are used, but `dev->roi.scaling` is not applied and `x=y=0`. The preview always renders the full image at a scale that fits the viewport.
+- Export and thumbnail: `dt_dev_pixelpipe_get_roi_out()` computes the full-image processed size after distortions/crops/borders. `_get_export_size()` then computes the target output size and `scale = target/full`. The requested ROI is `{0,0,target_w,target_h,scale}`. For export, `finalscale` forces upstream processing at scale 1.0 and resamples at the end. For thumbnails, `initialscale` does the early resampling and `finalscale` is disabled.
 
-Note that the darkroom main preview processes an image restricted to the visible area (ROI, or _Region of Interest_). The full RAW image is therefore clipped and zoomed at the step 0 of the pipeline, directly when fetching the base buffer (aka out of any module).
+**Modules that change ROI**
+- `iop/rawprepare.c`: trims sensor margins. `modify_roi_out()` shrinks width/height and resets `x,y` to 0. `modify_roi_in()` expands the request to include the cropped margins.
+- `iop/demosaic.c`: no scaling. `modify_roi_out()` snaps `x,y` to the mosaic origin (currently `0,0`). `modify_roi_in()` aligns `x,y` to the Bayer/X-Trans grid unless passthrough.
+- `iop/initialscale.c`: early resampling for non-export pipes. `modify_roi_in()` requests the full input buffer (`x=y=0`, `width/height=buf_in`, `scale=1.0`) so the module can resample down to the requested ROI. It does not change the forward size.
+- `iop/lens.cc`: geometry correction padding. `modify_roi_in()` expands the ROI based on lensfun distortion and interpolation width; `modify_roi_out()` is a passthrough.
+- `iop/crop.c`: rectangular crop. `modify_roi_out()` computes the cropped rectangle in the input. `modify_roi_in()` offsets `x,y` by the crop origin; width/height are unchanged.
+- `iop/clipping.c`: rotation/keystone + crop. `modify_roi_out()` computes the output bounding box and crop offsets. `modify_roi_in()` back-transforms the output AABB into input space and adds 1 px padding, with a fast path for pure cropping.
+- `iop/ashift.c`: perspective/homography. `modify_roi_out()` computes the output bounds, then applies the internal crop factors. `modify_roi_in()` back-transforms output corners to input space and pads by interpolation width.
+- `iop/borders.c`: frame/border. `modify_roi_out()` expands width/height to include borders. `modify_roi_in()` subtracts borders so only image pixels are requested from upstream.
+- `iop/finalscale.c`: export and GUI upscaling. `modify_roi_in()` maps `roi_out` back to scale 1.0 when exporting or when `roi_out.scale > 1`, so upstream modules stay at 1:1 and finalscale does the resampling. It does not change the forward size.
 
-Now, because `iop/demosaic.c` rescales to final size only for the thumbnail pipe, which defines sizes from output to input, its `modify_roi_in()` implements this rescaling, but its `modify_roi_out()` method is essentially a no-operation. Similarly, because `iop/finalscale.c` is used only for export pipelines, defining sizes from output to input, it has a `modify_roi_in()` but no `modify_roi_out()` at all.
-
-For this reason, we always call `dt_dev_pixelpipe_get_roi_in()` to get the in/out sizes from the end, before computing the pipeline global hashes, which use both input and output sizes for each module (plus the `(x, y)` coordinates of the top-left corner of the _Region Of Interest_). `dt_dev_pixelpipe_get_roi_out()` is only used on the full-resolution input to compute the final image ratio of the full-resolution output.
-
-However, since we apply real scaling coefficients on integers pixel dimensions, rounding errors are bound to happen and it is an ordeal to ensure that modules having both `modify_roi_in()` and `modify_roi_out()` methods are pixel-accurate when doing a roundtrip (for the ones even designed to roundtrip). Pixel-accuracy in this context is important because the input/output buffer sizes are both used in the hashes identifying module cache lines. This is what allows the thumbnail pipeline to reuse the cache from the darkroom preview, and they don't compute their sizes in the same direction.
-
-Some care has been taken to try and correct pixel rounding errors, in the ROI-modifying methods of modules using them. There is no guaranty that these methods work all the time and they will most likely be a burden to maintain. In an ideal world, `iop/demosaic.c` would do just that, and early downsampling would have a dedicated method, or even be done at the base buffer initialisation, like in the darkroom main preview.
+**Assumptions and pitfalls**
+- Cache hashes include `planned_roi_in/out`, so any rounding mismatch between forward/backward ROI passes causes cache misses or incorrect reuse. Modules generally clamp and add interpolation padding to mitigate this.
+- ROI is integer-based but `scale` is float. All resampling is handled by `initialscale` and `finalscale`; the base buffer path only supports `scale == 1.0` for the raw/full input copy.
+- During GUI editing, distortion modules can be bypassed to give an undistorted view for the active module. This affects ROI planning and hashes by design.
