@@ -39,6 +39,7 @@ typedef struct dt_pixel_cache_entry_t
   dt_atomic_int refcount;   // reference count for the cache entry, to avoid freeing it while still in use
   dt_pthread_rwlock_t lock; // read/write lock to avoid threads conflicts
   gboolean auto_destroy;    // TRUE for auto-destruction the next time it's used. Used for short-lived entries (transient states).
+  gboolean external_alloc;  // TRUE for external buffers tracked in the cache
   int hits;                 // number of times this entry was hit (utility score)
   dt_dev_pixelpipe_cache_t *cache; // reference to parent cache object
 } dt_pixel_cache_entry_t;
@@ -46,6 +47,9 @@ typedef struct dt_pixel_cache_entry_t
 
 void _non_thread_safe_cache_ref_count_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, gboolean lock,
                                             dt_pixel_cache_entry_t *cache_entry);
+static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, const size_t size,
+                                                        const dt_iop_buffer_dsc_t dsc, const char *name, const int id,
+                                                        dt_dev_pixelpipe_cache_t *cache, gboolean alloc);
 
 dt_pixel_cache_entry_t *_non_threadsafe_cache_get_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash)
 {
@@ -99,7 +103,7 @@ int _non_thread_safe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const uint64_
 
     if((!used || force) && !locked)
     {
-      g_hash_table_remove(cache->entries, GINT_TO_POINTER(hash));
+      g_hash_table_remove(cache->entries, GINT_TO_POINTER(cache_entry->hash));
       return 0;
     }
     else if(used)
@@ -109,7 +113,7 @@ int _non_thread_safe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const uint64_
   }
   else
   {
-    dt_print(DT_DEBUG_PIPE, "[pixelpipe] cache entry %" PRIu64 " not found, will not be removed\n", hash);
+    dt_print(DT_DEBUG_CACHE, "[pixelpipe] cache entry %" PRIu64 " not found, will not be removed\n", hash);
   }
   return 1;
 }
@@ -165,6 +169,12 @@ void _cache_get_oldest(gpointer key, gpointer value, gpointer user_data)
   }
 }
 
+void _print_cache_lines(gpointer key, gpointer value, gpointer user_data)
+{
+  dt_pixel_cache_entry_t *cache_entry = (dt_pixel_cache_entry_t *)value;
+  dt_pixel_cache_message(cache_entry, "", FALSE);
+}
+
 
 // remove the least used cache entry
 // return 0 on success, 1 on error
@@ -180,9 +190,18 @@ static int _non_thread_safe_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t
   g_hash_table_foreach(cache->entries, _cache_get_oldest, lru);
 
   if(lru->hash > 0)
+  {
     error = _non_thread_safe_cache_remove(cache, lru->hash, FALSE, lru->cache_entry);
+    if(error)
+      dt_print(DT_DEBUG_CACHE, "[pixelpipe] couldn't remove LRU %lu\n", lru->hash);
+    else
+      dt_print(DT_DEBUG_CACHE, "[pixelpipe] LRU %lu removed. Total cache size: %li MiB\n", lru->hash, cache->current_memory / (1024 * 1024));
+  }
   else
-    dt_print(DT_DEBUG_PIPE, "[pixelpipe] couldn't remove LRU, %i items and all are used\n", g_hash_table_size(cache->entries));
+  {
+    dt_print(DT_DEBUG_CACHE, "[pixelpipe] couldn't remove LRU, %i items and all are used\n", g_hash_table_size(cache->entries));
+    g_hash_table_foreach(cache->entries, _print_cache_lines, NULL);
+  }
 
   free(lru);
   return error;
@@ -202,32 +221,14 @@ void *dt_pixel_cache_alloc(dt_dev_pixelpipe_cache_t *cache, dt_pixel_cache_entry
 {
   // allocate the data buffer
   if(!cache_entry->data)
-    cache_entry->data = dt_alloc_align(cache_entry->size);
-    
-  return cache_entry->data;
+    cache_entry->data = __builtin_assume_aligned(dt_alloc_align(cache_entry->size), DT_CACHELINE_BYTES);
+
+  return cache_entry->data ? __builtin_assume_aligned(cache_entry->data, DT_CACHELINE_BYTES) : NULL;
 }
 
-
-// WARNING: not thread-safe, protect its calls with mutex lock
-static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, const size_t size,
-                                                        const dt_iop_buffer_dsc_t dsc, const char *name, const int id,
-                                                        dt_dev_pixelpipe_cache_t *cache, gboolean alloc)
+// WARNING: non thread-safe
+static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t size, const uint64_t hash, const char *name)
 {
-  // Dynamically update the max cache size depending on remaining free memory on system
-  const size_t remaining_mem = dt_get_available_mem();
-  const size_t safety_margin = 4 * dt_get_singlebuffer_mem();
-  if(remaining_mem < safety_margin)
-  {
-    cache->max_memory
-        = MIN(MAX((int64_t)remaining_mem - (int64_t)safety_margin, (int64_t)2 * dt_get_singlebuffer_mem()),
-              remaining_mem);
-    //fprintf(stdout, "new pipeline cache size : %lu MiB\n", cache->max_memory / (1024 * 1024));
-    if(cache->max_memory == 2 * dt_get_singlebuffer_mem())
-      dt_control_log(_("Your system RAM is nearly saturated.\n"
-                       "Processing full-resolution images may not "
-                       "possible anymore.\n"));
-  }
-
   // Free up space if needed to match the max memory limit
   // If error, all entries are currently locked or in use, so we cannot free space to allocate a new entry.
   int error = 0;
@@ -236,9 +237,93 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
 
   if(cache->current_memory + size > cache->max_memory)
   {
-    dt_print(DT_DEBUG_PIPE, "[pixelpipe] cache is full, cannot allocate new entry %" PRIu64 " (%s)\n", hash, name);
-    return NULL; // not enough memory
+    fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry %lu (%s)\n", hash, name);
+    dt_control_log(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
   }
+
+  return error;
+}
+
+void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache, size_t size, int id,
+                                                const char *name)
+{
+  // Free up space if needed to match the max memory limit
+  // If error, all entries are currently locked or in use, so we cannot free space to allocate a new entry.
+  dt_pthread_mutex_lock(&cache->lock);
+  int error = _free_space_to_alloc(cache, size, 0, name);
+  dt_pthread_mutex_unlock(&cache->lock);
+
+  if(error) return NULL;
+
+  void *buf = dt_alloc_align(size);
+  if(!buf) return NULL;
+  void *aligned = __builtin_assume_aligned(buf, DT_CACHELINE_BYTES);
+
+  dt_iop_buffer_dsc_t dsc = {0};
+
+  const uintptr_t addr = (uintptr_t)aligned;
+  uint64_t hash = dt_hash(5381, (const char *)&addr, sizeof(addr));
+
+  dt_pthread_mutex_lock(&cache->lock);
+
+  dt_pixel_cache_entry_t *cache_entry
+      = dt_pixel_cache_new_entry(hash, size, dsc, name, id, cache, FALSE);
+
+  if(!cache_entry)
+  {
+    dt_pthread_mutex_unlock(&cache->lock);
+    dt_free_align(buf);
+    return NULL;
+  }
+
+  // Protect this entry from LRU/flush removal while in use.
+  _non_thread_safe_cache_ref_count_entry(cache, hash, TRUE, cache_entry);
+  dt_pthread_rwlock_wrlock(&cache_entry->lock);
+  dt_pthread_mutex_unlock(&cache->lock);
+
+  cache_entry->data = aligned;
+  cache_entry->age = g_get_monotonic_time();
+  cache_entry->external_alloc = TRUE;
+  // Keep the lock held for the lifetime of this buffer.
+  return aligned;
+}
+
+void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void *mem)
+{
+  // In case we don't find the cache entry, we fall back to a generic dt_free_align(mem)
+  if(!mem) return;
+
+  const uintptr_t addr = (uintptr_t)mem;
+  uint64_t hash = dt_hash(5381, (const char *)&addr, sizeof(addr));
+
+  dt_pthread_mutex_lock(&cache->lock);
+
+  dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, hash);
+  if(cache_entry)
+  {
+    if(cache_entry->external_alloc)
+    {
+      _non_thread_safe_cache_ref_count_entry(cache, hash, FALSE, cache_entry);
+      dt_pthread_rwlock_unlock(&cache_entry->lock);
+      g_hash_table_remove(cache->entries, GINT_TO_POINTER(cache_entry->hash));
+    }
+  }
+  else
+  {
+    dt_free_align(mem);
+  }
+
+  dt_pthread_mutex_unlock(&cache->lock);
+}
+
+
+// WARNING: not thread-safe, protect its calls with mutex lock
+static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, const size_t size,
+                                                        const dt_iop_buffer_dsc_t dsc, const char *name, const int id,
+                                                        dt_dev_pixelpipe_cache_t *cache, gboolean alloc)
+{
+  int error = _free_space_to_alloc(cache, size, 0, name);
+  if(error) return NULL;
 
   dt_pixel_cache_entry_t *cache_entry = (dt_pixel_cache_entry_t *)malloc(sizeof(dt_pixel_cache_entry_t));
   if(!cache_entry) return NULL;
@@ -252,6 +337,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
   cache_entry->id = id;
   cache_entry->refcount = 0;
   cache_entry->auto_destroy = FALSE;
+  cache_entry->external_alloc = FALSE;
   cache_entry->data = NULL;
   cache_entry->cache = cache;
 
@@ -302,8 +388,8 @@ dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
   cache->current_memory = 0;
   cache->queries = cache->hits = 0;
 
-  // Run every 2 minutes
-  garbage_collection = g_timeout_add(2 * 60 * 1000, (GSourceFunc)dt_dev_pixelpipe_cache_flush_old, cache);
+  // Run every 5 minutes
+  garbage_collection = g_timeout_add(5 * 60 * 1000, (GSourceFunc)dt_dev_pixelpipe_cache_flush_old, cache);
   return cache;
 }
 
@@ -349,11 +435,11 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
   else
   {
     // New entry: create and allocate
-    cache_entry = dt_pixel_cache_new_entry(hash, size, **dsc, name, id, cache, alloc);
+    cache_entry = dt_pixel_cache_new_entry(hash, size, **dsc, name, id, cache, FALSE);
     
-    if(alloc && !cache_entry)
+    if(!cache_entry)
     {
-      dt_print(DT_DEBUG_PIPE, "couldn't allocate new cache entry %" PRIu64 "\n", hash);
+      dt_print(DT_DEBUG_CACHE, "couldn't allocate new cache entry %" PRIu64 "\n", hash);
       dt_pthread_mutex_unlock(&cache->lock);
       if(entry) *entry = NULL;
       return 1;
@@ -368,12 +454,15 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
     // Release cache lock AFTER acquiring entry locks to prevent other threads to capture it in-between
     dt_pthread_mutex_unlock(&cache->lock);
 
+    // Alloc after releasing the lock for better runtimes
+    if(alloc) dt_pixel_cache_alloc(cache, cache_entry);
+
     dt_print(DT_DEBUG_CACHE,"[pixelpipe_cache] Write-lock on entry (new cache entry %" PRIu64 " for %s pipeline)\n", hash, name);
   }
 
   // Finalize and return
   cache_entry->age = g_get_monotonic_time(); // Update MRU timestamp
-  *data = cache_entry->data;
+  *data = cache_entry->data ? __builtin_assume_aligned(cache_entry->data, DT_CACHELINE_BYTES) : NULL;
   *dsc = &cache_entry->dsc;
   dt_pixel_cache_message(cache_entry, cache_entry_found ? "found" : "created", FALSE);
 
@@ -395,7 +484,7 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
 
     // Set the time after we get the lock
     cache_entry->age = g_get_monotonic_time(); // this is the MRU entry
-    if(data) *data = cache_entry->data;
+    if(data) *data = cache_entry->data ? __builtin_assume_aligned(cache_entry->data, DT_CACHELINE_BYTES) : NULL;
     if(dsc) *dsc = &cache_entry->dsc;
     dt_pixel_cache_message(cache_entry, "found", FALSE);
   }
@@ -452,7 +541,9 @@ gboolean _for_each_remove_old(gpointer key, gpointer value, gpointer user_data)
 
 int dt_dev_pixelpipe_cache_flush_old(dt_dev_pixelpipe_cache_t *cache)
 {
-  dt_pthread_mutex_lock(&cache->lock);
+  // Don't hang the GUI thread if the cache is locked by a pipeline.
+  // Better luck next time.
+  if(dt_pthread_mutex_trylock(&cache->lock)) return G_SOURCE_CONTINUE;
   g_hash_table_foreach_remove(cache->entries, _for_each_remove_old, NULL);
   dt_pthread_mutex_unlock(&cache->lock);
   return G_SOURCE_CONTINUE;
@@ -620,7 +711,7 @@ void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, cons
 
   dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, TRUE, *cache_entry);
 
-  return data;
+  return data ? __builtin_assume_aligned(data, DT_CACHELINE_BYTES) : NULL;
 }
 
 void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, 
@@ -644,9 +735,9 @@ void dt_dev_pixelpipe_cache_unref_hash(dt_dev_pixelpipe_cache_t *cache, const ui
 
 void dt_dev_pixelpipe_cache_print(dt_dev_pixelpipe_cache_t *cache)
 {
-  if(!(darktable.unmuted & DT_DEBUG_PIPE)) return;
+  if(!(darktable.unmuted & DT_DEBUG_CACHE)) return;
 
-  dt_print(DT_DEBUG_PIPE, "[pixelpipe] cache hit rate so far: %.3f%% - size: %lu MiB over %lu MiB - %i items\n", 100. * (cache->hits) / (float)cache->queries, cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024), g_hash_table_size(cache->entries));
+  dt_print(DT_DEBUG_CACHE, "[pixelpipe] cache hit rate so far: %.3f%% - size: %lu MiB over %lu MiB - %i items\n", 100. * (cache->hits) / (float)cache->queries, cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024), g_hash_table_size(cache->entries));
 }
 
 // clang-format off

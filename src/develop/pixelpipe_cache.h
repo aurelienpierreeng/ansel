@@ -107,6 +107,26 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
  */
 void *dt_pixel_cache_alloc(dt_dev_pixelpipe_cache_t *cache, struct dt_pixel_cache_entry_t *entry);
 
+/**
+ * @brief Allocate aligned memory tracked by the pixelpipe cache. This allows
+ * LRU cache entries to be evicted if needed to make room.
+ *
+ * @param cache Pixelpipe cache to manage.
+ * @param size Buffer size in bytes.
+ * @param id Pipeline type owning the buffer.
+ * @param name Human-readable name.
+ * @return void* Pointer to the allocated buffer, or NULL on failure.
+ */
+void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache, size_t size, int id,
+                                                const char *name);
+
+/**
+ * @brief Free aligned memory allocated with dt_pixelpipe_cache_alloc_align_cache.
+ *
+ * @param cache Pixelpipe cache to manage.
+ * @param mem Pointer to the buffer.
+ */
+void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void *mem);
 
 /**
  * @brief Get an existing cache line from the cache. This is similar to `dt_dev_pixelpipe_cache_get`,

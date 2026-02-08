@@ -313,6 +313,36 @@ static inline void *dt_alloc_align_internal(size_t size)
 
 void *dt_alloc_align(size_t size);
 
+struct dt_dev_pixelpipe_cache_t;
+
+#define DT_STRINGIFY_HELPER(x) #x
+#define DT_STRINGIFY(x) DT_STRINGIFY_HELPER(x)
+
+void *dt_pixelpipe_cache_alloc_align_cache_impl(struct dt_dev_pixelpipe_cache_t *cache, size_t size, int id,
+                                                const char *name);
+#define dt_pixelpipe_cache_alloc_align_cache(size, id) \
+  dt_pixelpipe_cache_alloc_align_cache_impl(darktable.pixelpipe_cache, (size), (id), __FILE__ ":" DT_STRINGIFY(__LINE__))
+  
+#ifndef dt_pixelpipe_cache_alloc_align
+#define dt_pixelpipe_cache_alloc_align(size, pipe) \
+  dt_pixelpipe_cache_alloc_align_cache((size), (pipe)->type)
+#endif
+
+#ifndef dt_pixelpipe_cache_alloc_align_float
+#define dt_pixelpipe_cache_alloc_align_float(pixels, pipe) \
+  ((float *)dt_pixelpipe_cache_alloc_align((size_t)(pixels) * sizeof(float), (pipe)))
+#endif
+
+#ifndef dt_pixelpipe_cache_alloc_align_float_cache
+#define dt_pixelpipe_cache_alloc_align_float_cache(pixels, id) \
+  ((float *)dt_pixelpipe_cache_alloc_align_cache((size_t)(pixels) * sizeof(float), (id)))
+#endif
+
+void dt_pixelpipe_cache_free_align_cache(struct dt_dev_pixelpipe_cache_t *cache, void *mem);
+
+#define dt_pixelpipe_cache_free_align(mem) \
+  dt_pixelpipe_cache_free_align_cache(darktable.pixelpipe_cache, (mem));
+
 #ifdef _WIN32
   static inline void dt_free_align(void *mem)
   {
@@ -334,7 +364,6 @@ void *dt_alloc_align(size_t size);
   #define dt_free_align(A) if(A) free(A)
   #define dt_free_align_ptr free
 #endif
-
 
 static inline void* dt_calloc_align(size_t size)
 {

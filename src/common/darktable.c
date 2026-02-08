@@ -61,7 +61,6 @@
 #include "control/signal.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"
-#include "develop/pixelpipe_cache.h"
 
 #include "gui/gtk.h"
 #include "gui/guides.h"
@@ -376,14 +375,7 @@ static inline size_t _get_total_memory()
 
 void *dt_alloc_align(size_t size)
 {
-  void *buf = dt_alloc_align_internal(size);
-  int error = 0;
-  while(buf == NULL && size > 0 && !error)
-  {
-    error = dt_dev_pixel_pipe_cache_remove_lru(darktable.pixelpipe_cache);
-    buf = dt_alloc_align_internal(size);
-  }
-  return buf;
+  return dt_alloc_align_internal(size);
 }
 
 int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load_data, lua_State *L)
@@ -1108,9 +1100,6 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
 #endif
 
-  darktable.points = (dt_points_t *)calloc(1, sizeof(dt_points_t));
-  dt_points_init(darktable.points, darktable.num_openmp_threads);
-
   darktable.noiseprofile_parser = dt_noiseprofile_init(noiseprofiles_from_command);
 
   // The GUI must be initialized before the views, because the init()
@@ -1148,6 +1137,9 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   }
 
   darktable.pixelpipe_cache = dt_dev_pixelpipe_cache_init(darktable.dtresources.pixelpipe_memory);
+
+  darktable.points = (dt_points_t *)calloc(1, sizeof(dt_points_t));
+  dt_points_init(darktable.points, darktable.num_openmp_threads);
 
   // must come before mipmap_cache, because that one will need to access
   // image dimensions stored in here:
@@ -1327,8 +1319,6 @@ void dt_cleanup()
   dt_collection_free(darktable.collection);
   dt_selection_free(darktable.selection);
 
-  dt_dev_pixelpipe_cache_cleanup(darktable.pixelpipe_cache);
-
   dt_image_cache_cleanup(darktable.image_cache);
   free(darktable.image_cache);
   dt_mipmap_cache_cleanup(darktable.mipmap_cache);
@@ -1347,6 +1337,8 @@ void dt_cleanup()
   dt_opencl_cleanup(darktable.opencl);
   free(darktable.opencl);
   dt_pwstorage_destroy(darktable.pwstorage);
+
+  dt_dev_pixelpipe_cache_cleanup(darktable.pixelpipe_cache);
 
 #ifdef HAVE_GRAPHICSMAGICK
   DestroyMagick();
