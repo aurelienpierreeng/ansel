@@ -1978,12 +1978,14 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
   KILL_SWITCH_PIPE
 
   gboolean keep_running = TRUE;
+  int runs = 0;
   int opencl_error = 0;
   int err = 0;
 
-  while(keep_running)
+  while(keep_running && runs < 3)
   {
-
+    ++runs;
+    
 #ifdef HAVE_OPENCL
     dt_opencl_check_tuning(pipe->devid);
 #endif
