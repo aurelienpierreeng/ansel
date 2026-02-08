@@ -379,8 +379,8 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     piece->process_cl_ready = 0;
     piece->process_tiling_ready = 0;
     piece->raster_masks = dt_pixelpipe_raster_alloc();
-    memset(&piece->processed_roi_in, 0, sizeof(piece->processed_roi_in));
-    memset(&piece->processed_roi_out, 0, sizeof(piece->processed_roi_out));
+    memset(&piece->planned_roi_in, 0, sizeof(piece->planned_roi_in));
+    memset(&piece->planned_roi_out, 0, sizeof(piece->planned_roi_out));
 
     // dsc_mask is static, single channel float image
     memset(&piece->dsc_mask, 0, sizeof(piece->dsc_mask));
@@ -1530,10 +1530,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // 3) now recurse through the pipeline.
   dt_iop_buffer_dsc_t _input_format = { 0 };
   dt_iop_buffer_dsc_t *input_format = &_input_format;
-
   piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
-  piece->processed_roi_in = roi_in;
-  piece->processed_roi_out = roi_out;
 
   if(dt_dev_pixelpipe_process_rec(pipe, dev, &input, &cl_mem_input, &input_format, roi_in,
                                   g_list_previous(modules), g_list_previous(pieces), pos - 1))
@@ -2250,11 +2247,11 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
       {
         if(module->module->distort_mask
           && !(!strcmp(module->module->op, "finalscale") // hack against pipes not using finalscale
-                && module->processed_roi_in.width == 0
-                && module->processed_roi_in.height == 0))
+                && module->planned_roi_in.width == 0
+                && module->planned_roi_in.height == 0))
         {
-          float *transformed_mask = dt_alloc_align_float((size_t)module->processed_roi_out.width
-                                                          * module->processed_roi_out.height);
+          float *transformed_mask = dt_alloc_align_float((size_t)module->planned_roi_out.width
+                                                          * module->planned_roi_out.height);
           if(!transformed_mask)
           {
             fprintf(stderr, "[raster masks] could not allocate memory for transformed mask\n");
@@ -2268,23 +2265,23 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
                                       module,
                                       raster_mask,
                                       transformed_mask,
-                                      &module->processed_roi_in,
-                                      &module->processed_roi_out);
+                                      &module->planned_roi_in,
+                                      &module->planned_roi_out);
           if(*free_mask) dt_free_align(raster_mask);
           *free_mask = TRUE;
           raster_mask = transformed_mask;
           dt_print(DT_DEBUG_MASKS, "[raster masks] doing transform\n");
         }
         else if(!module->module->distort_mask &&
-                (module->processed_roi_in.width != module->processed_roi_out.width ||
-                  module->processed_roi_in.height != module->processed_roi_out.height ||
-                  module->processed_roi_in.x != module->processed_roi_out.x ||
-                  module->processed_roi_in.y != module->processed_roi_out.y))
+                (module->planned_roi_in.width != module->planned_roi_out.width ||
+                  module->planned_roi_in.height != module->planned_roi_out.height ||
+                  module->planned_roi_in.x != module->planned_roi_out.x ||
+                  module->planned_roi_in.y != module->planned_roi_out.y))
           fprintf(stderr, "FIXME: module `%s' changed the roi from %d x %d @ %d / %d to %d x %d | %d / %d but doesn't have "
-                  "distort_mask() implemented!\n", module->module->op, module->processed_roi_in.width,
-                  module->processed_roi_in.height, module->processed_roi_in.x, module->processed_roi_in.y,
-                  module->processed_roi_out.width, module->processed_roi_out.height, module->processed_roi_out.x,
-                  module->processed_roi_out.y);
+                  "distort_mask() implemented!\n", module->module->op, module->planned_roi_in.width,
+                  module->planned_roi_in.height, module->planned_roi_in.x, module->planned_roi_in.y,
+                  module->planned_roi_out.width, module->planned_roi_out.height, module->planned_roi_out.x,
+                  module->planned_roi_out.y);
       }
 
       if(module->module == target_module)
@@ -2473,26 +2470,26 @@ float *dt_dev_distort_detail_mask(const dt_dev_pixelpipe_t *pipe, float *src, co
       {
         if(module->module->distort_mask
               && !(!strcmp(module->module->op, "finalscale") // hack against pipes not using finalscale
-                    && module->processed_roi_in.width == 0
-                    && module->processed_roi_in.height == 0))
+                    && module->planned_roi_in.width == 0
+                    && module->planned_roi_in.height == 0))
         {
-          float *tmp = dt_alloc_align_float((size_t)module->processed_roi_out.width * module->processed_roi_out.height);
-          dt_vprint(DT_DEBUG_MASKS, "   %s %ix%i -> %ix%i\n", module->module->op, module->processed_roi_in.width, module->processed_roi_in.height, module->processed_roi_out.width, module->processed_roi_out.height);
-          module->module->distort_mask(module->module, module, inmask, tmp, &module->processed_roi_in, &module->processed_roi_out);
+          float *tmp = dt_alloc_align_float((size_t)module->planned_roi_out.width * module->planned_roi_out.height);
+          dt_vprint(DT_DEBUG_MASKS, "   %s %ix%i -> %ix%i\n", module->module->op, module->planned_roi_in.width, module->planned_roi_in.height, module->planned_roi_out.width, module->planned_roi_out.height);
+          module->module->distort_mask(module->module, module, inmask, tmp, &module->planned_roi_in, &module->planned_roi_out);
           resmask = tmp;
           if(inmask != src) dt_free_align(inmask);
           inmask = tmp;
         }
         else if(!module->module->distort_mask &&
-                (module->processed_roi_in.width != module->processed_roi_out.width ||
-                 module->processed_roi_in.height != module->processed_roi_out.height ||
-                 module->processed_roi_in.x != module->processed_roi_out.x ||
-                 module->processed_roi_in.y != module->processed_roi_out.y))
+                (module->planned_roi_in.width != module->planned_roi_out.width ||
+                 module->planned_roi_in.height != module->planned_roi_out.height ||
+                 module->planned_roi_in.x != module->planned_roi_out.x ||
+                 module->planned_roi_in.y != module->planned_roi_out.y))
               fprintf(stderr, "FIXME: module `%s' changed the roi from %d x %d @ %d / %d to %d x %d | %d / %d but doesn't have "
-                 "distort_mask() implemented!\n", module->module->op, module->processed_roi_in.width,
-                 module->processed_roi_in.height, module->processed_roi_in.x, module->processed_roi_in.y,
-                 module->processed_roi_out.width, module->processed_roi_out.height, module->processed_roi_out.x,
-                 module->processed_roi_out.y);
+                 "distort_mask() implemented!\n", module->module->op, module->planned_roi_in.width,
+                 module->planned_roi_in.height, module->planned_roi_in.x, module->planned_roi_in.y,
+                 module->planned_roi_out.width, module->planned_roi_out.height, module->planned_roi_out.x,
+                 module->planned_roi_out.y);
 
         if(module->module == target_module) break;
       }
