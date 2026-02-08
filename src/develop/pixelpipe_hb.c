@@ -877,13 +877,25 @@ static int _is_opencl_supported(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t
   return dt_opencl_is_inited() && piece->process_cl_ready && module->process_cl;
 }
 
-static int _resync_input_gpu_to_cache(dt_dev_pixelpipe_t *pipe, float *input, void *cl_mem_input,
-                                      dt_iop_buffer_dsc_t *input_format, const dt_iop_roi_t *roi_in,
-                                      dt_iop_module_t *module, dt_iop_colorspace_type_t input_cst_cl,
-                                      const size_t in_bpp, dt_pixel_cache_entry_t *input_entry,
-                                      const char *message)
+static float *_resync_input_gpu_to_cache(dt_dev_pixelpipe_t *pipe, float *input, void *cl_mem_input,
+                                         dt_iop_buffer_dsc_t *input_format, const dt_iop_roi_t *roi_in,
+                                         dt_iop_module_t *module, dt_iop_colorspace_type_t input_cst_cl,
+                                         const size_t in_bpp, dt_pixel_cache_entry_t *input_entry,
+                                         const char *message)
 {
+  if(!cl_mem_input) return input;
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
+
+  // Ensure it's allocated before attempting copy
+  if(!input) 
+    input = dt_pixel_cache_alloc(darktable.pixelpipe_cache, input_entry);
+
+  if(!input)
+  {
+    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
+    return input;
+  }
+
   int fail = _cl_pinned_memory_copy(pipe->devid, input, cl_mem_input, roi_in, CL_MAP_READ, in_bpp, module,
                                     message);
 
@@ -895,7 +907,7 @@ static int _resync_input_gpu_to_cache(dt_dev_pixelpipe_t *pipe, float *input, vo
   dt_opencl_events_wait_for(pipe->devid);
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
 
-  return fail;
+  return input;
 }
 
 
@@ -1019,9 +1031,9 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     {
       // If process_cl() failed, we will fallback to CPU path, but we have no guaranty that our
       // input is in cache. Force resync just to be safe.
-      _resync_input_gpu_to_cache(pipe, input, cl_mem_input, input_format, roi_in,
-                                 module, input_cst_cl, in_bpp, input_entry,
-                                 "fallback input copy to cache");
+      input = _resync_input_gpu_to_cache(pipe, input, cl_mem_input, input_format, roi_in,
+                                         module, input_cst_cl, in_bpp, input_entry,
+                                         "fallback input copy to cache");
       goto error;
     }
 
@@ -1055,9 +1067,9 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     {
       // If process_cl() failed, we will fallback to CPU path, but we have no guaranty that our
       // input is in cache. Force resync just to be safe.
-      _resync_input_gpu_to_cache(pipe, input, cl_mem_input, input_format, roi_in,
-                                 module, input_cst_cl, in_bpp, input_entry,
-                                 "fallback input copy to cache");
+      input = _resync_input_gpu_to_cache(pipe, input, cl_mem_input, input_format, roi_in,
+                                         module, input_cst_cl, in_bpp, input_entry,
+                                         "fallback input copy to cache");
       goto error;
     }
 
