@@ -361,9 +361,6 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       dt_pthread_mutex_lock(&pipe->busy_mutex);
       pipe->processing = 1;
 
-      dt_times_t thread_start;
-      dt_get_times(&thread_start);
-
       // We are starting fresh, reset the killswitch signal
       dt_atomic_set_int(&pipe->shutdown, FALSE);
 
@@ -402,34 +399,26 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       // Signal that we are starting
       pipe->status = DT_DEV_PIXELPIPE_UNDEF;
 
-      // Update ROI and hashes ASAP because GUI need them.
       dt_iop_roi_t roi = (dt_iop_roi_t){ x, y, wd, ht, scale };
-      dt_dev_pixelpipe_get_roi_in(pipe, dev, roi);
-      dt_pixelpipe_get_global_hash(pipe, dev);
 
-      int ret = 0;
+      dt_control_log_busy_enter();
+      dt_control_toast_busy_enter();
 
-      // Only if pipeline has changed
-      if(pipe->hash != pipe->backbuf.hash)
-      {
-        // Flag backbuf as invalid
-        dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, pipe->backbuf.hash);
-        pipe->backbuf.hash = -1;
+      dt_times_t thread_start;
+      dt_get_times(&thread_start);
 
-        dt_control_log_busy_enter();
-        dt_control_toast_busy_enter();
+      dev->progress.completed = 0;
+      dev->progress.total = 0;
+      int ret = dt_dev_pixelpipe_process(pipe, dev, roi);
+      dev->progress.completed = 0;
+      dev->progress.total = 0;
 
-        dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
-        dev->progress.completed = 0;
-        dev->progress.total = 0;
-        ret = dt_dev_pixelpipe_process(pipe, dev, roi);
-        dev->progress.completed = 0;
-        dev->progress.total = 0;
-        dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
+      gchar *msg = g_strdup_printf("[dev_process_%s] pipeline processing thread", dt_pixelpipe_get_pipe_name(pipe->type));
+      dt_show_times(&thread_start, msg);
+      g_free(msg);
 
-        dt_control_log_busy_leave();
-        dt_control_toast_busy_leave();
-      }
+      dt_control_log_busy_leave();
+      dt_control_toast_busy_leave();
 
       // If pipe is flagged for re-entry, we need to restart it right away
       if(dt_dev_pixelpipe_has_reentry(pipe))
@@ -443,9 +432,6 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       }
 
       pipe->processing = 0;
-      gchar *msg = g_strdup_printf("[pixelpipe] %s pipeline thread", dt_pixelpipe_get_pipe_name(pipe->type));
-      dt_show_times(&thread_start, msg);
-      g_free(msg);
 
       dt_pthread_mutex_unlock(&pipe->busy_mutex);
 

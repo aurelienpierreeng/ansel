@@ -78,19 +78,19 @@ char *dt_pixelpipe_get_pipe_name(dt_dev_pixelpipe_type_t pipe_type)
   switch(pipe_type)
   {
     case DT_DEV_PIXELPIPE_PREVIEW:
-      r = _("PREVIEW");
+      r = _("preview");
       break;
     case DT_DEV_PIXELPIPE_FULL:
-      r = _("FULL");
+      r = _("full");
       break;
     case DT_DEV_PIXELPIPE_THUMBNAIL:
-      r = _("THUMBNAIL");
+      r = _("thumbnail");
       break;
     case DT_DEV_PIXELPIPE_EXPORT:
-      r = _("EXPORT");
+      r = _("export");
       break;
     default:
-      r = _("UNKNOWN");
+      r = _("invalid");
   }
   return r;
 }
@@ -1930,6 +1930,8 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
 
   // Get the roi_out hash of all nodes.
   // Get the previous output size of the module, for cache invalidation.
+  dt_dev_pixelpipe_get_roi_in(pipe, dev, roi);
+  dt_pixelpipe_get_global_hash(pipe, dev);
   const guint pos = g_list_length(pipe->iop);
   _set_opencl_cache(pipe, dev);
 
@@ -1951,6 +1953,10 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
 
     return 0;
   }
+
+  // Flag backbuf as invalid
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, pipe->backbuf.hash);
+  pipe->backbuf.hash = -1;
 
   dt_print(DT_DEBUG_DEV, "[pixelpipe] Started %s pipeline recompute at %i×%i px\n", 
            dt_pixelpipe_get_pipe_name(pipe->type), roi.width, roi.height);
@@ -1994,12 +2000,21 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
 
     KILL_SWITCH_PIPE
 
+    // Because it's possible here that we export at full resolution,
+    // and our memory planning doesn't account for several concurrent pipelines
+    // at full size, we allow only one pipeline at a time to run.
+    // This is because wavelets decompositions and such use 6 copies,
+    // so the RAM usage can go out of control here.
+    dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
+
     dt_times_t start;
     dt_get_times(&start);
     err = dt_dev_pixelpipe_process_rec(pipe, dev, &buf, &cl_mem_out, &out_format, roi, modules, pieces, pos);
-    gchar *msg = g_strdup_printf("[pixelpipe] %s pipeline processing", dt_pixelpipe_get_pipe_name(pipe->type));
+    gchar *msg = g_strdup_printf("[pixelpipe] %s internal pixel pipeline processing", dt_pixelpipe_get_pipe_name(pipe->type));
     dt_show_times(&start, msg);
     g_free(msg);
+    
+    dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
 
     // The pipeline has copied cl_mem_out into buf, so we can release it now.
   #ifdef HAVE_OPENCL

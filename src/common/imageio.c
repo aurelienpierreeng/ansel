@@ -1020,24 +1020,13 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   const int bpp = format->bpp(format_params);
 
   dt_iop_roi_t roi = (dt_iop_roi_t){ 0, 0, processed_width, processed_height, scale };
-  dt_dev_pixelpipe_get_roi_in(&pipe, &dev, roi);
-  dt_pixelpipe_get_global_hash(&pipe, &dev);
 
   dt_get_times(&start);
+  int err = dt_dev_pixelpipe_process(&pipe, &dev, roi);
+  dt_show_times(&start, thumbnail_export ? "[dev_process_thumbnail] pixel pipeline processing thread"
+                                         : "[dev_process_export] pixel pipeline processing thread");
 
-  // Because it's possible here that we export at full resolution,
-  // and our memory planning doesn't account for several concurrent pipelines
-  // at full size, we allow only one pipeline at a time to run.
-  // This is because wavelets decompositions and such use 6 copies,
-  // so the RAM usage can go out of control here.
-  dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
-  dt_dev_pixelpipe_process(&pipe, &dev, roi);
-  dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
-
-  dt_show_times(&start, thumbnail_export ? "[dev_process_thumbnail] pixel pipeline processing"
-                                         : "[dev_process_export] pixel pipeline processing");
-
-  if(pipe.backbuf.hash == -1)
+  if(pipe.backbuf.hash == -1 || err)
   {
     dt_print(DT_DEBUG_IMAGEIO, "[dt_imageio_export_with_flags] no valid output buffer\n");
     goto error;
