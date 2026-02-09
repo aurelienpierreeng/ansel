@@ -22,6 +22,7 @@
 #include "common/darktable.h"
 #include "common/histogram.h"
 #include "common/imageio.h"
+#include "common/atomic.h"
 #include "common/opencl.h"
 #include "common/iop_order.h"
 #include "control/control.h"
@@ -31,6 +32,7 @@
 #include "develop/format.h"
 #include "develop/imageop_math.h"
 #include "develop/pixelpipe.h"
+#include "develop/pixelpipe_cache.h"
 #include "develop/tiling.h"
 #include "develop/masks.h"
 #include "gui/gtk.h"
@@ -638,13 +640,24 @@ static void collect_histogram_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
   return;
 }
 
+#ifdef HAVE_OPENCL
+static void _gpu_clear_buffer(void **cl_mem_buffer, dt_pixel_cache_entry_t *cache_entry, void *host_ptr, int cst);
+#else
+static inline void _gpu_clear_buffer(void **cl_mem_buffer, dt_pixel_cache_entry_t *cache_entry, void *host_ptr, int cst)
+{
+  (void)cache_entry;
+  (void)host_ptr;
+  (void)cst;
+  if(cl_mem_buffer) *cl_mem_buffer = NULL;
+}
+#endif
+
 #define KILL_SWITCH_ABORT                                                                                         \
   if(dt_atomic_get_int(&pipe->shutdown))                                                                          \
   {                                                                                                               \
     if(*cl_mem_output != NULL)                                                                                    \
     {                                                                                                             \
-      dt_opencl_release_mem_object(*cl_mem_output);                                                               \
-      *cl_mem_output = NULL;                                                                                      \
+      _gpu_clear_buffer(cl_mem_output, NULL, NULL, IOP_CS_NONE);                                                   \
     }                                                                                                             \
     dt_iop_nap(5000);                                                                                             \
     pipe->status = DT_DEV_PIXELPIPE_DIRTY;                                                                        \
@@ -660,8 +673,7 @@ static void collect_histogram_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
     *output = NULL;                                                                                               \
     if(*cl_mem_output != NULL)                                                                                    \
     {                                                                                                             \
-      dt_opencl_release_mem_object(*cl_mem_output);                                                               \
-      *cl_mem_output = NULL;                                                                                      \
+      _gpu_clear_buffer(cl_mem_output, NULL, NULL, IOP_CS_NONE);                                                   \
     }                                                                                                             \
     dt_iop_nap(5000);                                                                                             \
     pipe->status = DT_DEV_PIXELPIPE_DIRTY;                                                                        \
@@ -778,32 +790,109 @@ static void _sample_color_picker(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, fl
 
 // if host_ptr is NULL, we use an unpinned device buffer
 static void *_gpu_init_buffer(int devid, void *const host_ptr, const dt_iop_roi_t *roi, const size_t bpp,
-                              dt_iop_module_t *module, const char *message)
+                              dt_iop_module_t *module, const char *message,
+                              dt_pixel_cache_entry_t *cache_entry, const gboolean reuse_pinned,
+                              int *out_cst, gboolean *out_reused)
 {
   // Need to use read-write mode because of in-place color space conversions
   void *cl_mem_input = NULL;
+  gboolean reused_from_cache = FALSE;
+  int cached_cst = -1;
+  static dt_atomic_int clmem_reuse_hits;
+  static dt_atomic_int clmem_reuse_misses;
+
+  if(out_reused) *out_reused = FALSE;
   
   if(host_ptr)
-    cl_mem_input = dt_opencl_alloc_device_use_host_pointer(devid, roi->width, roi->height, bpp, host_ptr,
-                                                               CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR);
+  {
+    const int flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
+    if(reuse_pinned && cache_entry)
+    {
+      cl_mem_input = dt_pixel_cache_clmem_get(cache_entry, host_ptr, devid, roi->width, roi->height, (int)bpp, flags,
+                                              &cached_cst);
+      if(cl_mem_input && cached_cst >= 0)
+      {
+        reused_from_cache = TRUE;
+        if(out_cst) *out_cst = cached_cst;
+      }
+    }
+    if(!cl_mem_input)
+      cl_mem_input = dt_opencl_alloc_device_use_host_pointer(devid, roi->width, roi->height, bpp, host_ptr, flags);
+    if(!cl_mem_input)
+    {
+      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
+      if(reuse_pinned && cache_entry)
+      {
+        cached_cst = -1;
+        cl_mem_input = dt_pixel_cache_clmem_get(cache_entry, host_ptr, devid, roi->width, roi->height, (int)bpp, flags,
+                                                &cached_cst);
+        if(cl_mem_input && cached_cst >= 0)
+        {
+          reused_from_cache = TRUE;
+          if(out_cst) *out_cst = cached_cst;
+        }
+      }
+      if(!cl_mem_input)
+        cl_mem_input = dt_opencl_alloc_device_use_host_pointer(devid, roi->width, roi->height, bpp, host_ptr, flags);
+    }
+  }
   else
+  {
     cl_mem_input = dt_opencl_alloc_device(devid, roi->width, roi->height, bpp);
+    if(!cl_mem_input)
+    {
+      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
+      cl_mem_input = dt_opencl_alloc_device(devid, roi->width, roi->height, bpp);
+    }
+  }
 
   if(cl_mem_input == NULL)
   {
     dt_print(DT_DEBUG_OPENCL, "[opencl_pixelpipe] couldn't generate %s buffer for module %s\n", message,
-             module->op);
+             module ? module->op : "unknown");
+  }
+  else if(reuse_pinned && cache_entry && host_ptr)
+  {
+    if(reused_from_cache)
+    {
+      const int hits = dt_atomic_add_int(&clmem_reuse_hits, 1) + 1;
+      const int misses = dt_atomic_get_int(&clmem_reuse_misses);
+      if(out_reused) *out_reused = TRUE;
+      dt_print(DT_DEBUG_OPENCL,
+               "[opencl_pixelpipe] %s reused pinned input from cache (hits=%d, misses=%d)\n",
+               module ? module->name() : "unknown", hits, misses);
+    }
+    else
+    {
+      (void)dt_atomic_add_int(&clmem_reuse_misses, 1);
+    }
   }
 
   return cl_mem_input;
 }
 
 
-static void _gpu_clear_buffer(void **cl_mem_buffer)
+static void _gpu_clear_buffer(void **cl_mem_buffer, dt_pixel_cache_entry_t *cache_entry, void *host_ptr, int cst)
 {
   if(*cl_mem_buffer != NULL)
   {
-    dt_opencl_release_mem_object(*cl_mem_buffer);
+    cl_mem mem = *cl_mem_buffer;
+    const cl_mem_flags flags = dt_opencl_get_mem_flags(mem);
+    if(cache_entry && host_ptr && (flags & CL_MEM_USE_HOST_PTR))
+    {
+      const int devid = dt_opencl_get_mem_context_id(mem);
+      const int width = dt_opencl_get_image_width(mem);
+      const int height = dt_opencl_get_image_height(mem);
+      const int bpp = dt_opencl_get_image_element_size(mem);
+      if(devid >= 0 && width > 0 && height > 0 && bpp > 0)
+      {
+        dt_opencl_events_wait_for(devid);
+        dt_pixel_cache_clmem_put(cache_entry, host_ptr, devid, width, height, bpp, (int)flags, cst, mem);
+        *cl_mem_buffer = NULL;
+        return;
+      }
+    }
+    dt_opencl_release_mem_object(mem);
     *cl_mem_buffer = NULL;
   }
 }
@@ -938,9 +1027,19 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
 
   const float required_factor_cl = fmaxf(1.0f, (cl_mem_input != NULL) ? tiling->factor_cl - 1.0f : tiling->factor_cl);
   /* pre-check if there is enough space on device for non-tiled processing */
-  const gboolean fits_on_device = dt_opencl_image_fits_device(pipe->devid, MAX(roi_in->width, roi_out->width),
-                                                              MAX(roi_in->height, roi_out->height), MAX(in_bpp, bpp),
-                                                              required_factor_cl, tiling->overhead);
+  gboolean fits_on_device = dt_opencl_image_fits_device(pipe->devid, MAX(roi_in->width, roi_out->width),
+                                                        MAX(roi_in->height, roi_out->height), MAX(in_bpp, bpp),
+                                                        required_factor_cl, tiling->overhead);
+  if(!fits_on_device)
+  {
+    dt_print(DT_DEBUG_OPENCL,
+             "[dev_pixelpipe] %s pre-check didn't fit on device, flushing cached pinned buffers and retrying\n",
+             module->name());
+    dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, pipe->devid);
+    fits_on_device = dt_opencl_image_fits_device(pipe->devid, MAX(roi_in->width, roi_out->width),
+                                                 MAX(roi_in->height, roi_out->height), MAX(in_bpp, bpp),
+                                                 required_factor_cl, tiling->overhead);
+  }
 
   /* general remark: in case of opencl errors within modules or out-of-memory on GPU, we transparently
       fall back to the respective cpu module and continue in pixelpipe. If we encounter errors we set
@@ -989,12 +1088,17 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     if(cl_mem_input == NULL)
     {
       dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
-      cl_mem_input = _gpu_init_buffer(pipe->devid, input, roi_in, in_bpp, module, "input");
+      gboolean input_reused_from_cache = FALSE;
+      cl_mem_input = _gpu_init_buffer(pipe->devid, input, roi_in, in_bpp, module, "input", input_entry, TRUE,
+                                      &input_cst_cl, &input_reused_from_cache);
       int fail = (cl_mem_input == NULL);
 
-      if(!fail && _cl_pinned_memory_copy(pipe->devid, input, cl_mem_input, roi_in, CL_MAP_WRITE, in_bpp, module,
-                                "cache to input"))
-        fail = TRUE;
+      if(!fail && (!input_reused_from_cache || input_cst_cl == IOP_CS_NONE))
+      {
+        if(_cl_pinned_memory_copy(pipe->devid, input, cl_mem_input, roi_in, CL_MAP_WRITE, in_bpp, module,
+                                  "cache to input"))
+          fail = TRUE;
+      }
 
       // We need to enforce the OpenCL pipe to run in sync with CPU RAM cache
       // to ensure the validity of the locks
@@ -1013,7 +1117,8 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     {
       // Note : *output will be NULL unless piece->force_opencl_cache is TRUE
       // In this case, we start a pinned memory alloc. If NULL, it's device alloc.
-      *cl_mem_output = _gpu_init_buffer(pipe->devid, *output, roi_out, bpp, module, "output");
+      *cl_mem_output = _gpu_init_buffer(pipe->devid, *output, roi_out, bpp, module, "output", output_entry, FALSE,
+                                        NULL, NULL);
       if(*cl_mem_output == NULL) goto error;
     }
 
@@ -1100,7 +1205,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   else if(piece->process_tiling_ready)
   {
     /* image is too big for direct opencl processing -> try to process image via tiling */
-    _gpu_clear_buffer(&cl_mem_input);
+    _gpu_clear_buffer(&cl_mem_input, input_entry, input, input_cst_cl);
 
     // transform to module input colorspace
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
@@ -1173,7 +1278,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   // if (rand() % 20 == 0) success_opencl = FALSE; // Test code: simulate spurious failures
 
   // clean up OpenCL input memory and resync pipeline
-  _gpu_clear_buffer(&cl_mem_input);
+  _gpu_clear_buffer(&cl_mem_input, input_entry, input, input_cst_cl);
 
   // Wait for kernels and copies to complete before accessing the cache again and releasing the locks
   dt_opencl_events_wait_for(pipe->devid);
@@ -1187,8 +1292,8 @@ error:;
   // don't delete RAM output even if requested
   piece->force_opencl_cache = TRUE; 
 
-  _gpu_clear_buffer(cl_mem_output);
-  _gpu_clear_buffer(&cl_mem_input);
+  _gpu_clear_buffer(cl_mem_output, NULL, NULL, IOP_CS_NONE);
+  _gpu_clear_buffer(&cl_mem_input, input_entry, input, IOP_CS_NONE);
   dt_opencl_finish(pipe->devid);
 
   // Ensure the data buffer of the output cache is allocated
@@ -1377,7 +1482,8 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
 
         if(supports_opencl)
         {
-          *cl_mem_output = _gpu_init_buffer(pipe->devid, *output, &roi_out, bpp, NULL, "base buffer");
+          *cl_mem_output = _gpu_init_buffer(pipe->devid, *output, &roi_out, bpp, NULL, "base buffer", cache_entry, FALSE,
+                                            NULL, NULL);
           int fail = (*cl_mem_output == NULL);
 
           if(!fail)
@@ -1388,7 +1494,7 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
           // we use a read lock on the cache that lives in the CPU timeline.
           dt_opencl_events_wait_for(pipe->devid);
           
-          if(fail) _gpu_clear_buffer(cl_mem_output);
+          if(fail) _gpu_clear_buffer(cl_mem_output, NULL, NULL, IOP_CS_NONE);
         }
 #endif
       }
@@ -2043,7 +2149,9 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
 
     // The pipeline has copied cl_mem_out into buf, so we can release it now.
   #ifdef HAVE_OPENCL
-    _gpu_clear_buffer(&cl_mem_out);
+    dt_pixel_cache_entry_t *out_entry = NULL;
+    if(buf) dt_dev_pixelpipe_cache_get_hash_data(darktable.pixelpipe_cache, buf, &out_entry);
+    _gpu_clear_buffer(&cl_mem_out, NULL, NULL, IOP_CS_NONE);
   #endif
 
     // get status summary of opencl queue by checking the eventlist

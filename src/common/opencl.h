@@ -431,6 +431,7 @@ int dt_opencl_get_image_height(cl_mem mem);
 int dt_opencl_get_image_element_size(cl_mem mem);
 
 int dt_opencl_get_mem_context_id(cl_mem mem);
+cl_mem_flags dt_opencl_get_mem_flags(cl_mem mem);
 
 void dt_opencl_memory_statistics(int devid, cl_mem mem, dt_opencl_memory_t action);
 
@@ -595,6 +596,10 @@ static inline void dt_opencl_check_tuning(const int devid)
   return;
 }
 static inline size_t dt_opencl_get_device_memalloc(const int devid)
+{
+  return 0;
+}
+static inline unsigned long dt_opencl_get_mem_flags(void *mem)
 {
   return 0;
 }

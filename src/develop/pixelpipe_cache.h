@@ -120,6 +120,13 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
                                const char *name, const int id, void **data, struct dt_iop_buffer_dsc_t **dsc,
                                struct dt_pixel_cache_entry_t **entry, const gboolean alloc);
 
+/** OpenCL pinned buffer reuse tied to cache entries. */
+void *dt_pixel_cache_clmem_get(struct dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
+                               int width, int height, int bpp, int flags, int *out_cst);
+void dt_pixel_cache_clmem_put(struct dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
+                              int width, int height, int bpp, int flags, int cst, void *mem);
+void dt_pixel_cache_clmem_flush(struct dt_pixel_cache_entry_t *entry);
+
                     
 /**
  * @brief Actually allocate the memory buffer attached to the cache entry once you create it with
@@ -178,6 +185,9 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
  * @param id ID of the pipeline owning the cache line, or -1 to remove all lines.
  */
 void dt_dev_pixelpipe_cache_flush(dt_dev_pixelpipe_cache_t *cache, const int id);
+
+/** Release cached OpenCL pinned buffers for a device (-1 for all). */
+void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid);
 
 
 /**

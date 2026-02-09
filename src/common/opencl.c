@@ -36,6 +36,7 @@
 #include "control/control.h"
 #include "develop/blend.h"
 #include "develop/pixelpipe.h"
+#include "develop/pixelpipe_cache.h"
 
 #include <assert.h>
 #include <locale.h>
@@ -2643,13 +2644,28 @@ void *dt_opencl_alloc_device(const int devid, const int width, const int height,
   else
     return NULL;
 
-  cl_mem dev = (darktable.opencl->dlocl->symbols->dt_clCreateImage2D)(
-      darktable.opencl->dev[devid].context, CL_MEM_READ_WRITE, &fmt, width, height, 0, NULL, &err);
+  cl_mem dev = NULL;
+  for(int attempt = 0; attempt < 2; attempt++)
+  {
+    dev = (darktable.opencl->dlocl->symbols->dt_clCreateImage2D)(
+        darktable.opencl->dev[devid].context, CL_MEM_READ_WRITE, &fmt, width, height, 0, NULL, &err);
+    if(err == CL_SUCCESS) break;
+    if(attempt == 0 && (err == CL_MEM_OBJECT_ALLOCATION_FAILURE || err == CL_OUT_OF_RESOURCES))
+    {
+      dt_print(DT_DEBUG_OPENCL,
+               "[opencl alloc_device] out of memory on device %d, flushing cached pinned buffers and retrying\n",
+               devid);
+      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
+      continue;
+    }
+    break;
+  }
+
   if(err != CL_SUCCESS)
     dt_print(DT_DEBUG_OPENCL, "[opencl alloc_device] could not alloc img buffer on device %d: %i\n", devid,
              err);
 
-  dt_opencl_memory_statistics(devid, dev, OPENCL_MEMORY_ADD);
+  if(err == CL_SUCCESS) dt_opencl_memory_statistics(devid, dev, OPENCL_MEMORY_ADD);
 
   return dev;
 }
@@ -2671,15 +2687,29 @@ void *dt_opencl_alloc_device_use_host_pointer(const int devid, const int width, 
   else
     return NULL;
 
-  cl_mem dev = (darktable.opencl->dlocl->symbols->dt_clCreateImage2D)(
-      darktable.opencl->dev[devid].context, flags, &fmt, width, height, 0,
-      host, &err);
+  cl_mem dev = NULL;
+  for(int attempt = 0; attempt < 2; attempt++)
+  {
+    dev = (darktable.opencl->dlocl->symbols->dt_clCreateImage2D)(
+        darktable.opencl->dev[devid].context, flags, &fmt, width, height, 0,
+        host, &err);
+    if(err == CL_SUCCESS) break;
+    if(attempt == 0 && (err == CL_MEM_OBJECT_ALLOCATION_FAILURE || err == CL_OUT_OF_RESOURCES))
+    {
+      dt_print(DT_DEBUG_OPENCL,
+               "[opencl alloc_device_use_host_pointer] out of memory on device %d, flushing cached pinned buffers and retrying\n",
+               devid);
+      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
+      continue;
+    }
+    break;
+  }
   if(err != CL_SUCCESS)
     dt_print(DT_DEBUG_OPENCL,
              "[opencl alloc_device_use_host_pointer] could not alloc img buffer on device %d: %i\n", devid,
              err);
 
-  dt_opencl_memory_statistics(devid, dev, OPENCL_MEMORY_ADD);
+  if(err == CL_SUCCESS) dt_opencl_memory_statistics(devid, dev, OPENCL_MEMORY_ADD);
 
   return dev;
 }
@@ -2688,14 +2718,27 @@ void *dt_opencl_alloc_device_buffer_with_flags(const int devid, const size_t siz
 {
   if(!darktable.opencl->inited) return NULL;
   cl_int err;
-
-  cl_mem buf = (darktable.opencl->dlocl->symbols->dt_clCreateBuffer)(darktable.opencl->dev[devid].context,
-                                                                     flags, size, NULL, &err);
+  cl_mem buf = NULL;
+  for(int attempt = 0; attempt < 2; attempt++)
+  {
+    buf = (darktable.opencl->dlocl->symbols->dt_clCreateBuffer)(darktable.opencl->dev[devid].context,
+                                                               flags, size, NULL, &err);
+    if(err == CL_SUCCESS) break;
+    if(attempt == 0 && (err == CL_MEM_OBJECT_ALLOCATION_FAILURE || err == CL_OUT_OF_RESOURCES))
+    {
+      dt_print(DT_DEBUG_OPENCL,
+               "[opencl alloc_device_buffer] out of memory on device %d, flushing cached pinned buffers and retrying\n",
+               devid);
+      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
+      continue;
+    }
+    break;
+  }
   if(err != CL_SUCCESS)
     dt_print(DT_DEBUG_OPENCL, "[opencl alloc_device_buffer] could not alloc buffer on device %d: %d\n", devid,
              err);
 
-  dt_opencl_memory_statistics(devid, buf, OPENCL_MEMORY_ADD);
+  if(err == CL_SUCCESS) dt_opencl_memory_statistics(devid, buf, OPENCL_MEMORY_ADD);
 
   return buf;
 }
@@ -2735,6 +2778,15 @@ int dt_opencl_get_mem_context_id(cl_mem mem)
   return -1;
 }
 
+cl_mem_flags dt_opencl_get_mem_flags(cl_mem mem)
+{
+  if(!darktable.opencl->inited || mem == NULL) return 0;
+  cl_mem_flags flags = 0;
+  cl_int err = (darktable.opencl->dlocl->symbols->dt_clGetMemObjectInfo)(mem, CL_MEM_FLAGS, sizeof(flags), &flags, NULL);
+  if(err != CL_SUCCESS) return 0;
+  return flags;
+}
+
 int dt_opencl_get_image_width(cl_mem mem)
 {
   size_t size;
@@ -2771,24 +2823,25 @@ int dt_opencl_get_image_element_size(cl_mem mem)
 
 void dt_opencl_memory_statistics(int devid, cl_mem mem, dt_opencl_memory_t action)
 {
-  if(!((darktable.unmuted & DT_DEBUG_MEMORY) && (darktable.unmuted & DT_DEBUG_OPENCL)))
-    return;
-
   if(devid < 0)
     devid = dt_opencl_get_mem_context_id(mem);
 
   if(devid < 0)
     return;
 
+  const size_t size = dt_opencl_get_mem_object_size(mem);
   if(action == OPENCL_MEMORY_ADD)
-    darktable.opencl->dev[devid].memory_in_use += dt_opencl_get_mem_object_size(mem);
+    darktable.opencl->dev[devid].memory_in_use += size;
   else
-    darktable.opencl->dev[devid].memory_in_use -= dt_opencl_get_mem_object_size(mem);
+    darktable.opencl->dev[devid].memory_in_use =
+      (darktable.opencl->dev[devid].memory_in_use > size)
+        ? (darktable.opencl->dev[devid].memory_in_use - size)
+        : 0;
 
   darktable.opencl->dev[devid].peak_memory = MAX(darktable.opencl->dev[devid].peak_memory,
                                                  darktable.opencl->dev[devid].memory_in_use);
 
-  if(darktable.unmuted & DT_DEBUG_MEMORY)
+  if((darktable.unmuted & DT_DEBUG_MEMORY) && (darktable.unmuted & DT_DEBUG_OPENCL))
     dt_print(DT_DEBUG_OPENCL,
               "[opencl memory] device %d: %zu bytes (%.1f MB) in use\n", devid, darktable.opencl->dev[devid].memory_in_use,
                                       (float)darktable.opencl->dev[devid].memory_in_use/(1024*1024));
@@ -2813,7 +2866,9 @@ void dt_opencl_check_tuning(const int devid)
 cl_ulong dt_opencl_get_device_available(const int devid)
 {
   if(!darktable.opencl->inited || devid < 0) return 0;
-  return darktable.opencl->dev[devid].used_available;
+  const cl_ulong limit = darktable.opencl->dev[devid].used_available;
+  const size_t in_use = darktable.opencl->dev[devid].memory_in_use;
+  return (limit > in_use) ? (limit - in_use) : 0;
 }
 
 static cl_ulong _opencl_get_device_memalloc(const int devid)
@@ -2834,17 +2889,21 @@ gboolean dt_opencl_image_fits_device(const int devid, const size_t width, const 
   if(!cl->inited || devid < 0) return FALSE;
 
   const size_t required  = width * height * bpp;
-  //const size_t total = factor * required + overhead;
+  const double total = (double)required * (double)factor + (double)overhead;
 
   if(cl->dev[devid].max_image_width < width || cl->dev[devid].max_image_height < height)
     return FALSE;
 
   if(_opencl_get_device_memalloc(devid) < required)      return FALSE;
-  // FIXME: this is completly off in practice, and
-  // anyway, estimating used memory on GPU is a hack
-  //if(dt_opencl_get_device_available(devid) < total)      return FALSE;
-  // We know here that total memory fits and if so the buffersize will also fit as there is a factor of >=2
-  return TRUE;
+
+  if((double)dt_opencl_get_device_available(devid) >= total) return TRUE;
+
+  dt_print(DT_DEBUG_OPENCL,
+           "[dt_opencl_image_fits_device] not enough memory on device %d, flushing cached pinned buffers and retrying\n",
+           devid);
+  dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
+
+  return ((double)dt_opencl_get_device_available(devid) >= total);
 }
 
 /** round size to a multiple of the value given in the device specifig config parameter clroundup_wd/ht */

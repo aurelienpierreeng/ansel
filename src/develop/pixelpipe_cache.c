@@ -33,6 +33,7 @@
 #include "develop/pixelpipe_cache.h"
 #include "common/darktable.h"
 #include "common/debug.h"
+#include "common/opencl.h"
 #include "develop/format.h"
 #include "develop/pixelpipe_hb.h"
 
@@ -51,6 +52,8 @@ typedef struct dt_pixel_cache_entry_t
   gboolean external_alloc;  // TRUE for external buffers tracked in the cache
   int hits;                 // number of times this entry was hit (utility score)
   dt_dev_pixelpipe_cache_t *cache; // reference to parent cache object
+  GList *cl_mem_list;       // reusable OpenCL pinned buffers tied to this entry
+  dt_pthread_mutex_t cl_mem_lock;
 } dt_pixel_cache_entry_t;
 
 typedef struct dt_free_run_t
@@ -59,12 +62,25 @@ typedef struct dt_free_run_t
   uint32_t length;
 } dt_free_run_t;
 
+typedef struct dt_cache_clmem_t
+{
+  void *host_ptr;
+  int devid;
+  int width;
+  int height;
+  int bpp;
+  int flags;
+  int cst;
+  void *mem;
+} dt_cache_clmem_t;
+
 
 void _non_thread_safe_cache_ref_count_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, gboolean lock,
                                             dt_pixel_cache_entry_t *cache_entry);
 static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, const size_t size,
                                                         const dt_iop_buffer_dsc_t dsc, const char *name, const int id,
                                                         dt_dev_pixelpipe_cache_t *cache, gboolean alloc);
+static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid);
 
 dt_pixel_cache_entry_t *_non_threadsafe_cache_get_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash)
 {
@@ -141,6 +157,22 @@ int dt_dev_pixelpipe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const uint64_
   int error = _non_thread_safe_cache_remove(cache, hash, force, cache_entry);
   dt_pthread_mutex_unlock(&cache->lock);
   return error;
+}
+
+void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid)
+{
+  if(!cache) return;
+  if(devid >= 0) dt_opencl_events_wait_for(devid);
+  dt_pthread_mutex_lock(&cache->lock);
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, cache->entries);
+  while(g_hash_table_iter_next(&iter, &key, &value))
+  {
+    dt_pixel_cache_entry_t *entry = (dt_pixel_cache_entry_t *)value;
+    _cache_entry_clmem_flush_device(entry, devid);
+  }
+  dt_pthread_mutex_unlock(&cache->lock);
 }
 
 typedef struct _cache_lru_t
@@ -417,6 +449,119 @@ static void dt_cache_arena_free(dt_cache_arena_t *a,
   dt_pthread_mutex_unlock(&a->lock);
 }
 
+void *dt_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
+                               int width, int height, int bpp, int flags, int *out_cst)
+{
+  if(!entry || !host_ptr || width <= 0 || height <= 0 || bpp <= 0) return NULL;
+  if(out_cst) *out_cst = -1;
+
+  dt_pthread_mutex_lock(&entry->cl_mem_lock);
+  for(GList *l = entry->cl_mem_list; l; l = l->next)
+  {
+    dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
+    if(c->host_ptr == host_ptr && c->devid == devid && c->width == width && c->height == height
+       && c->bpp == bpp && c->flags == flags)
+    {
+      entry->cl_mem_list = g_list_delete_link(entry->cl_mem_list, l);
+      void *mem = c->mem;
+      if(out_cst) *out_cst = c->cst;
+      g_free(c);
+      dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+      return mem;
+    }
+  }
+  dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+  return NULL;
+}
+
+void dt_pixel_cache_clmem_put(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
+                              int width, int height, int bpp, int flags, int cst, void *mem)
+{
+  if(!entry || !mem || !host_ptr || width <= 0 || height <= 0 || bpp <= 0)
+  {
+    dt_opencl_release_mem_object(mem);
+    return;
+  }
+
+  dt_pthread_mutex_lock(&entry->cl_mem_lock);
+  for(GList *l = entry->cl_mem_list; l; l = l->next)
+  {
+    dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
+    if(c->mem == mem)
+    {
+      c->cst = cst;
+      dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+      return;
+    }
+    if(c->host_ptr == host_ptr && c->devid == devid && c->width == width && c->height == height
+       && c->bpp == bpp && c->flags == flags)
+    {
+      void *old = c->mem;
+      c->mem = mem;
+      c->cst = cst;
+      dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+      dt_opencl_release_mem_object(old);
+      return;
+    }
+  }
+
+  dt_cache_clmem_t *c = (dt_cache_clmem_t *)g_malloc0(sizeof(*c));
+  if(!c)
+  {
+    dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+    dt_opencl_release_mem_object(mem);
+    return;
+  }
+
+  c->host_ptr = host_ptr;
+  c->devid = devid;
+  c->width = width;
+  c->height = height;
+  c->bpp = bpp;
+  c->flags = flags;
+  c->cst = cst;
+  c->mem = mem;
+  entry->cl_mem_list = g_list_prepend(entry->cl_mem_list, c);
+  dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+}
+
+void dt_pixel_cache_clmem_flush(dt_pixel_cache_entry_t *entry)
+{
+  if(!entry) return;
+
+  dt_pthread_mutex_lock(&entry->cl_mem_lock);
+  for(GList *l = entry->cl_mem_list; l; l = l->next)
+  {
+    dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
+    dt_opencl_release_mem_object(c->mem);
+    g_free(c);
+  }
+  g_list_free(entry->cl_mem_list);
+  entry->cl_mem_list = NULL;
+  dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+}
+
+static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid)
+{
+  if(!entry) return;
+
+  dt_pthread_mutex_lock(&entry->cl_mem_lock);
+  GList *l = entry->cl_mem_list;
+  while(l)
+  {
+    GList *next = l->next;
+    dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
+    if(devid < 0 || c->devid == devid)
+    {
+      entry->cl_mem_list = g_list_delete_link(entry->cl_mem_list, l);
+      dt_opencl_release_mem_object(c->mem);
+      g_free(c);
+    }
+    l = next;
+  }
+  dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+}
+
 
 void *dt_pixel_cache_alloc(dt_dev_pixelpipe_cache_t *cache, dt_pixel_cache_entry_t *cache_entry)
 {
@@ -550,6 +695,8 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
   cache_entry->external_alloc = FALSE;
   cache_entry->data = NULL;
   cache_entry->cache = cache;
+  cache_entry->cl_mem_list = NULL;
+  dt_pthread_mutex_init(&cache_entry->cl_mem_lock, NULL);
 
   // Optionally alloc the actual buffer, but still record its size in cache
   if(alloc) dt_pixel_cache_alloc(cache, cache_entry);
@@ -583,9 +730,12 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
   if(cache_entry->data) 
     dt_cache_arena_free(&cache_entry->cache->arena, cache_entry->data, cache_entry->size);
 
+  dt_pixel_cache_clmem_flush(cache_entry);
+
   cache_entry->data = NULL;
   cache_entry->cache->current_memory -= cache_entry->size;
   dt_pthread_rwlock_destroy(&cache_entry->lock);
+  dt_pthread_mutex_destroy(&cache_entry->cl_mem_lock);
   g_free(cache_entry->name);
   free(cache_entry);
 }
