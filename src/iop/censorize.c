@@ -146,7 +146,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   const int height = roi_in->height;
   const int ch = 4;
 
-  float *const restrict temp = dt_alloc_align_float((size_t)width * height * ch);
+  float *const restrict temp = dt_pixelpipe_cache_alloc_align_float((size_t)width * height * ch, piece->pipe);
   if(temp == NULL) return;
 
   const float sigma_1 = data->radius_1 * roi_in->scale;
@@ -254,7 +254,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
 
-  dt_free_align(temp);
+  dt_pixelpipe_cache_free_align(temp);
 }
 
 

@@ -618,14 +618,16 @@ static int read_jsc(dt_imageio_jpeg_t *jpg, uint8_t *out)
 static int read_plain(dt_imageio_jpeg_t *jpg, uint8_t *out)
 {
   JSAMPROW row_pointer[1];
-  row_pointer[0] = (uint8_t *)dt_alloc_align((size_t)jpg->dinfo.output_width * jpg->dinfo.num_components);
+  row_pointer[0] = (uint8_t *)dt_pixelpipe_cache_alloc_align_cache(
+      (size_t)jpg->dinfo.output_width * jpg->dinfo.num_components,
+      0);
   uint8_t *tmp = out;
   while(jpg->dinfo.output_scanline < jpg->dinfo.image_height)
   {
     if(jpeg_read_scanlines(&(jpg->dinfo), row_pointer, 1) != 1)
     {
       jpeg_destroy_decompress(&(jpg->dinfo));
-      dt_free_align(row_pointer[0]);
+      dt_pixelpipe_cache_free_align(row_pointer[0]);
       fclose(jpg->f);
       return 1;
     }
@@ -633,7 +635,7 @@ static int read_plain(dt_imageio_jpeg_t *jpg, uint8_t *out)
       for(int k = 0; k < 3; k++) tmp[4 * i + k] = row_pointer[0][3 * i + k];
     tmp += 4 * jpg->width;
   }
-  dt_free_align(row_pointer[0]);
+  dt_pixelpipe_cache_free_align(row_pointer[0]);
   return 0;
 }
 
@@ -742,10 +744,12 @@ dt_imageio_retval_t dt_imageio_open_jpeg(dt_image_t *img, const char *filename, 
   img->width = jpg.width;
   img->height = jpg.height;
 
-  uint8_t *tmp = (uint8_t *)dt_alloc_align(sizeof(uint8_t) * 4 * jpg.width * jpg.height);
+  uint8_t *tmp = (uint8_t *)dt_pixelpipe_cache_alloc_align_cache(
+      sizeof(uint8_t) * 4 * jpg.width * jpg.height,
+      0);
   if(dt_imageio_jpeg_read(&jpg, tmp))
   {
-    dt_free_align(tmp);
+    dt_pixelpipe_cache_free_align(tmp);
     return DT_IMAGEIO_FILE_CORRUPTED;
   }
 
@@ -754,14 +758,14 @@ dt_imageio_retval_t dt_imageio_open_jpeg(dt_image_t *img, const char *filename, 
   void *buf = dt_mipmap_cache_alloc(mbuf, img);
   if(!buf)
   {
-    dt_free_align(tmp);
+    dt_pixelpipe_cache_free_align(tmp);
     return DT_IMAGEIO_CACHE_FULL;
   }
 
   dt_imageio_flip_buffers_ui8_to_float((float *)buf, tmp, 0.0f, 255.0f, 4, jpg.width, jpg.height, jpg.width,
                                        jpg.height, 4 * jpg.width, 0);
 
-  dt_free_align(tmp);
+  dt_pixelpipe_cache_free_align(tmp);
 
   img->buf_dsc.cst = IOP_CS_RGB; // jpeg is always RGB
   img->buf_dsc.filters = 0u;

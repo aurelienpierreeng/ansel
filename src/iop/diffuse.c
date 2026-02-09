@@ -1076,13 +1076,15 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   float *restrict in = DT_IS_ALIGNED((float *const restrict)ivoid);
   float *const restrict out = DT_IS_ALIGNED((float *const restrict)ovoid);
 
-  float *const restrict temp1 = dt_alloc_align_float((size_t)roi_out->width * roi_out->height * 4);
-  float *const restrict temp2 = dt_alloc_align_float((size_t)roi_out->width * roi_out->height * 4);
+  float *const restrict temp1 = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, piece->pipe);
+  float *const restrict temp2 = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, piece->pipe);
 
   float *restrict temp_in = NULL;
   float *restrict temp_out = NULL;
 
-  uint8_t *const restrict mask = dt_alloc_align(sizeof(uint8_t) * roi_out->width * roi_out->height);
+  uint8_t *const restrict mask = dt_pixelpipe_cache_alloc_align(
+      sizeof(uint8_t) * roi_out->width * roi_out->height,
+      piece->pipe);
 
   const float scale = fmaxf(1.f / roi_in->scale, 1.f);
   const float final_radius = (data->radius + data->radius_center) * 2.f / scale;
@@ -1091,28 +1093,25 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   const int diffusion_scales = num_steps_to_reach_equivalent_sigma(B_SPLINE_SIGMA, final_radius);
   const int scales = CLAMP(diffusion_scales, 1, MAX_NUM_SCALES);
 
-  gboolean out_of_memory = FALSE;
+  gboolean out_of_memory = (temp1 == NULL) || (temp2 == NULL);
 
   // wavelets scales buffers
   float *restrict HF[MAX_NUM_SCALES];
   for(int s = 0; s < scales; s++)
   {
-    HF[s] = dt_alloc_align_float(width * height * 4);
+    HF[s] = dt_pixelpipe_cache_alloc_align_float(width * height * 4, piece->pipe);
     if(!HF[s]) out_of_memory = TRUE;
   }
 
   // temp buffer for blurs. We will need to cycle between them for memory efficiency
-  float *const restrict LF_odd = dt_alloc_align_float(width * height * 4);
-  float *const restrict LF_even = dt_alloc_align_float(width * height * 4);
+  float *const restrict LF_odd = dt_pixelpipe_cache_alloc_align_float(width * height * 4, piece->pipe);
+  float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float(width * height * 4, piece->pipe);
 
   // PAUSE !
   // check that all buffers exist before processing,
   // because we use a lot of memory here.
   if(!mask || !temp1 || !temp2 || !LF_odd || !LF_even || out_of_memory)
-  {
-    dt_control_log(_("diffuse/sharpen failed to allocate memory, check your RAM settings"));
     goto error;
-  }
 
   const int has_mask = (data->threshold > 0.f);
 
@@ -1154,12 +1153,12 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   }
 
 error:
-  if(mask) dt_free_align(mask);
-  if(temp1) dt_free_align(temp1);
-  if(temp2) dt_free_align(temp2);
-  if(LF_even) dt_free_align(LF_even);
-  if(LF_odd) dt_free_align(LF_odd);
-  for(int s = 0; s < scales; s++) if(HF[s]) dt_free_align(HF[s]);
+  if(mask) dt_pixelpipe_cache_free_align(mask);
+  if(temp1) dt_pixelpipe_cache_free_align(temp1);
+  if(temp2) dt_pixelpipe_cache_free_align(temp2);
+  if(LF_even) dt_pixelpipe_cache_free_align(LF_even);
+  if(LF_odd) dt_pixelpipe_cache_free_align(LF_odd);
+  for(int s = 0; s < scales; s++) if(HF[s]) dt_pixelpipe_cache_free_align(HF[s]);
 }
 
 #if HAVE_OPENCL
@@ -1373,7 +1372,6 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   // because we use a lot of memory here.
   if(!mask || !temp1 || !temp2 || !LF_odd || !LF_even || out_of_memory)
   {
-    dt_control_log(_("diffuse/sharpen failed to allocate memory, check your RAM settings"));
     err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
     goto error;
   }

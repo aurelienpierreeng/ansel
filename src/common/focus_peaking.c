@@ -40,8 +40,8 @@ void dt_focuspeaking(cairo_t *cr,
                      gboolean draw,
                      float *x, float *y)
 {
-  float *const restrict luma = dt_alloc_align_float((size_t)buf_width * buf_height);
-  float *const restrict luma_ds = dt_alloc_align_float((size_t)buf_width * buf_height);
+  float *const restrict luma = dt_pixelpipe_cache_alloc_align_float_cache((size_t)buf_width * buf_height, 0);
+  float *const restrict luma_ds = dt_pixelpipe_cache_alloc_align_float_cache((size_t)buf_width * buf_height, 0);
   if(luma_ds == NULL || luma == NULL)
     goto error_early;
 
@@ -152,12 +152,14 @@ schedule(static) collapse(2) reduction(+:mass, x_integral, y_integral)
   // Stop there if no drawing is requested
   if(!draw)
   {
-    dt_free_align(luma);
-    dt_free_align(luma_ds);
+    dt_pixelpipe_cache_free_align(luma);
+    dt_pixelpipe_cache_free_align(luma_ds);
     return;
   }
 
-  uint8_t *const restrict focus_peaking = dt_alloc_align(sizeof(uint8_t) * buf_width * buf_height * 4);
+  uint8_t *const restrict focus_peaking = dt_pixelpipe_cache_alloc_align_cache(
+      sizeof(uint8_t) * buf_width * buf_height * 4,
+      0);
   if(focus_peaking == NULL) goto error;
 
   // Dilate the mask to improve connectivity
@@ -278,8 +280,8 @@ schedule(static) collapse(2) aligned(focus_peaking, luma:64) reduction(+:sigma)
   cairo_surface_destroy(surface);
 
 error:;
-  if(focus_peaking) dt_free_align(focus_peaking);
+  if(focus_peaking) dt_pixelpipe_cache_free_align(focus_peaking);
 error_early:;
-  if(luma) dt_free_align(luma);
-  if(luma_ds) dt_free_align(luma_ds);
+  if(luma) dt_pixelpipe_cache_free_align(luma);
+  if(luma_ds) dt_pixelpipe_cache_free_align(luma_ds);
 }

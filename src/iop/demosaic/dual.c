@@ -40,14 +40,14 @@ static void dual_demosaic(dt_dev_pixelpipe_iop_t *piece, float *const restrict r
   // If the threshold is zero and we don't want to see the blend mask we don't do anything
   if(dual_threshold <= 0.0f) return;
 
-  float *blend = dt_alloc_align_float((size_t) width * height);
-  float *tmp = dt_alloc_align_float((size_t) width * height);
-  float *vng_image = dt_alloc_align_float((size_t) 4 * width * height);
+  float *blend = dt_pixelpipe_cache_alloc_align_float((size_t) width * height, piece->pipe);
+  float *tmp = dt_pixelpipe_cache_alloc_align_float((size_t) width * height, piece->pipe);
+  float *vng_image = dt_pixelpipe_cache_alloc_align_float((size_t) 4 * width * height, piece->pipe);
   if(!blend || !tmp || !vng_image)
   {
-    if(tmp) dt_free_align(tmp);
-    if(blend) dt_free_align(blend);
-    if(vng_image) dt_free_align(vng_image);
+    if(tmp) dt_pixelpipe_cache_free_align(tmp);
+    if(blend) dt_pixelpipe_cache_free_align(blend);
+    if(vng_image) dt_pixelpipe_cache_free_align(vng_image);
     dt_control_log(_("[dual demosaic] can't allocate internal buffers"));
     return;
   }
@@ -97,9 +97,9 @@ static void dual_demosaic(dt_dev_pixelpipe_iop_t *piece, float *const restrict r
     dt_get_times(&end_blend);
     fprintf(stderr," [demosaic] CPU dual blending %.4f secs (%.4f CPU)\n", end_blend.clock - start_blend.clock, end_blend.user - start_blend.user);
   }
-  dt_free_align(tmp);
-  dt_free_align(blend);
-  dt_free_align(vng_image);
+  dt_pixelpipe_cache_free_align(tmp);
+  dt_pixelpipe_cache_free_align(blend);
+  dt_pixelpipe_cache_free_align(vng_image);
 }
 
 #ifdef HAVE_OPENCL

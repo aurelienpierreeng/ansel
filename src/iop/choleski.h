@@ -268,7 +268,7 @@ static inline int solve_hermitian(const float *const restrict A,
   // x and y are n vectors. Output the result in y
 
   // A and y need to be 64-bits aligned, which is darktable's default memory alignment
-  // if you used DT_ALIGNED_ARRAY and dt_alloc_sse_ps(...) to declare arrays and pointers
+  // if you used DT_ALIGNED_ARRAY and dt_alloc_align_float(...) to declare arrays and pointers
 
   // If you are sure about the properties of the matrix A (symmetrical square definite positive)
   // because you built it yourself, set checks == FALSE to branch to the fast track that
@@ -280,8 +280,8 @@ static inline int solve_hermitian(const float *const restrict A,
   // clock_t start = clock();
 
   int valid = 0;
-  float *const restrict x = dt_alloc_sse_ps(n);
-  float *const restrict L = dt_alloc_sse_ps(n * n);
+  float *const restrict x = dt_alloc_align_float(n);
+  float *const restrict L = dt_alloc_align_float(n * n);
 
   if(!x || !L)
   {
@@ -378,8 +378,8 @@ static inline int pseudo_solve(float *const restrict A,
     return valid;
   }
 
-  float *const restrict A_square = dt_alloc_sse_ps(n * n);
-  float *const restrict y_square = dt_alloc_sse_ps(n);
+  float *const restrict A_square = dt_alloc_align_float(n * n);
+  float *const restrict y_square = dt_alloc_align_float(n);
 
   if(!A_square || !y_square)
   {

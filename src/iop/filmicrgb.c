@@ -1186,17 +1186,16 @@ static inline gint reconstruct_highlights(const float *const restrict in, const 
   const int scales = get_scales(roi_in, piece);
 
   // wavelets scales buffers
-  float *const restrict LF_even = dt_alloc_sse_ps(ch * roi_out->width * roi_out->height); // low-frequencies RGB
-  float *const restrict LF_odd = dt_alloc_sse_ps(ch * roi_out->width * roi_out->height);  // low-frequencies RGB
-  float *const restrict HF_RGB = dt_alloc_sse_ps(ch * roi_out->width * roi_out->height);  // high-frequencies RGB
-  float *const restrict HF_grey = dt_alloc_sse_ps(ch * roi_out->width * roi_out->height); // high-frequencies RGB backup
+  float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float_cache(ch * roi_out->width * roi_out->height, 0); // low-frequencies RGB
+  float *const restrict LF_odd = dt_pixelpipe_cache_alloc_align_float_cache(ch * roi_out->width * roi_out->height, 0);  // low-frequencies RGB
+  float *const restrict HF_RGB = dt_pixelpipe_cache_alloc_align_float_cache(ch * roi_out->width * roi_out->height, 0);  // high-frequencies RGB
+  float *const restrict HF_grey = dt_pixelpipe_cache_alloc_align_float_cache(ch * roi_out->width * roi_out->height, 0); // high-frequencies RGB backup
 
   // alloc a permanent reusable buffer for intermediate computations - avoid multiple alloc/free
-  float *const restrict temp = dt_alloc_sse_ps(darktable.num_openmp_threads * ch * roi_out->width);
+  float *const restrict temp = dt_pixelpipe_cache_alloc_align_float_cache(darktable.num_openmp_threads * ch * roi_out->width, 0);
 
   if(!LF_even || !LF_odd || !HF_RGB || !HF_grey || !temp)
   {
-    dt_control_log(_("filmic highlights reconstruction failed to allocate memory, check your RAM settings"));
     success = FALSE;
     goto error;
   }
@@ -1268,11 +1267,11 @@ static inline gint reconstruct_highlights(const float *const restrict in, const 
   }
 
 error:
-  if(temp) dt_free_align(temp);
-  if(LF_even) dt_free_align(LF_even);
-  if(LF_odd) dt_free_align(LF_odd);
-  if(HF_RGB) dt_free_align(HF_RGB);
-  if(HF_grey) dt_free_align(HF_grey);
+  if(temp) dt_pixelpipe_cache_free_align(temp);
+  if(LF_even) dt_pixelpipe_cache_free_align(LF_even);
+  if(LF_odd) dt_pixelpipe_cache_free_align(LF_odd);
+  if(HF_RGB) dt_pixelpipe_cache_free_align(HF_RGB);
+  if(HF_grey) dt_pixelpipe_cache_free_align(HF_grey);
   return success;
 }
 
@@ -2092,7 +2091,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
 
   float *restrict in = (float *)ivoid;
   float *const restrict out = (float *)ovoid;
-  float *const restrict mask = dt_alloc_sse_ps((size_t)roi_out->width * roi_out->height);
+  float *const restrict mask = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height, piece->pipe);
 
   // used to adjuste noise level depending on size. Don't amplify noise if magnified > 100%
   const float scale = fmaxf(1.f / roi_in->scale, 1.f);
@@ -2108,18 +2107,18 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
     if(g->show_mask)
     {
       display_mask(mask, out, roi_out->width, roi_out->height);
-      dt_free_align(mask);
+      dt_pixelpipe_cache_free_align(mask);
       return;
     }
   }
 
-  float *const restrict reconstructed = dt_alloc_align_float((size_t)roi_out->width * roi_out->height * 4);
+  float *const restrict reconstructed = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, piece->pipe);
 
   // if fast mode is not in use
   if(recover_highlights && mask && reconstructed)
   {
     // init the blown areas with noise to create particles
-    float *const restrict inpainted =  dt_alloc_align_float((size_t)roi_out->width * roi_out->height * 4);
+    float *const restrict inpainted =  dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, piece->pipe);
     inpaint_noise(in, mask, inpainted, data->noise_level / scale, data->reconstruct_threshold, data->noise_distribution,
                   roi_out->width, roi_out->height);
 
@@ -2128,12 +2127,12 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
     const gint success_1 = reconstruct_highlights(inpainted, mask, reconstructed, DT_FILMIC_RECONSTRUCT_RGB, ch, data, piece, roi_in, roi_out);
     gint success_2 = TRUE;
 
-    dt_free_align(inpainted);
+    dt_pixelpipe_cache_free_align(inpainted);
 
     if(data->high_quality_reconstruction > 0 && success_1)
     {
-      float *const restrict norms = dt_alloc_align_float((size_t)roi_out->width * roi_out->height);
-      float *const restrict ratios = dt_alloc_align_float((size_t)roi_out->width * roi_out->height * 4);
+      float *const restrict norms = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height, piece->pipe);
+      float *const restrict ratios = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, piece->pipe);
 
       // reconstruct highlights PASS 2 on ratios
       if(norms && ratios)
@@ -2149,14 +2148,14 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
         }
       }
 
-      if(norms) dt_free_align(norms);
-      if(ratios) dt_free_align(ratios);
+      if(norms) dt_pixelpipe_cache_free_align(norms);
+      if(ratios) dt_pixelpipe_cache_free_align(ratios);
     }
 
     if(success_1 && success_2) in = reconstructed; // use reconstructed buffer as tonemapping input
   }
 
-  if(mask) dt_free_align(mask);
+  if(mask) dt_pixelpipe_cache_free_align(mask);
 
   const float white_display = powf(data->spline.y[4], data->output_power);
   const float black_display = powf(data->spline.y[0], data->output_power);
@@ -2194,7 +2193,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
     }
   }
 
-  if(reconstructed) dt_free_align(reconstructed);
+  if(reconstructed) dt_pixelpipe_cache_free_align(reconstructed);
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
@@ -2226,7 +2225,6 @@ static inline cl_int reconstruct_highlights_cl(cl_mem in, cl_mem mask, cl_mem re
 
   if(!LF_even || !LF_odd || !HF_RGB || !HF_grey || !temp)
   {
-    dt_control_log(_("filmic highlights reconstruction failed to allocate memory on GPU"));
     err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
     goto error;
   }

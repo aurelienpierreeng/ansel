@@ -886,7 +886,7 @@ static inline void auto_detect_WB(const float *const restrict in, dt_illuminant_
    *
   */
 
-   float *const restrict temp = dt_alloc_sse_ps(width * height * ch);
+   float *const restrict temp = dt_pixelpipe_cache_alloc_align_float_cache(width * height * ch, 0);
    if(!temp) return;
 
    // Convert RGB to xy
@@ -1036,7 +1036,7 @@ static inline void auto_detect_WB(const float *const restrict in, dt_illuminant_
   for(size_t c = 0; c < 2; c++)
     xyz[c] = norm_D50 * (xyY[c] / elements) + D50[c];
 
-  dt_free_align(temp);
+  dt_pixelpipe_cache_free_align(temp);
 }
 
 static void declare_cat_on_pipe(struct dt_iop_module_t *self, gboolean preset)
@@ -1302,7 +1302,7 @@ static const extraction_result_t _extract_patches(const float *const restrict in
   const float radius_y = radius_x / g->checker->ratio;
 
   if(g->delta_E_in == NULL)
-    g->delta_E_in = dt_alloc_sse_ps(g->checker->patches);
+    g->delta_E_in = dt_alloc_align_float(g->checker->patches);
 
   /* Get the average color over each patch */
   for(size_t k = 0; k < g->checker->patches; k++)
@@ -1492,7 +1492,7 @@ void extract_color_checker(const float *const restrict in, float *const restrict
                            const dt_colormatrix_t XYZ_to_CAM,
                            const dt_adaptation_t kind)
 {
-  float *const restrict patches = dt_alloc_sse_ps(g->checker->patches * 4);
+  float *const restrict patches = dt_alloc_align_float(g->checker->patches * 4);
   if(patches == NULL) return;
 
   dt_simd_memcpy(in, out, (size_t)roi_in->width * roi_in->height * 4);
@@ -1774,7 +1774,7 @@ void validate_color_checker(const float *const restrict in,
                             const dt_iop_roi_t *const roi_in, dt_iop_channelmixer_rgb_gui_data_t *g,
                             const dt_colormatrix_t RGB_to_XYZ, const dt_colormatrix_t XYZ_to_RGB, const dt_colormatrix_t XYZ_to_CAM)
 {
-  float *const restrict patches = dt_alloc_sse_ps(4 * g->checker->patches);
+  float *const restrict patches = dt_alloc_align_float(4 * g->checker->patches);
   if(patches == NULL) return;
   extraction_result_t extraction_result = _extract_patches(in, roi_in, g, RGB_to_XYZ, XYZ_to_CAM, patches, FALSE);
 

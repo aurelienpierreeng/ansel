@@ -322,9 +322,9 @@ static void process_wavelets(struct dt_iop_module_t *self, struct dt_dev_pixelpi
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(i, o, width, height);
 
-  dt_free_align(detail);
-  dt_free_align(tmp);
-  dt_free_align(tmp2);
+  dt_pixelpipe_cache_free_align(detail);
+  dt_pixelpipe_cache_free_align(tmp);
+  dt_pixelpipe_cache_free_align(tmp2);
   return;
 }
 

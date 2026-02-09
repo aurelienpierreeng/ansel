@@ -284,17 +284,17 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, struct dt_dev
 
   const int bufsize = MAX(iwidth * iheight, owidth * oheight);
 
-  tmp = dt_alloc_align_float(bufsize);
-  lum = dt_alloc_align_float(bufsize);
+  tmp = dt_pixelpipe_cache_alloc_align_float(bufsize, piece->pipe);
+  lum = dt_pixelpipe_cache_alloc_align_float(bufsize, piece->pipe);
   if((tmp == NULL) || (lum == NULL)) goto error;
 
   dt_masks_calc_detail_mask(p->rawdetail_mask_data, lum, tmp, iwidth, iheight, threshold, detail);
-  dt_free_align(tmp);
+  dt_pixelpipe_cache_free_align(tmp);
   tmp = NULL;
 
   // here we have the slightly blurred full detail mask available
   warp_mask = dt_dev_distort_detail_mask(p, lum, self);
-  dt_free_align(lum);
+  dt_pixelpipe_cache_free_align(lum);
   lum = NULL;
 
   if(warp_mask == NULL) goto error;
@@ -309,15 +309,15 @@ static void _refine_with_detail_mask(struct dt_iop_module_t *self, struct dt_dev
   {
     mask[idx] = mask[idx] * warp_mask[idx];
   }
-  dt_free_align(warp_mask);
+  dt_pixelpipe_cache_free_align(warp_mask);
 
   return;
 
   error:
   dt_control_log(_("detail mask blending error"));
-  dt_free_align(warp_mask);
-  dt_free_align(lum);
-  dt_free_align(tmp);
+  dt_pixelpipe_cache_free_align(warp_mask);
+  dt_pixelpipe_cache_free_align(lum);
+  dt_pixelpipe_cache_free_align(tmp);
 }
 
 static size_t _develop_mask_get_post_operations(const dt_develop_blend_params_t *const params,
@@ -369,7 +369,8 @@ static inline float *_develop_blend_process_copy_region(const float *const restr
                                                         const size_t owidth, const size_t oheight)
 {
   const size_t ioffset = yoffs * iwidth + xoffs;
-  float *const restrict output = dt_alloc_align_float(owidth * oheight);
+  float *const restrict output =
+    dt_pixelpipe_cache_alloc_align_float_cache(owidth * oheight, 0);
   if(output == NULL)
   {
     return NULL;
@@ -391,7 +392,7 @@ static inline float *_develop_blend_process_copy_region(const float *const restr
 
 static inline void _develop_blend_process_free_region(float *const restrict input)
 {
-  dt_free_align(input);
+  dt_pixelpipe_cache_free_align(input);
 }
 
 
@@ -403,12 +404,13 @@ static void _develop_blend_process_feather(const float *const guide, float *cons
   int w = (int)(2 * feathering_radius * scale + 0.5f);
   if(w < 1) w = 1;
 
-  float *const restrict mask_bak = dt_alloc_align_float(width * height);
+  float *const restrict mask_bak =
+    dt_pixelpipe_cache_alloc_align_float_cache( width * height, 0);
   if(mask_bak)
   {
     memcpy(mask_bak, mask, sizeof(float) * width * height);
     guided_filter(guide, mask_bak, mask, width, height, ch, w, sqrt_eps, guide_weight, 0.f, 1.f);
-    dt_free_align(mask_bak);
+    dt_pixelpipe_cache_free_align(mask_bak);
   }
 }
 
@@ -510,7 +512,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
   const float opacity = fminf(fmaxf(d->opacity / 100.0f, 0.0f), 1.0f);
 
   // allocate space for blend mask
-  float *const restrict _mask = dt_alloc_align_float(buffsize);
+  float *const restrict _mask = dt_pixelpipe_cache_alloc_align_float(buffsize, piece->pipe);
   if(!_mask)
   {
     dt_control_log(_("could not allocate buffer for blending"));
@@ -545,7 +547,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
       {
         dt_iop_image_scaled_copy(mask, raster_mask, opacity, owidth, oheight, 1); //mask[k] = opacity * raster_mask[k];
       }
-      if(free_mask) dt_free_align(raster_mask);
+      if(free_mask) dt_pixelpipe_cache_free_align(raster_mask);
     }
     else
     {
@@ -697,7 +699,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
     dt_print(DT_DEBUG_MASKS, "[raster masks] destroying raster mask id 0 for module %s (%s) for pipe %s\n", piece->module->op,
              piece->module->multi_name, dt_pipe_type_to_str(piece->pipe->type));
     dt_pixelpipe_raster_remove(piece->raster_masks);
-    dt_free_align(_mask);
+    dt_pixelpipe_cache_free_align(_mask);
   }
   // raster error is the only one we catch
   return raster_error;
@@ -726,7 +728,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, struct dt_
   const int oheight = roi_out->height;
   if(info) fprintf(stderr, "[_refine_with_detail_mask_cl] in module %s %ix%i --> %ix%i\n", self->op, iwidth, iheight, owidth, oheight);
 
-  lum = dt_alloc_align_float((size_t)iwidth * iheight);
+  lum = dt_pixelpipe_cache_alloc_align_float((size_t)iwidth * iheight, piece->pipe);
   if(lum == NULL) goto error;
   tmp = dt_opencl_alloc_device(devid, iwidth, iheight, sizeof(float));
   if(tmp == NULL) goto error;
@@ -813,7 +815,7 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, struct dt_
   // here we have the slightly blurred full detail available
   float *warp_mask = dt_dev_distort_detail_mask(p, lum, self);
   if(warp_mask == NULL) goto error;
-  dt_free_align(lum);
+  dt_pixelpipe_cache_free_align(lum);
   lum = NULL;
 
   const int msize = owidth * oheight;
@@ -826,12 +828,12 @@ static void _refine_with_detail_mask_cl(struct dt_iop_module_t *self, struct dt_
   {
     mask[idx] = mask[idx] * warp_mask[idx];
   }
-  dt_free_align(warp_mask);
+  dt_pixelpipe_cache_free_align(warp_mask);
   return;
 
   error:
   dt_control_log(_("detail mask CL blending problem"));
-  dt_free_align(lum);
+  dt_pixelpipe_cache_free_align(lum);
   dt_opencl_release_mem_object(tmp);
   dt_opencl_release_mem_object(blur);
   dt_opencl_release_mem_object(out);
@@ -911,7 +913,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
   const float opacity = fminf(fmaxf(d->opacity / 100.0f, 0.0f), 1.0f);
 
   // allocate space for blend mask
-  float *_mask = dt_alloc_align_float(buffsize);
+  float *_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, piece->pipe);
   if(!_mask)
   {
     dt_control_log(_("could not allocate buffer for blending"));
@@ -1026,7 +1028,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
       {
         dt_iop_image_scaled_copy(mask, raster_mask,opacity, owidth, oheight, 1); //mask[k] = opacity * raster_mask[k];
       }
-      if(free_mask) dt_free_align(raster_mask);
+      if(free_mask) dt_pixelpipe_cache_free_align(raster_mask);
     }
     else
     {
@@ -1287,7 +1289,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
     dt_print(DT_DEBUG_MASKS, "[raster masks] destroying raster mask id 0 in module '%s (%s)' for pipe %s\n", piece->module->op,
              piece->module->multi_name, dt_pipe_type_to_str(piece->pipe->type));
     dt_pixelpipe_raster_remove(piece->raster_masks);
-    dt_free_align(_mask);
+    dt_pixelpipe_cache_free_align(_mask);
   }
 
   dt_opencl_release_mem_object(dev_blendif_params);
@@ -1300,7 +1302,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
   return 0;
 
 error:
-  dt_free_align(_mask);
+  dt_pixelpipe_cache_free_align(_mask);
   dt_opencl_release_mem_object(dev_blendif_params);
   dt_opencl_release_mem_object(dev_boost_factors);
   dt_opencl_release_mem_object(dev_mask_1);

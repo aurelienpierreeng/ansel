@@ -327,8 +327,12 @@ static void _heal_laplace_loop(float *const restrict red_pixels, float *const re
   // a handful of runs in each row of pixels.
   // Note that using `unsigned` instead of size_t, the stamp is limited to ~8 gigapixels (the main image can be larger)
   const size_t subwidth = (width+1)/2;  // round up to be able to handle odd widths
-  unsigned *const restrict red_runs = dt_alloc_align(sizeof(unsigned) * subwidth * (height + 2));
-  unsigned *const restrict black_runs = dt_alloc_align(sizeof(unsigned) * subwidth * (height + 2));
+  unsigned *const restrict red_runs = dt_pixelpipe_cache_alloc_align_cache(
+      sizeof(unsigned) * subwidth * (height + 2),
+      0);
+  unsigned *const restrict black_runs = dt_pixelpipe_cache_alloc_align_cache(
+      sizeof(unsigned) * subwidth * (height + 2),
+      0);
   if(!red_runs || !black_runs)
   {
     fprintf(stderr, "_heal_laplace_loop: error allocating memory for healing\n");
@@ -372,8 +376,8 @@ static void _heal_laplace_loop(float *const restrict red_pixels, float *const re
   }
 
 cleanup:
-  if(red_runs) dt_free_align(red_runs);
-  if(black_runs) dt_free_align(black_runs);
+  if(red_runs) dt_pixelpipe_cache_free_align(red_runs);
+  if(black_runs) dt_pixelpipe_cache_free_align(black_runs);
 }
 
 
@@ -391,8 +395,8 @@ void dt_heal(const float *const src_buffer, float *dest_buffer, const float *con
     return;
   }
   const size_t subwidth = 4 * ((width+1)/2);  // round up to be able to handle odd widths
-  float *const restrict red_buffer = dt_alloc_align_float(subwidth * (height + 2));
-  float *const restrict black_buffer = dt_alloc_align_float(subwidth * (height + 2));
+  float *const restrict red_buffer = dt_pixelpipe_cache_alloc_align_float_cache(subwidth * (height + 2), 0);
+  float *const restrict black_buffer = dt_pixelpipe_cache_alloc_align_float_cache(subwidth * (height + 2), 0);
   if(red_buffer == NULL || black_buffer == NULL)
   {
     fprintf(stderr, "dt_heal: error allocating memory for healing\n");
@@ -408,8 +412,8 @@ void dt_heal(const float *const src_buffer, float *dest_buffer, const float *con
   _heal_add(red_buffer, black_buffer, src_buffer, dest_buffer, width, height);
 
 cleanup:
-  if(red_buffer) dt_free_align(red_buffer);
-  if(black_buffer) dt_free_align(black_buffer);
+  if(red_buffer) dt_pixelpipe_cache_free_align(red_buffer);
+  if(black_buffer) dt_pixelpipe_cache_free_align(black_buffer);
 }
 
 #ifdef HAVE_OPENCL
@@ -460,7 +464,7 @@ cl_int dt_heal_cl(heal_params_cl_t *p, cl_mem dev_src, cl_mem dev_dest, const fl
   float *src_buffer = NULL;
   float *dest_buffer = NULL;
 
-  src_buffer = dt_alloc_align_float((size_t)ch * width * height);
+  src_buffer = dt_pixelpipe_cache_alloc_align_float_cache((size_t)ch * width * height, 0);
   if(src_buffer == NULL)
   {
     fprintf(stderr, "dt_heal_cl: error allocating memory for healing\n");
@@ -468,7 +472,7 @@ cl_int dt_heal_cl(heal_params_cl_t *p, cl_mem dev_src, cl_mem dev_dest, const fl
     goto cleanup;
   }
 
-  dest_buffer = dt_alloc_align_float((size_t)ch * width * height);
+  dest_buffer = dt_pixelpipe_cache_alloc_align_float_cache((size_t)ch * width * height, 0);
   if(dest_buffer == NULL)
   {
     fprintf(stderr, "dt_heal_cl: error allocating memory for healing\n");
@@ -500,8 +504,8 @@ cl_int dt_heal_cl(heal_params_cl_t *p, cl_mem dev_src, cl_mem dev_dest, const fl
   }
 
 cleanup:
-  if(src_buffer) dt_free_align(src_buffer);
-  if(dest_buffer) dt_free_align(dest_buffer);
+  if(src_buffer) dt_pixelpipe_cache_free_align(src_buffer);
+  if(dest_buffer) dt_pixelpipe_cache_free_align(dest_buffer);
 
   return err;
 }

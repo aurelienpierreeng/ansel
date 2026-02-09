@@ -970,8 +970,8 @@ static void toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
       // Re-allocate a new buffer if the full preview size has changed
       if(g->full_preview_buf_width != width || g->full_preview_buf_height != height)
       {
-        if(g->full_preview_buf) dt_free_align(g->full_preview_buf);
-        g->full_preview_buf = dt_alloc_sse_ps(num_elem);
+        if(g->full_preview_buf) dt_pixelpipe_cache_free_align(g->full_preview_buf);
+        g->full_preview_buf = dt_pixelpipe_cache_alloc_align_float(num_elem, piece->pipe);
         g->full_preview_buf_width = width;
         g->full_preview_buf_height = height;
       }
@@ -990,8 +990,8 @@ static void toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
       dt_iop_gui_enter_critical_section(self);
       if(g->thumb_preview_buf_width != width || g->thumb_preview_buf_height != height)
       {
-        if(g->thumb_preview_buf) dt_free_align(g->thumb_preview_buf);
-        g->thumb_preview_buf = dt_alloc_sse_ps(num_elem);
+        if(g->thumb_preview_buf) dt_pixelpipe_cache_free_align(g->thumb_preview_buf);
+        g->thumb_preview_buf = dt_pixelpipe_cache_alloc_align_float(num_elem, piece->pipe);
         g->thumb_preview_buf_width = width;
         g->thumb_preview_buf_height = height;
         g->luminance_valid = FALSE;
@@ -1004,22 +1004,19 @@ static void toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
     }
     else // just to please GCC
     {
-      luminance = dt_alloc_sse_ps(num_elem);
+      luminance = dt_pixelpipe_cache_alloc_align_float(num_elem, piece->pipe);
     }
 
   }
   else
   {
     // no interactive editing/caching : just allocate a local temp buffer
-    luminance = dt_alloc_sse_ps(num_elem);
+    luminance = dt_pixelpipe_cache_alloc_align_float(num_elem, piece->pipe);
   }
 
   // Check if the luminance buffer exists
   if(!luminance)
-  {
-    dt_control_log(_("tone equalizer failed to allocate memory, check your RAM settings"));
     return;
-  }
 
   // Compute the luminance mask
   if(cached)
@@ -1090,7 +1087,7 @@ static void toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
     apply_toneequalizer(in, luminance, out, roi_in, roi_out, ch, d);
   }
 
-  if(!cached) dt_free_align(luminance);
+  if(!cached) dt_pixelpipe_cache_free_align(luminance);
 }
 
 void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
@@ -3194,8 +3191,8 @@ void gui_cleanup(struct dt_iop_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_ui_pipe_started_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_preview_pipe_finished_callback), self);
 
-  if(g->thumb_preview_buf) dt_free_align(g->thumb_preview_buf);
-  if(g->full_preview_buf) dt_free_align(g->full_preview_buf);
+  if(g->thumb_preview_buf) dt_pixelpipe_cache_free_align(g->thumb_preview_buf);
+  if(g->full_preview_buf) dt_pixelpipe_cache_free_align(g->full_preview_buf);
   if(g->desc) pango_font_description_free(g->desc);
   if(g->layout) g_object_unref(g->layout);
   if(g->cr) cairo_destroy(g->cr);

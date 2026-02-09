@@ -217,7 +217,7 @@ static void _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixe
   // we create a new buffer
   const int wt = piece->iwidth;
   const int ht = piece->iheight;
-  float *buf = dt_alloc_align_float((size_t)ht * wt);
+  float *buf = dt_pixelpipe_cache_alloc_align_float_cache((size_t)ht * wt, 0);
 
   // we fill this buffer
   for(int yy = 0; yy < MIN(*posy, ht); yy++)
@@ -239,7 +239,7 @@ static void _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixe
   }
 
   // we free the old buffer
-  dt_free_align(*buffer);
+  dt_pixelpipe_cache_free_align(*buffer);
   (*buffer) = buf;
 
   // we return correct values for positions;
@@ -304,7 +304,7 @@ static int _group_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
   *height = b - t;
 
   // we allocate the buffer
-  *buffer = dt_alloc_align_float((size_t)(r - l) * (b - t));
+  *buffer = dt_pixelpipe_cache_alloc_align_float_cache((size_t)(r - l) * (b - t), 0);
 
   // and we copy each buffer inside, row by row
   for(int i = 0; i < nb; i++)
@@ -391,7 +391,7 @@ static int _group_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
   free(px);
   free(h);
   free(w);
-  for(int i = 0; i < nb; i++) dt_free_align(bufs[i]);
+  for(int i = 0; i < nb; i++) dt_pixelpipe_cache_free_align(bufs[i]);
   free(bufs);
   return 1;
 
@@ -403,7 +403,7 @@ error:
   free(px);
   free(h);
   free(w);
-  for(int i = 0; i < nb; i++) dt_free_align(bufs[i]);
+  for(int i = 0; i < nb; i++) dt_pixelpipe_cache_free_align(bufs[i]);
   free(bufs);
   return 0;
 }
@@ -601,7 +601,7 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module,
   const size_t npixels = (size_t)width * height;
 
   // we need to allocate a zeroed temporary buffer for intermediate creation of individual shapes
-  float *const restrict bufs = dt_alloc_align_float(npixels);
+  float *const restrict bufs = dt_pixelpipe_cache_alloc_align_float_cache(npixels, 0);
   if(bufs == NULL) return 0;
 
   // and we get all masks
@@ -665,7 +665,7 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module,
     }
   }
   // and we free the intermediate buffer
-  dt_free_align(bufs);
+  dt_pixelpipe_cache_free_align(bufs);
 
   return nb_ok != 0;
 }

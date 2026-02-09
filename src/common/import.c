@@ -319,7 +319,9 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
     const float ratio = ((float)th_height) / ((float)th_width);
 
     // Convert RGBa to RGB because GdkPixbuf doesn't do RGBa
-    uint8_t *rgb = dt_alloc_align(th_width * th_height * 3 * sizeof(uint8_t));
+    uint8_t *rgb = dt_pixelpipe_cache_alloc_align_cache(
+        th_width * th_height * 3 * sizeof(uint8_t),
+        0);
     if(rgb)
     {
       for(size_t k = 0; k < th_width * th_height; k++)
@@ -339,8 +341,8 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
       }
     }
 
-    if(buffer) dt_free_align(buffer);
-    if(rgb) dt_free_align(rgb);
+    if(buffer) dt_pixelpipe_cache_free_align(buffer);
+    if(rgb) dt_pixelpipe_cache_free_align(rgb);
     g_free(mime_type);
   }
 

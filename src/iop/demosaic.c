@@ -497,7 +497,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
     if(!(img->flags & DT_IMAGE_4BAYER) && data->green_eq != DT_IOP_GREEN_EQ_NO)
     {
-      in = dt_alloc_align_float((size_t)roi_in->height * roi_in->width);
+      in = dt_pixelpipe_cache_alloc_align_float((size_t)roi_in->height * roi_in->width, piece->pipe);
       if(in)
       {
         switch(data->green_eq)
@@ -511,14 +511,14 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
                                     roi_in->x, roi_in->y, threshold);
             break;
           case DT_IOP_GREEN_EQ_BOTH:
-            aux = dt_alloc_align_float((size_t)roi_in->height * roi_in->width);
+            aux = dt_pixelpipe_cache_alloc_align_float((size_t)roi_in->height * roi_in->width, piece->pipe);
             if(aux)
             {
               green_equilibration_favg(aux, pixels, roi_in->width, roi_in->height, piece->pipe->dsc.filters,
                                       roi_in->x, roi_in->y);
               green_equilibration_lavg(in, aux, roi_in->width, roi_in->height, piece->pipe->dsc.filters, roi_in->x,
                                       roi_in->y, threshold);
-              dt_free_align(aux);
+              dt_pixelpipe_cache_free_align(aux);
             }
             break;
         }
@@ -562,7 +562,8 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     else
       amaze_demosaic_RT(piece, in, o, &roi, &roo, piece->pipe->dsc.filters);
 
-    if(!(img->flags & DT_IMAGE_4BAYER) && data->green_eq != DT_IOP_GREEN_EQ_NO) dt_free_align(in);
+    if(!(img->flags & DT_IMAGE_4BAYER) && data->green_eq != DT_IOP_GREEN_EQ_NO) 
+      dt_pixelpipe_cache_free_align(in);
   }
 
   if(info)

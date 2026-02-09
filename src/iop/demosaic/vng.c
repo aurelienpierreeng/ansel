@@ -58,8 +58,9 @@ static void vng_interpolate(float *out, const float *const in,
   // if only linear interpolation is requested we can stop it here
   if(only_vng_linear) return;
 
-  char *buffer
-      = (char *)dt_alloc_align(sizeof(**brow) * width * 3 + sizeof(*ip) * prow * pcol * 320);
+  char *buffer = (char *)dt_pixelpipe_cache_alloc_align_cache(
+      sizeof(**brow) * width * 3 + sizeof(*ip) * prow * pcol * 320,
+      0);
   if(!buffer)
   {
     fprintf(stderr, "[demosaic] not able to allocate VNG buffer\n");
@@ -175,7 +176,7 @@ static void vng_interpolate(float *out, const float *const in,
   // copy the final two rows to the image
   memcpy(out + (4 * ((height - 4) * width + 2)), brow[0] + 2, sizeof(*out) * 4 * (width - 4));
   memcpy(out + (4 * ((height - 3) * width + 2)), brow[1] + 2, sizeof(*out) * 4 * (width - 4));
-  dt_free_align(buffer);
+  dt_pixelpipe_cache_free_align(buffer);
 
   if(filters != 9 && !FILTERS_ARE_4BAYER(filters)) // x-trans or CYGM/RGBE
 // for Bayer mix the two greens to make VNG4

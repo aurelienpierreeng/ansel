@@ -283,7 +283,9 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   const size_t coordbufsize = (size_t)height * width * 2 * sizeof(float);
 
-  coordbuf = dt_alloc_align(coordbufsize);
+  coordbuf = dt_pixelpipe_cache_alloc_align_cache(
+      coordbufsize,
+      piece->pipe->type);
   if(coordbuf == NULL) goto error;
 
 #ifdef _OPENMP
@@ -373,7 +375,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   dt_opencl_release_mem_object(dev_colors);
   dt_opencl_release_mem_object(dev_thresholds);
   dt_opencl_release_mem_object(dev_coord);
-  dt_free_align(coordbuf);
+  dt_pixelpipe_cache_free_align(coordbuf);
   dt_opencl_release_mem_object(dev_raw);
   dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
 
@@ -384,7 +386,7 @@ error:
   dt_opencl_release_mem_object(dev_colors);
   dt_opencl_release_mem_object(dev_thresholds);
   dt_opencl_release_mem_object(dev_coord);
-  dt_free_align(coordbuf);
+  dt_pixelpipe_cache_free_align(coordbuf);
   dt_opencl_release_mem_object(dev_raw);
   dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
   dt_print(DT_DEBUG_OPENCL, "[opencl_rawoverexposed] couldn't enqueue kernel! %d\n", err);

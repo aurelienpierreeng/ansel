@@ -309,7 +309,9 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
   {
     if(d->params.bpp == 8)
     {
-      image_data = dt_alloc_align((size_t)3 * data->width * data->height);
+      image_data = dt_pixelpipe_cache_alloc_align_cache(
+          (size_t)3 * data->width * data->height,
+          0);
       const uint8_t *in_ptr = (const uint8_t *)in;
       uint8_t *out_ptr = (uint8_t *)image_data;
       for(int y = 0; y < data->height; y++)
@@ -320,7 +322,9 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
     }
     else
     {
-      image_data = dt_alloc_align(sizeof(uint16_t) * 3 * data->width * data->height);
+      image_data = dt_pixelpipe_cache_alloc_align_cache(
+          sizeof(uint16_t) * 3 * data->width * data->height,
+          0);
       const uint16_t *in_ptr = (const uint16_t *)in;
       uint16_t *out_ptr = (uint16_t *)image_data;
       for(int y = 0; y < data->height; y++)
@@ -336,7 +340,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
 
   dt_pdf_image_t *image = dt_pdf_add_image(d->pdf, image_data, d->params.global.width, d->params.global.height, d->params.bpp, icc_id, d->page_border);
 
-  dt_free_align(image_data);
+  dt_pixelpipe_cache_free_align(image_data);
 
   d->images = g_list_append(d->images, image);
 

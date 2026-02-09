@@ -178,7 +178,9 @@ dt_imageio_retval_t dt_imageio_open_png(dt_image_t *img, const char *filename, d
     return DT_IMAGEIO_CACHE_FULL;
   }
 
-  buf = dt_alloc_align((size_t)image.height * png_get_rowbytes(image.png_ptr, image.info_ptr));
+  buf = dt_pixelpipe_cache_alloc_align_cache(
+      (size_t)image.height * png_get_rowbytes(image.png_ptr, image.info_ptr),
+      0);
 
   if(!buf)
   {
@@ -190,7 +192,7 @@ dt_imageio_retval_t dt_imageio_open_png(dt_image_t *img, const char *filename, d
 
   if(read_image(&image, (void *)buf) != 0)
   {
-    dt_free_align(buf);
+    dt_pixelpipe_cache_free_align(buf);
     fprintf(stderr, "[png_open] could not read image `%s'\n", img->filename);
     return DT_IMAGEIO_FILE_CORRUPTED;
   }
@@ -208,7 +210,7 @@ dt_imageio_retval_t dt_imageio_open_png(dt_image_t *img, const char *filename, d
                                              + buf[2 * (3 * (j * width + i) + k) + 1]) * (1.0f / 65535.0f);
   }
 
-  dt_free_align(buf);
+  dt_pixelpipe_cache_free_align(buf);
 
   img->buf_dsc.cst = IOP_CS_RGB; // png is always RGB
   img->buf_dsc.filters = 0u;
@@ -260,4 +262,3 @@ int dt_imageio_png_read_profile(const char *filename, uint8_t **out)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

@@ -2264,8 +2264,8 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
                 && module->planned_roi_in.width == 0
                 && module->planned_roi_in.height == 0))
         {
-          float *transformed_mask = dt_alloc_align_float((size_t)module->planned_roi_out.width
-                                                          * module->planned_roi_out.height);
+          float *transformed_mask = dt_pixelpipe_cache_alloc_align_float_cache(module->planned_roi_out.width
+                                                                               * module->planned_roi_out.height, 0);
           if(!transformed_mask)
           {
             fprintf(stderr, "[raster masks] could not allocate memory for transformed mask\n");
@@ -2281,7 +2281,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
                                       transformed_mask,
                                       &module->planned_roi_in,
                                       &module->planned_roi_out);
-          if(*free_mask) dt_free_align(raster_mask);
+          if(*free_mask) dt_pixelpipe_cache_free_align(raster_mask);
           *free_mask = TRUE;
           raster_mask = transformed_mask;
           dt_print(DT_DEBUG_MASKS, "[raster masks] doing transform\n");
@@ -2315,7 +2315,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
 
 void dt_dev_clear_rawdetail_mask(dt_dev_pixelpipe_t *pipe)
 {
-  if(pipe->rawdetail_mask_data) dt_free_align(pipe->rawdetail_mask_data);
+  if(pipe->rawdetail_mask_data) dt_pixelpipe_cache_free_align(pipe->rawdetail_mask_data);
   pipe->rawdetail_mask_data = NULL;
 }
 
@@ -2334,8 +2334,8 @@ gboolean dt_dev_write_rawdetail_mask(dt_dev_pixelpipe_iop_t *piece, float *const
 
   const int width = roi_in->width;
   const int height = roi_in->height;
-  float *mask = dt_alloc_align_float((size_t)width * height);
-  float *tmp = dt_alloc_align_float((size_t)width * height);
+  float *mask = dt_pixelpipe_cache_alloc_align_float_cache((size_t)width * height, 0);
+  float *tmp = dt_pixelpipe_cache_alloc_align_float_cache((size_t)width * height, 0);
   if((mask == NULL) || (tmp == NULL)) goto error;
 
   p->rawdetail_mask_data = mask;
@@ -2349,14 +2349,14 @@ gboolean dt_dev_write_rawdetail_mask(dt_dev_pixelpipe_iop_t *piece, float *const
     wb[0] = wb[1] = wb[2] = 1.0f;
   }
   dt_masks_calc_rawdetail_mask(rgb, mask, tmp, width, height, wb);
-  dt_free_align(tmp);
+  dt_pixelpipe_cache_free_align(tmp);
   dt_print(DT_DEBUG_MASKS, "[dt_dev_write_rawdetail_mask] %i (%ix%i)\n", mode, roi_in->width, roi_in->height);
   return FALSE;
 
   error:
   fprintf(stderr, "[dt_dev_write_rawdetail_mask] couldn't write detail mask\n");
-  dt_free_align(mask);
-  dt_free_align(tmp);
+  dt_pixelpipe_cache_free_align(mask);
+  dt_pixelpipe_cache_free_align(tmp);
   return TRUE;
 }
 
@@ -2384,7 +2384,7 @@ gboolean dt_dev_write_rawdetail_mask_cl(dt_dev_pixelpipe_iop_t *piece, cl_mem in
   const int devid = p->devid;
 
   cl_int err = CL_SUCCESS;
-  mask = dt_alloc_align_float((size_t)width * height);
+  mask = dt_pixelpipe_cache_alloc_align_float_cache((size_t)width * height, 0);
   if(mask == NULL) goto error;
   out = dt_opencl_alloc_device(devid, width, height, sizeof(float));
   if(out == NULL) goto error;
@@ -2440,7 +2440,7 @@ gboolean dt_dev_write_rawdetail_mask_cl(dt_dev_pixelpipe_iop_t *piece, cl_mem in
   dt_dev_clear_rawdetail_mask(p);
   dt_opencl_release_mem_object(out);
   dt_opencl_release_mem_object(tmp);
-  dt_free_align(mask);
+  dt_pixelpipe_cache_free_align(mask);
   return TRUE;
 }
 #endif
@@ -2487,11 +2487,11 @@ float *dt_dev_distort_detail_mask(const dt_dev_pixelpipe_t *pipe, float *src, co
                     && module->planned_roi_in.width == 0
                     && module->planned_roi_in.height == 0))
         {
-          float *tmp = dt_alloc_align_float((size_t)module->planned_roi_out.width * module->planned_roi_out.height);
+          float *tmp = dt_pixelpipe_cache_alloc_align_float_cache((size_t)module->planned_roi_out.width * module->planned_roi_out.height, 0);
           dt_vprint(DT_DEBUG_MASKS, "   %s %ix%i -> %ix%i\n", module->module->op, module->planned_roi_in.width, module->planned_roi_in.height, module->planned_roi_out.width, module->planned_roi_out.height);
           module->module->distort_mask(module->module, module, inmask, tmp, &module->planned_roi_in, &module->planned_roi_out);
           resmask = tmp;
-          if(inmask != src) dt_free_align(inmask);
+          if(inmask != src) dt_pixelpipe_cache_free_align(inmask);
           inmask = tmp;
         }
         else if(!module->module->distort_mask &&

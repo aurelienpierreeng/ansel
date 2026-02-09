@@ -149,7 +149,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   const float *const restrict in = (const float *const restrict)ivoid;
   float *const restrict out = (float *const restrict)ovoid;
-  float *const restrict cmy = dt_alloc_align_float(roi_in->width * roi_in->height * 4);
+  float *const restrict cmy = dt_pixelpipe_cache_alloc_align_float_cache(roi_in->width * roi_in->height * 4, 0);
 
   const float sharpen = d->diffusion / (scale * scale) / d->iterations;
 
@@ -234,7 +234,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       for_four_channels(c, aligned(temp_out, out)) out[index + c] = 1.f - temp_out[index + c];
     }
 
-  dt_free_align(cmy);
+  dt_pixelpipe_cache_free_align(cmy);
 }
 
 

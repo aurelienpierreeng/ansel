@@ -416,7 +416,7 @@ void dt_develop_blendif_raw_blend(struct dt_dev_pixelpipe_iop_t *piece,
   {
     _blend_row_func *const blend = _choose_blend_func(d->blend_mode);
 
-    float *tmp_buffer = dt_alloc_align_float((size_t)owidth * oheight);
+    float *tmp_buffer = dt_pixelpipe_cache_alloc_align_float_cache((size_t)owidth * oheight, 0);
     if (tmp_buffer != NULL)
     {
       dt_iop_image_copy(tmp_buffer, b, (size_t)owidth * oheight);
@@ -446,7 +446,7 @@ void dt_develop_blendif_raw_blend(struct dt_dev_pixelpipe_iop_t *piece,
           blend(a + a_start, tmp_buffer + bm_start, b + bm_start, mask + bm_start, owidth);
         }
       }
-      dt_free_align(tmp_buffer);
+      dt_pixelpipe_cache_free_align(tmp_buffer);
     }
   }
 }

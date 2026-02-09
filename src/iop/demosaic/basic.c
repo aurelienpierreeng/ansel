@@ -512,7 +512,7 @@ static int green_equilibration_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe
                                                  slocal);
     if(err != CL_SUCCESS) goto error;
 
-    sumsum = dt_alloc_align_float((size_t)2 * reducesize);
+    sumsum = dt_pixelpipe_cache_alloc_align_float((size_t)2 * reducesize, piece->pipe);
     if(sumsum == NULL) goto error;
     err = dt_opencl_read_buffer_from_device(devid, (void *)sumsum, dev_r, 0,
                                             sizeof(float) * 2 * reducesize, CL_TRUE);
@@ -572,14 +572,14 @@ static int green_equilibration_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe
   dt_opencl_release_mem_object(dev_tmp);
   dt_opencl_release_mem_object(dev_m);
   dt_opencl_release_mem_object(dev_r);
-  dt_free_align(sumsum);
+  dt_pixelpipe_cache_free_align(sumsum);
   return TRUE;
 
 error:
   dt_opencl_release_mem_object(dev_tmp);
   dt_opencl_release_mem_object(dev_m);
   dt_opencl_release_mem_object(dev_r);
-  dt_free_align(sumsum);
+  dt_pixelpipe_cache_free_align(sumsum);
   dt_print(DT_DEBUG_OPENCL, "[opencl_demosaic_green_equilibration] couldn't enqueue kernel! %d\n", err);
   return FALSE;
 }

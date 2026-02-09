@@ -173,7 +173,7 @@ static inline void variance_analyse(const float *const restrict guide, // I
   /*
   * input is array of struct : { { guide , mask, guide * guide, guide * mask } }
   */
-  float *const restrict input = dt_alloc_align_float(Ndimch);
+  float *const restrict input = dt_pixelpipe_cache_alloc_align_float_cache(Ndimch, 0);
   if(input == NULL) goto error;
 
   // Pre-multiply guide and mask and pack all inputs into an array of 4x1 SIMD struct
@@ -210,7 +210,7 @@ static inline void variance_analyse(const float *const restrict guide, // I
   }
 
 error:;
-  if(input) dt_free_align(input);
+  if(input) dt_pixelpipe_cache_free_align(input);
 }
 
 
@@ -309,10 +309,10 @@ static inline void fast_surface_blur(float *const restrict image,
   const size_t num_elem_ds = ds_width * ds_height;
   const size_t num_elem = width * height;
 
-  float *const restrict ds_image = dt_alloc_sse_ps(dt_round_size_sse(num_elem_ds));
-  float *const restrict ds_mask = dt_alloc_sse_ps(dt_round_size_sse(num_elem_ds));
-  float *const restrict ds_ab = dt_alloc_sse_ps(dt_round_size_sse(num_elem_ds * 2));
-  float *const restrict ab = dt_alloc_sse_ps(dt_round_size_sse(num_elem * 2));
+  float *const restrict ds_image = dt_pixelpipe_cache_alloc_align_float_cache(dt_round_size_sse(num_elem_ds), 0);
+  float *const restrict ds_mask = dt_pixelpipe_cache_alloc_align_float_cache(dt_round_size_sse(num_elem_ds), 0);
+  float *const restrict ds_ab = dt_pixelpipe_cache_alloc_align_float_cache(dt_round_size_sse(num_elem_ds * 2), 0);
+  float *const restrict ab = dt_pixelpipe_cache_alloc_align_float_cache(dt_round_size_sse(num_elem * 2), 0);
 
   if(!ds_image || !ds_mask || !ds_ab || !ab)
   {
@@ -353,10 +353,10 @@ static inline void fast_surface_blur(float *const restrict image,
     apply_linear_blending_w_geomean(image, ab, num_elem);
 
 clean:
-  if(ab) dt_free_align(ab);
-  if(ds_ab) dt_free_align(ds_ab);
-  if(ds_mask) dt_free_align(ds_mask);
-  if(ds_image) dt_free_align(ds_image);
+  if(ab) dt_pixelpipe_cache_free_align(ab);
+  if(ds_ab) dt_pixelpipe_cache_free_align(ds_ab);
+  if(ds_mask) dt_pixelpipe_cache_free_align(ds_mask);
+  if(ds_image) dt_pixelpipe_cache_free_align(ds_image);
 }
 
 // clang-format off

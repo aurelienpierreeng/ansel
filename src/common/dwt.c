@@ -237,9 +237,9 @@ static void dwt_wavelet_decompose(float *img, dwt_params_t *const p, _dwt_layer_
   /* image buffers */
   buffer[0] = img;
   /* temporary storage */
-  buffer[1] = dt_alloc_align_float(size);
+  buffer[1] = dt_pixelpipe_cache_alloc_align_float_cache(size, 0);
   // buffer to reconstruct the image
-  layers = dt_alloc_align_float((size_t)4 * p->width * p->height);
+  layers = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * p->width * p->height, 0);
   // scratch buffer for decomposition
   temp = dt_alloc_align_float(darktable.num_openmp_threads * 4 * p->width);
 
@@ -252,7 +252,7 @@ static void dwt_wavelet_decompose(float *img, dwt_params_t *const p, _dwt_layer_
 
   if(p->merge_from_scale > 0)
   {
-    merged_layers = dt_alloc_align_float((size_t)p->width * p->height * p->ch);
+    merged_layers = dt_pixelpipe_cache_alloc_align_float_cache((size_t)p->width * p->height * p->ch, 0);
     if(merged_layers == NULL)
     {
       printf("not enough memory for wavelet decomposition");
@@ -347,9 +347,9 @@ static void dwt_wavelet_decompose(float *img, dwt_params_t *const p, _dwt_layer_
 
 cleanup:
   if(temp) dt_free_align(temp);
-  if(layers) dt_free_align(layers);
-  if(merged_layers) dt_free_align(merged_layers);
-  if(buffer[1]) dt_free_align(buffer[1]);
+  if(layers) dt_pixelpipe_cache_free_align(layers);
+  if(merged_layers) dt_pixelpipe_cache_free_align(merged_layers);
+  if(buffer[1]) dt_pixelpipe_cache_free_align(buffer[1]);
 }
 
 /* this function prepares for decomposing, which is done in the function dwt_wavelet_decompose() */
@@ -506,7 +506,7 @@ static void dwt_denoise_horiz_1ch(float *const restrict out, float *const restri
  */
 void dwt_denoise(float *const img, const int width, const int height, const int bands, const float *const noise)
 {
-  float *const details = dt_alloc_align_float((size_t)2 * width * height);
+  float *const details = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * width * height, 0);
   if(details == NULL) return;
   float *const interm = details + width * height;	// temporary storage for use during each pass
 
@@ -524,7 +524,7 @@ void dwt_denoise(float *const img, const int width, const int height, const int 
     // will be added to the residue left in 'img' on the last iteration
     dwt_denoise_horiz_1ch(interm, img, details, height, width, lev, noise[lev], last);
   }
-  dt_free_align(details);
+  dt_pixelpipe_cache_free_align(details);
 }
 
 #ifdef HAVE_OPENCL

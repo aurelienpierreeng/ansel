@@ -207,7 +207,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
         if(free_channel_data)
           free(channel_data);
         if(free_mask)
-          dt_free_align(raster_mask);
+          dt_pixelpipe_cache_free_align(raster_mask);
       }
     }
 

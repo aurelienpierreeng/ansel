@@ -139,13 +139,13 @@ dt_gaussian_t *dt_gaussian_init(const int width,    // width of input image
     g->min[k] = min[k];
   }
 
-  g->buf = dt_alloc_align_float((size_t)channels * width * height);
+  g->buf = dt_pixelpipe_cache_alloc_align_float_cache((size_t)channels * width * height, 0);
   if(!g->buf) goto error;
 
   return g;
 
 error:
-  if(g->buf) dt_free_align(g->buf);
+  if(g->buf) dt_pixelpipe_cache_free_align(g->buf);
   if(g->max) free(g->max);
   if(g->min) free(g->min);
   free(g);
@@ -497,7 +497,7 @@ void dt_gaussian_blur_4c(dt_gaussian_t *g, const float *const in, float *const o
 void dt_gaussian_free(dt_gaussian_t *g)
 {
   if(!g) return;
-  dt_free_align(g->buf);
+  dt_pixelpipe_cache_free_align(g->buf);
   free(g->min);
   free(g->max);
   free(g);

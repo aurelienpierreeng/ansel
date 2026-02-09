@@ -138,7 +138,9 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
     // Decompress the JPG into our own memory format
     dt_imageio_jpeg_t jpg;
     if(dt_imageio_jpeg_decompress_header(buf, bufsize, &jpg)) goto error;
-    *buffer = (uint8_t *)dt_alloc_align(sizeof(uint8_t) * 4 * jpg.width * jpg.height);
+    *buffer = (uint8_t *)dt_pixelpipe_cache_alloc_align_cache(
+        sizeof(uint8_t) * 4 * jpg.width * jpg.height,
+        0);
     if(!*buffer) goto error;
 
     *th_width = jpg.width;
@@ -147,7 +149,7 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
     *color_space = DT_COLORSPACE_SRGB;
     if(dt_imageio_jpeg_decompress(&jpg, *buffer))
     {
-      dt_free_align(*buffer);
+      dt_pixelpipe_cache_free_align(*buffer);
       *buffer = NULL;
       goto error;
     }
@@ -178,7 +180,9 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
     *th_height = image->rows;
     *color_space = DT_COLORSPACE_SRGB; // FIXME: this assumes that embedded thumbnails are always srgb
 
-    *buffer = (uint8_t *)dt_alloc_align(sizeof(uint8_t) * 4 * image->columns * image->rows);
+    *buffer = (uint8_t *)dt_pixelpipe_cache_alloc_align_cache(
+        sizeof(uint8_t) * 4 * image->columns * image->rows,
+        0);
     if(!*buffer) goto error_gm;
 
     for(uint32_t row = 0; row < image->rows; row++)
@@ -191,7 +195,7 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
       if(gm_ret != MagickPass)
       {
         fprintf(stderr, "[dt_imageio_large_thumbnail GM] error_gm reading thumbnail\n");
-        dt_free_align(*buffer);
+        dt_pixelpipe_cache_free_align(*buffer);
         *buffer = NULL;
         goto error_gm;
       }
@@ -300,7 +304,7 @@ gboolean dt_imageio_has_mono_preview(const char *filename)
   cleanup:
 
   dt_print(DT_DEBUG_IMAGEIO,"[dt_imageio_has_mono_preview] testing `%s', yes/no %i, %ix%i\n", filename, mono, thumb_width, thumb_height);
-  if(tmp) dt_free_align(tmp);
+  if(tmp) dt_pixelpipe_cache_free_align(tmp);
   return mono;
 }
 
@@ -967,13 +971,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   else
     res = dt_dev_pixelpipe_init_export(&pipe, buf_width, buf_height, format->levels(format_params), export_masks);
 
-  if(!res)
-  {
-    dt_control_log(
-        _("failed to allocate memory for %s, please verify your memory settings or close some applications on your system."),
-        thumbnail_export ? C_("noun", "thumbnail export") : C_("noun", "export"));
-    goto error;
-  }
+  if(!res) goto error;
 
   const gboolean use_style = !thumbnail_export && format_params->style[0] != '\0';
   //  If a style is to be applied during export, add the iop params into the history
@@ -1043,7 +1041,9 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   const size_t pixels = pipe.backbuf.width * pipe.backbuf.height * 4;
   if(bpp == 8)
   {
-    outbuf = dt_alloc_align(sizeof(uint8_t) * pixels);
+    outbuf = dt_pixelpipe_cache_alloc_align_cache(
+        sizeof(uint8_t) * pixels,
+        0);
     if(outbuf && display_byteorder)
       _swap_byteorder_float_to_uint8(data, outbuf, pipe.backbuf.width, pipe.backbuf.height);
     else if(outbuf)
@@ -1051,13 +1051,17 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   }
   else if(bpp == 16)
   {
-    outbuf = dt_alloc_align(sizeof(uint16_t) * pixels);
+    outbuf = dt_pixelpipe_cache_alloc_align_cache(
+        sizeof(uint16_t) * pixels,
+        0);
     if(outbuf)
       _export_final_buffer_to_uint16(data, outbuf, pipe.backbuf.width, pipe.backbuf.height);
   }
   else // output float, no further harm done to the pixels :)
   {
-    outbuf = dt_alloc_align(sizeof(float_t) * pixels);
+    outbuf = dt_pixelpipe_cache_alloc_align_cache(
+        sizeof(float_t) * pixels,
+        0);
     if(outbuf)
       memcpy(outbuf, data, sizeof(float_t) * pixels);
   }
@@ -1110,11 +1114,11 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                             format_params, storage, storage_params);
   }
 
-  if(outbuf) dt_free_align(outbuf);
+  if(outbuf) dt_pixelpipe_cache_free_align(outbuf);
   return 0; // success
 
 error:
-  if(outbuf) dt_free_align(outbuf);
+  if(outbuf) dt_pixelpipe_cache_free_align(outbuf);
   dt_dev_pixelpipe_cleanup(&pipe);
 error_early:
   dt_dev_cleanup(&dev);

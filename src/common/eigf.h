@@ -74,7 +74,7 @@ static inline void eigf_variance_analysis(const float *const restrict guide, // 
 {
   // We also use gaussian blurs instead of the square blurs of the guided filter
   const size_t Ndim = width * height;
-  float *const restrict in = dt_alloc_sse_ps(Ndim * 4);
+  float *const restrict in = dt_pixelpipe_cache_alloc_align_float_cache(Ndim * 4, 0);
   dt_gaussian_t *g = NULL;
   if(in == NULL) goto error;
 
@@ -132,7 +132,7 @@ dt_omp_firstprivate(out, Ndim) \
 
 error:;
   if(g) dt_gaussian_free(g);
-  if(in) dt_free_align(in);
+  if(in) dt_pixelpipe_cache_free_align(in);
 }
 
 // same function as above, but specialized for the case where guide == mask
@@ -144,7 +144,7 @@ static inline void eigf_variance_analysis_no_mask(const float *const restrict gu
 {
   // We also use gaussian blurs instead of the square blurs of the guided filter
   const size_t Ndim = width * height;
-  float *const restrict in = dt_alloc_sse_ps(Ndim * 2);
+  float *const restrict in = dt_pixelpipe_cache_alloc_align_float_cache(Ndim * 2, 0);
   dt_gaussian_t *g = NULL;
   if(in == NULL) goto error;
 
@@ -190,7 +190,7 @@ dt_omp_firstprivate(out, Ndim) \
 
 error:;
   if(g) dt_gaussian_free(g);
-  if(in) dt_free_align(in);
+  if(in) dt_pixelpipe_cache_free_align(in);
 }
 
 static inline void eigf_blending(float *const restrict image, const float *const restrict mask,
@@ -280,12 +280,12 @@ static inline void fast_eigf_surface_blur(float *const restrict image,
   const size_t num_elem_ds = ds_width * ds_height;
   const size_t num_elem = width * height;
 
-  float *const restrict mask = dt_alloc_sse_ps(dt_round_size_sse(num_elem));
-  float *const restrict ds_image = dt_alloc_sse_ps(dt_round_size_sse(num_elem_ds));
-  float *const restrict ds_mask = dt_alloc_sse_ps(dt_round_size_sse(num_elem_ds));
+  float *const restrict mask = dt_pixelpipe_cache_alloc_align_float_cache(dt_round_size_sse(num_elem), 0);
+  float *const restrict ds_image = dt_pixelpipe_cache_alloc_align_float_cache(dt_round_size_sse(num_elem_ds), 0);
+  float *const restrict ds_mask = dt_pixelpipe_cache_alloc_align_float_cache(dt_round_size_sse(num_elem_ds), 0);
   // average - variance arrays: store the guide and mask averages and variances
-  float *const restrict ds_av = dt_alloc_sse_ps(dt_round_size_sse(num_elem_ds * 4));
-  float *const restrict av = dt_alloc_sse_ps(dt_round_size_sse(num_elem * 4));
+  float *const restrict ds_av = dt_pixelpipe_cache_alloc_align_float_cache(dt_round_size_sse(num_elem_ds * 4), 0);
+  float *const restrict av = dt_pixelpipe_cache_alloc_align_float_cache(dt_round_size_sse(num_elem * 4), 0);
 
   if(!ds_image || !ds_mask || !ds_av || !av || !mask)
   {
@@ -327,11 +327,11 @@ static inline void fast_eigf_surface_blur(float *const restrict image,
   }
 
 clean:
-  if(av) dt_free_align(av);
-  if(ds_av) dt_free_align(ds_av);
-  if(ds_mask) dt_free_align(ds_mask);
-  if(ds_image) dt_free_align(ds_image);
-  if(mask) dt_free_align(mask);
+  if(av) dt_pixelpipe_cache_free_align(av);
+  if(ds_av) dt_pixelpipe_cache_free_align(ds_av);
+  if(ds_mask) dt_pixelpipe_cache_free_align(ds_mask);
+  if(ds_image) dt_pixelpipe_cache_free_align(ds_image);
+  if(mask) dt_pixelpipe_cache_free_align(mask);
 }
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

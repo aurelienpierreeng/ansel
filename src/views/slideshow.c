@@ -182,7 +182,9 @@ static int process_image(dt_slideshow_t *d, dt_slideshow_slot_t slot)
   dat.head.height = dat.head.max_height = d->height;
   dat.head.style[0] = '\0';
   dat.rank = d->buf[slot].rank;
-  dat.buf.buf = dt_alloc_align(sizeof(uint32_t) * d->width * d->height);
+  dat.buf.buf = dt_pixelpipe_cache_alloc_align_cache(
+      sizeof(uint32_t) * d->width * d->height,
+      0);
 
   d->exporting++;
 
@@ -230,11 +232,11 @@ static int process_image(dt_slideshow_t *d, dt_slideshow_slot_t slot)
     dt_pthread_mutex_unlock(&d->lock);
   }
 
-  dt_free_align(dat.buf.buf);
+  dt_pixelpipe_cache_free_align(dat.buf.buf);
   return 0;
 
  error:
-  dt_free_align(dat.buf.buf);
+  dt_pixelpipe_cache_free_align(dat.buf.buf);
   return 1;
 }
 
@@ -408,7 +410,9 @@ void enter(dt_view_t *self)
 
   for(int k=S_LEFT; k<S_SLOT_LAST; k++)
   {
-    d->buf[k].buf = dt_alloc_align(sizeof(uint32_t) * d->width * d->height);
+    d->buf[k].buf = dt_pixelpipe_cache_alloc_align_cache(
+        sizeof(uint32_t) * d->width * d->height,
+        0);
     d->buf[k].width =  d->width;
     d->buf[k].height = d->height;
     d->buf[k].invalidated = TRUE;
@@ -466,7 +470,7 @@ void leave(dt_view_t *self)
 
   for(int k=S_LEFT; k<S_SLOT_LAST; k++)
   {
-    dt_free_align(d->buf[k].buf);
+    dt_pixelpipe_cache_free_align(d->buf[k].buf);
     d->buf[k].buf = NULL;
   }
   dt_pthread_mutex_unlock(&d->lock);

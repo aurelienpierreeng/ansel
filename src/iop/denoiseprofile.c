@@ -30,6 +30,7 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
+#include "develop/pixelpipe_cache.h"
 #include "develop/tiling.h"
 #include "dtgtk/drawingarea.h"
 
@@ -1413,9 +1414,9 @@ static void process_wavelets(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
     backtransform_Y0U0V0(out, width, height, d->a[1] * compensate_p, p, d->b[1], d->bias - 0.5 * logf(in_scale), wb, toRGB);
   }
 
-  dt_free_align(buf);
-  dt_free_align(tmp);
-  dt_free_align(precond);
+  dt_pixelpipe_cache_free_align(buf);
+  dt_pixelpipe_cache_free_align(tmp);
+  dt_pixelpipe_cache_free_align(precond);
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, width, height);
 
@@ -1617,7 +1618,7 @@ static void process_nlmeans_cpu(dt_dev_pixelpipe_iop_t *piece,
                                       .norm = norm2 };
   denoiser(in,ovoid,roi_in,roi_out,&params);
 
-  dt_free_align(in);
+  dt_pixelpipe_cache_free_align(in);
   nlmeans_backtransform(d,ovoid,roi_in,scale,compensate_p,wb,aa,bb,p);
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
@@ -2208,8 +2209,9 @@ static int process_wavelets_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
   dev_r = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 4 * reducesize);
   if(dev_r == NULL) goto error;
 
-  sumsum = dt_alloc_align_float((size_t)4 * reducesize);
+  sumsum = (float *)dt_pixelpipe_cache_alloc_align(sizeof(float) * 4 * (size_t)reducesize, piece->pipe);
   if(sumsum == NULL) goto error;
+  sumsum = (float *)__builtin_assume_aligned(sumsum, DT_CACHELINE_BYTES);
 
   dev_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
   if(dev_tmp == NULL) goto error;
@@ -2588,7 +2590,7 @@ static int process_wavelets_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
   for(int k = 0; k < max_scale; k++)
     dt_opencl_release_mem_object(dev_detail[k]);
   free(dev_detail);
-  dt_free_align(sumsum);
+  dt_pixelpipe_cache_free_align(sumsum);
   return TRUE;
 
 error:
@@ -2599,7 +2601,7 @@ error:
   for(int k = 0; k < max_scale; k++)
     dt_opencl_release_mem_object(dev_detail[k]);
   free(dev_detail);
-  dt_free_align(sumsum);
+  dt_pixelpipe_cache_free_align(sumsum);
   dt_print(DT_DEBUG_OPENCL, "[opencl_denoiseprofile] couldn't enqueue kernel! %d, devid %d\n", err, devid);
   return FALSE;
 }

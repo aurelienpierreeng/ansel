@@ -190,7 +190,7 @@ static void wavelet_denoise(const float *const restrict in, float *const restric
                             const dt_iop_rawdenoise_data_t * const data, const uint32_t filters)
 {
   const size_t size = (size_t)(roi->width / 2 + 1) * (roi->height / 2 + 1);
-  float *const restrict fimg = dt_alloc_align_float(size);
+  float *const restrict fimg = dt_pixelpipe_cache_alloc_align_float_cache(size, 0);
   if (!fimg)
     return;
 
@@ -292,7 +292,7 @@ static void wavelet_denoise(const float *const restrict in, float *const restric
     }
   }
 #endif
-  dt_free_align(fimg);
+  dt_pixelpipe_cache_free_align(fimg);
 }
 
 static inline float vstransform(const float value)
@@ -309,7 +309,7 @@ static void wavelet_denoise_xtrans(const float *const restrict in, float *const 
   const size_t size = (size_t)width * height;
   // allocate a buffer for the particular color channel to be denoise; we add two rows to simplify the
   // channel-extraction code (no special case for top/bottom row)
-  float *const img = dt_alloc_align_float((size_t)width * (height+2));
+  float *const img = dt_pixelpipe_cache_alloc_align_float_cache((size_t)width * (height+2), 0);
   if (!img)
   {
     // we ran out of memory, so just pass through the image without denoising
@@ -472,7 +472,7 @@ static void wavelet_denoise_xtrans(const float *const restrict in, float *const 
     }
   }
 
-  dt_free_align(img);
+  dt_pixelpipe_cache_free_align(img);
 }
 
 void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,

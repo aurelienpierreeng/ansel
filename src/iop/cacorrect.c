@@ -327,11 +327,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   if(avoidshift)
   {
     const size_t buffsize = (size_t)h_width * h_height;
-    redfactor = dt_alloc_align_float(buffsize);
+    redfactor = dt_pixelpipe_cache_alloc_align_float(buffsize, piece->pipe);
     memset(redfactor, 0, sizeof(float) * buffsize);
-    bluefactor = dt_alloc_align_float(buffsize);
+    bluefactor = dt_pixelpipe_cache_alloc_align_float(buffsize, piece->pipe);
     memset(bluefactor, 0, sizeof(float) * buffsize);
-    oldraw = dt_alloc_align_float(buffsize * 2);
+    oldraw = dt_pixelpipe_cache_alloc_align_float(buffsize * 2, piece->pipe);
     memset(oldraw, 0, sizeof(float) * buffsize * 2);
     // copy raw values before ca correction
 #ifdef _OPENMP
@@ -349,11 +349,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   double fitparams[2][2][16];
 
   // temporary array to store simple interpolation of G
-  float *Gtmp = dt_alloc_align_float((size_t)height * width);
+  float *Gtmp = dt_pixelpipe_cache_alloc_align_float((size_t)height * width, piece->pipe);
   memset(Gtmp, 0, sizeof(float) * height * width);
 
   // temporary array to avoid race conflicts, only every second pixel needs to be saved here
-  float *RawDataTmp = dt_alloc_align_float(height * width / 2 + 4);
+  float *RawDataTmp = dt_pixelpipe_cache_alloc_align_float(height * width / 2 + 4, piece->pipe);
 
   const int border = 8;
   const int border2 = 16;
@@ -1298,11 +1298,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   }
 
   free(buffer1);
-  dt_free_align(RawDataTmp);
-  dt_free_align(Gtmp);
-  dt_free_align(redfactor);
-  dt_free_align(bluefactor);
-  dt_free_align(oldraw);
+  dt_pixelpipe_cache_free_align(RawDataTmp);
+  dt_pixelpipe_cache_free_align(Gtmp);
+  dt_pixelpipe_cache_free_align(redfactor);
+  dt_pixelpipe_cache_free_align(bluefactor);
+  dt_pixelpipe_cache_free_align(oldraw);
 }
 
 /*==================================================================================

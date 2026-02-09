@@ -112,7 +112,7 @@ void init_presets(dt_iop_module_so_t *self)
 static float *const init_gaussian_kernel(const int rad, const size_t mat_size, const float sigma2)
 {
   float weight = 0.0f;
-  float *const mat = dt_alloc_align_float(mat_size);
+  float *const mat = dt_pixelpipe_cache_alloc_align_float_cache(mat_size, 0);
   memset(mat, 0, sizeof(float) * mat_size);
   for(int l = -rad; l <= rad; l++) weight += mat[l + rad] = expf(-l * l / (2.f * sigma2));
   for(int l = -rad; l <= rad; l++) mat[l + rad] /= weight;
@@ -247,13 +247,13 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   dt_opencl_release_mem_object(dev_m);
   dt_opencl_release_mem_object(dev_tmp);
-  dt_free_align(mat);
+  dt_pixelpipe_cache_free_align(mat);
   return TRUE;
 
 error:
   dt_opencl_release_mem_object(dev_m);
   dt_opencl_release_mem_object(dev_tmp);
-  dt_free_align(mat);
+  dt_pixelpipe_cache_free_align(mat);
   dt_print(DT_DEBUG_OPENCL, "[opencl_sharpen] couldn't enqueue kernel! %d\n", err);
   return FALSE;
 }
@@ -390,7 +390,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       copy_pixel(row_out + 4*i, in + 4*(j*width+i));  //copy unsharpened border pixel
   }
 
-  dt_free_align(mat);
+  dt_pixelpipe_cache_free_align(mat);
   dt_free_align(tmp);
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)

@@ -74,13 +74,13 @@ typedef struct color_image
 // FIXME: the code consuming color_image doesn't check if we actually allocated the buffer
 static inline color_image new_color_image(int width, int height, int ch)
 {
-  return (color_image){ dt_alloc_align_float((size_t)width * height * ch), width, height, ch };
+  return (color_image){ dt_pixelpipe_cache_alloc_align_float_cache((size_t)width * height * ch, 0), width, height, ch };
 }
 
 // free space for n-component image
 static inline void free_color_image(color_image *img_p)
 {
-  dt_free_align(img_p->data);
+  dt_pixelpipe_cache_free_align(img_p->data);
   img_p->data = NULL;
 }
 
@@ -663,9 +663,15 @@ static void guided_filter_cl_fallback(int devid, cl_mem guide, cl_mem in, cl_mem
 {
   // fall-back implementation: copy data from device memory to host memory and perform filter
   // by CPU until there is a proper OpenCL implementation
-  float *guide_host = dt_alloc_align(sizeof(*guide_host) * width * height * ch);
-  float *in_host = dt_alloc_align(sizeof(*in_host) * width * height);
-  float *out_host = dt_alloc_align(sizeof(*out_host) * width * height);
+  float *guide_host = dt_pixelpipe_cache_alloc_align_float_cache(
+      width * height * ch,
+      0);
+  float *in_host = dt_pixelpipe_cache_alloc_align_float_cache(
+      width * height,
+      0);
+  float *out_host = dt_pixelpipe_cache_alloc_align_float_cache(
+      width * height,
+      0);
   int err;
   err = dt_opencl_read_host_from_device(devid, guide_host, guide, width, height, ch * sizeof(float));
   if(err != CL_SUCCESS) goto error;
@@ -675,9 +681,9 @@ static void guided_filter_cl_fallback(int devid, cl_mem guide, cl_mem in, cl_mem
   err = dt_opencl_write_host_to_device(devid, out_host, out, width, height, sizeof(float));
   if(err != CL_SUCCESS) goto error;
 error:
-  dt_free_align(guide_host);
-  dt_free_align(in_host);
-  dt_free_align(out_host);
+  dt_pixelpipe_cache_free_align(guide_host);
+  dt_pixelpipe_cache_free_align(in_host);
+  dt_pixelpipe_cache_free_align(out_host);
 }
 
 

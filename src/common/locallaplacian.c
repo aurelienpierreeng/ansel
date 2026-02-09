@@ -283,7 +283,7 @@ static inline float *ll_pad_input(
   const int stride = 4;
   *wd2 = 2*max_supp + wd;
   *ht2 = 2*max_supp + ht;
-  float *const out = dt_alloc_align_float((size_t) *wd2 * *ht2);
+  float *const out = dt_pixelpipe_cache_alloc_align_float_cache((size_t) *wd2 * *ht2, 0);
   if(out == NULL) return NULL;
 
   if(b && b->mode == 2)
@@ -591,7 +591,7 @@ void local_laplacian_internal(
   // allocate pyramid pointers for padded input
   for(int l=1;l<=last_level;l++)
   {
-    padded[l] = dt_alloc_align_float((size_t)dl(w,l) * dl(h,l));
+    padded[l] = dt_pixelpipe_cache_alloc_align_float_cache((size_t)dl(w,l) * dl(h,l), 0);
     if(padded[l] == NULL) goto error;
   }
 
@@ -599,7 +599,7 @@ void local_laplacian_internal(
   float *output[max_levels] = {0};
   for(int l=0;l<=last_level;l++)
   {
-    output[l] = dt_alloc_align_float((size_t)dl(w,l) * dl(h,l));
+    output[l] = dt_pixelpipe_cache_alloc_align_float_cache((size_t)dl(w,l) * dl(h,l), 0);
     if(output[l] == NULL) goto error;
   }
 
@@ -627,7 +627,7 @@ void local_laplacian_internal(
   // allocate memory for intermediate laplacian pyramids
   float *buf[num_gamma][max_levels] = {{0}};
   for(int k=0;k<num_gamma;k++) for(int l=0;l<=last_level;l++)
-    buf[k][l] = dt_alloc_align_float((size_t)dl(w,l)*dl(h,l));
+    buf[k][l] = dt_pixelpipe_cache_alloc_align_float_cache((size_t)dl(w,l)*dl(h,l), 0);
 
   // the paper says remapping only level 3 not 0 does the trick, too
   // (but i really like the additional octave of sharpness we get,
@@ -769,11 +769,11 @@ error:;
   for(int l=0;l<max_levels;l++)
   {
     if(!b || b->mode != 1 || l)
-      if(padded[l]) dt_free_align(padded[l]);
+      if(padded[l]) dt_pixelpipe_cache_free_align(padded[l]);
     if(!b || b->mode != 1)
-      if(output[l]) dt_free_align(output[l]);
+      if(output[l]) dt_pixelpipe_cache_free_align(output[l]);
     for(int k=0; k<num_gamma;k++)
-      if(buf[k][l]) dt_free_align(buf[k][l]);
+      if(buf[k][l]) dt_pixelpipe_cache_free_align(buf[k][l]);
   }
 }
 

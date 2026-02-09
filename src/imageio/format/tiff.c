@@ -364,7 +364,7 @@ int write_image(dt_imageio_module_data_t *d_tmp, const char *filename, const voi
       g_hash_table_iter_init(&rm_iter, piece->raster_masks);
       while(g_hash_table_iter_next(&rm_iter, &key, &value))
       {
-        if(free_mask) dt_free_align(raster_mask);
+        if(free_mask) dt_pixelpipe_cache_free_align(raster_mask);
         raster_mask = dt_dev_get_raster_mask(pipe, piece->module, GPOINTER_TO_INT(key), NULL, &free_mask, NULL);
 
 
@@ -536,7 +536,7 @@ exit:
   g_free(wfilename);
 #endif
   if(free_mask)
-    dt_free_align(raster_mask);
+    dt_pixelpipe_cache_free_align(raster_mask);
 
   return rc;
 }

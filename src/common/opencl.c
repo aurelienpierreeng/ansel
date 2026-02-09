@@ -1378,7 +1378,7 @@ static float dt_opencl_benchmark_gpu(const int devid, const size_t width, const 
   unsigned int *const tea_states = alloc_tea_states(darktable.num_openmp_threads);
 
   // Simulate a 24 Mpx raw
-  buf = dt_alloc_align(6144 * 4096 * bpp);
+  buf = dt_pixelpipe_cache_alloc_align_cache( 6144 * 4096 * bpp, 0);
   if(buf == NULL) goto error;
 
   // Write noise in the raw image
@@ -1457,7 +1457,7 @@ static float dt_opencl_benchmark_gpu(const int devid, const size_t width, const 
   double end = dt_get_wtime();
 
   // free dev_mem
-  dt_free_align(buf);
+  dt_pixelpipe_cache_free_align(buf);
   free_tea_states(tea_states);
   dt_opencl_release_mem_object(dev_mem);
   dt_opencl_release_mem_object(mem_out);
@@ -1466,7 +1466,7 @@ static float dt_opencl_benchmark_gpu(const int devid, const size_t width, const 
 
 error:
   if(g) dt_gaussian_free_cl(g);
-  if(buf) dt_free_align(buf);
+  if(buf) dt_pixelpipe_cache_free_align(buf);
   free_tea_states(tea_states);
 
   if(gf) dt_guided_filter_free_cl_global(gf);
@@ -1480,17 +1480,17 @@ static float dt_opencl_benchmark_cpu(const size_t width, const size_t height, co
 {
   const int bpp = 4 * sizeof(float);
 
-  float *buf = dt_alloc_align(width * height * bpp);
+  float *buf = dt_pixelpipe_cache_alloc_align_cache( width * height * bpp, 0);
 
   const float Labmax[] = { INFINITY, INFINITY, INFINITY, INFINITY };
   const float Labmin[] = { -INFINITY, -INFINITY, -INFINITY, -INFINITY };
 
   unsigned int *const tea_states = alloc_tea_states(darktable.num_openmp_threads);
 
-  float *out = dt_alloc_align(width * height * bpp);
+  float *out = dt_pixelpipe_cache_alloc_align_cache( width * height * bpp, 0);
 
   // Fake raw
-  float *in = dt_alloc_align(6144 * 4096 * bpp);
+  float *in = dt_pixelpipe_cache_alloc_align_cache( 6144 * 4096 * bpp, 0);
 
   // Write noise in the fake raw
 #ifdef _OPENMP
@@ -1534,9 +1534,9 @@ static float dt_opencl_benchmark_cpu(const size_t width, const size_t height, co
   // end timer
   double end = dt_get_wtime();
 
-  dt_free_align(buf);
-  dt_free_align(out);
-  dt_free_align(in);
+  dt_pixelpipe_cache_free_align(buf);
+  dt_pixelpipe_cache_free_align(out);
+  dt_pixelpipe_cache_free_align(in);
   free_tea_states(tea_states);
 
   return (end - start);

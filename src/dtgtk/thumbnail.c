@@ -24,6 +24,7 @@
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
 #include "common/datetime.h"
+#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/focus.h"
 #include "common/focus_peaking.h"
@@ -452,7 +453,7 @@ int32_t _get_image_buffer(dt_job_t *job)
                               full_res_thumb_ht, full_res_focus, frows, fcols, 1.0, 0, 0);
       cairo_destroy(cri);
     }
-    dt_free_align(full_res_thumb);
+    dt_pixelpipe_cache_free_align(full_res_thumb);
   }
 
   // The job was cancelled on the queue. Good chances of having thumb destroyed anytime soon.

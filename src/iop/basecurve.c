@@ -529,7 +529,7 @@ static inline void gauss_blur(
     const size_t ht)
 {
   const float w[5] = { 1.f / 16.f, 4.f / 16.f, 6.f / 16.f, 4.f / 16.f, 1.f / 16.f };
-  float *tmp = dt_alloc_align_float((size_t)4 * wd * ht);
+  float *tmp = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * wd * ht, 0);
   if(tmp == NULL) return;
 
   memset(tmp, 0, sizeof(float) * 4 * wd * ht);
@@ -573,7 +573,7 @@ static inline void gauss_blur(
       for(int jj=-2;jj<=2;jj++)
         output[4*(j*wd+i)+c] += tmp[4*(MIN(j+jj, ht-(j+jj-ht+1))*wd+i)+c] * w[jj+2];
   }
-  dt_free_align(tmp);
+  dt_pixelpipe_cache_free_align(tmp);
 }
 
 static inline void gauss_expand(
@@ -614,13 +614,13 @@ static inline void gauss_reduce(
   // blur, store only coarse res
   const size_t cw = (wd-1)/2+1, ch = (ht-1)/2+1;
 
-  float *blurred = dt_alloc_align_float((size_t)4 * wd * ht);
+  float *blurred = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * wd * ht, 0);
   if(blurred == NULL) return;
 
   gauss_blur(input, blurred, wd, ht);
   for(size_t j=0;j<ch;j++) for(size_t i=0;i<cw;i++)
     for(int c=0;c<4;c++) coarse[4*(j*cw+i)+c] = blurred[4*(2*j*wd+2*i)+c];
-  dt_free_align(blurred);
+  dt_pixelpipe_cache_free_align(blurred);
 
   if(detail)
   {
@@ -651,9 +651,9 @@ void process_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   for(int k = 0; k < num_levels; k++)
   {
     // coarsest step is some % of image width.
-    col[k]  = dt_alloc_align_float((size_t)4 * w * h);
+    col[k]  = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * w * h, 0);
     if(col[k] == NULL) goto error;
-    comb[k] = dt_alloc_align_float((size_t)4 * w * h);
+    comb[k] = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * w * h, 0);
     if(comb[k] == NULL) goto error;
 
     memset(comb[k], 0, sizeof(float) * 4 * w * h);
@@ -809,8 +809,8 @@ error:;
   // free temp buffers
   for(int k = 0; k < num_levels; k++)
   {
-    if(col[k]) dt_free_align(col[k]);
-    if(comb[k]) dt_free_align(comb[k]);
+    if(col[k]) dt_pixelpipe_cache_free_align(col[k]);
+    if(comb[k]) dt_pixelpipe_cache_free_align(comb[k]);
   }
   if(col) free(col);
   if(comb) free(comb);

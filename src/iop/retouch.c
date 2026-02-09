@@ -3033,7 +3033,7 @@ static void rt_build_scaled_mask(float *const mask, dt_iop_roi_t *const roi_mask
   const int x_to = roi_mask_scaled->width + roi_mask_scaled->x;
   const int y_to = roi_mask_scaled->height + roi_mask_scaled->y;
 
-  mask_tmp = dt_alloc_align_float((size_t)roi_mask_scaled->width * roi_mask_scaled->height);
+  mask_tmp = dt_pixelpipe_cache_alloc_align_float_cache((size_t)roi_mask_scaled->width * roi_mask_scaled->height, 0);
   if(mask_tmp == NULL)
   {
     fprintf(stderr, "rt_build_scaled_mask: error allocating memory\n");
@@ -3162,7 +3162,7 @@ static void _retouch_clone(float *const in, dt_iop_roi_t *const roi_in, float *c
                            dt_iop_roi_t *const roi_mask_scaled, const int dx, const int dy, const float opacity)
 {
   // alloc temp image to avoid issues when areas self-intersects
-  float *img_src = dt_alloc_align_float((size_t)4 * roi_mask_scaled->width * roi_mask_scaled->height);
+  float *img_src = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * roi_mask_scaled->width * roi_mask_scaled->height, 0);
   if(img_src == NULL)
   {
     fprintf(stderr, "retouch_clone: error allocating memory for cloning\n");
@@ -3176,7 +3176,7 @@ static void _retouch_clone(float *const in, dt_iop_roi_t *const roi_in, float *c
   rt_copy_image_masked(img_src, in, roi_in, mask_scaled, roi_mask_scaled, opacity);
 
 cleanup:
-  if(img_src) dt_free_align(img_src);
+  if(img_src) dt_pixelpipe_cache_free_align(img_src);
 }
 
 static void _retouch_blur(dt_iop_module_t *self, float *const in, dt_iop_roi_t *const roi_in, float *const mask_scaled,
@@ -3190,7 +3190,7 @@ static void _retouch_blur(dt_iop_module_t *self, float *const in, dt_iop_roi_t *
   float *img_dest = NULL;
 
   // alloc temp image to blur
-  img_dest = dt_alloc_align_float((size_t)4 * roi_mask_scaled->width * roi_mask_scaled->height);
+  img_dest = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * roi_mask_scaled->width * roi_mask_scaled->height, 0);
   if(img_dest == NULL)
   {
     fprintf(stderr, "retouch_blur: error allocating memory for blurring\n");
@@ -3250,7 +3250,7 @@ static void _retouch_blur(dt_iop_module_t *self, float *const in, dt_iop_roi_t *
   rt_copy_image_masked(img_dest, in, roi_in, mask_scaled, roi_mask_scaled, opacity);
 
 cleanup:
-  if(img_dest) dt_free_align(img_dest);
+  if(img_dest) dt_pixelpipe_cache_free_align(img_dest);
 }
 
 static void _retouch_heal(float *const in, dt_iop_roi_t *const roi_in, float *const mask_scaled,
@@ -3260,8 +3260,8 @@ static void _retouch_heal(float *const in, dt_iop_roi_t *const roi_in, float *co
   float *img_dest = NULL;
 
   // alloc temp images for source and destination
-  img_src  = dt_alloc_align_float((size_t)4 * roi_mask_scaled->width * roi_mask_scaled->height);
-  img_dest = dt_alloc_align_float((size_t)4 * roi_mask_scaled->width * roi_mask_scaled->height);
+  img_src  = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * roi_mask_scaled->width * roi_mask_scaled->height, 0);
+  img_dest = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * roi_mask_scaled->width * roi_mask_scaled->height, 0);
   if((img_src == NULL) || (img_dest == NULL))
   {
     fprintf(stderr, "retouch_heal: error allocating memory for healing\n");
@@ -3279,8 +3279,8 @@ static void _retouch_heal(float *const in, dt_iop_roi_t *const roi_in, float *co
   rt_copy_image_masked(img_dest, in, roi_in, mask_scaled, roi_mask_scaled, opacity);
 
 cleanup:
-  if(img_src) dt_free_align(img_src);
-  if(img_dest) dt_free_align(img_dest);
+  if(img_src) dt_pixelpipe_cache_free_align(img_src);
+  if(img_dest) dt_pixelpipe_cache_free_align(img_dest);
 }
 
 static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int scale1)
@@ -3378,7 +3378,7 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
           if(!rt_masks_get_delta_to_destination(self, piece, roi_layer, form, &dx, &dy,
                                                 p->rt_forms[index].distort_mode))
           {
-            if(mask) dt_free_align(mask);
+            if(mask) dt_pixelpipe_cache_free_align(mask);
             continue;
           }
         }
@@ -3392,7 +3392,7 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
         // we don't need the original mask anymore
         if(mask)
         {
-          dt_free_align(mask);
+          dt_pixelpipe_cache_free_align(mask);
           mask = NULL;
         }
 
@@ -3443,8 +3443,8 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
             rt_copy_mask_to_alpha(layer, roi_layer, wt_p->ch, mask_scaled, &roi_mask_scaled, form_opacity);
         }
 
-        if(mask) dt_free_align(mask);
-        if(mask_scaled) dt_free_align(mask_scaled);
+        if(mask) dt_pixelpipe_cache_free_align(mask);
+        if(mask_scaled) dt_pixelpipe_cache_free_align(mask_scaled);
       }
     }
   }
@@ -3474,7 +3474,7 @@ static void process_internal(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
 
   // we will do all the clone, heal, etc on the input image,
   // this way the source for one algorithm can be the destination from a previous one
-  in_retouch = dt_alloc_align_float((size_t)4 * roi_rt->width * roi_rt->height);
+  in_retouch = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * roi_rt->width * roi_rt->height, 0);
   if(in_retouch == NULL) goto cleanup;
 
   dt_iop_image_copy_by_size(in_retouch, ivoid, roi_rt->width, roi_rt->height, 4);
@@ -3565,7 +3565,7 @@ static void process_internal(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
   rt_copy_in_to_out(in_retouch, roi_rt, ovoid, roi_out, 4, 0, 0);
 
 cleanup:
-  if(in_retouch) dt_free_align(in_retouch);
+  if(in_retouch) dt_pixelpipe_cache_free_align(in_retouch);
   if(dwt_p) dt_dwt_free(dwt_p);
 }
 
@@ -3600,7 +3600,7 @@ cl_int rt_process_stats_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
 
   float *src_buffer = NULL;
 
-  src_buffer = dt_alloc_align_float((size_t)ch * width * height);
+  src_buffer = dt_pixelpipe_cache_alloc_align_float_cache((size_t)ch * width * height, 0);
   if(src_buffer == NULL)
   {
     fprintf(stderr, "dt_heal_cl: error allocating memory for healing\n");
@@ -3625,7 +3625,7 @@ cl_int rt_process_stats_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
   }
 
 cleanup:
-  if(src_buffer) dt_free_align(src_buffer);
+  if(src_buffer) dt_pixelpipe_cache_free_align(src_buffer);
 
   return err;
 }
@@ -3639,7 +3639,7 @@ cl_int rt_adjust_levels_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
 
   float *src_buffer = NULL;
 
-  src_buffer = dt_alloc_align_float((size_t)ch * width * height);
+  src_buffer = dt_pixelpipe_cache_alloc_align_float_cache((size_t)ch * width * height, 0);
   if(src_buffer == NULL)
   {
     fprintf(stderr, "dt_heal_cl: error allocating memory for healing\n");
@@ -3664,7 +3664,7 @@ cl_int rt_adjust_levels_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
   }
 
 cleanup:
-  if(src_buffer) dt_free_align(src_buffer);
+  if(src_buffer) dt_pixelpipe_cache_free_align(src_buffer);
 
   return err;
 }
@@ -4174,7 +4174,7 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
           if(!rt_masks_get_delta_to_destination(self, piece, roi_layer, form, &dx, &dy,
                                                 p->rt_forms[index].distort_mode))
           {
-            if(mask) dt_free_align(mask);
+            if(mask) dt_pixelpipe_cache_free_align(mask);
             continue;
           }
         }
@@ -4190,14 +4190,14 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
         // only heal needs mask scaled
         if(algo != DT_IOP_RETOUCH_HEAL && mask_scaled != NULL)
         {
-          dt_free_align(mask_scaled);
+          dt_pixelpipe_cache_free_align(mask_scaled);
           mask_scaled = NULL;
         }
 
         // we don't need the original mask anymore
         if(mask)
         {
-          dt_free_align(mask);
+          dt_pixelpipe_cache_free_align(mask);
           mask = NULL;
         }
 
@@ -4254,8 +4254,8 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
                                      gd);
         }
 
-        if(mask) dt_free_align(mask);
-        if(mask_scaled) dt_free_align(mask_scaled);
+        if(mask) dt_pixelpipe_cache_free_align(mask);
+        if(mask_scaled) dt_pixelpipe_cache_free_align(mask_scaled);
         if(dev_mask_scaled) dt_opencl_release_mem_object(dev_mask_scaled);
       }
     }

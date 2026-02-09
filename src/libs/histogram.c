@@ -566,7 +566,9 @@ static void _paint_parade(cairo_t *cr, uint8_t *const restrict image, const int 
   // We need to isolate each channel, then paint it at a third of the nominal image width/height.
   for(int c = 0; c < 3; c++)
   {
-    uint8_t *const restrict channel = dt_alloc_align(img_width * img_height * 4 * sizeof(uint8_t));
+    uint8_t *const restrict channel = dt_pixelpipe_cache_alloc_align_cache(
+        img_width * img_height * 4 * sizeof(uint8_t),
+        0);
     if(channel)
     {
       _mask_waveform(image, channel, img_width, img_height, c);
@@ -576,7 +578,7 @@ static void _paint_parade(cairo_t *cr, uint8_t *const restrict image, const int 
       cairo_set_source_surface(cr, background, x, y);
       cairo_paint(cr);
       cairo_surface_destroy(background);
-      dt_free_align(channel);
+      dt_pixelpipe_cache_free_align(channel);
     }
   }
 }
@@ -590,8 +592,12 @@ static void _process_waveform(dt_backbuf_t *backbuf, cairo_t *cr, const int widt
   if(!data) return;
 
   const size_t binning_size = (vertical) ? 4 * TONES * backbuf->height : 4 * TONES * backbuf->width;
-  uint32_t *const restrict bins = dt_alloc_align(binning_size * sizeof(uint32_t));
-  uint8_t *const restrict image = dt_alloc_align(binning_size * sizeof(uint8_t));
+  uint32_t *const restrict bins = dt_pixelpipe_cache_alloc_align_cache(
+      binning_size * sizeof(uint32_t),
+      0);
+  uint8_t *const restrict image = dt_pixelpipe_cache_alloc_align_cache(
+      binning_size * sizeof(uint8_t),
+      0);
   if(image == NULL || bins == NULL) goto error;
 
   // 1. Pixel binning along columns/rows, aka compute a column/row-wise histogram
@@ -628,8 +634,8 @@ static void _process_waveform(dt_backbuf_t *backbuf, cairo_t *cr, const int widt
   }
 
 error:;
-  if(bins) dt_free_align(bins);
-  if(image) dt_free_align(image);
+  if(bins) dt_pixelpipe_cache_free_align(bins);
+  if(image) dt_pixelpipe_cache_free_align(image);
   dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, backbuf->hash, entry);
 }
 
@@ -791,8 +797,12 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, cairo_t *cr, const int w
   void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, backbuf->hash, &entry, dev, dev->pipe);
   if(!data) return;
 
-  uint32_t *const restrict vectorscope = dt_alloc_align(HISTOGRAM_BINS * HISTOGRAM_BINS * sizeof(uint32_t));
-  uint8_t *const restrict image = dt_alloc_align(4 * HISTOGRAM_BINS * HISTOGRAM_BINS * sizeof(uint8_t));
+  uint32_t *const restrict vectorscope = dt_pixelpipe_cache_alloc_align_cache(
+      HISTOGRAM_BINS * HISTOGRAM_BINS * sizeof(uint32_t),
+      0);
+  uint8_t *const restrict image = dt_pixelpipe_cache_alloc_align_cache(
+      4 * HISTOGRAM_BINS * HISTOGRAM_BINS * sizeof(uint8_t),
+      0);
   if(vectorscope == NULL || image == NULL) goto error;
 
   _bin_vectorscope(data, vectorscope, backbuf->width, backbuf->height, zoom, d);
@@ -942,8 +952,8 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, cairo_t *cr, const int w
   }
 
 error:;
-  if(image) dt_free_align(image);
-  if(vectorscope) dt_free_align(vectorscope);
+  if(image) dt_pixelpipe_cache_free_align(image);
+  if(vectorscope) dt_pixelpipe_cache_free_align(vectorscope);
   dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, backbuf->hash, entry);
 }
 

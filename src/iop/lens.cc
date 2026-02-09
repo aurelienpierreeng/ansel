@@ -500,7 +500,9 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   {
     // acquire temp memory for image buffer
     const size_t bufsize = (size_t)roi_in->width * roi_in->height * ch * sizeof(float);
-    void *buf = dt_alloc_align(bufsize);
+    void *buf = dt_pixelpipe_cache_alloc_align_cache(
+        bufsize,
+        piece->pipe->type);
     if(buf == NULL) return;
     memcpy(buf, ivoid, bufsize);
 
@@ -583,7 +585,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
     {
       memcpy(ovoid, buf, bufsize);
     }
-    dt_free_align(buf);
+    dt_pixelpipe_cache_free_align(buf);
   }
   delete modifier;
 
@@ -666,7 +668,9 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
       return FALSE;
   }
 
-  tmpbuf = (float *)dt_alloc_align(tmpbuflen);
+  tmpbuf = (float *)dt_pixelpipe_cache_alloc_align_cache(
+      tmpbuflen,
+      piece->pipe->type);
   if(tmpbuf == NULL) goto error;
 
   dev_tmp = (cl_mem)dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
@@ -851,14 +855,14 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   dt_opencl_release_mem_object(dev_tmpbuf);
   dt_opencl_release_mem_object(dev_tmp);
-  if(tmpbuf != NULL) dt_free_align(tmpbuf);
+  if(tmpbuf != NULL) dt_pixelpipe_cache_free_align(tmpbuf);
   if(modifier != NULL) delete modifier;
   return TRUE;
 
 error:
   dt_opencl_release_mem_object(dev_tmp);
   dt_opencl_release_mem_object(dev_tmpbuf);
-  if(tmpbuf != NULL) dt_free_align(tmpbuf);
+  if(tmpbuf != NULL) dt_pixelpipe_cache_free_align(tmpbuf);
   if(modifier != NULL) delete modifier;
   dt_print(DT_DEBUG_OPENCL, "[opencl_lens] couldn't enqueue kernel! %d\n", err);
   return FALSE;

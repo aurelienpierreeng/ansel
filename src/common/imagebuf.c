@@ -94,7 +94,7 @@ gboolean dt_iop_alloc_image_buffers(struct dt_iop_module_t *const module,
     }
     else
     {
-      *bufptr = dt_alloc_align_float(nfloats);
+      *bufptr = dt_pixelpipe_cache_alloc_align_float_cache(nfloats, 0);
       if ((size & DT_IMGSZ_CLEARBUF) && *bufptr)
         memset(*bufptr, 0, nfloats * sizeof(float));
     }
@@ -118,7 +118,7 @@ gboolean dt_iop_alloc_image_buffers(struct dt_iop_module_t *const module,
         (void)va_arg(args,size_t*);  // skip the extra pointer for per-thread allocations
       if (size == 0 || !bufptr || !*bufptr)
         break;  // end of arg list or this attempted allocation failed
-      dt_free_align(*bufptr);
+      dt_pixelpipe_cache_free_align(*bufptr);
       *bufptr = NULL;
     }
     va_end(args);

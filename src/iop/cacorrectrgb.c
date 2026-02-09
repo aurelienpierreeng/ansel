@@ -254,11 +254,11 @@ static void get_manifolds(const float* const restrict in, const size_t width, co
                           const dt_iop_cacorrectrgb_guide_channel_t guide,
                           float* const restrict manifolds, gboolean refine_manifolds)
 {
-  float *const restrict blurred_in = dt_alloc_align_float(width * height * 4);
-  float *const restrict manifold_higher = dt_alloc_align_float(width * height * 4);
-  float *const restrict manifold_lower = dt_alloc_align_float(width * height * 4);
-  float *const restrict blurred_manifold_higher = dt_alloc_align_float(width * height * 4);
-  float *const restrict blurred_manifold_lower = dt_alloc_align_float(width * height * 4);
+  float *const restrict blurred_in = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
+  float *const restrict manifold_higher = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
+  float *const restrict manifold_lower = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
+  float *const restrict blurred_manifold_higher = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
+  float *const restrict blurred_manifold_lower = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
 
   if(blurred_in == NULL || manifold_higher == NULL || manifold_lower == NULL ||
      blurred_manifold_higher == NULL || blurred_manifold_lower == NULL)
@@ -504,11 +504,11 @@ dt_omp_firstprivate(manifolds, blurred_manifold_lower, blurred_manifold_higher, 
   }
 
 error:;
-  if(manifold_lower) dt_free_align(manifold_lower);
-  if(manifold_higher) dt_free_align(manifold_higher);
-  if(blurred_in) dt_free_align(blurred_in);
-  if(blurred_manifold_lower) dt_free_align(blurred_manifold_lower);
-  if(blurred_manifold_higher) dt_free_align(blurred_manifold_higher);
+  if(manifold_lower) dt_pixelpipe_cache_free_align(manifold_lower);
+  if(manifold_higher) dt_pixelpipe_cache_free_align(manifold_higher);
+  if(blurred_in) dt_pixelpipe_cache_free_align(blurred_in);
+  if(blurred_manifold_lower) dt_pixelpipe_cache_free_align(blurred_manifold_lower);
+  if(blurred_manifold_higher) dt_pixelpipe_cache_free_align(blurred_manifold_higher);
 }
 #undef DT_CACORRECTRGB_MAX_EV_DIFF
 
@@ -595,7 +595,7 @@ static void reduce_artifacts(const float* const restrict in,
   // in_out contains the 2 guided channels of in, and the 2 guided channels of out
   // it allows to blur all channels in one 4-channel gaussian blur instead of 2
   float *const restrict DT_ALIGNED_PIXEL in_out = dt_alloc_align_float(width * height * 4);
-  if(in_out == NULL) return;
+  if(in_out == NULL) goto error;
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -612,16 +612,14 @@ static void reduce_artifacts(const float* const restrict in,
     }
   }
 
-  float *const restrict blurred_in_out = dt_alloc_align_float(width * height * 4);
-  if(blurred_in_out == NULL) return;
+  float *const restrict blurred_in_out = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
+  if(blurred_in_out == NULL) goto error;
 
   dt_aligned_pixel_t max = { INFINITY, INFINITY, INFINITY, INFINITY };
   dt_aligned_pixel_t min = {0.0f, 0.0f, 0.0f, 0.0f};
   dt_gaussian_t *g = dt_gaussian_init(width, height, 4, max, min, sigma, 0);
-  if(!g) return;
+  if(!g) goto error;
   dt_gaussian_blur_4c(g, in_out, blurred_in_out);
-  dt_gaussian_free(g);
-  dt_free_align(in_out);
 
   // we consider that even with chromatic aberration, local average should
   // be close to be accurate.
@@ -652,7 +650,11 @@ dt_omp_firstprivate(in, out, blurred_in_out, width, height, guide, safety) \
       out[k * 4 + c] = fmaxf(1.0f - w, 0.0f) * fmaxf(in[k * 4 + c], 0.0f) + w * fmaxf(out[k * 4 + c], 0.0f);
     }
   }
-  dt_free_align(blurred_in_out);
+
+error:;
+  if(blurred_in_out) dt_pixelpipe_cache_free_align(blurred_in_out);
+  if(g) dt_gaussian_free(g);
+  if(in_out) dt_pixelpipe_cache_free_align(in_out);
 }
 
 static void reduce_chromatic_aberrations(const float* const restrict in,
@@ -668,12 +670,12 @@ static void reduce_chromatic_aberrations(const float* const restrict in,
   const float downsize = fminf(3.0f, sigma);
   const size_t ds_width = width / downsize;
   const size_t ds_height = height / downsize;
-  float *const restrict ds_in = dt_alloc_align_float(ds_width * ds_height * 4);
-  float *const restrict manifolds = dt_alloc_align_float(width * height * 6);
+  float *const restrict ds_in = dt_pixelpipe_cache_alloc_align_float_cache(ds_width * ds_height * 4, 0);
+  float *const restrict manifolds = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 6, 0);
 
   // we use only one variable for both higher and lower manifolds in order
   // to save time by doing only one bilinear interpolation instead of 2.
-  float *const restrict ds_manifolds = dt_alloc_align_float(ds_width * ds_height * 6);
+  float *const restrict ds_manifolds = dt_pixelpipe_cache_alloc_align_float_cache(ds_width * ds_height * 6, 0);
   if(ds_manifolds == NULL || ds_in == NULL || manifolds == NULL)
     goto error;
 
@@ -689,9 +691,9 @@ static void reduce_chromatic_aberrations(const float* const restrict in,
   reduce_artifacts(in, width, height, sigma, guide, safety, out);
 
 error:;
-  if(ds_in) dt_free_align(ds_in);
-  if(manifolds) dt_free_align(manifolds);
-  if(ds_manifolds) dt_free_align(ds_manifolds);
+  if(ds_in) dt_pixelpipe_cache_free_align(ds_in);
+  if(manifolds) dt_pixelpipe_cache_free_align(manifolds);
+  if(ds_manifolds) dt_pixelpipe_cache_free_align(ds_manifolds);
 }
 
 void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,

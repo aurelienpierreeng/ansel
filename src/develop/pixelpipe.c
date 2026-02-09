@@ -34,10 +34,14 @@ const char *dt_pixelpipe_name(dt_dev_pixelpipe_type_t pipe)
   }
 }
 
+static void _free_raster_mask(void *mask)
+{
+  dt_pixelpipe_cache_free_align(mask);
+}
 
 GHashTable *dt_pixelpipe_raster_alloc()
 {
-  return g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, dt_free_align_ptr);
+  return g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, _free_raster_mask);
 }
 
 void dt_pixelpipe_raster_cleanup(GHashTable *raster_masks)

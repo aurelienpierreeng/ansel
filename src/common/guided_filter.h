@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include "common/darktable.h"
+
 #if defined(__SSE__)
 #ifdef __PPC64__
 #ifdef NO_WARN_X86_INTRINSICS
@@ -49,14 +51,18 @@ typedef struct gray_image
 // FIXME: the code consuming gray_image doesn't check if we actually allocated the buffer
 static inline gray_image new_gray_image(int width, int height)
 {
-  return (gray_image){ dt_alloc_align(sizeof(float) * width * height), width, height };
+  return (gray_image){ dt_pixelpipe_cache_alloc_align_float_cache(
+                          width * height,
+                          0),
+                        width,
+                        height };
 }
 
 
 // free space for 1-component image
 static inline void free_gray_image(gray_image *img_p)
 {
-  dt_free_align(img_p->data);
+  dt_pixelpipe_cache_free_align(img_p->data);
   img_p->data = NULL;
 }
 

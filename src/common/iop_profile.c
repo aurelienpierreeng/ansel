@@ -1384,7 +1384,7 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
   else
   {
     // no matrix, call lcms2
-    src_buffer = dt_alloc_align_float(ch * width * height);
+    src_buffer = dt_pixelpipe_cache_alloc_align_float_cache(ch * width * height, 0);
     if(src_buffer == NULL)
     {
       fprintf(stderr, "[dt_ioppr_transform_image_colorspace_cl] error allocating memory for color transformation 1\n");
@@ -1412,7 +1412,7 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
   }
 
 cleanup:
-  if(src_buffer) dt_free_align(src_buffer);
+  if(src_buffer) dt_pixelpipe_cache_free_align(src_buffer);
   if(dev_tmp && in_place) dt_opencl_release_mem_object(dev_tmp);
   if(dev_profile_info) dt_opencl_release_mem_object(dev_profile_info);
   if(dev_lut) dt_opencl_release_mem_object(dev_lut);
@@ -1595,8 +1595,8 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
   else
   {
     // no matrix, call lcms2
-    src_buffer_in  = dt_alloc_align_float(ch * width * height);
-    src_buffer_out = dt_alloc_align_float(ch * width * height);
+    src_buffer_in  = dt_pixelpipe_cache_alloc_align_float_cache(ch * width * height, 0);
+    src_buffer_out = dt_pixelpipe_cache_alloc_align_float_cache(ch * width * height, 0);
     if(src_buffer_in == NULL || src_buffer_out == NULL)
     {
       fprintf(stderr,
@@ -1627,8 +1627,8 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
   }
 
 cleanup:
-  if(src_buffer_in) dt_free_align(src_buffer_in);
-  if(src_buffer_out) dt_free_align(src_buffer_out);
+  if(src_buffer_in) dt_pixelpipe_cache_free_align(src_buffer_in);
+  if(src_buffer_out) dt_pixelpipe_cache_free_align(src_buffer_out);
   if(dev_tmp && in_place) dt_opencl_release_mem_object(dev_tmp);
 
   if(dev_profile_info_from) dt_opencl_release_mem_object(dev_profile_info_from);

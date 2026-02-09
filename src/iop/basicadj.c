@@ -727,7 +727,9 @@ static void _get_auto_exp_histogram(const float *const img, const int width, con
   uint32_t *histogram = NULL;
   const float mul = hist_size;
 
-  histogram = dt_alloc_align(sizeof(uint32_t) * hist_size);
+  histogram = dt_pixelpipe_cache_alloc_align_cache(
+      sizeof(uint32_t) * hist_size,
+      0);
   if(histogram == NULL) goto cleanup;
 
   memset(histogram, 0, sizeof(uint32_t) * hist_size);
@@ -1171,7 +1173,7 @@ static void _auto_exposure(const float *const img, const int width, const int he
   _get_auto_exp(histogram, hist_size, histcompr, defGain, clip, midgray, _expcomp, _bright, _contr, _black,
                 _hlcompr, _hlcomprthresh);
 
-  if(histogram) dt_free_align(histogram);
+  if(histogram) dt_pixelpipe_cache_free_align(histogram);
 }
 
 static void _get_selected_area(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,

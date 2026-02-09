@@ -280,7 +280,7 @@ void dt_develop_blendif_rgb_jzczhz_make_mask(struct dt_dev_pixelpipe_iop_t *piec
     const dt_iop_order_iccprofile_info_t *profile = &blend_profile;
 
     // allocate space for a temporary mask buffer to split the computation of every channel
-    float *const restrict temp_mask = dt_alloc_align_float(buffsize);
+    float *const restrict temp_mask = dt_pixelpipe_cache_alloc_align_float_cache(buffsize, 0);
     if(!temp_mask)
     {
       return;
@@ -365,7 +365,7 @@ void dt_develop_blendif_rgb_jzczhz_make_mask(struct dt_dev_pixelpipe_iop_t *piec
 #endif
     }
 
-    dt_free_align(temp_mask);
+    dt_pixelpipe_cache_free_align(temp_mask);
   }
 }
 
@@ -1009,7 +1009,7 @@ void dt_develop_blendif_rgb_jzczhz_blend(struct dt_dev_pixelpipe_iop_t *piece, c
     const float p = exp2f(d->blend_parameter);
     _blend_row_func *const blend = _choose_blend_func(d->blend_mode);
 
-    float *tmp_buffer = dt_alloc_align_float((size_t)owidth * oheight * DT_BLENDIF_RGB_CH);
+    float *tmp_buffer = dt_pixelpipe_cache_alloc_align_float_cache((size_t)owidth * oheight * DT_BLENDIF_RGB_CH, 0);
     if (tmp_buffer != NULL)
     {
       dt_iop_image_copy(tmp_buffer, b, (size_t)owidth * oheight * DT_BLENDIF_RGB_CH);
@@ -1041,7 +1041,7 @@ void dt_develop_blendif_rgb_jzczhz_blend(struct dt_dev_pixelpipe_iop_t *piece, c
           blend(a + a_start, tmp_buffer + b_start, p, b + b_start, mask + m_start, owidth);
         }
       }
-      dt_free_align(tmp_buffer);
+      dt_pixelpipe_cache_free_align(tmp_buffer);
     }
   }
 

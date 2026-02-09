@@ -1574,13 +1574,13 @@ static void process_laplacian_bayer(struct dt_iop_module_t *self, dt_dev_pixelpi
   const size_t ds_width = width / DS_FACTOR;
   const size_t ds_size = ds_height * ds_width;
 
-  float *const restrict interpolated = dt_alloc_align_float(size * 4);  // [R, G, B, norm] for each pixel
-  float *const restrict clipping_mask = dt_alloc_align_float(size * 4); // [R, G, B, norm] for each pixel
+  float *const restrict interpolated = dt_pixelpipe_cache_alloc_align_float(size * 4, piece->pipe);  // [R, G, B, norm] for each pixel
+  float *const restrict clipping_mask = dt_pixelpipe_cache_alloc_align_float(size * 4, piece->pipe); // [R, G, B, norm] for each pixel
 
   // temp buffer for blurs. We will need to cycle between them for memory efficiency
-  float *const restrict LF_odd = dt_alloc_align_float(ds_size * 4);
-  float *const restrict LF_even = dt_alloc_align_float(ds_size * 4);
-  float *const restrict temp = dt_alloc_align_float(ds_size * 4);
+  float *const restrict LF_odd = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
+  float *const restrict LF_even = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
+  float *const restrict temp = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
 
   const float scale = fmaxf(DS_FACTOR / (roi_in->scale), 1.f);
   const float final_radius = (float)((int)(1 << data->scales)) / scale;
@@ -1589,15 +1589,12 @@ static void process_laplacian_bayer(struct dt_iop_module_t *self, dt_dev_pixelpi
   const float noise_level = data->noise_level / scale;
 
   // wavelets scales buffers
-  float *restrict HF = dt_alloc_align_float(ds_size * 4);
-  float *restrict ds_interpolated = dt_alloc_align_float(ds_size * 4);
-  float *restrict ds_clipping_mask = dt_alloc_align_float(ds_size * 4);
+  float *restrict HF = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
+  float *restrict ds_interpolated = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
+  float *restrict ds_clipping_mask = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
 
   if(!interpolated || !clipping_mask || !LF_odd || !LF_even || !temp || !HF || !ds_interpolated || !ds_clipping_mask)
-  {
-    fprintf(stderr, "[highlights] guided laplician : failed to allocate memory\n");
     goto error;
-  }
 
   const float *const restrict input = (const float *const restrict)ivoid;
   float *const restrict output = (float *const restrict)ovoid;
@@ -1628,14 +1625,14 @@ static void process_laplacian_bayer(struct dt_iop_module_t *self, dt_dev_pixelpi
 #endif
 
 error:;
-  if(interpolated) dt_free_align(interpolated);
-  if(clipping_mask) dt_free_align(clipping_mask);
-  if(temp) dt_free_align(temp);
-  if(LF_even) dt_free_align(LF_even);
-  if(LF_odd) dt_free_align(LF_odd);
-  if(HF) dt_free_align(HF);
-  if(ds_interpolated) dt_free_align(ds_interpolated);
-  if(ds_clipping_mask) dt_free_align(ds_clipping_mask);
+  if(interpolated) dt_pixelpipe_cache_free_align(interpolated);
+  if(clipping_mask) dt_pixelpipe_cache_free_align(clipping_mask);
+  if(temp) dt_pixelpipe_cache_free_align(temp);
+  if(LF_even) dt_pixelpipe_cache_free_align(LF_even);
+  if(LF_odd) dt_pixelpipe_cache_free_align(LF_odd);
+  if(HF) dt_pixelpipe_cache_free_align(HF);
+  if(ds_interpolated) dt_pixelpipe_cache_free_align(ds_interpolated);
+  if(ds_clipping_mask) dt_pixelpipe_cache_free_align(ds_clipping_mask);
 }
 
 #ifdef HAVE_OPENCL
@@ -1806,10 +1803,7 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, dt_dev_pi
 
   if(!interpolated || !clipping_mask || !LF_odd || !LF_even || !temp || !HF || !ds_interpolated
      || !ds_clipping_mask || !clips_cl || !wb_cl)
-  {
-    fprintf(stderr, "[highlights] guided laplician : failed to allocate memory\n");
     goto error;
-  }
 
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask, 0, sizeof(cl_mem), (void *)&dev_in);
   dt_opencl_set_kernel_arg(devid, gd->kernel_highlights_bilinear_and_mask, 1, sizeof(cl_mem), (void *)&interpolated);
