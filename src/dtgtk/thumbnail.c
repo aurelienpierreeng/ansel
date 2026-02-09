@@ -1209,6 +1209,17 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
 {
   thumb_return_if_fails(thumb, 0);
 
+  dt_job_t *job = NULL;
+
+  // Cancel any running/queued background job before tearing down the thumbnail.
+  dt_pthread_mutex_lock(&thumb->lock);
+  job = thumb->job;
+  if(job) dt_control_job_cancel(job);
+  thumb->job = NULL;
+  dt_pthread_mutex_unlock(&thumb->lock);
+
+  if(job) dt_control_job_wait(job);
+
   // Wait for background jobs to finish before deleting the buffers they write in
   dt_pthread_mutex_lock(&thumb->lock);
 
@@ -1217,9 +1228,6 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
   ;
   while(g_idle_remove_by_data(thumb->w_image))
   ;
-
-  // Kill background jobs rendering this thumbnail
-  if(thumb->job) thumb->job = NULL;
 
   if(thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
     cairo_surface_destroy(thumb->img_surf);
