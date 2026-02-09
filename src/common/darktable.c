@@ -1554,21 +1554,14 @@ int dt_worker_threads()
 
 size_t dt_get_available_mem()
 {
-  const size_t available_mem = get_usable_memory_bytes();
-  if(available_mem > 0)
-    return available_mem;
-  else
-    return darktable.dtresources.total_memory - darktable.dtresources.headroom_memory
-           - darktable.mipmap_cache->mip_thumbs.cache.cost
-           - darktable.mipmap_cache->mip_f.cache.cost * (1440 * 900 * sizeof(float))
-           - darktable.mipmap_cache->mip_full.cache.cost * darktable.dtresources.buffer_memory
-           - darktable.pixelpipe_cache->current_memory;
+  return darktable.pixelpipe_cache->max_memory - darktable.pixelpipe_cache->current_memory;
 }
 
 size_t dt_get_singlebuffer_mem()
 {
-  return darktable.dtresources.buffer_memory * 4;
+  return 4 * sizeof(float) * 6000 * 4000;
 }
+
 
 size_t dt_get_mipmap_mem()
 {
@@ -1601,31 +1594,14 @@ void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean in
   resources->mipmap_memory
       = CLAMP(resources->mipmap_memory, 256 * 1024 * 1024, resources->total_memory / 6);
 
-  // Export pipeline at full resolution memory allocs
-  gchar *resolution_str = dt_conf_get_string("raw_resolution");
-  size_t resolution = 2;
-  if(g_strcmp0(resolution_str, "12 Mpx") == 0) resolution = 12;
-  else if(g_strcmp0(resolution_str, "16 Mpx") == 0) resolution = 16;
-  else if(g_strcmp0(resolution_str, "24 Mpx") == 0) resolution = 24;
-  else if(g_strcmp0(resolution_str, "36 Mpx") == 0) resolution = 36;
-  else if(g_strcmp0(resolution_str, "46 Mpx") == 0) resolution = 46;
-  else if(g_strcmp0(resolution_str, "52 Mpx") == 0) resolution = 52;
-  else if(g_strcmp0(resolution_str, "72 Mpx") == 0) resolution = 72;
-  else if(g_strcmp0(resolution_str, "100 Mpx") == 0) resolution = 100;
-  else if(g_strcmp0(resolution_str, "150 Mpx") == 0) resolution = 150;
-
-  // RAW and half-RAW buffers sizes
-  const size_t raws = (darktable.num_openmp_threads + DT_CTL_WORKER_RESERVED) * (1440 * 900 + resolution * 1000 * 1000) * sizeof(float);
-
-  // RGBA float32 image:
-  resources->buffer_memory = resolution * 1000 * 1000 * sizeof(float);
-
-  // 6 temp copies of RGBA float32 at full res
-  const size_t min_pipeline_memory = 6 * 4 * resources->buffer_memory; // RGBa wavelets decompositions
-  const size_t min_pipecache_memory = 9 * resources->buffer_memory; // RGBa in, RGBa out, mask
+  // 6 temp copies of 24 Mpx RGBA float32 at full res
+  const size_t min_pipecache_memory = 6 * 6000 * 4000 * 4 * sizeof(float); 
 
   // Pipeline cache gets the rest. Need to cast as int otherwise, negative values saturate the uint64 to MAX_UINT or something
-  resources->pixelpipe_memory = MAX((int64_t)resources->total_memory - (int64_t)resources->mipmap_memory - (int64_t)resources->headroom_memory - (int64_t)min_pipeline_memory - (int64_t)raws, (int64_t)min_pipecache_memory);
+  resources->pixelpipe_memory = MAX((int64_t)resources->total_memory 
+                                    - (int64_t)resources->mipmap_memory 
+                                    - (int64_t)resources->headroom_memory, 
+                                    (int64_t)min_pipecache_memory);
 
   if(resources->pixelpipe_memory == min_pipecache_memory)
   {
@@ -1634,7 +1610,10 @@ void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean in
             "MEMORY WARNING: reduce your OS/apps headroom, or your thumbnail cache size.\n"
             "MEMORY WARNING: you may also simply need more RAM or need to reset the config key host_memory.\n"
             "MEMORY WARNING: we shrank the thumbnails cache to the bare minimum to leave enough space for pixelpipe cache.\n");
-    resources->mipmap_memory = MAX((int64_t)resources->total_memory - (int64_t)resources->headroom_memory - 2 * (int64_t)min_pipeline_memory, (int64_t)128 * 1024 * 1024);
+    resources->mipmap_memory = MAX((int64_t)resources->total_memory 
+                                   - (int64_t)resources->headroom_memory 
+                                   - (int64_t)resources->pixelpipe_memory, 
+                                   (int64_t)128 * 1024 * 1024);
   }
 
   // Print
@@ -1650,16 +1629,11 @@ void dt_configure_runtime_performance(dt_sys_resources_t *resources, gboolean in
   dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] Pixelpipe cache size: %lu MiB\n"),
            resources->pixelpipe_memory / (1024 * 1024));
 
-  dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] Max pixel buffer size: %lu MiB (%s RGBA float32)\n"),
-           resources->buffer_memory / (1024 * 1024), resolution_str);
-
   dt_print(DT_DEBUG_MEMORY | DT_DEBUG_CACHE, _("[MEMORY CONFIGURATION] Worker threads: %i\n"), dt_worker_threads());
 
-  if(resources->total_memory < resources->headroom_memory + resources->mipmap_memory + resources->pixelpipe_memory + resources->buffer_memory)
+  if(resources->total_memory < resources->headroom_memory + resources->mipmap_memory + resources->pixelpipe_memory)
     dt_control_log(_("CRITICAL WARNING: Ansel will not be able to use the RAM you allocated it.\n"
                      "Review your memory settings or add more RAM to your system."));
-
-  g_free(resolution_str);
 }
 
 int dt_capabilities_check(char *capability)

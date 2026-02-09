@@ -193,25 +193,6 @@
     <longdescription>This is the amount of memory that Ansel will use to keep intermediate module outputs for the pixelpipe</longdescription>
   </dtconfig>
   <dtconfig prefs="processing" section="cpugpu" restart="true">
-    <name>raw_resolution</name>
-    <type>
-      <enum>
-        <option>12 Mpx</option>
-        <option>16 Mpx</option>
-        <option>24 Mpx</option>
-        <option>36 Mpx</option>
-        <option>46 Mpx</option>
-        <option>52 Mpx</option>
-        <option>72 Mpx</option>
-        <option>100 Mpx</option>
-        <option>150 Mpx</option>
-      </enum>
-    </type>
-    <default>36 Mpx</default>
-    <shortdescription>Maximum RAW resolution to edit</shortdescription>
-    <longdescription>This is the maximum resolution for your RAW images. It will be used to compute the required pixelpipe memory.</longdescription>
-  </dtconfig>
-  <dtconfig prefs="processing" section="cpugpu" restart="true">
     <name>processing/timeout</name>
     <type min="0">int</type>
     <default>200</default>

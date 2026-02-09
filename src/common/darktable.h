@@ -322,7 +322,7 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(struct dt_dev_pixelpipe_cache_t 
                                                 const char *name);
 #define dt_pixelpipe_cache_alloc_align_cache(size, id) \
   dt_pixelpipe_cache_alloc_align_cache_impl(darktable.pixelpipe_cache, (size), (id), __FILE__ ":" DT_STRINGIFY(__LINE__))
-  
+
 #ifndef dt_pixelpipe_cache_alloc_align
 #define dt_pixelpipe_cache_alloc_align(size, pipe) \
   dt_pixelpipe_cache_alloc_align_cache((size), (pipe)->type)
@@ -381,12 +381,6 @@ static inline float *dt_calloc_align_float(size_t pixels)
   if(buf) memset(buf, 0, pixels * sizeof(float));
   return (float*)__builtin_assume_aligned(buf, DT_CACHELINE_BYTES);
 }
-
-static inline void * dt_alloc_sse_ps(size_t pixels)
-{
-  return __builtin_assume_aligned(dt_alloc_align(pixels * sizeof(float)), DT_CACHELINE_BYTES);
-}
-
 static inline void * dt_check_sse_aligned(void * pointer)
 {
   if(dt_is_aligned(pointer, DT_CACHELINE_BYTES))
@@ -541,10 +535,6 @@ typedef struct dt_sys_resources_t
   size_t mipmap_memory;    // RAM allocated to mipmap cache
   size_t headroom_memory;  // RAM left to OS & other Apps
   size_t pixelpipe_memory; // RAM used by the pixelpipe cache (approx.)
-  size_t buffer_memory;    // Max size of a single image buffer, fraction of available_memory
-
-  // pixel size of a main darkroom image cache line
-  size_t darkroom_cache;
 } dt_sys_resources_t;
 
 typedef struct darktable_t
