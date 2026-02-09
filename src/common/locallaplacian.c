@@ -627,7 +627,10 @@ void local_laplacian_internal(
   // allocate memory for intermediate laplacian pyramids
   float *buf[num_gamma][max_levels] = {{0}};
   for(int k=0;k<num_gamma;k++) for(int l=0;l<=last_level;l++)
+  {
     buf[k][l] = dt_pixelpipe_cache_alloc_align_float_cache((size_t)dl(w,l)*dl(h,l), 0);
+    if(buf[k][l] == NULL) goto error;
+  }
 
   // the paper says remapping only level 3 not 0 does the trick, too
   // (but i really like the additional octave of sharpness we get,
@@ -639,7 +642,9 @@ void local_laplacian_internal(
       apply_curve_sse2(buf[k][0], padded[0], w, h, max_supp, gamma[k], sigma, shadows, highlights, clarity);
     else // brackets in next line needed for silly gcc warning:
 #endif
-    {apply_curve(buf[k][0], padded[0], w, h, max_supp, gamma[k], sigma, shadows, highlights, clarity);}
+    {
+      apply_curve(buf[k][0], padded[0], w, h, max_supp, gamma[k], sigma, shadows, highlights, clarity);
+    }
 
     // create gaussian pyramids
     for(int l=1;l<=last_level;l++)
