@@ -2053,8 +2053,16 @@ void default_tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpi
 int dt_tiling_piece_fits_host_memory(const size_t width, const size_t height, const unsigned bpp,
                                      const float factor, const size_t overhead)
 {
-  const size_t available = dt_get_available_mem();
+  size_t available = dt_get_available_mem();
   const size_t total = factor * width * height * bpp + overhead;
+
+  // Try to make room in cache first
+  int error = 0;
+  while(!error && available < total)
+  {
+    error = dt_dev_pixel_pipe_cache_remove_lru(darktable.pixelpipe_cache);
+    available = dt_get_available_mem();
+  }
 
   if(total <= available)
     return TRUE;

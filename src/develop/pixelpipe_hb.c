@@ -706,9 +706,6 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   }
   else
   {
-    if(!fitting)
-      fprintf(stderr, "[pixelpipe_process_on_CPU] Warning: processes `%s' even if memory requirements are not met\n", module->op);
-
     module->process(module, piece, input, *output, roi_in, roi_out);
     *pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_CPU);
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
