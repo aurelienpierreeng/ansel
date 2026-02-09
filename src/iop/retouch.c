@@ -4254,7 +4254,7 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
                                      gd);
         }
 
-        if(mask) dt_pixelpipe_cache_free_align(mask);
+        if(mask) dt_free_align(mask);
         if(mask_scaled) dt_pixelpipe_cache_free_align(mask_scaled);
         if(dev_mask_scaled) dt_opencl_release_mem_object(dev_mask_scaled);
       }

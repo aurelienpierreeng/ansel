@@ -459,7 +459,7 @@ static inline dt_iop_gui_data_t *_iop_gui_alloc(dt_iop_module_t *module, size_t 
 #define IOP_GUI_FREE \
   dt_pthread_mutex_destroy(&self->gui_lock);       \
   if(self->gui_data){                              \
-    dt_pixelpipe_cache_free_align(self->gui_data); \
+    dt_free_align(self->gui_data);                 \
   }                                                \
   self->gui_data = NULL;
 

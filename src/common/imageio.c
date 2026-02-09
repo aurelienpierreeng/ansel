@@ -131,7 +131,8 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
   char *mime_type = NULL;
   size_t bufsize;
 
-  if(dt_exif_get_thumbnail(filename, &buf, &bufsize, &mime_type, th_width, th_height, MAX(width, height))) goto error;
+  if(dt_exif_get_thumbnail(filename, &buf, &bufsize, &mime_type, th_width, th_height, MAX(width, height))) 
+    goto error;
 
   if(strcmp(mime_type, "image/jpeg") == 0)
   {
