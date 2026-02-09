@@ -1256,7 +1256,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
         // change how thumbs are processed at runtime.
         dt_print(DT_DEBUG_CACHE, "[mipmap_cache] generate mip %d for image %d from embedded jpeg\n", size, imgid);
         dt_iop_flip_and_zoom_8(tmp, thumb_width, thumb_height, buf, wd, ht, orientation, width, height);
-        dt_free_align(tmp);
+        dt_pixelpipe_cache_free_align(tmp);
       }
     }
   }
