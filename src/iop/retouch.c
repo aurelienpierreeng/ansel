@@ -3378,7 +3378,7 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
           if(!rt_masks_get_delta_to_destination(self, piece, roi_layer, form, &dx, &dy,
                                                 p->rt_forms[index].distort_mode))
           {
-            if(mask) dt_pixelpipe_cache_free_align(mask);
+            if(mask) dt_free_align(mask);
             continue;
           }
         }
@@ -3392,7 +3392,7 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
         // we don't need the original mask anymore
         if(mask)
         {
-          dt_pixelpipe_cache_free_align(mask);
+          dt_free_align(mask);
           mask = NULL;
         }
 
