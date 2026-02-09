@@ -1533,7 +1533,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
     if(_init_base_buffer(pipe, dev, output, cl_mem_output, out_format, roi_in, roi_out, hash, bypass_cache, bufsize,
                       bpp))
+    {
+      // On error: release the cache line
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, FALSE, NULL);
       return 1;
+    }
 
     dt_show_times_f(&start, "[dev_pixelpipe]", "initing base buffer [%s]", dt_pixelpipe_get_pipe_name(pipe->type));
     return 0;
@@ -1546,7 +1550,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   if(dt_dev_pixelpipe_process_rec(pipe, dev, &input, &cl_mem_input, &input_format, roi_in,
                                   g_list_previous(modules), g_list_previous(pieces), pos - 1))
+  {
+    // On error: release the cache line
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, FALSE, NULL);
     return 1;
+  }
 
   KILL_SWITCH_ABORT;
 
@@ -1593,7 +1601,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(input_entry == NULL && cl_mem_input == NULL)
     if(dt_dev_pixelpipe_process_rec(pipe, dev, &input, &cl_mem_input, &input_format, roi_in,
                                     g_list_previous(modules), g_list_previous(pieces), pos - 1))
+    {
+      // On error: release the cache line
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
       return 1;
+    }
 
   dt_pixel_cache_entry_t *output_entry = NULL;
   gchar *type = dt_pixelpipe_get_pipe_name(pipe->type);
@@ -1604,7 +1616,12 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   gboolean new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
                                                   output, out_format, &output_entry, piece->force_opencl_cache);
   g_free(name);
-  if(output_entry == NULL) return 1;
+  if(output_entry == NULL) 
+  {
+    // On error: release the cache line
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
+    return 1;
+  }
 
   dt_pixelpipe_flow_t pixelpipe_flow = (PIXELPIPE_FLOW_NONE | PIXELPIPE_FLOW_HISTOGRAM_NONE);
 
@@ -1997,7 +2014,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
   while(keep_running && runs < 3)
   {
     ++runs;
-    
+
 #ifdef HAVE_OPENCL
     dt_opencl_check_tuning(pipe->devid);
 #endif

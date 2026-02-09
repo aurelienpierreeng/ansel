@@ -618,16 +618,14 @@ static int read_jsc(dt_imageio_jpeg_t *jpg, uint8_t *out)
 static int read_plain(dt_imageio_jpeg_t *jpg, uint8_t *out)
 {
   JSAMPROW row_pointer[1];
-  row_pointer[0] = (uint8_t *)dt_pixelpipe_cache_alloc_align_cache(
-      (size_t)jpg->dinfo.output_width * jpg->dinfo.num_components,
-      0);
+  row_pointer[0] = (uint8_t *)dt_alloc_align((size_t)jpg->dinfo.output_width * jpg->dinfo.num_components);
   uint8_t *tmp = out;
   while(jpg->dinfo.output_scanline < jpg->dinfo.image_height)
   {
     if(jpeg_read_scanlines(&(jpg->dinfo), row_pointer, 1) != 1)
     {
       jpeg_destroy_decompress(&(jpg->dinfo));
-      dt_pixelpipe_cache_free_align(row_pointer[0]);
+      dt_free_align(row_pointer[0]);
       fclose(jpg->f);
       return 1;
     }
@@ -635,7 +633,7 @@ static int read_plain(dt_imageio_jpeg_t *jpg, uint8_t *out)
       for(int k = 0; k < 3; k++) tmp[4 * i + k] = row_pointer[0][3 * i + k];
     tmp += 4 * jpg->width;
   }
-  dt_pixelpipe_cache_free_align(row_pointer[0]);
+  dt_free_align(row_pointer[0]);
   return 0;
 }
 
