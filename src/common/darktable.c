@@ -1339,11 +1339,15 @@ void dt_cleanup()
   darktable.iop_order_list = NULL;
   g_list_free_full(darktable.iop_order_rules, free);
   darktable.iop_order_rules = NULL;
+
+#ifdef HAVE_OPENCL
   if(darktable.opencl && darktable.opencl->inited && darktable.pixelpipe_cache)
   {
     for(int i = 0; i < darktable.opencl->num_devs; i++)
       dt_opencl_finish(i);
   }
+#endif
+
   dt_dev_pixelpipe_cache_cleanup(darktable.pixelpipe_cache);
 
   dt_opencl_cleanup(darktable.opencl);
