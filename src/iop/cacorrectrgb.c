@@ -592,10 +592,13 @@ static void reduce_artifacts(const float* const restrict in,
                           float* const restrict out)
 
 {
+  dt_gaussian_t *g = NULL;
+
   // in_out contains the 2 guided channels of in, and the 2 guided channels of out
   // it allows to blur all channels in one 4-channel gaussian blur instead of 2
   float *const restrict DT_ALIGNED_PIXEL in_out = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
-  if(in_out == NULL) goto error;
+  float *const restrict blurred_in_out = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
+  if(blurred_in_out == NULL || in_out == NULL) goto error;
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -612,12 +615,10 @@ static void reduce_artifacts(const float* const restrict in,
     }
   }
 
-  float *const restrict blurred_in_out = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
-  if(blurred_in_out == NULL) goto error;
 
   dt_aligned_pixel_t max = { INFINITY, INFINITY, INFINITY, INFINITY };
   dt_aligned_pixel_t min = {0.0f, 0.0f, 0.0f, 0.0f};
-  dt_gaussian_t *g = dt_gaussian_init(width, height, 4, max, min, sigma, 0);
+  g = dt_gaussian_init(width, height, 4, max, min, sigma, 0);
   if(!g) goto error;
   dt_gaussian_blur_4c(g, in_out, blurred_in_out);
 
