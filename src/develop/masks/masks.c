@@ -1414,11 +1414,9 @@ void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, in
     cairo_restore(cr);
     return;
   }
-  
-  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 
-  // we update the form if needed
-  // add preview when creating a circle, ellipse and gradient
+  // We update the form if needed
+  // Add preview when creating a circle, ellipse and gradient
   if(!(((form->type & DT_MASKS_CIRCLE) || (form->type & DT_MASKS_ELLIPSE) || (form->type & DT_MASKS_GRADIENT))
        && gui->creation))
     dt_masks_gui_form_test_create(form, gui, module);
@@ -2382,30 +2380,6 @@ void dt_masks_select_form(struct dt_iop_module_t *module, dt_masks_form_t *sel)
         module->masks_selection_changed(module, darktable.develop->mask_form_selected_id);
     }
   }
-}
-
-// draw a cross where the source position of a clone mask will be created
-void dt_masks_draw_clone_source_pos(cairo_t *cr, const float zoom_scale, const float x, const float y)
-{
-  const float dx = DT_DRAW_SIZE_CROSS / zoom_scale;
-  const float dy = DT_DRAW_SIZE_CROSS / zoom_scale;
-  cairo_save(cr);
-
-  dt_draw_set_dash_style(cr, DT_MASKS_NO_DASH, zoom_scale);
-  cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_HIGHLIGHT / zoom_scale);
-  dt_draw_set_color_overlay(cr, FALSE, 0.8);
-
-  cairo_move_to(cr, x + dx, y);
-  cairo_line_to(cr, x - dx, y);
-  cairo_move_to(cr, x, y + dy);
-  cairo_line_to(cr, x, y - dy);
-  cairo_stroke_preserve(cr);
-
-  cairo_set_line_width(cr, DT_DRAW_SIZE_LINE / zoom_scale);
-  dt_draw_set_color_overlay(cr, TRUE, 0.8);
-  cairo_stroke(cr);
-
-  cairo_restore(cr);
 }
 
 // sets if the initial source position for a clone mask will be absolute or relative,

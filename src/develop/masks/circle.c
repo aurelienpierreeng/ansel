@@ -445,12 +445,14 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, float pzx,
   return 1;
 }
 
-static void _circle_draw_shape(cairo_t *cr, const float *points, const int points_count, const int coord_nb, const gboolean border, const gboolean source)
+static gboolean _circle_draw_shape(cairo_t *cr, const float *points, const int points_count, const int coord_nb, const gboolean border, const gboolean source)
 {
   cairo_move_to(cr, points[coord_nb * 2 + 2], points[coord_nb * 2 + 3]);
   for(int i = 2; i < points_count; i++)
     cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
   cairo_close_path(cr);
+
+  return FALSE; // Circle is not an open shape
 }
 
 static float *_points_to_transform(float x, float y, float radius, float wd, float ht, int *points_count)
@@ -627,7 +629,7 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
     {
       float pts[2] = { 0.0, 0.0 };
       dt_masks_calculate_source_pos_value(gui, DT_MASKS_CIRCLE, xpos, ypos, xpos, ypos, &pts[0], &pts[1], FALSE);
-      dt_masks_draw_clone_source_pos(cr, zoom_scale, pts[0], pts[1]);
+      dt_draw_cross(cr, zoom_scale, pts[0], pts[1]);
     }
 
     if(points) dt_free_align(points);

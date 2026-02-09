@@ -974,10 +974,10 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
   return 1;
 }
 
-static void _ellipse_draw_shape(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source)
+static gboolean _ellipse_draw_shape(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source)
 {
   // minimum number of points to draw an ellipse
-  if(points_count <= 10) return;
+  if(points_count <= 10) return FALSE;
 
   // Draw the ellipse
   const float r = atan2f(points[3] - points[1], points[2] - points[0]);
@@ -997,6 +997,8 @@ static void _ellipse_draw_shape(cairo_t *cr, const float *points, const int poin
   // close the ellipse on the first point
   _ellipse_point_transform(points[0], points[1], points[10], points[11], sinr, cosr, &x, &y);
   cairo_line_to(cr, x, y);
+
+  return FALSE; // Ellipse is not an open shape
 }
 
 static void _ellipse_draw_node(const dt_masks_form_gui_t *gui, cairo_t *cr, const float zoom_scale,
@@ -1099,7 +1101,7 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       x = 0.0f;
       y = 0.0f;
       dt_masks_calculate_source_pos_value(gui, DT_MASKS_ELLIPSE, xpos, ypos, xpos, ypos, &x, &y, FALSE);
-      dt_masks_draw_clone_source_pos(cr, zoom_scale, x, y);
+      dt_draw_cross(cr, zoom_scale, x, y);
     }
 
     if(points) dt_free_align(points);

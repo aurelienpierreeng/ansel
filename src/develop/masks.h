@@ -231,8 +231,8 @@ typedef struct dt_masks_functions_t
   int (*button_released)(struct dt_iop_module_t *module, float pzx, float pzy, int which, uint32_t state,
                          struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
   void (*post_expose)(cairo_t *cr, float zoom_scale, struct dt_masks_form_gui_t *gui, int index, int num_points);
-  // The function to draw the shape in question
-  void (*draw_shape)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
+  // The function to draw the shape in question. it returns wether the shape is closed or not, to be able to draw round caps.
+  gboolean (*draw_shape)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
   /** initialise all control points to eventually match a catmull-rom like spline */
   void (*init_ctrl_points)(struct dt_masks_form_t *form);
 } dt_masks_functions_t;
@@ -503,7 +503,6 @@ int dt_masks_point_in_form_near(float x, float y, float *points, int points_star
 void dt_masks_select_form(struct dt_iop_module_t *module, dt_masks_form_t *sel);
 
 /** utils for selecting the source of a clone mask while creating it */
-void dt_masks_draw_clone_source_pos(cairo_t *cr, const float zoom_scale, const float x, const float y);
 void dt_masks_set_source_pos_initial_state(dt_masks_form_gui_t *gui, const uint32_t state, const float pzx,
                                            const float pzy);
 void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *gui, dt_masks_form_t *form,

@@ -874,11 +874,11 @@ cleanup:
   return res;
 }
 
-static void _gradient_draw_shape(cairo_t *cr, const float *pts_line, const int pts_line_count, const int nb, const gboolean border, const gboolean source)
+static gboolean _gradient_draw_shape(cairo_t *cr, const float *pts_line, const int pts_line_count, const int nb, const gboolean border, const gboolean source)
 {
   // safeguard in case of malformed arrays of points
-  if(border && pts_line_count <= 3) return;
-  if(!border && pts_line_count <= 4) return;
+  if(border && pts_line_count <= 3) return FALSE;
+  if(!border && pts_line_count <= 4) return FALSE;
 
   const float *points = (border) ? pts_line : pts_line + 6;
   const int points_count = (border) ? pts_line_count : pts_line_count - 3;
@@ -911,6 +911,8 @@ static void _gradient_draw_shape(cairo_t *cr, const float *pts_line, const int p
       i++;
     }
   }
+
+  return TRUE;
 }
 
 static void _gradient_draw_arrow(cairo_t *cr, const gboolean selected, const gboolean pivot_selected, const gboolean is_rotating,

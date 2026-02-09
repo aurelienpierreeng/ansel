@@ -56,9 +56,9 @@ extern "C" {
 #define DT_DRAW_SCALE_DASH          DT_PIXEL_APPLY_DPI(12.0f)
 #define DT_DRAW_SCALE_ARROW         DT_PIXEL_APPLY_DPI(18.0f)
 
-// radius/width of a handle & node
+// radius/width of node (handles are set to be 3/4 of a node size)
 #define DT_DRAW_RADIUS_NODE          DT_PIXEL_APPLY_DPI(5.0f)
-#define DT_DRAW_RADIUS_NODE_SELECTED (1.5f * DT_DRAW_RADIUS_NODE)
+#define DT_DRAW_RADIUS_NODE_SELECTED (1.25f * DT_DRAW_RADIUS_NODE)
 
 // used to detect the area where rotation of a shape is possible
 #define DT_DRAW_SELECTION_ROTATION_AREA           DT_PIXEL_APPLY_DPI(50.0f)
@@ -506,6 +506,29 @@ static inline GdkPixbuf *dt_draw_paint_to_pixbuf
 
 /***** SHAPES */
 
+// Helper that fills the current path with CAIRO_OPERATOR_CLEAR,
+// effectively erasing all drawings below,
+// but preserving the path for further drawing.
+static void _draw_fill_clear(cairo_t *cr, gboolean preserve)
+{
+  cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+  if(preserve)
+    cairo_fill_preserve(cr);
+  else
+    cairo_fill(cr);
+  cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+}
+
+static void _fill_clear(cairo_t *cr)
+{
+  _draw_fill_clear(cr, FALSE);
+}
+
+static void _fill_clear_preserve(cairo_t *cr)
+{
+  _draw_fill_clear(cr, TRUE);
+}
+
 static inline void dt_draw_set_dash_style(cairo_t *cr, dt_masks_dash_type_t type, float zoom_scale)
 {
   // return early if no dash is needed
@@ -562,22 +585,20 @@ static inline void dt_draw_node(cairo_t *cr, const gboolean square, const gboole
   // square for corner nodes, circle for others (curve)
   if(square)
   {
-    const float pos = node_width;
+    const float pos = node_width * 0.7071f; // radius * sin(45°) to have the same diagonal as the circle
     cairo_rectangle(cr, x - pos, y - pos, node_width * 2.f, node_width * 2.f);
   }
   else
-    cairo_arc(cr, x, y, node_width * 1.2f, 0.0, 2.0 * G_PI);
+    cairo_arc(cr, x, y, node_width * 1.2f, 0.0, 2.0 * M_PI);
 
-  cairo_fill_preserve(cr); // erase all drawings below
+  // Erase all drawings below
+  _fill_clear_preserve(cr);
 
   const float line_width = (point_action && selected) ? DT_DRAW_SIZE_LINE_SELECTED / zoom_scale
                                           : DT_DRAW_SIZE_LINE / zoom_scale;
 
   cairo_set_line_width(cr, line_width);
-  //if(selected) cairo_set_source_rgba(cr, 1., 1., 1., 0.8);
-  //else dt_draw_set_color_overlay(cr, TRUE, 0.8);
   dt_draw_set_color_overlay(cr, TRUE, selected || point_action ? 1 : 0.8);
-
   cairo_fill_preserve(cr);
 
   // draw dark border
@@ -589,73 +610,86 @@ static inline void dt_draw_node(cairo_t *cr, const gboolean square, const gboole
 }
 
 /**
- * @brief Draw & control handle of a point with a tail bet.
+ * @brief Draw a control handle attached to a point with a tail between the node and the handle.
  *
  * @param cr the cairo context to draw into
- * @param pt_x the x position of the node point
- * @param pt_y the y position of the node point
+ * @param pt_x the x position of the node point (-1 if no tail should be drawn)
+ * @param pt_y the y position of the node point (-1 if no tail should be drawn)
  * @param zoom_scale the current zoom scale of the image
  * @param handle_x the x position of the handle point
  * @param handle_y the y position of the handle point
- * @param node_index the index of the node being edited (-1 if none)
- * @param handle_index the index of the handle being edited (-1 if none)
- * @param handle_dragging the index of the handle being dragged (-1 if none)
+ * @param selected TRUE if the shape is selected
+ * @param square TRUE to draw a square handle, FALSE to draw a round handle
  */
 static inline void dt_draw_handle(cairo_t *cr, const float pt_x, const float pt_y, const float zoom_scale, 
-                                          const float handle_x, const float handle_y, const gboolean selected)
+                                          const float handle_x, const float handle_y, const gboolean selected, const gboolean square)
 {
-  cairo_save(cr);
-
-  // draw handle's tail
-  float delta_x = handle_x - pt_x;
-  float delta_y = handle_y - pt_y;
-  float tail_len = sqrtf(delta_x * delta_x + delta_y * delta_y);
-  // Draw only if the line is long enough
-  // and shorten the line by the size of the nodes so it does not overlap with them
-  float shorten = (DT_DRAW_RADIUS_NODE / zoom_scale) * 0.5f;
-  if(tail_len > (2 * shorten))
+  // draw handle's tail if a size is specified
+  if(pt_x >= 0 && pt_y >= 0)
   {
-    float start_x = pt_x + delta_x * (shorten / tail_len);
-    float start_y = pt_y + delta_y * (shorten / tail_len);
-    float end_x = handle_x - delta_x * (shorten / tail_len);
-    float end_y = handle_y - delta_y * (shorten / tail_len);
-    cairo_move_to(cr, start_x, start_y);
-    cairo_line_to(cr, end_x, end_y);
+    cairo_save(cr);
+
+    float delta_x = handle_x - pt_x;
+    float delta_y = handle_y - pt_y;
+    float tail_len = sqrtf(delta_x * delta_x + delta_y * delta_y);
+    // Draw only if the line is long enough
+    // and shorten the line by the size of the nodes so it does not overlap with them
+    float shorten = (DT_DRAW_RADIUS_NODE / zoom_scale) * 0.5f;
+    if(tail_len > (2 * shorten))
+    {
+      float start_x = pt_x + delta_x * (shorten / tail_len);
+      float start_y = pt_y + delta_y * (shorten / tail_len);
+      float end_x = handle_x - delta_x * (shorten / tail_len);
+      float end_y = handle_y - delta_y * (shorten / tail_len);
+      cairo_move_to(cr, start_x, start_y);
+      cairo_line_to(cr, end_x, end_y);
+    }
+
+    cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_HIGHLIGHT * 0.6 / zoom_scale);
+    dt_draw_set_color_overlay(cr, FALSE, 0.6);
+    cairo_stroke_preserve(cr);
+    cairo_set_line_width(cr, DT_DRAW_SIZE_LINE * 0.6 / zoom_scale);
+    dt_draw_set_color_overlay(cr, TRUE, 0.8);
+    cairo_stroke(cr);
+
+    cairo_restore(cr);
   }
 
-  cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_HIGHLIGHT * 0.6 / zoom_scale);
-  dt_draw_set_color_overlay(cr, FALSE, 0.6);
-  cairo_stroke_preserve(cr);
-  cairo_set_line_width(cr, DT_DRAW_SIZE_LINE * 0.6 / zoom_scale);
-  dt_draw_set_color_overlay(cr, TRUE, 0.8);
-  cairo_stroke(cr);
+  if(handle_x < 0 || handle_y < 0)
+    return;
 
-  cairo_restore(cr);
   cairo_save(cr);
 
-  //draw the control handle
-  float handle_radius = 0.0f;
-  float line_width = 0.0f;
-  if(selected)
+  // Draw the control handle (1/4 smaller than a node)
+  const float handle_radius = 0.75 * (selected ? DT_DRAW_RADIUS_NODE_SELECTED / zoom_scale
+                                       : DT_DRAW_RADIUS_NODE / zoom_scale);
+
+  if(square)
   {
-    handle_radius = DT_DRAW_RADIUS_NODE_SELECTED / zoom_scale;
-    line_width = (DT_DRAW_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale) * 0.5f;
+    const float square_width = handle_radius * 0.7071f; // handle_radius * sin(45°) to have the same diagonal as the circle
+    cairo_rectangle(cr, handle_x - square_width, handle_y - square_width, square_width * 2.f, square_width * 2.f);
   }
   else
-  {
-    handle_radius = DT_DRAW_RADIUS_NODE / zoom_scale;
-    line_width = DT_DRAW_SIZE_LINE / zoom_scale;
-  }
+    cairo_arc(cr, handle_x, handle_y, handle_radius, 0, 2.0 * M_PI);
 
-  cairo_arc(cr, handle_x, handle_y, handle_radius, 0, 2.0 * M_PI);
-  // Erase all drawings below
-  cairo_fill_preserve(cr);
-  
-  cairo_set_line_width(cr, line_width);
+  const float line_width_dark = selected
+                  ? (DT_DRAW_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale)
+                  : (DT_DRAW_SIZE_LINE_HIGHLIGHT / zoom_scale);
+  const float line_width_bright = selected
+                  ? (DT_DRAW_SIZE_LINE_SELECTED / zoom_scale)
+                  : (DT_DRAW_SIZE_LINE / zoom_scale);
+
+  // OUTLINE (dark)
+  cairo_set_line_width(cr, line_width_dark * 1.125);
+  dt_draw_set_color_overlay(cr, FALSE, 0.5);
+  cairo_stroke_preserve(cr);
+  // NORMAL (bright)
+  cairo_set_line_width(cr, line_width_bright * 1.5);
   dt_draw_set_color_overlay(cr, TRUE, 0.8);
   cairo_stroke_preserve(cr);
-  dt_draw_set_color_overlay(cr, FALSE, 0.6);
-  cairo_fill(cr);
+  // Erase all drawings below
+  _fill_clear(cr);
+
 
   // uncomment this part if you want to see "real" control points
   /*cairo_move_to(cr, gpt->points[n*6+2],gpt->points[n*6+3]);
@@ -668,7 +702,7 @@ static inline void dt_draw_handle(cairo_t *cr, const float pt_x, const float pt_
   cairo_restore(cr);
 }
 
-typedef void (*shape_draw_function_t)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
+typedef gboolean (*shape_draw_function_t)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
 
 /**
  * @brief Draw the lines of a mask shape.
@@ -687,33 +721,36 @@ static inline void dt_draw_shape_lines(const dt_masks_dash_type_t dash_type, con
                 const float zoom_scale, const float *points, const int points_count, const shape_draw_function_t *draw_shape_func)
 {
   cairo_save(cr);
-  // draw the shape from the integrated function if any
+  
+  // Are we drawing a border ?
+  const gboolean border = (dash_type != DT_MASKS_NO_DASH);  
+  gboolean shape_is_open = FALSE;
+  // Draw the shape from the integrated function if any
   if(points && points_count >= 2 && draw_shape_func)
-  {
-    // are we drawing a border ?
-    const gboolean border = (dash_type != DT_MASKS_NO_DASH);
-    (*draw_shape_func)(cr, points, points_count, nb, border, FALSE);
-  }
+    shape_is_open = (*draw_shape_func)(cr, points, points_count, nb, border, FALSE);
 
-  // dashed line and not source ?
-  if(dash_type && !source)
-    dt_draw_set_dash_style(cr, dash_type, zoom_scale);
-  else
-    dt_draw_set_dash_style(cr, DT_MASKS_NO_DASH, zoom_scale);
+  // Round line caps for dashed lines and open shapes to avoid sharp line ends
+  if(border || shape_is_open) cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
 
-  // HIGHLIGHT (dark)
-  if(selected)
-    cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
-  else
-    cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_HIGHLIGHT / zoom_scale);
+  const dt_masks_dash_type_t dash = (dash_type && !source)
+                                  ? dash_type : DT_MASKS_NO_DASH;
+
+  dt_draw_set_dash_style(cr, dash, zoom_scale);
+
+  const float line_width_dark = selected
+                  ? DT_DRAW_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale
+                  : DT_DRAW_SIZE_LINE_HIGHLIGHT / zoom_scale;
+  const float line_width_bright = selected
+                  ? DT_DRAW_SIZE_LINE_SELECTED / zoom_scale
+                  : DT_DRAW_SIZE_LINE / zoom_scale;
+  
+  // OUTLINE (dark)
+  cairo_set_line_width(cr, line_width_dark);
   dt_draw_set_color_overlay(cr, FALSE, dash_type ? 0.3f : 0.9f);
   cairo_stroke_preserve(cr);
 
   // NORMAL (bright)
-  if(selected)
-    cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_SELECTED / zoom_scale);
-  else
-    cairo_set_line_width(cr, DT_DRAW_SIZE_LINE / zoom_scale);
+  cairo_set_line_width(cr, line_width_bright);
   dt_draw_set_color_overlay(cr, TRUE, 0.8);
   cairo_stroke(cr);
   
@@ -791,8 +828,8 @@ static inline void dt_draw_arrow(cairo_t *cr, const float zoom_scale,const gbool
   {
     // arrow head
     _draw_arrow_head(cr, arrow, arrow_x_a, arrow_y_a, arrow_x_b, arrow_y_b);
-    // erase all drawings below
-    cairo_fill_preserve(cr);
+    // Erase all drawings below
+    _fill_clear(cr);
 
     dt_draw_set_dash_style(cr, DT_MASKS_NO_DASH, zoom_scale);
     dt_draw_set_color_overlay(cr, FALSE, 0.6);
@@ -849,8 +886,32 @@ static inline void dt_draw_arrow(cairo_t *cr, const float zoom_scale,const gbool
       cairo_set_line_width(cr, (2 * DT_DRAW_SIZE_LINE) / zoom_scale);
     cairo_stroke(cr);
   }
+  cairo_restore(cr);
 }
 
+static inline void dt_draw_cross(cairo_t *cr, const float zoom_scale, const float x, const float y)
+{
+  const float dx = DT_DRAW_SIZE_CROSS / zoom_scale;
+  const float dy = DT_DRAW_SIZE_CROSS / zoom_scale;
+  cairo_save(cr);
+
+  cairo_set_line_cap(cr, CAIRO_LINE_CAP_SQUARE);
+  dt_draw_set_dash_style(cr, DT_MASKS_NO_DASH, zoom_scale);
+  cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_HIGHLIGHT / zoom_scale);
+  dt_draw_set_color_overlay(cr, FALSE, 0.8);
+
+  cairo_move_to(cr, x + dx, y);
+  cairo_line_to(cr, x - dx, y);
+  cairo_move_to(cr, x, y + dy);
+  cairo_line_to(cr, x, y - dy);
+  cairo_stroke_preserve(cr);
+
+  cairo_set_line_width(cr, DT_DRAW_SIZE_LINE / zoom_scale);
+  dt_draw_set_color_overlay(cr, TRUE, 0.8);
+  cairo_stroke(cr);
+
+  cairo_restore(cr);
+}
 
 #ifdef __cplusplus
 }

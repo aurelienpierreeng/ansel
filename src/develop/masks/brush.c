@@ -2025,7 +2025,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   return 1;
 }
 
-static void _brush_draw_shape(cairo_t *cr, const float *points, const int points_count, const int node_nb, const gboolean border, const gboolean source)
+static gboolean _brush_draw_shape(cairo_t *cr, const float *points, const int points_count, const int node_nb, const gboolean border, const gboolean source)
 {
  // Find the first valid non-NaN point to start drawing
  // FIXME: Why not just avoid having NaN points in the array?
@@ -2053,6 +2053,8 @@ static void _brush_draw_shape(cairo_t *cr, const float *points, const int points
         cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
     }
   }
+
+  return TRUE; // brush is an open shape.
 }
 
 static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int node_count)
@@ -2104,7 +2106,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
         float x = 0.0f, y = 0.0f;
         dt_masks_calculate_source_pos_value(gui, DT_MASKS_BRUSH, xpos, ypos,
                                             xpos, ypos, &x, &y, FALSE);
-        dt_masks_draw_clone_source_pos(cr, zoom_scale, x, y);
+        dt_draw_cross(cr, zoom_scale, x, y);
       }
 
       cairo_restore(cr);
@@ -2225,7 +2227,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
         float x = 0.0f, y = 0.0f;
         dt_masks_calculate_source_pos_value(gui, DT_MASKS_BRUSH, guipoints[0], guipoints[1], guipoints[i * 2],
                                             guipoints[i * 2 + 1], &x, &y, TRUE);
-        dt_masks_draw_clone_source_pos(cr, zoom_scale, x, y);
+        dt_draw_cross(cr, zoom_scale, x, y);
       }
 
       cairo_restore(cr);
@@ -2247,6 +2249,10 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     // Track current segment start and end index for later
     int sel_start = -1, sel_end = -1;
     
+    cairo_save(cr);
+
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+
     cairo_move_to(cr, gpt->points[node_count * 6], gpt->points[node_count * 6 + 1]);
     
     for(int i = node_count * 3; i < total_points; i++)
@@ -2285,6 +2291,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       }
       dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, TRUE, zoom_scale);
     }
+    cairo_restore(cr);
   }
 
   // draw borders
@@ -2309,7 +2316,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       const float pt_x = gpt->points[n * 6 + 2];
       const float pt_y = gpt->points[n * 6 + 3];
       const gboolean selected = (gui->node_edited == gui->handle_selected) && gui->handle_selected >= 0;
-      dt_draw_handle(cr, pt_x, pt_y, zoom_scale, handle_x, handle_y, selected);
+      dt_draw_handle(cr, pt_x, pt_y, zoom_scale, handle_x, handle_y, selected, FALSE);
     }
 
     // draw all nodes

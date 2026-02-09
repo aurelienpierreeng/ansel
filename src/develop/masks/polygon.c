@@ -1874,7 +1874,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
   return 1;
 }
 
-static void _polygon_draw_shape(cairo_t *cr, const float *points, const int points_count, const int node_nb, const gboolean border, const gboolean source)
+static gboolean _polygon_draw_shape(cairo_t *cr, const float *points, const int points_count, const int node_nb, const gboolean border, const gboolean source)
 {
   // Find the first valid non-NaN point to start drawing
   // FIXME: Why not just avoid having NaN points in the array?
@@ -1898,6 +1898,8 @@ static void _polygon_draw_shape(cairo_t *cr, const float *points, const int poin
         cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
     }
   }
+
+  return !border; // plain line polygon is not considered as open shape
 }
 
 static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int node_count)
@@ -1918,7 +1920,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
 
       float pts[2] = { 0.0, 0.0 };
       dt_masks_calculate_source_pos_value(gui, DT_MASKS_POLYGON, node_posx, node_posy, node_posx, node_posy, &pts[0], &pts[1], FALSE);
-      dt_masks_draw_clone_source_pos(cr, zoom_scale, pts[0], pts[1]);
+      dt_draw_cross(cr, zoom_scale, pts[0], pts[1]);
     }
   }
   
@@ -1993,7 +1995,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       const float pt_x = gpt->points[n * 6 + 2];
       const float pt_y = gpt->points[n * 6 + 3];
       const gboolean selected = (gui->node_edited == gui->handle_selected) && gui->handle_selected >= 0;
-      dt_draw_handle(cr, pt_x, pt_y, zoom_scale, handle_x, handle_y, selected);
+      dt_draw_handle(cr, pt_x, pt_y, zoom_scale, handle_x, handle_y, selected, FALSE);
     }
   }
 
