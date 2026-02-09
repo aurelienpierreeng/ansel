@@ -338,10 +338,10 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(struct dt_dev_pixelpipe_cache_t 
   ((float *)dt_pixelpipe_cache_alloc_align_cache((size_t)(pixels) * sizeof(float), (id)))
 #endif
 
-void dt_pixelpipe_cache_free_align_cache(struct dt_dev_pixelpipe_cache_t *cache, void *mem);
+void dt_pixelpipe_cache_free_align_cache(struct dt_dev_pixelpipe_cache_t *cache, void *mem, const char *message);
 
 #define dt_pixelpipe_cache_free_align(mem) \
-  dt_pixelpipe_cache_free_align_cache(darktable.pixelpipe_cache, (mem));
+  dt_pixelpipe_cache_free_align_cache(darktable.pixelpipe_cache, (mem), __FILE__ ":" DT_STRINGIFY(__LINE__));
 
 #ifdef _WIN32
   static inline void dt_free_align(void *mem)

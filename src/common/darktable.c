@@ -1137,6 +1137,11 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   }
 
   darktable.pixelpipe_cache = dt_dev_pixelpipe_cache_init(darktable.dtresources.pixelpipe_memory);
+  if(!darktable.pixelpipe_cache)
+  {
+    fprintf(stderr, "ERROR: can't init pixelpipe cache, aborting.\n");
+    return 1;
+  }
 
   darktable.points = (dt_points_t *)calloc(1, sizeof(dt_points_t));
   dt_points_init(darktable.points, darktable.num_openmp_threads);

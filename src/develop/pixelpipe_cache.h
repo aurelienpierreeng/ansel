@@ -20,6 +20,7 @@
 #pragma once
 
 #include <inttypes.h>
+#include <glib.h>
 
 struct dt_dev_pixelpipe_t;
 struct dt_iop_buffer_dsc_t;
@@ -36,6 +37,29 @@ struct dt_iop_roi_t;
  * protects the whole recursive pixelpipe, so no internal locking is needed nor implemented here.
  */
 
+/*
+ * Arena allocator for cache buffers:
+ * - We reserve one big contiguous block of virtual memory (the arena).
+ * - The arena is split into fixed-size pages (page_size).
+ * - free_runs is a sorted list of "free stretches" of pages.
+ *   Each run says "from page N, K pages are free".
+ * This avoids many small malloc/free calls: we just carve out page ranges
+ * and put them back into the list when done.
+ */
+typedef struct dt_cache_arena_t
+{
+  uint8_t *base;
+  size_t   size;
+
+  size_t   page_size;
+  uint32_t num_pages;
+
+  GArray *free_runs; // sorted list of free page runs (start page + length in pages)
+
+  dt_pthread_mutex_t lock;
+} dt_cache_arena_t;
+
+
 typedef struct dt_dev_pixelpipe_cache_t
 {
   GHashTable *entries;
@@ -44,6 +68,7 @@ typedef struct dt_dev_pixelpipe_cache_t
   size_t max_memory;
   size_t current_memory;
   dt_pthread_mutex_t lock; // mutex to protect the cache entries
+  dt_cache_arena_t arena;
 } dt_dev_pixelpipe_cache_t;
 
 /** constructs a new cache with given cache line count (entries) and float buffer entry size in bytes.
@@ -126,7 +151,7 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache,
  * @param cache Pixelpipe cache to manage.
  * @param mem Pointer to the buffer.
  */
-void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void *mem);
+void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void *mem, const char *message);
 
 /**
  * @brief Get an existing cache line from the cache. This is similar to `dt_dev_pixelpipe_cache_get`,
