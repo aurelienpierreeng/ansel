@@ -1026,6 +1026,8 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
 
   dt_show_times(&start, "[export] creating pixelpipe");
 
+  // Compute the actual final sizes that fit within the bounding box width*height
+  // while preserving original image ratio
   int processed_width = 0;
   int processed_height = 0;
   _get_export_size(&dev, &pipe, format_params, is_scaling, &scale, width, height,
