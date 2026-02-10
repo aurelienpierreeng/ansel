@@ -240,9 +240,10 @@ static int _non_thread_safe_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t
   {
     error = _non_thread_safe_cache_remove(cache, lru->hash, FALSE, lru->cache_entry);
     if(error)
-      dt_print(DT_DEBUG_CACHE, "[pixelpipe] couldn't remove LRU %lu\n", lru->hash);
+      dt_print(DT_DEBUG_CACHE, "[pixelpipe] couldn't remove LRU %" PRIu64 "\n", lru->hash);
     else
-      dt_print(DT_DEBUG_CACHE, "[pixelpipe] LRU %lu removed. Total cache size: %li MiB\n", lru->hash, cache->current_memory / (1024 * 1024));
+      dt_print(DT_DEBUG_CACHE, "[pixelpipe] LRU %" PRIu64 " removed. Total cache size: %li MiB\n",
+               lru->hash, cache->current_memory / (1024 * 1024));
   }
   else
   {
@@ -583,7 +584,7 @@ static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t si
 
   if(cache->current_memory + size > cache->max_memory)
   {
-    fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry %lu (%s)\n", hash, name);
+    fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry %" PRIu64 " (%s)\n", hash, name);
     dt_control_log(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
   }
 
