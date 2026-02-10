@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include "common/atomic.h"
 #include "common/darktable.h"
 #include "common/debug.h"
 
@@ -132,6 +133,7 @@ typedef struct
 
   dt_pthread_mutex_t lock;
   struct _dt_job_t *job;
+  dt_atomic_int destroying;
 
   // Thumbnail actual image sizes (bounding box of GUI widget)
   int img_w;
