@@ -1085,7 +1085,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     /* image is small enough -> try to directly process entire image with opencl */
 
     /* input is not on gpu memory -> copy it there */
-    if(cl_mem_input == NULL)
+    if(cl_mem_input == NULL && input != NULL)
     {
       dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
       gboolean input_reused_from_cache = FALSE;
@@ -1107,9 +1107,13 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
 
       if(fail) goto error;
     }
-    else
+    else if(cl_mem_input != NULL)
     {
       dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s will use its input directly from vRAM\n", module->name());
+    }
+    else
+    {
+      goto error;
     }
 
     // Allocate GPU memory for output: pinned memory if copying to cache, else device memory.
@@ -1202,7 +1206,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     }
     */
   }
-  else if(piece->process_tiling_ready)
+  else if(piece->process_tiling_ready && input != NULL)
   {
     /* image is too big for direct opencl processing -> try to process image via tiling */
     _gpu_clear_buffer(&cl_mem_input, input_entry, input, input_cst_cl);
@@ -1732,7 +1736,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // bypassing the cache is not requested by the pipe, stop before processing.
   // This is mostly for the preview pipe since we didn't stop the recursion earlier
   // at the last-found cache line.
-  if(!pipe->reentry && !new_entry && pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+  if(!pipe->reentry && !new_entry && pipe->type == DT_DEV_PIXELPIPE_PREVIEW && input)
   {
     dt_print(DT_DEBUG_PIPE, "[pipeline] found %" PRIu64 " (%s) for %s pipeline in cache\n", hash, module ? module->op : "noop", type);
 
@@ -1844,7 +1848,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   KILL_SWITCH_AND_FLUSH_CACHE;
 
   // Sample all color pickers and histograms
-  if(piece->force_opencl_cache)
+  if(piece->force_opencl_cache && input)
     _sample_gui(pipe, dev, input, output, roi_in, roi_out, input_format, out_format, module, piece, input_hash,
                 hash, in_bpp, bpp, input_entry, output_entry);
 
