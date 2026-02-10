@@ -131,12 +131,12 @@ static inline void make_noise(float *const output, const float noise, const size
 }
 
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
                                          ivoid, ovoid, roi_in, roi_out))
-    return; // image has been copied through to output and module's trouble flag has been updated
+    return 0; // image has been copied through to output and module's trouble flag has been updated
 
   dt_iop_censorize_data_t *data = (dt_iop_censorize_data_t *)piece->data;
   const float *const restrict in = DT_IS_ALIGNED((const float *const restrict)ivoid);
@@ -147,7 +147,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   const int ch = 4;
 
   float *const restrict temp = dt_pixelpipe_cache_alloc_align_float((size_t)width * height * ch, piece->pipe);
-  if(temp == NULL) return;
+  if(temp == NULL) return 1;
 
   const float sigma_1 = data->radius_1 * roi_in->scale;
   const float sigma_2 = data->radius_2 * roi_in->scale;
@@ -171,7 +171,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   if(sigma_1 != 0.f)
   {
     dt_gaussian_t *g = dt_gaussian_init(width, height, ch, RGBmax, RGBmin, sigma_1, 0);
-    if(!g) return;
+    if(!g)
+    {
+      dt_pixelpipe_cache_free_align(temp);
+      return 1;
+    }
     dt_gaussian_blur_4c(g, input, output);
     dt_gaussian_free(g);
 
@@ -238,7 +242,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       make_noise(output, noise, width, height);
 
     dt_gaussian_t *g = dt_gaussian_init(width, height, ch, RGBmax, RGBmin, sigma_2, 0);
-    if(!g) return;
+    if(!g)
+    {
+      dt_pixelpipe_cache_free_align(temp);
+      return 1;
+    }
     dt_gaussian_blur_4c(g, input, output);
     dt_gaussian_free(g);
   }
@@ -255,6 +263,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
 
   dt_pixelpipe_cache_free_align(temp);
+  return 0;
 }
 
 

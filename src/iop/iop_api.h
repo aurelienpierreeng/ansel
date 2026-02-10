@@ -183,18 +183,18 @@ OPTIONAL(void, masks_selection_changed, struct dt_iop_module_t *self, const int 
   * formats may be filled by this callback, if the pipeline can handle it. */
 /** the simplest variant of process(). you can only use OpenMP SIMD here, no intrinsics */
 /** must be provided by each IOP. */
-REQUIRED(void, process, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
+REQUIRED(int, process, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
                         void *const o, const struct dt_iop_roi_t *const roi_in,
                         const struct dt_iop_roi_t *const roi_out);
 /** a tiling variant of process(). */
-DEFAULT(void, process_tiling, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
+DEFAULT(int, process_tiling, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
                                void *const o, const struct dt_iop_roi_t *const roi_in,
                                const struct dt_iop_roi_t *const roi_out, const int bpp);
 
 #if defined(__SSE__)
 /** a variant process(), that can contain SSE2 intrinsics. */
 /** can be provided by each IOP. */
-OPTIONAL(void, process_sse2, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
+OPTIONAL(int, process_sse2, struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
                              void *const o, const struct dt_iop_roi_t *const roi_in,
                              const struct dt_iop_roi_t *const roi_out);
 #endif

@@ -142,7 +142,7 @@ static inline void clamped_scaling(float *const restrict out, const float *const
     out[c] = CLAMPS(in[c] * slope[c] + offset[c], low[c], high[c]);
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   // this is called for preview and full pipe separately, each with its own pixelpipe piece.
@@ -153,7 +153,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   // how many colors in our buffer?
   if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
                                          ivoid, ovoid, roi_in, roi_out))
-    return; // image has been copied through to output and module's trouble flag has been updated
+    return 0; // image has been copied through to output and module's trouble flag has been updated
 
   const float *const restrict in = DT_IS_ALIGNED((const float *const)ivoid);
   float *const restrict out = DT_IS_ALIGNED((float *const)ovoid);
@@ -195,6 +195,8 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       clamped_scaling(out + 4*k, in + 4*k, slope, offset, lowlimit, highlimit);
     }
   }
+
+  return 0;
 }
 
 /** commit is the synch point between core and gui, so it copies params to pipe data. */

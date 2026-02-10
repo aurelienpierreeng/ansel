@@ -487,7 +487,7 @@ void copy_image_with_border(float *out, const float *const in, const struct bord
 
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_borders_data_t *const d = (dt_iop_borders_data_t *)piece->data;
@@ -560,6 +560,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     binfo.border_bot = frame_br_out_y + 1;
   }
   copy_image_with_border((float*)ovoid, (const float*)ivoid, &binfo);
+  return 0;
 }
 
 #ifdef HAVE_OPENCL

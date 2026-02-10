@@ -362,7 +362,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   return;
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_lowpass_data_t *data = (dt_iop_lowpass_data_t *)piece->data;
@@ -391,7 +391,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   if(data->lowpass_algo == LOWPASS_ALGO_GAUSSIAN)
   {
     dt_gaussian_t *g = dt_gaussian_init(width, height, ch, Labmax, Labmin, sigma, order);
-    if(!g) return;
+    if(!g) return 1;
     dt_gaussian_blur_4c(g, in, out);
     dt_gaussian_free(g);
   }
@@ -402,7 +402,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     const float detail = -1.0f; // we want the bilateral base layer
 
     dt_bilateral_t *b = dt_bilateral_init(width, height, sigma_s, sigma_r);
-    if(!b) return;
+    if(!b) return 1;
     dt_bilateral_splat(b, in);
     dt_bilateral_blur(b);
     dt_bilateral_slice(b, in, out, detail);
@@ -432,6 +432,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
         = CLAMPF(out[k * ch + 2] * data->saturation, Labminf[2], Labmaxf[2]); //                         - " -
     out[k * ch + 3] = in[k * ch + 3];
   }
+  return 0;
 }
 
 #if 0 // gaussian order not user selectable

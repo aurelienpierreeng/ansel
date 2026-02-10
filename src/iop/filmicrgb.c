@@ -1174,13 +1174,13 @@ static int get_scales(const dt_iop_roi_t *roi_in, const dt_dev_pixelpipe_iop_t *
 }
 
 
-static inline gint reconstruct_highlights(const float *const restrict in, const float *const restrict mask,
-                                          float *const restrict reconstructed,
-                                          const dt_iop_filmicrgb_reconstruction_type_t variant, const size_t ch,
-                                          const dt_iop_filmicrgb_data_t *const data, dt_dev_pixelpipe_iop_t *piece,
-                                          const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+static inline int reconstruct_highlights(const float *const restrict in, const float *const restrict mask,
+                                         float *const restrict reconstructed,
+                                         const dt_iop_filmicrgb_reconstruction_type_t variant, const size_t ch,
+                                         const dt_iop_filmicrgb_data_t *const data, dt_dev_pixelpipe_iop_t *piece,
+                                         const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  gint success = TRUE;
+  int err = 0;
 
   // wavelets scales
   const int scales = get_scales(roi_in, piece);
@@ -1196,7 +1196,7 @@ static inline gint reconstruct_highlights(const float *const restrict in, const 
 
   if(!LF_even || !LF_odd || !HF_RGB || !HF_grey || !temp)
   {
-    success = FALSE;
+    err = 1;
     goto error;
   }
 
@@ -1272,7 +1272,7 @@ error:
   if(LF_odd) dt_pixelpipe_cache_free_align(LF_odd);
   if(HF_RGB) dt_pixelpipe_cache_free_align(HF_RGB);
   if(HF_grey) dt_pixelpipe_cache_free_align(HF_grey);
-  return success;
+  return err;
 }
 
 
@@ -2065,7 +2065,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   return;
 }
 
-void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
+int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
              void *const restrict ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_filmicrgb_data_t *const data = (dt_iop_filmicrgb_data_t *)piece->data;
@@ -2075,7 +2075,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   if(piece->colors != 4)
   {
     dt_control_log(_("filmic works only on RGB input"));
-    return;
+    return 0;
   }
 
   const size_t ch = 4;
@@ -2092,6 +2092,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   float *restrict in = (float *)ivoid;
   float *const restrict out = (float *)ovoid;
   float *const restrict mask = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height, piece->pipe);
+  if(!mask) return 1;
 
   // used to adjuste noise level depending on size. Don't amplify noise if magnified > 100%
   const float scale = fmaxf(1.f / roi_in->scale, 1.f);
@@ -2108,31 +2109,57 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
     {
       display_mask(mask, out, roi_out->width, roi_out->height);
       dt_pixelpipe_cache_free_align(mask);
-      return;
+      return 0;
     }
   }
 
   float *const restrict reconstructed = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, piece->pipe);
+  if(recover_highlights && !reconstructed)
+  {
+    dt_pixelpipe_cache_free_align(mask);
+    return 1;
+  }
 
   // if fast mode is not in use
   if(recover_highlights && mask && reconstructed)
   {
     // init the blown areas with noise to create particles
     float *const restrict inpainted =  dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, piece->pipe);
+    if(!inpainted)
+    {
+      dt_pixelpipe_cache_free_align(mask);
+      dt_pixelpipe_cache_free_align(reconstructed);
+      return 1;
+    }
     inpaint_noise(in, mask, inpainted, data->noise_level / scale, data->reconstruct_threshold, data->noise_distribution,
                   roi_out->width, roi_out->height);
 
     // diffuse particles with wavelets reconstruction
     // PASS 1 on RGB channels
-    const gint success_1 = reconstruct_highlights(inpainted, mask, reconstructed, DT_FILMIC_RECONSTRUCT_RGB, ch, data, piece, roi_in, roi_out);
-    gint success_2 = TRUE;
+    const int err_1 = reconstruct_highlights(inpainted, mask, reconstructed, DT_FILMIC_RECONSTRUCT_RGB, ch, data, piece, roi_in, roi_out);
+    int err_2 = 0;
 
     dt_pixelpipe_cache_free_align(inpainted);
 
-    if(data->high_quality_reconstruction > 0 && success_1)
+    if(err_1)
+    {
+      dt_pixelpipe_cache_free_align(reconstructed);
+      dt_pixelpipe_cache_free_align(mask);
+      return 1;
+    }
+
+    if(data->high_quality_reconstruction > 0)
     {
       float *const restrict norms = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height, piece->pipe);
       float *const restrict ratios = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, piece->pipe);
+      if(!norms || !ratios)
+      {
+        if(norms) dt_pixelpipe_cache_free_align(norms);
+        if(ratios) dt_pixelpipe_cache_free_align(ratios);
+        dt_pixelpipe_cache_free_align(reconstructed);
+        dt_pixelpipe_cache_free_align(mask);
+        return 1;
+      }
 
       // reconstruct highlights PASS 2 on ratios
       if(norms && ratios)
@@ -2141,9 +2168,12 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
         {
           compute_ratios(reconstructed, norms, ratios, work_profile, DT_FILMIC_METHOD_EUCLIDEAN_NORM_V1,
                          roi_out->width, roi_out->height);
-          success_2 = success_2
-                      && reconstruct_highlights(ratios, mask, reconstructed, DT_FILMIC_RECONSTRUCT_RATIOS, ch,
-                                                data, piece, roi_in, roi_out);
+          if(reconstruct_highlights(ratios, mask, reconstructed, DT_FILMIC_RECONSTRUCT_RATIOS, ch,
+                                    data, piece, roi_in, roi_out))
+          {
+            err_2 = 1;
+            break;
+          }
           restore_ratios(reconstructed, norms, roi_out->width, roi_out->height);
         }
       }
@@ -2152,7 +2182,14 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
       if(ratios) dt_pixelpipe_cache_free_align(ratios);
     }
 
-    if(success_1 && success_2) in = reconstructed; // use reconstructed buffer as tonemapping input
+    if(err_2)
+    {
+      dt_pixelpipe_cache_free_align(reconstructed);
+      dt_pixelpipe_cache_free_align(mask);
+      return 1;
+    }
+
+    in = reconstructed; // use reconstructed buffer as tonemapping input
   }
 
   if(mask) dt_pixelpipe_cache_free_align(mask);
@@ -2197,6 +2234,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
+  return 0;
 }
 
 #ifdef HAVE_OPENCL

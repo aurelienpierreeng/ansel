@@ -554,14 +554,14 @@ static inline float lookup_gamut(const float *const gamut_lut, const float x)
 }
 
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_colorbalancergb_data_t *d = (dt_iop_colorbalancergb_data_t *)piece->data;
   dt_iop_colorbalancergb_gui_data_t *g = (dt_iop_colorbalancergb_gui_data_t *)self->gui_data;
   const struct dt_iop_order_iccprofile_info_t *const work_profile
       = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
-  if(work_profile == NULL) return; // no point
+  if(work_profile == NULL) return 0; // no point
 
   // work profile can't be fetched in commit_params since it is not yet initialised
   // work_profile->matrix_in === RGB_to_XYZ
@@ -890,6 +890,8 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       pix_out[3] = pix_in[3]; // alpha copy
     }
   }
+
+  return 0;
 }
 
 

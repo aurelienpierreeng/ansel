@@ -558,7 +558,7 @@ static void dt_iop_colorreconstruct_bilateral_slice(const dt_iop_colorreconstruc
 }
 
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_colorreconstruct_data_t *data = (dt_iop_colorreconstruct_data_t *)piece->data;
@@ -576,14 +576,14 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   dt_iop_colorreconstruct_bilateral_t *b;
 
   b = dt_iop_colorreconstruct_bilateral_init(roi_in, 1.f, sigma_s, sigma_r);
+  if(!b) goto error;
   dt_iop_colorreconstruct_bilateral_splat(b, in, data->threshold, data->precedence, params);
   dt_iop_colorreconstruct_bilateral_blur(b);
-
-  if(!b) goto error;
 
   dt_iop_colorreconstruct_bilateral_slice(b, in, out, data->threshold, roi_in, 1.f);
 
   // here is where we generate the canned bilateral grid of the preview pipe for later use
+  int err = 0;
   if(self->dev->gui_attached && g && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
   {
     uint64_t hash = piece->global_hash;
@@ -591,16 +591,19 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     dt_iop_colorreconstruct_bilateral_dump(g->can);
     g->can = dt_iop_colorreconstruct_bilateral_freeze(b);
     g->hash = hash;
+    if(!g->can) err = 1;
     dt_iop_gui_leave_critical_section(self);
   }
 
   dt_iop_colorreconstruct_bilateral_free(b);
-  return;
+  if(err) return 1;
+  return 0;
 
 error:
   dt_control_log(_("module `color reconstruction' failed"));
   dt_iop_colorreconstruct_bilateral_free(b);
   dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, piece->colors);
+  return 1;
 }
 
 #ifdef HAVE_OPENCL
@@ -930,6 +933,11 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     g->can = dt_iop_colorreconstruct_bilateral_freeze_cl(b);
     g->hash = hash;
     dt_iop_gui_leave_critical_section(self);
+    if(!g->can)
+    {
+      err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
+      goto error;
+    }
   }
 
   dt_iop_colorreconstruct_bilateral_free_cl(b);

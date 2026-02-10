@@ -95,7 +95,7 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_p
   return IOP_CS_RGB;
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_tonemapping_data_t *data = (dt_iop_tonemapping_data_t *)piece->data;
@@ -197,6 +197,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   L = logf(L);
   const float Ln = expf(L * (contr - 1.0f) - 1.0f);
   for(int k = 0; k < 3; k++) pmax[k] *= Ln;
+  return 0;
 }
 
 

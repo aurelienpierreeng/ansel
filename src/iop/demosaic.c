@@ -431,7 +431,7 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
 }
 
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_image_t *img = &self->dev->image_storage;
@@ -512,16 +512,22 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
             break;
           case DT_IOP_GREEN_EQ_BOTH:
             aux = dt_pixelpipe_cache_alloc_align_float((size_t)roi_in->height * roi_in->width, piece->pipe);
-            if(aux)
+            if(!aux)
             {
-              green_equilibration_favg(aux, pixels, roi_in->width, roi_in->height, piece->pipe->dsc.filters,
-                                      roi_in->x, roi_in->y);
-              green_equilibration_lavg(in, aux, roi_in->width, roi_in->height, piece->pipe->dsc.filters, roi_in->x,
-                                      roi_in->y, threshold);
-              dt_pixelpipe_cache_free_align(aux);
+              dt_pixelpipe_cache_free_align(in);
+              return 1;
             }
+            green_equilibration_favg(aux, pixels, roi_in->width, roi_in->height, piece->pipe->dsc.filters,
+                                    roi_in->x, roi_in->y);
+            green_equilibration_lavg(in, aux, roi_in->width, roi_in->height, piece->pipe->dsc.filters, roi_in->x,
+                                    roi_in->y, threshold);
+            dt_pixelpipe_cache_free_align(aux);
             break;
         }
+      }
+      else
+      {
+        return 1;
       }
     }
 
@@ -544,6 +550,16 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       {
         gd->lmmse_gamma_in = dt_alloc_align_float(65536);
         gd->lmmse_gamma_out = dt_alloc_align_float(65536);
+        if(!gd->lmmse_gamma_in || !gd->lmmse_gamma_out)
+        {
+          dt_free_align(gd->lmmse_gamma_in);
+          dt_free_align(gd->lmmse_gamma_out);
+          gd->lmmse_gamma_in = NULL;
+          gd->lmmse_gamma_out = NULL;
+          if(!(img->flags & DT_IMAGE_4BAYER) && data->green_eq != DT_IOP_GREEN_EQ_NO)
+            dt_pixelpipe_cache_free_align(in);
+          return 1;
+        }
 #ifdef _OPENMP
   #pragma omp for
 #endif
@@ -585,6 +601,8 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   if(data->color_smoothing)
     color_smoothing(o, roi_out, data->color_smoothing);
+    
+  return 0;
 }
 
 #ifdef HAVE_OPENCL

@@ -1134,6 +1134,7 @@ static float complex *create_global_distortion_map(const cairo_rectangle_int_t *
 
   // allocate distortion map big enough to contain all paths
   float complex *map = dt_alloc_align(sizeof(float complex) * mapsize);
+  if(!map) return NULL;
   memset(map, 0, sizeof(float complex) * mapsize);
 
   // build map
@@ -1150,6 +1151,11 @@ static float complex *create_global_distortion_map(const cairo_rectangle_int_t *
   if(inverted)
   {
     float complex * const imap = dt_alloc_align(sizeof(float complex) * mapsize);
+    if(!imap)
+    {
+      dt_free_align((void *)map);
+      return NULL;
+    }
     memset(imap, 0, sizeof(float complex) * mapsize);
 
     // copy map into imap(inverted map).
@@ -1429,7 +1435,10 @@ void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *p
   cairo_rectangle_int_t map_extent;
   float complex *map = build_global_distortion_map(self, piece, roi_in, roi_out, &map_extent);
   if(map == NULL)
+  {
+    if(map_extent.width != 0 && map_extent.height != 0) return;
     return;
+  }
 
   // 3. apply the map
 
@@ -1445,7 +1454,7 @@ void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *p
 
 }
 
-void process(struct dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, const void *const in,
+int process(struct dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, const void *const in,
              void *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   // 1. copy the whole image (we'll change only a small part of it)
@@ -1475,7 +1484,10 @@ void process(struct dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, cons
   cairo_rectangle_int_t map_extent;
   float complex *map = build_global_distortion_map(module, piece, roi_in, roi_out, &map_extent);
   if(map == NULL)
-    return;
+  {
+    if(map_extent.width != 0 && map_extent.height != 0) return 1;
+    return 0;
+  }
 
   // 3. apply the map
 
@@ -1483,6 +1495,8 @@ void process(struct dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, cons
     apply_global_distortion_map(module, piece, in, out, roi_in, roi_out, map, &map_extent);
 
   dt_free_align((void *)map);
+
+  return 0;
 }
 
 #ifdef HAVE_OPENCL
@@ -1540,24 +1554,28 @@ static cl_int_t apply_global_distortion_map_cl(struct dt_iop_module_t *module,
        kdesc.size = 1;
        kdesc.resolution = 1;
        k = malloc(sizeof(float) * 2);
+       if(!k) goto error;
        k[0] = 1.0f;
        k[1] = 0.0f;
        break;
      case DT_INTERPOLATION_BICUBIC:
        kdesc.size = 2;
        k = malloc(sizeof(float) * ((size_t)kdesc.size * kdesc.resolution + 1));
+       if(!k) goto error;
        for(int i = 0; i <= kdesc.size * kdesc.resolution; ++i)
          k[i] = bicubic(0.5f, (float) i / kdesc.resolution);
        break;
      case DT_INTERPOLATION_LANCZOS2:
        kdesc.size = 2;
        k = malloc(sizeof(float) * ((size_t)kdesc.size * kdesc.resolution + 1));
+       if(!k) goto error;
        for(int i = 0; i <= kdesc.size * kdesc.resolution; ++i)
          k[i] = lanczos(2, (float) i / kdesc.resolution);
        break;
      case DT_INTERPOLATION_LANCZOS3:
        kdesc.size = 3;
        k = malloc(sizeof(float) * ((size_t)kdesc.size * kdesc.resolution + 1));
+       if(!k) goto error;
        for(int i = 0; i <= kdesc.size * kdesc.resolution; ++i)
          k[i] = lanczos(3, (float) i / kdesc.resolution);
        break;
@@ -1638,7 +1656,10 @@ int process_cl(struct dt_iop_module_t *module,
   cairo_rectangle_int_t map_extent;
   const float complex *map = build_global_distortion_map(module, piece, roi_in, roi_out, &map_extent);
   if(map == NULL)
+  {
+    if(map_extent.width != 0 && map_extent.height != 0) return FALSE;
     return TRUE;
+  }
 
   // 3. apply the map
   if(map_extent.width != 0 && map_extent.height != 0)

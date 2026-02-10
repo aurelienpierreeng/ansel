@@ -427,7 +427,7 @@ static void kmeans(const float *col, const int width, const int height, const in
   }
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_colormapping_data_t *const restrict data = (dt_iop_colormapping_data_t *)piece->data;
@@ -439,7 +439,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   const int height = roi_in->height;
   if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
                                          in, out, roi_in, roi_out))
-    return; // image has been copied through to output and module's trouble flag has been updated
+    return 0; // image has been copied through to output and module's trouble flag has been updated
 
   const float scale = 1.f / roi_in->scale;
   const float sigma_s = 50.0f / scale;
@@ -456,7 +456,13 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     g->height = height;
     g->ch = 4;
 
-    if(g->buffer) dt_iop_image_copy_by_size(g->buffer, in, width, height, 4);
+    if(!g->buffer)
+    {
+      dt_iop_gui_leave_critical_section(self);
+      return 1;
+    }
+
+    dt_iop_image_copy_by_size(g->buffer, in, width, height, 4);
 
     dt_iop_gui_leave_critical_section(self);
   }
@@ -471,11 +477,17 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
     // get mapping from input clusters to target clusters
     int *const mapio = malloc(sizeof(int) * data->n);
+    if(!mapio) return 1;
 
     get_cluster_mapping(data->n, data->target_mean, data->target_weight, data->source_mean,
                         data->source_weight, dominance, mapio);
 
     float2 *const var_ratio = malloc(sizeof(float2) * data->n);
+    if(!var_ratio)
+    {
+      free(mapio);
+      return 1;
+    }
 
     for(int i = 0; i < data->n; i++)
     {
@@ -510,7 +522,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       {
         free(var_ratio);
         free(mapio);
-        return;
+        return 1;
       }
       dt_bilateral_splat(b, out);
       dt_bilateral_blur(b);
@@ -520,7 +532,12 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
     size_t allocsize;
     float *const weight_buf = dt_alloc_perthread(data->n, sizeof(float), &allocsize);
-    if(weight_buf == NULL) return;
+    if(weight_buf == NULL)
+    {
+      free(var_ratio);
+      free(mapio);
+      return 1;
+    }
 
 #ifdef _OPENMP
 #pragma omp parallel default(none) \
@@ -568,6 +585,8 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   {
     dt_iop_image_copy_by_size(out, in, width, height, 4);
   }
+
+  return 0;
 }
 
 void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,

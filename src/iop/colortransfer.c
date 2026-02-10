@@ -228,8 +228,8 @@ static int get_cluster(const float *col, const int n, float2 *mean)
   return cluster;
 }
 
-static void kmeans(const float *col, const dt_iop_roi_t *const roi, const int n, float2 *mean_out,
-                   float2 *var_out)
+static int kmeans(const float *col, const dt_iop_roi_t *const roi, const int n, float2 *mean_out,
+                  float2 *var_out)
 {
   // TODO: check params here:
   const int nit = 10;                                 // number of iterations
@@ -238,6 +238,13 @@ static void kmeans(const float *col, const dt_iop_roi_t *const roi, const int n,
   float2 *const mean = malloc(sizeof(float2) * n);
   float2 *const var = malloc(sizeof(float2) * n);
   int *const cnt = malloc(sizeof(int) * n);
+  if(!mean || !var || !cnt)
+  {
+    free(cnt);
+    free(var);
+    free(mean);
+    return 1;
+  }
 
   // init n clusters for a, b channels at random
   for(int k = 0; k < n; k++)
@@ -314,9 +321,10 @@ static void kmeans(const float *col, const dt_iop_roi_t *const roi, const int n,
     var_out[k][0] = sqrtf(var_out[k][0]);
     var_out[k][1] = sqrtf(var_out[k][1]);
   }
+  return 0;
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   // FIXME: this returns nan!!
@@ -337,7 +345,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       invert_histogram(hist, data->hist);
 
       // get n clusters
-      kmeans(in, roi_in, data->n, data->mean, data->var);
+      if(kmeans(in, roi_in, data->n, data->mean, data->var))
+      {
+        dt_iop_image_copy_by_size(out, in, roi_out->width, roi_out->height, ch);
+        return 1;
+      }
 
       // notify gui that commit_params should let stuff flow back!
       data->flag = ACQUIRED;
@@ -372,11 +384,28 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     // cluster input buffer
     float2 *const mean = malloc(sizeof(float2) * data->n);
     float2 *const var = malloc(sizeof(float2) * data->n);
+    if(!mean || !var)
+    {
+      free(mean);
+      free(var);
+      return 1;
+    }
 
-    kmeans(in, roi_in, data->n, mean, var);
+    if(kmeans(in, roi_in, data->n, mean, var))
+    {
+      free(var);
+      free(mean);
+      return 1;
+    }
 
     // get mapping from input clusters to target clusters
     int *const mapio = malloc(sizeof(int) * data->n);
+    if(!mapio)
+    {
+      free(var);
+      free(mean);
+      return 1;
+    }
 
     get_cluster_mapping(data->n, mean, data->mean, mapio);
 
@@ -424,6 +453,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   {
     dt_iop_image_copy_by_size(out, in, roi_out->width, roi_out->height, ch);
   }
+  return 0;
 }
 
 #if 0

@@ -97,7 +97,7 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_p
   return IOP_CS_LAB;
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_colisa_data_t *data = (dt_iop_colisa_data_t *)piece->data;
@@ -125,6 +125,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     out[k * ch + 2] = in[k * ch + 2] * data->saturation;
     out[k * ch + 3] = in[k * ch + 3];
   }
+  return 0;
 }
 
 

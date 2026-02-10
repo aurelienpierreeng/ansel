@@ -180,22 +180,23 @@ static int default_distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe
   return 1;
 }
 
-static void default_process(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
-                            const void *const i, void *const o, const struct dt_iop_roi_t *const roi_in,
-                            const struct dt_iop_roi_t *const roi_out)
+static int default_process(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+                           const void *const i, void *const o, const struct dt_iop_roi_t *const roi_in,
+                           const struct dt_iop_roi_t *const roi_out)
 {
-  if(roi_in->width <= 1 || roi_in->height <= 1 || roi_out->width <= 1 || roi_out->height <= 1) return;
+  if(roi_in->width <= 1 || roi_in->height <= 1 || roi_out->width <= 1 || roi_out->height <= 1) return 0;
 
   if(darktable.codepath.OPENMP_SIMD && self->process_plain)
-    self->process_plain(self, piece, i, o, roi_in, roi_out);
+    return self->process_plain(self, piece, i, o, roi_in, roi_out);
 #if defined(__SSE__)
   else if(darktable.codepath.SSE2 && self->process_sse2)
-    self->process_sse2(self, piece, i, o, roi_in, roi_out);
+    return self->process_sse2(self, piece, i, o, roi_in, roi_out);
 #endif
   else if(self->process_plain)
-    self->process_plain(self, piece, i, o, roi_in, roi_out);
+    return self->process_plain(self, piece, i, o, roi_in, roi_out);
   else
     dt_unreachable_codepath_with_desc(self->op);
+  return 1;
 }
 
 static dt_introspection_field_t *default_get_introspection_linear(void)

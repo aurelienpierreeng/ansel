@@ -274,7 +274,7 @@ static int process_xtrans(const dt_iop_hotpixels_data_t *data,
   return fixed;
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_hotpixels_gui_data_t *g = (dt_iop_hotpixels_gui_data_t *)self->gui_data;
@@ -297,6 +297,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   {
     g->pixels_fixed = fixed;
   }
+  return 0;
 }
 
 void reload_defaults(dt_iop_module_t *module)

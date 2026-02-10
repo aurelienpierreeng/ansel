@@ -124,7 +124,7 @@ void init_presets(dt_iop_module_so_t *self)
                              self->version(), &p, sizeof(p), 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_colorcorrection_data_t *const d = (dt_iop_colorcorrection_data_t *)piece->data;
@@ -132,7 +132,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   float *const restrict out = (float *)DT_IS_ALIGNED(o);
   if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
                                          in, out, roi_in, roi_out))
-    return; // image has been copied through to output and module's trouble flag has been updated
+    return 0; // image has been copied through to output and module's trouble flag has been updated
 
   // unpack the structure so that the compiler can keep the individual elements in registers instead of dereferencing
   // 'd' every time
@@ -153,6 +153,8 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     out[k+2] = saturation * (in[k+2] + in[k+0] * b_scale + b_base);
     out[k+3] = in[k+3];
   }
+
+  return 0;
 }
 
 #ifdef HAVE_OPENCL

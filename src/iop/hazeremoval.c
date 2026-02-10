@@ -428,7 +428,7 @@ static float ambient_light(const const_rgb_image img, int w1, rgb_pixel *pA0)
 }
 
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_hazeremoval_gui_data_t *const g = (dt_iop_hazeremoval_gui_data_t*)self->gui_data;
@@ -533,6 +533,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
+  return 0;
 }
 
 #ifdef HAVE_OPENCL
@@ -543,7 +544,8 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 // reduced by the factor exp(-1)
 // some parts of the calculation are not suitable for a parallel implementation,
 // thus we copy data to host memory fall back to a cpu routine
-static float ambient_light_cl(struct dt_iop_module_t *self, int devid, cl_mem img, int w1, rgb_pixel *pA0)
+static int ambient_light_cl(struct dt_iop_module_t *self, int devid, cl_mem img, int w1, rgb_pixel *pA0,
+                            float *max_depth_out)
 {
   const int width = dt_opencl_get_image_width(img);
   const int height = dt_opencl_get_image_height(img);
@@ -557,12 +559,13 @@ static float ambient_light_cl(struct dt_iop_module_t *self, int devid, cl_mem im
   if(err != CL_SUCCESS) goto error;
   const const_rgb_image img_in = (const_rgb_image){ in, width, height, element_size / sizeof(float) };
   const float max_depth = ambient_light(img_in, w1, pA0);
+  if(max_depth_out) *max_depth_out = max_depth;
   dt_pixelpipe_cache_free_align(in);
-  return max_depth;
+  return 0;
 
 error:
   if(in) dt_pixelpipe_cache_free_align(in);
-  return 0.f;
+  return 1;
 }
 
 
@@ -750,7 +753,12 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     dt_iop_gui_leave_critical_section(self);
   }
   // In all other cases we calculate distance_max and A0 here.
-  if(isnan(distance_max)) distance_max = ambient_light_cl(self, devid, img_in, w1, &A0);
+  if(isnan(distance_max))
+  {
+    float max_depth = 0.f;
+    if(ambient_light_cl(self, devid, img_in, w1, &A0, &max_depth)) return FALSE;
+    distance_max = max_depth;
+  }
   // PREVIEW pixelpipe stores values.
   if(self->dev->gui_attached && g && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
   {

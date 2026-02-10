@@ -658,7 +658,7 @@ error:;
   if(in_out) dt_pixelpipe_cache_free_align(in_out);
 }
 
-static void reduce_chromatic_aberrations(const float* const restrict in,
+static int reduce_chromatic_aberrations(const float* const restrict in,
                           const size_t width, const size_t height,
                           const size_t ch, const float sigma, const float sigma2,
                           const dt_iop_cacorrectrgb_guide_channel_t guide,
@@ -668,6 +668,7 @@ static void reduce_chromatic_aberrations(const float* const restrict in,
                           float* const restrict out)
 
 {
+  int err = 0;
   const float downsize = fminf(3.0f, sigma);
   const size_t ds_width = width / downsize;
   const size_t ds_height = height / downsize;
@@ -678,7 +679,10 @@ static void reduce_chromatic_aberrations(const float* const restrict in,
   // to save time by doing only one bilinear interpolation instead of 2.
   float *const restrict ds_manifolds = dt_pixelpipe_cache_alloc_align_float_cache(ds_width * ds_height * 6, 0);
   if(ds_manifolds == NULL || ds_in == NULL || manifolds == NULL)
+  {
+    err = 1;
     goto error;
+  }
 
   // Downsample the image for speed-up
   interpolate_bilinear(in, width, height, ds_in, ds_width, ds_height, 4);
@@ -695,14 +699,16 @@ error:;
   if(ds_in) dt_pixelpipe_cache_free_align(ds_in);
   if(manifolds) dt_pixelpipe_cache_free_align(manifolds);
   if(ds_manifolds) dt_pixelpipe_cache_free_align(ds_manifolds);
+
+  return err;
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
                                          ivoid, ovoid, roi_in, roi_out))
-    return; // ivoid has been copied to ovoid and the module's trouble flag has been set
+    return 0; // ivoid has been copied to ovoid and the module's trouble flag has been set
 
   dt_iop_cacorrectrgb_params_t *d = (dt_iop_cacorrectrgb_params_t *)piece->data;
   // used to adjuste blur level depending on size. Don't amplify noise if magnified > 100%
@@ -718,7 +724,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   // whether to be very conservative in preserving the original image, or to
   // keep algorithm result even if it overshoots
   const float safety = powf(20.0f, 1.0f - d->strength);
-  reduce_chromatic_aberrations(in, width, height, ch, sigma, sigma2, d->guide_channel, d->mode, d->refine_manifolds, safety, out);
+  return reduce_chromatic_aberrations(in, width, height, ch, sigma, sigma2, d->guide_channel, d->mode, d->refine_manifolds, safety, out);
 }
 
 void gui_update(dt_iop_module_t *self)

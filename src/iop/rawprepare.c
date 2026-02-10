@@ -304,7 +304,7 @@ static int BL(const dt_iop_roi_t *const roi_out, const dt_iop_rawprepare_data_t 
    compile generated code vs SSE specific code. This depends slightly on the cpu but it's 1.2 to 3-fold
    better for all tested cases.
 */
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_rawprepare_data_t *const d = (dt_iop_rawprepare_data_t *)piece->data;
@@ -449,6 +449,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   dt_dev_write_rawdetail_mask(piece, (float *const)ovoid, roi_in, DT_DEV_DETAIL_MASK_RAWPREPARE);
 
   for(int k = 0; k < 4; k++) piece->pipe->dsc.processed_maximum[k] = 1.0f;
+  return 0;
 }
 
 #ifdef HAVE_OPENCL

@@ -377,7 +377,7 @@ static lfModifier * get_modifier(int *mods_done, int w, int h, const dt_iop_lens
    As green / Y channel is the most centric i took that as the canonical value instead of taking the mean.
 */
 
-void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_lensfun_data_t *const d = (dt_iop_lensfun_data_t *)piece->data;
@@ -392,7 +392,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   if(!d->lens || !d->lens->Maker || d->crop <= 0.0f)
   {
     dt_iop_image_copy_by_size((float*)ovoid, (float*)ivoid, roi_out->width, roi_out->height, ch);
-    return;
+    return 0;
   }
 
   const gboolean raw_monochrome = dt_image_is_monochrome(&self->dev->image_storage);
@@ -419,7 +419,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
 
       size_t padded_bufsize;
       float *const buf = dt_alloc_perthread_float(bufsize, &padded_bufsize);
-      if(buf == NULL) return;
+      if(buf == NULL) return 1;
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -503,7 +503,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
     void *buf = dt_pixelpipe_cache_alloc_align_cache(
         bufsize,
         piece->pipe->type);
-    if(buf == NULL) return;
+    if(buf == NULL) return 1;
     memcpy(buf, ivoid, bufsize);
 
     if(modflags & LF_MODIFY_VIGNETTING)
@@ -530,6 +530,11 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
       const size_t buf2size = (size_t)roi_out->width * 2 * 3;
       size_t padded_buf2size;
       float *const buf2 = dt_alloc_perthread_float(buf2size, &padded_buf2size);
+      if(buf2 == NULL)
+      {
+        dt_pixelpipe_cache_free_align(buf);
+        return 1;
+      }
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -579,7 +584,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
           }
         }
       }
-      dt_free_align(buf2);
+      if(buf2) dt_free_align(buf2);
     }
     else
     {
@@ -595,6 +600,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
     g->corrections_done = (modflags & LENSFUN_MODFLAG_MASK);
     dt_iop_gui_leave_critical_section(self);
   }
+  return 0;
 }
 
 #ifdef HAVE_OPENCL

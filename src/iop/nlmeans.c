@@ -437,20 +437,20 @@ static void process_cpu(dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   process_cpu(piece,ivoid,ovoid,roi_in,roi_out,nlmeans_denoise);
-  return;
+  return 0;
 }
 
 #if defined(__SSE__)
 /** process, all real work is done here. */
-void process_sse2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process_sse2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                   void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   process_cpu(piece,ivoid,ovoid,roi_in,roi_out,nlmeans_denoise_sse2);
-  return;
+  return 0;
 }
 #endif
 

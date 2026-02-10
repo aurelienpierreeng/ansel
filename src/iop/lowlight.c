@@ -112,7 +112,7 @@ static float lookup(const float *lut, const float i)
   return lut[bin1] * f + lut[bin0] * (1. - f);
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_lowlight_data_t *d = (dt_iop_lowlight_data_t *)(piece->data);
@@ -174,6 +174,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
     out[3] = in[3];
   }
+  return 0;
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,

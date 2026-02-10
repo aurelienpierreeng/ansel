@@ -260,7 +260,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
 }
 
 
-void process(struct dt_iop_module_t *const self, dt_dev_pixelpipe_iop_t *const piece,
+int process(struct dt_iop_module_t *const self, dt_dev_pixelpipe_iop_t *const piece,
              const void *const restrict ivoid, void *const restrict ovoid,
              const dt_iop_roi_t *const restrict roi_in, const dt_iop_roi_t *const restrict roi_out)
 {
@@ -305,6 +305,7 @@ void process(struct dt_iop_module_t *const self, dt_dev_pixelpipe_iop_t *const p
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
+  return 0;
 }
 
 

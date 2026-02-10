@@ -884,17 +884,15 @@ static void dump_PFM(const char *filename, const float* out, const uint32_t w, c
 }
 #endif
 
-static inline gint wavelets_process(const float *const restrict in, float *const restrict reconstructed,
-                                    const uint8_t *const restrict mask, const size_t width,
-                                    const size_t height, const dt_iop_diffuse_data_t *const data,
-                                    const float final_radius, const float zoom, const int scales,
-                                    const int has_mask,
-                                    float *const restrict HF[MAX_NUM_SCALES],
-                                    float *const restrict LF_odd,
-                                    float *const restrict LF_even)
+static inline int wavelets_process(const float *const restrict in, float *const restrict reconstructed,
+                                   const uint8_t *const restrict mask, const size_t width,
+                                   const size_t height, const dt_iop_diffuse_data_t *const data,
+                                   const float final_radius, const float zoom, const int scales,
+                                   const int has_mask,
+                                   float *const restrict HF[MAX_NUM_SCALES],
+                                   float *const restrict LF_odd,
+                                   float *const restrict LF_even)
 {
-  gint success = TRUE;
-
   const dt_aligned_pixel_t anisotropy
       = { compute_anisotropy_factor(data->anisotropy_first),
           compute_anisotropy_factor(data->anisotropy_second),
@@ -917,7 +915,7 @@ static inline gint wavelets_process(const float *const restrict in, float *const
   // allocate a one-row temporary buffer for the decomposition
   size_t padded_size;
   float *const DT_ALIGNED_ARRAY tempbuf = dt_alloc_perthread_float(4 * width, &padded_size); //TODO: alloc in caller
-  if(tempbuf == NULL) return FALSE;
+  if(tempbuf == NULL) return 1;
 
   for(int s = 0; s < scales; ++s)
   {
@@ -1013,7 +1011,7 @@ static inline gint wavelets_process(const float *const restrict in, float *const
     count++;
   }
 
-  return success;
+  return 0;
 }
 
 
@@ -1065,7 +1063,7 @@ static inline void inpaint_mask(float *const restrict inpainted, const float *co
   }
 }
 
-void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
+int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const restrict ivoid,
              void *const restrict ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_diffuse_data_t *const data = (dt_iop_diffuse_data_t *)piece->data;
@@ -1081,6 +1079,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
 
   float *restrict temp_in = NULL;
   float *restrict temp_out = NULL;
+  int err = 0;
 
   uint8_t *const restrict mask = dt_pixelpipe_cache_alloc_align(
       sizeof(uint8_t) * roi_out->width * roi_out->height,
@@ -1111,7 +1110,10 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   // check that all buffers exist before processing,
   // because we use a lot of memory here.
   if(!mask || !temp1 || !temp2 || !LF_odd || !LF_even || out_of_memory)
+  {
+    err = 1;
     goto error;
+  }
 
   const int has_mask = (data->threshold > 0.f);
 
@@ -1147,9 +1149,13 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
     if(it == (int)iterations - 1)
       temp_out = out;
 
-    wavelets_process(temp_in, temp_out, mask,
-                     roi_out->width, roi_out->height,
-                     data, final_radius, scale, scales, has_mask, HF, LF_odd, LF_even);
+    if(wavelets_process(temp_in, temp_out, mask,
+                        roi_out->width, roi_out->height,
+                        data, final_radius, scale, scales, has_mask, HF, LF_odd, LF_even))
+    {
+      err = 1;
+      goto error;
+    }
   }
 
 error:
@@ -1159,6 +1165,7 @@ error:
   if(LF_even) dt_pixelpipe_cache_free_align(LF_even);
   if(LF_odd) dt_pixelpipe_cache_free_align(LF_odd);
   for(int s = 0; s < scales; s++) if(HF[s]) dt_pixelpipe_cache_free_align(HF[s]);
+  return err;
 }
 
 #if HAVE_OPENCL

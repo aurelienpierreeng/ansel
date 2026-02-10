@@ -444,7 +444,7 @@ static gchar *_watermark_get_svgdoc(dt_iop_module_t *self, dt_iop_watermark_data
   return svgdata;
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_watermark_data_t *data = (dt_iop_watermark_data_t *)piece->data;
@@ -470,7 +470,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   else
   {
     dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-    return;
+    return 0;
   }
 
   // find out the watermark type
@@ -485,13 +485,13 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     else // this should not happen
     {
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-      return;
+      return 0;
     }
   }
   else
   {
     dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-    return;
+    return 0;
   }
 
   /* Load svg if not loaded */
@@ -502,7 +502,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     if(!svgdoc)
     {
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-      return;
+      return 0;
     }
   }
 
@@ -512,20 +512,25 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   {
     fprintf(stderr, "[watermark] cairo stride error\n");
     dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-    return;
+    return 0;
   }
 
   /* create a cairo memory surface that is later used for reading watermark overlay data */
-  guint8 *image = (guint8 *)g_malloc0_n(roi_out->height, stride);
+  guint8 *image = (guint8 *)g_try_malloc0_n(roi_out->height, stride);
+  if(image == NULL)
+  {
+    dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
+    return 1;
+  }
   cairo_surface_t *surface = cairo_image_surface_create_for_data(image, CAIRO_FORMAT_ARGB32, roi_out->width,
                                                                  roi_out->height, stride);
-  if((cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) || (image == NULL))
+  if(cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
   {
     fprintf(stderr, "[watermark] cairo surface error: %s\n",
             cairo_status_to_string(cairo_surface_status(surface)));
     g_free(image);
     dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-    return;
+    return 0;
   }
 
   // rsvg (or some part of cairo which is used underneath) isn't thread safe, for example when handling fonts
@@ -546,7 +551,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
       fprintf(stderr, "[watermark] error processing svg file: %s\n", error->message);
       g_error_free(error);
-      return;
+      return 0;
     }
   }
 
@@ -572,7 +577,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
         g_free(image);
         dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
         dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
-        return;
+        return 0;
       }
       dimension.width = cairo_image_surface_get_width(surface_two);
       dimension.height = cairo_image_surface_get_height(surface_two);
@@ -675,10 +680,19 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     const int watermark_height = (int)((dimension.height * scale) + 3* svg_offset_y) ;
 
     const int stride_two = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, watermark_width);
-    image_two = (guint8 *)g_malloc0_n(watermark_height, stride_two);
+    image_two = (guint8 *)g_try_malloc0_n(watermark_height, stride_two);
+    if(image_two == NULL)
+    {
+      cairo_surface_destroy(surface);
+      g_object_unref(svg);
+      g_free(image);
+      dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
+      dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
+      return 1;
+    }
     surface_two = cairo_image_surface_create_for_data(image_two, CAIRO_FORMAT_ARGB32, watermark_width,
                                                                    watermark_height, stride_two);
-    if((cairo_surface_status(surface_two) != CAIRO_STATUS_SUCCESS) || (image_two == NULL))
+    if(cairo_surface_status(surface_two) != CAIRO_STATUS_SUCCESS)
     {
       fprintf(stderr, "[watermark] cairo surface 2 error: %s\n",
               cairo_status_to_string(cairo_surface_status(surface_two)));
@@ -688,7 +702,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       g_free(image_two);
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
       dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
-      return;
+      return 0;
     }
   }
 
@@ -797,6 +811,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     g_object_unref(svg);
   }
 
+  return 0;
 }
 
 static void watermark_callback(GtkWidget *tb, gpointer user_data)

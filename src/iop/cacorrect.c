@@ -275,7 +275,7 @@ static inline void pixSort(float *a, float *b)
   There is no "maths background" so i chose this after a lot of testing.
 */
 #define CA_SIZE_MINIMUM (1600)
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
                     const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const float *const in2 = (float *)i;
@@ -297,14 +297,18 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   // Because we can't break parallel processing, we need a switch do handle the errors
   gboolean processpasstwo = TRUE;
+  int err = 0;
 
   float *redfactor = NULL;
   float *bluefactor = NULL;
   float *oldraw = NULL;
+  char *buffer1 = NULL;
+  char *thread_buffers = NULL;
+  size_t padded_buffersize = 0;
 
   dt_iop_image_copy_by_size(out, in2, width, height, 1);
 
-  if(!valid) return;
+  if(!valid) return 0;
 
   const float *const in = out;
 
@@ -321,17 +325,32 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     for(int j = 0; j < 2; j++)
       if(FC(i, j, filters) == 3)
       {
-        return;
+        return 0;
       }
 
   if(avoidshift)
   {
     const size_t buffsize = (size_t)h_width * h_height;
     redfactor = dt_pixelpipe_cache_alloc_align_float(buffsize, piece->pipe);
+    if(!redfactor)
+    {
+      err = 1;
+      goto cleanup;
+    }
     memset(redfactor, 0, sizeof(float) * buffsize);
     bluefactor = dt_pixelpipe_cache_alloc_align_float(buffsize, piece->pipe);
+    if(!bluefactor)
+    {
+      err = 1;
+      goto cleanup;
+    }
     memset(bluefactor, 0, sizeof(float) * buffsize);
     oldraw = dt_pixelpipe_cache_alloc_align_float(buffsize * 2, piece->pipe);
+    if(!oldraw)
+    {
+      err = 1;
+      goto cleanup;
+    }
     memset(oldraw, 0, sizeof(float) * buffsize * 2);
     // copy raw values before ca correction
 #ifdef _OPENMP
@@ -349,11 +368,23 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   double fitparams[2][2][16];
 
   // temporary array to store simple interpolation of G
-  float *Gtmp = dt_pixelpipe_cache_alloc_align_float((size_t)height * width, piece->pipe);
+  float *Gtmp = NULL;
+  float *RawDataTmp = NULL;
+  Gtmp = dt_pixelpipe_cache_alloc_align_float((size_t)height * width, piece->pipe);
+  if(!Gtmp)
+  {
+    err = 1;
+    goto cleanup;
+  }
   memset(Gtmp, 0, sizeof(float) * height * width);
 
   // temporary array to avoid race conflicts, only every second pixel needs to be saved here
-  float *RawDataTmp = dt_pixelpipe_cache_alloc_align_float(height * width / 2 + 4, piece->pipe);
+  RawDataTmp = dt_pixelpipe_cache_alloc_align_float(height * width / 2 + 4, piece->pipe);
+  if(!RawDataTmp)
+  {
+    err = 1;
+    goto cleanup;
+  }
 
   const int border = 8;
   const int border2 = 16;
@@ -363,7 +394,20 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   const int vblsz = ceil((float)(height + border2) / (ts - border2) + 2 + vz1);
   const int hblsz = ceil((float)(width + border2) / (ts - border2) + 2 + hz1);
 
-  char *buffer1 = (char *)calloc((size_t)vblsz * hblsz * (2 * 2 + 1), sizeof(float));
+  buffer1 = (char *)calloc((size_t)vblsz * hblsz * (2 * 2 + 1), sizeof(float));
+  if(!buffer1)
+  {
+    err = 1;
+    goto cleanup;
+  }
+
+  const size_t buffersize = sizeof(float) * 3 * ts * ts + 6 * sizeof(float) * ts * tsh + 8 * 64 + 63;
+  thread_buffers = (char *)dt_alloc_perthread(buffersize + 63, sizeof(char), &padded_buffersize);
+  if(!thread_buffers)
+  {
+    err = 1;
+    goto cleanup;
+  }
 
   // block CA shift values and weight assigned to block
   float *blockwt = (float *)buffer1;
@@ -402,8 +446,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
           blockdenomthr[2][2] = { { 0, 0 }, { 0, 0 } };
 
     // assign working space
-    const size_t buffersize = sizeof(float) * 3 * ts * ts + 6 * sizeof(float) * ts * tsh + 8 * 64 + 63;
-    char *buffer = (char *)malloc(buffersize);
+    char *buffer = dt_get_perthread(thread_buffers, padded_buffersize);
     char *data = (char *)(((uintptr_t)buffer + (uintptr_t)63) / 64 * 64);
 
     // shift the beginning of all arrays but the first by 64 bytes to avoid cache miss conflicts on CPUs which
@@ -1221,7 +1264,6 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     }
 
     // clean up
-    free(buffer);
   }
   }
 
@@ -1273,6 +1315,13 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     float valmin[] = { 0.1f };
     dt_gaussian_t *red  = dt_gaussian_init(h_width, h_height, 1, valmax, valmin, 30.0f, 0);
     dt_gaussian_t *blue = dt_gaussian_init(h_width, h_height, 1, valmax, valmin, 30.0f, 0);
+    if(!red || !blue)
+    {
+      err = 1;
+      if(red)  dt_gaussian_free(red);
+      if(blue) dt_gaussian_free(blue);
+      goto cleanup;
+    }
     if(red && blue)
     {
       dt_gaussian_blur(red, redfactor, redfactor);
@@ -1297,12 +1346,15 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     if(blue) dt_gaussian_free(blue);
   }
 
-  free(buffer1);
+cleanup:
+  if(thread_buffers) dt_free_align(thread_buffers);
+  if(buffer1) free(buffer1);
   dt_pixelpipe_cache_free_align(RawDataTmp);
   dt_pixelpipe_cache_free_align(Gtmp);
   dt_pixelpipe_cache_free_align(redfactor);
   dt_pixelpipe_cache_free_align(bluefactor);
   dt_pixelpipe_cache_free_align(oldraw);
+  return err;
 }
 
 /*==================================================================================

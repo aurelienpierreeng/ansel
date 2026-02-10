@@ -282,7 +282,7 @@ int distort_backtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, 
           a signal should be used (raise a signal here) and a corresponding callback
           must be connected to this signal.
 */
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   // this is called for preview and full pipe separately, each with its own pixelpipe piece.
@@ -299,7 +299,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   dt_iop_useless_gui_data_t *g = (dt_iop_useless_gui_data_t *)self->gui_data;
   if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
                                          ivoid, ovoid, roi_in, roi_out))
-    return;
+    return 0;
 
   // we create a raster mask as an example
   float *mask = NULL;
@@ -317,7 +317,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       // through the input image and return now, since there isn't anything else we need to clean up at
       // this point.
       dt_iop_copy_image_roi(ovoid, ivoid, ch, roi_in, roi_out, TRUE);
-      return;
+      return 0;
     }
   }
   else

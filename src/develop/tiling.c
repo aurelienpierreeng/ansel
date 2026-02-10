@@ -584,7 +584,7 @@ static int _fit_output_to_input_roi(struct dt_iop_module_t *self, struct dt_dev_
 
 
 /* simple tiling algorithm for roi_in == roi_out, i.e. for pixel to pixel modules/operations */
-static void _default_process_tiling_ptp(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+static int _default_process_tiling_ptp(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
                                         const void *const ivoid, void *const ovoid,
                                         const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                                         const int in_bpp)
@@ -771,7 +771,14 @@ static void _default_process_tiling_ptp(struct dt_iop_module_t *self, struct dt_
       for(int k = 0; k < 4; k++) piece->pipe->dsc.processed_maximum[k] = processed_maximum_saved[k];
 
       /* call process() of module */
-      self->process(self, piece, input, output, &iroi, &oroi);
+      int err = self->process(self, piece, input, output, &iroi, &oroi);
+      if(err)
+      {
+        if(input != NULL) dt_pixelpipe_cache_free_align(input);
+        if(output != NULL) dt_pixelpipe_cache_free_align(output);
+        piece->pipe->tiling = 0;
+        return err;
+      }
 
       /* aggregate resulting processed_maximum */
       /* TODO: check if there really can be differences between tiles and take
@@ -818,7 +825,7 @@ static void _default_process_tiling_ptp(struct dt_iop_module_t *self, struct dt_
   if(input != NULL) dt_pixelpipe_cache_free_align(input);
   if(output != NULL) dt_pixelpipe_cache_free_align(output);
   piece->pipe->tiling = 0;
-  return;
+  return 0;
 
 error:
   dt_control_log(_("tiling failed for module '%s'. output might be garbled."), self->op);
@@ -830,15 +837,15 @@ fallback:
   piece->pipe->tiling = 0;
   dt_print(DT_DEBUG_TILING, "[default_process_tiling_ptp] fall back to standard processing for module '%s'\n",
            self->op);
-  self->process(self, piece, ivoid, ovoid, roi_in, roi_out);
-  return;
+  int err = self->process(self, piece, ivoid, ovoid, roi_in, roi_out);
+  return err;
 }
 
 
 
 /* more elaborate tiling algorithm for roi_in != roi_out: slower than the ptp variant,
    more tiles and larger overlap */
-static void _default_process_tiling_roi(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+static int _default_process_tiling_roi(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
                                         const void *const ivoid, void *const ovoid,
                                         const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
                                         const int in_bpp)
@@ -1118,7 +1125,14 @@ static void _default_process_tiling_roi(struct dt_iop_module_t *self, struct dt_
       for(int k = 0; k < 4; k++) piece->pipe->dsc.processed_maximum[k] = processed_maximum_saved[k];
 
       /* call process() of module */
-      self->process(self, piece, input, output, &iroi_full, &oroi_full);
+      int err = self->process(self, piece, input, output, &iroi_full, &oroi_full);
+      if(err)
+      {
+        dt_pixelpipe_cache_free_align(input);
+        dt_pixelpipe_cache_free_align(output);
+        piece->pipe->tiling = 0;
+        return err;
+      }
 
       /* aggregate resulting processed_maximum */
       /* TODO: check if there really can be differences between tiles and take
@@ -1156,7 +1170,7 @@ static void _default_process_tiling_roi(struct dt_iop_module_t *self, struct dt_
   if(input != NULL) dt_pixelpipe_cache_free_align(input);
   if(output != NULL) dt_pixelpipe_cache_free_align(output);
   piece->pipe->tiling = 0;
-  return;
+  return 0;
 
 error:
   dt_control_log(_("tiling failed for module '%s'. output might be garbled."), self->op);
@@ -1168,8 +1182,8 @@ fallback:
   piece->pipe->tiling = 0;
   dt_print(DT_DEBUG_TILING, "[default_process_tiling_roi] fall back to standard processing for module '%s'\n",
            self->op);
-  self->process(self, piece, ivoid, ovoid, roi_in, roi_out);
-  return;
+  int err = self->process(self, piece, ivoid, ovoid, roi_in, roi_out);
+  return err;
 }
 
 
@@ -1179,15 +1193,14 @@ fallback:
    _default_process_tiling_roi() takes care of all other cases where image gets distorted and for module
    "clipping",
    "flip" as this may flip or mirror the image. */
-void default_process_tiling(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
-                            const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
-                            const dt_iop_roi_t *const roi_out, const int in_bpp)
+int default_process_tiling(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+                           const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
+                           const dt_iop_roi_t *const roi_out, const int in_bpp)
 {
   if(memcmp(roi_in, roi_out, sizeof(struct dt_iop_roi_t)) || (self->flags() & IOP_FLAGS_TILING_FULL_ROI))
-    _default_process_tiling_roi(self, piece, ivoid, ovoid, roi_in, roi_out, in_bpp);
+    return _default_process_tiling_roi(self, piece, ivoid, ovoid, roi_in, roi_out, in_bpp);
   else
-    _default_process_tiling_ptp(self, piece, ivoid, ovoid, roi_in, roi_out, in_bpp);
-  return;
+    return _default_process_tiling_ptp(self, piece, ivoid, ovoid, roi_in, roi_out, in_bpp);
 }
 
 

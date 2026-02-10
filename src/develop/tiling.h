@@ -55,13 +55,13 @@ int process_tiling_cl(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_
                       const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                       const dt_iop_roi_t *const roi_out, const int bpp);
 
-void default_process_tiling(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
-                            const void *const ivoid, void *const ovid, const dt_iop_roi_t *const roi_in,
-                            const dt_iop_roi_t *const roi_out, const int bpp);
+int default_process_tiling(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+                           const void *const ivoid, void *const ovid, const dt_iop_roi_t *const roi_in,
+                           const dt_iop_roi_t *const roi_out, const int bpp);
 
-void process_tiling(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
-                    const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
-                    const dt_iop_roi_t *const roi_out, const int bpp);
+int process_tiling(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+                   const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
+                   const dt_iop_roi_t *const roi_out, const int bpp);
 
 void default_tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
                              const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
@@ -87,4 +87,3 @@ int dt_tiling_piece_fits_host_memory(const size_t width, const size_t height, co
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

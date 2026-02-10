@@ -109,7 +109,7 @@ static void process_common_setup(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
   }
 }
 
-void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_rawoverexposed_data_t *const d = piece->data;
@@ -134,7 +134,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   {
     dt_control_log(_("failed to get raw buffer from image `%s'"), image->filename);
     dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
-    return;
+    return 0;
   }
 
 #if 0
@@ -156,6 +156,11 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   // acquire temp memory for distorted pixel coords
   size_t coordbufsize;
   float *const restrict coordbuf = dt_alloc_perthread_float(2*roi_out->width, &coordbufsize);
+  if(coordbuf == NULL)
+  {
+    dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+    return 1;
+  }
 
 #ifdef _OPENMP
 #pragma omp parallel for SIMD() default(none) \
@@ -226,6 +231,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *c
   dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
+  return 0;
 }
 
 #ifdef HAVE_OPENCL

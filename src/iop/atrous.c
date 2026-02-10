@@ -252,10 +252,10 @@ static int get_scales(float (*thrs)[4], float (*boost)[4], float *sharp, const d
 }
 
 /* just process the supplied image buffer, upstream default_process_tiling() does the rest */
-static void process_wavelets(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
-                             const void *const i, void *const o, const dt_iop_roi_t *const roi_in,
-                             const dt_iop_roi_t *const roi_out, const eaw_decompose_t decompose,
-                             const eaw_synthesize_t synthesize)
+static int process_wavelets(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,
+                            const void *const i, void *const o, const dt_iop_roi_t *const roi_in,
+                            const dt_iop_roi_t *const roi_out, const eaw_decompose_t decompose,
+                            const eaw_synthesize_t synthesize)
 {
   dt_iop_atrous_data_t *d = (dt_iop_atrous_data_t *)piece->data;
   dt_aligned_pixel_t thrs[MAX_NUM_SCALES];
@@ -280,7 +280,7 @@ static void process_wavelets(struct dt_iop_module_t *self, struct dt_dev_pixelpi
   if(width < 2 * max_mult || height < 2 * max_mult)
   {
     dt_iop_image_copy_by_size(o, i, width, height, 4);
-    return;
+    return 0;
   }
 
   float *const restrict out = (float*)o;
@@ -290,8 +290,7 @@ static void process_wavelets(struct dt_iop_module_t *self, struct dt_dev_pixelpi
 
   if (!dt_iop_alloc_image_buffers(self, roi_in, roi_out, 4, &tmp, 4, &tmp2, 4, &detail, 0))
   {
-    dt_iop_copy_image_roi(out, i, piece->colors, roi_in, roi_out, TRUE);
-    return;
+    return 1;
   }
 
   float *buf1 = (float *)i;
@@ -325,20 +324,20 @@ static void process_wavelets(struct dt_iop_module_t *self, struct dt_dev_pixelpi
   dt_pixelpipe_cache_free_align(detail);
   dt_pixelpipe_cache_free_align(tmp);
   dt_pixelpipe_cache_free_align(tmp2);
-  return;
+  return 0;
 }
 
-void process(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
+int process(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
              void *const o, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  process_wavelets(self, piece, i, o, roi_in, roi_out, eaw_decompose, eaw_synthesize);
+  return process_wavelets(self, piece, i, o, roi_in, roi_out, eaw_decompose, eaw_synthesize);
 }
 
 #if defined(__SSE2__)
-void process_sse2(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
+int process_sse2(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece, const void *const i,
                   void *const o, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  process_wavelets(self, piece, i, o, roi_in, roi_out, eaw_decompose_sse2, eaw_synthesize_sse2);
+  return process_wavelets(self, piece, i, o, roi_in, roi_out, eaw_decompose_sse2, eaw_synthesize_sse2);
 }
 #endif
 

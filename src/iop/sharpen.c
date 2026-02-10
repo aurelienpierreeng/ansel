@@ -113,6 +113,7 @@ static float *const init_gaussian_kernel(const int rad, const size_t mat_size, c
 {
   float weight = 0.0f;
   float *const mat = dt_pixelpipe_cache_alloc_align_float_cache(mat_size, 0);
+  if(!mat) return NULL;
   memset(mat, 0, sizeof(float) * mat_size);
   for(int l = -rad; l <= rad; l++) weight += mat[l + rad] = expf(-l * l / (2.f * sigma2));
   for(int l = -rad; l <= rad; l++) mat[l + rad] /= weight;
@@ -159,6 +160,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   const float sigma2 = (1.0f / (2.5 * 2.5)) * (d->radius * roi_in->scale)
                        * (d->radius * roi_in->scale);
   mat = init_gaussian_kernel(rad, wd, sigma2);
+  if(!mat) goto error;
 
   int hblocksize;
   dt_opencl_local_buffer_t hlocopt
@@ -277,12 +279,12 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   return;
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
                                          ivoid, ovoid, roi_in, roi_out))
-    return;
+    return 0;
   const dt_iop_sharpen_data_t *const data = (dt_iop_sharpen_data_t *)piece->data;
   const int rad = MIN(MAXR, ceilf(data->radius * roi_in->scale));
   // Special case handling: very small image with one or two dimensions below 2*rad+1 treat as no sharpening and just
@@ -291,7 +293,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
      (roi_out->width < 2 * rad + 1 || roi_out->height < 2 * rad + 1))
   {
     dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, 4);
-    return;
+    return 0;
   }
 
   float *restrict tmp;	// one row per thread
@@ -301,7 +303,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
                                   0))
   {
     dt_iop_copy_image_roi(ovoid, ivoid, 4, roi_in, roi_out, TRUE);
-    return;
+    return 1;
   }
 
   const int wd = 2 * rad + 1;
@@ -311,6 +313,12 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   const float sigma2 = (1.0f / (2.5 * 2.5)) * (data->radius * roi_in->scale)
                        * (data->radius * roi_in->scale);
   float *const mat = init_gaussian_kernel(rad, mat_size, sigma2);
+  if(!mat)
+  {
+    dt_free_align(tmp);
+    dt_iop_copy_image_roi(ovoid, ivoid, 4, roi_in, roi_out, TRUE);
+    return 1;
+  }
 
   const float *const restrict in = (float*)ivoid;
   const size_t width = roi_out->width;
@@ -395,6 +403,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
+  return 0;
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,

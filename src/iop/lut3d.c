@@ -1050,7 +1050,7 @@ cleanup:
 }
 #endif
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ibuf, void *const obuf,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ibuf, void *const obuf,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_lut3d_data_t *d = (dt_iop_lut3d_data_t *)piece->data;
@@ -1101,6 +1101,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   {
     dt_iop_image_copy_by_size(obuf, ibuf, width, height, ch);
   }
+  return 0;
 }
 
 void filepath_set_unix_separator(char *filepath)

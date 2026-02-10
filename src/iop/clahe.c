@@ -84,7 +84,7 @@ int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_p
   return IOP_CS_RGB;
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_rlce_data_t *data = (dt_iop_rlce_data_t *)piece->data;
@@ -92,7 +92,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   // PASS1: Get a luminance map of image...
   float *luminance = (float *)malloc(sizeof(float) * ((size_t)roi_out->width * roi_out->height));
-  if(luminance == NULL) return;
+  if(luminance == NULL) return 1;
 
 // double lsmax=0.0,lsmin=1.0;
 #ifdef _OPENMP
@@ -125,6 +125,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   size_t destbuf_size;
   float *const restrict dest_buf = dt_alloc_perthread_float(roi_out->width, &destbuf_size);
+  if(dest_buf == NULL)
+  {
+    free(luminance);
+    return 1;
+  }
 
 // CLAHE
 #ifdef _OPENMP
@@ -253,6 +258,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   free(luminance);
 
 #undef BINS
+  return 0;
 }
 
 static void radius_callback(GtkWidget *slider, gpointer user_data)

@@ -498,8 +498,8 @@ static int masks_get_delta(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   return res;
 }
 
-void _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const float *const in,
-              float *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out, const int ch)
+static int _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const float *const in,
+                    float *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out, const int ch)
 {
   dt_iop_spots_params_t *d = (dt_iop_spots_params_t *)piece->data;
   dt_develop_blend_params_t *bp = self->blend_params;
@@ -567,6 +567,7 @@ void _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const
         const int fw = 2 * rad, fh = 2 * rad;
 
         float *filter = malloc(sizeof(float) * (2 * rad + 1));
+        if(filter == NULL) return 1;
 
         if(rad > 0)
         {
@@ -610,7 +611,12 @@ void _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const
         // we get the mask
         float *mask = NULL;
         int posx, posy, width, height;
-        dt_masks_get_mask(self, piece, form, &mask, &width, &height, &posx, &posy);
+        const int got_mask = dt_masks_get_mask(self, piece, form, &mask, &width, &height, &posx, &posy);
+        if(!got_mask || mask == NULL)
+        {
+          if(mask) dt_free_align(mask);
+          return 1;
+        }
         const int fts = posy * roi_in->scale;
         const int fhs = height * roi_in->scale;
         const int fls = posx * roi_in->scale;
@@ -654,20 +660,21 @@ void _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const
       }
     }
   }
+  return 0;
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const float *in = (float *)i;
   float *out = (float *)o;
-  _process(self, piece, in, out, roi_in, roi_out, piece->colors);
+  return _process(self, piece, in, out, roi_in, roi_out, piece->colors);
 }
 
 void distort_mask(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const float *const in,
                   float *const out, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  _process(self, piece, in, out, roi_in, roi_out, 1);
+  if(_process(self, piece, in, out, roi_in, roi_out, 1)) return;
 }
 
 /** init, cleanup, commit to pipeline */

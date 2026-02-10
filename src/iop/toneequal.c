@@ -904,7 +904,7 @@ static inline void display_luminance_mask(const float *const restrict in,
 
 
 __DT_CLONE_TARGETS__
-static void toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
              const void *const restrict ivoid, void *const restrict ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
@@ -920,7 +920,7 @@ static void toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
     // Pointers are not 64-bits aligned, and SSE code will segfault
     dt_control_log(_("tone equalizer in/out buffer are ill-aligned, please report the bug to the developers"));
     fprintf(stdout, "tone equalizer in/out buffer are ill-aligned, please report the bug to the developers\n");
-    return;
+    return 1;
   }
 
   const size_t width = roi_in->width;
@@ -933,15 +933,15 @@ static void toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
   uint64_t hash = piece->global_hash;
 
   // Sanity checks
-  if(width < 1 || height < 1) return;
-  if(roi_in->width < roi_out->width || roi_in->height < roi_out->height) return; // input should be at least as large as output
-  if(piece->colors != 4) return;  // we need RGB signal
+  if(width < 1 || height < 1) return 1;
+  if(roi_in->width < roi_out->width || roi_in->height < roi_out->height) return 0; // input should be at least as large as output
+  if(piece->colors != 4) return 0;  // we need RGB signal
 
   if(!sanity_check(self))
   {
     // if module just got disabled by sanity checks, due to pipe position, just pass input through
     dt_simd_memcpy(in, out, num_elem * ch);
-    return;
+    return 0;
   }
 
   // Init the luminance masks buffers
@@ -972,6 +972,7 @@ static void toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
       {
         if(g->full_preview_buf) dt_pixelpipe_cache_free_align(g->full_preview_buf);
         g->full_preview_buf = dt_pixelpipe_cache_alloc_align_float(num_elem, piece->pipe);
+        if(!g->full_preview_buf) return 1;
         g->full_preview_buf_width = width;
         g->full_preview_buf_height = height;
       }
@@ -992,6 +993,11 @@ static void toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
       {
         if(g->thumb_preview_buf) dt_pixelpipe_cache_free_align(g->thumb_preview_buf);
         g->thumb_preview_buf = dt_pixelpipe_cache_alloc_align_float(num_elem, piece->pipe);
+        if(!g->thumb_preview_buf)
+        {
+          dt_iop_gui_leave_critical_section(self);
+          return 1;
+        }
         g->thumb_preview_buf_width = width;
         g->thumb_preview_buf_height = height;
         g->luminance_valid = FALSE;
@@ -1016,7 +1022,7 @@ static void toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
 
   // Check if the luminance buffer exists
   if(!luminance)
-    return;
+    return 1;
 
   // Compute the luminance mask
   if(cached)
@@ -1088,13 +1094,14 @@ static void toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
   }
 
   if(!cached) dt_pixelpipe_cache_free_align(luminance);
+  return 0;
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
              const void *const restrict ivoid, void *const restrict ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  toneeq_process(self, piece, ivoid, ovoid, roi_in, roi_out);
+  return toneeq_process(self, piece, ivoid, ovoid, roi_in, roi_out);
 }
 
 

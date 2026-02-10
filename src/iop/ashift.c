@@ -3075,7 +3075,7 @@ static void do_fit(dt_iop_module_t *module, dt_iop_ashift_params_t *p, dt_iop_as
   --darktable.gui->reset;
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_ashift_data_t *data = (dt_iop_ashift_data_t *)piece->data;
@@ -3127,6 +3127,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       free(g->buf); // a no-op if g->buf is NULL
       // only get new buffer if no old buffer available or old buffer does not fit in terms of size
       g->buf = malloc(sizeof(float) * 4 * width * height);
+      if(!g->buf)
+      {
+        dt_iop_gui_leave_critical_section(self);
+        return 1;
+      }
     }
 
     if(g->buf /* && hash != g->buf_hash */)
@@ -3149,7 +3154,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   if(isneutral(data))
   {
     dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
-    return;
+    return 0;
   }
 
   const struct dt_interpolation *interpolation = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
@@ -3201,6 +3206,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
                                        roi_in->height, ch_width);
     }
   }
+  return 0;
 }
 
 #ifdef HAVE_OPENCL

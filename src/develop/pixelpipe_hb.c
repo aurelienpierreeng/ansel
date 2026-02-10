@@ -709,19 +709,22 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
 
   /* process module on cpu. use tiling if needed and possible. */
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
+  int err = 0;
   if(!fitting && piece->process_tiling_ready)
   {
-    module->process_tiling(module, piece, input, *output, roi_in, roi_out, in_bpp);
+    err = module->process_tiling(module, piece, input, *output, roi_in, roi_out, in_bpp);
     *pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_CPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU);
   }
   else
   {
-    module->process(module, piece, input, *output, roi_in, roi_out);
+    err = module->process(module, piece, input, *output, roi_in, roi_out);
     *pixelpipe_flow |= (PIXELPIPE_FLOW_PROCESSED_ON_CPU);
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_PROCESSED_ON_GPU | PIXELPIPE_FLOW_PROCESSED_WITH_TILING);
   }
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
+
+  if(err) return err;
 
   // and save the output colorspace
   pipe->dsc.cst = module->output_colorspace(module, pipe, piece);
@@ -742,7 +745,7 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   }
 
   /* process blending on CPU */
-  int err = dt_develop_blend_process(module, piece, input, *output, roi_in, roi_out);
+  err = dt_develop_blend_process(module, piece, input, *output, roi_in, roi_out);
   *pixelpipe_flow |= (PIXELPIPE_FLOW_BLENDED_ON_CPU);
   *pixelpipe_flow &= ~(PIXELPIPE_FLOW_BLENDED_ON_GPU);
 

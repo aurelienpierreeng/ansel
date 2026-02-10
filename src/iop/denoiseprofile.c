@@ -1263,10 +1263,10 @@ static void variance_stabilizing_xform(dt_aligned_pixel_t thrs, const int scale,
     thrs[c] = adjt[c] * sb2 / std_x[c];
 }
 
-static void process_wavelets(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
-                             const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
-                             const dt_iop_roi_t *const roi_out, const eaw_dn_decompose_t decompose,
-                             const eaw_synthesize_t synthesize)
+static int process_wavelets(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+                            const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
+                            const dt_iop_roi_t *const roi_out, const eaw_dn_decompose_t decompose,
+                            const eaw_synthesize_t synthesize)
 {
   // this is called for preview and full pipe separately, each with its own pixelpipe piece.
   // get our data struct:
@@ -1303,7 +1303,7 @@ static void process_wavelets(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
   if(width < 2 * max_mult || height < 2 * max_mult)
   {
     memcpy(out, in, sizeof(float) * 4 * npixels);
-    return;
+    return 0;
   }
 
   float *buf = NULL;
@@ -1313,7 +1313,7 @@ static void process_wavelets(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
   if (!dt_iop_alloc_image_buffers(self, roi_in, roi_out, 4, &precond, 4, &tmp, 4, &buf, 0))
   {
     dt_iop_copy_image_roi(out, in, piece->colors, roi_in, roi_out, TRUE);
-    return;
+    return 1;
   }
 
   dt_aligned_pixel_t wb;  // the "unused" fourth element enables vectorization
@@ -1421,6 +1421,7 @@ static void process_wavelets(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, width, height);
 
 #undef MAX_MAX_SCALE
+  return 0;
 }
 
 #if defined(HAVE_OPENCL) && !USE_NEW_IMPL_CL
@@ -1572,23 +1573,23 @@ static void nlmeans_backtransform(const dt_iop_denoiseprofile_data_t *const d, f
   return;
 }
 
-static void process_nlmeans_cpu(dt_dev_pixelpipe_iop_t *piece,
-                                const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
-                                const dt_iop_roi_t *const roi_out,
-                                void (*denoiser)(const float *const inbuf, float *const outbuf,
-                                                 const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
-                                                 const dt_nlmeans_param_t *const params))
+static int process_nlmeans_cpu(dt_dev_pixelpipe_iop_t *piece,
+                               const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
+                               const dt_iop_roi_t *const roi_out,
+                               void (*denoiser)(const float *const inbuf, float *const outbuf,
+                                                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
+                                                const dt_nlmeans_param_t *const params))
 {
   // this is called for preview and full pipe separately, each with its own pixelpipe piece.
   // get our data struct:
   const dt_iop_denoiseprofile_data_t *const d = (dt_iop_denoiseprofile_data_t *)piece->data;
   if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, piece->module, piece->colors,
                                          ivoid, ovoid, roi_in, roi_out))
-    return; // image has been copied through to output and module's trouble flag has been updated
+    return 0; // image has been copied through to output and module's trouble flag has been updated
 
   float *restrict in;
   if (!dt_iop_alloc_image_buffers(piece->module, roi_in, roi_out, 4 | DT_IMGSZ_INPUT, &in, 0))
-    return;
+    return 1;
 
   // adjust to zoom size:
   const float scale = fminf(fminf(roi_in->scale, 2.0f), 1.0f);
@@ -1623,23 +1624,22 @@ static void process_nlmeans_cpu(dt_dev_pixelpipe_iop_t *piece,
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
+  return 0;
 }
 
-static void process_nlmeans(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
-                            const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
-                            const dt_iop_roi_t *const roi_out)
+static int process_nlmeans(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+                           const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
+                           const dt_iop_roi_t *const roi_out)
 {
-  process_nlmeans_cpu(piece,ivoid,ovoid,roi_in,roi_out,nlmeans_denoise);
-  return;
+  return process_nlmeans_cpu(piece,ivoid,ovoid,roi_in,roi_out,nlmeans_denoise);
 }
 
 #if defined(__SSE2__)
-static void process_nlmeans_sse(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
-                                const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
-                                const dt_iop_roi_t *const roi_out)
+static int process_nlmeans_sse(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+                               const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
+                               const dt_iop_roi_t *const roi_out)
 {
-  process_nlmeans_cpu(piece,ivoid,ovoid,roi_in,roi_out,nlmeans_denoise_sse2);
-  return;
+  return process_nlmeans_cpu(piece,ivoid,ovoid,roi_in,roi_out,nlmeans_denoise_sse2);
 }
 #endif
 
@@ -1701,9 +1701,9 @@ static void variance_rec(const size_t npixels, const float *in, float *out, cons
   }
 }
 
-static void process_variance(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-                             void *const ovoid, const dt_iop_roi_t *const roi_in,
-                             const dt_iop_roi_t *const roi_out)
+static int process_variance(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+                            void *const ovoid, const dt_iop_roi_t *const roi_in,
+                            const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_denoiseprofile_data_t *const d = piece->data;
   dt_iop_denoiseprofile_gui_data_t *g = (dt_iop_denoiseprofile_gui_data_t*)self->gui_data;
@@ -1714,12 +1714,12 @@ static void process_variance(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
   memcpy(ovoid, ivoid, sizeof(float) * 4 * npixels);
   if((piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW) || (g == NULL))
   {
-    return;
+    return 0;
   }
 
   float *restrict in;
   if (!dt_iop_alloc_image_buffers(self, roi_in, roi_out, 4 | DT_IMGSZ_INPUT, &in, 0))
-    return;
+    return 1;
 
   dt_aligned_pixel_t wb;  // the "unused" fourth element enables vectorization
   const dt_aligned_pixel_t wb_weights = { 1.0f, 1.0f, 1.0f, 0.0f };
@@ -1757,6 +1757,7 @@ static void process_variance(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
   g->variance_B = var[2];
 
   memcpy(ovoid, ivoid, sizeof(float) * 4 * npixels);
+  return 0;
 }
 
 #if defined(HAVE_OPENCL) && !USE_NEW_IMPL_CL
@@ -2627,29 +2628,33 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 }
 #endif // HAVE_OPENCL
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_denoiseprofile_params_t *d = (dt_iop_denoiseprofile_params_t *)piece->data;
+  int err = 0;
   if(d->mode == MODE_NLMEANS || d->mode == MODE_NLMEANS_AUTO)
-    process_nlmeans(self, piece, ivoid, ovoid, roi_in, roi_out);
+    err = process_nlmeans(self, piece, ivoid, ovoid, roi_in, roi_out);
   else if(d->mode == MODE_WAVELETS || d->mode == MODE_WAVELETS_AUTO)
-    process_wavelets(self, piece, ivoid, ovoid, roi_in, roi_out, eaw_dn_decompose, eaw_synthesize);
+    err = process_wavelets(self, piece, ivoid, ovoid, roi_in, roi_out, eaw_dn_decompose, eaw_synthesize);
   else
-    process_variance(self, piece, ivoid, ovoid, roi_in, roi_out);
+    err = process_variance(self, piece, ivoid, ovoid, roi_in, roi_out);
+  return err;
 }
 
 #if defined(__SSE2__)
-void process_sse2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process_sse2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                   void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_denoiseprofile_params_t *d = (dt_iop_denoiseprofile_params_t *)piece->data;
+  int err = 0;
   if(d->mode == MODE_NLMEANS || d->mode == MODE_NLMEANS_AUTO)
-    process_nlmeans_sse(self, piece, ivoid, ovoid, roi_in, roi_out);
+    err = process_nlmeans_sse(self, piece, ivoid, ovoid, roi_in, roi_out);
   else if(d->mode == MODE_WAVELETS || d->mode == MODE_WAVELETS_AUTO)
-    process_wavelets(self, piece, ivoid, ovoid, roi_in, roi_out, eaw_dn_decompose_sse, eaw_synthesize_sse2);
+    err = process_wavelets(self, piece, ivoid, ovoid, roi_in, roi_out, eaw_dn_decompose_sse, eaw_synthesize_sse2);
   else
-    process_variance(self, piece, ivoid, ovoid, roi_in, roi_out);
+    err = process_variance(self, piece, ivoid, ovoid, roi_in, roi_out);
+  return err;
 }
 #endif
 

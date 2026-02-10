@@ -1478,20 +1478,18 @@ static inline void heat_PDE_diffusion(const float *const restrict high_freq, con
   }
 }
 
-static inline gint wavelets_process(const float *const restrict in, float
-                                    *const restrict reconstructed,
-                                    const float *const restrict clipping_mask,
-                                    const size_t width, const size_t height,
-                                    const int scales,
-                                    float *const restrict HF,
-                                    float *const restrict LF_odd,
-                                    float *const restrict LF_even,
-                                    const diffuse_reconstruct_variant_t variant,
-                                    const float noise_level,
-                                    const int salt, const float first_order_factor)
+static inline int wavelets_process(const float *const restrict in, float
+                                   *const restrict reconstructed,
+                                   const float *const restrict clipping_mask,
+                                   const size_t width, const size_t height,
+                                   const int scales,
+                                   float *const restrict HF,
+                                   float *const restrict LF_odd,
+                                   float *const restrict LF_even,
+                                   const diffuse_reconstruct_variant_t variant,
+                                   const float noise_level,
+                                   const int salt, const float first_order_factor)
 {
-  gint success = TRUE;
-
   // À trous decimated wavelet decompose
   // there is a paper from a guy we know that explains it : https://jo.dreggn.org/home/2010_atrous.pdf
   // the wavelets decomposition here is the same as the equalizer/atrous module,
@@ -1499,7 +1497,7 @@ static inline gint wavelets_process(const float *const restrict in, float
   // allocate a one-row temporary buffer for the decomposition
   size_t padded_size;
   float *const DT_ALIGNED_ARRAY tempbuf = dt_alloc_perthread_float(4 * width, &padded_size); //TODO: alloc in caller
-  if(tempbuf == NULL) return FALSE;
+  if(tempbuf == NULL) return 1;
 
   for(int s = 0; s < scales; ++s)
   {
@@ -1546,16 +1544,17 @@ static inline gint wavelets_process(const float *const restrict in, float
   }
   dt_free_align(tempbuf);
 
-  return success;
+  return 0;
 }
 
 
-static void process_laplacian_bayer(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
-                                    const void *const restrict ivoid, void *const restrict ovoid,
-                                    const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
-                                    const dt_aligned_pixel_t clips)
+static int process_laplacian_bayer(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+                                   const void *const restrict ivoid, void *const restrict ovoid,
+                                   const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out,
+                                   const dt_aligned_pixel_t clips)
 {
   dt_iop_highlights_data_t *data = (dt_iop_highlights_data_t *)piece->data;
+  int err = 0;
 
   const uint32_t filters = piece->pipe->dsc.filters;
   dt_aligned_pixel_t wb = { 1.f, 1.f, 1.f, 1.f };
@@ -1594,7 +1593,10 @@ static void process_laplacian_bayer(struct dt_iop_module_t *self, dt_dev_pixelpi
   float *restrict ds_clipping_mask = dt_pixelpipe_cache_alloc_align_float(ds_size * 4, piece->pipe);
 
   if(!interpolated || !clipping_mask || !LF_odd || !LF_even || !temp || !HF || !ds_interpolated || !ds_clipping_mask)
+  {
+    err = 1;
     goto error;
+  }
 
   const float *const restrict input = (const float *const restrict)ivoid;
   float *const restrict output = (float *const restrict)ovoid;
@@ -1609,10 +1611,18 @@ static void process_laplacian_bayer(struct dt_iop_module_t *self, dt_dev_pixelpi
   for(int i = 0; i < data->iterations; i++)
   {
     const int salt = (i == data->iterations - 1); // add noise on the last iteration only
-    wavelets_process(ds_interpolated, temp, ds_clipping_mask, ds_width, ds_height, scales, HF, LF_odd,
-                     LF_even, DIFFUSE_RECONSTRUCT_RGB, noise_level, salt, data->solid_color);
-    wavelets_process(temp, ds_interpolated, ds_clipping_mask, ds_width, ds_height, scales, HF, LF_odd,
-                     LF_even, DIFFUSE_RECONSTRUCT_CHROMA, noise_level, salt, data->solid_color);
+    if(wavelets_process(ds_interpolated, temp, ds_clipping_mask, ds_width, ds_height, scales, HF, LF_odd,
+                        LF_even, DIFFUSE_RECONSTRUCT_RGB, noise_level, salt, data->solid_color))
+    {
+      err = 1;
+      goto error;
+    }
+    if(wavelets_process(temp, ds_interpolated, ds_clipping_mask, ds_width, ds_height, scales, HF, LF_odd,
+                        LF_even, DIFFUSE_RECONSTRUCT_CHROMA, noise_level, salt, data->solid_color))
+    {
+      err = 1;
+      goto error;
+    }
   }
 
   // Upsample
@@ -1633,6 +1643,7 @@ error:;
   if(HF) dt_pixelpipe_cache_free_align(HF);
   if(ds_interpolated) dt_pixelpipe_cache_free_align(ds_interpolated);
   if(ds_clipping_mask) dt_pixelpipe_cache_free_align(ds_clipping_mask);
+  return err;
 }
 
 #ifdef HAVE_OPENCL
@@ -1974,7 +1985,7 @@ static void process_visualize(dt_dev_pixelpipe_iop_t *piece, const void *const i
   }
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const uint32_t filters = piece->pipe->dsc.filters;
@@ -1988,7 +1999,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   {
     process_visualize(piece, ivoid, ovoid, roi_in, roi_out, filters, data);
     piece->pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
-    return;
+    return 0;
   }
 
   const float clip
@@ -2002,7 +2013,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       piece->pipe->dsc.processed_maximum[k]
           = fminf(piece->pipe->dsc.processed_maximum[0],
                   fminf(piece->pipe->dsc.processed_maximum[1], piece->pipe->dsc.processed_maximum[2]));
-    return;
+    return 0;
   }
 
   switch(data->mode)
@@ -2079,7 +2090,8 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
       const dt_aligned_pixel_t clips = { 0.995f * data->clip * piece->pipe->dsc.processed_maximum[0],
                                          0.995f * data->clip * piece->pipe->dsc.processed_maximum[1],
                                          0.995f * data->clip * piece->pipe->dsc.processed_maximum[2], clip };
-      process_laplacian_bayer(self, piece, ivoid, ovoid, roi_in, roi_out, clips);
+      if(process_laplacian_bayer(self, piece, ivoid, ovoid, roi_in, roi_out, clips))
+        return 1;
       break;
     }
     default:
@@ -2099,6 +2111,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   }
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
+  return 0;
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,

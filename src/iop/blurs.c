@@ -364,11 +364,11 @@ static inline void normalize(float *const buffer, const size_t width, const size
 }
 
 
-static inline void build_pixel_kernel(float *const buffer, const size_t width, const size_t height,
-                                      dt_iop_blurs_params_t *p)
+static inline int build_pixel_kernel(float *const buffer, const size_t width, const size_t height,
+                                     dt_iop_blurs_params_t *p)
 {
   float *const restrict kernel_1 = dt_alloc_align_float(width * height);
-  if(kernel_1 == NULL) return;
+  if(kernel_1 == NULL) return 1;
 
   if(p->type == DT_BLUR_LENS)
   {
@@ -395,6 +395,7 @@ static inline void build_pixel_kernel(float *const buffer, const size_t width, c
   normalize(buffer, width, height, norm);
 
   dt_free_align(kernel_1);
+  return 0;
 }
 
 #if 0
@@ -549,7 +550,7 @@ static void process_fft(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
 // Spatial convolution should be slower for large blurs because it is o(N²) where N is the width of the kernel
 // but code is much simpler and easier to debug
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
                     const void *const restrict ivoid, void *const restrict ovoid,
                     const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
@@ -557,7 +558,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   const float scale = fmaxf(1.f / roi_in->scale, 1.f);
 
   if (!dt_iop_have_required_input_format(4, self, piece->colors, ivoid, ovoid, roi_in, roi_out))
-    return;
+    return 0;
 
   const float *const restrict in = __builtin_assume_aligned(ivoid, 64);
   float *const restrict out = __builtin_assume_aligned(ovoid, 64);
@@ -567,8 +568,12 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   const size_t kernel_width = 2 * radius + 1;
 
   float *const restrict kernel = dt_alloc_align_float(kernel_width * kernel_width);
-  if(kernel == NULL) return;
-  build_pixel_kernel(kernel, kernel_width, kernel_width, p);
+  if(kernel == NULL) return 1;
+  if(build_pixel_kernel(kernel, kernel_width, kernel_width, p))
+  {
+    dt_free_align(kernel);
+    return 1;
+  }
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -625,6 +630,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       out[index + 3] = in[index + 3];
     }
   dt_free_align(kernel);
+  return 0;
 }
 
 
@@ -650,7 +656,11 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   float *const restrict kernel = dt_alloc_align_float(kernel_width * kernel_width);
   if(kernel == NULL) return FALSE;
-  build_pixel_kernel(kernel, kernel_width, kernel_width, p);
+  if(build_pixel_kernel(kernel, kernel_width, kernel_width, p))
+  {
+    dt_free_align(kernel);
+    return FALSE;
+  }
 
   cl_mem kernel_cl = dt_opencl_copy_host_to_device(devid, kernel, kernel_width, kernel_width, sizeof(float));
 

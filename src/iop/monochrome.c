@@ -159,7 +159,7 @@ static float envelope(const float L)
   }
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_monochrome_data_t *d = (dt_iop_monochrome_data_t *)piece->data;
@@ -189,6 +189,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   const float detail = -1.0f; // bilateral base layer
 
   dt_bilateral_t *b = dt_bilateral_init(roi_in->width, roi_in->height, sigma_s, sigma_r);
+  if(!b) return 1;
   dt_bilateral_splat(b, (float *)o);
   dt_bilateral_blur(b);
   dt_bilateral_slice(b, (float *)o, (float *)o, detail);
@@ -206,6 +207,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     const float t = tt + (1.0f - tt) * (1.0f - highlights);
     out[k] = (1.0f - t) * in[k] + t * out[k] * (1.0f / 100.0f) * in[k]; // normalized filter * input brightness
   }
+  return 0;
 }
 
 

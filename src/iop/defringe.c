@@ -166,15 +166,16 @@ static inline void fib_latt(int *const x, int *const y, float radius, int step, 
 // most are chosen arbitrarily and/or by experiment/trial+error ... I am sorry ;-)
 // and having everything user-defineable would be just too much
 // -----------------------------------------------------------------------------------------
-void process(struct dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, const void *const i,
+int process(struct dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, const void *const i,
              void *const o, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_defringe_data_t *const d = (dt_iop_defringe_data_t *)piece->data;
   if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, module, piece->colors,
                                          i, o, roi_in, roi_out))
-    return; // image has been copied through to output and module's trouble flag has been updated
+    return 0; // image has been copied through to output and module's trouble flag has been updated
 
   const int order = 1; // 0,1,2
+  int err = 0;
   const float sigma = fmax(0.1f, fabs(d->radius)) * roi_in->scale;
   const float Labmax[] = { 100.0f, 128.0f, 128.0f, 1.0f };
   const float Labmin[] = { 0.0f, -128.0f, -128.0f, 0.0f };
@@ -199,6 +200,7 @@ void process(struct dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, cons
   if(!gauss)
   {
     fprintf(stderr, "Error allocating memory for gaussian blur in: defringe module\n");
+    err = 1;
     goto ERROR_EXIT;
   }
   dt_gaussian_blur_4c(gauss, in, out);
@@ -246,6 +248,7 @@ void process(struct dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, cons
   if(!xy_avg || !xy_small)
   {
     fprintf(stderr, "Error allocating memory for fibonacci lattice in: defringe module\n");
+    err = 1;
     goto ERROR_EXIT;
   }
 
@@ -407,6 +410,7 @@ ERROR_EXIT:
 FINISH_PROCESS:
   free(xy_small);
   free(xy_avg);
+  return err;
 }
 
 void gui_init(dt_iop_module_t *self)

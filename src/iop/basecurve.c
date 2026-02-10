@@ -604,7 +604,7 @@ static inline void gauss_expand(
 // XXX FIXME: downsampling will not result in an energy conserving pattern (every 4 pixels one sample)
 // XXX FIXME: neither will a mirror boundary condition (mirrors in subsampled values at random density)
 // TODO: copy laplacian code from local laplacian filters, it's faster.
-static inline void gauss_reduce(
+static inline int gauss_reduce(
     const float *const input, // fine input buffer
     float *const coarse,      // coarse scale, blurred input buf
     float *const detail,      // detail/laplacian, fine scale, or 0
@@ -615,7 +615,7 @@ static inline void gauss_reduce(
   const size_t cw = (wd-1)/2+1, ch = (ht-1)/2+1;
 
   float *blurred = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * wd * ht, 0);
-  if(blurred == NULL) return;
+  if(blurred == NULL) return 1;
 
   gauss_blur(input, blurred, wd, ht);
   for(size_t j=0;j<ch;j++) for(size_t i=0;i<cw;i++)
@@ -630,21 +630,28 @@ static inline void gauss_reduce(
     for(size_t k=0;k<wd*ht*4;k++)
       detail[k] = input[k] - detail[k];
   }
+  return 0;
 }
 
-void process_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-                    void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+int process_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+                   void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const float *const in = (const float *)ivoid;
   float *const out = (float *)ovoid;
   dt_iop_basecurve_data_t *const d = (dt_iop_basecurve_data_t *)(piece->data);
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_iop_work_profile_info(piece->module, piece->module->dev->iop);
+  int err = 0;
 
   // allocate temporary buffer for wavelet transform + blending
   const int wd = roi_in->width, ht = roi_in->height;
   int num_levels = 8;
-  float **col = malloc(sizeof(float *) * num_levels);
-  float **comb = malloc(sizeof(float *) * num_levels);
+  float **col = calloc(num_levels, sizeof(float *));
+  float **comb = calloc(num_levels, sizeof(float *));
+  if(col == NULL || comb == NULL)
+  {
+    err = 1;
+    goto error;
+  }
   int w = wd, h = ht;
   const int rad = MIN(wd, (int)ceilf(256 * roi_in->scale));
   int step = 1;
@@ -652,9 +659,17 @@ void process_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   {
     // coarsest step is some % of image width.
     col[k]  = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * w * h, 0);
-    if(col[k] == NULL) goto error;
+    if(col[k] == NULL)
+    {
+      err = 1;
+      goto error;
+    }
     comb[k] = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * w * h, 0);
-    if(comb[k] == NULL) goto error;
+    if(comb[k] == NULL)
+    {
+      err = 1;
+      goto error;
+    }
 
     memset(comb[k], 0, sizeof(float) * 4 * w * h);
     w = (w - 1) / 2 + 1;
@@ -684,7 +699,11 @@ void process_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     // create gaussian pyramid of colour buffer
     w = wd;
     h = ht;
-    gauss_reduce(col[0], col[1], out, w, h);
+    if(gauss_reduce(col[0], col[1], out, w, h))
+    {
+      err = 1;
+      goto error;
+    }
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
     dt_omp_firstprivate(ht, out, wd) \
@@ -707,7 +726,11 @@ void process_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
 
     for(int k = 1; k < num_levels; k++)
     {
-      gauss_reduce(col[k - 1], col[k], 0, w, h);
+      if(gauss_reduce(col[k - 1], col[k], 0, w, h))
+      {
+        err = 1;
+        goto error;
+      }
       w = (w - 1) / 2 + 1;
       h = (h - 1) / 2 + 1;
     }
@@ -814,6 +837,7 @@ error:;
   }
   if(col) free(col);
   if(comb) free(comb);
+  return err;
 }
 
 void process_lut(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
@@ -838,16 +862,17 @@ void process_lut(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, co
 }
 
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_basecurve_data_t *const d = (dt_iop_basecurve_data_t *)(piece->data);
 
   // are we doing exposure fusion?
   if(d->exposure_fusion)
-    process_fusion(self, piece, ivoid, ovoid, roi_in, roi_out);
+    return process_fusion(self, piece, ivoid, ovoid, roi_in, roi_out);
   else
     process_lut(self, piece, ivoid, ovoid, roi_in, roi_out);
+  return 0;
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,

@@ -315,18 +315,18 @@ static void _copy_output(const float *const restrict in, uint8_t *const restrict
 }
 
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const i, void *const o,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
                                          i, o, roi_in, roi_out))
-    return; // image has been copied through to output and module's trouble flag has been updated
+    return 0; // image has been copied through to output and module's trouble flag has been updated
 
   // this module also expects the same size of input image as the output image
   // This test is overkill since the only thing that could change roi_in/roi_out
   // is a modify_roi_in/modify_roi_out that this module doesn't implement.
   if(roi_in->width != roi_out->width || roi_in->height != roi_out->height)
-    return;
+    return 0;
 
   const dt_dev_pixelpipe_display_mask_t mask_display = piece->pipe->mask_display;
   const gboolean fcolor = dt_conf_is_equal("channel_display", "false color");
@@ -354,6 +354,8 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   {
     _copy_output((const float *const restrict)i, (uint8_t *const restrict)o, buffsize);
   }
+
+  return 0;
 }
 
 void init(dt_iop_module_t *module)

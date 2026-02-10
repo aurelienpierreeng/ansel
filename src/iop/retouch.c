@@ -3450,18 +3450,19 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
   }
 }
 
-static void process_internal(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-                             void *const ovoid, const dt_iop_roi_t *const roi_in,
-                             const dt_iop_roi_t *const roi_out, const int use_sse)
+static int process_internal(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+                            void *const ovoid, const dt_iop_roi_t *const roi_in,
+                            const dt_iop_roi_t *const roi_out, const int use_sse)
 {
   if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
                                          ivoid, ovoid, roi_in, roi_out))
-    return;
+    return 0;
 
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)piece->data;
   dt_iop_retouch_gui_data_t *g = (dt_iop_retouch_gui_data_t *)self->gui_data;
 
   float *in_retouch = NULL;
+  int err = 0;
 
   dt_iop_roi_t roi_retouch = *roi_in;
   dt_iop_roi_t *roi_rt = &roi_retouch;
@@ -3475,7 +3476,11 @@ static void process_internal(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
   // we will do all the clone, heal, etc on the input image,
   // this way the source for one algorithm can be the destination from a previous one
   in_retouch = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * roi_rt->width * roi_rt->height, 0);
-  if(in_retouch == NULL) goto cleanup;
+  if(in_retouch == NULL)
+  {
+    err = 1;
+    goto cleanup;
+  }
 
   dt_iop_image_copy_by_size(in_retouch, ivoid, roi_rt->width, roi_rt->height, 4);
 
@@ -3493,7 +3498,11 @@ static void process_internal(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
                       (!display_wavelet_scale || piece->pipe->type != DT_DEV_PIXELPIPE_FULL) ? 0 : p->curr_scale,
                       p->merge_from_scale, &usr_data,
                       roi_in->scale, use_sse);
-  if(dwt_p == NULL) goto cleanup;
+  if(dwt_p == NULL)
+  {
+    err = 1;
+    goto cleanup;
+  }
 
   // check if this module should expose mask.
   if(piece->pipe->type == DT_DEV_PIXELPIPE_FULL && g
@@ -3567,19 +3576,20 @@ static void process_internal(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
 cleanup:
   if(in_retouch) dt_pixelpipe_cache_free_align(in_retouch);
   if(dwt_p) dt_dwt_free(dwt_p);
+  return err;
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  process_internal(self, piece, ivoid, ovoid, roi_in, roi_out, 0);
+  return process_internal(self, piece, ivoid, ovoid, roi_in, roi_out, 0);
 }
 
 #if defined(__SSE__)
-void process_sse2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process_sse2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
                   void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  process_internal(self, piece, ivoid, ovoid, roi_in, roi_out, 1);
+  return process_internal(self, piece, ivoid, ovoid, roi_in, roi_out, 1);
 }
 #endif
 

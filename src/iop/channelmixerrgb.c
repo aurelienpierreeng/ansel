@@ -869,9 +869,9 @@ static inline void loop_switch(const float *const restrict in, float *const rest
 #define SHF(ii, jj, c) ((i + ii) * width + j + jj) * ch + c
 #define OFF 4
 
-static inline void auto_detect_WB(const float *const restrict in, dt_illuminant_t illuminant,
-                                  const size_t width, const size_t height, const size_t ch,
-                                  const dt_colormatrix_t RGB_to_XYZ, dt_aligned_pixel_t xyz)
+static inline int auto_detect_WB(const float *const restrict in, dt_illuminant_t illuminant,
+                                 const size_t width, const size_t height, const size_t ch,
+                                 const dt_colormatrix_t RGB_to_XYZ, dt_aligned_pixel_t xyz)
 {
   /**
    * Detect the chromaticity of the illuminant based on the grey edges hypothesis.
@@ -887,7 +887,7 @@ static inline void auto_detect_WB(const float *const restrict in, dt_illuminant_
   */
 
    float *const restrict temp = dt_pixelpipe_cache_alloc_align_float_cache(width * height * ch, 0);
-   if(!temp) return;
+   if(!temp) return 1;
 
    // Convert RGB to xy
 #ifdef _OPENMP
@@ -1037,6 +1037,7 @@ static inline void auto_detect_WB(const float *const restrict in, dt_illuminant_
     xyz[c] = norm_D50 * (xyY[c] / elements) + D50[c];
 
   dt_pixelpipe_cache_free_align(temp);
+  return 0;
 }
 
 static void declare_cat_on_pipe(struct dt_iop_module_t *self, gboolean preset)
@@ -1290,11 +1291,12 @@ typedef struct {
   float exposure;
 } extraction_result_t;
 
-static const extraction_result_t _extract_patches(const float *const restrict in, const dt_iop_roi_t *const roi_in,
-                                                  dt_iop_channelmixer_rgb_gui_data_t *g,
-                                                  const dt_colormatrix_t RGB_to_XYZ, const dt_colormatrix_t XYZ_to_CAM,
-                                                  float *const restrict patches,
-                                                  const gboolean normalize_exposure)
+static int _extract_patches(const float *const restrict in, const dt_iop_roi_t *const roi_in,
+                            dt_iop_channelmixer_rgb_gui_data_t *g,
+                            const dt_colormatrix_t RGB_to_XYZ, const dt_colormatrix_t XYZ_to_CAM,
+                            float *const restrict patches,
+                            const gboolean normalize_exposure,
+                            extraction_result_t *result)
 {
   const size_t width = roi_in->width;
   const size_t height = roi_in->height;
@@ -1302,7 +1304,10 @@ static const extraction_result_t _extract_patches(const float *const restrict in
   const float radius_y = radius_x / g->checker->ratio;
 
   if(g->delta_E_in == NULL)
+  {
     g->delta_E_in = dt_alloc_align_float(g->checker->patches);
+    if(g->delta_E_in == NULL) return 1;
+  }
 
   /* Get the average color over each patch */
   for(size_t k = 0; k < g->checker->patches; k++)
@@ -1482,23 +1487,28 @@ static const extraction_result_t _extract_patches(const float *const restrict in
   // so, rescale offset to adapt our offset to exposure module GUI
   black /= -exposure;
 
-  const extraction_result_t result = { black, exposure };
-  return result;
+  result->black = black;
+  result->exposure = exposure;
+  return 0;
 }
 
-void extract_color_checker(const float *const restrict in, float *const restrict out,
-                           const dt_iop_roi_t *const roi_in, dt_iop_channelmixer_rgb_gui_data_t *g,
-                           const dt_colormatrix_t RGB_to_XYZ, const dt_colormatrix_t XYZ_to_RGB,
-                           const dt_colormatrix_t XYZ_to_CAM,
-                           const dt_adaptation_t kind)
+int extract_color_checker(const float *const restrict in, float *const restrict out,
+                          const dt_iop_roi_t *const roi_in, dt_iop_channelmixer_rgb_gui_data_t *g,
+                          const dt_colormatrix_t RGB_to_XYZ, const dt_colormatrix_t XYZ_to_RGB,
+                          const dt_colormatrix_t XYZ_to_CAM,
+                          const dt_adaptation_t kind)
 {
   float *const restrict patches = dt_alloc_align_float(g->checker->patches * 4);
-  if(patches == NULL) return;
+  if(patches == NULL) return 1;
 
   dt_simd_memcpy(in, out, (size_t)roi_in->width * roi_in->height * 4);
 
-  extraction_result_t extraction_result = _extract_patches(out, roi_in, g, RGB_to_XYZ, XYZ_to_CAM,
-                                                           patches, TRUE);
+  extraction_result_t extraction_result = { 0 };
+  if(_extract_patches(out, roi_in, g, RGB_to_XYZ, XYZ_to_CAM, patches, TRUE, &extraction_result))
+  {
+    dt_free_align(patches);
+    return 1;
+  }
 
   // Compute the delta E
   float pre_wb_delta_E = 0.f;
@@ -1611,6 +1621,13 @@ void extract_color_checker(const float *const restrict in, float *const restrict
   /* Compute the matrix of mix */
   double *const restrict Y = dt_alloc_align(g->checker->patches * 3 * sizeof(double));
   double *const restrict A = dt_alloc_align(g->checker->patches * 3 * 9 * sizeof(double));
+  if(Y == NULL || A == NULL)
+  {
+    if(Y) dt_free_align(Y);
+    if(A) dt_free_align(A);
+    dt_free_align(patches);
+    return 1;
+  }
 
   for(size_t k = 0; k < g->checker->patches; k++)
   {
@@ -1768,15 +1785,21 @@ void extract_color_checker(const float *const restrict in, float *const restrict
                         g->mix[2][2], log2f(extraction_result.exposure), extraction_result.black);
 
   dt_free_align(patches);
+  return 0;
 }
 
-void validate_color_checker(const float *const restrict in,
-                            const dt_iop_roi_t *const roi_in, dt_iop_channelmixer_rgb_gui_data_t *g,
-                            const dt_colormatrix_t RGB_to_XYZ, const dt_colormatrix_t XYZ_to_RGB, const dt_colormatrix_t XYZ_to_CAM)
+int validate_color_checker(const float *const restrict in,
+                           const dt_iop_roi_t *const roi_in, dt_iop_channelmixer_rgb_gui_data_t *g,
+                           const dt_colormatrix_t RGB_to_XYZ, const dt_colormatrix_t XYZ_to_RGB, const dt_colormatrix_t XYZ_to_CAM)
 {
   float *const restrict patches = dt_alloc_align_float(4 * g->checker->patches);
-  if(patches == NULL) return;
-  extraction_result_t extraction_result = _extract_patches(in, roi_in, g, RGB_to_XYZ, XYZ_to_CAM, patches, FALSE);
+  if(patches == NULL) return 1;
+  extraction_result_t extraction_result = { 0 };
+  if(_extract_patches(in, roi_in, g, RGB_to_XYZ, XYZ_to_CAM, patches, FALSE, &extraction_result))
+  {
+    dt_free_align(patches);
+    return 1;
+  }
 
   // Compute the delta E
   float pre_wb_delta_E = 0.f;
@@ -1804,9 +1827,10 @@ void validate_color_checker(const float *const restrict in,
                                           extraction_result.black);
 
   dt_free_align(patches);
+  return 0;
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
              const void *const restrict ivoid, void *const restrict ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
@@ -1817,7 +1841,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
 
   if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
                                          ivoid, ovoid, roi_in, roi_out))
-    return; // image has been copied through to output and module's trouble flag has been updated
+    return 0; // image has been copied through to output and module's trouble flag has been updated
 
   declare_cat_on_pipe(self, FALSE);
 
@@ -1848,10 +1872,11 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     if(g->run_profile && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
     {
       dt_iop_gui_enter_critical_section(self);
-      extract_color_checker(in, out, roi_in, g, RGB_to_XYZ, XYZ_to_RGB, XYZ_to_CAM, data->adaptation);
+      const int err = extract_color_checker(in, out, roi_in, g, RGB_to_XYZ, XYZ_to_RGB, XYZ_to_CAM, data->adaptation);
       g->run_profile = FALSE;
       dt_iop_set_cache_bypass(self, FALSE);
       dt_iop_gui_leave_critical_section(self);
+      if(err) return 1;
     }
 
     if(data->illuminant_type == DT_ILLUMINANT_DETECT_EDGES || data->illuminant_type == DT_ILLUMINANT_DETECT_SURFACES)
@@ -1860,8 +1885,9 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       {
         // detection on full image only
         dt_iop_gui_enter_critical_section(self);
-        auto_detect_WB(in, data->illuminant_type, roi_in->width, roi_in->height, ch, RGB_to_XYZ, g->XYZ);
+        const int err = auto_detect_WB(in, data->illuminant_type, roi_in->width, roi_in->height, ch, RGB_to_XYZ, g->XYZ);
         dt_iop_gui_leave_critical_section(self);
+        if(err) return 1;
       }
 
       // passthrough pixels
@@ -1872,7 +1898,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       exit = TRUE;
     }
 
-    if(exit) return;
+    if(exit) return 0;
   }
 
   if(data->illuminant_type == DT_ILLUMINANT_CAMERA)
@@ -1957,9 +1983,12 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   if(self->dev->gui_attached && g)
     if(g->run_validation && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
     {
-      validate_color_checker(out, roi_out, g, RGB_to_XYZ, XYZ_to_RGB, XYZ_to_CAM);
+      const int err = validate_color_checker(out, roi_out, g, RGB_to_XYZ, XYZ_to_RGB, XYZ_to_CAM);
       g->run_validation = FALSE;
+      if(err) return 1;
     }
+
+  return 0;
 }
 
 #if HAVE_OPENCL

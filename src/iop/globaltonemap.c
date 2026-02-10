@@ -265,7 +265,7 @@ static inline void process_filmic(struct dt_iop_module_t *self, dt_dev_pixelpipe
   }
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_global_tonemap_data_t *data = (dt_iop_global_tonemap_data_t *)piece->data;
@@ -278,6 +278,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   if(data->detail != 0.0f)
   {
     b = dt_bilateral_init(roi_in->width, roi_in->height, sigma_s, sigma_r);
+    if(!b) return 1;
     // get detail from unchanged input buffer
     dt_bilateral_splat(b, (float *)ivoid);
   }
@@ -304,6 +305,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   }
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
+  return 0;
 }
 
 void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *piece,

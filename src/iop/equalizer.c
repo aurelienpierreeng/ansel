@@ -111,7 +111,7 @@ const char *deprecated_msg()
 }
 
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const int chs = piece->colors;
@@ -138,10 +138,17 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   // TODO: fixed alloc for data piece at capped resolution?
   float **tmp = (float **)calloc(numl_cap, sizeof(float *));
+  if(!tmp) return 1;
   for(int k = 1; k < numl_cap; k++)
   {
     const int wd = (int)(1 + (width >> (k - 1))), ht = (int)(1 + (height >> (k - 1)));
     tmp[k] = (float *)malloc(sizeof(float) * wd * ht);
+    if(!tmp[k])
+    {
+      for(int kk = 1; kk < k; kk++) free(tmp[kk]);
+      free(tmp);
+      return 1;
+    }
   }
 
   for(int level = 1; level < numl_cap; level++) dt_iop_equalizer_wtf(ovoid, tmp, level, width, height);
@@ -222,6 +229,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 // if(piece->iscale != 1.0) printf(" for preview\n");
 // else printf("\n");
 #endif
+  return 0;
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,

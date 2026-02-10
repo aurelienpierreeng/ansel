@@ -455,7 +455,7 @@ static inline void scaled_copy_4wide(float *const outp, const float *const inp, 
     outp[c] = inp[c] * coeffs[c];
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const uint32_t filters = piece->pipe->dsc.filters;
@@ -569,6 +569,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     piece->pipe->dsc.processed_maximum[k] = d->coeffs[k] * piece->pipe->dsc.processed_maximum[k];
     self->dev->proxy.wb_coeffs[k] = d->coeffs[k];
   }
+  return 0;
 }
 
 #ifdef HAVE_OPENCL

@@ -296,7 +296,7 @@ static inline float sign(float x)
 #ifdef _OPENMP
 #pragma omp declare simd aligned(ivoid, ovoid : 64)
 #endif
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_shadhi_data_t *const restrict data = (dt_iop_shadhi_data_t *)piece->data;
@@ -335,7 +335,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     }
 
     dt_gaussian_t *g = dt_gaussian_init(width, height, ch, Labmax, Labmin, sigma, order);
-    if(!g) return;
+    if(!g) return 1;
     dt_gaussian_blur_4c(g, in, out);
     dt_gaussian_free(g);
   }
@@ -346,7 +346,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     const float detail = -1.0f; // we want the bilateral base layer
 
     dt_bilateral_t *b = dt_bilateral_init(width, height, sigma_s, sigma_r);
-    if(!b) return;
+    if(!b) return 1;
     dt_bilateral_splat(b, in);
     dt_bilateral_blur(b);
     dt_bilateral_slice(b, in, out, detail);
@@ -452,6 +452,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
   }
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
+  return 0;
 }
 
 

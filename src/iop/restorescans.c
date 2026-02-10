@@ -137,7 +137,7 @@ void tiling_callback(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t
   tiling->yalign = 1;
 }
 
-void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
+int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid, void *const ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   dt_iop_restorescans_data_t *d = (dt_iop_restorescans_data_t *)piece->data;
@@ -145,11 +145,12 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
 
   if (!dt_iop_have_required_input_format(4 /*we need full-color pixels*/, self, piece->colors,
                                          ivoid, ovoid, roi_in, roi_out))
-    return;
+    return 0;
 
   const float *const restrict in = (const float *const restrict)ivoid;
   float *const restrict out = (float *const restrict)ovoid;
   float *const restrict cmy = dt_pixelpipe_cache_alloc_align_float_cache(roi_in->width * roi_in->height * 4, 0);
+  if(!cmy) return 1;
 
   const float sharpen = d->diffusion / (scale * scale) / d->iterations;
 
@@ -235,6 +236,7 @@ void process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const 
     }
 
   dt_pixelpipe_cache_free_align(cmy);
+  return 0;
 }
 
 
