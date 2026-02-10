@@ -136,8 +136,7 @@ inline static void _uint8_to_float(const uint8_t *const input, float *const outp
 }
 
 
-int dt_dev_pixelpipe_init_export(dt_dev_pixelpipe_t *pipe, int32_t width, int32_t height, int levels,
-                                 gboolean store_masks)
+int dt_dev_pixelpipe_init_export(dt_dev_pixelpipe_t *pipe, int levels, gboolean store_masks)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_EXPORT;
@@ -146,14 +145,14 @@ int dt_dev_pixelpipe_init_export(dt_dev_pixelpipe_t *pipe, int32_t width, int32_
   return res;
 }
 
-int dt_dev_pixelpipe_init_thumbnail(dt_dev_pixelpipe_t *pipe, int32_t width, int32_t height)
+int dt_dev_pixelpipe_init_thumbnail(dt_dev_pixelpipe_t *pipe)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_THUMBNAIL;
   return res;
 }
 
-int dt_dev_pixelpipe_init_dummy(dt_dev_pixelpipe_t *pipe, int32_t width, int32_t height)
+int dt_dev_pixelpipe_init_dummy(dt_dev_pixelpipe_t *pipe)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_THUMBNAIL;

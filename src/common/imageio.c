@@ -936,56 +936,78 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                                  dt_imageio_module_data_t *storage_params, int num, int total,
                                  dt_export_metadata_t *metadata)
 {
-
-  dt_develop_t dev;
-  dt_dev_init(&dev, 0);
-  dt_dev_load_image(&dev, imgid);
-
-  int width = MAX(format_params->max_width, 0);
-  int height = MAX(format_params->max_height, 0);
-  double scale = 1.;
+  dt_times_t start;
+  dt_get_times(&start);
 
   dt_mipmap_buffer_t buf;
   dt_mipmap_cache_t *cache = darktable.mipmap_cache;
   void *outbuf = NULL;
 
-  dt_mipmap_cache_get(cache, &buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
+  // Get the history, aka sequence of editing changes
+  dt_develop_t dev;
+  dt_dev_init(&dev, 0);
+  dt_dev_load_image(&dev, imgid);
+  dt_ioppr_resync_modules_order(&dev);
 
-  if(!buf.buf || buf.width == 0 || buf.height == 0)
-  {
-    dt_mipmap_cache_release(cache, &buf);
-    goto error_early;
-  }
-
-  // Take a local copy of the buffer so we can release the mipmap cache lock immediately
-  const size_t buf_width = buf.width;
-  const size_t buf_height = buf.height;
-  dt_mipmap_cache_release(cache, &buf);
-
-  // Redo an actual pipe init with actual input sizes
-  int res = 0;
-  dt_times_t start;
-  dt_get_times(&start);
-  dt_dev_pixelpipe_t pipe;
-  if(thumbnail_export)
-    res = dt_dev_pixelpipe_init_thumbnail(&pipe, buf_width, buf_height);
-  else
-    res = dt_dev_pixelpipe_init_export(&pipe, buf_width, buf_height, format->levels(format_params), export_masks);
-
-  if(!res) goto error;
-
+  // Apply styles on top of current history
   const gboolean use_style = !thumbnail_export && format_params->style[0] != '\0';
   //  If a style is to be applied during export, add the iop params into the history
   if(use_style && _apply_style_before_export(&dev, format_params, imgid))
     goto error;
 
-  dt_ioppr_resync_modules_order(&dev);
+  int width = MAX(format_params->max_width, 0);
+  int height = MAX(format_params->max_height, 0);
+  double scale = 1.;
 
+  // Get a pipeline, aka sequence of nodes
+  int res = 0;
+  dt_dev_pixelpipe_t pipe;
+  if(thumbnail_export)
+    res = dt_dev_pixelpipe_init_thumbnail(&pipe);
+  else
+    res = dt_dev_pixelpipe_init_export(&pipe, format->levels(format_params), export_masks);
+
+  if(!res) goto error;
+
+  dt_dev_pixelpipe_create_nodes(&pipe, &dev);
+
+  // Sync history with pipeline nodes
   // Update the ICC type if DT_COLORSPACE_NONE is passed
   dt_colorspaces_get_output_profile(imgid, &icc_type, icc_filename);
   dt_dev_pixelpipe_set_icc(&pipe, icc_type, icc_filename, icc_intent);
-  dt_dev_pixelpipe_set_input(&pipe, &dev, imgid, buf_width, buf_height, DT_MIPMAP_FULL);
-  dt_dev_pixelpipe_create_nodes(&pipe, &dev);
+  
+  // Find out what input size we want
+  dt_mipmap_size_t size = DT_MIPMAP_FULL;
+  if(thumbnail_export)
+  {
+    // Init size with full-resolution raw
+    dt_dev_pixelpipe_set_input(&pipe, &dev, imgid, width, height, size);
+    dt_dev_pixelpipe_synch_all(&pipe, &dev);
+
+    // Test if using the half-sized raw as input would still give us enough pixels to cover the desired image surface
+    int out_width, out_height;
+    dt_dev_pixelpipe_get_roi_out(&pipe, &dev, cache->max_width[DT_MIPMAP_F], cache->max_height[DT_MIPMAP_F], &out_width, &out_height);
+
+    // Only one dimension needs to be at least as large as the requested surface
+    if(out_width <= width || out_height <= height)
+      size = DT_MIPMAP_F;
+  }
+
+  // Take a local copy of the input buffer so we can release the mipmap cache lock immediately
+  dt_mipmap_cache_get(cache, &buf, imgid, size, DT_MIPMAP_BLOCKING, 'r');
+
+  if(!buf.buf || buf.width == 0 || buf.height == 0)
+  {
+    dt_mipmap_cache_release(cache, &buf);
+    goto error;
+  }
+
+  const size_t buf_width = buf.width;
+  const size_t buf_height = buf.height;
+  dt_mipmap_cache_release(cache, &buf);
+
+  // Update size with actual input and resync nodes
+  dt_dev_pixelpipe_set_input(&pipe, &dev, imgid, buf_width, buf_height, size);
   dt_dev_pixelpipe_synch_all(&pipe, &dev);
 
   // Write debug info to stdout
@@ -1121,7 +1143,6 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
 error:
   if(outbuf) dt_pixelpipe_cache_free_align(outbuf);
   dt_dev_pixelpipe_cleanup(&pipe);
-error_early:
   dt_dev_cleanup(&dev);
   return 1;
 }

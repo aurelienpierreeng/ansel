@@ -273,13 +273,12 @@ int dt_dev_pixelpipe_init(dt_dev_pixelpipe_t *pipe);
 // settings.
 int dt_dev_pixelpipe_init_preview(dt_dev_pixelpipe_t *pipe);
 // inits the pixelpipe with settings optimized for full-image export (no history stack cache)
-int dt_dev_pixelpipe_init_export(dt_dev_pixelpipe_t *pipe, int32_t width, int32_t height, int levels,
-                                 gboolean store_masks);
+int dt_dev_pixelpipe_init_export(dt_dev_pixelpipe_t *pipe, int levels, gboolean store_masks);
 // inits the pixelpipe with settings optimized for thumbnail export (no history stack cache)
-int dt_dev_pixelpipe_init_thumbnail(dt_dev_pixelpipe_t *pipe, int32_t width, int32_t height);
+int dt_dev_pixelpipe_init_thumbnail(dt_dev_pixelpipe_t *pipe);
 // inits all but the pixel caches, so you can't actually process an image (just get dimensions and
 // distortions)
-int dt_dev_pixelpipe_init_dummy(dt_dev_pixelpipe_t *pipe, int32_t width, int32_t height);
+int dt_dev_pixelpipe_init_dummy(dt_dev_pixelpipe_t *pipe);
 // inits the pixelpipe
 int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe);
 // constructs a new input buffer from given RGB float array.
