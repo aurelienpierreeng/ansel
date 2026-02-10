@@ -24,12 +24,12 @@ static size_t parallel_imgop_minimum = 500000;
 #endif
 
 // Allocate one or more buffers as detailed in the given parameters.  If any allocation fails, free all of them,
-// set the module's trouble flag, and return FALSE.
-gboolean dt_iop_alloc_image_buffers(struct dt_iop_module_t *const module,
-                                    const struct dt_iop_roi_t *const roi_in,
-                                    const struct dt_iop_roi_t *const roi_out, ...)
+// set the module's trouble flag, and return 1 (0 on success).
+int dt_iop_alloc_image_buffers(struct dt_iop_module_t *const module,
+                               const struct dt_iop_roi_t *const roi_in,
+                               const struct dt_iop_roi_t *const roi_out, ...)
 {
-  gboolean success = TRUE;
+  int err = 0;
   va_list args;
   // first pass: zero out all of the given buffer pointers
   va_start(args,roi_out);
@@ -47,7 +47,7 @@ gboolean dt_iop_alloc_image_buffers(struct dt_iop_module_t *const module,
 
   // second pass: attempt to allocate the requested buffers
   va_start(args,roi_out);
-  while (success)
+  while (!err)
   {
     const int size = va_arg(args,int);
     float **bufptr = va_arg(args,float**);
@@ -100,14 +100,14 @@ gboolean dt_iop_alloc_image_buffers(struct dt_iop_module_t *const module,
     }
     if (!*bufptr)
     {
-      success = FALSE;
+      err = 1;
       break;
     }
   }
   va_end(args);
 
   // finally, check whether successful and clean up if something went wrong
-  if (!success)
+  if (err)
   {
     va_start(args,roi_out);
     while (TRUE)
@@ -124,7 +124,7 @@ gboolean dt_iop_alloc_image_buffers(struct dt_iop_module_t *const module,
     va_end(args);
     // set the module's trouble flag
   }
-  return success;
+  return err;
 }
 
 

@@ -298,7 +298,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
 
   float *restrict tmp;	// one row per thread
   size_t padded_size;
-  if (!dt_iop_alloc_image_buffers(self, roi_in, roi_out,
+  if (dt_iop_alloc_image_buffers(self, roi_in, roi_out,
                                   1 | DT_IMGSZ_WIDTH | DT_IMGSZ_PERTHREAD, &tmp, &padded_size,
                                   0))
   {

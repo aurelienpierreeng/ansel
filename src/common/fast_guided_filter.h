@@ -156,11 +156,11 @@ static inline void interpolate_bilinear(const float *const restrict in, const si
 
 
 __DT_CLONE_TARGETS__
-static inline void variance_analyse(const float *const restrict guide, // I
-                                    const float *const restrict mask, //p
-                                    float *const restrict ab,
-                                    const size_t width, const size_t height,
-                                    const int radius, const float feathering)
+static inline int variance_analyse(const float *const restrict guide, // I
+                                   const float *const restrict mask, //p
+                                   float *const restrict ab,
+                                   const size_t width, const size_t height,
+                                   const int radius, const float feathering)
 {
   // Compute a box average (filter) on a grey image over a window of size 2*radius + 1
   // then get the variance of the guide and covariance with its mask
@@ -174,7 +174,7 @@ static inline void variance_analyse(const float *const restrict guide, // I
   * input is array of struct : { { guide , mask, guide * guide, guide * mask } }
   */
   float *const restrict input = dt_pixelpipe_cache_alloc_align_float_cache(Ndimch, 0);
-  if(input == NULL) goto error;
+  if(input == NULL) return 1;
 
   // Pre-multiply guide and mask and pack all inputs into an array of 4x1 SIMD struct
 #ifdef _OPENMP
@@ -192,7 +192,11 @@ static inline void variance_analyse(const float *const restrict guide, // I
   }
 
   // blur the guide and mask as a four-channel image to exploit data locality and SIMD
-  dt_box_mean(input, height, width, 4, radius, 1);
+  if(dt_box_mean(input, height, width, 4, radius, 1) != 0)
+  {
+    dt_pixelpipe_cache_free_align(input);
+    return 1;
+  }
 
   // blend the result and store in output buffer
 #ifdef _OPENMP
@@ -209,8 +213,8 @@ static inline void variance_analyse(const float *const restrict guide, // I
     ab[2*idx+1] = b;
   }
 
-error:;
-  if(input) dt_pixelpipe_cache_free_align(input);
+  dt_pixelpipe_cache_free_align(input);
+  return 0;
 }
 
 
@@ -290,11 +294,11 @@ schedule(simd:static) aligned(image, out:64)
 
 
 __DT_CLONE_TARGETS__
-static inline void fast_surface_blur(float *const restrict image,
-                                      const size_t width, const size_t height,
-                                      const int radius, float feathering, const int iterations,
-                                      const dt_iop_guided_filter_blending_t filter, const float scale,
-                                      const float quantization, const float quantize_min, const float quantize_max)
+static inline int fast_surface_blur(float *const restrict image,
+                                    const size_t width, const size_t height,
+                                    const int radius, float feathering, const int iterations,
+                                    const dt_iop_guided_filter_blending_t filter, const float scale,
+                                    const float quantization, const float quantize_min, const float quantize_max)
 {
   // Works in-place on a grey image
 
@@ -317,7 +321,11 @@ static inline void fast_surface_blur(float *const restrict image,
   if(!ds_image || !ds_mask || !ds_ab || !ab)
   {
     dt_control_log(_("fast guided filter failed to allocate memory, check your RAM settings"));
-    goto clean;
+    if(ab) dt_pixelpipe_cache_free_align(ab);
+    if(ds_ab) dt_pixelpipe_cache_free_align(ds_ab);
+    if(ds_mask) dt_pixelpipe_cache_free_align(ds_mask);
+    if(ds_image) dt_pixelpipe_cache_free_align(ds_image);
+    return 1;
   }
 
   // Downsample the image for speed-up
@@ -331,10 +339,24 @@ static inline void fast_surface_blur(float *const restrict image,
 
     // Perform the patch-wise variance analyse to get
     // the a and b parameters for the linear blending s.t. mask = a * I + b
-    variance_analyse(ds_mask, ds_image, ds_ab, ds_width, ds_height, ds_radius, feathering);
+    if(variance_analyse(ds_mask, ds_image, ds_ab, ds_width, ds_height, ds_radius, feathering) != 0)
+    {
+      if(ab) dt_pixelpipe_cache_free_align(ab);
+      if(ds_ab) dt_pixelpipe_cache_free_align(ds_ab);
+      if(ds_mask) dt_pixelpipe_cache_free_align(ds_mask);
+      if(ds_image) dt_pixelpipe_cache_free_align(ds_image);
+      return 1;
+    }
 
     // Compute the patch-wise average of parameters a and b
-    dt_box_mean(ds_ab, ds_height, ds_width, 2, ds_radius, 1);
+    if(dt_box_mean(ds_ab, ds_height, ds_width, 2, ds_radius, 1) != 0)
+    {
+      if(ab) dt_pixelpipe_cache_free_align(ab);
+      if(ds_ab) dt_pixelpipe_cache_free_align(ds_ab);
+      if(ds_mask) dt_pixelpipe_cache_free_align(ds_mask);
+      if(ds_image) dt_pixelpipe_cache_free_align(ds_image);
+      return 1;
+    }
 
     if(i != iterations - 1)
     {
@@ -352,11 +374,11 @@ static inline void fast_surface_blur(float *const restrict image,
   else if(filter == DT_GF_BLENDING_GEOMEAN)
     apply_linear_blending_w_geomean(image, ab, num_elem);
 
-clean:
   if(ab) dt_pixelpipe_cache_free_align(ab);
   if(ds_ab) dt_pixelpipe_cache_free_align(ds_ab);
   if(ds_mask) dt_pixelpipe_cache_free_align(ds_mask);
   if(ds_image) dt_pixelpipe_cache_free_align(ds_image);
+  return 0;
 }
 
 // clang-format off

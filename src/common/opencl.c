@@ -1443,7 +1443,8 @@ static float dt_opencl_benchmark_gpu(const int devid, const size_t width, const 
 
   for(int n = 0; n < count; n++)
   {
-    guided_filter_cl(devid, dev_mem, dev_mem, mem_out, width, height, 4, sigma, 1.0, 0.5, 0., 1.0);
+    if(guided_filter_cl(devid, dev_mem, dev_mem, mem_out, width, height, 4, sigma, 1.0, 0.5, 0., 1.0) != 0)
+      goto error;
 
     // copy back to host
     err = dt_opencl_copy_device_to_host(devid, buf, mem_out, width, height, bpp);
@@ -1530,15 +1531,16 @@ static float dt_opencl_benchmark_cpu(const size_t width, const size_t height, co
 
   // guided filter
   for(int n = 0; n < count; n++)
-    guided_filter(buf, buf, out, width, height, 4, sigma, 0.05, 0.5, 0., FLT_MAX);
+    if(guided_filter(buf, buf, out, width, height, 4, sigma, 0.05, 0.5, 0., FLT_MAX) != 0)
+      break;
 
   // end timer
   double end = dt_get_wtime();
 
-  dt_pixelpipe_cache_free_align(buf);
-  dt_pixelpipe_cache_free_align(out);
-  dt_pixelpipe_cache_free_align(in);
-  free_tea_states(tea_states);
+  if(buf) dt_pixelpipe_cache_free_align(buf);
+  if(out) dt_pixelpipe_cache_free_align(out);
+  if(in) dt_pixelpipe_cache_free_align(in);
+  if(tea_states) free_tea_states(tea_states);
 
   return (end - start);
 }

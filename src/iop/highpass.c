@@ -304,7 +304,10 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   const int range = 2 * radius + 1;
   const int hr = range / 2;
 
-  dt_box_mean(out, roi_out->height, roi_out->width, 1, hr, BOX_ITERATIONS);
+  if(dt_box_mean(out, roi_out->height, roi_out->width, 1, hr, BOX_ITERATIONS) != 0)
+  {
+    return 1;
+  }
 
   const float contrast_scale = ((data->contrast / 100.0) * 7.5);
   /* Blend the inverted blurred L channel with the original input.  Because we packed the L values */

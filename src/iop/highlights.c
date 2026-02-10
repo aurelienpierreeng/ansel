@@ -1602,7 +1602,11 @@ static int process_laplacian_bayer(struct dt_iop_module_t *self, dt_dev_pixelpip
   float *const restrict output = (float *const restrict)ovoid;
 
   _interpolate_and_mask(input, interpolated, clipping_mask, clips, wb, filters, width, height);
-  dt_box_mean(clipping_mask, height, width, 4, 2, 1);
+  if(dt_box_mean(clipping_mask, height, width, 4, 2, 1) != 0)
+  {
+    err = 1;
+    goto error;
+  }
 
   // Downsample
   interpolate_bilinear(clipping_mask, width, height, ds_clipping_mask, ds_width, ds_height, 4);

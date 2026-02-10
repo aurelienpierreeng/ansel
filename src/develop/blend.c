@@ -396,9 +396,9 @@ static inline void _develop_blend_process_free_region(float *const restrict inpu
 }
 
 
-static void _develop_blend_process_feather(const float *const guide, float *const mask, const size_t width,
-                                           const size_t height, const int ch, const float guide_weight,
-                                           const float feathering_radius, const float scale)
+static int _develop_blend_process_feather(const float *const guide, float *const mask, const size_t width,
+                                          const size_t height, const int ch, const float guide_weight,
+                                          const float feathering_radius, const float scale)
 {
   const float sqrt_eps = 1.f;
   int w = (int)(2 * feathering_radius * scale + 0.5f);
@@ -406,12 +406,16 @@ static void _develop_blend_process_feather(const float *const guide, float *cons
 
   float *const restrict mask_bak =
     dt_pixelpipe_cache_alloc_align_float_cache( width * height, 0);
-  if(mask_bak)
+  if(!mask_bak) return 1;
+
+  memcpy(mask_bak, mask, sizeof(float) * width * height);
+  if(guided_filter(guide, mask_bak, mask, width, height, ch, w, sqrt_eps, guide_weight, 0.f, 1.f) != 0)
   {
-    memcpy(mask_bak, mask, sizeof(float) * width * height);
-    guided_filter(guide, mask_bak, mask, width, height, ch, w, sqrt_eps, guide_weight, 0.f, 1.f);
     dt_pixelpipe_cache_free_align(mask_bak);
+    return 1;
   }
+  dt_pixelpipe_cache_free_align(mask_bak);
+  return 0;
 }
 
 
@@ -623,17 +627,31 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
         if(!rois_equal)
           guide = _develop_blend_process_copy_region(guide, ch * iwidth, ch * xoffs, ch * yoffs,
                                                      ch * owidth, ch * oheight);
-        if(guide)
-          _develop_blend_process_feather(guide, mask, owidth, oheight, ch, guide_weight,
-                                         d->feathering_radius, roi_out->scale);
+        if(!guide)
+        {
+          dt_pixelpipe_cache_free_align(_mask);
+          return 1;
+        }
+        if(_develop_blend_process_feather(guide, mask, owidth, oheight, ch, guide_weight,
+                                          d->feathering_radius, roi_out->scale) != 0)
+        {
+          if(!rois_equal)
+            _develop_blend_process_free_region(guide);
+          dt_pixelpipe_cache_free_align(_mask);
+          return 1;
+        }
         if(!rois_equal)
           _develop_blend_process_free_region(guide);
       }
       else if(operation == DEVELOP_MASK_POST_FEATHER_OUT)
       {
         const float guide_weight = cst == IOP_CS_RGB ? 100.0f : 1.0f;
-        _develop_blend_process_feather((const float *const restrict)ovoid, mask, owidth, oheight, ch,
-                                       guide_weight, d->feathering_radius, roi_out->scale);
+        if(_develop_blend_process_feather((const float *const restrict)ovoid, mask, owidth, oheight, ch,
+                                          guide_weight, d->feathering_radius, roi_out->scale) != 0)
+        {
+          dt_pixelpipe_cache_free_align(_mask);
+          return 1;
+        }
       }
       else if(operation == DEVELOP_MASK_POST_BLUR)
       {
@@ -1140,8 +1158,9 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
           err = dt_opencl_enqueue_copy_image(devid, dev_in, guide, origin_2, origin_1, region);
           if(err != CL_SUCCESS) goto error;
         }
-        guided_filter_cl(devid, guide, dev_mask_1, dev_mask_2, owidth, oheight, ch, w, sqrt_eps, guide_weight,
-                         0.0f, 1.0f);
+        if(guided_filter_cl(devid, guide, dev_mask_1, dev_mask_2, owidth, oheight, ch, w, sqrt_eps, guide_weight,
+                            0.0f, 1.0f) != 0)
+          goto error;
         if(!rois_equal)
         {
           dt_opencl_release_mem_object(dev_guide);
@@ -1156,8 +1175,9 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
         const float sqrt_eps = 1.0f;
         const float guide_weight = cst == IOP_CS_RGB ? 100.0f : 1.0f;
 
-        guided_filter_cl(devid, dev_out, dev_mask_1, dev_mask_2, owidth, oheight, ch, w, sqrt_eps, guide_weight,
-                         0.0f, 1.0f);
+        if(guided_filter_cl(devid, dev_out, dev_mask_1, dev_mask_2, owidth, oheight, ch, w, sqrt_eps, guide_weight,
+                            0.0f, 1.0f) != 0)
+          goto error;
         _blend_process_cl_exchange(&dev_mask_1, &dev_mask_2);
       }
       else if(operation == DEVELOP_MASK_POST_BLUR)
@@ -1302,15 +1322,15 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
   return 0;
 
 error:
-  dt_pixelpipe_cache_free_align(_mask);
-  dt_opencl_release_mem_object(dev_blendif_params);
-  dt_opencl_release_mem_object(dev_boost_factors);
-  dt_opencl_release_mem_object(dev_mask_1);
-  dt_opencl_release_mem_object(dev_mask_2);
-  dt_opencl_release_mem_object(dev_tmp);
-  dt_opencl_release_mem_object(dev_guide);
-  dt_ioppr_free_iccprofile_params_cl(&profile_info_cl, &profile_lut_cl, &dev_profile_info, &dev_profile_lut);
-  dt_ioppr_free_iccprofile_params_cl(&work_profile_info_cl, &work_profile_lut_cl, &dev_work_profile_info,
+  if(_mask) dt_pixelpipe_cache_free_align(_mask);
+  if(dev_blendif_params) dt_opencl_release_mem_object(dev_blendif_params);
+  if(dev_boost_factors) dt_opencl_release_mem_object(dev_boost_factors);
+  if(dev_mask_1) dt_opencl_release_mem_object(dev_mask_1);
+  if(dev_mask_2) dt_opencl_release_mem_object(dev_mask_2);
+  if(dev_tmp) dt_opencl_release_mem_object(dev_tmp);
+  if(dev_guide) dt_opencl_release_mem_object(dev_guide);
+  if(profile_info_cl) dt_ioppr_free_iccprofile_params_cl(&profile_info_cl, &profile_lut_cl, &dev_profile_info, &dev_profile_lut);
+  if(work_profile_info_cl) dt_ioppr_free_iccprofile_params_cl(&work_profile_info_cl, &work_profile_lut_cl, &dev_work_profile_info,
                                      &dev_work_profile_lut);
   dt_print(DT_DEBUG_OPENCL, "[opencl_blendop] couldn't enqueue kernel! %d\n", err);
   return 1;

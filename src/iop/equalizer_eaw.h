@@ -29,7 +29,7 @@
 #define gbuf(BUF, A, B) ((BUF)[4 * ((size_t)width * ((B)) + ((A))) + ch])
 
 
-static void dt_iop_equalizer_wtf(float *const buf, float **weight_a, const int l, const int width, const int height)
+static int dt_iop_equalizer_wtf(float *const buf, float **weight_a, const int l, const int width, const int height)
 {
   const int wd = (int)(1 + (width >> (l - 1))), ht = (int)(1 + (height >> (l - 1)));
   int ch = 0;
@@ -47,7 +47,7 @@ static void dt_iop_equalizer_wtf(float *const buf, float **weight_a, const int l
 
   size_t scratch_size;
   float *const restrict tmp_width_buf = dt_alloc_perthread_float(width, &scratch_size);
-  if(tmp_width_buf == NULL) return;
+  if(tmp_width_buf == NULL) return 1;
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -84,7 +84,7 @@ static void dt_iop_equalizer_wtf(float *const buf, float **weight_a, const int l
   dt_free_align(tmp_width_buf);
 
   float *const restrict tmp_height_buf = dt_alloc_perthread_float(height, &scratch_size);
-  if(tmp_height_buf == NULL) return;
+  if(tmp_height_buf == NULL) return 1;
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -119,9 +119,10 @@ static void dt_iop_equalizer_wtf(float *const buf, float **weight_a, const int l
   }
 
   dt_free_align(tmp_height_buf);
+  return 0;
 }
 
-static void dt_iop_equalizer_iwtf(float *buf, float **weight_a, const int l, const int width, const int height)
+static int dt_iop_equalizer_iwtf(float *buf, float **weight_a, const int l, const int width, const int height)
 {
   const int step = 1 << l;
   const int st = step / 2;
@@ -129,7 +130,7 @@ static void dt_iop_equalizer_iwtf(float *buf, float **weight_a, const int l, con
 
   size_t scratch_size;
   float *const restrict tmp_height_buf = dt_alloc_perthread_float(height, &scratch_size);
-  if(tmp_height_buf == NULL) return;
+  if(tmp_height_buf == NULL) return 1;
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -163,7 +164,7 @@ static void dt_iop_equalizer_iwtf(float *buf, float **weight_a, const int l, con
   dt_free_align(tmp_height_buf);
 
   float *const restrict tmp_width_buf = dt_alloc_perthread_float(width, &scratch_size);
-  if(tmp_width_buf == NULL) return;
+  if(tmp_width_buf == NULL) return 1;
   
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -195,6 +196,7 @@ static void dt_iop_equalizer_iwtf(float *buf, float **weight_a, const int l, con
   }
 
   dt_free_align(tmp_width_buf);
+  return 0;
 }
 
 #undef gbuf

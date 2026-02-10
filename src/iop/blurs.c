@@ -291,8 +291,8 @@ static inline void create_gauss_kernel(float *const restrict buffer,
 
 
 
-static inline void build_gui_kernel(unsigned char *const buffer, const size_t width, const size_t height,
-                                    dt_iop_blurs_params_t *p)
+static inline int build_gui_kernel(unsigned char *const buffer, const size_t width, const size_t height,
+                                   dt_iop_blurs_params_t *p)
 {
   float *const restrict kernel_1 = dt_alloc_align_float(width * height);
   float *const restrict kernel_2 = dt_alloc_align_float(width * height);
@@ -329,8 +329,10 @@ static inline void build_gui_kernel(unsigned char *const buffer, const size_t wi
   }
 
 error:;
+  int err = (kernel_1 == NULL || kernel_2 == NULL);
   if(kernel_1) dt_free_align(kernel_1);
   if(kernel_2) dt_free_align(kernel_2);
+  return err;
 }
 
 
@@ -750,7 +752,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   // update kernel view
   if(g->img_cached)
   {
-    build_gui_kernel(g->img, g->img_width, g->img_width, p);
+    if(build_gui_kernel(g->img, g->img_width, g->img_width, p)) return;
     gtk_widget_queue_draw(GTK_WIDGET(g->area));
   }
 }
@@ -776,9 +778,11 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   if(!g->img_cached)
   {
     g->img = dt_alloc_align(sizeof(unsigned char) * 4 * allocation.width * allocation.width);
+    if(!g->img) return FALSE;
     g->img_width = allocation.width;
     g->img_cached = TRUE;
-    build_gui_kernel(g->img, g->img_width, g->img_width, p);
+    if(build_gui_kernel(g->img, g->img_width, g->img_width, p)) 
+      return FALSE;
 
     // Note: if params change, we silently recompute the img in the buffer
     // no need to flush the cache. Flush only if buffer size changes,

@@ -137,7 +137,10 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   const int rad = mrad * (fmin(100.0, d->size + 1) / 100.0);
   const int radius = MIN(mrad, ceilf(rad * roi_in->scale));
 
-  dt_box_mean(out, roi_out->height, roi_out->width, 4, radius, BOX_ITERATIONS);
+  if(dt_box_mean(out, roi_out->height, roi_out->width, 4, radius, BOX_ITERATIONS) != 0)
+  {
+    return 1;
+  }
 
   const float amt = d->amount / 100.0f;
   dt_iop_image_linear_blend(out, amt, in, roi_out->width, roi_out->height, 4);

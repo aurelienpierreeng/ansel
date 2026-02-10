@@ -249,11 +249,12 @@ dt_omp_firstprivate(blurred_in, blurred_manifold_lower, blurred_manifold_higher,
 }
 
 #define DT_CACORRECTRGB_MAX_EV_DIFF 2.0f
-static void get_manifolds(const float* const restrict in, const size_t width, const size_t height,
-                          const float sigma, const float sigma2,
-                          const dt_iop_cacorrectrgb_guide_channel_t guide,
-                          float* const restrict manifolds, gboolean refine_manifolds)
+static int get_manifolds(const float* const restrict in, const size_t width, const size_t height,
+                         const float sigma, const float sigma2,
+                         const dt_iop_cacorrectrgb_guide_channel_t guide,
+                         float* const restrict manifolds, gboolean refine_manifolds)
 {
+  int err = 0;
   float *const restrict blurred_in = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
   float *const restrict manifold_higher = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
   float *const restrict manifold_lower = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
@@ -262,7 +263,10 @@ static void get_manifolds(const float* const restrict in, const size_t width, co
 
   if(blurred_in == NULL || manifold_higher == NULL || manifold_lower == NULL ||
      blurred_manifold_higher == NULL || blurred_manifold_lower == NULL)
+  {
+    err = 1;
     goto error;
+  }
 
   dt_aligned_pixel_t max = {INFINITY, INFINITY, INFINITY, INFINITY};
   dt_aligned_pixel_t min = {-INFINITY, -INFINITY, -INFINITY, 0.0f};
@@ -270,7 +274,11 @@ static void get_manifolds(const float* const restrict in, const size_t width, co
   // later on
   const float blur_size = refine_manifolds ? sigma2 : sigma;
   dt_gaussian_t *g = dt_gaussian_init(width, height, 4, max, min, blur_size, 0);
-  if(!g) return;
+  if(!g)
+  {
+    err = 1;
+    goto error;
+  }
   dt_gaussian_blur_4c(g, in, blurred_in);
 
   // construct the manifolds
@@ -340,7 +348,11 @@ dt_omp_firstprivate(in, blurred_in, manifold_lower, manifold_higher, width, heig
   if(refine_manifolds)
   {
     g = dt_gaussian_init(width, height, 4, max, min, sigma, 0);
-    if(!g) return;
+    if(!g)
+    {
+      err = 1;
+      goto error;
+    }
     dt_gaussian_blur_4c(g, in, blurred_in);
 
     // refine the manifolds
@@ -509,6 +521,7 @@ error:;
   if(blurred_in) dt_pixelpipe_cache_free_align(blurred_in);
   if(blurred_manifold_lower) dt_pixelpipe_cache_free_align(blurred_manifold_lower);
   if(blurred_manifold_higher) dt_pixelpipe_cache_free_align(blurred_manifold_higher);
+  return err;
 }
 #undef DT_CACORRECTRGB_MAX_EV_DIFF
 
@@ -585,20 +598,25 @@ dt_omp_firstprivate(in, width, height, guide, manifolds, out, sigma, mode) \
   }
 }
 
-static void reduce_artifacts(const float* const restrict in,
-                          const size_t width, const size_t height, const float sigma,
-                          const dt_iop_cacorrectrgb_guide_channel_t guide,
-                          const float safety,
-                          float* const restrict out)
+static int reduce_artifacts(const float* const restrict in,
+                            const size_t width, const size_t height, const float sigma,
+                            const dt_iop_cacorrectrgb_guide_channel_t guide,
+                            const float safety,
+                            float* const restrict out)
 
 {
+  int err = 0;
   dt_gaussian_t *g = NULL;
 
   // in_out contains the 2 guided channels of in, and the 2 guided channels of out
   // it allows to blur all channels in one 4-channel gaussian blur instead of 2
   float *const restrict DT_ALIGNED_PIXEL in_out = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
   float *const restrict blurred_in_out = dt_pixelpipe_cache_alloc_align_float_cache(width * height * 4, 0);
-  if(blurred_in_out == NULL || in_out == NULL) goto error;
+  if(blurred_in_out == NULL || in_out == NULL)
+  {
+    err = 1;
+    goto error;
+  }
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -619,7 +637,11 @@ static void reduce_artifacts(const float* const restrict in,
   dt_aligned_pixel_t max = { INFINITY, INFINITY, INFINITY, INFINITY };
   dt_aligned_pixel_t min = {0.0f, 0.0f, 0.0f, 0.0f};
   g = dt_gaussian_init(width, height, 4, max, min, sigma, 0);
-  if(!g) goto error;
+  if(!g)
+  {
+    err = 1;
+    goto error;
+  }
   dt_gaussian_blur_4c(g, in_out, blurred_in_out);
 
   // we consider that even with chromatic aberration, local average should
@@ -656,6 +678,7 @@ error:;
   if(blurred_in_out) dt_pixelpipe_cache_free_align(blurred_in_out);
   if(g) dt_gaussian_free(g);
   if(in_out) dt_pixelpipe_cache_free_align(in_out);
+  return err;
 }
 
 static int reduce_chromatic_aberrations(const float* const restrict in,
@@ -688,12 +711,20 @@ static int reduce_chromatic_aberrations(const float* const restrict in,
   interpolate_bilinear(in, width, height, ds_in, ds_width, ds_height, 4);
 
   // Compute manifolds
-  get_manifolds(ds_in, ds_width, ds_height, sigma / downsize, sigma2 / downsize, guide, ds_manifolds, refine_manifolds);
+  if(get_manifolds(ds_in, ds_width, ds_height, sigma / downsize, sigma2 / downsize, guide, ds_manifolds, refine_manifolds))
+  {
+    err = 1;
+    goto error;
+  }
 
   // upscale manifolds
   interpolate_bilinear(ds_manifolds, ds_width, ds_height, manifolds, width, height, 6);
   apply_correction(in, manifolds, width, height, sigma, guide, mode, out);
-  reduce_artifacts(in, width, height, sigma, guide, safety, out);
+  if(reduce_artifacts(in, width, height, sigma, guide, safety, out))
+  {
+    err = 1;
+    goto error;
+  }
 
 error:;
   if(ds_in) dt_pixelpipe_cache_free_align(ds_in);

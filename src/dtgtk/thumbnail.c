@@ -417,7 +417,13 @@ int32_t _get_image_buffer(dt_job_t *job)
     cairo_t *cri = cairo_create(surface);
     unsigned char *rgbbuf = cairo_image_surface_get_data(surface);
     if(rgbbuf)
-      dt_focuspeaking(cri, rgbbuf, img_width, img_height, show_focus_peaking, &x_center, &y_center);
+    {
+      if(dt_focuspeaking(cri, rgbbuf, img_width, img_height, show_focus_peaking, &x_center, &y_center) != 0)
+      {
+        cairo_destroy(cri);
+        return 1;
+      }
+    }
     cairo_destroy(cri);
 
     // Init the zoom offset using the barycenter of details, to center

@@ -66,17 +66,22 @@
  * - variance of guide
  * - average of mask
  * - covariance of mask and guide. */
-static inline void eigf_variance_analysis(const float *const restrict guide, // I
-                                    const float *const restrict mask, //p
-                                    float *const restrict out,
-                                    const size_t width, const size_t height,
-                                    const float sigma)
+static inline int eigf_variance_analysis(const float *const restrict guide, // I
+                                         const float *const restrict mask, //p
+                                         float *const restrict out,
+                                         const size_t width, const size_t height,
+                                         const float sigma)
 {
   // We also use gaussian blurs instead of the square blurs of the guided filter
   const size_t Ndim = width * height;
   float *const restrict in = dt_pixelpipe_cache_alloc_align_float_cache(Ndim * 4, 0);
   dt_gaussian_t *g = NULL;
-  if(in == NULL) goto error;
+  int err = 0;
+  if(in == NULL)
+  {
+    err = 1;
+    goto error;
+  }
 
   float ming = 10000000.0f;
   float maxg = 0.0f;
@@ -116,7 +121,11 @@ dt_omp_firstprivate(guide, mask, in, Ndim) \
   dt_aligned_pixel_t max = {maxg, maxg2, maxm, maxmg};
   dt_aligned_pixel_t min = {ming, ming2, minm, minmg};
   g = dt_gaussian_init(width, height, 4, max, min, sigma, 0);
-  if(g == NULL) goto error;
+  if(g == NULL)
+  {
+    err = 1;
+    goto error;
+  }
   dt_gaussian_blur_4c(g, in, out);
 
 #ifdef _OPENMP
@@ -130,23 +139,29 @@ dt_omp_firstprivate(out, Ndim) \
     out[4 * k + 3] -= out[4 * k] * out[4 * k + 2];
   }
 
-error:;
+error:
   if(g) dt_gaussian_free(g);
   if(in) dt_pixelpipe_cache_free_align(in);
+  return err;
 }
 
 // same function as above, but specialized for the case where guide == mask
 // for increased performance
-static inline void eigf_variance_analysis_no_mask(const float *const restrict guide, // I
-                                    float *const restrict out,
-                                    const size_t width, const size_t height,
-                                    const float sigma)
+static inline int eigf_variance_analysis_no_mask(const float *const restrict guide, // I
+                                                 float *const restrict out,
+                                                 const size_t width, const size_t height,
+                                                 const float sigma)
 {
   // We also use gaussian blurs instead of the square blurs of the guided filter
   const size_t Ndim = width * height;
   float *const restrict in = dt_pixelpipe_cache_alloc_align_float_cache(Ndim * 2, 0);
   dt_gaussian_t *g = NULL;
-  if(in == NULL) goto error;
+  int err = 0;
+  if(in == NULL)
+  {
+    err = 1;
+    goto error;
+  }
 
   float ming = 10000000.0f;
   float maxg = 0.0f;
@@ -174,7 +189,11 @@ dt_omp_firstprivate(guide, in, Ndim) \
   float max[2] = {maxg, maxg2};
   float min[2] = {ming, ming2};
   g = dt_gaussian_init(width, height, 2, max, min, sigma, 0);
-  if(!g) goto error;
+  if(!g)
+  {
+    err = 1;
+    goto error;
+  }
   dt_gaussian_blur(g, in, out);
 
 #ifdef _OPENMP
@@ -188,9 +207,10 @@ dt_omp_firstprivate(out, Ndim) \
     out[2 * k + 1] -= avg * avg;
   }
 
-error:;
+error:
   if(g) dt_gaussian_free(g);
   if(in) dt_pixelpipe_cache_free_align(in);
+  return err;
 }
 
 static inline void eigf_blending(float *const restrict image, const float *const restrict mask,
@@ -260,14 +280,16 @@ static inline void eigf_blending_no_mask(float *const restrict image, const floa
 }
 
 __DT_CLONE_TARGETS__
-static inline void fast_eigf_surface_blur(float *const restrict image,
-                                      const size_t width, const size_t height,
-                                      const float sigma, float feathering, const int iterations,
-                                      const dt_iop_guided_filter_blending_t filter, const float scale,
-                                      const float quantization, const float quantize_min, const float quantize_max)
+static inline int fast_eigf_surface_blur(float *const restrict image,
+                                         const size_t width, const size_t height,
+                                         const float sigma, float feathering, const int iterations,
+                                         const dt_iop_guided_filter_blending_t filter, const float scale,
+                                         const float quantization, const float quantize_min, const float quantize_max)
 {
   // Works in-place on a grey image
   // mostly similar with fast_surface_blur from fast_guided_filter.h
+
+  int err = 0;
 
   // A down-scaling of 4 seems empirically safe and consistent no matter the image zoom level
   // see reference paper above for proof.
@@ -289,8 +311,8 @@ static inline void fast_eigf_surface_blur(float *const restrict image,
 
   if(!ds_image || !ds_mask || !ds_av || !av || !mask)
   {
-    dt_control_log(_("fast exposure independent guided filter failed to allocate memory, check your RAM settings"));
-    goto clean;
+    err = 1;
+    goto error;
   }
 
   // Iterations of filter models the diffusion, sort of
@@ -309,7 +331,11 @@ static inline void fast_eigf_surface_blur(float *const restrict image,
       quantize(image, mask, width * height, quantization, quantize_min, quantize_max);
       // Downsample the image for speed-up
       interpolate_bilinear(mask, width, height, ds_mask, ds_width, ds_height, 1);
-      eigf_variance_analysis(ds_mask, ds_image, ds_av, ds_width, ds_height, ds_sigma);
+      if(eigf_variance_analysis(ds_mask, ds_image, ds_av, ds_width, ds_height, ds_sigma) != 0)
+      {
+        err = 1;
+        goto error;
+      }
       // Upsample the variances and averages
       interpolate_bilinear(ds_av, ds_width, ds_height, av, width, height, 4);
       // Blend the guided image
@@ -318,7 +344,11 @@ static inline void fast_eigf_surface_blur(float *const restrict image,
     else
     {
       // no need to build a mask.
-      eigf_variance_analysis_no_mask(ds_image, ds_av, ds_width, ds_height, ds_sigma);
+      if(eigf_variance_analysis_no_mask(ds_image, ds_av, ds_width, ds_height, ds_sigma) != 0)
+      {
+        err = 1;
+        goto error;
+      }
       // Upsample the variances and averages
       interpolate_bilinear(ds_av, ds_width, ds_height, av, width, height, 2);
       // Blend the guided image
@@ -326,12 +356,13 @@ static inline void fast_eigf_surface_blur(float *const restrict image,
     }
   }
 
-clean:
+error:
   if(av) dt_pixelpipe_cache_free_align(av);
   if(ds_av) dt_pixelpipe_cache_free_align(ds_av);
   if(ds_mask) dt_pixelpipe_cache_free_align(ds_mask);
   if(ds_image) dt_pixelpipe_cache_free_align(ds_image);
   if(mask) dt_pixelpipe_cache_free_align(mask);
+  return err;
 }
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

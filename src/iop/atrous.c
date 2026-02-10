@@ -288,7 +288,7 @@ static int process_wavelets(struct dt_iop_module_t *self, struct dt_dev_pixelpip
   float *restrict tmp = NULL;
   float *restrict tmp2 = NULL;
 
-  if (!dt_iop_alloc_image_buffers(self, roi_in, roi_out, 4, &tmp, 4, &tmp2, 4, &detail, 0))
+  if (dt_iop_alloc_image_buffers(self, roi_in, roi_out, 4, &tmp, 4, &tmp2, 4, &detail, 0))
   {
     return 1;
   }

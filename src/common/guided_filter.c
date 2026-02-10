@@ -71,10 +71,14 @@ typedef struct color_image
 } color_image;
 
 // allocate space for n-component image of size width x height
-// FIXME: the code consuming color_image doesn't check if we actually allocated the buffer
-static inline color_image new_color_image(int width, int height, int ch)
+static inline int new_color_image(color_image *img, int width, int height, int ch)
 {
-  return (color_image){ dt_pixelpipe_cache_alloc_align_float_cache((size_t)width * height * ch, 0), width, height, ch };
+  img->data = dt_pixelpipe_cache_alloc_align_float_cache((size_t)width * height * ch, 0);
+  if(!img->data) return 1;
+  img->width = width;
+  img->height = height;
+  img->stride = ch;
+  return 0;
 }
 
 // free space for n-component image
@@ -99,8 +103,8 @@ static inline float *get_color_pixel(color_image img, size_t i)
 //    6 variance (R-R, R-G, R-B, G-G, G-B, B-B)
 // for computational efficiency, we'll pack them into a four-channel image and a 9-channel image
 // image instead of running 13 separate box filters: guide+input, R/G/B/R-R/R-G/R-B/G-G/G-B/B-B.
-static void guided_filter_tiling(color_image imgg, gray_image img, gray_image img_out, tile target, const int w,
-                                 const float eps, const float guide_weight, const float min, const float max)
+static int guided_filter_tiling(color_image imgg, gray_image img, gray_image img_out, tile target, const int w,
+                                const float eps, const float guide_weight, const float min, const float max)
 {
   const tile source = { max_i(target.left - 2 * w, 0), min_i(target.right + 2 * w, imgg.width),
                         max_i(target.lower - 2 * w, 0), min_i(target.upper + 2 * w, imgg.height) };
@@ -122,13 +126,28 @@ static void guided_filter_tiling(color_image imgg, gray_image img, gray_image im
 #define VAR_GG 6
 #define VAR_BB 8
 #define VAR_GB 7
-  color_image mean = new_color_image(width, height, 4);
-  color_image variance = new_color_image(width, height, 9);
+  color_image mean = { 0 };
+  color_image variance = { 0 };
+  if(new_color_image(&mean, width, height, 4) != 0) 
+    return 1;
+
+  if(new_color_image(&variance, width, height, 9) != 0)
+  {
+    free_color_image(&mean);
+    return 1;
+  }
   const size_t img_dimen = mean.width;
   size_t img_bak_sz;
   float *img_bak = dt_alloc_perthread_float(9*img_dimen, &img_bak_sz);
+  if(!img_bak)
+  {
+    free_color_image(&variance);
+    free_color_image(&mean);
+    return 1;
+  }
+  int err = 0;
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(none) shared(img, imgg, mean, variance, img_bak) \
+#pragma omp parallel for schedule(static) default(none) shared(img, imgg, mean, variance, img_bak, err) \
   dt_omp_firstprivate(img_bak_sz, img_dimen, w, guide_weight) dt_omp_sharedconst(source)
 #endif
   for(int j_imgg = source.lower; j_imgg < source.upper; j_imgg++)
@@ -159,12 +178,28 @@ static void guided_filter_tiling(color_image imgg, gray_image img, gray_image im
     }
     // apply horizontal pass of box mean filter while the cache is still hot
     float *const restrict scratch = dt_get_perthread(img_bak, img_bak_sz);
-    dt_box_mean_horizontal(meanpx, mean.width, 4|BOXFILTER_KAHAN_SUM, w, scratch);
-    dt_box_mean_horizontal(varpx, variance.width, 9|BOXFILTER_KAHAN_SUM, w, scratch);
+    if(!scratch
+       || dt_box_mean_horizontal(meanpx, mean.width, 4|BOXFILTER_KAHAN_SUM, w, scratch) != 0
+       || dt_box_mean_horizontal(varpx, variance.width, 9|BOXFILTER_KAHAN_SUM, w, scratch) != 0)
+    {
+#ifdef _OPENMP
+#pragma omp atomic write
+#endif
+      err = 1;
+    }
   }
   dt_free_align(img_bak);
-  dt_box_mean_vertical(mean.data, mean.height, mean.width, 4|BOXFILTER_KAHAN_SUM, w);
-  dt_box_mean_vertical(variance.data, variance.height, variance.width, 9|BOXFILTER_KAHAN_SUM, w);
+  if(!err && dt_box_mean_vertical(mean.data, mean.height, mean.width, 4|BOXFILTER_KAHAN_SUM, w) != 0)
+    err = 1;
+  if(!err && dt_box_mean_vertical(variance.data, variance.height, variance.width, 9|BOXFILTER_KAHAN_SUM, w) != 0)
+    err = 1;
+  
+  if(err)
+  {
+    free_color_image(&variance);
+    free_color_image(&mean);
+    return 1;
+  }
   // we will recycle memory of 'mean' for the new coefficient arrays a_? and b to reduce memory foot print
   color_image a_b = mean;
   #define A_RED 0
@@ -230,7 +265,11 @@ static void guided_filter_tiling(color_image imgg, gray_image img, gray_image im
   }
   free_color_image(&variance);
 
-  dt_box_mean(a_b.data, a_b.height, a_b.width, a_b.stride|BOXFILTER_KAHAN_SUM, w, 1);
+  if(dt_box_mean(a_b.data, a_b.height, a_b.width, a_b.stride|BOXFILTER_KAHAN_SUM, w, 1))
+  {
+    free_color_image(&mean);
+    return 1;
+  }
 
 #ifdef _OPENMP
 #pragma omp parallel for schedule(static) default(none) \
@@ -254,6 +293,7 @@ static void guided_filter_tiling(color_image imgg, gray_image img, gray_image im
     }
   }
   free_color_image(&mean);
+  return 0;
 }
 
 static int compute_tile_height(const int height, const int w)
@@ -306,12 +346,12 @@ static int compute_tile_width(const int width, const int w)
   return tile_w;
 }
 
-void guided_filter(const float *const guide, const float *const in, float *const out, const int width,
-                   const int height, const int ch,
-                   const int w,              // window size
-                   const float sqrt_eps,     // regularization parameter
-                   const float guide_weight, // to balance the amplitudes in the guiding image and the input image
-                   const float min, const float max)
+int guided_filter(const float *const guide, const float *const in, float *const out, const int width,
+                  const int height, const int ch,
+                  const int w,              // window size
+                  const float sqrt_eps,     // regularization parameter
+                  const float guide_weight, // to balance the amplitudes in the guiding image and the input image
+                  const float min, const float max)
 {
   assert(ch >= 3);
   assert(w >= 1);
@@ -328,9 +368,11 @@ void guided_filter(const float *const guide, const float *const in, float *const
     for(int i = 0; i < width; i += tile_width)
     {
       tile target = { i, min_i(i + tile_width, width), j, min_i(j + tile_height, height) };
-      guided_filter_tiling(img_guide, img_in, img_out, target, w, eps, guide_weight, min, max);
+      if(guided_filter_tiling(img_guide, img_in, img_out, target, w, eps, guide_weight, min, max) != 0)
+        return 1;
     }
   }
+  return 0;
 }
 
 #ifdef HAVE_OPENCL
@@ -653,13 +695,13 @@ error:
 }
 
 
-static void guided_filter_cl_fallback(int devid, cl_mem guide, cl_mem in, cl_mem out, const int width,
-                                      const int height, const int ch,
-                                      const int w,              // window size
-                                      const float sqrt_eps,     // regularization parameter
-                                      const float guide_weight, // to balance the amplitudes in the guiding image
-                                                                // and the input// image
-                                      const float min, const float max)
+static int guided_filter_cl_fallback(int devid, cl_mem guide, cl_mem in, cl_mem out, const int width,
+                                     const int height, const int ch,
+                                     const int w,              // window size
+                                     const float sqrt_eps,     // regularization parameter
+                                     const float guide_weight, // to balance the amplitudes in the guiding image
+                                                               // and the input// image
+                                     const float min, const float max)
 {
   // fall-back implementation: copy data from device memory to host memory and perform filter
   // by CPU until there is a proper OpenCL implementation
@@ -672,28 +714,40 @@ static void guided_filter_cl_fallback(int devid, cl_mem guide, cl_mem in, cl_mem
   float *out_host = dt_pixelpipe_cache_alloc_align_float_cache(
       width * height,
       0);
+  if(!guide_host || !in_host || !out_host)
+  {
+    dt_pixelpipe_cache_free_align(guide_host);
+    dt_pixelpipe_cache_free_align(in_host);
+    dt_pixelpipe_cache_free_align(out_host);
+    return 1;
+  }
   int err;
   err = dt_opencl_read_host_from_device(devid, guide_host, guide, width, height, ch * sizeof(float));
   if(err != CL_SUCCESS) goto error;
   err = dt_opencl_read_host_from_device(devid, in_host, in, width, height, sizeof(float));
   if(err != CL_SUCCESS) goto error;
-  guided_filter(guide_host, in_host, out_host, width, height, ch, w, sqrt_eps, guide_weight, min, max);
+  if(guided_filter(guide_host, in_host, out_host, width, height, ch, w, sqrt_eps, guide_weight, min, max) != 0)
+  {
+    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
+    goto error;
+  }
   err = dt_opencl_write_host_to_device(devid, out_host, out, width, height, sizeof(float));
   if(err != CL_SUCCESS) goto error;
 error:
   dt_pixelpipe_cache_free_align(guide_host);
   dt_pixelpipe_cache_free_align(in_host);
   dt_pixelpipe_cache_free_align(out_host);
+  return err == CL_SUCCESS ? 0 : 1;
 }
 
 
-void guided_filter_cl(int devid, cl_mem guide, cl_mem in, cl_mem out, const int width, const int height,
-                      const int ch,
-                      const int w,              // window size
-                      const float sqrt_eps,     // regularization parameter
-                      const float guide_weight, // to balance the amplitudes in the guiding image and the input
-                                                // image
-                      const float min, const float max)
+int guided_filter_cl(int devid, cl_mem guide, cl_mem in, cl_mem out, const int width, const int height,
+                     const int ch,
+                     const int w,              // window size
+                     const float sqrt_eps,     // regularization parameter
+                     const float guide_weight, // to balance the amplitudes in the guiding image and the input
+                                               // image
+                     const float min, const float max)
 {
   assert(ch >= 3);
   assert(w >= 1);
@@ -708,8 +762,10 @@ void guided_filter_cl(int devid, cl_mem guide, cl_mem in, cl_mem out, const int 
     err = guided_filter_cl_impl(devid, guide, in, out, width, height, ch, w, sqrt_eps, guide_weight, min, max);
   if(err != CL_SUCCESS)
   {
-    guided_filter_cl_fallback(devid, guide, in, out, width, height, ch, w, sqrt_eps, guide_weight, min, max);
+    if(guided_filter_cl_fallback(devid, guide, in, out, width, height, ch, w, sqrt_eps, guide_weight, min, max) != 0)
+      return 1;
   }
+  return 0;
 }
 
 #endif

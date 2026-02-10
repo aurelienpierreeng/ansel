@@ -28,21 +28,20 @@
 #define BOXFILTER_KAHAN_SUM 0x1000000
 
 // ch = number of channels per pixel.  Supported values: 1, 2, 4, and 4|Kahan
-void dt_box_mean(float *const buf, const size_t height, const size_t width, const int ch,
-                 const int radius, const unsigned interations);
+int dt_box_mean(float *const buf, const size_t height, const size_t width, const int ch,
+                const int radius, const unsigned interations);
 // run a single iteration horizonally over a single row.  Supported values for ch: 4|Kahan
 // 'scratch' must point at a buffer large enough to hold ch*width floats, or be NULL
-void dt_box_mean_horizontal(float *const restrict buf, const size_t width, const int ch, const int radius,
-                            float *const restrict scratch);
+int dt_box_mean_horizontal(float *const restrict buf, const size_t width, const int ch, const int radius,
+                           float *const restrict scratch);
 // run a single iteration vertically over the entire image.  Supported values for ch: 4|Kahan
-void dt_box_mean_vertical(float *const buf, const size_t height, const size_t width, const int ch, const int radius);
+int dt_box_mean_vertical(float *const buf, const size_t height, const size_t width, const int ch, const int radius);
 
-void dt_box_min(float *const buf, const size_t height, const size_t width, const int ch, const int radius);
-void dt_box_max(float *const buf, const size_t height, const size_t width, const int ch, const int radius);
+int dt_box_min(float *const buf, const size_t height, const size_t width, const int ch, const int radius);
+int dt_box_max(float *const buf, const size_t height, const size_t width, const int ch, const int radius);
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

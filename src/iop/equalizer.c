@@ -151,7 +151,15 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     }
   }
 
-  for(int level = 1; level < numl_cap; level++) dt_iop_equalizer_wtf(ovoid, tmp, level, width, height);
+  for(int level = 1; level < numl_cap; level++)
+  {
+    if(dt_iop_equalizer_wtf(ovoid, tmp, level, width, height))
+    {
+      for(int k = 1; k < numl_cap; k++) free(tmp[k]);
+      free(tmp);
+      return 1;
+    }
+  }
 
 #if 0
   // printf("transformed\n");
@@ -221,7 +229,15 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     }
   }
   // printf("applied\n");
-  for(int level = numl_cap - 1; level > 0; level--) dt_iop_equalizer_iwtf(ovoid, tmp, level, width, height);
+  for(int level = numl_cap - 1; level > 0; level--)
+  {
+    if(dt_iop_equalizer_iwtf(ovoid, tmp, level, width, height))
+    {
+      for(int k = 1; k < numl_cap; k++) free(tmp[k]);
+      free(tmp);
+      return 1;
+    }
+  }
 
   for(int k = 1; k < numl_cap; k++) free(tmp[k]);
   free(tmp);

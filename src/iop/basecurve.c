@@ -522,7 +522,7 @@ static inline void compute_features(
   }
 }
 
-static inline void gauss_blur(
+static inline int gauss_blur(
     const float *const input,
     float *const output,
     const size_t wd,
@@ -530,7 +530,7 @@ static inline void gauss_blur(
 {
   const float w[5] = { 1.f / 16.f, 4.f / 16.f, 6.f / 16.f, 4.f / 16.f, 1.f / 16.f };
   float *tmp = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * wd * ht, 0);
-  if(tmp == NULL) return;
+  if(tmp == NULL) return 1;
 
   memset(tmp, 0, sizeof(float) * 4 * wd * ht);
 #ifdef _OPENMP
@@ -574,9 +574,10 @@ static inline void gauss_blur(
         output[4*(j*wd+i)+c] += tmp[4*(MIN(j+jj, ht-(j+jj-ht+1))*wd+i)+c] * w[jj+2];
   }
   dt_pixelpipe_cache_free_align(tmp);
+  return 0;
 }
 
-static inline void gauss_expand(
+static inline int gauss_expand(
     const float *const input, // coarse input
     float *const fine,        // upsampled, blurry output
     const size_t wd,          // fine res
@@ -597,7 +598,8 @@ static inline void gauss_expand(
         fine[4*(j*wd+i)+c] = 4.0f * input[4*(j/2*cw + i/2)+c];
 
   // convolve with same kernel weights mul by 4:
-  gauss_blur(fine, fine, wd, ht);
+  if(gauss_blur(fine, fine, wd, ht)) return 1;
+  return 0;
 }
 
 // XXX FIXME: we'll need to pad up the image to get a good boundary condition!
@@ -617,7 +619,11 @@ static inline int gauss_reduce(
   float *blurred = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * wd * ht, 0);
   if(blurred == NULL) return 1;
 
-  gauss_blur(input, blurred, wd, ht);
+  if(gauss_blur(input, blurred, wd, ht))
+  {
+    dt_pixelpipe_cache_free_align(blurred);
+    return 1;
+  }
   for(size_t j=0;j<ch;j++) for(size_t i=0;i<cw;i++)
     for(int c=0;c<4;c++) coarse[4*(j*cw+i)+c] = blurred[4*(2*j*wd+2*i)+c];
   dt_pixelpipe_cache_free_align(blurred);
@@ -626,7 +632,7 @@ static inline int gauss_reduce(
   {
     // compute laplacian/details: expand coarse buffer into detail
     // buffer subtract expanded buffer from input in place
-    gauss_expand(coarse, detail, wd, ht);
+    if(gauss_expand(coarse, detail, wd, ht)) return 1;
     for(size_t k=0;k<wd*ht*4;k++)
       detail[k] = input[k] - detail[k];
   }
@@ -747,7 +753,13 @@ int process_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, 
       }
       // abuse output buffer as temporary memory:
       if(k != num_levels - 1)
-        gauss_expand(col[k + 1], out, w, h);
+      {
+        if(gauss_expand(col[k + 1], out, w, h))
+        {
+          err = 1;
+          goto error;
+        }
+      }
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
       dt_omp_firstprivate(out) \
@@ -798,7 +810,11 @@ int process_fusion(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, 
 
     if(k < num_levels - 1)
     { // reconstruct output image
-      gauss_expand(comb[k + 1], out, w, h);
+      if(gauss_expand(comb[k + 1], out, w, h))
+      {
+        err = 1;
+        goto error;
+      }
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
       dt_omp_firstprivate(out, w, h, k) \

@@ -1310,7 +1310,7 @@ static int process_wavelets(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t
   float *restrict precond = NULL;
   float *restrict tmp = NULL;
 
-  if (!dt_iop_alloc_image_buffers(self, roi_in, roi_out, 4, &precond, 4, &tmp, 4, &buf, 0))
+  if (dt_iop_alloc_image_buffers(self, roi_in, roi_out, 4, &precond, 4, &tmp, 4, &buf, 0))
   {
     dt_iop_copy_image_roi(out, in, piece->colors, roi_in, roi_out, TRUE);
     return 1;
@@ -1588,7 +1588,7 @@ static int process_nlmeans_cpu(dt_dev_pixelpipe_iop_t *piece,
     return 0; // image has been copied through to output and module's trouble flag has been updated
 
   float *restrict in;
-  if (!dt_iop_alloc_image_buffers(piece->module, roi_in, roi_out, 4 | DT_IMGSZ_INPUT, &in, 0))
+  if (dt_iop_alloc_image_buffers(piece->module, roi_in, roi_out, 4 | DT_IMGSZ_INPUT, &in, 0))
     return 1;
 
   // adjust to zoom size:
@@ -1718,7 +1718,7 @@ static int process_variance(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t
   }
 
   float *restrict in;
-  if (!dt_iop_alloc_image_buffers(self, roi_in, roi_out, 4 | DT_IMGSZ_INPUT, &in, 0))
+  if (dt_iop_alloc_image_buffers(self, roi_in, roi_out, 4 | DT_IMGSZ_INPUT, &in, 0))
     return 1;
 
   dt_aligned_pixel_t wb;  // the "unused" fourth element enables vectorization

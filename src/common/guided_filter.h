@@ -49,13 +49,13 @@ typedef struct gray_image
 
 // allocate space for 1-component image of size width x height
 // FIXME: the code consuming gray_image doesn't check if we actually allocated the buffer
-static inline gray_image new_gray_image(int width, int height)
+static inline int new_gray_image(gray_image *img, int width, int height)
 {
-  return (gray_image){ dt_pixelpipe_cache_alloc_align_float_cache(
-                          width * height,
-                          0),
-                        width,
-                        height };
+  img->data = dt_pixelpipe_cache_alloc_align_float_cache(width * height, 0);
+  if(!img->data) return 1;
+  img->width = width;
+  img->height = height;
+  return 0;
 }
 
 
@@ -87,8 +87,8 @@ static inline int max_i(int a, int b)
   return a > b ? a : b;
 }
 
-void guided_filter(const float *guide, const float *in, float *out, int width, int height, int ch, int w,
-                   float sqrt_eps, float guide_weight, float min, float max);
+int guided_filter(const float *guide, const float *in, float *out, int width, int height, int ch, int w,
+                  float sqrt_eps, float guide_weight, float min, float max);
 
 #ifdef HAVE_OPENCL
 
@@ -109,8 +109,8 @@ dt_guided_filter_cl_global_t *dt_guided_filter_init_cl_global();
 
 void dt_guided_filter_free_cl_global(dt_guided_filter_cl_global_t *g);
 
-void guided_filter_cl(int devid, cl_mem guide, cl_mem in, cl_mem out, int width, int height, int ch, int w,
-                      float sqrt_eps, float guide_weight, float min, float max);
+int guided_filter_cl(int devid, cl_mem guide, cl_mem in, cl_mem out, int width, int height, int ch, int w,
+                     float sqrt_eps, float guide_weight, float min, float max);
 
 #endif
 // clang-format off

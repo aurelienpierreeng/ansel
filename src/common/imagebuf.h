@@ -39,9 +39,9 @@ static inline float *__restrict__ dt_iop_image_alloc(const size_t width, const s
 //  The variable arguments take the form  SIZE, PTR-to-floatPTR, SIZE, PTR-to-floatPTR, etc. except that if the SIZE
 //  indicates a per-thread allocation, a second pointer is passed: SIZE, PTR-to-floatPTR, PTR-to-size_t, SIZE, etc.
 //  SIZE is the number of floats per pixel, ORed with appropriate flags from the list following below
-gboolean dt_iop_alloc_image_buffers(struct dt_iop_module_t *const module,
-                                    const struct dt_iop_roi_t *const roi_in,
-                                    const struct dt_iop_roi_t *const roi_out, ...);
+int dt_iop_alloc_image_buffers(struct dt_iop_module_t *const module,
+                               const struct dt_iop_roi_t *const roi_in,
+                               const struct dt_iop_roi_t *const roi_out, ...);
 // Optional flags to add to size request.  Default is to allocate N channels per pixel according to
 // the dimensions of roi_out
 #define DT_IMGSZ_CH_MASK    0x000FFFF  // isolate just the number of floats per pixel

@@ -1095,8 +1095,8 @@ static size_t _compute_effective_height(const size_t height, const size_t radius
   return eff_height;
 }
 
-static void dt_box_mean_1ch(float *const buf, const size_t height, const size_t width, const size_t radius,
-                            const unsigned iterations)
+static int dt_box_mean_1ch(float *const buf, const size_t height, const size_t width, const size_t radius,
+                           const unsigned iterations)
 {
   // scratch space needed per thread:
   //   width floats to store one row during horizontal pass
@@ -1105,7 +1105,7 @@ static void dt_box_mean_1ch(float *const buf, const size_t height, const size_t 
   const size_t size = MAX(width,16*eff_height);
   size_t padded_size;
   float *const restrict scanlines = dt_alloc_perthread_float(size, &padded_size);
-  if(scanlines == NULL) return;
+  if(scanlines == NULL) return 1;
 
   for(unsigned iteration = 0; iteration < iterations; iteration++)
   {
@@ -1114,10 +1114,11 @@ static void dt_box_mean_1ch(float *const buf, const size_t height, const size_t 
   }
 
   dt_free_align(scanlines);
+  return 0;
 }
 
-static void dt_box_mean_4ch(float *const buf, const int height, const int width, const int radius,
-                            const unsigned iterations)
+static int dt_box_mean_4ch(float *const buf, const int height, const int width, const int radius,
+                           const unsigned iterations)
 {
   // scratch space needed per thread:
   //   4*width floats to store one row during horizontal pass
@@ -1126,7 +1127,7 @@ static void dt_box_mean_4ch(float *const buf, const int height, const int width,
   const size_t size = MAX(4*width,16*eff_height);
   size_t padded_size;
   float *const restrict scanlines = dt_alloc_perthread_float(size, &padded_size);
-  if(scanlines == NULL) return;
+  if(scanlines == NULL) return 1;
 
   for(unsigned iteration = 0; iteration < iterations; iteration++)
   {
@@ -1136,14 +1137,15 @@ static void dt_box_mean_4ch(float *const buf, const int height, const int width,
   }
 
   dt_free_align(scanlines);
+  return 0;
 }
 
-static void box_mean_vert_1ch_Kahan(float *const buf, const int height, const size_t width, const size_t radius)
+static int box_mean_vert_1ch_Kahan(float *const buf, const int height, const size_t width, const size_t radius)
 {
   const size_t eff_height = _compute_effective_height(height,radius);
   size_t padded_size;
   float *const restrict scratch_buf = dt_alloc_perthread_float(16*eff_height,&padded_size);
-  if(scratch_buf == NULL) return;
+  if(scratch_buf == NULL) return 1;
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -1170,17 +1172,18 @@ static void box_mean_vert_1ch_Kahan(float *const buf, const int height, const si
   }
 
   dt_free_align(scratch_buf);
+  return 0;
 }
 
-static void dt_box_mean_4ch_Kahan(float *const buf, const size_t height, const size_t width, const int radius,
-                                  const unsigned iterations)
+static int dt_box_mean_4ch_Kahan(float *const buf, const size_t height, const size_t width, const int radius,
+                                 const unsigned iterations)
 {
 
   for(unsigned iteration = 0; iteration < iterations; iteration++)
   {
     size_t padded_size;
     float *const restrict scanlines = dt_alloc_perthread_float(4*width,&padded_size);
-    if(scanlines == NULL) return;
+    if(scanlines == NULL) return 1;
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -1196,13 +1199,14 @@ static void dt_box_mean_4ch_Kahan(float *const buf, const size_t height, const s
 
     dt_free_align(scanlines);
 
-    box_mean_vert_1ch_Kahan(buf, height, 4*width, radius);
+    if(box_mean_vert_1ch_Kahan(buf, height, 4*width, radius) != 0) return 1;
   }
 
+  return 0;
 }
 
-static inline void box_mean_2ch(float *const restrict in, const size_t height, const size_t width,
-                                const int radius, const unsigned iterations)
+static inline int box_mean_2ch(float *const restrict in, const size_t height, const size_t width,
+                               const int radius, const unsigned iterations)
 {
   // Compute in-place a box average (filter) on a multi-channel image over a window of size 2*radius + 1
   // We make use of the separable nature of the filter kernel to speed-up the computation
@@ -1212,7 +1216,7 @@ static inline void box_mean_2ch(float *const restrict in, const size_t height, c
   const size_t Ndim = MAX(4*width,16*eff_height);
   size_t padded_size;
   float *const restrict temp = dt_alloc_perthread_float(Ndim, &padded_size);
-  if (temp == NULL) return;
+  if (temp == NULL) return 1;
 
   for (unsigned iteration = 0; iteration < iterations; iteration++)
   {
@@ -1220,65 +1224,71 @@ static inline void box_mean_2ch(float *const restrict in, const size_t height, c
     blur_vertical_1ch(in, height, 2*width, radius, temp, padded_size);
   }
   dt_free_align(temp);
+  return 0;
 }
 
-void dt_box_mean(float *const buf, const size_t height, const size_t width, const int ch,
-                 const int radius, const unsigned iterations)
+int dt_box_mean(float *const buf, const size_t height, const size_t width, const int ch,
+                const int radius, const unsigned iterations)
 {
   if (ch == 1)
   {
-    dt_box_mean_1ch(buf,height,width,radius,iterations);
+    return dt_box_mean_1ch(buf,height,width,radius,iterations);
   }
   else if (ch == 4)
   {
-    dt_box_mean_4ch(buf,height,width,radius,iterations);
+    return dt_box_mean_4ch(buf,height,width,radius,iterations);
   }
   else if (ch == (4|BOXFILTER_KAHAN_SUM))
   {
-    dt_box_mean_4ch_Kahan(buf,height,width,radius,iterations);
+    return dt_box_mean_4ch_Kahan(buf,height,width,radius,iterations);
   }
   else if (ch == 2) // used by fast_guided_filter.h
   {
-    box_mean_2ch(buf,height,width,radius,iterations);
+    return box_mean_2ch(buf,height,width,radius,iterations);
   }
   else
     dt_unreachable_codepath();
+  return 1;
 }
 
-void dt_box_mean_horizontal(float *const restrict buf, const size_t width, const int ch, const int radius,
-                            float *const restrict user_scratch)
+int dt_box_mean_horizontal(float *const restrict buf, const size_t width, const int ch, const int radius,
+                           float *const restrict user_scratch)
 {
   if (ch == (4|BOXFILTER_KAHAN_SUM))
   {
     float *const restrict scratch = user_scratch ? user_scratch : dt_alloc_align_float(4*width);
-    if(scratch == NULL) return;
+    if(scratch == NULL) return 1;
 
     blur_horizontal_4ch_Kahan(buf, width, radius, scratch);
     if (!user_scratch)
       dt_free_align(scratch);
+    return 0;
   }
   else if (ch == (9|BOXFILTER_KAHAN_SUM))
   {
     float *const restrict scratch = user_scratch ? user_scratch : dt_alloc_align_float(9*width);
-    if(scratch == NULL) return;
+    if(scratch == NULL) return 1;
 
     blur_horizontal_Nch_Kahan(9, buf, width, radius, scratch);
     if (!user_scratch)
       dt_free_align(scratch);
+    return 0;
   }
   else
     dt_unreachable_codepath();
+  return 1;
 }
 
-void dt_box_mean_vertical(float *const buf, const size_t height, const size_t width, const int ch, const int radius)
+int dt_box_mean_vertical(float *const buf, const size_t height, const size_t width, const int ch, const int radius)
 {
   if ((ch & BOXFILTER_KAHAN_SUM) && (ch & ~BOXFILTER_KAHAN_SUM) <= 16)
   {
     size_t channels = ch & ~BOXFILTER_KAHAN_SUM;
-    box_mean_vert_1ch_Kahan(buf, height, channels*width, radius);
+    return box_mean_vert_1ch_Kahan(buf, height, channels*width, radius);
   }
   else
     dt_unreachable_codepath();
+  return 1;
 }
 
 static inline float window_max(const float *x, int n)
@@ -1388,13 +1398,13 @@ static inline void box_max_vert_16wide(const int N, float *const restrict scratc
 
 // calculate the two-dimensional moving maximum over a box of size (2*w+1) x (2*w+1)
 // does the calculation in-place if input and output images are identical
-static void box_max_1ch(float *const buf, const size_t height, const size_t width, const unsigned w)
+static int box_max_1ch(float *const buf, const size_t height, const size_t width, const unsigned w)
 {
   const size_t eff_height = _compute_effective_height(height, w);
   const size_t scratch_size = MAX(width,MAX(height,16*eff_height));
   size_t allocsize;
   float *const restrict scratch_buffers = dt_alloc_perthread_float(scratch_size,&allocsize);
-  if(scratch_buffers == NULL) return;
+  if(scratch_buffers == NULL) return 1;
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -1428,17 +1438,19 @@ static void box_max_1ch(float *const buf, const size_t height, const size_t widt
     box_max_1d(height, scratch, buf + col, width, w);
   }
   dt_free_align(scratch_buffers);
+  return 0;
 }
 
 
 // in-place calculate the two-dimensional moving maximum over a box of size (2*radius+1) x (2*radius+1)
-void dt_box_max(float *const buf, const size_t height, const size_t width, const int ch, const int radius)
+int dt_box_max(float *const buf, const size_t height, const size_t width, const int ch, const int radius)
 {
   if (ch == 1)
-    box_max_1ch(buf, height, width, radius);
+    return box_max_1ch(buf, height, width, radius);
   else
   //TODO: 4ch version if needed
     dt_unreachable_codepath();
+  return 1;
 }
 
 static inline float window_min(const float *x, int n)
@@ -1537,13 +1549,13 @@ static inline void box_min_vert_16wide(const int N, float *const restrict scratc
 
 // calculate the two-dimensional moving minimum over a box of size (2*w+1) x (2*w+1)
 // does the calculation in-place if input and output images are identical
-static void box_min_1ch(float *const buf, const size_t height, const size_t width, const int w)
+static int box_min_1ch(float *const buf, const size_t height, const size_t width, const int w)
 {
   const size_t eff_height = _compute_effective_height(height, w);
   const size_t scratch_size = MAX(width,MAX(height,16*eff_height));
   size_t allocsize;
   float *const restrict scratch_buffers = dt_alloc_perthread_float(scratch_size,&allocsize);
-  if(scratch_buffers == NULL) return;
+  if(scratch_buffers == NULL) return 1;
   
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
@@ -1578,15 +1590,17 @@ static void box_min_1ch(float *const buf, const size_t height, const size_t widt
   }
 
   dt_free_align(scratch_buffers);
+  return 0;
 }
 
-void dt_box_min(float *const buf, const size_t height, const size_t width, const int ch, const int radius)
+int dt_box_min(float *const buf, const size_t height, const size_t width, const int ch, const int radius)
 {
   if (ch == 1)
-    box_min_1ch(buf, height, width, radius);
+    return box_min_1ch(buf, height, width, radius);
   else
   //TODO: 4ch version if needed
     dt_unreachable_codepath();
+  return 1;
 }
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

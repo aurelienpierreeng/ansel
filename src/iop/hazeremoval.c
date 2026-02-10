@@ -257,7 +257,7 @@ static inline void pointer_swap_f(float *a, float *b)
 
 
 // calculate the dark channel (minimal color component over a box of size (2*w+1) x (2*w+1) )
-static void dark_channel(const const_rgb_image img1, const gray_image img2, const int w)
+static int dark_channel(const const_rgb_image img1, const gray_image img2, const int w)
 {
   const size_t size = (size_t)img1.height * img1.width;
 #ifdef _OPENMP
@@ -273,13 +273,17 @@ static void dark_channel(const const_rgb_image img1, const gray_image img2, cons
     m = fminf(pixel[2], m);
     img2.data[i] = m;
   }
-  dt_box_min(img2.data, img2.height, img2.width, 1, w);
+  if(dt_box_min(img2.data, img2.height, img2.width, 1, w) != 0)
+  {
+    return 1;
+  }
+  return 0;
 }
 
 
 // calculate the transition map
-static void transition_map(const const_rgb_image img1, const gray_image img2, const int w, const float *const A0,
-                           const float strength)
+static int transition_map(const const_rgb_image img1, const gray_image img2, const int w, const float *const A0,
+                          const float strength)
 {
   const size_t size = (size_t)img1.height * img1.width;
 #ifdef _OPENMP
@@ -295,7 +299,11 @@ static void transition_map(const const_rgb_image img1, const gray_image img2, co
     m = fminf(pixel[2] / A0[2], m);
     img2.data[i] = 1.f - m * strength;
   }
-  dt_box_max(img2.data, img2.height, img2.width, 1, w);
+  if(dt_box_max(img2.data, img2.height, img2.width, 1, w) != 0)
+  {
+    return 1;
+  }
+  return 0;
 }
 
 
@@ -356,7 +364,7 @@ void quick_select(float *first, float *nth, float *last)
 // depth is estimated by the local amount of haze and given in units of the
 // characteristic haze depth, i.e., the distance over which object light is
 // reduced by the factor exp(-1)
-static float ambient_light(const const_rgb_image img, int w1, rgb_pixel *pA0)
+static int ambient_light(const const_rgb_image img, int w1, rgb_pixel *pA0, float *max_depth_out)
 {
   const float dark_channel_quantil = 0.95f; // quantil for determining the most hazy pixels
   const float bright_quantil = 0.95f; // quantil for determining the brightest pixels among the most hazy pixels
@@ -364,10 +372,12 @@ static float ambient_light(const const_rgb_image img, int w1, rgb_pixel *pA0)
   const int height = img.height;
   const size_t size = (size_t)width * height;
   // calculate dark channel, which is an estimate for local amount of haze
-  gray_image dark_ch = new_gray_image(width, height);
-  dark_channel(img, dark_ch, w1);
+  gray_image dark_ch = { 0 };
+  gray_image bright_hazy = { 0 };
+  if(new_gray_image(&dark_ch, width, height)) return 1;
+  if(dark_channel(img, dark_ch, w1)) goto error;
   // determine the brightest pixels among the most hazy pixels
-  gray_image bright_hazy = new_gray_image(width, height);
+  if(new_gray_image(&bright_hazy, width, height)) goto error;
   // first determine the most hazy pixels
   copy_gray_image(dark_ch, bright_hazy);
   size_t p = (size_t)(size * dark_channel_quantil);
@@ -424,7 +434,14 @@ static float ambient_light(const const_rgb_image img, int w1, rgb_pixel *pA0)
   // the critical haze level is at dark_channel_quantil (not 100%) to be insensitive
   // to extreme outliners, compensate for that by some factor slightly larger than
   // unity when calculating the maximal image depth
-  return crit_haze_level > 0 ? -1.125f * logf(crit_haze_level) : logf(FLT_MAX) / 2; // return the maximal depth
+  if(max_depth_out)
+    *max_depth_out = crit_haze_level > 0 ? -1.125f * logf(crit_haze_level) : logf(FLT_MAX) / 2;
+  return 0;
+
+error:
+  if(bright_hazy.data) free_gray_image(&bright_hazy);
+  if(dark_ch.data) free_gray_image(&dark_ch);
+  return 1;
 }
 
 
@@ -433,6 +450,9 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
 {
   dt_iop_hazeremoval_gui_data_t *const g = (dt_iop_hazeremoval_gui_data_t*)self->gui_data;
   dt_iop_hazeremoval_params_t *d = piece->data;
+  int err = 0;
+  gray_image trans_map = (gray_image){ 0 };
+  gray_image trans_map_filtered = (gray_image){ 0 };
 
   const int ch = piece->colors;
   const int width = roi_in->width;
@@ -483,7 +503,14 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     dt_iop_gui_leave_critical_section(self);
   }
   // In all other cases we calculate distance_max and A0 here.
-  if(isnan(distance_max)) distance_max = ambient_light(img_in, w1, &A0);
+  if(isnan(distance_max))
+  {
+    if(ambient_light(img_in, w1, &A0, &distance_max) != 0)
+    {
+      err = 1;
+      goto error;
+    }
+  }
   // PREVIEW pixelpipe stores values.
   if(self->dev->gui_attached && g && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
   {
@@ -498,15 +525,35 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   }
 
   // calculate the transition map
-  gray_image trans_map = new_gray_image(width, height);
-  transition_map(img_in, trans_map, w1, A0, strength);
+  if(new_gray_image(&trans_map, width, height))
+  {
+    err = 1;
+    goto error;
+  }
+  if(transition_map(img_in, trans_map, w1, A0, strength))
+  {
+    err = 1;
+    goto error;
+  }
 
   // refine the transition map
-  dt_box_min(trans_map.data, trans_map.height, trans_map.width, 1, w1);
-  gray_image trans_map_filtered = new_gray_image(width, height);
+  if(dt_box_min(trans_map.data, trans_map.height, trans_map.width, 1, w1))
+  {
+    err = 1;
+    goto error;
+  }
+  if(new_gray_image(&trans_map_filtered, width, height))
+  {
+    err = 1;
+    goto error;
+  }
   // apply guided filter with no clipping
-  guided_filter(img_in.data, trans_map.data, trans_map_filtered.data, width, height, ch, w2, eps, 1.f, -FLT_MAX,
-                FLT_MAX);
+  if(guided_filter(img_in.data, trans_map.data, trans_map_filtered.data, width, height, ch, w2, eps, 1.f, -FLT_MAX,
+                   FLT_MAX))
+  {
+    err = 1;
+    goto error;
+  }
 
   // finally, calculate the haze-free image
   const float t_min
@@ -534,6 +581,11 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);
   return 0;
+
+error:
+  if(trans_map.data) free_gray_image(&trans_map);
+  if(trans_map_filtered.data) free_gray_image(&trans_map_filtered);
+  return err;
 }
 
 #ifdef HAVE_OPENCL
@@ -558,8 +610,11 @@ static int ambient_light_cl(struct dt_iop_module_t *self, int devid, cl_mem img,
   int err = dt_opencl_read_host_from_device(devid, in, img, width, height, element_size);
   if(err != CL_SUCCESS) goto error;
   const const_rgb_image img_in = (const_rgb_image){ in, width, height, element_size / sizeof(float) };
-  const float max_depth = ambient_light(img_in, w1, pA0);
-  if(max_depth_out) *max_depth_out = max_depth;
+  if(ambient_light(img_in, w1, pA0, max_depth_out) != 0)
+  {
+    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
+    goto error;
+  }
   dt_pixelpipe_cache_free_align(in);
   return 0;
 
@@ -779,8 +834,13 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   box_min_cl(self, devid, trans_map, trans_map, w1);
   void *trans_map_filtered = dt_opencl_alloc_device(devid, width, height, (int)sizeof(float));
   // apply guided filter with no clipping
-  guided_filter_cl(devid, img_in, trans_map, trans_map_filtered, width, height, ch, w2, eps, 1.f, -CL_FLT_MAX,
-                   CL_FLT_MAX);
+  if(guided_filter_cl(devid, img_in, trans_map, trans_map_filtered, width, height, ch, w2, eps, 1.f, -CL_FLT_MAX,
+                      CL_FLT_MAX) != 0)
+  {
+    dt_opencl_release_mem_object(trans_map);
+    dt_opencl_release_mem_object(trans_map_filtered);
+    return FALSE;
+  }
 
   // finally, calculate the haze-free image
   const float t_min

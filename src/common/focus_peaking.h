@@ -20,8 +20,8 @@
 
 #pragma once
 
-void dt_focuspeaking(cairo_t *cr, uint8_t *const restrict image, const int buf_width,
-                     const int buf_height, gboolean draw, float *x, float *y);
+int dt_focuspeaking(cairo_t *cr, uint8_t *const restrict image, const int buf_width,
+                    const int buf_height, gboolean draw, float *x, float *y);
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

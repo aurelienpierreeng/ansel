@@ -35,7 +35,7 @@ typedef struct dwt_params_t
 } dwt_params_t;
 
 /* function prototype for the layer_func on dwt_decompose() call */
-typedef void(_dwt_layer_func)(float *layer, dwt_params_t *const p, const int scale);
+typedef int(_dwt_layer_func)(float *layer, dwt_params_t *const p, const int scale);
 
 /* returns a structure used when calling dwt_decompose(), free it with dt_dwt_free()
  * image: image to be decomposed and output image
@@ -66,7 +66,7 @@ int dt_dwt_first_scale_visible(dwt_params_t *p);
  * layer_func: this function is called for the original image and then once for each scale, including the residual
  * image
  */
-void dwt_decompose(dwt_params_t *p, _dwt_layer_func layer_func);
+int dwt_decompose(dwt_params_t *p, _dwt_layer_func layer_func);
 
 /* decomposes an image into 'bands' wavelet scales, then recomposes a denoised image from just that portion
  * of each scale whose absolute magnitude exceeds the threshold in noise[band]
@@ -75,7 +75,7 @@ void dwt_decompose(dwt_params_t *p, _dwt_layer_func layer_func);
  * bands: number of wavelet scales to generate
  * noise: array of thresholds, on per band
  */
-void dwt_denoise(float *const img, const int width, const int height, const int bands, const float *const noise);
+int dwt_denoise(float *const img, const int width, const int height, const int bands, const float *const noise);
 
 // to make the DWT algorithm (and others which operate on a column of spaced-out pixels for each pixel of a
 // row) as cache-friendly as possible, we want to interleave the actual processing of rows such that the next
@@ -150,4 +150,3 @@ cl_int dwt_decompose_cl(dwt_params_cl_t *p, _dwt_layer_func_cl layer_func);
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

@@ -718,9 +718,10 @@ static inline double igamma2(double x)
   return (x <= 0.03928) ? (x / 12.92) : (exp(log((x + 0.055) / 1.055) * sRGBGammaCurve));
 }
 
-static void _get_auto_exp_histogram(const float *const img, const int width, const int height, int *box_area,
-                                    uint32_t **_histogram, unsigned int *_hist_size, int *_histcompr)
+static int _get_auto_exp_histogram(const float *const img, const int width, const int height, int *box_area,
+                                   uint32_t **_histogram, unsigned int *_hist_size, int *_histcompr)
 {
+  int err = 0;
   const int ch = 4;
   const int histcompr = 3;
   const unsigned int hist_size = 65536 >> histcompr;
@@ -730,7 +731,11 @@ static void _get_auto_exp_histogram(const float *const img, const int width, con
   histogram = dt_pixelpipe_cache_alloc_align_cache(
       sizeof(uint32_t) * hist_size,
       0);
-  if(histogram == NULL) goto cleanup;
+  if(histogram == NULL)
+  {
+    err = 1;
+    goto cleanup;
+  }
 
   memset(histogram, 0, sizeof(uint32_t) * hist_size);
 
@@ -791,6 +796,7 @@ cleanup:
   *_histogram = histogram;
   *_hist_size = hist_size;
   *_histcompr = histcompr;
+  return err;
 }
 
 static void _get_sum_and_average(const uint32_t *const histogram, const int hist_size, float *_sum, float *_avg)
@@ -1159,9 +1165,9 @@ cleanup:
   *_hlcomprthresh = hlcomprthresh;
 }
 
-static void _auto_exposure(const float *const img, const int width, const int height, int *box_area,
-                           const float clip, const float midgray, float *_expcomp, float *_bright, float *_contr,
-                           float *_black, float *_hlcompr, float *_hlcomprthresh)
+static int _auto_exposure(const float *const img, const int width, const int height, int *box_area,
+                          const float clip, const float midgray, float *_expcomp, float *_bright, float *_contr,
+                          float *_black, float *_hlcompr, float *_hlcomprthresh)
 {
   uint32_t *histogram = NULL;
   unsigned int hist_size = 0;
@@ -1169,11 +1175,16 @@ static void _auto_exposure(const float *const img, const int width, const int he
 
   const float defGain = 0.0f;
 
-  _get_auto_exp_histogram(img, width, height, box_area, &histogram, &hist_size, &histcompr);
+  if(_get_auto_exp_histogram(img, width, height, box_area, &histogram, &hist_size, &histcompr))
+  {
+    if(histogram) dt_pixelpipe_cache_free_align(histogram);
+    return 1;
+  }
   _get_auto_exp(histogram, hist_size, histcompr, defGain, clip, midgray, _expcomp, _bright, _contr, _black,
                 _hlcompr, _hlcomprthresh);
 
   if(histogram) dt_pixelpipe_cache_free_align(histogram);
+  return 0;
 }
 
 static void _get_selected_area(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
@@ -1255,9 +1266,12 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
 
       int box[4] = { 0 };
       _get_selected_area(self, piece, g, roi_in, box);
-      _auto_exposure((const float *const)ivoid, roi_in->width, roi_in->height, box, g->params.clip,
-                     g->params.middle_grey / 100.f, &g->params.exposure, &g->params.brightness,
-                     &g->params.contrast, &g->params.black_point, &g->params.hlcompr, &g->params.hlcomprthresh);
+      if(_auto_exposure((const float *const)ivoid, roi_in->width, roi_in->height, box, g->params.clip,
+                        g->params.middle_grey / 100.f, &g->params.exposure, &g->params.brightness,
+                        &g->params.contrast, &g->params.black_point, &g->params.hlcompr, &g->params.hlcomprthresh))
+      {
+        return 1;
+      }
 
       dt_iop_gui_enter_critical_section(self);
       g->call_auto_exposure = 2;

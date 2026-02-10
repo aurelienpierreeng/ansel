@@ -3006,11 +3006,13 @@ static void rt_copy_in_to_out(const float *const in, const struct dt_iop_roi_t *
   }
 }
 
-static void rt_build_scaled_mask(float *const mask, dt_iop_roi_t *const roi_mask, float **mask_scaled,
-                                 dt_iop_roi_t *roi_mask_scaled, dt_iop_roi_t *const roi_in, const int dx,
-                                 const int dy, const int algo)
+static int rt_build_scaled_mask(float *const mask, dt_iop_roi_t *const roi_mask, float **mask_scaled,
+                                dt_iop_roi_t *roi_mask_scaled, dt_iop_roi_t *const roi_in, const int dx,
+                                const int dy, const int algo)
 {
   float *mask_tmp = NULL;
+  int err = 0;
+  *mask_scaled = NULL;
 
   const int padding = (algo == DT_IOP_RETOUCH_HEAL) ? 1 : 0;
 
@@ -3032,6 +3034,7 @@ static void rt_build_scaled_mask(float *const mask, dt_iop_roi_t *const roi_mask
   if(mask_tmp == NULL)
   {
     fprintf(stderr, "rt_build_scaled_mask: error allocating memory\n");
+    err = 1;
     goto cleanup;
   }
   dt_iop_image_fill(mask_tmp, 0.0f, roi_mask_scaled->width, roi_mask_scaled->height, 1);
@@ -3063,6 +3066,7 @@ static void rt_build_scaled_mask(float *const mask, dt_iop_roi_t *const roi_mask
 
 cleanup:
   *mask_scaled = mask_tmp;
+  return err;
 }
 
 // img_src and mask_scaled must have the same roi
@@ -3153,15 +3157,15 @@ static void _retouch_fill(float *const in, dt_iop_roi_t *const roi_in, float *co
   }
 }
 
-static void _retouch_clone(float *const in, dt_iop_roi_t *const roi_in, float *const mask_scaled,
-                           dt_iop_roi_t *const roi_mask_scaled, const int dx, const int dy, const float opacity)
+static int _retouch_clone(float *const in, dt_iop_roi_t *const roi_in, float *const mask_scaled,
+                          dt_iop_roi_t *const roi_mask_scaled, const int dx, const int dy, const float opacity)
 {
   // alloc temp image to avoid issues when areas self-intersects
   float *img_src = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * roi_mask_scaled->width * roi_mask_scaled->height, 0);
   if(img_src == NULL)
   {
     fprintf(stderr, "retouch_clone: error allocating memory for cloning\n");
-    goto cleanup;
+    return 1;
   }
 
   // copy source image to tmp
@@ -3170,15 +3174,15 @@ static void _retouch_clone(float *const in, dt_iop_roi_t *const roi_in, float *c
   // clone it
   rt_copy_image_masked(img_src, in, roi_in, mask_scaled, roi_mask_scaled, opacity);
 
-cleanup:
   if(img_src) dt_pixelpipe_cache_free_align(img_src);
+  return 0;
 }
 
-static void _retouch_blur(dt_iop_module_t *self, float *const in, dt_iop_roi_t *const roi_in, float *const mask_scaled,
-                          dt_iop_roi_t *const roi_mask_scaled, const float opacity, const int blur_type,
-                          const float blur_radius, dt_dev_pixelpipe_iop_t *piece, const int use_sse)
+static int _retouch_blur(dt_iop_module_t *self, float *const in, dt_iop_roi_t *const roi_in, float *const mask_scaled,
+                         dt_iop_roi_t *const roi_mask_scaled, const float opacity, const int blur_type,
+                         const float blur_radius, dt_dev_pixelpipe_iop_t *piece, const int use_sse)
 {
-  if(fabsf(blur_radius) <= 0.1f) return;
+  if(fabsf(blur_radius) <= 0.1f) return 0;
 
   const float sigma = blur_radius * roi_in->scale;
 
@@ -3189,7 +3193,7 @@ static void _retouch_blur(dt_iop_module_t *self, float *const in, dt_iop_roi_t *
   if(img_dest == NULL)
   {
     fprintf(stderr, "retouch_blur: error allocating memory for blurring\n");
-    goto cleanup;
+    return 1;
   }
 
   // copy source image so we blur just the mask area (at least the smallest rect that covers it)
@@ -3244,15 +3248,16 @@ static void _retouch_blur(dt_iop_module_t *self, float *const in, dt_iop_roi_t *
   // copy blurred (temp) image to destination image
   rt_copy_image_masked(img_dest, in, roi_in, mask_scaled, roi_mask_scaled, opacity);
 
-cleanup:
   if(img_dest) dt_pixelpipe_cache_free_align(img_dest);
+  return 0;
 }
 
-static void _retouch_heal(float *const in, dt_iop_roi_t *const roi_in, float *const mask_scaled,
-                          dt_iop_roi_t *const roi_mask_scaled, const int dx, const int dy, const float opacity, const int max_iter)
+static int _retouch_heal(float *const in, dt_iop_roi_t *const roi_in, float *const mask_scaled,
+                         dt_iop_roi_t *const roi_mask_scaled, const int dx, const int dy, const float opacity, const int max_iter)
 {
   float *img_src = NULL;
   float *img_dest = NULL;
+  int err = 0;
 
   // alloc temp images for source and destination
   img_src  = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * roi_mask_scaled->width * roi_mask_scaled->height, 0);
@@ -3260,6 +3265,7 @@ static void _retouch_heal(float *const in, dt_iop_roi_t *const roi_in, float *co
   if((img_src == NULL) || (img_dest == NULL))
   {
     fprintf(stderr, "retouch_heal: error allocating memory for healing\n");
+    err = 1;
     goto cleanup;
   }
 
@@ -3276,9 +3282,10 @@ static void _retouch_heal(float *const in, dt_iop_roi_t *const roi_in, float *co
 cleanup:
   if(img_src) dt_pixelpipe_cache_free_align(img_src);
   if(img_dest) dt_pixelpipe_cache_free_align(img_dest);
+  return err;
 }
 
-static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int scale1)
+static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int scale1)
 {
   int scale = scale1;
   retouch_user_data_t *usr_d = (retouch_user_data_t *)wt_p->user_data;
@@ -3287,9 +3294,9 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
 
   // if preview a single scale, just process that scale and original image
   // unless merge is activated
-  if(wt_p->merge_from_scale == 0 && wt_p->return_layer > 0 && scale != wt_p->return_layer && scale != 0) return;
+  if(wt_p->merge_from_scale == 0 && wt_p->return_layer > 0 && scale != wt_p->return_layer && scale != 0) return 0;
   // do not process the reconstructed image
-  if(scale > wt_p->scales + 1) return;
+  if(scale > wt_p->scales + 1) return 0;
 
   dt_develop_blend_params_t *bp = (dt_develop_blend_params_t *)piece->blendop_data;
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)piece->data;
@@ -3304,11 +3311,11 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
     scale = p->num_scales + 1;
   }
 
-  if(usr_d->suppress_mask) return;
+  if(usr_d->suppress_mask) return 0;
 
   // iterate through all forms
   const dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
-  if(!grp || !(grp->type & DT_MASKS_GROUP)) return;
+  if(!grp || !(grp->type & DT_MASKS_GROUP)) return 0;
   
   for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
   {
@@ -3382,7 +3389,11 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
     float *mask_scaled = NULL;
     dt_iop_roi_t roi_mask_scaled = { 0 };
 
-    rt_build_scaled_mask(mask, &roi_mask, &mask_scaled, &roi_mask_scaled, roi_layer, dx, dy, algo);
+        if(rt_build_scaled_mask(mask, &roi_mask, &mask_scaled, &roi_mask_scaled, roi_layer, dx, dy, algo) != 0)
+        {
+          if(mask) dt_free_align(mask);
+          return 1;
+        }
 
     // we don't need the original mask anymore
     if(mask)
@@ -3401,46 +3412,59 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
     {
       if(algo == DT_IOP_RETOUCH_CLONE)
       {
-        _retouch_clone(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity);
+        if(_retouch_clone(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity) != 0)
+        {
+          if(mask_scaled) dt_pixelpipe_cache_free_align(mask_scaled);
+          return 1;
+        }
       }
       else if(algo == DT_IOP_RETOUCH_HEAL)
       {
-        _retouch_heal(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity, p->max_heal_iter);
+        if(_retouch_heal(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity, p->max_heal_iter) != 0)
+        {
+          if(mask_scaled) dt_pixelpipe_cache_free_align(mask_scaled);
+          return 1;
+        }
       }
       else if(algo == DT_IOP_RETOUCH_BLUR)
       {
-        _retouch_blur(self, layer, roi_layer, mask_scaled, &roi_mask_scaled, form_opacity,
-                      p->rt_forms[index].blur_type, p->rt_forms[index].blur_radius, piece, wt_p->use_sse);
+        if(_retouch_blur(self, layer, roi_layer, mask_scaled, &roi_mask_scaled, form_opacity,
+                          p->rt_forms[index].blur_type, p->rt_forms[index].blur_radius, piece, wt_p->use_sse) != 0)
+        {
+          if(mask_scaled) dt_pixelpipe_cache_free_align(mask_scaled);
+          return 1;
+        }
       }
       else if(algo == DT_IOP_RETOUCH_FILL)
       {
         // add a brightness to the color so it can be fine-adjusted by the user
         dt_aligned_pixel_t fill_color;
 
-        if(p->rt_forms[index].fill_mode == DT_IOP_RETOUCH_FILL_ERASE)
-        {
-          fill_color[0] = fill_color[1] = fill_color[2] = p->rt_forms[index].fill_brightness;
-        }
-        else
-        {
-          fill_color[0] = p->rt_forms[index].fill_color[0] + p->rt_forms[index].fill_brightness;
-          fill_color[1] = p->rt_forms[index].fill_color[1] + p->rt_forms[index].fill_brightness;
-          fill_color[2] = p->rt_forms[index].fill_color[2] + p->rt_forms[index].fill_brightness;
-        }
-        fill_color[3] = 0.0f;
-
-        _retouch_fill(layer, roi_layer, mask_scaled, &roi_mask_scaled, form_opacity, fill_color);
+      if(p->rt_forms[index].fill_mode == DT_IOP_RETOUCH_FILL_ERASE)
+      {
+        fill_color[0] = fill_color[1] = fill_color[2] = p->rt_forms[index].fill_brightness;
       }
       else
-        fprintf(stderr, "rt_process_forms: unknown algorithm %i\n", algo);
+      {
+        fill_color[0] = p->rt_forms[index].fill_color[0] + p->rt_forms[index].fill_brightness;
+        fill_color[1] = p->rt_forms[index].fill_color[1] + p->rt_forms[index].fill_brightness;
+        fill_color[2] = p->rt_forms[index].fill_color[2] + p->rt_forms[index].fill_brightness;
+      }
+      fill_color[3] = 0.0f;
 
-      if(mask_display)
-        rt_copy_mask_to_alpha(layer, roi_layer, wt_p->ch, mask_scaled, &roi_mask_scaled, form_opacity);
+      _retouch_fill(layer, roi_layer, mask_scaled, &roi_mask_scaled, form_opacity, fill_color);
     }
+    else
+      fprintf(stderr, "rt_process_forms: unknown algorithm %i\n", algo);
 
+    if(mask_display)
+      rt_copy_mask_to_alpha(layer, roi_layer, wt_p->ch, mask_scaled, &roi_mask_scaled, form_opacity);
+  }
     if(mask) dt_pixelpipe_cache_free_align(mask);
     if(mask_scaled) dt_pixelpipe_cache_free_align(mask_scaled);
   }
+  
+  return 0;
 }
 
 static int process_internal(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
@@ -3525,7 +3549,11 @@ static int process_internal(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t
   }
 
   // decompose it
-  dwt_decompose(dwt_p, rt_process_forms);
+  if(dwt_decompose(dwt_p, rt_process_forms) != 0)
+  {
+    err = 1;
+    goto cleanup;
+  }
 
   dt_aligned_pixel_t levels = { p->preview_levels[0], p->preview_levels[1], p->preview_levels[2] };
 

@@ -792,9 +792,9 @@ static inline float pixel_correction(const float exposure,
 
 
 __DT_CLONE_TARGETS__
-static inline void compute_luminance_mask(const float *const restrict in, float *const restrict luminance,
-                                          const size_t width, const size_t height, const size_t ch,
-                                          const dt_iop_toneequalizer_data_t *const d)
+static inline int compute_luminance_mask(const float *const restrict in, float *const restrict luminance,
+                                         const size_t width, const size_t height, const size_t ch,
+                                         const dt_iop_toneequalizer_data_t *const d)
 {
   switch(d->details)
   {
@@ -809,8 +809,9 @@ static inline void compute_luminance_mask(const float *const restrict in, float 
     {
       // Still no contrast boost
       luminance_mask(in, luminance, width, height, ch, d->method, d->exposure_boost, 0.0f, 1.0f);
-      fast_surface_blur(luminance, width, height, d->radius, d->feathering, d->iterations,
-                    DT_GF_BLENDING_GEOMEAN, d->scale, d->quantization, exp2f(-14.0f), 4.0f);
+      if(fast_surface_blur(luminance, width, height, d->radius, d->feathering, d->iterations,
+                           DT_GF_BLENDING_GEOMEAN, d->scale, d->quantization, exp2f(-14.0f), 4.0f) != 0)
+        return 1;
       break;
     }
 
@@ -825,8 +826,9 @@ static inline void compute_luminance_mask(const float *const restrict in, float 
       // the exposure boost should be used to make this assumption true
       luminance_mask(in, luminance, width, height, ch, d->method, d->exposure_boost,
                       CONTRAST_FULCRUM, d->contrast_boost);
-      fast_surface_blur(luminance, width, height, d->radius, d->feathering, d->iterations,
-                    DT_GF_BLENDING_LINEAR, d->scale, d->quantization, exp2f(-14.0f), 4.0f);
+      if(fast_surface_blur(luminance, width, height, d->radius, d->feathering, d->iterations,
+                           DT_GF_BLENDING_LINEAR, d->scale, d->quantization, exp2f(-14.0f), 4.0f) != 0)
+        return 1;
       break;
     }
 
@@ -834,8 +836,9 @@ static inline void compute_luminance_mask(const float *const restrict in, float 
     {
       // Still no contrast boost
       luminance_mask(in, luminance, width, height, ch, d->method, d->exposure_boost, 0.0f, 1.0f);
-      fast_eigf_surface_blur(luminance, width, height, d->radius, d->feathering, d->iterations,
-                    DT_GF_BLENDING_GEOMEAN, d->scale, d->quantization, exp2f(-14.0f), 4.0f);
+      if(fast_eigf_surface_blur(luminance, width, height, d->radius, d->feathering, d->iterations,
+                                DT_GF_BLENDING_GEOMEAN, d->scale, d->quantization, exp2f(-14.0f), 4.0f) != 0)
+        return 1;
       break;
     }
 
@@ -843,8 +846,9 @@ static inline void compute_luminance_mask(const float *const restrict in, float 
     {
       luminance_mask(in, luminance, width, height, ch, d->method, d->exposure_boost,
                       CONTRAST_FULCRUM, d->contrast_boost);
-      fast_eigf_surface_blur(luminance, width, height, d->radius, d->feathering, d->iterations,
-                    DT_GF_BLENDING_LINEAR, d->scale, d->quantization, exp2f(-14.0f), 4.0f);
+      if(fast_eigf_surface_blur(luminance, width, height, d->radius, d->feathering, d->iterations,
+                                DT_GF_BLENDING_LINEAR, d->scale, d->quantization, exp2f(-14.0f), 4.0f) != 0)
+        return 1;
       break;
     }
 
@@ -854,6 +858,7 @@ static inline void compute_luminance_mask(const float *const restrict in, float 
       break;
     }
   }
+  return 0;
 }
 
 
@@ -1041,7 +1046,11 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
       if(hash != saved_hash || !luminance_valid)
       {
         /* compute only if upstream pipe state has changed */
-        compute_luminance_mask(in, luminance, width, height, ch, d);
+        if(compute_luminance_mask(in, luminance, width, height, ch, d) != 0)
+        {
+          if(!cached) dt_pixelpipe_cache_free_align(luminance);
+          return 1;
+        }
         hash_set_get(&hash, &g->ui_preview_hash, &self->gui_lock);
       }
     }
@@ -1057,23 +1066,35 @@ static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
       if(saved_hash != hash || !luminance_valid)
       {
         /* compute only if upstream pipe state has changed */
+        if(compute_luminance_mask(in, luminance, width, height, ch, d) != 0)
+        {
+          if(!cached) dt_pixelpipe_cache_free_align(luminance);
+          return 1;
+        }
         dt_iop_gui_enter_critical_section(self);
         g->thumb_preview_hash = hash;
         g->histogram_valid = FALSE;
-        compute_luminance_mask(in, luminance, width, height, ch, d);
         g->luminance_valid = TRUE;
         dt_iop_gui_leave_critical_section(self);
       }
     }
     else // make it dummy-proof
     {
-      compute_luminance_mask(in, luminance, width, height, ch, d);
+      if(compute_luminance_mask(in, luminance, width, height, ch, d) != 0)
+      {
+        if(!cached) dt_pixelpipe_cache_free_align(luminance);
+        return 1;
+      }
     }
   }
   else
   {
     // no caching path : compute no matter what
-    compute_luminance_mask(in, luminance, width, height, ch, d);
+    if(compute_luminance_mask(in, luminance, width, height, ch, d) != 0)
+    {
+      if(!cached) dt_pixelpipe_cache_free_align(luminance);
+      return 1;
+    }
   }
 
   // Display output

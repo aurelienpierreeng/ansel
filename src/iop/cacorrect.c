@@ -302,9 +302,13 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   float *redfactor = NULL;
   float *bluefactor = NULL;
   float *oldraw = NULL;
+  float *Gtmp = NULL;
+  float *RawDataTmp = NULL;
   char *buffer1 = NULL;
   char *thread_buffers = NULL;
   size_t padded_buffersize = 0;
+  double fitparams[2][2][16] = { 0 };
+  float blockvar[2][2] = { { 0, 0 }, { 0, 0 } };
 
   dt_iop_image_copy_by_size(out, in2, width, height, 1);
 
@@ -365,11 +369,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     }
   }
 
-  double fitparams[2][2][16];
-
   // temporary array to store simple interpolation of G
-  float *Gtmp = NULL;
-  float *RawDataTmp = NULL;
   Gtmp = dt_pixelpipe_cache_alloc_align_float((size_t)height * width, piece->pipe);
   if(!Gtmp)
   {
@@ -416,7 +416,6 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   float blockave[2][2] = { { 0, 0 }, { 0, 0 } };
   float blocksqave[2][2] = { { 0, 0 }, { 0, 0 } };
   float blockdenom[2][2] = { { 0, 0 }, { 0, 0 } };
-  float blockvar[2][2];
   // order of 2d polynomial fit (polyord), and numpar=polyord^2
   int polyord = 4, numpar = 16;
 
@@ -1349,11 +1348,11 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
 cleanup:
   if(thread_buffers) dt_free_align(thread_buffers);
   if(buffer1) free(buffer1);
-  dt_pixelpipe_cache_free_align(RawDataTmp);
-  dt_pixelpipe_cache_free_align(Gtmp);
-  dt_pixelpipe_cache_free_align(redfactor);
-  dt_pixelpipe_cache_free_align(bluefactor);
-  dt_pixelpipe_cache_free_align(oldraw);
+  if(RawDataTmp) dt_pixelpipe_cache_free_align(RawDataTmp);
+  if(Gtmp) dt_pixelpipe_cache_free_align(Gtmp);
+  if(redfactor) dt_pixelpipe_cache_free_align(redfactor);
+  if(bluefactor) dt_pixelpipe_cache_free_align(bluefactor);
+  if(oldraw) dt_pixelpipe_cache_free_align(oldraw);
   return err;
 }
 

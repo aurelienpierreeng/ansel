@@ -308,16 +308,16 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     // Attempt to allocate all of the buffers we need.  For this example, we need one buffer that is equal in
     // dimensions to the output buffer, has one color channel, and has been zero'd.  (See common/imagebuf.h for
     // more details on all of the options.)
-    if (!dt_iop_alloc_image_buffers(module, roi_in, roi_out,
-                                    1/*ch per pixel*/ | DT_IMGSZ_OUTPUT | DT_IMGSZ_FULL | DT_IMGSZ_CLEARBUF, &mask,
-                                    0 /* end of list of buffers to allocate */))
+    if (dt_iop_alloc_image_buffers(module, roi_in, roi_out,
+                                   1/*ch per pixel*/ | DT_IMGSZ_OUTPUT | DT_IMGSZ_FULL | DT_IMGSZ_CLEARBUF, &mask,
+                                   0 /* end of list of buffers to allocate */))
     {
       // Uh oh, we didn't have enough memory!  If multiple buffers were requested, any that had already
       // been allocated have been freed, and the module's trouble flag has been set.  We can simply pass
       // through the input image and return now, since there isn't anything else we need to clean up at
       // this point.
       dt_iop_copy_image_roi(ovoid, ivoid, ch, roi_in, roi_out, TRUE);
-      return 0;
+      return 1;
     }
   }
   else

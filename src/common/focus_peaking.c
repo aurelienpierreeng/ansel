@@ -34,16 +34,21 @@ static inline float uint8_to_float(const uint8_t i)
   return (float)i / 255.0f;
 }
 
-void dt_focuspeaking(cairo_t *cr,
-                     uint8_t *const restrict image,
-                     const int buf_width, const int buf_height,
-                     gboolean draw,
-                     float *x, float *y)
+int dt_focuspeaking(cairo_t *cr,
+                    uint8_t *const restrict image,
+                    const int buf_width, const int buf_height,
+                    gboolean draw,
+                    float *x, float *y)
 {
   float *const restrict luma = dt_pixelpipe_cache_alloc_align_float_cache((size_t)buf_width * buf_height, 0);
   float *const restrict luma_ds = dt_pixelpipe_cache_alloc_align_float_cache((size_t)buf_width * buf_height, 0);
+  uint8_t *restrict focus_peaking = NULL;
+  int err = 0;
   if(luma_ds == NULL || luma == NULL)
+  {
+    err = 1;
     goto error_early;
+  }
 
   const size_t npixels = (size_t)buf_height * buf_width;
   // Create a luma buffer as the euclidian norm of RGB channels
@@ -65,7 +70,11 @@ void dt_focuspeaking(cairo_t *cr,
     }
 
   // Prefilter noise
-  fast_eigf_surface_blur(luma, buf_width, buf_height, 12, 0.00005f, 4, DT_GF_BLENDING_LINEAR, 1, 0.0f, exp2f(-8.0f), 1.0f);
+  if(fast_eigf_surface_blur(luma, buf_width, buf_height, 12, 0.00005f, 4, DT_GF_BLENDING_LINEAR, 1, 0.0f, exp2f(-8.0f), 1.0f) != 0)
+  {
+    err = 1;
+    goto error_early;
+  }
 
   // Compute the laplacian of a gaussian
   float mass = 0.f;
@@ -154,13 +163,17 @@ schedule(static) collapse(2) reduction(+:mass, x_integral, y_integral)
   {
     dt_pixelpipe_cache_free_align(luma);
     dt_pixelpipe_cache_free_align(luma_ds);
-    return;
+    return 0;
   }
 
-  uint8_t *const restrict focus_peaking = dt_pixelpipe_cache_alloc_align_cache(
+  focus_peaking = dt_pixelpipe_cache_alloc_align_cache(
       sizeof(uint8_t) * buf_width * buf_height * 4,
       0);
-  if(focus_peaking == NULL) goto error;
+  if(focus_peaking == NULL)
+  {
+    err = 1;
+    goto error;
+  }
 
   // Dilate the mask to improve connectivity
 #ifdef _OPENMP
@@ -189,10 +202,18 @@ schedule(static) collapse(2)
     }
 
   // Anti-aliasing
-  dt_box_mean(luma, buf_height, buf_width, 1, 3, 1);
+  if(dt_box_mean(luma, buf_height, buf_width, 1, 3, 1) != 0)
+  {
+    err = 1;
+    goto error;
+  }
 
   // Postfilter to connect isolated dots and draw lines
-  fast_eigf_surface_blur(luma, buf_width, buf_height, 12, 0.000005f, 1, DT_GF_BLENDING_LINEAR, 1, 0.0f, exp2f(-8.0f), 1.0f);
+  if(fast_eigf_surface_blur(luma, buf_width, buf_height, 12, 0.000005f, 1, DT_GF_BLENDING_LINEAR, 1, 0.0f, exp2f(-8.0f), 1.0f) != 0)
+  {
+    err = 1;
+    goto error;
+  }
 
   // Compute the laplacian mean over the picture
   float TV_sum = 0.0f;
@@ -279,9 +300,10 @@ schedule(static) collapse(2) aligned(focus_peaking, luma:64) reduction(+:sigma)
   // cleanup
   cairo_surface_destroy(surface);
 
-error:;
+error:
   if(focus_peaking) dt_pixelpipe_cache_free_align(focus_peaking);
-error_early:;
+error_early:
   if(luma) dt_pixelpipe_cache_free_align(luma);
   if(luma_ds) dt_pixelpipe_cache_free_align(luma_ds);
+  return err;
 }

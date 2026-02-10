@@ -101,11 +101,11 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     return 0; // image has been copied through to output and module's trouble flag has been updated
 
   float *restrict blurlightness;
-  if (!dt_iop_alloc_image_buffers(self, roi_in, roi_out, 1, &blurlightness, 0))
+  if (dt_iop_alloc_image_buffers(self, roi_in, roi_out, 1, &blurlightness, 0))
   {
     // out of memory, so just copy image through to output
     dt_iop_copy_image_roi(ovoid, ivoid, piece->colors, roi_in, roi_out, TRUE);
-    return 0;
+    return 1;
   }
 
   const float *const restrict in = DT_IS_ALIGNED((float *)ivoid);
@@ -138,7 +138,11 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   const int range = 2 * radius + 1;
   const int hr = range / 2;
 
-  dt_box_mean(blurlightness, roi_out->height, roi_out->width, 1, hr, BOX_ITERATIONS);
+  if(dt_box_mean(blurlightness, roi_out->height, roi_out->width, 1, hr, BOX_ITERATIONS) != 0)
+  {
+    dt_pixelpipe_cache_free_align(blurlightness);
+    return 1;
+  }
 
 /* screen blend lightness with original */
 #ifdef _OPENMP

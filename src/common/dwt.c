@@ -219,18 +219,19 @@ static void dwt_decompose_layer(float *const restrict out, float *const restrict
 }
 
 /* actual decomposing algorithm */
-static void dwt_wavelet_decompose(float *img, dwt_params_t *const p, _dwt_layer_func layer_func)
+static int dwt_wavelet_decompose(float *img, dwt_params_t *const p, _dwt_layer_func layer_func)
 {
   float *temp = NULL;
   float *layers = NULL;
   float *merged_layers = NULL;
   float *buffer[2] = { 0, 0 };
   int bcontinue = 1;
+  int err = 0;
   const size_t size = (size_t)p->width * p->height * p->ch;
 
   assert(p->ch == 4);
 
-  if(layer_func) layer_func(img, p, 0);
+  if(layer_func && layer_func(img, p, 0) != 0) return 1;
 
   if(p->scales <= 0) goto cleanup;
 
@@ -246,6 +247,7 @@ static void dwt_wavelet_decompose(float *img, dwt_params_t *const p, _dwt_layer_
   if(buffer[1] == NULL || layers == NULL || temp == NULL)
   {
     printf("not enough memory for wavelet decomposition");
+    err = 1;
     goto cleanup;
   }
   dt_iop_image_fill(layers,0.0f,p->width,p->height,p->ch);
@@ -256,6 +258,7 @@ static void dwt_wavelet_decompose(float *img, dwt_params_t *const p, _dwt_layer_
     if(merged_layers == NULL)
     {
       printf("not enough memory for wavelet decomposition");
+      err = 1;
       goto cleanup;
     }
     dt_iop_image_fill(merged_layers,0.0f,p->width,p->height,p->ch);
@@ -273,7 +276,11 @@ static void dwt_wavelet_decompose(float *img, dwt_params_t *const p, _dwt_layer_
     if(p->merge_from_scale == 0 || p->merge_from_scale > lev + 1)
     {
       // allow to process this detail scale
-      if(layer_func) layer_func(buffer[hpass], p, lev + 1);
+      if(layer_func && layer_func(buffer[hpass], p, lev + 1) != 0)
+      {
+        err = 1;
+        goto cleanup;
+      }
 
       // user wants to preview this detail scale
       if(p->return_layer == lev + 1)
@@ -297,7 +304,11 @@ static void dwt_wavelet_decompose(float *img, dwt_params_t *const p, _dwt_layer_
       dt_iop_image_add_image(merged_layers, buffer[hpass], p->width, p->height, p->ch);
 
       // allow to process this merged scale
-      if(layer_func) layer_func(merged_layers, p, lev + 1);
+      if(layer_func && layer_func(merged_layers, p, lev + 1) != 0)
+      {
+        err = 1;
+        goto cleanup;
+      }
 
       // user wants to preview this merged scale
       if(p->return_layer == lev + 1)
@@ -316,7 +327,11 @@ static void dwt_wavelet_decompose(float *img, dwt_params_t *const p, _dwt_layer_
   if(bcontinue)
   {
     // allow to process residual image
-    if(layer_func) layer_func(buffer[hpass], p, p->scales + 1);
+    if(layer_func && layer_func(buffer[hpass], p, p->scales + 1) != 0)
+    {
+      err = 1;
+      goto cleanup;
+    }
 
     // user wants to preview residual image
     if(p->return_layer == p->scales + 1)
@@ -338,7 +353,11 @@ static void dwt_wavelet_decompose(float *img, dwt_params_t *const p, _dwt_layer_
       dt_iop_image_add_image(layers, buffer[hpass], p->width, p->height, p->ch);
 
       // allow to process reconstructed image
-      if(layer_func) layer_func(layers, p, p->scales + 2);
+      if(layer_func && layer_func(layers, p, p->scales + 2) != 0)
+      {
+        err = 1;
+        goto cleanup;
+      }
 
       // return reconstructed image
       dwt_get_image_layer(layers, p);
@@ -350,10 +369,11 @@ cleanup:
   if(layers) dt_pixelpipe_cache_free_align(layers);
   if(merged_layers) dt_pixelpipe_cache_free_align(merged_layers);
   if(buffer[1]) dt_pixelpipe_cache_free_align(buffer[1]);
+  return err;
 }
 
 /* this function prepares for decomposing, which is done in the function dwt_wavelet_decompose() */
-void dwt_decompose(dwt_params_t *p, _dwt_layer_func layer_func)
+int dwt_decompose(dwt_params_t *p, _dwt_layer_func layer_func)
 {
   // this is a zoom scale, not a wavelet scale
   if(p->preview_scale <= 0.f) p->preview_scale = 1.f;
@@ -379,7 +399,7 @@ void dwt_decompose(dwt_params_t *p, _dwt_layer_func layer_func)
   }
 
   // call the actual decompose
-  dwt_wavelet_decompose(p->image, p, layer_func);
+  return dwt_wavelet_decompose(p->image, p, layer_func);
 }
 
 // first, "vertical" pass of wavelet decomposition
@@ -504,10 +524,10 @@ static void dwt_denoise_horiz_1ch(float *const restrict out, float *const restri
  * recomposing the result from just the portion of each scale which exceeds the magnitude of the given
  * threshold for that scale.
  */
-void dwt_denoise(float *const img, const int width, const int height, const int bands, const float *const noise)
+int dwt_denoise(float *const img, const int width, const int height, const int bands, const float *const noise)
 {
   float *const details = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * width * height, 0);
-  if(details == NULL) return;
+  if(details == NULL) return 1;
   float *const interm = details + width * height;	// temporary storage for use during each pass
 
   // zero the accumulator
@@ -525,6 +545,7 @@ void dwt_denoise(float *const img, const int width, const int height, const int 
     dwt_denoise_horiz_1ch(interm, img, details, height, width, lev, noise[lev], last);
   }
   dt_pixelpipe_cache_free_align(details);
+  return 0;
 }
 
 #ifdef HAVE_OPENCL

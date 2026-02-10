@@ -224,7 +224,11 @@ static int wavelet_denoise(const float *const restrict in, float *const restrict
     }
 
     // perform the wavelet decomposition and denoising
-    dwt_denoise(fimg,halfwidth,halfheight,DT_IOP_RAWDENOISE_BANDS,noise);
+    if(dwt_denoise(fimg, halfwidth, halfheight, DT_IOP_RAWDENOISE_BANDS, noise) != 0)
+    {
+      dt_pixelpipe_cache_free_align(fimg);
+      return 1;
+    }
 
     // distribute the denoised data back out to the original R/G1/G2/B channel, squaring the resulting values to
     // undo the original transform
@@ -450,7 +454,11 @@ static int wavelet_denoise_xtrans(const float *const restrict in, float *const r
     }
 
     // perform the wavelet decomposition and denoising
-    dwt_denoise(fimg,width,height,DT_IOP_RAWDENOISE_BANDS,noise);
+    if(dwt_denoise(fimg, width, height, DT_IOP_RAWDENOISE_BANDS, noise) != 0)
+    {
+      dt_pixelpipe_cache_free_align(fimg);
+      return 1;
+    }
 
     // distribute the denoised data back out to the original R/G/B channel, squaring the resulting values to
     // undo the original transform
