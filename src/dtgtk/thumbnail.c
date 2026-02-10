@@ -526,6 +526,8 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   int w = 0;
   int h = 0;
   gtk_widget_get_size_request(thumb->w_image, &w, &h);
+
+  dt_pthread_mutex_lock(&thumb->lock);
   if(thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
   {
     /*
@@ -537,11 +539,13 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
       thumb->img_height < (int)roundf(darktable.gui->ppd * h))
       thumb->image_inited = FALSE;
   }
+  dt_pthread_mutex_unlock(&thumb->lock);
 
   dt_thumbnail_get_image_buffer(thumb);
 
   dt_print(DT_DEBUG_LIGHTTABLE, "[lighttable] redrawing thumbnail %i\n", thumb->imgid);
 
+  dt_pthread_mutex_lock(&thumb->lock);
   if(thumb->image_inited && thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
   {
     // we draw the image
@@ -583,6 +587,7 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   {
     dt_control_draw_busy_msg(cr, w, h);
   }
+  dt_pthread_mutex_unlock(&thumb->lock);
 
   return TRUE;
 }
