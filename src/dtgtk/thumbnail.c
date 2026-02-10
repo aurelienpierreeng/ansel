@@ -338,21 +338,18 @@ static gboolean _main_context_draw(GtkWidget *w_image)
 }
 
 static int _finish_buffer_thread(dt_thumbnail_t *thumb, gboolean success)
-
 {
   thumb_return_if_fails(thumb, 1);
 
   dt_pthread_mutex_lock(&thumb->lock);
   thumb->image_inited = success;
   thumb->job = NULL;
+  dt_pthread_mutex_unlock(&thumb->lock);
 
   // Redraw events need to be sent from the main GUI thread
   // though we may not have a target widget anymore...
   if(thumb && thumb->widget && thumb->w_image && !dt_atomic_get_int(&thumb->destroying))
-    g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, (GSourceFunc)_main_context_draw,
-                    g_object_ref(thumb->w_image), (GDestroyNotify)g_object_unref);
-
-  dt_pthread_mutex_unlock(&thumb->lock);
+    g_main_context_invoke(NULL, (GSourceFunc)_main_context_draw, thumb->w_image);
 
   return 0;
 }
@@ -459,7 +456,9 @@ int32_t _get_image_buffer(dt_job_t *job)
   }
 
   // The job was cancelled on the queue. Good chances of having thumb destroyed anytime soon.
-  if(!thumb->job || dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED)
+  if(!thumb->job || thumb->job != job 
+     || dt_control_job_get_state(job) == DT_JOB_STATE_CANCELLED 
+     || dt_atomic_get_int(&thumb->destroying))
   {
     cairo_surface_destroy(surface);
     return 1;
@@ -495,7 +494,7 @@ int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb)
   // - image inited: the cached buffer has a valid size. Invalid this flag when size changes.
   // - img_surf: we have a cached buffer (cairo surface), regardless of its validity.
   // - a rendering job has already been started
-  if((thumb->image_inited && thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0) || thumb->job)
+  if((thumb->image_inited && thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0))
     return 0;
 
   // Nuke the image surface in GUI mainthread.
@@ -1216,19 +1215,12 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
 {
   thumb_return_if_fails(thumb, 0);
 
-  dt_job_t *job = NULL;
-
   dt_atomic_set_int(&thumb->destroying, TRUE);
-
-  // Cancel any running/queued background job before tearing down the thumbnail.
-  dt_pthread_mutex_lock(&thumb->lock);
-  job = thumb->job;
-  thumb->job = NULL;
-  dt_pthread_mutex_unlock(&thumb->lock);
-  if(job) dt_control_job_cancel(job);
 
   // Wait for background jobs to finish before deleting the buffers they write in
   dt_pthread_mutex_lock(&thumb->lock);
+
+  thumb->job = NULL;
 
   // remove multiple delayed gtk_widget_queue_draw triggers
   while(g_idle_remove_by_data(thumb->widget))
