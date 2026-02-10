@@ -80,6 +80,14 @@ void dt_dev_pixelpipe_cache_cleanup(dt_dev_pixelpipe_cache_t *cache);
 struct dt_pixel_cache_entry_t;
 
 /**
+ * @brief Set the current module name for cache diagnostics (thread-local).
+ *
+ * @param module Module op name or NULL to clear.
+ * @return const char* Previous module name.
+ */
+const char *dt_pixelpipe_cache_set_current_module(const char *module);
+
+/**
  * @brief Get an internal reference to the cache entry matching hash.
  * If you are going to access this entry more than once, keeping the reference and using
  * it instead of hashes will prevent redundant lookups.

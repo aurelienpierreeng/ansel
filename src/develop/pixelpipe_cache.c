@@ -37,6 +37,15 @@
 #include "develop/format.h"
 #include "develop/pixelpipe_hb.h"
 
+static __thread const char *dt_pixelpipe_cache_current_module = NULL;
+
+const char *dt_pixelpipe_cache_set_current_module(const char *module)
+{
+  const char *previous = dt_pixelpipe_cache_current_module;
+  dt_pixelpipe_cache_current_module = module;
+  return previous;
+}
+
 typedef struct dt_pixel_cache_entry_t
 {
   uint64_t hash;            // unique identifier of the entry
@@ -584,8 +593,18 @@ static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t si
 
   if(cache->current_memory + size > cache->max_memory)
   {
+    const char *module = dt_pixelpipe_cache_current_module;
+    const gboolean name_is_file = (name != NULL) && (strchr(name, '/') != NULL) && (strchr(name, ':') != NULL);
+
     fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry %" PRIu64 " (%s)\n", hash, name);
-    dt_control_log(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
+    if(name && module && name_is_file)
+      dt_control_log(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."), name, module);
+    else if(name)
+      dt_control_log(_("The pipeline cache is full while allocating `%s`. Either your RAM settings are too frugal or your RAM is too small."), name);
+    else if(module)
+      dt_control_log(_("The pipeline cache is full while processing module `%s`. Either your RAM settings are too frugal or your RAM is too small."), module);
+    else
+      dt_control_log(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
   }
 
   return error;

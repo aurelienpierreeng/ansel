@@ -1793,6 +1793,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   dt_times_t start;
   dt_get_times(&start);
 
+  const char *prev_module = dt_pixelpipe_cache_set_current_module(module ? module->op : NULL);
+
 #ifdef HAVE_OPENCL
   error = pixelpipe_process_on_GPU(pipe, dev, input, cl_mem_input, input_format, &roi_in, output, cl_mem_output,
                                    out_format, &roi_out, module, piece, &tiling, &pixelpipe_flow, in_bpp, bpp, 
@@ -1801,6 +1803,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   error = pixelpipe_process_on_CPU(pipe, dev, input, input_format, &roi_in, output, out_format, &roi_out, module,
                                    piece, &tiling, &pixelpipe_flow, input_entry);
 #endif
+
+  dt_pixelpipe_cache_set_current_module(prev_module);
 
   _print_perf_debug(pipe, pixelpipe_flow, piece, module, &start);
 
