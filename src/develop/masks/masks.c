@@ -1364,6 +1364,7 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
 
   // draw the source shape
   {
+    cairo_save(cr);
     // trick to draw only the current polygon while editing but the full shaope when not
     const int nodes_nb = nb + !gui->creation;
     
@@ -1407,11 +1408,31 @@ void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, in
   if(wd < 1.0 || ht < 1.0) return;
   const float zoom_scale = dt_dev_get_zoom_level(dev);
 
-  cairo_save(cr);
+  // Create a surface to draw the mask, so that we can apply
+  // operation that does not affect the main context
+  cairo_surface_t *overlay = NULL;
+  cairo_t *mask_draw = NULL;
+  cairo_surface_t *target = cairo_get_target(cr);
+  double sx = 1.0, sy = 1.0;
+  cairo_surface_get_device_scale(target, &sx, &sy);
+  overlay = cairo_surface_create_similar(target, CAIRO_CONTENT_COLOR_ALPHA, (int)ceil(width * sx),
+                                         (int)ceil(height * sy));
+  cairo_surface_set_device_scale(overlay, sx, sy);
+  mask_draw = cairo_create(overlay);
+
+  // Apply the same transformation to the mask drawing context
+  /*cairo_matrix_t m;
+  cairo_get_matrix(cr, &m);
+  cairo_set_matrix(mask_draw, &m);*/
+  
+  cairo_save(mask_draw);
+
   // We rescale to input space
-  if(dt_dev_rescale_roi_to_input(dev, cr, width, height))
+  if(dt_dev_rescale_roi_to_input(dev, mask_draw, width, height))
   {
-    cairo_restore(cr);
+    cairo_restore(mask_draw);
+    cairo_destroy(mask_draw);
+    cairo_surface_destroy(overlay);
     return;
   }
 
@@ -1421,13 +1442,23 @@ void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, in
        && gui->creation))
     dt_masks_gui_form_test_create(form, gui, module);
 
-  // draw form
+  // Draw form
   if(form->type & DT_MASKS_GROUP)
-    dt_group_events_post_expose(cr, zoom_scale, form, gui);
+    dt_group_events_post_expose(mask_draw, zoom_scale, form, gui);
   else if(form->functions && form->functions->post_expose)
-    form->functions->post_expose(cr, zoom_scale, gui, 0, g_list_length(form->points));
+    form->functions->post_expose(mask_draw, zoom_scale, gui, 0, g_list_length(form->points));
 
+  cairo_restore(mask_draw);
+
+  // Draw the overlay with the same transformation as the main context
+  cairo_save(cr);
+  cairo_identity_matrix(cr);
+  cairo_set_source_surface(cr, overlay, 0.0, 0.0);
+  cairo_paint(cr);
   cairo_restore(cr);
+
+  cairo_destroy(mask_draw);
+  cairo_surface_destroy(overlay);
 }
 
 void dt_masks_clear_form_gui(dt_develop_t *dev)
