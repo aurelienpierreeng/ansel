@@ -1,6 +1,7 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2020 darktable developers.
+    Copyright (C) 2020 darktable developers,
+    Copyright (C) 2025 Guillaume Stutin.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,6 +17,8 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "darktable.h"
+
 /**
  * These are the CIELab values of Color Checker reference targets
  */
@@ -25,22 +28,24 @@ typedef enum dt_color_checker_targets
 {
   COLOR_CHECKER_XRITE_24_2000 = 0,
   COLOR_CHECKER_XRITE_24_2014 = 1,
-  COLOR_CHECKER_SPYDER_24     = 2,
-  COLOR_CHECKER_SPYDER_24_V2  = 3,
-  COLOR_CHECKER_SPYDER_48     = 4,
-  COLOR_CHECKER_SPYDER_48_V2  = 5,
+  COLOR_CHECKER_SPYDER_24 = 2,
+  COLOR_CHECKER_SPYDER_24_V2 = 3,
+  COLOR_CHECKER_SPYDER_48 = 4,
+  COLOR_CHECKER_SPYDER_48_V2 = 5,
+  COLOR_CHECKER_USER_REF = 6,
   COLOR_CHECKER_LAST
 } dt_color_checker_targets;
 
 // helper to deal with patch color
 typedef struct dt_color_checker_patch
 {
-  const char *name;        // mnemonic name for the patch
-  dt_aligned_pixel_t Lab;  // reference color in CIE Lab
+  char *name;       // mnemonic name for the patch
+  dt_aligned_pixel_t Lab; // reference color in CIE Lab
 
-  // (x, y) position of the patch center, relatively to the guides (white dots)
+  // (x, y) position of the patch  center, relatively to the guides (white dots)
   // in ratio of the grid dimension along that axis
-  struct {
+  struct
+  {
     float x;
     float y;
   };
@@ -48,36 +53,24 @@ typedef struct dt_color_checker_patch
 
 typedef struct dt_color_checker_t
 {
-  const char *name;
-  const char *author;
-  const char *date;
-  const char *manufacturer;
+  char *name;
+  char *author;
+  char *date;
+  char *manufacturer;
   dt_color_checker_targets type;
 
-  float ratio;                        // format ratio of the chart, guide to guide (white dots)
-  float radius;                       // radius of a patch in ratio of the checker diagonal
-  size_t patches;                     // number of patches in target
-  size_t size[2];                     // dimension along x, y axes
-  size_t middle_grey;                 // index of the closest patch to 20% neutral grey
-  size_t white;                       // index of the closest patch to pure white
-  size_t black;                       // index of the closest patch to pure black
-  dt_color_checker_patch values[];    // array of colors
+  float ratio;                     // format ratio of the chart, guide to guide (white dots)
+  float radius;                    // radius of a patch in ratio of the checker diagonal
+  size_t patches;                  // number of patches in target
+  size_t size[2];                  // dimension along x, y axes
+  size_t middle_grey;              // index of the closest patch to 20% neutral grey
+  size_t white;                    // index of the closest patch to pure white
+  size_t black;                    // index of the closest patch to pure black
+  dt_color_checker_patch *values;  // pointer to an array of colors
+  gboolean finished;               // whether the color checker is loaded or not
 } dt_color_checker_t;
 
-
-dt_color_checker_t xrite_24_2000 = { .name = "Xrite ColorChecker 24 before 2014",
-                                    .author = "X-Rite",
-                                    .date = "3/27/2000",
-                                    .manufacturer = "X-Rite/Gretag Macbeth",
-                                    .type = COLOR_CHECKER_XRITE_24_2000,
-                                    .radius = 0.055f,
-                                    .ratio = 2.f / 3.f,
-                                    .patches = 24,
-                                    .size = { 4, 6 },
-                                    .middle_grey = 21,
-                                    .white = 18,
-                                    .black = 23,
-                                    .values = {
+dt_color_checker_patch xrite_24_2000_patches[] = {
                                               { "A1", { 37.986,  13.555,  14.059 }, { 0.087, 0.125}},
                                               { "A2", { 65.711,  18.13,   17.81  }, { 0.250, 0.125}},
                                               { "A3", { 49.927, -04.88,  -21.905 }, { 0.417, 0.125}},
@@ -101,14 +94,13 @@ dt_color_checker_t xrite_24_2000 = { .name = "Xrite ColorChecker 24 before 2014"
                                               { "D3", { 66.766,  -0.734,  -0.504 }, { 0.417, 0.875}},
                                               { "D4", { 50.867,  -0.153,  -0.27  }, { 0.584, 0.875}},
                                               { "D5", { 35.656,  -0.421,  -1.231 }, { 0.751, 0.875}},
-                                              { "D6", { 20.461,  -0.079,  -0.973 }, { 0.918, 0.875}} } };
+                                              { "D6", { 20.461,  -0.079,  -0.973 }, { 0.918, 0.875}} };
 
-
-dt_color_checker_t xrite_24_2014 = { .name = "Xrite ColorChecker 24 after 2014",
+dt_color_checker_t xrite_24_2000 = { .name = "Xrite ColorChecker 24 before 2014",
                                     .author = "X-Rite",
-                                    .date = "3/28/2015",
+                                    .date = "3/27/2000",
                                     .manufacturer = "X-Rite/Gretag Macbeth",
-                                    .type = COLOR_CHECKER_XRITE_24_2014,
+                                    .type = COLOR_CHECKER_XRITE_24_2000,
                                     .radius = 0.055f,
                                     .ratio = 2.f / 3.f,
                                     .patches = 24,
@@ -116,7 +108,15 @@ dt_color_checker_t xrite_24_2014 = { .name = "Xrite ColorChecker 24 after 2014",
                                     .middle_grey = 21,
                                     .white = 18,
                                     .black = 23,
-                                    .values = {
+                                    .values = xrite_24_2000_patches };
+                                    
+dt_color_checker_patch xrite_24_2014_patches[] = {
+                                              { "A1", { 37.54,   14.37,   14.92 }, { 0.087, 0.125}},
+                                              { "A2", { 64.66,   19.27,   17.50 }, { 0.250, 0.125}},
+                                              { "A3", { 49.32,  -03.82,  -22.54 }, { 0.417, 0.125}},
+                                              { "A4", { 43.46,  -12.74,   22.72 }, { 0.584, 0.125}},
+                                              { "A5", { 54.94,   09.61,  -24.79 }, { 0.751, 0.125}},
+                                              { "A6", { 70.48,  -32.26,  -00.37 }, { 0.918, 0.125}},
                                               { "A1", { 37.54,   14.37,   14.92 }, { 0.087, 0.125}},
                                               { "A2", { 64.66,   19.27,   17.50 }, { 0.250, 0.125}},
                                               { "A3", { 49.32,  -03.82,  -22.54 }, { 0.417, 0.125}},
@@ -140,26 +140,30 @@ dt_color_checker_t xrite_24_2014 = { .name = "Xrite ColorChecker 24 after 2014",
                                               { "D3", { 66.89,  -00.75,  -00.06 }, { 0.417, 0.875}},
                                               { "D4", { 50.76,  -00.13,   00.14 }, { 0.584, 0.875}},
                                               { "D5", { 35.63,  -00.46,  -00.48 }, { 0.751, 0.875}},
-                                              { "D6", { 20.64,   00.07,  -00.46 }, { 0.918, 0.875}} } };
+                                              { "D6", { 20.64,   00.07,  -00.46 }, { 0.918, 0.875}} };
+
+dt_color_checker_t xrite_24_2014 = { .name = "Xrite ColorChecker 24 after 2014",
+                                    .author = "X-Rite",
+                                    .date = "3/28/2015",
+                                    .manufacturer = "X-Rite/Gretag Macbeth",
+                                    .type = COLOR_CHECKER_XRITE_24_2014,
+                                    .radius = 0.055f,
+                                    .ratio = 2.f / 3.f,
+                                    .patches = 24,
+                                    .size = { 4, 6 },
+                                    .middle_grey = 21,
+                                    .white = 18,
+                                    .black = 23,
+                                    .values = xrite_24_2014_patches };
 
 
 // dimensions between reference dots : 197 mm width x 135 mm height
 // patch width : 26x26 mm
 // outer gutter : 8 mm
 // internal gutters (gap between patches) : 5 mm
-dt_color_checker_t spyder_24 = {  .name = "Datacolor SpyderCheckr 24 before 2018",
-                                  .author = "Aur\303\251lien PIERRE",
-                                  .date = "dec, 9 2016",
-                                  .manufacturer = "DataColor",
-                                  .type = COLOR_CHECKER_SPYDER_24,
-                                  .ratio = 2.f / 3.f,
-                                  .radius = 0.035,
-                                  .patches = 24,
-                                  .size = { 4, 6 },
-                                  .middle_grey = 03,
-                                  .white = 00,
-                                  .black = 05,
-                                  .values = { { "A1", { 96.04,	 2.16,	 2.60 }, { 0.107, 0.844 } },
+
+dt_color_checker_patch spyder_24_patches[] = {
+                                              { "A1", { 96.04,	 2.16,	 2.60 }, { 0.107, 0.844 } },
                                               { "A2", { 80.44,	 1.17,	 2.05 }, { 0.264, 0.844 } },
                                               { "A3", { 65.52,	 0.69,	 1.86 }, { 0.421, 0.844 } },
                                               { "A4", { 49.62,	 0.58,	 1.56 }, { 0.579, 0.844 } },
@@ -182,13 +186,53 @@ dt_color_checker_t spyder_24 = {  .name = "Datacolor SpyderCheckr 24 before 2018
                                               { "D3", { 42.03, -15.80,	22.93 }, { 0.421, 0.155 } },
                                               { "D4", { 48.82,	-5.11, -23.08 }, { 0.579, 0.155 } },
                                               { "D5", { 65.10,	18.14,	18.68 }, { 0.736, 0.155 } },
-                                              { "D6", { 36.13,	14.15,	15.78 }, { 0.893, 0.155 } } } };
+                                              { "D6", { 36.13,	14.15,	15.78 }, { 0.893, 0.155 } } };
+
+dt_color_checker_t spyder_24 = {  .name = "Datacolor SpyderCheckr 24 before 2018",
+                                  .author = "Aur\303\251lien PIERRE",
+                                  .date = "dec, 9 2016",
+                                  .manufacturer = "DataColor",
+                                  .type = COLOR_CHECKER_SPYDER_24,
+                                  .ratio = 2.f / 3.f,
+                                  .radius = 0.035,
+                                  .patches = 24,
+                                  .size = { 4, 6 },
+                                  .middle_grey = 03,
+                                  .white = 00,
+                                  .black = 05,
+                                  .values = spyder_24_patches };
 
 
 // dimensions between reference dots : 197 mm width x 135 mm height
 // patch width : 26x26 mm
 // outer gutter : 8 mm
 // internal gutters (gap between patches) : 5 mm
+
+dt_color_checker_patch spyder_24_v2_patch[] = {{ "A1", { 96.04,   2.16,   2.60 }, { 0.107, 0.844 } },
+                                        { "A2", { 80.44,   1.17,   2.05 }, { 0.264, 0.844 } },
+                                        { "A3", { 65.52,   0.69,   1.86 }, { 0.421, 0.844 } },
+                                        { "A4", { 49.62,   0.58,   1.56 }, { 0.579, 0.844 } },
+                                        { "A5", { 33.55,   0.35,   1.40 }, { 0.736, 0.844 } },
+                                        { "A6", { 16.91,   1.43,  -0.81 }, { 0.893, 0.844 } },
+                                        { "B1", { 47.12, -32.50, -28.75 }, { 0.107, 0.615 } },
+                                        { "B2", { 50.49,  53.45, -13.55 }, { 0.264, 0.615 } },
+                                        { "B3", { 83.61,   3.36,  87.02 }, { 0.421, 0.615 } },
+                                        { "B4", { 41.05,  60.75,  31.17 }, { 0.579, 0.615 } },
+                                        { "B5", { 54.14, -40.80,  34.75 }, { 0.736, 0.615 } },
+                                        { "B6", { 24.75,  13.78, -49.48 }, { 0.893, 0.615 } },
+                                        { "C1", { 60.94,  38.21,  61.31 }, { 0.107, 0.385 } },
+                                        { "C2", { 37.80,   7.30, -43.04 }, { 0.264, 0.385 } },
+                                        { "C3", { 49.81,  48.50,  15.76 }, { 0.421, 0.385 } },
+                                        { "C4", { 28.88,  19.36, -24.48 }, { 0.579, 0.385 } },
+                                        { "C5", { 72.45, -23.57,  60.47 }, { 0.736, 0.385 } },
+                                        { "C6", { 71.65,  23.74,  72.28 }, { 0.893, 0.385 } },
+                                        { "D1", { 70.19, -31.85,   1.98 }, { 0.107, 0.155 } },
+                                        { "D2", { 54.38,   8.84, -25.71 }, { 0.264, 0.155 } },
+                                        { "D3", { 42.03, -15.78,  22.93 }, { 0.421, 0.155 } },
+                                        { "D4", { 48.82,  -5.11, -23.08 }, { 0.579, 0.155 } },
+                                        { "D5", { 65.10,  18.14,  18.68 }, { 0.736, 0.155 } },
+                                        { "D6", { 36.13,  14.15,  15.78 }, { 0.893, 0.155 } } };
+
 dt_color_checker_t spyder_24_v2 = {  .name = "Datacolor SpyderCheckr 24 after 2018",
                                   .author = "Aur\303\251lien PIERRE",
                                   .date = "dec, 9 2016",
@@ -201,49 +245,15 @@ dt_color_checker_t spyder_24_v2 = {  .name = "Datacolor SpyderCheckr 24 after 20
                                   .middle_grey = 03,
                                   .white = 00,
                                   .black = 05,
-                                  .values = { { "A1", { 96.04,   2.16,   2.60 }, { 0.107, 0.844 } },
-                                              { "A2", { 80.44,   1.17,   2.05 }, { 0.264, 0.844 } },
-                                              { "A3", { 65.52,   0.69,   1.86 }, { 0.421, 0.844 } },
-                                              { "A4", { 49.62,   0.58,   1.56 }, { 0.579, 0.844 } },
-                                              { "A5", { 33.55,   0.35,   1.40 }, { 0.736, 0.844 } },
-                                              { "A6", { 16.91,   1.43,  -0.81 }, { 0.893, 0.844 } },
-                                              { "B1", { 47.12, -32.50, -28.75 }, { 0.107, 0.615 } },
-                                              { "B2", { 50.49,  53.45, -13.55 }, { 0.264, 0.615 } },
-                                              { "B3", { 83.61,   3.36,  87.02 }, { 0.421, 0.615 } },
-                                              { "B4", { 41.05,  60.75,  31.17 }, { 0.579, 0.615 } },
-                                              { "B5", { 54.14, -40.80,  34.75 }, { 0.736, 0.615 } },
-                                              { "B6", { 24.75,  13.78, -49.48 }, { 0.893, 0.615 } },
-                                              { "C1", { 60.94,  38.21,  61.31 }, { 0.107, 0.385 } },
-                                              { "C2", { 37.80,   7.30, -43.04 }, { 0.264, 0.385 } },
-                                              { "C3", { 49.81,  48.50,  15.76 }, { 0.421, 0.385 } },
-                                              { "C4", { 28.88,  19.36, -24.48 }, { 0.579, 0.385 } },
-                                              { "C5", { 72.45, -23.57,  60.47 }, { 0.736, 0.385 } },
-                                              { "C6", { 71.65,  23.74,  72.28 }, { 0.893, 0.385 } },
-                                              { "D1", { 70.19, -31.85,   1.98 }, { 0.107, 0.155 } },
-                                              { "D2", { 54.38,   8.84, -25.71 }, { 0.264, 0.155 } },
-                                              { "D3", { 42.03, -15.78,  22.93 }, { 0.421, 0.155 } },
-                                              { "D4", { 48.82,  -5.11, -23.08 }, { 0.579, 0.155 } },
-                                              { "D5", { 65.10,  18.14,  18.68 }, { 0.736, 0.155 } },
-                                              { "D6", { 36.13,  14.15,  15.78 }, { 0.893, 0.155 } } } };
+                                  .values = spyder_24_v2_patch };
 
 
 // dimensions between reference dots : 297 mm width x 197 mm height
 // patch width : 26x26 mm
 // outer gutter : 8 mm
 // internal gutters (gap between patches) : 5 mm
-dt_color_checker_t spyder_48 = {  .name = "Datacolor SpyderCheckr 48 before 2018",
-                                  .author = "Aur\303\251lien PIERRE",
-                                  .date = "dec, 9 2016",
-                                  .manufacturer = "DataColor",
-                                  .type = COLOR_CHECKER_SPYDER_48,
-                                  .ratio = 2.f / 3.f,
-                                  .radius = 0.035,
-                                  .patches = 48,
-                                  .size = { 8, 6 },
-                                  .middle_grey = 24,
-                                  .white = 21,
-                                  .black = 29,
-                                  .values = { { "A1", { 61.35,  34.81,  18.38 }, { 0.071, 0.107 } },
+
+dt_color_checker_patch spyder_48_patches[] = { { "A1", { 61.35,  34.81,  18.38 }, { 0.071, 0.107 } },
                                               { "A2", { 75.50 ,  5.84,  50.42 }, { 0.071, 0.264 } },
                                               { "A3", { 66.82,	-25.1,	23.47 }, { 0.071, 0.421 } },
                                               { "A4", { 60.53,	-22.6, -20.40 }, { 0.071, 0.579 } },
@@ -290,18 +300,13 @@ dt_color_checker_t spyder_48 = {  .name = "Datacolor SpyderCheckr 48 before 2018
                                               { "H3", { 42.03, -15.80,	22.93 }, { 0.929, 0.421 } },
                                               { "H4", { 48.82,	-5.11, -23.08 }, { 0.929, 0.579 } },
                                               { "H5", { 65.10,	18.14,	18.68 }, { 0.929, 0.736 } },
-                                              { "H6", { 36.13,	14.15,	15.78 }, { 0.929, 0.893 } } } };
+                                              { "H6", { 36.13,	14.15,	15.78 }, { 0.929, 0.893 } } };
 
-
-// dimensions between reference dots : 297 mm width x 197 mm height
-// patch width : 26x26 mm
-// outer gutter : 8 mm
-// internal gutters (gap between patches) : 5 mm
-dt_color_checker_t spyder_48_v2 = {  .name = "Datacolor SpyderCheckr 48 after 2018",
+dt_color_checker_t spyder_48 = {  .name = "Datacolor SpyderCheckr 48 before 2018",
                                   .author = "Aur\303\251lien PIERRE",
                                   .date = "dec, 9 2016",
                                   .manufacturer = "DataColor",
-                                  .type = COLOR_CHECKER_SPYDER_48_V2,
+                                  .type = COLOR_CHECKER_SPYDER_48,
                                   .ratio = 2.f / 3.f,
                                   .radius = 0.035,
                                   .patches = 48,
@@ -309,7 +314,15 @@ dt_color_checker_t spyder_48_v2 = {  .name = "Datacolor SpyderCheckr 48 after 20
                                   .middle_grey = 24,
                                   .white = 21,
                                   .black = 29,
-                                  .values = { { "A1", { 61.35,  34.81,  18.38 }, { 0.071, 0.107 } },
+                                  .values = spyder_48_patches };
+
+
+// dimensions between reference dots : 297 mm width x 197 mm height
+// patch width : 26x26 mm
+// outer gutter : 8 mm
+// internal gutters (gap between patches) : 5 mm
+
+dt_color_checker_patch spyder_48_v2_patch[] = { { "A1", { 61.35,  34.81,  18.38 }, { 0.071, 0.107 } },
                                               { "A2", { 75.50 ,  5.84,  50.42 }, { 0.071, 0.264 } },
                                               { "A3", { 66.82,  -25.1,  23.47 }, { 0.071, 0.421 } },
                                               { "A4", { 60.53, -22.62, -20.40 }, { 0.071, 0.579 } },
@@ -356,36 +369,301 @@ dt_color_checker_t spyder_48_v2 = {  .name = "Datacolor SpyderCheckr 48 after 20
                                               { "H3", { 42.03, -15.78,  22.93 }, { 0.929, 0.421 } },
                                               { "H4", { 48.82,  -5.11, -23.08 }, { 0.929, 0.579 } },
                                               { "H5", { 65.10,  18.14,  18.68 }, { 0.929, 0.736 } },
-                                              { "H6", { 36.13,  14.15,  15.78 }, { 0.929, 0.893 } } } };
+                                              { "H6", { 36.13,  14.15,  15.78 }, { 0.929, 0.893 } } };
 
+dt_color_checker_t spyder_48_v2 = {  .name = "Datacolor SpyderCheckr 48 after 2018",
+                                  .author = "Aur\303\251lien PIERRE",
+                                  .date = "dec, 9 2016",
+                                  .manufacturer = "DataColor",
+                                  .type = COLOR_CHECKER_SPYDER_48_V2,
+                                  .ratio = 2.f / 3.f,
+                                  .radius = 0.035,
+                                  .patches = 48,
+                                  .size = { 8, 6 },
+                                  .middle_grey = 24,
+                                  .white = 21,
+                                  .black = 29,
+                                  .values = spyder_48_v2_patch };
 
-dt_color_checker_t * dt_get_color_checker(const dt_color_checker_targets target_type)
+typedef struct dt_colorchecker_label_t
 {
-  switch(target_type)
+  gchar *name;
+  dt_color_checker_targets type;
+  gchar *path;
+  int patch_nb;
+} dt_colorchecker_label_t;
+
+// Add other supported type of CGATS here
+typedef enum dt_colorchecker_CGATS_types
+{
+  CGATS_TYPE_IT8_7_1 = 0,
+  CGATS_TYPE_IT8_7_2 = 1,
+  CGATS_TYPE_UNKOWN = 2
+} dt_colorchecker_CGATS_types;
+
+const char *CGATS_types[CGATS_TYPE_UNKOWN] = {
+  "IT8.7/1", // transparent 
+  "IT8.7/2"  // opaque
+};
+
+typedef enum dt_colorchecker_material_types
+{
+  COLOR_CHECKER_MATERIAL_TRANSPARENT = 0,
+  COLOR_CHECKER_MATERIAL_OPAQUE = 1,
+  COLOR_CHECKER_MATERIAL_UNKNOWN = 2
+} dt_colorchecker_material_types;
+
+const char *colorchecker_material_types[COLOR_CHECKER_MATERIAL_UNKNOWN] = {
+  "Transparent",
+  "Opaque"
+};
+
+typedef struct dt_colorchecker_CGATS_label_make_name_t 
+{
+  const char *type;
+  const char *description;
+  const char *material;
+} dt_colorchecker_CGATS_label_make_name_t;
+
+// This defines charts specifications
+typedef struct dt_colorchecker_chart_spec_t
+{
+  const gchar *type;
+  float radius;       // radius of a patch in ratio of the checker diagonal
+  float ratio;        // format ratio of the chart, guide to guide (white dots)
+  size_t size[2];     // number of patch along x, y axes
+  float guide_size[2];// size of the guide area, specified by "MARK" data in cht files
+  size_t middle_grey;
+  size_t white;
+  size_t black;
+
+  int num_patches; // total number of patches
+  int colums;
+  int rows;
+  float patch_width;
+  float patch_height;
+  float patch_offset_x;
+  float patch_offset_y;
+
+  GSList *patches; // list of patches struct, data are dt_color_checker_patch
+
+} dt_colorchecker_chart_spec_t;
+
+dt_colorchecker_label_t *dt_colorchecker_label_init(const char *label, const dt_color_checker_targets type, const char *path, const int patch_nb)
+{
+  dt_colorchecker_label_t *checker_label = malloc(sizeof(dt_colorchecker_label_t));
+  if(!checker_label) return NULL;
+
+  checker_label->name = label ? g_strdup(label) : NULL;
+  checker_label->type = type;
+  checker_label->path = path ? g_strdup(path) : NULL;
+  checker_label->patch_nb = patch_nb;
+
+  return checker_label;
+}
+
+dt_color_checker_patch *dt_colorchecker_patch_array_init(const size_t num_patches)
+{
+  dt_color_checker_patch *patches = (dt_color_checker_patch *)dt_alloc_align(num_patches * sizeof(dt_color_checker_patch));
+  if(!patches) return NULL;
+
+  // Initialize the patches
+  for(size_t i = 0; i < num_patches; i++)
+  {
+    patches[i].name = NULL;
+    patches[i].x = 0.0f;
+    patches[i].y = 0.0f;
+    patches[i].Lab[0] = 0.0f;
+    patches[i].Lab[1] = 0.0f;
+    patches[i].Lab[2] = 0.0f;
+  }
+  return patches;
+}
+
+void dt_colorchecker_patch_cleanup(dt_color_checker_patch *patch)
+{
+  if(!patch) return;
+  if(!patch->name) return;
+
+  SAFE_G_FREE(patch->name);
+}
+
+// This one is to fully free GSList of dt_color_checker_patch
+void dt_colorchecker_patch_cleanup_list(void *_patch)
+{
+  dt_color_checker_patch *patch = (dt_color_checker_patch *)_patch;
+  if(!patch) return;
+
+  // Free the name if it was allocated
+  SAFE_G_FREE(patch->name)
+
+  free(patch);
+}
+
+dt_color_checker_t *dt_colorchecker_init()
+{                  
+  dt_color_checker_t *checker = (dt_color_checker_t*)malloc(sizeof(dt_color_checker_t));
+  if(!checker) return NULL;
+
+  checker->name = NULL;
+  checker->author = NULL;
+  checker->date = NULL;
+  checker->manufacturer = NULL;
+  checker->values = NULL;
+  checker->finished = FALSE;
+
+  return checker;
+}
+
+void dt_colorchecker_cleanup(dt_color_checker_t *checker)
+{
+  if (!checker) return;
+
+  SAFE_G_FREE(checker->name)
+  SAFE_G_FREE(checker->author)
+  SAFE_G_FREE(checker->date)
+  SAFE_G_FREE(checker->manufacturer)
+
+  if(checker->patches > 0 && checker->values)
+  {
+    for(size_t i = 0; i < checker->patches; i++)
+    {
+      dt_colorchecker_patch_cleanup(&checker->values[i]);
+    }
+
+    dt_free_align(checker->values);
+  }
+  free(checker);
+  checker = NULL;
+}
+
+void dt_colorchecker_label_free(gpointer data)
+{
+  dt_colorchecker_label_t *checker_label = (dt_colorchecker_label_t *)data;
+  if(!checker_label) return;
+
+  // Only free if not NULL and if dynamically allocated (user reference)
+  if(checker_label->type == COLOR_CHECKER_USER_REF)
+  {
+    SAFE_G_FREE(checker_label->name)
+    SAFE_G_FREE(checker_label->path) // Builtin checker doesn't use this char dynamically
+  }
+}
+
+void dt_colorchecker_label_list_cleanup(GList **colorcheckers)
+{
+  if(!colorcheckers) return;
+
+  g_list_free_full(g_steal_pointer(colorcheckers), dt_colorchecker_label_free);
+  *colorcheckers = NULL;
+}
+
+/**
+ * @brief Creates a color checker from a reference file (CGATS format).
+ *
+ * @param color_filename the path to the CGATS file.
+ * @param cht_filename the path to the .cht file (optional, can be NULL).
+ * @return dt_color_checker_t* the filled color checker.
+ */
+dt_color_checker_t *dt_colorchecker_user_ref_create(const char *color_filename, const char *cht_filename);
+
+/**
+ * @brief Find all .cht files in the user config/color/it8 directory
+ * 
+ * @param chts NULL GList that will be populated with found IT8 files
+ * @return int Number of found files
+ */
+int dt_colorchecker_find_cht_files(GList **chts);
+
+/**
+ * @brief Find all CGAT files in the user config/color/it8 directory
+ *
+ * @param ref_colorcheckers_files NULL GList that will be populated with found IT8 files
+ * @return int Number of found files
+ */
+int dt_colorchecker_find_CGATS_reference_files(GList **ref_colorcheckers_files);
+
+/**
+ * @brief Find all builtin colorcheckers
+ * 
+ * @param colorcheckers_label NULL GList that will be populated with found colorcheckers.
+ * @return int Number of found colorcheckers.
+ */
+int dt_colorchecker_find_builtin(GList **colorcheckers_label);
+
+/**
+ * @brief Copy the content of a color checker from source to destination.
+ * 
+ * @param dest A pointer to the destination color checker.
+ * @param src A pointer to the source color checker.
+ */
+void dt_colorchecker_copy(dt_color_checker_t *dest, const dt_color_checker_t *src);
+
+
+static dt_color_checker_t *dt_get_color_checker(const dt_color_checker_targets target_type, GList **colorchecker_label, const char *color_filename)
+{
+  // initialize the destination checker
+  dt_color_checker_t *checker_dest = NULL;
+  checker_dest = dt_colorchecker_init();
+  if(!checker_dest) return NULL;
+
+  // check if the target type is a user reference and get the label data if available
+  dt_color_checker_targets checker_type = COLOR_CHECKER_LAST;
+  const char *cht_filename = NULL;
+  if(target_type >= COLOR_CHECKER_USER_REF && colorchecker_label)
+  {
+    dt_print(DT_DEBUG_VERBOSE, _("dt_get_color_checker: colorchecker type %i is a user reference.\n"), target_type);
+
+    // Get the label data from the list
+    const dt_colorchecker_label_t *label_data = (const dt_colorchecker_label_t*)g_list_nth_data(*colorchecker_label, target_type);
+    if(label_data == NULL) return NULL;
+    
+    checker_type = COLOR_CHECKER_USER_REF;
+    cht_filename = label_data->path;
+  }
+  else // it's a builtin colorchecker
+    checker_type = target_type;
+
+  // Copy the color checker data from the predefined checkers or from reference file
+  switch(checker_type)
   {
     case COLOR_CHECKER_XRITE_24_2000:
-      return &xrite_24_2000;
-
+      dt_colorchecker_copy(checker_dest, &xrite_24_2000);
+      break;
     case COLOR_CHECKER_XRITE_24_2014:
-      return &xrite_24_2014;
-
+      dt_colorchecker_copy(checker_dest, &xrite_24_2014);
+      break;
     case COLOR_CHECKER_SPYDER_24:
-      return &spyder_24;
-
+      dt_colorchecker_copy(checker_dest, &spyder_24);
+      break;
     case COLOR_CHECKER_SPYDER_24_V2:
-      return &spyder_24_v2;
-
+      dt_colorchecker_copy(checker_dest, &spyder_24_v2);
+      break;
     case COLOR_CHECKER_SPYDER_48:
-      return &spyder_48;
-
+      dt_colorchecker_copy(checker_dest, &spyder_48);
+      break;
     case COLOR_CHECKER_SPYDER_48_V2:
-      return &spyder_48_v2;
-
+      dt_colorchecker_copy(checker_dest, &spyder_48_v2);
+      break;
+    case COLOR_CHECKER_USER_REF:
+      if(color_filename)
+      {
+        dt_color_checker_t *p = dt_colorchecker_user_ref_create(color_filename, cht_filename);
+        if(p)
+        {
+          dt_colorchecker_copy(checker_dest, p);
+          dt_colorchecker_cleanup(p);
+        }
+      }
+      else fprintf(stderr, "dt_get_color_checker: colorchecker %i is a user reference but no color filename was provided!\n", target_type);   
+      break;
+      
     case COLOR_CHECKER_LAST:
-      return &xrite_24_2014;
+      fprintf(stderr, "dt_get_color_checker: colorchecker type %i not found!\n", target_type);
+      dt_colorchecker_copy(checker_dest, &xrite_24_2014);
   }
 
-  return &xrite_24_2014;
+  return checker_dest;
 }
 
 /**
@@ -413,8 +691,7 @@ static inline void dt_color_checker_get_coordinates(const dt_color_checker_t *co
 }
 
 // find a patch matching a name
-static inline const dt_color_checker_patch* dt_color_checker_get_patch_by_name(const dt_color_checker_t *const target_checker,
-                                                                              const char *name, size_t *index)
+static inline const dt_color_checker_patch *dt_color_checker_get_patch_by_name(const dt_color_checker_t *const target_checker, const char *name, size_t *index)
 {
   size_t idx = -1;
   const dt_color_checker_patch *patch = NULL;
@@ -429,9 +706,50 @@ static inline const dt_color_checker_patch* dt_color_checker_get_patch_by_name(c
 
   if(patch == NULL) fprintf(stderr, "No patch matching name `%s` was found in %s\n", name, target_checker->name);
 
-  if(index ) *index = idx;
+  if(index) *index = idx;
   return patch;
 }
+
+/**
+ * @brief Find all builtin and .cht colorcheckers.
+ *
+ * @param colorcheckers_label the NULL GList that will be populated with found .cht.
+ * @return int Number of found colorcheckers.
+ */
+int dt_colorchecker_find(GList **colorcheckers_label)
+{
+  int total = dt_colorchecker_find_builtin(colorcheckers_label);
+  dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find: found %d builtin colorcheckers\n"), total);
+  int b_nb = total;
+  
+  total += dt_colorchecker_find_cht_files(colorcheckers_label);
+  if (total) dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find: found %d CGAT references files\n"), total - b_nb);
+  return total;
+}
+
+/**
+ * @brief Find all builtin and CGATS colorcheckers.
+ * 
+ * @param color_label A NULL GList that will be populated with found .CGATS files.
+ * @return int The number of found .cht files.
+ */
+int dt_colorchecker_find_color(GList **color_label)
+{
+  if(!color_label) return 0;
+
+  // Clear cht file list
+  dt_colorchecker_label_list_cleanup(color_label);
+
+  // Refill the list 
+  const int total = dt_colorchecker_find_CGATS_reference_files(color_label);
+  if(total) dt_print(DT_DEBUG_VERBOSE, _("dt_colorchecker_find_color: found %d .cht files\n"), total);
+
+  if(*color_label == NULL)
+    fprintf(stderr, "[channelmixerrgb] no CGATS file found\n");
+
+  return *color_label ? total : 0;
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
