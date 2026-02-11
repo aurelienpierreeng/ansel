@@ -610,13 +610,13 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
   const int scale = p->curr_scale;
   int count = 0;
 
-  // check if there is a shape on this scale
+  // Check if there is at least one shape on this scale
   for(int i = 0; i < RETOUCH_NO_FORMS && count == 0; i++)
   {
     if(p->rt_forms[i].formid != 0 && p->rt_forms[i].scale == scale) count++;
   }
 
-  // if there are shapes on this scale, make the cut shapes button sensitive
+  // If a shape was found on this scale, make the cut shapes button sensitive
   gtk_widget_set_sensitive(g->bt_copy_scale, count > 0);
 
   // if no shapes on this scale, we hide all
@@ -635,22 +635,22 @@ static void rt_show_forms_for_current_scale(dt_iop_module_t *self)
 
   // else, we create a new from group with the shapes and display it
   dt_masks_form_t *grp = dt_masks_create_ext(DT_MASKS_GROUP);
+  const int grid = self->blend_params->mask_id;
+
   for(int i = 0; i < RETOUCH_NO_FORMS; i++)
   {
     if(p->rt_forms[i].scale == scale)
     {
-      const int grid = self->blend_params->mask_id;
       const int formid = p->rt_forms[i].formid;
       dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, formid);
-      if(form)
-      {
-        dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)malloc(sizeof(dt_masks_form_group_t));
-        fpt->formid = formid;
-        fpt->parentid = grid;
-        fpt->state = DT_MASKS_STATE_USE;
-        fpt->opacity = 1.0f;
-        grp->points = g_list_append(grp->points, fpt);
-      }
+      if(!form) continue;
+      
+      dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)malloc(sizeof(dt_masks_form_group_t));
+      fpt->formid = formid;
+      fpt->parentid = grid;
+      fpt->state = DT_MASKS_STATE_USE;
+      fpt->opacity = 1.0f;
+      grp->points = g_list_append(grp->points, fpt);
     }
   }
 
@@ -673,64 +673,62 @@ static void rt_resynch_params(struct dt_iop_module_t *self)
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
   dt_develop_blend_params_t *bp = self->blend_params;
 
+  // Create a temporary array to store form data and initialize it to zero
   dt_iop_retouch_form_data_t forms_d[RETOUCH_NO_FORMS];
   memset(forms_d, 0, sizeof(dt_iop_retouch_form_data_t) * RETOUCH_NO_FORMS);
 
   // we go through all forms in blend params
   dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, bp->mask_id);
-  if(grp && (grp->type & DT_MASKS_GROUP))
+  if(!grp || !(grp->type & DT_MASKS_GROUP))
+    return;
+  
+  int new_form_index = 0;
+  // For each form in the group, we search if it already exists in the params array,
+  // if it does we copy it, if not we add it to the end of the array
+  for(GList *forms = grp->points; (new_form_index < RETOUCH_NO_FORMS) && forms; forms = g_list_next(forms))
   {
-    int new_form_index = 0;
-    for(GList *forms = grp->points; (new_form_index < RETOUCH_NO_FORMS) && forms; forms = g_list_next(forms))
+    dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
+    if(!grpt) return;
+    
+    const int formid = grpt->formid;
+
+    // search for the form index in the shapes array
+    const int form_index = rt_get_index_from_formid(p, formid);
+
+    // if it exists, copy it to the new array
+    if(form_index >= 0)
     {
-      dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
-      if(grpt)
+      forms_d[new_form_index] = p->rt_forms[form_index];
+    }
+    else
+    {
+      // if it does not exists, add it to the new array
+      const dt_masks_form_t *parent_form = dt_masks_get_from_id(darktable.develop, formid);
+      if(!parent_form) continue;
+      
+      forms_d[new_form_index].formid = formid;
+      forms_d[new_form_index].scale = p->curr_scale;
+      forms_d[new_form_index].algorithm = p->algorithm;
+      forms_d[new_form_index].distort_mode = 2;
+
+      switch(forms_d[new_form_index].algorithm)
       {
-        const int formid = grpt->formid;
-
-        // search for the form on the shapes array
-        const int form_index = rt_get_index_from_formid(p, formid);
-
-        // if it exists copy it to the new array
-        if(form_index >= 0)
-        {
-          forms_d[new_form_index] = p->rt_forms[form_index];
-
-          new_form_index++;
-        }
-        else
-        {
-          // if it does not exists add it to the new array
-          const dt_masks_form_t *parent_form = dt_masks_get_from_id(darktable.develop, formid);
-          if(parent_form)
-          {
-            forms_d[new_form_index].formid = formid;
-            forms_d[new_form_index].scale = p->curr_scale;
-            forms_d[new_form_index].algorithm = p->algorithm;
-            forms_d[new_form_index].distort_mode = 2;
-
-            switch(forms_d[new_form_index].algorithm)
-            {
-              case DT_IOP_RETOUCH_BLUR:
-                forms_d[new_form_index].blur_type = p->blur_type;
-                forms_d[new_form_index].blur_radius = p->blur_radius;
-                break;
-              case DT_IOP_RETOUCH_FILL:
-                forms_d[new_form_index].fill_mode = p->fill_mode;
-                forms_d[new_form_index].fill_color[0] = p->fill_color[0];
-                forms_d[new_form_index].fill_color[1] = p->fill_color[1];
-                forms_d[new_form_index].fill_color[2] = p->fill_color[2];
-                forms_d[new_form_index].fill_brightness = p->fill_brightness;
-                break;
-              default:
-                break;
-            }
-
-            new_form_index++;
-          }
-        }
+        case DT_IOP_RETOUCH_BLUR:
+          forms_d[new_form_index].blur_type = p->blur_type;
+          forms_d[new_form_index].blur_radius = p->blur_radius;
+          break;
+        case DT_IOP_RETOUCH_FILL:
+          forms_d[new_form_index].fill_mode = p->fill_mode;
+          forms_d[new_form_index].fill_color[0] = p->fill_color[0];
+          forms_d[new_form_index].fill_color[1] = p->fill_color[1];
+          forms_d[new_form_index].fill_color[2] = p->fill_color[2];
+          forms_d[new_form_index].fill_brightness = p->fill_brightness;
+          break;
+        default:
+          break;
       }
     }
+    new_form_index++; 
   }
 
   // we reaffect params
@@ -936,19 +934,19 @@ static int rt_shape_is_being_added(dt_iop_module_t *self, const int shape_type)
     if(self->dev->form_visible->type & DT_MASKS_GROUP)
     {
       GList *forms = self->dev->form_visible->points;
-      if(forms)
-      {
-        dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
-        if(grpt)
-        {
-          const dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, grpt->formid);
-          if(form) being_added = (form->type & shape_type);
-        }
-      }
+      if(!forms) goto end;
+      
+      dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
+      if(!grpt) goto end;
+      
+      const dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, grpt->formid);
+      if(form) being_added = (form->type & shape_type);
     }
     else
       being_added = (self->dev->form_visible->type & shape_type);
   }
+
+  end:
   return being_added;
 }
 
@@ -2497,70 +2495,65 @@ static void rt_compute_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelp
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
     {
       const dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
-      if(grpt)
+      if(!grpt) continue;
+      
+      const int formid = grpt->formid;
+      const int index = rt_get_index_from_formid(p, formid);
+      if(p->rt_forms[index].algorithm == DT_IOP_RETOUCH_FILL)
       {
-        const int formid = grpt->formid;
-        const int index = rt_get_index_from_formid(p, formid);
-        if(p->rt_forms[index].algorithm == DT_IOP_RETOUCH_FILL)
+        continue;
+      }
+
+      // we get the spot
+      dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
+      if(!form) continue;
+        
+      // if the form is outside the roi, we just skip it
+      // we get the area for the form
+      int fl, ft, fw, fh;
+      if(!dt_masks_get_area(self, piece, form, &fw, &fh, &fl, &ft))
+      {
+        continue;
+      }
+
+      // is the form outside of the roi?
+      fw *= roi_in->scale, fh *= roi_in->scale, fl *= roi_in->scale, ft *= roi_in->scale;
+      if(ft >= roi_in->y + roi_in->height || ft + fh <= roi_in->y || fl >= roi_in->x + roi_in->width
+          || fl + fw <= roi_in->x)
+      {
+        continue;
+      }
+
+      // heal need the entire area
+      if(p->rt_forms[index].algorithm == DT_IOP_RETOUCH_HEAL)
+      {
+        // we enlarge the roi if needed
+        roiy = fminf(ft, roiy);
+        roix = fminf(fl, roix);
+        roir = fmaxf(fl + fw, roir);
+        roib = fmaxf(ft + fh, roib);
+      }
+      // blur need an overlap of 4 * radius (scaled)
+      if(p->rt_forms[index].algorithm == DT_IOP_RETOUCH_BLUR && index >= 0)
+      {
+        const int overlap = ceilf(4 * (p->rt_forms[index].blur_radius * roi_in->scale));
+        if(roiy > ft) roiy = MAX(roiy - overlap, ft);
+        if(roix > fl) roix = MAX(roix - overlap, fl);
+        if(roir < fl + fw) roir = MAX(roir + overlap, fl + fw);
+        if(roib < ft + fh) roib = MAX(roib + overlap, ft + fh);
+      }
+      // heal and clone need both source and destination areas
+      if(p->rt_forms[index].algorithm == DT_IOP_RETOUCH_HEAL
+          || p->rt_forms[index].algorithm == DT_IOP_RETOUCH_CLONE)
+      {
+        float dx = 0.f, dy = 0.f;
+        if(rt_masks_get_delta_to_destination(self, piece, roi_in, form, &dx, &dy,
+                                              p->rt_forms[index].distort_mode))
         {
-          continue;
-        }
-
-        // we get the spot
-        dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
-        if(form)
-        {
-          // if the form is outside the roi, we just skip it
-          // we get the area for the form
-          int fl, ft, fw, fh;
-          if(!dt_masks_get_area(self, piece, form, &fw, &fh, &fl, &ft))
-          {
-            continue;
-          }
-
-          // is the form outside of the roi?
-          fw *= roi_in->scale, fh *= roi_in->scale, fl *= roi_in->scale, ft *= roi_in->scale;
-          if(ft >= roi_in->y + roi_in->height || ft + fh <= roi_in->y || fl >= roi_in->x + roi_in->width
-             || fl + fw <= roi_in->x)
-          {
-            continue;
-          }
-
-          // heal need the entire area
-          if(p->rt_forms[index].algorithm == DT_IOP_RETOUCH_HEAL)
-          {
-            // we enlarge the roi if needed
-            roiy = fminf(ft, roiy);
-            roix = fminf(fl, roix);
-            roir = fmaxf(fl + fw, roir);
-            roib = fmaxf(ft + fh, roib);
-          }
-          // blur need an overlap of 4 * radius (scaled)
-          if(p->rt_forms[index].algorithm == DT_IOP_RETOUCH_BLUR)
-          {
-            if(index >= 0)
-            {
-              const int overlap = ceilf(4 * (p->rt_forms[index].blur_radius * roi_in->scale));
-              if(roiy > ft) roiy = MAX(roiy - overlap, ft);
-              if(roix > fl) roix = MAX(roix - overlap, fl);
-              if(roir < fl + fw) roir = MAX(roir + overlap, fl + fw);
-              if(roib < ft + fh) roib = MAX(roib + overlap, ft + fh);
-            }
-          }
-          // heal and clone need both source and destination areas
-          if(p->rt_forms[index].algorithm == DT_IOP_RETOUCH_HEAL
-             || p->rt_forms[index].algorithm == DT_IOP_RETOUCH_CLONE)
-          {
-            float dx = 0.f, dy = 0.f;
-            if(rt_masks_get_delta_to_destination(self, piece, roi_in, form, &dx, &dy,
-                                                 p->rt_forms[index].distort_mode))
-            {
-              roiy = fminf(ft - dy, roiy);
-              roix = fminf(fl - dx, roix);
-              roir = fmaxf(fl + fw - dx, roir);
-              roib = fmaxf(ft + fh - dy, roib);
-            }
-          }
+          roiy = fminf(ft - dy, roiy);
+          roix = fminf(fl - dx, roix);
+          roir = fmaxf(fl + fw - dx, roir);
+          roib = fmaxf(ft + fh - dy, roib);
         }
       }
     }
@@ -2594,64 +2587,62 @@ static void rt_extend_roi_in_from_source_clones(struct dt_iop_module_t *self, st
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
     {
       const dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
-      if(grpt)
+      if(!grpt) continue;
+      
+      const int formid = grpt->formid;
+
+      // just need the previous forms
+      if(formid == formid_src) break;
+
+      const int index = rt_get_index_from_formid(p, formid);
+
+      // only process clone and heal
+      if(p->rt_forms[index].algorithm != DT_IOP_RETOUCH_HEAL
+          && p->rt_forms[index].algorithm != DT_IOP_RETOUCH_CLONE)
       {
-        const int formid = grpt->formid;
+        continue;
+      }
 
-        // just need the previous forms
-        if(formid == formid_src) break;
+      // we get the spot
+      dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
+      if(!form) continue;
+      
+      // we get the source area
+      int fl, ft, fw, fh;
+      if(!dt_masks_get_source_area(self, piece, form, &fw, &fh, &fl, &ft))
+      {
+        continue;
+      }
+      fw *= roi_in->scale, fh *= roi_in->scale, fl *= roi_in->scale, ft *= roi_in->scale;
 
-        const int index = rt_get_index_from_formid(p, formid);
+      // get the destination area
+      int fl_dest, ft_dest;
+      float dx = 0.f, dy = 0.f;
+      if(!rt_masks_get_delta_to_destination(self, piece, roi_in, form, &dx, &dy,
+                                            p->rt_forms[index].distort_mode))
+      {
+        continue;
+      }
 
-        // only process clone and heal
-        if(p->rt_forms[index].algorithm != DT_IOP_RETOUCH_HEAL
-           && p->rt_forms[index].algorithm != DT_IOP_RETOUCH_CLONE)
-        {
-          continue;
-        }
+      ft_dest = ft + dy;
+      fl_dest = fl + dx;
 
-        // we get the spot
-        dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
-        if(form)
-        {
-          // we get the source area
-          int fl, ft, fw, fh;
-          if(!dt_masks_get_source_area(self, piece, form, &fw, &fh, &fl, &ft))
-          {
-            continue;
-          }
-          fw *= roi_in->scale, fh *= roi_in->scale, fl *= roi_in->scale, ft *= roi_in->scale;
+      // check if the destination of this form intersects the source of the formid_src
+      const int intersects = !(ft_dest + fh < ft_src || ft_src + fh_src < ft_dest || fl_dest + fw < fl_src
+                                || fl_src + fw_src < fl_dest);
+      if(intersects)
+      {
+        // we enlarge the roi if needed
+        roiy = fminf(ft, roiy);
+        roix = fminf(fl, roix);
+        roir = fmaxf(fl + fw, roir);
+        roib = fmaxf(ft + fh, roib);
 
-          // get the destination area
-          int fl_dest, ft_dest;
-          float dx = 0.f, dy = 0.f;
-          if(!rt_masks_get_delta_to_destination(self, piece, roi_in, form, &dx, &dy,
-                                                p->rt_forms[index].distort_mode))
-          {
-            continue;
-          }
-
-          ft_dest = ft + dy;
-          fl_dest = fl + dx;
-
-          // check if the destination of this form intersects the source of the formid_src
-          const int intersects = !(ft_dest + fh < ft_src || ft_src + fh_src < ft_dest || fl_dest + fw < fl_src
-                                   || fl_src + fw_src < fl_dest);
-          if(intersects)
-          {
-            // we enlarge the roi if needed
-            roiy = fminf(ft, roiy);
-            roix = fminf(fl, roix);
-            roir = fmaxf(fl + fw, roir);
-            roib = fmaxf(ft + fh, roib);
-
-            // need both source and destination areas
-            roiy = fminf(ft + dy, roiy);
-            roix = fminf(fl + dx, roix);
-            roir = fmaxf(fl + fw + dx, roir);
-            roib = fmaxf(ft + fh + dy, roib);
-          }
-        }
+        // need both source and destination areas
+        roiy = fminf(ft + dy, roiy);
+        roix = fminf(fl + dx, roix);
+        roir = fmaxf(fl + fw + dx, roir);
+        roib = fmaxf(ft + fh + dy, roib);
       }
     }
   }
@@ -2682,40 +2673,39 @@ static void rt_extend_roi_in_for_clone(struct dt_iop_module_t *self, struct dt_d
     for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
     {
       dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
-      if(grpt)
+      if(!grpt) continue;
+      
+      const int formid = grpt->formid;
+      const int index = rt_get_index_from_formid(p, formid);
+
+      if(p->rt_forms[index].algorithm != DT_IOP_RETOUCH_HEAL
+          && p->rt_forms[index].algorithm != DT_IOP_RETOUCH_CLONE)
       {
-        const int formid = grpt->formid;
-        const int index = rt_get_index_from_formid(p, formid);
-
-        if(p->rt_forms[index].algorithm != DT_IOP_RETOUCH_HEAL
-           && p->rt_forms[index].algorithm != DT_IOP_RETOUCH_CLONE)
-        {
-          continue;
-        }
-
-        // we get the spot
-        dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
-        if(form == NULL)
-        {
-          continue;
-        }
-
-        // get the source area
-        int fl_src, ft_src, fw_src, fh_src;
-        if(!dt_masks_get_source_area(self, piece, form, &fw_src, &fh_src, &fl_src, &ft_src))
-        {
-          continue;
-        }
-
-        fw_src *= roi_in->scale, fh_src *= roi_in->scale, fl_src *= roi_in->scale, ft_src *= roi_in->scale;
-
-        // we only want to process forms already in roi_in
-        const int intersects
-            = !(roib < ft_src || ft_src + fh_src < roiy || roir < fl_src || fl_src + fw_src < roix);
-        if(intersects)
-          rt_extend_roi_in_from_source_clones(self, piece, roi_in, formid, fl_src, ft_src, fw_src, fh_src, &roir,
-                                              &roib, &roix, &roiy);
+        continue;
       }
+
+      // we get the spot
+      dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
+      if(form == NULL)
+      {
+        continue;
+      }
+
+      // get the source area
+      int fl_src, ft_src, fw_src, fh_src;
+      if(!dt_masks_get_source_area(self, piece, form, &fw_src, &fh_src, &fl_src, &ft_src))
+      {
+        continue;
+      }
+
+      fw_src *= roi_in->scale, fh_src *= roi_in->scale, fl_src *= roi_in->scale, ft_src *= roi_in->scale;
+
+      // we only want to process forms already in roi_in
+      const int intersects
+          = !(roib < ft_src || ft_src + fh_src < roiy || roir < fl_src || fl_src + fw_src < roix);
+      if(intersects)
+        rt_extend_roi_in_from_source_clones(self, piece, roi_in, formid, fl_src, ft_src, fw_src, fh_src, &roir,
+                                            &roib, &roix, &roiy);
     }
   }
 
@@ -3309,144 +3299,142 @@ static void rt_process_forms(float *layer, dwt_params_t *const wt_p, const int s
     scale = p->num_scales + 1;
   }
 
+  if(usr_d->suppress_mask) return;
+
   // iterate through all forms
-  if(!usr_d->suppress_mask)
+  const dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
+  if(!grp || !(grp->type & DT_MASKS_GROUP)) return;
+  
+  for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
   {
-    const dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
-    if(grp && (grp->type & DT_MASKS_GROUP))
+    const dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
+    if(grpt == NULL)
     {
-      for(const GList *forms = grp->points; forms; forms = g_list_next(forms))
+      fprintf(stderr, "rt_process_forms: invalid form\n");
+      continue;
+    }
+    const int formid = grpt->formid;
+    const float form_opacity = grpt->opacity;
+    if(formid == 0)
+    {
+      fprintf(stderr, "rt_process_forms: form is null\n");
+      continue;
+    }
+    const int index = rt_get_index_from_formid(p, formid);
+    if(index == -1)
+    {
+      // FIXME: we get this error when user go back in history, so forms are the same but the array has changed
+      fprintf(stderr, "rt_process_forms: missing form=%i from array\n", formid);
+      continue;
+    }
+
+    // only process current scale
+    if(p->rt_forms[index].scale != scale)
+    {
+      continue;
+    }
+
+    // get the spot
+    dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
+    if(form == NULL)
+    {
+      fprintf(stderr, "rt_process_forms: missing form=%i from masks\n", formid);
+      continue;
+    }
+
+    // if the form is outside the roi, we just skip it
+    if(!rt_masks_form_is_in_roi(self, piece, form, roi_layer, roi_layer))
+    {
+      continue;
+    }
+
+    // get the mask
+    float *mask = NULL;
+    dt_iop_roi_t roi_mask = { 0 };
+
+    dt_masks_get_mask(self, piece, form, &mask, &roi_mask.width, &roi_mask.height, &roi_mask.x, &roi_mask.y);
+    if(mask == NULL)
+    {
+      fprintf(stderr, "rt_process_forms: error retrieving mask\n");
+      continue;
+    }
+
+    // search the delta with the source
+    const dt_iop_retouch_algo_type_t algo = p->rt_forms[index].algorithm;
+    float dx = 0.f, dy = 0.f;
+
+    if(algo != DT_IOP_RETOUCH_BLUR && algo != DT_IOP_RETOUCH_FILL)
+    {
+      if(!rt_masks_get_delta_to_destination(self, piece, roi_layer, form, &dx, &dy,
+                                            p->rt_forms[index].distort_mode))
       {
-        const dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
-        if(grpt == NULL)
-        {
-          fprintf(stderr, "rt_process_forms: invalid form\n");
-          continue;
-        }
-        const int formid = grpt->formid;
-        const float form_opacity = grpt->opacity;
-        if(formid == 0)
-        {
-          fprintf(stderr, "rt_process_forms: form is null\n");
-          continue;
-        }
-        const int index = rt_get_index_from_formid(p, formid);
-        if(index == -1)
-        {
-          // FIXME: we get this error when user go back in history, so forms are the same but the array has changed
-          fprintf(stderr, "rt_process_forms: missing form=%i from array\n", formid);
-          continue;
-        }
-
-        // only process current scale
-        if(p->rt_forms[index].scale != scale)
-        {
-          continue;
-        }
-
-        // get the spot
-        dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
-        if(form == NULL)
-        {
-          fprintf(stderr, "rt_process_forms: missing form=%i from masks\n", formid);
-          continue;
-        }
-
-        // if the form is outside the roi, we just skip it
-        if(!rt_masks_form_is_in_roi(self, piece, form, roi_layer, roi_layer))
-        {
-          continue;
-        }
-
-        // get the mask
-        float *mask = NULL;
-        dt_iop_roi_t roi_mask = { 0 };
-
-        dt_masks_get_mask(self, piece, form, &mask, &roi_mask.width, &roi_mask.height, &roi_mask.x, &roi_mask.y);
-        if(mask == NULL)
-        {
-          fprintf(stderr, "rt_process_forms: error retrieving mask\n");
-          continue;
-        }
-
-        // search the delta with the source
-        const dt_iop_retouch_algo_type_t algo = p->rt_forms[index].algorithm;
-        float dx = 0.f, dy = 0.f;
-
-        if(algo != DT_IOP_RETOUCH_BLUR && algo != DT_IOP_RETOUCH_FILL)
-        {
-          if(!rt_masks_get_delta_to_destination(self, piece, roi_layer, form, &dx, &dy,
-                                                p->rt_forms[index].distort_mode))
-          {
-            if(mask) dt_free_align(mask);
-            continue;
-          }
-        }
-
-        // scale the mask
-        float *mask_scaled = NULL;
-        dt_iop_roi_t roi_mask_scaled = { 0 };
-
-        rt_build_scaled_mask(mask, &roi_mask, &mask_scaled, &roi_mask_scaled, roi_layer, dx, dy, algo);
-
-        // we don't need the original mask anymore
-        if(mask)
-        {
-          dt_free_align(mask);
-          mask = NULL;
-        }
-
-        if(mask_scaled == NULL)
-        {
-          continue;
-        }
-
-        if((dx != 0 || dy != 0 || algo == DT_IOP_RETOUCH_BLUR || algo == DT_IOP_RETOUCH_FILL)
-           && ((roi_mask_scaled.width > 2) && (roi_mask_scaled.height > 2)))
-        {
-          if(algo == DT_IOP_RETOUCH_CLONE)
-          {
-            _retouch_clone(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity);
-          }
-          else if(algo == DT_IOP_RETOUCH_HEAL)
-          {
-            _retouch_heal(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity, p->max_heal_iter);
-          }
-          else if(algo == DT_IOP_RETOUCH_BLUR)
-          {
-            _retouch_blur(self, layer, roi_layer, mask_scaled, &roi_mask_scaled, form_opacity,
-                          p->rt_forms[index].blur_type, p->rt_forms[index].blur_radius, piece, wt_p->use_sse);
-          }
-          else if(algo == DT_IOP_RETOUCH_FILL)
-          {
-            // add a brightness to the color so it can be fine-adjusted by the user
-            dt_aligned_pixel_t fill_color;
-
-            if(p->rt_forms[index].fill_mode == DT_IOP_RETOUCH_FILL_ERASE)
-            {
-              fill_color[0] = fill_color[1] = fill_color[2] = p->rt_forms[index].fill_brightness;
-            }
-            else
-            {
-              fill_color[0] = p->rt_forms[index].fill_color[0] + p->rt_forms[index].fill_brightness;
-              fill_color[1] = p->rt_forms[index].fill_color[1] + p->rt_forms[index].fill_brightness;
-              fill_color[2] = p->rt_forms[index].fill_color[2] + p->rt_forms[index].fill_brightness;
-            }
-            fill_color[3] = 0.0f;
-
-            _retouch_fill(layer, roi_layer, mask_scaled, &roi_mask_scaled, form_opacity, fill_color);
-          }
-          else
-            fprintf(stderr, "rt_process_forms: unknown algorithm %i\n", algo);
-
-          if(mask_display)
-            rt_copy_mask_to_alpha(layer, roi_layer, wt_p->ch, mask_scaled, &roi_mask_scaled, form_opacity);
-        }
-
-        if(mask) dt_pixelpipe_cache_free_align(mask);
-        if(mask_scaled) dt_pixelpipe_cache_free_align(mask_scaled);
+        if(mask) dt_free_align(mask);
+        continue;
       }
     }
+
+    // scale the mask
+    float *mask_scaled = NULL;
+    dt_iop_roi_t roi_mask_scaled = { 0 };
+
+    rt_build_scaled_mask(mask, &roi_mask, &mask_scaled, &roi_mask_scaled, roi_layer, dx, dy, algo);
+
+    // we don't need the original mask anymore
+    if(mask)
+    {
+      dt_free_align(mask);
+      mask = NULL;
+    }
+
+    if(mask_scaled == NULL)
+    {
+      continue;
+    }
+
+    if((dx != 0 || dy != 0 || algo == DT_IOP_RETOUCH_BLUR || algo == DT_IOP_RETOUCH_FILL)
+        && ((roi_mask_scaled.width > 2) && (roi_mask_scaled.height > 2)))
+    {
+      if(algo == DT_IOP_RETOUCH_CLONE)
+      {
+        _retouch_clone(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity);
+      }
+      else if(algo == DT_IOP_RETOUCH_HEAL)
+      {
+        _retouch_heal(layer, roi_layer, mask_scaled, &roi_mask_scaled, dx, dy, form_opacity, p->max_heal_iter);
+      }
+      else if(algo == DT_IOP_RETOUCH_BLUR)
+      {
+        _retouch_blur(self, layer, roi_layer, mask_scaled, &roi_mask_scaled, form_opacity,
+                      p->rt_forms[index].blur_type, p->rt_forms[index].blur_radius, piece, wt_p->use_sse);
+      }
+      else if(algo == DT_IOP_RETOUCH_FILL)
+      {
+        // add a brightness to the color so it can be fine-adjusted by the user
+        dt_aligned_pixel_t fill_color;
+
+        if(p->rt_forms[index].fill_mode == DT_IOP_RETOUCH_FILL_ERASE)
+        {
+          fill_color[0] = fill_color[1] = fill_color[2] = p->rt_forms[index].fill_brightness;
+        }
+        else
+        {
+          fill_color[0] = p->rt_forms[index].fill_color[0] + p->rt_forms[index].fill_brightness;
+          fill_color[1] = p->rt_forms[index].fill_color[1] + p->rt_forms[index].fill_brightness;
+          fill_color[2] = p->rt_forms[index].fill_color[2] + p->rt_forms[index].fill_brightness;
+        }
+        fill_color[3] = 0.0f;
+
+        _retouch_fill(layer, roi_layer, mask_scaled, &roi_mask_scaled, form_opacity, fill_color);
+      }
+      else
+        fprintf(stderr, "rt_process_forms: unknown algorithm %i\n", algo);
+
+      if(mask_display)
+        rt_copy_mask_to_alpha(layer, roi_layer, wt_p->ch, mask_scaled, &roi_mask_scaled, form_opacity);
+    }
+
+    if(mask) dt_pixelpipe_cache_free_align(mask);
+    if(mask_scaled) dt_pixelpipe_cache_free_align(mask_scaled);
   }
 }
 
@@ -4119,155 +4107,154 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
   if(!usr_d->suppress_mask)
   {
     dt_masks_form_t *grp = dt_masks_get_from_id(self->dev, bp->mask_id);
-    if(grp && (grp->type & DT_MASKS_GROUP))
+    if(!grp || !(grp->type & DT_MASKS_GROUP)) return err;
+
+    for(const GList *forms = grp->points; forms && err == CL_SUCCESS; forms = g_list_next(forms))
     {
-      for(const GList *forms = grp->points; forms && err == CL_SUCCESS; forms = g_list_next(forms))
+      dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
+      if(grpt == NULL)
       {
-        dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
-        if(grpt == NULL)
+        fprintf(stderr, "rt_process_forms: invalid form\n");
+        continue;
+      }
+      const int formid = grpt->formid;
+      const float form_opacity = grpt->opacity;
+      if(formid == 0)
+      {
+        fprintf(stderr, "rt_process_forms: form is null\n");
+        continue;
+      }
+      const int index = rt_get_index_from_formid(p, formid);
+      if(index == -1)
+      {
+        // FIXME: we get this error when user go back in history, so forms are the same but the array has changed
+        fprintf(stderr, "rt_process_forms: missing form=%i from array\n", formid);
+        continue;
+      }
+
+      // only process current scale
+      if(p->rt_forms[index].scale != scale)
+      {
+        continue;
+      }
+
+      // get the spot
+      dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
+      if(form == NULL)
+      {
+        fprintf(stderr, "rt_process_forms: missing form=%i from masks\n", formid);
+        continue;
+      }
+
+      // if the form is outside the roi, we just skip it
+      if(!rt_masks_form_is_in_roi(self, piece, form, roi_layer, roi_layer))
+      {
+        continue;
+      }
+
+      // get the mask
+      float *mask = NULL;
+      dt_iop_roi_t roi_mask = { 0 };
+
+      dt_masks_get_mask(self, piece, form, &mask, &roi_mask.width, &roi_mask.height, &roi_mask.x, &roi_mask.y);
+      if(mask == NULL)
+      {
+        fprintf(stderr, "rt_process_forms: error retrieving mask\n");
+        continue;
+      }
+
+      float dx = 0.f, dy = 0.f;
+
+      // search the delta with the source
+      const dt_iop_retouch_algo_type_t algo = p->rt_forms[index].algorithm;
+      if(algo != DT_IOP_RETOUCH_BLUR && algo != DT_IOP_RETOUCH_FILL)
+      {
+        if(!rt_masks_get_delta_to_destination(self, piece, roi_layer, form, &dx, &dy,
+                                              p->rt_forms[index].distort_mode))
         {
-          fprintf(stderr, "rt_process_forms: invalid form\n");
+          if(mask) dt_pixelpipe_cache_free_align(mask);
           continue;
         }
-        const int formid = grpt->formid;
-        const float form_opacity = grpt->opacity;
-        if(formid == 0)
+      }
+
+      // scale the mask
+      cl_mem dev_mask_scaled = NULL;
+      float *mask_scaled = NULL;
+      dt_iop_roi_t roi_mask_scaled = { 0 };
+
+      err = rt_build_scaled_mask_cl(devid, mask, &roi_mask, &mask_scaled, &dev_mask_scaled, &roi_mask_scaled,
+                                    roi_layer, dx, dy, algo);
+
+      // only heal needs mask scaled
+      if(algo != DT_IOP_RETOUCH_HEAL && mask_scaled != NULL)
+      {
+        dt_pixelpipe_cache_free_align(mask_scaled);
+        mask_scaled = NULL;
+      }
+
+      // we don't need the original mask anymore
+      if(mask)
+      {
+        dt_free_align(mask);
+        mask = NULL;
+      }
+
+      if(mask_scaled == NULL && algo == DT_IOP_RETOUCH_HEAL)
+      {
+        if(dev_mask_scaled) dt_opencl_release_mem_object(dev_mask_scaled);
+        dev_mask_scaled = NULL;
+        continue;
+      }
+
+      if((err == CL_SUCCESS)
+          && (dx != 0 || dy != 0 || algo == DT_IOP_RETOUCH_BLUR || algo == DT_IOP_RETOUCH_FILL)
+          && ((roi_mask_scaled.width > 2) && (roi_mask_scaled.height > 2)))
+      {
+        if(algo == DT_IOP_RETOUCH_CLONE)
         {
-          fprintf(stderr, "rt_process_forms: form is null\n");
-          continue;
+          err = _retouch_clone_cl(devid, dev_layer, roi_layer, dev_mask_scaled, &roi_mask_scaled, dx, dy,
+                                  form_opacity, gd);
         }
-        const int index = rt_get_index_from_formid(p, formid);
-        if(index == -1)
+        else if(algo == DT_IOP_RETOUCH_HEAL)
         {
-          // FIXME: we get this error when user go back in history, so forms are the same but the array has changed
-          fprintf(stderr, "rt_process_forms: missing form=%i from array\n", formid);
-          continue;
+          err = _retouch_heal_cl(devid, dev_layer, roi_layer, mask_scaled, dev_mask_scaled, &roi_mask_scaled, dx,
+                                  dy, form_opacity, gd, p->max_heal_iter);
         }
-
-        // only process current scale
-        if(p->rt_forms[index].scale != scale)
+        else if(algo == DT_IOP_RETOUCH_BLUR)
         {
-          continue;
+          err = _retouch_blur_cl(devid, dev_layer, roi_layer, dev_mask_scaled, &roi_mask_scaled, form_opacity,
+                                  p->rt_forms[index].blur_type, p->rt_forms[index].blur_radius, piece, gd);
         }
-
-        // get the spot
-        dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
-        if(form == NULL)
+        else if(algo == DT_IOP_RETOUCH_FILL)
         {
-          fprintf(stderr, "rt_process_forms: missing form=%i from masks\n", formid);
-          continue;
-        }
+          // add a brightness to the color so it can be fine-adjusted by the user
+          dt_aligned_pixel_t fill_color;
 
-        // if the form is outside the roi, we just skip it
-        if(!rt_masks_form_is_in_roi(self, piece, form, roi_layer, roi_layer))
-        {
-          continue;
-        }
-
-        // get the mask
-        float *mask = NULL;
-        dt_iop_roi_t roi_mask = { 0 };
-
-        dt_masks_get_mask(self, piece, form, &mask, &roi_mask.width, &roi_mask.height, &roi_mask.x, &roi_mask.y);
-        if(mask == NULL)
-        {
-          fprintf(stderr, "rt_process_forms: error retrieving mask\n");
-          continue;
-        }
-
-        float dx = 0.f, dy = 0.f;
-
-        // search the delta with the source
-        const dt_iop_retouch_algo_type_t algo = p->rt_forms[index].algorithm;
-        if(algo != DT_IOP_RETOUCH_BLUR && algo != DT_IOP_RETOUCH_FILL)
-        {
-          if(!rt_masks_get_delta_to_destination(self, piece, roi_layer, form, &dx, &dy,
-                                                p->rt_forms[index].distort_mode))
+          if(p->rt_forms[index].fill_mode == DT_IOP_RETOUCH_FILL_ERASE)
           {
-            if(mask) dt_pixelpipe_cache_free_align(mask);
-            continue;
-          }
-        }
-
-        // scale the mask
-        cl_mem dev_mask_scaled = NULL;
-        float *mask_scaled = NULL;
-        dt_iop_roi_t roi_mask_scaled = { 0 };
-
-        err = rt_build_scaled_mask_cl(devid, mask, &roi_mask, &mask_scaled, &dev_mask_scaled, &roi_mask_scaled,
-                                      roi_layer, dx, dy, algo);
-
-        // only heal needs mask scaled
-        if(algo != DT_IOP_RETOUCH_HEAL && mask_scaled != NULL)
-        {
-          dt_pixelpipe_cache_free_align(mask_scaled);
-          mask_scaled = NULL;
-        }
-
-        // we don't need the original mask anymore
-        if(mask)
-        {
-          dt_free_align(mask);
-          mask = NULL;
-        }
-
-        if(mask_scaled == NULL && algo == DT_IOP_RETOUCH_HEAL)
-        {
-          if(dev_mask_scaled) dt_opencl_release_mem_object(dev_mask_scaled);
-          dev_mask_scaled = NULL;
-          continue;
-        }
-
-        if((err == CL_SUCCESS)
-           && (dx != 0 || dy != 0 || algo == DT_IOP_RETOUCH_BLUR || algo == DT_IOP_RETOUCH_FILL)
-           && ((roi_mask_scaled.width > 2) && (roi_mask_scaled.height > 2)))
-        {
-          if(algo == DT_IOP_RETOUCH_CLONE)
-          {
-            err = _retouch_clone_cl(devid, dev_layer, roi_layer, dev_mask_scaled, &roi_mask_scaled, dx, dy,
-                                    form_opacity, gd);
-          }
-          else if(algo == DT_IOP_RETOUCH_HEAL)
-          {
-            err = _retouch_heal_cl(devid, dev_layer, roi_layer, mask_scaled, dev_mask_scaled, &roi_mask_scaled, dx,
-                                   dy, form_opacity, gd, p->max_heal_iter);
-          }
-          else if(algo == DT_IOP_RETOUCH_BLUR)
-          {
-            err = _retouch_blur_cl(devid, dev_layer, roi_layer, dev_mask_scaled, &roi_mask_scaled, form_opacity,
-                                   p->rt_forms[index].blur_type, p->rt_forms[index].blur_radius, piece, gd);
-          }
-          else if(algo == DT_IOP_RETOUCH_FILL)
-          {
-            // add a brightness to the color so it can be fine-adjusted by the user
-            dt_aligned_pixel_t fill_color;
-
-            if(p->rt_forms[index].fill_mode == DT_IOP_RETOUCH_FILL_ERASE)
-            {
-              fill_color[0] = fill_color[1] = fill_color[2] = p->rt_forms[index].fill_brightness;
-            }
-            else
-            {
-              fill_color[0] = p->rt_forms[index].fill_color[0] + p->rt_forms[index].fill_brightness;
-              fill_color[1] = p->rt_forms[index].fill_color[1] + p->rt_forms[index].fill_brightness;
-              fill_color[2] = p->rt_forms[index].fill_color[2] + p->rt_forms[index].fill_brightness;
-            }
-
-            err = _retouch_fill_cl(devid, dev_layer, roi_layer, dev_mask_scaled, &roi_mask_scaled, form_opacity,
-                                   fill_color, gd);
+            fill_color[0] = fill_color[1] = fill_color[2] = p->rt_forms[index].fill_brightness;
           }
           else
-            fprintf(stderr, "rt_process_forms: unknown algorithm %i\n", algo);
+          {
+            fill_color[0] = p->rt_forms[index].fill_color[0] + p->rt_forms[index].fill_brightness;
+            fill_color[1] = p->rt_forms[index].fill_color[1] + p->rt_forms[index].fill_brightness;
+            fill_color[2] = p->rt_forms[index].fill_color[2] + p->rt_forms[index].fill_brightness;
+          }
 
-          if(mask_display)
-            rt_copy_mask_to_alpha_cl(devid, dev_layer, roi_layer, dev_mask_scaled, &roi_mask_scaled, form_opacity,
-                                     gd);
+          err = _retouch_fill_cl(devid, dev_layer, roi_layer, dev_mask_scaled, &roi_mask_scaled, form_opacity,
+                                  fill_color, gd);
         }
+        else
+          fprintf(stderr, "rt_process_forms: unknown algorithm %i\n", algo);
 
-        if(mask) dt_free_align(mask);
-        if(mask_scaled) dt_pixelpipe_cache_free_align(mask_scaled);
-        if(dev_mask_scaled) dt_opencl_release_mem_object(dev_mask_scaled);
+        if(mask_display)
+          rt_copy_mask_to_alpha_cl(devid, dev_layer, roi_layer, dev_mask_scaled, &roi_mask_scaled, form_opacity,
+                                    gd);
       }
+
+      if(mask) dt_free_align(mask);
+      if(mask_scaled) dt_pixelpipe_cache_free_align(mask_scaled);
+      if(dev_mask_scaled) dt_opencl_release_mem_object(dev_mask_scaled);
     }
   }
 
