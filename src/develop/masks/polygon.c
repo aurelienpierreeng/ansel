@@ -1874,7 +1874,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
   return 1;
 }
 
-static gboolean _polygon_draw_shape(cairo_t *cr, const float *points, const int points_count, const int node_nb, const gboolean border, const gboolean source)
+static void _polygon_draw_shape(cairo_t *cr, const float *points, const int points_count, const int node_nb, const gboolean border, const gboolean source)
 {
   // Find the first valid non-NaN point to start drawing
   // FIXME: Why not just avoid having NaN points in the array?
@@ -1963,9 +1963,9 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
           const gboolean all_selected = (gui->group_selected == index) && gui->node_edited == -1 && (gui->form_selected || gui->form_dragging);
           // creation mode: draw the current segment as round dotted line
           if(gui->creation && current_seg == node_count -2)
-            dt_draw_stroke_line(DT_MASKS_DASH_ROUND, FALSE, cr, all_selected, zoom_scale);
+            dt_draw_stroke_line(DT_MASKS_DASH_ROUND, FALSE, cr, all_selected, zoom_scale, CAIRO_LINE_CAP_ROUND);
           else
-            dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, (seg_selected || all_selected), zoom_scale);
+            dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, (seg_selected || all_selected), zoom_scale, CAIRO_LINE_CAP_BUTT);
           seg1 = (seg1 + 1) % node_count;
           current_seg++;
 
@@ -1982,7 +1982,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     if(gpt->border_count > node_count * 3 + 2)
     {
       dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, node_count, (gui->border_selected), zoom_scale, gpt->border,
-                        gpt->border_count, &dt_masks_functions_polygon.draw_shape);
+                        gpt->border_count, &dt_masks_functions_polygon.draw_shape, CAIRO_LINE_CAP_ROUND);
     }
 
     // draw the current node's handle if it's a curve node

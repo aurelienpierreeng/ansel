@@ -874,11 +874,11 @@ cleanup:
   return res;
 }
 
-static gboolean _gradient_draw_shape(cairo_t *cr, const float *pts_line, const int pts_line_count, const int nb, const gboolean border, const gboolean source)
+static void _gradient_draw_shape(cairo_t *cr, const float *pts_line, const int pts_line_count, const int nb, const gboolean border, const gboolean source)
 {
   // safeguard in case of malformed arrays of points
-  if(border && pts_line_count <= 3) return FALSE;
-  if(!border && pts_line_count <= 4) return FALSE;
+  if(border && pts_line_count <= 3) return;
+  if(!border && pts_line_count <= 4) return;
 
   const float *points = (border) ? pts_line : pts_line + 6;
   const int points_count = (border) ? pts_line_count : pts_line_count - 3;
@@ -911,8 +911,6 @@ static gboolean _gradient_draw_shape(cairo_t *cr, const float *pts_line, const i
       i++;
     }
   }
-
-  return TRUE;
 }
 
 static void _gradient_draw_arrow(cairo_t *cr, const gboolean selected, const gboolean pivot_selected, const gboolean is_rotating,
@@ -942,7 +940,7 @@ static void _gradient_draw_arrow(cairo_t *cr, const gboolean selected, const gbo
     cairo_move_to(cr, new_x1, new_y1);
     cairo_line_to(cr, new_x2, new_y2);
 
-    dt_draw_stroke_line(DT_MASKS_DASH_ROUND, FALSE, cr, FALSE, zoom_scale);
+    dt_draw_stroke_line(DT_MASKS_DASH_ROUND, FALSE, cr, FALSE, zoom_scale, CAIRO_LINE_CAP_ROUND);
   }
 
   // always draw arrow to clearly display the direction
@@ -1034,11 +1032,11 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
       draw = _gradient_get_pts_border(darktable.develop, x, y, rotation, extent, curvature, &border, &border_count);
 
     // draw main line
-    dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, FALSE, zoom_scale, points, points_count, &dt_masks_functions_gradient.draw_shape);
+    dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, FALSE, zoom_scale, points, points_count, &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND);
     _gradient_draw_arrow(cr, FALSE, FALSE, gui->form_rotating, zoom_scale, points, points_count);
 
     // draw borders
-    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, FALSE, zoom_scale, border, border_count, &dt_masks_functions_gradient.draw_shape);
+    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, FALSE, zoom_scale, border, border_count, &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND);
     if(points) dt_free_align(points);
     if(border) dt_free_align(border);
   
@@ -1051,11 +1049,11 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
   const gboolean seg_selected = (gui->group_selected == index) && (gui->seg_selected >= 0);
   const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging); 
   // draw main line
-  dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, (seg_selected), zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_gradient.draw_shape);
+  dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, (seg_selected), zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND);
   // draw borders
   if(gui->group_selected == index)
   {
-    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, (gui->border_selected), zoom_scale, gpt->border, gpt->border_count, &dt_masks_functions_gradient.draw_shape);
+    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, (gui->border_selected), zoom_scale, gpt->border, gpt->border_count, &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND);
   }
 
   _gradient_draw_arrow(cr, (seg_selected || all_selected), ((gui->group_selected == index) && gui->pivot_selected), gui->form_rotating,

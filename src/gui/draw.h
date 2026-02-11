@@ -702,7 +702,7 @@ static inline void dt_draw_handle(cairo_t *cr, const float pt_x, const float pt_
   cairo_restore(cr);
 }
 
-typedef gboolean (*shape_draw_function_t)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
+typedef void (*shape_draw_function_t)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
 
 /**
  * @brief Draw the lines of a mask shape.
@@ -718,19 +718,17 @@ typedef gboolean (*shape_draw_function_t)(cairo_t *cr, const float *points, cons
  * @param functions the functions table of the shape
  */
 static inline void dt_draw_shape_lines(const dt_masks_dash_type_t dash_type, const gboolean source, cairo_t *cr, const int nb, const gboolean selected,
-                const float zoom_scale, const float *points, const int points_count, const shape_draw_function_t *draw_shape_func)
+                const float zoom_scale, const float *points, const int points_count, const shape_draw_function_t *draw_shape_func, const cairo_line_cap_t line_cap)
 {
   cairo_save(cr);
   
+  cairo_set_line_cap(cr, line_cap);
   // Are we drawing a border ?
   const gboolean border = (dash_type != DT_MASKS_NO_DASH);  
-  gboolean shape_is_open = FALSE;
+
   // Draw the shape from the integrated function if any
   if(points && points_count >= 2 && draw_shape_func)
-    shape_is_open = (*draw_shape_func)(cr, points, points_count, nb, border, FALSE);
-
-  // Round line caps for dashed lines and open shapes to avoid sharp line ends
-  if(border || shape_is_open) cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    (*draw_shape_func)(cr, points, points_count, nb, border, FALSE);
 
   const dt_masks_dash_type_t dash = (dash_type && !source)
                                   ? dash_type : DT_MASKS_NO_DASH;
@@ -767,9 +765,9 @@ static inline void dt_draw_shape_lines(const dt_masks_dash_type_t dash_type, con
  * @param zoom_scale the current zoom scale of the image
  */
 static inline void dt_draw_stroke_line(const dt_masks_dash_type_t dash_type, const gboolean source, cairo_t *cr,
-                          const gboolean selected, const float zoom_scale)
+                          const gboolean selected, const float zoom_scale, const cairo_line_cap_t line_cap)
 {
-  dt_draw_shape_lines(dash_type, source, cr, 0, selected, zoom_scale, NULL, 0, NULL);
+  dt_draw_shape_lines(dash_type, source, cr, 0, selected, zoom_scale, NULL, 0, NULL, line_cap);
 }
 
 static void _draw_arrow_head(cairo_t *cr, const float arrow[2], const float arrow_x_a, const float arrow_y_a,

@@ -231,8 +231,8 @@ typedef struct dt_masks_functions_t
   int (*button_released)(struct dt_iop_module_t *module, float pzx, float pzy, int which, uint32_t state,
                          struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
   void (*post_expose)(cairo_t *cr, float zoom_scale, struct dt_masks_form_gui_t *gui, int index, int num_points);
-  // The function to draw the shape in question. it returns wether the shape is closed or not, to be able to draw round caps.
-  gboolean (*draw_shape)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
+  // The function to draw the shape in question.
+  void (*draw_shape)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
   /** initialise all control points to eventually match a catmull-rom like spline */
   void (*init_ctrl_points)(struct dt_masks_form_t *form);
 } dt_masks_functions_t;

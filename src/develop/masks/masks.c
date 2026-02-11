@@ -1365,9 +1365,11 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
   // draw the source shape
   {
     cairo_save(cr);
-    // trick to draw only the current polygon while editing but the full shaope when not
+    // Trick to only draw the current polygon lines while editing, but the complete shape when not
     const int nodes_nb = nb + !gui->creation;
     
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+
     if(draw_shape_func)
       (*draw_shape_func)(cr, gpt->source, gpt->source_count, nodes_nb, FALSE, TRUE);
 
