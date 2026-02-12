@@ -38,6 +38,85 @@ static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, float pz
   return 0;
 }
 
+static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form_gui_t *gui, float pzx, float pzy)
+{
+  if(!form || !gui) return FALSE;
+
+  // If we get here, it's either because:
+  // 1. no group is being currently edited
+  // 2. the currently-edited group didn't capture the event, meaning the click didn't happen near a control node.
+  // Both ways, we need to redetect where the click happened to see if a new shape should be selected.
+
+  // reset selection
+  dt_masks_soft_reset_form_gui(gui);
+  dt_develop_t *dev = (dt_develop_t *)darktable.develop;
+  dev->mask_form_selected_id = -1;
+
+  // now we check if we are near a new form
+  const float as = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;  // transformed to backbuf dimensions
+  gui->form_selected = gui->border_selected = FALSE;
+  gui->source_selected = gui->source_dragging = FALSE;
+  gui->pivot_selected = FALSE;
+  gui->handle_selected = -1;
+  gui->node_edited = gui->node_selected = -1;
+  gui->seg_selected = -1;
+  gui->handle_border_selected = -1;
+  gui->group_selected = -1;
+
+  dt_masks_form_t *sel = NULL;
+  int sel_index = 0;
+  float sel_dist = FLT_MAX;
+
+  const float scale = dev->natural_scale;
+  const float xx = (pzx * dev->preview_width)  / scale,
+              yy = (pzy * dev->preview_height) / scale;
+
+  int index = 0;
+  for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
+  {
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
+    if(!fpt) continue;
+    dt_masks_form_t *frm = dt_masks_get_from_id(dev, fpt->formid);
+    if(!frm) continue; // it means the form has been deleted meanwhile
+
+    int inside, inside_border, near, inside_source;
+    float dist = FLT_MAX;
+    inside = inside_border = inside_source = 0;
+    near = -1;
+    
+
+    //float xx = -1, yy = -1;
+    //dt_dev_retrieve_full_pos(darktable.develop, pzx, pzy, &xx, &yy);
+    
+
+    if(frm->functions && frm->functions->get_distance)
+      frm->functions->get_distance(xx, yy, as, gui, index, g_list_length(frm->points),
+                                   &inside, &inside_border, &near, &inside_source, &dist);
+
+    if(inside || inside_border || near >= 0 || inside_source)
+    {
+
+      // Look for the closest
+      if(sel_dist > dist)
+      {
+        sel = frm;
+        sel_dist = dist;
+        sel_index = index;
+      }
+    }
+    index++;
+  }
+
+  if(sel && sel->functions)
+  {
+    gui->group_selected = sel_index;
+    dev->mask_form_selected_id = sel->formid;
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
 static int _group_events_button_pressed(struct dt_iop_module_t *module, float pzx, float pzy,
                                         double pressure, int which, int type, uint32_t state,
                                         dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui, int unused2)
@@ -67,6 +146,7 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
                                          uint32_t state, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
                                          int unused2)
 {
+  fprintf(stdout, "group button released event, which: %i, state: %u, form: %i, group_selected: %i\n", which, state, form ? form->formid : -1, gui->group_selected);
   if(gui->group_selected >= 0)
   {
     // we get the form
@@ -74,82 +154,12 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
     if(!fpt) return 0;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
-      return sel->functions->button_released(module, pzx, pzy, which, state, sel, fpt->parentid, gui,
-                                             gui->group_selected);
+      if(sel->functions->button_released(module, pzx, pzy, which, state, sel, fpt->parentid, gui,
+                                             gui->group_selected))
+        return 1;
   }
 
-  // If we get here, it's either because:
-  // 1. no group is being currently edited
-  // 2. the currently-edited group didn't capture the event, meaning the click didn't happen near a control node.
-  // Both ways, we need to redetect where the click happened to see if a new shape should be selected.
-
-  // reset selection
-  dt_masks_soft_reset_form_gui(gui);
-  dt_develop_t *dev = (dt_develop_t *)darktable.develop;
-  dev->mask_form_selected_id = -1;
-
-  // now we check if we are near a new form
-  const float as = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;  // transformed to backbuf dimensions
-  int pos = 0;
-  gui->form_selected = gui->border_selected = FALSE;
-  gui->source_selected = gui->source_dragging = FALSE;
-  gui->pivot_selected = FALSE;
-  gui->handle_selected = -1;
-  gui->node_edited = gui->node_selected = -1;
-  gui->seg_selected = -1;
-  gui->handle_border_selected = -1;
-  gui->group_selected = -1;
-
-  dt_masks_form_t *sel = NULL;
-  int sel_pos = 0;
-  float sel_dist = FLT_MAX;
-
-  const float scale = dev->natural_scale;
-  const float xx = (pzx * dev->preview_width)  / scale,
-              yy = (pzy * dev->preview_height) / scale;
-
-  for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
-  {
-    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
-    if(!fpt) continue;
-    dt_masks_form_t *frm = dt_masks_get_from_id(dev, fpt->formid);
-    if(!frm) continue; // it means the form has been deleted meanwhile
-
-    int inside, inside_border, near, inside_source;
-    float dist = FLT_MAX;
-    inside = inside_border = inside_source = 0;
-    near = -1;
-    
-
-    //float xx = -1, yy = -1;
-    //dt_dev_retrieve_full_pos(darktable.develop, pzx, pzy, &xx, &yy);
-    
-
-    if(frm->functions && frm->functions->get_distance)
-      frm->functions->get_distance(xx, yy, as, gui, pos, g_list_length(frm->points),
-                                   &inside, &inside_border, &near, &inside_source, &dist);
-
-    if(inside || inside_border || near >= 0 || inside_source)
-    {
-
-      if(sel_dist > dist)
-      {
-        sel = frm;
-        sel_dist = dist;
-        sel_pos = pos;
-      }
-    }
-    pos++;
-  }
-
-  if(sel && sel->functions)
-  {
-    gui->group_selected = sel_pos;
-    dev->mask_form_selected_id = sel->formid;
-    return 1;
-  }
-
-  return 0;
+  return _detect_new_shape_selection(form, gui, pzx, pzy);
 }
 
 static int _group_events_mouse_moved(struct dt_iop_module_t *module, float pzx, float pzy, double pressure,

@@ -527,6 +527,7 @@ static int _gradient_events_button_pressed(struct dt_iop_module_t *module, float
         // we select the new form
         dt_dev_masks_selection_change(darktable.develop, NULL, form->formid, TRUE);
       }
+      
       return 1;
     }
   }

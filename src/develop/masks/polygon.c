@@ -1466,28 +1466,6 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
             dt_dev_masks_selection_change(darktable.develop, NULL, form->formid, TRUE);
           }
 
-          if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-          {
-            dt_masks_form_t *grp = darktable.develop->form_visible;
-            if(!grp || !(grp->type & DT_MASKS_GROUP)) return 1;
-            int form_index = 0, pos2 = -1;
-            for(GList *fs = grp->points; fs; fs = g_list_next(fs))
-            {
-              dt_masks_form_group_t *pt = (dt_masks_form_group_t *)fs->data;
-              if(pt->formid == form->formid)
-              {
-                pos2 = form_index;
-                break;
-              }
-              form_index++;
-            }
-            if(pos2 < 0) return 1;
-            dt_masks_form_gui_t *gui2 = darktable.develop->form_gui;
-            if(!gui2) return 1;
-            gui2->group_selected = pos2;
-
-            dt_masks_select_form(crea_module, dt_masks_get_from_id(darktable.develop, form->formid));
-          }
           return 1;
         }
       }

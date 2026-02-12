@@ -2364,6 +2364,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   {
     // Change on mask parameters and image output.
     _do_delayed_history_commit(dev);
+    dt_dev_pixelpipe_refresh_preview(dev, FALSE); // Needed if mask selection changed
     return 1;
   }
 
