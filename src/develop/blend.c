@@ -570,7 +570,11 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
 
     if(form && (!(self->flags() & IOP_FLAGS_NO_MASKS)) && (d->mask_mode & DEVELOP_MASK_MASK))
     {
-      dt_masks_group_render_roi(self, piece, form, roi_out, mask);
+      if(dt_masks_group_render_roi(self, piece, form, roi_out, mask) != 0)
+      {
+        dt_pixelpipe_cache_free_align(_mask);
+        return 1;
+      }
 
       if(d->mask_combine & DEVELOP_COMBINE_MASKS_POS)
       {
@@ -1071,7 +1075,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
 
     if(form && (!(self->flags() & IOP_FLAGS_NO_MASKS)) && (d->mask_mode & DEVELOP_MASK_MASK))
     {
-      dt_masks_group_render_roi(self, piece, form, roi_out, mask);
+      if(dt_masks_group_render_roi(self, piece, form, roi_out, mask) != 0) goto error;
 
       if(d->mask_combine & DEVELOP_COMBINE_MASKS_POS)
       {

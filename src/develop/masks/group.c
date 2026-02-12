@@ -213,14 +213,15 @@ void dt_group_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_t 
     _group_events_post_expose_draw(cr, zoom_scale, form, gui, gui->group_selected);
 }
 
-static void _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
-                          dt_masks_form_t *const form,
-                          float **buffer, int *width, int *height, int *posx, int *posy)
+static int _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
+                         dt_masks_form_t *const form,
+                         float **buffer, int *width, int *height, int *posx, int *posy)
 {
   // we create a new buffer
   const int wt = piece->iwidth;
   const int ht = piece->iheight;
   float *buf = dt_pixelpipe_cache_alloc_align_float_cache((size_t)ht * wt, 0);
+  if(buf == NULL) return 1;
 
   // we fill this buffer
   for(int yy = 0; yy < MIN(*posy, ht); yy++)
@@ -249,6 +250,7 @@ static void _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixe
   *posx = *posy = 0;
   *width = wt;
   *height = ht;
+  return 0;
 }
 
 static int _group_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
@@ -257,40 +259,70 @@ static int _group_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
 {
   // we allocate buffers and values
   const guint nb = g_list_length(form->points);
-  if(nb == 0) return 0;
+  if(nb == 0)
+  {
+    *buffer = NULL;
+    *width = *height = *posx = *posy = 0;
+    return 0;
+  }
   float **bufs = calloc(nb, sizeof(float *));
   int *w = malloc(sizeof(int) * nb);
   int *h = malloc(sizeof(int) * nb);
   int *px = malloc(sizeof(int) * nb);
   int *py = malloc(sizeof(int) * nb);
-  int *ok = malloc(sizeof(int) * nb);
   int *states = malloc(sizeof(int) * nb);
   float *op = malloc(sizeof(float) * nb);
+  if(!bufs || !w || !h || !px || !py || !states || !op)
+  {
+    free(op);
+    free(states);
+    free(py);
+    free(px);
+    free(h);
+    free(w);
+    free(bufs);
+    return 1;
+  }
 
   // and we get all masks
   int pos = 0;
   int nb_ok = 0;
+  int err = 0;
   for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
   {
     dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
     dt_masks_form_t *sel = dt_masks_get_from_id(module->dev, fpt->formid);
     if(sel)
     {
-      ok[pos] = dt_masks_get_mask(module, piece, sel, &bufs[pos], &w[pos], &h[pos], &px[pos], &py[pos]);
+      if(dt_masks_get_mask(module, piece, sel, &bufs[pos], &w[pos], &h[pos], &px[pos], &py[pos]) != 0)
+      {
+        err = 1;
+        break;
+      }
       if(fpt->state & DT_MASKS_STATE_INVERSE)
       {
         const double start = dt_get_wtime();
-        _inverse_mask(module, piece, sel, &bufs[pos], &w[pos], &h[pos], &px[pos], &py[pos]);
+        if(_inverse_mask(module, piece, sel, &bufs[pos], &w[pos], &h[pos], &px[pos], &py[pos]) != 0)
+        {
+          err = 1;
+          break;
+        }
         if(darktable.unmuted & DT_DEBUG_PERF)
           dt_print(DT_DEBUG_MASKS, "[masks %s] inverse took %0.04f sec\n", sel->name, dt_get_wtime() - start);
       }
       op[pos] = fpt->opacity;
       states[pos] = fpt->state;
-      if(ok[pos]) nb_ok++;
+      nb_ok++;
     }
     pos++;
   }
-  if(nb_ok == 0) goto error;
+  if(err) goto cleanup;
+  if(nb_ok == 0)
+  {
+    *buffer = NULL;
+    *width = *height = *posx = *posy = 0;
+    goto cleanup;
+  }
 
   // now we get the min, max, width, height of the final mask
   int l = INT_MAX, r = INT_MIN, t = INT_MAX, b = INT_MIN;
@@ -308,6 +340,11 @@ static int _group_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
 
   // we allocate the buffer
   *buffer = dt_pixelpipe_cache_alloc_align_float_cache((size_t)(r - l) * (b - t), 0);
+  if(*buffer == NULL)
+  {
+    err = 1;
+    goto cleanup;
+  }
 
   // and we copy each buffer inside, row by row
   for(int i = 0; i < nb; i++)
@@ -387,28 +424,16 @@ static int _group_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
       dt_print(DT_DEBUG_MASKS, "[masks %d] combine took %0.04f sec\n", i, dt_get_wtime() - start);
   }
 
+cleanup:
   free(op);
   free(states);
-  free(ok);
   free(py);
   free(px);
   free(h);
   free(w);
   for(int i = 0; i < nb; i++) dt_pixelpipe_cache_free_align(bufs[i]);
   free(bufs);
-  return 1;
-
-error:
-  free(op);
-  free(states);
-  free(ok);
-  free(py);
-  free(px);
-  free(h);
-  free(w);
-  for(int i = 0; i < nb; i++) dt_pixelpipe_cache_free_align(bufs[i]);
-  free(bufs);
-  return 0;
+  return err;
 }
 
 static void _combine_masks_union(float *const restrict dest, float *const restrict newmask, const size_t npixels,
@@ -605,7 +630,8 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module,
 
   // we need to allocate a zeroed temporary buffer for intermediate creation of individual shapes
   float *const restrict bufs = dt_pixelpipe_cache_alloc_align_float_cache(npixels, 0);
-  if(bufs == NULL) return 0;
+  if(bufs == NULL) return 1;
+  int err = 0;
 
   // and we get all masks
   for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
@@ -617,11 +643,16 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module,
     {
       // ensure that we start with a zeroed buffer regardless of what was previously written into 'bufs'
       memset(bufs, 0, npixels*sizeof(float));
-      const int ok = dt_masks_get_mask_roi(module, piece, sel, roi, bufs);
+      const int err_child = dt_masks_get_mask_roi(module, piece, sel, roi, bufs);
       const float op = fpt->opacity;
       const int state = fpt->state;
 
-      if(ok)
+      if(err_child != 0)
+      {
+        err = 1;
+        break;
+      }
+      if(err_child == 0)
       {
         // first see if we need to invert this shape
         const int inverted = (state & DT_MASKS_STATE_INVERSE);
@@ -670,7 +701,10 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module,
   // and we free the intermediate buffer
   dt_pixelpipe_cache_free_align(bufs);
 
-  return nb_ok != 0;
+  if(nb_ok == 0)
+    memset(buffer, 0, npixels * sizeof(float));
+
+  return err;
 }
 
 int dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
@@ -679,11 +713,11 @@ int dt_masks_group_render_roi(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *p
   const double start = dt_get_wtime();
   if(!form) return 0;
 
-  const int ok = dt_masks_get_mask_roi(module, piece, form, roi, buffer);
+  const int err = dt_masks_get_mask_roi(module, piece, form, roi, buffer);
 
   if(darktable.unmuted & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks] render all masks took %0.04f sec\n", dt_get_wtime() - start);
-  return ok;
+  return err;
 }
 
 static void _group_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *const base,

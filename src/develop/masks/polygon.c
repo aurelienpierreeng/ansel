@@ -381,9 +381,14 @@ static void _polygon_points_recurs(float *p1, float *p2, double tmin, double tma
 #define POLYGON_MAX_SELF_INTERSECTIONS(nb_nodes) ((nb_nodes) * 4)
 
 /** find all self intersections in a polygon */
-static int _polygon_find_self_intersection(dt_masks_dynbuf_t *inter, int nb_nodes, float *border, int border_count)
+static int _polygon_find_self_intersection(dt_masks_dynbuf_t *inter, int nb_nodes, float *border, int border_count,
+                                           int *inter_count_out)
 {
-  if(nb_nodes == 0 || border_count == 0) return 0;
+  if(nb_nodes == 0 || border_count == 0)
+  {
+    *inter_count_out = 0;
+    return 0;
+  }
 
   int inter_count = 0;
 
@@ -447,17 +452,21 @@ static int _polygon_find_self_intersection(dt_masks_dynbuf_t *inter, int nb_node
 
   // we allocate the buffer
   const size_t ss = (size_t)hb * wb;
-  if(ss < 10 || hb < 0 || wb < 0) return 0;
+  if(ss < 10 || hb < 0 || wb < 0)
+  {
+    *inter_count_out = 0;
+    return 0;
+  }
 
   int *binter = dt_alloc_align(sizeof(int) * ss);
-  if(binter == NULL) return 0;
+  if(binter == NULL) return 1;
   memset(binter, 0, sizeof(int) * ss);
 
   dt_masks_dynbuf_t *extra = dt_masks_dynbuf_init(100000, "polygon extra");
   if(extra == NULL)
   {
     dt_free_align(binter);
-    return 0;
+    return 1;
   }
 
   // we'll iterate through all border points, but we can't start at point[0]
@@ -495,8 +504,9 @@ static int _polygon_find_self_intersection(dt_masks_dynbuf_t *inter, int nb_node
       // ensure idx is within [0, ss)
       if(idx < 0 || (size_t)idx >= ss)
       {
+        dt_masks_dynbuf_free(extra);
         dt_free_align(binter);
-        return 0;
+        return 1;
       }
       v[0] = binter[idx];
       if(xx > xmin) v[1] = binter[idx - 1];
@@ -563,7 +573,8 @@ static int _polygon_find_self_intersection(dt_masks_dynbuf_t *inter, int nb_node
   dt_free_align(binter);
 
   // and we return the number of self-intersection found
-  return inter_count;
+  *inter_count_out = inter_count;
+  return 0;
 }
 
 /** get all points of the polygon and the border */
@@ -589,7 +600,7 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
   if(border) *border_count = 0;
 
   dpoints = dt_masks_dynbuf_init(1000000, "polygon dpoints");
-  if(dpoints == NULL) return 0;
+  if(dpoints == NULL) return 1;
 
   if(border)
   {
@@ -597,7 +608,7 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
     if(dborder == NULL)
     {
       dt_masks_dynbuf_free(dpoints);
-      return 0;
+      return 1;
     }
   }
 
@@ -606,7 +617,7 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
   {
     dt_masks_dynbuf_free(dpoints);
     dt_masks_dynbuf_free(dborder);
-    return 0;
+    return 1;
   }
 
   // we store all points
@@ -641,6 +652,13 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
   }
 
   float *border_init = dt_alloc_align_float((size_t)6 * nb);
+  if(border_init == NULL)
+  {
+    dt_masks_dynbuf_free(intersections);
+    dt_masks_dynbuf_free(dpoints);
+    dt_masks_dynbuf_free(dborder);
+    return 1;
+  }
   int cw = _polygon_is_clockwise(form);
   if(cw == 0) cw = -1;
 
@@ -756,7 +774,13 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
   int inter_count = 0;
   if(border)
   {
-    inter_count = _polygon_find_self_intersection(intersections, nb, *border, *border_count);
+    if(_polygon_find_self_intersection(intersections, nb, *border, *border_count, &inter_count) != 0)
+    {
+      dt_masks_dynbuf_free(intersections);
+      dt_free_align(*points);
+      dt_free_align(*border);
+      return 1;
+    }
 
     if(darktable.unmuted & DT_DEBUG_PERF)
     {
@@ -804,7 +828,7 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
 
     dt_masks_dynbuf_free(intersections);
     dt_free_align(border_init);
-    return 1;
+    return 0;
   }
   else if(dt_dev_distort_transform_plus(dev, pipe, iop_order, transf_direction, *points, *points_count))
   {
@@ -857,7 +881,7 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
 
       dt_masks_dynbuf_free(intersections);
       dt_free_align(border_init);
-      return 1;
+      return 0;
     }
   }
 
@@ -874,7 +898,7 @@ fail:
     *border = NULL;
     *border_count = 0;
   }
-  return 0;
+  return 1;
 }
 
 /** find relative position within a brush segment that is closest to the point given by coordinates x and y;
@@ -975,7 +999,7 @@ static void _change_node_type(struct dt_iop_module_t *module, dt_masks_form_t *f
 static int _polygon_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, float **points, int *points_count,
                                    float **border, int *border_count, int source, const dt_iop_module_t *module)
 {
-  if(source && !module) return 0;
+  if(source && !module) return 1;
   const double ioporder = (module) ? module->iop_order : 0.0f;
   return _polygon_get_pts_border(dev, form, ioporder, DT_DEV_TRANSFORM_DIR_ALL, dev->preview_pipe, points,
                               points_count, border, border_count, source);
@@ -2175,18 +2199,18 @@ static void _polygon_bounding_box(const float *const points, const float *border
 static int _get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
                      dt_masks_form_t *const form, int *width, int *height, int *posx, int *posy, gboolean get_source)
 {
-  if(!module) return 0;
+  if(!module) return 1;
 
   // we get buffers for all points
   float *points = NULL, *border = NULL;
   int points_count = 0, border_count = 0;
 
-  if(!_polygon_get_pts_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe, &points, &points_count,
-                           &border, &border_count, get_source))
+  if(_polygon_get_pts_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe, &points, &points_count,
+                           &border, &border_count, get_source) != 0)
   {
     dt_free_align(points);
     dt_free_align(border);
-    return 0;
+    return 1;
   }
 
   const guint nb_corner = g_list_length(form->points);
@@ -2194,7 +2218,7 @@ static int _get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe
 
   dt_free_align(points);
   dt_free_align(border);
-  return 1;
+  return 0;
 }
 
 static int _polygon_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
@@ -2238,7 +2262,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, const dt_dev_p
                           dt_masks_form_t *const form,
                           float **buffer, int *width, int *height, int *posx, int *posy)
 {
-  if(!module) return 0;
+  if(!module) return 1;
   double start = 0.0;
   double start2 = 0.0;
 
@@ -2247,13 +2271,13 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   // we get buffers for all points
   float *points = NULL, *border = NULL;
   int points_count, border_count;
-  if(!_polygon_get_pts_border(module->dev, form, module->iop_order,
+  if(_polygon_get_pts_border(module->dev, form, module->iop_order,
                            DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe, &points, &points_count,
-                           &border, &border_count, FALSE))
+                           &border, &border_count, FALSE) != 0)
   {
     dt_free_align(points);
     dt_free_align(border);
-    return 0;
+    return 1;
   }
 
   if(darktable.unmuted & DT_DEBUG_PERF)
@@ -2284,7 +2308,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   {
     dt_free_align(points);
     dt_free_align(border);
-    return 0;
+    return 1;
   }
 
   // we write all the point around the polygon into the buffer
@@ -2466,7 +2490,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, const dt_dev_p
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon fill buffer took %0.04f sec\n", form->name,
              dt_get_wtime() - start);
 
-  return 1;
+  return 0;
 }
 
 
@@ -2647,7 +2671,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
                               dt_masks_form_t *const form,
                               const dt_iop_roi_t *roi, float *buffer)
 {
-  if(!module) return 0;
+  if(!module) return 1;
   double start = 0.0;
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start = dt_get_wtime();
@@ -2670,8 +2694,14 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   // we get buffers for all points
   float *points = NULL, *border = NULL;
   int points_count = 0, border_count = 0;
-  if(!_polygon_get_pts_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe, &points, &points_count,
-                           &border, &border_count, FALSE) || (points_count <= 2))
+  if(_polygon_get_pts_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe, &points, &points_count,
+                           &border, &border_count, FALSE) != 0)
+  {
+    dt_free_align(points);
+    dt_free_align(border);
+    return 1;
+  }
+  if(points_count <= 2)
   {
     dt_free_align(points);
     dt_free_align(border);
@@ -2769,7 +2799,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   {
     dt_free_align(points);
     dt_free_align(border);
-    return 1;
+    return 0;
   }
 
   // now get min/max values
@@ -2799,7 +2829,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
     {
       dt_free_align(points);
       dt_free_align(border);
-      return 0;
+      return 1;
     }
     memcpy(cpoints, points, sizeof(float) * 2 * points_count);
 
@@ -2919,7 +2949,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
     {
       dt_free_align(points);
       dt_free_align(border);
-      return 0;
+      return 1;
     }
 
     int dindex = 0;
@@ -2999,7 +3029,7 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
     dt_print(DT_DEBUG_MASKS, "[masks %s] polygon fill buffer took %0.04f sec\n", form->name,
              dt_get_wtime() - start);
 
-  return 1;
+  return 0;
 }
 
 static void _polygon_sanitize_config(dt_masks_type_t type)

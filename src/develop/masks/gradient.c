@@ -705,7 +705,7 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
 
   const int count = sqrtf(wd * wd + ht * ht) + 3;
   *points = dt_alloc_align_float((size_t)2 * count);
-  if(*points == NULL) return 0;
+  if(*points == NULL) return 1;
 
   // we set the anchor point
   (*points)[0] = x * wd;
@@ -727,6 +727,15 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
   size_t c_padded_size;
   uint32_t *pts_count = dt_calloc_perthread(nthreads, sizeof(uint32_t), &c_padded_size);
   float *const restrict pts = dt_alloc_align_float((size_t)2 * count * nthreads);
+  if(pts_count == NULL || pts == NULL)
+  {
+    if(pts_count) dt_free_align(pts_count);
+    if(pts) dt_free_align(pts);
+    dt_free_align(*points);
+    *points = NULL;
+    *points_count = 0;
+    return 1;
+  }
 
   // we set the line point
   const float xstart = fabsf(curvature) > 1.0f ? -sqrtf(1.0f / fabsf(curvature)) : -1.0f;
@@ -775,12 +784,14 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
   dt_free_align(pts);
 
   // and we transform them with all distorted modules
-  if(dt_dev_distort_transform(dev, *points, *points_count)) return 1;
+  if(!dt_dev_distort_transform(dev, *points, *points_count))
+  {
+    dt_free_align(*points);
+    *points = NULL;
+    *points_count = 0;
+    return 1;
+  }
 
-  // if we failed, then free all and return
-  dt_free_align(*points);
-  *points = NULL;
-  *points_count = 0;
   return 0;
 }
 
@@ -818,14 +829,14 @@ static int _gradient_get_pts_border(dt_develop_t *dev, float x, float y, float r
   // Get points for both curves
   float *points1 = NULL, *points2 = NULL;
   int points_count1 = 0, points_count2 = 0;
-  const int r1 = _gradient_get_points(dev, x1, y1, rotation, curvature, &points1, &points_count1);
-  const int r2 = _gradient_get_points(dev, x2, y2, rotation, curvature, &points2, &points_count2);
+  const int err1 = _gradient_get_points(dev, x1, y1, rotation, curvature, &points1, &points_count1);
+  const int err2 = _gradient_get_points(dev, x2, y2, rotation, curvature, &points2, &points_count2);
 
   // Check which curves are valid (need more than 4 points: 3 metadata + at least 1 data)
-  const gboolean valid1 = r1 && points_count1 > 4;
-  const gboolean valid2 = r2 && points_count2 > 4;
+  const gboolean valid1 = (err1 == 0) && points_count1 > 4;
+  const gboolean valid2 = (err2 == 0) && points_count2 > 4;
 
-  int res = 0;
+  int err = 1;
   
   if(valid1 && valid2)
   {
@@ -841,7 +852,7 @@ static int _gradient_get_pts_border(dt_develop_t *dev, float x, float y, float r
     (*points)[k * 2] = (*points)[k * 2 + 1] = INFINITY; // Separator
     k++;
     _copy_points(*points, points2, points_count2, &k);
-    res = 1;
+    err = 0;
   }
   else if(valid1)
   {
@@ -852,7 +863,7 @@ static int _gradient_get_pts_border(dt_develop_t *dev, float x, float y, float r
     
     int k = 0;
     _copy_points(*points, points1, points_count1, &k);
-    res = 1;
+    err = 0;
   }
   else if(valid2)
   {
@@ -863,13 +874,13 @@ static int _gradient_get_pts_border(dt_develop_t *dev, float x, float y, float r
     
     int k = 0;
     _copy_points(*points, points2, points_count2, &k);
-    res = 1;
+    err = 0;
   }
 
 cleanup:
   dt_free_align(points1);
   dt_free_align(points2);
-  return res;
+  return err;
 }
 
 static void _gradient_draw_shape(cairo_t *cr, const float *pts_line, const int pts_line_count, const int nb, const gboolean border, const gboolean source)
@@ -1025,9 +1036,23 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
     int points_count = 0;
     float *border = NULL;
     int border_count = 0;
-    int draw = _gradient_get_points(darktable.develop, x, y, rotation, curvature, &points, &points_count);
-    if(draw && extent > 0.0f)
-      draw = _gradient_get_pts_border(darktable.develop, x, y, rotation, extent, curvature, &border, &border_count);
+    int err = _gradient_get_points(darktable.develop, x, y, rotation, curvature, &points, &points_count);
+    if(err)
+    {
+      if(points) dt_free_align(points);
+      if(border) dt_free_align(border);
+      return;
+    }
+    if(extent > 0.0f)
+    {
+      err = _gradient_get_pts_border(darktable.develop, x, y, rotation, extent, curvature, &border, &border_count);
+      if(err)
+      {
+        if(points) dt_free_align(points);
+        if(border) dt_free_align(border);
+        return;
+      }
+    }
 
     // draw main line
     dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, FALSE, zoom_scale, points, points_count, &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND);
@@ -1067,15 +1092,12 @@ static int _gradient_get_points_border(dt_develop_t *dev, dt_masks_form_t *form,
   dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)form->points->data;
   if(!gradient) return 0;
   if(_gradient_get_points(dev, gradient->center[0], gradient->center[1], gradient->rotation, gradient->curvature,
-                          points, points_count))
-  {
-    if(border)
-      return _gradient_get_pts_border(dev, gradient->center[0], gradient->center[1],
-                                      gradient->rotation, gradient->extent, gradient->curvature,
-                                      border, border_count);
-    else
-      return 1;
-  }
+                          points, points_count) != 0)
+    return 1;
+  if(border)
+    return _gradient_get_pts_border(dev, gradient->center[0], gradient->center[1],
+                                    gradient->rotation, gradient->extent, gradient->curvature,
+                                    border, border_count);
   return 0;
 }
 
@@ -1088,7 +1110,8 @@ static int _gradient_get_area(const dt_iop_module_t *const module, const dt_dev_
   float points[8] = { 0.0f, 0.0f, wd, 0.0f, wd, ht, 0.0f, ht };
 
   // and we transform them with all distorted modules
-  if(!dt_dev_distort_transform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, 4)) return 0;
+  if(!dt_dev_distort_transform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, 4))
+    return 1;
 
   // now we search min and max
   float xmin = 0.0f, xmax = 0.0f, ymin = 0.0f, ymax = 0.0f;
@@ -1107,7 +1130,7 @@ static int _gradient_get_area(const dt_iop_module_t *const module, const dt_dev_
   *posy = ymin;
   *width = (xmax - xmin);
   *height = (ymax - ymin);
-  return 1;
+  return 0;
 }
 
 // caller needs to make sure that input remains within bounds
@@ -1127,7 +1150,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
   // we get the area
-  if(!_gradient_get_area(module, piece, form, width, height, posx, posy)) return 0;
+  if(_gradient_get_area(module, piece, form, width, height, posx, posy) != 0) return 1;
 
   if(darktable.unmuted & DT_DEBUG_PERF)
   {
@@ -1149,7 +1172,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
   const int gh = (h + grid - 1) / grid + 1;
 
   float *points = dt_alloc_align_float((size_t)2 * gw * gh);
-  if(points == NULL) return 0;
+  if(points == NULL) return 1;
 
 #ifdef _OPENMP
 #if !defined(__SUNOS__) && !defined(__NetBSD__)
@@ -1178,7 +1201,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
   if(!dt_dev_distort_backtransform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)gw * gh))
   {
     dt_free_align(points);
-    return 0;
+    return 1;
   }
 
   if(darktable.unmuted & DT_DEBUG_PERF)
@@ -1209,7 +1232,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
   if(lut == NULL)
   {
     dt_free_align(points);
-    return 0;
+    return 1;
   }
 
 #ifdef _OPENMP
@@ -1265,7 +1288,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
   if(*buffer == NULL)
   {
     dt_free_align(points);
-    return 0;
+    return 1;
   }
 
 // we fill the mask buffer by interpolation
@@ -1302,7 +1325,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
     dt_print(DT_DEBUG_MASKS, "[masks %s] gradient fill took %0.04f sec\n", form->name,
              dt_get_wtime() - start2);
 
-  return 1;
+  return 0;
 }
 
 
@@ -1327,7 +1350,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_
   const int gh = (h + grid - 1) / grid + 1;
 
   float *points = dt_alloc_align_float((size_t)2 * gw * gh);
-  if(points == NULL) return 0;
+  if(points == NULL) return 1;
 
 #ifdef _OPENMP
 #if !defined(__SUNOS__) && !defined(__NetBSD__)
@@ -1359,7 +1382,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_
                                         (size_t)gw * gh))
   {
     dt_free_align(points);
-    return 0;
+    return 1;
   }
 
   if(darktable.unmuted & DT_DEBUG_PERF)
@@ -1390,7 +1413,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_
   if(lut == NULL)
   {
     dt_free_align(points);
-    return 0;
+    return 1;
   }
 
 #ifdef _OPENMP
@@ -1476,7 +1499,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_
     dt_print(DT_DEBUG_MASKS, "[masks %s] gradient fill took %0.04f sec\n", form->name,
              dt_get_wtime() - start2);
 
-  return 1;
+  return 0;
 }
 
 static void _gradient_sanitize_config(dt_masks_type_t type)

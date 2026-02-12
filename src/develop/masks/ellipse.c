@@ -275,47 +275,52 @@ static int _ellipse_get_points_source(dt_develop_t *dev, float xx, float yy, flo
   // compute the points of the target (center and circumference of ellipse)
   // we get the point in RAW image reference
   *points = _points_to_transform(xx, yy, radius_a, radius_b, rotation, wd, ht, points_count);
-  if(!*points) return 0;
+  if(!*points) return 1;
 
   // we transform with all distortion that happen *before* the module
   // so we have now the TARGET points in module input reference
-  if(dt_dev_distort_transform_plus(dev, dev->preview_pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
-                                   *points, *points_count))
+  if(!dt_dev_distort_transform_plus(dev, dev->preview_pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
+                                    *points, *points_count))
+    goto error;
+
+  // now we move all the points by the shift
+  // so we have now the SOURCE points in module input reference
+  float pts[2] = { xs * wd, ys * ht };
+  if(!dt_dev_distort_transform_plus(dev, dev->preview_pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
+                                    pts, 1))
+    goto error;
+
   {
-    // now we move all the points by the shift
-    // so we have now the SOURCE points in module input reference
-    float pts[2] = { xs * wd, ys * ht };
-    if(dt_dev_distort_transform_plus(dev, dev->preview_pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_EXCL,
-                                     pts, 1))
-    {
-      const float dx = pts[0] - (*points)[0];
-      const float dy = pts[1] - (*points)[1];
-      (*points)[0] = pts[0];
-      (*points)[1] = pts[1];
+    const float dx = pts[0] - (*points)[0];
+    const float dy = pts[1] - (*points)[1];
+    (*points)[0] = pts[0];
+    (*points)[1] = pts[1];
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
     dt_omp_firstprivate(points_count, points, dx, dy)              \
     schedule(static) if(*points_count > 100) aligned(points:64)
 #endif
-      for(int i = 5; i < *points_count; i++)
-      {
-        (*points)[i * 2] += dx;
-        (*points)[i * 2 + 1] += dy;
-      }
-
-      // we apply the rest of the distortions (those after the module)
-      // so we have now the SOURCE points in final image reference
-      if(dt_dev_distort_transform_plus(dev, dev->preview_pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
-                                       *points, *points_count))
-        return 1;
+    for(int i = 5; i < *points_count; i++)
+    {
+      (*points)[i * 2] += dx;
+      (*points)[i * 2 + 1] += dy;
     }
   }
 
+  // we apply the rest of the distortions (those after the module)
+  // so we have now the SOURCE points in final image reference
+  if(!dt_dev_distort_transform_plus(dev, dev->preview_pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
+                                    *points, *points_count))
+    goto error;
+
+  return 0;
+
   // if we failed, then free all and return
+error:
   dt_free_align(*points);
   *points = NULL;
   *points_count = 0;
-  return 0;
+  return 1;
 }
 
 static int _ellipse_get_points(dt_develop_t *dev, float xx, float yy, float radius_a, float radius_b,
@@ -325,15 +330,17 @@ static int _ellipse_get_points(dt_develop_t *dev, float xx, float yy, float radi
   const float ht = dev->preview_pipe->iheight;
 
   *points = _points_to_transform(xx, yy, radius_a, radius_b, rotation, wd, ht, points_count);
-  if(!*points) return 0;
+  if(!*points) return 1;
 
   // and we transform them with all distorted modules
-  if(dt_dev_distort_transform(dev, *points, *points_count)) return 1;
+  if(!dt_dev_distort_transform(dev, *points, *points_count))
+  {
+    dt_free_align(*points);
+    *points = NULL;
+    *points_count = 0;
+    return 1;
+  }
 
-  // if we failed, then free all and return
-  dt_free_align(*points);
-  *points = NULL;
-  *points_count = 0;
   return 0;
 }
 
@@ -355,20 +362,18 @@ static int _ellipse_get_points_border(dt_develop_t *dev, struct dt_masks_form_t 
   }
   else
   {
-    if(_ellipse_get_points(dev, x, y, a, b, ellipse->rotation, points, points_count))
+    if(_ellipse_get_points(dev, x, y, a, b, ellipse->rotation, points, points_count) != 0)
+      return 1;
+    if(border)
     {
-      if(border)
-      {
-        const int prop = ellipse->flags & DT_MASKS_ELLIPSE_PROPORTIONAL;
-        return _ellipse_get_points(dev, x, y, (prop ? a * (1.0f + ellipse->border) : a + ellipse->border),
-                                   (prop ? b * (1.0f + ellipse->border) : b + ellipse->border), ellipse->rotation,
-                                   border, border_count);
-      }
-      else
-        return 1;
+      const int prop = ellipse->flags & DT_MASKS_ELLIPSE_PROPORTIONAL;
+      return _ellipse_get_points(dev, x, y, (prop ? a * (1.0f + ellipse->border) : a + ellipse->border),
+                                 (prop ? b * (1.0f + ellipse->border) : b + ellipse->border), ellipse->rotation,
+                                 border, border_count);
     }
+    return 0;
   }
-  return 0;
+  return 1;
 }
 
 static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float pzy, dt_masks_form_t *form, int parentid,
@@ -1080,10 +1085,22 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     int points_count = 0;
     float *border = NULL;
     int border_count = 0;
-    int draw = _ellipse_get_points(darktable.develop, x, y, radius_a, radius_b, rotation, &points, &points_count);
-    if(draw && masks_border > 0.f)
+    int err = _ellipse_get_points(darktable.develop, x, y, radius_a, radius_b, rotation, &points, &points_count);
+    if(err)
     {
-      draw = _ellipse_get_points(darktable.develop, x, y, border_a, border_b, rotation, &border, &border_count);
+      if(points) dt_free_align(points);
+      if(border) dt_free_align(border);
+      return;
+    }
+    if(masks_border > 0.f)
+    {
+      err = _ellipse_get_points(darktable.develop, x, y, border_a, border_b, rotation, &border, &border_count);
+      if(err)
+      {
+        if(points) dt_free_align(points);
+        if(border) dt_free_align(border);
+        return;
+      }
     }
     // we draw the form and it's border
     cairo_save(cr);
@@ -1287,19 +1304,19 @@ static int _ellipse_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_io
   float *const restrict points
     = _ellipse_points_to_transform(form->source[0], form->source[1], total[0], total[1], ellipse->rotation, wd, ht, &point_count);
   if (!points)
-    return 0;
+    return 1;
 
   // and we transform them with all distorted modules
   if(!dt_dev_distort_transform_plus(darktable.develop, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, point_count))
   {
     dt_free_align(points);
-    return 0;
+    return 1;
   }
 
   // finally, find the extreme left/right and top/bottom points
   _bounding_box(points, point_count, width, height, posx, posy);
   dt_free_align(points);
-  return 1;
+  return 0;
 }
 
 static int _ellipse_get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
@@ -1320,19 +1337,19 @@ static int _ellipse_get_area(const dt_iop_module_t *const module, const dt_dev_p
   float *const restrict points
     = _ellipse_points_to_transform(ellipse->center[0], ellipse->center[1], total[0], total[1], ellipse->rotation, wd, ht, &point_count);
   if (!points)
-    return 0;
+    return 1;
 
   // and we transform them with all distorted modules
   if(!dt_dev_distort_transform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, point_count))
   {
     dt_free_align(points);
-    return 0;
+    return 1;
   }
 
   // finally, find the extreme left/right and top/bottom points
   _bounding_box(points, point_count, width, height, posx, posy);
   dt_free_align(points);
-  return 1;
+  return 0;
 }
 
 static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
@@ -1344,7 +1361,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
   // we get the area
-  if(!_ellipse_get_area(module, piece, form, width, height, posx, posy)) return 0;
+  if(_ellipse_get_area(module, piece, form, width, height, posx, posy) != 0) return 1;
 
   if(darktable.unmuted & DT_DEBUG_PERF)
   {
@@ -1359,7 +1376,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   int w = *width, h = *height;
   float *points = dt_alloc_align_float((size_t)2 * w * h);
   if(points == NULL)
-    return 0;
+    return 1;
 
   for(int i = 0; i < h; i++)
     for(int j = 0; j < w; j++)
@@ -1378,7 +1395,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   if(!dt_dev_distort_backtransform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)w * h))
   {
     dt_free_align(points);
-    return 0;
+    return 1;
   }
 
   if(darktable.unmuted & DT_DEBUG_PERF)
@@ -1393,7 +1410,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   if(*buffer == NULL)
   {
     dt_free_align(points);
-    return 0;
+    return 1;
   }
 
   // we populate the buffer
@@ -1431,7 +1448,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   if(darktable.unmuted & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks %s] ellipse fill took %0.04f sec\n", form->name, dt_get_wtime() - start2);
 
-  return 1;
+  return 0;
 }
 
 static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
@@ -1483,7 +1500,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   const int l = (int)(M_PI * (ta + tb) * (1.0f + (3.0f * lambda * lambda) / (10.0f + sqrtf(4.0f - 3.0f * lambda * lambda))));
   const size_t ellpts = MIN(360, l);
   float *ell = dt_alloc_align_float(ellpts * 2);
-  if(ell == NULL) return 0;
+  if(ell == NULL) return 1;
 
 #ifdef _OPENMP
 #if !defined(__SUNOS__) && !defined(__NetBSD__)
@@ -1514,7 +1531,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
                                         ellpts))
   {
     dt_free_align(ell);
-    return 0;
+    return 1;
   }
 
   if(darktable.unmuted & DT_DEBUG_PERF)
@@ -1566,10 +1583,10 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   // check if there is anything to do at all;
   // only if width and height of bounding box is 2 or greater the shape lies inside of roi and requires action
   if(bbw <= 1 || bbh <= 1)
-    return 1;
+    return 0;
 
   float *points = dt_alloc_align_float((size_t)2 * bbw * bbh);
-  if(points == NULL) return 0;
+  if(points == NULL) return 1;
 
   // we populate the grid points in module coordinates
 #ifdef _OPENMP
@@ -1600,7 +1617,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
                                         (size_t)bbw * bbh))
   {
     dt_free_align(points);
-    return 0;
+    return 1;
   }
 
   if(darktable.unmuted & DT_DEBUG_PERF)
@@ -1658,7 +1675,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
     dt_print(DT_DEBUG_MASKS, "[masks %s] ellipse total render took %0.04f sec\n", form->name,
              dt_get_wtime() - start1);
   }
-  return 1;
+  return 0;
 }
 
 static void _ellipse_set_form_name(struct dt_masks_form_t *const form, const size_t nb)

@@ -785,7 +785,7 @@ static gboolean rt_masks_form_is_in_roi(dt_iop_module_t *self, dt_dev_pixelpipe_
   // we get the area for the form
   int fl, ft, fw, fh;
 
-  if(!dt_masks_get_area(self, piece, form, &fw, &fh, &fl, &ft)) return FALSE;
+  if(dt_masks_get_area(self, piece, form, &fw, &fh, &fl, &ft) != 0) return FALSE;
 
   // is the form outside of the roi?
   fw *= roi_in->scale, fh *= roi_in->scale, fl *= roi_in->scale, ft *= roi_in->scale;
@@ -3388,12 +3388,11 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
     // scale the mask
     float *mask_scaled = NULL;
     dt_iop_roi_t roi_mask_scaled = { 0 };
-
-        if(rt_build_scaled_mask(mask, &roi_mask, &mask_scaled, &roi_mask_scaled, roi_layer, dx, dy, algo) != 0)
-        {
-          if(mask) dt_free_align(mask);
-          return 1;
-        }
+    if(rt_build_scaled_mask(mask, &roi_mask, &mask_scaled, &roi_mask_scaled, roi_layer, dx, dy, algo) != 0)
+    {
+      if(mask) dt_free_align(mask);
+      return 1;
+    }
 
     // we don't need the original mask anymore
     if(mask)

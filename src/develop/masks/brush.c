@@ -681,7 +681,7 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
   dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *dpayload = NULL;
 
   dpoints = dt_masks_dynbuf_init(1000000, "brush dpoints");
-  if(dpoints == NULL) return 0;
+  if(dpoints == NULL) return 1;
 
   if(border)
   {
@@ -689,7 +689,7 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
     if(dborder == NULL)
     {
       dt_masks_dynbuf_free(dpoints);
-      return 0;
+      return 1;
     }
   }
 
@@ -700,7 +700,7 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
     {
       dt_masks_dynbuf_free(dpoints);
       dt_masks_dynbuf_free(dborder);
-      return 0;
+      return 1;
     }
   }
 
@@ -995,7 +995,7 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
     if(darktable.unmuted & DT_DEBUG_PERF)
       dt_print(DT_DEBUG_MASKS, "[masks %s] path_points end took %0.04f sec\n", form->name, dt_get_wtime() - start2);
 
-    return 1;
+    return 0;
   }
   else if(dt_dev_distort_transform_plus(dev, pipe, iop_order, transf_direction, *points, *points_count))
   {
@@ -1004,7 +1004,7 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
       if(darktable.unmuted & DT_DEBUG_PERF)
         dt_print(DT_DEBUG_MASKS, "[masks %s] brush_points transform took %0.04f sec\n", form->name,
                  dt_get_wtime() - start2);
-      return 1;
+      return 0;
     }
   }
 
@@ -1025,7 +1025,7 @@ fail:
     *payload = NULL;
     *payload_count = 0;
   }
-  return 0;
+  return 1;
 }
 
 /** get the distance between point (x,y) and the brush */
@@ -1151,7 +1151,7 @@ static void _brush_get_distance(float x, float y, float as, dt_masks_form_gui_t 
 static int _brush_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, float **points, int *points_count,
                                     float **border, int *border_count, int source, const dt_iop_module_t *module)
 {
-  if(source && !module) return 0;
+  if(source && !module) return 1;
   const double ioporder = (module) ? module->iop_order : 0.0f;
   return _brush_get_pts_border(dev, form, ioporder, DT_DEV_TRANSFORM_DIR_ALL, dev->preview_pipe, points,
                                points_count, border, border_count, NULL, NULL, source);
@@ -2470,16 +2470,16 @@ static void _brush_bounding_box(const float *const points, const float *const bo
 static int _get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
                      dt_masks_form_t *const form, int *width, int *height, int *posx, int *posy, int get_source)
 {
-  if(!module) return 0;
+  if(!module) return 1;
   // we get buffers for all points
   float *points = NULL, *border = NULL;
   int points_count, border_count;
-  if(!_brush_get_pts_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe, &points, &points_count,
-                            &border, &border_count, NULL, NULL, get_source))
+  if(_brush_get_pts_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe, &points, &points_count,
+                            &border, &border_count, NULL, NULL, get_source) != 0)
   {
     dt_free_align(points);
     dt_free_align(border);
-    return 0;
+    return 1;
   }
 
   const guint nb_corner = g_list_length(form->points);
@@ -2487,7 +2487,7 @@ static int _get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe
 
   dt_free_align(points);
   dt_free_align(border);
-  return 1;
+  return 0;
 }
 
 static int _brush_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
@@ -2534,7 +2534,7 @@ static int _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
                            dt_masks_form_t *const form,
                            float **buffer, int *width, int *height, int *posx, int *posy)
 {
-  if(!module) return 0;
+  if(!module) return 1;
   double start = 0.0;
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start = start2 = dt_get_wtime();
@@ -2542,13 +2542,13 @@ static int _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
   // we get buffers for all points
   float *points = NULL, *border = NULL, *payload = NULL;
   int points_count, border_count, payload_count;
-  if(!_brush_get_pts_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe,&points, &points_count,
-                               &border, &border_count, &payload, &payload_count, 0))
+  if(_brush_get_pts_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe,&points, &points_count,
+                               &border, &border_count, &payload, &payload_count, 0) != 0)
   {
     dt_free_align(points);
     dt_free_align(border);
     dt_free_align(payload);
-    return 0;
+    return 1;
   }
 
   if(darktable.unmuted & DT_DEBUG_PERF)
@@ -2573,7 +2573,7 @@ static int _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
     dt_free_align(points);
     dt_free_align(border);
     dt_free_align(payload);
-    return 0;
+    return 1;
   }
 
   // now we fill the falloff
@@ -2597,7 +2597,7 @@ static int _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
     dt_print(DT_DEBUG_MASKS, "[masks %s] brush fill buffer took %0.04f sec\n", form->name,
              dt_get_wtime() - start);
 
-  return 1;
+  return 0;
 }
 
 /** we write a falloff segment respecting limits of buffer */
@@ -2648,7 +2648,7 @@ static inline void _brush_falloff_roi(float *buffer, const int *p0, const int *p
 static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
                                dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer)
 {
-  if(!module) return 0;
+  if(!module) return 1;
   double start = 0.0;
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start = start2 = dt_get_wtime();
@@ -2664,13 +2664,13 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev
 
   int points_count, border_count, payload_count;
 
-  if(!_brush_get_pts_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe,&points, &points_count,
-                               &border, &border_count, &payload, &payload_count, 0))
+  if(_brush_get_pts_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe,&points, &points_count,
+                               &border, &border_count, &payload, &payload_count, 0) != 0)
   {
     dt_free_align(points);
     dt_free_align(border);
     dt_free_align(payload);
-    return 0;
+    return 1;
   }
 
   if(darktable.unmuted & DT_DEBUG_PERF)
@@ -2715,7 +2715,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev
     dt_free_align(points);
     dt_free_align(border);
     dt_free_align(payload);
-    return 1;
+    return 0;
   }
 
   // now we fill the falloff
@@ -2752,7 +2752,7 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev
              dt_get_wtime() - start);
   }
 
-  return 1;
+  return 0;
 }
 
 static void _brush_sanitize_config(dt_masks_type_t type)

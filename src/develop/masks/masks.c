@@ -170,10 +170,13 @@ void dt_masks_gui_form_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, i
 
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(dt_masks_get_points_border(darktable.develop, form, &gpt->points, &gpt->points_count, &gpt->border,
-                                &gpt->border_count, 0, NULL))
+                                &gpt->border_count, 0, NULL) == 0)
   {
     if(form->type & DT_MASKS_CLONE)
-      dt_masks_get_points_border(darktable.develop, form, &gpt->source, &gpt->source_count, NULL, NULL, TRUE, module);
+    {
+      if(dt_masks_get_points_border(darktable.develop, form, &gpt->source, &gpt->source_count, NULL, NULL, TRUE, module) != 0)
+        return;
+    }
     gui->pipe_hash = darktable.develop->preview_pipe->backbuf.hash;
     gui->formid = form->formid;
   }
@@ -484,19 +487,16 @@ int dt_masks_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, float *
                                float **border, int *border_count, int source, dt_iop_module_t *module)
 {
   if(form->functions && form->functions->get_points_border)
-  {
     return form->functions->get_points_border(dev, form, points, points_count, border, border_count, source, module);
-  }
-  return 0;
+  return 1;
 }
 
 int dt_masks_get_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
                       int *width, int *height, int *posx, int *posy)
 {
-  if(form->functions)
+  if(form->functions && form->functions->get_area)
     return form->functions->get_area(module, piece, form, width, height, posx, posy);
-
-  return 0;
+  return 1;
 }
 
 int dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, dt_masks_form_t *form,
@@ -507,10 +507,10 @@ int dt_masks_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *pi
   // must be a clone form
   if(form->type & DT_MASKS_CLONE)
   {
-    if(form->functions)
+    if(form->functions && form->functions->get_source_area)
       return form->functions->get_source_area(module, piece, form, width, height, posx, posy);
   }
-  return 0;
+  return 1;
 }
 
 int dt_masks_version(void)

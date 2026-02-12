@@ -368,7 +368,7 @@ static gboolean masks_form_is_in_roi(dt_iop_module_t *self, dt_dev_pixelpipe_iop
   // we get the area for the form
   int fl, ft, fw, fh;
 
-  if(!dt_masks_get_area(self, piece, form, &fw, &fh, &fl, &ft)) return FALSE;
+  if(dt_masks_get_area(self, piece, form, &fw, &fh, &fl, &ft) != 0) return FALSE;
 
   // is the form outside of the roi?
   fw *= roi_in->scale, fh *= roi_in->scale, fl *= roi_in->scale, ft *= roi_in->scale;
@@ -419,7 +419,7 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
         // we get the area for the source
         int fl, ft, fw, fh;
 
-        if(!dt_masks_get_source_area(self, piece, form, &fw, &fh, &fl, &ft))
+        if(dt_masks_get_source_area(self, piece, form, &fw, &fh, &fl, &ft) != 0)
         {
           continue;
         }
@@ -611,11 +611,14 @@ static int _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
         // we get the mask
         float *mask = NULL;
         int posx, posy, width, height;
-        const int got_mask = dt_masks_get_mask(self, piece, form, &mask, &width, &height, &posx, &posy);
-        if(!got_mask || mask == NULL)
+        if(dt_masks_get_mask(self, piece, form, &mask, &width, &height, &posx, &posy) != 0)
         {
-          if(mask) dt_free_align(mask);
           return 1;
+        }
+        if(width < 1 || height < 1)
+        {
+          dt_free_align(mask);
+          continue;
         }
         const int fts = posy * roi_in->scale;
         const int fhs = height * roi_in->scale;
