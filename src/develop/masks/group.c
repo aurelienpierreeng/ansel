@@ -30,6 +30,7 @@ static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, float pz
   {
     // we get the form
     dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    if(!fpt) return 0;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
       return sel->functions->mouse_scrolled(module, pzx, pzy, up, flow, state, sel, fpt->parentid, gui, gui->group_selected, interaction);
@@ -70,12 +71,11 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
   {
     // we get the form
     dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    if(!fpt) return 0;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-
     if(sel && sel->functions)
-      if(sel->functions->button_released(module, pzx, pzy, which, state, sel, fpt->parentid, gui,
-                                             gui->group_selected))
-        return 1;
+      return sel->functions->button_released(module, pzx, pzy, which, state, sel, fpt->parentid, gui,
+                                             gui->group_selected);
   }
 
   // If we get here, it's either because:
@@ -172,6 +172,7 @@ static int _group_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   {
     // we get the form
     dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    if(!fpt) return 0;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
       return sel->functions->mouse_moved(module, pzx, pzy, pressure, which, sel, fpt->parentid, gui,
@@ -189,7 +190,6 @@ static void _group_events_post_expose_draw(cairo_t *cr, float zoom_scale, dt_mas
   // we get the form
   dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, pos);
   dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-  if (!sel) return;
   if(sel && sel->functions)
     sel->functions->post_expose(cr, zoom_scale, gui, pos, g_list_length(sel->points));
 }
