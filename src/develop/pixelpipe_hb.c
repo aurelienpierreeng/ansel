@@ -801,8 +801,8 @@ static void *_gpu_try_reuse_pinned_from_cache(dt_pixel_cache_entry_t *cache_entr
                                        &cached_cst);
   if(mem)
   {
-    if(out_cst) *out_cst = cached_cst;
-    if(out_reused && cached_cst != IOP_CS_NONE) *out_reused = TRUE;
+    if(out_reused) *out_reused = (cached_cst != IOP_CS_NONE);
+    if(out_cst && cached_cst != IOP_CS_NONE) *out_cst = cached_cst;
   }
 
   return mem;
@@ -874,7 +874,6 @@ static void *_gpu_init_buffer(int devid, void *const host_ptr, const dt_iop_roi_
   gboolean reused_from_cache = FALSE;
 
   if(out_reused) *out_reused = FALSE;
-  if(out_cst) *out_cst = IOP_CS_NONE;
   
   if(host_ptr)
   {
