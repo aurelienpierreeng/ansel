@@ -1554,30 +1554,32 @@ static cl_int_t apply_global_distortion_map_cl(struct dt_iop_module_t *module,
        kdesc.size = 1;
        kdesc.resolution = 1;
        k = malloc(sizeof(float) * 2);
-       if(!k) goto error;
-       k[0] = 1.0f;
-       k[1] = 0.0f;
+       if(k)
+       {
+        k[0] = 1.0f;
+        k[1] = 0.0f;
+       }
        break;
      case DT_INTERPOLATION_BICUBIC:
        kdesc.size = 2;
        k = malloc(sizeof(float) * ((size_t)kdesc.size * kdesc.resolution + 1));
-       if(!k) goto error;
-       for(int i = 0; i <= kdesc.size * kdesc.resolution; ++i)
-         k[i] = bicubic(0.5f, (float) i / kdesc.resolution);
+       if(k)
+        for(int i = 0; i <= kdesc.size * kdesc.resolution; ++i)
+          k[i] = bicubic(0.5f, (float) i / kdesc.resolution);
        break;
      case DT_INTERPOLATION_LANCZOS2:
        kdesc.size = 2;
        k = malloc(sizeof(float) * ((size_t)kdesc.size * kdesc.resolution + 1));
-       if(!k) goto error;
-       for(int i = 0; i <= kdesc.size * kdesc.resolution; ++i)
-         k[i] = lanczos(2, (float) i / kdesc.resolution);
+       if(k)
+        for(int i = 0; i <= kdesc.size * kdesc.resolution; ++i)
+          k[i] = lanczos(2, (float) i / kdesc.resolution);
        break;
      case DT_INTERPOLATION_LANCZOS3:
        kdesc.size = 3;
        k = malloc(sizeof(float) * ((size_t)kdesc.size * kdesc.resolution + 1));
-       if(!k) goto error;
-       for(int i = 0; i <= kdesc.size * kdesc.resolution; ++i)
-         k[i] = lanczos(3, (float) i / kdesc.resolution);
+       if(k)
+        for(int i = 0; i <= kdesc.size * kdesc.resolution; ++i)
+          k[i] = lanczos(3, (float) i / kdesc.resolution);
        break;
      default:
        return FALSE;
@@ -1602,7 +1604,7 @@ static cl_int_t apply_global_distortion_map_cl(struct dt_iop_module_t *module,
     (devid, sizeof(float) * (kdesc.size * kdesc.resolution  + 1), (void *) k);
 
   if(dev_roi_in == NULL || dev_roi_out == NULL || dev_map == NULL || dev_map_extent == NULL
-      || dev_kdesc == NULL || dev_kernel == NULL)
+      || dev_kdesc == NULL || dev_kernel == NULL || k == NULL)
     goto error;
 
   dt_opencl_set_kernel_arg(devid, gd->warp_kernel, 0, sizeof(cl_mem), &dev_in);
