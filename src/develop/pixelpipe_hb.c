@@ -1059,18 +1059,18 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                     : tiling->factor_cl);
 
   /* pre-check if there is enough space on device for non-tiled processing */
-  gboolean fits_on_device = dt_opencl_image_fits_device(pipe->devid, MAX(roi_in->width, roi_out->width),
-                                                        MAX(roi_in->height, roi_out->height), MAX(in_bpp, bpp),
-                                                        required_factor_cl, tiling->overhead);
+  const size_t precheck_width = ROUNDUPDWD(MAX(roi_in->width, roi_out->width), pipe->devid);
+  const size_t precheck_height = ROUNDUPDHT(MAX(roi_in->height, roi_out->height), pipe->devid);
+  gboolean fits_on_device = dt_opencl_image_fits_device(pipe->devid, precheck_width, precheck_height,
+                                                        MAX(in_bpp, bpp), required_factor_cl, tiling->overhead);
   if(!fits_on_device)
   {
     dt_print(DT_DEBUG_OPENCL,
              "[dev_pixelpipe] %s pre-check didn't fit on device, flushing cached pinned buffers and retrying\n",
              module->name());
     dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, pipe->devid);
-    fits_on_device = dt_opencl_image_fits_device(pipe->devid, MAX(roi_in->width, roi_out->width),
-                                                 MAX(roi_in->height, roi_out->height), MAX(in_bpp, bpp),
-                                                 required_factor_cl, tiling->overhead);
+    fits_on_device = dt_opencl_image_fits_device(pipe->devid, precheck_width, precheck_height,
+                                                 MAX(in_bpp, bpp), required_factor_cl, tiling->overhead);
   }
 
   /* general remark: in case of opencl errors within modules or out-of-memory on GPU, we transparently
