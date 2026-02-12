@@ -29,16 +29,16 @@ static float slider2contrast(float slider)
 {
   return 0.005f * powf(slider, 1.1f);
 }
-static void dual_demosaic(dt_dev_pixelpipe_iop_t *piece, float *const restrict rgb_data, const float *const restrict raw_data,
+static int dual_demosaic(dt_dev_pixelpipe_iop_t *piece, float *const restrict rgb_data, const float *const restrict raw_data,
                           dt_iop_roi_t *const roi_out, const dt_iop_roi_t *const roi_in, const uint32_t filters, const uint8_t (*const xtrans)[6],
                           const gboolean dual_mask, float dual_threshold)
 {
   const int width = roi_in->width;
   const int height = roi_in->height;
-  if((width < 16) || (height < 16)) return;
+  if((width < 16) || (height < 16)) return 0;
 
   // If the threshold is zero and we don't want to see the blend mask we don't do anything
-  if(dual_threshold <= 0.0f) return;
+  if(dual_threshold <= 0.0f) return 0;
 
   float *blend = dt_pixelpipe_cache_alloc_align_float((size_t) width * height, piece->pipe);
   float *tmp = dt_pixelpipe_cache_alloc_align_float((size_t) width * height, piece->pipe);
@@ -49,11 +49,17 @@ static void dual_demosaic(dt_dev_pixelpipe_iop_t *piece, float *const restrict r
     if(blend) dt_pixelpipe_cache_free_align(blend);
     if(vng_image) dt_pixelpipe_cache_free_align(vng_image);
     dt_control_log(_("[dual demosaic] can't allocate internal buffers"));
-    return;
+    return 1;
   }
   const gboolean info = ((darktable.unmuted & (DT_DEBUG_DEMOSAIC | DT_DEBUG_PERF)) && (piece->pipe->type == DT_DEV_PIXELPIPE_FULL));
 
-  vng_interpolate(vng_image, raw_data, roi_out, roi_in, filters, xtrans, FALSE);
+  if(vng_interpolate(vng_image, raw_data, roi_out, roi_in, filters, xtrans, FALSE))
+  {
+    dt_pixelpipe_cache_free_align(tmp);
+    dt_pixelpipe_cache_free_align(blend);
+    dt_pixelpipe_cache_free_align(vng_image);
+    return 1;
+  }
   color_smoothing(vng_image, roi_out, 2);
 
   dt_times_t start_blend = { 0 }, end_blend = { 0 };
@@ -100,6 +106,7 @@ static void dual_demosaic(dt_dev_pixelpipe_iop_t *piece, float *const restrict r
   dt_pixelpipe_cache_free_align(tmp);
   dt_pixelpipe_cache_free_align(blend);
   dt_pixelpipe_cache_free_align(vng_image);
+  return 0;
 }
 
 #ifdef HAVE_OPENCL

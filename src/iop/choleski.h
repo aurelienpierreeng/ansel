@@ -280,6 +280,7 @@ static inline int solve_hermitian(const float *const restrict A,
   // clock_t start = clock();
 
   int valid = 0;
+  int err = 0;
   float *const restrict x = dt_alloc_align_float(n);
   float *const restrict L = dt_alloc_align_float(n * n);
 
@@ -287,7 +288,8 @@ static inline int solve_hermitian(const float *const restrict A,
   {
     dt_control_log(_("Choleski decomposition failed to allocate memory, check your RAM settings"));
     fprintf(stdout, "Choleski decomposition failed to allocate memory, check your RAM settings\n");
-    return 0;
+    err = 1;
+    goto error;
   }
 
   // LU decomposition
@@ -307,13 +309,16 @@ static inline int solve_hermitian(const float *const restrict A,
                        triangular_ascent_fast(L, x, y, n);
   if(!valid) fprintf(stdout, "Cholesky LU triangular ascent returned NaNs\n");
 
-  dt_free_align(x);
-  dt_free_align(L);
+  if(!valid) err = 1;
+
+error:
+  if(x) dt_free_align(x);
+  if(L) dt_free_align(L);
 
   //clock_t end = clock();
   //fprintf(stdout, "hermitian matrix solving took : %f s\n", ((float) (end - start)) / CLOCKS_PER_SEC);
 
-  return valid;
+  return err;
 }
 
 
@@ -335,7 +340,7 @@ static inline int transpose_dot_matrix(float *const restrict A, // input
       A_square[i * n + j] = sum;
     }
 
-  return 1;
+  return 0;
 }
 
 
@@ -356,7 +361,7 @@ static inline int transpose_dot_vector(float *const restrict A, // input
     y_square[i] = sum;
   }
 
-  return 1;
+  return 0;
 }
 
 
@@ -370,12 +375,11 @@ static inline int pseudo_solve(float *const restrict A,
 
   //clock_t start = clock();
 
-  int valid = 1;
+  int err = 0;
   if(m < n)
   {
-    valid = 0;
     fprintf(stdout, "Pseudo solve: cannot cast %zu \303\227 %zu matrice\n", m, n);
-    return valid;
+    return 1;
   }
 
   float *const restrict A_square = dt_alloc_align_float(n * n);
@@ -384,7 +388,8 @@ static inline int pseudo_solve(float *const restrict A,
   if(!A_square || !y_square)
   {
     dt_control_log(_("Choleski decomposition failed to allocate memory, check your RAM settings"));
-    return 0;
+    err = 1;
+    goto error;
   }
 
   #ifdef _OPENMP
@@ -396,7 +401,7 @@ static inline int pseudo_solve(float *const restrict A,
     #endif
     {
       // Prepare the least squares matrix = A' A
-      valid = transpose_dot_matrix(A, A_square, m, n);
+      transpose_dot_matrix(A, A_square, m, n);
     }
 
     #ifdef _OPENMP
@@ -404,22 +409,27 @@ static inline int pseudo_solve(float *const restrict A,
     #endif
     {
       // Prepare the y square vector = A' y
-      valid = transpose_dot_vector(A, y, y_square, m, n);
+      transpose_dot_vector(A, y, y_square, m, n);
     }
   }
 
 
   // Solve A' A x = A' y for x
-  valid = solve_hermitian(A_square, y_square, n, checks);
+  if(solve_hermitian(A_square, y_square, n, checks))
+  {
+    err = 1;
+    goto error;
+  }
   dt_simd_memcpy(y_square, y, n);
 
-  dt_free_align(y_square);
-  dt_free_align(A_square);
+error:
+  if(y_square) dt_free_align(y_square);
+  if(A_square) dt_free_align(A_square);
 
   //clock_t end = clock();
   //fprintf(stdout, "hermitian matrix solving took : %f s\n", ((float) (end - start)) / CLOCKS_PER_SEC);
 
-  return valid;
+  return err;
 }
 
 

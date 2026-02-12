@@ -488,7 +488,8 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     else if(demosaicing_method >= DT_IOP_DEMOSAIC_MARKESTEIJN)
       xtrans_markesteijn_interpolate(o, pixels, &roo, &roi, xtrans, passes);
     else
-      vng_interpolate(o, pixels, &roo, &roi, piece->pipe->dsc.filters, xtrans, FALSE);
+      if(vng_interpolate(o, pixels, &roo, &roi, piece->pipe->dsc.filters, xtrans, FALSE))
+        return 1;
   }
   else
   {
@@ -533,7 +534,8 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
 
     if(demosaicing_method == DT_IOP_DEMOSAIC_VNG4 || (img->flags & DT_IMAGE_4BAYER))
     {
-      vng_interpolate(o, in, &roo, &roi, piece->pipe->dsc.filters, xtrans, FALSE);
+      if(vng_interpolate(o, in, &roo, &roi, piece->pipe->dsc.filters, xtrans, FALSE))
+        return 1;
       if(img->flags & DT_IMAGE_4BAYER)
       {
         dt_colorspaces_cygm_to_rgb(o, roo.width*roo.height, data->CAM_to_RGB);
@@ -573,8 +575,14 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       lmmse_demosaic(piece, o, in, &roo, &roi, piece->pipe->dsc.filters, data->lmmse_refine, gd->lmmse_gamma_in, gd->lmmse_gamma_out);
     }
     else if((demosaicing_method & ~DEMOSAIC_DUAL) != DT_IOP_DEMOSAIC_AMAZE)
-      demosaic_ppg(o, in, &roo, &roi, piece->pipe->dsc.filters,
-                    data->median_thrs); // wanted ppg or zoomed out a lot and quality is limited to 1
+    {
+      if(demosaic_ppg(o, in, &roo, &roi, piece->pipe->dsc.filters, data->median_thrs))
+      {
+        if(!(img->flags & DT_IMAGE_4BAYER) && data->green_eq != DT_IOP_GREEN_EQ_NO)
+          dt_pixelpipe_cache_free_align(in);
+        return 1;
+      }
+    } // wanted ppg or zoomed out a lot and quality is limited to 1
     else
       amaze_demosaic_RT(piece, in, o, &roi, &roo, piece->pipe->dsc.filters);
 
@@ -596,7 +604,8 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
 
   if((demosaicing_method & DEMOSAIC_DUAL))
   {
-    dual_demosaic(piece, o, pixels, &roo, &roi, piece->pipe->dsc.filters, xtrans, showmask, data->dual_thrs);
+    if(dual_demosaic(piece, o, pixels, &roo, &roi, piece->pipe->dsc.filters, xtrans, showmask, data->dual_thrs))
+      return 1;
   }
 
   if(data->color_smoothing)

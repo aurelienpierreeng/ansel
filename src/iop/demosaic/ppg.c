@@ -4,8 +4,8 @@
 #ifdef _OPENMP
   #pragma omp declare simd aligned(in, out)
 #endif
-static void demosaic_ppg(float *const out, const float *const in, const dt_iop_roi_t *const roi_out,
-                         const dt_iop_roi_t *const roi_in, const uint32_t filters, const float thrs)
+static int demosaic_ppg(float *const out, const float *const in, const dt_iop_roi_t *const roi_out,
+                        const dt_iop_roi_t *const roi_in, const uint32_t filters, const float thrs)
 {
   // these may differ a little, if you're unlucky enough to split a bayer block with cropping or similar.
   // we never want to access the input out of bounds though:
@@ -46,7 +46,7 @@ static void demosaic_ppg(float *const out, const float *const in, const dt_iop_r
   if(median)
   {
     float *med_in = (float *)dt_pixelpipe_cache_alloc_align_float_cache((size_t)roi_in->height * roi_in->width, 0);
-    if(med_in == NULL) return;
+    if(med_in == NULL) return 1;
     pre_median(med_in, in, roi_in, filters, 1, thrs);
     input = med_in;
   }
@@ -198,6 +198,7 @@ static void demosaic_ppg(float *const out, const float *const in, const dt_iop_r
   }
   // _mm_sfence();
   if(median) dt_pixelpipe_cache_free_align((float *)input);
+  return 0;
 }
 
 // clang-format off

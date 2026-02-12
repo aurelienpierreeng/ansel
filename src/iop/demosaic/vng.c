@@ -12,9 +12,9 @@
    I've extended the basic idea to work with non-Bayer filter arrays.
    Gradients are numbered clockwise from NW=0 to W=7.
  */
-static void vng_interpolate(float *out, const float *const in,
-                            const dt_iop_roi_t *const roi_out, const dt_iop_roi_t *const roi_in,
-                            const uint32_t filters, const uint8_t (*const xtrans)[6], const int only_vng_linear)
+static int vng_interpolate(float *out, const float *const in,
+                           const dt_iop_roi_t *const roi_out, const dt_iop_roi_t *const roi_in,
+                           const uint32_t filters, const uint8_t (*const xtrans)[6], const int only_vng_linear)
 {
   static const signed char terms[]
       = { -2, -2, +0, -1, 1, 0x01, -2, -2, +0, +0, 2, 0x01, -2, -1, -1, +0, 1, 0x01, -2, -1, +0, -1, 1, 0x02,
@@ -56,7 +56,7 @@ static void vng_interpolate(float *out, const float *const in,
   lin_interpolate(out, in, roi_out, roi_in, filters4, xtrans);
 
   // if only linear interpolation is requested we can stop it here
-  if(only_vng_linear) return;
+  if(only_vng_linear) return 0;
 
   char *buffer = (char *)dt_pixelpipe_cache_alloc_align_cache(
       sizeof(**brow) * width * 3 + sizeof(*ip) * prow * pcol * 320,
@@ -64,7 +64,7 @@ static void vng_interpolate(float *out, const float *const in,
   if(!buffer)
   {
     fprintf(stderr, "[demosaic] not able to allocate VNG buffer\n");
-    return;
+    return 1;
   }
   for(int row = 0; row < 3; row++) brow[row] = (float(*)[4])buffer + row * width;
   ip = (int *)(buffer + sizeof(**brow) * width * 3);
@@ -187,6 +187,7 @@ static void vng_interpolate(float *out, const float *const in,
     schedule(static)
 #endif
     for(int i = 0; i < height * width; i++) out[i * 4 + 1] = (out[i * 4 + 1] + out[i * 4 + 3]) / 2.0f;
+  return 0;
 }
 
 #ifdef HAVE_OPENCL

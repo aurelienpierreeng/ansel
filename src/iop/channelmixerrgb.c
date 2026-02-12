@@ -1708,7 +1708,13 @@ int extract_color_checker(const float *const restrict in, float *const restrict 
     A[k * 3 * 9 + 18 + 8] = w * LMS_test[2];
   }
 
-  pseudo_solve_gaussian(A, Y, g->checker->patches * 3, 9, TRUE);
+  if(pseudo_solve_gaussian(A, Y, g->checker->patches * 3, 9, TRUE) != 0)
+  {
+    dt_free_align(Y);
+    dt_free_align(A);
+    dt_free_align(patches);
+    return 1;
+  }
 
   // repack the matrix
   repack_double3x3_to_3xSSE(Y, g->mix);

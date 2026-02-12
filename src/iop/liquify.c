@@ -839,6 +839,11 @@ static float *build_lookup_table(const int distance, const float control1, const
 
   // reparameterize bezier by x and keep only y values
   float *lookup = dt_alloc_align_float((size_t)(distance + 2));
+  if(lookup == NULL)
+  {
+    dt_free_align(clookup);
+    return NULL;
+  }
   float *ptr = lookup;
   float complex *cptr = clookup + 1;
   const float complex *cptr_end = cptr + distance;
@@ -894,9 +899,9 @@ static void compute_round_stamp_extent(cairo_rectangle_int_t *const restrict sta
   Our stamp is stored in a rectangular region.
 */
 
-static void build_round_stamp(float complex **pstamp,
-                               cairo_rectangle_int_t *const restrict stamp_extent,
-                               const dt_liquify_warp_t *const restrict warp)
+static int build_round_stamp(float complex **pstamp,
+                              cairo_rectangle_int_t *const restrict stamp_extent,
+                              const dt_liquify_warp_t *const restrict warp)
 {
   const int iradius = round(cabsf(warp->radius - warp->point));
   assert(iradius > 0);
@@ -913,10 +918,16 @@ static void build_round_stamp(float complex **pstamp,
 
   float complex *restrict stamp =
     calloc(sizeof(float complex), (size_t)stamp_extent->width * stamp_extent->height);
+  if(stamp == NULL) return 1;
 
   // lookup table: map of distance from center point => warp
   const int table_size = iradius * LOOKUP_OVERSAMPLE;
   const float *const restrict lookup_table = build_lookup_table(table_size, warp->control1, warp->control2);
+  if(lookup_table == NULL)
+  {
+    free((void *)stamp);
+    return 1;
+  }
 
   // points into buffer at the center of the circle
   float complex *const center = stamp + 2 * iradius * iradius + 2 * iradius;
@@ -976,6 +987,7 @@ static void build_round_stamp(float complex **pstamp,
 
   dt_free_align((void *) lookup_table);
   *pstamp = stamp;
+  return 0;
 }
 
 /*
@@ -1143,7 +1155,11 @@ static float complex *create_global_distortion_map(const cairo_rectangle_int_t *
     const dt_liquify_warp_t *warp = ((dt_liquify_warp_t *) i->data);
     float complex *stamp = NULL;
     cairo_rectangle_int_t r;
-    build_round_stamp(&stamp, &r, warp);
+    if(build_round_stamp(&stamp, &r, warp) != 0)
+    {
+      dt_free_align((void *)map);
+      return NULL;
+    }
     add_to_global_distortion_map(map, map_extent, warp, stamp, &r);
     free((void *) stamp);
   }

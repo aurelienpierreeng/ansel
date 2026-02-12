@@ -121,7 +121,7 @@ static inline int transpose_dot_matrix(double *const restrict A, // input
       A_square[i * n + j] = sum;
     }
 
-  return 1;
+  return 0;
 }
 
 
@@ -141,7 +141,7 @@ static inline int transpose_dot_vector(double *const restrict A, // input
     y_square[i] = sum;
   }
 
-  return 1;
+  return 0;
 }
 
 
@@ -151,18 +151,22 @@ static inline int pseudo_solve_gaussian(double *const restrict A,
 {
   // Solve the weighted linear problem w A'A x = w A' y with the over-constrained rectanguler matrix A
   // of dimension m x n (m >= n) and w a vector of weights, by the least squares method
-  int valid = 1;
+  int err = 0;
 
   if(m < n)
   {
     fprintf(stderr, "pseudo solve: cannot cast %zu \303\227 %zu matrix\n", m, n);
-    return 0;
+    return 1;
   }
 
   double *const restrict A_square = dt_alloc_align(n * n * sizeof(double));
   double *const restrict y_square = dt_alloc_align(n * sizeof(double));
   
-  if(y_square == NULL || A_square == NULL) goto error;
+  if(y_square == NULL || A_square == NULL)
+  {
+    err = 1;
+    goto error;
+  }
 
   #ifdef _OPENMP
   #pragma omp parallel sections
@@ -186,14 +190,18 @@ static inline int pseudo_solve_gaussian(double *const restrict A,
   }
 
   // Solve A' A x = A' y for x
-  valid = gauss_solve(A_square, y_square, n);
+  if(gauss_solve(A_square, y_square, n) == 0)
+  {
+    err = 1;
+    goto error;
+  }
   for(size_t k = 0; k < n; k++) y[k] = y_square[k];
 
 error:;
   if(y_square) dt_free_align(y_square);
   if(A_square) dt_free_align(A_square);
 
-  return valid;
+  return err;
 }
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

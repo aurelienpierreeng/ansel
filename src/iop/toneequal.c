@@ -1512,10 +1512,16 @@ static inline gboolean update_curve_lut(struct dt_iop_module_t *self)
   {
     float factors[CHANNELS] DT_ALIGNED_ARRAY;
     dt_simd_memcpy(g->temp_user_params, factors, CHANNELS);
-    valid = pseudo_solve(g->interpolation_matrix, factors, CHANNELS, PIXEL_CHAN, 1);
-    dt_simd_memcpy(factors, g->factors, PIXEL_CHAN);
-    g->factors_valid = TRUE;
-    g->lut_valid = FALSE;
+    if(pseudo_solve(g->interpolation_matrix, factors, CHANNELS, PIXEL_CHAN, 1) != 0)
+    {
+      valid = FALSE;
+    }
+    else
+    {
+      dt_simd_memcpy(factors, g->factors, PIXEL_CHAN);
+      g->factors_valid = TRUE;
+      g->lut_valid = FALSE;
+    }
   }
 
   if(!g->lut_valid && g->factors_valid)
@@ -1596,7 +1602,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
     float A[CHANNELS * PIXEL_CHAN] DT_ALIGNED_ARRAY;
     build_interpolation_matrix(A, p->smoothing);
-    pseudo_solve(A, factors, CHANNELS, PIXEL_CHAN, 0);
+    if(pseudo_solve(A, factors, CHANNELS, PIXEL_CHAN, 0) != 0) return;
 
     dt_simd_memcpy(factors, d->factors, PIXEL_CHAN);
   }
@@ -2086,7 +2092,7 @@ static inline int set_new_params_interactive(const float control_exposure, const
   float factors[CHANNELS] DT_ALIGNED_ARRAY;
   dt_simd_memcpy(g->temp_user_params, factors, CHANNELS);
   if(g->user_param_valid)
-    g->user_param_valid = pseudo_solve(g->interpolation_matrix, factors, CHANNELS, PIXEL_CHAN, 1);;
+    g->user_param_valid = (pseudo_solve(g->interpolation_matrix, factors, CHANNELS, PIXEL_CHAN, 1) == 0);
   if(!g->user_param_valid) dt_control_log(_("the interpolation is unstable, decrease the curve smoothing"));
 
   // Compute new user params for channels and store them locally
