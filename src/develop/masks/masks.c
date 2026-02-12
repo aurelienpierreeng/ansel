@@ -194,7 +194,9 @@ void dt_masks_form_gui_points_free(gpointer data)
 static void _masks_remove_node(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
                           dt_masks_form_gui_t *gui, int index)
 {
+  if(!form || !form->points) return;
   dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)g_list_nth_data(form->points, gui->node_selected);
+  if(!node) return;
   form->points = g_list_remove(form->points, node);
   free(node);
   gui->node_selected = -1;
@@ -568,6 +570,7 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *dev, void *params)
     if(m->type & DT_MASKS_CIRCLE)
     {
       dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)p->data;
+      if(!circle) return 1;
       module->distort_backtransform(module, &piece, circle->center, 1);
     }
     else if(m->type & DT_MASKS_POLYGON)
@@ -575,6 +578,7 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *dev, void *params)
       for(; p; p = g_list_next(p))
       {
         dt_masks_node_polygon_t *polygone = (dt_masks_node_polygon_t *)p->data;
+        if(!polygone) return 1;
         module->distort_backtransform(module, &piece, polygone->node, 1);
         module->distort_backtransform(module, &piece, polygone->ctrl1, 1);
         module->distort_backtransform(module, &piece, polygone->ctrl2, 1);
@@ -583,6 +587,7 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *dev, void *params)
     else if(m->type & DT_MASKS_GRADIENT)
     { // TODO: new ones have wrong rotation.
       dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)p->data;
+      if(!gradient) return 1;
       module->distort_backtransform(module, &piece, gradient->center, 1);
 
       if(ori == ORIENTATION_ROTATE_180_DEG)
@@ -609,6 +614,7 @@ static int dt_masks_legacy_params_v1_to_v2(dt_develop_t *dev, void *params)
       for(; p; p = g_list_next(p))
       {
         dt_masks_node_brush_t *brush = (dt_masks_node_brush_t *)p->data;
+        if(!brush) return 1;
         module->distort_backtransform(module, &piece, brush->node, 1);
         module->distort_backtransform(module, &piece, brush->ctrl1, 1);
         module->distort_backtransform(module, &piece, brush->ctrl2, 1);
@@ -688,6 +694,7 @@ static int dt_masks_legacy_params_v2_to_v3(dt_develop_t *dev, void *params)
     if(m->type & DT_MASKS_CIRCLE)
     {
       dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)p->data;
+      if(!circle) return 1;
       dt_masks_legacy_params_v2_to_v3_transform(img, circle->center);
       dt_masks_legacy_params_v2_to_v3_transform_only_rescale(img, &circle->radius, 1);
       dt_masks_legacy_params_v2_to_v3_transform_only_rescale(img, &circle->border, 1);
@@ -697,6 +704,7 @@ static int dt_masks_legacy_params_v2_to_v3(dt_develop_t *dev, void *params)
       for(; p; p = g_list_next(p))
       {
         dt_masks_node_polygon_t *polygone = (dt_masks_node_polygon_t *)p->data;
+        if(!polygone) return 1;
         dt_masks_legacy_params_v2_to_v3_transform(img, polygone->node);
         dt_masks_legacy_params_v2_to_v3_transform(img, polygone->ctrl1);
         dt_masks_legacy_params_v2_to_v3_transform(img, polygone->ctrl2);
@@ -720,6 +728,7 @@ static int dt_masks_legacy_params_v2_to_v3(dt_develop_t *dev, void *params)
       for(; p;  p = g_list_next(p))
       {
         dt_masks_node_brush_t *brush = (dt_masks_node_brush_t *)p->data;
+        if(!brush) return 1;
         dt_masks_legacy_params_v2_to_v3_transform(img, brush->node);
         dt_masks_legacy_params_v2_to_v3_transform(img, brush->ctrl1);
         dt_masks_legacy_params_v2_to_v3_transform(img, brush->ctrl2);

@@ -341,7 +341,9 @@ static int _ellipse_get_points_border(dt_develop_t *dev, struct dt_masks_form_t 
                                       int *points_count, float **border, int *border_count, int source,
                                       const dt_iop_module_t *module)
 {
+  if(!form || !form->points) return 0;
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
+  if(!ellipse) return 0;
   float x = 0.0f, y = 0.0f, a = 0.0f, b = 0.0f;
   x = ellipse->center[0], y = ellipse->center[1];
   a = ellipse->radius[0], b = ellipse->radius[1];
@@ -480,6 +482,7 @@ static int _init_rotation(dt_masks_form_t *form, const float amount, const dt_ma
 
 static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
+  if(!form || !form->points) return 0;
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)(form->points)->data;
   if(!ellipse) return 0;
 
@@ -500,6 +503,7 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
 
 static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
+  if(!form || !form->points) return 0;
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)(form->points)->data;
   if(!ellipse) return 0;
 
@@ -540,6 +544,7 @@ static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct 
 
 static int _change_rotation(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
+  if(!form || !form->points) return 0;
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)(form->points)->data;
   if(!ellipse) return 0;
 
@@ -613,6 +618,7 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
                                           int index)
 {
   if(!gui) return 0;
+  if(!form) return 0;
 
   _find_closest_handle(module, pzx, pzy, form, parentid, gui, index);
 
@@ -631,7 +637,7 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
       dt_iop_module_t *crea_module = gui->creation_module;
       // we create the ellipse
       dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)(malloc(sizeof(dt_masks_node_ellipse_t)));
-
+      if(!ellipse) return 0;
       // we change the center value
       dt_dev_roi_to_input_space(darktable.develop, TRUE, pzx, pzy, &ellipse->center[0], &ellipse->center[1]);
 
@@ -780,6 +786,7 @@ static int _ellipse_events_button_released(struct dt_iop_module_t *module, float
                                            uint32_t state, dt_masks_form_t *form, int parentid,
                                            dt_masks_form_gui_t *gui, int index)
 {
+  if(!form || !form->points) return 0;
   if(gui->form_dragging && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
     // we end the form dragging
@@ -790,6 +797,7 @@ static int _ellipse_events_button_released(struct dt_iop_module_t *module, float
   {
     // we get the ellipse
     dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
+    if(!ellipse) return 0;
 
     // we end the border toggling
     gui->border_toggling = FALSE;
@@ -870,97 +878,97 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     return 1;
   }
 
-  else
-  {
-    dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
-    if(!ellipse) return 0;
+  if(!form || !form->points) return 0;
 
-    // we need the reference points
-    dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-    if(!gpt) return 0;
-    
-    if(gui->form_dragging || gui->source_dragging)
-      {
-      dt_develop_t *dev = (dt_develop_t *)darktable.develop;
-      // apply delta to the current mouse position
-      float pts[2] = { -1 , -1 };
-      const float pointer[2] = { pzx, pzy };
-      dt_dev_roi_delta_to_input_space(dev, gui->delta, pointer, pts);
+  dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
+  if(!ellipse) return 0;
 
-      if(gui->form_dragging)
-      {
-        ellipse->center[0] = pts[0];
-        ellipse->center[1] = pts[1];
-      }
-      else if(gui->source_dragging)
-      {
-        form->source[0] = pts[0];
-        form->source[1] = pts[1];
-      }
-
-      // we recreate the form points
-      dt_masks_gui_form_create(form, gui, index, module);
-
-      return 1;
-    }
-
-    else if(gui->node_dragging >= 1)
+  // we need the reference points
+  dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
+  if(!gpt) return 0;
+  
+  if(gui->form_dragging || gui->source_dragging)
     {
-      const int k = gui->node_dragging;
+    dt_develop_t *dev = (dt_develop_t *)darktable.develop;
+    // apply delta to the current mouse position
+    float pts[2] = { -1 , -1 };
+    const float pointer[2] = { pzx, pzy };
+    dt_dev_roi_delta_to_input_space(dev, gui->delta, pointer, pts);
 
-      const float xref = gpt->points[0];
-      const float yref = gpt->points[1];
-      const float rx = gpt->points[k * 2] - xref;
-      const float ry = gpt->points[k * 2 + 1] - yref;
-      const float deltax = gui->pos[0] + gui->delta[0] - xref;
-      const float deltay = gui->pos[1] + gui->delta[1] - yref;
-
-      // we remap dx, dy to the right values, as it will be used in next movements
-      gui->delta[0] = xref - gui->pos[0];
-      gui->delta[1] = yref - gui->pos[1];
-
-      const float r = sqrtf(rx * rx + ry * ry);
-      const float d = (rx * deltax + ry * deltay) / r;
-      const float s = fmaxf(r > 0.0f ? (r + d) / r : 0.0f, 0.0f);
-      
-      if(k == 1 || k == 2)
-      {
-        ellipse->radius[0] = MAX(0.0002f, ellipse->radius[0] * s);
-        if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-          dt_conf_set_float("plugins/darkroom/spots/ellipse/radius_a", ellipse->radius[0]);
-        else
-          dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_a", ellipse->radius[0]);
-      }
-      else if(k == 3 || k == 4)
-      {
-        ellipse->radius[1] = MAX(0.0002f, ellipse->radius[1] * s);
-        if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-          dt_conf_set_float("plugins/darkroom/spots/ellipse/radius_b", ellipse->radius[1]);
-        else
-          dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_b", ellipse->radius[1]);
-      }
-
-      // we recreate the form points
-      dt_masks_gui_form_create(form, gui, index, module);
-
-      return 1;
-    }
-
-    // rotation of the ellipse with the mouse
-    else if(gui->form_rotating)
+    if(gui->form_dragging)
     {
-
-      const float origin_point[2] = { gpt->points[0], gpt->points[1] };
-      const float angle = dt_masks_rotate_with_anchor(darktable.develop, gui->pos, origin_point, gui);
-
-      _change_rotation(form, gui, module, index, angle , DT_MASKS_INCREMENT_OFFSET, 1);
-
-      // we recreate the form points
-      dt_masks_gui_form_create(form, gui, index, module);
-
-      return 1;
+      ellipse->center[0] = pts[0];
+      ellipse->center[1] = pts[1];
     }
+    else if(gui->source_dragging)
+    {
+      form->source[0] = pts[0];
+      form->source[1] = pts[1];
+    }
+
+    // we recreate the form points
+    dt_masks_gui_form_create(form, gui, index, module);
+
+    return 1;
   }
+
+  else if(gui->node_dragging >= 1)
+  {
+    const int k = gui->node_dragging;
+
+    const float xref = gpt->points[0];
+    const float yref = gpt->points[1];
+    const float rx = gpt->points[k * 2] - xref;
+    const float ry = gpt->points[k * 2 + 1] - yref;
+    const float deltax = gui->pos[0] + gui->delta[0] - xref;
+    const float deltay = gui->pos[1] + gui->delta[1] - yref;
+
+    // we remap dx, dy to the right values, as it will be used in next movements
+    gui->delta[0] = xref - gui->pos[0];
+    gui->delta[1] = yref - gui->pos[1];
+
+    const float r = sqrtf(rx * rx + ry * ry);
+    const float d = (rx * deltax + ry * deltay) / r;
+    const float s = fmaxf(r > 0.0f ? (r + d) / r : 0.0f, 0.0f);
+    
+    if(k == 1 || k == 2)
+    {
+      ellipse->radius[0] = MAX(0.0002f, ellipse->radius[0] * s);
+      if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
+        dt_conf_set_float("plugins/darkroom/spots/ellipse/radius_a", ellipse->radius[0]);
+      else
+        dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_a", ellipse->radius[0]);
+    }
+    else if(k == 3 || k == 4)
+    {
+      ellipse->radius[1] = MAX(0.0002f, ellipse->radius[1] * s);
+      if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
+        dt_conf_set_float("plugins/darkroom/spots/ellipse/radius_b", ellipse->radius[1]);
+      else
+        dt_conf_set_float("plugins/darkroom/masks/ellipse/radius_b", ellipse->radius[1]);
+    }
+
+    // we recreate the form points
+    dt_masks_gui_form_create(form, gui, index, module);
+
+    return 1;
+  }
+
+  // rotation of the ellipse with the mouse
+  else if(gui->form_rotating)
+  {
+
+    const float origin_point[2] = { gpt->points[0], gpt->points[1] };
+    const float angle = dt_masks_rotate_with_anchor(darktable.develop, gui->pos, origin_point, gui);
+
+    _change_rotation(form, gui, module, index, angle , DT_MASKS_INCREMENT_OFFSET, 1);
+
+    // we recreate the form points
+    dt_masks_gui_form_create(form, gui, index, module);
+
+    return 1;
+  }
+  
   
   if(_find_closest_handle(module, pzx, pzy, form, parentid, gui, index)) return 1;
   if(gui->edit_mode != DT_MASKS_EDIT_FULL) return 0;
@@ -1265,8 +1273,10 @@ static float *const _ellipse_points_to_transform(const float center_x, const flo
 static int _ellipse_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
                                     dt_masks_form_t *form, int *width, int *height, int *posx, int *posy)
 {
+  if(!form || !form->points) return 0;
   // we get the ellipse values
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
+  if(!ellipse) return 0;
   const float wd = piece->pipe->iwidth, ht = piece->pipe->iheight;
   const int prop = ellipse->flags & DT_MASKS_ELLIPSE_PROPORTIONAL;
   const float total[2] = { (prop ? ellipse->radius[0] * (1.0f + ellipse->border) : ellipse->radius[0] + ellipse->border) * MIN(wd, ht),
@@ -1296,8 +1306,10 @@ static int _ellipse_get_area(const dt_iop_module_t *const module, const dt_dev_p
                              dt_masks_form_t *const form,
                              int *width, int *height, int *posx, int *posy)
 {
+  if(!form || !form->points) return 0;
   // we get the ellipse values
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
+  if(!ellipse) return 0;
   const float wd = piece->pipe->iwidth, ht = piece->pipe->iheight;
   const int prop = ellipse->flags & DT_MASKS_ELLIPSE_PROPORTIONAL;
   const float total[2] = { (prop ? ellipse->radius[0] * (1.0f + ellipse->border) : ellipse->radius[0] + ellipse->border) * MIN(wd, ht),
@@ -1327,6 +1339,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
                              dt_masks_form_t *const form,
                              float **buffer, int *width, int *height, int *posx, int *posy)
 {
+  if(!form || !form->points) return 0;
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
@@ -1341,7 +1354,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
 
   // we get the ellipse values
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
-
+  if(!ellipse) return 0;
   // we create a buffer of points with all points in the area
   int w = *width, h = *height;
   float *points = dt_alloc_align_float((size_t)2 * w * h);
@@ -1424,12 +1437,15 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
 static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
                                  dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer)
 {
+  if(!form || !form->points) return 0;
+
   double start1 = 0.0;
   double start2 = start1;
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = start1 = dt_get_wtime();
 
   // we get the ellipse parameters
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)((form->points)->data);
+  if(!ellipse) return 0;
   const int wi = piece->pipe->iwidth, hi = piece->pipe->iheight;
   const float center[2] = { ellipse->center[0] * wi, ellipse->center[1] * hi };
   const float radius[2] = { ellipse->radius[0] * MIN(wi, hi), ellipse->radius[1] * MIN(wi, hi) };

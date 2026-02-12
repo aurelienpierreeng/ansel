@@ -850,29 +850,34 @@ static int rt_masks_get_delta_to_destination(dt_iop_module_t *self, dt_dev_pixel
                                              const dt_iop_roi_t *roi, dt_masks_form_t *form, float *dx, float *dy,
                                              const int distort_mode)
 {
+  if(!form || !form->points) return 0;
   int res = 0;
 
   if(form->type & DT_MASKS_POLYGON)
   {
     const dt_masks_node_polygon_t *pt = (dt_masks_node_polygon_t *)form->points->data;
+    if(!pt) return 0;
 
     res = rt_masks_point_calc_delta(self, piece, roi, pt->node, form->source, dx, dy, distort_mode);
   }
   else if(form->type & DT_MASKS_CIRCLE)
   {
     const dt_masks_node_circle_t *pt = (dt_masks_node_circle_t *)form->points->data;
+    if(!pt) return 0;
 
     res = rt_masks_point_calc_delta(self, piece, roi, pt->center, form->source, dx, dy, distort_mode);
   }
   else if(form->type & DT_MASKS_ELLIPSE)
   {
     const dt_masks_node_ellipse_t *pt = (dt_masks_node_ellipse_t *)form->points->data;
+    if(!pt) return 0;
 
     res = rt_masks_point_calc_delta(self, piece, roi, pt->center, form->source, dx, dy, distort_mode);
   }
   else if(form->type & DT_MASKS_BRUSH)
   {
     const dt_masks_node_brush_t *pt = (dt_masks_node_brush_t *)form->points->data;
+    if(!pt) return 0;
 
     res = rt_masks_point_calc_delta(self, piece, roi, pt->node, form->source, dx, dy, distort_mode);
   }

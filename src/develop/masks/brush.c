@@ -321,6 +321,7 @@ static void _brush_catmull_to_bezier(float x1, float y1, float x2, float y2, flo
 /** initialise all control points to eventually match a catmull-rom like spline */
 static void _brush_init_ctrl_points(dt_masks_form_t *form)
 {
+  if(!form || !form->points) return;
   // if we have less than 2 points, what to do ??
   if(g_list_shorter_than(form->points, 2)) return;
 
@@ -330,6 +331,7 @@ static void _brush_init_ctrl_points(dt_masks_form_t *form)
   for (GList *form_points = form->points; form_points; form_points = g_list_next(form_points))
   {
     dt_masks_node_brush_t *point3 = (dt_masks_node_brush_t *)form_points->data;
+    if(!point3) continue;
     // if the point has not been set manually, we redefine it
     if(point3->state & DT_MASKS_POINT_STATE_NORMAL)
     {
@@ -662,6 +664,7 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
                                     float **border, int *border_count, float **payload, int *payload_count,
                                     int source)
 {
+  if(!form || !form->points) return 0;
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
@@ -1159,6 +1162,7 @@ static int _brush_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, fl
    frills */
 static float _brush_get_position_in_segment(float x, float y, dt_masks_form_t *form, int segment)
 {
+  if(!form || !form->points) return 0;
   GList *firstpt = g_list_nth(form->points, segment);
   dt_masks_node_brush_t *point0 = (dt_masks_node_brush_t *)firstpt->data;
   // advance to next node in list, if not already on the last
@@ -1322,6 +1326,7 @@ static int _init_opacity(dt_masks_form_t *form, int parentid, dt_masks_form_gui_
 
 static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
+  if(!form || !form->points) return 0;
   int node_index = 0;
   const float flowed_amount = powf(amount, (float)flow);
   float res_amount = 0;
@@ -1348,6 +1353,7 @@ static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_g
 
 static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
+  if(!form || !form->points) return 0;
   // Sanitize loop
   // do not exceed upper limit of 1.0 and lower limit of 0.004
   int pts_number = 0;
@@ -1356,6 +1362,7 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
     if(gui->node_selected == -1 || gui->node_selected == pts_number)
     {
       dt_masks_node_brush_t *point = (dt_masks_node_brush_t *)l->data;
+      if(!point) continue;
       if(amount > 1.0f && (point->border[0] > 1.0f || point->border[1] > 1.0f))
         return 1;
     }
@@ -1369,6 +1376,7 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
     if(gui->node_selected == -1 || gui->node_selected == pts_number)
     {
       dt_masks_node_brush_t *point = (dt_masks_node_brush_t *)l->data;
+      if(!point) continue;
 
       switch(increment)
       {
@@ -1516,7 +1524,7 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
   if(!gui) return 0;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
-
+  if(!form) return 0;
   dt_develop_t *dev = (dt_develop_t *)darktable.develop;
 
   // Do we need to refresh currently active node ?
@@ -1681,6 +1689,7 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
   {
     if(gui->handle_selected >= 0)
     {
+      if(!form->points) return 0;
       // reset handle to default position
       dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)g_list_nth_data(form->points, gui->handle_selected);
       if(node && node->state != DT_MASKS_POINT_STATE_NORMAL && !dt_masks_is_corner_node(gpt, gui->handle_selected, 6, 2))
@@ -1917,6 +1926,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   if(!gui) return 0;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
+  if(!form) return 0;
 
   dt_develop_t *dev = (dt_develop_t *)darktable.develop;
   const float wd = dev->preview_width / dev->natural_scale;
@@ -1944,11 +1954,13 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     }
   }
 
+  if(!form->points) return 0;
+  
   if(gui->node_dragging >= 0)
   {
     dt_masks_node_brush_t *dragged_node
         = (dt_masks_node_brush_t *)g_list_nth_data(form->points, gui->node_dragging);
-
+    if(!dragged_node) return 0;
     // apply delta to the current mouse position
     float pts[2] = { -1 , -1 };
     const float pointer[2] = { pzx, pzy };
@@ -1984,6 +1996,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     const GList *pt2 = g_list_next_wraparound(pt1, form->points);
     dt_masks_node_brush_t *point = (dt_masks_node_brush_t *)pt1->data;
     dt_masks_node_brush_t *point2 = (dt_masks_node_brush_t *)pt2->data;
+    if(!point || !point2) return 0;
     float pts[2] = { pzx * wd + gui->delta[0], pzy * ht + gui->delta[1] };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
     const float dx = pts[0] / iwidth - point->node[0];
@@ -2012,7 +2025,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   {
     dt_masks_node_brush_t *node
         = (dt_masks_node_brush_t *)g_list_nth_data(form->points, gui->handle_dragging);
-
+    if(!node) return 0;
     float pts[2] = { pzx * wd + gui->delta[0], pzy * ht + gui->delta[1] };
 
     // compute ctrl points directly from new handle position
@@ -2103,6 +2116,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     float pts[2] = { pzx * wd + gui->delta[0], pzy * ht + gui->delta[1] };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
     dt_masks_node_brush_t *dragging_shape = (dt_masks_node_brush_t *)(form->points)->data;
+    if(!dragging_shape) return 0;
 
     // we move all points
     if(gui->form_dragging)
@@ -2112,6 +2126,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
       for(GList *nodes = form->points; nodes; nodes = g_list_next(nodes))
       {
         dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)nodes->data;
+        if(!node) continue;
         node->node[0] += dx;
         node->node[1] += dy;
         node->ctrl1[0] += dx;
@@ -2763,10 +2778,12 @@ static void _brush_set_hint_message(const dt_masks_form_gui_t *const gui, const 
 
 static void _brush_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)
 {
+  if(!base || !dest) return;
   (void)dev; // unused arg, keep compiler from complaining
   for(GList *pts = base->points; pts; pts = g_list_next(pts))
   {
     dt_masks_node_brush_t *pt = (dt_masks_node_brush_t *)pts->data;
+    if(!pt) continue;
     dt_masks_node_brush_t *npt = (dt_masks_node_brush_t *)malloc(sizeof(dt_masks_node_brush_t));
     memcpy(npt, pt, sizeof(dt_masks_node_brush_t));
     dest->points = g_list_append(dest->points, npt);

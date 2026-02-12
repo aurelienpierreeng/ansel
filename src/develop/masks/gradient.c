@@ -352,6 +352,7 @@ static int _init_rotation(dt_masks_form_t *form, const float amount, const dt_ma
 
 static int _change_extent(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
+  if(!form || !form->points) return 0;
   dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(form->points)->data;
   if(!gradient) return 0;
 
@@ -372,6 +373,7 @@ static int _change_extent(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struc
 
 static int _change_curvature(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
+  if(!form || !form->points) return 0;
   dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(form->points)->data;
   if(!gradient) return 0;
 
@@ -412,6 +414,7 @@ static int _change_curvature(dt_masks_form_t *form, dt_masks_form_gui_t *gui, st
 
 static int _change_rotation(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
+  if(!form || !form->points) return 0;
   dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(form->points)->data;
   if(!gradient) return 0;
 
@@ -481,7 +484,8 @@ static int _gradient_events_button_pressed(struct dt_iop_module_t *module, float
                                            dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, int index)
 {
   if(!gui) return 0;
- 
+  if(!form) return 0;
+
   // Do we need to refresh currently active node ?
   // Its requested to give back the focus when clicking outside current shape.
   _find_closest_handle(module, pzx, pzy, form, parentid, gui, index);
@@ -499,7 +503,7 @@ static int _gradient_events_button_pressed(struct dt_iop_module_t *module, float
       dt_iop_module_t *crea_module = gui->creation_module;
       // we create the gradient
       dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(malloc(sizeof(dt_masks_anchor_gradient_t)));
-
+      if(!gradient) return 0;
       // we change the center value
       dt_dev_roi_to_input_space(darktable.develop, TRUE, pzx, pzy, &gradient->center[0], &gradient->center[1]);
 
@@ -580,6 +584,8 @@ static int _gradient_events_button_released(struct dt_iop_module_t *module, floa
                                             uint32_t state, dt_masks_form_t *form, int parentid,
                                             dt_masks_form_gui_t *gui, int index)
 {
+  if(!form || !form->points) return 0;
+
   if(gui->form_dragging && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
     // we end the form dragging
@@ -597,7 +603,7 @@ static int _gradient_events_button_released(struct dt_iop_module_t *module, floa
   {
     // we get the gradient
     dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)((form->points)->data);
-
+    if(!gradient) return 0;
     // we end the gradient toggling
     gui->gradient_toggling = FALSE;
 
@@ -631,45 +637,44 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, float pz
     return 1;
   }
 
-  else
+  if(!form || !form->points) return 0;
+
+  // we get the gradient
+  dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)((form->points)->data);
+  if(!gradient) return 0;
+
+  // we need the reference points
+  dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
+  if(!gpt) return 0;
+
+  if(gui->form_dragging)
   {
-    // we get the gradient
-    dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)((form->points)->data);
-    if(!gradient) return 0;
+    // we change the center value
+    dt_develop_t *dev = (dt_develop_t *)darktable.develop;
+    float pts[2] = { -1 , -1 };
+    const float pointer[2] = { pzx, pzy };
+    dt_dev_roi_delta_to_input_space(dev, gui->delta, pointer, pts);
 
-    // we need the reference points
-    dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-    if(!gpt) return 0;
+    gradient->center[0] = pts[0];
+    gradient->center[1] = pts[1];
 
-    if(gui->form_dragging)
-    {
-      // we change the center value
-      dt_develop_t *dev = (dt_develop_t *)darktable.develop;
-      float pts[2] = { -1 , -1 };
-      const float pointer[2] = { pzx, pzy };
-      dt_dev_roi_delta_to_input_space(dev, gui->delta, pointer, pts);
+    // we recreate the form points
+    dt_masks_gui_form_create(form, gui, index, module);
 
-      gradient->center[0] = pts[0];
-      gradient->center[1] = pts[1];
+    return 1;
+  }
 
-      // we recreate the form points
-      dt_masks_gui_form_create(form, gui, index, module);
+  //rotation with the mouse
+  if(gui->form_rotating)
+  {
+    const float origin_point[2] = { gpt->points[0], gpt->points[1] };
+    const float angle = - dt_masks_rotate_with_anchor(darktable.develop, gui->pos, origin_point, gui);
+    _change_rotation(form, gui, module, index, angle , DT_MASKS_INCREMENT_OFFSET, 1);
 
-      return 1;
-    }
+    // we recreate the form points
+    dt_masks_gui_form_create(form, gui, index, module);
 
-    //rotation with the mouse
-    if(gui->form_rotating)
-    {
-      const float origin_point[2] = { gpt->points[0], gpt->points[1] };
-      const float angle = - dt_masks_rotate_with_anchor(darktable.develop, gui->pos, origin_point, gui);
-      _change_rotation(form, gui, module, index, angle , DT_MASKS_INCREMENT_OFFSET, 1);
-
-      // we recreate the form points
-      dt_masks_gui_form_create(form, gui, index, module);
-
-      return 1;
-    }
+    return 1;
   }
 
   if(_find_closest_handle(module, pzx, pzy, form, parentid, gui, index)) return 1;
@@ -1058,7 +1063,9 @@ static int _gradient_get_points_border(dt_develop_t *dev, dt_masks_form_t *form,
                                        const dt_iop_module_t *module)
 {
   (void)source;  // unused arg, keep compiler from complaining
+  if(!form || !form->points) return 0;
   dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)form->points->data;
+  if(!gradient) return 0;
   if(_gradient_get_points(dev, gradient->center[0], gradient->center[1], gradient->rotation, gradient->curvature,
                           points, points_count))
   {
@@ -1116,6 +1123,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
                               dt_masks_form_t *const form,
                               float **buffer, int *width, int *height, int *posx, int *posy)
 {
+  if(!form || !form->points) return 0;
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
   // we get the area
@@ -1130,7 +1138,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
 
   // we get the gradient values
   dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)((form->points)->data);
-
+  if(!gradient) return 0;
   // we create a buffer of grid points for later interpolation. mainly in order to reduce memory footprint
   const int w = *width;
   const int h = *height;
@@ -1301,10 +1309,12 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
 static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
                                   dt_masks_form_t *const form, const dt_iop_roi_t *roi, float *buffer)
 {
+  if(!form || !form->points) return 0;
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
   // we get the gradient values
   const dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(form->points->data);
+  if(!gradient) return 0;
 
   // we create a buffer of grid points for later interpolation. mainly in order to reduce memory footprint
   const int w = roi->width;
@@ -1493,6 +1503,7 @@ static void _gradient_set_hint_message(const dt_masks_form_gui_t *const gui, con
 
 static void _gradient_duplicate_points(dt_develop_t *dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)
 {
+  if(!base || !base->points) return;
   (void)dev; // unused arg, keep compiler from complaining
   for(GList *pts = base->points; pts; pts = g_list_next(pts))
   {

@@ -143,10 +143,13 @@ static void _polygon_init_ctrl_points(dt_masks_form_t *form)
   const guint nb = g_list_length(form->points);
   if(nb < 2) return;
 
+  if(!form || !form->points) return;
+  
   const GList *form_points = form->points;
   for(int k = 0; k < nb; k++)
   {
     dt_masks_node_polygon_t *point3 = (dt_masks_node_polygon_t *)form_points->data;
+    if(!point3) return;
     // if the point has not been set manually, we redefine it
     if(point3->state & DT_MASKS_POINT_STATE_NORMAL)
     {
@@ -184,6 +187,7 @@ static void _polygon_init_ctrl_points(dt_masks_form_t *form)
 
 static gboolean _polygon_is_clockwise(dt_masks_form_t *form)
 {
+  if(!form || !form->points) return 0;
   if(!g_list_shorter_than(form->points, 3)) // if we have at least three points...
   {
     float sum = 0.0f;
@@ -192,6 +196,7 @@ static gboolean _polygon_is_clockwise(dt_masks_form_t *form)
       const GList *next = g_list_next_wraparound(form_points, form->points); // next, wrapping around if on last elt
       dt_masks_node_polygon_t *point1 = (dt_masks_node_polygon_t *)form_points->data; // kth element of form->points
       dt_masks_node_polygon_t *point2 = (dt_masks_node_polygon_t *)next->data;
+      if(!point1 || !point2) return 0;
       sum += (point2->node[0] - point1->node[0]) * (point2->node[1] + point1->node[1]);
     }
     return (sum < 0);
@@ -567,6 +572,8 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
                                    dt_dev_pixelpipe_t *pipe, float **points, int *points_count,
                                    float **border, int *border_count, gboolean source)
 {
+  if(!form || !form->points) return 0;
+
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
 
@@ -609,6 +616,7 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
   if(source && nb > 0 && transf_direction != DT_DEV_TRANSFORM_DIR_ALL)
   {
     dt_masks_node_polygon_t *polygon = (dt_masks_node_polygon_t *)form->points->data;
+    if(!polygon) return 0;
     dx = (polygon->node[0] - form->source[0]) * iwd;
     dy = (polygon->node[1] - form->source[1]) * iht;
   }
@@ -874,6 +882,7 @@ fail:
    frills */
 static float _polygon_get_position_in_segment(float x, float y, dt_masks_form_t *form, int segment)
 {
+  if(!form || !form->points) return 0;
   GList *firstpt = g_list_nth(form->points, segment);
   dt_masks_node_polygon_t *point0 = (dt_masks_node_polygon_t *)firstpt->data;
   // advance to next node in list, if not already on the last
@@ -908,6 +917,7 @@ static float _polygon_get_position_in_segment(float x, float y, dt_masks_form_t 
 static void _add_node_to_segment(struct dt_iop_module_t *module, float pzx, float pzy, dt_masks_form_t *form,
                                   int parentid, dt_masks_form_gui_t *gui, int index)
 {
+  if(!form || !form->points) return;
   // we add a new node to the brush
   dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)(malloc(sizeof(dt_masks_node_polygon_t)));
 
@@ -943,7 +953,9 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, float pzx, floa
 static void _change_node_type(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
                                dt_masks_form_gui_t *gui, int index)
 {
+  if(!form || !form->points) return;
   dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->node_edited);
+  if(!node) return;
   if(node->state != DT_MASKS_POINT_STATE_NORMAL)
   {
     node->state = DT_MASKS_POINT_STATE_NORMAL;
@@ -1250,6 +1262,7 @@ static int _init_hardness(dt_masks_form_t *form, const float amount, const dt_ma
 
 static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
+  if(!form || !form->points) return 0;
   float gx = 0.0f;
   float gy = 0.0f;
   float surf = 0.0f; 
@@ -1330,7 +1343,7 @@ static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_g
     if(gui->node_edited == -1 || gui->node_edited == node_index)
     {
       dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)l->data;
-
+      if(!node) continue;
       if(increment)
       {
         node->border[0] = CLAMPF(node->border[0] * flowed_amount, HARDNESS_MIN, HARDNESS_MAX);
@@ -1386,6 +1399,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
 {
   if(type == GDK_2BUTTON_PRESS || type == GDK_3BUTTON_PRESS) return 1;
   if(!gui) return 0;
+  if(!form) return 0;
 
   _find_closest_handle(module, pzx, pzy, form, parentid, gui, index);
 
@@ -1631,6 +1645,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
 
     else if(gui->handle_selected >= 0)
     {
+      if(!form->points) return 0;
       dt_masks_node_polygon_t *node
           = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->handle_selected);
       if(node && node->state != DT_MASKS_POINT_STATE_NORMAL && !dt_masks_is_corner_node(gpt, gui->handle_selected, 6, 2))
@@ -1702,6 +1717,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
   if(!gui) return 0;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
+  if(!form) return 0;
 
   const float wd = dev->preview_width / dev->natural_scale;
   const float ht = dev->preview_height / dev->natural_scale;
@@ -1710,6 +1726,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
 
   if(gui->node_dragging >= 0)
   {
+    if(!form->points) return 0;
     // check if we are near the first point to close the polygon on creation
     if(gui->creation && !g_list_shorter_than(form->points, 4)) // at least 3 points + the one being created 
     {
@@ -1760,6 +1777,8 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     return 1;
   }
 
+  if(!form->points) return 0;
+
   else if(gui->seg_dragging >= 0)
   {
     // we get point0 new values
@@ -1808,7 +1827,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
   {
     dt_masks_node_polygon_t *node
         = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->handle_dragging);
-
+    if(!node) return 0;
     float pts[2] = { pzx * wd + gui->delta[0], pzy * ht + gui->delta[1] };
 
     // compute ctrl points directly from new handle position
@@ -1908,6 +1927,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     if(gui->form_dragging)
     {
       dt_masks_node_polygon_t *dragging_shape = (dt_masks_node_polygon_t *)(form->points)->data;
+      if(!dragging_shape) return 0;
       const float dx = pts[0] - dragging_shape->node[0];
       const float dy = pts[1] - dragging_shape->node[1];
       for(GList *nodes = form->points; nodes; nodes = g_list_next(nodes))

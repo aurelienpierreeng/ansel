@@ -41,12 +41,15 @@ static int _group_events_button_pressed(struct dt_iop_module_t *module, float pz
                                         double pressure, int which, int type, uint32_t state,
                                         dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui, int unused2)
 {
+  if(!form) return 0;
+
   gboolean return_value = FALSE;
 
   if(gui->group_selected >= 0)
   {
     // we get the form
     dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    if(!fpt) return 0;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
       return_value = sel->functions->button_pressed(module, pzx, pzy, pressure, which, type, state, sel,
