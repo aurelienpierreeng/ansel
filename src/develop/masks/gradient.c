@@ -365,7 +365,6 @@ static int _change_extent(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struc
   _init_extent(form, amount, increment, flow);
 
   // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 
   return 1;
@@ -406,7 +405,6 @@ static int _change_curvature(dt_masks_form_t *form, dt_masks_form_gui_t *gui, st
   _init_curvature(form, amount, DT_MASKS_INCREMENT_SCALE, flow);
 
   // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 
   return 1;
@@ -444,7 +442,6 @@ static int _change_rotation(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
   _init_rotation(form, amount, DT_MASKS_INCREMENT_OFFSET, flow);
 
   // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 
   return 1;
@@ -536,7 +533,6 @@ static int _gradient_events_button_pressed(struct dt_iop_module_t *module, float
     if(type == GDK_2BUTTON_PRESS)
     {
       _change_curvature(form, gui, module, index, 0, DT_MASKS_INCREMENT_ABSOLUTE, 0);
-      dt_masks_gui_form_remove(form, gui, index);
       dt_masks_gui_form_create(form, gui, index, module);
       return 1;
     }
@@ -614,7 +610,6 @@ static int _gradient_events_button_released(struct dt_iop_module_t *module, floa
     dt_conf_set_int("plugins/darkroom/masks/gradient/state", gradient->state);
     
     // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
     dt_masks_gui_form_create(form, gui, index, module);
 
     // we save the new parameters
@@ -658,7 +653,6 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, float pz
       gradient->center[1] = pts[1];
 
       // we recreate the form points
-      dt_masks_gui_form_remove(form, gui, index);
       dt_masks_gui_form_create(form, gui, index, module);
 
       return 1;
@@ -672,7 +666,6 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, float pz
       _change_rotation(form, gui, module, index, angle , DT_MASKS_INCREMENT_OFFSET, 1);
 
       // we recreate the form points
-      dt_masks_gui_form_remove(form, gui, index);
       dt_masks_gui_form_create(form, gui, index, module);
 
       return 1;

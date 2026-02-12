@@ -1341,7 +1341,6 @@ static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_g
   dt_masks_get_set_conf_value(form, "hardness", res_amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
 
   // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 
   return 1;
@@ -1398,7 +1397,6 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
   dt_masks_get_set_conf_value(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
 
   // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 
   return 1;
@@ -1474,7 +1472,6 @@ static void _change_node_type(struct dt_iop_module_t *module, dt_masks_form_t *f
     node->state = DT_MASKS_POINT_STATE_USER;
   }
   // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 }
 
@@ -1503,8 +1500,7 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, float pzx, floa
 
   form->points = g_list_insert(form->points, node, gui->seg_selected + 1);
   _brush_init_ctrl_points(form);
-
-  dt_masks_gui_form_remove(form, gui, index);
+  
   dt_masks_gui_form_create(form, gui, index, module);
 
   gui->node_edited = gui->node_dragging = gui->node_selected = gui->seg_selected + 1;
@@ -1693,7 +1689,6 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
         _brush_init_ctrl_points(form);
 
         // we recreate the form points
-        dt_masks_gui_form_remove(form, gui, index);
         dt_masks_gui_form_create(form, gui, index, module);
       }
       return 1;
@@ -1978,7 +1973,6 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     }
 
     // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
     dt_masks_gui_form_create(form, gui, index, module);
 
     return 1;
@@ -2010,7 +2004,6 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     point2->ctrl2[1] += dy;
 
     // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
     dt_masks_gui_form_create(form, gui, index, module);
 
     return 1;
@@ -2040,7 +2033,6 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
 
     _brush_init_ctrl_points(form);
     // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
     dt_masks_gui_form_create(form, gui, index, module);
 
     return 1;
@@ -2134,7 +2126,6 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
       form->source[1] = pts[1] / darktable.develop->preview_pipe->iheight;
     }
     // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
     dt_masks_gui_form_create(form, gui, index, module);
 
     return 1;

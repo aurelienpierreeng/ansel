@@ -934,7 +934,6 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, float pzx, floa
   form->points = g_list_insert(form->points, node, gui->seg_selected + 1);
   _polygon_init_ctrl_points(form);
 
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 
   gui->node_edited = gui->node_dragging = gui->node_selected = gui->seg_selected + 1;
@@ -958,7 +957,6 @@ static void _change_node_type(struct dt_iop_module_t *module, dt_masks_form_t *f
 
   }
   // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 }
 
@@ -1317,7 +1315,6 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
   dt_toast_log(_("Size: %3.2f%%"), masks_size * 100.0f);
 
     // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
   return 1;
 }
@@ -1355,7 +1352,6 @@ static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_g
   _init_hardness(form, amount, increment, flow, masks_size, border_size);
 
   // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 
   return 1;
@@ -1520,7 +1516,6 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
       }
 
       // we recreate the form points in all case
-      dt_masks_gui_form_remove(form, gui, index);
       dt_masks_gui_form_create(form, gui, index, module);
     
       return 1;
@@ -1644,7 +1639,6 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
         _polygon_init_ctrl_points(form);
 
         // we recreate the form points
-        dt_masks_gui_form_remove(form, gui, index);
         dt_masks_gui_form_create(form, gui, index, module);
         gpt->clockwise = _polygon_is_clockwise(form);
       }
@@ -1755,7 +1749,6 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     if(gui->creation) _polygon_init_ctrl_points(form);
 
     // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
     dt_masks_gui_form_create(form, gui, index, module);
     gpt->clockwise = _polygon_is_clockwise(form);
 
@@ -1805,7 +1798,6 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     next_point->ctrl2[1]  += dy;
 
     // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
     dt_masks_gui_form_create(form, gui, index, module);
     gpt->clockwise = _polygon_is_clockwise(form);
 
@@ -1841,7 +1833,6 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
 
     _polygon_init_ctrl_points(form);
     // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
     dt_masks_gui_form_create(form, gui, index, module);
 
     return 1;
@@ -1937,7 +1928,6 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     }
 
     // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
     dt_masks_gui_form_create(form, gui, index, module);
 
     return 1;

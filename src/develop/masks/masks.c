@@ -203,7 +203,6 @@ static void _masks_remove_node(struct dt_iop_module_t *module, dt_masks_form_t *
     form->functions->init_ctrl_points(form);
     
   // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 }
 

@@ -157,7 +157,6 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
   _init_hardness(form, amount, increment, flow);
 
   // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 
   return 1;
@@ -198,7 +197,6 @@ static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct 
   _init_size(form, amount, increment, flow);
 
   // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 
   return 1;
@@ -434,7 +432,6 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, float pzx,
     }
 
     // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
     dt_masks_gui_form_create(form, gui, index, module);
 
     return 1;

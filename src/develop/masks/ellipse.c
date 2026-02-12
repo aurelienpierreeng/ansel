@@ -493,7 +493,6 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
   _init_hardness(form, amount, increment, flow);
 
   // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 
   return 1;
@@ -534,7 +533,6 @@ static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct 
   _init_size(form, amount, DT_MASKS_INCREMENT_SCALE, flow);
 
   // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 
   return 1;
@@ -572,7 +570,6 @@ static int _change_rotation(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
   _init_rotation(form, amount, DT_MASKS_INCREMENT_OFFSET, flow);
 
   // we recreate the form points
-  dt_masks_gui_form_remove(form, gui, index);
   dt_masks_gui_form_create(form, gui, index, module);
 
   return 1;
@@ -827,7 +824,6 @@ static int _ellipse_events_button_released(struct dt_iop_module_t *module, float
     }
 
     // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
     dt_masks_gui_form_create(form, gui, index, module);
 
     // we save the new parameters
@@ -903,7 +899,6 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
       }
 
       // we recreate the form points
-      dt_masks_gui_form_remove(form, gui, index);
       dt_masks_gui_form_create(form, gui, index, module);
 
       return 1;
@@ -946,7 +941,6 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
       }
 
       // we recreate the form points
-      dt_masks_gui_form_remove(form, gui, index);
       dt_masks_gui_form_create(form, gui, index, module);
 
       return 1;
@@ -962,7 +956,6 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
       _change_rotation(form, gui, module, index, angle , DT_MASKS_INCREMENT_OFFSET, 1);
 
       // we recreate the form points
-      dt_masks_gui_form_remove(form, gui, index);
       dt_masks_gui_form_create(form, gui, index, module);
 
       return 1;
