@@ -827,15 +827,11 @@ static inline void dt_draw_arrow(cairo_t *cr, const float zoom_scale,const gbool
     // arrow head
     _draw_arrow_head(cr, arrow, arrow_x_a, arrow_y_a, arrow_x_b, arrow_y_b);
     // Erase all drawings below
-    _fill_clear(cr);
+    _fill_clear_preserve(cr);
 
     dt_draw_set_dash_style(cr, DT_MASKS_NO_DASH, zoom_scale);
     dt_draw_set_color_overlay(cr, FALSE, 0.6);
-    /*if(selected)
-      cairo_set_line_width(cr, (4 * DT_DRAW_SIZE_LINE) / zoom_scale);
-    else
-      cairo_set_line_width(cr, (2 * DT_DRAW_SIZE_LINE) / zoom_scale);
-    */
+
     if(selected)
       cairo_set_line_width(cr, 0.8f * DT_DRAW_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
     else
@@ -863,11 +859,6 @@ static inline void dt_draw_arrow(cairo_t *cr, const float zoom_scale,const gbool
 
     dt_draw_set_color_overlay(cr, TRUE, 0.8);
     dt_draw_set_dash_style(cr, DT_MASKS_NO_DASH, zoom_scale);
-    /*if(selected)
-      cairo_set_line_width(cr, (DT_DRAW_SIZE_LINE_SELECTED) / zoom_scale);
-    else
-      cairo_set_line_width(cr, (DT_DRAW_SIZE_LINE) / zoom_scale);
-      */
     if(selected)
       cairo_set_line_width(cr, (2 * DT_DRAW_SIZE_LINE) / zoom_scale);
     else
