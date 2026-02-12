@@ -326,7 +326,9 @@ int process_sse2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, co
   }
   else // s_mode_local_laplacian
   {
-    local_laplacian_sse2(i, o, roi_in->width, roi_in->height, d->midtone, d->sigma_s, d->sigma_r, d->detail, 0);
+    if(local_laplacian_sse2(i, o, roi_in->width, roi_in->height, d->midtone, d->sigma_s,
+                            d->sigma_r, d->detail, 0) != 0)
+      return 1;
   }
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(i, o, roi_in->width, roi_in->height);
@@ -358,7 +360,9 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   }
   else // s_mode_local_laplacian
   {
-    local_laplacian(i, o, roi_in->width, roi_in->height, d->midtone, d->sigma_s, d->sigma_r, d->detail, 0);
+    if(local_laplacian(i, o, roi_in->width, roi_in->height, d->midtone, d->sigma_s, d->sigma_r,
+                       d->detail, 0) != 0)
+      return 1;
   }
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) dt_iop_alpha_copy(i, o, roi_in->width, roi_in->height);

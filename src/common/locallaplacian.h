@@ -47,7 +47,7 @@ static void local_laplacian_boundary_free(local_laplacian_boundary_t *b)
 }
 #endif
 
-void local_laplacian_internal(
+int local_laplacian_internal(
     const float *const input,   // input buffer in some Labx or yuvx format
     float *const out,           // output buffer with colour
     const int wd,               // width and
@@ -60,7 +60,7 @@ void local_laplacian_internal(
     // the following is just needed for clipped roi with boundary conditions from coarse buffer (can be 0)
     local_laplacian_boundary_t *b);
 
-void local_laplacian(
+int local_laplacian(
     const float *const input,   // input buffer in some Labx or yuvx format
     float *const out,           // output buffer with colour
     const int wd,               // width and
@@ -71,7 +71,7 @@ void local_laplacian(
     const float clarity,        // user param: increase clarity/local contrast
     local_laplacian_boundary_t *b) // can be 0
 {
-  local_laplacian_internal(input, out, wd, ht, sigma, shadows, highlights, clarity, 0, b);
+  return local_laplacian_internal(input, out, wd, ht, sigma, shadows, highlights, clarity, 0, b);
 }
 
 size_t local_laplacian_memory_use(const int width,      // width of input image
@@ -83,7 +83,7 @@ size_t local_laplacian_singlebuffer_size(const int width,       // width of inpu
 
 
 #if defined(__SSE2__)
-void local_laplacian_sse2(
+int local_laplacian_sse2(
     const float *const input,   // input buffer in some Labx or yuvx format
     float *const out,           // output buffer with colour
     const int wd,               // width and
@@ -94,7 +94,7 @@ void local_laplacian_sse2(
     const float clarity,        // user param: increase clarity/local contrast
     local_laplacian_boundary_t *b) // can be 0
 {
-  local_laplacian_internal(input, out, wd, ht, sigma, shadows, highlights, clarity, 1, b);
+  return local_laplacian_internal(input, out, wd, ht, sigma, shadows, highlights, clarity, 1, b);
 }
 #endif
 // clang-format off

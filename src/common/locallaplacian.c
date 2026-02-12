@@ -561,7 +561,7 @@ void apply_curve(
   pad_by_replication(out, w, h, padding);
 }
 
-void local_laplacian_internal(
+int local_laplacian_internal(
     const float *const input,   // input buffer in some Labx or yuvx format
     float *const out,           // output buffer with colour
     const int wd,               // width and
@@ -573,7 +573,7 @@ void local_laplacian_internal(
     const int use_sse2,         // flag whether to use SSE version
     local_laplacian_boundary_t *b)
 {
-  if(wd <= 1 || ht <= 1) return;
+  if(wd <= 1 || ht <= 1) return 0;
 
   // don't divide by 2 more often than we can:
   const int num_levels = MIN(max_levels, 31-__builtin_clz(MIN(wd,ht)));
@@ -582,17 +582,27 @@ void local_laplacian_internal(
     last_level = num_levels > 4 ? 4 : num_levels-1;
   const int max_supp = 1<<last_level;
   int w, h;
+  int err = 0;
   float *padded[max_levels] = {0};
   if(b && b->mode == 2)
     padded[0] = ll_pad_input(input, wd, ht, max_supp, &w, &h, b);
   else
     padded[0] = ll_pad_input(input, wd, ht, max_supp, &w, &h, 0);
+  if(padded[0] == NULL)
+  {
+    err = 1;
+    goto error;
+  }
 
   // allocate pyramid pointers for padded input
   for(int l=1;l<=last_level;l++)
   {
     padded[l] = dt_pixelpipe_cache_alloc_align_float_cache((size_t)dl(w,l) * dl(h,l), 0);
-    if(padded[l] == NULL) goto error;
+    if(padded[l] == NULL)
+    {
+      err = 1;
+      goto error;
+    }
   }
 
   // allocate pyramid pointers for output
@@ -600,7 +610,11 @@ void local_laplacian_internal(
   for(int l=0;l<=last_level;l++)
   {
     output[l] = dt_pixelpipe_cache_alloc_align_float_cache((size_t)dl(w,l) * dl(h,l), 0);
-    if(output[l] == NULL) goto error;
+    if(output[l] == NULL)
+    {
+      err = 1;
+      goto error;
+    }
   }
 
   // create gauss pyramid of padded input, write coarse directly to output
@@ -629,7 +643,11 @@ void local_laplacian_internal(
   for(int k=0;k<num_gamma;k++) for(int l=0;l<=last_level;l++)
   {
     buf[k][l] = dt_pixelpipe_cache_alloc_align_float_cache((size_t)dl(w,l)*dl(h,l), 0);
-    if(buf[k][l] == NULL) goto error;
+    if(buf[k][l] == NULL)
+    {
+      err = 1;
+      goto error;
+    }
   }
 
   // the paper says remapping only level 3 not 0 does the trick, too
@@ -771,15 +789,17 @@ void local_laplacian_internal(
 
 error:;
   // free all buffers except the ones passed out for preview rendering
+  const int keep_preview = (b && b->mode == 1 && err == 0);
   for(int l=0;l<max_levels;l++)
   {
-    if(!b || b->mode != 1 || l)
+    if(!keep_preview || l)
       if(padded[l]) dt_pixelpipe_cache_free_align(padded[l]);
-    if(!b || b->mode != 1)
+    if(!keep_preview)
       if(output[l]) dt_pixelpipe_cache_free_align(output[l]);
     for(int k=0; k<num_gamma;k++)
       if(buf[k][l]) dt_pixelpipe_cache_free_align(buf[k][l]);
   }
+  return err;
 }
 
 
