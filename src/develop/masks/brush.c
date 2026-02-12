@@ -220,6 +220,72 @@ static void _brush_ctrl2_to_handle(float ptx, float pty, float ctrlx, float ctrl
   }
 }
 
+/**
+ * @brief get the border handle position corresponding to a node, by looking for the closest border point in the resampled points of the form GUI.
+ * 
+ * This is used when we have to initialize control points for a node that has been set manually by the user,
+ * so we want to get the corresponding handle position to eventually match a catmull-rom like spline.
+ * The values should be in orthonormal space.
+ * 
+ * @param gpt the form GUI points
+ * @param node_count the number of nodes in the form
+ * @param node_index the index of the node for which we want to get the border handle position
+ * @param x the x coordinate of the border handle position (output)
+ * @param y the y coordinate of the border handle position (output)
+ * @return gboolean TRUE if the border handle position has been successfully retrieved, FALSE otherwise
+ */
+static gboolean _brush_get_border_handle_resampled(const dt_masks_form_gui_points_t *gpt, int node_count,
+                                                    int node_index, float *x, float *y)
+{
+  if(!gpt || node_count <= 0 || node_index < 0 || node_index >= node_count) return FALSE;
+
+  const int start = node_count * 3;
+  const int max_points = MIN(gpt->points_count, gpt->border_count);
+  if(max_points <= start) return FALSE;
+
+  const float node_x = gpt->points[node_index * 6 + 2];
+  const float node_y = gpt->points[node_index * 6 + 3];
+
+  float best_dist2 = FLT_MAX;
+  int best_idx = -1;
+
+  for(int i = start; i < max_points; i++)
+  {
+    const float px = gpt->points[i * 2];
+    const float py = gpt->points[i * 2 + 1];
+    if(isnan(px) || isnan(py)) continue;
+
+    const float dx = node_x - px;
+    const float dy = node_y - py;
+    const float dist2 = dx * dx + dy * dy;
+    if(dist2 < best_dist2)
+    {
+      best_dist2 = dist2;
+      best_idx = i;
+    }
+  }
+
+  if(best_idx < 0) return FALSE;
+
+  *x = gpt->border[best_idx * 2];
+  *y = gpt->border[best_idx * 2 + 1];
+  return !(isnan(*x) || isnan(*y));
+}
+
+static gboolean _brush_get_border_handle_mirrored(const dt_masks_form_gui_points_t *gpt, int node_count,
+                                                  int node_index, float *x, float *y)
+{
+  float hx = NAN, hy = NAN;
+  if(!_brush_get_border_handle_resampled(gpt, node_count, node_index, &hx, &hy)) return FALSE;
+
+  const float node_x = gpt->points[node_index * 6 + 2];
+  const float node_y = gpt->points[node_index * 6 + 3];
+
+  *x = node_x - (hx - node_x);
+  *y = node_y - (hy - node_y);
+  return !(isnan(*x) || isnan(*y));
+}
+
 /** get bezier control points from feather extremity */
 /** the values should be in orthonormal space */
 static void _brush_handle_to_ctrl(float ptx, float pty, float fx, float fy,
@@ -691,6 +757,7 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
     const int k = _brush_cyclic_cursor(n, nb);
     const int k1 = _brush_cyclic_cursor(n + 1, nb);
     const int k2 = _brush_cyclic_cursor(n + 2, nb);
+    const gboolean allow_border_gap_rounding = FALSE;
 
     dt_masks_node_brush_t *point1 = (dt_masks_node_brush_t *)g_list_nth_data(form->points, k);
     dt_masks_node_brush_t *point2 = (dt_masks_node_brush_t *)g_list_nth_data(form->points, k1);
@@ -768,7 +835,8 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
         float bmin[2] = { dt_masks_dynbuf_get(dborder, -2), dt_masks_dynbuf_get(dborder, -1) };
         float cmax[2] = { dt_masks_dynbuf_get(dpoints, -2), dt_masks_dynbuf_get(dpoints, -1) };
         float bmax[2] = { 2 * cmax[0] - bmin[0], 2 * cmax[1] - bmin[1] };
-        _brush_points_recurs_border_gaps(cmax, bmin, NULL, bmax, dpoints, dborder, TRUE);
+        if(allow_border_gap_rounding)
+          _brush_points_recurs_border_gaps(cmax, bmin, NULL, bmax, dpoints, dborder, TRUE);
       }
 
       if(dpayload)
@@ -848,7 +916,8 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
       if(bmax[0] - rb[0] > 1 || bmax[0] - rb[0] < -1 || bmax[1] - rb[1] > 1 || bmax[1] - rb[1] < -1)
       {
         // float bmin2[2] = {(*border)[posb-22],(*border)[posb-21]};
-        _brush_points_recurs_border_gaps(rc, rb, NULL, bmax, dpoints, dborder, cw);
+        if(allow_border_gap_rounding)
+          _brush_points_recurs_border_gaps(rc, rb, NULL, bmax, dpoints, dborder, cw);
       }
     }
 
@@ -1150,7 +1219,19 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   if((gui->group_selected == index) && gui->node_edited >= 0)
   {
     const int k = gui->node_edited;
-    // we can select the handle only if the node is a curve
+
+    // Current node's border handle
+     float bh_x = NAN, bh_y = NAN;
+     if(_brush_get_border_handle_mirrored(gpt, nb, k, &bh_x, &bh_y)
+       && dt_masks_is_within_radius(pzx, pzy, bh_x, bh_y, dist_curs))
+    {
+      gui->handle_border_selected = k;
+
+      return 1;
+    }
+
+    // Current node's curve handle
+    // We can select the handle only if the node is a curve
     if(!dt_masks_is_corner_node(gpt, k, 6, 2))
     {
       float ffx, ffy;
@@ -1164,7 +1245,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
       }
     }
 
-    // are we also close to the node ?
+    // are we close to the node ?
     if(dt_masks_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], dist_curs))
     {
       gui->node_selected = k;
@@ -1189,7 +1270,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   float dist;
   _brush_get_distance(pzx, pzy, dist_curs, gui, index, nb, &in, &inside_border, &near, &inside_source, &dist);
   // the maximum segment number is nb-1 (open brush)
-  if(near < (g_list_length(form->points) - 1))
+  if(near < (g_list_length(form->points)) && gui->node_edited == -1)
     gui->seg_selected = near;
 
   if(near < 0)
@@ -1566,17 +1647,23 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
         return 1;
       }
     }
-    /* unused
     else if(gui->handle_border_selected >= 0)
     {
-      gui->node_edited = -1;
       gui->handle_border_dragging = gui->handle_border_selected;
-      gui->handle_border_selected = -1; // reset
+
+      float handle_x = NAN, handle_y = NAN;
+      if(_brush_get_border_handle_mirrored(gpt, g_list_length(form->points), gui->handle_border_dragging,
+                                           &handle_x, &handle_y))
+      {
+        gui->delta[0] = handle_x - gui->pos[0];
+        gui->delta[1] = handle_y - gui->pos[1];
+      }
+
       return 1;
-    }*/
+    }
     else if(gui->seg_selected >= 0)
     {
-      gui->node_edited = -1;
+      gui->node_selected = -1;
 
       if(dt_modifier_is(state, GDK_CONTROL_MASK))
       {
@@ -1839,6 +1926,8 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   dt_develop_t *dev = (dt_develop_t *)darktable.develop;
   const float wd = dev->preview_width / dev->natural_scale;
   const float ht = dev->preview_height / dev->natural_scale;
+  const int iwidth = darktable.develop->preview_pipe->iwidth;
+  const int iheight = darktable.develop->preview_pipe->iheight;
 
   if(gui->creation)
   {
@@ -1903,8 +1992,8 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     dt_masks_node_brush_t *point2 = (dt_masks_node_brush_t *)pt2->data;
     float pts[2] = { pzx * wd + gui->delta[0], pzy * ht + gui->delta[1] };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
-    const float dx = pts[0] / darktable.develop->preview_pipe->iwidth - point->node[0];
-    const float dy = pts[1] / darktable.develop->preview_pipe->iheight - point->node[1];
+    const float dx = pts[0] / iwidth - point->node[0];
+    const float dy = pts[1] / iheight - point->node[1];
 
     // we move all points
     point->node[0] += dx;
@@ -1941,8 +2030,8 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     dt_dev_distort_backtransform(darktable.develop, p, 2);
     
     // set new ctrl points
-    const float iw = darktable.develop->preview_pipe->iwidth;
-    const float ih = darktable.develop->preview_pipe->iheight;
+    const float iw = iwidth;
+    const float ih = iheight;
     node->ctrl1[0] = p[0] / iw;
     node->ctrl1[1] = p[1] / ih;
     node->ctrl2[0] = p[2] / iw;
@@ -1956,36 +2045,67 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
 
     return 1;
   }
-  /* unused
-  else if(gui->handle_border_dragging >= 0)
+ else if(gui->handle_border_dragging >= 0)
   {
-    const int k = gui->handle_border_dragging;
+    const int node_index = gui->handle_border_dragging;
+    dt_masks_node_brush_t *node
+        = (dt_masks_node_brush_t *)g_list_nth_data(form->points, node_index);
+    if(!node) return 0;
 
-    // now we want to know the position reflected on actual corner/border segment
-    const float a = (gpt->border[k * 6 + 1] - gpt->points[k * 6 + 3])
-                    / (float)(gpt->border[k * 6] - gpt->points[k * 6 + 2]);
-    const float b = gpt->points[k * 6 + 3] - a * gpt->points[k * 6 + 2];
+    float handle_x = NAN, handle_y = NAN;
+    if(!_brush_get_border_handle_mirrored(gpt, g_list_length(form->points), node_index,
+                        &handle_x, &handle_y))
+      return 0;
 
+    const float node_px = gpt->points[node_index * 6 + 2];
+    const float node_py = gpt->points[node_index * 6 + 3];
+    const float dx_line = handle_x - node_px;
+    const float dy_line = handle_y - node_py;
+
+    // Get the cursor position
     float pts[2];
-    pts[0] = (a * pzy * ht + pzx * wd - b * a) / (a * a + 1.0);
-    pts[1] = a * pts[0] + b;
+    const float cursor_x = pzx * wd + gui->delta[0];
+    const float cursor_y = pzy * ht + gui->delta[1];
+
+    // Project the cursor position onto the line defined by the node and its border handle
+    if(fabsf(dx_line) < 1e-6f)
+    {
+      // The line is vertical, so we just take the y coordinate of the cursor
+      // and the x coordinate of the node
+      pts[0] = node_px;
+      pts[1] = cursor_y;
+    }
+    else
+    {
+      // Calculate the slope (a) and intercept (b) of the line defined by the node and its border handle
+      const float a = dy_line / dx_line;
+      const float b = node_py - a * node_px;
+
+      // Project the cursor position onto the line
+      const float denom = a * a + 1.0f;
+      const float xproj = (a * cursor_y + cursor_x - b * a) / denom;
+
+      pts[0] = xproj;
+      pts[1] = a * xproj + b;
+    }
 
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
 
-    dt_masks_node_brush_t *point = (dt_masks_node_brush_t *)g_list_nth_data(form->points, k);
-    const float nx = point->node[0] * darktable.develop->preview_pipe->iwidth;
-    const float ny = point->node[1] * darktable.develop->preview_pipe->iheight;
-    const float nr = sqrtf((pts[0] - nx) * (pts[0] - nx) + (pts[1] - ny) * (pts[1] - ny));
-    const float bdr = nr / fminf(darktable.develop->preview_pipe->iwidth, darktable.develop->preview_pipe->iheight);
-
-    point->border[0] = point->border[1] = bdr;
+    // Calculate distance from node to border handle
+    const float node_x = node->node[0] * iwidth;
+    const float node_y = node->node[1] * iheight;
+    const float dx = pts[0] - node_x;
+    const float dy = pts[1] - node_y;
+    const float bdr = sqrtf(dx * dx + dy * dy);
+    const float border = bdr / fminf(iwidth, iheight);
+    
+    node->border[0] = node->border[1] = border;
 
     // we recreate the form points
-    dt_masks_gui_form_remove(form, gui, index);
     dt_masks_gui_form_create(form, gui, index, module);
 
     return 1;
-  }*/
+  }
   else if(gui->form_dragging || gui->source_dragging)
   {
     float pts[2] = { pzx * wd + gui->delta[0], pzy * ht + gui->delta[1] };
@@ -2030,7 +2150,7 @@ static void _brush_draw_shape(cairo_t *cr, const float *points, const int points
  // Find the first valid non-NaN point to start drawing
  // FIXME: Why not just avoid having NaN points in the array?
   int start_idx = -1;
-  for (int i = node_nb * 3 + border; i < points_count; i++)
+  for(int i = node_nb * 3 + border; i < points_count; i++)
   {
     if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
     {
@@ -2047,7 +2167,7 @@ static void _brush_draw_shape(cairo_t *cr, const float *points, const int points
     // We don't want to draw the plain line twice, adapt the end index accordingly
     const int end_idx = border ? points_count : 0.5 * points_count;
     
-    for (int i = start_idx + 1; i < end_idx; i++)
+    for(int i = start_idx + 1; i < end_idx; i++)
     {
       if(!isnan(points[i * 2]) && !isnan(points[i * 2 + 1]))
         cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
@@ -2063,7 +2183,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
 
   // in creation mode
   if(gui->creation)
-  {
+  {   
     const float iwd = darktable.develop->preview_pipe->iwidth;
     const float iht = darktable.develop->preview_pipe->iheight;
     const float min_iwd_iht= MIN(iwd,iht);
@@ -2073,7 +2193,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       dt_masks_form_t *form = darktable.develop->form_visible;
       if(!form) return;
 
-      const float masks_border = dt_masks_get_set_conf_value(form, "border", 1.0f, HARDNESS_MIN, HARDNESS_MAX, DT_MASKS_INCREMENT_SCALE, 1);
+      const float masks_border = dt_masks_get_set_conf_value(form, "border", 1.0f, BORDER_MIN, BORDER_MAX, DT_MASKS_INCREMENT_SCALE, 1);
       const float masks_hardness = dt_masks_get_set_conf_value(form, "hardness", 1.0f, HARDNESS_MIN, HARDNESS_MAX, DT_MASKS_INCREMENT_SCALE, 1);
       const float opacity = dt_conf_get_float("plugins/darkroom/masks/opacity");
 
@@ -2263,7 +2383,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
                                 gpt->points[n * 6 + 5], &handle_x, &handle_y, TRUE);
       const float pt_x = gpt->points[n * 6 + 2];
       const float pt_y = gpt->points[n * 6 + 3];
-      const gboolean selected = (gui->node_edited == gui->handle_selected) && gui->handle_selected >= 0;
+      const gboolean selected = (gui->node_selected >= 0 || gui->handle_selected >= 0);
       dt_draw_handle(cr, pt_x, pt_y, zoom_scale, handle_x, handle_y, selected, FALSE);
     }
 
@@ -2277,6 +2397,17 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       const gboolean action = (k == gui->node_edited);
 
       dt_draw_node(cr, corner, action, selected, zoom_scale, x, y);
+    }
+
+    // Draw the current node's border handle, if needed
+    if(gui->node_edited >= 0)
+    {
+      const gboolean selected = (gui->node_selected >= 0 || gui->handle_border_selected >= 0);
+      float x = NAN, y = NAN;
+      if(_brush_get_border_handle_mirrored(gpt, node_count, gui->node_edited, &x, &y))
+      {
+        dt_draw_handle(cr, -1, -1, zoom_scale, x, y, selected, TRUE);
+      }
     }
   }
 

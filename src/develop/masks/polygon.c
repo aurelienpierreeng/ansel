@@ -1142,7 +1142,19 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   if((gui->group_selected == index) && gui->node_edited >= 0)
   {
     const int k = gui->node_edited;
-    // we can select the handle only if the node is a curve
+
+    // Current node's border handle
+    const float bh_x = gpt->border[k * 6];
+    const float bh_y = gpt->border[k * 6 + 1];
+    if(dt_masks_is_within_radius(pzx, pzy, bh_x, bh_y, dist_curs))
+    {
+      gui->handle_border_selected = k;
+
+      return 1;
+    }
+
+    // Current node's curve handle
+    // We can select the handle only if the node is a curve
     if(!dt_masks_is_corner_node(gpt, k, 6, 2))
     {
       float ffx, ffy;
@@ -1156,7 +1168,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
       }
     }
     
-    // are we also close to the node ?
+    // are we close to the node ?
     if(dt_masks_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3],
                                               dist_curs))
     {
@@ -1181,7 +1193,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   int inside, inside_border, near, inside_source;
   float dist;
   _polygon_get_distance(pzx, pzy, dist_curs, gui, index, nb, &inside, &inside_border, &near, &inside_source, &dist);
-  if(near < (g_list_length(form->points)))
+  if(near < (g_list_length(form->points)) && gui->node_edited == -1)
     gui->seg_selected = near;
 
   if(near < 0)
@@ -1576,18 +1588,20 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
         return 1;
       }
     }
-    /* unused
     else if(gui->handle_border_selected >= 0)
     {
-      gui->node_edited = -1;
       gui->handle_border_dragging = gui->handle_border_selected;
-      gui->handle_border_selected = -1; // reset
+
+      const float handle_x = gpt->border[gui->handle_border_dragging * 6];
+      const float handle_y = gpt->border[gui->handle_border_dragging * 6 + 1];
+      gui->delta[0] = handle_x - gui->pos[0];
+      gui->delta[1] = handle_y - gui->pos[1];
+
       return 1;
     }
-      */
     else if(gui->seg_selected >= 0)
     {
-      gui->node_edited = -1;
+      gui->node_selected = -1;
 
       if(dt_modifier_is(state, GDK_CONTROL_MASK))
       {
@@ -1676,12 +1690,11 @@ static int _polygon_events_button_released(struct dt_iop_module_t *module, float
       gui->handle_dragging = -1;
       return 1;
     }
-    /* unused
     else if(gui->handle_border_dragging >= 0)
     {
       gui->handle_border_dragging = -1;
       return 1;
-    }*/
+    }
   }
   return 0;
 }
@@ -1698,6 +1711,8 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
 
   const float wd = dev->preview_width / dev->natural_scale;
   const float ht = dev->preview_height / dev->natural_scale;
+  const int iwidth = darktable.develop->preview_pipe->iwidth;
+  const int iheight = darktable.develop->preview_pipe->iheight;
 
   if(gui->node_dragging >= 0)
   {
@@ -1814,8 +1829,8 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     // set new ctrl points
     for(size_t i = 0; i < 4; i += 2)
     {
-      p[i] /= darktable.develop->preview_pipe->iwidth;
-      p[i + 1] /= darktable.develop->preview_pipe->iheight;
+      p[i] /= iwidth;
+      p[i + 1] /= iheight;
     }
 
     node->ctrl1[0] = p[0];
@@ -1832,6 +1847,65 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     return 1;
   }
   
+  else if(gui->handle_border_dragging >= 0)
+  {
+    const int node_index = gui->handle_border_dragging;
+    dt_masks_node_polygon_t *node
+        = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, node_index);
+    if(!node) return 0;
+
+    const int base = node_index * 6;
+    const int node_point_index = base + 2;
+
+    // Get delta between the node and its border handle
+    const float dx_line = gpt->border[base] - gpt->points[node_point_index];
+
+    // Get the cursor position
+    float pts[2];
+    const float cursor_x = pzx * wd + gui->delta[0];
+    const float cursor_y = pzy * ht + gui->delta[1];
+
+    // Project the cursor position onto the line defined by the node and its border handle
+    if(fabsf(dx_line) < 1e-6f)
+    {
+      // The line is vertical, so we just take the y coordinate of the cursor
+      // and the x coordinate of the node
+      pts[0] = gpt->points[node_point_index];
+      pts[1] = cursor_y;
+    }
+    else
+    {
+      // Calculate the slope (a) and intercept (b) of the line defined by the node and its border handle
+      const float a = (gpt->border[base + 1] - gpt->points[node_point_index + 1]) / dx_line;
+      const float b = gpt->points[node_point_index + 1] - a * gpt->points[node_point_index];
+
+      // Project the cursor position onto the line
+      const float denom = a * a + 1.0f;
+      const float xproj = (a * cursor_y + cursor_x - b * a) / denom;
+
+      pts[0] = xproj;
+      pts[1] = a * xproj + b;
+    }
+
+    dt_dev_distort_backtransform(darktable.develop, pts, 1);
+
+    // Calculate distance from node to border handle
+    const float node_x = node->node[0] * iwidth;
+    const float node_y = node->node[1] * iheight;
+    const float dx = pts[0] - node_x;
+    const float dy = pts[1] - node_y;
+    const float bdr = sqrtf(dx * dx + dy * dy);
+    const float border = bdr / fminf(iwidth, iheight);
+    
+    node->border[0] = node->border[1] = border;
+
+    // we recreate the form points
+    dt_masks_gui_form_create(form, gui, index, module);
+
+    return 1;
+  }
+
+
   else if(gui->form_dragging || gui->source_dragging)
   {
 
@@ -1898,8 +1972,6 @@ static void _polygon_draw_shape(cairo_t *cr, const float *points, const int poin
         cairo_line_to(cr, points[i * 2], points[i * 2 + 1]);
     }
   }
-
-  return !border; // plain line polygon is not considered as open shape
 }
 
 static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int node_count)
@@ -1994,7 +2066,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
                                 gpt->points[n * 6 + 5], &handle_x, &handle_y, gpt->clockwise);
       const float pt_x = gpt->points[n * 6 + 2];
       const float pt_y = gpt->points[n * 6 + 3];
-      const gboolean selected = (gui->node_edited == gui->handle_selected) && gui->handle_selected >= 0;
+      const gboolean selected = (gui->node_selected >= 0 || gui->handle_selected >= 0);
       dt_draw_handle(cr, pt_x, pt_y, zoom_scale, handle_x, handle_y, selected, FALSE);
     }
   }
@@ -2018,6 +2090,17 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
         dt_draw_node(cr, FALSE, TRUE, TRUE, zoom_scale, x, y);
       else
         dt_draw_node(cr, corner, action, selected, zoom_scale, x, y);
+    }
+
+    // Draw the current node's border handle, if needed
+    if(gui->node_edited >= 0)
+    {
+      const gboolean selected = (gui->node_selected >= 0 || gui->handle_border_selected >= 0);
+      const int curr_node = gui->node_edited * 6;  
+      const float x = gpt->border[curr_node];
+      const float y = gpt->border[curr_node + 1];
+
+      dt_draw_handle(cr, -1, -1, zoom_scale, x, y, selected, TRUE);
     }
   }
 
