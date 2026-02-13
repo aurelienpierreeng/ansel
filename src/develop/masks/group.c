@@ -146,7 +146,6 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
                                          uint32_t state, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
                                          int unused2)
 {
-  fprintf(stdout, "group button released event, which: %i, state: %u, form: %i, group_selected: %i\n", which, state, form ? form->formid : -1, gui->group_selected);
   if(gui->group_selected >= 0)
   {
     // we get the form
