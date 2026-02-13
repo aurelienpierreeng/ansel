@@ -47,7 +47,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
 
   const size_t buffer_size = (size_t)TS * TS * (ndir * 4 + 3) * sizeof(float);
   size_t padded_buffer_size;
-  char *const all_buffers = (char *)dt_alloc_perthread(buffer_size, sizeof(char), &padded_buffer_size);
+  char *const all_buffers = (char *)dt_pixelpipe_cache_alloc_perthread(buffer_size, sizeof(char), &padded_buffer_size);
   if(!all_buffers)
   {
     printf("[demosaic] not able to allocate Markesteijn buffers\n");
@@ -499,7 +499,7 @@ static void xtrans_markesteijn_interpolate(float *out, const float *const in,
         }
     }
   }
-  dt_free_align(all_buffers);
+  dt_pixelpipe_cache_free_align(all_buffers);
 }
 
 #undef TS
@@ -1053,7 +1053,7 @@ static void xtrans_fdc_interpolate(struct dt_iop_module_t *self, float *out, con
 
   const size_t buffer_size = (size_t)TS * TS * (ndir * 4 + 7) * sizeof(float);
   size_t padded_buffer_size;
-  char *const all_buffers = (char *)dt_alloc_perthread(buffer_size, sizeof(char), &padded_buffer_size);
+  char *const all_buffers = (char *)dt_pixelpipe_cache_alloc_perthread(buffer_size, sizeof(char), &padded_buffer_size);
   if(!all_buffers)
   {
     fprintf(stderr, "[demosaic] not able to allocate FDC base buffers\n");
@@ -1618,7 +1618,7 @@ static void xtrans_fdc_interpolate(struct dt_iop_module_t *self, float *out, con
         }
     }
   }
-  dt_free_align(all_buffers);
+  dt_pixelpipe_cache_free_align(all_buffers);
 }
 
 #ifdef HAVE_OPENCL

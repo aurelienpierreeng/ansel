@@ -41,8 +41,8 @@ local_laplacian_boundary_t;
 // WARNING: CRITICAL: why is this not used anywhere ?
 static void local_laplacian_boundary_free(local_laplacian_boundary_t *b)
 {
-  dt_free_align(b->pad0);
-  for(int l=0;l<b->num_levels;l++) dt_free_align(b->output[l]);
+  dt_pixelpipe_cache_free_align(b->pad0);
+  for(int l=0;l<b->num_levels;l++) dt_pixelpipe_cache_free_align(b->output[l]);
   memset(b, 0, sizeof(*b));
 }
 #endif

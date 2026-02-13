@@ -531,7 +531,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     }
 
     size_t allocsize;
-    float *const weight_buf = dt_alloc_perthread(data->n, sizeof(float), &allocsize);
+    float *const weight_buf = dt_pixelpipe_cache_alloc_perthread(data->n, sizeof(float), &allocsize);
     if(weight_buf == NULL)
     {
       free(var_ratio);
@@ -576,7 +576,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       }
     }
 
-    dt_free_align(weight_buf);
+    dt_pixelpipe_cache_free_align(weight_buf);
     free(var_ratio);
     free(mapio);
   }

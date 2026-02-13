@@ -203,9 +203,9 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *const ds
   const size_t numthreads = darktable.num_openmp_threads;
 
   size_t allocsize;
-  float *const restrict mean = dt_alloc_perthread_float(4, &allocsize);
-  float *const restrict mmin = dt_alloc_perthread_float(4, &allocsize);
-  float *const restrict mmax = dt_alloc_perthread_float(4, &allocsize);
+  float *const restrict mean = dt_pixelpipe_cache_alloc_perthread_float(4, &allocsize);
+  float *const restrict mmin = dt_pixelpipe_cache_alloc_perthread_float(4, &allocsize);
+  float *const restrict mmax = dt_pixelpipe_cache_alloc_perthread_float(4, &allocsize);
 
   if(mean == NULL || mmax == NULL || mmin == NULL)
     goto error;
@@ -313,9 +313,9 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *const ds
   }
 
 error:;
-  if(mmax) dt_free_align(mmax);
-  if(mmin) dt_free_align(mmin);
-  if(mean) dt_free_align(mean);
+  if(mmax) dt_pixelpipe_cache_free_align(mmax);
+  if(mmin) dt_pixelpipe_cache_free_align(mmin);
+  if(mean) dt_pixelpipe_cache_free_align(mean);
 }
 
 static void color_picker_helper_4ch(const dt_iop_buffer_dsc_t *dsc, const float *const pixel,
@@ -380,7 +380,7 @@ static void color_picker_helper_bayer_parallel(const dt_iop_buffer_dsc_t *const 
 
   const size_t numthreads = darktable.num_openmp_threads;
 
-  //TODO: convert to use dt_alloc_perthread
+  //TODO: convert to use dt_pixelpipe_cache_alloc_perthread
   float *const msum = malloc(sizeof(float) * numthreads * 4);
   float *const mmin = malloc(sizeof(float) * numthreads * 4);
   float *const mmax = malloc(sizeof(float) * numthreads * 4);
@@ -513,7 +513,7 @@ static void color_picker_helper_xtrans_parallel(const dt_iop_buffer_dsc_t *const
 
   const size_t numthreads = darktable.num_openmp_threads;
 
-  //TODO: convert to use dt_alloc_perthread
+  //TODO: convert to use dt_pixelpipe_cache_alloc_perthread
   float *const mmin = malloc(sizeof(float) * numthreads * 3);
   float *const msum = malloc(sizeof(float) * numthreads * 3);
   float *const mmax = malloc(sizeof(float) * numthreads * 3);
@@ -615,8 +615,8 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
   {
     // Denoise the image
     size_t padded_size;
-    float *const restrict denoised = dt_alloc_align_float(4 * roi->width * roi->height);
-    float *const DT_ALIGNED_ARRAY tempbuf = dt_alloc_perthread_float(4 * roi->width, &padded_size); // TODO: alloc in caller
+    float *const restrict denoised = dt_pixelpipe_cache_alloc_align_float_cache(4 * roi->width * roi->height, 0);
+    float *const DT_ALIGNED_ARRAY tempbuf = dt_pixelpipe_cache_alloc_perthread_float(4 * roi->width, &padded_size); // TODO: alloc in caller
     if(tempbuf == NULL || denoised == NULL)
       goto error;
 
@@ -633,8 +633,8 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
       color_picker_helper_4ch(dsc, denoised, roi, box, picked_color, picked_color_min, picked_color_max, picker_cst, profile);
 
   error:;
-    if(denoised) dt_free_align(denoised);
-    if(tempbuf) dt_free_align(tempbuf);
+    if(denoised) dt_pixelpipe_cache_free_align(denoised);
+    if(tempbuf) dt_pixelpipe_cache_free_align(tempbuf);
   }
   else if(dsc->channels == 1u && dsc->filters != 0u && dsc->filters != 9u)
     color_picker_helper_bayer(dsc, pixel, roi, box, picked_color, picked_color_min, picked_color_max);

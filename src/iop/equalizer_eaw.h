@@ -46,7 +46,7 @@ static int dt_iop_equalizer_wtf(float *const buf, float **weight_a, const int l,
   const int st = step / 2;
 
   size_t scratch_size;
-  float *const restrict tmp_width_buf = dt_alloc_perthread_float(width, &scratch_size);
+  float *const restrict tmp_width_buf = dt_pixelpipe_cache_alloc_perthread_float(width, &scratch_size);
   if(tmp_width_buf == NULL) return 1;
 
 #ifdef _OPENMP
@@ -81,9 +81,9 @@ static int dt_iop_equalizer_wtf(float *const buf, float **weight_a, const int l,
       for(ch = 0; ch < 3; ch++) gbuf(buf, i, j) += gbuf(buf, i - st, j) * .5f;
   }
 
-  dt_free_align(tmp_width_buf);
+  dt_pixelpipe_cache_free_align(tmp_width_buf);
 
-  float *const restrict tmp_height_buf = dt_alloc_perthread_float(height, &scratch_size);
+  float *const restrict tmp_height_buf = dt_pixelpipe_cache_alloc_perthread_float(height, &scratch_size);
   if(tmp_height_buf == NULL) return 1;
 
 #ifdef _OPENMP
@@ -118,7 +118,7 @@ static int dt_iop_equalizer_wtf(float *const buf, float **weight_a, const int l,
       for(ch = 0; ch < 3; ch++) gbuf(buf, i, j) += gbuf(buf, i, j - st) * .5f;
   }
 
-  dt_free_align(tmp_height_buf);
+  dt_pixelpipe_cache_free_align(tmp_height_buf);
   return 0;
 }
 
@@ -129,7 +129,7 @@ static int dt_iop_equalizer_iwtf(float *buf, float **weight_a, const int l, cons
   const int wd = (int)(1 + (width >> (l - 1)));
 
   size_t scratch_size;
-  float *const restrict tmp_height_buf = dt_alloc_perthread_float(height, &scratch_size);
+  float *const restrict tmp_height_buf = dt_pixelpipe_cache_alloc_perthread_float(height, &scratch_size);
   if(tmp_height_buf == NULL) return 1;
 
 #ifdef _OPENMP
@@ -161,9 +161,9 @@ static int dt_iop_equalizer_iwtf(float *buf, float **weight_a, const int l, cons
       for(int ch = 0; ch < 3; ch++) gbuf(buf, i, j) += gbuf(buf, i, j - st);
   }
 
-  dt_free_align(tmp_height_buf);
+  dt_pixelpipe_cache_free_align(tmp_height_buf);
 
-  float *const restrict tmp_width_buf = dt_alloc_perthread_float(width, &scratch_size);
+  float *const restrict tmp_width_buf = dt_pixelpipe_cache_alloc_perthread_float(width, &scratch_size);
   if(tmp_width_buf == NULL) return 1;
   
 #ifdef _OPENMP
@@ -195,7 +195,7 @@ static int dt_iop_equalizer_iwtf(float *buf, float **weight_a, const int l, cons
       for(int ch = 0; ch < 3; ch++) gbuf(buf, i, j) += gbuf(buf, i - st, j);
   }
 
-  dt_free_align(tmp_width_buf);
+  dt_pixelpipe_cache_free_align(tmp_width_buf);
   return 0;
 }
 

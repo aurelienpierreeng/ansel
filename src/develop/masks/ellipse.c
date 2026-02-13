@@ -227,7 +227,7 @@ static float *_points_to_transform(float xx, float yy, float radius_a, float rad
                   * (1.0f + (3.0f * lambda * lambda) / (10.0f + sqrtf(4.0f - 3.0f * lambda * lambda)))) / n));
 
   // buffer allocations
-  float *const restrict points = dt_alloc_align_float((size_t)2 * (l + 5));
+  float *const restrict points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * (l + 5), 0);
   if(!points)
   {
     *points_count = 0;
@@ -317,7 +317,7 @@ static int _ellipse_get_points_source(dt_develop_t *dev, float xx, float yy, flo
 
   // if we failed, then free all and return
 error:
-  dt_free_align(*points);
+  dt_pixelpipe_cache_free_align(*points);
   *points = NULL;
   *points_count = 0;
   return 1;
@@ -335,7 +335,7 @@ static int _ellipse_get_points(dt_develop_t *dev, float xx, float yy, float radi
   // and we transform them with all distorted modules
   if(!dt_dev_distort_transform(dev, *points, *points_count))
   {
-    dt_free_align(*points);
+    dt_pixelpipe_cache_free_align(*points);
     *points = NULL;
     *points_count = 0;
     return 1;
@@ -1054,8 +1054,8 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     int err = _ellipse_get_points(darktable.develop, x, y, radius_a, radius_b, rotation, &points, &points_count);
     if(err)
     {
-      if(points) dt_free_align(points);
-      if(border) dt_free_align(border);
+      if(points) dt_pixelpipe_cache_free_align(points);
+      if(border) dt_pixelpipe_cache_free_align(border);
       return;
     }
     if(masks_border > 0.f)
@@ -1063,8 +1063,8 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       err = _ellipse_get_points(darktable.develop, x, y, border_a, border_b, rotation, &border, &border_count);
       if(err)
       {
-        if(points) dt_free_align(points);
-        if(border) dt_free_align(border);
+        if(points) dt_pixelpipe_cache_free_align(points);
+        if(border) dt_pixelpipe_cache_free_align(border);
         return;
       }
     }
@@ -1086,8 +1086,8 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       dt_draw_cross(cr, zoom_scale, x, y);
     }
 
-    if(points) dt_free_align(points);
-    if(border) dt_free_align(border);
+    if(points) dt_pixelpipe_cache_free_align(points);
+    if(border) dt_pixelpipe_cache_free_align(border);
     
     return;
   } // gui->creation
@@ -1226,7 +1226,7 @@ static float *const _ellipse_points_to_transform(const float center_x, const flo
                       * (1.0f + (3.0f * lambda * lambda) / (10.0f + sqrtf(4.0f - 3.0f * lambda * lambda))));
 
   // buffer allocation
-  float *points = dt_alloc_align_float((size_t) 2 * (l + 5));
+  float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t) 2 * (l + 5), 0);
   if(points == NULL)
     return NULL;
   *point_count = l + 5;
@@ -1275,13 +1275,13 @@ static int _ellipse_get_source_area(dt_iop_module_t *module, dt_dev_pixelpipe_io
   // and we transform them with all distorted modules
   if(!dt_dev_distort_transform_plus(darktable.develop, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, point_count))
   {
-    dt_free_align(points);
+    dt_pixelpipe_cache_free_align(points);
     return 1;
   }
 
   // finally, find the extreme left/right and top/bottom points
   _bounding_box(points, point_count, width, height, posx, posy);
-  dt_free_align(points);
+  dt_pixelpipe_cache_free_align(points);
   return 0;
 }
 
@@ -1308,13 +1308,13 @@ static int _ellipse_get_area(const dt_iop_module_t *const module, const dt_dev_p
   // and we transform them with all distorted modules
   if(!dt_dev_distort_transform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, point_count))
   {
-    dt_free_align(points);
+    dt_pixelpipe_cache_free_align(points);
     return 1;
   }
 
   // finally, find the extreme left/right and top/bottom points
   _bounding_box(points, point_count, width, height, posx, posy);
-  dt_free_align(points);
+  dt_pixelpipe_cache_free_align(points);
   return 0;
 }
 
@@ -1340,7 +1340,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   if(!ellipse) return 0;
   // we create a buffer of points with all points in the area
   int w = *width, h = *height;
-  float *points = dt_alloc_align_float((size_t)2 * w * h);
+  float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * w * h, 0);
   if(points == NULL)
     return 1;
 
@@ -1360,7 +1360,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   // we back transform all this points
   if(!dt_dev_distort_backtransform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points, (size_t)w * h))
   {
-    dt_free_align(points);
+    dt_pixelpipe_cache_free_align(points);
     return 1;
   }
 
@@ -1372,10 +1372,10 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   }
 
   // we allocate the buffer
-  *buffer = dt_alloc_align_float((size_t)w * h);
+  *buffer = dt_pixelpipe_cache_alloc_align_float_cache((size_t)w * h, 0);
   if(*buffer == NULL)
   {
-    dt_free_align(points);
+    dt_pixelpipe_cache_free_align(points);
     return 1;
   }
 
@@ -1409,7 +1409,7 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
 
   _fill_mask((size_t)(h)*w, bufptr, points, center, a, b, ta, tb, alpha, 0);
 
-  dt_free_align(points);
+  dt_pixelpipe_cache_free_align(points);
 
   if(darktable.unmuted & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks %s] ellipse fill took %0.04f sec\n", form->name, dt_get_wtime() - start2);
@@ -1465,7 +1465,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   const float lambda = (ta - tb) / (ta + tb);
   const int l = (int)(M_PI * (ta + tb) * (1.0f + (3.0f * lambda * lambda) / (10.0f + sqrtf(4.0f - 3.0f * lambda * lambda))));
   const size_t ellpts = MIN(360, l);
-  float *ell = dt_alloc_align_float(ellpts * 2);
+  float *ell = dt_pixelpipe_cache_alloc_align_float_cache(ellpts * 2, 0);
   if(ell == NULL) return 1;
 
 #ifdef _OPENMP
@@ -1496,7 +1496,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   if(!dt_dev_distort_transform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, ell,
                                         ellpts))
   {
-    dt_free_align(ell);
+    dt_pixelpipe_cache_free_align(ell);
     return 1;
   }
 
@@ -1538,7 +1538,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   printf("gw %d, gh %d, bbw %d, bbh %d\n", gw, gh, bbw, bbh);
 #endif
 
-  dt_free_align(ell);
+  dt_pixelpipe_cache_free_align(ell);
 
   if(darktable.unmuted & DT_DEBUG_PERF)
   {
@@ -1551,7 +1551,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   if(bbw <= 1 || bbh <= 1)
     return 0;
 
-  float *points = dt_alloc_align_float((size_t)2 * bbw * bbh);
+  float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * bbw * bbh, 0);
   if(points == NULL) return 1;
 
   // we populate the grid points in module coordinates
@@ -1582,7 +1582,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   if(!dt_dev_distort_backtransform_plus(module->dev, piece->pipe, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, points,
                                         (size_t)bbw * bbh))
   {
-    dt_free_align(points);
+    dt_pixelpipe_cache_free_align(points);
     return 1;
   }
 
@@ -1633,7 +1633,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
     }
   }
 
-  dt_free_align(points);
+  dt_pixelpipe_cache_free_align(points);
 
   if(darktable.unmuted & DT_DEBUG_PERF)
   {

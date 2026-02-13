@@ -952,7 +952,8 @@ void init_by_array(sfmt_state_t *s, uint32_t *init_key, int key_length)
 
 static inline void dt_points_init(dt_points_t *p, const unsigned int num_threads)
 {
-  sfmt_state_t *states = (sfmt_state_t *)dt_alloc_align(sizeof(sfmt_state_t) * num_threads);
+  sfmt_state_t *states = (sfmt_state_t *)dt_pixelpipe_cache_alloc_align_cache(
+      sizeof(sfmt_state_t) * num_threads, 0);
   p->s = (sfmt_state_t **)calloc(num_threads, sizeof(sfmt_state_t *));
   p->num = num_threads;
 
@@ -976,7 +977,7 @@ static inline void dt_points_init(dt_points_t *p, const unsigned int num_threads
 
 static inline void dt_points_cleanup(dt_points_t *p)
 {
-  dt_free_align(p->s[0]);
+  dt_pixelpipe_cache_free_align(p->s[0]);
   free(p->s);
 }
 

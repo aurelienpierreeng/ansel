@@ -212,7 +212,7 @@ int write_image(dt_imageio_module_data_t *p_tmp, const char *filename, const voi
    */
   png_set_filler(png_ptr, 0, PNG_FILLER_AFTER);
 
-  png_bytep *row_pointers = dt_alloc_align(sizeof(png_bytep) * height);
+  png_bytep *row_pointers = dt_pixelpipe_cache_alloc_align_cache(sizeof(png_bytep) * height, 0);
 
   if(p->bpp > 8)
   {
@@ -228,7 +228,7 @@ int write_image(dt_imageio_module_data_t *p_tmp, const char *filename, const voi
 
   png_write_image(png_ptr, row_pointers);
 
-  dt_free_align(row_pointers);
+  dt_pixelpipe_cache_free_align(row_pointers);
 
   png_write_end(png_ptr, info_ptr);
   png_destroy_write_struct(&png_ptr, &info_ptr);

@@ -175,14 +175,15 @@ static int decompress_jsc(dt_imageio_jpeg_t *jpg, uint8_t *out)
 static int decompress_plain(dt_imageio_jpeg_t *jpg, uint8_t *out)
 {
   JSAMPROW row_pointer[1];
-  row_pointer[0] = (uint8_t *)dt_alloc_align((size_t)jpg->dinfo.output_width * jpg->dinfo.num_components);
+  row_pointer[0] = (uint8_t *)dt_pixelpipe_cache_alloc_align_cache(
+      (size_t)jpg->dinfo.output_width * jpg->dinfo.num_components, 0);
   if(row_pointer[0] == NULL) return 1;
   uint8_t *tmp = out;
   while(jpg->dinfo.output_scanline < jpg->dinfo.image_height)
   {
     if(jpeg_read_scanlines(&(jpg->dinfo), row_pointer, 1) != 1)
     {
-      dt_free_align(row_pointer[0]);
+      dt_pixelpipe_cache_free_align(row_pointer[0]);
       return 1;
     }
     for(unsigned int i = 0; i < jpg->dinfo.image_width; i++)
@@ -192,7 +193,7 @@ static int decompress_plain(dt_imageio_jpeg_t *jpg, uint8_t *out)
     tmp += 4 * jpg->width;
   }
 
-  if(row_pointer[0]) dt_free_align(row_pointer[0]);
+  if(row_pointer[0]) dt_pixelpipe_cache_free_align(row_pointer[0]);
   return 0;
 }
 
@@ -294,7 +295,7 @@ int dt_imageio_jpeg_compress(const uint8_t *in, uint8_t *out, const int width, c
   if(quality > 90) jpg.cinfo.comp_info[0].v_samp_factor = 1;
   if(quality > 92) jpg.cinfo.comp_info[0].h_samp_factor = 1;
   jpeg_start_compress(&(jpg.cinfo), TRUE);
-  uint8_t *row = dt_alloc_align(sizeof(uint8_t) * 3 * width);
+  uint8_t *row = dt_pixelpipe_cache_alloc_align_cache(sizeof(uint8_t) * 3 * width, 0);
   const uint8_t *buf;
   while(jpg.cinfo.next_scanline < jpg.cinfo.image_height)
   {
@@ -306,7 +307,7 @@ int dt_imageio_jpeg_compress(const uint8_t *in, uint8_t *out, const int width, c
     jpeg_write_scanlines(&(jpg.cinfo), tmp, 1);
   }
   jpeg_finish_compress(&(jpg.cinfo));
-  dt_free_align(row);
+  dt_pixelpipe_cache_free_align(row);
   jpeg_destroy_compress(&(jpg.cinfo));
   return sizeof(uint8_t) * 4 * width * height - jpg.dest.free_in_buffer;
 }
@@ -534,16 +535,16 @@ int dt_imageio_jpeg_write_with_icc_profile(const char *filename, const uint8_t *
     cmsSaveProfileToMem(out_profile, 0, &len);
     if(len > 0)
     {
-      unsigned char *buf = dt_alloc_align(sizeof(unsigned char) * len);
+      unsigned char *buf = dt_pixelpipe_cache_alloc_align_cache(sizeof(unsigned char) * len, 0);
       cmsSaveProfileToMem(out_profile, buf, &len);
       write_icc_profile(&(jpg.cinfo), buf, len);
-      dt_free_align(buf);
+      dt_pixelpipe_cache_free_align(buf);
     }
   }
 
   if(exif && exif_len > 0 && exif_len < 65534) jpeg_write_marker(&(jpg.cinfo), JPEG_APP0 + 1, exif, exif_len);
 
-  uint8_t *row = dt_alloc_align(sizeof(uint8_t) * 3 * width);
+  uint8_t *row = dt_pixelpipe_cache_alloc_align_cache(sizeof(uint8_t) * 3 * width, 0);
   const uint8_t *buf;
   while(jpg.cinfo.next_scanline < jpg.cinfo.image_height)
   {
@@ -555,7 +556,7 @@ int dt_imageio_jpeg_write_with_icc_profile(const char *filename, const uint8_t *
     jpeg_write_scanlines(&(jpg.cinfo), tmp, 1);
   }
   jpeg_finish_compress(&(jpg.cinfo));
-  dt_free_align(row);
+  dt_pixelpipe_cache_free_align(row);
   jpeg_destroy_compress(&(jpg.cinfo));
   fclose(f);
   return 0;
@@ -618,14 +619,15 @@ static int read_jsc(dt_imageio_jpeg_t *jpg, uint8_t *out)
 static int read_plain(dt_imageio_jpeg_t *jpg, uint8_t *out)
 {
   JSAMPROW row_pointer[1];
-  row_pointer[0] = (uint8_t *)dt_alloc_align((size_t)jpg->dinfo.output_width * jpg->dinfo.num_components);
+  row_pointer[0] = (uint8_t *)dt_pixelpipe_cache_alloc_align_cache(
+      (size_t)jpg->dinfo.output_width * jpg->dinfo.num_components, 0);
   uint8_t *tmp = out;
   while(jpg->dinfo.output_scanline < jpg->dinfo.image_height)
   {
     if(jpeg_read_scanlines(&(jpg->dinfo), row_pointer, 1) != 1)
     {
       jpeg_destroy_decompress(&(jpg->dinfo));
-      dt_free_align(row_pointer[0]);
+      dt_pixelpipe_cache_free_align(row_pointer[0]);
       fclose(jpg->f);
       return 1;
     }
@@ -633,7 +635,7 @@ static int read_plain(dt_imageio_jpeg_t *jpg, uint8_t *out)
       for(int k = 0; k < 3; k++) tmp[4 * i + k] = row_pointer[0][3 * i + k];
     tmp += 4 * jpg->width;
   }
-  dt_free_align(row_pointer[0]);
+  dt_pixelpipe_cache_free_align(row_pointer[0]);
   return 0;
 }
 

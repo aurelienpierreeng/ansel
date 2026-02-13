@@ -307,15 +307,15 @@ static void rcd_demosaic(dt_dev_pixelpipe_iop_t *piece, float *const restrict ou
     // FIXME: CRITICAL: need to handle the case where we couldn't alloc the memory,
     // but in a parallel section, that's not going to be trivial.
 
-    float *const VH_Dir = dt_alloc_align_float((size_t) RCD_TILESIZE * RCD_TILESIZE);
+    float *const VH_Dir = dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE, 0);
     // ensure that border elements which are read but never actually set below are zeroed out
     memset(VH_Dir, 0, sizeof(*VH_Dir) * RCD_TILESIZE * RCD_TILESIZE);
-    float *const PQ_Dir = dt_alloc_align_float((size_t) RCD_TILESIZE * RCD_TILESIZE / 2);
-    float *const cfa =    dt_alloc_align_float((size_t) RCD_TILESIZE * RCD_TILESIZE);
-    float *const P_CDiff_Hpf = dt_alloc_align_float((size_t) RCD_TILESIZE * RCD_TILESIZE / 2);
-    float *const Q_CDiff_Hpf = dt_alloc_align_float((size_t) RCD_TILESIZE * RCD_TILESIZE / 2);
+    float *const PQ_Dir = dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE / 2, 0);
+    float *const cfa =    dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE, 0);
+    float *const P_CDiff_Hpf = dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE / 2, 0);
+    float *const Q_CDiff_Hpf = dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE / 2, 0);
 
-    float (*const rgb)[RCD_TILESIZE * RCD_TILESIZE] = (void *)dt_alloc_align_float((size_t)3 * RCD_TILESIZE * RCD_TILESIZE);
+    float (*const rgb)[RCD_TILESIZE * RCD_TILESIZE] = (void *)dt_pixelpipe_cache_alloc_align_float_cache((size_t)3 * RCD_TILESIZE * RCD_TILESIZE, 0);
 
     // No overlapping use so re-use same buffer
     float *const lpf = PQ_Dir;
@@ -561,12 +561,12 @@ static void rcd_demosaic(dt_dev_pixelpipe_iop_t *piece, float *const restrict ou
         }
       }
     }
-    dt_free_align(cfa);
-    dt_free_align(rgb);
-    dt_free_align(VH_Dir);
-    dt_free_align(PQ_Dir);
-    dt_free_align(P_CDiff_Hpf);
-    dt_free_align(Q_CDiff_Hpf);
+    dt_pixelpipe_cache_free_align(cfa);
+    dt_pixelpipe_cache_free_align(rgb);
+    dt_pixelpipe_cache_free_align(VH_Dir);
+    dt_pixelpipe_cache_free_align(PQ_Dir);
+    dt_pixelpipe_cache_free_align(P_CDiff_Hpf);
+    dt_pixelpipe_cache_free_align(Q_CDiff_Hpf);
   }
 }
 

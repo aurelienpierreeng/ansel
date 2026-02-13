@@ -832,16 +832,16 @@ static float complex point_at_arc_length(const float complex points[], const int
 
 static float *build_lookup_table(const int distance, const float control1, const float control2)
 {
-  float complex *clookup = dt_alloc_align(sizeof(float complex) * (distance + 2));
+  float complex *clookup = dt_pixelpipe_cache_alloc_align_cache(sizeof(float complex) * (distance + 2), 0);
   if(clookup == NULL) return NULL;
 
   interpolate_cubic_bezier(I, control1 + I, control2, 1.0, clookup, distance + 2);
 
   // reparameterize bezier by x and keep only y values
-  float *lookup = dt_alloc_align_float((size_t)(distance + 2));
+  float *lookup = dt_pixelpipe_cache_alloc_align_float_cache((size_t)(distance + 2), 0);
   if(lookup == NULL)
   {
-    dt_free_align(clookup);
+    dt_pixelpipe_cache_free_align(clookup);
     return NULL;
   }
   float *ptr = lookup;
@@ -862,7 +862,7 @@ static float *build_lookup_table(const int distance, const float control1, const
   }
   *ptr++ = 0.0f;
 
-  dt_free_align(clookup);
+  dt_pixelpipe_cache_free_align(clookup);
   return lookup;
 }
 
@@ -985,7 +985,7 @@ static int build_round_stamp(float complex **pstamp,
     }
   }
 
-  dt_free_align((void *) lookup_table);
+  dt_pixelpipe_cache_free_align((void *) lookup_table);
   *pstamp = stamp;
   return 0;
 }
@@ -1145,7 +1145,7 @@ static float complex *create_global_distortion_map(const cairo_rectangle_int_t *
   }
 
   // allocate distortion map big enough to contain all paths
-  float complex *map = dt_alloc_align(sizeof(float complex) * mapsize);
+  float complex *map = dt_pixelpipe_cache_alloc_align_cache(sizeof(float complex) * mapsize, 0);
   if(!map) return NULL;
   memset(map, 0, sizeof(float complex) * mapsize);
 
@@ -1157,7 +1157,7 @@ static float complex *create_global_distortion_map(const cairo_rectangle_int_t *
     cairo_rectangle_int_t r;
     if(build_round_stamp(&stamp, &r, warp) != 0)
     {
-      dt_free_align((void *)map);
+      dt_pixelpipe_cache_free_align((void *)map);
       return NULL;
     }
     add_to_global_distortion_map(map, map_extent, warp, stamp, &r);
@@ -1166,10 +1166,10 @@ static float complex *create_global_distortion_map(const cairo_rectangle_int_t *
 
   if(inverted)
   {
-    float complex * const imap = dt_alloc_align(sizeof(float complex) * mapsize);
+    float complex * const imap = dt_pixelpipe_cache_alloc_align_cache(sizeof(float complex) * mapsize, 0);
     if(!imap)
     {
-      dt_free_align((void *)map);
+      dt_pixelpipe_cache_free_align((void *)map);
       return NULL;
     }
     memset(imap, 0, sizeof(float complex) * mapsize);
@@ -1197,7 +1197,7 @@ static float complex *create_global_distortion_map(const cairo_rectangle_int_t *
       }
     }
 
-    dt_free_align((void *) map);
+    dt_pixelpipe_cache_free_align((void *) map);
 
     // now just do a pass to avoid gap with a displacement of zero, note that we do not need high
     // precision here as the inverted distortion mask is only used to compute a final displacement
@@ -1396,7 +1396,7 @@ static int _distort_xtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
       }
     }
 
-    dt_free_align((void *) map);
+    dt_pixelpipe_cache_free_align((void *) map);
   }
 
   return 1;
@@ -1466,7 +1466,7 @@ void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *p
     piece->colors = ch;
   }
 
-  dt_free_align((void *) map);
+  dt_pixelpipe_cache_free_align((void *) map);
 
 }
 
@@ -1510,7 +1510,7 @@ int process(struct dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, const
   if(map_extent.width != 0 && map_extent.height != 0)
     apply_global_distortion_map(module, piece, in, out, roi_in, roi_out, map, &map_extent);
 
-  dt_free_align((void *)map);
+  dt_pixelpipe_cache_free_align((void *)map);
 
   return 0;
 }
@@ -1682,7 +1682,7 @@ int process_cl(struct dt_iop_module_t *module,
   // 3. apply the map
   if(map_extent.width != 0 && map_extent.height != 0)
     err = apply_global_distortion_map_cl(module, piece, dev_in, dev_out, roi_in, roi_out, map, &map_extent);
-  dt_free_align((void *) map);
+  dt_pixelpipe_cache_free_align((void *) map);
   if(err != CL_SUCCESS) goto error;
 
   return TRUE;

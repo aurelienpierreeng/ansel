@@ -914,7 +914,7 @@ static inline int wavelets_process(const float *const restrict in, float *const 
   float *restrict residual; // will store the temp buffer containing the last step of blur
   // allocate a one-row temporary buffer for the decomposition
   size_t padded_size;
-  float *const DT_ALIGNED_ARRAY tempbuf = dt_alloc_perthread_float(4 * width, &padded_size); //TODO: alloc in caller
+  float *const DT_ALIGNED_ARRAY tempbuf = dt_pixelpipe_cache_alloc_perthread_float(4 * width, &padded_size); //TODO: alloc in caller
   if(tempbuf == NULL) return 1;
 
   for(int s = 0; s < scales; ++s)
@@ -954,7 +954,7 @@ static inline int wavelets_process(const float *const restrict in, float *const 
     dump_PFM(name, buffer_out, width, height);
 #endif
   }
-  dt_free_align(tempbuf);
+  dt_pixelpipe_cache_free_align(tempbuf);
 
   // will store the temp buffer NOT containing the last step of blur
   float *restrict temp = (residual == LF_even) ? LF_odd : LF_even;

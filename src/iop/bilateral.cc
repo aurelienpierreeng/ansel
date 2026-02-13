@@ -146,7 +146,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       for(int k = -rad; k <= rad; k++) m[l * wd + k] /= weight;
 
     size_t padded_weights_size;
-    float *const weights_buf = dt_alloc_perthread_float(weights_size, &padded_weights_size);
+    float *const weights_buf = dt_pixelpipe_cache_alloc_perthread_float(weights_size, &padded_weights_size);
     if(weights_buf == NULL) return 1;
 
 #ifdef _OPENMP
@@ -189,7 +189,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       }
     }
 
-    dt_free_align(weights_buf);
+    dt_pixelpipe_cache_free_align(weights_buf);
 
     // fill unprocessed border
     for(int j = 0; j < rad; j++)

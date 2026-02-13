@@ -3380,7 +3380,7 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
       if(!rt_masks_get_delta_to_destination(self, piece, roi_layer, form, &dx, &dy,
                                             p->rt_forms[index].distort_mode))
       {
-        if(mask) dt_free_align(mask);
+        if(mask) dt_pixelpipe_cache_free_align(mask);
         continue;
       }
     }
@@ -3390,14 +3390,14 @@ static int rt_process_forms(float *layer, dwt_params_t *const wt_p, const int sc
     dt_iop_roi_t roi_mask_scaled = { 0 };
     if(rt_build_scaled_mask(mask, &roi_mask, &mask_scaled, &roi_mask_scaled, roi_layer, dx, dy, algo) != 0)
     {
-      if(mask) dt_free_align(mask);
+      if(mask) dt_pixelpipe_cache_free_align(mask);
       return 1;
     }
 
     // we don't need the original mask anymore
     if(mask)
     {
-      dt_free_align(mask);
+      dt_pixelpipe_cache_free_align(mask);
       mask = NULL;
     }
 
@@ -4227,7 +4227,7 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
       // we don't need the original mask anymore
       if(mask)
       {
-        dt_free_align(mask);
+        dt_pixelpipe_cache_free_align(mask);
         mask = NULL;
       }
 
@@ -4284,7 +4284,7 @@ static cl_int rt_process_forms_cl(cl_mem dev_layer, dwt_params_cl_t *const wt_p,
                                     gd);
       }
 
-      if(mask) dt_free_align(mask);
+      if(mask) dt_pixelpipe_cache_free_align(mask);
       if(mask_scaled) dt_pixelpipe_cache_free_align(mask_scaled);
       if(dev_mask_scaled) dt_opencl_release_mem_object(dev_mask_scaled);
     }

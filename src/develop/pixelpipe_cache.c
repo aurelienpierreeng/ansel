@@ -624,8 +624,8 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache,
   size_t page_size = 0;
   void *buf = dt_cache_arena_alloc(&cache->arena, size, &page_size);
   if(!buf) return NULL;
-  void *aligned = __builtin_assume_aligned(buf, DT_CACHELINE_BYTES);
 
+  void *aligned = __builtin_assume_aligned(buf, DT_CACHELINE_BYTES);
   dt_iop_buffer_dsc_t dsc = {0};
 
   const uintptr_t addr = (uintptr_t)aligned;
@@ -672,6 +672,7 @@ void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void *
       _non_thread_safe_cache_ref_count_entry(cache, hash, FALSE, cache_entry);
       dt_pthread_rwlock_unlock(&cache_entry->lock);
       g_hash_table_remove(cache->entries, GINT_TO_POINTER(cache_entry->hash));
+      mem = NULL;
     }
   }
   else

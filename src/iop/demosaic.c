@@ -550,12 +550,12 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     {
       if(gd->lmmse_gamma_in == NULL)
       {
-        gd->lmmse_gamma_in = dt_alloc_align_float(65536);
-        gd->lmmse_gamma_out = dt_alloc_align_float(65536);
+        gd->lmmse_gamma_in = dt_pixelpipe_cache_alloc_align_float_cache(65536, 0);
+        gd->lmmse_gamma_out = dt_pixelpipe_cache_alloc_align_float_cache(65536, 0);
         if(!gd->lmmse_gamma_in || !gd->lmmse_gamma_out)
         {
-          dt_free_align(gd->lmmse_gamma_in);
-          dt_free_align(gd->lmmse_gamma_out);
+          dt_pixelpipe_cache_free_align(gd->lmmse_gamma_in);
+          dt_pixelpipe_cache_free_align(gd->lmmse_gamma_out);
           gd->lmmse_gamma_in = NULL;
           gd->lmmse_gamma_out = NULL;
           if(!(img->flags & DT_IMAGE_4BAYER) && data->green_eq != DT_IOP_GREEN_EQ_NO)
@@ -1161,8 +1161,8 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_rcd_border_redblue);
   dt_opencl_free_kernel(gd->kernel_rcd_border_green);
   dt_opencl_free_kernel(gd->kernel_write_blended_dual);
-  dt_free_align(gd->lmmse_gamma_in);
-  dt_free_align(gd->lmmse_gamma_out);
+  dt_pixelpipe_cache_free_align(gd->lmmse_gamma_in);
+  dt_pixelpipe_cache_free_align(gd->lmmse_gamma_out);
   free(module->data);
   module->data = NULL;
 }

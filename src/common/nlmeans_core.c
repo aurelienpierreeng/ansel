@@ -112,7 +112,7 @@ define_patches(const dt_nlmeans_param_t *const params, const int stride, int *nu
     n_patches = (n_patches + 1) / 2;
   *num_patches = n_patches ;
   // allocate a cacheline-aligned buffer
-  struct patch_t *patches = dt_alloc_align(sizeof(struct patch_t) * n_patches);
+  struct patch_t *patches = dt_pixelpipe_cache_alloc_align_cache(sizeof(struct patch_t) * n_patches, 0);
   if(patches == NULL) return NULL;
 
   // set up the patch offsets
@@ -415,7 +415,7 @@ void nlmeans_denoise(const float *const inbuf, float *const outbuf,
   const size_t scratch_size = SLICE_WIDTH + 2*radius + 1 + 48; // getting false sharing without the +48....
 #endif /* CACHE_PIXDIFFS */
   size_t padded_scratch_size;
-  float *const restrict scratch_buf = dt_alloc_perthread_float(scratch_size, &padded_scratch_size);
+  float *const restrict scratch_buf = dt_pixelpipe_cache_alloc_perthread_float(scratch_size, &padded_scratch_size);
   if(scratch_buf == NULL) return;
 
   const int chk_height = compute_slice_height(roi_out->height);
@@ -608,8 +608,8 @@ void nlmeans_denoise(const float *const inbuf, float *const outbuf,
   }
 
   // clean up: free the work space
-  dt_free_align(patches);
-  dt_free_align(scratch_buf);
+  dt_pixelpipe_cache_free_align(patches);
+  dt_pixelpipe_cache_free_align(scratch_buf);
   return;
 }
 
@@ -641,7 +641,7 @@ void nlmeans_denoise_sse2(const float *const inbuf, float *const outbuf,
   const size_t scratch_size = SLICE_WIDTH + 2*radius + 1 + 48; // getting false sharing without the +48....
 #endif /* CACHE_PIXDIFFS_SSE */
   size_t padded_scratch_size;
-  float *const restrict scratch_buf = dt_alloc_perthread_float(scratch_size, &padded_scratch_size);
+  float *const restrict scratch_buf = dt_pixelpipe_cache_alloc_perthread_float(scratch_size, &padded_scratch_size);
   if(scratch_buf == NULL) return;
 
   const int chk_height = compute_slice_height(roi_out->height);
@@ -828,8 +828,8 @@ void nlmeans_denoise_sse2(const float *const inbuf, float *const outbuf,
   }
 
   // clean up: free the work space
-  dt_free_align(patches);
-  dt_free_align(scratch_buf);
+  dt_pixelpipe_cache_free_align(patches);
+  dt_pixelpipe_cache_free_align(scratch_buf);
   return;
 }
 #endif /* __SSE2__ */
@@ -1008,7 +1008,7 @@ int nlmeans_denoise_cl(const dt_nlmeans_param_t *const params, const int devid,
 
 error:
   // clean up and return status
-  dt_free_align(patches);
+  dt_pixelpipe_cache_free_align(patches);
   for(int k = 0; k < NUM_BUCKETS; k++)
   {
     dt_opencl_release_mem_object(buckets[k]);
@@ -1103,7 +1103,7 @@ int nlmeans_denoiseprofile_cl(const dt_nlmeans_param_t *const params, const int 
 
 error:
   // clean up and return status
-  dt_free_align(patches);
+  dt_pixelpipe_cache_free_align(patches);
   for(int k = 0; k < NUM_BUCKETS; k++)
   {
     dt_opencl_release_mem_object(buckets[k]);

@@ -171,7 +171,7 @@ static void lmmse_demosaic(dt_dev_pixelpipe_iop_t *piece, float *const restrict 
 #endif
   {
     float *qix[6];
-    float *buffer = dt_alloc_align_float(LMMSE_GRP * LMMSE_GRP * 6);
+    float *buffer = dt_pixelpipe_cache_alloc_align_float_cache(LMMSE_GRP * LMMSE_GRP * 6, 0);
 
     qix[0] = buffer;
     for(int i = 1; i < 6; i++)
@@ -577,7 +577,7 @@ static void lmmse_demosaic(dt_dev_pixelpipe_iop_t *piece, float *const restrict 
         }
       }
     }
-    dt_free_align(buffer);
+    dt_pixelpipe_cache_free_align(buffer);
   }
 }
 

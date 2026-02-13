@@ -242,7 +242,7 @@ static int dwt_wavelet_decompose(float *img, dwt_params_t *const p, _dwt_layer_f
   // buffer to reconstruct the image
   layers = dt_pixelpipe_cache_alloc_align_float_cache((size_t)4 * p->width * p->height, 0);
   // scratch buffer for decomposition
-  temp = dt_alloc_align_float(darktable.num_openmp_threads * 4 * p->width);
+  temp = dt_pixelpipe_cache_alloc_align_float_cache(darktable.num_openmp_threads * 4 * p->width, 0);
 
   if(buffer[1] == NULL || layers == NULL || temp == NULL)
   {
@@ -365,7 +365,7 @@ static int dwt_wavelet_decompose(float *img, dwt_params_t *const p, _dwt_layer_f
   }
 
 cleanup:
-  if(temp) dt_free_align(temp);
+  if(temp) dt_pixelpipe_cache_free_align(temp);
   if(layers) dt_pixelpipe_cache_free_align(layers);
   if(merged_layers) dt_pixelpipe_cache_free_align(merged_layers);
   if(buffer[1]) dt_pixelpipe_cache_free_align(buffer[1]);

@@ -617,7 +617,7 @@ static int _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
         }
         if(width < 1 || height < 1)
         {
-          dt_free_align(mask);
+          dt_pixelpipe_cache_free_align(mask);
           continue;
         }
         const int fts = posy * roi_in->scale;
@@ -629,7 +629,7 @@ static int _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
         // now we search the delta with the source
         if(!masks_get_delta(self, piece, roi_in, form, &dx, &dy))
         {
-          dt_free_align(mask);
+          dt_pixelpipe_cache_free_align(mask);
           continue;
         }
 
@@ -659,7 +659,7 @@ static int _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
             }
           }
         }
-        dt_free_align(mask);
+        dt_pixelpipe_cache_free_align(mask);
       }
     }
   }

@@ -88,7 +88,7 @@ int dt_iop_alloc_image_buffers(struct dt_iop_module_t *const module,
     }
     if (size & DT_IMGSZ_PERTHREAD)
     {
-      *bufptr = dt_alloc_perthread_float(nfloats,paddedsize);
+      *bufptr = dt_pixelpipe_cache_alloc_perthread_float(nfloats,paddedsize);
       if ((size & DT_IMGSZ_CLEARBUF) && *bufptr)
         memset(*bufptr, 0, *paddedsize * darktable.num_openmp_threads * sizeof(float));
     }

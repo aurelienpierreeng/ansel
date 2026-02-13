@@ -315,7 +315,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   float *const mat = init_gaussian_kernel(rad, mat_size, sigma2);
   if(!mat)
   {
-    dt_free_align(tmp);
+    dt_pixelpipe_cache_free_align(tmp);
     dt_iop_copy_image_roi(ovoid, ivoid, 4, roi_in, roi_out, TRUE);
     return 1;
   }
@@ -399,7 +399,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   }
 
   dt_pixelpipe_cache_free_align(mat);
-  dt_free_align(tmp);
+  dt_pixelpipe_cache_free_align(tmp);
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);

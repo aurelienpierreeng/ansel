@@ -26,7 +26,7 @@
 #define TEA_STATE_SIZE (MAX(DT_CACHELINE_BYTES, 2*sizeof(unsigned int)))
 static inline unsigned int* alloc_tea_states(size_t numthreads)
 {
-  unsigned int* states = dt_alloc_align(numthreads * TEA_STATE_SIZE);
+  unsigned int* states = dt_pixelpipe_cache_alloc_align_cache(numthreads * TEA_STATE_SIZE, 0);
   if (states) memset(states, 0, numthreads * TEA_STATE_SIZE);
   return states;
 }
@@ -40,7 +40,7 @@ static inline unsigned int* get_tea_state(unsigned int* const states, int thread
 
 static inline void free_tea_states(unsigned int* states)
 {
-  dt_free_align(states);
+  dt_pixelpipe_cache_free_align(states);
 }
 
 // How many rounds of the mixing function to run for one encryption
@@ -77,4 +77,3 @@ static inline float tpdf(unsigned int urandom)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

@@ -122,10 +122,10 @@ float dt_image_distance_transform(float *const restrict src, float *const restri
   dt_omp_sharedconst(maxdim, width, height)
 #endif
   {
-    float *f = dt_alloc_align_float(maxdim);
-    float *z = dt_alloc_align_float(maxdim + 1);
-    float *d = dt_alloc_align_float(maxdim);
-    int *v = dt_alloc_align(maxdim * sizeof(int));
+    float *f = dt_pixelpipe_cache_alloc_align_float_cache(maxdim, 0);
+    float *z = dt_pixelpipe_cache_alloc_align_float_cache(maxdim + 1, 0);
+    float *d = dt_pixelpipe_cache_alloc_align_float_cache(maxdim, 0);
+    int *v = dt_pixelpipe_cache_alloc_align_cache(maxdim * sizeof(int), 0);
 
     // transform along columns
 #ifdef _OPENMP
@@ -154,10 +154,10 @@ float dt_image_distance_transform(float *const restrict src, float *const restri
         max_distance = fmaxf(max_distance, val);
       }
     }
-    dt_free_align(f);
-    dt_free_align(d);
-    dt_free_align(z);
-    dt_free_align(v);
+    dt_pixelpipe_cache_free_align(f);
+    dt_pixelpipe_cache_free_align(d);
+    dt_pixelpipe_cache_free_align(z);
+    dt_pixelpipe_cache_free_align(v);
   }
   return max_distance;
 }

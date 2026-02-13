@@ -155,7 +155,7 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
 
   // acquire temp memory for distorted pixel coords
   size_t coordbufsize;
-  float *const restrict coordbuf = dt_alloc_perthread_float(2*roi_out->width, &coordbufsize);
+  float *const restrict coordbuf = dt_pixelpipe_cache_alloc_perthread_float(2*roi_out->width, &coordbufsize);
   if(coordbuf == NULL)
   {
     dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
@@ -226,7 +226,7 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
     }
   }
 
-  dt_free_align(coordbuf);
+  dt_pixelpipe_cache_free_align(coordbuf);
 
   dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
 

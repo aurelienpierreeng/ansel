@@ -780,39 +780,49 @@ static inline void dt_unreachable_codepath_with_caller(const char *description, 
 // a multiple of the cache line size.  Returns a pointer to the allocated pool and the adjusted number
 // of objects in each thread's buffer.  Use dt_get_perthread or dt_get_bythread (see below) to access
 // a specific thread's buffer.
-static inline void *dt_alloc_perthread(const size_t n, const size_t objsize, size_t* padded_size)
+static inline void *dt_pixelpipe_cache_alloc_perthread_impl(const size_t n, const size_t objsize, size_t* padded_size, const char *message)
 {
   const size_t alloc_size = n * objsize;
   const size_t cache_lines = (alloc_size + DT_CACHELINE_BYTES - 1) / DT_CACHELINE_BYTES;
   *padded_size = DT_CACHELINE_BYTES * cache_lines / objsize;
-  return __builtin_assume_aligned(dt_alloc_align(DT_CACHELINE_BYTES * cache_lines * darktable.num_openmp_threads), DT_CACHELINE_BYTES);
+  const size_t total_bytes = DT_CACHELINE_BYTES * cache_lines * darktable.num_openmp_threads;
+  void *buf = dt_pixelpipe_cache_alloc_align_cache_impl(darktable.pixelpipe_cache, total_bytes, 0, message);
+  if(!buf) return NULL;
+  return __builtin_assume_aligned(buf, DT_CACHELINE_BYTES);
 }
-static inline void *dt_calloc_perthread(const size_t n, const size_t objsize, size_t* padded_size)
+
+#ifndef dt_pixelpipe_cache_alloc_perthread
+#define dt_pixelpipe_cache_alloc_perthread(n, objsize, padded_size) \
+  ((void *)dt_pixelpipe_cache_alloc_perthread_impl((n), (objsize), (padded_size), __FILE__ ":" DT_STRINGIFY(__LINE__)))
+#endif
+
+static inline void *dt_pixelpipe_cache_calloc_perthread_impl(const size_t n, const size_t objsize, size_t* padded_size, const char *message)
 {
-  void *const buf = (float*)dt_alloc_perthread(n, objsize, padded_size);
+  void *const buf = (float*)dt_pixelpipe_cache_alloc_perthread_impl(n, objsize, padded_size, message);
+  if(!buf) return NULL;
   memset(buf, 0, *padded_size * darktable.num_openmp_threads * objsize);
   return buf;
 }
-// Same as dt_alloc_perthread, but the object is a float.
-static inline float *dt_alloc_perthread_float(const size_t n, size_t* padded_size)
+
+#ifndef dt_pixelpipe_cache_calloc_perthread
+#define dt_pixelpipe_cache_calloc_perthread(n, objsize, padded_size) \
+  ((void *)dt_pixelpipe_cache_calloc_perthread_impl((n), (objsize), (padded_size), __FILE__ ":" DT_STRINGIFY(__LINE__)))
+#endif
+
+// Same as dt_pixelpipe_cache_alloc_perthread, but the object is a float.
+static inline float *dt_pixelpipe_cache_alloc_perthread_float_impl(const size_t n, size_t* padded_size, const char *message)
 {
-  return (float*)dt_alloc_perthread(n, sizeof(float), padded_size);
-}
-// Allocate floats, cleared to zero
-static inline float *dt_calloc_perthread_float(const size_t n, size_t* padded_size)
-{
-  float *const buf = (float*)dt_alloc_perthread(n, sizeof(float), padded_size);
-  if (buf)
-  {
-    for (size_t i = 0; i < *padded_size * darktable.num_openmp_threads; i++)
-      buf[i] = 0.0f;
-  }
-  return buf;
+  return (float*)dt_pixelpipe_cache_alloc_perthread_impl(n, sizeof(float), padded_size, message);
 }
 
-// Given the buffer and object count returned by dt_alloc_perthread, return the current thread's private buffer.
+#ifndef dt_pixelpipe_cache_alloc_perthread_float
+#define dt_pixelpipe_cache_alloc_perthread_float(n, padded_size) \
+  ((float *)dt_pixelpipe_cache_alloc_perthread_float_impl((n), (padded_size), __FILE__ ":" DT_STRINGIFY(__LINE__)))
+#endif
+
+// Given the buffer and object count returned by dt_pixelpipe_cache_alloc_perthread, return the current thread's private buffer.
 #define dt_get_perthread(buf, padsize) DT_IS_ALIGNED((buf) + ((padsize) * dt_get_thread_num()))
-// Given the buffer and object count returned by dt_alloc_perthread and a thread count in 0..darktable.num_openmp_threads,
+// Given the buffer and object count returned by dt_pixelpipe_cache_alloc_perthread and a thread count in 0..darktable.num_openmp_threads,
 // return a pointer to the indicated thread's private buffer.
 #define dt_get_bythread(buf, padsize, tnum) DT_IS_ALIGNED((buf) + ((padsize) * (tnum)))
 

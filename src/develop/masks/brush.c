@@ -1010,18 +1010,18 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
 
   // if we failed, then free all and return
 fail:
-  dt_free_align(*points);
+  dt_pixelpipe_cache_free_align(*points);
   *points = NULL;
   *points_count = 0;
   if(border)
   {
-    dt_free_align(*border);
+    dt_pixelpipe_cache_free_align(*border);
     *border = NULL;
     *border_count = 0;
   }
   if(payload)
   {
-    dt_free_align(*payload);
+    dt_pixelpipe_cache_free_align(*payload);
     *payload = NULL;
     *payload_count = 0;
   }
@@ -2477,16 +2477,16 @@ static int _get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe
   if(_brush_get_pts_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe, &points, &points_count,
                             &border, &border_count, NULL, NULL, get_source) != 0)
   {
-    dt_free_align(points);
-    dt_free_align(border);
+    dt_pixelpipe_cache_free_align(points);
+    dt_pixelpipe_cache_free_align(border);
     return 1;
   }
 
   const guint nb_corner = g_list_length(form->points);
   _brush_bounding_box(points, border, nb_corner, points_count, width, height, posx, posy);
 
-  dt_free_align(points);
-  dt_free_align(border);
+  dt_pixelpipe_cache_free_align(points);
+  dt_pixelpipe_cache_free_align(border);
   return 0;
 }
 
@@ -2545,9 +2545,9 @@ static int _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
   if(_brush_get_pts_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe,&points, &points_count,
                                &border, &border_count, &payload, &payload_count, 0) != 0)
   {
-    dt_free_align(points);
-    dt_free_align(border);
-    dt_free_align(payload);
+    dt_pixelpipe_cache_free_align(points);
+    dt_pixelpipe_cache_free_align(border);
+    dt_pixelpipe_cache_free_align(payload);
     return 1;
   }
 
@@ -2567,14 +2567,15 @@ static int _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
   // we allocate the buffer
   const size_t bufsize = (size_t)(*width) * (*height);
   // ensure that the buffer is zeroed, as the below code only fills in pixels in the falloff region
-  *buffer = dt_calloc_align_float(bufsize);
+  *buffer = dt_pixelpipe_cache_alloc_align_float_cache(bufsize, 0);
   if(*buffer == NULL)
   {
-    dt_free_align(points);
-    dt_free_align(border);
-    dt_free_align(payload);
+    dt_pixelpipe_cache_free_align(points);
+    dt_pixelpipe_cache_free_align(border);
+    dt_pixelpipe_cache_free_align(payload);
     return 1;
   }
+  memset(*buffer, 0, sizeof(float) * bufsize);
 
   // now we fill the falloff
   int p0[2], p1[2];
@@ -2589,9 +2590,9 @@ static int _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
     _brush_falloff(*buffer, p0, p1, *posx, *posy, *width, payload[i * 2], payload[i * 2 + 1]);
   }
 
-  dt_free_align(points);
-  dt_free_align(border);
-  dt_free_align(payload);
+  dt_pixelpipe_cache_free_align(points);
+  dt_pixelpipe_cache_free_align(border);
+  dt_pixelpipe_cache_free_align(payload);
 
   if(darktable.unmuted & DT_DEBUG_PERF)
     dt_print(DT_DEBUG_MASKS, "[masks %s] brush fill buffer took %0.04f sec\n", form->name,
@@ -2667,9 +2668,9 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev
   if(_brush_get_pts_border(module->dev, form, module->iop_order, DT_DEV_TRANSFORM_DIR_BACK_INCL, piece->pipe,&points, &points_count,
                                &border, &border_count, &payload, &payload_count, 0) != 0)
   {
-    dt_free_align(points);
-    dt_free_align(border);
-    dt_free_align(payload);
+    dt_pixelpipe_cache_free_align(points);
+    dt_pixelpipe_cache_free_align(border);
+    dt_pixelpipe_cache_free_align(payload);
     return 1;
   }
 
@@ -2712,9 +2713,9 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev
   // check if the path completely lies outside of roi -> we're done/mask remains empty
   if(xmax < 0 || ymax < 0 || xmin >= width || ymin >= height)
   {
-    dt_free_align(points);
-    dt_free_align(border);
-    dt_free_align(payload);
+    dt_pixelpipe_cache_free_align(points);
+    dt_pixelpipe_cache_free_align(border);
+    dt_pixelpipe_cache_free_align(payload);
     return 0;
   }
 
@@ -2740,9 +2741,9 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev
     _brush_falloff_roi(buffer, p0, p1, width, height, payload[i * 2], payload[i * 2 + 1]);
   }
 
-  dt_free_align(points);
-  dt_free_align(border);
-  dt_free_align(payload);
+  dt_pixelpipe_cache_free_align(points);
+  dt_pixelpipe_cache_free_align(border);
+  dt_pixelpipe_cache_free_align(payload);
 
   if(darktable.unmuted & DT_DEBUG_PERF)
   {

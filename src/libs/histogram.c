@@ -1701,7 +1701,8 @@ void gui_reset(dt_lib_module_t *self)
 void gui_init(dt_lib_module_t *self)
 {
   /* initialize ui widgets */
-  dt_lib_histogram_t *d = (dt_lib_histogram_t *)dt_calloc_align(sizeof(dt_lib_histogram_t));
+  dt_lib_histogram_t *d = (dt_lib_histogram_t *)dt_pixelpipe_cache_alloc_align_cache(sizeof(dt_lib_histogram_t), 0);
+  if(d) memset(d, 0, sizeof(dt_lib_histogram_t));
   self->data = (void *)d;
   d->cst = NULL;
 
@@ -1872,7 +1873,7 @@ void gui_cleanup(dt_lib_module_t *self)
   while(darktable.lib->proxy.colorpicker.live_samples)
     _remove_sample(darktable.lib->proxy.colorpicker.live_samples->data);
 
-  dt_free_align(self->data);
+  dt_pixelpipe_cache_free_align(self->data);
   self->data = NULL;
 }
 

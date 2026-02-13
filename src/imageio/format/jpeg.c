@@ -358,9 +358,9 @@ int write_image(dt_imageio_module_data_t *jpg_tmp, const char *filename, const v
     }
   }
 
-  uint8_t *row = dt_alloc_align(sizeof(uint8_t) * 3 * jpg->global.width);
+  uint8_t *row = dt_pixelpipe_cache_alloc_align_cache(sizeof(uint8_t) * 3 * jpg->global.width, 0);
   const uint8_t *buf;
-  while(jpg->cinfo.next_scanline < jpg->cinfo.image_height)
+  while(row && jpg->cinfo.next_scanline < jpg->cinfo.image_height)
   {
     JSAMPROW tmp[1];
     buf = in + (size_t)jpg->cinfo.next_scanline * jpg->cinfo.image_width * 4;
@@ -370,7 +370,7 @@ int write_image(dt_imageio_module_data_t *jpg_tmp, const char *filename, const v
     jpeg_write_scanlines(&(jpg->cinfo), tmp, 1);
   }
   jpeg_finish_compress(&(jpg->cinfo));
-  dt_free_align(row);
+  dt_pixelpipe_cache_free_align(row);
   jpeg_destroy_compress(&(jpg->cinfo));
   fclose(f);
 
@@ -416,9 +416,10 @@ int read_image(dt_imageio_module_data_t *jpg_tmp, uint8_t *out)
   }
   (void)jpeg_start_decompress(&(jpg->dinfo));
   JSAMPROW row_pointer[1];
-  row_pointer[0] = (uint8_t *)dt_alloc_align((size_t)jpg->dinfo.output_width * jpg->dinfo.num_components);
+  row_pointer[0] = (uint8_t *)dt_pixelpipe_cache_alloc_align_cache(
+      (size_t)jpg->dinfo.output_width * jpg->dinfo.num_components, 0);
   uint8_t *tmp = out;
-  while(jpg->dinfo.output_scanline < jpg->dinfo.image_height)
+  while(row_pointer[0] && jpg->dinfo.output_scanline < jpg->dinfo.image_height)
   {
     if(jpeg_read_scanlines(&(jpg->dinfo), row_pointer, 1) != 1) return 1;
     if(jpg->dinfo.num_components < 3)
@@ -432,13 +433,13 @@ int read_image(dt_imageio_module_data_t *jpg_tmp, uint8_t *out)
   if(setjmp(jerr.setjmp_buffer))
   {
     jpeg_destroy_decompress(&(jpg->dinfo));
-    dt_free_align(row_pointer[0]);
+    dt_pixelpipe_cache_free_align(row_pointer[0]);
     fclose(jpg->f);
     return 1;
   }
   (void)jpeg_finish_decompress(&(jpg->dinfo));
   jpeg_destroy_decompress(&(jpg->dinfo));
-  dt_free_align(row_pointer[0]);
+  dt_pixelpipe_cache_free_align(row_pointer[0]);
   fclose(jpg->f);
   return 0;
 }

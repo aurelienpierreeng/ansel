@@ -159,8 +159,8 @@ static inline int pseudo_solve_gaussian(double *const restrict A,
     return 1;
   }
 
-  double *const restrict A_square = dt_alloc_align(n * n * sizeof(double));
-  double *const restrict y_square = dt_alloc_align(n * sizeof(double));
+  double *const restrict A_square = dt_pixelpipe_cache_alloc_align_cache(n * n * sizeof(double), 0);
+  double *const restrict y_square = dt_pixelpipe_cache_alloc_align_cache(n * sizeof(double), 0);
   
   if(y_square == NULL || A_square == NULL)
   {
@@ -198,8 +198,8 @@ static inline int pseudo_solve_gaussian(double *const restrict A,
   for(size_t k = 0; k < n; k++) y[k] = y_square[k];
 
 error:;
-  if(y_square) dt_free_align(y_square);
-  if(A_square) dt_free_align(A_square);
+  if(y_square) dt_pixelpipe_cache_free_align(y_square);
+  if(A_square) dt_pixelpipe_cache_free_align(A_square);
 
   return err;
 }

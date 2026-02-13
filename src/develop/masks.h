@@ -560,7 +560,7 @@ void dt_group_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_t 
 static inline gboolean _dt_masks_dynbuf_growto(dt_masks_dynbuf_t *a, size_t size)
 {
   const size_t newsize = dt_round_size_sse(sizeof(float) * size) / sizeof(float);
-  float *newbuf = dt_alloc_align_float(newsize);
+  float *newbuf = dt_pixelpipe_cache_alloc_align_float_cache(newsize, 0);
   if (!newbuf)
   {
     // not much we can do here except emit an error message
@@ -572,7 +572,7 @@ static inline gboolean _dt_masks_dynbuf_growto(dt_masks_dynbuf_t *a, size_t size
     memcpy(newbuf, a->buffer, a->size * sizeof(float));
     dt_print(DT_DEBUG_MASKS, "[masks dynbuf '%s'] grows to size %lu (is %p, was %p)\n", a->tag,
              (unsigned long)a->size, newbuf, a->buffer);
-    dt_free_align(a->buffer);
+    dt_pixelpipe_cache_free_align(a->buffer);
   }
   a->size = newsize;
   a->buffer = newbuf;
@@ -706,7 +706,7 @@ static inline void dt_masks_dynbuf_free(dt_masks_dynbuf_t *a)
   if(a == NULL) return;
   dt_print(DT_DEBUG_MASKS, "[masks dynbuf '%s'] freed (was %p)\n", a->tag,
           a->buffer);
-  dt_free_align(a->buffer);
+  dt_pixelpipe_cache_free_align(a->buffer);
   free(a);
 }
 

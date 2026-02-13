@@ -149,7 +149,8 @@ dt_bilateral_t *dt_bilateral_init(const int width,     // width of input image
   b->numslices = darktable.num_openmp_threads;
   b->sliceheight = (height + b->numslices - 1) / b->numslices;
   b->slicerows = (b->size_y + b->numslices - 1) / b->numslices + 2;
-  b->buf = dt_calloc_align_float(b->size_x * b->size_z * b->numslices * b->slicerows);
+  b->buf = dt_pixelpipe_cache_alloc_align_float_cache(b->size_x * b->size_z * b->numslices * b->slicerows, 0);
+  if(b->buf) memset(b->buf, 0, sizeof(float) * b->size_x * b->size_z * b->numslices * b->slicerows);
   if (!b->buf)
   {
     fprintf(stderr,"[bilateral] unable to allocate buffer for %zux%zux%zu grid\n",b->size_x,b->size_y,b->size_z);
@@ -452,7 +453,7 @@ void dt_bilateral_slice_to_output(const dt_bilateral_t *const b, const float *co
 void dt_bilateral_free(dt_bilateral_t *b)
 {
   if(!b) return;
-  dt_free_align(b->buf);
+  dt_pixelpipe_cache_free_align(b->buf);
   free(b);
 }
 

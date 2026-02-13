@@ -799,7 +799,7 @@ const struct dt_interpolation *dt_interpolation_new(enum dt_interpolation_type t
  * @param in [in] Number of input samples
  * @param out [in] Number of output samples
  * @param plength [out] Array of lengths for each pixel filtering (number
- * of taps/indexes to use). This array mus be freed with dt_free_align() when you're
+ * of taps/indexes to use). This array mus be freed with dt_pixelpipe_cache_free_align() when you're
  * done with the plan.
  * @param pkernel [out] Array of filter kernel taps
  * @param pindex [out] Array of sample indexes to be used for applying each kernel tap
@@ -859,7 +859,7 @@ static gboolean _prepare_resampling_plan(const struct dt_interpolation *itor,
   const size_t metareq = dt_round_size(pmeta ? 4 * sizeof(int) * out : 0, DT_CACHELINE_BYTES);
 
   const size_t totalreq = kernelreq + lengthreq + indexreq + scratchreq + metareq;
-  void *blob = dt_alloc_align(totalreq);
+  void *blob = dt_pixelpipe_cache_alloc_align_cache(totalreq, 0);
   if(!blob) return TRUE;
 
   int *lengths = (int *)blob;
@@ -1125,8 +1125,8 @@ exit:
   /* Free the resampling plans. It's nasty to optimize allocs like that, but
    * it simplifies the code :-D. The length array is in fact the only memory
    * allocated. */
-  dt_free_align(hlength);
-  dt_free_align(vlength);
+  dt_pixelpipe_cache_free_align(hlength);
+  dt_pixelpipe_cache_free_align(vlength);
 }
 
 /** Applies resampling (re-scaling) on *full* input and output buffers.
@@ -1367,8 +1367,8 @@ error:
   dt_opencl_release_mem_object(dev_vlength);
   dt_opencl_release_mem_object(dev_vkernel);
   dt_opencl_release_mem_object(dev_vmeta);
-  dt_free_align(hlength);
-  dt_free_align(vlength);
+  dt_pixelpipe_cache_free_align(hlength);
+  dt_pixelpipe_cache_free_align(vlength);
   return err;
 }
 
@@ -1517,8 +1517,8 @@ static void _interpolation_resample_1c_plain(const struct dt_interpolation *itor
   /* Free the resampling plans. It's nasty to optimize allocs like that, but
    * it simplifies the code :-D. The length array is in fact the only memory
    * allocated. */
-  dt_free_align(hlength);
-  dt_free_align(vlength);
+  dt_pixelpipe_cache_free_align(hlength);
+  dt_pixelpipe_cache_free_align(vlength);
 }
 
 /** Applies resampling (re-scaling) on *full* input and output buffers.

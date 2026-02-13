@@ -124,7 +124,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   const float slope = data->slope;
 
   size_t destbuf_size;
-  float *const restrict dest_buf = dt_alloc_perthread_float(roi_out->width, &destbuf_size);
+  float *const restrict dest_buf = dt_pixelpipe_cache_alloc_perthread_float(roi_out->width, &destbuf_size);
   if(dest_buf == NULL)
   {
     free(luminance);
@@ -252,7 +252,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     }
   }
 
-  dt_free_align(dest_buf);
+  dt_pixelpipe_cache_free_align(dest_buf);
 
   // Cleanup
   free(luminance);

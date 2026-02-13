@@ -402,7 +402,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   }
 
   const size_t buffersize = sizeof(float) * 3 * ts * ts + 6 * sizeof(float) * ts * tsh + 8 * 64 + 63;
-  thread_buffers = (char *)dt_alloc_perthread(buffersize + 63, sizeof(char), &padded_buffersize);
+  thread_buffers = (char *)dt_pixelpipe_cache_alloc_perthread(buffersize + 63, sizeof(char), &padded_buffersize);
   if(!thread_buffers)
   {
     err = 1;
@@ -1346,7 +1346,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   }
 
 cleanup:
-  if(thread_buffers) dt_free_align(thread_buffers);
+  if(thread_buffers) dt_pixelpipe_cache_free_align(thread_buffers);
   if(buffer1) free(buffer1);
   if(RawDataTmp) dt_pixelpipe_cache_free_align(RawDataTmp);
   if(Gtmp) dt_pixelpipe_cache_free_align(Gtmp);

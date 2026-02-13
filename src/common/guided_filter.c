@@ -138,7 +138,7 @@ static int guided_filter_tiling(color_image imgg, gray_image img, gray_image img
   }
   const size_t img_dimen = mean.width;
   size_t img_bak_sz;
-  float *img_bak = dt_alloc_perthread_float(9*img_dimen, &img_bak_sz);
+  float *img_bak = dt_pixelpipe_cache_alloc_perthread_float(9*img_dimen, &img_bak_sz);
   if(!img_bak)
   {
     free_color_image(&variance);
@@ -188,7 +188,7 @@ static int guided_filter_tiling(color_image imgg, gray_image img, gray_image img
       err = 1;
     }
   }
-  dt_free_align(img_bak);
+  dt_pixelpipe_cache_free_align(img_bak);
   if(!err && dt_box_mean_vertical(mean.data, mean.height, mean.width, 4|BOXFILTER_KAHAN_SUM, w) != 0)
     err = 1;
   if(!err && dt_box_mean_vertical(variance.data, variance.height, variance.width, 9|BOXFILTER_KAHAN_SUM, w) != 0)

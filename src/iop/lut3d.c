@@ -461,7 +461,7 @@ uint8_t calculate_clut_compressed(dt_iop_lut3d_params_t *const p, const char *co
 
   get_cache_filename(p->lutname, cache_filename);
   buf_size_lut = (size_t)(level * level * level * 3);
-  lclut = dt_alloc_align(sizeof(float) * buf_size_lut);
+  lclut = dt_pixelpipe_cache_alloc_align_cache(sizeof(float) * buf_size_lut, 0);
   if(!lclut)
   {
     fprintf(stderr, "[lut3d] error allocating buffer for gmz lut\n");
@@ -543,7 +543,7 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
   const size_t buf_size = (size_t)png.height * png_get_rowbytes(png.png_ptr, png.info_ptr);
   dt_print(DT_DEBUG_DEV, "[lut3d] allocating %zu bytes for png file\n", buf_size);
   uint8_t *buf = NULL;
-  buf = dt_alloc_align(buf_size);
+  buf = dt_pixelpipe_cache_alloc_align_cache(buf_size, 0);
   if(!buf)
   {
     fprintf(stderr, "[lut3d] error allocating buffer for png lut\n");
@@ -556,17 +556,17 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
   {
     fprintf(stderr, "[lut3d] error - could not read png image `%s'\n", filepath);
     dt_control_log(_("error - could not read png image %s"), filepath);
-    dt_free_align(buf);
+    dt_pixelpipe_cache_free_align(buf);
     return 0;
   }
   const size_t buf_size_lut = (size_t)png.height * png.height * 3;
   dt_print(DT_DEBUG_DEV, "[lut3d] allocating %zu floats for png lut - level %d\n", buf_size_lut, level);
-  float *lclut = dt_alloc_align(sizeof(float) * buf_size_lut);
+  float *lclut = dt_pixelpipe_cache_alloc_align_cache(sizeof(float) * buf_size_lut, 0);
   if(!lclut)
   {
     fprintf(stderr, "[lut3d] error - allocating buffer for png lut\n");
     dt_control_log(_("error - allocating buffer for png lut"));
-    dt_free_align(buf);
+    dt_pixelpipe_cache_free_align(buf);
     return 0;
   }
   // get clut values
@@ -581,7 +581,7 @@ uint16_t calculate_clut_haldclut(dt_iop_lut3d_params_t *const p, const char *con
     for (size_t i = 0; i < buf_size_lut; ++i)
       lclut[i] = (256.0f * (float)buf[2*i] + (float)buf[2*i+1]) * norm;
   }
-  dt_free_align(buf);
+  dt_pixelpipe_cache_free_align(buf);
   *clut = lclut;
   return level;
 }
@@ -754,7 +754,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
         {
           fprintf(stderr, "[lut3d] DOMAIN MIN <> 0.0 is not supported\n");
           dt_control_log(_("DOMAIN MIN <> 0.0 is not supported"));
-          if (lclut) dt_free_align(lclut);
+          if (lclut) dt_pixelpipe_cache_free_align(lclut);
           free(line);
           fclose(cube_file);
         }
@@ -765,7 +765,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
         {
           fprintf(stderr, "[lut3d] DOMAIN MAX <> 1.0 is not supported\n");
           dt_control_log(_("DOMAIN MAX <> 1.0 is not supported"));
-          if (lclut) dt_free_align(lclut);
+          if (lclut) dt_pixelpipe_cache_free_align(lclut);
           free(line);
           fclose(cube_file);
         }
@@ -791,7 +791,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
         }
         buf_size = level * level * level * 3;
         dt_print(DT_DEBUG_DEV, "[lut3d] allocating %zu bytes for cube lut - level %d\n", buf_size, level);
-        lclut = dt_alloc_align(sizeof(float) * buf_size);
+        lclut = dt_pixelpipe_cache_alloc_align_cache(sizeof(float) * buf_size, 0);
         if(!lclut)
         {
           fprintf(stderr, "[lut3d] error - allocating buffer for cube lut\n");
@@ -835,7 +835,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
             (int)i/3, (int)buf_size/3);
     dt_control_log(_("error - cube lut lines number %d is not correct, should be %d"),
                    (int)i/3, (int)buf_size/3);
-    dt_free_align(lclut);
+    dt_pixelpipe_cache_free_align(lclut);
     free(line);
     fclose(cube_file);
     return 0;
@@ -895,7 +895,7 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
             }
             buf_size = level * level * level * 3;
             dt_print(DT_DEBUG_DEV, "[lut3d] allocating %zu bytes for cube lut - level %d\n", buf_size, level);
-            lclut = dt_alloc_align(sizeof(float) * buf_size);
+            lclut = dt_pixelpipe_cache_alloc_align_cache(sizeof(float) * buf_size, 0);
             if(!lclut)
             {
               fprintf(stderr, "[lut3d] error - allocating buffer for cube lut\n");
@@ -941,7 +941,7 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
   {
     fprintf(stderr, "[lut3d] error - cube lut lines number is not correct\n");
     dt_control_log(_("error - cube lut lines number is not correct"));
-    dt_free_align(lclut);
+    dt_pixelpipe_cache_free_align(lclut);
     free(line);
     fclose(cube_file);
     return 0;
@@ -957,7 +957,7 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
   {
     fprintf(stderr, "[lut3d] error - the maximum lut value does not match any valid bit depth\n");
     dt_control_log(_("error - the maximum lut value does not match any valid bit depth"));
-    dt_free_align(lclut);
+    dt_pixelpipe_cache_free_align(lclut);
     return 0;
   }
   const float norm = 1.0f / (float)(inorm - 1);
@@ -1355,7 +1355,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   { // new clut file
     if (d->clut)
     { // reset current clut if any
-      dt_free_align(d->clut);
+      dt_pixelpipe_cache_free_align(d->clut);
       d->clut = NULL;
       d->level = 0;
     }
@@ -1379,7 +1379,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 {
   dt_iop_lut3d_data_t *d = (dt_iop_lut3d_data_t *)piece->data;;
   if (d->clut)
-    dt_free_align(d->clut);
+    dt_pixelpipe_cache_free_align(d->clut);
   d->clut = NULL;
   d->level = 0;
   free(piece->data);

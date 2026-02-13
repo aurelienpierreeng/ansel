@@ -418,7 +418,7 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
       const size_t bufsize = (size_t)roi_out->width * 2 * 3;
 
       size_t padded_bufsize;
-      float *const buf = dt_alloc_perthread_float(bufsize, &padded_bufsize);
+      float *const buf = dt_pixelpipe_cache_alloc_perthread_float(bufsize, &padded_bufsize);
       if(buf == NULL) return 1;
 
 #ifdef _OPENMP
@@ -471,7 +471,7 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
           }
         }
       }
-      dt_free_align(buf);
+      dt_pixelpipe_cache_free_align(buf);
     }
     else
     {
@@ -529,7 +529,7 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
       // acquire temp memory for distorted pixel coords
       const size_t buf2size = (size_t)roi_out->width * 2 * 3;
       size_t padded_buf2size;
-      float *const buf2 = dt_alloc_perthread_float(buf2size, &padded_buf2size);
+      float *const buf2 = dt_pixelpipe_cache_alloc_perthread_float(buf2size, &padded_buf2size);
       if(buf2 == NULL)
       {
         dt_pixelpipe_cache_free_align(buf);
@@ -584,7 +584,7 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
           }
         }
       }
-      if(buf2) dt_free_align(buf2);
+      if(buf2) dt_pixelpipe_cache_free_align(buf2);
     }
     else
     {
@@ -985,7 +985,7 @@ void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *p
   // acquire temp memory for distorted pixel coords
   const size_t bufsize = (size_t)roi_out->width * 2 * 3;
   size_t padded_bufsize;
-  float *const buf = dt_alloc_perthread_float(bufsize, &padded_bufsize);
+  float *const buf = dt_pixelpipe_cache_alloc_perthread_float(bufsize, &padded_bufsize);
   if(buf == NULL) return;
 
 #ifdef _OPENMP
@@ -1017,7 +1017,7 @@ void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *p
                                               roi_in->width);
     }
   }
-  dt_free_align(buf);
+  dt_pixelpipe_cache_free_align(buf);
   delete modifier;
 }
 
@@ -1055,7 +1055,8 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
     float xm = FLT_MAX, xM = -FLT_MAX, ym = FLT_MAX, yM = -FLT_MAX;
     const size_t nbpoints = 2 * awidth + 2 * aheight;
 
-    float *const buf = (float *)dt_alloc_align(sizeof(float) * nbpoints * 2 * 3);
+    float *const buf = (float *)dt_pixelpipe_cache_alloc_align_cache(sizeof(float) * nbpoints * 2 * 3,
+                                                                     piece->pipe->type);
     if(buf == NULL) return;
 
 #ifdef _OPENMP
@@ -1111,7 +1112,7 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
       }
     }
 
-    dt_free_align(buf);
+  dt_pixelpipe_cache_free_align(buf);
 
     // LensFun can return NAN coords, so we need to handle them carefully.
     if(!isfinite(xm) || !(0 <= xm && xm < orig_w)) xm = 0;
