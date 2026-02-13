@@ -63,20 +63,30 @@ static GTimeSpan _gdatetime_to_gtimespan(GDateTime *gdt)
 
 gboolean dt_datetime_exif_to_numbers(dt_datetime_t *dt, const char *exif)
 {
-  if(exif && *exif && dt)
+  if(!exif || !*exif || !dt) return FALSE;
+
+  // fast-path for ISO-8601 (handles timezone offsets and 'T' separator)
+  GDateTime *gdt = g_date_time_new_from_iso8601(exif, darktable.utc_tz);
+  if(gdt)
   {
-    char sdt[DT_DATETIME_LENGTH] = DT_DATETIME_ORIGIN;
-    const int len = strlen(exif) > sizeof(sdt) - 1 ? sizeof(sdt) - 1 : strlen(exif);
-    memcpy(sdt, exif, len);
-    sdt[4] = sdt[7] = '-';
-    GDateTime *gdt = g_date_time_new_from_iso8601(sdt, darktable.utc_tz);
-    if(gdt)
-    {
-      const gboolean res = _datetime_gdatetime_to_numbers(dt, gdt);
-      g_date_time_unref(gdt);
-      return res;
-    }
+    const gboolean res = _datetime_gdatetime_to_numbers(dt, gdt);
+    g_date_time_unref(gdt);
+    return res;
   }
+
+  // fallback for EXIF-like formats (YYYY:MM:DD HH:MM:SS[.sss])
+  // convert date separators to ISO form before parsing
+  char sdt[DT_DATETIME_LENGTH] = DT_DATETIME_ORIGIN;
+  g_strlcpy(sdt, exif, sizeof(sdt));
+  sdt[4] = sdt[7] = '-';
+  gdt = g_date_time_new_from_iso8601(sdt, darktable.utc_tz);
+  if(gdt)
+  {
+    const gboolean res = _datetime_gdatetime_to_numbers(dt, gdt);
+    g_date_time_unref(gdt);
+    return res;
+  }
+
   return FALSE;
 }
 
