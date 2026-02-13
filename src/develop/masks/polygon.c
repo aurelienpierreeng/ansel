@@ -2091,7 +2091,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       // don't draw the last node while creating
       if(gui->creation && k == node_count - 1) break;
 
-      const gboolean corner = dt_masks_is_corner_node(gpt, k, 6, 2);
+      const gboolean squared = dt_masks_is_corner_node(gpt, k, 6, 2);
       const gboolean selected = (k == gui->node_selected || k == gui->node_dragging);
       const gboolean action = (k == gui->node_edited);
       const float x = gpt->points[k * 6 + 2];
@@ -2101,7 +2101,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       if(gui->creation && k == 0)
         dt_draw_node(cr, FALSE, TRUE, TRUE, zoom_scale, x, y);
       else
-        dt_draw_node(cr, corner, action, selected, zoom_scale, x, y);
+        dt_draw_node(cr, squared, action, selected, zoom_scale, x, y);
     }
 
     // Draw the current node's border handle, if needed
@@ -2120,6 +2120,23 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   if(gpt->source_count > node_count * 3 + 2)
   {
     dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, &dt_masks_functions_polygon.draw_shape);
+    
+    //draw the current node projection
+    int current_node = -1;
+    if(gui->creation)
+      current_node = MAX(0, node_count - 1);
+    else if(gui->node_selected >= 0 || gui->node_edited >= 0)
+      current_node = MAX(gui->node_selected, gui->node_edited);
+    if(current_node >= 0)
+    {
+      const int node_index = current_node * 6 +2;
+      const float proj_x = gpt->source[node_index];
+      const float proj_y = gpt->source[node_index + 1];
+      const gboolean selected = gui->node_selected >= 0;
+      const gboolean squared = dt_masks_is_corner_node(gpt, current_node, 6, 2);
+
+      dt_draw_handle(cr, -1, -1, zoom_scale, proj_x, proj_y, selected, squared);
+    }
   }
 }
 
