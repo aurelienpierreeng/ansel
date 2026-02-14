@@ -102,7 +102,7 @@ void init(dt_view_t *self)
 {
   self->data = malloc(sizeof(dt_develop_t));
   dt_dev_init((dt_develop_t *)self->data, 1);
-
+  darktable.develop = (dt_develop_t *)self->data;
   darktable.view_manager->proxy.darkroom.view = self;
 
 #ifdef USE_LUA

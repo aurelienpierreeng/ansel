@@ -59,18 +59,6 @@ static void dt_view_unload_module(dt_view_t *view);
 void dt_view_manager_init(dt_view_manager_t *vm)
 {
   dt_view_manager_load_modules(vm);
-
-  // Modules loaded, let's handle specific cases
-  for(GList *iter = vm->views; iter; iter = g_list_next(iter))
-  {
-    dt_view_t *view = (dt_view_t *)iter->data;
-    if(!strcmp(view->module_name, "darkroom"))
-    {
-      darktable.develop = (dt_develop_t *)view->data;
-      break;
-    }
-  }
-
   vm->current_view = NULL;
   vm->audio.audio_player_id = -1;
   vm->active_images = NULL;
@@ -148,8 +136,6 @@ static int dt_view_load_module(void *v, const char *libname, const char *module_
   module->hscroll_size = module->hscroll_viewport_size = 1.0;
   module->vscroll_pos = module->hscroll_pos = 0.0;
   module->height = module->width = 100; // set to non-insane defaults before first expose/configure.
-
-  if(!strcmp(module->module_name, "darkroom")) darktable.develop = (dt_develop_t *)module->data;
 
 #ifdef USE_LUA
   dt_lua_register_view(darktable.lua_state.state, module);

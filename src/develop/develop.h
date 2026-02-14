@@ -355,6 +355,7 @@ extern "C" {
 
 void dt_dev_init(dt_develop_t *dev, int32_t gui_attached);
 void dt_dev_cleanup(dt_develop_t *dev);
+GList *dt_dev_load_modules(dt_develop_t *dev);
 
 void dt_dev_process_image_job(dt_develop_t *dev);
 void dt_dev_process_preview_job(dt_develop_t *dev);

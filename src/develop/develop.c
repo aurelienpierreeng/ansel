@@ -73,13 +73,13 @@ static gchar *dt_pipe_type_to_str(dt_dev_pixelpipe_type_t pipe_type)
   return type_str;
 }
 
-inline static GList *_load_modules(dt_develop_t *dev)
+GList *dt_dev_load_modules(dt_develop_t *dev)
 {
   GList *res = NULL;
   dt_iop_module_t *module;
   dt_iop_module_so_t *module_so;
   dev->iop_instance = 0;
-  GList *iop = darktable.iop;
+  GList *iop = g_list_first(darktable.iop);
   while(iop)
   {
     module_so = (dt_iop_module_so_t *)iop->data;
@@ -166,7 +166,7 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
 
   dt_dev_reset_roi(dev);
 
-  dev->iop = _load_modules(dev);
+  dev->iop = dt_dev_load_modules(dev);
 }
 
 void dt_dev_cleanup(dt_develop_t *dev)

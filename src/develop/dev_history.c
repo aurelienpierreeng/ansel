@@ -1519,12 +1519,9 @@ static void _process_history_db_entry(dt_develop_t *dev, sqlite3_stmt *stmt, con
 void dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolean no_image)
 {
   if(imgid == UNKNOWN_IMAGE) return;
+
   if(!dev->iop)
-  {
-    fprintf(stderr,
-            "[dt_dev_read_history_ext] ERROR: can't read an history if dev->iop is not inited. Aborting...\n");
-    return;
-  }
+    dev->iop = dt_dev_load_modules(dev);
 
   // Get our hown fresh copy of the image structure.
   // Need to do it here, some modules rely on it to update their default params
