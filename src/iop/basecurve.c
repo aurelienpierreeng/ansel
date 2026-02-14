@@ -938,17 +938,16 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   // create part of the pixelpipe
-  piece->data = calloc(1, sizeof(dt_iop_basecurve_data_t));
+  piece->data = dt_calloc_align(sizeof(dt_iop_basecurve_data_t));
   piece->data_size = sizeof(dt_iop_basecurve_data_t);
-  self->commit_params(self, self->default_params, pipe, piece);
 }
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   // clean up everything again.
   dt_iop_basecurve_data_t *d = (dt_iop_basecurve_data_t *)(piece->data);
-  dt_draw_curve_destroy(d->curve);
-  free(piece->data);
+  if(d->curve) dt_draw_curve_destroy(d->curve);
+  dt_free_align(piece->data);
   piece->data = NULL;
 }
 

@@ -526,7 +526,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_lowpass_data_t *d = (dt_iop_lowpass_data_t *)calloc(1, sizeof(dt_iop_lowpass_data_t));
+  dt_iop_lowpass_data_t *d = (dt_iop_lowpass_data_t *)dt_calloc_align(sizeof(dt_iop_lowpass_data_t));
   piece->data = (void *)d;
   piece->data_size = sizeof(dt_iop_lowpass_data_t);
   for(int k = 0; k < 0x10000; k++) d->ctable[k] = d->ltable[k] = 100.0f * k / 0x10000; // identity
@@ -534,7 +534,7 @@ void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
 
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  free(piece->data);
+  dt_free_align(piece->data);
   piece->data = NULL;
 }
 

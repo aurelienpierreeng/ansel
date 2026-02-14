@@ -2905,7 +2905,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *params, dt_dev
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_denoiseprofile_data_t *d = (dt_iop_denoiseprofile_data_t *)malloc(sizeof(dt_iop_denoiseprofile_data_t));
+  dt_iop_denoiseprofile_data_t *d = (dt_iop_denoiseprofile_data_t *)dt_calloc_align(sizeof(dt_iop_denoiseprofile_data_t));
   dt_iop_denoiseprofile_params_t *default_params = (dt_iop_denoiseprofile_params_t *)self->default_params;
 
   piece->data = (void *)d;
@@ -2922,7 +2922,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 {
   dt_iop_denoiseprofile_data_t *d = (dt_iop_denoiseprofile_data_t *)(piece->data);
   for(int ch = 0; ch < DT_DENOISE_PROFILE_NONE; ch++) dt_draw_curve_destroy(d->curve[ch]);
-  free(piece->data);
+  dt_free_align(piece->data);
   piece->data = NULL;
 }
 

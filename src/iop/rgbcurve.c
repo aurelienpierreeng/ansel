@@ -1458,7 +1458,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   // create part of the pixelpipe
-  dt_iop_rgbcurve_data_t *d = (dt_iop_rgbcurve_data_t *)malloc(sizeof(dt_iop_rgbcurve_data_t));
+  dt_iop_rgbcurve_data_t *d = (dt_iop_rgbcurve_data_t *)dt_calloc_align(sizeof(dt_iop_rgbcurve_data_t));
   dt_iop_rgbcurve_params_t *default_params = (dt_iop_rgbcurve_params_t *)self->default_params;
   piece->data = (void *)d;
   piece->data_size = sizeof(dt_iop_rgbcurve_data_t);
@@ -1484,7 +1484,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
   // clean up everything again.
   dt_iop_rgbcurve_data_t *d = (dt_iop_rgbcurve_data_t *)(piece->data);
   for(int ch = 0; ch < DT_IOP_RGBCURVE_MAX_CHANNELS; ch++) dt_draw_curve_destroy(d->curve[ch]);
-  free(piece->data);
+  dt_free_align(piece->data);
   piece->data = NULL;
 }
 

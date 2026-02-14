@@ -266,7 +266,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   // create part of the pixelpipe
-  dt_iop_equalizer_data_t *d = (dt_iop_equalizer_data_t *)malloc(sizeof(dt_iop_equalizer_data_t));
+  dt_iop_equalizer_data_t *d = (dt_iop_equalizer_data_t *)dt_calloc_align(sizeof(dt_iop_equalizer_data_t));
   dt_iop_equalizer_params_t *default_params = (dt_iop_equalizer_params_t *)self->default_params;
   piece->data = (void *)d;
   piece->data_size = sizeof(dt_iop_equalizer_data_t);
@@ -287,7 +287,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
 // clean up everything again.
   dt_iop_equalizer_data_t *d = (dt_iop_equalizer_data_t *)(piece->data);
   for(int ch = 0; ch < 3; ch++) dt_draw_curve_destroy(d->curve[ch]);
-  free(piece->data);
+  dt_free_align(piece->data);
   piece->data = NULL;
 }
 
