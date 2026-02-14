@@ -284,9 +284,6 @@ static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_im
   dt_dev_init(dev_src, FALSE);
   dt_dev_init(dev_dest, FALSE);
 
-  dev_src->iop = dt_iop_load_modules_ext(dev_src, TRUE);
-  dev_dest->iop = dt_iop_load_modules_ext(dev_dest, TRUE);
-
   dt_dev_read_history_ext(dev_src, imgid, TRUE);
 
   // This prepends the default modules and converts just in case it's an empty history

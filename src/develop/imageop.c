@@ -142,17 +142,22 @@ static void default_commit_params(struct dt_iop_module_t *self, dt_iop_params_t 
   memcpy(piece->data, params, self->params_size);
 }
 
+// WARNING: this works only if the data struct has the same size
+// as the param structure. You need to implement your own IOP module
+// method if they don't match !!!
 static void default_init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
                               dt_dev_pixelpipe_iop_t *piece)
 {
-  piece->data = calloc(1,self->params_size);
-  piece->data_size = self->params_size;
+  size_t data_size = (size_t)self->params_size;
+  piece->data = dt_calloc_align(data_size);
+  piece->data_size = data_size;
 }
 
 static void default_cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
                                  dt_dev_pixelpipe_iop_t *piece)
 {
-  free(piece->data);
+  dt_free_align(piece->data);
+  piece->data = NULL;
 }
 
 static void default_gui_cleanup(dt_iop_module_t *self)
@@ -444,7 +449,15 @@ void dt_iop_init_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe_t 
                       struct dt_dev_pixelpipe_iop_t *piece)
 {
   module->init_pipe(module, pipe, piece);
-  piece->blendop_data = calloc(1, sizeof(dt_develop_blend_params_t));
+  piece->blendop_data = dt_calloc_align(sizeof(dt_develop_blend_params_t));
+}
+
+void dt_iop_cleanup_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe,
+                        struct dt_dev_pixelpipe_iop_t *piece)
+{
+  module->cleanup_pipe(module, pipe, piece);
+  dt_free_align(piece->blendop_data);
+  piece->blendop_data = NULL;
 }
 
 static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
@@ -1380,44 +1393,6 @@ int dt_iop_load_module(dt_iop_module_t *module, dt_iop_module_so_t *module_so, d
     return 1;
   }
   return 0;
-}
-
-GList *dt_iop_load_modules_ext(dt_develop_t *dev, gboolean no_image)
-{
-  GList *res = NULL;
-  dt_iop_module_t *module;
-  dt_iop_module_so_t *module_so;
-  dev->iop_instance = 0;
-  GList *iop = darktable.iop;
-  while(iop)
-  {
-    module_so = (dt_iop_module_so_t *)iop->data;
-    module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
-    if(dt_iop_load_module_by_so(module, module_so, dev))
-    {
-      free(module);
-      continue;
-    }
-    res = g_list_insert_sorted(res, module, dt_sort_iop_by_order);
-    module->global_data = module_so->data;
-    module->so = module_so;
-    iop = g_list_next(iop);
-  }
-
-  GList *it = res;
-  while(it)
-  {
-    module = (dt_iop_module_t *)it->data;
-    module->instance = dev->iop_instance++;
-    module->multi_name[0] = '\0';
-    it = g_list_next(it);
-  }
-  return res;
-}
-
-GList *dt_iop_load_modules(dt_develop_t *dev)
-{
-  return dt_iop_load_modules_ext(dev, FALSE);
 }
 
 void dt_iop_cleanup_module(dt_iop_module_t *module)

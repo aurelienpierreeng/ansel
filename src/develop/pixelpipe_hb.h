@@ -212,8 +212,6 @@ typedef struct dt_dev_pixelpipe_t
   dt_colorspaces_color_profile_type_t icc_type;
   gchar *icc_filename;
   dt_iop_color_intent_t icc_intent;
-  // snapshot of modules
-  GList *iop;
   // snapshot of modules iop_order
   GList *iop_order_list;
   // snapshot of mask list
@@ -292,6 +290,7 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe);
 // cleanup all nodes except clean input/output
 void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe);
 // sync with develop_t history stack from scratch (new node added, have to pop old ones)
+// this should be called with dev->history_mutex locked in read mode
 void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev);
 // sync with develop_t history stack by just copying the top item params (same op, new params on top)
 void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, const char *caller_func);

@@ -765,7 +765,6 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
 
     dt_dev_init(dev_dest, FALSE);
 
-    dev_dest->iop = dt_iop_load_modules_ext(dev_dest, TRUE);
     dev_dest->image_storage.id = imgid;
 
     // now let's deal with the iop-order (possibly merging style & target lists)

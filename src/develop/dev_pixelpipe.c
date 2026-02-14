@@ -5,6 +5,7 @@
 #include "develop/pixelpipe.h"
 #include "develop/blend.h"
 #include "control/control.h"
+#include <stdint.h>
 
 static void _change_pipe(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_change_t flag)
 {
@@ -162,7 +163,7 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t 
 {
   dt_iop_roi_t roi_in = (dt_iop_roi_t){ 0, 0, width_in, height_in, 1.0 };
   dt_iop_roi_t roi_out;
-  GList *modules = g_list_first(pipe->iop);
+  GList *modules = g_list_first(dev->iop);
   GList *pieces = g_list_first(pipe->nodes);
   while(modules)
   {
@@ -204,7 +205,7 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
 
   dt_iop_roi_t roi_out_temp = roi_out;
   dt_iop_roi_t roi_in;
-  GList *modules = g_list_last(pipe->iop);
+  GList *modules = g_list_last(dev->iop);
   GList *pieces = g_list_last(pipe->nodes);
   while(modules)
   {

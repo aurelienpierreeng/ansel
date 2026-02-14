@@ -21,6 +21,7 @@
 #include <gmodule.h>
 #include <gtk/gtk.h>
 #include <sched.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -325,14 +326,13 @@ void dt_iop_load_modules_so(void);
 void dt_iop_unload_modules_so(void);
 /** load a module for a given .so */
 int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, struct dt_develop_t *dev);
-/** returns a list of instances referencing stuff loaded in load_modules_so. */
-GList *dt_iop_load_modules_ext(struct dt_develop_t *dev, gboolean no_image);
-GList *dt_iop_load_modules(struct dt_develop_t *dev);
 int dt_iop_load_module(dt_iop_module_t *module, dt_iop_module_so_t *module_so, struct dt_develop_t *dev);
 /** calls module->cleanup and closes the dl connection. */
 void dt_iop_cleanup_module(dt_iop_module_t *module);
 /** initialize pipe. */
 void dt_iop_init_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe,
+                      struct dt_dev_pixelpipe_iop_t *piece);
+void dt_iop_cleanup_pipe(struct dt_iop_module_t *module, struct dt_dev_pixelpipe_t *pipe,
                       struct dt_dev_pixelpipe_iop_t *piece);
 /** checks if iop do have an ui */
 gboolean dt_iop_so_is_hidden(dt_iop_module_so_t *module);

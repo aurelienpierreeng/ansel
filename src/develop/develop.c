@@ -73,6 +73,39 @@ static gchar *dt_pipe_type_to_str(dt_dev_pixelpipe_type_t pipe_type)
   return type_str;
 }
 
+inline static GList *_load_modules(dt_develop_t *dev)
+{
+  GList *res = NULL;
+  dt_iop_module_t *module;
+  dt_iop_module_so_t *module_so;
+  dev->iop_instance = 0;
+  GList *iop = darktable.iop;
+  while(iop)
+  {
+    module_so = (dt_iop_module_so_t *)iop->data;
+    module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
+    if(dt_iop_load_module_by_so(module, module_so, dev))
+    {
+      free(module);
+      continue;
+    }
+    res = g_list_insert_sorted(res, module, dt_sort_iop_by_order);
+    module->global_data = module_so->data;
+    module->so = module_so;
+    iop = g_list_next(iop);
+  }
+
+  GList *it = res;
+  while(it)
+  {
+    module = (dt_iop_module_t *)it->data;
+    module->instance = dev->iop_instance++;
+    module->multi_name[0] = '\0';
+    it = g_list_next(it);
+  }
+  return res;
+}
+
 void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
 {
   memset(dev, 0, sizeof(dt_develop_t));
@@ -132,6 +165,8 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dev->overexposed.upper = dt_conf_get_float("darkroom/ui/overexposed/upper");
 
   dt_dev_reset_roi(dev);
+
+  dev->iop = _load_modules(dev);
 }
 
 void dt_dev_cleanup(dt_develop_t *dev)
@@ -501,7 +536,6 @@ int dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
 
   // we need a global lock as the dev->iop set must not be changed until read history is terminated
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
-  dev->iop = dt_iop_load_modules(dev);
 
   dt_dev_read_history_ext(dev, dev->image_storage.id, FALSE);
 
@@ -911,8 +945,8 @@ int dt_dev_distort_backtransform(dt_develop_t *dev, float *points, size_t points
 int dt_dev_distort_transform_locked(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const double iop_order,
                                     const int transf_direction, float *points, size_t points_count)
 {
-  GList *modules = pipe->iop;
-  GList *pieces = pipe->nodes;
+  GList *modules = g_list_first(dev->iop);
+  GList *pieces = g_list_first(pipe->nodes);
   while(modules)
   {
     if(!pieces)
@@ -950,7 +984,7 @@ int dt_dev_distort_transform_plus(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, c
 int dt_dev_distort_backtransform_locked(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const double iop_order,
                                         const int transf_direction, float *points, size_t points_count)
 {
-  GList *modules = g_list_last(pipe->iop);
+  GList *modules = g_list_last(dev->iop);
   GList *pieces = g_list_last(pipe->nodes);
   while(modules)
   {

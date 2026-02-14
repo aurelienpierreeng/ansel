@@ -210,7 +210,6 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->icc_type = DT_COLORSPACE_NONE;
   pipe->icc_filename = NULL;
   pipe->icc_intent = DT_INTENT_LAST;
-  pipe->iop = NULL;
   pipe->iop_order_list = NULL;
   pipe->forms = NULL;
   pipe->store_all_raster_masks = FALSE;
@@ -314,13 +313,11 @@ void dt_dev_pixelpipe_reset_reentry(dt_dev_pixelpipe_t *pipe)
 void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
 {
   // destroy all nodes
-  for(GList *nodes = pipe->nodes; nodes; nodes = g_list_next(nodes))
+  for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
     // printf("cleanup module `%s'\n", piece->module->name());
-    piece->module->cleanup_pipe(piece->module, pipe, piece);
-    free(piece->blendop_data);
-    piece->blendop_data = NULL;
+    dt_iop_cleanup_pipe(piece->module, pipe, piece);
     free(piece->histogram);
     piece->histogram = NULL;
     dt_pixelpipe_raster_cleanup(piece->raster_masks);
@@ -328,12 +325,6 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
   }
   g_list_free(pipe->nodes);
   pipe->nodes = NULL;
-  // also cleanup iop here
-  if(pipe->iop)
-  {
-    g_list_free(pipe->iop);
-    pipe->iop = NULL;
-  }
   // and iop order
   g_list_free_full(pipe->iop_order_list, free);
   pipe->iop_order_list = NULL;
@@ -343,7 +334,6 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   // check that the pipe was actually properly cleaned up after the last run
   g_assert(pipe->nodes == NULL);
-  g_assert(pipe->iop == NULL);
   g_assert(pipe->iop_order_list == NULL);
   pipe->iop_order_list = dt_ioppr_iop_order_copy_deep(dev->iop_order_list);
 
@@ -351,8 +341,7 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   // TODO: don't add deprecated modules that are not enabled are not added to pipeline.
   // currently, that loads 84 modules of which a solid third are not used anymore.
   // if(module->flags() & IOP_FLAGS_DEPRECATED && !(module->enabled)) continue;
-  pipe->iop = g_list_copy(dev->iop);
-  for(GList *modules = pipe->iop; modules; modules = g_list_next(modules))
+  for(GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)calloc(1, sizeof(dt_dev_pixelpipe_iop_t));
@@ -390,6 +379,7 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     piece->dsc_mask.filters = 0;
 
     dt_iop_init_pipe(piece->module, pipe, piece);
+    
     pipe->nodes = g_list_append(pipe->nodes, piece);
   }
 }
@@ -1525,7 +1515,7 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
         // In this situation, OpenCL can't use a pinned memory to copy a cropped buf.buf, 
         // so we will need to copy the copy, aka output (the cache).
         GList *pieces = g_list_first(pipe->nodes);
-        GList *modules = g_list_first(pipe->iop);
+        GList *modules = g_list_first(dev->iop);
         dt_dev_pixelpipe_iop_t *first_piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
         dt_iop_module_t *first_module = (dt_iop_module_t *)modules->data;
         const int supports_opencl = _is_opencl_supported(pipe, first_piece, first_module);
@@ -1992,7 +1982,7 @@ static void _set_opencl_cache(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   gboolean opencl_cache = TRUE;
 
   GList *pieces = g_list_last(pipe->nodes);
-  GList *modules = g_list_last(pipe->iop);
+  GList *modules = g_list_last(dev->iop);
   while(pieces)
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
@@ -2115,7 +2105,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
   // Get the previous output size of the module, for cache invalidation.
   dt_dev_pixelpipe_get_roi_in(pipe, dev, roi);
   dt_pixelpipe_get_global_hash(pipe, dev);
-  const guint pos = g_list_length(pipe->iop);
+  const guint pos = g_list_length(dev->iop);
   _set_opencl_cache(pipe, dev);
 
   void *buf = NULL;
@@ -2150,7 +2140,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
   dt_pthread_rwlock_unlock(&dev->masks_mutex);
 
   // go through the list of modules from the end:
-  GList *modules = g_list_last(pipe->iop);
+  GList *modules = g_list_last(dev->iop);
   GList *pieces = g_list_last(pipe->nodes);
 
   pipe->opencl_enabled = dt_opencl_update_settings(); // update enabled flag and profile from preferences
