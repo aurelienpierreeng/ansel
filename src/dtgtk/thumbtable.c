@@ -1540,6 +1540,11 @@ gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpo
       _alternative_mode(table, TRUE);
       return TRUE;
     }
+    case GDK_KEY_Delete:
+    {
+      dt_control_remove_images();
+      return TRUE;
+    }
   }
   return FALSE;
 }
@@ -1731,6 +1736,10 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
   path = dt_accels_build_path(_("Lighttable/Thumbtable"), _("Enable thumbnail transient alternative view"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->lighttable_accels,
                                  path, table->grid, GDK_KEY_Alt_L, 0);
+  g_free(path);
+  path = dt_accels_build_path(_("Global/Menu/File"), _("Remove image from library"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->lighttable_accels,
+                                 path, table->grid, GDK_KEY_Delete, 0);
   g_free(path);
   return table;
 }

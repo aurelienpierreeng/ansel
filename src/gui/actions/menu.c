@@ -82,23 +82,32 @@ dt_menu_entry_t *set_menu_entry(GtkWidget **menus, GList **items_list,
   // Wire the accelerator
   // Publish a new accel to the global map and attach it to the menu entry widget
   if(action_callback != NULL)
-  {
-    gchar *clean_label = strip_markup(label);
+  {    
+    // Register accel only if requested
+    if(accel_group != NULL && key_val != 0 && mods != 0)
+    {
+      gchar *clean_label = strip_markup(label);
 
-    // slash is not allowed in control names because that makes accel pathes fail
-    assert(g_strrstr(clean_label, "/") == NULL);
+      // slash is not allowed in control names because that makes accel pathes fail
+      assert(g_strrstr(clean_label, "/") == NULL);
 
-    const gchar *parent_path = gtk_menu_get_accel_path(parent);
+      const gchar *parent_path = gtk_menu_get_accel_path(parent);
 
-    dt_accels_new_action_shortcut(
-        darktable.gui->accels, action_callback, entry->widget, accel_group,
-        parent_path, clean_label,
-        key_val, mods, FALSE, _("Triggers the action"));
+      dt_accels_new_action_shortcut(
+          darktable.gui->accels, action_callback, entry->widget, accel_group,
+          parent_path, clean_label,
+          key_val, mods, FALSE, _("Triggers the action"));
 
-    gchar *path = dt_accels_build_path(parent_path, clean_label);
-    gtk_widget_set_accel_path(entry->widget, path, (action_callback != NULL) ? accel_group : NULL);
-    g_free(path);
-    g_free(clean_label);
+      gchar *path = dt_accels_build_path(parent_path, clean_label);
+      gtk_widget_set_accel_path(entry->widget, path, (action_callback != NULL) ? accel_group : NULL);
+      g_free(path);
+      g_free(clean_label);
+    }
+    else if(GTK_IS_ACCEL_LABEL(child))
+    {
+      // Show a fake shortcut
+      gtk_accel_label_set_accel(GTK_ACCEL_LABEL(child), key_val, mods);
+    }
 
     g_signal_connect(G_OBJECT(entry->widget), "activate", G_CALLBACK(_activate_callback_to_action_callback), entry);
   }
@@ -247,6 +256,18 @@ void add_sub_menu_entry(GtkWidget **menus, GList **lists, const gchar *label, co
                              sensitive_callback, key_val, mods, darktable.gui->accels->global_accels);
 }
 
+void add_no_accel_sub_menu_entry(GtkWidget **menus, GList **lists, const gchar *label, const dt_menus_t index,
+                                void *data,
+                                gboolean (*action_callback)(GtkAccelGroup *group, GObject *acceleratable,
+                                                            guint keyval, GdkModifierType mods, gpointer user_data),
+                                gboolean (*checked_callback)(GtkWidget *widget),
+                                gboolean (*active_callback)(GtkWidget *widget),
+                                gboolean (*sensitive_callback)(GtkWidget *widget), guint key_val,
+                                GdkModifierType mods)
+{
+  add_generic_sub_menu_entry(menus, lists, label, index, data, action_callback, checked_callback, active_callback,
+                             sensitive_callback, key_val, mods, NULL);
+}
 
 void add_generic_sub_sub_menu_entry(GtkWidget **menus, GtkWidget *parent, GList **lists, const gchar *label,
                                     const dt_menus_t index, void *data,
@@ -325,4 +346,17 @@ gboolean _is_lighttable()
 {
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
   return cv && !g_strcmp0(cv->module_name, "lighttable");
+}
+
+gboolean _is_darkroom()
+{
+  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
+  return cv && !g_strcmp0(cv->module_name, "darkroom");
+}
+
+gboolean has_active_image_in_lighttable()
+{
+  const gboolean image = has_active_images();
+  const gboolean lighttable = _is_lighttable();
+  return image && lighttable;
 }

@@ -1234,10 +1234,12 @@ void gui_init(dt_view_t *self)
   dt_accels_new_darkroom_action(_switch_to_prev_picture, self, N_("Darkroom/Actions"),
                                 N_("Switch to the previous picture"), GDK_KEY_Left, GDK_MOD1_MASK, _("Triggers the action"));
 
-  dt_accels_new_darkroom_action(_focus_main_image, self, N_("Darkroom/Actions"),
-                                N_("Give focus to the main image"), GDK_KEY_Return, 0, _("Triggers the action"));
+  gchar *path = dt_accels_build_path(_("Darkroom/Actions"), _("Give focus to the main image"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
+                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Return, 0);
+  g_free(path);
 
-  gchar *path = dt_accels_build_path(_("Darkroom/Main image"), _("Move up"));
+  path = dt_accels_build_path(_("Darkroom/Main image"), _("Move up"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_Up, 0);
   g_free(path);
@@ -2024,7 +2026,8 @@ void enter(dt_view_t *self)
                             G_CALLBACK(_view_darkroom_filmstrip_activate_callback), self);
 
   dt_view_image_info_update(dev->image_storage.id);
-  dt_dev_update_mouse_effect_radius(dev);
+  gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui)); // ensure the center view has focus for keybindings to work
+  dt_dev_update_mouse_effect_radius(dev); // FIXME: Should be placed right after dev->natural_scale is properly initialized.
 }
 
 void leave(dt_view_t *self)
@@ -2667,6 +2670,18 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
     {
       dev->roi.x += delta / (float)dev->pipe->processed_height;
       _key_scroll(dev);
+      return 1;
+    }
+    case GDK_KEY_Escape:
+    {
+      dt_ctl_switch_mode_to("lighttable");
+      return 1;
+    }
+    case GDK_KEY_Return:
+    case GDK_KEY_KP_Enter:
+    {
+      // "Give focus to the main image"
+      gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
       return 1;
     }
   }

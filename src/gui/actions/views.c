@@ -59,9 +59,21 @@ void append_views(GtkWidget **menus, GList **lists, const dt_menus_t index)
     else if(!g_strcmp0(view->module_name, "map"))
       callback = view_switch_to_map;
 
-    add_sub_menu_entry(menus, lists, view->name(view), index, view->module_name, callback,
-                       NULL, views_active_callback, views_sensitive_callback,
-                       !g_strcmp0(view->module_name, "lighttable") ? GDK_KEY_Escape : 0, 0);
+    guint key = 0;
+    if(!g_strcmp0(view->module_name, "lighttable"))
+      key = GDK_KEY_Escape;
+    else if(!g_strcmp0(view->module_name, "darkroom"))
+      key = GDK_KEY_Return;
+    else if(!g_strcmp0(view->module_name, "print"))
+      key = 0;
+    else if(!g_strcmp0(view->module_name, "slideshow"))
+      key = 0;
+    else if(!g_strcmp0(view->module_name, "map"))
+      key = 0;
+
+
+    add_no_accel_sub_menu_entry(menus, lists, view->name(view), index, view->module_name, callback,
+                       NULL, views_active_callback, views_sensitive_callback, key, 0);
 
     // Darkroom is not handled in global menu since it needs to be opened with an image ID,
     // so we only handle it from filmstrip and lighttable thumbnails.

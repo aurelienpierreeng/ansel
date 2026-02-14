@@ -112,6 +112,16 @@ void add_generic_sub_sub_menu_entry(GtkWidget **menus, GtkWidget *parent, GList 
                                     gboolean (*sensitive_callback)(GtkWidget *widget), guint key_val,
                                     GdkModifierType mods, GtkAccelGroup *accel_group);
 
+// add a submenu entry without a real accel, for when the key shortcut is handled in key_pressed event.
+void add_no_accel_sub_menu_entry(GtkWidget **menus, GList **lists, const gchar *label, const dt_menus_t index,
+                                void *data,
+                                gboolean (*action_callback)(GtkAccelGroup *group, GObject *acceleratable,
+                                                            guint keyval, GdkModifierType mods, gpointer user_data),
+                                gboolean (*checked_callback)(GtkWidget *widget),
+                                gboolean (*active_callback)(GtkWidget *widget),
+                                gboolean (*sensitive_callback)(GtkWidget *widget), guint key_val,
+                                GdkModifierType mods);
+
 void add_sub_sub_menu_entry(GtkWidget **menus, GtkWidget *parent, GList **lists, const gchar *label,
                             const dt_menus_t index, void *data,
                             gboolean (*action_callback)(GtkAccelGroup *group, GObject *acceleratable, guint keyval,
@@ -134,6 +144,7 @@ GtkWidget *get_last_widget(GList **list);
 gboolean has_selection();
 gboolean has_active_images();
 gboolean _is_lighttable();
+gboolean has_active_image_in_lighttable();
 
 
 void append_display(GtkWidget **menus, GList **lists, const dt_menus_t index);

@@ -237,11 +237,11 @@ void append_file(GtkWidget **menus, GList **lists, const dt_menus_t index)
 
   add_menu_separator(menus[index]);
 
-  add_sub_menu_entry(menus, lists, _("Remove from library"), index, NULL, GET_ACCEL_WRAPPER(dt_control_remove_images), NULL, NULL,
-                     has_active_images, GDK_KEY_Delete, 0);
+  add_no_accel_sub_menu_entry(menus, lists, _("Remove from library"), index, NULL, GET_ACCEL_WRAPPER(dt_control_remove_images), NULL, NULL,
+                             has_active_image_in_lighttable, GDK_KEY_Delete, 0);
 
   add_sub_menu_entry(menus, lists, _("Delete on disk"), index, NULL, GET_ACCEL_WRAPPER(dt_control_delete_images), NULL, NULL,
-                     has_active_images, GDK_KEY_Delete, GDK_SHIFT_MASK);
+                     has_active_image_in_lighttable, GDK_KEY_Delete, GDK_SHIFT_MASK);
 
   add_menu_separator(menus[index]);
 
