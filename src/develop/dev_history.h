@@ -163,6 +163,16 @@ int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, GList 
  */
 void dt_dev_history_compress(struct dt_develop_t *dev);
 
+/**
+ * @brief Find the first history entry on dev->history attached to a module
+ * 
+ * @param dev 
+ * @param module 
+ * @return dt_dev_history_item_t* 
+ */
+dt_dev_history_item_t *dt_dev_history_get_first_item_by_module(struct dt_develop_t *dev, struct dt_iop_module_t *module);
+
+
 #ifdef __cplusplus
 }
 #endif

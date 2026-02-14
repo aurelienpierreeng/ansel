@@ -1970,7 +1970,7 @@ int dt_ioppr_check_iop_order(dt_develop_t *dev, const int32_t imgid, const char 
   // check if there's duplicate or out-of-order iop_order
   {
     dt_iop_module_t *mod_prev = NULL;
-    for(const GList *modules = dev->iop; modules; modules = g_list_next(modules))
+    for(const GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
     {
       dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
       if(mod->iop_order != INT_MAX)

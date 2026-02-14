@@ -17,10 +17,10 @@ static void _process_history_db_entry(dt_develop_t *dev, sqlite3_stmt *stmt, con
                                       int *legacy_params, gboolean presets);
 
 // returns the first history item with hist->module == module
-static dt_dev_history_item_t *_search_history_by_module(dt_develop_t *dev, dt_iop_module_t *module)
+dt_dev_history_item_t *dt_dev_history_get_first_item_by_module(dt_develop_t *dev, dt_iop_module_t *module)
 {
   dt_dev_history_item_t *hist_mod = NULL;
-  for(GList *history = dev->history; history; history = g_list_next(history))
+  for(GList *history = g_list_first(dev->history); history; history = g_list_next(history))
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
 
@@ -37,7 +37,7 @@ static dt_dev_history_item_t *_search_history_by_module(dt_develop_t *dev, dt_io
 static dt_dev_history_item_t *_search_history_by_op(dt_develop_t *dev, dt_iop_module_t *module)
 {
   dt_dev_history_item_t *hist_mod = NULL;
-  for(GList *history = dev->history; history; history = g_list_next(history))
+  for(GList *history = g_list_first(dev->history); history; history = g_list_next(history))
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
 
@@ -175,7 +175,7 @@ int dt_history_merge_module_into_history(dt_develop_t *dev_dest, dt_develop_t *d
   {
     dt_iop_module_t *module_duplicate = NULL;
     // check if there's a module with the same iop_order
-    for( GList *modules_dest = dev_dest->iop; modules_dest; modules_dest = g_list_next(modules_dest))
+    for( GList *modules_dest = g_list_first(dev_dest->iop); modules_dest; modules_dest = g_list_next(modules_dest))
     {
       dt_iop_module_t *mod = (dt_iop_module_t *)(modules_dest->data);
 
@@ -327,12 +327,12 @@ static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_im
     dt_print(DT_DEBUG_PARAMS, "[_history_copy_and_paste_on_image_merge] pasting all IOP\n");
 
     // we will copy all modules
-    for(GList *modules_src = dev_src->iop; modules_src; modules_src = g_list_next(modules_src))
+    for(GList *modules_src = g_list_first(dev_src->iop); modules_src; modules_src = g_list_next(modules_src))
     {
       dt_iop_module_t *mod_src = (dt_iop_module_t *)(modules_src->data);
 
       // copy from history only if
-      if((_search_history_by_module(dev_src, mod_src) != NULL) // module is in history of source image
+      if((dt_dev_history_get_first_item_by_module(dev_src, mod_src) != NULL) // module is in history of source image
          && !dt_iop_is_hidden(mod_src) // hidden modules are technical and special
          && (copy_full || !dt_history_module_skip_copy(mod_src->flags()))
         )
@@ -348,7 +348,7 @@ static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_im
   // update iop-order list to have entries for the new modules
   dt_ioppr_update_for_modules(dev_dest, mod_list, FALSE);
 
-  for(GList *l = mod_list; l; l = g_list_next(l))
+  for(GList *l = g_list_first(mod_list); l; l = g_list_next(l))
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)l->data;
     dt_history_merge_module_into_history(dev_dest, dev_src, mod, &modules_used);
@@ -1668,8 +1668,6 @@ gboolean _module_leaves_no_history(dt_iop_module_t *module)
 
 void dt_dev_history_compress(dt_develop_t *dev)
 {
-  if(!dev->iop) return;
-
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
 
   // Cleanup old history

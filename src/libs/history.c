@@ -281,11 +281,11 @@ static void _add_module_expander(GList *iop_list, dt_iop_module_t *module)
 }
 
 // return the 1st history entry that matches module
-static dt_dev_history_item_t *_search_history_by_module(GList *history_list, dt_iop_module_t *module)
+static dt_dev_history_item_t *_history_get_first_item_by_module(GList *history_list, dt_iop_module_t *module)
 {
   dt_dev_history_item_t *hist_ret = NULL;
 
-  for(GList *history = history_list; history; history = g_list_next(history))
+  for(GList *history = g_list_first(history_list); history; history = g_list_next(history))
   {
     dt_dev_history_item_t *hist_item = (dt_dev_history_item_t *)history->data;
 
@@ -327,8 +327,8 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
         if(strcmp(mod_next->op, mod->op) == 0 && mod_next->multi_priority == 0)
         {
           // is the same one, check which one must be deleted
-          const int mod_in_history = (_search_history_by_module(history_list, mod) != NULL);
-          const int mod_next_in_history = (_search_history_by_module(history_list, mod_next) != NULL);
+          const int mod_in_history = (_history_get_first_item_by_module(history_list, mod) != NULL);
+          const int mod_next_in_history = (_history_get_first_item_by_module(history_list, mod_next) != NULL);
 
           // current is in history and next is not, delete next
           if(mod_in_history && !mod_next_in_history)
@@ -363,7 +363,7 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
     // this is a regular multi-instance and must be in history
     else
     {
-      delete_module = (_search_history_by_module(history_list, mod) == NULL);
+      delete_module = (_history_get_first_item_by_module(history_list, mod) == NULL);
     }
 
     // if module is not in history we delete it

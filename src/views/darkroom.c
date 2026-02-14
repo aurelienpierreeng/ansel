@@ -2083,6 +2083,9 @@ void leave(dt_view_t *self)
   // Now, cleanup the pipes and history
   dt_dev_history_auto_save(darktable.develop);
 
+  // Pipeline nodes reference modules from dev->iop
+  // we need to destroy objects referencing modules
+  // before destroying the actual modules being referenced.
   dt_pthread_mutex_lock(&dev->pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->pipe);
   dt_pthread_mutex_unlock(&dev->pipe->busy_mutex);

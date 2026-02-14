@@ -163,12 +163,10 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t 
 {
   dt_iop_roi_t roi_in = (dt_iop_roi_t){ 0, 0, width_in, height_in, 1.0 };
   dt_iop_roi_t roi_out;
-  GList *modules = g_list_first(dev->iop);
-  GList *pieces = g_list_first(pipe->nodes);
-  while(modules)
+  for(GList *pieces = g_list_first(pipe->nodes); pieces; pieces = g_list_next(pieces))
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
+    dt_iop_module_t *module = piece->module;
 
     piece->buf_in = roi_in;
 
@@ -185,10 +183,8 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t 
 
     piece->buf_out = roi_out;
     roi_in = roi_out;
-
-    modules = g_list_next(modules);
-    pieces = g_list_next(pieces);
   }
+
   *width = roi_out.width;
   *height = roi_out.height;
 }
@@ -205,12 +201,10 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
 
   dt_iop_roi_t roi_out_temp = roi_out;
   dt_iop_roi_t roi_in;
-  GList *modules = g_list_last(dev->iop);
-  GList *pieces = g_list_last(pipe->nodes);
-  while(modules)
+  for(GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
+    dt_iop_module_t *module = piece->module;
 
     piece->planned_roi_out = roi_out_temp;
 
@@ -238,9 +232,6 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
 
     piece->planned_roi_in = roi_in;
     roi_out_temp = roi_in;
-
-    modules = g_list_previous(modules);
-    pieces = g_list_previous(pieces);
   }
 }
 

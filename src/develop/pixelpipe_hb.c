@@ -338,9 +338,6 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   pipe->iop_order_list = dt_ioppr_iop_order_copy_deep(dev->iop_order_list);
 
   // for all modules in dev:
-  // TODO: don't add deprecated modules that are not enabled are not added to pipeline.
-  // currently, that loads 84 modules of which a solid third are not used anymore.
-  // if(module->flags() & IOP_FLAGS_DEPRECATED && !(module->enabled)) continue;
   for(GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
@@ -1515,9 +1512,8 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
         // In this situation, OpenCL can't use a pinned memory to copy a cropped buf.buf, 
         // so we will need to copy the copy, aka output (the cache).
         GList *pieces = g_list_first(pipe->nodes);
-        GList *modules = g_list_first(dev->iop);
         dt_dev_pixelpipe_iop_t *first_piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
-        dt_iop_module_t *first_module = (dt_iop_module_t *)modules->data;
+        dt_iop_module_t *first_module = first_piece->module;
         const int supports_opencl = _is_opencl_supported(pipe, first_piece, first_module);
 
         if(supports_opencl)
@@ -1610,7 +1606,7 @@ static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input
 // recursive helper for process:
 static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void **output,
                                         void **cl_mem_output, dt_iop_buffer_dsc_t **out_format,
-                                        dt_iop_roi_t roi_out, GList *modules, GList *pieces, int pos)
+                                        dt_iop_roi_t roi_out, GList *pieces, int pos)
 {
   // The pipeline is executed recursively, from the end. For each module n, starting from the end,
   // if output is cached, take it, else if input is cached, take it, process it and output,
@@ -1625,21 +1621,21 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   dt_iop_module_t *module = NULL;
   dt_dev_pixelpipe_iop_t *piece = NULL;
 
-  if(modules)
+  if(pieces)
   {
-    module = (dt_iop_module_t *)modules->data;
     piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
 
     if(piece) 
     {
       roi_out = piece->planned_roi_out;
       roi_in = piece->planned_roi_in;
+      module = piece->module;
     }
 
     // skip this module?
     if(!piece->enabled)
       return dt_dev_pixelpipe_process_rec(pipe, dev, output, cl_mem_output, out_format, roi_in,
-                                          g_list_previous(modules), g_list_previous(pieces), pos - 1);
+                                          g_list_previous(pieces), pos - 1);
 
     if(dev->gui_attached) dev->progress.total++;
   }
@@ -1669,7 +1665,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   }
 
   // 2) no module means step 0 of the pipe : importing the input buffer
-  if(!modules)
+  if(!module)
   {
     dt_times_t start;
     dt_get_times(&start);
@@ -1692,7 +1688,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
 
   if(dt_dev_pixelpipe_process_rec(pipe, dev, &input, &cl_mem_input, &input_format, roi_in,
-                                  g_list_previous(modules), g_list_previous(pieces), pos - 1))
+                                  g_list_previous(pieces), pos - 1))
   {
     // On error: release the cache line
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, FALSE, NULL);
@@ -1743,7 +1739,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // But if we have neither cache nor vRAM buffer, we need to fetch the previous step again.
   if(input_entry == NULL && cl_mem_input == NULL)
     if(dt_dev_pixelpipe_process_rec(pipe, dev, &input, &cl_mem_input, &input_format, roi_in,
-                                    g_list_previous(modules), g_list_previous(pieces), pos - 1))
+                                    g_list_previous(pieces), pos - 1))
     {
       // On error: release the cache line
       dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
@@ -1981,12 +1977,10 @@ static void _set_opencl_cache(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
   // Any module not supporting OpenCL will set this to TRUE for the previous
   gboolean opencl_cache = TRUE;
 
-  GList *pieces = g_list_last(pipe->nodes);
-  GList *modules = g_list_last(dev->iop);
-  while(pieces)
+  for(GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
-    dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+    dt_iop_module_t *module = piece->module;
 
     if(piece->enabled)
     {
@@ -2039,9 +2033,6 @@ static void _set_opencl_cache(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
       // if the current one doesn't handle OpenCL or is being edited
       opencl_cache = !supports_opencl || active_in_gui;
     }
-
-    pieces = g_list_previous(pieces);
-    modules = g_list_previous(modules);
   }
 }
 
@@ -2140,7 +2131,6 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
   dt_pthread_rwlock_unlock(&dev->masks_mutex);
 
   // go through the list of modules from the end:
-  GList *modules = g_list_last(dev->iop);
   GList *pieces = g_list_last(pipe->nodes);
 
   pipe->opencl_enabled = dt_opencl_update_settings(); // update enabled flag and profile from preferences
@@ -2184,7 +2174,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
 
     dt_times_t start;
     dt_get_times(&start);
-    err = dt_dev_pixelpipe_process_rec(pipe, dev, &buf, &cl_mem_out, &out_format, roi, modules, pieces, pos);
+    err = dt_dev_pixelpipe_process_rec(pipe, dev, &buf, &cl_mem_out, &out_format, roi, pieces, pos);
     gchar *msg = g_strdup_printf("[pixelpipe] %s internal pixel pipeline processing", dt_pixelpipe_get_pipe_name(pipe->type));
     dt_show_times(&start, msg);
     g_free(msg);
