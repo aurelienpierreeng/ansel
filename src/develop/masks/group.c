@@ -161,6 +161,12 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
   return _detect_new_shape_selection(form, gui, pzx, pzy);
 }
 
+static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *event, dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, int index)
+{
+  gboolean return_value = FALSE;
+  return return_value;
+}
+
 static int _group_events_mouse_moved(struct dt_iop_module_t *module, float pzx, float pzy, double pressure,
                                      int which, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
                                      int unused2)
@@ -764,6 +770,7 @@ const dt_masks_functions_t dt_masks_functions_group = {
   .mouse_scrolled = _group_events_mouse_scrolled,
   .button_pressed = _group_events_button_pressed,
   .button_released = _group_events_button_released,
+  .key_pressed = _group_events_key_pressed,
 //TODO:  .post_expose = _group_events_post_expose
   .draw_shape = NULL
 };

@@ -366,6 +366,12 @@ static int _circle_events_button_released(struct dt_iop_module_t *module, float 
   return 0;
 }
 
+static int _circle_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *event, dt_masks_form_t *form,
+                                              int parentid, dt_masks_form_gui_t *gui, int index)
+{
+  return 0;
+}
+
 static int _circle_events_mouse_moved(struct dt_iop_module_t *module, float pzx, float pzy, double pressure,
                                       int which, dt_masks_form_t *form, int parentid,
                                       dt_masks_form_gui_t *gui, int index)
@@ -1179,6 +1185,7 @@ const dt_masks_functions_t dt_masks_functions_circle = {
   .mouse_scrolled = _circle_events_mouse_scrolled,
   .button_pressed = _circle_events_button_pressed,
   .button_released = _circle_events_button_released,
+  .key_pressed = _circle_events_key_pressed,
   .post_expose = _circle_events_post_expose,
   .draw_shape = _circle_draw_shape
 };

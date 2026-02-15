@@ -232,6 +232,8 @@ typedef struct dt_masks_functions_t
   /* Mouse pzx and pzy are normalized coordinates in full image space */
   int (*button_released)(struct dt_iop_module_t *module, float pzx, float pzy, int which, uint32_t state,
                          struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
+  /* Key event */
+  int (*key_pressed)(struct dt_iop_module_t *module, GdkEventKey *event, struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
   void (*post_expose)(cairo_t *cr, float zoom_scale, struct dt_masks_form_gui_t *gui, int index, int num_points);
   // The function to draw the shape in question.
   void (*draw_shape)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
@@ -429,6 +431,7 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
                                    int which, int type, uint32_t state);
 int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, double y, int up, uint32_t state, int delta_y);
 
+int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *event);
 /**
  * @brief returns wether a node is a corner or not.
  * A node is a corner if its 2 control handles are at the same position, else it's a curve.

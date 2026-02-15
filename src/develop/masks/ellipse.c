@@ -837,6 +837,12 @@ static int _ellipse_events_button_released(struct dt_iop_module_t *module, float
   return 0;
 }
 
+static int _ellipse_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *event, dt_masks_form_t *form,
+                                              int parentid, dt_masks_form_gui_t *gui, int index)
+{
+  return 0;
+}
+
 static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx, float pzy,
                                        double pressure, int which, dt_masks_form_t *form, int parentid,
                                        dt_masks_form_gui_t *gui, int index)
@@ -1677,11 +1683,7 @@ static void _ellipse_set_hint_message(const dt_masks_form_gui_t *const gui, cons
     g_snprintf(msgbuf, msgbuf_len,
                _("<b>Size</b>: scroll, <b>Hardness</b>: shift+scroll\n"
                  "<b>Rotate</b>: ctrl+shift+scroll, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
-  else if(gui->border_selected)
-    g_snprintf(msgbuf, msgbuf_len,
-               _("<b>Hardness mode</b>: shift+click, <b>Size</b>: scroll\n"
-                 "<b>Hardness</b>: shift+scroll, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
-  else if(gui->form_selected)
+  else if(gui->form_selected || gui->border_selected)
     g_snprintf(msgbuf, msgbuf_len,
                _("<b>Hardness mode</b>: shift+click, <b>Size</b>: scroll\n"
                  "<b>Hardness</b>: shift+scroll, <b>Opacity</b>: ctrl+scroll (%d%%)"), opacity);
@@ -1759,6 +1761,7 @@ const dt_masks_functions_t dt_masks_functions_ellipse = {
   .mouse_scrolled = _ellipse_events_mouse_scrolled,
   .button_pressed = _ellipse_events_button_pressed,
   .button_released = _ellipse_events_button_released,
+  .key_pressed = _ellipse_events_key_pressed,
   .post_expose = _ellipse_events_post_expose,
   .draw_shape = _ellipse_draw_shape
 };

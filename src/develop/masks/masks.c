@@ -1222,6 +1222,18 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
   return 0;
 }
 
+int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *event)
+{
+  dt_masks_form_t *form = darktable.develop->form_visible;
+  if(!form) return 0;
+  dt_masks_form_gui_t *gui = darktable.develop->form_gui;
+  if(!gui) return 0;
+
+  gboolean return_value = FALSE;
+
+  return return_value;
+}
+
 int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, double y, int up, uint32_t state, int scrolling_delta)
 {
   // add an option to allow skip mouse events while editing masks

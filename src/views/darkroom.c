@@ -2633,6 +2633,12 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   dt_develop_t *dev = (dt_develop_t *)self->data;
   const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
 
+  if(dev->form_visible && dt_masks_events_key_pressed(dev->gui_module, event))
+  {
+    _do_delayed_history_commit(dev);
+    return 1;
+  }
+
   const gboolean shift = dt_modifier_is(event->state, GDK_SHIFT_MASK);
   const gboolean ctrl = dt_modifier_is(event->state, GDK_CONTROL_MASK);
 
