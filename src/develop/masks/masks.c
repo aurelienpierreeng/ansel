@@ -262,23 +262,48 @@ static gboolean _masks_remove_shape(struct dt_iop_module_t *module, dt_masks_for
   return 1;
 }
 
+gboolean dt_masks_form_cancel_creation(dt_iop_module_t *module, dt_masks_form_gui_t *gui)
+{
+  if(gui->creation)
+  {
+    if(gui->guipoints)
+    {
+      dt_masks_dynbuf_free(gui->guipoints);
+      dt_masks_dynbuf_free(gui->guipoints_payload);
+      gui->guipoints = NULL;
+      gui->guipoints_payload = NULL;
+      gui->guipoints_count = 0;
+    }
+
+    dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
+    dt_masks_iop_update(module);
+
+    return TRUE;
+  }
+  return FALSE;
+}
+
 gboolean dt_masks_gui_delete(struct dt_iop_module_t *module, dt_masks_form_t *form, dt_masks_form_gui_t *gui, const int parentid)
 {
-  // we remove the node (and the entire form if there is too few nodes left)
-  if( ((form->type & DT_MASKS_BRUSH) || (form->type & DT_MASKS_POLYGON)) && gui->node_selected >= 0)
+  // Just clean temp mask if we are in creation mode
+  if(dt_masks_form_cancel_creation(module, gui))
+    return TRUE;
+
+  // we remove the selected node (and the entire form if there is too few nodes left)
+  if(((form->type & DT_MASKS_BRUSH) || (form->type & DT_MASKS_POLYGON)) && gui->node_selected >= 0)
   {
     if(g_list_shorter_than(form->points, 3))
       return _masks_remove_shape(module, form, parentid, gui, gui->group_selected);
 
     _masks_remove_node(module, form, parentid, gui, gui->group_selected);
 
-    return 1;
+    return TRUE;
   }
   // we remove the entire shape
   else if(parentid > 0 && gui->edit_mode == DT_MASKS_EDIT_FULL)
     return _masks_remove_shape(module, form, parentid, gui, gui->group_selected);
   
-  return 0;
+  return FALSE;
 }
 
 void dt_masks_gui_form_remove(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index)
@@ -1610,13 +1635,7 @@ static void _menu_no_masks(struct dt_iop_module_t *module)
 
 static void _menu_add_shape(struct dt_iop_module_t *module, dt_masks_type_t type)
 {
-  // we want to be sure that the iop has focus
-  dt_iop_request_focus(module);
-  // we create the new form
-  dt_masks_form_t *form = dt_masks_create(type);
-  dt_masks_change_form_gui(form);
-  darktable.develop->form_gui->creation = TRUE;
-  darktable.develop->form_gui->creation_module = module;
+  dt_masks_creation_mode(module, type);
 }
 
 static void _menu_add_exist(dt_iop_module_t *module, int formid)
