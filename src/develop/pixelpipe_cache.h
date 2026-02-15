@@ -164,9 +164,9 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache,
  * @brief Free aligned memory allocated with dt_pixelpipe_cache_alloc_align_cache.
  *
  * @param cache Pixelpipe cache to manage.
- * @param mem Pointer to the buffer.
+ * @param mem Pointer to the buffer pointer. Set to NULL on successful free.
  */
-void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void *mem, const char *message);
+void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void **mem, const char *message);
 
 /**
  * @brief Get an existing cache line from the cache. This is similar to `dt_dev_pixelpipe_cache_get`,

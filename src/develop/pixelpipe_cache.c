@@ -90,10 +90,12 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
                                                         const dt_iop_buffer_dsc_t dsc, const char *name, const int id,
                                                         dt_dev_pixelpipe_cache_t *cache, gboolean alloc);
 static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid);
+uint64_t _non_thread_safe_cache_get_hash_data(dt_dev_pixelpipe_cache_t *cache, void *data, dt_pixel_cache_entry_t **entry);
 
 dt_pixel_cache_entry_t *_non_threadsafe_cache_get_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash)
 {
-  dt_pixel_cache_entry_t *entry = (dt_pixel_cache_entry_t *)g_hash_table_lookup(cache->entries, GINT_TO_POINTER(hash));
+  const uint64_t key = hash;
+  dt_pixel_cache_entry_t *entry = (dt_pixel_cache_entry_t *)g_hash_table_lookup(cache->entries, &key);
   if(entry) entry->hits++;
   return entry;
 }
@@ -143,7 +145,8 @@ int _non_thread_safe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const uint64_
 
     if((!used || force) && !locked)
     {
-      g_hash_table_remove(cache->entries, GINT_TO_POINTER(cache_entry->hash));
+      const uint64_t key = cache_entry->hash;
+      g_hash_table_remove(cache->entries, &key);
       return 0;
     }
     else if(used)
@@ -655,29 +658,73 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache,
   return aligned;
 }
 
-void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void *mem, const char *message)
+void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void **mem, const char *message)
 {
-  if(!mem) return;
+  if(!mem || !*mem) return;
 
-  const uintptr_t addr = (uintptr_t)mem;
+  const uintptr_t addr = (uintptr_t)(*mem);
   uint64_t hash = dt_hash(5381, (const char *)&addr, sizeof(addr));
 
   dt_pthread_mutex_lock(&cache->lock);
 
   dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, hash);
+  if(!cache_entry)
+  {
+    dt_pixel_cache_entry_t *scan_entry = NULL;
+    const uint64_t scan_hash = _non_thread_safe_cache_get_hash_data(cache, *mem, &scan_entry);
+    if(scan_entry)
+    {
+      dt_print(DT_DEBUG_CACHE,
+               "[pixelpipe] free_align_cache: hash miss (%" PRIu64 ") but pointer found with hash %" PRIu64 " (%s)\n",
+               hash, scan_hash, message);
+      cache_entry = scan_entry;
+      hash = scan_hash;
+    }
+  }
   if(cache_entry)
   {
     if(cache_entry->external_alloc)
     {
       _non_thread_safe_cache_ref_count_entry(cache, hash, FALSE, cache_entry);
       dt_pthread_rwlock_unlock(&cache_entry->lock);
-      g_hash_table_remove(cache->entries, GINT_TO_POINTER(cache_entry->hash));
-      mem = NULL;
+      const uint64_t key = cache_entry->hash;
+      g_hash_table_remove(cache->entries, &key);
+      *mem = NULL;
     }
   }
   else
   {
-    fprintf(stdout, "error while freeing cache entry: no entry found but we have a buffer, %s.\n", message);
+    const uintptr_t base = (uintptr_t)cache->arena.base;
+    const uintptr_t end = base + cache->arena.size;
+    const uintptr_t ptr = (uintptr_t)(*mem);
+    // Try to find if the pointer falls inside any known cache entry.
+    dt_pixel_cache_entry_t *range_entry = NULL;
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init(&iter, cache->entries);
+    while(g_hash_table_iter_next(&iter, &key, &value))
+    {
+      dt_pixel_cache_entry_t *entry = (dt_pixel_cache_entry_t *)value;
+      if(!entry || !entry->data) continue;
+      const uintptr_t start = (uintptr_t)entry->data;
+      const uintptr_t stop = start + entry->size;
+      if(ptr >= start && ptr < stop)
+      {
+        range_entry = entry;
+        break;
+      }
+    }
+    if(range_entry)
+    {
+      dt_print(DT_DEBUG_CACHE,
+               "[pixelpipe] free_align_cache: pointer %p is inside entry %" PRIu64 " (%s), offset=%zu size=%zu refs=%i external=%i\n",
+               *mem, range_entry->hash, range_entry->name,
+               (size_t)(ptr - (uintptr_t)range_entry->data), range_entry->size,
+               dt_atomic_get_int(&range_entry->refcount), range_entry->external_alloc ? 1 : 0);
+    }
+    fprintf(stdout,
+            "error while freeing cache entry: no entry found but we have a buffer, %s (ptr=%p in_arena=%i).\n",
+            message, *mem, (ptr >= base && ptr < end) ? 1 : 0);
     raise(SIGSEGV); // triggers dt_set_signal_handlers() backtrace on Unix
   }
 
@@ -733,7 +780,9 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
   dt_pthread_rwlock_init(&cache_entry->lock, NULL);
 
   // Add this entry to the table
-  g_hash_table_insert(cache->entries, GINT_TO_POINTER(hash), cache_entry);
+  uint64_t *key = (uint64_t *)g_malloc(sizeof(uint64_t));
+  *key = hash;
+  g_hash_table_insert(cache->entries, key, cache_entry);
 
   // Note : we grow the cache size even though the data buffer is not yet allocated
   // This is planning
@@ -857,7 +906,7 @@ dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
 {
   dt_dev_pixelpipe_cache_t *cache = (dt_dev_pixelpipe_cache_t *)malloc(sizeof(dt_dev_pixelpipe_cache_t));
   dt_pthread_mutex_init(&cache->lock, NULL);
-  cache->entries = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)_free_cache_entry);
+  cache->entries = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, (GDestroyNotify)_free_cache_entry);
   cache->max_memory = max_memory;
   cache->current_memory = 0;
   cache->queries = cache->hits = 0;
@@ -1167,7 +1216,10 @@ void dt_dev_pixel_pipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache,
     cache_entry = _non_threadsafe_cache_get_entry(cache, hash);
 
   if(cache_entry && cache_entry->auto_destroy)
-    g_hash_table_remove(cache->entries, GINT_TO_POINTER(hash));
+  {
+    const uint64_t key = hash;
+    g_hash_table_remove(cache->entries, &key);
+  }
   
   dt_pthread_mutex_unlock(&cache->lock);
 }

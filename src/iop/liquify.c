@@ -922,7 +922,7 @@ static int build_round_stamp(float complex **pstamp,
 
   // lookup table: map of distance from center point => warp
   const int table_size = iradius * LOOKUP_OVERSAMPLE;
-  const float *const restrict lookup_table = build_lookup_table(table_size, warp->control1, warp->control2);
+  const float *restrict lookup_table = build_lookup_table(table_size, warp->control1, warp->control2);
   if(lookup_table == NULL)
   {
     free((void *)stamp);
@@ -985,7 +985,7 @@ static int build_round_stamp(float complex **pstamp,
     }
   }
 
-  dt_pixelpipe_cache_free_align((void *) lookup_table);
+  dt_pixelpipe_cache_free_align(lookup_table);
   *pstamp = stamp;
   return 0;
 }
@@ -1157,7 +1157,7 @@ static float complex *create_global_distortion_map(const cairo_rectangle_int_t *
     cairo_rectangle_int_t r;
     if(build_round_stamp(&stamp, &r, warp) != 0)
     {
-      dt_pixelpipe_cache_free_align((void *)map);
+      dt_pixelpipe_cache_free_align(map);
       return NULL;
     }
     add_to_global_distortion_map(map, map_extent, warp, stamp, &r);
@@ -1169,7 +1169,7 @@ static float complex *create_global_distortion_map(const cairo_rectangle_int_t *
     float complex * const imap = dt_pixelpipe_cache_alloc_align_cache(sizeof(float complex) * mapsize, 0);
     if(!imap)
     {
-      dt_pixelpipe_cache_free_align((void *)map);
+      dt_pixelpipe_cache_free_align(map);
       return NULL;
     }
     memset(imap, 0, sizeof(float complex) * mapsize);
@@ -1197,7 +1197,7 @@ static float complex *create_global_distortion_map(const cairo_rectangle_int_t *
       }
     }
 
-    dt_pixelpipe_cache_free_align((void *) map);
+    dt_pixelpipe_cache_free_align(map);
 
     // now just do a pass to avoid gap with a displacement of zero, note that we do not need high
     // precision here as the inverted distortion mask is only used to compute a final displacement
@@ -1396,7 +1396,7 @@ static int _distort_xtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
       }
     }
 
-    dt_pixelpipe_cache_free_align((void *) map);
+    dt_pixelpipe_cache_free_align(map);
   }
 
   return 1;
@@ -1466,7 +1466,7 @@ void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *p
     piece->colors = ch;
   }
 
-  dt_pixelpipe_cache_free_align((void *) map);
+  dt_pixelpipe_cache_free_align(map);
 
 }
 
@@ -1510,7 +1510,7 @@ int process(struct dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, const
   if(map_extent.width != 0 && map_extent.height != 0)
     apply_global_distortion_map(module, piece, in, out, roi_in, roi_out, map, &map_extent);
 
-  dt_pixelpipe_cache_free_align((void *)map);
+  dt_pixelpipe_cache_free_align(map);
 
   return 0;
 }
@@ -1682,7 +1682,7 @@ int process_cl(struct dt_iop_module_t *module,
   // 3. apply the map
   if(map_extent.width != 0 && map_extent.height != 0)
     err = apply_global_distortion_map_cl(module, piece, dev_in, dev_out, roi_in, roi_out, map, &map_extent);
-  dt_pixelpipe_cache_free_align((void *) map);
+  dt_pixelpipe_cache_free_align(map);
   if(err != CL_SUCCESS) goto error;
 
   return TRUE;

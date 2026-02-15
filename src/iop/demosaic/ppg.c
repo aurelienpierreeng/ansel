@@ -197,7 +197,7 @@ static int demosaic_ppg(float *const out, const float *const in, const dt_iop_ro
     }
   }
   // _mm_sfence();
-  if(median) dt_pixelpipe_cache_free_align((float *)input);
+  if(median) dt_pixelpipe_cache_free_align(input);
   return 0;
 }
 
