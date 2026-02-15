@@ -1256,6 +1256,34 @@ int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *eve
 
   gboolean return_value = FALSE;
 
+  if(form->functions)
+    return_value = form->functions->key_pressed(module, event, form, 0, gui, 0);
+  
+  if(!return_value)
+  {
+    switch(event->keyval)
+    {
+      case GDK_KEY_Escape:
+      {
+        return_value = dt_masks_form_cancel_creation(module, gui);
+        break;
+      }
+      case GDK_KEY_Delete:
+      {
+        if(gui->group_selected >= 0)
+        {
+          // Delete shape from current group
+          dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+          if(!fpt) return 0;
+          dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+          if(sel)
+            return_value = dt_masks_gui_delete(module, sel, gui, fpt->parentid);
+          break;
+        }
+      }
+    }
+  }
+
   return return_value;
 }
 

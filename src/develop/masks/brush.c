@@ -1574,21 +1574,6 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
 
       return 1;
     }
-    else if(which == 3)
-    {
-      // Delete shape from current group
-      // TODO: map that to context menu
-      dt_masks_dynbuf_free(gui->guipoints);
-      dt_masks_dynbuf_free(gui->guipoints_payload);
-      gui->guipoints = NULL;
-      gui->guipoints_payload = NULL;
-      gui->guipoints_count = 0;
-
-      dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
-      dt_masks_iop_update(module);
-
-      return 1;
-    }
   }
 
   else if(which == 1)

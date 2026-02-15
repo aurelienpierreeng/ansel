@@ -329,14 +329,6 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, float p
     }
   }
 
-  else if(gui->creation && which == 3)
-  {
-    dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
-    dt_masks_iop_update(module);
-
-    return 1;
-  }
-
   return 0;
 }
 

@@ -1417,13 +1417,49 @@ static int _polygon_events_mouse_scrolled(struct dt_iop_module_t *module, float 
   return 0;
 }
 
+static int _polygon_creation_closing_form(dt_masks_form_t *form, dt_masks_form_gui_t *gui)
+{
+  // we don't want a form with less than 3 points
+  if(g_list_shorter_than(form->points, 4))
+  {
+    dt_toast_log(_("Polygon mask requires at least 3 nodes."));
+    return 1;
+  }
+
+  dt_iop_module_t *crea_module = gui->creation_module;
+  // we delete last point (the one we are currently dragging)
+  dt_masks_node_polygon_t *point = (dt_masks_node_polygon_t *)g_list_last(form->points)->data;
+  form->points = g_list_remove(form->points, point);
+  free(point);
+  point = NULL;
+
+  gui->node_dragging = -1;
+  _polygon_init_ctrl_points(form);
+
+  // we save the form and quit creation mode
+  dt_masks_gui_form_save_creation(darktable.develop, crea_module, form, gui);
+  if(crea_module)
+  {
+
+    dt_masks_set_edit_mode(crea_module, DT_MASKS_EDIT_FULL);
+    dt_masks_iop_update(crea_module);
+    dt_dev_masks_selection_change(darktable.develop, crea_module, form->formid, TRUE);
+    gui->creation_module = NULL;
+  }
+  else
+  {
+    dt_dev_masks_selection_change(darktable.develop, NULL, form->formid, TRUE);
+  }
+
+  return 1;
+}
+
 static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float pzx, float pzy,
                                        double pressure, int which, int type, uint32_t state,
                                        dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, int index)
 {
   if(type == GDK_2BUTTON_PRESS || type == GDK_3BUTTON_PRESS) return 1;
-  if(!gui) return 0;
-  if(!form) return 0;
+  if(!gui || !form) return 0;
 
   _find_closest_handle(module, pzx, pzy, form, parentid, gui, index);
 
@@ -1432,43 +1468,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
     if(gui->creation)
     {
       if(gui->creation_closing_form)
-      {
-        // we don't want a form with less than 3 points
-        if(g_list_shorter_than(form->points, 4))
-        {
-          dt_toast_log(_("Polygon mask requires at least 3 nodes."));
-          return 1;
-        }
-        else
-        {
-          dt_iop_module_t *crea_module = gui->creation_module;
-          // we delete last point (the one we are currently dragging)
-          dt_masks_node_polygon_t *point = (dt_masks_node_polygon_t *)g_list_last(form->points)->data;
-          form->points = g_list_remove(form->points, point);
-          free(point);
-          point = NULL;
-
-          gui->node_dragging = -1;
-          _polygon_init_ctrl_points(form);
-
-          // we save the form and quit creation mode
-          dt_masks_gui_form_save_creation(darktable.develop, crea_module, form, gui);
-          if(crea_module)
-          {
-
-            dt_masks_set_edit_mode(crea_module, DT_MASKS_EDIT_FULL);
-            dt_masks_iop_update(crea_module);
-            dt_dev_masks_selection_change(darktable.develop, crea_module, form->formid, TRUE);
-            gui->creation_module = NULL;
-          }
-          else
-          {
-            dt_dev_masks_selection_change(darktable.develop, NULL, form->formid, TRUE);
-          }
-
-          return 1;
-        }
-      }
+        return _polygon_creation_closing_form(form, gui);
 
       if(dt_modifier_is(state, GDK_CONTROL_MASK | GDK_SHIFT_MASK) || dt_modifier_is(state, GDK_SHIFT_MASK))
       {
@@ -1635,17 +1635,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
     dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
     if(!gpt) return 0;
 
-    if(gui->creation)
-    {
-      // Delete shape from current group
-      // TODO: map that to context menu
-      dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
-      dt_masks_iop_update(module);
-
-      return 1;
-    }
-
-    else if(gui->handle_selected >= 0)
+    if(gui->handle_selected >= 0)
     {
       if(!form->points) return 0;
       dt_masks_node_polygon_t *node
@@ -1713,6 +1703,17 @@ static int _polygon_events_button_released(struct dt_iop_module_t *module, float
 static int _polygon_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *event, dt_masks_form_t *form,
                                               int parentid, dt_masks_form_gui_t *gui, int index)
 {
+  if(!gui || !form) return 0;
+  
+  if(gui->creation)
+  {
+    switch(event->keyval)
+    {
+      case GDK_KEY_KP_Enter:
+      case GDK_KEY_Return:
+        return _polygon_creation_closing_form(form, gui);
+    }
+  }
   return 0;
 }
 

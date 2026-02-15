@@ -123,8 +123,6 @@ static int _group_events_button_pressed(struct dt_iop_module_t *module, float pz
 {
   if(!form) return 0;
 
-  gboolean return_value = FALSE;
-
   if(gui->group_selected >= 0)
   {
     // we get the form
@@ -132,14 +130,11 @@ static int _group_events_button_pressed(struct dt_iop_module_t *module, float pz
     if(!fpt) return 0;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
-      return_value = sel->functions->button_pressed(module, pzx, pzy, pressure, which, type, state, sel,
-                                           fpt->parentid, gui, gui->group_selected);
-    if(which == 3 && !return_value)
-    {
-      return_value = dt_masks_gui_delete(module, sel, gui, fpt->parentid);
-    }
+      if(sel->functions->button_pressed(module, pzx, pzy, pressure, which, type, state, sel,
+                                           fpt->parentid, gui, gui->group_selected))
+        return 1;
   }
-  return return_value;
+  return FALSE;
 }
 
 static int _group_events_button_released(struct dt_iop_module_t *module, float pzx, float pzy, int which,
@@ -163,7 +158,48 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
 
 static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *event, dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, int index)
 {
+  if(!form) return 0;
+
   gboolean return_value = FALSE;
+
+  if(gui->group_selected >= 0)
+  {
+    // we get the form
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    if(!fpt) return 0;
+    dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+    if(sel && sel->functions && sel->functions->key_pressed)
+      return_value = sel->functions->key_pressed(module, event, sel, fpt->parentid, gui, gui->group_selected);
+  }
+
+  fprintf(stdout,"key pressed: %d, group: %d, return_value: %d\n", event->keyval, gui->group_selected, return_value);
+  // Global key bindings for groups
+  // TODO: map that to context menu
+  if(!return_value)
+  {
+    switch(event->keyval)
+    {
+      case GDK_KEY_Escape:
+      {
+        return_value = dt_masks_form_cancel_creation(module, gui);
+        break;
+      }
+      case GDK_KEY_Delete:
+      {
+        if(gui->group_selected >= 0)
+        {
+          // Delete shape from current group
+          dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+          if(!fpt) return 0;
+          dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+          if(sel)
+            return_value = dt_masks_gui_delete(module, sel, gui, fpt->parentid);
+          break;
+        }
+      }
+    }
+  }
+  
   return return_value;
 }
 
