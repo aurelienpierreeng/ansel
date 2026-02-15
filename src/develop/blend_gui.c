@@ -1348,10 +1348,7 @@ static gboolean _blendop_masks_add_shape(GtkWidget *widget, GdkEventButton *even
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), TRUE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), FALSE);
   // we create the new form
-  dt_masks_form_t *form = dt_masks_create(bd->masks_type[this]);
-  dt_masks_change_form_gui(form);
-  darktable.develop->form_gui->creation = TRUE;
-  darktable.develop->form_gui->creation_module = self;
+  dt_masks_creation_mode(self, bd->masks_type[this]);
   dt_control_queue_redraw_center();
 
   return TRUE;

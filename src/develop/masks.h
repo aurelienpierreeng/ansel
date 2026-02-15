@@ -45,7 +45,9 @@ typedef enum dt_masks_type_t
   DT_MASKS_GRADIENT = 1 << 4,
   DT_MASKS_ELLIPSE = 1 << 5,
   DT_MASKS_BRUSH = 1 << 6,
-  DT_MASKS_NON_CLONE = 1 << 7
+  DT_MASKS_NON_CLONE = 1 << 7,
+  DT_MASKS_ALL = DT_MASKS_CIRCLE | DT_MASKS_POLYGON | DT_MASKS_GROUP | DT_MASKS_CLONE |
+                 DT_MASKS_GRADIENT | DT_MASKS_ELLIPSE | DT_MASKS_BRUSH | DT_MASKS_NON_CLONE
 } dt_masks_type_t;
 
 /**masts states */
@@ -730,6 +732,9 @@ static inline int dt_masks_roundup(int num, int mult)
 gboolean dt_masks_is_within_radius(const float px, const float py,
                                         const float cx, const float cy,
                                         const float radius);
+
+gboolean dt_masks_creation_mode(dt_iop_module_t *module, const dt_masks_type_t type);
+
 
 #ifdef __cplusplus
 }

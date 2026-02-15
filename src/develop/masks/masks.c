@@ -2633,6 +2633,22 @@ gboolean dt_masks_is_within_radius(const float px, const float py,
   return sq_dist <= sq_radius;
 }
 
+// NOTE: this does quite the same as _menu_add_shape
+gboolean dt_masks_creation_mode(dt_iop_module_t *module, const dt_masks_type_t type)
+{
+  if(!module || (type & DT_MASKS_ALL) == 0) return FALSE;
+  // we want to be sure that the iop has focus
+  dt_iop_request_focus(module);
+
+  dt_masks_form_t *form = dt_masks_create(type);
+  dt_masks_change_form_gui(form);
+  darktable.develop->form_gui->creation = TRUE;
+  darktable.develop->form_gui->creation_module = module;
+
+  // Give focus to central view to allow using shortcuts for mask creation right after selecting a mask type in the manager
+  gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui));
+  return TRUE;
+}
 
 #include "detail.c"
 

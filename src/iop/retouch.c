@@ -993,15 +993,13 @@ static gboolean rt_add_shape(GtkWidget *widget, dt_iop_module_t *self)
       type = DT_MASKS_BRUSH;
 
     // we create the new form
-    dt_masks_form_t *spot = NULL;
+    dt_masks_type_t masks_type = DT_MASKS_NONE;
     if(p->algorithm == DT_IOP_RETOUCH_CLONE || p->algorithm == DT_IOP_RETOUCH_HEAL)
-      spot = dt_masks_create(type | DT_MASKS_CLONE);
+      masks_type = (type | DT_MASKS_CLONE);
     else
-      spot = dt_masks_create(type | DT_MASKS_NON_CLONE);
+      masks_type = (type | DT_MASKS_NON_CLONE);
 
-    dt_masks_change_form_gui(spot);
-    self->dev->form_gui->creation = TRUE;
-    self->dev->form_gui->creation_module = self;
+    dt_masks_creation_mode(self, masks_type);
 
     dt_control_queue_redraw_center();
   }
@@ -1814,15 +1812,14 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
     else if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->bt_brush)))
       type = DT_MASKS_BRUSH;
 
-    dt_masks_form_t *spot = NULL;
+    dt_masks_type_t masks_type = DT_MASKS_NONE;
     if(p->algorithm == DT_IOP_RETOUCH_CLONE || p->algorithm == DT_IOP_RETOUCH_HEAL)
-      spot = dt_masks_create(type | DT_MASKS_CLONE);
+      masks_type = (type | DT_MASKS_CLONE);
     else
-      spot = dt_masks_create(type | DT_MASKS_NON_CLONE);
-    dt_masks_change_form_gui(spot);
+      masks_type = (type | DT_MASKS_NON_CLONE);
 
-    self->dev->form_gui->creation = TRUE;
-    self->dev->form_gui->creation_module = self;
+    dt_masks_creation_mode(self, masks_type);
+
     dt_control_queue_redraw_center();
   }
 

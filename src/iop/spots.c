@@ -288,10 +288,9 @@ static gboolean _add_shape(GtkWidget *widget, dt_iop_module_t *self)
     type = DT_MASKS_ELLIPSE;
 
 
-  dt_masks_form_t *form = dt_masks_create(type | DT_MASKS_CLONE);
-  dt_masks_change_form_gui(form);
-  self->dev->form_gui->creation = TRUE;
-  self->dev->form_gui->creation_module = self;
+  const dt_masks_type_t masks_type = (type | DT_MASKS_CLONE);
+  dt_masks_creation_mode(self, masks_type);
+
 
   dt_control_queue_redraw_center();
   return FALSE;
