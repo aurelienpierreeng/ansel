@@ -158,6 +158,28 @@
             ]
         },
         {
+            "name": "libgusb",
+            "buildsystem": "meson",
+            "config-opts": [
+                "-Dtests=false",
+                "-Ddocs=false",
+                "-Dvapi=false"
+            ],
+            "sources": [
+                {
+                    "type": "archive",
+                    "url": "https://github.com/hughsie/libgusb/releases/download/0.4.9/libgusb-0.4.9.tar.xz",
+                    "sha256": "9df5ef301d6a4b361002aa52cce1165a87a89744055879bdbab31e7e86f1e846",
+                    "x-checker-data": {
+                        "type": "anitya",
+                        "project-id": 5505,
+                        "stable-only": true,
+                        "url-template": "https://github.com/hughsie/libgusb/releases/download/$version/libgusb-$version.tar.xz"
+                    }
+                }
+            ]
+        },
+        {
             "name": "colord",
             "buildsystem": "meson",
             "config-opts": [

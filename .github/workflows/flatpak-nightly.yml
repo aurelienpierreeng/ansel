@@ -1,17 +1,19 @@
 name: flatpak-nightly
 
 on:
-  schedule:
-    - cron: "30 5 * * *"
   workflow_dispatch:
 
 jobs:
   build-flatpak:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout ansel source
         uses: actions/checkout@v4
-
+        with:
+          ref: ${{ env.BRANCH }}
+          fetch-depth: 1
+          fetch-tags: true
+          submodules: true
       - name: Install Flatpak tools
         run: |
           sudo apt-get update
@@ -19,7 +21,7 @@ jobs:
 
       - name: Build Flatpak
         env:
-          MANIFEST_URL: https://raw.githubusercontent.com/flathub/photos.ansel.ansel/master/photos.ansel.ansel.json
+          MANIFEST_URL: https://raw.githubusercontent.com/aurelienpierreeng/ansel/refs/heads/master/packaging/flatpak/photos.ansel.ansel.json
         run: packaging/flatpak/build-flatpak.sh
 
       - name: Upload Flatpak artifact

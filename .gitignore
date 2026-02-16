@@ -1,6 +1,7 @@
 .idea
 build*/
 install*/
+.flatpak-builder/
 obj*/
 *~
 *.mo
