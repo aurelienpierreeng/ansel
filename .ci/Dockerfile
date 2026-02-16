@@ -40,7 +40,5 @@ RUN export GCC_VER=14 && /bin/bash /tmp/install-deps-ubuntu.sh && \
 WORKDIR /src
 COPY . /src
 
-RUN ./build.sh --install --clean-all \
-    --cccompiler "gcc-${GCC_VER}" \
-    --cxxcompiler "g++-${GCC_VER}" && \
+RUN ./build.sh --install \
     rm -rf /src/build /src/src
