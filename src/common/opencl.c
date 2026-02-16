@@ -278,6 +278,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   cl->dev[dev].name = NULL;
   cl->dev[dev].cname = NULL;
   cl->dev[dev].options = NULL;
+  cl->dev[dev].options_md5 = NULL;
   cl->dev[dev].memory_in_use = 0;
   cl->dev[dev].peak_memory = 0;
   cl->dev[dev].used_available = 0;
@@ -634,12 +635,25 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
                             my_option,
                             (cl->dev[dev].nvidia_sm_20 ? " -DNVIDIA_SM_20=1" : ""),
                             dt_opencl_get_vendor_by_id(vendor_id), escapedkerneldir);
+  // Keep kernel checksum stable when the runtime kernel path changes (e.g. AppImage mount point).
+  const char *kerneldir_token = "<ansel-kernels>";
+  char *escapedkerneldir_md5 = NULL;
+#ifndef __APPLE__
+  escapedkerneldir_md5 = g_strdup_printf("\"%s\"", kerneldir_token);
+#else
+  escapedkerneldir_md5 = g_strdup(kerneldir_token);
+#endif
+  cl->dev[dev].options_md5 = g_strdup_printf("-w %s %s -D%s=1 -I%s",
+                               my_option,
+                               (cl->dev[dev].nvidia_sm_20 ? " -DNVIDIA_SM_20=1" : ""),
+                               dt_opencl_get_vendor_by_id(vendor_id), escapedkerneldir_md5);
 
   dt_print_nts(DT_DEBUG_OPENCL, "   CL COMPILER OPTION:       %s\n", my_option);
 
   g_free(compile_option_name_cname);
   g_free(my_option);
   g_free(escapedkerneldir);
+  g_free(escapedkerneldir_md5);
   escapedkerneldir = NULL;
 
   const char *clincludes[DT_OPENCL_MAX_INCLUDES] = { "rgb_norms.h", "noise_generator.h", "color_conversion.h", "colorspaces.cl", "colorspace.h", "common.h", NULL };
@@ -1034,6 +1048,7 @@ void dt_opencl_cleanup_device(dt_opencl_t *cl, int i)
   free((void *)(cl->dev[i].name));
   free((void *)(cl->dev[i].cname));
   free((void *)(cl->dev[i].options));
+  free((void *)(cl->dev[i].options_md5));
 }
 
 void dt_opencl_cleanup(dt_opencl_t *cl)
@@ -1515,7 +1530,8 @@ int dt_opencl_load_program(const int dev, const int prog, const char *filename, 
   (cl->dlocl->symbols->dt_clGetPlatformInfo)(platform, CL_PLATFORM_VERSION, end - start, start, &len);
   start += len;
 
-  len = g_strlcpy(start, cl->dev[dev].options, end - start);
+  const char *options_md5 = cl->dev[dev].options_md5 ? cl->dev[dev].options_md5 : cl->dev[dev].options;
+  len = g_strlcpy(start, options_md5, end - start);
   start += len;
 
   /* make sure that the md5sums of all the includes are applied as well */
