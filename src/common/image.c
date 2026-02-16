@@ -2534,6 +2534,13 @@ char *dt_image_get_text_path_from_path(const char *image_path)
   return _text_path_legacy_if_exists(image_path);
 }
 
+char *dt_image_build_text_path_from_path(const char *image_path)
+{
+  if(!image_path) return NULL;
+
+  return _text_path_legacy_build(image_path);
+}
+
 static void _copy_text_sidecar_if_present(const char *src_image_path, const char *dest_image_path)
 {
   if(!src_image_path || !dest_image_path) return;

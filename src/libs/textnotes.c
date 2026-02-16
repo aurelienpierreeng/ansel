@@ -97,6 +97,7 @@ int position()
 }
 
 static void _save_now(dt_lib_module_t *self);
+static void _render_preview(dt_lib_textnotes_t *d, const char *text);
 
 static gchar *_get_buffer_text(GtkTextBuffer *buffer)
 {
@@ -105,14 +106,29 @@ static gchar *_get_buffer_text(GtkTextBuffer *buffer)
   return gtk_text_buffer_get_text(buffer, &start, &end, TRUE);
 }
 
+static gchar *_get_edit_text(dt_lib_textnotes_t *d)
+{
+  if(!d || !d->edit_view) return g_strdup("");
+  GtkTextBuffer *buffer = gtk_text_view_get_buffer(d->edit_view);
+  return _get_buffer_text(buffer);
+}
+
+static void _set_edit_text(dt_lib_textnotes_t *d, const char *text)
+{
+  if(!d || !d->edit_view) return;
+  d->loading = TRUE;
+  GtkTextBuffer *buffer = gtk_text_view_get_buffer(d->edit_view);
+  gtk_text_buffer_set_text(buffer, text ? text : "", -1);
+  d->loading = FALSE;
+}
+
 void *get_params(dt_lib_module_t *self, int *size)
 {
   if(size) *size = 0;
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
   if(!d || !d->edit_view) return NULL;
 
-  GtkTextBuffer *buffer = gtk_text_view_get_buffer(d->edit_view);
-  gchar *text = _get_buffer_text(buffer);
+  gchar *text = _get_edit_text(d);
   if(!text) return NULL;
 
   if(size) *size = strlen(text) + 1;
@@ -127,10 +143,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
   if(!d || !d->edit_view) return 1;
 
   gchar *text = g_strndup((const gchar *)params, size);
-  d->loading = TRUE;
-  GtkTextBuffer *buffer = gtk_text_view_get_buffer(d->edit_view);
-  gtk_text_buffer_set_text(buffer, text, -1);
-  d->loading = FALSE;
+  _set_edit_text(d, text);
   d->dirty = TRUE;
   _save_now(self);
 
@@ -174,6 +187,14 @@ static int _preview_text_window_width_px(dt_lib_textnotes_t *d)
   if(!tw) return 0;
 
   return gdk_window_get_width(tw);
+}
+
+static void _render_preview_from_edit(dt_lib_textnotes_t *d)
+{
+  if(!d) return;
+  gchar *text = _get_edit_text(d);
+  _render_preview(d, text);
+  g_free(text);
 }
 
 static void _completion_hide(dt_lib_textnotes_t *d)
@@ -440,6 +461,83 @@ static void _completion_row_activated(GtkTreeView *tree, GtkTreePath *path, GtkT
   (void)column;
 }
 
+static void _setup_completion(dt_lib_module_t *self, GtkWidget *textview)
+{
+  dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
+  if(!d || !textview) return;
+
+  d->completion_model = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+  GtkWidget *completion_tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(d->completion_model));
+  gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(completion_tree), FALSE);
+  GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+  GtkTreeViewColumn *col = gtk_tree_view_column_new_with_attributes(_("variable"), renderer,
+                                                                     "text", COMPL_DESCRIPTION, NULL);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(completion_tree), col);
+  GtkTreeSelection *sel = gtk_tree_view_get_selection(GTK_TREE_VIEW(completion_tree));
+  gtk_tree_selection_set_mode(sel, GTK_SELECTION_SINGLE);
+  g_signal_connect(completion_tree, "row-activated", G_CALLBACK(_completion_row_activated), self);
+
+  GtkWidget *completion_sw = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(completion_sw), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  gtk_container_add(GTK_CONTAINER(completion_sw), completion_tree);
+  gtk_widget_set_size_request(completion_sw, 360, 200);
+
+  d->completion_popover = gtk_popover_new(NULL);
+  gtk_popover_set_position(GTK_POPOVER(d->completion_popover), GTK_POS_BOTTOM);
+  gtk_popover_set_relative_to(GTK_POPOVER(d->completion_popover), textview);
+  gtk_container_add(GTK_CONTAINER(d->completion_popover), completion_sw);
+  d->completion_tree = completion_tree;
+}
+
+static gboolean _alloc_row_buffers(const int width, guchar **row_in, guchar **row_out)
+{
+  *row_in = g_malloc((size_t)width * 4);
+  *row_out = g_malloc((size_t)width * 4);
+  if(!*row_in || !*row_out)
+  {
+    g_free(*row_in);
+    g_free(*row_out);
+    *row_in = NULL;
+    *row_out = NULL;
+    return FALSE;
+  }
+  return TRUE;
+}
+
+static void _free_row_buffers(guchar *row_in, guchar *row_out)
+{
+  g_free(row_in);
+  g_free(row_out);
+}
+
+static void _colorcorrect_row(cmsHTRANSFORM transform, guchar *src, const int width,
+                              const int n_channels, const gboolean has_alpha,
+                              guchar *row_in, guchar *row_out)
+{
+  for(int x = 0; x < width; x++)
+  {
+    const int s = x * n_channels;
+    const int d = x * 4;
+    row_in[d + 0] = src[s + 0];
+    row_in[d + 1] = src[s + 1];
+    row_in[d + 2] = src[s + 2];
+    row_in[d + 3] = has_alpha ? src[s + 3] : 255;
+  }
+
+  cmsDoTransform(transform, row_in, row_out, width);
+
+  for(int x = 0; x < width; x++)
+  {
+    const int s = x * 4;
+    const int d = x * n_channels;
+    src[d + 0] = row_out[s + 2];
+    src[d + 1] = row_out[s + 1];
+    src[d + 2] = row_out[s + 0];
+    if(has_alpha)
+      src[d + 3] = row_out[s + 3];
+  }
+}
+
 static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
 {
   if(!pixbuf) return;
@@ -481,9 +579,7 @@ static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
   gboolean ok = TRUE;
   for(int i = 0; i < nthreads; i++)
   {
-    rows_in[i] = g_malloc((size_t)width * 4);
-    rows_out[i] = g_malloc((size_t)width * 4);
-    if(!rows_in[i] || !rows_out[i])
+    if(!_alloc_row_buffers(width, &rows_in[i], &rows_out[i]))
     {
       ok = FALSE;
       break;
@@ -492,10 +588,7 @@ static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
   if(!ok)
   {
     for(int i = 0; i < nthreads; i++)
-    {
-      g_free(rows_in[i]);
-      g_free(rows_out[i]);
-    }
+      _free_row_buffers(rows_in[i], rows_out[i]);
     g_free(rows_in);
     g_free(rows_out);
     pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
@@ -513,78 +606,28 @@ static void _colorcorrect_pixbuf(GdkPixbuf *pixbuf)
     for(int y = 0; y < height; y++)
     {
       guchar *src = pixels + (size_t)y * rowstride;
-
-      for(int x = 0; x < width; x++)
-      {
-        const int s = x * n_channels;
-        const int d = x * 4;
-        row_in[d + 0] = src[s + 0];
-        row_in[d + 1] = src[s + 1];
-        row_in[d + 2] = src[s + 2];
-        row_in[d + 3] = has_alpha ? src[s + 3] : 255;
-      }
-
-      cmsDoTransform(transform, row_in, row_out, width);
-
-      for(int x = 0; x < width; x++)
-      {
-        const int s = x * 4;
-        const int d = x * n_channels;
-        src[d + 0] = row_out[s + 2];
-        src[d + 1] = row_out[s + 1];
-        src[d + 2] = row_out[s + 0];
-        if(has_alpha)
-          src[d + 3] = row_out[s + 3];
-      }
+      _colorcorrect_row(transform, src, width, n_channels, has_alpha, row_in, row_out);
     }
   }
 
   for(int i = 0; i < nthreads; i++)
-  {
-    g_free(rows_in[i]);
-    g_free(rows_out[i]);
-  }
+    _free_row_buffers(rows_in[i], rows_out[i]);
   g_free(rows_in);
   g_free(rows_out);
 #else
-  guchar *row_in = g_malloc((size_t)width * 4);
-  guchar *row_out = g_malloc((size_t)width * 4);
-  if(!row_in || !row_out)
+  guchar *row_in = NULL;
+  guchar *row_out = NULL;
+  if(!_alloc_row_buffers(width, &row_in, &row_out))
   {
-    g_free(row_in);
-    g_free(row_out);
     pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
     return;
   }
   for(int y = 0; y < height; y++)
   {
     guchar *src = pixels + (size_t)y * rowstride;
-
-    for(int x = 0; x < width; x++)
-    {
-      const int s = x * n_channels;
-      const int d = x * 4;
-      row_in[d + 0] = src[s + 0];
-      row_in[d + 1] = src[s + 1];
-      row_in[d + 2] = src[s + 2];
-      row_in[d + 3] = has_alpha ? src[s + 3] : 255;
-    }
-
-    cmsDoTransform(transform, row_in, row_out, width);
-
-    for(int x = 0; x < width; x++)
-    {
-      const int s = x * 4;
-      const int d = x * n_channels;
-      src[d + 0] = row_out[s + 2];
-      src[d + 1] = row_out[s + 1];
-      src[d + 2] = row_out[s + 0];
-      if(has_alpha)
-        src[d + 3] = row_out[s + 3];
-    }
+    _colorcorrect_row(transform, src, width, n_channels, has_alpha, row_in, row_out);
   }
-  g_free(row_in);
-  g_free(row_out);
+  _free_row_buffers(row_in, row_out);
 #endif
 
   pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
@@ -609,6 +652,30 @@ static void _open_uri(const char *uri)
     dt_control_log(_("could not open link: %s"), error->message);
     g_clear_error(&error);
   }
+}
+
+static gchar *_expand_text_for_preview(dt_lib_textnotes_t *d, const char *source_text)
+{
+  if(!d || d->imgid <= 0) return NULL;
+
+  dt_variables_params_t *vp;
+  dt_variables_params_init(&vp);
+
+  char input_dir[PATH_MAX] = { 0 };
+  gboolean from_cache = TRUE;
+  dt_image_full_path(d->imgid, input_dir, sizeof(input_dir), &from_cache, __FUNCTION__);
+
+  vp->filename = input_dir;
+  vp->jobcode = "textnotes";
+  vp->imgid = d->imgid;
+  vp->sequence = 0;
+  vp->escape_markup = FALSE;
+
+  gchar *tmp = g_strdup(source_text ? source_text : "");
+  gchar *expanded = dt_variables_expand(vp, tmp, TRUE);
+  g_free(tmp);
+  dt_variables_params_destroy(vp);
+  return expanded;
 }
 
 #ifdef HAVE_CMARK
@@ -725,6 +792,122 @@ static void _clear_tag_table(GtkTextBuffer *buffer)
   for(guint i = 0; i < tags->len; i++)
     gtk_text_tag_table_remove(table, g_ptr_array_index(tags, i));
   g_ptr_array_free(tags, TRUE);
+}
+
+typedef struct dt_textnotes_tags_t
+{
+  GtkTextTag *bold;
+  GtkTextTag *italic;
+  GtkTextTag *mono;
+  GtkTextTag *h1;
+  GtkTextTag *h2;
+  GtkTextTag *h3;
+} dt_textnotes_tags_t;
+
+static dt_textnotes_tags_t _create_preview_tags(GtkTextBuffer *buffer)
+{
+  dt_textnotes_tags_t tags = { 0 };
+  tags.bold = gtk_text_buffer_create_tag(buffer, "tn_bold", "weight", PANGO_WEIGHT_BOLD, NULL);
+  tags.italic = gtk_text_buffer_create_tag(buffer, "tn_italic", "style", PANGO_STYLE_ITALIC, NULL);
+  tags.mono = gtk_text_buffer_create_tag(buffer, "tn_mono", "family", "monospace", NULL);
+  tags.h1 = gtk_text_buffer_create_tag(buffer, "tn_h1", "weight", PANGO_WEIGHT_BOLD, "scale", 1.4, NULL);
+  tags.h2 = gtk_text_buffer_create_tag(buffer, "tn_h2", "weight", PANGO_WEIGHT_BOLD, "scale", 1.25, NULL);
+  tags.h3 = gtk_text_buffer_create_tag(buffer, "tn_h3", "weight", PANGO_WEIGHT_BOLD, "scale", 1.15, NULL);
+  return tags;
+}
+
+static void _pop_active_tag(GPtrArray *active_tags)
+{
+  if(active_tags->len > 0)
+    g_ptr_array_remove_index(active_tags, active_tags->len - 1);
+}
+
+static void _push_link_tag(GtkTextBuffer *buffer, GPtrArray *active_tags, const char *url)
+{
+  GtkTextTag *tag = gtk_text_buffer_create_tag(buffer, NULL,
+                                               "underline", PANGO_UNDERLINE_SINGLE,
+                                               NULL);
+  if(url && *url)
+    g_object_set_data_full(G_OBJECT(tag), "href", g_strdup(url), g_free);
+  g_ptr_array_add(active_tags, tag);
+}
+
+static void _insert_mono_text(GtkTextBuffer *buffer, GtkTextTag *tag_mono, const char *lit)
+{
+  if(!lit || !*lit) return;
+  GtkTextIter start, end;
+  gtk_text_buffer_get_end_iter(buffer, &start);
+  GtkTextMark *mark = gtk_text_buffer_create_mark(buffer, NULL, &start, TRUE);
+  end = start;
+  gtk_text_buffer_insert(buffer, &end, lit, -1);
+  gtk_text_buffer_get_iter_at_mark(buffer, &start, mark);
+  gtk_text_buffer_apply_tag(buffer, tag_mono, &start, &end);
+  gtk_text_buffer_delete_mark(buffer, mark);
+}
+
+static void _emit_pending_list_prefix(GtkTextBuffer *buffer, GArray *list_stack,
+                                      gboolean *item_pending_prefix)
+{
+  if(*item_pending_prefix)
+  {
+    _emit_list_prefix(buffer, list_stack, FALSE, FALSE, 0);
+    *item_pending_prefix = FALSE;
+  }
+}
+
+static const char *_handle_list_text_prefix(GtkTextBuffer *buffer, GArray *list_stack,
+                                            gboolean *item_pending_prefix,
+                                            const char *lit, const int line_no)
+{
+  if(!lit || !*lit) return lit;
+
+  if(*item_pending_prefix && lit[0] == '[' && lit[2] == ']'
+     && (lit[1] == ' ' || lit[1] == 'x' || lit[1] == 'X'))
+  {
+    const gboolean checked = (lit[1] == 'x' || lit[1] == 'X');
+    _emit_list_prefix(buffer, list_stack, TRUE, checked, line_no);
+    *item_pending_prefix = FALSE;
+    int offset = 3;
+    if(lit[3] == ' ') offset = 4;
+    return lit + offset;
+  }
+
+  if(*item_pending_prefix)
+  {
+    _emit_list_prefix(buffer, list_stack, FALSE, FALSE, 0);
+    *item_pending_prefix = FALSE;
+  }
+
+  return lit;
+}
+
+static void _list_push(GArray *list_stack, cmark_node *node)
+{
+  dt_textnotes_list_state_t st = {
+    .ordered = (cmark_node_get_list_type(node) == CMARK_ORDERED_LIST),
+    .index = cmark_node_get_list_start(node)
+  };
+  g_array_append_val(list_stack, st);
+}
+
+static void _list_pop(GtkTextBuffer *buffer, GArray *list_stack)
+{
+  if(list_stack->len > 0) g_array_remove_index(list_stack, list_stack->len - 1);
+  _buffer_append_blankline(buffer);
+}
+
+static void _list_item_enter(GtkTextBuffer *buffer, gboolean *in_list_item, gboolean *item_pending_prefix)
+{
+  _buffer_append_newline(buffer);
+  *in_list_item = TRUE;
+  *item_pending_prefix = TRUE;
+}
+
+static void _list_item_leave(GtkTextBuffer *buffer, gboolean *in_list_item, gboolean *item_pending_prefix)
+{
+  _buffer_append_newline(buffer);
+  *in_list_item = FALSE;
+  *item_pending_prefix = FALSE;
 }
 
 static gboolean _is_remote_url(const char *url)
@@ -903,6 +1086,111 @@ static gchar *_resolve_image_path(const char *url, const char *base_dir)
   return result;
 }
 
+static gchar *_get_image_base_dir(dt_lib_textnotes_t *d)
+{
+  if(!d || d->imgid <= 0) return NULL;
+
+  char *txt_path = dt_image_get_text_path(d->imgid);
+  if(txt_path)
+  {
+    gchar *dir = g_path_get_dirname(txt_path);
+    g_free(txt_path);
+    return dir;
+  }
+
+  gboolean from_cache = FALSE;
+  char image_path[PATH_MAX] = { 0 };
+  dt_image_full_path(d->imgid, image_path, sizeof(image_path), &from_cache, __FUNCTION__);
+  if(image_path[0] == '\0') return NULL;
+
+  return g_path_get_dirname(image_path);
+}
+
+static void _queue_preview_refresh(dt_lib_textnotes_t *d, const guint delay_ms)
+{
+  if(!d || d->resize_idle_id) return;
+  d->resize_idle_id = g_timeout_add(delay_ms, _refresh_preview_idle, d->self);
+}
+
+static int _get_preview_scale(dt_lib_textnotes_t *d)
+{
+  int scale = 1;
+  if(d && d->preview_view)
+    scale = gtk_widget_get_scale_factor(GTK_WIDGET(d->preview_view));
+  if(scale <= 0) scale = 1;
+  return scale;
+}
+
+static int _compute_max_image_width(dt_lib_textnotes_t *d, const int scale, gboolean *have_device)
+{
+  int device_w = _preview_text_window_width_px(d);
+  if(have_device) *have_device = (device_w > 0);
+
+  int max_w = 0;
+  if(device_w > 0)
+  {
+    const int dpad = (scale > 1) ? 3 : 2; // slightly tighter on HiDPI
+    if(device_w > dpad) device_w -= dpad;
+    max_w = device_w / scale;
+    if(max_w < 1) max_w = 1;
+  }
+
+  if(max_w <= 0 && d->preview_view)
+  {
+    GdkRectangle rect = { 0 };
+    gtk_text_view_get_visible_rect(d->preview_view, &rect);
+    if(rect.width > 0) max_w = rect.width;
+  }
+  if(max_w <= 0 && d->preview_view)
+    max_w = gtk_widget_get_allocated_width(GTK_WIDGET(d->preview_view));
+  if(max_w <= 0 && d->preview_sw)
+    max_w = gtk_widget_get_allocated_width(GTK_WIDGET(d->preview_sw));
+  if(max_w <= 0 && d->root)
+    max_w = gtk_widget_get_allocated_width(d->root);
+
+  if((!have_device || !*have_device) && d->preview_view)
+  {
+    const int margin = gtk_text_view_get_left_margin(d->preview_view)
+                       + gtk_text_view_get_right_margin(d->preview_view);
+    if(margin > 0 && max_w > margin) max_w -= margin;
+
+    GtkStyleContext *ctx = gtk_widget_get_style_context(GTK_WIDGET(d->preview_view));
+    GtkStateFlags state = gtk_widget_get_state_flags(GTK_WIDGET(d->preview_view));
+    GtkBorder padding = { 0 }, border = { 0 };
+    gtk_style_context_get_padding(ctx, state, &padding);
+    gtk_style_context_get_border(ctx, state, &border);
+    const int chrome = padding.left + padding.right + border.left + border.right;
+    if(chrome > 0 && max_w > chrome) max_w -= chrome;
+  }
+
+  if(max_w > 2) max_w -= 2;
+  return max_w;
+}
+
+static GdkPixbuf *_load_scaled_pixbuf(const char *path, const int target_w, GError **error)
+{
+  if(target_w > 0)
+    return gdk_pixbuf_new_from_file_at_scale(path, target_w, -1, TRUE, error);
+  return gdk_pixbuf_new_from_file(path, error);
+}
+
+static void _insert_pixbuf_widget(dt_lib_textnotes_t *d, GtkTextBuffer *buffer,
+                                  GdkPixbuf *pixbuf, const int max_w)
+{
+  GtkWidget *image = gtk_image_new_from_pixbuf(pixbuf);
+  if(max_w > 0)
+    gtk_widget_set_size_request(image, max_w, -1);
+  gtk_widget_set_halign(image, GTK_ALIGN_START);
+  gtk_widget_set_margin_top(image, 2);
+  gtk_widget_set_margin_bottom(image, 6);
+
+  GtkTextIter iter;
+  gtk_text_buffer_get_end_iter(buffer, &iter);
+  GtkTextChildAnchor *anchor = gtk_text_buffer_create_child_anchor(buffer, &iter);
+  gtk_text_view_add_child_at_anchor(d->preview_view, image, anchor);
+  gtk_widget_show(image);
+}
+
 static gboolean _insert_markdown_image(dt_lib_textnotes_t *d, GtkTextBuffer *buffer,
                                        const char *url, const char *fallback_url,
                                        const char *base_dir)
@@ -934,69 +1222,20 @@ static gboolean _insert_markdown_image(dt_lib_textnotes_t *d, GtkTextBuffer *buf
     return FALSE;
   }
 
-  int scale = 1;
-  if(d->preview_view)
-    scale = gtk_widget_get_scale_factor(GTK_WIDGET(d->preview_view));
-  if(scale <= 0) scale = 1;
-
-  int device_w = _preview_text_window_width_px(d);
-  int max_w = 0;
-  const gboolean have_device = (device_w > 0);
-  if(!have_device)
-  {
-    if(!d->resize_idle_id)
-      d->resize_idle_id = g_timeout_add(60, _refresh_preview_idle, d->self);
-  }
-  if(have_device)
-  {
-    const int dpad = (scale > 1) ? 3 : 2; // slightly tighter on HiDPI
-    if(device_w > dpad) device_w -= dpad;
-    max_w = device_w / scale;
-    if(max_w < 1) max_w = 1;
-  }
-
-  if(max_w <= 0 && d->preview_view)
-  {
-    GdkRectangle rect = { 0 };
-    gtk_text_view_get_visible_rect(d->preview_view, &rect);
-    if(rect.width > 0) max_w = rect.width;
-  }
-  if(max_w <= 0 && d->preview_view)
-    max_w = gtk_widget_get_allocated_width(GTK_WIDGET(d->preview_view));
-  if(max_w <= 0 && d->preview_sw)
-    max_w = gtk_widget_get_allocated_width(GTK_WIDGET(d->preview_sw));
-  if(max_w <= 0 && d->root)
-    max_w = gtk_widget_get_allocated_width(d->root);
+  const int scale = _get_preview_scale(d);
+  gboolean have_device = FALSE;
+  int max_w = _compute_max_image_width(d, scale, &have_device);
+  if(!have_device) _queue_preview_refresh(d, 60);
   if(max_w <= 0)
   {
-    if(!d->resize_idle_id)
-      d->resize_idle_id = g_timeout_add(60, _refresh_preview_idle, d->self);
+    _queue_preview_refresh(d, 60);
     g_free(path);
     return TRUE;
   }
-  if(!have_device && d->preview_view)
-  {
-    const int margin = gtk_text_view_get_left_margin(d->preview_view)
-                       + gtk_text_view_get_right_margin(d->preview_view);
-    if(margin > 0 && max_w > margin) max_w -= margin;
 
-    GtkStyleContext *ctx = gtk_widget_get_style_context(GTK_WIDGET(d->preview_view));
-    GtkStateFlags state = gtk_widget_get_state_flags(GTK_WIDGET(d->preview_view));
-    GtkBorder padding = { 0 }, border = { 0 };
-    gtk_style_context_get_padding(ctx, state, &padding);
-    gtk_style_context_get_border(ctx, state, &border);
-    const int chrome = padding.left + padding.right + border.left + border.right;
-    if(chrome > 0 && max_w > chrome) max_w -= chrome;
-  }
-  if(max_w > 2) max_w -= 2;
-  int target_w = max_w * scale;
-
+  const int target_w = max_w * scale;
   GError *error = NULL;
-  GdkPixbuf *pixbuf = NULL;
-  if(target_w > 0)
-    pixbuf = gdk_pixbuf_new_from_file_at_scale(path, target_w, -1, TRUE, &error);
-  else
-    pixbuf = gdk_pixbuf_new_from_file(path, &error);
+  GdkPixbuf *pixbuf = _load_scaled_pixbuf(path, target_w, &error);
   if(!pixbuf)
   {
     if(error) g_clear_error(&error);
@@ -1005,20 +1244,8 @@ static gboolean _insert_markdown_image(dt_lib_textnotes_t *d, GtkTextBuffer *buf
   }
 
   _colorcorrect_pixbuf(pixbuf);
-
-  GtkWidget *image = gtk_image_new_from_pixbuf(pixbuf);
+  _insert_pixbuf_widget(d, buffer, pixbuf, max_w);
   g_object_unref(pixbuf);
-  if(max_w > 0)
-    gtk_widget_set_size_request(image, max_w, -1);
-  gtk_widget_set_halign(image, GTK_ALIGN_START);
-  gtk_widget_set_margin_top(image, 2);
-  gtk_widget_set_margin_bottom(image, 6);
-
-  GtkTextIter iter;
-  gtk_text_buffer_get_end_iter(buffer, &iter);
-  GtkTextChildAnchor *anchor = gtk_text_buffer_create_child_anchor(buffer, &iter);
-  gtk_text_view_add_child_at_anchor(d->preview_view, image, anchor);
-  gtk_widget_show(image);
 
   g_free(path);
   return TRUE;
@@ -1179,45 +1406,19 @@ static gchar *_extract_image_dest_from_source(const char *text, const GArray *of
 
 static void _render_preview(dt_lib_textnotes_t *d, const char *text)
 {
-#ifdef HAVE_CMARK
   d->rendering = TRUE;
   GtkTextBuffer *buffer = gtk_text_view_get_buffer(d->preview_view);
   gtk_text_buffer_set_text(buffer, "", -1);
+
+#ifdef HAVE_CMARK
   _clear_tag_table(buffer);
-
-  GtkTextTag *tag_bold = gtk_text_buffer_create_tag(buffer, "tn_bold", "weight", PANGO_WEIGHT_BOLD, NULL);
-  GtkTextTag *tag_italic = gtk_text_buffer_create_tag(buffer, "tn_italic", "style", PANGO_STYLE_ITALIC, NULL);
-  GtkTextTag *tag_mono = gtk_text_buffer_create_tag(buffer, "tn_mono", "family", "monospace", NULL);
-  GtkTextTag *tag_h1 = gtk_text_buffer_create_tag(buffer, "tn_h1", "weight", PANGO_WEIGHT_BOLD, "scale", 1.4, NULL);
-  GtkTextTag *tag_h2 = gtk_text_buffer_create_tag(buffer, "tn_h2", "weight", PANGO_WEIGHT_BOLD, "scale", 1.25, NULL);
-  GtkTextTag *tag_h3 = gtk_text_buffer_create_tag(buffer, "tn_h3", "weight", PANGO_WEIGHT_BOLD, "scale", 1.15, NULL);
-
+  dt_textnotes_tags_t tags = _create_preview_tags(buffer);
   GPtrArray *active_tags = g_ptr_array_new();
 
   const char *source_text = text ? text : "";
-  gchar *expanded = NULL;
-  if(d->imgid > 0)
-  {
-    dt_variables_params_t *vp;
-    dt_variables_params_init(&vp);
-
-    char input_dir[PATH_MAX] = { 0 };
-    gboolean from_cache = TRUE;
-    dt_image_full_path(d->imgid, input_dir, sizeof(input_dir), &from_cache, __FUNCTION__);
-
-    vp->filename = input_dir;
-    vp->jobcode = "textnotes";
-    vp->imgid = d->imgid;
-    vp->sequence = 0;
-    vp->escape_markup = FALSE;
-
-    gchar *tmp = g_strdup(source_text);
-    expanded = dt_variables_expand(vp, tmp, TRUE);
-    g_free(tmp);
-    dt_variables_params_destroy(vp);
-  }
-
+  gchar *expanded = _expand_text_for_preview(d, source_text);
   const char *render_text = expanded ? expanded : source_text;
+
   gchar *normalized = _normalize_markdown_images(render_text);
   cmark_node *doc = cmark_parse_document(normalized,
                                          strlen(normalized),
@@ -1226,6 +1427,7 @@ static void _render_preview(dt_lib_textnotes_t *d, const char *text)
   {
     g_ptr_array_free(active_tags, TRUE);
     g_free(normalized);
+    g_free(expanded);
     d->rendering = FALSE;
     return;
   }
@@ -1237,25 +1439,7 @@ static void _render_preview(dt_lib_textnotes_t *d, const char *text)
   gboolean item_pending_prefix = FALSE;
 
   GArray *line_offsets = _build_line_offsets(render_text);
-
-  gchar *base_dir = NULL;
-  if(d->imgid > 0)
-  {
-    char *txt_path = dt_image_get_text_path(d->imgid);
-    if(txt_path)
-    {
-      base_dir = g_path_get_dirname(txt_path);
-      g_free(txt_path);
-    }
-    else
-    {
-      gboolean from_cache = FALSE;
-      char image_path[PATH_MAX] = { 0 };
-      dt_image_full_path(d->imgid, image_path, sizeof(image_path), &from_cache, __FUNCTION__);
-      if(image_path[0] != '\0')
-        base_dir = g_path_get_dirname(image_path);
-    }
-  }
+  gchar *base_dir = _get_image_base_dir(d);
 
   for(cmark_event_type ev = cmark_iter_next(it); ev != CMARK_EVENT_DONE; ev = cmark_iter_next(it))
   {
@@ -1277,32 +1461,14 @@ static void _render_preview(dt_lib_textnotes_t *d, const char *text)
         {
           const char *lit = cmark_node_get_literal(node);
           if(!lit) break;
-
           if(image_stack->len > 0)
           {
             dt_textnotes_image_state_t *st =
               &g_array_index(image_stack, dt_textnotes_image_state_t, image_stack->len - 1);
             if(st->suppress_text) break;
           }
-
-          if(item_pending_prefix && lit[0] == '[' && lit[2] == ']'
-             && (lit[1] == ' ' || lit[1] == 'x' || lit[1] == 'X'))
-          {
-            const gboolean checked = (lit[1] == 'x' || lit[1] == 'X');
-            _emit_list_prefix(buffer, list_stack, TRUE, checked, cmark_node_get_start_line(node));
-            item_pending_prefix = FALSE;
-            int offset = 3;
-            if(lit[3] == ' ') offset = 4;
-            lit += offset;
-          }
-          else
-          {
-            if(item_pending_prefix)
-            {
-              _emit_list_prefix(buffer, list_stack, FALSE, FALSE, 0);
-              item_pending_prefix = FALSE;
-            }
-          }
+          lit = _handle_list_text_prefix(buffer, list_stack, &item_pending_prefix,
+                                         lit, cmark_node_get_start_line(node));
           _insert_with_tags(buffer, lit, active_tags);
         }
         break;
@@ -1317,109 +1483,57 @@ static void _render_preview(dt_lib_textnotes_t *d, const char *text)
         break;
       case CMARK_NODE_EMPH:
         if(entering)
-        {
-          g_ptr_array_add(active_tags, tag_italic);
-        }
-        else if(active_tags->len > 0)
-        {
-          g_ptr_array_remove_index(active_tags, active_tags->len - 1);
-        }
+          g_ptr_array_add(active_tags, tags.italic);
+        else
+          _pop_active_tag(active_tags);
         break;
       case CMARK_NODE_STRONG:
         if(entering)
-        {
-          g_ptr_array_add(active_tags, tag_bold);
-        }
-        else if(active_tags->len > 0)
-        {
-          g_ptr_array_remove_index(active_tags, active_tags->len - 1);
-        }
+          g_ptr_array_add(active_tags, tags.bold);
+        else
+          _pop_active_tag(active_tags);
         break;
       case CMARK_NODE_CODE:
         if(entering)
         {
-          if(item_pending_prefix)
-          {
-            _emit_list_prefix(buffer, list_stack, FALSE, FALSE, 0);
-            item_pending_prefix = FALSE;
-          }
-          const char *lit = cmark_node_get_literal(node);
-          if(lit && *lit)
-          {
-            GtkTextIter start, end;
-            gtk_text_buffer_get_end_iter(buffer, &start);
-            GtkTextMark *mark = gtk_text_buffer_create_mark(buffer, NULL, &start, TRUE);
-            end = start;
-            gtk_text_buffer_insert(buffer, &end, lit, -1);
-            gtk_text_buffer_get_iter_at_mark(buffer, &start, mark);
-            gtk_text_buffer_apply_tag(buffer, tag_mono, &start, &end);
-            gtk_text_buffer_delete_mark(buffer, mark);
-          }
+          _emit_pending_list_prefix(buffer, list_stack, &item_pending_prefix);
+          _insert_mono_text(buffer, tags.mono, cmark_node_get_literal(node));
         }
         break;
       case CMARK_NODE_CODE_BLOCK:
         if(entering)
         {
           _buffer_append_blankline(buffer);
-          if(item_pending_prefix)
-          {
-            _emit_list_prefix(buffer, list_stack, FALSE, FALSE, 0);
-            item_pending_prefix = FALSE;
-          }
-          const char *lit = cmark_node_get_literal(node);
-          if(lit && *lit)
-          {
-            GtkTextIter start, end;
-            gtk_text_buffer_get_end_iter(buffer, &start);
-            GtkTextMark *mark = gtk_text_buffer_create_mark(buffer, NULL, &start, TRUE);
-            end = start;
-            gtk_text_buffer_insert(buffer, &end, lit, -1);
-            gtk_text_buffer_get_iter_at_mark(buffer, &start, mark);
-            gtk_text_buffer_apply_tag(buffer, tag_mono, &start, &end);
-            gtk_text_buffer_delete_mark(buffer, mark);
-          }
+          _emit_pending_list_prefix(buffer, list_stack, &item_pending_prefix);
+          _insert_mono_text(buffer, tags.mono, cmark_node_get_literal(node));
           _buffer_append_blankline(buffer);
         }
         break;
       case CMARK_NODE_HEADING:
         if(entering)
         {
-          GtkTextTag *tag = tag_h3;
+          GtkTextTag *tag = tags.h3;
           const int level = cmark_node_get_heading_level(node);
-          if(level <= 1) tag = tag_h1;
-          else if(level == 2) tag = tag_h2;
+          if(level <= 1) tag = tags.h1;
+          else if(level == 2) tag = tags.h2;
           g_ptr_array_add(active_tags, tag);
         }
-        else if(active_tags->len > 0)
+        else
         {
-          g_ptr_array_remove_index(active_tags, active_tags->len - 1);
+          _pop_active_tag(active_tags);
           _buffer_append_blankline(buffer);
         }
         break;
       case CMARK_NODE_LINK:
         if(entering)
-        {
-          const char *url = cmark_node_get_url(node);
-          GtkTextTag *tag = gtk_text_buffer_create_tag(buffer, NULL,
-                                                       "underline", PANGO_UNDERLINE_SINGLE,
-                                                       NULL);
-          if(url && *url)
-            g_object_set_data_full(G_OBJECT(tag), "href", g_strdup(url), g_free);
-          g_ptr_array_add(active_tags, tag);
-        }
-        else if(active_tags->len > 0)
-        {
-          g_ptr_array_remove_index(active_tags, active_tags->len - 1);
-        }
+          _push_link_tag(buffer, active_tags, cmark_node_get_url(node));
+        else
+          _pop_active_tag(active_tags);
         break;
       case CMARK_NODE_IMAGE:
         if(entering)
         {
-          if(item_pending_prefix)
-          {
-            _emit_list_prefix(buffer, list_stack, FALSE, FALSE, 0);
-            item_pending_prefix = FALSE;
-          }
+          _emit_pending_list_prefix(buffer, list_stack, &item_pending_prefix);
           const char *url = cmark_node_get_url(node);
           gchar *fallback = _extract_image_dest_from_source(render_text, line_offsets, node);
           const gboolean inlined = _insert_markdown_image(d, buffer, url, fallback, base_dir);
@@ -1427,56 +1541,30 @@ static void _render_preview(dt_lib_textnotes_t *d, const char *text)
           dt_textnotes_image_state_t st = { .suppress_text = inlined, .tag_added = FALSE };
           if(!inlined)
           {
-            GtkTextTag *tag = gtk_text_buffer_create_tag(buffer, NULL,
-                                                         "underline", PANGO_UNDERLINE_SINGLE,
-                                                         NULL);
-            if(url && *url)
-              g_object_set_data_full(G_OBJECT(tag), "href", g_strdup(url), g_free);
-            g_ptr_array_add(active_tags, tag);
+            _push_link_tag(buffer, active_tags, url);
             st.tag_added = TRUE;
           }
           g_array_append_val(image_stack, st);
         }
-        else
+        else if(image_stack->len > 0)
         {
-          if(image_stack->len > 0)
-          {
-            dt_textnotes_image_state_t st =
-              g_array_index(image_stack, dt_textnotes_image_state_t, image_stack->len - 1);
-            if(st.tag_added && active_tags->len > 0)
-              g_ptr_array_remove_index(active_tags, active_tags->len - 1);
-            g_array_remove_index(image_stack, image_stack->len - 1);
-          }
+          dt_textnotes_image_state_t st =
+            g_array_index(image_stack, dt_textnotes_image_state_t, image_stack->len - 1);
+          if(st.tag_added) _pop_active_tag(active_tags);
+          g_array_remove_index(image_stack, image_stack->len - 1);
         }
         break;
       case CMARK_NODE_LIST:
         if(entering)
-        {
-          dt_textnotes_list_state_t st = {
-            .ordered = (cmark_node_get_list_type(node) == CMARK_ORDERED_LIST),
-            .index = cmark_node_get_list_start(node)
-          };
-          g_array_append_val(list_stack, st);
-        }
+          _list_push(list_stack, node);
         else
-        {
-          if(list_stack->len > 0) g_array_remove_index(list_stack, list_stack->len - 1);
-          _buffer_append_blankline(buffer);
-        }
+          _list_pop(buffer, list_stack);
         break;
       case CMARK_NODE_ITEM:
         if(entering)
-        {
-          _buffer_append_newline(buffer);
-          in_list_item = TRUE;
-          item_pending_prefix = TRUE;
-        }
+          _list_item_enter(buffer, &in_list_item, &item_pending_prefix);
         else
-        {
-          _buffer_append_newline(buffer);
-          in_list_item = FALSE;
-          item_pending_prefix = FALSE;
-        }
+          _list_item_leave(buffer, &in_list_item, &item_pending_prefix);
         break;
       default:
         break;
@@ -1492,36 +1580,20 @@ static void _render_preview(dt_lib_textnotes_t *d, const char *text)
   g_free(base_dir);
   g_free(normalized);
   g_free(expanded);
-  d->rendering = FALSE;
 #else
-  d->rendering = TRUE;
-  GtkTextBuffer *buffer = gtk_text_view_get_buffer(d->preview_view);
   const char *source_text = text ? text : "";
-  gchar *expanded = NULL;
-  if(d->imgid > 0)
-  {
-    dt_variables_params_t *vp;
-    dt_variables_params_init(&vp);
-
-    char input_dir[PATH_MAX] = { 0 };
-    gboolean from_cache = TRUE;
-    dt_image_full_path(d->imgid, input_dir, sizeof(input_dir), &from_cache, __FUNCTION__);
-
-    vp->filename = input_dir;
-    vp->jobcode = "textnotes";
-    vp->imgid = d->imgid;
-    vp->sequence = 0;
-    vp->escape_markup = FALSE;
-
-    gchar *tmp = g_strdup(source_text);
-    expanded = dt_variables_expand(vp, tmp, TRUE);
-    g_free(tmp);
-    dt_variables_params_destroy(vp);
-  }
+  gchar *expanded = _expand_text_for_preview(d, source_text);
   gtk_text_buffer_set_text(buffer, expanded ? expanded : source_text, -1);
   g_free(expanded);
-  d->rendering = FALSE;
 #endif
+  d->rendering = FALSE;
+}
+
+static void _clear_mtime_label(dt_lib_textnotes_t *d)
+{
+  if(!d || !d->mtime_label) return;
+  gtk_label_set_text(GTK_LABEL(d->mtime_label), "");
+  gtk_widget_set_visible(d->mtime_label, FALSE);
 }
 
 static void _update_mtime_label(dt_lib_module_t *self)
@@ -1532,16 +1604,14 @@ static void _update_mtime_label(dt_lib_module_t *self)
   char *path = (d->imgid > 0) ? dt_image_get_text_path(d->imgid) : NULL;
   if(!path)
   {
-    gtk_label_set_text(GTK_LABEL(d->mtime_label), "");
-    gtk_widget_set_visible(d->mtime_label, FALSE);
+    _clear_mtime_label(d);
     return;
   }
 
   GStatBuf statbuf;
   if(g_stat(path, &statbuf) != 0)
   {
-    gtk_label_set_text(GTK_LABEL(d->mtime_label), "");
-    gtk_widget_set_visible(d->mtime_label, FALSE);
+    _clear_mtime_label(d);
     g_free(path);
     return;
   }
@@ -1559,8 +1629,7 @@ static void _update_mtime_label(dt_lib_module_t *self)
   }
   else
   {
-    gtk_label_set_text(GTK_LABEL(d->mtime_label), "");
-    gtk_widget_set_visible(d->mtime_label, FALSE);
+    _clear_mtime_label(d);
   }
 
   if(gdt) g_date_time_unref(gdt);
@@ -1698,10 +1767,7 @@ static gboolean _refresh_preview_idle(gpointer user_data)
   if(d->mode_toggle && !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->mode_toggle)))
     return G_SOURCE_REMOVE;
 
-  GtkTextBuffer *buffer = gtk_text_view_get_buffer(d->edit_view);
-  gchar *text = _get_buffer_text(buffer);
-  _render_preview(d, text);
-  g_free(text);
+  _render_preview_from_edit(d);
   return G_SOURCE_REMOVE;
 }
 
@@ -1711,10 +1777,7 @@ static void _preview_map(GtkWidget *widget, dt_lib_module_t *self)
   if(!d || !d->preview_view || !d->edit_view) return;
   if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->mode_toggle))) return;
 
-  GtkTextBuffer *buffer = gtk_text_view_get_buffer(d->edit_view);
-  gchar *text = _get_buffer_text(buffer);
-  _render_preview(d, text);
-  g_free(text);
+  _render_preview_from_edit(d);
 
   if(!d->resize_idle_id)
     d->resize_idle_id = g_timeout_add(80, _refresh_preview_idle, self);
@@ -1779,23 +1842,13 @@ static char *_text_sidecar_save_path(const int32_t imgid)
 
   if(image_path[0] == '\0') return NULL;
 
-  size_t len = strlen(image_path);
-  const char *c = image_path + len;
-  while((c > image_path) && (*c != '.')) c--;
-  len = c - image_path + 1;
-
-  char *result = g_strndup(image_path, len + 3);
-  result[len] = 't';
-  result[len + 1] = 'x';
-  result[len + 2] = 't';
-  return result;
+  return dt_image_build_text_path_from_path(image_path);
 }
 
 static void _save_and_render(dt_lib_module_t *self)
 {
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
-  GtkTextBuffer *buffer = gtk_text_view_get_buffer(d->edit_view);
-  gchar *text = _get_buffer_text(buffer);
+  gchar *text = _get_edit_text(d);
 
   _render_preview(d, text);
 
@@ -1873,8 +1926,7 @@ static void _toggle_mode(GtkToggleButton *button, dt_lib_module_t *self)
   if(preview)
   {
     _completion_hide(d);
-    GtkTextBuffer *buffer = gtk_text_view_get_buffer(d->edit_view);
-    gchar *text = _get_buffer_text(buffer);
+    gchar *text = _get_edit_text(d);
     _render_preview(d, text);
     g_free(text);
   }
@@ -1915,10 +1967,7 @@ static void _load_for_image(dt_lib_module_t *self, const int32_t imgid)
   }
   if(!text) text = g_strdup("");
 
-  d->loading = TRUE;
-  GtkTextBuffer *buffer = gtk_text_view_get_buffer(d->edit_view);
-  gtk_text_buffer_set_text(buffer, text, -1);
-  d->loading = FALSE;
+  _set_edit_text(d, text);
   d->dirty = FALSE;
 
   if(d->mode_toggle && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->mode_toggle)))
@@ -1996,28 +2045,7 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(textview, "button-release-event", G_CALLBACK(_edit_button_release), self);
 
   d->edit_view = GTK_TEXT_VIEW(textview);
-
-  d->completion_model = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
-  GtkWidget *completion_tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(d->completion_model));
-  gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(completion_tree), FALSE);
-  GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
-  GtkTreeViewColumn *col = gtk_tree_view_column_new_with_attributes(_("variable"), renderer,
-                                                                     "text", COMPL_DESCRIPTION, NULL);
-  gtk_tree_view_append_column(GTK_TREE_VIEW(completion_tree), col);
-  GtkTreeSelection *sel = gtk_tree_view_get_selection(GTK_TREE_VIEW(completion_tree));
-  gtk_tree_selection_set_mode(sel, GTK_SELECTION_SINGLE);
-  g_signal_connect(completion_tree, "row-activated", G_CALLBACK(_completion_row_activated), self);
-
-  GtkWidget *completion_sw = gtk_scrolled_window_new(NULL, NULL);
-  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(completion_sw), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-  gtk_container_add(GTK_CONTAINER(completion_sw), completion_tree);
-  gtk_widget_set_size_request(completion_sw, 360, 200);
-
-  d->completion_popover = gtk_popover_new(NULL);
-  gtk_popover_set_position(GTK_POPOVER(d->completion_popover), GTK_POS_BOTTOM);
-  gtk_popover_set_relative_to(GTK_POPOVER(d->completion_popover), textview);
-  gtk_container_add(GTK_CONTAINER(d->completion_popover), completion_sw);
-  d->completion_tree = completion_tree;
+  _setup_completion(self, textview);
 
   GtkWidget *edit_sw = dt_ui_scroll_wrap(textview, 140, d->height_setting);
   gtk_widget_set_hexpand(edit_sw, TRUE);

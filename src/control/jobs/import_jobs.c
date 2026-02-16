@@ -4,6 +4,7 @@
 #include "common/exif.h"
 #include "common/metadata.h"
 #include "control/control.h"
+#include "common/image.h"
 #include "control/jobs/control_jobs.h"
 
 #ifndef _WIN32
@@ -195,26 +196,12 @@ int _import_copy_xmp(const char *const filename, gchar *dest_file_path)
   return xmp_cntr;
 }
 
-static char *_text_sidecar_build_path(const char *image_path)
-{
-  size_t len = strlen(image_path);
-  const char *c = image_path + len;
-  while((c > image_path) && (*c != '.')) c--;
-  len = c - image_path + 1;
-
-  char *result = g_strndup(image_path, len + 3);
-  result[len] = 't';
-  result[len + 1] = 'x';
-  result[len + 2] = 't';
-  return result;
-}
-
 int _import_copy_txt(const char *const filename, const char *dest_file_path)
 {
   char *txt_source = dt_image_get_text_path_from_path(filename);
   if(!txt_source) return 0;
 
-  char *txt_dest = _text_sidecar_build_path(dest_file_path);
+  char *txt_dest = dt_image_build_text_path_from_path(dest_file_path);
   int success = 0;
 
   if(txt_dest)
