@@ -239,6 +239,7 @@ typedef struct dt_masks_functions_t
   void (*draw_shape)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
   /** initialise all control points to eventually match a catmull-rom like spline */
   void (*init_ctrl_points)(struct dt_masks_form_t *form);
+  int (*populate_context_menu)(GtkWidget *menu, struct dt_masks_form_t *form, struct dt_masks_form_gui_t *gui);
 } dt_masks_functions_t;
 
 /** structure used to define a form */
@@ -339,6 +340,20 @@ typedef struct dt_masks_form_gui_t
   uint64_t pipe_hash;
 } dt_masks_form_gui_t;
 
+typedef enum dt_masks_menu_icon_t
+{
+  DT_MASKS_MENU_ICON_NONE = 0,
+  DT_MASKS_MENU_ICON_CIRCLE,
+  DT_MASKS_MENU_ICON_SQUARE
+} dt_masks_menu_icon_t;
+
+typedef struct dt_masks_menu_icon_data_t
+{
+  dt_masks_menu_icon_t shape;
+} dt_masks_menu_icon_data_t;
+
+
+
 /** the shape-specific function tables */
 extern const dt_masks_functions_t dt_masks_functions_circle;
 extern const dt_masks_functions_t dt_masks_functions_ellipse;
@@ -385,6 +400,8 @@ int dt_masks_version(void);
 
 void dt_masks_append_form(dt_develop_t *dev, dt_masks_form_t *form);
 void dt_masks_remove_form(dt_develop_t *dev, dt_masks_form_t *form);
+void dt_masks_remove_node(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
+                          dt_masks_form_gui_t *gui, int index, int node_index);
 
 // update masks from older versions
 int dt_masks_legacy_params(dt_develop_t *dev, void *params, const int old_version, const int new_version);
@@ -443,7 +460,7 @@ int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *eve
  * 
  * @return TRUE if the node is a corner, FALSE it's a curve.
  */
-gboolean dt_masks_is_corner_node(const dt_masks_form_gui_points_t *gpt, const int index, const int nb, const int coord_offset);
+gboolean dt_masks_node_is_cusp(const dt_masks_form_gui_points_t *gpt, const int index, const int nb, const int coord_offset);
 
 /**
  * @brief Draw the source for a correction mask.
@@ -742,6 +759,29 @@ gboolean dt_masks_is_within_radius(const float px, const float py,
 
 gboolean dt_masks_creation_mode(dt_iop_module_t *module, const dt_masks_type_t type);
 
+/** Contextual menu */
+
+#define menu_item_set_fake_accel(menu_item, keyval, mods)             \
+                                                                      \
+{                                                                     \
+  GtkWidget *child = gtk_bin_get_child(GTK_BIN(menu_item));           \
+  if(GTK_IS_ACCEL_LABEL(child))                                       \
+    gtk_accel_label_set_accel(GTK_ACCEL_LABEL(child), keyval, mods);  \
+}
+
+void _masks_gui_delete_node_callback(GtkWidget *menu, struct dt_masks_form_gui_t *gui);
+
+GdkModifierType dt_masks_get_accel_mods(dt_masks_interaction_t interaction);
+
+GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form);
+
+GtkWidget *masks_gtk_menu_item_new_with_icon(const char *label, GtkWidget *menu,
+                                                 void (*activate_callback)(GtkWidget *widget, dt_masks_form_gui_t *gui),
+                                                 dt_masks_form_gui_t *gui, dt_masks_menu_icon_t icon);
+
+GtkWidget *masks_gtk_menu_item_new_with_markup(const char *label, GtkWidget *menu,
+                                                 void (*activate_callback)(GtkWidget *widget, dt_masks_form_gui_t *gui),
+                                                 struct dt_masks_form_gui_t *gui);
 
 #ifdef __cplusplus
 }

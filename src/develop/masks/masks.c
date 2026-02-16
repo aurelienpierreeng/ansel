@@ -194,11 +194,11 @@ void dt_masks_form_gui_points_free(gpointer data)
   free(gpt);
 }
 
-static void _masks_remove_node(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
-                          dt_masks_form_gui_t *gui, int index)
+void dt_masks_remove_node(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
+                          dt_masks_form_gui_t *gui, int index, int node_index)
 {
   if(!form || !form->points) return;
-  dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)g_list_nth_data(form->points, gui->node_selected);
+  dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)g_list_nth_data(form->points, node_index);
   if(!node) return;
   form->points = g_list_remove(form->points, node);
   free(node);
@@ -295,7 +295,7 @@ gboolean dt_masks_gui_delete(struct dt_iop_module_t *module, dt_masks_form_t *fo
     if(g_list_shorter_than(form->points, 3))
       return _masks_remove_shape(module, form, parentid, gui, gui->group_selected);
 
-    _masks_remove_node(module, form, parentid, gui, gui->group_selected);
+    dt_masks_remove_node(module, form, parentid, gui, gui->group_selected, gui->node_selected);
 
     return TRUE;
   }
@@ -1227,6 +1227,236 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
   return ret;
 }
 
+static void _masks_gui_remove_form_callback(GtkWidget *menu, struct dt_masks_form_gui_t *gui)
+{
+  if(!gui) return;
+  dt_masks_form_t *forms = darktable.develop->form_visible;
+  if(!forms) return;
+
+
+  if(gui->group_selected >= 0)
+  {
+    // Delete shape from current group
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(forms->points, gui->group_selected);
+    if(!fpt) return;
+    dt_iop_module_t *module = darktable.develop->gui_module;
+    if(!module) return;
+    dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+    if(sel)
+      _masks_remove_shape(module, sel, fpt->parentid, gui, gui->group_selected);
+
+    dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+  }
+
+}
+
+void _masks_gui_delete_node_callback(GtkWidget *menu, struct dt_masks_form_gui_t *gui)
+{
+  if(!gui) return;
+  dt_masks_form_t *forms = darktable.develop->form_visible;
+  if(!forms) return;
+
+  dt_iop_module_t *module = darktable.develop->gui_module;
+  if(!module) return;
+
+  if(gui->creation)
+  {
+    // Minimum points to create a polygon
+    if(gui->node_dragging < 1)
+    {
+      dt_masks_form_cancel_creation(module, gui);
+      return;
+    }
+    dt_masks_form_t *sel = darktable.develop->form_visible;
+    if(sel)
+      dt_masks_remove_node(module, sel, 0, gui, 0, gui->node_dragging);
+    gui->node_dragging -= 1; 
+  }
+  else if(gui->group_selected >= 0)
+  {
+    // Delete shape from current group
+
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(forms->points, gui->group_selected);
+    if(!fpt) return;
+    dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+    if(sel)
+      dt_masks_remove_node(module, sel, fpt->parentid, gui, gui->group_selected, gui->node_selected);
+    
+    dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+  }
+}
+
+static void _masks_gui_cancel_creation_callback(GtkWidget *menu, struct dt_masks_form_gui_t *gui)
+{
+  dt_iop_module_t *module = darktable.develop->gui_module;
+  dt_masks_form_cancel_creation(module, gui);
+}
+
+
+/** Contextual menu */
+
+static gboolean _brush_menu_icon_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
+{
+  dt_masks_menu_icon_data_t *data = (dt_masks_menu_icon_data_t *)user_data;
+  if(!data || data->shape == DT_MASKS_MENU_ICON_NONE) return FALSE;
+
+  GtkStyleContext *context = gtk_widget_get_style_context(widget);
+  GdkRGBA color;
+  gtk_style_context_get_color(context, GTK_STATE_FLAG_NORMAL, &color);
+  cairo_set_source_rgba(cr, color.red, color.green, color.blue, color.alpha);
+  cairo_set_line_width(cr, 1.2);
+
+  GtkAllocation alloc;
+  gtk_widget_get_allocation(widget, &alloc);
+  const double pad = 1.0;
+  const double w = MAX(0.0, (double)alloc.width - 2.0 * pad);
+  const double h = MAX(0.0, (double)alloc.height - 2.0 * pad);
+  const double size = fmin(w, h);
+  const double x = ((double)alloc.width - size) * 0.5;
+  const double y = ((double)alloc.height - size) * 0.5;
+
+  if(data->shape == DT_MASKS_MENU_ICON_CIRCLE)
+  {
+    cairo_arc(cr, x + size * 0.5, y + size * 0.5, MAX(0.0, size * 0.5 - 0.5), 0.0, 2.0 * M_PI);
+    cairo_stroke(cr);
+  }
+  else if(data->shape == DT_MASKS_MENU_ICON_SQUARE)
+  {
+    cairo_rectangle(cr, x, y, size, size);
+    cairo_stroke(cr);
+  }
+
+  return FALSE;
+}
+
+GtkWidget *masks_gtk_menu_item_new_with_icon(const char *label, GtkWidget *menu,
+                                                 void (*activate_callback)(GtkWidget *widget, dt_masks_form_gui_t *gui),
+                                                 dt_masks_form_gui_t *gui, dt_masks_menu_icon_t icon)
+{
+  GtkWidget *menu_item = gtk_menu_item_new();
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+  GtkWidget *icon_widget = gtk_drawing_area_new();
+  GtkWidget *label_widget = gtk_label_new(NULL);
+
+  gtk_widget_set_size_request(icon_widget, 10, 10);
+  gtk_label_set_markup(GTK_LABEL(label_widget), label);
+
+  if(icon != DT_MASKS_MENU_ICON_NONE)
+  {
+    dt_masks_menu_icon_data_t *data = g_malloc0(sizeof(dt_masks_menu_icon_data_t));
+    data->shape = icon;
+    g_signal_connect_data(icon_widget, "draw", G_CALLBACK(_brush_menu_icon_draw), data, (GClosureNotify)g_free, 0);
+  }
+
+  gtk_label_set_xalign(GTK_LABEL(label_widget), 0.0f);
+  gtk_box_pack_start(GTK_BOX(box), label_widget, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(box), icon_widget, FALSE, FALSE, 2);
+  gtk_container_add(GTK_CONTAINER(menu_item), box);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", G_CALLBACK(activate_callback), gui);
+
+  return menu_item;
+}
+
+GtkWidget *masks_gtk_menu_item_new_with_markup(const char *label, GtkWidget *menu,
+                                                 void (*activate_callback)(GtkWidget *widget, dt_masks_form_gui_t *gui),
+                                                 struct dt_masks_form_gui_t *gui)
+{
+  GtkWidget *menu_item = gtk_menu_item_new_with_label("");
+  GtkWidget *child = gtk_bin_get_child(GTK_BIN(menu_item));
+  gtk_label_set_markup(GTK_LABEL(child), label);
+  gtk_menu_item_set_reserve_indicator(GTK_MENU_ITEM(menu_item), FALSE);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", G_CALLBACK(activate_callback), gui);
+
+  return menu_item;
+}
+
+GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form)
+{
+  assert(gui);
+  assert(form);
+  // Always re-create the menu when we show it because we don't bother updating info during the lifetime of the mask
+  GtkWidget *menu = gtk_menu_new();
+  
+  // Title
+  gchar *form_name = NULL;
+  if(form->name[0])
+    form_name = g_strdup(form->name);
+  else if(gui->creation)
+  {
+    // if no name, we are probably creating a new form, we create one based on the type
+    form_name = g_strdup(_("New "));
+    switch (form->type)
+    {
+      case DT_MASKS_CIRCLE:
+        form_name = g_strconcat(form_name, _("circle"), NULL);
+        break;
+      case DT_MASKS_ELLIPSE:
+        form_name = g_strconcat(form_name, _("ellipse"), NULL);
+        break;
+      case DT_MASKS_POLYGON:
+        form_name = g_strconcat(form_name, _("polygon"), NULL);
+        break;
+      case DT_MASKS_BRUSH:
+        form_name = g_strconcat(form_name, _("brush"), NULL);
+        break;
+      case DT_MASKS_GRADIENT:
+        form_name = g_strconcat(form_name, _("gradient"), NULL);
+        break;
+      case DT_MASKS_GROUP:
+        form_name = g_strconcat(form_name, _("group"), NULL);
+        break;
+      default:
+        g_free(form_name); // Erase the "New " prefix
+        form_name = g_strdup(_("Unknown shape"));
+        break;
+    }
+  }
+  gchar *node_index = g_strdup_printf(gui->node_selected >= 0 ? " - (%s #%d)" : "", _("node"), gui->node_selected);
+  gchar *title = g_strdup_printf("<b><big>%s%s</big></b>", form_name, node_index);
+  GtkWidget *menu_item = masks_gtk_menu_item_new_with_markup(title, menu, NULL, gui);
+  gtk_widget_set_sensitive(menu_item, FALSE);
+  g_free(node_index);
+  g_free(title);
+  g_free(form_name);
+
+  // Shape specific menu items
+  if(form && form->functions && form->functions->populate_context_menu)
+    form->functions->populate_context_menu(menu, form, gui);
+
+
+
+  GtkWidget *sep = gtk_separator_menu_item_new();
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
+
+  // Common menu items
+  if(gui->creation)
+  {
+    menu_item = masks_gtk_menu_item_new_with_markup(_("Cancel"), menu, _masks_gui_cancel_creation_callback, gui);
+    menu_item_set_fake_accel(menu_item, GDK_KEY_Escape, 0);
+  }
+  else
+  {
+    if(gui->node_selected >= 0)
+    {
+      menu_item = masks_gtk_menu_item_new_with_markup(_("Delete node"), menu, _masks_gui_delete_node_callback, gui);
+      menu_item_set_fake_accel(menu_item, GDK_KEY_Delete, 0);
+    }
+    else
+    {
+      menu_item = masks_gtk_menu_item_new_with_markup(_("Remove form"), menu, _masks_gui_remove_form_callback, gui);
+      menu_item_set_fake_accel(menu_item, GDK_KEY_Delete, 0);
+      gtk_widget_set_sensitive(menu_item, gui->form_selected >= 0);
+    }
+  }
+
+  gtk_widget_show_all(menu);
+  return menu;
+}
+
 int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, double y, double pressure,
                                    int which, int type, uint32_t state)
 {
@@ -1241,10 +1471,22 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);
 
+  gboolean return_val = FALSE;
   if(form->functions)
-    return form->functions->button_pressed(module, pzx, pzy, pressure, which, type, state, form, 0, gui, 0);
+    return_val = form->functions->button_pressed(module, pzx, pzy, pressure, which, type, state, form, 0, gui, 0);
 
-  return 0;
+  if(which == 3 && !return_val)
+  {
+    // mouse is over a form
+    if(gui && ((gui->group_selected >= 0 && gui->form_selected) || gui->creation))
+    {
+      GtkWidget *menu = dt_masks_create_menu(gui, form);
+      gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
+      return_val = TRUE;
+    }
+  }
+
+  return return_val;
 }
 
 int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *event)
@@ -1312,7 +1554,7 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
   return ret;
 }
 
-gboolean dt_masks_is_corner_node(const dt_masks_form_gui_points_t *gpt, const int index, const int nb, const int coord_offset)
+gboolean dt_masks_node_is_cusp(const dt_masks_form_gui_points_t *gpt, const int index, const int nb, const int coord_offset)
 {
   const float *p = &gpt->points[index * nb];
   return (p[0 + coord_offset] == p[2 + coord_offset] && p[1 + coord_offset] == p[3 + coord_offset]);

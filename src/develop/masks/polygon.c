@@ -151,7 +151,7 @@ static void _polygon_init_ctrl_points(dt_masks_form_t *form)
     dt_masks_node_polygon_t *point3 = (dt_masks_node_polygon_t *)form_points->data;
     if(!point3) return;
     // if the point has not been set manually, we redefine it
-    if(point3->state & DT_MASKS_POINT_STATE_NORMAL)
+    if(point3->state == DT_MASKS_POINT_STATE_NORMAL)
     {
       // we want to get point-2 (into pt1), point-1 (into pt2), point+1 (into pt4), point+2 (into pt5), wrapping
       // around to the other end of the list
@@ -974,19 +974,26 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, float pzx, floa
   gui->seg_selected = -1;
 }
 
-static void _change_node_type(struct dt_iop_module_t *module, dt_masks_form_t *form, int parentid,
+// TODO: Should be in masks.c
+static void _change_node_type(struct dt_iop_module_t *module, dt_masks_form_t *form,
                                dt_masks_form_gui_t *gui, int index)
 {
   if(!form || !form->points) return;
+  dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, gui->group_selected);
+  if(!gpt) return;
   dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->node_edited);
   if(!node) return;
-  if(node->state != DT_MASKS_POINT_STATE_NORMAL)
+  const gboolean is_corner = dt_masks_node_is_cusp(gpt, gui->node_selected, 6, 2);
+
+  if(is_corner)
   {
+    // Switch to round
     node->state = DT_MASKS_POINT_STATE_NORMAL;
     _polygon_init_ctrl_points(form);
   }
   else
   {
+    // Switch to corner
     node->ctrl1[0] = node->ctrl2[0] = node->node[0];
     node->ctrl1[1] = node->ctrl2[1] = node->node[1];
     node->state = DT_MASKS_POINT_STATE_USER;
@@ -1189,7 +1196,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
 
     // Current node's curve handle
     // We can select the handle only if the node is a curve
-    if(!dt_masks_is_corner_node(gpt, k, 6, 2))
+    if(!dt_masks_node_is_cusp(gpt, k, 6, 2))
     {
       float ffx, ffy;
       _polygon_ctrl2_to_handle(gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], gpt->points[k * 6 + 4],
@@ -1454,6 +1461,27 @@ static int _polygon_creation_closing_form(dt_masks_form_t *form, dt_masks_form_g
   return 1;
 }
 
+static gboolean _reset_ctrl_points(struct dt_iop_module_t *module, dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index)
+{
+  if(!form || !form->points) return FALSE;
+  dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
+  if(!gpt) return FALSE;
+  int node_index = MAX(gui->node_selected, gui->handle_selected);
+  dt_masks_node_polygon_t *node
+      = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, node_index);
+  if(!node) return FALSE;
+
+  if(node->state != DT_MASKS_POINT_STATE_NORMAL && !dt_masks_node_is_cusp(gpt, node_index, 6, 2))
+  {
+    node->state = DT_MASKS_POINT_STATE_NORMAL;
+    _polygon_init_ctrl_points(form);
+    // we recreate the form points
+    dt_masks_gui_form_create(form, gui, index, module);
+    gpt->clockwise = _polygon_is_clockwise(form);
+  }
+  return TRUE;
+}
+
 static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float pzx, float pzy,
                                        double pressure, int which, int type, uint32_t state,
                                        dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, int index)
@@ -1563,8 +1591,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
       // if ctrl is pressed, we change the type of point
       if(gui->node_edited == gui->node_selected && dt_modifier_is(state, GDK_CONTROL_MASK))
       {
-        // FIXME: handle that in context menu
-        _change_node_type(module, form, parentid, gui, index);
+        _change_node_type(module, form, gui, index);
         return 1;
       }
       /*// we register the current position to avoid accidental move
@@ -1582,7 +1609,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
     }
     else if(gui->handle_selected >= 0)
     {  
-      if(!dt_masks_is_corner_node(gpt, gui->handle_selected, 6, 2))
+      if(!dt_masks_node_is_cusp(gpt, gui->handle_selected, 6, 2))
       {
         gui->handle_dragging = gui->handle_selected;
       
@@ -1630,28 +1657,6 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
     gui->node_edited = -1;
   }
 
-  else if(which == 3)
-  {
-    dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-    if(!gpt) return 0;
-
-    if(gui->handle_selected >= 0)
-    {
-      if(!form->points) return 0;
-      dt_masks_node_polygon_t *node
-          = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->handle_selected);
-      if(node && node->state != DT_MASKS_POINT_STATE_NORMAL && !dt_masks_is_corner_node(gpt, gui->handle_selected, 6, 2))
-      {
-        node->state = DT_MASKS_POINT_STATE_NORMAL;
-        _polygon_init_ctrl_points(form);
-
-        // we recreate the form points
-        dt_masks_gui_form_create(form, gui, index, module);
-        gpt->clockwise = _polygon_is_clockwise(form);
-      }
-      return 1;
-    }
-  }
   return 0;
 }
 
@@ -1709,6 +1714,28 @@ static int _polygon_events_key_pressed(struct dt_iop_module_t *module, GdkEventK
   {
     switch(event->keyval)
     {
+      case GDK_KEY_BackSpace:
+      {
+        // Minimum points to create a polygon
+        if(gui->node_dragging < 1)
+        {
+          dt_masks_form_cancel_creation(module, gui);
+          return 1;
+        }
+        // switch previous node coords to the current one
+        dt_masks_node_polygon_t *previous_node = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->node_dragging - 1);
+        dt_masks_node_polygon_t *current_node = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->node_dragging);
+        if(!previous_node || !current_node) return 0;
+        previous_node->node[0] = current_node->node[0];
+        previous_node->node[1] = current_node->node[1];
+      
+        dt_masks_remove_node(module, form, 0, gui, 0, gui->node_dragging);
+        // Decrease the current dragging node index
+        gui->node_dragging -= 1;
+        
+        dt_dev_pixelpipe_refresh_preview(darktable.develop, FALSE);
+        return 1;
+      }
       case GDK_KEY_KP_Enter:
       case GDK_KEY_Return:
         return _polygon_creation_closing_form(form, gui);
@@ -2077,7 +2104,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     }
 
     // draw the current node's handle if it's a curve node
-    if(gui->node_edited >= 0 && !dt_masks_is_corner_node(gpt, gui->node_edited, 6, 2))
+    if(gui->node_edited >= 0 && !dt_masks_node_is_cusp(gpt, gui->node_edited, 6, 2))
     {
       const int n = gui->node_edited;
       float handle_x, handle_y;
@@ -2098,7 +2125,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       // don't draw the last node while creating
       if(gui->creation && k == node_count - 1) break;
 
-      const gboolean squared = dt_masks_is_corner_node(gpt, k, 6, 2);
+      const gboolean squared = dt_masks_node_is_cusp(gpt, k, 6, 2);
       const gboolean selected = (k == gui->node_selected || k == gui->node_dragging);
       const gboolean action = (k == gui->node_edited);
       const float x = gpt->points[k * 6 + 2];
@@ -2140,7 +2167,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       const float proj_x = gpt->source[node_index];
       const float proj_y = gpt->source[node_index + 1];
       const gboolean selected = gui->node_selected >= 0;
-      const gboolean squared = dt_masks_is_corner_node(gpt, current_node, 6, 2);
+      const gboolean squared = dt_masks_node_is_cusp(gpt, current_node, 6, 2);
 
       dt_draw_handle(cr, -1, -1, zoom_scale, proj_x, proj_y, selected, squared);
     }
@@ -3087,6 +3114,93 @@ static void _polygon_initial_source_pos(const float iwd, const float iht, float 
   *y = (0.1f * iht);
 }
 
+static void _polygon_creation_closing_form_callback(GtkWidget *widget, struct dt_masks_form_gui_t *gui)
+{
+  dt_masks_form_t *form = darktable.develop->form_visible;
+  if(!form) return;
+
+  _polygon_creation_closing_form(form, gui);
+}
+
+static void _polygon_switch_node_callback(GtkWidget *widget, struct dt_masks_form_gui_t *gui)
+{
+  gui->node_edited = gui->node_selected;
+
+  if(!gui) return;
+  dt_iop_module_t *module = darktable.develop->gui_module;
+  if(!module) return;
+
+  dt_masks_form_t *forms = darktable.develop->form_visible;
+  if(!forms) return;
+  dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(forms->points, gui->group_selected);
+  if(!fpt) return;
+  dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+  if(!sel) return;
+  _change_node_type(module, sel, gui, gui->group_selected);
+}
+
+static void _polygon_reset_round_node_callback(GtkWidget *widget, struct dt_masks_form_gui_t *gui)
+{
+  if(!gui) return;
+  dt_iop_module_t *module = darktable.develop->gui_module;
+  if(!module) return;
+
+  dt_masks_form_t *forms = darktable.develop->form_visible;
+  if(!forms) return;
+  dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(forms->points, gui->group_selected);
+  if(!fpt) return;
+  dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+  if(!sel) return;
+
+  _reset_ctrl_points(module, sel, gui, gui->group_selected);
+}
+
+static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t *form, struct dt_masks_form_gui_t *gui)
+{
+  // Only add separator if there will be menu items
+  if(gui->creation || gui->node_selected >= 0)
+  {
+    GtkWidget *sep = gtk_separator_menu_item_new();
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
+  }
+
+  GtkWidget *menu_item = NULL;
+
+  if(gui->creation)
+  {
+    menu_item = masks_gtk_menu_item_new_with_markup(_("Close path"), menu, _polygon_creation_closing_form_callback, gui);
+    gtk_widget_set_sensitive(menu_item, form->points && !g_list_shorter_than(form->points, 4));
+    menu_item_set_fake_accel(menu_item, GDK_KEY_Return, 0);
+
+    menu_item = masks_gtk_menu_item_new_with_markup(_("Remove last point"), menu, _masks_gui_delete_node_callback, gui);
+    menu_item_set_fake_accel(menu_item, GDK_KEY_BackSpace, 0);
+
+  }
+
+  else if(gui->node_selected >= 0)
+  {
+    dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, gui->group_selected);
+    if(!gpt) return 0;
+    dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->node_selected);
+    if(!node) return 0;
+    const gboolean is_corner = dt_masks_node_is_cusp(gpt, gui->node_selected, 6, 2);
+
+    {
+      gchar *to_change_type = g_strdup_printf(_("Switch to %s node"), (is_corner) ? _("round") : _("cusp"));
+      const dt_masks_menu_icon_t icon = is_corner ? DT_MASKS_MENU_ICON_CIRCLE : DT_MASKS_MENU_ICON_SQUARE;
+      menu_item = masks_gtk_menu_item_new_with_icon(to_change_type, menu, _polygon_switch_node_callback, gui, icon);
+      g_free(to_change_type);
+    }
+
+    {
+      menu_item = masks_gtk_menu_item_new_with_markup(_("Reset round node"), menu, _polygon_reset_round_node_callback, gui);
+      gtk_widget_set_sensitive(menu_item, !is_corner);
+    }
+  }
+
+  return 1;
+}
+
 // The function table for polygons.  This must be public, i.e. no "static" keyword.
 const dt_masks_functions_t dt_masks_functions_polygon = {
   .point_struct_size = sizeof(struct dt_masks_node_polygon_t),
@@ -3108,7 +3222,8 @@ const dt_masks_functions_t dt_masks_functions_polygon = {
   .key_pressed = _polygon_events_key_pressed,
   .post_expose = _polygon_events_post_expose,
   .draw_shape = _polygon_draw_shape,
-  .init_ctrl_points = _polygon_init_ctrl_points
+  .init_ctrl_points = _polygon_init_ctrl_points,
+  .populate_context_menu = _polygon_populate_context_menu
 };
 
 

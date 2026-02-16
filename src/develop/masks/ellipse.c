@@ -742,14 +742,6 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
     }
   }
 
-  else if((which == 3) && gui->creation)
-  {
-    dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
-    dt_masks_iop_update(module);
-
-    return 1;
-  }
-
   return 0;
 }
 
@@ -990,10 +982,9 @@ static void _ellipse_draw_node(const dt_masks_form_gui_t *gui, cairo_t *cr, cons
   for(int i = 1; i < 5; i++)
   {
     _ellipse_point_transform(nodes[0], nodes[1], nodes[i * 2], nodes[i * 2 + 1], sinr, cosr, &x, &y);
-    const gboolean corner = dt_masks_is_corner_node(gpt, i, 2, 0);
     const gboolean selected = (i == gui->node_selected || i == gui->node_dragging);
     const gboolean action = (i == gui->node_edited);
-    dt_draw_node(cr, corner, action, selected, zoom_scale, x, y);
+    dt_draw_node(cr, FALSE, action, selected, zoom_scale, x, y);
   }
 }
 

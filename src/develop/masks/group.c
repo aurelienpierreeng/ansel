@@ -117,22 +117,35 @@ static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form
   return FALSE;
 }
 
-static int _group_events_button_pressed(struct dt_iop_module_t *module, float pzx, float pzy,
+static gboolean _group_events_button_pressed(struct dt_iop_module_t *module, float pzx, float pzy,
                                         double pressure, int which, int type, uint32_t state,
                                         dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui, int unused2)
 {
-  if(!form) return 0;
+  if(!form) return FALSE;
 
   if(gui->group_selected >= 0)
   {
     // we get the form
     dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
-    if(!fpt) return 0;
+    if(!fpt) return FALSE;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
+    {
       if(sel->functions->button_pressed(module, pzx, pzy, pressure, which, type, state, sel,
                                            fpt->parentid, gui, gui->group_selected))
-        return 1;
+        return TRUE;
+
+      else if(which == 3)
+      {
+        // mouse is over a form or a node
+        if(gui && gui->group_selected >= 0 && (gui->form_selected || gui->node_selected >= 0))
+        {
+          GtkWidget *menu = dt_masks_create_menu(gui, sel);
+          gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
+          return TRUE;
+        }
+      }
+    }
   }
   return FALSE;
 }
