@@ -185,7 +185,6 @@ static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey
       return_value = sel->functions->key_pressed(module, event, sel, fpt->parentid, gui, gui->group_selected);
   }
 
-  fprintf(stdout,"key pressed: %d, group: %d, return_value: %d\n", event->keyval, gui->group_selected, return_value);
   // Global key bindings for groups
   // TODO: map that to context menu
   if(!return_value)

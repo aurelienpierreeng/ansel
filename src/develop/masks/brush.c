@@ -2833,10 +2833,6 @@ static void _brush_reset_round_node_callback(GtkWidget *widget, struct dt_masks_
   dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
   if(!sel) return;
 
-  fprintf(stdout,"resetting node %d\n", gui->node_selected);
-  #ifdef _DEBUG
-  raise(SIGTRAP);
-  #endif
   _reset_ctrl_points(module, sel, gui, gui->group_selected);
 }
 
