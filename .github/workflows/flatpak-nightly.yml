@@ -1,0 +1,29 @@
+name: flatpak-nightly
+
+on:
+  schedule:
+    - cron: "30 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  build-flatpak:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Flatpak tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder jq
+
+      - name: Build Flatpak
+        env:
+          MANIFEST_URL: https://raw.githubusercontent.com/flathub/photos.ansel.ansel/master/photos.ansel.ansel.json
+        run: packaging/flatpak/build-flatpak.sh
+
+      - name: Upload Flatpak artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flatpak
+          path: build/flatpak/photos.ansel.app.flatpak
