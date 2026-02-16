@@ -154,7 +154,10 @@ void init_presets(dt_lib_module_t *self)
     "\n"
     "## Lifecycle\n"
     "\n"
-    "Shot on $(EXIF.YEAR)-$(EXIF.MONTH)-$(EXIF.DAY) $(EXIF.HOUR):$(EXIF.MINUTE)\n"
+    "- Shot: $(EXIF.YEAR)-$(EXIF.MONTH)-$(EXIF.DAY) $(EXIF.HOUR):$(EXIF.MINUTE)\n"
+    "- Imported: $(IMPORT.DATE)\n"
+    "- Last edited: $(CHANGE.DATE)\n"
+    "- Exported: $(EXPORT.DATE)\n"  
     "\n"
     "![](https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba)";
 

@@ -60,6 +60,8 @@ typedef struct dt_variables_data_t
   // image export size after crop and export resize
   int export_width;
   int export_height;
+  int crop_width;
+  int crop_height;
 
   char *homedir;
   char *pictures_folder;
@@ -83,6 +85,10 @@ typedef struct dt_variables_data_t
   double longitude;
   double latitude;
   double elevation;
+  GTimeSpan import_timestamp;
+  GTimeSpan change_timestamp;
+  GTimeSpan export_timestamp;
+  GTimeSpan print_timestamp;
 
   uint32_t tags_flags;
 
@@ -154,6 +160,12 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
   params->data->longitude = NAN;
   params->data->latitude = NAN;
   params->data->elevation = NAN;
+  params->data->crop_width = 0;
+  params->data->crop_height = 0;
+  params->data->import_timestamp = 0;
+  params->data->change_timestamp = 0;
+  params->data->export_timestamp = 0;
+  params->data->print_timestamp = 0;
   params->data->show_msec = dt_conf_get_bool("lighttable/ui/milliseconds");
 
   dt_image_t *img = NULL;
@@ -200,6 +212,12 @@ static void _init_expansion(dt_variables_params_t *params, gboolean iterate)
     params->data->sensor_width = img->width;
     params->data->export_height = 0;
     params->data->export_width = 0;
+    params->data->crop_height = img->crop_height;
+    params->data->crop_width = img->crop_width;
+    params->data->import_timestamp = img->import_timestamp;
+    params->data->change_timestamp = img->change_timestamp;
+    params->data->export_timestamp = img->export_timestamp;
+    params->data->print_timestamp = img->print_timestamp;
   }
 
   switch (release)
@@ -269,6 +287,18 @@ static char *_variables_get_latitude(dt_variables_params_t *params)
   }
 }
 
+static char *_variables_get_iso_timestamp(const GTimeSpan gts)
+{
+  if(gts <= 0) return NULL;
+
+  GDateTime *gdt = g_date_time_add(darktable.origin_gdt, gts);
+  if(!gdt) return NULL;
+
+  char *result = g_date_time_format(gdt, "%Y-%m-%d %H:%M:%S");
+  g_date_time_unref(gdt);
+  return result;
+}
+
 static char *_get_base_value(dt_variables_params_t *params, char **variable)
 {
   char *result = NULL;
@@ -307,6 +337,22 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
   {
     dt_datetime_gdatetime_to_exif(exif_datetime, params->data->show_msec ? DT_DATETIME_LENGTH : DT_DATETIME_EXIF_LENGTH, params->data->time);
     result = g_strdup(exif_datetime);
+  }
+  else if(_has_prefix(variable, "IMPORT.DATE") || _has_prefix(variable, "DATE.IMPORT"))
+  {
+    result = _variables_get_iso_timestamp(params->data->import_timestamp);
+  }
+  else if(_has_prefix(variable, "CHANGE.DATE") || _has_prefix(variable, "DATE.CHANGE"))
+  {
+    result = _variables_get_iso_timestamp(params->data->change_timestamp);
+  }
+  else if(_has_prefix(variable, "EXPORT.DATE") || _has_prefix(variable, "DATE.EXPORT"))
+  {
+    result = _variables_get_iso_timestamp(params->data->export_timestamp);
+  }
+  else if(_has_prefix(variable, "PRINT.DATE") || _has_prefix(variable, "DATE.PRINT"))
+  {
+    result = _variables_get_iso_timestamp(params->data->print_timestamp);
   }
 
   else if(_has_prefix(variable, "EXIF.YEAR.SHORT") || _has_prefix(variable, "EXIF.DATE.SHORT_YEAR"))
@@ -649,6 +695,8 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     result = g_strdup_printf("%d", params->data->sensor_width);
   else if(_has_prefix(variable, "WIDTH.RAW") || _has_prefix(variable, "RAW_WIDTH"))
     result = g_strdup_printf("%d", params->data->raw_width);
+  else if(_has_prefix(variable, "WIDTH.CROP"))
+    result = g_strdup_printf("%d", params->data->crop_width);
   else if(_has_prefix(variable, "WIDTH.EXPORT") || _has_prefix(variable, "EXPORT_WIDTH"))
     result = g_strdup_printf("%d", params->data->export_width);
   else if(_has_prefix(variable, "HEIGHT.MAX") || _has_prefix(variable, "MAX_HEIGHT"))
@@ -657,6 +705,8 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     result = g_strdup_printf("%d", params->data->sensor_height);
   else if(_has_prefix(variable, "HEIGHT.RAW") || _has_prefix(variable, "RAW_HEIGHT"))
     result = g_strdup_printf("%d", params->data->raw_height);
+  else if(_has_prefix(variable, "HEIGHT.CROP"))
+    result = g_strdup_printf("%d", params->data->crop_height);
   else if(_has_prefix(variable, "HEIGHT.EXPORT") || _has_prefix(variable, "EXPORT_HEIGHT"))
     result = g_strdup_printf("%d", params->data->export_height);
   else if (_has_prefix(variable, "CATEGORY"))
