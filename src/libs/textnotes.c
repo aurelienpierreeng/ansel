@@ -1537,7 +1537,7 @@ static void _update_mtime_label(dt_lib_module_t *self)
     return;
   }
 
-  struct stat statbuf;
+  GStatBuf statbuf;
   if(g_stat(path, &statbuf) != 0)
   {
     gtk_label_set_text(GTK_LABEL(d->mtime_label), "");
