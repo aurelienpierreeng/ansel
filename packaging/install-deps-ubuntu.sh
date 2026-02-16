@@ -116,7 +116,10 @@ if [ -n "${GCC_VER:-}" ]; then
   APT_PACKAGES+=(
     "gcc-${GCC_VER}"
     "g++-${GCC_VER}"
-    "libgomp-${GCC_VER}-dev"
+    "libomp-dev"
+    # LLVM/CLang is still required for OpenCL test-build
+    "llvm"
+    "clang"
   )
 fi
 
