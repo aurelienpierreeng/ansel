@@ -16,7 +16,7 @@ jobs:
         btype:
           - Release
         compiler:
-          - { compiler: GNU12, CC: gcc-12, CXX: g++-12, packages: gcc-12 g++-12 }
+          - { compiler: GNU12, CC: gcc-12, CXX: g++-12, GCC_VER: "12", LLVM_VER: "" }
         eco: [-DBINARY_PACKAGE_BUILD=ON -DUSE_XMLLINT=OFF]
         target:
           - skiptest
@@ -27,6 +27,8 @@ jobs:
     env:
       CC: ${{ matrix.compiler.CC }}
       CXX: ${{ matrix.compiler.CXX }}
+      GCC_VER: ${{ matrix.compiler.GCC_VER }}
+      LLVM_VER: ${{ matrix.compiler.LLVM_VER }}
       SRC_DIR: ${{ github.workspace }}/src
       BUILD_DIR: ${{ github.workspace }}/build
       INSTALL_PREFIX: ${{ github.workspace }}/AppDir/usr
@@ -38,15 +40,13 @@ jobs:
       BRANCH: ${{ matrix.branch.code }}
       BUILD_NAME: ${{ matrix.branch.label }}
     steps:
-      - name: Install compiler ${{ matrix.compiler.compiler }}
+      - name: Enable compiler repositories
         run: |
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo add-apt-repository -y universe
           sudo add-apt-repository -y multiverse
           sudo apt-get update
           sudo apt-get upgrade
-          sudo apt-get -y install \
-            ${{ matrix.compiler.packages }}
       - name: Checkout ansel source
         uses: actions/checkout@v4
         with:

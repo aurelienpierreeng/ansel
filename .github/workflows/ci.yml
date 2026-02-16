@@ -54,8 +54,8 @@ jobs:
         os:
           - { label: ubuntu-24.04, code: noble }
         compiler:
-          - { compiler: GNU14,  CC: gcc-14,   CXX: g++-14,     packages: gcc-14 g++-14 }
-          - { compiler: LLVM16, CC: clang-16, CXX: clang++-16, packages: clang-16 libomp-16-dev llvm-16-dev libc++-16-dev libc++abi1-16 lld-16 clang-tools-16 mlir-16-tools libmlir-16-dev}
+          - { compiler: GNU14,  CC: gcc-14,   CXX: g++-14,   GCC_VER: "14", LLVM_VER: "" }
+          - { compiler: LLVM16, CC: clang-16, CXX: clang++-16, GCC_VER: "", LLVM_VER: "16" }
         btype:
           - Debug
           - Release
@@ -67,6 +67,8 @@ jobs:
     env:
       CC: ${{ matrix.compiler.CC }}
       CXX: ${{ matrix.compiler.CXX }}
+      GCC_VER: ${{ matrix.compiler.GCC_VER }}
+      LLVM_VER: ${{ matrix.compiler.LLVM_VER }}
       SRC_DIR: ${{ github.workspace }}/src
       BUILD_DIR: ${{ github.workspace }}/build
       INSTALL_PREFIX: ${{ github.workspace }}/install
@@ -75,14 +77,11 @@ jobs:
       TARGET: ${{ matrix.target }}
       DARKTABLE_CLI: ${{ github.workspace }}/install/bin/ansel-cli
     steps:
-      - name: Install compiler ${{ matrix.compiler.compiler }}
+      - name: Enable compiler repositories
         run: |
           sudo add-apt-repository ppa:ubuntu-toolchain-r/test
           sudo add-apt-repository -y universe
           sudo add-apt-repository -y multiverse
-          sudo apt-get update
-          sudo apt-get -y install \
-            ${{ matrix.compiler.packages }}
       - uses: actions/checkout@v4
         with:
           submodules: true

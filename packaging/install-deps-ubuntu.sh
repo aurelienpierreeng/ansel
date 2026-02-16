@@ -13,7 +13,6 @@ APT_PACKAGES=(
   appstream-util
   at-spi2-core
   build-essential
-  clang
   cmake
   curl
   debianutils
@@ -29,7 +28,6 @@ APT_PACKAGES=(
   libavif-dev
   libavifile-0.7-dev
   libcairo2-dev
-  libclang-dev
   libcolord-dev
   libcolord-gtk-dev
   libcmocka-dev
@@ -62,7 +60,6 @@ APT_PACKAGES=(
   liblua5.3-dev
   libopenexr-dev
   libopenjp2-7-dev
-  libomp-dev
   libosmgpsmap-1.0-dev
   libpango1.0-dev
   libpixman-1-dev
@@ -85,7 +82,6 @@ APT_PACKAGES=(
   libxml2-utils
   libxshmfence-dev
   libxslt1-dev
-  llvm
   ninja-build
   perl
   pkg-config
@@ -106,6 +102,14 @@ if [ -n "${LLVM_VER:-}" ]; then
     "libomp-${LLVM_VER}-dev"
     "llvm-${LLVM_VER}-dev"
   )
+else
+  # Fallback to the distro default OpenMP runtime when LLVM_VER is not pinned.
+  APT_PACKAGES+=(
+    "clang"
+    "libclang-dev"
+    "libomp-dev"
+    "llvm"
+  )
 fi
 
 if [ -n "${GCC_VER:-}" ]; then
@@ -116,12 +120,6 @@ if [ -n "${GCC_VER:-}" ]; then
   )
 fi
 
-if command -v clang >/dev/null 2>&1; then
-  CLANG_VER="$(clang --version | head -n1 | sed -E 's/.*clang version ([0-9]+).*/\\1/')" || CLANG_VER=""
-  if [ -n "${CLANG_VER}" ] && apt-cache show "libomp-${CLANG_VER}-dev" >/dev/null 2>&1; then
-    APT_PACKAGES+=("libomp-${CLANG_VER}-dev")
-  fi
-fi
 
 "${SUDO}" apt-get update
 "${SUDO}" apt-get install -y "${APT_PACKAGES[@]}"
