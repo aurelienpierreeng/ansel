@@ -265,8 +265,12 @@ void dt_loc_init_sharedir(const char* application_directory)
 
 void dt_loc_init_kerneldir(const char* application_directory, const char *kerneldir)
 {
+#ifdef HAVE_OPENCL
   darktable.kerneldir = dt_loc_init_generic(kerneldir, application_directory, DARKTABLE_KERNELSDIR);
   dt_check_opendir("ansel.kerneldir", darktable.kerneldir);
+#else 
+  darktable.kerneldir = NULL;
+#endif
 }
 
 void dt_loc_get_kerneldir(char *kerneldir, size_t bufsize)
