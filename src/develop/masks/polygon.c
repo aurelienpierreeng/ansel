@@ -2112,7 +2112,8 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
                                 gpt->points[n * 6 + 5], &handle_x, &handle_y, gpt->clockwise);
       const float pt_x = gpt->points[n * 6 + 2];
       const float pt_y = gpt->points[n * 6 + 3];
-      const gboolean selected = (gui->node_selected >= 0 || gui->handle_selected >= 0);
+      const gboolean selected = (gui->node_selected == n
+                              || gui->handle_selected == n);
       dt_draw_handle(cr, pt_x, pt_y, zoom_scale, handle_x, handle_y, selected, FALSE);
     }
   }
@@ -2141,8 +2142,10 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     // Draw the current node's border handle, if needed
     if(gui->node_edited >= 0)
     {
-      const gboolean selected = (gui->node_selected >= 0 || gui->handle_border_selected >= 0);
-      const int curr_node = gui->node_edited * 6;  
+      const int edited = gui->node_edited;
+      const gboolean selected = (gui->node_selected == edited
+                              || gui->handle_border_selected == edited);
+      const int curr_node = edited * 6;  
       const float x = gpt->border[curr_node];
       const float y = gpt->border[curr_node + 1];
 

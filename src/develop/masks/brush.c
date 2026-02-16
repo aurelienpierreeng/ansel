@@ -2391,7 +2391,8 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
                                 gpt->points[n * 6 + 5], &handle_x, &handle_y, TRUE);
       const float pt_x = gpt->points[n * 6 + 2];
       const float pt_y = gpt->points[n * 6 + 3];
-      const gboolean selected = (gui->node_selected >= 0 || gui->handle_selected >= 0);
+      const gboolean selected = (gui->node_selected == n
+                              || gui->handle_selected == n);
       dt_draw_handle(cr, pt_x, pt_y, zoom_scale, handle_x, handle_y, selected, FALSE);
     }
 
@@ -2410,9 +2411,11 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     // Draw the current node's border handle, if needed
     if(gui->node_edited >= 0)
     {
-      const gboolean selected = (gui->node_selected >= 0 || gui->handle_border_selected >= 0);
+      const int edited = gui->node_edited;
+      const gboolean selected = (gui->node_selected == edited
+                              || gui->handle_border_selected == edited);
       float x = NAN, y = NAN;
-      if(_brush_get_border_handle_mirrored(gpt, node_count, gui->node_edited, &x, &y))
+      if(_brush_get_border_handle_mirrored(gpt, node_count, edited, &x, &y))
       {
         dt_draw_handle(cr, -1, -1, zoom_scale, x, y, selected, TRUE);
       }
