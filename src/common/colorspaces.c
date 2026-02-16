@@ -37,6 +37,11 @@
 #include "colord-gtk.h"
 #endif
 
+#ifdef _WIN32
+#include <dwmapi.h>
+#include <gdk/gdkwin32.h>
+#endif
+
 #ifdef HAVE_OPENJPEG
 #include "common/imageio_j2k.h"
 #endif
@@ -1975,7 +1980,16 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
   profile_source = g_strdup("osx color profile api");
 #endif
 #elif defined G_OS_WIN32
-  HDC hdc = GetDC(NULL);
+  //HDC hdc = GetDC(NULL);
+  GtkWidget *widget = dt_ui_center(darktable.gui->ui);
+  GdkWindow *window = gtk_widget_get_window(widget);
+  HWND hwnd = (HWND)gdk_win32_window_get_handle(window);  // get window handle
+  HMONITOR hMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST); // get monitor handle
+  if(!hMonitor){  return;} //TODO log error
+  MONITORINFOEX monitorInfo;
+  monitorInfo.cbSize = sizeof(MONITORINFOEX);
+  if(!GetMonitorInfoW(hMonitor,(LPMONITORINFO) &monitorInfo)) { return;} //get monitor info , TODO log error
+  HDC hdc = CreateIC(L"MONITOR",monitorInfo.szDevice,NULL,NULL); // get device-info context of the monitor
   if(hdc != NULL)
   {
     DWORD len = 0;
@@ -1994,7 +2008,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
       }
     }
     g_free(wpath);
-    ReleaseDC(NULL, hdc);
+    DeleteDC(hdc);
   }
   profile_source = g_strdup("windows color profile api");
 #endif
