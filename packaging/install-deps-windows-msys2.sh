@@ -40,7 +40,6 @@ MINGW_PACKAGES=(
   libjxl
   librsvg
   libsecret
-  libsoup
   libtiff
   libwebp
   libxml2
@@ -62,6 +61,20 @@ MINGW_PACKAGES=(
 )
 
 pacman -Sy --noconfirm
+
+# libsoup package name differs across MSYS2 repositories.
+LIBSOUP_PKG=""
+for cand in libsoup libsoup2; do
+  if pacman -Si "${MINGW_PREFIX}-${cand}" >/dev/null 2>&1; then
+    LIBSOUP_PKG="${cand}"
+    break
+  fi
+done
+if [ -n "${LIBSOUP_PKG}" ]; then
+  MINGW_PACKAGES+=("${LIBSOUP_PKG}")
+else
+  echo "Warning: no libsoup package found for ${MINGW_PREFIX} (tried libsoup, libsoup2)." >&2
+fi
 pacman -S --needed --noconfirm "${MSYS_PACKAGES[@]}"
 
 MINGW_FULL_PACKAGES=()
