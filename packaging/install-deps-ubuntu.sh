@@ -44,6 +44,7 @@ APT_PACKAGES=(
   libglib2.0-dev
   libgmic-dev
   libgraphicsmagick1-dev
+  libgomp1
   libgtk-3-dev
   libheif-dev
   libicu-dev
@@ -111,6 +112,7 @@ if [ -n "${GCC_VER:-}" ]; then
   APT_PACKAGES+=(
     "gcc-${GCC_VER}"
     "g++-${GCC_VER}"
+    "libgomp-${GCC_VER}-dev"
   )
 fi
 

@@ -32,6 +32,8 @@ DNF_PACKAGES=(
   gmic
   graphviz
   GraphicsMagick-devel
+  libgomp
+  libgomp-devel
   gstreamer1-plugins-base-tools
   gdk-pixbuf2-devel
   glib2-devel

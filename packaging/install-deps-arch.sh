@@ -25,6 +25,7 @@ PACMAN_PACKAGES=(
   dbus-glib
   desktop-file-utils
   doxygen
+  gcc-libs
   exiv2
   fuse2
   gdb

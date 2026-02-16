@@ -63,6 +63,7 @@ ZYPPER_PACKAGES=(
   libxslt-devel
   libxshmfence-devel
   llvm-devel
+  libgomp-devel
   lua53-devel
   make
   ninja
