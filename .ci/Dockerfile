@@ -14,57 +14,33 @@
 #    You should have received a copy of the GNU General Public License
 #    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 
-# docker build -t darktable/darktable .
+# Build from the repo root so packaging/ is in the build context:
+# docker build -t ansel -f .ci/Dockerfile .
 
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! WARNING !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-# !!! hub.docker.com will not auto-rebuild the image                        !!!
-# !!! after making changes here, or if you just want to manually refresh    !!!
-# !!! the image, you need to go to:                                         !!!
-# https://hub.docker.com/r/darktable/darktable/~/settings/automated-builds/ !!!
-# !!!                            and press the "Trigger" button.            !!!
-# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! WARNING !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-FROM debian:testing
-MAINTAINER Roman Lebedev <lebedev.ri@gmail.com>
+FROM ubuntu:24.04
 
 # needed at least for python-based jsonschema :(
 # see https://github.com/Julian/jsonschema/issues/299
 # and https://github.com/docker-library/python/issues/13
-ENV LANG C.UTF-8
-ENV LC_ALL C.UTF-8
-ENV LC_MESSAGES C.UTF-8
-ENV LANGUAGE C.UTF-8
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV LC_MESSAGES=C.UTF-8
+ENV LANGUAGE=C.UTF-8
+ENV DEBIAN_FRONTEND=noninteractive
 
-ENV DEBIAN_FRONTEND noninteractive
-
-# Paper over occasional network flakiness of some mirrors.
-RUN echo 'Acquire::Retries "10";' > /etc/apt/apt.conf.d/80retry
-
-# Do not install recommended packages
-RUN echo 'APT::Install-Recommends "false";' > /etc/apt/apt.conf.d/80recommends
-
-# Do not install suggested packages
-RUN echo 'APT::Install-Suggests "false";' > /etc/apt/apt.conf.d/80suggests
-
-# Assume yes
-RUN echo 'APT::Get::Assume-Yes "true";' > /etc/apt/apt.conf.d/80forceyes
-
-# Fix broken packages
-RUN echo 'APT::Get::Fix-Missing "true";' > /etc/apt/apt.conf.d/80fixmissin
-
-ENV GCC_VER=9
-ENV LLVM_VER=10
+RUN apt-get update && apt-get install -y bash
 
 COPY packaging/install-deps-ubuntu.sh /tmp/install-deps-ubuntu.sh
+RUN chmod +x /tmp/install-deps-ubuntu.sh
 
 # pls keep sorted :)
-RUN /tmp/install-deps-ubuntu.sh && \
+RUN export GCC_VER=14 && /bin/bash /tmp/install-deps-ubuntu.sh && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# i'd like to explicitly use ld.gold
-# while it may be just immeasurably faster, it is known to cause more issues
-# than traditional ld.bfd; plus, at this time, ld.gold seems like the future.
-RUN dpkg-divert --add --rename --divert /usr/bin/ld.original /usr/bin/ld && \
-    ln -s /usr/bin/ld.gold /usr/bin/ld
+WORKDIR /src
+COPY . /src
 
-# optional: opencl kernels test-compilation
+RUN ./build.sh --install --clean-all \
+    --cccompiler "gcc-${GCC_VER}" \
+    --cxxcompiler "g++-${GCC_VER}" && \
+    rm -rf /src/build /src/src
