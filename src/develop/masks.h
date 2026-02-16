@@ -460,7 +460,7 @@ int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *eve
  * 
  * @return TRUE if the node is a corner, FALSE it's a curve.
  */
-gboolean dt_masks_node_is_cusp(const dt_masks_form_gui_points_t *gpt, const int index, const int nb, const int coord_offset);
+gboolean dt_masks_node_is_cusp(const dt_masks_form_gui_points_t *gpt, const int index);
 
 /**
  * @brief Draw the source for a correction mask.

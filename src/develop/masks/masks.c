@@ -1554,10 +1554,12 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
   return ret;
 }
 
-gboolean dt_masks_node_is_cusp(const dt_masks_form_gui_points_t *gpt, const int index, const int nb, const int coord_offset)
+gboolean dt_masks_node_is_cusp(const dt_masks_form_gui_points_t *gpt, const int index)
 {
-  const float *p = &gpt->points[index * nb];
-  return (p[0 + coord_offset] == p[2 + coord_offset] && p[1 + coord_offset] == p[3 + coord_offset]);
+  const int offset = 2;
+  const float *p = &gpt->points[index * 6];
+  return (p[0 + offset] == p[2 + offset]
+       && p[1 + offset] == p[3 + offset]);
 }
 
 /**

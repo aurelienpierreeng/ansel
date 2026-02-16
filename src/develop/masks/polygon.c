@@ -983,7 +983,7 @@ static void _change_node_type(struct dt_iop_module_t *module, dt_masks_form_t *f
   if(!gpt) return;
   dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->node_edited);
   if(!node) return;
-  const gboolean is_corner = dt_masks_node_is_cusp(gpt, gui->node_selected, 6, 2);
+  const gboolean is_corner = dt_masks_node_is_cusp(gpt ,gui->node_selected);
 
   if(is_corner)
   {
@@ -1196,7 +1196,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
 
     // Current node's curve handle
     // We can select the handle only if the node is a curve
-    if(!dt_masks_node_is_cusp(gpt, k, 6, 2))
+    if(!dt_masks_node_is_cusp(gpt ,k))
     {
       float ffx, ffy;
       _polygon_ctrl2_to_handle(gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], gpt->points[k * 6 + 4],
@@ -1471,7 +1471,7 @@ static gboolean _reset_ctrl_points(struct dt_iop_module_t *module, dt_masks_form
       = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, node_index);
   if(!node) return FALSE;
 
-  if(node->state != DT_MASKS_POINT_STATE_NORMAL && !dt_masks_node_is_cusp(gpt, node_index, 6, 2))
+  if(node->state != DT_MASKS_POINT_STATE_NORMAL && !dt_masks_node_is_cusp(gpt ,node_index))
   {
     node->state = DT_MASKS_POINT_STATE_NORMAL;
     _polygon_init_ctrl_points(form);
@@ -1609,7 +1609,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
     }
     else if(gui->handle_selected >= 0)
     {  
-      if(!dt_masks_node_is_cusp(gpt, gui->handle_selected, 6, 2))
+      if(!dt_masks_node_is_cusp(gpt ,gui->handle_selected))
       {
         gui->handle_dragging = gui->handle_selected;
       
@@ -2104,7 +2104,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     }
 
     // draw the current node's handle if it's a curve node
-    if(gui->node_edited >= 0 && !dt_masks_node_is_cusp(gpt, gui->node_edited, 6, 2))
+    if(gui->node_edited >= 0 && !dt_masks_node_is_cusp(gpt ,gui->node_edited))
     {
       const int n = gui->node_edited;
       float handle_x, handle_y;
@@ -2126,7 +2126,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       // don't draw the last node while creating
       if(gui->creation && k == node_count - 1) break;
 
-      const gboolean squared = dt_masks_node_is_cusp(gpt, k, 6, 2);
+      const gboolean squared = dt_masks_node_is_cusp(gpt ,k);
       const gboolean selected = (k == gui->node_selected || k == gui->node_dragging);
       const gboolean action = (k == gui->node_edited);
       const float x = gpt->points[k * 6 + 2];
@@ -2159,20 +2159,18 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, &dt_masks_functions_polygon.draw_shape);
     
     //draw the current node projection
-    int current_node = -1;
-    if(gui->creation)
-      current_node = MAX(0, node_count - 1);
-    else if(gui->node_selected >= 0 || gui->node_edited >= 0)
-      current_node = MAX(gui->node_selected, gui->node_edited);
-    if(current_node >= 0)
+    for(int k = 0; k < node_count; k++)
     {
-      const int node_index = current_node * 6 +2;
-      const float proj_x = gpt->source[node_index];
-      const float proj_y = gpt->source[node_index + 1];
-      const gboolean selected = gui->node_selected >= 0;
-      const gboolean squared = dt_masks_node_is_cusp(gpt, current_node, 6, 2);
+      if(k == gui->node_selected || k == gui->node_edited || k == node_count - 1)
+      {
+        const int node_index = k * 6 + 2;
+        const float proj_x = gpt->source[node_index];
+        const float proj_y = gpt->source[node_index + 1];
+        const gboolean selected = gui->node_selected == k;
+        const gboolean squared = dt_masks_node_is_cusp(gpt ,k);
 
-      dt_draw_handle(cr, -1, -1, zoom_scale, proj_x, proj_y, selected, squared);
+        dt_draw_handle(cr, -1, -1, zoom_scale, proj_x, proj_y, selected, squared);
+      }
     }
   }
 }
@@ -3186,7 +3184,7 @@ static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_
     if(!gpt) return 0;
     dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->node_selected);
     if(!node) return 0;
-    const gboolean is_corner = dt_masks_node_is_cusp(gpt, gui->node_selected, 6, 2);
+    const gboolean is_corner = dt_masks_node_is_cusp(gpt ,gui->node_selected);
 
     {
       gchar *to_change_type = g_strdup_printf(_("Switch to %s node"), (is_corner) ? _("round") : _("cusp"));
