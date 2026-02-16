@@ -3,9 +3,9 @@
 set -euo pipefail
 
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
-  SUDO="sudo"
+  SUDO=(sudo)
 else
-  SUDO=""
+  SUDO=()
 fi
 
 APT_PACKAGES=(
@@ -20,6 +20,7 @@ APT_PACKAGES=(
   doxygen
   gdb
   gettext
+  git
   graphviz
   gstreamer1.0-tools
   intltool
@@ -83,6 +84,8 @@ APT_PACKAGES=(
   libxshmfence-dev
   libxslt1-dev
   ninja-build
+  ocl-icd-opencl-dev
+  opencl-headers
   perl
   pkg-config
   po4a
@@ -123,6 +126,5 @@ if [ -n "${GCC_VER:-}" ]; then
   )
 fi
 
-
-"${SUDO}" apt-get update
-"${SUDO}" apt-get install -y "${APT_PACKAGES[@]}"
+"${SUDO[@]}" apt-get update
+"${SUDO[@]}" apt-get install -y "${APT_PACKAGES[@]}"

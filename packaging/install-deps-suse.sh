@@ -3,9 +3,9 @@
 set -euo pipefail
 
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
-  SUDO="sudo"
+  SUDO=(sudo)
 else
-  SUDO=""
+  SUDO=()
 fi
 
 ZYPPER_PACKAGES=(
@@ -27,6 +27,7 @@ ZYPPER_PACKAGES=(
   gcc-c++
   gdb
   gettext-tools
+  git
   gmic
   gnome-keyring-devel
   graphviz
@@ -67,6 +68,8 @@ ZYPPER_PACKAGES=(
   lua53-devel
   make
   ninja
+  ocl-icd-devel
+  opencl-headers
   openjpeg2-devel
   osm-gps-map-devel
   pango-devel
@@ -86,4 +89,4 @@ ZYPPER_PACKAGES=(
   zlib-devel
 )
 
-"${SUDO}" zypper --non-interactive install --no-recommends "${ZYPPER_PACKAGES[@]}"
+"${SUDO[@]}" zypper --non-interactive install --no-recommends "${ZYPPER_PACKAGES[@]}"

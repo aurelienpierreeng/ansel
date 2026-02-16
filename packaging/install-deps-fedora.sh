@@ -3,9 +3,9 @@
 set -euo pipefail
 
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
-  SUDO="sudo"
+  SUDO=(sudo)
 else
-  SUDO=""
+  SUDO=()
 fi
 
 DNF_PACKAGES=(
@@ -29,6 +29,7 @@ DNF_PACKAGES=(
   fuse
   gdb
   gettext
+  git
   gmic
   graphviz
   GraphicsMagick-devel
@@ -70,6 +71,8 @@ DNF_PACKAGES=(
   lua-devel
   make
   ninja-build
+  ocl-icd-devel
+  opencl-headers
   openexr-devel
   openjpeg2-devel
   osm-gps-map-devel
@@ -90,4 +93,4 @@ DNF_PACKAGES=(
   zlib-devel
 )
 
-"${SUDO}" dnf install -y "${DNF_PACKAGES[@]}"
+"${SUDO[@]}" dnf install -y "${DNF_PACKAGES[@]}"

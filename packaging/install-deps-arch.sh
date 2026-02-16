@@ -3,9 +3,9 @@
 set -euo pipefail
 
 if [ "${EUID:-$(id -u)}" -ne 0 ]; then
-  SUDO="sudo"
+  SUDO=(sudo)
 else
-  SUDO=""
+  SUDO=()
 fi
 
 PACMAN_PACKAGES=(
@@ -30,6 +30,7 @@ PACMAN_PACKAGES=(
   fuse2
   gdb
   gettext
+  git
   gmic
   graphviz
   graphicsmagick
@@ -66,6 +67,8 @@ PACMAN_PACKAGES=(
   lua
   make
   ninja
+  ocl-icd
+  opencl-headers
   openexr
   openjpeg2
   osm-gps-map
@@ -85,4 +88,4 @@ PACMAN_PACKAGES=(
   zlib
 )
 
-"${SUDO}" pacman -Syu --needed --noconfirm "${PACMAN_PACKAGES[@]}"
+"${SUDO[@]}" pacman -Syu --needed --noconfirm "${PACMAN_PACKAGES[@]}"
