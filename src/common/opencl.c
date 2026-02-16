@@ -51,8 +51,6 @@
 #include <zlib.h>
 
 static const char *dt_opencl_get_vendor_by_id(unsigned int id);
-static float dt_opencl_benchmark_gpu(const int devid, const size_t width, const size_t height, const int count, const float sigma);
-static float dt_opencl_benchmark_cpu(const size_t width, const size_t height, const int count, const float sigma);
 static char *_ascii_str_canonical(const char *in, char *out, int maxlen);
 /** parse a single token of priority string and store priorities in priority_list */
 static void dt_opencl_priority_parse(dt_opencl_t *cl, char *configstr, int *priority_list, int *mandatory);
@@ -170,12 +168,6 @@ void dt_opencl_write_device_config(const int devid)
   g_snprintf(buf, sizeof(buf), "%s/disabled", key_device);
   dt_conf_set_int(buf, cl->dev[devid].disabled & 1);
 
-  g_snprintf(buf, sizeof(buf), "%s/benchmark", key_device);
-  dt_conf_set_float(buf, cl->dev[devid].benchmark);
-
-  // Also take care of extended device data, these are not only device specific but also depend on the devid
-  // to support systems with two similar cards.
-
   g_snprintf(buf, sizeof(buf), "%s/id%i/forced_headroom", key_device, devid);
   dt_conf_set_int(buf, cl->dev[devid].forced_headroom);
 }
@@ -187,23 +179,6 @@ static int _dt_opencl_get_conf_int(const gchar *key_device, const gchar *conf_na
   const gboolean existing_device = dt_conf_key_not_empty(key);
   if(existing_device)
     res = dt_conf_get_int(key);
-  else
-  {
-    dt_print(DT_DEBUG_OPENCL, "Warning: conf '%s' not found in anselrc.\n", key);
-    *safety_ok = FALSE;
-  }
-
-  g_free(key);
-  return res;
-}
-
-static float _dt_opencl_get_conf_float(const gchar *key_device, const gchar *conf_name, gboolean *safety_ok)
-{
-  float res = 0.0f;
-  gchar *key = g_strconcat(key_device, "/", conf_name, NULL);
-  const gboolean existing_device = dt_conf_key_not_empty(key);
-  if(existing_device)
-    res = dt_conf_get_float(key);
   else
   {
     dt_print(DT_DEBUG_OPENCL, "Warning: conf '%s' not found in anselrc.\n", key);
@@ -229,7 +204,6 @@ gboolean dt_opencl_read_device_config(const int devid)
   int ht = _dt_opencl_get_conf_int(key_device, "ht", &safety_ok);
   int event_handles = _dt_opencl_get_conf_int(key_device, "event_handles", &safety_ok);
   int disabled = _dt_opencl_get_conf_int(key_device, "disabled", &safety_ok);
-  float benchmark = _dt_opencl_get_conf_float(key_device, "benchmark", &safety_ok);
 
   // some rudimentary safety checking if string seems to be ok
   safety_ok |= (wd > 1) && (wd < 513) && (ht > 1) && (ht < 513);
@@ -243,7 +217,6 @@ gboolean dt_opencl_read_device_config(const int devid)
     cl->dev[devid].clroundup_ht = ht;
     cl->dev[devid].event_handles = event_handles;
     cl->dev[devid].disabled = disabled;
-    cl->dev[devid].benchmark = benchmark;
   }
   else // if there is something wrong with the found conf key reset to defaults
   {
@@ -260,7 +233,6 @@ gboolean dt_opencl_read_device_config(const int devid)
     cl->dev[devid].clroundup_ht = 16;
   if(cl->dev[devid].event_handles < 0)
     cl->dev[devid].event_handles = 0x40961440;
-  cl->dev[devid].benchmark = fminf(1e6, fmaxf(0.0f, cl->dev[devid].benchmark));
 
   cl->dev[devid].use_events = (cl->dev[devid].event_handles != 0) ? 1 : 0;
   cl->dev[devid].disabled &= 1;
@@ -277,15 +249,6 @@ gboolean dt_opencl_read_device_config(const int devid)
 
   dt_opencl_write_device_config(devid);
   return !safety_ok;
-}
-
-static float dt_opencl_device_perfgain(const int devid)
-{
-  dt_opencl_t *cl = darktable.opencl;
-  const float tcpu = cl->cpubenchmark;
-  const float tgpu = cl->dev[devid].benchmark;
-  if((tcpu < 1e-8) || (tgpu < 1e-8)) return 1.0f;
-  return (tcpu / tgpu);
 }
 
 // returns 0 if all ok or an error if we failed to init this device
@@ -324,7 +287,6 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   cl->dev[dev].pinned_memory = DT_OPENCL_PINNING_OFF;
   cl->dev[dev].clroundup_wd = 16;
   cl->dev[dev].clroundup_ht = 16;
-  cl->dev[dev].benchmark = 0.0f;
   cl->dev[dev].use_events = 1;
   cl->dev[dev].event_handles = 128;
   cl->dev[dev].disabled = 0;
@@ -576,8 +538,6 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   dt_print_nts(DT_DEBUG_OPENCL, "   ROUNDUP WIDTH:            %i\n", cl->dev[dev].clroundup_wd);
   dt_print_nts(DT_DEBUG_OPENCL, "   ROUNDUP HEIGHT:           %i\n", cl->dev[dev].clroundup_ht);
   dt_print_nts(DT_DEBUG_OPENCL, "   CHECK EVENT HANDLES:      %i\n", cl->dev[dev].event_handles);
-  if(cl->dev[dev].benchmark > 0.0f)
-    dt_print_nts(DT_DEBUG_OPENCL, "   PERFORMANCE:              %f\n", dt_opencl_device_perfgain(dev));
   dt_print_nts(DT_DEBUG_OPENCL, "   DEFAULT DEVICE:           %s\n", (type & CL_DEVICE_TYPE_DEFAULT) ? "YES" : "NO");
 
   if(cl->dev[dev].disabled)
@@ -795,216 +755,6 @@ end:
   return res;
 }
 
-#define RUNS 5
-
-// If in GUI, the benchmarking array is running in a separate thread,
-// but Gtk widgets need to be updated from the main thread.
-// We need to wrap this function into g_main_context_invoke
-// to make that happen.
-static gboolean _opencl_update_progress(gpointer userdata)
-{
-  dt_opencl_t *cl = (dt_opencl_t *)userdata;
-  gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(cl->progress), cl->step / cl->steps);
-  gtk_progress_bar_set_text(GTK_PROGRESS_BAR(cl->progress), cl->progress_label);
-  return G_SOURCE_REMOVE;
-}
-
-static void dt_opencl_benchmark_array(dt_opencl_t *cl, const char *config, int width, int height, gboolean gui, int steps, int step)
-{
-  // Parametric sweep : N runs for each rounding for each device. CPU only does runs.
-  const int inner_steps_for_outer_step = 3 * RUNS * cl->num_devs + RUNS;
-  cl->steps = inner_steps_for_outer_step * steps; // total
-  cl->step = step * inner_steps_for_outer_step; // current
-
-  // CPU - no params sweep
-  cl->cpubenchmark = 0.f;
-  for(int _x = 0; _x < RUNS; _x++)
-  {
-    if(gui)
-    {
-      g_snprintf(cl->progress_label, sizeof(cl->progress_label), _("Benchmarking CPU @%i×%ipx..."), width, height);
-      g_main_context_invoke(NULL, _opencl_update_progress, cl);
-    }
-
-    cl->cpubenchmark += dt_opencl_benchmark_cpu(width, height, 3, 100.0f);
-
-    cl->step += 1.;
-    if(gui) g_main_context_invoke(NULL, _opencl_update_progress, cl);
-  }
-
-  cl->cpubenchmark /= (float)RUNS;
-
-  fprintf(stdout, "[OpenCL benchmark]: %s - CPU %f s\n", config, cl->cpubenchmark);
-  dt_conf_set_float("dt_cpubenchmark", cl->cpubenchmark);
-
-  // GPU
-  int round_sizes[3] = { 16, 32, 64 };
-  for(int n = 0; n < cl->num_devs; n++)
-  {
-    float results[3];
-
-    for(int l = 0; l < 3; l++)
-    {
-      cl->dev[n].clroundup_ht = round_sizes[l];
-      cl->dev[n].clroundup_wd = round_sizes[l];
-      results[l] = 0.f;
-
-      if(gui)
-      {
-        g_snprintf(cl->progress_label, sizeof(cl->progress_label), _("Benchmarking %s %s @%i×%ipx..."), cl->dev[n].vendor, cl->dev[n].name, width, height);
-        g_main_context_invoke(NULL, _opencl_update_progress, cl);
-      }
-
-      for(int _x = 0; _x < RUNS; _x++)
-      {
-        results[l] += dt_opencl_benchmark_gpu(n, width, height, 3, 100.0f);
-        cl->step += 1.;
-        if(gui) g_main_context_invoke(NULL, _opencl_update_progress, cl);
-      }
-
-      results[l] /= (float)RUNS;
-
-      fprintf(stdout, "[OpenCL benchmark]: %s %s %f s for rounding size %i\n", config, cl->dev[n].name,
-              results[l], cl->dev[n].clroundup_ht);
-    }
-
-    // Find the best run for that device
-    cl->dev[n].benchmark = FLT_MAX;
-
-    for(int l = 0; l < 3; l++)
-    {
-      if(results[l] < cl->dev[n].benchmark)
-      {
-        cl->dev[n].benchmark = results[l];
-        cl->dev[n].clroundup_ht = round_sizes[l];
-        cl->dev[n].clroundup_wd = round_sizes[l];
-      }
-    }
-    dt_opencl_write_device_config(n);
-  }
-
-  // Find the best run for all devices
-  const float tcpu = cl->cpubenchmark;
-  float tgpumin = INFINITY;
-  float tgpumax = -INFINITY;
-  int fastest_device = -1; // Device -1 is CPU
-  for(int n = 0; n < cl->num_devs; n++)
-  {
-    if((cl->dev[n].benchmark > 0.0f) && (cl->dev[n].benchmark < tgpumin))
-    {
-      tgpumin = cl->dev[n].benchmark;
-      fastest_device = n;
-    }
-    tgpumax = fmaxf(cl->dev[n].benchmark, tgpumax);
-  }
-
-  if(tcpu < tgpumin / 1.5f)
-  {
-    // CPU is much faster than GPU: disable GPU.
-    dt_conf_set_string(config, "-1");
-  }
-  else if(tcpu > tgpumin)
-  {
-    // GPU is faster than CPU: force enable
-    gchar *device_str = g_strdup_printf("+%i", fastest_device);
-    dt_conf_set_string(config, device_str);
-    g_free(device_str);
-  }
-  else
-  {
-    // GPU is on-par or slightly slower than CPU: still suggest it.
-    // Reason is the most power-hungry algos are not in the benchmark,
-    // and we know for a fact that OpenCL makes them faster.
-    gchar *device_str = g_strdup_printf("%i", fastest_device);
-    dt_conf_set_string(config, device_str);
-    g_free(device_str);
-  }
-
-  // Timeouts: wait for available GPU for that amount of time.
-  // Say CPU takes 2s to complete and GPU 1s,
-  // we'd better wait for at most 1s for the GPU to be available.
-  // Timeouts are expressed in increments of 5 ms
-  dt_conf_set_int("opencl_mandatory_timeout", CLAMP((tcpu - tgpumin) / 0.005f, 100, 2000));
-
-  // TODO: that should be deleted in the future
-  dt_conf_set_int("pixelpipe_synchronization_timeout", 2 * MIN(tcpu, tgpumin) / 0.005f);
-}
-
-static gboolean _close_opencl_window(gpointer userdata)
-{
-  dt_opencl_t *cl = (dt_opencl_t *)userdata;
-  gtk_widget_destroy(cl->dialog);
-  return G_SOURCE_REMOVE;
-}
-
-gpointer dt_opencl_benchmark_sequence(dt_opencl_t *cl)
-{
-  // Get display size
-  int width, height;
-  gboolean gui = FALSE;
-
-  if(cl->dialog != NULL)
-  {
-    // If GUI, use screen size for darkroom pipeline
-    GdkDisplay *display = gdk_display_manager_get_default_display(gdk_display_manager_get());
-    GdkMonitor *monitor = gdk_display_get_monitor_at_window(display, gtk_widget_get_window(cl->dialog));
-    GdkRectangle geometry;
-    gdk_monitor_get_geometry(monitor, &geometry);
-    width = geometry.width * gdk_monitor_get_scale_factor(monitor);
-    height = geometry.height * gdk_monitor_get_scale_factor(monitor);
-    gui = TRUE;
-  }
-  else
-  {
-    width = 3840;
-    height = 2160;
-  }
-
-  // Each of these globally overwrites size rounding factors and timeouts
-  // So we leave the darkroom one for last since the most perf-critical
-  // pipeline is when the user is editing in realtime.
-  dt_opencl_benchmark_array(cl, "opencl_devid_thumbnail", 1920, 1200, gui, 4, 0);
-  dt_opencl_benchmark_array(cl, "opencl_devid_preview", 1440, 900, gui, 4, 1);
-  dt_opencl_benchmark_array(cl, "opencl_devid_export", 6144, 4096, gui, 4, 2);
-  dt_opencl_benchmark_array(cl, "opencl_devid_darkroom", width, height, gui, 4, 3);
-
-  if(gui) g_main_context_invoke(NULL, _close_opencl_window, cl);
-
-  return NULL;
-}
-
-void dt_opencl_benchmark_window(dt_opencl_t *cl)
-{
-  // Create the widgets
-  cl->dialog = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-  gtk_window_set_title(GTK_WINDOW(cl->dialog), _("Tuning OpenCL parameters..."));
-  gtk_window_set_default_size(GTK_WINDOW(cl->dialog), DT_PIXEL_APPLY_DPI(600), DT_PIXEL_APPLY_DPI(400));
-  gtk_window_set_icon_name(GTK_WINDOW(cl->dialog), "ansel");
-  gtk_window_set_type_hint(GTK_WINDOW(cl->dialog), GDK_WINDOW_TYPE_HINT_DIALOG);
-
-  GtkWindow *win = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
-  gtk_window_set_transient_for(GTK_WINDOW(cl->dialog), win);
-  gtk_window_set_modal(GTK_WINDOW(cl->dialog), TRUE);
-
-  GtkWidget *content_area = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_PIXEL_APPLY_DPI(20));
-  gtk_container_add(GTK_CONTAINER(cl->dialog), content_area);
-
-  cl->label = gtk_label_new(_("Ansel is looking for the optimal parameters to configure your GPU. It will take some time.\n\n"
-                              "This happens when a new GPU is connected and when an OpenCL driver is updated."));
-  gtk_label_set_line_wrap(GTK_LABEL(cl->label), TRUE);
-  gtk_box_pack_start(GTK_BOX(content_area), cl->label, TRUE, TRUE, 0);
-
-  cl->progress = gtk_progress_bar_new();
-  gtk_progress_bar_set_text(GTK_PROGRESS_BAR(cl->progress), "");
-  gtk_progress_bar_set_show_text(GTK_PROGRESS_BAR(cl->progress), TRUE);
-  gtk_box_pack_start(GTK_BOX(content_area), cl->progress, TRUE, TRUE, 0);
-
-  gtk_widget_show_all(cl->dialog);
-  g_signal_connect(GTK_WINDOW(cl->dialog), "destroy", G_CALLBACK(gtk_main_quit), NULL);
-  g_thread_new("dt_opencl_benchmark_sequence", (GThreadFunc)dt_opencl_benchmark_sequence, cl);
-  gtk_main();
-}
-
 void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboolean print_statistics)
 {
   dt_pthread_mutex_init(&cl->lock, NULL);
@@ -1013,9 +763,6 @@ void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboole
   cl->stopped = 0;
   cl->error_count = 0;
   cl->print_statistics = print_statistics;
-  cl->progress = NULL;
-  cl->dialog = NULL;
-  cl->label = NULL;
 
   // work-around to fix a bug in some AMD OpenCL compilers, which would fail parsing certain numerical
   // constants if locale is different from "C".
@@ -1026,10 +773,10 @@ void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboole
 
   cl->crc = 5781;
   cl->dlocl = NULL;
-  cl->dev_priority_image = NULL;
-  cl->dev_priority_preview = NULL;
-  cl->dev_priority_export = NULL;
-  cl->dev_priority_thumbnail = NULL;
+  cl->dev_priority_image = 0;
+  cl->dev_priority_preview = 0;
+  cl->dev_priority_export = 0;
+  cl->dev_priority_thumbnail = 0;
 
   if(exclude_opencl) return;
 
@@ -1038,8 +785,6 @@ void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboole
 
   char *platform_name = calloc(DT_OPENCL_CBUFFSIZE, sizeof(char));
   char *platform_vendor = calloc(DT_OPENCL_CBUFFSIZE, sizeof(char));
-
-  cl->cpubenchmark = dt_conf_get_float("dt_cpubenchmark");
 
   dt_print_nts(DT_DEBUG_OPENCL, "[opencl_init] opencl related configuration options:\n");
   dt_print_nts(DT_DEBUG_OPENCL, "[opencl_init] opencl: %s\n", dt_conf_get_bool("opencl") ? "ON" : "OFF" );
@@ -1207,13 +952,8 @@ finally:
   dt_print_nts(DT_DEBUG_OPENCL, "[opencl_init] initial status of opencl enabled flag is %s.\n",
            cl->enabled ? "ON" : "OFF");
 
-  // check if the list of existing OpenCL devices (indicated by checksum != oldchecksum) has changed
-  // If it has, reprofile and update config if needed.
   char checksum[64];
   snprintf(checksum, sizeof(checksum), "%u", cl->crc);
-  const char *oldchecksum = dt_conf_get_string_const("opencl_checksum");
-  const gboolean manually = strcasecmp(oldchecksum, "OFF") == 0;
-  const gboolean newcheck = ((strcmp(oldchecksum, checksum) != 0) || (strlen(oldchecksum) < 1));
 
   if(cl->inited)
   {
@@ -1227,17 +967,6 @@ finally:
     cl->heal = dt_heal_init_cl_global();
     cl->colorspaces = dt_colorspaces_init_cl_global();
     cl->guided_filter = dt_guided_filter_init_cl_global();
-  }
-
-  if((newcheck && !manually) && cl->inited)
-  {
-    dt_print_nts(DT_DEBUG_OPENCL, "[opencl_init] OpenCL devices changed, we will update the profiling configuration.\n");
-    dt_conf_set_string("opencl_checksum", checksum);
-
-    if(darktable.gui) // use the GUI path only if there is a graphical session
-      dt_opencl_benchmark_window(cl);
-    else
-      dt_opencl_benchmark_sequence(cl);
   }
 
   dt_opencl_apply_scheduling_profile();
@@ -1360,189 +1089,6 @@ static const char *dt_opencl_get_vendor_by_id(unsigned int id)
   }
 
   return vendor;
-}
-
-static float dt_opencl_benchmark_gpu(const int devid, const size_t width, const size_t height, const int count, const float sigma)
-{
-  const int bpp = 4 * sizeof(float);
-  cl_int err = DT_OPENCL_DEFAULT_ERROR;
-  cl_mem dev_mem = NULL;
-  cl_mem dev_in = NULL;
-  cl_mem mem_out = NULL;
-  float *buf = NULL;
-  dt_gaussian_cl_t *g = NULL;
-  dt_guided_filter_cl_global_t *gf = NULL;
-
-  const float Labmax[] = { INFINITY, INFINITY, INFINITY, INFINITY };
-  const float Labmin[] = { -INFINITY, -INFINITY, -INFINITY, -INFINITY };
-
-  unsigned int *const tea_states = alloc_tea_states(darktable.num_openmp_threads);
-
-  // Simulate a 24 Mpx raw
-  buf = dt_pixelpipe_cache_alloc_align_cache( 6144 * 4096 * bpp, 0);
-  if(buf == NULL) goto error;
-
-  // Write noise in the raw image
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-  dt_omp_firstprivate(tea_states, buf)
-#endif
-  for(size_t j = 0; j < 4096; j++)
-  {
-    unsigned int *tea_state = get_tea_state(tea_states,dt_get_thread_num());
-    tea_state[0] = j + dt_get_thread_num();
-    size_t index = j * 4 * 6144;
-    for(int i = 0; i < 4 * 6144; i++)
-    {
-      encrypt_tea(tea_state);
-      buf[index + i] = 100.0f * tpdf(tea_state[0]);
-    }
-  }
-
-  // start timer
-  double start = dt_get_wtime();
-
-  // Allocate dev_in buffer & copy fake data from RAM to vRAM
-  // We take I/O cost into account in the timer because
-  // OpenCL pipelines have a lot of overhead.
-  dev_in = dt_opencl_copy_host_to_device(devid, buf, 6144, 4096, bpp);
-  if(dev_in == NULL) goto error;
-
-  dev_mem = dt_opencl_alloc_device(devid, width, height, bpp);
-  if(dev_mem == NULL) goto error;
-
-  // simulate "demosaicing" a 24 Mpx raw, aka interpolation
-  const struct dt_interpolation *itor = dt_interpolation_new(DT_INTERPOLATION_LANCZOS3);
-  dt_iop_roi_t roi_in = { .height = 4096, .width = 6144, .x = 0, .y = 0 };
-  dt_iop_roi_t roi_out = { .height = height, .width = width, .x = 0, .y = 0 };
-  dt_interpolation_resample_cl(itor, devid, dev_mem, &roi_out, dev_in, &roi_in);
-
-  // prepare gaussian filter
-  g = dt_gaussian_init_cl(devid, width, height, 4, Labmax, Labmin, sigma, 0);
-  if(!g) goto error;
-
-  // gaussian blur
-  for(int n = 0; n < count; n++)
-  {
-    err = dt_gaussian_blur_cl(g, dev_mem, dev_mem);
-    if(err != CL_SUCCESS) goto error;
-
-    // copy back to host
-    err = dt_opencl_copy_device_to_host(devid, buf, dev_mem, width, height, bpp);
-    if(err != CL_SUCCESS) goto error;
-  }
-
-  // cleanup gaussian filter
-  dt_gaussian_free_cl(g);
-  g = NULL;
-
-  // prepare guided filter
-  gf = dt_guided_filter_init_cl_global();
-  mem_out = dt_opencl_alloc_device(devid, width, height, bpp);
-  if(!mem_out) goto error;
-
-  for(int n = 0; n < count; n++)
-  {
-    if(guided_filter_cl(devid, dev_mem, dev_mem, mem_out, width, height, 4, sigma, 1.0, 0.5, 0., 1.0) != 0)
-      goto error;
-
-    // copy back to host
-    err = dt_opencl_copy_device_to_host(devid, buf, mem_out, width, height, bpp);
-    if(err != CL_SUCCESS) goto error;
-  }
-
-  // cleanup guided filter
-  dt_guided_filter_free_cl_global(gf);
-  gf = NULL;
-
-  // end timer
-  double end = dt_get_wtime();
-
-  // free dev_mem
-  dt_pixelpipe_cache_free_align(buf);
-  free_tea_states(tea_states);
-  dt_opencl_release_mem_object(dev_mem);
-  dt_opencl_release_mem_object(mem_out);
-  dt_opencl_release_mem_object(dev_in);
-  return (end - start);
-
-error:
-  if(g) dt_gaussian_free_cl(g);
-  if(buf) dt_pixelpipe_cache_free_align(buf);
-  free_tea_states(tea_states);
-
-  if(gf) dt_guided_filter_free_cl_global(gf);
-  dt_opencl_release_mem_object(dev_mem);
-  dt_opencl_release_mem_object(mem_out);
-  dt_opencl_release_mem_object(dev_in);
-  return INFINITY;
-}
-
-static float dt_opencl_benchmark_cpu(const size_t width, const size_t height, const int count, const float sigma)
-{
-  const int bpp = 4 * sizeof(float);
-
-  float *buf = dt_pixelpipe_cache_alloc_align_cache( width * height * bpp, 0);
-
-  const float Labmax[] = { INFINITY, INFINITY, INFINITY, INFINITY };
-  const float Labmin[] = { -INFINITY, -INFINITY, -INFINITY, -INFINITY };
-
-  unsigned int *const tea_states = alloc_tea_states(darktable.num_openmp_threads);
-
-  float *out = dt_pixelpipe_cache_alloc_align_cache( width * height * bpp, 0);
-
-  // Fake raw
-  float *in = dt_pixelpipe_cache_alloc_align_cache( 6144 * 4096 * bpp, 0);
-
-  // Write noise in the fake raw
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-  dt_omp_firstprivate(tea_states, in)
-#endif
-  for(size_t j = 0; j < 4096; j++)
-  {
-    unsigned int *tea_state = get_tea_state(tea_states,dt_get_thread_num());
-    tea_state[0] = j + dt_get_thread_num();
-    size_t index = j * 4 * 6144;
-    for(int i = 0; i < 4 * 6144; i++)
-    {
-      encrypt_tea(tea_state);
-      in[index + i] = 100.0f * tpdf(tea_state[0]);
-    }
-  }
-
-  // start timer
-  double start = dt_get_wtime();
-
-  // Simulate "demosaicing" a 24 Mpx raw, aka interpolation
-  const struct dt_interpolation *itor = dt_interpolation_new(DT_INTERPOLATION_LANCZOS3);
-  dt_iop_roi_t roi_in = { .height = 4096, .width = 6144, .x = 0, .y = 0 };
-  dt_iop_roi_t roi_out = { .height = height, .width = width, .x = 0, .y = 0 };
-  dt_interpolation_resample(itor, out, &roi_out, in, &roi_in);
-
-  // prepare gaussian filter
-  dt_gaussian_t *g = dt_gaussian_init(width, height, 4, Labmax, Labmin, sigma, 0);
-
-  for(int n = 0; n < count; n++)
-    dt_gaussian_blur(g, buf, buf);
-
-  // cleanup gaussian filter
-  dt_gaussian_free(g);
-
-  // guided filter
-  for(int n = 0; n < count; n++)
-    if(guided_filter(buf, buf, out, width, height, 4, sigma, 0.05, 0.5, 0., FLT_MAX) != 0)
-      break;
-
-  // end timer
-  double end = dt_get_wtime();
-
-  if(buf) dt_pixelpipe_cache_free_align(buf);
-  if(out) dt_pixelpipe_cache_free_align(out);
-  if(in) dt_pixelpipe_cache_free_align(in);
-  if(tea_states) free_tea_states(tea_states);
-
-  return (end - start);
 }
 
 gboolean dt_opencl_finish(const int devid)

@@ -126,8 +126,6 @@ typedef struct dt_opencl_device_t
   const char *cname;
   const char *options;
   cl_int summary;
-  // the benchmark value must not be changed by the user
-  float benchmark;
   size_t memory_in_use;
   size_t peak_memory;
   size_t used_available;
@@ -211,16 +209,6 @@ typedef struct dt_opencl_t
   dt_opencl_device_t *dev;
   dt_dlopencl_t *dlocl;
 
-  // Benchmarking GUI to make user wait while we run expensive stuff in background
-  GtkWidget *dialog;
-  GtkWidget *progress;
-  GtkWidget *label;
-  char progress_label[256];
-  double steps;
-  double step;
-
-  // we want the cpu benchmark to be available
-  float cpubenchmark;
   // global kernels for blending operations.
   struct dt_blendop_cl_global_t *blendop;
 
