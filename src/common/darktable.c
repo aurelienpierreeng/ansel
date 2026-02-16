@@ -1428,7 +1428,7 @@ void dt_cleanup()
 
 void dt_print(dt_debug_thread_t thread, const char *msg, ...)
 {
-  if(darktable.unmuted & thread)
+  if(thread == DT_DEBUG_ALWAYS || (darktable.unmuted & thread))
   {
     printf("%f ", dt_get_wtime() - darktable.start_wtime);
     va_list ap;
@@ -1441,7 +1441,7 @@ void dt_print(dt_debug_thread_t thread, const char *msg, ...)
 
 void dt_print_nts(dt_debug_thread_t thread, const char *msg, ...)
 {
-  if(darktable.unmuted & thread)
+  if(thread == DT_DEBUG_ALWAYS || (darktable.unmuted & thread))
   {
     va_list ap;
     va_start(ap, msg);
@@ -1453,7 +1453,7 @@ void dt_print_nts(dt_debug_thread_t thread, const char *msg, ...)
 
 void dt_vprint(dt_debug_thread_t thread, const char *msg, ...)
 {
-  if((darktable.unmuted & DT_DEBUG_VERBOSE) && (darktable.unmuted & thread))
+  if(thread == DT_DEBUG_ALWAYS || ((darktable.unmuted & DT_DEBUG_VERBOSE) && (darktable.unmuted & thread)))
   {
     printf("%f ", dt_get_wtime() - darktable.start_wtime);
     va_list ap;

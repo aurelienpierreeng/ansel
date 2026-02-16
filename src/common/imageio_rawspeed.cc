@@ -37,11 +37,13 @@
 
 #include "common/colorspaces.h"
 #include "common/darktable.h"
+#include "common/debug.h"
 #include "common/exif.h"
 #include "common/file_location.h"
+#include "common/imageio.h"
 #include "common/imageio_rawspeed.h"
-#include "imageio.h"
 #include "common/tags.h"
+#include "control/conf.h"
 #include "develop/imageop.h"
 #include <stdint.h>
 
@@ -80,9 +82,14 @@ static void dt_rawspeed_load_meta()
   }
 }
 
-gboolean dt_rawspeed_lookup_makermodel(const char *maker, const char *model,
-                                   char *mk, int mk_len, char *md, int md_len,
-                                   char *al, int al_len)
+gboolean dt_rawspeed_lookup_makermodel(const char *maker,
+                                       const char *model,
+                                       char *mk,
+                                       int mk_len,
+                                       char *md,
+                                       int md_len,
+                                       char *al,
+                                       int al_len)
 {
   gboolean got_it_done = FALSE;
   try {
@@ -99,7 +106,7 @@ gboolean dt_rawspeed_lookup_makermodel(const char *maker, const char *model,
   }
   catch(const std::exception &exc)
   {
-    fprintf(stderr, "[rawspeed] %s\n", exc.what());
+    dt_print(DT_DEBUG_ALWAYS, "[rawspeed] %s", exc.what());
   }
 
   if(!got_it_done)
@@ -136,12 +143,22 @@ static gboolean _ignore_image(const gchar *filename)
   return FALSE;
 }
 
-dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img, const char *filename,
+dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
+                                             const char *filename,
                                              dt_mipmap_buffer_t *mbuf)
 {
-  if(_ignore_image(filename)) return DT_IMAGEIO_FILE_CORRUPTED;
+  if(_ignore_image(filename))
+    return DT_IMAGEIO_UNSUPPORTED_FORMAT;
 
-  if(!img->exif_inited) (void)dt_exif_read(img, filename);
+  if(!img)
+  {
+    dt_print(DT_DEBUG_ALWAYS, "[dt_imageio_open_rawspeed] failed to get dt_image_t for '%s' at %p",
+             filename, mbuf);
+    return DT_IMAGEIO_LOAD_FAILED;
+  }
+
+  if(!img->exif_inited)
+    (void)dt_exif_read(img, filename);
 
   char filen[PATH_MAX] = { 0 };
   snprintf(filen, sizeof(filen), "%s", filename);
@@ -158,7 +175,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img, const char *filena
     RawParser t(storageBuf);
     std::unique_ptr<RawDecoder> d = t.getDecoder(meta);
 
-    if(!d.get()) return DT_IMAGEIO_FILE_CORRUPTED;
+    if(!d.get()) return DT_IMAGEIO_UNSUPPORTED_FORMAT;
 
     d->failOnUnknown = true;
     d->checkSupport(meta);
@@ -168,7 +185,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img, const char *filena
 
     const auto errors = r->getErrors();
     for(const auto &error : errors)
-      fprintf(stderr, "[rawspeed] (%s) %s\n", img->filename, error.c_str());
+      dt_print(DT_DEBUG_ALWAYS, "[rawspeed] (%s) %s", img->filename, error.c_str());
 
     g_strlcpy(img->camera_maker, r->metadata.canonical_make.c_str(), sizeof(img->camera_maker));
     g_strlcpy(img->camera_model, r->metadata.canonical_model.c_str(), sizeof(img->camera_model));
@@ -326,19 +343,19 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img, const char *filena
     }
 
     if((r->getDataType() != TYPE_USHORT16) && (r->getDataType() != TYPE_FLOAT32))
-      return DT_IMAGEIO_FILE_CORRUPTED;
+      return DT_IMAGEIO_UNSUPPORTED_FEATURE;
 
     if((r->getBpp() != sizeof(uint16_t)) && (r->getBpp() != sizeof(float)))
-      return DT_IMAGEIO_FILE_CORRUPTED;
+      return DT_IMAGEIO_UNSUPPORTED_FEATURE;
 
     if((r->getDataType() == TYPE_USHORT16) && (r->getBpp() != sizeof(uint16_t)))
-      return DT_IMAGEIO_FILE_CORRUPTED;
+      return DT_IMAGEIO_UNSUPPORTED_FEATURE;
 
     if((r->getDataType() == TYPE_FLOAT32) && (r->getBpp() != sizeof(float)))
-      return DT_IMAGEIO_FILE_CORRUPTED;
+      return DT_IMAGEIO_UNSUPPORTED_FEATURE;
 
     const float cpp = r->getCpp();
-    if(cpp != 1) return DT_IMAGEIO_FILE_CORRUPTED;
+    if(cpp != 1) return DT_IMAGEIO_LOAD_FAILED;
 
     img->buf_dsc.channels = 1;
 
@@ -351,7 +368,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img, const char *filena
         img->buf_dsc.datatype = TYPE_FLOAT;
         break;
       default:
-        return DT_IMAGEIO_FILE_CORRUPTED;
+        return DT_IMAGEIO_UNSUPPORTED_FEATURE;
     }
 
     // as the X-Trans filters comments later on states, these are for
@@ -423,13 +440,13 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img, const char *filena
   }
   catch(const rawspeed::IOException &exc)
   {
-    fprintf(stderr, "[rawspeed] (%s) I/O error: %s", img->filename, exc.what());
-    return DT_IMAGEIO_FILE_CORRUPTED;
+    dt_print(DT_DEBUG_ALWAYS, "[rawspeed] (%s) I/O error: %s", img->filename, exc.what());
+    return DT_IMAGEIO_IOERROR;
   }
   catch(const rawspeed::FileIOException &exc)
   {
-    fprintf(stderr, "[rawspeed] (%s) File I/O error: %s", img->filename, exc.what());
-    return DT_IMAGEIO_FILE_CORRUPTED;
+    dt_print(DT_DEBUG_ALWAYS, "[rawspeed] (%s) File I/O error: %s", img->filename, exc.what());
+    return DT_IMAGEIO_IOERROR;
   }
   catch(const rawspeed::RawDecoderException &exc)
   {
@@ -441,33 +458,38 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img, const char *filena
     // or unsupported feature (e.g. bit depth, compression, aspect ratio mode, ...)
     if(msg && (strstr(msg, "Camera not supported") || strstr(msg, "not supported, and not allowed to guess")))
     {
-      fprintf(stderr, "[rawspeed] Unsupported camera model for %s", img->filename);
-      return DT_IMAGEIO_FILE_CORRUPTED;
+      dt_print(DT_DEBUG_ALWAYS, "[rawspeed] Unsupported camera model for %s", img->filename);
+      return DT_IMAGEIO_UNSUPPORTED_CAMERA;
     }
     else if (msg && strstr(msg, "supported"))
     {
-      fprintf(stderr, "[rawspeed] (%s) %s", img->filename, msg);
-      return DT_IMAGEIO_FILE_CORRUPTED;
+      dt_print(DT_DEBUG_ALWAYS, "[rawspeed] (%s) %s", img->filename, msg);
+      return DT_IMAGEIO_UNSUPPORTED_FEATURE;
     }
     else
     {
-      fprintf(stderr, "[rawspeed] %s corrupt: %s", img->filename, exc.what());
-      return DT_IMAGEIO_FILE_CORRUPTED;
+      dt_print(DT_DEBUG_ALWAYS, "[rawspeed] %s corrupt: %s", img->filename, exc.what());
+      // We can end up here if the loader is called on what is actually
+      // a TIFF file, which mistakenly contains the signature of a raw
+      // format in a TIFF container. So it is very important that the
+      // return code from here directs the execution path through the
+      // fallback loader chain.
+      return DT_IMAGEIO_UNSUPPORTED_FORMAT;
     }
   }
   catch(const rawspeed::RawParserException &exc)
   {
-    fprintf(stderr, "[rawspeed] (%s) CIFF/FIFF error: %s", img->filename, exc.what());
-    return DT_IMAGEIO_FILE_CORRUPTED;
+    dt_print(DT_DEBUG_ALWAYS, "[rawspeed] (%s) CIFF/FIFF error: %s", img->filename, exc.what());
+    return DT_IMAGEIO_UNSUPPORTED_FORMAT;
   }
   catch(const rawspeed::CameraMetadataException &exc)
   {
-    fprintf(stderr, "[rawspeed] (%s) metadata error: %s", img->filename, exc.what());
-    return DT_IMAGEIO_FILE_CORRUPTED;
+    dt_print(DT_DEBUG_ALWAYS, "[rawspeed] (%s) metadata error: %s", img->filename, exc.what());
+    return DT_IMAGEIO_UNSUPPORTED_FEATURE;
   }
   catch(const std::exception &exc)
   {
-    fprintf(stderr, "[rawspeed] (%s) %s", img->filename, exc.what());
+    dt_print(DT_DEBUG_ALWAYS, "[rawspeed] (%s) %s", img->filename, exc.what());
 
     /* if an exception is raised lets not retry or handle the
      specific ones, consider the file as corrupted */
@@ -475,7 +497,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img, const char *filena
   }
   catch(...)
   {
-    fprintf(stderr, "[rawspeed] unhandled exception in imageio_rawspeed\n");
+    dt_print(DT_DEBUG_ALWAYS, "[rawspeed] unhandled exception in imageio_rawspeed");
     return DT_IMAGEIO_FILE_CORRUPTED;
   }
 
@@ -499,7 +521,7 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
   img->buf_dsc.datatype = TYPE_FLOAT;
 
   if(r->getDataType() != TYPE_USHORT16 && r->getDataType() != TYPE_FLOAT32)
-    return DT_IMAGEIO_FILE_CORRUPTED;
+    return DT_IMAGEIO_UNSUPPORTED_FEATURE;
 
   const uint32_t cpp = r->getCpp();
   if(cpp != 1 && cpp != 3 && cpp != 4) return DT_IMAGEIO_FILE_CORRUPTED;
@@ -536,10 +558,8 @@ dt_imageio_retval_t dt_imageio_open_rawspeed_sraw(dt_image_t *img,
 
         for(int i = 0; i < img->width; i++, out += 4)
         {
-          for(int k = 0; k < 3; k++)
-          {
-            out[k] = (float)in(j, cpp * i + k) / (float)UINT16_MAX;
-          }
+          out[0] = out[1] = out[2] = (float)in(j, cpp * i) / (float)UINT16_MAX;
+          out[3] = 0.0f;
         }
       }
     }

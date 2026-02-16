@@ -491,6 +491,7 @@ typedef float dt_boundingbox_t[4];  //(x,y) of upperleft, then (x,y) of lowerrig
 
 typedef enum dt_debug_thread_t
 {
+  DT_DEBUG_ALWAYS        = 0,       // always print regardless of debug flags
   // powers of two, masking
   DT_DEBUG_CACHE          = 1 <<  0,
   DT_DEBUG_CONTROL        = 1 <<  1,
