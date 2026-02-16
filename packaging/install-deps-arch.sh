@@ -48,6 +48,7 @@ PACMAN_PACKAGES=(
   libicu
   libjpeg-turbo
   libjxl
+  libomp
   libpng
   libraw
   librsvg

@@ -116,5 +116,12 @@ if [ -n "${GCC_VER:-}" ]; then
   )
 fi
 
+if command -v clang >/dev/null 2>&1; then
+  CLANG_VER="$(clang --version | head -n1 | sed -E 's/.*clang version ([0-9]+).*/\\1/')" || CLANG_VER=""
+  if [ -n "${CLANG_VER}" ] && apt-cache show "libomp-${CLANG_VER}-dev" >/dev/null 2>&1; then
+    APT_PACKAGES+=("libomp-${CLANG_VER}-dev")
+  fi
+fi
+
 "${SUDO}" apt-get update
 "${SUDO}" apt-get install -y "${APT_PACKAGES[@]}"
