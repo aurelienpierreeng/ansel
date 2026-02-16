@@ -7,7 +7,7 @@ add_definitions(-include libs/lib_api.h)
 
 
 # The modules
-set(MODULES export styles tagging collect metadata metadata_view navigation histogram history snapshots modulegroups backgroundjobs masks duplicate ioporder)
+set(MODULES export styles tagging collect metadata metadata_view navigation histogram history snapshots modulegroups backgroundjobs masks duplicate ioporder textnotes)
 
 # The tools
 set(MODULES ${MODULES} filter)
@@ -31,6 +31,15 @@ add_library(backgroundjobs MODULE "backgroundjobs.c")
 add_library(masks MODULE "masks.c")
 add_library(duplicate MODULE "duplicate.c")
 add_library(ioporder MODULE "ioporder.c")
+add_library(textnotes MODULE "textnotes.c")
+
+if(ANSEL_HAVE_CMARK AND ANSEL_CMARK_TARGET AND TARGET ${ANSEL_CMARK_TARGET})
+  target_link_libraries(textnotes ${ANSEL_CMARK_TARGET})
+  if(ANSEL_CMARK_INCLUDE_DIR)
+    target_include_directories(textnotes PRIVATE "${ANSEL_CMARK_INCLUDE_DIR}")
+  endif()
+  target_compile_definitions(textnotes PRIVATE HAVE_CMARK=1)
+endif()
 
 # tools
 add_library(filter MODULE "tools/filter.c")

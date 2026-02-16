@@ -196,21 +196,12 @@ GList *dt_control_crawler_run(void)
     while((c > image_path) && (*c != '.')) c--;
     len = c - image_path + 1;
 
+    char *txt_path = dt_image_get_text_path_from_path(image_path);
+    gboolean has_txt = txt_path != NULL;
+    g_free(txt_path);
+
     char *extra_path = (char *)calloc(len + 3 + 1, sizeof(char));
     g_strlcpy(extra_path, image_path, len + 1);
-
-    extra_path[len] = 't';
-    extra_path[len + 1] = 'x';
-    extra_path[len + 2] = 't';
-    gboolean has_txt = g_file_test(extra_path, G_FILE_TEST_EXISTS);
-
-    if(!has_txt)
-    {
-      extra_path[len] = 'T';
-      extra_path[len + 1] = 'X';
-      extra_path[len + 2] = 'T';
-      has_txt = g_file_test(extra_path, G_FILE_TEST_EXISTS);
-    }
 
     extra_path[len] = 'w';
     extra_path[len + 1] = 'a';

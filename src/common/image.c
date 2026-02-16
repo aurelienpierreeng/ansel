@@ -89,6 +89,8 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
 
 
 static void _image_local_copy_full_path(const int32_t imgid, char *pathname, size_t pathname_len);
+static void _copy_text_sidecar_if_present(const char *src_image_path, const char *dest_image_path);
+static void _move_text_sidecar_if_present(const char *src_image_path, const char *dest_image_path, const gboolean overwrite);
 
 int dt_image_is_ldr(const dt_image_t *img)
 {
@@ -1663,6 +1665,8 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
 
     if(moveStatus)
     {
+      _move_text_sidecar_if_present(oldimg, newimg, FALSE);
+
       // statement for getting ids of the image to be moved and its duplicates
       sqlite3_stmt *duplicates_stmt;
       // clang-format off
@@ -1862,6 +1866,13 @@ int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gc
 
     if(copyStatus || g_error_matches(gerror, G_IO_ERROR, G_IO_ERROR_EXISTS))
     {
+      gchar *dest_image_path = g_file_get_path(dest);
+      if(dest_image_path)
+      {
+        _copy_text_sidecar_if_present(srcpath, dest_image_path);
+        g_free(dest_image_path);
+      }
+
       // update database
       // clang-format off
       DT_DEBUG_SQLITE3_PREPARE_V2
@@ -2098,6 +2109,8 @@ int dt_image_local_copy_set(const int32_t imgid)
     g_object_unref(src);
   }
 
+  _copy_text_sidecar_if_present(srcpath, destpath);
+
   // update cache local copy flags, do this even if the local copy already exists as we need to set the flags
   // for duplicate
   dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
@@ -2186,7 +2199,11 @@ int dt_image_local_copy_reset(const int32_t imgid)
     // delete image from cache directory only if there is no other local cache image referencing it
     // for example duplicates are all referencing the same base picture.
 
-    if(_nb_other_local_copy_for(imgid) == 0) g_file_delete(dest, NULL, NULL);
+    if(_nb_other_local_copy_for(imgid) == 0)
+    {
+      _move_text_sidecar_if_present(locppath, destpath, TRUE);
+      g_file_delete(dest, NULL, NULL);
+    }
 
     g_object_unref(dest);
 
@@ -2473,7 +2490,7 @@ char *dt_image_get_audio_path(const int32_t imgid)
   return dt_image_get_audio_path_from_path(image_path);
 }
 
-char *dt_image_get_text_path_from_path(const char *image_path)
+static char *_text_path_legacy_if_exists(const char *image_path)
 {
   size_t len = strlen(image_path);
   const char *c = image_path + len;
@@ -2496,13 +2513,104 @@ char *dt_image_get_text_path_from_path(const char *image_path)
   return NULL;
 }
 
+static char *_text_path_legacy_build(const char *image_path)
+{
+  size_t len = strlen(image_path);
+  const char *c = image_path + len;
+  while((c > image_path) && (*c != '.')) c--;
+  len = c - image_path + 1;
+
+  char *result = g_strndup(image_path, len + 3);
+  result[len] = 't';
+  result[len + 1] = 'x';
+  result[len + 2] = 't';
+  return result;
+}
+
+char *dt_image_get_text_path_from_path(const char *image_path)
+{
+  if(!image_path) return NULL;
+
+  return _text_path_legacy_if_exists(image_path);
+}
+
+static void _copy_text_sidecar_if_present(const char *src_image_path, const char *dest_image_path)
+{
+  if(!src_image_path || !dest_image_path) return;
+
+  char *src_txt = dt_image_get_text_path_from_path(src_image_path);
+  if(!src_txt) return;
+
+  char *dest_txt = _text_path_legacy_build(dest_image_path);
+  if(dest_txt)
+  {
+    GFile *src = g_file_new_for_path(src_txt);
+    GFile *dest = g_file_new_for_path(dest_txt);
+    GError *gerror = NULL;
+    gboolean copyStatus = g_file_copy(src, dest, G_FILE_COPY_NONE, NULL, NULL, NULL, &gerror);
+
+    if(!copyStatus && g_error_matches(gerror, G_IO_ERROR, G_IO_ERROR_EXISTS))
+      copyStatus = TRUE;
+
+    if(!copyStatus && gerror)
+      fprintf(stderr, "[dt_image] failed to copy text sidecar `%s' -> `%s': %s\n",
+              src_txt, dest_txt, gerror->message);
+
+    g_clear_error(&gerror);
+    g_object_unref(dest);
+    g_object_unref(src);
+  }
+
+  g_free(dest_txt);
+  g_free(src_txt);
+}
+
+static void _move_text_sidecar_if_present(const char *src_image_path, const char *dest_image_path, const gboolean overwrite)
+{
+  if(!src_image_path || !dest_image_path) return;
+
+  char *src_txt = dt_image_get_text_path_from_path(src_image_path);
+  if(!src_txt) return;
+
+  char *dest_txt = _text_path_legacy_build(dest_image_path);
+  if(dest_txt)
+  {
+    GFile *src = g_file_new_for_path(src_txt);
+    GFile *dest = g_file_new_for_path(dest_txt);
+    GError *gerror = NULL;
+    const GFileCopyFlags flags = overwrite ? G_FILE_COPY_OVERWRITE : G_FILE_COPY_NONE;
+    gboolean moveStatus = g_file_move(src, dest, flags, NULL, NULL, NULL, &gerror);
+
+    if(!moveStatus && gerror)
+      fprintf(stderr, "[dt_image] failed to move text sidecar `%s' -> `%s': %s\n",
+              src_txt, dest_txt, gerror->message);
+
+    g_clear_error(&gerror);
+    g_object_unref(dest);
+    g_object_unref(src);
+  }
+
+  g_free(dest_txt);
+  g_free(src_txt);
+}
+
 char *dt_image_get_text_path(const int32_t imgid)
 {
-  gboolean from_cache = FALSE;
   char image_path[PATH_MAX] = { 0 };
+
+  gboolean from_cache = FALSE;
   dt_image_full_path(imgid,  image_path,  sizeof(image_path),  &from_cache, __FUNCTION__);
 
-  return dt_image_get_text_path_from_path(image_path);
+  if(image_path[0] != '\0' && g_file_test(image_path, G_FILE_TEST_EXISTS))
+    return dt_image_get_text_path_from_path(image_path);
+
+  from_cache = TRUE;
+  dt_image_full_path(imgid,  image_path,  sizeof(image_path),  &from_cache, __FUNCTION__);
+
+  if(from_cache && image_path[0] != '\0' && g_file_test(image_path, G_FILE_TEST_EXISTS))
+    return dt_image_get_text_path_from_path(image_path);
+
+  return NULL;
 }
 
 float dt_image_get_exposure_bias(const struct dt_image_t *image_storage)

@@ -38,7 +38,7 @@ SUDO=""
 
 PRINT_HELP=0
 
-FEATURES="COLORD GRAPHICSMAGICK IMAGEMAGICK KWALLET LIBSECRET LUA MAP MAC_INTEGRATION NLS OPENCL OPENEXR OPENMP WEBP"
+FEATURES="CMARK COLORD GRAPHICSMAGICK IMAGEMAGICK KWALLET LIBSECRET LUA MAP MAC_INTEGRATION NLS OPENCL OPENEXR OPENMP WEBP"
 
 # prepare a lowercase version with a space before and after
 # it's very important for parse_feature, has no impact in for loop expansions
@@ -336,6 +336,7 @@ MAKE_TASKS=$(num_cpu)
 MAKE=$(make_name)
 
 features_set_to_autodetect
+FEAT_CMARK=1
 parse_args "$@"
 
 if [ $PRINT_HELP -ne 0 ] ; then

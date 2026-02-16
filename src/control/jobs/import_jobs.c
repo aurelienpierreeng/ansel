@@ -9,6 +9,7 @@
 #ifndef _WIN32
 #include <glob.h>
 #endif
+#include <string.h>
 #ifdef __APPLE__
 #include "osx/osx.h"
 #endif
@@ -194,6 +195,40 @@ int _import_copy_xmp(const char *const filename, gchar *dest_file_path)
   return xmp_cntr;
 }
 
+static char *_text_sidecar_build_path(const char *image_path)
+{
+  size_t len = strlen(image_path);
+  const char *c = image_path + len;
+  while((c > image_path) && (*c != '.')) c--;
+  len = c - image_path + 1;
+
+  char *result = g_strndup(image_path, len + 3);
+  result[len] = 't';
+  result[len + 1] = 'x';
+  result[len + 2] = 't';
+  return result;
+}
+
+int _import_copy_txt(const char *const filename, const char *dest_file_path)
+{
+  char *txt_source = dt_image_get_text_path_from_path(filename);
+  if(!txt_source) return 0;
+
+  char *txt_dest = _text_sidecar_build_path(dest_file_path);
+  int success = 0;
+
+  if(txt_dest)
+  {
+    success = _copy_file(txt_source, txt_dest);
+    dt_print(DT_DEBUG_IMPORT, "[Import] copying %s to %s %s\n", txt_source, txt_dest,
+             (success) ? "succeeded" : "failed");
+  }
+
+  g_free(txt_dest);
+  g_free(txt_source);
+  return success ? 1 : 0;
+}
+
 /**
  * @brief copy a file to a destination path after checking if everything is allright.
  *
@@ -242,7 +277,11 @@ int _import_copy_file(const char *const filename, const int index, dt_control_im
     else
       fprintf(stdout, "[Import] Not allowed to write in the %s folder.\n", data->target_dir);
 
-    if(process) _import_copy_xmp(filename, dest_file_path);
+    if(process)
+    {
+      _import_copy_xmp(filename, dest_file_path);
+      _import_copy_txt(filename, dest_file_path);
+    }
 
     if(process)
       g_strlcpy(img_path_to_db, dest_file_path, pathname_len);
