@@ -40,5 +40,5 @@ RUN export GCC_VER=14 && /bin/bash /tmp/install-deps-ubuntu.sh && \
 WORKDIR /src
 COPY . /src
 
-RUN sh /src/build.sh --install && \
+RUN sh /src/build.sh --install --update && \
     rm -rf /src/build /src/src
