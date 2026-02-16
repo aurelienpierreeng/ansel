@@ -32,6 +32,7 @@ APT_PACKAGES=(
   libcolord-dev
   libcolord-gtk-dev
   libcmocka-dev
+  libcmark-dev
   libcups2-dev
   libcurl4-gnutls-dev
   libdbus-glib-1-dev

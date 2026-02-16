@@ -12,6 +12,7 @@ brew update
 HB_PACKAGES=(
   adwaita-icon-theme
   cmake
+  cmark
   pkg-config
   cmocka
   curl

@@ -16,6 +16,7 @@ ZYPPER_PACKAGES=(
   cairo-devel
   clang
   cmake
+  cmark-devel
   colord-devel
   colord-gtk-devel
   cmocka-devel

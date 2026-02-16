@@ -17,6 +17,7 @@ DNF_PACKAGES=(
   clang
   clang-devel
   cmake
+  cmark-devel
   colord-devel
   colord-gtk-devel
   cmocka-devel

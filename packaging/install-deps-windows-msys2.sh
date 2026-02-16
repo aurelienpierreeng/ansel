@@ -15,6 +15,7 @@ MINGW_PACKAGES=(
   toolchain
   clang
   cmake
+  cmark
   cmocka
   curl
   dbus-glib

@@ -10,7 +10,7 @@ in stdenv.mkDerivation rec {
   nativeBuildInputs = [ pkgs.git ];
 
   buildInputs = with pkgs; with xorg; with gnome2;
-    [ atk cairo cmake curl dbus_glib exiv2 glib gtk3
+    [ atk cairo cmake cmark curl dbus_glib exiv2 glib gtk3
       ilmbase intltool lcms2 lensfun libX11 libexif
       libjpeg libpng
       librsvg libtiff libxcb openexr pixman pkgconfig sqlite libxslt

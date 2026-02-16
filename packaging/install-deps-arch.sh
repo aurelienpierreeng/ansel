@@ -17,6 +17,7 @@ PACMAN_PACKAGES=(
   cairo
   clang
   cmake
+  cmark
   colord
   colord-gtk
   cmocka
