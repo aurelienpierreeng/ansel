@@ -19,7 +19,6 @@ jobs:
           fetch-depth: 1
           fetch-tags: true
           submodules: true
-          path: src
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Log in to Docker Hub
