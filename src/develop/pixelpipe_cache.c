@@ -632,7 +632,8 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache,
   dt_iop_buffer_dsc_t dsc = {0};
 
   const uintptr_t addr = (uintptr_t)aligned;
-  uint64_t hash = dt_hash(5381, (const char *)&addr, sizeof(addr));
+  // Use the pointer value directly to avoid hash collisions on page-aligned addresses.
+  uint64_t hash = (uint64_t)addr;
 
   dt_pthread_mutex_lock(&cache->lock);
 
@@ -663,7 +664,8 @@ void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void *
   if(!mem || !*mem) return;
 
   const uintptr_t addr = (uintptr_t)(*mem);
-  uint64_t hash = dt_hash(5381, (const char *)&addr, sizeof(addr));
+  // Must match dt_pixelpipe_cache_alloc_align_cache_impl key.
+  uint64_t hash = (uint64_t)addr;
 
   dt_pthread_mutex_lock(&cache->lock);
 

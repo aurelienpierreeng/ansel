@@ -307,18 +307,19 @@ static void rcd_demosaic(dt_dev_pixelpipe_iop_t *piece, float *const restrict ou
     // FIXME: CRITICAL: need to handle the case where we couldn't alloc the memory,
     // but in a parallel section, that's not going to be trivial.
 
-    float *const VH_Dir = dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE, 0);
+    float *VH_Dir = dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE, 0);
     // ensure that border elements which are read but never actually set below are zeroed out
     memset(VH_Dir, 0, sizeof(*VH_Dir) * RCD_TILESIZE * RCD_TILESIZE);
-    float *const PQ_Dir = dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE / 2, 0);
-    float *const cfa =    dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE, 0);
-    float *const P_CDiff_Hpf = dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE / 2, 0);
-    float *const Q_CDiff_Hpf = dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE / 2, 0);
+    float *PQ_Dir = dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE / 2, 0);
+    float *cfa =    dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE, 0);
+    float *P_CDiff_Hpf = dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE / 2, 0);
+    float *Q_CDiff_Hpf = dt_pixelpipe_cache_alloc_align_float_cache((size_t) RCD_TILESIZE * RCD_TILESIZE / 2, 0);
 
-    float (*const rgb)[RCD_TILESIZE * RCD_TILESIZE] = (void *)dt_pixelpipe_cache_alloc_align_float_cache((size_t)3 * RCD_TILESIZE * RCD_TILESIZE, 0);
+    float (*rgb)[RCD_TILESIZE * RCD_TILESIZE] =
+      (void *)dt_pixelpipe_cache_alloc_align_float_cache((size_t)3 * RCD_TILESIZE * RCD_TILESIZE, 0);
 
     // No overlapping use so re-use same buffer
-    float *const lpf = PQ_Dir;
+    float *lpf = PQ_Dir;
 
     // There has been a discussion about the schedule strategy, at least on the tested machines the
     // dynamic scheduling seems to be slightly faster.
