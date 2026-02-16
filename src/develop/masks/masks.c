@@ -1415,7 +1415,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form)
         break;
     }
   }
-  gchar *node_index = g_strdup_printf(gui->node_selected >= 0 ? " - (%s #%d)" : "", _("node"), gui->node_selected);
+  gchar *node_index = gui->node_selected >= 0 ? g_strdup_printf(" - (%s #%d)", _("node"), gui->node_selected) : g_strdup("");
   gchar *title = g_strdup_printf("<b><big>%s%s</big></b>", form_name, node_index);
   GtkWidget *menu_item = masks_gtk_menu_item_new_with_markup(title, menu, NULL, gui);
   gtk_widget_set_sensitive(menu_item, FALSE);
