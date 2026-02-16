@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Created: 2026-02-16
+set -euo pipefail
+
+if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+  SUDO="sudo"
+else
+  SUDO=""
+fi
+
+DNF_PACKAGES=(
+  adwaita-icon-theme
+  appstream-util
+  at-spi2-core
+  atk-devel
+  cairo-devel
+  clang
+  clang-devel
+  cmake
+  colord-devel
+  colord-gtk-devel
+  cmocka-devel
+  cups-devel
+  curl
+  dbus-glib-devel
+  desktop-file-utils
+  doxygen
+  exiv2-devel
+  fuse
+  gdb
+  gettext
+  gmic
+  graphviz
+  GraphicsMagick-devel
+  gstreamer1-plugins-base-tools
+  gdk-pixbuf2-devel
+  glib2-devel
+  gtk3-devel
+  intltool
+  iso-codes
+  json-glib-devel
+  lensfun-devel
+  libavif-devel
+  libcurl-devel
+  libde265-devel
+  libexif-devel
+  libheif-devel
+  libicu-devel
+  libjpeg-turbo-devel
+  libjxl-devel
+  liblcms2-devel
+  librsvg2-devel
+  libsoup-devel
+  libomp-devel
+  libpng-devel
+  libraw-devel
+  libsecret-devel
+  libtiff-devel
+  libwebp-devel
+  libxkbcommon-devel
+  libxml2
+  libxml2-devel
+  libxslt
+  libxslt-devel
+  libX11-devel
+  libxcb-devel
+  libxshmfence-devel
+  lua-devel
+  make
+  ninja-build
+  openexr-devel
+  openjpeg2-devel
+  osm-gps-map-devel
+  pango-devel
+  perl
+  pixman-devel
+  pkgconf-pkg-config
+  po4a
+  pugixml-devel
+  python3
+  python3-jsonschema
+  python3-pip
+  saxon
+  SDL2-devel
+  squashfs-tools
+  sqlite-devel
+  x265-devel
+  zlib-devel
+)
+
+"${SUDO}" dnf install -y "${DNF_PACKAGES[@]}"

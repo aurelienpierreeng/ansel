@@ -41,51 +41,6 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: ${{ matrix.msystem }}
-          install: >-
-            git
-            intltool
-            po4a
-          pacboy: >-
-            cc:p
-            cmake:p
-            cmocka:p
-            curl:p
-            ninja:p
-            nsis:p
-            dbus-glib:p
-            drmingw:p
-            gcc-libs:p
-            gettext:p
-            gmic:p
-            graphicsmagick:p
-            gtk3:p
-            icu:p
-            imath:p
-            iso-codes:p
-            lcms2:p
-            lensfun:p
-            libavif:p
-            libexif:p
-            libheif:p
-            libinih:p
-            libjpeg-turbo:p
-            libjxl:p
-            librsvg:p
-            libsecret:p
-            libsoup:p
-            libwebp:p
-            libtiff:p
-            libwebp:p
-            libxml2:p
-            libxslt:p
-            lua:p
-            omp:p
-            openjpeg2:p
-            openexr:p
-            osm-gps-map:p
-            pugixml:p
-            sqlite3:p
-            zlib:p
           update: false
       - name: Checkout ansel source
         uses: actions/checkout@v4
@@ -95,6 +50,9 @@ jobs:
           fetch-tags: true
           submodules: true
           path: src
+      - name: Install Base Dependencies
+        run: |
+          $(cygpath ${SRC_DIR})/packaging/install-deps-windows-msys2.sh
       - name: Checkout exiv2 source
         uses: actions/checkout@v3
         with:

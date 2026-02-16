@@ -51,11 +51,7 @@ jobs:
           path: ${{ env.SRC_DIR }}
       - name: Install Base Dependencies
         run: |
-          brew update > /dev/null || true
-          cd src/.ci
-          export HOMEBREW_NO_INSTALL_UPGRADE=1
-          brew bundle --verbose || true
-          brew link --force libomp libsoup
+          "${SRC_DIR}/packaging/install-deps-macos.sh"
       - name: Update lensfun data
         if: ${{ success() }}
         run: |

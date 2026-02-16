@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Created: 2026-02-16
+set -euo pipefail
+
+if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+  SUDO="sudo"
+else
+  SUDO=""
+fi
+
+PACMAN_PACKAGES=(
+  adwaita-icon-theme
+  appstream
+  at-spi2-core
+  atk
+  base-devel
+  cairo
+  clang
+  cmake
+  colord
+  colord-gtk
+  cmocka
+  cups
+  curl
+  dbus-glib
+  desktop-file-utils
+  doxygen
+  exiv2
+  fuse2
+  gdb
+  gettext
+  gmic
+  graphviz
+  graphicsmagick
+  gdk-pixbuf2
+  glib2
+  gstreamer
+  gtk3
+  intltool
+  iso-codes
+  json-glib
+  lensfun
+  libavif
+  libde265
+  libexif
+  libheif
+  libicu
+  libjpeg-turbo
+  libjxl
+  libpng
+  libraw
+  librsvg
+  libsecret
+  libsoup
+  libtiff
+  libwebp
+  libx11
+  libxcb
+  libxkbcommon
+  libxml2
+  libxslt
+  libxshmfence
+  llvm
+  lua
+  make
+  ninja
+  openexr
+  openjpeg2
+  osm-gps-map
+  pango
+  perl
+  pixman
+  pkgconf
+  po4a
+  pugixml
+  python
+  python-jsonschema
+  python-pip
+  sdl2
+  sqlite
+  squashfs-tools
+  x265
+  zlib
+)
+
+"${SUDO}" pacman -Syu --needed --noconfirm "${PACMAN_PACKAGES[@]}"

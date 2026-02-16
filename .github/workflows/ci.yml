@@ -83,62 +83,14 @@ jobs:
           sudo apt-get update
           sudo apt-get -y install \
             ${{ matrix.compiler.packages }}
-      - name: Install Base Dependencies
-        run: |
-          sudo apt-get -y install \
-            build-essential \
-            appstream-util \
-            desktop-file-utils \
-            gettext \
-            git \
-            gdb \
-            intltool \
-            libatk1.0-dev \
-            libavif-dev \
-            libcairo2-dev \
-            libcolord-dev \
-            libcolord-gtk-dev \
-            libcmocka-dev \
-            libcups2-dev \
-            libcurl4-gnutls-dev \
-            libexiv2-dev \
-            libgdk-pixbuf2.0-dev \
-            libglib2.0-dev \
-            libgraphicsmagick1-dev \
-            libgtk-3-dev \
-            libheif-dev \
-            libjpeg-dev \
-            libjson-glib-dev \
-            liblcms2-dev \
-            liblensfun-dev \
-            liblua5.3-dev \
-            libopenexr-dev \
-            libopenjp2-7-dev \
-            libosmgpsmap-1.0-dev \
-            libpango1.0-dev \
-            libpng-dev \
-            libpugixml-dev \
-            librsvg2-dev \
-            libsaxon-java \
-            libsecret-1-dev \
-            libsoup2.4-dev \
-            libsqlite3-dev \
-            libtiff5-dev \
-            libwebp-dev \
-            libx11-dev \
-            libxml2-dev \
-            libxml2-utils \
-            ninja-build \
-            perl \
-            po4a \
-            python3-jsonschema \
-            xsltproc \
-            zlib1g-dev;
       - uses: actions/checkout@v4
         with:
           submodules: true
           fetch-depth: 1
           path: src
+      - name: Install Base Dependencies
+        run: |
+          "${SRC_DIR}/packaging/install-deps-ubuntu.sh"
       - name: Build and Install
         run: |
           cmake -E make_directory "${BUILD_DIR}";
@@ -197,61 +149,15 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: ${{ matrix.msystem }}
-          install: >-
-            git
-            intltool
-            po4a
-          pacboy: >-
-            cc:p
-            cmake:p
-            cmocka:p
-            curl:p
-            ninja:p
-            nsis:p
-            dbus-glib:p
-            drmingw:p
-            exiv2:p
-            gcc-libs:p
-            gettext:p
-            gmic:p
-            graphicsmagick:p
-            gtk3:p
-            icu:p
-            imath:p
-            iso-codes:p
-            lcms2:p
-            lensfun:p
-            libavif:p
-            libexif:p
-            libheif:p
-            libjpeg-turbo:p
-            libjxl:p
-            librsvg:p
-            libsecret:p
-            libsoup:p
-            libwebp:p
-            libtiff:p
-            libwebp:p
-            libxml2:p
-            libxslt:p
-            lua:p
-            omp:p
-            openexr:p
-            openjpeg2:p
-            osm-gps-map:p
-            pugixml:p
-            python:p
-            python-jsonschema:p
-            python-setuptools:p
-            python-six:p
-            sqlite3:p
-            zlib:p
           update: true
       - uses: actions/checkout@v4
         with:
           submodules: true
           fetch-depth: 1
           path: src
+      - name: Install Base Dependencies
+        run: |
+          $(cygpath ${SRC_DIR})/packaging/install-deps-windows-msys2.sh
       - name: Build and Install
         run: |
           cmake -E make_directory "${BUILD_DIR}"
@@ -312,12 +218,7 @@ jobs:
           path: ${{ env.SRC_DIR }}
       - name: Install Base Dependencies
         run: |
-          brew update > /dev/null || true
-          cd src/.ci
-          export HOMEBREW_NO_INSTALL_UPGRADE=1
-          brew bundle --verbose || true
-          # handle keg-only libs
-          brew link --force libomp libsoup
+          "${SRC_DIR}/packaging/install-deps-macos.sh"
       - name: Build and Install
         run: |
           cmake -E make_directory "${BUILD_DIR}";

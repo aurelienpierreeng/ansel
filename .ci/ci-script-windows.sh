@@ -81,11 +81,8 @@ cat > "$FONTCONFIG_FILE" <<EOF
 <fontconfig><dir>$(cygpath -aw fonts)</dir></fontconfig>
 EOF
 
-execute 'Installing base-devel and toolchain'  pacman -S --needed --noconfirm mingw-w64-x86_64-{toolchain,clang,cmake}
-execute 'Installing dependencies' pacman -S --needed --noconfirm  mingw-w64-x86_64-{exiv2,lcms2,dbus-glib,openexr,sqlite3,libxslt,libsoup,libavif,libwebp,libsecret,lua,graphicsmagick,openjpeg2,gtk3,pugixml,libexif,osm-gps-map,flickcurl,drmingw,gettext,python3,iso-codes,lensfun}
+execute 'Installing dependencies' bash "$(cygpath "${APPVEYOR_BUILD_FOLDER}")/packaging/install-deps-windows-msys2.sh"
 
 execute 'Updating lensfun databse' lensfun-update-data
-
-execute 'Installing additional OpenMP library for clang' pacman -S --needed --noconfirm mingw-w64-x86_64-openmp
 
 execute 'Building Ansel' build_darktable

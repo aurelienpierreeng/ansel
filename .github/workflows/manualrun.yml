@@ -56,61 +56,13 @@ jobs:
           sudo apt-get update
           sudo apt-get -y install \
             ${{ matrix.compiler.packages }}
-      - name: Install Base Dependencies
-        run: |
-          sudo apt-get -y install \
-            build-essential \
-            appstream-util \
-            desktop-file-utils \
-            gettext \
-            git \
-            gdb \
-            intltool \
-            libatk1.0-dev \
-            libcairo2-dev \
-            libcolord-dev \
-            libcolord-gtk-dev \
-            libcmocka-dev \
-            libcups2-dev \
-            libcurl4-gnutls-dev \
-            libexiv2-dev \
-            libgdk-pixbuf2.0-dev \
-            libglib2.0-dev \
-            libgraphicsmagick1-dev \
-            libgtk-3-dev \
-            libheif-dev \
-            libjpeg-dev \
-            libjson-glib-dev \
-            liblcms2-dev \
-            liblensfun-dev \
-            liblua5.2-dev \
-            liblua5.3-dev \
-            libopenexr-dev \
-            libopenjp2-7-dev \
-            libosmgpsmap-1.0-dev \
-            libpango1.0-dev \
-            libpng-dev \
-            libpugixml-dev \
-            librsvg2-dev \
-            libsaxon-java \
-            libsecret-1-dev \
-            libsoup2.4-dev \
-            libsqlite3-dev \
-            libtiff5-dev \
-            libwebp-dev \
-            libx11-dev \
-            libxml2-dev \
-            libxml2-utils \
-            ninja-build \
-            perl \
-            po4a \
-            python3-jsonschema \
-            xsltproc \
-            zlib1g-dev;
       - uses: actions/checkout@v3
         with:
           submodules: true
           path: src
+      - name: Install Base Dependencies
+        run: |
+          "${SRC_DIR}/packaging/install-deps-ubuntu.sh"
       - name: Build and Install
         run: |
           cmake -E make_directory "${BUILD_DIR}";
@@ -178,56 +130,14 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
-          install: >-
-            pacman-mirrors
-            bash
-            curl
-            git
-            base-devel
-            intltool
-            mingw-w64-x86_64-gdb
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-clang
-            mingw-w64-x86_64-openmp
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-cmocka
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-libxml2
-            mingw-w64-x86_64-pugixml
-            mingw-w64-x86_64-libjpeg-turbo
-            mingw-w64-x86_64-zlib
-            mingw-w64-x86_64-exiv2
-            mingw-w64-x86_64-lcms2
-            mingw-w64-x86_64-lensfun
-            mingw-w64-x86_64-dbus-glib
-            mingw-w64-x86_64-openexr
-            mingw-w64-x86_64-sqlite3
-            mingw-w64-x86_64-libxslt
-            mingw-w64-x86_64-libsoup
-            mingw-w64-x86_64-libavif
-            mingw-w64-x86_64-libwebp
-            mingw-w64-x86_64-libsecret
-            mingw-w64-x86_64-lua
-            mingw-w64-x86_64-graphicsmagick
-            mingw-w64-x86_64-openjpeg2
-            mingw-w64-x86_64-gtk3
-            mingw-w64-x86_64-pugixml
-            mingw-w64-x86_64-libexif
-            mingw-w64-x86_64-osm-gps-map
-            mingw-w64-x86_64-drmingw
-            mingw-w64-x86_64-gettext
-            mingw-w64-x86_64-python3
-            mingw-w64-x86_64-iso-codes
-            mingw-w64-x86_64-python3-jsonschema
-            mingw-w64-x86_64-python3-setuptools
-            mingw-w64-x86_64-gmic
-            mingw-w64-x86_64-nsis
           update: true
       - uses: actions/checkout@v3
         with:
           submodules: true
           path: src
+      - name: Install Base Dependencies
+        run: |
+          $(cygpath ${SRC_DIR})/packaging/install-deps-windows-msys2.sh
       - name: Build and Install
         run: |
           cmake -E make_directory "${BUILD_DIR}"
@@ -289,10 +199,7 @@ jobs:
           path: src
       - name: Install Base Dependencies
         run: |
-          brew update > /dev/null || true
-          brew tap Homebrew/bundle
-          cd src/.ci
-          brew bundle --verbose
+          "${SRC_DIR}/packaging/install-deps-macos.sh"
       - name: Build and Install
           # todo: use linker which supports --wrap, ld.bfd and ld.gold support it
         run: |

@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Created: 2026-02-16
+set -euo pipefail
+
+if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+  SUDO="sudo"
+else
+  SUDO=""
+fi
+
+ZYPPER_PACKAGES=(
+  Mesa-devel
+  OpenEXR-devel
+  SDL2-devel
+  atk-devel
+  cairo-devel
+  clang
+  cmake
+  colord-devel
+  colord-gtk-devel
+  cmocka-devel
+  dbus-1-glib-devel
+  desktop-file-utils
+  doxygen
+  fdupes
+  fuse
+  gcc-c++
+  gdb
+  gettext-tools
+  gmic
+  gnome-keyring-devel
+  graphviz
+  GraphicsMagick-devel
+  gdk-pixbuf-devel
+  gtk2-devel
+  gtk3-devel
+  intltool
+  iso-codes
+  json-glib-devel
+  lensfun-devel
+  libavif-devel
+  libcurl-devel
+  libde265-devel
+  libexiv2-devel
+  libexif-devel
+  libheif-devel
+  libicu-devel
+  libjpeg-devel
+  libjxl-devel
+  liblcms2-devel
+  libomp-devel
+  libpng16-devel
+  libraw-devel
+  librsvg-devel
+  libsecret-devel
+  libsoup2-devel
+  libtiff-devel
+  libwebp-devel
+  libX11-devel
+  libxcb-devel
+  libxkbcommon-devel
+  libxml2-devel
+  libxslt-devel
+  libxshmfence-devel
+  llvm-devel
+  lua53-devel
+  make
+  ninja
+  openjpeg2-devel
+  osm-gps-map-devel
+  pango-devel
+  perl
+  pixman-devel
+  pkg-config
+  po4a
+  pugixml-devel
+  python3
+  python3-jsonschema
+  python3-pip
+  saxon
+  sqlite3-devel
+  squashfs
+  update-desktop-files
+  x265-devel
+  zlib-devel
+)
+
+"${SUDO}" zypper --non-interactive install --no-recommends "${ZYPPER_PACKAGES[@]}"
