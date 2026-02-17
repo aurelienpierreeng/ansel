@@ -1,31 +1,40 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2017-2021 darktable developers.
-
+    Copyright (C) 2017-2020 Heiko Bauke.
+    Copyright (C) 2019, 2021 luzpaz.
+    Copyright (C) 2020 Hubert Kowalski.
+    Copyright (C) 2020-2021 Pascal Obry.
+    Copyright (C) 2020-2021 Ralf Brown.
+    Copyright (C) 2022 Hanno Schwalm.
+    Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2024 Alban Gruin.
+    Copyright (C) 2024 Alynx Zhou.
+    Copyright (C) 2025-2026 Aurélien PIERRE.
+    
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-
+    
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
+    
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
-
-
+    
+    
     Implementation of the guided image filter as described in
-
+    
     "Guided Image Filtering" by Kaiming He, Jian Sun, and Xiaoou Tang in
     K. Daniilidis, P. Maragos, N. Paragios (Eds.): ECCV 2010, Part I,
     LNCS 6311, pp. 1-14, 2010. Springer-Verlag Berlin Heidelberg 2010
-
+    
     "Guided Image Filtering" by Kaiming He, Jian Sun, and Xiaoou Tang in
     IEEE Transactions on Pattern Analysis and Machine Intelligence, vol. 35,
     no. 6, June 2013, 1397-1409
-
+    
 */
 
 #include "common/box_filters.h"

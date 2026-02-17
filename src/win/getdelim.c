@@ -1,39 +1,41 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2017-2020 darktable developers.
-
+    Copyright (C) 2016-2017 Peter Budai.
+    Copyright (C) 2020 Pascal Obry.
+    Copyright (C) 2022 Martin Bařinka.
+    
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-
+    
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
+    
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
-
+    
     getdelim.c --- Implementation of replacement getdelim function.
-
+    
     Copyright (C) 1994, 1996-1998, 2001, 2003, 2005-2011 Free Software
     Foundation, Inc.
-
+    
     This program is free software; you can redistribute it and/or
     modify it under the terms of the GNU General Public License as
     published by the Free Software Foundation; either version 2, or (at
     your option) any later version.
-
+    
     This program is distributed in the hope that it will be useful, but
     WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
     General Public License for more details.
-
+    
     You should have received a copy of the GNU General Public License
     along with this program; if not, write to the Free Software
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
-    02110-1301, USA.  */
+*/
 
 /* Ported from glibc by Simon Josefsson. */
 

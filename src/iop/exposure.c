@@ -1,17 +1,55 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2009-2021 darktable developers.
-
+    Copyright (C) 2009-2016, 2018 johannes hanika.
+    Copyright (C) 2010-2011 Bruce Guenter.
+    Copyright (C) 2010-2012 Henrik Andersson.
+    Copyright (C) 2010 José Carlos García Sogo.
+    Copyright (C) 2010 Milan Knížek.
+    Copyright (C) 2010 Stuart Henderson.
+    Copyright (C) 2011 Antony Dovgal.
+    Copyright (C) 2011 Christophe Augier.
+    Copyright (C) 2011 Olivier Tribout.
+    Copyright (C) 2011-2012 Pascal de Bruijn.
+    Copyright (C) 2011 Robert Bieber.
+    Copyright (C) 2011 root.
+    Copyright (C) 2011-2019 Tobias Ellinghaus.
+    Copyright (C) 2011-2014, 2017 Ulrich Pegelow.
+    Copyright (C) 2012 Edouard Gomez.
+    Copyright (C) 2012 Richard Wonka.
+    Copyright (C) 2013, 2020, 2022 Aldric Renaudin.
+    Copyright (C) 2013 Dennis Gnad.
+    Copyright (C) 2013-2014, 2018-2022 Pascal Obry.
+    Copyright (C) 2014-2016 Roman Lebedev.
+    Copyright (C) 2015 Jan Kundrát.
+    Copyright (C) 2015 Pedro Côrte-Real.
+    Copyright (C) 2016 Alexander V. Smal.
+    Copyright (C) 2017 Heiko Bauke.
+    Copyright (C) 2018-2023, 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2018-2019 Edgardo Hoszowski.
+    Copyright (C) 2018 Maurizio Paglia.
+    Copyright (C) 2018 rawfiner.
+    Copyright (C) 2019 Andreas Schneider.
+    Copyright (C) 2019-2020, 2022 Diederik Ter Rahe.
+    Copyright (C) 2020-2022 Chris Elston.
+    Copyright (C) 2020 Ralf Brown.
+    Copyright (C) 2021 Alex Esseling.
+    Copyright (C) 2021 Hubert Kowalski.
+    Copyright (C) 2022 Hanno Schwalm.
+    Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2022 Philipp Lutz.
+    Copyright (C) 2023 Luca Zulberti.
+    Copyright (C) 2025 Guillaume Stutin.
+    
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-
+    
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
+    
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */

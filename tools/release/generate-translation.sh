@@ -1,11 +1,36 @@
 #!/bin/bash
-
+#   This file is part of darktable,
+#   Copyright (C) 2019, 2021-2022 Pascal Obry.
+#   Copyright (C) 2022 Aurélien PIERRE.
+#   
+#   darktable is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#   
+#   darktable is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#   
+#   You should have received a copy of the GNU General Public License
+#   along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
 # generate translation for RELEASE_NOTES.md
 # flag translations to be removed from release
-#
+
 # 1. Run this script, it just display information (dry-run)
 #    ./tools/generate-translations.sh
-#
+
 # 2. Run with option DO to actually issue the git remove
 #    ./tools/generate-translations.sh DO
 #
@@ -17,8 +42,7 @@
 #
 #    At this point only the kept languages are displayed, and the text can
 #    be copy/pasted directly at the end of RELEASE_NOTES.md
-#
-
+#   
 CDPATH=
 
 MAX_UNTRANSLATED=20

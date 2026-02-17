@@ -1,30 +1,33 @@
 #!/bin/bash
-
-#    This file is part of darktable.
-#    copyright (c) 2016 Roman Lebedev.
-#
-#    darktable is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU General Public License as published by
-#    the Free Software Foundation, either version 3 of the License, or
-#    (at your option) any later version.
-#
-#    darktable is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU General Public License for more details.
-#
-#    You should have received a copy of the GNU General Public License
-#    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
-
+#   This file is part of darktable,
+#   Copyright (C) 2016-2017 Roman Lebedev.
+#   Copyright (C) 2016 Tobias Ellinghaus.
+#   Copyright (C) 2020 Andreas Schneider.
+#   Copyright (C) 2020 Heiko Bauke.
+#   Copyright (C) 2020 Hubert Kowalski.
+#   Copyright (C) 2022-2023 Aurélien PIERRE.
+#   
+#   darktable is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#   
+#   darktable is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#   
+#   You should have received a copy of the GNU General Public License
+#   along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 # it is supposed to be run by travis-ci
-# expects a few env variables to be set:
+ expects a few env variables to be set:
 #   BUILD_DIR - the working directory, where to build
 #   INSTALL_DIR - the installation prefix.
 #   SRC_DIR - read-only directory with git checkout to compile
 #   CC, CXX, CFLAGS, CXXFLAGS are not required, should make sense too
 #   TARGET - either build, skiptest, nofeatures or usermanual
 #   ECO - some other flags for cmake
-
+#   
 set -ex
 
 if [ "$GENERATOR" = "Ninja" ];

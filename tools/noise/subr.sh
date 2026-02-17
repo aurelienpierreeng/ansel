@@ -1,7 +1,46 @@
-# --------------------------------------------------------------------
-# General purpose functions.
-# --------------------------------------------------------------------
-
+#   This file is part of darktable,
+#   Copyright (C) 2012-2013 Jean-Sébastien Pédron.
+#   Copyright (C) 2013 Dennis Gnad.
+#   Copyright (C) 2013 johannes hanika.
+#   Copyright (C) 2013 Pascal Obry.
+#   Copyright (C) 2015-2016 Pedro Côrte-Real.
+#   Copyright (C) 2015-2017 Tobias Ellinghaus.
+#   Copyright (C) 2016-2017 Matthieu Volat.
+#   Copyright (C) 2016-2018 Stefan Schöfegger.
+#   Copyright (C) 2017 luzpaz.
+#   Copyright (C) 2018 Andreas Schneider.
+#   Copyright (C) 2019 junkyardsparkle.
+#   Copyright (C) 2019 Wolfgang Goetz.
+#   Copyright (C) 2021-2022 Miloš Komarčević.
+#   Copyright (C) 2022 Philipp Lutz.
+#   Copyright (C) 2022 Šarūnas Burdulis.
+#   Copyright (C) 2023 Alynx Zhou.
+#   
+#   darktable is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#   
+#   darktable is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#   
+#   You should have received a copy of the GNU General Public License
+#   along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+ --------------------------------------------------------------------
+ General purpose functions.
+ --------------------------------------------------------------------
+#   
 color_ok=$'\033[32m'
 color_warning=$'\033[33m'
 color_error=$'\033[31m'

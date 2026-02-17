@@ -1,20 +1,31 @@
 /*
    This file is part of darktable,
-   Copyright (C) 2011-2022 darktable developers.
-
+   Copyright (C) 2011 Jochen Schroeder.
+   Copyright (C) 2011-2013 johannes hanika.
+   Copyright (C) 2012 Edouard Bourguignon.
+   Copyright (C) 2012 James C. McPherson.
+   Copyright (C) 2012 Richard Wonka.
+   Copyright (C) 2012, 2014, 2016 Tobias Ellinghaus.
+   Copyright (C) 2016-2017 Roman Lebedev.
+   Copyright (C) 2017 luzpaz.
+   Copyright (C) 2019 Heiko Bauke.
+   Copyright (C) 2019-2020, 2022 Pascal Obry.
+   Copyright (C) 2020 Ralf Brown.
+   Copyright (C) 2022 Martin Bařinka.
+   
    darktable is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation, either version 3 of the License, or
    (at your option) any later version.
-
+   
    darktable is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
-
+   
    You should have received a copy of the GNU General Public License
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
-
+   
    Part of this file is based on nikon_curve.c from UFraw
    Copyright 2004-2008 by Shawn Freeman, Udi Fuchs
 */

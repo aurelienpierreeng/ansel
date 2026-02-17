@@ -1,20 +1,43 @@
 /*
-    This file is part of ansel,
-    Copyright (C) 2012-2021 darktable developers.
-    Copyright (C) 2023 ansel developers.
-
-    ansel is free software: you can redistribute it and/or modify
+    This file is part of darktable,
+    Copyright (C) 2012, 2014-2015 johannes hanika.
+    Copyright (C) 2012, 2014-2016, 2019-2021 Pascal Obry.
+    Copyright (C) 2012-2017, 2019-2020 Tobias Ellinghaus.
+    Copyright (C) 2013-2014 Jérémy Rosen.
+    Copyright (C) 2013-2014 Pascal de Bruijn.
+    Copyright (C) 2013 Thomas Pryds.
+    Copyright (C) 2014 Pedro Côrte-Real.
+    Copyright (C) 2014-2016 Roman Lebedev.
+    Copyright (C) 2017, 2020 Heiko Bauke.
+    Copyright (C) 2018 Bill Ferguson.
+    Copyright (C) 2018 Michael Mayer.
+    Copyright (C) 2019 Denis Dyakov.
+    Copyright (C) 2019 parafin.
+    Copyright (C) 2019 Philippe Weyland.
+    Copyright (C) 2020 bobobo1618.
+    Copyright (C) 2020 David-Tillmann Schaefer.
+    Copyright (C) 2020 Hubert Kowalski.
+    Copyright (C) 2021 Aldric Renaudin.
+    Copyright (C) 2021 Christian Kreibich.
+    Copyright (C) 2021 Hanno Schwalm.
+    Copyright (C) 2021 Ralf Brown.
+    Copyright (C) 2022-2023, 2025 Aurélien PIERRE.
+    Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2022 Miloš Komarčević.
+    Copyright (C) 2023 Alynx Zhou.
+    
+    darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-
-    ansel is distributed in the hope that it will be useful,
+    
+    darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
+    
     You should have received a copy of the GNU General Public License
-    along with ansel.  If not, see <http://www.gnu.org/licenses/>.
+    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 /**

@@ -1,10 +1,36 @@
 #!/bin/bash
+#   This file is part of the Ansel project.
+#   Copyright (C) 2022-2023, 2025-2026 Aurélien PIERRE.
+#   Copyright (C) 2023 Alynx Zhou.
+#   
+#   Ansel is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#   
+#   Ansel is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#   
+#   You should have received a copy of the GNU General Public License
+#   along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 
+
+
+
+
+
+
+
+
+
+#   
 # Build Ansel within an AppDir directory
 # Then package it as an .AppImage
-# Call this script from the Ansel root folder like `sh .ci/ci-script-appimage.sh`
+ #Call this script from the Ansel root folder like `sh .ci/ci-script-appimage.sh`
 # Copyright (c) Aurélien Pierre - 2022
-
+#   
 # For local builds, purge and clean build pathes if any
 #if [ -d "build" ];
 #then yes | rm -R build;

@@ -1,17 +1,53 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2011-2021 darktable developers.
-
+    Copyright (C) 2011-2012 Edouard Gomez.
+    Copyright (C) 2011 Henrik Andersson.
+    Copyright (C) 2011-2012 johannes hanika.
+    Copyright (C) 2011 Moritz Lipp.
+    Copyright (C) 2012, 2017 Christian Tellefsen.
+    Copyright (C) 2012 José Carlos García Sogo.
+    Copyright (C) 2012 Jérémy Rosen.
+    Copyright (C) 2012 Richard Wonka.
+    Copyright (C) 2012 Simon Spannagel.
+    Copyright (C) 2012-2020 Tobias Ellinghaus.
+    Copyright (C) 2013-2014, 2018-2022 Pascal Obry.
+    Copyright (C) 2014-2016 Roman Lebedev.
+    Copyright (C) 2015 Pedro Côrte-Real.
+    Copyright (C) 2016 piterdias.
+    Copyright (C) 2017, 2019, 2021 luzpaz.
+    Copyright (C) 2017-2018 Rikard Öxler.
+    Copyright (C) 2018-2019 Edgardo Hoszowski.
+    Copyright (C) 2018 Mario Lueder.
+    Copyright (C) 2018 Peter Budai.
+    Copyright (C) 2019 jakubfi.
+    Copyright (C) 2019-2022 Philippe Weyland.
+    Copyright (C) 2020 Heiko Bauke.
+    Copyright (C) 2020-2021 Hubert Kowalski.
+    Copyright (C) 2020 JP Verrue.
+    Copyright (C) 2020 jpverrue.
+    Copyright (C) 2021 Diederik Ter Rahe.
+    Copyright (C) 2021 Hanno Schwalm.
+    Copyright (C) 2021 HansBull.
+    Copyright (C) 2021 Harald.
+    Copyright (C) 2021 Ralf Brown.
+    Copyright (C) 2022 Aldric Renaudin.
+    Copyright (C) 2022-2023, 2025-2026 Aurélien PIERRE.
+    Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2022 Miloš Komarčević.
+    Copyright (C) 2023 Maurizio Paglia.
+    Copyright (C) 2025 Alynx Zhou.
+    Copyright (C) 2025-2026 Guillaume Stutin.
+    
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-
+    
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
+    
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */

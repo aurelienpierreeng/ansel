@@ -1,17 +1,36 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2010-2020 darktable developers.
-
+    Copyright (C) 2010-2011 Henrik Andersson.
+    Copyright (C) 2010-2012, 2014 johannes hanika.
+    Copyright (C) 2010 Stuart Henderson.
+    Copyright (C) 2010-2018, 2020 Tobias Ellinghaus.
+    Copyright (C) 2011 Robert Bieber.
+    Copyright (C) 2012 Christian Tellefsen.
+    Copyright (C) 2012-2014 Jérémy Rosen.
+    Copyright (C) 2012 Richard Wonka.
+    Copyright (C) 2012 Simon Spannagel.
+    Copyright (C) 2013-2014, 2018, 2020 Pascal Obry.
+    Copyright (C) 2014 Pascal de Bruijn.
+    Copyright (C) 2014-2016 Roman Lebedev.
+    Copyright (C) 2019 Denis Dyakov.
+    Copyright (C) 2019 Heiko Bauke.
+    Copyright (C) 2019 jakubfi.
+    Copyright (C) 2019 Philippe Weyland.
+    Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2023, 2025 Aurélien PIERRE.
+    Copyright (C) 2023 Maurizio Paglia.
+    Copyright (C) 2023 Ricky Moon.
+    
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-
+    
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
+    
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */

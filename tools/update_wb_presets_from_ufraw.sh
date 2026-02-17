@@ -1,8 +1,35 @@
 #!/bin/bash
-#
-# Script updates our wb_presets which we regularly steal from UFRaw.
-#
+#   This file is part of darktable,
+#   Copyright (C) 2011-2012 Pascal de Bruijn.
+#   Copyright (C) 2012 Jean-Sébastien Pédron.
+#   Copyright (C) 2014 Roman Lebedev.
+#   Copyright (C) 2017, 2020 Heiko Bauke.
+#   
+#   darktable is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#   
+#   darktable is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#   
+#   You should have received a copy of the GNU General Public License
+#   along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+ Script updates our wb_presets which we regularly steal from UFRaw.
 
+#   
 TEMP_FILE=$(tempfile -p dtwb -s .c)
 OUT_FILE="../src/external/wb_presets.c"
 

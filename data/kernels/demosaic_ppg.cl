@@ -1,17 +1,24 @@
 /*
     This file is part of darktable,
-    copyright (c) 2009--2010 johannes hanika.
-
+    Copyright (C) 2010 Henrik Andersson.
+    Copyright (C) 2010-2012 johannes hanika.
+    Copyright (C) 2011-2014, 2016-2017 Ulrich Pegelow.
+    Copyright (C) 2011 Ville Pätsi.
+    Copyright (C) 2012 Michal Babej.
+    Copyright (C) 2013 Roman Lebedev.
+    Copyright (C) 2021-2022 Hanno Schwalm.
+    Copyright (C) 2021 Pascal Obry.
+    
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-
+    
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
+    
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */

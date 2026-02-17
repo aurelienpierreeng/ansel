@@ -1,27 +1,35 @@
-#
-#   This file is part of darktable,
-#   Copyright (C) 2022 darktable developers.
-#
-#   darktable is free software: you can redistribute it and/or modify
+#   This file is part of the Ansel project.
+#   Copyright (C) 2022 Aurélien PIERRE.
+#   
+#   Ansel is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
 #   the Free Software Foundation, either version 3 of the License, or
 #   (at your option) any later version.
-#
-#   darktable is distributed in the hope that it will be useful,
+#   
+#   Ansel is distributed in the hope that it will be useful,
 #   but WITHOUT ANY WARRANTY; without even the implied warranty of
 #   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #   GNU General Public License for more details.
-#
+#   
 #   You should have received a copy of the GNU General Public License
-#   along with darktable.  If not, see <http://www.gnu.org/licenses/>.
-#
-
-# Read an IOP file and guess how many buffers it needs from reading allocs
-# This can be used to predict the RAM footprint of an IOP and setup tiling properly
-# Example use :
-#  `python tiling.py filmicrgb.c OpenCL` for OpenCL buffers
-#  `python tiling.py filmicrgb.c C` for C buffers
-
+#   along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+ Read an IOP file and guess how many buffers it needs from reading allocs
+ This can be used to predict the RAM footprint of an IOP and setup tiling properly
+ Example use :
+  `python tiling.py filmicrgb.c OpenCL` for OpenCL buffers
+  `python tiling.py filmicrgb.c C` for C buffers
+#   
 import os
 import re
 import sys

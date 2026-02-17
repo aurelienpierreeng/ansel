@@ -1,20 +1,53 @@
 /*
-    This file is part of ansel,
-    Copyright (C) 2010-2022 darktable developers.
-    Copyright (C) 2023 ansel developers.
-
-    ansel is free software: you can redistribute it and/or modify
+    This file is part of darktable,
+    Copyright (C) 2010 Alex Chateau.
+    Copyright (C) 2010-2011 Henrik Andersson.
+    Copyright (C) 2010-2013, 2016-2017 johannes hanika.
+    Copyright (C) 2010 José Carlos García Sogo.
+    Copyright (C) 2010, 2012-2014 Pascal de Bruijn.
+    Copyright (C) 2011 Antony Dovgal.
+    Copyright (C) 2011 Bruce Guenter.
+    Copyright (C) 2011 Robert Bieber.
+    Copyright (C) 2011-2018 Tobias Ellinghaus.
+    Copyright (C) 2011, 2013-2014 Ulrich Pegelow.
+    Copyright (C) 2012 Christian Tellefsen.
+    Copyright (C) 2012 Jérémy Rosen.
+    Copyright (C) 2012 Richard Wonka.
+    Copyright (C) 2014-2016 Pedro Côrte-Real.
+    Copyright (C) 2014-2016 Roman Lebedev.
+    Copyright (C) 2015 parafin.
+    Copyright (C) 2016 Peter Budai.
+    Copyright (C) 2018-2019 Edgardo Hoszowski.
+    Copyright (C) 2019 Andreas Schneider.
+    Copyright (C) 2019-2020 Heiko Bauke.
+    Copyright (C) 2019 jakubfi.
+    Copyright (C) 2019 luzpaz.
+    Copyright (C) 2019 Matthias Vogelgesang.
+    Copyright (C) 2019-2022 Pascal Obry.
+    Copyright (C) 2019 Philippe Weyland.
+    Copyright (C) 2020 a.
+    Copyright (C) 2020, 2022-2026 Aurélien PIERRE.
+    Copyright (C) 2020 Dan Torop.
+    Copyright (C) 2020 Hubert Kowalski.
+    Copyright (C) 2020-2021 Miloš Komarčević.
+    Copyright (C) 2020-2021 Ralf Brown.
+    Copyright (C) 2021 Sakari Kapanen.
+    Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2023 Alynx Zhou.
+    Copyright (C) 2023 Luca Zulberti.
+    
+    darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-
-    ansel is distributed in the hope that it will be useful,
+    
+    darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
+    
     You should have received a copy of the GNU General Public License
-    along with ansel.  If not, see <http://www.gnu.org/licenses/>.
+    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include "common/colorspaces.h"

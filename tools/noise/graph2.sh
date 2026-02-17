@@ -1,6 +1,25 @@
 #!/bin/bash
+#   This file is part of darktable,
+#   Copyright (C) 2013 Edouard Gomez.
+#   Copyright (C) 2013 johannes hanika.
+#   Copyright (C) 2015 Tobias Ellinghaus.
+#   Copyright (C) 2020 Heiko Bauke.
+#   
+#   darktable is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#   
+#   darktable is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#   
+#   You should have received a copy of the GNU General Public License
+#   along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+#   
 
-# remove whitespace and braces,
+
 # filter out panasonic and powershot etc because they usually blow up the plot ranges
 # also only choose nikon d800 and canon 5d mark 2 for comparison
 grep '"name"' data/noiseprofiles.json | grep -v '"skip"[ \t]*:[ \t]*true' | tr -d "{}()[]\"" | tr ":" "," | sed 's/\s*,\s*/,/g' | tr -s " " "_" | awk -F, "{print \$2 \",\" \$4 \",\" \$7 \",\" \$11;}" | sed 's/_*iso_*[0-9]*//' | \

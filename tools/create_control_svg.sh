@@ -1,22 +1,34 @@
 #!/bin/bash
-#
 #   This file is part of darktable,
-#   copyright (c) 2009--2010 johannes hanika.
-#
+#   Copyright (C) 2010 johannes hanika.
+#   Copyright (C) 2011, 2013 Simon Spannagel.
+#   Copyright (C) 2011 Tobias Ellinghaus.
+#   Copyright (C) 2017, 2020 Heiko Bauke.
+#   Copyright (C) 2017 Tobias Jakobs.
+#   
 #   darktable is free software: you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
 #   the Free Software Foundation, either version 3 of the License, or
 #   (at your option) any later version.
-#
+#   
 #   darktable is distributed in the hope that it will be useful,
 #   but WITHOUT ANY WARRANTY; without even the implied warranty of
 #   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #   GNU General Public License for more details.
-#
+#   
 #   You should have received a copy of the GNU General Public License
 #   along with darktable.  If not, see <http://www.gnu.org/licenses/>.
-#
-
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
 header=$(cat << EOF
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- created with darktable utility scripts, https://www.darktable.org/ -->

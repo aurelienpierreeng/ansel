@@ -1,17 +1,64 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2009-2021 darktable developers.
-
+    Copyright (C) 2009-2014 johannes hanika.
+    Copyright (C) 2010-2011 Bruce Guenter.
+    Copyright (C) 2010-2012 Henrik Andersson.
+    Copyright (C) 2010 Stuart Henderson.
+    Copyright (C) 2011 Antony Dovgal.
+    Copyright (C) 2011 Brian Teague.
+    Copyright (C) 2011-2012 Jérémy Rosen.
+    Copyright (C) 2011 Robert Bieber.
+    Copyright (C) 2011 Rostyslav Pidgornyi.
+    Copyright (C) 2011-2020 Tobias Ellinghaus.
+    Copyright (C) 2011-2015, 2017, 2019 Ulrich Pegelow.
+    Copyright (C) 2012-2014, 2019-2022 Aldric Renaudin.
+    Copyright (C) 2012 Edouard Gomez.
+    Copyright (C) 2012-2013, 2015, 2018, 2020 parafin.
+    Copyright (C) 2012-2013, 2018-2022 Pascal Obry.
+    Copyright (C) 2012 Richard Wonka.
+    Copyright (C) 2013-2016 Roman Lebedev.
+    Copyright (C) 2013 Simon Spannagel.
+    Copyright (C) 2013 Thomas Pryds.
+    Copyright (C) 2014, 2017, 2021 Dan Torop.
+    Copyright (C) 2014 Mikhail Trishchenkov.
+    Copyright (C) 2014-2016 Pedro Côrte-Real.
+    Copyright (C) 2017 Dominik Markiewicz.
+    Copyright (C) 2017-2019 Edgardo Hoszowski.
+    Copyright (C) 2017-2020 Heiko Bauke.
+    Copyright (C) 2017 Peter Budai.
+    Copyright (C) 2018 Matthieu Moy.
+    Copyright (C) 2018 rawfiner.
+    Copyright (C) 2019-2026 Aurélien PIERRE.
+    Copyright (C) 2019-2022 Diederik Ter Rahe.
+    Copyright (C) 2019 Jacques Le Clerc.
+    Copyright (C) 2020-2022 Chris Elston.
+    Copyright (C) 2020-2022 Hanno Schwalm.
+    Copyright (C) 2020 Harold le Clément de Saint-Marcq.
+    Copyright (C) 2020-2021 Hubert Kowalski.
+    Copyright (C) 2020-2021 Marco.
+    Copyright (C) 2020 Philippe Weyland.
+    Copyright (C) 2020-2021 Ralf Brown.
+    Copyright (C) 2021 Mark-64.
+    Copyright (C) 2021-2022 Philipp Lutz.
+    Copyright (C) 2021 Sakari Kapanen.
+    Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2022 Miloš Komarčević.
+    Copyright (C) 2022 Nicolas Auffray.
+    Copyright (C) 2023 Alynx Zhou.
+    Copyright (C) 2023 Luca Zulberti.
+    Copyright (C) 2025-2026 Guillaume Stutin.
+    Copyright (C) 2025 Miguel Moquillon.
+    
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-
+    
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
+    
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */

@@ -1,23 +1,49 @@
 #!/bin/bash
+#   This file is part of darktable,
+#   Copyright (C) 2020-2021 Pascal Obry.
+#   Copyright (C) 2020 Ralf Brown.
+#   Copyright (C) 2023, 2025 Aurélien PIERRE.
+#   
+#   darktable is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#   
+#   darktable is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#   
+#   You should have received a copy of the GNU General Public License
+#   along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+#   
+ To run darktable-cli must be found, either
 
-# To run darktable-cli must be found, either
-#
 #   1. Put darktable-cli in the PATH
 #   2. Set DARKTABLE_CLI to the full pathname of darktable-cli executable
 #   3. Have installed darktable to test in /opt/darktable
-#
-# To run the test suite:
-#
+
+ To run the test suite:
+
 #   ./run.sh               - will run all tests
 #   ./run.sh 0001-exposure - will run the single tests 0001-exposure
-#
-# Options:
-#
+
+ Options:
+
 #   --disable-opencl           - do not run the OpenCL path
 #   --no-deltae                - do a light check not requiring Delta-E module
 #   --fast-fail                - abort testing on the first NOK test
 #   --op=<n> | --operation=<n> - run test with matching operation n
-
+#   
 CDPATH=
 
 # If DARKTABLE_CLI not set and darktable-cli not found in the PATH but found

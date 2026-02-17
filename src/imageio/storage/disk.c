@@ -1,17 +1,49 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2010-2021 darktable developers.
-
+    Copyright (C) 2010 Andrea Purracchio.
+    Copyright (C) 2010-2011, 2013 Henrik Andersson.
+    Copyright (C) 2010-2013 johannes hanika.
+    Copyright (C) 2010 Stuart Henderson.
+    Copyright (C) 2011 Antony Dovgal.
+    Copyright (C) 2011 Moritz Lipp.
+    Copyright (C) 2011 Olivier Tribout.
+    Copyright (C) 2011 Robert Bieber.
+    Copyright (C) 2011-2018, 2020 Tobias Ellinghaus.
+    Copyright (C) 2012 Christian Tellefsen.
+    Copyright (C) 2012 Richard Wonka.
+    Copyright (C) 2013 Jake Probst.
+    Copyright (C) 2013-2015 Jérémy Rosen.
+    Copyright (C) 2013-2015, 2018-2021 Pascal Obry.
+    Copyright (C) 2013-2016 Roman Lebedev.
+    Copyright (C) 2014 Pascal de Bruijn.
+    Copyright (C) 2015 Pedro Côrte-Real.
+    Copyright (C) 2017 parafin.
+    Copyright (C) 2018 Dan Torop.
+    Copyright (C) 2019, 2023, 2025 Aurélien PIERRE.
+    Copyright (C) 2019 Denis Dyakov.
+    Copyright (C) 2019 Edgardo Hoszowski.
+    Copyright (C) 2019, 2022 Philippe Weyland.
+    Copyright (C) 2020-2021 Chris Elston.
+    Copyright (C) 2020-2021 Diederik Ter Rahe.
+    Copyright (C) 2020 Marco.
+    Copyright (C) 2021 Hanno Schwalm.
+    Copyright (C) 2021 Hubert Kowalski.
+    Copyright (C) 2021 Marco Carrarini.
+    Copyright (C) 2021 Mark-64.
+    Copyright (C) 2021 Ralf Brown.
+    Copyright (C) 2022 Martin Bařinka.
+    Copyright (C) 2023 Ricky Moon.
+    
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
-
+    
     darktable is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
+    
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */

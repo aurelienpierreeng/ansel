@@ -1,25 +1,49 @@
 #!/usr/bin/env python3
-# This script is part of the Ansel project
-# Copyright (c) 2025 - Aurélien Pierre
-#
-# Scan C/C++ header files in the src directory for function declarations
-# and check if they are used in the source files.
-#
-# WARNING: some functions will appear unused from .c files but may be used in
-# generated code or XML/XSL templates, in particular for the preferences popup.
-# Unused functions may be unneeded (if API/logic changed), or they might have been
-# forgotten or not yet implemented, in which case they will be useful in the future.
-# Don't remove them without checking which it is.
-#
-# Ensure to check the function name in the code before removing it.
-#
-# Call this script from the root of the repository.
-#
-# Usage:
+#   This file is part of the Ansel project.
+#   Copyright (C) 2025 Aurélien PIERRE.
+#   
+#   Ansel is free software: you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation, either version 3 of the License, or
+#   (at your option) any later version.
+#   
+#   Ansel is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#   
+#   You should have received a copy of the GNU General Public License
+#   along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+#   #
+#   #
+#   #
+#   #
+#   #
+#   #
+#   #
+#   #
+#   #
+#   # This script is part of the Ansel project
+#   # Copyright (c) 2025 - Aurélien Pierre
+#   #
+#   # Scan C/C++ header files in the src directory for function declarations
+#   # and check if they are used in the source files.
+#   #
+#   # WARNING: some functions will appear unused from .c files but may be used in
+#   # generated code or XML/XSL templates, in particular for the preferences popup.
+#   # Unused functions may be unneeded (if API/logic changed), or they might have been
+#   # forgotten or not yet implemented, in which case they will be useful in the future.
+#   # Don't remove them without checking which it is.
+#   #
+#   # Ensure to check the function name in the code before removing it.
+#   #
+#   # Call this script from the root of the repository.
+#   #
+#   # Usage:
 #   - python3 tools/detect-unused-functions.py -> scan all header files
 #   - python3 tools/detect-unused-functions.py <header_file> -> scan a specific header file
-
-
+#   
+#   
 import os
 import re
 import sys
