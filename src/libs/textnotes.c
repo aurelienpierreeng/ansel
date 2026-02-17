@@ -27,6 +27,7 @@
 #include "gui/gtk.h"
 #include "gui/gtkentry.h"
 #include "libs/lib.h"
+#include "views/view.h"
 
 #include <glib.h>
 #include <glib/gstdio.h>
@@ -82,7 +83,7 @@ const char *name(dt_lib_module_t *self)
 
 const char **views(dt_lib_module_t *self)
 {
-  static const char *v[] = { "darkroom", NULL };
+  static const char *v[] = { "darkroom", "lighttable", NULL };
   return v;
 }
 
@@ -98,6 +99,7 @@ int position()
 
 static void _save_now(dt_lib_module_t *self);
 static void _render_preview(dt_lib_textnotes_t *d, const char *text);
+static void _update_for_current_image(dt_lib_module_t *self);
 
 static gchar *_get_buffer_text(GtkTextBuffer *buffer)
 {
@@ -1987,17 +1989,31 @@ static void _load_for_image(dt_lib_module_t *self, const int32_t imgid)
 static void _image_changed_callback(gpointer instance, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  _update_for_current_image(self);
+}
+
+static void _mouse_over_image_callback(gpointer instance, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  _update_for_current_image(self);
+}
+
+static void _update_for_current_image(dt_lib_module_t *self)
+{
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
+  if(!d) return;
 
   if(!d->loading) _save_now(self);
 
-  if(!darktable.develop)
-  {
-    _load_for_image(self, -1);
-    return;
-  }
+  int32_t img_id = dt_control_get_mouse_over_id();
+  if(img_id > -1)
+    ;
+  else if(dt_act_on_get_first_image() > -1)
+    img_id = dt_act_on_get_first_image();
 
-  _load_for_image(self, darktable.develop->image_storage.id);
+  if(img_id == d->imgid) return; // nothing to update, spare the SQL queries
+
+  _load_for_image(self, img_id);
 }
 
 void gui_init(dt_lib_module_t *self)
@@ -2083,10 +2099,12 @@ void gui_init(dt_lib_module_t *self)
                                   G_CALLBACK(_image_changed_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_INITIALIZE,
                                   G_CALLBACK(_image_changed_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MOUSE_OVER_IMAGE_CHANGE,
+                                  G_CALLBACK(_mouse_over_image_callback), self);
 
   gtk_widget_show_all(self->widget);
 
-  _load_for_image(self, darktable.develop ? darktable.develop->image_storage.id : -1);
+  _update_for_current_image(self);
   g_idle_add(_initial_load_idle, self);
 }
 
@@ -2095,6 +2113,7 @@ void gui_cleanup(dt_lib_module_t *self)
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_image_changed_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_mouse_over_image_callback), self);
 
   if(d->save_timeout_id)
   {
