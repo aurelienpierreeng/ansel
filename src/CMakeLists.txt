@@ -976,6 +976,7 @@ endif(BUILD_TESTING)
 
 add_library(help_menu "gui/actions/help.c")
 add_dependencies(help_menu generate_authors_h)
+target_include_directories(help_menu PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 #
 # build ansel executable
