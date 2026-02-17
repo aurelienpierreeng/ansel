@@ -38,6 +38,8 @@
 #include "osx/osx.h"
 #endif
 #include <gdk/gdkkeysyms.h>
+
+static sqlite3_stmt *_export_presets_stmt = NULL;
 #include <gtk/gtk.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -1396,6 +1398,12 @@ void gui_cleanup(dt_lib_module_t *self)
     if(module->widget && GTK_IS_CONTAINER(d->format_extra_container)) gtk_container_remove(GTK_CONTAINER(d->format_extra_container), module->widget);
   }
 
+  if(_export_presets_stmt)
+  {
+    sqlite3_finalize(_export_presets_stmt);
+    _export_presets_stmt = NULL;
+  }
+
   g_free(d->metadata_export);
 
   free(self->data);
@@ -1419,10 +1427,16 @@ void init_presets(dt_lib_module_t *self)
 
   const int version = self->version();
 
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
-      "SELECT rowid, op_version, op_params, name FROM data.presets WHERE operation='export'", -1, &stmt, NULL);
+  if(!_export_presets_stmt)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(
+        dt_database_get(darktable.db),
+        "SELECT rowid, op_version, op_params, name FROM data.presets WHERE operation='export'", -1,
+        &_export_presets_stmt, NULL);
+  }
+  sqlite3_stmt *stmt = _export_presets_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     const int rowid = sqlite3_column_int(stmt, 0);

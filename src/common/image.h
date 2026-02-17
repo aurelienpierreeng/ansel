@@ -354,6 +354,8 @@ void dt_image_set_images_locations(const GList *imgs, const GArray *gloc,
 void dt_image_get_location(const int32_t imgid, dt_image_geoloc_t *geoloc);
 /** returns the number of history entries in library for this image */
 uint32_t dt_image_altered(const int32_t imgid);
+/** cleanup cached statements */
+void dt_image_cleanup(void);
 
 /** returns the orientation bits of the image from exif. */
 static inline dt_image_orientation_t dt_image_orientation(const dt_image_t *img)

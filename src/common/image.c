@@ -20,6 +20,7 @@
 #include "common/collection.h"
 #include "common/darktable.h"
 #include "common/debug.h"
+#include "common/dtpthread.h"
 #include "common/exif.h"
 #include "common/file_location.h"
 #include "common/grouping.h"
@@ -54,6 +55,11 @@
 #include <glob.h>
 #endif
 #include <glib/gstdio.h>
+
+static sqlite3_stmt *_image_altered_stmt = NULL;
+static dt_pthread_mutex_t _image_stmt_mutex = PTHREAD_MUTEX_INITIALIZER;
+static sqlite3_stmt *_image_full_path_stmt = NULL;
+static sqlite3_stmt *_image_local_copy_full_path_stmt = NULL;
 
 typedef struct dt_undo_monochrome_t
 {
@@ -332,19 +338,23 @@ void dt_image_full_path(const int32_t imgid, char *pathname, size_t pathname_len
 {
   if(imgid < 0) return;
 
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT folder || '" G_DIR_SEPARATOR_S "' || filename FROM main.images i, main.film_rolls f WHERE "
-                              "i.film_id = f.id and i.id = ?1",
-                              -1, &stmt, NULL);
-  // clang-format on
+  if(!_image_full_path_stmt)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT folder || '" G_DIR_SEPARATOR_S "' || filename FROM main.images i, main.film_rolls f WHERE "
+                                "i.film_id = f.id and i.id = ?1",
+                                -1, &_image_full_path_stmt, NULL);
+    // clang-format on
+  }
+  sqlite3_stmt *stmt = _image_full_path_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   if(sqlite3_step(stmt) == SQLITE_ROW)
   {
     g_strlcpy(pathname, (char *)sqlite3_column_text(stmt, 0), pathname_len);
   }
-  sqlite3_finalize(stmt);
 
   if(*from_cache)
   {
@@ -362,15 +372,19 @@ void dt_image_full_path(const int32_t imgid, char *pathname, size_t pathname_len
 
 static void _image_local_copy_full_path(const int32_t imgid, char *pathname, size_t pathname_len)
 {
-  sqlite3_stmt *stmt;
-
   *pathname = '\0';
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT folder || '" G_DIR_SEPARATOR_S "' || filename FROM main.images i, main.film_rolls f "
-                              "WHERE i.film_id = f.id AND i.id = ?1",
-                              -1, &stmt, NULL);
-  // clang-format on
+  if(!_image_local_copy_full_path_stmt)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT folder || '" G_DIR_SEPARATOR_S "' || filename FROM main.images i, main.film_rolls f "
+                                "WHERE i.film_id = f.id AND i.id = ?1",
+                                -1, &_image_local_copy_full_path_stmt, NULL);
+    // clang-format on
+  }
+  sqlite3_stmt *stmt = _image_local_copy_full_path_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   if(sqlite3_step(stmt) == SQLITE_ROW)
   {
@@ -397,7 +411,6 @@ static void _image_local_copy_full_path(const int32_t imgid, char *pathname, siz
 
     g_free(md5_filename);
   }
-  sqlite3_finalize(stmt);
 }
 
 void dt_image_path_append_version_no_db(int version, char *pathname, size_t pathname_len)
@@ -1036,16 +1049,44 @@ uint32_t dt_image_altered(const int32_t imgid)
 {
   uint32_t found_it = 0;
 
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT COUNT(imgid) FROM main.history WHERE imgid = ?1", -1, &stmt, NULL);
+  dt_pthread_mutex_lock(&_image_stmt_mutex);
+  if(!_image_altered_stmt)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT COUNT(imgid) FROM main.history WHERE imgid = ?1", -1,
+                                &_image_altered_stmt, NULL);
+  }
+  sqlite3_stmt *stmt = _image_altered_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   if(sqlite3_step(stmt) == SQLITE_ROW)
     found_it = sqlite3_column_int(stmt, 0);
 
-  sqlite3_finalize(stmt);
+  dt_pthread_mutex_unlock(&_image_stmt_mutex);
 
   return found_it;
+}
+
+void dt_image_cleanup(void)
+{
+  dt_pthread_mutex_lock(&_image_stmt_mutex);
+  if(_image_altered_stmt)
+  {
+    sqlite3_finalize(_image_altered_stmt);
+    _image_altered_stmt = NULL;
+  }
+  if(_image_full_path_stmt)
+  {
+    sqlite3_finalize(_image_full_path_stmt);
+    _image_full_path_stmt = NULL;
+  }
+  if(_image_local_copy_full_path_stmt)
+  {
+    sqlite3_finalize(_image_local_copy_full_path_stmt);
+    _image_local_copy_full_path_stmt = NULL;
+  }
+  dt_pthread_mutex_unlock(&_image_stmt_mutex);
 }
 
 #ifndef _WIN32

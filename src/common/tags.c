@@ -29,6 +29,11 @@
 #include "win/getdelim.h"
 #endif // defined (_WIN32)
 
+static sqlite3_stmt *_tag_get_attached_single_stmt = NULL;
+static sqlite3_stmt *_tag_get_attached_single_ignore_stmt = NULL;
+static sqlite3_stmt *_tag_get_attached_selected_stmt = NULL;
+static sqlite3_stmt *_tag_get_attached_selected_ignore_stmt = NULL;
+
 typedef struct dt_undo_tags_t
 {
   int32_t imgid;
@@ -599,34 +604,101 @@ uint32_t dt_tag_get_attached(const int32_t imgid, GList **result, const gboolean
 {
   sqlite3_stmt *stmt;
   uint32_t nb_selected = 0;
-  char *images = NULL;
   if(imgid > 0)
   {
-    images = g_strdup_printf("%d", imgid);
     nb_selected = 1;
   }
   else
   {
-    // we get the query used to retrieve the list of select images
-    images = dt_selection_ids_to_string(darktable.selection);
     nb_selected = dt_selection_get_length(darktable.selection);
   }
   uint32_t count = 0;
-  if(images)
+  if(imgid > 0 || nb_selected > 0)
   {
-    // clang-format off
-    gchar *query = g_strdup_printf(
-                            "SELECT DISTINCT I.tagid, T.name, T.flags, T.synonyms,"
-                            " COUNT(DISTINCT I.imgid) AS inb"
-                            " FROM main.tagged_images AS I"
-                            " JOIN data.tags AS T ON T.id = I.tagid"
-                            " WHERE I.imgid IN (%s)%s"
-                            " GROUP BY I.tagid "
-                            " ORDER by T.name",
-                            images, ignore_dt_tags ? " AND T.id NOT IN memory.darktable_tags" : "");
-    // clang-format on
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
-    g_free(images);
+    if(imgid > 0)
+    {
+      if(ignore_dt_tags)
+      {
+        if(!_tag_get_attached_single_ignore_stmt)
+        {
+          // clang-format off
+          DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                      "SELECT DISTINCT I.tagid, T.name, T.flags, T.synonyms,"
+                                      " COUNT(DISTINCT I.imgid) AS inb"
+                                      " FROM main.tagged_images AS I"
+                                      " JOIN data.tags AS T ON T.id = I.tagid"
+                                      " WHERE I.imgid = ?1 AND T.id NOT IN memory.darktable_tags"
+                                      " GROUP BY I.tagid "
+                                      " ORDER by T.name",
+                                      -1, &_tag_get_attached_single_ignore_stmt, NULL);
+          // clang-format on
+        }
+        stmt = _tag_get_attached_single_ignore_stmt;
+      }
+      else
+      {
+        if(!_tag_get_attached_single_stmt)
+        {
+          // clang-format off
+          DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                      "SELECT DISTINCT I.tagid, T.name, T.flags, T.synonyms,"
+                                      " COUNT(DISTINCT I.imgid) AS inb"
+                                      " FROM main.tagged_images AS I"
+                                      " JOIN data.tags AS T ON T.id = I.tagid"
+                                      " WHERE I.imgid = ?1"
+                                      " GROUP BY I.tagid "
+                                      " ORDER by T.name",
+                                      -1, &_tag_get_attached_single_stmt, NULL);
+          // clang-format on
+        }
+        stmt = _tag_get_attached_single_stmt;
+      }
+      sqlite3_reset(stmt);
+      sqlite3_clear_bindings(stmt);
+      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+    }
+    else
+    {
+      if(ignore_dt_tags)
+      {
+        if(!_tag_get_attached_selected_ignore_stmt)
+        {
+          // clang-format off
+          DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                      "SELECT DISTINCT I.tagid, T.name, T.flags, T.synonyms,"
+                                      " COUNT(DISTINCT I.imgid) AS inb"
+                                      " FROM main.tagged_images AS I"
+                                      " JOIN data.tags AS T ON T.id = I.tagid"
+                                      " JOIN main.selected_images AS S ON S.imgid = I.imgid"
+                                      " WHERE T.id NOT IN memory.darktable_tags"
+                                      " GROUP BY I.tagid "
+                                      " ORDER by T.name",
+                                      -1, &_tag_get_attached_selected_ignore_stmt, NULL);
+          // clang-format on
+        }
+        stmt = _tag_get_attached_selected_ignore_stmt;
+      }
+      else
+      {
+        if(!_tag_get_attached_selected_stmt)
+        {
+          // clang-format off
+          DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                      "SELECT DISTINCT I.tagid, T.name, T.flags, T.synonyms,"
+                                      " COUNT(DISTINCT I.imgid) AS inb"
+                                      " FROM main.tagged_images AS I"
+                                      " JOIN data.tags AS T ON T.id = I.tagid"
+                                      " JOIN main.selected_images AS S ON S.imgid = I.imgid"
+                                      " GROUP BY I.tagid "
+                                      " ORDER by T.name",
+                                      -1, &_tag_get_attached_selected_stmt, NULL);
+          // clang-format on
+        }
+        stmt = _tag_get_attached_selected_stmt;
+      }
+      sqlite3_reset(stmt);
+      sqlite3_clear_bindings(stmt);
+    }
 
     // Create result
     *result = NULL;
@@ -647,8 +719,6 @@ uint32_t dt_tag_get_attached(const int32_t imgid, GList **result, const gboolean
       *result = g_list_append(*result, t);
       count++;
     }
-    sqlite3_finalize(stmt);
-    g_free(query);
   }
   return count;
 }
@@ -1790,6 +1860,30 @@ void dt_tag_set_tag_order_by_id(const uint32_t tagid, const uint32_t sort,
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, DT_TF_ALL);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
+}
+
+void dt_tags_cleanup(void)
+{
+  if(_tag_get_attached_single_stmt)
+  {
+    sqlite3_finalize(_tag_get_attached_single_stmt);
+    _tag_get_attached_single_stmt = NULL;
+  }
+  if(_tag_get_attached_single_ignore_stmt)
+  {
+    sqlite3_finalize(_tag_get_attached_single_ignore_stmt);
+    _tag_get_attached_single_ignore_stmt = NULL;
+  }
+  if(_tag_get_attached_selected_stmt)
+  {
+    sqlite3_finalize(_tag_get_attached_selected_stmt);
+    _tag_get_attached_selected_stmt = NULL;
+  }
+  if(_tag_get_attached_selected_ignore_stmt)
+  {
+    sqlite3_finalize(_tag_get_attached_selected_ignore_stmt);
+    _tag_get_attached_selected_ignore_stmt = NULL;
+  }
 }
 
 // clang-format off

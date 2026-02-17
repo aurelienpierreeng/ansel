@@ -37,6 +37,8 @@
 
 DT_MODULE(1)
 
+static sqlite3_stmt *_duplicate_versions_stmt = NULL;
+
 typedef struct dt_lib_duplicate_t
 {
   GtkWidget *duplicate_box;
@@ -195,13 +197,19 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
 
   // we get a summarize of all versions of the image
   // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT i.version, i.id, m.value"
-                              " FROM images AS i"
-                              " LEFT JOIN meta_data AS m ON m.id = i.id AND m.key = ?3"
-                              " WHERE film_id = ?1 AND filename = ?2"
-                              " ORDER BY i.version",
-                              -1, &stmt, NULL);
+  if(!_duplicate_versions_stmt)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT i.version, i.id, m.value"
+                                " FROM images AS i"
+                                " LEFT JOIN meta_data AS m ON m.id = i.id AND m.key = ?3"
+                                " WHERE film_id = ?1 AND filename = ?2"
+                                " ORDER BY i.version",
+                                -1, &_duplicate_versions_stmt, NULL);
+  }
+  stmt = _duplicate_versions_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   // clang-format on
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, dev->image_storage.film_id);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, dev->image_storage.filename, -1, SQLITE_TRANSIENT);
@@ -263,7 +271,7 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
     d->thumbs = g_list_append(d->thumbs, thumb);
     count++;
   }
-  sqlite3_finalize (stmt);
+  sqlite3_reset(stmt);
 
   gtk_widget_show(d->duplicate_box);
 
@@ -344,6 +352,12 @@ void gui_cleanup(dt_lib_module_t *self)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_duplicate_init_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_duplicate_preview_updated_callback), self);
+
+  if(_duplicate_versions_stmt)
+  {
+    sqlite3_finalize(_duplicate_versions_stmt);
+    _duplicate_versions_stmt = NULL;
+  }
 
   g_free(self->data);
   self->data = NULL;

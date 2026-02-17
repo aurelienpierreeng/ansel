@@ -210,6 +210,9 @@ uint32_t dt_tag_get_tag_id_by_name(const char * const name);
 /** init the darktable tags table */
 void dt_set_darktable_tags();
 
+/** cleanup cached statements */
+void dt_tags_cleanup(void);
+
 #ifdef __cplusplus
 }
 #endif

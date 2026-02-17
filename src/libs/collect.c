@@ -47,6 +47,9 @@
 
 DT_MODULE(3)
 
+static sqlite3_stmt *_collect_filmrolls_select_like_stmt = NULL;
+static sqlite3_stmt *_collect_filmrolls_update_stmt = NULL;
+
 #define MAX_RULES 10
 
 #define PARAM_STRING_SIZE 256 // FIXME: is this enough !?
@@ -461,7 +464,6 @@ static void view_popup_menu_onSearchFilmroll(GtkWidget *menuitem, gpointer userd
   {
     gint id = -1;
     sqlite3_stmt *stmt;
-    gchar *query = NULL;
 
     gchar *uri = NULL;
     uri = gtk_file_chooser_get_uri(GTK_FILE_CHOOSER(filechooser));
@@ -472,19 +474,23 @@ static void view_popup_menu_onSearchFilmroll(GtkWidget *menuitem, gpointer userd
       gchar *old = NULL;
 
       gchar *q_tree_path = g_strdup_printf("%s%%", tree_path);
-      query = "SELECT id, folder FROM main.film_rolls WHERE folder LIKE ?1";
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+      if(!_collect_filmrolls_select_like_stmt)
+      {
+        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                    "SELECT id, folder FROM main.film_rolls WHERE folder LIKE ?1",
+                                    -1, &_collect_filmrolls_select_like_stmt, NULL);
+      }
+      stmt = _collect_filmrolls_select_like_stmt;
+      sqlite3_reset(stmt);
+      sqlite3_clear_bindings(stmt);
       DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, q_tree_path, -1, SQLITE_TRANSIENT);
       g_free(q_tree_path);
       q_tree_path = NULL;
-      query = NULL;
 
       while(sqlite3_step(stmt) == SQLITE_ROW)
       {
         id = sqlite3_column_int(stmt, 0);
         old = (gchar *)sqlite3_column_text(stmt, 1);
-
-        query = g_strdup("UPDATE main.film_rolls SET folder=?1 WHERE id=?2");
 
         gchar trailing[1024] = { 0 };
         gchar final[1024] = { 0 };
@@ -499,15 +505,19 @@ static void view_popup_menu_onSearchFilmroll(GtkWidget *menuitem, gpointer userd
           g_strlcpy(final, new_path, sizeof(final));
         }
 
-        sqlite3_stmt *stmt2;
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt2, NULL);
+        if(!_collect_filmrolls_update_stmt)
+        {
+          DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                      "UPDATE main.film_rolls SET folder=?1 WHERE id=?2",
+                                      -1, &_collect_filmrolls_update_stmt, NULL);
+        }
+        sqlite3_stmt *stmt2 = _collect_filmrolls_update_stmt;
+        sqlite3_reset(stmt2);
+        sqlite3_clear_bindings(stmt2);
         DT_DEBUG_SQLITE3_BIND_TEXT(stmt2, 1, final, -1, SQLITE_STATIC);
         DT_DEBUG_SQLITE3_BIND_INT(stmt2, 2, id);
         sqlite3_step(stmt2);
-        sqlite3_finalize(stmt2);
       }
-      sqlite3_finalize(stmt);
-      g_free(query);
 
       // refresh the folders status
       dt_film_set_folder_status();
@@ -1170,11 +1180,17 @@ static GtkTreeModel *_create_filtered_model(GtkTreeModel *model, dt_lib_collect_
         int id = -1;
         // Check if this path also matches a filmroll
         gtk_tree_model_get(model, &iter, DT_LIB_COLLECT_COL_PATH, &pth, -1);
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                    "SELECT id FROM main.film_rolls WHERE folder LIKE ?1", -1, &stmt, NULL);
+        if(!_collect_filmrolls_select_like_stmt)
+        {
+          DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                      "SELECT id, folder FROM main.film_rolls WHERE folder LIKE ?1",
+                                      -1, &_collect_filmrolls_select_like_stmt, NULL);
+        }
+        stmt = _collect_filmrolls_select_like_stmt;
+        sqlite3_reset(stmt);
+        sqlite3_clear_bindings(stmt);
         DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, pth, -1, SQLITE_TRANSIENT);
         if(sqlite3_step(stmt) == SQLITE_ROW) id = sqlite3_column_int(stmt, 0);
-        sqlite3_finalize(stmt);
 
         g_free(pth);
 
@@ -3407,6 +3423,16 @@ void gui_cleanup(dt_lib_module_t *self)
   free(d->params);
 
   /* cleanup mem */
+  if(_collect_filmrolls_select_like_stmt)
+  {
+    sqlite3_finalize(_collect_filmrolls_select_like_stmt);
+    _collect_filmrolls_select_like_stmt = NULL;
+  }
+  if(_collect_filmrolls_update_stmt)
+  {
+    sqlite3_finalize(_collect_filmrolls_update_stmt);
+    _collect_filmrolls_update_stmt = NULL;
+  }
 
   g_object_unref(d->treefilter);
   g_object_unref(d->listfilter);

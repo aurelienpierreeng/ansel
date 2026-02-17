@@ -57,6 +57,8 @@
 #include "common/opencl.h"
 #include "common/points.h"
 #include "common/resource_limits.h"
+#include "common/tags.h"
+#include "common/styles.h"
 #include "common/undo.h"
 #include "control/conf.h"
 #include "control/control.h"
@@ -1351,6 +1353,9 @@ void dt_cleanup()
   dt_colorlabels_cleanup();
   dt_history_cleanup();
   dt_metadata_cleanup();
+  dt_image_cleanup();
+  dt_tags_cleanup();
+  dt_styles_cleanup();
 
   dt_collection_free(darktable.collection);
   dt_selection_free(darktable.selection);

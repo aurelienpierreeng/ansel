@@ -28,6 +28,8 @@
 #include "common/imageio.h"
 #include "common/tags.h"
 #include "control/control.h"
+
+static sqlite3_stmt *_styles_get_list_stmt = NULL;
 #include "develop/develop.h"
 
 
@@ -1062,12 +1064,17 @@ char *dt_styles_get_item_list_as_string(const char *name)
 GList *dt_styles_get_list(const char *filter)
 {
   char filterstring[512] = { 0 };
-  sqlite3_stmt *stmt;
   snprintf(filterstring, sizeof(filterstring), "%%%s%%", filter);
-  DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
-      "SELECT name, description FROM data.styles WHERE name LIKE ?1 OR description LIKE ?1 ORDER BY name", -1,
-      &stmt, NULL);
+  if(!_styles_get_list_stmt)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(
+        dt_database_get(darktable.db),
+        "SELECT name, description FROM data.styles WHERE name LIKE ?1 OR description LIKE ?1 ORDER BY name", -1,
+        &_styles_get_list_stmt, NULL);
+  }
+  sqlite3_stmt *stmt = _styles_get_list_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, filterstring, -1, SQLITE_TRANSIENT);
   GList *result = NULL;
   while(sqlite3_step(stmt) == SQLITE_ROW)
@@ -1079,7 +1086,6 @@ GList *dt_styles_get_list(const char *filter)
     s->description = g_strdup(description);
     result = g_list_prepend(result, s);
   }
-  sqlite3_finalize(stmt);
   return g_list_reverse(result);  // list was built in reverse order, so un-reverse it
 }
 
@@ -1498,6 +1504,15 @@ dt_style_t *dt_styles_get_by_name(const char *name)
 
     sqlite3_finalize(stmt);
     return NULL;
+  }
+}
+
+void dt_styles_cleanup(void)
+{
+  if(_styles_get_list_stmt)
+  {
+    sqlite3_finalize(_styles_get_list_stmt);
+    _styles_get_list_stmt = NULL;
   }
 }
 

@@ -124,6 +124,9 @@ void dt_styles_save_to_file(const char *style_name, const char *filedir, gboolea
 /** load style from file */
 void dt_styles_import_from_file(const char *style_path);
 
+/** cleanup cached statements */
+void dt_styles_cleanup(void);
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

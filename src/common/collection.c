@@ -46,6 +46,12 @@
 #define SELECT_QUERY "SELECT DISTINCT * FROM %s"
 #define LIMIT_QUERY "LIMIT ?1, ?2"
 
+static sqlite3_stmt *_collection_count_stmt = NULL;
+static sqlite3_stmt *_collection_get_stmt = NULL;
+static sqlite3_stmt *_collection_get_limit_stmt = NULL;
+static sqlite3_stmt *_collection_get_makermodels_stmt = NULL;
+static sqlite3_stmt *_collection_image_offset_stmt = NULL;
+
 /* Stores the collection query, returns 1 if changed.. */
 static int _dt_collection_store(const dt_collection_t *collection, gchar *query);
 /* Counts the number of images in the current collection */
@@ -65,6 +71,31 @@ void dt_collection_free(const dt_collection_t *collection)
 {
   g_free(collection->query);
   g_strfreev(collection->where_ext);
+  if(_collection_count_stmt)
+  {
+    sqlite3_finalize(_collection_count_stmt);
+    _collection_count_stmt = NULL;
+  }
+  if(_collection_get_stmt)
+  {
+    sqlite3_finalize(_collection_get_stmt);
+    _collection_get_stmt = NULL;
+  }
+  if(_collection_get_limit_stmt)
+  {
+    sqlite3_finalize(_collection_get_limit_stmt);
+    _collection_get_limit_stmt = NULL;
+  }
+  if(_collection_get_makermodels_stmt)
+  {
+    sqlite3_finalize(_collection_get_makermodels_stmt);
+    _collection_get_makermodels_stmt = NULL;
+  }
+  if(_collection_image_offset_stmt)
+  {
+    sqlite3_finalize(_collection_image_offset_stmt);
+    _collection_image_offset_stmt = NULL;
+  }
   g_free((dt_collection_t *)collection);
 }
 
@@ -731,11 +762,17 @@ static int _dt_collection_store(const dt_collection_t *collection, gchar *query)
 
 static uint32_t _dt_collection_compute_count(dt_collection_t *collection)
 {
-  sqlite3_stmt *stmt = NULL;
   uint32_t count = 1;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT COUNT(DISTINCT imgid) from memory.collected_images", -1, &stmt, NULL);
+  if(!_collection_count_stmt)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT COUNT(DISTINCT imgid) from memory.collected_images",
+                                -1, &_collection_count_stmt, NULL);
+  }
+  sqlite3_stmt *stmt = _collection_count_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   if(sqlite3_step(stmt) == SQLITE_ROW) count = sqlite3_column_int(stmt, 0);
-  sqlite3_finalize(stmt);
   collection->count = count;
   return count;
 }
@@ -751,27 +788,43 @@ GList *dt_collection_get(const dt_collection_t *collection, int limit)
   const gchar *query = dt_collection_get_query(collection);
   if(query)
   {
-    sqlite3_stmt *stmt = NULL;
-
     if(collection->params.query_flags & COLLECTION_QUERY_USE_LIMIT)
     {
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                  "SELECT imgid FROM memory.collected_images LIMIT -1, ?1",
-                                  -1, &stmt, NULL);
+      if(!_collection_get_limit_stmt)
+      {
+        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                    "SELECT imgid FROM memory.collected_images LIMIT -1, ?1",
+                                    -1, &_collection_get_limit_stmt, NULL);
+      }
+      sqlite3_stmt *stmt = _collection_get_limit_stmt;
+      sqlite3_reset(stmt);
+      sqlite3_clear_bindings(stmt);
       DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, limit);
+
+      while(sqlite3_step(stmt) == SQLITE_ROW)
+      {
+        const int32_t imgid = sqlite3_column_int(stmt, 0);
+        list = g_list_prepend(list, GINT_TO_POINTER(imgid));
+      }
     }
     else
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                  "SELECT imgid FROM memory.collected_images",
-                                  -1, &stmt, NULL);
-
-    while(sqlite3_step(stmt) == SQLITE_ROW)
     {
-      const int32_t imgid = sqlite3_column_int(stmt, 0);
-      list = g_list_prepend(list, GINT_TO_POINTER(imgid));
-    }
+      if(!_collection_get_stmt)
+      {
+        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                    "SELECT imgid FROM memory.collected_images",
+                                    -1, &_collection_get_stmt, NULL);
+      }
+      sqlite3_stmt *stmt = _collection_get_stmt;
+      sqlite3_reset(stmt);
+      sqlite3_clear_bindings(stmt);
 
-    sqlite3_finalize(stmt);
+      while(sqlite3_step(stmt) == SQLITE_ROW)
+      {
+        const int32_t imgid = sqlite3_column_int(stmt, 0);
+        list = g_list_prepend(list, GINT_TO_POINTER(imgid));
+      }
+    }
   }
 
   return g_list_reverse(list);  // list built in reverse order, so un-reverse it
@@ -1007,7 +1060,6 @@ void dt_collection_split_operator_exposure(const gchar *input, char **number1, c
 
 void dt_collection_get_makermodels(const gchar *filter, GList **sanitized, GList **exif)
 {
-  sqlite3_stmt *stmt;
   gchar *needle = NULL;
   gboolean wildcard = FALSE;
 
@@ -1023,9 +1075,15 @@ void dt_collection_get_makermodels(const gchar *filter, GList **sanitized, GList
       needle[strlen(needle) - 1] = '\0';
   }
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT maker, model FROM main.images GROUP BY maker, model",
-                              -1, &stmt, NULL);
+  if(!_collection_get_makermodels_stmt)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT maker, model FROM main.images GROUP BY maker, model",
+                                -1, &_collection_get_makermodels_stmt, NULL);
+  }
+  sqlite3_stmt *stmt = _collection_get_makermodels_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     const char *exif_maker = (char *)sqlite3_column_text(stmt, 0);
@@ -1055,7 +1113,6 @@ void dt_collection_get_makermodels(const gchar *filter, GList **sanitized, GList
     g_free(haystack);
     g_free(makermodel);
   }
-  sqlite3_finalize(stmt);
   g_free(needle);
 
   if(sanitized)
@@ -1957,11 +2014,15 @@ static int dt_collection_image_offset_with_collection(const dt_collection_t *col
 {
   if(imgid == UNKNOWN_IMAGE) return 0;
   int offset = 0;
-  sqlite3_stmt *stmt;
-
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT imgid FROM memory.collected_images",
-                              -1, &stmt, NULL);
+  if(!_collection_image_offset_stmt)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT imgid FROM memory.collected_images",
+                                -1, &_collection_image_offset_stmt, NULL);
+  }
+  sqlite3_stmt *stmt = _collection_image_offset_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
 
   gboolean found = FALSE;
 
@@ -1977,8 +2038,6 @@ static int dt_collection_image_offset_with_collection(const dt_collection_t *col
   }
 
   if(!found) offset = 0;
-
-  sqlite3_finalize(stmt);
 
   return offset;
 }

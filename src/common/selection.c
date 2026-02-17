@@ -23,6 +23,8 @@
 #include "gui/gtk.h"
 #include "views/view.h"
 
+static sqlite3_stmt *_selection_database_to_glist_stmt = NULL;
+
 typedef struct dt_selection_t
 {
   /* length of selection. 0 means no selection, -1 means it needs to be updated */
@@ -81,22 +83,25 @@ static void _clean_missing_ids(dt_selection_t *selection)
 // Unroll DB imgids to GList
 static GList *_selection_database_to_glist(dt_selection_t *selection)
 {
-  sqlite3_stmt *stmt = NULL;
   GList *list = NULL;
 
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT imgid FROM main.selected_images ORDER BY imgid DESC",
-                              -1, &stmt, NULL);
-  // clang-format on
+  if(!_selection_database_to_glist_stmt)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT imgid FROM main.selected_images ORDER BY imgid DESC",
+                                -1, &_selection_database_to_glist_stmt, NULL);
+    // clang-format on
+  }
+  sqlite3_stmt *stmt = _selection_database_to_glist_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
 
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     const int32_t imgid = sqlite3_column_int(stmt, 0);
     list = g_list_prepend(list, GINT_TO_POINTER(imgid));
   }
-
-  sqlite3_finalize(stmt);
 
   // Don't reverse the GList since we ordered SQL rows by descending order
   // and prepend to the GList.
@@ -230,6 +235,11 @@ void dt_selection_free(dt_selection_t *selection)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_selection_update_collection),
                                      (gpointer)selection);
   g_list_free(selection->ids);
+  if(_selection_database_to_glist_stmt)
+  {
+    sqlite3_finalize(_selection_database_to_glist_stmt);
+    _selection_database_to_glist_stmt = NULL;
+  }
   g_free(selection);
 }
 

@@ -23,6 +23,8 @@
 #include "common/debug.h"
 #include "control/conf.h"
 #include "control/control.h"
+
+static sqlite3_stmt *_metadata_update_stmt = NULL;
 #include "control/signal.h"
 #include "dtgtk/button.h"
 
@@ -181,21 +183,24 @@ static void _update(dt_lib_module_t *self)
 
   // using dt_metadata_get() is not possible here. we want to do all this in a single pass, everything else
   // takes ages.
-  gchar *images = dt_selection_ids_to_string(darktable.selection);
   const uint32_t imgs_count = g_list_length((GList *)imgs);
 
-  if(images)
+  if(imgs_count > 0)
   {
-    sqlite3_stmt *stmt;
-    // clang-format off
-    gchar *query = g_strdup_printf(
-                            "SELECT key, value, COUNT(id) AS ct FROM main.meta_data"
-                            " WHERE id IN (%s)"
-                            " GROUP BY key, value ORDER BY value",
-                            images);
-    // clang-format on
-    g_free(images);
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+    if(!_metadata_update_stmt)
+    {
+      // clang-format off
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                  "SELECT m.key, m.value, COUNT(m.id) AS ct"
+                                  " FROM main.meta_data AS m"
+                                  " JOIN main.selected_images AS s ON s.imgid = m.id"
+                                  " GROUP BY m.key, m.value ORDER BY m.value",
+                                  -1, &_metadata_update_stmt, NULL);
+      // clang-format on
+    }
+    sqlite3_stmt *stmt = _metadata_update_stmt;
+    sqlite3_reset(stmt);
+    sqlite3_clear_bindings(stmt);
 
     while(sqlite3_step(stmt) == SQLITE_ROW)
     {
@@ -210,8 +215,6 @@ static void _update(dt_lib_module_t *self)
         metadata[key] = g_list_append(metadata[key], value);
       }
     }
-    sqlite3_finalize(stmt);
-    g_free(query);
   }
 
   for(unsigned int i = 0; i < DT_METADATA_NUMBER; i++)
@@ -751,6 +754,11 @@ void gui_cleanup(dt_lib_module_t *self)
       continue;
     g_signal_handlers_block_by_func(d->textview[i], _lost_focus, self);
     g_free(d->setting_name[i]);
+  }
+  if(_metadata_update_stmt)
+  {
+    sqlite3_finalize(_metadata_update_stmt);
+    _metadata_update_stmt = NULL;
   }
   free(self->data);
   self->data = NULL;
