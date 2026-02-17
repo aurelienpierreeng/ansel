@@ -619,7 +619,8 @@ static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t si
   {
     const char *module = dt_pixelpipe_cache_current_module;
     const gboolean name_is_file = (name != NULL) && (strchr(name, '/') != NULL) && (strchr(name, ':') != NULL);
-
+    if(!name) name = g_strdup("unknown");
+    
     fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry %" PRIu64 " (%s)\n", hash, name);
     if(name && module && name_is_file)
       dt_control_log(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."), name, module);
