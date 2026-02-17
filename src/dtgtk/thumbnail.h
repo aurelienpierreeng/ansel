@@ -55,6 +55,7 @@ typedef struct dt_thumbnail_image_info_t
   int32_t version;
   int32_t width;
   int32_t height;
+  int32_t orientation;
   int32_t p_width;
   int32_t p_height;
   int32_t flags;

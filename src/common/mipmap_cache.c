@@ -29,6 +29,7 @@
 #include "control/conf.h"
 #include "control/jobs.h"
 #include "develop/imageop_math.h"
+#include "gui/gtk.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -179,6 +180,12 @@ exit:
   return r;
 }
 
+static gboolean _mipmap_get_thumb_info(const int32_t imgid, dt_thumbnail_image_info_t *info);
+static gboolean _mipmap_local_copy_full_path_from_info(const dt_thumbnail_image_info_t *info, char *pathname,
+                                                       size_t pathname_len);
+static gboolean _mipmap_full_path_from_info(const dt_thumbnail_image_info_t *info, char *pathname,
+                                            size_t pathname_len, gboolean *from_cache);
+
 /**
  * @brief Check if an image should be written to disk, if the thumbnail should be computed from embedded JPEG,
  * and optionaly return intermediate checks to get there, like whether the input is a JPEG file and if it exists on
@@ -199,10 +206,14 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
   // Get file name
   gboolean from_cache = TRUE;
   char _filename[PATH_MAX] = { 0 };
+  dt_thumbnail_image_info_t info = { 0 };
+  const gboolean have_info = _mipmap_get_thumb_info(imgid, &info);
 
   if(filename || ext || input_exists || is_jpg_input)
   {
-    dt_image_full_path(imgid, _filename, sizeof(_filename), &from_cache, __FUNCTION__);
+    // Avoid per-image SQL by building paths from the thumbtable LUT when available.
+    if(!(have_info && _mipmap_full_path_from_info(&info, _filename, sizeof(_filename), &from_cache)))
+      dt_image_full_path(imgid, _filename, sizeof(_filename), &from_cache, __FUNCTION__);
     if(filename) strncpy(filename, _filename, PATH_MAX);
     if(input_exists) *input_exists = *_filename && g_file_test(_filename, G_FILE_TEST_EXISTS);
   }
@@ -221,9 +232,21 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
   // 1 = only on unedited pics,
   // 2 = always use embedded thumbnail
   int mode = dt_conf_get_int("lighttable/embedded_jpg");
+  gboolean altered = FALSE;
+  if(mode == 1)
+  {
+    if(have_info)
+    {
+      altered = info.is_altered;
+    }
+    else
+    {
+      altered = dt_image_altered(imgid);
+    }
+  }
   const gboolean _use_embedded_jpg
-      = (mode == 2                                    // always use embedded
-         || (mode == 1 && !dt_image_altered(imgid))); // use embedded only on unaltered images
+      = (mode == 2                           // always use embedded
+         || (mode == 1 && !altered));        // use embedded only on unaltered images
   if(use_embedded_jpg) *use_embedded_jpg = _use_embedded_jpg;
 
   // Save to cache only if the option is enabled by user and the thumbnail is not the embedded thumbnail
@@ -241,6 +264,74 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *buf, uint32_t *width,
 static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *iscale,
                     dt_colorspaces_color_profile_type_t *color_space, const int32_t imgid,
                     const dt_mipmap_size_t size);
+static gboolean _mipmap_get_thumb_info(const int32_t imgid, dt_thumbnail_image_info_t *info)
+{
+  if(!info || !darktable.gui || !darktable.gui->ui) return FALSE;
+
+  // Prefer the lightweight thumbtable LUT to avoid image-cache SQL in hot paths.
+  if(dt_thumbtable_get_thumbnail_info(darktable.gui->ui->thumbtable_lighttable, imgid, info))
+    return TRUE;
+  if(dt_thumbtable_get_thumbnail_info(darktable.gui->ui->thumbtable_filmstrip, imgid, info))
+    return TRUE;
+
+  return FALSE;
+}
+
+static gboolean _mipmap_local_copy_full_path_from_info(const dt_thumbnail_image_info_t *info, char *pathname,
+                                                       size_t pathname_len)
+{
+  if(!info || !pathname) return FALSE;
+  if(!info->folder[0] || !info->filename[0]) return FALSE;
+
+  char filename[PATH_MAX] = { 0 };
+  g_snprintf(filename, sizeof(filename), "%s" G_DIR_SEPARATOR_S "%s", info->folder, info->filename);
+
+  char *md5_filename = g_compute_checksum_for_string(G_CHECKSUM_MD5, filename, strlen(filename));
+  if(!md5_filename) return FALSE;
+
+  char cachedir[PATH_MAX] = { 0 };
+  dt_loc_get_user_cache_dir(cachedir, sizeof(cachedir));
+
+  // Keep the same extension semantics as the DB-backed path builder.
+  char *c = filename + strlen(filename);
+  while(*c != '.' && c > filename) c--;
+
+  // cache filename old format: <cachedir>/img-<id>-<MD5>.<ext>
+  snprintf(pathname, pathname_len, "%s/img-%d-%s%s", cachedir, info->imgid, md5_filename, c);
+  if(!g_file_test(pathname, G_FILE_TEST_EXISTS))
+  {
+    // cache filename format: <cachedir>/img-<MD5>.<ext>
+    snprintf(pathname, pathname_len, "%s/img-%s%s", cachedir, md5_filename, c);
+  }
+
+  g_free(md5_filename);
+  return TRUE;
+}
+
+static gboolean _mipmap_full_path_from_info(const dt_thumbnail_image_info_t *info, char *pathname,
+                                            size_t pathname_len, gboolean *from_cache)
+{
+  if(!info || !pathname || !from_cache) return FALSE;
+  if(!info->folder[0] || !info->filename[0]) return FALSE;
+
+  g_snprintf(pathname, pathname_len, "%s" G_DIR_SEPARATOR_S "%s", info->folder, info->filename);
+
+  if(*from_cache)
+  {
+    char lc_pathname[PATH_MAX] = { 0 };
+    if(_mipmap_local_copy_full_path_from_info(info, lc_pathname, sizeof(lc_pathname))
+       && g_file_test(lc_pathname, G_FILE_TEST_EXISTS))
+    {
+      g_strlcpy(pathname, lc_pathname, pathname_len);
+    }
+    else
+    {
+      *from_cache = FALSE;
+    }
+  }
+
+  return TRUE;
+}
 
 
 /**
@@ -1220,7 +1311,20 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
     }
   }
 
-  const dt_image_orientation_t orientation = dt_image_get_orientation(imgid);
+  // Orientation is only needed when loading embedded JPEGs; avoid extra SQL otherwise.
+  dt_image_orientation_t orientation = ORIENTATION_NONE;
+  if(use_embedded_jpg)
+  {
+    dt_thumbnail_image_info_t info = { 0 };
+    if(_mipmap_get_thumb_info(imgid, &info))
+    {
+      orientation = (info.orientation != ORIENTATION_NULL) ? info.orientation : ORIENTATION_NONE;
+    }
+    else
+    {
+      orientation = dt_image_get_orientation(imgid);
+    }
+  }
 
   if(res && use_embedded_jpg)
   {

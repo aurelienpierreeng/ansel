@@ -78,6 +78,8 @@ typedef struct dt_thumbtable_cache_t
   dt_thumbnail_t *thumb;  /**< Pointer to thumbnail widget */
   uint32_t group_members; /**< Number of images in this group */
   uint32_t history_items; /**< Number of history items */
+  dt_thumbnail_image_info_t info; /**< Cached metadata for thumbnails */
+  gboolean info_valid;
 } dt_thumbtable_cache_t;
 
 

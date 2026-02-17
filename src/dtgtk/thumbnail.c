@@ -20,6 +20,7 @@
 #include "common/extra_optimizations.h"
 
 #include "dtgtk/thumbnail.h"
+#include "dtgtk/thumbtable.h"
 
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
@@ -251,64 +252,89 @@ static void _image_get_infos(dt_thumbnail_t *thumb)
 
   // we only get here infos that might change, others(exif, ...) are cached on widget creation
   const int old_rating = thumb->info.rating;
-  memset(&thumb->info, 0, sizeof(thumb->info));
-  thumb->info_valid = FALSE;
-  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, thumb->imgid, 'r');
-  if(img)
+  // Fast path: copy precomputed metadata from the thumbtable LUT to avoid
+  // per-image image-cache reads during scrolling.
+  gboolean from_lut = FALSE;
+  if(thumb->table && thumb->table->lut
+     && thumb->rowid >= 0 && thumb->rowid < thumb->table->collection_count)
   {
-    thumb->info.has_localcopy = (img->flags & DT_IMAGE_LOCAL_COPY);
-    thumb->info.rating = img->flags & DT_IMAGE_REJECTED ? DT_VIEW_REJECT : (img->flags & DT_VIEW_RATINGS_MASK);
-    thumb->info.is_bw = dt_image_monochrome_flags(img);
-    thumb->info.is_bw_flow = dt_image_use_monochrome_workflow(img);
-    thumb->info.is_hdr = dt_image_is_hdr(img);
-    g_strlcpy(thumb->info.filename, img->filename, sizeof(thumb->info.filename));
-    dt_image_film_roll_directory(img, thumb->info.folder, sizeof(thumb->info.folder));
-    thumb->info.has_audio = (img->flags & DT_IMAGE_HAS_WAV);
-    dt_datetime_img_to_local(thumb->info.datetime, sizeof(thumb->info.datetime), img, FALSE);
-    g_strlcpy(thumb->info.camera, img->camera_makermodel, sizeof(thumb->info.camera));
+    const int lock_ret = dt_pthread_mutex_trylock(&thumb->table->lock);
+    const gboolean locked = (lock_ret == 0);
+    dt_thumbtable_cache_t *entry = &thumb->table->lut[thumb->rowid];
+    if(entry->imgid == thumb->imgid && entry->info_valid)
+    {
+      thumb->info = entry->info;
+      thumb->info_valid = TRUE;
+      thumb->groupid = entry->groupid;
+      from_lut = TRUE;
+    }
+    if(locked) dt_pthread_mutex_unlock(&thumb->table->lock);
+  }
 
-    thumb->groupid = img->group_id;
-    thumb->info.colorlabels = img->color_labels;
+  // Fallback to image cache only when LUT data is unavailable.
+  // This keeps write-driven updates correct while minimizing SQL traffic.
+  if(!from_lut)
+  {
+    memset(&thumb->info, 0, sizeof(thumb->info));
+    thumb->info_valid = FALSE;
+    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, thumb->imgid, 'r');
+    if(img)
+    {
+      thumb->info.has_localcopy = (img->flags & DT_IMAGE_LOCAL_COPY);
+      thumb->info.rating = img->flags & DT_IMAGE_REJECTED ? DT_VIEW_REJECT : (img->flags & DT_VIEW_RATINGS_MASK);
+      thumb->info.is_bw = dt_image_monochrome_flags(img);
+      thumb->info.is_bw_flow = dt_image_use_monochrome_workflow(img);
+      thumb->info.is_hdr = dt_image_is_hdr(img);
+      g_strlcpy(thumb->info.filename, img->filename, sizeof(thumb->info.filename));
+      dt_image_film_roll_directory(img, thumb->info.folder, sizeof(thumb->info.folder));
+      thumb->info.has_audio = (img->flags & DT_IMAGE_HAS_WAV);
+      dt_datetime_img_to_local(thumb->info.datetime, sizeof(thumb->info.datetime), img, FALSE);
+      g_strlcpy(thumb->info.camera, img->camera_makermodel, sizeof(thumb->info.camera));
 
-    thumb->info.imgid = img->id;
-    thumb->info.film_id = img->film_id;
-    thumb->info.groupid = img->group_id;
-    thumb->info.version = img->version;
-    thumb->info.width = img->width;
-    thumb->info.height = img->height;
-    thumb->info.p_width = img->p_width;
-    thumb->info.p_height = img->p_height;
-    thumb->info.flags = img->flags;
-    thumb->info.loader = img->loader;
-    thumb->info.import_timestamp = img->import_timestamp;
-    thumb->info.change_timestamp = img->change_timestamp;
-    thumb->info.export_timestamp = img->export_timestamp;
-    thumb->info.print_timestamp = img->print_timestamp;
-    thumb->info.exif_exposure = img->exif_exposure;
-    thumb->info.exif_exposure_bias = img->exif_exposure_bias;
-    thumb->info.exif_aperture = img->exif_aperture;
-    thumb->info.exif_iso = img->exif_iso;
-    thumb->info.exif_focal_length = img->exif_focal_length;
-    thumb->info.exif_focus_distance = img->exif_focus_distance;
-    thumb->info.exif_datetime_taken = img->exif_datetime_taken;
-    thumb->info.geoloc_latitude = img->geoloc.latitude;
-    thumb->info.geoloc_longitude = img->geoloc.longitude;
-    thumb->info.geoloc_elevation = img->geoloc.elevation;
+      thumb->groupid = img->group_id;
+      thumb->info.colorlabels = img->color_labels;
 
-    g_strlcpy(thumb->info.exif_maker, img->exif_maker, sizeof(thumb->info.exif_maker));
-    g_strlcpy(thumb->info.exif_model, img->exif_model, sizeof(thumb->info.exif_model));
-    g_strlcpy(thumb->info.exif_lens, img->exif_lens, sizeof(thumb->info.exif_lens));
-    if(img->film_id < 0)
-      g_strlcpy(thumb->info.filmroll, _("orphaned image"), sizeof(thumb->info.filmroll));
-    else
-      g_strlcpy(thumb->info.filmroll, dt_image_film_roll_name(thumb->info.folder), sizeof(thumb->info.filmroll));
+      thumb->info.imgid = img->id;
+      thumb->info.film_id = img->film_id;
+      thumb->info.groupid = img->group_id;
+      thumb->info.version = img->version;
+      thumb->info.width = img->width;
+      thumb->info.height = img->height;
+      thumb->info.orientation = img->orientation;
+      thumb->info.p_width = img->p_width;
+      thumb->info.p_height = img->p_height;
+      thumb->info.flags = img->flags;
+      thumb->info.loader = img->loader;
+      thumb->info.import_timestamp = img->import_timestamp;
+      thumb->info.change_timestamp = img->change_timestamp;
+      thumb->info.export_timestamp = img->export_timestamp;
+      thumb->info.print_timestamp = img->print_timestamp;
+      thumb->info.exif_exposure = img->exif_exposure;
+      thumb->info.exif_exposure_bias = img->exif_exposure_bias;
+      thumb->info.exif_aperture = img->exif_aperture;
+      thumb->info.exif_iso = img->exif_iso;
+      thumb->info.exif_focal_length = img->exif_focal_length;
+      thumb->info.exif_focus_distance = img->exif_focus_distance;
+      thumb->info.exif_datetime_taken = img->exif_datetime_taken;
+      thumb->info.geoloc_latitude = img->geoloc.latitude;
+      thumb->info.geoloc_longitude = img->geoloc.longitude;
+      thumb->info.geoloc_elevation = img->geoloc.elevation;
 
-    gboolean from_cache = FALSE;
-    dt_image_full_path(img->id, thumb->info.fullpath, sizeof(thumb->info.fullpath), &from_cache, __FUNCTION__);
+      g_strlcpy(thumb->info.exif_maker, img->exif_maker, sizeof(thumb->info.exif_maker));
+      g_strlcpy(thumb->info.exif_model, img->exif_model, sizeof(thumb->info.exif_model));
+      g_strlcpy(thumb->info.exif_lens, img->exif_lens, sizeof(thumb->info.exif_lens));
+      if(img->film_id < 0)
+        g_strlcpy(thumb->info.filmroll, _("orphaned image"), sizeof(thumb->info.filmroll));
+      else
+        g_strlcpy(thumb->info.filmroll, dt_image_film_roll_name(thumb->info.folder), sizeof(thumb->info.filmroll));
 
-    thumb->info_valid = TRUE;
+      gboolean from_cache = FALSE;
+      dt_image_full_path(img->id, thumb->info.fullpath, sizeof(thumb->info.fullpath), &from_cache, __FUNCTION__);
 
-    dt_image_cache_read_release(darktable.image_cache, img);
+      thumb->info_valid = TRUE;
+
+      dt_image_cache_read_release(darktable.image_cache, img);
+    }
   }
   // if the rating as changed, update the rejected
   if(old_rating != thumb->info.rating)
@@ -321,11 +347,14 @@ static void _image_get_infos(dt_thumbnail_t *thumb)
     btn->icon_flags = thumb->info.colorlabels;
   }
 
-  // altered
-  thumb->info.is_altered = (thumb->table) ? thumb->table->lut[thumb->rowid].history_items > 0 : FALSE;
+  if(!from_lut && thumb->table && thumb->table->lut)
+  {
+    // altered
+    thumb->info.is_altered = (thumb->table) ? thumb->table->lut[thumb->rowid].history_items > 0 : FALSE;
 
-  // grouping
-  thumb->info.is_grouped = (thumb->table) ? thumb->table->lut[thumb->rowid].group_members > 1 : FALSE;
+    // grouping
+    thumb->info.is_grouped = (thumb->table) ? thumb->table->lut[thumb->rowid].group_members > 1 : FALSE;
+  }
 
   _thumb_write_extension(thumb);
 }
@@ -1309,6 +1338,7 @@ void dt_thumbnail_update_partial_infos(dt_thumbnail_t *thumb)
   // grouping
   thumb->info.is_grouped = (thumb->table) ? thumb->table->lut[thumb->rowid].group_members > 1 : FALSE;
   thumb->groupid = (thumb->table) ? thumb->table->lut[thumb->rowid].groupid : UNKNOWN_IMAGE;
+  thumb->info.groupid = thumb->groupid;
 
   _thumb_update_icons(thumb);
 }

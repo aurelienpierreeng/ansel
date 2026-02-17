@@ -1336,8 +1336,10 @@ void dt_cleanup()
     dt_imageio_cleanup(darktable.imageio);
     free(darktable.imageio);
 
-    dt_accels_cleanup(darktable.gui->accels);
-    free(darktable.gui);
+    dt_gui_gtk_t *gui = darktable.gui;
+    darktable.gui = NULL;
+    dt_accels_cleanup(gui->accels);
+    free(gui);
   }
 
   dt_collection_free(darktable.collection);

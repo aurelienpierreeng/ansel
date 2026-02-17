@@ -553,8 +553,16 @@ void dt_ui_init_main_table(GtkWidget *parent, dt_ui_t *ui)
 
 void dt_ui_cleanup_main_table(dt_ui_t *ui)
 {
-  dt_thumbtable_cleanup(ui->thumbtable_filmstrip);
-  dt_thumbtable_cleanup(ui->thumbtable_lighttable);
+  // Avoid dangling UI pointers during shutdown: background threads might query
+  // thumbnail info while mipmap cache is being flushed.
+  dt_thumbtable_t *filmstrip = ui->thumbtable_filmstrip;
+  dt_thumbtable_t *lighttable = ui->thumbtable_lighttable;
+
+  ui->thumbtable_filmstrip = NULL;
+  ui->thumbtable_lighttable = NULL;
+
+  if(filmstrip) dt_thumbtable_cleanup(filmstrip);
+  if(lighttable) dt_thumbtable_cleanup(lighttable);
 }
 
 
