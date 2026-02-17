@@ -62,14 +62,12 @@ typedef struct dt_lib_textnotes_t
   GtkWidget *completion_tree;
   GtkListStore *completion_model;
   GtkTextMark *completion_mark;
-  int preview_alloc_width;
   gchar *path;
   gchar *height_setting;
   int32_t imgid;
   gboolean loading;
   gboolean dirty;
   gboolean rendering;
-  guint resize_idle_id;
   guint save_timeout_id;
 #ifdef HAVE_HTTP_SERVER
   GHashTable *download_inflight;
@@ -1108,12 +1106,6 @@ static gchar *_get_image_base_dir(dt_lib_textnotes_t *d)
   return g_path_get_dirname(image_path);
 }
 
-static void _queue_preview_refresh(dt_lib_textnotes_t *d, const guint delay_ms)
-{
-  if(!d || d->resize_idle_id) return;
-  d->resize_idle_id = g_timeout_add(delay_ms, _refresh_preview_idle, d->self);
-}
-
 static int _get_preview_scale(dt_lib_textnotes_t *d)
 {
   int scale = 1;
@@ -1227,12 +1219,10 @@ static gboolean _insert_markdown_image(dt_lib_textnotes_t *d, GtkTextBuffer *buf
   const int scale = _get_preview_scale(d);
   gboolean have_device = FALSE;
   int max_w = _compute_max_image_width(d, scale, &have_device);
-  if(!have_device) _queue_preview_refresh(d, 60);
   if(max_w <= 0)
   {
-    _queue_preview_refresh(d, 60);
     g_free(path);
-    return TRUE;
+    return FALSE;
   }
 
   const int target_w = max_w * scale;
@@ -1765,7 +1755,6 @@ static gboolean _refresh_preview_idle(gpointer user_data)
   if(!self) return G_SOURCE_REMOVE;
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
   if(!d || !d->edit_view) return G_SOURCE_REMOVE;
-  d->resize_idle_id = 0;
   if(d->mode_toggle && !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->mode_toggle)))
     return G_SOURCE_REMOVE;
 
@@ -1780,27 +1769,6 @@ static void _preview_map(GtkWidget *widget, dt_lib_module_t *self)
   if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->mode_toggle))) return;
 
   _render_preview_from_edit(d);
-
-  if(!d->resize_idle_id)
-    d->resize_idle_id = g_timeout_add(80, _refresh_preview_idle, self);
-}
-
-static void _preview_size_allocate(GtkWidget *widget, GtkAllocation *allocation, dt_lib_module_t *self)
-{
-  dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
-  if(!d || !allocation) return;
-
-  const int width = allocation->width;
-  if(width > 0 && width != d->preview_alloc_width)
-  {
-    d->preview_alloc_width = width;
-    if(d->mode_toggle && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->mode_toggle)))
-    {
-      if(!d->resize_idle_id && !d->rendering)
-        d->resize_idle_id = g_timeout_add(60, _refresh_preview_idle, self);
-    }
-  }
-
   (void)widget;
 }
 
@@ -2080,7 +2048,6 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(preview_view), "button-press-event",
                    G_CALLBACK(_preview_button_press), self);
   g_signal_connect(G_OBJECT(preview_view), "map", G_CALLBACK(_preview_map), self);
-  g_signal_connect(G_OBJECT(preview_view), "size-allocate", G_CALLBACK(_preview_size_allocate), self);
   gtk_widget_set_hexpand(preview_view, TRUE);
   gtk_widget_set_vexpand(preview_view, TRUE);
   d->preview_view = GTK_TEXT_VIEW(preview_view);
@@ -2119,12 +2086,6 @@ void gui_cleanup(dt_lib_module_t *self)
   {
     g_source_remove(d->save_timeout_id);
     d->save_timeout_id = 0;
-  }
-
-  if(d->resize_idle_id)
-  {
-    g_source_remove(d->resize_idle_id);
-    d->resize_idle_id = 0;
   }
 
 #ifdef HAVE_HTTP_SERVER
