@@ -46,6 +46,7 @@
 
 static void _thumbtable_info_from_image(dt_thumbnail_image_info_t *info, const dt_image_t *img,
                                         const uint32_t history_items, const uint32_t group_members);
+static void _thumbtable_info_finalize_expensive(dt_thumbnail_image_info_t *info);
 
 #ifndef NDEBUG
 static gboolean _thumbtable_float_equal(const float a, const float b)
@@ -68,9 +69,13 @@ static void _thumbtable_debug_assert_info_matches_cache(const dt_thumbnail_image
 
   dt_thumbnail_image_info_t cache_info = {0};
   _thumbtable_info_from_image(&cache_info, img, history_items, group_members);
+  _thumbtable_info_finalize_expensive(&cache_info);
   dt_image_cache_read_release(darktable.image_cache, img);
 
-  g_assert_cmpint(sql_info->imgid, ==, cache_info.imgid);
+  dt_thumbnail_image_info_t sql_copy = *sql_info;
+  _thumbtable_info_finalize_expensive(&sql_copy);
+
+  g_assert_cmpint(sql_copy.imgid, ==, cache_info.imgid);
   g_assert_cmpint(sql_info->film_id, ==, cache_info.film_id);
   g_assert_cmpint(sql_info->groupid, ==, cache_info.groupid);
   g_assert_cmpint(sql_info->version, ==, cache_info.version);
@@ -104,17 +109,60 @@ static void _thumbtable_debug_assert_info_matches_cache(const dt_thumbnail_image
   g_assert(_thumbtable_double_equal(sql_info->geoloc_latitude, cache_info.geoloc_latitude));
   g_assert(_thumbtable_double_equal(sql_info->geoloc_longitude, cache_info.geoloc_longitude));
   g_assert(_thumbtable_double_equal(sql_info->geoloc_elevation, cache_info.geoloc_elevation));
-  g_assert_cmpstr(sql_info->filename, ==, cache_info.filename);
-  g_assert_cmpstr(sql_info->fullpath, ==, cache_info.fullpath);
-  g_assert_cmpstr(sql_info->filmroll, ==, cache_info.filmroll);
-  g_assert_cmpstr(sql_info->folder, ==, cache_info.folder);
-  g_assert_cmpstr(sql_info->datetime, ==, cache_info.datetime);
-  g_assert_cmpstr(sql_info->camera, ==, cache_info.camera);
-  g_assert_cmpstr(sql_info->exif_maker, ==, cache_info.exif_maker);
-  g_assert_cmpstr(sql_info->exif_model, ==, cache_info.exif_model);
-  g_assert_cmpstr(sql_info->exif_lens, ==, cache_info.exif_lens);
+  g_assert_cmpstr(sql_copy.filename, ==, cache_info.filename);
+  g_assert_cmpstr(sql_copy.fullpath, ==, cache_info.fullpath);
+  g_assert_cmpstr(sql_copy.filmroll, ==, cache_info.filmroll);
+  g_assert_cmpstr(sql_copy.folder, ==, cache_info.folder);
+  g_assert_cmpstr(sql_copy.datetime, ==, cache_info.datetime);
+  g_assert_cmpstr(sql_copy.camera, ==, cache_info.camera);
+  g_assert_cmpstr(sql_copy.exif_maker, ==, cache_info.exif_maker);
+  g_assert_cmpstr(sql_copy.exif_model, ==, cache_info.exif_model);
+  g_assert_cmpstr(sql_copy.exif_lens, ==, cache_info.exif_lens);
 }
 #endif
+
+static gboolean _thumbtable_clone_lut(dt_thumbtable_t *dst)
+{
+  if(!dst || !darktable.gui || !darktable.gui->ui) return FALSE;
+
+  dt_thumbtable_t *src = NULL;
+  if(darktable.gui->ui->thumbtable_lighttable == dst)
+    src = darktable.gui->ui->thumbtable_filmstrip;
+  else if(darktable.gui->ui->thumbtable_filmstrip == dst)
+    src = darktable.gui->ui->thumbtable_lighttable;
+
+  if(!src || src == dst) return FALSE;
+
+  dt_pthread_mutex_lock(&src->lock);
+  const gboolean can_clone = (src->lut
+                              && src->collection_inited
+                              && src->collection_hash == dst->collection_hash
+                              && src->collapse_groups == dst->collapse_groups
+                              && src->collection_count > 0);
+  if(!can_clone)
+  {
+    dt_pthread_mutex_unlock(&src->lock);
+    return FALSE;
+  }
+
+  const uint32_t count = src->collection_count;
+  dst->lut = malloc(count * sizeof(dt_thumbtable_cache_t));
+  if(!dst->lut)
+  {
+    dt_pthread_mutex_unlock(&src->lock);
+    return FALSE;
+  }
+
+  memcpy(dst->lut, src->lut, count * sizeof(dt_thumbtable_cache_t));
+  dt_pthread_mutex_unlock(&src->lock);
+
+  for(uint32_t i = 0; i < count; i++)
+    dst->lut[i].thumb = NULL;
+
+  dst->collection_count = count;
+  dst->collection_inited = TRUE;
+  return TRUE;
+}
 
 static void _thumbtable_info_finalize(dt_thumbnail_image_info_t *info)
 {
@@ -132,6 +180,14 @@ static void _thumbtable_info_finalize(dt_thumbnail_image_info_t *info)
   info->is_bw = dt_image_monochrome_flags(&tmp);
   info->is_bw_flow = dt_image_use_monochrome_workflow(&tmp);
   info->is_hdr = dt_image_is_hdr(&tmp);
+
+  // Expensive, display-only derived fields are filled lazily
+  // to avoid paying the cost for the whole collection upfront.
+}
+
+static void _thumbtable_info_finalize_expensive(dt_thumbnail_image_info_t *info)
+{
+  if(!info) return;
 
   if(!info->camera[0])
   {
@@ -156,19 +212,24 @@ static void _thumbtable_info_finalize(dt_thumbnail_image_info_t *info)
     g_strlcpy(info->camera + len + 1, model, sizeof(info->camera) - len - 1);
   }
 
-  dt_datetime_gtimespan_to_local(info->datetime, sizeof(info->datetime), info->exif_datetime_taken, FALSE, FALSE);
+  if(!info->datetime[0])
+    dt_datetime_gtimespan_to_local(info->datetime, sizeof(info->datetime), info->exif_datetime_taken, FALSE, FALSE);
 
-  if(info->film_id < 0 || !info->folder[0])
+  if(!info->filmroll[0])
   {
-    g_strlcpy(info->filmroll, _("orphaned image"), sizeof(info->filmroll));
-  }
-  else
-  {
-    g_strlcpy(info->filmroll, dt_image_film_roll_name(info->folder), sizeof(info->filmroll));
+    if(info->film_id < 0 || !info->folder[0])
+      g_strlcpy(info->filmroll, _("orphaned image"), sizeof(info->filmroll));
+    else
+      g_strlcpy(info->filmroll, dt_image_film_roll_name(info->folder), sizeof(info->filmroll));
   }
 
-  if(info->folder[0] && info->filename[0])
+  if(!info->fullpath[0] && info->folder[0] && info->filename[0])
     g_snprintf(info->fullpath, sizeof(info->fullpath), "%s" G_DIR_SEPARATOR_S "%s", info->folder, info->filename);
+}
+
+void dt_thumbtable_fill_info_expensive(dt_thumbnail_image_info_t *info)
+{
+  _thumbtable_info_finalize_expensive(info);
 }
 
 static void _thumbtable_info_from_image(dt_thumbnail_image_info_t *info, const dt_image_t *img,
@@ -687,6 +748,7 @@ gboolean dt_thumbtable_get_thumbnail_info(dt_thumbtable_t *table, int32_t imgid,
     {
       if(table->lut[rowid].imgid == imgid && table->lut[rowid].info_valid)
       {
+        _thumbtable_info_finalize_expensive(&table->lut[rowid].info);
         *out = table->lut[rowid].info;
         found = TRUE;
         break;
@@ -698,6 +760,7 @@ gboolean dt_thumbtable_get_thumbnail_info(dt_thumbtable_t *table, int32_t imgid,
     dt_thumbnail_t *thumb = _find_thumb_by_imgid(table, imgid);
     if(thumb && thumb->info_valid)
     {
+      _thumbtable_info_finalize_expensive(&thumb->info);
       *out = thumb->info;
       found = TRUE;
     }
@@ -1370,7 +1433,13 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
     // If groups are collapsed, we add only the group leader image to the collection
     // It needs to be set before running _dt_collection_lut()
     table->collapse_groups = collapse_groups;
-    _dt_collection_lut(table);
+    if(table->lut)
+    {
+      free(table->lut);
+      table->lut = NULL;
+    }
+    if(!_thumbtable_clone_lut(table))
+      _dt_collection_lut(table);
 
     table->thumbs_inited = FALSE;
     _dt_thumbtable_empty_list(table);

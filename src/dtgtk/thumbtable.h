@@ -245,6 +245,7 @@ void dt_thumbtable_refresh_thumbnail_real(dt_thumbtable_t *table, int32_t imgid,
 
 // Copy cached thumbnail metadata by image id. Returns TRUE on success.
 gboolean dt_thumbtable_get_thumbnail_info(dt_thumbtable_t *table, int32_t imgid, dt_thumbnail_image_info_t *out);
+void dt_thumbtable_fill_info_expensive(dt_thumbnail_image_info_t *info);
 
 /**
  * @brief Select all images in the current grid

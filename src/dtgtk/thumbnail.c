@@ -258,17 +258,15 @@ static void _image_get_infos(dt_thumbnail_t *thumb)
   if(thumb->table && thumb->table->lut
      && thumb->rowid >= 0 && thumb->rowid < thumb->table->collection_count)
   {
-    const int lock_ret = dt_pthread_mutex_trylock(&thumb->table->lock);
-    const gboolean locked = (lock_ret == 0);
     dt_thumbtable_cache_t *entry = &thumb->table->lut[thumb->rowid];
     if(entry->imgid == thumb->imgid && entry->info_valid)
     {
+      dt_thumbtable_fill_info_expensive(&entry->info);
       thumb->info = entry->info;
       thumb->info_valid = TRUE;
       thumb->groupid = entry->groupid;
       from_lut = TRUE;
     }
-    if(locked) dt_pthread_mutex_unlock(&thumb->table->lock);
   }
 
   // Fallback to image cache only when LUT data is unavailable.
