@@ -6,9 +6,19 @@ include(CheckCSourceCompiles)
 include(CheckCXXSymbolExists)
 
 # Generate authors
+if(WIN32)
+  if(CMAKE_SH)
+    set(ANSEL_SH_EXECUTABLE "${CMAKE_SH}")
+  else()
+    set(ANSEL_SH_EXECUTABLE "sh")
+  endif()
+else()
+  set(ANSEL_SH_EXECUTABLE "/bin/sh")
+endif()
+
 add_custom_target(
   generate_authors_file ALL
-  COMMAND /bin/sh -c "tools/release/generate-authors.sh release-3.9.0 HEAD > AUTHORS"
+  COMMAND ${ANSEL_SH_EXECUTABLE} -c "tools/release/generate-authors.sh release-3.9.0 HEAD > AUTHORS"
   COMMENT "Generating AUTHORS file for releases."
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
