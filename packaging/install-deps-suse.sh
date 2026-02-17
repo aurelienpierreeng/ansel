@@ -29,6 +29,7 @@ ZYPPER_PACKAGES=(
   gdb
   gettext-tools
   git
+  gstreamer
   gmic
   gnome-keyring-devel
   graphviz
