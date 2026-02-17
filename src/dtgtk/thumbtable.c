@@ -941,8 +941,6 @@ static void _dt_image_info_changed_callback(gpointer instance, gpointer imgs, gp
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
   if(!table->lut) return;
 
-  const int32_t mouse_over = dt_control_get_mouse_over_id();
-
   dt_pthread_mutex_lock(&table->lock);
 
   for(GList *l = g_list_first(imgs); l; l = g_list_next(l))
