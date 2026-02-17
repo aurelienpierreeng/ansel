@@ -123,7 +123,6 @@ jobs:
       matrix:
         btype:
           - Debug
-          - Release
         eco: [-DUSE_XMLLINT=OFF]
         target:
           - skiptest
@@ -194,6 +193,7 @@ jobs:
           - Release
         target:
           - skiptest
+          - nofeatures
         generator:
           - Ninja
         eco: [-DBUILD_SSE2_CODEPATHS=OFF -DUSE_GRAPHICSMAGICK=ON -DUSE_IMAGEMAGICK=OFF]
