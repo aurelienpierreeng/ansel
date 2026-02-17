@@ -98,6 +98,45 @@ APT_PACKAGES=(
   zlib1g-dev
 )
 
+remove_pkg() {
+  local remove="$1"
+  local new=()
+  for pkg in "${APT_PACKAGES[@]}"; do
+    if [ "${pkg}" != "${remove}" ]; then
+      new+=("${pkg}")
+    fi
+  done
+  APT_PACKAGES=("${new[@]}")
+}
+
+# Read OS metadata so we can handle Ubuntu version-specific repositories.
+if [ -r /etc/os-release ]; then
+  . /etc/os-release
+fi
+
+version_lt() {
+  local a="$1"
+  local b="$2"
+  if command -v dpkg >/dev/null 2>&1; then
+    dpkg --compare-versions "${a}" lt "${b}"
+  else
+    [ "$(printf '%s\n' "${a}" "${b}" | sort -V | head -n 1)" != "${b}" ]
+  fi
+}
+
+maybe_enable_backports() {
+  # libjxl-dev is only in Ubuntu backports for 22.04 (jammy). For older Ubuntu
+  # releases we also need backports to satisfy this critical dependency.
+  if [ "${ID:-}" = "ubuntu" ] && [ -n "${VERSION_ID:-}" ] && version_lt "${VERSION_ID}" "24.04"; then
+    if [ -n "${VERSION_CODENAME:-}" ]; then
+      local backports_list="/etc/apt/sources.list.d/${VERSION_CODENAME}-backports.list"
+      if [ ! -f "${backports_list}" ]; then
+        echo "deb http://archive.ubuntu.com/ubuntu ${VERSION_CODENAME}-backports main universe" | "${SUDO[@]}" tee "${backports_list}" >/dev/null
+      fi
+    fi
+  fi
+}
+
 if [ -n "${LLVM_VER:-}" ]; then
   APT_PACKAGES+=(
     "clang-${LLVM_VER}"
@@ -127,5 +166,7 @@ if [ -n "${GCC_VER:-}" ]; then
   )
 fi
 
+maybe_enable_backports
 "${SUDO[@]}" apt-get update
+
 "${SUDO[@]}" apt-get install -y "${APT_PACKAGES[@]}"
