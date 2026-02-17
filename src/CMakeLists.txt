@@ -915,6 +915,7 @@ set_source_files_properties(${CMAKE_CURRENT_BINARY_DIR}/version_gen.c PROPERTIES
 add_dependencies(lib_ansel generate_conf)
 add_dependencies(lib_ansel generate_version)
 add_dependencies(lib_ansel generate_preferences)
+add_dependencies(lib_ansel generate_authors_h)
 
 if(APPLE)
   set_target_properties(lib_ansel PROPERTIES MACOSX_RPATH TRUE)
