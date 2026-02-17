@@ -60,6 +60,8 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename);
 void dt_database_start_transaction_debug(const struct dt_database_t *db);
 void dt_database_release_transaction_debug(const struct dt_database_t *db);
 void dt_database_rollback_transaction(const struct dt_database_t *db);
+void dt_database_begin_transaction_batch(const struct dt_database_t *db);
+void dt_database_end_transaction_batch(const struct dt_database_t *db);
 
 #define dt_database_start_transaction(db) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_SQL, dt_database_start_transaction_debug, (db))
 #define dt_database_release_transaction(db) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_SQL, dt_database_release_transaction_debug, (db))

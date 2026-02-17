@@ -20,6 +20,7 @@
 #include "common/collection.h"
 #include "common/darktable.h"
 #include "common/debug.h"
+#include "common/dtpthread.h"
 #include "common/exif.h"
 #include "common/history_snapshot.h"
 #include "common/image_cache.h"
@@ -35,6 +36,9 @@
 #include "gui/hist_dialog.h"
 
 #define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
+
+static sqlite3_stmt *_history_check_module_exists_stmt = NULL;
+static dt_pthread_mutex_t _history_stmt_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void dt_history_item_free(gpointer data)
 {
@@ -603,23 +607,39 @@ int dt_history_compress_on_list(const GList *imgs)
 gboolean dt_history_check_module_exists(int32_t imgid, const char *operation, gboolean enabled)
 {
   gboolean result = FALSE;
-  sqlite3_stmt *stmt;
-
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(
-    dt_database_get(darktable.db),
-    "SELECT imgid"
-    " FROM main.history"
-    " WHERE imgid= ?1 AND operation = ?2 AND enabled in (1, ?3)",
-    -1, &stmt, NULL);
-  // clang-format on
+  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  if(!_history_check_module_exists_stmt)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(
+      dt_database_get(darktable.db),
+      "SELECT imgid"
+      " FROM main.history"
+      " WHERE imgid= ?1 AND operation = ?2 AND enabled in (1, ?3)",
+      -1, &_history_check_module_exists_stmt, NULL);
+    // clang-format on
+  }
+  sqlite3_stmt *stmt = _history_check_module_exists_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, operation, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, enabled);
   if (sqlite3_step(stmt) == SQLITE_ROW) result = TRUE;
-  sqlite3_finalize(stmt);
+  dt_pthread_mutex_unlock(&_history_stmt_mutex);
 
   return result;
+}
+
+void dt_history_cleanup(void)
+{
+  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  if(_history_check_module_exists_stmt)
+  {
+    sqlite3_finalize(_history_check_module_exists_stmt);
+    _history_check_module_exists_stmt = NULL;
+  }
+  dt_pthread_mutex_unlock(&_history_stmt_mutex);
 }
 
 // if the image has no history return 0

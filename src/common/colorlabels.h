@@ -35,6 +35,8 @@ void dt_colorlabels_remove_label(const int32_t imgid, const int color);
 const char *dt_colorlabels_to_string(int label);
 /** check if an image has a color label */
 int dt_colorlabels_check_label(const int32_t imgid, const int color);
+/** cleanup cached statements */
+void dt_colorlabels_cleanup(void);
 
 #ifdef __cplusplus
 }

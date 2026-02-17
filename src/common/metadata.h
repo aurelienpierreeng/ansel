@@ -131,6 +131,9 @@ void dt_metadata_clear(const GList *imgs, const gboolean undo_on); // libs/metad
 /** Return the first imgid of the filename-datetime "Xmp.darktable.image_id" if it already exists */
 int dt_metadata_already_imported(const char *filename, const char *datetime);
 
+/** cleanup cached statements */
+void dt_metadata_cleanup(void);
+
 #ifdef __cplusplus
 }
 #endif

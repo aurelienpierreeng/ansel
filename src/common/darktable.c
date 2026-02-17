@@ -30,13 +30,16 @@
 
 #include "common/collection.h"
 #include "common/colorspaces.h"
+#include "common/colorlabels.h"
 #include "common/darktable.h"
 #include "common/datetime.h"
 #include "common/exif.h"
+#include "common/history.h"
 #include "common/pwstorage/pwstorage.h"
 #include "common/selection.h"
 #include "common/system_signal_handling.h"
 #include "bauhaus/bauhaus.h"
+#include "gui/presets.h"
 #include "gui/splash.h"
 
 #include "common/cpuid.h"
@@ -48,6 +51,7 @@
 #include "common/imageio_module.h"
 #include "common/iop_order.h"
 #include "common/l10n.h"
+#include "common/metadata.h"
 #include "common/mipmap_cache.h"
 #include "common/noiseprofiles.h"
 #include "common/opencl.h"
@@ -1336,11 +1340,17 @@ void dt_cleanup()
     dt_imageio_cleanup(darktable.imageio);
     free(darktable.imageio);
 
+    dt_gui_presets_cleanup();
+
     dt_gui_gtk_t *gui = darktable.gui;
     darktable.gui = NULL;
     dt_accels_cleanup(gui->accels);
     free(gui);
   }
+
+  dt_colorlabels_cleanup();
+  dt_history_cleanup();
+  dt_metadata_cleanup();
 
   dt_collection_free(darktable.collection);
   dt_selection_free(darktable.selection);

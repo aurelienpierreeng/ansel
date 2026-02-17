@@ -32,6 +32,35 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+static sqlite3_stmt *_lib_presets_remove_stmt = NULL;
+static sqlite3_stmt *_lib_presets_add_stmt = NULL;
+static sqlite3_stmt *_lib_presets_select_stmt = NULL;
+static sqlite3_stmt *_lib_presets_delete_operation_stmt = NULL;
+
+static void _lib_presets_stmt_cleanup(void)
+{
+  if(_lib_presets_remove_stmt)
+  {
+    sqlite3_finalize(_lib_presets_remove_stmt);
+    _lib_presets_remove_stmt = NULL;
+  }
+  if(_lib_presets_add_stmt)
+  {
+    sqlite3_finalize(_lib_presets_add_stmt);
+    _lib_presets_add_stmt = NULL;
+  }
+  if(_lib_presets_select_stmt)
+  {
+    sqlite3_finalize(_lib_presets_select_stmt);
+    _lib_presets_select_stmt = NULL;
+  }
+  if(_lib_presets_delete_operation_stmt)
+  {
+    sqlite3_finalize(_lib_presets_delete_operation_stmt);
+    _lib_presets_delete_operation_stmt = NULL;
+  }
+}
+
 typedef enum dt_action_element_lib_t
 {
   DT_ACTION_ELEMENT_SHOW = 0,
@@ -320,19 +349,23 @@ gchar *dt_lib_presets_duplicate(const gchar *preset, const gchar *module_name, i
 
 void dt_lib_presets_remove(const gchar *preset, const gchar *module_name, int module_version)
 {
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
-      "DELETE FROM data.presets"
-      " WHERE name=?1 AND operation=?2 AND op_version=?3 AND writeprotect=0", -1, &stmt,
-      NULL);
-  // clang-format on
+  if(!_lib_presets_remove_stmt)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(
+        dt_database_get(darktable.db),
+        "DELETE FROM data.presets"
+        " WHERE name=?1 AND operation=?2 AND op_version=?3 AND writeprotect=0", -1, &_lib_presets_remove_stmt,
+        NULL);
+    // clang-format on
+  }
+  sqlite3_stmt *stmt = _lib_presets_remove_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, preset, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, module_name, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, module_version);
   sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
 }
 
 gboolean dt_lib_presets_apply(const gchar *preset, const gchar *module_name, int module_version)
@@ -714,27 +747,36 @@ void dt_lib_init_presets(dt_lib_module_t *module)
 
   if(module->set_params == NULL)
   {
-    sqlite3_stmt *stmt;
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "DELETE FROM data.presets"
-                                " WHERE operation=?1", -1,
-                                &stmt, NULL);
-    // clang-format on
+    if(!_lib_presets_delete_operation_stmt)
+    {
+      // clang-format off
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                  "DELETE FROM data.presets"
+                                  " WHERE operation=?1", -1,
+                                  &_lib_presets_delete_operation_stmt, NULL);
+      // clang-format on
+    }
+    sqlite3_stmt *stmt = _lib_presets_delete_operation_stmt;
+    sqlite3_reset(stmt);
+    sqlite3_clear_bindings(stmt);
     DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, module->plugin_name, -1, SQLITE_TRANSIENT);
     sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
   }
   else
   {
-    sqlite3_stmt *stmt;
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "SELECT rowid, op_version, op_params, name"
-                                " FROM data.presets"
-                                " WHERE operation=?1",
-                                -1, &stmt, NULL);
-    // clang-format on
+    if(!_lib_presets_select_stmt)
+    {
+      // clang-format off
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                  "SELECT rowid, op_version, op_params, name"
+                                  " FROM data.presets"
+                                  " WHERE operation=?1",
+                                  -1, &_lib_presets_select_stmt, NULL);
+      // clang-format on
+    }
+    sqlite3_stmt *stmt = _lib_presets_select_stmt;
+    sqlite3_reset(stmt);
+    sqlite3_clear_bindings(stmt);
     DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, module->plugin_name, -1, SQLITE_TRANSIENT);
     while(sqlite3_step(stmt) == SQLITE_ROW)
     {
@@ -792,7 +834,7 @@ void dt_lib_init_presets(dt_lib_module_t *module)
         free(new_params);
       }
     }
-    sqlite3_finalize(stmt);
+    sqlite3_reset(stmt);
   }
 
   if(module->init_presets)
@@ -1136,36 +1178,41 @@ void dt_lib_cleanup(dt_lib_t *lib)
     }
     lib->plugins = g_list_delete_link(lib->plugins, lib->plugins);
   }
+
+  _lib_presets_stmt_cleanup();
 }
 
 void dt_lib_presets_add(const char *name, const char *plugin_name, const int32_t version, const void *params,
                         const int32_t params_size, gboolean readonly)
 {
   dt_lib_presets_remove(name, plugin_name, version);
-
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
-      "INSERT INTO data.presets"
-      " (name, description, operation, op_version, op_params, "
-      "  blendop_params, blendop_version, enabled, model, maker, lens, "
-      "  iso_min, iso_max, exposure_min, exposure_max, aperture_min, aperture_max, "
-      "  focal_length_min, focal_length_max, writeprotect, "
-      "  autoapply, filter, def, format)"
-      " VALUES "
-      "  (?1, '', ?2, ?3, ?4, NULL, 0, 1, '%', "
-      "   '%', '%', 0, 340282346638528859812000000000000000000, 0, 10000000, 0, 100000000, 0,"
-      "   1000, ?5, 0, 0, 0, 0)",
-      -1, &stmt, NULL);
-  // clang-format on
+  if(!_lib_presets_add_stmt)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(
+        dt_database_get(darktable.db),
+        "INSERT INTO data.presets"
+        " (name, description, operation, op_version, op_params, "
+        "  blendop_params, blendop_version, enabled, model, maker, lens, "
+        "  iso_min, iso_max, exposure_min, exposure_max, aperture_min, aperture_max, "
+        "  focal_length_min, focal_length_max, writeprotect, "
+        "  autoapply, filter, def, format)"
+        " VALUES "
+        "  (?1, '', ?2, ?3, ?4, NULL, 0, 1, '%', "
+        "   '%', '%', 0, 340282346638528859812000000000000000000, 0, 10000000, 0, 100000000, 0,"
+        "   1000, ?5, 0, 0, 0, 0)",
+        -1, &_lib_presets_add_stmt, NULL);
+    // clang-format on
+  }
+  sqlite3_stmt *stmt = _lib_presets_add_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, name, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, plugin_name, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, version);
   DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 4, params, params_size, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 5, readonly);
   sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
 }
 
 static gchar *_get_lib_view_path(dt_lib_module_t *module, char *suffix)

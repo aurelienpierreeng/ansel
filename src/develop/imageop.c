@@ -20,7 +20,6 @@
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
 #include "common/debug.h"
-#include "common/dtpthread.h"
 #include "common/exif.h"
 #include "common/history.h"
 #include "common/imagebuf.h"
@@ -53,6 +52,8 @@
 #include <math.h>
 #include <complex.h>
 #include <stdlib.h>
+
+static sqlite3_stmt *_iop_presets_select_stmt = NULL;
 #include <string.h>
 #include <strings.h>
 #if defined(__SSE__)
@@ -1144,12 +1145,16 @@ static void _init_presets(dt_iop_module_so_t *module_so)
   // presets.
 
   const int32_t module_version = module_so->version();
-
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
-      "SELECT name, op_version, op_params, blendop_version, blendop_params FROM data.presets WHERE operation = ?1",
-      -1, &stmt, NULL);
+  if(!_iop_presets_select_stmt)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(
+        dt_database_get(darktable.db),
+        "SELECT name, op_version, op_params, blendop_version, blendop_params FROM data.presets WHERE operation = ?1",
+        -1, &_iop_presets_select_stmt, NULL);
+  }
+  sqlite3_stmt *stmt = _iop_presets_select_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, module_so->op, -1, SQLITE_TRANSIENT);
 
   while(sqlite3_step(stmt) == SQLITE_ROW)
@@ -1331,7 +1336,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       free(module);
     }
   }
-  sqlite3_finalize(stmt);
+  sqlite3_reset(stmt);
 }
 
 
@@ -1380,8 +1385,11 @@ static void _init_module_so(void *m)
 
 void dt_iop_load_modules_so(void)
 {
+  // Batch presets initialization in a single transaction to avoid per-module BEGIN/COMMIT overhead.
+  dt_database_begin_transaction_batch(darktable.db);
   darktable.iop = dt_module_load_modules("/plugins", sizeof(dt_iop_module_so_t), dt_iop_load_module_so,
                                          _init_module_so, NULL);
+  dt_database_end_transaction_batch(darktable.db);
 }
 
 int dt_iop_load_module(dt_iop_module_t *module, dt_iop_module_so_t *module_so, dt_develop_t *dev)
@@ -1420,6 +1428,12 @@ void dt_iop_cleanup_module(dt_iop_module_t *module)
 
 void dt_iop_unload_modules_so()
 {
+  if(_iop_presets_select_stmt)
+  {
+    sqlite3_finalize(_iop_presets_select_stmt);
+    _iop_presets_select_stmt = NULL;
+  }
+
   while(darktable.iop)
   {
     dt_iop_module_so_t *module = (dt_iop_module_so_t *)darktable.iop->data;

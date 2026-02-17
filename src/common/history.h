@@ -113,6 +113,8 @@ char *dt_history_item_as_string(const char *name, gboolean enabled);
 
 /* check if a module exists in the history of corresponding image */
 gboolean dt_history_check_module_exists(int32_t imgid, const char *operation, gboolean enabled);
+/** cleanup cached statements */
+void dt_history_cleanup(void);
 
 /** calculate history hash and save it to database*/
 void dt_history_hash_write_from_history(const int32_t imgid, const dt_history_hash_t type);

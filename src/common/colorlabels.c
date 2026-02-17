@@ -62,22 +62,30 @@ typedef struct dt_undo_colorlabels_t
   int after;
 } dt_undo_colorlabels_t;
 
+static sqlite3_stmt *_colorlabels_get_labels_stmt = NULL;
+static sqlite3_stmt *_colorlabels_remove_labels_stmt = NULL;
+static sqlite3_stmt *_colorlabels_set_label_stmt = NULL;
+static sqlite3_stmt *_colorlabels_remove_label_stmt = NULL;
+
 int dt_colorlabels_get_labels(const int32_t imgid)
 {
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT color FROM main.color_labels WHERE imgid = ?1",
-                              -1, &stmt, NULL);
-  // clang-format on
+  if(!_colorlabels_get_labels_stmt)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT color FROM main.color_labels WHERE imgid = ?1",
+                                -1, &_colorlabels_get_labels_stmt, NULL);
+    // clang-format on
+  }
+  sqlite3_stmt *stmt = _colorlabels_get_labels_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   int colors = 0;
 
   // Colors are int between 0 and 5, turn them into octal bitmask
   while(sqlite3_step(stmt) == SQLITE_ROW)
     colors |= (1 << sqlite3_column_int(stmt, 0));
-
-  sqlite3_finalize(stmt);
   return colors;
 }
 
@@ -139,41 +147,77 @@ static void _colorlabels_undo_data_free(gpointer data)
 
 void dt_colorlabels_remove_labels(const int32_t imgid)
 {
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "DELETE FROM main.color_labels WHERE imgid=?1",
-                              -1, &stmt, NULL);
+  if(!_colorlabels_remove_labels_stmt)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "DELETE FROM main.color_labels WHERE imgid=?1",
+                                -1, &_colorlabels_remove_labels_stmt, NULL);
+  }
+  sqlite3_stmt *stmt = _colorlabels_remove_labels_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
 }
 
 void dt_colorlabels_set_label(const int32_t imgid, const int color)
 {
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "INSERT OR IGNORE INTO main.color_labels (imgid, color) VALUES (?1, ?2)",
-                              -1, &stmt, NULL);
-  // clang-format on
+  if(!_colorlabels_set_label_stmt)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "INSERT OR IGNORE INTO main.color_labels (imgid, color) VALUES (?1, ?2)",
+                                -1, &_colorlabels_set_label_stmt, NULL);
+    // clang-format on
+  }
+  sqlite3_stmt *stmt = _colorlabels_set_label_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, color);
   sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
 }
 
 void dt_colorlabels_remove_label(const int32_t imgid, const int color)
 {
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "DELETE FROM main.color_labels WHERE imgid=?1 AND color=?2",
-                              -1, &stmt, NULL);
-  // clang-format on
+  if(!_colorlabels_remove_label_stmt)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "DELETE FROM main.color_labels WHERE imgid=?1 AND color=?2",
+                                -1, &_colorlabels_remove_label_stmt, NULL);
+    // clang-format on
+  }
+  sqlite3_stmt *stmt = _colorlabels_remove_label_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, color);
   sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+}
+
+void dt_colorlabels_cleanup(void)
+{
+  if(_colorlabels_get_labels_stmt)
+  {
+    sqlite3_finalize(_colorlabels_get_labels_stmt);
+    _colorlabels_get_labels_stmt = NULL;
+  }
+  if(_colorlabels_remove_labels_stmt)
+  {
+    sqlite3_finalize(_colorlabels_remove_labels_stmt);
+    _colorlabels_remove_labels_stmt = NULL;
+  }
+  if(_colorlabels_set_label_stmt)
+  {
+    sqlite3_finalize(_colorlabels_set_label_stmt);
+    _colorlabels_set_label_stmt = NULL;
+  }
+  if(_colorlabels_remove_label_stmt)
+  {
+    sqlite3_finalize(_colorlabels_remove_label_stmt);
+    _colorlabels_remove_label_stmt = NULL;
+  }
 }
 
 typedef enum dt_colorlabels_actions_t

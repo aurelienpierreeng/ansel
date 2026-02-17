@@ -28,6 +28,9 @@
 #include <stdlib.h>
 
 // this array should contain all dt metadata
+
+static sqlite3_stmt *_metadata_get_selected_stmt = NULL;
+static sqlite3_stmt *_metadata_get_single_stmt = NULL;
 // add the new metadata at the end when needed
 // Dependencies
 //    Must match with dt_metadata_t in metadata.h.
@@ -473,18 +476,30 @@ GList *dt_metadata_get(const int id, const char *key, uint32_t *count)
   if(id == -1)
   {
     // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "SELECT value FROM main.meta_data WHERE id IN "
-                                "(SELECT imgid FROM main.selected_images) AND key = ?1 ORDER BY value",
-                                -1, &stmt, NULL);
+    if(!_metadata_get_selected_stmt)
+    {
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                  "SELECT value FROM main.meta_data WHERE id IN "
+                                  "(SELECT imgid FROM main.selected_images) AND key = ?1 ORDER BY value",
+                                  -1, &_metadata_get_selected_stmt, NULL);
+    }
     // clang-format on
+    stmt = _metadata_get_selected_stmt;
+    sqlite3_reset(stmt);
+    sqlite3_clear_bindings(stmt);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, keyid);
   }
   else // single image under mouse cursor
   {
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "SELECT value FROM main.meta_data WHERE id = ?1 AND key = ?2 ORDER BY value", -1,
-                                &stmt, NULL);
+    if(!_metadata_get_single_stmt)
+    {
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                  "SELECT value FROM main.meta_data WHERE id = ?1 AND key = ?2 ORDER BY value", -1,
+                                  &_metadata_get_single_stmt, NULL);
+    }
+    stmt = _metadata_get_single_stmt;
+    sqlite3_reset(stmt);
+    sqlite3_clear_bindings(stmt);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, keyid);
   }
@@ -494,9 +509,22 @@ GList *dt_metadata_get(const int id, const char *key, uint32_t *count)
     char *value = (char *)sqlite3_column_text(stmt, 0);
     result = g_list_prepend(result, g_strdup(value ? value : "")); // to avoid NULL value
   }
-  sqlite3_finalize(stmt);
   if(count != NULL) *count = local_count;
   return g_list_reverse(result);  // list was built in reverse order, so un-reverse it
+}
+
+void dt_metadata_cleanup(void)
+{
+  if(_metadata_get_selected_stmt)
+  {
+    sqlite3_finalize(_metadata_get_selected_stmt);
+    _metadata_get_selected_stmt = NULL;
+  }
+  if(_metadata_get_single_stmt)
+  {
+    sqlite3_finalize(_metadata_get_single_stmt);
+    _metadata_get_single_stmt = NULL;
+  }
 }
 
 static void _metadata_add_metadata_to_list(GList **list, const GList *metadata)
