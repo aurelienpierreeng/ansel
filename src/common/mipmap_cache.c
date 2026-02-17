@@ -29,6 +29,7 @@
 #include "control/conf.h"
 #include "control/jobs.h"
 #include "develop/imageop_math.h"
+#include "dtgtk/thumbtable_info.h"
 #include "gui/gtk.h"
 
 #include <assert.h>
@@ -237,7 +238,7 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
   {
     if(have_info)
     {
-      altered = info.is_altered;
+      altered = dt_thumbtable_info_is_altered(&info);
     }
     else
     {

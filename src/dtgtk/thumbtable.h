@@ -73,11 +73,7 @@ typedef enum dt_thumbtable_zoom_t
  */
 typedef struct dt_thumbtable_cache_t
 {
-  int32_t imgid;          /**< Image ID from database */
-  int32_t groupid;        /**< Group ID this image belongs to */
-  dt_thumbnail_t *thumb;  /**< Pointer to thumbnail widget */
-  uint32_t group_members; /**< Number of images in this group */
-  uint32_t history_items; /**< Number of history items */
+  dt_thumbnail_t *thumb; /**< Pointer to thumbnail object */
   dt_thumbnail_image_info_t info; /**< Cached metadata for thumbnails */
   gboolean info_valid;
 } dt_thumbtable_cache_t;
@@ -245,7 +241,6 @@ void dt_thumbtable_refresh_thumbnail_real(dt_thumbtable_t *table, int32_t imgid,
 
 // Copy cached thumbnail metadata by image id. Returns TRUE on success.
 gboolean dt_thumbtable_get_thumbnail_info(dt_thumbtable_t *table, int32_t imgid, dt_thumbnail_image_info_t *out);
-void dt_thumbtable_fill_info_expensive(dt_thumbnail_image_info_t *info);
 
 /**
  * @brief Select all images in the current grid

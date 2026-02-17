@@ -20,12 +20,11 @@
 
 #include "dtgtk/thumbtable.h"
 #include "dtgtk/thumbnail.h"
+#include "dtgtk/thumbtable_info.h"
 #include "common/collection.h"
 #include "common/colorlabels.h"
-#include "common/datetime.h"
 #include "common/history.h"
 #include "common/image_cache.h"
-#include "common/imageio.h"
 #include "common/grouping.h"
 #include "common/ratings.h"
 #include "common/selection.h"
@@ -44,82 +43,6 @@
 #include <glib-object.h>
 #include <math.h>
 
-static void _thumbtable_info_from_image(dt_thumbnail_image_info_t *info, const dt_image_t *img,
-                                        const uint32_t history_items, const uint32_t group_members);
-static void _thumbtable_info_finalize_expensive(dt_thumbnail_image_info_t *info);
-
-#ifndef NDEBUG
-static gboolean _thumbtable_float_equal(const float a, const float b)
-{
-  return (isnan(a) && isnan(b)) || a == b;
-}
-
-static gboolean _thumbtable_double_equal(const double a, const double b)
-{
-  return (isnan(a) && isnan(b)) || a == b;
-}
-
-static void _thumbtable_debug_assert_info_matches_cache(const dt_thumbnail_image_info_t *sql_info,
-                                                        const uint32_t history_items, const uint32_t group_members)
-{
-  if(!sql_info || sql_info->imgid <= 0) return;
-
-  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, sql_info->imgid, 'r');
-  if(!img) return;
-
-  dt_thumbnail_image_info_t cache_info = {0};
-  _thumbtable_info_from_image(&cache_info, img, history_items, group_members);
-  _thumbtable_info_finalize_expensive(&cache_info);
-  dt_image_cache_read_release(darktable.image_cache, img);
-
-  dt_thumbnail_image_info_t sql_copy = *sql_info;
-  _thumbtable_info_finalize_expensive(&sql_copy);
-
-  g_assert_cmpint(sql_copy.imgid, ==, cache_info.imgid);
-  g_assert_cmpint(sql_info->film_id, ==, cache_info.film_id);
-  g_assert_cmpint(sql_info->groupid, ==, cache_info.groupid);
-  g_assert_cmpint(sql_info->version, ==, cache_info.version);
-  g_assert_cmpint(sql_info->width, ==, cache_info.width);
-  g_assert_cmpint(sql_info->height, ==, cache_info.height);
-  g_assert_cmpint(sql_info->orientation, ==, cache_info.orientation);
-  g_assert_cmpint(sql_info->p_width, ==, cache_info.p_width);
-  g_assert_cmpint(sql_info->p_height, ==, cache_info.p_height);
-  g_assert_cmpint(sql_info->flags, ==, cache_info.flags);
-  g_assert_cmpint(sql_info->loader, ==, cache_info.loader);
-  g_assert_cmpint(sql_info->rating, ==, cache_info.rating);
-  g_assert_cmpint(sql_info->colorlabels, ==, cache_info.colorlabels);
-  g_assert(sql_info->has_localcopy == cache_info.has_localcopy);
-  g_assert(sql_info->has_audio == cache_info.has_audio);
-  g_assert(sql_info->is_bw == cache_info.is_bw);
-  g_assert(sql_info->is_bw_flow == cache_info.is_bw_flow);
-  g_assert(sql_info->is_hdr == cache_info.is_hdr);
-  g_assert(sql_info->is_altered == cache_info.is_altered);
-  g_assert(sql_info->is_grouped == cache_info.is_grouped);
-  g_assert((int64_t)sql_info->import_timestamp == (int64_t)cache_info.import_timestamp);
-  g_assert((int64_t)sql_info->change_timestamp == (int64_t)cache_info.change_timestamp);
-  g_assert((int64_t)sql_info->export_timestamp == (int64_t)cache_info.export_timestamp);
-  g_assert((int64_t)sql_info->print_timestamp == (int64_t)cache_info.print_timestamp);
-  g_assert(_thumbtable_float_equal(sql_info->exif_exposure, cache_info.exif_exposure));
-  g_assert(_thumbtable_float_equal(sql_info->exif_exposure_bias, cache_info.exif_exposure_bias));
-  g_assert(_thumbtable_float_equal(sql_info->exif_aperture, cache_info.exif_aperture));
-  g_assert(_thumbtable_float_equal(sql_info->exif_iso, cache_info.exif_iso));
-  g_assert(_thumbtable_float_equal(sql_info->exif_focal_length, cache_info.exif_focal_length));
-  g_assert(_thumbtable_float_equal(sql_info->exif_focus_distance, cache_info.exif_focus_distance));
-  g_assert((int64_t)sql_info->exif_datetime_taken == (int64_t)cache_info.exif_datetime_taken);
-  g_assert(_thumbtable_double_equal(sql_info->geoloc_latitude, cache_info.geoloc_latitude));
-  g_assert(_thumbtable_double_equal(sql_info->geoloc_longitude, cache_info.geoloc_longitude));
-  g_assert(_thumbtable_double_equal(sql_info->geoloc_elevation, cache_info.geoloc_elevation));
-  g_assert_cmpstr(sql_copy.filename, ==, cache_info.filename);
-  g_assert_cmpstr(sql_copy.fullpath, ==, cache_info.fullpath);
-  g_assert_cmpstr(sql_copy.filmroll, ==, cache_info.filmroll);
-  g_assert_cmpstr(sql_copy.folder, ==, cache_info.folder);
-  g_assert_cmpstr(sql_copy.datetime, ==, cache_info.datetime);
-  g_assert_cmpstr(sql_copy.camera, ==, cache_info.camera);
-  g_assert_cmpstr(sql_copy.exif_maker, ==, cache_info.exif_maker);
-  g_assert_cmpstr(sql_copy.exif_model, ==, cache_info.exif_model);
-  g_assert_cmpstr(sql_copy.exif_lens, ==, cache_info.exif_lens);
-}
-#endif
 
 static gboolean _thumbtable_clone_lut(dt_thumbtable_t *dst)
 {
@@ -163,122 +86,6 @@ static gboolean _thumbtable_clone_lut(dt_thumbtable_t *dst)
   dst->collection_inited = TRUE;
   return TRUE;
 }
-
-static void _thumbtable_info_finalize(dt_thumbnail_image_info_t *info)
-{
-  if(!info) return;
-
-  // Compute derived UI fields once per collection build or refresh.
-  // This avoids repeated per-thumb image-cache reads just to format UI strings/flags.
-  dt_image_t tmp = {0};
-  tmp.flags = info->flags;
-  g_strlcpy(tmp.filename, info->filename, sizeof(tmp.filename));
-
-  info->has_localcopy = (info->flags & DT_IMAGE_LOCAL_COPY);
-  info->has_audio = (info->flags & DT_IMAGE_HAS_WAV);
-  info->rating = (info->flags & DT_IMAGE_REJECTED) ? DT_VIEW_REJECT : (info->flags & DT_VIEW_RATINGS_MASK);
-  info->is_bw = dt_image_monochrome_flags(&tmp);
-  info->is_bw_flow = dt_image_use_monochrome_workflow(&tmp);
-  info->is_hdr = dt_image_is_hdr(&tmp);
-
-  // Expensive, display-only derived fields are filled lazily
-  // to avoid paying the cost for the whole collection upfront.
-}
-
-static void _thumbtable_info_finalize_expensive(dt_thumbnail_image_info_t *info)
-{
-  if(!info) return;
-
-  if(!info->camera[0])
-  {
-    const char *maker = info->exif_maker;
-    const char *model = info->exif_model;
-    char mk[64] = { 0 };
-    char md[64] = { 0 };
-    char al[64] = { 0 };
-
-    if((info->exif_maker[0] || info->exif_model[0])
-       && dt_imageio_lookup_makermodel(info->exif_maker, info->exif_model,
-                                       mk, sizeof(mk), md, sizeof(md), al, sizeof(al)))
-    {
-      if(mk[0]) maker = mk;
-      if(md[0]) model = md;
-    }
-
-    g_strlcpy(info->camera, maker, sizeof(info->camera));
-    const size_t len = strlen(maker);
-    if(len < sizeof(info->camera) - 1)
-      info->camera[len] = ' ';
-    g_strlcpy(info->camera + len + 1, model, sizeof(info->camera) - len - 1);
-  }
-
-  if(!info->datetime[0])
-    dt_datetime_gtimespan_to_local(info->datetime, sizeof(info->datetime), info->exif_datetime_taken, FALSE, FALSE);
-
-  if(!info->filmroll[0])
-  {
-    if(info->film_id < 0 || !info->folder[0])
-      g_strlcpy(info->filmroll, _("orphaned image"), sizeof(info->filmroll));
-    else
-      g_strlcpy(info->filmroll, dt_image_film_roll_name(info->folder), sizeof(info->filmroll));
-  }
-
-  if(!info->fullpath[0] && info->folder[0] && info->filename[0])
-    g_snprintf(info->fullpath, sizeof(info->fullpath), "%s" G_DIR_SEPARATOR_S "%s", info->folder, info->filename);
-}
-
-void dt_thumbtable_fill_info_expensive(dt_thumbnail_image_info_t *info)
-{
-  _thumbtable_info_finalize_expensive(info);
-}
-
-static void _thumbtable_info_from_image(dt_thumbnail_image_info_t *info, const dt_image_t *img,
-                                        const uint32_t history_items, const uint32_t group_members)
-{
-  if(!info || !img) return;
-
-  // Refresh a single LUT entry from the image cache for write-driven updates
-  // (ratings, color labels, etc. are updated through the cache APIs).
-  memset(info, 0, sizeof(*info));
-
-  info->imgid = img->id;
-  info->film_id = img->film_id;
-  info->groupid = img->group_id;
-  info->version = img->version;
-  info->width = img->width;
-  info->height = img->height;
-  info->orientation = img->orientation;
-  info->p_width = img->p_width;
-  info->p_height = img->p_height;
-  info->flags = img->flags;
-  info->loader = img->loader;
-  info->import_timestamp = img->import_timestamp;
-  info->change_timestamp = img->change_timestamp;
-  info->export_timestamp = img->export_timestamp;
-  info->print_timestamp = img->print_timestamp;
-  info->exif_exposure = img->exif_exposure;
-  info->exif_exposure_bias = img->exif_exposure_bias;
-  info->exif_aperture = img->exif_aperture;
-  info->exif_iso = img->exif_iso;
-  info->exif_focal_length = img->exif_focal_length;
-  info->exif_focus_distance = img->exif_focus_distance;
-  info->exif_datetime_taken = img->exif_datetime_taken;
-  info->geoloc_latitude = img->geoloc.latitude;
-  info->geoloc_longitude = img->geoloc.longitude;
-  info->geoloc_elevation = img->geoloc.elevation;
-  g_strlcpy(info->filename, img->filename, sizeof(info->filename));
-  g_strlcpy(info->exif_maker, img->exif_maker, sizeof(info->exif_maker));
-  g_strlcpy(info->exif_model, img->exif_model, sizeof(info->exif_model));
-  g_strlcpy(info->exif_lens, img->exif_lens, sizeof(info->exif_lens));
-  g_strlcpy(info->camera, img->camera_makermodel, sizeof(info->camera));
-  dt_image_film_roll_directory(img, info->folder, sizeof(info->folder));
-  info->colorlabels = img->color_labels;
-  info->is_grouped = (group_members > 1);
-  info->is_altered = (history_items > 0);
-
-  _thumbtable_info_finalize(info);
-}
-
 
 /**
  * @file thumbtable.c
@@ -364,10 +171,10 @@ void _mouse_over_image_callback(gpointer instance, gpointer user_data)
     if(!thumb) continue; // thumb object not inited
 
     const gboolean mouse_over = thumb->mouse_over;
-    dt_thumbnail_set_mouseover(thumb, thumb->imgid == imgid);
+    dt_thumbnail_set_mouseover(thumb, thumb->info.imgid == imgid);
 
-    if(thumb->imgid == imgid && table->lut[rowid].group_members > 1)
-      group_id = thumb->groupid;
+    if(thumb->info.imgid == imgid && dt_thumbtable_info_is_grouped(&table->lut[rowid].info))
+      group_id = thumb->info.groupid;
 
     if(thumb->mouse_over != mouse_over)
       gtk_widget_queue_draw(thumb->widget);
@@ -388,7 +195,7 @@ void _mouse_over_image_callback(gpointer instance, gpointer user_data)
       // images borders from non-hovered groups, when there is one, are transparent (overwrite base border classes width default)
       // Here we dispatch the additional CSS classes alloying to overwrite
       // the base border classes.
-      if(thumb->groupid == group_id)
+      if(thumb->info.groupid == group_id)
       {
         dt_gui_add_class(thumb->widget, "hovered-group");
         dt_gui_remove_class(thumb->widget, "non-hovered-group");
@@ -496,7 +303,7 @@ static void dt_thumbtable_scroll_to_rowid(dt_thumbtable_t *table, int rowid)
 static int _find_rowid_from_imgid(dt_thumbtable_t *table, const int32_t imgid)
 {
   for(int i = 0; i < table->collection_count; i++)
-    if(table->lut[i].imgid == imgid)
+    if(table->lut[i].info.imgid == imgid)
       return i;
 
   return UNKNOWN_IMAGE;
@@ -728,7 +535,7 @@ dt_thumbnail_t *_find_thumb_by_imgid(dt_thumbtable_t *table, const int32_t imgid
   for(GList *item = g_list_first(table->list); item; item = g_list_next(item))
   {
     dt_thumbnail_t *th = (dt_thumbnail_t *)item->data;
-    if(th->imgid == imgid)
+    if(th->info.imgid == imgid)
       return th;
   }
 
@@ -746,23 +553,13 @@ gboolean dt_thumbtable_get_thumbnail_info(dt_thumbtable_t *table, int32_t imgid,
   {
     for(int rowid = 0; rowid < table->collection_count; rowid++)
     {
-      if(table->lut[rowid].imgid == imgid && table->lut[rowid].info_valid)
+      if(table->lut[rowid].info.imgid == imgid && table->lut[rowid].info_valid)
       {
-        _thumbtable_info_finalize_expensive(&table->lut[rowid].info);
+        dt_thumbtable_info_finalize(&table->lut[rowid].info, TRUE);
         *out = table->lut[rowid].info;
         found = TRUE;
         break;
       }
-    }
-  }
-  if(!found)
-  {
-    dt_thumbnail_t *thumb = _find_thumb_by_imgid(table, imgid);
-    if(thumb && thumb->info_valid)
-    {
-      _thumbtable_info_finalize_expensive(&thumb->info);
-      *out = thumb->info;
-      found = TRUE;
     }
   }
   dt_pthread_mutex_unlock(&table->lock);
@@ -780,32 +577,32 @@ void _add_thumbnail_group_borders(dt_thumbtable_t *table, dt_thumbnail_t *thumb)
   dt_thumbnail_set_group_border(thumb, borders);
 
   const int32_t rowid = thumb->rowid;
-  const int32_t groupid = thumb->groupid;
+  const int32_t groupid = thumb->info.groupid;
 
   // Ungrouped image: abort
-  if(table->lut[rowid].group_members < 2 || !table->draw_group_borders) return;
+  if(!dt_thumbtable_info_is_grouped(&table->lut[rowid].info) || !table->draw_group_borders) return;
 
   if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
-    if(table->lut[CLAMP_ROW(rowid - table->thumbs_per_row)].groupid != groupid
+    if(table->lut[CLAMP_ROW(rowid - table->thumbs_per_row)].info.groupid != groupid
       || IS_COLLECTION_EDGE(rowid - table->thumbs_per_row))
       borders |= DT_THUMBNAIL_BORDER_TOP;
 
-    if(table->lut[CLAMP_ROW(rowid + table->thumbs_per_row)].groupid != groupid
+    if(table->lut[CLAMP_ROW(rowid + table->thumbs_per_row)].info.groupid != groupid
       || IS_COLLECTION_EDGE(rowid + table->thumbs_per_row))
       borders |= DT_THUMBNAIL_BORDER_BOTTOM;
 
-    if(table->lut[CLAMP_ROW(rowid - 1)].groupid != groupid
+    if(table->lut[CLAMP_ROW(rowid - 1)].info.groupid != groupid
       || IS_COLLECTION_EDGE(rowid - 1))
       borders |= DT_THUMBNAIL_BORDER_LEFT;
 
-    if(table->lut[CLAMP_ROW(rowid + 1)].groupid != groupid
+    if(table->lut[CLAMP_ROW(rowid + 1)].info.groupid != groupid
       || IS_COLLECTION_EDGE(rowid + 1))
       borders |= DT_THUMBNAIL_BORDER_RIGHT;
 
     // If the group spans over more than a full row,
     // close the row ends. Otherwise, we leave orphans opened at the row ends.
-    if(table->lut[rowid].group_members > table->thumbs_per_row)
+    if(table->lut[rowid].info.group_members > table->thumbs_per_row)
     {
       if(rowid % table->thumbs_per_row == 0)
         borders |= DT_THUMBNAIL_BORDER_LEFT;
@@ -817,11 +614,11 @@ void _add_thumbnail_group_borders(dt_thumbtable_t *table, dt_thumbnail_t *thumb)
   {
     borders |= DT_THUMBNAIL_BORDER_BOTTOM | DT_THUMBNAIL_BORDER_TOP;
 
-    if(table->lut[CLAMP_ROW(rowid - 1)].groupid != groupid
+    if(table->lut[CLAMP_ROW(rowid - 1)].info.groupid != groupid
       || IS_COLLECTION_EDGE(rowid - 1))
       borders |= DT_THUMBNAIL_BORDER_LEFT;
 
-    if(table->lut[CLAMP_ROW(rowid + 1)].groupid != groupid
+    if(table->lut[CLAMP_ROW(rowid + 1)].info.groupid != groupid
       || IS_COLLECTION_EDGE(rowid + 1))
       borders |= DT_THUMBNAIL_BORDER_RIGHT;
   }
@@ -831,15 +628,13 @@ void _add_thumbnail_group_borders(dt_thumbtable_t *table, dt_thumbnail_t *thumb)
 
 void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const int32_t mouse_over)
 {
-  const int32_t imgid = table->lut[rowid].imgid;
-  const int32_t groupid = table->lut[rowid].groupid;
-
+  dt_thumbnail_image_info_t *info = &(table->lut[rowid].info);
   dt_thumbnail_t *thumb = NULL;
   gboolean new_item = TRUE;
   gboolean new_position = TRUE;
 
   // Do we already have a thumbnail at the correct postion for the correct imgid ?
-  if(table->lut[rowid].thumb && table->lut[rowid].thumb->imgid == imgid)
+  if(table->lut[rowid].thumb && table->lut[rowid].thumb->info.imgid == info->imgid)
   {
     // YES : reuse it
     thumb = table->lut[rowid].thumb;
@@ -850,19 +645,19 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
     // NO : Try to find an existing thumbnail widget by imgid in table->list
     // That will be faster if we only changed the sorting order but are still in the same collection.
     // NOTE: the thumb widget position in grid will be wrong
-    thumb = _find_thumb_by_imgid(table, imgid);
+    thumb = _find_thumb_by_imgid(table, info->imgid);
   }
 
   if(thumb)
   {
     // Ensure everything is up-to-date
     thumb->rowid = rowid;
-    thumb->groupid = groupid;
+    dt_thumbnail_resync_info(thumb, info);
     new_item = FALSE;
   }
   else
   {
-    thumb = dt_thumbnail_new(imgid, rowid, groupid, table->overlays, table);
+    thumb = dt_thumbnail_new(rowid, table->overlays, table, info);
     table->list = g_list_prepend(table->list, thumb);
     table->thumb_nb += 1;
   }
@@ -894,17 +689,17 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
   }
 
   // Update visual states and flags. Mouse over is not connected to a signal and cheap to update
-  dt_thumbnail_set_mouseover(thumb, (mouse_over == thumb->imgid));
+  dt_thumbnail_set_mouseover(thumb, (mouse_over == thumb->info.imgid));
   dt_thumbnail_alternative_mode(thumb, table->alternate_mode);
 
   if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
   {
-    dt_thumbnail_update_selection(thumb, dt_view_active_images_has_imgid(thumb->imgid));
+    dt_thumbnail_update_selection(thumb, dt_view_active_images_has_imgid(thumb->info.imgid));
     thumb->disable_actions = TRUE;
   }
   else if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
-    dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->imgid));
+    dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->info.imgid));
     thumb->disable_actions = FALSE;
   }
 
@@ -947,7 +742,7 @@ void _resize_thumbnails(dt_thumbtable_t *table)
       dt_thumbnail_alternative_mode(thumb, table->alternate_mode);
     }
 
-    dt_thumbnail_update_partial_infos(thumb);
+    dt_thumbnail_update_gui(thumb);
     _add_thumbnail_group_borders(table, thumb);
     gtk_widget_queue_draw(thumb->widget);
   }
@@ -1006,11 +801,11 @@ static void _dt_selection_changed_callback(gpointer instance, gpointer user_data
   {
     dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
     const gboolean selected = thumb->selected;
-    dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->imgid));
+    dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->info.imgid));
 
     if(thumb->selected && first)
     {
-      dt_view_image_info_update(thumb->imgid);
+      dt_view_image_info_update(thumb->info.imgid);
 
       // Sync the table active row id with the first thumb in selection
       table->rowid = thumb->rowid;
@@ -1094,7 +889,7 @@ void dt_thumbtable_refresh_thumbnail_real(dt_thumbtable_t *table, int32_t imgid,
   for(GList *l = g_list_first(table->list); l; l = g_list_next(l))
   {
     dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
-    if(thumb->imgid == imgid)
+    if(thumb->info.imgid == imgid)
     {
       dt_thumbnail_image_refresh(thumb);
       break;
@@ -1113,121 +908,57 @@ static void _dt_image_info_changed_callback(gpointer instance, gpointer imgs, gp
 {
   if(!user_data || !imgs) return;
   dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
+  if(!table->lut) return;
 
-  // Batch-fetch lightweight update data to avoid per-image SQL from dt_image_altered().
-  GArray *imgids = g_array_new(FALSE, FALSE, sizeof(int32_t));
-  for(GList *l = g_list_first(imgs); l; l = g_list_next(l))
-  {
-    const int32_t imgid_to_update = GPOINTER_TO_INT(l->data);
-    g_array_append_val(imgids, imgid_to_update);
-  }
-
-  typedef struct dt_thumbtable_update_info_t
-  {
-    int32_t groupid;
-    uint32_t history_items;
-  } dt_thumbtable_update_info_t;
-
-  GHashTable *updates = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, g_free);
-  if(imgids->len > 0)
-  {
-    GString *placeholders = g_string_new("");
-    for(guint i = 0; i < imgids->len; i++)
-    {
-      if(i) g_string_append(placeholders, ",");
-      g_string_append(placeholders, "?");
-    }
-
-    gchar *query = g_strdup_printf(
-        "SELECT im.id, im.group_id, COALESCE(h.cnt, 0) "
-        "FROM main.images AS im "
-        "LEFT JOIN (SELECT imgid, COUNT(imgid) AS cnt FROM main.history WHERE imgid IN (%s) GROUP BY imgid) AS h "
-        "ON h.imgid = im.id "
-        "WHERE im.id IN (%s)",
-        placeholders->str, placeholders->str);
-    g_string_free(placeholders, TRUE);
-
-    sqlite3_stmt *stmt = NULL;
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
-    for(guint i = 0; i < imgids->len; i++)
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, (int)i + 1, g_array_index(imgids, int32_t, i));
-    for(guint i = 0; i < imgids->len; i++)
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, (int)i + 1 + (int)imgids->len, g_array_index(imgids, int32_t, i));
-
-    while(sqlite3_step(stmt) == SQLITE_ROW)
-    {
-      const int32_t imgid = sqlite3_column_int(stmt, 0);
-      dt_thumbtable_update_info_t *info = g_new0(dt_thumbtable_update_info_t, 1);
-      info->groupid = sqlite3_column_int(stmt, 1);
-      info->history_items = sqlite3_column_int(stmt, 2);
-      g_hash_table_insert(updates, GINT_TO_POINTER(imgid), info);
-    }
-
-    sqlite3_finalize(stmt);
-    g_free(query);
-  }
+  const int32_t mouse_over = dt_control_get_mouse_over_id();
 
   dt_pthread_mutex_lock(&table->lock);
 
-  // Update the LUT infos ahead, because group borders need their neighbours inited first
-  for(int rowid = 0; rowid < table->collection_count; rowid++)
+  for(GList *l = g_list_first(imgs); l; l = g_list_next(l))
   {
-    for(GList *l = g_list_first(imgs); l; l = g_list_next(l))
+    const int32_t imgid = GPOINTER_TO_INT(l->data);
+    if(imgid <= 0) continue;
+
+    const int rowid = _find_rowid_from_imgid(table, imgid);
+    if(rowid == UNKNOWN_IMAGE) continue;
+
+    dt_thumbtable_cache_t *entry = &table->lut[rowid];
+
+    // Refresh the cached LUT info from the image cache for write-driven updates
+    // (ratings, color labels, etc.) while still keeping read paths cache-free.
+    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    if(img)
     {
-      const int32_t imgid_to_update = GPOINTER_TO_INT(l->data);
-      if(table->lut[rowid].imgid == imgid_to_update)
-      {
-        dt_thumbtable_update_info_t *info = g_hash_table_lookup(updates, GINT_TO_POINTER(imgid_to_update));
-        if(info)
-        {
-          // Update infos reads the content of the LUT, for performance at init time,
-          // but then we need to keep it updated during the lifetime of the thumbnail.
-          table->lut[rowid].history_items = info->history_items;
+      dt_thumbtable_info_from_image(&entry->info, img);
+      entry->info_valid = TRUE;
+      dt_image_cache_read_release(darktable.image_cache, img);
+    }
 
-          // This is overkill in grouping/ungrouping since grouping operations necessarily refresh the collection
-          // and we already refresh the image group as part of collection_changed signal handler.
-          // Needed when changing image representative though.
-          table->lut[rowid].groupid = info->groupid;
-        }
+    gboolean created = FALSE;
+    if(!entry->thumb)
+    {
+      _add_thumbnail_at_rowid(table, rowid, mouse_over);
+      created = TRUE;
+    }
 
-        // Refresh the cached LUT info from the image cache for write-driven updates
-        // (ratings, color labels, etc.) while still keeping read paths cache-free.
-        const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid_to_update, 'r');
-        if(img)
-        {
-          _thumbtable_info_from_image(&table->lut[rowid].info, img,
-                                      table->lut[rowid].history_items, table->lut[rowid].group_members);
-          table->lut[rowid].info_valid = TRUE;
-          dt_image_cache_read_release(darktable.image_cache, img);
-        }
-        break;
-      }
+    dt_thumbnail_t *thumb = entry->thumb;
+    if(thumb)
+    {
+      if(entry->info_valid)
+        dt_thumbnail_resync_info(thumb, &entry->info);
+      
+      if(!created)
+        dt_thumbnail_update_gui(thumb);
+
+      _add_thumbnail_group_borders(table, thumb);
+      gtk_widget_queue_draw(thumb->widget);
+
+      if(darktable.view_manager->image_info_id == imgid)
+        dt_view_image_info_update(imgid);
     }
   }
 
-  for(GList *i = g_list_first(imgs); i; i = g_list_next(i))
-  {
-    const int32_t imgid_to_update = GPOINTER_TO_INT(i->data);
-    for(GList *l = g_list_first(table->list); l; l = g_list_next(l))
-    {
-      dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
-      if(thumb->imgid == imgid_to_update)
-      {
-        dt_thumbnail_update_infos(thumb);
-        _add_thumbnail_group_borders(table, thumb);
-        gtk_widget_queue_draw(thumb->widget);
-
-        if(darktable.view_manager->image_info_id == imgid_to_update)
-          dt_view_image_info_update(imgid_to_update);
-
-        break;
-      }
-    }
-  }
   dt_pthread_mutex_unlock(&table->lock);
-
-  g_hash_table_destroy(updates);
-  g_array_free(imgids, TRUE);
 }
 
 static void _dt_collection_lut(dt_thumbtable_t *table)
@@ -1236,26 +967,7 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
   table->lut = NULL;
 
   // In-memory collected images don't store group_id, so we need to fetch it again from DB
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-    // Batch-fetch thumbnail metadata in one SQL query to avoid one query per image
-    // through the image cache. This keeps scrolling lightweight and predictable.
-    "SELECT im.id, im.group_id, c.rowid, "
-    "(SELECT COUNT(id) FROM main.images WHERE group_id=im.group_id), "
-    "(SELECT COUNT(imgid) FROM main.history WHERE imgid=c.imgid), "
-    "im.film_id, im.version, im.width, im.height, im.orientation, "
-    "im.flags, "
-    "im.import_timestamp, im.change_timestamp, im.export_timestamp, im.print_timestamp, "
-    "im.exposure, im.exposure_bias, im.aperture, im.iso, im.focal_length, im.focus_distance, "
-    "im.datetime_taken, "
-    "im.longitude, im.latitude, im.altitude, "
-    "im.filename, im.maker, im.model, im.lens, fr.folder, "
-    "COALESCE((SELECT SUM(1 << color) FROM main.color_labels WHERE imgid=im.id), 0) "
-    "FROM main.images AS im "
-    "JOIN memory.collected_images AS c ON im.id = c.imgid "
-    "LEFT JOIN main.film_rolls AS fr ON fr.id = im.film_id "
-    "ORDER BY c.rowid ASC",
-    -1, &stmt, NULL);
+  sqlite3_stmt *stmt = dt_thumbtable_info_get_collection_stmt();
 
   // NOTE: non-grouped images have group_id equal to their own id
   // grouped images have group_id equal to the id of the "group leader".
@@ -1284,74 +996,18 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
     }
 
     dt_thumbtable_cache_t entry = {0};
-    entry.imgid = imgid;
-    entry.groupid = groupid;
-    entry.group_members = group_items;
-    entry.history_items = history_items;
     entry.thumb = NULL;
 
     dt_thumbnail_image_info_t *info = &entry.info;
-    info->imgid = imgid;
-    info->film_id = sqlite3_column_int(stmt, 5);
-    info->groupid = groupid;
-    info->version = sqlite3_column_int(stmt, 6);
-    info->width = sqlite3_column_int(stmt, 7);
-    info->height = sqlite3_column_int(stmt, 8);
-    info->orientation = sqlite3_column_int(stmt, 9);
-    info->p_width = 0;
-    info->p_height = 0;
-    info->flags = sqlite3_column_int(stmt, 10);
-    info->loader = LOADER_UNKNOWN;
-    info->import_timestamp = sqlite3_column_int64(stmt, 11);
-    info->change_timestamp = sqlite3_column_int64(stmt, 12);
-    info->export_timestamp = sqlite3_column_int64(stmt, 13);
-    info->print_timestamp = sqlite3_column_int64(stmt, 14);
-    info->exif_exposure = sqlite3_column_double(stmt, 15);
-    if(sqlite3_column_type(stmt, 16) == SQLITE_FLOAT)
-      info->exif_exposure_bias = sqlite3_column_double(stmt, 16);
-    else
-      info->exif_exposure_bias = NAN;
-    info->exif_aperture = sqlite3_column_double(stmt, 17);
-    info->exif_iso = sqlite3_column_double(stmt, 18);
-    info->exif_focal_length = sqlite3_column_double(stmt, 19);
-    info->exif_focus_distance = sqlite3_column_double(stmt, 20);
-    info->exif_datetime_taken = sqlite3_column_int64(stmt, 21);
-    if(sqlite3_column_type(stmt, 22) == SQLITE_FLOAT)
-      info->geoloc_longitude = sqlite3_column_double(stmt, 22);
-    else
-      info->geoloc_longitude = NAN;
-    if(sqlite3_column_type(stmt, 23) == SQLITE_FLOAT)
-      info->geoloc_latitude = sqlite3_column_double(stmt, 23);
-    else
-      info->geoloc_latitude = NAN;
-    if(sqlite3_column_type(stmt, 24) == SQLITE_FLOAT)
-      info->geoloc_elevation = sqlite3_column_double(stmt, 24);
-    else
-      info->geoloc_elevation = NAN;
-
-    const char *filename = (const char *)sqlite3_column_text(stmt, 25);
-    if(filename) g_strlcpy(info->filename, filename, sizeof(info->filename));
-    const char *maker = (const char *)sqlite3_column_text(stmt, 26);
-    if(maker) g_strlcpy(info->exif_maker, maker, sizeof(info->exif_maker));
-    const char *model = (const char *)sqlite3_column_text(stmt, 27);
-    if(model) g_strlcpy(info->exif_model, model, sizeof(info->exif_model));
-    const char *lens = (const char *)sqlite3_column_text(stmt, 28);
-    if(lens) g_strlcpy(info->exif_lens, lens, sizeof(info->exif_lens));
-    const char *folder = (const char *)sqlite3_column_text(stmt, 29);
-    if(folder) g_strlcpy(info->folder, folder, sizeof(info->folder));
-
-    info->colorlabels = sqlite3_column_int(stmt, 30);
-    info->is_grouped = (group_items > 1);
-    info->is_altered = (history_items > 0);
-    _thumbtable_info_finalize(info);
+    dt_thumbtable_info_from_stmt(info, stmt, history_items, group_items);
 #ifndef NDEBUG
-    _thumbtable_debug_assert_info_matches_cache(info, history_items, group_items);
+    dt_thumbtable_info_debug_assert_matches_cache(info, history_items, group_items);
 #endif
     entry.info_valid = TRUE;
 
     g_array_append_val(collection, entry);
   }
-  sqlite3_finalize(stmt);
+  sqlite3_reset(stmt);
 
   if(!collection || collection->len == 0)
   {
@@ -1711,7 +1367,7 @@ int _imgid_to_rowid(dt_thumbtable_t *table, int32_t imgid)
   dt_pthread_mutex_lock(&table->lock);
   for(int i = 0; i < table->collection_count; i++)
   {
-    if(table->lut[i].imgid == imgid)
+    if(table->lut[i].info.imgid == imgid)
     {
       rowid = i;
       break;
@@ -1774,7 +1430,7 @@ void _move_in_grid(dt_thumbtable_t *table, GdkEventKey *event, dt_thumbtable_dir
   int new_rowid = CLAMP(current_rowid + offset, 0, table->collection_count - 1);
 
   dt_pthread_mutex_lock(&table->lock);
-  int new_imgid = table->lut[new_rowid].imgid;
+  int new_imgid = table->lut[new_rowid].info.imgid;
   dt_pthread_mutex_unlock(&table->lock);
 
   dt_thumbtable_dispatch_over(table, event->type, new_imgid);
@@ -1828,7 +1484,7 @@ gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpo
   if(imgid < 0 && table->lut)
   {
     dt_pthread_mutex_lock(&table->lock);
-    imgid = table->lut[0].imgid;
+    imgid = table->lut[0].info.imgid;
     dt_pthread_mutex_unlock(&table->lock);
   }
 
@@ -2192,6 +1848,8 @@ void dt_thumbtable_cleanup(dt_thumbtable_t *table)
 
   _dt_thumbtable_empty_list(table);
 
+  dt_thumbtable_info_cleanup();
+
   dt_pthread_mutex_destroy(&table->lock);
 
   if(table->lut) free(table->lut);
@@ -2238,7 +1896,7 @@ void dt_thumbtable_select_all(dt_thumbtable_t *table)
 
   dt_pthread_mutex_lock(&table->lock);
   for(size_t i = 0; i < table->collection_count; i++)
-    img = g_list_prepend(img, GINT_TO_POINTER(table->lut[i].imgid));
+    img = g_list_prepend(img, GINT_TO_POINTER(table->lut[i].info.imgid));
   dt_pthread_mutex_unlock(&table->lock);
 
   if(img)
@@ -2297,13 +1955,13 @@ void dt_thumbtable_select_range(dt_thumbtable_t *table, const int rowid)
   {
     // select after
     for(int i = rowid_end + 1; i <= rowid; i++)
-      img = g_list_prepend(img, GINT_TO_POINTER(table->lut[i].imgid));
+      img = g_list_prepend(img, GINT_TO_POINTER(table->lut[i].info.imgid));
   }
   else if(rowid < rowid_start && rowid_start > 0)
   {
     // select before
     for(int i = rowid_start - 1; i >= rowid; i--)
-      img = g_list_prepend(img, GINT_TO_POINTER(table->lut[i].imgid));
+      img = g_list_prepend(img, GINT_TO_POINTER(table->lut[i].info.imgid));
   }
   // else: select within. What should that yield ??? Deselect ?
 

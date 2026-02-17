@@ -230,6 +230,8 @@ typedef struct dt_image_t
 
   // used by library
   int32_t num, flags, film_id, id, group_id, version;
+  uint32_t group_members;
+  uint32_t history_items;
 
   //timestamps
   GTimeSpan import_timestamp, change_timestamp, export_timestamp, print_timestamp;

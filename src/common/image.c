@@ -1588,6 +1588,8 @@ void dt_image_init(dt_image_t *img)
   img->buf_dsc = (dt_iop_buffer_dsc_t){.channels = 0, .datatype = TYPE_UNKNOWN };
   img->film_id = UNKNOWN_IMAGE;
   img->group_id = UNKNOWN_IMAGE;
+  img->group_members = 0;
+  img->history_items = 0;
   img->flags = 0;
   img->id = UNKNOWN_IMAGE;
   img->version = -1;

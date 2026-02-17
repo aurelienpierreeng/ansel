@@ -21,6 +21,7 @@
 
 #include "dtgtk/thumbnail.h"
 #include "dtgtk/thumbtable.h"
+#include "dtgtk/thumbtable_info.h"
 
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
@@ -67,7 +68,7 @@ static void _set_flag(GtkWidget *w, GtkStateFlags flag, gboolean activate)
 static void _image_update_group_tooltip(dt_thumbnail_t *thumb)
 {
   thumb_return_if_fails(thumb);
-  if(!thumb->info.is_grouped)
+  if(!dt_thumbtable_info_is_grouped(&thumb->info))
   {
     gtk_widget_set_has_tooltip(thumb->w_group, FALSE);
     return;
@@ -77,11 +78,11 @@ static void _image_update_group_tooltip(dt_thumbnail_t *thumb)
   int nb = 0;
 
   // the group leader
-  if(thumb->imgid == thumb->groupid)
+  if(thumb->info.imgid == thumb->info.groupid)
     tt = g_strdup_printf("\n\u2022 <b>%s (%s)</b>", _("current"), _("leader"));
   else
   {
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, thumb->groupid, 'r');
+    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, thumb->info.groupid, 'r');
     if(img)
     {
       tt = g_strdup_printf("%s\n\u2022 <b>%s (%s)</b>", _("\nclick here to set this image as group leader\n"), img->filename, _("leader"));
@@ -98,16 +99,16 @@ static void _image_update_group_tooltip(dt_thumbnail_t *thumb)
                               " WHERE group_id = ?1", -1, &stmt,
                               NULL);
   // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, thumb->groupid);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, thumb->info.groupid);
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
     nb++;
     const int id = sqlite3_column_int(stmt, 0);
     const int v = sqlite3_column_int(stmt, 1);
 
-    if(id != thumb->groupid)
+    if(id != thumb->info.groupid)
     {
-      if(id == thumb->imgid)
+      if(id == thumb->info.imgid)
         tt = dt_util_dstrcat(tt, "\n\u2022 %s", _("current"));
       else
       {
@@ -185,12 +186,12 @@ static GtkWidget *_menuitem_from_text(const char *label, const char *value, GtkW
 static void _color_label_callback(GtkWidget *widget, dt_thumbnail_t *thumb)
 {
   int color = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "custom-data"));
-  dt_colorlabels_toggle_label_on_list(g_list_append(NULL, GINT_TO_POINTER(thumb->imgid)), color, TRUE);
+  dt_colorlabels_toggle_label_on_list(g_list_append(NULL, GINT_TO_POINTER(thumb->info.imgid)), color, TRUE);
 }
 
 static void _preview_window_open(GtkWidget *widget, dt_thumbnail_t *thumb)
 {
-  dt_preview_window_spawn(thumb->imgid);
+  dt_preview_window_spawn(thumb->info.imgid);
 }
 
 static GtkWidget *_create_menu(dt_thumbnail_t *thumb)
@@ -244,119 +245,6 @@ static GtkWidget *_create_menu(dt_thumbnail_t *thumb)
 
   return menu;
 }
-
-
-static void _image_get_infos(dt_thumbnail_t *thumb)
-{
-  thumb_return_if_fails(thumb);
-
-  // we only get here infos that might change, others(exif, ...) are cached on widget creation
-  const int old_rating = thumb->info.rating;
-  // Fast path: copy precomputed metadata from the thumbtable LUT to avoid
-  // per-image image-cache reads during scrolling.
-  gboolean from_lut = FALSE;
-  if(thumb->table && thumb->table->lut
-     && thumb->rowid >= 0 && thumb->rowid < thumb->table->collection_count)
-  {
-    dt_thumbtable_cache_t *entry = &thumb->table->lut[thumb->rowid];
-    if(entry->imgid == thumb->imgid && entry->info_valid)
-    {
-      dt_thumbtable_fill_info_expensive(&entry->info);
-      thumb->info = entry->info;
-      thumb->info_valid = TRUE;
-      thumb->groupid = entry->groupid;
-      from_lut = TRUE;
-    }
-  }
-
-  // Fallback to image cache only when LUT data is unavailable.
-  // This keeps write-driven updates correct while minimizing SQL traffic.
-  if(!from_lut)
-  {
-    memset(&thumb->info, 0, sizeof(thumb->info));
-    thumb->info_valid = FALSE;
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, thumb->imgid, 'r');
-    if(img)
-    {
-      thumb->info.has_localcopy = (img->flags & DT_IMAGE_LOCAL_COPY);
-      thumb->info.rating = img->flags & DT_IMAGE_REJECTED ? DT_VIEW_REJECT : (img->flags & DT_VIEW_RATINGS_MASK);
-      thumb->info.is_bw = dt_image_monochrome_flags(img);
-      thumb->info.is_bw_flow = dt_image_use_monochrome_workflow(img);
-      thumb->info.is_hdr = dt_image_is_hdr(img);
-      g_strlcpy(thumb->info.filename, img->filename, sizeof(thumb->info.filename));
-      dt_image_film_roll_directory(img, thumb->info.folder, sizeof(thumb->info.folder));
-      thumb->info.has_audio = (img->flags & DT_IMAGE_HAS_WAV);
-      dt_datetime_img_to_local(thumb->info.datetime, sizeof(thumb->info.datetime), img, FALSE);
-      g_strlcpy(thumb->info.camera, img->camera_makermodel, sizeof(thumb->info.camera));
-
-      thumb->groupid = img->group_id;
-      thumb->info.colorlabels = img->color_labels;
-
-      thumb->info.imgid = img->id;
-      thumb->info.film_id = img->film_id;
-      thumb->info.groupid = img->group_id;
-      thumb->info.version = img->version;
-      thumb->info.width = img->width;
-      thumb->info.height = img->height;
-      thumb->info.orientation = img->orientation;
-      thumb->info.p_width = img->p_width;
-      thumb->info.p_height = img->p_height;
-      thumb->info.flags = img->flags;
-      thumb->info.loader = img->loader;
-      thumb->info.import_timestamp = img->import_timestamp;
-      thumb->info.change_timestamp = img->change_timestamp;
-      thumb->info.export_timestamp = img->export_timestamp;
-      thumb->info.print_timestamp = img->print_timestamp;
-      thumb->info.exif_exposure = img->exif_exposure;
-      thumb->info.exif_exposure_bias = img->exif_exposure_bias;
-      thumb->info.exif_aperture = img->exif_aperture;
-      thumb->info.exif_iso = img->exif_iso;
-      thumb->info.exif_focal_length = img->exif_focal_length;
-      thumb->info.exif_focus_distance = img->exif_focus_distance;
-      thumb->info.exif_datetime_taken = img->exif_datetime_taken;
-      thumb->info.geoloc_latitude = img->geoloc.latitude;
-      thumb->info.geoloc_longitude = img->geoloc.longitude;
-      thumb->info.geoloc_elevation = img->geoloc.elevation;
-
-      g_strlcpy(thumb->info.exif_maker, img->exif_maker, sizeof(thumb->info.exif_maker));
-      g_strlcpy(thumb->info.exif_model, img->exif_model, sizeof(thumb->info.exif_model));
-      g_strlcpy(thumb->info.exif_lens, img->exif_lens, sizeof(thumb->info.exif_lens));
-      if(img->film_id < 0)
-        g_strlcpy(thumb->info.filmroll, _("orphaned image"), sizeof(thumb->info.filmroll));
-      else
-        g_strlcpy(thumb->info.filmroll, dt_image_film_roll_name(thumb->info.folder), sizeof(thumb->info.filmroll));
-
-      gboolean from_cache = FALSE;
-      dt_image_full_path(img->id, thumb->info.fullpath, sizeof(thumb->info.fullpath), &from_cache, __FUNCTION__);
-
-      thumb->info_valid = TRUE;
-
-      dt_image_cache_read_release(darktable.image_cache, img);
-    }
-  }
-  // if the rating as changed, update the rejected
-  if(old_rating != thumb->info.rating)
-    _thumb_update_rating_class(thumb);
-
-  // colorlabels
-  if(thumb->w_color)
-  {
-    GtkDarktableThumbnailBtn *btn = (GtkDarktableThumbnailBtn *)thumb->w_color;
-    btn->icon_flags = thumb->info.colorlabels;
-  }
-
-  if(!from_lut && thumb->table && thumb->table->lut)
-  {
-    // altered
-    thumb->info.is_altered = (thumb->table) ? thumb->table->lut[thumb->rowid].history_items > 0 : FALSE;
-
-    // grouping
-    thumb->info.is_grouped = (thumb->table) ? thumb->table->lut[thumb->rowid].group_members > 1 : FALSE;
-  }
-
-  _thumb_write_extension(thumb);
-}
-
 
 static gboolean _event_cursor_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
@@ -434,7 +322,7 @@ int32_t _get_image_buffer(dt_job_t *job)
   const gboolean show_focus_peaking = (thumb->table && thumb->table->focus_peaking);
   const gboolean show_focus_clusters = (thumb->table && thumb->table->focus_regions);
   const gboolean zoom_in = (thumb->table && thumb->table->zoom > DT_THUMBTABLE_ZOOM_FIT);
-  const int32_t imgid = thumb->imgid;
+  const int32_t imgid = thumb->info.imgid;
 
   dt_pthread_mutex_unlock(&thumb->lock);
 
@@ -448,7 +336,7 @@ int32_t _get_image_buffer(dt_job_t *job)
   float y_center = 0.f;
 
   // From there, never read thumb->... directly since it might get destroyed in mainthread anytime.
-  dt_print(DT_DEBUG_LIGHTTABLE, "[lighttable] fetching or computing thumbnail %i\n", thumb->imgid);
+  dt_print(DT_DEBUG_LIGHTTABLE, "[lighttable] fetching or computing thumbnail %i\n", thumb->info.imgid);
 
   // Get the actual image content. This typically triggers a rendering pipeline,
   // and can possibly take a long time.
@@ -573,7 +461,7 @@ int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb)
   // Drawing the focus peaking and doing the color conversions
   // can be expensive on large thumbnails. Do it in a background job,
   // so the thumbtable stays responsive.
-  thumb->job = dt_control_job_create(&_get_image_buffer, "get image %i", thumb->imgid);
+  thumb->job = dt_control_job_create(&_get_image_buffer, "get image %i", thumb->info.imgid);
   dt_control_job_set_params(thumb->job, thumb, NULL);
   dt_control_add_job(darktable.control, DT_JOB_QUEUE_SYSTEM_FG, thumb->job);
 
@@ -606,7 +494,7 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 
   dt_thumbnail_get_image_buffer(thumb);
 
-  dt_print(DT_DEBUG_LIGHTTABLE, "[lighttable] redrawing thumbnail %i\n", thumb->imgid);
+  dt_print(DT_DEBUG_LIGHTTABLE, "[lighttable] redrawing thumbnail %i\n", thumb->info.imgid);
 
   dt_pthread_mutex_lock(&thumb->lock);
   if(thumb->image_inited && thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
@@ -665,8 +553,8 @@ static void _thumb_update_icons(dt_thumbnail_t *thumb)
   gboolean show = (thumb->over > DT_THUMBNAIL_OVERLAYS_NONE);
 
   gtk_widget_set_visible(thumb->w_local_copy, (thumb->info.has_localcopy && show) || DEBUG);
-  gtk_widget_set_visible(thumb->w_altered, (thumb->info.is_altered && show) || DEBUG);
-  gtk_widget_set_visible(thumb->w_group, (thumb->info.is_grouped && show) || DEBUG);
+  gtk_widget_set_visible(thumb->w_altered, (dt_thumbtable_info_is_altered(&thumb->info) && show) || DEBUG);
+  gtk_widget_set_visible(thumb->w_group, (dt_thumbtable_info_is_grouped(&thumb->info) && show) || DEBUG);
   gtk_widget_set_visible(thumb->w_audio, (thumb->info.has_audio && show) || DEBUG);
   gtk_widget_set_visible(thumb->w_color, show || DEBUG);
   gtk_widget_set_visible(thumb->w_bottom_eb, show || DEBUG);
@@ -685,7 +573,7 @@ static void _thumb_update_icons(dt_thumbnail_t *thumb)
     _set_flag(thumb->w_stars[i], GTK_STATE_FLAG_ACTIVE, (thumb->info.rating > i && thumb->info.rating < DT_VIEW_REJECT));
   }
 
-  _set_flag(thumb->w_group, GTK_STATE_FLAG_ACTIVE, (thumb->imgid == thumb->groupid));
+  _set_flag(thumb->w_group, GTK_STATE_FLAG_ACTIVE, (thumb->info.imgid == thumb->info.groupid));
   _set_flag(thumb->w_main, GTK_STATE_FLAG_SELECTED, thumb->selected);
   _set_flag(thumb->widget, GTK_STATE_FLAG_SELECTED, thumb->selected);
 }
@@ -699,15 +587,15 @@ static gboolean _event_main_press(GtkWidget *widget, GdkEventButton *event, gpoi
   // Ensure mouse_over_id is set because that's what darkroom uses to open a picture.
   // NOTE: Duplicate module uses that fucking thumbnail without a table...
   if(thumb->table)
-    dt_thumbtable_dispatch_over(thumb->table, event->type, thumb->imgid);
+    dt_thumbtable_dispatch_over(thumb->table, event->type, thumb->info.imgid);
   else
-    dt_control_set_mouse_over_id(thumb->imgid);
+    dt_control_set_mouse_over_id(thumb->info.imgid);
 
   // raise signal on double click
   if(event->button == 1 && event->type == GDK_2BUTTON_PRESS)
   {
     thumb->dragging = FALSE;
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE, thumb->imgid);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE, thumb->info.imgid);
     return TRUE;
   }
   else if(event->button == GDK_BUTTON_SECONDARY && event->type == GDK_BUTTON_PRESS)
@@ -731,9 +619,9 @@ static gboolean _event_main_release(GtkWidget *widget, GdkEventButton *event, gp
      && thumb->table && thumb->table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
     if(dt_modifier_is(event->state, 0))
-      dt_selection_select_single(darktable.selection, thumb->imgid);
+      dt_selection_select_single(darktable.selection, thumb->info.imgid);
     else if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
-      dt_selection_toggle(darktable.selection, thumb->imgid);
+      dt_selection_toggle(darktable.selection, thumb->info.imgid);
     else if(dt_modifier_is(event->state, GDK_SHIFT_MASK) && thumb->table)
       dt_thumbtable_select_range(thumb->table, thumb->rowid);
     // Because selection might include several images, we handle styling globally
@@ -768,7 +656,7 @@ static gboolean _event_rating_release(GtkWidget *widget, GdkEventButton *event, 
       rating = DT_VIEW_STAR_5;
 
     if(rating != DT_VIEW_DESERT)
-      dt_ratings_apply_on_image(thumb->imgid, rating, TRUE, TRUE, TRUE);
+      dt_ratings_apply_on_image(thumb->info.imgid, rating, TRUE, TRUE, TRUE);
   }
   return TRUE;
 }
@@ -779,7 +667,7 @@ static gboolean _event_grouping_release(GtkWidget *widget, GdkEventButton *event
   thumb_return_if_fails(thumb, TRUE);
   if(thumb->disable_actions) return FALSE;
   if(dtgtk_thumbnail_btn_is_hidden(widget)) return FALSE;
-  dt_grouping_change_representative(thumb->imgid);
+  dt_grouping_change_representative(thumb->info.imgid);
   return FALSE;
 }
 
@@ -796,13 +684,13 @@ static gboolean _event_audio_release(GtkWidget *widget, GdkEventButton *event, g
     if(darktable.view_manager->audio.audio_player_id != -1)
     {
       // don't start the audio for the image we just killed it for
-      if(darktable.view_manager->audio.audio_player_id == thumb->imgid) start_audio = FALSE;
+      if(darktable.view_manager->audio.audio_player_id == thumb->info.imgid) start_audio = FALSE;
       dt_view_audio_stop(darktable.view_manager);
     }
 
     if(start_audio)
     {
-      dt_view_audio_start(darktable.view_manager, thumb->imgid);
+      dt_view_audio_start(darktable.view_manager, thumb->info.imgid);
     }
   }
   return FALSE;
@@ -922,9 +810,9 @@ static gboolean _event_main_motion(GtkWidget *widget, GdkEventMotion *event, gpo
     // Be conservative with sending mouse_over_id events/signal because many
     // places in the soft listen to them and refresh stuff from DB, so it's expensive.
     if(thumb->table)
-      dt_thumbtable_dispatch_over(thumb->table, event->type, thumb->imgid);
+      dt_thumbtable_dispatch_over(thumb->table, event->type, thumb->info.imgid);
     else
-      dt_control_set_mouse_over_id(thumb->imgid);
+      dt_control_set_mouse_over_id(thumb->info.imgid);
 
     dt_thumbnail_set_mouseover(thumb, TRUE);
   }
@@ -938,9 +826,9 @@ static gboolean _event_main_enter(GtkWidget *widget, GdkEventCrossing *event, gp
   if(!gtk_widget_is_visible(thumb->widget)) return TRUE;
 
   if(thumb->table)
-    dt_thumbtable_dispatch_over(thumb->table, event->type, thumb->imgid);
+    dt_thumbtable_dispatch_over(thumb->table, event->type, thumb->info.imgid);
   else
-    dt_control_set_mouse_over_id(thumb->imgid);
+    dt_control_set_mouse_over_id(thumb->info.imgid);
 
   dt_thumbnail_set_mouseover(thumb, TRUE);
   return FALSE;
@@ -966,9 +854,9 @@ static gboolean _altered_enter(GtkWidget *widget, GdkEventCrossing *event, gpoin
 {
   dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
   thumb_return_if_fails(thumb, TRUE);
-  if(thumb->info.is_altered)
+  if(dt_thumbtable_info_is_altered(&thumb->info))
   {
-    char *tooltip = dt_history_get_items_as_string(thumb->imgid);
+    char *tooltip = dt_history_get_items_as_string(thumb->info.imgid);
     if(tooltip)
     {
       gtk_widget_set_tooltip_text(thumb->w_altered, tooltip);
@@ -1251,14 +1139,33 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   return thumb->widget;
 }
 
-dt_thumbnail_t *dt_thumbnail_new(int32_t imgid, int rowid, int32_t groupid,
-                                 dt_thumbnail_overlay_t over, dt_thumbtable_t *table)
+void dt_thumbnail_resync_info(dt_thumbnail_t *thumb, dt_thumbnail_image_info_t *info)
+{
+  if(!thumb || !info) return;
+
+  memcpy(&thumb->info, info, sizeof(dt_thumbnail_image_info_t));
+  dt_thumbtable_info_finalize(&thumb->info, TRUE);
+  thumb->info_valid = TRUE;
+
+  if(!thumb->widget || !thumb->w_main) return;
+
+  _thumb_update_rating_class(thumb);
+  _thumb_update_icons(thumb);
+  _create_alternative_view(thumb);
+  _thumb_write_extension(thumb);
+
+  if(thumb->w_color)
+  {
+    GtkDarktableThumbnailBtn *btn = (GtkDarktableThumbnailBtn *)thumb->w_color;
+    btn->icon_flags = thumb->info.colorlabels;
+  }
+}
+
+dt_thumbnail_t *dt_thumbnail_new(int rowid, dt_thumbnail_overlay_t over, dt_thumbtable_t *table, dt_thumbnail_image_info_t *info)
 {
   dt_thumbnail_t *thumb = calloc(1, sizeof(dt_thumbnail_t));
 
-  thumb->imgid = imgid;
   thumb->rowid = rowid;
-  thumb->groupid = groupid;
   thumb->over = over;
   thumb->table = table;
   thumb->zoomx = 0.;
@@ -1270,15 +1177,13 @@ dt_thumbnail_t *dt_thumbnail_new(int32_t imgid, int rowid, int32_t groupid,
 
   dt_pthread_mutex_init(&thumb->lock, NULL);
 
-  // we create the widget
   dt_thumbnail_create_widget(thumb);
 
-  // Query ratings, extension and such.
-  // This will then only run on "image_info_changed" event.
-  dt_thumbnail_update_infos(thumb);
+  dt_thumbnail_resync_info(thumb, info);
+  dt_thumbnail_update_gui(thumb);
 
   // This will then only run on "selection_changed" event
-  dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->imgid));
+  dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->info.imgid));
 
   return thumb;
 }
@@ -1318,27 +1223,16 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
   return 0;
 }
 
-void dt_thumbnail_update_infos(dt_thumbnail_t *thumb)
+void dt_thumbnail_update_gui(dt_thumbnail_t *thumb)
 {
   thumb_return_if_fails(thumb);
-  _image_get_infos(thumb);
+  
+  _thumb_update_rating_class(thumb);
+  GtkDarktableThumbnailBtn *btn = (GtkDarktableThumbnailBtn *)thumb->w_color;
+  btn->icon_flags = thumb->info.colorlabels;
+  _thumb_write_extension(thumb);
   _thumb_update_icons(thumb);
   _create_alternative_view(thumb);
-}
-
-void dt_thumbnail_update_partial_infos(dt_thumbnail_t *thumb)
-{
-  thumb_return_if_fails(thumb);
-
-  // altered
-  thumb->info.is_altered = (thumb->table) ? thumb->table->lut[thumb->rowid].history_items > 0 : FALSE;
-
-  // grouping
-  thumb->info.is_grouped = (thumb->table) ? thumb->table->lut[thumb->rowid].group_members > 1 : FALSE;
-  thumb->groupid = (thumb->table) ? thumb->table->lut[thumb->rowid].groupid : UNKNOWN_IMAGE;
-  thumb->info.groupid = thumb->groupid;
-
-  _thumb_update_icons(thumb);
 }
 
 void dt_thumbnail_set_overlay(dt_thumbnail_t *thumb, dt_thumbnail_overlay_t mode)
@@ -1434,7 +1328,7 @@ static int _thumb_resize_overlays(dt_thumbnail_t *thumb, int width, int height)
 void dt_thumbnail_resize(dt_thumbnail_t *thumb, int width, int height)
 {
   thumb_return_if_fails(thumb);
-  //fprintf(stdout, "calling resize on %i with overlay %i\n", thumb->imgid, thumb->over);
+  //fprintf(stdout, "calling resize on %i with overlay %i\n", thumb->info.imgid, thumb->over);
 
   if(width < 1 || height < 1) return;
 

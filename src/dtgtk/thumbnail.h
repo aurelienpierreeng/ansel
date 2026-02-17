@@ -22,6 +22,7 @@
 #include "common/atomic.h"
 #include "common/darktable.h"
 #include "common/debug.h"
+#include "dtgtk/thumbtable_info.h"
 
 #include <glib.h>
 #include <gtk/gtk.h>
@@ -47,61 +48,10 @@ typedef enum dt_thumbnail_overlay_t
   DT_THUMBNAIL_OVERLAYS_LAST
 } dt_thumbnail_overlay_t;
 
-typedef struct dt_thumbnail_image_info_t
-{
-  int32_t imgid;
-  int32_t film_id;
-  int32_t groupid;
-  int32_t version;
-  int32_t width;
-  int32_t height;
-  int32_t orientation;
-  int32_t p_width;
-  int32_t p_height;
-  int32_t flags;
-  int32_t loader;
-
-  int rating;
-  int colorlabels;
-  gboolean has_localcopy;
-  gboolean has_audio;
-  gboolean is_bw;
-  gboolean is_bw_flow;
-  gboolean is_hdr;
-  gboolean is_altered;
-  gboolean is_grouped;
-
-  GTimeSpan import_timestamp;
-  GTimeSpan change_timestamp;
-  GTimeSpan export_timestamp;
-  GTimeSpan print_timestamp;
-
-  float exif_exposure;
-  float exif_exposure_bias;
-  float exif_aperture;
-  float exif_iso;
-  float exif_focal_length;
-  float exif_focus_distance;
-  GTimeSpan exif_datetime_taken;
-
-  double geoloc_latitude;
-  double geoloc_longitude;
-  double geoloc_elevation;
-
-  char filename[DT_MAX_FILENAME_LEN];
-  char fullpath[PATH_MAX];
-  char filmroll[PATH_MAX];
-  char folder[PATH_MAX];
-  char datetime[200];
-  char camera[128];
-  char exif_maker[64];
-  char exif_model[64];
-  char exif_lens[128];
-} dt_thumbnail_image_info_t;
 
 typedef struct
 {
-  int32_t imgid, rowid, groupid;
+  int32_t rowid;
   int width, height;         // current thumb size (with the background and the border)
   int x, y;                  // current position at screen
   int img_width, img_height; // current image size (can be greater than the image box in case of zoom)
@@ -174,7 +124,8 @@ typedef struct
 
 } dt_thumbnail_t;
 
-dt_thumbnail_t *dt_thumbnail_new(int32_t imgid, int rowid, int32_t groupid, dt_thumbnail_overlay_t over, struct dt_thumbtable_t *table);
+dt_thumbnail_t *dt_thumbnail_new(int rowid, dt_thumbnail_overlay_t over, struct dt_thumbtable_t *table, 
+                                 dt_thumbnail_image_info_t *info);
 int dt_thumbnail_destroy(dt_thumbnail_t *thumb);
 GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb);
 void dt_thumbnail_resize(dt_thumbnail_t *thumb, int width, int height);
@@ -186,11 +137,11 @@ void dt_thumbnail_set_overlay(dt_thumbnail_t *thumb, dt_thumbnail_overlay_t mode
 // note that it's just cosmetic as dropping occurs in thumbtable in any case
 void dt_thumbnail_set_drop(dt_thumbnail_t *thumb, gboolean accept_drop);
 
-// Full update of the image information and update icons accordingly, using the image cache
-void dt_thumbnail_update_infos(dt_thumbnail_t *thumb);
+// Resync cached image info for this thumbnail with any arbitrary new info
+void dt_thumbnail_resync_info(dt_thumbnail_t *thumb, dt_thumbnail_image_info_t *info);
 
-// Partial (quick) update of the image information from the thumbtable LUT, avoiding image cache lock
-void dt_thumbnail_update_partial_infos(dt_thumbnail_t *thumb);
+// Full update of the image information and update icons accordingly, using the image cache
+void dt_thumbnail_update_gui(dt_thumbnail_t *thumb);
 
 // check if the image is selected and set its state and background
 void dt_thumbnail_update_selection(dt_thumbnail_t *thumb, gboolean selected);
