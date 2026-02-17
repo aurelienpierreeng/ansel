@@ -63,7 +63,10 @@ typedef struct dt_lib_textnotes_t
   GtkListStore *completion_model;
   GtkTextMark *completion_mark;
   gchar *path;
+  gchar *image_path;
+  gchar *image_dir;
   gchar *height_setting;
+  dt_variables_params_t *vars_params;
   int32_t imgid;
   gboolean loading;
   gboolean dirty;
@@ -98,6 +101,10 @@ int position()
 static void _save_now(dt_lib_module_t *self);
 static void _render_preview(dt_lib_textnotes_t *d, const char *text);
 static void _update_for_current_image(dt_lib_module_t *self);
+static gboolean _image_has_txt_flag(const int32_t imgid);
+static gboolean _set_image_paths(dt_lib_textnotes_t *d, const int32_t imgid);
+static char *_image_text_path(dt_lib_textnotes_t *d);
+static void _clear_variables_cache(dt_lib_textnotes_t *d);
 
 static gchar *_get_buffer_text(GtkTextBuffer *buffer)
 {
@@ -657,15 +664,16 @@ static void _open_uri(const char *uri)
 static gchar *_expand_text_for_preview(dt_lib_textnotes_t *d, const char *source_text)
 {
   if(!d || d->imgid <= 0) return NULL;
+  if(!source_text || !*source_text) return NULL;
+  if(!strstr(source_text, "$(")) return NULL;
 
-  dt_variables_params_t *vp;
-  dt_variables_params_init(&vp);
+  if(!_set_image_paths(d, d->imgid))
+    return NULL;
+  if(!d->vars_params)
+    dt_variables_params_init(&d->vars_params);
 
-  char input_dir[PATH_MAX] = { 0 };
-  gboolean from_cache = TRUE;
-  dt_image_full_path(d->imgid, input_dir, sizeof(input_dir), &from_cache, __FUNCTION__);
-
-  vp->filename = input_dir;
+  dt_variables_params_t *vp = d->vars_params;
+  vp->filename = d->image_path;
   vp->jobcode = "textnotes";
   vp->imgid = d->imgid;
   vp->sequence = 0;
@@ -674,7 +682,6 @@ static gchar *_expand_text_for_preview(dt_lib_textnotes_t *d, const char *source
   gchar *tmp = g_strdup(source_text ? source_text : "");
   gchar *expanded = dt_variables_expand(vp, tmp, TRUE);
   g_free(tmp);
-  dt_variables_params_destroy(vp);
   return expanded;
 }
 
@@ -1090,20 +1097,10 @@ static gchar *_get_image_base_dir(dt_lib_textnotes_t *d)
 {
   if(!d || d->imgid <= 0) return NULL;
 
-  char *txt_path = dt_image_get_text_path(d->imgid);
-  if(txt_path)
-  {
-    gchar *dir = g_path_get_dirname(txt_path);
-    g_free(txt_path);
-    return dir;
-  }
-
-  gboolean from_cache = FALSE;
-  char image_path[PATH_MAX] = { 0 };
-  dt_image_full_path(d->imgid, image_path, sizeof(image_path), &from_cache, __FUNCTION__);
-  if(image_path[0] == '\0') return NULL;
-
-  return g_path_get_dirname(image_path);
+  if(!_set_image_paths(d, d->imgid))
+    return NULL;
+  if(d->image_dir) return g_strdup(d->image_dir);
+  return g_path_get_dirname(d->image_path);
 }
 
 static int _get_preview_scale(dt_lib_textnotes_t *d)
@@ -1595,8 +1592,7 @@ static void _update_mtime_label(dt_lib_module_t *self)
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
   if(!d->mtime_label) return;
   if(!dt_lib_gui_get_expanded(self)) return;
-
-  char *path = (d->imgid > 0) ? dt_image_get_text_path(d->imgid) : NULL;
+  char *path = _image_text_path(d);
   if(!path)
   {
     _clear_mtime_label(d);
@@ -1803,23 +1799,69 @@ static void _ensure_has_txt_flag(const int32_t imgid)
   dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_SAFE);
 }
 
-static char *_text_sidecar_save_path(const int32_t imgid)
+static gboolean _image_has_txt_flag(const int32_t imgid)
 {
-  if(imgid <= 0) return NULL;
+  if(imgid <= 0) return FALSE;
+
+  dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  if(!img) return FALSE;
+  const gboolean has_txt = (img->flags & DT_IMAGE_HAS_TXT);
+  dt_image_cache_read_release(darktable.image_cache, img);
+  return has_txt;
+}
+
+static void _clear_variables_cache(dt_lib_textnotes_t *d)
+{
+  if(!d || !d->vars_params) return;
+  dt_variables_params_destroy(d->vars_params);
+  d->vars_params = NULL;
+}
+
+static char *_image_text_path(dt_lib_textnotes_t *d)
+{
+  if(!d || d->imgid <= 0) return NULL;
+  if(!_image_has_txt_flag(d->imgid)) return NULL;
+
+  if(!_set_image_paths(d, d->imgid))
+    return NULL;
+
+  return dt_image_build_text_path_from_path(d->image_path);
+}
+
+static gboolean _set_image_paths(dt_lib_textnotes_t *d, const int32_t imgid)
+{
+  if(!d) return FALSE;
+
+  if(imgid <= 0) return FALSE;
+  if(d->image_path && d->image_dir) return TRUE;
+
+  g_free(d->image_path);
+  g_free(d->image_dir);
+  d->image_path = NULL;
+  d->image_dir = NULL;
 
   gboolean from_cache = FALSE;
   char image_path[PATH_MAX] = { 0 };
   dt_image_full_path(imgid, image_path, sizeof(image_path), &from_cache, __FUNCTION__);
-
   if(image_path[0] == '\0' || !g_file_test(image_path, G_FILE_TEST_EXISTS))
   {
     from_cache = TRUE;
     dt_image_full_path(imgid, image_path, sizeof(image_path), &from_cache, __FUNCTION__);
   }
 
-  if(image_path[0] == '\0') return NULL;
+  if(image_path[0] == '\0') return FALSE;
 
-  return dt_image_build_text_path_from_path(image_path);
+  d->image_path = g_strdup(image_path);
+  d->image_dir = g_path_get_dirname(image_path);
+  return (d->image_path && d->image_dir);
+}
+
+static char *_text_sidecar_save_path(dt_lib_textnotes_t *d, const int32_t imgid)
+{
+  if(!d || imgid <= 0) return NULL;
+  if(!_set_image_paths(d, imgid))
+    return NULL;
+  return dt_image_build_text_path_from_path(d->image_path);
 }
 
 static void _save_and_render(dt_lib_module_t *self)
@@ -1829,21 +1871,21 @@ static void _save_and_render(dt_lib_module_t *self)
 
   _render_preview(d, text);
 
-  if(d->dirty && d->path && d->imgid > 0)
+  if(!d->dirty || !d->path || d->imgid <= 0)
+    goto done;
+
+  GError *error = NULL;
+  if(!g_file_set_contents(d->path, text, -1, &error))
   {
-    GError *error = NULL;
-    if(!g_file_set_contents(d->path, text, -1, &error))
-    {
-      dt_control_log(_("failed to save text notes to %s: %s"), d->path, error->message);
-      g_clear_error(&error);
-    }
-    else
-    {
-      _ensure_has_txt_flag(d->imgid);
-      d->dirty = FALSE;
-    }
+    dt_control_log(_("failed to save text notes to %s: %s"), d->path, error->message);
+    g_clear_error(&error);
+    goto done;
   }
 
+  _ensure_has_txt_flag(d->imgid);
+  d->dirty = FALSE;
+
+done:
   _update_mtime_label(self);
   g_free(text);
 }
@@ -1919,42 +1961,35 @@ static void _load_for_image(dt_lib_module_t *self, const int32_t imgid)
     d->save_timeout_id = 0;
   }
 
+  const int32_t old_imgid = d->imgid;
+  const gboolean changed = (old_imgid != imgid);
   d->imgid = imgid;
   g_free(d->path);
   d->path = NULL;
+  if(changed) _clear_variables_cache(d);
+  if(changed)
+    g_clear_pointer(&d->image_path, g_free);
+  if(changed)
+    g_clear_pointer(&d->image_dir, g_free);
 
-  if(imgid <= 0)
-  {
-    gtk_widget_set_sensitive(GTK_WIDGET(d->edit_view), FALSE);
-    gtk_widget_set_sensitive(d->mode_toggle, FALSE);
-  }
-  else
-  {
-    gtk_widget_set_sensitive(GTK_WIDGET(d->edit_view), TRUE);
-    gtk_widget_set_sensitive(d->mode_toggle, TRUE);
-    d->path = _text_sidecar_save_path(imgid);
-  }
+  const gboolean has_img = (imgid > 0);
+  gtk_widget_set_sensitive(GTK_WIDGET(d->edit_view), has_img);
+  gtk_widget_set_sensitive(d->mode_toggle, has_img);
+  if(has_img) d->path = _text_sidecar_save_path(d, imgid);
 
   gchar *text = NULL;
-  char *existing_path = (imgid > 0) ? dt_image_get_text_path(imgid) : NULL;
-  if(existing_path)
-  {
-    g_file_get_contents(existing_path, &text, NULL, NULL);
+  char *existing_path = _image_text_path(d);
+  if(existing_path && g_file_get_contents(existing_path, &text, NULL, NULL))
     _ensure_has_txt_flag(imgid);
-  }
   if(!text) text = g_strdup("");
 
   _set_edit_text(d, text);
   d->dirty = FALSE;
 
   if(d->mode_toggle && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->mode_toggle)))
-  {
     _toggle_mode(GTK_TOGGLE_BUTTON(d->mode_toggle), self);
-  }
   else
-  {
     _render_preview(d, text);
-  }
 
   g_free(existing_path);
   g_free(text);
@@ -2116,6 +2151,9 @@ void gui_cleanup(dt_lib_module_t *self)
   }
 
   g_free(d->path);
+  g_free(d->image_path);
+  g_free(d->image_dir);
+  _clear_variables_cache(d);
   g_free(d->height_setting);
   free(d);
   self->data = NULL;
