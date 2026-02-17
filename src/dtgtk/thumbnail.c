@@ -66,7 +66,7 @@ static void _set_flag(GtkWidget *w, GtkStateFlags flag, gboolean activate)
 static void _image_update_group_tooltip(dt_thumbnail_t *thumb)
 {
   thumb_return_if_fails(thumb);
-  if(!thumb->is_grouped)
+  if(!thumb->info.is_grouped)
   {
     gtk_widget_set_has_tooltip(thumb->w_group, FALSE);
     return;
@@ -132,7 +132,7 @@ static void _thumb_update_rating_class(dt_thumbnail_t *thumb)
   for(int i = DT_VIEW_DESERT; i <= DT_VIEW_REJECT; i++)
   {
     gchar *cn = g_strdup_printf("dt_thumbnail_rating_%d", i);
-    if(thumb->rating == i)
+    if(thumb->info.rating == i)
       dt_gui_add_class(thumb->w_main, cn);
     else
       dt_gui_remove_class(thumb->w_main, cn);
@@ -144,11 +144,11 @@ static void _thumb_write_extension(dt_thumbnail_t *thumb)
 {
   // fill the file extension label
   thumb_return_if_fails(thumb);
-  if(!thumb->filename) return;
-  const char *ext = thumb->filename + strlen(thumb->filename);
-  while(ext > thumb->filename && *ext != '.') ext--;
+  if(!thumb->info.filename[0]) return;
+  const char *ext = thumb->info.filename + strlen(thumb->info.filename);
+  while(ext > thumb->info.filename && *ext != '.') ext--;
   ext++;
-  gchar *uext = dt_view_extend_modes_str(ext, thumb->is_hdr, thumb->is_bw, thumb->is_bw_flow);
+  gchar *uext = dt_view_extend_modes_str(ext, thumb->info.is_hdr, thumb->info.is_bw, thumb->info.is_bw_flow);
   gchar *label = g_strdup_printf("%s #%i", uext, thumb->rowid + 1);
   gtk_label_set_text(GTK_LABEL(thumb->w_ext), label);
   g_free(uext);
@@ -198,7 +198,7 @@ static GtkWidget *_create_menu(dt_thumbnail_t *thumb)
   GtkWidget *menu = gtk_menu_new();
 
   // Filename: insensitive header to mean that the context menu is for this picture only
-  GtkWidget *menu_item = _gtk_menu_item_new_with_markup(thumb->filename, menu, NULL, thumb);
+  GtkWidget *menu_item = _gtk_menu_item_new_with_markup(thumb->info.filename, menu, NULL, thumb);
   gtk_widget_set_sensitive(menu_item, FALSE);
 
   GtkWidget *sep = gtk_separator_menu_item_new();
@@ -209,10 +209,10 @@ static GtkWidget *_create_menu(dt_thumbnail_t *thumb)
   GtkWidget *sub_menu = gtk_menu_new();
   gtk_menu_item_set_submenu(GTK_MENU_ITEM(menu_item), sub_menu);
 
-  _menuitem_from_text(_("Folder : "), thumb->folder, sub_menu, NULL, thumb);
-  _menuitem_from_text(_("Date : "), thumb->datetime, sub_menu, NULL, thumb);
-  _menuitem_from_text(_("Camera : "), thumb->camera, sub_menu, NULL, thumb);
-  _menuitem_from_text(_("Lens : "), thumb->lens, sub_menu, NULL, thumb);
+  _menuitem_from_text(_("Folder : "), thumb->info.folder, sub_menu, NULL, thumb);
+  _menuitem_from_text(_("Date : "), thumb->info.datetime, sub_menu, NULL, thumb);
+  _menuitem_from_text(_("Camera : "), thumb->info.camera, sub_menu, NULL, thumb);
+  _menuitem_from_text(_("Lens : "), thumb->info.exif_lens, sub_menu, NULL, thumb);
 
   sep = gtk_separator_menu_item_new();
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
@@ -250,52 +250,82 @@ static void _image_get_infos(dt_thumbnail_t *thumb)
   thumb_return_if_fails(thumb);
 
   // we only get here infos that might change, others(exif, ...) are cached on widget creation
-  const int old_rating = thumb->rating;
-  thumb->rating = 0;
+  const int old_rating = thumb->info.rating;
+  memset(&thumb->info, 0, sizeof(thumb->info));
+  thumb->info_valid = FALSE;
   const dt_image_t *img = dt_image_cache_get(darktable.image_cache, thumb->imgid, 'r');
   if(img)
   {
-    thumb->has_localcopy = (img->flags & DT_IMAGE_LOCAL_COPY);
-    thumb->rating = img->flags & DT_IMAGE_REJECTED ? DT_VIEW_REJECT : (img->flags & DT_VIEW_RATINGS_MASK);
-    thumb->is_bw = dt_image_monochrome_flags(img);
-    thumb->is_bw_flow = dt_image_use_monochrome_workflow(img);
-    thumb->is_hdr = dt_image_is_hdr(img);
-    thumb->filename = g_strdup(img->filename);
-    memset(thumb->folder, 0, PATH_MAX);
-    dt_image_film_roll_directory(img, thumb->folder, PATH_MAX);
-    thumb->has_audio = (img->flags & DT_IMAGE_HAS_WAV);
-
-    thumb->iso = img->exif_iso;
-    thumb->aperture = img->exif_aperture;
-    thumb->speed = img->exif_exposure;
-    thumb->exposure_bias = img->exif_exposure_bias;
-    thumb->focal = img->exif_focal_length;
-    thumb->focus_distance = img->exif_focus_distance;
-    dt_datetime_img_to_local(thumb->datetime, sizeof(thumb->datetime), img, FALSE);
-    memcpy(&thumb->camera, &img->camera_makermodel, 128 * sizeof(char));
-    memcpy(&thumb->lens, &img->exif_lens, 128 * sizeof(char));
+    thumb->info.has_localcopy = (img->flags & DT_IMAGE_LOCAL_COPY);
+    thumb->info.rating = img->flags & DT_IMAGE_REJECTED ? DT_VIEW_REJECT : (img->flags & DT_VIEW_RATINGS_MASK);
+    thumb->info.is_bw = dt_image_monochrome_flags(img);
+    thumb->info.is_bw_flow = dt_image_use_monochrome_workflow(img);
+    thumb->info.is_hdr = dt_image_is_hdr(img);
+    g_strlcpy(thumb->info.filename, img->filename, sizeof(thumb->info.filename));
+    dt_image_film_roll_directory(img, thumb->info.folder, sizeof(thumb->info.folder));
+    thumb->info.has_audio = (img->flags & DT_IMAGE_HAS_WAV);
+    dt_datetime_img_to_local(thumb->info.datetime, sizeof(thumb->info.datetime), img, FALSE);
+    g_strlcpy(thumb->info.camera, img->camera_makermodel, sizeof(thumb->info.camera));
 
     thumb->groupid = img->group_id;
-    thumb->colorlabels = img->color_labels;
+    thumb->info.colorlabels = img->color_labels;
+
+    thumb->info.imgid = img->id;
+    thumb->info.film_id = img->film_id;
+    thumb->info.groupid = img->group_id;
+    thumb->info.version = img->version;
+    thumb->info.width = img->width;
+    thumb->info.height = img->height;
+    thumb->info.p_width = img->p_width;
+    thumb->info.p_height = img->p_height;
+    thumb->info.flags = img->flags;
+    thumb->info.loader = img->loader;
+    thumb->info.import_timestamp = img->import_timestamp;
+    thumb->info.change_timestamp = img->change_timestamp;
+    thumb->info.export_timestamp = img->export_timestamp;
+    thumb->info.print_timestamp = img->print_timestamp;
+    thumb->info.exif_exposure = img->exif_exposure;
+    thumb->info.exif_exposure_bias = img->exif_exposure_bias;
+    thumb->info.exif_aperture = img->exif_aperture;
+    thumb->info.exif_iso = img->exif_iso;
+    thumb->info.exif_focal_length = img->exif_focal_length;
+    thumb->info.exif_focus_distance = img->exif_focus_distance;
+    thumb->info.exif_datetime_taken = img->exif_datetime_taken;
+    thumb->info.geoloc_latitude = img->geoloc.latitude;
+    thumb->info.geoloc_longitude = img->geoloc.longitude;
+    thumb->info.geoloc_elevation = img->geoloc.elevation;
+
+    g_strlcpy(thumb->info.exif_maker, img->exif_maker, sizeof(thumb->info.exif_maker));
+    g_strlcpy(thumb->info.exif_model, img->exif_model, sizeof(thumb->info.exif_model));
+    g_strlcpy(thumb->info.exif_lens, img->exif_lens, sizeof(thumb->info.exif_lens));
+    if(img->film_id < 0)
+      g_strlcpy(thumb->info.filmroll, _("orphaned image"), sizeof(thumb->info.filmroll));
+    else
+      g_strlcpy(thumb->info.filmroll, dt_image_film_roll_name(thumb->info.folder), sizeof(thumb->info.filmroll));
+
+    gboolean from_cache = FALSE;
+    dt_image_full_path(img->id, thumb->info.fullpath, sizeof(thumb->info.fullpath), &from_cache, __FUNCTION__);
+
+    thumb->info_valid = TRUE;
 
     dt_image_cache_read_release(darktable.image_cache, img);
   }
   // if the rating as changed, update the rejected
-  if(old_rating != thumb->rating)
+  if(old_rating != thumb->info.rating)
     _thumb_update_rating_class(thumb);
 
   // colorlabels
   if(thumb->w_color)
   {
     GtkDarktableThumbnailBtn *btn = (GtkDarktableThumbnailBtn *)thumb->w_color;
-    btn->icon_flags = thumb->colorlabels;
+    btn->icon_flags = thumb->info.colorlabels;
   }
 
   // altered
-  thumb->is_altered = (thumb->table) ? thumb->table->lut[thumb->rowid].history_items > 0 : FALSE;
+  thumb->info.is_altered = (thumb->table) ? thumb->table->lut[thumb->rowid].history_items > 0 : FALSE;
 
   // grouping
-  thumb->is_grouped = (thumb->table) ? thumb->table->lut[thumb->rowid].group_members > 1 : FALSE;
+  thumb->info.is_grouped = (thumb->table) ? thumb->table->lut[thumb->rowid].group_members > 1 : FALSE;
 
   _thumb_write_extension(thumb);
 }
@@ -607,10 +637,10 @@ static void _thumb_update_icons(dt_thumbnail_t *thumb)
 
   gboolean show = (thumb->over > DT_THUMBNAIL_OVERLAYS_NONE);
 
-  gtk_widget_set_visible(thumb->w_local_copy, (thumb->has_localcopy && show) || DEBUG);
-  gtk_widget_set_visible(thumb->w_altered, (thumb->is_altered && show) || DEBUG);
-  gtk_widget_set_visible(thumb->w_group, (thumb->is_grouped && show) || DEBUG);
-  gtk_widget_set_visible(thumb->w_audio, (thumb->has_audio && show) || DEBUG);
+  gtk_widget_set_visible(thumb->w_local_copy, (thumb->info.has_localcopy && show) || DEBUG);
+  gtk_widget_set_visible(thumb->w_altered, (thumb->info.is_altered && show) || DEBUG);
+  gtk_widget_set_visible(thumb->w_group, (thumb->info.is_grouped && show) || DEBUG);
+  gtk_widget_set_visible(thumb->w_audio, (thumb->info.has_audio && show) || DEBUG);
   gtk_widget_set_visible(thumb->w_color, show || DEBUG);
   gtk_widget_set_visible(thumb->w_bottom_eb, show || DEBUG);
   gtk_widget_set_visible(thumb->w_reject, show || DEBUG);
@@ -620,12 +650,12 @@ static void _thumb_update_icons(dt_thumbnail_t *thumb)
   _set_flag(thumb->w_main, GTK_STATE_FLAG_PRELIGHT, thumb->mouse_over);
   _set_flag(thumb->widget, GTK_STATE_FLAG_PRELIGHT, thumb->mouse_over);
 
-  _set_flag(thumb->w_reject, GTK_STATE_FLAG_ACTIVE, (thumb->rating == DT_VIEW_REJECT));
+  _set_flag(thumb->w_reject, GTK_STATE_FLAG_ACTIVE, (thumb->info.rating == DT_VIEW_REJECT));
 
   for(int i = 0; i < MAX_STARS; i++)
   {
     gtk_widget_set_visible(thumb->w_stars[i], show || DEBUG);
-    _set_flag(thumb->w_stars[i], GTK_STATE_FLAG_ACTIVE, (thumb->rating > i && thumb->rating < DT_VIEW_REJECT));
+    _set_flag(thumb->w_stars[i], GTK_STATE_FLAG_ACTIVE, (thumb->info.rating > i && thumb->info.rating < DT_VIEW_REJECT));
   }
 
   _set_flag(thumb->w_group, GTK_STATE_FLAG_ACTIVE, (thumb->imgid == thumb->groupid));
@@ -768,18 +798,22 @@ void dt_thumbnail_update_selection(dt_thumbnail_t *thumb, gboolean selected)
 void _create_alternative_view(dt_thumbnail_t *thumb)
 {
   thumb_return_if_fails(thumb);
-  gtk_label_set_text(GTK_LABEL(thumb->w_filename), thumb->filename);
-  gtk_label_set_text(GTK_LABEL(thumb->w_datetime), thumb->datetime);
-  gtk_label_set_text(GTK_LABEL(thumb->w_folder), thumb->folder);
+  gtk_label_set_text(GTK_LABEL(thumb->w_filename), thumb->info.filename);
+  gtk_label_set_text(GTK_LABEL(thumb->w_datetime), thumb->info.datetime);
+  gtk_label_set_text(GTK_LABEL(thumb->w_folder), thumb->info.folder);
 
-  const gchar *exposure_field = g_strdup_printf("%.0f ISO - f/%.1f - %s", thumb->iso, thumb->aperture,
-                                                dt_util_format_exposure(thumb->speed));
+  const gchar *exposure_field = g_strdup_printf("%.0f ISO - f/%.1f - %s",
+                                                thumb->info.exif_iso,
+                                                thumb->info.exif_aperture,
+                                                dt_util_format_exposure(thumb->info.exif_exposure));
 
-  gtk_label_set_text(GTK_LABEL(thumb->w_exposure_bias), g_strdup_printf("%+.1f EV", thumb->exposure_bias));
+  gtk_label_set_text(GTK_LABEL(thumb->w_exposure_bias), g_strdup_printf("%+.1f EV", thumb->info.exif_exposure_bias));
   gtk_label_set_text(GTK_LABEL(thumb->w_exposure), exposure_field);
-  gtk_label_set_text(GTK_LABEL(thumb->w_camera), thumb->camera);
-  gtk_label_set_text(GTK_LABEL(thumb->w_lens), thumb->lens);
-  gtk_label_set_text(GTK_LABEL(thumb->w_focal), g_strdup_printf("%0.f mm @ %.2f m", thumb->focal, thumb->focus_distance));
+  gtk_label_set_text(GTK_LABEL(thumb->w_camera), thumb->info.camera);
+  gtk_label_set_text(GTK_LABEL(thumb->w_lens), thumb->info.exif_lens);
+  gtk_label_set_text(GTK_LABEL(thumb->w_focal),
+                     g_strdup_printf("%0.f mm @ %.2f m", thumb->info.exif_focal_length,
+                                     thumb->info.exif_focus_distance));
 }
 
 
@@ -836,7 +870,7 @@ static gboolean _event_star_leave(GtkWidget *widget, GdkEventCrossing *event, gp
     _set_flag(thumb->w_stars[i], GTK_STATE_FLAG_PRELIGHT, FALSE);
 
     // restore active state
-    _set_flag(thumb->w_stars[i], GTK_STATE_FLAG_ACTIVE, i < thumb->rating && thumb->rating < DT_VIEW_REJECT);
+    _set_flag(thumb->w_stars[i], GTK_STATE_FLAG_ACTIVE, i < thumb->info.rating && thumb->info.rating < DT_VIEW_REJECT);
   }
   return TRUE;
 }
@@ -905,7 +939,7 @@ static gboolean _altered_enter(GtkWidget *widget, GdkEventCrossing *event, gpoin
 {
   dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
   thumb_return_if_fails(thumb, TRUE);
-  if(thumb->is_altered)
+  if(thumb->info.is_altered)
   {
     char *tooltip = dt_history_get_items_as_string(thumb->imgid);
     if(tooltip)
@@ -1087,7 +1121,7 @@ GtkWidget *dt_thumbnail_create_widget(dt_thumbnail_t *thumb)
   }
 
   // the color labels
-  thumb->w_color = dtgtk_thumbnail_btn_new(dtgtk_cairo_paint_label_flower, thumb->colorlabels, NULL);
+  thumb->w_color = dtgtk_thumbnail_btn_new(dtgtk_cairo_paint_label_flower, thumb->info.colorlabels, NULL);
   dt_gui_add_class(thumb->w_color, "thumb-colorlabels");
   gtk_widget_set_valign(thumb->w_color, GTK_ALIGN_CENTER);
   gtk_widget_set_halign(thumb->w_color, GTK_ALIGN_END);
@@ -1247,9 +1281,6 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
     gtk_container_remove(GTK_CONTAINER(gtk_widget_get_parent(thumb->widget)), thumb->widget);
   thumb->widget = NULL;
 
-  if(thumb->filename) g_free(thumb->filename);
-  thumb->filename = NULL;
-
   dt_pthread_mutex_unlock(&thumb->lock);
 
   dt_pthread_mutex_destroy(&thumb->lock);
@@ -1273,10 +1304,10 @@ void dt_thumbnail_update_partial_infos(dt_thumbnail_t *thumb)
   thumb_return_if_fails(thumb);
 
   // altered
-  thumb->is_altered = (thumb->table) ? thumb->table->lut[thumb->rowid].history_items > 0 : FALSE;
+  thumb->info.is_altered = (thumb->table) ? thumb->table->lut[thumb->rowid].history_items > 0 : FALSE;
 
   // grouping
-  thumb->is_grouped = (thumb->table) ? thumb->table->lut[thumb->rowid].group_members > 1 : FALSE;
+  thumb->info.is_grouped = (thumb->table) ? thumb->table->lut[thumb->rowid].group_members > 1 : FALSE;
   thumb->groupid = (thumb->table) ? thumb->table->lut[thumb->rowid].groupid : UNKNOWN_IMAGE;
 
   _thumb_update_icons(thumb);

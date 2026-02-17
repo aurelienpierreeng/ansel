@@ -47,6 +47,57 @@ typedef enum dt_thumbnail_overlay_t
   DT_THUMBNAIL_OVERLAYS_LAST
 } dt_thumbnail_overlay_t;
 
+typedef struct dt_thumbnail_image_info_t
+{
+  int32_t imgid;
+  int32_t film_id;
+  int32_t groupid;
+  int32_t version;
+  int32_t width;
+  int32_t height;
+  int32_t p_width;
+  int32_t p_height;
+  int32_t flags;
+  int32_t loader;
+
+  int rating;
+  int colorlabels;
+  gboolean has_localcopy;
+  gboolean has_audio;
+  gboolean is_bw;
+  gboolean is_bw_flow;
+  gboolean is_hdr;
+  gboolean is_altered;
+  gboolean is_grouped;
+
+  GTimeSpan import_timestamp;
+  GTimeSpan change_timestamp;
+  GTimeSpan export_timestamp;
+  GTimeSpan print_timestamp;
+
+  float exif_exposure;
+  float exif_exposure_bias;
+  float exif_aperture;
+  float exif_iso;
+  float exif_focal_length;
+  float exif_focus_distance;
+  GTimeSpan exif_datetime_taken;
+
+  double geoloc_latitude;
+  double geoloc_longitude;
+  double geoloc_elevation;
+
+  char filename[DT_MAX_FILENAME_LEN];
+  char fullpath[PATH_MAX];
+  char filmroll[PATH_MAX];
+  char folder[PATH_MAX];
+  char datetime[200];
+  char camera[128];
+  char exif_maker[64];
+  char exif_model[64];
+  char exif_lens[128];
+} dt_thumbnail_image_info_t;
+
 typedef struct
 {
   int32_t imgid, rowid, groupid;
@@ -57,16 +108,8 @@ typedef struct
   gboolean mouse_over;
   gboolean selected;
 
-  int rating;
-  int colorlabels;
-  gchar *filename;
-  gboolean is_altered;
-  gboolean has_audio;
-  gboolean is_grouped;
-  gboolean is_bw;
-  gboolean is_bw_flow;
-  gboolean is_hdr;
-  gboolean has_localcopy;
+  dt_thumbnail_image_info_t info;
+  gboolean info_valid;
 
   // all widget components
   GtkWidget *widget;               // GtkEventbox -- parent of all others
@@ -111,17 +154,6 @@ typedef struct
   gboolean image_inited;
 
   gboolean alternative_mode;
-  float iso;
-  float aperture;
-  float speed;
-  float exposure_bias;
-  float focal;
-  float focus_distance;
-  char datetime[200];
-  char camera[128];
-  char lens[128];
-  char folder[PATH_MAX];
-
   GtkWidget *w_exposure;
   GtkWidget *w_exposure_bias;
   GtkWidget *w_camera;

@@ -241,6 +241,9 @@ gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpo
 void dt_thumbtable_refresh_thumbnail_real(dt_thumbtable_t *table, int32_t imgid, gboolean reinit);
 #define dt_thumbtable_refresh_thumbnail(table, imgid, reinit) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_LIGHTTABLE, dt_thumbtable_refresh_thumbnail_real, (table), (imgid), (reinit))
 
+// Copy cached thumbnail metadata by image id. Returns TRUE on success.
+gboolean dt_thumbtable_get_thumbnail_info(dt_thumbtable_t *table, int32_t imgid, dt_thumbnail_image_info_t *out);
+
 /**
  * @brief Select all images in the current grid
  * @param table The thumbnail table

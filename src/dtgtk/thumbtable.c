@@ -497,6 +497,23 @@ dt_thumbnail_t *_find_thumb_by_imgid(dt_thumbtable_t *table, const int32_t imgid
   return NULL;
 }
 
+gboolean dt_thumbtable_get_thumbnail_info(dt_thumbtable_t *table, int32_t imgid, dt_thumbnail_image_info_t *out)
+{
+  if(!table || !out || imgid <= 0) return FALSE;
+
+  gboolean found = FALSE;
+  dt_pthread_mutex_lock(&table->lock);
+  dt_thumbnail_t *thumb = _find_thumb_by_imgid(table, imgid);
+  if(thumb && thumb->info_valid)
+  {
+    *out = thumb->info;
+    found = TRUE;
+  }
+  dt_pthread_mutex_unlock(&table->lock);
+
+  return found;
+}
+
 #define CLAMP_ROW(rowid) CLAMP(rowid, 0, table->collection_count - 1)
 #define IS_COLLECTION_EDGE(rowid) (rowid < 0 || rowid >= table->collection_count)
 
