@@ -32,6 +32,7 @@
 #include "dtgtk/sidepanel.h"
 
 #include "gui/gtk.h"
+#include "gui/splash.h"
 
 #include "common/styles.h"
 #include "control/conf.h"
@@ -800,6 +801,8 @@ static void _init_widgets(dt_gui_gtk_t *gui)
     int height = dt_conf_get_int("ui_last/window_height");
     gtk_window_resize(GTK_WINDOW(gui->ui->main_window), width, height);
   }
+
+  dt_gui_splash_set_transient_for(gui->ui->main_window);
 
   g_signal_connect(G_OBJECT(gui->ui->main_window ), "delete_event", G_CALLBACK(dt_gui_quit_callback), NULL);
   g_signal_connect(G_OBJECT(gui->ui->main_window ), "focus-in-event", G_CALLBACK(_focus_in_out_event), NULL);

@@ -35,6 +35,12 @@ typedef struct dt_splash_t
   GtkWidget *logo;
   gchar *logo_path;
   int logo_scale_factor;
+  GdkPixbuf *slide_pixbuf;
+  int slide_cache_width;
+  int slide_cache_height;
+  int slide_cache_scale;
+  int slide_cache_index;
+  gboolean shown;
   GtkCssProvider *css;
 
   GPtrArray *authors;
@@ -50,6 +56,43 @@ typedef struct dt_splash_slide_t
 } dt_splash_slide_t;
 
 static dt_splash_t *splash = NULL;
+
+void dt_gui_splash_set_transient_for(GtkWidget *parent)
+{
+  if(!splash || !splash->window || !parent) return;
+  gtk_window_set_transient_for(GTK_WINDOW(splash->window), GTK_WINDOW(parent));
+  gtk_window_set_keep_above(GTK_WINDOW(splash->window), TRUE);
+}
+
+static void _splash_force_show(void)
+{
+  if(!splash || !splash->window || splash->shown) return;
+
+  gtk_widget_show_all(splash->window);
+  gtk_window_present(GTK_WINDOW(splash->window));
+  gtk_widget_show_now(splash->window);
+  gtk_widget_queue_draw(splash->drawing);
+  gtk_widget_queue_draw(splash->window);
+
+  GdkDisplay *display = gdk_display_get_default();
+  if(display) gdk_display_flush(display);
+
+  splash->shown = TRUE;
+}
+
+static void _splash_clear_slide_cache(void)
+{
+  if(!splash) return;
+  if(splash->slide_pixbuf)
+  {
+    g_object_unref(splash->slide_pixbuf);
+    splash->slide_pixbuf = NULL;
+  }
+  splash->slide_cache_index = -1;
+  splash->slide_cache_width = 0;
+  splash->slide_cache_height = 0;
+  splash->slide_cache_scale = 0;
+}
 
 static void _splash_add_css(const char *data)
 {
@@ -171,23 +214,46 @@ static gboolean _splash_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   dt_splash_slide_t *slide = (dt_splash_slide_t *)splash->slides->pdata[splash->current_slide % splash->slides->len];
   if(!slide || !slide->path) return FALSE;
 
-  GError *error = NULL;
-  GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file(slide->path, &error);
-  if(!pixbuf)
-  {
-    if(error) g_error_free(error);
-    return FALSE;
-  }
-
-  const int img_w = gdk_pixbuf_get_width(pixbuf);
-  const int img_h = gdk_pixbuf_get_height(pixbuf);
   int scale_factor = gtk_widget_get_scale_factor(widget);
   if(scale_factor < 1) scale_factor = 1;
   const int dev_width = width * scale_factor;
   const int dev_height = height * scale_factor;
-  const double scale = fmax((double)dev_width / img_w, (double)dev_height / img_h);
-  const int scaled_w = (int)ceil(img_w * scale);
-  const int scaled_h = (int)ceil(img_h * scale);
+
+  const int slide_index = splash->current_slide % splash->slides->len;
+  const gboolean cache_ok = splash->slide_pixbuf
+    && splash->slide_cache_index == slide_index
+    && splash->slide_cache_width == dev_width
+    && splash->slide_cache_height == dev_height
+    && splash->slide_cache_scale == scale_factor;
+
+  if(!cache_ok)
+  {
+    _splash_clear_slide_cache();
+
+    GError *error = NULL;
+    GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file(slide->path, &error);
+    if(!pixbuf)
+    {
+      if(error) g_error_free(error);
+      return FALSE;
+    }
+
+    const int img_w = gdk_pixbuf_get_width(pixbuf);
+    const int img_h = gdk_pixbuf_get_height(pixbuf);
+    const double scale = fmax((double)dev_width / img_w, (double)dev_height / img_h);
+    const int scaled_w = (int)ceil(img_w * scale);
+    const int scaled_h = (int)ceil(img_h * scale);
+
+    splash->slide_pixbuf = gdk_pixbuf_scale_simple(pixbuf, scaled_w, scaled_h, GDK_INTERP_HYPER);
+    g_object_unref(pixbuf);
+    splash->slide_cache_index = slide_index;
+    splash->slide_cache_width = dev_width;
+    splash->slide_cache_height = dev_height;
+    splash->slide_cache_scale = scale_factor;
+  }
+
+  const int scaled_w = gdk_pixbuf_get_width(splash->slide_pixbuf);
+  const int scaled_h = gdk_pixbuf_get_height(splash->slide_pixbuf);
   const int offset_x = (dev_width - scaled_w) / 2;
   const int offset_y = (dev_height - scaled_h) / 2;
 
@@ -196,12 +262,8 @@ static gboolean _splash_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   cairo_rectangle(cr, 0, 0, dev_width, dev_height);
   cairo_clip(cr);
 
-  GdkPixbuf *scaled = gdk_pixbuf_scale_simple(pixbuf, scaled_w, scaled_h, GDK_INTERP_HYPER);
-  g_object_unref(pixbuf);
-
-  gdk_cairo_set_source_pixbuf(cr, scaled, offset_x, offset_y);
+  gdk_cairo_set_source_pixbuf(cr, splash->slide_pixbuf, offset_x, offset_y);
   cairo_paint(cr);
-  g_object_unref(scaled);
 
   cairo_restore(cr);
 
@@ -247,6 +309,7 @@ static gboolean _splash_slide_advance(gpointer user_data)
   if(!splash || !splash->drawing) return G_SOURCE_REMOVE;
   if(!splash->slides || splash->slides->len == 0) return G_SOURCE_CONTINUE;
   splash->current_slide = (splash->current_slide + 1) % splash->slides->len;
+  _splash_clear_slide_cache();
   gtk_widget_queue_draw(splash->drawing);
   return G_SOURCE_CONTINUE;
 }
@@ -320,11 +383,12 @@ static void _splash_load_slides(void)
 static void _splash_update_message(const gchar *message)
 {
   if(!splash || !splash->label_message) return;
+  _splash_force_show();
   _splash_shadow_label_set_text(splash->label_message, message);
-  gtk_widget_queue_draw(splash->window);
-
-  for(int i = 0; i < 8 && gtk_events_pending(); i++)
-    gtk_main_iteration();
+  gtk_widget_queue_draw(splash->label_message);
+  gtk_widget_queue_draw(splash->drawing);
+  for(int i = 0; i < 2; i++)
+    gtk_main_iteration_do(FALSE);
 }
 
 static gchar *_splash_capitalize_name(const char *name)
@@ -430,6 +494,8 @@ void dt_gui_splash_init(void)
   splash = calloc(1, sizeof(dt_splash_t));
   splash->authors = g_ptr_array_new_with_free_func(g_free);
   splash->slides = g_ptr_array_new_with_free_func(_splash_slide_free);
+  splash->slide_cache_index = -1;
+  splash->shown = FALSE;
 
   _splash_load_authors();
   _splash_load_slides();
@@ -439,6 +505,7 @@ void dt_gui_splash_init(void)
   gtk_window_set_resizable(GTK_WINDOW(splash->window), FALSE);
   gtk_window_set_position(GTK_WINDOW(splash->window), GTK_WIN_POS_CENTER);
   gtk_window_set_type_hint(GTK_WINDOW(splash->window), GDK_WINDOW_TYPE_HINT_SPLASHSCREEN);
+  gtk_window_set_keep_above(GTK_WINDOW(splash->window), TRUE);
   gtk_window_set_default_size(GTK_WINDOW(splash->window), 960, 600);
   gtk_widget_set_app_paintable(splash->window, TRUE);
   gtk_widget_set_name(splash->window, "ansel-splash");
@@ -582,9 +649,7 @@ void dt_gui_splash_init(void)
     gtk_style_context_add_provider_for_screen(screen, GTK_STYLE_PROVIDER(splash->css),
                                               GTK_STYLE_PROVIDER_PRIORITY_USER + 2);
 
-  gtk_widget_show_all(splash->window);
-  for(int i = 0; i < 8 && gtk_events_pending(); i++)
-    gtk_main_iteration();
+  _splash_force_show();
   _splash_update_logo_for_scale();
 
   splash->slide_timeout_id = g_timeout_add(4000, _splash_slide_advance, NULL);
@@ -622,6 +687,7 @@ void dt_gui_splash_close(void)
   g_ptr_array_free(splash->authors, TRUE);
   g_ptr_array_free(splash->slides, TRUE);
   g_free(splash->logo_path);
+  _splash_clear_slide_cache();
 
   free(splash);
   splash = NULL;

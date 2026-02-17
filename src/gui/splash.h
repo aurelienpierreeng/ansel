@@ -20,7 +20,10 @@
 
 #include <stdarg.h>
 
+typedef struct _GtkWidget GtkWidget;
+
 void dt_gui_splash_init(void);
 void dt_gui_splash_update(const char *message);
 void dt_gui_splash_updatef(const char *format, ...) __attribute__((format(printf, 1, 2)));
 void dt_gui_splash_close(void);
+void dt_gui_splash_set_transient_for(GtkWidget *parent);
