@@ -715,6 +715,7 @@ void dt_ui_init_global_menu(dt_ui_t *ui)
 
 void dt_ui_set_image_info_label(dt_ui_t *ui, const char *label)
 {
+  if(!ui || !ui->header || !GTK_IS_LABEL(ui->header->image_info)) return;
   gtk_label_set_markup(GTK_LABEL(ui->header->image_info), label);
 }
 
@@ -726,6 +727,7 @@ void dt_ui_set_window_buttons_visible(dt_ui_t *ui, gboolean visible)
 
 void dt_hinter_set_message(dt_ui_t *ui, const char *message)
 {
+  if(!ui || !ui->header || !GTK_IS_LABEL(ui->header->hinter)) return;
   // Remove hacky attempts of line wrapping with hardcoded newline :
   // Line wrap is handled by Gtk at the label scope.
   char **split = g_strsplit(message, "\n", -1);

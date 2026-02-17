@@ -11,3 +11,5 @@ endforeach(PIXMAP_SIZE)
 
 file(GLOB OTHER_PIXMAPS "*.png" "*.svg")
 install(FILES ${OTHER_PIXMAPS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel/pixmaps COMPONENT DTApplication)
+
+install(DIRECTORY "splash" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel/pixmaps COMPONENT DTApplication)

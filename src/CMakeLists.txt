@@ -6,6 +6,13 @@ include(CheckCSourceCompiles)
 include(CheckCXXSymbolExists)
 
 # Generate authors
+add_custom_target(
+  generate_authors_file ALL
+  COMMAND /bin/sh -c "tools/release/generate-authors.sh release-3.9.0 HEAD > AUTHORS"
+  COMMENT "Generating AUTHORS file for releases."
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
 add_custom_command(
   DEPENDS ${CMAKE_SOURCE_DIR}/tools/authors_h.sh ${CMAKE_SOURCE_DIR}/AUTHORS
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/tools/darktable_authors.h
@@ -20,6 +27,7 @@ add_custom_target(
   DEPENDS ${CMAKE_SOURCE_DIR}/tools/authors_h.sh ${CMAKE_SOURCE_DIR}/AUTHORS ${CMAKE_CURRENT_BINARY_DIR}/tools/darktable_authors.h
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+add_dependencies(generate_authors_h generate_authors_file)
 
 #
 # Add files for libansel
@@ -162,6 +170,7 @@ FILE(GLOB SOURCE_FILES
   "gui/gtkentry.c"
   "gui/guides.c"
   "gui/gtk.c"
+  "gui/splash.c"
   "gui/hist_dialog.c"
   "gui/preferences.c"
   "gui/presets.c"

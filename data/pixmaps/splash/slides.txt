@@ -1,0 +1,5 @@
+# filename|author
+slide-01.jpg|Aurélien Pierre
+slide-02.jpg|Aurélien Pierre
+slide-03.jpg|Aurélien Pierre
+slide-04.jpg|Aurélien Pierre

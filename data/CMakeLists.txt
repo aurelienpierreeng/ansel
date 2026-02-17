@@ -139,6 +139,9 @@ if(${VALIDATE_JSON})
 endif()
 install(FILES noiseprofiles.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
 
+# Install AUTHORS file for splash screen credits
+install(FILES ${CMAKE_SOURCE_DIR}/AUTHORS DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/ansel COMPONENT DTApplication)
+
 #
 # Transform anselconfig.xml into anselrc
 #

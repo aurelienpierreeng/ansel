@@ -918,6 +918,11 @@ static void _ui_log_redraw_callback(gpointer instance, GtkWidget *widget)
 {
   // draw log message, if any
   dt_pthread_mutex_lock(&darktable.control->log_mutex);
+  if(!GTK_IS_LABEL(widget))
+  {
+    dt_pthread_mutex_unlock(&darktable.control->log_mutex);
+    return;
+  }
   if(darktable.control->log_ack != darktable.control->log_pos)
   {
     if(strcmp(darktable.control->log_message[darktable.control->log_ack], gtk_label_get_text(GTK_LABEL(widget))))
@@ -935,6 +940,11 @@ static void _ui_toast_redraw_callback(gpointer instance, GtkWidget *widget)
 {
   // draw toast message, if any
   dt_pthread_mutex_lock(&darktable.control->toast_mutex);
+  if(!GTK_IS_LABEL(widget))
+  {
+    dt_pthread_mutex_unlock(&darktable.control->toast_mutex);
+    return;
+  }
   if(darktable.control->toast_ack != darktable.control->toast_pos)
   {
     if(strcmp(darktable.control->toast_message[darktable.control->toast_ack], gtk_label_get_text(GTK_LABEL(widget))))
@@ -971,6 +981,13 @@ typedef struct result_t
   GtkWidget *window, *entry, *button_yes, *button_no;
 } result_t;
 
+static void _gtk_main_quit_safe(GtkWidget *widget, gpointer data)
+{
+  (void)widget;
+  (void)data;
+  if(gtk_main_level() > 0) gtk_main_quit();
+}
+
 static void _yes_no_button_handler(GtkButton *button, gpointer data)
 {
   result_t *result = (result_t *)data;
@@ -983,7 +1000,7 @@ static void _yes_no_button_handler(GtkButton *button, gpointer data)
   if(result->entry)
     result->entry_text = g_strdup(gtk_entry_get_text(GTK_ENTRY(result->entry)));
   gtk_widget_destroy(result->window);
-  gtk_main_quit();
+  _gtk_main_quit_safe(NULL, NULL);
 }
 
 gboolean dt_gui_show_standalone_yes_no_dialog(const char *title, const char *markup, const char *no_text,
@@ -999,7 +1016,7 @@ gboolean dt_gui_show_standalone_yes_no_dialog(const char *title, const char *mar
 
   gtk_window_set_icon_name(GTK_WINDOW(window), "ansel");
   gtk_window_set_title(GTK_WINDOW(window), title);
-  g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+  g_signal_connect(window, "destroy", G_CALLBACK(_gtk_main_quit_safe), NULL);
 
   if(darktable.gui)
   {
@@ -1081,7 +1098,7 @@ char *dt_gui_show_standalone_string_dialog(const char *title, const char *markup
 
   gtk_window_set_icon_name(GTK_WINDOW(window), "ansel");
   gtk_window_set_title(GTK_WINDOW(window), title);
-  g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
+  g_signal_connect(window, "destroy", G_CALLBACK(_gtk_main_quit_safe), NULL);
 
   if(darktable.gui)
   {

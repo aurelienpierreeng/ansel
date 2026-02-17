@@ -37,6 +37,7 @@
 #include "common/selection.h"
 #include "common/system_signal_handling.h"
 #include "bauhaus/bauhaus.h"
+#include "gui/splash.h"
 
 #include "common/cpuid.h"
 #include "common/file_location.h"
@@ -961,18 +962,23 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     gtk_init(&argc, &argv);
 
     darktable.themes = NULL;
+
+    dt_gui_splash_init();
+    dt_gui_splash_update(_("Initializing interface..."));
   }
 
   // detect cpu features and decide which codepaths to enable
   dt_codepaths_init();
 
   // get the list of color profiles
+  dt_gui_splash_update(_("Loading color profiles..."));
   darktable.color_profiles = dt_colorspaces_init();
 
   // initialize datetime data
   dt_datetime_init();
 
   // initialize the database
+  dt_gui_splash_update(_("Opening database..."));
   gboolean recheck_needed = TRUE;
   while (recheck_needed)
   {
@@ -980,6 +986,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     if(darktable.db == NULL)
     {
       printf("ERROR : cannot open database\n");
+      dt_gui_splash_close();
       return 1;
     }
     else if(!dt_database_get_lock_acquired(darktable.db))
@@ -1018,6 +1025,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
       if(error)
       {
         fprintf(stderr, "ERROR: can't acquire database lock, aborting.\n");
+        dt_gui_splash_close();
         return error;
       }
       else
@@ -1032,6 +1040,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   //db maintenance on startup (if configured to do so)
   if(dt_database_maybe_maintenance(darktable.db, init_gui, FALSE))
   {
+    dt_gui_splash_update(_("Running database maintenance..."));
     dt_database_perform_maintenance(darktable.db);
   }
 
@@ -1052,6 +1061,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
   if(init_gui)
   {
+    dt_gui_splash_update(_("Initializing GUI..."));
     dt_control_init(darktable.control);
   }
   else
@@ -1067,6 +1077,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // idem for folder reachability
   if(init_gui)
   {
+    dt_gui_splash_update(_("Loading user interface..."));
     darktable.gui = (dt_gui_gtk_t *)calloc(1, sizeof(dt_gui_gtk_t));
     memset(darktable.gui->scroll_to, 0, sizeof(darktable.gui->scroll_to));
     dt_film_set_folder_status();
@@ -1114,6 +1125,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     if(dt_gui_gtk_init(darktable.gui))
     {
       fprintf(stderr, "ERROR: can't init gui, aborting.\n");
+      dt_gui_splash_close();
       return 1;
     }
     darktable.bauhaus = dt_bauhaus_init();
@@ -1133,6 +1145,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   if(!darktable.develop)
   {
     fprintf(stderr, "ERROR: can't init develop system, aborting.\n");
+    dt_gui_splash_close();
     return 1;
   }
 
@@ -1140,6 +1153,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   if(!darktable.pixelpipe_cache)
   {
     fprintf(stderr, "ERROR: can't init pixelpipe cache, aborting.\n");
+    dt_gui_splash_close();
     return 1;
   }
 
@@ -1155,11 +1169,13 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   dt_mipmap_cache_init(darktable.mipmap_cache);
 
   darktable.opencl = (dt_opencl_t *)calloc(1, sizeof(dt_opencl_t));
-  #ifdef HAVE_OPENCL
-    dt_opencl_init(darktable.opencl, exclude_opencl, print_statistics);
-  #endif
+#ifdef HAVE_OPENCL
+  dt_gui_splash_update(_("Initializing OpenCL..."));
+  dt_opencl_init(darktable.opencl, exclude_opencl, print_statistics);
+#endif
 
   darktable.imageio = (dt_imageio_t *)calloc(1, sizeof(dt_imageio_t));
+  dt_gui_splash_update(_("Loading image I/O modules..."));
   dt_imageio_init(darktable.imageio);
 
   // load default iop order
@@ -1167,11 +1183,13 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // load iop order rules
   darktable.iop_order_rules = dt_ioppr_get_iop_order_rules();
   // load the darkroom mode plugins once:
+  dt_gui_splash_update(_("Loading processing modules..."));
   dt_iop_load_modules_so();
   // check if all modules have a iop order assigned
   if(dt_ioppr_check_so_iop_order(darktable.iop, darktable.iop_order_list))
   {
     fprintf(stderr, "ERROR: iop order looks bad, aborting.\n");
+    dt_gui_splash_close();
     return 1;
   }
 
@@ -1254,6 +1272,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
     //gtk_window_add_accel_group(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)), darktable.gui->accels->global_accels);
   }
 
+  dt_gui_splash_close();
   dt_print(DT_DEBUG_CONTROL, "[init] startup took %f seconds\n", dt_get_wtime() - start_wtime);
 
   return 0;

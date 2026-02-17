@@ -140,7 +140,7 @@ void dt_control_quit()
   dt_pthread_mutex_unlock(&darktable.control->run_mutex);
   dt_pthread_mutex_unlock(&darktable.control->cond_mutex);
 
-  gtk_main_quit();
+  if(gtk_main_level() > 0) gtk_main_quit();
 }
 
 void dt_control_shutdown(dt_control_t *s)
@@ -278,13 +278,16 @@ void *dt_control_expose(void *voidptr)
 
   dt_pthread_mutex_unlock(&darktable.control->log_mutex);
 
-  // Draw progress bar
-  const float progress_h = DT_PIXEL_APPLY_DPI(5);
-  cairo_rectangle(cr, 0, height - progress_h, 
-    width * (float)darktable.develop->progress.completed / (float)darktable.develop->progress.total, 
-    progress_h);
-  cairo_set_source_rgba(cr, 0., 0., 0., 0.33);
-  cairo_fill(cr);
+  // Draw progress bar (guard during early startup)
+  if(darktable.develop && darktable.develop->progress.total > 0)
+  {
+    const float progress_h = DT_PIXEL_APPLY_DPI(5);
+    cairo_rectangle(cr, 0, height - progress_h,
+      width * (float)darktable.develop->progress.completed / (float)darktable.develop->progress.total,
+      progress_h);
+    cairo_set_source_rgba(cr, 0., 0., 0., 0.33);
+    cairo_fill(cr);
+  }
   cairo_destroy(cr);
 
   cairo_t *cr_pixmap = cairo_create(darktable.gui->surface);

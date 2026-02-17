@@ -51,7 +51,8 @@ ALL_DEVELOPERS=("Aldric Renaudin"
                 "Ulrich Pegelow"
                 "johannes hanika"
                 "parafin"
-                "Aurélien PIERRE")
+                "Aurélien PIERRE"
+                "Guillaume Stutin")
 
 function shortlog()
 {

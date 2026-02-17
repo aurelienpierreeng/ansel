@@ -19,11 +19,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <gmodule.h>
+#include <glib/gi18n.h>
 
 #include "config.h"
 #include "common/file_location.h"
 #include "common/module.h"
 #include "control/conf.h"
+#include "gui/splash.h"
 
 GList *dt_module_load_modules(const char *subdir, size_t module_size,
                               int (*load_module_so)(void *module, const char *libname, const char *plugin_name),
@@ -69,6 +71,8 @@ GList *dt_module_load_modules(const char *subdir, size_t module_size,
     }
 
     g_free(pref_line);
+
+    dt_gui_splash_updatef(_("Loading module %s..."), plugin_name);
 
     if(load) res = load_module_so(module, libname, plugin_name);
     // if(res) fprintf(stdout, "Plugin %s/%s NOT loaded\n", subdir, plugin_name);

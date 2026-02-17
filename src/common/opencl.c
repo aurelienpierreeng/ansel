@@ -34,6 +34,7 @@
 #include "common/tea.h"
 #include "control/conf.h"
 #include "control/control.h"
+#include "gui/splash.h"
 #include "develop/blend.h"
 #include "develop/pixelpipe.h"
 #include "develop/pixelpipe_cache.h"
@@ -715,6 +716,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
 
       snprintf(filename, PATH_MAX * sizeof(char), "%s" G_DIR_SEPARATOR_S "%s", kerneldir, programname);
       snprintf(binname, PATH_MAX * sizeof(char), "%s" G_DIR_SEPARATOR_S "%s.bin", cachedir, programname);
+      dt_gui_splash_updatef(_("Building OpenCL kernels: %s"), programname);
       dt_vprint(DT_DEBUG_OPENCL, "[dt_opencl_device_init] testing program `%s' ..\n", programname);
       int loaded_cached;
       char md5sum[33];

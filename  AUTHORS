@@ -1,0 +1,197 @@
+* developers:
+Aurélien PIERRE
+Pascal Obry
+Aldric Renaudin
+Guillaume Stutin
+parafin
+Roman Lebedev
+
+* translators:
+Pascal Obry
+Jeronimo Pellegrini
+Victor Forsiuk
+Aurélien PIERRE
+Ryo Shinozaki
+Martin Straeten
+Guillaume Marty
+Alynx Zhou
+Serkan ÖNDER
+Petr Stasiak
+Stephan Hoek
+Maurizio Paglia
+EdgarLux
+Luca Zulberti
+Matt Maguire
+Nicolas Auffray
+bajdero
+mmardegan
+Hubert Figuière
+Jan Friedrich
+Matjaž Jeran
+MatteoVita
+cotacot
+篠崎亮　Ryo Shinozaki
+
+* contributors (at least 4 commits):
+Hanno Schwalm
+Philippe Weyland
+Diederik ter Rahe
+Alynx Zhou
+Victor Forsiuk
+Nicolas Auffray
+Miloš Komarčević
+Jeronimo Pellegrini
+Chris Elston
+Sakari Kapanen
+Dan Torop
+Ryo Shinozaki
+HansBull
+Jiyone
+Guillaume Marty
+Martin Straeten
+lologor
+Ralf Brown
+Maurizio Paglia
+Serkan ÖNDER
+starapo7348
+Miguel Moquillon
+Petr Stasiak
+Stephan Hoek
+solarer
+Luca Zulberti
+Philipp Lutz
+luz paz
+Alban Gruin
+Apfelkraut
+EdgarLux
+Ricky Moon
+quovadit
+
+* Sub-module rawspeed contributors (at least 1 commit):
+Roman Lebedev
+Miloš Komarčević
+Jordan Neumeyer
+Pascal Obry
+Georg Lukas
+Kolton Yager
+Thomas Baumann
+Victor Forsiuk
+Aurélien PIERRE
+Philipp Lutz
+Daniel Vogelbacher
+Louie Lu
+Howard Liberty
+Steven Le Rouzic
+Yattaro
+maruncz
+-cr
+Alex Tutubalin
+Andreas Stiller
+Artemis Tosini
+David Korczynski
+Georg Niedrist
+Hon1nbo
+Jan Šmucr
+Jonas Schäfer
+Jorge Nerín
+LibRaw LLC
+Marco Ristuccia
+Marko Toplak
+Massimo Paladin
+Michael Allman
+Milos Komarcevic
+Omari Stephens
+PeterWem
+Simon Raffeiner
+Sprite
+luz paz
+squid-f
+ubergeek801
+Šarūnas Burdulis
+
+* Sub-module OpenCL contributors (at least 1 commit):
+Ben Ashbaugh
+Kévin Petit
+Brice Videau
+Ewan Crawford
+Nagy-Egri Máté Ferenc
+John Plate
+Lőrinc Serfőző
+Sreelakshmi Haridas Maruthur
+arm-wk
+Beatriz Navidad Vilches
+Feng Zou
+Gustavo Alvarez
+Jon Leech
+Jose Lopez
+Jörg Thalheim
+Karol Herbst
+Michal Babej
+Milkey Mouse
+Nikhil Joshi
+Philip Turner
+Sergei Barannikov
+Zibai Wang
+aharon-abramson
+joshqti
+sherry-yuan
+y-novikov
+
+* Sub-module libxcf contributors (at least 1 commit):
+
+* Sub-module whereami contributors (at least 1 commit):
+Gregory Pakosz
+Ian Burgan
+Sergey Agievich
+
+* Sub-module LibRaw contributors (at least 1 commit):
+Alex Tutubalin
+LibRaw LLC
+Egor Egorov
+Mark Reid
+Miloš Komarčević
+Aleks L
+Dirk Lemstra
+Rainer Schielke
+龙俊良
+Alex
+Daniel Martinez
+Fabien Castan
+LAK132
+Paul Oliver
+Petr Minář
+Pino Toscano
+Sam James
+TOMIKAWA Sotaro
+Z. Liu
+davidrankin2
+luz paz
+psykose
+sashashura
+ssssota
+
+* Sub-module doxygen-awesome-css contributors (at least 1 commit):
+jothepro
+Johannes Krafft
+Markus Napp
+Adheesh Trivedi
+Andrea Pappacoda
+Andy Maloney
+Ayush Chamoli
+Bernd Riederer
+David Álvarez Rosa
+Eritque arcus
+Leger Charlie
+Liviu Ionescu
+Michael R. Crusoe
+Murillo Teixeira
+OkawaYusuke
+Thibaud Chupin
+Timo Koch
+Vincent Hamp
+Volker Enderlein
+William Roy
+patricklaf
+pinchartl
+
+And all those of you that made previous releases possible
