@@ -1579,7 +1579,8 @@ void init_presets(dt_lib_module_t *self)
       sqlite3_finalize(innerstmt);
     }
   }
-  sqlite3_finalize(stmt);
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
 }
 
 void *legacy_params(dt_lib_module_t *self, const void *const old_params, const size_t old_params_size,
