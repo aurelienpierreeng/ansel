@@ -137,6 +137,33 @@ maybe_enable_backports() {
   fi
 }
 
+enable_noble_jxl_repo() {
+  # As a last resort on Ubuntu < 24.04, allow pulling libjxl* from Noble with
+  # strict apt pinning so we don't upgrade unrelated packages.
+  local list_file="/etc/apt/sources.list.d/ansel-noble-jxl.list"
+  local pref_file="/etc/apt/preferences.d/ansel-noble-jxl.pref"
+
+  if [ ! -f "${list_file}" ]; then
+    {
+      echo "deb http://archive.ubuntu.com/ubuntu noble main universe"
+      echo "deb http://archive.ubuntu.com/ubuntu noble-updates main universe"
+      echo "deb http://security.ubuntu.com/ubuntu noble-security main universe"
+    } | "${SUDO[@]}" tee "${list_file}" >/dev/null
+  fi
+
+  if [ ! -f "${pref_file}" ]; then
+    {
+      echo "Package: *"
+      echo "Pin: release n=noble"
+      echo "Pin-Priority: 100"
+      echo ""
+      echo "Package: libjxl* jpeg-xl"
+      echo "Pin: release n=noble"
+      echo "Pin-Priority: 1001"
+    } | "${SUDO[@]}" tee "${pref_file}" >/dev/null
+  fi
+}
+
 if [ -n "${LLVM_VER:-}" ]; then
   APT_PACKAGES+=(
     "clang-${LLVM_VER}"
@@ -168,5 +195,19 @@ fi
 
 maybe_enable_backports
 "${SUDO[@]}" apt-get update
+
+# JPEG XL support is a hard requirement. We only accept system packages to keep
+# installs reproducible and aligned with distro security updates.
+if ! apt-cache show libjxl-dev >/dev/null 2>&1; then
+  if [ "${ID:-}" = "ubuntu" ] && [ -n "${VERSION_ID:-}" ] && version_lt "${VERSION_ID}" "24.04" && [ "${JXL_ALLOW_NOBLE:-0}" -eq 1 ]; then
+    enable_noble_jxl_repo
+    "${SUDO[@]}" apt-get update
+  fi
+  if ! apt-cache show libjxl-dev >/dev/null 2>&1; then
+    echo "ERROR: libjxl-dev not available in apt repositories. Enable backports or upgrade to Ubuntu 24.04+." >&2
+    echo "Set JXL_ALLOW_NOBLE=1 to allow pulling libjxl from Ubuntu 24.04 (Noble) with apt pinning." >&2
+    exit 1
+  fi
+fi
 
 "${SUDO[@]}" apt-get install -y "${APT_PACKAGES[@]}"
