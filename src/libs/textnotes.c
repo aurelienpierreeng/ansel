@@ -1398,6 +1398,8 @@ static gchar *_extract_image_dest_from_source(const char *text, const GArray *of
 
 static void _render_preview(dt_lib_textnotes_t *d, const char *text)
 {
+  if(!d || !d->preview_view) return;
+  if(!dt_lib_gui_get_expanded(d->self)) return;
   d->rendering = TRUE;
   GtkTextBuffer *buffer = gtk_text_view_get_buffer(d->preview_view);
   gtk_text_buffer_set_text(buffer, "", -1);
@@ -1592,6 +1594,7 @@ static void _update_mtime_label(dt_lib_module_t *self)
 {
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
   if(!d->mtime_label) return;
+  if(!dt_lib_gui_get_expanded(self)) return;
 
   char *path = (d->imgid > 0) ? dt_image_get_text_path(d->imgid) : NULL;
   if(!path)
@@ -1772,14 +1775,18 @@ static void _preview_map(GtkWidget *widget, dt_lib_module_t *self)
   (void)widget;
 }
 
+static void _edit_map(GtkWidget *widget, dt_lib_module_t *self)
+{
+  _update_for_current_image(self);
+}
+
 static gboolean _initial_load_idle(gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
   if(!d) return G_SOURCE_REMOVE;
   if(d->imgid > 0) return G_SOURCE_REMOVE;
-  if(!darktable.develop) return G_SOURCE_CONTINUE;
-  _load_for_image(self, darktable.develop->image_storage.id);
+  _update_for_current_image(self);
   return G_SOURCE_REMOVE;
 }
 
@@ -1971,8 +1978,6 @@ static void _update_for_current_image(dt_lib_module_t *self)
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
   if(!d) return;
 
-  if(!d->loading) _save_now(self);
-
   int32_t img_id = dt_control_get_mouse_over_id();
   if(img_id > -1)
     ;
@@ -1980,6 +1985,8 @@ static void _update_for_current_image(dt_lib_module_t *self)
     img_id = dt_act_on_get_first_image();
 
   if(img_id == d->imgid) return; // nothing to update, spare the SQL queries
+  if(!d->loading) _save_now(self);
+  if(!dt_lib_gui_get_expanded(self)) return;
 
   _load_for_image(self, img_id);
 }
@@ -2027,6 +2034,7 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(textview, "key-press-event", G_CALLBACK(_edit_key_press), self);
   g_signal_connect(textview, "key-release-event", G_CALLBACK(_edit_key_release), self);
   g_signal_connect(textview, "button-release-event", G_CALLBACK(_edit_button_release), self);
+  g_signal_connect(textview, "map", G_CALLBACK(_edit_map), self);
 
   d->edit_view = GTK_TEXT_VIEW(textview);
   _setup_completion(self, textview);
