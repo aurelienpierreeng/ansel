@@ -904,6 +904,15 @@ void dt_thumbtable_refresh_thumbnail_real(dt_thumbtable_t *table, int32_t imgid,
 
 
 // this is called each time the images info change
+// NOTE: remember we populate the table->lut with the current collection
+// but we init actual thumbnail objects and add their widgets to the grid
+// only when they appear in viewport. 
+// So, we have to account for the fact that we may not have actual
+// thumbnails to refresh yet, and the table->list doesn't contain
+// uninited thumbs.
+// So we always use table->lut to find imgid, update the cached info
+// and try to update widgets only if we have some.
+// Otherwise, fresh info will be read when initing new thumbnails objects.
 static void _dt_image_info_changed_callback(gpointer instance, gpointer imgs, gpointer user_data)
 {
   if(!user_data || !imgs) return;
@@ -934,28 +943,17 @@ static void _dt_image_info_changed_callback(gpointer instance, gpointer imgs, gp
       dt_image_cache_read_release(darktable.image_cache, img);
     }
 
-    gboolean created = FALSE;
-    if(!entry->thumb)
-    {
-      _add_thumbnail_at_rowid(table, rowid, mouse_over);
-      created = TRUE;
-    }
-
     dt_thumbnail_t *thumb = entry->thumb;
-    if(thumb)
+    if(thumb && img)
     {
-      if(entry->info_valid)
-        dt_thumbnail_resync_info(thumb, &entry->info);
-      
-      if(!created)
-        dt_thumbnail_update_gui(thumb);
-
+      dt_thumbnail_resync_info(thumb, &entry->info);
+      dt_thumbnail_update_gui(thumb);
       _add_thumbnail_group_borders(table, thumb);
       gtk_widget_queue_draw(thumb->widget);
-
-      if(darktable.view_manager->image_info_id == imgid)
-        dt_view_image_info_update(imgid);
     }
+
+    if(darktable.view_manager->image_info_id == imgid)
+      dt_view_image_info_update(imgid);
   }
 
   dt_pthread_mutex_unlock(&table->lock);
