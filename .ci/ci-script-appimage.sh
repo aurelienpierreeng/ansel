@@ -47,7 +47,14 @@ export NO_STRIP=true
 # Our plugins link against libansel, it's not in system, so tell linuxdeploy
 # where to find it. Don't use LD_PRELOAD here, linuxdeploy cannot see preloaded
 # libraries.
-export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:../AppDir/usr/lib64/"
+ANSEL_LIBDIR="$(find ../AppDir/usr -type d -name ansel -path "../AppDir/usr/lib*" | head -n 1)"
+if [ -z "${ANSEL_LIBDIR}" ]; then
+  echo "ERROR: Could not locate installed ansel libraries in AppDir." >&2
+  find ../AppDir/usr -maxdepth 4 -type d -name ansel >&2
+  exit 1
+fi
+ANSEL_LIBROOT="$(dirname "${ANSEL_LIBDIR}")"
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${ANSEL_LIBROOT}/"
 # Using `--deploy-deps-only` to tell linuxdeploy also collect dependencies for
 # libraries in this dir, but don't copy those libraries. On the contrary,
 # `--library` will copy both libraries and their dependencies, which is not what
@@ -57,10 +64,10 @@ export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:../AppDir/usr/lib64/"
 ./linuxdeploy-x86_64.AppImage \
   --appdir ../AppDir \
   --plugin gtk \
-  --deploy-deps-only ../AppDir/usr/lib64/ansel \
-  --deploy-deps-only ../AppDir/usr/lib64/ansel/views \
-  --deploy-deps-only ../AppDir/usr/lib64/ansel/plugins \
-  --deploy-deps-only ../AppDir/usr/lib64/ansel/plugins/imageio/format \
-  --deploy-deps-only ../AppDir/usr/lib64/ansel/plugins/imageio/storage \
-  --deploy-deps-only ../AppDir/usr/lib64/ansel/plugins/lighttable \
+  --deploy-deps-only "${ANSEL_LIBDIR}" \
+  --deploy-deps-only "${ANSEL_LIBDIR}/views" \
+  --deploy-deps-only "${ANSEL_LIBDIR}/plugins" \
+  --deploy-deps-only "${ANSEL_LIBDIR}/plugins/imageio/format" \
+  --deploy-deps-only "${ANSEL_LIBDIR}/plugins/imageio/storage" \
+  --deploy-deps-only "${ANSEL_LIBDIR}/plugins/lighttable" \
   --output appimage
