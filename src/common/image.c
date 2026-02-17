@@ -57,9 +57,19 @@
 #include <glib/gstdio.h>
 
 static sqlite3_stmt *_image_altered_stmt = NULL;
-static dt_pthread_mutex_t _image_stmt_mutex = PTHREAD_MUTEX_INITIALIZER;
+static dt_pthread_mutex_t _image_stmt_mutex;
+static gsize _image_stmt_mutex_inited = 0;
 static sqlite3_stmt *_image_full_path_stmt = NULL;
 static sqlite3_stmt *_image_local_copy_full_path_stmt = NULL;
+
+static inline void _image_stmt_mutex_ensure(void)
+{
+  if(g_once_init_enter(&_image_stmt_mutex_inited))
+  {
+    dt_pthread_mutex_init(&_image_stmt_mutex, NULL);
+    g_once_init_leave(&_image_stmt_mutex_inited, 1);
+  }
+}
 
 typedef struct dt_undo_monochrome_t
 {
@@ -1049,6 +1059,7 @@ uint32_t dt_image_altered(const int32_t imgid)
 {
   uint32_t found_it = 0;
 
+  _image_stmt_mutex_ensure();
   dt_pthread_mutex_lock(&_image_stmt_mutex);
   if(!_image_altered_stmt)
   {
@@ -1070,6 +1081,7 @@ uint32_t dt_image_altered(const int32_t imgid)
 
 void dt_image_cleanup(void)
 {
+  _image_stmt_mutex_ensure();
   dt_pthread_mutex_lock(&_image_stmt_mutex);
   if(_image_altered_stmt)
   {

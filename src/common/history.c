@@ -38,7 +38,17 @@
 #define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
 
 static sqlite3_stmt *_history_check_module_exists_stmt = NULL;
-static dt_pthread_mutex_t _history_stmt_mutex = PTHREAD_MUTEX_INITIALIZER;
+static dt_pthread_mutex_t _history_stmt_mutex;
+static gsize _history_stmt_mutex_inited = 0;
+
+static inline void _history_stmt_mutex_ensure(void)
+{
+  if(g_once_init_enter(&_history_stmt_mutex_inited))
+  {
+    dt_pthread_mutex_init(&_history_stmt_mutex, NULL);
+    g_once_init_leave(&_history_stmt_mutex_inited, 1);
+  }
+}
 
 void dt_history_item_free(gpointer data)
 {
@@ -607,6 +617,7 @@ int dt_history_compress_on_list(const GList *imgs)
 gboolean dt_history_check_module_exists(int32_t imgid, const char *operation, gboolean enabled)
 {
   gboolean result = FALSE;
+  _history_stmt_mutex_ensure();
   dt_pthread_mutex_lock(&_history_stmt_mutex);
   if(!_history_check_module_exists_stmt)
   {
@@ -633,6 +644,7 @@ gboolean dt_history_check_module_exists(int32_t imgid, const char *operation, gb
 
 void dt_history_cleanup(void)
 {
+  _history_stmt_mutex_ensure();
   dt_pthread_mutex_lock(&_history_stmt_mutex);
   if(_history_check_module_exists_stmt)
   {
