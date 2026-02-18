@@ -46,7 +46,12 @@
 #else
 #include <sys/mman.h>
 #ifndef MAP_ANONYMOUS
-#define MAP_ANONYMOUS MAP_ANON
+  #ifdef MAP_ANON
+    #define MAP_ANONYMOUS MAP_ANON
+  #elif defined(__linux__) && defined(__GNUC__) && !defined(__clang__) && (__GNUC__ < 14)
+    // GCC < 14 may hide MAP_ANONYMOUS in strict feature sets: provide a local fallback.
+    #define MAP_ANONYMOUS 0x20
+  #endif
 #endif
 #endif
 
