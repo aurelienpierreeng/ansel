@@ -25,6 +25,7 @@
 #include "common/image_cache.h"
 #include "common/imageio.h"
 #include "common/ratings.h"
+#include "develop/imageop.h"
 #include "views/view.h"
 
 #include <glib.h>
@@ -33,6 +34,86 @@
 #include <string.h>
 
 static sqlite3_stmt *_thumbtable_collection_stmt = NULL;
+
+static void _thumbtable_info_to_image(dt_image_t *img, const dt_thumbnail_image_info_t *info)
+{
+  if(!img || !info) return;
+
+  dt_image_init(img);
+
+  img->id = info->imgid;
+  img->film_id = info->film_id;
+  img->group_id = info->groupid;
+  img->group_members = info->group_members;
+  img->history_items = info->history_items;
+  img->version = info->version;
+  img->width = info->width;
+  img->height = info->height;
+  img->p_width = info->p_width;
+  img->p_height = info->p_height;
+  img->orientation = info->orientation;
+  img->flags = info->flags;
+  img->loader = info->loader;
+  img->import_timestamp = info->import_timestamp;
+  img->change_timestamp = info->change_timestamp;
+  img->export_timestamp = info->export_timestamp;
+  img->print_timestamp = info->print_timestamp;
+  img->exif_exposure = info->exif_exposure;
+  img->exif_exposure_bias = info->exif_exposure_bias;
+  img->exif_aperture = info->exif_aperture;
+  img->exif_iso = info->exif_iso;
+  img->exif_focal_length = info->exif_focal_length;
+  img->exif_focus_distance = info->exif_focus_distance;
+  img->exif_datetime_taken = info->exif_datetime_taken;
+  img->geoloc.latitude = info->geoloc_latitude;
+  img->geoloc.longitude = info->geoloc_longitude;
+  img->geoloc.elevation = info->geoloc_elevation;
+  img->color_labels = info->colorlabels;
+
+  g_strlcpy(img->filename, info->filename, sizeof(img->filename));
+  g_strlcpy(img->fullpath, info->fullpath, sizeof(img->fullpath));
+  g_strlcpy(img->local_copy_path, info->local_copy_path, sizeof(img->local_copy_path));
+  g_strlcpy(img->local_copy_legacy_path, info->local_copy_legacy_path, sizeof(img->local_copy_legacy_path));
+  g_strlcpy(img->exif_maker, info->exif_maker, sizeof(img->exif_maker));
+  g_strlcpy(img->exif_model, info->exif_model, sizeof(img->exif_model));
+  g_strlcpy(img->exif_lens, info->exif_lens, sizeof(img->exif_lens));
+  g_strlcpy(img->camera_makermodel, info->camera, sizeof(img->camera_makermodel));
+
+  if(!img->local_copy_path[0] && !img->local_copy_legacy_path[0] && img->fullpath[0])
+    dt_image_local_copy_paths_from_fullpath(img->fullpath, img->id, img->local_copy_path,
+                                            sizeof(img->local_copy_path), img->local_copy_legacy_path,
+                                            sizeof(img->local_copy_legacy_path));
+
+  if(img->exif_focus_distance >= 0 && img->orientation >= 0) img->exif_inited = 1;
+
+  if(img->flags & DT_IMAGE_LDR)
+  {
+    img->buf_dsc.channels = 4;
+    img->buf_dsc.datatype = TYPE_FLOAT;
+    img->buf_dsc.cst = IOP_CS_RGB;
+  }
+  else if(img->flags & DT_IMAGE_HDR)
+  {
+    if(img->flags & DT_IMAGE_RAW)
+    {
+      img->buf_dsc.channels = 1;
+      img->buf_dsc.datatype = TYPE_FLOAT;
+      img->buf_dsc.cst = IOP_CS_RAW;
+    }
+    else
+    {
+      img->buf_dsc.channels = 4;
+      img->buf_dsc.datatype = TYPE_FLOAT;
+      img->buf_dsc.cst = IOP_CS_RGB;
+    }
+  }
+  else
+  {
+    img->buf_dsc.channels = 1;
+    img->buf_dsc.datatype = TYPE_UINT16;
+    img->buf_dsc.cst = IOP_CS_RAW;
+  }
+}
 
 static void _thumbtable_info_finalize_expensive(dt_thumbnail_image_info_t *info)
 {
@@ -216,6 +297,17 @@ void dt_thumbtable_info_from_stmt(dt_thumbnail_image_info_t *info, sqlite3_stmt 
                                             sizeof(info->local_copy_legacy_path));
 
   dt_thumbtable_info_finalize(info, FALSE);
+}
+
+void dt_thumbtable_info_seed_image_cache(const dt_thumbnail_image_info_t *info)
+{
+  if(!info || info->imgid <= 0) return;
+
+  if(!darktable.image_cache) return;
+
+  dt_image_t img = {0};
+  _thumbtable_info_to_image(&img, info);
+  dt_image_cache_seed(darktable.image_cache, &img);
 }
 
 sqlite3_stmt *dt_thumbtable_info_get_collection_stmt(void)

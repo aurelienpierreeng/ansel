@@ -67,6 +67,10 @@ dt_image_t *dt_image_cache_get(dt_image_cache_t *cache, const int32_t imgid, cha
 // is currently unavailable.
 dt_image_t *dt_image_cache_testget(dt_image_cache_t *cache, const int32_t imgid, char mode);
 
+// seed an image cache entry from an already-populated dt_image_t (no SQL).
+// returns 0 on insert, 1 if already present, -1 on failure.
+int dt_image_cache_seed(dt_image_cache_t *cache, const dt_image_t *img);
+
 // drops the read lock on an image struct
 void dt_image_cache_read_release(dt_image_cache_t *cache, const dt_image_t *img);
 
@@ -94,4 +98,3 @@ void dt_image_cache_set_print_timestamp(dt_image_cache_t *cache, const int32_t i
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

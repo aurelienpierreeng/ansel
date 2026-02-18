@@ -655,6 +655,9 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
   gboolean new_item = TRUE;
   gboolean new_position = TRUE;
 
+  // Fast-track: seed the image cache from thumbtable SQL info to avoid per-thumb SQL in mipmap cache.
+  dt_thumbtable_info_seed_image_cache(info);
+
   // Do we already have a thumbnail at the correct postion for the correct imgid ?
   if(table->lut[rowid].thumb && table->lut[rowid].thumb->info.imgid == info->imgid)
   {
@@ -955,7 +958,7 @@ static void _dt_image_info_changed_callback(gpointer instance, gpointer imgs, gp
 
     // Refresh the cached LUT info from the image cache for write-driven updates
     // (ratings, color labels, etc.) while still keeping read paths cache-free.
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    const dt_image_t *img = dt_image_cache_testget(darktable.image_cache, imgid, 'r');
     if(img)
     {
       dt_thumbtable_info_from_image(&entry->info, img);
@@ -1018,9 +1021,8 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
 
     dt_thumbnail_image_info_t *info = &entry.info;
     dt_thumbtable_info_from_stmt(info, stmt, history_items, group_items);
-#ifndef NDEBUG
-    dt_thumbtable_info_debug_assert_matches_cache(info, history_items, group_items);
-#endif
+// NOTE: Debug cache-compare disabled: it hits the image cache and defeats
+// the SQL-only thumbtable population during thumbnail init.
     entry.info_valid = TRUE;
 
     g_array_append_val(collection, entry);

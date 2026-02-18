@@ -271,6 +271,21 @@ dt_image_t *dt_image_cache_testget(dt_image_cache_t *cache, const int32_t imgid,
   return img;
 }
 
+int dt_image_cache_seed(dt_image_cache_t *cache, const dt_image_t *img)
+{
+  if(!cache || !img || img->id <= 0) return -1;
+
+  dt_image_t seeded = *img;
+
+  // Avoid ownership issues for pointers that the cache cleanup would free.
+  seeded.profile = NULL;
+  seeded.profile_size = 0;
+  seeded.dng_gain_maps = NULL;
+  seeded.cache_entry = NULL;
+
+  return dt_cache_seed(&cache->cache, (uint32_t)seeded.id, &seeded, sizeof(dt_image_t), sizeof(dt_image_t), FALSE);
+}
+
 // drops the read lock on an image struct
 void dt_image_cache_read_release(dt_image_cache_t *cache, const dt_image_t *img)
 {

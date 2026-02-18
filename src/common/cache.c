@@ -37,6 +37,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 // this implements a concurrent LRU cache
 
@@ -397,6 +398,53 @@ void dt_cache_release_with_caller(dt_cache_t *cache, dt_cache_entry_t *entry, co
 #endif
 
   dt_pthread_rwlock_unlock(&entry->lock);
+}
+
+int dt_cache_seed(dt_cache_t *cache, const uint32_t key, const void *data, size_t data_size, size_t cost,
+                  gboolean aligned_alloc)
+{
+  if(!cache || !data || data_size == 0) return -1;
+
+  dt_pthread_mutex_lock(&cache->lock);
+  if(g_hash_table_contains(cache->hashtable, GINT_TO_POINTER(key)))
+  {
+    dt_pthread_mutex_unlock(&cache->lock);
+    return 1;
+  }
+
+  if(cache->cost > 0.8f * cache->cost_quota)
+    dt_cache_gc(cache, 0.8f);
+
+  dt_cache_entry_t *entry = (dt_cache_entry_t *)g_slice_alloc(sizeof(dt_cache_entry_t));
+  entry->data = 0;
+  entry->data_size = data_size;
+  entry->cost = cost ? cost : data_size;
+  entry->link = g_list_append(0, entry);
+  entry->key = key;
+  entry->_lock_demoting = 0;
+
+  entry->data = aligned_alloc ? dt_alloc_align(entry->data_size) : g_malloc(entry->data_size);
+  if(!entry->data)
+  {
+    g_slice_free1(sizeof(*entry), entry);
+    dt_pthread_mutex_unlock(&cache->lock);
+    return -1;
+  }
+
+  memcpy(entry->data, data, entry->data_size);
+
+  int ret = dt_pthread_rwlock_init(&entry->lock, 0);
+  if(ret) fprintf(stderr, "rwlock init: %d\n", ret);
+
+  g_hash_table_insert(cache->hashtable, GINT_TO_POINTER(key), entry);
+  cache->lru = g_list_concat(cache->lru, entry->link);
+  cache->cost += entry->cost;
+
+  assert(entry->data_size);
+  ASAN_POISON_MEMORY_REGION(entry->data, entry->data_size);
+
+  dt_pthread_mutex_unlock(&cache->lock);
+  return 0;
 }
 
 // clang-format off

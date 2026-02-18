@@ -21,6 +21,7 @@
 #include "common/darktable.h"
 
 #include <limits.h>
+#include <stdint.h>
 #include <sqlite3.h>
 
 #ifdef __cplusplus
@@ -101,6 +102,7 @@ void dt_thumbtable_info_from_stmt(dt_thumbnail_image_info_t *info, sqlite3_stmt 
                                   uint32_t history_items, uint32_t group_members);
 void dt_thumbtable_info_from_image(dt_thumbnail_image_info_t *info, const struct dt_image_t *img);
 void dt_thumbtable_info_finalize(dt_thumbnail_image_info_t *info, gboolean expensive);
+void dt_thumbtable_info_seed_image_cache(const dt_thumbnail_image_info_t *info);
 
 #ifndef NDEBUG
 void dt_thumbtable_info_debug_assert_matches_cache(const dt_thumbnail_image_info_t *sql_info,

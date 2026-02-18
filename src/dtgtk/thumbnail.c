@@ -103,12 +103,9 @@ static void _image_update_group_tooltip(dt_thumbnail_t *thumb)
     tt = g_strdup_printf("\n\u2022 <b>%s (%s)</b>", _("current"), _("leader"));
   else
   {
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, thumb->info.groupid, 'r');
-    if(img)
-    {
-      tt = g_strdup_printf("%s\n\u2022 <b>%s (%s)</b>", _("\nclick here to set this image as group leader\n"), img->filename, _("leader"));
-      dt_image_cache_read_release(darktable.image_cache, img);
-    }
+    dt_thumbnail_image_info_t leader = { 0 };
+    if(dt_thumbtable_get_thumbnail_info(thumb->table, thumb->info.groupid, &leader))
+      tt = g_strdup_printf("%s\n\u2022 <b>%s (%s)</b>", _("\nclick here to set this image as group leader\n"), leader.filename, _("leader"));
   }
 
   // and the other images

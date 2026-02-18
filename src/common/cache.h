@@ -93,6 +93,9 @@ void dt_cache_release_with_caller(dt_cache_t *cache, dt_cache_entry_t *entry, co
 int32_t dt_cache_contains(dt_cache_t *cache, const uint32_t key);
 // returns 0 on success, 1 if the key was not found.
 int32_t dt_cache_remove(dt_cache_t *cache, const uint32_t key);
+// seed a cache entry without running allocate callback. returns 0 on insert, 1 if already present, -1 on failure.
+int dt_cache_seed(dt_cache_t *cache, const uint32_t key, const void *data, size_t data_size, size_t cost,
+                  gboolean aligned_alloc);
 // removes from the tip of the lru list, until the fill ratio of the hashtable
 // goes below the given parameter, in terms of the user defined cost measure.
 // will never lock and never fail, but sometimes not free memory (in case all
@@ -111,4 +114,3 @@ int dt_cache_for_all(dt_cache_t *cache,
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-
