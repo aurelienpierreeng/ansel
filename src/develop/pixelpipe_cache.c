@@ -123,7 +123,7 @@ uint64_t _non_thread_safe_cache_get_hash_data(dt_dev_pixelpipe_cache_t *cache, v
 dt_pixel_cache_entry_t *_non_threadsafe_cache_get_entry(dt_dev_pixelpipe_cache_t *cache, GHashTable *table,
                                                         const uint64_t key)
 {
-  dt_pixel_cache_entry_t *entry = (dt_pixel_cache_entry_t *)g_hash_table_lookup(table, GUINT_TO_POINTER(key));
+  dt_pixel_cache_entry_t *entry = (dt_pixel_cache_entry_t *)g_hash_table_lookup(table, &key);
   if(entry) entry->hits++;
   return entry;
 }
@@ -173,7 +173,7 @@ int _non_thread_safe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const uint64_
 
     if((!used || force) && !locked)
     {
-      g_hash_table_remove(table, GUINT_TO_POINTER(cache_entry->hash));
+      g_hash_table_remove(table, &cache_entry->hash);
       return 0;
     }
     else if(used)
@@ -613,7 +613,8 @@ void *dt_pixel_cache_alloc(dt_dev_pixelpipe_cache_t *cache, dt_pixel_cache_entry
 }
 
 // WARNING: non thread-safe
-static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t size, const uint64_t hash, const char *name)
+static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t size, const uint64_t hash,
+                                const char *name)
 {
   // Free up space if needed to match the max memory limit
   // If error, all entries are currently locked or in use, so we cannot free space to allocate a new entry.
@@ -627,7 +628,10 @@ static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t si
     const gboolean name_is_file = (name != NULL) && (strchr(name, '/') != NULL) && (strchr(name, ':') != NULL);
     if(!name) name = g_strdup("unknown");
     
-    fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry %" PRIu64 " (%s)\n", hash, name);
+    if(hash)
+      fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry %" PRIu64 " (%s)\n", hash, name);
+    else
+      fprintf(stdout, "[pixelpipe] cache is full, cannot allocate new entry (%s)\n", name);
     if(name && module && name_is_file)
       dt_control_log(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."), name, module);
     else if(name)
@@ -652,6 +656,7 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache,
 
   if(error) return NULL;
 
+  // Page size is the desired size + AVX/SSE rounding
   size_t page_size = 0;
   void *buf = dt_cache_arena_alloc(&cache->arena, size, &page_size);
   if(!buf) return NULL;
@@ -700,7 +705,7 @@ void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void *
 
   _non_thread_safe_cache_ref_count_entry(cache, cache_entry->hash, FALSE, cache_entry);
   dt_pthread_rwlock_unlock(&cache_entry->lock);
-  g_hash_table_remove(cache->external_entries, GUINT_TO_POINTER(cache_entry->hash));
+  g_hash_table_remove(cache->external_entries, &cache_entry->hash);
   *mem = NULL;
 
   dt_pthread_mutex_unlock(&cache->lock);
@@ -721,7 +726,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
     return NULL;
   }
 
-  int error = _free_space_to_alloc(cache, rounded_size, 0, name);
+  int error = _free_space_to_alloc(cache, rounded_size, hash, name);
   if(error) return NULL;
 
   dt_pixel_cache_entry_t *cache_entry = (dt_pixel_cache_entry_t *)malloc(sizeof(dt_pixel_cache_entry_t));
@@ -755,11 +760,21 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
   cache_entry->name = g_strdup(name);
   dt_pthread_rwlock_init(&cache_entry->lock, NULL);
 
-  g_hash_table_insert(table, GUINT_TO_POINTER(hash), cache_entry);
+  uint64_t *key = g_malloc(sizeof(*key));
+  if(!key)
+  {
+    dt_pthread_rwlock_destroy(&cache_entry->lock);
+    g_free(cache_entry->name);
+    dt_pthread_mutex_destroy(&cache_entry->cl_mem_lock);
+    free(cache_entry);
+    return NULL;
+  }
+  *key = hash;
+  g_hash_table_insert(table, key, cache_entry);
 
   // Note : we grow the cache size even though the data buffer is not yet allocated
   // This is planning
-  cache->current_memory += size;
+  cache->current_memory += rounded_size;
 
   return cache_entry;
 }
@@ -770,8 +785,10 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
   if(!cache_entry) return;
   dt_pixel_cache_message(cache_entry, "freed", FALSE);
 
-  if(cache_entry->data) 
+  if(cache_entry->data)
+  {
     dt_cache_arena_free(&cache_entry->cache->arena, cache_entry->data, cache_entry->size);
+  }
 
   dt_pixel_cache_clmem_flush(cache_entry);
 
@@ -879,8 +896,8 @@ dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
 {
   dt_dev_pixelpipe_cache_t *cache = (dt_dev_pixelpipe_cache_t *)malloc(sizeof(dt_dev_pixelpipe_cache_t));
   dt_pthread_mutex_init(&cache->lock, NULL);
-  cache->entries = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)_free_cache_entry);
-  cache->external_entries = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)_free_cache_entry);
+  cache->entries = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, (GDestroyNotify)_free_cache_entry);
+  cache->external_entries = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, (GDestroyNotify)_free_cache_entry);
   cache->max_memory = max_memory;
   cache->current_memory = 0;
   cache->queries = cache->hits = 0;
