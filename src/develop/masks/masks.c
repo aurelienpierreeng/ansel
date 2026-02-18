@@ -2850,39 +2850,18 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mas
   {
     if(gui->pos_source[0] == -1.0f && gui->pos_source[1] == -1.0f)
     {
-#if 0 //TODO: replace individual cases with this generic one (will require passing 'form' through multiple layers...)
-      if(form->functions && form->functions->initial_source_pos)
+      const dt_masks_form_t *forms = darktable.develop->form_visible;
+      if(!forms) return;
+      const dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(forms->points, gui->group_selected);
+      if(!fpt) return;
+      const dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, fpt->formid);
+
+      if(form && form->functions && form->functions->initial_source_pos)
       {
         form->functions->initial_source_pos(iwd, iht, &x, &y);
         x += xpos;
         y += ypos;
       }
-#else
-      if(mask_type & DT_MASKS_CIRCLE)
-      {
-        dt_masks_functions_circle.initial_source_pos(iwd, iht, &x, &y);
-        x += xpos;
-        y += ypos;
-      }
-      else if(mask_type & DT_MASKS_ELLIPSE)
-      {
-        dt_masks_functions_ellipse.initial_source_pos(iwd, iht, &x, &y);
-        x += xpos;
-        y += ypos;
-      }
-      else if(mask_type & DT_MASKS_POLYGON)
-      {
-        dt_masks_functions_polygon.initial_source_pos(iwd, iht, &x, &y);
-        x += xpos;
-        y += ypos;
-      }
-      else if(mask_type & DT_MASKS_BRUSH)
-      {
-        dt_masks_functions_brush.initial_source_pos(iwd, iht, &x, &y);
-        x += xpos;
-        y += ypos;
-      }
-#endif
       else
         fprintf(stderr, "[dt_masks_calculate_source_pos_value] unsupported masks type when calculating source position value\n");
     }
