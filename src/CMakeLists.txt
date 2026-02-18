@@ -68,6 +68,7 @@ FILE(GLOB SOURCE_FILES
   "common/dbus.c"
   "common/dtpthread.c"
   "common/eaw.c"
+  "common/memory_arena.c"
   "common/exif.cc"
   "common/film.c"
   "common/file_location.c"

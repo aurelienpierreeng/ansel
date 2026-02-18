@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include "common/memory_arena.h"
 #include <inttypes.h>
 #include <glib.h>
 
@@ -45,29 +46,6 @@ struct dt_iop_roi_t;
  * to protect cache entries addition/removal accross threads. The mutex lock
  * protects the whole recursive pixelpipe, so no internal locking is needed nor implemented here.
  */
-
-/*
- * Arena allocator for cache buffers:
- * - We reserve one big contiguous block of virtual memory (the arena).
- * - The arena is split into fixed-size pages (page_size).
- * - free_runs is a sorted list of "free stretches" of pages.
- *   Each run says "from page N, K pages are free".
- * This avoids many small malloc/free calls: we just carve out page ranges
- * and put them back into the list when done.
- */
-typedef struct dt_cache_arena_t
-{
-  uint8_t *base;
-  size_t   size;
-
-  size_t   page_size;
-  uint32_t num_pages;
-
-  GArray *free_runs; // sorted list of free page runs (start page + length in pages)
-
-  dt_pthread_mutex_t lock;
-} dt_cache_arena_t;
-
 
 typedef struct dt_dev_pixelpipe_cache_t
 {
