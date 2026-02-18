@@ -273,6 +273,9 @@ typedef struct dt_image_t
   char fullpath[PATH_MAX];
   char local_copy_path[PATH_MAX];
   char local_copy_legacy_path[PATH_MAX];
+  char folder[PATH_MAX];
+  char filmroll[PATH_MAX];
+  char datetime[200];
 
   // common stuff
 
@@ -325,6 +328,13 @@ typedef struct dt_image_t
 
   /* Color labels */
   int color_labels;
+  int rating;
+
+  gboolean has_localcopy;
+  gboolean has_audio;
+  gboolean is_bw;
+  gboolean is_bw_flow;
+  gboolean is_hdr;
 
   /* convenience pointer back into the image cache, so we can return dt_image_t* there directly. */
   struct dt_cache_entry_t *cache_entry;

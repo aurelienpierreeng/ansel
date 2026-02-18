@@ -1658,6 +1658,9 @@ void dt_image_init(dt_image_t *img)
   memset(img->fullpath, 0, sizeof(img->fullpath));
   memset(img->local_copy_path, 0, sizeof(img->local_copy_path));
   memset(img->local_copy_legacy_path, 0, sizeof(img->local_copy_legacy_path));
+  memset(img->folder, 0, sizeof(img->folder));
+  memset(img->filmroll, 0, sizeof(img->filmroll));
+  memset(img->datetime, 0, sizeof(img->datetime));
   g_strlcpy(img->filename, "(unknown)", sizeof(img->filename));
   img->exif_crop = 1.0;
   img->exif_exposure = 0;
@@ -1687,6 +1690,12 @@ void dt_image_init(dt_image_t *img)
   img->dng_gain_maps = NULL;
   img->cache_entry = 0;
   img->color_labels = 0;
+  img->rating = 0;
+  img->has_localcopy = FALSE;
+  img->has_audio = FALSE;
+  img->is_bw = FALSE;
+  img->is_bw_flow = FALSE;
+  img->is_hdr = FALSE;
 
   for(int k=0; k<4; k++)
     for(int i=0; i<3; i++)

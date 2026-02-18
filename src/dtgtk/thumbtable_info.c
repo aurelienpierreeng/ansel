@@ -35,279 +35,26 @@
 
 static sqlite3_stmt *_thumbtable_collection_stmt = NULL;
 
-static void _thumbtable_info_to_image(dt_image_t *img, const dt_thumbnail_image_info_t *info)
-{
-  if(!img || !info) return;
-
-  dt_image_init(img);
-
-  img->id = info->imgid;
-  img->film_id = info->film_id;
-  img->group_id = info->groupid;
-  img->group_members = info->group_members;
-  img->history_items = info->history_items;
-  img->version = info->version;
-  img->width = info->width;
-  img->height = info->height;
-  img->p_width = info->p_width;
-  img->p_height = info->p_height;
-  img->orientation = info->orientation;
-  img->flags = info->flags;
-  img->loader = info->loader;
-  img->import_timestamp = info->import_timestamp;
-  img->change_timestamp = info->change_timestamp;
-  img->export_timestamp = info->export_timestamp;
-  img->print_timestamp = info->print_timestamp;
-  img->exif_exposure = info->exif_exposure;
-  img->exif_exposure_bias = info->exif_exposure_bias;
-  img->exif_aperture = info->exif_aperture;
-  img->exif_iso = info->exif_iso;
-  img->exif_focal_length = info->exif_focal_length;
-  img->exif_focus_distance = info->exif_focus_distance;
-  img->exif_datetime_taken = info->exif_datetime_taken;
-  img->geoloc.latitude = info->geoloc_latitude;
-  img->geoloc.longitude = info->geoloc_longitude;
-  img->geoloc.elevation = info->geoloc_elevation;
-  img->color_labels = info->colorlabels;
-
-  g_strlcpy(img->filename, info->filename, sizeof(img->filename));
-  g_strlcpy(img->fullpath, info->fullpath, sizeof(img->fullpath));
-  g_strlcpy(img->local_copy_path, info->local_copy_path, sizeof(img->local_copy_path));
-  g_strlcpy(img->local_copy_legacy_path, info->local_copy_legacy_path, sizeof(img->local_copy_legacy_path));
-  g_strlcpy(img->exif_maker, info->exif_maker, sizeof(img->exif_maker));
-  g_strlcpy(img->exif_model, info->exif_model, sizeof(img->exif_model));
-  g_strlcpy(img->exif_lens, info->exif_lens, sizeof(img->exif_lens));
-  g_strlcpy(img->camera_makermodel, info->camera, sizeof(img->camera_makermodel));
-
-  if(!img->local_copy_path[0] && !img->local_copy_legacy_path[0] && img->fullpath[0])
-    dt_image_local_copy_paths_from_fullpath(img->fullpath, img->id, img->local_copy_path,
-                                            sizeof(img->local_copy_path), img->local_copy_legacy_path,
-                                            sizeof(img->local_copy_legacy_path));
-
-  if(img->exif_focus_distance >= 0 && img->orientation >= 0) img->exif_inited = 1;
-
-  if(img->flags & DT_IMAGE_LDR)
-  {
-    img->buf_dsc.channels = 4;
-    img->buf_dsc.datatype = TYPE_FLOAT;
-    img->buf_dsc.cst = IOP_CS_RGB;
-  }
-  else if(img->flags & DT_IMAGE_HDR)
-  {
-    if(img->flags & DT_IMAGE_RAW)
-    {
-      img->buf_dsc.channels = 1;
-      img->buf_dsc.datatype = TYPE_FLOAT;
-      img->buf_dsc.cst = IOP_CS_RAW;
-    }
-    else
-    {
-      img->buf_dsc.channels = 4;
-      img->buf_dsc.datatype = TYPE_FLOAT;
-      img->buf_dsc.cst = IOP_CS_RGB;
-    }
-  }
-  else
-  {
-    img->buf_dsc.channels = 1;
-    img->buf_dsc.datatype = TYPE_UINT16;
-    img->buf_dsc.cst = IOP_CS_RAW;
-  }
-}
-
-static void _thumbtable_info_finalize_expensive(dt_thumbnail_image_info_t *info)
-{
-  if(!info) return;
-
-  if(!info->camera[0])
-  {
-    const char *maker = info->exif_maker;
-    const char *model = info->exif_model;
-    char mk[64] = { 0 };
-    char md[64] = { 0 };
-    char al[64] = { 0 };
-
-    if((info->exif_maker[0] || info->exif_model[0])
-       && dt_imageio_lookup_makermodel(info->exif_maker, info->exif_model,
-                                       mk, sizeof(mk), md, sizeof(md), al, sizeof(al)))
-    {
-      if(mk[0]) maker = mk;
-      if(md[0]) model = md;
-    }
-
-    g_strlcpy(info->camera, maker, sizeof(info->camera));
-    const size_t len = strlen(maker);
-    if(len < sizeof(info->camera) - 1)
-      info->camera[len] = ' ';
-    g_strlcpy(info->camera + len + 1, model, sizeof(info->camera) - len - 1);
-  }
-
-  if(!info->datetime[0])
-    dt_datetime_gtimespan_to_local(info->datetime, sizeof(info->datetime), info->exif_datetime_taken, FALSE, FALSE);
-
-  if(!info->filmroll[0])
-  {
-    if(info->film_id < 0 || !info->folder[0])
-      g_strlcpy(info->filmroll, _("orphaned image"), sizeof(info->filmroll));
-    else
-      g_strlcpy(info->filmroll, dt_image_film_roll_name(info->folder), sizeof(info->filmroll));
-  }
-
-  if(!info->fullpath[0] && info->folder[0] && info->filename[0])
-    g_snprintf(info->fullpath, sizeof(info->fullpath), "%s" G_DIR_SEPARATOR_S "%s", info->folder, info->filename);
-
-  if(!info->local_copy_path[0] && !info->local_copy_legacy_path[0] && info->fullpath[0])
-    dt_image_local_copy_paths_from_fullpath(info->fullpath, info->imgid, info->local_copy_path,
-                                            sizeof(info->local_copy_path), info->local_copy_legacy_path,
-                                            sizeof(info->local_copy_legacy_path));
-}
-
-void dt_thumbtable_info_finalize(dt_thumbnail_image_info_t *info, gboolean expensive)
-{
-  if(!info) return;
-
-  // Minimal copy of dt_image_t struct to use typical functions
-  dt_image_t tmp = {0};
-  tmp.flags = info->flags;
-  g_strlcpy(tmp.filename, info->filename, sizeof(tmp.filename));
-
-  info->has_localcopy = (info->flags & DT_IMAGE_LOCAL_COPY);
-  info->has_audio = (info->flags & DT_IMAGE_HAS_WAV);
-  info->rating = (info->flags & DT_IMAGE_REJECTED) ? DT_VIEW_REJECT : (info->flags & DT_VIEW_RATINGS_MASK);
-  info->is_bw = dt_image_monochrome_flags(&tmp);
-  info->is_bw_flow = dt_image_use_monochrome_workflow(&tmp);
-  info->is_hdr = dt_image_is_hdr(&tmp);
-
-  if(expensive)
-    _thumbtable_info_finalize_expensive(info);
-}
-
-void dt_thumbtable_info_from_image(dt_thumbnail_image_info_t *info, const dt_image_t *img)
+void dt_thumbtable_copy_image(dt_image_t *info, const dt_image_t *img)
 {
   if(!info || !img) return;
 
-  memset(info, 0, sizeof(*info));
+  memcpy(info, img, sizeof(dt_image_t));
 
-  info->imgid = img->id;
-  info->film_id = img->film_id;
-  info->groupid = img->group_id;
-  info->group_members = img->group_members;
-  info->history_items = img->history_items;
-  info->version = img->version;
-  info->width = img->width;
-  info->height = img->height;
-  info->orientation = img->orientation;
-  info->p_width = img->p_width;
-  info->p_height = img->p_height;
-  info->flags = img->flags;
-  info->loader = img->loader;
-  info->import_timestamp = img->import_timestamp;
-  info->change_timestamp = img->change_timestamp;
-  info->export_timestamp = img->export_timestamp;
-  info->print_timestamp = img->print_timestamp;
-  info->exif_exposure = img->exif_exposure;
-  info->exif_exposure_bias = img->exif_exposure_bias;
-  info->exif_aperture = img->exif_aperture;
-  info->exif_iso = img->exif_iso;
-  info->exif_focal_length = img->exif_focal_length;
-  info->exif_focus_distance = img->exif_focus_distance;
-  info->exif_datetime_taken = img->exif_datetime_taken;
-  info->geoloc_latitude = img->geoloc.latitude;
-  info->geoloc_longitude = img->geoloc.longitude;
-  info->geoloc_elevation = img->geoloc.elevation;
-  g_strlcpy(info->filename, img->filename, sizeof(info->filename));
-  g_strlcpy(info->fullpath, img->fullpath, sizeof(info->fullpath));
-  g_strlcpy(info->local_copy_path, img->local_copy_path, sizeof(info->local_copy_path));
-  g_strlcpy(info->local_copy_legacy_path, img->local_copy_legacy_path, sizeof(info->local_copy_legacy_path));
-  g_strlcpy(info->exif_maker, img->exif_maker, sizeof(info->exif_maker));
-  g_strlcpy(info->exif_model, img->exif_model, sizeof(info->exif_model));
-  g_strlcpy(info->exif_lens, img->exif_lens, sizeof(info->exif_lens));
-  g_strlcpy(info->camera, img->camera_makermodel, sizeof(info->camera));
-  dt_image_film_roll_directory(img, info->folder, sizeof(info->folder));
-  info->colorlabels = img->color_labels;
-
-  dt_thumbtable_info_finalize(info, FALSE);
+  // Avoid sharing cache-owned pointers in GUI copies.
+  info->profile = NULL;
+  info->profile_size = 0;
+  info->dng_gain_maps = NULL;
+  info->cache_entry = NULL;
 }
 
-void dt_thumbtable_info_from_stmt(dt_thumbnail_image_info_t *info, sqlite3_stmt *stmt,
-                                  uint32_t history_items, uint32_t group_members)
+void dt_thumbtable_info_seed_image_cache(const dt_image_t *info)
 {
-  if(!info || !stmt) return;
-
-  memset(info, 0, sizeof(*info));
-
-  info->imgid = sqlite3_column_int(stmt, 0);
-  info->film_id = sqlite3_column_int(stmt, 5);
-  info->groupid = sqlite3_column_int(stmt, 1);
-  info->group_members = group_members;
-  info->history_items = history_items;
-  info->version = sqlite3_column_int(stmt, 6);
-  info->width = sqlite3_column_int(stmt, 7);
-  info->height = sqlite3_column_int(stmt, 8);
-  info->orientation = sqlite3_column_int(stmt, 9);
-  info->p_width = 0;
-  info->p_height = 0;
-  info->flags = sqlite3_column_int(stmt, 10);
-  info->loader = LOADER_UNKNOWN;
-  info->import_timestamp = sqlite3_column_int64(stmt, 11);
-  info->change_timestamp = sqlite3_column_int64(stmt, 12);
-  info->export_timestamp = sqlite3_column_int64(stmt, 13);
-  info->print_timestamp = sqlite3_column_int64(stmt, 14);
-  info->exif_exposure = sqlite3_column_double(stmt, 15);
-  if(sqlite3_column_type(stmt, 16) == SQLITE_FLOAT)
-    info->exif_exposure_bias = sqlite3_column_double(stmt, 16);
-  else
-    info->exif_exposure_bias = NAN;
-  info->exif_aperture = sqlite3_column_double(stmt, 17);
-  info->exif_iso = sqlite3_column_double(stmt, 18);
-  info->exif_focal_length = sqlite3_column_double(stmt, 19);
-  info->exif_focus_distance = sqlite3_column_double(stmt, 20);
-  info->exif_datetime_taken = sqlite3_column_int64(stmt, 21);
-  if(sqlite3_column_type(stmt, 22) == SQLITE_FLOAT)
-    info->geoloc_longitude = sqlite3_column_double(stmt, 22);
-  else
-    info->geoloc_longitude = NAN;
-  if(sqlite3_column_type(stmt, 23) == SQLITE_FLOAT)
-    info->geoloc_latitude = sqlite3_column_double(stmt, 23);
-  else
-    info->geoloc_latitude = NAN;
-  if(sqlite3_column_type(stmt, 24) == SQLITE_FLOAT)
-    info->geoloc_elevation = sqlite3_column_double(stmt, 24);
-  else
-    info->geoloc_elevation = NAN;
-
-  const char *filename = (const char *)sqlite3_column_text(stmt, 25);
-  if(filename) g_strlcpy(info->filename, filename, sizeof(info->filename));
-  const char *fullpath = (const char *)sqlite3_column_text(stmt, 26);
-  if(fullpath) g_strlcpy(info->fullpath, fullpath, sizeof(info->fullpath));
-  const char *maker = (const char *)sqlite3_column_text(stmt, 27);
-  if(maker) g_strlcpy(info->exif_maker, maker, sizeof(info->exif_maker));
-  const char *model = (const char *)sqlite3_column_text(stmt, 28);
-  if(model) g_strlcpy(info->exif_model, model, sizeof(info->exif_model));
-  const char *lens = (const char *)sqlite3_column_text(stmt, 29);
-  if(lens) g_strlcpy(info->exif_lens, lens, sizeof(info->exif_lens));
-  const char *folder = (const char *)sqlite3_column_text(stmt, 30);
-  if(folder) g_strlcpy(info->folder, folder, sizeof(info->folder));
-
-  info->colorlabels = sqlite3_column_int(stmt, 31);
-
-  if(info->fullpath[0])
-    dt_image_local_copy_paths_from_fullpath(info->fullpath, info->imgid, info->local_copy_path,
-                                            sizeof(info->local_copy_path), info->local_copy_legacy_path,
-                                            sizeof(info->local_copy_legacy_path));
-
-  dt_thumbtable_info_finalize(info, FALSE);
-}
-
-void dt_thumbtable_info_seed_image_cache(const dt_thumbnail_image_info_t *info)
-{
-  if(!info || info->imgid <= 0) return;
+  if(!info || info->id <= 0) return;
 
   if(!darktable.image_cache) return;
 
-  dt_image_t img = {0};
-  _thumbtable_info_to_image(&img, info);
-  dt_image_cache_seed(darktable.image_cache, &img);
+  dt_image_cache_seed(darktable.image_cache, info);
 }
 
 sqlite3_stmt *dt_thumbtable_info_get_collection_stmt(void)
@@ -318,7 +65,7 @@ sqlite3_stmt *dt_thumbtable_info_get_collection_stmt(void)
         dt_database_get(darktable.db),
         // Batch-fetch thumbnail metadata in one SQL query to avoid one query per image
         // through the image cache. This keeps scrolling lightweight and predictable.
-        "SELECT im.id, im.group_id, c.rowid, "
+        "SELECT im.id, im.group_id, "
         "(SELECT COUNT(id) FROM main.images WHERE group_id=im.group_id), "
         "(SELECT COUNT(imgid) FROM main.history WHERE imgid=c.imgid), "
         "im.film_id, im.version, im.width, im.height, im.orientation, "
@@ -329,7 +76,9 @@ sqlite3_stmt *dt_thumbtable_info_get_collection_stmt(void)
         "im.longitude, im.latitude, im.altitude, "
         "im.filename, fr.folder || '" G_DIR_SEPARATOR_S "' || im.filename, "
         "im.maker, im.model, im.lens, fr.folder, "
-        "COALESCE((SELECT SUM(1 << color) FROM main.color_labels WHERE imgid=im.id), 0) "
+        "COALESCE((SELECT SUM(1 << color) FROM main.color_labels WHERE imgid=im.id), 0), "
+        "im.crop, im.raw_parameters, im.color_matrix, im.colorspace, "
+        "im.raw_black, im.raw_maximum, im.aspect_ratio, im.output_width, im.output_height "
         "FROM main.images AS im "
         "JOIN memory.collected_images AS c ON im.id = c.imgid "
         "LEFT JOIN main.film_rolls AS fr ON fr.id = im.film_id "
@@ -362,30 +111,28 @@ static gboolean _thumbtable_double_equal(const double a, const double b)
   return (isnan(a) && isnan(b)) || a == b;
 }
 
-void dt_thumbtable_info_debug_assert_matches_cache(const dt_thumbnail_image_info_t *sql_info,
+void dt_thumbtable_info_debug_assert_matches_cache(const dt_image_t *sql_info,
                                                    uint32_t history_items, uint32_t group_members)
 {
-  if(!sql_info || sql_info->imgid <= 0) return;
+  if(!sql_info || sql_info->id <= 0) return;
 
-  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, sql_info->imgid, 'r');
+  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, sql_info->id, 'r');
   if(!img) return;
 
-  dt_image_t tmp = *img;
-  tmp.group_id = sql_info->groupid;
+  dt_image_t tmp = {0};
+  dt_thumbtable_copy_image(&tmp, img);
+  tmp.group_id = sql_info->group_id;
   tmp.group_members = group_members;
   tmp.history_items = history_items;
 
-  dt_thumbnail_image_info_t cache_info = {0};
-  dt_thumbtable_info_from_image(&cache_info, &tmp);
-  dt_thumbtable_info_finalize(&cache_info, TRUE);
+  dt_image_t cache_info = {0};
+  dt_thumbtable_copy_image(&cache_info, &tmp);
   dt_image_cache_read_release(darktable.image_cache, img);
 
-  dt_thumbnail_image_info_t sql_copy = *sql_info;
-  dt_thumbtable_info_finalize(&sql_copy, TRUE);
-
-  g_assert_cmpint(sql_copy.imgid, ==, cache_info.imgid);
+  dt_image_t sql_copy = *sql_info;
+  g_assert_cmpint(sql_copy.id, ==, cache_info.id);
   g_assert_cmpint(sql_info->film_id, ==, cache_info.film_id);
-  g_assert_cmpint(sql_info->groupid, ==, cache_info.groupid);
+  g_assert_cmpint(sql_info->group_id, ==, cache_info.group_id);
   g_assert_cmpint(sql_info->group_members, ==, cache_info.group_members);
   g_assert_cmpint(sql_info->history_items, ==, cache_info.history_items);
   g_assert_cmpint(sql_info->version, ==, cache_info.version);
@@ -397,7 +144,7 @@ void dt_thumbtable_info_debug_assert_matches_cache(const dt_thumbnail_image_info
   g_assert_cmpint(sql_info->flags, ==, cache_info.flags);
   g_assert_cmpint(sql_info->loader, ==, cache_info.loader);
   g_assert_cmpint(sql_info->rating, ==, cache_info.rating);
-  g_assert_cmpint(sql_info->colorlabels, ==, cache_info.colorlabels);
+  g_assert_cmpint(sql_info->color_labels, ==, cache_info.color_labels);
   g_assert(sql_info->has_localcopy == cache_info.has_localcopy);
   g_assert(sql_info->has_audio == cache_info.has_audio);
   g_assert(sql_info->is_bw == cache_info.is_bw);
@@ -414,9 +161,9 @@ void dt_thumbtable_info_debug_assert_matches_cache(const dt_thumbnail_image_info
   g_assert(_thumbtable_float_equal(sql_info->exif_focal_length, cache_info.exif_focal_length));
   g_assert(_thumbtable_float_equal(sql_info->exif_focus_distance, cache_info.exif_focus_distance));
   g_assert((int64_t)sql_info->exif_datetime_taken == (int64_t)cache_info.exif_datetime_taken);
-  g_assert(_thumbtable_double_equal(sql_info->geoloc_latitude, cache_info.geoloc_latitude));
-  g_assert(_thumbtable_double_equal(sql_info->geoloc_longitude, cache_info.geoloc_longitude));
-  g_assert(_thumbtable_double_equal(sql_info->geoloc_elevation, cache_info.geoloc_elevation));
+  g_assert(_thumbtable_double_equal(sql_info->geoloc.latitude, cache_info.geoloc.latitude));
+  g_assert(_thumbtable_double_equal(sql_info->geoloc.longitude, cache_info.geoloc.longitude));
+  g_assert(_thumbtable_double_equal(sql_info->geoloc.elevation, cache_info.geoloc.elevation));
   g_assert_cmpstr(sql_copy.filename, ==, cache_info.filename);
   g_assert_cmpstr(sql_copy.fullpath, ==, cache_info.fullpath);
   g_assert_cmpstr(sql_copy.local_copy_path, ==, cache_info.local_copy_path);
@@ -424,7 +171,7 @@ void dt_thumbtable_info_debug_assert_matches_cache(const dt_thumbnail_image_info
   g_assert_cmpstr(sql_copy.filmroll, ==, cache_info.filmroll);
   g_assert_cmpstr(sql_copy.folder, ==, cache_info.folder);
   g_assert_cmpstr(sql_copy.datetime, ==, cache_info.datetime);
-  g_assert_cmpstr(sql_copy.camera, ==, cache_info.camera);
+  g_assert_cmpstr(sql_copy.camera_makermodel, ==, cache_info.camera_makermodel);
   g_assert_cmpstr(sql_copy.exif_maker, ==, cache_info.exif_maker);
   g_assert_cmpstr(sql_copy.exif_model, ==, cache_info.exif_model);
   g_assert_cmpstr(sql_copy.exif_lens, ==, cache_info.exif_lens);

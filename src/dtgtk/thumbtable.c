@@ -193,10 +193,10 @@ void _mouse_over_image_callback(gpointer instance, gpointer user_data)
     if(!thumb) continue; // thumb object not inited
 
     const gboolean mouse_over = thumb->mouse_over;
-    dt_thumbnail_set_mouseover(thumb, thumb->info.imgid == imgid);
+    dt_thumbnail_set_mouseover(thumb, thumb->info->id == imgid);
 
-    if(thumb->info.imgid == imgid && dt_thumbtable_info_is_grouped(&table->lut[rowid].info))
-      group_id = thumb->info.groupid;
+    if(thumb->info->id == imgid && dt_thumbtable_info_is_grouped(&table->lut[rowid].info))
+      group_id = thumb->info->group_id;
 
     if(thumb->mouse_over != mouse_over)
       gtk_widget_queue_draw(thumb->widget);
@@ -217,7 +217,7 @@ void _mouse_over_image_callback(gpointer instance, gpointer user_data)
       // images borders from non-hovered groups, when there is one, are transparent (overwrite base border classes width default)
       // Here we dispatch the additional CSS classes alloying to overwrite
       // the base border classes.
-      if(thumb->info.groupid == group_id)
+      if(thumb->info->group_id == group_id)
       {
         dt_gui_add_class(thumb->widget, "hovered-group");
         dt_gui_remove_class(thumb->widget, "non-hovered-group");
@@ -325,7 +325,7 @@ static void dt_thumbtable_scroll_to_rowid(dt_thumbtable_t *table, int rowid)
 static int _find_rowid_from_imgid(dt_thumbtable_t *table, const int32_t imgid)
 {
   for(int i = 0; i < table->collection_count; i++)
-    if(table->lut[i].info.imgid == imgid)
+    if(table->lut[i].info.id == imgid)
       return i;
 
   return UNKNOWN_IMAGE;
@@ -557,14 +557,14 @@ dt_thumbnail_t *_find_thumb_by_imgid(dt_thumbtable_t *table, const int32_t imgid
   for(GList *item = g_list_first(table->list); item; item = g_list_next(item))
   {
     dt_thumbnail_t *th = (dt_thumbnail_t *)item->data;
-    if(th->info.imgid == imgid)
+    if(th->info->id == imgid)
       return th;
   }
 
   return NULL;
 }
 
-gboolean dt_thumbtable_get_thumbnail_info(dt_thumbtable_t *table, int32_t imgid, dt_thumbnail_image_info_t *out)
+gboolean dt_thumbtable_get_thumbnail_info(dt_thumbtable_t *table, int32_t imgid, dt_image_t *out)
 {
   if(!table || !out || imgid <= 0) return FALSE;
 
@@ -575,9 +575,8 @@ gboolean dt_thumbtable_get_thumbnail_info(dt_thumbtable_t *table, int32_t imgid,
   {
     for(int rowid = 0; rowid < table->collection_count; rowid++)
     {
-      if(table->lut[rowid].info.imgid == imgid && table->lut[rowid].info_valid)
+      if(table->lut[rowid].info.id == imgid && table->lut[rowid].info_valid)
       {
-        dt_thumbtable_info_finalize(&table->lut[rowid].info, TRUE);
         *out = table->lut[rowid].info;
         found = TRUE;
         break;
@@ -599,26 +598,26 @@ void _add_thumbnail_group_borders(dt_thumbtable_t *table, dt_thumbnail_t *thumb)
   dt_thumbnail_set_group_border(thumb, borders);
 
   const int32_t rowid = thumb->rowid;
-  const int32_t groupid = thumb->info.groupid;
+  const int32_t groupid = thumb->info->group_id;
 
   // Ungrouped image: abort
   if(!dt_thumbtable_info_is_grouped(&table->lut[rowid].info) || !table->draw_group_borders) return;
 
   if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
-    if(table->lut[CLAMP_ROW(rowid - table->thumbs_per_row)].info.groupid != groupid
+    if(table->lut[CLAMP_ROW(rowid - table->thumbs_per_row)].info.group_id != groupid
       || IS_COLLECTION_EDGE(rowid - table->thumbs_per_row))
       borders |= DT_THUMBNAIL_BORDER_TOP;
 
-    if(table->lut[CLAMP_ROW(rowid + table->thumbs_per_row)].info.groupid != groupid
+    if(table->lut[CLAMP_ROW(rowid + table->thumbs_per_row)].info.group_id != groupid
       || IS_COLLECTION_EDGE(rowid + table->thumbs_per_row))
       borders |= DT_THUMBNAIL_BORDER_BOTTOM;
 
-    if(table->lut[CLAMP_ROW(rowid - 1)].info.groupid != groupid
+    if(table->lut[CLAMP_ROW(rowid - 1)].info.group_id != groupid
       || IS_COLLECTION_EDGE(rowid - 1))
       borders |= DT_THUMBNAIL_BORDER_LEFT;
 
-    if(table->lut[CLAMP_ROW(rowid + 1)].info.groupid != groupid
+    if(table->lut[CLAMP_ROW(rowid + 1)].info.group_id != groupid
       || IS_COLLECTION_EDGE(rowid + 1))
       borders |= DT_THUMBNAIL_BORDER_RIGHT;
 
@@ -636,11 +635,11 @@ void _add_thumbnail_group_borders(dt_thumbtable_t *table, dt_thumbnail_t *thumb)
   {
     borders |= DT_THUMBNAIL_BORDER_BOTTOM | DT_THUMBNAIL_BORDER_TOP;
 
-    if(table->lut[CLAMP_ROW(rowid - 1)].info.groupid != groupid
+    if(table->lut[CLAMP_ROW(rowid - 1)].info.group_id != groupid
       || IS_COLLECTION_EDGE(rowid - 1))
       borders |= DT_THUMBNAIL_BORDER_LEFT;
 
-    if(table->lut[CLAMP_ROW(rowid + 1)].info.groupid != groupid
+    if(table->lut[CLAMP_ROW(rowid + 1)].info.group_id != groupid
       || IS_COLLECTION_EDGE(rowid + 1))
       borders |= DT_THUMBNAIL_BORDER_RIGHT;
   }
@@ -650,7 +649,7 @@ void _add_thumbnail_group_borders(dt_thumbtable_t *table, dt_thumbnail_t *thumb)
 
 void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const int32_t mouse_over)
 {
-  dt_thumbnail_image_info_t *info = &(table->lut[rowid].info);
+  dt_image_t *info = &(table->lut[rowid].info);
   dt_thumbnail_t *thumb = NULL;
   gboolean new_item = TRUE;
   gboolean new_position = TRUE;
@@ -659,7 +658,7 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
   dt_thumbtable_info_seed_image_cache(info);
 
   // Do we already have a thumbnail at the correct postion for the correct imgid ?
-  if(table->lut[rowid].thumb && table->lut[rowid].thumb->info.imgid == info->imgid)
+  if(table->lut[rowid].thumb && table->lut[rowid].thumb->info->id == info->id)
   {
     // YES : reuse it
     thumb = table->lut[rowid].thumb;
@@ -670,7 +669,7 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
     // NO : Try to find an existing thumbnail widget by imgid in table->list
     // That will be faster if we only changed the sorting order but are still in the same collection.
     // NOTE: the thumb widget position in grid will be wrong
-    thumb = _find_thumb_by_imgid(table, info->imgid);
+    thumb = _find_thumb_by_imgid(table, info->id);
   }
 
   if(thumb)
@@ -714,17 +713,17 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
   }
 
   // Update visual states and flags. Mouse over is not connected to a signal and cheap to update
-  dt_thumbnail_set_mouseover(thumb, (mouse_over == thumb->info.imgid));
+  dt_thumbnail_set_mouseover(thumb, (mouse_over == thumb->info->id));
   dt_thumbnail_alternative_mode(thumb, table->alternate_mode);
 
   if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
   {
-    dt_thumbnail_update_selection(thumb, dt_view_active_images_has_imgid(thumb->info.imgid));
+    dt_thumbnail_update_selection(thumb, dt_view_active_images_has_imgid(thumb->info->id));
     thumb->disable_actions = TRUE;
   }
   else if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
-    dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->info.imgid));
+    dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->info->id));
     thumb->disable_actions = FALSE;
   }
 
@@ -826,11 +825,11 @@ static void _dt_selection_changed_callback(gpointer instance, gpointer user_data
   {
     dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
     const gboolean selected = thumb->selected;
-    dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->info.imgid));
+    dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->info->id));
 
     if(thumb->selected && first)
     {
-      dt_view_image_info_update(thumb->info.imgid);
+      dt_view_image_info_update(thumb->info->id);
 
       // Sync the table active row id with the first thumb in selection
       table->rowid = thumb->rowid;
@@ -914,7 +913,7 @@ void dt_thumbtable_refresh_thumbnail_real(dt_thumbtable_t *table, int32_t imgid,
   for(GList *l = g_list_first(table->list); l; l = g_list_next(l))
   {
     dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
-    if(thumb->info.imgid == imgid)
+    if(thumb->info->id == imgid)
     {
       dt_thumbnail_image_refresh(thumb);
       break;
@@ -961,7 +960,7 @@ static void _dt_image_info_changed_callback(gpointer instance, gpointer imgs, gp
     const dt_image_t *img = dt_image_cache_testget(darktable.image_cache, imgid, 'r');
     if(img)
     {
-      dt_thumbtable_info_from_image(&entry->info, img);
+      dt_thumbtable_copy_image(&entry->info, img);
       entry->info_valid = TRUE;
       dt_image_cache_read_release(darktable.image_cache, img);
     }
@@ -999,10 +998,8 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
   GArray *collection = g_array_new(FALSE, FALSE, sizeof(dt_thumbtable_cache_t));
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
-    int32_t imgid = sqlite3_column_int(stmt, 0);
-    int32_t groupid = sqlite3_column_int(stmt, 1);
-    int32_t group_items = sqlite3_column_int(stmt, 3);
-    int32_t history_items = sqlite3_column_int(stmt, 4);
+    const int32_t imgid = sqlite3_column_int(stmt, 0);
+    const int32_t groupid = sqlite3_column_int(stmt, 1);
 
     if(table->collapse_groups && imgid != groupid)
     {
@@ -1019,10 +1016,13 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
     dt_thumbtable_cache_t entry = {0};
     entry.thumb = NULL;
 
-    dt_thumbnail_image_info_t *info = &entry.info;
-    dt_thumbtable_info_from_stmt(info, stmt, history_items, group_items);
-// NOTE: Debug cache-compare disabled: it hits the image cache and defeats
-// the SQL-only thumbtable population during thumbnail init.
+    dt_image_t *info = &entry.info;
+    dt_image_from_stmt(info, stmt);   
+
+#ifndef NDEBUG
+    dt_thumbtable_info_debug_assert_matches_cache(info, info->history_items, info->group_members);
+#endif
+
     entry.info_valid = TRUE;
 
     g_array_append_val(collection, entry);
@@ -1387,7 +1387,7 @@ int _imgid_to_rowid(dt_thumbtable_t *table, int32_t imgid)
   dt_pthread_mutex_lock(&table->lock);
   for(int i = 0; i < table->collection_count; i++)
   {
-    if(table->lut[i].info.imgid == imgid)
+    if(table->lut[i].info.id == imgid)
     {
       rowid = i;
       break;
@@ -1450,7 +1450,7 @@ void _move_in_grid(dt_thumbtable_t *table, GdkEventKey *event, dt_thumbtable_dir
   int new_rowid = CLAMP(current_rowid + offset, 0, table->collection_count - 1);
 
   dt_pthread_mutex_lock(&table->lock);
-  int new_imgid = table->lut[new_rowid].info.imgid;
+  int new_imgid = table->lut[new_rowid].info.id;
   dt_pthread_mutex_unlock(&table->lock);
 
   dt_thumbtable_dispatch_over(table, event->type, new_imgid);
@@ -1504,7 +1504,7 @@ gboolean dt_thumbtable_key_pressed_grid(GtkWidget *self, GdkEventKey *event, gpo
   if(imgid < 0 && table->lut)
   {
     dt_pthread_mutex_lock(&table->lock);
-    imgid = table->lut[0].info.imgid;
+    imgid = table->lut[0].info.id;
     dt_pthread_mutex_unlock(&table->lock);
   }
 
@@ -1916,7 +1916,7 @@ void dt_thumbtable_select_all(dt_thumbtable_t *table)
 
   dt_pthread_mutex_lock(&table->lock);
   for(size_t i = 0; i < table->collection_count; i++)
-    img = g_list_prepend(img, GINT_TO_POINTER(table->lut[i].info.imgid));
+    img = g_list_prepend(img, GINT_TO_POINTER(table->lut[i].info.id));
   dt_pthread_mutex_unlock(&table->lock);
 
   if(img)
@@ -1975,13 +1975,13 @@ void dt_thumbtable_select_range(dt_thumbtable_t *table, const int rowid)
   {
     // select after
     for(int i = rowid_end + 1; i <= rowid; i++)
-      img = g_list_prepend(img, GINT_TO_POINTER(table->lut[i].info.imgid));
+      img = g_list_prepend(img, GINT_TO_POINTER(table->lut[i].info.id));
   }
   else if(rowid < rowid_start && rowid_start > 0)
   {
     // select before
     for(int i = rowid_start - 1; i >= rowid; i--)
-      img = g_list_prepend(img, GINT_TO_POINTER(table->lut[i].info.imgid));
+      img = g_list_prepend(img, GINT_TO_POINTER(table->lut[i].info.id));
   }
   // else: select within. What should that yield ??? Deselect ?
 

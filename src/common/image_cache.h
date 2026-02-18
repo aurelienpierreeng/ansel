@@ -29,6 +29,8 @@
 #include "common/cache.h"
 #include "common/image.h"
 
+#include <sqlite3.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -70,6 +72,15 @@ dt_image_t *dt_image_cache_testget(dt_image_cache_t *cache, const int32_t imgid,
 // seed an image cache entry from an already-populated dt_image_t (no SQL).
 // returns 0 on insert, 1 if already present, -1 on failure.
 int dt_image_cache_seed(dt_image_cache_t *cache, const dt_image_t *img);
+
+// Populate the common dt_image_t subset from a SQL row (shared with thumbtable).
+// Expected column order:
+// id, group_id, group_members, history_items, film_id, version, width, height, orientation, flags,
+// import_timestamp, change_timestamp, export_timestamp, print_timestamp, exposure, exposure_bias, aperture, iso,
+// focal_length, focus_distance, datetime_taken, longitude, latitude, altitude, filename, fullpath, maker, model,
+// lens, folder, color_labels, crop, raw_parameters, color_matrix, colorspace, raw_black, raw_maximum,
+// aspect_ratio, output_width, output_height.
+void dt_image_from_stmt(dt_image_t *info, sqlite3_stmt *stmt);
 
 // drops the read lock on an image struct
 void dt_image_cache_read_release(dt_image_cache_t *cache, const dt_image_t *img);

@@ -500,7 +500,7 @@ static void _metadata_get_flags(const dt_image_t *const img, char *const text, c
 #undef FLAG_NB
 }
 
-static gboolean _metadata_view_get_thumb_info(const int32_t imgid, dt_thumbnail_image_info_t *info)
+static gboolean _metadata_view_get_thumb_info(const int32_t imgid, dt_image_t *info)
 {
   if(imgid <= 0 || !info || !darktable.gui || !darktable.gui->ui) return FALSE;
 
@@ -628,7 +628,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
 
   if(count > 1) _concatenate_multiple_images(skip, count);
 
-  dt_thumbnail_image_info_t tinfo = {0};
+  dt_image_t tinfo = {0};
   const gboolean have_thumb_info = _metadata_view_get_thumb_info(img_id, &tinfo);
   if(!have_thumb_info) return;
 
@@ -676,12 +676,12 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
         break;
 
       case md_internal_imgid:
-        (void)g_snprintf(text, sizeof(text), "%d", tinfo.imgid);
+        (void)g_snprintf(text, sizeof(text), "%d", tinfo.id);
         _metadata_update_value(md_internal_imgid, text, self);
         break;
 
       case md_internal_groupid:
-        (void)g_snprintf(text, sizeof(text), "%d", tinfo.groupid);
+        (void)g_snprintf(text, sizeof(text), "%d", tinfo.group_id);
         _metadata_update_value(md_internal_groupid, text, self);
         break;
 
@@ -832,7 +832,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
 //          break;
 
       case md_geotagging_lat:
-        if(isnan(tinfo.geoloc_latitude))
+        if(isnan(tinfo.geoloc.latitude))
         {
           _metadata_update_value(md_geotagging_lat, NODATA_STRING, self);
         }
@@ -840,21 +840,21 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
         {
           if(dt_conf_get_bool("plugins/lighttable/metadata_view/pretty_location"))
           {
-            gchar *latitude = dt_util_latitude_str((float)tinfo.geoloc_latitude);
+            gchar *latitude = dt_util_latitude_str((float)tinfo.geoloc.latitude);
             _metadata_update_value(md_geotagging_lat, latitude, self);
             g_free(latitude);
           }
           else
           {
-            const gchar NS = tinfo.geoloc_latitude < 0 ? 'S' : 'N';
-            (void)g_snprintf(text, sizeof(text), "%c %09.6f", NS, fabs(tinfo.geoloc_latitude));
+            const gchar NS = tinfo.geoloc.latitude < 0 ? 'S' : 'N';
+            (void)g_snprintf(text, sizeof(text), "%c %09.6f", NS, fabs(tinfo.geoloc.latitude));
             _metadata_update_value(md_geotagging_lat, text, self);
           }
         }
         break;
 
       case md_geotagging_lon:
-        if(isnan(tinfo.geoloc_longitude))
+        if(isnan(tinfo.geoloc.longitude))
         {
           _metadata_update_value(md_geotagging_lon, NODATA_STRING, self);
         }
@@ -862,21 +862,21 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
         {
           if(dt_conf_get_bool("plugins/lighttable/metadata_view/pretty_location"))
           {
-            gchar *longitude = dt_util_longitude_str((float)tinfo.geoloc_longitude);
+            gchar *longitude = dt_util_longitude_str((float)tinfo.geoloc.longitude);
             _metadata_update_value(md_geotagging_lon, longitude, self);
             g_free(longitude);
           }
           else
           {
-            const gchar EW = tinfo.geoloc_longitude < 0 ? 'W' : 'E';
-            (void)g_snprintf(text, sizeof(text), "%c %010.6f", EW, fabs(tinfo.geoloc_longitude));
+            const gchar EW = tinfo.geoloc.longitude < 0 ? 'W' : 'E';
+            (void)g_snprintf(text, sizeof(text), "%c %010.6f", EW, fabs(tinfo.geoloc.longitude));
             _metadata_update_value(md_geotagging_lon, text, self);
           }
         }
         break;
 
       case md_geotagging_ele:
-        if(isnan(tinfo.geoloc_elevation))
+        if(isnan(tinfo.geoloc.elevation))
         {
           _metadata_update_value(md_geotagging_ele, NODATA_STRING, self);
         }
@@ -884,13 +884,13 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
         {
           if(dt_conf_get_bool("plugins/lighttable/metadata_view/pretty_location"))
           {
-            gchar *elevation = dt_util_elevation_str((float)tinfo.geoloc_elevation);
+            gchar *elevation = dt_util_elevation_str((float)tinfo.geoloc.elevation);
             _metadata_update_value(md_geotagging_ele, elevation, self);
             g_free(elevation);
           }
           else
           {
-            (void)g_snprintf(text, sizeof(text), "%.2f %s", tinfo.geoloc_elevation, _("m"));
+            (void)g_snprintf(text, sizeof(text), "%.2f %s", tinfo.geoloc.elevation, _("m"));
             _metadata_update_value(md_geotagging_ele, text, self);
           }
         }

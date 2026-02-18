@@ -119,7 +119,7 @@ static void _lib_duplicate_delete(GtkButton *button, dt_lib_module_t *self)
     for(GList *l = d->thumbs; l; l = g_list_next(l))
     {
       dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
-      if(thumb->info.imgid == imgid)
+      if(thumb->info->id == imgid)
       {
         GList *l2 = g_list_next(l);
         if(!l2) l2 = g_list_previous(l);
@@ -127,7 +127,7 @@ static void _lib_duplicate_delete(GtkButton *button, dt_lib_module_t *self)
         {
           dt_thumbnail_t *th2 = (dt_thumbnail_t *)l2->data;
           DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
-                                        th2->info.imgid);
+                                        th2->info->id);
           break;
         }
       }
@@ -239,8 +239,8 @@ static void _lib_duplicate_init_callback(gpointer instance, dt_lib_module_t *sel
   {
     GtkWidget *hb = gtk_grid_new();
     const int32_t imgid = sqlite3_column_int(stmt, 1);
-    dt_thumbnail_image_info_t info = { 0 };
-    info.imgid = imgid;
+    dt_image_t info = { 0 };
+    info.id = imgid;
     dt_thumbnail_t *thumb = dt_thumbnail_new(0, DT_THUMBNAIL_OVERLAYS_NONE, NULL, &info);
 
     thumb->disable_mouseover = TRUE;
