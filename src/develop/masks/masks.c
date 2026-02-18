@@ -2655,7 +2655,7 @@ int dt_masks_point_in_form_exact(float x, float y, float *points, int points_sta
                     ? points[points_start * 2 + 1]
                     : points_start;
 
-    float yf = (float)y;
+    float yf = y;
     for(int i = start, next = start + 1; i < points_count;)
     {
       float y1 = points[i * 2 + 1];
@@ -2691,7 +2691,7 @@ int dt_masks_point_in_form_near(float x, float y, float *points, int points_star
                       ? points[points_start * 2 + 1]
                       : points_start;
 
-    const float yf = (float)y;
+    const float yf = y;
     int nb = 0;
     for(int i = start, next = start + 1; i < points_count;)
     {
@@ -2834,7 +2834,7 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *gui, dt_masks_fo
 }
 
 // calculates the source position value for preview drawing, on cairo coordinates
-void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mask_type, const float initial_xpos,
+void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const float initial_xpos,
                                          const float initial_ypos, const float xpos, const float ypos, float *px,
                                          float *py, const int adding)
 {
@@ -2850,12 +2850,7 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mas
   {
     if(gui->pos_source[0] == -1.0f && gui->pos_source[1] == -1.0f)
     {
-      const dt_masks_form_t *forms = darktable.develop->form_visible;
-      if(!forms) return;
-      const dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(forms->points, gui->group_selected);
-      if(!fpt) return;
-      const dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, fpt->formid);
-
+      const dt_masks_form_t *form = darktable.develop->form_visible;
       if(form && form->functions && form->functions->initial_source_pos)
       {
         form->functions->initial_source_pos(iwd, iht, &x, &y);

@@ -2060,7 +2060,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       float node_posy = node_count ? gpt->points[3] : gui->pos[1];
 
       float pts[2] = { 0.0, 0.0 };
-      dt_masks_calculate_source_pos_value(gui, DT_MASKS_POLYGON, node_posx, node_posy, node_posx, node_posy, &pts[0], &pts[1], FALSE);
+      dt_masks_calculate_source_pos_value(gui, node_posx, node_posy, node_posx, node_posy, &pts[0], &pts[1], FALSE);
       dt_draw_cross(cr, zoom_scale, pts[0], pts[1]);
     }
   }

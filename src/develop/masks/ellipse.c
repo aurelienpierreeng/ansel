@@ -1097,7 +1097,7 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     {
       x = 0.0f;
       y = 0.0f;
-      dt_masks_calculate_source_pos_value(gui, DT_MASKS_ELLIPSE, xpos, ypos, xpos, ypos, &x, &y, FALSE);
+      dt_masks_calculate_source_pos_value(gui, xpos, ypos, xpos, ypos, &x, &y, FALSE);
       dt_draw_cross(cr, zoom_scale, x, y);
     }
 

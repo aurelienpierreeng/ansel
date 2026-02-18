@@ -553,7 +553,7 @@ void dt_masks_set_source_pos_initial_state(dt_masks_form_gui_t *gui, const uint3
                                            const float pzy);
 void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
                                                    const float pzx, const float pzy);
-void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const int mask_type, const float initial_xpos,
+void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const float initial_xpos,
                                          const float initial_ypos, const float xpos, const float ypos, float *px,
                                          float *py, const int adding);
 /**
