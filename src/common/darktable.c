@@ -1420,10 +1420,13 @@ void dt_cleanup()
   dt_collection_free(darktable.collection);
   dt_selection_free(darktable.selection);
 
-  dt_image_cache_cleanup(darktable.image_cache);
-  free(darktable.image_cache);
+  // Mipmap cleanup may still consult the image cache for paths.
   dt_mipmap_cache_cleanup(darktable.mipmap_cache);
   free(darktable.mipmap_cache);
+  darktable.mipmap_cache = NULL;
+  dt_image_cache_cleanup(darktable.image_cache);
+  free(darktable.image_cache);
+  darktable.image_cache = NULL;
 
   dt_colorspaces_cleanup(darktable.color_profiles);
   dt_conf_cleanup(darktable.conf);

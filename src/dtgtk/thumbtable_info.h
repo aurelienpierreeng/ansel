@@ -72,6 +72,8 @@ typedef struct dt_thumbnail_image_info_t
 
   char filename[DT_MAX_FILENAME_LEN];
   char fullpath[PATH_MAX];
+  char local_copy_path[PATH_MAX];
+  char local_copy_legacy_path[PATH_MAX];
   char filmroll[PATH_MAX];
   char folder[PATH_MAX];
   char datetime[200];

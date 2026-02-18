@@ -96,6 +96,7 @@ int dt_exif_write_blob(uint8_t *blob, uint32_t size, const char *path, const int
 
 /** write xmp sidecar file. */
 int dt_exif_xmp_write(const int32_t imgid, const char *filename);
+int dt_exif_xmp_write_with_imgpath(const int32_t imgid, const char *filename, const char *imgpath);
 
 /** write xmp packet inside an image. */
 int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *metadata);

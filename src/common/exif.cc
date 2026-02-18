@@ -4513,14 +4513,11 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
 }
 
 // write xmp sidecar file:
-int dt_exif_xmp_write(const int32_t imgid, const char *filename)
+static int _dt_exif_xmp_write_with_imgpath(const int32_t imgid, const char *filename, const char *imgpath)
 {
   // refuse to write sidecar for non-existent image:
-  char imgfname[PATH_MAX] = { 0 };
-  gboolean from_cache = TRUE;
-
-  dt_image_full_path(imgid,  imgfname,  sizeof(imgfname),  &from_cache, __FUNCTION__);
-  if(!g_file_test(imgfname, G_FILE_TEST_IS_REGULAR)) return 1;
+  if(!imgpath || !*imgpath) return 1;
+  if(!g_file_test(imgpath, G_FILE_TEST_IS_REGULAR)) return 1;
 
   try
   {
@@ -4617,6 +4614,20 @@ int dt_exif_xmp_write(const int32_t imgid, const char *filename)
     std::cerr << "[dt_exif_xmp_write] " << filename << ": caught exiv2 exception '" << e << "'\n";
     return -1;
   }
+}
+
+int dt_exif_xmp_write_with_imgpath(const int32_t imgid, const char *filename, const char *imgpath)
+{
+  return _dt_exif_xmp_write_with_imgpath(imgid, filename, imgpath);
+}
+
+int dt_exif_xmp_write(const int32_t imgid, const char *filename)
+{
+  char imgfname[PATH_MAX] = { 0 };
+  gboolean from_cache = TRUE;
+
+  dt_image_full_path(imgid,  imgfname,  sizeof(imgfname),  &from_cache, __FUNCTION__);
+  return _dt_exif_xmp_write_with_imgpath(imgid, filename, imgfname);
 }
 
 dt_colorspaces_color_profile_type_t dt_exif_get_color_space(const uint8_t *data, size_t size)

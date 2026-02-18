@@ -114,8 +114,6 @@
 static sqlite3_stmt *_image_altered_stmt = NULL;
 static dt_pthread_mutex_t _image_stmt_mutex;
 static gsize _image_stmt_mutex_inited = 0;
-static sqlite3_stmt *_image_full_path_stmt = NULL;
-static sqlite3_stmt *_image_local_copy_full_path_stmt = NULL;
 
 static inline void _image_stmt_mutex_ensure(void)
 {
@@ -159,7 +157,6 @@ static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t 
 static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_data_t data, const dt_undo_action_t action, GList **imgs);
 
 
-static void _image_local_copy_full_path(const int32_t imgid, char *pathname, size_t pathname_len);
 static void _copy_text_sidecar_if_present(const char *src_image_path, const char *dest_image_path);
 static void _move_text_sidecar_if_present(const char *src_image_path, const char *dest_image_path, const gboolean overwrite);
 
@@ -388,10 +385,50 @@ gboolean dt_image_safe_remove(const int32_t imgid)
   }
 }
 
+dt_image_path_source_t dt_image_choose_input_path(const dt_image_t *img, char *pathname,
+                                                  size_t pathname_len, gboolean force_cache)
+{
+  if(!img || !pathname) return DT_IMAGE_PATH_NONE;
+  pathname[0] = '\0';
+
+  // Start with local copies as file I/O will be better if we have a choice
+  if(img->flags & DT_IMAGE_LOCAL_COPY || force_cache)
+  {
+    if(img->local_copy_path[0] && g_file_test(img->local_copy_path, G_FILE_TEST_EXISTS))
+    {
+      g_strlcpy(pathname, img->local_copy_path, pathname_len);
+      return DT_IMAGE_PATH_LOCAL_COPY;
+    }
+
+    if(img->local_copy_legacy_path[0] && g_file_test(img->local_copy_legacy_path, G_FILE_TEST_EXISTS))
+    {
+      g_strlcpy(pathname, img->local_copy_legacy_path, pathname_len);
+      return DT_IMAGE_PATH_LOCAL_COPY_LEGACY;
+    }
+  }
+  // Forcing the cache should not consider the original image
+  else
+  {
+    if(img->fullpath[0] && g_file_test(img->fullpath, G_FILE_TEST_EXISTS))
+    { 
+      g_strlcpy(pathname, img->fullpath, pathname_len);
+      return DT_IMAGE_PATH_ORIGINAL;
+    }
+  }
+
+  // In case the local copy flag was not set properly, but the original file failed
+  // last-chance attempt at getting a possibly forgotten local copy to have some input
+  if(img->local_copy_path[0] && g_file_test(img->local_copy_path, G_FILE_TEST_EXISTS))
+  {
+    g_strlcpy(pathname, img->local_copy_path, pathname_len);
+    return DT_IMAGE_PATH_LOCAL_COPY;
+  }
+
+  return DT_IMAGE_PATH_NONE;
+}
+
 /**
  * @brief Get the full path of an image out of the database.
- * TODO: This gets called too many times and the output should be cached.
- * TODO: Document where the pathname_len is being set.
  *
  * @param imgid The image ID.
  * @param pathname A pointer storing the returned value from the sql request.
@@ -402,80 +439,47 @@ gboolean dt_image_safe_remove(const int32_t imgid)
 void dt_image_full_path(const int32_t imgid, char *pathname, size_t pathname_len, gboolean *from_cache, const char *calling_func)
 {
   if(imgid < 0) return;
+  dt_image_path_source_t source = DT_IMAGE_PATH_NONE;
+  gboolean force_cache = (from_cache && *from_cache);
 
-  if(!_image_full_path_stmt)
+  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  if(img)
   {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "SELECT folder || '" G_DIR_SEPARATOR_S "' || filename FROM main.images i, main.film_rolls f WHERE "
-                                "i.film_id = f.id and i.id = ?1",
-                                -1, &_image_full_path_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _image_full_path_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    g_strlcpy(pathname, (char *)sqlite3_column_text(stmt, 0), pathname_len);
+    source = dt_image_choose_input_path(img, pathname, pathname_len, force_cache);
+    dt_image_cache_read_release(darktable.image_cache, img);
   }
 
-  if(*from_cache)
-  {
-    char lc_pathname[PATH_MAX] = { 0 };
-    _image_local_copy_full_path(imgid, lc_pathname, sizeof(lc_pathname));
-    if(g_file_test(lc_pathname, G_FILE_TEST_EXISTS))
-      g_strlcpy(pathname, (char *)lc_pathname, pathname_len);
-    else
-      *from_cache = FALSE;
-  }
+  if(from_cache) 
+    *from_cache = (source == DT_IMAGE_PATH_LOCAL_COPY 
+                   || source == DT_IMAGE_PATH_LOCAL_COPY_LEGACY);
 
-  // NOTE: must come after sql as it sets the pointer pathname which is undefined otherwise.
-  dt_print(DT_DEBUG_SQL, "dt_image_full_path pathname (%s) called from %s, cache=%i\n", pathname, calling_func, *from_cache);
 }
 
-static void _image_local_copy_full_path(const int32_t imgid, char *pathname, size_t pathname_len)
+void dt_image_local_copy_paths_from_fullpath(const char *fullpath, int32_t imgid, char *local_copy_path,
+                                             size_t local_copy_len, char *local_copy_legacy_path,
+                                             size_t local_copy_legacy_len)
 {
-  *pathname = '\0';
-  if(!_image_local_copy_full_path_stmt)
-  {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "SELECT folder || '" G_DIR_SEPARATOR_S "' || filename FROM main.images i, main.film_rolls f "
-                                "WHERE i.film_id = f.id AND i.id = ?1",
-                                -1, &_image_local_copy_full_path_stmt, NULL);
-    // clang-format on
-  }
-  sqlite3_stmt *stmt = _image_local_copy_full_path_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    char filename[PATH_MAX] = { 0 };
-    char cachedir[PATH_MAX] = { 0 };
-    g_strlcpy(filename, (char *)sqlite3_column_text(stmt, 0), pathname_len);
-    char *md5_filename = g_compute_checksum_for_string(G_CHECKSUM_MD5, filename, strlen(filename));
-    dt_loc_get_user_cache_dir(cachedir, sizeof(cachedir));
+  if(local_copy_path) local_copy_path[0] = '\0';
+  if(local_copy_legacy_path) local_copy_legacy_path[0] = '\0';
+  if(!fullpath || !*fullpath || imgid <= 0 || !local_copy_path || !local_copy_legacy_path) return;
 
-    // and finally, add extension, needed as some part of the code is looking for the extension
-    char *c = filename + strlen(filename);
-    while(*c != '.' && c > filename) c--;
+  char *md5_filename = g_compute_checksum_for_string(G_CHECKSUM_MD5, fullpath, strlen(fullpath));
+  if(!md5_filename) return;
 
-    // cache filename old format: <cachedir>/img-<id>-<MD5>.<ext>
-    // for upward compatibility we check for the old name, if found we return it
-    snprintf(pathname, pathname_len, "%s/img-%d-%s%s", cachedir, imgid, md5_filename, c);
+  char cachedir[PATH_MAX] = { 0 };
+  dt_loc_get_user_cache_dir(cachedir, sizeof(cachedir));
 
-    // if it does not exist, we return the new naming
-    if(!g_file_test(pathname, G_FILE_TEST_EXISTS))
-    {
-      // cache filename format: <cachedir>/img-<MD5>.<ext>
-      snprintf(pathname, pathname_len, "%s/img-%s%s", cachedir, md5_filename, c);
-    }
+  const char *c = fullpath + strlen(fullpath);
+  while(*c != '.' && c > fullpath) c--;
 
-    g_free(md5_filename);
-  }
+  // cache filename old format: <cachedir>/img-<id>-<MD5>.<ext>
+  // for upward compatibility we check for the old name, if found we return it
+  snprintf(local_copy_legacy_path, local_copy_legacy_len, "%s/img-%d-%s%s", cachedir, imgid, md5_filename, c);
+
+  // cache filename format: <cachedir>/img-<MD5>.<ext>
+  snprintf(local_copy_path, local_copy_len, "%s/img-%s%s", cachedir, md5_filename, c);
+
+  g_free(md5_filename);
 }
 
 void dt_image_path_append_version_no_db(int version, char *pathname, size_t pathname_len)
@@ -1143,16 +1147,6 @@ void dt_image_cleanup(void)
     sqlite3_finalize(_image_altered_stmt);
     _image_altered_stmt = NULL;
   }
-  if(_image_full_path_stmt)
-  {
-    sqlite3_finalize(_image_full_path_stmt);
-    _image_full_path_stmt = NULL;
-  }
-  if(_image_local_copy_full_path_stmt)
-  {
-    sqlite3_finalize(_image_local_copy_full_path_stmt);
-    _image_local_copy_full_path_stmt = NULL;
-  }
   dt_pthread_mutex_unlock(&_image_stmt_mutex);
 }
 
@@ -1661,6 +1655,9 @@ void dt_image_init(dt_image_t *img)
   memset(img->camera_makermodel, 0, sizeof(img->camera_makermodel));
   memset(img->camera_legacy_makermodel, 0, sizeof(img->camera_legacy_makermodel));
   memset(img->filename, 0, sizeof(img->filename));
+  memset(img->fullpath, 0, sizeof(img->fullpath));
+  memset(img->local_copy_path, 0, sizeof(img->local_copy_path));
+  memset(img->local_copy_legacy_path, 0, sizeof(img->local_copy_legacy_path));
   g_strlcpy(img->filename, "(unknown)", sizeof(img->filename));
   img->exif_crop = 1.0;
   img->exif_exposure = 0;
@@ -1767,7 +1764,12 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
   if(new)
   {
     // get current local copy if any
-    _image_local_copy_full_path(imgid, copysrcpath, sizeof(copysrcpath));
+    dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    if(img)
+    {
+      dt_image_choose_input_path(img, copysrcpath, sizeof(copysrcpath), TRUE);
+      dt_image_cache_read_release(darktable.image_cache, img);
+    }
 
     // move image
     GError *moveError = NULL;
@@ -1822,7 +1824,7 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
       while(dup_list)
       {
         const int id = GPOINTER_TO_INT(dup_list->data);
-        dt_image_t *img = dt_image_cache_get(darktable.image_cache, id, 'w');
+        img = dt_image_cache_get(darktable.image_cache, id, 'w');
         img->film_id = filmid;
         if(newname) g_strlcpy(img->filename, newname, DT_MAX_FILENAME_LEN);
         // write through to db, but not to xmp
@@ -1838,7 +1840,12 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
       if(g_file_test(copysrcpath, G_FILE_TEST_EXISTS))
       {
         // get new name
-        _image_local_copy_full_path(imgid, copydestpath, sizeof(copydestpath));
+        img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+        if(img)
+        {
+          dt_image_choose_input_path(img, copydestpath, sizeof(copydestpath), TRUE);
+          dt_image_cache_read_release(darktable.image_cache, img);
+        }
 
         GFile *cold = g_file_new_for_path(copysrcpath);
         GFile *cnew = g_file_new_for_path(copydestpath);
@@ -2186,11 +2193,27 @@ int dt_image_local_copy_set(const int32_t imgid)
 {
   gchar srcpath[PATH_MAX] = { 0 };
   gchar destpath[PATH_MAX] = { 0 };
-
-  gboolean from_cache = FALSE;
-  dt_image_full_path(imgid,  srcpath,  sizeof(srcpath),  &from_cache, __FUNCTION__);
-
-  _image_local_copy_full_path(imgid, destpath, sizeof(destpath));
+  dt_image_path_source_t source = DT_IMAGE_PATH_NONE;
+  char local_copy_path[PATH_MAX] = { 0 };
+  char local_copy_legacy_path[PATH_MAX] = { 0 };
+  dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  if(img)
+  {
+    g_strlcpy(srcpath, img->fullpath, PATH_MAX);
+    g_strlcpy(local_copy_path, img->local_copy_path, sizeof(local_copy_path));
+    g_strlcpy(local_copy_legacy_path, img->local_copy_legacy_path, sizeof(local_copy_legacy_path));
+    char existing[PATH_MAX] = { 0 };
+    source = dt_image_choose_input_path(img, existing, sizeof(existing), TRUE);
+    if(source == DT_IMAGE_PATH_LOCAL_COPY || source == DT_IMAGE_PATH_LOCAL_COPY_LEGACY)
+      g_strlcpy(destpath, existing, sizeof(destpath));
+    else
+      g_strlcpy(destpath, local_copy_path, sizeof(destpath));
+    dt_image_cache_read_release(darktable.image_cache, img);
+  }
+  else
+  {
+    return 1;
+  }
 
   // check that the src file is readable
   if(!g_file_test(srcpath, G_FILE_TEST_IS_REGULAR))
@@ -2199,7 +2222,7 @@ int dt_image_local_copy_set(const int32_t imgid)
     return 1;
   }
 
-  if(!g_file_test(destpath, G_FILE_TEST_EXISTS))
+  if(source != DT_IMAGE_PATH_LOCAL_COPY && source != DT_IMAGE_PATH_LOCAL_COPY_LEGACY)
   {
     GFile *src = g_file_new_for_path(srcpath);
     GFile *dest = g_file_new_for_path(destpath);
@@ -2223,7 +2246,7 @@ int dt_image_local_copy_set(const int32_t imgid)
 
   // update cache local copy flags, do this even if the local copy already exists as we need to set the flags
   // for duplicate
-  dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
   img->flags |= DT_IMAGE_LOCAL_COPY;
   dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
 
@@ -2291,7 +2314,13 @@ int dt_image_local_copy_reset(const int32_t imgid)
 
   // get name of local copy
 
-  _image_local_copy_full_path(imgid, locppath, sizeof(locppath));
+  locppath[0] = '\0';
+  dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  if(img)
+  {
+    dt_image_choose_input_path(img, locppath, sizeof(locppath), TRUE);
+    dt_image_cache_read_release(darktable.image_cache, img);
+  }
 
   // remove cached file, but double check that this is really into the cache. We really want to avoid deleting
   // a user's original file.
@@ -2330,7 +2359,7 @@ int dt_image_local_copy_reset(const int32_t imgid)
   // reach this point the local-copy flag is present and the file has been either removed
   // or is not present.
 
-  dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
   img->flags &= ~DT_IMAGE_LOCAL_COPY;
   dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
 
@@ -2343,49 +2372,66 @@ int dt_image_local_copy_reset(const int32_t imgid)
 // xmp stuff
 // *******************************************************
 
-int dt_image_write_sidecar_file(const int32_t imgid)
+int dt_image_write_sidecar_file_from_image(const dt_image_t *img)
 {
   // FIXME: [CRITICAL] should lock the image history at the app level
   // TODO: compute hash and don't write if not needed!
   // write .xmp file
-  if((imgid > 0) && dt_image_get_xmp_mode())
+  if(!img || img->id <= 0 || !dt_image_get_xmp_mode()) return 1;
+
+  char imgpath[PATH_MAX] = { 0 };
+
+  // Prefer the original file when accessible, otherwise fall back to local copy paths.
+  if(img->fullpath[0] && g_file_test(img->fullpath, G_FILE_TEST_EXISTS))
   {
-    char filename[PATH_MAX] = { 0 };
+    g_strlcpy(imgpath, img->fullpath, sizeof(imgpath));
+  }
+  else if(img->local_copy_path[0] && g_file_test(img->local_copy_path, G_FILE_TEST_EXISTS))
+  {
+    g_strlcpy(imgpath, img->local_copy_path, sizeof(imgpath));
+  }
+  else if(img->local_copy_legacy_path[0] && g_file_test(img->local_copy_legacy_path, G_FILE_TEST_EXISTS))
+  {
+    g_strlcpy(imgpath, img->local_copy_legacy_path, sizeof(imgpath));
+  }
+  else
+  {
+    return 1;
+  }
 
-    // FIRST: check if the original file is present
-    gboolean from_cache = FALSE;
-    dt_image_full_path(imgid, filename, sizeof(filename), &from_cache, __FUNCTION__);
+  char filename[PATH_MAX] = { 0 };
+  g_strlcpy(filename, imgpath, sizeof(filename));
+  dt_image_path_append_version(img->id, filename, sizeof(filename));
+  g_strlcat(filename, ".xmp", sizeof(filename));
 
-    if(!g_file_test(filename, G_FILE_TEST_EXISTS))
-    {
-      // OTHERWISE: check if the local copy exists
-      from_cache = TRUE;
-      dt_image_full_path(imgid, filename, sizeof(filename), &from_cache, __FUNCTION__);
-
-      //  nothing to do, the original is not accessible and there is no local copy
-      if(!from_cache) return 1;
-    }
-
-    dt_image_path_append_version(imgid, filename, sizeof(filename));
-    g_strlcat(filename, ".xmp", sizeof(filename));
-
-    if(!dt_exif_xmp_write(imgid, filename))
-    {
-      // put the timestamp into db. this can't be done in exif.cc since that code gets called
-      // for the copy exporter, too
-      sqlite3_stmt *stmt;
-      DT_DEBUG_SQLITE3_PREPARE_V2
-        (dt_database_get(darktable.db),
-         "UPDATE main.images SET write_timestamp = STRFTIME('%s', 'now') WHERE id = ?1",
-         -1, &stmt, NULL);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-      sqlite3_step(stmt);
-      sqlite3_finalize(stmt);
-      return 0;
-    }
+  if(!dt_exif_xmp_write_with_imgpath(img->id, filename, imgpath))
+  {
+    // put the timestamp into db. this can't be done in exif.cc since that code gets called
+    // for the copy exporter, too
+    sqlite3_stmt *stmt;
+    DT_DEBUG_SQLITE3_PREPARE_V2
+      (dt_database_get(darktable.db),
+       "UPDATE main.images SET write_timestamp = STRFTIME('%s', 'now') WHERE id = ?1",
+       -1, &stmt, NULL);
+    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->id);
+    sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return 0;
   }
 
   return 1; // error : nothing written
+}
+
+int dt_image_write_sidecar_file(const int32_t imgid)
+{
+  if(imgid <= 0 || !dt_image_get_xmp_mode()) return 1;
+
+  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  if(!img) return 1;
+
+  const int res = dt_image_write_sidecar_file_from_image(img);
+  dt_image_cache_read_release(darktable.image_cache, img);
+  return res;
 }
 
 void dt_image_synch_xmps(const GList *img)

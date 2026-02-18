@@ -74,6 +74,11 @@ static void _thumbtable_info_finalize_expensive(dt_thumbnail_image_info_t *info)
 
   if(!info->fullpath[0] && info->folder[0] && info->filename[0])
     g_snprintf(info->fullpath, sizeof(info->fullpath), "%s" G_DIR_SEPARATOR_S "%s", info->folder, info->filename);
+
+  if(!info->local_copy_path[0] && !info->local_copy_legacy_path[0] && info->fullpath[0])
+    dt_image_local_copy_paths_from_fullpath(info->fullpath, info->imgid, info->local_copy_path,
+                                            sizeof(info->local_copy_path), info->local_copy_legacy_path,
+                                            sizeof(info->local_copy_legacy_path));
 }
 
 void dt_thumbtable_info_finalize(dt_thumbnail_image_info_t *info, gboolean expensive)
@@ -130,6 +135,9 @@ void dt_thumbtable_info_from_image(dt_thumbnail_image_info_t *info, const dt_ima
   info->geoloc_longitude = img->geoloc.longitude;
   info->geoloc_elevation = img->geoloc.elevation;
   g_strlcpy(info->filename, img->filename, sizeof(info->filename));
+  g_strlcpy(info->fullpath, img->fullpath, sizeof(info->fullpath));
+  g_strlcpy(info->local_copy_path, img->local_copy_path, sizeof(info->local_copy_path));
+  g_strlcpy(info->local_copy_legacy_path, img->local_copy_legacy_path, sizeof(info->local_copy_legacy_path));
   g_strlcpy(info->exif_maker, img->exif_maker, sizeof(info->exif_maker));
   g_strlcpy(info->exif_model, img->exif_model, sizeof(info->exif_model));
   g_strlcpy(info->exif_lens, img->exif_lens, sizeof(info->exif_lens));
@@ -189,16 +197,23 @@ void dt_thumbtable_info_from_stmt(dt_thumbnail_image_info_t *info, sqlite3_stmt 
 
   const char *filename = (const char *)sqlite3_column_text(stmt, 25);
   if(filename) g_strlcpy(info->filename, filename, sizeof(info->filename));
-  const char *maker = (const char *)sqlite3_column_text(stmt, 26);
+  const char *fullpath = (const char *)sqlite3_column_text(stmt, 26);
+  if(fullpath) g_strlcpy(info->fullpath, fullpath, sizeof(info->fullpath));
+  const char *maker = (const char *)sqlite3_column_text(stmt, 27);
   if(maker) g_strlcpy(info->exif_maker, maker, sizeof(info->exif_maker));
-  const char *model = (const char *)sqlite3_column_text(stmt, 27);
+  const char *model = (const char *)sqlite3_column_text(stmt, 28);
   if(model) g_strlcpy(info->exif_model, model, sizeof(info->exif_model));
-  const char *lens = (const char *)sqlite3_column_text(stmt, 28);
+  const char *lens = (const char *)sqlite3_column_text(stmt, 29);
   if(lens) g_strlcpy(info->exif_lens, lens, sizeof(info->exif_lens));
-  const char *folder = (const char *)sqlite3_column_text(stmt, 29);
+  const char *folder = (const char *)sqlite3_column_text(stmt, 30);
   if(folder) g_strlcpy(info->folder, folder, sizeof(info->folder));
 
-  info->colorlabels = sqlite3_column_int(stmt, 30);
+  info->colorlabels = sqlite3_column_int(stmt, 31);
+
+  if(info->fullpath[0])
+    dt_image_local_copy_paths_from_fullpath(info->fullpath, info->imgid, info->local_copy_path,
+                                            sizeof(info->local_copy_path), info->local_copy_legacy_path,
+                                            sizeof(info->local_copy_legacy_path));
 
   dt_thumbtable_info_finalize(info, FALSE);
 }
@@ -220,7 +235,8 @@ sqlite3_stmt *dt_thumbtable_info_get_collection_stmt(void)
         "im.exposure, im.exposure_bias, im.aperture, im.iso, im.focal_length, im.focus_distance, "
         "im.datetime_taken, "
         "im.longitude, im.latitude, im.altitude, "
-        "im.filename, im.maker, im.model, im.lens, fr.folder, "
+        "im.filename, fr.folder || '" G_DIR_SEPARATOR_S "' || im.filename, "
+        "im.maker, im.model, im.lens, fr.folder, "
         "COALESCE((SELECT SUM(1 << color) FROM main.color_labels WHERE imgid=im.id), 0) "
         "FROM main.images AS im "
         "JOIN memory.collected_images AS c ON im.id = c.imgid "
@@ -311,6 +327,8 @@ void dt_thumbtable_info_debug_assert_matches_cache(const dt_thumbnail_image_info
   g_assert(_thumbtable_double_equal(sql_info->geoloc_elevation, cache_info.geoloc_elevation));
   g_assert_cmpstr(sql_copy.filename, ==, cache_info.filename);
   g_assert_cmpstr(sql_copy.fullpath, ==, cache_info.fullpath);
+  g_assert_cmpstr(sql_copy.local_copy_path, ==, cache_info.local_copy_path);
+  g_assert_cmpstr(sql_copy.local_copy_legacy_path, ==, cache_info.local_copy_legacy_path);
   g_assert_cmpstr(sql_copy.filmroll, ==, cache_info.filmroll);
   g_assert_cmpstr(sql_copy.folder, ==, cache_info.folder);
   g_assert_cmpstr(sql_copy.datetime, ==, cache_info.datetime);

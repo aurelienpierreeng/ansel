@@ -59,7 +59,6 @@
 #include "control/conf.h"
 #include "control/jobs.h"
 #include "develop/imageop_math.h"
-#include "dtgtk/thumbtable_info.h"
 #include "gui/gtk.h"
 
 #include <assert.h>
@@ -211,12 +210,6 @@ exit:
   return r;
 }
 
-static gboolean _mipmap_get_thumb_info(const int32_t imgid, dt_thumbnail_image_info_t *info);
-static gboolean _mipmap_local_copy_full_path_from_info(const dt_thumbnail_image_info_t *info, char *pathname,
-                                                       size_t pathname_len);
-static gboolean _mipmap_full_path_from_info(const dt_thumbnail_image_info_t *info, char *pathname,
-                                            size_t pathname_len, gboolean *from_cache);
-
 /**
  * @brief Check if an image should be written to disk, if the thumbnail should be computed from embedded JPEG,
  * and optionaly return intermediate checks to get there, like whether the input is a JPEG file and if it exists on
@@ -235,18 +228,14 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
                                   gboolean *is_jpg_input, gboolean *use_embedded_jpg, gboolean *write_to_disk)
 {
   // Get file name
-  gboolean from_cache = TRUE;
   char _filename[PATH_MAX] = { 0 };
-  dt_thumbnail_image_info_t info = { 0 };
-  const gboolean have_info = _mipmap_get_thumb_info(imgid, &info);
-
+  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
   if(filename || ext || input_exists || is_jpg_input)
   {
-    // Avoid per-image SQL by building paths from the thumbtable LUT when available.
-    if(!(have_info && _mipmap_full_path_from_info(&info, _filename, sizeof(_filename), &from_cache)))
-      dt_image_full_path(imgid, _filename, sizeof(_filename), &from_cache, __FUNCTION__);
+    const dt_image_path_source_t source = dt_image_choose_input_path(img, _filename, sizeof(_filename), FALSE);
+    if(source == DT_IMAGE_PATH_NONE) _filename[0] = '\0';
     if(filename) strncpy(filename, _filename, PATH_MAX);
-    if(input_exists) *input_exists = *_filename && g_file_test(_filename, G_FILE_TEST_EXISTS);
+    if(input_exists) *input_exists = (source != DT_IMAGE_PATH_NONE);
   }
 
   // Get the file extension
@@ -266,14 +255,7 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
   gboolean altered = FALSE;
   if(mode == 1)
   {
-    if(have_info)
-    {
-      altered = dt_thumbtable_info_is_altered(&info);
-    }
-    else
-    {
-      altered = dt_image_altered(imgid);
-    }
+    if(img) altered = img->history_items > 0;
   }
   const gboolean _use_embedded_jpg
       = (mode == 2                           // always use embedded
@@ -287,6 +269,9 @@ static void _write_mipmap_to_disk(const int32_t imgid, char *filename, char *ext
   {
     *write_to_disk = dt_conf_get_bool("cache_disk_backend") && !_use_embedded_jpg;
   }
+
+  if(img)
+    dt_image_cache_read_release(darktable.image_cache, img);
 }
 
 
@@ -295,75 +280,6 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *buf, uint32_t *width,
 static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *iscale,
                     dt_colorspaces_color_profile_type_t *color_space, const int32_t imgid,
                     const dt_mipmap_size_t size);
-static gboolean _mipmap_get_thumb_info(const int32_t imgid, dt_thumbnail_image_info_t *info)
-{
-  if(!info || !darktable.gui || !darktable.gui->ui) return FALSE;
-
-  // Prefer the lightweight thumbtable LUT to avoid image-cache SQL in hot paths.
-  if(dt_thumbtable_get_thumbnail_info(darktable.gui->ui->thumbtable_lighttable, imgid, info))
-    return TRUE;
-  if(dt_thumbtable_get_thumbnail_info(darktable.gui->ui->thumbtable_filmstrip, imgid, info))
-    return TRUE;
-
-  return FALSE;
-}
-
-static gboolean _mipmap_local_copy_full_path_from_info(const dt_thumbnail_image_info_t *info, char *pathname,
-                                                       size_t pathname_len)
-{
-  if(!info || !pathname) return FALSE;
-  if(!info->folder[0] || !info->filename[0]) return FALSE;
-
-  char filename[PATH_MAX] = { 0 };
-  g_snprintf(filename, sizeof(filename), "%s" G_DIR_SEPARATOR_S "%s", info->folder, info->filename);
-
-  char *md5_filename = g_compute_checksum_for_string(G_CHECKSUM_MD5, filename, strlen(filename));
-  if(!md5_filename) return FALSE;
-
-  char cachedir[PATH_MAX] = { 0 };
-  dt_loc_get_user_cache_dir(cachedir, sizeof(cachedir));
-
-  // Keep the same extension semantics as the DB-backed path builder.
-  char *c = filename + strlen(filename);
-  while(*c != '.' && c > filename) c--;
-
-  // cache filename old format: <cachedir>/img-<id>-<MD5>.<ext>
-  snprintf(pathname, pathname_len, "%s/img-%d-%s%s", cachedir, info->imgid, md5_filename, c);
-  if(!g_file_test(pathname, G_FILE_TEST_EXISTS))
-  {
-    // cache filename format: <cachedir>/img-<MD5>.<ext>
-    snprintf(pathname, pathname_len, "%s/img-%s%s", cachedir, md5_filename, c);
-  }
-
-  g_free(md5_filename);
-  return TRUE;
-}
-
-static gboolean _mipmap_full_path_from_info(const dt_thumbnail_image_info_t *info, char *pathname,
-                                            size_t pathname_len, gboolean *from_cache)
-{
-  if(!info || !pathname || !from_cache) return FALSE;
-  if(!info->folder[0] || !info->filename[0]) return FALSE;
-
-  g_snprintf(pathname, pathname_len, "%s" G_DIR_SEPARATOR_S "%s", info->folder, info->filename);
-
-  if(*from_cache)
-  {
-    char lc_pathname[PATH_MAX] = { 0 };
-    if(_mipmap_local_copy_full_path_from_info(info, lc_pathname, sizeof(lc_pathname))
-       && g_file_test(lc_pathname, G_FILE_TEST_EXISTS))
-    {
-      g_strlcpy(pathname, lc_pathname, pathname_len);
-    }
-    else
-    {
-      *from_cache = FALSE;
-    }
-  }
-
-  return TRUE;
-}
-
 
 /**
  * @file: mipmap_cache.c
@@ -943,8 +859,8 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
 
     // Get the input file path, possibly from our local cache of copied images
     char filename[PATH_MAX] = { 0 };
-    gboolean from_cache = TRUE;
-    dt_image_full_path(buffered_image.id,  filename,  sizeof(filename),  &from_cache, __FUNCTION__);
+    dt_image_path_source_t source = dt_image_choose_input_path(&buffered_image, filename, sizeof(filename), FALSE);
+    if(source == DT_IMAGE_PATH_NONE) return;
 
     dt_print(DT_DEBUG_CACHE,
       "[mipmap_cache] fetch mip %d float32 for image %i (%ix%i) from original file I/O \n", mip,
@@ -1137,9 +1053,16 @@ static void _init_f(dt_mipmap_buffer_t *mipmap_buf, float *out, uint32_t *width,
 
   /* do not even try to process file if it isn't available */
   char filename[PATH_MAX] = { 0 };
-  gboolean from_cache = TRUE;
-  dt_image_full_path(imgid,  filename,  sizeof(filename),  &from_cache, __FUNCTION__);
-  if(!*filename || !g_file_test(filename, G_FILE_TEST_EXISTS))
+  dt_image_path_source_t source = DT_IMAGE_PATH_NONE;
+  {
+    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    if(img)
+    {
+      source = dt_image_choose_input_path(img, filename, sizeof(filename), FALSE);
+      dt_image_cache_read_release(darktable.image_cache, img);
+    }
+  }
+  if(source == DT_IMAGE_PATH_NONE)
   {
     *width = *height = 0;
     *iscale = 0.0f;
@@ -1342,18 +1265,15 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
     }
   }
 
-  // Orientation is only needed when loading embedded JPEGs; avoid extra SQL otherwise.
+  // Orientation is only needed when loading embedded JPEGs.
   dt_image_orientation_t orientation = ORIENTATION_NONE;
   if(use_embedded_jpg)
   {
-    dt_thumbnail_image_info_t info = { 0 };
-    if(_mipmap_get_thumb_info(imgid, &info))
+    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    if(img)
     {
-      orientation = (info.orientation != ORIENTATION_NULL) ? info.orientation : ORIENTATION_NONE;
-    }
-    else
-    {
-      orientation = dt_image_get_orientation(imgid);
+      orientation = (img->orientation != ORIENTATION_NULL) ? img->orientation : ORIENTATION_NONE;
+      dt_image_cache_read_release(darktable.image_cache, img);
     }
   }
 

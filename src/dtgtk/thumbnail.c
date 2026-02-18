@@ -408,10 +408,7 @@ int32_t _get_image_buffer(dt_job_t *job)
     uint8_t *full_res_thumb = NULL;
     int32_t full_res_thumb_wd, full_res_thumb_ht;
     dt_colorspaces_color_profile_type_t color_space;
-    char path[PATH_MAX] = { 0 };
-    gboolean from_cache = TRUE;
-    dt_image_full_path(imgid,  path,  sizeof(path),  &from_cache, __FUNCTION__);
-    if(!dt_imageio_large_thumbnail(path, &full_res_thumb, &full_res_thumb_wd, &full_res_thumb_ht, &color_space, img_width, img_height))
+    if(!dt_imageio_large_thumbnail(thumb->info.fullpath, &full_res_thumb, &full_res_thumb_wd, &full_res_thumb_ht, &color_space, img_width, img_height))
     {
       // we look for focus areas
       dt_focus_cluster_t full_res_focus[49];

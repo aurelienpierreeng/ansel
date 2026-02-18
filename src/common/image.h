@@ -204,6 +204,14 @@ typedef enum dt_image_loader_t
   LOADER_COUNT    = 16, // keep last
 } dt_image_loader_t;
 
+typedef enum dt_image_path_source_t
+{
+  DT_IMAGE_PATH_NONE = 0,
+  DT_IMAGE_PATH_LOCAL_COPY,
+  DT_IMAGE_PATH_LOCAL_COPY_LEGACY,
+  DT_IMAGE_PATH_ORIGINAL
+} dt_image_path_source_t;
+
 static const struct
 {
   const char *tooltip;
@@ -262,6 +270,9 @@ typedef struct dt_image_t
   gboolean camera_missing_sample;
 
   char filename[DT_MAX_FILENAME_LEN];
+  char fullpath[PATH_MAX];
+  char local_copy_path[PATH_MAX];
+  char local_copy_legacy_path[PATH_MAX];
 
   // common stuff
 
@@ -345,6 +356,13 @@ gboolean dt_image_use_monochrome_workflow(const dt_image_t *img);
 /** returns the full path name where the image was imported from. from_cache=TRUE check and return local
  * cached filename if any. */
 void dt_image_full_path(const int32_t imgid, char *pathname, size_t pathname_len, gboolean *from_cache, const char *calling_func);
+/** pregenerate modern and legacy pathes to local copies from full path */
+void dt_image_local_copy_paths_from_fullpath(const char *fullpath, int32_t imgid, char *local_copy_path,
+                                             size_t local_copy_len, char *local_copy_legacy_path,
+                                             size_t local_copy_legacy_len);
+/** test local copies and original files to find an image buffer */
+dt_image_path_source_t dt_image_choose_input_path(const dt_image_t *img, char *pathname,
+                                                  size_t pathname_len, gboolean force_cache);
 /** returns the full directory of the associated film roll. */
 void dt_image_film_roll_directory(const dt_image_t *img, char *pathname, size_t pathname_len);
 /** returns the portion of the path used for the film roll name. */
@@ -453,6 +471,7 @@ gboolean dt_image_safe_remove(const int32_t imgid);
 void dt_image_local_copy_synch();
 // xmp functions:
 int dt_image_write_sidecar_file(const int32_t imgid);
+int dt_image_write_sidecar_file_from_image(const struct dt_image_t *img);
 void dt_image_synch_xmp(const int selected);
 void dt_image_synch_xmps(const GList *img);
 void dt_image_synch_all_xmp(const gchar *pathname);
