@@ -72,6 +72,8 @@ typedef struct dt_cache_arena_t
 typedef struct dt_dev_pixelpipe_cache_t
 {
   GHashTable *entries;
+  // External (temporary) buffers keyed by address hash, separate from pipeline cache entries.
+  GHashTable *external_entries;
   uint64_t queries;
   uint64_t hits;
   size_t max_memory;
