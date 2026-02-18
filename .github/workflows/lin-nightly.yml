@@ -43,7 +43,7 @@ jobs:
         btype:
           - Release
         compiler:
-          - { compiler: GNU14, CC: gcc-13, CXX: g++-13, GCC_VER: "14", LLVM_VER: "" }
+          - { compiler: GNU13, CC: gcc-13, CXX: g++-13, GCC_VER: "14", LLVM_VER: "" }
         eco: [-DBINARY_PACKAGE_BUILD=ON -DUSE_XMLLINT=OFF]
         target:
           - skiptest
