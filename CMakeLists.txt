@@ -23,6 +23,41 @@ else()
   project(ansel VERSION 0 LANGUAGES CXX C)
 endif()
 
+# Shell to use for scripts (prefer bash for bash-specific scripts)
+if(WIN32)
+  if(CMAKE_SH)
+    set(ANSEL_SH_EXECUTABLE "${CMAKE_SH}")
+  else()
+    find_program(ANSEL_SH_EXECUTABLE sh)
+  endif()
+else()
+  find_program(ANSEL_SH_EXECUTABLE bash)
+  if(NOT ANSEL_SH_EXECUTABLE)
+    set(ANSEL_SH_EXECUTABLE "/bin/sh")
+  endif()
+endif()
+
+# Generated files in the build tree (shared across subdirectories)
+set(ANSEL_AUTHORS_FILE "${CMAKE_BINARY_DIR}/AUTHORS")
+
+# Ensure AUTHORS exists at install time (fallbacks to static AUTHORS if needed)
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/cmake")
+file(GENERATE
+  OUTPUT "${CMAKE_BINARY_DIR}/cmake/install_generate_authors.cmake"
+  CONTENT
+"execute_process(
+  COMMAND \"${CMAKE_COMMAND}\"
+    -DANSEL_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"
+    -DANSEL_AUTHORS_FILE=\"${ANSEL_AUTHORS_FILE}\"
+    -DANSEL_SH_EXECUTABLE=\"${ANSEL_SH_EXECUTABLE}\"
+    -DANSEL_BASE=release-3.9.0
+    -DANSEL_HEAD=HEAD
+    -P \"${CMAKE_SOURCE_DIR}/tools/generate-authors.cmake\"
+)
+"
+)
+install(SCRIPT "${CMAKE_BINARY_DIR}/cmake/install_generate_authors.cmake")
+
 # Allow forcing the C/CPP compiler that is actually used during the compilation
 # to something other than what is used by the cmake run. This is useful when
 # the compiler for some reason breaks the initial cmake checks but works fine

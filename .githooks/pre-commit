@@ -50,3 +50,24 @@ done
 if [ ${#errors[@]} -ne 0 ]; then
   exit 1
 fi
+
+# Regenerate AUTHORS in repo root before committing
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -n "$repo_root" ]; then
+  gen_script="$repo_root/tools/release/generate-authors.sh"
+  if [ -x "$gen_script" ]; then
+    tmp_file=$(mktemp "${repo_root}/.git/authors.XXXXXX") || exit 1
+    if "$gen_script" release-3.9.0 HEAD > "$tmp_file"; then
+      if [ ! -f "$repo_root/AUTHORS" ] || ! cmp -s "$tmp_file" "$repo_root/AUTHORS"; then
+        mv "$tmp_file" "$repo_root/AUTHORS"
+        git add "$repo_root/AUTHORS"
+        echo "Updated AUTHORS"
+      else
+        rm -f "$tmp_file"
+      fi
+    else
+      echo "Warning: failed to regenerate AUTHORS" >&2
+      rm -f "$tmp_file"
+    fi
+  fi
+fi

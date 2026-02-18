@@ -5,36 +5,38 @@ include(CheckCXXCompilerFlag)
 include(CheckCSourceCompiles)
 include(CheckCXXSymbolExists)
 
-# Generate authors
-if(WIN32)
-  if(CMAKE_SH)
-    set(ANSEL_SH_EXECUTABLE "${CMAKE_SH}")
-  else()
-    set(ANSEL_SH_EXECUTABLE "sh")
-  endif()
-else()
-  set(ANSEL_SH_EXECUTABLE "/bin/sh")
-endif()
-
-add_custom_target(
-  generate_authors_file ALL
-  COMMAND ${ANSEL_SH_EXECUTABLE} -c "tools/release/generate-authors.sh release-3.9.0 HEAD > AUTHORS"
+add_custom_command(
+  OUTPUT ${ANSEL_AUTHORS_FILE}
+  COMMAND ${CMAKE_COMMAND}
+    -DANSEL_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+    -DANSEL_AUTHORS_FILE=${ANSEL_AUTHORS_FILE}
+    -DANSEL_SH_EXECUTABLE=${ANSEL_SH_EXECUTABLE}
+    -DANSEL_BASE=release-3.9.0
+    -DANSEL_HEAD=HEAD
+    -P ${CMAKE_SOURCE_DIR}/tools/generate-authors.cmake
+  DEPENDS ${CMAKE_SOURCE_DIR}/tools/release/generate-authors.sh
+          ${CMAKE_SOURCE_DIR}/tools/generate-authors.cmake
   COMMENT "Generating AUTHORS file for releases."
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
+add_custom_target(
+  generate_authors_file ALL
+  DEPENDS ${ANSEL_AUTHORS_FILE}
+)
+
 add_custom_command(
-  DEPENDS ${CMAKE_SOURCE_DIR}/tools/authors_h.sh ${CMAKE_SOURCE_DIR}/AUTHORS
+  DEPENDS ${CMAKE_SOURCE_DIR}/tools/authors_h.sh ${ANSEL_AUTHORS_FILE}
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/tools/darktable_authors.h
   COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/tools/
-  COMMAND bash ${CMAKE_SOURCE_DIR}/tools/authors_h.sh ${CMAKE_SOURCE_DIR}/AUTHORS ${CMAKE_CURRENT_BINARY_DIR}/tools/darktable_authors.h
+  COMMAND bash ${CMAKE_SOURCE_DIR}/tools/authors_h.sh ${ANSEL_AUTHORS_FILE} ${CMAKE_CURRENT_BINARY_DIR}/tools/darktable_authors.h
   COMMENT "Generating authors.h for about dialog."
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
 add_custom_target(
   generate_authors_h ALL
-  DEPENDS ${CMAKE_SOURCE_DIR}/tools/authors_h.sh ${CMAKE_SOURCE_DIR}/AUTHORS ${CMAKE_CURRENT_BINARY_DIR}/tools/darktable_authors.h
+  DEPENDS ${CMAKE_SOURCE_DIR}/tools/authors_h.sh ${ANSEL_AUTHORS_FILE} ${CMAKE_CURRENT_BINARY_DIR}/tools/darktable_authors.h
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 add_dependencies(generate_authors_h generate_authors_file)

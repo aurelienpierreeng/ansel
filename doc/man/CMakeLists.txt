@@ -25,8 +25,8 @@ macro(add_manpage pod)
   set(target ${CMAKE_CURRENT_BINARY_DIR}/${manpage})
   add_custom_command(
     OUTPUT ${target}
-    COMMAND sh ${CMAKE_SOURCE_DIR}/tools/makeman.sh ${source} ${CMAKE_CURRENT_SOURCE_DIR}/../../AUTHORS ${target}
-    DEPENDS ${source} ${CMAKE_CURRENT_SOURCE_DIR}/../../AUTHORS ${CMAKE_SOURCE_DIR}/tools/makeman.sh
+    COMMAND sh ${CMAKE_SOURCE_DIR}/tools/makeman.sh ${source} ${ANSEL_AUTHORS_FILE} ${target}
+    DEPENDS ${source} ${ANSEL_AUTHORS_FILE} ${CMAKE_SOURCE_DIR}/tools/makeman.sh
   )
   add_custom_target(manpage_${manpage} ALL DEPENDS ${target})
   add_dependencies(manpages manpage_${manpage})
@@ -64,8 +64,8 @@ else()
       # turn the .pod into a manpage
       add_custom_command(
         OUTPUT ${target}
-        COMMAND sh ${CMAKE_SOURCE_DIR}/tools/makeman.sh ${tmppod} ${CMAKE_CURRENT_SOURCE_DIR}/../../AUTHORS ${target}
-        DEPENDS ${tmppod} ${CMAKE_CURRENT_SOURCE_DIR}/../../AUTHORS ${CMAKE_SOURCE_DIR}/tools/makeman.sh
+        COMMAND sh ${CMAKE_SOURCE_DIR}/tools/makeman.sh ${tmppod} ${ANSEL_AUTHORS_FILE} ${target}
+        DEPENDS ${tmppod} ${ANSEL_AUTHORS_FILE} ${CMAKE_SOURCE_DIR}/tools/makeman.sh
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
       )
       add_custom_target(manpage-${language}-${manpage} ALL DEPENDS ${target})
