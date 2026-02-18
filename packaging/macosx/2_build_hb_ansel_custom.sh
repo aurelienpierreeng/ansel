@@ -22,7 +22,7 @@
 # Script to build and install ansel with custom configuration
 #
 #   
- Exit in case of error
+# Exit in case of error
 set -e -o pipefail
 trap 'echo "${BASH_SOURCE[0]}{${FUNCNAME[0]}}:${LINENO}: Error: command \`${BASH_COMMAND}\` failed with exit code $?"' ERR
 
