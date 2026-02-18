@@ -1172,7 +1172,7 @@ void dt_variables_params_destroy(dt_variables_params_t *params)
   if(params->data->time)
     g_date_time_unref(params->data->time);
 
-  if(params->data->time)
+  if(params->data->file_datetime)
     g_date_time_unref(params->data->file_datetime);
 
   g_free(params->data);
