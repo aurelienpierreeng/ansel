@@ -1044,6 +1044,8 @@ static float *_resync_input_gpu_to_cache(dt_dev_pixelpipe_t *pipe, float *input,
   dt_opencl_events_wait_for(pipe->devid);
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
 
+  // Update colorspace tag
+  input_format->cst = input_cst_cl;
   return input;
 }
 
@@ -1186,7 +1188,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
       // In this case, we start a pinned memory alloc. If NULL, it's device alloc.
       // *output decides which it is going to be.
       *cl_mem_output = _gpu_init_buffer(pipe->devid, *output, roi_out, bpp, module, "output", output_entry, FALSE,
-                                        NULL, NULL);
+                                        &pipe->dsc.cst, NULL);
       if(*cl_mem_output == NULL) goto error;
     }
 
@@ -1256,20 +1258,6 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
       dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] output memory was copied to cache for %s\n", module->name());
       // Note : this whole function is already called from within a write locked section
     }
-
-    // Because we color-converted the input several times in place,
-    // we need to update the colorspace metadata. But since it's shared
-    // between RAM pixel cache and GPU buffer, then we need to resync GPU buffer with cache.
-    /* Still needed ?
-    if(input_format->cst != input_cst_cl && piece->force_opencl_cache && FALSE)
-    {
-      int fail = _resync_input_gpu_to_cache(pipe, input, cl_mem_input, input_format, roi_in,
-                                             module, input_cst_cl, in_bpp, input_entry,
-                                             "color-converted input to cache");
-      if(fail) goto error;
-      input_format->cst = input_cst_cl;
-    }
-    */
   }
   else if(piece->process_tiling_ready && input != NULL)
   {
@@ -1321,20 +1309,6 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     dt_develop_blend_process(module, piece, input, *output, roi_in, roi_out);
     *pixelpipe_flow |= (PIXELPIPE_FLOW_BLENDED_ON_CPU);
     *pixelpipe_flow &= ~(PIXELPIPE_FLOW_BLENDED_ON_GPU);
-    
-    // Because we color-converted the input several times in place,
-    // we need to update the colorspace metadata. But since it's shared
-    // between RAM pixel cache and GPU buffer, then we need to resync GPU buffer with cache.
-    /* Still needed ?
-    if(input_format->cst != input_cst_cl && piece->force_opencl_cache && FALSE)
-    {
-      int fail = _resync_input_gpu_to_cache(pipe, input, cl_mem_input, input_format, roi_in,
-                                             module, input_cst_cl, in_bpp, input_entry,
-                                             "color-converted input to cache");
-      if(fail) goto error;
-      input_format->cst = input_cst_cl;
-    }
-    */
   }
   else
   {
@@ -1363,7 +1337,7 @@ error:;
   piece->force_opencl_cache = TRUE; 
 
   _gpu_clear_buffer(cl_mem_output, NULL, NULL, IOP_CS_NONE);
-  _gpu_clear_buffer(&cl_mem_input, input_entry, input, IOP_CS_NONE);
+  _gpu_clear_buffer(&cl_mem_input, input_entry, input, input_cst_cl);
   dt_opencl_finish(pipe->devid);
 
   // If output caching was not explicitly required initially, *output was not allocated.
@@ -1553,7 +1527,7 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
         if(supports_opencl)
         {
           *cl_mem_output = _gpu_init_buffer(pipe->devid, *output, &roi_out, bpp, NULL, "base buffer", cache_entry, FALSE,
-                                            NULL, NULL);
+                                            &pipe->dsc.cst, NULL);
           int fail = (*cl_mem_output == NULL);
 
           if(!fail)
@@ -1564,7 +1538,7 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
           // we use a read lock on the cache that lives in the CPU timeline.
           dt_opencl_events_wait_for(pipe->devid);
           
-          if(fail) _gpu_clear_buffer(cl_mem_output, NULL, NULL, IOP_CS_NONE);
+          if(fail) _gpu_clear_buffer(cl_mem_output, NULL, NULL, pipe->dsc.cst);
         }
 #endif
       }
