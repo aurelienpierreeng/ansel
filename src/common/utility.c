@@ -792,8 +792,15 @@ GDateTime *dt_util_get_file_datetime(const char *const path)
   if(path == NULL) return NULL;
 
   GFile *file = g_file_new_for_path(path);
+  GError *error = NULL;
   GFileInfo *info = g_file_query_info(file, G_FILE_ATTRIBUTE_STANDARD_NAME "," G_FILE_ATTRIBUTE_TIME_MODIFIED,
-                                      G_FILE_QUERY_INFO_NONE, NULL, NULL);
+                                      G_FILE_QUERY_INFO_NONE, NULL, &error);
+  if(!info)
+  {
+    if(error) g_error_free(error);
+    g_object_unref(file);
+    return NULL;
+  }
 
   const guint64 datetime = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
   g_object_unref(file);

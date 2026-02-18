@@ -505,10 +505,16 @@ static int _is_in_library_by_path(const gchar *folder, const char *filename)
 
 static int _is_in_library_by_metadata(GFile *file)
 {
+  GError *error = NULL;
   GFileInfo *info = g_file_query_info(file,
                             G_FILE_ATTRIBUTE_STANDARD_NAME ","
                             G_FILE_ATTRIBUTE_TIME_MODIFIED,
-                            G_FILE_QUERY_INFO_NONE, NULL, NULL);
+                            G_FILE_QUERY_INFO_NONE, NULL, &error);
+  if(!info)
+  {
+    if(error) g_error_free(error);
+    return 0;
+  }
 
   const guint64 datetime = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
   char dtid[DT_DATETIME_EXIF_LENGTH];
