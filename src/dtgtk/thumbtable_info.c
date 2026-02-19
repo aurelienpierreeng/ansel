@@ -114,18 +114,11 @@ void dt_thumbtable_info_debug_assert_matches_cache(const dt_image_t *sql_info)
   const dt_image_t *img = dt_image_cache_get(darktable.image_cache, sql_info->id, 'r');
   if(!img) return;
 
-  dt_image_t tmp = {0};
-  dt_thumbtable_copy_image(&tmp, img);
-  tmp.group_id = sql_info->group_id;
-  tmp.group_members = group_members;
-  tmp.history_items = history_items;
-
   dt_image_t cache_info = {0};
-  dt_thumbtable_copy_image(&cache_info, &tmp);
+  dt_thumbtable_copy_image(&cache_info, &cache_info);
   dt_image_cache_read_release(darktable.image_cache, img);
 
-  dt_image_t sql_copy = *sql_info;
-  g_assert_cmpint(sql_copy.id, ==, cache_info.id);
+  g_assert_cmpint(sql_info->id, ==, cache_info.id);
   g_assert_cmpint(sql_info->film_id, ==, cache_info.film_id);
   g_assert_cmpint(sql_info->group_id, ==, cache_info.group_id);
   g_assert_cmpint(sql_info->group_members, ==, cache_info.group_members);
@@ -159,17 +152,17 @@ void dt_thumbtable_info_debug_assert_matches_cache(const dt_image_t *sql_info)
   g_assert(_thumbtable_double_equal(sql_info->geoloc.latitude, cache_info.geoloc.latitude));
   g_assert(_thumbtable_double_equal(sql_info->geoloc.longitude, cache_info.geoloc.longitude));
   g_assert(_thumbtable_double_equal(sql_info->geoloc.elevation, cache_info.geoloc.elevation));
-  g_assert_cmpstr(sql_copy.filename, ==, cache_info.filename);
-  g_assert_cmpstr(sql_copy.fullpath, ==, cache_info.fullpath);
-  g_assert_cmpstr(sql_copy.local_copy_path, ==, cache_info.local_copy_path);
-  g_assert_cmpstr(sql_copy.local_copy_legacy_path, ==, cache_info.local_copy_legacy_path);
-  g_assert_cmpstr(sql_copy.filmroll, ==, cache_info.filmroll);
-  g_assert_cmpstr(sql_copy.folder, ==, cache_info.folder);
-  g_assert_cmpstr(sql_copy.datetime, ==, cache_info.datetime);
-  g_assert_cmpstr(sql_copy.camera_makermodel, ==, cache_info.camera_makermodel);
-  g_assert_cmpstr(sql_copy.exif_maker, ==, cache_info.exif_maker);
-  g_assert_cmpstr(sql_copy.exif_model, ==, cache_info.exif_model);
-  g_assert_cmpstr(sql_copy.exif_lens, ==, cache_info.exif_lens);
+  g_assert_cmpstr(sql_info->filename, ==, cache_info.filename);
+  g_assert_cmpstr(sql_info->fullpath, ==, cache_info.fullpath);
+  g_assert_cmpstr(sql_info->local_copy_path, ==, cache_info.local_copy_path);
+  g_assert_cmpstr(sql_info->local_copy_legacy_path, ==, cache_info.local_copy_legacy_path);
+  g_assert_cmpstr(sql_info->filmroll, ==, cache_info.filmroll);
+  g_assert_cmpstr(sql_info->folder, ==, cache_info.folder);
+  g_assert_cmpstr(sql_info->datetime, ==, cache_info.datetime);
+  g_assert_cmpstr(sql_info->camera_makermodel, ==, cache_info.camera_makermodel);
+  g_assert_cmpstr(sql_info->exif_maker, ==, cache_info.exif_maker);
+  g_assert_cmpstr(sql_info->exif_model, ==, cache_info.exif_model);
+  g_assert_cmpstr(sql_info->exif_lens, ==, cache_info.exif_lens);
 }
 #endif
 
