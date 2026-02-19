@@ -481,7 +481,6 @@ gboolean dt_image_safe_remove(const int32_t imgid);
 void dt_image_local_copy_synch();
 // xmp functions:
 int dt_image_write_sidecar_file(const int32_t imgid);
-int dt_image_write_sidecar_file_from_image(const struct dt_image_t *img);
 void dt_image_synch_xmp(const int selected);
 void dt_image_synch_xmps(const GList *img);
 void dt_image_synch_all_xmp(const gchar *pathname);

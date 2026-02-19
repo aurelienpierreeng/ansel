@@ -1836,12 +1836,9 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
         img = dt_image_cache_get(darktable.image_cache, id, 'w');
         img->film_id = filmid;
         if(newname) g_strlcpy(img->filename, newname, DT_MAX_FILENAME_LEN);
-        // write through to db, but not to xmp
-        dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
+        // write through to db and queue xmp write
+        dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_SAFE);
         dup_list = g_list_delete_link(dup_list, dup_list);
-        // write xmp file
-        // TODO: map that to a background job
-        dt_image_write_sidecar_file(id);
       }
       g_list_free(dup_list);
 
@@ -2381,30 +2378,98 @@ int dt_image_local_copy_reset(const int32_t imgid)
 // xmp stuff
 // *******************************************************
 
-int dt_image_write_sidecar_file_from_image(const dt_image_t *img)
+static sqlite3_stmt *_write_timestamp_select_stmt = NULL;
+static sqlite3_stmt *_write_timestamp_update_stmt = NULL;
+static dt_pthread_mutex_t _write_timestamp_stmt_mutex;
+static gsize _write_timestamp_stmt_mutex_inited = 0;
+
+static void _write_timestamp_stmt_ensure(void)
 {
-  // FIXME: [CRITICAL] should lock the image history at the app level
-  // TODO: compute hash and don't write if not needed!
-  // write .xmp file
-  if(!img || img->id <= 0 || !dt_image_get_xmp_mode()) return 1;
+  if(g_once_init_enter(&_write_timestamp_stmt_mutex_inited))
+  {
+    dt_pthread_mutex_init(&_write_timestamp_stmt_mutex, NULL);
+    g_once_init_leave(&_write_timestamp_stmt_mutex_inited, 1);
+  }
+}
+
+static int64_t _write_timestamp_get(const int32_t imgid)
+{
+  if(imgid <= 0) return 0;
+
+  _write_timestamp_stmt_ensure();
+  dt_pthread_mutex_lock(&_write_timestamp_stmt_mutex);
+  if(!_write_timestamp_select_stmt)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT write_timestamp FROM main.images WHERE id = ?1",
+                                -1, &_write_timestamp_select_stmt, NULL);
+  }
+  if(!_write_timestamp_select_stmt)
+  {
+    dt_pthread_mutex_unlock(&_write_timestamp_stmt_mutex);
+    return 0;
+  }
+
+  int64_t write_timestamp = 0;
+  DT_DEBUG_SQLITE3_BIND_INT(_write_timestamp_select_stmt, 1, imgid);
+  if(sqlite3_step(_write_timestamp_select_stmt) == SQLITE_ROW)
+    write_timestamp = sqlite3_column_int64(_write_timestamp_select_stmt, 0);
+  sqlite3_reset(_write_timestamp_select_stmt);
+  sqlite3_clear_bindings(_write_timestamp_select_stmt);
+  dt_pthread_mutex_unlock(&_write_timestamp_stmt_mutex);
+
+  return write_timestamp;
+}
+
+static void _write_timestamp_set_now(const int32_t imgid)
+{
+  if(imgid <= 0) return;
+
+  _write_timestamp_stmt_ensure();
+  dt_pthread_mutex_lock(&_write_timestamp_stmt_mutex);
+  if(!_write_timestamp_update_stmt)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2
+      (dt_database_get(darktable.db),
+       "UPDATE main.images SET write_timestamp = STRFTIME('%s', 'now') WHERE id = ?1",
+       -1, &_write_timestamp_update_stmt, NULL);
+  }
+  if(_write_timestamp_update_stmt)
+  {
+    DT_DEBUG_SQLITE3_BIND_INT(_write_timestamp_update_stmt, 1, imgid);
+    sqlite3_step(_write_timestamp_update_stmt);
+    sqlite3_reset(_write_timestamp_update_stmt);
+    sqlite3_clear_bindings(_write_timestamp_update_stmt);
+  }
+  dt_pthread_mutex_unlock(&_write_timestamp_stmt_mutex);
+}
+
+static gboolean _sidecar_is_up_to_date(const dt_image_t *img)
+{
+  if(!img || img->id <= 0) return FALSE;
+  if(img->change_timestamp <= 0) return FALSE;
+
+  const int64_t write_timestamp = _write_timestamp_get(img->id);
+  if(write_timestamp <= 0) return FALSE;
+
+  GDateTime *gdt = dt_datetime_gtimespan_to_gdatetime(img->change_timestamp);
+  if(!gdt) return FALSE;
+  const int64_t change_timestamp_unix = g_date_time_to_unix(gdt);
+  g_date_time_unref(gdt);
+  dt_print(DT_DEBUG_CONTROL,
+           "[xmp] imgid %d change_ts=%lld write_ts=%lld\n",
+           img->id, (long long)change_timestamp_unix, (long long)write_timestamp);
+  return change_timestamp_unix <= write_timestamp;
+}
+
+static int _write_sidecar_file_from_image_locked(const dt_image_t *img)
+{
+  if(!img || img->id <= 0) return 1;
 
   char imgpath[PATH_MAX] = { 0 };
-
-  // Prefer the original file when accessible, otherwise fall back to local copy paths.
-  if(img->fullpath[0] && g_file_test(img->fullpath, G_FILE_TEST_EXISTS))
+  if(dt_image_choose_input_path(img, imgpath, sizeof(imgpath), FALSE) == DT_IMAGE_PATH_NONE)
   {
-    g_strlcpy(imgpath, img->fullpath, sizeof(imgpath));
-  }
-  else if(img->local_copy_path[0] && g_file_test(img->local_copy_path, G_FILE_TEST_EXISTS))
-  {
-    g_strlcpy(imgpath, img->local_copy_path, sizeof(imgpath));
-  }
-  else if(img->local_copy_legacy_path[0] && g_file_test(img->local_copy_legacy_path, G_FILE_TEST_EXISTS))
-  {
-    g_strlcpy(imgpath, img->local_copy_legacy_path, sizeof(imgpath));
-  }
-  else
-  {
+    dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d no source path available\n", img->id);
     return 1;
   }
 
@@ -2413,33 +2478,39 @@ int dt_image_write_sidecar_file_from_image(const dt_image_t *img)
   dt_image_path_append_version(img->id, filename, sizeof(filename));
   g_strlcat(filename, ".xmp", sizeof(filename));
 
-  if(!dt_exif_xmp_write_with_imgpath(img->id, filename, imgpath))
+  if(g_file_test(filename, G_FILE_TEST_EXISTS))
   {
-    // put the timestamp into db. this can't be done in exif.cc since that code gets called
-    // for the copy exporter, too
-    sqlite3_stmt *stmt;
-    DT_DEBUG_SQLITE3_PREPARE_V2
-      (dt_database_get(darktable.db),
-       "UPDATE main.images SET write_timestamp = STRFTIME('%s', 'now') WHERE id = ?1",
-       -1, &stmt, NULL);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->id);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-    return 0;
+    if(_sidecar_is_up_to_date(img))
+    {
+      dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d sidecar up-to-date, skip\n", img->id);
+      return 0;
+    }
   }
 
-  return 1; // error : nothing written
+  dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d writing sidecar %s\n", img->id, filename);
+  if(dt_exif_xmp_write_with_imgpath(img->id, filename, imgpath) != 0) return 1;
+
+  dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d updating write_timestamp\n", img->id);
+  _write_timestamp_set_now(img->id);
+  return 0;
 }
 
 int dt_image_write_sidecar_file(const int32_t imgid)
 {
   if(imgid <= 0 || !dt_image_get_xmp_mode()) return 1;
 
+  dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d write start\n", imgid);
   const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-  if(!img) return 1;
+  if(!img)
+  {
+    dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock failed\n", imgid);
+    return 1;
+  }
+  dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock acquired (read)\n", imgid);
 
-  const int res = dt_image_write_sidecar_file_from_image(img);
+  const int res = _write_sidecar_file_from_image_locked(img);
   dt_image_cache_read_release(darktable.image_cache, img);
+  dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock released (read)\n", imgid);
   return res;
 }
 
@@ -2448,10 +2519,7 @@ void dt_image_synch_xmps(const GList *img)
   if(!img) return;
   if(dt_image_get_xmp_mode())
   {
-    for(const GList *imgs = img; imgs; imgs = g_list_next(imgs))
-    {
-      dt_image_write_sidecar_file(GPOINTER_TO_INT(imgs->data));
-    }
+    dt_control_save_xmps(img, FALSE);
   }
 }
 
@@ -2459,18 +2527,12 @@ void dt_image_synch_xmp(const int selected)
 {
   if(selected > 0)
   {
-    dt_image_write_sidecar_file(selected);
+    GList *imgs = g_list_append(NULL, GINT_TO_POINTER(selected));
+    dt_control_save_xmps(imgs, FALSE);
+    g_list_free(imgs);
   }
   else
   {
-    // TODO: if fucking act_on bullshit was only targeting selected files,
-    // we could just call the control job that resyncs XMPs on the whole selection
-    // in a background thread. But since people got clever about selections,
-    // we have to run this in fucking GUI mainthread, which means hanging there.
-    // If images are on a NAS, we can always prompt users to go fetch a cup of coffee.
-    // Hell, let's put a pomodoro timer there and call that a feature: 
-    // take a mandatory break, go stretch your legs, it's good for you.
-    // Fucking hell.
     GList *imgs = dt_act_on_get_images();
     dt_image_synch_xmps(imgs);
     g_list_free(imgs);
@@ -2484,7 +2546,9 @@ void dt_image_synch_all_xmp(const gchar *pathname)
     const int32_t imgid = dt_image_get_id_full_path(pathname);
     if(imgid != UNKNOWN_IMAGE)
     {
-      dt_image_write_sidecar_file(imgid);
+      GList *imgs = g_list_append(NULL, GINT_TO_POINTER(imgid));
+      dt_control_save_xmps(imgs, FALSE);
+      g_list_free(imgs);
     }
   }
 }
@@ -2494,12 +2558,11 @@ void dt_image_local_copy_synch()
   // nothing to do if not creating .xmp
   if(!dt_image_get_xmp_mode()) return;
   sqlite3_stmt *stmt;
+  GList *imgs = NULL;
 
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "SELECT id FROM main.images WHERE flags&?1=?1", -1,
                               &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, DT_IMAGE_LOCAL_COPY);
-
-  int count = 0;
 
   while(sqlite3_step(stmt) == SQLITE_ROW)
   {
@@ -2510,18 +2573,20 @@ void dt_image_local_copy_synch()
 
     if(g_file_test(filename, G_FILE_TEST_EXISTS))
     {
-      dt_image_write_sidecar_file(imgid);
-      count++;
+      imgs = g_list_prepend(imgs, GINT_TO_POINTER(imgid));
     }
   }
   sqlite3_finalize(stmt);
 
+  const int count = g_list_length(imgs);
   if(count > 0)
   {
+    dt_control_save_xmps(imgs, FALSE);
     dt_control_log(ngettext("%d local copy has been synchronized",
                             "%d local copies have been synchronized", count),
                    count);
   }
+  g_list_free(imgs);
 }
 
 void dt_image_get_datetime(const int32_t imgid, char *datetime)

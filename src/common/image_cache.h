@@ -45,9 +45,9 @@ dt_image_cache_t;
 // released after writing.
 typedef enum dt_image_cache_write_mode_t
 {
-  // always write to database and xmp
+  // write to db and queue xmp write
   DT_IMAGE_CACHE_SAFE = 0,
-  // only write to db and do xmp only during shutdown
+  // only write to db
   DT_IMAGE_CACHE_RELAXED = 1
 }
 dt_image_cache_write_mode_t;

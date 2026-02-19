@@ -285,45 +285,29 @@ static dt_job_t *dt_control_generic_image_job_create(dt_job_execute_callback exe
 }
 
 
-static int32_t dt_control_write_sidecar_files_job_run(dt_job_t *job)
+static int32_t dt_control_save_xmps_job_run(dt_job_t *job)
 {
+  if(!dt_image_get_xmp_mode()) return 0;
+
   dt_control_image_enumerator_t *params = dt_control_job_get_params(job);
-  GList *t = params->index;
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "UPDATE main.images SET write_timestamp = STRFTIME('%s', 'now') WHERE id = ?1", -1,
-                              &stmt, NULL);
-  while(t)
+
+  for(GList *t = params->index; t; t = g_list_next(t))
   {
-    gboolean from_cache = FALSE;
     const int32_t imgid = GPOINTER_TO_INT(t->data);
-    const dt_image_t *img = dt_image_cache_get(darktable.image_cache, (int32_t)imgid, 'r');
-    char dtfilename[PATH_MAX] = { 0 };
-    dt_image_full_path(img->id,  dtfilename,  sizeof(dtfilename),  &from_cache, __FUNCTION__);
-    dt_image_path_append_version(img->id, dtfilename, sizeof(dtfilename));
-    g_strlcat(dtfilename, ".xmp", sizeof(dtfilename));
-    if(!dt_exif_xmp_write(imgid, dtfilename))
-    {
-      // put the timestamp into db. this can't be done in exif.cc since that code gets called
-      // for the copy exporter, too
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-      sqlite3_step(stmt);
-      sqlite3_reset(stmt);
-      sqlite3_clear_bindings(stmt);
-    }
-    dt_image_cache_read_release(darktable.image_cache, img);
-    t = g_list_next(t);
+    if(dt_image_write_sidecar_file(imgid))
+      fprintf(stdout,
+              "cannot write XMP file for image %i. The target storage may be unavailable or read-only.\n",
+              imgid);
   }
-  sqlite3_finalize(stmt);
   return 0;
 }
 
 void dt_control_write_sidecar_files()
 {
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
-                     dt_control_generic_images_job_create(&dt_control_write_sidecar_files_job_run,
-                                                          N_("write sidecar files"), 0, NULL, PROGRESS_NONE,
-                                                          FALSE));
+  GList *imgs = dt_act_on_get_images();
+  if(!imgs) return;
+  dt_control_save_xmps(imgs, FALSE);
+  g_list_free(imgs);
 }
 
 typedef struct dt_control_merge_hdr_t
@@ -1556,21 +1540,34 @@ static dt_job_t *_control_gpx_apply_job_create(const gchar *filename, int32_t fi
   return job;
 }
 
-static int32_t dt_dev_save_xmp_job_run(dt_job_t *job)
-{
-  dt_control_image_enumerator_t *params = dt_control_job_get_params(job);
-  const int32_t imgid = GPOINTER_TO_INT(params->data);
-  if(dt_image_write_sidecar_file(imgid))
-    fprintf(stdout, "cannot write XMP file for image %i. The target storage may be unavailable or read-only.\n", imgid);
-
-  return 0;
-}
-
 void dt_control_save_xmp(const int32_t imgid)
 {
   dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG,
-                     dt_control_generic_images_job_create(&dt_dev_save_xmp_job_run, N_("save history to XMP"), 0,
-                                                          GINT_TO_POINTER(imgid), PROGRESS_SIMPLE, FALSE));
+                     dt_control_generic_images_job_create(&dt_control_save_xmps_job_run,
+                                                          N_("save history to XMP"),
+                                                          0, NULL, PROGRESS_SIMPLE, imgid));
+}
+
+void dt_control_save_xmps(const GList *imgids, const gboolean check_history)
+{
+  (void)check_history;
+  if(!imgids) return;
+
+  dt_job_t *job = dt_control_job_create(&dt_control_save_xmps_job_run, "save xmp");
+  if(!job) return;
+
+  dt_control_image_enumerator_t *params = dt_control_image_enumerator_alloc();
+  if(!params)
+  {
+    dt_control_job_dispose(job);
+    return;
+  }
+
+  params->index = g_list_copy((GList *)imgids);
+  params->flag = 0;
+
+  dt_control_job_set_params(job, params, dt_control_image_enumerator_cleanup);
+  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, job);
 }
 
 void dt_control_merge_hdr()

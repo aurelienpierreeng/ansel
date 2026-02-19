@@ -96,6 +96,8 @@ void dt_control_set_cursor(dt_cursor_t cursor);
 // commit the currently set cursor shape from darktable.control->cursor
 void dt_control_commit_cursor();
 void dt_control_write_sidecar_files();
+void dt_control_save_xmp(const int32_t imgid);
+void dt_control_save_xmps(const GList *imgids, const gboolean check_history);
 void dt_control_delete_images();
 
 /** \brief request redraw of the workspace.

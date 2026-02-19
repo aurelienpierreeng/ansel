@@ -48,6 +48,7 @@
 #include "common/image.h"
 #include "common/datetime.h"
 #include "control/conf.h"
+#include "control/control.h"
 #include "control/jobs.h"
 #include "control/signal.h"
 #include "develop/develop.h"
@@ -432,8 +433,7 @@ void dt_image_cache_read_release(dt_image_cache_t *cache, const dt_image_t *img)
 }
 
 // drops the write privileges on an image struct.
-// this triggers a write-through to sql, and if the setting
-// is present, also to xmp sidecar files (safe setting).
+// this triggers a write-through to sql, and optionally queues xmp sidecar writing.
 void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_image_cache_write_mode_t mode)
 {
   union {
@@ -540,12 +540,11 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
 
   dt_colorlabels_set_labels(img->id, img->color_labels);
 
-  // TODO: make this work in relaxed mode, too.
-  // TODO: protect XMP saving from concurrent accesses to DB history
-  if(mode == DT_IMAGE_CACHE_SAFE)
-    dt_image_write_sidecar_file_from_image(img);
-
+  const int32_t imgid = img->id;
   dt_cache_release(&cache->cache, img->cache_entry);
+
+  if(mode == DT_IMAGE_CACHE_SAFE && dt_image_get_xmp_mode())
+    dt_control_save_xmp(imgid);
 }
 
 

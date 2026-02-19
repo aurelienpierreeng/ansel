@@ -65,7 +65,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
 
   // we got a copy of the file, now write the xmp data
   xmpfile = g_strconcat(targetfile, ".xmp", NULL);
-  if(dt_exif_xmp_write(imgid, xmpfile) != 0)
+  if(dt_exif_xmp_write_with_imgpath(imgid, xmpfile, sourcefile) != 0)
   {
     // something went wrong, unlink the copied image.
     g_unlink(targetfile);
