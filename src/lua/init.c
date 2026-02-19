@@ -37,6 +37,7 @@
 #include "lua/gui.h"
 #include "lua/guides.h"
 #include "lua/image.h"
+#include "common/l10n.h"
 #include "lua/lib.h"
 #include "lua/lua.h"
 #include "lua/lualib.h"
@@ -223,6 +224,7 @@ static int load_from_lua(lua_State *L)
   lua_pop(L, lua_gettop(L));
   argv[argc] = NULL;
   argv_copy[argc] = NULL;
+  dt_l10n_disable_setlocale_early();
   gtk_init(&argc, &argv);
   if(dt_init(argc, argv, FALSE, TRUE, L)) {
     luaL_error(L,"Starting darktable failed.");
@@ -268,4 +270,3 @@ void dt_lua_finalize()
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

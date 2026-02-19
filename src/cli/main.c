@@ -61,6 +61,7 @@
 #include "common/imageio.h"
 #include "common/imageio_jpeg.h"
 #include "common/imageio_module.h"
+#include "common/l10n.h"
 #include "common/points.h"
 #include "control/conf.h"
 #include "develop/imageop.h"
@@ -208,6 +209,8 @@ int main(int argc, char *arg[])
   dt_loc_get_localedir(localedir, sizeof(localedir));
   bindtextdomain(GETTEXT_PACKAGE, localedir);
 
+  // gtk_parse_args may trigger GTK initialization, so disable GTK locale handling first.
+  dt_l10n_disable_setlocale_early();
   if(!gtk_parse_args(&argc, &arg)) exit(1);
 
   // parse command line arguments

@@ -39,6 +39,7 @@ typedef struct dt_l10n_t
 } dt_l10n_t;
 
 dt_l10n_t *dt_l10n_init(gboolean init_list);
+void dt_l10n_disable_setlocale_early(void);
 
 const char *dt_l10n_get_current_lang(dt_l10n_t *l10n);
 

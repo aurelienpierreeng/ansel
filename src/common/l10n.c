@@ -84,6 +84,15 @@ static gchar* _dt_full_locale_name(const char *locale)
 #endif
 }
 
+static gboolean _l10n_gtk_locale_disabled = FALSE;
+
+void dt_l10n_disable_setlocale_early(void)
+{
+  if(_l10n_gtk_locale_disabled) return;
+  gtk_disable_setlocale();
+  _l10n_gtk_locale_disabled = TRUE;
+}
+
 static void set_locale(const char *ui_lang, const char *old_env)
 {
   if(ui_lang && *ui_lang)
@@ -95,7 +104,7 @@ static void set_locale(const char *ui_lang, const char *old_env)
       g_free(full_locale);
     }
     g_setenv("LANGUAGE", ui_lang, TRUE);
-    gtk_disable_setlocale();
+    dt_l10n_disable_setlocale_early();
   }
   else if(old_env && *old_env)
     g_setenv("LANGUAGE", old_env, TRUE);
