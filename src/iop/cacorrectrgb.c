@@ -524,11 +524,11 @@ dt_omp_firstprivate(manifolds, blurred_manifold_lower, blurred_manifold_higher, 
   }
 
 error:;
-  if(manifold_lower) dt_pixelpipe_cache_free_align(manifold_lower);
-  if(manifold_higher) dt_pixelpipe_cache_free_align(manifold_higher);
-  if(blurred_in) dt_pixelpipe_cache_free_align(blurred_in);
-  if(blurred_manifold_lower) dt_pixelpipe_cache_free_align(blurred_manifold_lower);
-  if(blurred_manifold_higher) dt_pixelpipe_cache_free_align(blurred_manifold_higher);
+  dt_pixelpipe_cache_free_align(manifold_lower);
+  dt_pixelpipe_cache_free_align(manifold_higher);
+  dt_pixelpipe_cache_free_align(blurred_in);
+  dt_pixelpipe_cache_free_align(blurred_manifold_lower);
+  dt_pixelpipe_cache_free_align(blurred_manifold_higher);
   return err;
 }
 #undef DT_CACORRECTRGB_MAX_EV_DIFF
@@ -683,9 +683,9 @@ dt_omp_firstprivate(in, out, blurred_in_out, width, height, guide, safety) \
   }
 
 error:;
-  if(blurred_in_out) dt_pixelpipe_cache_free_align(blurred_in_out);
+  dt_pixelpipe_cache_free_align(blurred_in_out);
   if(g) dt_gaussian_free(g);
-  if(in_out) dt_pixelpipe_cache_free_align(in_out);
+  dt_pixelpipe_cache_free_align(in_out);
   return err;
 }
 
@@ -735,9 +735,9 @@ static int reduce_chromatic_aberrations(const float* const restrict in,
   }
 
 error:;
-  if(ds_in) dt_pixelpipe_cache_free_align(ds_in);
-  if(manifolds) dt_pixelpipe_cache_free_align(manifolds);
-  if(ds_manifolds) dt_pixelpipe_cache_free_align(ds_manifolds);
+  dt_pixelpipe_cache_free_align(ds_in);
+  dt_pixelpipe_cache_free_align(manifolds);
+  dt_pixelpipe_cache_free_align(ds_manifolds);
 
   return err;
 }

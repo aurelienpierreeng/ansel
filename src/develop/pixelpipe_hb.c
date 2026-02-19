@@ -2480,7 +2480,7 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
 
 void dt_dev_clear_rawdetail_mask(dt_dev_pixelpipe_t *pipe)
 {
-  if(pipe->rawdetail_mask_data) dt_pixelpipe_cache_free_align(pipe->rawdetail_mask_data);
+  dt_pixelpipe_cache_free_align(pipe->rawdetail_mask_data);
   pipe->rawdetail_mask_data = NULL;
 }
 

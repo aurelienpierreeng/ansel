@@ -774,7 +774,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
         {
           fprintf(stderr, "[lut3d] DOMAIN MIN <> 0.0 is not supported\n");
           dt_control_log(_("DOMAIN MIN <> 0.0 is not supported"));
-          if (lclut) dt_pixelpipe_cache_free_align(lclut);
+          dt_pixelpipe_cache_free_align(lclut);
           free(line);
           fclose(cube_file);
         }
@@ -785,7 +785,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
         {
           fprintf(stderr, "[lut3d] DOMAIN MAX <> 1.0 is not supported\n");
           dt_control_log(_("DOMAIN MAX <> 1.0 is not supported"));
-          if (lclut) dt_pixelpipe_cache_free_align(lclut);
+          dt_pixelpipe_cache_free_align(lclut);
           free(line);
           fclose(cube_file);
         }
@@ -1063,7 +1063,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   }
 
 cleanup:
-  if(clut_cl) dt_opencl_release_mem_object(clut_cl);
+  dt_opencl_release_mem_object(clut_cl);
 
   if(err != CL_SUCCESS) dt_print(DT_DEBUG_OPENCL, "[opencl_lut3d] couldn't enqueue kernel! %d\n", err);
   return (err == CL_SUCCESS) ? TRUE : FALSE;
@@ -1398,7 +1398,6 @@ void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pi
 void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   dt_iop_lut3d_data_t *d = (dt_iop_lut3d_data_t *)piece->data;;
-  if (d->clut)
     dt_pixelpipe_cache_free_align(d->clut);
   d->clut = NULL;
   d->level = 0;

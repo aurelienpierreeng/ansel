@@ -144,7 +144,7 @@ dt_omp_firstprivate(out, Ndim) \
 
 error:
   if(g) dt_gaussian_free(g);
-  if(in) dt_pixelpipe_cache_free_align(in);
+  dt_pixelpipe_cache_free_align(in);
   return err;
 }
 
@@ -212,7 +212,7 @@ dt_omp_firstprivate(out, Ndim) \
 
 error:
   if(g) dt_gaussian_free(g);
-  if(in) dt_pixelpipe_cache_free_align(in);
+  dt_pixelpipe_cache_free_align(in);
   return err;
 }
 
@@ -360,11 +360,11 @@ static inline int fast_eigf_surface_blur(float *const restrict image,
   }
 
 error:
-  if(av) dt_pixelpipe_cache_free_align(av);
-  if(ds_av) dt_pixelpipe_cache_free_align(ds_av);
-  if(ds_mask) dt_pixelpipe_cache_free_align(ds_mask);
-  if(ds_image) dt_pixelpipe_cache_free_align(ds_image);
-  if(mask) dt_pixelpipe_cache_free_align(mask);
+  dt_pixelpipe_cache_free_align(av);
+  dt_pixelpipe_cache_free_align(ds_av);
+  dt_pixelpipe_cache_free_align(ds_mask);
+  dt_pixelpipe_cache_free_align(ds_image);
+  dt_pixelpipe_cache_free_align(mask);
   return err;
 }
 // clang-format off

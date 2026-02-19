@@ -1647,8 +1647,8 @@ int extract_color_checker(const float *const restrict in, float *const restrict 
   double *const restrict A = dt_alloc_align(g->checker->patches * 3 * 9 * sizeof(double));
   if(Y == NULL || A == NULL)
   {
-    if(Y) dt_free_align(Y);
-    if(A) dt_free_align(A);
+    dt_free_align(Y);
+    dt_free_align(A);
     dt_free_align(patches);
     return 1;
   }
@@ -2136,9 +2136,9 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   return TRUE;
 
 error:
-  if(input_matrix_cl) dt_opencl_release_mem_object(input_matrix_cl);
-  if(output_matrix_cl) dt_opencl_release_mem_object(output_matrix_cl);
-  if(MIX_cl) dt_opencl_release_mem_object(MIX_cl);
+  dt_opencl_release_mem_object(input_matrix_cl);
+  dt_opencl_release_mem_object(output_matrix_cl);
+  dt_opencl_release_mem_object(MIX_cl);
   dt_print(DT_DEBUG_OPENCL, "[opencl_channelmixerrgb] couldn't enqueue kernel! %d\n", err);
   return FALSE;
 }

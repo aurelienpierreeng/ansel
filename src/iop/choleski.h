@@ -319,8 +319,8 @@ static inline int solve_hermitian(const float *const restrict A,
   if(!valid) err = 1;
 
 error:
-  if(x) dt_free_align(x);
-  if(L) dt_free_align(L);
+  dt_free_align(x);
+  dt_free_align(L);
 
   //clock_t end = clock();
   //fprintf(stdout, "hermitian matrix solving took : %f s\n", ((float) (end - start)) / CLOCKS_PER_SEC);
@@ -430,8 +430,8 @@ static inline int pseudo_solve(float *const restrict A,
   dt_simd_memcpy(y_square, y, n);
 
 error:
-  if(y_square) dt_free_align(y_square);
-  if(A_square) dt_free_align(A_square);
+  dt_free_align(y_square);
+  dt_free_align(A_square);
 
   //clock_t end = clock();
   //fprintf(stdout, "hermitian matrix solving took : %f s\n", ((float) (end - start)) / CLOCKS_PER_SEC);

@@ -1673,14 +1673,14 @@ static int process_laplacian_bayer(struct dt_iop_module_t *self, dt_dev_pixelpip
 #endif
 
 error:;
-  if(interpolated) dt_pixelpipe_cache_free_align(interpolated);
-  if(clipping_mask) dt_pixelpipe_cache_free_align(clipping_mask);
-  if(temp) dt_pixelpipe_cache_free_align(temp);
-  if(LF_even) dt_pixelpipe_cache_free_align(LF_even);
-  if(LF_odd) dt_pixelpipe_cache_free_align(LF_odd);
-  if(HF) dt_pixelpipe_cache_free_align(HF);
-  if(ds_interpolated) dt_pixelpipe_cache_free_align(ds_interpolated);
-  if(ds_clipping_mask) dt_pixelpipe_cache_free_align(ds_clipping_mask);
+  dt_pixelpipe_cache_free_align(interpolated);
+  dt_pixelpipe_cache_free_align(clipping_mask);
+  dt_pixelpipe_cache_free_align(temp);
+  dt_pixelpipe_cache_free_align(LF_even);
+  dt_pixelpipe_cache_free_align(LF_odd);
+  dt_pixelpipe_cache_free_align(HF);
+  dt_pixelpipe_cache_free_align(ds_interpolated);
+  dt_pixelpipe_cache_free_align(ds_clipping_mask);
   return err;
 }
 
@@ -1931,27 +1931,27 @@ static cl_int process_laplacian_bayer_cl(struct dt_iop_module_t *self, dt_dev_pi
   if(err != CL_SUCCESS) goto error;
 
   // cleanup and exit on success
-  if(wb_cl) dt_opencl_release_mem_object(wb_cl);
-  if(interpolated) dt_opencl_release_mem_object(interpolated);
-  if(clipping_mask) dt_opencl_release_mem_object(clipping_mask);
-  if(temp) dt_opencl_release_mem_object(temp);
-  if(LF_even) dt_opencl_release_mem_object(LF_even);
-  if(LF_odd) dt_opencl_release_mem_object(LF_odd);
-  if(HF) dt_opencl_release_mem_object(HF);
-  if(ds_clipping_mask) dt_opencl_release_mem_object(ds_clipping_mask);
-  if(ds_interpolated) dt_opencl_release_mem_object(ds_interpolated);
+  dt_opencl_release_mem_object(wb_cl);
+  dt_opencl_release_mem_object(interpolated);
+  dt_opencl_release_mem_object(clipping_mask);
+  dt_opencl_release_mem_object(temp);
+  dt_opencl_release_mem_object(LF_even);
+  dt_opencl_release_mem_object(LF_odd);
+  dt_opencl_release_mem_object(HF);
+  dt_opencl_release_mem_object(ds_clipping_mask);
+  dt_opencl_release_mem_object(ds_interpolated);
   return err;
 
 error:
-  if(wb_cl) dt_opencl_release_mem_object(wb_cl);
-  if(interpolated) dt_opencl_release_mem_object(interpolated);
-  if(clipping_mask) dt_opencl_release_mem_object(clipping_mask);
-  if(temp) dt_opencl_release_mem_object(temp);
-  if(LF_even) dt_opencl_release_mem_object(LF_even);
-  if(LF_odd) dt_opencl_release_mem_object(LF_odd);
-  if(HF) dt_opencl_release_mem_object(HF);
-  if(ds_clipping_mask) dt_opencl_release_mem_object(ds_clipping_mask);
-  if(ds_interpolated) dt_opencl_release_mem_object(ds_interpolated);
+  dt_opencl_release_mem_object(wb_cl);
+  dt_opencl_release_mem_object(interpolated);
+  dt_opencl_release_mem_object(clipping_mask);
+  dt_opencl_release_mem_object(temp);
+  dt_opencl_release_mem_object(LF_even);
+  dt_opencl_release_mem_object(LF_odd);
+  dt_opencl_release_mem_object(HF);
+  dt_opencl_release_mem_object(ds_clipping_mask);
+  dt_opencl_release_mem_object(ds_interpolated);
 
   dt_print(DT_DEBUG_OPENCL, "[opencl_highlights] couldn't enqueue kernel! %i\n", err);
   return err;

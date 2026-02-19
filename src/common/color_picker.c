@@ -324,9 +324,9 @@ static void color_picker_helper_4ch_parallel(const dt_iop_buffer_dsc_t *const ds
   }
 
 error:;
-  if(mmax) dt_pixelpipe_cache_free_align(mmax);
-  if(mmin) dt_pixelpipe_cache_free_align(mmin);
-  if(mean) dt_pixelpipe_cache_free_align(mean);
+  dt_pixelpipe_cache_free_align(mmax);
+  dt_pixelpipe_cache_free_align(mmin);
+  dt_pixelpipe_cache_free_align(mean);
 }
 
 static void color_picker_helper_4ch(const dt_iop_buffer_dsc_t *dsc, const float *const pixel,
@@ -644,8 +644,8 @@ void dt_color_picker_helper(const dt_iop_buffer_dsc_t *dsc, const float *const p
       color_picker_helper_4ch(dsc, denoised, roi, box, picked_color, picked_color_min, picked_color_max, picker_cst, profile);
 
   error:;
-    if(denoised) dt_pixelpipe_cache_free_align(denoised);
-    if(tempbuf) dt_pixelpipe_cache_free_align(tempbuf);
+    dt_pixelpipe_cache_free_align(denoised);
+    dt_pixelpipe_cache_free_align(tempbuf);
   }
   else if(dsc->channels == 1u && dsc->filters != 0u && dsc->filters != 9u)
     color_picker_helper_bayer(dsc, pixel, roi, box, picked_color, picked_color_min, picked_color_max);

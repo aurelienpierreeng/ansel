@@ -1174,11 +1174,11 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
   }
 
 error:
-  if(mask) dt_pixelpipe_cache_free_align(mask);
-  if(temp1) dt_pixelpipe_cache_free_align(temp1);
-  if(temp2) dt_pixelpipe_cache_free_align(temp2);
-  if(LF_even) dt_pixelpipe_cache_free_align(LF_even);
-  if(LF_odd) dt_pixelpipe_cache_free_align(LF_odd);
+  dt_pixelpipe_cache_free_align(mask);
+  dt_pixelpipe_cache_free_align(temp1);
+  dt_pixelpipe_cache_free_align(temp2);
+  dt_pixelpipe_cache_free_align(LF_even);
+  dt_pixelpipe_cache_free_align(LF_odd);
   for(int s = 0; s < scales; s++) if(HF[s]) dt_pixelpipe_cache_free_align(HF[s]);
   return err;
 }
@@ -1456,12 +1456,12 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   return TRUE;
 
 error:
-  if(temp1) dt_opencl_release_mem_object(temp1);
-  if(temp2) dt_opencl_release_mem_object(temp2);
-  if(mask) dt_opencl_release_mem_object(mask);
-  if(LF_even) dt_opencl_release_mem_object(LF_even);
-  if(LF_odd) dt_opencl_release_mem_object(LF_odd);
-  for(int s = 0; s < scales; s++) if(HF[s]) dt_opencl_release_mem_object(HF[s]);
+  dt_opencl_release_mem_object(temp1);
+  dt_opencl_release_mem_object(temp2);
+  dt_opencl_release_mem_object(mask);
+  dt_opencl_release_mem_object(LF_even);
+  dt_opencl_release_mem_object(LF_odd);
+  for(int s = 0; s < scales; s++) dt_opencl_release_mem_object(HF[s]);
 
   dt_print(DT_DEBUG_OPENCL, "[opencl_diffuse] couldn't enqueue kernel! %d\n", err);
   return FALSE;

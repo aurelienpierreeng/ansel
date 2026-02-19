@@ -207,7 +207,7 @@ static int decompress_plain(dt_imageio_jpeg_t *jpg, uint8_t *out)
     tmp += 4 * jpg->width;
   }
 
-  if(row_pointer[0]) dt_pixelpipe_cache_free_align(row_pointer[0]);
+  dt_pixelpipe_cache_free_align(row_pointer[0]);
   return 0;
 }
 

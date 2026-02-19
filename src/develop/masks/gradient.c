@@ -743,8 +743,8 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
   float *const restrict pts = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * count * nthreads, 0);
   if(pts_count == NULL || pts == NULL)
   {
-    if(pts_count) dt_pixelpipe_cache_free_align(pts_count);
-    if(pts) dt_pixelpipe_cache_free_align(pts);
+    dt_pixelpipe_cache_free_align(pts_count);
+    dt_pixelpipe_cache_free_align(pts);
     dt_pixelpipe_cache_free_align(*points);
     *points = NULL;
     *points_count = 0;
@@ -1053,8 +1053,8 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
     int err = _gradient_get_points(darktable.develop, x, y, rotation, curvature, &points, &points_count);
     if(err)
     {
-      if(points) dt_pixelpipe_cache_free_align(points);
-      if(border) dt_pixelpipe_cache_free_align(border);
+      dt_pixelpipe_cache_free_align(points);
+      dt_pixelpipe_cache_free_align(border);
       return;
     }
     if(extent > 0.0f)
@@ -1062,8 +1062,8 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
       err = _gradient_get_pts_border(darktable.develop, x, y, rotation, extent, curvature, &border, &border_count);
       if(err)
       {
-        if(points) dt_pixelpipe_cache_free_align(points);
-        if(border) dt_pixelpipe_cache_free_align(border);
+        dt_pixelpipe_cache_free_align(points);
+        dt_pixelpipe_cache_free_align(border);
         return;
       }
     }
@@ -1074,8 +1074,8 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
 
     // draw borders
     dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, FALSE, zoom_scale, border, border_count, &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND);
-    if(points) dt_pixelpipe_cache_free_align(points);
-    if(border) dt_pixelpipe_cache_free_align(border);
+    dt_pixelpipe_cache_free_align(points);
+    dt_pixelpipe_cache_free_align(border);
   
     return;
   }

@@ -51,9 +51,9 @@ static int dual_demosaic(dt_dev_pixelpipe_iop_t *piece, float *const restrict rg
   float *vng_image = dt_pixelpipe_cache_alloc_align_float((size_t) 4 * width * height, piece->pipe);
   if(!blend || !tmp || !vng_image)
   {
-    if(tmp) dt_pixelpipe_cache_free_align(tmp);
-    if(blend) dt_pixelpipe_cache_free_align(blend);
-    if(vng_image) dt_pixelpipe_cache_free_align(vng_image);
+    dt_pixelpipe_cache_free_align(tmp);
+    dt_pixelpipe_cache_free_align(blend);
+    dt_pixelpipe_cache_free_align(vng_image);
     dt_control_log(_("[dual demosaic] can't allocate internal buffers"));
     return 1;
   }

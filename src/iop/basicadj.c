@@ -1200,13 +1200,13 @@ static int _auto_exposure(const float *const img, const int width, const int hei
 
   if(_get_auto_exp_histogram(img, width, height, box_area, &histogram, &hist_size, &histcompr))
   {
-    if(histogram) dt_pixelpipe_cache_free_align(histogram);
+    dt_pixelpipe_cache_free_align(histogram);
     return 1;
   }
   _get_auto_exp(histogram, hist_size, histcompr, defGain, clip, midgray, _expcomp, _bright, _contr, _black,
                 _hlcompr, _hlcomprthresh);
 
-  if(histogram) dt_pixelpipe_cache_free_align(histogram);
+  dt_pixelpipe_cache_free_align(histogram);
   return 0;
 }
 

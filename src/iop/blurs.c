@@ -339,8 +339,8 @@ static inline int build_gui_kernel(unsigned char *const buffer, const size_t wid
 
 error:;
   int err = (kernel_1 == NULL || kernel_2 == NULL);
-  if(kernel_1) dt_free_align(kernel_1);
-  if(kernel_2) dt_free_align(kernel_2);
+  dt_free_align(kernel_1);
+  dt_free_align(kernel_2);
   return err;
 }
 
@@ -691,8 +691,8 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   return TRUE;
 
 error:
-  if(kernel) dt_free_align(kernel);
-  if(kernel_cl) dt_opencl_release_mem_object(kernel_cl);
+  dt_free_align(kernel);
+  dt_opencl_release_mem_object(kernel_cl);
   dt_print(DT_DEBUG_OPENCL, "[opencl_blurs] couldn't enqueue kernel! %d\n", err);
   return FALSE;
 }
@@ -781,7 +781,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
   {
     // Widget size changed, flush the cache buffer and restart
     g->img_cached = FALSE;
-    if(g->img) dt_free_align(g->img);
+    dt_free_align(g->img);
   }
 
   if(!g->img_cached)
@@ -859,7 +859,7 @@ void gui_init(dt_iop_module_t *self)
 void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_blurs_gui_data_t *g = (dt_iop_blurs_gui_data_t *)self->gui_data;
-  if(g->img) dt_free_align(g->img);
+  dt_free_align(g->img);
   IOP_GUI_FREE;
 }
 

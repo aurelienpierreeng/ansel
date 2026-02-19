@@ -416,7 +416,7 @@ void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img)
   }
 
   // Free and reset everything
-  if(entry->data) dt_free_align(entry->data);
+  dt_free_align(entry->data);
   ASAN_POISON_MEMORY_REGION(entry->data, entry->data_size);
 
   // Get a new allocation
@@ -461,7 +461,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
   assert(mip < DT_MIPMAP_NONE);
 
   // Free and reset everything
-  if(entry->data) dt_free_align(entry->data);
+  dt_free_align(entry->data);
 
   // Get a new allocation
   const size_t buffer_size = (mip <= DT_MIPMAP_F) ? cache->buffer_size[mip] : _get_entry_size(sizeof(float) * 4 * 64);
@@ -558,7 +558,7 @@ finish:
               imgid, filename, error);
     }
 
-    if(blob) dt_free_align(blob);
+    dt_free_align(blob);
     if(f) fclose(f);
   }
 
@@ -1188,7 +1188,7 @@ static int _load_jpg(const char *filename, const int32_t imgid, const uint32_t w
       dt_iop_flip_and_zoom_8(tmp, jpg.width, jpg.height, buf, wd, ht, orientation, width, height);
       res = 0;
     }
-    if(tmp) dt_free_align(tmp);
+    dt_free_align(tmp);
   }
   return res;
 }

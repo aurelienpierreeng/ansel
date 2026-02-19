@@ -307,9 +307,9 @@ schedule(static) collapse(2) aligned(focus_peaking, luma:64) reduction(+:sigma)
   cairo_surface_destroy(surface);
 
 error:
-  if(focus_peaking) dt_pixelpipe_cache_free_align(focus_peaking);
+  dt_pixelpipe_cache_free_align(focus_peaking);
 error_early:
-  if(luma) dt_pixelpipe_cache_free_align(luma);
-  if(luma_ds) dt_pixelpipe_cache_free_align(luma_ds);
+  dt_pixelpipe_cache_free_align(luma);
+  dt_pixelpipe_cache_free_align(luma_ds);
   return err;
 }

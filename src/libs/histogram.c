@@ -669,8 +669,8 @@ static void _process_waveform(dt_backbuf_t *backbuf, cairo_t *cr, const int widt
   }
 
 error:;
-  if(bins) dt_pixelpipe_cache_free_align(bins);
-  if(image) dt_pixelpipe_cache_free_align(image);
+  dt_pixelpipe_cache_free_align(bins);
+  dt_pixelpipe_cache_free_align(image);
   dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, backbuf->hash, entry);
 }
 
@@ -987,8 +987,8 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, cairo_t *cr, const int w
   }
 
 error:;
-  if(image) dt_pixelpipe_cache_free_align(image);
-  if(vectorscope) dt_pixelpipe_cache_free_align(vectorscope);
+  dt_pixelpipe_cache_free_align(image);
+  dt_pixelpipe_cache_free_align(vectorscope);
   dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, backbuf->hash, entry);
 }
 

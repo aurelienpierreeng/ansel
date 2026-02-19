@@ -806,11 +806,11 @@ error:;
   for(int l=0;l<max_levels;l++)
   {
     if(!keep_preview || l)
-      if(padded[l]) dt_pixelpipe_cache_free_align(padded[l]);
+      dt_pixelpipe_cache_free_align(padded[l]);
     if(!keep_preview)
-      if(output[l]) dt_pixelpipe_cache_free_align(output[l]);
+      dt_pixelpipe_cache_free_align(output[l]);
     for(int k=0; k<num_gamma;k++)
-      if(buf[k][l]) dt_pixelpipe_cache_free_align(buf[k][l]);
+      dt_pixelpipe_cache_free_align(buf[k][l]);
   }
   return err;
 }

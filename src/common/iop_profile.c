@@ -644,8 +644,8 @@ void dt_ioppr_cleanup_profile_info(dt_iop_order_iccprofile_info_t *profile_info)
 {
   for(int i = 0; i < 3; i++)
   {
-    if(profile_info->lut_in[i]) dt_free_align(profile_info->lut_in[i]);
-    if(profile_info->lut_out[i]) dt_free_align(profile_info->lut_out[i]);
+    dt_free_align(profile_info->lut_in[i]);
+    dt_free_align(profile_info->lut_out[i]);
   }
 }
 
@@ -1265,8 +1265,8 @@ void dt_ioppr_free_iccprofile_params_cl(dt_colorspaces_iccprofile_info_cl_t **_p
   cl_mem dev_profile_lut = *_dev_profile_lut;
 
   if(profile_info_cl) free(profile_info_cl);
-  if(dev_profile_info) dt_opencl_release_mem_object(dev_profile_info);
-  if(dev_profile_lut) dt_opencl_release_mem_object(dev_profile_lut);
+  dt_opencl_release_mem_object(dev_profile_info);
+  dt_opencl_release_mem_object(dev_profile_lut);
   if(profile_lut_cl) free(profile_lut_cl);
 
   *_profile_info_cl = NULL;
@@ -1433,10 +1433,10 @@ int dt_ioppr_transform_image_colorspace_cl(struct dt_iop_module_t *self, const i
   }
 
 cleanup:
-  if(src_buffer) dt_pixelpipe_cache_free_align(src_buffer);
+  dt_pixelpipe_cache_free_align(src_buffer);
   if(dev_tmp && in_place) dt_opencl_release_mem_object(dev_tmp);
-  if(dev_profile_info) dt_opencl_release_mem_object(dev_profile_info);
-  if(dev_lut) dt_opencl_release_mem_object(dev_lut);
+  dt_opencl_release_mem_object(dev_profile_info);
+  dt_opencl_release_mem_object(dev_lut);
   if(lut_cl) free(lut_cl);
 
   return (err == CL_SUCCESS) ? TRUE : FALSE;
@@ -1648,16 +1648,16 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
   }
 
 cleanup:
-  if(src_buffer_in) dt_pixelpipe_cache_free_align(src_buffer_in);
-  if(src_buffer_out) dt_pixelpipe_cache_free_align(src_buffer_out);
+  dt_pixelpipe_cache_free_align(src_buffer_in);
+  dt_pixelpipe_cache_free_align(src_buffer_out);
   if(dev_tmp && in_place) dt_opencl_release_mem_object(dev_tmp);
 
-  if(dev_profile_info_from) dt_opencl_release_mem_object(dev_profile_info_from);
-  if(dev_lut_from) dt_opencl_release_mem_object(dev_lut_from);
+  dt_opencl_release_mem_object(dev_profile_info_from);
+  dt_opencl_release_mem_object(dev_lut_from);
   if(lut_from_cl) free(lut_from_cl);
 
-  if(dev_profile_info_to) dt_opencl_release_mem_object(dev_profile_info_to);
-  if(dev_lut_to) dt_opencl_release_mem_object(dev_lut_to);
+  dt_opencl_release_mem_object(dev_profile_info_to);
+  dt_opencl_release_mem_object(dev_lut_to);
   if(lut_to_cl) free(lut_to_cl);
 
   dt_opencl_release_mem_object(matrix_cl);

@@ -1296,11 +1296,11 @@ static inline int reconstruct_highlights(const float *const restrict in, const f
   }
 
 error:
-  if(temp) dt_pixelpipe_cache_free_align(temp);
-  if(LF_even) dt_pixelpipe_cache_free_align(LF_even);
-  if(LF_odd) dt_pixelpipe_cache_free_align(LF_odd);
-  if(HF_RGB) dt_pixelpipe_cache_free_align(HF_RGB);
-  if(HF_grey) dt_pixelpipe_cache_free_align(HF_grey);
+  dt_pixelpipe_cache_free_align(temp);
+  dt_pixelpipe_cache_free_align(LF_even);
+  dt_pixelpipe_cache_free_align(LF_odd);
+  dt_pixelpipe_cache_free_align(HF_RGB);
+  dt_pixelpipe_cache_free_align(HF_grey);
   return err;
 }
 
@@ -2183,8 +2183,8 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
       float *const restrict ratios = dt_pixelpipe_cache_alloc_align_float((size_t)roi_out->width * roi_out->height * 4, piece->pipe);
       if(!norms || !ratios)
       {
-        if(norms) dt_pixelpipe_cache_free_align(norms);
-        if(ratios) dt_pixelpipe_cache_free_align(ratios);
+        dt_pixelpipe_cache_free_align(norms);
+        dt_pixelpipe_cache_free_align(ratios);
         dt_pixelpipe_cache_free_align(reconstructed);
         dt_pixelpipe_cache_free_align(mask);
         return 1;
@@ -2207,8 +2207,8 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
         }
       }
 
-      if(norms) dt_pixelpipe_cache_free_align(norms);
-      if(ratios) dt_pixelpipe_cache_free_align(ratios);
+      dt_pixelpipe_cache_free_align(norms);
+      dt_pixelpipe_cache_free_align(ratios);
     }
 
     if(err_2)
@@ -2221,7 +2221,7 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
     in = reconstructed; // use reconstructed buffer as tonemapping input
   }
 
-  if(mask) dt_pixelpipe_cache_free_align(mask);
+  dt_pixelpipe_cache_free_align(mask);
 
   const float white_display = powf(data->spline.y[4], data->output_power);
   const float black_display = powf(data->spline.y[0], data->output_power);
@@ -2259,7 +2259,7 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
     }
   }
 
-  if(reconstructed) dt_pixelpipe_cache_free_align(reconstructed);
+  dt_pixelpipe_cache_free_align(reconstructed);
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
     dt_iop_alpha_copy(ivoid, ovoid, roi_out->width, roi_out->height);

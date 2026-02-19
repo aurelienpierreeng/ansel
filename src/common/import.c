@@ -343,8 +343,8 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
       }
     }
 
-    if(buffer) dt_pixelpipe_cache_free_align(buffer);
-    if(rgb) dt_pixelpipe_cache_free_align(rgb);
+    dt_pixelpipe_cache_free_align(buffer);
+    dt_pixelpipe_cache_free_align(rgb);
     g_free(mime_type);
   }
 

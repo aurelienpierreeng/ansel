@@ -636,7 +636,7 @@ static int ambient_light_cl(struct dt_iop_module_t *self, int devid, cl_mem img,
   return 0;
 
 error:
-  if(in) dt_pixelpipe_cache_free_align(in);
+  dt_pixelpipe_cache_free_align(in);
   return 1;
 }
 

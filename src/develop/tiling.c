@@ -789,8 +789,8 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, struct dt_d
       int err = self->process(self, piece, input, output, &iroi, &oroi);
       if(err)
       {
-        if(input != NULL) dt_pixelpipe_cache_free_align(input);
-        if(output != NULL) dt_pixelpipe_cache_free_align(output);
+        dt_pixelpipe_cache_free_align(input);
+        dt_pixelpipe_cache_free_align(output);
         piece->pipe->tiling = 0;
         return err;
       }
@@ -837,8 +837,8 @@ static int _default_process_tiling_ptp(struct dt_iop_module_t *self, struct dt_d
   /* copy back final processed_maximum */
   for(int k = 0; k < 4; k++) piece->pipe->dsc.processed_maximum[k] = processed_maximum_new[k];
 
-  if(input != NULL) dt_pixelpipe_cache_free_align(input);
-  if(output != NULL) dt_pixelpipe_cache_free_align(output);
+  dt_pixelpipe_cache_free_align(input);
+  dt_pixelpipe_cache_free_align(output);
   piece->pipe->tiling = 0;
   return 0;
 
@@ -847,8 +847,8 @@ error:
 // fall through
 
 fallback:
-  if(input != NULL) dt_pixelpipe_cache_free_align(input);
-  if(output != NULL) dt_pixelpipe_cache_free_align(output);
+  dt_pixelpipe_cache_free_align(input);
+  dt_pixelpipe_cache_free_align(output);
   piece->pipe->tiling = 0;
   dt_print(DT_DEBUG_TILING, "[default_process_tiling_ptp] fall back to standard processing for module '%s'\n",
            self->op);
@@ -1182,8 +1182,8 @@ static int _default_process_tiling_roi(struct dt_iop_module_t *self, struct dt_d
   /* copy back final processed_maximum */
   for(int k = 0; k < 4; k++) piece->pipe->dsc.processed_maximum[k] = processed_maximum_new[k];
 
-  if(input != NULL) dt_pixelpipe_cache_free_align(input);
-  if(output != NULL) dt_pixelpipe_cache_free_align(output);
+  dt_pixelpipe_cache_free_align(input);
+  dt_pixelpipe_cache_free_align(output);
   piece->pipe->tiling = 0;
   return 0;
 
@@ -1192,8 +1192,8 @@ error:
 // fall through
 
 fallback:
-  if(input != NULL) dt_pixelpipe_cache_free_align(input);
-  if(output != NULL) dt_pixelpipe_cache_free_align(output);
+  dt_pixelpipe_cache_free_align(input);
+  dt_pixelpipe_cache_free_align(output);
   piece->pipe->tiling = 0;
   dt_print(DT_DEBUG_TILING, "[default_process_tiling_roi] fall back to standard processing for module '%s'\n",
            self->op);

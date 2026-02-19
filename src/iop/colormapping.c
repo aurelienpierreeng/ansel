@@ -470,7 +470,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   if(self->dev->gui_attached && g && piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW && (data->flag & ACQUIRE))
   {
     dt_iop_gui_enter_critical_section(self);
-    if(g->buffer) dt_free_align(g->buffer);
+    dt_free_align(g->buffer);
 
     g->buffer = dt_iop_image_alloc(width, height, 4);
     g->width = width;

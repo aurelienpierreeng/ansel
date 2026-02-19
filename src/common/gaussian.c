@@ -155,7 +155,7 @@ dt_gaussian_t *dt_gaussian_init(const int width,    // width of input image
   return g;
 
 error:
-  if(g->buf) dt_pixelpipe_cache_free_align(g->buf);
+  dt_pixelpipe_cache_free_align(g->buf);
   if(g->max) free(g->max);
   if(g->min) free(g->min);
   free(g);

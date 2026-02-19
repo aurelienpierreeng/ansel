@@ -328,10 +328,10 @@ static inline int fast_surface_blur(float *const restrict image,
   if(!ds_image || !ds_mask || !ds_ab || !ab)
   {
     dt_control_log(_("fast guided filter failed to allocate memory, check your RAM settings"));
-    if(ab) dt_pixelpipe_cache_free_align(ab);
-    if(ds_ab) dt_pixelpipe_cache_free_align(ds_ab);
-    if(ds_mask) dt_pixelpipe_cache_free_align(ds_mask);
-    if(ds_image) dt_pixelpipe_cache_free_align(ds_image);
+    dt_pixelpipe_cache_free_align(ab);
+    dt_pixelpipe_cache_free_align(ds_ab);
+    dt_pixelpipe_cache_free_align(ds_mask);
+    dt_pixelpipe_cache_free_align(ds_image);
     return 1;
   }
 
@@ -348,20 +348,20 @@ static inline int fast_surface_blur(float *const restrict image,
     // the a and b parameters for the linear blending s.t. mask = a * I + b
     if(variance_analyse(ds_mask, ds_image, ds_ab, ds_width, ds_height, ds_radius, feathering) != 0)
     {
-      if(ab) dt_pixelpipe_cache_free_align(ab);
-      if(ds_ab) dt_pixelpipe_cache_free_align(ds_ab);
-      if(ds_mask) dt_pixelpipe_cache_free_align(ds_mask);
-      if(ds_image) dt_pixelpipe_cache_free_align(ds_image);
+      dt_pixelpipe_cache_free_align(ab);
+      dt_pixelpipe_cache_free_align(ds_ab);
+      dt_pixelpipe_cache_free_align(ds_mask);
+      dt_pixelpipe_cache_free_align(ds_image);
       return 1;
     }
 
     // Compute the patch-wise average of parameters a and b
     if(dt_box_mean(ds_ab, ds_height, ds_width, 2, ds_radius, 1) != 0)
     {
-      if(ab) dt_pixelpipe_cache_free_align(ab);
-      if(ds_ab) dt_pixelpipe_cache_free_align(ds_ab);
-      if(ds_mask) dt_pixelpipe_cache_free_align(ds_mask);
-      if(ds_image) dt_pixelpipe_cache_free_align(ds_image);
+      dt_pixelpipe_cache_free_align(ab);
+      dt_pixelpipe_cache_free_align(ds_ab);
+      dt_pixelpipe_cache_free_align(ds_mask);
+      dt_pixelpipe_cache_free_align(ds_image);
       return 1;
     }
 
@@ -381,10 +381,10 @@ static inline int fast_surface_blur(float *const restrict image,
   else if(filter == DT_GF_BLENDING_GEOMEAN)
     apply_linear_blending_w_geomean(image, ab, num_elem);
 
-  if(ab) dt_pixelpipe_cache_free_align(ab);
-  if(ds_ab) dt_pixelpipe_cache_free_align(ds_ab);
-  if(ds_mask) dt_pixelpipe_cache_free_align(ds_mask);
-  if(ds_image) dt_pixelpipe_cache_free_align(ds_image);
+  dt_pixelpipe_cache_free_align(ab);
+  dt_pixelpipe_cache_free_align(ds_ab);
+  dt_pixelpipe_cache_free_align(ds_mask);
+  dt_pixelpipe_cache_free_align(ds_image);
   return 0;
 }
 

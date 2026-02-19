@@ -342,7 +342,7 @@ gboolean dt_imageio_has_mono_preview(const char *filename)
   cleanup:
 
   dt_print(DT_DEBUG_IMAGEIO,"[dt_imageio_has_mono_preview] testing `%s', yes/no %i, %ix%i\n", filename, mono, thumb_width, thumb_height);
-  if(tmp) dt_pixelpipe_cache_free_align(tmp);
+  dt_pixelpipe_cache_free_align(tmp);
   return mono;
 }
 
@@ -1176,11 +1176,11 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
                             format_params, storage, storage_params);
   }
 
-  if(outbuf) dt_pixelpipe_cache_free_align(outbuf);
+  dt_pixelpipe_cache_free_align(outbuf);
   return 0; // success
 
 error:
-  if(outbuf) dt_pixelpipe_cache_free_align(outbuf);
+  dt_pixelpipe_cache_free_align(outbuf);
   dt_dev_pixelpipe_cleanup(&pipe);
   dt_dev_cleanup(&dev);
   return 1;

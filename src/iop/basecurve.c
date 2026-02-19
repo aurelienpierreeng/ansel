@@ -893,8 +893,8 @@ error:;
   // free temp buffers
   for(int k = 0; k < num_levels; k++)
   {
-    if(col[k]) dt_pixelpipe_cache_free_align(col[k]);
-    if(comb[k]) dt_pixelpipe_cache_free_align(comb[k]);
+    dt_pixelpipe_cache_free_align(col[k]);
+    dt_pixelpipe_cache_free_align(comb[k]);
   }
   if(col) free(col);
   if(comb) free(comb);

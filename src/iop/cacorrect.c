@@ -1376,13 +1376,13 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   }
 
 cleanup:
-  if(thread_buffers) dt_pixelpipe_cache_free_align(thread_buffers);
+  dt_pixelpipe_cache_free_align(thread_buffers);
   if(buffer1) free(buffer1);
-  if(RawDataTmp) dt_pixelpipe_cache_free_align(RawDataTmp);
-  if(Gtmp) dt_pixelpipe_cache_free_align(Gtmp);
-  if(redfactor) dt_pixelpipe_cache_free_align(redfactor);
-  if(bluefactor) dt_pixelpipe_cache_free_align(bluefactor);
-  if(oldraw) dt_pixelpipe_cache_free_align(oldraw);
+  dt_pixelpipe_cache_free_align(RawDataTmp);
+  dt_pixelpipe_cache_free_align(Gtmp);
+  dt_pixelpipe_cache_free_align(redfactor);
+  dt_pixelpipe_cache_free_align(bluefactor);
+  dt_pixelpipe_cache_free_align(oldraw);
   return err;
 }
 

@@ -385,8 +385,8 @@ static void _heal_laplace_loop(float *const restrict red_pixels, float *const re
   }
 
 cleanup:
-  if(red_runs) dt_pixelpipe_cache_free_align(red_runs);
-  if(black_runs) dt_pixelpipe_cache_free_align(black_runs);
+  dt_pixelpipe_cache_free_align(red_runs);
+  dt_pixelpipe_cache_free_align(black_runs);
 }
 
 
@@ -421,8 +421,8 @@ void dt_heal(const float *const src_buffer, float *dest_buffer, const float *con
   _heal_add(red_buffer, black_buffer, src_buffer, dest_buffer, width, height);
 
 cleanup:
-  if(red_buffer) dt_pixelpipe_cache_free_align(red_buffer);
-  if(black_buffer) dt_pixelpipe_cache_free_align(black_buffer);
+  dt_pixelpipe_cache_free_align(red_buffer);
+  dt_pixelpipe_cache_free_align(black_buffer);
 }
 
 #ifdef HAVE_OPENCL
@@ -513,8 +513,8 @@ cl_int dt_heal_cl(heal_params_cl_t *p, cl_mem dev_src, cl_mem dev_dest, const fl
   }
 
 cleanup:
-  if(src_buffer) dt_pixelpipe_cache_free_align(src_buffer);
-  if(dest_buffer) dt_pixelpipe_cache_free_align(dest_buffer);
+  dt_pixelpipe_cache_free_align(src_buffer);
+  dt_pixelpipe_cache_free_align(dest_buffer);
 
   return err;
 }

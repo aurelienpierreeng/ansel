@@ -374,10 +374,10 @@ static int dwt_wavelet_decompose(float *img, dwt_params_t *const p, _dwt_layer_f
   }
 
 cleanup:
-  if(temp) dt_pixelpipe_cache_free_align(temp);
-  if(layers) dt_pixelpipe_cache_free_align(layers);
-  if(merged_layers) dt_pixelpipe_cache_free_align(merged_layers);
-  if(buffer[1]) dt_pixelpipe_cache_free_align(buffer[1]);
+  dt_pixelpipe_cache_free_align(temp);
+  dt_pixelpipe_cache_free_align(layers);
+  dt_pixelpipe_cache_free_align(merged_layers);
+  dt_pixelpipe_cache_free_align(buffer[1]);
   return err;
 }
 
@@ -929,10 +929,10 @@ static cl_int dwt_wavelet_decompose_cl(cl_mem img, dwt_params_cl_t *const p, _dw
   }
 
 cleanup:
-  if(layers) dt_opencl_release_mem_object(layers);
-  if(merged_layers) dt_opencl_release_mem_object(merged_layers);
-  if(temp) dt_opencl_release_mem_object(temp);
-  if(buffer[1]) dt_opencl_release_mem_object(buffer[1]);
+  dt_opencl_release_mem_object(layers);
+  dt_opencl_release_mem_object(merged_layers);
+  dt_opencl_release_mem_object(temp);
+  dt_opencl_release_mem_object(buffer[1]);
 
   return err;
 }

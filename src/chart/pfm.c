@@ -157,7 +157,7 @@ void write_pfm(const char *filename, int width, int height, float *data)
     }
 
   error:;
-    if(buf_line) dt_pixelpipe_cache_free_align(buf_line);
+    dt_pixelpipe_cache_free_align(buf_line);
     buf_line = NULL;
     fclose(f);
   }

@@ -1069,8 +1069,8 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     int err = _ellipse_get_points(darktable.develop, x, y, radius_a, radius_b, rotation, &points, &points_count);
     if(err)
     {
-      if(points) dt_pixelpipe_cache_free_align(points);
-      if(border) dt_pixelpipe_cache_free_align(border);
+      dt_pixelpipe_cache_free_align(points);
+      dt_pixelpipe_cache_free_align(border);
       return;
     }
     if(masks_border > 0.f)
@@ -1078,8 +1078,8 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       err = _ellipse_get_points(darktable.develop, x, y, border_a, border_b, rotation, &border, &border_count);
       if(err)
       {
-        if(points) dt_pixelpipe_cache_free_align(points);
-        if(border) dt_pixelpipe_cache_free_align(border);
+        dt_pixelpipe_cache_free_align(points);
+        dt_pixelpipe_cache_free_align(border);
         return;
       }
     }
@@ -1101,8 +1101,8 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       dt_draw_cross(cr, zoom_scale, x, y);
     }
 
-    if(points) dt_pixelpipe_cache_free_align(points);
-    if(border) dt_pixelpipe_cache_free_align(border);
+    dt_pixelpipe_cache_free_align(points);
+    dt_pixelpipe_cache_free_align(border);
     
     return;
   } // gui->creation

@@ -1350,13 +1350,13 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
   return 0;
 
 error:
-  if(_mask) dt_pixelpipe_cache_free_align(_mask);
-  if(dev_blendif_params) dt_opencl_release_mem_object(dev_blendif_params);
-  if(dev_boost_factors) dt_opencl_release_mem_object(dev_boost_factors);
-  if(dev_mask_1) dt_opencl_release_mem_object(dev_mask_1);
-  if(dev_mask_2) dt_opencl_release_mem_object(dev_mask_2);
-  if(dev_tmp) dt_opencl_release_mem_object(dev_tmp);
-  if(dev_guide) dt_opencl_release_mem_object(dev_guide);
+  dt_pixelpipe_cache_free_align(_mask);
+  dt_opencl_release_mem_object(dev_blendif_params);
+  dt_opencl_release_mem_object(dev_boost_factors);
+  dt_opencl_release_mem_object(dev_mask_1);
+  dt_opencl_release_mem_object(dev_mask_2);
+  dt_opencl_release_mem_object(dev_tmp);
+  dt_opencl_release_mem_object(dev_guide);
   if(profile_info_cl) dt_ioppr_free_iccprofile_params_cl(&profile_info_cl, &profile_lut_cl, &dev_profile_info, &dev_profile_lut);
   if(work_profile_info_cl) dt_ioppr_free_iccprofile_params_cl(&work_profile_info_cl, &work_profile_lut_cl, &dev_work_profile_info,
                                      &dev_work_profile_lut);

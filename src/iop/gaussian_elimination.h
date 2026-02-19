@@ -205,8 +205,8 @@ static inline int pseudo_solve_gaussian(double *const restrict A,
   for(size_t k = 0; k < n; k++) y[k] = y_square[k];
 
 error:;
-  if(y_square) dt_pixelpipe_cache_free_align(y_square);
-  if(A_square) dt_pixelpipe_cache_free_align(A_square);
+  dt_pixelpipe_cache_free_align(y_square);
+  dt_pixelpipe_cache_free_align(A_square);
 
   return err;
 }
