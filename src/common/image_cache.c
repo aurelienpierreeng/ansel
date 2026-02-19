@@ -428,6 +428,12 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
   } flip;
   if(img->id <= 0) return;
 
+  if(mode == DT_IMAGE_CACHE_MINIMAL)
+  {
+    dt_cache_release(&cache->cache, img->cache_entry);
+    return;
+  }
+
   // Recompute full/local copy paths (and derived folder/filmroll/datetime) from possibly updated filename.
   // Avoid SQL here; rely on the cached folder/fullpath, or leave fields empty if they can't be rebuilt.
   char folder[PATH_MAX] = { 0 };

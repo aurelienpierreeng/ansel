@@ -48,7 +48,9 @@ typedef enum dt_image_cache_write_mode_t
   // write to db and queue xmp write
   DT_IMAGE_CACHE_SAFE = 0,
   // only write to db
-  DT_IMAGE_CACHE_RELAXED = 1
+  DT_IMAGE_CACHE_RELAXED = 1,
+  // only release the lock (no db write, no xmp)
+  DT_IMAGE_CACHE_MINIMAL = 2
 }
 dt_image_cache_write_mode_t;
 
@@ -97,6 +99,7 @@ void dt_image_cache_read_release(dt_image_cache_t *cache, const dt_image_t *img)
 // drops the write privileges on an image struct.
 // this triggers a write-through to sql, and if the setting
 // is present, also to xmp sidecar files (safe setting).
+// minimal mode only releases the lock without any write.
 void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_image_cache_write_mode_t mode);
 
 // remove the image from the cache

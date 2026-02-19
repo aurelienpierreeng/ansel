@@ -2500,17 +2500,17 @@ int dt_image_write_sidecar_file(const int32_t imgid)
   if(imgid <= 0 || !dt_image_get_xmp_mode()) return 1;
 
   dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d write start\n", imgid);
-  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
   if(!img)
   {
     dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock failed\n", imgid);
     return 1;
   }
-  dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock acquired (read)\n", imgid);
+  dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock acquired (write)\n", imgid);
 
   const int res = _write_sidecar_file_from_image_locked(img);
-  dt_image_cache_read_release(darktable.image_cache, img);
-  dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock released (read)\n", imgid);
+  dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_MINIMAL);
+  dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d cache lock released (write minimal)\n", imgid);
   return res;
 }
 
