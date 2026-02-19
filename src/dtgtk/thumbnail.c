@@ -293,10 +293,11 @@ static void _free_image_surface(dt_thumbnail_t *thumb)
   thumb->img_surf = NULL;
 }
 
-static gboolean _main_context_draw(GtkWidget *w_image)
+static gboolean _main_context_draw(dt_thumbnail_t *thumb)
 {
-  if(GTK_IS_WIDGET(w_image) && gtk_widget_get_parent(w_image))
-    gtk_widget_queue_draw(w_image);
+  if(thumb && GTK_IS_WIDGET(thumb->widget) && gtk_widget_get_parent(thumb->widget))
+      gtk_widget_queue_draw(thumb->widget);
+
   return G_SOURCE_REMOVE;
 }
 
@@ -311,9 +312,9 @@ static int _finish_buffer_thread(dt_thumbnail_t *thumb, gboolean success)
 
   // Redraw events need to be sent from the main GUI thread
   // though we may not have a target widget anymore...
-  if(thumb && thumb->widget && thumb->w_image && !dt_atomic_get_int(&thumb->destroying))
-    g_main_context_invoke(NULL, (GSourceFunc)_main_context_draw, thumb->w_image);
-
+  if(thumb && !dt_atomic_get_int(&thumb->destroying))
+    g_main_context_invoke(NULL, (GSourceFunc)_main_context_draw, thumb);
+  
   return 0;
 }
 
