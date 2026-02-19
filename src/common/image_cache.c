@@ -267,7 +267,6 @@ static void _image_cache_reload_from_db(dt_image_t *img, const uint32_t imgid)
   }
   else
   {
-    dt_image_init(img);
     img->id = -1;
     fprintf(stderr, "[image_cache_reload] failed to open image %" PRIu32 " from database: %s\n", imgid,
             sqlite3_errmsg(dt_database_get(darktable.db)));
@@ -282,6 +281,7 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
 
   dt_image_t *img = (dt_image_t *)g_malloc(sizeof(dt_image_t));
   entry->data = img;
+  dt_image_init(img);
   _image_cache_reload_from_db(img, entry->key);
 
   img->cache_entry = entry; // init backref
