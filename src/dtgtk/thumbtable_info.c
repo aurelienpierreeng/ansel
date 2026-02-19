@@ -40,12 +40,6 @@ void dt_thumbtable_copy_image(dt_image_t *info, const dt_image_t *img)
   if(!info || !img) return;
 
   memcpy(info, img, sizeof(dt_image_t));
-
-  // Avoid sharing cache-owned pointers in GUI copies.
-  info->profile = NULL;
-  info->profile_size = 0;
-  info->dng_gain_maps = NULL;
-  info->cache_entry = NULL;
 }
 
 void dt_thumbtable_info_seed_image_cache(const dt_image_t *info)

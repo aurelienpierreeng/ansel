@@ -180,9 +180,6 @@ void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
   if(img->exif_focus_distance >= 0 && img->orientation >= 0) img->exif_inited = 1;
 
   img->crop_x = img->crop_y = img->crop_width = img->crop_height = 0;
-  g_free(img->profile);
-  img->profile = NULL;
-  img->profile_size = 0;
 
   for(uint8_t i = 0; i < 4; i++) 
     img->raw_black_level_separate[i] = 0;
@@ -232,19 +229,8 @@ void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
   dt_image_refresh_makermodel(img);
 }
 
-static void _image_cache_release_dynamic(dt_image_t *img)
-{
-  g_free(img->profile);
-  img->profile = NULL;
-  img->profile_size = 0;
-  g_list_free_full(img->dng_gain_maps, g_free);
-  img->dng_gain_maps = NULL;
-}
-
 static void _image_cache_reload_from_db(dt_image_t *img, const uint32_t imgid)
 {
-  _image_cache_release_dynamic(img);
-
   _image_cache_stmt_mutex_ensure();
   dt_pthread_mutex_lock(&_image_cache_stmt_mutex);
 
