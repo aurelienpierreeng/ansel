@@ -2593,24 +2593,28 @@ static void _disable_module()
 // to be called before issuing any query based on memory.darktable_iop_names
 void dt_iop_set_darktable_iop_table()
 {
-  sqlite3_stmt *stmt;
-  gchar *module_list = NULL;
+  if(!darktable.iop) return;
+
+  // Faster than building a huge VALUES string: reuse a prepared statement and bind per module.
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(
+      dt_database_get(darktable.db),
+      "INSERT INTO memory.darktable_iop_names (operation, name) VALUES (?1, ?2)",
+      -1, &stmt, NULL);
+  if(!stmt) return;
+
+  dt_database_start_transaction(darktable.db);
   for(GList *iop = darktable.iop; iop; iop = g_list_next(iop))
   {
     dt_iop_module_so_t *module = (dt_iop_module_so_t *)iop->data;
-    module_list = dt_util_dstrcat(module_list, "(\"%s\",\"%s\"),", module->op, module->name());
-  }
-
-  if(module_list)
-  {
-    module_list[strlen(module_list) - 1] = '\0';
-    gchar *query = g_strdup_printf("INSERT INTO memory.darktable_iop_names (operation, name) VALUES %s", module_list);
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
+    sqlite3_reset(stmt);
+    sqlite3_clear_bindings(stmt);
+    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, module->op, -1, SQLITE_TRANSIENT);
+    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, module->name(), -1, SQLITE_TRANSIENT);
     sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-    g_free(query);
-    g_free(module_list);
   }
+  dt_database_release_transaction(darktable.db);
+  sqlite3_finalize(stmt);
 }
 
 const gchar *dt_iop_get_localized_name(const gchar *op)
