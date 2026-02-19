@@ -36,7 +36,6 @@
 #include "common/grouping.h"
 #include "common/mipmap_cache.h" // for dt_mipmap_size_t, etc
 #include "common/file_location.h"
-#include "common/history.h"
 #include "common/image.h"
 #include "common/image_cache.h"
 #include "common/collection.h"
@@ -152,9 +151,6 @@ static int generate_cache(lua_State *L)
     dt_mipmap_cache_get(darktable.mipmap_cache, &buf, imgid, k, DT_MIPMAP_BLOCKING, 'r');
     dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
   }
-  // thumbnail in sync with image
-  dt_history_hash_set_mipmap(imgid);
-
   return 0;
 }
 

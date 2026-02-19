@@ -131,17 +131,6 @@ void dt_dev_invalidate_history_module(GList *list, struct dt_iop_module_t *modul
  */
 uint64_t dt_dev_history_get_hash(struct dt_develop_t *dev);
 
-/**
- * @brief Write history to DB and XMP only if the integrety hash has changed since
- * first reading history, or since prior saving point.
- * Callback function meant to be used with g_timeout, or standalone.
- *
- * @param dev
- * @return int
- */
-int dt_dev_history_auto_save(struct dt_develop_t *dev);
-
-
 // We allow pipelines to run partial histories, up to a certain index
 // stored privately in dev->history_end. Use these getter/setters
 // that will check validity, instead of directly reading/writing the private data.
@@ -180,6 +169,7 @@ int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, GList 
  * @param dev
  */
 void dt_dev_history_compress(struct dt_develop_t *dev);
+void dt_dev_history_cleanup(void);
 
 /**
  * @brief Find the first history entry on dev->history attached to a module

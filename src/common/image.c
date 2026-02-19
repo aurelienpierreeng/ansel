@@ -791,7 +791,12 @@ void dt_image_set_flip(const int32_t imgid, const dt_image_orientation_t orienta
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 
-  dt_history_hash_write_from_history(imgid, DT_HISTORY_HASH_CURRENT);
+  dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  if(image)
+  {
+    image->history_hash = 0;
+    dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_RELAXED);
+  }
 
   dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
   dt_control_save_xmp(imgid);
@@ -1065,9 +1070,6 @@ static int32_t _image_duplicate_with_version(const int32_t imgid, const int32_t 
     if(dt_tag_detach_by_string("darktable|changed", newid, FALSE, FALSE)
        || dt_tag_detach_by_string("darktable|exported", newid, FALSE, FALSE))
       DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
-
-    /* unset change timestamp */
-    dt_image_cache_unset_change_timestamp(darktable.image_cache, newid);
 
     const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
     const int grpid = img->group_id;
@@ -1623,6 +1625,7 @@ int32_t dt_image_import_lua(const int32_t film_id, const char *filename)
 
 void dt_image_init(dt_image_t *img)
 {
+  memset(img, 0, sizeof(*img));
   img->width = img->height = 0;
   img->p_width = img->p_height = 0;
   img->crop_x = img->crop_y = img->crop_width = img->crop_height = 0;
@@ -1639,6 +1642,9 @@ void dt_image_init(dt_image_t *img)
   img->group_id = UNKNOWN_IMAGE;
   img->group_members = 0;
   img->history_items = 0;
+  img->history_hash = 0;
+  img->mipmap_hash = 0;
+  img->self_hash = 0;
   img->flags = 0;
   img->id = UNKNOWN_IMAGE;
   img->version = -1;
@@ -2488,7 +2494,8 @@ static int _write_sidecar_file_from_image_locked(const dt_image_t *img)
   }
 
   dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d writing sidecar %s\n", img->id, filename);
-  if(dt_exif_xmp_write_with_imgpath(img->id, filename, imgpath) != 0) return 1;
+  if(dt_exif_xmp_write_with_imgpath(img, filename, imgpath) != 0)
+    return 1;
 
   dt_print(DT_DEBUG_CONTROL, "[xmp] imgid %d updating write_timestamp\n", img->id);
   _write_timestamp_set_now(img->id);

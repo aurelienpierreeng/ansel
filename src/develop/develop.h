@@ -253,10 +253,7 @@ typedef struct dt_develop_t
   dt_backbuf_t raw_histogram; // backbuf to prepare the raw histogram (before white balance)
   dt_backbuf_t output_histogram;  // backbuf to prepare the display-agnostic output histogram (in the middle of colorout)
   dt_backbuf_t display_histogram; // backbuf to prepare the display-referred output histogram (at the far end of the pipe)
-
-  // if dev is GUI-attached, auto save history 15s after the last change is made.
-  guint auto_save_timeout;
-
+  
   // Track history changes from C. Note: we have a DB variant.
   uint64_t history_hash;
 

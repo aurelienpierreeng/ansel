@@ -85,7 +85,7 @@
 #include "common/film.h"
 #include "common/metadata.h"
 #include "common/utility.h"
-#include "common/history.h"
+#include "common/image.h"
 #include "common/map_locations.h"
 #include "common/datetime.h"
 #include "control/conf.h"
@@ -1868,22 +1868,17 @@ static void list_view(dt_lib_collect_rule_t *dr)
         break;
 
       case DT_COLLECTION_PROP_HISTORY: // History
-        // images without history are counted as if they were basic
         // clang-format off
         g_snprintf(query, sizeof(query),
                    "SELECT CASE"
-                   "       WHEN basic_hash == current_hash THEN '%s'"
-                   "       WHEN auto_hash == current_hash THEN '%s'"
-                   "       WHEN current_hash IS NOT NULL THEN '%s'"
+                   "       WHEN EXISTS (SELECT 1 FROM main.history h WHERE h.imgid = mi.id) THEN '%s'"
                    "       ELSE '%s'"
                    "     END as altered, 1, COUNT(*) AS count"
                    " FROM main.images AS mi"
-                   " LEFT JOIN (SELECT DISTINCT imgid, basic_hash, auto_hash, current_hash"
-                   "            FROM main.history_hash) ON id = imgid"
                    " WHERE %s"
                    " GROUP BY altered"
                    " ORDER BY altered ASC",
-                   _("basic"), _("auto applied"), _("altered"), _("basic"), where_ext);
+                   _("altered"), _("unaltered"), where_ext);
         // clang-format on
         break;
 

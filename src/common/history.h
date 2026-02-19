@@ -37,32 +37,11 @@
 #include <inttypes.h>
 #include <sqlite3.h>
 
+#include "common/image_cache.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-// history hash is designed to detect any change made on the image
-// if current = basic the image has only the mandatory modules with their original settings
-// if current = auto the image has the mandatory and auto applied modules with their original settings
-// else the image has been changed in some way
-// note that if an image has no history (and no history hash) it is considered as basic
-typedef enum dt_history_hash_t
-{
-  DT_HISTORY_HASH_BASIC   = 1 << 0,  // only mandatory modules
-  DT_HISTORY_HASH_AUTO    = 1 << 1,  // mandatory modules plus the auto applied ones
-  DT_HISTORY_HASH_CURRENT = 1 << 2,  // current state, with or without change
-  DT_HISTORY_HASH_MIPMAP  = 1 << 3,  // last mipmap hash
-} dt_history_hash_t;
-
-typedef struct dt_history_hash_values_t
-{
-  guint8 *basic;
-  int basic_len;
-  guint8 *auto_apply;
-  int auto_apply_len;
-  guint8 *current;
-  int current_len;
-} dt_history_hash_values_t;
 
 typedef struct dt_history_copy_item_t
 {
@@ -131,20 +110,8 @@ gboolean dt_history_check_module_exists(int32_t imgid, const char *operation, gb
 /** cleanup cached statements */
 void dt_history_cleanup(void);
 
-/** calculate history hash and save it to database*/
-void dt_history_hash_write_from_history(const int32_t imgid, const dt_history_hash_t type);
-
-/** return true if mipmap_hash = current_hash */
-gboolean dt_history_hash_is_mipmap_synced(const int32_t imgid);
-
-/** update mipmap hash to db (= current_hash) */
-void dt_history_hash_set_mipmap(const int32_t imgid);
-
-/** write hash values to db */
-void dt_history_hash_write(const int32_t imgid, dt_history_hash_values_t *hash);
-
-/** read hash values from db */
-void dt_history_hash_read(const int32_t imgid, dt_history_hash_values_t *hash);
+/** update mipmap hash in database from cached image history hash */
+void dt_history_hash_set_mipmap(const int32_t imgid, const dt_image_cache_write_mode_t mode);
 
 #ifdef __cplusplus
 }

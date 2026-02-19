@@ -1272,24 +1272,18 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
 
     case DT_COLLECTION_PROP_HISTORY: // history
       {
-        // clang-format off
-        // three groups
-        // - images without history and basic together
-        // - auto applied
-        // - altered
-        const char *condition =
-            (strcmp(escaped_text, _("basic")) == 0) ?
-              "WHERE (basic_hash IS NULL OR current_hash != basic_hash) "
-            : (strcmp(escaped_text, _("auto applied")) == 0) ?
-              "WHERE current_hash == auto_hash "
-            : (strcmp(escaped_text, _("altered")) == 0) ?
-              "WHERE (basic_hash IS NULL OR current_hash != basic_hash) "
-              "AND (auto_hash IS NULL OR current_hash != auto_hash) "
-            : "";
-        const char *condition2 = (strcmp(escaped_text, _("basic")) == 0) ? "not" : "";
-        query = g_strdup_printf("(id %s IN (SELECT imgid FROM main.history_hash %s)) ",
-                                condition2, condition);
-        // clang-format on
+        if(strcmp(escaped_text, _("altered")) == 0)
+        {
+          query = g_strdup("EXISTS (SELECT 1 FROM main.history h WHERE h.imgid = id)");
+        }
+        else if(strcmp(escaped_text, _("unaltered")) == 0)
+        {
+          query = g_strdup("NOT EXISTS (SELECT 1 FROM main.history h WHERE h.imgid = id)");
+        }
+        else
+        {
+          query = g_strdup("1");
+        }
       }
       break;
 

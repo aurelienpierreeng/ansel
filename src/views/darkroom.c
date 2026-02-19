@@ -2147,9 +2147,6 @@ void leave(dt_view_t *self)
   dt_thumbtable_hide(darktable.gui->ui->thumbtable_filmstrip);
   gtk_widget_hide(dt_ui_center(darktable.gui->ui));
 
-  // Now, cleanup the pipes and history
-  dt_dev_history_auto_save(darktable.develop);
-
   // Pipeline nodes reference modules from dev->iop
   // we need to destroy objects referencing modules
   // before destroying the actual modules being referenced.

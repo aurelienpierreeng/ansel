@@ -27,6 +27,7 @@
 #include "common/darktable.h"
 #include "common/debug.h"
 #include "common/history.h"
+#include "common/image_cache.h"
 #include "control/signal.h"
 
 dt_undo_lt_history_t *dt_history_snapshot_item_init(void)
@@ -216,7 +217,13 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
     fprintf(stderr, "[_history_snapshot_undo_restore] fails to restore a snapshot for %d\n", imgid);
   }
 
-  dt_history_hash_write_from_history(imgid, DT_HISTORY_HASH_CURRENT);
+  dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  if(image)
+  {
+    // FIXME: this might be wrong or need more accurate handling
+    image->history_hash = 0;
+    dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_RELAXED);
+  }
 }
 
 static void _clear_undo_snapshot(const int32_t imgid, const int snap_id)

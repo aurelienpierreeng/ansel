@@ -67,6 +67,7 @@
 #include <unistd.h>
 
 #include "common/atomic.h"
+#include "common/datetime.h"
 #include "common/debug.h"
 #include "common/history.h"
 #include "common/image_cache.h"
@@ -217,11 +218,6 @@ void dt_dev_cleanup(dt_develop_t *dev)
   // image_cache does not have to be unref'd, this is done outside develop module.
 
   // On dev cleanup, it is expected to force an history save
-  if(dev->auto_save_timeout) 
-  {
-    g_source_remove(dev->auto_save_timeout);
-    dev->auto_save_timeout = 0;
-  }
   if(dev->drawing_timeout) 
   {
     g_source_remove(dev->drawing_timeout);
@@ -545,19 +541,21 @@ void dt_dev_process_image_job(dt_develop_t *dev)
 // load the raw and get the new image struct, blocking in gui thread
 static inline int _dt_dev_load_raw(dt_develop_t *dev, const int32_t imgid)
 {
-  // first load the raw, to make sure dt_image_t will contain all and correct data.
+  // then load the raw
   dt_times_t start;
   dt_get_times(&start);
 
   // Test we got images. Also that populates the cache for later.
   dt_mipmap_buffer_t buf;
   dt_mipmap_cache_get(darktable.mipmap_cache, &buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
-  gboolean no_valid_image = (buf.buf == NULL) || buf.width == 0 || buf.height == 0;
+  const gboolean no_valid_image = (buf.buf == NULL) || buf.width == 0 || buf.height == 0;
   dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
 
   dt_show_times_f(&start, "[dev_pixelpipe]", "to load the image.");
 
+  // Refresh our private copy in case raw loading updated image metadata
   const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  if(!image) return 1;
   dev->image_storage = *image;
   dt_image_cache_read_release(darktable.image_cache, image);
 
@@ -1156,10 +1154,6 @@ void dt_dev_append_changed_tag(const int32_t imgid)
   guint tagid = 0;
   dt_tag_new("darktable|changed", &tagid);
   const gboolean tag_change = dt_tag_attach(tagid, imgid, FALSE, FALSE);
-
-  /* register last change timestamp in cache */
-  dt_image_cache_set_change_timestamp(darktable.image_cache, imgid);
-
   if(tag_change) DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
 }
 

@@ -62,6 +62,8 @@ sqlite3_stmt *dt_thumbtable_info_get_collection_stmt(void)
         "SELECT im.id, im.group_id, "
         "(SELECT COUNT(id) FROM main.images WHERE group_id=im.group_id), "
         "(SELECT COUNT(imgid) FROM main.history WHERE imgid=c.imgid), "
+        "COALESCE((SELECT current_hash FROM main.history_hash WHERE imgid=im.id), 0), "
+        "COALESCE((SELECT mipmap_hash FROM main.history_hash WHERE imgid=im.id), 0), "
         "im.film_id, im.version, im.width, im.height, im.orientation, "
         "im.flags, "
         "im.import_timestamp, im.change_timestamp, im.export_timestamp, im.print_timestamp, "

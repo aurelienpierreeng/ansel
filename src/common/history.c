@@ -61,6 +61,7 @@
 #define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
 
 static sqlite3_stmt *_history_check_module_exists_stmt = NULL;
+static sqlite3_stmt *_history_hash_set_mipmap_stmt = NULL;
 static dt_pthread_mutex_t _history_stmt_mutex;
 static gsize _history_stmt_mutex_inited = 0;
 
@@ -153,12 +154,6 @@ void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo)
   /* remove darktable|style|* tags */
   dt_tag_detach_by_string("darktable|style|%", imgid, FALSE, FALSE);
   dt_tag_detach_by_string("darktable|changed", imgid, FALSE, FALSE);
-
-  /* unset change timestamp */
-  dt_image_cache_unset_change_timestamp(darktable.image_cache, imgid);
-
-  // update history hash
-  dt_history_hash_write_from_history(imgid, DT_HISTORY_HASH_CURRENT);
 
   // signal that the mipmap need to be updated
   dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
@@ -489,7 +484,6 @@ void dt_history_compress_on_image(const int32_t imgid)
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
   }
-  dt_history_hash_write_from_history(imgid, DT_HISTORY_HASH_CURRENT);
 
   dt_database_release_transaction(darktable.db);
 
@@ -548,7 +542,6 @@ void dt_history_truncate_on_image(const int32_t imgid, const int32_t history_end
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
-  dt_history_hash_write_from_history(imgid, DT_HISTORY_HASH_CURRENT);
 
   dt_database_release_transaction(darktable.db);
 
@@ -630,8 +623,6 @@ int dt_history_compress_on_list(const GList *imgs)
     }
     if(test == 0) // no compression as history_end is right in the middle of history
       uncompressed++;
-
-    dt_history_hash_write_from_history(imgid, DT_HISTORY_HASH_CURRENT);
   }
 
   return uncompressed;
@@ -669,6 +660,11 @@ void dt_history_cleanup(void)
 {
   _history_stmt_mutex_ensure();
   dt_pthread_mutex_lock(&_history_stmt_mutex);
+  if(_history_hash_set_mipmap_stmt)
+  {
+    sqlite3_finalize(_history_hash_set_mipmap_stmt);
+    _history_hash_set_mipmap_stmt = NULL;
+  }
   if(_history_check_module_exists_stmt)
   {
     sqlite3_finalize(_history_check_module_exists_stmt);
@@ -677,292 +673,16 @@ void dt_history_cleanup(void)
   dt_pthread_mutex_unlock(&_history_stmt_mutex);
 }
 
-// if the image has no history return 0
-static gsize _history_hash_compute_from_db(const int32_t imgid, guint8 **hash)
+
+void dt_history_hash_set_mipmap(const int32_t imgid, const dt_image_cache_write_mode_t mode)
 {
-  if(imgid == UNKNOWN_IMAGE) return 0;
+  if(imgid <= 0) return;
 
-  GChecksum *checksum = g_checksum_new(G_CHECKSUM_MD5);
-  gsize hash_len = 0;
-
-  sqlite3_stmt *stmt;
-
-  // get history end
-  int history_end = 0;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT history_end FROM main.images WHERE id = ?1",
-                              -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    if(sqlite3_column_type(stmt, 0) != SQLITE_NULL)
-      history_end = sqlite3_column_int(stmt, 0);
-  }
-  sqlite3_finalize(stmt);
-
-  // get history. the active history for an image are all the latest operations (MAX(num))
-  // which are enabled. this is important here as we want the hash to represent the actual
-  // developement of the image.
-  gboolean history_on = FALSE;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT operation, op_params, blendop_params, enabled, MAX(num)"
-                              " FROM main.history"
-                              " WHERE imgid = ?1 AND num <= ?2"
-                              " GROUP BY operation, multi_priority"
-                              " ORDER BY num",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, history_end);
-
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    const int enabled = sqlite3_column_int(stmt, 3);
-    if(enabled)
-    {
-      // operation
-      char *buf = (char *)sqlite3_column_text(stmt, 0);
-      if(buf) g_checksum_update(checksum, (const guchar *)buf, -1);
-      // op_params
-      buf = (char *)sqlite3_column_blob(stmt, 1);
-      int params_len = sqlite3_column_bytes(stmt, 1);
-      if(buf) g_checksum_update(checksum, (const guchar *)buf, params_len);
-      // blendop_params
-      buf = (char *)sqlite3_column_blob(stmt, 2);
-      params_len = sqlite3_column_bytes(stmt, 2);
-      if(buf) g_checksum_update(checksum, (const guchar *)buf, params_len);
-      history_on = TRUE;
-    }
-  }
-  sqlite3_finalize(stmt);
-
-  if(history_on)
-  {
-    // get module order
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "SELECT version, iop_list"
-                                " FROM main.module_order"
-                                " WHERE imgid = ?1",
-                                -1, &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-    if(sqlite3_step(stmt) == SQLITE_ROW)
-    {
-      const int version = sqlite3_column_int(stmt, 0);
-      g_checksum_update(checksum, (const guchar *)&version, sizeof(version));
-      if(version == DT_IOP_ORDER_CUSTOM)
-      {
-        // iop_list
-        const char *buf = (char *)sqlite3_column_text(stmt, 1);
-        if(buf) g_checksum_update(checksum, (const guchar *)buf, -1);
-      }
-    }
-    sqlite3_finalize(stmt);
-
-    const gsize checksum_len = g_checksum_type_get_length(G_CHECKSUM_MD5);
-    *hash = g_malloc(checksum_len);
-    hash_len = checksum_len;
-    g_checksum_get_digest(checksum, *hash, &hash_len);
-  }
-  g_checksum_free(checksum);
-
-  return hash_len;
+  dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  if(!img) return;
+  img->mipmap_hash = img->history_hash;
+  dt_image_cache_write_release(darktable.image_cache, img, mode);
 }
-
-void dt_history_hash_write_from_history(const int32_t imgid, const dt_history_hash_t type)
-{
-  if(imgid == UNKNOWN_IMAGE) return;
-
-  guint8 *hash = NULL;
-  gsize hash_len = _history_hash_compute_from_db(imgid, &hash);
-  if(hash_len)
-  {
-    char *fields = NULL;
-    char *values = NULL;
-    char *conflict = NULL;
-    if(type & DT_HISTORY_HASH_BASIC)
-    {
-      fields = g_strdup_printf("%s,", "basic_hash");
-      values = g_strdup("?2,");
-      conflict = g_strdup("basic_hash=?2,");
-    }
-    if(type & DT_HISTORY_HASH_AUTO)
-    {
-      fields = dt_util_dstrcat(fields, "%s,", "auto_hash");
-      values = dt_util_dstrcat(values, "?2,");
-      conflict = dt_util_dstrcat(conflict, "auto_hash=?2,");
-    }
-    if(type & DT_HISTORY_HASH_CURRENT)
-    {
-      fields = dt_util_dstrcat(fields, "%s,", "current_hash");
-      values = dt_util_dstrcat(values, "?2,");
-      conflict = dt_util_dstrcat(conflict, "current_hash=?2,");
-    }
-    // remove the useless last comma
-    if(fields) fields[strlen(fields) - 1] = '\0';
-    if(values) values[strlen(values) - 1] = '\0';
-    if(conflict) conflict[strlen(conflict) - 1] = '\0';
-
-    if(fields)
-    {
-      sqlite3_stmt *stmt;
-      // clang-format off
-      char *query = g_strdup_printf("INSERT INTO main.history_hash"
-                                    " (imgid, %s) VALUES (?1, %s)"
-                                    " ON CONFLICT (imgid)"
-                                    " DO UPDATE SET %s",
-                                    fields, values, conflict);
-      // clang-format on
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-      DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 2, hash, hash_len, SQLITE_TRANSIENT);
-      sqlite3_step(stmt);
-      sqlite3_finalize(stmt);
-      g_free(query);
-      g_free(fields);
-      g_free(values);
-      g_free(conflict);
-    }
-    g_free(hash);
-  }
-}
-
-void dt_history_hash_write(const int32_t imgid, dt_history_hash_values_t *hash)
-{
-  if(hash->basic || hash->auto_apply || hash->current)
-  {
-    sqlite3_stmt *stmt;
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "INSERT OR REPLACE INTO main.history_hash"
-                                " (imgid, basic_hash, auto_hash, current_hash)"
-                                " VALUES (?1, ?2, ?3, ?4)",
-                                -1, &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-    DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 2, hash->basic, hash->basic_len, SQLITE_TRANSIENT);
-    DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 3, hash->auto_apply, hash->auto_apply_len, SQLITE_TRANSIENT);
-    DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 4, hash->current, hash->current_len, SQLITE_TRANSIENT);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-    g_free(hash->basic);
-    g_free(hash->auto_apply);
-    g_free(hash->current);
-  }
-}
-
-void dt_history_hash_read(const int32_t imgid, dt_history_hash_values_t *hash)
-{
-  hash->basic = hash->auto_apply = hash->current = NULL;
-  hash->basic_len = hash->auto_apply_len = hash->current_len = 0;
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT basic_hash, auto_hash, current_hash"
-                              " FROM main.history_hash"
-                              " WHERE imgid = ?1",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    void *buf = (void *)sqlite3_column_blob(stmt, 0);
-    hash->basic_len = sqlite3_column_bytes(stmt, 0);
-    if(buf)
-    {
-      hash->basic = malloc(hash->basic_len);
-      memcpy(hash->basic, buf, hash->basic_len);
-    }
-    buf = (void *)sqlite3_column_blob(stmt, 1);
-    hash->auto_apply_len = sqlite3_column_bytes(stmt, 1);
-    if(buf)
-    {
-      hash->auto_apply = malloc(hash->auto_apply_len);
-      memcpy(hash->auto_apply, buf, hash->auto_apply_len);
-    }
-    buf = (void *)sqlite3_column_blob(stmt, 2);
-    hash->current_len = sqlite3_column_bytes(stmt, 2);
-    if(buf)
-    {
-      hash->current = malloc(hash->current_len);
-      memcpy(hash->current, buf, hash->current_len);
-    }
-  }
-  sqlite3_finalize(stmt);
-}
-
-gboolean dt_history_hash_is_mipmap_synced(const int32_t imgid)
-{
-  gboolean status = FALSE;
-  if(imgid == UNKNOWN_IMAGE) return status;
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT CASE"
-                              "  WHEN mipmap_hash == current_hash THEN 1"
-                              "  ELSE 0 END AS status"
-                              " FROM main.history_hash"
-                              " WHERE imgid = ?1",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    status = sqlite3_column_int(stmt, 0);
-  }
-  sqlite3_finalize(stmt);
-  return status;
-}
-
-void dt_history_hash_set_mipmap(const int32_t imgid)
-{
-  if(imgid == UNKNOWN_IMAGE) return;
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "UPDATE main.history_hash"
-                              " SET mipmap_hash = current_hash"
-                              " WHERE imgid = ?1",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-}
-
-# if 0
-dt_history_hash_t dt_history_hash_get_status(const int32_t imgid)
-{
-  dt_history_hash_t status = 0;
-  if(imgid == UNKNOWN_IMAGE) return status;
-  sqlite3_stmt *stmt;
-  // clang-format off
-  char *query = g_strdup_printf("SELECT CASE"
-                                "  WHEN basic_hash == current_hash THEN %d"
-                                "  WHEN auto_hash == current_hash THEN %d"
-                                "  WHEN (basic_hash IS NULL OR current_hash != basic_hash) AND"
-                                "       (auto_hash IS NULL OR current_hash != auto_hash) THEN %d"
-                                "  ELSE %d END AS status"
-                                " FROM main.history_hash"
-                                " WHERE imgid = %d",
-                                DT_HISTORY_HASH_BASIC, DT_HISTORY_HASH_AUTO,
-                                DT_HISTORY_HASH_CURRENT, DT_HISTORY_HASH_BASIC, imgid);
-  // clang-format on
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              query, -1, &stmt, NULL);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    status = sqlite3_column_int(stmt, 0);
-  }
-  // if no history_hash basic status
-  else status = DT_HISTORY_HASH_BASIC;
-  sqlite3_finalize(stmt);
-  g_free(query);
-  return status;
-}
-#endif
 
 gboolean dt_history_copy(int32_t imgid)
 {

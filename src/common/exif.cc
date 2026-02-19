@@ -46,7 +46,7 @@
    Copyright (C) 2020 Matt Maguire.
    Copyright (C) 2020-2022 Miloš Komarčević.
    Copyright (C) 2020-2021 Ralf Brown.
-   Copyright (C) 2021, 2023, 2025 Aurélien PIERRE.
+   Copyright (C) 2021, 2023, 2025-2026 Aurélien PIERRE.
    Copyright (C) 2021 Daniel Vogelbacher.
    Copyright (C) 2021 Victor Forsiuk.
    Copyright (C) 2022 gi-man.
@@ -89,6 +89,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -3085,30 +3086,6 @@ int _get_max_multi_priority(GList *history, const char *operation)
   return max_prio;
 }
 
-static gboolean _image_altered_deprecated(const int32_t imgid)
-{
-  sqlite3_stmt *stmt;
-
-  char query[1024] = { 0 };
-
-  // clang-format off
-  snprintf(query, sizeof(query),
-           "SELECT 1"
-           " FROM main.history, main.images"
-           " WHERE id=?1 AND imgid=id AND num<history_end AND enabled=1"
-           "       AND operation NOT IN ('flip', 'dither', 'highlights', 'rawprepare',"
-           "                             'colorin', 'colorout', 'gamma', 'demosaic', 'temperature')");
-  // clang-format on
-
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-
-  const gboolean altered = (sqlite3_step(stmt) == SQLITE_ROW);
-  sqlite3_finalize(stmt);
-
-  return altered;
-}
-
 // need a write lock on *img (non-const) to write stars (and soon color labels).
 int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_only)
 {
@@ -3531,35 +3508,19 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
     {
       dt_database_release_transaction(darktable.db);
 
-      // history_hash
-      dt_history_hash_values_t hash = {NULL, 0, NULL, 0, NULL, 0};
-      if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.history_basic_hash"))) != xmpData.end())
-      {
-        hash.basic = dt_exif_xmp_decode(pos->toString().c_str(), strlen(pos->toString().c_str()),
-                                          &hash.basic_len);
-      }
-      if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.history_auto_hash"))) != xmpData.end())
-      {
-        hash.auto_apply = dt_exif_xmp_decode(pos->toString().c_str(), strlen(pos->toString().c_str()),
-                                       &hash.auto_apply_len);
-      }
+      // history_hash (current only)
       if((pos = xmpData.findKey(Exiv2::XmpKey("Xmp.darktable.history_current_hash"))) != xmpData.end())
       {
-        hash.current = dt_exif_xmp_decode(pos->toString().c_str(), strlen(pos->toString().c_str()),
-                                          &hash.current_len);
-      }
-      if(hash.basic || hash.auto_apply || hash.current)
-      {
-        dt_history_hash_write(img->id, &hash);
-      }
-      else
-      {
-        // no choice, use the history itelf applying the former rules
-        dt_history_hash_t hash_flag = DT_HISTORY_HASH_CURRENT;
-        if(!_image_altered_deprecated(img->id))
-          // we assume the image has an history
-          hash_flag = (dt_history_hash_t)(hash_flag | DT_HISTORY_HASH_BASIC);
-        dt_history_hash_write_from_history(img->id, hash_flag);
+        int hash_len = 0;
+        unsigned char *decoded = dt_exif_xmp_decode(pos->toString().c_str(), strlen(pos->toString().c_str()),
+                                                    &hash_len);
+        if(decoded && hash_len == (int)sizeof(uint64_t))
+        {
+          uint64_t be_hash = 0;
+          memcpy(&be_hash, decoded, sizeof(be_hash));
+          img->history_hash = GUINT64_FROM_BE(be_hash);
+        }
+        if(decoded) free(decoded);
       }
     }
     else
@@ -3893,7 +3854,31 @@ static void dt_set_xmp_dt_metadata(Exiv2::XmpData &xmpData, const int32_t imgid,
 }
 
 // helper to create an xmp data thing. throws exiv2 exceptions if stuff goes wrong.
-static void _exif_xmp_read_data(Exiv2::XmpData &xmpData, const int32_t imgid)
+static void _exif_xmp_append_history_hash(Exiv2::XmpData &xmpData, const int32_t imgid,
+                                          const dt_image_t *image)
+{
+  const dt_image_t *cached = image;
+  if(!cached)
+    cached = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+
+  if(cached)
+  {
+    if(cached->history_hash)
+    {
+      const uint64_t be_hash = GUINT64_TO_BE(cached->history_hash);
+      char *value = dt_exif_xmp_encode(reinterpret_cast<const unsigned char *>(&be_hash), sizeof(be_hash), NULL);
+      if(value)
+      {
+        xmpData["Xmp.darktable.history_current_hash"] = value;
+        free(value);
+      }
+    }
+    if(!image)
+      dt_image_cache_read_release(darktable.image_cache, cached);
+  }
+}
+
+static void _exif_xmp_read_data(Exiv2::XmpData &xmpData, const int32_t imgid, const dt_image_t *image)
 {
   const int xmp_version = DT_XMP_EXIF_VERSION;
   int stars = 1, raw_params = 0, history_end = -1;
@@ -3991,33 +3976,10 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData, const int32_t imgid)
   xmpData["Xmp.darktable.iop_order_version"] = iop_order_version;
   if(iop_order_list) xmpData["Xmp.darktable.iop_order_list"] = iop_order_list;
 
+  _exif_xmp_append_history_hash(xmpData, imgid, image);
+
   sqlite3_finalize(stmt);
   g_free(iop_order_list);
-
-  // store history hash
-  dt_history_hash_values_t hash;
-  dt_history_hash_read(imgid, &hash);
-  if(hash.basic)
-  {
-    char* value = dt_exif_xmp_encode(hash.basic, hash.basic_len, NULL);
-    xmpData["Xmp.darktable.history_basic_hash"] = value;
-    free(value);
-    g_free(hash.basic);
-  }
-  if(hash.auto_apply)
-  {
-    char* value = dt_exif_xmp_encode(hash.auto_apply, hash.auto_apply_len, NULL);
-    xmpData["Xmp.darktable.history_auto_hash"] = value;
-    free(value);
-    g_free(hash.auto_apply);
-  }
-  if(hash.current)
-  {
-    char* value = dt_exif_xmp_encode(hash.current, hash.current_len, NULL);
-    xmpData["Xmp.darktable.history_current_hash"] = value;
-    free(value);
-    g_free(hash.current);
-  }
 }
 
 // helper to create an xmp data thing. throws exiv2 exceptions if stuff goes wrong.
@@ -4131,6 +4093,7 @@ static void _exif_xmp_read_data_export(Exiv2::XmpData &xmpData, const int32_t im
     // we need to read the iop-order list
     xmpData["Xmp.darktable.iop_order_version"] = iop_order_version;
     if(iop_order_list) xmpData["Xmp.darktable.iop_order_list"] = iop_order_list;
+    _exif_xmp_append_history_hash(xmpData, imgid, NULL);
   }
 
   sqlite3_finalize(stmt);
@@ -4193,7 +4156,7 @@ char *dt_exif_xmp_read_string(const int32_t imgid)
 
     // last but not least attach what we have in DB to the XMP. in theory that should be
     // the same as what we just copied over from the sidecar file, but you never know ...
-    _exif_xmp_read_data(xmpData, imgid);
+    _exif_xmp_read_data(xmpData, imgid, NULL);
 
     // serialize the xmp data and output the xmp packet
     std::string xmpPacket;
@@ -4513,11 +4476,14 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
 }
 
 // write xmp sidecar file:
-int dt_exif_xmp_write_with_imgpath(const int32_t imgid, const char *filename, const char *imgpath)
+int dt_exif_xmp_write_with_imgpath(const dt_image_t *image, const char *filename,
+                                   const char *imgpath)
 {
   // refuse to write sidecar for non-existent image:
+  if(!image || image->id <= 0) return 1;
   if(!imgpath || !*imgpath) return 1;
   if(!g_file_test(imgpath, G_FILE_TEST_IS_REGULAR)) return 1;
+  const int32_t imgid = image->id;
 
   try
   {
@@ -4562,7 +4528,7 @@ int dt_exif_xmp_write_with_imgpath(const int32_t imgid, const char *filename, co
     }
 
     // initialize xmp data:
-    _exif_xmp_read_data(xmpData, imgid);
+    _exif_xmp_read_data(xmpData, imgid, image);
 
     // serialize the xmp data and output the xmp packet
     if(Exiv2::XmpParser::encode(xmpPacket, xmpData,

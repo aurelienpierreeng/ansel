@@ -95,7 +95,7 @@ void dt_exif_img_check_additional_tags(dt_image_t *img, const char *filename);
 int dt_exif_write_blob(uint8_t *blob, uint32_t size, const char *path, const int compressed);
 
 /** write xmp sidecar file. */
-int dt_exif_xmp_write_with_imgpath(const int32_t imgid, const char *filename, const char *imgpath);
+int dt_exif_xmp_write_with_imgpath(const struct dt_image_t *image, const char *filename, const char *imgpath);
 
 /** write xmp packet inside an image. */
 int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *metadata);

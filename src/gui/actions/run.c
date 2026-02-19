@@ -83,7 +83,6 @@ static int32_t preload_image_cache(dt_job_t *job)
     // and immediately write thumbs to disc and remove from mipmap cache.
     dt_mimap_cache_evict(darktable.mipmap_cache, imgid);
 
-    dt_history_hash_set_mipmap(imgid);
     img = g_list_next(img);
   }
 

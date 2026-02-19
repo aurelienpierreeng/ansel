@@ -310,9 +310,6 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
   /* write current history changes so nothing gets lost,
      do that only in the darkroom as there is nothing to be saved
      when in the lighttable (and it would write over current history stack) */
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(cv->view(cv) == DT_VIEW_DARKROOM) dt_dev_history_auto_save(darktable.develop);
-
   char style[128] = { 0 };
 
   // get the format_name and storage_name settings which are plug-ins name and not necessary what is displayed on the combobox.

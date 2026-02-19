@@ -50,6 +50,7 @@ typedef enum dt_image_cache_write_mode_t
   // only write to db
   DT_IMAGE_CACHE_RELAXED = 1,
   // only release the lock (no db write, no xmp)
+  // use that for multi-threading data safety
   DT_IMAGE_CACHE_MINIMAL = 2
 }
 dt_image_cache_write_mode_t;
@@ -81,7 +82,7 @@ int dt_image_cache_seed(dt_image_cache_t *cache, const dt_image_t *img);
 
 // Populate the common dt_image_t subset from a SQL row (shared with thumbtable).
 // Expected column order:
-// id, group_id, group_members, history_items, film_id, version, width, height, orientation, flags,
+// id, group_id, group_members, history_items, history_hash, mipmap_hash, film_id, version, width, height, orientation, flags,
 // import_timestamp, change_timestamp, export_timestamp, print_timestamp, exposure, exposure_bias, aperture, iso,
 // focal_length, focus_distance, datetime_taken, longitude, latitude, altitude, filename, fullpath, maker, model,
 // lens, folder, color_labels, crop, raw_parameters, color_matrix, colorspace, raw_black, raw_maximum,
@@ -106,9 +107,6 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
 void dt_image_cache_remove(dt_image_cache_t *cache, const int32_t imgid);
 
 // register timestamps in cache
-void dt_image_cache_set_change_timestamp(dt_image_cache_t *cache, const int32_t imgid);
-void dt_image_cache_set_change_timestamp_from_image(dt_image_cache_t *cache, const int32_t imgid, const int32_t sourceid);
-void dt_image_cache_unset_change_timestamp(dt_image_cache_t *cache, const int32_t imgid);
 void dt_image_cache_set_export_timestamp(dt_image_cache_t *cache, const int32_t imgid);
 void dt_image_cache_set_print_timestamp(dt_image_cache_t *cache, const int32_t imgid);
 

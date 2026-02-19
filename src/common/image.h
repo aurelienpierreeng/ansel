@@ -287,6 +287,9 @@ typedef struct dt_image_t
   int32_t num, flags, film_id, id, group_id, version;
   uint32_t group_members;
   uint32_t history_items;
+  uint64_t history_hash;
+  uint64_t mipmap_hash;
+  uint64_t self_hash;
 
   //timestamps
   GTimeSpan import_timestamp, change_timestamp, export_timestamp, print_timestamp;

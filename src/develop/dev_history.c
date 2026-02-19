@@ -76,6 +76,24 @@
 static void _process_history_db_entry(dt_develop_t *dev, sqlite3_stmt *stmt, const int32_t imgid,
                                       int *legacy_params, gboolean presets);
 
+static sqlite3_stmt *_dev_history_delete_history_stmt = NULL;
+static sqlite3_stmt *_dev_history_delete_masks_stmt = NULL;
+static sqlite3_stmt *_dev_history_update_history_end_stmt = NULL;
+static sqlite3_stmt *_dev_history_select_num_stmt = NULL;
+static sqlite3_stmt *_dev_history_insert_num_stmt = NULL;
+static sqlite3_stmt *_dev_history_update_item_stmt = NULL;
+static dt_pthread_mutex_t _dev_history_stmt_mutex;
+static gsize _dev_history_stmt_mutex_inited = 0;
+
+static inline void _dev_history_stmt_mutex_ensure(void)
+{
+  if(g_once_init_enter(&_dev_history_stmt_mutex_inited))
+  {
+    dt_pthread_mutex_init(&_dev_history_stmt_mutex, NULL);
+    g_once_init_leave(&_dev_history_stmt_mutex_inited, 1);
+  }
+}
+
 // returns the first history item with hist->module == module
 dt_dev_history_item_t *dt_dev_history_get_first_item_by_module(dt_develop_t *dev, dt_iop_module_t *module)
 {
@@ -688,9 +706,6 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
   return add_new_pipe_node;
 }
 
-
-#define AUTO_SAVE_TIMEOUT 15000
-
 uint64_t dt_dev_history_get_hash(dt_develop_t *dev)
 {
   uint64_t hash = 5381;
@@ -703,47 +718,6 @@ uint64_t dt_dev_history_get_hash(dt_develop_t *dev)
   }
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_history_get_hash] history hash: %" PRIu64 ", history end: %i, items %i\n", hash, dt_dev_get_history_end(dev), g_list_length(dev->history));
   return hash;
-}
-
-int dt_dev_history_auto_save(dt_develop_t *dev)
-{
-  if(dev->auto_save_timeout)
-  {
-    g_source_remove(dev->auto_save_timeout);
-    dev->auto_save_timeout = 0;
-  }
-
-  dt_toast_log(_("autosaving changes..."));
-  dt_pthread_rwlock_rdlock(&dev->history_mutex);
-  dt_control_change_cursor(GDK_WATCH);
-  const uint64_t new_hash = dt_dev_history_get_hash(dev);
-  if(new_hash == dev->history_hash)
-  {
-    dt_pthread_rwlock_unlock(&dev->history_mutex);
-    dt_control_change_cursor(GDK_LEFT_PTR);
-    return G_SOURCE_REMOVE;
-  }
-  else
-  {
-    dev->history_hash = new_hash;
-  }
-
-  dt_times_t start;
-  dt_get_times(&start);
-
-  dt_dev_write_history_ext(dev, dev->image_storage.id);
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
-  dt_control_change_cursor(GDK_LEFT_PTR);
-
-  dt_control_save_xmp(dev->image_storage.id);
-
-  dt_show_times(&start, "[dt_dev_history_auto_save] auto-saving history upon last change");
-
-  dt_times_t end;
-  dt_get_times(&end);
-  dt_toast_log("autosaving completed in %.3f s", end.clock - start.clock);
-
-  return G_SOURCE_REMOVE;
 }
 
 
@@ -809,17 +783,10 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
       dt_iop_gui_set_enable_button(module);
       --darktable.gui->reset;
     }
-
-    // Auto-save N s after the last change.
-    // If another change is made during that delay,
-    // reset the timer and restart Ns
-    if(dev->auto_save_timeout)
-    {
-      g_source_remove(dev->auto_save_timeout);
-      dev->auto_save_timeout = 0;
-    }
-    dev->auto_save_timeout = g_timeout_add(AUTO_SAVE_TIMEOUT, (GSourceFunc)dt_dev_history_auto_save, dev);
   }
+  
+  // Save history straight away
+  dt_dev_write_history_ext(dev, dev->image_storage.id);
 }
 
 void dt_dev_free_history_item(gpointer data)
@@ -957,18 +924,30 @@ void dt_dev_pop_history_items(dt_develop_t *dev)
 
 static void _cleanup_history(const int32_t imgid)
 {
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.history WHERE imgid = ?1", -1,
-                              &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+  _dev_history_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_dev_history_stmt_mutex);
 
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.masks_history WHERE imgid = ?1", -1,
-                              &stmt, NULL);
+  if(!_dev_history_delete_history_stmt)
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "DELETE FROM main.history WHERE imgid = ?1", -1,
+                                &_dev_history_delete_history_stmt, NULL);
+  sqlite3_stmt *stmt = _dev_history_delete_history_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+
+  if(!_dev_history_delete_masks_stmt)
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "DELETE FROM main.masks_history WHERE imgid = ?1", -1,
+                                &_dev_history_delete_masks_stmt, NULL);
+  stmt = _dev_history_delete_masks_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  sqlite3_step(stmt);
+
+  dt_pthread_mutex_unlock(&_dev_history_stmt_mutex);
 }
 
 guint dt_dev_mask_history_overload(GList *dev_history, guint threshold)
@@ -1004,14 +983,19 @@ static void _warn_about_history_overuse(GList *dev_history, int32_t imgid)
 void dt_dev_write_history_end_ext(const int history_end, const int32_t imgid)
 {
   // update history end
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "UPDATE main.images SET history_end = ?1 WHERE id = ?2", -1,
-                              &stmt, NULL);
+  _dev_history_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_dev_history_stmt_mutex);
+  if(!_dev_history_update_history_end_stmt)
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "UPDATE main.images SET history_end = ?1 WHERE id = ?2", -1,
+                                &_dev_history_update_history_end_stmt, NULL);
+  sqlite3_stmt *stmt = _dev_history_update_history_end_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, history_end);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
   sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+  dt_pthread_mutex_unlock(&_dev_history_stmt_mutex);
 }
 
 // helper used to synch a single history item with db
@@ -1019,31 +1003,44 @@ int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int
 {
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_item] writing history for module %s (%s) at pipe position %i for image %i...\n", h->op_name, h->multi_name, h->iop_order, imgid);
 
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT num FROM main.history WHERE imgid = ?1 AND num = ?2", -1, &stmt, NULL);
+  _dev_history_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_dev_history_stmt_mutex);
+
+  if(!_dev_history_select_num_stmt)
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT num FROM main.history WHERE imgid = ?1 AND num = ?2", -1,
+                                &_dev_history_select_num_stmt, NULL);
+  sqlite3_stmt *stmt = _dev_history_select_num_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, num);
   if(sqlite3_step(stmt) != SQLITE_ROW)
   {
-    sqlite3_finalize(stmt);
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "INSERT INTO main.history (imgid, num) VALUES (?1, ?2)", -1, &stmt, NULL);
+    if(!_dev_history_insert_num_stmt)
+      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                  "INSERT INTO main.history (imgid, num) VALUES (?1, ?2)", -1,
+                                  &_dev_history_insert_num_stmt, NULL);
+    stmt = _dev_history_insert_num_stmt;
+    sqlite3_reset(stmt);
+    sqlite3_clear_bindings(stmt);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, num);
     sqlite3_step(stmt);
   }
-  // printf("[dev write history item] writing %d - %s params %f %f\n", h->module->instance, h->module->op,
-  // *(float *)h->params, *(((float *)h->params)+1));
-  sqlite3_finalize(stmt);
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "UPDATE main.history"
-                              " SET operation = ?1, op_params = ?2, module = ?3, enabled = ?4, "
-                              "     blendop_params = ?7, blendop_version = ?8, multi_priority = ?9, multi_name = ?10"
-                              " WHERE imgid = ?5 AND num = ?6",
-                              -1, &stmt, NULL);
-  // clang-format on
+
+  if(!_dev_history_update_item_stmt)
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "UPDATE main.history"
+                                " SET operation = ?1, op_params = ?2, module = ?3, enabled = ?4, "
+                                "     blendop_params = ?7, blendop_version = ?8, multi_priority = ?9, multi_name = ?10"
+                                " WHERE imgid = ?5 AND num = ?6",
+                                -1, &_dev_history_update_item_stmt, NULL);
+    // clang-format on
+  stmt = _dev_history_update_item_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, h->module->op, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 2, h->params, h->module->params_size, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, h->module->version());
@@ -1054,9 +1051,9 @@ int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 8, dt_develop_blend_version());
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 9, h->multi_priority);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 10, h->multi_name, -1, SQLITE_TRANSIENT);
-
   sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+
+  dt_pthread_mutex_unlock(&_dev_history_stmt_mutex);
 
   // write masks (if any)
   if(h->forms)
@@ -1072,16 +1069,61 @@ int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int
   return 0;
 }
 
+void dt_dev_history_cleanup(void)
+{
+  _dev_history_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_dev_history_stmt_mutex);
+
+  if(_dev_history_delete_history_stmt)
+  {
+    sqlite3_finalize(_dev_history_delete_history_stmt);
+    _dev_history_delete_history_stmt = NULL;
+  }
+  if(_dev_history_delete_masks_stmt)
+  {
+    sqlite3_finalize(_dev_history_delete_masks_stmt);
+    _dev_history_delete_masks_stmt = NULL;
+  }
+  if(_dev_history_update_history_end_stmt)
+  {
+    sqlite3_finalize(_dev_history_update_history_end_stmt);
+    _dev_history_update_history_end_stmt = NULL;
+  }
+  if(_dev_history_select_num_stmt)
+  {
+    sqlite3_finalize(_dev_history_select_num_stmt);
+    _dev_history_select_num_stmt = NULL;
+  }
+  if(_dev_history_insert_num_stmt)
+  {
+    sqlite3_finalize(_dev_history_insert_num_stmt);
+    _dev_history_insert_num_stmt = NULL;
+  }
+  if(_dev_history_update_item_stmt)
+  {
+    sqlite3_finalize(_dev_history_update_item_stmt);
+    _dev_history_update_item_stmt = NULL;
+  }
+
+  dt_pthread_mutex_unlock(&_dev_history_stmt_mutex);
+
+  if(_dev_history_stmt_mutex_inited)
+  {
+    dt_pthread_mutex_destroy(&_dev_history_stmt_mutex);
+    _dev_history_stmt_mutex_inited = 0;
+  }
+}
+
 
 
 void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
 {
+  dt_image_t *cache_img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  if(!cache_img) return;
+
   _warn_about_history_overuse(dev->history, imgid);
 
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_ext] writing history for image %i...\n", imgid);
-
-  // Lock database
-  //dt_pthread_rwlock_wrlock(&darktable.database_threadsafe);
 
   _cleanup_history(imgid);
 
@@ -1099,17 +1141,11 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
   // write the current iop-order-list for this image
   dt_ioppr_write_iop_order_list(dev->iop_order_list, imgid);
 
-  dt_history_hash_write_from_history(imgid, DT_HISTORY_HASH_CURRENT);
-  dt_dev_append_changed_tag(imgid);
-  dt_image_cache_set_change_timestamp(darktable.image_cache, imgid);
+  cache_img->history_hash = dev->history_hash;
 
-  // Unlock database
-  //dt_pthread_rwlock_unlock(&darktable.database_threadsafe);
+  dt_image_cache_write_release(darktable.image_cache, cache_img, DT_IMAGE_CACHE_SAFE);
+  cache_img = NULL;
 
-  // We call dt_dev_write_history_ext only when history hash has changed,
-  // however, we use our C-based cumulative custom hash while the following
-  // fetches history MD5 hash from DB
-  //if(!dt_history_hash_is_mipmap_synced(imgid))
   dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
 
   // Don't refresh the thumbnail if we are in darkroom
@@ -1583,14 +1619,17 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolean no
   if(!dev->iop)
     dev->iop = dt_dev_load_modules(dev);
 
-  // Get our hown fresh copy of the image structure.
-  // Need to do it here, some modules rely on it to update their default params
+  // Ensure we have our own fresh copy of the image structure.
+  // Need to do it here, some modules rely on it to update their default params.
   // This is redundant with `_dt_dev_load_raw()` called from `dt_dev_load_image()`,
-  // but we don't always manipulate an history when/after loading an image, so we need to
-  // be sure.
-  dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-  dev->image_storage = *image;
-  dt_image_cache_read_release(darktable.image_cache, image);
+  // but we don't always manipulate an history when/after loading an image.
+  if(dev->image_storage.id != imgid)
+  {
+    dt_image_t *cache_img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+    if(!cache_img) return;
+    dev->image_storage = *cache_img;
+    dt_image_cache_read_release(darktable.image_cache, cache_img);
+  }
 
   gboolean legacy_params = FALSE;
 
@@ -1600,6 +1639,11 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolean no
   //dt_pthread_rwlock_rdlock(&darktable.database_threadsafe);
 
   gboolean first_run = _init_default_history(dev, imgid);
+
+  // Protect history DB reads with a cache read lock.
+  // Release it before applying history to modules to avoid deadlocks.
+  dt_image_t *read_lock_img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  if(!read_lock_img) return;
 
   sqlite3_stmt *stmt;
 
@@ -1650,6 +1694,9 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolean no
   // writes hist->forms for each history entry, from DB
   dt_masks_read_masks_history(dev, imgid);
 
+  dt_image_cache_read_release(darktable.image_cache, read_lock_img);
+  read_lock_img = NULL;
+
   // Now we have fully-populated history items:
   // Commit params to modules and publish the masks on the raster stack for other modules to find
   for(GList *history = g_list_first(dev->history); history; history = g_list_next(history))
@@ -1678,6 +1725,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolean no
 
   // Init global history hash to track changes during runtime
   dev->history_hash = dt_dev_history_get_hash(dev);
+  dev->image_storage.history_hash = dev->history_hash;
 
   // Write it straight away if we just inited the history
   // NOTE: if the embedded_jpg mode is set to "never" (= 0),
@@ -1688,13 +1736,14 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolean no
   // So we auto-write here only if we are in darkroom.
   if(first_run && dev == darktable.develop)
   {
-    dt_dev_write_history_ext(dev, imgid);
-
     // Resync our private copy of image image with DB,
     // mostly for DT_IMAGE_AUTO_PRESETS_APPLIED flag
-    image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+    dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
     *image = dev->image_storage;
+    dt_dev_append_changed_tag(imgid);
     dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
+    
+    dt_dev_write_history_ext(dev, imgid);
   }
   //else if(legacy_params)
   //  TODO: ask user for confirmation before saving updated history

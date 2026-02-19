@@ -636,9 +636,6 @@ static int32_t dt_control_duplicate_images_job_run(dt_job_t *job)
       else
         dt_history_copy_and_paste_on_image(imgid, newimgid, NULL, TRUE, TRUE);
 
-      // a duplicate should keep the change time stamp of the original
-      dt_image_cache_set_change_timestamp_from_image(darktable.image_cache, newimgid, imgid);
-
       dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF, NULL);
     }
     t = g_list_next(t);

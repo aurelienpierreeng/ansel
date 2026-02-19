@@ -53,6 +53,7 @@
 #include "common/file_location.h"
 #include "common/grealpath.h"
 #include "common/image_cache.h"
+#include "common/history.h"
 #include "common/imageio.h"
 #include "common/imageio_jpeg.h"
 #include "common/imageio_module.h"
@@ -110,6 +111,23 @@ static const int dt_mipmap_cache_exif_data_srgb_length
                       = sizeof(dt_mipmap_cache_exif_data_srgb) / sizeof(*dt_mipmap_cache_exif_data_srgb);
 static const int dt_mipmap_cache_exif_data_adobergb_length
                       = sizeof(dt_mipmap_cache_exif_data_adobergb) / sizeof(*dt_mipmap_cache_exif_data_adobergb);
+
+static gboolean _mipmap_cache_disk_hash_matches(const int32_t imgid)
+{
+  uint64_t history_hash = 0;
+  uint64_t mipmap_hash = 0;
+  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  if(img)
+  {
+    history_hash = img->history_hash;
+    mipmap_hash = img->mipmap_hash;
+    dt_image_cache_read_release(darktable.image_cache, img);
+  }
+
+  if(history_hash == 0 || mipmap_hash == 0) return FALSE;
+
+  return (mipmap_hash == history_hash);
+}
 
 struct dt_mipmap_buffer_dsc
 {
@@ -494,8 +512,15 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
     uint8_t *blob = NULL;
     dt_colorspaces_color_profile_type_t color_space = DT_COLORSPACE_DISPLAY;
     dt_imageio_jpeg_t jpg;
+    FILE *f = NULL;
 
-    FILE *f = g_fopen(filename, "rb");
+    if(!_mipmap_cache_disk_hash_matches(imgid))
+    {
+      g_unlink(filename);
+      goto finish;
+    }
+
+    f = g_fopen(filename, "rb");
     if(f == NULL) goto finish; // file doesn't exist
 
     fseek(f, 0, SEEK_END);
@@ -605,6 +630,7 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
       }
       else if(cache->cachedir[0] && write_to_disk && mip < DT_MIPMAP_F)
       {
+        gboolean wrote_to_disk = FALSE;
         // serialize to disk
         char filename[PATH_MAX] = {0};
         snprintf(filename, sizeof(filename), "%s.d/%d", cache->cachedir, mip);
@@ -647,13 +673,20 @@ void dt_mipmap_cache_deallocate_dynamic(void *data, dt_cache_entry_t *entry)
               exif = dt_mipmap_cache_exif_data_adobergb;
               exif_len = dt_mipmap_cache_exif_data_adobergb_length;
             }
-            if(dt_imageio_jpeg_write(filename, _get_buffer_from_dsc(dsc), dsc->width, dsc->height, MIN(100, MAX(10, cache_quality)), exif, exif_len))
+            if(dt_imageio_jpeg_write(filename, _get_buffer_from_dsc(dsc), dsc->width, dsc->height,
+                                     MIN(100, MAX(10, cache_quality)), exif, exif_len))
             {
 write_error:
               g_unlink(filename);
             }
+            else
+            {
+              wrote_to_disk = TRUE;
+            }
           }
           if(f) fclose(f);
+          if(wrote_to_disk)
+            dt_history_hash_set_mipmap(imgid, DT_IMAGE_CACHE_RELAXED);
         }
       }
     }
@@ -899,6 +932,8 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
              "[mipmap_cache] compute mip %d uint8 for image %i (%ix%i) from original file \n", mip,
              imgid, dsc->width, dsc->height);
     _init_8((uint8_t *)_get_buffer_from_dsc(dsc), &dsc->width, &dsc->height, &dsc->iscale, &dsc->color_space, imgid, mip);
+    if(dsc->width > 0 && dsc->height > 0)
+      dt_history_hash_set_mipmap(imgid, DT_IMAGE_CACHE_MINIMAL);
   }
   dsc->flags &= ~DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE;
   _paint_skulls(buf, dsc, mip);

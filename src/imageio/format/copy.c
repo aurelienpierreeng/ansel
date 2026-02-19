@@ -30,6 +30,7 @@
 #include "common/darktable.h"
 #include "common/debug.h"
 #include "common/exif.h"
+#include "common/image_cache.h"
 #include "common/imageio_module.h"
 #include "common/utility.h"
 #include "imageio/format/imageio_format_api.h"
@@ -65,12 +66,15 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
 
   // we got a copy of the file, now write the xmp data
   xmpfile = g_strconcat(targetfile, ".xmp", NULL);
-  if(dt_exif_xmp_write_with_imgpath(imgid, xmpfile, sourcefile) != 0)
+  dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  if(!img || dt_exif_xmp_write_with_imgpath(img, xmpfile, sourcefile) != 0)
   {
+    if(img) dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_MINIMAL);
     // something went wrong, unlink the copied image.
     g_unlink(targetfile);
     goto END;
   }
+  dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_MINIMAL);
 
   status = 0;
 END:

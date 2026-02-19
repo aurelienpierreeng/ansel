@@ -58,6 +58,7 @@
 #include <math.h>
 
 static sqlite3_stmt *_image_cache_load_stmt = NULL;
+static sqlite3_stmt *_image_cache_write_history_hash_stmt = NULL;
 static dt_pthread_mutex_t _image_cache_stmt_mutex;
 static gsize _image_cache_stmt_mutex_inited = 0;
 
@@ -70,6 +71,56 @@ static inline void _image_cache_stmt_mutex_ensure(void)
   }
 }
 
+static inline uint64_t _image_cache_self_hash(const dt_image_t *img)
+{
+  dt_image_t tmp = *img;
+
+  // These should be constant with regard to self integrity checks
+  // change_timestamp will be auto-updated if the hash changed,
+  // so it's handled out of the scope of what we do here
+  tmp.self_hash = 0;
+  tmp.mipmap_hash = 0;
+  tmp.change_timestamp = 0;
+  tmp.print_timestamp = 0;
+  tmp.import_timestamp = 0;
+  tmp.export_timestamp = 0;
+
+  return dt_hash(5381, (const char *)&tmp, sizeof(dt_image_t));
+}
+
+static inline void _image_cache_lock_init(dt_image_t *img)
+{
+  img->self_hash = _image_cache_self_hash(img);
+}
+
+static void _image_cache_write_history_hash(const dt_image_t *img)
+{
+  if(!img || img->id <= 0) return;
+
+  _image_cache_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_image_cache_stmt_mutex);
+  if(!_image_cache_write_history_hash_stmt)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(
+        dt_database_get(darktable.db),
+        "INSERT INTO main.history_hash (imgid, current_hash, basic_hash, auto_hash, mipmap_hash)"
+        " VALUES (?1, ?2, NULL, NULL, ?3)"
+        " ON CONFLICT (imgid)"
+        " DO UPDATE SET current_hash = ?2, basic_hash = NULL, auto_hash = NULL, mipmap_hash = ?3",
+        -1, &_image_cache_write_history_hash_stmt, NULL);
+    // clang-format on
+  }
+  sqlite3_stmt *stmt = _image_cache_write_history_hash_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->id);
+  DT_DEBUG_SQLITE3_BIND_INT64(stmt, 2, (sqlite3_int64)img->history_hash);
+  DT_DEBUG_SQLITE3_BIND_INT64(stmt, 3, (sqlite3_int64)img->mipmap_hash);
+  sqlite3_step(stmt);
+  dt_pthread_mutex_unlock(&_image_cache_stmt_mutex);
+}
+
 static sqlite3_stmt *_image_cache_get_stmt(void)
 {
   if(!_image_cache_load_stmt)
@@ -80,6 +131,8 @@ static sqlite3_stmt *_image_cache_get_stmt(void)
         "SELECT i.id, i.group_id, "
         "       (SELECT COUNT(id) FROM main.images WHERE group_id = i.group_id), "
         "       (SELECT COUNT(imgid) FROM main.history WHERE imgid = i.id), "
+        "       COALESCE((SELECT current_hash FROM main.history_hash WHERE imgid = i.id), 0), "
+        "       COALESCE((SELECT mipmap_hash FROM main.history_hash WHERE imgid = i.id), 0), "
         "       i.film_id, i.version, i.width, i.height, i.orientation, i.flags, "
         "       i.import_timestamp, i.change_timestamp, i.export_timestamp, i.print_timestamp, "
         "       i.exposure, i.exposure_bias, i.aperture, i.iso, i.focal_length, i.focus_distance, "
@@ -109,68 +162,70 @@ void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
   img->group_id = sqlite3_column_int(stmt, 1);
   img->group_members = (uint32_t)sqlite3_column_int(stmt, 2);
   img->history_items = (uint32_t)sqlite3_column_int(stmt, 3);
-  img->film_id = sqlite3_column_int(stmt, 4);
-  img->version = sqlite3_column_int(stmt, 5);
-  img->width = sqlite3_column_int(stmt, 6);
-  img->height = sqlite3_column_int(stmt, 7);
-  img->orientation = sqlite3_column_int(stmt, 8);
+  img->history_hash = sqlite3_column_int64(stmt, 4);
+  img->mipmap_hash = sqlite3_column_int64(stmt, 5);
+  img->film_id = sqlite3_column_int(stmt, 6);
+  img->version = sqlite3_column_int(stmt, 7);
+  img->width = sqlite3_column_int(stmt, 8);
+  img->height = sqlite3_column_int(stmt, 9);
+  img->orientation = sqlite3_column_int(stmt, 10);
   img->p_width = 0;
   img->p_height = 0;
-  img->flags = sqlite3_column_int(stmt, 9);
+  img->flags = sqlite3_column_int(stmt, 11);
   img->loader = LOADER_UNKNOWN;
-  img->import_timestamp = sqlite3_column_int64(stmt, 10);
-  img->change_timestamp = sqlite3_column_int64(stmt, 11);
-  img->export_timestamp = sqlite3_column_int64(stmt, 12);
-  img->print_timestamp = sqlite3_column_int64(stmt, 13);
-  img->exif_exposure = sqlite3_column_double(stmt, 14);
-  if(sqlite3_column_type(stmt, 15) == SQLITE_FLOAT)
-    img->exif_exposure_bias = sqlite3_column_double(stmt, 15);
+  img->import_timestamp = sqlite3_column_int64(stmt, 12);
+  img->change_timestamp = sqlite3_column_int64(stmt, 13);
+  img->export_timestamp = sqlite3_column_int64(stmt, 14);
+  img->print_timestamp = sqlite3_column_int64(stmt, 15);
+  img->exif_exposure = sqlite3_column_double(stmt, 16);
+  if(sqlite3_column_type(stmt, 17) == SQLITE_FLOAT)
+    img->exif_exposure_bias = sqlite3_column_double(stmt, 17);
   else
     img->exif_exposure_bias = NAN;
-  img->exif_aperture = sqlite3_column_double(stmt, 16);
-  img->exif_iso = sqlite3_column_double(stmt, 17);
-  img->exif_focal_length = sqlite3_column_double(stmt, 18);
-  img->exif_focus_distance = sqlite3_column_double(stmt, 19);
-  img->exif_datetime_taken = sqlite3_column_int64(stmt, 20);
-  if(sqlite3_column_type(stmt, 21) == SQLITE_FLOAT)
-    img->geoloc.longitude = sqlite3_column_double(stmt, 21);
+  img->exif_aperture = sqlite3_column_double(stmt, 18);
+  img->exif_iso = sqlite3_column_double(stmt, 19);
+  img->exif_focal_length = sqlite3_column_double(stmt, 20);
+  img->exif_focus_distance = sqlite3_column_double(stmt, 21);
+  img->exif_datetime_taken = sqlite3_column_int64(stmt, 22);
+  if(sqlite3_column_type(stmt, 23) == SQLITE_FLOAT)
+    img->geoloc.longitude = sqlite3_column_double(stmt, 23);
   else
     img->geoloc.longitude = NAN;
-  if(sqlite3_column_type(stmt, 22) == SQLITE_FLOAT)
-    img->geoloc.latitude = sqlite3_column_double(stmt, 22);
+  if(sqlite3_column_type(stmt, 24) == SQLITE_FLOAT)
+    img->geoloc.latitude = sqlite3_column_double(stmt, 24);
   else
     img->geoloc.latitude = NAN;
-  if(sqlite3_column_type(stmt, 23) == SQLITE_FLOAT)
-    img->geoloc.elevation = sqlite3_column_double(stmt, 23);
+  if(sqlite3_column_type(stmt, 25) == SQLITE_FLOAT)
+    img->geoloc.elevation = sqlite3_column_double(stmt, 25);
   else
     img->geoloc.elevation = NAN;
 
-  const char *filename = (const char *)sqlite3_column_text(stmt, 24);
+  const char *filename = (const char *)sqlite3_column_text(stmt, 26);
   if(filename) g_strlcpy(img->filename, filename, sizeof(img->filename));
-  const char *fullpath = (const char *)sqlite3_column_text(stmt, 25);
+  const char *fullpath = (const char *)sqlite3_column_text(stmt, 27);
   if(fullpath) g_strlcpy(img->fullpath, fullpath, sizeof(img->fullpath));
-  const char *maker = (const char *)sqlite3_column_text(stmt, 26);
+  const char *maker = (const char *)sqlite3_column_text(stmt, 28);
   if(maker) g_strlcpy(img->exif_maker, maker, sizeof(img->exif_maker));
-  const char *model = (const char *)sqlite3_column_text(stmt, 27);
+  const char *model = (const char *)sqlite3_column_text(stmt, 29);
   if(model) g_strlcpy(img->exif_model, model, sizeof(img->exif_model));
-  const char *lens = (const char *)sqlite3_column_text(stmt, 28);
+  const char *lens = (const char *)sqlite3_column_text(stmt, 30);
   if(lens) g_strlcpy(img->exif_lens, lens, sizeof(img->exif_lens));
-  const char *folder = (const char *)sqlite3_column_text(stmt, 29);
+  const char *folder = (const char *)sqlite3_column_text(stmt, 31);
   if(folder) g_strlcpy(img->folder, folder, sizeof(img->folder));
 
-  img->color_labels = sqlite3_column_int(stmt, 30);
+  img->color_labels = sqlite3_column_int(stmt, 32);
 
-  img->exif_crop = sqlite3_column_double(stmt, 31);
-  uint32_t tmp = sqlite3_column_int(stmt, 32);
+  img->exif_crop = sqlite3_column_double(stmt, 33);
+  uint32_t tmp = sqlite3_column_int(stmt, 34);
   memcpy(&img->legacy_flip, &tmp, sizeof(dt_image_raw_parameters_t));
-  const void *color_matrix = sqlite3_column_blob(stmt, 33);
+  const void *color_matrix = sqlite3_column_blob(stmt, 35);
   if(color_matrix)
     memcpy(img->d65_color_matrix, color_matrix, sizeof(img->d65_color_matrix));
   else
     img->d65_color_matrix[0] = NAN;
-  img->colorspace = sqlite3_column_int(stmt, 34);
-  img->raw_black_level = sqlite3_column_int(stmt, 35);
-  img->raw_white_point = sqlite3_column_int(stmt, 36);
+  img->colorspace = sqlite3_column_int(stmt, 36);
+  img->raw_black_level = sqlite3_column_int(stmt, 37);
+  img->raw_white_point = sqlite3_column_int(stmt, 38);
 
   if(img->fullpath[0])
     dt_image_local_copy_paths_from_fullpath(img->fullpath, img->id, img->local_copy_path,
@@ -307,6 +362,11 @@ void dt_image_cache_cleanup(dt_image_cache_t *cache)
     sqlite3_finalize(_image_cache_load_stmt);
     _image_cache_load_stmt = NULL;
   }
+  if(_image_cache_write_history_hash_stmt)
+  {
+    sqlite3_finalize(_image_cache_write_history_hash_stmt);
+    _image_cache_write_history_hash_stmt = NULL;
+  }
   if(_image_cache_stmt_mutex_inited)
   {
     dt_pthread_mutex_destroy(&_image_cache_stmt_mutex);
@@ -330,6 +390,7 @@ dt_image_t *dt_image_cache_get(dt_image_cache_t *cache, const int32_t imgid, cha
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
   dt_image_t *img = (dt_image_t *)entry->data;
   img->cache_entry = entry;
+  _image_cache_lock_init(img);
   return img;
 }
 
@@ -341,6 +402,7 @@ dt_image_t *dt_image_cache_testget(dt_image_cache_t *cache, const int32_t imgid,
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
   dt_image_t *img = (dt_image_t *)entry->data;
   img->cache_entry = entry;
+  _image_cache_lock_init(img);
   return img;
 }
 
@@ -369,6 +431,7 @@ dt_image_t *dt_image_cache_get_reload(dt_image_cache_t *cache, const int32_t img
     img->cache_entry = entry;
   }
 
+  _image_cache_lock_init(img);
   return img;
 }
 
@@ -414,7 +477,11 @@ void dt_image_cache_connect_info_changed_first(const struct dt_control_signal_t 
 void dt_image_cache_read_release(dt_image_cache_t *cache, const dt_image_t *img)
 {
   if(!img || img->id <= 0) return;
-  // just force the dt_image_t struct to make sure it has been locked before.
+  const uint64_t self_hash = _image_cache_self_hash(img);
+  if(self_hash != img->self_hash)
+    g_error("[image_cache] read lock modified image %d, you need to use a write lock\n", img->id);
+
+    // just force the dt_image_t struct to make sure it has been locked before.
   dt_cache_release(&cache->cache, img->cache_entry);
 }
 
@@ -428,8 +495,20 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
   } flip;
   if(img->id <= 0) return;
 
+  const uint64_t self_hash = _image_cache_self_hash(img);
+  const gboolean changed = (self_hash != img->self_hash);
+
+  if(changed)
+    img->change_timestamp = dt_datetime_now_to_gtimespan();
+
+  // even if nothing changed, we might need to write export/print timestamps 
+  // and mipmap hash, so we can't exit just yet.
+
   if(mode == DT_IMAGE_CACHE_MINIMAL)
   {
+    if(changed)
+      g_error("[image_cache] minimal write release modified image %d, you need to commit those changes to DB.\n", img->id);
+    
     dt_cache_release(&cache->cache, img->cache_entry);
     return;
   }
@@ -531,6 +610,7 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
   sqlite3_finalize(stmt);
 
   dt_colorlabels_set_labels(img->id, img->color_labels);
+  _image_cache_write_history_hash(img);
 
   const int32_t imgid = img->id;
   dt_cache_release(&cache->cache, img->cache_entry);
@@ -546,57 +626,11 @@ void dt_image_cache_remove(dt_image_cache_t *cache, const int32_t imgid)
   dt_cache_remove(&cache->cache, imgid);
 }
 
-/* set timestamps */
-void dt_image_cache_set_change_timestamp(dt_image_cache_t *cache, const int32_t imgid)
-{
-  if(imgid <= 0) return;
-  dt_cache_entry_t *entry = dt_cache_get(&cache->cache, imgid, DT_IMAGE_CACHE_SAFE);
-  if(!entry) return;
-  ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
-  dt_image_t *img = (dt_image_t *)entry->data;
-  img->cache_entry = entry;
-  img->change_timestamp = dt_datetime_now_to_gtimespan();
-  dt_image_cache_write_release(cache, img, DT_IMAGE_CACHE_SAFE);
-}
-
-void dt_image_cache_set_change_timestamp_from_image(dt_image_cache_t *cache, const int32_t imgid, const int32_t sourceid)
-{
-  if(imgid <= 0 || sourceid <= 0) return;
-
-  // get source timestamp
-  const dt_image_t *simg = dt_image_cache_get(cache, sourceid, 'r');
-  const GTimeSpan change_timestamp = simg->change_timestamp;
-  dt_image_cache_read_release(cache, simg);
-
-  dt_cache_entry_t *entry = dt_cache_get(&cache->cache, imgid, DT_IMAGE_CACHE_SAFE);
-  if(!entry) return;
-  ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
-  dt_image_t *img = (dt_image_t *)entry->data;
-  img->cache_entry = entry;
-  img->change_timestamp = change_timestamp;
-  dt_image_cache_write_release(cache, img, DT_IMAGE_CACHE_SAFE);
-}
-
-void dt_image_cache_unset_change_timestamp(dt_image_cache_t *cache, const int32_t imgid)
-{
-  if(imgid <= 0) return;
-  dt_cache_entry_t *entry = dt_cache_get(&cache->cache, imgid, DT_IMAGE_CACHE_SAFE);
-  if(!entry) return;
-  ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
-  dt_image_t *img = (dt_image_t *)entry->data;
-  img->cache_entry = entry;
-  img->change_timestamp = 0;
-  dt_image_cache_write_release(cache, img, DT_IMAGE_CACHE_SAFE);
-}
-
 void dt_image_cache_set_export_timestamp(dt_image_cache_t *cache, const int32_t imgid)
 {
   if(imgid <= 0) return;
-  dt_cache_entry_t *entry = dt_cache_get(&cache->cache, imgid, DT_IMAGE_CACHE_SAFE);
-  if(!entry) return;
-  ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
-  dt_image_t *img = (dt_image_t *)entry->data;
-  img->cache_entry = entry;
+  dt_image_t *img = dt_image_cache_get(cache, imgid, 'w');
+  if(!img) return;
   img->export_timestamp = dt_datetime_now_to_gtimespan();
   dt_image_cache_write_release(cache, img, DT_IMAGE_CACHE_SAFE);
 }
@@ -604,11 +638,8 @@ void dt_image_cache_set_export_timestamp(dt_image_cache_t *cache, const int32_t 
 void dt_image_cache_set_print_timestamp(dt_image_cache_t *cache, const int32_t imgid)
 {
   if(imgid <= 0) return;
-  dt_cache_entry_t *entry = dt_cache_get(&cache->cache, imgid, DT_IMAGE_CACHE_SAFE);
-  if(!entry) return;
-  ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
-  dt_image_t *img = (dt_image_t *)entry->data;
-  img->cache_entry = entry;
+  dt_image_t *img = dt_image_cache_get(cache, imgid, 'w');
+  if(!img) return;
   img->print_timestamp = dt_datetime_now_to_gtimespan();
   dt_image_cache_write_release(cache, img, DT_IMAGE_CACHE_SAFE);
 }
