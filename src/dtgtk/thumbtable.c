@@ -575,7 +575,7 @@ gboolean dt_thumbtable_get_thumbnail_info(dt_thumbtable_t *table, int32_t imgid,
   {
     for(int rowid = 0; rowid < table->collection_count; rowid++)
     {
-      if(table->lut[rowid].imgid == imgid)
+      if(table->lut[rowid].imgid == imgid && table->lut[rowid].thumb)
       {
         *out = table->lut[rowid].thumb->info;
         found = TRUE;
