@@ -49,11 +49,56 @@
 #include "common/datetime.h"
 #include "control/conf.h"
 #include "control/jobs.h"
+#include "control/signal.h"
 #include "develop/develop.h"
 
 #include <sqlite3.h>
 #include <inttypes.h>
 #include <math.h>
+
+static sqlite3_stmt *_image_cache_load_stmt = NULL;
+static dt_pthread_mutex_t _image_cache_stmt_mutex;
+static gsize _image_cache_stmt_mutex_inited = 0;
+
+static inline void _image_cache_stmt_mutex_ensure(void)
+{
+  if(g_once_init_enter(&_image_cache_stmt_mutex_inited))
+  {
+    dt_pthread_mutex_init(&_image_cache_stmt_mutex, NULL);
+    g_once_init_leave(&_image_cache_stmt_mutex_inited, 1);
+  }
+}
+
+static sqlite3_stmt *_image_cache_get_stmt(void)
+{
+  if(!_image_cache_load_stmt)
+  {
+    // clang-format off
+    DT_DEBUG_SQLITE3_PREPARE_V2(
+        dt_database_get(darktable.db),
+        "SELECT i.id, i.group_id, "
+        "       (SELECT COUNT(id) FROM main.images WHERE group_id = i.group_id), "
+        "       (SELECT COUNT(imgid) FROM main.history WHERE imgid = i.id), "
+        "       i.film_id, i.version, i.width, i.height, i.orientation, i.flags, "
+        "       i.import_timestamp, i.change_timestamp, i.export_timestamp, i.print_timestamp, "
+        "       i.exposure, i.exposure_bias, i.aperture, i.iso, i.focal_length, i.focus_distance, "
+        "       i.datetime_taken, i.longitude, i.latitude, i.altitude, "
+        "       i.filename, f.folder || '" G_DIR_SEPARATOR_S "' || i.filename, "
+        "       i.maker, i.model, i.lens, f.folder, "
+        "       COALESCE((SELECT SUM(1 << color) FROM main.color_labels WHERE imgid=i.id), 0), "
+        "       i.crop, i.raw_parameters, i.color_matrix, i.colorspace, "
+        "       i.raw_black, i.raw_maximum, i.aspect_ratio, i.output_width, i.output_height"
+        "  FROM main.images AS i"
+        "  LEFT JOIN main.film_rolls AS f ON f.id = i.film_id"
+        "  WHERE i.id = ?1",
+        -1, &_image_cache_load_stmt, NULL);
+    // clang-format on
+  }
+
+  sqlite3_reset(_image_cache_load_stmt);
+  sqlite3_clear_bindings(_image_cache_load_stmt);
+  return _image_cache_load_stmt;
+}
 
 void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
 {
@@ -186,35 +231,24 @@ void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
   dt_image_refresh_makermodel(img);
 }
 
-void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
+static void _image_cache_release_dynamic(dt_image_t *img)
 {
-  entry->cost = sizeof(dt_image_t);
+  g_free(img->profile);
+  img->profile = NULL;
+  img->profile_size = 0;
+  g_list_free_full(img->dng_gain_maps, g_free);
+  img->dng_gain_maps = NULL;
+}
 
-  dt_image_t *img = (dt_image_t *)g_malloc(sizeof(dt_image_t));
-  entry->data = img;
-  // load stuff from db and store in cache:
-  sqlite3_stmt *stmt;
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(
-      dt_database_get(darktable.db),
-      "SELECT i.id, i.group_id, "
-      "       (SELECT COUNT(id) FROM main.images WHERE group_id = i.group_id), "
-      "       (SELECT COUNT(imgid) FROM main.history WHERE imgid = i.id), "
-      "       i.film_id, i.version, i.width, i.height, i.orientation, i.flags, "
-      "       i.import_timestamp, i.change_timestamp, i.export_timestamp, i.print_timestamp, "
-      "       i.exposure, i.exposure_bias, i.aperture, i.iso, i.focal_length, i.focus_distance, "
-      "       i.datetime_taken, i.longitude, i.latitude, i.altitude, "
-      "       i.filename, f.folder || '" G_DIR_SEPARATOR_S "' || i.filename, "
-      "       i.maker, i.model, i.lens, f.folder, "
-      "       COALESCE((SELECT SUM(1 << color) FROM main.color_labels WHERE imgid=i.id), 0), "
-      "       i.crop, i.raw_parameters, i.color_matrix, i.colorspace, "
-      "       i.raw_black, i.raw_maximum, i.aspect_ratio, i.output_width, i.output_height"
-      "  FROM main.images AS i"
-      "  LEFT JOIN main.film_rolls AS f ON f.id = i.film_id"
-      "  WHERE i.id = ?1",
-      -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, entry->key);
+static void _image_cache_reload_from_db(dt_image_t *img, const uint32_t imgid)
+{
+  _image_cache_release_dynamic(img);
+
+  _image_cache_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_image_cache_stmt_mutex);
+
+  sqlite3_stmt *stmt = _image_cache_get_stmt();
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   if(sqlite3_step(stmt) == SQLITE_ROW)
   {
     dt_image_from_stmt(img, stmt);
@@ -235,10 +269,20 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
   {
     dt_image_init(img);
     img->id = -1;
-    fprintf(stderr, "[image_cache_allocate] failed to open image %" PRIu32 " from database: %s\n", entry->key,
+    fprintf(stderr, "[image_cache_reload] failed to open image %" PRIu32 " from database: %s\n", imgid,
             sqlite3_errmsg(dt_database_get(darktable.db)));
   }
-  sqlite3_finalize(stmt);
+
+  dt_pthread_mutex_unlock(&_image_cache_stmt_mutex);
+}
+
+void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
+{
+  entry->cost = sizeof(dt_image_t);
+
+  dt_image_t *img = (dt_image_t *)g_malloc(sizeof(dt_image_t));
+  entry->data = img;
+  _image_cache_reload_from_db(img, entry->key);
 
   img->cache_entry = entry; // init backref
 }
@@ -271,6 +315,17 @@ void dt_image_cache_init(dt_image_cache_t *cache)
 
 void dt_image_cache_cleanup(dt_image_cache_t *cache)
 {
+  if(_image_cache_load_stmt)
+  {
+    sqlite3_finalize(_image_cache_load_stmt);
+    _image_cache_load_stmt = NULL;
+  }
+  if(_image_cache_stmt_mutex_inited)
+  {
+    dt_pthread_mutex_destroy(&_image_cache_stmt_mutex);
+    _image_cache_stmt_mutex_inited = 0;
+  }
+
   dt_cache_cleanup(&cache->cache);
 }
 
@@ -302,6 +357,34 @@ dt_image_t *dt_image_cache_testget(dt_image_cache_t *cache, const int32_t imgid,
   return img;
 }
 
+// Always reload the cache entry from DB before returning it.
+// This is critical for IMAGE_INFO_CHANGED: other handlers will read from the cache.
+dt_image_t *dt_image_cache_get_reload(dt_image_cache_t *cache, const int32_t imgid, char mode)
+{
+  if(imgid <= 0) return NULL;
+
+  // We must take a write lock to reload in-place, then demote to read if requested.
+  dt_cache_entry_t *entry = dt_cache_get(&cache->cache, (uint32_t)imgid, 'w');
+  ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
+  dt_image_t *img = (dt_image_t *)entry->data;
+  _image_cache_reload_from_db(img, (uint32_t)imgid);
+  img->cache_entry = entry;
+
+  if(mode == 'r')
+  {
+    // demote the lock to read mode (see mipmap cache for rationale)
+    entry->_lock_demoting = 1;
+    dt_cache_release(&cache->cache, entry);
+    entry = dt_cache_get(&cache->cache, (uint32_t)imgid, 'r');
+    entry->_lock_demoting = 0;
+    ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
+    img = (dt_image_t *)entry->data;
+    img->cache_entry = entry;
+  }
+
+  return img;
+}
+
 int dt_image_cache_seed(dt_image_cache_t *cache, const dt_image_t *img)
 {
   if(!cache || !img || img->id <= 0) return -1;
@@ -315,6 +398,29 @@ int dt_image_cache_seed(dt_image_cache_t *cache, const dt_image_t *img)
   seeded.cache_entry = NULL;
 
   return dt_cache_seed(&cache->cache, (uint32_t)seeded.id, &seeded, sizeof(dt_image_t), sizeof(dt_image_t), FALSE);
+}
+
+// This callback must run before any other DT_SIGNAL_IMAGE_INFO_CHANGED handler.
+// The signal notifies about DB changes, and most listeners read image info from the cache.
+// We therefore force a DB reload here so every subsequent handler sees up-to-date data.
+static void _image_cache_info_changed_reload_callback(gpointer instance, gpointer imgs, gpointer user_data)
+{
+  for(GList *l = g_list_first((GList *)imgs); l; l = g_list_next(l))
+  {
+    const int32_t imgid = GPOINTER_TO_INT(l->data);
+    if(imgid <= 0) continue;
+
+    dt_image_t *img = dt_image_cache_get_reload(darktable.image_cache, imgid, 'r');
+    if(img)
+      dt_image_cache_read_release(darktable.image_cache, img);
+  }
+}
+
+void dt_image_cache_connect_info_changed_first(const struct dt_control_signal_t *ctlsig)
+{
+  // Must be connected early to run before any other handler.
+  dt_control_signal_connect(ctlsig, DT_SIGNAL_IMAGE_INFO_CHANGED,
+                            G_CALLBACK(_image_cache_info_changed_reload_callback), NULL);
 }
 
 // drops the read lock on an image struct

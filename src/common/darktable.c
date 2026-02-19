@@ -1115,6 +1115,9 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
   // Initialize the signal system
   darktable.signals = dt_control_signal_init();
+  // Critical: ensure image cache gets refreshed BEFORE any other IMAGE_INFO_CHANGED handlers.
+  // This handler reloads dt_image_t from DB so all downstream callbacks see fresh metadata.
+  dt_image_cache_connect_info_changed_first(darktable.signals);
 
   // Make sure that the database and xmp files are in sync
   // We need conf and db to be up and running for that which is the case here.

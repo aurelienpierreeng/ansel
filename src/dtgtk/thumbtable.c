@@ -1017,7 +1017,7 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
     entry.thumb = NULL;
 
     dt_image_t *info = &entry.info;
-    dt_image_from_stmt(info, stmt);   
+    dt_image_from_stmt(info, stmt);
 
 #ifndef NDEBUG
     dt_thumbtable_info_debug_assert_matches_cache(info, info->history_items, info->group_members);

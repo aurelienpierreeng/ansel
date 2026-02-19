@@ -69,6 +69,10 @@ dt_image_t *dt_image_cache_get(dt_image_cache_t *cache, const int32_t imgid, cha
 // is currently unavailable.
 dt_image_t *dt_image_cache_testget(dt_image_cache_t *cache, const int32_t imgid, char mode);
 
+// like dt_image_cache_get/testget, but always reloads the image data from the database
+// before returning the cache entry.
+dt_image_t *dt_image_cache_get_reload(dt_image_cache_t *cache, const int32_t imgid, char mode);
+
 // seed an image cache entry from an already-populated dt_image_t (no SQL).
 // returns 0 on insert, 1 if already present, -1 on failure.
 int dt_image_cache_seed(dt_image_cache_t *cache, const dt_image_t *img);
@@ -81,6 +85,11 @@ int dt_image_cache_seed(dt_image_cache_t *cache, const dt_image_t *img);
 // lens, folder, color_labels, crop, raw_parameters, color_matrix, colorspace, raw_black, raw_maximum,
 // aspect_ratio, output_width, output_height.
 void dt_image_from_stmt(dt_image_t *info, sqlite3_stmt *stmt);
+
+struct dt_control_signal_t;
+// Register an IMAGE_INFO_CHANGED handler that force-reloads image cache entries.
+// This must be connected before any other handler, so everyone observes fresh data.
+void dt_image_cache_connect_info_changed_first(const struct dt_control_signal_t *ctlsig);
 
 // drops the read lock on an image struct
 void dt_image_cache_read_release(dt_image_cache_t *cache, const dt_image_t *img);
