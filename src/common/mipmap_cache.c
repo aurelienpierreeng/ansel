@@ -124,8 +124,6 @@ static gboolean _mipmap_cache_disk_hash_matches(const int32_t imgid)
     dt_image_cache_read_release(darktable.image_cache, img);
   }
 
-  if(history_hash == 0 || mipmap_hash == 0) return FALSE;
-
   return (mipmap_hash == history_hash);
 }
 

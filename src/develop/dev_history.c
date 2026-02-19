@@ -1725,7 +1725,6 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolean no
 
   // Init global history hash to track changes during runtime
   dev->history_hash = dt_dev_history_get_hash(dev);
-  dev->image_storage.history_hash = dev->history_hash;
 
   // Write it straight away if we just inited the history
   // NOTE: if the embedded_jpg mode is set to "never" (= 0),
