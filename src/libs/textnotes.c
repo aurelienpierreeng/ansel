@@ -23,6 +23,7 @@
 #include "common/image_cache.h"
 #include "common/variables.h"
 #include "control/control.h"
+#include "control/jobs.h"
 #include "control/signal.h"
 #include "gui/gtk.h"
 #include "gui/gtkentry.h"
@@ -68,6 +69,7 @@ typedef struct dt_lib_textnotes_t
   gchar *height_setting;
   dt_variables_params_t *vars_params;
   int32_t imgid;
+  uint64_t load_token;
   gboolean loading;
   gboolean dirty;
   gboolean rendering;
@@ -103,8 +105,28 @@ static void _render_preview(dt_lib_textnotes_t *d, const char *text);
 static void _update_for_current_image(dt_lib_module_t *self);
 static gboolean _image_has_txt_flag(const int32_t imgid);
 static gboolean _set_image_paths(dt_lib_textnotes_t *d, const int32_t imgid);
-static char *_image_text_path(dt_lib_textnotes_t *d);
 static void _clear_variables_cache(dt_lib_textnotes_t *d);
+static gboolean _textnotes_load_finish_idle(gpointer user_data);
+static int32_t _textnotes_load_job_run(dt_job_t *job);
+static void _textnotes_load_job_state(dt_job_t *job, dt_job_state_t state);
+static void _textnotes_load_job_cleanup(void *data);
+
+typedef struct dt_textnotes_load_job_t
+{
+  dt_lib_module_t *self;
+  uint64_t token;
+  gchar *path;
+  gchar *text;
+  gboolean loaded;
+} dt_textnotes_load_job_t;
+
+typedef struct dt_textnotes_load_result_t
+{
+  dt_lib_module_t *self;
+  uint64_t token;
+  gchar *text;
+  gboolean loaded;
+} dt_textnotes_load_result_t;
 
 static gchar *_get_buffer_text(GtkTextBuffer *buffer)
 {
@@ -1592,18 +1614,16 @@ static void _update_mtime_label(dt_lib_module_t *self)
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
   if(!d->mtime_label) return;
   if(!dt_lib_gui_get_expanded(self)) return;
-  char *path = _image_text_path(d);
-  if(!path)
+  if(!d->path || !_image_has_txt_flag(d->imgid))
   {
     _clear_mtime_label(d);
     return;
   }
 
   GStatBuf statbuf;
-  if(g_stat(path, &statbuf) != 0)
+  if(g_stat(d->path, &statbuf) != 0)
   {
     _clear_mtime_label(d);
-    g_free(path);
     return;
   }
 
@@ -1624,7 +1644,6 @@ static void _update_mtime_label(dt_lib_module_t *self)
   }
 
   if(gdt) g_date_time_unref(gdt);
-  g_free(path);
 }
 
 static void _toggle_checklist_at_line(dt_lib_module_t *self, const int line_no)
@@ -1817,17 +1836,6 @@ static void _clear_variables_cache(dt_lib_textnotes_t *d)
   d->vars_params = NULL;
 }
 
-static char *_image_text_path(dt_lib_textnotes_t *d)
-{
-  if(!d || d->imgid <= 0) return NULL;
-  if(!_image_has_txt_flag(d->imgid)) return NULL;
-
-  if(!_set_image_paths(d, d->imgid))
-    return NULL;
-
-  return dt_image_build_text_path_from_path(d->image_path);
-}
-
 static gboolean _set_image_paths(dt_lib_textnotes_t *d, const int32_t imgid)
 {
   if(!d) return FALSE;
@@ -1862,6 +1870,43 @@ static char *_text_sidecar_save_path(dt_lib_textnotes_t *d, const int32_t imgid)
   if(!_set_image_paths(d, imgid))
     return NULL;
   return dt_image_build_text_path_from_path(d->image_path);
+}
+
+static int32_t _textnotes_load_job_run(dt_job_t *job)
+{
+  dt_textnotes_load_job_t *params = dt_control_job_get_params(job);
+  if(!params) return 1;
+
+  if(params->path && g_file_get_contents(params->path, &params->text, NULL, NULL))
+    params->loaded = TRUE;
+
+  if(!params->text) params->text = g_strdup("");
+  return 0;
+}
+
+static void _textnotes_load_job_cleanup(void *data)
+{
+  dt_textnotes_load_job_t *params = data;
+  if(!params) return;
+  g_free(params->path);
+  g_free(params->text);
+  g_free(params);
+}
+
+static void _textnotes_load_job_state(dt_job_t *job, dt_job_state_t state)
+{
+  if(state != DT_JOB_STATE_FINISHED) return;
+  dt_textnotes_load_job_t *params = dt_control_job_get_params(job);
+  if(!params) return;
+
+  dt_textnotes_load_result_t *result = g_new0(dt_textnotes_load_result_t, 1);
+  result->self = params->self;
+  result->token = params->token;
+  result->text = params->text ? params->text : g_strdup("");
+  result->loaded = params->loaded;
+  params->text = NULL;
+
+  g_idle_add(_textnotes_load_finish_idle, result);
 }
 
 static void _save_and_render(dt_lib_module_t *self)
@@ -1951,6 +1996,40 @@ static void _toggle_mode(GtkToggleButton *button, dt_lib_module_t *self)
   }
 }
 
+static gboolean _textnotes_load_finish_idle(gpointer user_data)
+{
+  dt_textnotes_load_result_t *result = (dt_textnotes_load_result_t *)user_data;
+  if(!result) return G_SOURCE_REMOVE;
+
+  dt_lib_module_t *self = result->self;
+  if(!self || !self->data) goto cleanup;
+  dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
+
+  if(result->token != d->load_token) goto cleanup;
+
+  _set_edit_text(d, result->text);
+  d->dirty = FALSE;
+
+  if(result->loaded) _ensure_has_txt_flag(d->imgid);
+
+  if(d->mode_toggle && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->mode_toggle)))
+    _toggle_mode(GTK_TOGGLE_BUTTON(d->mode_toggle), self);
+  else
+    _render_preview(d, result->text);
+
+  gtk_widget_set_sensitive(GTK_WIDGET(d->edit_view), TRUE);
+  gtk_widget_set_sensitive(d->mode_toggle, TRUE);
+  if(result->loaded)
+    _update_mtime_label(self);
+  else
+    _clear_mtime_label(d);
+
+cleanup:
+  g_free(result->text);
+  g_free(result);
+  return G_SOURCE_REMOVE;
+}
+
 static void _load_for_image(dt_lib_module_t *self, const int32_t imgid)
 {
   dt_lib_textnotes_t *d = (dt_lib_textnotes_t *)self->data;
@@ -1977,23 +2056,40 @@ static void _load_for_image(dt_lib_module_t *self, const int32_t imgid)
   gtk_widget_set_sensitive(d->mode_toggle, has_img);
   if(has_img) d->path = _text_sidecar_save_path(d, imgid);
 
-  gchar *text = NULL;
-  char *existing_path = _image_text_path(d);
-  if(existing_path && g_file_get_contents(existing_path, &text, NULL, NULL))
-    _ensure_has_txt_flag(imgid);
-  if(!text) text = g_strdup("");
-
-  _set_edit_text(d, text);
+  _set_edit_text(d, "");
   d->dirty = FALSE;
 
-  if(d->mode_toggle && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->mode_toggle)))
-    _toggle_mode(GTK_TOGGLE_BUTTON(d->mode_toggle), self);
-  else
-    _render_preview(d, text);
+  if(d->preview_view)
+  {
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(d->preview_view);
+    gtk_text_buffer_set_text(buffer, "", -1);
+  }
+  _clear_mtime_label(d);
 
-  g_free(existing_path);
-  g_free(text);
-  _update_mtime_label(self);
+  if(!has_img) return;
+
+  const gboolean has_text = _image_has_txt_flag(imgid);
+  if(!has_text || !d->path) return;
+
+  gtk_widget_set_sensitive(GTK_WIDGET(d->edit_view), FALSE);
+  gtk_widget_set_sensitive(d->mode_toggle, FALSE);
+
+  d->load_token++;
+  dt_job_t *job = dt_control_job_create(&_textnotes_load_job_run, "textnotes load %d", imgid);
+  if(!job)
+  {
+    gtk_widget_set_sensitive(GTK_WIDGET(d->edit_view), TRUE);
+    gtk_widget_set_sensitive(d->mode_toggle, TRUE);
+    return;
+  }
+
+  dt_textnotes_load_job_t *params = g_new0(dt_textnotes_load_job_t, 1);
+  params->self = self;
+  params->token = d->load_token;
+  params->path = g_strdup(d->path);
+  dt_control_job_set_params(job, params, _textnotes_load_job_cleanup);
+  dt_control_job_set_state_callback(job, _textnotes_load_job_state);
+  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_BG, job);
 }
 
 static void _image_changed_callback(gpointer instance, gpointer user_data)
