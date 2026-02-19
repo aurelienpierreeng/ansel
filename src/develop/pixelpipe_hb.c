@@ -1058,6 +1058,8 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                     const size_t in_bpp, const size_t bpp,
                                     dt_pixel_cache_entry_t *input_entry, dt_pixel_cache_entry_t *output_entry)
 {
+  dt_iop_colorspace_type_t input_cst_cl = input_format->cst;
+  
   // Not properly speaking an error, but go to CPU fallback straight away
   gboolean no_opencl = !_is_opencl_supported(pipe, piece, module) || !pipe->opencl_enabled;
   if(no_opencl)
@@ -1075,7 +1077,6 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   // so we send NULL to by-pass
   const dt_iop_order_iccprofile_info_t *const work_profile
       = (input_format->cst != IOP_CS_RAW) ? dt_ioppr_get_pipe_work_profile_info(pipe) : NULL;
-  dt_iop_colorspace_type_t input_cst_cl = input_format->cst;
 
   const float required_factor_cl = fmaxf(1.0f, (cl_mem_input != NULL) 
                                     ? tiling->factor_cl - 1.0f 
