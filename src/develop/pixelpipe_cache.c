@@ -92,6 +92,12 @@ typedef struct dt_cache_clmem_t
 void _non_thread_safe_cache_ref_count_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, gboolean lock,
                                             dt_pixel_cache_entry_t *cache_entry);
 static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry);
+static void _pixelpipe_cache_finalize_entry(dt_pixel_cache_entry_t *cache_entry, void **data,
+                                            dt_iop_buffer_dsc_t **dsc, const char *message);
+static dt_pixel_cache_entry_t *_pixelpipe_cache_create_entry_locked(dt_dev_pixelpipe_cache_t *cache,
+                                                                    const uint64_t hash, const size_t size,
+                                                                    const dt_iop_buffer_dsc_t *dsc,
+                                                                    const char *name, const int id);
 static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, const size_t size,
                                                         const dt_iop_buffer_dsc_t dsc, const char *name, const int id,
                                                         dt_dev_pixelpipe_cache_t *cache, gboolean alloc,
@@ -130,6 +136,16 @@ void dt_pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char *mes
   dt_print(DT_DEBUG_CACHE, "[pixelpipe] cache entry %" PRIu64 ": %s (%lu MiB - age %" PRId64 " - hits %i - refs %i) %s\n", 
            cache_entry->hash, cache_entry->name, dt_pixel_cache_get_size(cache_entry), 
            cache_entry->age, cache_entry->hits, dt_atomic_get_int(&cache_entry->refcount), message);
+}
+
+static void _pixelpipe_cache_finalize_entry(dt_pixel_cache_entry_t *cache_entry, void **data,
+                                            dt_iop_buffer_dsc_t **dsc, const char *message)
+{
+  cache_entry->age = g_get_monotonic_time(); // Update MRU timestamp
+  if(data)
+    *data = cache_entry->data ? __builtin_assume_aligned(cache_entry->data, DT_CACHELINE_BYTES) : NULL;
+  if(dsc) *dsc = &cache_entry->dsc;
+  dt_pixel_cache_message(cache_entry, message, FALSE);
 }
 
 
@@ -179,7 +195,6 @@ int dt_dev_pixelpipe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const uint64_
 
 void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid)
 {
-  if(!cache) return;
   if(devid >= 0) dt_opencl_events_wait_for(devid);
   dt_pthread_mutex_lock(&cache->lock);
   GHashTableIter iter;
@@ -285,7 +300,6 @@ int dt_dev_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t *cache)
 void *dt_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
                                int width, int height, int bpp, int flags, int *out_cst)
 {
-  if(!entry || !host_ptr || width <= 0 || height <= 0 || bpp <= 0) return NULL;
   if(out_cst) *out_cst = -1;
 
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
@@ -310,11 +324,6 @@ void *dt_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_ptr, in
 void dt_pixel_cache_clmem_put(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
                               int width, int height, int bpp, int flags, int cst, void *mem)
 {
-  if(!entry || !mem || !host_ptr || width <= 0 || height <= 0 || bpp <= 0)
-  {
-    dt_opencl_release_mem_object(mem);
-    return;
-  }
 
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
   for(GList *l = entry->cl_mem_list; l; l = l->next)
@@ -360,8 +369,6 @@ void dt_pixel_cache_clmem_put(dt_pixel_cache_entry_t *entry, void *host_ptr, int
 
 void dt_pixel_cache_clmem_flush(dt_pixel_cache_entry_t *entry)
 {
-  if(!entry) return;
-
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
   for(GList *l = entry->cl_mem_list; l; l = l->next)
   {
@@ -376,8 +383,6 @@ void dt_pixel_cache_clmem_flush(dt_pixel_cache_entry_t *entry)
 
 static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid)
 {
-  if(!entry) return;
-
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
   GList *l = entry->cl_mem_list;
   while(l)
@@ -575,7 +580,6 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
 
 static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
 {
-  if(!cache_entry) return;
   dt_pixel_cache_message(cache_entry, "freed", FALSE);
 
   if(cache_entry->data)
@@ -631,7 +635,6 @@ dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
 
 void dt_dev_pixelpipe_cache_cleanup(dt_dev_pixelpipe_cache_t *cache)
 {
-  if(!cache) return;
   g_hash_table_destroy(cache->external_entries);
   g_hash_table_destroy(cache->entries);
   cache->external_entries = NULL;
@@ -646,6 +649,23 @@ void dt_dev_pixelpipe_cache_cleanup(dt_dev_pixelpipe_cache_t *cache)
   }
 }
 
+static dt_pixel_cache_entry_t *_pixelpipe_cache_create_entry_locked(dt_dev_pixelpipe_cache_t *cache,
+                                                                    const uint64_t hash, const size_t size,
+                                                                    const dt_iop_buffer_dsc_t *dsc,
+                                                                    const char *name, const int id)
+{
+  dt_pixel_cache_entry_t *cache_entry = dt_pixel_cache_new_entry(hash, size, *dsc, name, id, cache, FALSE, cache->entries);
+  if(!cache_entry) return NULL;
+
+  // Increase ref_count, consumer will have to decrease it
+  _non_thread_safe_cache_ref_count_entry(cache, hash, TRUE, cache_entry);
+
+  // Acquire write lock so caller can populate data safely
+  dt_dev_pixelpipe_cache_wrlock_entry(cache, hash, TRUE, cache_entry);
+
+  return cache_entry;
+}
+
 
 int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
                                const size_t size, const char *name, const int id,
@@ -657,55 +677,37 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
   cache->queries++;
 
   dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
-  const gboolean cache_entry_found = (cache_entry != NULL);
-
-  if(cache_entry_found)
+  if(cache_entry)
   {
-    // Existing entry: increment hit counter
     cache->hits++;
-
-    // Increase ref_count, consumer will have to decrease it
     _non_thread_safe_cache_ref_count_entry(cache, hash, TRUE, cache_entry);
-    
-    // Release cache lock BEFORE acquiring entry locks to avoid deadlock
     dt_pthread_mutex_unlock(&cache->lock);
+    _pixelpipe_cache_finalize_entry(cache_entry, data, dsc, "found");
+    if(entry) *entry = cache_entry;
+    return 0;
   }
-  else
+
+  cache_entry = _pixelpipe_cache_create_entry_locked(cache, hash, size, *dsc, name, id);
+  if(!cache_entry)
   {
-    // New entry: create and allocate
-    cache_entry = dt_pixel_cache_new_entry(hash, size, **dsc, name, id, cache, FALSE, cache->entries);
-    
-    if(!cache_entry)
-    {
-      dt_print(DT_DEBUG_CACHE, "couldn't allocate new cache entry %" PRIu64 "\n", hash);
-      dt_pthread_mutex_unlock(&cache->lock);
-      if(entry) *entry = NULL;
-      return 1;
-    }
-
-    // Increase ref_count, consumer will have to decrease it
-    _non_thread_safe_cache_ref_count_entry(cache, hash, TRUE, cache_entry);
-    
-    // Acquire write lock so caller can populate data safely
-    dt_dev_pixelpipe_cache_wrlock_entry(cache, hash, TRUE, cache_entry);
-
-    // Release cache lock AFTER acquiring entry locks to prevent other threads to capture it in-between
+    dt_print(DT_DEBUG_CACHE, "couldn't allocate new cache entry %" PRIu64 "\n", hash);
     dt_pthread_mutex_unlock(&cache->lock);
-
-    // Alloc after releasing the lock for better runtimes
-    if(alloc) dt_pixel_cache_alloc(cache, cache_entry);
-
-    dt_print(DT_DEBUG_CACHE,"[pixelpipe_cache] Write-lock on entry (new cache entry %" PRIu64 " for %s pipeline)\n", hash, name);
+    if(entry) *entry = NULL;
+    return 1;
   }
 
-  // Finalize and return
-  cache_entry->age = g_get_monotonic_time(); // Update MRU timestamp
-  *data = cache_entry->data ? __builtin_assume_aligned(cache_entry->data, DT_CACHELINE_BYTES) : NULL;
-  *dsc = &cache_entry->dsc;
-  dt_pixel_cache_message(cache_entry, cache_entry_found ? "found" : "created", FALSE);
+  // Release cache lock AFTER acquiring entry locks to prevent other threads to capture it in-between
+  dt_pthread_mutex_unlock(&cache->lock);
+
+  // Alloc after releasing the lock for better runtimes
+  if(alloc) dt_pixel_cache_alloc(cache, cache_entry);
+
+  dt_print(DT_DEBUG_CACHE, "[pixelpipe_cache] Write-lock on entry (new cache entry %" PRIu64 " for %s pipeline)\n",
+           hash, name);
+  _pixelpipe_cache_finalize_entry(cache_entry, data, dsc, "created");
 
   if(entry) *entry = cache_entry;
-  return !cache_entry_found;
+  return 1;
 }
 
 int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
@@ -719,12 +721,7 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
   if(cache_entry)
   {
     cache->hits++;
-
-    // Set the time after we get the lock
-    cache_entry->age = g_get_monotonic_time(); // this is the MRU entry
-    if(data) *data = cache_entry->data ? __builtin_assume_aligned(cache_entry->data, DT_CACHELINE_BYTES) : NULL;
-    if(dsc) *dsc = &cache_entry->dsc;
-    dt_pixel_cache_message(cache_entry, "found", FALSE);
+    _pixelpipe_cache_finalize_entry(cache_entry, data, dsc, "found");
   }
 
   dt_pthread_mutex_unlock(&cache->lock);
@@ -833,18 +830,17 @@ void _non_thread_safe_cache_ref_count_entry(dt_dev_pixelpipe_cache_t *cache, con
   if(cache_entry == NULL)
     cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
 
-  if(cache_entry)
+  if(cache_entry == NULL) return;
+
+  if(lock)
   {
-    if(lock)
-    {
-      dt_atomic_add_int(&cache_entry->refcount, 1);
-      dt_pixel_cache_message(cache_entry, "ref count ++", TRUE);
-    }
-    else
-    {
-      dt_atomic_sub_int(&cache_entry->refcount, 1);
-      dt_pixel_cache_message(cache_entry, "ref count --", TRUE);
-    }
+    dt_atomic_add_int(&cache_entry->refcount, 1);
+    dt_pixel_cache_message(cache_entry, "ref count ++", TRUE);
+  }
+  else
+  {
+    dt_atomic_sub_int(&cache_entry->refcount, 1);
+    dt_pixel_cache_message(cache_entry, "ref count --", TRUE);
   }
 }
 
@@ -864,18 +860,15 @@ void dt_dev_pixelpipe_cache_wrlock_entry(dt_dev_pixelpipe_cache_t *cache, const 
   if(cache_entry == NULL)
     cache_entry = dt_dev_pixelpipe_cache_get_entry(cache, hash);
 
-  if(cache_entry)
+  if(lock)
   {
-    if(lock)
-    {
-      dt_pthread_rwlock_wrlock(&cache_entry->lock);
-      dt_pixel_cache_message(cache_entry, "write lock", TRUE);
-    }
-    else
-    {
-      dt_pthread_rwlock_unlock(&cache_entry->lock);
-      dt_pixel_cache_message(cache_entry, "write unlock", TRUE);
-    }
+    dt_pthread_rwlock_wrlock(&cache_entry->lock);
+    dt_pixel_cache_message(cache_entry, "write lock", TRUE);
+  }
+  else
+  {
+    dt_pthread_rwlock_unlock(&cache_entry->lock);
+    dt_pixel_cache_message(cache_entry, "write unlock", TRUE);
   }
 }
 
@@ -886,18 +879,15 @@ void dt_dev_pixelpipe_cache_rdlock_entry(dt_dev_pixelpipe_cache_t *cache, const 
   if(cache_entry == NULL)
     cache_entry = dt_dev_pixelpipe_cache_get_entry(cache, hash);
 
-  if(cache_entry)
+  if(lock)
   {
-    if(lock)
-    {
-      dt_pthread_rwlock_rdlock(&cache_entry->lock);
-      dt_pixel_cache_message(cache_entry, "read lock", TRUE);
-    }
-    else
-    {
-      dt_pthread_rwlock_unlock(&cache_entry->lock);
-      dt_pixel_cache_message(cache_entry, "read unlock", TRUE);
-    }
+    dt_pthread_rwlock_rdlock(&cache_entry->lock);
+    dt_pixel_cache_message(cache_entry, "read lock", TRUE);
+  }
+  else
+  {
+    dt_pthread_rwlock_unlock(&cache_entry->lock);
+    dt_pixel_cache_message(cache_entry, "read unlock", TRUE);
   }
 }
 
@@ -909,7 +899,7 @@ void dt_dev_pixelpipe_cache_flag_auto_destroy(dt_dev_pixelpipe_cache_t *cache, u
   if(cache_entry == NULL)
     cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
 
-  if(cache_entry) cache_entry->auto_destroy = TRUE;
+  cache_entry->auto_destroy = TRUE;
   dt_pthread_mutex_unlock(&cache->lock);
 }
 
@@ -921,7 +911,7 @@ void dt_dev_pixel_pipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache,
   if(cache_entry == NULL)
     cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
 
-  if(cache_entry && cache_entry->auto_destroy)
+  if(cache_entry->auto_destroy)
   {
     const uint64_t key = hash;
     g_hash_table_remove(cache->entries, &key);
@@ -964,6 +954,8 @@ void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, con
 
 void dt_dev_pixelpipe_cache_unref_hash(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash)
 {
+  if(hash == (uint64_t)-1) return;
+
   dt_pthread_mutex_lock(&cache->lock);
   cache->queries++;
   dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
