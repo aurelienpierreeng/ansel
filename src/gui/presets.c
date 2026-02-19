@@ -100,6 +100,7 @@ static sqlite3_stmt *_gui_presets_update_fl_stmt = NULL;
 static sqlite3_stmt *_gui_presets_update_ldr_stmt = NULL;
 static sqlite3_stmt *_gui_presets_update_autoapply_stmt = NULL;
 static sqlite3_stmt *_gui_presets_update_filter_stmt = NULL;
+static gboolean _gui_presets_autogen_enabled = TRUE;
 
 // format string and corresponding flag stored into the database
 static const char *_gui_presets_format_value_str[5]
@@ -110,9 +111,29 @@ static const int _gui_presets_format_flag[5] = { FOR_LDR, FOR_RAW, FOR_HDR, FOR_
 // so beware, don't use any darktable.gui stuff here .. (or change this behaviour in darktable.c)
 void dt_gui_presets_init()
 {
+  // Avoid regenerating all auto-presets on every startup when the build and UI language are unchanged.
+  // This cuts a large number of INSERTs during module load without altering behavior across upgrades.
+  gchar *lang = dt_conf_get_string("ui_last/gui_language");
+  if(!lang) lang = g_strdup("");
+  gchar *sig = g_strdup_printf("%d|%s", dt_version(), lang);
+  gchar *prev = dt_conf_get_string("ui_last/presets_autogen_signature");
+  _gui_presets_autogen_enabled = !(prev && !g_strcmp0(prev, sig));
+  dt_conf_set_string("ui_last/presets_autogen_signature", sig);
+  g_free(prev);
+  g_free(sig);
+  g_free(lang);
+
   // remove auto generated presets from plugins, not the user included ones.
-  DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "DELETE FROM data.presets WHERE writeprotect = 1", NULL,
-                        NULL, NULL);
+  if(_gui_presets_autogen_enabled)
+  {
+    DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), "DELETE FROM data.presets WHERE writeprotect = 1", NULL,
+                          NULL, NULL);
+  }
+}
+
+gboolean dt_gui_presets_autogen_enabled()
+{
+  return _gui_presets_autogen_enabled;
 }
 
 void dt_gui_presets_cleanup()

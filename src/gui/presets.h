@@ -74,6 +74,7 @@ typedef struct dt_gui_presets_edit_dialog_t
 /** create a db table with presets for all operations. */
 void dt_gui_presets_init();
 void dt_gui_presets_cleanup();
+gboolean dt_gui_presets_autogen_enabled();
 
 /** add or replace a generic (i.e. non-exif specific) preset for this operation. */
 void dt_gui_presets_add_generic(const char *name, dt_dev_operation_t op, const int32_t version,

@@ -81,6 +81,7 @@
 #include "develop/format.h"
 #include "develop/masks.h"
 #include "develop/tiling.h"
+#include "gui/presets.h"
 #include "dtgtk/button.h"
 #include "dtgtk/expander.h"
 #include "dtgtk/gradientslider.h"
@@ -1186,7 +1187,9 @@ void dt_iop_reload_defaults(dt_iop_module_t *module)
 
 static void _init_presets(dt_iop_module_so_t *module_so)
 {
-  if(module_so->init_presets) module_so->init_presets(module_so);
+  // Skip auto-preset regeneration when the build + UI language haven't changed.
+  if(module_so->init_presets && dt_gui_presets_autogen_enabled())
+    module_so->init_presets(module_so);
 
   // this seems like a reasonable place to check for and update legacy
   // presets.
