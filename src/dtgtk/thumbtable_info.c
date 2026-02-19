@@ -35,7 +35,7 @@
 
 static sqlite3_stmt *_thumbtable_collection_stmt = NULL;
 
-void dt_thumbtable_copy_image(dt_image_t *info, const dt_image_t *img)
+void dt_thumbtable_copy_image(dt_image_t *info, const dt_image_t *const img)
 {
   if(!info || !img) return;
 
@@ -107,8 +107,7 @@ static gboolean _thumbtable_double_equal(const double a, const double b)
   return (isnan(a) && isnan(b)) || a == b;
 }
 
-void dt_thumbtable_info_debug_assert_matches_cache(const dt_image_t *sql_info,
-                                                   uint32_t history_items, uint32_t group_members)
+void dt_thumbtable_info_debug_assert_matches_cache(const dt_image_t *sql_info)
 {
   if(!sql_info || sql_info->id <= 0) return;
 

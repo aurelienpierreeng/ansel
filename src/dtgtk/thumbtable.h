@@ -87,8 +87,8 @@ typedef enum dt_thumbtable_zoom_t
 typedef struct dt_thumbtable_cache_t
 {
   dt_thumbnail_t *thumb; /**< Pointer to thumbnail object */
-  dt_image_t info; /**< Cached metadata for thumbnails */
-  gboolean info_valid;
+  int32_t imgid; /**< ID of the image */
+  int32_t groupid; /**< ID of the group */
 } dt_thumbtable_cache_t;
 
 

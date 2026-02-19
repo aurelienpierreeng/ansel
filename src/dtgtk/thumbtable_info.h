@@ -30,26 +30,25 @@
 extern "C" {
 #endif
 
-static inline gboolean dt_thumbtable_info_is_altered(const dt_image_t *info)
+static inline gboolean dt_thumbtable_info_is_altered(const dt_image_t info)
 {
-  return info && info->history_items > 0;
+  return info.history_items > 0;
 }
 
-static inline gboolean dt_thumbtable_info_is_grouped(const dt_image_t *info)
+static inline gboolean dt_thumbtable_info_is_grouped(const dt_image_t info)
 {
-  return info && info->group_members > 1;
+  return info.group_members > 1;
 }
 
 
 sqlite3_stmt *dt_thumbtable_info_get_collection_stmt(void);
 void dt_thumbtable_info_cleanup(void);
 
-void dt_thumbtable_copy_image(dt_image_t *info, const dt_image_t *img);
+void dt_thumbtable_copy_image(dt_image_t *info, const dt_image_t *const img);
 void dt_thumbtable_info_seed_image_cache(const dt_image_t *info);
 
 #ifndef NDEBUG
-void dt_thumbtable_info_debug_assert_matches_cache(const dt_image_t *sql_info,
-                                                   uint32_t history_items, uint32_t group_members);
+void dt_thumbtable_info_debug_assert_matches_cache(const dt_image_t *sql_info);
 #endif
 
 #ifdef __cplusplus

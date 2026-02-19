@@ -73,7 +73,7 @@ typedef struct
   gboolean mouse_over;
   gboolean selected;
 
-  dt_image_t *info;
+  dt_image_t info;
 
   // all widget components
   GtkWidget *widget;               // GtkEventbox -- parent of all others
@@ -151,7 +151,7 @@ void dt_thumbnail_set_overlay(dt_thumbnail_t *thumb, dt_thumbnail_overlay_t mode
 void dt_thumbnail_set_drop(dt_thumbnail_t *thumb, gboolean accept_drop);
 
 // Resync cached image info for this thumbnail with any arbitrary new info
-void dt_thumbnail_resync_info(dt_thumbnail_t *thumb, dt_image_t *info);
+void dt_thumbnail_resync_info(dt_thumbnail_t *thumb, const dt_image_t *const info);
 
 // Full update of the image information and update icons accordingly, using the image cache
 void dt_thumbnail_update_gui(dt_thumbnail_t *thumb);
