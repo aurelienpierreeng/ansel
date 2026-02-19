@@ -110,6 +110,9 @@ void dt_image_cache_remove(dt_image_cache_t *cache, const int32_t imgid);
 void dt_image_cache_set_export_timestamp(dt_image_cache_t *cache, const int32_t imgid);
 void dt_image_cache_set_print_timestamp(dt_image_cache_t *cache, const int32_t imgid);
 
+// return 1 if the image is invalid so we can bail out early
+int dt_image_invalid(const dt_image_t *img);
+
 #ifdef __cplusplus
 }
 #endif

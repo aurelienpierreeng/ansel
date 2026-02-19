@@ -290,6 +290,8 @@ static void _image_cache_reload_from_db(dt_image_t *img, const uint32_t imgid)
   dt_pthread_mutex_lock(&_image_cache_stmt_mutex);
 
   sqlite3_stmt *stmt = _image_cache_get_stmt();
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   if(sqlite3_step(stmt) == SQLITE_ROW)
   {
@@ -390,6 +392,13 @@ dt_image_t *dt_image_cache_get(dt_image_cache_t *cache, const int32_t imgid, cha
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
   dt_image_t *img = (dt_image_t *)entry->data;
   img->cache_entry = entry;
+
+  if(dt_image_invalid(img))
+  {
+    dt_cache_release(&cache->cache, entry);
+    return NULL;
+  }
+
   _image_cache_lock_init(img);
   return img;
 }
@@ -419,6 +428,12 @@ dt_image_t *dt_image_cache_get_reload(dt_image_cache_t *cache, const int32_t img
   _image_cache_reload_from_db(img, (uint32_t)imgid);
   img->cache_entry = entry;
 
+  if(dt_image_invalid(img))
+  {
+    dt_cache_release(&cache->cache, entry);
+    return NULL;
+  }
+
   if(mode == 'r')
   {
     // demote the lock to read mode (see mipmap cache for rationale)
@@ -435,9 +450,14 @@ dt_image_t *dt_image_cache_get_reload(dt_image_cache_t *cache, const int32_t img
   return img;
 }
 
+int dt_image_invalid(const dt_image_t *img)
+{
+  return (img == NULL || img->id <= 0);
+}
+
 int dt_image_cache_seed(dt_image_cache_t *cache, const dt_image_t *img)
 {
-  if(!cache || !img || img->id <= 0) return -1;
+  if(!cache || dt_image_invalid(img)) return -1;
 
   dt_image_t seeded = *img;
 
