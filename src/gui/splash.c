@@ -57,6 +57,25 @@ typedef struct dt_splash_slide_t
 
 static dt_splash_t *splash = NULL;
 
+static gboolean _splash_env_is_truthy(const char *value)
+{
+  if(!value) return FALSE;
+  if(value[0] == '\0') return TRUE;
+  if(g_ascii_strcasecmp(value, "0") == 0) return FALSE;
+  if(g_ascii_strcasecmp(value, "false") == 0) return FALSE;
+  if(g_ascii_strcasecmp(value, "no") == 0) return FALSE;
+  if(g_ascii_strcasecmp(value, "off") == 0) return FALSE;
+  return TRUE;
+}
+
+static gboolean _splash_is_disabled(void)
+{
+  return _splash_env_is_truthy(g_getenv("ANSEL_NO_SPLASH"))
+      || _splash_env_is_truthy(g_getenv("ANSEL_DISABLE_SPLASH"))
+      || _splash_env_is_truthy(g_getenv("DARKTABLE_NO_SPLASH"))
+      || _splash_env_is_truthy(g_getenv("DARKTABLE_DISABLE_SPLASH"));
+}
+
 void dt_gui_splash_set_transient_for(GtkWidget *parent)
 {
   if(!splash || !splash->window || !parent) return;
@@ -490,6 +509,7 @@ static void _splash_scale_factor_changed(GObject *object, GParamSpec *pspec, gpo
 void dt_gui_splash_init(void)
 {
   if(splash) return;
+  if(_splash_is_disabled()) return;
 
   splash = calloc(1, sizeof(dt_splash_t));
   splash->authors = g_ptr_array_new_with_free_func(g_free);
