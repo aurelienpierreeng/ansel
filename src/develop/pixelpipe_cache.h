@@ -114,7 +114,8 @@ struct dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry(dt_dev_pixelpipe
  * @return int 1 if the cache line was freshly allocated, 0 if it was found in the cache.
  */
 int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, const size_t size,
-                               const char *name, const int id, void **data, struct dt_iop_buffer_dsc_t **dsc,
+                               const char *name, const int id, const gboolean alloc,
+                               void **data, struct dt_iop_buffer_dsc_t **dsc,
                                struct dt_pixel_cache_entry_t **entry);
 
 /** OpenCL pinned buffer reuse tied to cache entries. */
@@ -122,9 +123,13 @@ void *dt_pixel_cache_clmem_get(struct dt_pixel_cache_entry_t *entry, void *host_
                                int width, int height, int bpp, int flags, int *out_cst);
 void dt_pixel_cache_clmem_put(struct dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,
                               int width, int height, int bpp, int flags, int cst, void *mem);
+void dt_pixel_cache_clmem_remove(struct dt_pixel_cache_entry_t *entry, void *mem);
 void dt_pixel_cache_clmem_flush(struct dt_pixel_cache_entry_t *entry);
 
-                    
+/** Peek the host data pointer of a cache entry without allocating. */
+void *dt_pixel_cache_entry_get_data(struct dt_pixel_cache_entry_t *entry);
+
+	                    
 /**
  * @brief Actually allocate the memory buffer attached to the cache entry once you create it with
  * `dt_dev_pixelpipe_cache_get()`. Sizes and everything are already saved in the entry, and the 
@@ -229,18 +234,6 @@ int dt_dev_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t *cache);
  */
 void dt_dev_pixelpipe_cache_ref_count_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, gboolean lock,
                                             struct dt_pixel_cache_entry_t *entry);
-
-/**
- * @brief Find the hash of the cache entry holding the buffer data
- *
- * @param cache
- * @param data
- * @param cache_entry a reference to the cache entry, to be reused later. Can be NULL. The caller
- * doesn't own the data and shouldn't free it.
- * @return uint64_t defaults to 0 if nothing was found.
- */
-uint64_t dt_dev_pixelpipe_cache_get_hash_data(dt_dev_pixelpipe_cache_t *cache, void *data,
-                                              struct dt_pixel_cache_entry_t **entry);
 
 /**
  * @brief Lock or release the write lock on the entry
