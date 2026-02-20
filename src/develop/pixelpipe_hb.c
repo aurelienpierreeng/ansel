@@ -2109,6 +2109,13 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
   // go through the list of modules from the end:
   GList *pieces = g_list_last(pipe->nodes);
 
+  // Because it's possible here that we export at full resolution,
+  // and our memory planning doesn't account for several concurrent pipelines
+  // at full size, we allow only one pipeline at a time to run.
+  // This is because wavelets decompositions and such use 6 copies,
+  // so the RAM usage can go out of control here.
+  dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
+
   pipe->opencl_enabled = dt_opencl_update_settings(); // update enabled flag and profile from preferences
   pipe->devid = (pipe->opencl_enabled) ? dt_opencl_lock_device(pipe->type)
                                        : -1; // try to get/lock opencl resource
@@ -2141,13 +2148,6 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
 
     KILL_SWITCH_PIPE
 
-    // Because it's possible here that we export at full resolution,
-    // and our memory planning doesn't account for several concurrent pipelines
-    // at full size, we allow only one pipeline at a time to run.
-    // This is because wavelets decompositions and such use 6 copies,
-    // so the RAM usage can go out of control here.
-    dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);
-
     dt_times_t start;
     dt_get_times(&start);
     err = dt_dev_pixelpipe_process_rec(pipe, dev, &buf, &cl_mem_out, &out_format, roi, pieces, pos);
@@ -2155,8 +2155,6 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
     dt_show_times(&start, msg);
     g_free(msg);
     
-    dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
-
     // The pipeline has copied cl_mem_out into buf, so we can release it now.
   #ifdef HAVE_OPENCL
     dt_pixel_cache_entry_t *out_entry = NULL;
@@ -2192,9 +2190,6 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
       }
 
       _print_opencl_errors(opencl_error, pipe);
-
-      // Relinquish the CPU because we are in a realtime thread
-      dt_iop_nap(5000);
     }
     else if(!dt_atomic_get_int(&pipe->shutdown))
     {
@@ -2205,6 +2200,8 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
       // Whatever consuming it will need to unlock it.
     }
   }
+
+  dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);
 
   // release resources:
   if(pipe->forms)
