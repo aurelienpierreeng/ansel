@@ -178,6 +178,7 @@ int dt_dev_pixelpipe_init_thumbnail(dt_dev_pixelpipe_t *pipe)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_THUMBNAIL;
+  pipe->no_cache = TRUE;
   return res;
 }
 
@@ -185,6 +186,7 @@ int dt_dev_pixelpipe_init_dummy(dt_dev_pixelpipe_t *pipe)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_THUMBNAIL;
+  pipe->no_cache = TRUE;
   return res;
 }
 
@@ -219,6 +221,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->hash = 0;
   pipe->history_hash = 0;
   pipe->bypass_cache = 0;
+  pipe->no_cache = FALSE;
   dt_dev_set_backbuf(&pipe->backbuf, 0, 0, 0, -1, -1);
 
   pipe->output_imgid = UNKNOWN_IMAGE;
@@ -282,7 +285,13 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   // blocks while busy and sets shutdown bit:
   dt_dev_pixelpipe_cleanup_nodes(pipe);
   // so now it's safe to clean up cache:
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, pipe->backbuf.hash);
+  const uint64_t old_backbuf_hash = pipe->backbuf.hash;
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, old_backbuf_hash);
+  if(pipe->no_cache)
+  {
+    dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, old_backbuf_hash, NULL);
+    dt_dev_pixelpipe_cache_auto_destroy_apply(darktable.pixelpipe_cache, old_backbuf_hash, NULL);
+  }
   pipe->backbuf.hash = -1;
   dt_pthread_mutex_destroy(&(pipe->busy_mutex));
   pipe->icc_type = DT_COLORSPACE_NONE;
@@ -1175,6 +1184,11 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
   if(new_entry)
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, FALSE, cache_entry);
 
+  // For one-shot pipelines (thumbnail export), ensure the base buffer cacheline is not kept around.
+  // It will be freed as soon as the next module is done consuming it as input.
+  if(pipe->no_cache)
+    dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, hash, cache_entry);
+
   return err;
 }
 
@@ -1442,7 +1456,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // Flag to throw away the output as soon as we are done consuming it in this thread, at the next module.
   // Cache bypass is requested by modules like crop/perspective, when they show the full image,
   // and when doing anything transient.
-  if(bypass_cache || pipe->reentry || !piece->force_opencl_cache)
+  if(bypass_cache || pipe->reentry || !piece->force_opencl_cache || pipe->no_cache)
     dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, hash, output_entry);
 
   // in case we get this buffer from the cache in the future, cache some stuff:

@@ -263,6 +263,11 @@ typedef struct dt_dev_pixelpipe_t
   // TRUE if at least one module is bypassing the cache
   gboolean bypass_cache;
 
+  // If TRUE, do not keep any pixelpipe cache lines around for reuse.
+  // This is intended for one-shot pipelines such as thumbnail exports where caching is pure overhead
+  // and can lead to memory pressure (RAM buffers + OpenCL pinned/device buffers).
+  gboolean no_cache;
+
   // Timeout in usec to delay the start of the pipeline
   // Use for example if you want to ensure one pipe starts after another.
   // Timeout is reset to 0 after the pipeline has run.
