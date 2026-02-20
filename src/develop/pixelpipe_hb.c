@@ -1921,7 +1921,7 @@ void dt_dev_pixelpipe_disable_before(dt_dev_pixelpipe_t *pipe, const char *op)
       g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_free_form);                                        \
       pipe->forms = NULL;                                                                                         \
     }                                                                                                             \
-    dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);                                                        \
+    dt_pthread_mutex_unlock(&darktable.pipeline_threadsafe);                                                      \
     return 1;                                                                                                     \
   }
 
