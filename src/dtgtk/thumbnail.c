@@ -53,6 +53,7 @@
 #include "common/focus_peaking.h"
 #include "common/grouping.h"
 #include "common/image_cache.h"
+#include "common/database.h"
 #include "common/ratings.h"
 #include "common/selection.h"
 #include "common/variables.h"
@@ -66,6 +67,7 @@
 #include "views/view.h"
 
 #include <glib-object.h>
+#include <sqlite3.h>
 
 /**
  * @file thumbnail.c
@@ -212,6 +214,75 @@ static void _preview_window_open(GtkWidget *widget, dt_thumbnail_t *thumb)
   dt_preview_window_spawn(thumb->info.id);
 }
 
+static void _active_modules_popup(GtkWidget *widget, dt_thumbnail_t *thumb)
+{
+  (void)widget;
+  if(!thumb) return;
+
+  sqlite3 *handle = dt_database_get(darktable.db);
+  if(!handle) return;
+
+  static const char *sql =
+      "SELECT MIN(num) AS num, operation, multi_name "
+      "FROM main.history "
+      "WHERE imgid = ?1 AND enabled = 1 "
+      "GROUP BY operation, multi_name "
+      "ORDER BY MIN(num) ASC";
+
+  sqlite3_stmt *stmt = NULL;
+  DT_DEBUG_SQLITE3_PREPARE_V2(handle, sql, -1, &stmt, NULL);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, thumb->info.id);
+
+  GString *text = g_string_new(NULL);
+  g_string_append_printf(text, "image id: %d\nfile: %s\n\n", thumb->info.id,
+                         (thumb->info.fullpath[0]) ? thumb->info.fullpath : thumb->info.filename);
+  while(sqlite3_step(stmt) == SQLITE_ROW)
+  {
+    const int num = sqlite3_column_int(stmt, 0);
+    const char *op = (const char *)sqlite3_column_text(stmt, 1);
+    const char *multi = (const char *)sqlite3_column_text(stmt, 2);
+    const gboolean has_multi = (multi && multi[0] && strcmp(multi, " "));
+
+    if(has_multi)
+      g_string_append_printf(text, "%d. %s (%s)\n", num, op ? op : "?", multi);
+    else
+      g_string_append_printf(text, "%d. %s\n", num, op ? op : "?");
+  }
+  sqlite3_finalize(stmt);
+
+  if(text->len == 0) g_string_assign(text, _("No active modules"));
+
+  // Use the real application window as transient parent, not the popup menu toplevel.
+  // Standalone dialog (no transient parent) to avoid GTK parent warnings from popup menus.
+  GtkWidget *dialog = gtk_dialog_new_with_buttons(_("Active modules"),
+                                                  NULL, GTK_DIALOG_DESTROY_WITH_PARENT,
+                                                  _("_Close"), GTK_RESPONSE_CLOSE,
+                                                  NULL);
+  gtk_window_set_modal(GTK_WINDOW(dialog), TRUE);
+
+  GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+  GtkWidget *scrolled = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(scrolled), GTK_SHADOW_IN);
+  gtk_widget_set_size_request(scrolled, 420, 260);
+  gtk_container_set_border_width(GTK_CONTAINER(scrolled), 4);
+
+  GtkWidget *view = gtk_text_view_new();
+  gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
+  gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(view), FALSE);
+  gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view), GTK_WRAP_WORD_CHAR);
+  gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);
+  gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)), text->str, -1);
+  gtk_container_add(GTK_CONTAINER(scrolled), view);
+
+  gtk_box_pack_start(GTK_BOX(content), scrolled, TRUE, TRUE, 0);
+  gtk_widget_show_all(dialog);
+
+  g_signal_connect(dialog, "response", G_CALLBACK(gtk_widget_destroy), NULL);
+
+  g_string_free(text, TRUE);
+}
+
 static GtkWidget *_create_menu(dt_thumbnail_t *thumb)
 {
   // Always re-create the menu when we show it because we don't bother updating info during the lifetime of the thumbnail
@@ -258,6 +329,13 @@ static GtkWidget *_create_menu(dt_thumbnail_t *thumb)
   g_object_set_data(G_OBJECT(menu_item), "custom-data", GINT_TO_POINTER(4));
 
   menu_item = _gtk_menu_item_new_with_markup(_("Open in preview window…"), menu, _preview_window_open, thumb);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+  sep = gtk_separator_menu_item_new();
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
+
+  menu_item = _gtk_menu_item_new_with_markup(_("Show active modules…"), menu, _active_modules_popup, thumb);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
 
   gtk_widget_show_all(menu);
 
