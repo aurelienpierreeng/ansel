@@ -57,6 +57,11 @@ void dt_cache_arena_free(dt_cache_arena_t *a,
                          void *ptr,
                          size_t size);
 
+// Return arena free-space stats (in pages). Thread-safe.
+void dt_cache_arena_stats(dt_cache_arena_t *a,
+                          uint32_t *out_total_free_pages,
+                          uint32_t *out_largest_free_run_pages);
+
 int dt_cache_arena_init(dt_cache_arena_t *a, size_t total_size);
 void dt_cache_arena_cleanup(dt_cache_arena_t *a);
 

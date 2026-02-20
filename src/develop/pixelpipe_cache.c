@@ -109,7 +109,6 @@ dt_pixel_cache_entry_t *_non_threadsafe_cache_get_entry(dt_dev_pixelpipe_cache_t
                                                         const uint64_t key)
 {
   dt_pixel_cache_entry_t *entry = (dt_pixel_cache_entry_t *)g_hash_table_lookup(table, &key);
-  if(entry) entry->hits++;
   return entry;
 }
 
@@ -381,6 +380,79 @@ void dt_pixel_cache_clmem_flush(dt_pixel_cache_entry_t *entry)
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
 }
 
+// Attempt to allocate from the arena; if fragmentation prevents it, evict LRU cache lines
+// until a sufficiently large contiguous run is available (or nothing remains to evict).
+static inline void *_arena_alloc_with_defrag(dt_dev_pixelpipe_cache_t *cache, size_t request_size,
+                                             size_t *actual_size)
+{
+  void *buf = dt_cache_arena_alloc(&cache->arena, request_size, actual_size);
+  if(buf) return buf;
+
+  uint32_t pages_needed = 0;
+  if(dt_cache_arena_calc(&cache->arena, request_size, &pages_needed, NULL))
+  {
+    dt_pthread_mutex_lock(&cache->lock);
+    uint32_t total_free_pages = 0, largest_free_run_pages = 0;
+    dt_cache_arena_stats(&cache->arena, &total_free_pages, &largest_free_run_pages);
+
+    while(largest_free_run_pages < pages_needed && g_hash_table_size(cache->entries) > 0)
+    {
+      if(_non_thread_safe_pixel_pipe_cache_remove_lru(cache)) break;
+      dt_cache_arena_stats(&cache->arena, &total_free_pages, &largest_free_run_pages);
+    }
+    dt_pthread_mutex_unlock(&cache->lock);
+  }
+
+  return dt_cache_arena_alloc(&cache->arena, request_size, actual_size);
+}
+
+static inline void _arena_stats_bytes(dt_dev_pixelpipe_cache_t *cache, uint32_t *total_pages,
+                                      uint32_t *largest_pages, size_t *total_bytes, size_t *largest_bytes)
+{
+  dt_cache_arena_stats(&cache->arena, total_pages, largest_pages);
+  const size_t page_size = cache->arena.page_size ? cache->arena.page_size : 1;
+  if(total_bytes) *total_bytes = (size_t)(*total_pages) * page_size;
+  if(largest_bytes) *largest_bytes = (size_t)(*largest_pages) * page_size;
+}
+
+static inline void _log_arena_allocation_failure(dt_dev_pixelpipe_cache_t *cache, size_t request_size,
+                                                 const char *entry_name, const char *module, uint64_t hash,
+                                                 gboolean name_is_file)
+{
+  uint32_t total_free_pages = 0, largest_free_run_pages = 0;
+  size_t total_free_bytes = 0, largest_free_bytes = 0;
+  _arena_stats_bytes(cache, &total_free_pages, &largest_free_run_pages, &total_free_bytes, &largest_free_bytes);
+
+  if(entry_name)
+    fprintf(stdout,
+            "[pixelpipe_cache] failed to allocate %zu bytes for entry %" PRIu64 " (%s, module=%s) "
+            "[arena largest=%zu MiB, total=%zu MiB, cache=%zu/%zu MiB]\n",
+            request_size, hash, entry_name, module ? module : "unknown",
+            largest_free_bytes / (1024 * 1024), total_free_bytes / (1024 * 1024),
+            cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024));
+  else
+    fprintf(stdout,
+            "[pixelpipe_cache] failed to allocate %zu bytes for entry %" PRIu64 " (module=%s) "
+            "[arena largest=%zu MiB, total=%zu MiB, cache=%zu/%zu MiB]\n",
+            request_size, hash, module ? module : "unknown",
+            largest_free_bytes / (1024 * 1024), total_free_bytes / (1024 * 1024),
+            cache->current_memory / (1024 * 1024), cache->max_memory / (1024 * 1024));
+
+  if(entry_name && module)
+    dt_control_log(_("The pipeline cache is full while allocating `%s` (module `%s`). Either your RAM settings are too frugal or your RAM is too small."),
+                   entry_name, module);
+  else if(entry_name)
+    dt_control_log(_("The pipeline cache is full while allocating `%s`. Either your RAM settings are too frugal or your RAM is too small."),
+                   entry_name);
+  else if(module)
+    dt_control_log(_("The pipeline cache is full while processing module `%s`. Either your RAM settings are too frugal or your RAM is too small."),
+                   module);
+  else
+    dt_control_log(_("The pipeline cache is full. Either your RAM settings are too frugal or your RAM is too small."));
+
+  (void)name_is_file; // kept for signature symmetry if future callers need it.
+}
+
 static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid)
 {
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
@@ -405,7 +477,16 @@ void *dt_pixel_cache_alloc(dt_dev_pixelpipe_cache_t *cache, dt_pixel_cache_entry
 {
   // allocate the data buffer
   if(!cache_entry->data)
-    cache_entry->data = dt_cache_arena_alloc(&cache->arena, cache_entry->size, &cache_entry->size);
+  {
+    cache_entry->data = _arena_alloc_with_defrag(cache, cache_entry->size, &cache_entry->size);
+
+    if(!cache_entry->data)
+    {
+      const char *module = dt_pixelpipe_cache_current_module;
+      _log_arena_allocation_failure(cache, cache_entry->size, cache_entry->name, module,
+                                    cache_entry->hash, FALSE);
+    }
+  }
 
   return cache_entry->data;
 }
@@ -456,8 +537,13 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache,
 
   // Page size is the desired size + AVX/SSE rounding
   size_t page_size = 0;
-  void *buf = dt_cache_arena_alloc(&cache->arena, size, &page_size);
-  if(!buf) return NULL;
+  void *buf = _arena_alloc_with_defrag(cache, size, &page_size);
+
+  if(!buf)
+  {
+    _log_arena_allocation_failure(cache, size, name, NULL, 0, FALSE);
+    return NULL;
+  }
 
   void *aligned = __builtin_assume_aligned(buf, DT_CACHELINE_BYTES);
   dt_iop_buffer_dsc_t dsc = {0};
@@ -627,8 +713,8 @@ dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
     return NULL;
   }
 
-  // Run every 5 minutes
-  garbage_collection = g_timeout_add(5 * 60 * 1000, (GSourceFunc)dt_dev_pixelpipe_cache_flush_old, cache);
+  // Run every 3 minutes
+  garbage_collection = g_timeout_add(3 * 60 * 1000, (GSourceFunc)dt_dev_pixelpipe_cache_flush_old, cache);
   return cache;
 }
 
@@ -680,6 +766,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
   if(cache_entry)
   {
     cache->hits++;
+    cache_entry->hits++;
     _non_thread_safe_cache_ref_count_entry(cache, hash, TRUE, cache_entry);
     dt_pthread_mutex_unlock(&cache->lock);
     _pixelpipe_cache_finalize_entry(cache_entry, data, dsc, "found");
@@ -721,6 +808,7 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
   if(cache_entry)
   {
     cache->hits++;
+    cache_entry->hits++;
     _pixelpipe_cache_finalize_entry(cache_entry, data, dsc, "found");
   }
 
@@ -767,9 +855,9 @@ gboolean _for_each_remove_old(gpointer key, gpointer value, gpointer user_data)
   int64_t delta = g_get_monotonic_time() - cache_entry->age;
 
   // 3 min in microseconds
-  const int64_t ten_min = 3 * 60 * 1000 * 1000;
+  const int64_t three_min = 3 * 60 * 1000 * 1000;
 
-  gboolean too_old = (delta > ten_min) && (cache_entry->hits < 4);
+  gboolean too_old = (delta > three_min) && (cache_entry->hits < 4);
 
   return too_old && !used && !locked;
 }
@@ -798,6 +886,10 @@ uint64_t _non_thread_safe_cache_get_hash_data(dt_dev_pixelpipe_cache_t *cache, v
   uint64_t hash = 0;
   if(entry) *entry = NULL;
 
+  // NULL is never a valid cache buffer pointer. Without this guard, if an entry ever ends up with data==NULL
+  // (e.g. allocation failure), we can spuriously "match" it here and corrupt refcount/GC behavior.
+  if(data == NULL) return 0;
+
   g_hash_table_iter_init(&iter, cache->entries);
   while(g_hash_table_iter_next(&iter, &key, &value))
   {
@@ -805,7 +897,6 @@ uint64_t _non_thread_safe_cache_get_hash_data(dt_dev_pixelpipe_cache_t *cache, v
     if(cache_entry->data == data)
     {
       hash = cache_entry->hash;
-      cache_entry->hits++;
       if(entry) *entry = cache_entry;
       break;
     }

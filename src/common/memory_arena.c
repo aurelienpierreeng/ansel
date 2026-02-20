@@ -212,6 +212,29 @@ void dt_cache_arena_free(dt_cache_arena_t *a,
   dt_pthread_mutex_unlock(&a->lock);
 }
 
+void dt_cache_arena_stats(dt_cache_arena_t *a,
+                          uint32_t *out_total_free_pages,
+                          uint32_t *out_largest_free_run_pages)
+{
+  if(out_total_free_pages) *out_total_free_pages = 0;
+  if(out_largest_free_run_pages) *out_largest_free_run_pages = 0;
+  if(!a || !a->free_runs) return;
+
+  dt_pthread_mutex_lock(&a->lock);
+  uint32_t total = 0;
+  uint32_t largest = 0;
+  for(guint i = 0; i < a->free_runs->len; i++)
+  {
+    dt_free_run_t *r = &g_array_index(a->free_runs, dt_free_run_t, i);
+    total += r->length;
+    if(r->length > largest) largest = r->length;
+  }
+  dt_pthread_mutex_unlock(&a->lock);
+
+  if(out_total_free_pages) *out_total_free_pages = total;
+  if(out_largest_free_run_pages) *out_largest_free_run_pages = largest;
+}
+
 void dt_cache_arena_cleanup(dt_cache_arena_t *a)
 {
   if(!a) return;
