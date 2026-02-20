@@ -670,7 +670,7 @@ static dt_pixel_cache_entry_t *_pixelpipe_cache_create_entry_locked(dt_dev_pixel
 int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
                                const size_t size, const char *name, const int id,
                                void **data, dt_iop_buffer_dsc_t **dsc,
-                               dt_pixel_cache_entry_t **entry, const gboolean alloc)
+                               dt_pixel_cache_entry_t **entry)
 {
   // Search or create cache entry (under cache lock)
   dt_pthread_mutex_lock(&cache->lock);
@@ -700,7 +700,7 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
   dt_pthread_mutex_unlock(&cache->lock);
 
   // Alloc after releasing the lock for better runtimes
-  if(alloc) dt_pixel_cache_alloc(cache, cache_entry);
+  dt_pixel_cache_alloc(cache, cache_entry);
 
   dt_print(DT_DEBUG_CACHE, "[pixelpipe_cache] Write-lock on entry (new cache entry %" PRIu64 " for %s pipeline)\n",
            hash, name);

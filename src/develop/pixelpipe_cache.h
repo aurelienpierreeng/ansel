@@ -115,7 +115,7 @@ struct dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry(dt_dev_pixelpipe
  */
 int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, const size_t size,
                                const char *name, const int id, void **data, struct dt_iop_buffer_dsc_t **dsc,
-                               struct dt_pixel_cache_entry_t **entry, const gboolean alloc);
+                               struct dt_pixel_cache_entry_t **entry);
 
 /** OpenCL pinned buffer reuse tied to cache entries. */
 void *dt_pixel_cache_clmem_get(struct dt_pixel_cache_entry_t *entry, void *host_ptr, int devid,

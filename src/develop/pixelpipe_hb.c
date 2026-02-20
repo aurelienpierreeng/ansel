@@ -1027,10 +1027,6 @@ static float *_resync_input_gpu_to_cache(dt_dev_pixelpipe_t *pipe, float *input,
   if(!cl_mem_input) return input;
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
 
-  // Ensure it's allocated before attempting copy
-  if(!input) 
-    input = dt_pixel_cache_alloc(darktable.pixelpipe_cache, input_entry);
-
   if(!input)
   {
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
@@ -1279,9 +1275,6 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
 
     /* now call process_tiling_cl of module; module should emit meaningful messages in case of error */
     dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
-    
-    // Ensure the data buffer of the output cache is allocated
-    *output = dt_pixel_cache_alloc(darktable.pixelpipe_cache, output_entry);
 
     int fail = !module->process_tiling_cl(module, piece, input, *output, roi_in, roi_out, in_bpp);
     dt_opencl_events_wait_for(pipe->devid);
@@ -1347,10 +1340,6 @@ error:;
   _gpu_clear_buffer(cl_mem_output, NULL, NULL, IOP_CS_NONE);
   _gpu_clear_buffer(&cl_mem_input, input_entry, input, IOP_CS_NONE);
   dt_opencl_finish(pipe->devid);
-
-  // If output caching was not explicitly required initially, *output was not allocated.
-  // Allocate it now to have something to write on.
-  *output = dt_pixel_cache_alloc(darktable.pixelpipe_cache, output_entry);
 
   if(input != NULL && *output != NULL)
     return pixelpipe_process_on_CPU(pipe, dev, input, input_format, roi_in, output, out_format, roi_out, module,
@@ -1472,7 +1461,7 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
   // Note: dt_dev_pixelpipe_cache_get actually init/alloc *output
   dt_pixel_cache_entry_t *cache_entry;
   int new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, "base buffer", pipe->type,
-                                             output, out_format, &cache_entry, TRUE);
+                                             output, out_format, &cache_entry);
   if(cache_entry == NULL) return 1;
 
   int err = 0;
@@ -1740,7 +1729,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // Immediately alloc output buffer only if we know we force the use of the cache.
   // Otherwise, it's handled in OpenCL fallbacks.
   gboolean new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
-                                                  output, out_format, &output_entry, piece->force_opencl_cache);
+                                                  output, out_format, &output_entry);
   g_free(name);
   if(output_entry == NULL) 
   {
