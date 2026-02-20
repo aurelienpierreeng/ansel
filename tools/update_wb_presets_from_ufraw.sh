@@ -27,7 +27,7 @@
 #   
 #   
 #   
- Script updates our wb_presets which we regularly steal from UFRaw.
+# Script updates our wb_presets which we regularly steal from UFRaw.
 
 #   
 TEMP_FILE=$(tempfile -p dtwb -s .c)
