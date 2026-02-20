@@ -23,8 +23,7 @@
 #   
 #   
 #   
-#   
- go to project root
+#  go to project root
 PROJECT_ROOT="$(cd `dirname $0`/..; pwd -P)"
 cd "$PROJECT_ROOT"
 
