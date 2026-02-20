@@ -147,6 +147,7 @@ FILE(GLOB SOURCE_FILES
   "develop/imageop_gui.c"
   "develop/lightroom.c"
   "develop/pixelpipe.c"
+  "develop/pixelpipe_cache.c"
   "develop/blend.c"
   "develop/blend_gui.c"
   "develop/blends/blendif_lab.c"
