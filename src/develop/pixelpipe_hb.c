@@ -745,7 +745,11 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   }
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
 
-  if(err) return err;
+  if(err)
+  {
+    fprintf(stdout, "[pixelpipe] %s process on CPU returned with an error\n", module->name());
+    return err;
+  }
 
   // and save the output colorspace
   pipe->dsc.cst = module->output_colorspace(module, pipe, piece);
@@ -1178,6 +1182,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     else
     {
       // We have no input on vRAM, no input on RAM cache. Nothing to work on.
+      dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no input (cache or vRAM)\n", module->name());
       goto error;
     }
 
@@ -1189,7 +1194,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
       // In this case, we start a pinned memory alloc. If NULL, it's device alloc.
       // *output decides which it is going to be.
       *cl_mem_output = _gpu_init_buffer(pipe->devid, *output, roi_out, bpp, module, "output", output_entry, FALSE,
-                                        &pipe->dsc.cst, NULL);
+                                        &(*out_format)->cst, NULL);
       if(*cl_mem_output == NULL) goto error;
     }
 
@@ -1333,12 +1338,14 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   // free everything and fall back to CPU processing
 error:;
 
+  dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s couldn't process on GPU\n", module->name());
+
   // don't delete RAM output even if requested. If we fallback to CPU,
   // we want to keep a cache copy for performance.
   piece->force_opencl_cache = TRUE; 
 
   _gpu_clear_buffer(cl_mem_output, NULL, NULL, IOP_CS_NONE);
-  _gpu_clear_buffer(&cl_mem_input, input_entry, input, input_cst_cl);
+  _gpu_clear_buffer(&cl_mem_input, input_entry, input, IOP_CS_NONE);
   dt_opencl_finish(pipe->devid);
 
   // If output caching was not explicitly required initially, *output was not allocated.
@@ -1349,6 +1356,7 @@ error:;
     return pixelpipe_process_on_CPU(pipe, dev, input, input_format, roi_in, output, out_format, roi_out, module,
                                     piece, tiling, pixelpipe_flow, input_entry);
   
+  dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no input and no output\n", module->name());
   return 1;
 }
 #endif
@@ -1512,36 +1520,6 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
 
         dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
         err = 0;
-
-#ifdef HAVE_OPENCL
-        // In case the first module of the pipeline (straight after what we do here)
-        // supports OpenCL natively, skip the RAM cache and directly copy the RAW
-        // base buffer into GPU.
-        // Note that _copy_buffer may crop a few pixels, so it's not always a direct copy.
-        // In this situation, OpenCL can't use a pinned memory to copy a cropped buf.buf, 
-        // so we will need to copy the copy, aka output (the cache).
-        GList *pieces = g_list_first(pipe->nodes);
-        dt_dev_pixelpipe_iop_t *first_piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
-        dt_iop_module_t *first_module = first_piece->module;
-        const int supports_opencl = _is_opencl_supported(pipe, first_piece, first_module);
-
-        if(supports_opencl)
-        {
-          *cl_mem_output = _gpu_init_buffer(pipe->devid, *output, &roi_out, bpp, NULL, "base buffer", cache_entry, FALSE,
-                                            &pipe->dsc.cst, NULL);
-          int fail = (*cl_mem_output == NULL);
-
-          if(!fail)
-            err = _cl_pinned_memory_copy(pipe->devid, *output, *cl_mem_output, &roi_out,
-                                         CL_MAP_WRITE, bpp, NULL, "base buffer");
-
-          // We need to synch the OpenCL events pipeline with CPU timeline because
-          // we use a read lock on the cache that lives in the CPU timeline.
-          dt_opencl_events_wait_for(pipe->devid);
-          
-          if(fail) _gpu_clear_buffer(cl_mem_output, NULL, NULL, pipe->dsc.cst);
-        }
-#endif
       }
       else
       {
