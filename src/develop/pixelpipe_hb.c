@@ -96,6 +96,7 @@ typedef enum dt_pixelpipe_flow_t
   PIXELPIPE_FLOW_BLENDED_ON_GPU = 1 << 7
 } dt_pixelpipe_flow_t;
 
+#include "develop/pixelpipe_cache.c"
 #include "develop/pixelpipe_cache_cl.c"
 #include "develop/pixelpipe_gui.c"
 
