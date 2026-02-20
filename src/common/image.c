@@ -405,6 +405,14 @@ dt_image_path_source_t dt_image_choose_input_path(const dt_image_t *img, char *p
       g_strlcpy(pathname, img->local_copy_legacy_path, pathname_len);
       return DT_IMAGE_PATH_LOCAL_COPY_LEGACY;
     }
+
+    // Local copy flag might be stale (cache cleared, moved file, etc.). If local copy is missing and
+    // we are not explicitly forcing the cache, fall back to the original image.
+    if(!force_cache && img->fullpath[0] && g_file_test(img->fullpath, G_FILE_TEST_EXISTS))
+    {
+      g_strlcpy(pathname, img->fullpath, pathname_len);
+      return DT_IMAGE_PATH_ORIGINAL;
+    }
   }
   // Forcing the cache should not consider the original image
   else
@@ -433,19 +441,30 @@ dt_image_path_source_t dt_image_choose_input_path(const dt_image_t *img, char *p
  * @param imgid The image ID.
  * @param pathname A pointer storing the returned value from the sql request.
  * @param pathname_len Number of characters of the path set outside the function.
- * @param from_cache Boolean, false returns the orgina file (file system), true tries to ge a local copy.
+ * @param from_cache Boolean, false returns the original file (file system), true prefers a local copy when available.
  * @param calling_func Pass __FUNCTION__ for identifcation of callers of this function.
  */
 void dt_image_full_path(const int32_t imgid, char *pathname, size_t pathname_len, gboolean *from_cache, const char *calling_func)
 {
   if(imgid < 0) return;
   dt_image_path_source_t source = DT_IMAGE_PATH_NONE;
-  gboolean force_cache = (from_cache && *from_cache);
+  const gboolean prefer_cache = (from_cache && *from_cache);
 
   const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
   if(img)
   {
-    source = dt_image_choose_input_path(img, pathname, pathname_len, force_cache);
+    // Preserve legacy semantics: `from_cache = TRUE` means "try local copy first, then fall back to original",
+    // not "only local copy".
+    if(prefer_cache)
+    {
+      source = dt_image_choose_input_path(img, pathname, pathname_len, TRUE);
+      if(source == DT_IMAGE_PATH_NONE)
+        source = dt_image_choose_input_path(img, pathname, pathname_len, FALSE);
+    }
+    else
+    {
+      source = dt_image_choose_input_path(img, pathname, pathname_len, FALSE);
+    }
     dt_image_cache_read_release(darktable.image_cache, img);
   }
 
