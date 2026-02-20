@@ -514,6 +514,11 @@ void *dt_pixel_cache_entry_get_data(dt_pixel_cache_entry_t *entry)
   return entry ? entry->data : NULL;
 }
 
+size_t dt_pixel_cache_entry_get_size(dt_pixel_cache_entry_t *entry)
+{
+  return entry ? entry->size : 0;
+}
+
 // WARNING: non thread-safe
 static int _free_space_to_alloc(dt_dev_pixelpipe_cache_t *cache, const size_t size, const uint64_t hash,
                                 const char *name)
@@ -991,8 +996,8 @@ void dt_dev_pixelpipe_cache_flag_auto_destroy(dt_dev_pixelpipe_cache_t *cache, u
 }
 
 
-void dt_dev_pixel_pipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
-                                                dt_pixel_cache_entry_t *cache_entry)
+void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
+                                               dt_pixel_cache_entry_t *cache_entry)
 {
   dt_pthread_mutex_lock(&cache->lock);
   if(cache_entry == NULL)

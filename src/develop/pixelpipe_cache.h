@@ -31,6 +31,7 @@
 #include "common/memory_arena.h"
 #include <inttypes.h>
 #include <glib.h>
+#include <stddef.h>
 
 struct dt_dev_pixelpipe_t;
 struct dt_iop_buffer_dsc_t;
@@ -66,7 +67,7 @@ typedef struct dt_dev_pixelpipe_cache_t
 dt_dev_pixelpipe_cache_t *dt_dev_pixelpipe_cache_init(size_t max_memory);
 void dt_dev_pixelpipe_cache_cleanup(dt_dev_pixelpipe_cache_t *cache);
 
-struct dt_pixel_cache_entry_t;
+typedef struct dt_pixel_cache_entry_t dt_pixel_cache_entry_t;
 
 /**
  * @brief Set the current module name for cache diagnostics (thread-local).
@@ -128,6 +129,17 @@ void dt_pixel_cache_clmem_flush(struct dt_pixel_cache_entry_t *entry);
 
 /** Peek the host data pointer of a cache entry without allocating. */
 void *dt_pixel_cache_entry_get_data(struct dt_pixel_cache_entry_t *entry);
+
+/**
+ * @brief Peek the size (in bytes) reserved for the host buffer of a cache entry.
+ *
+ * @details
+ * The pixelpipe cache treats `dt_pixel_cache_entry_t` as an internal/private structure. External users
+ * (such as the pixelpipe implementation) should not access struct fields directly.
+ *
+ * This accessor is intentionally "peek-only": it does not allocate and it does not change ownership.
+ */
+size_t dt_pixel_cache_entry_get_size(struct dt_pixel_cache_entry_t *entry);
 
 	                    
 /**
