@@ -203,6 +203,8 @@ int flags()
 
 int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
+  if(piece && piece->dsc_in.cst != IOP_CS_RAW)
+    return IOP_CS_RGB;
   return IOP_CS_RAW;
 }
 
@@ -2161,7 +2163,7 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   memcpy(d, p, sizeof(*p));
 
   // No code path for monochrome or JPEG/TIFF
-  if(dt_image_is_monochrome(&self->dev->image_storage) || !dt_image_is_rawprepare_supported(&self->dev->image_storage))
+  if(dt_image_is_monochrome(&self->dev->image_storage) || !dt_image_is_raw(&self->dev->image_storage))
     piece->enabled = FALSE;
 
   // no OpenCL for DT_IOP_HIGHLIGHTS_INPAINT
@@ -2169,6 +2171,20 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
 
   if(d->mode == DT_IOP_HIGHLIGHTS_LAPLACIAN) 
     piece->force_opencl_cache = TRUE;
+}
+
+static gboolean enable(dt_image_t *image)
+{
+  return dt_image_is_raw(image) && !dt_image_is_monochrome(image);
+}
+
+gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state)
+{
+  // No codepath for non-raw images
+  if(current_state && enable(&self->dev->image_storage))
+    return FALSE;
+  else
+    return current_state;
 }
 
 void init_global(dt_iop_module_so_t *module)
@@ -2275,15 +2291,15 @@ void gui_update(struct dt_iop_module_t *self)
   gui_changed(self, NULL, NULL);
 }
 
+
 void reload_defaults(dt_iop_module_t *module)
 {
   // we might be called from presets update infrastructure => there is no image
   if(!module->dev || module->dev->image_storage.id == -1) return;
 
-  const gboolean monochrome = dt_image_is_monochrome(&module->dev->image_storage);
   // enable this per default if raw or sraw if not real monochrome
-  module->default_enabled = dt_image_is_rawprepare_supported(&module->dev->image_storage) && !monochrome;
-  module->hide_enable_button = monochrome;
+  module->default_enabled = enable(&module->dev->image_storage);
+  module->hide_enable_button = !enable(&module->dev->image_storage);
   if(module->widget)
     gtk_stack_set_visible_child_name(GTK_STACK(module->widget), module->default_enabled ? "default" : "monochrome");
 

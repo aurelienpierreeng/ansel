@@ -1210,19 +1210,7 @@ gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state
 {
   // This needs to be enabled for raw images, disabled for other images.
   // There is no messing around.
-
-  const int is_raw = dt_image_is_raw(&self->dev->image_storage);
-  gboolean enable = current_state;
-
-  if(is_raw && !current_state)
-  {
-    enable = TRUE;
-  }
-  else if(!is_raw && current_state)
-  {
-    enable = FALSE;
-  }
-  return enable;
+  return dt_image_is_raw(&self->dev->image_storage);
 }
 
 

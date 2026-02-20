@@ -134,6 +134,8 @@ int default_group()
 
 int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
+  if(piece && piece->dsc_in.cst != IOP_CS_RAW)
+    return IOP_CS_RGB;
   return IOP_CS_RAW;
 }
 
@@ -750,6 +752,13 @@ void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
   piece->data = NULL;
 }
 
+
+static gboolean enable(const dt_image_t *image)
+{
+  return dt_image_is_rawprepare_supported(image) 
+          && !image_is_normalized(image);
+}
+
 void reload_defaults(dt_iop_module_t *self)
 {
   dt_iop_rawprepare_params_t *d = self->default_params;
@@ -770,7 +779,7 @@ void reload_defaults(dt_iop_module_t *self)
                                     .flat_field = has_gainmaps ? FLAT_FIELD_EMBEDDED : FLAT_FIELD_OFF };
 
   self->hide_enable_button = 1;
-  self->default_enabled = dt_image_is_rawprepare_supported(image) && !image_is_normalized(image);
+  self->default_enabled = enable(image);
 
   if(self->widget)
     gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->default_enabled ? "raw" : "non_raw");
