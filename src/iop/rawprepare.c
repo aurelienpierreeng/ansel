@@ -327,7 +327,6 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_rawprepare_data_t *const d = (dt_iop_rawprepare_data_t *)piece->data;
-
   // fprintf(stderr, "roi in %d %d %d %d\n", roi_in->x, roi_in->y, roi_in->width, roi_in->height);
   // fprintf(stderr, "roi out %d %d %d %d\n", roi_out->x, roi_out->y, roi_out->width, roi_out->height);
 
@@ -478,6 +477,9 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_
   dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
   dt_iop_rawprepare_global_data_t *gd = (dt_iop_rawprepare_global_data_t *)self->global_data;
 
+  // Scanner DNGs and already-demosaiced files have no CFA; OpenCL path assumes CFA.
+  if(piece->pipe->dsc.filters == 0) return FALSE;
+
   const int devid = piece->pipe->devid;
   cl_mem dev_sub = NULL;
   cl_mem dev_div = NULL;
@@ -487,7 +489,8 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_
   int kernel = -1;
   gboolean gainmap_args = FALSE;
 
-  if(piece->pipe->dsc.filters && piece->dsc_in.channels == 1 && piece->dsc_in.datatype == TYPE_UINT16)
+  // Monochrome raws (no CFA) also come in as 1 channel; use the 1f kernels regardless of filters.
+  if(piece->dsc_in.channels == 1 && piece->dsc_in.datatype == TYPE_UINT16)
   {
     if(d->apply_gainmaps)
     {
@@ -499,7 +502,7 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_
       kernel = gd->kernel_rawprepare_1f;
     }
   }
-  else if(piece->pipe->dsc.filters && piece->dsc_in.channels == 1 && piece->dsc_in.datatype == TYPE_FLOAT)
+  else if(piece->dsc_in.channels == 1 && piece->dsc_in.datatype == TYPE_FLOAT)
   {
     if(d->apply_gainmaps)
     {
@@ -681,6 +684,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
 {
   const dt_iop_rawprepare_params_t *const p = (dt_iop_rawprepare_params_t *)params;
   dt_iop_rawprepare_data_t *d = (dt_iop_rawprepare_data_t *)piece->data;
+  const dt_image_t *const img = &piece->pipe->image;
 
   d->x = p->x;
   d->y = p->y;
@@ -736,6 +740,10 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *params, dt_dev_pixelp
      || image_is_normalized(&piece->pipe->image))
     piece->enabled = 0;
 
+  // OpenCL path only for RAW, single-channel, CFA images.
+  const gboolean cl_ok = (img->buf_dsc.cst == IOP_CS_RAW && img->buf_dsc.channels == 1 && img->buf_dsc.filters);
+  if(!cl_ok) piece->process_cl_ready = FALSE;
+
   if(piece->pipe->want_detail_mask == (DT_DEV_DETAIL_MASK_REQUIRED | DT_DEV_DETAIL_MASK_RAWPREPARE))
     piece->process_tiling_ready = 0;
 }
@@ -757,6 +765,11 @@ static gboolean enable(const dt_image_t *image)
 {
   return dt_image_is_rawprepare_supported(image) 
           && !image_is_normalized(image);
+}
+
+gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state)
+{
+  return enable(&self->dev->image_storage) && current_state;
 }
 
 void reload_defaults(dt_iop_module_t *self)
