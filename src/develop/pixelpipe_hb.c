@@ -287,6 +287,8 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   // blocks while busy and sets shutdown bit:
   dt_dev_pixelpipe_cleanup_nodes(pipe);
   // so now it's safe to clean up cache:
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, pipe->backbuf.hash);
+  pipe->backbuf.hash = -1;
   dt_pthread_mutex_destroy(&(pipe->busy_mutex));
   pipe->icc_type = DT_COLORSPACE_NONE;
   g_free(pipe->icc_filename);
@@ -1919,7 +1921,7 @@ void dt_dev_pixelpipe_disable_before(dt_dev_pixelpipe_t *pipe, const char *op)
       g_list_free_full(pipe->forms, (void (*)(void *))dt_masks_free_form);                                        \
       pipe->forms = NULL;                                                                                         \
     }                                                                                                             \
-    dt_iop_nap(5000);                                                                                             \
+    dt_pthread_mutex_lock(&darktable.pipeline_threadsafe);                                                        \
     return 1;                                                                                                     \
   }
 
