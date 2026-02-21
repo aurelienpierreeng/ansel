@@ -538,6 +538,39 @@ void dt_dev_process_image_job(dt_develop_t *dev)
   dt_dev_darkroom_pipeline(dev, dev->pipe);
 }
 
+static gboolean _dt_dev_mipmap_prefetch_full(const int32_t imgid)
+{
+  dt_mipmap_buffer_t buf;
+  dt_mipmap_cache_get(darktable.mipmap_cache, &buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
+  const gboolean ok = (buf.buf != NULL) && buf.width != 0 && buf.height != 0;
+  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+
+  return ok;
+}
+
+static gboolean _dt_dev_refresh_image_storage(dt_develop_t *dev, const int32_t imgid)
+{
+  const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  if(!image) return FALSE;
+  dev->image_storage = *image;
+  dt_image_cache_read_release(darktable.image_cache, image);
+  return TRUE;
+}
+
+dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int32_t imgid)
+{
+  if(!dev || imgid <= 0 || !darktable.image_cache)
+    return DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
+
+  if(!_dt_dev_mipmap_prefetch_full(imgid))
+    return DT_DEV_IMAGE_STORAGE_MIPMAP_NOT_FOUND;
+
+  if(!_dt_dev_refresh_image_storage(dev, imgid)) 
+    return DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
+
+  return DT_DEV_IMAGE_STORAGE_OK;
+}
+
 // load the raw and get the new image struct, blocking in gui thread
 static inline int _dt_dev_load_raw(dt_develop_t *dev, const int32_t imgid)
 {
@@ -546,20 +579,14 @@ static inline int _dt_dev_load_raw(dt_develop_t *dev, const int32_t imgid)
   dt_get_times(&start);
 
   // Test we got images. Also that populates the cache for later.
-  dt_mipmap_buffer_t buf;
-  dt_mipmap_cache_get(darktable.mipmap_cache, &buf, imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
-  const gboolean no_valid_image = (buf.buf == NULL) || buf.width == 0 || buf.height == 0;
-  dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
-
+  // Refresh our private copy in case raw loading updated image metadata
+  const dt_dev_image_storage_t storage_status = dt_dev_ensure_image_storage(dev, imgid);
+  if(storage_status) 
+    return storage_status;
+  
   dt_show_times_f(&start, "[dev_pixelpipe]", "to load the image.");
 
-  // Refresh our private copy in case raw loading updated image metadata
-  const dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-  if(!image) return 1;
-  dev->image_storage = *image;
-  dt_image_cache_read_release(darktable.image_cache, image);
-
-  return (no_valid_image);
+  return 0;
 }
 
 // return the zoom scale to fit into the viewport
@@ -572,12 +599,13 @@ float dt_dev_get_zoom_scale(dt_develop_t *dev, const gboolean preview)
 
 int dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
 {
-  if(_dt_dev_load_raw(dev, imgid)) return 1;
+  const int ret = _dt_dev_load_raw(dev, imgid);
+  if(ret) return ret;
 
   // we need a global lock as the dev->iop set must not be changed until read history is terminated
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
 
-  const gboolean first_run = dt_dev_read_history_ext(dev, dev->image_storage.id, FALSE);
+  const gboolean first_run = dt_dev_read_history_ext(dev, imgid, FALSE);
   if(first_run && dev == darktable.develop)
   {
     // Resync our private copy of image image with DB,

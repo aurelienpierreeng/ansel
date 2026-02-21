@@ -706,7 +706,18 @@ int try_enter(dt_view_t *self)
   int ret = dt_dev_load_image(darktable.develop, imgid);
   if(ret)
   {
-    dt_control_log(_("We could not load the image."));
+    switch(ret)
+    {
+      case DT_DEV_IMAGE_STORAGE_MIPMAP_NOT_FOUND:
+        dt_control_log(_("Could not load the image source data."));
+        break;
+      case DT_DEV_IMAGE_STORAGE_DB_NOT_READ:
+        dt_control_log(_("Could not read image information from the database."));
+        break;
+      default:
+        dt_control_log(_("We could not load the image."));
+        break;
+    }
     return 1;
   }
   darktable.develop->proxy.wb_coeffs[0] = 0.f;

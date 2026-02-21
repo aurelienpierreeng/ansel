@@ -156,49 +156,32 @@ static sqlite3_stmt *_image_cache_get_stmt(void)
 
 void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
 {
-  dt_image_init(img);
-
-  img->id = sqlite3_column_int(stmt, 0);
-  img->group_id = sqlite3_column_int(stmt, 1);
-  img->group_members = (uint32_t)sqlite3_column_int(stmt, 2);
-  img->history_items = (uint32_t)sqlite3_column_int(stmt, 3);
-  img->history_hash = sqlite3_column_int64(stmt, 4);
-  img->mipmap_hash = sqlite3_column_int64(stmt, 5);
-  img->film_id = sqlite3_column_int(stmt, 6);
-  img->version = sqlite3_column_int(stmt, 7);
-  img->width = sqlite3_column_int(stmt, 8);
-  img->height = sqlite3_column_int(stmt, 9);
-  img->orientation = sqlite3_column_int(stmt, 10);
-  img->p_width = 0;
-  img->p_height = 0;
-  img->flags = sqlite3_column_int(stmt, 11);
-  img->loader = LOADER_UNKNOWN;
-  img->import_timestamp = sqlite3_column_int64(stmt, 12);
-  img->change_timestamp = sqlite3_column_int64(stmt, 13);
-  img->export_timestamp = sqlite3_column_int64(stmt, 14);
-  img->print_timestamp = sqlite3_column_int64(stmt, 15);
-  img->exif_exposure = sqlite3_column_double(stmt, 16);
-  if(sqlite3_column_type(stmt, 17) == SQLITE_FLOAT)
-    img->exif_exposure_bias = sqlite3_column_double(stmt, 17);
-  else
-    img->exif_exposure_bias = NAN;
-  img->exif_aperture = sqlite3_column_double(stmt, 18);
-  img->exif_iso = sqlite3_column_double(stmt, 19);
-  img->exif_focal_length = sqlite3_column_double(stmt, 20);
-  img->exif_focus_distance = sqlite3_column_double(stmt, 21);
-  img->exif_datetime_taken = sqlite3_column_int64(stmt, 22);
-  if(sqlite3_column_type(stmt, 23) == SQLITE_FLOAT)
-    img->geoloc.longitude = sqlite3_column_double(stmt, 23);
-  else
-    img->geoloc.longitude = NAN;
-  if(sqlite3_column_type(stmt, 24) == SQLITE_FLOAT)
-    img->geoloc.latitude = sqlite3_column_double(stmt, 24);
-  else
-    img->geoloc.latitude = NAN;
-  if(sqlite3_column_type(stmt, 25) == SQLITE_FLOAT)
-    img->geoloc.elevation = sqlite3_column_double(stmt, 25);
-  else
-    img->geoloc.elevation = NAN;
+  if(sqlite3_column_type(stmt, 0) != SQLITE_NULL) img->id = sqlite3_column_int(stmt, 0);
+  if(sqlite3_column_type(stmt, 1) != SQLITE_NULL) img->group_id = sqlite3_column_int(stmt, 1);
+  if(sqlite3_column_type(stmt, 2) != SQLITE_NULL) img->group_members = (uint32_t)sqlite3_column_int(stmt, 2);
+  if(sqlite3_column_type(stmt, 3) != SQLITE_NULL) img->history_items = (uint32_t)sqlite3_column_int(stmt, 3);
+  if(sqlite3_column_type(stmt, 4) != SQLITE_NULL) img->history_hash = sqlite3_column_int64(stmt, 4);
+  if(sqlite3_column_type(stmt, 5) != SQLITE_NULL) img->mipmap_hash = sqlite3_column_int64(stmt, 5);
+  if(sqlite3_column_type(stmt, 6) != SQLITE_NULL) img->film_id = sqlite3_column_int(stmt, 6);
+  if(sqlite3_column_type(stmt, 7) != SQLITE_NULL) img->version = sqlite3_column_int(stmt, 7);
+  if(sqlite3_column_type(stmt, 8) != SQLITE_NULL) img->width = sqlite3_column_int(stmt, 8);
+  if(sqlite3_column_type(stmt, 9) != SQLITE_NULL) img->height = sqlite3_column_int(stmt, 9);
+  if(sqlite3_column_type(stmt, 10) != SQLITE_NULL) img->orientation = sqlite3_column_int(stmt, 10);
+  if(sqlite3_column_type(stmt, 11) != SQLITE_NULL) img->flags = sqlite3_column_int(stmt, 11);
+  if(sqlite3_column_type(stmt, 12) != SQLITE_NULL) img->import_timestamp = sqlite3_column_int64(stmt, 12);
+  if(sqlite3_column_type(stmt, 13) != SQLITE_NULL) img->change_timestamp = sqlite3_column_int64(stmt, 13);
+  if(sqlite3_column_type(stmt, 14) != SQLITE_NULL) img->export_timestamp = sqlite3_column_int64(stmt, 14);
+  if(sqlite3_column_type(stmt, 15) != SQLITE_NULL) img->print_timestamp = sqlite3_column_int64(stmt, 15);
+  if(sqlite3_column_type(stmt, 16) != SQLITE_NULL) img->exif_exposure = sqlite3_column_double(stmt, 16);
+  if(sqlite3_column_type(stmt, 17) != SQLITE_NULL) img->exif_exposure_bias = sqlite3_column_double(stmt, 17);
+  if(sqlite3_column_type(stmt, 18) != SQLITE_NULL) img->exif_aperture = sqlite3_column_double(stmt, 18);
+  if(sqlite3_column_type(stmt, 19) != SQLITE_NULL) img->exif_iso = sqlite3_column_double(stmt, 19);
+  if(sqlite3_column_type(stmt, 20) != SQLITE_NULL) img->exif_focal_length = sqlite3_column_double(stmt, 20);
+  if(sqlite3_column_type(stmt, 21) != SQLITE_NULL) img->exif_focus_distance = sqlite3_column_double(stmt, 21);
+  if(sqlite3_column_type(stmt, 22) != SQLITE_NULL) img->exif_datetime_taken = sqlite3_column_int64(stmt, 22);
+  if(sqlite3_column_type(stmt, 23) != SQLITE_NULL) img->geoloc.longitude = sqlite3_column_double(stmt, 23);
+  if(sqlite3_column_type(stmt, 24) != SQLITE_NULL) img->geoloc.latitude = sqlite3_column_double(stmt, 24);
+  if(sqlite3_column_type(stmt, 25) != SQLITE_NULL) img->geoloc.elevation = sqlite3_column_double(stmt, 25);
 
   const char *filename = (const char *)sqlite3_column_text(stmt, 26);
   if(filename) g_strlcpy(img->filename, filename, sizeof(img->filename));
@@ -213,31 +196,26 @@ void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
   const char *folder = (const char *)sqlite3_column_text(stmt, 31);
   if(folder) g_strlcpy(img->folder, folder, sizeof(img->folder));
 
-  img->color_labels = sqlite3_column_int(stmt, 32);
+  if(sqlite3_column_type(stmt, 32) != SQLITE_NULL) img->color_labels = sqlite3_column_int(stmt, 32);
 
-  img->exif_crop = sqlite3_column_double(stmt, 33);
-  uint32_t tmp = sqlite3_column_int(stmt, 34);
-  memcpy(&img->legacy_flip, &tmp, sizeof(dt_image_raw_parameters_t));
+  if(sqlite3_column_type(stmt, 33) != SQLITE_NULL) img->exif_crop = sqlite3_column_double(stmt, 33);
+  if(sqlite3_column_type(stmt, 34) != SQLITE_NULL)
+  {
+    uint32_t tmp = sqlite3_column_int(stmt, 34);
+    memcpy(&img->legacy_flip, &tmp, sizeof(dt_image_raw_parameters_t));
+  }
   const void *color_matrix = sqlite3_column_blob(stmt, 35);
-  if(color_matrix)
-    memcpy(img->d65_color_matrix, color_matrix, sizeof(img->d65_color_matrix));
-  else
-    img->d65_color_matrix[0] = NAN;
-  img->colorspace = sqlite3_column_int(stmt, 36);
-  img->raw_black_level = sqlite3_column_int(stmt, 37);
-  img->raw_white_point = sqlite3_column_int(stmt, 38);
+  if(color_matrix) memcpy(img->d65_color_matrix, color_matrix, sizeof(img->d65_color_matrix));
+  if(sqlite3_column_type(stmt, 36) != SQLITE_NULL) img->colorspace = sqlite3_column_int(stmt, 36);
+  if(sqlite3_column_type(stmt, 37) != SQLITE_NULL) img->raw_black_level = sqlite3_column_int(stmt, 37);
+  if(sqlite3_column_type(stmt, 38) != SQLITE_NULL) img->raw_white_point = sqlite3_column_int(stmt, 38);
 
   if(img->fullpath[0])
     dt_image_local_copy_paths_from_fullpath(img->fullpath, img->id, img->local_copy_path,
                                             sizeof(img->local_copy_path), img->local_copy_legacy_path,
                                             sizeof(img->local_copy_legacy_path));
 
-  if(img->exif_focus_distance >= 0 && img->orientation >= 0) img->exif_inited = 1;
-
-  img->crop_x = img->crop_y = img->crop_width = img->crop_height = 0;
-
-  for(uint8_t i = 0; i < 4; i++) 
-    img->raw_black_level_separate[i] = 0;
+  img->exif_inited = (img->exif_focus_distance >= 0 && img->orientation >= 0);
 
   if(img->folder[0])
     g_strlcpy(img->filmroll, dt_image_film_roll_name(img->folder), sizeof(img->filmroll));
@@ -426,6 +404,7 @@ dt_image_t *dt_image_cache_get_reload(dt_image_cache_t *cache, const int32_t img
   ASAN_UNPOISON_MEMORY_REGION(entry->data, sizeof(dt_image_t));
   dt_image_t *img = (dt_image_t *)entry->data;
   _image_cache_reload_from_db(img, (uint32_t)imgid);
+
   img->cache_entry = entry;
 
   if(dt_image_invalid(img))

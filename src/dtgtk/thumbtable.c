@@ -1181,6 +1181,7 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
     // Populate the image cache. We don't keep a copy here because it wouldn't
     // be memory-managed
     dt_image_t info;
+    dt_image_init(&info);
     dt_image_from_stmt(&info, stmt);
 
 #ifndef NDEBUG

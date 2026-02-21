@@ -65,6 +65,7 @@
 #include "common/image_cache.h"
 #include "develop/dev_history.h"
 #include "develop/blend.h"
+#include "develop/develop.h"
 #include "develop/imageop.h"
 #include "develop/masks.h"
 
@@ -904,6 +905,10 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
 
 void dt_dev_pop_history_items(dt_develop_t *dev)
 {
+  // Ensure `dev->image_storage` is up-to-date before modules reload their defaults.
+  // This avoids using incomplete RAW metadata (WB coeffs, matrices) on newly-inited images.
+  dt_dev_ensure_image_storage(dev, dev->image_storage.id);
+
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
@@ -1452,17 +1457,12 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolea
   if(!dev->iop)
     dev->iop = dt_dev_load_modules(dev);
 
-  // Ensure we have our own fresh copy of the image structure.
-  // Need to do it here, some modules rely on it to update their default params.
+  // Ensure raw metadata (WB coeffs, matrices, etc.) is available for modules that
+  // query it while (re)loading defaults (e.g. temperature/colorin).
   // This is redundant with `_dt_dev_load_raw()` called from `dt_dev_load_image()`,
-  // but we don't always manipulate an history when/after loading an image.
-  if(dev->image_storage.id != imgid)
-  {
-    dt_image_t *cache_img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-    if(!cache_img) return FALSE;
-    dev->image_storage = *cache_img;
-    dt_image_cache_read_release(darktable.image_cache, cache_img);
-  }
+  // but some call sites reload history without guaranteeing a prior FULL open.
+  if(dt_dev_ensure_image_storage(dev, imgid)) 
+    return FALSE;
 
   int legacy_params = 0;
 

@@ -87,6 +87,8 @@ int dt_image_cache_seed(dt_image_cache_t *cache, const dt_image_t *img);
 // focal_length, focus_distance, datetime_taken, longitude, latitude, altitude, filename, fullpath, maker, model,
 // lens, folder, color_labels, crop, raw_parameters, color_matrix, colorspace, raw_black, raw_maximum,
 // aspect_ratio, output_width, output_height.
+//
+// IMPORTANT: this does not call dt_image_init(). Fields not present in the SQL row are left unchanged.
 void dt_image_from_stmt(dt_image_t *info, sqlite3_stmt *stmt);
 
 struct dt_control_signal_t;

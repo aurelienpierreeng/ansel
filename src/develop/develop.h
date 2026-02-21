@@ -383,6 +383,17 @@ GList *dt_dev_load_modules(dt_develop_t *dev);
 void dt_dev_process_image_job(dt_develop_t *dev);
 void dt_dev_process_preview_job(dt_develop_t *dev);
 
+typedef enum dt_dev_image_storage_t
+{
+  DT_DEV_IMAGE_STORAGE_OK = 0,
+  DT_DEV_IMAGE_STORAGE_MIPMAP_NOT_FOUND = 1,
+  DT_DEV_IMAGE_STORAGE_DB_NOT_READ = 2,
+} dt_dev_image_storage_t;
+
+// Optionally prefetch `DT_MIPMAP_FULL`, then refresh dev->image_storage from the image cache.
+// Returns a status code to differentiate missing source image data from DB/cache failures.
+dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int32_t imgid);
+
 // Launch a pipeline job
 void dt_dev_process(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe);
 
