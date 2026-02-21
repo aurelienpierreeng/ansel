@@ -783,7 +783,8 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   }
   
   // Save history straight away
-  dt_dev_write_history_ext(dev, dev->image_storage.id);
+  dt_dev_write_history(dev);
+  dt_dev_history_notify_change(dev, dev->image_storage.id);
 }
 
 void dt_dev_free_history_item(gpointer data)
@@ -809,22 +810,13 @@ void dt_dev_history_free_history(dt_develop_t *dev)
 
 void dt_dev_reload_history_items(dt_develop_t *dev)
 {
-  // Recreate the whole history from scratch
+  // Recreate the whole history from scratch.
+  // Backend only: GUI updates and pixelpipe rebuilds need to be triggered by callers.
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_history_free_history(dev);
   dt_dev_read_history_ext(dev, dev->image_storage.id, !dev->gui_attached);
+  dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
-
-  // dt_dev_pop_history_items() triggers GUI updates and pixelpipe rebuilds, which are not available
-  // for headless dt_develop_t instances (gui_attached == FALSE).
-  if(darktable.gui && dev->gui_attached)
-    dt_dev_pop_history_items(dev);
-  else
-  {
-    dt_pthread_rwlock_wrlock(&dev->history_mutex);
-    dt_dev_pop_history_items_ext(dev);
-    dt_pthread_rwlock_unlock(&dev->history_mutex);
-  }
 }
 
 
@@ -908,10 +900,14 @@ void dt_dev_pop_history_items(dt_develop_t *dev)
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
+}
+
+void dt_dev_history_gui_update(dt_develop_t *dev)
+{
+  if(!darktable.gui || !dev || !dev->gui_attached) return;
 
   ++darktable.gui->reset;
 
-  // update all gui modules
   for(GList *module = g_list_first(dev->iop); module; module = g_list_next(module))
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)(module->data);
@@ -924,6 +920,11 @@ void dt_dev_pop_history_items(dt_develop_t *dev)
   dt_dev_masks_list_change(dev);
 
   --darktable.gui->reset;
+}
+
+void dt_dev_history_pixelpipe_update(dt_develop_t *dev)
+{
+  if(!dev || !dev->gui_attached) return;
 
   dt_dev_pixelpipe_rebuild_all(dev);
   dt_dev_process_all(dev);
@@ -971,19 +972,26 @@ guint dt_dev_mask_history_overload(GList *dev_history, guint threshold)
   return states;
 }
 
-static void _warn_about_history_overuse(GList *dev_history, int32_t imgid)
+void dt_dev_history_notify_change(dt_develop_t *dev, const int32_t imgid)
 {
-  /* History stores one entry per module, everytime a parameter is changed.
-  *  For modules using masks, we also store a full snapshot of masks states.
-  *  All that is saved into database and XMP. When history entries x number of mask > 250,
-  *  we get a really bad performance penalty.
-  */
-  guint states = dt_dev_mask_history_overload(dev_history, 250);
+  if(!dev || imgid <= 0) return;
 
-  if(states > 250)
-    dt_toast_log(_("Image #%i history is storing %d mask states. n"
-                   "Consider compressing history and removing unused masks to keep reads/writes manageable."),
-                   imgid, states);
+  if(darktable.gui && dev->gui_attached)
+  {
+    const guint states = dt_dev_mask_history_overload(dev->history, 250);
+    if(states > 250)
+      dt_toast_log(_("Image #%i history is storing %d mask states. n"
+                     "Consider compressing history and removing unused masks to keep reads/writes manageable."),
+                     imgid, states);
+  }
+
+  // Don't refresh the thumbnail if we are in darkroom
+  // Spawning another export thread will likely slow-down the current one.
+  if(darktable.gui && dev != darktable.develop)
+    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
+
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_INFO_CHANGED,
+                               g_list_append(NULL, GINT_TO_POINTER(imgid)));
 }
 
 
@@ -1128,9 +1136,9 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
   dt_image_t *cache_img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
   if(!cache_img) return;
 
-  _warn_about_history_overuse(dev->history, imgid);
-
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_ext] writing history for image %i...\n", imgid);
+
+  dev->history_hash = dt_dev_history_get_hash(dev);
 
   _cleanup_history(imgid);
 
@@ -1143,7 +1151,7 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
     i++;
   }
 
-  dt_dev_write_history_end_ext(dt_dev_get_history_end(dev), dev->image_storage.id);
+  dt_dev_write_history_end_ext(dt_dev_get_history_end(dev), imgid);
 
   // write the current iop-order-list for this image
   dt_ioppr_write_iop_order_list(dev->iop_order_list, imgid);
@@ -1154,13 +1162,6 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
   cache_img = NULL;
 
   dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
-
-  // Don't refresh the thumbnail if we are in darkroom
-  // Spawning another export thread will likely slow-down the current one.
-  if(darktable.gui && dev != darktable.develop)
-    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
-
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_INFO_CHANGED, g_list_append(NULL, GINT_TO_POINTER(imgid)));
 }
 
 // Write TO XMP, so from the dev perspective, it's a read
@@ -1169,6 +1170,30 @@ void dt_dev_write_history(dt_develop_t *dev)
   dt_pthread_rwlock_rdlock(&dev->history_mutex);
   dt_dev_write_history_ext(dev, dev->image_storage.id);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
+}
+
+void dt_dev_write_history_end(dt_develop_t *dev)
+{
+  if(!dev) return;
+
+  const int32_t imgid = dev->image_storage.id;
+  if(imgid <= 0) return;
+
+  uint64_t history_hash = 0;
+  int history_end = 0;
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
+  history_hash = dev->history_hash = dt_dev_history_get_hash(dev);
+  history_end = dt_dev_get_history_end(dev);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
+
+  dt_dev_write_history_end_ext(history_end, imgid);
+
+  dt_image_t *cache_img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+  if(!cache_img) return;
+  cache_img->history_hash = history_hash;
+  dt_image_cache_write_release(darktable.image_cache, cache_img, DT_IMAGE_CACHE_SAFE);
+
+  dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
 }
 
 static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
@@ -1619,9 +1644,9 @@ static void _process_history_db_entry(dt_develop_t *dev, sqlite3_stmt *stmt, con
 }
 
 
-void dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolean no_image)
+gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolean no_image)
 {
-  if(imgid == UNKNOWN_IMAGE) return;
+  if(imgid == UNKNOWN_IMAGE) return FALSE;
 
   if(!dev->iop)
     dev->iop = dt_dev_load_modules(dev);
@@ -1633,7 +1658,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolean no
   if(dev->image_storage.id != imgid)
   {
     dt_image_t *cache_img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-    if(!cache_img) return;
+    if(!cache_img) return FALSE;
     dev->image_storage = *cache_img;
     dt_image_cache_read_release(darktable.image_cache, cache_img);
   }
@@ -1650,7 +1675,7 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolean no
   // Protect history DB reads with a cache read lock.
   // Release it before applying history to modules to avoid deadlocks.
   dt_image_t *read_lock_img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
-  if(!read_lock_img) return;
+  if(!read_lock_img) return FALSE;
 
   sqlite3_stmt *stmt;
 
@@ -1724,29 +1749,8 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolean no
   // Init global history hash to track changes during runtime
   dev->history_hash = dt_dev_history_get_hash(dev);
 
-  // Write it straight away if we just inited the history
-  // NOTE: if the embedded_jpg mode is set to "never" (= 0),
-  // browsing the lighttable will render the thumbnails from scratch
-  // from the raw input, which will init an history to init a pipeline.
-  // In that case, we don't want to write an history that would make the images
-  // look like they have been edited.
-  // So we auto-write here only if we are in darkroom.
-  if(first_run && dev == darktable.develop)
-  {
-    // Resync our private copy of image image with DB,
-    // mostly for DT_IMAGE_AUTO_PRESETS_APPLIED flag
-    dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-    *image = dev->image_storage;
-    dt_dev_append_changed_tag(imgid);
-    dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
-    
-    dt_dev_write_history_ext(dev, imgid);
-  }
-  //else if(legacy_params)
-  //  TODO: ask user for confirmation before saving updated history
-  //  because that will made it incompatible with earlier app versions
-
   dt_print(DT_DEBUG_HISTORY, "[history] dt_dev_read_history_ext completed\n");
+  return first_run;
 }
 
 
@@ -1774,6 +1778,7 @@ gboolean _module_leaves_no_history(dt_iop_module_t *module)
 
 void dt_dev_history_compress(dt_develop_t *dev)
 {
+  const int32_t imgid = dev->image_storage.id;
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
 
   // Cleanup old history
@@ -1826,17 +1831,20 @@ void dt_dev_history_compress(dt_develop_t *dev)
       dt_dev_add_history_item_ext(dev, module, FALSE, TRUE, TRUE, TRUE);
   }
 
-  // Update the global checksum before writing to DB/XMP.
-  dev->history_hash = dt_dev_history_get_hash(dev);
-
   // Commit to DB
-  dt_dev_write_history_ext(dev, dev->image_storage.id);
+  dt_dev_write_history_ext(dev, imgid);
+
+  // Reload to sanitize mandatory/incompatible modules.
+  dt_dev_history_free_history(dev);
+  dt_dev_read_history_ext(dev, imgid, !dev->gui_attached);
+  dt_dev_pop_history_items_ext(dev);
+
+  // Ensure the cursor is at the top after sanitization: dt_dev_read_history_ext()
+  // may prepend missing default modules, increasing history size.
+  dt_dev_set_history_end(dev, g_list_length(dev->history));
+
+  // Write again after sanitization.
+  dt_dev_write_history_ext(dev, imgid);
 
   dt_pthread_rwlock_unlock(&dev->history_mutex);
-
-  // Reload to sanitize mandatory/incompatible modules
-  dt_dev_reload_history_items(dev);
-
-  // Write again after sanitization
-  dt_dev_write_history(dev);
 }

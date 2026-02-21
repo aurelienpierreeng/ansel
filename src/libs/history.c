@@ -632,10 +632,13 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
     // write new history and reload
     dt_dev_write_history(dev);
     dt_dev_reload_history_items(dev);
+    dt_dev_history_gui_update(dev);
+    dt_dev_history_pixelpipe_update(dev);
 
     dt_ioppr_resync_modules_order(dev);
 
     dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
+    dt_dev_history_notify_change(dev, dev->image_storage.id);
 
     if(dev->gui_module)
     {
@@ -1164,9 +1167,30 @@ static void _lib_history_change_callback(gpointer instance, gpointer user_data)
 static void _lib_history_truncate(gboolean compress)
 {
   dt_dev_undo_start_record(darktable.develop);
-  dt_dev_history_compress(darktable.develop);
+
+  if(compress)
+  {
+    dt_dev_history_compress(darktable.develop);
+  }
+  else
+  {
+    dt_develop_t *dev = darktable.develop;
+    const int32_t imgid = dev->image_storage.id;
+
+    // Persist current edits, then truncate DB/XMP to the currently-selected item (history_end).
+    dt_dev_write_history(dev);
+    dt_history_truncate_on_image(imgid, dt_dev_get_history_end(dev));
+
+    // Keep the loaded pipeline consistent with the newly-truncated history.
+    dt_dev_reload_history_items(dev);
+  }
+
   darktable.develop->proxy.chroma_adaptation = NULL;
   dt_dev_undo_end_record(darktable.develop);
+
+  dt_dev_history_gui_update(darktable.develop);
+  dt_dev_history_pixelpipe_update(darktable.develop);
+  dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
 }
 
 
@@ -1225,11 +1249,15 @@ static gboolean _lib_history_button_clicked_callback(GtkWidget *widget, GdkEvent
   const int num = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "history-number"));
   dt_dev_set_history_end(darktable.develop, num);
   dt_dev_pop_history_items(darktable.develop);
-  // set the module list order
-  dt_dev_reorder_gui_module_list(darktable.develop);
+  dt_dev_history_gui_update(darktable.develop);
+  dt_dev_history_pixelpipe_update(darktable.develop);
 
   /* signal history changed */
   dt_dev_undo_end_record(darktable.develop);
+
+  // Persist history_end so reloading/switching images keeps the same stack position.
+  dt_dev_write_history_end(darktable.develop);
+  dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
 
   dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
 

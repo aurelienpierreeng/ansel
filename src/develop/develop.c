@@ -577,7 +577,20 @@ int dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
   // we need a global lock as the dev->iop set must not be changed until read history is terminated
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
 
-  dt_dev_read_history_ext(dev, dev->image_storage.id, FALSE);
+  const gboolean first_run = dt_dev_read_history_ext(dev, dev->image_storage.id, FALSE);
+  if(first_run && dev == darktable.develop)
+  {
+    // Resync our private copy of image image with DB,
+    // mostly for DT_IMAGE_AUTO_PRESETS_APPLIED flag.
+    dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
+    if(image)
+    {
+      *image = dev->image_storage;
+      dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_SAFE);
+    }
+
+    dt_dev_write_history_ext(dev, imgid);
+  }
 
   if(dev->pipe)
   {
@@ -590,6 +603,12 @@ int dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
     dev->preview_pipe->processed_height = 0;
   }
   dt_pthread_rwlock_unlock(&dev->history_mutex);
+
+  if(first_run && dev == darktable.develop)
+  {
+    dt_dev_append_changed_tag(imgid);
+    dt_dev_history_notify_change(dev, imgid);
+  }
 
   dt_dev_pixelpipe_rebuild_all(dev);
 

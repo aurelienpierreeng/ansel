@@ -374,6 +374,7 @@ void dt_history_compress_on_image(const int32_t imgid)
   dt_dev_set_history_end(&dev, my_history_end);
   dt_dev_pop_history_items_ext(&dev);
   dt_dev_history_compress(&dev);
+  dt_dev_history_notify_change(&dev, imgid);
   dt_dev_cleanup(&dev);
 }
 
@@ -393,7 +394,13 @@ void dt_history_truncate_on_image(const int32_t imgid, const int32_t history_end
 
   dt_develop_t dev;
   dt_dev_init(&dev, FALSE);
-  dt_dev_read_history_ext(&dev, imgid, TRUE);
+  dt_pthread_rwlock_wrlock(&dev.history_mutex);
+  if(!dt_dev_read_history_ext(&dev, imgid, TRUE))
+  {
+    dt_pthread_rwlock_unlock(&dev.history_mutex);
+    dt_dev_cleanup(&dev);
+    return;
+  }
 
   // Clamp to history size.
   dt_dev_set_history_end(&dev, history_end);
@@ -409,8 +416,9 @@ void dt_history_truncate_on_image(const int32_t imgid, const int32_t history_end
     link = next;
   }
 
-  dev.history_hash = dt_dev_history_get_hash(&dev);
   dt_dev_write_history_ext(&dev, imgid);
+  dt_pthread_rwlock_unlock(&dev.history_mutex);
+  dt_dev_history_notify_change(&dev, imgid);
   dt_dev_cleanup(&dev);
 }
 

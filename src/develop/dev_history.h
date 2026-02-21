@@ -97,11 +97,23 @@ void dt_dev_write_history_ext(struct dt_develop_t *dev, const int32_t imgid);
 // Locks dev->history_mutex and calls dt_dev_write_history_ext()
 void dt_dev_write_history(struct dt_develop_t *dev);
 
+// Persist history_end + history_hash to DB and XMP, without rewriting history entries.
+void dt_dev_write_history_end(struct dt_develop_t *dev);
+
+// Apply module params already loaded from history to module GUIs.
+void dt_dev_history_gui_update(struct dt_develop_t *dev);
+
+// Rebuild and process pixelpipes after backend history changes.
+void dt_dev_history_pixelpipe_update(struct dt_develop_t *dev);
+
+// Notify the rest of the app that history-related DB/XMP changes were written.
+void dt_dev_history_notify_change(struct dt_develop_t *dev, const int32_t imgid);
+
 // Locks darktable.database_threadsafe in read mode,
 // get history (module params) and masks from DB,
 // apply default modules, auto-presets and mandatory modules,
 // then populate dev->history GList.
-void dt_dev_read_history_ext(struct dt_develop_t *dev, const int32_t imgid, gboolean no_image);;
+gboolean dt_dev_read_history_ext(struct dt_develop_t *dev, const int32_t imgid, gboolean no_image);
 
 // Read dev->history state, up to dev->history_end,
 // and write it into the params/blendops of modules from dev->iop.

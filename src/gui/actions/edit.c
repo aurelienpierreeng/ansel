@@ -122,6 +122,9 @@ static gboolean compress_history_callback(GtkAccelGroup *group, GObject *acceler
     dt_dev_undo_start_record(darktable.develop);
     dt_dev_history_compress(darktable.develop);
     dt_dev_undo_end_record(darktable.develop);
+    dt_dev_history_gui_update(darktable.develop);
+    dt_dev_history_pixelpipe_update(darktable.develop);
+    dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
 
     // Avoid running a headless compression for the current darkroom image: the history module
@@ -157,6 +160,9 @@ static gboolean delete_history_callback(GtkAccelGroup *group, GObject *accelerat
   {
     dt_dev_undo_end_record(darktable.develop);
     dt_dev_reload_history_items(darktable.develop);
+    dt_dev_history_gui_update(darktable.develop);
+    dt_dev_history_pixelpipe_update(darktable.develop);
+    dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
   }
 
@@ -239,6 +245,9 @@ static gboolean paste_all_callback(GtkAccelGroup *group, GObject *acceleratable,
   {
     dt_dev_undo_end_record(darktable.develop);
     dt_dev_reload_history_items(darktable.develop);
+    dt_dev_history_gui_update(darktable.develop);
+    dt_dev_history_pixelpipe_update(darktable.develop);
+    dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
   }
 
@@ -270,6 +279,9 @@ static gboolean paste_parts_callback(GtkAccelGroup *group, GObject *acceleratabl
   {
     dt_dev_undo_end_record(darktable.develop);
     dt_dev_reload_history_items(darktable.develop);
+    dt_dev_history_gui_update(darktable.develop);
+    dt_dev_history_pixelpipe_update(darktable.develop);
+    dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
   }
 
@@ -343,6 +355,9 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
 
       // TODO: only when needed, check imgid
       dt_dev_reload_history_items(darktable.develop);
+      dt_dev_history_gui_update(darktable.develop);
+      dt_dev_history_pixelpipe_update(darktable.develop);
+      dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
     }
     else
     {

@@ -2039,6 +2039,8 @@ void enter(dt_view_t *self)
   // this is done here and not in dt_read_history, as it would else be triggered before module->gui_init.
   // locks history mutex internally
   dt_dev_pop_history_items(dev);
+  dt_dev_history_gui_update(dev);
+  dt_dev_history_pixelpipe_update(dev);
 
   // Clean & Init the starting point of undo/redo
   dt_undo_clear(darktable.undo, DT_UNDO_DEVELOP);

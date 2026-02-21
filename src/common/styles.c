@@ -813,11 +813,12 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
       g_list_free_full(img_iop_order_list, g_free);
     }
 
+    dt_pthread_rwlock_wrlock(&dev_dest->history_mutex);
     dt_dev_read_history_ext(dev_dest, newimgid, TRUE);
+    dt_dev_pop_history_items_ext(dev_dest);
+    dt_pthread_rwlock_unlock(&dev_dest->history_mutex);
 
     dt_ioppr_check_iop_order(dev_dest, newimgid, "dt_styles_apply_to_image ");
-
-    dt_dev_pop_history_items_ext(dev_dest);
 
     dt_ioppr_check_iop_order(dev_dest, newimgid, "dt_styles_apply_to_image 1");
 
@@ -880,7 +881,10 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
     dt_history_snapshot_undo_create(hist->imgid, &hist->before, &hist->before_history_end);
 
     // write history and forms to db
+    dt_pthread_rwlock_rdlock(&dev_dest->history_mutex);
     dt_dev_write_history_ext(dev_dest, newimgid);
+    dt_pthread_rwlock_unlock(&dev_dest->history_mutex);
+    dt_dev_history_notify_change(dev_dest, newimgid);
 
     dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
     dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
@@ -897,7 +901,12 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
 
     /* if current image in develop reload history */
     if(dt_dev_is_current_image(darktable.develop, newimgid))
+    {
       dt_dev_reload_history_items(darktable.develop);
+      dt_dev_history_gui_update(darktable.develop);
+      dt_dev_history_pixelpipe_update(darktable.develop);
+      dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
+    }
 
     /* remove old obsolete thumbnails */
     dt_mipmap_cache_remove(darktable.mipmap_cache, newimgid, TRUE);
