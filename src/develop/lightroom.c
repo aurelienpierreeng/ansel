@@ -40,6 +40,7 @@
 #include "common/curve_tools.h"
 #include "common/darktable.h"
 #include "common/debug.h"
+#include "common/history.h"
 #include "common/iop_order.h"
 #include "common/ratings.h"
 #include "common/tags.h"
@@ -347,52 +348,12 @@ static float lr2dt_clarity(float value)
 static void dt_add_hist(int32_t imgid, char *operation, dt_iop_params_t *params, int params_size, char *imported,
                         size_t imported_len, int version, int *import_count)
 {
-  int32_t num = 0;
   dt_develop_blend_params_t blend_params = { 0 };
 
-  //  get current num if any
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT COUNT(*) FROM main.history WHERE imgid = ?1", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    num = sqlite3_column_int(stmt, 0);
-  }
-  sqlite3_finalize(stmt);
-
-  // add new history info
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "INSERT INTO main.history"
-                              "  (imgid, num, module, operation, op_params, enabled,"
-                              "   blendop_params, blendop_version, multi_priority, multi_name)"
-                              " VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7, 0, ' ')",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, num);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, version);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, operation, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 5, params, params_size, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 6, &blend_params, sizeof(dt_develop_blend_params_t), SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 7, LRDT_BLEND_VERSION);
-
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-
-  // also bump history_end
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "UPDATE main.images"
-                              " SET history_end = (SELECT IFNULL(MAX(num) + 1, 0)"
-                              "                    FROM main.history"
-                              "                    WHERE imgid = ?1)"
-                              " WHERE id = ?1", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+  const int32_t num = dt_history_db_get_next_history_num(imgid);
+  dt_history_db_write_history_item(imgid, num, operation, params, params_size, version, 1,
+                                   &blend_params, sizeof(dt_develop_blend_params_t), LRDT_BLEND_VERSION, 0, " ");
+  dt_history_set_end(imgid, num + 1);
 
   if(imported[0]) g_strlcat(imported, ", ", imported_len);
   g_strlcat(imported, dt_iop_get_localized_name(operation), imported_len);

@@ -3196,11 +3196,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
     GList *mask_entries_v3 = NULL;
 
     // clean all old masks for this image
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.masks_history WHERE imgid = ?1", -1,
-                                &stmt, NULL);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->id);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
+    dt_history_db_delete_masks_history(img->id);
 
     // read the masks from the file first so we can add them to the db while reading history entries
     if(xmp_version < 3)
@@ -3251,46 +3247,21 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
 
     dt_database_start_transaction(darktable.db);
 
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), "DELETE FROM main.history WHERE imgid = ?1", -1,
-                                &stmt, NULL);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->id);
-    if(sqlite3_step(stmt) != SQLITE_DONE)
+    if(!dt_history_db_delete_history(img->id))
     {
       fprintf(stderr, "[exif] error deleting history for image %d\n", img->id);
       fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
       all_ok = FALSE;
       goto end;
     }
-    sqlite3_finalize(stmt);
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "INSERT INTO main.history"
-                                " (imgid, num, module, operation, op_params, enabled, "
-                                "  blendop_params, blendop_version, multi_priority, multi_name) "
-                                "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)", -1, &stmt, NULL);
-    // clang-format on
 
     for(GList *iter = history_entries; iter; iter = g_list_next(iter))
     {
       history_entry_t *entry = (history_entry_t *)iter->data;
+      const int db_num = (xmp_version < 3) ? num : entry->num;
 
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->id);
-      if(xmp_version < 3)
-      {
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, num);
-      }
-      else
-      {
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, entry->num);
-      }
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, entry->modversion);
-      DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, entry->operation, -1, SQLITE_TRANSIENT);
-      DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 5, entry->params, entry->params_len, SQLITE_TRANSIENT);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 6, entry->enabled);
       if(entry->blendop_params)
       {
-        DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 7, entry->blendop_params, entry->blendop_params_len, SQLITE_TRANSIENT);
-
         if(xmp_version < 3)
         {
           // check what mask entries belong to this iop and add them to the db
@@ -3298,34 +3269,22 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
           add_mask_entries_to_db(img->id, mask_entries, blendop_params->mask_id);
         }
       }
-      else
-      {
-        sqlite3_bind_null(stmt, 7);
-      }
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 8, entry->blendop_version);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 9, entry->multi_priority);
-      if(entry->multi_name)
-      {
-        DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 10, entry->multi_name, -1, SQLITE_TRANSIENT);
-      }
-      else
-      {
-        DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 10, "", -1, SQLITE_TRANSIENT); // "" instead of " " should be fine now
-      }
 
-      if(sqlite3_step(stmt) != SQLITE_DONE)
+      if(!dt_history_db_write_history_item(img->id, db_num, entry->operation,
+                                           entry->params, entry->params_len,
+                                           entry->modversion, entry->enabled,
+                                           entry->blendop_params, entry->blendop_params_len,
+                                           entry->blendop_version, entry->multi_priority,
+                                           entry->multi_name ? entry->multi_name : ""))
       {
         fprintf(stderr, "[exif] error adding history entry for image %d\n", img->id);
         fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
         all_ok = FALSE;
         goto end;
       }
-      sqlite3_reset(stmt);
-      sqlite3_clear_bindings(stmt);
 
       num++;
     }
-    sqlite3_finalize(stmt);
 
     // we now need to create and store the proper iop-order taking into account all multi-instances
     // for previous xmp versions.
@@ -3398,31 +3357,20 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       if(num_masks > 0)
       {
         // make room for mask_manager entry
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                    "UPDATE main.history SET num = num + 1 WHERE imgid = ?1", -1,
-                                    &stmt, NULL);
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->id);
-        sqlite3_step(stmt);
-        sqlite3_finalize(stmt);
-
-        // insert mask_manager entry
-        // clang-format off
-        DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                    "INSERT INTO main.history"
-                                    " (imgid, num, module, operation, op_params, enabled, "
-                                    "  blendop_params, blendop_version, multi_priority, multi_name) "
-                                    "VALUES"
-                                    " (?1, 0, 1, 'mask_manager', NULL, 0, NULL, 0, 0, '')", -1, &stmt, NULL);
-        // clang-format on
-        DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->id);
-        if(sqlite3_step(stmt) != SQLITE_DONE)
+        if(!dt_history_db_shift_history_nums(img->id, 1))
+        {
+          fprintf(stderr, "[exif] error shifting history nums for image %d\n", img->id);
+          fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
+          all_ok = FALSE;
+          goto end;
+        }
+        if(!dt_history_db_write_history_item(img->id, 0, "mask_manager", NULL, 0, 1, 0, NULL, 0, 0, 0, ""))
         {
           fprintf(stderr, "[exif] error adding mask history entry for image %d\n", img->id);
           fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
           all_ok = FALSE;
           goto end;
         }
-        sqlite3_finalize(stmt);
 
         num++;
       }
@@ -3434,12 +3382,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       int history_end = MIN(pos->toLong(), num);
       if(num_masks > 0) history_end++;
       if((history_end < 1) && preset_applied) preset_applied = -1;
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                  "UPDATE main.images SET history_end = ?1 WHERE id = ?2", -1,
-                                  &stmt, NULL);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, history_end);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, img->id);
-      if(sqlite3_step(stmt) != SQLITE_DONE)
+      if(!dt_history_set_end(img->id, history_end))
       {
         fprintf(stderr, "[exif] error writing history_end for image %d\n", img->id);
         fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
@@ -3450,17 +3393,8 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
     else
     {
       if(preset_applied) preset_applied = -1;
-      // clang-format off
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                  "UPDATE main.images "
-                                  " SET history_end = (SELECT IFNULL(MAX(num) + 1, 0)"
-                                  "                    FROM main.history"
-                                  "                    WHERE imgid = ?1)"
-                                  " WHERE id = ?1", -1,
-                                  &stmt, NULL);
-      // clang-format on
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, img->id);
-      if(sqlite3_step(stmt) != SQLITE_DONE)
+      const int32_t history_end = dt_history_db_get_next_history_num(img->id);
+      if(!dt_history_set_end(img->id, history_end))
       {
         fprintf(stderr, "[exif] error writing history_end for image %d\n", img->id);
         fprintf(stderr, "[exif]   %s\n", sqlite3_errmsg(dt_database_get(darktable.db)));
@@ -3479,8 +3413,6 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
   end:
 
     read_xmp_timestamps(xmpData, img, xmp_version);
-
-    sqlite3_finalize(stmt);
 
     // set or clear bit in image struct. ONLY set if the Xmp.darktable.auto_presets_applied was 1
     // AND there was a history in xmp

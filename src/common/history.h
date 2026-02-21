@@ -86,6 +86,41 @@ void dt_history_truncate_on_image(const int32_t imgid, const int32_t history_end
 /** read history_end from database for an image (main.images.history_end) */
 int32_t dt_history_get_end(const int32_t imgid);
 
+/** write history_end to database for an image (main.images.history_end) */
+gboolean dt_history_set_end(const int32_t imgid, const int32_t history_end);
+
+/** low-level DB helpers (used by develop/dev_history.c) */
+typedef void (*dt_history_db_row_cb)(void *user_data,
+                                    const int32_t imgid,
+                                    const int num,
+                                    const int module_version,
+                                    const char *operation,
+                                    const void *op_params,
+                                    const int op_params_len,
+                                    const int enabled,
+                                    const void *blendop_params,
+                                    const int blendop_params_len,
+                                    const int blendop_version,
+                                    const int multi_priority,
+                                    const char *multi_name,
+                                    const char *preset_name);
+
+void dt_history_db_foreach_history_row(const int32_t imgid, dt_history_db_row_cb cb, void *user_data);
+void dt_history_db_foreach_auto_preset_row(const int32_t imgid, const struct dt_image_t *image, const char *workflow_preset,
+                                          const int iformat, const int excluded, dt_history_db_row_cb cb, void *user_data);
+gboolean dt_history_db_get_autoapply_ioporder_params(const int32_t imgid, const struct dt_image_t *image,
+                                                    const int iformat, const int excluded, void **params,
+                                                    int32_t *params_len);
+int32_t dt_history_db_get_next_history_num(const int32_t imgid);
+gboolean dt_history_db_delete_history(const int32_t imgid);
+gboolean dt_history_db_delete_masks_history(const int32_t imgid);
+gboolean dt_history_db_delete_dev_history(const int32_t imgid);
+gboolean dt_history_db_shift_history_nums(const int32_t imgid, const int delta);
+gboolean dt_history_db_write_history_item(const int32_t imgid, const int num, const char *operation, const void *op_params,
+                                         const int op_params_size, const int module_version, const int enabled,
+                                         const void *blendop_params, const int blendop_params_size,
+                                         const int blendop_version, const int multi_priority, const char *multi_name);
+
 /* duplicate an history list */
 GList *dt_history_duplicate(GList *hist);
 

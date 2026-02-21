@@ -771,44 +771,12 @@ void dt_image_set_images_locations(const GList *imgs, const GArray *gloc, const 
 
 void dt_image_set_flip(const int32_t imgid, const dt_image_orientation_t orientation)
 {
-  sqlite3_stmt *stmt;
   // push new orientation to sql via additional history entry:
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT IFNULL(MAX(num)+1, 0) FROM main.history"
-                              " WHERE imgid = ?1", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
   const int iop_flip_MODVER = 2;
-  int num = 0;
-  if(sqlite3_step(stmt) == SQLITE_ROW) num = sqlite3_column_int(stmt, 0);
-  sqlite3_finalize(stmt);
-
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "INSERT INTO main.history"
-                              "  (imgid, num, module, operation, op_params, enabled, "
-                              "   blendop_params, blendop_version, multi_priority, multi_name)"
-                              " VALUES (?1, ?2, ?3, 'flip', ?4, 1, NULL, 0, 0, '') ",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, num);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, iop_flip_MODVER);
-  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 4, &orientation, sizeof(int32_t), SQLITE_TRANSIENT);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "UPDATE main.images"
-                              " SET history_end = (SELECT MAX(num) + 1"
-                              "                    FROM main.history "
-                              "                    WHERE imgid = ?1) WHERE id = ?1", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+  const int num = dt_history_db_get_next_history_num(imgid);
+  dt_history_db_write_history_item(imgid, num, "flip", &orientation, sizeof(int32_t), iop_flip_MODVER, 1,
+                                   NULL, 0, 0, 0, "");
+  dt_history_set_end(imgid, num + 1);
 
   dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
   if(image)

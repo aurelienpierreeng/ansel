@@ -59,6 +59,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/darktable.h"
+#include "common/history.h"
 #include "common/undo.h"
 #include "common/history_snapshot.h"
 #include "common/image_cache.h"
@@ -73,25 +74,31 @@
 
 #include <glib.h>
 
-static void _process_history_db_entry(dt_develop_t *dev, sqlite3_stmt *stmt, const int32_t imgid,
-                                      int *legacy_params, gboolean presets);
+static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, const int id, const int num,
+                                      const int modversion, const char *operation, const void *module_params,
+                                      const int param_length, const int enabled, const void *blendop_params,
+                                      const int bl_length, const int blendop_version, const int multi_priority,
+                                      const char *multi_name, const char *preset_name, int *legacy_params,
+                                      const gboolean presets);
 
-static sqlite3_stmt *_dev_history_delete_history_stmt = NULL;
-static sqlite3_stmt *_dev_history_delete_masks_stmt = NULL;
-static sqlite3_stmt *_dev_history_update_history_end_stmt = NULL;
-static sqlite3_stmt *_dev_history_select_num_stmt = NULL;
-static sqlite3_stmt *_dev_history_insert_num_stmt = NULL;
-static sqlite3_stmt *_dev_history_update_item_stmt = NULL;
-static dt_pthread_mutex_t _dev_history_stmt_mutex;
-static gsize _dev_history_stmt_mutex_inited = 0;
-
-static inline void _dev_history_stmt_mutex_ensure(void)
+typedef struct dt_dev_history_db_ctx_t
 {
-  if(g_once_init_enter(&_dev_history_stmt_mutex_inited))
-  {
-    dt_pthread_mutex_init(&_dev_history_stmt_mutex, NULL);
-    g_once_init_leave(&_dev_history_stmt_mutex_inited, 1);
-  }
+  dt_develop_t *dev;
+  int32_t imgid;
+  int *legacy_params;
+  gboolean presets;
+} dt_dev_history_db_ctx_t;
+
+static void _dev_history_db_row_cb(void *user_data, const int32_t id, const int num, const int modversion,
+                                   const char *operation, const void *module_params, const int param_length,
+                                   const int enabled, const void *blendop_params, const int bl_length,
+                                   const int blendop_version, const int multi_priority, const char *multi_name,
+                                   const char *preset_name)
+{
+  dt_dev_history_db_ctx_t *ctx = (dt_dev_history_db_ctx_t *)user_data;
+  _process_history_db_entry(ctx->dev, ctx->imgid, id, num, modversion, operation, module_params, param_length, enabled,
+                            blendop_params, bl_length, blendop_version, multi_priority, multi_name, preset_name,
+                            ctx->legacy_params, ctx->presets);
 }
 
 // returns the first history item with hist->module == module
@@ -932,30 +939,7 @@ void dt_dev_history_pixelpipe_update(dt_develop_t *dev)
 
 static void _cleanup_history(const int32_t imgid)
 {
-  _dev_history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_dev_history_stmt_mutex);
-
-  if(!_dev_history_delete_history_stmt)
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "DELETE FROM main.history WHERE imgid = ?1", -1,
-                                &_dev_history_delete_history_stmt, NULL);
-  sqlite3_stmt *stmt = _dev_history_delete_history_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  sqlite3_step(stmt);
-
-  if(!_dev_history_delete_masks_stmt)
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "DELETE FROM main.masks_history WHERE imgid = ?1", -1,
-                                &_dev_history_delete_masks_stmt, NULL);
-  stmt = _dev_history_delete_masks_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  sqlite3_step(stmt);
-
-  dt_pthread_mutex_unlock(&_dev_history_stmt_mutex);
+  dt_history_db_delete_dev_history(imgid);
 }
 
 guint dt_dev_mask_history_overload(GList *dev_history, guint threshold)
@@ -995,80 +979,14 @@ void dt_dev_history_notify_change(dt_develop_t *dev, const int32_t imgid)
 }
 
 
-void dt_dev_write_history_end_ext(const int history_end, const int32_t imgid)
-{
-  // update history end
-  _dev_history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_dev_history_stmt_mutex);
-  if(!_dev_history_update_history_end_stmt)
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "UPDATE main.images SET history_end = ?1 WHERE id = ?2", -1,
-                                &_dev_history_update_history_end_stmt, NULL);
-  sqlite3_stmt *stmt = _dev_history_update_history_end_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, history_end);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-  sqlite3_step(stmt);
-  dt_pthread_mutex_unlock(&_dev_history_stmt_mutex);
-}
-
 // helper used to synch a single history item with db
 int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int32_t num)
 {
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_item] writing history for module %s (%s) at pipe position %i for image %i...\n", h->op_name, h->multi_name, h->iop_order, imgid);
 
-  _dev_history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_dev_history_stmt_mutex);
-
-  if(!_dev_history_select_num_stmt)
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "SELECT num FROM main.history WHERE imgid = ?1 AND num = ?2", -1,
-                                &_dev_history_select_num_stmt, NULL);
-  sqlite3_stmt *stmt = _dev_history_select_num_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, num);
-  if(sqlite3_step(stmt) != SQLITE_ROW)
-  {
-    if(!_dev_history_insert_num_stmt)
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                  "INSERT INTO main.history (imgid, num) VALUES (?1, ?2)", -1,
-                                  &_dev_history_insert_num_stmt, NULL);
-    stmt = _dev_history_insert_num_stmt;
-    sqlite3_reset(stmt);
-    sqlite3_clear_bindings(stmt);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, num);
-    sqlite3_step(stmt);
-  }
-
-  if(!_dev_history_update_item_stmt)
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "UPDATE main.history"
-                                " SET operation = ?1, op_params = ?2, module = ?3, enabled = ?4, "
-                                "     blendop_params = ?7, blendop_version = ?8, multi_priority = ?9, multi_name = ?10"
-                                " WHERE imgid = ?5 AND num = ?6",
-                                -1, &_dev_history_update_item_stmt, NULL);
-    // clang-format on
-  stmt = _dev_history_update_item_stmt;
-  sqlite3_reset(stmt);
-  sqlite3_clear_bindings(stmt);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, h->module->op, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 2, h->params, h->module->params_size, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 3, h->module->version());
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 4, h->enabled);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 5, imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 6, num);
-  DT_DEBUG_SQLITE3_BIND_BLOB(stmt, 7, h->blend_params, sizeof(dt_develop_blend_params_t), SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 8, dt_develop_blend_version());
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 9, h->multi_priority);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 10, h->multi_name, -1, SQLITE_TRANSIENT);
-  sqlite3_step(stmt);
-
-  dt_pthread_mutex_unlock(&_dev_history_stmt_mutex);
+  dt_history_db_write_history_item(imgid, num, h->module->op, h->params, h->module->params_size, h->module->version(),
+                                   h->enabled, h->blend_params, sizeof(dt_develop_blend_params_t),
+                                   dt_develop_blend_version(), h->multi_priority, h->multi_name);
 
   // write masks (if any)
   if(h->forms)
@@ -1086,47 +1004,7 @@ int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int
 
 void dt_dev_history_cleanup(void)
 {
-  _dev_history_stmt_mutex_ensure();
-  dt_pthread_mutex_lock(&_dev_history_stmt_mutex);
-
-  if(_dev_history_delete_history_stmt)
-  {
-    sqlite3_finalize(_dev_history_delete_history_stmt);
-    _dev_history_delete_history_stmt = NULL;
-  }
-  if(_dev_history_delete_masks_stmt)
-  {
-    sqlite3_finalize(_dev_history_delete_masks_stmt);
-    _dev_history_delete_masks_stmt = NULL;
-  }
-  if(_dev_history_update_history_end_stmt)
-  {
-    sqlite3_finalize(_dev_history_update_history_end_stmt);
-    _dev_history_update_history_end_stmt = NULL;
-  }
-  if(_dev_history_select_num_stmt)
-  {
-    sqlite3_finalize(_dev_history_select_num_stmt);
-    _dev_history_select_num_stmt = NULL;
-  }
-  if(_dev_history_insert_num_stmt)
-  {
-    sqlite3_finalize(_dev_history_insert_num_stmt);
-    _dev_history_insert_num_stmt = NULL;
-  }
-  if(_dev_history_update_item_stmt)
-  {
-    sqlite3_finalize(_dev_history_update_item_stmt);
-    _dev_history_update_item_stmt = NULL;
-  }
-
-  dt_pthread_mutex_unlock(&_dev_history_stmt_mutex);
-
-  if(_dev_history_stmt_mutex_inited)
-  {
-    dt_pthread_mutex_destroy(&_dev_history_stmt_mutex);
-    _dev_history_stmt_mutex_inited = 0;
-  }
+  // No-op: SQL statement caching/cleanup for history lives in common/history.c (dt_history_cleanup()).
 }
 
 
@@ -1151,7 +1029,7 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
     i++;
   }
 
-  dt_dev_write_history_end_ext(dt_dev_get_history_end(dev), imgid);
+  dt_history_set_end(imgid, dt_dev_get_history_end(dev));
 
   // write the current iop-order-list for this image
   dt_ioppr_write_iop_order_list(dev->iop_order_list, imgid);
@@ -1186,7 +1064,7 @@ void dt_dev_write_history_end(dt_develop_t *dev)
   history_end = dt_dev_get_history_end(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
-  dt_dev_write_history_end_ext(history_end, imgid);
+  dt_history_set_end(imgid, history_end);
 
   dt_image_t *cache_img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
   if(!cache_img) return;
@@ -1217,47 +1095,9 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
   else
     excluded |= FOR_NOT_COLOR;
 
-  sqlite3_stmt *stmt;
-  // clang-format off
-  char *query = g_strdup_printf(
-  " SELECT ?1, 0, op_version, operation, op_params," // 0 is num in main.history, we just need uniform params binding
-  "       enabled, blendop_params, blendop_version, multi_priority, multi_name, name"
-  " FROM %s" // SQLite doesn't like the table name to be bound with variables...
-  " WHERE ( (autoapply=1"
-  "          AND ((?2 LIKE model AND ?3 LIKE maker) OR (?4 LIKE model AND ?5 LIKE maker))"
-  "          AND ?6 LIKE lens AND ?7 BETWEEN iso_min AND iso_max"
-  "          AND ?8 BETWEEN exposure_min AND exposure_max"
-  "          AND ?9 BETWEEN aperture_min AND aperture_max"
-  "          AND ?10 BETWEEN focal_length_min AND focal_length_max"
-  "          AND (format = 0 OR (format & ?11 != 0 AND ~format & ?12 != 0)))"
-  "        OR (name = ?13))"
-  "   AND operation NOT IN"
-  "        ('ioporder', 'metadata', 'modulegroups', 'export', 'tagging', 'collect', 'basecurve')"
-  " ORDER BY writeprotect DESC, LENGTH(model), LENGTH(maker), LENGTH(lens)",
-  (image->flags & DT_IMAGE_NO_LEGACY_PRESETS) ? "data.presets" : "main.legacy_presets");
-  // clang-format on
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, image->exif_model, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, image->exif_maker, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, image->camera_alias, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 5, image->camera_maker, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 6, image->exif_lens, -1, SQLITE_TRANSIENT);
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 7, fmaxf(0.0f, fminf(FLT_MAX, image->exif_iso)));
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 8, fmaxf(0.0f, fminf(1000000, image->exif_exposure)));
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 9, fmaxf(0.0f, fminf(1000000, image->exif_aperture)));
-  DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 10, fmaxf(0.0f, fminf(1000000, image->exif_focal_length)));
-  // 0: dontcare, 1: ldr, 2: raw plus monochrome & color
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 11, iformat);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 12, excluded);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 13, workflow_preset, -1, SQLITE_TRANSIENT);
-
   int legacy_params = 0;
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-    _process_history_db_entry(dev, stmt, imgid, &legacy_params, TRUE);
-
-  sqlite3_finalize(stmt);
-  g_free(query);
+  dt_dev_history_db_ctx_t ctx = { .dev = dev, .imgid = imgid, .legacy_params = &legacy_params, .presets = TRUE };
+  dt_history_db_foreach_auto_preset_row(imgid, image, workflow_preset, iformat, excluded, _dev_history_db_row_cb, &ctx);
 
   // now we want to auto-apply the iop-order list if one corresponds and none are
   // still applied. Note that we can already have an iop-order list set when
@@ -1265,42 +1105,15 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
 
   if(!dt_ioppr_has_iop_order_list(imgid))
   {
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "SELECT op_params"
-                                " FROM data.presets"
-                                " WHERE autoapply=1"
-                                "       AND ((?2 LIKE model AND ?3 LIKE maker) OR (?4 LIKE model AND ?5 LIKE maker))"
-                                "       AND ?6 LIKE lens AND ?7 BETWEEN iso_min AND iso_max"
-                                "       AND ?8 BETWEEN exposure_min AND exposure_max"
-                                "       AND ?9 BETWEEN aperture_min AND aperture_max"
-                                "       AND ?10 BETWEEN focal_length_min AND focal_length_max"
-                                "       AND (format = 0 OR (format & ?11 != 0 AND ~format & ?12 != 0))"
-                                "       AND operation = 'ioporder'"
-                                " ORDER BY writeprotect DESC, LENGTH(model), LENGTH(maker), LENGTH(lens)",
-                                -1, &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, image->exif_model, -1, SQLITE_TRANSIENT);
-    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, image->exif_maker, -1, SQLITE_TRANSIENT);
-    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 4, image->camera_alias, -1, SQLITE_TRANSIENT);
-    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 5, image->camera_maker, -1, SQLITE_TRANSIENT);
-    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 6, image->exif_lens, -1, SQLITE_TRANSIENT);
-    DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 7, fmaxf(0.0f, fminf(FLT_MAX, image->exif_iso)));
-    DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 8, fmaxf(0.0f, fminf(1000000, image->exif_exposure)));
-    DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 9, fmaxf(0.0f, fminf(1000000, image->exif_aperture)));
-    DT_DEBUG_SQLITE3_BIND_DOUBLE(stmt, 10, fmaxf(0.0f, fminf(1000000, image->exif_focal_length)));
-    // 0: dontcare, 1: ldr, 2: raw plus monochrome & color
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 11, iformat);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 12, excluded);
-    if(sqlite3_step(stmt) == SQLITE_ROW)
+    void *params = NULL;
+    int32_t params_len = 0;
+    if(dt_history_db_get_autoapply_ioporder_params(imgid, image, iformat, excluded, &params, &params_len))
     {
-      const char *params = (char *)sqlite3_column_blob(stmt, 0);
-      const int32_t params_len = sqlite3_column_bytes(stmt, 0);
       GList *iop_list = dt_ioppr_deserialize_iop_order_list(params, params_len);
       dt_ioppr_write_iop_order_list(iop_list, imgid);
       g_list_free_full(iop_list, free);
       dt_ioppr_set_default_iop_order(dev, imgid);
+      g_free(params);
     }
     else
     {
@@ -1310,7 +1123,6 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
       g_list_free_full(iop_list, free);
       dt_ioppr_set_default_iop_order(dev, imgid);
     }
-    sqlite3_finalize(stmt);
   }
 
   // Notify our private image copy that auto-presets got applied
@@ -1539,36 +1351,25 @@ static int _sync_params(dt_dev_history_item_t *hist, const void *module_params, 
 }
 
 // WARNING: this does not set hist->forms
-static void _process_history_db_entry(dt_develop_t *dev, sqlite3_stmt *stmt, const int32_t imgid, int *legacy_params, gboolean presets)
+static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, const int id, const int num,
+                                      const int modversion, const char *operation, const void *module_params,
+                                      const int param_length, const int enabled, const void *blendop_params,
+                                      const int bl_length, const int blendop_version, const int multi_priority,
+                                      const char *multi_name, const char *preset_name, int *legacy_params,
+                                      const gboolean presets)
 {
-  // Unpack the DB blobs
-  const int id = sqlite3_column_int(stmt, 0);
-  const int num = sqlite3_column_int(stmt, 1);
-  const int modversion = sqlite3_column_int(stmt, 2);
-  const char *module_name = (const char *)sqlite3_column_text(stmt, 3);
-  const void *module_params = sqlite3_column_blob(stmt, 4);
-  const int enabled = sqlite3_column_int(stmt, 5);
-  const void *blendop_params = sqlite3_column_blob(stmt, 6);
-  const int blendop_version = sqlite3_column_int(stmt, 7);
-  const int multi_priority = sqlite3_column_int(stmt, 8);
-  const char *multi_name = (const char *)sqlite3_column_text(stmt, 9);
-  const char *preset_name = (presets) ? (const char *)sqlite3_column_text(stmt, 10) : "";
-
-  const int param_length = sqlite3_column_bytes(stmt, 4);
-  const int bl_length = sqlite3_column_bytes(stmt, 6);
-
   // Sanity checks
   const gboolean is_valid_id = (id == imgid);
-  const gboolean has_module_name = (module_name != NULL);
+  const gboolean has_operation = (operation != NULL);
 
-  if(!(has_module_name && is_valid_id))
+  if(!(has_operation && is_valid_id))
   {
     fprintf(stderr, "[dev_read_history] database history for image `%s' seems to be corrupted!\n",
             dev->image_storage.filename);
     return;
   }
 
-  const int iop_order = dt_ioppr_get_iop_order(dev->iop_order_list, module_name, multi_priority);
+  const int iop_order = dt_ioppr_get_iop_order(dev->iop_order_list, operation, multi_priority);
 
   // Init a bare minimal history entry
   dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
@@ -1577,8 +1378,8 @@ static void _process_history_db_entry(dt_develop_t *dev, sqlite3_stmt *stmt, con
   hist->iop_order = iop_order;
   hist->multi_priority = multi_priority;
   hist->enabled = enabled;
-  g_strlcpy(hist->op_name, module_name, sizeof(hist->op_name));
-  g_strlcpy(hist->multi_name, multi_name, sizeof(hist->multi_name));
+  g_strlcpy(hist->op_name, operation, sizeof(hist->op_name));
+  g_strlcpy(hist->multi_name, multi_name ? multi_name : "", sizeof(hist->multi_name));
 
   // Find a .so file that matches our history entry, aka a module to run the params stored in DB
   _find_so_for_history_entry(dev, hist);
@@ -1589,7 +1390,7 @@ static void _process_history_db_entry(dt_develop_t *dev, sqlite3_stmt *stmt, con
     fprintf(
         stderr,
         "[dev_read_history] the module `%s' requested by image `%s' is not installed on this computer!\n",
-        module_name, dev->image_storage.filename);
+        operation, dev->image_storage.filename);
     free(hist);
     return;
   }
@@ -1663,7 +1464,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolea
     dt_image_cache_read_release(darktable.image_cache, cache_img);
   }
 
-  gboolean legacy_params = FALSE;
+  int legacy_params = 0;
 
   dt_ioppr_set_default_iop_order(dev, imgid);
 
@@ -1677,26 +1478,8 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolea
   dt_image_t *read_lock_img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
   if(!read_lock_img) return FALSE;
 
-  sqlite3_stmt *stmt;
-
-  // Load current image history from DB
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT imgid, num, module, operation,"
-                              "       op_params, enabled, blendop_params,"
-                              "       blendop_version, multi_priority, multi_name"
-                              " FROM main.history"
-                              " WHERE imgid = ?1"
-                              " ORDER BY num",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-
-  // Strip rows from DB lookup. One row == One module in history
-  while(sqlite3_step(stmt) == SQLITE_ROW)
-    _process_history_db_entry(dev, stmt, imgid, &legacy_params, FALSE);
-
-  sqlite3_finalize(stmt);
+  dt_dev_history_db_ctx_t ctx = { .dev = dev, .imgid = imgid, .legacy_params = &legacy_params, .presets = FALSE };
+  dt_history_db_foreach_history_row(imgid, _dev_history_db_row_cb, &ctx);
 
   // Find the new history end.
   // Note: dt_dev_set_history_end sanitizes the value with the actual history size.
