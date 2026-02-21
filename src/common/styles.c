@@ -899,9 +899,6 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
     if(dt_dev_is_current_image(darktable.develop, newimgid))
       dt_dev_reload_history_items(darktable.develop);
 
-    /* update xmp file */
-    dt_control_save_xmp(newimgid);
-
     /* remove old obsolete thumbnails */
     dt_mipmap_cache_remove(darktable.mipmap_cache, newimgid, TRUE);
 

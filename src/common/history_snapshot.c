@@ -42,14 +42,7 @@ void dt_history_snapshot_undo_create(const int32_t imgid, int *snap_id, int *his
   gboolean all_ok = TRUE;
 
   // get current history end
-  *history_end = 0;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT history_end FROM main.images WHERE id=?1", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-
-  if (sqlite3_step(stmt) == SQLITE_ROW)
-    *history_end = sqlite3_column_int(stmt, 0);
-  sqlite3_finalize(stmt);
+  *history_end = dt_history_get_end(imgid);
 
   // get max snapshot
 

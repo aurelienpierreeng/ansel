@@ -54,6 +54,7 @@
 #include "common/utility.h"
 #include "control/control.h"
 #include "develop/blend.h"
+#include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "develop/masks.h"
 #include "gui/hist_dialog.h"
@@ -62,6 +63,7 @@
 
 static sqlite3_stmt *_history_check_module_exists_stmt = NULL;
 static sqlite3_stmt *_history_hash_set_mipmap_stmt = NULL;
+static sqlite3_stmt *_history_get_end_stmt = NULL;
 static dt_pthread_mutex_t _history_stmt_mutex;
 static gsize _history_stmt_mutex_inited = 0;
 
@@ -333,13 +335,7 @@ static int dt_history_end_attop(const int32_t imgid)
     size = sqlite3_column_int(stmt, 0);
   sqlite3_finalize(stmt);
 
-  // get history_end
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-    "SELECT history_end FROM main.images WHERE id=?1", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  if (sqlite3_step(stmt) == SQLITE_ROW)
-    end = sqlite3_column_int(stmt, 0);
-  sqlite3_finalize(stmt);
+  end = dt_history_get_end(imgid);
 
   // fprintf(stderr,"\ndt_history_end_attop for image %i: size %i, end %i",imgid,size,end);
 
@@ -357,196 +353,65 @@ static int dt_history_end_attop(const int32_t imgid)
 
 /* Please note: dt_history_compress_on_image
   - is used in lighttable and darkroom mode
-  - It compresses history *exclusively* in the database and does *not* touch anything on the history stack
+  - It compresses history through dt_dev_history_compress() (develop/dev_history.c)
 */
 void dt_history_compress_on_image(const int32_t imgid)
 {
-  sqlite3_stmt *stmt;
-
   dt_print(DT_DEBUG_HISTORY, "[dt_history_compress_on_image] compressing history for image %i\n", imgid);
+  if(imgid <= 0) return;
 
-  // get history_end for image
-  int my_history_end = 0;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-    "SELECT history_end FROM main.images WHERE id=?1", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  const int my_history_end = dt_history_get_end(imgid);
 
-  if (sqlite3_step(stmt) == SQLITE_ROW)
-    my_history_end = sqlite3_column_int(stmt, 0);
-  sqlite3_finalize(stmt);
-
-  if(my_history_end == 0)
+  if(my_history_end <= 0)
   {
     dt_history_delete_on_image(imgid);
     return;
   }
 
-  int masks_count = 0;
-  const char *op_mask_manager = "mask_manager";
-  gboolean manager_position = FALSE;
-
-  dt_database_start_transaction(darktable.db);
-
-  // We must know for sure whether there is a mask manager at slot 0 in history
-  // because only if this is **not** true history nums and history_end must be increased
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-    "SELECT COUNT(*) FROM main.history WHERE imgid = ?1 AND operation = ?2 AND num = 0", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, op_mask_manager, -1, SQLITE_TRANSIENT);
-  if(sqlite3_step(stmt) == SQLITE_ROW)
-  {
-    if (sqlite3_column_int(stmt, 0) == 1) manager_position = TRUE;
-  }
-  sqlite3_finalize(stmt);
-
-  // compress history, keep disabled modules as documented
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "DELETE FROM main.history"
-                              " WHERE imgid = ?1 AND num NOT IN"
-                              "   (SELECT MAX(num) FROM main.history"
-                              "     WHERE imgid = ?1 AND num < ?2"
-                              "     GROUP BY operation, multi_priority)",
-                              -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, my_history_end);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-
-  // delete all mask_manager entries
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-    "DELETE FROM main.history WHERE imgid = ?1 AND operation = ?2", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, op_mask_manager, -1, SQLITE_TRANSIENT);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-
-  // compress masks history
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "DELETE FROM main.masks_history"
-                              " WHERE imgid = ?1 "
-                              "   AND num NOT IN (SELECT MAX(num)"
-                              "                   FROM main.masks_history"
-                              "                   WHERE imgid = ?1 AND num < ?2)", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, my_history_end);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-
-  // if there are masks create a mask manager entry, so we need to count them
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-    "SELECT COUNT(*) FROM main.masks_history WHERE imgid = ?1", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  if(sqlite3_step(stmt) == SQLITE_ROW) masks_count = sqlite3_column_int(stmt, 0);
-  sqlite3_finalize(stmt);
-
-  if(masks_count > 0)
-  {
-    // Set num in masks history to make sure they are owned by the manager at slot 0.
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-      "UPDATE main.masks_history SET num = 0 WHERE imgid = ?1", -1, &stmt, NULL);
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-
-    if (!manager_position)
-    {
-      // make room for mask manager history entry
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-        "UPDATE main.history SET num=num+1 WHERE imgid = ?1", -1, &stmt, NULL);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-      sqlite3_step(stmt);
-      sqlite3_finalize(stmt);
-
-      // update history end
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-        "UPDATE main.images SET history_end = history_end+1 WHERE id = ?1", -1, &stmt, NULL);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-      sqlite3_step(stmt);
-      sqlite3_finalize(stmt);
-    }
-
-    // create a mask manager entry in history as first entry
-    // clang-format off
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                                "INSERT INTO main.history (imgid, num, operation, op_params, module, enabled, "
-                                "                          blendop_params, blendop_version, multi_priority, multi_name) "
-                                " VALUES(?1, 0, ?2, NULL, 1, 0, NULL, 0, 0, '')",
-                                -1, &stmt, NULL);
-    // clang-format on
-    DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-    DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, op_mask_manager, -1, SQLITE_TRANSIENT);
-    sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-  }
-
-  dt_database_release_transaction(darktable.db);
-
-  // signal that the mipmap need to be updated
-  dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
+  dt_develop_t dev;
+  dt_dev_init(&dev, FALSE);
+  dt_dev_read_history_ext(&dev, imgid, TRUE);
+  dt_dev_set_history_end(&dev, my_history_end);
+  dt_dev_pop_history_items_ext(&dev);
+  dt_dev_history_compress(&dev);
+  dt_dev_cleanup(&dev);
 }
 
 /* Please note: dt_history_truncate_on_image
   - can be used in lighttable and darkroom mode
-  - It truncates history *exclusively* in the database and does *not* touch anything on the history stack
+  - It truncates history through develop/dev_history.c and rewrites DB/XMP.
 */
 void dt_history_truncate_on_image(const int32_t imgid, const int32_t history_end)
 {
-  sqlite3_stmt *stmt;
+  if(imgid <= 0) return;
 
-  if (history_end == 0)
+  if(history_end <= 0)
   {
     dt_history_delete_on_image(imgid);
     return;
   }
 
-  dt_database_start_transaction(darktable.db);
+  dt_develop_t dev;
+  dt_dev_init(&dev, FALSE);
+  dt_dev_read_history_ext(&dev, imgid, TRUE);
 
-  // delete end of history
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "DELETE FROM main.history"
-                              " WHERE imgid = ?1 "
-                              "   AND num >= ?2", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, history_end);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+  // Clamp to history size.
+  dt_dev_set_history_end(&dev, history_end);
+  const int32_t end = dt_dev_get_history_end(&dev);
 
-  // delete end of masks history
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "DELETE FROM main.masks_history"
-                              " WHERE imgid = ?1 "
-                              "   AND num >= ?2", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, history_end);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
+  // Remove tail entries (num >= end).
+  GList *link = g_list_nth(dev.history, end);
+  while(link)
+  {
+    GList *next = g_list_next(link);
+    dt_dev_free_history_item(link->data);
+    dev.history = g_list_delete_link(dev.history, link);
+    link = next;
+  }
 
-  // update history end
-  // clang-format off
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "UPDATE main.images"
-                              " SET history_end = ?1"
-                              " WHERE id = ?2 ", -1, &stmt, NULL);
-  // clang-format on
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, history_end);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, imgid);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-
-  dt_database_release_transaction(darktable.db);
-
-  // signal that the mipmap need to be updated
-  dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
+  dev.history_hash = dt_dev_history_get_hash(&dev);
+  dt_dev_write_history_ext(&dev, imgid);
+  dt_dev_cleanup(&dev);
 }
 
 int dt_history_compress_on_list(const GList *imgs)
@@ -561,65 +426,6 @@ int dt_history_compress_on_list(const GList *imgs)
     if(test == 1) // we do a compression and we know for sure history_end is at the top!
     {
       dt_history_compress_on_image(imgid);
-
-      // now the modules are in right order but need renumbering to remove leaks
-      int max=0;    // the maximum num in main_history for an image
-      int size=0;   // the number of items in main_history for an image
-      int done=0;   // used for renumbering index
-
-      sqlite3_stmt *stmt2;
-
-      // get highest num in history
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-        "SELECT MAX(num) FROM main.history WHERE imgid=?1", -1, &stmt2, NULL);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt2, 1, imgid);
-      if (sqlite3_step(stmt2) == SQLITE_ROW)
-        max = sqlite3_column_int(stmt2, 0);
-      sqlite3_finalize(stmt2);
-
-      // get number of items in main.history
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-        "SELECT COUNT(*) FROM main.history WHERE imgid = ?1", -1, &stmt2, NULL);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt2, 1, imgid);
-      if(sqlite3_step(stmt2) == SQLITE_ROW)
-        size = sqlite3_column_int(stmt2, 0);
-      sqlite3_finalize(stmt2);
-
-      if ((size>0) && (max>0))
-      {
-        for (int index=0;index<(max+1);index++)
-        {
-          sqlite3_stmt *stmt3;
-          DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-            "SELECT num FROM main.history WHERE imgid=?1 AND num=?2", -1, &stmt3, NULL);
-          DT_DEBUG_SQLITE3_BIND_INT(stmt3, 1, imgid);
-          DT_DEBUG_SQLITE3_BIND_INT(stmt3, 2, index);
-          if (sqlite3_step(stmt3) == SQLITE_ROW)
-          {
-            sqlite3_stmt *stmt4;
-            // step by step set the correct num
-            DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-              "UPDATE main.history SET num = ?3 WHERE imgid = ?1 AND num = ?2", -1, &stmt4, NULL);
-            DT_DEBUG_SQLITE3_BIND_INT(stmt4, 1, imgid);
-            DT_DEBUG_SQLITE3_BIND_INT(stmt4, 2, index);
-            DT_DEBUG_SQLITE3_BIND_INT(stmt4, 3, done);
-            sqlite3_step(stmt4);
-            sqlite3_finalize(stmt4);
-
-            done++;
-          }
-          sqlite3_finalize(stmt3);
-        }
-      }
-      // update history end
-      DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-        "UPDATE main.images SET history_end = ?2 WHERE id = ?1", -1, &stmt2, NULL);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt2, 1, imgid);
-      DT_DEBUG_SQLITE3_BIND_INT(stmt2, 2, done);
-      sqlite3_step(stmt2);
-      sqlite3_finalize(stmt2);
-
-      dt_control_save_xmp(imgid);
     }
     if(test == 0) // no compression as history_end is right in the middle of history
       uncompressed++;
@@ -670,7 +476,36 @@ void dt_history_cleanup(void)
     sqlite3_finalize(_history_check_module_exists_stmt);
     _history_check_module_exists_stmt = NULL;
   }
+  if(_history_get_end_stmt)
+  {
+    sqlite3_finalize(_history_get_end_stmt);
+    _history_get_end_stmt = NULL;
+  }
   dt_pthread_mutex_unlock(&_history_stmt_mutex);
+}
+
+int32_t dt_history_get_end(const int32_t imgid)
+{
+  if(imgid <= 0) return 0;
+
+  int32_t end = 0;
+  _history_stmt_mutex_ensure();
+  dt_pthread_mutex_lock(&_history_stmt_mutex);
+  if(!_history_get_end_stmt)
+  {
+    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+                                "SELECT history_end FROM main.images WHERE id=?1", -1,
+                                &_history_get_end_stmt, NULL);
+  }
+  sqlite3_stmt *stmt = _history_get_end_stmt;
+  sqlite3_reset(stmt);
+  sqlite3_clear_bindings(stmt);
+  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
+  if(sqlite3_step(stmt) == SQLITE_ROW && sqlite3_column_type(stmt, 0) != SQLITE_NULL)
+    end = sqlite3_column_int(stmt, 0);
+  dt_pthread_mutex_unlock(&_history_stmt_mutex);
+
+  return end;
 }
 
 

@@ -2192,9 +2192,6 @@ int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gc
 
         dt_history_copy_and_paste_on_image(imgid, newid, NULL, TRUE, TRUE);
 
-        // write xmp file
-        dt_control_save_xmp(newid);
-
         dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                                    NULL);
       }

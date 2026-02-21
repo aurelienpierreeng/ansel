@@ -120,17 +120,16 @@ static gboolean compress_history_callback(GtkAccelGroup *group, GObject *acceler
   if(is_darkroom_image_in_list)
   {
     dt_dev_undo_start_record(darktable.develop);
-    dt_dev_write_history(darktable.develop);
-  }
-
-  dt_history_compress_on_list(imgs);
-
-  if(is_darkroom_image_in_list)
-  {
+    dt_dev_history_compress(darktable.develop);
     dt_dev_undo_end_record(darktable.develop);
-    dt_dev_reload_history_items(darktable.develop);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+
+    // Avoid running a headless compression for the current darkroom image: the history module
+    // (src/libs/history.c) compresses directly from the loaded pipeline.
+    imgs = g_list_remove(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
   }
+
+  if(imgs) dt_history_compress_on_list(imgs);
 
   g_list_free(imgs);
   return TRUE;

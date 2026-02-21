@@ -478,9 +478,6 @@ gboolean dt_history_copy_and_paste_on_image(const int32_t imgid, const int32_t d
                  dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
   dt_undo_end_group(darktable.undo);
 
-  /* update xmp file */
-  dt_control_save_xmp(dest_imgid);
-
   // signal that the mipmap need to be updated
   dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, dest_imgid, TRUE);
 
@@ -815,9 +812,19 @@ void dt_dev_reload_history_items(dt_develop_t *dev)
   // Recreate the whole history from scratch
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_history_free_history(dev);
-  dt_dev_read_history_ext(dev, dev->image_storage.id, FALSE);
+  dt_dev_read_history_ext(dev, dev->image_storage.id, !dev->gui_attached);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
-  dt_dev_pop_history_items(dev);
+
+  // dt_dev_pop_history_items() triggers GUI updates and pixelpipe rebuilds, which are not available
+  // for headless dt_develop_t instances (gui_attached == FALSE).
+  if(darktable.gui && dev->gui_attached)
+    dt_dev_pop_history_items(dev);
+  else
+  {
+    dt_pthread_rwlock_wrlock(&dev->history_mutex);
+    dt_dev_pop_history_items_ext(dev);
+    dt_pthread_rwlock_unlock(&dev->history_mutex);
+  }
 }
 
 
@@ -1666,20 +1673,11 @@ void dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolean no
 
   sqlite3_finalize(stmt);
 
-  // find the new history end
+  // Find the new history end.
   // Note: dt_dev_set_history_end sanitizes the value with the actual history size.
-  // It needs to run after dev->history is fully populated
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-                              "SELECT history_end FROM main.images WHERE id = ?1",
-                              -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-
-  if(sqlite3_step(stmt) == SQLITE_ROW) // seriously, this should never fail
-    if(sqlite3_column_type(stmt, 0) != SQLITE_NULL
-       && sqlite3_column_int(stmt, 0) > 0)
-      dt_dev_set_history_end(dev, sqlite3_column_int(stmt, 0));
-
-  sqlite3_finalize(stmt);
+  // It needs to run after dev->history is fully populated.
+  const int32_t history_end = dt_history_get_end(imgid);
+  if(history_end > 0) dt_dev_set_history_end(dev, history_end);
 
   // Unlock database
   //dt_pthread_rwlock_unlock(&darktable.database_threadsafe);
@@ -1828,6 +1826,9 @@ void dt_dev_history_compress(dt_develop_t *dev)
       dt_dev_add_history_item_ext(dev, module, FALSE, TRUE, TRUE, TRUE);
   }
 
+  // Update the global checksum before writing to DB/XMP.
+  dev->history_hash = dt_dev_history_get_hash(dev);
+
   // Commit to DB
   dt_dev_write_history_ext(dev, dev->image_storage.id);
 
@@ -1836,6 +1837,6 @@ void dt_dev_history_compress(dt_develop_t *dev)
   // Reload to sanitize mandatory/incompatible modules
   dt_dev_reload_history_items(dev);
 
-  // Write again after sanitizatio
+  // Write again after sanitization
   dt_dev_write_history(dev);
 }
