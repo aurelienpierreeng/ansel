@@ -84,8 +84,8 @@ typedef struct dt_undo_history_t
 
 typedef struct dt_lib_history_t
 {
-  /* vbox with managed history items */
-  GtkWidget *history_box;
+  GtkWidget *history_view;
+  GtkListStore *history_store;
   GtkWidget *create_button;
   GtkWidget *compress_button;
   gboolean record_undo;
@@ -96,23 +96,35 @@ typedef struct dt_lib_history_t
   GList *previous_snapshot;
   int previous_history_end;
   GList *previous_iop_order_list;
+  gboolean selection_reset;
 } dt_lib_history_t;
 
-/* 3 widgets in each history line */
-#define HIST_WIDGET_NUMBER 0
-#define HIST_WIDGET_MODULE 1
-#define HIST_WIDGET_STATUS 2
+typedef enum dt_history_view_column_t
+{
+  DT_HISTORY_VIEW_COL_HISTORY_INDEX = 0,
+  DT_HISTORY_VIEW_COL_NUMBER,
+  DT_HISTORY_VIEW_COL_LABEL,
+  DT_HISTORY_VIEW_COL_ICON_NAME,
+  DT_HISTORY_VIEW_COL_ENABLED,
+  DT_HISTORY_VIEW_COL_TOOLTIP,
+  DT_HISTORY_VIEW_COL_COUNT
+} dt_history_view_column_t;
 
 /* compress history stack */
 static void _lib_history_compress_clicked_callback(GtkButton *widget, gpointer user_data);
 static gboolean _lib_history_compress_pressed_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data);
-static gboolean _lib_history_button_clicked_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data);
+static gboolean _lib_history_view_button_press_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data);
 static void _lib_history_create_style_button_clicked_callback(GtkWidget *widget, gpointer user_data);
 /* signal callback for history change */
 static void _lib_history_will_change_callback(gpointer instance, GList *history, int history_end,
                                               GList *iop_order_list, gpointer user_data);
 static void _lib_history_change_callback(gpointer instance, gpointer user_data);
 static void _lib_history_module_remove_callback(gpointer instance, dt_iop_module_t *module, gpointer user_data);
+static void _lib_history_view_selection_changed(GtkTreeSelection *selection, gpointer user_data);
+static gboolean _lib_history_view_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean keyboard_mode,
+                                                GtkTooltip *tooltip, gpointer user_data);
+static void _lib_history_view_cell_set_foreground(GtkTreeViewColumn *column, GtkCellRenderer *renderer,
+                                                  GtkTreeModel *model, GtkTreeIter *iter, gpointer data);
 
 const char *name(struct dt_lib_module_t *self)
 {
@@ -146,11 +158,55 @@ void gui_init(dt_lib_module_t *self)
   d->previous_snapshot = NULL;
   d->previous_history_end = 0;
   d->previous_iop_order_list = NULL;
+  d->selection_reset = FALSE;
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_widget_set_name(self->widget, "history-ui");
 
-  d->history_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  d->history_store = gtk_list_store_new(DT_HISTORY_VIEW_COL_COUNT,
+                                        G_TYPE_INT,     // history_index
+                                        G_TYPE_STRING,  // number
+                                        G_TYPE_STRING,  // label
+                                        G_TYPE_STRING,  // icon-name
+                                        G_TYPE_BOOLEAN, // enabled
+                                        G_TYPE_STRING); // tooltip text
+
+  d->history_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(d->history_store));
+  gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(d->history_view), FALSE);
+  gtk_tree_view_set_enable_search(GTK_TREE_VIEW(d->history_view), FALSE);
+
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(d->history_view));
+  gtk_tree_selection_set_mode(selection, GTK_SELECTION_BROWSE);
+  g_signal_connect(G_OBJECT(selection), "changed", G_CALLBACK(_lib_history_view_selection_changed), self);
+  g_signal_connect(G_OBJECT(d->history_view), "button-press-event", G_CALLBACK(_lib_history_view_button_press_callback), self);
+
+  gtk_widget_set_has_tooltip(d->history_view, TRUE);
+  g_signal_connect(G_OBJECT(d->history_view), "query-tooltip", G_CALLBACK(_lib_history_view_query_tooltip), self);
+
+  GtkCellRenderer *renderer_num = gtk_cell_renderer_text_new();
+  g_object_set(G_OBJECT(renderer_num), "xalign", 1.0, "family", "monospace", NULL);
+  GtkTreeViewColumn *col_num = gtk_tree_view_column_new_with_attributes("n", renderer_num,
+                                                                        "text", DT_HISTORY_VIEW_COL_NUMBER,
+                                                                        NULL);
+  gtk_tree_view_column_set_cell_data_func(col_num, renderer_num, _lib_history_view_cell_set_foreground, NULL, NULL);
+  gtk_tree_view_column_set_sizing(col_num, GTK_TREE_VIEW_COLUMN_AUTOSIZE);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(d->history_view), col_num);
+
+  GtkCellRenderer *renderer_label = gtk_cell_renderer_text_new();
+  g_object_set(G_OBJECT(renderer_label), "ellipsize", PANGO_ELLIPSIZE_END, NULL);
+  GtkTreeViewColumn *col_label = gtk_tree_view_column_new_with_attributes("label", renderer_label,
+                                                                          "text", DT_HISTORY_VIEW_COL_LABEL,
+                                                                          NULL);
+  gtk_tree_view_column_set_cell_data_func(col_label, renderer_label, _lib_history_view_cell_set_foreground, NULL, NULL);
+  gtk_tree_view_column_set_expand(col_label, TRUE);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(d->history_view), col_label);
+
+  GtkCellRenderer *renderer_icon = gtk_cell_renderer_pixbuf_new();
+  GtkTreeViewColumn *col_icon = gtk_tree_view_column_new_with_attributes("status", renderer_icon,
+                                                                         "icon-name", DT_HISTORY_VIEW_COL_ICON_NAME,
+                                                                         NULL);
+  gtk_tree_view_column_set_sizing(col_icon, GTK_TREE_VIEW_COLUMN_AUTOSIZE);
+  gtk_tree_view_append_column(GTK_TREE_VIEW(d->history_view), col_icon);
 
   GtkWidget *hhbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 
@@ -172,7 +228,7 @@ void gui_init(dt_lib_module_t *self)
 
   /* add history list and buttonbox to widget */
   gtk_box_pack_start(GTK_BOX(self->widget),
-                     dt_ui_scroll_wrap(d->history_box, 1, "plugins/darkroom/history/windowheight"), FALSE, FALSE, 0);
+                     dt_ui_scroll_wrap(d->history_view, 1, "plugins/darkroom/history/windowheight"), FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), hhbox, FALSE, FALSE, 0);
 
   gtk_widget_show_all(self->widget);
@@ -191,79 +247,19 @@ void gui_cleanup(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_history_change_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_history_will_change_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_history_module_remove_callback), self);
+  dt_lib_history_t *d = (dt_lib_history_t *)self->data;
+  if(d && d->history_store) g_object_unref(d->history_store);
   g_free(self->data);
   self->data = NULL;
 }
 
-static GtkWidget *_lib_history_create_button(dt_lib_module_t *self, int num, const char *label,
-                                             gboolean enabled, gboolean default_enabled, gboolean always_on, gboolean selected, gboolean deprecated)
+static const char *_history_icon_name(const gboolean enabled, const gboolean default_enabled, const gboolean always_on,
+                                      const gboolean deprecated)
 {
-  /* create label */
-  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-  gchar numlab[10];
-
-  g_snprintf(numlab, sizeof(numlab), "%2d", num + 1);
-  GtkWidget *numwidget = gtk_label_new(numlab);
-  gtk_widget_set_name(numwidget, "history-number");
-  dt_gui_add_class(numwidget, "dt_history_items");
-  dt_gui_add_class(numwidget, "dt_monospace");
-
-  GtkWidget *onoff = NULL;
-
-  /* create toggle button */
-  GtkWidget *widget = gtk_toggle_button_new_with_label(label);
-  dt_gui_add_class(widget, "dt_transparent_background");
-  GtkWidget *lab = gtk_bin_get_child(GTK_BIN(widget));
-  gtk_widget_set_halign(lab, GTK_ALIGN_START);
-  gtk_label_set_xalign(GTK_LABEL(lab), 0);
-  gtk_label_set_ellipsize(GTK_LABEL(lab), PANGO_ELLIPSIZE_END);
-  if(always_on)
-  {
-    onoff = dtgtk_button_new(dtgtk_cairo_paint_switch_on, 0, NULL);
-    dtgtk_button_set_active(DTGTK_BUTTON(onoff), TRUE);
-    gtk_widget_set_tooltip_text(onoff, _("always-on module"));
-  }
-  else if(default_enabled)
-  {
-    onoff = dtgtk_button_new(dtgtk_cairo_paint_switch, 0, NULL);
-    dtgtk_button_set_active(DTGTK_BUTTON(onoff), enabled);
-    gtk_widget_set_tooltip_text(onoff, _("default enabled module"));
-  }
-  else
-  {
-    if(deprecated)
-    {
-      onoff = dtgtk_button_new(dtgtk_cairo_paint_switch_deprecated, 0, NULL);
-      gtk_widget_set_tooltip_text(onoff, _("deprecated module"));
-    }
-    else
-    {
-      onoff = dtgtk_button_new(dtgtk_cairo_paint_switch, 0, NULL);
-      dt_gui_add_class(onoff, enabled ? "" : "dt_history_switch_off");
-    }
-    dt_gui_add_class(lab, enabled ? "" : "dt_history_switch_off");
-    dtgtk_button_set_active(DTGTK_BUTTON(onoff), enabled);
-  }
-  dt_gui_add_class(widget, "dt_history_items");
-  dt_gui_add_class(onoff, "dt_history_switch");
-
-  gtk_widget_set_sensitive(onoff, FALSE);
-
-  g_object_set_data(G_OBJECT(widget), "history_number", GINT_TO_POINTER(num + 1));
-  g_object_set_data(G_OBJECT(widget), "label", (gpointer)label);
-  if(selected) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), TRUE);
-
-  /* set callback when clicked */
-  g_signal_connect(G_OBJECT(widget), "button-press-event", G_CALLBACK(_lib_history_button_clicked_callback), self);
-
-  /* associate the history number */
-  g_object_set_data(G_OBJECT(widget), "history-number", GINT_TO_POINTER(num + 1));
-
-  gtk_box_pack_start(GTK_BOX(hbox), numwidget, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(hbox), widget, TRUE, TRUE, 0);
-  gtk_box_pack_end(GTK_BOX(hbox), onoff, FALSE, FALSE, 0);
-
-  return hbox;
+  if(always_on) return "emblem-readonly";
+  if(deprecated) return "dialog-warning";
+  if(default_enabled) return enabled ? "emblem-ok" : "process-stop";
+  return enabled ? "emblem-ok" : "process-stop";
 }
 
 static void _reset_module_instance(GList *hist, dt_iop_module_t *module, int multi_priority)
@@ -1071,97 +1067,215 @@ static gboolean _changes_tooltip_callback(GtkWidget *widget, gint x, gint y, gbo
   return TRUE;
 }
 
+static gboolean _lib_history_view_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean keyboard_mode,
+                                                GtkTooltip *tooltip, gpointer user_data)
+{
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_history_t *d = (dt_lib_history_t *)self->data;
+  GtkTreeModel *model = GTK_TREE_MODEL(d->history_store);
+  GtkTreeIter iter;
+  GtkTreePath *path = NULL;
+
+  if(keyboard_mode)
+  {
+    GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(widget));
+    if(!gtk_tree_selection_get_selected(selection, &model, &iter)) return FALSE;
+  }
+  else
+  {
+    if(!gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), x, y, &path, NULL, NULL, NULL)) return FALSE;
+    if(!gtk_tree_model_get_iter(model, &iter, path))
+    {
+      gtk_tree_path_free(path);
+      return FALSE;
+    }
+  }
+
+  gchar *tooltip_text = NULL;
+  gtk_tree_model_get(model, &iter, DT_HISTORY_VIEW_COL_TOOLTIP, &tooltip_text, -1);
+  g_object_set_data_full(G_OBJECT(widget), "tooltip-text", tooltip_text, g_free);
+
+  const gboolean ret = _changes_tooltip_callback(widget, x, y, keyboard_mode, tooltip);
+  if(path) gtk_tree_path_free(path);
+  return ret;
+}
+
+static void _lib_history_view_cell_set_foreground(GtkTreeViewColumn *column, GtkCellRenderer *renderer,
+                                                  GtkTreeModel *model, GtkTreeIter *iter, gpointer data)
+{
+  gboolean enabled = TRUE;
+  gtk_tree_model_get(model, iter, DT_HISTORY_VIEW_COL_ENABLED, &enabled, -1);
+  if(enabled)
+    g_object_set(G_OBJECT(renderer), "foreground-set", FALSE, NULL);
+  else
+    g_object_set(G_OBJECT(renderer), "foreground-set", TRUE, "foreground", "#888", NULL);
+}
+
+static inline int _history_end_from_index(const int history_index)
+{
+  return history_index + 1;
+}
+
+static void _history_apply_history_end(const int history_end)
+{
+  dt_dev_undo_start_record(darktable.develop);
+
+  dt_dev_set_history_end(darktable.develop, history_end);
+  dt_dev_pop_history_items(darktable.develop);
+  dt_dev_history_gui_update(darktable.develop);
+  dt_dev_history_pixelpipe_update(darktable.develop);
+
+  dt_dev_undo_end_record(darktable.develop);
+
+  dt_dev_write_history_end(darktable.develop);
+  dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
+  dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
+}
+
+static void _history_show_module_for_index(const int history_index)
+{
+  if(history_index < 0) return;
+
+  dt_dev_history_item_t *hist = (dt_dev_history_item_t *)g_list_nth_data(darktable.develop->history, history_index);
+  if(hist && hist->module)
+  {
+    dt_dev_modulegroups_switch(darktable.develop, hist->module);
+    dt_iop_gui_set_expanded(hist->module, TRUE, TRUE);
+  }
+}
+
+static void _history_store_add_original(dt_lib_history_t *d)
+{
+  GtkTreeIter iter;
+  gtk_list_store_append(d->history_store, &iter);
+  gtk_list_store_set(d->history_store, &iter, DT_HISTORY_VIEW_COL_HISTORY_INDEX, -1, DT_HISTORY_VIEW_COL_NUMBER, " 0",
+                     DT_HISTORY_VIEW_COL_LABEL, _("original"), DT_HISTORY_VIEW_COL_ICON_NAME,
+                     _history_icon_name(TRUE, FALSE, TRUE, FALSE), DT_HISTORY_VIEW_COL_ENABLED, TRUE,
+                     DT_HISTORY_VIEW_COL_TOOLTIP, "", -1);
+}
+
+static gchar *_history_tooltip_with_hint(const dt_dev_history_item_t *hitem)
+{
+  const gchar *hint = _("Shift+click: show module without changing history");
+
+  gchar *tooltip_text = _create_tooltip_text(hitem);
+  if(tooltip_text && tooltip_text[0])
+  {
+    gchar *tooltip_with_hint = g_strconcat(tooltip_text, "\n\n", hint, NULL);
+    g_free(tooltip_text);
+    return tooltip_with_hint;
+  }
+
+  g_free(tooltip_text);
+  return g_strdup(hint);
+}
+
+static void _history_store_prepend_item(dt_lib_history_t *d, const dt_dev_history_item_t *hitem, const int history_index)
+{
+  const gboolean enabled = (hitem->enabled || (strcmp(hitem->op_name, "mask_manager") == 0));
+  const gboolean deprecated = (hitem->module->flags() & IOP_FLAGS_DEPRECATED);
+  const char *icon_name = _history_icon_name(enabled, hitem->module->default_enabled, hitem->module->hide_enable_button,
+                                             deprecated);
+
+  const gboolean enabled_by_default
+      = ((hitem->module->force_enable && hitem->module->force_enable(hitem->module, hitem->enabled))
+         || hitem->module->default_enabled);
+  const gchar *star = (hitem == _find_previous_history_step(hitem) && enabled_by_default) ? " *" : "";
+
+  gchar *clean_name = delete_underscore(hitem->module->name());
+  gchar *label = NULL;
+  if(!hitem->multi_name[0] || strcmp(hitem->multi_name, "0") == 0)
+    label = g_strdup_printf("%s%s", clean_name, star);
+  else
+    label = g_strdup_printf("%s %s%s", clean_name, hitem->multi_name, star);
+  g_free(clean_name);
+
+  gchar number[10];
+  g_snprintf(number, sizeof(number), "%2d", history_index + 1);
+
+  gchar *tooltip_text = _history_tooltip_with_hint(hitem);
+
+  GtkTreeIter iter;
+  gtk_list_store_insert(d->history_store, &iter, 0);
+  gtk_list_store_set(d->history_store, &iter, DT_HISTORY_VIEW_COL_HISTORY_INDEX, history_index,
+                     DT_HISTORY_VIEW_COL_NUMBER, number, DT_HISTORY_VIEW_COL_LABEL, label,
+                     DT_HISTORY_VIEW_COL_ICON_NAME, icon_name, DT_HISTORY_VIEW_COL_ENABLED, enabled,
+                     DT_HISTORY_VIEW_COL_TOOLTIP, tooltip_text ? tooltip_text : "", -1);
+
+  g_free(tooltip_text);
+  g_free(label);
+}
+
+static void _history_select_row_for_end(dt_lib_history_t *d, const int history_end)
+{
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(d->history_view));
+  GtkTreeModel *model = GTK_TREE_MODEL(d->history_store);
+  GtkTreeIter iter;
+
+  for(gboolean valid = gtk_tree_model_get_iter_first(model, &iter); valid; valid = gtk_tree_model_iter_next(model, &iter))
+  {
+    int history_index = -1;
+    gtk_tree_model_get(model, &iter, DT_HISTORY_VIEW_COL_HISTORY_INDEX, &history_index, -1);
+    if(_history_end_from_index(history_index) == history_end)
+    {
+      gtk_tree_selection_select_iter(selection, &iter);
+      return;
+    }
+  }
+}
+
+static void _history_maybe_record_undo(dt_lib_module_t *self, dt_lib_history_t *d)
+{
+  d->record_history_level -= 1;
+
+  if(d->record_undo != TRUE || d->record_history_level != 0) return;
+
+  dt_undo_history_t *hist = malloc(sizeof(dt_undo_history_t));
+  hist->before_snapshot = dt_history_duplicate(d->previous_snapshot);
+  hist->before_end = d->previous_history_end;
+  hist->before_iop_order_list = dt_ioppr_iop_order_copy_deep(d->previous_iop_order_list);
+
+  hist->after_snapshot = dt_history_duplicate(darktable.develop->history);
+  hist->after_end = dt_dev_get_history_end(darktable.develop);
+  hist->after_iop_order_list = dt_ioppr_iop_order_copy_deep(darktable.develop->iop_order_list);
+
+  if(darktable.develop->gui_module)
+  {
+    hist->mask_edit_mode = dt_masks_get_edit_mode(darktable.develop->gui_module);
+    hist->request_mask_display = darktable.develop->gui_module->request_mask_display;
+  }
+  else
+  {
+    hist->mask_edit_mode = DT_MASKS_EDIT_OFF;
+    hist->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
+  }
+
+  dt_undo_record(darktable.undo, self, DT_UNDO_HISTORY, (dt_undo_data_t)hist, _pop_undo, _history_undo_data_free);
+}
+
 static void _lib_history_change_callback(gpointer instance, gpointer user_data)
 {
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_history_t *d = (dt_lib_history_t *)self->data;
+  _history_maybe_record_undo(self, d);
+  d->record_undo = TRUE;
 
-  /* first destroy all buttons in list */
-  dt_gui_container_destroy_children(GTK_CONTAINER(d->history_box));
-
-  /* add default which always should be */
-  int num = -1;
-  GtkWidget *widget =
-    _lib_history_create_button(self, num, _("original"), FALSE, FALSE, TRUE, dt_dev_get_history_end(darktable.develop) == 0, FALSE);
-  gtk_box_pack_start(GTK_BOX(d->history_box), widget, FALSE, FALSE, 0);
-  num++;
-
-  d->record_history_level -= 1;
-
-  if (d->record_undo == TRUE && (d->record_history_level == 0))
-  {
-    /* record undo/redo history snapshot */
-    dt_undo_history_t *hist = malloc(sizeof(dt_undo_history_t));
-    hist->before_snapshot = dt_history_duplicate(d->previous_snapshot);
-    hist->before_end = d->previous_history_end;
-    hist->before_iop_order_list = dt_ioppr_iop_order_copy_deep(d->previous_iop_order_list);
-
-    hist->after_snapshot = dt_history_duplicate(darktable.develop->history);
-    hist->after_end = dt_dev_get_history_end(darktable.develop);
-    hist->after_iop_order_list = dt_ioppr_iop_order_copy_deep(darktable.develop->iop_order_list);
-
-    if(darktable.develop->gui_module)
-    {
-      hist->mask_edit_mode = dt_masks_get_edit_mode(darktable.develop->gui_module);
-      hist->request_mask_display = darktable.develop->gui_module->request_mask_display;
-    }
-    else
-    {
-      hist->mask_edit_mode = DT_MASKS_EDIT_OFF;
-      hist->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
-    }
-
-    dt_undo_record(darktable.undo, self, DT_UNDO_HISTORY, (dt_undo_data_t)hist,
-                   _pop_undo, _history_undo_data_free);
-  }
-  else
-    d->record_undo = TRUE;
+  d->selection_reset = TRUE;
+  gtk_list_store_clear(d->history_store);
 
   /* lock history mutex */
   dt_pthread_rwlock_wrlock(&darktable.develop->history_mutex);
 
-  /* iterate over history items and add them to list*/
-  for(const GList *history = darktable.develop->history; history; history = g_list_next(history))
-  {
-    const dt_dev_history_item_t *hitem = (dt_dev_history_item_t *)(history->data);
+  _history_store_add_original(d);
 
-    // Append * to the history label of enabled-by-default or forced-enabled modules
-    // That is the first history entry of modules enabled by default
-    const gboolean enabled_by_default
-        = ((hitem->module->force_enable && hitem->module->force_enable(hitem->module, hitem->enabled))
-          || hitem->module->default_enabled);
-    gchar *star = (hitem == _find_previous_history_step(hitem) && enabled_by_default) ? " *" : "";
-
-    gchar *label;
-    gchar *clean_name = delete_underscore(hitem->module->name());
-    if(!hitem->multi_name[0] || strcmp(hitem->multi_name, "0") == 0)
-      label = g_strdup_printf("%s%s", clean_name, star);
-    else
-      label = g_strdup_printf("%s %s%s", clean_name, hitem->multi_name, star);
-    g_free(clean_name);
-
-    const gboolean selected = (num == dt_dev_get_history_end(darktable.develop) - 1);
-    widget =
-      _lib_history_create_button(self, num, label, (hitem->enabled || (strcmp(hitem->op_name, "mask_manager") == 0)),
-                                 hitem->module->default_enabled, hitem->module->hide_enable_button, selected,
-                                 hitem->module->flags() & IOP_FLAGS_DEPRECATED);
-
-    g_free(label);
-
-    // FIXME: is that a memleak ?
-    g_object_set_data(G_OBJECT(widget), "tooltip-text", _create_tooltip_text(hitem));
-    gtk_widget_set_has_tooltip(widget, TRUE);
-    g_signal_connect(G_OBJECT(widget), "query-tooltip", G_CALLBACK(_changes_tooltip_callback), NULL);
-
-    gtk_box_pack_start(GTK_BOX(d->history_box), widget, FALSE, FALSE, 0);
-    gtk_box_reorder_child(GTK_BOX(d->history_box), widget, 0);
-    num++;
-  }
-
-  /* show all widgets */
-  gtk_widget_show_all(d->history_box);
+  int history_index = 0;
+  for(const GList *history = darktable.develop->history; history; history = g_list_next(history), history_index++)
+    _history_store_prepend_item(d, (const dt_dev_history_item_t *)history->data, history_index);
 
   dt_pthread_rwlock_unlock(&darktable.develop->history_mutex);
+
+  _history_select_row_for_end(d, dt_dev_get_history_end(darktable.develop));
+  d->selection_reset = FALSE;
 }
 
 static void _lib_history_truncate(gboolean compress)
@@ -1207,59 +1321,46 @@ static gboolean _lib_history_compress_pressed_callback(GtkWidget *widget, GdkEve
   return TRUE;
 }
 
-static gboolean _lib_history_button_clicked_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data)
+static void _lib_history_view_selection_changed(GtkTreeSelection *selection, gpointer user_data)
 {
-  static int reset = 0;
-  if(reset) return FALSE;
-  if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget))) return FALSE;
-
-  // ctrl-click just show the corresponding module in modulegroups
-  if(dt_modifier_is(e->state, GDK_SHIFT_MASK))
-  {
-    const int num = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "history-number"));
-    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)g_list_nth_data(darktable.develop->history, num - 1);
-    if(hist)
-    {
-      dt_dev_modulegroups_switch(darktable.develop, hist->module);
-      dt_iop_gui_set_expanded(hist->module, TRUE, TRUE);
-    }
-    return TRUE;
-  }
-
   dt_lib_module_t *self = (dt_lib_module_t *)user_data;
   dt_lib_history_t *d = (dt_lib_history_t *)self->data;
-  reset = 1;
+  if(!d || d->selection_reset || darktable.gui->reset) return;
 
-  /* deactivate all toggle buttons */
-  GList *children = gtk_container_get_children(GTK_CONTAINER(d->history_box));
-  for(GList *l = children; l != NULL; l = g_list_next(l))
+  GtkTreeModel *model = NULL;
+  GtkTreeIter iter;
+  if(!gtk_tree_selection_get_selected(selection, &model, &iter)) return;
+
+  int history_index = -1;
+  gtk_tree_model_get(model, &iter, DT_HISTORY_VIEW_COL_HISTORY_INDEX, &history_index, -1);
+  const int history_end = _history_end_from_index(history_index);
+  if(history_end == dt_dev_get_history_end(darktable.develop)) return;
+
+  _history_apply_history_end(history_end);
+}
+
+static gboolean _lib_history_view_button_press_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data)
+{
+  // shift-click just shows the corresponding module in modulegroups
+  if(e->button == 1 && dt_modifier_is(e->state, GDK_SHIFT_MASK))
   {
-    GtkToggleButton *b = GTK_TOGGLE_BUTTON(dt_gui_container_nth_child(GTK_CONTAINER(l->data), HIST_WIDGET_MODULE));
-    if(b != GTK_TOGGLE_BUTTON(widget))
-      g_object_set(G_OBJECT(b), "active", FALSE, (gchar *)0);
+    GtkTreePath *path = NULL;
+    if(gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(widget), (gint)e->x, (gint)e->y, &path, NULL, NULL, NULL))
+    {
+      dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+      dt_lib_history_t *d = (dt_lib_history_t *)self->data;
+      GtkTreeModel *model = GTK_TREE_MODEL(d->history_store);
+      GtkTreeIter iter;
+      if(gtk_tree_model_get_iter(model, &iter, path))
+      {
+        int history_index = -1;
+        gtk_tree_model_get(model, &iter, DT_HISTORY_VIEW_COL_HISTORY_INDEX, &history_index, -1);
+        _history_show_module_for_index(history_index);
+      }
+      gtk_tree_path_free(path);
+      return TRUE;
+    }
   }
-  g_list_free(children);
-
-  reset = 0;
-  if(darktable.gui->reset) return FALSE;
-
-  dt_dev_undo_start_record(darktable.develop);
-
-  /* revert to given history item. */
-  const int num = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "history-number"));
-  dt_dev_set_history_end(darktable.develop, num);
-  dt_dev_pop_history_items(darktable.develop);
-  dt_dev_history_gui_update(darktable.develop);
-  dt_dev_history_pixelpipe_update(darktable.develop);
-
-  /* signal history changed */
-  dt_dev_undo_end_record(darktable.develop);
-
-  // Persist history_end so reloading/switching images keeps the same stack position.
-  dt_dev_write_history_end(darktable.develop);
-  dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
-
-  dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
 
   return FALSE;
 }
