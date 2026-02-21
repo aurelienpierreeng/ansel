@@ -69,6 +69,7 @@ FORCE_CLEAN=0
 DO_CONFIG=1
 DO_BUILD=1
 DO_INSTALL=0
+SKIP_UPDATE_LENSFUN=0
 SUDO=""
 
 PRINT_HELP=0
@@ -170,6 +171,9 @@ parse_args()
 		--update)
 			GIT_UPDATE=1
 			;;
+		--skip-lensfun)
+			SKIP_UPDATE_LENSFUN=1
+			;;
 		-h|--help)
 			PRINT_HELP=1
 			;;
@@ -235,6 +239,8 @@ Update actions:
    --update                   Run 'git pull' to update the source code and submodules
 	                            from the project master branch.
 	                            Git needs to be installed on the computer.
+															(default: disabled)
+	 --skip-lensfun    					Skip lensfun data update after installation
 															(default: disabled)
 
 
@@ -444,6 +450,7 @@ Build generator:     $BUILD_GENERATOR
 Build tasks:         $MAKE_TASKS
 CPU Architecture:    $CPU_ARCHITECTURE
 Compiler:            $CC_COMPILER $CXX_COMPILER
+Skip Lensfun update: $([ $SKIP_UPDATE_LENSFUN -eq 1 ] && echo "Yes" || echo "No")
 
 EOF
 
@@ -556,4 +563,10 @@ if [ $DO_INSTALL ] ; then
 	fi
 fi
 # update Lensfun
-$SUDO lensfun-update-data
+echo
+if [ $SKIP_UPDATE_LENSFUN -eq 0 ] ; then
+	$SUDO lensfun-update-data
+	echo "Lensfun data updated"
+else
+	echo "Skipped Lensfun data update"
+fi
