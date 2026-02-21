@@ -501,7 +501,11 @@ static void _ui_init_panel_bottom(dt_ui_t *ui, GtkWidget *container)
   gtk_widget_set_name(GTK_WIDGET(handle), "panel-handle-bottom");
   g_signal_connect(G_OBJECT(handle), "button-press-event", G_CALLBACK(_panel_handle_button_callback), handle);
   g_signal_connect(G_OBJECT(handle), "button-release-event", G_CALLBACK(_panel_handle_button_callback), handle);
-  g_signal_connect(G_OBJECT(handle), "motion-notify-event", G_CALLBACK(_panel_handle_motion_callback), over);
+  // Resize the actual bottom panel widget (named "bottom"), not the overlay wrapper.
+  // Otherwise the panel can be grown (outer overlay expands) but not shrunk because the
+  // filmstrip panel keeps its previous size request until the view is recreated.
+  g_signal_connect(G_OBJECT(handle), "motion-notify-event", G_CALLBACK(_panel_handle_motion_callback),
+                   ui->thumbtable_filmstrip->parent_overlay);
   g_signal_connect(G_OBJECT(handle), "leave-notify-event", G_CALLBACK(_panel_handle_cursor_callback), handle);
   g_signal_connect(G_OBJECT(handle), "enter-notify-event", G_CALLBACK(_panel_handle_cursor_callback), handle);
   gtk_widget_show(handle);

@@ -1667,6 +1667,17 @@ static gboolean _draw_callback(GtkWidget *widget, cairo_t *cr, gpointer user_dat
   return FALSE;
 }
 
+static void _parent_size_allocate_callback(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data)
+{
+  dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
+  if(!table) return;
+
+  // Ensure container resizes (e.g. bottom panel handle drag) trigger a redraw.
+  // The redraw callback drives dt_thumbtable_configure()/dt_thumbtable_update(),
+  // but GTK might not emit a draw immediately on size-allocate unless something is invalidated.
+  dt_thumbtable_redraw(table);
+}
+
 void dt_thumbtable_reset_collection(dt_thumbtable_t *table)
 {
   table->reset_collection = TRUE;
@@ -1888,6 +1899,7 @@ void dt_thumbtable_set_parent(dt_thumbtable_t *table, dt_thumbtable_mode_t mode)
   table->mode = mode;
   table->parent_overlay = gtk_overlay_new();
   gtk_overlay_add_overlay(GTK_OVERLAY(table->parent_overlay), table->scroll_window);
+  g_signal_connect(table->parent_overlay, "size-allocate", G_CALLBACK(_parent_size_allocate_callback), table);
 
   if(mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {

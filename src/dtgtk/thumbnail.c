@@ -1531,7 +1531,11 @@ int dt_thumbnail_image_refresh_real(dt_thumbnail_t *thumb)
 {
   thumb_return_if_fails(thumb, G_SOURCE_REMOVE);
   thumb->image_inited = FALSE;
-  gtk_widget_queue_draw(thumb->w_main);
+  // Queue redraw on the drawing area itself: it's the widget that requests/regenerates the cairo surface.
+  // Queueing only the parent overlay may not invalidate the drawing area's window, leaving stale (too small)
+  // cached surfaces until some pointer event happens.
+  if(thumb->w_image) gtk_widget_queue_draw(thumb->w_image);
+  if(thumb->w_main) gtk_widget_queue_draw(thumb->w_main);
   return G_SOURCE_REMOVE;
 }
 
