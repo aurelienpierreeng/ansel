@@ -286,13 +286,11 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   dt_dev_pixelpipe_cleanup_nodes(pipe);
   // so now it's safe to clean up cache:
   const uint64_t old_backbuf_hash = pipe->backbuf.hash;
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, old_backbuf_hash);
   if(pipe->no_cache)
   {
     dt_dev_pixelpipe_cache_flag_auto_destroy(darktable.pixelpipe_cache, old_backbuf_hash, NULL);
     dt_dev_pixelpipe_cache_auto_destroy_apply(darktable.pixelpipe_cache, old_backbuf_hash, NULL);
   }
-  pipe->backbuf.hash = -1;
   dt_pthread_mutex_destroy(&(pipe->busy_mutex));
   pipe->icc_type = DT_COLORSPACE_NONE;
   g_free(pipe->icc_filename);
