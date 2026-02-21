@@ -555,28 +555,63 @@ int dt_thumbnail_get_image_buffer(dt_thumbnail_t *thumb)
 {
   thumb_return_if_fails(thumb, 1);
 
+  // Avoid spawning multiple background jobs for the same thumbnail.
+  // Re-scheduling here is counter-productive because each new job replaces thumb->job and makes
+  // previously queued/running jobs exit early (thumb->job != job), which can lead to endless
+  // "busy" redraws without ever painting an image.
+  dt_pthread_mutex_lock(&thumb->lock);
+  const gboolean job_running = (thumb->job != NULL);
+  dt_pthread_mutex_unlock(&thumb->lock);
+  if(job_running) return 0;
+
   // - image inited: the cached buffer has a valid size. Invalid this flag when size changes.
   // - img_surf: we have a cached buffer (cairo surface), regardless of its validity.
   // - a rendering job has already been started
   if((thumb->image_inited && thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0))
     return 0;
 
-  // Nuke the image surface in GUI mainthread.
-  // Note: if background thumbnail thread gets ditched,
-  // this may never be recreated.
+  // Nuke the image surface in GUI mainthread.
+  // Note: if background thumbnail thread gets ditched, this may never be recreated.
+  dt_pthread_mutex_lock(&thumb->lock);
   _free_image_surface(thumb);
+  dt_pthread_mutex_unlock(&thumb->lock);
 
-  // Get thumbnail GUI requested size now (in GUI mainthread). 
-  gtk_widget_get_size_request(thumb->w_image, &thumb->img_w, &thumb->img_h);
-  thumb->img_w = MAX(thumb->img_w, 32);
-  thumb->img_h = MAX(thumb->img_h, 32);
+  // Get thumbnail GUI allocated size now (in GUI mainthread).
+  // Size requests may be unset (-1) during initial layout while allocations are already valid.
+  int img_w = gtk_widget_get_allocated_width(thumb->w_image);
+  int img_h = gtk_widget_get_allocated_height(thumb->w_image);
+  if(img_w < 2 || img_h < 2)
+    gtk_widget_get_size_request(thumb->w_image, &img_w, &img_h);
+
+  // Not allocated yet: wait for the next draw once the widget has a real size.
+  if(img_w < 2 || img_h < 2) return 0;
+
+  img_w = MAX(img_w, 32);
+  img_h = MAX(img_h, 32);
+
+  dt_pthread_mutex_lock(&thumb->lock);
+  thumb->img_w = img_w;
+  thumb->img_h = img_h;
+  dt_pthread_mutex_unlock(&thumb->lock);
 
   // Drawing the focus peaking and doing the color conversions
   // can be expensive on large thumbnails. Do it in a background job,
   // so the thumbtable stays responsive.
-  thumb->job = dt_control_job_create(&_get_image_buffer, "get image %i", thumb->info.id);
-  dt_control_job_set_params(thumb->job, thumb, NULL);
-  dt_control_add_job(darktable.control, DT_JOB_QUEUE_SYSTEM_FG, thumb->job);
+  dt_job_t *job = dt_control_job_create(&_get_image_buffer, "get image %i", thumb->info.id);
+  dt_control_job_set_params(job, thumb, NULL);
+
+  dt_pthread_mutex_lock(&thumb->lock);
+  // Re-check now that we are about to publish the job pointer.
+  if(thumb->job)
+  {
+    dt_pthread_mutex_unlock(&thumb->lock);
+    dt_control_job_dispose(job);
+    return 0;
+  }
+  thumb->job = job;
+  dt_pthread_mutex_unlock(&thumb->lock);
+
+  dt_control_add_job(darktable.control, DT_JOB_QUEUE_SYSTEM_FG, job);
 
   return 0;
 }
@@ -587,9 +622,9 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
   dt_thumbnail_t *thumb = (dt_thumbnail_t *)user_data;
   thumb_return_if_fails(thumb, TRUE);
 
-  int w = 0;
-  int h = 0;
-  gtk_widget_get_size_request(thumb->w_image, &w, &h);
+  int w = gtk_widget_get_allocated_width(widget);
+  int h = gtk_widget_get_allocated_height(widget);
+  if(w < 2 || h < 2) return TRUE;
 
   dt_pthread_mutex_lock(&thumb->lock);
   if(thumb->img_surf && cairo_surface_get_reference_count(thumb->img_surf) > 0)
