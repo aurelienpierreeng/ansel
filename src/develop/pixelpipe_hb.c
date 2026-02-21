@@ -745,6 +745,15 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   dt_iop_colorspace_type_t input_cst_cl = input_format->cst;
   dt_pixel_cache_entry_t *cpu_input_entry = input_entry;
   dt_pixel_cache_entry_t *locked_input_entry = NULL;
+
+  // No input, nothing to do
+  if(input == NULL && cl_mem_input == NULL)
+  {
+    dt_print(DT_DEBUG_OPENCL,
+             "[dev_pixelpipe] %s has no RAM nor vRAM input... aborting.\n",
+             module->name());
+    return 1;
+  }
   
   // Go to CPU fallback straight away if we know we can't do OpenCL.
   if(!_is_opencl_supported(pipe, piece, module) 
@@ -754,15 +763,6 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     return _gpu_early_cpu_fallback_if_unsupported(pipe, dev, &input, &cl_mem_input, input_format, roi_in,
                                                  output, out_format, roi_out, module, piece, tiling, pixelpipe_flow,
                                                  in_bpp, input_entry, output_entry);
-  }
-
-  // No input, nothing to do
-  if(input == NULL && cl_mem_input == NULL)
-  {
-    dt_print(DT_DEBUG_OPENCL,
-             "[dev_pixelpipe] %s has no RAM nor vRAM input... aborting.\n",
-             module->name());
-    return 1;
   }
 
   // Fetch RGB working profile
