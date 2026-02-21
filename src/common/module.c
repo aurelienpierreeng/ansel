@@ -77,8 +77,6 @@ GList *dt_module_load_modules(const char *subdir, size_t module_size,
 
     g_free(pref_line);
 
-    dt_gui_splash_updatef(_("Loading module %s..."), plugin_name);
-
     if(load) res = load_module_so(module, libname, plugin_name);
     // if(res) fprintf(stdout, "Plugin %s/%s NOT loaded\n", subdir, plugin_name);
 

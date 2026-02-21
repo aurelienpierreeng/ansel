@@ -83,6 +83,22 @@
 #include <sys/stat.h>
 #include <zlib.h>
 
+static gboolean _opencl_splash_active = FALSE;
+
+static inline void _opencl_splash_update_compile(const char *programname)
+{
+  if(!programname) return;
+  if(!darktable.gui) return;
+
+  if(!_opencl_splash_active)
+  {
+    dt_gui_splash_init();
+    _opencl_splash_active = TRUE;
+  }
+
+  dt_gui_splash_updatef(_("Building OpenCL kernels: %s"), programname);
+}
+
 static const char *dt_opencl_get_vendor_by_id(unsigned int id);
 static char *_ascii_str_canonical(const char *in, char *out, int maxlen);
 /** parse a single token of priority string and store priorities in priority_list */
@@ -748,18 +764,22 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
 
       snprintf(filename, PATH_MAX * sizeof(char), "%s" G_DIR_SEPARATOR_S "%s", kerneldir, programname);
       snprintf(binname, PATH_MAX * sizeof(char), "%s" G_DIR_SEPARATOR_S "%s.bin", cachedir, programname);
-      dt_gui_splash_updatef(_("Building OpenCL kernels: %s"), programname);
       dt_vprint(DT_DEBUG_OPENCL, "[dt_opencl_device_init] testing program `%s' ..\n", programname);
       int loaded_cached;
       char md5sum[33];
-      if(dt_opencl_load_program(dev, prog, filename, binname, cachedir, md5sum, includemd5, &loaded_cached)
-         && dt_opencl_build_program(dev, prog, binname, cachedir, md5sum, loaded_cached) != CL_SUCCESS)
+      if(dt_opencl_load_program(dev, prog, filename, binname, cachedir, md5sum, includemd5, &loaded_cached))
       {
-        dt_print(DT_DEBUG_OPENCL, "[dt_opencl_device_init] failed to compile program `%s'!\n", programname);
-        fclose(f);
-        g_strfreev(tokens);
-        res = -1;
-        goto end;
+        if(!loaded_cached)
+          _opencl_splash_update_compile(programname);
+
+        if(dt_opencl_build_program(dev, prog, binname, cachedir, md5sum, loaded_cached) != CL_SUCCESS)
+        {
+          dt_print(DT_DEBUG_OPENCL, "[dt_opencl_device_init] failed to compile program `%s'!\n", programname);
+          fclose(f);
+          g_strfreev(tokens);
+          res = -1;
+          goto end;
+        }
       }
 
       g_strfreev(tokens);
@@ -805,6 +825,8 @@ end:
 
 void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboolean print_statistics)
 {
+  _opencl_splash_active = FALSE;
+
   dt_pthread_mutex_init(&cl->lock, NULL);
   cl->inited = 0;
   cl->enabled = 0;
