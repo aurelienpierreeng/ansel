@@ -180,6 +180,17 @@ typedef struct dt_thumbtable_t
 
   gboolean draw_group_borders;
 
+  // Coalesce layout/scroll updates outside of draw handlers.
+  guint idle_update_id;
+
+  // Last parent overlay allocation (used to ignore no-op size-allocate signals).
+  int last_parent_width;
+  int last_parent_height;
+
+  // Last known scrollbar allocation (used to ignore no-op size-allocate signals).
+  int last_h_scrollbar_height;
+  int last_v_scrollbar_width;
+
 } dt_thumbtable_t;
 
 
@@ -198,6 +209,7 @@ void dt_thumbtable_configure(dt_thumbtable_t *table);
 void dt_thumbtable_update(dt_thumbtable_t *table);
 void dt_thumbtable_set_parent(dt_thumbtable_t *table, dt_thumbtable_mode_t mode);
 void dt_thumbtable_update_parent(dt_thumbtable_t *table);
+void dt_thumbtable_queue_update(dt_thumbtable_t *table);
 
 /**
  * @brief Handle drag-and-drop data received
@@ -335,6 +347,7 @@ int dt_thumbtable_scroll_to_selection(dt_thumbtable_t *table);
 
 static inline void dt_thumbtable_redraw_real(dt_thumbtable_t *table)
 {
+  dt_thumbtable_queue_update(table);
   gtk_widget_queue_draw(table->grid);
 }
 
@@ -354,7 +367,7 @@ static inline void dt_thumbtable_show(dt_thumbtable_t *table)
 
   // Thumbtable is prevented to configure and update, for
   // as long as it's hidden. We need to force the update now.
-  dt_thumbtable_redraw(table);
+  dt_thumbtable_queue_update(table);
 }
 
 /**

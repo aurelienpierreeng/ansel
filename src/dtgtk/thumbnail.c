@@ -634,8 +634,12 @@ _thumb_draw_image(GtkWidget *widget, cairo_t *cr, gpointer user_data)
             darktable.gui->ppd * w, darktable.gui->ppd * h);
     */
     // If the size of the image buffer is smaller than the widget surface, we need a new image
-    if(thumb->img_width < (int)roundf(darktable.gui->ppd * w) &&
-      thumb->img_height < (int)roundf(darktable.gui->ppd * h))
+    // dt_view_image_get_surface() aspect-fits the image inside the widget box,
+    // so one surface dimension is typically smaller than the widget even when up-to-date.
+    // Only invalidate cached buffers when the surface is too small in *both* dimensions.
+    const int req_w = (int)roundf(darktable.gui->ppd * w);
+    const int req_h = (int)roundf(darktable.gui->ppd * h);
+    if(thumb->img_width + 1 < req_w && thumb->img_height + 1 < req_h)
       thumb->image_inited = FALSE;
   }
   dt_pthread_mutex_unlock(&thumb->lock);

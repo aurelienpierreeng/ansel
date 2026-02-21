@@ -150,6 +150,13 @@ static gboolean _thumbtable_clone_lut(dt_thumbtable_t *dst)
 
 void _dt_thumbtable_empty_list(dt_thumbtable_t *table);
 
+static gboolean _thumbtable_idle_update(gpointer user_data);
+static void _thumbtable_schedule_update(dt_thumbtable_t *table);
+static void _scrollbar_value_changed(GtkAdjustment *adjustment, gpointer user_data);
+static void _scrollbar_page_size_notify(GObject *object, GParamSpec *pspec, gpointer user_data);
+static void _parent_overlay_size_allocate(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data);
+static void _scrollbar_widget_size_allocate(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data);
+
 static int _grab_focus(dt_thumbtable_t *table)
 {
   // Ensure all previous Gtk events are finished,
@@ -168,6 +175,93 @@ static int _grab_focus(dt_thumbtable_t *table)
   }
   dt_thumbtable_scroll_to_selection(table);
   return 0;
+}
+
+static gboolean _thumbtable_idle_update(gpointer user_data)
+{
+  dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
+  if(!table) return G_SOURCE_REMOVE;
+
+  table->idle_update_id = 0;
+  dt_thumbtable_configure(table);
+  dt_thumbtable_update(table);
+  if(!table->list) gtk_widget_queue_draw(table->grid);
+  return G_SOURCE_REMOVE;
+}
+
+static void _thumbtable_schedule_update(dt_thumbtable_t *table)
+{
+  if(!table) return;
+  if(table->scroll_window && !gtk_widget_is_visible(table->scroll_window)) return;
+  if(table->idle_update_id) return;
+  table->idle_update_id = g_idle_add_full(G_PRIORITY_LOW, (GSourceFunc)_thumbtable_idle_update, table, NULL);
+}
+
+void dt_thumbtable_queue_update(dt_thumbtable_t *table)
+{
+  _thumbtable_schedule_update(table);
+}
+
+static void _scrollbar_value_changed(GtkAdjustment *adjustment, gpointer user_data)
+{
+  dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
+  if(!table) return;
+
+  // Only react to the adjustment that is meaningful in the current mode.
+  if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER && adjustment != table->v_scrollbar) return;
+  if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP && adjustment != table->h_scrollbar) return;
+
+  _thumbtable_schedule_update(table);
+}
+
+static void _scrollbar_page_size_notify(GObject *object, GParamSpec *pspec, gpointer user_data)
+{
+  dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
+  if(!table) return;
+
+  // Page size is only used to size the filemanager/grid. Filmstrip uses its parent allocation.
+  if(table->mode != DT_THUMBTABLE_MODE_FILEMANAGER) return;
+
+  _thumbtable_schedule_update(table);
+}
+
+static void _parent_overlay_size_allocate(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data)
+{
+  dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
+  if(!table || !allocation) return;
+
+  if(allocation->width == table->last_parent_width && allocation->height == table->last_parent_height)
+    return;
+
+  table->last_parent_width = allocation->width;
+  table->last_parent_height = allocation->height;
+  _thumbtable_schedule_update(table);
+}
+
+static void _scrollbar_widget_size_allocate(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data)
+{
+  dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
+  if(!table || !allocation || !table->scroll_window) return;
+
+  GtkWidget *h_scroll = gtk_scrolled_window_get_hscrollbar(GTK_SCROLLED_WINDOW(table->scroll_window));
+  GtkWidget *v_scroll = gtk_scrolled_window_get_vscrollbar(GTK_SCROLLED_WINDOW(table->scroll_window));
+
+  // Filmstrip height depends on the horizontal scrollbar height. When it gets realized/allocated,
+  // we need to recompute thumbnail sizes even if the parent size didn't change.
+  if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP && widget == h_scroll)
+  {
+    if(allocation->height == table->last_h_scrollbar_height) return;
+    table->last_h_scrollbar_height = allocation->height;
+    _thumbtable_schedule_update(table);
+  }
+
+  // Filemanager fallback sizing subtracts the vertical scrollbar width.
+  if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER && widget == v_scroll)
+  {
+    if(allocation->width == table->last_v_scrollbar_width) return;
+    table->last_v_scrollbar_width = allocation->width;
+    _thumbtable_schedule_update(table);
+  }
 }
 
 // We can't trust the mouse enter/leave events on thumnbails to properly
@@ -444,7 +538,7 @@ gboolean _update_row_ids(dt_thumbtable_t *table)
 {
   int rowid_min = 0;
   int rowid_max = 0;
-  _get_row_ids(table, &rowid_min, &rowid_max);
+  if(!_get_row_ids(table, &rowid_min, &rowid_max)) return FALSE;
   if(rowid_min != table->min_row_id || rowid_max != table->max_row_id)
   {
     table->min_row_id = rowid_min;
@@ -460,21 +554,42 @@ void _update_grid_area(dt_thumbtable_t *table)
   if(!table->configured || !table->collection_inited) return;
 
   double main_dimension = 0.;
+  int current_w = 0, current_h = 0;
+  gtk_widget_get_size_request(table->grid, &current_w, &current_h);
+  gboolean changed = FALSE;
 
   if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
-    double height = main_dimension = ceilf((float)table->collection_count / (float)table->thumbs_per_row) * table->thumb_height;
-    gtk_widget_set_size_request(table->grid, -1, height);
+    const int height = (int)ceilf((float)table->collection_count / (float)table->thumbs_per_row) * table->thumb_height;
+    main_dimension = height;
+    if(current_h != height)
+    {
+      gtk_widget_set_size_request(table->grid, -1, height);
+      changed = TRUE;
+    }
   }
   else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
   {
-    double width = main_dimension = table->collection_count * table->thumb_height;
-    gtk_widget_set_size_request(table->grid, width, -1);
+    const int width = table->collection_count * table->thumb_width;
+    main_dimension = width;
+    if(current_w != width)
+    {
+      gtk_widget_set_size_request(table->grid, width, -1);
+      changed = TRUE;
+    }
   }
   else
-    gtk_widget_set_size_request(table->grid, -1, -1);
+  {
+    main_dimension = 0.;
+    if(current_w != -1 || current_h != -1)
+    {
+      gtk_widget_set_size_request(table->grid, -1, -1);
+      changed = TRUE;
+    }
+  }
 
-  dt_print(DT_DEBUG_LIGHTTABLE, "Configuring grid size main dimension: %.f\n", main_dimension);
+  if(changed)
+    dt_print(DT_DEBUG_LIGHTTABLE, "Configuring grid size main dimension: %.f\n", main_dimension);
 }
 
 
@@ -514,41 +629,87 @@ void dt_thumbtable_configure(dt_thumbtable_t *table)
   int cols = 1;
   int new_width = 0;
   int new_height = 0;
+  int new_thumbs_per_row = 0;
+  int new_thumb_width = 0;
+  int new_thumb_height = 0;
 
   if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
+    // Use actual widget allocations for sizing: GtkAdjustment page sizes are not reliably updated
+    // during shrinking, which can prevent thumbnails from downscaling until another resize happens.
     new_width = gtk_widget_get_allocated_width(table->parent_overlay);
     new_height = gtk_widget_get_allocated_height(table->parent_overlay);
+
     GtkWidget *v_scroll = gtk_scrolled_window_get_vscrollbar(GTK_SCROLLED_WINDOW(table->scroll_window));
-    new_width -= gtk_widget_get_allocated_width(v_scroll) + 1;
+    const int v_scroll_w = v_scroll ? gtk_widget_get_allocated_width(v_scroll) : 0;
+    if(v_scroll_w > 0) new_width -= v_scroll_w + 1;
+
     cols = dt_conf_get_int("plugins/lighttable/images_in_row");
   }
   else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
   {
+    // Don't use GtkAdjustment page sizes here: in filmstrip, the scrolled window height can
+    // be influenced by its (resized) children during initial layout, which may cause a
+    // feedback loop where thumbnails keep growing.
     new_width = gtk_widget_get_allocated_width(table->parent_overlay);
     new_height = gtk_widget_get_allocated_height(table->parent_overlay);
     GtkWidget *h_scroll = gtk_scrolled_window_get_hscrollbar(GTK_SCROLLED_WINDOW(table->scroll_window));
-    new_height -= gtk_widget_get_allocated_height(h_scroll) + 1;
+    int h_scroll_h = 0;
+    if(h_scroll)
+    {
+      h_scroll_h = gtk_widget_get_allocated_height(h_scroll);
+      if(h_scroll_h > 0) h_scroll_h += 1;
+    }
+
+    // Clamp to the explicit panel size request when present to enforce "container drives child size".
+    int req_w = -1, req_h = -1;
+    gtk_widget_get_size_request(table->parent_overlay, &req_w, &req_h);
+    if(req_h > 0)
+      new_height = MIN(new_height, req_h);
+
+    new_height -= h_scroll_h;
   }
 
-  if((new_width > 0 && new_width != table->view_width) ||
-     (new_height > 0 && new_height != table->view_height) ||
-     (cols != table->thumbs_per_row))
+  // Parent is not allocated or something went wrong:
+  // ensure to reset everything so no further code will run.
+  if(new_width < 32 || new_height < 32)
   {
-    // new sizes: update everything
-    table->thumbs_inited = FALSE;
-    _grid_configure(table, new_width, new_height, cols);
-    _update_grid_area(table);
-  }
-  else if(new_width < 32 || new_height < 32)
-  {
-    // Parent is not allocated or something went wrong:
-    // ensure to reset everything so no further code will run
     table->thumbs_inited = FALSE;
     table->configured = FALSE;
     table->thumbs_per_row = 0;
     table->thumb_height = 0;
     table->thumb_width = 0;
+    return;
+  }
+
+  // Compute derived thumbnail sizes and only invalidate thumbnails when they actually change.
+  if(table->mode == DT_THUMBTABLE_MODE_FILEMANAGER)
+  {
+    new_thumbs_per_row = cols;
+    new_thumb_width = (int)floorf((float)new_width / (float)MAX(new_thumbs_per_row, 1));
+    new_thumb_height = (new_thumbs_per_row == 1) ? new_height : new_thumb_width;
+  }
+  else if(table->mode == DT_THUMBTABLE_MODE_FILMSTRIP)
+  {
+    new_thumbs_per_row = 1;
+    new_thumb_height = new_height;
+    new_thumb_width = new_height;
+  }
+
+  const gboolean thumbs_changed = (!table->configured
+                                  || new_thumbs_per_row != table->thumbs_per_row
+                                  || new_thumb_width != table->thumb_width
+                                  || new_thumb_height != table->thumb_height);
+
+  // Always keep view sizes in sync: they are used for navigation and scroll centering.
+  table->view_width = new_width;
+  table->view_height = new_height;
+
+  if(thumbs_changed)
+  {
+    table->thumbs_inited = FALSE;
+    _grid_configure(table, new_width, new_height, cols);
+    _update_grid_area(table);
   }
 }
 
@@ -806,8 +967,10 @@ void dt_thumbtable_update(dt_thumbtable_t *table)
 
   dt_pthread_mutex_unlock(&table->lock);
 
-  dt_print(DT_DEBUG_LIGHTTABLE, "Populated %d thumbs between %i and %i in %0.04f sec \n", table->thumb_nb,
-           table->min_row_id, table->max_row_id, dt_get_wtime() - start);
+  const char *const name = gtk_widget_get_name(table->grid);
+  dt_print(DT_DEBUG_LIGHTTABLE, "[%s] Populated %d thumbs between %i and %i in %0.04f sec \n",
+           name ? name : "thumbtable", table->thumb_nb, table->min_row_id, table->max_row_id,
+           dt_get_wtime() - start);
 }
 
 
@@ -1132,10 +1295,8 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
     // Number of images may have changed, size of grid too:
     _update_grid_area(table);
 
-    // Update without waiting for the next redraw event,
-    // improves subjective responsiveness and makes auto-scrolling to
-    // selected image more reliable.
-    dt_thumbtable_update(table);
+    // Coalesce multiple layout/resize signals that can happen during collection loads.
+    dt_thumbtable_queue_update(table);
 
     g_idle_add((GSourceFunc)_grab_focus, table);
   }
@@ -1648,9 +1809,6 @@ gboolean dt_thumbtable_key_released_grid(GtkWidget *self, GdkEventKey *event, gp
 static gboolean _draw_callback(GtkWidget *widget, cairo_t *cr, gpointer user_data)
 {
   if(!user_data) return TRUE;
-  dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
-
-  dt_print(DT_DEBUG_LIGHTTABLE, "[lighttable] Redrawing thumbtable container\n");
 
   // Ensure the background color is painted
   GtkStyleContext *context = gtk_widget_get_style_context(widget);
@@ -1659,23 +1817,7 @@ static gboolean _draw_callback(GtkWidget *widget, cairo_t *cr, gpointer user_dat
   gtk_render_background(context, cr, 0, 0, allocation.width, allocation.height);
   gtk_render_frame(context, cr, 0, 0, allocation.width, allocation.height);
 
-  // The draw callback catches all parent resizing events that need an update of the grid layout.
-  // Some are already captured upstream, but the rest need to be handled here.
-  dt_thumbtable_configure(table);
-  dt_thumbtable_update(table);
-
   return FALSE;
-}
-
-static void _parent_size_allocate_callback(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data)
-{
-  dt_thumbtable_t *table = (dt_thumbtable_t *)user_data;
-  if(!table) return;
-
-  // Ensure container resizes (e.g. bottom panel handle drag) trigger a redraw.
-  // The redraw callback drives dt_thumbtable_configure()/dt_thumbtable_update(),
-  // but GTK might not emit a draw immediately on size-allocate unless something is invalidated.
-  dt_thumbtable_redraw(table);
 }
 
 void dt_thumbtable_reset_collection(dt_thumbtable_t *table)
@@ -1701,6 +1843,19 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
 
   table->v_scrollbar = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(table->scroll_window));
   table->h_scrollbar = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(table->scroll_window));
+  g_signal_connect(G_OBJECT(table->v_scrollbar), "value-changed", G_CALLBACK(_scrollbar_value_changed), table);
+  g_signal_connect(G_OBJECT(table->h_scrollbar), "value-changed", G_CALLBACK(_scrollbar_value_changed), table);
+  g_signal_connect(G_OBJECT(table->v_scrollbar), "notify::page-size", G_CALLBACK(_scrollbar_page_size_notify), table);
+  g_signal_connect(G_OBJECT(table->h_scrollbar), "notify::page-size", G_CALLBACK(_scrollbar_page_size_notify), table);
+
+  // Track actual scrollbar widget allocations: filmstrip sizing depends on the horizontal scrollbar height,
+  // and filemanager fallback sizing depends on the vertical scrollbar width.
+  GtkWidget *h_scroll = gtk_scrolled_window_get_hscrollbar(GTK_SCROLLED_WINDOW(table->scroll_window));
+  GtkWidget *v_scroll = gtk_scrolled_window_get_vscrollbar(GTK_SCROLLED_WINDOW(table->scroll_window));
+  if(h_scroll)
+    g_signal_connect(G_OBJECT(h_scroll), "size-allocate", G_CALLBACK(_scrollbar_widget_size_allocate), table);
+  if(v_scroll)
+    g_signal_connect(G_OBJECT(v_scroll), "size-allocate", G_CALLBACK(_scrollbar_widget_size_allocate), table);
 
   table->grid = gtk_fixed_new();
   dt_gui_add_class(table->grid, "dt_thumbtable");
@@ -1753,6 +1908,11 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
   table->rowid = -1;
   table->collapse_groups = dt_conf_get_bool("ui_last/grouping");
   table->draw_group_borders = dt_conf_get_bool("plugins/lighttable/group_borders");
+  table->idle_update_id = 0;
+  table->last_parent_width = 0;
+  table->last_parent_height = 0;
+  table->last_h_scrollbar_height = -1;
+  table->last_v_scrollbar_width = -1;
 
   dt_pthread_mutex_init(&table->lock, NULL);
 
@@ -1872,6 +2032,12 @@ void _dt_thumbtable_empty_list(dt_thumbtable_t *table)
 
 void dt_thumbtable_cleanup(dt_thumbtable_t *table)
 {
+  if(table->idle_update_id)
+  {
+    g_source_remove(table->idle_update_id);
+    table->idle_update_id = 0;
+  }
+
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_collection_changed_callback), table);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_selection_changed_callback), table);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_profile_change_callback), table);
@@ -1899,7 +2065,7 @@ void dt_thumbtable_set_parent(dt_thumbtable_t *table, dt_thumbtable_mode_t mode)
   table->mode = mode;
   table->parent_overlay = gtk_overlay_new();
   gtk_overlay_add_overlay(GTK_OVERLAY(table->parent_overlay), table->scroll_window);
-  g_signal_connect(table->parent_overlay, "size-allocate", G_CALLBACK(_parent_size_allocate_callback), table);
+  g_signal_connect(G_OBJECT(table->parent_overlay), "size-allocate", G_CALLBACK(_parent_overlay_size_allocate), table);
 
   if(mode == DT_THUMBTABLE_MODE_FILEMANAGER)
   {
