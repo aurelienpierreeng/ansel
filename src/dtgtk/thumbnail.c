@@ -371,10 +371,22 @@ static void _free_image_surface(dt_thumbnail_t *thumb)
   thumb->img_surf = NULL;
 }
 
-static gboolean _main_context_draw(dt_thumbnail_t *thumb)
+static gboolean _main_context_queue_draw(GtkWidget *widget)
 {
-  if(thumb && GTK_IS_WIDGET(thumb->widget) && gtk_widget_get_parent(thumb->widget))
-      gtk_widget_queue_draw(thumb->widget);
+  if(GTK_IS_WIDGET(widget))
+  {
+    gtk_widget_queue_draw(widget);
+
+    // Gtk redraws may get deferred until the next GDK event; force processing now
+    // to ensure background thumbnail jobs repaint as soon as they complete.
+    GdkWindow *window = gtk_widget_get_window(widget);
+    if(window)
+    {
+      G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+      gdk_window_process_updates(window, TRUE);
+      G_GNUC_END_IGNORE_DEPRECATIONS
+    }
+  }
 
   return G_SOURCE_REMOVE;
 }
@@ -390,8 +402,15 @@ static int _finish_buffer_thread(dt_thumbnail_t *thumb, gboolean success)
 
   // Redraw events need to be sent from the main GUI thread
   // though we may not have a target widget anymore...
-  if(thumb && !dt_atomic_get_int(&thumb->destroying))
-    g_main_context_invoke(NULL, (GSourceFunc)_main_context_draw, thumb);
+  if(!dt_atomic_get_int(&thumb->destroying) && thumb->w_image)
+  {
+    GMainContext *context = g_main_context_default();
+    g_main_context_invoke_full(context, G_PRIORITY_DEFAULT,
+                               (GSourceFunc)_main_context_queue_draw,
+                               g_object_ref(thumb->w_image),
+                               (GDestroyNotify)g_object_unref);
+    g_main_context_wakeup(context);
+  }
   
   return 0;
 }
