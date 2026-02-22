@@ -419,7 +419,7 @@ void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
 
   // go through all history items and adjust params
   // note that we don't necessarily process the whole history, history_end is an user param.
-  const uint32_t history_end = dt_dev_get_history_end(dev);
+  const uint32_t history_end = dt_dev_get_history_end_ext(dev);
 
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {
@@ -477,7 +477,7 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 
   dt_print(DT_DEBUG_DEV, "[pixelpipe] synch top modules with history for pipe %s\n", type);
 
-  GList *last_item = g_list_nth(dev->history, dt_dev_get_history_end(dev) - 1);
+  GList *last_item = g_list_nth(dev->history, dt_dev_get_history_end_ext(dev) - 1);
   if(last_item)
   {
     GList *first_item = NULL;
@@ -498,8 +498,8 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 
     // We also need to care about the case where the history_end is not at the actual end of the history
     // aka stop looping before we overflow the desired range of history.
-    GList *fence_item = g_list_nth(dev->history, dt_dev_get_history_end(dev));
-    // if the history end cursor is at the actual end of the history, dt_dev_get_history_end()
+    GList *fence_item = g_list_nth(dev->history, dt_dev_get_history_end_ext(dev));
+    // if the history end cursor is at the actual end of the history, dt_dev_get_history_end_ext()
     // returns an index that is outside of the range (equal to number of elements),
     // so fence_item = NULL but the code works as expected since we check history != NULL
     // first.

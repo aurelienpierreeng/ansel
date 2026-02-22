@@ -940,9 +940,9 @@ void dt_ioppr_set_default_iop_order(dt_develop_t *dev, const int32_t imgid)
 void dt_ioppr_migrate_iop_order(struct dt_develop_t *dev, const int32_t imgid)
 {
   dt_ioppr_set_default_iop_order(dev, imgid);
-  dt_dev_reload_history_items(dev);
+  dt_dev_reload_history_items(dev, dev->image_storage.id);
   dt_dev_history_gui_update(dev);
-  dt_dev_history_pixelpipe_update(dev);
+  dt_dev_history_pixelpipe_update(dev, TRUE);
   dt_dev_history_notify_change(dev, imgid);
 }
 

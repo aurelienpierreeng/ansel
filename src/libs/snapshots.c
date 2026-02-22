@@ -452,16 +452,16 @@ static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpoint
   d->snapshot[0] = last;
   d->snapshot[0].button = b;
   const gchar *name = _("original");
-  if(dt_dev_get_history_end(darktable.develop) > 0)
+  if(dt_dev_get_history_end_ext(darktable.develop) > 0)
   {
     dt_dev_history_item_t *history_item = g_list_nth_data(darktable.develop->history,
-                                                          dt_dev_get_history_end(darktable.develop) - 1);
+                                                          dt_dev_get_history_end_ext(darktable.develop) - 1);
     if(history_item && history_item->module)
       name = history_item->module->name();
     else
       name = _("unknown");
   }
-  g_snprintf(label, sizeof(label), "%s (%d)", name, dt_dev_get_history_end(darktable.develop));
+  g_snprintf(label, sizeof(label), "%s (%d)", name, dt_dev_get_history_end_ext(darktable.develop));
   gtk_label_set_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(d->snapshot[0].button))), label);
 
   /* update slots used */

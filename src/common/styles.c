@@ -783,13 +783,10 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
       newimgid = imgid;
 
     // now deal with the history
-    dt_develop_t _dev_dest = { 0 };
-
-    dt_develop_t *dev_dest = &_dev_dest;
-
-    dt_dev_init(dev_dest, FALSE);
-
-    dev_dest->image_storage.id = imgid;
+    dt_develop_t dev_dest = { 0 };
+    dt_dev_init(&dev_dest, FALSE);
+    if(dt_dev_ensure_image_storage(&dev_dest, imgid)) 
+      return;
 
     // now let's deal with the iop-order (possibly merging style & target lists)
     GList *iop_list = dt_styles_module_order_list(name);
@@ -808,17 +805,10 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
       g_list_free_full(img_iop_order_list, g_free);
     }
 
-    dt_pthread_rwlock_wrlock(&dev_dest->history_mutex);
-    dt_dev_read_history_ext(dev_dest, newimgid, TRUE);
-    dt_dev_pop_history_items_ext(dev_dest);
-    dt_pthread_rwlock_unlock(&dev_dest->history_mutex);
-
-    dt_ioppr_check_iop_order(dev_dest, newimgid, "dt_styles_apply_to_image ");
-
-    dt_ioppr_check_iop_order(dev_dest, newimgid, "dt_styles_apply_to_image 1");
+    dt_dev_reload_history_items(&dev_dest, dev_dest.image_storage.id);
 
     if (DT_IOP_ORDER_INFO)
-      fprintf(stderr,"\n^^^^^ Apply style on image %i, history size %i\n",imgid, dt_dev_get_history_end(dev_dest));
+      fprintf(stderr,"\n^^^^^ Apply style on image %i, history size %i\n",imgid, dt_dev_get_history_end_ext(&dev_dest));
 
     // go through all entries in style
     // clang-format off
@@ -857,7 +847,7 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
     sqlite3_finalize(stmt);
     si_list = g_list_reverse(si_list);  // list was built in reverse order, so un-reverse it
 
-    dt_ioppr_update_for_style_items(dev_dest, si_list, FALSE);
+    dt_ioppr_update_for_style_items(&dev_dest, si_list, FALSE);
 
     // Build a list of temporary modules with style params, then merge them using the same
     // code path as history copy/paste.
@@ -865,7 +855,7 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
     for(GList *l = si_list; l; l = g_list_next(l))
     {
       dt_style_item_t *style_item = (dt_style_item_t *)l->data;
-      dt_iop_module_t *module = _dt_styles_tmp_module_from_style_item(dev_dest, style_item);
+      dt_iop_module_t *module = _dt_styles_tmp_module_from_style_item(&dev_dest, style_item);
       if(module) mod_list = g_list_append(mod_list, module);
     }
 
@@ -873,36 +863,35 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
 
     if (DT_IOP_ORDER_INFO) fprintf(stderr,"\nvvvvv --> look for written history below\n");
 
-    dt_ioppr_check_iop_order(dev_dest, newimgid, "dt_styles_apply_to_image 2");
+    dt_ioppr_check_iop_order(&dev_dest, newimgid, "dt_styles_apply_to_image 2");
 
     dt_undo_lt_history_t *hist = dt_history_snapshot_item_init();
     hist->imgid = newimgid;
     dt_history_snapshot_undo_create(hist->imgid, &hist->before, &hist->before_history_end);
-
-    dt_history_merge_module_list_into_image(dev_dest, NULL, newimgid, mod_list);
-    dt_dev_history_notify_change(dev_dest, newimgid);
-
+    dt_history_merge_module_list_into_image(&dev_dest, NULL, newimgid, mod_list);
     dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
+
     dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
     dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
                    dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
     dt_undo_end_group(darktable.undo);
 
+    /* add tag */
+    dt_dev_append_changed_tag(newimgid);
+    dt_dev_write_history(&dev_dest);
+
     for(GList *l = g_list_first(mod_list); l; l = g_list_next(l))
       _dt_styles_tmp_module_free((dt_iop_module_t *)l->data);
     g_list_free(mod_list);
 
-    dt_dev_cleanup(dev_dest);
-
-    /* add tag */
-    dt_dev_append_changed_tag(newimgid);
+    dt_dev_cleanup(&dev_dest);
 
     /* if current image in develop reload history */
     if(dt_dev_is_current_image(darktable.develop, newimgid))
     {
-      dt_dev_reload_history_items(darktable.develop);
+      dt_dev_reload_history_items(darktable.develop, darktable.develop->image_storage.id);
+      dt_dev_history_pixelpipe_update(darktable.develop, TRUE);
       dt_dev_history_gui_update(darktable.develop);
-      dt_dev_history_pixelpipe_update(darktable.develop);
       dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
     }
 

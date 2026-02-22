@@ -97,27 +97,33 @@ void dt_dev_write_history_ext(struct dt_develop_t *dev, const int32_t imgid);
 // Locks dev->history_mutex and calls dt_dev_write_history_ext()
 void dt_dev_write_history(struct dt_develop_t *dev);
 
-// Persist history_end + history_hash to DB and XMP, without rewriting history entries.
-void dt_dev_write_history_end(struct dt_develop_t *dev);
-
 // Apply module params already loaded from history to module GUIs.
 void dt_dev_history_gui_update(struct dt_develop_t *dev);
 
 // Rebuild and process pixelpipes after backend history changes.
-void dt_dev_history_pixelpipe_update(struct dt_develop_t *dev);
+// Set rebuild to TRUE if the pipeline topology has changed
+void dt_dev_history_pixelpipe_update(struct dt_develop_t *dev, gboolean rebuild);
 
 // Notify the rest of the app that history-related DB/XMP changes were written.
 void dt_dev_history_notify_change(struct dt_develop_t *dev, const int32_t imgid);
 
-// Locks darktable.database_threadsafe in read mode,
-// get history (module params) and masks from DB,
+// Undo handling for history changes. These are called by dt_dev_undo_start_record()
+// / dt_dev_undo_end_record() (develop/develop.c) and are independent of any GUI module.
+void dt_dev_history_undo_start_record(struct dt_develop_t *dev);
+void dt_dev_history_undo_end_record(struct dt_develop_t *dev);
+void dt_dev_history_undo_invalidate_module(struct dt_iop_module_t *module);
+
+// Get history (module params) and masks from DB,
 // apply default modules, auto-presets and mandatory modules,
 // then populate dev->history GList.
+// WARNING: this init modules internals with the whole history,
+// not taking history_end into account. You need to call
+// dt_dev_pop_history_items_ext to set it properly.
 gboolean dt_dev_read_history_ext(struct dt_develop_t *dev, const int32_t imgid, gboolean no_image);
 
 // Read dev->history state, up to dev->history_end,
 // and write it into the params/blendops of modules from dev->iop.
-// dev->history_end should be set before, see `dt_dev_set_history_end()`.
+// dev->history_end should be set before, see `dt_dev_set_history_end_ext()`.
 // This doesn't update GUI. See `dt_dev_pop_history_items()`
 void dt_dev_pop_history_items_ext(struct dt_develop_t *dev);
 
@@ -128,7 +134,7 @@ void dt_dev_pop_history_items(struct dt_develop_t *dev);
 
 // Free exisiting history, re-read it from database, update GUI and rebuild darkroom pipeline nodes.
 // Locks dev->history_mutex
-void dt_dev_reload_history_items(struct dt_develop_t *dev);
+void dt_dev_reload_history_items(struct dt_develop_t *dev, const int32_t imgid);
 
 
 // Removes the reference to `*module` from history entries
@@ -153,7 +159,7 @@ uint64_t dt_dev_history_get_hash(struct dt_develop_t *dev);
 // actually the first element of history, and dev->history_end = length(dev->history) is the last.
 // Note: the value is sanitized with the actual history size.
 // It needs to run after dev->history is fully populated
-int32_t dt_dev_get_history_end(struct dt_develop_t *dev);
+int32_t dt_dev_get_history_end_ext(struct dt_develop_t *dev);
 
 // Set the index of the last active history element from a GUI perspective.
 // It means that dev->history_end is shifted by a +1 offset, so index 0 is the raw image,
@@ -161,7 +167,7 @@ int32_t dt_dev_get_history_end(struct dt_develop_t *dev);
 // actually the first element of history, and dev->history_end = length(dev->history) is the last.
 // Note: the value is sanitized with the actual history size.
 // It needs to run after dev->history is fully populated
-void dt_dev_set_history_end(struct dt_develop_t *dev, const uint32_t index);
+void dt_dev_set_history_end_ext(struct dt_develop_t *dev, const uint32_t index);
 
 gboolean dt_history_module_skip_copy(const int flags);
 
@@ -196,12 +202,32 @@ void dt_dev_history_cleanup(void);
 /**
  * @brief Find the first history entry on dev->history attached to a module
  * 
- * @param dev 
+ * @param history_list
  * @param module 
  * @return dt_dev_history_item_t* 
  */
-dt_dev_history_item_t *dt_dev_history_get_first_item_by_module(struct dt_develop_t *dev, struct dt_iop_module_t *module);
+dt_dev_history_item_t *dt_dev_history_get_first_item_by_module(GList *history_list, struct dt_iop_module_t *module);
 
+/**
+ * @brief Find the last history entry on dev->history attached to a module, starting at history_end.
+ * 
+ * @param history_list 
+ * @param module 
+ * @param history_end 
+ * @return dt_dev_history_item_t* 
+ */
+dt_dev_history_item_t *dt_dev_history_get_last_item_by_module(GList *history_list, struct dt_iop_module_t *module, int history_end);
+
+/**
+ * @brief Delete, add (back) and reorder modules in GUI based on their 
+ * pipeline existence and order at a certain point in the history.
+ * 
+ * @param dev 
+ * @param iop 
+ * @param history 
+ * @return int 
+ */
+int dt_dev_history_refresh_nodes(struct dt_develop_t *dev, GList *iop, GList *history);
 
 #ifdef __cplusplus
 }

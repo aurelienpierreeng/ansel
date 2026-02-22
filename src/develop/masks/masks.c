@@ -1101,7 +1101,7 @@ void dt_masks_read_masks_history(dt_develop_t *dev, const int32_t imgid)
               "[_dev_read_masks_history] can't find history entry %i while adding mask %s(%i)\n",
               num, form->name, formid);
 
-    if(num < dt_dev_get_history_end(dev)) hist_item_last = hist_item;
+    if(num < dt_dev_get_history_end_ext(dev)) hist_item_last = hist_item;
   }
   sqlite3_finalize(stmt);
 
@@ -2692,7 +2692,7 @@ void dt_masks_cleanup_unused(dt_develop_t *dev)
   GList *forms = NULL;
   int num = 0;
   for(const GList *history = g_list_first(dev->history);
-      history && num < dt_dev_get_history_end(dev);
+      history && num < dt_dev_get_history_end_ext(dev);
       history = g_list_next(history))
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;

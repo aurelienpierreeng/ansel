@@ -1537,9 +1537,10 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
     if(!iauto)
     {
       /* signal history changed */
-      dt_dev_reload_history_items(dev);
+      dt_dev_write_history(dev);
+      dt_dev_reload_history_items(dev, imgid);
       dt_dev_history_gui_update(dev);
-      dt_dev_history_pixelpipe_update(dev);
+      dt_dev_history_pixelpipe_update(dev, TRUE);
       dt_dev_history_notify_change(dev, imgid);
       /* update xmp file */
       dt_image_synch_xmp(imgid);

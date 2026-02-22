@@ -374,19 +374,9 @@ void dt_history_compress_on_image(const int32_t imgid)
   dt_print(DT_DEBUG_HISTORY, "[dt_history_compress_on_image] compressing history for image %i\n", imgid);
   if(imgid <= 0) return;
 
-  const int my_history_end = dt_history_get_end(imgid);
-
-  if(my_history_end <= 0)
-  {
-    dt_history_delete_on_image(imgid);
-    return;
-  }
-
   dt_develop_t dev;
   dt_dev_init(&dev, FALSE);
-  dt_dev_read_history_ext(&dev, imgid, TRUE);
-  dt_dev_set_history_end(&dev, my_history_end);
-  dt_dev_pop_history_items_ext(&dev);
+  dt_dev_reload_history_items(&dev, imgid);
   dt_dev_history_compress(&dev);
   dt_dev_history_notify_change(&dev, imgid);
   dt_dev_cleanup(&dev);
@@ -396,44 +386,40 @@ void dt_history_compress_on_image(const int32_t imgid)
   - can be used in lighttable and darkroom mode
   - It truncates history through develop/dev_history.c and rewrites DB/XMP.
 */
-void dt_history_truncate_on_image(const int32_t imgid, const int32_t history_end)
+void dt_history_truncate_on_image(dt_develop_t *dev, const int32_t imgid, const int32_t history_end)
 {
-  if(imgid <= 0) return;
-
   if(history_end <= 0)
   {
     dt_history_delete_on_image(imgid);
+    dt_dev_reload_history_items(dev, dev->image_storage.id);
     return;
   }
 
-  dt_develop_t dev;
-  dt_dev_init(&dev, FALSE);
-  dt_pthread_rwlock_wrlock(&dev.history_mutex);
-  if(!dt_dev_read_history_ext(&dev, imgid, TRUE))
-  {
-    dt_pthread_rwlock_unlock(&dev.history_mutex);
-    dt_dev_cleanup(&dev);
-    return;
-  }
-
-  // Clamp to history size.
-  dt_dev_set_history_end(&dev, history_end);
-  const int32_t end = dt_dev_get_history_end(&dev);
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
+  dt_dev_set_history_end_ext(dev, history_end);
 
   // Remove tail entries (num >= end).
-  GList *link = g_list_nth(dev.history, end);
+  // history_end is a cursor expressed in "number of applied items" terms:
+  // - keep items [0..history_end-1]
+  // - remove items [history_end..]
+  GList *link = g_list_nth(dev->history, history_end);
   while(link)
   {
     GList *next = g_list_next(link);
     dt_dev_free_history_item(link->data);
-    dev.history = g_list_delete_link(dev.history, link);
+    dev->history = g_list_delete_link(dev->history, link);
     link = next;
   }
 
-  dt_dev_write_history_ext(&dev, imgid);
-  dt_pthread_rwlock_unlock(&dev.history_mutex);
-  dt_dev_history_notify_change(&dev, imgid);
-  dt_dev_cleanup(&dev);
+  // Write to DB/XMP
+  dt_dev_write_history_ext(dev, imgid);
+
+  // Reload to sanitize mandatory/incompatible modules.
+  dt_dev_reload_history_items(dev, imgid);
+
+  // Write again after sanitization.
+  dt_dev_write_history_ext(dev, imgid);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 }
 
 int dt_history_compress_on_list(const GList *imgs)

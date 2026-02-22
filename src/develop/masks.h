@@ -227,9 +227,9 @@ typedef struct dt_masks_functions_t
   void (*initial_source_pos)(const float iwd, const float iht, float *x, float *y);
   void (*get_distance)(float x, float y, float as, struct dt_masks_form_gui_t *gui, int index, int num_points,
                        int *inside, int *inside_border, int *near, int *inside_source, float *dist);
-  int (*get_points)(dt_develop_t *dev, float x, float y, float radius_a, float radius_b, float rotation,
+  int (*get_points)(struct dt_develop_t *dev, float x, float y, float radius_a, float radius_b, float rotation,
                     float **points, int *points_count);
-  int (*get_points_border)(dt_develop_t *dev, struct dt_masks_form_t *form, float **points, int *points_count,
+  int (*get_points_border)(struct dt_develop_t *dev, struct dt_masks_form_t *form, float **points, int *points_count,
                            float **border, int *border_count, int source, const dt_iop_module_t *const module);
   int (*get_mask)(const dt_iop_module_t *const module, const dt_dev_pixelpipe_iop_t *const piece,
                   struct dt_masks_form_t *const form,
@@ -405,7 +405,7 @@ void dt_masks_init_form_gui(dt_masks_form_gui_t *gui);
 
 /** get points in real space with respect of distortion dx and dy are used to eventually move the center of
  * the circle */
-int dt_masks_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, float **points, int *points_count,
+int dt_masks_get_points_border(struct dt_develop_t *dev, dt_masks_form_t *form, float **points, int *points_count,
                                float **border, int *border_count, int source, dt_iop_module_t *module);
 
 /** get the rectangle which include the form and his border */

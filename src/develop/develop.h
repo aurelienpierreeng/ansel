@@ -211,10 +211,20 @@ typedef struct dt_develop_t
   // by the iop through the copy their respective pixelpipe holds, for thread-safety.
   dt_image_t image_storage;
 
-  // history stack
-  // Protect read & write to dev->history
+  // Protect read & write to dev->history and dev->forms
+  // and other related stuff like history_end, hashes, etc.
   dt_pthread_rwlock_t history_mutex;
+
+  // We don't always apply the full history to modules,
+  // this is the cursor where we stop the list.
+  // Note: history_end = number of history items,
+  // since we consider the 0th element to be the RAW image
+  // (no IOP, no history entry, no item on the GList). 
+  // So the index of the history
+  // entry matching history_end is history_end - 1,
   int32_t history_end;
+
+  // history stack
   GList *history;
 
   // operations pipeline
@@ -226,6 +236,14 @@ typedef struct dt_develop_t
   // iop order
   int iop_order_version;
   GList *iop_order_list;
+
+  // Undo tracking for history changes. This is managed by dt_dev_undo_start_record()
+  // / dt_dev_undo_end_record() and stores "before" snapshots until the outermost
+  // change completes.
+  int undo_history_depth;
+  GList *undo_history_before_snapshot;
+  int undo_history_before_end;
+  GList *undo_history_before_iop_order_list;
 
   // profiles info
   GList *allprofile_info;

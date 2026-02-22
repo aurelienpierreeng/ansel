@@ -81,7 +81,7 @@ int dt_history_compress_on_list(const GList *imgs);
 void dt_history_compress_on_image(const int32_t imgid);
 
 /** truncate history stack */
-void dt_history_truncate_on_image(const int32_t imgid, const int32_t history_end);
+void dt_history_truncate_on_image(struct dt_develop_t *dev, const int32_t imgid, const int32_t history_end);
 
 /** read history_end from database for an image (main.images.history_end) */
 int32_t dt_history_get_end(const int32_t imgid);

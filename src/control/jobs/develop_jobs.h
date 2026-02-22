@@ -32,10 +32,10 @@
 #include <inttypes.h>
 
 /** process preview */
-dt_job_t *dt_dev_process_preview_job_create(dt_develop_t *dev);
+dt_job_t *dt_dev_process_preview_job_create(struct dt_develop_t *dev);
 
 /** process image */
-dt_job_t *dt_dev_process_image_job_create(dt_develop_t *dev);
+dt_job_t *dt_dev_process_image_job_create(struct dt_develop_t *dev);
 
 
 // clang-format off

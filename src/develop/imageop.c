@@ -535,10 +535,7 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
   }
   if(!next) return; // what happened ???
 
-  if(dev->gui_attached)
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_WILL_CHANGE,
-                            dt_history_duplicate(darktable.develop->history), dt_dev_get_history_end(darktable.develop),
-                            dt_ioppr_iop_order_copy_deep(darktable.develop->iop_order_list));
+  if(dev->gui_attached) dt_dev_undo_start_record(dev);
 
   // we must pay attention if priority is 0
   const gboolean is_zero = (module->multi_priority == 0);
@@ -600,11 +597,8 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
     }
   }
 
-  // we save the current state of history (with the new multi_priorities)
-  if(dev->gui_attached)
-  {
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
-  }
+  // Commit undo snapshot for the whole delete operation (module removal + multi_priority adjustments).
+  if(dev->gui_attached) dt_dev_undo_end_record(dev);
 
   // don't delete the module, a pipe may still need it
   dev->alliop = g_list_append(dev->alliop, module);

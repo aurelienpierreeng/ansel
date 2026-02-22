@@ -246,6 +246,14 @@ void dt_dev_cleanup(dt_develop_t *dev)
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   dt_pthread_rwlock_destroy(&dev->history_mutex);
 
+  // free pending "before" snapshots for history undo
+  dev->undo_history_depth = 0;
+  g_list_free_full(dev->undo_history_before_snapshot, dt_dev_free_history_item);
+  dev->undo_history_before_snapshot = NULL;
+  g_list_free_full(dev->undo_history_before_iop_order_list, free);
+  dev->undo_history_before_iop_order_list = NULL;
+  dev->undo_history_before_end = 0;
+
   while(dev->iop)
   {
     dt_iop_cleanup_module((dt_iop_module_t *)dev->iop->data);
@@ -898,13 +906,14 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
                  hist->module->op, hist->module->multi_name, module, hist->module);
         dt_dev_free_history_item(hist);
         dev->history = g_list_delete_link(dev->history, elem);
-        dt_dev_set_history_end(dev, dt_dev_get_history_end(dev) - 1);
+        dt_dev_set_history_end_ext(dev, dt_dev_get_history_end_ext(dev) - 1);
         del = 1;
       }
       elem = next;
     }
   }
 
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   // and we remove it from the list
   for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
@@ -917,18 +926,15 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
     }
   }
 
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
-
   if(dev->gui_attached && del)
   {
     /* signal that history has changed */
     dt_dev_undo_end_record(dev);
-
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULE_REMOVE, module);
+    dt_dev_history_undo_invalidate_module(module);
   }
 }
 
-void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *module)
+void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *module, const int history_end)
 {
   // We count the number of other instances
   int nb_instances = 0;
@@ -959,11 +965,19 @@ void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *mod
     module->multi_show_down = move_prev;
   else
     module->multi_show_down = 0;
+
+  // If it's an additionnal instance supposed to be added by an history item after
+  // the current history_end cursor, conceptually it doesn't exist yet, 
+  // even though it's dangling there on the pipe. So hide it from GUI.
+  if(nb_instances > 1 
+     && dt_dev_history_get_last_item_by_module(dev->history, module, history_end) == NULL)
+      gtk_widget_hide(module->expander);
 }
 
 void dt_dev_modules_update_multishow(dt_develop_t *dev)
 {
   dt_ioppr_check_iop_order(dev, 0, "dt_dev_modules_update_multishow");
+  const int history_end = dt_dev_get_history_end_ext(dev);
 
   for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
   {
@@ -973,7 +987,7 @@ void dt_dev_modules_update_multishow(dt_develop_t *dev)
     GtkWidget *expander = mod->expander;
     if(expander && gtk_widget_is_visible(expander))
     {
-      _dev_module_update_multishow(dev, mod);
+      _dev_module_update_multishow(dev, mod, history_end);
     }
   }
 }
@@ -1061,9 +1075,7 @@ int dt_dev_distort_transform_locked(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe,
 int dt_dev_distort_transform_plus(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
                                   float *points, size_t points_count)
 {
-  dt_pthread_rwlock_rdlock(&dev->history_mutex);
   dt_dev_distort_transform_locked(dev, pipe, iop_order, transf_direction, points, points_count);
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
   return 1;
 }
 
@@ -1100,9 +1112,7 @@ int dt_dev_distort_backtransform_locked(dt_develop_t *dev, dt_dev_pixelpipe_t *p
 int dt_dev_distort_backtransform_plus(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
                                       float *points, size_t points_count)
 {
-  dt_pthread_rwlock_rdlock(&dev->history_mutex);
   const int success = dt_dev_distort_backtransform_locked(dev, pipe, iop_order, transf_direction, points, points_count);
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
   return success;
 }
 
@@ -1144,9 +1154,7 @@ void dt_dev_undo_start_record(dt_develop_t *dev)
   /* record current history state : before change (needed for undo) */
   if(dev->gui_attached && cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM)
   {
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_WILL_CHANGE,
-                                  dt_history_duplicate(dev->history), dt_dev_get_history_end(dev),
-                                  dt_ioppr_iop_order_copy_deep(dev->iop_order_list));
+    dt_dev_history_undo_start_record(dev);
   }
 }
 
@@ -1157,6 +1165,7 @@ void dt_dev_undo_end_record(dt_develop_t *dev)
   /* record current history state : after change (needed for undo) */
   if(dev->gui_attached && cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM)
   {
+    dt_dev_history_undo_end_record(dev);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
   }
 }
@@ -1183,13 +1192,13 @@ void dt_masks_set_lock_mode(dt_develop_t *dev, gboolean mode)
   }
 }
 
-int32_t dt_dev_get_history_end(dt_develop_t *dev)
+int32_t dt_dev_get_history_end_ext(dt_develop_t *dev)
 {
   const int num_items = g_list_length(dev->history);
   return CLAMP(dev->history_end, 0, num_items);
 }
 
-void dt_dev_set_history_end(dt_develop_t *dev, const uint32_t index)
+void dt_dev_set_history_end_ext(dt_develop_t *dev, const uint32_t index)
 {
   const int num_items = g_list_length(dev->history);
   dev->history_end = CLAMP(index, 0, num_items);

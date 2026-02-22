@@ -119,17 +119,19 @@ static gboolean compress_history_callback(GtkAccelGroup *group, GObject *acceler
 
   if(is_darkroom_image_in_list)
   {
-    dt_dev_undo_start_record(darktable.develop);
-    dt_dev_history_compress(darktable.develop);
-    dt_dev_undo_end_record(darktable.develop);
-    dt_dev_history_gui_update(darktable.develop);
-    dt_dev_history_pixelpipe_update(darktable.develop);
-    dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
+    dt_develop_t *dev = darktable.develop;
+    dt_dev_undo_start_record(dev);
+    dt_dev_history_compress(dev);
+    dt_dev_undo_end_record(dev);
+    int pipe_remove = dt_dev_history_refresh_nodes(dev, dev->iop, dev->history);
+    dt_dev_history_gui_update(dev);
+    dt_dev_history_pixelpipe_update(dev, pipe_remove);
+    dt_dev_history_notify_change(dev, dev->image_storage.id);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
 
     // Avoid running a headless compression for the current darkroom image: the history module
     // (src/libs/history.c) compresses directly from the loaded pipeline.
-    imgs = g_list_remove(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
+    imgs = g_list_remove(imgs, GINT_TO_POINTER(dev->image_storage.id));
   }
 
   if(imgs) dt_history_compress_on_list(imgs);
@@ -159,9 +161,9 @@ static gboolean delete_history_callback(GtkAccelGroup *group, GObject *accelerat
   if(is_darkroom_image_in_list)
   {
     dt_dev_undo_end_record(darktable.develop);
-    dt_dev_reload_history_items(darktable.develop);
+    dt_dev_reload_history_items(darktable.develop, darktable.develop->image_storage.id);
     dt_dev_history_gui_update(darktable.develop);
-    dt_dev_history_pixelpipe_update(darktable.develop);
+    dt_dev_history_pixelpipe_update(darktable.develop, TRUE);
     dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
   }
@@ -244,9 +246,9 @@ static gboolean paste_all_callback(GtkAccelGroup *group, GObject *acceleratable,
   if(is_darkroom_image_in_list)
   {
     dt_dev_undo_end_record(darktable.develop);
-    dt_dev_reload_history_items(darktable.develop);
+    dt_dev_reload_history_items(darktable.develop, darktable.develop->image_storage.id);
     dt_dev_history_gui_update(darktable.develop);
-    dt_dev_history_pixelpipe_update(darktable.develop);
+    dt_dev_history_pixelpipe_update(darktable.develop, TRUE);
     dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
   }
@@ -278,9 +280,9 @@ static gboolean paste_parts_callback(GtkAccelGroup *group, GObject *acceleratabl
   if(is_darkroom_image_in_list)
   {
     dt_dev_undo_end_record(darktable.develop);
-    dt_dev_reload_history_items(darktable.develop);
+    dt_dev_reload_history_items(darktable.develop, darktable.develop->image_storage.id);
     dt_dev_history_gui_update(darktable.develop);
-    dt_dev_history_pixelpipe_update(darktable.develop);
+    dt_dev_history_pixelpipe_update(darktable.develop, TRUE);
     dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
   }
@@ -354,9 +356,9 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
       gtk_widget_destroy(dialog);
 
       // TODO: only when needed, check imgid
-      dt_dev_reload_history_items(darktable.develop);
+      dt_dev_reload_history_items(darktable.develop, darktable.develop->image_storage.id);
       dt_dev_history_gui_update(darktable.develop);
-      dt_dev_history_pixelpipe_update(darktable.develop);
+      dt_dev_history_pixelpipe_update(darktable.develop, TRUE);
       dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
     }
     else
