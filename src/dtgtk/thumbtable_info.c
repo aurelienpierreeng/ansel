@@ -115,7 +115,7 @@ void dt_thumbtable_info_debug_assert_matches_cache(const dt_image_t *sql_info)
   if(!img) return;
 
   dt_image_t cache_info = {0};
-  dt_thumbtable_copy_image(&cache_info, &cache_info);
+  dt_thumbtable_copy_image(&cache_info, img);
   dt_image_cache_read_release(darktable.image_cache, img);
 
   g_assert_cmpint(sql_info->id, ==, cache_info.id);
