@@ -1998,7 +1998,6 @@ void enter(dt_view_t *self)
   // Add IOP modules to the plugin list
   char option[1024];
   const char *active_plugin = dt_conf_get_string_const("plugins/darkroom/active");
-  dt_pthread_rwlock_rdlock(&dev->history_mutex);
   for(const GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)(modules->data);
@@ -2020,7 +2019,6 @@ void enter(dt_view_t *self)
       }
     }
   }
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
 
 #ifdef USE_LUA
 
@@ -2037,7 +2035,7 @@ void enter(dt_view_t *self)
   // locks history mutex internally
   dt_dev_pop_history_items(dev);
   dt_dev_history_gui_update(dev);
-  dt_dev_history_pixelpipe_update(dev);
+  dt_dev_history_pixelpipe_update(dev, TRUE);
 
   // Clean & Init the starting point of undo/redo
   dt_undo_clear(darktable.undo, DT_UNDO_DEVELOP);

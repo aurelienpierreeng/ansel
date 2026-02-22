@@ -21,7 +21,7 @@
     Copyright (C) 2018 Matthieu Moy.
     Copyright (C) 2018-2022 Pascal Obry.
     Copyright (C) 2018 Peter Budai.
-    Copyright (C) 2019-2020, 2022-2025 Aurélien PIERRE.
+    Copyright (C) 2019-2020, 2022-2026 Aurélien PIERRE.
     Copyright (C) 2019-2022 Diederik Ter Rahe.
     Copyright (C) 2019 emeikei.
     Copyright (C) 2019-2021 Heiko Bauke.
@@ -1653,6 +1653,10 @@ static gint _delayed_combobox_commit(gpointer data)
   dt_bauhaus_combobox_data_t *d = &w->data.combobox;
   d->timeout_handle = 0;
 
+  // If a reset started after the timeout was scheduled (e.g. while reloading history,
+  // applying a style, etc.), don't commit anything to history from this stale callback.
+  if(darktable.gui && darktable.gui->reset) return G_SOURCE_REMOVE;
+
   if(w->use_default_callback)
   {
     if(w->bauhaus->default_value_changed_callback)
@@ -2900,6 +2904,10 @@ static gboolean _delayed_slider_commit(gpointer data)
   // so incremental scrolls don't trigger a recompute at every scroll step.
   struct dt_bauhaus_widget_t *w = data;
   w->data.slider.timeout_handle = 0;
+
+  // If a reset started after the timeout was scheduled (e.g. while reloading history,
+  // applying a style, etc.), don't commit anything to history from this stale callback.
+  if(darktable.gui && darktable.gui->reset) return G_SOURCE_REMOVE;
 
   if(w->use_default_callback)
   {
