@@ -69,6 +69,7 @@ typedef struct dt_pthread_rwlock_t
   pthread_rwlock_t lock;
   int cnt;
   pthread_t writer;
+  int writer_depth;
   char name[256];
 } dt_pthread_rwlock_t;
 
@@ -221,6 +222,7 @@ static inline int dt_pthread_rwlock_init(dt_pthread_rwlock_t *lock,
 {
   memset(lock, 0, sizeof(dt_pthread_rwlock_t));
   lock->cnt = 0;
+  lock->writer_depth = 0;
   const int res = pthread_rwlock_init(&lock->lock, attr);
   assert(!res);
   return res;
@@ -228,6 +230,7 @@ static inline int dt_pthread_rwlock_init(dt_pthread_rwlock_t *lock,
 
 static inline int dt_pthread_rwlock_destroy(dt_pthread_rwlock_t *lock)
 {
+  assert(lock->writer_depth == 0);
   snprintf(lock->name, sizeof(lock->name), "destroyed with cnt %d", lock->cnt);
   const int res = pthread_rwlock_destroy(&lock->lock);
   assert(!res);
@@ -242,11 +245,23 @@ static inline pthread_t dt_pthread_rwlock_get_writer(dt_pthread_rwlock_t *lock)
 #define dt_pthread_rwlock_unlock(A) dt_pthread_rwlock_unlock_with_caller(A, __FILE__, __LINE__)
 static inline int dt_pthread_rwlock_unlock_with_caller(dt_pthread_rwlock_t *rwlock, const char *file, int line)
 {
+  if(pthread_equal(rwlock->writer, pthread_self()) && rwlock->writer_depth > 1)
+  {
+    __sync_fetch_and_sub(&(rwlock->cnt), 1);
+    rwlock->writer_depth--;
+    assert(rwlock->writer_depth >= 1);
+    assert(rwlock->cnt >= 0);
+    snprintf(rwlock->name, sizeof(rwlock->name), "nu:%s:%d", file, line);
+    return 0;
+  }
+
+  const gboolean writer_was_self = pthread_equal(rwlock->writer, pthread_self());
   const int res = pthread_rwlock_unlock(&rwlock->lock);
   assert(!res);
   __sync_fetch_and_sub(&(rwlock->cnt), 1);
   assert(rwlock->cnt >= 0);
   __sync_bool_compare_and_swap(&(rwlock->writer), pthread_self(), 0);
+  if(writer_was_self) rwlock->writer_depth = 0;
   if(!res) snprintf(rwlock->name, sizeof(rwlock->name), "u:%s:%d", file, line);
   return res;
 }
@@ -254,6 +269,14 @@ static inline int dt_pthread_rwlock_unlock_with_caller(dt_pthread_rwlock_t *rwlo
 #define dt_pthread_rwlock_rdlock(A) dt_pthread_rwlock_rdlock_with_caller(A, __FILE__, __LINE__)
 static inline int dt_pthread_rwlock_rdlock_with_caller(dt_pthread_rwlock_t *rwlock, const char *file, int line)
 {
+  if(pthread_equal(rwlock->writer, pthread_self()) && rwlock->writer_depth >= 1)
+  {
+    __sync_fetch_and_add(&(rwlock->cnt), 1);
+    rwlock->writer_depth++;
+    snprintf(rwlock->name, sizeof(rwlock->name), "wr:%s:%d", file, line);
+    return 0;
+  }
+
   const int res = pthread_rwlock_rdlock(&rwlock->lock);
   assert(!res);
   assert(!(res && pthread_equal(rwlock->writer, pthread_self())));
@@ -265,12 +288,21 @@ static inline int dt_pthread_rwlock_rdlock_with_caller(dt_pthread_rwlock_t *rwlo
 #define dt_pthread_rwlock_wrlock(A) dt_pthread_rwlock_wrlock_with_caller(A, __FILE__, __LINE__)
 static inline int dt_pthread_rwlock_wrlock_with_caller(dt_pthread_rwlock_t *rwlock, const char *file, int line)
 {
+  if(pthread_equal(rwlock->writer, pthread_self()) && rwlock->writer_depth >= 1)
+  {
+    __sync_fetch_and_add(&(rwlock->cnt), 1);
+    rwlock->writer_depth++;
+    snprintf(rwlock->name, sizeof(rwlock->name), "ww:%s:%d", file, line);
+    return 0;
+  }
+
   const int res = pthread_rwlock_wrlock(&rwlock->lock);
   assert(!res);
   __sync_fetch_and_add(&(rwlock->cnt), 1);
   if(!res)
   {
     __sync_lock_test_and_set(&(rwlock->writer), pthread_self());
+    rwlock->writer_depth = 1;
     snprintf(rwlock->name, sizeof(rwlock->name), "w:%s:%d", file, line);
   }
   return res;
@@ -278,6 +310,14 @@ static inline int dt_pthread_rwlock_wrlock_with_caller(dt_pthread_rwlock_t *rwlo
 #define dt_pthread_rwlock_tryrdlock(A) dt_pthread_rwlock_tryrdlock_with_caller(A, __FILE__, __LINE__)
 static inline int dt_pthread_rwlock_tryrdlock_with_caller(dt_pthread_rwlock_t *rwlock, const char *file, int line)
 {
+  if(pthread_equal(rwlock->writer, pthread_self()) && rwlock->writer_depth >= 1)
+  {
+    __sync_fetch_and_add(&(rwlock->cnt), 1);
+    rwlock->writer_depth++;
+    snprintf(rwlock->name, sizeof(rwlock->name), "wtr:%s:%d", file, line);
+    return 0;
+  }
+
   const int res = pthread_rwlock_tryrdlock(&rwlock->lock);
   assert(!res || (res == EBUSY));
   assert(!(res && pthread_equal(rwlock->writer, pthread_self())));
@@ -291,12 +331,21 @@ static inline int dt_pthread_rwlock_tryrdlock_with_caller(dt_pthread_rwlock_t *r
 #define dt_pthread_rwlock_trywrlock(A) dt_pthread_rwlock_trywrlock_with_caller(A, __FILE__, __LINE__)
 static inline int dt_pthread_rwlock_trywrlock_with_caller(dt_pthread_rwlock_t *rwlock, const char *file, int line)
 {
+  if(pthread_equal(rwlock->writer, pthread_self()) && rwlock->writer_depth >= 1)
+  {
+    __sync_fetch_and_add(&(rwlock->cnt), 1);
+    rwlock->writer_depth++;
+    snprintf(rwlock->name, sizeof(rwlock->name), "wtw:%s:%d", file, line);
+    return 0;
+  }
+
   const int res = pthread_rwlock_trywrlock(&rwlock->lock);
   assert(!res || (res == EBUSY));
   if(!res)
   {
     __sync_fetch_and_add(&(rwlock->cnt), 1);
     __sync_lock_test_and_set(&(rwlock->writer), pthread_self());
+    rwlock->writer_depth = 1;
     snprintf(rwlock->name, sizeof(rwlock->name), "tw:%s:%d", file, line);
   }
   return res;
