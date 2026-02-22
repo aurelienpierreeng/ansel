@@ -614,13 +614,13 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
     dev->iop = iop_temp;
     g_list_free(iop_temp2);
 
+    dt_pthread_rwlock_unlock(&dev->history_mutex);
+
     // topology has changed
     if(pipe_remove)
     {
       dt_dev_pixelpipe_rebuild_all(dev);
     }
-
-    dt_pthread_rwlock_unlock(&dev->history_mutex);
 
     // if dev->iop has changed reflect that on module list
     if(pipe_remove) _reorder_gui_module_list(dev);
