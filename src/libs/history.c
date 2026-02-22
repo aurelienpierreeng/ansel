@@ -1136,11 +1136,14 @@ static void _history_show_module_for_index(const int history_index)
 {
   if(history_index < 0) return;
 
+  dt_pthread_rwlock_rdlock(&darktable.develop->history_mutex);
   dt_dev_history_item_t *hist = (dt_dev_history_item_t *)g_list_nth_data(darktable.develop->history, history_index);
-  if(hist && hist->module)
+  dt_iop_module_t *module = hist ? hist->module : NULL;
+  dt_pthread_rwlock_unlock(&darktable.develop->history_mutex);
+  if(module)
   {
-    dt_dev_modulegroups_switch(darktable.develop, hist->module);
-    dt_iop_gui_set_expanded(hist->module, TRUE, TRUE);
+    dt_dev_modulegroups_switch(darktable.develop, module);
+    dt_iop_gui_set_expanded(module, TRUE, TRUE);
   }
 }
 
@@ -1235,9 +1238,11 @@ static void _history_maybe_record_undo(dt_lib_module_t *self, dt_lib_history_t *
   hist->before_end = d->previous_history_end;
   hist->before_iop_order_list = dt_ioppr_iop_order_copy_deep(d->previous_iop_order_list);
 
+  dt_pthread_rwlock_rdlock(&darktable.develop->history_mutex);
   hist->after_snapshot = dt_history_duplicate(darktable.develop->history);
   hist->after_end = dt_dev_get_history_end(darktable.develop);
   hist->after_iop_order_list = dt_ioppr_iop_order_copy_deep(darktable.develop->iop_order_list);
+  dt_pthread_rwlock_unlock(&darktable.develop->history_mutex);
 
   if(darktable.develop->gui_module)
   {
@@ -1263,8 +1268,10 @@ static void _lib_history_change_callback(gpointer instance, gpointer user_data)
   d->selection_reset = TRUE;
   gtk_list_store_clear(d->history_store);
 
-  /* lock history mutex */
-  dt_pthread_rwlock_wrlock(&darktable.develop->history_mutex);
+  // Read-only access: don't take a write lock here. This callback can run
+  // while the pixelpipe holds a read lock, and a write lock would deadlock
+  // the UI thread when history change signals are emitted.
+  dt_pthread_rwlock_rdlock(&darktable.develop->history_mutex);
 
   _history_store_add_original(d);
 
@@ -1272,9 +1279,10 @@ static void _lib_history_change_callback(gpointer instance, gpointer user_data)
   for(const GList *history = darktable.develop->history; history; history = g_list_next(history), history_index++)
     _history_store_prepend_item(d, (const dt_dev_history_item_t *)history->data, history_index);
 
+  const int history_end = dt_dev_get_history_end(darktable.develop);
   dt_pthread_rwlock_unlock(&darktable.develop->history_mutex);
 
-  _history_select_row_for_end(d, dt_dev_get_history_end(darktable.develop));
+  _history_select_row_for_end(d, history_end);
   d->selection_reset = FALSE;
 }
 
