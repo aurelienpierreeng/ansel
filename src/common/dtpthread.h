@@ -252,6 +252,7 @@ static inline int dt_pthread_rwlock_unlock_with_caller(dt_pthread_rwlock_t *rwlo
     assert(rwlock->writer_depth >= 1);
     assert(rwlock->cnt >= 0);
     snprintf(rwlock->name, sizeof(rwlock->name), "nu:%s:%d", file, line);
+    fprintf(stdout, "Warning: thread lock owned by the same thread is unlocked again by %s\n", rwlock->name);
     return 0;
   }
 
@@ -274,12 +275,12 @@ static inline int dt_pthread_rwlock_rdlock_with_caller(dt_pthread_rwlock_t *rwlo
     __sync_fetch_and_add(&(rwlock->cnt), 1);
     rwlock->writer_depth++;
     snprintf(rwlock->name, sizeof(rwlock->name), "wr:%s:%d", file, line);
+    fprintf(stdout, "Warning: thread lock owned by the same thread is locked again by %s\n", rwlock->name);
     return 0;
   }
 
   const int res = pthread_rwlock_rdlock(&rwlock->lock);
   assert(!res);
-  assert(!(res && pthread_equal(rwlock->writer, pthread_self())));
   __sync_fetch_and_add(&(rwlock->cnt), 1);
   if(!res)
     snprintf(rwlock->name, sizeof(rwlock->name), "r:%s:%d", file, line);
@@ -293,6 +294,7 @@ static inline int dt_pthread_rwlock_wrlock_with_caller(dt_pthread_rwlock_t *rwlo
     __sync_fetch_and_add(&(rwlock->cnt), 1);
     rwlock->writer_depth++;
     snprintf(rwlock->name, sizeof(rwlock->name), "ww:%s:%d", file, line);
+    fprintf(stdout, "Warning: thread lock owned by the same thread is locked again by %s\n", rwlock->name);
     return 0;
   }
 
@@ -315,12 +317,12 @@ static inline int dt_pthread_rwlock_tryrdlock_with_caller(dt_pthread_rwlock_t *r
     __sync_fetch_and_add(&(rwlock->cnt), 1);
     rwlock->writer_depth++;
     snprintf(rwlock->name, sizeof(rwlock->name), "wtr:%s:%d", file, line);
+    fprintf(stdout, "Warning: thread lock owned by the same thread is locked again by %s\n", rwlock->name);
     return 0;
   }
 
   const int res = pthread_rwlock_tryrdlock(&rwlock->lock);
   assert(!res || (res == EBUSY));
-  assert(!(res && pthread_equal(rwlock->writer, pthread_self())));
   if(!res)
   {
     __sync_fetch_and_add(&(rwlock->cnt), 1);
@@ -336,6 +338,7 @@ static inline int dt_pthread_rwlock_trywrlock_with_caller(dt_pthread_rwlock_t *r
     __sync_fetch_and_add(&(rwlock->cnt), 1);
     rwlock->writer_depth++;
     snprintf(rwlock->name, sizeof(rwlock->name), "wtw:%s:%d", file, line);
+    fprintf(stdout, "Warning: thread lock owned by the same thread is locked again by %s\n", rwlock->name);
     return 0;
   }
 
