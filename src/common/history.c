@@ -413,10 +413,12 @@ void dt_history_truncate_on_image(dt_develop_t *dev, const int32_t imgid, const 
   }
 
   // Write to DB/XMP
+  // TODO: write a fast path that sanitizes without intermediate DB write
   dt_dev_write_history_ext(dev, imgid);
 
   // Reload to sanitize mandatory/incompatible modules.
   dt_dev_read_history_ext(dev, imgid, !dev->gui_attached);
+  dt_dev_set_history_end_ext(dev, g_list_length(dev->history));
   dt_dev_pop_history_items_ext(dev);
 
   // Write again after sanitization.

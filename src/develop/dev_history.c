@@ -1056,13 +1056,13 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
 
   const int history_end = dt_dev_get_history_end_ext(dev);
 
-  // Modules after history_end need to be disabled first in case they were previously enabled
+  // Modules after history_end need to be reset to default in case they were previously enabled
   // They will get a chance to be re-enabled next
   for(GList *history = g_list_nth(dev->history, history_end); history; history = g_list_next(history))
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
     dt_iop_module_t *module = hist->module;
-    module->enabled = FALSE;
+    module->enabled = module->default_enabled;
     dt_iop_compute_module_hash(module, hist->forms);
     hist->hash = module->hash;
   }
@@ -1785,10 +1785,12 @@ void dt_dev_history_compress(dt_develop_t *dev)
   }
 
   // Commit to DB
+  // TODO: write a fast path sanitizing without intermediate DB write
   dt_dev_write_history_ext(dev, imgid);
 
   // Reload to sanitize mandatory/incompatible modules.
   dt_dev_read_history_ext(dev, imgid, !dev->gui_attached);
+  dt_dev_set_history_end_ext(dev, g_list_length(dev->history));
   dt_dev_pop_history_items_ext(dev);
 
   // Write again after sanitization.
