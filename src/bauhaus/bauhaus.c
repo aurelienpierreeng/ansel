@@ -1691,6 +1691,14 @@ void _combobox_set(GtkWidget *widget, const int pos, gboolean timeout)
   const int new_pos = (d->entries) ? CLAMP(pos, -1, (int)d->entries->len - 1)
                                    : -1;
 
+  // When updating programmatically (GUI reset), ensure no delayed commit from a
+  // previous user interaction survives, even if the value doesn't change.
+  if(darktable.gui->reset && d->timeout_handle)
+  {
+    g_source_remove(d->timeout_handle);
+    d->timeout_handle = 0;
+  }
+
   if(old_pos != new_pos)
   {
     d->active = new_pos;
@@ -1700,14 +1708,17 @@ void _combobox_set(GtkWidget *widget, const int pos, gboolean timeout)
 
     gtk_widget_queue_draw(GTK_WIDGET(w));
 
+    // If a delayed commit is pending from a previous user interaction, cancel it.
+    // This is especially important when updating widgets programmatically (during GUI reset),
+    // as we don't want stale timeouts to later emit "value-changed" and commit to history.
+    if(d->timeout_handle)
+    {
+      g_source_remove(d->timeout_handle);
+      d->timeout_handle = 0;
+    }
+
     if(!darktable.gui->reset)
     {
-      if(d->timeout_handle)
-      {
-        g_source_remove(d->timeout_handle);
-        d->timeout_handle = 0;
-      }
-
       if (w->timeout > 0)
         d->timeout_handle = g_timeout_add(w->timeout, _delayed_combobox_commit, w);
       else
@@ -2941,14 +2952,17 @@ static void dt_bauhaus_slider_set_normalized(struct dt_bauhaus_widget_t *w, floa
 
     gtk_widget_queue_draw(GTK_WIDGET(w));
 
+    // If a delayed commit is pending from a previous user interaction, cancel it.
+    // This prevents stale timers from firing after programmatic updates (GUI reset)
+    // and unexpectedly committing module changes to history.
+    if(d->timeout_handle)
+    {
+      g_source_remove(d->timeout_handle);
+      d->timeout_handle = 0;
+    }
+
     if(!darktable.gui->reset && raise)
     {
-      if(d->timeout_handle)
-      {
-        g_source_remove(d->timeout_handle);
-        d->timeout_handle = 0;
-      }
-
       if (w->timeout > 0)
         d->timeout_handle = g_timeout_add(w->timeout, _delayed_slider_commit, w);
       else
