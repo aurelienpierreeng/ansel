@@ -154,9 +154,9 @@ static gboolean _group_events_button_pressed(struct dt_iop_module_t *module, flo
       else if(which == 3)
       {
         // mouse is over a form or a node
-        if(gui && gui->group_selected >= 0 && (gui->form_selected || gui->node_selected >= 0))
+        if(gui && gui->group_selected >= 0 && (gui->form_selected || gui->node_selected >= 0 || gui->seg_selected >= 0))
         {
-          GtkWidget *menu = dt_masks_create_menu(gui, sel);
+          GtkWidget *menu = dt_masks_create_menu(gui, sel, pzx, pzy);
           gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
           return TRUE;
         }

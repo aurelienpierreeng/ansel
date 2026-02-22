@@ -1537,32 +1537,47 @@ static gboolean _reset_ctrl_points(struct dt_iop_module_t *module, dt_masks_form
 static void _add_node_to_segment(struct dt_iop_module_t *module, float pzx, float pzy, dt_masks_form_t *form,
                                   int parentid, dt_masks_form_gui_t *gui, int index)
 {
+  if(!form || !form->points || !gui) return;
+  if(gui->seg_selected < 0 || gui->seg_selected >= g_list_length(form->points)) return;
+
   // we add a new node to the brush
-  dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)(malloc(sizeof(dt_masks_node_brush_t)));
+  dt_masks_node_brush_t *new_node = (dt_masks_node_brush_t *)(malloc(sizeof(dt_masks_node_brush_t)));
+  if(!new_node) return;
 
-  dt_dev_roi_to_input_space(darktable.develop, TRUE, pzx, pzy, &node->node[0], &node->node[1]);
-
-  node->ctrl1[0] = node->ctrl1[1] = node->ctrl2[0] = node->ctrl2[1] = -1.0;
-  node->state = DT_MASKS_POINT_STATE_NORMAL;
+  // set coordinates
+  dt_dev_roi_to_input_space(darktable.develop, TRUE, pzx, pzy, &new_node->node[0], &new_node->node[1]);
+  new_node->ctrl1[0] = new_node->ctrl1[1] = new_node->ctrl2[0] = new_node->ctrl2[1] = -1.0;
+  new_node->state = DT_MASKS_POINT_STATE_NORMAL;
 
   // set other attributes of the new node. we interpolate the starting and the end node of that
   // segment
-  const float t = _brush_get_position_in_segment(node->node[0], node->node[1], form, gui->seg_selected);
+  const float t = _brush_get_position_in_segment(new_node->node[0], new_node->node[1], form, gui->seg_selected);
   // start and end node of the segment
   GList *pt = g_list_nth(form->points, gui->seg_selected);
+  if(!pt || !pt->data)
+  {
+    free(new_node);
+    return;
+  }
   dt_masks_node_brush_t *point0 = (dt_masks_node_brush_t *)pt->data;
-  dt_masks_node_brush_t *point1 = (dt_masks_node_brush_t *)g_list_next_wraparound(pt, form->points)->data;
-  node->border[0] = point0->border[0] * (1.0f - t) + point1->border[0] * t;
-  node->border[1] = point0->border[1] * (1.0f - t) + point1->border[1] * t;
-  node->hardness = point0->hardness * (1.0f - t) + point1->hardness * t;
-  node->density = point0->density * (1.0f - t) + point1->density * t;
+  const GList *const next_pt = g_list_next_wraparound(pt, form->points);
+  if(!next_pt || !next_pt->data)
+  {
+    free(new_node);
+    return;
+  }
+  dt_masks_node_brush_t *point1 = (dt_masks_node_brush_t *)next_pt->data;
+  new_node->border[0] = point0->border[0] * (1.0f - t) + point1->border[0] * t;
+  new_node->border[1] = point0->border[1] * (1.0f - t) + point1->border[1] * t;
+  new_node->hardness = point0->hardness * (1.0f - t) + point1->hardness * t;
+  new_node->density = point0->density * (1.0f - t) + point1->density * t;
 
-  form->points = g_list_insert(form->points, node, gui->seg_selected + 1);
+  form->points = g_list_insert(form->points, new_node, gui->seg_selected + 1);
   _brush_init_ctrl_points(form);
   
   dt_masks_gui_form_create(form, gui, index, module);
 
-  gui->node_edited = gui->node_dragging = gui->node_selected = gui->seg_selected + 1;
+  gui->node_edited = gui->node_selected = gui->seg_selected + 1;
   gui->seg_selected = -1;
 }
 
@@ -2989,16 +3004,35 @@ static void _brush_reset_round_node_callback(GtkWidget *widget, struct dt_masks_
   _reset_ctrl_points(module, sel, gui, gui->group_selected);
 }
 
-static int _brush_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t *form, struct dt_masks_form_gui_t *gui)
+static void _brush_add_node_callback(GtkWidget *menu, struct dt_masks_form_gui_t *gui)
+{
+  if(!gui) return;
+  dt_masks_form_t *forms = darktable.develop->form_visible;
+  if(!forms) return;
+
+  dt_iop_module_t *module = darktable.develop->gui_module;
+  if(!module) return;
+
+  dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(forms->points, gui->group_selected);
+  if(!fpt) return;
+  dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+  if(sel)
+    _add_node_to_segment(module, gui->pos[0], gui->pos[1], sel, fpt->parentid, gui, gui->group_selected);
+    
+  dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+}
+
+static int _brush_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t *form, struct dt_masks_form_gui_t *gui, const float pzx, const float pzy)
 {
   // Only add separator if there will be menu items
-  if(gui->node_selected >= 0)
+  if(gui->node_selected >= 0 || gui->seg_selected >= 0)
   {
     GtkWidget *sep = gtk_separator_menu_item_new();
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
   }
 
   GtkWidget *menu_item = NULL;
+  gchar *accel = g_strdup_printf(_("%s+Click"), gtk_accelerator_get_label(0, GDK_CONTROL_MASK));
 
   if(gui->node_selected >= 0)
   {
@@ -3011,7 +3045,8 @@ static int _brush_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t 
     {
       gchar *to_change_type = g_strdup_printf(_("Switch to %s node"), (is_corner) ? _("round") : _("cusp"));
       const dt_masks_menu_icon_t icon = is_corner ? DT_MASKS_MENU_ICON_CIRCLE : DT_MASKS_MENU_ICON_SQUARE;
-      menu_item = masks_gtk_menu_item_new_with_icon(to_change_type, menu, _brush_switch_node_callback, gui, icon);
+      menu_item = masks_gtk_menu_item_new_with_icon_and_shortcut(to_change_type, accel, menu,
+                                                                  _brush_switch_node_callback, gui, icon);
       g_free(to_change_type);
     }
 
@@ -3020,6 +3055,16 @@ static int _brush_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t 
       gtk_widget_set_sensitive(menu_item, !is_corner && node->state != DT_MASKS_POINT_STATE_NORMAL);
     }
   }
+
+  if(gui->seg_selected >= 0)
+  {
+    gui->pos[0] = pzx;
+    gui->pos[1] = pzy;
+    menu_item = masks_gtk_menu_item_new_with_markup_and_shortcut(_("Add a node here"), accel,
+                                                                  menu, _brush_add_node_callback, gui);
+  }
+
+  g_free(accel);
 
   return 1;
 }

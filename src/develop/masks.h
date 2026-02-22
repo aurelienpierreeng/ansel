@@ -263,7 +263,7 @@ typedef struct dt_masks_functions_t
   void (*draw_shape)(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source);
   /** initialise all control points to eventually match a catmull-rom like spline */
   void (*init_ctrl_points)(struct dt_masks_form_t *form);
-  int (*populate_context_menu)(GtkWidget *menu, struct dt_masks_form_t *form, struct dt_masks_form_gui_t *gui);
+  int (*populate_context_menu)(GtkWidget *menu, struct dt_masks_form_t *form, struct dt_masks_form_gui_t *gui, const float pzx, const float pzy);
 } dt_masks_functions_t;
 
 /** structure used to define a form */
@@ -810,13 +810,21 @@ void _masks_gui_delete_node_callback(GtkWidget *menu, struct dt_masks_form_gui_t
 
 GdkModifierType dt_masks_get_accel_mods(dt_masks_interaction_t interaction);
 
-GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form);
+GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form, const float pzx, const float pzy);
 
 GtkWidget *masks_gtk_menu_item_new_with_icon(const char *label, GtkWidget *menu,
                                                  void (*activate_callback)(GtkWidget *widget, dt_masks_form_gui_t *gui),
                                                  dt_masks_form_gui_t *gui, dt_masks_menu_icon_t icon);
+GtkWidget *masks_gtk_menu_item_new_with_icon_and_shortcut(const char *label, const char *shortcut,
+                                                 GtkWidget *menu,
+                                                 void (*activate_callback)(GtkWidget *widget, dt_masks_form_gui_t *gui),
+                                                 dt_masks_form_gui_t *gui, dt_masks_menu_icon_t icon);
 
 GtkWidget *masks_gtk_menu_item_new_with_markup(const char *label, GtkWidget *menu,
+                                                 void (*activate_callback)(GtkWidget *widget, dt_masks_form_gui_t *gui),
+                                                 struct dt_masks_form_gui_t *gui);
+GtkWidget *masks_gtk_menu_item_new_with_markup_and_shortcut(const char *label, const char *shortcut,
+                                                 GtkWidget *menu,
                                                  void (*activate_callback)(GtkWidget *widget, dt_masks_form_gui_t *gui),
                                                  struct dt_masks_form_gui_t *gui);
 
