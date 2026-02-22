@@ -1788,7 +1788,8 @@ void dt_dev_history_compress(dt_develop_t *dev)
   dt_dev_write_history_ext(dev, imgid);
 
   // Reload to sanitize mandatory/incompatible modules.
-  dt_dev_reload_history_items(dev, imgid);
+  dt_dev_read_history_ext(dev, imgid, !dev->gui_attached);
+  dt_dev_pop_history_items_ext(dev);
 
   // Write again after sanitization.
   dt_dev_write_history_ext(dev, imgid);

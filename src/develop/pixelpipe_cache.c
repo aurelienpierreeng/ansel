@@ -589,14 +589,15 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache,
     return NULL;
   }
 
-  // Protect this entry from LRU/flush removal while in use.
+  // Keep this entry marked as "used" for diagnostics/bookkeeping.
+  // Note that external_entries are not subject to LRU eviction, so we must not keep
+  // a thread-owned rwlock held across the lifetime of the buffer (it may be freed
+  // from a different thread during cleanup paths).
   _non_thread_safe_cache_ref_count_entry(cache, hash, TRUE, cache_entry);
-  dt_pthread_rwlock_wrlock(&cache_entry->lock);
   cache_entry->data = aligned;
   cache_entry->age = g_get_monotonic_time();
   cache_entry->external_alloc = TRUE;
   dt_pthread_mutex_unlock(&cache->lock);
-  // Keep the lock held for the lifetime of this buffer.
   return aligned;
 }
 
@@ -616,7 +617,6 @@ void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void *
   }
 
   _non_thread_safe_cache_ref_count_entry(cache, cache_entry->hash, FALSE, cache_entry);
-  dt_pthread_rwlock_unlock(&cache_entry->lock);
   g_hash_table_remove(cache->external_entries, &cache_entry->hash);
   *mem = NULL;
 

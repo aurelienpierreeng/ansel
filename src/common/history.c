@@ -395,6 +395,7 @@ void dt_history_truncate_on_image(dt_develop_t *dev, const int32_t imgid, const 
     return;
   }
 
+  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_set_history_end_ext(dev, history_end);
 
@@ -415,11 +416,13 @@ void dt_history_truncate_on_image(dt_develop_t *dev, const int32_t imgid, const 
   dt_dev_write_history_ext(dev, imgid);
 
   // Reload to sanitize mandatory/incompatible modules.
-  dt_dev_reload_history_items(dev, imgid);
+  dt_dev_read_history_ext(dev, imgid, !dev->gui_attached);
+  dt_dev_pop_history_items_ext(dev);
 
   // Write again after sanitization.
   dt_dev_write_history_ext(dev, imgid);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
+  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
 }
 
 int dt_history_compress_on_list(const GList *imgs)

@@ -230,6 +230,9 @@ static inline int dt_pthread_rwlock_init(dt_pthread_rwlock_t *lock,
 
 static inline int dt_pthread_rwlock_destroy(dt_pthread_rwlock_t *lock)
 {
+  if(lock->writer_depth != 0)
+    fprintf(stderr, "ERROR: destroying rwlock still owned by writer (depth=%d cnt=%d last=%s)\n",
+            lock->writer_depth, lock->cnt, lock->name);
   assert(lock->writer_depth == 0);
   snprintf(lock->name, sizeof(lock->name), "destroyed with cnt %d", lock->cnt);
   const int res = pthread_rwlock_destroy(&lock->lock);
@@ -312,14 +315,10 @@ static inline int dt_pthread_rwlock_wrlock_with_caller(dt_pthread_rwlock_t *rwlo
 #define dt_pthread_rwlock_tryrdlock(A) dt_pthread_rwlock_tryrdlock_with_caller(A, __FILE__, __LINE__)
 static inline int dt_pthread_rwlock_tryrdlock_with_caller(dt_pthread_rwlock_t *rwlock, const char *file, int line)
 {
-  if(pthread_equal(rwlock->writer, pthread_self()) && rwlock->writer_depth >= 1)
-  {
-    __sync_fetch_and_add(&(rwlock->cnt), 1);
-    rwlock->writer_depth++;
-    snprintf(rwlock->name, sizeof(rwlock->name), "wtr:%s:%d", file, line);
-    fprintf(stdout, "Warning: thread lock owned by the same thread is locked again by %s\n", rwlock->name);
-    return 0;
-  }
+  // IMPORTANT: try* locks are often used as "is it locked by anyone?" probes (e.g. caches).
+  // Returning success when the current thread already holds the write lock breaks that contract
+  // and can lead to freeing data still in use. Treat it as busy.
+  if(pthread_equal(rwlock->writer, pthread_self()) && rwlock->writer_depth >= 1) return EBUSY;
 
   const int res = pthread_rwlock_tryrdlock(&rwlock->lock);
   assert(!res || (res == EBUSY));
@@ -333,14 +332,8 @@ static inline int dt_pthread_rwlock_tryrdlock_with_caller(dt_pthread_rwlock_t *r
 #define dt_pthread_rwlock_trywrlock(A) dt_pthread_rwlock_trywrlock_with_caller(A, __FILE__, __LINE__)
 static inline int dt_pthread_rwlock_trywrlock_with_caller(dt_pthread_rwlock_t *rwlock, const char *file, int line)
 {
-  if(pthread_equal(rwlock->writer, pthread_self()) && rwlock->writer_depth >= 1)
-  {
-    __sync_fetch_and_add(&(rwlock->cnt), 1);
-    rwlock->writer_depth++;
-    snprintf(rwlock->name, sizeof(rwlock->name), "wtw:%s:%d", file, line);
-    fprintf(stdout, "Warning: thread lock owned by the same thread is locked again by %s\n", rwlock->name);
-    return 0;
-  }
+  // See dt_pthread_rwlock_tryrdlock_with_caller(): don't make trywrlock succeed recursively.
+  if(pthread_equal(rwlock->writer, pthread_self()) && rwlock->writer_depth >= 1) return EBUSY;
 
   const int res = pthread_rwlock_trywrlock(&rwlock->lock);
   assert(!res || (res == EBUSY));
