@@ -1124,7 +1124,7 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   {
     dt_masks_gui_center_point_t center_pt = { .main = { gpt->points[0], gpt->points[1] },
                                               .source = { gpt->source[0], gpt->source[1] }};
-    dt_masks_draw_source(cr, gui, index, num_points, zoom_scale, TRUE, &center_pt, &dt_masks_functions_ellipse.draw_shape);
+    dt_masks_draw_source(cr, gui, index, num_points, zoom_scale, &center_pt, &dt_masks_functions_ellipse.draw_shape);
   }
 
 }

@@ -2213,8 +2213,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     float offset_y = gpt->source[1] - gpt->points[1];
     center_pt.source.x = center_pt.main.x + offset_x;
     center_pt.source.y = center_pt.main.y + offset_y;
-    
-    dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, gpt->clockwise, &center_pt, &dt_masks_functions_polygon.draw_shape);
+    dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, &center_pt, &dt_masks_functions_polygon.draw_shape);
     
     //draw the current node projection
     for(int k = 0; k < node_count; k++)

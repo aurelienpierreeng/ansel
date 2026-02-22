@@ -1612,15 +1612,15 @@ gboolean dt_masks_node_is_cusp(const dt_masks_form_gui_points_t *gpt, const int 
  *  
  * @param ray_1 First point of the ray
  * @param ray_2 Second point of the ray
- * @param offset Distance to offset from the contour
  * @param points Array of points defining the shape contour
  * @param points_count Number of points in the contour
  * @param first_pt Index of the first point to consider
  * @param is_closed_shape Whether the contour is closed
  * @param result Array to store the resulting attachment point
  */
-static void _dt_masks_find_best_attachment_point(const float ray_1[2], const float ray_2[2], const float offset,
-                                                 const float *points, const int points_count, const int first_pt,
+static void _dt_masks_find_best_attachment_point(const float ray_1[2], const float ray_2[2],
+                                                 const float *points, const int points_count, const float zoom_scale,
+                                                 const int first_pt,
                                                  const gboolean is_closed_shape,
                                                  float result[2])
 {
@@ -1638,10 +1638,11 @@ static void _dt_masks_find_best_attachment_point(const float ray_1[2], const flo
   const float dir_x = ray_1[0] - ray_2[0];
   const float dir_y = ray_1[1] - ray_2[1];
   float min_s = FLT_MAX;
-  const float off = fabsf(offset);
+  const float offset = DT_PIXEL_APPLY_DPI(12.0f) / zoom_scale;
   const float inv_dir_len = f_inv_sqrtf(dir_x * dir_x + dir_y * dir_y);
   const float ux = dir_x * inv_dir_len;
   const float uy = dir_y * inv_dir_len;
+
 
   const int segment_count = (available_points - 1) + ((is_closed_shape) ? 1 : 0);
   for(int seg = 0; seg < segment_count; seg++)
@@ -1672,8 +1673,11 @@ static void _dt_masks_find_best_attachment_point(const float ray_1[2], const flo
     // Offset along the ray axis toward the ray segment center.
     const float to_center = (ray_center_x - ix) * ux + (ray_center_y - iy) * uy;
     const float side_sign = (to_center >= 0.0f) ? 1.0f : -1.0f;
-    result[0] = ix + side_sign * off * ux;
-    result[1] = iy + side_sign * off * uy;
+    result[0] = ix + side_sign * offset * ux;
+    result[1] = iy + side_sign * offset * uy;
+
+    fprintf(stderr, "cw: %f, side_sign: %f\n", offset, side_sign);
+
   }
 }
 
@@ -1700,7 +1704,7 @@ static void _dt_masks_find_best_attachment_point(const float ray_1[2], const flo
 }*/
 
 void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index, const int nb, 
-                  const float zoom_scale, const gboolean clockwise, struct dt_masks_gui_center_point_t *center_point,
+                  const float zoom_scale, struct dt_masks_gui_center_point_t *center_point,
                   const shape_draw_function_t *draw_shape_func)
 {
   if(!gui) return;
@@ -1713,11 +1717,6 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
     const float source[2] = { center_point->source.x, center_point->source.y };
     const gboolean is_open_shape = (gui->type & DT_MASKS_IS_OPEN_SHAPE) != 0;
     const gboolean is_closed_shape = (gui->type & DT_MASKS_IS_CLOSED_SHAPE) != 0;
-
-    // Offset points from borders along the attachment rays.
-    const float offset = (clockwise ? 1.0f : -1.0f) * DT_PIXEL_APPLY_DPI(12.0f) / zoom_scale;
-    const float main_offset = /*is_open_shape ? 0.0f :*/ offset;
-    const float source_offset = offset;
 
     int first_pt = 2;
     if((gui->type & DT_MASKS_ELLIPSE) != 0)
@@ -1736,12 +1735,10 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
     float head[2] = { 0 }, tail[2] = { 0 };
 
     // Find attachment point for the arrow's head with the main shape
-    _dt_masks_find_best_attachment_point(main, source, main_offset,
-                                      gpt->points, points_count_attach, first_pt, is_closed_shape, head);
+    _dt_masks_find_best_attachment_point(main, source, gpt->points, points_count_attach, zoom_scale, first_pt, is_closed_shape, head);
 
     // Find attachment point for the arrow's base with the source shape
-    _dt_masks_find_best_attachment_point(source, main, source_offset,
-                                    gpt->source, source_count_attach, first_pt, is_closed_shape, tail);
+    _dt_masks_find_best_attachment_point(source, main, gpt->source, source_count_attach, zoom_scale, first_pt, is_closed_shape, tail);
 
     const gboolean selected = (gui->group_selected == index)
                               && (gui->source_selected || gui->source_dragging);
