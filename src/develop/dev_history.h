@@ -168,6 +168,16 @@ gboolean dt_history_module_skip_copy(const int flags);
 /** adds to dev_dest module mod_src */
 int dt_history_merge_module_into_history(struct dt_develop_t *dev_dest, struct dt_develop_t *dev_src, struct dt_iop_module_t *mod_src, GList **_modules_used);
 
+/**
+ * @brief Merge a list of source modules into a destination image history and write the result to DB.
+ *
+ * `dev_dest` must be initialized and have already loaded `dest_imgid` history (dt_dev_read_history_ext + pop).
+ * `dev_src` can be NULL (no masks copied).
+ * `mod_list` contains dt_iop_module_t* from `dev_src` or temporary modules created in the `dev_dest` context.
+ */
+int dt_history_merge_module_list_into_image(struct dt_develop_t *dev_dest, struct dt_develop_t *dev_src,
+                                            int32_t dest_imgid, const GList *mod_list);
+
 
 /** copy history from imgid and pasts on dest_imgid, merge or overwrite... */
 int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, GList *ops, gboolean copy_iop_order, const gboolean copy_full);

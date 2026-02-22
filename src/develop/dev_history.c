@@ -356,10 +356,33 @@ int dt_history_merge_module_into_history(dt_develop_t *dev_dest, dt_develop_t *d
   return module_added;
 }
 
+int dt_history_merge_module_list_into_image(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_t dest_imgid,
+                                            const GList *mod_list)
+{
+  if(!dev_dest || dest_imgid <= 0) return 1;
+  if(!mod_list) return 0;
+
+  // update iop-order list to have entries for the new modules
+  dt_ioppr_update_for_modules(dev_dest, (GList *)mod_list, FALSE);
+
+  GList *modules_used = NULL;
+  for(const GList *l = g_list_first((GList *)mod_list); l; l = g_list_next(l))
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)l->data;
+    dt_history_merge_module_into_history(dev_dest, dev_src, mod, &modules_used);
+  }
+
+  // update iop-order list to have entries for the new modules
+  dt_ioppr_update_for_modules(dev_dest, (GList *)mod_list, FALSE);
+
+  dt_dev_write_history_ext(dev_dest, dest_imgid);
+
+  g_list_free(modules_used);
+  return 0;
+}
+
 static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_imgid, GList *ops, const gboolean copy_full)
 {
-  GList *modules_used = NULL;
-
   dt_develop_t _dev_src = { 0 };
   dt_develop_t _dev_dest = { 0 };
 
@@ -431,29 +454,16 @@ static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_im
 
   mod_list = g_list_reverse(mod_list);   // list was built in reverse order, so un-reverse it
 
-  // update iop-order list to have entries for the new modules
-  dt_ioppr_update_for_modules(dev_dest, mod_list, FALSE);
-
-  for(GList *l = g_list_first(mod_list); l; l = g_list_next(l))
-  {
-    dt_iop_module_t *mod = (dt_iop_module_t *)l->data;
-    dt_history_merge_module_into_history(dev_dest, dev_src, mod, &modules_used);
-  }
-
-  // update iop-order list to have entries for the new modules
-  dt_ioppr_update_for_modules(dev_dest, mod_list, FALSE);
-
-  dt_ioppr_check_iop_order(dev_dest, dest_imgid, "_history_copy_and_paste_on_image_merge 2");
-
-  // write history and forms to db
-  dt_dev_write_history_ext(dev_dest, dest_imgid);
+  dt_ioppr_check_iop_order(dev_dest, dest_imgid, "_history_copy_and_paste_on_image_merge 2 pre");
+  const int ret_val = dt_history_merge_module_list_into_image(dev_dest, dev_src, dest_imgid, mod_list);
+  dt_ioppr_check_iop_order(dev_dest, dest_imgid, "_history_copy_and_paste_on_image_merge 2 post");
 
   dt_dev_cleanup(dev_src);
   dt_dev_cleanup(dev_dest);
 
-  g_list_free(modules_used);
+  g_list_free(mod_list);
 
-  return 0;
+  return ret_val;
 }
 
 gboolean dt_history_copy_and_paste_on_image(const int32_t imgid, const int32_t dest_imgid, GList *ops,

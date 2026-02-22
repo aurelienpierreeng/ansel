@@ -667,103 +667,100 @@ void dt_styles_create_from_list(const GList *list)
   if(!selected) dt_control_log(_("no image selected!"));
 }
 
+static dt_iop_module_t *_dt_styles_tmp_module_from_style_item(dt_develop_t *dev, const dt_style_item_t *style_item)
+{
+  dt_iop_module_t *mod_src = dt_iop_get_module_by_op_priority(dev->iop, style_item->operation, -1);
+  if(!mod_src) return NULL;
+
+  dt_iop_module_t *module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
+  if(dt_iop_load_module(module, mod_src->so, dev))
+  {
+    fprintf(stderr, "[dt_styles_apply] can't load module %s %s\n", style_item->operation,
+            style_item->multi_name ? style_item->multi_name : "(null)");
+    free(module);
+    return NULL;
+  }
+
+  module->instance = mod_src->instance;
+  module->multi_priority = style_item->multi_priority;
+  module->iop_order = style_item->iop_order;
+
+  module->enabled = style_item->enabled;
+  if(style_item->multi_name)
+    g_strlcpy(module->multi_name, style_item->multi_name, sizeof(module->multi_name));
+
+  if(style_item->blendop_params && (style_item->blendop_version == dt_develop_blend_version())
+     && (style_item->blendop_params_size == sizeof(dt_develop_blend_params_t)))
+  {
+    memcpy(module->blend_params, style_item->blendop_params, sizeof(dt_develop_blend_params_t));
+  }
+  else if(style_item->blendop_params
+          && dt_develop_blend_legacy_params(module, style_item->blendop_params, style_item->blendop_version,
+                                            module->blend_params, dt_develop_blend_version(),
+                                            style_item->blendop_params_size)
+                 == 0)
+  {
+    // do nothing
+  }
+  else
+  {
+    memcpy(module->blend_params, module->default_blendop_params, sizeof(dt_develop_blend_params_t));
+  }
+
+  gboolean ok = TRUE;
+  if(module->version() != style_item->module_version || module->params_size != style_item->params_size
+     || strcmp(style_item->operation, module->op))
+  {
+    if(!module->legacy_params
+       || module->legacy_params(module, style_item->params, labs(style_item->module_version), module->params,
+                                labs(module->version())))
+    {
+      fprintf(stderr, "[dt_styles_apply] module `%s' version mismatch: history is %d, dt %d.\n", module->op,
+              style_item->module_version, module->version());
+      dt_control_log(_("module `%s' version mismatch: %d != %d"), module->op, module->version(),
+                     style_item->module_version);
+      ok = FALSE;
+    }
+  }
+  else
+  {
+    memcpy(module->params, style_item->params, module->params_size);
+  }
+
+  if(ok && !strcmp(module->op, "flip") && module->enabled == 0 && labs(style_item->module_version) == 1)
+  {
+    memcpy(module->params, module->default_params, module->params_size);
+    module->enabled = 1;
+  }
+
+  if(!ok)
+  {
+    dt_iop_cleanup_module(module);
+    free(module);
+    return NULL;
+  }
+
+  return module;
+}
+
+static void _dt_styles_tmp_module_free(dt_iop_module_t *module)
+{
+  if(!module) return;
+  dt_iop_cleanup_module(module);
+  free(module);
+}
+
 void dt_styles_apply_style_item(dt_develop_t *dev, dt_style_item_t *style_item, GList **modules_used)
 {
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
 
-  // get any instance of the same operation so we can copy it
-  dt_iop_module_t *mod_src = dt_iop_get_module_by_op_priority(dev->iop, style_item->operation, -1);
-
-  if(mod_src)
+  dt_iop_module_t *module = _dt_styles_tmp_module_from_style_item(dev, style_item);
+  if(module)
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
-    if(dt_iop_load_module(module, mod_src->so, dev))
-    {
-      module = NULL;
-      fprintf(stderr, "[dt_styles_apply_style_item] can't load module %s %s\n", style_item->operation,
-              style_item->multi_name);
-    }
-    else
-    {
-      gboolean do_merge = TRUE;
-
-      module->instance = mod_src->instance;
-      module->multi_priority = style_item->multi_priority;
-      module->iop_order = style_item->iop_order;
-
-      module->enabled = style_item->enabled;
-      g_strlcpy(module->multi_name, style_item->multi_name, sizeof(module->multi_name));
-
-      // TODO: this is copied from dt_dev_read_history_ext(), maybe do a helper with this?
-      if(style_item->blendop_params && (style_item->blendop_version == dt_develop_blend_version())
-         && (style_item->blendop_params_size == sizeof(dt_develop_blend_params_t)))
-      {
-        memcpy(module->blend_params, style_item->blendop_params, sizeof(dt_develop_blend_params_t));
-      }
-      else if(style_item->blendop_params
-              && dt_develop_blend_legacy_params(module, style_item->blendop_params, style_item->blendop_version,
-                  module->blend_params, dt_develop_blend_version(), style_item->blendop_params_size) == 0)
-      {
-        // do nothing
-      }
-      else
-      {
-        memcpy(module->blend_params, module->default_blendop_params, sizeof(dt_develop_blend_params_t));
-      }
-
-      if(module->version() != style_item->module_version || module->params_size != style_item->params_size
-         || strcmp(style_item->operation, module->op))
-      {
-        if(!module->legacy_params
-           || module->legacy_params(module, style_item->params, labs(style_item->module_version),
-                                          module->params, labs(module->version())))
-        {
-          fprintf(stderr, "[dt_styles_apply_style_item] module `%s' version mismatch: history is %d, dt %d.\n",
-                  module->op, style_item->module_version, module->version());
-          dt_control_log(_("module `%s' version mismatch: %d != %d"), module->op,
-                         module->version(), style_item->module_version);
-
-          do_merge = FALSE;
-        }
-        else
-        {
-          if(!strcmp(module->op, "spots") && style_item->module_version == 1)
-          {
-            // FIXME: not sure how to handle this here...
-            // quick and dirty hack to handle spot removal legacy_params
-            /* memcpy(module->blend_params, module->blend_params, sizeof(dt_develop_blend_params_t));
-            memcpy(module->blend_params, module->default_blendop_params,
-                   sizeof(dt_develop_blend_params_t)); */
-          }
-        }
-
-        /*
-         * Fix for flip iop: previously it was not always needed, but it might be
-         * in history stack as "orientation (off)", but now we always want it
-         * by default, so if it is disabled, enable it, and replace params with
-         * default_params. if user want to, he can disable it.
-         */
-        if(!strcmp(module->op, "flip") && module->enabled == 0 && labs(style_item->module_version) == 1)
-        {
-          memcpy(module->params, module->default_params, module->params_size);
-          module->enabled = 1;
-        }
-      }
-      else
-      {
-        memcpy(module->params, style_item->params, module->params_size);
-      }
-
-      if(do_merge)
-        dt_history_merge_module_into_history(dev, NULL, module, modules_used);
-    }
-
-    if(module)
-    {
-      dt_iop_cleanup_module(module);
-      free(module);
-    }
+    dt_history_merge_module_into_history(dev, NULL, module, modules_used);
+    _dt_styles_tmp_module_free(module);
   }
+
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 }
 
@@ -786,8 +783,6 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
       newimgid = imgid;
 
     // now deal with the history
-    GList *modules_used = NULL;
-
     dt_develop_t _dev_dest = { 0 };
 
     dt_develop_t *dev_dest = &_dev_dest;
@@ -864,10 +859,14 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
 
     dt_ioppr_update_for_style_items(dev_dest, si_list, FALSE);
 
+    // Build a list of temporary modules with style params, then merge them using the same
+    // code path as history copy/paste.
+    GList *mod_list = NULL;
     for(GList *l = si_list; l; l = g_list_next(l))
     {
       dt_style_item_t *style_item = (dt_style_item_t *)l->data;
-      dt_styles_apply_style_item(dev_dest, style_item, &modules_used);
+      dt_iop_module_t *module = _dt_styles_tmp_module_from_style_item(dev_dest, style_item);
+      if(module) mod_list = g_list_append(mod_list, module);
     }
 
     g_list_free_full(si_list, dt_style_item_free);
@@ -880,10 +879,7 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
     hist->imgid = newimgid;
     dt_history_snapshot_undo_create(hist->imgid, &hist->before, &hist->before_history_end);
 
-    // write history and forms to db
-    dt_pthread_rwlock_rdlock(&dev_dest->history_mutex);
-    dt_dev_write_history_ext(dev_dest, newimgid);
-    dt_pthread_rwlock_unlock(&dev_dest->history_mutex);
+    dt_history_merge_module_list_into_image(dev_dest, NULL, newimgid, mod_list);
     dt_dev_history_notify_change(dev_dest, newimgid);
 
     dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
@@ -892,9 +888,11 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
                    dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
     dt_undo_end_group(darktable.undo);
 
-    dt_dev_cleanup(dev_dest);
+    for(GList *l = g_list_first(mod_list); l; l = g_list_next(l))
+      _dt_styles_tmp_module_free((dt_iop_module_t *)l->data);
+    g_list_free(mod_list);
 
-    g_list_free(modules_used);
+    dt_dev_cleanup(dev_dest);
 
     /* add tag */
     dt_dev_append_changed_tag(newimgid);
@@ -914,6 +912,19 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
     /* redraw center view to update visible mipmaps */
     dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
   }
+}
+
+void dt_styles_apply_to_image_in_dev(dt_develop_t *dev, const char *name, const int32_t imgid)
+{
+  if(imgid <= 0 || !name) return;
+
+  dt_dev_write_history(dev);
+
+  dt_dev_undo_start_record(dev);
+  dt_styles_apply_to_image(name, FALSE, imgid);
+  dt_dev_undo_end_record(dev);
+
+  dt_dev_pixelpipe_refresh_all(dev, TRUE);
 }
 
 void dt_styles_delete_by_name_adv(const char *name, const gboolean raise)
