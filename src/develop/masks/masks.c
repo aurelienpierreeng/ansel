@@ -1675,9 +1675,6 @@ static void _dt_masks_find_best_attachment_point(const float ray_1[2], const flo
     const float side_sign = (to_center >= 0.0f) ? 1.0f : -1.0f;
     result[0] = ix + side_sign * offset * ux;
     result[1] = iy + side_sign * offset * uy;
-
-    fprintf(stderr, "cw: %f, side_sign: %f\n", offset, side_sign);
-
   }
 }
 
