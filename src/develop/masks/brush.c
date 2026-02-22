@@ -2036,7 +2036,14 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     point2->ctrl1[1] += dy;
     point2->ctrl2[0] += dx;
     point2->ctrl2[1] += dy;
-
+    
+    // if first point's segment, adjust the source position accordingly
+    if((form->type & DT_MASKS_CLONE) && gui->seg_dragging == 0)
+    {
+      form->source[0] += dx;
+      form->source[1] += dy;
+    }
+    
     // we recreate the form points
     dt_masks_gui_form_create(form, gui, index, module);
 
