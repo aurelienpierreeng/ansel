@@ -1887,6 +1887,54 @@ void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index
   
 }
 
+void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *gui, const int index, const float *points,
+                                   const int points_count, const int node_count, const float zoom_scale)
+{
+  if(!cr || !points || !gui) return;
+  if(node_count <= 0 || points_count <= node_count * 3 + 6) return;
+
+  const int total_coords = points_count * 2;
+  if(total_coords <= (node_count * 6 + 1)) return;
+
+  const gboolean group_selected = (gui->group_selected == index);
+
+  int seg1 = 1;
+  int current_seg = 0;
+  cairo_move_to(cr, points[node_count * 6], points[node_count * 6 + 1]);
+
+  for(int i = node_count * 3; i < points_count; i++)
+  {
+    const int pi = i * 2;
+    if((pi + 1) >= total_coords) break;
+
+    const double x = points[pi];
+    const double y = points[pi + 1];
+    cairo_line_to(cr, x, y);
+
+    const int seg_idx = seg1 * 6;
+    if((seg_idx + 3) >= total_coords) continue;
+
+    const double segment_x = points[seg_idx + 2];
+    const double segment_y = points[seg_idx + 3];
+    if(x == segment_x && y == segment_y)
+    {
+      const gboolean seg_is_selected = group_selected && (gui->seg_selected == current_seg);
+      const gboolean all_selected = group_selected && gui->node_edited == -1 && (gui->form_selected || gui->form_dragging);
+
+      if(gui->creation && current_seg == node_count - 2)
+        dt_draw_stroke_line(DT_MASKS_DASH_ROUND, FALSE, cr, all_selected, zoom_scale, CAIRO_LINE_CAP_ROUND);
+      else
+        dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, (seg_is_selected || all_selected), zoom_scale,
+                            CAIRO_LINE_CAP_BUTT);
+
+      seg1 = (seg1 + 1) % node_count;
+      current_seg++;
+    }
+
+    if(gui->creation && current_seg >= node_count -1 ) break;
+  } 
+}
+
 void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
                                  int32_t pointerx, int32_t pointery)
 {
@@ -1933,8 +1981,7 @@ void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, in
 
   // We update the form if needed
   // Add preview when creating a circle, ellipse and gradient
-  if(!((form->type & DT_MASKS_IS_SIMPLE_SHAPE) && gui->creation))
-
+  if(!((form->type & DT_MASKS_IS_PRIMITIVE_SHAPE) && gui->creation))
     dt_masks_gui_form_test_create(form, gui, module);
 
   // Draw form

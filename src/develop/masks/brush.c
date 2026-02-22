@@ -2511,11 +2511,49 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   if(gpt->points_count <= node_count * 3 + 2) return;
 
   // draw path
+  if(node_count > 0 && gpt->points_count > node_count * 3 + 6) // there must be something to draw
   {
-    const gboolean all_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
+    dt_masks_draw_path_seg_by_seg(cr, gui, index, gpt->points, 0.5f * gpt->points_count, node_count, zoom_scale);
+  }
 
-    dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, node_count, all_selected, zoom_scale, gpt->points,
-                              gpt->points_count, &dt_masks_functions_brush.draw_shape, CAIRO_LINE_CAP_ROUND);
+  if(0)
+  {
+    const int total_points = gpt->points_count * 2;
+    int seg1 = 1;
+    int current_seg = 0;
+
+    /* Draw the line point-by-point up to the next node, then stroke it; repeat in a loop. */
+    cairo_move_to(cr, gpt->points[node_count * 6], gpt->points[node_count * 6 + 1]);
+
+    const int end_idx =  0.5 * gpt->points_count;
+
+    for(int i = node_count * 3; i < end_idx; i++)
+    {
+      const double x = gpt->points[i * 2];
+      const double y = gpt->points[i * 2 + 1];
+      cairo_line_to(cr, x, y);
+
+      int seg_idx = seg1 * 6;
+      if((seg_idx + 3) < total_points)
+      {
+        const double segment_x = gpt->points[seg_idx + 2];
+        const double segment_y = gpt->points[seg_idx + 3];
+
+        /* Is this point the next node? */
+        if(x == segment_x && y == segment_y)
+        {
+          const gboolean seg_selected = (gui->group_selected == index) && (gui->seg_selected == current_seg);
+          const gboolean all_selected = (gui->group_selected == index) && gui->node_edited == -1 && (gui->form_selected || gui->form_dragging);
+          // creation mode: draw the current segment as round dotted line
+          if(gui->creation && current_seg == node_count -2)
+            dt_draw_stroke_line(DT_MASKS_DASH_ROUND, FALSE, cr, all_selected, zoom_scale, CAIRO_LINE_CAP_ROUND);
+          else
+            dt_draw_stroke_line(DT_MASKS_NO_DASH, FALSE, cr, (seg_selected || all_selected), zoom_scale, CAIRO_LINE_CAP_BUTT);
+          seg1 = (seg1 + 1) % node_count;
+          current_seg++;
+        }
+      }
+    }
   }
 
   // draw nodes and attached stuff

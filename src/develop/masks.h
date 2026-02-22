@@ -69,8 +69,10 @@ typedef enum dt_masks_type_t
   DT_MASKS_IS_CLOSED_SHAPE = DT_MASKS_CIRCLE | DT_MASKS_ELLIPSE | DT_MASKS_POLYGON,
   DT_MASKS_IS_OPEN_SHAPE   = DT_MASKS_ALL & ~DT_MASKS_IS_CLOSED_SHAPE,
   
+  DT_MASKS_IS_RETOUCHE = DT_MASKS_CLONE | DT_MASKS_NON_CLONE,
+
   DT_MASKS_IS_PATH_SHAPE   = DT_MASKS_POLYGON | DT_MASKS_BRUSH,
-  DT_MASKS_IS_SIMPLE_SHAPE = DT_MASKS_CIRCLE | DT_MASKS_ELLIPSE | DT_MASKS_GRADIENT
+  DT_MASKS_IS_PRIMITIVE_SHAPE = DT_MASKS_CIRCLE | DT_MASKS_ELLIPSE | DT_MASKS_GRADIENT
 
 } dt_masks_type_t;
 
@@ -512,6 +514,8 @@ gboolean dt_masks_node_is_cusp(const dt_masks_form_gui_points_t *gpt, const int 
  */
 void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index, const int nb, 
   const float zoom_scale, struct dt_masks_gui_center_point_t *center_point, const shape_draw_function_t *draw_shape_func);
+void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *gui, const int index, const float *points,
+                                   const int points_count, const int node_count, const float zoom_scale);
 
 void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
                                  int32_t pointerx, int32_t pointery);
