@@ -65,7 +65,9 @@ static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t
   if(!gpt) return;
 
   // we first check if we are inside the source form
-  if(dt_masks_point_in_form_exact(x, y, gpt->source, 1, gpt->source_count))
+  const float pt[2] = { x, y };
+
+  if(dt_masks_point_in_form_exact(pt, 1, gpt->source, 1, gpt->source_count) >= 0)
   {
     *inside_source = 1;
     *inside = 1;
@@ -84,12 +86,13 @@ static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t
   *dist = sqf(cx) + sqf(cy);
 
   // we check if it's inside borders
-  if(!dt_masks_point_in_form_exact(x, y, gpt->border, 1, gpt->border_count)) return;
+  if(dt_masks_point_in_form_exact(pt, 1, gpt->border, 1, gpt->border_count) < 0) return;
   *inside = 1;
   *near = 0;
 
   // and we check if it's inside form
-  *inside_border = !(dt_masks_point_in_form_near(x, y, gpt->points, 1, gpt->points_count, as, near));
+  if(dt_masks_point_in_form_exact(pt, 1, gpt->points, 1, gpt->points_count) < 0)
+    *inside_border = *near = 1;
 }
 
 static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float pzy, dt_masks_form_t *form, int parentid,
@@ -643,8 +646,11 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
 
   // draw the source if any
   if(gpt->source_count > 6)
-  { 
-    dt_masks_draw_source(cr, gui, index, num_points, zoom_scale, &dt_masks_functions_circle.draw_shape);
+  {
+    dt_masks_gui_center_point_t center_pt = { .main = { gpt->points[0], gpt->points[1] },
+                                              .source = { gpt->source[0], gpt->source[1] }};
+
+    dt_masks_draw_source(cr, gui, index, num_points, zoom_scale, TRUE, &center_pt, &dt_masks_functions_circle.draw_shape);
   }
 }
 

@@ -190,10 +190,12 @@ static void _ellipse_get_distance(float x, float y, float as, dt_masks_form_gui_
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return;
 
+  const float pt[2] = { x, y };
+
   // we first check if we are inside the source form
   if(gpt->source_count > 10)
   {
-    if(dt_masks_point_in_form_exact(x, y, gpt->source, 10, gpt->source_count - 5))
+    if(dt_masks_point_in_form_exact(pt, 1, gpt->source, 10, gpt->source_count - 5) >= 0)
     {
       *inside_source = 1;
       *inside = 1;
@@ -216,7 +218,7 @@ static void _ellipse_get_distance(float x, float y, float as, dt_masks_form_gui_
   *dist = sqf(cx) + sqf(cy);
 
   // we check if it's inside borders
-  if(!dt_masks_point_in_form_exact(x, y, gpt->border, 10, gpt->border_count - 5)) return;
+  if(dt_masks_point_in_form_exact(pt, 1, gpt->border, 10, gpt->border_count - 5) < 0) return;
   *inside = 1;
   *near = 0;
 
@@ -406,6 +408,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
 
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
   const float dist_curs = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED; // transformed to backbuf dimensions
+  const float sq_dist = dist_curs * dist_curs;
 
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
@@ -429,7 +432,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
     _ellipse_point_transform(nodes[0], nodes[1], nodes[k * 2], nodes[k * 2 + 1], sinr, cosr, &x, &y);
 
     // are we also close to the node ?
-    if(dt_masks_is_within_radius(pzx, pzy, x, y, dist_curs))
+    if(dt_masks_point_is_within_radius(pzx, pzy, x, y, sq_dist))
     {
       gui->node_selected = k;
       return 1;
@@ -440,7 +443,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   for(int i = 1; i < 5; i++)
   {
     _ellipse_point_transform(nodes[0], nodes[1], nodes[i * 2], nodes[i * 2 + 1], sinr, cosr, &x, &y);
-    if(dt_masks_is_within_radius(pzx, pzy, x, y, dist_curs))
+    if(dt_masks_point_is_within_radius(pzx, pzy, x, y, sq_dist))
     {
       gui->node_selected = i;
       return 1;
@@ -964,27 +967,15 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, float pzx
 
 static void _ellipse_draw_shape(cairo_t *cr, const float *points, const int points_count, const int nb, const gboolean border, const gboolean source)
 {
-  // minimum number of points to draw an ellipse
-  if(points_count <= 10) return;
-
-  // Draw the ellipse
-  const float r = atan2f(points[3] - points[1], points[2] - points[0]);
-  const float sinr = sinf(r);
-  const float cosr = cosf(r);
-  float x = 0.0f;
-  float y = 0.0f;
-  // start position
-  _ellipse_point_transform(points[0], points[1], points[10], points[11], sinr, cosr, &x, &y);
-  cairo_move_to(cr, x, y);
-  // loop over all other points
-  for(int i = 6; i < points_count; i++)
+  cairo_move_to(cr, points[10], points[11]);
+  for(int t = 6; t < points_count; t++)
   {
-    _ellipse_point_transform(points[0], points[1], points[i * 2], points[i * 2 + 1], sinr, cosr, &x, &y);
+    const float x = points[t * 2];
+    const float y = points[t * 2 + 1];
+
     cairo_line_to(cr, x, y);
   }
-  // close the ellipse on the first point
-  _ellipse_point_transform(points[0], points[1], points[10], points[11], sinr, cosr, &x, &y);
-  cairo_line_to(cr, x, y);
+  cairo_close_path(cr);
 }
 
 static void _ellipse_draw_node(const dt_masks_form_gui_t *gui, cairo_t *cr, const float zoom_scale,
@@ -1131,10 +1122,11 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   // draw the source if any
   if(gpt->source_count > 10)
   {
-    cairo_save(cr);
-    dt_masks_draw_source(cr, gui, index, num_points, zoom_scale, &dt_masks_functions_ellipse.draw_shape);
-    cairo_restore(cr);
-  } 
+    dt_masks_gui_center_point_t center_pt = { .main = { gpt->points[0], gpt->points[1] },
+                                              .source = { gpt->source[0], gpt->source[1] }};
+    dt_masks_draw_source(cr, gui, index, num_points, zoom_scale, TRUE, &center_pt, &dt_masks_functions_ellipse.draw_shape);
+  }
+
 }
 
 static void _bounding_box(const float *const points, int num_points, int *width, int *height, int *posx, int *posy)

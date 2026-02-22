@@ -270,7 +270,10 @@ static void _group_events_post_expose_draw(cairo_t *cr, float zoom_scale, dt_mas
   dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, pos);
   dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
   if(sel && sel->functions)
+  {
+    gui->type = sel->type;
     sel->functions->post_expose(cr, zoom_scale, gui, pos, g_list_length(sel->points));
+  }
 }
 
 void dt_group_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,

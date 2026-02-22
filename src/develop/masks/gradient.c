@@ -296,22 +296,6 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   pzx *= darktable.develop->preview_width / dev->natural_scale;
   pzy *= darktable.develop->preview_height / dev->natural_scale;
 
-  // This allow to rotate if the mouse is at a certain distance from center
-  /*if((gui->group_selected == index))
-  {
-    // are we away enough from the pivot ?
-    const float dx = pzx - gpt->points[0];
-    const float dy = pzy - gpt->points[1];
-    const float distance_sq = dx * dx + dy * dy;
-    const float rotation_dist = DT_DRAW_SELECTION_ROTATION_RADIUS(dev);
-    const float threshold_sq = rotation_dist * rotation_dist;
-    if(distance_sq >= threshold_sq && distance_sq <= (threshold_sq * 3.0f))
-    {
-      gui->pivot_selected = gui->form_selected = TRUE;
-      return 1;
-    }
-  }*/
-
   // are we inside the form or the borders or near a segment ???
   int inside, inside_border, near, inside_source;
   float dist;

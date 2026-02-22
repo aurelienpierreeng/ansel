@@ -62,8 +62,16 @@ typedef enum dt_masks_type_t
   DT_MASKS_ELLIPSE = 1 << 5,
   DT_MASKS_BRUSH = 1 << 6,
   DT_MASKS_NON_CLONE = 1 << 7,
-  DT_MASKS_ALL = DT_MASKS_CIRCLE | DT_MASKS_POLYGON | DT_MASKS_GROUP | DT_MASKS_CLONE |
-                 DT_MASKS_GRADIENT | DT_MASKS_ELLIPSE | DT_MASKS_BRUSH | DT_MASKS_NON_CLONE
+
+  DT_MASKS_ALL = DT_MASKS_CIRCLE | DT_MASKS_POLYGON | DT_MASKS_GROUP |
+                 DT_MASKS_GRADIENT | DT_MASKS_ELLIPSE | DT_MASKS_BRUSH,
+
+  DT_MASKS_IS_CLOSED_SHAPE = DT_MASKS_CIRCLE | DT_MASKS_ELLIPSE | DT_MASKS_POLYGON,
+  DT_MASKS_IS_OPEN_SHAPE   = DT_MASKS_ALL & ~DT_MASKS_IS_CLOSED_SHAPE,
+  
+  DT_MASKS_IS_PATH_SHAPE   = DT_MASKS_POLYGON | DT_MASKS_BRUSH,
+  DT_MASKS_IS_SIMPLE_SHAPE = DT_MASKS_CIRCLE | DT_MASKS_ELLIPSE | DT_MASKS_GRADIENT
+
 } dt_masks_type_t;
 
 /**masts states */
@@ -300,6 +308,7 @@ typedef struct dt_masks_dynbuf_t
 /** structure used to display a form */
 typedef struct dt_masks_form_gui_t
 {
+  dt_masks_type_t type;
   // points used to draw the form
   GList *points; // list of dt_masks_form_gui_points_t 
 
@@ -368,7 +377,20 @@ typedef struct dt_masks_menu_icon_data_t
   dt_masks_menu_icon_t shape;
 } dt_masks_menu_icon_data_t;
 
+typedef struct dt_masks_gui_center_point_t
+{
+  struct
+  {
+    float x;
+    float y;
+  }main;
 
+  struct 
+  {
+    float x;
+    float y;
+  }source;
+} dt_masks_gui_center_point_t;
 
 /** the shape-specific function tables */
 extern const dt_masks_functions_t dt_masks_functions_circle;
@@ -489,7 +511,7 @@ gboolean dt_masks_node_is_cusp(const dt_masks_form_gui_points_t *gpt, const int 
  * @param shape_function the function to draw the shape
  */
 void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index, const int nb, 
-  const float zoom_scale, const shape_draw_function_t *functions);
+  const float zoom_scale, const gboolean clockwise, struct dt_masks_gui_center_point_t *center_point, const shape_draw_function_t *draw_shape_func);
 
 void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
                                  int32_t pointerx, int32_t pointery);
@@ -542,8 +564,7 @@ dt_masks_form_t *dt_masks_dup_masks_form(const dt_masks_form_t *form);
 GList *dt_masks_dup_forms_deep(GList *forms, dt_masks_form_t *form);
 
 /** utils functions */
-int dt_masks_point_in_form_exact(float x, float y, float *points, int points_start, int points_count);
-int dt_masks_point_in_form_near(float x, float y, float *points, int points_start, int points_count, float distance, int *near);
+int dt_masks_point_in_form_exact(const float *pts, int num_pts, const float *points, int points_start, int points_count);
 
 /** allow to select a shape inside an iop */
 void dt_masks_select_form(struct dt_iop_module_t *module, dt_masks_form_t *sel);
@@ -769,7 +790,7 @@ static inline int dt_masks_roundup(int num, int mult)
  * @param radius the radius from center
  * @return gboolean TRUE if the point is inside the radius from center, FALSE otherwise
  */
-gboolean dt_masks_is_within_radius(const float px, const float py,
+gboolean dt_masks_point_is_within_radius(const float px, const float py,
                                         const float cx, const float cy,
                                         const float radius);
 

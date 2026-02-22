@@ -85,12 +85,12 @@ extern "C" {
 #define DT_DRAW_SELECTION_ROTATION_RADIUS(dev)   (DT_DRAW_SELECTION_ROTATION_AREA / dt_dev_get_zoom_level((dt_develop_t *)dev))  
 
 /**dash type */
-typedef enum dt_masks_dash_type_t
+typedef enum dt_draw_dash_type_t
 {
   DT_MASKS_NO_DASH = 0,
   DT_MASKS_DASH_STICK = 1,
   DT_MASKS_DASH_ROUND = 2
-} dt_masks_dash_type_t;
+} dt_draw_dash_type_t;
 
 /** wrapper around nikon curve. */
 typedef struct dt_draw_curve_t
@@ -549,7 +549,7 @@ static void _fill_clear_preserve(cairo_t *cr)
   _draw_fill_clear(cr, TRUE);
 }
 
-static inline void dt_draw_set_dash_style(cairo_t *cr, dt_masks_dash_type_t type, float zoom_scale)
+static inline void dt_draw_set_dash_style(cairo_t *cr, dt_draw_dash_type_t type, float zoom_scale)
 {
   // return early if no dash is needed
   if(type == DT_MASKS_NO_DASH)
@@ -737,7 +737,7 @@ typedef void (*shape_draw_function_t)(cairo_t *cr, const float *points, const in
  * @param points_count the number of points in the shape
  * @param functions the functions table of the shape
  */
-static inline void dt_draw_shape_lines(const dt_masks_dash_type_t dash_type, const gboolean source, cairo_t *cr, const int nb, const gboolean selected,
+static inline void dt_draw_shape_lines(const dt_draw_dash_type_t dash_type, const gboolean source, cairo_t *cr, const int nb, const gboolean selected,
                 const float zoom_scale, const float *points, const int points_count, const shape_draw_function_t *draw_shape_func, const cairo_line_cap_t line_cap)
 {
   cairo_save(cr);
@@ -750,7 +750,7 @@ static inline void dt_draw_shape_lines(const dt_masks_dash_type_t dash_type, con
   if(points && points_count >= 2 && draw_shape_func)
     (*draw_shape_func)(cr, points, points_count, nb, border, FALSE);
 
-  const dt_masks_dash_type_t dash = (dash_type && !source)
+  const dt_draw_dash_type_t dash = (dash_type && !source)
                                   ? dash_type : DT_MASKS_NO_DASH;
 
   dt_draw_set_dash_style(cr, dash, zoom_scale);
@@ -784,7 +784,7 @@ static inline void dt_draw_shape_lines(const dt_masks_dash_type_t dash_type, con
  * @param selected TRUE if the shape is selected
  * @param zoom_scale the current zoom scale of the image
  */
-static inline void dt_draw_stroke_line(const dt_masks_dash_type_t dash_type, const gboolean source, cairo_t *cr,
+static inline void dt_draw_stroke_line(const dt_draw_dash_type_t dash_type, const gboolean source, cairo_t *cr,
                           const gboolean selected, const float zoom_scale, const cairo_line_cap_t line_cap)
 {
   dt_draw_shape_lines(dash_type, source, cr, 0, selected, zoom_scale, NULL, 0, NULL, line_cap);
@@ -821,13 +821,8 @@ static void _draw_arrow_tail(cairo_t *cr, const float arrow_bud_x, const float a
  * @param tail the position of the tail point
  */
 static inline void dt_draw_arrow(cairo_t *cr, const float zoom_scale,const gboolean selected, const gboolean draw_tail,
-              const dt_masks_dash_type_t dash_style, const float arrow[2], const float tail[2])
+              const dt_draw_dash_type_t dash_style, const float arrow[2], const float tail[2], const float angle)
 {
-  // calculate the angle of the segment from tail to arrow
-  float delta_x = tail[0] - arrow[0];
-  float delta_y = tail[1] - arrow[1];
-  float angle = atan2f(delta_y, delta_x);
-
   // calculate the coordinates of the two base points of the arrow head
   const float arrow_x_a = arrow[0] + (DT_DRAW_SCALE_ARROW / zoom_scale) * cosf(angle + (0.4f));
   const float arrow_y_a = arrow[1] + (DT_DRAW_SCALE_ARROW / zoom_scale) * sinf(angle + (0.4f));
@@ -919,6 +914,36 @@ static inline void dt_draw_cross(cairo_t *cr, const float zoom_scale, const floa
   dt_draw_set_color_overlay(cr, TRUE, 0.8);
   cairo_stroke(cr);
 
+  cairo_restore(cr);
+}
+
+static inline void dt_draw_source_shape(cairo_t *cr, const float zoom_scale, const gboolean selected, 
+  const float *source_pts, const int source_pts_count, const int nodes_nb, const shape_draw_function_t *draw_shape_func)
+{
+  cairo_save(cr);
+
+  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+  dt_draw_set_dash_style(cr, DT_MASKS_NO_DASH, zoom_scale);
+  
+  if(draw_shape_func)
+    (*draw_shape_func)(cr, source_pts, source_pts_count, nodes_nb, FALSE, TRUE);
+
+  //dark line
+  if(selected)
+    cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
+  else
+    cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_HIGHLIGHT / zoom_scale);
+  dt_draw_set_color_overlay(cr, FALSE, 0.6);
+  cairo_stroke_preserve(cr);
+
+  //bright line
+  if(selected)
+    cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_SELECTED / zoom_scale);
+  else
+    cairo_set_line_width(cr, (1.5f * DT_DRAW_SIZE_LINE) / zoom_scale);
+  dt_draw_set_color_overlay(cr, TRUE, 0.8);
+  cairo_stroke(cr);
+  
   cairo_restore(cr);
 }
 

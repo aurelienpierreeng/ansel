@@ -43,12 +43,24 @@
 #include "develop/masks.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
+#include "common/math.h"
 #include "common/mipmap_cache.h"
 #include "control/conf.h"
 #include "common/undo.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
+#include <stdint.h>
+
+gboolean dt_masks_point_is_within_radius(const float px, const float py,
+                                        const float cx, const float cy,
+                                        const float sq_radius)
+{
+  const float dx = px - cx;
+  const float dy = py - cy;
+  const float sq_dist = dx * dx + dy * dy;
+  return sq_dist <= sq_radius;
+}
 
 dt_masks_form_t *dt_masks_dup_masks_form(const dt_masks_form_t *form)
 {
@@ -204,6 +216,8 @@ void dt_masks_gui_form_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, i
     }
     gui->pipe_hash = darktable.develop->preview_pipe->backbuf.hash;
     gui->formid = form->formid;
+    gui->type = form->type;
+
   }
 }
 
@@ -315,7 +329,7 @@ gboolean dt_masks_gui_delete(struct dt_iop_module_t *module, dt_masks_form_t *fo
     return TRUE;
 
   // we remove the selected node (and the entire form if there is too few nodes left)
-  if(((form->type & DT_MASKS_BRUSH) || (form->type & DT_MASKS_POLYGON)) && gui->node_selected >= 0)
+  if(((form->type & DT_MASKS_IS_PATH_SHAPE) != 0) && gui->node_selected >= 0)
   {
     if(g_list_shorter_than(form->points, 3))
       return _masks_remove_shape(module, form, parentid, gui, gui->group_selected);
@@ -1581,159 +1595,222 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
 
 gboolean dt_masks_node_is_cusp(const dt_masks_form_gui_points_t *gpt, const int index)
 {
-  const int offset = 2;
+  if(!gpt || !gpt->points) return FALSE;
+  if(gpt->points_count <= 0 || index < 0 || index >= gpt->points_count) return FALSE;
+
   const float *p = &gpt->points[index * 6];
-  return (p[0 + offset] == p[2 + offset]
-       && p[1 + offset] == p[3 + offset]);
+  return (p[0 + 2] == p[2 + 2]
+       && p[1 + 2] == p[3 + 2]);
 }
 
 /**
- * @brief Find the best attachment point for the arrow's tip or arrow's base along shape outline
+ * @brief Find the best attachment point on the shape contour for a ray crossing the form
  * 
- * @param pos_x resulting x position
- * @param pos_y resulting y position
- * @param offset offset from the shape outline
- * @param radius max radius of the shape
- * @param origin_x x position of the shape's origin point
- * @param origin_y y position of the shape's origin point
- * @param cosc cosine of the angle
- * @param sinc sine of the angle
- * @param points array of points defining the shape outline
- * @param points_count number of points in the shape outline
+ * The best point is the one with the smallest positive projection along the ray.
+ * The result is offset from the contour by a given distance along the ray axis,
+ * oriented toward the center of the ray segment [ray_2, ray_1].
+ *  
+ * @param ray_1 First point of the ray
+ * @param ray_2 Second point of the ray
+ * @param offset Distance to offset from the contour
+ * @param points Array of points defining the shape contour
+ * @param points_count Number of points in the contour
+ * @param first_pt Index of the first point to consider
+ * @param is_closed_shape Whether the contour is closed
+ * @param result Array to store the resulting attachment point
  */
-void _dt_masks_find_best_attachment_point(float *pos_x, float *pos_y, const float offset, const float radius,
-                                    const float origin_x, const float origin_y,
-                                    const float cosc, const float sinc,
-                                    const float *points, const int points_count)
+static void _dt_masks_find_best_attachment_point(const float ray_1[2], const float ray_2[2], const float offset,
+                                                 const float *points, const int points_count, const int first_pt,
+                                                 const gboolean is_closed_shape,
+                                                 float result[2])
 {
-    const float step = radius / 259.0f;
-    float best_dist = FLT_MAX;
+  // Fallback: no intersection found.
+  result[0] = ray_1[0];
+  result[1] = ray_1[1];
 
-    for(int k = 1; k < points_count; k += 2)
-    {
-      const float px = points[k * 2];
-      const float py = points[k * 2 + 1];
+  const int available_points = points_count - first_pt;
+  if(available_points < 2) return;
 
-      for(float r = 0.01f; r < radius; r += step)
-      {
-        const float epx = origin_x + r * cosc;
-        const float epy = origin_y + r * sinc;
-        const float ed = sqf(epx - px) + sqf(epy - py);
-        if(ed < best_dist)
-        {
-          best_dist = ed;
-          *pos_x = origin_x + (r + offset) * cosc;
-          *pos_y = origin_y + (r + offset) * sinc;
-        }
-      }
-    }
+  const float ray2_x = ray_2[0];
+  const float ray2_y = ray_2[1];
+  const float ray_center_x = 0.5f * (ray_1[0] + ray_2[0]);
+  const float ray_center_y = 0.5f * (ray_1[1] + ray_2[1]);
+  const float dir_x = ray_1[0] - ray_2[0];
+  const float dir_y = ray_1[1] - ray_2[1];
+  float min_s = FLT_MAX;
+  const float off = fabsf(offset);
+  const float inv_dir_len = f_inv_sqrtf(dir_x * dir_x + dir_y * dir_y);
+  const float ux = dir_x * inv_dir_len;
+  const float uy = dir_y * inv_dir_len;
+
+  const int segment_count = (available_points - 1) + ((is_closed_shape) ? 1 : 0);
+  for(int seg = 0; seg < segment_count; seg++)
+  {
+    // Get the current segment [i, j], with wrap-around if the shape is closed.
+    const int i = first_pt + seg;
+    const int j = (i + 1 < points_count) ? (i + 1) : first_pt;
+    const float x3 = points[i * 2];
+    const float y3 = points[i * 2 + 1];
+    const float x4 = points[j * 2];
+    const float y4 = points[j * 2 + 1];
+
+    // Compute the intersection of the ray with the segment.
+    const float dx = x4 - x3;
+    const float dy = y4 - y3;
+    const float det = dx * (-dir_y) + dy * dir_x;
+    if(det > -1e-8f && det < 1e-8f) continue;
+    const float inv_det = 1.0f / det;
+
+    const float segment_param = ((ray2_x - x3) * (-dir_y) + (ray2_y - y3) * dir_x) * inv_det;
+    const float ray_param = ((x3 - ray2_x) * dy - (y3 - ray2_y) * dx) * inv_det;
+    if(segment_param < 0.0f || segment_param > 1.0f || ray_param <= 0.0f || ray_param >= min_s) continue;
+
+    min_s = ray_param;
+    const float ix = ray2_x + ray_param * dir_x;
+    const float iy = ray2_y + ray_param * dir_y;
+
+    // Offset along the ray axis toward the ray segment center.
+    const float to_center = (ray_center_x - ix) * ux + (ray_center_y - iy) * uy;
+    const float side_sign = (to_center >= 0.0f) ? 1.0f : -1.0f;
+    result[0] = ix + side_sign * off * ux;
+    result[1] = iy + side_sign * off * uy;
+  }
 }
 
+/*static void dt_masks_get_shape_center_of_gravity(const float *points, const int points_nb, const int first_pt, float center[2])
+{
+  if(!points || points_nb <= 0)
+  {
+    center[0] = 0.0f;
+    center[1] = 0.0f;
+    return;
+  }
+
+  float sum_x = 0.0f;
+  float sum_y = 0.0f;
+
+  for(int i = first_pt; i < points_nb; i++)
+  {
+    sum_x += points[i * 2];
+    sum_y += points[i * 2 + 1];
+  }
+
+  center[0] = sum_x / points_nb;
+  center[1] = sum_y / points_nb;
+}*/
+
 void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *gui, const int index, const int nb, 
-  const float zoom_scale, const shape_draw_function_t *draw_shape_func)
+                  const float zoom_scale, const gboolean clockwise, struct dt_masks_gui_center_point_t *center_point,
+                  const shape_draw_function_t *draw_shape_func)
 {
   if(!gui) return;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return;
 
-  gboolean is_path = (nb > 1);// brush/polygon shapes have nb > 1
-  float radius = 2.0f;  // default values for brush/polygon shapes
-  // index offset starts differently for brush/polygon shapes and other shapes
-  size_t idx = is_path ? 2 : 0;
-  // For brush/polygon shapes, the source coordinates are at indices [2] and [3],
-  // while for other mask shapes they are at indices [0] and [1]
-  const float source_x = is_path ? gpt->source[2] : gpt->source[0];
-  const float source_y = is_path ? gpt->source[3] : gpt->source[1];
-  const float origin_x = gpt->points[idx];
-  const float origin_y = gpt->points[idx + 1];
-
-  // direction from center to source (use atan2 to avoid special cases)
-  const float center_angle = atan2f(source_y - origin_y, source_x - origin_x);
-  const float cosc = cosf(center_angle);
-  const float sinc = sinf(center_angle);
-  const float offset = DT_PIXEL_APPLY_DPI(8.0f)/ zoom_scale;
-  
-  float arrow_x = 0.0f, arrow_y = 0.0f;
-  float arrow_source_x = 0.0f, arrow_source_y = 0.0f;
-  if(is_path)
+  if(!gui->creation)
   {
-    // radial attachment
-    arrow_x = origin_x + (offset + radius) * cosc;
-    arrow_y = origin_y + (offset + radius) * sinc;
+    const float main[2] = { center_point->main.x, center_point->main.y };
+    const float source[2] = { center_point->source.x, center_point->source.y };
+    const gboolean is_open_shape = (gui->type & DT_MASKS_IS_OPEN_SHAPE) != 0;
+    const gboolean is_closed_shape = (gui->type & DT_MASKS_IS_CLOSED_SHAPE) != 0;
 
-    arrow_source_x = source_x - radius * cosc;
-    arrow_source_y = source_y - radius * sinc;
+    // Offset points from borders along the attachment rays.
+    const float offset = (clockwise ? 1.0f : -1.0f) * DT_PIXEL_APPLY_DPI(12.0f) / zoom_scale;
+    const float main_offset = /*is_open_shape ? 0.0f :*/ offset;
+    const float source_offset = offset;
+
+    int first_pt = 2;
+    if((gui->type & DT_MASKS_ELLIPSE) != 0)
+      first_pt = 10;
+    else if((gui->type & DT_MASKS_IS_PATH_SHAPE) != 0)
+      first_pt = nb * 3;
+
+    int points_count_attach = gpt->points_count;
+    int source_count_attach = gpt->source_count;
+    if((gui->type & DT_MASKS_BRUSH) != 0)
+    {
+      points_count_attach /= 2;
+      source_count_attach /= 2;
+    }
+
+    float head[2] = { 0 }, tail[2] = { 0 };
+
+    // Find attachment point for the arrow's head with the main shape
+    _dt_masks_find_best_attachment_point(main, source, main_offset,
+                                      gpt->points, points_count_attach, first_pt, is_closed_shape, head);
+
+    // Find attachment point for the arrow's base with the source shape
+    _dt_masks_find_best_attachment_point(source, main, source_offset,
+                                    gpt->source, source_count_attach, first_pt, is_closed_shape, tail);
+
+    const gboolean selected = (gui->group_selected == index)
+                              && (gui->source_selected || gui->source_dragging);
+    gboolean draw_tail = TRUE;
+
+    // Do not draw the arrow tail if the shape overlapes source,
+    // Just draw the head pointing to the center of the source shape
+    // and displace it at mid-distance between main and source center.
+    // Open shapes always draw the tail since they have not really filled area.
+    if(is_closed_shape)
+    {
+      // From more frequent to least frequent, to get out of loop earlier. Tail first, then source.
+      const float pts[4] = { tail[0], tail[1], source[0], source[1] };
+      gboolean overlap
+          = (dt_masks_point_in_form_exact(pts, 2, gpt->points, first_pt, gpt->points_count) >= 0);
+      // Skip the second containment test when overlap is already detected.
+      if(!overlap)
+      {
+        const float origin_pt[2] = { main[0], main[1] };
+        overlap = (dt_masks_point_in_form_exact(origin_pt, 1, gpt->source, first_pt, gpt->source_count) >= 0);
+      }
+
+      // Update head position to be between main and source center point.
+      if(overlap)
+      {
+        head[0] = 0.5f * (main[0] + source[0]);
+        head[1] = 0.5f * (main[1] + source[1]);
+      }
+
+      const float arrow_len_sq = sqf(tail[0] - head[0]) + sqf(tail[1] - head[1]);
+      draw_tail = arrow_len_sq > 1e-6f && !overlap;
+    }
+
+    // Calculate the angle, so the arrow head always points in the direction of the main shape's center.
+    const float angle = is_open_shape ? atan2f(tail[1] - head[1], tail[0] - head[0])
+                                      : atan2f(head[1] - main[1], head[0] - main[0]);
+
+    dt_draw_arrow(cr, zoom_scale, selected, draw_tail, DT_MASKS_DASH_ROUND, head, tail, angle);
+
+
+
+    
+    if(darktable.unmuted & DT_DEBUG_MASKS)
+    {
+      // Debug: show the main and source gravity points, show head and tail points
+      cairo_save(cr);
+      cairo_arc(cr, main[0], main[1], DT_PIXEL_APPLY_DPI(4.0f) / zoom_scale, 0, 2 * M_PI);
+      cairo_set_source_rgba(cr, 1.0, 0.0, 0.0, 1);
+      cairo_fill(cr);
+      cairo_arc(cr, source[0], source[1], DT_PIXEL_APPLY_DPI(4.0f) / zoom_scale, 0, 2 * M_PI);
+      cairo_set_source_rgba(cr, 0.0, 1.0, 0.0, 1);
+      cairo_fill(cr);
+
+      cairo_arc(cr, head[0], head[1], DT_PIXEL_APPLY_DPI(4.0f) / zoom_scale, 0, 2 * M_PI);
+      cairo_set_source_rgba(cr, 0.0, 0.0, 1.0, 1);
+      cairo_fill(cr);
+      cairo_arc(cr, tail[0], tail[1], DT_PIXEL_APPLY_DPI(4.0f) / zoom_scale, 0, 2 * M_PI);
+      cairo_fill(cr);
+      cairo_restore(cr);
+    }
   }
-  else
-  {
-    // compute radius a & radius b.
-    const float cnt_x = gpt->points[0]; // center x
-    const float cnt_y = gpt->points[1]; // center y
-    const float bot_x = gpt->points[2]; // first point x
-    const float bot_y = gpt->points[3]; // first point y
-    const float rgt_x = gpt->points[6];
-    const float rgt_y = gpt->points[7];
-
-    const float delta_x = cnt_x - bot_x;
-    const float delta_y = cnt_y - bot_y;
-    const float radius_a = delta_x * delta_x + delta_y * delta_y;
-
-    const float border_x = cnt_x - rgt_x;
-    const float border_y = cnt_y - rgt_y;
-    const float radius_b = border_x * border_x + border_y * border_y;
-
-    radius = sqrtf(fmaxf(radius_a, radius_b));
-  
-    // find best attachment point for the arrow's tip along shape outline
-    _dt_masks_find_best_attachment_point(&arrow_x, &arrow_y, offset, radius,
-                                    origin_x, origin_y, cosc, sinc,
-                                    gpt->points, gpt->points_count);
-
-    // find best attachment point for the arrow's base along source's shape outline
-    _dt_masks_find_best_attachment_point(&arrow_source_x, &arrow_source_y, offset, radius,
-                                source_x, source_y, -cosc, -sinc, 
-                                gpt->source, gpt->source_count);
-  }
-
-  const gboolean selected = (gui->group_selected == index) && (gui->source_selected || gui->source_dragging);
-  // don't draw the line if the source is inside the shape
-  float arrow_len_sq = sqf(source_x - arrow_x) + sqf(source_y - arrow_y);
-  const gboolean draw_tail = (arrow_len_sq > 1e-12f && !dt_masks_point_in_form_exact(arrow_source_x, arrow_source_y, gpt->points, 0, gpt->points_count));
-  
-  const float arrow[2] = {arrow_x, arrow_y};
-  const float source[2] = {arrow_source_x, arrow_source_y};
-  dt_draw_arrow(cr, zoom_scale, selected, draw_tail, DT_MASKS_DASH_ROUND, arrow, source);
 
   // draw the source shape
-  {
-    cairo_save(cr);
-    // Trick to only draw the current polygon lines while editing, but the complete shape when not
-    const int nodes_nb = nb + !gui->creation;
-    
-    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+  // Trick to draw the current polygon shape lines while editing, but draw the complete shape in all other cases
+  const int nodes_nb = nb + !gui->creation;
+  const gboolean shape_selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
 
-    if(draw_shape_func)
-      (*draw_shape_func)(cr, gpt->source, gpt->source_count, nodes_nb, FALSE, TRUE);
-
-    dt_draw_set_dash_style(cr, DT_MASKS_NO_DASH, zoom_scale);
-    //dark line
-    if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
-      cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale);
-    else
-      cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_HIGHLIGHT / zoom_scale);
-    dt_draw_set_color_overlay(cr, FALSE, 0.6);
-    cairo_stroke_preserve(cr);
-
-    //bright line
-    if((gui->group_selected == index) && (gui->form_selected || gui->form_dragging))
-      cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_SELECTED / zoom_scale);
-    else
-      cairo_set_line_width(cr, (1.5f * DT_DRAW_SIZE_LINE) / zoom_scale);
-    dt_draw_set_color_overlay(cr, TRUE, 0.8);
-    cairo_stroke(cr);
-
-    cairo_restore(cr);
-  }
+  dt_draw_source_shape(cr, zoom_scale, shape_selected, gpt->source, gpt->source_count, nodes_nb, draw_shape_func);
+  
 }
 
 void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, int32_t width, int32_t height,
@@ -1782,16 +1859,18 @@ void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, in
 
   // We update the form if needed
   // Add preview when creating a circle, ellipse and gradient
-  if(!(((form->type & DT_MASKS_CIRCLE) || (form->type & DT_MASKS_ELLIPSE) || (form->type & DT_MASKS_GRADIENT))
-       && gui->creation))
+  if(!((form->type & DT_MASKS_IS_SIMPLE_SHAPE) && gui->creation))
+
     dt_masks_gui_form_test_create(form, gui, module);
 
   // Draw form
   if(form->type & DT_MASKS_GROUP)
     dt_group_events_post_expose(mask_draw, zoom_scale, form, gui);
   else if(form->functions && form->functions->post_expose)
+  {
+    gui->type = form->type;
     form->functions->post_expose(mask_draw, zoom_scale, gui, 0, g_list_length(form->points));
-
+  }
   cairo_restore(mask_draw);
 
   // Draw the overlay with the same transformation as the main context
@@ -2632,90 +2711,53 @@ void dt_masks_cleanup_unused(dt_develop_t *dev)
 }
 
 /**
- * @brief Check whether the 2D point (x, y) lies inside the polygon (mask) described by `points`.
+ * @brief Check whether any 2D point in pts[] lies inside the form points[].
  *
- * we use ray casting algorithm
- * to avoid most problems with horizontal segments, y should be rounded as int
- * so that there's very little chance than y==points...
- * 
- * @param x The x-coordinate of the point to test.
- * @param y The y-coordinate of the point to test.
- * @param points The array of polygon vertices.
- * @param points_start The starting index of the polygon vertices in the array.
- * @param points_count The total number of vertices in the polygon.
- * @return int 1 if the point is inside the polygon, 0 otherwise.
+ * We use the ray casting algorithm for each tested point.
+ *
+ * @param pts Flat array of tested points [x0, y0, x1, y1, ...].
+ * @param num_pts Number of tested points in pts.
+ * @param points The array of form vertices.
+ * @param points_start The starting index of the form vertices in the array.
+ * @param points_count The total number of vertices in the form.
+ * @return int Index of the first tested point found inside the form, -1 otherwise.
  */
-int dt_masks_point_in_form_exact(float x, float y, float *points, int points_start, int points_count)
+int dt_masks_point_in_form_exact(const float *pts, int num_pts, const float *points, int points_start, int points_count)
 {
-  int nb = 0;
+  if(!pts || num_pts <= 0 || !points) return -1;
+  if(points_count <= 2 + points_start) return -1;
 
-  if(points_count > 2 + points_start)
+  const int point = points_start;
+  for(int p = 0; p < num_pts; p++)
   {
-    int start = isnan(points[points_start * 2]) && !isnan(points[points_start * 2 + 1])
-                    ? points[points_start * 2 + 1]
-                    : points_start;
-
-    float yf = y;
-    for(int i = start, next = start + 1; i < points_count;)
-    {
-      float y1 = points[i * 2 + 1];
-      float y2 = points[next * 2 + 1];
-      //if we need to skip points (in case of deleted point, because of self-intersection)
-      if(isnan(points[next * 2]))
-      {
-        next = isnan(y2) ? start : (int)y2;
-        continue;
-      }
-      if(((yf <= y2 && yf > y1) || (yf >= y2 && yf < y1)) && (points[i * 2] > x)) nb++;
-
-      if(next == start) break;
-      i = next++;
-      if(next >= points_count) next = start;
-    }
-  }
-
-  return (nb & 1);
-}
-
-int dt_masks_point_in_form_near(float x, float y, float *points, int points_start, int points_count, float distance, int *near)
-{
-  // we use ray casting algorithm
-  // to avoid most problems with horizontal segments, y should be rounded as int
-  // so that there's very little chance than y==points...
-
-  // TODO : distance is only evaluated in x, not y...
-
-  if(points_count > 2 + points_start)
-  {
-    const int start = isnan(points[points_start * 2]) && !isnan(points[points_start * 2 + 1])
-                      ? points[points_start * 2 + 1]
-                      : points_start;
-
-    const float yf = y;
     int nb = 0;
-    for(int i = start, next = start + 1; i < points_count;)
+    const float x = pts[p * 2];
+    const float y = pts[p * 2 + 1];
+
+    for(int i = points_start, next = point + 1; i < points_count;)
     {
       const float y1 = points[i * 2 + 1];
       const float y2 = points[next * 2 + 1];
-      //if we need to jump to skip points (in case of deleted point, because of self-intersection)
+
+      // if we need to skip points (in case of deleted point, because of self-intersection)
       if(isnan(points[next * 2]))
       {
-        next = isnan(y2) ? start : (int)y2;
+        next = isnan(y2) ? point : (int)y2;
         continue;
       }
-      if((yf <= y2 && yf > y1) || (yf >= y2 && yf < y1))
-      {
-        if(points[i * 2] > x) nb++;
-        if(points[i * 2] - x < distance && points[i * 2] - x > -distance) *near = 1;
-      }
 
-      if(next == start) break;
+      if(((y <= y2 && y > y1) || (y >= y2 && y < y1)) && (points[i * 2] > x)) nb++;
+
+      if(next == point) break;
       i = next++;
-      if(next >= points_count) next = start;
+      // loop
+      if(next >= points_count) next = point;
     }
-    return (nb & 1);
+
+    if(nb & 1) return p;
   }
-  return 0;
+
+  return -1;
 }
 
 // allow to select a shape inside an iop
@@ -2922,17 +2964,6 @@ float dt_masks_rotate_with_anchor(dt_develop_t *dev, const float anchor[2], cons
   gui->delta[1] = anchor_y;
 
   return angle / M_PI * 180.0f;
-}
-
-gboolean dt_masks_is_within_radius(const float px, const float py,
-                                        const float cx, const float cy,
-                                        const float radius)
-{
-  const float sq_radius = radius * radius;
-  const float dx = px - cx;
-  const float dy = py - cy;
-  const float sq_dist = dx * dx + dy * dy;
-  return sq_dist <= sq_radius;
 }
 
 // NOTE: this does quite the same as _menu_add_shape

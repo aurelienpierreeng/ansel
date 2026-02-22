@@ -1225,6 +1225,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
 
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
   const float dist_curs = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED; // transformed to backbuf dimensions
+  const float sq_dist = dist_curs * dist_curs;
 
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
@@ -1246,7 +1247,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
     // Current node's border handle
      float bh_x = NAN, bh_y = NAN;
      if(_brush_get_border_handle_mirrored(gpt, nb, k, &bh_x, &bh_y)
-       && dt_masks_is_within_radius(pzx, pzy, bh_x, bh_y, dist_curs))
+       && dt_masks_point_is_within_radius(pzx, pzy, bh_x, bh_y, sq_dist))
     {
       gui->handle_border_selected = k;
 
@@ -1260,7 +1261,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
       float ffx, ffy;
       _brush_ctrl2_to_handle(gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], gpt->points[k * 6 + 4],
                               gpt->points[k * 6 + 5], &ffx, &ffy, TRUE);
-    if(dt_masks_is_within_radius(pzx, pzy, ffx, ffy, dist_curs))
+    if(dt_masks_point_is_within_radius(pzx, pzy, ffx, ffy, sq_dist))
       {
         gui->handle_selected = k;
 
@@ -1269,7 +1270,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
     }
 
     // are we close to the node ?
-    if(dt_masks_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], dist_curs))
+    if(dt_masks_point_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], sq_dist))
     {
       gui->node_selected = k;
 
@@ -1280,7 +1281,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   // iterate all nodes and look for one that is close enough
   for(int k = 0; k < nb; k++)
   {
-    if(dt_masks_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], dist_curs))
+    if(dt_masks_point_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], sq_dist))
     {
       gui->node_selected = k;
 
@@ -2209,6 +2210,160 @@ static void _brush_draw_shape(cairo_t *cr, const float *points, const int points
   }
 }
 
+static float _brush_line_length(const float *line, const int first_pt, const int last_pt)
+{
+  float total_len = 0.0f;
+  for(int i = first_pt; i < last_pt; i++)
+  {
+    const int i0 = i * 2;
+    const int i1 = (i + 1) * 2;
+    const float x0 = line[i0];
+    const float y0 = line[i0 + 1];
+    const float x1 = line[i1];
+    const float y1 = line[i1 + 1];
+    if(isnan(x0) || isnan(y0) || isnan(x1) || isnan(y1)) continue;
+    const float dx = x1 - x0;
+    const float dy = y1 - y0;
+    const float len = dx * dx + dy * dy;
+    if(len > 1e-12f) total_len += sqrtf(len);
+  }
+  return total_len;
+}
+
+static gboolean _brush_line_point_at_length(const float *line, const int first_pt, const int last_pt,
+                                            const float target_len, float *x, float *y, float *tx, float *ty)
+{
+  if(!line || !x || !y || !tx || !ty) return FALSE;
+  if(last_pt <= first_pt) return FALSE;
+
+  float acc = 0.0f;
+  int fallback_seg = -1;
+  float fallback_tx = 0.0f, fallback_ty = 0.0f;
+  float fallback_x = NAN, fallback_y = NAN;
+
+  for(int i = first_pt; i < last_pt; i++)
+  {
+    const int i0 = i * 2;
+    const int i1 = (i + 1) * 2;
+    const float x0 = line[i0];
+    const float y0 = line[i0 + 1];
+    const float x1 = line[i1];
+    const float y1 = line[i1 + 1];
+    if(isnan(x0) || isnan(y0) || isnan(x1) || isnan(y1)) continue;
+
+    const float dx = x1 - x0;
+    const float dy = y1 - y0;
+    const float len = sqrtf(dx * dx + dy * dy);
+    if(len <= 1e-6f) continue;
+
+    fallback_seg = i;
+    fallback_tx = dx;
+    fallback_ty = dy;
+    fallback_x = x1;
+    fallback_y = y1;
+
+    if(acc + len >= target_len)
+    {
+      const float t = (target_len - acc) / len;
+      *x = x0 + t * dx;
+      *y = y0 + t * dy;
+      *tx = dx;
+      *ty = dy;
+      return TRUE;
+    }
+    acc += len;
+  }
+
+  if(fallback_seg < 0 || isnan(fallback_x) || isnan(fallback_y)) return FALSE;
+  *x = fallback_x;
+  *y = fallback_y;
+  *tx = fallback_tx;
+  *ty = fallback_ty;
+  return TRUE;
+}
+
+static gboolean _brush_get_line_midpoint_and_tangent(const float *line, const int first_pt, const int last_pt,
+                                                     float *mx, float *my, float *tx, float *ty)
+{
+  if(!line || !mx || !my || !tx || !ty) return FALSE;
+  const float total_len = _brush_line_length(line, first_pt, last_pt);
+  if(total_len <= 1e-6f) return FALSE;
+
+  const float half_len = 0.5f * total_len;
+  float mid_tx = 0.0f, mid_ty = 0.0f;
+  if(!_brush_line_point_at_length(line, first_pt, last_pt, half_len, mx, my, &mid_tx, &mid_ty))
+    return FALSE;
+
+  // Smooth tangent using a centered secant around the midpoint to avoid sign flips at segment boundaries.
+  const float delta = MAX(1.0f, 0.02f * total_len);
+  const float l0 = MAX(0.0f, half_len - delta);
+  const float l1 = MIN(total_len, half_len + delta);
+  float x0 = 0.0f, y0 = 0.0f, x1 = 0.0f, y1 = 0.0f, t0x = 0.0f, t0y = 0.0f, t1x = 0.0f, t1y = 0.0f;
+  if(_brush_line_point_at_length(line, first_pt, last_pt, l0, &x0, &y0, &t0x, &t0y)
+     && _brush_line_point_at_length(line, first_pt, last_pt, l1, &x1, &y1, &t1x, &t1y))
+  {
+    const float sx = x1 - x0;
+    const float sy = y1 - y0;
+    if((sx * sx + sy * sy) > 1e-6f)
+    {
+      *tx = sx;
+      *ty = sy;
+      return TRUE;
+    }
+  }
+
+  *tx = mid_tx;
+  *ty = mid_ty;
+  return TRUE;
+}
+
+static gboolean _brush_get_source_center_and_clockwise(const dt_masks_form_gui_points_t *gpt, const int node_count,
+                                                       dt_masks_gui_center_point_t *center_pt, gboolean *clockwise)
+{
+  if(!gpt || !center_pt || !clockwise) return FALSE;
+
+  // Work on the exact centerline span that is actually drawn (non-border path):
+  // [node_count * 3, 0.5 * points_count)
+  const int line_offset_pt = node_count * 3;
+  const int points_line_end = gpt->points_count / 2; // exclusive
+  const int source_line_end = gpt->source_count / 2; // exclusive
+  const int line_end = MIN(points_line_end, source_line_end);
+  const int line_count = line_end - line_offset_pt;
+  if(line_count < 2) return FALSE;
+
+  const float *const points_line = gpt->points + 2 * line_offset_pt;
+  const float *const source_line = gpt->source + 2 * line_offset_pt;
+  const int first_pt = 0;
+  const int last_pt = line_count - 1;
+
+  float tx = 0.0f, ty = 0.0f;
+  float tx_src = 0.0f, ty_src = 0.0f;
+  if(!_brush_get_line_midpoint_and_tangent(points_line, first_pt, last_pt,
+                                           &center_pt->main.x, &center_pt->main.y, &tx, &ty))
+    return FALSE;
+  if(!_brush_get_line_midpoint_and_tangent(source_line, first_pt, last_pt,
+                                           &center_pt->source.x, &center_pt->source.y, &tx_src, &ty_src))
+    return FALSE;
+  (void)tx_src;
+  (void)ty_src;
+
+  const float vx = center_pt->source.x - center_pt->main.x;
+  const float vy = center_pt->source.y - center_pt->main.y;
+  float cross = tx * vy - ty * vx;
+  const float denom = hypotf(tx, ty) * hypotf(vx, vy);
+
+  // If nearly collinear, use a more global tangent to prevent spontaneous sign flips.
+  if(denom > 1e-6f && fabsf(cross) < 0.02f * denom)
+  {
+    const float gtx = points_line[(last_pt * 2)] - points_line[0];
+    const float gty = points_line[(last_pt * 2) + 1] - points_line[1];
+    if((gtx * gtx + gty * gty) > 1e-6f) cross = gtx * vy - gty * vx;
+  }
+
+  *clockwise = (cross < 0.0f);
+  return TRUE;
+}
+
 static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int node_count)
 {
   if(!gui) return;
@@ -2448,10 +2603,28 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     }
   }
 
-  // draw the source if needed
+  // Draw the source if needed
   if(gpt->source_count > node_count * 3 + 2)
   {
-    dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, &dt_masks_functions_brush.draw_shape);
+    dt_masks_gui_center_point_t center_pt;
+    gboolean clockwise = TRUE;
+    if(_brush_get_source_center_and_clockwise(gpt, node_count, &center_pt, &clockwise))
+      dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, clockwise, &center_pt, &dt_masks_functions_brush.draw_shape);
+    
+    //draw the current node projection
+    for(int k = 0; k < node_count; k++)
+    {
+      if(gui->group_selected == index && (k == gui->node_selected || k == gui->node_edited || (gui->creation && k == node_count - 1)))
+      {
+        const int node_index = k * 6 + 2;
+        const float proj_x = gpt->source[node_index];
+        const float proj_y = gpt->source[node_index + 1];
+        const gboolean selected = gui->node_selected == k;
+        const gboolean squared = dt_masks_node_is_cusp(gpt ,k);
+
+        dt_draw_handle(cr, -1, -1, zoom_scale, proj_x, proj_y, selected, squared);
+      }
+    }
   }
 }
 

@@ -525,6 +525,27 @@ static inline void dt_vector_sin(const dt_aligned_pixel_t arg,
     sine[c] = scaled[c] * (p[c] * (abs_scaled[c] - one[c]) + one[c]);
 }
 
+/** Fast inverse square root approximation, based on the famous Quake III algorithm,
+ * with a Newton-Raphson iteration for improved accuracy.
+ * approximation of 1/sqrtf() for x > 0.0f, with a maximum relative error of ~0.0005% at 1.0f
+ */
+static inline float f_inv_sqrtf(const float x)
+{
+  if(x <= 1e-16f) return 0.0f;
+
+  union
+  {
+    float f;
+    uint32_t i;
+  } conv = { x };
+
+  conv.i = 0x5f3759dfu - (conv.i >> 1);
+  float y = conv.f;
+  // One Newton-Raphson iteration is accurate enough for geometry offsets.
+  y = y * (1.5f - 0.5f * x * y * y);
+  return y;
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

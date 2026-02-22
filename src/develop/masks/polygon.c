@@ -1099,9 +1099,10 @@ static void _polygon_get_distance(float x, float y, float as, dt_masks_form_gui_
   *dist = FLT_MAX;
 
   const float as2 = as * as;
+  const float pt[2] = { x, y };
   
   // we first check if we are inside the source form
-  if(dt_masks_point_in_form_exact(x, y, gpt->source, node_count * 3, gpt->source_count))
+  if(dt_masks_point_in_form_exact(pt, 1, gpt->source, node_count * 3, gpt->source_count) >= 0)
   {
     *inside_source = 1;
     *inside = 1;
@@ -1169,14 +1170,14 @@ static void _polygon_get_distance(float x, float y, float as, dt_masks_form_gui_
   }
 
   // we check if it's not inside borders, meaning we are not inside at all
-  if(!dt_masks_point_in_form_exact(x, y, gpt->border, node_count * 3, gpt->border_count))
+  if(dt_masks_point_in_form_exact(pt, 1, gpt->border, node_count * 3, gpt->border_count) < 0)
     return;
   
   // we are at least inside the border
   *inside = 1;
 
   // and we check if it's not inside form, meaning we are inside border only
-  *inside_border = !(dt_masks_point_in_form_exact(x, y, gpt->points, node_count * 3, gpt->points_count));
+  *inside_border = (dt_masks_point_in_form_exact(pt, 1, gpt->points, node_count * 3, gpt->points_count) < 0);
 }
 
 static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float pzy, dt_masks_form_t *form, int parentid,
@@ -1189,6 +1190,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
 
   // we define a distance to the cursor for handle detection (in backbuf dimensions)
   const float dist_curs = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED; // transformed to backbuf dimensions
+  const float sq_dist = dist_curs * dist_curs;
 
   gui->form_selected = FALSE;
   gui->border_selected = FALSE;
@@ -1210,7 +1212,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
     // Current node's border handle
     const float bh_x = gpt->border[k * 6];
     const float bh_y = gpt->border[k * 6 + 1];
-    if(dt_masks_is_within_radius(pzx, pzy, bh_x, bh_y, dist_curs))
+    if(dt_masks_point_is_within_radius(pzx, pzy, bh_x, bh_y, sq_dist))
     {
       gui->handle_border_selected = k;
 
@@ -1224,7 +1226,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
       float ffx, ffy;
       _polygon_ctrl2_to_handle(gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], gpt->points[k * 6 + 4],
                               gpt->points[k * 6 + 5], &ffx, &ffy, gpt->clockwise);
-      if(dt_masks_is_within_radius(pzx, pzy, ffx, ffy, dist_curs))
+      if(dt_masks_point_is_within_radius(pzx, pzy, ffx, ffy, sq_dist))
       {
         gui->handle_selected = k;
 
@@ -1233,8 +1235,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
     }
     
     // are we close to the node ?
-    if(dt_masks_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3],
-                                              dist_curs))
+    if(dt_masks_point_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3],
+                                              sq_dist))
     {
       gui->node_selected = k;
 
@@ -1245,7 +1247,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   // iterate all nodes and look for one that is close enough
   for(int k = 0; k < nb; k++)
   {
-    if(dt_masks_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], dist_curs))
+    if(dt_masks_point_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], sq_dist))
     {
       gui->node_selected = k;
 
@@ -1284,27 +1286,64 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
 }
 
 // get the center of gravity of the form (like if it was a simple polygon)
-static void _polygon_gravity_center(dt_masks_form_t *form, float *gx, float *gy, float *surf)
+static void _polygon_gui_gravity_center(float *points, int nb_points, float *gx, float *gy, float *surf)
 {
+  if(!points || nb_points < 3) return;
   float bx = 0.0f, by = 0.0f, surface = 0.0f;
-  
-  for(const GList *form_points = form->points; form_points; form_points = g_list_next(form_points))
+
+  struct point_t
   {
-    const GList *next = g_list_next_wraparound(form_points, form->points);
-    const dt_masks_node_polygon_t *point1 = (dt_masks_node_polygon_t *)form_points->data;
-    const dt_masks_node_polygon_t *point2 = (dt_masks_node_polygon_t *)next->data;
+    float x;
+    float y;
+  };
+
+  for(int i = 0; i < nb_points; i++)
+  {
+    const int next = (i + 1) % nb_points;
+    struct point_t point1 = { points[i * 2], points[i * 2 + 1] };
+    struct point_t point2 = { points[next * 2], points[next * 2 + 1] };
     
-    const float cross_product = point1->node[0] * point2->node[1] - point2->node[0] * point1->node[1];
+    const float cross_product = point1.x * point2.y - point2.x * point1.y;
     surface += cross_product;
     
-    bx += (point1->node[0] + point2->node[0]) * cross_product;
-    by += (point1->node[1] + point2->node[1]) * cross_product;
+    bx += (point1.x + point2.x) * cross_product;
+    by += (point1.y + point2.y) * cross_product;
   }
   
-  const float divisor = 3.0f * surface;
-  *gx = bx / divisor;
-  *gy = by / divisor;
-  *surf = surface;
+  if(fabsf(surface) > 1e-8f)
+  {
+    const float inv_divisor = 1.0f / (3.0f * surface);
+    if(gx) *gx = bx * inv_divisor;
+    if(gy) *gy = by * inv_divisor;
+  }
+  if(surf) *surf = surface;
+}
+
+static gboolean _polygon_form_gravity_center(const dt_masks_form_t *form, float *gx, float *gy, float *surf)
+{
+  if(!form || !form->points || g_list_shorter_than(form->points, 3)) return FALSE;
+
+  float bx = 0.0f, by = 0.0f, surface = 0.0f;
+  for(const GList *l = form->points; l; l = g_list_next(l))
+  {
+    const GList *next = g_list_next_wraparound(l, form->points);
+    const dt_masks_node_polygon_t *p1 = (const dt_masks_node_polygon_t *)l->data;
+    const dt_masks_node_polygon_t *p2 = (const dt_masks_node_polygon_t *)next->data;
+    if(!p1 || !p2) return FALSE;
+
+    const float cross = p1->node[0] * p2->node[1] - p2->node[0] * p1->node[1];
+    surface += cross;
+    bx += (p1->node[0] + p2->node[0]) * cross;
+    by += (p1->node[1] + p2->node[1]) * cross;
+  }
+
+  if(surf) *surf = surface;
+  if(fabsf(surface) <= 1e-8f) return FALSE;
+
+  const float inv_divisor = 1.0f / (3.0f * surface);
+  if(gx) *gx = bx * inv_divisor;
+  if(gy) *gy = by * inv_divisor;
+  return TRUE;
 }
 
 static int _init_hardness(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow, const float masks_size, const float border_size)
@@ -1319,52 +1358,40 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
   if(!form || !form->points) return 0;
   float gx = 0.0f;
   float gy = 0.0f;
-  float surf = 0.0f; 
-  _polygon_gravity_center(form, &gx, &gy, &surf);
-
+  float surf = 0.0f;
+  if(!_polygon_form_gravity_center(form, &gx, &gy, &surf)) return 1;
   // Sanitize
   // do not exceed upper limit of 1.0 and lower limit of 0.004
   if(amount < 1.0f && surf < 0.00001f && surf > -0.00001f) return 1;
   if(amount > 1.0f && surf > 4.0f) return 1;
   
-  float delta = 0.0f;
-  if(increment)
-    delta = powf(amount, (float)flow);
-  else
-    delta = amount;
+  float delta = amount;
+  switch(increment)
+  {
+    case DT_MASKS_INCREMENT_SCALE:
+      delta = powf(amount, (float)flow);
+      break;
+    case DT_MASKS_INCREMENT_OFFSET:
+      // For polygon global scaling, interpret offset as multiplicative offset around 1.0.
+      delta = 1.0f + amount * (float)flow;
+      break;
+    case DT_MASKS_INCREMENT_ABSOLUTE:
+    default:
+      delta = amount;
+      break;
+  }
 
   for(GList *l = form->points; l; l = g_list_next(l))
   {
     dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)l->data;
     if(!node) continue;
 
-    float new_node_x = 0.0f, new_node_y = 0.0f;
-    float ctrl1_offset_x = 0.0f, ctrl1_offset_y = 0.0f, ctrl2_offset_x = 0.0f, ctrl2_offset_y = 0.0f;
-
-    if(increment)
-    {
-      // Calculate new node position
-      new_node_x = gx + (node->node[0] - gx) * delta;
-      new_node_y = gy + (node->node[1] - gy) * delta;
-
-      // Calculate control point offsets once
-      ctrl1_offset_x = (node->ctrl1[0] - node->node[0]) * delta;
-      ctrl1_offset_y = (node->ctrl1[1] - node->node[1]) * delta;
-      ctrl2_offset_x = (node->ctrl2[0] - node->node[0]) * delta;
-      ctrl2_offset_y = (node->ctrl2[1] - node->node[1]) * delta;
-    }
-    else
-    {
-      // Calculate new node position
-      new_node_x = gx + (node->node[0] - gx) * delta;
-      new_node_y = gy + (node->node[1] - gy) * delta;
-
-      // Calculate control point offsets once
-      ctrl1_offset_x = (node->ctrl1[0] - node->node[0]) * delta;
-      ctrl1_offset_y = (node->ctrl1[1] - node->node[1]) * delta;
-      ctrl2_offset_x = (node->ctrl2[0] - node->node[0]) * delta;
-      ctrl2_offset_y = (node->ctrl2[1] - node->node[1]) * delta;
-    }
+    const float new_node_x = gx + (node->node[0] - gx) * delta;
+    const float new_node_y = gy + (node->node[1] - gy) * delta;
+    const float ctrl1_offset_x = (node->ctrl1[0] - node->node[0]) * delta;
+    const float ctrl1_offset_y = (node->ctrl1[1] - node->node[1]) * delta;
+    const float ctrl2_offset_x = (node->ctrl2[0] - node->node[0]) * delta;
+    const float ctrl2_offset_y = (node->ctrl2[1] - node->node[1]) * delta;
 
 
     // Update all coordinates
@@ -2066,7 +2093,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   }
   
   // update clockwise info for the handles
-  else if(gui->node_edited >= 0 || gui->node_dragging >= 0 || gui->handle_selected >= 0)
+  else if(gui->type & DT_MASKS_NON_CLONE || gui->type & DT_MASKS_CLONE || gui->node_edited >= 0 || gui->node_dragging >= 0 || gui->handle_selected >= 0)
   {
     dt_masks_form_t *group_form = darktable.develop->form_visible ? darktable.develop->form_visible : NULL;
     if(!group_form) return;
@@ -2078,7 +2105,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   }
 
   // draw polygon
-  if(gpt->points_count > node_count * 3 + 6) // there must be something to draw
+  if(node_count > 0 && gpt->points_count > node_count * 3 + 6) // there must be something to draw
   {
     const int total_points = gpt->points_count * 2;
     int seg1 = 1;
@@ -2179,12 +2206,20 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   // draw the source if needed
   if(gpt->source_count > node_count * 3 + 2)
   {
-    dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, &dt_masks_functions_polygon.draw_shape);
+    dt_masks_gui_center_point_t center_pt;
+    _polygon_gui_gravity_center(gpt->points, gpt->points_count, &center_pt.main.x, &center_pt.main.y, NULL);
+    // project the source's center point from the center of gravity
+    float offset_x = gpt->source[0] - gpt->points[0];
+    float offset_y = gpt->source[1] - gpt->points[1];
+    center_pt.source.x = center_pt.main.x + offset_x;
+    center_pt.source.y = center_pt.main.y + offset_y;
+    
+    dt_masks_draw_source(cr, gui, index, node_count, zoom_scale, gpt->clockwise, &center_pt, &dt_masks_functions_polygon.draw_shape);
     
     //draw the current node projection
     for(int k = 0; k < node_count; k++)
     {
-      if(k == gui->node_selected || k == gui->node_edited || k == node_count - 1)
+      if(gui->group_selected == index && (k == gui->node_selected || k == gui->node_edited || (gui->creation && k == node_count - 1)))
       {
         const int node_index = k * 6 + 2;
         const float proj_x = gpt->source[node_index];
