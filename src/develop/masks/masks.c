@@ -179,7 +179,7 @@ void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *gui)
   // Note: we have an hard reset function below that frees all buffers and such
   gui->source_selected = FALSE;
   gui->handle_selected = -1;
-  gui->node_selected = -1;
+  gui->node_hovered = -1;
   gui->seg_selected = -1;
   gui->handle_border_selected = -1;
   gui->group_selected = -1;
@@ -187,7 +187,7 @@ void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *gui)
   gui->delta[0] = gui->delta[1] = 0.0f;
   gui->form_selected = gui->border_selected = gui->form_dragging = gui->form_rotating = FALSE;
   gui->pivot_selected = FALSE;
-  gui->handle_border_selected = gui->seg_selected = gui->node_selected = gui->handle_selected = -1;
+  gui->handle_border_selected = gui->seg_selected = gui->node_hovered = gui->handle_selected = -1;
   gui->handle_border_dragging = gui->seg_dragging = gui->handle_dragging = gui->node_dragging = -1;
 }
 
@@ -241,8 +241,8 @@ void dt_masks_remove_node(struct dt_iop_module_t *module, dt_masks_form_t *form,
   if(!node) return;
   form->points = g_list_remove(form->points, node);
   free(node);
+  gui->node_hovered = -1;
   gui->node_selected = -1;
-  gui->node_edited = -1;
   if(form->functions && form->functions->init_ctrl_points)
     form->functions->init_ctrl_points(form);
     
@@ -1193,9 +1193,9 @@ static void _set_cursor_shape(dt_masks_form_gui_t *gui)
     dt_control_set_cursor(GDK_HAND1);*/
 
   // crosshair
-  else if(!gui->creation && (((gui->form_selected || gui->seg_selected >= 0) && gui->node_edited == -1)
+  else if(!gui->creation && (((gui->form_selected || gui->seg_selected >= 0) && gui->node_selected == -1)
                     || gui->handle_selected >= 0 || gui->handle_border_selected >= 0
-                    || gui->node_selected >= 0))
+                    || gui->node_hovered >= 0))
     dt_control_set_cursor(GDK_FLEUR);
 }
 
@@ -1319,7 +1319,7 @@ void _masks_gui_delete_node_callback(GtkWidget *menu, struct dt_masks_form_gui_t
     if(!fpt) return;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel)
-      dt_masks_remove_node(module, sel, fpt->parentid, gui, gui->group_selected, gui->node_selected);
+      dt_masks_remove_node(module, sel, fpt->parentid, gui, gui->group_selected, gui->node_hovered);
     
     dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
   }
@@ -1529,10 +1529,10 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   }
 
   gchar *item_str = NULL;
-  if(gui->node_selected >= 0 || gui->seg_selected >= 0)
+  if(gui->node_hovered >= 0 || gui->seg_selected >= 0)
   {
-    int item_index = (gui->node_selected >= 0) ? gui->node_selected : gui->seg_selected;
-    item_str = g_strdup_printf(" - (%s #%d)", gui->node_selected >= 0 ? _("node") : _("segment"), item_index);
+    int item_index = (gui->node_hovered >= 0) ? gui->node_hovered : gui->seg_selected;
+    item_str = g_strdup_printf(" - (%s #%d)", gui->node_hovered >= 0 ? _("node") : _("segment"), item_index);
   }
   else
     item_str = g_strdup("");
@@ -1567,6 +1567,23 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
       }
   }
 
+
+  /*  Operation */
+  if(!gui->creation && !(form->type & DT_MASKS_IS_RETOUCHE))
+  { 
+    menu_item = masks_gtk_menu_item_new_with_markup(_("Operation"), menu, NULL, gui);
+    GtkWidget *sub_menu = gtk_menu_new();
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(menu_item), sub_menu);
+
+    menu_item = masks_gtk_menu_item_new_with_markup(_("Union"), sub_menu, _masks_gui_cancel_creation_callback, gui);
+    menu_item = masks_gtk_menu_item_new_with_markup(_("Intersection"), sub_menu, _masks_gui_cancel_creation_callback, gui);
+    menu_item = masks_gtk_menu_item_new_with_markup(_("Difference"), sub_menu, _masks_gui_cancel_creation_callback, gui);
+    menu_item = masks_gtk_menu_item_new_with_markup(_("Exclusion"), sub_menu, _masks_gui_cancel_creation_callback, gui);
+    
+    sep = gtk_separator_menu_item_new();
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
+  }
+
   // Common menu items
   if(gui->creation)
   {
@@ -1575,7 +1592,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   }
   else
   {
-    if(gui->node_selected >= 0)
+    if(gui->node_hovered >= 0)
     {
       menu_item = masks_gtk_menu_item_new_with_markup(_("Delete node"), menu, _masks_gui_delete_node_callback, gui);
       menu_item_set_fake_accel(menu_item, GDK_KEY_Delete, 0);
@@ -1935,7 +1952,7 @@ void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *gui, const 
     if(x == segment_x && y == segment_y)
     {
       const gboolean seg_is_selected = group_selected && (gui->seg_selected == current_seg);
-      const gboolean all_selected = group_selected && gui->node_edited == -1 && (gui->form_selected || gui->form_dragging);
+      const gboolean all_selected = group_selected && gui->node_selected == -1 && (gui->form_selected || gui->form_dragging);
 
       if(gui->creation && current_seg == node_count - 2)
         dt_draw_stroke_line(DT_MASKS_DASH_ROUND, FALSE, cr, all_selected, zoom_scale, CAIRO_LINE_CAP_ROUND);
@@ -2038,14 +2055,14 @@ void dt_masks_clear_form_gui(dt_develop_t *dev)
       = dev->form_gui->form_rotating = dev->form_gui->border_toggling = dev->form_gui->gradient_toggling = FALSE;
   dev->form_gui->source_selected = dev->form_gui->source_dragging = FALSE;
   dev->form_gui->pivot_selected = FALSE;
-  dev->form_gui->handle_border_selected = dev->form_gui->seg_selected = dev->form_gui->node_selected
+  dev->form_gui->handle_border_selected = dev->form_gui->seg_selected = dev->form_gui->node_hovered
       = dev->form_gui->handle_selected = -1;
   dev->form_gui->handle_border_dragging = dev->form_gui->seg_dragging = dev->form_gui->handle_dragging
       = dev->form_gui->node_dragging = -1;
   dev->form_gui->creation_closing_form = dev->form_gui->creation = FALSE;
   dev->form_gui->pressure_sensitivity = DT_MASKS_PRESSURE_OFF;
   dev->form_gui->creation_module = NULL;
-  dev->form_gui->node_edited = -1;
+  dev->form_gui->node_selected = -1;
 
   dev->form_gui->group_selected = -1;
   dev->form_gui->group_selected = -1;

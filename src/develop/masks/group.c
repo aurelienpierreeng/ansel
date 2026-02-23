@@ -74,7 +74,7 @@ static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form
   gui->source_selected = gui->source_dragging = FALSE;
   gui->pivot_selected = FALSE;
   gui->handle_selected = -1;
-  gui->node_edited = gui->node_selected = -1;
+  gui->node_selected = gui->node_hovered = -1;
   gui->seg_selected = -1;
   gui->handle_border_selected = -1;
   gui->group_selected = -1;
@@ -154,7 +154,7 @@ static gboolean _group_events_button_pressed(struct dt_iop_module_t *module, flo
       else if(which == 3)
       {
         // mouse is over a form or a node
-        if(gui && gui->group_selected >= 0 && (gui->form_selected || gui->node_selected >= 0 || gui->seg_selected >= 0))
+        if(gui && gui->group_selected >= 0 && (gui->form_selected || gui->node_hovered >= 0 || gui->seg_selected >= 0))
         {
           GtkWidget *menu = dt_masks_create_menu(gui, sel, pzx, pzy);
           gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);

@@ -414,7 +414,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->border_selected = FALSE;
   gui->source_selected = FALSE;
   gui->handle_selected = -1;
-  gui->node_selected = -1;
+  gui->node_hovered = -1;
   gui->pivot_selected = FALSE;
 
   pzx *= darktable.develop->preview_width / dev->natural_scale;
@@ -425,16 +425,16 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   const float cosr = cosf(r);
   float x, y;
 
-  if((gui->group_selected == index) && gui->node_edited >= 0)
+  if((gui->group_selected == index) && gui->node_selected >= 0)
   {
-    const int k = gui->node_edited;
+    const int k = gui->node_selected;
 
     _ellipse_point_transform(nodes[0], nodes[1], nodes[k * 2], nodes[k * 2 + 1], sinr, cosr, &x, &y);
 
     // are we also close to the node ?
     if(dt_masks_point_is_within_radius(pzx, pzy, x, y, sq_dist))
     {
-      gui->node_selected = k;
+      gui->node_hovered = k;
       return 1;
     }
   }
@@ -445,7 +445,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
     _ellipse_point_transform(nodes[0], nodes[1], nodes[i * 2], nodes[i * 2 + 1], sinr, cosr, &x, &y);
     if(dt_masks_point_is_within_radius(pzx, pzy, x, y, sq_dist))
     {
-      gui->node_selected = i;
+      gui->node_hovered = i;
       return 1;
     }
   }
@@ -728,10 +728,10 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
         gui->delta[1] = gpt->source[1] - gui->pos[1];
         return 1;
       }
-      else if(gui->node_selected >= 1 && gui->edit_mode == DT_MASKS_EDIT_FULL)
+      else if(gui->node_hovered >= 1 && gui->edit_mode == DT_MASKS_EDIT_FULL)
       {
         // we start the point dragging
-        gui->node_dragging = gui->node_selected;
+        gui->node_dragging = gui->node_hovered;
         gui->delta[0] = gpt->points[0] - gui->pos[0];
         gui->delta[1] = gpt->points[1] - gui->pos[1];
         return 1;
@@ -991,8 +991,8 @@ static void _ellipse_draw_node(const dt_masks_form_gui_t *gui, cairo_t *cr, cons
   for(int i = 1; i < 5; i++)
   {
     _ellipse_point_transform(nodes[0], nodes[1], nodes[i * 2], nodes[i * 2 + 1], sinr, cosr, &x, &y);
-    const gboolean selected = (i == gui->node_selected || i == gui->node_dragging);
-    const gboolean action = (i == gui->node_edited);
+    const gboolean selected = (i == gui->node_hovered || i == gui->node_dragging);
+    const gboolean action = (i == gui->node_selected);
     dt_draw_node(cr, FALSE, action, selected, zoom_scale, x, y);
   }
 }

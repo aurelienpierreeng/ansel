@@ -287,7 +287,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->border_selected = FALSE;
   gui->source_selected = FALSE;
   gui->handle_selected = -1;
-  gui->node_selected = -1;
+  gui->node_hovered = -1;
   gui->seg_selected = -1;
   gui->handle_border_selected = -1;
   gui->pivot_selected = FALSE;
@@ -382,7 +382,7 @@ static int _change_curvature(dt_masks_form_t *form, dt_masks_form_gui_t *gui, st
     return 1;
 
   // bending
-  if(gui->node_selected == -1 || gui->node_selected == 0)
+  if(gui->node_hovered == -1 || gui->node_hovered == 0)
   {
     switch(increment)
     {

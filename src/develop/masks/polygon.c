@@ -1002,7 +1002,7 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, float pzx, floa
 
   dt_masks_gui_form_create(form, gui, index, module);
 
-  gui->node_edited = gui->node_selected = gui->seg_selected + 1;
+  gui->node_selected = gui->node_hovered = gui->seg_selected + 1;
   gui->seg_selected = -1;
 }
 
@@ -1013,9 +1013,9 @@ static void _change_node_type(struct dt_iop_module_t *module, dt_masks_form_t *f
   if(!form || !form->points) return;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, gui->group_selected);
   if(!gpt) return;
-  dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->node_edited);
+  dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->node_selected);
   if(!node) return;
-  const gboolean is_corner = dt_masks_node_is_cusp(gpt ,gui->node_selected);
+  const gboolean is_corner = dt_masks_node_is_cusp(gpt ,gui->node_hovered);
 
   if(is_corner)
   {
@@ -1205,7 +1205,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->border_selected = FALSE;
   gui->source_selected = FALSE;
   gui->handle_selected = -1;
-  gui->node_selected = -1;
+  gui->node_hovered = -1;
   gui->seg_selected = -1;
   gui->handle_border_selected = -1;
   const guint nb = g_list_length(form->points);
@@ -1214,9 +1214,9 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   pzy *= darktable.develop->preview_height / dev->natural_scale;
 
 
-  if((gui->group_selected == index) && gui->node_edited >= 0)
+  if((gui->group_selected == index) && gui->node_selected >= 0)
   {
-    const int k = gui->node_edited;
+    const int k = gui->node_selected;
 
     // Current node's border handle
     const float bh_x = gpt->border[k * 6];
@@ -1247,7 +1247,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
     if(dt_masks_point_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3],
                                               sq_dist))
     {
-      gui->node_selected = k;
+      gui->node_hovered = k;
 
       return 1;
     }
@@ -1258,7 +1258,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   {
     if(dt_masks_point_is_within_radius(pzx, pzy, gpt->points[k * 6 + 2], gpt->points[k * 6 + 3], sq_dist))
     {
-      gui->node_selected = k;
+      gui->node_hovered = k;
 
       return 1;
     }
@@ -1268,7 +1268,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   int inside, inside_border, near, inside_source;
   float dist;
   _polygon_get_distance(pzx, pzy, dist_curs, gui, index, nb, &inside, &inside_border, &near, &inside_source, &dist);
-  if(near < (g_list_length(form->points)) && gui->node_edited == -1)
+  if(near < (g_list_length(form->points)) && gui->node_selected == -1)
     gui->seg_selected = near;
 
   if(near < 0)
@@ -1430,7 +1430,7 @@ static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_g
   const float flowed_amount = powf(amount, (float)flow);
   for(GList *l = form->points; l; l = g_list_next(l))
   {
-    if(gui->node_edited == -1 || gui->node_edited == node_index)
+    if(gui->node_selected == -1 || gui->node_selected == node_index)
     {
       dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)l->data;
       if(!node) continue;
@@ -1471,11 +1471,11 @@ static int _polygon_events_mouse_scrolled(struct dt_iop_module_t *module, float 
     return 0;
   }
 
-  else if(gui->edit_mode == DT_MASKS_EDIT_FULL && (gui->form_selected || gui->node_selected >= 0 || gui->handle_selected >= 0 || gui->seg_selected >= 0))
+  else if(gui->edit_mode == DT_MASKS_EDIT_FULL && (gui->form_selected || gui->node_hovered >= 0 || gui->handle_selected >= 0 || gui->seg_selected >= 0))
   {
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
       return dt_masks_form_change_opacity(form, parentid, up, flow);
-    else if(dt_modifier_is(state, GDK_SHIFT_MASK) || gui->node_edited >= 0)
+    else if(dt_modifier_is(state, GDK_SHIFT_MASK) || gui->node_selected >= 0)
       return _change_hardness(form, parentid, gui, module, index, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
     else
       return _change_size(form, parentid, gui, module, index, up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
@@ -1525,7 +1525,7 @@ static gboolean _reset_ctrl_points(struct dt_iop_module_t *module, dt_masks_form
   if(!form || !form->points) return FALSE;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return FALSE;
-  int node_index = MAX(gui->node_selected, gui->handle_selected);
+  int node_index = MAX(gui->node_hovered, gui->handle_selected);
   dt_masks_node_polygon_t *node
       = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, node_index);
   if(!node) return FALSE;
@@ -1631,7 +1631,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
     {
       // we start the source dragging
       gui->source_dragging = TRUE;
-      gui->node_edited = -1;
+      gui->node_selected = -1;
       gui->delta[0] = gpt->source[2] - gui->pos[0];
       gui->delta[1] = gpt->source[3] - gui->pos[1];
       return 1;
@@ -1640,29 +1640,29 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
     {
       // we start the form dragging
       gui->form_dragging = TRUE;
-      gui->node_edited = -1;
+      gui->node_selected = -1;
       gui->delta[0] = gpt->points[2] - gui->pos[0];
       gui->delta[1] = gpt->points[3] - gui->pos[1];
       return 1;
     }
-    else if(gui->node_selected >= 0)
+    else if(gui->node_hovered >= 0)
     {
       // if ctrl is pressed, we change the type of point
-      if(gui->node_edited == gui->node_selected && dt_modifier_is(state, GDK_CONTROL_MASK))
+      if(gui->node_selected == gui->node_hovered && dt_modifier_is(state, GDK_CONTROL_MASK))
       {
         _change_node_type(module, form, gui, index);
         return 1;
       }
       /*// we register the current position to avoid accidental move
-      if(gui->node_edited < 0 && gui->scrollx == 0.0f && gui->scrolly == 0.0f)
+      if(gui->node_selected < 0 && gui->scrollx == 0.0f && gui->scrolly == 0.0f)
       {
         gui->scrollx = pzx;
         gui->scrolly = pzy;
       }*/
-      gui->node_edited = gui->node_dragging = gui->node_selected;
+      gui->node_selected = gui->node_dragging = gui->node_hovered;
 
-      gui->delta[0] = gpt->points[gui->node_selected * 6 + 2] - gui->pos[0];
-      gui->delta[1] = gpt->points[gui->node_selected * 6 + 3] - gui->pos[1];
+      gui->delta[0] = gpt->points[gui->node_hovered * 6 + 2] - gui->pos[0];
+      gui->delta[1] = gpt->points[gui->node_hovered * 6 + 3] - gui->pos[1];
 
       return 1;
     }
@@ -1698,7 +1698,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
     }
     else if(gui->seg_selected >= 0)
     {
-      gui->node_selected = -1;
+      gui->node_hovered = -1;
 
       if(dt_modifier_is(state, GDK_CONTROL_MASK))
       {
@@ -1713,7 +1713,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, float 
       }
       return 1;
     }
-    gui->node_edited = -1;
+    gui->node_selected = -1;
   }
 
   return 0;
@@ -2102,7 +2102,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   }
   
   // update clockwise info for the handles
-  else if((gui->type & DT_MASKS_IS_RETOUCHE) != 0 || gui->node_edited >= 0 || gui->node_dragging >= 0 || gui->handle_selected >= 0)
+  else if((gui->type & DT_MASKS_IS_RETOUCHE) != 0 || gui->node_selected >= 0 || gui->node_dragging >= 0 || gui->handle_selected >= 0)
   {
     dt_masks_form_t *group_form = darktable.develop->form_visible ? darktable.develop->form_visible : NULL;
     if(!group_form) return;
@@ -2129,15 +2129,15 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     }
 
     // draw the current node's handle if it's a curve node
-    if(gui->node_edited >= 0 && !dt_masks_node_is_cusp(gpt ,gui->node_edited))
+    if(gui->node_selected >= 0 && !dt_masks_node_is_cusp(gpt ,gui->node_selected))
     {
-      const int n = gui->node_edited;
+      const int n = gui->node_selected;
       float handle_x, handle_y;
       _polygon_ctrl2_to_handle(gpt->points[n * 6 + 2], gpt->points[n * 6 + 3], gpt->points[n * 6 + 4],
                                 gpt->points[n * 6 + 5], &handle_x, &handle_y, gpt->clockwise);
       const float pt_x = gpt->points[n * 6 + 2];
       const float pt_y = gpt->points[n * 6 + 3];
-      const gboolean selected = (gui->node_selected == n
+      const gboolean selected = (gui->node_hovered == n
                               || gui->handle_selected == n);
       dt_draw_handle(cr, pt_x, pt_y, zoom_scale, handle_x, handle_y, selected, FALSE);
     }
@@ -2152,8 +2152,8 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
       if(gui->creation && k == node_count - 1) break;
 
       const gboolean squared = dt_masks_node_is_cusp(gpt ,k);
-      const gboolean selected = (k == gui->node_selected || k == gui->node_dragging);
-      const gboolean action = (k == gui->node_edited);
+      const gboolean selected = (k == gui->node_hovered || k == gui->node_dragging);
+      const gboolean action = (k == gui->node_selected);
       const float x = gpt->points[k * 6 + 2];
       const float y = gpt->points[k * 6 + 3];
      
@@ -2165,10 +2165,10 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     }
 
     // Draw the current node's border handle, if needed
-    if(gui->node_edited >= 0)
+    if(gui->node_selected >= 0)
     {
-      const int edited = gui->node_edited;
-      const gboolean selected = (gui->node_selected == edited
+      const int edited = gui->node_selected;
+      const gboolean selected = (gui->node_hovered == edited
                               || gui->handle_border_selected == edited);
       const int curr_node = edited * 6;  
       const float x = gpt->border[curr_node];
@@ -2193,12 +2193,12 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     //draw the current node projection
     for(int k = 0; k < node_count; k++)
     {
-      if(gui->group_selected == index && (k == gui->node_selected || k == gui->node_edited || (gui->creation && k == node_count - 1)))
+      if(gui->group_selected == index && (k == gui->node_hovered || k == gui->node_selected || (gui->creation && k == node_count - 1)))
       {
         const int node_index = k * 6 + 2;
         const float proj_x = gpt->source[node_index];
         const float proj_y = gpt->source[node_index + 1];
-        const gboolean selected = gui->node_selected == k;
+        const gboolean selected = gui->node_hovered == k;
         const gboolean squared = dt_masks_node_is_cusp(gpt ,k);
 
         dt_draw_handle(cr, -1, -1, zoom_scale, proj_x, proj_y, selected, squared);
@@ -3116,10 +3116,10 @@ static void _polygon_set_hint_message(const dt_masks_form_gui_t *const gui, cons
                         "<b>Finish polygon</b>: Enter or click on first node"), msgbuf_len);
   else if(gui->handle_selected >= 0)
     g_strlcat(msgbuf, _("<b>Node curvature</b>: drag\n<b>Reset curvature</b>: right-click"), msgbuf_len);
-  else if(gui->node_edited >= 0)
+  else if(gui->node_selected >= 0)
     g_strlcat(msgbuf, _("<b>NODE:</b> <b>Move</b>: drag, <b>Delete</b>: right-click or Del\n"
                         "<b>Hardness</b>: scroll, <b>Switch smooth/sharp</b>: ctrl+click"), msgbuf_len);
-  else if(gui->node_selected >= 0)
+  else if(gui->node_hovered >= 0)
     g_strlcat(msgbuf, _("<b>Move node</b>: drag\n<b>Delete node</b>: right-click\n"
                         "<b>Hardness</b>: scroll, <b>Switch smooth/sharp</b>: ctrl+click"), msgbuf_len);
   else if(gui->seg_selected >= 0)
@@ -3165,7 +3165,7 @@ static void _polygon_switch_node_callback(GtkWidget *widget, struct dt_masks_for
   dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, formid);
   if(!sel) return;
 
-  gui->node_edited = gui->node_selected;
+  gui->node_selected = gui->node_hovered;
   _change_node_type(module, sel, gui, gui->group_selected);
 }
 
@@ -3178,7 +3178,7 @@ static void _polygon_reset_round_node_callback(GtkWidget *widget, struct dt_mask
   dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, formid);
   if(!sel) return;
 
-  gui->node_edited = gui->node_selected;
+  gui->node_selected = gui->node_hovered;
   _reset_ctrl_points(module, sel, gui, gui->group_selected);
 }
 
@@ -3221,13 +3221,13 @@ static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_
     ret = TRUE;
   }
 
-  else if(gui->node_selected >= 0)
+  else if(gui->node_hovered >= 0)
   {
     dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, gui->group_selected);
     if(!gpt) goto end;
-    dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->node_selected);
+    dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->node_hovered);
     if(!node) goto end;
-    const gboolean is_corner = dt_masks_node_is_cusp(gpt ,gui->node_selected);
+    const gboolean is_corner = dt_masks_node_is_cusp(gpt ,gui->node_hovered);
 
     {
       gchar *to_change_type = g_strdup_printf(_("Switch to %s node"), (is_corner) ? _("round") : _("cusp"));

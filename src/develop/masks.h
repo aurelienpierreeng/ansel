@@ -336,8 +336,8 @@ typedef struct dt_masks_form_gui_t
   gboolean source_selected;
   gboolean pivot_selected;
   dt_masks_edit_mode_t edit_mode;
+  int node_hovered;
   int node_selected;
-  int node_edited;
   int handle_selected;
   int seg_selected;
   int handle_border_selected;
