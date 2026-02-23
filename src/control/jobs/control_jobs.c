@@ -1603,6 +1603,12 @@ void dt_control_monochrome_images(const int32_t mode)
 
 gboolean dt_control_remove_images()
 {
+  if(darktable.view_manager->current_view != DT_VIEW_LIGHTTABLE)
+  {
+    dt_control_log(_("removing images from library is only possible in Lighttable view"));
+    return FALSE;
+  }
+  
   // get all selected images now, to avoid the set changing during ui interaction
   dt_job_t *job = dt_control_generic_images_job_create(&dt_control_remove_images_job_run, N_("remove images"), 0,
                                                        NULL, PROGRESS_SIMPLE, FALSE);
@@ -1643,6 +1649,12 @@ gboolean dt_control_remove_images()
 
 void dt_control_delete_images()
 {
+  if(darktable.view_manager->current_view != DT_VIEW_LIGHTTABLE)
+  {
+    dt_control_log(_("Deleting images from library is only possible in Lighttable view"));
+    return FALSE;
+  }
+
   // first get all selected images, to avoid the set changing during ui interaction
   dt_job_t *job = dt_control_generic_images_job_create(&dt_control_delete_images_job_run, N_("delete images"), 0,
                                                        NULL, PROGRESS_SIMPLE, FALSE);
