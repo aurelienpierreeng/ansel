@@ -3207,6 +3207,8 @@ static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_
   GtkWidget *menu_item = NULL;
   gchar *accel = g_strdup_printf(_("%s+Click"), gtk_accelerator_get_label(0, GDK_CONTROL_MASK));
 
+  gboolean ret = FALSE;
+
   if(gui->creation)
   {
     menu_item = masks_gtk_menu_item_new_with_markup(_("Close path"), menu, _polygon_creation_closing_form_callback, gui);
@@ -3216,14 +3218,15 @@ static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_
     menu_item = masks_gtk_menu_item_new_with_markup(_("Remove last point"), menu, _masks_gui_delete_node_callback, gui);
     menu_item_set_fake_accel(menu_item, GDK_KEY_BackSpace, 0);
 
+    ret = TRUE;
   }
 
   else if(gui->node_selected >= 0)
   {
     dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, gui->group_selected);
-    if(!gpt) return 0;
+    if(!gpt) goto end;
     dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)g_list_nth_data(form->points, gui->node_selected);
-    if(!node) return 0;
+    if(!node) goto end;
     const gboolean is_corner = dt_masks_node_is_cusp(gpt ,gui->node_selected);
 
     {
@@ -3239,6 +3242,8 @@ static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_
       menu_item = masks_gtk_menu_item_new_with_markup(_("Reset round node"), menu, _polygon_reset_round_node_callback, gui);
       gtk_widget_set_sensitive(menu_item, !is_corner);
     }
+
+    ret = TRUE;
   }
 
   if(gui->seg_selected >= 0)
@@ -3247,11 +3252,12 @@ static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_
     gui->pos[1] = pzy;
     menu_item = masks_gtk_menu_item_new_with_markup_and_shortcut(_("Add a node here"), accel,
                                                                   menu, _polygon_add_node_callback, gui);
+    ret = TRUE;
   }
 
+  end:
   g_free(accel);
-
-  return 1;
+  return ret;
 }
 
 // The function table for polygons.  This must be public, i.e. no "static" keyword.

@@ -3059,12 +3059,14 @@ static int _brush_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t 
   GtkWidget *menu_item = NULL;
   gchar *accel = g_strdup_printf(_("%s+Click"), gtk_accelerator_get_label(0, GDK_CONTROL_MASK));
 
+  gboolean ret = FALSE;
+
   if(gui->node_selected >= 0)
   {
     dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, gui->group_selected);
-    if(!gpt) return 0;
+    if(!gpt) goto end;
     dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)g_list_nth_data(form->points, gui->node_selected);
-    if(!node) return 0;
+    if(!node) goto end;
     const gboolean is_corner = dt_masks_node_is_cusp(gpt ,gui->node_selected);
 
     {
@@ -3079,6 +3081,7 @@ static int _brush_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t 
       menu_item = masks_gtk_menu_item_new_with_markup(_("Reset round node"), menu, _brush_reset_round_node_callback, gui);
       gtk_widget_set_sensitive(menu_item, !is_corner && node->state != DT_MASKS_POINT_STATE_NORMAL);
     }
+    ret = TRUE;
   }
 
   if(gui->seg_selected >= 0)
@@ -3087,11 +3090,12 @@ static int _brush_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t 
     gui->pos[1] = pzy;
     menu_item = masks_gtk_menu_item_new_with_markup_and_shortcut(_("Add a node here"), accel,
                                                                   menu, _brush_add_node_callback, gui);
+    ret = TRUE;
   }
 
+  end:
   g_free(accel);
-
-  return 1;
+  return ret;
 }
 
 // The function table for brushes.  This must be public, i.e. no "static" keyword.
