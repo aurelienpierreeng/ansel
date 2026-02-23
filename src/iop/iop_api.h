@@ -258,6 +258,8 @@ OPTIONAL(gboolean, force_enable, struct dt_iop_module_t *self, const gboolean cu
  */
 OPTIONAL(void, post_history_commit, struct dt_iop_module_t *self);
 
+OPTIONAL(int, populate_masks_context_menu, struct dt_iop_module_t *self, GtkWidget *menu, const int formid,const float pzx, const float pzy);
+
 #ifdef FULL_API_H
 
 #pragma GCC visibility pop
