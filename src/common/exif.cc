@@ -3272,7 +3272,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
 
       if(!dt_history_db_write_history_item(img->id, db_num, entry->operation,
                                            entry->params, entry->params_len,
-                                           entry->modversion, entry->enabled,
+                                           entry->modversion, entry->enabled != 0,
                                            entry->blendop_params, entry->blendop_params_len,
                                            entry->blendop_version, entry->multi_priority,
                                            entry->multi_name ? entry->multi_name : ""))

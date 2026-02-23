@@ -1015,6 +1015,15 @@ static inline void _dt_dev_modules_reload_defaults(dt_develop_t *dev)
     else
       module->iop_order = INT_MAX;
 
+    // Last chance & desperate attempt at enabling/disabling critical modules
+    // when history is garbled - This might prevent segfaults on invalid data
+    if(module->force_enable)
+      module->enabled = (module->force_enable(module, module->enabled) != 0);
+
+    // make sure that always-on modules are always on. duh.
+    if(module->default_enabled == 1 && module->hide_enable_button == 1)
+      module->enabled = TRUE;
+
     dt_iop_compute_module_hash(module, dev->forms);
   }
 }
@@ -1022,7 +1031,7 @@ static inline void _dt_dev_modules_reload_defaults(dt_develop_t *dev)
 // Dump the content of an history entry into its associated module params, blendops, etc.
 static inline void _history_to_module(const dt_dev_history_item_t *const hist, dt_iop_module_t *module)
 {
-  module->enabled = hist->enabled;
+  module->enabled = (hist->enabled != 0);
 
   // Update IOP order stuff, that applies to all modules regardless of their internals
   module->iop_order = hist->iop_order;
@@ -1185,7 +1194,7 @@ int dt_dev_write_history_item(const int32_t imgid, dt_dev_history_item_t *h, int
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_item] writing history for module %s (%s) at pipe position %i for image %i...\n", h->op_name, h->multi_name, h->iop_order, imgid);
 
   dt_history_db_write_history_item(imgid, num, h->module->op, h->params, h->module->params_size, h->module->version(),
-                                   h->enabled, h->blend_params, sizeof(dt_develop_blend_params_t),
+                                   h->enabled != 0, h->blend_params, sizeof(dt_develop_blend_params_t),
                                    dt_develop_blend_version(), h->multi_priority, h->multi_name);
 
   // write masks (if any)
@@ -1433,7 +1442,7 @@ static void _find_so_for_history_entry(dt_develop_t *dev, dt_dev_history_item_t 
   }
   // else we found an already-existing instance and it's in hist->module already
 
-  if(hist->module) hist->module->enabled = hist->enabled;
+  if(hist->module) hist->module->enabled = (hist->enabled != 0);
 }
 
 
@@ -1527,7 +1536,7 @@ static int _sync_params(dt_dev_history_item_t *hist, const void *module_params, 
 // WARNING: this does not set hist->forms
 static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, const int id, const int num,
                                       const int modversion, const char *operation, const void *module_params,
-                                      const int param_length, const int enabled, const void *blendop_params,
+                                      const int param_length, const gboolean enabled, const void *blendop_params,
                                       const int bl_length, const int blendop_version, const int multi_priority,
                                       const char *multi_name, const char *preset_name, int *legacy_params,
                                       const gboolean presets)
@@ -1551,7 +1560,7 @@ static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, co
   hist->num = num;
   hist->iop_order = iop_order;
   hist->multi_priority = multi_priority;
-  hist->enabled = enabled;
+  hist->enabled = (enabled != 0); // cast to gboolean
   g_strlcpy(hist->op_name, operation, sizeof(hist->op_name));
   g_strlcpy(hist->multi_name, multi_name ? multi_name : "", sizeof(hist->multi_name));
 
@@ -1598,10 +1607,10 @@ static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, co
   // Last chance & desperate attempt at enabling/disabling critical modules
   // when history is garbled - This might prevent segfaults on invalid data
   if(hist->module->force_enable)
-    hist->enabled = hist->module->force_enable(hist->module, hist->enabled);
+    hist->enabled = (hist->module->force_enable(hist->module, hist->enabled) != 0);
 
   // make sure that always-on modules are always on. duh.
-  if(hist->module->default_enabled == 1 && hist->module->hide_enable_button == 1)
+  if(hist->module->default_enabled == TRUE && hist->module->hide_enable_button == TRUE)
     hist->enabled = TRUE;
 
   // Copy blending params if valid, else try to convert legacy params

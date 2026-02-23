@@ -699,7 +699,7 @@ gboolean dt_history_db_delete_dev_history(const int32_t imgid)
 }
 
 gboolean dt_history_db_write_history_item(const int32_t imgid, const int num, const char *operation, const void *op_params,
-                                         const int op_params_size, const int module_version, const int enabled,
+                                         const int op_params_size, const int module_version, const gboolean enabled,
                                          const void *blendop_params, const int blendop_params_size,
                                          const int blendop_version, const int multi_priority, const char *multi_name)
 {
@@ -793,7 +793,7 @@ void dt_history_db_foreach_history_row(const int32_t imgid, dt_history_db_row_cb
     const int modversion = sqlite3_column_int(stmt, 2);
     const char *operation = (const char *)sqlite3_column_text(stmt, 3);
     const void *module_params = sqlite3_column_blob(stmt, 4);
-    const int enabled = sqlite3_column_int(stmt, 5);
+    const gboolean enabled = sqlite3_column_int(stmt, 5) != 0; // ensure casting to gboolean
     const void *blendop_params = sqlite3_column_blob(stmt, 6);
     const int blendop_version = sqlite3_column_int(stmt, 7);
     const int multi_priority = sqlite3_column_int(stmt, 8);
