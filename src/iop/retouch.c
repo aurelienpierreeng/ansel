@@ -489,52 +489,54 @@ static void rt_shape_selection_changed(dt_iop_module_t *self)
 
   ++darktable.gui->reset;
 
-  int selection_changed = 0;
+  gboolean selection_changed = FALSE;
 
   const int index = rt_get_selected_shape_index(p);
   if(index >= 0)
   {
-    dt_bauhaus_slider_set(g->sl_mask_opacity, rt_get_shape_opacity(self, p->rt_forms[index].formid));
+    const dt_iop_retouch_form_data_t *const selected_form = &p->rt_forms[index];
+    dt_bauhaus_slider_set(g->sl_mask_opacity, rt_get_shape_opacity(self, selected_form->formid));
 
-    if(p->rt_forms[index].algorithm == DT_IOP_RETOUCH_BLUR)
+    if(selected_form->algorithm == DT_IOP_RETOUCH_BLUR)
     {
-      p->blur_type = p->rt_forms[index].blur_type;
-      p->blur_radius = p->rt_forms[index].blur_radius;
+      p->blur_type = selected_form->blur_type;
+      p->blur_radius = selected_form->blur_radius;
 
       dt_bauhaus_combobox_set(g->cmb_blur_type, p->blur_type);
       dt_bauhaus_slider_set(g->sl_blur_radius, p->blur_radius);
 
-      selection_changed = 1;
+      selection_changed = TRUE;
     }
-    else if(p->rt_forms[index].algorithm == DT_IOP_RETOUCH_FILL)
+    else if(selected_form->algorithm == DT_IOP_RETOUCH_FILL)
     {
-      p->fill_mode = p->rt_forms[index].fill_mode;
-      p->fill_brightness = p->rt_forms[index].fill_brightness;
-      p->fill_color[0] = p->rt_forms[index].fill_color[0];
-      p->fill_color[1] = p->rt_forms[index].fill_color[1];
-      p->fill_color[2] = p->rt_forms[index].fill_color[2];
+      p->fill_mode = selected_form->fill_mode;
+      p->fill_brightness = selected_form->fill_brightness;
+      p->fill_color[0] = selected_form->fill_color[0];
+      p->fill_color[1] = selected_form->fill_color[1];
+      p->fill_color[2] = selected_form->fill_color[2];
 
       dt_bauhaus_slider_set(g->sl_fill_brightness, p->fill_brightness);
       dt_bauhaus_combobox_set(g->cmb_fill_mode, p->fill_mode);
       rt_display_selected_fill_color(g, p);
 
-      selection_changed = 1;
+      selection_changed = TRUE;
     }
 
-    if(p->algorithm != p->rt_forms[index].algorithm)
+    if(p->algorithm != selected_form->algorithm)
     {
-      p->algorithm = p->rt_forms[index].algorithm;
+      p->algorithm = selected_form->algorithm;
 
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_clone), (p->algorithm == DT_IOP_RETOUCH_CLONE));
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_heal), (p->algorithm == DT_IOP_RETOUCH_HEAL));
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_blur), (p->algorithm == DT_IOP_RETOUCH_BLUR));
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_fill), (p->algorithm == DT_IOP_RETOUCH_FILL));
 
-      selection_changed = 1;
+      selection_changed = TRUE;
     }
-
-    if(selection_changed) rt_show_hide_controls(self);
   }
+
+  if(selection_changed) rt_show_hide_controls(self);
+
 
   rt_display_selected_shapes_lbl(g);
 
@@ -1758,6 +1760,15 @@ static gboolean rt_add_shape_callback(GtkWidget *widget, GdkEventButton *e, dt_i
   return TRUE;
 }
 
+static gboolean rt_algo_pair_compatible(const dt_iop_retouch_algo_type_t from,
+                                        const dt_iop_retouch_algo_type_t to)
+{
+  return ((from == DT_IOP_RETOUCH_CLONE && to == DT_IOP_RETOUCH_HEAL)
+          || (from == DT_IOP_RETOUCH_HEAL && to == DT_IOP_RETOUCH_CLONE)
+          || (from == DT_IOP_RETOUCH_BLUR && to == DT_IOP_RETOUCH_FILL)
+          || (from == DT_IOP_RETOUCH_FILL && to == DT_IOP_RETOUCH_BLUR));
+}
+
 static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkEventButton *e,
                                              dt_iop_module_t *self)
 {
@@ -1785,17 +1796,8 @@ static gboolean rt_select_algorithm_callback(GtkToggleButton *togglebutton, GdkE
   const int index = rt_get_selected_shape_index(p);
   if(index >= 0 && dt_modifier_is(e->state, GDK_CONTROL_MASK))
   {
-    if(new_algo != p->rt_forms[index].algorithm)
-    {
-      // we restrict changes to clone<->heal and blur<->fill
-      if((new_algo == DT_IOP_RETOUCH_CLONE && p->rt_forms[index].algorithm != DT_IOP_RETOUCH_HEAL)
-         || (new_algo == DT_IOP_RETOUCH_HEAL && p->rt_forms[index].algorithm != DT_IOP_RETOUCH_CLONE)
-         || (new_algo == DT_IOP_RETOUCH_BLUR && p->rt_forms[index].algorithm != DT_IOP_RETOUCH_FILL)
-         || (new_algo == DT_IOP_RETOUCH_FILL && p->rt_forms[index].algorithm != DT_IOP_RETOUCH_BLUR))
-      {
-        accept = FALSE;
-      }
-    }
+    const dt_iop_retouch_algo_type_t current_algo = p->rt_forms[index].algorithm;
+    accept = (new_algo != current_algo && !rt_algo_pair_compatible(current_algo, new_algo));
   }
 
   if(accept) p->algorithm = new_algo;
@@ -4472,6 +4474,104 @@ cleanup:
 }
 #endif
 
+/** masks menu */
+
+static void rt_menu_select_algorithm_callback(GtkWidget *widget, struct dt_iop_module_t *self)
+{
+  dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
+
+  const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "formid"));
+  const int algo = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "algo"));
+  const int index = rt_get_index_from_formid(p, formid);
+  if(index < 0) return;
+  if(algo < DT_IOP_RETOUCH_CLONE || algo > DT_IOP_RETOUCH_FILL) return;
+  if(p->rt_forms[index].algorithm == algo) return;
+  dt_masks_form_t *form = dt_masks_get_from_id(self->dev, formid);
+  if(!form) return;
+
+  // Apply the new algorithm to the form
+  p->rt_forms[index].algorithm = algo;
+
+  // Switch the clone type of the form
+  dt_masks_type_t masks_type = form->type;
+  if(algo == DT_IOP_RETOUCH_CLONE || algo == DT_IOP_RETOUCH_HEAL)
+  {
+    masks_type |= DT_MASKS_CLONE;
+    masks_type &= ~DT_MASKS_NON_CLONE;
+  }
+  else
+  {
+    masks_type &= ~DT_MASKS_CLONE;
+    masks_type |= DT_MASKS_NON_CLONE;
+  }
+  form->type = masks_type;
+
+  // Update GUI
+  rt_shape_selection_changed(self);
+
+  //dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+}
+
+GtkWidget *rt_masks_gtk_menu_item_new_with_markup(const char *label, GtkWidget *menu,
+                                                 void (*activate_callback)(GtkWidget *widget, struct dt_iop_module_t *self),
+                                                 struct dt_iop_module_t *self)
+{
+  GtkWidget *menu_item = gtk_menu_item_new_with_label("");
+  GtkWidget *child = gtk_bin_get_child(GTK_BIN(menu_item));
+  gtk_label_set_markup(GTK_LABEL(child), label);
+  gtk_menu_item_set_reserve_indicator(GTK_MENU_ITEM(menu_item), FALSE);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", G_CALLBACK(activate_callback), self);
+
+  return menu_item;
+}
+
+int populate_masks_context_menu(struct dt_iop_module_t *self, GtkWidget *menu, const int formid,const float pzx, const float pzy)
+{
+  dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
+  const int index = rt_get_index_from_formid(p, formid);
+  if(index == -1)
+  {
+    fprintf(stderr, "populate_masks_context_menu: missing form=%i from array\n", formid);
+    return FALSE;
+  }
+
+  GtkWidget *menu_item = masks_gtk_menu_item_new_with_markup(_("Retouch correction"), menu, NULL, NULL);
+  GtkWidget *sub_menu = gtk_menu_new();
+  gtk_menu_item_set_submenu(GTK_MENU_ITEM(menu_item), sub_menu);
+
+  static const struct
+  {
+    dt_iop_retouch_algo_type_t algo;
+    const char *name;
+  } algo_entries[] = {{ DT_IOP_RETOUCH_CLONE, N_("Clone") },
+                      { DT_IOP_RETOUCH_HEAL, N_("Heal") },
+                      { DT_IOP_RETOUCH_BLUR, N_("Blur") },
+                      { DT_IOP_RETOUCH_FILL, N_("Fill") },};
+
+  for(size_t i = 0; i < G_N_ELEMENTS(algo_entries); i++)
+  {
+    const gboolean is_selected = (p->rt_forms[index].algorithm == algo_entries[i].algo);
+    const char *const translated_name = _(algo_entries[i].name);
+    GtkWidget *algo_item = NULL;
+    if(is_selected)
+    {
+      gchar *const label = g_markup_printf_escaped("<b>%s</b>", translated_name);
+      algo_item = rt_masks_gtk_menu_item_new_with_markup(label, sub_menu, rt_menu_select_algorithm_callback, self);
+      g_free(label);
+    }
+    else
+    {
+      algo_item = rt_masks_gtk_menu_item_new_with_markup(translated_name, sub_menu, is_selected ? NULL : rt_menu_select_algorithm_callback, self);
+    }
+
+    g_object_set_data(G_OBJECT(algo_item), "formid", GINT_TO_POINTER(formid));
+    g_object_set_data(G_OBJECT(algo_item), "algo", GINT_TO_POINTER(algo_entries[i].algo));
+  }
+
+  return TRUE;
+}
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
