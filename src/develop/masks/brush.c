@@ -3014,11 +3014,8 @@ static void _brush_switch_node_callback(GtkWidget *widget, struct dt_masks_form_
 
   gui->node_edited = gui->node_selected;
 
-  dt_masks_form_t *forms = darktable.develop->form_visible;
-  if(!forms) return;
-  dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(forms->points, gui->group_selected);
-  if(!fpt) return;
-  dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+  int formid = gui->formid; 
+  dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, formid);
   if(!sel) return;
   _change_node_type(module, sel, gui, gui->group_selected);
 }
@@ -3032,11 +3029,8 @@ static void _brush_reset_round_node_callback(GtkWidget *widget, struct dt_masks_
 
   gui->node_edited = gui->node_selected;
 
-  dt_masks_form_t *forms = darktable.develop->form_visible;
-  if(!forms) return;
-  dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(forms->points, gui->group_selected);
-  if(!fpt) return;
-  dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+  int formid = gui->formid; 
+  dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, formid);
   if(!sel) return;
 
   _reset_ctrl_points(module, sel, gui, gui->group_selected);
@@ -3062,13 +3056,6 @@ static void _brush_add_node_callback(GtkWidget *menu, struct dt_masks_form_gui_t
 
 static int _brush_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t *form, struct dt_masks_form_gui_t *gui, const float pzx, const float pzy)
 {
-  // Only add separator if there will be menu items
-  if(gui->node_selected >= 0 || gui->seg_selected >= 0)
-  {
-    GtkWidget *sep = gtk_separator_menu_item_new();
-    gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
-  }
-
   GtkWidget *menu_item = NULL;
   gchar *accel = g_strdup_printf(_("%s+Click"), gtk_accelerator_get_label(0, GDK_CONTROL_MASK));
 
