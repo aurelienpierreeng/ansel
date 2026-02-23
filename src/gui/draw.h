@@ -633,53 +633,41 @@ static inline void dt_draw_node(cairo_t *cr, const gboolean square, const gboole
  * @brief Draw a control handle attached to a point with a tail between the node and the handle.
  *
  * @param cr the cairo context to draw into
- * @param pt_x the x position of the node point (-1 if no tail should be drawn)
- * @param pt_y the y position of the node point (-1 if no tail should be drawn)
+ * @param pt the node point position (pt[0]=x, pt[1]=y, use NULL if no tail should be drawn)
  * @param zoom_scale the current zoom scale of the image
- * @param handle_x the x position of the handle point
- * @param handle_y the y position of the handle point
+ * @param handle the handle point position (handle[0]=x, handle[1]=y)
  * @param selected TRUE if the shape is selected
  * @param square TRUE to draw a square handle, FALSE to draw a round handle
  */
-static inline void dt_draw_handle(cairo_t *cr, const float pt_x, const float pt_y, const float zoom_scale, 
-                                          const float handle_x, const float handle_y, const gboolean selected, const gboolean square)
+static inline void dt_draw_handle(cairo_t *cr, const float pt[2], const float zoom_scale,
+                                  const float handle[2], const gboolean selected, const gboolean square)
 {
-  // draw handle's tail if a size is specified
-  if(pt_x >= 0 && pt_y >= 0)
+  cairo_save(cr);
+
+
+  // Draw only if the line is long enough
+  // and shorten the line by the size of the nodes so it does not overlap with them
+  //float shorten = 0; //(DT_DRAW_RADIUS_NODE / zoom_scale) * 0.5f;
+  //float f = shorten / tail_len;
+  if(pt)
   {
-    cairo_save(cr);
-
-    float delta_x = handle_x - pt_x;
-    float delta_y = handle_y - pt_y;
-    float tail_len = sqrtf(delta_x * delta_x + delta_y * delta_y);
-    // Draw only if the line is long enough
-    // and shorten the line by the size of the nodes so it does not overlap with them
-    float shorten = (DT_DRAW_RADIUS_NODE / zoom_scale) * 0.5f;
-    if(tail_len > (2 * shorten))
-    {
-      float start_x = pt_x + delta_x * (shorten / tail_len);
-      float start_y = pt_y + delta_y * (shorten / tail_len);
-      float end_x = handle_x - delta_x * (shorten / tail_len);
-      float end_y = handle_y - delta_y * (shorten / tail_len);
-      cairo_move_to(cr, start_x, start_y);
-      cairo_line_to(cr, end_x, end_y);
-    }
-
+    float delta_x = handle[0] - pt[0];
+    float delta_y = handle[1] - pt[1];
+    float start_x = pt[0] + delta_x;
+    float start_y = pt[1] + delta_y;
+    float end_x = handle[0] - delta_x;
+    float end_y = handle[1] - delta_y;
+    cairo_move_to(cr, start_x, start_y);
+    cairo_line_to(cr, end_x, end_y);
+  
     cairo_set_line_width(cr, DT_DRAW_SIZE_LINE_HIGHLIGHT * 0.6 / zoom_scale);
     dt_draw_set_color_overlay(cr, FALSE, 0.6);
     cairo_stroke_preserve(cr);
     cairo_set_line_width(cr, DT_DRAW_SIZE_LINE * 0.6 / zoom_scale);
     dt_draw_set_color_overlay(cr, TRUE, 0.8);
     cairo_stroke(cr);
-
-    cairo_restore(cr);
   }
-
-  if(handle_x < 0 || handle_y < 0)
-    return;
-
-  cairo_save(cr);
-
+  
   // Draw the control handle (1/4 smaller than a node)
   const float handle_radius = 0.75 * (selected ? DT_DRAW_RADIUS_NODE_SELECTED / zoom_scale
                                        : DT_DRAW_RADIUS_NODE / zoom_scale);
@@ -687,10 +675,10 @@ static inline void dt_draw_handle(cairo_t *cr, const float pt_x, const float pt_
   if(square)
   {
     const float square_width = handle_radius * 0.7071f; // handle_radius * sin(45°) to have the same diagonal as the circle
-    cairo_rectangle(cr, handle_x - square_width, handle_y - square_width, square_width * 2.f, square_width * 2.f);
+    cairo_rectangle(cr, handle[0] - square_width, handle[1] - square_width, square_width * 2.f, square_width * 2.f);
   }
   else
-    cairo_arc(cr, handle_x, handle_y, handle_radius, 0, 2.0 * M_PI);
+    cairo_arc(cr, handle[0], handle[1], handle_radius, 0, 2.0 * M_PI);
 
   const float line_width_dark = selected
                   ? (DT_DRAW_SIZE_LINE_HIGHLIGHT_SELECTED / zoom_scale)

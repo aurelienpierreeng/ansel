@@ -2570,14 +2570,13 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     if(gui->node_selected >= 0 && !dt_masks_node_is_cusp(gpt ,gui->node_selected))
     {
       const int n = gui->node_selected;
-      float handle_x, handle_y;
+      float handle[2];
       _brush_ctrl2_to_handle(gpt->points[n * 6 + 2], gpt->points[n * 6 + 3], gpt->points[n * 6 + 4],
-                                gpt->points[n * 6 + 5], &handle_x, &handle_y, TRUE);
-      const float pt_x = gpt->points[n * 6 + 2];
-      const float pt_y = gpt->points[n * 6 + 3];
+                                gpt->points[n * 6 + 5], &handle[0], &handle[1], TRUE);
+      const float pt[2] = { gpt->points[n * 6 + 2], gpt->points[n * 6 + 3] };
       const gboolean selected = (gui->node_hovered == n
                               || gui->handle_selected == n);
-      dt_draw_handle(cr, pt_x, pt_y, zoom_scale, handle_x, handle_y, selected, FALSE);
+      dt_draw_handle(cr, pt, zoom_scale, handle, selected, FALSE);
     }
 
     // draw all nodes
@@ -2598,11 +2597,11 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
       const int edited = gui->node_selected;
       const gboolean selected = (gui->node_hovered == edited
                               || gui->handle_border_selected == edited);
-      float x = NAN, y = NAN;
+      float handle[2] = {NAN, NAN};
       // Show the border handle on the opposite side from the curve handle
-      if(_brush_get_border_handle_mirrored(gpt, node_count, edited, &x, &y))
+      if(_brush_get_border_handle_mirrored(gpt, node_count, edited, &handle[0], &handle[1]))
       {
-        dt_draw_handle(cr, -1, -1, zoom_scale, x, y, selected, TRUE);
+        dt_draw_handle(cr, NULL, zoom_scale, handle, selected, TRUE);
       }
     }
   }
@@ -2621,12 +2620,11 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
         && (k == gui->node_hovered || k == gui->node_selected || (gui->creation && k == node_count - 1)))
       {
         const int node_index = k * 6 + 2;
-        const float proj_x = gpt->source[node_index];
-        const float proj_y = gpt->source[node_index + 1];
+        const float proj[2] = { gpt->source[node_index], gpt->source[node_index + 1] };
         const gboolean selected = gui->node_hovered == k;
         const gboolean squared = dt_masks_node_is_cusp(gpt ,k);
 
-        dt_draw_handle(cr, -1, -1, zoom_scale, proj_x, proj_y, selected, squared);
+        dt_draw_handle(cr, NULL, zoom_scale, proj, selected, squared);
       }
     }
   }
