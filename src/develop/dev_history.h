@@ -142,7 +142,8 @@ void dt_dev_reload_history_items(struct dt_develop_t *dev, const int32_t imgid);
 void dt_dev_invalidate_history_module(GList *list, struct dt_iop_module_t *module);
 
 /**
- * @brief Get the integrity checksum of the whole history stack
+ * @brief Get the integrity checksum of the whole history stack.
+ * This should be done ONLY when history is changed, read or written.
  *
  * @param dev
  * @return uint64_t

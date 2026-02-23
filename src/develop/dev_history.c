@@ -612,10 +612,9 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
   dt_dev_set_history_end_ext(dev, history_end);
   g_list_free_full(dev->iop_order_list, free);
   dev->iop_order_list = iop_order_temp;
+  dt_dev_pop_history_items_ext(dev);
+  dt_dev_write_history_ext(dev, dev->image_storage.id);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
-
-  dt_dev_write_history(dev);
-  dt_dev_reload_history_items(dev, dev->image_storage.id);
 
   int pipe_remove = dt_dev_history_refresh_nodes(dev, dev->iop, dev->history);
   dt_dev_history_gui_update(dev);
@@ -930,6 +929,10 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
     has_forms = (hist->forms != NULL);
   }
 
+  // We don't update history hash in dt_dev_add_history_item_ext
+  // because it can be called within loops, so that can be expensive.
+  dev->history_hash = dt_dev_history_get_hash(dev);
+
   // Recompute pipeline last
   if(module && !(has_forms || (module->blend_params->blend_mode & DEVELOP_MASK_RASTER)))
   {
@@ -1065,17 +1068,6 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
 
   const int history_end = dt_dev_get_history_end_ext(dev);
 
-  // Modules after history_end need to be reset to default in case they were previously enabled
-  // They will get a chance to be re-enabled next
-  for(GList *history = g_list_nth(dev->history, history_end); history; history = g_list_next(history))
-  {
-    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
-    dt_iop_module_t *module = hist->module;
-    module->enabled = module->default_enabled;
-    dt_iop_compute_module_hash(module, hist->forms);
-    hist->hash = module->hash;
-  }
-
   // go through history up to history_end and set modules params
   GList *history = g_list_first(dev->history);
   GList *forms = NULL;
@@ -1093,6 +1085,9 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
   dt_ioppr_resync_modules_order(dev);
   dt_ioppr_check_duplicate_iop_order(&dev->iop, dev->history);
   dt_ioppr_check_iop_order(dev, 0, "dt_dev_pop_history_items_ext end");
+
+  // Reloading defaults might have changed the global history hash
+  dev->history_hash = dt_dev_history_get_hash(dev);
 }
 
 void dt_dev_pop_history_items(dt_develop_t *dev)
@@ -1526,7 +1521,7 @@ static int _sync_params(dt_dev_history_item_t *hist, const void *module_params, 
     if(!strcmp(hist->module->op, "flip") && hist->enabled == 0 && labs(modversion) == 1)
     {
       memcpy(hist->params, hist->module->default_params, hist->module->params_size);
-      hist->enabled = 1;
+      hist->enabled = TRUE;
     }
   }
 
@@ -1618,11 +1613,6 @@ static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, co
 
   dev->history = g_list_append(dev->history, hist);
 
-  // Update the history end cursor. Note that this is useful only if it's a fresh, empty history,
-  // otherwise the value will get overriden by the DB value
-  // when we are done adding entries from defaults & auto-presets.
-  dt_dev_set_history_end_ext(dev, g_list_length(dev->history));
-
   dt_print(DT_DEBUG_HISTORY, "[history entry] read %s at pipe position %i (enabled %i) from %s %s\n", hist->op_name,
     hist->iop_order, hist->enabled, (presets) ? "preset" : "database", (presets) ? preset_name : "");
 }
@@ -1703,12 +1693,14 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolea
   dt_dev_masks_list_change(dev);
   dt_dev_masks_update_hash(dev);
 
-  // Init global history hash to track changes during runtime
-  dev->history_hash = dt_dev_history_get_hash(dev);
-
   // Unless it's a new editing and history end is the length of the history stack,
   // we need to grab it from DB because it's user-defined.
-  if(history_end > 0) dt_dev_set_history_end_ext(dev, history_end);
+  if(history_end > 0) 
+    dt_dev_set_history_end_ext(dev, history_end);
+  else
+    dt_dev_set_history_end_ext(dev, g_list_length(dev->history));
+
+  // Note: dt_dev_set_history_end already updates dev->history_hash
 
   dt_print(DT_DEBUG_HISTORY, "[history] dt_dev_read_history_ext completed\n");
   return first_run;
@@ -1793,16 +1785,8 @@ void dt_dev_history_compress(dt_develop_t *dev)
       dt_dev_add_history_item_ext(dev, module, FALSE, TRUE, TRUE, TRUE);
   }
 
-  // Commit to DB
-  // TODO: write a fast path sanitizing without intermediate DB write
-  dt_dev_write_history_ext(dev, imgid);
-
-  // Reload to sanitize mandatory/incompatible modules.
-  dt_dev_read_history_ext(dev, imgid, !dev->gui_attached);
   dt_dev_set_history_end_ext(dev, g_list_length(dev->history));
   dt_dev_pop_history_items_ext(dev);
-
-  // Write again after sanitization.
   dt_dev_write_history_ext(dev, imgid);
 
   dt_pthread_rwlock_unlock(&dev->history_mutex);

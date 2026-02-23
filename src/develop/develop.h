@@ -272,7 +272,8 @@ typedef struct dt_develop_t
   dt_backbuf_t output_histogram;  // backbuf to prepare the display-agnostic output histogram (in the middle of colorout)
   dt_backbuf_t display_histogram; // backbuf to prepare the display-referred output histogram (at the far end of the pipe)
   
-  // Track history changes from C. Note: we have a DB variant.
+  // Track history changes from C.
+  // This is updated when history is changed, read or written.
   uint64_t history_hash;
 
   /* proxy for communication between plugins and develop/darkroom */

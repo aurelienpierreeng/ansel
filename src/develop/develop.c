@@ -1202,6 +1202,7 @@ void dt_dev_set_history_end_ext(dt_develop_t *dev, const uint32_t index)
 {
   const int num_items = g_list_length(dev->history);
   dev->history_end = CLAMP(index, 0, num_items);
+  dev->history_hash = dt_dev_history_get_hash(dev);
 }
 
 void dt_dev_append_changed_tag(const int32_t imgid)
