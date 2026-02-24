@@ -1447,6 +1447,34 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   else
     item_str = g_strdup("");
 
+  const dt_masks_state_t state = op_form->state & DT_MASKS_STATE_IS_COMBINE_OP;
+  const gboolean has_inverse = (op_form->state & DT_MASKS_STATE_INVERSE) != 0;
+  GdkPixbuf *icon = (state <= DT_MASKS_STATE_EXCLUSION) ? op_icon[state] : NULL;
+  GdkPixbuf *composed_icon = NULL;
+  if(has_inverse && op_icon[DT_MASKS_STATE_INVERSE])
+  {
+    if(icon)
+    {
+      const int base_w = gdk_pixbuf_get_width(icon);
+      const int base_h = gdk_pixbuf_get_height(icon);
+      const int inv_w = gdk_pixbuf_get_width(op_icon[DT_MASKS_STATE_INVERSE]);
+      const int inv_h = gdk_pixbuf_get_height(op_icon[DT_MASKS_STATE_INVERSE]);
+      const int out_w = base_w + inv_w;
+      const int out_h = MAX(base_h, inv_h);
+
+      composed_icon = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, out_w, out_h);
+      if(composed_icon)
+      {
+        gdk_pixbuf_fill(composed_icon, 0x00000000);
+        gdk_pixbuf_copy_area(icon, 0, 0, base_w, base_h, composed_icon, 0, 0);
+        gdk_pixbuf_copy_area(op_icon[DT_MASKS_STATE_INVERSE], 0, 0, inv_w, inv_h, composed_icon, base_w, 0);
+        icon = composed_icon;
+      }
+    }
+    else
+      icon = op_icon[DT_MASKS_STATE_INVERSE];
+  }
+
   gchar *title = g_strdup_printf("<b><big>%s%s</big></b>", form_name, item_str);
   GtkWidget *menu_item = ctx_gtk_menu_item_new_with_markup_and_pixbuf(title, icon, menu, NULL, gui);
   gtk_widget_set_sensitive(menu_item, FALSE);
@@ -1479,18 +1507,32 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
 
 
   /*  Operation */
-  if(!gui->creation && !(form->type & DT_MASKS_IS_RETOUCHE))
+  if(!gui->creation
+     && !(form->type & DT_MASKS_IS_RETOUCHE)
+     && (op_form))
   { 
     menu_item = ctx_gtk_menu_item_new_with_markup(_("Operation"), menu, NULL, gui);
     GtkWidget *sub_menu = gtk_menu_new();
     gtk_style_context_add_class(gtk_widget_get_style_context(sub_menu), "dt-masks-context-menu");
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(menu_item), sub_menu);
 
-    menu_item = masks_gtk_menu_item_new_with_markup(_("Union"), sub_menu, _masks_gui_cancel_creation_callback, gui);
-    menu_item = masks_gtk_menu_item_new_with_markup(_("Intersection"), sub_menu, _masks_gui_cancel_creation_callback, gui);
-    menu_item = masks_gtk_menu_item_new_with_markup(_("Difference"), sub_menu, _masks_gui_cancel_creation_callback, gui);
-    menu_item = masks_gtk_menu_item_new_with_markup(_("Exclusion"), sub_menu, _masks_gui_cancel_creation_callback, gui);
-    
+    masks_gtk_menu_item_new_bold(_("Invert"), (op_form->state & DT_MASKS_STATE_INVERSE), DT_MASKS_STATE_INVERSE,
+                                 op_icon[DT_MASKS_STATE_INVERSE]);
+    sep = gtk_separator_menu_item_new();
+    gtk_menu_shell_append(GTK_MENU_SHELL(sub_menu), sep);
+    masks_gtk_menu_item_new_bold(_("Union"), (op_form->state & DT_MASKS_STATE_UNION), DT_MASKS_STATE_UNION,
+                                 op_icon[DT_MASKS_STATE_UNION]);
+    masks_gtk_menu_item_new_bold(_("Intersection"), (op_form->state & DT_MASKS_STATE_INTERSECTION), DT_MASKS_STATE_INTERSECTION,
+                                 op_icon[DT_MASKS_STATE_INTERSECTION]);
+    masks_gtk_menu_item_new_bold(_("Difference"), (op_form->state & DT_MASKS_STATE_DIFFERENCE), DT_MASKS_STATE_DIFFERENCE,
+                                 op_icon[DT_MASKS_STATE_DIFFERENCE]);
+    masks_gtk_menu_item_new_bold(_("Exclusion"), (op_form->state & DT_MASKS_STATE_EXCLUSION), DT_MASKS_STATE_EXCLUSION,
+                                 op_icon[DT_MASKS_STATE_EXCLUSION]);
+    //sep = gtk_separator_menu_item_new();
+    //gtk_menu_shell_append(GTK_MENU_SHELL(sub_menu), sep);
+    //menu_item = ctx_gtk_menu_item_new_with_markup(_("Move up"), sub_menu, NULL, gui);
+    //menu_item = ctx_gtk_menu_item_new_with_markup(_("Move down"), sub_menu, NULL, gui);
+
     sep = gtk_separator_menu_item_new();
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
   }
@@ -1515,6 +1557,10 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
       gtk_widget_set_sensitive(menu_item, gui->form_selected >= 0);
     }
   }
+
+  for(size_t k = 0; k < G_N_ELEMENTS(op_icon); k++)
+    g_clear_object(&op_icon[k]);
+  g_clear_object(&composed_icon);
 
   gtk_widget_show_all(menu);
   return menu;
@@ -1543,7 +1589,7 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
     // mouse is over a form
     if(gui && ((gui->group_selected >= 0 && gui->form_selected) || gui->creation))
     {
-      GtkWidget *menu = dt_masks_create_menu(gui, form, pzx, pzy);
+      GtkWidget *menu = dt_masks_create_menu(gui, form, NULL, pzx, pzy);
       gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
       return_val = TRUE;
     }

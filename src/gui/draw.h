@@ -935,6 +935,19 @@ static inline void dt_draw_source_shape(cairo_t *cr, const float zoom_scale, con
   cairo_restore(cr);
 }
 
+static inline GdkPixbuf *dt_draw_get_pixbuf_from_cairo(DTGTKCairoPaintIconFunc paint, const int width, const int height)
+{
+  cairo_surface_t *cst = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+  cairo_t *cr = cairo_create(cst);
+  dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BUTTON_FG, 1.0);
+  paint(cr, 0, 0, width, height, 0, NULL);
+  cairo_destroy(cr);
+  guchar *data = cairo_image_surface_get_data(cst);
+  dt_draw_cairo_to_gdk_pixbuf(data, width, height);
+  return gdk_pixbuf_new_from_data(data, GDK_COLORSPACE_RGB, TRUE, 8, width, height,
+                                  cairo_image_surface_get_stride(cst), NULL, NULL);
+}
+
 #ifdef __cplusplus
 }
 #endif
