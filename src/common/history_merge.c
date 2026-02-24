@@ -445,6 +445,14 @@ static gchar *_hm_cycle_node_label(const dt_digraph_node_t *n, GHashTable *id_ht
   return _hm_pretty_id_from_id_ht(n ? n->id : NULL, id_ht, TRUE);
 }
 
+static void _hm_append_cycle_label(GString *out, const char *s, const gboolean bold)
+{
+  gchar *esc = g_markup_escape_text(s ? s : "", -1);
+  if(bold) g_string_append_printf(out, "<b>%s</b>", esc);
+  else g_string_append(out, esc);
+  g_free(esc);
+}
+
 static void _hm_show_toposort_cycle_popup(GList *cycle_nodes, GHashTable *id_ht)
 {
   /* Present a detected ordering cycle as a GTK modal popup.
@@ -460,7 +468,7 @@ static void _hm_show_toposort_cycle_popup(GList *cycle_nodes, GHashTable *id_ht)
   GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
   if(!window) return;
 
-  // Build a "A → B → C → A" string so the cycle reads naturally.
+  // Build a "A → B → C → A" markup string so the cycle reads naturally.
   GPtrArray *labels = g_ptr_array_new_with_free_func(g_free);
   for(GList *it = g_list_first(cycle_nodes); it; it = g_list_next(it))
   {
@@ -473,38 +481,45 @@ static void _hm_show_toposort_cycle_popup(GList *cycle_nodes, GHashTable *id_ht)
   {
     const char *s = (const char *)g_ptr_array_index(labels, i);
     if(i > 0) g_string_append(cycle, " → ");
-    g_string_append(cycle, s ? s : "");
+    _hm_append_cycle_label(cycle, s, i == 0);
   }
   if(labels && labels->len > 0)
   {
     const char *first = (const char *)g_ptr_array_index(labels, 0);
     g_string_append(cycle, " → ");
-    g_string_append(cycle, first ? first : "");
+    _hm_append_cycle_label(cycle, first, TRUE);
   }
 
   GtkDialog *dialog = GTK_DIALOG(gtk_dialog_new_with_buttons(
       _("Incompatible module ordering constraints"), GTK_WINDOW(window),
       GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, _("_Close"), GTK_RESPONSE_CLOSE, NULL));
+  gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
 
   GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
 
   GtkWidget *label = gtk_label_new(NULL);
   gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+  gtk_widget_set_halign(label, GTK_ALIGN_START);
+  gtk_widget_set_valign(label, GTK_ALIGN_START);
   gtk_label_set_selectable(GTK_LABEL(label), TRUE);
   gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
   gtk_label_set_max_width_chars(GTK_LABEL(label), 80);
 
-  gchar *text = g_strdup_printf(_("Module ordering constraints contain a cycle and cannot be satisfied.\n\n"
-                                  "Cycle:\n%s"),
-                                cycle->str);
-  gtk_label_set_text(GTK_LABEL(label), text);
-  gtk_box_pack_start(GTK_BOX(content_area), label, TRUE, TRUE, 0);
+  GString *text = g_string_new(NULL);
+  gchar *prefix = g_markup_escape_text(
+      _("Module ordering constraints contain a cycle and cannot be satisfied.\n\nCycle:\n\n"), -1);
+  g_string_append(text, prefix);
+  g_free(prefix);
+  g_string_append(text, cycle->str);
+
+  gtk_label_set_markup(GTK_LABEL(label), text->str);
+  gtk_box_pack_start(GTK_BOX(content_area), label, FALSE, FALSE, 6);
 
   gtk_widget_show_all(GTK_WIDGET(dialog));
   gtk_dialog_run(dialog);
   gtk_widget_destroy(GTK_WIDGET(dialog));
 
-  g_free(text);
+  if(text) g_string_free(text, TRUE);
   if(cycle) g_string_free(cycle, TRUE);
   if(labels) g_ptr_array_free(labels, TRUE);
 }
