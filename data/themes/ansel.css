@@ -581,13 +581,6 @@ menuitem menu menuitem label
   font-weight: 400;
 }
 
-menuitem menu menuitem.menu-active label,
-menuitem.menu-active label
-{
-  font-weight: 800;
-  color: @grey_100;
-}
-
 menubar menuitem,
 menubar menuitem label
 {
@@ -2479,4 +2472,22 @@ tooltip label,
 #shortcut-search-dialog entry
 {
   background-color: @button_bg;
+}
+
+/* Masks context menu: hide check glyph on selected operation items */
+menu.dt-masks-context-menu menuitem.dt-masks-hide-check check
+{
+  -gtk-icon-source: none;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+}
+
+/* Keep this at the end so it wins over generic menu/font state rules above */
+menu.dt-masks-context-menu menuitem.dt-masks-checked label.dt-masks-checked-label
+{
+  font-weight:600;
+  color: @grey_100;
 }

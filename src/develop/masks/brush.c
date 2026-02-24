@@ -43,6 +43,7 @@
 #include "develop/imageop.h"
 #include "develop/masks.h"
 #include "develop/openmp_maths.h"
+#include "gui/actions/menu.h"
 
 #define HARDNESS_MIN 0.0005f
 #define HARDNESS_MAX 1.0f
@@ -3003,8 +3004,9 @@ static void _brush_initial_source_pos(const float iwd, const float iht, float *x
   *y = 0.01f * iht;
 }
 
-static void _brush_switch_node_callback(GtkWidget *widget, struct dt_masks_form_gui_t *gui)
+static void _brush_switch_node_callback(GtkWidget *widget, gpointer user_data)
 {
+  dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   if(!gui) return;
 
   dt_iop_module_t *module = darktable.develop->gui_module;
@@ -3018,8 +3020,9 @@ static void _brush_switch_node_callback(GtkWidget *widget, struct dt_masks_form_
   _change_node_type(module, sel, gui, gui->group_selected);
 }
 
-static void _brush_reset_round_node_callback(GtkWidget *widget, struct dt_masks_form_gui_t *gui)
+static void _brush_reset_round_node_callback(GtkWidget *widget, gpointer user_data)
 {
+  dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   if(!gui) return;
 
   dt_iop_module_t *module = darktable.develop->gui_module;
@@ -3034,8 +3037,9 @@ static void _brush_reset_round_node_callback(GtkWidget *widget, struct dt_masks_
   _reset_ctrl_points(module, sel, gui, gui->group_selected);
 }
 
-static void _brush_add_node_callback(GtkWidget *menu, struct dt_masks_form_gui_t *gui)
+static void _brush_add_node_callback(GtkWidget *menu, gpointer user_data)
 {
+  dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   if(!gui) return;
   dt_masks_form_t *forms = darktable.develop->form_visible;
   if(!forms) return;
@@ -3069,14 +3073,14 @@ static int _brush_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t 
 
     {
       gchar *to_change_type = g_strdup_printf(_("Switch to %s node"), (is_corner) ? _("round") : _("cusp"));
-      const dt_masks_menu_icon_t icon = is_corner ? DT_MASKS_MENU_ICON_CIRCLE : DT_MASKS_MENU_ICON_SQUARE;
-      menu_item = masks_gtk_menu_item_new_with_icon_and_shortcut(to_change_type, accel, menu,
+      const dt_menu_icon_t icon = is_corner ? DT_MENU_ICON_CIRCLE : DT_MENU_ICON_SQUARE;
+      menu_item = ctx_gtk_menu_item_new_with_icon_and_shortcut(to_change_type, accel, menu,
                                                                   _brush_switch_node_callback, gui, icon);
       g_free(to_change_type);
     }
 
     {
-      menu_item = masks_gtk_menu_item_new_with_markup(_("Reset round node"), menu, _brush_reset_round_node_callback, gui);
+      menu_item = ctx_gtk_menu_item_new_with_markup(_("Reset round node"), menu, _brush_reset_round_node_callback, gui);
       gtk_widget_set_sensitive(menu_item, !is_corner && node->state != DT_MASKS_POINT_STATE_NORMAL);
     }
     ret = TRUE;
@@ -3086,7 +3090,7 @@ static int _brush_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t 
   {
     gui->pos[0] = pzx;
     gui->pos[1] = pzy;
-    menu_item = masks_gtk_menu_item_new_with_markup_and_shortcut(_("Add a node here"), accel,
+    menu_item = ctx_gtk_menu_item_new_with_markup_and_shortcut(_("Add a node here"), accel,
                                                                   menu, _brush_add_node_callback, gui);
     ret = TRUE;
   }

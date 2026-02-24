@@ -56,6 +56,7 @@
 #include "develop/imageop_gui.h"
 #include "develop/masks.h"
 #include "develop/tiling.h"
+#include "gui/actions/menu.h"
 #include "iop/iop_api.h"
 #include "dtgtk/drawingarea.h"
 
@@ -4476,8 +4477,9 @@ cleanup:
 
 /** masks menu */
 
-static void rt_menu_select_algorithm_callback(GtkWidget *widget, struct dt_iop_module_t *self)
+static void rt_menu_select_algorithm_callback(GtkWidget *widget, gpointer user_data)
 {
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
 
   const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "formid"));
@@ -4512,21 +4514,6 @@ static void rt_menu_select_algorithm_callback(GtkWidget *widget, struct dt_iop_m
   //dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
 
-GtkWidget *rt_masks_gtk_menu_item_new_with_markup(const char *label, GtkWidget *menu,
-                                                 void (*activate_callback)(GtkWidget *widget, struct dt_iop_module_t *self),
-                                                 struct dt_iop_module_t *self)
-{
-  GtkWidget *menu_item = gtk_menu_item_new_with_label("");
-  GtkWidget *child = gtk_bin_get_child(GTK_BIN(menu_item));
-  gtk_label_set_markup(GTK_LABEL(child), label);
-  gtk_menu_item_set_reserve_indicator(GTK_MENU_ITEM(menu_item), FALSE);
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
-
-  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", G_CALLBACK(activate_callback), self);
-
-  return menu_item;
-}
-
 int populate_masks_context_menu(struct dt_iop_module_t *self, GtkWidget *menu, const int formid,const float pzx, const float pzy)
 {
   dt_iop_retouch_params_t *p = (dt_iop_retouch_params_t *)self->params;
@@ -4537,7 +4524,7 @@ int populate_masks_context_menu(struct dt_iop_module_t *self, GtkWidget *menu, c
     return FALSE;
   }
 
-  GtkWidget *menu_item = masks_gtk_menu_item_new_with_markup(_("Retouch correction"), menu, NULL, NULL);
+  GtkWidget *menu_item = ctx_gtk_menu_item_new_with_markup(_("Retouch correction"), menu, NULL, NULL);
   GtkWidget *sub_menu = gtk_menu_new();
   gtk_menu_item_set_submenu(GTK_MENU_ITEM(menu_item), sub_menu);
 
@@ -4553,18 +4540,10 @@ int populate_masks_context_menu(struct dt_iop_module_t *self, GtkWidget *menu, c
   for(size_t i = 0; i < G_N_ELEMENTS(algo_entries); i++)
   {
     const gboolean is_selected = (p->rt_forms[index].algorithm == algo_entries[i].algo);
-    const char *const translated_name = _(algo_entries[i].name);
-    GtkWidget *algo_item = NULL;
-    if(is_selected)
-    {
-      gchar *const label = g_markup_printf_escaped("<b>%s</b>", translated_name);
-      algo_item = rt_masks_gtk_menu_item_new_with_markup(label, sub_menu, rt_menu_select_algorithm_callback, self);
-      g_free(label);
-    }
-    else
-    {
-      algo_item = rt_masks_gtk_menu_item_new_with_markup(translated_name, sub_menu, is_selected ? NULL : rt_menu_select_algorithm_callback, self);
-    }
+    const char *const label = _(algo_entries[i].name);
+    GtkWidget *algo_item = ctx_gtk_check_menu_item_new_with_markup(label, sub_menu,
+                                                          is_selected ? NULL : rt_menu_select_algorithm_callback, self,
+                                                          is_selected, FALSE);
 
     g_object_set_data(G_OBJECT(algo_item), "formid", GINT_TO_POINTER(formid));
     g_object_set_data(G_OBJECT(algo_item), "algo", GINT_TO_POINTER(algo_entries[i].algo));

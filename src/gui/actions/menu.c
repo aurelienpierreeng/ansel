@@ -27,12 +27,14 @@
 #include "develop/develop.h"
 #include "gui/gtk.h"
 #include "views/view.h"
-
+#include "math.h"
 #include "menu.h"
 
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
+
+typedef struct dt_masks_form_gui_t dt_masks_form_gui_t;
 
 /** How to use:
  *  1. write callback functions returning a gboolean that will check the context to decide if
@@ -53,6 +55,269 @@ static void _activate_callback_to_action_callback(GtkMenuItem* menu_item, gpoint
   dt_menu_entry_t *entry = (dt_menu_entry_t *)user_data;
   GtkWindow *window = GTK_WINDOW(gtk_widget_get_ancestor(GTK_WIDGET(menu_item), GTK_TYPE_WINDOW));
   entry->action_callback(entry->accel_group, G_OBJECT(window), 0, 0, menu_item);
+}
+
+static gboolean _menu_icon_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
+{
+  dt_menu_icon_data_t *data = (dt_menu_icon_data_t *)user_data;
+  if(!data || data->shape == DT_MENU_ICON_NONE) return FALSE;
+
+  GtkStyleContext *context = gtk_widget_get_style_context(widget);
+  GdkRGBA color;
+  gtk_style_context_get_color(context, GTK_STATE_FLAG_NORMAL, &color);
+  cairo_set_source_rgba(cr, color.red, color.green, color.blue, color.alpha);
+  cairo_set_line_width(cr, 1.2);
+
+  GtkAllocation alloc;
+  gtk_widget_get_allocation(widget, &alloc);
+  const double pad = 1.0;
+  const double w = MAX(0.0, (double)alloc.width - 2.0 * pad);
+  const double h = MAX(0.0, (double)alloc.height - 2.0 * pad);
+  const double size = fmin(w, h);
+  const double x = ((double)alloc.width - size) * 0.5;
+  const double y = ((double)alloc.height - size) * 0.5;
+
+  if(data->shape == DT_MENU_ICON_CIRCLE)
+  {
+    cairo_arc(cr, x + size * 0.5, y + size * 0.5, MAX(0.0, size * 0.5 - 0.5), 0.0, 2.0 * M_PI);
+    cairo_stroke(cr);
+  }
+  else if(data->shape == DT_MENU_ICON_SQUARE)
+  {
+    cairo_rectangle(cr, x, y, size, size);
+    cairo_stroke(cr);
+  }
+
+  return FALSE;
+}
+
+GtkWidget *ctx_gtk_menu_item_new_with_icon(const char *label, GtkWidget *menu,
+                                             void (*activate_callback)(GtkWidget *widget, gpointer user_data),
+                                             gpointer user_data, dt_menu_icon_t icon)
+{
+  GtkWidget *menu_item = gtk_menu_item_new();
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+  GtkWidget *icon_widget = gtk_drawing_area_new();
+  GtkWidget *label_widget = gtk_label_new(NULL);
+
+  gtk_widget_set_size_request(icon_widget, 10, 10);
+  gtk_label_set_markup(GTK_LABEL(label_widget), label);
+
+  if(icon != DT_MENU_ICON_NONE)
+  {
+    dt_menu_icon_data_t *data = g_malloc0(sizeof(dt_menu_icon_data_t));
+    data->shape = icon;
+    g_signal_connect_data(icon_widget, "draw", G_CALLBACK(_menu_icon_draw), data, (GClosureNotify)g_free, 0);
+  }
+
+  gtk_label_set_xalign(GTK_LABEL(label_widget), 0.0f);
+  gtk_box_pack_start(GTK_BOX(box), label_widget, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(box), icon_widget, FALSE, FALSE, 2);
+  gtk_container_add(GTK_CONTAINER(menu_item), box);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", G_CALLBACK(activate_callback), user_data);
+
+  return menu_item;
+}
+
+GtkWidget *ctx_gtk_menu_item_new_with_icon_and_shortcut(const char *label, const char *shortcut,
+                                                           GtkWidget *menu,
+                                                           void (*activate_callback)(GtkWidget *widget, gpointer user_data),
+                                                           gpointer user_data, dt_menu_icon_t icon)
+{
+  GtkWidget *menu_item = gtk_menu_item_new();
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+  GtkWidget *left_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+  GtkWidget *icon_widget = gtk_drawing_area_new();
+  GtkWidget *label_widget = gtk_label_new(NULL);
+  GtkWidget *shortcut_widget = gtk_label_new(shortcut);
+
+  gtk_widget_set_size_request(icon_widget, 10, 10);
+  gtk_label_set_markup(GTK_LABEL(label_widget), label);
+  gtk_label_set_xalign(GTK_LABEL(label_widget), 0.0f);
+  gtk_widget_set_halign(label_widget, GTK_ALIGN_START);
+  gtk_widget_set_hexpand(label_widget, TRUE);
+
+  if(icon != DT_MENU_ICON_NONE)
+  {
+    dt_menu_icon_data_t *data = g_malloc0(sizeof(dt_menu_icon_data_t));
+    data->shape = icon;
+    g_signal_connect_data(icon_widget, "draw", G_CALLBACK(_menu_icon_draw), data, (GClosureNotify)g_free, 0);
+  }
+
+  gtk_label_set_xalign(GTK_LABEL(shortcut_widget), 1.0f);
+  gtk_widget_set_halign(shortcut_widget, GTK_ALIGN_END);
+  gtk_style_context_add_class(gtk_widget_get_style_context(shortcut_widget), "accelerator");
+
+  gtk_box_pack_start(GTK_BOX(left_box), label_widget, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(left_box), icon_widget, FALSE, FALSE, 2);
+  gtk_box_pack_start(GTK_BOX(box), left_box, TRUE, TRUE, 0);
+  gtk_box_pack_end(GTK_BOX(box), shortcut_widget, FALSE, FALSE, 0);
+
+  gtk_container_add(GTK_CONTAINER(menu_item), box);
+  gtk_menu_item_set_reserve_indicator(GTK_MENU_ITEM(menu_item), FALSE);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", G_CALLBACK(activate_callback), user_data);
+
+  return menu_item;
+}
+
+GtkWidget *ctx_gtk_menu_item_new_with_markup(const char *label, GtkWidget *menu,
+                                               void (*activate_callback)(GtkWidget *widget, gpointer user_data),
+                                               gpointer user_data)
+{
+  GtkWidget *menu_item = gtk_menu_item_new_with_label("");
+  GtkWidget *child = gtk_bin_get_child(GTK_BIN(menu_item));
+  gtk_label_set_markup(GTK_LABEL(child), label);
+  gtk_menu_item_set_reserve_indicator(GTK_MENU_ITEM(menu_item), FALSE);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", G_CALLBACK(activate_callback), user_data);
+
+  return menu_item;
+}
+
+GtkWidget *ctx_gtk_menu_item_new_with_markup_and_shortcut(const char *label, const char *shortcut,
+                                                             GtkWidget *menu,
+                                                             void (*activate_callback)(GtkWidget *widget, gpointer user_data),
+                                                             gpointer user_data)
+{
+  GtkWidget *menu_item = gtk_menu_item_new();
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
+  GtkWidget *label_widget = gtk_label_new(NULL);
+  GtkWidget *shortcut_widget = gtk_label_new(shortcut);
+
+  gtk_label_set_markup(GTK_LABEL(label_widget), label);
+  gtk_label_set_xalign(GTK_LABEL(label_widget), 0.0f);
+  gtk_widget_set_halign(label_widget, GTK_ALIGN_START);
+  gtk_widget_set_hexpand(label_widget, TRUE);
+
+  gtk_label_set_xalign(GTK_LABEL(shortcut_widget), 1.0f);
+  gtk_widget_set_halign(shortcut_widget, GTK_ALIGN_END);
+  gtk_style_context_add_class(gtk_widget_get_style_context(shortcut_widget), "accelerator");
+
+  gtk_box_pack_start(GTK_BOX(box), label_widget, TRUE, TRUE, 0);
+  gtk_box_pack_end(GTK_BOX(box), shortcut_widget, FALSE, FALSE, 0);
+  gtk_container_add(GTK_CONTAINER(menu_item), box);
+  gtk_menu_item_set_reserve_indicator(GTK_MENU_ITEM(menu_item), FALSE);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", G_CALLBACK(activate_callback), user_data);
+
+  return menu_item;
+}
+
+GtkWidget *ctx_gtk_menu_item_new_with_markup_and_pixbuf(const char *label, GdkPixbuf *icon,
+                                                           GtkWidget *menu,
+                                                           void (*activate_callback)(GtkWidget *widget, gpointer user_data),
+                                                           gpointer user_data)
+{
+  GtkWidget *menu_item = gtk_menu_item_new();
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+  GtkWidget *image_widget = icon ? gtk_image_new_from_pixbuf(icon) : gtk_image_new();
+  GtkWidget *label_widget = gtk_label_new(NULL);
+
+  gtk_label_set_markup(GTK_LABEL(label_widget), label);
+  gtk_label_set_xalign(GTK_LABEL(label_widget), 0.0f);
+  gtk_widget_set_halign(label_widget, GTK_ALIGN_START);
+  gtk_widget_set_hexpand(label_widget, TRUE);
+
+  gtk_box_pack_start(GTK_BOX(box), label_widget, TRUE, TRUE, 0);
+  gtk_box_pack_end(GTK_BOX(box), image_widget, FALSE, FALSE, 0);
+  gtk_container_add(GTK_CONTAINER(menu_item), box);
+  gtk_menu_item_set_reserve_indicator(GTK_MENU_ITEM(menu_item), FALSE);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", G_CALLBACK(activate_callback), user_data);
+
+  return menu_item;
+}
+
+GtkWidget *ctx_gtk_check_menu_item_new_with_markup(const char *label,
+                                                   GtkWidget *menu,
+                                                   void (*activate_callback)(GtkWidget *widget, gpointer user_data),
+                                                   gpointer user_data,
+                                                   const gboolean checked,
+                                                   const gboolean show_checkbox)
+{
+  GtkWidget *menu_item = gtk_check_menu_item_new();
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+  GtkWidget *label_widget = gtk_label_new(NULL);
+
+  gtk_label_set_markup(GTK_LABEL(label_widget), label);
+  gtk_label_set_xalign(GTK_LABEL(label_widget), 0.0f);
+  gtk_widget_set_halign(label_widget, GTK_ALIGN_START);
+  gtk_widget_set_hexpand(label_widget, TRUE);
+  gtk_widget_set_hexpand(box, TRUE);
+  gtk_widget_set_halign(box, GTK_ALIGN_FILL);
+
+  gtk_box_pack_start(GTK_BOX(box), label_widget, TRUE, TRUE, 0);
+  gtk_container_add(GTK_CONTAINER(menu_item), box);
+  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(menu_item), checked);
+  if(show_checkbox)
+    gtk_style_context_add_class(gtk_widget_get_style_context(menu_item), "dt-masks-inverse-item");
+  else
+    gtk_style_context_add_class(gtk_widget_get_style_context(menu_item), "dt-masks-hide-check");
+
+  if(checked)
+  {
+    gtk_style_context_add_class(gtk_widget_get_style_context(menu_item), "dt-masks-checked");
+    gtk_style_context_add_class(gtk_widget_get_style_context(label_widget), "dt-masks-checked-label");
+  }
+  gtk_menu_item_set_reserve_indicator(GTK_MENU_ITEM(menu_item), FALSE);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", G_CALLBACK(activate_callback), user_data);
+
+  return menu_item;
+}
+
+GtkWidget *ctx_gtk_check_menu_item_new_with_markup_and_pixbuf(const char *label, GdkPixbuf *icon,
+                                                                 GtkWidget *menu,
+                                                                 void (*activate_callback)(GtkWidget *widget, gpointer user_data),
+                                                                 gpointer user_data,
+                                                                 const gboolean checked,
+                                                                 const gboolean show_checkbox)
+{
+  GtkWidget *menu_item = gtk_check_menu_item_new();
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+  GtkWidget *left_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *image_widget = icon ? gtk_image_new_from_pixbuf(icon) : gtk_image_new();
+  GtkWidget *label_widget = gtk_label_new(NULL);
+
+  gtk_label_set_markup(GTK_LABEL(label_widget), label);
+  gtk_label_set_xalign(GTK_LABEL(label_widget), 0.0f);
+  gtk_widget_set_halign(label_widget, GTK_ALIGN_START);
+  gtk_widget_set_hexpand(label_widget, TRUE);
+  gtk_widget_set_hexpand(left_box, TRUE);
+  gtk_widget_set_halign(left_box, GTK_ALIGN_FILL);
+  gtk_widget_set_hexpand(box, TRUE);
+  gtk_widget_set_halign(box, GTK_ALIGN_FILL);
+  gtk_widget_set_halign(image_widget, GTK_ALIGN_END);
+
+  gtk_box_pack_start(GTK_BOX(left_box), label_widget, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(box), left_box, TRUE, TRUE, 0);
+  gtk_box_pack_end(GTK_BOX(box), image_widget, FALSE, FALSE, 0);
+  gtk_container_add(GTK_CONTAINER(menu_item), box);
+  gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(menu_item), checked);
+  if(show_checkbox)
+    gtk_style_context_add_class(gtk_widget_get_style_context(menu_item), "dt-masks-inverse-item");
+  else
+    gtk_style_context_add_class(gtk_widget_get_style_context(menu_item), "dt-masks-hide-check");
+
+  if(checked)
+  {
+    gtk_style_context_add_class(gtk_widget_get_style_context(menu_item), "dt-masks-checked");
+    gtk_style_context_add_class(gtk_widget_get_style_context(label_widget), "dt-masks-checked-label");
+  }
+  gtk_menu_item_set_reserve_indicator(GTK_MENU_ITEM(menu_item), FALSE);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", G_CALLBACK(activate_callback), user_data);
+
+  return menu_item;
 }
 
 

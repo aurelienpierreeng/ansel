@@ -47,6 +47,7 @@
 #include "develop/imageop.h"
 #include "develop/masks.h"
 #include "develop/openmp_maths.h"
+#include "gui/actions/menu.h"
 #include <assert.h>
 
 #define HARDNESS_MIN 0.0005f
@@ -3144,8 +3145,9 @@ static void _polygon_initial_source_pos(const float iwd, const float iht, float 
   *y = (0.1f * iht);
 }
 
-static void _polygon_creation_closing_form_callback(GtkWidget *widget, struct dt_masks_form_gui_t *gui)
+static void _polygon_creation_closing_form_callback(GtkWidget *widget, gpointer user_data)
 {
+  dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   // This is a temp form on creation mode
   dt_masks_form_t *form = darktable.develop->form_visible;
   if(!form) return;
@@ -3153,8 +3155,9 @@ static void _polygon_creation_closing_form_callback(GtkWidget *widget, struct dt
   _polygon_creation_closing_form(form, gui);
 }
 
-static void _polygon_switch_node_callback(GtkWidget *widget, struct dt_masks_form_gui_t *gui)
+static void _polygon_switch_node_callback(GtkWidget *widget, gpointer user_data)
 {
+  dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   if(!gui) return;
   dt_iop_module_t *module = darktable.develop->gui_module;
   if(!module) return;
@@ -3166,8 +3169,9 @@ static void _polygon_switch_node_callback(GtkWidget *widget, struct dt_masks_for
   _change_node_type(module, sel, gui, gui->group_selected);
 }
 
-static void _polygon_reset_round_node_callback(GtkWidget *widget, struct dt_masks_form_gui_t *gui)
+static void _polygon_reset_round_node_callback(GtkWidget *widget, gpointer user_data)
 {
+  dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   if(!gui) return;
   dt_iop_module_t *module = darktable.develop->gui_module;
   if(!module) return;
@@ -3179,8 +3183,9 @@ static void _polygon_reset_round_node_callback(GtkWidget *widget, struct dt_mask
   _reset_ctrl_points(module, sel, gui, gui->group_selected);
 }
 
-static void _polygon_add_node_callback(GtkWidget *menu, struct dt_masks_form_gui_t *gui)
+static void _polygon_add_node_callback(GtkWidget *menu, gpointer user_data)
 {
+  dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   if(!gui) return;
   dt_masks_form_t *forms = darktable.develop->form_visible;
   if(!forms) return;
@@ -3208,11 +3213,11 @@ static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_
 
   if(gui->creation)
   {
-    menu_item = masks_gtk_menu_item_new_with_markup(_("Close path"), menu, _polygon_creation_closing_form_callback, gui);
+    menu_item = ctx_gtk_menu_item_new_with_markup(_("Close path"), menu, _polygon_creation_closing_form_callback, gui);
     gtk_widget_set_sensitive(menu_item, form->points && !g_list_shorter_than(form->points, 4));
     menu_item_set_fake_accel(menu_item, GDK_KEY_Return, 0);
 
-    menu_item = masks_gtk_menu_item_new_with_markup(_("Remove last point"), menu, _masks_gui_delete_node_callback, gui);
+    menu_item = ctx_gtk_menu_item_new_with_markup(_("Remove last point"), menu, _masks_gui_delete_node_callback, gui);
     menu_item_set_fake_accel(menu_item, GDK_KEY_BackSpace, 0);
 
     ret = TRUE;
@@ -3228,15 +3233,15 @@ static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_
 
     {
       gchar *to_change_type = g_strdup_printf(_("Switch to %s node"), (is_corner) ? _("round") : _("cusp"));
-      const dt_masks_menu_icon_t icon = is_corner ? DT_MASKS_MENU_ICON_CIRCLE : DT_MASKS_MENU_ICON_SQUARE;
-      menu_item = masks_gtk_menu_item_new_with_icon_and_shortcut(to_change_type, accel, menu,
+      const dt_menu_icon_t icon = is_corner ? DT_MENU_ICON_CIRCLE : DT_MENU_ICON_SQUARE;
+      menu_item = ctx_gtk_menu_item_new_with_icon_and_shortcut(to_change_type, accel, menu,
                                                                   _polygon_switch_node_callback, gui, icon);
 
       g_free(to_change_type);
     }
 
     {
-      menu_item = masks_gtk_menu_item_new_with_markup(_("Reset round node"), menu, _polygon_reset_round_node_callback, gui);
+      menu_item = ctx_gtk_menu_item_new_with_markup(_("Reset round node"), menu, _polygon_reset_round_node_callback, gui);
       gtk_widget_set_sensitive(menu_item, !is_corner);
     }
 
@@ -3247,7 +3252,7 @@ static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_
   {
     gui->pos[0] = pzx;
     gui->pos[1] = pzy;
-    menu_item = masks_gtk_menu_item_new_with_markup_and_shortcut(_("Add a node here"), accel,
+    menu_item = ctx_gtk_menu_item_new_with_markup_and_shortcut(_("Add a node here"), accel,
                                                                   menu, _polygon_add_node_callback, gui);
     ret = TRUE;
   }

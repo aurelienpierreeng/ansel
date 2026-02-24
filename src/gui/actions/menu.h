@@ -26,6 +26,18 @@
 
 #pragma once
 
+typedef enum dt_menu_icon_t
+{
+  DT_MENU_ICON_NONE = 0,
+  DT_MENU_ICON_CIRCLE,
+  DT_MENU_ICON_SQUARE
+} dt_menu_icon_t;
+
+typedef struct dt_menu_icon_data_t
+{
+  dt_menu_icon_t shape;
+} dt_menu_icon_data_t;
+
 typedef enum dt_menus_t
 {
   DT_MENU_FILE = 0,
@@ -174,6 +186,37 @@ void append_image(GtkWidget **menus, GList **lists, const dt_menus_t index);
 void append_run(GtkWidget **menus, GList **lists, const dt_menus_t index);
 void append_select(GtkWidget **menus, GList **lists, const dt_menus_t index);
 void append_views(GtkWidget **menus, GList **lists, const dt_menus_t index);
+
+GtkWidget *ctx_gtk_menu_item_new_with_icon(const char *label, GtkWidget *menu,
+                                           void (*activate_callback)(GtkWidget *widget, gpointer user_data),
+                                           gpointer user_data, dt_menu_icon_t icon);
+GtkWidget *ctx_gtk_menu_item_new_with_icon_and_shortcut(const char *label, const char *shortcut,
+                                                        GtkWidget *menu,
+                                                        void (*activate_callback)(GtkWidget *widget, gpointer user_data),
+                                                        gpointer user_data, dt_menu_icon_t icon);
+GtkWidget *ctx_gtk_menu_item_new_with_markup(const char *label, GtkWidget *menu,
+                                             void (*activate_callback)(GtkWidget *widget, gpointer user_data),
+                                             gpointer user_data);
+GtkWidget *ctx_gtk_menu_item_new_with_markup_and_shortcut(const char *label, const char *shortcut,
+                                                          GtkWidget *menu,
+                                                          void (*activate_callback)(GtkWidget *widget, gpointer user_data),
+                                                          gpointer user_data);
+GtkWidget *ctx_gtk_menu_item_new_with_markup_and_pixbuf(const char *label, GdkPixbuf *icon,
+                                                        GtkWidget *menu,
+                                                        void (*activate_callback)(GtkWidget *widget, gpointer user_data),
+                                                        gpointer user_data);
+GtkWidget *ctx_gtk_check_menu_item_new_with_markup(const char *label,
+                                                   GtkWidget *menu,
+                                                   void (*activate_callback)(GtkWidget *widget, gpointer user_data),
+                                                   gpointer user_data,
+                                                   const gboolean checked,
+                                                   const gboolean show_checkbox);
+GtkWidget *ctx_gtk_check_menu_item_new_with_markup_and_pixbuf(const char *label, GdkPixbuf *icon,
+                                                              GtkWidget *menu,
+                                                              void (*activate_callback)(GtkWidget *widget, gpointer user_data),
+                                                              gpointer user_data,
+                                                              const gboolean checked,
+                                                              const gboolean show_checkbox);
 
 // Helper to wrap (*void)(void) functions into GtkAccel compatible callbacks
 #define MAKE_ACCEL_WRAPPER(cb)                                            \

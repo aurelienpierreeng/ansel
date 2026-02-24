@@ -50,6 +50,7 @@
 #include "develop/blend.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
+#include "gui/actions/menu.h"
 #include <stdint.h>
 
 gboolean dt_masks_point_is_within_radius(const float px, const float py,
@@ -1266,8 +1267,9 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
   return ret;
 }
 
-static void _masks_gui_remove_form_callback(GtkWidget *menu, struct dt_masks_form_gui_t *gui)
+static void _masks_gui_remove_form_callback(GtkWidget *menu, gpointer user_data)
 {
+  dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   if(!gui) return;
   dt_masks_form_t *forms = darktable.develop->form_visible;
   if(!forms) return;
@@ -1289,8 +1291,9 @@ static void _masks_gui_remove_form_callback(GtkWidget *menu, struct dt_masks_for
 
 }
 
-void _masks_gui_delete_node_callback(GtkWidget *menu, struct dt_masks_form_gui_t *gui)
+void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data)
 {
+  dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   if(!gui) return;
   dt_masks_form_t *forms = darktable.develop->form_visible;
   if(!forms) return;
@@ -1325,8 +1328,9 @@ void _masks_gui_delete_node_callback(GtkWidget *menu, struct dt_masks_form_gui_t
   }
 }
 
-static void _masks_gui_cancel_creation_callback(GtkWidget *menu, struct dt_masks_form_gui_t *gui)
+static void _masks_gui_cancel_creation_callback(GtkWidget *menu, gpointer user_data)
 {
+  dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   dt_iop_module_t *module = darktable.develop->gui_module;
   dt_masks_form_cancel_creation(module, gui);
 }
@@ -1334,165 +1338,71 @@ static void _masks_gui_cancel_creation_callback(GtkWidget *menu, struct dt_masks
 
 /** Contextual menu */
 
-static gboolean _masks_menu_icon_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
+static void _masks_operation_callback(GtkWidget *menu, gpointer user_data)
 {
-  dt_masks_menu_icon_data_t *data = (dt_masks_menu_icon_data_t *)user_data;
-  if(!data || data->shape == DT_MASKS_MENU_ICON_NONE) return FALSE;
+  dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
+  if(!gui || !menu) return;
 
-  GtkStyleContext *context = gtk_widget_get_style_context(widget);
-  GdkRGBA color;
-  gtk_style_context_get_color(context, GTK_STATE_FLAG_NORMAL, &color);
-  cairo_set_source_rgba(cr, color.red, color.green, color.blue, color.alpha);
-  cairo_set_line_width(cr, 1.2);
+  const dt_masks_state_t state_op = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu), "state_op"));
+  dt_masks_form_group_t *form_op = (dt_masks_form_group_t *)g_object_get_data(G_OBJECT(menu), "op_form");
+  if(!form_op) return;
 
-  GtkAllocation alloc;
-  gtk_widget_get_allocation(widget, &alloc);
-  const double pad = 1.0;
-  const double w = MAX(0.0, (double)alloc.width - 2.0 * pad);
-  const double h = MAX(0.0, (double)alloc.height - 2.0 * pad);
-  const double size = fmin(w, h);
-  const double x = ((double)alloc.width - size) * 0.5;
-  const double y = ((double)alloc.height - size) * 0.5;
-
-  if(data->shape == DT_MASKS_MENU_ICON_CIRCLE)
-  {
-    cairo_arc(cr, x + size * 0.5, y + size * 0.5, MAX(0.0, size * 0.5 - 0.5), 0.0, 2.0 * M_PI);
-    cairo_stroke(cr);
-  }
-  else if(data->shape == DT_MASKS_MENU_ICON_SQUARE)
-  {
-    cairo_rectangle(cr, x, y, size, size);
-    cairo_stroke(cr);
-  }
-
-  return FALSE;
+  apply_operation(form_op, state_op);
 }
 
-GtkWidget *masks_gtk_menu_item_new_with_icon(const char *label, GtkWidget *menu,
-                                                 void (*activate_callback)(GtkWidget *widget, dt_masks_form_gui_t *gui),
-                                                 dt_masks_form_gui_t *gui, dt_masks_menu_icon_t icon)
-{
-  GtkWidget *menu_item = gtk_menu_item_new();
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-  GtkWidget *icon_widget = gtk_drawing_area_new();
-  GtkWidget *label_widget = gtk_label_new(NULL);
-
-  gtk_widget_set_size_request(icon_widget, 10, 10);
-  gtk_label_set_markup(GTK_LABEL(label_widget), label);
-
-  if(icon != DT_MASKS_MENU_ICON_NONE)
-  {
-    dt_masks_menu_icon_data_t *data = g_malloc0(sizeof(dt_masks_menu_icon_data_t));
-    data->shape = icon;
-    g_signal_connect_data(icon_widget, "draw", G_CALLBACK(_masks_menu_icon_draw), data, (GClosureNotify)g_free, 0);
-  }
-
-  gtk_label_set_xalign(GTK_LABEL(label_widget), 0.0f);
-  gtk_box_pack_start(GTK_BOX(box), label_widget, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(box), icon_widget, FALSE, FALSE, 2);
-  gtk_container_add(GTK_CONTAINER(menu_item), box);
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
-
-  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", G_CALLBACK(activate_callback), gui);
-
-  return menu_item;
+#define masks_gtk_menu_item_new_bold(label, selected, state, icon)                    \
+{                                                                                     \
+  gchar *op_title = g_strdup(label);                                                  \
+  gchar *op_label = g_strdup_printf("%s", op_title);                                  \
+  menu_item = ctx_gtk_check_menu_item_new_with_markup_and_pixbuf(op_label, icon,      \
+                                                                    sub_menu,         \
+                                                                    _masks_operation_callback, gui, \
+                                                                    (selected != 0),  \
+                                                                    ((state) == DT_MASKS_STATE_INVERSE)); \
+  g_free(op_label);                                                                   \
+  g_free(op_title);                                                                   \
+  g_object_set_data(G_OBJECT(menu_item), "state_op", GINT_TO_POINTER(state));         \
+  g_object_set_data(G_OBJECT(menu_item), "op_form", op_form);                         \
 }
 
-GtkWidget *masks_gtk_menu_item_new_with_icon_and_shortcut(const char *label, const char *shortcut,
-                                                          GtkWidget *menu,
-                                                          void (*activate_callback)(GtkWidget *widget, dt_masks_form_gui_t *gui),
-                                                          dt_masks_form_gui_t *gui, dt_masks_menu_icon_t icon)
-{
-  GtkWidget *menu_item = gtk_menu_item_new();
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-  GtkWidget *left_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-  GtkWidget *icon_widget = gtk_drawing_area_new();
-  GtkWidget *label_widget = gtk_label_new(NULL);
-  GtkWidget *shortcut_widget = gtk_label_new(shortcut);
 
-  gtk_widget_set_size_request(icon_widget, 10, 10);
-  gtk_label_set_markup(GTK_LABEL(label_widget), label);
-  gtk_label_set_xalign(GTK_LABEL(label_widget), 0.0f);
-  gtk_widget_set_halign(label_widget, GTK_ALIGN_START);
-  gtk_widget_set_hexpand(label_widget, TRUE);
-
-  if(icon != DT_MASKS_MENU_ICON_NONE)
-  {
-    dt_masks_menu_icon_data_t *data = g_malloc0(sizeof(dt_masks_menu_icon_data_t));
-    data->shape = icon;
-    g_signal_connect_data(icon_widget, "draw", G_CALLBACK(_masks_menu_icon_draw), data, (GClosureNotify)g_free, 0);
-  }
-
-  gtk_label_set_xalign(GTK_LABEL(shortcut_widget), 1.0f);
-  gtk_widget_set_halign(shortcut_widget, GTK_ALIGN_END);
-  gtk_style_context_add_class(gtk_widget_get_style_context(shortcut_widget), "accelerator");
-
-  gtk_box_pack_start(GTK_BOX(left_box), label_widget, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(left_box), icon_widget, FALSE, FALSE, 2);
-  gtk_box_pack_start(GTK_BOX(box), left_box, TRUE, TRUE, 0);
-  gtk_box_pack_end(GTK_BOX(box), shortcut_widget, FALSE, FALSE, 0);
-
-  gtk_container_add(GTK_CONTAINER(menu_item), box);
-  gtk_menu_item_set_reserve_indicator(GTK_MENU_ITEM(menu_item), FALSE);
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
-
-  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", G_CALLBACK(activate_callback), gui);
-
-  return menu_item;
-}
-
-GtkWidget *masks_gtk_menu_item_new_with_markup(const char *label, GtkWidget *menu,
-                                                 void (*activate_callback)(GtkWidget *widget, dt_masks_form_gui_t *gui),
-                                                 struct dt_masks_form_gui_t *gui)
-{
-  GtkWidget *menu_item = gtk_menu_item_new_with_label("");
-  GtkWidget *child = gtk_bin_get_child(GTK_BIN(menu_item));
-  gtk_label_set_markup(GTK_LABEL(child), label);
-  gtk_menu_item_set_reserve_indicator(GTK_MENU_ITEM(menu_item), FALSE);
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
-
-  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", G_CALLBACK(activate_callback), gui);
-
-  return menu_item;
-}
-
-GtkWidget *masks_gtk_menu_item_new_with_markup_and_shortcut(const char *label, const char *shortcut,
-                                                            GtkWidget *menu,
-                                                            void (*activate_callback)(GtkWidget *widget, dt_masks_form_gui_t *gui),
-                                                            struct dt_masks_form_gui_t *gui)
-{
-  GtkWidget *menu_item = gtk_menu_item_new();
-  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
-  GtkWidget *label_widget = gtk_label_new(NULL);
-  GtkWidget *shortcut_widget = gtk_label_new(shortcut);
-
-  gtk_label_set_markup(GTK_LABEL(label_widget), label);
-  gtk_label_set_xalign(GTK_LABEL(label_widget), 0.0f);
-  gtk_widget_set_halign(label_widget, GTK_ALIGN_START);
-  gtk_widget_set_hexpand(label_widget, TRUE);
-
-  gtk_label_set_xalign(GTK_LABEL(shortcut_widget), 1.0f);
-  gtk_widget_set_halign(shortcut_widget, GTK_ALIGN_END);
-  gtk_style_context_add_class(gtk_widget_get_style_context(shortcut_widget), "accelerator");
-
-  gtk_box_pack_start(GTK_BOX(box), label_widget, TRUE, TRUE, 0);
-  gtk_box_pack_end(GTK_BOX(box), shortcut_widget, FALSE, FALSE, 0);
-  gtk_container_add(GTK_CONTAINER(menu_item), box);
-  gtk_menu_item_set_reserve_indicator(GTK_MENU_ITEM(menu_item), FALSE);
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
-
-  if(activate_callback) g_signal_connect(G_OBJECT(menu_item), "activate", G_CALLBACK(activate_callback), gui);
-
-  return menu_item;
-}
-
-GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form, const float x, const float y)
+GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form, const dt_masks_form_group_t *formgroup,
+                                const float x, const float y)
 {
   assert(gui);
   assert(form);
   // Always re-create the menu when we show it because we don't bother updating info during the lifetime of the mask
   GtkWidget *menu = gtk_menu_new();
-  
+  gtk_style_context_add_class(gtk_widget_get_style_context(menu), "dt-masks-context-menu");
+
+  // Create an array of icons for the operations
+  const int bs2 = DT_PIXEL_APPLY_DPI(13);
+  GdkPixbuf *op_icon[DT_MASKS_STATE_EXCLUSION + 1] = { 0 };
+  op_icon[DT_MASKS_STATE_INVERSE] = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_inverse, bs2 * 2, bs2);
+  op_icon[DT_MASKS_STATE_UNION] = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_union, bs2 * 2, bs2);
+  op_icon[DT_MASKS_STATE_INTERSECTION] = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_intersection, bs2 * 2, bs2);
+  op_icon[DT_MASKS_STATE_DIFFERENCE] = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_difference, bs2 * 2, bs2);
+  op_icon[DT_MASKS_STATE_EXCLUSION] = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_exclusion, bs2 * 2, bs2);
+
+  // Get the current group to apply operations on it if needed
+  dt_masks_form_group_t *op_form = NULL;
+  dt_masks_form_t *grp = formgroup ? dt_masks_get_from_id(darktable.develop, formgroup->parentid) : NULL;
+  if(grp && (grp->type & DT_MASKS_GROUP))
+  {
+    for(const GList *pts = grp->points; pts; pts = g_list_next(pts))
+    {
+      dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
+      if(pt->formid == form->formid)
+      {
+        op_form = pt;
+        break;
+      }
+    }
+  }
+  if(!op_form) return NULL;
+
+
+
   // Title
   gchar *form_name = NULL;
   if(form->name[0])
@@ -1538,7 +1448,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
     item_str = g_strdup("");
 
   gchar *title = g_strdup_printf("<b><big>%s%s</big></b>", form_name, item_str);
-  GtkWidget *menu_item = masks_gtk_menu_item_new_with_markup(title, menu, NULL, gui);
+  GtkWidget *menu_item = ctx_gtk_menu_item_new_with_markup_and_pixbuf(title, icon, menu, NULL, gui);
   gtk_widget_set_sensitive(menu_item, FALSE);
   g_free(item_str);
   g_free(title);
@@ -1571,8 +1481,9 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   /*  Operation */
   if(!gui->creation && !(form->type & DT_MASKS_IS_RETOUCHE))
   { 
-    menu_item = masks_gtk_menu_item_new_with_markup(_("Operation"), menu, NULL, gui);
+    menu_item = ctx_gtk_menu_item_new_with_markup(_("Operation"), menu, NULL, gui);
     GtkWidget *sub_menu = gtk_menu_new();
+    gtk_style_context_add_class(gtk_widget_get_style_context(sub_menu), "dt-masks-context-menu");
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(menu_item), sub_menu);
 
     menu_item = masks_gtk_menu_item_new_with_markup(_("Union"), sub_menu, _masks_gui_cancel_creation_callback, gui);
@@ -1587,19 +1498,19 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   // Common menu items
   if(gui->creation)
   {
-    menu_item = masks_gtk_menu_item_new_with_markup(_("Cancel"), menu, _masks_gui_cancel_creation_callback, gui);
+    menu_item = ctx_gtk_menu_item_new_with_markup(_("Cancel"), menu, _masks_gui_cancel_creation_callback, gui);
     menu_item_set_fake_accel(menu_item, GDK_KEY_Escape, 0);
   }
   else
   {
     if(gui->node_hovered >= 0)
     {
-      menu_item = masks_gtk_menu_item_new_with_markup(_("Delete node"), menu, _masks_gui_delete_node_callback, gui);
+      menu_item = ctx_gtk_menu_item_new_with_markup(_("Delete node"), menu, _masks_gui_delete_node_callback, gui);
       menu_item_set_fake_accel(menu_item, GDK_KEY_Delete, 0);
     }
     else
     {
-      menu_item = masks_gtk_menu_item_new_with_markup(_("Remove form"), menu, _masks_gui_remove_form_callback, gui);
+      menu_item = ctx_gtk_menu_item_new_with_markup(_("Remove form"), menu, _masks_gui_remove_form_callback, gui);
       menu_item_set_fake_accel(menu_item, GDK_KEY_Delete, 0);
       gtk_widget_set_sensitive(menu_item, gui->form_selected >= 0);
     }
