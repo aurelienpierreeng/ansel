@@ -368,7 +368,7 @@ dt_menu_entry_t *set_menu_entry(GtkWidget **menus, GList **items_list,
   if(action_callback != NULL)
   {    
     // Register accel only if requested
-    if(accel_group != NULL && key_val != 0 && mods != 0)
+    if(accel_group != NULL)
     {
       gchar *clean_label = strip_markup(label);
 
@@ -387,7 +387,7 @@ dt_menu_entry_t *set_menu_entry(GtkWidget **menus, GList **items_list,
       g_free(path);
       g_free(clean_label);
     }
-    else if(GTK_IS_ACCEL_LABEL(child))
+    else
     {
       // Show a fake shortcut
       gtk_accel_label_set_accel(GTK_ACCEL_LABEL(child), key_val, mods);
