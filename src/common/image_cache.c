@@ -611,6 +611,15 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
   dt_colorlabels_set_labels(img->id, img->color_labels);
   _image_cache_write_history_hash(img);
 
+  // Sync derived fields from flags before releasing the write lock,
+  // so any reader that immediately testget()s the cache sees consistent data.
+  img->rating = dt_image_get_xmp_rating_from_flags(img->flags);
+  img->has_localcopy = (img->flags & DT_IMAGE_LOCAL_COPY) != 0;
+  img->has_audio = (img->flags & DT_IMAGE_HAS_WAV) != 0;
+  img->is_bw = dt_image_monochrome_flags(img);
+  img->is_bw_flow = dt_image_use_monochrome_workflow(img);
+  img->is_hdr = dt_image_is_hdr(img);
+
   const int32_t imgid = img->id;
   dt_cache_release(&cache->cache, img->cache_entry);
 

@@ -151,10 +151,12 @@ static void _image_update_group_tooltip(dt_thumbnail_t *thumb)
 static void _thumb_update_rating_class(dt_thumbnail_t *thumb)
 {
   thumb_return_if_fails(thumb);
+  const int rating = (thumb->info.flags & DT_IMAGE_REJECTED) ? DT_VIEW_REJECT
+                                                              : (thumb->info.flags & DT_VIEW_RATINGS_MASK);
   for(int i = DT_VIEW_DESERT; i <= DT_VIEW_REJECT; i++)
   {
     gchar *cn = g_strdup_printf("dt_thumbnail_rating_%d", i);
-    if(thumb->info.rating == i)
+    if(rating == i)
       dt_gui_add_class(thumb->w_main, cn);
     else
       dt_gui_remove_class(thumb->w_main, cn);
@@ -717,12 +719,14 @@ static void _thumb_update_icons(dt_thumbnail_t *thumb)
   _set_flag(thumb->w_main, GTK_STATE_FLAG_PRELIGHT, thumb->mouse_over);
   _set_flag(thumb->widget, GTK_STATE_FLAG_PRELIGHT, thumb->mouse_over);
 
-  _set_flag(thumb->w_reject, GTK_STATE_FLAG_ACTIVE, (thumb->info.rating == DT_VIEW_REJECT));
+  const int rating = (thumb->info.flags & DT_IMAGE_REJECTED) ? DT_VIEW_REJECT
+                                                              : (thumb->info.flags & DT_VIEW_RATINGS_MASK);
+  _set_flag(thumb->w_reject, GTK_STATE_FLAG_ACTIVE, (rating == DT_VIEW_REJECT));
 
   for(int i = 0; i < MAX_STARS; i++)
   {
     gtk_widget_set_visible(thumb->w_stars[i], show || DEBUG);
-    _set_flag(thumb->w_stars[i], GTK_STATE_FLAG_ACTIVE, (thumb->info.rating > i && thumb->info.rating < DT_VIEW_REJECT));
+    _set_flag(thumb->w_stars[i], GTK_STATE_FLAG_ACTIVE, (rating > i && rating < DT_VIEW_REJECT));
   }
 
   _set_flag(thumb->w_group, GTK_STATE_FLAG_ACTIVE, (thumb->info.id == thumb->info.group_id));
@@ -937,7 +941,9 @@ static gboolean _event_star_leave(GtkWidget *widget, GdkEventCrossing *event, gp
     _set_flag(thumb->w_stars[i], GTK_STATE_FLAG_PRELIGHT, FALSE);
 
     // restore active state
-    _set_flag(thumb->w_stars[i], GTK_STATE_FLAG_ACTIVE, i < thumb->info.rating && thumb->info.rating < DT_VIEW_REJECT);
+    const int rating = (thumb->info.flags & DT_IMAGE_REJECTED) ? DT_VIEW_REJECT
+                                                                : (thumb->info.flags & DT_VIEW_RATINGS_MASK);
+    _set_flag(thumb->w_stars[i], GTK_STATE_FLAG_ACTIVE, i < rating && rating < DT_VIEW_REJECT);
   }
   return TRUE;
 }
