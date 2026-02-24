@@ -17,6 +17,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "common/history.h"
+#include "common/history_merge.h"
 
 #include <glib.h>
 
@@ -66,6 +67,32 @@ void dt_dev_history_free_history(struct dt_develop_t *dev);
 
 /** Free a single GList *link containing a `dt_dev_history_item_t` */
 void dt_dev_free_history_item(gpointer data);
+
+/**
+ * @brief Fill/refresh a history item from explicit params and apply them to the module.
+ *
+ * This helper exists to share code between regular history edits and history merge logic.
+ * It will:
+ * - allocate `hist->params` and `hist->blend_params` if needed,
+ * - free and replace `hist->forms` with `forms` (ownership transferred),
+ * - sync history metadata from `module` (op_name, multi_name, iop_order, multi_priority),
+ * - copy params/blend_params into the history buffers (params size is clamped),
+ * - apply params/blend_params to the module and recompute the hash.
+ *
+ * @param dev          develop context (currently unused, reserved for future).
+ * @param hist         history item to update (must be non-NULL).
+ * @param module       destination module instance (must be non-NULL).
+ * @param enabled      enabled state to store/apply.
+ * @param params       params buffer (if NULL, uses `module->params`).
+ * @param params_size  size of @p params in bytes (ignored if params is NULL).
+ * @param blend_params blend params buffer (if NULL, uses `module->blend_params`).
+ * @param forms        mask forms snapshot for this history item (ownership transferred; may be NULL).
+ * @return TRUE on success, FALSE on allocation failure/invalid args.
+ */
+gboolean dt_dev_history_item_update_from_params(struct dt_develop_t *dev, dt_dev_history_item_t *hist,
+                                               struct dt_iop_module_t *module, gboolean enabled,
+                                               const void *params, const int32_t params_size,
+                                               const struct dt_develop_blend_params_t *blend_params, GList *forms);
 
 /**
  * @brief Append a new history item on dev->history, at dev->history_end position.
@@ -187,7 +214,8 @@ int dt_history_merge_module_list_into_image(struct dt_develop_t *dev_dest, struc
 
 
 /** copy history from imgid and pasts on dest_imgid, merge or overwrite... */
-int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, GList *ops, gboolean copy_iop_order, const gboolean copy_full);
+int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, GList *ops, 
+                                       const gboolean copy_full, const dt_history_merge_strategy_t mode);
 
 
 /**

@@ -269,6 +269,24 @@
     <shortdescription>store xmp tags in compressed format</shortdescription>
     <longdescription>entries in xmp tags can get rather large and may exceed the available space to store the history stack in output files. this option allows xmp tags to be compressed and save space.</longdescription>
   </dtconfig>
+  <dtconfig>
+    <name>history/mode</name>
+    <type>int</type>
+    <default>0</default>
+    <shortdescription>on history pasting or style application, whether the pasted history is added after or before the original history</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>history/paste_instances</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>Paste history creating new module instances instead of merging with old.</shortdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>history/copy_iop_order</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>Paste modules order along with history.</shortdescription>
+  </dtconfig>
   <dtconfig prefs="misc" section="tags">
     <name>omit_tag_hierarchy</name>
     <type>bool</type>

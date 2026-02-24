@@ -916,6 +916,34 @@ void dt_ioppr_resync_modules_order(dt_develop_t *dev)
   dev->iop = g_list_sort(dev->iop, dt_sort_iop_by_order);
 }
 
+void dt_ioppr_rebuild_iop_order_from_modules(struct dt_develop_t *dev, GList *ordered_modules)
+{
+  if(!dev || !ordered_modules) return;
+
+  GList *new_iop_order_list = NULL;
+  int order = 1;
+
+  for(const GList *l = ordered_modules; l; l = g_list_next(l))
+  {
+    const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
+    if(!mod) continue;
+
+    dt_iop_order_entry_t *entry = (dt_iop_order_entry_t *)calloc(1, sizeof(dt_iop_order_entry_t));
+    g_strlcpy(entry->operation, mod->op, sizeof(entry->operation));
+    entry->instance = mod->multi_priority;
+    g_strlcpy(entry->name, mod->multi_name, sizeof(entry->name));
+    entry->o.iop_order = order++;
+    new_iop_order_list = g_list_append(new_iop_order_list, entry);
+  }
+
+  if(new_iop_order_list)
+  {
+    g_list_free_full(dev->iop_order_list, free);
+    dev->iop_order_list = new_iop_order_list;
+    dt_ioppr_resync_modules_order(dev);
+  }
+}
+
 // sets the iop_order on each module of *_iop_list
 // iop_order is set only for base modules, multi-instances will be flagged as unused with INT_MAX
 // if a module do not exists on iop_order_list it is flagged as unused with INT_MAX

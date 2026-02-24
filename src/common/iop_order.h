@@ -210,6 +210,9 @@ void dt_ioppr_insert_module_instance(struct dt_develop_t *dev, struct dt_iop_mod
 void dt_ioppr_resync_modules_order(struct dt_develop_t *dev);
 void dt_ioppr_resync_iop_list(struct dt_develop_t *dev);
 
+/** rebuild dev->iop_order_list from an ordered list of modules */
+void dt_ioppr_rebuild_iop_order_from_modules(struct dt_develop_t *dev, GList *ordered_modules);
+
 /** update target_iop_order_list to ensure that modules in iop_order_list are in target_iop_order_list
     note that iop_order_list contains a set of dt_iop_order_entry_t where order is the multi-priority */
 void dt_ioppr_update_for_entries(struct dt_develop_t *dev, GList *entry_list, gboolean append);

@@ -777,7 +777,7 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
     {
       newimgid = dt_image_duplicate(imgid);
       if(newimgid != UNKNOWN_IMAGE)
-        dt_history_copy_and_paste_on_image(imgid, newimgid, NULL, TRUE, TRUE);
+        dt_history_copy_and_paste_on_image(imgid, newimgid, NULL, TRUE, dt_conf_get_int("history/mode"));
     }
     else
       newimgid = imgid;

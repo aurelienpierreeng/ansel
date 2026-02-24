@@ -49,7 +49,6 @@ typedef struct dt_history_copy_item_t
   GtkTreeView *items;
   int copied_imageid;
   gboolean full_copy;
-  gboolean copy_iop_order;
 } dt_history_copy_item_t;
 
 /** helper function to free a GList of dt_history_item_t */
@@ -97,7 +96,7 @@ typedef void (*dt_history_db_row_cb)(void *user_data,
                                     const char *operation,
                                     const void *op_params,
                                     const int op_params_len,
-                                    const int enabled,
+                                    const gboolean enabled,
                                     const void *blendop_params,
                                     const int blendop_params_len,
                                     const int blendop_version,

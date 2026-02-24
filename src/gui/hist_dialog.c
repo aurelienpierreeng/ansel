@@ -54,27 +54,6 @@ typedef enum _style_items_columns_t
   DT_HIST_ITEMS_NUM_COLS
 } _styles_columns_t;
 
-static gboolean _gui_hist_is_copy_module_order_set(dt_history_copy_item_t *d)
-{
-  /* iterate through TreeModel to find if module order was copied (num=-1 and active)  */
-  GtkTreeIter iter;
-  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(d->items));
-
-  gboolean active = FALSE;
-  gboolean module_order_was_copied = FALSE;
-  gint num = 0;
-
-  gtk_tree_model_get_iter_first(model, &iter);
-  do
-  {
-      gtk_tree_model_get(model, &iter, DT_HIST_ITEMS_COL_ENABLED, &active, DT_HIST_ITEMS_COL_NUM, &num, -1);
-      if(active && (num == -1)) module_order_was_copied = TRUE;
-  }
-  while(gtk_tree_model_iter_next(model, &iter));
-
-  return module_order_was_copied;
-}
-
 static GList *_gui_hist_get_active_items(dt_history_copy_item_t *d)
 {
   GList *result = NULL;
@@ -128,7 +107,6 @@ static void _gui_hist_copy_response(GtkDialog *dialog, gint response_id, dt_hist
 
     case GTK_RESPONSE_OK:
       g->selops = _gui_hist_get_active_items(g);
-      g->copy_iop_order = _gui_hist_is_copy_module_order_set(g);
       break;
   }
 }
@@ -289,21 +267,6 @@ int dt_gui_hist_dialog_new(dt_history_copy_item_t *d, int32_t imgid, gboolean is
       }
     }
     g_list_free_full(items, dt_history_item_free);
-
-    /* last item is for copying the module order, or if paste and was selected */
-    if(iscopy || d->copy_iop_order)
-    {
-      const dt_iop_order_t order = dt_ioppr_get_iop_order_version(imgid);
-      char *label = g_strdup_printf("%s (%s)", _("module order"), dt_iop_order_string(order));
-      gtk_list_store_append(GTK_LIST_STORE(liststore), &iter);
-      gtk_list_store_set(GTK_LIST_STORE(liststore), &iter,
-                         DT_HIST_ITEMS_COL_ENABLED, TRUE,
-                         DT_HIST_ITEMS_COL_ISACTIVE, is_active_pb,
-                         DT_HIST_ITEMS_COL_NAME, label,
-                         DT_HIST_ITEMS_COL_NUM, -1,
-                         -1);
-      g_free(label);
-    }
   }
   else
   {

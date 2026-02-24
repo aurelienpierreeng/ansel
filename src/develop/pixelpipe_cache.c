@@ -46,7 +46,6 @@
 #include "common/debug.h"
 #include "common/opencl.h"
 #include "develop/format.h"
-#include "develop/pixelpipe_hb.h"
 
 static __thread const char *dt_pixelpipe_cache_current_module = NULL;
 
