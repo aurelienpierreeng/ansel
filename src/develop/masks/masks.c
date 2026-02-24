@@ -3048,6 +3048,19 @@ gboolean dt_masks_creation_mode(dt_iop_module_t *module, const dt_masks_type_t t
   return TRUE;
 }
 
+void apply_operation(struct dt_masks_form_group_t *pt, const dt_masks_state_t apply_state)
+{
+  if(!pt) return;
+
+  if(apply_state == DT_MASKS_STATE_INVERSE)
+    pt->state ^= DT_MASKS_STATE_INVERSE;
+  
+  else if((apply_state & DT_MASKS_STATE_IS_COMBINE_OP) != 0)
+  {
+    pt->state = (pt->state & ~DT_MASKS_STATE_IS_COMBINE_OP) | apply_state;
+  }
+}
+
 #include "detail.c"
 
 // clang-format off

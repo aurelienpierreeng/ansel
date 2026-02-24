@@ -86,7 +86,9 @@ typedef enum dt_masks_state_t
   DT_MASKS_STATE_UNION = 1 << 3,
   DT_MASKS_STATE_INTERSECTION = 1 << 4,
   DT_MASKS_STATE_DIFFERENCE = 1 << 5,
-  DT_MASKS_STATE_EXCLUSION = 1 << 6
+  DT_MASKS_STATE_EXCLUSION = 1 << 6,
+
+  DT_MASKS_STATE_IS_COMBINE_OP = DT_MASKS_STATE_UNION | DT_MASKS_STATE_INTERSECTION | DT_MASKS_STATE_DIFFERENCE | DT_MASKS_STATE_EXCLUSION
 } dt_masks_state_t;
 
 typedef enum dt_masks_points_states_t
@@ -787,6 +789,7 @@ gboolean dt_masks_point_is_within_radius(const float px, const float py,
                                         const float radius);
 
 gboolean dt_masks_creation_mode(dt_iop_module_t *module, const dt_masks_type_t type);
+void apply_operation(struct dt_masks_form_group_t *pt, const dt_masks_state_t apply_state);
 
 /** Contextual menu */
 

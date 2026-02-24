@@ -399,13 +399,14 @@ static void _tree_inverse(GtkButton *button, dt_lib_module_t *self)
           dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
           if(pt->formid == id)
           {
-            if(pt->state & DT_MASKS_STATE_INVERSE)
-              pt->state &= ~DT_MASKS_STATE_INVERSE;
-            else
-              pt->state |= DT_MASKS_STATE_INVERSE;
-            _set_iter_name(lm, dt_masks_get_from_id(darktable.develop, id), pt->state, pt->opacity, model,
-                           &iter);
-            change = 1;
+            const int old_state = pt->state;
+            apply_operation(pt, DT_MASKS_STATE_INVERSE);
+            if(pt->state != old_state)
+            {
+              _set_iter_name(lm, dt_masks_get_from_id(darktable.develop, id), pt->state, pt->opacity, model,
+                             &iter);
+              change = 1;
+            }
             break;
           }
         }
@@ -450,15 +451,10 @@ static void _tree_intersection(GtkButton *button, dt_lib_module_t *self)
           dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
           if(pt->formid == id)
           {
-            if(!(pt->state & DT_MASKS_STATE_INTERSECTION))
+            const int old_state = pt->state;
+            apply_operation(pt, DT_MASKS_STATE_INTERSECTION);
+            if(pt->state != old_state)
             {
-              if(pt->state & DT_MASKS_STATE_DIFFERENCE)
-                pt->state &= ~DT_MASKS_STATE_DIFFERENCE;
-              else if(pt->state & DT_MASKS_STATE_UNION)
-                pt->state &= ~DT_MASKS_STATE_UNION;
-              else if(pt->state & DT_MASKS_STATE_EXCLUSION)
-                pt->state &= ~DT_MASKS_STATE_EXCLUSION;
-              pt->state |= DT_MASKS_STATE_INTERSECTION;
               _set_iter_name(lm, dt_masks_get_from_id(darktable.develop, id), pt->state, pt->opacity, model,
                              &iter);
               change = 1;
@@ -507,15 +503,10 @@ static void _tree_difference(GtkButton *button, dt_lib_module_t *self)
           dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
           if(pt->formid == id)
           {
-            if(!(pt->state & DT_MASKS_STATE_DIFFERENCE))
+            const int old_state = pt->state;
+            apply_operation(pt, DT_MASKS_STATE_DIFFERENCE);
+            if(pt->state != old_state)
             {
-              if(pt->state & DT_MASKS_STATE_UNION)
-                pt->state &= ~DT_MASKS_STATE_UNION;
-              else if(pt->state & DT_MASKS_STATE_INTERSECTION)
-                pt->state &= ~DT_MASKS_STATE_INTERSECTION;
-              else if(pt->state & DT_MASKS_STATE_EXCLUSION)
-                pt->state &= ~DT_MASKS_STATE_EXCLUSION;
-              pt->state |= DT_MASKS_STATE_DIFFERENCE;
               _set_iter_name(lm, dt_masks_get_from_id(darktable.develop, id), pt->state, pt->opacity, model,
                              &iter);
               change = 1;
@@ -564,15 +555,10 @@ static void _tree_exclusion(GtkButton *button, dt_lib_module_t *self)
           dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
           if(pt->formid == id)
           {
-            if(!(pt->state & DT_MASKS_STATE_EXCLUSION))
+            const int old_state = pt->state;
+            apply_operation(pt, DT_MASKS_STATE_EXCLUSION);
+            if(pt->state != old_state)
             {
-              if(pt->state & DT_MASKS_STATE_DIFFERENCE)
-                pt->state &= ~DT_MASKS_STATE_DIFFERENCE;
-              else if(pt->state & DT_MASKS_STATE_INTERSECTION)
-                pt->state &= ~DT_MASKS_STATE_INTERSECTION;
-              else if(pt->state & DT_MASKS_STATE_UNION)
-                pt->state &= ~DT_MASKS_STATE_UNION;
-              pt->state |= DT_MASKS_STATE_EXCLUSION;
               _set_iter_name(lm, dt_masks_get_from_id(darktable.develop, id), pt->state, pt->opacity, model,
                              &iter);
               change = 1;
@@ -621,15 +607,10 @@ static void _tree_union(GtkButton *button, dt_lib_module_t *self)
           dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
           if(pt->formid == id)
           {
-            if(!(pt->state & DT_MASKS_STATE_UNION))
+            const int old_state = pt->state;
+            apply_operation(pt, DT_MASKS_STATE_UNION);
+            if(pt->state != old_state)
             {
-              if(pt->state & DT_MASKS_STATE_DIFFERENCE)
-                pt->state &= ~DT_MASKS_STATE_DIFFERENCE;
-              else if(pt->state & DT_MASKS_STATE_INTERSECTION)
-                pt->state &= ~DT_MASKS_STATE_INTERSECTION;
-              else if(pt->state & DT_MASKS_STATE_EXCLUSION)
-                pt->state &= ~DT_MASKS_STATE_EXCLUSION;
-              pt->state |= DT_MASKS_STATE_UNION;
               _set_iter_name(lm, dt_masks_get_from_id(darktable.develop, id), pt->state, pt->opacity, model,
                              &iter);
               change = 1;
