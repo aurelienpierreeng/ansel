@@ -43,6 +43,7 @@
 */
 #include "accelerators.h"
 #include "common/darktable.h" // lots of garbage to include, only to get debug prints & flags
+#include "gui/gtk.h"
 #include "gui/gtkentry.h"
 #include "gui/gdkkeys.h"
 #include "dtgtk/icon_cell_renderer.h"
@@ -1562,10 +1563,25 @@ static void _find_and_rank_matches(GtkTreeModel *model, GtkWidget *search_entry)
   gtk_tree_sortable_sort_column_changed(GTK_TREE_SORTABLE(model));
 }
 
+typedef struct dt_accels_search_state_t
+{
+  GtkListStore *store;
+  GtkWindow *main_window;
+  dt_shortcut_t *selected;
+} dt_accels_search_state_t;
+
+typedef struct dt_accels_dispatch_state_t
+{
+  dt_shortcut_t *shortcut;
+  GtkWindow *main_window;
+} dt_accels_dispatch_state_t;
+
 // redo the suggestion list on each entry change
 static void _search_entry_changed(GtkWidget *widget, gpointer user_data)
 {
-  _find_and_rank_matches(GTK_TREE_MODEL(user_data), widget);
+  dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
+  state->selected = NULL;
+  _find_and_rank_matches(GTK_TREE_MODEL(state->store), widget);
 }
 
 // fire action callbacks even when they don't have a keyboard shortcut defined
@@ -1596,43 +1612,93 @@ static void _call_shortcut_cclosure(dt_shortcut_t *shortcut, GtkWindow *main_win
   g_closure_invoke(dt_shortcut_get_closure(shortcut), &ret, 4, params, NULL);
 }
 
-static gboolean _run_action_from_shortcut(dt_shortcut_t *shortcut, GtkDialog *dialog, GtkWindow *main_window)
+static void _dispatch_selected_shortcut(dt_accels_dispatch_state_t *state)
 {
-  // Refocus the target widget
-  gtk_widget_grab_focus(GTK_WIDGET(shortcut->widget));
+  if(!state->shortcut) return;
 
-  if(dt_shortcut_get_closure(shortcut))
+  dt_gui_refocus_center();
+
+  if(dt_shortcut_get_closure(state->shortcut))
   {
-    gtk_dialog_response(dialog, GTK_RESPONSE_ACCEPT);
-    _call_shortcut_cclosure(shortcut, main_window);
-    return TRUE;
+    _call_shortcut_cclosure(state->shortcut, state->main_window);
   }
-  else if(shortcut->widget)
+  else if(state->shortcut->widget)
   {
-    gtk_dialog_response(dialog, GTK_RESPONSE_ACCEPT);
-    gtk_widget_activate(shortcut->widget);
-    return TRUE;
+    gtk_widget_activate(state->shortcut->widget);
   }
-  // should never happen
+}
+
+static gboolean _dispatch_selected_shortcut_idle(gpointer data)
+{
+  dt_accels_dispatch_state_t *state = (dt_accels_dispatch_state_t *)data;
+  _dispatch_selected_shortcut(state);
+  g_free(state);
+  return G_SOURCE_REMOVE;
+}
+
+static dt_shortcut_t *_find_first_match(dt_accels_search_state_t *state)
+{
+  GtkTreeIter iter;
+  GtkTreeModel *model = GTK_TREE_MODEL(state->store);
+
+  if(gtk_tree_model_get_iter_first(model, &iter))
+  {
+    do
+    {
+      int rank = -1;
+      dt_shortcut_t *shortcut = NULL;
+      gtk_tree_model_get(model, &iter, 2, &rank, 1, &shortcut, -1);
+      if(rank >= 0 && shortcut)
+        return shortcut;
+    } while(gtk_tree_model_iter_next(model, &iter));
+  }
+
+  return NULL;
+}
+
+static gboolean _cursor_on_match(GtkEntryCompletion *completion, GtkTreeModel *model, GtkTreeIter *iter, gpointer user_data)
+{
+  dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
+  dt_shortcut_t *shortcut = NULL;
+  gtk_tree_model_get(model, iter, 1, &shortcut, -1);
+  state->selected = shortcut;
   return FALSE;
+}
+
+static gboolean _queue_action_from_shortcut(dt_shortcut_t *shortcut, GtkDialog *dialog,
+                                            dt_accels_search_state_t *state)
+{
+  state->selected = shortcut;
+  gtk_dialog_response(dialog, GTK_RESPONSE_ACCEPT);
+  return TRUE;
 }
 
 // Click on one of the suggestions
 static gboolean _match_selected(GtkEntryCompletion *cmp, GtkTreeModel *model, GtkTreeIter *iter, gpointer user_data)
 {
+  dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
   GtkDialog *dialog = GTK_DIALOG(gtk_widget_get_ancestor(gtk_entry_completion_get_entry(cmp), GTK_TYPE_DIALOG));
   dt_shortcut_t *shortcut;
   gtk_tree_model_get(model, iter, 1, &shortcut, -1);
-  return _run_action_from_shortcut(shortcut, dialog, user_data);
+  return _queue_action_from_shortcut(shortcut, dialog, state);
 }
 
 static gboolean _search_entry_key_pressed(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 {
+  dt_accels_search_state_t *state = (dt_accels_search_state_t *)user_data;
   if(event->keyval == GDK_KEY_Escape)
   {
     // Close the popup
     GtkDialog *dialog = GTK_DIALOG(gtk_widget_get_ancestor(widget, GTK_TYPE_DIALOG));
     gtk_dialog_response(dialog, GTK_RESPONSE_CANCEL);
+    return TRUE;
+  }
+  if(event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter)
+  {
+    GtkDialog *dialog = GTK_DIALOG(gtk_widget_get_ancestor(widget, GTK_TYPE_DIALOG));
+    dt_shortcut_t *shortcut = state->selected ? state->selected : _find_first_match(state);
+    if(shortcut)
+      return _queue_action_from_shortcut(shortcut, dialog, state);
     return TRUE;
   }
   return FALSE;
@@ -1671,6 +1737,8 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window)
   // Build the list of currently-relevant shortcut pathes
   GtkListStore *store = gtk_list_store_new(7, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_INT, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_UINT);
   g_hash_table_foreach(accels->acceleratables, _for_each_path_create_treeview_row, store);
+
+  dt_accels_search_state_t state = { .store = store, .main_window = main_window, .selected = NULL };
 
   // Sort the filtered model by relevance
   gtk_tree_sortable_set_sort_func(GTK_TREE_SORTABLE(store), 2,
@@ -1715,9 +1783,10 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window)
     g_object_set(txt, "ellipsize", PANGO_ELLIPSIZE_END, "ellipsize-set", TRUE, "max-width-chars", 70, NULL);
 
   // Wire callbacks
-  g_signal_connect(G_OBJECT(search_entry), "changed", G_CALLBACK(_search_entry_changed), store);
-  g_signal_connect(G_OBJECT(search_entry), "key-press-event", G_CALLBACK(_search_entry_key_pressed), main_window);
-  g_signal_connect(G_OBJECT(completion), "match-selected", G_CALLBACK(_match_selected), main_window);
+  g_signal_connect(G_OBJECT(search_entry), "changed", G_CALLBACK(_search_entry_changed), &state);
+  g_signal_connect(G_OBJECT(search_entry), "key-press-event", G_CALLBACK(_search_entry_key_pressed), &state);
+  g_signal_connect(G_OBJECT(completion), "cursor-on-match", G_CALLBACK(_cursor_on_match), &state);
+  g_signal_connect(G_OBJECT(completion), "match-selected", G_CALLBACK(_match_selected), &state);
 
   gtk_widget_show_all(dialog);
 
@@ -1727,8 +1796,15 @@ void dt_accels_search(dt_accels_t *accels, GtkWindow *main_window)
   gdk_window_move_to_rect(GDK_WINDOW(gtk_widget_get_window(dialog)), &tmp, GDK_GRAVITY_NORTH, GDK_GRAVITY_NORTH, 0,
                           0, 0);
 
-  gtk_dialog_run(GTK_DIALOG(dialog));
+  const gint response = gtk_dialog_run(GTK_DIALOG(dialog));
   gtk_grab_remove(search_entry);
+  if(response == GTK_RESPONSE_ACCEPT && state.selected)
+  {
+    dt_accels_dispatch_state_t *dispatch = g_malloc0(sizeof(*dispatch));
+    dispatch->shortcut = state.selected;
+    dispatch->main_window = main_window;
+    g_idle_add(_dispatch_selected_shortcut_idle, dispatch);
+  }
   gtk_widget_destroy(dialog);
   g_object_unref(store);
 }
