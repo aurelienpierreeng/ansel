@@ -825,6 +825,42 @@ static const char * _find_path_for_keys(dt_accels_t *accels, guint key, GdkModif
   return path;
 }
 
+static inline void _for_each_non_virtual_accel(gpointer key, gpointer value, gpointer user_data)
+{
+  dt_shortcut_t *shortcut = (dt_shortcut_t *)value;
+  const gchar *path = (const gchar *)key;
+  _accel_lookup_t *results = (_accel_lookup_t *)user_data;
+
+  if(shortcut->accel_group == results->group
+     && shortcut->key == results->key
+     && shortcut->mods == results->modifier
+     && !shortcut->virtual_shortcut)
+  {
+    if(!g_strcmp0(path, shortcut->path))
+    {
+      results->results = g_list_prepend(results->results, shortcut);
+      dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Found accel %s for typed keys\n", path);
+    }
+    else
+    {
+      fprintf(stderr, "[shortcuts] ERROR: the shortcut path '%s' is known under the key '%s' in hashtable\n", shortcut->path, path);
+    }
+  }
+}
+
+static gboolean _has_shortcut(dt_accels_t *accels, GtkAccelGroup *group, guint keyval, GdkModifierType mods)
+{
+  _accel_lookup_t result = { .results = NULL, .key = keyval, .modifier = mods, .group = group };
+
+  dt_pthread_mutex_lock(&accels->lock);
+  g_hash_table_foreach(accels->acceleratables, _for_each_non_virtual_accel, &result);
+  dt_pthread_mutex_unlock(&accels->lock);
+
+  const gboolean has_accel = (result.results != NULL);
+  g_list_free(result.results);
+  return has_accel;
+}
+
 
 static gboolean _key_pressed(GtkWidget *w, GdkEvent *event, dt_accels_t *accels, guint keyval, GdkModifierType mods)
 {
@@ -834,27 +870,17 @@ static gboolean _key_pressed(GtkWidget *w, GdkEvent *event, dt_accels_t *accels,
   dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Combination of keys decoded: %s\n", accel_name);
   g_free(accel_name);
 
-  if(darktable.unmuted & DT_DEBUG_SHORTCUTS)
-  {
-    if(_find_path_for_keys(accels, keyval, mods, accels->active_group))
-      dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Action found in active accels group:\n");
-  }
-
   // Look into the active group first, aka darkroom, lighttable, etc.
-  if(gtk_accel_group_activate(accels->active_group, accel_quark, G_OBJECT(w), keyval, mods))
+  if(_has_shortcut(accels, accels->active_group, keyval, mods)
+     && gtk_accel_group_activate(accels->active_group, accel_quark, G_OBJECT(w), keyval, mods))
   {
     dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Active group action executed\n");
     return TRUE;
   }
 
-  if(darktable.unmuted & DT_DEBUG_SHORTCUTS)
-  {
-    if(_find_path_for_keys(accels, keyval, mods, accels->global_accels))
-      dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Action found in global accels group:\n");
-  }
-
   // If nothing found, try again with global accels.
-  if(gtk_accel_group_activate(accels->global_accels, accel_quark, G_OBJECT(w), keyval, mods))
+  if(_has_shortcut(accels, accels->global_accels, keyval, mods)
+     && gtk_accel_group_activate(accels->global_accels, accel_quark, G_OBJECT(w), keyval, mods))
   {
     dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Global group action executed\n");
     return TRUE;
@@ -1572,6 +1598,9 @@ static void _call_shortcut_cclosure(dt_shortcut_t *shortcut, GtkWindow *main_win
 
 static gboolean _run_action_from_shortcut(dt_shortcut_t *shortcut, GtkDialog *dialog, GtkWindow *main_window)
 {
+  // Refocus the target widget
+  gtk_widget_grab_focus(GTK_WIDGET(shortcut->widget));
+
   if(dt_shortcut_get_closure(shortcut))
   {
     gtk_dialog_response(dialog, GTK_RESPONSE_ACCEPT);
