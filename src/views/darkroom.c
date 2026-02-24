@@ -1329,6 +1329,46 @@ void gui_init(dt_view_t *self)
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_Down, GDK_CONTROL_MASK);
   g_free(path);
+
+  path = dt_accels_build_path(_("Darkroom/Main image"), _("Move left"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
+                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Left, 0);
+  g_free(path);
+
+  path = dt_accels_build_path(_("Darkroom/Main image"), _("Move left (coarse step)"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
+                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Left, GDK_SHIFT_MASK);
+  g_free(path);
+
+  path = dt_accels_build_path(_("Darkroom/Main image"), _("Move left (fine step)"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
+                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Left, GDK_CONTROL_MASK);
+  g_free(path);
+
+  path = dt_accels_build_path(_("Darkroom/Main image"), _("Move right"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
+                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Right, 0);
+  g_free(path);
+
+  path = dt_accels_build_path(_("Darkroom/Main image"), _("Move right (coarse step)"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
+                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Right, GDK_SHIFT_MASK);
+  g_free(path);
+
+  path = dt_accels_build_path(_("Darkroom/Main image"), _("Move right (fine step)"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
+                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_Right, GDK_CONTROL_MASK);
+  g_free(path);
+
+  path = dt_accels_build_path(_("Darkroom/Main image"), _("Zoom in"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
+                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_plus, GDK_CONTROL_MASK);
+  g_free(path);
+
+  path = dt_accels_build_path(_("Darkroom/Main image"), _("Zoom out"));
+  dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
+                                 path, dt_ui_center(darktable.gui->ui), GDK_KEY_minus, GDK_CONTROL_MASK);
+  g_free(path);
   /*
    * Add view specific tool buttons
    */
@@ -2699,6 +2739,24 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
 
   const gboolean shift = dt_modifier_is(event->state, GDK_SHIFT_MASK);
   const gboolean ctrl = dt_modifier_is(event->state, GDK_CONTROL_MASK);
+  const gboolean ctrl_any = dt_modifiers_include(event->state, GDK_CONTROL_MASK);
+
+  if(ctrl_any)
+  {
+    const float zoom_step = 1.1f;
+    const float center_x = 0.5f * dev->orig_width;
+    const float center_y = 0.5f * dev->orig_height;
+
+    switch(event->keyval)
+    {
+      case GDK_KEY_plus:
+      case GDK_KEY_KP_Add:
+        return _change_scaling(dev, center_x, center_y, dev->roi.scaling * zoom_step);
+      case GDK_KEY_minus:
+      case GDK_KEY_KP_Subtract:
+        return _change_scaling(dev, center_x, center_y, dev->roi.scaling / zoom_step);
+    }
+  }
 
   float multiplier = (shift) ? 4.f :
                      (ctrl) ? 0.5f :
