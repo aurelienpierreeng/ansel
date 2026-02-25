@@ -460,16 +460,25 @@ static GList *_get_user_mod_list(dt_develop_t *dev_src, GList *ops, gboolean cop
     for(const GList *l = g_list_last(ops); l; l = g_list_previous(l))
     {
       const unsigned int num = GPOINTER_TO_UINT(l->data);
-      const dt_dev_history_item_t *hist = g_list_nth_data(dev_src->history, num);
+      const dt_dev_history_item_t *hist = NULL;
+      for(GList *h = g_list_last(dev_src->history); h; h = g_list_previous(h))
+      {
+        const dt_dev_history_item_t *item = (dt_dev_history_item_t *)h->data;
+        if(item && item->num == (int)num)
+        {
+          hist = item;
+          break;
+        }
+      }
 
       if(hist)
       {
-        if(!dt_iop_is_hidden(hist->module))
+        dt_iop_module_t *mod = hist->module;
+        if(mod && !dt_iop_is_hidden(mod))
         {
-          dt_print(DT_DEBUG_IOPORDER, "\n  module %20s, multiprio %i", hist->module->op,
-                   hist->module->multi_priority);
+          dt_print(DT_DEBUG_HISTORY, "selected for copy/pasting : module %20s, multiprio %i", mod->op, mod->multi_priority);
 
-          mod_list = g_list_prepend(mod_list, hist->module);
+          mod_list = g_list_prepend(mod_list, mod);
         }
       }
     }
