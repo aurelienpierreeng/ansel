@@ -912,9 +912,14 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
   // Always resync history with all module internals
   if(enable) module->enabled = TRUE;
 
-  // Include masks if module supports blending and blending is on or if it's the mask manager
-  include_masks = ((module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) == IOP_FLAGS_SUPPORTS_BLENDING
-                   && module->blend_params->mask_mode > DEVELOP_MASK_ENABLED)
+  // Include masks if module supports blending and masks are in use, or if it's the mask manager.
+  const gboolean supports_blending = (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) == IOP_FLAGS_SUPPORTS_BLENDING;
+  const gboolean mask_mode_on = module->blend_params && (module->blend_params->mask_mode > DEVELOP_MASK_ENABLED);
+  const gboolean has_mask_id = module->blend_params && (module->blend_params->mask_id > 0);
+  const gboolean has_raster = (module->blend_params
+                              && ((module->blend_params->mask_mode & DEVELOP_MASK_RASTER) == DEVELOP_MASK_RASTER))
+                              || (module->raster_mask.sink.source != NULL);
+  include_masks = (supports_blending && (mask_mode_on || has_mask_id || has_raster))
                   || (module->flags() & IOP_FLAGS_INTERNAL_MASKS) == IOP_FLAGS_INTERNAL_MASKS;
 
   GList *forms_snapshot = NULL;
@@ -997,7 +1002,9 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   dev->history_hash = dt_dev_history_get_hash(dev);
 
   // Recompute pipeline last
-  if(module && !(has_forms || (module->blend_params->blend_mode & DEVELOP_MASK_RASTER)))
+  const gboolean has_raster = module && module->blend_params
+                              && ((module->blend_params->mask_mode & DEVELOP_MASK_RASTER) == DEVELOP_MASK_RASTER);
+  if(module && !(has_forms || has_raster))
   {
     // If we have a module and it doesn't use drawn or raster masks,
     // we only need to resync the top-most history item with pipeline
@@ -1748,6 +1755,10 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolea
     // This is valid whether history_end was 0 or not
     history_end += history_length - db_items;
   }
+
+  // Set a provisional history_end so mask history can resolve current forms.
+  // We will recompute hashes once all history items are committed below.
+  dt_dev_set_history_end_ext(dev, history_end);
 
   // Sanitize and flatten module order
   dt_ioppr_resync_modules_order(dev);
