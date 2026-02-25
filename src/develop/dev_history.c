@@ -1826,6 +1826,64 @@ gboolean _module_leaves_no_history(dt_iop_module_t *module)
   return (module->flags() & IOP_FLAGS_NO_HISTORY_STACK);
 }
 
+static gboolean _module_is_default_or_forced_enabled(dt_iop_module_t *module)
+{
+  return module->default_enabled || (module->force_enable && module->force_enable(module, module->enabled));
+}
+
+static gboolean _module_params_are_default(dt_iop_module_t *module)
+{
+  return module->has_defaults ? module->has_defaults(module) : TRUE;
+}
+
+static gboolean _module_blend_params_are_default(dt_iop_module_t *module)
+{
+  if(!module->blend_params || !module->default_blendop_params) return TRUE;
+
+  return memcmp(module->blend_params, module->default_blendop_params,
+                sizeof(dt_develop_blend_params_t)) == 0;
+}
+
+static gboolean _module_has_nondefault_internal_params(dt_iop_module_t *module)
+{
+  return !_module_params_are_default(module) || !_module_blend_params_are_default(module);
+}
+
+typedef gboolean (*dt_iop_module_filter_t)(dt_iop_module_t *module);
+
+static void _dev_history_add_filtered(dt_develop_t *dev, dt_iop_module_filter_t filter)
+{
+  for(GList *item = g_list_first(dev->iop); item; item = g_list_next(item))
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)(item->data);
+    if(!_module_leaves_no_history(module) && filter(module))
+      dt_dev_add_history_item_ext(dev, module, FALSE, TRUE, TRUE, TRUE);
+  }
+}
+
+static gboolean _compress_enabled_default_or_forced(dt_iop_module_t *module)
+{
+  return module->enabled && _module_is_default_or_forced_enabled(module);
+}
+
+static gboolean _compress_enabled_user_default_params(dt_iop_module_t *module)
+{
+  return module->enabled && !_module_is_default_or_forced_enabled(module)
+         && _module_params_are_default(module);
+}
+
+static gboolean _compress_enabled_user_nondefault_params(dt_iop_module_t *module)
+{
+  return module->enabled && !_module_is_default_or_forced_enabled(module)
+         && !_module_params_are_default(module);
+}
+
+static gboolean _compress_disabled_with_history(dt_iop_module_t *module)
+{
+  return !module->enabled
+         && (module->default_enabled || _module_has_nondefault_internal_params(module));
+}
+
 void dt_dev_history_compress(dt_develop_t *dev)
 {
   const int32_t imgid = dev->image_storage.id;
@@ -1837,50 +1895,21 @@ void dt_dev_history_compress(dt_develop_t *dev)
 
   // Rebuild an history from current pipeline.
   // First: modules enabled by default or forced enabled for technical reasons
-  for(GList *item = g_list_first(dev->iop); item; item = g_list_next(item))
-  {
-    dt_iop_module_t *module = (dt_iop_module_t *)(item->data);
-    if(module->enabled
-       && (module->default_enabled || (module->force_enable && module->force_enable(module, module->enabled)))
-       && !_module_leaves_no_history(module))
-      dt_dev_add_history_item_ext(dev, module, FALSE, TRUE, TRUE, TRUE);
-  }
+  _dev_history_add_filtered(dev, _compress_enabled_default_or_forced);
 
   // Second: modules enabled by user
   // 2.1 : start with modules that still have default params,
-  for(GList *item = g_list_first(dev->iop); item; item = g_list_next(item))
-  {
-    dt_iop_module_t *module = (dt_iop_module_t *)(item->data);
-    if(module->enabled
-      && !(module->default_enabled || (module->force_enable && module->force_enable(module, module->enabled)))
-      && module->has_defaults(module)
-      && !_module_leaves_no_history(module))
-      dt_dev_add_history_item_ext(dev, module, FALSE, TRUE, TRUE, TRUE);
-  }
+  _dev_history_add_filtered(dev, _compress_enabled_user_default_params);
 
   // 2.2 : then modules that are set to non-default
-  for(GList *item = g_list_first(dev->iop); item; item = g_list_next(item))
-  {
-    dt_iop_module_t *module = (dt_iop_module_t *)(item->data);
-    if(module->enabled
-      && !(module->default_enabled || (module->force_enable && module->force_enable(module, module->enabled)))
-      && !module->has_defaults(module)
-      && !_module_leaves_no_history(module))
-      dt_dev_add_history_item_ext(dev, module, FALSE, TRUE, TRUE, TRUE);
-  }
+  _dev_history_add_filtered(dev, _compress_enabled_user_nondefault_params);
 
-  // Third: disabled modules that have an history. Maybe users want to re-enable them later,
-  // or it's modules enabled by default that were manually disabled.
+  // Third: disabled modules that have history because they were enabled by default or
+  // because their internal params (including blendops) differ from defaults. Maybe users
+  // want to re-enable them later, or it's modules enabled by default that were manually disabled.
   // Put them the end of the history, so user can truncate it after the last enabled item
   // to get rid of disabled history if needed.
-  for(GList *item = g_list_first(dev->iop); item; item = g_list_next(item))
-  {
-    dt_iop_module_t *module = (dt_iop_module_t *)(item->data);
-    if(!module->enabled
-       && (module->default_enabled || !module->has_defaults(module))
-       && !_module_leaves_no_history(module))
-      dt_dev_add_history_item_ext(dev, module, FALSE, TRUE, TRUE, TRUE);
-  }
+  _dev_history_add_filtered(dev, _compress_disabled_with_history);
 
   dt_dev_set_history_end_ext(dev, g_list_length(dev->history));
   dt_dev_pop_history_items_ext(dev);
