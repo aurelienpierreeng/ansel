@@ -76,7 +76,6 @@ typedef struct dt_lib_history_t
 {
   GtkWidget *history_view;
   GtkListStore *history_store;
-  GtkWidget *create_button;
   GtkWidget *compress_button;
   gboolean selection_reset;
 } dt_lib_history_t;
@@ -99,7 +98,6 @@ typedef enum dt_history_view_column_t
 static void _lib_history_compress_clicked_callback(GtkButton *widget, gpointer user_data);
 static gboolean _lib_history_compress_pressed_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data);
 static gboolean _lib_history_view_button_press_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data);
-static void _lib_history_create_style_button_clicked_callback(GtkWidget *widget, gpointer user_data);
 /* signal callback for history change */
 static void _lib_history_change_callback(gpointer instance, gpointer user_data);
 static void _lib_history_view_selection_changed(GtkTreeSelection *selection, gpointer user_data);
@@ -193,15 +191,9 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(G_OBJECT(d->compress_button), "button-press-event", G_CALLBACK(_lib_history_compress_pressed_callback), self);
 
   /* add toolbar button for creating style */
-  d->create_button = dtgtk_button_new(dtgtk_cairo_paint_styles, CPF_NONE, NULL);
-  g_signal_connect(G_OBJECT(d->create_button), "clicked",
-                   G_CALLBACK(_lib_history_create_style_button_clicked_callback), NULL);
-  gtk_widget_set_name(d->create_button, "non-flat");
-  gtk_widget_set_tooltip_text(d->create_button, _("create a style from the current history stack"));
 
   /* add buttons to buttonbox */
   gtk_box_pack_start(GTK_BOX(hhbox), d->compress_button, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(hhbox), d->create_button, FALSE, FALSE, 0);
 
   /* add history list and buttonbox to widget */
   gtk_box_pack_start(GTK_BOX(self->widget),
@@ -878,15 +870,6 @@ static gboolean _lib_history_view_button_press_callback(GtkWidget *widget, GdkEv
   }
 
   return FALSE;
-}
-
-static void _lib_history_create_style_button_clicked_callback(GtkWidget *widget, gpointer user_data)
-{
-  if(darktable.develop->image_storage.id)
-  {
-    dt_dev_write_history(darktable.develop);
-    dt_gui_styles_dialog_new(darktable.develop->image_storage.id);
-  }
 }
 
 void gui_reset(dt_lib_module_t *self)

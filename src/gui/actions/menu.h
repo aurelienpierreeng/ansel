@@ -185,6 +185,7 @@ void append_help(GtkWidget **menus, GList **lists, const dt_menus_t index);
 void append_image(GtkWidget **menus, GList **lists, const dt_menus_t index);
 void append_run(GtkWidget **menus, GList **lists, const dt_menus_t index);
 void append_select(GtkWidget **menus, GList **lists, const dt_menus_t index);
+void append_styles(GtkWidget **menus, GList **lists, const dt_menus_t index);
 void append_views(GtkWidget **menus, GList **lists, const dt_menus_t index);
 
 GtkWidget *ctx_gtk_menu_item_new_with_icon(const char *label, GtkWidget *menu,
@@ -217,6 +218,8 @@ GtkWidget *ctx_gtk_check_menu_item_new_with_markup_and_pixbuf(const char *label,
                                                               gpointer user_data,
                                                               const gboolean checked,
                                                               const gboolean show_checkbox);
+
+gboolean dt_menu_is_image_in_dev(GList *imgs);
 
 // Helper to wrap (*void)(void) functions into GtkAccel compatible callbacks
 #define MAKE_ACCEL_WRAPPER(cb)                                            \

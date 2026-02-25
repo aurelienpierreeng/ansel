@@ -616,6 +616,8 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   gui->last_preset = NULL;
   gui->export_popup.window = NULL;
   gui->export_popup.module = NULL;
+  gui->styles_popup.window = NULL;
+  gui->styles_popup.module = NULL;
   gui->input_devices = NULL;
 
   // load the style / theme

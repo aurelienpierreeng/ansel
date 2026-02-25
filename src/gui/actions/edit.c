@@ -104,19 +104,12 @@ static gboolean redo_callback(GtkAccelGroup *group, GObject *acceleratable, guin
   return TRUE;
 }
 
-
-static gboolean is_image_in_dev(GList *imgs)
-{
-  return darktable.develop != NULL
-    && g_list_find(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
-}
-
 static gboolean compress_history_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   GList *imgs = dt_act_on_get_images();
   if(!imgs) return FALSE;
 
-  gboolean is_darkroom_image_in_list = is_image_in_dev(imgs);
+  gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
 
   if(is_darkroom_image_in_list)
   {
@@ -148,7 +141,7 @@ static gboolean delete_history_callback(GtkAccelGroup *group, GObject *accelerat
   GList *imgs = dt_act_on_get_images();
   if(!imgs) return FALSE;
 
-  gboolean is_darkroom_image_in_list = is_image_in_dev(imgs);
+  gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
 
   if(is_darkroom_image_in_list)
   {
@@ -183,7 +176,7 @@ static gboolean copy_callback(GtkAccelGroup *group, GObject *acceleratable, guin
   }
 
   GList *imgs = dt_selection_get_list(darktable.selection);
-  gboolean is_darkroom_image_in_list = is_image_in_dev(imgs);
+  gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
   g_list_free(imgs);
 
   if(is_darkroom_image_in_list)
@@ -206,7 +199,7 @@ static gboolean copy_parts_callback(GtkAccelGroup *group, GObject *acceleratable
   }
 
   GList *imgs = dt_selection_get_list(darktable.selection);
-  gboolean is_darkroom_image_in_list = is_image_in_dev(imgs);
+  gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
   g_list_free(imgs);
 
   if(is_darkroom_image_in_list)
@@ -233,7 +226,7 @@ static gboolean paste_all_callback(GtkAccelGroup *group, GObject *acceleratable,
   }
 
   GList *imgs = dt_selection_get_list(darktable.selection);
-  gboolean is_darkroom_image_in_list = is_image_in_dev(imgs);
+  gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
 
   if(is_darkroom_image_in_list)
   {
@@ -266,7 +259,7 @@ static gboolean paste_parts_callback(GtkAccelGroup *group, GObject *acceleratabl
   }
 
   GList *imgs = dt_selection_get_list(darktable.selection);
-  gboolean is_darkroom_image_in_list = is_image_in_dev(imgs);
+  gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
 
   if(is_darkroom_image_in_list)
   {

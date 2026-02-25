@@ -94,7 +94,6 @@
 #include "common/imageio.h"
 #include "common/imageio_module.h"
 #include "common/selection.h"
-#include "common/styles.h"
 #include "common/tags.h"
 #include "common/undo.h"
 #include "control/conf.h"
@@ -745,147 +744,6 @@ static void _view_darkroom_filmstrip_activate_callback(gpointer instance, int32_
   }
 }
 
-#if 0
-static void zoom_key_accel(dt_action_t *action)
-{
-  dt_develop_t *dev = darktable.develop;
-}
-
-static void zoom_in_callback(dt_action_t *action)
-{
-  dt_view_t *self = dt_action_view(action);
-  dt_develop_t *dev = self->data;
-
-  scrolled(self, dev->roi.width / 2, dev->roi.height / 2, 1, GDK_CONTROL_MASK);
-}
-
-static void zoom_out_callback(dt_action_t *action)
-{
-  dt_view_t *self = dt_action_view(action);
-  dt_develop_t *dev = self->data;
-
-  scrolled(self, dev->roi.width / 2, dev->roi.height / 2, 0, GDK_CONTROL_MASK);
-}
-
-#endif
-
-static void _darkroom_ui_apply_style_activate_callback(gchar *name)
-{
-  dt_control_log(_("applied style `%s' on current image"), name);
-
-  darktable.develop->exit = 1;
-  dt_styles_apply_to_image_in_dev(darktable.develop, name, darktable.develop->image_storage.id);
-  darktable.develop->exit = 0;
-}
-
-static void _darkroom_ui_apply_style_popupmenu(GtkWidget *w, gpointer user_data)
-{
-  /* show styles popup menu */
-  GList *styles = dt_styles_get_list("");
-  GtkMenuShell *menu = NULL;
-  if(styles)
-  {
-    menu = GTK_MENU_SHELL(gtk_menu_new());
-    for(const GList *st_iter = styles; st_iter; st_iter = g_list_next(st_iter))
-    {
-      dt_style_t *style = (dt_style_t *)st_iter->data;
-
-      char *items_string = dt_styles_get_item_list_as_string(style->name);
-      gchar *tooltip = NULL;
-
-      if(style->description && *style->description)
-      {
-        tooltip = g_strconcat("<b>", g_markup_escape_text(style->description, -1), "</b>\n", items_string, NULL);
-      }
-      else
-      {
-        tooltip = g_strdup(items_string);
-      }
-
-      gchar **split = g_strsplit(style->name, "|", 0);
-
-      // if sub-menu, do not put leading group in final name
-
-      gchar *mi_name = NULL;
-
-      if(split[1])
-      {
-        gsize mi_len = 1 + strlen(split[1]);
-        for(int i=2; split[i]; i++)
-          mi_len += strlen(split[i]) + strlen(" | ");
-
-        mi_name = g_new0(gchar, mi_len);
-        gchar* tmp_ptr = g_stpcpy(mi_name, split[1]);
-        for(int i=2; split[i]; i++)
-        {
-          tmp_ptr = g_stpcpy(tmp_ptr, " | ");
-          tmp_ptr = g_stpcpy(tmp_ptr, split[i]);
-        }
-      }
-      else
-        mi_name = g_strdup(split[0]);
-
-      GtkWidget *mi = gtk_menu_item_new_with_label(mi_name);
-      gtk_widget_set_tooltip_markup(mi, tooltip);
-      g_free(mi_name);
-
-      // check if we already have a sub-menu with this name
-      GtkMenu *sm = NULL;
-
-      GList *children = gtk_container_get_children(GTK_CONTAINER(menu));
-      for(const GList *child = children; child; child = g_list_next(child))
-      {
-        GtkMenuItem *smi = (GtkMenuItem *)child->data;
-        if(!g_strcmp0(split[0],gtk_menu_item_get_label(smi)))
-        {
-          sm = (GtkMenu *)gtk_menu_item_get_submenu(smi);
-          break;
-        }
-      }
-      g_list_free(children);
-
-      GtkMenuItem *smi = NULL;
-
-      // no sub-menu, but we need one
-      if(!sm && split[1])
-      {
-        smi = (GtkMenuItem *)gtk_menu_item_new_with_label(split[0]);
-        sm = (GtkMenu *)gtk_menu_new();
-        gtk_menu_item_set_submenu(smi, GTK_WIDGET(sm));
-      }
-
-      if(sm)
-        gtk_menu_shell_append(GTK_MENU_SHELL(sm), mi);
-      else
-        gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
-
-      if(smi)
-      {
-        gtk_menu_shell_append(GTK_MENU_SHELL(menu), GTK_WIDGET(smi));
-        gtk_widget_show(GTK_WIDGET(smi));
-      }
-
-      g_signal_connect_swapped(G_OBJECT(mi), "activate",
-                               G_CALLBACK(_darkroom_ui_apply_style_activate_callback),
-                               (gpointer)g_strdup(style->name));
-      gtk_widget_show(mi);
-
-      g_free(items_string);
-      g_free(tooltip);
-      g_strfreev(split);
-    }
-    g_list_free_full(styles, dt_style_free);
-  }
-
-  /* if we got any styles, lets popup menu for selection */
-  if(menu)
-  {
-    dt_gui_menu_popup(GTK_MENU(menu), w, GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST);
-  }
-  else
-    dt_control_log(_("no styles have been created yet"));
-}
-
 /** toolbar buttons */
 
 static gboolean _toolbar_show_popup(gpointer user_data)
@@ -1373,13 +1231,6 @@ void gui_init(dt_view_t *self)
    * Add view specific tool buttons
    */
 
-  /* create quick styles popup menu tool */
-  GtkWidget *styles = dtgtk_button_new(dtgtk_cairo_paint_styles, 0, NULL);
-  g_signal_connect(G_OBJECT(styles), "clicked", G_CALLBACK(_darkroom_ui_apply_style_popupmenu), NULL);
-  gtk_widget_set_tooltip_text(styles, _("quick access for applying any of your styles"));
-  dt_gui_add_help_link(styles, dt_get_help_url("bottom_panel_styles"));
-  dt_view_manager_module_toolbox_add(darktable.view_manager, styles, DT_VIEW_DARKROOM);
-
   /* Enable ISO 12646-compliant colour assessment conditions */
   dev->iso_12646.button = dtgtk_togglebutton_new(dtgtk_cairo_paint_bulb, 0, NULL);
   gtk_widget_set_tooltip_text(dev->iso_12646.button,
@@ -1625,37 +1476,6 @@ void gui_init(dt_view_t *self)
 
   darktable.view_manager->proxy.darkroom.get_layout = _lib_darkroom_get_layout;
   dev->border_size = DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size"));
-
-#if 0
-  // move left/right/up/down
-  ac = dt_action_define(sa, N_("move"), N_("horizontal"), GINT_TO_POINTER(1), &_action_def_move);
-  dt_shortcut_register(ac, 0, DT_ACTION_EFFECT_DOWN, GDK_KEY_Left , 0);
-  dt_shortcut_register(ac, 0, DT_ACTION_EFFECT_UP  , GDK_KEY_Right, 0);
-  ac = dt_action_define(sa, N_("move"), N_("vertical"), GINT_TO_POINTER(0), &_action_def_move);
-  dt_shortcut_register(ac, 0, DT_ACTION_EFFECT_DOWN, GDK_KEY_Down , 0);
-  dt_shortcut_register(ac, 0, DT_ACTION_EFFECT_UP  , GDK_KEY_Up   , 0);
-
-  // Zoom shortcuts
-  dt_action_register(self, N_("zoom close-up"), zoom_key_accel, GDK_KEY_1, GDK_MOD1_MASK);
-  dt_action_register(self, N_("zoom fill"), zoom_key_accel, GDK_KEY_2, GDK_MOD1_MASK);
-  dt_action_register(self, N_("zoom fit"), zoom_key_accel, GDK_KEY_3, GDK_MOD1_MASK);
-
-  // zoom in/out
-  dt_action_register(self, N_("zoom in"), zoom_in_callback, GDK_KEY_plus, GDK_CONTROL_MASK);
-  dt_action_register(self, N_("zoom out"), zoom_out_callback, GDK_KEY_minus, GDK_CONTROL_MASK);
-
-  // Shortcut to skip images
-  dt_action_register(self, N_("image forward"), skip_f_key_accel_callback, GDK_KEY_Right, GDK_MOD1_MASK);
-  dt_action_register(self, N_("image back"), skip_b_key_accel_callback, GDK_KEY_Left, GDK_MOD1_MASK);
-
-  // cycle overlay colors
-  dt_action_register(self, N_("cycle overlay colors"), _overlay_cycle_callback, 0, 0);
-
-  // toggle visibility of drawn masks for current gui module
-  dt_action_register(self, N_("show drawn masks"), _toggle_mask_visibility_callback, 0, 0);
-
-  // Focus on next/previous modules
-#endif
 }
 
 enum

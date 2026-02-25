@@ -331,6 +331,8 @@ dt_menu_entry_t *set_menu_entry(GtkWidget **menus, GList **items_list,
                                 gboolean (*sensitive_callback)(GtkWidget *widget), guint key_val,
                                 GdkModifierType mods, GtkAccelGroup *accel_group)
 {
+  if(!label) label = "";
+
   // Alloc and set to 0
   dt_menu_entry_t *entry = calloc(1, sizeof(dt_menu_entry_t));
 
@@ -589,12 +591,14 @@ void add_menu_separator(GtkWidget *menu)
 {
   GtkWidget *sep = gtk_separator_menu_item_new();
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
+  gtk_widget_show(sep);
 }
 
 void add_sub_menu_separator(GtkWidget *parent)
 {
   GtkWidget *sep = gtk_separator_menu_item_new();
   gtk_menu_shell_append(GTK_MENU_SHELL(gtk_menu_item_get_submenu(GTK_MENU_ITEM(parent))), sep);
+  gtk_widget_show(sep);
 }
 
 void * get_custom_data(GtkWidget *widget)
@@ -643,4 +647,10 @@ gboolean has_active_image_in_lighttable()
   const gboolean image = has_active_images();
   const gboolean lighttable = _is_lighttable();
   return image && lighttable;
+}
+
+gboolean dt_menu_is_image_in_dev(GList *imgs)
+{
+  return darktable.develop != NULL
+    && g_list_find(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
 }

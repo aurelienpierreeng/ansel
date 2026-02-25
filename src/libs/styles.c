@@ -82,7 +82,7 @@ const char *name(struct dt_lib_module_t *self)
 const char **views(dt_lib_module_t *self)
 {
   // Goes in popup
-  static const char *v[] = {NULL};
+  static const char *v[] = {"special", NULL};
   return v;
 }
 

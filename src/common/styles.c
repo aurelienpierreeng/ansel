@@ -1079,38 +1079,13 @@ void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const 
   {
     /* add tag */
     dt_dev_append_changed_tag(newimgid);
-  }
-
-  if(ret_val == 0)
-  {
-    /* if current image in develop reload history */
-    if(dt_dev_is_current_image(darktable.develop, newimgid))
-    {
-      dt_dev_reload_history_items(darktable.develop, darktable.develop->image_storage.id);
-      dt_dev_history_pixelpipe_update(darktable.develop, TRUE);
-      dt_dev_history_gui_update(darktable.develop);
-      dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
-    }
-
+  
     /* remove old obsolete thumbnails */
     dt_mipmap_cache_remove(darktable.mipmap_cache, newimgid, TRUE);
 
     /* redraw center view to update visible mipmaps */
     dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
   }
-}
-
-void dt_styles_apply_to_image_in_dev(dt_develop_t *dev, const char *name, const int32_t imgid)
-{
-  if(imgid <= 0 || !name) return;
-
-  dt_dev_write_history(dev);
-
-  dt_dev_undo_start_record(dev);
-  dt_styles_apply_to_image(name, FALSE, imgid);
-  dt_dev_undo_end_record(dev);
-
-  dt_dev_pixelpipe_refresh_all(dev, TRUE);
 }
 
 void dt_styles_delete_by_name_adv(const char *name, const gboolean raise)

@@ -926,6 +926,8 @@ static inline gchar *delete_underscore(const char *s)
  */
 static inline gchar *strip_markup(const char *s)
 {
+  if(!s) return g_strdup("");
+
   PangoAttrList *attrs = NULL;
   gchar *plain = NULL;
 

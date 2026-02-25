@@ -679,6 +679,7 @@ void dt_ui_init_global_menu(dt_ui_t *ui)
   append_edit(ui->header->menus, &ui->header->item_lists[DT_MENU_EDIT], DT_MENU_EDIT);
   append_select(ui->header->menus, &ui->header->item_lists[DT_MENU_SELECTION], DT_MENU_SELECTION);
   append_image(ui->header->menus, &ui->header->item_lists[DT_MENU_IMAGE], DT_MENU_IMAGE);
+  append_styles(ui->header->menus, &ui->header->item_lists[DT_MENU_STYLES], DT_MENU_STYLES);
   append_run(ui->header->menus, &ui->header->item_lists[DT_MENU_RUN], DT_MENU_RUN);
   append_display(ui->header->menus, &ui->header->item_lists[DT_MENU_DISPLAY], DT_MENU_DISPLAY);
   append_views(ui->header->menus, &ui->header->item_lists[DT_MENU_ATELIERS], DT_MENU_ATELIERS);
