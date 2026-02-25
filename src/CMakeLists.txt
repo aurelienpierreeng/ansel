@@ -78,6 +78,7 @@ FILE(GLOB SOURCE_FILES
   "common/guided_filter.c"
   "common/history.c"
   "common/history_merge.c"
+  "common/history_merge_gui.c"
   "common/history_snapshot.c"
   "common/topological_sort.c"
   "common/gpx.c"
