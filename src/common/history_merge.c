@@ -89,7 +89,6 @@
 #include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
-#include "develop/masks.h"
 #include <glib.h>
 #include <stdlib.h>
 #include <string.h>
@@ -115,9 +114,6 @@ char *_hm_make_node_id(const char *op, const char *multi_name)
    */
   return g_strdup_printf("%s|%s", op, multi_name);
 }
-
-static int _hm_copy_masks_for_module(dt_develop_t *dev_dest, dt_develop_t *dev_src,
-                                     const dt_iop_module_t *mod_src);
 
 static void _hm_free_input_node(dt_digraph_node_t *n)
 {
@@ -443,101 +439,6 @@ static _hm_id_info_t *_hm_id_info_upsert(GHashTable *id_ht, const char *op, cons
   if(dst_iop && !info->dst_iop) info->dst_iop = dst_iop;
 
   return info;
-}
-
-static int _hm_next_multi_priority_for_op(dt_develop_t *dev, const char *op)
-{
-  /* Find the next available multi_priority value for a given module kind (`op`) in `dev`.
-   *
-   * GUI semantics for "add new instance" are: new instance gets `max(existing)+1`.
-   * We reimplement that here so topo-merge can create missing instances consistently.
-   */
-
-  int max_priority = 0;
-  // Scan all module instances to find the highest multi_priority for this op.
-  for(const GList *l = g_list_first(dev->iop); l; l = g_list_next(l))
-  {
-    const dt_iop_module_t *m = (const dt_iop_module_t *)l->data;
-    if(strcmp(m->op, op)) continue;
-    max_priority = MAX(max_priority, m->multi_priority);
-  }
-  return max_priority + 1;
-}
-
-static dt_iop_module_t *_hm_create_new_dest_instance(dt_develop_t *dev_dest, const char *op, const char *multi_name)
-{
-  /* Create a new module instance in `dev_dest` for the given (op, multi_name).
-   *
-   * When applying a topological ordering solution, we may encounter ids that do not have a matching
-   * instance in the destination pipeline. We interpret those as "new modules must be added".
-   *
-   * Special case:
-   * - One-instance modules can't be duplicated, so we just return the base instance.
-   *
-   * Side effects:
-   * - Appends a new module to `dev_dest->iop` (caller must resync order lists afterwards).
-   */
-
-  // Find an existing instance (prefer base) to use as template for loading.
-  dt_iop_module_t *base = dt_iop_get_module_by_op_priority(dev_dest->iop, op, 0);
-  if(!base) base = dt_iop_get_module_by_op_priority(dev_dest->iop, op, -1);
-
-  if((base->flags() & IOP_FLAGS_ONE_INSTANCE) == IOP_FLAGS_ONE_INSTANCE)
-  {
-    dt_print(DT_DEBUG_HISTORY,
-             "[dt_history_merge_module_list_into_image_topological] %s is one-instance, refusing to create a new "
-             "instance\n",
-             op);
-    return base;
-  }
-
-  // Allocate and load the new module in the destination develop context.
-  dt_iop_module_t *module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
-  if(!module) return NULL;
-
-  if(dt_iop_load_module(module, base->so, dev_dest))
-  {
-    fprintf(stderr, "[dt_history_merge_module_list_into_image_topological] can't load module %s\n", op);
-    free(module);
-    return NULL;
-  }
-
-  module->instance = base->instance;
-  module->enabled = FALSE;
-  module->multi_priority = _hm_next_multi_priority_for_op(dev_dest, op);
-  g_strlcpy(module->multi_name, multi_name ? multi_name : "", sizeof(module->multi_name));
-
-  dev_dest->iop = g_list_append(dev_dest->iop, module);
-  return module;
-}
-
-static int _hm_copy_module_contents(dt_develop_t *dev_dest, dt_develop_t *dev_src, dt_iop_module_t *mod_dest,
-                                    const dt_iop_module_t *mod_src)
-{
-  /* Copy the "inner state" of a module instance from source to destination.
-   *
-   * This is separate from ordering: it is about applying the source module parameters and blending state
-   * to a destination instance that has been selected/created by the ordering merge.
-   *
-   * We intentionally deep-copy what needs deep-copy semantics:
-   * - blend params via `dt_iop_commit_blend_params()`,
-   * - masks referenced by blend params by duplicating forms into `dev_dest`.
-   *
-   * Defensive behavior:
-   * - Params buffer copy is clamped to the smaller of (src,dst) sizes to tolerate version differences.
-   */
-
-  mod_dest->enabled = mod_src->enabled;
-
-  const int32_t sz_dest = mod_dest->params_size;
-  const int32_t sz_src = mod_src->params_size;
-  const int32_t sz = MIN(sz_dest, sz_src);
-  if(sz > 0) memcpy(mod_dest->params, mod_src->params, sz);
-
-  if(mod_src->blend_params) dt_iop_commit_blend_params(mod_dest, mod_src->blend_params);
-
-  if(_hm_copy_masks_for_module(dev_dest, dev_src, mod_src)) return 1;
-  return 0;
 }
 
 /* Build a list of node ids in pipeline order, restricted by an origin bitmask.
@@ -1261,11 +1162,10 @@ static int _hm_topo_apply_solution(_hm_topo_merge_ctx_t *ctx, dt_develop_t *dev_
     _hm_id_to_op_name(n->id, op, name);
 
     // Resolve (or create) the destination instance for this id.
-    dt_iop_module_t *mod_dest
-        = info->dst_iop ? info->dst_iop : dt_iop_get_module_by_instance_name(dev_dest->iop, op, name);
+    dt_iop_module_t *mod_dest = info->dst_iop ? info->dst_iop : dt_dev_get_module_instance(dev_dest, op, name, 0);
     if(!mod_dest)
     {
-      mod_dest = _hm_create_new_dest_instance(dev_dest, op, name);
+      mod_dest = dt_dev_create_module_instance(dev_dest, op, name, 0, TRUE);
       if(!mod_dest) return 1;
       created++;
       info->dst_iop = mod_dest;
@@ -1275,7 +1175,7 @@ static int _hm_topo_apply_solution(_hm_topo_merge_ctx_t *ctx, dt_develop_t *dev_
     // Only nodes originating from mod_list trigger content overwrite, and only when requested by caller.
     if(ctx->copy_module_contents && info->mod_list)
     {
-      if(_hm_copy_module_contents(dev_dest, dev_src, mod_dest, info->mod_list)) return 1;
+      if(dt_dev_copy_module_contents(dev_dest, dev_src, mod_dest, info->mod_list)) return 1;
       copied++;
     }
 
@@ -1342,163 +1242,6 @@ static int _hm_try_merge_iop_order_topologically(dt_develop_t *dev_dest, dt_deve
   }
 
   _hm_topo_merge_cleanup(&ctx);
-  return 0;
-}
-
-static void _hm_fill_used_forms(GList *forms_list, int formid, int *used, int nb)
-{
-  /* Mark a mask form and all of its dependencies as "used".
-   *
-   * We need this when copying blend params that reference a mask: the referenced forms (and any nested
-   * group members) must exist in the destination develop context.
-   *
-   * Implementation:
-   * - `used` is a fixed-size array acting as an insertion-ordered set of form ids.
-   * - We add `formid` if missing, then recurse into group members when `formid` is a group.
-   *
-   * Assumptions:
-   * - `nb` equals the number of forms in `forms_list`, so the array is large enough.
-   */
-  // Insert `formid` in the first empty slot, unless it already exists.
-  for(int i = 0; i < nb; i++)
-  {
-    if(used[i] == 0)
-    {
-      used[i] = formid;
-      break;
-    }
-    if(used[i] == formid) break;
-  }
-
-  dt_masks_form_t *form = dt_masks_get_from_id_ext(forms_list, formid);
-  if(form && (form->type & DT_MASKS_GROUP))
-  {
-    // For group forms, recursively visit all referenced form ids.
-    for(GList *grpts = form->points; grpts; grpts = g_list_next(grpts))
-    {
-      dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)grpts->data;
-      _hm_fill_used_forms(forms_list, grpt->formid, used, nb);
-    }
-  }
-}
-
-static int _hm_copy_masks_for_module(dt_develop_t *dev_dest, dt_develop_t *dev_src, const dt_iop_module_t *mod_src)
-{
-  /* Copy all mask forms referenced by `mod_src` from `dev_src` to `dev_dest`.
-   *
-   * Trigger:
-   * - When a module supports blending and has a positive `blend_params->mask_id`, blend params reference a
-   *   mask graph in `dev_src->forms`. We must make sure those same form ids exist in `dev_dest->forms`.
-   *
-   * Behavior:
-   * - Destination forms with the same id are removed from the active list and moved to `allforms`
-   *   (to preserve them but make the pasted ones effective),
-   * - New forms are duplicated from source and appended to destination active forms.
-   */
-
-  if(!(mod_src->flags() & IOP_FLAGS_SUPPORTS_BLENDING)) return 0;
-  if(mod_src->blend_params->mask_id <= 0) return 0;
-
-  const guint nbf = g_list_length(dev_src->forms);
-  if(nbf == 0) return 0;
-
-  int *forms_used_replace = calloc(nbf, sizeof(int));
-  if(!forms_used_replace) return 1;
-
-  // Collect the closure of referenced form ids starting at the root mask id.
-  _hm_fill_used_forms(dev_src->forms, mod_src->blend_params->mask_id, forms_used_replace, nbf);
-
-  // For each referenced id, overwrite/insert the form into destination.
-  for(int i = 0; i < (int)nbf && forms_used_replace[i] > 0; i++)
-  {
-    dt_masks_form_t *form = dt_masks_get_from_id(dev_src, forms_used_replace[i]);
-    if(form)
-    {
-      dt_masks_form_t *form_dest = dt_masks_get_from_id_ext(dev_dest->forms, forms_used_replace[i]);
-      if(form_dest)
-      {
-        // Replace any existing destination form with that id (keep old in `allforms`).
-        dev_dest->forms = g_list_remove(dev_dest->forms, form_dest);
-        dev_dest->allforms = g_list_append(dev_dest->allforms, form_dest);
-      }
-
-      dt_masks_form_t *form_new = dt_masks_dup_masks_form(form);
-      if(!form_new)
-      {
-        free(forms_used_replace);
-        return 1;
-      }
-      dev_dest->forms = g_list_append(dev_dest->forms, form_new);
-    }
-    else
-      fprintf(stderr, "[dt_history_merge_module_list_into_image_advanced] form %i not found in source image\n",
-              forms_used_replace[i]);
-  }
-
-  free(forms_used_replace);
-  return 0;
-}
-
-static gboolean _hm_history_item_include_masks(const dt_iop_module_t *module)
-{
-  /* Whether history items for this module must include a forms snapshot.
-   *
-   * We store `hist->forms` when:
-   * - blending is enabled beyond DEVELOP_MASK_ENABLED (so the mask graph matters), or
-   * - the module manages internal masks which must be replayed with history.
-   */
-  const gboolean supports_blending
-      = ((module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) == IOP_FLAGS_SUPPORTS_BLENDING);
-  const gboolean blending_on = supports_blending && (module->blend_params->mask_mode > DEVELOP_MASK_ENABLED);
-  const gboolean internal_masks = ((module->flags() & IOP_FLAGS_INTERNAL_MASKS) == IOP_FLAGS_INTERNAL_MASKS);
-
-  return blending_on || internal_masks;
-}
-
-static int _hm_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_develop_t *dev_src,
-                                                     const dt_dev_history_item_t *hist_src, dt_iop_module_t *mod_dest,
-                                                     dt_dev_history_item_t **out_hist)
-{
-  /* Create a new history item for `dev_dest` based on an existing `hist_src`.
-   *
-   * We use the source history item rather than the source module state because:
-   * - it reflects exactly what the user committed to history,
-   * - it carries parameter buffers and blend params in the same way history replay expects.
-   *
-   * Key detail:
-   * - The created item is bound to `mod_dest`, so its `iop_order` / multi_priority are taken from the
-   *   destination pipeline (which may have changed after topological reordering).
-   */
-
-  dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
-  if(!hist) return 1;
-
-  // Copy required masks into destination forms list before snapshotting the forms state.
-  if(_hm_copy_masks_for_module(dev_dest, dev_src, hist_src->module))
-  {
-    dt_dev_free_history_item(hist);
-    return 1;
-  }
-  GList *forms_snapshot = NULL;
-  if(_hm_history_item_include_masks(hist_src->module))
-  {
-    forms_snapshot = dt_masks_dup_forms_deep(dev_dest->forms, NULL);
-    if(!forms_snapshot)
-    {
-      dt_dev_free_history_item(hist);
-      return 1;
-    }
-  }
-
-  // Fill the destination history item from source params/blend params, but bind it to the destination module.
-  if(!dt_dev_history_item_update_from_params(dev_dest, hist, mod_dest, hist_src->enabled, hist_src->params,
-                                             hist_src->module->params_size, hist_src->blend_params, forms_snapshot))
-  {
-    dt_dev_free_history_item(hist);
-    return 1;
-  }
-
-  *out_hist = hist;
   return 0;
 }
 
@@ -1628,9 +1371,7 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   }
 
   // Sanitize and flatten module order
-  dt_ioppr_resync_modules_order(dev_dest);
-  dt_ioppr_resync_iop_list(dev_dest);
-  dt_ioppr_check_iop_order(dev_dest, dest_imgid, "_history_copy_and_paste_on_image_merge");
+  dt_ioppr_resync_pipeline(dev_dest, dest_imgid, "_history_copy_and_paste_on_image_merge", FALSE);
 
   GList *temp_history = NULL;
   // Build the temporary history list from the source history stack, module-by-module.
@@ -1645,13 +1386,9 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
 
     // Destination module instance and its current pipeline ordering info.
     dt_iop_module_t *mod_dest
-        = dt_iop_get_module_by_instance_name(dev_dest->iop, mod_src->op, mod_src->multi_name);
-    if(!mod_dest && mod_src->multi_name[0] == '\0')
-      mod_dest = dt_iop_get_module_by_op_priority(dev_dest->iop, mod_src->op, mod_src->multi_priority);
-    if(!mod_dest && mod_src->multi_name[0] == '\0')
-      mod_dest = dt_iop_get_module_by_op_priority(dev_dest->iop, mod_src->op, 0);
+        = dt_dev_get_module_instance(dev_dest, mod_src->op, mod_src->multi_name, mod_src->multi_priority);
     dt_dev_history_item_t *hist = NULL;
-    if(_hm_history_item_from_source_history_item(dev_dest, dev_src, hist_src, mod_dest, &hist)) goto cleanup;
+    if(dt_dev_history_item_from_source_history_item(dev_dest, dev_src, hist_src, mod_dest, &hist)) goto cleanup;
 
     temp_history = g_list_append(temp_history, hist);
   }
@@ -1681,9 +1418,7 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   }
 
   // Sanitize and flatten module order
-  dt_ioppr_resync_modules_order(dev_dest);
-  dt_ioppr_resync_iop_list(dev_dest);
-  dt_ioppr_check_iop_order(dev_dest, dest_imgid, "_history_copy_and_paste_on_image_merge 2");
+  dt_ioppr_resync_pipeline(dev_dest, dest_imgid, "_history_copy_and_paste_on_image_merge 2", FALSE);
 
   rc = 0;
 

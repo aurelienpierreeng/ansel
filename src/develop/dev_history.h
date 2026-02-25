@@ -62,10 +62,20 @@ typedef struct dt_dev_history_item_t
 } dt_dev_history_item_t;
 
 
-/** Free the whole GList of `dt_dev_history_item_t` attached to dev->history  */
+/**
+ * @brief Free the whole history list attached to dev->history.
+ *
+ * Frees each history item and clears the list pointer.
+ *
+ * @param dev Develop context.
+ */
 void dt_dev_history_free_history(struct dt_develop_t *dev);
 
-/** Free a single GList *link containing a `dt_dev_history_item_t` */
+/**
+ * @brief Free a single history item (used as GList free callback).
+ *
+ * @param data Pointer to @ref dt_dev_history_item_t.
+ */
 void dt_dev_free_history_item(gpointer data);
 
 /**
@@ -89,83 +99,277 @@ void dt_dev_free_history_item(gpointer data);
  * @param forms        mask forms snapshot for this history item (ownership transferred; may be NULL).
  * @return TRUE on success, FALSE on allocation failure/invalid args.
  */
+/**
+ * @brief Populate a history item from module parameters and recompute hashes.
+ *
+ * This allocates the history buffers if needed, copies params/blend params,
+ * assigns module metadata (op name, instance data), applies the values back
+ * to the module to keep hashes in sync, and computes the history hash using
+ * the provided mask snapshot.
+ *
+ * @param dev Develop context (currently unused, reserved for future use).
+ * @param hist History item to update.
+ * @param module Destination module instance.
+ * @param enabled Enabled state to store.
+ * @param params Optional params buffer (NULL uses module->params).
+ * @param params_size Size of @p params in bytes (ignored if params is NULL).
+ * @param blend_params Optional blend params buffer (NULL uses module->blend_params).
+ * @param forms Mask snapshot to attach (ownership transferred, may be NULL).
+ * @return TRUE on success, FALSE on allocation/argument failure.
+ */
 gboolean dt_dev_history_item_update_from_params(struct dt_develop_t *dev, dt_dev_history_item_t *hist,
-                                               struct dt_iop_module_t *module, gboolean enabled,
-                                               const void *params, const int32_t params_size,
-                                               const struct dt_develop_blend_params_t *blend_params, GList *forms);
+                                                struct dt_iop_module_t *module, gboolean enabled,
+                                                const void *params, const int32_t params_size,
+                                                const struct dt_develop_blend_params_t *blend_params, GList *forms);
 
 /**
- * @brief Append a new history item on dev->history, at dev->history_end position.
- * If history items exist after dev->history_end, they will be removed under certain conditions.
+ * @brief Return the next available multi_priority for an operation.
+ *
+ * @param dev Develop context.
+ * @param op Operation name.
+ * @return Next available instance priority (>= 1).
+ */
+int dt_dev_next_multi_priority_for_op(struct dt_develop_t *dev, const char *op);
+
+/**
+ * @brief Find a module instance by op name and instance metadata.
+ *
+ * Tries multi_name first, then falls back to matching multi_priority.
+ *
+ * @param dev Develop context.
+ * @param op Operation name.
+ * @param multi_name Instance name (may be NULL/empty).
+ * @param multi_priority Instance priority.
+ * @return Matching module instance or NULL.
+ */
+struct dt_iop_module_t *dt_dev_get_module_instance(struct dt_develop_t *dev, const char *op, const char *multi_name,
+                                                   const int multi_priority);
+
+/**
+ * @brief Create a new module instance from an existing base .so.
+ *
+ * @param dev Develop context.
+ * @param op Operation name.
+ * @param multi_name Instance name (may be NULL/empty).
+ * @param multi_priority Instance priority.
+ * @param use_next_priority If TRUE, auto-pick the next priority for this op.
+ * @return New module instance or NULL on failure.
+ */
+struct dt_iop_module_t *dt_dev_create_module_instance(struct dt_develop_t *dev, const char *op, const char *multi_name,
+                                                      const int multi_priority, gboolean use_next_priority);
+/**
+ * @brief Copy params/blend params from one module instance to another.
+ *
+ * Optionally copies the drawn masks used by @p mod_src from @p dev_src into
+ * @p dev_dest (if @p dev_src is non-NULL).
+ *
+ * @param dev_dest Destination develop context.
+ * @param dev_src Source develop context (may be NULL to skip mask copy).
+ * @param mod_dest Destination module instance.
+ * @param mod_src Source module instance.
+ * @return 0 on success, non-zero on allocation failure.
+ */
+int dt_dev_copy_module_contents(struct dt_develop_t *dev_dest, struct dt_develop_t *dev_src,
+                                struct dt_iop_module_t *mod_dest, const struct dt_iop_module_t *mod_src);
+
+/**
+ * @brief Create a history item from another history item, using a destination module.
+ *
+ * Copies params/blend params, updates module ordering metadata, and
+ * snapshots masks if needed by the source module.
+ *
+ * @param dev_dest Destination develop context (receives masks).
+ * @param dev_src Source develop context (provides masks).
+ * @param hist_src Source history item.
+ * @param mod_dest Destination module instance.
+ * @param out_hist Output history item (allocated on success).
+ * @return 0 on success, non-zero on allocation failure.
+ */
+int dt_dev_history_item_from_source_history_item(struct dt_develop_t *dev_dest, struct dt_develop_t *dev_src,
+                                                 const struct dt_dev_history_item_t *hist_src,
+                                                 struct dt_iop_module_t *mod_dest,
+                                                 struct dt_dev_history_item_t **out_hist);
+
+/**
+ * @brief Merge a list of modules into a destination image history via dt_history_merge().
+ *
+ * @param dev_src Source develop context (provides module params).
+ * @param dest_imgid Destination image id.
+ * @param mod_list List of module instances to merge.
+ * @param merge_iop_order Whether to merge pipeline order (TRUE) or preserve destination (FALSE).
+ * @param mode Merge strategy for history entries.
+ * @param paste_instances Whether to paste module instances.
+ * @return 0 on success, non-zero on failure.
+ */
+int dt_dev_merge_history_into_image(struct dt_develop_t *dev_src, int32_t dest_imgid, const GList *mod_list,
+                                    gboolean merge_iop_order, const dt_history_merge_strategy_t mode,
+                                    const gboolean paste_instances);
+/**
+ * @brief Replace an image history with the content of @p dev_src.
+ *
+ * Optionally reloads default modules before writing to DB. This is used
+ * by history replace and style replace paths.
+ *
+ * @param dev_src Source develop context.
+ * @param dest_imgid Destination image id.
+ * @param reload_defaults Whether to reload default modules before writing.
+ * @param msg Optional debug message.
+ * @return 0 on success, non-zero on failure.
+ */
+int dt_dev_replace_history_on_image(struct dt_develop_t *dev_src, const int32_t dest_imgid,
+                                    const gboolean reload_defaults, const char *msg);
+
+/**
+ * @brief Append or update a history item for a module.
+ *
+ * If the last history item matches the module and @p force_new_item is FALSE,
+ * the existing item is reused. Otherwise a new entry is appended.
+ * If history items exist after dev->history_end, they may be removed depending
+ * on module rules (see dev_history.c).
  *
  * @param dev
  * @param module
  * @param enable
  * @param force_new_item
- * @param no_image
- * @param include_masks
- * @return gboolean TRUE if the pipeline topology may need to be updated, aka new module node inserted
+ * @return TRUE if the pipeline topology may need to be updated (new module node).
  */
-gboolean dt_dev_add_history_item_ext(struct dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable, gboolean force_new_item,
-                                     gboolean no_image, gboolean include_masks);
+gboolean dt_dev_add_history_item_ext(struct dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable,
+                                     gboolean force_new_item);
 
-// Locks dev->history_mutex, calls `dt_dev_add_history_item_ext()`, invalidates darkroom pipelines,
-// triggers pipe recomputation and queue an history auto-save for the next 15 seconds.
+/**
+ * @brief Thread-safe wrapper around dt_dev_add_history_item_ext().
+ *
+ * Locks history mutex, invalidates pipelines, triggers recomputation and
+ * schedules history auto-save. This is the typical entry point for GUI actions.
+ *
+ * @param dev Develop context.
+ * @param module Module instance.
+ * @param enable Enable state.
+ * @param redraw Whether to force a GUI redraw.
+ */
 void dt_dev_add_history_item_real(struct dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable, gboolean redraw);
 
 // Debug helper to follow calls to `dt_dev_add_history_item_real()`, but mostly to follow useless pipe recomputations.
 #define dt_dev_add_history_item(dev, module, enable, redraw) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_add_history_item_real, (dev), (module), (enable), (redraw))
 
 
-// Locks darktable.database_threadsafe in write mode,
-// write dev->history GList into DB and XMP
+/**
+ * @brief Write dev->history to DB and XMP for a given image id.
+ *
+ * This acquires the database lock in write mode.
+ *
+ * @param dev Develop context.
+ * @param imgid Image id.
+ */
 void dt_dev_write_history_ext(struct dt_develop_t *dev, const int32_t imgid);
 
-// Locks dev->history_mutex and calls dt_dev_write_history_ext()
+/**
+ * @brief Thread-safe wrapper around dt_dev_write_history_ext() for dev->image_storage.id.
+ *
+ * @param dev Develop context.
+ */
 void dt_dev_write_history(struct dt_develop_t *dev);
 
-// Apply module params already loaded from history to module GUIs.
+/**
+ * @brief Apply history-loaded params to module GUIs.
+ *
+ * Ensures module instances shown in the GUI match the history state.
+ *
+ * @param dev Develop context.
+ */
 void dt_dev_history_gui_update(struct dt_develop_t *dev);
 
-// Rebuild and process pixelpipes after backend history changes.
-// Set rebuild to TRUE if the pipeline topology has changed
+/**
+ * @brief Rebuild or resync pixelpipes after backend history changes.
+ *
+ * @param dev Develop context.
+ * @param rebuild TRUE to rebuild pipeline topology, FALSE to resync only.
+ */
 void dt_dev_history_pixelpipe_update(struct dt_develop_t *dev, gboolean rebuild);
 
-// Notify the rest of the app that history-related DB/XMP changes were written.
+/**
+ * @brief Notify the rest of the app that history changes were written.
+ *
+ * Updates thumbnails and emits user-visible notices when needed.
+ *
+ * @param dev Develop context.
+ * @param imgid Image id.
+ */
 void dt_dev_history_notify_change(struct dt_develop_t *dev, const int32_t imgid);
 
-// Undo handling for history changes. These are called by dt_dev_undo_start_record()
-// / dt_dev_undo_end_record() (develop/develop.c) and are independent of any GUI module.
+/**
+ * @brief Start an undo record for history changes.
+ *
+ * Called by the develop undo framework.
+ *
+ * @param dev Develop context.
+ */
 void dt_dev_history_undo_start_record(struct dt_develop_t *dev);
+/**
+ * @brief Finish an undo record for history changes.
+ *
+ * @param dev Develop context.
+ */
 void dt_dev_history_undo_end_record(struct dt_develop_t *dev);
+/**
+ * @brief Invalidate a module pointer inside undo snapshots.
+ *
+ * Used when module instances are destroyed or replaced.
+ *
+ * @param module Module to invalidate.
+ */
 void dt_dev_history_undo_invalidate_module(struct dt_iop_module_t *module);
 
-// Get history (module params) and masks from DB,
-// apply default modules, auto-presets and mandatory modules,
-// then populate dev->history GList.
-// WARNING: this init modules internals with the whole history,
-// not taking history_end into account. You need to call
-// dt_dev_pop_history_items_ext to set it properly.
-gboolean dt_dev_read_history_ext(struct dt_develop_t *dev, const int32_t imgid, gboolean no_image);
+/**
+ * @brief Read history and masks from DB and populate dev->history.
+ *
+ * Also loads default modules and auto-presets when needed. This initializes
+ * module internals with the full history and does not honor history_end.
+ * Call dt_dev_pop_history_items_ext() afterwards to apply history_end.
+ *
+ * @param dev Develop context.
+ * @param imgid Image id.
+ * @return TRUE if this is a newly-initialized history, FALSE otherwise.
+ */
+gboolean dt_dev_read_history_ext(struct dt_develop_t *dev, const int32_t imgid);
 
-// Read dev->history state, up to dev->history_end,
-// and write it into the params/blendops of modules from dev->iop.
-// dev->history_end should be set before, see `dt_dev_set_history_end_ext()`.
-// This doesn't update GUI. See `dt_dev_pop_history_items()`
+/**
+ * @brief Apply history items to module params up to dev->history_end.
+ *
+ * Does not update the GUI; see dt_dev_pop_history_items() for GUI-aware calls.
+ *
+ * @param dev Develop context.
+ */
 void dt_dev_pop_history_items_ext(struct dt_develop_t *dev);
 
-// Locks dev->history_mutex and calls `dt_dev_pop_history_items_ext()`
-// Then update module GUI
+/**
+ * @brief Thread-safe wrapper around dt_dev_pop_history_items_ext(), then update GUI.
+ *
+ * @param dev Develop context.
+ */
 void dt_dev_pop_history_items(struct dt_develop_t *dev);
 
 
-// Free exisiting history, re-read it from database, update GUI and rebuild darkroom pipeline nodes.
-// Locks dev->history_mutex
+/**
+ * @brief Reload history from DB and rebuild pipelines/GUI state.
+ *
+ * Frees existing history, re-reads from DB, applies to modules,
+ * and updates GUI and pipelines. Locks history mutex.
+ *
+ * @param dev Develop context.
+ * @param imgid Image id.
+ */
 void dt_dev_reload_history_items(struct dt_develop_t *dev, const int32_t imgid);
 
 
-// Removes the reference to `*module` from history entries
-// FIXME: why is that needed ?
+/**
+ * @brief Remove a module pointer from a history list.
+ *
+ * Used when modules are deleted or re-instantiated.
+ *
+ * @param list History list.
+ * @param module Module to invalidate.
+ */
 void dt_dev_invalidate_history_module(GList *list, struct dt_iop_module_t *module);
 
 /**
@@ -177,43 +381,65 @@ void dt_dev_invalidate_history_module(GList *list, struct dt_iop_module_t *modul
  */
 uint64_t dt_dev_history_get_hash(struct dt_develop_t *dev);
 
-// We allow pipelines to run partial histories, up to a certain index
-// stored privately in dev->history_end. Use these getter/setters
-// that will check validity, instead of directly reading/writing the private data.
-
-// Get the index of the last active history element from a GUI perspective.
-// It means that dev->history_end is shifted by a +1 offset, so index 0 is the raw image,
-// therefore outside of the actual dev->history list, then dev->history_end = 1 is
-// actually the first element of history, and dev->history_end = length(dev->history) is the last.
-// Note: the value is sanitized with the actual history size.
-// It needs to run after dev->history is fully populated
+/**
+ * @brief Get the current history end index (GUI perspective).
+ *
+ * The index is 1-based with 0 representing the raw input image. The value is
+ * sanitized against the actual history length.
+ *
+ * @param dev Develop context.
+ * @return History end index.
+ */
 int32_t dt_dev_get_history_end_ext(struct dt_develop_t *dev);
 
-// Set the index of the last active history element from a GUI perspective.
-// It means that dev->history_end is shifted by a +1 offset, so index 0 is the raw image,
-// therefore outside of the actual dev->history list, then dev->history_end = 1 is
-// actually the first element of history, and dev->history_end = length(dev->history) is the last.
-// Note: the value is sanitized with the actual history size.
-// It needs to run after dev->history is fully populated
+/**
+ * @brief Set the history end index (GUI perspective).
+ *
+ * The index is 1-based with 0 representing the raw input image. The value is
+ * sanitized against the actual history length.
+ *
+ * @param dev Develop context.
+ * @param index New history end index.
+ */
 void dt_dev_set_history_end_ext(struct dt_develop_t *dev, const uint32_t index);
 
+/**
+ * @brief Determine whether a module should be skipped during history copy.
+ *
+ * Evaluates module flags such as deprecated/unsafe/hidden.
+ *
+ * @param flags Module flags.
+ * @return TRUE if module should be skipped, FALSE otherwise.
+ */
 gboolean dt_history_module_skip_copy(const int flags);
 
-/** adds to dev_dest module mod_src */
-int dt_history_merge_module_into_history(struct dt_develop_t *dev_dest, struct dt_develop_t *dev_src, struct dt_iop_module_t *mod_src, GList **_modules_used);
+/**
+ * @brief Merge a single module instance into a destination history.
+ *
+ * Creates or reuses a destination module instance and copies its parameters.
+ * This does not resync the pipeline or pop history; callers should batch
+ * multiple merges and resync once.
+ *
+ * @param dev_dest Destination develop context.
+ * @param dev_src Source develop context (may be NULL to skip mask copy).
+ * @param mod_src Source module instance.
+ * @return 1 on success, 0 on failure.
+ */
+int dt_history_merge_module_into_history(struct dt_develop_t *dev_dest, struct dt_develop_t *dev_src,
+                                         struct dt_iop_module_t *mod_src);
 
 /**
- * @brief Merge a list of source modules into a destination image history and write the result to DB.
+ * @brief Copy and paste history between images.
  *
- * `dev_dest` must be initialized and have already loaded `dest_imgid` history (dt_dev_read_history_ext + pop).
- * `dev_src` can be NULL (no masks copied).
- * `mod_list` contains dt_iop_module_t* from `dev_src` or temporary modules created in the `dev_dest` context.
+ * Depending on @p mode, this merges or replaces the destination history.
+ *
+ * @param imgid Source image id.
+ * @param dest_imgid Destination image id.
+ * @param ops Optional list of history indices to copy (NULL for full copy).
+ * @param copy_full Whether to copy full history.
+ * @param mode Merge strategy (append/appstart/replace).
+ * @return 0 on success, non-zero on failure.
  */
-int dt_history_merge_module_list_into_image(struct dt_develop_t *dev_dest, struct dt_develop_t *dev_src,
-                                            int32_t dest_imgid, const GList *mod_list);
-
-
-/** copy history from imgid and pasts on dest_imgid, merge or overwrite... */
 int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, GList *ops, 
                                        const gboolean copy_full, const dt_history_merge_strategy_t mode);
 
@@ -226,35 +452,61 @@ int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, GList 
  * @param dev
  */
 void dt_dev_history_compress(struct dt_develop_t *dev);
+/**
+ * @brief Variant of history compression that optionally skips DB writeback.
+ *
+ * @param dev Develop context.
+ * @param write_history If TRUE, write history to DB/XMP after compression.
+ */
+void dt_dev_history_compress_ext(struct dt_develop_t *dev, gboolean write_history);
+/**
+ * @brief Cleanup cached statements or state used by history I/O.
+ */
 void dt_dev_history_cleanup(void);
 
 /**
- * @brief Find the first history entry on dev->history attached to a module
- * 
- * @param history_list
- * @param module 
- * @return dt_dev_history_item_t* 
+ * @brief Initialize module defaults and insert required default modules.
+ *
+ * This does not read the database history. It only loads defaults and
+ * optionally applies auto-presets, mirroring the internal init path used
+ * by dt_dev_read_history_ext().
+ *
+ * @param dev Develop context.
+ * @param imgid Image id.
+ * @param apply_auto_presets Whether to apply auto-presets.
+ * @return TRUE if this was the first initialization for the image.
+ */
+gboolean dt_dev_init_default_history(struct dt_develop_t *dev, const int32_t imgid, gboolean apply_auto_presets);
+
+/**
+ * @brief Find the first history item referencing a module.
+ *
+ * @param history_list History list.
+ * @param module Module instance.
+ * @return First matching history item or NULL.
  */
 dt_dev_history_item_t *dt_dev_history_get_first_item_by_module(GList *history_list, struct dt_iop_module_t *module);
 
 /**
- * @brief Find the last history entry on dev->history attached to a module, starting at history_end.
- * 
- * @param history_list 
- * @param module 
- * @param history_end 
- * @return dt_dev_history_item_t* 
+ * @brief Find the last history item referencing a module up to history_end.
+ *
+ * @param history_list History list.
+ * @param module Module instance.
+ * @param history_end Upper bound index (GUI perspective).
+ * @return Last matching history item or NULL.
  */
 dt_dev_history_item_t *dt_dev_history_get_last_item_by_module(GList *history_list, struct dt_iop_module_t *module, int history_end);
 
 /**
- * @brief Delete, add (back) and reorder modules in GUI based on their 
- * pipeline existence and order at a certain point in the history.
- * 
- * @param dev 
- * @param iop 
- * @param history 
- * @return int 
+ * @brief Refresh GUI module nodes to match history state.
+ *
+ * Removes modules without history, creates missing instances, and reorders
+ * the GUI list according to history/pipeline ordering.
+ *
+ * @param dev Develop context.
+ * @param iop Module list.
+ * @param history History list.
+ * @return 0 on success, non-zero on error.
  */
 int dt_dev_history_refresh_nodes(struct dt_develop_t *dev, GList *iop, GList *history);
 

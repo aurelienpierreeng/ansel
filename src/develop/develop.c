@@ -613,7 +613,7 @@ int dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
   // we need a global lock as the dev->iop set must not be changed until read history is terminated
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
 
-  const gboolean first_run = dt_dev_read_history_ext(dev, imgid, FALSE);
+  const gboolean first_run = dt_dev_read_history_ext(dev, imgid);
   if(first_run && dev == darktable.develop)
   {
     // Resync our private copy of image image with DB,

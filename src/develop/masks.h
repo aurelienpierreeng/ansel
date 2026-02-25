@@ -451,10 +451,17 @@ dt_masks_form_t *dt_masks_create(dt_masks_type_t type);
 dt_masks_form_t *dt_masks_create_ext(dt_masks_type_t type);
 /** replace dev->forms with forms */
 void dt_masks_replace_current_forms(dt_develop_t *dev, GList *forms);
+/** snapshot current dev->forms (deep copy) and optionally reset dev->forms_changed */
+GList *dt_masks_snapshot_current_forms(dt_develop_t *dev, gboolean reset_changed);
 /** returns a form with formid == id from a list of forms */
 dt_masks_form_t *dt_masks_get_from_id_ext(GList *forms, int id);
 /** returns a form with formid == id from dev->forms */
 dt_masks_form_t *dt_masks_get_from_id(dt_develop_t *dev, int id);
+/** copy forms used by a module from dev_src to dev_dest */
+int dt_masks_copy_used_forms_for_module(dt_develop_t *dev_dest, dt_develop_t *dev_src,
+                                        const struct dt_iop_module_t *mod_src);
+/** return the mask manager module instance if present */
+struct dt_iop_module_t *dt_masks_get_mask_manager(struct dt_develop_t *dev);
 
 /** read the forms from the db */
 void dt_masks_read_masks_history(dt_develop_t *dev, const int32_t imgid);

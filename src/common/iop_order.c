@@ -53,6 +53,15 @@
 #define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
 
 static void _ioppr_reset_iop_order(GList *iop_order_list);
+static dt_iop_order_entry_t *dt_ioppr_get_iop_order_entry(GList *iop_order_list, const char *op_name,
+                                                          const int multi_priority);
+static gboolean dt_ioppr_write_iop_order(const dt_iop_order_t kind, GList *iop_order_list, const int32_t imgid);
+static void dt_ioppr_resync_iop_list(dt_develop_t *dev);
+static void dt_ioppr_update_for_entries(dt_develop_t *dev, GList *entry_list, gboolean append);
+static void dt_ioppr_check_duplicate_iop_order(GList **_iop_list, GList *history_list);
+static void dt_ioppr_migrate_iop_order(struct dt_develop_t *dev, const int32_t imgid);
+static GList *dt_ioppr_extract_multi_instances_list(GList *iop_order_list);
+static GList *dt_ioppr_merge_multi_instance_iop_order_list(GList *iop_order_list, GList *multi_instance_list);
 
 /** Note :
  * we do not use finite-math-only and fast-math because divisions by zero are not manually avoided in the code
@@ -408,6 +417,17 @@ static void *_dup_iop_order_entry(const void *src, gpointer data);
 static int _count_entries_operation(GList *e_list, const char *operation);
 
 
+/**
+ * @brief Insert a missing module entry before another module in an order list.
+ *
+ * This is used to migrate older/custom lists when new modules appear in
+ * built-in orders.
+ *
+ * @param iop_order_list Order list to update.
+ * @param module Existing module name to insert before.
+ * @param new_module New module name to insert if missing.
+ * @return Updated list head.
+ */
 static GList *_insert_before(GList *iop_order_list, const char *module, const char *new_module)
 {
   gboolean exists = FALSE;
@@ -525,8 +545,16 @@ GList *dt_ioppr_get_iop_order_link(GList *iop_order_list, const char *op_name, c
   return link;
 }
 
-// returns the first iop order entry that matches operation == op_name
-dt_iop_order_entry_t *dt_ioppr_get_iop_order_entry(GList *iop_order_list, const char *op_name, const int multi_priority)
+/**
+ * @brief Return the first order entry matching operation/instance.
+ *
+ * @param iop_order_list Order list.
+ * @param op_name Operation name.
+ * @param multi_priority Instance priority (or -1 for any).
+ * @return Matching entry or NULL.
+ */
+static dt_iop_order_entry_t *dt_ioppr_get_iop_order_entry(GList *iop_order_list, const char *op_name,
+                                                          const int multi_priority)
 {
   const GList * const restrict link = dt_ioppr_get_iop_order_link(iop_order_list, op_name, multi_priority);
   if(link)
@@ -671,7 +699,18 @@ gboolean dt_ioppr_has_multiple_instances(GList *iop_order_list)
   return FALSE;
 }
 
-gboolean dt_ioppr_write_iop_order(const dt_iop_order_t kind, GList *iop_order_list, const int32_t imgid)
+/**
+ * @brief Persist an order list for a given image with a specific kind.
+ *
+ * Handles both built-in orders (stores version only) and custom orders
+ * (stores serialized list in DB).
+ *
+ * @param kind Order kind to store.
+ * @param iop_order_list Order list to serialize if needed.
+ * @param imgid Image id.
+ * @return TRUE on success, FALSE on error.
+ */
+static gboolean dt_ioppr_write_iop_order(const dt_iop_order_t kind, GList *iop_order_list, const int32_t imgid)
 {
   sqlite3_stmt *stmt;
 
@@ -716,6 +755,12 @@ gboolean dt_ioppr_write_iop_order_list(GList *iop_order_list, const int32_t imgi
   return dt_ioppr_write_iop_order(kind, iop_order_list, imgid);
 }
 
+/**
+ * @brief Build an order list from a static entry table.
+ *
+ * @param entries Zero-terminated array of @ref dt_iop_order_entry_t.
+ * @return Newly-allocated order list.
+ */
 GList *_table_to_list(const dt_iop_order_entry_t entries[])
 {
   GList *iop_order_list = NULL;
@@ -862,6 +907,13 @@ GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted)
   return iop_order_list;
 }
 
+/**
+ * @brief Reset iop_order values to a sequential order for a list.
+ *
+ * Ensures the list has monotonically increasing iop_order values.
+ *
+ * @param iop_order_list Order list to normalize.
+ */
 static void _ioppr_reset_iop_order(GList *iop_order_list)
 {
   // iop-order must start with a number > 0 and be incremented. There is no
@@ -874,7 +926,14 @@ static void _ioppr_reset_iop_order(GList *iop_order_list)
   }
 }
 
-void dt_ioppr_resync_iop_list(dt_develop_t *dev)
+/**
+ * @brief Resynchronize dev->iop list order against dev->iop_order_list.
+ *
+ * This updates each module's iop_order and then sorts the module list.
+ *
+ * @param dev Develop context.
+ */
+static void dt_ioppr_resync_iop_list(dt_develop_t *dev)
 {
   // make sure that the iop_order_list does not contains possibly removed modules
 
@@ -891,6 +950,14 @@ void dt_ioppr_resync_iop_list(dt_develop_t *dev)
 
     l = next;
   }
+}
+
+void dt_ioppr_resync_pipeline(dt_develop_t *dev, const int32_t imgid, const char *msg, gboolean check_duplicates)
+{
+  dt_ioppr_resync_modules_order(dev);
+  dt_ioppr_resync_iop_list(dev);
+  if(check_duplicates) dt_ioppr_check_duplicate_iop_order(&dev->iop, dev->history);
+  if(msg) dt_ioppr_check_iop_order(dev, imgid, msg);
 }
 
 void dt_ioppr_resync_modules_order(dt_develop_t *dev)
@@ -965,7 +1032,13 @@ void dt_ioppr_set_default_iop_order(dt_develop_t *dev, const int32_t imgid)
   dt_ioppr_resync_modules_order(dev);
 }
 
-void dt_ioppr_migrate_iop_order(struct dt_develop_t *dev, const int32_t imgid)
+/**
+ * @brief Apply a new order list by reloading history and rebuilding UI/pipelines.
+ *
+ * @param dev Develop context.
+ * @param imgid Image id.
+ */
+static void dt_ioppr_migrate_iop_order(struct dt_develop_t *dev, const int32_t imgid)
 {
   dt_ioppr_set_default_iop_order(dev, imgid);
   dt_dev_reload_history_items(dev, dev->image_storage.id);
@@ -988,7 +1061,13 @@ void dt_ioppr_change_iop_order(struct dt_develop_t *dev, const int32_t imgid, GL
   dt_ioppr_migrate_iop_order(darktable.develop, imgid);
 }
 
-GList *dt_ioppr_extract_multi_instances_list(GList *iop_order_list)
+/**
+ * @brief Extract all order entries that have multiple instances.
+ *
+ * @param iop_order_list Order list to scan.
+ * @return List of duplicated entries corresponding to multi-instance ops.
+ */
+static GList *dt_ioppr_extract_multi_instances_list(GList *iop_order_list)
 {
   GList *mi = NULL;
 
@@ -1006,6 +1085,16 @@ GList *dt_ioppr_extract_multi_instances_list(GList *iop_order_list)
   return g_list_reverse(mi);  // list was built in reverse order, so un-reverse it
 }
 
+/**
+ * @brief Merge an operation's multiple instances into the order list.
+ *
+ * Updates instance numbers in-place and inserts additional entries as needed.
+ *
+ * @param iop_order_list Base order list.
+ * @param operation Operation name.
+ * @param multi_instance_list List of instances for that operation.
+ * @return Updated order list.
+ */
 GList *dt_ioppr_merge_module_multi_instance_iop_order_list(GList *iop_order_list,
                                                            const char *operation, GList *multi_instance_list)
 {
@@ -1058,7 +1147,17 @@ GList *dt_ioppr_merge_module_multi_instance_iop_order_list(GList *iop_order_list
   return iop_order_list;
 }
 
-GList *dt_ioppr_merge_multi_instance_iop_order_list(GList *iop_order_list, GList *multi_instance_list)
+/**
+ * @brief Merge multiple-instance entries into an order list.
+ *
+ * Groups all instances of the same operation together, then merges them
+ * back into the main list while preserving relative ordering.
+ *
+ * @param iop_order_list Base order list to update.
+ * @param multi_instance_list List of entries containing multiple instances.
+ * @return Updated order list.
+ */
+static GList *dt_ioppr_merge_multi_instance_iop_order_list(GList *iop_order_list, GList *multi_instance_list)
 {
   GList *op = NULL;
 
@@ -1103,6 +1202,16 @@ GList *dt_ioppr_merge_multi_instance_iop_order_list(GList *iop_order_list, GList
   return iop_order_list;
 }
 
+/**
+ * @brief Count module instances and track their highest priorities.
+ *
+ * @param iop Module list.
+ * @param operation Operation name to count.
+ * @param max_multi_priority Output: maximum multi_priority among all instances.
+ * @param count Output: total number of instances.
+ * @param max_multi_priority_enabled Output: maximum multi_priority among enabled instances.
+ * @param count_enabled Output: number of enabled instances.
+ */
 static void _count_iop_module(GList *iop, const char *operation, int *max_multi_priority, int *count,
                               int *max_multi_priority_enabled, int *count_enabled)
 {
@@ -1130,6 +1239,13 @@ static void _count_iop_module(GList *iop, const char *operation, int *max_multi_
   assert(*count >= *count_enabled);
 }
 
+/**
+ * @brief Count order-list entries matching an operation name.
+ *
+ * @param e_list Entry list.
+ * @param operation Operation name to match.
+ * @return Count of entries.
+ */
 static int _count_entries_operation(GList *e_list, const char *operation)
 {
   int count = 0;
@@ -1143,6 +1259,13 @@ static int _count_entries_operation(GList *e_list, const char *operation)
   return count;
 }
 
+/**
+ * @brief Check if an operation was already handled earlier in the list.
+ *
+ * @param e_list Current list node.
+ * @param operation Operation name to search.
+ * @return TRUE if found earlier, FALSE otherwise.
+ */
 static gboolean _operation_already_handled(GList *e_list, const char *operation)
 {
   for(const GList *l = g_list_previous(e_list); l; l = g_list_previous(l))
@@ -1153,7 +1276,15 @@ static gboolean _operation_already_handled(GList *e_list, const char *operation)
   return FALSE;
 }
 
-// returns the nth module's priority being active or not
+/**
+ * @brief Return the multi_priority of the n-th instance of an operation.
+ *
+ * @param dev Develop context.
+ * @param operation Operation name.
+ * @param n Instance index (1-based).
+ * @param only_disabled If TRUE, only consider disabled instances.
+ * @return multi_priority or INT_MAX if not found.
+ */
 int _get_multi_priority(dt_develop_t *dev, const char *operation, const int n, const gboolean only_disabled)
 {
   int count = 0;
@@ -1170,7 +1301,16 @@ int _get_multi_priority(dt_develop_t *dev, const char *operation, const int n, c
   return INT_MAX;
 }
 
-void dt_ioppr_update_for_entries(dt_develop_t *dev, GList *entry_list, gboolean append)
+/**
+ * @brief Update dev->iop_order_list to include entries from @p entry_list.
+ *
+ * Used by update paths for modules and style items.
+ *
+ * @param dev Develop context.
+ * @param entry_list List of @ref dt_iop_order_entry_t.
+ * @param append Whether to append missing entries at the end.
+ */
+static void dt_ioppr_update_for_entries(dt_develop_t *dev, GList *entry_list, gboolean append)
 {
 
   // for each priority list to be checked
@@ -1340,6 +1480,13 @@ void dt_ioppr_update_for_modules(dt_develop_t *dev, GList *modules, gboolean app
 }
 
 // returns the first dt_dev_history_item_t on history_list where hist->module == mod
+/**
+ * @brief Find a history item referencing a given module instance.
+ *
+ * @param history_list History list.
+ * @param mod Module instance.
+ * @return First matching history item or NULL.
+ */
 static dt_dev_history_item_t *_ioppr_search_history_by_module(GList *history_list, dt_iop_module_t *mod)
 {
   dt_dev_history_item_t *hist_entry = NULL;
@@ -1360,7 +1507,16 @@ static dt_dev_history_item_t *_ioppr_search_history_by_module(GList *history_lis
 
 // check if there's duplicate iop_order entries in iop_list
 // if so, updates the iop_order to be unique, but only if the module is disabled and not in history
-void dt_ioppr_check_duplicate_iop_order(GList **_iop_list, GList *history_list)
+/**
+ * @brief Detect and resolve duplicate iop_order values.
+ *
+ * Walks the module list, reorders or removes disabled duplicates not present
+ * in history to keep a consistent ordering.
+ *
+ * @param _iop_list Pointer to module list to mutate.
+ * @param history_list History list used to preserve required instances.
+ */
+static void dt_ioppr_check_duplicate_iop_order(GList **_iop_list, GList *history_list)
 {
   GList *iop_list = *_iop_list;
   dt_iop_module_t *mod_prev = NULL;
@@ -1481,6 +1637,13 @@ int dt_ioppr_check_so_iop_order(GList *iop_list, GList *iop_order_list)
   return iop_order_missing;
 }
 
+/**
+ * @brief Deep-copy callback for @ref dt_iop_order_entry_t.
+ *
+ * @param src Source entry.
+ * @param data Unused.
+ * @return Newly-allocated copy.
+ */
 static void *_dup_iop_order_entry(const void *src, gpointer data)
 {
   const dt_iop_order_entry_t *const restrict scr_entry = (dt_iop_order_entry_t *)src;
@@ -1774,43 +1937,15 @@ gboolean dt_ioppr_move_iop_after(struct dt_develop_t *dev, dt_iop_module_t *modu
   return TRUE;
 }
 
-//--------------------------------------------------------------------
-// from here just for debug
-//--------------------------------------------------------------------
-
-void dt_ioppr_print_module_iop_order(GList *iop_list, const char *msg)
-{
-  for(const GList *modules = iop_list; modules; modules = g_list_next(modules))
-  {
-    dt_iop_module_t *mod = (dt_iop_module_t *)(modules->data);
-
-    fprintf(stderr, "[%s] module %s %s multi_priority=%i, iop_order=%d\n",
-            msg, mod->op, mod->multi_name, mod->multi_priority, mod->iop_order);
-  }
-}
-
-void dt_ioppr_print_history_iop_order(GList *history_list, const char *msg)
-{
-  for(const GList *history = history_list; history; history = g_list_next(history))
-  {
-    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)(history->data);
-
-    fprintf(stderr, "[%s] module %s %s multi_priority=%i, iop_order=%d\n",
-            msg, hist->op_name, hist->multi_name, hist->multi_priority, hist->iop_order);
-  }
-}
-
-void dt_ioppr_print_iop_order(GList *iop_order_list, const char *msg)
-{
-  for(const GList *iops_order = iop_order_list; iops_order; iops_order = g_list_next(iops_order))
-  {
-    dt_iop_order_entry_t *order_entry = (dt_iop_order_entry_t *)(iops_order->data);
-
-    fprintf(stderr, "[%s] op %20s (inst %d) iop_order=%d\n",
-            msg, order_entry->operation, order_entry->instance, order_entry->o.iop_order);
-  }
-}
-
+/**
+ * @brief Build a list of "fence" modules that should not be crossed.
+ *
+ * Fences are modules that enforce local ordering constraints (e.g. RAW
+ * preprocessing chain).
+ *
+ * @param iop_list Module list.
+ * @return Newly-allocated list of fence modules.
+ */
 static GList *_get_fence_modules_list(GList *iop_list)
 {
   GList *fences = NULL;
@@ -1826,6 +1961,15 @@ static GList *_get_fence_modules_list(GList *iop_list)
   return g_list_reverse(fences);  // list was built in reverse order, so un-reverse it
 }
 
+/**
+ * @brief Validate pipeline order against fence and rule constraints.
+ *
+ * Emits debug messages when violations are detected.
+ *
+ * @param iop_list Module list.
+ * @param imgid Image id (for diagnostics).
+ * @param msg Optional debug label.
+ */
 static void _ioppr_check_rules(GList *iop_list, const int32_t imgid, const char *msg)
 {
   // check for IOP_FLAGS_FENCE on each module
@@ -2144,6 +2288,14 @@ char *dt_ioppr_serialize_text_iop_order_list(GList *iop_order_list)
  * One common case seems that the list does not end with gamma.
 */
 
+/**
+ * @brief Basic sanity check for an order list.
+ *
+ * Ensures all entries are valid and ordering values are non-zero.
+ *
+ * @param list Order list.
+ * @return TRUE if list looks sane, FALSE otherwise.
+ */
 static gboolean _ioppr_sanity_check_iop_order(GList *list)
 {
   gboolean ok = TRUE;

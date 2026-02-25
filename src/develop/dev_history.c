@@ -64,6 +64,7 @@
 #include "common/history_snapshot.h"
 #include "common/image_cache.h"
 #include "common/history_merge.h"
+#include "common/iop_order.h"
 #include "develop/dev_history.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
@@ -91,8 +92,28 @@ typedef struct dt_dev_history_db_ctx_t
   gboolean presets;
 } dt_dev_history_db_ctx_t;
 
-static gboolean _init_default_history(dt_develop_t *dev, const int32_t imgid, gboolean apply_auto_presets);
+gboolean dt_dev_init_default_history(dt_develop_t *dev, const int32_t imgid, gboolean apply_auto_presets);
 
+/**
+ * @brief Adapter callback for history DB rows.
+ *
+ * Converts DB row fields into a history item and appends it to dev->history.
+ *
+ * @param user_data Context pointer (dt_dev_history_db_ctx_t).
+ * @param id Image id from DB row.
+ * @param num History index.
+ * @param modversion Module version stored in DB.
+ * @param operation Operation name.
+ * @param module_params Module params blob.
+ * @param param_length Params blob length.
+ * @param enabled Enabled flag from DB.
+ * @param blendop_params Blend params blob.
+ * @param bl_length Blend blob length.
+ * @param blendop_version Blend params version.
+ * @param multi_priority Instance priority.
+ * @param multi_name Instance name.
+ * @param preset_name Optional preset name (for auto presets).
+ */
 static void _dev_history_db_row_cb(void *user_data, const int32_t id, const int num, const int modversion,
                                    const char *operation, const void *module_params, const int param_length,
                                    const gboolean enabled, const void *blendop_params, const int bl_length,
@@ -186,8 +207,145 @@ gboolean dt_dev_history_item_update_from_params(dt_develop_t *dev, dt_dev_histor
   return TRUE;
 }
 
-// returns the first history item with corresponding module->op
-static dt_dev_history_item_t *_search_history_by_op(dt_develop_t *dev, dt_iop_module_t *module)
+int dt_dev_next_multi_priority_for_op(dt_develop_t *dev, const char *op)
+{
+  int max_priority = 0;
+  for(const GList *l = g_list_first(dev->iop); l; l = g_list_next(l))
+  {
+    const dt_iop_module_t *m = (const dt_iop_module_t *)l->data;
+    if(strcmp(m->op, op)) continue;
+    max_priority = MAX(max_priority, m->multi_priority);
+  }
+  return max_priority + 1;
+}
+
+dt_iop_module_t *dt_dev_get_module_instance(dt_develop_t *dev, const char *op, const char *multi_name,
+                                            const int multi_priority)
+{
+  const char *name = (multi_name && *multi_name) ? multi_name : NULL;
+  dt_iop_module_t *module = dt_iop_get_module_by_instance_name(dev->iop, op, name);
+  if(!module && (!name || *name == '\0'))
+    module = dt_iop_get_module_by_op_priority(dev->iop, op, multi_priority);
+  if(!module && (!name || *name == '\0'))
+    module = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
+  return module;
+}
+
+dt_iop_module_t *dt_dev_create_module_instance(dt_develop_t *dev, const char *op, const char *multi_name,
+                                               const int multi_priority, gboolean use_next_priority)
+{
+  dt_iop_module_t *base = dt_iop_get_module_by_op_priority(dev->iop, op, 0);
+  if(!base) base = dt_iop_get_module_by_op_priority(dev->iop, op, -1);
+  if(!base) return NULL;
+
+  if((base->flags() & IOP_FLAGS_ONE_INSTANCE) == IOP_FLAGS_ONE_INSTANCE)
+    return base;
+
+  dt_iop_module_t *module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
+  if(!module) return NULL;
+
+  if(dt_iop_load_module(module, base->so, dev))
+  {
+    fprintf(stderr, "[dt_dev_create_module_instance] can't load module %s\n", op);
+    free(module);
+    return NULL;
+  }
+
+  module->instance = base->instance;
+  module->enabled = FALSE;
+  module->multi_priority = use_next_priority ? dt_dev_next_multi_priority_for_op(dev, op) : multi_priority;
+  g_strlcpy(module->multi_name, multi_name ? multi_name : "", sizeof(module->multi_name));
+
+  dev->iop = g_list_append(dev->iop, module);
+  return module;
+}
+
+int dt_dev_copy_module_contents(dt_develop_t *dev_dest, dt_develop_t *dev_src, dt_iop_module_t *mod_dest,
+                                const dt_iop_module_t *mod_src)
+{
+  mod_dest->enabled = mod_src->enabled;
+
+  const int32_t sz_dest = mod_dest->params_size;
+  const int32_t sz_src = mod_src->params_size;
+
+  // If both param sizes don't match, we have a serious problem
+  assert(sz_dest == sz_src);
+  if(sz_dest != sz_src) return 1;
+
+  const int32_t sz = MIN(sz_dest, sz_src);
+  if(sz > 0) memcpy(mod_dest->params, mod_src->params, sz);
+
+  if(mod_src->blend_params) dt_iop_commit_blend_params(mod_dest, mod_src->blend_params);
+
+  if(dev_src && dt_masks_copy_used_forms_for_module(dev_dest, dev_src, mod_src)) return 1;
+  return 0;
+}
+
+int dt_dev_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_develop_t *dev_src,
+                                                 const dt_dev_history_item_t *hist_src, dt_iop_module_t *mod_dest,
+                                                 dt_dev_history_item_t **out_hist)
+{
+  dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
+  if(!hist) return 1;
+
+  if(dt_masks_copy_used_forms_for_module(dev_dest, dev_src, hist_src->module))
+  {
+    dt_dev_free_history_item(hist);
+    return 1;
+  }
+  GList *forms_snapshot = NULL;
+  if(dt_iop_module_needs_mask_history(hist_src->module))
+  {
+    forms_snapshot = dt_masks_snapshot_current_forms(dev_dest, FALSE);
+    if(!forms_snapshot)
+    {
+      dt_dev_free_history_item(hist);
+      return 1;
+    }
+  }
+
+  if(!dt_dev_history_item_update_from_params(dev_dest, hist, mod_dest, hist_src->enabled, hist_src->params,
+                                             hist_src->module->params_size, hist_src->blend_params, forms_snapshot))
+  {
+    dt_dev_free_history_item(hist);
+    return 1;
+  }
+
+  *out_hist = hist;
+  return 0;
+}
+
+int dt_dev_merge_history_into_image(dt_develop_t *dev_src, int32_t dest_imgid, const GList *mod_list,
+                                    gboolean merge_iop_order, const dt_history_merge_strategy_t mode,
+                                    const gboolean paste_instances)
+{
+  if(dest_imgid <= 0) return 1;
+  if(!mod_list) return 0;
+
+  dt_develop_t dev_dest = { 0 };
+  dt_dev_init(&dev_dest, FALSE);
+  dt_dev_reload_history_items(&dev_dest, dest_imgid);
+
+  const int ret_val = dt_history_merge(&dev_dest, dev_src, dest_imgid, mod_list, merge_iop_order, mode, paste_instances);
+
+  if(ret_val == 0)
+  {
+    dt_dev_pop_history_items_ext(&dev_dest);
+    dt_dev_write_history(&dev_dest);
+  }
+
+  dt_dev_cleanup(&dev_dest);
+  return ret_val;
+}
+
+/**
+ * @brief Find the first history item matching a module operation name.
+ *
+ * @param dev Develop context.
+ * @param module Module instance to match by op name.
+ * @return First matching history item or NULL.
+ */
+static dt_dev_history_item_t *_search_history_by_op(dt_develop_t *dev, const dt_iop_module_t *module)
 {
   dt_dev_history_item_t *hist_mod = NULL;
   for(GList *history = g_list_first(dev->history); history; history = g_list_next(history))
@@ -203,251 +361,91 @@ static dt_dev_history_item_t *_search_history_by_op(dt_develop_t *dev, dt_iop_mo
   return hist_mod;
 }
 
-const dt_dev_history_item_t *_get_last_history_item_for_module(dt_develop_t *dev, struct dt_iop_module_t *module)
+/**
+ * @brief Resolve or create the destination module instance for history merge.
+ *
+ * Attempts to reuse existing instances when possible, otherwise creates a new instance.
+ *
+ * @param dev_dest Destination develop context.
+ * @param mod_src Source module instance.
+ * @param created Output flag set TRUE if a new instance is created.
+ * @param reused_base Output flag set TRUE if an existing base instance is reused.
+ * @return Destination module instance or NULL on failure.
+ */
+static dt_iop_module_t *_history_merge_resolve_dest_instance(dt_develop_t *dev_dest,
+                                                             const dt_iop_module_t *mod_src,
+                                                             gboolean *created,
+                                                             gboolean *reused_base)
 {
-  for(GList *l = g_list_last(dev->history); l; l = g_list_previous(l))
-  {
-    dt_dev_history_item_t *item = (dt_dev_history_item_t *)l->data;
-    if(item->module == module)
-      return item;
-  }
-  return NULL;
-}
+  *created = FALSE;
+  *reused_base = FALSE;
 
-// fills used with formid, if it is a group it recurs and fill all sub-forms
-static void _fill_used_forms(GList *forms_list, int formid, int *used, int nb)
-{
-  // first, we search for the formid in used table
-  for(int i = 0; i < nb; i++)
-  {
-    if(used[i] == 0)
-    {
-      // we store the formid
-      used[i] = formid;
-      break;
-    }
-    if(used[i] == formid) break;
-  }
+  if(mod_src->flags() & IOP_FLAGS_ONE_INSTANCE)
+    return dt_iop_get_module_by_op_priority(dev_dest->iop, mod_src->op, -1);
 
-  // if the form is a group, we iterate through the sub-forms
-  dt_masks_form_t *form = dt_masks_get_from_id_ext(forms_list, formid);
-  if(form && (form->type & DT_MASKS_GROUP))
+  dt_iop_module_t *module
+      = dt_dev_get_module_instance(dev_dest, mod_src->op, mod_src->multi_name, mod_src->multi_priority);
+  if(module) return module;
+
+  if(_search_history_by_op(dev_dest, mod_src) == NULL)
   {
-    for(GList *grpts = form->points; grpts; grpts = g_list_next(grpts))
+    module = dt_iop_get_module_by_op_priority(dev_dest->iop, mod_src->op, -1);
+    if(module)
     {
-      dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)grpts->data;
-      _fill_used_forms(forms_list, grpt->formid, used, nb);
+      *reused_base = TRUE;
+      return module;
     }
   }
+
+  module = dt_dev_create_module_instance(dev_dest, mod_src->op, mod_src->multi_name, mod_src->multi_priority, FALSE);
+  if(module) *created = TRUE;
+
+  return module;
 }
 
 // dev_src is used only to copy masks, if no mask will be copied it can be null
-int dt_history_merge_module_into_history(dt_develop_t *dev_dest, dt_develop_t *dev_src, dt_iop_module_t *mod_src, GList **_modules_used)
+int dt_history_merge_module_into_history(dt_develop_t *dev_dest, dt_develop_t *dev_src, dt_iop_module_t *mod_src)
 {
-  int module_added = 1;
-  GList *modules_used = *_modules_used;
-  dt_iop_module_t *module = NULL;
-  dt_iop_module_t *mod_replace = NULL;
+  gboolean created = FALSE;
+  gboolean reused_base = FALSE;
+  dt_iop_module_t *module = _history_merge_resolve_dest_instance(dev_dest, mod_src, &created, &reused_base);
+  if(!module) return 0;
 
-  // one-instance modules always replace the existing one
   if(mod_src->flags() & IOP_FLAGS_ONE_INSTANCE)
   {
-    mod_replace = dt_iop_get_module_by_op_priority(dev_dest->iop, mod_src->op, -1);
-    if(mod_replace == NULL)
-    {
-      fprintf(stderr, "[dt_history_merge_module_into_history] can't find single instance module %s\n",
-              mod_src->op);
-      module_added = 0;
-    }
-    else
-    {
-      dt_print(DT_DEBUG_HISTORY, "[dt_history_merge_module_into_history] %s (%s) will be overriden in target history by parameters from source history\n", mod_src->name(), mod_src->multi_name);
-    }
+    dt_print(DT_DEBUG_HISTORY, "[dt_history_merge_module_into_history] %s (%s) will be overriden in target history by parameters from source history\n",
+             mod_src->name(), mod_src->multi_name);
   }
-
-  if(module_added && mod_replace == NULL)
+  else if(created)
   {
-    // we haven't found a module to replace, so we will create a new instance
-    // but if there's an un-used instance on dev->iop we will use that
-
-    if(_search_history_by_op(dev_dest, mod_src) == NULL)
-    {
-      // there should be only one instance of this iop (since is un-used)
-      mod_replace = dt_iop_get_module_by_op_priority(dev_dest->iop, mod_src->op, -1);
-      if(mod_replace == NULL)
-      {
-        fprintf(stderr, "[dt_history_merge_module_into_history] can't find base instance module %s\n", mod_src->op);
-        module_added = 0;
-      }
-      else
-      {
-        dt_print(DT_DEBUG_HISTORY, "[dt_history_merge_module_into_history] %s (%s) will be enabled in target history with parameters from source history\n", mod_src->name(), mod_src->multi_name);
-      }
-    }
+    dt_print(DT_DEBUG_HISTORY, "[dt_history_merge_module_into_history] %s (%s) will be inserted as a new instance in target history\n",
+             mod_src->name(), mod_src->multi_name);
   }
-
-  if(module_added)
+  else if(reused_base)
   {
-    // if we are creating a new instance, create a new module
-    if(mod_replace == NULL)
-    {
-      dt_iop_module_t *base = dt_iop_get_module_by_op_priority(dev_dest->iop, mod_src->op, -1);
-      module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
-      if(dt_iop_load_module(module, base->so, dev_dest))
-      {
-        fprintf(stderr, "[dt_history_merge_module_into_history] can't load module %s\n", mod_src->op);
-        module_added = 0;
-      }
-      else
-      {
-        module->instance = mod_src->instance;
-        module->multi_priority = mod_src->multi_priority;
-        module->iop_order = dt_ioppr_get_iop_order(dev_dest->iop_order_list, module->op, module->multi_priority);
-        dt_print(DT_DEBUG_HISTORY, "[dt_history_merge_module_into_history] %s (%s) will be inserted as a new instance in target history\n", mod_src->name(), mod_src->multi_name);
-      }
-    }
-    else
-    {
-      module = mod_replace;
-    }
-
-    module->enabled = mod_src->enabled;
-    g_strlcpy(module->multi_name, mod_src->multi_name, sizeof(module->multi_name));
-
-    memcpy(module->params, mod_src->params, module->params_size);
-    if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
-    {
-      memcpy(module->blend_params, mod_src->blend_params, sizeof(dt_develop_blend_params_t));
-      module->blend_params->mask_id = mod_src->blend_params->mask_id;
-    }
+    dt_print(DT_DEBUG_HISTORY, "[dt_history_merge_module_into_history] %s (%s) will be enabled in target history with parameters from source history\n",
+             mod_src->name(), mod_src->multi_name);
   }
 
-  // we have the module, we will use the source module iop_order unless there's already
-  // a module with that order
-  if(module_added)
-  {
-    dt_iop_module_t *module_duplicate = NULL;
-    // check if there's a module with the same iop_order
-    for( GList *modules_dest = g_list_first(dev_dest->iop); modules_dest; modules_dest = g_list_next(modules_dest))
-    {
-      dt_iop_module_t *mod = (dt_iop_module_t *)(modules_dest->data);
+  g_strlcpy(module->multi_name, mod_src->multi_name, sizeof(module->multi_name));
 
-      if(module_duplicate != NULL)
-      {
-        module_duplicate = mod;
-        break;
-      }
-      if(mod->iop_order == mod_src->iop_order && mod != module)
-      {
-        module_duplicate = mod;
-      }
-    }
+  if(dt_dev_copy_module_contents(dev_dest, dev_src, module, mod_src)) return 0;
 
-    // do some checking...
-    if(mod_src->iop_order <= 0.0 || mod_src->iop_order == INT_MAX)
-      fprintf(stderr, "[dt_history_merge_module_into_history] invalid source module %s %s(%d)(%i)\n",
-          mod_src->op, mod_src->multi_name, mod_src->iop_order, mod_src->multi_priority);
-    if(module_duplicate && (module_duplicate->iop_order <= 0.0 || module_duplicate->iop_order == INT_MAX))
-      fprintf(stderr, "[dt_history_merge_module_into_history] invalid duplicate module module %s %s(%d)(%i)\n",
-          module_duplicate->op, module_duplicate->multi_name, module_duplicate->iop_order, module_duplicate->multi_priority);
-    if(module->iop_order <= 0.0 || module->iop_order == INT_MAX)
-      fprintf(stderr, "[dt_history_merge_module_into_history] invalid iop_order for module %s %s(%d)(%i)\n",
-          module->op, module->multi_name, module->iop_order, module->multi_priority);
+  dt_dev_add_history_item_ext(dev_dest, module, FALSE, FALSE);
 
-    // if this is a new module just add it to the list
-    if(mod_replace == NULL)
-      dev_dest->iop = g_list_insert_sorted(dev_dest->iop, module, dt_sort_iop_by_order);
-    else
-      dev_dest->iop = g_list_sort(dev_dest->iop, dt_sort_iop_by_order);
-  }
-
-  // and we add it to history
-  if(module_added)
-  {
-    dt_print(DT_DEBUG_HISTORY, "[dt_history_merge_module_into_history] %s (%s) was at position %i in source pipeline, now is at position %i\n", mod_src->name(), mod_src->multi_name, mod_src->iop_order, module->iop_order);
-
-    // copy masks
-    guint nbf = 0;
-    int *forms_used_replace = NULL;
-
-    if(dev_src)
-    {
-      // we will copy only used forms
-      // record the masks used by this module
-      if(mod_src->flags() & IOP_FLAGS_SUPPORTS_BLENDING && mod_src->blend_params->mask_id > 0)
-      {
-        nbf = g_list_length(dev_src->forms);
-        forms_used_replace = calloc(nbf, sizeof(int));
-
-        _fill_used_forms(dev_src->forms, mod_src->blend_params->mask_id, forms_used_replace, nbf);
-
-        // now copy masks
-        for(int i = 0; i < nbf && forms_used_replace[i] > 0; i++)
-        {
-          dt_masks_form_t *form = dt_masks_get_from_id(dev_src, forms_used_replace[i]);
-          if(form)
-          {
-            // check if the form already exists in dest image
-            // if so we'll remove it, so it is replaced
-            dt_masks_form_t *form_dest = dt_masks_get_from_id_ext(dev_dest->forms, forms_used_replace[i]);
-            if(form_dest)
-            {
-              dev_dest->forms = g_list_remove(dev_dest->forms, form_dest);
-              // and add it to allforms to cleanup
-              dev_dest->allforms = g_list_append(dev_dest->allforms, form_dest);
-            }
-
-            // and add it to dest image
-            dt_masks_form_t *form_new = dt_masks_dup_masks_form(form);
-            dev_dest->forms = g_list_append(dev_dest->forms, form_new);
-          }
-          else
-            fprintf(stderr, "[dt_history_merge_module_into_history] form %i not found in source image\n", forms_used_replace[i]);
-        }
-      }
-    }
-
-    dt_dev_add_history_item_ext(dev_dest, module, FALSE, FALSE, TRUE, TRUE);
-
-    dt_ioppr_resync_modules_order(dev_dest);
-
-    dt_ioppr_check_iop_order(dev_dest, 0, "dt_history_merge_module_into_history");
-
-    dt_dev_pop_history_items_ext(dev_dest);
-
-    if(forms_used_replace) free(forms_used_replace);
-  }
-
-  *_modules_used = modules_used;
-
-  return module_added;
+  return 1;
 }
 
-int dt_history_merge_module_list_into_image(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_t dest_imgid,
-                                            const GList *mod_list)
-{
-  if(!dev_dest || dest_imgid <= 0) return 1;
-  if(!mod_list) return 0;
-
-  // update iop-order list to have entries for the new modules
-  dt_ioppr_update_for_modules(dev_dest, (GList *)mod_list, FALSE);
-
-  GList *modules_used = NULL;
-  for(const GList *l = g_list_first((GList *)mod_list); l; l = g_list_next(l))
-  {
-    dt_iop_module_t *mod = (dt_iop_module_t *)l->data;
-    dt_history_merge_module_into_history(dev_dest, dev_src, mod, &modules_used);
-  }
-
-  // update iop-order list to have entries for the new modules
-  dt_ioppr_update_for_modules(dev_dest, (GList *)mod_list, FALSE);
-
-  dt_dev_write_history_ext(dev_dest, dest_imgid);
-
-  g_list_free(modules_used);
-  return 0;
-}
-
+/**
+ * @brief Build a module list to copy based on selected history indices.
+ *
+ * When @p ops is NULL, builds a list from the full history depending on @p copy_full.
+ *
+ * @param dev_src Source develop context.
+ * @param ops Optional list of history indices (as GPOINTER_TO_UINT).
+ * @param copy_full Whether to include disabled/default items.
+ * @return Newly-allocated list of modules to copy.
+ */
 static GList *_get_user_mod_list(dt_develop_t *dev_src, GList *ops, gboolean copy_full)
 {
   GList *mod_list = NULL;
@@ -507,6 +505,18 @@ static GList *_get_user_mod_list(dt_develop_t *dev_src, GList *ops, gboolean cop
   return g_list_reverse(mod_list);
 }
 
+/**
+ * @brief Copy/merge history between images using the merge pipeline.
+ *
+ * Builds a source dev, resolves the module list, and dispatches to dt_history_merge().
+ *
+ * @param imgid Source image id.
+ * @param dest_imgid Destination image id.
+ * @param ops Optional list of history indices to copy.
+ * @param copy_full Whether to copy the full history.
+ * @param mode Merge strategy.
+ * @return 0 on success, non-zero on failure.
+ */
 static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_imgid, GList *ops,
                                                   const gboolean copy_full, const dt_history_merge_strategy_t mode)
 {
@@ -515,12 +525,6 @@ static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_im
   dt_develop_t *dev_src = &_dev_src;
   dt_dev_init(dev_src, FALSE);
   dt_dev_reload_history_items(dev_src, imgid);
-
-  // Init destination history + pipeline
-  dt_develop_t _dev_dest = { 0 };
-  dt_develop_t *dev_dest = &_dev_dest;
-  dt_dev_init(dev_dest, FALSE);
-  dt_dev_reload_history_items(dev_dest, dest_imgid);
 
   int ret_val = 0;
 
@@ -531,40 +535,18 @@ static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_im
     // NOTE: when pasting from LDR/JPEG onto RAW images, the source iop-order list might not be compatible
     // with the destination pipeline. We need to re-init the iop-order list for the destination image and
     // reload module defaults for the destination image, but we must not apply auto-presets.
-    dev_src->image_storage = dev_dest->image_storage;
-
-    // Refresh `dev_src->image_storage` from cache/mipmap to ensure RAW metadata is available for reload_defaults.
-    dt_dev_ensure_image_storage(dev_src, dest_imgid);
-
-    // Reload defaults and insert missing default modules, but do not apply auto-presets.
-    // Note: they will be appended to the source history, which is kinda expected
-    _init_default_history(dev_src, dest_imgid, FALSE);
-
-    // Sanitize and flatten module order in case default modules were added
-    dt_ioppr_resync_modules_order(dev_src);
-    dt_ioppr_resync_iop_list(dev_src);
-    dt_ioppr_check_iop_order(dev_src, dest_imgid, "_history_copy_and_paste_on_image_merge");
-
-    dt_dev_pop_history_items_ext(dev_src);
-    dt_dev_write_history(dev_src);
+    ret_val = dt_dev_replace_history_on_image(dev_src, dest_imgid, TRUE, "_history_copy_and_paste_on_image_merge");
   }
   else
   {
     // Merge
     GList *mod_list = _get_user_mod_list(dev_src, ops, copy_full);
-    ret_val = dt_history_merge(dev_dest, dev_src, dest_imgid, mod_list, dt_conf_get_bool("history/copy_iop_order"),
-                               mode, dt_conf_get_bool("history/paste_instances"));
+    ret_val = dt_dev_merge_history_into_image(dev_src, dest_imgid, mod_list,
+                                              dt_conf_get_bool("history/copy_iop_order"), mode,
+                                              dt_conf_get_bool("history/paste_instances"));
     g_list_free(mod_list);
-    
-    if(ret_val == 0)
-    {
-      dt_ioppr_check_iop_order(dev_src, dest_imgid, "_history_copy_and_paste_on_image_merge");
-      dt_dev_pop_history_items_ext(dev_dest);
-      dt_dev_write_history(dev_dest);
-    }
   }
   dt_dev_cleanup(dev_src);
-  dt_dev_cleanup(dev_dest);
 
   return ret_val;
 }
@@ -598,6 +580,14 @@ gboolean dt_history_copy_and_paste_on_image(const int32_t imgid, const int32_t d
   return ret_val;
 }
 
+/**
+ * @brief Deep-copy a history list.
+ *
+ * Duplicates params, blend params and masks for each history item.
+ *
+ * @param hist Source history list.
+ * @return Newly-allocated history list.
+ */
 GList *dt_history_duplicate(GList *hist)
 {
   GList *result = NULL;
@@ -645,6 +635,13 @@ struct _cb_data
   int multi_priority;
 };
 
+/**
+ * @brief Undo iterator callback to invalidate module pointers in snapshots.
+ *
+ * @param user_data Module pointer to invalidate.
+ * @param type Undo record type.
+ * @param item Undo data payload.
+ */
 static void _history_invalidate_cb(gpointer user_data, dt_undo_type_t type, dt_undo_data_t item)
 {
   dt_iop_module_t *module = (dt_iop_module_t *)user_data;
@@ -659,6 +656,11 @@ void dt_dev_history_undo_invalidate_module(dt_iop_module_t *module)
   dt_undo_iterate_internal(darktable.undo, DT_UNDO_HISTORY, module, &_history_invalidate_cb);
 }
 
+/**
+ * @brief Free an undo history snapshot structure.
+ *
+ * @param data Pointer to dt_undo_history_t.
+ */
 static void _history_undo_data_free(gpointer data)
 {
   dt_undo_history_t *hist = (dt_undo_history_t *)data;
@@ -670,6 +672,17 @@ static void _history_undo_data_free(gpointer data)
   free(hist);
 }
 
+/**
+ * @brief Apply an undo/redo history snapshot to a develop context.
+ *
+ * Restores history list, history_end, and iop_order_list, then re-populates modules.
+ *
+ * @param user_data Develop context.
+ * @param type Undo record type.
+ * @param data Undo record payload.
+ * @param action Undo/redo action.
+ * @param imgs Unused.
+ */
 static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t data, dt_undo_action_t action, GList **imgs)
 {
   if(type != DT_UNDO_HISTORY) return;
@@ -778,17 +791,13 @@ void dt_dev_history_undo_end_record(dt_develop_t *dev)
 }
 
 
-static dt_iop_module_t * _find_mask_manager(dt_develop_t *dev)
-{
-  for(GList *module = g_list_first(dev->iop); module; module = g_list_next(module))
-  {
-    dt_iop_module_t *mod = (dt_iop_module_t *)(module->data);
-    if(strcmp(mod->op, "mask_manager") == 0)
-      return mod;
-  }
-  return NULL;
-}
-
+/**
+ * @brief Remove history items past history_end when allowed.
+ *
+ * Filters out obsolete entries while preserving mandatory modules.
+ *
+ * @param dev Develop context.
+ */
 static void _remove_history_leaks(dt_develop_t *dev)
 {
   GList *history = g_list_nth(dev->history, dt_dev_get_history_end_ext(dev));
@@ -839,7 +848,7 @@ static void _remove_history_leaks(dt_develop_t *dev)
 }
 
 gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *module, gboolean enable,
-                                     gboolean force_new_item, gboolean no_image, gboolean include_masks)
+                                     gboolean force_new_item)
 {
   // If this history item is the first for this module,
   // we need to notify the pipeline that its topology may change (aka insert a new node).
@@ -850,7 +859,7 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
   {
     // module = NULL means a mask was changed from the mask manager and that's where this function is called.
     // Find it now, even though it is not enabled and won't be.
-    module = _find_mask_manager(dev);
+    module = dt_masks_get_mask_manager(dev);
     if(module)
     {
       // Mask manager is an IOP that never processes pixel aka it's an ugly hack to record mask history
@@ -878,7 +887,8 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
   }
   else
   {
-    const dt_dev_history_item_t *previous_item = _get_last_history_item_for_module(dev, module);
+    const dt_dev_history_item_t *previous_item =
+      dt_dev_history_get_last_item_by_module(dev->history, module, g_list_length(dev->history));
     // check if NULL first or prevous_item->module will segfault
     // We need to add a new pipeline node if:
     add_new_pipe_node = (previous_item == NULL)                         // it's the first history entry for this module
@@ -913,14 +923,7 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
   if(enable) module->enabled = TRUE;
 
   // Include masks if module supports blending and masks are in use, or if it's the mask manager.
-  const gboolean supports_blending = (module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) == IOP_FLAGS_SUPPORTS_BLENDING;
-  const gboolean mask_mode_on = module->blend_params && (module->blend_params->mask_mode > DEVELOP_MASK_ENABLED);
-  const gboolean has_mask_id = module->blend_params && (module->blend_params->mask_id > 0);
-  const gboolean has_raster = (module->blend_params
-                              && ((module->blend_params->mask_mode & DEVELOP_MASK_RASTER) == DEVELOP_MASK_RASTER))
-                              || (module->raster_mask.sink.source != NULL);
-  include_masks = (supports_blending && (mask_mode_on || has_mask_id || has_raster))
-                  || (module->flags() & IOP_FLAGS_INTERNAL_MASKS) == IOP_FLAGS_INTERNAL_MASKS;
+  const gboolean include_masks = dt_iop_module_needs_mask_history(module);
 
   GList *forms_snapshot = NULL;
   if(include_masks)
@@ -928,11 +931,7 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
     dt_print(DT_DEBUG_HISTORY, "[dt_dev_add_history_item_ext] committing masks for module %s at history position %i\n", module->name(), hist->num);
     // FIXME: this copies ALL drawn masks AND masks groups used by all modules to any module history using masks.
     // Kudos to the idiots who thought it would be reasonable. Expect database bloating and perf penalty.
-    dt_pthread_rwlock_rdlock(&dev->masks_mutex);
-    forms_snapshot = dt_masks_dup_forms_deep(dev->forms, NULL);
-    dt_pthread_rwlock_unlock(&dev->masks_mutex);
-
-    dev->forms_changed = FALSE; // reset
+    forms_snapshot = dt_masks_snapshot_current_forms(dev, TRUE);
   }
   // else forms_snapshot stays NULL
 
@@ -980,7 +979,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 
   dt_dev_undo_start_record(dev);
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
-  dt_dev_add_history_item_ext(dev, module, enable, FALSE, FALSE, FALSE);
+  dt_dev_add_history_item_ext(dev, module, enable, FALSE);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   dt_dev_undo_end_record(dev);
 
@@ -1002,8 +1001,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   dev->history_hash = dt_dev_history_get_hash(dev);
 
   // Recompute pipeline last
-  const gboolean has_raster = module && module->blend_params
-                              && ((module->blend_params->mask_mode & DEVELOP_MASK_RASTER) == DEVELOP_MASK_RASTER);
+  const gboolean has_raster = module && dt_iop_module_has_raster_mask(module);
   if(module && !(has_forms || has_raster))
   {
     // If we have a module and it doesn't use drawn or raster masks,
@@ -1069,13 +1067,20 @@ void dt_dev_reload_history_items(dt_develop_t *dev, const int32_t imgid)
   // Backend only: GUI updates and pixelpipe rebuilds need to be triggered by callers.
   if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
-  dt_dev_read_history_ext(dev, imgid, !dev->gui_attached);
+  dt_dev_read_history_ext(dev, imgid);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
 }
 
 
+/**
+ * @brief Reload defaults for all modules in dev->iop.
+ *
+ * Some modules depend on defaults to initialize GUI state or internal structures.
+ *
+ * @param dev Develop context.
+ */
 static inline void _dt_dev_modules_reload_defaults(dt_develop_t *dev)
 {
   for(GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
@@ -1102,6 +1107,14 @@ static inline void _dt_dev_modules_reload_defaults(dt_develop_t *dev)
 }
 
 // Dump the content of an history entry into its associated module params, blendops, etc.
+/**
+ * @brief Apply a history item to a module instance.
+ *
+ * Copies params/blend params, updates enabled state, and recomputes hashes.
+ *
+ * @param hist History item.
+ * @param module Module instance.
+ */
 static inline void _history_to_module(const dt_dev_history_item_t *const hist, dt_iop_module_t *module)
 {
   module->enabled = (hist->enabled != 0);
@@ -1152,9 +1165,7 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
   }
 
   dt_masks_replace_current_forms(dev, forms);
-  dt_ioppr_resync_modules_order(dev);
-  dt_ioppr_check_duplicate_iop_order(&dev->iop, dev->history);
-  dt_ioppr_check_iop_order(dev, 0, "dt_dev_pop_history_items_ext end");
+  dt_ioppr_resync_pipeline(dev, 0, "dt_dev_pop_history_items_ext end", TRUE);
 
   // Reloading defaults might have changed the global history hash
   dev->history_hash = dt_dev_history_get_hash(dev);
@@ -1211,6 +1222,11 @@ void dt_dev_history_pixelpipe_update(dt_develop_t *dev, gboolean rebuild)
   dt_dev_process_all(dev);
 }
 
+/**
+ * @brief Delete all history entries for an image from the DB.
+ *
+ * @param imgid Image id.
+ */
 static void _cleanup_history(const int32_t imgid)
 {
   dt_history_db_delete_dev_history(imgid);
@@ -1319,6 +1335,13 @@ void dt_dev_write_history(dt_develop_t *dev)
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 }
 
+/**
+ * @brief Apply auto-presets and default iop order for a fresh history.
+ *
+ * @param dev Develop context.
+ * @param imgid Image id.
+ * @return TRUE if presets were applied.
+ */
 static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
 {
   dt_image_t *image = &dev->image_storage;
@@ -1376,16 +1399,13 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
   return TRUE;
 }
 
-// helper function for debug strings
-char * _print_validity(gboolean state)
-{
-  if(state)
-    return "ok";
-  else
-    return "WRONG";
-}
-
-
+/**
+ * @brief Check whether a module is already present in history.
+ *
+ * @param dev Develop context.
+ * @param module Module instance.
+ * @return TRUE if present, FALSE otherwise.
+ */
 static gboolean _hm_history_has_module(const dt_develop_t *dev, const dt_iop_module_t *module)
 {
   for(GList *history = g_list_first(dev->history); history; history = g_list_next(history))
@@ -1402,6 +1422,16 @@ static gboolean _hm_history_has_module(const dt_develop_t *dev, const dt_iop_mod
   return FALSE;
 }
 
+/**
+ * @brief Insert default modules into history when needed.
+ *
+ * Ensures mandatory/default-enabled modules are represented in history,
+ * including legacy handling for older histories.
+ *
+ * @param dev Develop context.
+ * @param module Module instance to consider.
+ * @param is_inited TRUE if auto-presets were already applied.
+ */
 static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, gboolean is_inited)
 {
   // Module already in history: don't prepend extra entries
@@ -1438,7 +1468,7 @@ static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, 
       dt_conf_set_string("plugins/darkroom/chromatic-adaptation", "legacy");
       dt_iop_reload_defaults(module);
 
-      dt_dev_add_history_item_ext(dev, module, TRUE, TRUE, TRUE, FALSE);
+      dt_dev_add_history_item_ext(dev, module, TRUE, TRUE);
 
       // Go back to current defaults
       dt_conf_set_string("plugins/darkroom/chromatic-adaptation", "modern");
@@ -1446,19 +1476,19 @@ static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, 
     }
     else
     {
-      dt_dev_add_history_item_ext(dev, module, TRUE, TRUE, TRUE, FALSE);
+      dt_dev_add_history_item_ext(dev, module, TRUE, TRUE);
     }
   }
   else if(module->workflow_enabled && !is_inited)
   {
     module->enabled = TRUE;
-    dt_dev_add_history_item_ext(dev, module, TRUE, TRUE, TRUE, FALSE);
+    dt_dev_add_history_item_ext(dev, module, TRUE, TRUE);
   }
 }
 
 // Returns TRUE if this is a freshly-inited history on which we just applied auto presets and defaults,
 // FALSE if we had an earlier history
-static gboolean _init_default_history(dt_develop_t *dev, const int32_t imgid, gboolean apply_auto_presets)
+gboolean dt_dev_init_default_history(dt_develop_t *dev, const int32_t imgid, gboolean apply_auto_presets)
 {
   const gboolean is_inited = (dev->image_storage.flags & DT_IMAGE_AUTO_PRESETS_APPLIED);
 
@@ -1480,7 +1510,34 @@ static gboolean _init_default_history(dt_develop_t *dev, const int32_t imgid, gb
   return !is_inited;
 }
 
+int dt_dev_replace_history_on_image(dt_develop_t *dev_src, const int32_t dest_imgid,
+                                    const gboolean reload_defaults, const char *msg)
+{
+  if(dest_imgid <= 0) return 1;
+
+  dt_dev_ensure_image_storage(dev_src, dest_imgid);
+
+  if(reload_defaults)
+  {
+    dt_dev_init_default_history(dev_src, dest_imgid, FALSE);
+    dt_ioppr_resync_pipeline(dev_src, dest_imgid, msg, FALSE);
+  }
+
+  dt_dev_pop_history_items_ext(dev_src);
+  dt_dev_write_history(dev_src);
+
+  return 0;
+}
+
 // populate hist->module
+/**
+ * @brief Bind a history entry to a module instance (.so) in dev->iop.
+ *
+ * Creates a new instance if a matching one is required but missing.
+ *
+ * @param dev Develop context.
+ * @param hist History item to bind.
+ */
 static void _find_so_for_history_entry(dt_develop_t *dev, dt_dev_history_item_t *hist)
 {
   dt_iop_module_t *match = NULL;
@@ -1524,8 +1581,19 @@ static void _find_so_for_history_entry(dt_develop_t *dev, dt_dev_history_item_t 
 }
 
 
+/**
+ * @brief Load or convert blendop params into a history item.
+ *
+ * Handles version mismatch and legacy conversion.
+ *
+ * @param hist History item to populate.
+ * @param blendop_params Raw blend params blob.
+ * @param bl_length Blob size.
+ * @param blendop_version Stored version.
+ * @param legacy_params Output flag set when legacy conversion occurs.
+ */
 static void _sync_blendop_params(dt_dev_history_item_t *hist, const void *blendop_params, const int bl_length,
-                          const int blendop_version, int *legacy_params)
+                                 const int blendop_version, int *legacy_params)
 {
   const gboolean is_valid_blendop_version = (blendop_version == dt_develop_blend_version());
   const gboolean is_valid_blendop_size = (bl_length == sizeof(dt_develop_blend_params_t));
@@ -1549,8 +1617,21 @@ static void _sync_blendop_params(dt_dev_history_item_t *hist, const void *blendo
   }
 }
 
+/**
+ * @brief Load or convert module params into a history item.
+ *
+ * Handles version mismatch, legacy conversion and special cases.
+ *
+ * @param hist History item to populate.
+ * @param module_params Raw params blob.
+ * @param param_length Blob size.
+ * @param modversion Stored module version.
+ * @param legacy_params Output flag set when legacy conversion occurs.
+ * @param preset_name Optional preset name (for logging).
+ * @return 0 on success, non-zero on conversion failure.
+ */
 static int _sync_params(dt_dev_history_item_t *hist, const void *module_params, const int param_length,
-                          const int modversion, int *legacy_params, const char *preset_name)
+                        const int modversion, int *legacy_params, const char *preset_name)
 {
   const gboolean is_valid_module_version = (modversion == hist->module->version());
   const gboolean is_valid_params_size = (param_length == hist->module->params_size);
@@ -1612,6 +1693,29 @@ static int _sync_params(dt_dev_history_item_t *hist, const void *module_params, 
 }
 
 // WARNING: this does not set hist->forms
+/**
+ * @brief Build a history item from DB row data and append it to dev->history.
+ *
+ * Resolves module instance, loads params/blend params, and updates ordering metadata.
+ *
+ * @param dev Develop context.
+ * @param imgid Image id.
+ * @param id Image id from DB row (sanity-checked).
+ * @param num History index.
+ * @param modversion Module version stored in DB.
+ * @param operation Operation name.
+ * @param module_params Module params blob.
+ * @param param_length Module params size.
+ * @param enabled Enabled flag from DB.
+ * @param blendop_params Blend params blob.
+ * @param bl_length Blend params size.
+ * @param blendop_version Blend params version.
+ * @param multi_priority Instance priority.
+ * @param multi_name Instance name.
+ * @param preset_name Optional preset name (for logging).
+ * @param legacy_params Output flag set when legacy conversion occurs.
+ * @param presets TRUE if reading from presets instead of DB history.
+ */
 static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, const int id, const int num,
                                       const int modversion, const char *operation, const void *module_params,
                                       const int param_length, const gboolean enabled, const void *blendop_params,
@@ -1701,7 +1805,7 @@ static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, co
 }
 
 
-gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolean no_image)
+gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid)
 {
   if(imgid == UNKNOWN_IMAGE) return FALSE;
 
@@ -1732,7 +1836,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolea
 
   // Load all the modules that may be required by the image format,
   // plus auto-presets if it's a new edit
-  gboolean first_run = _init_default_history(dev, imgid, (db_items == 0));
+  gboolean first_run = dt_dev_init_default_history(dev, imgid, (db_items == 0));
 
   // Protect history DB reads with a cache read lock.
   // Release it before applying history to modules to avoid deadlocks.
@@ -1758,9 +1862,7 @@ gboolean dt_dev_read_history_ext(dt_develop_t *dev, const int32_t imgid, gboolea
   dt_dev_set_history_end_ext(dev, history_end);
 
   // Sanitize and flatten module order
-  dt_ioppr_resync_modules_order(dev);
-  dt_ioppr_resync_iop_list(dev);
-  dt_ioppr_check_iop_order(dev, imgid, "dt_dev_read_history_no_image end");
+  dt_ioppr_resync_pipeline(dev, imgid, "dt_dev_read_history_no_image end", FALSE);
 
   // Update masks history
   // Note: until there, we had only blendops. No masks
@@ -1821,21 +1923,45 @@ gboolean dt_history_module_skip_copy(const int flags)
   return flags & (IOP_FLAGS_DEPRECATED | IOP_FLAGS_UNSAFE_COPY | IOP_FLAGS_HIDDEN);
 }
 
+/**
+ * @brief Return whether a module never writes history entries.
+ *
+ * @param module Module instance.
+ * @return TRUE if module leaves no history, FALSE otherwise.
+ */
 gboolean _module_leaves_no_history(dt_iop_module_t *module)
 {
   return (module->flags() & IOP_FLAGS_NO_HISTORY_STACK);
 }
 
+/**
+ * @brief Check if a module is enabled by default or force-enabled.
+ *
+ * @param module Module instance.
+ * @return TRUE if default/forced enabled, FALSE otherwise.
+ */
 static gboolean _module_is_default_or_forced_enabled(dt_iop_module_t *module)
 {
   return module->default_enabled || (module->force_enable && module->force_enable(module, module->enabled));
 }
 
+/**
+ * @brief Check if module params match defaults.
+ *
+ * @param module Module instance.
+ * @return TRUE if params are default, FALSE otherwise.
+ */
 static gboolean _module_params_are_default(dt_iop_module_t *module)
 {
   return module->has_defaults ? module->has_defaults(module) : TRUE;
 }
 
+/**
+ * @brief Check if blend params match defaults.
+ *
+ * @param module Module instance.
+ * @return TRUE if blend params are default, FALSE otherwise.
+ */
 static gboolean _module_blend_params_are_default(dt_iop_module_t *module)
 {
   if(!module->blend_params || !module->default_blendop_params) return TRUE;
@@ -1844,6 +1970,12 @@ static gboolean _module_blend_params_are_default(dt_iop_module_t *module)
                 sizeof(dt_develop_blend_params_t)) == 0;
 }
 
+/**
+ * @brief Check if any module params (including blend params) are non-default.
+ *
+ * @param module Module instance.
+ * @return TRUE if any params are non-default, FALSE otherwise.
+ */
 static gboolean _module_has_nondefault_internal_params(dt_iop_module_t *module)
 {
   return !_module_params_are_default(module) || !_module_blend_params_are_default(module);
@@ -1851,40 +1983,66 @@ static gboolean _module_has_nondefault_internal_params(dt_iop_module_t *module)
 
 typedef gboolean (*dt_iop_module_filter_t)(dt_iop_module_t *module);
 
+/**
+ * @brief Append history items for modules that pass a filter.
+ *
+ * @param dev Develop context.
+ * @param filter Predicate deciding whether a module should be added.
+ */
 static void _dev_history_add_filtered(dt_develop_t *dev, dt_iop_module_filter_t filter)
 {
   for(GList *item = g_list_first(dev->iop); item; item = g_list_next(item))
   {
     dt_iop_module_t *module = (dt_iop_module_t *)(item->data);
     if(!_module_leaves_no_history(module) && filter(module))
-      dt_dev_add_history_item_ext(dev, module, FALSE, TRUE, TRUE, TRUE);
+      dt_dev_add_history_item_ext(dev, module, FALSE, TRUE);
   }
 }
 
+/**
+ * @brief Filter: enabled modules that are default/forced enabled.
+ */
 static gboolean _compress_enabled_default_or_forced(dt_iop_module_t *module)
 {
   return module->enabled && _module_is_default_or_forced_enabled(module);
 }
 
+/**
+ * @brief Filter: enabled modules with default params (user enabled).
+ */
 static gboolean _compress_enabled_user_default_params(dt_iop_module_t *module)
 {
   return module->enabled && !_module_is_default_or_forced_enabled(module)
          && _module_params_are_default(module);
 }
 
+/**
+ * @brief Filter: enabled modules with non-default params (user edits).
+ */
 static gboolean _compress_enabled_user_nondefault_params(dt_iop_module_t *module)
 {
   return module->enabled && !_module_is_default_or_forced_enabled(module)
          && !_module_params_are_default(module);
 }
 
+/**
+ * @brief Filter: disabled modules that still need history entries.
+ */
 static gboolean _compress_disabled_with_history(dt_iop_module_t *module)
 {
   return !module->enabled
          && (module->default_enabled || _module_has_nondefault_internal_params(module));
 }
 
-void dt_dev_history_compress(dt_develop_t *dev)
+/**
+ * @brief Rebuild history from current pipeline state.
+ *
+ * Creates a compact history snapshot and optionally writes it to DB.
+ *
+ * @param dev Develop context.
+ * @param write_history Whether to write to DB/XMP after compression.
+ */
+static void _dt_dev_history_compress_internal(dt_develop_t *dev, const gboolean write_history)
 {
   const int32_t imgid = dev->image_storage.id;
   if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
@@ -1913,13 +2071,31 @@ void dt_dev_history_compress(dt_develop_t *dev)
 
   dt_dev_set_history_end_ext(dev, g_list_length(dev->history));
   dt_dev_pop_history_items_ext(dev);
-  dt_dev_write_history_ext(dev, imgid);
+  if(write_history) dt_dev_write_history_ext(dev, imgid);
 
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
 }
 
+void dt_dev_history_compress_ext(dt_develop_t *dev, gboolean write_history)
+{
+  _dt_dev_history_compress_internal(dev, write_history);
+}
 
+void dt_dev_history_compress(dt_develop_t *dev)
+{
+  _dt_dev_history_compress_internal(dev, TRUE);
+}
+
+
+/**
+ * @brief Detect and handle module instances that exist in iop list but not in history.
+ *
+ * @param dev Develop context.
+ * @param _iop_list Pointer to module list to mutate.
+ * @param history_list History list.
+ * @return 0 on success, non-zero on error.
+ */
 static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList *history_list)
 {
   GList *iop_list = *_iop_list;
@@ -2033,6 +2209,11 @@ static int _check_deleted_instances(dt_develop_t *dev, GList **_iop_list, GList 
   return deleted_module_found;
 }
 
+/**
+ * @brief Reorder GUI module expanders to match dev->iop order.
+ *
+ * @param dev Develop context.
+ */
 static void _reorder_gui_module_list(dt_develop_t *dev)
 {
   int pos_module = 0;
@@ -2049,6 +2230,12 @@ static void _reorder_gui_module_list(dt_develop_t *dev)
   }
 }
 
+/**
+ * @brief Resync module multi_priority values from history.
+ *
+ * @param history_list History list.
+ * @return 1 if changes were made, 0 otherwise.
+ */
 static int _rebuild_multi_priority(GList *history_list)
 {
   int changed = 0;
@@ -2067,6 +2254,13 @@ static int _rebuild_multi_priority(GList *history_list)
   return changed;
 }
 
+/**
+ * @brief Rebind history items to a module instance after recreation.
+ *
+ * @param hist History list.
+ * @param module Module instance.
+ * @param multi_priority Instance priority to match.
+ */
 static void _reset_module_instance(GList *hist, dt_iop_module_t *module, int multi_priority)
 {
   for(; hist; hist = g_list_next(hist))
@@ -2080,6 +2274,13 @@ static void _reset_module_instance(GList *hist, dt_iop_module_t *module, int mul
   }
 }
 
+/**
+ * @brief Undo iterator callback to fix module pointers in snapshots.
+ *
+ * @param user_data Callback data (struct _cb_data).
+ * @param type Undo record type.
+ * @param data Undo record payload.
+ */
 static void _undo_items_cb(gpointer user_data, dt_undo_type_t type, dt_undo_data_t data)
 {
   struct _cb_data *udata = (struct _cb_data *)user_data;
@@ -2087,6 +2288,16 @@ static void _undo_items_cb(gpointer user_data, dt_undo_type_t type, dt_undo_data
   _reset_module_instance(hdata->after_snapshot, udata->module, udata->multi_priority);
 }
 
+/**
+ * @brief Recreate missing module instances referenced by history.
+ *
+ * This is used during undo/redo when history refers to modules that
+ * were deleted from the live module list.
+ *
+ * @param _iop_list Pointer to module list to mutate.
+ * @param history_list History list.
+ * @return 1 if changes were made, 0 otherwise.
+ */
 static int _create_deleted_modules(GList **_iop_list, GList *history_list)
 {
   GList *iop_list = *_iop_list;

@@ -1012,6 +1012,90 @@ dt_masks_form_t *dt_masks_get_from_id(dt_develop_t *dev, int id)
   return result;
 }
 
+dt_iop_module_t *dt_masks_get_mask_manager(dt_develop_t *dev)
+{
+  for(GList *module = g_list_first(dev->iop); module; module = g_list_next(module))
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)(module->data);
+    if(strcmp(mod->op, "mask_manager") == 0)
+      return mod;
+  }
+  return NULL;
+}
+
+GList *dt_masks_snapshot_current_forms(dt_develop_t *dev, gboolean reset_changed)
+{
+  dt_pthread_rwlock_rdlock(&dev->masks_mutex);
+  GList *forms_snapshot = dt_masks_dup_forms_deep(dev->forms, NULL);
+  dt_pthread_rwlock_unlock(&dev->masks_mutex);
+  if(reset_changed) dev->forms_changed = FALSE;
+  return forms_snapshot;
+}
+
+static void _masks_fill_used_forms(GList *forms_list, const int formid, int *used, const int nb)
+{
+  for(int i = 0; i < nb; i++)
+  {
+    if(used[i] == 0)
+    {
+      used[i] = formid;
+      break;
+    }
+    if(used[i] == formid) break;
+  }
+
+  dt_masks_form_t *form = dt_masks_get_from_id_ext(forms_list, formid);
+  if(form && (form->type & DT_MASKS_GROUP))
+  {
+    for(GList *grpts = form->points; grpts; grpts = g_list_next(grpts))
+    {
+      dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)grpts->data;
+      _masks_fill_used_forms(forms_list, grpt->formid, used, nb);
+    }
+  }
+}
+
+int dt_masks_copy_used_forms_for_module(dt_develop_t *dev_dest, dt_develop_t *dev_src, const dt_iop_module_t *mod_src)
+{
+  if(!(mod_src->flags() & IOP_FLAGS_SUPPORTS_BLENDING)) return 0;
+  if(mod_src->blend_params->mask_id <= 0) return 0;
+
+  const guint nbf = g_list_length(dev_src->forms);
+  if(nbf == 0) return 0;
+
+  int *forms_used_replace = calloc(nbf, sizeof(int));
+  if(!forms_used_replace) return 1;
+
+  _masks_fill_used_forms(dev_src->forms, mod_src->blend_params->mask_id, forms_used_replace, nbf);
+
+  for(int i = 0; i < (int)nbf && forms_used_replace[i] > 0; i++)
+  {
+    dt_masks_form_t *form = dt_masks_get_from_id(dev_src, forms_used_replace[i]);
+    if(form)
+    {
+      dt_masks_form_t *form_dest = dt_masks_get_from_id_ext(dev_dest->forms, forms_used_replace[i]);
+      if(form_dest)
+      {
+        dev_dest->forms = g_list_remove(dev_dest->forms, form_dest);
+        dev_dest->allforms = g_list_append(dev_dest->allforms, form_dest);
+      }
+
+      dt_masks_form_t *form_new = dt_masks_dup_masks_form(form);
+      if(!form_new)
+      {
+        free(forms_used_replace);
+        return 1;
+      }
+      dev_dest->forms = g_list_append(dev_dest->forms, form_new);
+    }
+    else
+      fprintf(stderr, "[dt_masks_copy_used_forms_for_module] form %i not found in source image\n", forms_used_replace[i]);
+  }
+
+  free(forms_used_replace);
+  return 0;
+}
+
 void dt_masks_read_masks_history(dt_develop_t *dev, const int32_t imgid)
 {
   dt_dev_history_item_t *hist_item = NULL;

@@ -1503,6 +1503,34 @@ void dt_iop_set_mask_mode(dt_iop_module_t *module, int mask_mode)
   }
 }
 
+gboolean dt_iop_module_has_raster_mask(const dt_iop_module_t *module)
+{
+  if(!module) return FALSE;
+
+  const gboolean mask_mode_raster = module->blend_params
+                                    && ((module->blend_params->mask_mode & DEVELOP_MASK_RASTER) == DEVELOP_MASK_RASTER);
+  const gboolean has_raster_sink = (module->raster_mask.sink.source != NULL);
+
+  return mask_mode_raster || has_raster_sink;
+}
+
+gboolean dt_iop_module_needs_mask_history(const dt_iop_module_t *module)
+{
+  if(!module) return FALSE;
+
+  const gboolean supports_blending
+      = ((module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) == IOP_FLAGS_SUPPORTS_BLENDING);
+  const gboolean internal_masks = ((module->flags() & IOP_FLAGS_INTERNAL_MASKS) == IOP_FLAGS_INTERNAL_MASKS);
+
+  if(!supports_blending) return internal_masks;
+
+  const gboolean mask_mode_on = module->blend_params && (module->blend_params->mask_mode > DEVELOP_MASK_ENABLED);
+  const gboolean has_mask_id = module->blend_params && (module->blend_params->mask_id > 0);
+  const gboolean has_raster = dt_iop_module_has_raster_mask(module);
+
+  return (mask_mode_on || has_mask_id || has_raster) || internal_masks;
+}
+
 // make sure that blend_params are in sync with the iop struct
 void dt_iop_commit_blend_params(dt_iop_module_t *module, const dt_develop_blend_params_t *blendop_params)
 {

@@ -166,98 +166,300 @@ typedef struct dt_iop_order_rule_t
   char op_next[20];
 } dt_iop_order_rule_t;
 
-/** return the name string for that dy_iop_order */
+/**
+ * @brief Return the human-readable name for an IOP order enum value.
+ *
+ * This is mostly used for debug strings, logs, and UI messages.
+ *
+ * @param order IOP order enum value.
+ * @return Static string describing the order.
+ */
 const char *dt_iop_order_string(const dt_iop_order_t order);
 
-/** return the iop-order-version used by imgid (DT_IOP_ORDER_V30 if unknown iop-order-version) */
+/**
+ * @brief Fetch the IOP order version stored for an image.
+ *
+ * If the image has no stored order, this falls back to the default
+ * (currently DT_IOP_ORDER_V30).
+ *
+ * @param imgid Image id.
+ * @return Stored order version or the default built-in order.
+ */
 dt_iop_order_t dt_ioppr_get_iop_order_version(const int32_t imgid);
 
-/** returns the kind of the list by looking at the order of the modules, it is either one of the built-in version
-    or a customr order  */
+/**
+ * @brief Determine the kind of an order list by inspecting its content.
+ *
+ * Compares the list ordering to the known built-in lists to decide whether
+ * this is a built-in version or a custom order.
+ *
+ * @param iop_order_list List of @ref dt_iop_order_entry_t.
+ * @return A built-in order version or DT_IOP_ORDER_CUSTOM.
+ */
 dt_iop_order_t dt_ioppr_get_iop_order_list_kind(GList *iop_order_list);
 
-/** returns true if imgid has an iop-order set */
+/**
+ * @brief Check whether the image has an explicit order list stored in DB.
+ *
+ * @param imgid Image id.
+ * @return TRUE if an order list exists, FALSE otherwise.
+ */
 gboolean dt_ioppr_has_iop_order_list(int32_t imgid);
 
-/** returns a list of dt_iop_order_entry_t and updates *_version */
+/**
+ * @brief Load the order list for an image from the DB.
+ *
+ * If no list is found, returns NULL.
+ *
+ * @param imgid Image id.
+ * @param sorted If TRUE, entries are sorted by iop_order; otherwise the stored order is kept.
+ * @return A newly-allocated list of @ref dt_iop_order_entry_t or NULL.
+ */
 GList *dt_ioppr_get_iop_order_list(int32_t imgid, gboolean sorted);
-/** return the iop-order list for the given version, this is used to get the built-in lists */
+/**
+ * @brief Return the built-in order list for a given version.
+ *
+ * @param version Built-in order version.
+ * @return A newly-allocated list of @ref dt_iop_order_entry_t.
+ */
 GList *dt_ioppr_get_iop_order_list_version(dt_iop_order_t version);
-/** returns the dt_iop_order_entry_t of iop_order_list with operation = op_name */
-dt_iop_order_entry_t *dt_ioppr_get_iop_order_entry(GList *iop_order_list, const char *op_name, const int multi_priority);
-/** likewise, but returns the link in the list instead of the entry */
+/**
+ * @brief Find a list link matching an operation and instance.
+ *
+ * @param iop_order_list Order list to search.
+ * @param op_name Operation name.
+ * @param multi_priority Instance priority.
+ * @return The matching list node or NULL if not found.
+ */
 GList *dt_ioppr_get_iop_order_link(GList *iop_order_list, const char *op_name, const int multi_priority);
-/** For a non custom order, returns TRUE if iop_order_list has multiple instances grouped together */
+/**
+ * @brief Detect whether multiple instances are grouped for a non-custom order.
+ *
+ * Used to decide if a list follows the built-in ordering conventions.
+ *
+ * @param iop_order_list Order list to inspect.
+ * @return TRUE if instances are grouped together, FALSE otherwise.
+ */
 gboolean dt_ioppr_has_multiple_instances(GList *iop_order_list);
 
-/** returns the iop_order from iop_order_list list with operation = op_name */
+/**
+ * @brief Return the iop_order for a given operation/instance pair.
+ *
+ * @param iop_order_list Order list to search.
+ * @param op_name Operation name.
+ * @param multi_priority Instance priority.
+ * @return The iop_order value, or 0 if not found.
+ */
 int dt_ioppr_get_iop_order(GList *iop_order_list, const char *op_name, const int multi_priority);
 
-/* write iop-order list for the given image */
+/**
+ * @brief Persist an order list to the DB for a given image.
+ *
+ * @param iop_order_list Order list to store.
+ * @param imgid Image id.
+ * @return TRUE on success, FALSE on error.
+ */
 gboolean dt_ioppr_write_iop_order_list(GList *iop_order_list, const int32_t imgid);
-gboolean dt_ioppr_write_iop_order(const dt_iop_order_t kind, GList *iop_order_list, const int32_t imgid);
 
-/** serialize list, used for presets */
+/**
+ * @brief Serialize an order list into a binary blob (used for presets).
+ *
+ * @param iop_order_list Order list to serialize.
+ * @param size Output size of the serialized blob.
+ * @return Allocated buffer to be freed by the caller.
+ */
 void *dt_ioppr_serialize_iop_order_list(GList *iop_order_list, size_t *size);
-/** returns the iop_order_list from the serialized form found in buf (blob in preset table) */
+/**
+ * @brief Deserialize an order list from a binary blob.
+ *
+ * @param buf Serialized buffer.
+ * @param size Buffer size in bytes.
+ * @return Newly-allocated order list or NULL on error.
+ */
 GList *dt_ioppr_deserialize_iop_order_list(const char *buf, size_t size);
-/** likewise but a text serializer/deserializer */
+/**
+ * @brief Serialize an order list to a text representation.
+ *
+ * @param iop_order_list Order list to serialize.
+ * @return Newly-allocated NUL-terminated string.
+ */
 char *dt_ioppr_serialize_text_iop_order_list(GList *iop_order_list);
+/**
+ * @brief Deserialize an order list from a text representation.
+ *
+ * @param buf NUL-terminated string.
+ * @return Newly-allocated order list or NULL on error.
+ */
 GList *dt_ioppr_deserialize_text_iop_order_list(const char *buf);
 
-/** insert a match for module into the iop-order list */
+/**
+ * @brief Ensure a module instance has an entry in dev->iop_order_list.
+ *
+ * Inserts a new entry if missing, keeping list consistency for subsequent
+ * reordering or serialization.
+ *
+ * @param dev Develop context.
+ * @param module Module instance to insert.
+ */
 void dt_ioppr_insert_module_instance(struct dt_develop_t *dev, struct dt_iop_module_t *module);
+/**
+ * @brief Update dev->iop module order values from dev->iop_order_list.
+ *
+ * This writes iop_order fields on modules to match the stored list.
+ *
+ * @param dev Develop context.
+ */
 void dt_ioppr_resync_modules_order(struct dt_develop_t *dev);
-void dt_ioppr_resync_iop_list(struct dt_develop_t *dev);
+/**
+ * @brief Resynchronize pipeline order and related structures.
+ *
+ * Rebuilds ordering for modules/history and optionally checks for duplicate
+ * iop_order values.
+ *
+ * @param dev Develop context.
+ * @param imgid Image id (for diagnostics).
+ * @param msg Optional debug message.
+ * @param check_duplicates Whether to validate duplicate iop_order entries.
+ */
+void dt_ioppr_resync_pipeline(struct dt_develop_t *dev, const int32_t imgid, const char *msg, gboolean check_duplicates);
 
-/** rebuild dev->iop_order_list from an ordered list of modules */
+/**
+ * @brief Rebuild dev->iop_order_list from a list of ordered modules.
+ *
+ * @param dev Develop context.
+ * @param ordered_modules Modules in the desired pipeline order.
+ */
 void dt_ioppr_rebuild_iop_order_from_modules(struct dt_develop_t *dev, GList *ordered_modules);
 
-/** update target_iop_order_list to ensure that modules in iop_order_list are in target_iop_order_list
-    note that iop_order_list contains a set of dt_iop_order_entry_t where order is the multi-priority */
-void dt_ioppr_update_for_entries(struct dt_develop_t *dev, GList *entry_list, gboolean append);
+/**
+ * @brief Update dev->iop_order_list with modules referenced by style items.
+ *
+ * @param dev Develop context.
+ * @param st_items Style items list.
+ * @param append Whether to append new entries at the end (TRUE) or merge into list order (FALSE).
+ */
 void dt_ioppr_update_for_style_items(struct dt_develop_t *dev, GList *st_items, gboolean append);
+/**
+ * @brief Update dev->iop_order_list with modules from a module list.
+ *
+ * @param dev Develop context.
+ * @param modules List of module instances.
+ * @param append Whether to append new entries at the end (TRUE) or merge into list order (FALSE).
+ */
 void dt_ioppr_update_for_modules(struct dt_develop_t *dev, GList *modules, gboolean append);
 
-/** check if there's duplicate iop_order entries in iop_list */
-void dt_ioppr_check_duplicate_iop_order(GList **_iop_list, GList *history_list);
-
-/** sets the default iop_order to iop_list */
+/**
+ * @brief Set dev->iop_order_list to the default order for a given image.
+ *
+ * Uses the image type/workflow to pick an appropriate built-in list.
+ *
+ * @param dev Develop context.
+ * @param imgid Image id.
+ */
 void dt_ioppr_set_default_iop_order(struct dt_develop_t *dev, const int32_t imgid);
-void dt_ioppr_migrate_iop_order(struct dt_develop_t *dev, const int32_t imgid);
+/**
+ * @brief Replace the current order list with a new one and persist it.
+ *
+ * @param dev Develop context.
+ * @param imgid Image id.
+ * @param new_iop_list New order list (ownership remains with caller).
+ */
 void dt_ioppr_change_iop_order(struct dt_develop_t *dev, const int32_t imgid, GList *new_iop_list);
-/** extract all modules with multi-instances */
-GList *dt_ioppr_extract_multi_instances_list(GList *iop_order_list);
-/** merge all modules with multi-instances as extracted with routine above into a canonical iop-order list */
-GList *dt_ioppr_merge_multi_instance_iop_order_list(GList *iop_order_list, GList *multi_instance_list);
 
-/** returns 1 if there's a module_so without a iop_order defined */
+/**
+ * @brief Check whether any module .so is missing an iop_order entry.
+ *
+ * @param iop_list List of module .so entries.
+ * @param iop_order_list Current order list.
+ * @return 1 if any module is missing an entry, 0 otherwise.
+ */
 int dt_ioppr_check_so_iop_order(GList *iop_list, GList *iop_order_list);
 
-/* returns a list of dt_iop_order_rule_t with the current iop order rules */
+/**
+ * @brief Return the list of ordering rules (prev/next constraints).
+ *
+ * @return List of @ref dt_iop_order_rule_t.
+ */
 GList *dt_ioppr_get_iop_order_rules();
 
-/** returns a duplicate of iop_order_list */
+/**
+ * @brief Deep-copy an order list.
+ *
+ * @param iop_order_list Source list.
+ * @return Newly-allocated list with duplicated entries.
+ */
 GList *dt_ioppr_iop_order_copy_deep(GList *iop_order_list);
 
-/** sort two modules by iop_order */
+/**
+ * @brief Compare two module instances by iop_order for sorting.
+ *
+ * @param a First module pointer.
+ * @param b Second module pointer.
+ * @return Sorting comparison result.
+ */
 gint dt_sort_iop_by_order(gconstpointer a, gconstpointer b);
+/**
+ * @brief Compare two list nodes holding modules by iop_order.
+ *
+ * @param a GList node containing a module.
+ * @param b GList node containing a module.
+ * @return Sorting comparison result.
+ */
 gint dt_sort_iop_list_by_order_f(gconstpointer a, gconstpointer b);
 
-/** returns the iop_order before module_next if module can be moved */
+/**
+ * @brief Validate whether module can be moved before module_next.
+ *
+ * @param iop_list Current module list.
+ * @param module Module to move.
+ * @param module_next Target module that should follow.
+ * @return TRUE if move is allowed, FALSE otherwise.
+ */
 gboolean dt_ioppr_check_can_move_before_iop(GList *iop_list, struct dt_iop_module_t *module, struct dt_iop_module_t *module_next);
-/** returns the iop_order after module_prev if module can be moved */
+/**
+ * @brief Validate whether module can be moved after module_prev.
+ *
+ * @param iop_list Current module list.
+ * @param module Module to move.
+ * @param module_prev Target module that should precede.
+ * @return TRUE if move is allowed, FALSE otherwise.
+ */
 gboolean dt_ioppr_check_can_move_after_iop(GList *iop_list, struct dt_iop_module_t *module, struct dt_iop_module_t *module_prev);
 
-/** moves module before/after module_next/previous on pipe */
+/**
+ * @brief Move a module instance before another module in the pipe.
+ *
+ * Updates module ordering and related lists.
+ *
+ * @param dev Develop context.
+ * @param module Module to move.
+ * @param module_next Module that should follow after move.
+ * @return TRUE if move succeeded, FALSE otherwise.
+ */
 gboolean dt_ioppr_move_iop_before(struct dt_develop_t *dev, struct dt_iop_module_t *module, struct dt_iop_module_t *module_next);
+/**
+ * @brief Move a module instance after another module in the pipe.
+ *
+ * Updates module ordering and related lists.
+ *
+ * @param dev Develop context.
+ * @param module Module to move.
+ * @param module_prev Module that should precede after move.
+ * @return TRUE if move succeeded, FALSE otherwise.
+ */
 gboolean dt_ioppr_move_iop_after(struct dt_develop_t *dev, struct dt_iop_module_t *module, struct dt_iop_module_t *module_prev);
 
-// for debug only
+/**
+ * @brief Debug helper to validate the current order for a develop context.
+ *
+ * Logs inconsistencies and optionally reports the state with @p msg.
+ *
+ * @param dev Develop context.
+ * @param imgid Image id (for diagnostics).
+ * @param msg Optional debug message.
+ * @return 0 on success, non-zero if issues were detected.
+ */
 int dt_ioppr_check_iop_order(struct dt_develop_t *dev, const int32_t imgid, const char *msg);
-void dt_ioppr_print_module_iop_order(GList *iop_list, const char *msg);
-void dt_ioppr_print_history_iop_order(GList *history_list, const char *msg);
-void dt_ioppr_print_iop_order(GList *iop_order_list, const char *msg);
 
 #ifdef __cplusplus
 }
