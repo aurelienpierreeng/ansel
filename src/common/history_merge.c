@@ -303,6 +303,19 @@ static gchar *_hm_clean_module_name(const dt_iop_module_t *mod)
   return clean;
 }
 
+static gchar *_hm_module_label_short(const dt_iop_module_t *mod)
+{
+  gchar *name = _hm_clean_module_name(mod);
+  if(!name) return g_strdup("");
+  if(mod && mod->multi_name[0] != '\0')
+  {
+    gchar *out = g_strdup_printf("%s (%s)", name, mod->multi_name);
+    g_free(name);
+    return out;
+  }
+  return name;
+}
+
 static dt_hm_constraint_choice_t _hm_ask_user_constraints_choice(GHashTable *id_ht, const char *faulty_id,
                                                                  const char *src_prev, const char *src_next,
                                                                  const char *dst_prev, const char *dst_next)
@@ -372,6 +385,89 @@ static dt_hm_constraint_choice_t _hm_ask_user_constraints_choice(GHashTable *id_
   if(res == GTK_RESPONSE_ACCEPT) return DT_HM_CONSTRAINTS_PREFER_SRC;
   // Cancel defaults to destination to keep the existing image stable.
   return DT_HM_CONSTRAINTS_PREFER_DEST;
+}
+
+static gboolean _hm_warn_missing_raster_producers(const GList *mod_list)
+{
+  /* Warn the user when pasted modules rely on raster masks that will be missing.
+   *
+   * We scan `mod_list` (modules selected from source history) and flag any module whose
+   * raster-mask producer is not also present in the pasted set.
+   */
+  if(!darktable.gui) return TRUE;
+  if(!g_main_context_is_owner(g_main_context_default())) return TRUE;
+
+  GtkWidget *window = dt_ui_main_window(darktable.gui->ui);
+  if(!window) return TRUE;
+
+  GHashTable *mods = g_hash_table_new(g_direct_hash, g_direct_equal);
+  // Build a set of modules included in the paste so membership checks are O(1).
+  for(const GList *l = g_list_first((GList *)mod_list); l; l = g_list_next(l))
+  {
+    const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
+    if(mod) g_hash_table_add(mods, (gpointer)mod);
+  }
+
+  GString *lines = g_string_new("");
+  // Collect any "user -> producer" relationship where the producer is missing from the paste.
+  for(const GList *l = g_list_first((GList *)mod_list); l; l = g_list_next(l))
+  {
+    const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
+    if(!mod) continue;
+    const dt_iop_module_t *producer = mod->raster_mask.sink.source;
+    if(!producer) continue;
+
+    const gboolean missing = !producer || !g_hash_table_contains(mods, producer);
+    if(missing)
+    {
+      gchar *user = _hm_module_label_short(mod);
+      gchar *prod = _hm_module_label_short(producer);
+      g_string_append_printf(lines, "• %s → %s\n", user, prod);
+      g_free(user);
+      g_free(prod);
+    }
+  }
+
+  g_hash_table_destroy(mods);
+
+  if(lines->len == 0)
+  {
+    g_string_free(lines, TRUE);
+    return TRUE;
+  }
+
+  GtkDialog *dialog = GTK_DIALOG(gtk_dialog_new_with_buttons(
+      _("Missing raster mask producers"), GTK_WINDOW(window),
+      GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, _("_Cancel merge"), GTK_RESPONSE_CANCEL, _("_Continue"),
+      GTK_RESPONSE_ACCEPT, NULL));
+  gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
+  gtk_dialog_set_default_response(dialog, GTK_RESPONSE_ACCEPT);
+
+  GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+
+  GtkWidget *label = gtk_label_new(NULL);
+  gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+  gtk_widget_set_halign(label, GTK_ALIGN_START);
+  gtk_widget_set_valign(label, GTK_ALIGN_START);
+  gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+  gtk_label_set_max_width_chars(GTK_LABEL(label), 90);
+
+  gchar *text = g_strdup_printf(
+      _("Some pasted modules use raster masks produced by modules that were not included.\n"
+        "Those masks will not be available after the merge.\n\n"
+        "Missing producers:\n\n%s"),
+      lines->str);
+  gtk_label_set_text(GTK_LABEL(label), text);
+  gtk_box_pack_start(GTK_BOX(content_area), label, FALSE, FALSE, 6);
+
+  gtk_widget_show_all(GTK_WIDGET(dialog));
+  const int res = gtk_dialog_run(dialog);
+  gtk_widget_destroy(GTK_WIDGET(dialog));
+
+  g_free(text);
+  g_string_free(lines, TRUE);
+
+  return res == GTK_RESPONSE_ACCEPT;
 }
 
 typedef enum
@@ -1738,6 +1834,10 @@ static _hm_id_info_t *_hm_id_info_upsert(GHashTable *id_ht, const char *op, cons
   _hm_id_info_t *info = (_hm_id_info_t *)g_hash_table_lookup(id_ht, id);
   if(!info)
   {
+    if(origin & HM_ID_FROM_MOD_LIST)
+      dt_print(DT_DEBUG_HISTORY,
+            "[_hm_id_info_upsert] %s input node \n",
+            id);
     info = g_new0(_hm_id_info_t, 1);
     g_hash_table_insert(id_ht, id, info);
   }
@@ -1957,6 +2057,67 @@ static GList *_hm_build_input_nodes_from_ids_filtered(const GList *ids, const ch
   return nodes;
 }
 
+static GList *_hm_build_isolated_nodes_from_modules(const GList *modules, const char *tag)
+{
+  /* Build nodes without edges, so modules are present in the graph even if no adjacency constraints apply. */
+  GList *nodes = NULL;
+  for(const GList *l = g_list_first((GList *)modules); l; l = g_list_next(l))
+  {
+    const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
+    if(!mod) continue;
+
+    char *id = _hm_make_node_id(mod->op, mod->multi_name);
+    dt_digraph_node_t *n = dt_digraph_node_new(id);
+    if(tag) n->tag = g_strdup(tag);
+    nodes = g_list_append(nodes, n);
+    g_free(id);
+  }
+  return nodes;
+}
+
+/* Build constraint nodes enforcing raster-mask producer -> user ordering. */
+static GList *_hm_build_raster_mask_nodes_from_modules(const GList *modules, GHashTable *id_ht, const guint keep_mask,
+                                                       const char *tag)
+{
+  GList *nodes = NULL;
+  // For each module using a raster mask, add a producer->user edge if both are kept in the graph.
+  for(const GList *l = g_list_first((GList *)modules); l; l = g_list_next(l))
+  {
+    const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
+    if(!mod) continue;
+    const dt_iop_module_t *producer = mod->raster_mask.sink.source;
+    if(!producer) continue;
+
+    char *user_id = _hm_make_node_id(mod->op, mod->multi_name);
+    char *prod_id = _hm_make_node_id(producer->op, producer->multi_name);
+
+    const _hm_id_info_t *user_info = (_hm_id_info_t *)g_hash_table_lookup(id_ht, user_id);
+    const _hm_id_info_t *prod_info = (_hm_id_info_t *)g_hash_table_lookup(id_ht, prod_id);
+    if(!(user_info && (user_info->flags & keep_mask) && prod_info && (prod_info->flags & keep_mask)))
+    {
+      g_free(user_id);
+      g_free(prod_id);
+      continue;
+    }
+
+    dt_digraph_node_t *prod = dt_digraph_node_new(prod_id);
+    dt_digraph_node_t *user = dt_digraph_node_new(user_id);
+    if(tag)
+    {
+      prod->tag = g_strdup(tag);
+      user->tag = g_strdup(tag);
+    }
+    user->previous = g_list_append(user->previous, prod);
+
+    nodes = g_list_append(nodes, prod);
+    nodes = g_list_append(nodes, user);
+
+    g_free(user_id);
+    g_free(prod_id);
+  }
+  return nodes;
+}
+
 // Extract rules from IOP global fences
 static GList *_iop_rules(GHashTable *keep)
 {
@@ -2015,6 +2176,10 @@ typedef struct _hm_topo_merge_ctx_t
   // Set of ids (strings) used to decide which source adjacency edges we import.
   // An edge prev->cur from the source pipeline is kept when prev or cur is in this set.
   GHashTable *src_focus_ids;
+  // Modules selected for pasting (source instances).
+  const GList *mod_list;
+  // Destination develop context for raster-mask constraints.
+  dt_develop_t *dev_dest;
 } _hm_topo_merge_ctx_t;
 
 static void _hm_topo_merge_cleanup(_hm_topo_merge_ctx_t *ctx)
@@ -2170,7 +2335,17 @@ static int _hm_topo_flatten_constraints(_hm_topo_merge_ctx_t *ctx)
   GList *dest_nodes = _hm_build_input_nodes_from_ids(ctx->dest_ids, "dst");
   // Import source ordering only for edges touching `ctx->src_focus_ids`.
   GList *src_nodes = _hm_build_input_nodes_from_ids_filtered(ctx->src_ids, "src", ctx->src_focus_ids);
-  ctx->input_nodes = g_list_concat(g_list_concat(dest_nodes, src_nodes), _iop_rules(NULL));
+  // Ensure all pasted modules are present in the graph, even if they don't appear in src/dst adjacency lists.
+  GList *mod_nodes = _hm_build_isolated_nodes_from_modules(ctx->mod_list, "mod");
+  // Raster mask constraints: producer must come before user.
+  GList *dst_raster_nodes =
+      _hm_build_raster_mask_nodes_from_modules(ctx->dev_dest ? ctx->dev_dest->iop : NULL, ctx->id_ht, ctx->keep_mask,
+                                               "dst-raster");
+  GList *src_raster_nodes =
+      _hm_build_raster_mask_nodes_from_modules(ctx->mod_list, ctx->id_ht, ctx->keep_mask, "src-raster");
+  ctx->input_nodes = g_list_concat(g_list_concat(g_list_concat(dest_nodes, src_nodes),
+                                                 g_list_concat(mod_nodes, g_list_concat(dst_raster_nodes, src_raster_nodes))),
+                                   _iop_rules(NULL));
 
   if(flatten_nodes(ctx->input_nodes, &ctx->flat))
   {
@@ -2467,6 +2642,8 @@ static int _hm_try_merge_iop_order_topologically(dt_develop_t *dev_dest, dt_deve
 
   _hm_topo_merge_ctx_t ctx = { 0 };
   ctx.copy_module_contents = merge_iop_order;
+  ctx.mod_list = mod_list;
+  ctx.dev_dest = dev_dest;
 
   if(_hm_topo_build_id_info_table(&ctx, dev_dest, dev_src, mod_list))
   {
@@ -2717,6 +2894,8 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
    */
   if(!dev_dest || dest_imgid <= 0) return 1;
   if(!mod_list) return 0;
+
+  if(!_hm_warn_missing_raster_producers(mod_list)) return 1;
 
   // Snapshot the original destination pipeline and last history items before we modify the destination history.
   _hm_dest_backup_t backup = _hm_backup_dest(dev_dest);
