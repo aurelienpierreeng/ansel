@@ -805,8 +805,40 @@ static void _hm_report_update_arrows(GtkListStore *store, GHashTable *override, 
                                      GHashTable *dst_last_before_by_id)
 {
   /* Refresh override arrows after destination order changes. */
+  GHashTable *dst_row = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+
   GtkTreeIter iter;
   gboolean valid = gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store), &iter);
+  int row = 0;
+  while(valid)
+  {
+    gboolean is_input = FALSE;
+    gchar *src_id = NULL;
+    gchar *dst_id = NULL;
+    gtk_tree_model_get(GTK_TREE_MODEL(store), &iter, HM_REPORT_COL_SRC_ID, &src_id, HM_REPORT_COL_DST_ID, &dst_id,
+                       HM_REPORT_COL_IS_INPUT, &is_input, -1);
+
+    if(!is_input)
+    {
+      g_free(src_id);
+
+      if(dst_id && dst_id[0] != '\0')
+        g_hash_table_replace(dst_row, dst_id, GINT_TO_POINTER(row));
+      else
+        g_free(dst_id);
+    }
+    else
+    {
+      g_free(src_id);
+      g_free(dst_id);
+    }
+
+    valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(store), &iter);
+    row++;
+  }
+
+  valid = gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store), &iter);
+  row = 0;
   while(valid)
   {
     gboolean is_input = FALSE;
@@ -816,12 +848,12 @@ static void _hm_report_update_arrows(GtkListStore *store, GHashTable *override, 
                        HM_REPORT_COL_IS_INPUT, &is_input, -1);
 
     const char *arrow = "";
-    if(!is_input && src_id && dst_id && strcmp(src_id, dst_id) == 0 && g_hash_table_contains(override, dst_id))
+    if(!is_input && src_id && g_hash_table_contains(override, src_id))
     {
       const dt_dev_history_item_t *hist_after
-          = dst_last_by_id ? (const dt_dev_history_item_t *)g_hash_table_lookup(dst_last_by_id, dst_id) : NULL;
+          = dst_last_by_id ? (const dt_dev_history_item_t *)g_hash_table_lookup(dst_last_by_id, src_id) : NULL;
       const dt_dev_history_item_t *hist_before
-          = dst_last_before_by_id ? (const dt_dev_history_item_t *)g_hash_table_lookup(dst_last_before_by_id, dst_id)
+          = dst_last_before_by_id ? (const dt_dev_history_item_t *)g_hash_table_lookup(dst_last_before_by_id, src_id)
                                   : NULL;
 
       gboolean mask_override = FALSE;
@@ -830,7 +862,22 @@ static void _hm_report_update_arrows(GtkListStore *store, GHashTable *override, 
       else
         mask_override = _hm_history_item_uses_masks(hist_after);
 
-      arrow = mask_override ? "→*" : "→";
+      const gpointer dst_row_ptr = g_hash_table_lookup(dst_row, src_id);
+      if(dst_row_ptr)
+      {
+        const int dst_r = GPOINTER_TO_INT(dst_row_ptr);
+        const int delta = dst_r - row;
+        if(delta == 0)
+          arrow = mask_override ? "→*" : "→";
+        else if(delta == 1)
+          arrow = mask_override ? "↘*" : "↘";
+        else if(delta == -1)
+          arrow = mask_override ? "↗*" : "↗";
+        else if(delta > 1)
+          arrow = mask_override ? "↴*" : "↴";
+        else
+          arrow = mask_override ? "↴*" : "↴";
+      }
     }
 
     gtk_list_store_set(store, &iter, HM_REPORT_COL_ARROW, arrow, -1);
@@ -838,7 +885,10 @@ static void _hm_report_update_arrows(GtkListStore *store, GHashTable *override, 
     g_free(src_id);
     g_free(dst_id);
     valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(store), &iter);
+    row++;
   }
+
+  g_hash_table_destroy(dst_row);
 }
 
 static void _hm_report_keep_input_row_at_bottom(GtkListStore *store)
@@ -1129,7 +1179,10 @@ static void _hm_report_drag_data_received(GtkWidget *widget, GdkDragContext *con
 static GHashTable *_hm_build_override_map(const dt_develop_t *dev_dest, GHashTable *src_last_by_id,
                                           GHashTable *dst_last_before_by_id)
 {
-  /* Build a set of module ids whose final history item matches the source but not the destination. */
+  /* Build a set of module ids whose final history item matches the source but not the destination.
+   *
+   * We only report overrides when source and destination history items differ.
+   */
   GHashTable *override = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
   const int history_end = dt_dev_get_history_end_ext((dt_develop_t *)dev_dest);
 
@@ -1145,8 +1198,8 @@ static GHashTable *_hm_build_override_map(const dt_develop_t *dev_dest, GHashTab
     const dt_dev_history_item_t *hist_dst
         = dst_last_before_by_id ? (const dt_dev_history_item_t *)g_hash_table_lookup(dst_last_before_by_id, id) : NULL;
 
-    const gboolean match_src = _hm_history_items_match(hist_after, hist_src);
-    const gboolean match_dst = _hm_history_items_match(hist_after, hist_dst);
+    const gboolean match_src = hist_src && _hm_history_items_match(hist_after, hist_src);
+    const gboolean match_dst = hist_dst && _hm_history_items_match(hist_after, hist_dst);
     if(match_src && !match_dst)
       g_hash_table_replace(override, id, GINT_TO_POINTER(1));
     else
@@ -1226,6 +1279,7 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   gchar *dst_title = g_strdup_printf(_("Destination: %d %s"), dev_dest->image_storage.id, dst_base);
 
   GtkCellRenderer *r_orig = gtk_cell_renderer_text_new();
+  g_object_set(r_orig, "fixed-height-from-font", 1, "ypad", 0, NULL);
   GtkTreeViewColumn *c_orig = gtk_tree_view_column_new_with_attributes(orig_title, r_orig, "text",
                                                                        HM_REPORT_COL_ORIG, "style",
                                                                        HM_REPORT_COL_ORIG_STYLE, NULL);
@@ -1233,7 +1287,7 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree), c_orig);
 
   GtkCellRenderer *r_filet = gtk_cell_renderer_text_new();
-  g_object_set(r_filet, "xalign", 0.5f, NULL);
+  g_object_set(r_filet, "xalign", 0.5f, "fixed-height-from-font", 1, "ypad", 0, NULL);
   GtkTreeViewColumn *c_filet = gtk_tree_view_column_new_with_attributes("", r_filet, "text",
                                                                         HM_REPORT_COL_FILET, NULL);
   gtk_tree_view_column_set_alignment(c_filet, 0.5f);
@@ -1243,6 +1297,7 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree), c_filet);
 
   GtkCellRenderer *r_src = gtk_cell_renderer_text_new();
+  g_object_set(r_src, "fixed-height-from-font", 1, "ypad", 0, NULL);
   GtkTreeViewColumn *c_src = gtk_tree_view_column_new_with_attributes(src_title, r_src, "text",
                                                                       HM_REPORT_COL_SRC, "weight",
                                                                       HM_REPORT_COL_SRC_WEIGHT, "style",
@@ -1251,14 +1306,15 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree), c_src);
 
   GtkCellRenderer *r_arrow = gtk_cell_renderer_text_new();
-  g_object_set(r_arrow, "xalign", 0.5f, NULL);
-  GtkTreeViewColumn *c_arrow = gtk_tree_view_column_new_with_attributes(_("Override"), r_arrow, "text",
+  g_object_set(r_arrow, "xalign", 0.5f, "fixed-height-from-font", 1, "ypad", 0, NULL);
+  GtkTreeViewColumn *c_arrow = gtk_tree_view_column_new_with_attributes(_("Override"), r_arrow, "markup",
                                                                         HM_REPORT_COL_ARROW, NULL);
   gtk_tree_view_column_set_alignment(c_arrow, 0.5f);
   gtk_tree_view_column_set_expand(c_arrow, FALSE);
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree), c_arrow);
 
   GtkCellRenderer *r_dst = gtk_cell_renderer_text_new();
+  g_object_set(r_dst, "fixed-height-from-font", 1, "ypad", 0, NULL);
   GtkTreeViewColumn *c_dst = gtk_tree_view_column_new_with_attributes(dst_title, r_dst, "text",
                                                                       HM_REPORT_COL_DST, "weight",
                                                                       HM_REPORT_COL_DST_WEIGHT, "style",
@@ -1268,7 +1324,8 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
 
   gtk_container_add(GTK_CONTAINER(scrolled), tree);
 
-  GtkWidget *legend = gtk_label_new(_("[name] inserted module, * uses masks, bold = moved module, italic = disabled module (shown only if copied), → parameters overriden, →* parameters and masks overridden.\n"
+  GtkWidget *legend = gtk_label_new(_("[name] inserted module, * uses masks, bold = moved module, italic = disabled module (shown only if copied).\n"
+    "Arrows indicate parameters overriden (→ same row, ↗/↘ adjacent, ↴/↴ farther), * on arrow means masks overridden.\n"
                                       "Drag and drop modules in the `Destination` column to reorder the pipeline."));
   gtk_label_set_xalign(GTK_LABEL(legend), 0.0f);
   gtk_label_set_line_wrap(GTK_LABEL(legend), TRUE);
@@ -1332,25 +1389,6 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
     }
 
     const char *arrow = "";
-    if(src_mod && dst_mod && !strcmp(src_mod->op, dst_mod->op) && !strcmp(src_mod->multi_name, dst_mod->multi_name))
-    {
-      if(g_hash_table_contains(override, src_id))
-      {
-        const dt_dev_history_item_t *hist_after = dst_last_by_id
-                                                      ? (const dt_dev_history_item_t *)g_hash_table_lookup(dst_last_by_id, src_id)
-                                                      : NULL;
-        const dt_dev_history_item_t *hist_before
-            = dst_last_before_by_id ? (const dt_dev_history_item_t *)g_hash_table_lookup(dst_last_before_by_id, src_id) : NULL;
-
-        gboolean mask_override = FALSE;
-        if(hist_before)
-          mask_override = !_hm_history_masks_match(hist_after, hist_before);
-        else
-          mask_override = _hm_history_item_uses_masks(hist_after);
-
-        arrow = mask_override ? "→*" : "→";
-      }
-    }
 
     GtkTreeIter iter;
     gtk_list_store_append(store, &iter);
@@ -1382,6 +1420,7 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   }
 
   _hm_report_update_move_styles(store, dev_src, mod_list_ids);
+  _hm_report_update_arrows(store, override, dst_last_by_id, dst_last_before_by_id);
 
   GtkTargetEntry targets[] = { { "DT_HISTORY_MERGE_DST_ROW", GTK_TARGET_SAME_WIDGET, 0 } };
   gtk_tree_view_enable_model_drag_source(GTK_TREE_VIEW(tree), GDK_BUTTON1_MASK, targets, 1, GDK_ACTION_MOVE);
