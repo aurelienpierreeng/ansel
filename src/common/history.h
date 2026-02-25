@@ -48,7 +48,6 @@ typedef struct dt_history_copy_item_t
   GList *selops;
   GtkTreeView *items;
   int copied_imageid;
-  gboolean full_copy;
 } dt_history_copy_item_t;
 
 /** helper function to free a GList of dt_history_item_t */

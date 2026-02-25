@@ -1304,7 +1304,6 @@ static int32_t dt_control_refresh_exif_run(dt_job_t *job)
 {
   dt_control_image_enumerator_t *params = (dt_control_image_enumerator_t *)dt_control_job_get_params(job);
   GList *t = params->index;
-  GList *imgs = g_list_copy(t);
   const guint total = g_list_length(t);
   double fraction = 0.0f;
   char message[512] = { 0 };

@@ -959,7 +959,6 @@ gboolean dt_history_copy(int32_t imgid)
   if(imgid <= 0) return FALSE;
 
   darktable.view_manager->copy_paste.copied_imageid = imgid;
-  darktable.view_manager->copy_paste.full_copy = TRUE;
 
   return TRUE;
 }
@@ -968,9 +967,6 @@ gboolean dt_history_copy_parts(int32_t imgid)
 {
   if(dt_history_copy(imgid))
   {
-    // we want to copy all history and let user select the parts needed
-    darktable.view_manager->copy_paste.full_copy = FALSE;
-
     // run dialog, it will insert into selops the selected moduel
 
     if(dt_gui_hist_dialog_new(&(darktable.view_manager->copy_paste), imgid, TRUE) == GTK_RESPONSE_CANCEL)
@@ -994,7 +990,7 @@ gboolean dt_history_paste_on_list(const GList *list, gboolean undo)
     dt_history_copy_and_paste_on_image(darktable.view_manager->copy_paste.copied_imageid,
                                        dest,
                                        darktable.view_manager->copy_paste.selops,
-                                       darktable.view_manager->copy_paste.full_copy,
+                                       FALSE,
                                        dt_conf_get_int("history/mode"));
   }
 
@@ -1028,7 +1024,7 @@ gboolean dt_history_paste_parts_on_list(const GList *list, gboolean undo)
     dt_history_copy_and_paste_on_image(darktable.view_manager->copy_paste.copied_imageid,
                                        dest,
                                        darktable.view_manager->copy_paste.selops,
-                                       darktable.view_manager->copy_paste.full_copy,
+                                       FALSE,
                                        dt_conf_get_int("history/mode"));
   }
   if(undo) dt_undo_end_group(darktable.undo);
