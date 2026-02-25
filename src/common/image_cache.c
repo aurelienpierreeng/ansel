@@ -254,7 +254,8 @@ void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
 
   img->has_localcopy = (img->flags & DT_IMAGE_LOCAL_COPY);
   img->has_audio = (img->flags & DT_IMAGE_HAS_WAV);
-  img->rating = dt_image_get_xmp_rating_from_flags(img->flags);
+  int xmp_rating = dt_image_get_xmp_rating_from_flags(img->flags);
+  img->rating = (xmp_rating == -1) ? DT_VIEW_REJECT : xmp_rating;
   img->is_bw = dt_image_monochrome_flags(img);
   img->is_bw_flow = dt_image_use_monochrome_workflow(img);
   img->is_hdr = dt_image_is_hdr(img);
@@ -548,6 +549,14 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
                                           sizeof(img->local_copy_path), img->local_copy_legacy_path,
                                           sizeof(img->local_copy_legacy_path));
 
+  img->has_localcopy = (img->flags & DT_IMAGE_LOCAL_COPY);
+  img->has_audio = (img->flags & DT_IMAGE_HAS_WAV);
+  int xmp_rating = dt_image_get_xmp_rating_from_flags(img->flags);
+  img->rating = (xmp_rating == -1) ? DT_VIEW_REJECT : xmp_rating;
+  img->is_bw = dt_image_monochrome_flags(img);
+  img->is_bw_flow = dt_image_use_monochrome_workflow(img);
+  img->is_hdr = dt_image_is_hdr(img);
+
   sqlite3_stmt *stmt;
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
@@ -616,6 +625,11 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
 
   if(mode == DT_IMAGE_CACHE_SAFE && dt_image_get_xmp_mode())
     dt_control_save_xmp(imgid);
+  
+  // FIXME: that a memory leak ?
+  GList *imgs = NULL;
+  imgs = g_list_prepend(imgs, GINT_TO_POINTER(img->id));
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_INFO_CHANGED, imgs);
 }
 
 

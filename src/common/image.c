@@ -644,7 +644,6 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
     if(i > 1) dt_control_log((action == DT_ACTION_UNDO)
                               ? _("date/time undone for %d images")
                               : _("date/time re-applied to %d images"), i);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_INFO_CHANGED, g_list_copy(*imgs));
   }
   else if(type == DT_UNDO_DUPLICATE)
   {

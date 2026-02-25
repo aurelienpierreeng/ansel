@@ -333,7 +333,6 @@ void dt_colorlabels_toggle_label_on_list(GList *list, const int color, const gbo
   }
   dt_collection_hint_message(darktable.collection);
   dt_toast_log(_("Color label set to %s for %i image(s)"), dt_colorlabels_get_name(color), g_list_length(list));
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_INFO_CHANGED, g_list_copy(list));
 }
 
 int dt_colorlabels_check_label(const int32_t imgid, const int color)
