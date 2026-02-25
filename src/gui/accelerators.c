@@ -784,6 +784,11 @@ typedef struct _accel_lookup_t
   GtkAccelGroup *group;
 } _accel_lookup_t;
 
+static inline guint _normalize_keyval(const guint keyval)
+{
+  return gdk_keyval_to_lower(keyval);
+}
+
 
 static inline void _for_each_accel(gpointer key, gpointer value, gpointer user_data)
 {
@@ -791,8 +796,13 @@ static inline void _for_each_accel(gpointer key, gpointer value, gpointer user_d
   const gchar *path = (const gchar *)key;
   _accel_lookup_t *results = (_accel_lookup_t *)user_data;
 
+  // gtk_accel_group_activate() maps uppercase and lowercase to the same key,
+  // for compatibility we need to do the same.
+  const guint shortcut_key = _normalize_keyval(shortcut->key);
+  const guint result_key = _normalize_keyval(results->key);
+
   if(shortcut->accel_group == results->group
-     && shortcut->key == results->key
+     && shortcut_key == result_key
      && shortcut->mods == results->modifier)
   {
     if(!g_strcmp0(path, shortcut->path))
@@ -832,8 +842,13 @@ static inline void _for_each_non_virtual_accel(gpointer key, gpointer value, gpo
   const gchar *path = (const gchar *)key;
   _accel_lookup_t *results = (_accel_lookup_t *)user_data;
 
+  // gtk_accel_group_activate() maps uppercase and lowercase to the same key,
+  // for compatibility we need to do the same.
+  const guint shortcut_key = _normalize_keyval(shortcut->key);
+  const guint result_key = _normalize_keyval(results->key);
+
   if(shortcut->accel_group == results->group
-     && shortcut->key == results->key
+     && shortcut_key == result_key
      && shortcut->mods == results->modifier
      && !shortcut->virtual_shortcut)
   {
@@ -1321,6 +1336,8 @@ static gboolean filter_callback(GtkTreeModel *model, GtkTreeIter *iter, gpointer
       guint keyval = 0;
       GdkModifierType mods = 0;
       gtk_tree_model_get(model, iter, COL_KEYVAL, &keyval, COL_MODS, &mods, -1);
+      keyval = _normalize_keyval(keyval);
+      search_keyval = _normalize_keyval(search_keyval);
 
       // If both keyval and mods are searched, use strict mode.
       // Else use fuzzy mode
