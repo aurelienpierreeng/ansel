@@ -990,6 +990,12 @@ void dt_dev_pixelpipe_cache_flag_auto_destroy(dt_dev_pixelpipe_cache_t *cache, u
   if(cache_entry == NULL)
     cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
 
+  if(cache_entry == NULL)
+  {
+    dt_pthread_mutex_unlock(&cache->lock);
+    return;
+  }
+
   cache_entry->auto_destroy = TRUE;
   dt_pthread_mutex_unlock(&cache->lock);
 }
@@ -1001,6 +1007,12 @@ void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache, 
   dt_pthread_mutex_lock(&cache->lock);
   if(cache_entry == NULL)
     cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
+
+  if(cache_entry == NULL)
+  {
+    dt_pthread_mutex_unlock(&cache->lock);
+    return;
+  }
 
   if(cache_entry->auto_destroy)
   {
