@@ -113,13 +113,20 @@ char *_hm_make_node_id(const char *op, const char *multi_name)
    * Ownership:
    * - Returns a newly allocated string that must be freed with g_free().
    */
-  if(!op) op = "";
-  if(!multi_name) multi_name = "";
   return g_strdup_printf("%s|%s", op, multi_name);
 }
 
-static void _hm_copy_masks_for_module(dt_develop_t *dev_dest, dt_develop_t *dev_src,
-                                      const dt_iop_module_t *mod_src);
+static int _hm_copy_masks_for_module(dt_develop_t *dev_dest, dt_develop_t *dev_src,
+                                     const dt_iop_module_t *mod_src);
+
+static void _hm_free_input_node(dt_digraph_node_t *n)
+{
+  if(!n) return;
+  g_list_free(n->previous);
+  if(n->tag) g_free(n->tag);
+  g_free((char *)n->id);
+  g_free(n);
+}
 
 static void _hm_free_input_nodes(GList *input_nodes)
 {
@@ -133,20 +140,9 @@ static void _hm_free_input_nodes(GList *input_nodes)
    *
    * Important detail:
    * - `node->previous` is a GList that stores non-owning pointers to other input nodes.
-   *   We free only the list container, not the pointed-to nodes here (each node is freed
-   *   exactly once when we iterate the outer list).
+   *   We free only the list container, not the pointed-to nodes here.
    */
-  for(GList *it = input_nodes; it; it = g_list_next(it))
-  {
-    dt_digraph_node_t *n = (dt_digraph_node_t *)it->data;
-    if(!n) continue;
-    // Free the predecessor list container (the predecessors are nodes in `input_nodes`).
-    if(n->previous) g_list_free(n->previous);
-    if(n->tag) g_free(n->tag);
-    g_free((char *)n->id);
-    g_free(n);
-  }
-  g_list_free(input_nodes);
+  g_list_free_full(input_nodes, (GDestroyNotify)_hm_free_input_node);
 }
 
 void _hm_id_to_op_name(const char *id, char *op, char *name)
@@ -163,8 +159,6 @@ void _hm_id_to_op_name(const char *id, char *op, char *name)
    */
   op[0] = '\0';
   name[0] = '\0';
-  if(!id) return;
-
   const char *sep = strchr(id, '|');
   if(!sep)
   {
@@ -179,7 +173,7 @@ void _hm_id_to_op_name(const char *id, char *op, char *name)
   g_strlcpy(name, sep + 1, sizeof(((dt_dev_history_item_t *)0)->multi_name));
 }
 
-static GHashTable *_hm_build_prev_map_from_ids(const GList *ids)
+static int _hm_build_prev_map_from_ids(const GList *ids, GHashTable **out_prev)
 {
   /* Build an adjacency map from a list of node ids that is already in pipeline order.
    *
@@ -193,24 +187,24 @@ static GHashTable *_hm_build_prev_map_from_ids(const GList *ids)
    * - Returns a hashtable owning both keys and values (g_hash_table_destroy()).
    */
   GHashTable *prev = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-  if(!prev) return NULL;
+  if(!prev) return 1;
 
   const char *prev_id = NULL;
   // Walk the list in order to record each element's immediate predecessor.
   for(const GList *l = ids; l; l = g_list_next(l))
   {
     const char *id = (const char *)l->data;
-    if(!id) continue;
 
     if(prev_id) g_hash_table_replace(prev, g_strdup(id), g_strdup(prev_id));
 
     prev_id = id;
   }
 
-  return prev;
+  *out_prev = prev;
+  return 0;
 }
 
-static GHashTable *_hm_build_next_map_from_ids(const GList *ids)
+static int _hm_build_next_map_from_ids(const GList *ids, GHashTable **out_next)
 {
   /* Symmetric to `_hm_build_prev_map_from_ids()`.
    *
@@ -221,21 +215,21 @@ static GHashTable *_hm_build_next_map_from_ids(const GList *ids)
    * - Returns a hashtable owning both keys and values (g_hash_table_destroy()).
    */
   GHashTable *next = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-  if(!next) return NULL;
+  if(!next) return 1;
 
   const char *prev_id = NULL;
   // Walk the list in order to record each element's immediate successor.
   for(const GList *l = ids; l; l = g_list_next(l))
   {
     const char *id = (const char *)l->data;
-    if(!id) continue;
 
     if(prev_id) g_hash_table_replace(next, g_strdup(prev_id), g_strdup(id));
 
     prev_id = id;
   }
 
-  return next;
+  *out_next = next;
+  return 0;
 }
 
 static gboolean _hm_node_has_predecessor(const dt_digraph_node_t *n, const dt_digraph_node_t *pred)
@@ -299,37 +293,46 @@ typedef struct
   GHashTable *orig_ids;
 } _hm_dest_backup_t;
 
-static GHashTable *_hm_build_last_history_by_id_from_history(GList *history, const int history_end)
+static int _hm_build_last_history_by_id_from_history(GList *history, const int history_end, GHashTable **out_map)
 {
   GHashTable *map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  if(!map) return 1;
 
   int idx = 0;
   for(GList *l = g_list_first(history); l && idx < history_end; l = g_list_next(l), idx++)
   {
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)l->data;
-    if(!hist) continue;
     g_hash_table_replace(map, _hm_make_node_id(hist->op_name, hist->multi_name), hist);
   }
 
-  return map;
+  *out_map = map;
+  return 0;
 }
 
-static _hm_dest_backup_t _hm_backup_dest(const dt_develop_t *dev_dest, const GHashTable *mod_list_ids)
+static int _hm_backup_dest(const dt_develop_t *dev_dest, const GHashTable *mod_list_ids, _hm_dest_backup_t *backup)
 {
-  _hm_dest_backup_t backup = { 0 };
-  backup.history = dt_history_duplicate(dev_dest->history);
-  backup.history_end = dt_dev_get_history_end_ext((dt_develop_t *)dev_dest);
-  backup.iop_order_list = dt_ioppr_iop_order_copy_deep(dev_dest->iop_order_list);
-  GHashTable *last_by_id = _hm_build_last_history_by_id_from_history(backup.history, backup.history_end);
-  backup.orig_labels = _hm_collect_labels_from_history_map(last_by_id, mod_list_ids, &backup.orig_styles);
-  backup.orig_ids = last_by_id;
-  return backup;
+  *backup = (_hm_dest_backup_t){ 0 };
+  backup->history = dt_history_duplicate(dev_dest->history);
+  backup->history_end = dt_dev_get_history_end_ext((dt_develop_t *)dev_dest);
+  backup->iop_order_list = dt_ioppr_iop_order_copy_deep(dev_dest->iop_order_list);
+  if(!backup->iop_order_list) return 1;
+
+  GHashTable *last_by_id = NULL;
+  if(_hm_build_last_history_by_id_from_history(backup->history, backup->history_end, &last_by_id)) return 1;
+  backup->orig_labels = _hm_collect_labels_from_history_map(last_by_id, mod_list_ids, &backup->orig_styles);
+  if(!backup->orig_labels || !backup->orig_styles)
+  {
+    if(backup->orig_labels) g_ptr_array_free(backup->orig_labels, TRUE);
+    if(backup->orig_styles) g_ptr_array_free(backup->orig_styles, TRUE);
+    g_hash_table_destroy(last_by_id);
+    return 1;
+  }
+  backup->orig_ids = last_by_id;
+  return 0;
 }
 
 static void _hm_restore_dest_from_backup(dt_develop_t *dev_dest, _hm_dest_backup_t *backup)
 {
-  if(!dev_dest || !backup) return;
-
   dt_dev_history_free_history(dev_dest);
   dev_dest->history = backup->history;
   backup->history = NULL;
@@ -345,7 +348,6 @@ static void _hm_restore_dest_from_backup(dt_develop_t *dev_dest, _hm_dest_backup
 
 static void _hm_backup_cleanup(_hm_dest_backup_t *backup)
 {
-  if(!backup) return;
   if(backup->history) g_list_free_full(backup->history, dt_dev_free_history_item);
   if(backup->iop_order_list) g_list_free_full(backup->iop_order_list, free);
   if(backup->orig_labels) g_ptr_array_free(backup->orig_labels, TRUE);
@@ -358,7 +360,7 @@ static void _hm_backup_cleanup(_hm_dest_backup_t *backup)
   backup->orig_ids = NULL;
 }
 
-GHashTable *_hm_build_last_history_by_id(const dt_develop_t *dev)
+int _hm_build_last_history_by_id(const dt_develop_t *dev, GHashTable **out_map)
 {
   /* Build a map of last history item per module instance in the given develop stack.
    *
@@ -368,31 +370,32 @@ GHashTable *_hm_build_last_history_by_id(const dt_develop_t *dev)
    * This is used to decide whether a post-merge history item matches the source or destination history.
    */
   GHashTable *map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  if(!map) return 1;
 
   const int history_end = dt_dev_get_history_end_ext((dt_develop_t *)dev);
   for(GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
     dt_dev_history_item_t *hist = dt_dev_history_get_last_item_by_module(dev->history, mod, history_end);
-    if(!hist) continue;
-
     g_hash_table_replace(map, _hm_make_node_id(mod->op, mod->multi_name), hist);
   }
 
-  return map;
+  *out_map = map;
+  return 0;
 }
 
-static GHashTable *_hm_build_id_set_from_mod_list(const GList *mod_list)
+static int _hm_build_id_set_from_mod_list(const GList *mod_list, GHashTable **out_ids)
 {
   /* Build a set of node ids from the pasted module list. */
   GHashTable *ids = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  if(!ids) return 1;
   for(const GList *l = g_list_first((GList *)mod_list); l; l = g_list_next(l))
   {
     const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
-    if(!mod) continue;
     g_hash_table_add(ids, _hm_make_node_id(mod->op, mod->multi_name));
   }
-  return ids;
+  *out_ids = ids;
+  return 0;
 }
 
 static _hm_id_info_t *_hm_id_info_upsert(GHashTable *id_ht, const char *op, const char *multi_name,
@@ -455,7 +458,6 @@ static int _hm_next_multi_priority_for_op(dt_develop_t *dev, const char *op)
   for(const GList *l = g_list_first(dev->iop); l; l = g_list_next(l))
   {
     const dt_iop_module_t *m = (const dt_iop_module_t *)l->data;
-    if(!m) continue;
     if(strcmp(m->op, op)) continue;
     max_priority = MAX(max_priority, m->multi_priority);
   }
@@ -479,11 +481,6 @@ static dt_iop_module_t *_hm_create_new_dest_instance(dt_develop_t *dev_dest, con
   // Find an existing instance (prefer base) to use as template for loading.
   dt_iop_module_t *base = dt_iop_get_module_by_op_priority(dev_dest->iop, op, 0);
   if(!base) base = dt_iop_get_module_by_op_priority(dev_dest->iop, op, -1);
-  if(!base)
-  {
-    fprintf(stderr, "[dt_history_merge_module_list_into_image_topological] can't find base module %s\n", op);
-    return NULL;
-  }
 
   if((base->flags() & IOP_FLAGS_ONE_INSTANCE) == IOP_FLAGS_ONE_INSTANCE)
   {
@@ -514,8 +511,8 @@ static dt_iop_module_t *_hm_create_new_dest_instance(dt_develop_t *dev_dest, con
   return module;
 }
 
-static void _hm_copy_module_contents(dt_develop_t *dev_dest, dt_develop_t *dev_src, dt_iop_module_t *mod_dest,
-                                     const dt_iop_module_t *mod_src)
+static int _hm_copy_module_contents(dt_develop_t *dev_dest, dt_develop_t *dev_src, dt_iop_module_t *mod_dest,
+                                    const dt_iop_module_t *mod_src)
 {
   /* Copy the "inner state" of a module instance from source to destination.
    *
@@ -530,22 +527,17 @@ static void _hm_copy_module_contents(dt_develop_t *dev_dest, dt_develop_t *dev_s
    * - Params buffer copy is clamped to the smaller of (src,dst) sizes to tolerate version differences.
    */
 
-  if(strcmp(mod_dest->op, mod_src->op)) return;
-
   mod_dest->enabled = mod_src->enabled;
 
   const int32_t sz_dest = mod_dest->params_size;
   const int32_t sz_src = mod_src->params_size;
   const int32_t sz = MIN(sz_dest, sz_src);
-  if(mod_dest->params && mod_src->params && sz > 0)
-    memcpy(mod_dest->params, mod_src->params, sz);
-  else
-    fprintf(stderr, "[dt_history_merge_module_list_into_image_topological] can't copy params for %s\n",
-            mod_dest->op);
+  if(sz > 0) memcpy(mod_dest->params, mod_src->params, sz);
 
   if(mod_src->blend_params) dt_iop_commit_blend_params(mod_dest, mod_src->blend_params);
 
-  _hm_copy_masks_for_module(dev_dest, dev_src, mod_src);
+  if(_hm_copy_masks_for_module(dev_dest, dev_src, mod_src)) return 1;
+  return 0;
 }
 
 /* Build a list of node ids in pipeline order, restricted by an origin bitmask.
@@ -556,14 +548,13 @@ static void _hm_copy_module_contents(dt_develop_t *dev_dest, dt_develop_t *dev_s
  * Ownership:
  * - Returned ids are owned by the caller (free with g_list_free_full(list, g_free)).
  */
-static GList *_hm_ids_from_iop_list(GList *iop, GHashTable *id_ht, const guint keep_mask)
+static int _hm_ids_from_iop_list(GList *iop, GHashTable *id_ht, const guint keep_mask, GList **out_ids)
 {
   GList *ids = NULL;
   // Walk the iop list in order so the returned ids encode adjacency constraints.
   for(const GList *l = iop; l; l = g_list_next(l))
   {
     const dt_iop_module_t *const mod = (const dt_iop_module_t *)l->data;
-    if(!mod) continue;
 
     char *id = _hm_make_node_id(mod->op, mod->multi_name);
     const _hm_id_info_t *info = (_hm_id_info_t *)g_hash_table_lookup(id_ht, id);
@@ -572,10 +563,11 @@ static GList *_hm_ids_from_iop_list(GList *iop, GHashTable *id_ht, const guint k
     else
       g_free(id);
   }
-  return ids;
+  *out_ids = ids;
+  return 0;
 }
 
-static GList *_hm_build_input_nodes_from_ids(const GList *ids, const char *tag)
+static int _hm_build_input_nodes_from_ids(const GList *ids, const char *tag, GList **out_nodes)
 {
   /* Build a list of digraph nodes encoding linear "previous" constraints.
    *
@@ -595,20 +587,35 @@ static GList *_hm_build_input_nodes_from_ids(const GList *ids, const char *tag)
   for(const GList *l = ids; l; l = g_list_next(l))
   {
     const char *id = (const char *)l->data;
-    if(!id) continue;
 
     dt_digraph_node_t *n = dt_digraph_node_new(id);
-    if(tag) n->tag = g_strdup(tag);
+    if(!n)
+    {
+      _hm_free_input_nodes(nodes);
+      return 1;
+    }
+    if(tag)
+    {
+      n->tag = g_strdup(tag);
+      if(!n->tag)
+      {
+        _hm_free_input_node(n);
+        _hm_free_input_nodes(nodes);
+        return 1;
+      }
+    }
 
     if(prev) n->previous = g_list_append(n->previous, prev);
 
     nodes = g_list_append(nodes, n);
     prev = n;
   }
-  return nodes;
+  *out_nodes = nodes;
+  return 0;
 }
 
-static GList *_hm_build_input_nodes_from_ids_filtered(const GList *ids, const char *tag, const GHashTable *focus)
+static int _hm_build_input_nodes_from_ids_filtered(const GList *ids, const char *tag, const GHashTable *focus,
+                                                   GList **out_nodes)
 {
   /* Build input constraint nodes from an ordered id list, optionally filtering which adjacency edges are kept.
    *
@@ -627,10 +634,23 @@ static GList *_hm_build_input_nodes_from_ids_filtered(const GList *ids, const ch
   for(const GList *l = ids; l; l = g_list_next(l))
   {
     const char *id = (const char *)l->data;
-    if(!id) continue;
 
     dt_digraph_node_t *n = dt_digraph_node_new(id);
-    if(tag) n->tag = g_strdup(tag);
+    if(!n)
+    {
+      _hm_free_input_nodes(nodes);
+      return 1;
+    }
+    if(tag)
+    {
+      n->tag = g_strdup(tag);
+      if(!n->tag)
+      {
+        _hm_free_input_node(n);
+        _hm_free_input_nodes(nodes);
+        return 1;
+      }
+    }
 
     if(prev)
     {
@@ -642,37 +662,53 @@ static GList *_hm_build_input_nodes_from_ids_filtered(const GList *ids, const ch
     nodes = g_list_append(nodes, n);
     prev = n;
   }
-  return nodes;
+  *out_nodes = nodes;
+  return 0;
 }
 
-static GList *_hm_build_isolated_nodes_from_modules(const GList *modules, const char *tag)
+static int _hm_build_isolated_nodes_from_modules(const GList *modules, const char *tag, GList **out_nodes)
 {
   /* Build nodes without edges, so modules are present in the graph even if no adjacency constraints apply. */
   GList *nodes = NULL;
   for(const GList *l = g_list_first((GList *)modules); l; l = g_list_next(l))
   {
     const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
-    if(!mod) continue;
 
     char *id = _hm_make_node_id(mod->op, mod->multi_name);
     dt_digraph_node_t *n = dt_digraph_node_new(id);
-    if(tag) n->tag = g_strdup(tag);
+    if(!n)
+    {
+      g_free(id);
+      _hm_free_input_nodes(nodes);
+      return 1;
+    }
+    if(tag)
+    {
+      n->tag = g_strdup(tag);
+      if(!n->tag)
+      {
+        g_free(id);
+        _hm_free_input_node(n);
+        _hm_free_input_nodes(nodes);
+        return 1;
+      }
+    }
     nodes = g_list_append(nodes, n);
     g_free(id);
   }
-  return nodes;
+  *out_nodes = nodes;
+  return 0;
 }
 
 /* Build constraint nodes enforcing raster-mask producer -> user ordering. */
-static GList *_hm_build_raster_mask_nodes_from_modules(const GList *modules, GHashTable *id_ht, const guint keep_mask,
-                                                       const char *tag)
+static int _hm_build_raster_mask_nodes_from_modules(const GList *modules, GHashTable *id_ht, const guint keep_mask,
+                                                    const char *tag, GList **out_nodes)
 {
   GList *nodes = NULL;
   // For each module using a raster mask, add a producer->user edge if both are kept in the graph.
   for(const GList *l = g_list_first((GList *)modules); l; l = g_list_next(l))
   {
     const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
-    if(!mod) continue;
     const dt_iop_module_t *producer = mod->raster_mask.sink.source;
     if(!producer) continue;
 
@@ -690,10 +726,24 @@ static GList *_hm_build_raster_mask_nodes_from_modules(const GList *modules, GHa
 
     dt_digraph_node_t *prod = dt_digraph_node_new(prod_id);
     dt_digraph_node_t *user = dt_digraph_node_new(user_id);
+    if(!prod || !user)
+    {
+      _hm_free_input_node(prod);
+      _hm_free_input_node(user);
+      _hm_free_input_nodes(nodes);
+      return 1;
+    }
     if(tag)
     {
       prod->tag = g_strdup(tag);
       user->tag = g_strdup(tag);
+      if(!prod->tag || !user->tag)
+      {
+        _hm_free_input_node(prod);
+        _hm_free_input_node(user);
+        _hm_free_input_nodes(nodes);
+        return 1;
+      }
     }
     user->previous = g_list_append(user->previous, prod);
 
@@ -703,11 +753,12 @@ static GList *_hm_build_raster_mask_nodes_from_modules(const GList *modules, GHa
     g_free(user_id);
     g_free(prod_id);
   }
-  return nodes;
+  *out_nodes = nodes;
+  return 0;
 }
 
 // Extract rules from IOP global fences
-static GList *_iop_rules(GHashTable *keep)
+static int _iop_rules(GHashTable *keep, GList **out_nodes)
 {
   /* Convert global iop-order fence rules into digraph constraints.
    *
@@ -729,13 +780,28 @@ static GList *_iop_rules(GHashTable *keep)
 
     dt_digraph_node_t *next = dt_digraph_node_new(next_id);
     dt_digraph_node_t *prev = dt_digraph_node_new(prev_id);
+    if(!next || !prev)
+    {
+      _hm_free_input_node(next);
+      _hm_free_input_node(prev);
+      _hm_free_input_nodes(iop_rules);
+      return 1;
+    }
     next->tag = g_strdup("rule");
     prev->tag = g_strdup("rule");
+    if(!next->tag || !prev->tag)
+    {
+      _hm_free_input_node(next);
+      _hm_free_input_node(prev);
+      _hm_free_input_nodes(iop_rules);
+      return 1;
+    }
     next->previous = g_list_append(next->previous, prev);
     iop_rules = g_list_append(iop_rules, next);
     iop_rules = g_list_append(iop_rules, prev);
   }
-  return iop_rules;
+  *out_nodes = iop_rules;
+  return 0;
 }
 
 typedef struct _hm_topo_merge_ctx_t
@@ -814,7 +880,6 @@ static int _hm_topo_build_id_info_table(_hm_topo_merge_ctx_t *ctx, dt_develop_t 
   for(const GList *l = g_list_first((GList *)mod_list); l; l = g_list_next(l))
   {
     const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
-    if(!mod) continue;
     _hm_id_info_upsert(ctx->id_ht, mod->op, mod->multi_name, HM_ID_FROM_MOD_LIST, mod, NULL, NULL);
   }
 
@@ -822,7 +887,6 @@ static int _hm_topo_build_id_info_table(_hm_topo_merge_ctx_t *ctx, dt_develop_t 
   for(const GList *l = g_list_first(dev_src->iop); l; l = g_list_next(l))
   {
     const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
-    if(!mod) continue;
     _hm_id_info_upsert(ctx->id_ht, mod->op, mod->multi_name, HM_ID_FROM_SRC_IOP, NULL, mod, NULL);
   }
 
@@ -830,7 +894,6 @@ static int _hm_topo_build_id_info_table(_hm_topo_merge_ctx_t *ctx, dt_develop_t 
   for(const GList *l = g_list_first(dev_dest->iop); l; l = g_list_next(l))
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)l->data;
-    if(!mod) continue;
     _hm_id_info_upsert(ctx->id_ht, mod->op, mod->multi_name, HM_ID_FROM_DST_IOP, NULL, NULL, mod);
   }
 
@@ -839,7 +902,6 @@ static int _hm_topo_build_id_info_table(_hm_topo_merge_ctx_t *ctx, dt_develop_t 
   for(const GList *rules = g_list_first(darktable.iop_order_rules); rules; rules = g_list_next(rules))
   {
     const dt_iop_order_rule_t *rule = (dt_iop_order_rule_t *)rules->data;
-    if(!rule) continue;
     _hm_id_info_upsert(ctx->id_ht, rule->op_next, "", HM_ID_FROM_RULE, NULL, NULL, NULL);
     _hm_id_info_upsert(ctx->id_ht, rule->op_prev, "", HM_ID_FROM_RULE, NULL, NULL, NULL);
   }
@@ -870,11 +932,10 @@ static int _hm_topo_build_constraint_ids(_hm_topo_merge_ctx_t *ctx, dt_develop_t
   for(const GList *l = g_list_first((GList *)mod_list); l; l = g_list_next(l))
   {
     const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
-    if(!mod) continue;
 
     char *id = _hm_make_node_id(mod->op, mod->multi_name);
     const _hm_id_info_t *info = (_hm_id_info_t *)g_hash_table_lookup(ctx->id_ht, id);
-    const gboolean exists_in_dest = info && (info->flags & HM_ID_FROM_DST_IOP);
+    const gboolean exists_in_dest = (info->flags & HM_ID_FROM_DST_IOP);
 
     if(merge_iop_order || !exists_in_dest) g_hash_table_add(ctx->src_focus_ids, g_strdup(id));
 
@@ -885,10 +946,10 @@ static int _hm_topo_build_constraint_ids(_hm_topo_merge_ctx_t *ctx, dt_develop_t
   ctx->keep_mask = HM_ID_FROM_DST_IOP | HM_ID_FROM_MOD_LIST | HM_ID_FROM_RULE;
 
   // Destination constraints: current destination pipeline order, filtered to the kept ids.
-  ctx->dest_ids = _hm_ids_from_iop_list(g_list_first(dev_dest->iop), ctx->id_ht, ctx->keep_mask);
+  if(_hm_ids_from_iop_list(g_list_first(dev_dest->iop), ctx->id_ht, ctx->keep_mask, &ctx->dest_ids)) return 1;
   // Source constraints: the source pipeline order, filtered to the kept ids.
   // We will later import only the edges that touch the focus set (`ctx->src_focus_ids`).
-  ctx->src_ids = _hm_ids_from_iop_list(g_list_first(dev_src->iop), ctx->id_ht, ctx->keep_mask);
+  if(_hm_ids_from_iop_list(g_list_first(dev_src->iop), ctx->id_ht, ctx->keep_mask, &ctx->src_ids)) return 1;
 
   dt_print(DT_DEBUG_HISTORY,
            "[dt_history_merge_module_list_into_image_topological] iop-order solve: merge_iop_order=%d mod_list=%d "
@@ -896,16 +957,14 @@ static int _hm_topo_build_constraint_ids(_hm_topo_merge_ctx_t *ctx, dt_develop_t
            "dst_iop=%d keep(dst+mod+rules) dest_constraints=%d src_constraints=%d focus=%d\n",
            merge_iop_order, g_list_length((GList *)mod_list), g_list_length(dev_src->iop),
            g_list_length(dev_dest->iop), g_list_length(ctx->dest_ids), g_list_length(ctx->src_ids),
-           ctx->src_focus_ids ? g_hash_table_size(ctx->src_focus_ids) : 0);
-
-  if(!ctx->dest_ids || !ctx->src_ids) return 1;
+           g_hash_table_size(ctx->src_focus_ids));
 
   return 0;
 }
 
 // Resolve direct 2-cycles after flattening (declared here because `_hm_topo_flatten_constraints()` calls it).
-static void _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *id_ht, const GList *src_ids,
-                                                      const GList *dest_ids);
+static int _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *id_ht, const GList *src_ids,
+                                                     const GList *dest_ids);
 
 static int _hm_topo_flatten_constraints(_hm_topo_merge_ctx_t *ctx)
 {
@@ -920,20 +979,31 @@ static int _hm_topo_flatten_constraints(_hm_topo_merge_ctx_t *ctx)
 
 
 
-  GList *dest_nodes = _hm_build_input_nodes_from_ids(ctx->dest_ids, "dst");
+  GList *dest_nodes = NULL;
+  GList *src_nodes = NULL;
+  GList *mod_nodes = NULL;
+  GList *dst_raster_nodes = NULL;
+  GList *src_raster_nodes = NULL;
+  GList *rule_nodes = NULL;
+
+  if(_hm_build_input_nodes_from_ids(ctx->dest_ids, "dst", &dest_nodes)) goto error;
   // Import source ordering only for edges touching `ctx->src_focus_ids`.
-  GList *src_nodes = _hm_build_input_nodes_from_ids_filtered(ctx->src_ids, "src", ctx->src_focus_ids);
+  if(_hm_build_input_nodes_from_ids_filtered(ctx->src_ids, "src", ctx->src_focus_ids, &src_nodes)) goto error;
   // Ensure all pasted modules are present in the graph, even if they don't appear in src/dst adjacency lists.
-  GList *mod_nodes = _hm_build_isolated_nodes_from_modules(ctx->mod_list, "mod");
+  if(_hm_build_isolated_nodes_from_modules(ctx->mod_list, "mod", &mod_nodes)) goto error;
   // Raster mask constraints: producer must come before user.
-  GList *dst_raster_nodes =
-      _hm_build_raster_mask_nodes_from_modules(ctx->dev_dest ? ctx->dev_dest->iop : NULL, ctx->id_ht, ctx->keep_mask,
-                                               "dst-raster");
-  GList *src_raster_nodes =
-      _hm_build_raster_mask_nodes_from_modules(ctx->mod_list, ctx->id_ht, ctx->keep_mask, "src-raster");
-  ctx->input_nodes = g_list_concat(g_list_concat(g_list_concat(dest_nodes, src_nodes),
-                                                 g_list_concat(mod_nodes, g_list_concat(dst_raster_nodes, src_raster_nodes))),
-                                   _iop_rules(NULL));
+  if(_hm_build_raster_mask_nodes_from_modules(ctx->dev_dest->iop, ctx->id_ht, ctx->keep_mask, "dst-raster",
+                                              &dst_raster_nodes))
+    goto error;
+  if(_hm_build_raster_mask_nodes_from_modules(ctx->mod_list, ctx->id_ht, ctx->keep_mask, "src-raster",
+                                              &src_raster_nodes))
+    goto error;
+  if(_iop_rules(NULL, &rule_nodes)) goto error;
+
+  ctx->input_nodes = g_list_concat(
+      g_list_concat(g_list_concat(dest_nodes, src_nodes),
+                    g_list_concat(mod_nodes, g_list_concat(dst_raster_nodes, src_raster_nodes))),
+      rule_nodes);
 
   if(flatten_nodes(ctx->input_nodes, &ctx->flat))
   {
@@ -942,13 +1012,22 @@ static int _hm_topo_flatten_constraints(_hm_topo_merge_ctx_t *ctx)
     return 1;
   }
 
-  _hm_topo_resolve_incompatible_constraints(ctx->flat, ctx->id_ht, ctx->src_ids, ctx->dest_ids);
+  if(_hm_topo_resolve_incompatible_constraints(ctx->flat, ctx->id_ht, ctx->src_ids, ctx->dest_ids)) return 1;
 
   return 0;
+
+error:
+  _hm_free_input_nodes(dest_nodes);
+  _hm_free_input_nodes(src_nodes);
+  _hm_free_input_nodes(mod_nodes);
+  _hm_free_input_nodes(dst_raster_nodes);
+  _hm_free_input_nodes(src_raster_nodes);
+  _hm_free_input_nodes(rule_nodes);
+  return 1;
 }
 
-static void _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *id_ht, const GList *src_ids,
-                                                      const GList *dest_ids)
+static int _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *id_ht, const GList *src_ids,
+                                                     const GList *dest_ids)
 {
   /* Break direct 2-cycles (A<->B) by removing one of the two conflicting edges.
    *
@@ -962,11 +1041,17 @@ static void _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *i
    * Otherwise we default to preserving destination ordering.
    */
 
+  GList *_hm_cycles = NULL;
+  GHashTable *seen_cycles = NULL;
   // Build adjacency lookup tables from the original linear constraints.
-  GHashTable *src_prev = _hm_build_prev_map_from_ids(src_ids);
-  GHashTable *src_next = _hm_build_next_map_from_ids(src_ids);
-  GHashTable *dst_prev = _hm_build_prev_map_from_ids(dest_ids);
-  GHashTable *dst_next = _hm_build_next_map_from_ids(dest_ids);
+  GHashTable *src_prev = NULL;
+  GHashTable *src_next = NULL;
+  GHashTable *dst_prev = NULL;
+  GHashTable *dst_next = NULL;
+  if(_hm_build_prev_map_from_ids(src_ids, &src_prev)) goto cleanup;
+  if(_hm_build_next_map_from_ids(src_ids, &src_next)) goto cleanup;
+  if(_hm_build_prev_map_from_ids(dest_ids, &dst_prev)) goto cleanup;
+  if(_hm_build_next_map_from_ids(dest_ids, &dst_next)) goto cleanup;
 
   typedef struct
   {
@@ -978,55 +1063,51 @@ static void _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *i
     dt_digraph_node_t *faulty;
   } _hm_cycle_t;
 
-  GList *_hm_cycles = NULL;
-  GHashTable *seen_cycles = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  seen_cycles = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  if(!seen_cycles) goto cleanup;
 
-  if(seen_cycles)
+  // Scan all edges a<-b and record those where b also has a as predecessor (2-cycle).
+  for(GList *it = g_list_first(flat); it; it = g_list_next(it))
   {
-    // Scan all edges a<-b and record those where b also has a as predecessor (2-cycle).
-    for(GList *it = g_list_first(flat); it; it = g_list_next(it))
+    dt_digraph_node_t *a = (dt_digraph_node_t *)it->data;
+
+    // Each `a->previous` entry means an edge (pred -> a).
+    for(GList *p = g_list_first(a->previous); p; p = g_list_next(p))
     {
-      dt_digraph_node_t *a = (dt_digraph_node_t *)it->data;
-      if(!a) continue;
+      dt_digraph_node_t *b = (dt_digraph_node_t *)p->data;
 
-      // Each `a->previous` entry means an edge (pred -> a).
-      for(GList *p = g_list_first(a->previous); p; p = g_list_next(p))
+      if(!_hm_node_has_predecessor(b, a)) continue;
+
+      // Deduplicate: we'll discover (a,b) and (b,a), so normalize the key ordering.
+      const char *id1 = a->id;
+      const char *id2 = b->id;
+      if(strcmp(id1, id2) > 0)
       {
-        dt_digraph_node_t *b = (dt_digraph_node_t *)p->data;
-        if(!b) continue;
-
-        if(!_hm_node_has_predecessor(b, a)) continue;
-
-        // Deduplicate: we'll discover (a,b) and (b,a), so normalize the key ordering.
-        const char *id1 = a->id;
-        const char *id2 = b->id;
-        const gboolean swap = (strcmp(id1, id2) > 0);
-        if(swap)
-        {
-          id1 = b->id;
-          id2 = a->id;
-        }
-
-        gchar *key = g_strdup_printf("%s<->%s", id1, id2);
-        if(g_hash_table_contains(seen_cycles, key))
-        {
-          g_free(key);
-          continue;
-        }
-        g_hash_table_add(seen_cycles, key);
-
-        _hm_cycle_t *c = g_new0(_hm_cycle_t, 1);
-        c->a = a;
-        c->b = b;
-
-        // Prefer blaming a pasted module when possible, because that's usually what users care about.
-        const _hm_id_info_t *ai = (_hm_id_info_t *)g_hash_table_lookup(id_ht, a->id);
-        const _hm_id_info_t *bi = (_hm_id_info_t *)g_hash_table_lookup(id_ht, b->id);
-        c->faulty = (bi && (bi->flags & HM_ID_FROM_MOD_LIST)) ? b : a;
-        if(ai && (ai->flags & HM_ID_FROM_MOD_LIST)) c->faulty = a;
-
-        _hm_cycles = g_list_append(_hm_cycles, c);
+        id1 = b->id;
+        id2 = a->id;
       }
+
+      gchar *key = g_strdup_printf("%s<->%s", id1, id2);
+      if(!key) goto cleanup;
+      if(g_hash_table_contains(seen_cycles, key))
+      {
+        g_free(key);
+        continue;
+      }
+      g_hash_table_add(seen_cycles, key);
+
+      _hm_cycle_t *c = g_new0(_hm_cycle_t, 1);
+      if(!c) goto cleanup;
+      c->a = a;
+      c->b = b;
+
+      // Prefer blaming a pasted module when possible, because that's usually what users care about.
+      const _hm_id_info_t *ai = (_hm_id_info_t *)g_hash_table_lookup(id_ht, a->id);
+      const _hm_id_info_t *bi = (_hm_id_info_t *)g_hash_table_lookup(id_ht, b->id);
+      c->faulty = (bi->flags & HM_ID_FROM_MOD_LIST) ? b : a;
+      if(ai->flags & HM_ID_FROM_MOD_LIST) c->faulty = a;
+
+      _hm_cycles = g_list_append(_hm_cycles, c);
     }
   }
 
@@ -1056,7 +1137,6 @@ static void _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *i
     for(GList *l = _hm_cycles; l; l = g_list_next(l))
     {
       _hm_cycle_t *c = (_hm_cycle_t *)l->data;
-      if(!c || !c->a || !c->b) continue;
 
       dt_digraph_node_t *a = c->a;
       dt_digraph_node_t *b = c->b;
@@ -1103,11 +1183,21 @@ static void _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *i
   }
 
   g_list_free_full(_hm_cycles, g_free);
+  g_hash_table_destroy(seen_cycles);
+  g_hash_table_destroy(src_prev);
+  g_hash_table_destroy(src_next);
+  g_hash_table_destroy(dst_prev);
+  g_hash_table_destroy(dst_next);
+  return 0;
+
+cleanup:
   if(seen_cycles) g_hash_table_destroy(seen_cycles);
   if(src_prev) g_hash_table_destroy(src_prev);
   if(src_next) g_hash_table_destroy(src_next);
   if(dst_prev) g_hash_table_destroy(dst_prev);
   if(dst_next) g_hash_table_destroy(dst_next);
+  g_list_free_full(_hm_cycles, g_free);
+  return 1;
 }
 
 static int _hm_topo_sort_constraints(_hm_topo_merge_ctx_t *ctx)
@@ -1137,7 +1227,7 @@ static int _hm_topo_sort_constraints(_hm_topo_merge_ctx_t *ctx)
   return 0;
 }
 
-static void _hm_topo_apply_solution(_hm_topo_merge_ctx_t *ctx, dt_develop_t *dev_dest, dt_develop_t *dev_src)
+static int _hm_topo_apply_solution(_hm_topo_merge_ctx_t *ctx, dt_develop_t *dev_dest, dt_develop_t *dev_src)
 {
   /* Apply the topological solution to the destination develop context.
    *
@@ -1154,7 +1244,6 @@ static void _hm_topo_apply_solution(_hm_topo_merge_ctx_t *ctx, dt_develop_t *dev
   // - copy module content for items that are in mod_list,
   // - rebuild dev_dest->iop_order_list from scratch.
   GList *ordered_modules = NULL;
-  int missing = 0;
   int created = 0;
   int copied = 0;
 
@@ -1162,11 +1251,10 @@ static void _hm_topo_apply_solution(_hm_topo_merge_ctx_t *ctx, dt_develop_t *dev
   for(const GList *l = g_list_first(ctx->sorted); l; l = g_list_next(l))
   {
     const dt_digraph_node_t *n = (const dt_digraph_node_t *)l->data;
-    if(!n || !n->id) continue;
 
     _hm_id_info_t *info = (_hm_id_info_t *)g_hash_table_lookup(ctx->id_ht, n->id);
     // Skip nodes that are not part of the kept set (dst/mod/rule).
-    if(!info || !(info->flags & ctx->keep_mask)) continue;
+    if(!(info->flags & ctx->keep_mask)) continue;
 
     char op[sizeof(((dt_dev_history_item_t *)0)->op_name)];
     char name[sizeof(((dt_dev_history_item_t *)0)->multi_name)];
@@ -1178,27 +1266,16 @@ static void _hm_topo_apply_solution(_hm_topo_merge_ctx_t *ctx, dt_develop_t *dev
     if(!mod_dest)
     {
       mod_dest = _hm_create_new_dest_instance(dev_dest, op, name);
-      if(mod_dest)
-      {
-        created++;
-        info->dst_iop = mod_dest;
-        info->flags |= HM_ID_FROM_DST_IOP;
-      }
-    }
-
-    if(!mod_dest)
-    {
-      missing++;
-      dt_print(DT_DEBUG_HISTORY,
-               "[dt_history_merge_module_list_into_image_topological] iop-order solve: missing module %s (%s)\n",
-               op, name);
-      continue;
+      if(!mod_dest) return 1;
+      created++;
+      info->dst_iop = mod_dest;
+      info->flags |= HM_ID_FROM_DST_IOP;
     }
 
     // Only nodes originating from mod_list trigger content overwrite, and only when requested by caller.
     if(ctx->copy_module_contents && info->mod_list)
     {
-      _hm_copy_module_contents(dev_dest, dev_src, mod_dest, info->mod_list);
+      if(_hm_copy_module_contents(dev_dest, dev_src, mod_dest, info->mod_list)) return 1;
       copied++;
     }
 
@@ -1214,8 +1291,9 @@ static void _hm_topo_apply_solution(_hm_topo_merge_ctx_t *ctx, dt_develop_t *dev
 
   dt_print(
       DT_DEBUG_HISTORY,
-      "[dt_history_merge_module_list_into_image_topological] iop-order solve: created=%d copied=%d missing=%d\n",
-      created, copied, missing);
+      "[dt_history_merge_module_list_into_image_topological] iop-order solve: created=%d copied=%d\n",
+      created, copied);
+  return 0;
 }
 
 static int _hm_try_merge_iop_order_topologically(dt_develop_t *dev_dest, dt_develop_t *dev_src,
@@ -1257,7 +1335,11 @@ static int _hm_try_merge_iop_order_topologically(dt_develop_t *dev_dest, dt_deve
     return 1;
   }
 
-  _hm_topo_apply_solution(&ctx, dev_dest, dev_src);
+  if(_hm_topo_apply_solution(&ctx, dev_dest, dev_src))
+  {
+    _hm_topo_merge_cleanup(&ctx);
+    return 1;
+  }
 
   _hm_topo_merge_cleanup(&ctx);
   return 0;
@@ -1300,7 +1382,7 @@ static void _hm_fill_used_forms(GList *forms_list, int formid, int *used, int nb
   }
 }
 
-static void _hm_copy_masks_for_module(dt_develop_t *dev_dest, dt_develop_t *dev_src, const dt_iop_module_t *mod_src)
+static int _hm_copy_masks_for_module(dt_develop_t *dev_dest, dt_develop_t *dev_src, const dt_iop_module_t *mod_src)
 {
   /* Copy all mask forms referenced by `mod_src` from `dev_src` to `dev_dest`.
    *
@@ -1314,15 +1396,14 @@ static void _hm_copy_masks_for_module(dt_develop_t *dev_dest, dt_develop_t *dev_
    * - New forms are duplicated from source and appended to destination active forms.
    */
 
-  if(!(mod_src->flags() & IOP_FLAGS_SUPPORTS_BLENDING)) return;
-  if(!mod_src->blend_params) return;
-  if(mod_src->blend_params->mask_id <= 0) return;
+  if(!(mod_src->flags() & IOP_FLAGS_SUPPORTS_BLENDING)) return 0;
+  if(mod_src->blend_params->mask_id <= 0) return 0;
 
   const guint nbf = g_list_length(dev_src->forms);
-  if(nbf == 0) return;
+  if(nbf == 0) return 0;
 
   int *forms_used_replace = calloc(nbf, sizeof(int));
-  if(!forms_used_replace) return;
+  if(!forms_used_replace) return 1;
 
   // Collect the closure of referenced form ids starting at the root mask id.
   _hm_fill_used_forms(dev_src->forms, mod_src->blend_params->mask_id, forms_used_replace, nbf);
@@ -1342,6 +1423,11 @@ static void _hm_copy_masks_for_module(dt_develop_t *dev_dest, dt_develop_t *dev_
       }
 
       dt_masks_form_t *form_new = dt_masks_dup_masks_form(form);
+      if(!form_new)
+      {
+        free(forms_used_replace);
+        return 1;
+      }
       dev_dest->forms = g_list_append(dev_dest->forms, form_new);
     }
     else
@@ -1350,6 +1436,7 @@ static void _hm_copy_masks_for_module(dt_develop_t *dev_dest, dt_develop_t *dev_
   }
 
   free(forms_used_replace);
+  return 0;
 }
 
 static gboolean _hm_history_item_include_masks(const dt_iop_module_t *module)
@@ -1360,8 +1447,6 @@ static gboolean _hm_history_item_include_masks(const dt_iop_module_t *module)
    * - blending is enabled beyond DEVELOP_MASK_ENABLED (so the mask graph matters), or
    * - the module manages internal masks which must be replayed with history.
    */
-  if(!module || !module->blend_params) return FALSE;
-
   const gboolean supports_blending
       = ((module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) == IOP_FLAGS_SUPPORTS_BLENDING);
   const gboolean blending_on = supports_blending && (module->blend_params->mask_mode > DEVELOP_MASK_ENABLED);
@@ -1370,10 +1455,9 @@ static gboolean _hm_history_item_include_masks(const dt_iop_module_t *module)
   return blending_on || internal_masks;
 }
 
-static dt_dev_history_item_t *_hm_history_item_from_source_history_item(dt_develop_t *dev_dest,
-                                                                        dt_develop_t *dev_src,
-                                                                        const dt_dev_history_item_t *hist_src,
-                                                                        dt_iop_module_t *mod_dest)
+static int _hm_history_item_from_source_history_item(dt_develop_t *dev_dest, dt_develop_t *dev_src,
+                                                     const dt_dev_history_item_t *hist_src, dt_iop_module_t *mod_dest,
+                                                     dt_dev_history_item_t **out_hist)
 {
   /* Create a new history item for `dev_dest` based on an existing `hist_src`.
    *
@@ -1387,23 +1471,35 @@ static dt_dev_history_item_t *_hm_history_item_from_source_history_item(dt_devel
    */
 
   dt_dev_history_item_t *hist = (dt_dev_history_item_t *)calloc(1, sizeof(dt_dev_history_item_t));
-  if(!hist) return NULL;
+  if(!hist) return 1;
 
   // Copy required masks into destination forms list before snapshotting the forms state.
-  _hm_copy_masks_for_module(dev_dest, dev_src, hist_src->module);
+  if(_hm_copy_masks_for_module(dev_dest, dev_src, hist_src->module))
+  {
+    dt_dev_free_history_item(hist);
+    return 1;
+  }
   GList *forms_snapshot = NULL;
   if(_hm_history_item_include_masks(hist_src->module))
+  {
     forms_snapshot = dt_masks_dup_forms_deep(dev_dest->forms, NULL);
+    if(!forms_snapshot)
+    {
+      dt_dev_free_history_item(hist);
+      return 1;
+    }
+  }
 
   // Fill the destination history item from source params/blend params, but bind it to the destination module.
   if(!dt_dev_history_item_update_from_params(dev_dest, hist, mod_dest, hist_src->enabled, hist_src->params,
                                              hist_src->module->params_size, hist_src->blend_params, forms_snapshot))
   {
     dt_dev_free_history_item(hist);
-    return NULL;
+    return 1;
   }
 
-  return hist;
+  *out_hist = hist;
+  return 0;
 }
 
 static void _hm_renumber_history(GList *history)
@@ -1419,7 +1515,7 @@ static void _hm_renumber_history(GList *history)
   for(GList *it = g_list_first(history); it; it = g_list_next(it), idx++)
   {
     dt_dev_history_item_t *h = (dt_dev_history_item_t *)it->data;
-    if(h) h->num = idx;
+    h->num = idx;
   }
 }
 
@@ -1480,16 +1576,24 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
    * - `dev_dest` is initialized for `dest_imgid` (pipeline loaded, defaults applied).
    * - `dev_src` is non-NULL when `merge_iop_order` is requested.
    */
-  if(!dev_dest || dest_imgid <= 0) return 1;
+  if(dest_imgid <= 0) return 1;
   if(!mod_list) return 0;
 
   if(!_hm_warn_missing_raster_producers(mod_list)) return 1;
 
+  int rc = 1;
+  gboolean used_source_order = merge_iop_order;
+  gboolean revert = FALSE;
+  GHashTable *mod_list_ids = NULL;
+  GHashTable *src_last_by_id = NULL;
+  GHashTable *dst_last_before_by_id = NULL;
+  _hm_dest_backup_t backup = { 0 };
+
   // Snapshot the original destination pipeline and last history items before we modify the destination history.
-  GHashTable *mod_list_ids = _hm_build_id_set_from_mod_list(mod_list);
-  _hm_dest_backup_t backup = _hm_backup_dest(dev_dest, mod_list_ids);
-  GHashTable *src_last_by_id = dev_src ? _hm_build_last_history_by_id(dev_src) : NULL;
-  GHashTable *dst_last_before_by_id = _hm_build_last_history_by_id(dev_dest);
+  if(_hm_build_id_set_from_mod_list(mod_list, &mod_list_ids)) goto cleanup;
+  if(_hm_backup_dest(dev_dest, mod_list_ids, &backup)) goto cleanup;
+  if(_hm_build_last_history_by_id(dev_src, &src_last_by_id)) goto cleanup;
+  if(_hm_build_last_history_by_id(dev_dest, &dst_last_before_by_id)) goto cleanup;
 
   if(force_new_modules)
     dt_print(DT_DEBUG_HISTORY, "[dt_history_merge] force_new_modules is "
@@ -1507,7 +1611,6 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   // Always run a topological solve so we can insert missing source instances into the destination pipeline.
   // The difference between merge_iop_order modes is which source edges we import (see
   // `_hm_topo_build_constraint_ids()`).
-  gboolean used_source_order = merge_iop_order;
   if(_hm_try_merge_iop_order_topologically(dev_dest, dev_src, mod_list, merge_iop_order))
   {
     // If it failed with source IOP order, retry with destination order
@@ -1519,8 +1622,7 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
         // It's unlikely that it fail again, but if it does, there is nothing we can do.
         // The only mathematically valid way to insert new instances is through topology.
         // Abort then.
-        _hm_backup_cleanup(&backup);
-        return 1;
+        goto cleanup;
       }
     }
   }
@@ -1535,19 +1637,11 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   for(const GList *l = g_list_first((GList *)mod_list); l; l = g_list_next(l))
   {
     const dt_iop_module_t *mod_src = (const dt_iop_module_t *)l->data;
-    if(!mod_src) continue;
 
     // Last history item for this module in the source history stack.
-    const int src_end = dev_src ? dt_dev_get_history_end_ext(dev_src) : 0;
+    const int src_end = dt_dev_get_history_end_ext(dev_src);
     const dt_dev_history_item_t *hist_src
-        = dev_src ? dt_dev_history_get_last_item_by_module(dev_src->history, (dt_iop_module_t *)mod_src, src_end)
-                  : NULL;
-    if(!hist_src)
-    {
-      dt_print(DT_DEBUG_HISTORY, "[dt_history_merge] skipping %s (%s): no source history item\n", mod_src->op,
-               mod_src->multi_name);
-      continue;
-    }
+        = dt_dev_history_get_last_item_by_module(dev_src->history, (dt_iop_module_t *)mod_src, src_end);
 
     // Destination module instance and its current pipeline ordering info.
     dt_iop_module_t *mod_dest
@@ -1556,10 +1650,8 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
       mod_dest = dt_iop_get_module_by_op_priority(dev_dest->iop, mod_src->op, mod_src->multi_priority);
     if(!mod_dest && mod_src->multi_name[0] == '\0')
       mod_dest = dt_iop_get_module_by_op_priority(dev_dest->iop, mod_src->op, 0);
-    if(!mod_dest) continue;
-
-    dt_dev_history_item_t *hist = _hm_history_item_from_source_history_item(dev_dest, dev_src, hist_src, mod_dest);
-    if(!hist) continue;
+    dt_dev_history_item_t *hist = NULL;
+    if(_hm_history_item_from_source_history_item(dev_dest, dev_src, hist_src, mod_dest, &hist)) goto cleanup;
 
     temp_history = g_list_append(temp_history, hist);
   }
@@ -1578,22 +1670,14 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   dt_print(DT_DEBUG_HISTORY, "[dt_history_merge] merged history: end=%d len=%d\n",
            dt_dev_get_history_end_ext(dev_dest), g_list_length(dev_dest->history));
 
-  const gboolean revert = _hm_show_merge_report_popup(dev_dest, dev_src, merge_iop_order, used_source_order,
-                                                      strategy, src_last_by_id, dst_last_before_by_id,
-                                                      backup.orig_labels, backup.orig_styles, backup.orig_ids,
-                                                      mod_list_ids);
-
-  if(src_last_by_id) g_hash_table_destroy(src_last_by_id);
-  if(dst_last_before_by_id) g_hash_table_destroy(dst_last_before_by_id);
-  if(mod_list_ids) g_hash_table_destroy(mod_list_ids);
+  revert = _hm_show_merge_report_popup(dev_dest, dev_src, merge_iop_order, used_source_order, strategy,
+                                       src_last_by_id, dst_last_before_by_id, backup.orig_labels,
+                                       backup.orig_styles, backup.orig_ids, mod_list_ids);
 
   if(revert)
   {
     _hm_restore_dest_from_backup(dev_dest, &backup);
-    if(backup.orig_labels) g_ptr_array_free(backup.orig_labels, TRUE);
-    if(backup.orig_styles) g_ptr_array_free(backup.orig_styles, TRUE);
-    if(backup.orig_ids) g_hash_table_destroy(backup.orig_ids);
-    return 1;
+    goto cleanup;
   }
 
   // Sanitize and flatten module order
@@ -1601,9 +1685,14 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   dt_ioppr_resync_iop_list(dev_dest);
   dt_ioppr_check_iop_order(dev_dest, dest_imgid, "_history_copy_and_paste_on_image_merge 2");
 
-  _hm_backup_cleanup(&backup);
+  rc = 0;
 
-  return 0;
+cleanup:
+  if(src_last_by_id) g_hash_table_destroy(src_last_by_id);
+  if(dst_last_before_by_id) g_hash_table_destroy(dst_last_before_by_id);
+  if(mod_list_ids) g_hash_table_destroy(mod_list_ids);
+  _hm_backup_cleanup(&backup);
+  return rc;
 }
 
 // clang-format off

@@ -1278,7 +1278,8 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   const int orig_len = orig_labels ? orig_labels->len : 0;
   GPtrArray *src_mods = dev_src ? _hm_collect_enabled_modules_gui_order(dev_src, mod_list_ids) : g_ptr_array_new();
   GPtrArray *dst_mods = _hm_collect_enabled_modules_gui_order(dev_dest, mod_list_ids);
-  GHashTable *dst_last_by_id = _hm_build_last_history_by_id(dev_dest);
+  GHashTable *dst_last_by_id = NULL;
+  if(_hm_build_last_history_by_id(dev_dest, &dst_last_by_id)) return FALSE;
 
   const int src_len = src_mods->len;
   const int dst_len = dst_mods->len;

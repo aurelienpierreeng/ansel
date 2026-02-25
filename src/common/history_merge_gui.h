@@ -43,7 +43,7 @@ gboolean _hm_warn_missing_raster_producers(const GList *mod_list);
 
 void _hm_show_toposort_cycle_popup(GList *cycle_nodes, GHashTable *id_ht);
 
-GHashTable *_hm_build_last_history_by_id(const struct dt_develop_t *dev);
+int _hm_build_last_history_by_id(const struct dt_develop_t *dev, GHashTable **out_map);
 
 GPtrArray *_hm_collect_labels_from_history_map(GHashTable *last_by_id, const GHashTable *mod_list_ids,
                                                GPtrArray **out_styles);
