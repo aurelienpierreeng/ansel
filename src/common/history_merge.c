@@ -669,6 +669,7 @@ typedef struct
   int history_end;
   GList *iop_order_list;
   GPtrArray *orig_labels;
+  GPtrArray *orig_styles;
   GHashTable *orig_ids;
 } _hm_dest_backup_t;
 
@@ -683,6 +684,9 @@ typedef enum dt_hm_report_col_t
   HM_REPORT_COL_DST_ID,
   HM_REPORT_COL_SRC_WEIGHT,
   HM_REPORT_COL_DST_WEIGHT,
+  HM_REPORT_COL_ORIG_STYLE,
+  HM_REPORT_COL_SRC_STYLE,
+  HM_REPORT_COL_DST_STYLE,
   HM_REPORT_COL_IS_INPUT,
   HM_REPORT_COL_COUNT
 } dt_hm_report_col_t;
@@ -696,6 +700,7 @@ typedef struct
   GHashTable *dst_last_before_by_id; // last history items before merge
   GHashTable *override;        // override markers
   const GHashTable *orig_ids;  // original module ids (inserted markers)
+  const GHashTable *mod_list_ids; // pasted module ids (show disabled)
   GtkTreePath *drag_path;      // path being dragged
   gboolean in_reorder;         // guard against recursive row-reordered signals
 } _hm_report_reorder_ctx_t;
@@ -712,6 +717,7 @@ typedef struct
 {
   int iop_order;
   gchar *label;
+  int style;
 } _hm_label_t;
 
 static gint _hm_label_cmp(gconstpointer a, gconstpointer b)
@@ -762,7 +768,8 @@ static GHashTable *_hm_build_last_history_by_id_from_history(GList *history, con
   return map;
 }
 
-static GPtrArray *_hm_collect_labels_from_history_map(GHashTable *last_by_id)
+static GPtrArray *_hm_collect_labels_from_history_map(GHashTable *last_by_id, const GHashTable *mod_list_ids,
+                                                      GPtrArray **out_styles)
 {
   GList *labels = NULL;
   GHashTableIter it;
@@ -773,7 +780,7 @@ static GPtrArray *_hm_collect_labels_from_history_map(GHashTable *last_by_id)
     dt_dev_history_item_t *hist = (dt_dev_history_item_t *)value;
     if(!hist || !hist->module) continue;
     if(hist->module->flags() & IOP_FLAGS_NO_HISTORY_STACK) continue;
-    if(!hist->enabled) continue;
+    if(!hist->enabled && (!mod_list_ids || !g_hash_table_contains((GHashTable *)mod_list_ids, key))) continue;
 
     gchar *label = _hm_module_row_label(hist->module);
     if(_hm_history_item_uses_masks(hist))
@@ -786,29 +793,37 @@ static GPtrArray *_hm_collect_labels_from_history_map(GHashTable *last_by_id)
     _hm_label_t *item = g_malloc0(sizeof(_hm_label_t));
     item->iop_order = hist->iop_order;
     item->label = label;
+    item->style = hist->enabled ? PANGO_STYLE_NORMAL : PANGO_STYLE_ITALIC;
     labels = g_list_insert_sorted(labels, item, (GCompareFunc)_hm_label_cmp);
   }
 
   GPtrArray *result = g_ptr_array_new_with_free_func(g_free);
+  GPtrArray *styles = g_ptr_array_new();
   for(GList *l = g_list_last(labels); l; l = g_list_previous(l))
   {
     _hm_label_t *item = (_hm_label_t *)l->data;
     g_ptr_array_add(result, item->label);
+    g_ptr_array_add(styles, GINT_TO_POINTER(item->style));
     g_free(item);
   }
   g_list_free(labels);
 
+  if(out_styles)
+    *out_styles = styles;
+  else
+    g_ptr_array_free(styles, TRUE);
+
   return result;
 }
 
-static _hm_dest_backup_t _hm_backup_dest(const dt_develop_t *dev_dest)
+static _hm_dest_backup_t _hm_backup_dest(const dt_develop_t *dev_dest, const GHashTable *mod_list_ids)
 {
   _hm_dest_backup_t backup = { 0 };
   backup.history = dt_history_duplicate(dev_dest->history);
   backup.history_end = dt_dev_get_history_end_ext((dt_develop_t *)dev_dest);
   backup.iop_order_list = dt_ioppr_iop_order_copy_deep(dev_dest->iop_order_list);
   GHashTable *last_by_id = _hm_build_last_history_by_id_from_history(backup.history, backup.history_end);
-  backup.orig_labels = _hm_collect_labels_from_history_map(last_by_id);
+  backup.orig_labels = _hm_collect_labels_from_history_map(last_by_id, mod_list_ids, &backup.orig_styles);
   backup.orig_ids = last_by_id;
   return backup;
 }
@@ -836,10 +851,12 @@ static void _hm_backup_cleanup(_hm_dest_backup_t *backup)
   if(backup->history) g_list_free_full(backup->history, dt_dev_free_history_item);
   if(backup->iop_order_list) g_list_free_full(backup->iop_order_list, free);
   if(backup->orig_labels) g_ptr_array_free(backup->orig_labels, TRUE);
+  if(backup->orig_styles) g_ptr_array_free(backup->orig_styles, TRUE);
   if(backup->orig_ids) g_hash_table_destroy(backup->orig_ids);
   backup->history = NULL;
   backup->iop_order_list = NULL;
   backup->orig_labels = NULL;
+  backup->orig_styles = NULL;
   backup->orig_ids = NULL;
 }
 
@@ -867,6 +884,19 @@ static GHashTable *_hm_build_last_history_by_id(const dt_develop_t *dev)
   return map;
 }
 
+static GHashTable *_hm_build_id_set_from_mod_list(const GList *mod_list)
+{
+  /* Build a set of node ids from the pasted module list. */
+  GHashTable *ids = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  for(const GList *l = g_list_first((GList *)mod_list); l; l = g_list_next(l))
+  {
+    const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
+    if(!mod) continue;
+    g_hash_table_add(ids, _hm_make_node_id(mod->op, mod->multi_name));
+  }
+  return ids;
+}
+
 static gboolean _hm_same_module_instance(const dt_iop_module_t *a, const dt_iop_module_t *b)
 {
   /* Compare two module instances by their stable identity. */
@@ -889,10 +919,17 @@ static dt_iop_module_t *_hm_module_from_id(dt_develop_t *dev, const char *id)
   return mod;
 }
 
-static gboolean _hm_module_visible_in_report(const dt_iop_module_t *mod)
+static gboolean _hm_module_visible_in_report(const dt_iop_module_t *mod, const GHashTable *mod_list_ids)
 {
   /* Check whether a module appears in the report list and can be reordered. */
-  return mod->enabled && !(mod->flags() & IOP_FLAGS_NO_HISTORY_STACK);
+  if(!mod) return FALSE;
+  if(mod->flags() & IOP_FLAGS_NO_HISTORY_STACK) return FALSE;
+  if(mod->enabled) return TRUE;
+  if(!mod_list_ids) return FALSE;
+  gchar *id = _hm_make_node_id(mod->op, mod->multi_name);
+  const gboolean keep = g_hash_table_contains((GHashTable *)mod_list_ids, id);
+  g_free(id);
+  return keep;
 }
 
 static gchar *_hm_module_row_label(const dt_iop_module_t *mod)
@@ -944,15 +981,15 @@ static gchar *_hm_report_dest_label(const dt_iop_module_t *mod, GHashTable *dst_
   return dst_txt;
 }
 
-static GPtrArray *_hm_collect_enabled_modules_gui_order(const dt_develop_t *dev)
+static GPtrArray *_hm_collect_enabled_modules_gui_order(const dt_develop_t *dev, const GHashTable *mod_list_ids)
 {
-  /* Collect enabled modules in GUI order (reverse pipeline order). */
+  /* Collect report modules in GUI order (reverse pipeline order). */
   GPtrArray *mods = g_ptr_array_new();
   for(GList *modules = g_list_last(dev->iop); modules; modules = g_list_previous(modules))
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
     if(!mod) continue;
-    if(!_hm_module_visible_in_report(mod)) continue;
+    if(!_hm_module_visible_in_report(mod, mod_list_ids)) continue;
     g_ptr_array_add(mods, mod);
   }
   return mods;
@@ -1025,7 +1062,8 @@ static GPtrArray *_hm_report_build_desired_visible_order(dt_develop_t *dev_dest,
   return mods;
 }
 
-static GList *_hm_report_build_ordered_modules(dt_develop_t *dev_dest, const GPtrArray *visible_order)
+static GList *_hm_report_build_ordered_modules(dt_develop_t *dev_dest, const GPtrArray *visible_order,
+                                               const GHashTable *mod_list_ids)
 {
   /* Build a full ordered module list by reordering only visible modules. */
   if(!dev_dest || !visible_order) return NULL;
@@ -1034,7 +1072,7 @@ static GList *_hm_report_build_ordered_modules(dt_develop_t *dev_dest, const GPt
   for(const GList *l = g_list_first(dev_dest->iop); l; l = g_list_next(l))
   {
     const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
-    if(mod && _hm_module_visible_in_report(mod)) visible_count++;
+    if(mod && _hm_module_visible_in_report(mod, mod_list_ids)) visible_count++;
   }
 
   if(visible_count != (int)visible_order->len)
@@ -1051,7 +1089,7 @@ static GList *_hm_report_build_ordered_modules(dt_develop_t *dev_dest, const GPt
   for(const GList *l = g_list_first(dev_dest->iop); l; l = g_list_next(l))
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)l->data;
-    if(mod && _hm_module_visible_in_report(mod) && visible_idx < visible_len)
+    if(mod && _hm_module_visible_in_report(mod, mod_list_ids) && visible_idx < visible_len)
       mod = (dt_iop_module_t *)g_ptr_array_index((GPtrArray *)visible_order, visible_idx++);
 
     if(mod) ordered = g_list_append(ordered, mod);
@@ -1067,10 +1105,11 @@ static GList *_hm_report_build_ordered_modules(dt_develop_t *dev_dest, const GPt
   return ordered;
 }
 
-static gboolean _hm_report_apply_visible_order(dt_develop_t *dev_dest, const GPtrArray *visible_order)
+static gboolean _hm_report_apply_visible_order(dt_develop_t *dev_dest, const GPtrArray *visible_order,
+                                               const GHashTable *mod_list_ids)
 {
   /* Rebuild iop_order_list by reordering only visible modules, keeping others fixed. */
-  GList *ordered = _hm_report_build_ordered_modules(dev_dest, visible_order);
+  GList *ordered = _hm_report_build_ordered_modules(dev_dest, visible_order, mod_list_ids);
   if(!ordered) return FALSE;
 
   dt_ioppr_rebuild_iop_order_from_modules(dev_dest, ordered);
@@ -1078,7 +1117,8 @@ static gboolean _hm_report_apply_visible_order(dt_develop_t *dev_dest, const GPt
   return TRUE;
 }
 
-static GHashTable *_hm_report_build_moved_set(dt_develop_t *dev_src, GtkTreeModel *model)
+static GHashTable *_hm_report_build_moved_set(dt_develop_t *dev_src, GtkTreeModel *model,
+                                              const GHashTable *mod_list_ids)
 {
   /* Build a set of module ids that changed relative order between source and destination. */
   GHashTable *moved = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
@@ -1100,7 +1140,7 @@ static GHashTable *_hm_report_build_moved_set(dt_develop_t *dev_src, GtkTreeMode
   for(const GList *l = g_list_first(dev_src->iop); l; l = g_list_next(l))
   {
     const dt_iop_module_t *mod = (const dt_iop_module_t *)l->data;
-    if(!mod || !_hm_module_visible_in_report(mod)) continue;
+    if(!mod || !_hm_module_visible_in_report(mod, mod_list_ids)) continue;
     gchar *id = _hm_make_node_id(mod->op, mod->multi_name);
     if(g_hash_table_contains(dest_id_set, id))
       g_ptr_array_add(src_common, id);
@@ -1168,10 +1208,11 @@ static GHashTable *_hm_report_build_moved_set(dt_develop_t *dev_src, GtkTreeMode
   return moved;
 }
 
-static void _hm_report_update_move_styles(GtkListStore *store, dt_develop_t *dev_src)
+static void _hm_report_update_move_styles(GtkListStore *store, dt_develop_t *dev_src,
+                                          const GHashTable *mod_list_ids)
 {
-  /* Update italics for modules moved between source and destination order. */
-  GHashTable *moved = _hm_report_build_moved_set(dev_src, GTK_TREE_MODEL(store));
+  /* Update bold styles for modules moved between source and destination order. */
+  GHashTable *moved = _hm_report_build_moved_set(dev_src, GTK_TREE_MODEL(store), mod_list_ids);
 
   GtkTreeIter iter;
   gboolean valid = gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store), &iter);
@@ -1301,12 +1342,12 @@ static void _hm_report_apply_store_order(_hm_report_reorder_ctx_t *ctx)
   _hm_report_keep_input_row_at_bottom(ctx->store);
 
   GPtrArray *desired = _hm_report_build_desired_visible_order(ctx->dev_dest, GTK_TREE_MODEL(ctx->store));
-  if(desired && _hm_report_apply_visible_order(ctx->dev_dest, desired))
+  if(desired && _hm_report_apply_visible_order(ctx->dev_dest, desired, ctx->mod_list_ids))
   {
     _hm_report_resync_history_iop_order(ctx->dev_dest);
     _hm_report_update_dest_labels(ctx->store, ctx->dev_dest, ctx->dst_last_by_id, ctx->orig_ids);
     _hm_report_update_arrows(ctx->store, ctx->override, ctx->dst_last_by_id, ctx->dst_last_before_by_id);
-    _hm_report_update_move_styles(ctx->store, ctx->dev_src);
+    _hm_report_update_move_styles(ctx->store, ctx->dev_src, ctx->mod_list_ids);
   }
   if(desired) g_ptr_array_free(desired, TRUE);
 
@@ -1561,7 +1602,8 @@ static gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t
                                             const gboolean merge_iop_order, const gboolean used_source_order,
                                             const dt_history_merge_strategy_t strategy, GHashTable *src_last_by_id,
                                             GHashTable *dst_last_before_by_id, const GPtrArray *orig_labels,
-                                            const GHashTable *orig_ids)
+                                            const GPtrArray *orig_styles, const GHashTable *orig_ids,
+                                            const GHashTable *mod_list_ids)
 {
   /* Present a merge report with source/destination pipelines and override markers. */
   if(!darktable.gui) return FALSE;
@@ -1612,7 +1654,7 @@ static gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t
 
   GtkListStore *store = gtk_list_store_new(HM_REPORT_COL_COUNT, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
                                            G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_INT,
-                                           G_TYPE_INT, G_TYPE_BOOLEAN);
+                                           G_TYPE_INT, G_TYPE_INT, G_TYPE_INT, G_TYPE_INT, G_TYPE_BOOLEAN);
   GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
   g_object_unref(store);
   gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(tree), TRUE);
@@ -1627,7 +1669,8 @@ static gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t
 
   GtkCellRenderer *r_orig = gtk_cell_renderer_text_new();
   GtkTreeViewColumn *c_orig = gtk_tree_view_column_new_with_attributes(orig_title, r_orig, "text",
-                                                                       HM_REPORT_COL_ORIG, NULL);
+                                                                       HM_REPORT_COL_ORIG, "style",
+                                                                       HM_REPORT_COL_ORIG_STYLE, NULL);
   gtk_tree_view_column_set_expand(c_orig, TRUE);
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree), c_orig);
 
@@ -1644,7 +1687,8 @@ static gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t
   GtkCellRenderer *r_src = gtk_cell_renderer_text_new();
   GtkTreeViewColumn *c_src = gtk_tree_view_column_new_with_attributes(src_title, r_src, "text",
                                                                       HM_REPORT_COL_SRC, "weight",
-                                                                      HM_REPORT_COL_SRC_WEIGHT, NULL);
+                                                                      HM_REPORT_COL_SRC_WEIGHT, "style",
+                                                                      HM_REPORT_COL_SRC_STYLE, NULL);
   gtk_tree_view_column_set_expand(c_src, TRUE);
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree), c_src);
 
@@ -1659,13 +1703,14 @@ static gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t
   GtkCellRenderer *r_dst = gtk_cell_renderer_text_new();
   GtkTreeViewColumn *c_dst = gtk_tree_view_column_new_with_attributes(dst_title, r_dst, "text",
                                                                       HM_REPORT_COL_DST, "weight",
-                                                                      HM_REPORT_COL_DST_WEIGHT, NULL);
+                                                                      HM_REPORT_COL_DST_WEIGHT, "style",
+                                                                      HM_REPORT_COL_DST_STYLE, NULL);
   gtk_tree_view_column_set_expand(c_dst, TRUE);
   gtk_tree_view_append_column(GTK_TREE_VIEW(tree), c_dst);
 
   gtk_container_add(GTK_CONTAINER(scrolled), tree);
 
-  GtkWidget *legend = gtk_label_new(_("[name] inserted module, * uses masks, bold = moved module, → parameters overriden, →* parameters and masks overridden.\n"
+  GtkWidget *legend = gtk_label_new(_("[name] inserted module, * uses masks, bold = moved module, italic = disabled module (shown only if copied), → parameters overriden, →* parameters and masks overridden.\n"
                                       "Drag and drop modules in the `Destination` column to reorder the pipeline."));
   gtk_label_set_xalign(GTK_LABEL(legend), 0.0f);
   gtk_label_set_line_wrap(GTK_LABEL(legend), TRUE);
@@ -1673,8 +1718,8 @@ static gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t
   gtk_box_pack_start(GTK_BOX(content_area), legend, FALSE, FALSE, 6);
 
   const int orig_len = orig_labels ? orig_labels->len : 0;
-  GPtrArray *src_mods = dev_src ? _hm_collect_enabled_modules_gui_order(dev_src) : g_ptr_array_new();
-  GPtrArray *dst_mods = _hm_collect_enabled_modules_gui_order(dev_dest);
+  GPtrArray *src_mods = dev_src ? _hm_collect_enabled_modules_gui_order(dev_src, mod_list_ids) : g_ptr_array_new();
+  GPtrArray *dst_mods = _hm_collect_enabled_modules_gui_order(dev_dest, mod_list_ids);
   GHashTable *dst_last_by_id = _hm_build_last_history_by_id(dev_dest);
 
   const int src_len = src_mods->len;
@@ -1693,6 +1738,7 @@ static gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t
   reorder_ctx->dst_last_before_by_id = dst_last_before_by_id;
   reorder_ctx->override = override;
   reorder_ctx->orig_ids = orig_ids;
+  reorder_ctx->mod_list_ids = mod_list_ids;
 
   for(int r = 0; r < rows; r++)
   {
@@ -1703,12 +1749,17 @@ static gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t
     const char *orig_txt = (orig_idx >= 0 && orig_labels)
                                ? (const char *)g_ptr_array_index((GPtrArray *)orig_labels, orig_idx)
                                : "";
+    const int orig_style = (orig_idx >= 0 && orig_styles)
+                               ? GPOINTER_TO_INT(g_ptr_array_index((GPtrArray *)orig_styles, orig_idx))
+                               : PANGO_STYLE_NORMAL;
     const dt_iop_module_t *src_mod = (src_idx >= 0) ? (const dt_iop_module_t *)g_ptr_array_index(src_mods, src_idx) : NULL;
     const dt_iop_module_t *dst_mod = (dst_idx >= 0) ? (const dt_iop_module_t *)g_ptr_array_index(dst_mods, dst_idx) : NULL;
 
     gchar *src_txt = src_mod ? _hm_module_row_label(src_mod) : g_strdup("");
     gchar *dst_txt = dst_mod ? _hm_report_dest_label(dst_mod, dst_last_by_id, orig_ids) : g_strdup("");
     gchar *src_id = src_mod ? _hm_make_node_id(src_mod->op, src_mod->multi_name) : NULL;
+    const int src_style = (src_mod && !src_mod->enabled) ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL;
+    const int dst_style = (dst_mod && !dst_mod->enabled) ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL;
 
     if(src_mod && src_last_by_id)
     {
@@ -1748,7 +1799,9 @@ static gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t
     gtk_list_store_set(store, &iter, HM_REPORT_COL_ORIG, orig_txt, HM_REPORT_COL_FILET, "│", HM_REPORT_COL_SRC,
                        src_txt, HM_REPORT_COL_ARROW, arrow, HM_REPORT_COL_DST, dst_txt, HM_REPORT_COL_SRC_ID,
                        src_id, HM_REPORT_COL_DST_ID, dst_id, HM_REPORT_COL_SRC_WEIGHT, PANGO_WEIGHT_NORMAL,
-                       HM_REPORT_COL_DST_WEIGHT, PANGO_WEIGHT_NORMAL, HM_REPORT_COL_IS_INPUT, FALSE, -1);
+                       HM_REPORT_COL_DST_WEIGHT, PANGO_WEIGHT_NORMAL, HM_REPORT_COL_ORIG_STYLE, orig_style,
+                       HM_REPORT_COL_SRC_STYLE, src_style, HM_REPORT_COL_DST_STYLE, dst_style,
+                       HM_REPORT_COL_IS_INPUT, FALSE, -1);
     g_free(dst_id);
     g_free(src_id);
 
@@ -1764,11 +1817,13 @@ static gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t
     gtk_list_store_set(store, &iter, HM_REPORT_COL_ORIG, input_label, HM_REPORT_COL_FILET, "│", HM_REPORT_COL_SRC,
                        input_label, HM_REPORT_COL_ARROW, "", HM_REPORT_COL_DST, input_label, HM_REPORT_COL_SRC_ID,
                        NULL, HM_REPORT_COL_DST_ID, NULL, HM_REPORT_COL_SRC_WEIGHT, PANGO_WEIGHT_NORMAL,
-                       HM_REPORT_COL_DST_WEIGHT, PANGO_WEIGHT_NORMAL, HM_REPORT_COL_IS_INPUT, TRUE, -1);
+                       HM_REPORT_COL_DST_WEIGHT, PANGO_WEIGHT_NORMAL, HM_REPORT_COL_ORIG_STYLE, PANGO_STYLE_NORMAL,
+                       HM_REPORT_COL_SRC_STYLE, PANGO_STYLE_NORMAL, HM_REPORT_COL_DST_STYLE, PANGO_STYLE_NORMAL,
+                       HM_REPORT_COL_IS_INPUT, TRUE, -1);
     g_free(input_label);
   }
 
-  _hm_report_update_move_styles(store, dev_src);
+  _hm_report_update_move_styles(store, dev_src, mod_list_ids);
 
   GtkTargetEntry targets[] = { { "DT_HISTORY_MERGE_DST_ROW", GTK_TARGET_SAME_WIDGET, 0 } };
   gtk_tree_view_enable_model_drag_source(GTK_TREE_VIEW(tree), GDK_BUTTON1_MASK, targets, 1, GDK_ACTION_MOVE);
@@ -2898,7 +2953,8 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
   if(!_hm_warn_missing_raster_producers(mod_list)) return 1;
 
   // Snapshot the original destination pipeline and last history items before we modify the destination history.
-  _hm_dest_backup_t backup = _hm_backup_dest(dev_dest);
+  GHashTable *mod_list_ids = _hm_build_id_set_from_mod_list(mod_list);
+  _hm_dest_backup_t backup = _hm_backup_dest(dev_dest, mod_list_ids);
   GHashTable *src_last_by_id = dev_src ? _hm_build_last_history_by_id(dev_src) : NULL;
   GHashTable *dst_last_before_by_id = _hm_build_last_history_by_id(dev_dest);
 
@@ -2991,15 +3047,18 @@ int dt_history_merge(dt_develop_t *dev_dest, dt_develop_t *dev_src, const int32_
 
   const gboolean revert = _hm_show_merge_report_popup(dev_dest, dev_src, merge_iop_order, used_source_order,
                                                       strategy, src_last_by_id, dst_last_before_by_id,
-                                                      backup.orig_labels, backup.orig_ids);
+                                                      backup.orig_labels, backup.orig_styles, backup.orig_ids,
+                                                      mod_list_ids);
 
   if(src_last_by_id) g_hash_table_destroy(src_last_by_id);
   if(dst_last_before_by_id) g_hash_table_destroy(dst_last_before_by_id);
+  if(mod_list_ids) g_hash_table_destroy(mod_list_ids);
 
   if(revert)
   {
     _hm_restore_dest_from_backup(dev_dest, &backup);
     if(backup.orig_labels) g_ptr_array_free(backup.orig_labels, TRUE);
+    if(backup.orig_styles) g_ptr_array_free(backup.orig_styles, TRUE);
     if(backup.orig_ids) g_hash_table_destroy(backup.orig_ids);
     return 1;
   }
