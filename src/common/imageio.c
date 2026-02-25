@@ -1026,7 +1026,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     dt_dev_pixelpipe_get_roi_out(&pipe, &dev, cache->max_width[DT_MIPMAP_F], cache->max_height[DT_MIPMAP_F], &out_width, &out_height);
 
     // Only one dimension needs to be at least as large as the requested surface
-    if(out_width <= width || out_height <= height)
+    if(out_width >= width || out_height >= height)
       size = DT_MIPMAP_F;
   }
 
