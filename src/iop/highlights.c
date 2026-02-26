@@ -2181,7 +2181,7 @@ static gboolean enable(dt_image_t *image)
 gboolean force_enable(struct dt_iop_module_t *self, const gboolean current_state)
 {
   // No codepath for non-raw images
-  if(current_state && enable(&self->dev->image_storage))
+  if(current_state && dt_image_is_monochrome(&self->dev->image_storage))
     return FALSE;
   else
     return current_state;
