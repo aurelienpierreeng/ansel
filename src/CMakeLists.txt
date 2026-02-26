@@ -77,6 +77,7 @@ FILE(GLOB SOURCE_FILES
   "common/grouping.c"
   "common/guided_filter.c"
   "common/history.c"
+  "common/history_actions.c"
   "common/history_merge.c"
   "common/history_merge_gui.c"
   "common/history_snapshot.c"

@@ -421,7 +421,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
   }
 
   // Infinite loop: run for as long as the thread is running
-  while(!dev->exit)
+  while(!dev->exit && dt_control_running())
   {
     // Keep track of ROI changes out of the loop
     float scale = 1.f;
@@ -437,8 +437,11 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
     }
 
     // Updating loop: run for as long as the output image is invalid/unavailable
-    while(!finish_on_error && (pipe->status == DT_DEV_PIXELPIPE_DIRTY) && reentries < 2)
+    while(!finish_on_error && (pipe->status == DT_DEV_PIXELPIPE_DIRTY) && reentries < 2
+          && !dev->exit && dt_control_running())
     {
+      if(dev->exit || !dt_control_running()) break;
+
       dt_pthread_mutex_lock(&pipe->busy_mutex);
       pipe->processing = 1;
 
@@ -528,9 +531,11 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
         else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
           dt_control_queue_redraw();
       }
-      dt_iop_nap(250000); // wait 250 ms
+      if(dev->exit || !dt_control_running()) break;
+      dt_iop_nap(250); // wait 250 ms
     }
-    dt_iop_nap(100000); // wait 100 ms
+    if(dev->exit || !dt_control_running()) break;
+    dt_iop_nap(100); // wait 100 ms
   }
 
   pipe->running = 0;
@@ -887,12 +892,12 @@ dt_iop_module_t *dt_dev_module_duplicate(dt_develop_t *dev, dt_iop_module_t *bas
 void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
 {
   // if(darktable.gui->reset) return;
-  dt_pthread_rwlock_wrlock(&dev->history_mutex);
   int del = 0;
 
   if(dev->gui_attached)
   {
-    dt_dev_undo_start_record(dev);
+    dt_pthread_rwlock_wrlock(&dev->history_mutex);
+    dt_dev_history_undo_start_record_locked(dev);
 
     GList *elem = dev->history;
     while(elem != NULL)
@@ -911,9 +916,11 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
       }
       elem = next;
     }
-  }
 
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
+    dt_dev_history_undo_end_record(dev);
+    dt_pthread_rwlock_unlock(&dev->history_mutex);
+    if(del) dt_dev_history_undo_invalidate_module(module);
+  }
 
   // and we remove it from the list
   for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
@@ -924,13 +931,6 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
       dev->iop = g_list_remove_link(dev->iop, modules);
       break;
     }
-  }
-
-  if(dev->gui_attached && del)
-  {
-    /* signal that history has changed */
-    dt_dev_undo_end_record(dev);
-    dt_dev_history_undo_invalidate_module(module);
   }
 }
 

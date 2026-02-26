@@ -36,6 +36,7 @@
 #pragma once
 
 #include "common/darktable.h"
+#include "common/history_merge.h"
 #include "develop/blend.h"
 #include "develop/imageop.h"
 
@@ -94,7 +95,6 @@ void dt_styles_update(const char *name, const char *newname, const char *descrip
                       const gboolean copy_iop_order, const gboolean update_iop_order);
 
 /** applies the style to selection of images */
-void dt_styles_apply_to_list(const char *name, const GList *list, gboolean duplicate);
 
 /** applies list of styles to selection of images */
 void dt_multiple_styles_apply_to_list(GList *styles, const GList *list, gboolean duplicate);
@@ -104,6 +104,9 @@ void dt_styles_apply_style_item(dt_develop_t *dev, dt_style_item_t *style_item);
 
 /** applies the style to image by imgid, takes care of overwrite and duplicate modes */
 void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const int32_t imgid);
+/** internal helper used by history actions */
+int dt_styles_apply_to_image_merge(const char *name, const int style_id, const int32_t newimgid,
+                                   const dt_history_merge_strategy_t mode);
 
 /** delete a style by name */
 void dt_styles_delete_by_name_adv(const char *name, const gboolean raise);
@@ -113,6 +116,9 @@ void dt_styles_delete_by_name(const char *name);
 
 /** get a style object by name, the object needs to be freed by the caller */
 dt_style_t *dt_styles_get_by_name(const char *name);
+
+/** get a style id by name */
+int32_t dt_styles_get_id_by_name(const char *name);
 
 /** check if style exists by name*/
 gboolean dt_styles_exists(const char *name);

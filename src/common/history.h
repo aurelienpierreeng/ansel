@@ -37,6 +37,7 @@
 #include <inttypes.h>
 #include <sqlite3.h>
 
+#include "common/history_actions.h"
 #include "common/image_cache.h"
 
 #ifdef __cplusplus
@@ -58,28 +59,6 @@ void dt_history_delete_on_image(int32_t imgid);
 
 /** as above but control whether to record undo/redo */
 void dt_history_delete_on_image_ext(int32_t imgid, gboolean undo);
-
-/** copy history from imgid and pasts on selected images, merge or overwrite... */
-gboolean dt_history_copy(int32_t imgid);
-gboolean dt_history_copy_parts(int32_t imgid);
-gboolean dt_history_paste_on_list(const GList *list, gboolean undo);
-gboolean dt_history_paste_parts_on_list(const GList *list, gboolean undo);
-
-/** load a dt file and applies to selected images */
-int dt_history_load_and_apply_on_list(gchar *filename, const GList *list);
-
-/** load a dt file and applies to specified image */
-int dt_history_load_and_apply(int32_t imgid, gchar *filename, int history_only);
-
-/** delete historystack of selected images */
-gboolean dt_history_delete_on_list(const GList *list, gboolean undo);
-
-/** compress history stack */
-int dt_history_compress_on_list(const GList *imgs);
-void dt_history_compress_on_image(const int32_t imgid);
-
-/** truncate history stack */
-void dt_history_truncate_on_image(struct dt_develop_t *dev, const int32_t imgid, const int32_t history_end);
 
 /** read history_end from database for an image (main.images.history_end) */
 int32_t dt_history_get_end(const int32_t imgid);

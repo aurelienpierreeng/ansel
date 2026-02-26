@@ -373,9 +373,10 @@ dt_menu_entry_t *set_menu_entry(GtkWidget **menus, GList **items_list,
     if(accel_group != NULL)
     {
       gchar *clean_label = strip_markup(label);
-
-      // slash is not allowed in control names because that makes accel pathes fail
-      assert(g_strrstr(clean_label, "/") == NULL);
+      // Slash is not allowed in control names because that makes accel paths fail.
+      // Keep the visible label intact, but sanitize the accelerator name.
+      if(g_strrstr(clean_label, "/") != NULL)
+        g_strdelimit(clean_label, "/", '-');
 
       const gchar *parent_path = gtk_menu_get_accel_path(parent);
 
@@ -653,4 +654,15 @@ gboolean dt_menu_is_image_in_dev(GList *imgs)
 {
   return darktable.develop != NULL
     && g_list_find(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
+}
+
+void dt_menu_apply_dev_history_update(dt_develop_t *dev, const gboolean history_inited)
+{
+  if(!dev) return;
+
+  dt_dev_reload_history_items(dev, dev->image_storage.id);
+  dt_dev_history_gui_update(dev);
+  dt_dev_history_pixelpipe_update(dev, TRUE);
+  dt_dev_history_notify_change(dev, dev->image_storage.id);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
 }

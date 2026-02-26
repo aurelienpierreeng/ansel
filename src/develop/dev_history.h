@@ -312,6 +312,22 @@ void dt_dev_history_undo_start_record(struct dt_develop_t *dev);
  */
 void dt_dev_history_undo_end_record(struct dt_develop_t *dev);
 /**
+ * @brief Start an undo record with history_mutex already locked.
+ *
+ * Caller must hold dev->history_mutex (read or write).
+ *
+ * @param dev Develop context.
+ */
+void dt_dev_history_undo_start_record_locked(struct dt_develop_t *dev);
+/**
+ * @brief Finish an undo record with history_mutex already locked.
+ *
+ * Caller must hold dev->history_mutex (read or write).
+ *
+ * @param dev Develop context.
+ */
+void dt_dev_history_undo_end_record_locked(struct dt_develop_t *dev);
+/**
  * @brief Invalidate a module pointer inside undo snapshots.
  *
  * Used when module instances are destroyed or replaced.
@@ -429,22 +445,6 @@ int dt_history_merge_module_into_history(struct dt_develop_t *dev_dest, struct d
                                          struct dt_iop_module_t *mod_src);
 
 /**
- * @brief Copy and paste history between images.
- *
- * Depending on @p mode, this merges or replaces the destination history.
- *
- * @param imgid Source image id.
- * @param dest_imgid Destination image id.
- * @param ops Optional list of history indices to copy (NULL for full copy).
- * @param copy_full Whether to copy full history.
- * @param mode Merge strategy (append/appstart/replace).
- * @return 0 on success, non-zero on failure.
- */
-int dt_history_copy_and_paste_on_image(int32_t imgid, int32_t dest_imgid, GList *ops, 
-                                       const gboolean copy_full, const dt_history_merge_strategy_t mode);
-
-
-/**
  * @brief Compress an history from a loaded pipeline,
  * aka simply take a snapshot of all modules parameters.
  * This assumes the history end is properly set, which always happens
@@ -459,6 +459,12 @@ void dt_dev_history_compress(struct dt_develop_t *dev);
  * @param write_history If TRUE, write history to DB/XMP after compression.
  */
 void dt_dev_history_compress_ext(struct dt_develop_t *dev, gboolean write_history);
+/**
+ * @brief Compress history if history_end is at top, otherwise truncate.
+ *
+ * @param dev Develop context.
+ */
+void dt_dev_history_compress_or_truncate(struct dt_develop_t *dev);
 /**
  * @brief Cleanup cached statements or state used by history I/O.
  */
@@ -508,7 +514,10 @@ dt_dev_history_item_t *dt_dev_history_get_last_item_by_module(GList *history_lis
  * @param history History list.
  * @return 0 on success, non-zero on error.
  */
-int dt_dev_history_refresh_nodes(struct dt_develop_t *dev, GList *iop, GList *history);
+int dt_dev_history_refresh_nodes_ext(struct dt_develop_t *dev, GList *iop, GList *history);
+
+/** truncate history stack */
+void dt_dev_history_truncate(struct dt_develop_t *dev, const int32_t imgid);
 
 #ifdef __cplusplus
 }

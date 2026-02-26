@@ -20,6 +20,7 @@
 #include "gui/gtk.h"
 #include "gui/styles.h"
 #include "common/act_on.h"
+#include "common/history.h"
 #include "common/styles.h"
 #include "common/undo.h"
 #include "control/conf.h"
@@ -33,7 +34,6 @@ static GtkWidget **_styles_menus = NULL;
 static GList **_styles_lists = NULL;
 static dt_menus_t _styles_index = DT_MENU_STYLES;
 static gboolean _styles_signal_connected = FALSE;
-static gboolean _styles_activate_connected = FALSE;
 static guint _styles_menu_rebuild_source = 0;
 
 static gboolean _styles_menu_disabled(GtkWidget *widget)
@@ -53,21 +53,17 @@ static gboolean _styles_apply_callback(GtkAccelGroup *group, GObject *accelerata
 
   if(is_darkroom_image_in_list)
   {
+    imgs = g_list_remove(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
     dt_dev_undo_start_record(darktable.develop);
-  }
-
-  dt_styles_apply_to_list(style_name, imgs, duplicate);
-  g_list_free(imgs);
-
-  if(is_darkroom_image_in_list)
-  {
+    const gboolean applied = dt_history_style_on_image(darktable.develop->image_storage.id, style_name, duplicate);
     dt_dev_undo_end_record(darktable.develop);
-    dt_dev_reload_history_items(darktable.develop, darktable.develop->image_storage.id);
-    dt_dev_history_gui_update(darktable.develop);
-    dt_dev_history_pixelpipe_update(darktable.develop, TRUE);
-    dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+    if(applied)
+      dt_menu_apply_dev_history_update(darktable.develop, TRUE);
   }
+
+  if(imgs) dt_history_style_on_list(imgs, style_name, duplicate);
+
+  g_list_free(imgs);
 
   return TRUE;
 }
@@ -261,11 +257,6 @@ static void _styles_menu_rebuild_callback(gpointer instance, gpointer user_data)
     _styles_menu_rebuild_source = g_idle_add(_styles_menu_rebuild_idle, NULL);
 }
 
-static void _styles_menu_activate_callback(GtkWidget *widget, gpointer user_data)
-{
-  if(_styles_menu_rebuild_source == 0)
-    _styles_menu_rebuild_source = g_idle_add(_styles_menu_rebuild_idle, NULL);
-}
 
 void append_styles(GtkWidget **menus, GList **lists, const dt_menus_t index)
 {

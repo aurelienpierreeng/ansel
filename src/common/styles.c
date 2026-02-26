@@ -127,7 +127,7 @@ void dt_style_item_free(gpointer data)
   free(item);
 }
 
-static int32_t dt_styles_get_id_by_name(const char *name);
+int32_t dt_styles_get_id_by_name(const char *name);
 
 gboolean dt_styles_exists(const char *name)
 {
@@ -580,47 +580,12 @@ gboolean dt_styles_create_from_image(const char *name, const char *description,
   return FALSE;
 }
 
-void dt_styles_apply_to_list(const char *name, const GList *list, gboolean duplicate)
-{
-  gboolean selected = FALSE;
-
-  /* write current history changes so nothing gets lost,
-     do that only in the darkroom as there is nothing to be saved
-     when in the lighttable (and it would write over current history stack) */
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(cv->view(cv) == DT_VIEW_DARKROOM) dt_dev_write_history(darktable.develop);
-
-  /* for each selected image apply style */
-  dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
-
-  for(const GList *l = list; l; l = g_list_next(l))
-  {
-    const int32_t imgid = GPOINTER_TO_INT(l->data);
-    dt_styles_apply_to_image(name, duplicate, imgid);
-    selected = TRUE;
-  }
-
-  dt_undo_end_group(darktable.undo);
-
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
-
-  if(!selected)
-  {
-    dt_control_log(_("no image selected!"));
-  }
-  else
-  {
-    dt_control_log(_("style %s successfully applied!"), name);
-  }
-}
 
 void dt_multiple_styles_apply_to_list(GList *styles, const GList *list, gboolean duplicate)
 {
   /* write current history changes so nothing gets lost,
      do that only in the darkroom as there is nothing to be saved
      when in the lighttable (and it would write over current history stack) */
-  const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
-  if(cv->view((dt_view_t *)cv) == DT_VIEW_DARKROOM) dt_dev_write_history(darktable.develop);
 
   if(!styles && !list)
   {
@@ -643,14 +608,12 @@ void dt_multiple_styles_apply_to_list(GList *styles, const GList *list, gboolean
   for(const GList *l = list; l; l = g_list_next(l))
   {
     const int32_t imgid = GPOINTER_TO_INT(l->data);
-    for (GList *style = styles; style; style = g_list_next(style))
+    for(GList *style = styles; style; style = g_list_next(style))
     {
-      dt_styles_apply_to_image((char*)style->data, duplicate, imgid);
+      dt_history_style_on_image(imgid, (char *)style->data, duplicate);
     }
   }
   dt_undo_end_group(darktable.undo);
-
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
 
   const guint styles_cnt = g_list_length(styles);
   dt_control_log(ngettext("style successfully applied!", "styles successfully applied!", styles_cnt));
@@ -983,8 +946,8 @@ static int _styles_prepare_source_dev(dt_develop_t *dev_src, const char *name, c
   return 0;
 }
 
-static int _styles_apply_to_image_merge(const char *name, const int style_id, const int32_t newimgid,
-                                        const dt_history_merge_strategy_t mode)
+int dt_styles_apply_to_image_merge(const char *name, const int style_id, const int32_t newimgid,
+                                   const dt_history_merge_strategy_t mode)
 {
   int ret_val = 1;
 
@@ -1040,52 +1003,9 @@ void dt_styles_apply_style_item(dt_develop_t *dev, dt_style_item_t *style_item)
 
 void dt_styles_apply_to_image(const char *name, const gboolean duplicate, const int32_t imgid)
 {
-  int id = 0;
-
-  if((id = dt_styles_get_id_by_name(name)) == 0) return;
-
-  int32_t newimgid;
-  /* check if we should make a duplicate before applying style */
-  if(duplicate)
-  {
-    newimgid = dt_image_duplicate(imgid);
-    if(newimgid != UNKNOWN_IMAGE)
-    {
-      dt_history_copy_and_paste_on_image(imgid, newimgid, NULL, TRUE, dt_conf_get_int("history/mode"));
-      return;
-    }
-  }
-  else
-    newimgid = imgid;
-
-  if(newimgid == UNKNOWN_IMAGE) return;
-
-  const dt_history_merge_strategy_t mode = dt_conf_get_int("history/mode");
-
-  dt_undo_lt_history_t *hist = dt_history_snapshot_item_init();
-  hist->imgid = newimgid;
-  dt_history_snapshot_undo_create(hist->imgid, &hist->before, &hist->before_history_end);
-
-  int ret_val = _styles_apply_to_image_merge(name, id, newimgid, mode);
-
-  dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
-
   dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
-  dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
-                 dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
+  dt_history_style_on_image(imgid, name, duplicate);
   dt_undo_end_group(darktable.undo);
-
-  if(ret_val == 0)
-  {
-    /* add tag */
-    dt_dev_append_changed_tag(newimgid);
-  
-    /* remove old obsolete thumbnails */
-    dt_mipmap_cache_remove(darktable.mipmap_cache, newimgid, TRUE);
-
-    /* redraw center view to update visible mipmaps */
-    dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
-  }
 }
 
 void dt_styles_delete_by_name_adv(const char *name, const gboolean raise)
@@ -1672,7 +1592,7 @@ gchar *dt_styles_get_description(const char *name)
   return description;
 }
 
-static int32_t dt_styles_get_id_by_name(const char *name)
+int32_t dt_styles_get_id_by_name(const char *name)
 {
   int id = 0;
   sqlite3_stmt *stmt;

@@ -44,6 +44,7 @@
 */
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
+#include "common/history.h"
 #include "common/styles.h"
 #include "common/darktable.h"
 #include "control/conf.h"
@@ -231,7 +232,7 @@ static void _styles_row_activated_callback(GtkTreeView *view, GtkTreePath *path,
   GList *list = dt_act_on_get_images();
   if(name)
   {
-    dt_styles_apply_to_list(name, list, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->duplicate)));
+    dt_history_style_on_list(list, name, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->duplicate)));
     g_free(name);
   }
   g_list_free(list);
@@ -728,7 +729,7 @@ static gboolean entry_activated(GtkEntry *entry, gpointer user_data)
   if(name)
   {
     GList *imgs = dt_act_on_get_images();
-    dt_styles_apply_to_list(name, imgs, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->duplicate)));
+    dt_history_style_on_list(imgs, name, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->duplicate)));
     g_list_free(imgs);
   }
 

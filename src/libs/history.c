@@ -76,7 +76,6 @@ typedef struct dt_lib_history_t
 {
   GtkWidget *history_view;
   GtkListStore *history_store;
-  GtkWidget *compress_button;
   gboolean selection_reset;
 } dt_lib_history_t;
 
@@ -95,8 +94,6 @@ typedef enum dt_history_view_column_t
 } dt_history_view_column_t;
 
 /* compress history stack */
-static void _lib_history_compress_clicked_callback(GtkButton *widget, gpointer user_data);
-static gboolean _lib_history_compress_pressed_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data);
 static gboolean _lib_history_view_button_press_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data);
 /* signal callback for history change */
 static void _lib_history_change_callback(gpointer instance, gpointer user_data);
@@ -183,22 +180,9 @@ void gui_init(dt_lib_module_t *self)
   gtk_tree_view_column_set_sizing(col_icon, GTK_TREE_VIEW_COLUMN_AUTOSIZE);
   gtk_tree_view_append_column(GTK_TREE_VIEW(d->history_view), col_icon);
 
-  GtkWidget *hhbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-
-  d->compress_button = dt_action_button_new(self, N_("compress history stack"), _lib_history_compress_clicked_callback, self,
-                                            _("create a minimal history stack which produces the same image\n"
-                                              "ctrl+click to truncate history to the selected item"), 0, 0);
-  g_signal_connect(G_OBJECT(d->compress_button), "button-press-event", G_CALLBACK(_lib_history_compress_pressed_callback), self);
-
-  /* add toolbar button for creating style */
-
-  /* add buttons to buttonbox */
-  gtk_box_pack_start(GTK_BOX(hhbox), d->compress_button, TRUE, TRUE, 0);
-
   /* add history list and buttonbox to widget */
   gtk_box_pack_start(GTK_BOX(self->widget),
                      dt_ui_scroll_wrap(d->history_view, 1, "plugins/darkroom/history/windowheight"), FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(self->widget), hhbox, FALSE, FALSE, 0);
 
   gtk_widget_show_all(self->widget);
 
@@ -793,40 +777,6 @@ static void _lib_history_change_callback(gpointer instance, gpointer user_data)
 
   _history_select_row_for_end(d, history_end);
   d->selection_reset = FALSE;
-}
-
-static void _lib_history_truncate()
-{
-  dt_develop_t *dev = darktable.develop;
-  const int32_t imgid = dev->image_storage.id;
-
-  dt_dev_undo_start_record(dev);
-
-  if(dt_dev_get_history_end_ext(dev) == g_list_length(dev->history))
-    dt_dev_history_compress(dev);
-  else
-    dt_history_truncate_on_image(dev, imgid, dt_dev_get_history_end_ext(dev));
-
-  dev->proxy.chroma_adaptation = NULL;
-  dt_dev_undo_end_record(dev);
-
-  int pipe_remove = dt_dev_history_refresh_nodes(dev, dev->iop, dev->history);
-  dt_dev_history_gui_update(dev);
-  dt_dev_history_pixelpipe_update(dev, pipe_remove);
-  dt_dev_history_notify_change(dev, dev->image_storage.id);
-}
-
-
-static void _lib_history_compress_clicked_callback(GtkButton *widget, gpointer user_data)
-{
-  _lib_history_truncate();
-}
-
-static gboolean _lib_history_compress_pressed_callback(GtkWidget *widget, GdkEventButton *e, gpointer user_data)
-{
-  _lib_history_truncate();
-
-  return TRUE;
 }
 
 static void _lib_history_view_selection_changed(GtkTreeSelection *selection, gpointer user_data)

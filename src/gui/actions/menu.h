@@ -220,6 +220,8 @@ GtkWidget *ctx_gtk_check_menu_item_new_with_markup_and_pixbuf(const char *label,
                                                               const gboolean show_checkbox);
 
 gboolean dt_menu_is_image_in_dev(GList *imgs);
+struct dt_develop_t;
+void dt_menu_apply_dev_history_update(struct dt_develop_t *dev, const gboolean history_inited);
 
 // Helper to wrap (*void)(void) functions into GtkAccel compatible callbacks
 #define MAKE_ACCEL_WRAPPER(cb)                                            \

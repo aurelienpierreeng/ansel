@@ -44,7 +44,6 @@
 #include "common/darktable.h"
 #include "common/debug.h"
 #include "common/dtpthread.h"
-#include "common/exif.h"
 #include "common/history_snapshot.h"
 #include "common/image_cache.h"
 #include "common/imageio.h"
@@ -57,7 +56,6 @@
 #include "develop/dev_history.h"
 #include "develop/develop.h"
 #include "develop/masks.h"
-#include "gui/hist_dialog.h"
 
 #define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
 
@@ -191,52 +189,6 @@ void dt_history_delete_on_image(int32_t imgid)
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
 }
 
-int dt_history_load_and_apply(const int32_t imgid, gchar *filename, int history_only)
-{
-  dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
-  if(img)
-  {
-    dt_undo_lt_history_t *hist = dt_history_snapshot_item_init();
-    hist->imgid = imgid;
-    dt_history_snapshot_undo_create(hist->imgid, &hist->before, &hist->before_history_end);
-
-    if(dt_exif_xmp_read(img, filename, history_only))
-    {
-      dt_image_cache_write_release(darktable.image_cache, img,
-                                   // ugly but if not history_only => called from crawler - do not write the xmp
-                                   history_only ? DT_IMAGE_CACHE_SAFE : DT_IMAGE_CACHE_RELAXED);
-      return 1;
-    }
-    dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
-    dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
-    dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
-                   dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
-    dt_undo_end_group(darktable.undo);
-
-    dt_image_cache_write_release(darktable.image_cache, img,
-    // ugly but if not history_only => called from crawler - do not write the xmp
-                                 history_only ? DT_IMAGE_CACHE_SAFE : DT_IMAGE_CACHE_RELAXED);
-    dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
-  }
-
-  // signal that the mipmap need to be updated
-  dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, imgid, TRUE);
-  return 0;
-}
-
-int dt_history_load_and_apply_on_list(gchar *filename, const GList *list)
-{
-  int res = 0;
-  dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
-  for(GList *l = (GList *)list; l; l = g_list_next(l))
-  {
-    const int32_t imgid = GPOINTER_TO_INT(l->data);
-    if(dt_history_load_and_apply(imgid, filename, 1)) res = 1;
-  }
-  dt_undo_end_group(darktable.undo);
-  return res;
-}
-
 char *dt_history_item_as_string(const char *name, gboolean enabled)
 {
   return g_strconcat(enabled ? "\342\227\217" : "\342\227\213", "  ", name, NULL);
@@ -331,111 +283,6 @@ char *dt_history_get_items_as_string(const int32_t imgid)
   char *result = dt_util_glist_to_str("\n", items);
   g_list_free_full(items, g_free);
   return result;
-}
-
-static int dt_history_end_attop(const int32_t imgid)
-{
-  int size=0;
-  int end=0;
-  sqlite3_stmt *stmt;
-
-  // get highest num in history
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-    "SELECT MAX(num) FROM main.history WHERE imgid=?1", -1, &stmt, NULL);
-  DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, imgid);
-
-  if (sqlite3_step(stmt) == SQLITE_ROW)
-    size = sqlite3_column_int(stmt, 0);
-  sqlite3_finalize(stmt);
-
-  end = dt_history_get_end(imgid);
-
-  // fprintf(stderr,"\ndt_history_end_attop for image %i: size %i, end %i",imgid,size,end);
-
-  // a special case right after removing all history
-  // It must be absolutely fresh and untouched so history_end is always on top
-  if ((size==0) && (end==0)) return -1;
-
-  // return 1 if end is larger than size
-  if (end > size) return 1;
-
-  // no compression as history_end is right in the middle of stack
-  return 0;
-}
-
-
-/* Please note: dt_history_compress_on_image
-  - is used in lighttable and darkroom mode
-  - It compresses history through dt_dev_history_compress() (develop/dev_history.c)
-*/
-void dt_history_compress_on_image(const int32_t imgid)
-{
-  dt_print(DT_DEBUG_HISTORY, "[dt_history_compress_on_image] compressing history for image %i\n", imgid);
-  if(imgid <= 0) return;
-
-  dt_develop_t dev;
-  dt_dev_init(&dev, FALSE);
-  dt_dev_reload_history_items(&dev, imgid);
-  dt_dev_history_compress(&dev);
-  dt_dev_history_notify_change(&dev, imgid);
-  dt_dev_cleanup(&dev);
-}
-
-/* Please note: dt_history_truncate_on_image
-  - can be used in lighttable and darkroom mode
-  - It truncates history through develop/dev_history.c and rewrites DB/XMP.
-*/
-void dt_history_truncate_on_image(dt_develop_t *dev, const int32_t imgid, const int32_t history_end)
-{
-  if(history_end <= 0)
-  {
-    dt_history_delete_on_image(imgid);
-    dt_dev_reload_history_items(dev, dev->image_storage.id);
-    return;
-  }
-
-  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
-  dt_pthread_rwlock_wrlock(&dev->history_mutex);
-  dt_dev_set_history_end_ext(dev, history_end);
-
-  // Remove tail entries (num >= end).
-  // history_end is a cursor expressed in "number of applied items" terms:
-  // - keep items [0..history_end-1]
-  // - remove items [history_end..]
-  GList *link = g_list_nth(dev->history, history_end);
-  while(link)
-  {
-    GList *next = g_list_next(link);
-    dt_dev_free_history_item(link->data);
-    dev->history = g_list_delete_link(dev->history, link);
-    link = next;
-  }
-
-  // Write to DB/XMP
-  dt_dev_pop_history_items_ext(dev);
-  dt_dev_write_history_ext(dev, imgid);
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
-  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
-}
-
-int dt_history_compress_on_list(const GList *imgs)
-{
-  int uncompressed=0;
-
-  // Get the list of selected images
-  for(const GList *l = imgs; l; l = g_list_next(l))
-  {
-    const int32_t imgid = GPOINTER_TO_INT(l->data);
-    const int test = dt_history_end_attop(imgid);
-    if(test == 1) // we do a compression and we know for sure history_end is at the top!
-    {
-      dt_history_compress_on_image(imgid);
-    }
-    if(test == 0) // no compression as history_end is right in the middle of history
-      uncompressed++;
-  }
-
-  return uncompressed;
 }
 
 gboolean dt_history_check_module_exists(int32_t imgid, const char *operation, gboolean enabled)
@@ -949,116 +796,6 @@ void dt_history_hash_set_mipmap(const int32_t imgid, const dt_image_cache_write_
   if(!img) return;
   img->mipmap_hash = img->history_hash;
   dt_image_cache_write_release(darktable.image_cache, img, mode);
-}
-
-gboolean dt_history_copy(int32_t imgid)
-{
-  // note that this routine does not copy anything, it just setup the copy_paste proxy
-  // with the needed information that will be used while pasting.
-
-  if(imgid <= 0) return FALSE;
-
-  darktable.view_manager->copy_paste.copied_imageid = imgid;
-
-  return TRUE;
-}
-
-gboolean dt_history_copy_parts(int32_t imgid)
-{
-  if(dt_history_copy(imgid))
-  {
-    // run dialog, it will insert into selops the selected moduel
-
-    if(dt_gui_hist_dialog_new(&(darktable.view_manager->copy_paste), imgid, TRUE) == GTK_RESPONSE_CANCEL)
-      return FALSE;
-    return TRUE;
-  }
-  else
-    return FALSE;
-}
-
-gboolean dt_history_paste_on_list(const GList *list, gboolean undo)
-{
-  if(darktable.view_manager->copy_paste.copied_imageid <= 0) return FALSE;
-  if(!list) // do we have any images to receive the pasted history?
-    return FALSE;
-
-  if(undo) dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
-  for(GList *l = g_list_first((GList *)list); l; l = g_list_next(l))
-  {
-    const int32_t dest = GPOINTER_TO_INT(l->data);
-    dt_history_copy_and_paste_on_image(darktable.view_manager->copy_paste.copied_imageid,
-                                       dest,
-                                       darktable.view_manager->copy_paste.selops,
-                                       FALSE,
-                                       dt_conf_get_int("history/mode"));
-  }
-
-  if(undo) dt_undo_end_group(darktable.undo);
-
-  return TRUE;
-}
-
-gboolean dt_history_paste_parts_on_list(const GList *list, gboolean undo)
-{
-  if(darktable.view_manager->copy_paste.copied_imageid <= 0) return FALSE;
-  if(!list) // do we have any images to receive the pasted history?
-    return FALSE;
-
-  // at the time the dialog is started, some signals are sent and this in turn call
-  // back dt_view_get_images_to_act_on() which free list and create a new one.
-
-  // we launch the dialog
-  const int res = dt_gui_hist_dialog_new(&(darktable.view_manager->copy_paste),
-                                         darktable.view_manager->copy_paste.copied_imageid, FALSE);
-
-  if(res != GTK_RESPONSE_OK)
-  {
-    return FALSE;
-  }
-
-  if(undo) dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
-  for (const GList *l = g_list_first((GList *)list); l; l = g_list_next(l))
-  {
-    const int32_t dest = GPOINTER_TO_INT(l->data);
-    dt_history_copy_and_paste_on_image(darktable.view_manager->copy_paste.copied_imageid,
-                                       dest,
-                                       darktable.view_manager->copy_paste.selops,
-                                       FALSE,
-                                       dt_conf_get_int("history/mode"));
-  }
-  if(undo) dt_undo_end_group(darktable.undo);
-
-  return TRUE;
-}
-
-gboolean dt_history_delete_on_list(const GList *list, gboolean undo)
-{
-  if(!list)  // do we have any images on which to operate?
-    return FALSE;
-
-  if(undo) dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
-
-  for(GList *l = g_list_first((GList *)list); l; l = g_list_next(l))
-  {
-    const int32_t imgid = GPOINTER_TO_INT(l->data);
-    dt_undo_lt_history_t *hist = dt_history_snapshot_item_init();
-
-    hist->imgid = imgid;
-    dt_history_snapshot_undo_create(hist->imgid, &hist->before, &hist->before_history_end);
-
-    dt_history_delete_on_image_ext(imgid, FALSE);
-
-    dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
-    dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist, dt_history_snapshot_undo_pop,
-                   dt_history_snapshot_undo_lt_history_data_free);
-  }
-
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_INFO_CHANGED, g_list_copy((GList *)list));
-
-  if(undo) dt_undo_end_group(darktable.undo);
-  return TRUE;
 }
 
 #undef DT_IOP_ORDER_INFO

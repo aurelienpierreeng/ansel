@@ -435,151 +435,6 @@ int dt_history_merge_module_into_history(dt_develop_t *dev_dest, dt_develop_t *d
 
   return 1;
 }
-
-/**
- * @brief Build a module list to copy based on selected history indices.
- *
- * When @p ops is NULL, builds a list from the full history depending on @p copy_full.
- *
- * @param dev_src Source develop context.
- * @param ops Optional list of history indices (as GPOINTER_TO_UINT).
- * @param copy_full Whether to include disabled/default items.
- * @return Newly-allocated list of modules to copy.
- */
-static GList *_get_user_mod_list(dt_develop_t *dev_src, GList *ops, gboolean copy_full)
-{
-  GList *mod_list = NULL;
-
-  if(ops)
-  {
-    dt_print(DT_DEBUG_PARAMS, "[_history_copy_and_paste_on_image_merge] pasting selected IOP\n");
-
-    // copy only selected history entries
-    for(const GList *l = g_list_last(ops); l; l = g_list_previous(l))
-    {
-      const unsigned int num = GPOINTER_TO_UINT(l->data);
-      const dt_dev_history_item_t *hist = NULL;
-      for(GList *h = g_list_last(dev_src->history); h; h = g_list_previous(h))
-      {
-        const dt_dev_history_item_t *item = (dt_dev_history_item_t *)h->data;
-        if(item && item->num == (int)num)
-        {
-          hist = item;
-          break;
-        }
-      }
-
-      if(hist)
-      {
-        dt_iop_module_t *mod = hist->module;
-        if(mod && !dt_iop_is_hidden(mod))
-        {
-          dt_print(DT_DEBUG_HISTORY, "selected for copy/pasting : module %20s, multiprio %i", mod->op, mod->multi_priority);
-
-          mod_list = g_list_prepend(mod_list, mod);
-        }
-      }
-    }
-  }
-  else
-  {
-    dt_print(DT_DEBUG_PARAMS, "[_history_copy_and_paste_on_image_merge] pasting all IOP\n");
-
-    // we will copy all modules
-    for(GList *modules_src = g_list_first(dev_src->iop); modules_src; modules_src = g_list_next(modules_src))
-    {
-      dt_iop_module_t *mod_src = (dt_iop_module_t *)(modules_src->data);
-
-      // copy from history only if
-      if((dt_dev_history_get_first_item_by_module(dev_src->history, mod_src) != NULL) // module is in history of source image
-         && !dt_iop_is_hidden(mod_src) // hidden modules are technical and special
-         && (copy_full || !dt_history_module_skip_copy(mod_src->flags()))
-        )
-      {
-        // Note: we prepend to GList because it's more efficient
-        mod_list = g_list_prepend(mod_list, mod_src);
-      }
-    }
-  }
-
-  return g_list_reverse(mod_list);
-}
-
-/**
- * @brief Copy/merge history between images using the merge pipeline.
- *
- * Builds a source dev, resolves the module list, and dispatches to dt_history_merge().
- *
- * @param imgid Source image id.
- * @param dest_imgid Destination image id.
- * @param ops Optional list of history indices to copy.
- * @param copy_full Whether to copy the full history.
- * @param mode Merge strategy.
- * @return 0 on success, non-zero on failure.
- */
-static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_imgid, GList *ops,
-                                                  const gboolean copy_full, const dt_history_merge_strategy_t mode)
-{
-  // Init source history + pipeline
-  dt_develop_t _dev_src = { 0 };
-  dt_develop_t *dev_src = &_dev_src;
-  dt_dev_init(dev_src, FALSE);
-  dt_dev_reload_history_items(dev_src, imgid);
-
-  int ret_val = 0;
-
-  if(mode == DT_HISTORY_MERGE_REPLACE)
-  {
-    // Dumb mode : keep dev_src intact but swap destination imgid and image info into it.
-    //
-    // NOTE: when pasting from LDR/JPEG onto RAW images, the source iop-order list might not be compatible
-    // with the destination pipeline. We need to re-init the iop-order list for the destination image and
-    // reload module defaults for the destination image, but we must not apply auto-presets.
-    ret_val = dt_dev_replace_history_on_image(dev_src, dest_imgid, TRUE, "_history_copy_and_paste_on_image_merge");
-  }
-  else
-  {
-    // Merge
-    GList *mod_list = _get_user_mod_list(dev_src, ops, copy_full);
-    ret_val = dt_dev_merge_history_into_image(dev_src, dest_imgid, mod_list,
-                                              dt_conf_get_bool("history/copy_iop_order"), mode,
-                                              dt_conf_get_bool("history/paste_instances"));
-    g_list_free(mod_list);
-  }
-  dt_dev_cleanup(dev_src);
-
-  return ret_val;
-}
-
-gboolean dt_history_copy_and_paste_on_image(const int32_t imgid, const int32_t dest_imgid, GList *ops,
-                                            const gboolean copy_full, const dt_history_merge_strategy_t mode)
-{
-  if(imgid == dest_imgid) return 1;
-
-  if(imgid == UNKNOWN_IMAGE)
-  {
-    dt_control_log(_("you need to copy history from an image before you paste it onto another"));
-    return 1;
-  }
-
-  dt_undo_lt_history_t *hist = dt_history_snapshot_item_init();
-  hist->imgid = dest_imgid;
-  dt_history_snapshot_undo_create(hist->imgid, &hist->before, &hist->before_history_end);
-
-  int ret_val = _history_copy_and_paste_on_image_merge(imgid, dest_imgid, ops, copy_full, mode);
-
-  dt_history_snapshot_undo_create(hist->imgid, &hist->after, &hist->after_history_end);
-  dt_undo_start_group(darktable.undo, DT_UNDO_LT_HISTORY);
-  dt_undo_record(darktable.undo, NULL, DT_UNDO_LT_HISTORY, (dt_undo_data_t)hist,
-                 dt_history_snapshot_undo_pop, dt_history_snapshot_undo_lt_history_data_free);
-  dt_undo_end_group(darktable.undo);
-
-  // signal that the mipmap need to be updated
-  dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, dest_imgid, TRUE);
-
-  return ret_val;
-}
-
 /**
  * @brief Deep-copy a history list.
  *
@@ -709,9 +564,8 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
   dt_dev_write_history_ext(dev, dev->image_storage.id);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
-  int pipe_remove = dt_dev_history_refresh_nodes(dev, dev->iop, dev->history);
   dt_dev_history_gui_update(dev);
-  dt_dev_history_pixelpipe_update(dev, pipe_remove);
+  dt_dev_history_pixelpipe_update(dev, TRUE);
   dt_dev_history_notify_change(dev, dev->image_storage.id);
 
   if(dev->gui_module)
@@ -734,6 +588,14 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
 void dt_dev_history_undo_start_record(dt_develop_t *dev)
 {
   if(!dev) return;
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
+  dt_dev_history_undo_start_record_locked(dev);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
+}
+
+void dt_dev_history_undo_start_record_locked(dt_develop_t *dev)
+{
+  if(!dev) return;
 
   if(dev->undo_history_depth == 0)
   {
@@ -743,17 +605,23 @@ void dt_dev_history_undo_start_record(dt_develop_t *dev)
     dev->undo_history_before_iop_order_list = NULL;
     dev->undo_history_before_end = 0;
 
-    dt_pthread_rwlock_rdlock(&dev->history_mutex);
     dev->undo_history_before_snapshot = dt_history_duplicate(dev->history);
     dev->undo_history_before_end = dt_dev_get_history_end_ext(dev);
     dev->undo_history_before_iop_order_list = dt_ioppr_iop_order_copy_deep(dev->iop_order_list);
-    dt_pthread_rwlock_unlock(&dev->history_mutex);
   }
 
   dev->undo_history_depth++;
 }
 
 void dt_dev_history_undo_end_record(dt_develop_t *dev)
+{
+  if(!dev) return;
+  dt_pthread_rwlock_rdlock(&dev->history_mutex);
+  dt_dev_history_undo_end_record_locked(dev);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
+}
+
+void dt_dev_history_undo_end_record_locked(dt_develop_t *dev)
 {
   if(!dev || dev->undo_history_depth <= 0) return;
 
@@ -770,11 +638,9 @@ void dt_dev_history_undo_end_record(dt_develop_t *dev)
   dev->undo_history_before_end = 0;
   dev->undo_history_before_iop_order_list = NULL;
 
-  dt_pthread_rwlock_rdlock(&dev->history_mutex);
   hist->after_snapshot = dt_history_duplicate(dev->history);
   hist->after_end = dt_dev_get_history_end_ext(dev);
   hist->after_iop_order_list = dt_ioppr_iop_order_copy_deep(dev->iop_order_list);
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   if(dev->gui_module)
   {
@@ -1139,6 +1005,10 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
 {
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_pop_history_items_ext] loading history entries into modules...\n");
 
+  // Ensure `dev->image_storage` is up-to-date before modules reload their defaults.
+  // This avoids using incomplete RAW metadata (WB coeffs, matrices) on newly-inited images.
+  dt_dev_ensure_image_storage(dev, dev->image_storage.id);
+
   // Shitty design ahead:
   // some modules (temperature.c, colorin.c) init their GUI comboboxes
   // in/from reload_defaults. Though we already loaded them once at
@@ -1173,13 +1043,11 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
 
 void dt_dev_pop_history_items(dt_develop_t *dev)
 {
-  // Ensure `dev->image_storage` is up-to-date before modules reload their defaults.
-  // This avoids using incomplete RAW metadata (WB coeffs, matrices) on newly-inited images.
-  dt_dev_ensure_image_storage(dev, dev->image_storage.id);
-
+  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
+  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
 }
 
 void dt_dev_history_gui_update(dt_develop_t *dev)
@@ -1190,7 +1058,7 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
   // hide/remove instances that are no longer referenced by any history item.
   // Note: this may also reorder modules in the GUI if needed.
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
-  dt_dev_history_refresh_nodes(dev, dev->iop, dev->history);
+  dt_dev_history_refresh_nodes_ext(dev, dev->iop, dev->history);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   ++darktable.gui->reset;
@@ -1324,7 +1192,8 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
   cache_img->history_hash = dev->history_hash;
 
   dt_image_cache_write_release(darktable.image_cache, cache_img, DT_IMAGE_CACHE_SAFE);
-  dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, TRUE);
+  
+  dt_mipmap_cache_remove(darktable.mipmap_cache, dev->image_storage.id, TRUE);
 }
 
 // Write TO XMP, so from the dev perspective, it's a read
@@ -1400,29 +1269,6 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
 }
 
 /**
- * @brief Check whether a module is already present in history.
- *
- * @param dev Develop context.
- * @param module Module instance.
- * @return TRUE if present, FALSE otherwise.
- */
-static gboolean _hm_history_has_module(const dt_develop_t *dev, const dt_iop_module_t *module)
-{
-  for(GList *history = g_list_first(dev->history); history; history = g_list_next(history))
-  {
-    const dt_dev_history_item_t *hist = (const dt_dev_history_item_t *)history->data;
-    if(!hist) continue;
-
-    if(hist->module == module) return TRUE;
-
-    // Fallback to a stable key: operation name + multi_priority.
-    if(!strcmp(hist->op_name, module->op) && hist->multi_priority == module->multi_priority) return TRUE;
-  }
-
-  return FALSE;
-}
-
-/**
  * @brief Insert default modules into history when needed.
  *
  * Ensures mandatory/default-enabled modules are represented in history,
@@ -1435,7 +1281,7 @@ static gboolean _hm_history_has_module(const dt_develop_t *dev, const dt_iop_mod
 static void _insert_default_modules(dt_develop_t *dev, dt_iop_module_t *module, gboolean is_inited)
 {
   // Module already in history: don't prepend extra entries
-  if(_hm_history_has_module(dev, module))
+  if(dt_history_check_module_exists(dev->image_storage.id, module->op, FALSE))
     return;
 
   // Module has no user params: no history: don't prepend either
@@ -2045,8 +1891,6 @@ static gboolean _compress_disabled_with_history(dt_iop_module_t *module)
 static void _dt_dev_history_compress_internal(dt_develop_t *dev, const gboolean write_history)
 {
   const int32_t imgid = dev->image_storage.id;
-  if(darktable.gui && dev->gui_attached) ++darktable.gui->reset;
-  dt_pthread_rwlock_wrlock(&dev->history_mutex);
 
   // Cleanup old history
   dt_dev_history_free_history(dev);
@@ -2072,9 +1916,6 @@ static void _dt_dev_history_compress_internal(dt_develop_t *dev, const gboolean 
   dt_dev_set_history_end_ext(dev, g_list_length(dev->history));
   dt_dev_pop_history_items_ext(dev);
   if(write_history) dt_dev_write_history_ext(dev, imgid);
-
-  dt_pthread_rwlock_unlock(&dev->history_mutex);
-  if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
 }
 
 void dt_dev_history_compress_ext(dt_develop_t *dev, gboolean write_history)
@@ -2085,6 +1926,34 @@ void dt_dev_history_compress_ext(dt_develop_t *dev, gboolean write_history)
 void dt_dev_history_compress(dt_develop_t *dev)
 {
   _dt_dev_history_compress_internal(dev, TRUE);
+}
+
+void dt_dev_history_truncate(dt_develop_t *dev, const int32_t imgid)
+{
+  // Remove tail entries (num >= end).
+  // history_end is a cursor expressed in "number of applied items" terms:
+  // - keep items [0..history_end-1]
+  // - remove items [history_end..]
+  GList *link = g_list_nth(dev->history, dt_dev_get_history_end_ext(dev));
+  while(link)
+  {
+    GList *next = g_list_next(link);
+    dt_dev_free_history_item(link->data);
+    dev->history = g_list_delete_link(dev->history, link);
+    link = next;
+  }
+
+  // Re-apply history and resync iop order from the truncated stack.
+  dt_dev_pop_history_items_ext(dev);
+  dt_dev_write_history_ext(dev, imgid);
+}
+
+void dt_dev_history_compress_or_truncate(dt_develop_t *dev)
+{
+  if(dt_dev_get_history_end_ext(dev) == g_list_length(dev->history))
+    dt_dev_history_compress(dev);
+  else
+    dt_dev_history_truncate(dev, dev->image_storage.id);
 }
 
 
@@ -2371,7 +2240,7 @@ static int _create_deleted_modules(GList **_iop_list, GList *history_list)
 
 // returns 1 if the topology of the pipe has changed, aka it needs a full rebuild
 // 0 means only internal parameters of pipe nodes have change, so it's a mere resync
-int dt_dev_history_refresh_nodes(dt_develop_t *dev, GList *iop, GList *history)
+int dt_dev_history_refresh_nodes_ext(dt_develop_t *dev, GList *iop, GList *history)
 {
   // topology has changed?
   int pipe_remove = 0;

@@ -420,7 +420,7 @@ static void sync_xmp_to_db(GtkTreeModel *model,
   _db_update_timestamp(entry.id, entry.timestamp_xmp);
 
   const int error =
-    dt_history_load_and_apply(entry.id, entry.xmp_path, 0);  // success = 0, fail = 1
+    dt_history_load_and_apply_on_image(entry.id, entry.xmp_path, 0);  // success = 0, fail = 1
 
   if(error)
   {
@@ -483,7 +483,7 @@ static void sync_newest_to_oldest(GtkTreeModel *model,
   {
     // WRITE XMP in DB
     _db_update_timestamp(entry.id, entry.timestamp_xmp);
-    error = dt_history_load_and_apply(entry.id, entry.xmp_path, 0);
+    error = dt_history_load_and_apply_on_image(entry.id, entry.xmp_path, 0);
     if(error)
     {
       _log_synchronization
@@ -553,7 +553,7 @@ static void sync_oldest_to_newest(GtkTreeModel *model,
   {
     // WRITE XMP in DB
     _db_update_timestamp(entry.id, entry.timestamp_xmp);
-    error = dt_history_load_and_apply(entry.id, entry.xmp_path, 0);
+    error = dt_history_load_and_apply_on_image(entry.id, entry.xmp_path, 0);
     if(error)
     {
       _log_synchronization(gui,

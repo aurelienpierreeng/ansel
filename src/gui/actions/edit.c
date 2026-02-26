@@ -22,6 +22,7 @@
 #include "common/selection.h"
 #include "common/collection.h"
 #include "common/image_cache.h"
+#include "common/history.h"
 #include "common/history_merge.h"
 #include "develop/dev_history.h"
 #include "control/control.h"
@@ -115,13 +116,9 @@ static gboolean compress_history_callback(GtkAccelGroup *group, GObject *acceler
   {
     dt_develop_t *dev = darktable.develop;
     dt_dev_undo_start_record(dev);
-    dt_dev_history_compress(dev);
+    dt_history_compress_on_image(dev->image_storage.id);
     dt_dev_undo_end_record(dev);
-    int pipe_remove = dt_dev_history_refresh_nodes(dev, dev->iop, dev->history);
-    dt_dev_history_gui_update(dev);
-    dt_dev_history_pixelpipe_update(dev, pipe_remove);
-    dt_dev_history_notify_change(dev, dev->image_storage.id);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+    dt_menu_apply_dev_history_update(dev, TRUE);
 
     // Avoid running a headless compression for the current darkroom image: the history module
     // (src/libs/history.c) compresses directly from the loaded pipeline.
@@ -154,11 +151,7 @@ static gboolean delete_history_callback(GtkAccelGroup *group, GObject *accelerat
   if(is_darkroom_image_in_list)
   {
     dt_dev_undo_end_record(darktable.develop);
-    dt_dev_reload_history_items(darktable.develop, darktable.develop->image_storage.id);
-    dt_dev_history_gui_update(darktable.develop);
-    dt_dev_history_pixelpipe_update(darktable.develop, TRUE);
-    dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
+    dt_menu_apply_dev_history_update(darktable.develop, TRUE);
   }
 
   dt_control_queue_redraw_center();
@@ -226,26 +219,13 @@ static gboolean paste_all_callback(GtkAccelGroup *group, GObject *acceleratable,
   }
 
   GList *imgs = dt_selection_get_list(darktable.selection);
-  gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
 
-  if(is_darkroom_image_in_list)
-  {
-    dt_dev_undo_start_record(darktable.develop);
-  }
+  // We don't allow pasting on darkroom image
+  if(dt_menu_is_image_in_dev(imgs))
+    imgs = g_list_remove(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
 
-  dt_history_paste_on_list(imgs, TRUE);
+  if(imgs) dt_history_paste_on_list(imgs);
 
-  if(is_darkroom_image_in_list)
-  {
-    dt_dev_undo_end_record(darktable.develop);
-    dt_dev_reload_history_items(darktable.develop, darktable.develop->image_storage.id);
-    dt_dev_history_gui_update(darktable.develop);
-    dt_dev_history_pixelpipe_update(darktable.develop, TRUE);
-    dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
-  }
-
-  dt_control_queue_redraw_center();
   g_list_free(imgs);
   return TRUE;
 }
@@ -259,24 +239,18 @@ static gboolean paste_parts_callback(GtkAccelGroup *group, GObject *acceleratabl
   }
 
   GList *imgs = dt_selection_get_list(darktable.selection);
-  gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
 
-  if(is_darkroom_image_in_list)
+  if(!dt_history_paste_parts_prepare())
   {
-    dt_dev_undo_start_record(darktable.develop);
+    g_list_free(imgs);
+    return FALSE;
   }
 
-  dt_history_paste_parts_on_list(imgs, TRUE);
+  // We don't allow pasting on darkroom image
+  if(dt_menu_is_image_in_dev(imgs))
+    imgs = g_list_remove(imgs, GINT_TO_POINTER(darktable.develop->image_storage.id));
 
-  if(is_darkroom_image_in_list)
-  {
-    dt_dev_undo_end_record(darktable.develop);
-    dt_dev_reload_history_items(darktable.develop, darktable.develop->image_storage.id);
-    dt_dev_history_gui_update(darktable.develop);
-    dt_dev_history_pixelpipe_update(darktable.develop, TRUE);
-    dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_HISTORY_CHANGE);
-  }
+  if(imgs) dt_history_paste_parts_on_list(imgs);
 
   dt_control_queue_redraw_center();
   g_list_free(imgs);
@@ -345,12 +319,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
 #endif
       gtk_dialog_run(GTK_DIALOG(dialog));
       gtk_widget_destroy(dialog);
-
-      // TODO: only when needed, check imgid
-      dt_dev_reload_history_items(darktable.develop, darktable.develop->image_storage.id);
-      dt_dev_history_gui_update(darktable.develop);
-      dt_dev_history_pixelpipe_update(darktable.develop, TRUE);
-      dt_dev_history_notify_change(darktable.develop, darktable.develop->image_storage.id);
+ 
     }
     else
     {
@@ -363,6 +332,10 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
     }
     g_free(dtfilename);
   }
+
+  if(dt_menu_is_image_in_dev(imgs))
+    dt_menu_apply_dev_history_update(darktable.develop, TRUE);
+
   g_object_unref(filechooser);
   g_list_free(imgs);
   return TRUE;
