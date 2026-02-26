@@ -551,8 +551,7 @@ static gboolean _modulegroups_module_visible_in_current(const dt_lib_modulegroup
       return !(module->flags() & IOP_FLAGS_DEPRECATED) || module->enabled;
 
     default:
-      return d->current == module->default_group()
-             && (!(module->flags() & IOP_FLAGS_DEPRECATED) || module->enabled);
+      return d->current == module->default_group();
   }
 }
 
@@ -560,73 +559,64 @@ static gboolean _modulegroups_module_visible_in_current(const dt_lib_modulegroup
 static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self)
 {
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
-
-  if(DT_IOP_ORDER_INFO) fprintf(stderr, "\n^^^^^ modulegroups");
-
-  GList *modules = darktable.develop->iop;
-  if(modules)
+  for(GList *modules = g_list_first(darktable.develop->iop); modules; modules = g_list_next(modules))
   {
-    /*
-     * iterate over iop modules and do various test to
-     * detect if the modules should be shown or not.
-     */
-    do
+
+    dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+    GtkWidget *w = module->expander;
+
+    /* skip modules without a gui */
+    if(dt_iop_is_hidden(module)) continue;
+
+    /* lets show/hide modules dependent on current group*/
+    switch(d->current)
     {
-      dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
-      GtkWidget *w = module->expander;
-
-      /* skip modules without a gui */
-      if(dt_iop_is_hidden(module)) continue;
-
-      /* lets show/hide modules dependent on current group*/
-      switch(d->current)
+      case DT_MODULEGROUP_ACTIVE_PIPE:
       {
-        case DT_MODULEGROUP_ACTIVE_PIPE:
+        if(_is_module_in_history(module) || module->enabled)
         {
-          if(_is_module_in_history(module) || module->enabled)
-          {
-            if(w) gtk_widget_show(w);
-          }
-          else
-          {
-            if(darktable.develop->gui_module == module) dt_iop_request_focus(NULL);
-            if(w) gtk_widget_hide(w);
-          }
-          break;
+          if(w) gtk_widget_show(w);
         }
-
-        case DT_MODULEGROUP_NONE:
+        else
         {
-          /* show all except deprecated ones - in case of deprecated, still show it if enabled*/
-          if(!(module->flags() & IOP_FLAGS_DEPRECATED) || module->enabled)
-          {
-            if(w) gtk_widget_show(w);
-          }
-          else
-          {
-            if(darktable.develop->gui_module == module) dt_iop_request_focus(NULL);
-            if(w) gtk_widget_hide(w);
-          }
-          break;
+          if(darktable.develop->gui_module == module) dt_iop_request_focus(NULL);
+          if(w) gtk_widget_hide(w);
         }
+        break;
+      }
 
-        default:
+      case DT_MODULEGROUP_NONE:
+      {
+        /* show all except deprecated ones - in case of deprecated, still show it if enabled*/
+        if(!(module->flags() & IOP_FLAGS_DEPRECATED) || module->enabled)
         {
-          if(d->current == module->default_group()
-             && (!(module->flags() & IOP_FLAGS_DEPRECATED) || module->enabled))
-          {
-            if(w) gtk_widget_show(w);
-          }
-          else
-          {
-            if(darktable.develop->gui_module == module) dt_iop_request_focus(NULL);
-            if(w) gtk_widget_hide(w);
-          }
+          if(w) gtk_widget_show(w);
+        }
+        else
+        {
+          if(darktable.develop->gui_module == module) dt_iop_request_focus(NULL);
+          if(w) gtk_widget_hide(w);
+        }
+        break;
+      }
+
+      default:
+      {
+        if(d->current == module->default_group() 
+           && (!(module->flags() & IOP_FLAGS_DEPRECATED) 
+               || module->enabled
+               || _is_module_in_history(module)))
+        {
+          if(w) gtk_widget_show(w);
+        }
+        else
+        {
+          if(darktable.develop->gui_module == module) dt_iop_request_focus(NULL);
+          if(w) gtk_widget_hide(w);
         }
       }
-    } while((modules = g_list_next(modules)) != NULL);
+    }
   }
-  if(DT_IOP_ORDER_INFO) fprintf(stderr, "\nvvvvv\n");
   // now that visibility has been updated set multi-show
   dt_dev_modules_update_multishow(darktable.develop);
 }

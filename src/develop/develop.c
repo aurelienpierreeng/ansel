@@ -922,19 +922,22 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
   }
 }
 
-void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *module, const int history_end)
+typedef struct dt_dev_multishow_state_t
 {
-  // We count the number of other instances
-  int nb_instances = 0;
-  for(GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
-  {
-    dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+  GHashTable *instance_counts;
+  GHashTable *modules_in_history;
+  GHashTable *prev_visible;
+  GHashTable *next_visible;
+} dt_dev_multishow_state_t;
 
-    if(mod->instance == module->instance) nb_instances++;
-  }
+void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *module,
+                                  const dt_dev_multishow_state_t *state)
+{
+  const int nb_instances = GPOINTER_TO_INT(
+      g_hash_table_lookup(state->instance_counts, GINT_TO_POINTER(module->instance)));
 
-  dt_iop_module_t *mod_prev = dt_iop_gui_get_previous_visible_module(module);
-  dt_iop_module_t *mod_next = dt_iop_gui_get_next_visible_module(module);
+  dt_iop_module_t *mod_prev = (dt_iop_module_t *)g_hash_table_lookup(state->prev_visible, module);
+  dt_iop_module_t *mod_next = (dt_iop_module_t *)g_hash_table_lookup(state->next_visible, module);
 
   const gboolean move_next = (mod_next && mod_next->iop_order != INT_MAX)
                                  ? dt_ioppr_check_can_move_after_iop(dev->iop, module, mod_next)
@@ -954,12 +957,13 @@ void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *mod
   else
     module->multi_show_down = 0;
 
-  // If it's an additionnal instance supposed to be added by an history item after
-  // the current history_end cursor, conceptually it doesn't exist yet, 
+  // If it's an additional instance supposed to be added by an history item after
+  // the current history_end cursor, conceptually it doesn't exist yet,
   // even though it's dangling there on the pipe. So hide it from GUI.
-  if(nb_instances > 1 
-     && dt_dev_history_get_last_item_by_module(dev->history, module, history_end) == NULL)
-      gtk_widget_hide(module->expander);
+  if(nb_instances > 1
+     && module->multi_priority > 0
+     && !g_hash_table_contains(state->modules_in_history, module))
+    gtk_widget_hide(module->expander);
 }
 
 void dt_dev_modules_update_multishow(dt_develop_t *dev)
@@ -967,17 +971,67 @@ void dt_dev_modules_update_multishow(dt_develop_t *dev)
   dt_ioppr_check_iop_order(dev, 0, "dt_dev_modules_update_multishow");
   const int history_end = dt_dev_get_history_end_ext(dev);
 
+  dt_dev_multishow_state_t state = { 0 };
+  state.instance_counts = g_hash_table_new(g_direct_hash, g_direct_equal);
+  state.modules_in_history = g_hash_table_new(g_direct_hash, g_direct_equal);
+  state.prev_visible = g_hash_table_new(g_direct_hash, g_direct_equal);
+  state.next_visible = g_hash_table_new(g_direct_hash, g_direct_equal);
+
+  // Precompute how many instances exist for each base module.
+  for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
+  {
+    const dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+    gpointer key = GINT_TO_POINTER(mod->instance);
+    int count = GPOINTER_TO_INT(g_hash_table_lookup(state.instance_counts, key));
+    g_hash_table_replace(state.instance_counts, key, GINT_TO_POINTER(count + 1));
+  }
+
+  // Precompute which modules exist in history up to history_end.
+  int history_pos = 0;
+  for(GList *history = g_list_first(dev->history);
+      history && history_pos < history_end;
+      history = g_list_next(history), history_pos++)
+  {
+    dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
+    if(hist->module) g_hash_table_add(state.modules_in_history, hist->module);
+  }
+
+  // Precompute previous visible module in pipeline order.
+  dt_iop_module_t *last_visible = NULL;
+  for(GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+    if(dt_iop_gui_module_is_visible(mod))
+    {
+      g_hash_table_insert(state.prev_visible, mod, last_visible);
+      last_visible = mod;
+    }
+  }
+
+  // Precompute next visible module in GUI order (reverse pipeline).
+  last_visible = NULL;
+  for(GList *modules = g_list_last(dev->iop); modules; modules = g_list_previous(modules))
+  {
+    dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
+    if(dt_iop_gui_module_is_visible(mod))
+    {
+      g_hash_table_insert(state.next_visible, mod, last_visible);
+      last_visible = mod;
+    }
+  }
+
   for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)modules->data;
 
-    // only for visible modules
-    GtkWidget *expander = mod->expander;
-    if(expander && gtk_widget_is_visible(expander))
-    {
-      _dev_module_update_multishow(dev, mod, history_end);
-    }
+    if(dt_iop_gui_module_is_visible(mod))
+      _dev_module_update_multishow(dev, mod, &state);
   }
+
+  g_hash_table_destroy(state.instance_counts);
+  g_hash_table_destroy(state.modules_in_history);
+  g_hash_table_destroy(state.prev_visible);
+  g_hash_table_destroy(state.next_visible);
 }
 
 gchar *dt_history_item_get_label(const struct dt_iop_module_t *module)
