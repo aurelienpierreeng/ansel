@@ -842,6 +842,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 {
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
+  if(dev->virtual_pipe) dt_atomic_set_int(&dev->virtual_pipe->shutdown, TRUE);
 
   dt_dev_undo_start_record(dev);
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
@@ -1043,8 +1044,8 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
   // Reloading defaults might have changed the global history hash
   dev->history_hash = dt_dev_history_get_hash(dev);
 
-  // Update darkroom sizes in case clipping & distortion changed
-  if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
+  // Update darkroom sizes in case clipping & distortion changed.
+  // This is now handled by the wrapper after releasing the history lock.
 }
 
 void dt_dev_pop_history_items(dt_develop_t *dev)
@@ -1053,6 +1054,8 @@ void dt_dev_pop_history_items(dt_develop_t *dev)
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
+  // Update darkroom sizes after releasing the history lock to avoid deadlocks.
+  if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
   if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
 }
 

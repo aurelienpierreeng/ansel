@@ -2835,8 +2835,8 @@ void gui_post_expose(struct dt_iop_module_t *module,
   if(!g)
     return;
 
-  const float bb_width = develop->preview_pipe->backbuf.width;
-  const float bb_height = develop->preview_pipe->backbuf.height;
+  const float bb_width = develop->roi.preview_width;
+  const float bb_height = develop->roi.preview_height;
   const float scale = MAX(bb_width, bb_height);
   if(bb_width < 1.0 || bb_height < 1.0)
     return;
@@ -2850,7 +2850,7 @@ void gui_post_expose(struct dt_iop_module_t *module,
   dt_iop_gui_leave_critical_section(module);
 
   // distort all points
-  const distort_params_t d_params = { develop, develop->preview_pipe, 1.0, 1.0 / scale, DT_DEV_TRANSFORM_DIR_ALL, FALSE };
+  const distort_params_t d_params = { develop, develop->virtual_pipe, 1.0, 1.0 / scale, DT_DEV_TRANSFORM_DIR_ALL, FALSE };
   _distort_paths(module, &d_params, &copy_params);
 
   // You're not supposed to understand this
@@ -2910,9 +2910,9 @@ static void get_point_scale(struct dt_iop_module_t *module, float x, float y, fl
   const float wd = module->dev->roi.preview_width;
   const float ht = module->dev->roi.preview_height;
   float pts[2] = { pzx * wd, pzy * ht };
-  dt_dev_distort_backtransform_plus(module->dev, module->dev->preview_pipe,
+  dt_dev_distort_backtransform_plus(module->dev, module->dev->virtual_pipe,
                                     module->iop_order,DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
-  dt_dev_distort_backtransform_plus(module->dev, module->dev->preview_pipe,
+  dt_dev_distort_backtransform_plus(module->dev, module->dev->virtual_pipe,
                                     module->iop_order,DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1);
   const float nx = pts[0] / module->dev->roi.raw_width;
   const float ny = pts[1] / module->dev->roi.raw_height;

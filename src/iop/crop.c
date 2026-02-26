@@ -205,7 +205,7 @@ static void _params_to_gui(dt_iop_crop_params_t *p, dt_iop_crop_gui_data_t *g)
 
 static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop_crop_params_t *p)
 {
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
   if(!piece) return;
   // we want value in iop space
   const float wd = (float)piece->buf_out.width; //self->dev->roi.preview_width;
@@ -218,10 +218,10 @@ static void _commit_box(dt_iop_module_t *self, dt_iop_crop_gui_data_t *g, dt_iop
 
   dt_boundingbox_t points = { bbox_left, bbox_top, bbox_right, bbox_bottom };
 
-  if(dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+  if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                        DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2))
   {
-    //dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+    //dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
     //if(piece)
     //{
       //fprintf(stderr, "buf_out size: %dx%d\n", piece->buf_out.width, piece->buf_out.height);
@@ -264,15 +264,14 @@ static gboolean _set_max_clip(struct dt_iop_module_t *self)
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
   dt_iop_crop_params_t *p = (dt_iop_crop_params_t *)self->params;
 
-  if(!dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe, self->dev)) return TRUE;
   // we want to know the size of the actual buffer
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
   if(!piece) return FALSE;
 
   float wp = piece->buf_out.width;
   float hp = piece->buf_out.height;
   float points[8] = { 0.0f, 0.0f, wp, hp, p->cx * wp, p->cy * hp, p->cw * wp, p->ch * hp };
-  if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+  if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 4))
     return FALSE;
 
@@ -446,7 +445,7 @@ static float _aspect_ratio_get(dt_iop_module_t *self, GtkWidget *combo)
   }
 
   // we want to know the size of the actual buffer
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
   if(!piece) return 0.0f;
 
   const int iwd = piece->buf_in.width, iht = piece->buf_in.height;
@@ -1317,9 +1316,6 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
 {
   dt_develop_t *dev = self->dev;
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
-
-  if(!dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe, self->dev))
-    return;
 
   _aspect_apply(self, GRAB_HORIZONTAL);
 

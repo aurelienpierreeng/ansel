@@ -1173,7 +1173,7 @@ static int _brush_get_points_border(dt_develop_t *dev, dt_masks_form_t *form, fl
 {
   if(source && !module) return 1;
   const double ioporder = (module) ? module->iop_order : 0.0f;
-  return _brush_get_pts_border(dev, form, ioporder, DT_DEV_TRANSFORM_DIR_ALL, dev->preview_pipe, points,
+  return _brush_get_pts_border(dev, form, ioporder, DT_DEV_TRANSFORM_DIR_ALL, dev->virtual_pipe, points,
                                points_count, border, border_count, NULL, NULL, source);
 }
 

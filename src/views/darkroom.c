@@ -1959,6 +1959,7 @@ void leave(dt_view_t *self)
   dev->exit = 1;
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
+  if(dev->virtual_pipe) dt_atomic_set_int(&dev->virtual_pipe->shutdown, TRUE);
 
   // While we wait for possible pipelines to finish,
   // do the GUI cleaning.
@@ -2008,6 +2009,10 @@ void leave(dt_view_t *self)
   dt_pthread_mutex_lock(&dev->preview_pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->preview_pipe);
   dt_pthread_mutex_unlock(&dev->preview_pipe->busy_mutex);
+
+  dt_pthread_mutex_lock(&dev->virtual_pipe->busy_mutex);
+  dt_dev_pixelpipe_cleanup_nodes(dev->virtual_pipe);
+  dt_pthread_mutex_unlock(&dev->virtual_pipe->busy_mutex);
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_history_free_history(dev);
@@ -2068,6 +2073,10 @@ void leave(dt_view_t *self)
 
   dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dev->preview_pipe->backbuf.hash);
   dev->preview_pipe->backbuf.hash = -1;
+
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dev->virtual_pipe->backbuf.hash);
+  dev->virtual_pipe->backbuf.hash = -1;
+
 
   dt_print(DT_DEBUG_CONTROL, "[run_job-] 11 %f in darkroom mode\n", dt_get_wtime());
 }

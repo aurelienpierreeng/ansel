@@ -224,6 +224,10 @@ typedef struct dt_develop_t
 
   // image processing pipeline with caching
   struct dt_dev_pixelpipe_t *pipe, *preview_pipe;
+  // Virtual preview-like pipeline used for geometry/ROI computations on the GUI thread.
+  // It mirrors preview_pipe history/nodes but never processes pixels.
+  // It is meant for fast access from the GUI mainthread without waiting for threads to return.
+  struct dt_dev_pixelpipe_t *virtual_pipe;
 
   // image under consideration, which
   // is copied each time an image is changed. this means we have some information
@@ -507,9 +511,9 @@ gchar *dt_history_item_get_label(const struct dt_iop_module_t *module);
 /*
  * distort functions
  */
-/** apply all transforms to the specified points (in preview pipe space) */
+/** apply all transforms to the specified points (in virtual preview-pipe space) */
 int dt_dev_distort_transform(dt_develop_t *dev, float *points, size_t points_count);
-/** reverse apply all transforms to the specified points (in preview pipe space) */
+/** reverse apply all transforms to the specified points (in virtual preview-pipe space) */
 int dt_dev_distort_backtransform(dt_develop_t *dev, float *points, size_t points_count);
 /** same fct, but we can specify iop with priority between pmin and pmax */
 int dt_dev_distort_transform_plus(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,

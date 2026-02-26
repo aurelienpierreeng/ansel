@@ -26,6 +26,9 @@
 #include "control/control.h"
 #include <stdint.h>
 
+// Keep a preview-like virtual pipe in sync with history without running pixels.
+static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag);
+
 static void _change_pipe(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_change_t flag)
 {
   if(!pipe) return;
@@ -39,6 +42,8 @@ void dt_dev_pixelpipe_rebuild_all(dt_develop_t *dev)
   if(!dev || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_REMOVE);
   _change_pipe(dev->pipe, DT_DEV_PIPE_REMOVE);
+  // Virtual pipe must mirror preview history/topology for GUI geometry.
+  _sync_virtual_pipe(dev, DT_DEV_PIPE_REMOVE);
 }
 
 void dt_dev_pixelpipe_resync_history_main(dt_develop_t *dev)
@@ -51,6 +56,8 @@ void dt_dev_pixelpipe_resync_history_preview(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_SYNCH);
+  // Virtual pipe mirrors preview history for GUI coordinate transforms.
+  _sync_virtual_pipe(dev, DT_DEV_PIPE_SYNCH);
 }
 
 void dt_dev_pixelpipe_resync_history_all(dt_develop_t *dev)
@@ -70,6 +77,8 @@ void dt_dev_pixelpipe_update_history_preview_real(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_TOP_CHANGED);
+  // Virtual pipe mirrors preview history for GUI coordinate transforms.
+  _sync_virtual_pipe(dev, DT_DEV_PIPE_TOP_CHANGED);
 }
 
 void dt_dev_pixelpipe_update_history_all_real(dt_develop_t *dev)
@@ -83,6 +92,8 @@ void dt_dev_pixelpipe_update_zoom_preview(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached) return;
   _change_pipe(dev->preview_pipe, DT_DEV_PIPE_ZOOMED);
+  // Keep the virtual pipe aligned with preview ROI/zoom changes for GUI transforms.
+  _sync_virtual_pipe(dev, DT_DEV_PIPE_ZOOMED);
 }
 
 void dt_dev_pixelpipe_update_zoom_main_real(dt_develop_t *dev)
@@ -159,6 +170,8 @@ void dt_dev_pixelpipe_change_zoom_main(dt_develop_t *dev)
   dt_control_navigation_redraw();
   gtk_widget_queue_draw(dt_ui_center(darktable.gui->ui));
   dt_dev_pixelpipe_update_zoom_main(dev);
+  // Keep the virtual pipe aligned with zoom/ROI changes for GUI transforms.
+  _sync_virtual_pipe(dev, DT_DEV_PIPE_ZOOMED);
   dt_dev_update_mouse_effect_radius(dev);
   dt_dev_process(dev, dev->pipe);
 }
@@ -176,98 +189,18 @@ gboolean dt_dev_pixelpipe_activemodule_disables_currentmodule(struct dt_develop_
           // cache bypass is our hint that the active module is in "editing" mode
 }
 
-static GHashTable *_build_piece_lookup(dt_dev_pixelpipe_t *pipe)
-{
-  if(!pipe || !pipe->nodes) return NULL;
-
-  GHashTable *lookup = g_hash_table_new(g_direct_hash, g_direct_equal);
-  for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
-  {
-    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
-    g_hash_table_insert(lookup, piece->module, piece);
-  }
-
-  return lookup;
-}
-
-static void _init_temp_pipe(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
-                            const int width_in, const int height_in)
-{
-  memset(pipe, 0, sizeof(*pipe));
-  pipe->type = (dev && dev->gui_attached) ? DT_DEV_PIXELPIPE_FULL : DT_DEV_PIXELPIPE_EXPORT;
-
-  if(dev)
-  {
-    dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, width_in, height_in, DT_MIPMAP_FULL);
-  }
-  else
-  {
-    pipe->iwidth = width_in;
-    pipe->iheight = height_in;
-  }
-}
-
-static void _init_temp_piece(dt_dev_pixelpipe_iop_t *piece, dt_iop_module_t *module,
-                             dt_dev_pixelpipe_t *pipe, const int width_in, const int height_in)
-{
-  memset(piece, 0, sizeof(*piece));
-  piece->enabled = module->enabled;
-  piece->request_histogram = DT_REQUEST_ONLY_IN_GUI;
-  piece->histogram_params.roi = NULL;
-  piece->histogram_params.bins_count = 256;
-  piece->histogram_stats.bins_count = 0;
-  piece->histogram_stats.pixels = 0;
-  piece->iwidth = width_in;
-  piece->iheight = height_in;
-  piece->module = module;
-  piece->pipe = pipe;
-  piece->colors
-      = ((module->default_colorspace(module, pipe, NULL) == IOP_CS_RAW) && (dt_image_is_raw(&pipe->image)))
-            ? 1
-            : 4;
-  piece->bypass_cache = FALSE;
-  piece->force_opencl_cache = TRUE;
-  piece->process_cl_ready = 0;
-  piece->process_tiling_ready = 0;
-
-  dt_iop_init_pipe(module, pipe, piece);
-  module->commit_params(module, module->params, pipe, piece);
-}
 
 void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev,
                                   const int width_in, const int height_in,
                                   int *width, int *height)
 {
-  if(!dev || !dev->iop)
-  {
-    *width = width_in;
-    *height = height_in;
-    return;
-  }
-
-  const gboolean pipe_ready = (pipe && pipe->nodes);
-  dt_dev_pixelpipe_t temp_pipe;
-  dt_dev_pixelpipe_t *use_pipe = pipe_ready ? pipe : &temp_pipe;
-  if(!pipe_ready) _init_temp_pipe(use_pipe, dev, width_in, height_in);
-
-  GHashTable *piece_lookup = _build_piece_lookup(pipe_ready ? pipe : NULL);
-
   dt_iop_roi_t roi_in = (dt_iop_roi_t){ 0, 0, width_in, height_in, 1.0 };
   dt_iop_roi_t roi_out = roi_in;
 
-  for(GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
+  for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
-    dt_dev_pixelpipe_iop_t *piece = piece_lookup ? g_hash_table_lookup(piece_lookup, module) : NULL;
-    dt_dev_pixelpipe_iop_t temp_piece;
-    gboolean temp = FALSE;
-
-    if(!piece)
-    {
-      _init_temp_piece(&temp_piece, module, use_pipe, width_in, height_in);
-      piece = &temp_piece;
-      temp = TRUE;
-    }
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
+    dt_iop_module_t *module = piece->module;
 
     piece->buf_in = roi_in;
 
@@ -284,11 +217,7 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t 
 
     piece->buf_out = roi_out;
     roi_in = roi_out;
-
-    if(temp) dt_iop_cleanup_pipe(module, use_pipe, piece);
   }
-
-  if(piece_lookup) g_hash_table_destroy(piece_lookup);
 
   *width = roi_out.width;
   *height = roi_out.height;
@@ -304,35 +233,15 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
   // upstream in the pipeline for proper pipeline cache invalidation, so we need to browse the pipeline
   // backwards.
 
-  if(!dev || !dev->iop) return;
-
-  const int input_width = pipe ? pipe->iwidth : dev->image_storage.width;
-  const int input_height = pipe ? pipe->iheight : dev->image_storage.height;
-
-  const gboolean pipe_ready = (pipe && pipe->nodes);
-  dt_dev_pixelpipe_t temp_pipe;
-  dt_dev_pixelpipe_t *use_pipe = pipe_ready ? pipe : &temp_pipe;
-  if(!pipe_ready) _init_temp_pipe(use_pipe, dev, input_width, input_height);
-
-  GHashTable *piece_lookup = _build_piece_lookup(pipe_ready ? pipe : NULL);
+  // The virtual pipe is expected to be ready before calling this.
+  // This function no longer supports NULL pipes or ad-hoc temp nodes.
 
   dt_iop_roi_t roi_out_temp = roi_out;
   dt_iop_roi_t roi_in;
-  for(GList *mods = g_list_last(dev->iop); mods; mods = g_list_previous(mods))
+  for(GList *nodes = g_list_last(pipe->nodes); nodes; nodes = g_list_previous(nodes))
   {
-    dt_iop_module_t *module = (dt_iop_module_t *)mods->data;
-    dt_dev_pixelpipe_iop_t *piece = piece_lookup ? g_hash_table_lookup(piece_lookup, module) : NULL;
-    dt_dev_pixelpipe_iop_t temp_piece;
-    gboolean temp = FALSE;
-
-    if(!piece)
-    {
-      _init_temp_piece(&temp_piece, module, use_pipe, input_width, input_height);
-      piece = &temp_piece;
-      temp = TRUE;
-      piece->buf_in = (dt_iop_roi_t){ 0, 0, input_width, input_height, 1.0 };
-      piece->buf_out = piece->buf_in;
-    }
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
+    dt_iop_module_t *module = piece->module;
 
     piece->planned_roi_out = roi_out_temp;
 
@@ -358,13 +267,10 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
     }
     */
 
-    if(!temp) piece->planned_roi_in = roi_in;
+    piece->planned_roi_in = roi_in;
     roi_out_temp = roi_in;
-
-    if(temp) dt_iop_cleanup_pipe(module, use_pipe, piece);
   }
 
-  if(piece_lookup) g_hash_table_destroy(piece_lookup);
 }
 
 static uint64_t _default_pipe_hash(dt_dev_pixelpipe_t *pipe)
@@ -373,7 +279,8 @@ static uint64_t _default_pipe_hash(dt_dev_pixelpipe_t *pipe)
   return dt_hash(5381, (const char *)&pipe->image.filename, DT_MAX_FILENAME_LEN);
 }
 
-uint64_t dt_dev_pixelpipe_node_hash(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t roi_out, const int pos)
+uint64_t dt_dev_pixelpipe_node_hash(dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece, 
+                                    const dt_iop_roi_t roi_out, const int pos)
 {
   // to be called at runtime, not at pipe init.
 
@@ -677,7 +584,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   if(status & DT_DEV_PIPE_REMOVE)
   {
     // modules have been added in between or removed. need to rebuild the whole pipeline.
-    dt_dev_pixelpipe_cleanup_nodes(pipe);
+    if(pipe->nodes) dt_dev_pixelpipe_cleanup_nodes(pipe);
     dt_dev_pixelpipe_create_nodes(pipe, dev);
     dt_dev_pixelpipe_synch_all(pipe, dev);
   }
@@ -696,6 +603,34 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   pipe->changed = DT_DEV_PIPE_UNCHANGED;
 
   dt_show_times_f(&start, "[dev_pixelpipe] pipeline resync with history", "for pipe %s", type);
+}
+
+static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag)
+{
+  // Virtual pipe exists only for GUI geometry (ROI/mask transforms) and never processes pixels.
+  if(!dev || !dev->gui_attached || !dev->virtual_pipe) return;
+  if(!dev->roi.raw_inited || dev->image_storage.id <= 0) return;
+
+  // Ensure its input image metadata matches the current dev state.
+  if(dev->virtual_pipe->imgid != dev->image_storage.id
+     || dev->virtual_pipe->iwidth != dev->roi.raw_width
+     || dev->virtual_pipe->iheight != dev->roi.raw_height
+     || dev->virtual_pipe->image.id != dev->image_storage.id)
+  {
+    dt_dev_pixelpipe_set_input(dev->virtual_pipe, dev, dev->image_storage.id,
+                               dev->roi.raw_width, dev->roi.raw_height, DT_MIPMAP_FULL);
+  }
+
+  // Mirror the preview-pipe change flags and commit immediately.
+  _change_pipe(dev->virtual_pipe, flag);
+  dt_dev_pixelpipe_change(dev->virtual_pipe, dev);
+
+  dev->virtual_pipe->status = DT_DEV_PIXELPIPE_VALID;
+}
+
+void dt_dev_pixelpipe_sync_virtual(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag)
+{
+  _sync_virtual_pipe(dev, flag);
 }
 
 gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)

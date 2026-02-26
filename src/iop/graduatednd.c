@@ -246,8 +246,8 @@ static int set_grad_from_points(struct dt_iop_module_t *self, float xa, float ya
   float pts[4]
       = { xa * self->dev->roi.preview_width, ya * self->dev->roi.preview_height,
           xb * self->dev->roi.preview_width, yb * self->dev->roi.preview_height };
-  dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+  dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
   pts[0] /= (float)piece->buf_out.width;
   pts[2] /= (float)piece->buf_out.width;
   pts[1] /= (float)piece->buf_out.height;
@@ -341,7 +341,7 @@ static int set_points_from_grad(struct dt_iop_module_t *self, float *xa, float *
   const float sinv = sinf(v);
   dt_boundingbox_t pts;
 
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
   if(!piece) return 0;
   float wp = piece->buf_out.width, hp = piece->buf_out.height;
 
@@ -455,7 +455,7 @@ static int set_points_from_grad(struct dt_iop_module_t *self, float *xa, float *
   }
   // now we want that points to take care of distort modules
 
-  if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2))
+  if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2))
     return 0;
   *xa = pts[0] / self->dev->roi.preview_width;
   *ya = pts[1] / self->dev->roi.preview_height;

@@ -2759,7 +2759,7 @@ static void _draw_save_lines_to_params(dt_iop_module_t *self)
     float pts[8] = { g->lines[0].p1[0], g->lines[0].p1[1], g->lines[0].p2[0],
                      g->lines[0].p2[1], g->lines[1].p1[0], g->lines[1].p1[1],
                      g->lines[1].p2[0], g->lines[1].p2[1] };
-    if(dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 4))
     {
       for(int i = 0; i < 8; i++) p->last_quad_lines[i] = pts[i];
@@ -2784,7 +2784,7 @@ static void _draw_save_lines_to_params(dt_iop_module_t *self)
         if(p->last_drawn_lines_count >= MAX_SAVED_LINES) break;
       }
     }
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+    dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_BACK_EXCL, p->last_drawn_lines,
                                       p->last_drawn_lines_count * 2);
   }
@@ -2800,7 +2800,7 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
   if(!g || !p) return FALSE;
 
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
 
   if(method == ASHIFT_METHOD_QUAD
      && p->last_quad_lines[0] > 0.0f && p->last_quad_lines[1] > 0.0f
@@ -2810,7 +2810,7 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
                      p->last_quad_lines[2], p->last_quad_lines[3],
                      p->last_quad_lines[4], p->last_quad_lines[5],
                      p->last_quad_lines[6], p->last_quad_lines[7] };
-    if(dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+    if(dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                      DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 4))
     {
       if(g->lines) free(g->lines);
@@ -2846,7 +2846,7 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
     for(int i = 0; i < p->last_drawn_lines_count * 4; i++)
       pts[i] = p->last_drawn_lines[i];
 
-    if(dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+    if(dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                      DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, p->last_drawn_lines_count * 2))
     {
       if(g->lines) free(g->lines);
@@ -2975,7 +2975,7 @@ static void _do_get_structure_lines(dt_iop_module_t *self)
     return;
   }
 
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
 
   _do_clean_structure(self, p, TRUE);
 
@@ -3010,7 +3010,7 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
     return;
   }
 
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
 
   _do_clean_structure(self, p, TRUE);
 
@@ -3025,7 +3025,7 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
     const float wd = self->dev->roi.preview_width;
     const float ht = self->dev->roi.preview_height;
     float pts[8] = { wd * 0.2, ht * 0.2, wd * 0.2, ht * 0.8, wd * 0.8, ht * 0.2, wd * 0.8, ht * 0.8 };
-    if(dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 4))
     {
       g->current_structure_method = ASHIFT_METHOD_QUAD;
@@ -3131,7 +3131,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     float ivecl = sqrtf(ivec[0] * ivec[0] + ivec[1] * ivec[1]);
 
     // where do they go?
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+    dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2);
 
     float ovec[2] = { points[2] - points[0], points[3] - points[1] };
@@ -3270,7 +3270,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     const float ivecl = sqrtf(ivec[0] * ivec[0] + ivec[1] * ivec[1]);
 
     // where do they go?
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+    dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2);
 
     const float ovec[2] = { points[2] - points[0], points[3] - points[1] };
@@ -3625,9 +3625,9 @@ static int get_points(struct dt_iop_module_t *self, const dt_iop_ashift_line_t *
   }
 
   // third step: transform all points
-  if(!dt_dev_distort_transform_plus(dev, dev->preview_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL, my_points, total_points))
+  if(!dt_dev_distort_transform_plus(dev, dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL, my_points, total_points))
     goto error;
-  if(!dt_dev_distort_transform_plus(dev, dev->preview_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
+  if(!dt_dev_distort_transform_plus(dev, dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
                                     my_extremas, 2 * lines_count))
     goto error;
 
@@ -3672,14 +3672,14 @@ error:
 }
 
 /* this function replaces this sentence, it calls distort_transform() for this module on the pipe
-if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->priority, self->priority + 1,
+if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->priority, self->priority + 1,
       (float *)V, 4))
 */
 static int call_distort_transform(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, struct dt_iop_module_t *self,
                                   float *points, size_t points_count)
 {
   int ret = 0;
-  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->preview_pipe, self);
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
   if(!piece) return ret;
   if(piece->module == self && /*piece->enabled && */  //see note below
      !dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, piece->module))
@@ -3700,9 +3700,6 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_develop_t *dev = self->dev;
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
   dt_iop_ashift_params_t *p = _get_ashift_params(self);
-
-  if(!dt_dev_pixelpipe_is_backbufer_valid(self->dev->preview_pipe, self->dev))
-    return;
 
   // the usual rescaling stuff
   const float wd = dev->roi.preview_width;
@@ -3816,7 +3813,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                     { ixo + iwd,  iyo       } };
 
   // convert coordinates of corners to coordinates of this module's output
-  if(!call_distort_transform(self->dev, self->dev->preview_pipe, self, (float *)V, 4))
+  if(!call_distort_transform(self->dev, self->dev->virtual_pipe, self, (float *)V, 4))
     return;
 
   // get x/y-offset as well as width and height of output buffer
@@ -3833,10 +3830,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // Paint black outside area when not in editing mode then returns.
   if(!g->editing)
   {
-    if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+    if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)V, 4))
       return;
-    const float scale_factor = dt_dev_get_natural_scale(dev, dev->preview_pipe);
+    const float scale_factor = dt_dev_get_natural_scale(dev, dev->virtual_pipe);
     for(size_t i = 0; i < 4; i++)
     {
       V[i][0] *= scale_factor;
@@ -3867,10 +3864,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
                     { xmin + p->cr * owd, ymin + p->ct * oht } };
 
   // convert clipping corners to final output image
-  if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+  if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)C, 4))
     return;
-  if(!dt_dev_distort_transform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+  if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, (float *)V, 4))
     return;
 
@@ -3932,7 +3929,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->fitting || g->lines == NULL || !g->buf || !self->enabled) return;
 
   // get hash value that changes if distortions from here to the end of the pixelpipe changed
-  const uint64_t hash = dev->preview_pipe->hash;
+  const uint64_t hash = dev->virtual_pipe->hash;
   // get hash value that changes if coordinates of lines have changed
   const uint64_t lines_hash = _get_lines_hash(g->lines, g->lines_count);
 
@@ -3950,7 +3947,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     g->draw_points = NULL;
     g->points_lines_count = 0;
 
-    const float scale = 1.0f; // / dt_dev_get_natural_scale(dev, dev->preview_pipe);
+    const float scale = 1.0f; // / dt_dev_get_natural_scale(dev, dev->virtual_pipe);
 
 
     if(!get_points(self, g->lines, g->lines_count, g->lines_version, &g->points, &g->draw_points, &g->points_idx,
@@ -4162,7 +4159,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(g->draw_point_move)
   {
     float pts[2] = { pzx * wd, pzy * ht };
-    if(dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
       // first we move the point
@@ -4221,7 +4218,7 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(g->draw_line_move >= 0)
   {
     float pts[2] = { pzx * wd, pzy * ht };
-    if(dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+    if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
       const float dx = (pts[0] - g->draw_pointmove_x);
@@ -4436,7 +4433,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
       if(g->points_idx[n].near)
       {
         float pts[2] = { pzx * wd, pzy * ht };
-        dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+        dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                           DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
         g->draw_line_move = n;
         g->draw_pointmove_x = pts[0];
@@ -4509,7 +4506,7 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     // we instantiate a new line with both extrema at the current position
     // and enable the "move point" mode with the second extrema
     float pts[2] = { pzx * wd, pzy * ht };
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
+    dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
     const int count = g->lines_count + 1;
     // if count > MAX_SAVED_LINES we alert that the next lines won't be saved in params
@@ -4570,7 +4567,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
     g->straightening = FALSE;
     // adjust the line with possible current angle and flip on this module
     float pts[4] = { x, y, g->lastx, g->lasty };
-    dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe,
+    dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe,
                                       self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
 
