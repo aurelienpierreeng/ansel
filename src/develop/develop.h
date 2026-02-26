@@ -279,26 +279,6 @@ typedef struct dt_develop_t
   /* proxy for communication between plugins and develop/darkroom */
   struct
   {
-    // modulegroups plugin hooks
-    struct
-    {
-      struct dt_lib_module_t *module;
-      /* switch module group */
-      void (*set)(struct dt_lib_module_t *self, uint32_t group);
-      /* get current module group */
-      uint32_t (*get)(struct dt_lib_module_t *self);
-      /* get activated module group */
-      uint32_t (*get_activated)(struct dt_lib_module_t *self);
-      /* test if iop group flags matches modulegroup */
-      gboolean (*test)(struct dt_lib_module_t *self, uint32_t group, uint32_t iop_group);
-      /* switch to modulegroup */
-      void (*switch_group)(struct dt_lib_module_t *self, struct dt_iop_module_t *module);
-      /* update modulegroup visibility */
-      void (*update_visibility)(struct dt_lib_module_t *self);
-      /* test if module is preset in one of the current groups */
-      gboolean (*test_visible)(struct dt_lib_module_t *self, gchar *module);
-    } modulegroups;
-
     // snapshots plugin hooks
     struct
     {
@@ -461,16 +441,12 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht);
 void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h);
 
 /*
- * modulegroups plugin hooks
+ * modulegroups helpers
  */
-/** switch to modulegroup of module */
+/** request modulegroups to show the group of the given module */
 void dt_dev_modulegroups_switch(dt_develop_t *dev, struct dt_iop_module_t *module);
 /** update modulegroup visibility */
 void dt_dev_modulegroups_update_visibility(dt_develop_t *dev);
-/** set the active modulegroup */
-void dt_dev_modulegroups_set(dt_develop_t *dev, uint32_t group);
-/** get the active modulegroup */
-uint32_t dt_dev_modulegroups_get(dt_develop_t *dev);
 /** reorder the module list */
 void dt_dev_reorder_gui_module_list(dt_develop_t *dev);
 

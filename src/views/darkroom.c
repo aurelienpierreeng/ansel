@@ -1911,9 +1911,6 @@ void enter(dt_view_t *self)
   // tagging should be ignored.
   dt_undo_clear(darktable.undo, DT_UNDO_TAGS);
 
-  // switch on groups as they were last time:
-  dt_dev_modulegroups_set(dev, dt_conf_get_int("plugins/darkroom/groups"));
-
   dt_iop_color_picker_init();
 
   dt_image_check_camera_missing_sample(&dev->image_storage);
@@ -1965,9 +1962,6 @@ void leave(dt_view_t *self)
 
   // While we wait for possible pipelines to finish,
   // do the GUI cleaning.
-
-  // store groups for next time:
-  dt_conf_set_int("plugins/darkroom/groups", dt_dev_modulegroups_get(darktable.develop));
 
   // store last active plugin:
   if(darktable.develop->gui_module)

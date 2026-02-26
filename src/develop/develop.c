@@ -77,6 +77,7 @@
 #include "common/tags.h"
 #include "control/conf.h"
 #include "control/control.h"
+#include "control/signal.h"
 #include "control/jobs.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
@@ -761,30 +762,16 @@ int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid)
   return (dev->image_storage.id == imgid) ? 1 : 0;
 }
 
-void dt_dev_modulegroups_set(dt_develop_t *dev, uint32_t group)
-{
-  if(dev->proxy.modulegroups.module && dev->proxy.modulegroups.set)
-    dev->proxy.modulegroups.set(dev->proxy.modulegroups.module, group);
-}
-
-uint32_t dt_dev_modulegroups_get(dt_develop_t *dev)
-{
-  if(dev->proxy.modulegroups.module && dev->proxy.modulegroups.get)
-    return dev->proxy.modulegroups.get(dev->proxy.modulegroups.module);
-
-  return 0;
-}
-
 void dt_dev_modulegroups_switch(dt_develop_t *dev, dt_iop_module_t *module)
 {
-  if(dev->proxy.modulegroups.module && dev->proxy.modulegroups.switch_group)
-    dev->proxy.modulegroups.switch_group(dev->proxy.modulegroups.module, module);
+  if(!dev || !module) return;
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULEGROUPS_SET, module);
 }
 
 void dt_dev_modulegroups_update_visibility(dt_develop_t *dev)
 {
-  if(dev->proxy.modulegroups.module && dev->proxy.modulegroups.switch_group)
-    dev->proxy.modulegroups.update_visibility(dev->proxy.modulegroups.module);
+  if(!dev) return;
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MODULEGROUPS_SET, NULL);
 }
 
 void dt_dev_masks_list_change(dt_develop_t *dev)

@@ -13,7 +13,7 @@
     Copyright (C) 2018-2022 Pascal Obry.
     Copyright (C) 2018 rawfiner.
     Copyright (C) 2019-2022 Aldric Renaudin.
-    Copyright (C) 2019-2021, 2023, 2025 Aurélien PIERRE.
+    Copyright (C) 2019-2021, 2023, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2019, 2021 Hanno Schwalm.
     Copyright (C) 2020-2022 Chris Elston.
     Copyright (C) 2020-2021 Hubert Kowalski.
@@ -51,6 +51,7 @@
 #include "common/image_cache.h"
 #include "control/conf.h"
 #include "control/control.h"
+#include "control/signal.h"
 #include "develop/develop.h"
 #include "gui/gtk.h"
 #include "libs/lib.h"
@@ -68,26 +69,15 @@ typedef struct dt_lib_modulegroups_t
   GtkWidget *notebook;
 } dt_lib_modulegroups_t;
 
+static dt_lib_module_t *g_modulegroups_module = NULL;
+static dt_lib_modulegroups_t *g_modulegroups_data = NULL;
+
 /* toggle button callback */
 static void _lib_modulegroups_toggle(GtkNotebook *notebook, GtkWidget *page, guint page_num, gpointer user_data);
 /* helper function to update iop module view depending on group */
 static void _lib_modulegroups_update_iop_visibility(dt_lib_module_t *self);
 
-/* modulergroups proxy set group function
-   \see dt_dev_modulegroups_set()
-*/
-static void _lib_modulegroups_set(dt_lib_module_t *self, uint32_t group);
-/* modulegroups proxy update visibility function
- */
-static void _lib_modulegroups_update_visibility_proxy(dt_lib_module_t *self);
-/* modulegroups proxy get group function
-  \see dt_dev_modulegroups_get()
-*/
-static uint32_t _lib_modulegroups_get(dt_lib_module_t *self);
-/* modulegroups proxy switch group function.
-   sets the active group which module belongs too.
-*/
-static void _lib_modulegroups_switch_group(dt_lib_module_t *self, dt_iop_module_t *module);
+static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpointer user_data);
 
 static gboolean _focus_next_module();
 static gboolean _focus_previous_module();
@@ -148,6 +138,27 @@ int _modulegroups_cycle_tabs(int user_set_group)
   return group;
 }
 
+static uint32_t _modulegroups_get_current_group()
+{
+  if(g_modulegroups_data && g_modulegroups_data->current < DT_MODULEGROUP_SIZE)
+    return g_modulegroups_data->current;
+
+  return DT_MODULEGROUP_ACTIVE_PIPE;
+}
+
+static void _modulegroups_set_current_group(uint32_t group)
+{
+  if(!g_modulegroups_module || !g_modulegroups_data) return;
+  if(group >= DT_MODULEGROUP_SIZE) return;
+  if(g_modulegroups_data->current == group) return;
+
+  g_modulegroups_data->current = group;
+  if(GTK_IS_NOTEBOOK(g_modulegroups_data->notebook))
+    gtk_notebook_set_current_page(GTK_NOTEBOOK(g_modulegroups_data->notebook), group);
+
+  _lib_modulegroups_update_iop_visibility(g_modulegroups_module);
+}
+
 static gboolean _modulegroups_switch_tab_next(GtkAccelGroup *accel_group, GObject *accelerable, guint keyval,
                                               GdkModifierType modifier, gpointer data)
 {
@@ -157,8 +168,8 @@ static gboolean _modulegroups_switch_tab_next(GtkAccelGroup *accel_group, GObjec
   dt_iop_module_t *focused = dev->gui_module;
   if(focused) dt_iop_gui_set_expanded(focused, FALSE, TRUE);
 
-  uint32_t current = dt_dev_modulegroups_get(dev);
-  dt_dev_modulegroups_set(dev, _modulegroups_cycle_tabs(current + 1));
+  uint32_t current = _modulegroups_get_current_group();
+  _modulegroups_set_current_group(_modulegroups_cycle_tabs(current + 1));
   dt_iop_request_focus(NULL);
   return TRUE;
 }
@@ -172,8 +183,8 @@ static gboolean _modulegroups_switch_tab_previous(GtkAccelGroup *accel_group, GO
   dt_iop_module_t *focused = dev->gui_module;
   if(focused) dt_iop_gui_set_expanded(focused, FALSE, TRUE);
 
-  uint32_t current = dt_dev_modulegroups_get(dev);
-  dt_dev_modulegroups_set(dev, _modulegroups_cycle_tabs(current - 1));
+  uint32_t current = _modulegroups_get_current_group();
+  _modulegroups_set_current_group(_modulegroups_cycle_tabs(current - 1));
   dt_iop_request_focus(NULL);
 
   return TRUE;
@@ -188,7 +199,7 @@ static gboolean _lib_modulegroups_scroll(GtkWidget *widget, GdkEventScroll *even
 
   if(dt_gui_get_scroll_unit_deltas(event, &delta_x, &delta_y))
   {
-    int current = dt_dev_modulegroups_get(darktable.develop);
+    int current = _modulegroups_get_current_group();
     int future = 0;
     if(delta_x > 0. || delta_y > 0.)
       future = current + 1;
@@ -211,7 +222,7 @@ static gboolean _lib_modulegroups_scroll(GtkWidget *widget, GdkEventScroll *even
       }
     }
 
-    dt_dev_modulegroups_set(darktable.develop, _modulegroups_cycle_tabs(future));
+    _modulegroups_set_current_group(_modulegroups_cycle_tabs(future));
     dt_iop_request_focus(NULL);
   }
 
@@ -248,7 +259,7 @@ static dt_iop_module_t *_module_from_active_group(dt_iop_module_t *mod, uint32_t
 /* WARNING: first/last refer to pipeline nodes order, which is reversed compared to GUI order. */
 static dt_iop_module_t *_find_first_visible_module()
 {
-  uint32_t current_group = dt_dev_modulegroups_get(darktable.develop);
+  uint32_t current_group = _modulegroups_get_current_group();
 
   for(GList *module = g_list_first(darktable.develop->iop); module; module = g_list_next(module))
   {
@@ -260,7 +271,7 @@ static dt_iop_module_t *_find_first_visible_module()
 
 static dt_iop_module_t *_find_last_visible_module()
 {
-  uint32_t current_group = dt_dev_modulegroups_get(darktable.develop);
+  uint32_t current_group = _modulegroups_get_current_group();
 
   for(GList *module = g_list_last(darktable.develop->iop); module; module = g_list_previous(module))
   {
@@ -431,6 +442,12 @@ void gui_init(dt_lib_module_t *self)
   /* initialize ui widgets */
   dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)g_malloc0(sizeof(dt_lib_modulegroups_t));
   self->data = (void *)d;
+  const int conf_group = dt_conf_get_int("plugins/darkroom/groups");
+  d->current = (conf_group >= 0 && conf_group < DT_MODULEGROUP_SIZE)
+                   ? (uint32_t)conf_group
+                   : DT_MODULEGROUP_ACTIVE_PIPE;
+  g_modulegroups_module = self;
+  g_modulegroups_data = d;
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   dt_gui_add_help_link(self->widget, dt_get_help_url(self->plugin_name));
@@ -458,6 +475,7 @@ void gui_init(dt_lib_module_t *self)
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_notebook_append_page(GTK_NOTEBOOK(d->notebook), page, label);
   }
+  gtk_notebook_set_current_page(GTK_NOTEBOOK(d->notebook), d->current);
   gtk_notebook_popup_enable(GTK_NOTEBOOK(d->notebook));
   gtk_notebook_set_scrollable(GTK_NOTEBOOK(d->notebook), TRUE);
   g_signal_connect(G_OBJECT(d->notebook), "switch_page", G_CALLBACK(_lib_modulegroups_toggle), self);
@@ -466,17 +484,11 @@ void gui_init(dt_lib_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->notebook), TRUE, TRUE, 0);
 
-  if(d->current == DT_MODULEGROUP_NONE) _lib_modulegroups_update_iop_visibility(self);
+  _lib_modulegroups_update_iop_visibility(self);
   gtk_widget_show_all(self->widget);
 
-  /*
-   * set the proxy functions
-   */
-  darktable.develop->proxy.modulegroups.module = self;
-  darktable.develop->proxy.modulegroups.set = _lib_modulegroups_set;
-  darktable.develop->proxy.modulegroups.update_visibility = _lib_modulegroups_update_visibility_proxy;
-  darktable.develop->proxy.modulegroups.get = _lib_modulegroups_get;
-  darktable.develop->proxy.modulegroups.switch_group = _lib_modulegroups_switch_group;
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_MODULEGROUPS_SET,
+                                  G_CALLBACK(_lib_modulegroups_signal_set), self);
 
   dt_accels_new_darkroom_action(_modulegroups_switch_tab_next, darktable.develop, N_("Darkroom/Actions"),
                                 N_("move to the next modules tab"), GDK_KEY_Tab, GDK_CONTROL_MASK, _("Triggers the action"));
@@ -497,10 +509,19 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
-  darktable.develop->proxy.modulegroups.module = NULL;
-  darktable.develop->proxy.modulegroups.set = NULL;
-  darktable.develop->proxy.modulegroups.get = NULL;
-  darktable.develop->proxy.modulegroups.switch_group = NULL;
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_modulegroups_signal_set), self);
+
+  if(self->data)
+  {
+    dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
+    dt_conf_set_int("plugins/darkroom/groups", (int)d->current);
+  }
+
+  if(g_modulegroups_module == self)
+  {
+    g_modulegroups_module = NULL;
+    g_modulegroups_data = NULL;
+  }
 
   g_free(self->data);
   self->data = NULL;
@@ -515,6 +536,24 @@ static gboolean _is_module_in_history(const dt_iop_module_t *module)
   }
 
   return FALSE;
+}
+
+static gboolean _modulegroups_module_visible_in_current(const dt_lib_modulegroups_t *d, const dt_iop_module_t *module)
+{
+  if(!d || !module) return FALSE;
+
+  switch(d->current)
+  {
+    case DT_MODULEGROUP_ACTIVE_PIPE:
+      return _is_module_in_history(module) || module->enabled;
+
+    case DT_MODULEGROUP_NONE:
+      return !(module->flags() & IOP_FLAGS_DEPRECATED) || module->enabled;
+
+    default:
+      return d->current == module->default_group()
+             && (!(module->flags() & IOP_FLAGS_DEPRECATED) || module->enabled);
+  }
 }
 
 
@@ -606,66 +645,23 @@ static void _lib_modulegroups_toggle(GtkNotebook *notebook, GtkWidget *page, gui
   _lib_modulegroups_update_iop_visibility(self);
 }
 
-typedef struct _set_gui_thread_t
+static void _lib_modulegroups_signal_set(gpointer instance, gpointer module, gpointer user_data)
 {
-  dt_lib_module_t *self;
-  uint32_t group;
-} _set_gui_thread_t;
+  dt_lib_module_t *self = (dt_lib_module_t *)user_data;
+  dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
+  dt_iop_module_t *iop_module = (dt_iop_module_t *)module;
 
-static gboolean _lib_modulegroups_set_gui_thread(gpointer user_data)
-{
-  _set_gui_thread_t *params = (_set_gui_thread_t *)user_data;
-  dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)params->self->data;
-
-  /* set current group and update visibility */
-  if(params->group < DT_MODULEGROUP_SIZE && GTK_IS_NOTEBOOK(d->notebook))
+  if(iop_module && !_modulegroups_module_visible_in_current(d, iop_module) && GTK_IS_NOTEBOOK(d->notebook))
   {
-    d->current = params->group;
-    gtk_notebook_set_current_page(GTK_NOTEBOOK(d->notebook), params->group);
+    const uint32_t group = iop_module->default_group();
+    if(group < DT_MODULEGROUP_SIZE)
+    {
+      d->current = group;
+      gtk_notebook_set_current_page(GTK_NOTEBOOK(d->notebook), group);
+    }
   }
 
-  _lib_modulegroups_update_iop_visibility(params->self);
-  free(params);
-  return FALSE;
-}
-
-static gboolean _lib_modulegroups_upd_gui_thread(gpointer user_data)
-{
-  _set_gui_thread_t *params = (_set_gui_thread_t *)user_data;
-  _lib_modulegroups_update_iop_visibility(params->self);
-  free(params);
-  return FALSE;
-}
-
-/* this is a proxy function so it might be called from another thread */
-static void _lib_modulegroups_set(dt_lib_module_t *self, uint32_t group)
-{
-  _set_gui_thread_t *params = (_set_gui_thread_t *)malloc(sizeof(_set_gui_thread_t));
-  if(!params) return;
-  params->self = self;
-  params->group = group;
-  g_main_context_invoke(NULL, _lib_modulegroups_set_gui_thread, params);
-}
-
-/* this is a proxy function so it might be called from another thread */
-static void _lib_modulegroups_update_visibility_proxy(dt_lib_module_t *self)
-{
-  _set_gui_thread_t *params = (_set_gui_thread_t *)malloc(sizeof(_set_gui_thread_t));
-  if(!params) return;
-  params->self = self;
-  g_main_context_invoke(NULL, _lib_modulegroups_upd_gui_thread, params);
-}
-
-static void _lib_modulegroups_switch_group(dt_lib_module_t *self, dt_iop_module_t *module)
-{
-  _lib_modulegroups_set(self, module->default_group());
-}
-
-static uint32_t _lib_modulegroups_get(dt_lib_module_t *self)
-{
-  dt_lib_modulegroups_t *d = (dt_lib_modulegroups_t *)self->data;
-
-  return (d->current < DT_MODULEGROUP_SIZE) ? d->current : DT_MODULEGROUP_NONE;
+  _lib_modulegroups_update_iop_visibility(self);
 }
 
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.sh

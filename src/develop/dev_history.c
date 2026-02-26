@@ -1073,7 +1073,6 @@ void dt_dev_history_gui_update(dt_develop_t *dev)
   dt_dev_modules_update_multishow(dev);
   dt_dev_modulegroups_update_visibility(dev);
   dt_dev_masks_list_change(dev);
-  dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
 
   --darktable.gui->reset;
 }

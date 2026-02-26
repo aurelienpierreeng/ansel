@@ -348,9 +348,7 @@ int default_iop_focus(dt_gui_module_t *m, gboolean toggle)
   dt_iop_module_t *module = (dt_iop_module_t *) m;
 
   // Showing the module, if it isn't already visible
-  uint32_t current_group = dt_dev_modulegroups_get(darktable.develop);
-  if(!dt_is_module_in_group(module, current_group))
-    dt_dev_modulegroups_switch(darktable.develop, module);
+  dt_dev_modulegroups_switch(darktable.develop, module);
 
   // Expand and scroll
   if(darktable.develop->gui_module != module)
