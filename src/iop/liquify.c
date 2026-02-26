@@ -2818,7 +2818,7 @@ static void unselect_all(dt_iop_liquify_params_t *p)
       p->nodes[k].header.selected = 0;
 }
 
-static float get_zoom_scale(dt_develop_t *develop)
+static float get_zoom_scale(const dt_develop_t *develop)
 {
   return dt_dev_get_zoom_scale(develop,  1);
 }
@@ -2914,11 +2914,11 @@ static void get_point_scale(struct dt_iop_module_t *module, float x, float y, fl
                                     module->iop_order,DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
   dt_dev_distort_backtransform_plus(module->dev, module->dev->preview_pipe,
                                     module->iop_order,DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1);
-  const float nx = pts[0] / module->dev->preview_pipe->iwidth;
-  const float ny = pts[1] / module->dev->preview_pipe->iheight;
+  const float nx = pts[0] / module->dev->roi.raw_width;
+  const float ny = pts[1] / module->dev->roi.raw_height;
 
   *scale = get_zoom_scale(module->dev);
-  *pt = (nx * module->dev->pipe->iwidth) +  (ny * module->dev->pipe->iheight) * I;
+  *pt = (nx * module->dev->roi.raw_width) +  (ny * module->dev->roi.raw_height) * I;
 }
 
 int mouse_moved(struct dt_iop_module_t *module,
@@ -3115,10 +3115,10 @@ static void get_stamp_params(dt_iop_module_t *module, float *radius, float *r_st
   gtk_widget_get_allocation(widget, &allocation);
   const int last_win_min = MIN(allocation.width, allocation.height);
 
-  const dt_dev_pixelpipe_t *devpipe = module->dev->preview_pipe;
-  const float iwd_min = MIN(devpipe->iwidth, devpipe->iheight);
-  const float proc_wdht_min = MIN(devpipe->processed_width, devpipe->processed_height);
-  const float scale = 1.f / (get_zoom_scale(module->dev));
+  const dt_develop_t *dev = module->dev;
+  const float iwd_min = MIN(dev->roi.raw_width, dev->roi.raw_height);
+  const float proc_wdht_min = MIN(dev->roi.processed_width, dev->roi.processed_height);
+  const float scale = 1.f / (get_zoom_scale(dev));
   const float im_scale = 0.09f * iwd_min * last_win_min * scale / proc_wdht_min;
 
   *radius = dt_conf_get_sanitize_float(CONF_RADIUS, 0.1f*im_scale, 3.0f*im_scale, im_scale);

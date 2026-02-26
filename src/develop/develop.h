@@ -191,13 +191,25 @@ typedef struct dt_develop_t
     // the width x height bounding box.
     int32_t preview_width, preview_height;
 
-    // natural scaling = MIN(dev->width / dev->pipe->processed_width, dev->height / dev->pipe->processed_height)
+    // Dimension of the main image backbuffer
+    // They are at lower than or equal to (width, height),
+    // the bounding box defined by the widget where main image fits.
+    // Since the ROI may clip the zoomed-in image, they don't respect
+    // the final image aspect ratio
+    int32_t main_width, main_height;
+
+    // natural scaling = MIN(dev->width / dev->roi.processed_width, dev->height / dev->roi.processed_height)
     // aka ensure that image fits into widget minus margins/borders.
     float natural_scale;
 
     // Dimensions of the full-resolution RAW image
     // being worked on.
     int32_t raw_width, raw_height;
+
+    // Dimensions of the final processed image if we processed it full-resolution.
+    // This is used to get the final aspect ratio of an image,
+    // taking all cropping and distortions into account.
+    int32_t processed_width, processed_height;
 
     // Conveniency state to check if all widget sizes are inited
     gboolean gui_inited;
@@ -417,7 +429,7 @@ int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid);
 
 void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch);
 
-float dt_dev_get_zoom_scale(dt_develop_t *dev, gboolean preview);
+float dt_dev_get_zoom_scale(const dt_develop_t *dev, gboolean preview);
 
 // Set all the params of a backbuffer at once
 void dt_dev_set_backbuf(dt_backbuf_t *backbuf, const int width, const int height, const size_t bpp, 
@@ -541,7 +553,12 @@ void dt_dev_append_changed_tag(const int32_t imgid);
 // and `pipe->processed_height` are defined.
 // Natural scale is the rescaling factor such that the full-res pipeline output
 // (real or virtual) fits within darkroom widget area (minus borders/margins)
-float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe);
+float dt_dev_get_natural_scale(dt_develop_t *dev);
+
+// Get the final size of the main thumbnail that fits within darkroom central widget
+// Needs to be recomputed when module parameters change (for modules changing ROI)
+// or when the widget is resized.
+int dt_dev_get_thumbnail_size(dt_develop_t *dev);
 
 /**
  * @brief  Get the overlay scale factor

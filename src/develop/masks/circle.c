@@ -479,8 +479,8 @@ static int _circle_get_points_source(dt_develop_t *dev, float x, float y, float 
 {
   (void)radius2; // keep compiler from complaining about unused arg
   (void)rotation;
-  const float wd = dev->preview_pipe->iwidth;
-  const float ht = dev->preview_pipe->iheight;
+  const float wd = dev->roi.raw_width;
+  const float ht = dev->roi.raw_height;
 
   // compute the points of the target (center and circumference of circle)
   // we get the point in RAW image reference
@@ -536,8 +536,8 @@ static int _circle_get_points(dt_develop_t *dev, float x, float y, float radius,
 {
   (void)radius2; // keep compiler from complaining about unused arg
   (void)rotation;
-  const float wd = dev->preview_pipe->iwidth;
-  const float ht = dev->preview_pipe->iheight;
+  const float wd = dev->roi.raw_width;
+  const float ht = dev->roi.raw_height;
 
   // compute the points we need to transform (center and circumference of circle)
   *points = _points_to_transform(x, y, radius, wd, ht, points_count);
@@ -596,8 +596,8 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
     float back_pts[2] = { xpos, ypos };
     dt_dev_distort_backtransform(darktable.develop, back_pts, 1);
     // normalize
-    float x = back_pts[0] / dev->preview_pipe->iwidth;
-    float y = back_pts[1] / dev->preview_pipe->iheight;
+    float x = back_pts[0] / dev->roi.raw_width;
+    float y = back_pts[1] / dev->roi.raw_height;
     // we get all the points, distorted if needed, of the sample form
     float *points = NULL;
     int points_count = 0;

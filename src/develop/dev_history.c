@@ -890,6 +890,9 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 
   if(darktable.gui && dev->gui_attached)
   {
+    if(module->modify_roi_in || module->modify_roi_out)
+      dt_dev_get_thumbnail_size(dev);
+
     if(redraw) dt_dev_process_all(dev);
     
     if(module) 
@@ -1039,6 +1042,9 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
 
   // Reloading defaults might have changed the global history hash
   dev->history_hash = dt_dev_history_get_hash(dev);
+
+  // Update darkroom sizes in case clipping & distortion changed
+  if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
 }
 
 void dt_dev_pop_history_items(dt_develop_t *dev)

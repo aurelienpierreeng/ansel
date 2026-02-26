@@ -289,8 +289,8 @@ static int _ellipse_get_points_source(dt_develop_t *dev, float xx, float yy, flo
                                       float radius_b, float rotation, float **points, int *points_count,
                                       const dt_iop_module_t *module)
 {
-  const float wd = dev->preview_pipe->iwidth;
-  const float ht = dev->preview_pipe->iheight;
+  const float wd = dev->roi.raw_width;
+  const float ht = dev->roi.raw_height;
 
   // compute the points of the target (center and circumference of ellipse)
   // we get the point in RAW image reference
@@ -346,8 +346,8 @@ error:
 static int _ellipse_get_points(dt_develop_t *dev, float xx, float yy, float radius_a, float radius_b,
                                float rotation, float **points, int *points_count)
 {
-  const float wd = dev->preview_pipe->iwidth;
-  const float ht = dev->preview_pipe->iheight;
+  const float wd = dev->roi.raw_width;
+  const float ht = dev->roi.raw_height;
 
   *points = _points_to_transform(xx, yy, radius_a, radius_b, rotation, wd, ht, points_count);
   if(!*points) return 1;
@@ -1049,8 +1049,8 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     }
     float pts[2] = { xpos, ypos };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
-    x = pts[0] / darktable.develop->preview_pipe->iwidth;
-    y = pts[1] / darktable.develop->preview_pipe->iheight;
+    x = pts[0] / darktable.develop->roi.raw_width;
+    y = pts[1] / darktable.develop->roi.raw_height;
 
     // we get all the points, distorted if needed of the sample form
     float *points = NULL;

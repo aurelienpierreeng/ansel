@@ -692,8 +692,8 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
   *points = NULL;
   *points_count = 0;
 
-  const float wd = dev->preview_pipe->iwidth;
-  const float ht = dev->preview_pipe->iheight;
+  const float wd = dev->roi.raw_width;
+  const float ht = dev->roi.raw_height;
   const float scale = sqrtf(wd * wd + ht * ht);
   const float distance = 0.1f * fminf(wd, ht);
 
@@ -810,8 +810,8 @@ static int _gradient_get_pts_border(dt_develop_t *dev, float x, float y, float r
   *points_count = 0;
 
   // Get border curve dimensions and scaling
-  const float wd = dev->preview_pipe->iwidth;
-  const float ht = dev->preview_pipe->iheight;
+  const float wd = dev->roi.raw_width;
+  const float ht = dev->roi.raw_height;
   const float scale = sqrtf(wd * wd + ht * ht);
   
   // Calculate perpendicular offsets (±90 degrees from rotation)
@@ -890,8 +890,8 @@ static void _gradient_draw_shape(cairo_t *cr, const float *pts_line, const int p
   const float *points = (border) ? pts_line : pts_line + 6;
   const int points_count = (border) ? pts_line_count : pts_line_count - 3;
   
-  const float wd = darktable.develop->preview_pipe->iwidth;
-  const float ht = darktable.develop->preview_pipe->iheight;
+  const float wd = darktable.develop->roi.raw_width;
+  const float ht = darktable.develop->roi.raw_height;
 
   int i = 0;
   while(i < points_count)
@@ -1026,8 +1026,8 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
     }
     float pts[2] = { xpos, ypos };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);
-    float x = pts[0] / darktable.develop->preview_pipe->iwidth;
-    float y = pts[1] / darktable.develop->preview_pipe->iheight;
+    float x = pts[0] / darktable.develop->roi.raw_width;
+    float y = pts[1] / darktable.develop->roi.raw_height;
 
     // we get all the points, distorted if needed of the sample form
     float *points = NULL;

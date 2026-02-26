@@ -1817,8 +1817,8 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
 
   const float wd = dev->roi.preview_width / dev->roi.natural_scale;
   const float ht = dev->roi.preview_height / dev->roi.natural_scale;
-  const int iwidth = darktable.develop->preview_pipe->iwidth;
-  const int iheight = darktable.develop->preview_pipe->iheight;
+  const int iwidth = darktable.develop->roi.raw_width;
+  const int iheight = darktable.develop->roi.raw_height;
 
   if(gui->node_dragging >= 0)
   {

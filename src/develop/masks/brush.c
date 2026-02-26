@@ -1834,8 +1834,8 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, float p
 
       for(int i = 0; i < gui->guipoints_count; i++)
       {
-        guipoints[i * 2] /= darktable.develop->preview_pipe->iwidth;
-        guipoints[i * 2 + 1] /= darktable.develop->preview_pipe->iheight;
+        guipoints[i * 2] /= darktable.develop->roi.raw_width;
+        guipoints[i * 2 + 1] /= darktable.develop->roi.raw_height;
       }
 
       // we consolidate pen pressure readings into payload
@@ -1969,8 +1969,8 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   dt_develop_t *dev = (dt_develop_t *)darktable.develop;
   const float wd = dev->roi.preview_width / dev->roi.natural_scale;
   const float ht = dev->roi.preview_height / dev->roi.natural_scale;
-  const int iwidth = darktable.develop->preview_pipe->iwidth;
-  const int iheight = darktable.develop->preview_pipe->iheight;
+  const int iwidth = darktable.develop->roi.raw_width;
+  const int iheight = darktable.develop->roi.raw_height;
 
   if(gui->creation)
   {
@@ -2166,8 +2166,8 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     // we move all points
     if(gui->form_dragging)
     {
-      const float dx = pts[0] / darktable.develop->preview_pipe->iwidth - dragging_shape->node[0];
-      const float dy = pts[1] / darktable.develop->preview_pipe->iheight - dragging_shape->node[1];
+      const float dx = pts[0] / darktable.develop->roi.raw_width - dragging_shape->node[0];
+      const float dy = pts[1] / darktable.develop->roi.raw_height - dragging_shape->node[1];
       for(GList *nodes = form->points; nodes; nodes = g_list_next(nodes))
       {
         dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)nodes->data;
@@ -2182,8 +2182,8 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     }
     else //source dragging
     {
-      form->source[0] = pts[0] / darktable.develop->preview_pipe->iwidth;
-      form->source[1] = pts[1] / darktable.develop->preview_pipe->iheight;
+      form->source[0] = pts[0] / darktable.develop->roi.raw_width;
+      form->source[1] = pts[1] / darktable.develop->roi.raw_height;
     }
     // we recreate the form points
     dt_masks_gui_form_create(form, gui, index, module);
@@ -2339,8 +2339,8 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   // in creation mode
   if(gui->creation)
   {   
-    const float iwd = darktable.develop->preview_pipe->iwidth;
-    const float iht = darktable.develop->preview_pipe->iheight;
+    const float iwd = darktable.develop->roi.raw_width;
+    const float iht = darktable.develop->roi.raw_height;
     const float min_iwd_iht= MIN(iwd,iht);
 
     if(gui->guipoints_count == 0)

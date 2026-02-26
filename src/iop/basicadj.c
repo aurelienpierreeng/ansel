@@ -363,10 +363,10 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
       g->box_cood[2] = g->posx_to;
       g->box_cood[3] = g->posy_to;
       dt_dev_distort_backtransform(darktable.develop, g->box_cood, 2);
-      g->box_cood[0] /= self->dev->preview_pipe->iwidth;
-      g->box_cood[1] /= self->dev->preview_pipe->iheight;
-      g->box_cood[2] /= self->dev->preview_pipe->iwidth;
-      g->box_cood[3] /= self->dev->preview_pipe->iheight;
+      g->box_cood[0] /= self->dev->roi.raw_width;
+      g->box_cood[1] /= self->dev->roi.raw_height;
+      g->box_cood[2] /= self->dev->roi.raw_width;
+      g->box_cood[3] /= self->dev->roi.raw_height;
 
       g->button_down = 0;
       g->call_auto_exposure = 1;

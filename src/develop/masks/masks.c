@@ -3015,8 +3015,8 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *gui, dt_masks_fo
 {
   const float wd = darktable.develop->roi.preview_width;
   const float ht = darktable.develop->roi.preview_height;
-  const float iwd = darktable.develop->preview_pipe->iwidth;
-  const float iht = darktable.develop->preview_pipe->iheight;
+  const float iwd = darktable.develop->roi.raw_width;
+  const float iht = darktable.develop->roi.raw_height;
 
   // if this is the first time the relative pos is used
   if(gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE_TEMP)
@@ -3076,8 +3076,8 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const float i
                                          float *py, const int adding)
 {
   float x = 0.0f, y = 0.0f;
-  const float iwd = darktable.develop->preview_pipe->iwidth;
-  const float iht = darktable.develop->preview_pipe->iheight;
+  const float iwd = darktable.develop->roi.raw_width;
+  const float iht = darktable.develop->roi.raw_height;
   if(gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE)
   {
     x = xpos + gui->pos_source[0];

@@ -63,6 +63,7 @@
 #include "control/conf.h"
 #include "control/signal.h"
 #include "develop/blend.h"
+#include "develop/dev_pixelpipe.h"
 #include "develop/format.h"
 #include "develop/imageop_math.h"
 #include "develop/pixelpipe.h"

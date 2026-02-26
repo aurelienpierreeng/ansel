@@ -20,6 +20,7 @@
 #include "common/debug.h"
 #include "common/darktable.h"
 #include "common/dtpthread.h"
+#include "develop/imageop.h"
 #include "develop/pixelpipe.h"
 #include "develop/blend.h"
 #include "control/control.h"
@@ -175,16 +176,98 @@ gboolean dt_dev_pixelpipe_activemodule_disables_currentmodule(struct dt_develop_
           // cache bypass is our hint that the active module is in "editing" mode
 }
 
+static GHashTable *_build_piece_lookup(dt_dev_pixelpipe_t *pipe)
+{
+  if(!pipe || !pipe->nodes) return NULL;
+
+  GHashTable *lookup = g_hash_table_new(g_direct_hash, g_direct_equal);
+  for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
+  {
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
+    g_hash_table_insert(lookup, piece->module, piece);
+  }
+
+  return lookup;
+}
+
+static void _init_temp_pipe(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
+                            const int width_in, const int height_in)
+{
+  memset(pipe, 0, sizeof(*pipe));
+  pipe->type = (dev && dev->gui_attached) ? DT_DEV_PIXELPIPE_FULL : DT_DEV_PIXELPIPE_EXPORT;
+
+  if(dev)
+  {
+    dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, width_in, height_in, DT_MIPMAP_FULL);
+  }
+  else
+  {
+    pipe->iwidth = width_in;
+    pipe->iheight = height_in;
+  }
+}
+
+static void _init_temp_piece(dt_dev_pixelpipe_iop_t *piece, dt_iop_module_t *module,
+                             dt_dev_pixelpipe_t *pipe, const int width_in, const int height_in)
+{
+  memset(piece, 0, sizeof(*piece));
+  piece->enabled = module->enabled;
+  piece->request_histogram = DT_REQUEST_ONLY_IN_GUI;
+  piece->histogram_params.roi = NULL;
+  piece->histogram_params.bins_count = 256;
+  piece->histogram_stats.bins_count = 0;
+  piece->histogram_stats.pixels = 0;
+  piece->iwidth = width_in;
+  piece->iheight = height_in;
+  piece->module = module;
+  piece->pipe = pipe;
+  piece->colors
+      = ((module->default_colorspace(module, pipe, NULL) == IOP_CS_RAW) && (dt_image_is_raw(&pipe->image)))
+            ? 1
+            : 4;
+  piece->bypass_cache = FALSE;
+  piece->force_opencl_cache = TRUE;
+  piece->process_cl_ready = 0;
+  piece->process_tiling_ready = 0;
+
+  dt_iop_init_pipe(module, pipe, piece);
+  module->commit_params(module, module->params, pipe, piece);
+}
+
 void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev,
                                   const int width_in, const int height_in,
                                   int *width, int *height)
 {
-  dt_iop_roi_t roi_in = (dt_iop_roi_t){ 0, 0, width_in, height_in, 1.0 };
-  dt_iop_roi_t roi_out;
-  for(GList *pieces = g_list_first(pipe->nodes); pieces; pieces = g_list_next(pieces))
+  if(!dev || !dev->iop)
   {
-    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
-    dt_iop_module_t *module = piece->module;
+    *width = width_in;
+    *height = height_in;
+    return;
+  }
+
+  const gboolean pipe_ready = (pipe && pipe->nodes);
+  dt_dev_pixelpipe_t temp_pipe;
+  dt_dev_pixelpipe_t *use_pipe = pipe_ready ? pipe : &temp_pipe;
+  if(!pipe_ready) _init_temp_pipe(use_pipe, dev, width_in, height_in);
+
+  GHashTable *piece_lookup = _build_piece_lookup(pipe_ready ? pipe : NULL);
+
+  dt_iop_roi_t roi_in = (dt_iop_roi_t){ 0, 0, width_in, height_in, 1.0 };
+  dt_iop_roi_t roi_out = roi_in;
+
+  for(GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+    dt_dev_pixelpipe_iop_t *piece = piece_lookup ? g_hash_table_lookup(piece_lookup, module) : NULL;
+    dt_dev_pixelpipe_iop_t temp_piece;
+    gboolean temp = FALSE;
+
+    if(!piece)
+    {
+      _init_temp_piece(&temp_piece, module, use_pipe, width_in, height_in);
+      piece = &temp_piece;
+      temp = TRUE;
+    }
 
     piece->buf_in = roi_in;
 
@@ -193,7 +276,7 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t 
     if(dt_dev_pixelpipe_activemodule_disables_currentmodule(dev, module))
       piece->enabled = FALSE;
 
-    // If module is disabled, modify_roi_in() is a no-op
+    // If module is disabled, modify_roi_out() is a no-op
     if(piece->enabled)
       module->modify_roi_out(module, piece, &roi_out, &roi_in);
     else
@@ -201,7 +284,11 @@ void dt_dev_pixelpipe_get_roi_out(dt_dev_pixelpipe_t *pipe, struct dt_develop_t 
 
     piece->buf_out = roi_out;
     roi_in = roi_out;
+
+    if(temp) dt_iop_cleanup_pipe(module, use_pipe, piece);
   }
+
+  if(piece_lookup) g_hash_table_destroy(piece_lookup);
 
   *width = roi_out.width;
   *height = roi_out.height;
@@ -217,12 +304,35 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
   // upstream in the pipeline for proper pipeline cache invalidation, so we need to browse the pipeline
   // backwards.
 
+  if(!dev || !dev->iop) return;
+
+  const int input_width = pipe ? pipe->iwidth : dev->image_storage.width;
+  const int input_height = pipe ? pipe->iheight : dev->image_storage.height;
+
+  const gboolean pipe_ready = (pipe && pipe->nodes);
+  dt_dev_pixelpipe_t temp_pipe;
+  dt_dev_pixelpipe_t *use_pipe = pipe_ready ? pipe : &temp_pipe;
+  if(!pipe_ready) _init_temp_pipe(use_pipe, dev, input_width, input_height);
+
+  GHashTable *piece_lookup = _build_piece_lookup(pipe_ready ? pipe : NULL);
+
   dt_iop_roi_t roi_out_temp = roi_out;
   dt_iop_roi_t roi_in;
-  for(GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))
+  for(GList *mods = g_list_last(dev->iop); mods; mods = g_list_previous(mods))
   {
-    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
-    dt_iop_module_t *module = piece->module;
+    dt_iop_module_t *module = (dt_iop_module_t *)mods->data;
+    dt_dev_pixelpipe_iop_t *piece = piece_lookup ? g_hash_table_lookup(piece_lookup, module) : NULL;
+    dt_dev_pixelpipe_iop_t temp_piece;
+    gboolean temp = FALSE;
+
+    if(!piece)
+    {
+      _init_temp_piece(&temp_piece, module, use_pipe, input_width, input_height);
+      piece = &temp_piece;
+      temp = TRUE;
+      piece->buf_in = (dt_iop_roi_t){ 0, 0, input_width, input_height, 1.0 };
+      piece->buf_out = piece->buf_in;
+    }
 
     piece->planned_roi_out = roi_out_temp;
 
@@ -248,9 +358,13 @@ void dt_dev_pixelpipe_get_roi_in(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *
     }
     */
 
-    piece->planned_roi_in = roi_in;
+    if(!temp) piece->planned_roi_in = roi_in;
     roi_out_temp = roi_in;
+
+    if(temp) dt_iop_cleanup_pipe(module, use_pipe, piece);
   }
+
+  if(piece_lookup) g_hash_table_destroy(piece_lookup);
 }
 
 static uint64_t _default_pipe_hash(dt_dev_pixelpipe_t *pipe)

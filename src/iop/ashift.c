@@ -3804,8 +3804,8 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // we draw the cropping area; we need x_off/y_off/width/height which is only available
   // after g->buf has been processed
   // roi data of the preview pipe input buffer
-  const float iwd = dev->preview_pipe->iwidth;
-  const float iht = dev->preview_pipe->iheight;
+  const float iwd = dev->roi.raw_width;
+  const float iht = dev->roi.raw_height;
   const float ixo = 0;
   const float iyo = 0;
 
@@ -3878,7 +3878,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   cairo_set_dash(cr, &dashes, 0, 0);
   
   // Resize the coordinates of the rectangles V and C according to the current zoom.
-  const float scale_factor = dt_dev_get_natural_scale(dev, dev->preview_pipe);
+  const float scale_factor = dt_dev_get_natural_scale(dev);
   for(size_t i = 0; i < 4; i++)
   {
     V[i][0] *= scale_factor;
