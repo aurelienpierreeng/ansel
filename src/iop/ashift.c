@@ -1683,10 +1683,13 @@ static int _get_structure(dt_iop_module_t *module, dt_iop_ashift_enhance_t enhan
     goto error;
 
   // save new structural data
-  g->lines_in_width = width;
-  g->lines_in_height = height;
-  g->lines_x_off = x_off;
-  g->lines_y_off = y_off;
+  // line_detect() rescales coordinates back to input (full-res) space, so
+  // we must apply the same scaling to metadata.
+  const float inv_scale = (scale > 0.f) ? (1.f / scale) : 1.f;
+  g->lines_in_width = (int)roundf(width * inv_scale);
+  g->lines_in_height = (int)roundf(height * inv_scale);
+  g->lines_x_off = (int)roundf(x_off * inv_scale);
+  g->lines_y_off = (int)roundf(y_off * inv_scale);
   g->lines_count = lines_count;
   g->vertical_count = vertical_count;
   g->horizontal_count = horizontal_count;
@@ -3022,8 +3025,8 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
   else
   {
     // Create new lines
-    const float wd = self->dev->roi.preview_width;
-    const float ht = self->dev->roi.preview_height;
+    const float wd = self->dev->roi.processed_width;
+    const float ht = self->dev->roi.processed_height;
     float pts[8] = { wd * 0.2, ht * 0.2, wd * 0.2, ht * 0.8, wd * 0.8, ht * 0.2, wd * 0.8, ht * 0.8 };
     if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 4))
@@ -3587,19 +3590,19 @@ static int get_points(struct dt_iop_module_t *self, const dt_iop_ashift_line_t *
   // second step: generate points for each line
   for(int n = 0, offset = 0; n < lines_count; n++)
   {
-    my_extremas[4 * n] = lines[n].p1[0] / scale;
-    my_extremas[4 * n + 1] = lines[n].p1[1] / scale;
-    my_extremas[4 * n + 2] = lines[n].p2[0] / scale;
-    my_extremas[4 * n + 3] = lines[n].p2[1] / scale;
+    my_extremas[4 * n] = lines[n].p1[0];
+    my_extremas[4 * n + 1] = lines[n].p1[1];
+    my_extremas[4 * n + 2] = lines[n].p2[0];
+    my_extremas[4 * n + 3] = lines[n].p2[1];
 
     my_points_idx[n].offset = offset;
 
-    float x = lines[n].p1[0] / scale;
-    float y = lines[n].p1[1] / scale;
+    float x = lines[n].p1[0];
+    float y = lines[n].p1[1];
     const int length = lines[n].length;
 
-    const float dx = (lines[n].p2[0] / scale - x) / (float)(length - 1);
-    const float dy = (lines[n].p2[1] / scale - y) / (float)(length - 1);
+    const float dx = (lines[n].p2[0] - x) / (float)(length - 1);
+    const float dy = (lines[n].p2[1] - y) / (float)(length - 1);
 
     // for very small length, we set the second extrema at last point
     if(length < 2)
@@ -3607,8 +3610,8 @@ static int get_points(struct dt_iop_module_t *self, const dt_iop_ashift_line_t *
       my_points[2 * offset] = x;
       my_points[2 * offset + 1] = y;
       offset++;
-      my_points[2 * offset] = lines[n].p2[0] / scale;
-      my_points[2 * offset + 1] = lines[n].p2[1] / scale;
+      my_points[2 * offset] = lines[n].p2[0];
+      my_points[2 * offset + 1] = lines[n].p2[1];
       offset++;
     }
     else
@@ -3630,6 +3633,16 @@ static int get_points(struct dt_iop_module_t *self, const dt_iop_ashift_line_t *
   if(!dt_dev_distort_transform_plus(dev, dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_INCL,
                                     my_extremas, 2 * lines_count))
     goto error;
+
+  // Apply preview scaling after distortion to keep GUI coordinates in preview space.
+  const float gui_scale = (scale > 0.f) ? scale : 1.f;
+  if(gui_scale != 1.f)
+  {
+    for(size_t i = 0; i < total_points * 2; i++)
+      my_points[i] *= gui_scale;
+    for(int i = 0; i < 4 * lines_count; i++)
+      my_extremas[i] *= gui_scale;
+  }
 
   // fourth step: get bounding box in final coordinates (used later for checking "near"-ness to mouse pointer)
   for(int n = 0; n < lines_count; n++)
@@ -3798,13 +3811,17 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_dev_clip_roi(dev, cr, width, height);
   dt_dev_rescale_roi(dev, cr, width, height);
 
-  // we draw the cropping area; we need x_off/y_off/width/height which is only available
-  // after g->buf has been processed
-  // roi data of the preview pipe input buffer
-  const float iwd = dev->roi.raw_width;
-  const float iht = dev->roi.raw_height;
-  const float ixo = 0;
-  const float iyo = 0;
+  // we draw the cropping area; use the input ROI from the virtual pipe piece
+  dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(dev, dev->virtual_pipe, self);
+  if(!piece)
+  {
+    cairo_restore(cr);
+    return;
+  }
+  const float iwd = piece->buf_in.width;
+  const float iht = piece->buf_in.height;
+  const float ixo = piece->buf_in.x;
+  const float iyo = piece->buf_in.y;
 
   // The four corners of the inner image polygon
   float V[4][2] = { { ixo,        iyo       },
@@ -3928,8 +3945,13 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // no structural data or visibility switched off? -> stop here
   if(g->fitting || g->lines == NULL || !g->buf || !self->enabled) return;
 
+  // ensure virtual pipe params are in sync so distortions use current settings
+  if(dev->virtual_pipe->history_hash != dev->history_hash)
+    dt_dev_pixelpipe_sync_virtual(dev, DT_DEV_PIPE_TOP_CHANGED);
+
   // get hash value that changes if distortions from here to the end of the pixelpipe changed
-  const uint64_t hash = dev->virtual_pipe->hash;
+  // virtual_pipe doesn't process pixels, so its hash isn't reliable for invalidation.
+  const uint64_t hash = dev->preview_pipe->hash;
   // get hash value that changes if coordinates of lines have changed
   const uint64_t lines_hash = _get_lines_hash(g->lines, g->lines_count);
 
@@ -3947,8 +3969,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     g->draw_points = NULL;
     g->points_lines_count = 0;
 
-    const float scale = 1.0f; // / dt_dev_get_natural_scale(dev, dev->virtual_pipe);
-
+    const float scale = dt_dev_get_natural_scale(dev);
 
     if(!get_points(self, g->lines, g->lines_count, g->lines_version, &g->points, &g->draw_points, &g->points_idx,
                    &g->points_lines_count, scale))
@@ -4116,7 +4137,8 @@ static void _update_lines_count(const dt_iop_ashift_line_t *lines, const int lin
 // determine if we are near a drawn line extrema
 static int _draw_near_point(const float x, const float y, const float *points, const int limit)
 {
-  const float delta = DT_PIXEL_APPLY_DPI(6);
+  const float zoom_scale = dt_dev_get_overlay_scale(darktable.develop);
+  const float delta = DT_PIXEL_APPLY_DPI(6) / (zoom_scale > 0.f ? zoom_scale : 1.f);
 
   for(int i = 0; i < limit; i++)
   {
@@ -4158,7 +4180,9 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   // if we are moving a drawn line extrema, we do the change here
   if(g->draw_point_move)
   {
-    float pts[2] = { pzx * wd, pzy * ht };
+    const float pd_w = self->dev->roi.processed_width;
+    const float pd_h = self->dev->roi.processed_height;
+    float pts[2] = { pzx * pd_w, pzy * pd_h };
     if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
@@ -4217,7 +4241,9 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   // case where we move a drawn line
   if(g->draw_line_move >= 0)
   {
-    float pts[2] = { pzx * wd, pzy * ht };
+    const float pd_w = self->dev->roi.processed_width;
+    const float pd_h = self->dev->roi.processed_height;
+    float pts[2] = { pzx * pd_w, pzy * pd_h };
     if(dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                          DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1))
     {
@@ -4372,8 +4398,8 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   {
     dt_control_change_cursor(GDK_CROSSHAIR);
     g->straightening = TRUE;
-    g->lastx = x;
-    g->lasty = y;
+    g->lastx = pzx;
+    g->lasty = pzy;
     g->straighten_x = pzx;
     g->straighten_y = pzy;
     return TRUE;
@@ -4432,7 +4458,9 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     {
       if(g->points_idx[n].near)
       {
-        float pts[2] = { pzx * wd, pzy * ht };
+        const float pd_w = self->dev->roi.processed_width;
+        const float pd_h = self->dev->roi.processed_height;
+        float pts[2] = { pzx * pd_w, pzy * pd_h };
         dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                           DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
         g->draw_line_move = n;
@@ -4505,7 +4533,9 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 
     // we instantiate a new line with both extrema at the current position
     // and enable the "move point" mode with the second extrema
-    float pts[2] = { pzx * wd, pzy * ht };
+    const float pd_w = self->dev->roi.processed_width;
+    const float pd_h = self->dev->roi.processed_height;
+    float pts[2] = { pzx * pd_w, pzy * pd_h };
     dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_INCL, pts, 1);
     const int count = g->lines_count + 1;
@@ -4566,7 +4596,11 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   {
     g->straightening = FALSE;
     // adjust the line with possible current angle and flip on this module
-    float pts[4] = { x, y, g->lastx, g->lasty };
+    float pzx = 0.0f, pzy = 0.0f;
+    dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
+    const float pd_w = self->dev->roi.processed_width;
+    const float pd_h = self->dev->roi.processed_height;
+    float pts[4] = { pzx * pd_w, pzy * pd_h, g->lastx * pd_w, g->lasty * pd_h };
     dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe,
                                       self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
@@ -4665,9 +4699,6 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
     float pzx = 0.0f, pzy = 0.0f;
     dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
 
-    pzx += 0.5f;
-    pzy += 0.5f;
-
     if(wd >= 1.0 && ht >= 1.0)
     {
       // mark lines inside the rectangle
@@ -4732,9 +4763,6 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
 
     float pzx = 0.0f, pzy = 0.0f;
     dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
-    pzx += 0.5f;
-    pzy += 0.5f;
-
     const float wd = self->dev->roi.preview_width;
     const float ht = self->dev->roi.preview_height;
 
