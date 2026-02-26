@@ -184,8 +184,8 @@ void gui_post_expose(dt_lib_module_t *self, cairo_t *cri, int32_t width, int32_t
 
     cairo_set_line_width(cri, 1.);
 
-    const float iwidth = dev->preview_width * zoom_scale;
-    const float iheight = dev->preview_height * zoom_scale;
+    const float iwidth = dev->roi.preview_width * zoom_scale;
+    const float iheight = dev->roi.preview_height * zoom_scale;
 
     if(d->vertical)
     {

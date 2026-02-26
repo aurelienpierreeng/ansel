@@ -254,8 +254,8 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   }
   else
   {
-    wd = dev->preview_width;
-    ht = dev->preview_height;
+    wd = dev->roi.preview_width;
+    ht = dev->roi.preview_height;
   }
 
   if(d->image_surface && imgid == dev->image_storage.id)
@@ -342,7 +342,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     if(dev->roi.scaling == 1.f)
       fit = g_strdup(_("Fit"));
   
-    zoomline = g_strdup_printf("%s %.0f%%", fit ? fit : "", dev->roi.scaling * dev->natural_scale * 100);
+    zoomline = g_strdup_printf("%s %.0f%%", fit ? fit : "", dev->roi.scaling * dev->roi.natural_scale * 100);
     if(fit) g_free(fit);
   }
 
@@ -445,13 +445,13 @@ static void _zoom_preset_change(dt_lib_zoom_t zoom)
   switch(zoom)
   {
     default:
-      dev->roi.scaling = dev->natural_scale;
+      dev->roi.scaling = dev->roi.natural_scale;
       break;
     case LIB_ZOOM_SMALL:
-      dev->roi.scaling = dev->natural_scale * 0.33;
+      dev->roi.scaling = dev->roi.natural_scale * 0.33;
       break;
     case LIB_ZOOM_FIT:
-      dev->roi.scaling = dev->natural_scale;
+      dev->roi.scaling = dev->roi.natural_scale;
       break;
     case LIB_ZOOM_25:
       dev->roi.scaling = 0.25;
@@ -479,9 +479,9 @@ static void _zoom_preset_change(dt_lib_zoom_t zoom)
       break;
   }
 
-  // Actual pixelpipe scaling is dev->roi.scaling * dev->natural_scale,
-  // where dev->natural_scale ensures the images fits within viewport
-  dev->roi.scaling /= dev->natural_scale;
+  // Actual pixelpipe scaling is dev->roi.scaling * dev->roi.natural_scale,
+  // where dev->roi.natural_scale ensures the images fits within viewport
+  dev->roi.scaling /= dev->roi.natural_scale;
 
   dt_dev_check_zoom_pos_bounds(dev, &dev->roi.x, &dev->roi.y, NULL, NULL);
   dt_dev_pixelpipe_change_zoom_main(dev);

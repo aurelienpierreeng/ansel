@@ -83,9 +83,9 @@ static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form
   int sel_index = 0;
   float sel_dist = FLT_MAX;
 
-  const float scale = dev->natural_scale;
-  const float xx = (pzx * dev->preview_width)  / scale,
-              yy = (pzy * dev->preview_height) / scale;
+  const float scale = dev->roi.natural_scale;
+  const float xx = (pzx * dev->roi.preview_width)  / scale,
+              yy = (pzy * dev->roi.preview_height) / scale;
 
   int index = 0;
   for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))

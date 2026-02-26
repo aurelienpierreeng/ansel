@@ -146,17 +146,6 @@ typedef enum dt_clipping_preview_mode_t
 
 struct dt_dev_pixelpipe_t;
 
-/*
-typedef struct dt_backbuf_t
-{
-  size_t bpp;            // bits per pixel
-  size_t width;          // pixel size of image
-  size_t height;         // pixel size of image
-  uint64_t hash;         // data checksum/integrity hash, for example to connect to a cacheline
-  uint64_t history_hash; // arbitrary state hash
-} dt_backbuf_t;
-*/
-
 typedef struct dt_develop_t
 {
   // != 0 if the gui should be notified of changes in hist stack and modules should be
@@ -166,23 +155,11 @@ typedef struct dt_develop_t
   int exit; // set to 1 to close background darkroom pipeline threads
   struct dt_iop_module_t *gui_module; // this module claims gui expose/event callbacks.
 
-  // darkroom border size: ISO 12646 borders or user-defined borders
-  int32_t border_size;
-
-  // Those are the darkroom main widget size, aka max paintable area.
-  // This size is allocated by Gtk from the window size minus all panels.
-  // It is NOT the size of the backbuffer/ROI.
-  int32_t orig_width, orig_height;
-
-  // Dimensions of the preview backbuffer, depending on the 
-  // darkroom main widget size and DPI factor.
-  // These are computed early, before we have the actual buffer.
-  // Use them everywhere in GUI
-  int32_t preview_width, preview_height;
-
-  // natural scaling = MIN(dev->width / dev->pipe->processed_width, dev->height / dev->pipe->processed_height)
-  // aka ensure that image fits into widget minus margins/borders.
-  float natural_scale;
+  // The roi structure is used in darkroom GUI only.
+  // It defines the output size of the image backbuffer fitting
+  // into the darkroom center widget. This is critically used for all
+  // GUI <-> RAW pixel coordinates conversions. It should be recomputed
+  // ASAP when widget size changes.
   struct {
     // width = orig_width - 2 * border_size,
     // height = orig_height - 2 * border_size,
@@ -197,6 +174,39 @@ typedef struct dt_develop_t
     // Relative coordinates of the center of the ROI, expressed with
     // regard to the complete image.
     float x, y;
+
+    // darkroom border size: ISO 12646 borders or user-defined borders
+    int32_t border_size;
+
+    // Those are the darkroom main widget size, aka max paintable area.
+    // This size is allocated by Gtk from the window size minus all panels.
+    // It is NOT the size of the backbuffer/ROI.
+    int32_t orig_width, orig_height;
+
+    // Dimensions of the preview backbuffer, depending on the 
+    // darkroom main widget size and DPI factor.
+    // These are computed early, before we have the actual buffer.
+    // Use them everywhere in GUI.
+    // They respect the final image aspect ratio and fit within
+    // the width x height bounding box.
+    int32_t preview_width, preview_height;
+
+    // natural scaling = MIN(dev->width / dev->pipe->processed_width, dev->height / dev->pipe->processed_height)
+    // aka ensure that image fits into widget minus margins/borders.
+    float natural_scale;
+
+    // Dimensions of the full-resolution RAW image
+    // being worked on.
+    int32_t raw_width, raw_height;
+
+    // Conveniency state to check if all widget sizes are inited
+    gboolean gui_inited;
+
+    // Conveniency state to check if input (raw image) sizes are inited
+    gboolean raw_inited;
+
+    // Conveniency state to check if all output (backbuffer) sizes are inited
+    gboolean output_inited;
 
   } roi;
 
@@ -268,7 +278,7 @@ typedef struct dt_develop_t
   // aka dev->forms and dev->all_forms
   dt_pthread_rwlock_t masks_mutex;
 
-  dt_backbuf_t raw_histogram; // backbuf to prepare the raw histogram (before white balance)
+  dt_backbuf_t raw_histogram;     // backbuf to prepare the raw histogram (before white balance)
   dt_backbuf_t output_histogram;  // backbuf to prepare the display-agnostic output histogram (in the middle of colorout)
   dt_backbuf_t display_histogram; // backbuf to prepare the display-referred output histogram (at the far end of the pipe)
   

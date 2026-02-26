@@ -241,8 +241,8 @@ static void _darkroom_pickers_draw(dt_view_t *self, cairo_t *cri,
   cairo_save(cri);
   // The colorpicker samples bounding rectangle should only be displayed inside the visible image
 
-  const double wd = dev->preview_width;
-  const double ht = dev->preview_height;
+  const double wd = dev->roi.preview_width;
+  const double ht = dev->roi.preview_height;
   const double scale = dt_dev_get_fit_scale(dev);
   const double lw = 1.0 / scale;
   const double dashes[1] = { lw * 4.0 };
@@ -429,7 +429,7 @@ void expose(
   cairo_save(cri);
   
   dt_develop_t *dev = (dt_develop_t *)self->data;
-  const int32_t border = dev->border_size;
+  const int32_t border = dev->roi.border_size;
 
   static int image_surface_width = 0;
   static int image_surface_height = 0;
@@ -598,8 +598,8 @@ void expose(
   // draw guide lines if needed
   if(!dev->gui_module || !(dev->gui_module->flags() & IOP_FLAGS_GUIDES_SPECIAL_DRAW))
   {
-    const float wd = dev->preview_width;
-    const float ht = dev->preview_height;
+    const float wd = dev->roi.preview_width;
+    const float ht = dev->roi.preview_height;
     const float scaling = dt_dev_get_overlay_scale(dev);
 
     cairo_save(cri);
@@ -784,15 +784,15 @@ static void _get_final_size_with_iso_12646(dt_develop_t *d)
     // no matter the size of the widget. Meaning we force them to fit a square
     // of length matching the smaller widget dimension. The goal is to leave
     // a consistent perceptual impression between pictures, independent from orientation.
-    const int main_dim = MIN(d->orig_width, d->orig_height);
-    d->border_size = 0.125 * main_dim;
+    const int main_dim = MIN(d->roi.orig_width, d->roi.orig_height);
+    d->roi.border_size = 0.125 * main_dim;
   }
   else
   {
-    d->border_size = DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size"));
+    d->roi.border_size = DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size"));
   }
 
-  dt_dev_configure(d, d->orig_width - 2 * d->border_size, d->orig_height - 2 * d->border_size);
+  dt_dev_configure(d, d->roi.orig_width - 2 * d->roi.border_size, d->roi.orig_height - 2 * d->roi.border_size);
 }
 
 /* colour assessment */
@@ -1475,7 +1475,7 @@ void gui_init(dt_view_t *self)
   }
 
   darktable.view_manager->proxy.darkroom.get_layout = _lib_darkroom_get_layout;
-  dev->border_size = DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size"));
+  dev->roi.border_size = DT_PIXEL_APPLY_DPI(dt_conf_get_int("plugins/darkroom/ui/border_size"));
 }
 
 enum
@@ -1945,7 +1945,7 @@ void enter(dt_view_t *self)
 
   dt_view_image_info_update(dev->image_storage.id);
   gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui)); // ensure the center view has focus for keybindings to work
-  dt_dev_update_mouse_effect_radius(dev); // FIXME: Should be placed right after dev->natural_scale is properly initialized.
+  dt_dev_update_mouse_effect_radius(dev); // FIXME: Should be placed right after dev->roi.natural_scale is properly initialized.
 }
 
 void leave(dt_view_t *self)
@@ -2316,8 +2316,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     dt_dev_retrieve_full_pos(dev, x, y, &pzx, &pzy);
 
     float zoom_scale = dev->roi.scaling;
-    const int procw = dev->preview_width;
-    const int proch = dev->preview_height;
+    const int procw = dev->roi.preview_width;
+    const int proch = dev->roi.preview_height;
 
     if(which == 1)
     {
@@ -2432,16 +2432,16 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
     // Incremental zoom-in on middle button click, from fit to 800% 
     // by power of 2 increments (100%, 200%, 400%, 800%).
     float new_scale = 1.f;
-    if(dev->roi.scaling < dev->natural_scale || dev->roi.scaling > 7.f / dev->natural_scale)
-      new_scale = dev->natural_scale; // zoom to fit
-    else if(dev->roi.scaling * dev->natural_scale < 1.f)
+    if(dev->roi.scaling < dev->roi.natural_scale || dev->roi.scaling > 7.f / dev->roi.natural_scale)
+      new_scale = dev->roi.natural_scale; // zoom to fit
+    else if(dev->roi.scaling * dev->roi.natural_scale < 1.f)
       new_scale = 1.f; // 100 %
     else
-      new_scale = floorf(dev->roi.scaling * dev->natural_scale) * 2.f;
+      new_scale = floorf(dev->roi.scaling * dev->roi.natural_scale) * 2.f;
 
-    // Actual pixelpipe scaling is dev->roi.scaling * dev->natural_scale,
-    // where dev->natural_scale ensures the images fits within viewport
-    new_scale /= dev->natural_scale;
+    // Actual pixelpipe scaling is dev->roi.scaling * dev->roi.natural_scale,
+    // where dev->roi.natural_scale ensures the images fits within viewport
+    new_scale /= dev->roi.natural_scale;
 
     return _change_scaling(dev, x, y, new_scale);
   }
@@ -2463,8 +2463,8 @@ static int _change_scaling(dt_develop_t *dev, const float x, const float y, cons
   if(!dt_dev_check_zoom_scale_bounds(dev))
   { 
     // Calculate zoom position offset to keep mouse position fixed during zoom
-    const float mouse_off_x = x - 0.5f * dev->orig_width;
-    const float mouse_off_y = y - 0.5f * dev->orig_height;
+    const float mouse_off_x = x - 0.5f * dev->roi.orig_width;
+    const float mouse_off_y = y - 0.5f * dev->roi.orig_height;
     
     // To keep the point under the mouse fixed, calculate the adjustment
     const float scale = dt_dev_get_zoom_level(dev);
@@ -2558,8 +2558,8 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   if(ctrl_any)
   {
     const float zoom_step = 1.1f;
-    const float center_x = 0.5f * dev->orig_width;
-    const float center_y = 0.5f * dev->orig_height;
+    const float center_x = 0.5f * dev->roi.orig_width;
+    const float center_y = 0.5f * dev->roi.orig_height;
 
     switch(event->keyval)
     {
@@ -2643,8 +2643,8 @@ void configure(dt_view_t *self, int wd, int ht)
   if(dt_view_manager_get_current_view(darktable.view_manager) == self)
   {
     // Reference dimensions before ISO 12646 mode
-    dev->orig_height = ht;
-    dev->orig_width = wd;
+    dev->roi.orig_height = ht;
+    dev->roi.orig_width = wd;
     _get_final_size_with_iso_12646(dev);
   }
 }

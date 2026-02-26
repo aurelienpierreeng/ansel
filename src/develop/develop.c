@@ -122,7 +122,6 @@ GList *dt_dev_load_modules(dt_develop_t *dev)
   GList *res = NULL;
   dt_iop_module_t *module;
   dt_iop_module_so_t *module_so;
-  dev->iop_instance = 0;
   GList *iop = g_list_first(darktable.iop);
   while(iop)
   {
@@ -143,8 +142,6 @@ GList *dt_dev_load_modules(dt_develop_t *dev)
   while(it)
   {
     module = (dt_iop_module_t *)it->data;
-    module->instance = dev->iop_instance++;
-    module->multi_name[0] = '\0';
     it = g_list_next(it);
   }
   return res;
@@ -359,7 +356,7 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
                                 &pipe->processed_height);
 
   // Scale is inited to the value that would fit our full-res raw to GUI viewport size
-  *scale = dev->natural_scale = dt_dev_get_natural_scale(dev, pipe);
+  *scale = dev->roi.natural_scale = dt_dev_get_natural_scale(dev, pipe);
   // The full pipeline shows only the ROI, which may be zoomed in/out
   if(pipe->type == DT_DEV_PIXELPIPE_FULL) *scale *= dev->roi.scaling;
 
@@ -374,8 +371,8 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
 
   if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
   {
-    dev->preview_width = *wd;
-    dev->preview_height = *ht;
+    dev->roi.preview_width = *wd;
+    dev->roi.preview_height = *ht;
   }
 
   // dev->roi.x,y are the relative coordinates of the ROI center.
@@ -386,7 +383,7 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
 
 /*  fprintf (stderr, "_update_darkroom_roi: dev %.2f %.2f  type %s  xy %d %d  dim %d %d"
                    "   ppd:%.4f scale:%.4f nat_scale:%.4f * scaling:%.4f\n",
-            dev->roi.x, dev->roi.y, dt_pipe_type_to_str(pipe->type), *x, *y, *wd, *ht, darktable.gui->ppd, *scale, dev->natural_scale, dev->roi.scaling);
+            dev->roi.x, dev->roi.y, dt_pipe_type_to_str(pipe->type), *x, *y, *wd, *ht, darktable.gui->ppd, *scale, dev->roi.natural_scale, dev->roi.scaling);
 */
   return x_old != *x || y_old != *y || wd_old != *wd || ht_old != *ht || old_scale != *scale;
 }
@@ -750,8 +747,8 @@ void dt_dev_retrieve_full_pos(dt_develop_t *dev, const int px, const int py, flo
   const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
 
   // calculate delta from center in processed image coordinates
-  const float dx = px - 0.5f * dev->roi.width - dev->border_size;
-  const float dy = py - 0.5f * dev->roi.height - dev->border_size;
+  const float dx = px - 0.5f * dev->roi.width - dev->roi.border_size;
+  const float dy = py - 0.5f * dev->roi.height - dev->roi.border_size;
 
   if(mouse_x) *mouse_x = dev->roi.x + dx / (wd * scale);
   if(mouse_y) *mouse_y = dev->roi.y + dy / (ht * scale);
@@ -1230,11 +1227,11 @@ float dt_dev_get_natural_scale(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pip
 
 float dt_dev_get_fit_scale(dt_develop_t *dev)
 {
-  if(!dev->preview_pipe || dev->preview_width == 0 || dev->preview_height == 0)
+  if(!dev->preview_pipe || dev->roi.preview_width == 0 || dev->roi.preview_height == 0)
     return dev->roi.scaling;
 
-  const float nat_scale = fminf(fminf((float)dev->roi.width / (float)dev->preview_width,
-                         (float)dev->roi.height / (float)dev->preview_height),
+  const float nat_scale = fminf(fminf((float)dev->roi.width / (float)dev->roi.preview_width,
+                         (float)dev->roi.height / (float)dev->roi.preview_height),
                           1.f);
   return dev->roi.scaling * nat_scale;
 }
@@ -1247,12 +1244,12 @@ float dt_dev_get_overlay_scale(dt_develop_t *dev)
 float dt_dev_get_zoom_level(const dt_develop_t *dev)
 {
   if(!dev) return 1.f;
-  return dev->roi.scaling * dev->natural_scale;
+  return dev->roi.scaling * dev->roi.natural_scale;
 }
 
 void dt_dev_reset_roi(dt_develop_t *dev)
 {
-  dev->natural_scale = -1.f;
+  dev->roi.natural_scale = -1.f;
   dev->roi.scaling = 1.f;
   dev->roi.x = 0.5f;
   dev->roi.y = 0.5f;
@@ -1262,12 +1259,12 @@ gboolean dt_dev_clip_roi(dt_develop_t *dev, cairo_t *cr, int32_t width, int32_t 
 {
   // DO NOT MODIFIY !! //
 
-  const float wd = dev->preview_width;
-  const float ht = dev->preview_height;
+  const float wd = dev->roi.preview_width;
+  const float ht = dev->roi.preview_height;
   if(wd == 0.f || ht == 0.f) return TRUE;
 
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
-  const int32_t border = dev->border_size;
+  const int32_t border = dev->roi.border_size;
   const float roi_width = fminf(width, wd * zoom_scale);
   const float roi_height = fminf(height, ht * zoom_scale);
 
@@ -1323,7 +1320,7 @@ gboolean dt_dev_rescale_roi_to_input(dt_develop_t *dev, cairo_t *cr, int32_t wid
 
 gboolean dt_dev_check_zoom_scale_bounds(dt_develop_t *dev)
 {
-  const float natural_scale = dev->natural_scale;
+  const float natural_scale = dev->roi.natural_scale;
   const float ppd = darktable.gui->ppd;
 
   // Limit zoom in to 16x the size of an apparent pixel on screen
@@ -1352,9 +1349,9 @@ gboolean dt_dev_roi_to_input_space(dt_develop_t *dev, /*gboolean normalized_in,*
 {
   if(!dev->preview_pipe || !point_x || !point_y) return FALSE;
 
-  const float scale = dev->natural_scale;
-  const int wd = dev->preview_width;
-  const int ht = dev->preview_height;
+  const float scale = dev->roi.natural_scale;
+  const int wd = dev->roi.preview_width;
+  const int ht = dev->roi.preview_height;
   const int iwd = dev->preview_pipe->iwidth;
   const int iht = dev->preview_pipe->iheight;
   // avoid division by zero
@@ -1366,8 +1363,8 @@ gboolean dt_dev_roi_to_input_space(dt_develop_t *dev, /*gboolean normalized_in,*
   // if(normalized_in)
   //{
   //  De-normalize preview coordinate to pixel space
-  pzx *= dev->preview_width;
-  pzy *= dev->preview_height;
+  pzx *= dev->roi.preview_width;
+  pzy *= dev->roi.preview_height;
   //}
 
   pzx /= scale;
@@ -1389,9 +1386,9 @@ gboolean dt_dev_roi_to_input_space(dt_develop_t *dev, /*gboolean normalized_in,*
 gboolean dt_dev_roi_delta_to_input_space(dt_develop_t *dev, const float delta[2],
                                             const float in[2], float points[2])
 {
-  const float natural_scale = dev->natural_scale;
-  const int wd = dev->preview_width;
-  const int ht = dev->preview_height;
+  const float natural_scale = dev->roi.natural_scale;
+  const int wd = dev->roi.preview_width;
+  const int ht = dev->roi.preview_height;
   const int iwd = dev->preview_pipe->iwidth;
   const int iht = dev->preview_pipe->iheight;
   // avoid division by zero
@@ -1416,8 +1413,8 @@ void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
   float zoom_level = dt_dev_get_zoom_level(dev);
   
   // TODO: this should not be necessary if there is a way to execute this function
-  // after dev->natural_scale is properly initialized the first time we enter the darkroom.
-  // If dev->natural_scale is not ready, fallback to a generic value
+  // after dev->roi.natural_scale is properly initialized the first time we enter the darkroom.
+  // If dev->roi.natural_scale is not ready, fallback to a generic value
   if(zoom_level == -1.f) zoom_level = 0.1f;
 
   darktable.gui->mouse.effect_radius = radius / zoom_level;

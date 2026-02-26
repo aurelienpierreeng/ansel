@@ -2907,8 +2907,8 @@ static void get_point_scale(struct dt_iop_module_t *module, float x, float y, fl
   dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
   pzx += 0.5f;
   pzy += 0.5f;
-  const float wd = module->dev->preview_width;
-  const float ht = module->dev->preview_height;
+  const float wd = module->dev->roi.preview_width;
+  const float ht = module->dev->roi.preview_height;
   float pts[2] = { pzx * wd, pzy * ht };
   dt_dev_distort_backtransform_plus(module->dev, module->dev->preview_pipe,
                                     module->iop_order,DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);

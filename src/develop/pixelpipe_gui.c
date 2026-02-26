@@ -202,8 +202,8 @@ static int pixelpipe_picker_helper(dt_iop_module_t *module, const dt_iop_roi_t r
                                    dt_aligned_pixel_t picked_color_min, dt_aligned_pixel_t picked_color_max,
                                    dt_pixelpipe_picker_source_t picker_source, int *box)
 {
-  const float wd = darktable.develop->preview_width;
-  const float ht = darktable.develop->preview_height;
+  const float wd = darktable.develop->roi.preview_width;
+  const float ht = darktable.develop->roi.preview_height;
   const int width = roi.width;
   const int height = roi.height;
   const dt_colorpicker_sample_t *const sample = darktable.lib->proxy.colorpicker.primary_sample;

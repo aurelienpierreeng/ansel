@@ -293,8 +293,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->pivot_selected = FALSE;
   const guint nb = g_list_length(form->points);
 
-  pzx *= darktable.develop->preview_width / dev->natural_scale;
-  pzy *= darktable.develop->preview_height / dev->natural_scale;
+  pzx *= darktable.develop->roi.preview_width / dev->roi.natural_scale;
+  pzy *= darktable.develop->roi.preview_height / dev->roi.natural_scale;
 
   // are we inside the form or the borders or near a segment ???
   int inside, inside_border, near, inside_source;
@@ -1021,8 +1021,8 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
     if((xpos == -1.f && ypos == -1.f) || gui->mouse_leaved_center)
     {
       const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
-      xpos = (.5f + dev->roi.x) * darktable.develop->preview_width;
-      ypos = (.5f + dev->roi.y) * darktable.develop->preview_height;
+      xpos = (.5f + dev->roi.x) * darktable.develop->roi.preview_width;
+      ypos = (.5f + dev->roi.y) * darktable.develop->roi.preview_height;
     }
     float pts[2] = { xpos, ypos };
     dt_dev_distort_backtransform(darktable.develop, pts, 1);

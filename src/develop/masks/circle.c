@@ -111,8 +111,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->source_selected = FALSE;
   gui->handle_selected = -1;
 
-  pzx *= darktable.develop->preview_width / dev->natural_scale;
-  pzy *= darktable.develop->preview_height / dev->natural_scale;
+  pzx *= darktable.develop->roi.preview_width / dev->roi.natural_scale;
+  pzy *= darktable.develop->roi.preview_height / dev->roi.natural_scale;
 
   int in, inside_border, near, inside_source;
   float dist;
@@ -589,8 +589,8 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
     // fallback to center of the current view
     if((xpos == -1.f && ypos == -1.f) || gui->mouse_leaved_center)
     {
-      xpos = (.5f + dev->roi.x) * dev->preview_width;
-      ypos = (.5f + dev->roi.y) * dev->preview_height;
+      xpos = (.5f + dev->roi.x) * dev->roi.preview_width;
+      ypos = (.5f + dev->roi.y) * dev->roi.preview_height;
     }
     // we backtransform the point to get them in input space
     float back_pts[2] = { xpos, ypos };

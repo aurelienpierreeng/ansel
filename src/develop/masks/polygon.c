@@ -1052,8 +1052,8 @@ static void _polygon_get_sizes(struct dt_iop_module_t *module, dt_masks_form_t *
   if(!gpt) return;
 
   const int nb = g_list_length(form->points);
-  const float wd = darktable.develop->preview_width;
-  const float ht = darktable.develop->preview_height;
+  const float wd = darktable.develop->roi.preview_width;
+  const float ht = darktable.develop->roi.preview_height;
 
   float p1[2] = { FLT_MAX, FLT_MAX };
   float p2[2] = { FLT_MIN, FLT_MIN };
@@ -1211,8 +1211,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   gui->handle_border_selected = -1;
   const guint nb = g_list_length(form->points);
 
-  pzx *= darktable.develop->preview_width / dev->natural_scale;
-  pzy *= darktable.develop->preview_height / dev->natural_scale;
+  pzx *= darktable.develop->roi.preview_width / dev->roi.natural_scale;
+  pzy *= darktable.develop->roi.preview_height / dev->roi.natural_scale;
 
 
   if((gui->group_selected == index) && gui->node_selected >= 0)
@@ -1815,8 +1815,8 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
   if(!gpt) return 0;
   if(!form) return 0;
 
-  const float wd = dev->preview_width / dev->natural_scale;
-  const float ht = dev->preview_height / dev->natural_scale;
+  const float wd = dev->roi.preview_width / dev->roi.natural_scale;
+  const float ht = dev->roi.preview_height / dev->roi.natural_scale;
   const int iwidth = darktable.develop->preview_pipe->iwidth;
   const int iheight = darktable.develop->preview_pipe->iheight;
 

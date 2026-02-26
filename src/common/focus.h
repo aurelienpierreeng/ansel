@@ -294,7 +294,7 @@ static void dt_focus_draw_clusters(cairo_t *cr, int width, int height, int32_t i
     dt_dev_cleanup(&dev);
   }
 
-  const int32_t tb = darktable.develop->border_size;
+  const int32_t tb = darktable.develop->roi.border_size;
   const float scale = fminf((width - 2 * tb) / (float)wd, (height - 2 * tb) / (float)ht) * full_zoom;
   cairo_scale(cr, scale, scale);
   float fx = 0.0f;
