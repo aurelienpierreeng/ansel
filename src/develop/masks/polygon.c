@@ -561,8 +561,10 @@ static int _polygon_find_self_intersection(dt_masks_dynbuf_t *inter, int nb_node
             // and we are sure that this portion doesn't include one of the shape extrema
             if(inter_count > 0)
             {
-              if((v[k] - i) * ((int)dt_masks_dynbuf_get(inter, -2) - (int)dt_masks_dynbuf_get(inter, -1)) > 0
-                 && (int)dt_masks_dynbuf_get(inter, -2) >= v[k] && (int)dt_masks_dynbuf_get(inter, -1) <= i)
+              const int inter_last0 = (int)dt_masks_dynbuf_get(inter, -2);
+              const int inter_last1 = (int)dt_masks_dynbuf_get(inter, -1);
+              if((v[k] - i) * (inter_last0 - inter_last1) > 0
+                 && inter_last0 >= v[k] && inter_last1 <= i)
               {
                 // we find an self-intersection portion which include the last one
                 // we just update it
@@ -2574,6 +2576,162 @@ static int _polygon_crop_to_roi(float *polygon, const int point_count, float xmi
 
   if(point_start < 0) return 0; // no point means roi lies completely within polygon
 
+  typedef struct
+  {
+    int l;
+    int r;
+    float start;
+    float delta;
+  } roi_crop_segment_t;
+
+  roi_crop_segment_t *xmax_segs = malloc(sizeof(*xmax_segs) * point_count);
+  roi_crop_segment_t *ymax_segs = malloc(sizeof(*ymax_segs) * point_count);
+  if(!xmax_segs || !ymax_segs)
+  {
+    free(xmax_segs);
+    free(ymax_segs);
+    goto fallback_passes;
+  }
+
+  int xmin_l = -1, xmin_r = -1;
+  int xmax_l = -1, xmax_r = -1;
+  int xmax_count = 0;
+
+  // find the crossing points with xmin/xmax in a single pass
+  for(int k = 0; k < point_count; k++)
+  {
+    const int kk = (k + point_start) % point_count;
+    const float x = polygon[2 * kk];
+
+    if(xmin_l < 0 && x < xmin) xmin_l = k;       // where we leave roi (xmin)
+    if(xmin_l >= 0 && x >= xmin) xmin_r = k - 1; // where we re-enter roi (xmin)
+
+    if(xmin_l >= 0 && xmin_r >= 0)
+    {
+      const int count = xmin_r - xmin_l + 1;
+      const int ll = (xmin_l - 1 + point_start) % point_count;
+      const int rr = (xmin_r + 1 + point_start) % point_count;
+      const float delta_y = (count == 1) ? 0 : (polygon[2 * rr + 1] - polygon[2 * ll + 1]) / (count - 1);
+      const float start_y = polygon[2 * ll + 1];
+
+      for(int n = 0; n < count; n++)
+      {
+        const int nn = (n + xmin_l + point_start) % point_count;
+        polygon[2 * nn] = xmin;
+        polygon[2 * nn + 1] = start_y + n * delta_y;
+      }
+
+      xmin_l = xmin_r = -1;
+    }
+
+    if(xmax_l < 0 && x > xmax) xmax_l = k;       // where we leave roi (xmax)
+    if(xmax_l >= 0 && x <= xmax) xmax_r = k - 1; // where we re-enter roi (xmax)
+
+    if(xmax_l >= 0 && xmax_r >= 0)
+    {
+      const int count = xmax_r - xmax_l + 1;
+      const int ll = (xmax_l - 1 + point_start) % point_count;
+      const int rr = (xmax_r + 1 + point_start) % point_count;
+      const float delta_y = (count == 1) ? 0 : (polygon[2 * rr + 1] - polygon[2 * ll + 1]) / (count - 1);
+      const float start_y = polygon[2 * ll + 1];
+
+      xmax_segs[xmax_count].l = xmax_l;
+      xmax_segs[xmax_count].r = xmax_r;
+      xmax_segs[xmax_count].start = start_y;
+      xmax_segs[xmax_count].delta = delta_y;
+      xmax_count++;
+
+      xmax_l = xmax_r = -1;
+    }
+  }
+
+  for(int s = 0; s < xmax_count; s++)
+  {
+    const int count = xmax_segs[s].r - xmax_segs[s].l + 1;
+    const float start_y = xmax_segs[s].start;
+    const float delta_y = xmax_segs[s].delta;
+    for(int n = 0; n < count; n++)
+    {
+      const int nn = (n + xmax_segs[s].l + point_start) % point_count;
+      polygon[2 * nn] = xmax;
+      polygon[2 * nn + 1] = start_y + n * delta_y;
+    }
+  }
+
+  free(xmax_segs);
+  xmax_segs = NULL;
+
+  int ymin_l = -1, ymin_r = -1;
+  int ymax_l = -1, ymax_r = -1;
+  int ymax_count = 0;
+
+  // find the crossing points with ymin/ymax in a single pass
+  for(int k = 0; k < point_count; k++)
+  {
+    const int kk = (k + point_start) % point_count;
+    const float y = polygon[2 * kk + 1];
+
+    if(ymin_l < 0 && y < ymin) ymin_l = k;       // where we leave roi (ymin)
+    if(ymin_l >= 0 && y >= ymin) ymin_r = k - 1; // where we re-enter roi (ymin)
+
+    if(ymin_l >= 0 && ymin_r >= 0)
+    {
+      const int count = ymin_r - ymin_l + 1;
+      const int ll = (ymin_l - 1 + point_start) % point_count;
+      const int rr = (ymin_r + 1 + point_start) % point_count;
+      const float delta_x = (count == 1) ? 0 : (polygon[2 * rr] - polygon[2 * ll]) / (count - 1);
+      const float start_x = polygon[2 * ll];
+
+      for(int n = 0; n < count; n++)
+      {
+        const int nn = (n + ymin_l + point_start) % point_count;
+        polygon[2 * nn] = start_x + n * delta_x;
+        polygon[2 * nn + 1] = ymin;
+      }
+
+      ymin_l = ymin_r = -1;
+    }
+
+    if(ymax_l < 0 && y > ymax) ymax_l = k;       // where we leave roi (ymax)
+    if(ymax_l >= 0 && y <= ymax) ymax_r = k - 1; // where we re-enter roi (ymax)
+
+    if(ymax_l >= 0 && ymax_r >= 0)
+    {
+      const int count = ymax_r - ymax_l + 1;
+      const int ll = (ymax_l - 1 + point_start) % point_count;
+      const int rr = (ymax_r + 1 + point_start) % point_count;
+      const float delta_x = (count == 1) ? 0 : (polygon[2 * rr] - polygon[2 * ll]) / (count - 1);
+      const float start_x = polygon[2 * ll];
+
+      ymax_segs[ymax_count].l = ymax_l;
+      ymax_segs[ymax_count].r = ymax_r;
+      ymax_segs[ymax_count].start = start_x;
+      ymax_segs[ymax_count].delta = delta_x;
+      ymax_count++;
+
+      ymax_l = ymax_r = -1;
+    }
+  }
+
+  for(int s = 0; s < ymax_count; s++)
+  {
+    const int count = ymax_segs[s].r - ymax_segs[s].l + 1;
+    const float start_x = ymax_segs[s].start;
+    const float delta_x = ymax_segs[s].delta;
+    for(int n = 0; n < count; n++)
+    {
+      const int nn = (n + ymax_segs[s].l + point_start) % point_count;
+      polygon[2 * nn] = start_x + n * delta_x;
+      polygon[2 * nn + 1] = ymax;
+    }
+  }
+
+  free(ymax_segs);
+  ymax_segs = NULL;
+  return 1;
+
+fallback_passes:
+  l = r = -1;
   // find the crossing points with xmin and replace segment by nodes on border
   for(int k = 0; k < point_count; k++)
   {
