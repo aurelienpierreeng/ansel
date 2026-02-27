@@ -1602,6 +1602,13 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   // we only need to take the contents of our bounding box into account
   const int endx = MIN(w, bbXM * grid);
   const int endy = MIN(h, bbYM * grid);
+  const float inv_grid2 = 1.0f / (grid * grid);
+  float w0[4], w1[4];
+  for(int i = 0; i < grid; i++)
+  {
+    w0[i] = (float)(grid - i);
+    w1[i] = (float)i;
+  }
 #ifdef _OPENMP
 #if !defined(__SUNOS__) && !defined(__NetBSD__)
 #pragma omp parallel for default(none) \
@@ -1615,15 +1622,27 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   {
     const int jj = j % grid;
     const int mj = j / grid - bbym;
+    const float wj0 = w0[jj];
+    const float wj1 = w1[jj];
+    const size_t row_base = (size_t)mj * bbw;
+    float *const row = buffer + (size_t)j * w;
+    int ii = 0;
+    int mi = 0;
     for(int i = bbxm * grid; i < endx; i++)
     {
-      const int ii = i % grid;
-      const int mi = i / grid - bbxm;
-      const size_t mindex = (size_t)mj * bbw + mi;
-      buffer[(size_t)j * w + i]
-          = (points[mindex * 2] * (grid - ii) * (grid - jj) + points[(mindex + 1) * 2] * ii * (grid - jj)
-             + points[(mindex + bbw) * 2] * (grid - ii) * jj + points[(mindex + bbw + 1) * 2] * ii * jj)
-            / (grid * grid);
+      const size_t mindex = row_base + mi;
+      const float wii0 = w0[ii];
+      const float wii1 = w1[ii];
+      row[i] = (points[mindex * 2] * wii0 * wj0
+                + points[(mindex + 1) * 2] * wii1 * wj0
+                + points[(mindex + bbw) * 2] * wii0 * wj1
+                + points[(mindex + bbw + 1) * 2] * wii1 * wj1) * inv_grid2;
+      ii++;
+      if(ii == grid)
+      {
+        ii = 0;
+        mi++;
+      }
     }
   }
 
