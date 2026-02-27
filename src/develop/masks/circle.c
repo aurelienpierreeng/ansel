@@ -830,16 +830,16 @@ static int _circle_get_mask(const dt_iop_module_t *const restrict module,
   const float radius2 = circle->radius * mindim * circle->radius * mindim;
   const float total2 = (circle->radius + circle->border) * mindim * (circle->radius + circle->border) * mindim;
   const float border2 = total2 - radius2;
-  const float *const points_y = points + 1;
 #ifdef _OPENMP
-#pragma omp parallel for default(none)  \
-  dt_omp_firstprivate(h, w, border2, total2, centerx, centery, points, points_y, ptbuffer) \
-  schedule(simd:static) if(h*w > 50000) num_threads(MIN(darktable.num_openmp_threads,(h*w)/20000))
+#pragma omp parallel for simd default(none)  \
+  dt_omp_firstprivate(h, w, border2, total2, centerx, centery, points, ptbuffer) \
+  schedule(simd:static) if(h*w > 50000) num_threads(MIN(darktable.num_openmp_threads,(h*w)/20000)) \
+  aligned(points, ptbuffer : 64)
 #endif
   for(int i = 0 ; i < h*w; i++)
   {
     // find the square of the distance from the center
-    const float l2 = sqf(points[2 * i] - centerx) + sqf(points_y[2 * i] - centery);
+    const float l2 = sqf(points[2 * i] - centerx) + sqf(points[2 * i + 1] - centery);
     // quadratic falloff between the circle's radius and the radius of the outside of the feathering
     const float ratio = (total2 - l2) / border2;
     // enforce 1.0 inside the circle and 0.0 outside the feathering

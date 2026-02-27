@@ -1150,9 +1150,9 @@ static void _fill_mask(const size_t numpoints, float *const bufptr, const float 
   // be rotated, but we can compensate for that by applying a rotation matrix for the same rotation in the opposite
   // direction before projecting the vector.
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(numpoints, bufptr, points, center, alpha, a2, b2, ta2, tb2, cos_alpha, sin_alpha, out_scale) \
-  schedule(static) if(numpoints > 50000)
+  schedule(static) if(numpoints > 50000) aligned(points, bufptr : 64)
 #endif
   for(size_t i = 0; i < numpoints; i++)
     {
@@ -1328,15 +1328,22 @@ static int _ellipse_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   if(!ellipse) return 0;
   // we create a buffer of points with all points in the area
   int w = *width, h = *height;
+  const int posx_ = *posx;
+  const int posy_ = *posy;
   float *points = dt_pixelpipe_cache_alloc_align_float_cache((size_t)2 * w * h, 0);
   if(points == NULL)
     return 1;
 
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(w, h, posx_, posy_, points) \
+  schedule(static) collapse(2) if((size_t)w * h > 50000)
+#endif
   for(int i = 0; i < h; i++)
     for(int j = 0; j < w; j++)
     {
-      points[(i * w + j) * 2] = (j + (*posx));
-      points[(i * w + j) * 2 + 1] = (i + (*posy));
+      points[(i * w + j) * 2] = (j + posx_);
+      points[(i * w + j) * 2 + 1] = (i + posy_);
     }
 
   if(darktable.unmuted & DT_DEBUG_PERF)
@@ -1544,7 +1551,7 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(grid, bbxm, bbym, bbXM, bbYM, bbw, iscale, px, py, points) \
-  if((size_t)bbw * bbh > 50000)
+  schedule(static) collapse(2) if((size_t)bbw * bbh > 50000)
 #endif
   for(int j = bbym; j <= bbYM; j++)
     for(int i = bbxm; i <= bbXM; i++)

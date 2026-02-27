@@ -1216,9 +1216,9 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
   }
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(lutsize, lutmax, hwscale, state, normf, extent, lut) \
-  schedule(static) if(lutsize > 1000)
+  schedule(static) if(lutsize > 1000) aligned(lut : 64)
 #endif
   for(int n = 0; n < lutsize; n++)
   {
@@ -1403,9 +1403,9 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_
   }
 
 #ifdef _OPENMP
-#pragma omp parallel for default(none) \
+#pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(lutsize, lutmax, hwscale, state, normf, extent, lut) \
-  schedule(static) if(lutsize > 1000)
+  schedule(static) if(lutsize > 1000) aligned(lut : 64)
 #endif
   for(int n = 0; n < lutsize; n++)
   {
