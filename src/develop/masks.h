@@ -32,6 +32,80 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+
+/*
+Typical forms tree structure :
+
+GList darktable.develop->forms
+  |
+  0) dt_masks_form_t  circle --------------------> ID 1771813676,  "circle #2"
+  |    { GList *points
+  |        | dt_masks_form_t  --------------------> dt_masks_type_t type; const dt_masks_functions_t *functions;
+  |            |                                     float source[2]; char name[128]; int formid; int version;
+  |              { GList *points;
+  |                  | dt_masks_node_circle_t ----> float center[2]; float radius; float border;
+  |
+  |
+  1) dt_masks_form_t  group ---------------------> ID 1771813678,  "grp retouch"
+  |    { GList *points
+  |        |-> dt_masks_form_group_t :   ID 1771813676,  parentid: 1771813678,    state: use show union 
+  |        |-> dt_masks_form_group_t :   ID 1771942330,  parentid: 1771813678,    state: use show union 
+  |
+  |
+  2) dt_masks_form_t  polygon -------------------> ID 1771815454,  "polygon #1"
+  |    { GList *points
+  |        | dt_masks_form_t   -------------------> dt_masks_type_t type; const dt_masks_functions_t *functions;
+  |              |                                   float source[2]; char name[128]; int formid; int version;
+  |              { GList *points;
+  |                  | dt_masks_node_polygon_t ---> float node[2]; float ctrl1[2]; float ctrl2[2]; float border[2];
+  |                  | dt_masks_node_polygon_t ---> ...
+  |                  | ...
+  |                  | ...
+  |
+  |
+  3) dt_masks_form_t  group ---------------------> ID 1771942331,  "grp exposure"
+  |    { GList *points
+  |        |-> dt_masks_form_group_t :  ID 1771815454,   parentid: 1771942331,    state: use show union 
+  |        |-> dt_masks_form_group_t :  ID 1771877226,   parentid: 1771942331,    state: use show union 
+  |        |-> dt_masks_form_group_t :  ID 1771877232,   parentid: 1771942331,    state: use show union 
+  |
+  |
+  4) dt_masks_form_t  ellipse -------------------> ID 1771877226,  "ellipse #1"
+  |    { GList *points
+  |        | dt_masks_form_t  --------------------> dt_masks_type_t type; const dt_masks_functions_t *functions;
+  |              |                                   float source[2]; char name[128]; int formid; int version;
+  |              { GList *points;
+  |                  | dt_masks_node_ellipse_t ---> float center[2]; float radius[2]; float rotation;
+  |                                                  float border; dt_masks_ellipse_flags_t flags;
+  |
+  |
+  5) dt_masks_form_t  brush ---------------------> ID 1771877232,  "brush #1"
+  |    { GList *points
+  |        | dt_masks_form_t  --------------------> dt_masks_type_t type; const dt_masks_functions_t *functions;
+  |              |                                   float source[2]; char name[128]; int formid; int version;
+  |              { GList *points;
+  |                  | dt_masks_node_brush_t ----->  float node[2]; float pressure; float hardness; float size;
+  |                  |                                dt_masks_pressure_sensitivity_t pressure_sensitivity;
+  |                  | dt_masks_node_brush_t -----> ...
+  |                  |
+  |                  | ...
+  |                  | ...
+  |
+  |
+  6) dt_masks_form_t  gradient -------------------> ID 1771942330,  "gradient #1"
+  |    { GList *points
+  |        | dt_masks_form_t  ---------------------> dt_masks_type_t type; const dt_masks_functions_t *functions;
+  |              |                                    float source[2]; char name[128]; int formid; int version;
+  |              { GList *points;
+  |                  | dt_masks_anchor_gradient_t -> float center[2]; float rotation; float extent; float steepness; float curvature;
+  |
+  7)...
+  |
+  ...
+
+
+*/
+
 #pragma once
 
 #include "common/darktable.h"
