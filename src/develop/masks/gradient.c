@@ -55,7 +55,7 @@ static int _find_border_separator(const float *border, int count)
 
 #ifdef _OPENMP
   int found = count;
-#pragma omp parallel for reduction(min:found)
+#pragma omp parallel for reduction(min:found) if(count > 1000)
   for(int i = 0; i < count; i++)
   {
     if(isinf(border[i * 2]) && isinf(border[i * 2 + 1]))
@@ -1161,7 +1161,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(grid, gh, gw, px, py, points) \
-  schedule(static) collapse(2)
+  schedule(static) collapse(2) if((size_t)gw * gh > 50000)
 #endif
   for(int j = 0; j < gh; j++)
     for(int i = 0; i < gw; i++)
@@ -1218,7 +1218,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(lutsize, lutmax, hwscale, state, normf, extent, lut) \
-  schedule(static)
+  schedule(static) if(lutsize > 1000)
 #endif
   for(int n = 0; n < lutsize; n++)
   {
@@ -1235,9 +1235,9 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
 #if !defined(__SUNOS__) && !defined(__NetBSD__)
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(gh, gw, sinv, cosv, xoffset, yoffset, hwscale, ihwscale, curvature, extent, points, clut) \
-  schedule(static) collapse(2)
+  schedule(static) collapse(2) if((size_t)gw * gh > 50000)
 #else
-#pragma omp parallel for dt_omp_firstprivate(points)
+#pragma omp parallel for dt_omp_firstprivate(points) if((size_t)gw * gh > 50000)
 #endif
 #endif
   for(int j = 0; j < gh; j++)
@@ -1279,7 +1279,7 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(h, w, gw, grid, bufptr, points, w0, w1, inv_grid2) \
-  schedule(simd:static)
+  schedule(simd:static) if((size_t)w * h > 50000)
 #endif
   for(int j = 0; j < h; j++)
   {
@@ -1345,7 +1345,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(iscale, gh, gw, py, px, grid, points) \
-  schedule(static) collapse(2)
+  schedule(static) collapse(2) if((size_t)gw * gh > 50000)
 #endif
   for(int j = 0; j < gh; j++)
     for(int i = 0; i < gw; i++)
@@ -1405,7 +1405,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(lutsize, lutmax, hwscale, state, normf, extent, lut) \
-  schedule(static)
+  schedule(static) if(lutsize > 1000)
 #endif
   for(int n = 0; n < lutsize; n++)
   {
@@ -1421,9 +1421,9 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_
 #if !defined(__SUNOS__) && !defined(__NetBSD__)
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(gh, gw, sinv, cosv, xoffset, yoffset, hwscale, ihwscale, curvature, extent, points, clut) \
-  schedule(static) collapse(2)
+  schedule(static) collapse(2) if((size_t)gw * gh > 50000)
 #else
-#pragma omp parallel for dt_omp_firstprivate(points)
+#pragma omp parallel for dt_omp_firstprivate(points) if((size_t)gw * gh > 50000)
 #endif
 #endif
   for(int j = 0; j < gh; j++)
@@ -1457,7 +1457,7 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(h, w, grid, gw, buffer, points, w0, w1, inv_grid2) \
-  schedule(simd:static)
+  schedule(simd:static) if((size_t)w * h > 50000)
 #endif
   for(int j = 0; j < h; j++)
   {

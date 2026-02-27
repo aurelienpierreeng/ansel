@@ -2941,7 +2941,8 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev
   // now we fill the falloff
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(nb_corner, border_count, width, height, buffer, points, border, payload)
+  dt_omp_firstprivate(nb_corner, border_count, width, height, buffer, points, border, payload) \
+  if(border_count - nb_corner * 3 > 1000)
 #endif
   for(int i = nb_corner * 3; i < border_count; i++)
   {

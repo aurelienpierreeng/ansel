@@ -2487,7 +2487,7 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, const dt_dev_p
 #ifdef _OPENMP
 #pragma omp parallel for \
   dt_omp_firstprivate(hb, wb, bufptr) \
-  schedule(static)
+  schedule(static) if((size_t)hb * wb > 50000)
 #endif
   for(int yy = 0; yy < hb; yy++)
   {
@@ -2859,7 +2859,7 @@ fallback_passes:
 }
 
 /** we write a falloff segment respecting limits of buffer */
-static void _polygon_falloff_roi(float *buffer, int *p0, int *p1, int bw, int bh)
+static inline void _polygon_falloff_roi(float *buffer, int *p0, int *p1, int bw, int bh)
 {
   // segment length
   const int l = sqrt((p1[0] - p0[0]) * (p1[0] - p0[0]) + (p1[1] - p0[1]) * (p1[1] - p0[1])) + 1;
@@ -3144,7 +3144,8 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(xxmin, xxmax, yymin, yymax, width, buffer) \
-  schedule(static) num_threads(MIN(8,darktable.num_openmp_threads))
+  schedule(static) \
+  if((size_t)(yymax - yymin + 1) * (size_t)(xxmax - xxmin + 1) > 50000)
 #endif
       for(int yy = yymin; yy <= yymax; yy++)
       {
@@ -3230,7 +3231,8 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(width, height, dindex, buffer, dpoints)
+  dt_omp_firstprivate(width, height, dindex, buffer, dpoints) \
+  if(dindex > 4096)
 #endif
     for(int n = 0; n < dindex; n += 4)
       _polygon_falloff_roi(buffer, dpoints + n, dpoints + n + 2, width, height);

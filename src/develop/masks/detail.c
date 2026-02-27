@@ -97,7 +97,7 @@ void dt_masks_extend_border(float *const restrict mask, const int width, const i
 #ifdef _OPENMP
   #pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(mask, width, height, border, max_col) \
-  schedule(simd:static) aligned(mask : 64)
+  schedule(simd:static) aligned(mask : 64) if((size_t)width * height > 10000)
  #endif
   for(int row = border; row < height - border; row++)
   {
@@ -113,7 +113,7 @@ void dt_masks_extend_border(float *const restrict mask, const int width, const i
 #ifdef _OPENMP
   #pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(mask, width, height, border, max_col, top_row, bot_row) \
-  schedule(simd:static) aligned(mask : 64)
+  schedule(simd:static) aligned(mask : 64) if((size_t)width * height > 10000)
  #endif
   for(int col = 0; col < width; col++)
   {
@@ -237,7 +237,7 @@ void dt_masks_blur_9x9(float *const restrict src, float *const restrict out, con
 #ifdef _OPENMP
   #pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(blurmat, src, out, width, height, w1, w2, w3, w4) \
-  schedule(simd:static) aligned(src, out : 64)
+  schedule(simd:static) aligned(src, out : 64) if((size_t)width * height > 50000)
  #endif
   for(int row = 4; row < height - 4; row++)
   {
@@ -307,7 +307,7 @@ void dt_masks_calc_rawdetail_mask(float *const restrict src, float *const restri
 #ifdef _OPENMP
   #pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(tmp, src, msize, wb) \
-  schedule(simd:static) aligned(tmp, src : 64)
+  schedule(simd:static) aligned(tmp, src : 64) if(msize > 50000)
 #endif
   for(int idx =0; idx < msize; idx++)
   {
@@ -319,7 +319,7 @@ void dt_masks_calc_rawdetail_mask(float *const restrict src, float *const restri
 #ifdef _OPENMP
   #pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(mask, tmp, width, height, scale) \
-  schedule(simd:static) aligned(mask, tmp : 64)
+  schedule(simd:static) aligned(mask, tmp : 64) if((size_t)width * height > 50000)
  #endif
   for(int row = 1; row < height - 1; row++)
   {
@@ -356,7 +356,7 @@ void dt_masks_calc_detail_mask(float *const restrict src, float *const restrict 
 #ifdef _OPENMP
   #pragma omp parallel for simd default(none) \
   dt_omp_firstprivate(src, tmp, msize, threshold, detail, out) \
-  schedule(simd:static) aligned(src, tmp, out : 64)
+  schedule(simd:static) aligned(src, tmp, out : 64) if(msize > 50000)
 #endif
   for(int idx = 0; idx < msize; idx++)
   {

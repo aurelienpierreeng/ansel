@@ -1080,7 +1080,7 @@ static int _circle_get_mask_roi(const dt_iop_module_t *const restrict module,
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(grid, bbxm, bbym, bbw, endx, endy, width, buffer, points, w0, w1, inv_grid2) \
-  schedule(static)
+  schedule(static) if((size_t)(endy - bbym * grid) * (size_t)(endx - bbxm * grid) > 50000)
 
 #endif
   for(int j = bbym * grid; j < endy; j++)
