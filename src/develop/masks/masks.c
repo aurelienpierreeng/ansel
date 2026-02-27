@@ -2195,8 +2195,9 @@ void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, in
     dt_group_events_post_expose(mask_draw, zoom_scale, form, gui);
   else if(form->functions && form->functions->post_expose)
   {
+    const guint nb_points = g_list_length(form->points);
     gui->type = form->type;
-    form->functions->post_expose(mask_draw, zoom_scale, gui, 0, g_list_length(form->points));
+    form->functions->post_expose(mask_draw, zoom_scale, gui, 0, nb_points);
   }
   cairo_restore(mask_draw);
 
@@ -2416,7 +2417,9 @@ void dt_masks_iop_combo_populate(GtkWidget *w, void *m)
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
 
   // we determine a higher approx of the entry number
-  guint nbe = 5 + g_list_length(module->dev->forms) + g_list_length(module->dev->iop);
+  const guint forms_count = g_list_length(module->dev->forms);
+  const guint iop_count = g_list_length(module->dev->iop);
+  guint nbe = 5 + forms_count + iop_count;
   free(bd->masks_combo_ids);
   bd->masks_combo_ids = malloc(sizeof(int) * nbe);
 
@@ -2498,6 +2501,7 @@ void dt_masks_iop_value_changed_callback(GtkWidget *widget, struct dt_iop_module
   if(sel > 0)
   {
     int val = bd->masks_combo_ids[sel];
+    const guint iop_count = g_list_length(module->dev->iop);
     // FIXME : these values should use binary enums
     if(val == -1000000)
     {
@@ -2533,7 +2537,7 @@ void dt_masks_iop_value_changed_callback(GtkWidget *widget, struct dt_iop_module
     {
       // use same shapes as another iop
       val = -1 * val - 1;
-      if(val < g_list_length(module->dev->iop))
+      if(val < (int)iop_count)
       {
         dt_iop_module_t *m = (dt_iop_module_t *)g_list_nth_data(module->dev->iop, val);
         dt_masks_iop_use_same_as(module, m);
@@ -2792,9 +2796,9 @@ void dt_masks_form_move(dt_masks_form_t *grp, int formid, int up)
   // we remove the form and read it
   if(grpt)
   {
-    // Don't exceed limits
+    const guint grp_len = g_list_length(grp->points);
     if(!up && pos == 0) return;
-    if(up && pos == g_list_length(grp->points) - 1) return;
+    if(up && pos == grp_len - 1) return;
 
     grp->points = g_list_remove(grp->points, grpt);
     if(!up)
