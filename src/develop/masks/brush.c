@@ -2636,7 +2636,8 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   }
 }
 
-static void _brush_bounding_box_raw(const float *const points, const float *const border, const int nb_corner,
+static void _brush_bounding_box_raw(const float *const restrict points, const float *const restrict border,
+                                    const int nb_corner,
                                     const int num_points, float *x_min, float *x_max, float *y_min, float *y_max)
 {
   // now we want to find the area, so we search min/max points
@@ -2939,13 +2940,8 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev
 
   // now we fill the falloff
 #ifdef _OPENMP
-#if !defined(__SUNOS__) && !defined(__NetBSD__)
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(nb_corner, border_count, width, height) \
-  shared(buffer, points, border, payload) schedule(static)
-#else
-#pragma omp parallel for shared(buffer)
-#endif
+  dt_omp_firstprivate(nb_corner, border_count, width, height, buffer, points, border, payload)
 #endif
   for(int i = nb_corner * 3; i < border_count; i++)
   {
