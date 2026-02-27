@@ -93,31 +93,33 @@
 void dt_masks_extend_border(float *const restrict mask, const int width, const int height, const int border)
 {
   if(border <= 0) return;
+  const int max_col = width - border - 1;
 #ifdef _OPENMP
   #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(mask) \
-  dt_omp_sharedconst(width, height, border) \
+  dt_omp_firstprivate(mask, width, height, border, max_col) \
   schedule(simd:static) aligned(mask : 64)
  #endif
   for(int row = border; row < height - border; row++)
   {
-    const int idx = row * width;
+    float *const rowptr = mask + (size_t)(row * width);
     for(int i = 0; i < border; i++)
     {
-      mask[idx + i] = mask[idx + border];
-      mask[idx + width - i - 1] = mask[idx + width - border -1];
+      rowptr[i] = rowptr[border];
+      rowptr[width - i - 1] = rowptr[max_col];
     }
   }
+  const float *const top_row = mask + (size_t)(border * width);
+  const float *const bot_row = mask + (size_t)(height - border - 1) * width;
 #ifdef _OPENMP
   #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(mask) \
-  dt_omp_sharedconst(width, height, border) \
+  dt_omp_firstprivate(mask, width, height, border, max_col, top_row, bot_row) \
   schedule(simd:static) aligned(mask : 64)
  #endif
   for(int col = 0; col < width; col++)
   {
-    const float top = mask[border * width + MIN(width - border - 1, MAX(col, border))];
-    const float bot = mask[(height - border - 1) * width + MIN(width - border - 1, MAX(col, border))];
+    const int c = MIN(max_col, MAX(col, border));
+    const float top = top_row[c];
+    const float bot = bot_row[c];
     for(int i = 0; i < border; i++)
     {
       mask[col + i * width] = top;
@@ -234,15 +236,15 @@ void dt_masks_blur_9x9(float *const restrict src, float *const restrict out, con
   const int w4 = 4*width;
 #ifdef _OPENMP
   #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(blurmat, src, out) \
-  dt_omp_sharedconst(width, height, w1, w2, w3, w4) \
+  dt_omp_firstprivate(blurmat, src, out, width, height, w1, w2, w3, w4) \
   schedule(simd:static) aligned(src, out : 64)
  #endif
   for(int row = 4; row < height - 4; row++)
   {
+    const int row_off = row * width;
     for(int col = 4; col < width - 4; col++)
     {
-      const int i = row * width + col;
+      const int i = row_off + col;
       out[i] = fminf(1.0f, fmaxf(0.0f, FAST_BLUR_9));
     }
   }
