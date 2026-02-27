@@ -517,6 +517,7 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
     grpt->opacity = dt_conf_get_float("plugins/darkroom/masks/opacity");
     grp->points = g_list_append(grp->points, grpt);
     // we update module gui
+      
     if(gui) dt_masks_iop_update(module);
   }
 
@@ -1372,7 +1373,6 @@ static void _masks_gui_remove_form_callback(GtkWidget *menu, gpointer user_data)
 
     dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
   }
-
 }
 
 void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data)
@@ -1419,6 +1419,38 @@ static void _masks_gui_cancel_creation_callback(GtkWidget *menu, gpointer user_d
   dt_masks_form_cancel_creation(module, gui);
 }
 
+static void _masks_move_up_down_callback(gpointer user_data, const int up)
+{
+  dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
+  if(!gui) return;
+  if(gui->group_selected < 0) return;
+
+  dt_iop_module_t *module = darktable.develop->gui_module;
+  if(!module) return;
+
+  dt_masks_form_t *forms = darktable.develop->form_visible;
+  if(!forms) return;
+  dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(forms->points, gui->group_selected);
+  if(!fpt) return;
+  dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, fpt->parentid);
+  if(!grp || !(grp->type & DT_MASKS_GROUP)) return;
+
+  dt_masks_form_move(grp, fpt->formid, up);
+  
+  //dt_dev_masks_list_change(darktable.develop);
+
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, fpt->formid, fpt->parentid, DT_MASKS_EVENT_CHANGE);
+}
+
+static void _masks_moveup_callback(GtkWidget *menu, gpointer user_data)
+{
+  _masks_move_up_down_callback(user_data, 0);
+}
+
+static void _masks_movedown_callback(GtkWidget *menu, gpointer user_data)
+{
+  _masks_move_up_down_callback(user_data, 1);
+}
 
 /** Contextual menu */
 
@@ -1434,19 +1466,20 @@ static void _masks_operation_callback(GtkWidget *menu, gpointer user_data)
   apply_operation(form_op, state_op);
 }
 
-#define masks_gtk_menu_item_new_bold(label, selected, state, icon)                    \
-{                                                                                     \
-  gchar *op_title = g_strdup(label);                                                  \
-  gchar *op_label = g_strdup_printf("%s", op_title);                                  \
-  menu_item = ctx_gtk_check_menu_item_new_with_markup_and_pixbuf(op_label, icon,      \
-                                                                    sub_menu,         \
-                                                                    _masks_operation_callback, gui, \
-                                                                    (selected != 0),  \
+#define masks_gtk_menu_item_new_bold(label, selected, state, icon)                                        \
+{                                                                                                         \
+  gchar *op_title = g_strdup(label);                                                                      \
+  gchar *op_label = g_strdup_printf("%s", op_title);                                                      \
+  menu_item = ctx_gtk_check_menu_item_new_with_markup_and_pixbuf(op_label, icon,                          \
+                                                                    sub_menu,                             \
+                                                                    _masks_operation_callback, gui,       \
+                                                                    (selected != 0),                      \
                                                                     ((state) == DT_MASKS_STATE_INVERSE)); \
-  g_free(op_label);                                                                   \
-  g_free(op_title);                                                                   \
-  g_object_set_data(G_OBJECT(menu_item), "state_op", GINT_TO_POINTER(state));         \
-  g_object_set_data(G_OBJECT(menu_item), "op_form", op_form);                         \
+  g_free(op_label);                                                                                       \
+  g_free(op_title);                                                                                       \
+  g_object_set_data(G_OBJECT(menu_item), "state_op", GINT_TO_POINTER(state));                             \
+  g_object_set_data(G_OBJECT(menu_item), "op_form", op_form);                                             \
+  g_object_set_data(G_OBJECT(menu_item), "form_pos", GINT_TO_POINTER(form_pos));                          \
 }
 
 
@@ -1462,11 +1495,12 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   // Create an array of icons for the operations
   const int bs2 = DT_PIXEL_APPLY_DPI(13);
   GdkPixbuf *op_icon[DT_MASKS_STATE_EXCLUSION + 1] = { 0 };
-  op_icon[DT_MASKS_STATE_INVERSE] = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_inverse, bs2 * 2, bs2);
-  op_icon[DT_MASKS_STATE_UNION] = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_union, bs2 * 2, bs2);
-  op_icon[DT_MASKS_STATE_INTERSECTION] = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_intersection, bs2 * 2, bs2);
-  op_icon[DT_MASKS_STATE_DIFFERENCE] = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_difference, bs2 * 2, bs2);
-  op_icon[DT_MASKS_STATE_EXCLUSION] = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_exclusion, bs2 * 2, bs2);
+  int width = bs2 * 2;
+  op_icon[DT_MASKS_STATE_INVERSE] = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_inverse, width, bs2);
+  op_icon[DT_MASKS_STATE_UNION] = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_union, width, bs2);
+  op_icon[DT_MASKS_STATE_INTERSECTION] = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_intersection, width, bs2);
+  op_icon[DT_MASKS_STATE_DIFFERENCE] = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_difference, width, bs2);
+  op_icon[DT_MASKS_STATE_EXCLUSION] = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_exclusion, width, bs2);
 
   // Get the current group to apply operations on it if needed
   dt_masks_form_group_t *op_form = NULL;
@@ -1591,9 +1625,8 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
 
 
   /*  Operation */
-  if(!gui->creation
-     && !(form->type & DT_MASKS_IS_RETOUCHE)
-     && (op_form))
+
+  if(!gui->creation && !(form->type & DT_MASKS_IS_RETOUCHE) && (op_form) && gui->form_selected)
   { 
     menu_item = ctx_gtk_menu_item_new_with_markup(_("Operation"), menu, NULL, gui);
     GtkWidget *sub_menu = gtk_menu_new();
@@ -1612,16 +1645,24 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
                                  op_icon[DT_MASKS_STATE_DIFFERENCE]);
     masks_gtk_menu_item_new_bold(_("Exclusion"), (op_form->state & DT_MASKS_STATE_EXCLUSION), DT_MASKS_STATE_EXCLUSION,
                                  op_icon[DT_MASKS_STATE_EXCLUSION]);
-    //sep = gtk_separator_menu_item_new();
-    //gtk_menu_shell_append(GTK_MENU_SHELL(sub_menu), sep);
-    //menu_item = ctx_gtk_menu_item_new_with_markup(_("Move up"), sub_menu, NULL, gui);
-    //menu_item = ctx_gtk_menu_item_new_with_markup(_("Move down"), sub_menu, NULL, gui);
+  }
+
+  // Common menu items
+
+  if(gui->form_selected)
+  {
+    sep = gtk_separator_menu_item_new();
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
+    
+    menu_item = ctx_gtk_menu_item_new_with_markup(_("Move up"), menu, _masks_moveup_callback, gui);
+    gtk_widget_set_sensitive(menu_item, (form_pos > 0));
+    menu_item = ctx_gtk_menu_item_new_with_markup(_("Move down"), menu, _masks_movedown_callback, gui);
+    gtk_widget_set_sensitive(menu_item, (form_pos < list_length - 1));    
 
     sep = gtk_separator_menu_item_new();
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
   }
 
-  // Common menu items
   if(gui->creation)
   {
     menu_item = ctx_gtk_menu_item_new_with_markup(_("Cancel"), menu, _masks_gui_cancel_creation_callback, gui);
@@ -2660,6 +2701,7 @@ void dt_masks_form_move(dt_masks_form_t *grp, int formid, int up)
   // we remove the form and read it
   if(grpt)
   {
+    // Don't exceed limits
     if(!up && pos == 0) return;
     if(up && pos == g_list_length(grp->points) - 1) return;
 
@@ -3181,11 +3223,13 @@ void apply_operation(struct dt_masks_form_group_t *pt, const dt_masks_state_t ap
 {
   if(!pt) return;
 
+  // Apply Inverse
   if(apply_state == DT_MASKS_STATE_INVERSE)
     pt->state ^= DT_MASKS_STATE_INVERSE;
   
   else if((apply_state & DT_MASKS_STATE_IS_COMBINE_OP) != 0)
   {
+    // Reset all and apply state
     pt->state = (pt->state & ~DT_MASKS_STATE_IS_COMBINE_OP) | apply_state;
   }
 }
