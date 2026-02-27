@@ -1505,18 +1505,6 @@ static int _polygon_creation_closing_form(dt_masks_form_t *form, dt_masks_form_g
 
   // we save the form and quit creation mode
   dt_masks_gui_form_save_creation(darktable.develop, crea_module, form, gui);
-  if(crea_module)
-  {
-
-    dt_masks_set_edit_mode(crea_module, DT_MASKS_EDIT_FULL);
-    dt_masks_iop_update(crea_module);
-    dt_dev_masks_selection_change(darktable.develop, crea_module, form->formid, TRUE);
-    gui->creation_module = NULL;
-  }
-  else
-  {
-    dt_dev_masks_selection_change(darktable.develop, NULL, form->formid, TRUE);
-  }
 
   return 1;
 }

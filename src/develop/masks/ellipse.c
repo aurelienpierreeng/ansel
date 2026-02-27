@@ -696,21 +696,6 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
       }
       form->points = g_list_append(form->points, ellipse);
       dt_masks_gui_form_save_creation(darktable.develop, crea_module, form, gui);
-
-      if(crea_module)
-      {
-        // we save the move
-
-        dt_masks_set_edit_mode(crea_module, DT_MASKS_EDIT_FULL);
-        dt_masks_iop_update(crea_module);
-        dt_dev_masks_selection_change(darktable.develop, crea_module, form->formid, TRUE);
-        gui->creation_module = NULL;
-      }
-      else
-      {
-        // we select the new form
-        dt_dev_masks_selection_change(darktable.develop, NULL, form->formid, TRUE);
-      }
       
       return 1;
     }

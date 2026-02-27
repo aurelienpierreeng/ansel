@@ -497,6 +497,7 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
 
   dt_masks_append_form(dev, form);
 
+  dt_masks_form_group_t *grpt = malloc(sizeof(dt_masks_form_group_t));
   if(module)
   {
     // is there already a masks group for this module ?
@@ -510,22 +511,41 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
         grp = _group_create(dev, module, DT_MASKS_GROUP);
     }
     // we add the form in this group
-    dt_masks_form_group_t *grpt = malloc(sizeof(dt_masks_form_group_t));
     grpt->formid = form->formid;
     grpt->parentid = grp->formid;
     grpt->state = DT_MASKS_STATE_SHOW | DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION;
     grpt->opacity = dt_conf_get_float("plugins/darkroom/masks/opacity");
     grp->points = g_list_append(grp->points, grpt);
-
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, grpt->formid, grpt->parentid, DT_MASKS_EVENT_ADD);
     
     // we update module gui
       
     if(gui) dt_masks_iop_update(module);
   }
 
-  // show the form if needed
-  if(gui) dev->form_gui->formid = form->formid;
+  if(gui)
+  {
+    // show the form if needed
+    dev->form_gui->formid = form->formid;
+
+    if(module)
+    {
+      // we save the move
+      dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
+      dt_masks_iop_update(module);
+      dt_dev_masks_selection_change(darktable.develop, module, form->formid, TRUE);
+      gui->creation_module = NULL;
+    }
+    else
+    {
+      // we select the new form
+      dt_dev_masks_selection_change(darktable.develop, NULL, form->formid, TRUE);
+    }
+
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, grpt->formid, grpt->parentid, DT_MASKS_EVENT_ADD);
+  }
+
+  // Free grpt if it 
+  if(!gui && !module) free(grpt);
 }
 
 int dt_masks_form_duplicate(dt_develop_t *dev, int formid)
@@ -1658,6 +1678,43 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
       }
   }
 
+  int i = 0;
+  for(GList *forms = darktable.develop->forms; forms; forms = g_list_next(forms))
+  {
+    dt_masks_form_t *f = (dt_masks_form_t *)forms->data;
+    fprintf(stderr, "%2d) dt_masks_form_t %s,\tID %d,\t\"%s\"\n", i,
+                                f->type & DT_MASKS_CIRCLE ? "circle" :
+                                f->type & DT_MASKS_ELLIPSE ? "ellipse" :
+                                f->type & DT_MASKS_POLYGON ? "polygon" :
+                                f->type & DT_MASKS_BRUSH ? "brush" :
+                                f->type & DT_MASKS_GRADIENT ? "gradient" :
+                                f->type & DT_MASKS_GROUP ? "group" : "unknown", f->formid, f->name);
+
+
+    if(f->type & DT_MASKS_GROUP)
+    {
+      fprintf(stderr, "   ||\n");
+      for(GList *gf = f->points; gf; gf = g_list_next(gf))
+      {
+        dt_masks_form_group_t *group_pt = (dt_masks_form_group_t *)gf->data;
+        fprintf(stderr, "   |-> dt_masks_form_group_t \tID %d,\tparentid: %d,\t state: %s%s%s%s%s%s%s%s\n", group_pt->formid, group_pt->parentid, group_pt->state & DT_MASKS_STATE_INVERSE ? _("inverse ") : "",
+                                                        group_pt->state & DT_MASKS_STATE_USE ? _("use ") : "",
+                                                        group_pt->state & DT_MASKS_STATE_NONE ? _("none ") : "",
+                                                        group_pt->state & DT_MASKS_STATE_SHOW ? _("show ") : "",
+                                                        group_pt->state & DT_MASKS_STATE_UNION ? _("union ") : "",
+                                                        group_pt->state & DT_MASKS_STATE_INTERSECTION ? _("intersection ") : "",
+                                                        group_pt->state & DT_MASKS_STATE_DIFFERENCE ? _("difference ") : "",
+                                                        group_pt->state & DT_MASKS_STATE_EXCLUSION ? _("exclusion ") : "");
+      }
+    }
+    i++;
+    fprintf(stderr, "\n");
+  }
+  fprintf(stderr, "----\n"
+                  "form: %d\n"
+                  "form_visible: %d\n"
+                  "parentid: %d\n\n", form->formid, darktable.develop->form_visible->formid,
+                  formgroup ? formgroup->parentid : -1);
 
   /*  Operation */
 
