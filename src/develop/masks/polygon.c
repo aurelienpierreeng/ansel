@@ -731,11 +731,15 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
     _polygon_points_recurs(p1, p2, 0.0, 1.0, cmin, cmax, bmin, bmax, rc, rb, dpoints, dborder, border && (nb >= 3));
 
     // we check gaps in the border (sharp edges)
-    if(dborder && (fabs(dt_masks_dynbuf_get(dborder, -2) - rb[0]) > 1.0f
-                   || fabs(dt_masks_dynbuf_get(dborder, -1) - rb[1]) > 1.0f))
+    if(dborder)
     {
-      bmin[0] = dt_masks_dynbuf_get(dborder, -2);
-      bmin[1] = dt_masks_dynbuf_get(dborder, -1);
+      const float lastb0 = dt_masks_dynbuf_get(dborder, -2);
+      const float lastb1 = dt_masks_dynbuf_get(dborder, -1);
+      if(fabs(lastb0 - rb[0]) > 1.0f || fabs(lastb1 - rb[1]) > 1.0f)
+      {
+        bmin[0] = lastb0;
+        bmin[1] = lastb1;
+      }
     }
 
     dt_masks_dynbuf_add_2(dpoints, rc[0], rc[1]);
@@ -746,13 +750,17 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
     {
       if(isnan(rb[0]))
       {
-        if(isnan(dt_masks_dynbuf_get(dborder, - 2)))
+        float lastb0 = dt_masks_dynbuf_get(dborder, -2);
+        float lastb1 = dt_masks_dynbuf_get(dborder, -1);
+        if(isnan(lastb0))
         {
-          dt_masks_dynbuf_set(dborder, -2, dt_masks_dynbuf_get(dborder, -4));
-          dt_masks_dynbuf_set(dborder, -1, dt_masks_dynbuf_get(dborder, -3));
+          lastb0 = dt_masks_dynbuf_get(dborder, -4);
+          lastb1 = dt_masks_dynbuf_get(dborder, -3);
+          dt_masks_dynbuf_set(dborder, -2, lastb0);
+          dt_masks_dynbuf_set(dborder, -1, lastb1);
         }
-        rb[0] = dt_masks_dynbuf_get(dborder, -2);
-        rb[1] = dt_masks_dynbuf_get(dborder, -1);
+        rb[0] = lastb0;
+        rb[1] = lastb1;
       }
       dt_masks_dynbuf_add_2(dborder, rb[0], rb[1]);
 
@@ -971,7 +979,8 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, float pzx, floa
                                   int parentid, dt_masks_form_gui_t *gui, int index)
 {  
   if(!form || !form->points || !gui) return;
-  if(gui->seg_selected < 0 || gui->seg_selected >= g_list_length(form->points)) return;
+  const guint nb_points = g_list_length(form->points);
+  if(gui->seg_selected < 0 || gui->seg_selected >= (int)nb_points) return;
 
   // we add a new node to the polygon
   dt_masks_node_polygon_t *new_node = (dt_masks_node_polygon_t *)(malloc(sizeof(dt_masks_node_polygon_t)));
@@ -1274,7 +1283,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   int inside, inside_border, near, inside_source;
   float dist;
   _polygon_get_distance(pzx, pzy, dist_curs, gui, index, nb, &inside, &inside_border, &near, &inside_source, &dist);
-  if(near < (g_list_length(form->points)) && gui->node_selected == -1)
+  if(near < (int)nb && gui->node_selected == -1)
     gui->seg_selected = near;
 
   if(near < 0)
@@ -1867,8 +1876,9 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
   }
 
   if(!form->points) return 0;
+  const guint nb_points = g_list_length(form->points);
 
-  else if(gui->seg_dragging >= 0)
+  if(gui->seg_dragging >= 0)
   {
     // we get point0 new values
     const GList *const pt = g_list_nth(form->points, gui->seg_dragging);
@@ -1884,7 +1894,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
 
     // if first or last segment, update the source accordingly
     // (the source point follows the first/last segment when moved)
-    if((form->type & DT_MASKS_CLONE) && (gui->seg_dragging == 0 || gui->seg_dragging == (g_list_length(form->points) - 1)))
+    if((form->type & DT_MASKS_CLONE) && (gui->seg_dragging == 0 || gui->seg_dragging == (int)nb_points - 1))
     {
       form->source[0] += dx;
       form->source[1] += dy;
@@ -2295,13 +2305,14 @@ static int _polygon_get_area(const dt_iop_module_t *const module, const dt_dev_p
 
   const float lx = p1[0] - p0[0];
   const float ly = p1[1] - p0[1];
+  const float inv_l = 1.0f / (float)l;
 
   for(int i = 0; i < l; i++)
   {
     // position
-    const int x = (int)((float)i * lx / (float)l) + p0[0] - posx;
-    const int y = (int)((float)i * ly / (float)l) + p0[1] - posy;
-    const float op = 1.0 - (float)i / (float)l;
+    const int x = (int)((float)i * lx * inv_l) + p0[0] - posx;
+    const int y = (int)((float)i * ly * inv_l) + p0[1] - posy;
+    const float op = 1.0f - (float)i * inv_l;
     size_t idx = y * bw + x;
     buffer[idx] = fmaxf(buffer[idx], op);
     if(x > 0)
@@ -2480,12 +2491,13 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, const dt_dev_p
 #endif
   for(int yy = 0; yy < hb; yy++)
   {
+    float *const restrict row = bufptr + (size_t)yy * wb;
     int state = 0;
     for(int xx = 0; xx < wb; xx++)
     {
-      const float v = bufptr[yy * wb + xx];
+      const float v = row[xx];
       if(v == 1.0f) state = !state;
-      if(state) bufptr[yy * wb + xx] = 1.0f;
+      if(state) row[xx] = 1.0f;
     }
   }
 
@@ -2854,19 +2866,28 @@ static void _polygon_falloff_roi(float *buffer, int *p0, int *p1, int bw, int bh
 
   const float lx = p1[0] - p0[0];
   const float ly = p1[1] - p0[1];
+  const float inv_l = 1.0f / (float)l;
 
   const int dx = lx < 0 ? -1 : 1;
   const int dy = ly < 0 ? -1 : 1;
   const int dpy = dy * bw;
 
+  const int x0 = p0[0], y0 = p0[1];
+  const int x1 = p1[0], y1 = p1[1];
+  if((x0 < 0 && x1 < 0) || (x0 >= bw && x1 >= bw) || (y0 < 0 && y1 < 0) || (y0 >= bh && y1 >= bh)) return;
+  const int inside = (x0 >= 0 && x0 < bw && x1 >= 0 && x1 < bw && y0 >= 0 && y0 < bh && y1 >= 0 && y1 < bh);
+
   for(int i = 0; i < l; i++)
   {
     // position
-    const int x = (int)((float)i * lx / (float)l) + p0[0];
-    const int y = (int)((float)i * ly / (float)l) + p0[1];
-    const float op = 1.0f - (float)i / (float)l;
+    const int x = (int)((float)i * lx * inv_l) + p0[0];
+    const int y = (int)((float)i * ly * inv_l) + p0[1];
+    const float op = 1.0f - (float)i * inv_l;
+    if(!inside && (x < 0 || x >= bw || y < 0 || y >= bh)) continue;
     float *buf = buffer + (size_t)y * bw + x;
-    if(x >= 0 && x < bw && y >= 0 && y < bh)
+    if(inside)
+      buf[0] = MAX(buf[0], op);
+    else if(x >= 0 && x < bw && y >= 0 && y < bh)
       buf[0] = MAX(buf[0], op);
     if(x + dx >= 0 && x + dx < bw && y >= 0 && y < bh)
       buf[dx] = MAX(buf[dx], op); // this one is to avoid gap due to int rounding
@@ -3131,13 +3152,13 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
 #endif
       for(int yy = yymin; yy <= yymax; yy++)
       {
+        float *const restrict row = buffer + (size_t)yy * width;
         int state = 0;
         for(int xx = xxmin; xx <= xxmax; xx++)
         {
-          const size_t index = (size_t)yy * width + xx;
-          const float v = buffer[index];
+          const float v = row[xx];
           if(v > 0.5f) state = !state;
-          if(state) buffer[index] = 1.0f;
+          if(state) row[xx] = 1.0f;
         }
       }
 
@@ -3255,7 +3276,8 @@ static void _polygon_set_form_name(struct dt_masks_form_t *const form, const siz
 static void _polygon_set_hint_message(const dt_masks_form_gui_t *const gui, const dt_masks_form_t *const form,
                                      const int opacity, char *const restrict msgbuf, const size_t msgbuf_len)
 {
-  if(gui->creation && g_list_length(form->points) < 4)
+  const guint nb_points = form->points ? g_list_length(form->points) : 0;
+  if(gui->creation && nb_points < 4)
     g_strlcat(msgbuf, _("<b>Add node</b>: click, <b>Add sharp node</b>:ctrl+click\n"
                         "<b>Cancel</b>: right-click or Esc"), msgbuf_len);
   else if(gui->creation)
