@@ -74,6 +74,125 @@ static void _g_list_closure_unref(gpointer data)
   g_free(pc);
 }
 
+static inline void _shortcut_set_widget_data(GtkWidget *widget, dt_shortcut_t *shortcut)
+{
+  if(!widget) return;
+  g_object_set_data(G_OBJECT(widget), DT_ACCELS_WIDGET_SHORTCUT_KEY, shortcut);
+  if(!g_object_get_data(G_OBJECT(widget), DT_ACCELS_WIDGET_TOOLTIP_DISABLED_KEY))
+    gtk_widget_set_has_tooltip(widget, TRUE);
+}
+
+static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_param_values,
+                                           const GValue *param_values, gpointer data)
+{
+  (void)hint;
+  (void)data;
+  if(n_param_values < 5) return TRUE;
+
+  GtkWidget *widget = g_value_get_object(&param_values[0]);
+  if(!widget) return TRUE;
+
+  if(!gtk_widget_get_has_tooltip(widget)) return TRUE;
+  if(g_object_get_data(G_OBJECT(widget), DT_ACCELS_WIDGET_TOOLTIP_DISABLED_KEY)) return TRUE;
+
+  const char *base_markup = g_object_get_data(G_OBJECT(widget), "dt-accel-tooltip-base-markup");
+  const char *base_text = base_markup ? NULL : g_object_get_data(G_OBJECT(widget), "dt-accel-tooltip-base-text");
+  const gboolean base_none = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "dt-accel-tooltip-base-none"));
+
+  if(!base_markup && !base_text && !base_none)
+  {
+    gchar *current_markup = gtk_widget_get_tooltip_markup(widget);
+    if(current_markup && current_markup[0])
+    {
+      g_object_set_data_full(G_OBJECT(widget), "dt-accel-tooltip-base-markup", current_markup, g_free);
+      base_markup = current_markup;
+    }
+    else
+    {
+      g_free(current_markup);
+      gchar *current_text = gtk_widget_get_tooltip_text(widget);
+      if(current_text && current_text[0])
+      {
+        g_object_set_data_full(G_OBJECT(widget), "dt-accel-tooltip-base-text", current_text, g_free);
+        base_text = current_text;
+      }
+      else
+      {
+        g_free(current_text);
+        g_object_set_data(G_OBJECT(widget), "dt-accel-tooltip-base-none", GINT_TO_POINTER(1));
+      }
+    }
+  }
+
+  dt_shortcut_t *shortcut = g_object_get_data(G_OBJECT(widget), DT_ACCELS_WIDGET_SHORTCUT_KEY);
+  if(!shortcut)
+  {
+    const char *accel_path = g_object_get_data(G_OBJECT(widget), "accel-path");
+    if(accel_path && darktable.gui && darktable.gui->accels)
+    {
+      dt_accels_t *accels = darktable.gui->accels;
+      dt_pthread_mutex_lock(&accels->lock);
+      shortcut = (dt_shortcut_t *)g_hash_table_lookup(accels->acceleratables, accel_path);
+      dt_pthread_mutex_unlock(&accels->lock);
+    }
+  }
+
+  if(!shortcut || shortcut->key == 0)
+  {
+    if(base_markup)
+      gtk_widget_set_tooltip_markup(widget, base_markup);
+    else if(base_text)
+      gtk_widget_set_tooltip_text(widget, base_text);
+    return TRUE;
+  }
+
+  gchar *shortcut_label = gtk_accelerator_get_label(shortcut->key, shortcut->mods);
+  if(!shortcut_label || !shortcut_label[0])
+  {
+    g_free(shortcut_label);
+    return TRUE;
+  }
+
+  const char *shortcut_desc = (shortcut->description && shortcut->description[0]) ? shortcut->description : _("Shortcut");
+  if(base_markup && base_markup[0])
+  {
+    gchar *esc_label = g_markup_escape_text(shortcut_label, -1);
+    gchar *esc_desc = g_markup_escape_text(shortcut_desc, -1);
+    gchar *new_markup = g_strdup_printf("%s\n<small>%s: %s</small>", base_markup, esc_desc, esc_label);
+    gtk_widget_set_tooltip_markup(widget, new_markup);
+    g_free(new_markup);
+    g_free(esc_label);
+    g_free(esc_desc);
+  }
+  else if(base_text && base_text[0])
+  {
+    gchar *new_text = g_strdup_printf("%s\n%s: %s", base_text, shortcut_desc, shortcut_label);
+    gtk_widget_set_tooltip_text(widget, new_text);
+    g_free(new_text);
+  }
+  else
+  {
+    gchar *new_text = g_strdup_printf("%s: %s", shortcut_desc, shortcut_label);
+    gtk_widget_set_tooltip_text(widget, new_text);
+    g_free(new_text);
+  }
+
+  g_free(shortcut_label);
+
+  return TRUE;
+}
+
+static void _accels_install_tooltip_hook(void)
+{
+  static gulong hook_id = 0;
+  if(hook_id != 0) return;
+
+  const guint signal_id = g_signal_lookup("query-tooltip", GTK_TYPE_WIDGET);
+  if(signal_id == 0) return;
+
+  hook_id = g_signal_add_emission_hook(signal_id, 0, _accels_tooltip_query_hook, NULL, NULL);
+}
+
 
 static void _clean_shortcut(gpointer data)
 {
@@ -224,6 +343,7 @@ dt_accels_t * dt_accels_init(char *config_file, GtkAccelFlags flags)
   accels->disable_accels = FALSE;
   accels->flags = flags;
   dt_pthread_mutex_init(&accels->lock, NULL);
+  _accels_install_tooltip_hook();
   return accels;
 }
 
@@ -440,6 +560,12 @@ void dt_accels_new_virtual_shortcut(dt_accels_t *accels, GtkAccelGroup *accel_gr
   dt_shortcut_t *shortcut = (dt_shortcut_t *)g_hash_table_lookup(accels->acceleratables, accel_path);
   dt_pthread_mutex_unlock(&accels->lock);
 
+  if(shortcut && shortcut->widget == widget)
+  {
+    _shortcut_set_widget_data(widget, shortcut);
+    return;
+  }
+
   if(!shortcut)
   {
     shortcut = malloc(sizeof(dt_shortcut_t));
@@ -457,6 +583,7 @@ void dt_accels_new_virtual_shortcut(dt_accels_t *accels, GtkAccelGroup *accel_gr
     shortcut->accels = accels;
     dt_shortcut_set_closure(shortcut, _virtual_shortcut_callback, shortcut);
     _insert_accel(accels, shortcut);
+    _shortcut_set_widget_data(widget, shortcut);
   }
 }
 
@@ -512,6 +639,7 @@ void dt_accels_new_widget_shortcut(dt_accels_t *accels, GtkWidget *widget, const
   if(shortcut && shortcut->widget == widget)
   {
     // reference is still up-to-date. Nothing to do.
+    _shortcut_set_widget_data(widget, shortcut);
     return;
   }
   else if(shortcut && shortcut->type != DT_SHORTCUT_UNSET)
@@ -521,6 +649,7 @@ void dt_accels_new_widget_shortcut(dt_accels_t *accels, GtkWidget *widget, const
     if(shortcut->key > 0) _remove_widget_accel(shortcut, &key);
     shortcut->widget = widget;
     if(shortcut->key > 0) _add_widget_accel(shortcut, accels->flags);
+    _shortcut_set_widget_data(widget, shortcut);
   }
   // else if shortcut && shortcut->type == DT_SHORTCUT_UNSET, we need to wait for the next call to dt_accels_connect_accels()
   else if(!shortcut)
@@ -539,6 +668,7 @@ void dt_accels_new_widget_shortcut(dt_accels_t *accels, GtkWidget *widget, const
     shortcut->description = _("Trigger the action");
     shortcut->accels = accels;
     _insert_accel(accels, shortcut);
+    _shortcut_set_widget_data(widget, shortcut);
     // accel is inited with empty keys so user config may set it.
     // dt_accels_load_config needs to run next
     // then dt_accels_connect_accels will update keys and possibly wire the widgets in Gtk

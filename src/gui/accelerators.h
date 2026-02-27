@@ -36,6 +36,9 @@
 
 #include "common/dtpthread.h"
 
+#define DT_ACCELS_WIDGET_SHORTCUT_KEY "dt-accel-shortcut"
+#define DT_ACCELS_WIDGET_TOOLTIP_DISABLED_KEY "dt-accel-tooltip-disabled"
+
 /**
  * @file accelerators.h
  * @brief Handle default and user-set shortcuts (accelerators)

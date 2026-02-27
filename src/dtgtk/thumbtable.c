@@ -54,6 +54,7 @@
 #include "control/control.h"
 #include "control/jobs/import_jobs.h"
 
+#include "gui/accelerators.h"
 #include "gui/drag_and_drop.h"
 #include "views/view.h"
 #include "bauhaus/bauhaus.h"
@@ -1861,6 +1862,8 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
   table->grid = gtk_fixed_new();
   dt_gui_add_class(table->grid, "dt_thumbtable");
   gtk_container_add(GTK_CONTAINER(table->scroll_window), table->grid);
+  g_object_set_data(G_OBJECT(table->grid), DT_ACCELS_WIDGET_TOOLTIP_DISABLED_KEY, GINT_TO_POINTER(1));
+  gtk_widget_set_has_tooltip(table->grid, FALSE);
   gtk_widget_set_can_focus(table->grid, TRUE);
   gtk_widget_set_focus_on_click(table->grid, TRUE);
   gtk_widget_add_events(table->grid, GDK_LEAVE_NOTIFY_MASK);

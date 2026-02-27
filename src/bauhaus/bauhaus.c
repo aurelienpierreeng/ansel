@@ -1282,6 +1282,7 @@ void dt_bauhaus_widget_set_label(GtkWidget *widget, const char *label)
       gchar *scope = g_strdup_printf("%s/Modules", m->view);
       dt_accels_new_darkroom_action(_action_request_focus, widget, scope, plugin_name, 0, 0, _("Focuses the control"));
       g_object_set_data(G_OBJECT(widget), "accel-path", dt_accels_build_path("Darkroom/Modules", plugin_name));
+      gtk_widget_set_has_tooltip(widget, TRUE);
       g_free(scope);
       g_free(plugin_name);
     }
