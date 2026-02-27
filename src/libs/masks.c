@@ -1686,11 +1686,9 @@ static void _lib_masks_handler_callback(gpointer instance, const int formid, con
   if(!lm) return;
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
   GtkTreeIter iter;
-  gtk_tree_model_get_iter_first(model, &iter);
+  gboolean found_iter = gtk_tree_model_get_iter_first(model, &iter);
 
-  const gboolean found_iter = _find_iter_by_parentid_and_formid(model, parentid, formid, &iter);
-
-  if(found_iter)
+  if(found_iter && _find_iter_by_parentid_and_formid(model, parentid, formid, &iter))
   {
     switch(event)
     {
