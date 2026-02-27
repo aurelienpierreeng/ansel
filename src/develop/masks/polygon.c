@@ -169,24 +169,27 @@ static void _polygon_init_ctrl_points(dt_masks_form_t *form)
 
   if(!form || !form->points) return;
   
+  dt_masks_node_polygon_t **nodes = malloc((size_t)nb * sizeof(*nodes));
+  if(!nodes) return;
   const GList *form_points = form->points;
-  for(int k = 0; k < nb; k++)
+  for(guint i = 0; i < nb; i++)
   {
-    dt_masks_node_polygon_t *point3 = (dt_masks_node_polygon_t *)form_points->data;
-    if(!point3) return;
+    nodes[i] = (dt_masks_node_polygon_t *)form_points->data;
+    form_points = g_list_next(form_points);
+  }
+
+  for(guint k = 0; k < nb; k++)
+  {
+    dt_masks_node_polygon_t *point3 = nodes[k];
+    if(!point3) { free(nodes); return; }
     // if the point has not been set manually, we redefine it
     if(point3->state == DT_MASKS_POINT_STATE_NORMAL)
     {
-      // we want to get point-2 (into pt1), point-1 (into pt2), point+1 (into pt4), point+2 (into pt5), wrapping
-      // around to the other end of the list
-      const GList *pt2 = g_list_prev_wraparound(form_points); // prev, wrapping around if already on first element
-      const GList *pt1 = g_list_prev_wraparound(pt2);
-      const GList *pt4 = g_list_next_wraparound(form_points, form->points); // next, wrapping around if on last element
-      const GList *pt5 = g_list_next_wraparound(pt4, form->points);
-      dt_masks_node_polygon_t *point1 = (dt_masks_node_polygon_t *)pt1->data;
-      dt_masks_node_polygon_t *point2 = (dt_masks_node_polygon_t *)pt2->data;
-      dt_masks_node_polygon_t *point4 = (dt_masks_node_polygon_t *)pt4->data;
-      dt_masks_node_polygon_t *point5 = (dt_masks_node_polygon_t *)pt5->data;
+      dt_masks_node_polygon_t *point1 = nodes[(k + nb - 2) % nb];
+      dt_masks_node_polygon_t *point2 = nodes[(k + nb - 1) % nb];
+      dt_masks_node_polygon_t *point4 = nodes[(k + 1) % nb];
+      dt_masks_node_polygon_t *point5 = nodes[(k + 2) % nb];
+      if(!point1 || !point2 || !point4 || !point5) { free(nodes); return; }
 
       float bx1 = 0.0f, by1 = 0.0f, bx2 = 0.0f, by2 = 0.0f;
       _polygon_catmull_to_bezier(point1->node[0], point1->node[1], point2->node[0], point2->node[1],
@@ -204,9 +207,9 @@ static void _polygon_init_ctrl_points(dt_masks_form_t *form)
       point3->ctrl2[0] = bx1;
       point3->ctrl2[1] = by1;
     }
-    // keep form_points tracking the kth element of form->points
-    form_points = g_list_next(form_points);
   }
+  free(nodes);
+  return;
 }
 
 static gboolean _polygon_is_clockwise(dt_masks_form_t *form)
