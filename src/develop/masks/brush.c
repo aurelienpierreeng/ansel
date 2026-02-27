@@ -743,9 +743,22 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
     dy = (pt->node[1] - form->source[1]) * iht;
   }
 
+  const guint nb = g_list_length(form->points);
+
+  dt_masks_node_brush_t **nodes = malloc((size_t)nb * sizeof(*nodes));
+  if(!nodes)
+  {
+    dt_masks_dynbuf_free(dpoints);
+    dt_masks_dynbuf_free(dborder);
+    dt_masks_dynbuf_free(dpayload);
+    return 1;
+  }
+
+  guint node_index = 0;
   for(GList *form_points = form->points; form_points; form_points = g_list_next(form_points))
   {
     const dt_masks_node_brush_t *const pt = (dt_masks_node_brush_t *)form_points->data;
+    nodes[node_index++] = (dt_masks_node_brush_t *)form_points->data;
     float *const buf = dt_masks_dynbuf_reserve_n(dpoints, 6);
     if (buf)
     {
@@ -757,8 +770,6 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
       buf[5] = pt->ctrl2[1] * iht - dy;
     }
   }
-
-  const guint nb = g_list_length(form->points);
 
   // for the border, we store value too
   if(dborder)
@@ -791,9 +802,9 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
     const int k2 = _brush_cyclic_cursor(n + 2, nb);
     const gboolean allow_border_gap_rounding = FALSE;
 
-    dt_masks_node_brush_t *point1 = (dt_masks_node_brush_t *)g_list_nth_data(form->points, k);
-    dt_masks_node_brush_t *point2 = (dt_masks_node_brush_t *)g_list_nth_data(form->points, k1);
-    dt_masks_node_brush_t *point3 = (dt_masks_node_brush_t *)g_list_nth_data(form->points, k2);
+    dt_masks_node_brush_t *point1 = nodes[k];
+    dt_masks_node_brush_t *point2 = nodes[k1];
+    dt_masks_node_brush_t *point3 = nodes[k2];
     if(cw > 0)
     {
       const float pa[7] = { point1->node[0] * iwd - dx, point1->node[1] * iht - dy, point1->ctrl2[0] * iwd - dx,
@@ -851,10 +862,7 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
 
         if(dpayload)
         {
-          while(dt_masks_dynbuf_position(dpayload) < dt_masks_dynbuf_position(dpoints))
-          {
-            dt_masks_dynbuf_add_2(dpayload, p1[5], p1[6]);
-          }
+          _brush_payload_sync(dpayload, dpoints, p1[5], p1[6]);
         }
       }
     }
@@ -873,10 +881,7 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
 
       if(dpayload)
       {
-        while(dt_masks_dynbuf_position(dpayload) < dt_masks_dynbuf_position(dpoints))
-        {
-          dt_masks_dynbuf_add_2(dpayload, p1[5], p1[6]);
-        }
+        _brush_payload_sync(dpayload, dpoints, p1[5], p1[6]);
       }
     }
 
@@ -893,10 +898,7 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
 
       if(dpayload)
       {
-        while(dt_masks_dynbuf_position(dpayload) < dt_masks_dynbuf_position(dpoints))
-        {
-          dt_masks_dynbuf_add_2(dpayload, p1[5], p1[6]);
-        }
+        _brush_payload_sync(dpayload, dpoints, p1[5], p1[6]);
       }
 
       cw *= -1;
@@ -923,13 +925,17 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
     {
       if(isnan(rb[0]))
       {
-        if(isnan(dt_masks_dynbuf_get(dborder, -2)))
+        float lastb0 = dt_masks_dynbuf_get(dborder, -2);
+        float lastb1 = dt_masks_dynbuf_get(dborder, -1);
+        if(isnan(lastb0))
         {
-          dt_masks_dynbuf_set(dborder, -2, dt_masks_dynbuf_get(dborder, -4));
-          dt_masks_dynbuf_set(dborder, -1, dt_masks_dynbuf_get(dborder, -3));
+          lastb0 = dt_masks_dynbuf_get(dborder, -4);
+          lastb1 = dt_masks_dynbuf_get(dborder, -3);
+          dt_masks_dynbuf_set(dborder, -2, lastb0);
+          dt_masks_dynbuf_set(dborder, -1, lastb1);
         }
-        rb[0] = dt_masks_dynbuf_get(dborder, -2);
-        rb[1] = dt_masks_dynbuf_get(dborder, -1);
+        rb[0] = lastb0;
+        rb[1] = lastb1;
       }
       dt_masks_dynbuf_add_2(dborder, rb[0], rb[1]);
     }
@@ -955,12 +961,12 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
 
     if(dpayload)
     {
-      while(dt_masks_dynbuf_position(dpayload) < dt_masks_dynbuf_position(dpoints))
-      {
-        dt_masks_dynbuf_add_2(dpayload, rp[0], rp[1]);
-      }
+      _brush_payload_sync(dpayload, dpoints, rp[0], rp[1]);
     }
   }
+
+  free(nodes);
+  nodes = NULL;
 
   *points_count = dt_masks_dynbuf_position(dpoints) / 2;
   *points = dt_masks_dynbuf_harvest(dpoints);
