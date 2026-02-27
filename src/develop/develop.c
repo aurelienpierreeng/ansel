@@ -1492,8 +1492,13 @@ void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
   // If dev->roi.natural_scale is not ready, fallback to a generic value
   if(zoom_level == -1.f) zoom_level = 0.1f;
 
-  darktable.gui->mouse.effect_radius = radius / zoom_level;
+  darktable.gui->mouse.effect_radius = radius * zoom_level;
   darktable.gui->mouse.effect_radius_scaled = darktable.gui->mouse.effect_radius * darktable.gui->ppd;
+
+  dt_print(DT_DEBUG_MASKS,
+           "[mouse] effect_radius=%0.2f effect_radius_scaled=%0.2f zoom_level=%0.4f ppd=%0.4f\n",
+           darktable.gui->mouse.effect_radius, darktable.gui->mouse.effect_radius_scaled,
+           zoom_level, darktable.gui->ppd);
 }
 
 void dt_dev_set_backbuf(dt_backbuf_t *backbuf, const int width, const int height, const size_t bpp, 
