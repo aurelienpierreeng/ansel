@@ -606,7 +606,7 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
                          points_max + 1, border_max, border_max + 1);
   }
 
-  const int pixel_threshold = 2 * darktable.gui->ppd;
+  const int pixel_threshold = 1;
 
   // are the points near ?
   if((tmax - tmin < 0.0001f)

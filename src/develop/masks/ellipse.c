@@ -1442,7 +1442,9 @@ static int _ellipse_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   const int px = roi->x;
   const int py = roi->y;
   const float iscale = 1.0f / roi->scale;
-  const int grid = CLAMP((10.0f * roi->scale + 2.0f) / 3.0f, 1, 4); // scale dependent resolution
+  // scale dependent resolution: when zoomed in (scale > 1), use finer grid to avoid interpolation holes
+  const float grid_scale = 1.0f / MAX(roi->scale, 1e-6f);
+  const int grid = CLAMP((10.0f * grid_scale + 2.0f) / 3.0f, 1, 4);
   const int gw = (w + grid - 1) / grid + 1;  // grid dimension of total roi
   const int gh = (h + grid - 1) / grid + 1;  // grid dimension of total roi
 
