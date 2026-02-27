@@ -598,6 +598,10 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
   // Commit undo snapshot for the whole delete operation (module removal + multi_priority adjustments).
   if(dev->gui_attached) dt_dev_undo_end_record(dev);
 
+  // Save history
+  dt_dev_write_history(dev);
+  dt_dev_history_notify_change(dev, dev->image_storage.id);
+
   // don't delete the module, a pipe may still need it
   dev->alliop = g_list_append(dev->alliop, module);
 

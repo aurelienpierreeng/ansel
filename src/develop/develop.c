@@ -915,6 +915,9 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
     dt_pthread_rwlock_wrlock(&dev->history_mutex);
     dt_dev_history_undo_start_record_locked(dev);
 
+    const int history_end = dt_dev_get_history_end_ext(dev);
+    int removed_before_end = 0;
+    int history_pos = 0;
     GList *elem = dev->history;
     while(elem != NULL)
     {
@@ -927,11 +930,15 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
                  hist->module->op, hist->module->multi_name, module, hist->module);
         dt_dev_free_history_item(hist);
         dev->history = g_list_delete_link(dev->history, elem);
-        dt_dev_set_history_end_ext(dev, dt_dev_get_history_end_ext(dev) - 1);
+        if(history_pos < history_end) removed_before_end++;
         del = 1;
       }
+      history_pos++;
       elem = next;
     }
+
+    if(removed_before_end > 0)
+      dt_dev_set_history_end_ext(dev, MAX(0, history_end - removed_before_end));
 
     dt_dev_history_undo_end_record_locked(dev);
     dt_pthread_rwlock_unlock(&dev->history_mutex);
