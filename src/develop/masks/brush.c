@@ -1310,7 +1310,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
   float dist;
   _brush_get_distance(pzx, pzy, dist_curs, gui, index, nb, &in, &inside_border, &near, &inside_source, &dist);
   // the maximum segment number is nb-1 (open brush)
-  if(near < (g_list_length(form->points)) && gui->node_selected == -1)
+  if(near < (int)nb && gui->node_selected == -1)
     gui->seg_selected = near;
 
   if(near < 0)
@@ -1554,7 +1554,8 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, float pzx, floa
                                   int parentid, dt_masks_form_gui_t *gui, int index)
 {
   if(!form || !form->points || !gui) return;
-  if(gui->seg_selected < 0 || gui->seg_selected >= g_list_length(form->points)) return;
+  const guint nb_points = g_list_length(form->points);
+  if(gui->seg_selected < 0 || gui->seg_selected >= (int)nb_points) return;
 
   // we add a new node to the brush
   dt_masks_node_brush_t *new_node = (dt_masks_node_brush_t *)(malloc(sizeof(dt_masks_node_brush_t)));
@@ -1607,6 +1608,7 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
   if(!form) return 0;
+  const guint nb_points = g_list_length(form->points);
   dt_develop_t *dev = (dt_develop_t *)darktable.develop;
 
   // Do we need to refresh currently active node ?
@@ -1722,7 +1724,7 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float pz
       gui->handle_border_dragging = gui->handle_border_selected;
 
       float handle_x = NAN, handle_y = NAN;
-      if(_brush_get_border_handle_mirrored(gpt, g_list_length(form->points), gui->handle_border_dragging,
+      if(_brush_get_border_handle_mirrored(gpt, nb_points, gui->handle_border_dragging,
                                            &handle_x, &handle_y))
       {
         gui->delta[0] = handle_x - gui->pos[0];
@@ -1995,6 +1997,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   }
 
   if(!form->points) return 0;
+  const guint nb_points = g_list_length(form->points);
   
   if(gui->node_dragging >= 0)
   {
@@ -2105,7 +2108,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     if(!node) return 0;
 
     float handle_x = NAN, handle_y = NAN;
-    if(!_brush_get_border_handle_mirrored(gpt, g_list_length(form->points), node_index,
+    if(!_brush_get_border_handle_mirrored(gpt, nb_points, node_index,
                         &handle_x, &handle_y))
       return 0;
 
