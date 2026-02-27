@@ -1377,9 +1377,9 @@ static float _brush_get_interaction_value(const dt_masks_form_t *form, dt_masks_
   }
 }
 
-static gboolean _brush_get_gravity_center(const dt_masks_form_t *form, float center[2])
+static gboolean _brush_get_gravity_center(const dt_masks_form_t *form, float center[2], float *area)
 {
-  if(!form || !form->points || !center) return FALSE;
+  if(!form || !form->points) return FALSE;
 
   const int points_count = g_list_length(form->points);
   if(points_count <= 0) return FALSE;
@@ -1397,7 +1397,7 @@ static gboolean _brush_get_gravity_center(const dt_masks_form_t *form, float cen
     i++;
   }
 
-  const gboolean ok = dt_masks_center_of_gravity_from_points(points, i, center);
+  const gboolean ok = dt_masks_center_of_gravity_from_points(points, i, center, area);
   dt_free_align(points);
   return ok;
 }

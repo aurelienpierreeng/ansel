@@ -2329,38 +2329,31 @@ float dt_masks_form_get_interaction_value(dt_masks_form_group_t *form_group,
   return target_form->functions->get_interaction_value(target_form, interaction);
 }
 
-gboolean dt_masks_form_get_gravity_center(const dt_masks_form_t *form, float center[2])
+gboolean dt_masks_form_get_gravity_center(const dt_masks_form_t *form, float center[2], float *area)
 {
-  if(center)
-  {
-    center[0] = 0.0f;
-    center[1] = 0.0f;
-  }
+  center[0] = 0.0f;
+  center[1] = 0.0f;
+  if(area) *area = 0.0f;
 
   if(!form || !form->functions || !form->functions->get_gravity_center || !center) return FALSE;
-  return form->functions->get_gravity_center(form, center);
+  return form->functions->get_gravity_center(form, center, area);
 }
 
 void dt_masks_form_update_gravity_center(dt_masks_form_t *form)
 {
   if(!form) return;
 
-  float center[2] = { 0.0f, 0.0f };
-  const gboolean ok = dt_masks_form_get_gravity_center(form, center);
-  if(ok)
-  {
-    form->gravity_center[0] = center[0];
-    form->gravity_center[1] = center[1];
-  }
-  else
-  {
-    form->gravity_center[0] = 0.0f;
-    form->gravity_center[1] = 0.0f;
-  }
+  float center[2];
+  float area = 0.0f;
+  const gboolean ok = dt_masks_form_get_gravity_center(form, center, &area);
+  form->gravity_center[0] = center[0];
+  form->gravity_center[1] = center[1];
+  form->area = area;
+
   dt_print(DT_DEBUG_MASKS,
-           "[masks] gravity center updated: form=%p id=%d type=0x%x ok=%d center=(%f,%f)\n",
+           "[masks] gravity center updated: form=%p id=%d type=0x%x ok=%d center=(%f,%f), area=%f\n",
            (void *)form, form->formid, form->type, ok,
-           form->gravity_center[0], form->gravity_center[1]);
+           form->gravity_center[0], form->gravity_center[1], form->area);
 }
 
 static float _change_opacity(dt_masks_form_group_t *form_group, float value,

@@ -523,13 +523,14 @@ static float _ellipse_get_interaction_value(const dt_masks_form_t *form, dt_mask
   }
 }
 
-static gboolean _ellipse_get_gravity_center(const dt_masks_form_t *form, float center[2])
+static gboolean _ellipse_get_gravity_center(const dt_masks_form_t *form, float center[2], float *area)
 {
-  if(!form || !form->points || !center) return FALSE;
+  if(!form || !form->points || !center || !area) return FALSE;
   const dt_masks_node_ellipse_t *ellipse = (const dt_masks_node_ellipse_t *)(form->points)->data;
   if(!ellipse) return FALSE;
   center[0] = ellipse->center[0];
   center[1] = ellipse->center[1];
+  *area = M_PI_F * ellipse->radius[0] * ellipse->radius[1];
   return TRUE;
 }
 

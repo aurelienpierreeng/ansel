@@ -366,13 +366,14 @@ static float _gradient_get_interaction_value(const dt_masks_form_t *form, dt_mas
   }
 }
 
-static gboolean _gradient_get_gravity_center(const dt_masks_form_t *form, float center[2])
+static gboolean _gradient_get_gravity_center(const dt_masks_form_t *form, float center[2], float *area)
 {
-  if(!form || !form->points || !center) return FALSE;
+  if(!form || !form->points || !center || !area) return FALSE;
   const dt_masks_anchor_gradient_t *gradient = (const dt_masks_anchor_gradient_t *)(form->points)->data;
   if(!gradient) return FALSE;
   center[0] = gradient->center[0];
   center[1] = gradient->center[1];
+  *area = gradient->extent; // pretend it's a rectangle of unit width
   return TRUE;
 }
 

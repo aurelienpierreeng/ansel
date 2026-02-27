@@ -905,17 +905,15 @@ static void _group_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *co
   }
 }
 
-static gboolean _group_get_gravity_center(const dt_masks_form_t *form, float center[2])
+static gboolean _group_get_gravity_center(const dt_masks_form_t *form, float center[2], float *area)
 {
-  if(!form || !form->points || !center) return FALSE;
+  if(!form || !form->points || !center || !area) return FALSE;
 
-  const int points_count = g_list_length(form->points);
-  if(points_count <= 0) return FALSE;
+  float sum_x = 0.0f;
+  float sum_y = 0.0f;
+  float sum_w = 0.0f;
+  int count = 0;
 
-  float *points = dt_alloc_align_float((size_t)points_count * 2);
-  if(!points) return FALSE;
-
-  int i = 0;
   for(const GList *l = form->points; l; l = g_list_next(l))
   {
     const dt_masks_form_group_t *pt = (const dt_masks_form_group_t *)l->data;
@@ -924,16 +922,38 @@ static gboolean _group_get_gravity_center(const dt_masks_form_t *form, float cen
     if(!child) continue;
 
     float child_center[2] = { 0.0f, 0.0f };
-    if(!dt_masks_form_get_gravity_center(child, child_center)) continue;
+    float child_area = 0.0f;
+    if(!dt_masks_form_get_gravity_center(child, child_center, &child_area)) continue;
 
-    points[2 * i] = child_center[0];
-    points[2 * i + 1] = child_center[1];
-    i++;
+    const float w = (child_area > 0.0f) ? child_area : 1.0f;
+    sum_x += child_center[0] * w;
+    sum_y += child_center[1] * w;
+    sum_w += w;
+    count++;
   }
 
-  const gboolean ok = dt_masks_center_of_gravity_from_points(points, i, center);
-  dt_free_align(points);
-  return ok;
+  if(count == 0)
+  {
+    center[0] = 0.0f;
+    center[1] = 0.0f;
+    *area = 0.0f;
+    return FALSE;
+  }
+
+  if(sum_w <= 0.0f)
+  {
+    center[0] = sum_x / (float)count;
+    center[1] = sum_y / (float)count;
+    *area = 0.0f;
+  }
+  else
+  {
+    center[0] = sum_x / sum_w;
+    center[1] = sum_y / sum_w;
+    *area = sum_w;
+  }
+
+  return TRUE;
 }
 
 // The function table for groups.  This must be public, i.e. no "static" keyword.

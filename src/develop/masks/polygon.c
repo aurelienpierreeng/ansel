@@ -1153,7 +1153,7 @@ static float _polygon_get_interaction_value(const dt_masks_form_t *form, dt_mask
   }
 }
 
-static gboolean _polygon_get_gravity_center(const dt_masks_form_t *form, float center[2])
+static gboolean _polygon_get_gravity_center(const dt_masks_form_t *form, float center[2], float *area)
 {
   if(!form || !form->points || !center) return FALSE;
 
@@ -1173,7 +1173,7 @@ static gboolean _polygon_get_gravity_center(const dt_masks_form_t *form, float c
     i++;
   }
 
-  const gboolean ok = dt_masks_center_of_gravity_from_points(points, i, center);
+  const gboolean ok = dt_masks_center_of_gravity_from_points(points, i, center, area);
   dt_free_align(points);
   return ok;
 }

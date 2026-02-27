@@ -179,13 +179,14 @@ static float _circle_get_interaction_value(const dt_masks_form_t *form, dt_masks
   }
 }
 
-static gboolean _circle_get_gravity_center(const dt_masks_form_t *form, float center[2])
+static gboolean _circle_get_gravity_center(const dt_masks_form_t *form, float center[2], float *area)
 {
-  if(!form || !form->points || !center) return FALSE;
+  if(!form || !form->points || !center || !area) return FALSE;
   const dt_masks_node_circle_t *circle = (const dt_masks_node_circle_t *)(form->points)->data;
   if(!circle) return FALSE;
   center[0] = circle->center[0];
   center[1] = circle->center[1];
+  *area = M_PI_F * sqf(circle->radius);
   return TRUE;
 }
 
