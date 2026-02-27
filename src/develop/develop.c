@@ -933,7 +933,7 @@ void dt_dev_module_remove(dt_develop_t *dev, dt_iop_module_t *module)
       elem = next;
     }
 
-    dt_dev_history_undo_end_record(dev);
+    dt_dev_history_undo_end_record_locked(dev);
     dt_pthread_rwlock_unlock(&dev->history_mutex);
     if(del) dt_dev_history_undo_invalidate_module(module);
   }
