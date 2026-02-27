@@ -244,6 +244,13 @@ void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
       img->buf_dsc.cst = IOP_CS_RGB;
     }
   }
+  else if(img->flags & DT_IMAGE_S_RAW)
+  {
+    // sraw: already RGB-like data
+    img->buf_dsc.channels = 4;
+    img->buf_dsc.datatype = TYPE_FLOAT;
+    img->buf_dsc.cst = IOP_CS_RGB;
+  }
   else
   {
     // raw

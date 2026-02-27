@@ -41,6 +41,7 @@
 #include "common/imageio_rawspeed.h" // for dt_rawspeed_crop_dcraw_filters
 #include "common/opencl.h"
 #include "common/imagebuf.h"
+#include "common/image.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
 #include "develop/tiling.h"
@@ -797,6 +798,8 @@ void reload_defaults(dt_iop_module_t *self)
 
   self->hide_enable_button = 1;
   self->default_enabled = enable(image);
+
+  dt_image_print_debug_info(image, "rawprepare.reload_defaults");
 
   if(self->widget)
     gtk_stack_set_visible_child_name(GTK_STACK(self->widget), self->default_enabled ? "raw" : "non_raw");

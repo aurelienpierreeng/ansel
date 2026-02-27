@@ -165,6 +165,76 @@ inline static void _uint8_to_float(const uint8_t *const input, float *const outp
   }
 }
 
+static const char *_debug_cst_to_string(const int cst)
+{
+  switch(cst)
+  {
+    case IOP_CS_RAW:
+      return "raw";
+    case IOP_CS_LAB:
+      return "lab";
+    case IOP_CS_RGB:
+      return "rgb";
+    case IOP_CS_LCH:
+      return "lch";
+    case IOP_CS_HSL:
+      return "hsl";
+    case IOP_CS_JZCZHZ:
+      return "jzczhz";
+    case IOP_CS_NONE:
+      return "none";
+    default:
+      return "unknown";
+  }
+}
+
+static const char *_debug_type_to_string(const dt_iop_buffer_type_t type)
+{
+  switch(type)
+  {
+    case TYPE_FLOAT:
+      return "float";
+    case TYPE_UINT16:
+      return "uint16";
+    case TYPE_UNKNOWN:
+    default:
+      return "unknown";
+  }
+}
+
+static void _debug_dump_module_io(dt_dev_pixelpipe_t *pipe, dt_iop_module_t *module, const char *stage,
+                                  const gboolean is_cl,
+                                  const dt_iop_buffer_dsc_t *in_dsc, const dt_iop_buffer_dsc_t *out_dsc,
+                                  const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
+                                  const size_t in_bpp, const size_t out_bpp,
+                                  const int cst_before, const int cst_after)
+{
+  const char *module_name = module ? module->op : "base";
+  const char *pipe_name = dt_pixelpipe_get_pipe_name(pipe->type);
+  const char *stage_name = stage ? stage : "process";
+
+  if(in_dsc && out_dsc)
+  {
+    dt_print(DT_DEBUG_PIPE,
+             "[pixelpipe] %s %s %s %s: in cst=%s->%s ch=%d type=%s bpp=%zu roi=%dx%d | "
+             "out cst=%s ch=%d type=%s bpp=%zu roi=%dx%d\n",
+             pipe_name, module_name, is_cl ? "cl" : "cpu", stage_name,
+             _debug_cst_to_string(cst_before), _debug_cst_to_string(cst_after),
+             in_dsc->channels, _debug_type_to_string(in_dsc->datatype), in_bpp,
+             roi_in ? roi_in->width : 0, roi_in ? roi_in->height : 0,
+             _debug_cst_to_string(out_dsc->cst), out_dsc->channels, _debug_type_to_string(out_dsc->datatype),
+             out_bpp, roi_out ? roi_out->width : 0, roi_out ? roi_out->height : 0);
+  }
+  else if(out_dsc)
+  {
+    dt_print(DT_DEBUG_PIPE,
+             "[pixelpipe] %s %s %s %s: out cst=%s ch=%d type=%s bpp=%zu roi=%dx%d\n",
+             pipe_name, module_name, is_cl ? "cl" : "cpu", stage_name,
+             _debug_cst_to_string(out_dsc->cst), out_dsc->channels, _debug_type_to_string(out_dsc->datatype),
+             out_bpp, roi_out ? roi_out->width : 0, roi_out ? roi_out->height : 0);
+  }
+}
+
 
 int dt_dev_pixelpipe_init_export(dt_dev_pixelpipe_t *pipe, int levels, gboolean store_masks)
 {
@@ -506,13 +576,31 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
 
   // transform to module input colorspace
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
+  const int cst_before = input_format->cst;
   dt_ioppr_transform_image_colorspace(module, input, input, roi_in->width, roi_in->height, input_format->cst,
                                       module->input_colorspace(module, pipe, piece), &input_format->cst,
                                       work_profile);
+  const int cst_after = input_format->cst;
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
 
   const size_t in_bpp = dt_iop_buffer_dsc_to_bpp(input_format);
   const size_t bpp = dt_iop_buffer_dsc_to_bpp(*out_format);
+
+  _debug_dump_module_io(pipe, module, "pre", FALSE, input_format, *out_format, roi_in, roi_out,
+                        in_bpp, bpp, cst_before, cst_after);
+
+  if((darktable.unmuted & DT_DEBUG_NAN) && *output && (*out_format)->datatype == TYPE_FLOAT)
+  {
+    const size_t ch = (*out_format)->channels;
+    const size_t count = (size_t)roi_out->width * (size_t)roi_out->height * ch;
+    float *out = (float *)(*output);
+#ifdef _OPENMP
+#pragma omp parallel for simd default(none) \
+    dt_omp_firstprivate(out, count) schedule(static)
+#endif
+    for(size_t k = 0; k < count; k++)
+      out[k] = NAN;
+  }
 
   const gboolean fitting = dt_tiling_piece_fits_host_memory(MAX(roi_in->width, roi_out->width),
                                                             MAX(roi_in->height, roi_out->height), MAX(in_bpp, bpp),
@@ -549,14 +637,24 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   {
     dt_iop_colorspace_type_t blend_cst = dt_develop_blend_colorspace(piece, pipe->dsc.cst);
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
+    const int blend_in_before = input_format->cst;
     dt_ioppr_transform_image_colorspace(module, input, input, roi_in->width, roi_in->height,
                                         input_format->cst, blend_cst, &input_format->cst,
                                         work_profile);
+    const int blend_in_after = input_format->cst;
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, FALSE, input_entry);
 
+    _debug_dump_module_io(pipe, module, "blend-in", FALSE, input_format, input_format,
+                          roi_in, roi_in, in_bpp, in_bpp, blend_in_before, blend_in_after);
+
+    const int blend_out_before = pipe->dsc.cst;
     dt_ioppr_transform_image_colorspace(module, *output, *output, roi_out->width, roi_out->height,
                                         pipe->dsc.cst, blend_cst, &pipe->dsc.cst,
                                         work_profile);
+    const int blend_out_after = pipe->dsc.cst;
+
+    _debug_dump_module_io(pipe, module, "blend-out", FALSE, *out_format, &pipe->dsc,
+                          roi_out, roi_out, bpp, bpp, blend_out_before, blend_out_after);
   }
 
   /* process blending on CPU */
@@ -852,10 +950,15 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     }
 
     // transform to input colorspace if we got our input in a different colorspace
+    const int cst_before_cl = input_cst_cl;
     if(!dt_ioppr_transform_image_colorspace_cl(
            module, piece->pipe->devid, cl_mem_input, cl_mem_input, roi_in->width, roi_in->height, input_cst_cl,
            module->input_colorspace(module, pipe, piece), &input_cst_cl, work_profile))
       goto error;
+    const int cst_after_cl = input_cst_cl;
+
+    _debug_dump_module_io(pipe, module, "pre", TRUE, input_format, *out_format, roi_in, roi_out,
+                          in_bpp, bpp, cst_before_cl, cst_after_cl);
 
     /* now call process_cl of module; module should emit meaningful messages in case of error */
     if(!module->process_cl(module, piece, cl_mem_input, *cl_mem_output, roi_in, roi_out))
@@ -874,12 +977,20 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     {
       dt_iop_colorspace_type_t blend_cst = dt_develop_blend_colorspace(piece, pipe->dsc.cst);
       int success = 1;
+      const int blend_in_before = input_cst_cl;
       success &= dt_ioppr_transform_image_colorspace_cl(
           module, piece->pipe->devid, cl_mem_input, cl_mem_input, roi_in->width, roi_in->height, input_cst_cl,
           blend_cst, &input_cst_cl, work_profile);
+      const int blend_in_after = input_cst_cl;
+      _debug_dump_module_io(pipe, module, "blend-in", TRUE, input_format, input_format,
+                            roi_in, roi_in, in_bpp, in_bpp, blend_in_before, blend_in_after);
+      const int blend_out_before = pipe->dsc.cst;
       success &= dt_ioppr_transform_image_colorspace_cl(
           module, piece->pipe->devid, *cl_mem_output, *cl_mem_output, roi_out->width, roi_out->height,
           pipe->dsc.cst, blend_cst, &pipe->dsc.cst, work_profile);
+      const int blend_out_after = pipe->dsc.cst;
+      _debug_dump_module_io(pipe, module, "blend-out", TRUE, *out_format, &pipe->dsc,
+                            roi_out, roi_out, bpp, bpp, blend_out_before, blend_out_after);
 
       if(!success)
       {
@@ -1156,6 +1267,9 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
 
         _copy_buffer((const char *const)buf.buf, (char *const)*output, cp_height, roi_out.width,
                       pipe->iwidth, in_x, in_y, bpp * cp_width, bpp);
+
+        _debug_dump_module_io(pipe, NULL, "base-init", FALSE, NULL, *out_format, NULL, &roi_out,
+                              0, bpp, IOP_CS_NONE, IOP_CS_NONE);
 
         dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
         err = 0;

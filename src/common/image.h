@@ -366,6 +366,8 @@ gboolean dt_image_is_rawprepare_supported(const dt_image_t *img);
 int dt_image_monochrome_flags(const dt_image_t *img);
 /** returns true if the image has been tested to be monochrome and the image wants monochrome workflow */
 gboolean dt_image_use_monochrome_workflow(const dt_image_t *img);
+/** debug helper: dump image flags and buffer details (DT_DEBUG_IMAGEIO) */
+void dt_image_print_debug_info(const dt_image_t *img, const char *context);
 /** returns the full path name where the image was imported from. from_cache=TRUE check and return local
  * cached filename if any. */
 void dt_image_full_path(const int32_t imgid, char *pathname, size_t pathname_len, gboolean *from_cache, const char *calling_func);

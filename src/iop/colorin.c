@@ -1914,7 +1914,7 @@ static void update_profile_list(dt_iop_module_t *self)
     prof->in_pos = ++pos;
   }
 
-  if(!isnan(self->dev->image_storage.adobe_XYZ_to_CAM[0][0])
+  if(dt_image_is_matrix_correction_supported(&self->dev->image_storage)
      && !(self->dev->image_storage.flags & DT_IMAGE_4BAYER))
   {
     dt_colorspaces_color_profile_t *prof

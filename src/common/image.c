@@ -253,9 +253,27 @@ static void _pop_undo_execute(const int32_t imgid, const gboolean before, const 
   _image_set_monochrome_flag(imgid, after, FALSE);
 }
 
+static gboolean _image_matrix_has_data(const float *matrix, const int count)
+{
+  float sum = 0.0f;
+  for(int i = 0; i < count; i++)
+  {
+    if(!isfinite(matrix[i])) return FALSE;
+    sum += fabsf(matrix[i]);
+  }
+  return sum > 0.0f;
+}
+
 gboolean dt_image_is_matrix_correction_supported(const dt_image_t *img)
 {
-  return ((img->flags & (DT_IMAGE_RAW | DT_IMAGE_S_RAW )) && !(img->flags & DT_IMAGE_MONOCHROME)) ? TRUE : FALSE;
+  if(!(img->flags & (DT_IMAGE_RAW | DT_IMAGE_S_RAW))) return FALSE;
+  if(img->flags & DT_IMAGE_MONOCHROME) return FALSE;
+  if((img->flags & DT_IMAGE_S_RAW) && img->buf_dsc.filters == 0) return FALSE;
+
+  const gboolean has_d65 = _image_matrix_has_data(img->d65_color_matrix, 9);
+  const gboolean has_adobe = _image_matrix_has_data(&img->adobe_XYZ_to_CAM[0][0], 9);
+
+  return (has_d65 || has_adobe) ? TRUE : FALSE;
 }
 
 gboolean dt_image_is_rawprepare_supported(const dt_image_t *img)
@@ -272,6 +290,107 @@ gboolean dt_image_use_monochrome_workflow(const dt_image_t *img)
 int dt_image_monochrome_flags(const dt_image_t *img)
 {
   return (img->flags & (DT_IMAGE_MONOCHROME | DT_IMAGE_MONOCHROME_PREVIEW | DT_IMAGE_MONOCHROME_BAYER));
+}
+
+static const char *_image_buf_type_to_string(const dt_iop_buffer_type_t type)
+{
+  switch(type)
+  {
+    case TYPE_FLOAT:
+      return "float";
+    case TYPE_UINT16:
+      return "uint16";
+    case TYPE_UNKNOWN:
+    default:
+      return "unknown";
+  }
+}
+
+static const char *_image_colorspace_to_string(const dt_image_colorspace_t colorspace)
+{
+  switch(colorspace)
+  {
+    case DT_IMAGE_COLORSPACE_SRGB:
+      return "sRGB";
+    case DT_IMAGE_COLORSPACE_ADOBE_RGB:
+      return "AdobeRGB";
+    case DT_IMAGE_COLORSPACE_NONE:
+    default:
+      return "none";
+  }
+}
+
+void dt_image_print_debug_info(const dt_image_t *img, const char *context)
+{
+  if(!img) return;
+
+  const char *ctx = context ? context : "image";
+  const dt_iop_buffer_dsc_t *dsc = &img->buf_dsc;
+  const gboolean is_raw = dt_image_is_raw(img);
+  const gboolean is_ldr = dt_image_is_ldr(img);
+  const gboolean is_hdr = dt_image_is_hdr(img);
+  const gboolean is_mono = dt_image_is_monochrome(img);
+  const gboolean mono_workflow = dt_image_use_monochrome_workflow(img);
+  const int mono_flags = dt_image_monochrome_flags(img);
+  const gboolean mosaic = dsc->filters != 0u;
+  const gboolean xtrans = dsc->filters == 9u;
+  const gboolean bayer = mosaic && !xtrans;
+  const size_t bpp = dt_iop_buffer_dsc_to_bpp(dsc);
+  int bit_depth = 0;
+
+  switch(dsc->datatype)
+  {
+    case TYPE_FLOAT:
+      bit_depth = 32;
+      break;
+    case TYPE_UINT16:
+      bit_depth = 16;
+      break;
+    case TYPE_UNKNOWN:
+    default:
+      if(dsc->channels != 0)
+        bit_depth = (int)(bpp * 8 / dsc->channels);
+      break;
+  }
+
+  const unsigned int flags = (unsigned int)img->flags;
+
+  dt_print(DT_DEBUG_IMAGEIO,
+           "[image debug] %s id=%d filename='%s' fullpath='%s'\n",
+           ctx, img->id, img->filename, img->fullpath);
+  dt_print(DT_DEBUG_IMAGEIO,
+           "[image debug] %s size=%dx%d crop=%dx%d+%d+%d orientation=%d psize=%dx%d pixel_aspect=%.6f\n",
+           ctx, img->width, img->height, img->crop_width, img->crop_height, img->crop_x, img->crop_y,
+           img->orientation, img->p_width, img->p_height, img->pixel_aspect_ratio);
+  dt_print(DT_DEBUG_IMAGEIO,
+           "[image debug] %s flags=0x%08x raw=%d non_raw=%d ldr=%d hdr=%d sraw=%d 4bayer=%d mosaic=%d xtrans=%d "
+           "bayer=%d mono=%d mono_flags=0x%x mono_workflow=%d mono_preview=%d mono_bayer=%d bw=%d bw_flow=%d "
+           "local_copy=%d has_txt=%d has_wav=%d addl_dng=%d auto_presets=%d no_legacy_presets=%d rejected=%d remove=%d "
+           "has_localcopy=%d has_audio=%d is_hdr_field=%d\n",
+           ctx, flags, is_raw, !is_raw, is_ldr, is_hdr,
+           (flags & DT_IMAGE_S_RAW) != 0, (flags & DT_IMAGE_4BAYER) != 0, mosaic, xtrans, bayer, is_mono,
+           mono_flags, mono_workflow, (flags & DT_IMAGE_MONOCHROME_PREVIEW) != 0,
+           (flags & DT_IMAGE_MONOCHROME_BAYER) != 0, img->is_bw, img->is_bw_flow,
+           (flags & DT_IMAGE_LOCAL_COPY) != 0, (flags & DT_IMAGE_HAS_TXT) != 0, (flags & DT_IMAGE_HAS_WAV) != 0,
+           (flags & DT_IMAGE_HAS_ADDITIONAL_DNG_TAGS) != 0, (flags & DT_IMAGE_AUTO_PRESETS_APPLIED) != 0,
+           (flags & DT_IMAGE_NO_LEGACY_PRESETS) != 0, (flags & DT_IMAGE_REJECTED) != 0, (flags & DT_IMAGE_REMOVE) != 0,
+           img->has_localcopy, img->has_audio, img->is_hdr);
+  dt_print(DT_DEBUG_IMAGEIO,
+           "[image debug] %s buf: channels=%u datatype=%s bit_depth=%d bpp=%zu filters=%u cst=%d colorspace=%s "
+           "processed_max=[%.4f %.4f %.4f %.4f]\n",
+           ctx, dsc->channels, _image_buf_type_to_string(dsc->datatype), bit_depth, bpp, dsc->filters, dsc->cst,
+           _image_colorspace_to_string(img->colorspace), dsc->processed_maximum[0], dsc->processed_maximum[1],
+           dsc->processed_maximum[2], dsc->processed_maximum[3]);
+  dt_print(DT_DEBUG_IMAGEIO,
+           "[image debug] %s colorspace=enum:%s d65_color_matrix=[%.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f]\n",
+           ctx, _image_colorspace_to_string(img->colorspace), img->d65_color_matrix[0], img->d65_color_matrix[1],
+           img->d65_color_matrix[2], img->d65_color_matrix[3], img->d65_color_matrix[4], img->d65_color_matrix[5],
+           img->d65_color_matrix[6], img->d65_color_matrix[7], img->d65_color_matrix[8]);
+  dt_print(DT_DEBUG_IMAGEIO,
+           "[image debug] %s raw: black=%u separate=[%u %u %u %u] white=%u rawprepare=[%u %u]\n",
+           ctx, img->raw_black_level, img->raw_black_level_separate[0], img->raw_black_level_separate[1],
+           img->raw_black_level_separate[2], img->raw_black_level_separate[3], img->raw_white_point,
+           dsc->rawprepare.raw_black_level, dsc->rawprepare.raw_white_point);
 }
 
 const char *dt_image_film_roll_name(const char *path)
