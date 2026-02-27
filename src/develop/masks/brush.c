@@ -1233,6 +1233,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
                                  dt_masks_form_gui_t *gui, int index)
 {
   if(!gui) return 0;
+  if(!gui->creation && gui->group_selected != index) return 0;
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return 0;
 

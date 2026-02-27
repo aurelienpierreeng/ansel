@@ -99,6 +99,7 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
                                  dt_masks_form_gui_t *gui, int index)
 {
   if(!gui) return 0;
+  if(!gui->creation && gui->group_selected != index) return 0;
 
   // get the zoom scale
   dt_develop_t *dev = (dt_develop_t *)darktable.develop;
