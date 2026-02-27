@@ -582,6 +582,18 @@ static inline gboolean _is_within_pxl_threshold(float *min, float *max, int pixe
          abs((int)min[1] - (int)max[1]) < pixel_threshold;
 }
 
+static inline void _brush_payload_sync(dt_masks_dynbuf_t *dpayload, dt_masks_dynbuf_t *dpoints,
+                                       const float v0, const float v1)
+{
+  size_t payload_pos = dt_masks_dynbuf_position(dpayload);
+  const size_t target_pos = dt_masks_dynbuf_position(dpoints);
+  while(payload_pos < target_pos)
+  {
+    dt_masks_dynbuf_add_2(dpayload, v0, v1);
+    payload_pos += 2;
+  }
+}
+
 /** recursive function to get all points of the brush AND all point of the border */
 /** the function takes care to avoid big gaps between points */
 static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax, float *points_min,
@@ -643,12 +655,9 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
 
     if(withpayload)
     {
-      while(dt_masks_dynbuf_position(dpayload) < dt_masks_dynbuf_position(dpoints))
-      {
-        rpayload[0] = p1[5] + tmax * (p2[5] - p1[5]);
-        rpayload[1] = p1[6] + tmax * (p2[6] - p1[6]);
-        dt_masks_dynbuf_add_2(dpayload, rpayload[0], rpayload[1]);
-      }
+      rpayload[0] = p1[5] + tmax * (p2[5] - p1[5]);
+      rpayload[1] = p1[6] + tmax * (p2[6] - p1[6]);
+      _brush_payload_sync(dpayload, dpoints, rpayload[0], rpayload[1]);
     }
 
     return;
