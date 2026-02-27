@@ -498,8 +498,6 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
   dt_masks_append_form(dev, form);
 
   dt_masks_form_group_t *grpt = malloc(sizeof(dt_masks_form_group_t));
-  grpt->formid = -1;
-  grpt->parentid = -1;
   if(module)
   {
     // is there already a masks group for this module ?
@@ -536,14 +534,13 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
       dt_masks_iop_update(module);
       dt_dev_masks_selection_change(darktable.develop, module, form->formid, TRUE);
       gui->creation_module = NULL;
+      DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, grpt->formid, grpt->parentid, DT_MASKS_EVENT_ADD);
     }
     else
     {
       // we select the new form
       dt_dev_masks_selection_change(darktable.develop, NULL, form->formid, TRUE);
     }
-
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, grpt->formid, grpt->parentid, DT_MASKS_EVENT_ADD);
   }
 
   // Free grpt if it 
