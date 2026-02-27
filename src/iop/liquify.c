@@ -2835,9 +2835,8 @@ void gui_post_expose(struct dt_iop_module_t *module,
   if(!g)
     return;
 
-  const float bb_width = develop->roi.preview_width;
-  const float bb_height = develop->roi.preview_height;
-  const float scale = MAX(bb_width, bb_height);
+  const float bb_width = develop->roi.processed_width;
+  const float bb_height = develop->roi.processed_height;
   if(bb_width < 1.0 || bb_height < 1.0)
     return;
 
@@ -2850,15 +2849,18 @@ void gui_post_expose(struct dt_iop_module_t *module,
   dt_iop_gui_leave_critical_section(module);
 
   // distort all points
-  const distort_params_t d_params = { develop, develop->virtual_pipe, 1.0, 1.0 / scale, DT_DEV_TRANSFORM_DIR_ALL, FALSE };
+  if(develop->virtual_pipe->history_hash != develop->history_hash)
+    dt_dev_pixelpipe_sync_virtual(develop, DT_DEV_PIPE_TOP_CHANGED);
+  const distort_params_t d_params = { develop, develop->virtual_pipe, 1.0, 1.0, DT_DEV_TRANSFORM_DIR_ALL, FALSE };
   _distort_paths(module, &d_params, &copy_params);
 
   // You're not supposed to understand this
-  const float zoom_scale = develop->roi.scaling;
+  const float zoom_scale = get_zoom_scale(develop) * develop->roi.scaling;
 
-  dt_dev_rescale_roi(develop, cr, width, height);
+  if(dt_dev_rescale_roi_to_input(develop, cr, width, height))
+    return;
 
-  draw_paths(module, cr, 1.0 / (scale * zoom_scale), &copy_params);
+  draw_paths(module, cr, 1.0 / zoom_scale, &copy_params);
 }
 
 static gboolean btn_make_radio_callback(GtkToggleButton *btn, GdkEventButton *event, dt_iop_module_t *module);
@@ -2905,10 +2907,8 @@ static void get_point_scale(struct dt_iop_module_t *module, float x, float y, fl
 {
   float pzx = 0.0f, pzy = 0.0f;
   dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
-  pzx += 0.5f;
-  pzy += 0.5f;
-  const float wd = module->dev->roi.preview_width;
-  const float ht = module->dev->roi.preview_height;
+  const float wd = module->dev->roi.processed_width;
+  const float ht = module->dev->roi.processed_height;
   float pts[2] = { pzx * wd, pzy * ht };
   dt_dev_distort_backtransform_plus(module->dev, module->dev->virtual_pipe,
                                     module->iop_order,DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
