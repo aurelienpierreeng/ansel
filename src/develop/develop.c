@@ -975,7 +975,9 @@ void _dev_module_update_multishow(dt_develop_t *dev, struct dt_iop_module_t *mod
                                  : -1.0;
 
   module->multi_show_new = !(module->flags() & IOP_FLAGS_ONE_INSTANCE);
-  module->multi_show_close = (nb_instances > 1);
+  // Never allow deleting the base instance (multi_priority == 0) nor modules limited to one instance.
+  module->multi_show_close =
+      (nb_instances > 1 && module->multi_priority > 0 && !(module->flags() & IOP_FLAGS_ONE_INSTANCE));
   if(mod_next)
     module->multi_show_up = move_next;
   else
