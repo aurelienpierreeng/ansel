@@ -1360,15 +1360,62 @@ static int _init_opacity(dt_masks_form_t *form, int parentid, dt_masks_form_gui_
   return 1;
 }
 
-static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
+static float _brush_get_interaction_value(const dt_masks_form_t *form, dt_masks_interaction_t interaction)
+{
+  if(!form || !form->points) return NAN;
+  const dt_masks_node_brush_t *point = (const dt_masks_node_brush_t *)(form->points)->data;
+  if(!point) return NAN;
+
+  switch(interaction)
+  {
+    case DT_MASKS_INTERACTION_SIZE:
+      return fmaxf(point->border[0], point->border[1]);
+    case DT_MASKS_INTERACTION_HARDNESS:
+      return point->hardness;
+    default:
+      return NAN;
+  }
+}
+
+static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui,
+                            struct dt_iop_module_t *module, int index, const float amount,
+                            const dt_masks_increment_t increment, const int flow);
+static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui,
+                        struct dt_iop_module_t *module, int index, const float amount,
+                        const dt_masks_increment_t increment, const int flow);
+
+static float _brush_set_interaction_value(dt_masks_form_t *form, dt_masks_interaction_t interaction, float value,
+                                          dt_masks_increment_t increment, int flow,
+                                          dt_masks_form_gui_t *gui, struct dt_iop_module_t *module)
+{
+  if(!form) return NAN;
+  const int index = 0;
+
+  switch(interaction)
+  {
+    case DT_MASKS_INTERACTION_SIZE:
+      if(!_change_size(form, 0, gui, module, index, value, increment, flow)) return NAN;
+      return _brush_get_interaction_value(form, interaction);
+    case DT_MASKS_INTERACTION_HARDNESS:
+      if(!_change_hardness(form, 0, gui, module, index, value, increment, flow)) return NAN;
+      return _brush_get_interaction_value(form, interaction);
+    default:
+      return NAN;
+  }
+}
+
+static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui,
+                            struct dt_iop_module_t *module, int index, const float amount,
+                            const dt_masks_increment_t increment, const int flow)
 {
   if(!form || !form->points) return 0;
+  const int node_hovered = gui->node_hovered;
   int node_index = 0;
   const float flowed_amount = powf(amount, (float)flow);
   float res_amount = 0;
   for(GList *l = form->points; l; l = g_list_next(l))
   {
-    if(gui->node_hovered == -1 || gui->node_hovered == node_index)
+    if(node_hovered == -1 || node_hovered == node_index)
     {
       dt_masks_node_brush_t *point = (dt_masks_node_brush_t *)l->data;
       const float masks_hardness = point->hardness;
@@ -1392,10 +1439,11 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
   if(!form || !form->points) return 0;
   // Sanitize loop
   // do not exceed upper limit of 1.0 and lower limit of 0.004
+  const int node_hovered = gui->node_hovered;
   int pts_number = 0;
   for(GList *l = form->points; l; l = g_list_next(l))
   {
-    if(gui->node_hovered == -1 || gui->node_hovered == pts_number)
+    if(node_hovered == -1 || node_hovered == pts_number)
     {
       dt_masks_node_brush_t *point = (dt_masks_node_brush_t *)l->data;
       if(!point) continue;
@@ -1409,7 +1457,7 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
   pts_number = 0;
   for(GList *l = form->points; l; l = g_list_next(l))
   {
-    if(gui->node_hovered == -1 || gui->node_hovered == pts_number)
+    if(node_hovered == -1 || node_hovered == pts_number)
     {
       dt_masks_node_brush_t *point = (dt_masks_node_brush_t *)l->data;
       if(!point) continue;
@@ -1441,7 +1489,7 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
   dt_masks_get_set_conf_value(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
 
   // we recreate the form points
-  dt_masks_gui_form_create(form, gui, index, module);
+  if(gui && module) dt_masks_gui_form_create(form, gui, index, module);
 
   return 1;
 }
@@ -3055,7 +3103,7 @@ static void _brush_add_node_callback(GtkWidget *menu, gpointer user_data)
   dt_iop_module_t *module = darktable.develop->gui_module;
   if(!module) return;
 
-  dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(forms->points, gui->group_selected);
+  dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(forms, gui);
   if(!fpt) return;
   dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
   if(sel)
@@ -3122,6 +3170,8 @@ const dt_masks_functions_t dt_masks_functions_brush = {
   .get_mask_roi = _brush_get_mask_roi,
   .get_area = _brush_get_area,
   .get_source_area = _brush_get_source_area,
+  .get_interaction_value = _brush_get_interaction_value,
+  .set_interaction_value = _brush_set_interaction_value,
   .mouse_moved = _brush_events_mouse_moved,
   .mouse_scrolled = _brush_events_mouse_scrolled,
   .button_pressed = _brush_events_button_pressed,

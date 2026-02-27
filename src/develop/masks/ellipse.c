@@ -506,6 +506,48 @@ static int _init_rotation(dt_masks_form_t *form, const float amount, const dt_ma
   return 1;
 }
 
+static float _ellipse_get_interaction_value(const dt_masks_form_t *form, dt_masks_interaction_t interaction)
+{
+  if(!form || !form->points) return NAN;
+  const dt_masks_node_ellipse_t *ellipse = (const dt_masks_node_ellipse_t *)(form->points)->data;
+  if(!ellipse) return NAN;
+
+  switch(interaction)
+  {
+    case DT_MASKS_INTERACTION_SIZE:
+      return fmaxf(ellipse->radius[0], ellipse->radius[1]);
+    case DT_MASKS_INTERACTION_HARDNESS:
+      return ellipse->border;
+    default:
+      return NAN;
+  }
+}
+
+static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
+                            int index, const float amount, const dt_masks_increment_t increment, const int flow);
+static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
+                        int index, const float amount, const dt_masks_increment_t increment, const int flow);
+
+static float _ellipse_set_interaction_value(dt_masks_form_t *form, dt_masks_interaction_t interaction, float value,
+                                            dt_masks_increment_t increment, int flow,
+                                            dt_masks_form_gui_t *gui, struct dt_iop_module_t *module)
+{
+  if(!form) return NAN;
+  const int index = 0;
+
+  switch(interaction)
+  {
+    case DT_MASKS_INTERACTION_SIZE:
+      if(!_change_size(form, gui, module, index, value, increment, flow)) return NAN;
+      return _ellipse_get_interaction_value(form, interaction);
+    case DT_MASKS_INTERACTION_HARDNESS:
+      if(!_change_hardness(form, gui, module, index, value, increment, flow)) return NAN;
+      return _ellipse_get_interaction_value(form, interaction);
+    default:
+      return NAN;
+  }
+}
+
 static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
   if(!form || !form->points) return 0;
@@ -517,7 +559,6 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
     ellipse->border = MAX(HARDNESS_MIN, MIN(masks_hardness * powf(amount, (float)flow), HARDNESS_MAX));
   else
     ellipse->border = MAX(HARDNESS_MIN, MIN(amount, HARDNESS_MAX));
-
 
   _init_hardness(form, amount, increment, flow);
 
@@ -538,6 +579,7 @@ static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct 
   if(amount > 1.0f && (ellipse->border > 1.0f ))
     return 1;
 
+  // adjust the sizes directly to avoid re-querying group/form
   switch(increment)
   {
     case(DT_MASKS_INCREMENT_SCALE):
@@ -558,7 +600,6 @@ static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct 
       ellipse->radius[1] = amount;
     }
   }
-  
 
   _init_size(form, amount, DT_MASKS_INCREMENT_SCALE, flow);
 
@@ -628,7 +669,7 @@ static int _ellipse_events_mouse_scrolled(struct dt_iop_module_t *module, float 
     if(dt_modifier_is(state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
       return _change_rotation(form, gui, module, index, (up ? +0.2f : -0.2f), DT_MASKS_INCREMENT_OFFSET, flow);
     else if(dt_modifier_is(state, GDK_CONTROL_MASK))
-      return dt_masks_form_set_opacity(form, parentid, (up ? +0.02f : -0.02f), DT_MASKS_INCREMENT_OFFSET, flow);
+      return dt_masks_form_change_opacity(form, parentid, up, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
       return _change_hardness(form, gui, module, index, (up ? 1.02f : 0.98f), DT_MASKS_INCREMENT_SCALE, flow);
     else
@@ -1755,6 +1796,8 @@ const dt_masks_functions_t dt_masks_functions_ellipse = {
   .get_mask_roi = _ellipse_get_mask_roi,
   .get_area = _ellipse_get_area,
   .get_source_area = _ellipse_get_source_area,
+  .get_interaction_value = _ellipse_get_interaction_value,
+  .set_interaction_value = _ellipse_set_interaction_value,
   .mouse_moved = _ellipse_events_mouse_moved,
   .mouse_scrolled = _ellipse_events_mouse_scrolled,
   .button_pressed = _ellipse_events_button_pressed,

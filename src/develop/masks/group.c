@@ -45,7 +45,7 @@ static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, float pz
   if(gui->group_selected >= 0)
   {
     // we get the form
-    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
     if(!fpt) return 0;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
@@ -142,7 +142,7 @@ static gboolean _group_events_button_pressed(struct dt_iop_module_t *module, flo
   if(gui->group_selected >= 0)
   {
     // we get the form
-    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
     if(!fpt) return FALSE;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
@@ -173,7 +173,7 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
   if(gui->group_selected >= 0)
   {
     // we get the form
-    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
     if(!fpt) return 0;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
@@ -194,7 +194,7 @@ static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey
   if(gui->group_selected >= 0)
   {
     // we get the form
-    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
     if(!fpt) return 0;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions && sel->functions->key_pressed)
@@ -217,7 +217,7 @@ static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey
         if(gui->group_selected >= 0)
         {
           // Delete shape from current group
-          dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+          dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
           if(!fpt) return 0;
           dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
           if(sel)
@@ -250,7 +250,7 @@ static int _group_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   if(gui->group_selected >= 0)
   {
     // we get the form
-    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
     if(!fpt) return 0;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
@@ -920,6 +920,8 @@ const dt_masks_functions_t dt_masks_functions_group = {
   .get_mask_roi = _group_get_mask_roi,
   .get_area = NULL,
   .get_source_area = NULL,
+  .get_interaction_value = NULL,
+  .set_interaction_value = NULL,
   .mouse_moved = _group_events_mouse_moved,
   .mouse_scrolled = _group_events_mouse_scrolled,
   .button_pressed = _group_events_button_pressed,

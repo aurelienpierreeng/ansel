@@ -1108,6 +1108,78 @@ static void _polygon_get_sizes(struct dt_iop_module_t *module, dt_masks_form_t *
   if(border_size) *border_size = fmaxf((fp2[0] - fp1[0]) / wd, (fp2[1] - fp1[1]) / ht);
 }
 
+static gboolean _polygon_form_gravity_center(const dt_masks_form_t *form, float *gx, float *gy, float *surf);
+
+static float _polygon_get_size_from_nodes(const dt_masks_form_t *form)
+{
+  if(!form || !form->points) return 0.0f;
+  float p1[2] = { FLT_MAX, FLT_MAX };
+  float p2[2] = { -FLT_MAX, -FLT_MAX };
+
+  for(const GList *l = form->points; l; l = g_list_next(l))
+  {
+    const dt_masks_node_polygon_t *node = (const dt_masks_node_polygon_t *)l->data;
+    if(!node) continue;
+    p1[0] = fminf(p1[0], node->node[0]);
+    p2[0] = fmaxf(p2[0], node->node[0]);
+    p1[1] = fminf(p1[1], node->node[1]);
+    p2[1] = fmaxf(p2[1], node->node[1]);
+  }
+
+  if(p1[0] == FLT_MAX) return 0.0f;
+  return fmaxf(p2[0] - p1[0], p2[1] - p1[1]);
+}
+
+static float _polygon_get_interaction_value(const dt_masks_form_t *form, dt_masks_interaction_t interaction)
+{
+  if(!form || !form->points) return NAN;
+
+  switch(interaction)
+  {
+    case DT_MASKS_INTERACTION_SIZE:
+    {
+      const float size = _polygon_get_size_from_nodes(form);
+      if(size <= 0.0f) return NAN;
+      return size;
+    }
+    case DT_MASKS_INTERACTION_HARDNESS:
+    {
+      const dt_masks_node_polygon_t *node = (const dt_masks_node_polygon_t *)form->points->data;
+      if(!node) return NAN;
+      return node->border[0];
+    }
+    default:
+      return NAN;
+  }
+}
+
+static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui,
+                        struct dt_iop_module_t *module, int index, const float amount,
+                        const dt_masks_increment_t increment, const int flow);
+static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui,
+                            struct dt_iop_module_t *module, int index, const float amount,
+                            const dt_masks_increment_t increment, int flow);
+
+static float _polygon_set_interaction_value(dt_masks_form_t *form, dt_masks_interaction_t interaction, float value,
+                                            dt_masks_increment_t increment, int flow,
+                                            dt_masks_form_gui_t *gui, struct dt_iop_module_t *module)
+{
+  if(!form || !value) return NAN;
+  const int index = 0;
+
+  switch(interaction)
+  {
+    case DT_MASKS_INTERACTION_SIZE:
+      if(!_change_size(form, 0, gui, module, index, value, increment, flow)) return NAN;
+      return _polygon_get_interaction_value(form, interaction);
+    case DT_MASKS_INTERACTION_HARDNESS:
+      if(!_change_hardness(form, 0, gui, module, index, value, increment, flow)) return NAN;
+      return _polygon_get_interaction_value(form, interaction);
+    default:
+      return NAN;
+  }
+}
+
 /** get the distance between point (x,y) and the brush */
 static void _polygon_get_distance(float x, float y, float as, dt_masks_form_gui_t *gui, int index,
                                 int node_count, int *inside, int *inside_border, int *near, int *inside_source, float *dist)
@@ -1388,7 +1460,7 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
   // do not exceed upper limit of 1.0 and lower limit of 0.004
   if(amount < 1.0f && surf < 0.00001f && surf > -0.00001f) return 1;
   if(amount > 1.0f && surf > 4.0f) return 1;
-  
+
   float delta = amount;
   switch(increment)
   {
@@ -1417,7 +1489,6 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
     const float ctrl2_offset_x = (node->ctrl2[0] - node->node[0]) * delta;
     const float ctrl2_offset_y = (node->ctrl2[1] - node->node[1]) * delta;
 
-
     // Update all coordinates
     node->node[0] = new_node_x;
     node->node[1] = new_node_y;
@@ -1440,12 +1511,13 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
 static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
    int index, const float amount, const dt_masks_increment_t increment, int flow)
 {
+  const int node_selected = gui->node_selected;
   // Growing/shrinking loop
   int node_index = 0;
   const float flowed_amount = powf(amount, (float)flow);
   for(GList *l = form->points; l; l = g_list_next(l))
   {
-    if(gui->node_selected == -1 || gui->node_selected == node_index)
+    if(node_selected == -1 || node_selected == node_index)
     {
       dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)l->data;
       if(!node) continue;
@@ -1459,6 +1531,7 @@ static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_g
         node->border[0] = CLAMPF(amount, HARDNESS_MIN, HARDNESS_MAX);
         node->border[1] = CLAMPF(amount, HARDNESS_MIN, HARDNESS_MAX);
       }
+      if(node_selected >= 0) break;
     }
     node_index++;
   }
@@ -3357,7 +3430,7 @@ static void _polygon_add_node_callback(GtkWidget *menu, gpointer user_data)
   dt_iop_module_t *module = darktable.develop->gui_module;
   if(!module) return;
 
-  dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(forms->points, gui->group_selected);
+  dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(forms, gui);
   if(!fpt) return;
   dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
 
@@ -3440,6 +3513,8 @@ const dt_masks_functions_t dt_masks_functions_polygon = {
   .get_mask_roi = _polygon_get_mask_roi,
   .get_area = _polygon_get_area,
   .get_source_area = _polygon_get_source_area,
+  .get_interaction_value = _polygon_get_interaction_value,
+  .set_interaction_value = _polygon_set_interaction_value,
   .mouse_moved = _polygon_events_mouse_moved,
   .mouse_scrolled = _polygon_events_mouse_scrolled,
   .button_pressed = _polygon_events_button_pressed,

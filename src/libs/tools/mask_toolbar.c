@@ -27,6 +27,7 @@
 #include "libs/lib.h"
 #include "libs/lib_api.h"
 #include "bauhaus/bauhaus.h"
+#include <math.h>
 
 DT_MODULE(1)
 
@@ -76,7 +77,13 @@ static void _opacity_changed_callback(GtkWidget *widget, gpointer data)
   dt_masks_form_t *sel = g_object_get_data(G_OBJECT(widget), "selected");
   if(parent_id && sel)
   {
-    dt_masks_form_set_opacity(sel, *parent_id, new_value, FALSE, 1);
+    dt_masks_form_group_t *form_group = dt_masks_form_group_from_parentid(*parent_id, sel->formid);
+    if(form_group)
+    {
+      float value = new_value;
+      dt_masks_form_set_interaction_value(form_group, DT_MASKS_INTERACTION_OPACITY,
+                                          value, DT_MASKS_INCREMENT_ABSOLUTE, 1, NULL, NULL);
+    }
     dt_dev_add_history_item(darktable.develop, NULL, FALSE, TRUE);
   }
 
@@ -93,8 +100,8 @@ static void _reset_opacity_slider(dt_lib_tool_mask_t *d)
 
 static void _set_opacity_slider(dt_lib_tool_mask_t *d, dt_masks_form_t *sel, dt_masks_form_group_t *fpt)
 {
-  const float opacity = dt_masks_form_get_opacity(sel, fpt->parentid);
-  if(opacity != -1.f)
+  const float opacity = dt_masks_form_get_interaction_value(fpt, DT_MASKS_INTERACTION_OPACITY);
+  if(!isnan(opacity))
   {
     dt_bauhaus_slider_set(d->opacity, opacity);
     gtk_widget_set_sensitive(d->opacity, TRUE);

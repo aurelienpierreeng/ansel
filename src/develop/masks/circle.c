@@ -162,6 +162,48 @@ static int _init_opacity(dt_masks_form_t *form, const float amount, const dt_mas
   return 1;
 }
 
+static float _circle_get_interaction_value(const dt_masks_form_t *form, dt_masks_interaction_t interaction)
+{
+  if(!form || !form->points) return NAN;
+  const dt_masks_node_circle_t *circle = (const dt_masks_node_circle_t *)(form->points)->data;
+  if(!circle) return NAN;
+
+  switch(interaction)
+  {
+    case DT_MASKS_INTERACTION_SIZE:
+      return circle->radius;
+    case DT_MASKS_INTERACTION_HARDNESS:
+      return circle->border;
+    default:
+      return NAN;
+  }
+}
+
+static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
+                            int index, const float amount, const dt_masks_increment_t increment, const int flow);
+static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
+                        int index, const float amount, const dt_masks_increment_t increment, const int flow);
+
+static float _circle_set_interaction_value(dt_masks_form_t *form, dt_masks_interaction_t interaction, float value,
+                                           dt_masks_increment_t increment, int flow,
+                                           dt_masks_form_gui_t *gui, struct dt_iop_module_t *module)
+{
+  if(!form) return NAN;
+  const int index = 0;
+
+  switch(interaction)
+  {
+    case DT_MASKS_INTERACTION_SIZE:
+      if(!_change_size(form, gui, module, index, value, increment, flow)) return NAN;
+      return _circle_get_interaction_value(form, interaction);
+    case DT_MASKS_INTERACTION_HARDNESS:
+      if(!_change_hardness(form, gui, module, index, value, increment, flow)) return NAN;
+      return _circle_get_interaction_value(form, interaction);
+    default:
+      return NAN;
+  }
+}
+
 static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module, int index, const float amount, const dt_masks_increment_t increment, const int flow)
 {
   if(!form || !form->points) return 0;
@@ -173,7 +215,6 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
     circle->border = MAX(HARDNESS_MIN, MIN(masks_hardness * powf(amount, (float)flow), HARDNESS_MAX));
   else
     circle->border = MAX(HARDNESS_MIN, MIN(amount, HARDNESS_MAX));
-
 
   _init_hardness(form, amount, increment, flow);
 
@@ -194,8 +235,10 @@ static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct 
   if(amount > 1.0f && (circle->border > 1.0f ))
     return 1;
 
+  const int node_hovered = gui->node_hovered;
+
   // Growing/shrinking
-  if(gui->node_hovered == -1 || gui->node_hovered == 0)
+  if(node_hovered == -1 || node_hovered == 0)
   {
     switch(increment)
     {
@@ -1186,6 +1229,8 @@ const dt_masks_functions_t dt_masks_functions_circle = {
   .get_mask_roi = _circle_get_mask_roi,
   .get_area = _circle_get_area,
   .get_source_area = _circle_get_source_area,
+  .get_interaction_value = _circle_get_interaction_value,
+  .set_interaction_value = _circle_set_interaction_value,
   .mouse_moved = _circle_events_mouse_moved,
   .mouse_scrolled = _circle_events_mouse_scrolled,
   .button_pressed = _circle_events_button_pressed,

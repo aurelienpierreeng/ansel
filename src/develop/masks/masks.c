@@ -113,11 +113,41 @@ static inline dt_masks_form_group_t *_masks_group_find_form(dt_masks_form_t *grp
   return NULL;
 }
 
-static inline dt_masks_form_group_t *_masks_group_find_form_from_parentid(const int parentid, const int formid)
+dt_masks_form_group_t *dt_masks_form_group_from_parentid(int parentid, int formid)
 {
   dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, parentid);
   if(!grp || !(grp->type & DT_MASKS_GROUP)) return NULL;
   return _masks_group_find_form(grp, formid);
+}
+
+dt_masks_form_group_t *dt_masks_form_get_selected_group(const dt_masks_form_t *form,
+                                                        const dt_masks_form_gui_t *gui)
+{
+  if(!form || !gui) return NULL;
+  if(gui->group_selected < 0) return NULL;
+  return (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+}
+
+dt_masks_form_group_t *dt_masks_form_get_selected_group_live(const dt_masks_form_t *form,
+                                                             const dt_masks_form_gui_t *gui)
+{
+  if(!form || !gui) return NULL;
+
+  dt_masks_form_group_t *fpt = NULL;
+  if(gui->group_selected >= 0)
+    fpt = dt_masks_form_get_selected_group(form, gui);
+  else if(form->formid > 0 && darktable.develop->mask_form_selected_id > 0)
+    fpt = dt_masks_form_group_from_parentid(form->formid, darktable.develop->mask_form_selected_id);
+
+  if(!fpt) return NULL;
+
+  if(fpt->parentid > 0)
+  {
+    dt_masks_form_group_t *real_fpt = dt_masks_form_group_from_parentid(fpt->parentid, fpt->formid);
+    if(real_fpt) return real_fpt;
+  }
+
+  return fpt;
 }
 
 // duplicate the list of forms, replace item in the list with form with the same formid
@@ -126,19 +156,7 @@ GList *dt_masks_dup_forms_deep(GList *forms, dt_masks_form_t *form)
   return (GList *)g_list_copy_deep(forms, _dup_masks_form_cb, (gpointer)form);
 }
 
-static int _get_opacity(dt_masks_form_gui_t *gui, const dt_masks_form_t *form)
-{
-  const dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
-  const dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-  if(!sel) return 0;
-  const int formid = sel->formid;
-
-  // look for opacity
-  dt_masks_form_group_t *form_pt = _masks_group_find_form_from_parentid(fpt->parentid, formid);
-  return form_pt ? (form_pt->opacity * 100) : 0;
-}
-
-static void _set_hinter_message(dt_masks_form_gui_t *gui, const dt_masks_form_t *form)
+static gboolean _set_hinter_message(dt_masks_form_gui_t *gui, const dt_masks_form_t *form)
 {
   char msg[256] = "";
 
@@ -147,14 +165,22 @@ static void _set_hinter_message(dt_masks_form_gui_t *gui, const dt_masks_form_t 
   int opacity = 100;
 
   const dt_masks_form_t *sel = form;
-  if((ftype & DT_MASKS_GROUP) && (gui->group_selected >= 0))
+  dt_print(DT_DEBUG_INPUT,
+           "[masks] hint begin: form=%p type=%d gui=%p group_selected=%d form_selected=%d node_hovered=%d seg_selected=%d mask_form_selected_id=%d\n",
+           (void *)form, form ? form->type : -1, (void *)gui,
+           gui->group_selected, gui->form_selected,
+           gui->node_hovered, gui->seg_selected,
+           darktable.develop ? darktable.develop->mask_form_selected_id : -2);
+  if(ftype & DT_MASKS_GROUP)
   {
     // we get the selected form
-    const dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
-    sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-    if(!sel) return;
-
-    opacity = _get_opacity(gui, form);
+    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group_live(form, gui);
+    if(fpt)
+    {
+      opacity = dt_masks_form_get_interaction_value(fpt, DT_MASKS_INTERACTION_OPACITY) * 100.f;
+      sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
+      if(!sel) return FALSE;
+    }
   }
   else
   {
@@ -163,10 +189,22 @@ static void _set_hinter_message(dt_masks_form_gui_t *gui, const dt_masks_form_t 
 
   if(sel->functions && sel->functions->set_hint_message)
   {
-    sel->functions->set_hint_message(gui, form, opacity, msg, sizeof(msg));
+    sel->functions->set_hint_message(gui, sel, opacity, msg, sizeof(msg));
+    if(msg[0] == '\0')
+    {
+      const gboolean was_form_selected = gui->form_selected;
+      gui->form_selected = TRUE;
+      sel->functions->set_hint_message(gui, sel, opacity, msg, sizeof(msg));
+      gui->form_selected = was_form_selected;
+    }
   }
 
   dt_control_hinter_message(darktable.control, msg);
+  dt_print(DT_DEBUG_INPUT,
+           "[masks] hint end: sel=%p has_set_hint=%d opacity=%d msg_len=%zu msg='%s'\n",
+           (void *)sel, (sel && sel->functions && sel->functions->set_hint_message) ? 1 : 0,
+           opacity, strlen(msg), msg);
+  return msg[0] != '\0';
 }
 
 void dt_masks_init_form_gui(dt_masks_form_gui_t *gui)
@@ -1389,7 +1427,7 @@ static void _masks_gui_remove_form_callback(GtkWidget *menu, gpointer user_data)
   if(gui->group_selected >= 0)
   {
     // Delete shape from current group
-    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(forms->points, gui->group_selected);
+    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(forms, gui);
     if(!fpt) return;
     dt_iop_module_t *module = darktable.develop->gui_module;
     if(!module) return;
@@ -1429,7 +1467,7 @@ void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data)
   {
     // Delete shape from current group
 
-    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(forms->points, gui->group_selected);
+    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(forms, gui);
     if(!fpt) return;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel)
@@ -1457,7 +1495,7 @@ static void _masks_move_up_down_callback(gpointer user_data, const int up)
 
   dt_masks_form_t *forms = darktable.develop->form_visible;
   if(!forms) return;
-  dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(forms->points, gui->group_selected);
+  dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(forms, gui);
   if(!fpt) return;
   dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, fpt->parentid);
   if(!grp || !(grp->type & DT_MASKS_GROUP)) return;
@@ -1835,7 +1873,7 @@ int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *eve
         if(gui->group_selected >= 0)
         {
           // Delete shape from current group
-          dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+          dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
           if(!fpt) return 0;
           dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
           if(sel)
@@ -1870,7 +1908,16 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
                                           incr ? 1 : 0, flow,
                                           state, form, 0, gui, 0, DT_MASKS_INTERACTION_UNDEF);
 
-  if(ret && gui) _set_hinter_message(gui, form);
+  if(gui)
+  {
+    const gboolean hinted = _set_hinter_message(gui, form);
+    dt_print(DT_DEBUG_INPUT,
+             "[masks] scroll: ret=%d hinted=%d form=%p type=%d gui=%p group_selected=%d flow=%d state=0x%x\n",
+             ret, hinted, (void *)form, form ? form->type : -1, (void *)gui,
+             gui->group_selected, flow, state);
+    if(hinted)
+      ret = 1;
+  }
   return ret;
 }
 
@@ -2654,19 +2701,71 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *grp, 
   }
 }
 
-float dt_masks_form_get_opacity(dt_masks_form_t *form, int parentid)
+float dt_masks_form_get_interaction_value(dt_masks_form_group_t *form_group,
+                                          dt_masks_interaction_t interaction)
 {
-  // Return -1.0f if we couldn't find the opacity of the parent group
-  // Note that opacity is not defined at the form level.
-  if(!form) return -1.f;
+  if(!form_group) return NAN;
 
-  // we first need to test if the opacity can be set to the form
-  if(form->type & DT_MASKS_GROUP) return -1.f;
-  const int id = form->formid;
+  if(interaction == DT_MASKS_INTERACTION_OPACITY)
+  {
+    return form_group->opacity;
+  }
 
-  // so we change the value inside the group
-  dt_masks_form_group_t *fpt = _masks_group_find_form_from_parentid(parentid, id);
-  return fpt ? fpt->opacity : -1.f;
+  dt_masks_form_t *target_form = dt_masks_get_from_id(darktable.develop, form_group->formid);
+  if(!target_form || !target_form->functions || !target_form->functions->get_interaction_value) return NAN;
+
+  return target_form->functions->get_interaction_value(target_form, interaction);
+}
+
+static float _change_opacity(dt_masks_form_group_t *form_group, float value,
+                           const dt_masks_increment_t increment, const int flow)
+{
+  if(!form_group) return 0;
+
+  float new_value = value;
+  if(increment != DT_MASKS_INCREMENT_ABSOLUTE)
+  {
+    const float current = form_group->opacity;
+    switch(increment)
+    {
+      case DT_MASKS_INCREMENT_SCALE:
+        new_value = current * powf(value, (float)flow);
+        break;
+      case DT_MASKS_INCREMENT_OFFSET:
+        new_value = current + (value) * (float)flow;
+        break;
+      case DT_MASKS_INCREMENT_ABSOLUTE:
+      default:
+        new_value = value;
+        break;
+    }
+  }
+
+  form_group->opacity = CLAMPF(new_value, 0.0f, 1.0f);
+  dt_toast_log(_("Opacity: %3.2f%%"), form_group->opacity * 100.f);
+  return form_group->opacity;
+}
+
+float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
+                                          dt_masks_interaction_t interaction,
+                                          float value, dt_masks_increment_t increment, int flow,
+                                          dt_masks_form_gui_t *gui, dt_iop_module_t *module)
+{
+  if(!form_group) return NAN;
+
+  if(interaction == DT_MASKS_INTERACTION_OPACITY)
+  {
+    return _change_opacity(form_group, value, increment, flow);
+  }
+
+  dt_masks_form_t *target_form = dt_masks_get_from_id(darktable.develop, form_group->formid);
+  if(!target_form || !target_form->functions
+     || !target_form->functions->set_interaction_value) return NAN;
+
+  const float result = target_form->functions->set_interaction_value(target_form, interaction, value, increment, flow,
+                                                                     gui, module);
+  if(isnan(result)) return NAN;
+  return result;
 }
 
 const char * _get_mask_plugin(dt_masks_form_t *form)
@@ -2725,32 +2824,16 @@ float dt_masks_get_set_conf_value(dt_masks_form_t *form, char *feature, float ne
   return value;
 }
 
-int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity, dt_masks_increment_t offset, const int flow)
-{
-  // If offset == TRUE, opacity is treated as an offset to add on top of current mask opacity
-  // else it is set absolutely and directly
-  if(!form) return 0;
-
-  // we first need to test if the opacity can be set to the form
-  if(form->type & DT_MASKS_GROUP) return 0;
-  const int id = form->formid;
-
-  // so we change the value inside the group
-  dt_masks_form_group_t *fpt = _masks_group_find_form_from_parentid(parentid, id);
-  if(!fpt) return 0;
-  float new_opacity = (offset == DT_MASKS_INCREMENT_OFFSET)  ? fpt->opacity + opacity * flow
-                            : (offset == DT_MASKS_INCREMENT_SCALE) ? fpt->opacity * powf(opacity, (float)flow)
-                                                                   : opacity; // DT_MASKS_INCREMENT_ABSOLUTE
-  new_opacity = CLAMP(new_opacity, 0.0f, 1.0f);
-  fpt->opacity = new_opacity;
-  dt_toast_log(_("Opacity: %3.2f%%"), new_opacity * 100.f);
-  return 1;
-}
-
 int dt_masks_form_change_opacity(dt_masks_form_t *form, int parentid, int up, const int flow)
 {
-  const float amount = up ? 0.02f : -0.02f;
-  return dt_masks_form_set_opacity(form, parentid, amount, DT_MASKS_INCREMENT_OFFSET, flow);
+  if(!form) return 0;
+  dt_masks_form_group_t *form_group = dt_masks_form_group_from_parentid(parentid, form->formid);
+  if(!form_group) return 0;
+
+  float amount = up ? 0.02f : -0.02f;
+  const float changed = dt_masks_form_set_interaction_value(form_group, DT_MASKS_INTERACTION_OPACITY,
+                                                            amount, DT_MASKS_INCREMENT_OFFSET, flow, NULL, NULL);
+  return !isnan(changed);
 }
 
 void dt_masks_form_move(dt_masks_form_t *grp, int formid, int up)

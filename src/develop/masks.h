@@ -332,6 +332,10 @@ typedef struct dt_masks_functions_t
                   int *width, int *height, int *posx, int *posy);
   int (*get_source_area)(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, struct dt_masks_form_t *form,
                          int *width, int *height, int *posx, int *posy);
+  float (*get_interaction_value)(const struct dt_masks_form_t *form, dt_masks_interaction_t interaction);
+  float (*set_interaction_value)(struct dt_masks_form_t *form, dt_masks_interaction_t interaction, float value,
+                                 dt_masks_increment_t increment, int flow,
+                                 struct dt_masks_form_gui_t *gui, struct dt_iop_module_t *module);
   /* Mouse pzx and pzy are normalized coordinates in full image space */
   int (*mouse_moved)(struct dt_iop_module_t *module, float pzx, float pzy, double pressure, int which,
                      struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
@@ -677,8 +681,30 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const float i
 float dt_masks_rotate_with_anchor(dt_develop_t *dev, const float anchor[2], const float center[2], dt_masks_form_gui_t *gui);
 
 /** Getters and setters for direct GUI interaction */
-float dt_masks_form_get_opacity(dt_masks_form_t *form, int parentid);
-int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity, dt_masks_increment_t offset, const int flow);
+dt_masks_form_group_t *dt_masks_form_group_from_parentid(int parentid, int formid);
+dt_masks_form_group_t *dt_masks_form_get_selected_group(const struct dt_masks_form_t *form,
+                                                        const struct dt_masks_form_gui_t *gui);
+/**
+ * @brief Return the currently selected group entry, resolving to the live form group when the GUI
+ *        is operating on a temporary copy (for example the visible group created for editing).
+ *
+ * The selection is taken from `gui->group_selected` when available, otherwise it falls back to
+ * `darktable.develop->mask_form_selected_id`. If the selected entry belongs to a temporary group
+ * (non-zero parentid), the function resolves and returns the corresponding entry from the real
+ * group in `dev->forms`.
+ * 
+ * @todo Resolve a unique reference to the group of interest upstream, so we don't
+ * have to dance like that. It looks as if we can't manage what's going on in the 
+ * flow...
+ */
+dt_masks_form_group_t *dt_masks_form_get_selected_group_live(const struct dt_masks_form_t *form,
+                                                             const struct dt_masks_form_gui_t *gui);
+float dt_masks_form_get_interaction_value(dt_masks_form_group_t *form_group,
+                                          dt_masks_interaction_t interaction);
+float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
+                                          dt_masks_interaction_t interaction,
+                                          float value, dt_masks_increment_t increment, int flow,
+                                          struct dt_masks_form_gui_t *gui, struct dt_iop_module_t *module);
 
 /**
  * @brief Change a numerical property of a mask shape, either by in/de-crementing the current value
