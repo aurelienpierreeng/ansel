@@ -2725,20 +2725,21 @@ static void _brush_falloff(float *const restrict buffer, int p0[2], int p1[2], i
 
   const float lx = p1[0] - p0[0];
   const float ly = p1[1] - p0[1];
+  const float inv_l = 1.0f / (float)l;
+  const float inv_soft = (soft > 0) ? 1.0f / (float)soft : 0.0f;
 
   for(int i = 0; i < l; i++)
   {
     // position
-    const int x = (int)((float)i * lx / (float)l) + p0[0] - posx;
-    const int y = (int)((float)i * ly / (float)l) + p0[1] - posy;
-    const float op = density * ((i <= solid) ? 1.0f : 1.0 - (float)(i - solid) / (float)soft);
-    buffer[y * bw + x] = MAX(buffer[y * bw + x], op);
+    const int x = (int)((float)i * lx * inv_l) + p0[0] - posx;
+    const int y = (int)((float)i * ly * inv_l) + p0[1] - posy;
+    const float op = density * ((i <= solid) ? 1.0f : 1.0f - (float)(i - solid) * inv_soft);
+    const int idx = y * bw + x;
+    buffer[idx] = MAX(buffer[idx], op);
     if(x > 0)
-      buffer[y * bw + x - 1]
-          = MAX(buffer[y * bw + x - 1], op); // this one is to avoid gap due to int rounding
+      buffer[idx - 1] = MAX(buffer[idx - 1], op); // this one is to avoid gap due to int rounding
     if(y > 0)
-      buffer[(y - 1) * bw + x]
-          = MAX(buffer[(y - 1) * bw + x], op); // this one is to avoid gap due to int rounding
+      buffer[idx - bw] = MAX(buffer[idx - bw], op); // this one is to avoid gap due to int rounding
   }
 }
 
@@ -2835,6 +2836,11 @@ static inline void _brush_falloff_roi(float *buffer, const int *p0, const int *p
   float op = density;
   const float dop = density / (float)(l - solid);
 
+  const int x0 = p0[0], y0 = p0[1];
+  const int x1 = p1[0], y1 = p1[1];
+  if((x0 < 0 && x1 < 0) || (x0 >= bw && x1 >= bw) || (y0 < 0 && y1 < 0) || (y0 >= bh && y1 >= bh)) return;
+  const int inside = (x0 >= 0 && x0 < bw && x1 >= 0 && x1 < bw && y0 >= 0 && y0 < bh && y1 >= 0 && y1 < bh);
+
   for(int i = 0; i < l; i++)
   {
     const int x = fx;
@@ -2844,7 +2850,7 @@ static inline void _brush_falloff_roi(float *buffer, const int *p0, const int *p
     fy += ly;
     if(i > solid) op -= dop;
 
-    if(x < 0 || x >= bw || y < 0 || y >= bh) continue;
+    if(!inside && (x < 0 || x >= bw || y < 0 || y >= bh)) continue;
 
     float *buf = buffer + (size_t)y * bw + x;
 
