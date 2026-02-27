@@ -902,7 +902,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
   // Image codecs doing their own colorspace detection should set this to TRUE
   gboolean already_set = FALSE;
 
-  //fprintf(stdout, "Color profile type for %s: \n", filename);
+  dt_print(DT_DEBUG_COLORPROFILE, "Color profile type for %s: \n", filename);
 
   if(img->profile && img->profile_size > 0
      && dt_colorspaces_get_rgb_profile_from_mem(img->profile, img->profile_size))
@@ -914,7 +914,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
       *output = dt_colorspaces_get_rgb_profile_from_mem(img->profile, img->profile_size);
       *new_profile = TRUE;
     }
-    //fprintf(stdout, "Embedded ICC profile (inline)\n");
+    dt_print(DT_DEBUG_COLORPROFILE, "Embedded ICC profile (inline)\n");
   }
   else if(!isnan(img->d65_color_matrix[0])
            && dt_colorspaces_create_xyzimatrix_profile((float(*)[3])img->d65_color_matrix))
@@ -926,7 +926,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
       *output = dt_colorspaces_create_xyzimatrix_profile((float(*)[3])img->d65_color_matrix);
       *new_profile = TRUE;
     }
-    //fprintf(stdout, "Embedded EXIF matrix\n");
+    dt_print(DT_DEBUG_COLORPROFILE, "Embedded EXIF matrix\n");
   }
   else if(dt_image_is_monochrome(img))
   {
@@ -934,7 +934,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
     color_profile = DT_COLORSPACE_LIN_REC709;
     if(output != NULL)
       *output = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC709, "", DT_PROFILE_DIRECTION_IN)->profile;
-    //fprintf(stdout, "Monochrome RAW\n");
+    dt_print(DT_DEBUG_COLORPROFILE, "Monochrome RAW\n");
   }
   else if(dt_image_is_matrix_correction_supported(img))
   {
@@ -945,7 +945,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
       *output = dt_colorspaces_create_xyzimatrix_profile((float(*)[3])img->adobe_XYZ_to_CAM);
       *new_profile = TRUE;
     }
-    //fprintf(stdout, "Typical RAW\n");
+    dt_print(DT_DEBUG_COLORPROFILE, "Typical RAW\n");
   }
   else if(img->flags & DT_IMAGE_4BAYER)
   {
@@ -953,13 +953,13 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
     color_profile = DT_COLORSPACE_LIN_REC2020;
     if(output != NULL)
       *output = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC2020, "", DT_PROFILE_DIRECTION_IN)->profile;
-    //fprintf(stdout, "4Bayer RAW\n");
+    dt_print(DT_DEBUG_COLORPROFILE, "4Bayer RAW\n");
   }
   else if(img->colorspace == DT_IMAGE_COLORSPACE_SRGB)
   {
     // Images tagged explicitely with sRGB flag
     color_profile = DT_COLORSPACE_SRGB;
-    //fprintf(stdout, "Raster image tagged with sRGB\n");
+    dt_print(DT_DEBUG_COLORPROFILE, "Raster image tagged with sRGB\n");
   }
   else if(img->colorspace == DT_IMAGE_COLORSPACE_ADOBE_RGB)
   {
@@ -967,7 +967,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
     color_profile = DT_COLORSPACE_ADOBERGB;
     if(output != NULL)
       *output = dt_colorspaces_get_profile(DT_COLORSPACE_ADOBERGB, "", DT_PROFILE_DIRECTION_IN)->profile;
-    //fprintf(stdout, "Raster image tagged with Adobe RGB\n");
+    dt_print(DT_DEBUG_COLORPROFILE, "Raster image tagged with Adobe RGB\n");
   }
   else if(!strcmp(ext, "pfm"))
   {
@@ -976,7 +976,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
     color_profile = DT_COLORSPACE_LIN_REC709;
     if(output != NULL)
       *output = dt_colorspaces_get_profile(DT_COLORSPACE_LIN_REC709, "", DT_PROFILE_DIRECTION_IN)->profile;
-    //fprintf(stdout, "PFM untagged image\n");
+    dt_print(DT_DEBUG_COLORPROFILE, "PFM untagged image\n");
   }
   else
   {
@@ -1045,14 +1045,14 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
         *output = dt_colorspaces_get_rgb_profile_from_mem(img->profile, img->profile_size);
         *new_profile = TRUE;
       }
-      //fprintf(stdout, "Embedded ICC (extracted)\n");
+      dt_print(DT_DEBUG_COLORPROFILE, "Embedded ICC (extracted)\n");
     }
     else if(already_set && img->profile && img->profile_size > 0)
     {
       // This happens when AVIF/HEIF found a basic color profile into CICP fields
       if(output != NULL)
         *output = dt_colorspaces_get_profile(color_profile, "", DT_PROFILE_DIRECTION_IN)->profile;
-      //fprintf(stdout, "Embedded ICC (extracted)\n");
+      dt_print(DT_DEBUG_COLORPROFILE, "Embedded ICC (extracted)\n");
     }
   }
 
@@ -1065,6 +1065,110 @@ finish:
   dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
   g_free(ext);
   return color_profile;
+}
+
+dt_colorspaces_color_profile_type_t dt_colorspaces_get_input_profile_from_image(
+    int32_t imgid,
+    dt_colorspaces_color_profile_type_t requested,
+    cmsHPROFILE *output,
+    gboolean *new_profile)
+{
+  if(output) *output = NULL;
+  if(new_profile) *new_profile = FALSE;
+
+  if(requested == DT_COLORSPACE_NONE)
+    return dt_image_find_best_color_profile(imgid, output, new_profile);
+
+  if(requested != DT_COLORSPACE_EMBEDDED_ICC
+     && requested != DT_COLORSPACE_EMBEDDED_MATRIX
+     && requested != DT_COLORSPACE_STANDARD_MATRIX)
+    return DT_COLORSPACE_NONE;
+
+  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  if(!img) return DT_COLORSPACE_NONE;
+
+  if(!dt_image_is_matrix_correction_supported(img))
+  {
+    dt_image_cache_read_release(darktable.image_cache, img);
+    return dt_image_find_best_color_profile(imgid, output, new_profile);
+  }
+
+  gboolean have_embedded_icc = (img->profile && img->profile_size > 0);
+  dt_image_cache_read_release(darktable.image_cache, img);
+
+  if(requested == DT_COLORSPACE_EMBEDDED_ICC && !have_embedded_icc)
+  {
+    // Try to extract embedded ICC into cache if needed.
+    gboolean dummy_new_profile = FALSE;
+    dt_image_find_best_color_profile(imgid, NULL, &dummy_new_profile);
+  }
+
+  img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  if(!img) return DT_COLORSPACE_NONE;
+
+  cmsHPROFILE profile = NULL;
+  dt_colorspaces_color_profile_type_t type = requested;
+
+  if(type == DT_COLORSPACE_EMBEDDED_ICC)
+  {
+    if(img->profile && img->profile_size > 0)
+    {
+      profile = dt_colorspaces_get_rgb_profile_from_mem(img->profile, img->profile_size);
+      if(profile)
+      {
+        type = DT_COLORSPACE_EMBEDDED_ICC;
+        goto finish;
+      }
+    }
+    type = DT_COLORSPACE_EMBEDDED_MATRIX;
+  }
+
+  if(type == DT_COLORSPACE_EMBEDDED_MATRIX)
+  {
+    if(!isnan(img->d65_color_matrix[0]))
+    {
+      profile = dt_colorspaces_create_xyzimatrix_profile((float(*)[3])img->d65_color_matrix);
+      if(profile)
+      {
+        type = DT_COLORSPACE_EMBEDDED_MATRIX;
+        goto finish;
+      }
+    }
+    type = DT_COLORSPACE_STANDARD_MATRIX;
+  }
+
+  if(type == DT_COLORSPACE_STANDARD_MATRIX)
+  {
+    if(!isnan(img->adobe_XYZ_to_CAM[0][0]))
+    {
+      profile = dt_colorspaces_create_xyzimatrix_profile((float(*)[3])img->adobe_XYZ_to_CAM);
+      if(profile)
+      {
+        type = DT_COLORSPACE_STANDARD_MATRIX;
+        goto finish;
+      }
+    }
+  }
+
+  type = DT_COLORSPACE_LIN_REC709;
+
+finish:
+  dt_image_cache_read_release(darktable.image_cache, img);
+
+  if(profile)
+  {
+    if(output)
+    {
+      *output = profile;
+      if(new_profile) *new_profile = TRUE;
+    }
+    else
+    {
+      dt_colorspaces_cleanup_profile(profile);
+    }
+  }
+
+  return type;
 }
 
 
@@ -1467,7 +1571,7 @@ static void _update_display_profile(guchar *tmp_data, gsize size, char *name, si
 
 static void cms_error_handler(cmsContext ContextID, cmsUInt32Number ErrorCode, const char *text)
 {
-  fprintf(stderr, "[lcms2] error %d: %s\n", ErrorCode, text);
+  dt_print(DT_DEBUG_COLORPROFILE, "[lcms2] error %d: %s\n", ErrorCode, text);
 }
 
 static gint _sort_profiles(gconstpointer a, gconstpointer b)

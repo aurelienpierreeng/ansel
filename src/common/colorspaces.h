@@ -318,6 +318,24 @@ static inline dt_colorspaces_color_profile_type_t sanitize_colorspaces(dt_colors
     return (dt_colorspaces_color_profile_type_t)MIN(colorspace, DT_COLORSPACE_LAST - 1);
 }
 
+static inline gboolean dt_colorspaces_is_raw_matrix_profile_type(const dt_colorspaces_color_profile_type_t type)
+{
+  return (type == DT_COLORSPACE_STANDARD_MATRIX
+          || type == DT_COLORSPACE_ENHANCED_MATRIX
+          || type == DT_COLORSPACE_VENDOR_MATRIX
+          || type == DT_COLORSPACE_ALTERNATE_MATRIX);
+}
+
+static inline gboolean dt_colorspaces_is_matrix_profile_type(const dt_colorspaces_color_profile_type_t type)
+{
+  return dt_colorspaces_is_raw_matrix_profile_type(type) || type == DT_COLORSPACE_EMBEDDED_MATRIX;
+}
+
+static inline gboolean dt_colorspaces_is_embedded_or_matrix_profile_type(const dt_colorspaces_color_profile_type_t type)
+{
+  return (type == DT_COLORSPACE_EMBEDDED_ICC) || dt_colorspaces_is_matrix_profile_type(type);
+}
+
 
 /**
  * @brief Best effort to find a suitable (input) color profile for a given image, using embedded ICC or EXIF whenever possible.
@@ -330,6 +348,22 @@ static inline dt_colorspaces_color_profile_type_t sanitize_colorspaces(dt_colors
  * @return dt_colorspaces_color_profile_type_t type of profile detected. This type is tested internally and guaranteed to work.
  */
 dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t imgid, cmsHPROFILE *output, gboolean *new_profile);
+
+/**
+ * @brief Resolve an embedded/matrix input profile for a given image, honoring the requested type when possible.
+ * For non-RAW images, falls back to dt_image_find_best_color_profile() to avoid invalid matrix usage.
+ *
+ * @param imgid ID of the picture
+ * @param requested Requested embedded/matrix profile type
+ * @param output If not NULL, writes the generated color profile into this pointer.
+ * @param new_profile Will be set to true if a new profile was generated (aka embedded profile) and will need to be freed.
+ * @return dt_colorspaces_color_profile_type_t resolved type, or DT_COLORSPACE_NONE on error.
+ */
+dt_colorspaces_color_profile_type_t dt_colorspaces_get_input_profile_from_image(
+    int32_t imgid,
+    dt_colorspaces_color_profile_type_t requested,
+    cmsHPROFILE *output,
+    gboolean *new_profile);
 
 #ifdef __cplusplus
 }

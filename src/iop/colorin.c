@@ -224,9 +224,9 @@ static void _resolve_work_profile(dt_colorspaces_color_profile_type_t *work_type
       return;
   }
 
-  fprintf(stderr,
-          "[colorin] profile `%s' not suitable for work profile. it has been replaced by linear Rec2020 RGB!\n",
-          dt_colorspaces_get_name(*work_type, work_filename));
+  dt_print(DT_DEBUG_COLORPROFILE,
+           "[colorin] profile `%s' not suitable for work profile. it has been replaced by linear Rec2020 RGB!\n",
+           dt_colorspaces_get_name(*work_type, work_filename));
   *work_type = DT_COLORSPACE_LIN_REC2020;
   work_filename[0] = '\0';
 }
@@ -534,7 +534,8 @@ static void profile_changed(GtkWidget *widget, gpointer user_data)
     }
   }
   // should really never happen.
-  fprintf(stderr, "[colorin] color profile %s seems to have disappeared!\n", dt_colorspaces_get_name(p->type, p->filename));
+  dt_print(DT_DEBUG_COLORPROFILE, "[colorin] color profile %s seems to have disappeared!\n",
+           dt_colorspaces_get_name(p->type, p->filename));
 }
 
 static void workicc_changed(GtkWidget *widget, gpointer user_data)
@@ -568,7 +569,9 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
     const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_add_profile_info_to_list(self->dev, p->type_work, p->filename_work, DT_INTENT_PERCEPTUAL);
     if(work_profile == NULL || isnan(work_profile->matrix_in[0][0]) || isnan(work_profile->matrix_out[0][0]))
     {
-      fprintf(stderr, "[colorin] can't extract matrix from colorspace `%s', it will be replaced by Rec2020 RGB!\n", p->filename_work);
+      dt_print(DT_DEBUG_COLORPROFILE,
+               "[colorin] can't extract matrix from colorspace `%s', it will be replaced by Rec2020 RGB!\n",
+               p->filename_work);
       dt_control_log(_("can't extract matrix from colorspace `%s', it will be replaced by Rec2020 RGB!"), p->filename_work);
 
     }
@@ -581,7 +584,8 @@ static void workicc_changed(GtkWidget *widget, gpointer user_data)
   else
   {
     // should really never happen.
-    fprintf(stderr, "[colorin] color profile %s seems to have disappeared!\n", dt_colorspaces_get_name(p->type_work, p->filename_work));
+    dt_print(DT_DEBUG_COLORPROFILE, "[colorin] color profile %s seems to have disappeared!\n",
+             dt_colorspaces_get_name(p->type_work, p->filename_work));
   }
 }
 
@@ -1461,26 +1465,37 @@ int process_sse2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, co
 }
 #endif
 
-void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+static void _reset_input_transforms(dt_iop_colorin_data_t *d)
 {
-  const dt_iop_colorin_params_t *p = (dt_iop_colorin_params_t *)p1;
-  dt_iop_colorin_data_t *d = (dt_iop_colorin_data_t *)piece->data;
+  if(d->xform_cam_Lab)
+  {
+    cmsDeleteTransform(d->xform_cam_Lab);
+    d->xform_cam_Lab = NULL;
+  }
+  if(d->xform_cam_nrgb)
+  {
+    cmsDeleteTransform(d->xform_cam_nrgb);
+    d->xform_cam_nrgb = NULL;
+  }
+  if(d->xform_nrgb_Lab)
+  {
+    cmsDeleteTransform(d->xform_nrgb_Lab);
+    d->xform_nrgb_Lab = NULL;
+  }
+}
 
-  d->type = p->type;
-  d->type_work = p->type_work;
-  g_strlcpy(d->filename, p->filename, sizeof(d->filename));
-  g_strlcpy(d->filename_work, p->filename_work, sizeof(d->filename_work));
+static void _reset_processing_state(dt_iop_colorin_data_t *d, dt_dev_pixelpipe_iop_t *piece)
+{
+  d->cmatrix[0][0] = d->nmatrix[0][0] = d->lmatrix[0][0] = NAN;
+  d->lut[0][0] = -1.0f;
+  d->lut[1][0] = -1.0f;
+  d->lut[2][0] = -1.0f;
+  d->nonlinearlut = 0;
+  piece->process_cl_ready = 1;
+}
 
-  const cmsHPROFILE Lab = dt_colorspaces_get_profile(DT_COLORSPACE_LAB, "", DT_PROFILE_DIRECTION_ANY)->profile;
-
-  // only clean up when it's a type that we created here
-  if(d->input && d->clear_input) dt_colorspaces_cleanup_profile(d->input);
-  d->input = NULL;
-  d->clear_input = 0;
-  d->nrgb = NULL;
-
-  d->blue_mapping = p->blue_mapping;
-
+static void _select_normalization_profile(const dt_iop_colorin_params_t *p, dt_iop_colorin_data_t *d)
+{
   switch(p->normalize)
   {
     case DT_NORMALIZE_SRGB:
@@ -1499,39 +1514,14 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     default:
       d->nrgb = NULL;
   }
+}
 
-  if(d->xform_cam_Lab)
-  {
-    cmsDeleteTransform(d->xform_cam_Lab);
-    d->xform_cam_Lab = NULL;
-  }
-  if(d->xform_cam_nrgb)
-  {
-    cmsDeleteTransform(d->xform_cam_nrgb);
-    d->xform_cam_nrgb = NULL;
-  }
-  if(d->xform_nrgb_Lab)
-  {
-    cmsDeleteTransform(d->xform_nrgb_Lab);
-    d->xform_nrgb_Lab = NULL;
-  }
-
-  d->cmatrix[0][0] = d->nmatrix[0][0] = d->lmatrix[0][0] = NAN;
-  d->lut[0][0] = -1.0f;
-  d->lut[1][0] = -1.0f;
-  d->lut[2][0] = -1.0f;
-  d->nonlinearlut = 0;
-  piece->process_cl_ready = 1;
-  char datadir[PATH_MAX] = { 0 };
-  dt_loc_get_datadir(datadir, sizeof(datadir));
-
+static dt_colorspaces_color_profile_type_t _resolve_input_profile(const dt_iop_colorin_params_t *p,
+                                                                  dt_dev_pixelpipe_t *pipe,
+                                                                  dt_iop_colorin_data_t *d)
+{
   dt_colorspaces_color_profile_type_t type = p->type;
-  if(type == DT_COLORSPACE_LAB)
-  {
-    piece->enabled = 0;
-    return;
-  }
-  piece->enabled = 1;
+  const dt_colorspaces_color_profile_type_t requested_type = type;
 
   if(type == DT_COLORSPACE_ENHANCED_MATRIX)
   {
@@ -1551,48 +1541,27 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     if(!d->input) type = DT_COLORSPACE_EMBEDDED_ICC;
     else d->clear_input = 1;
   }
-  if(type == DT_COLORSPACE_EMBEDDED_ICC)
+
+  if(type == DT_COLORSPACE_EMBEDDED_ICC
+     || type == DT_COLORSPACE_EMBEDDED_MATRIX
+     || type == DT_COLORSPACE_STANDARD_MATRIX)
   {
-    // embedded color profile
-    const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, pipe->image.id, 'r');
-    if(cimg == NULL || cimg->profile == NULL)
-      type = DT_COLORSPACE_EMBEDDED_MATRIX;
-    else
+    gboolean new_profile = FALSE;
+    cmsHPROFILE profile = NULL;
+    type = dt_colorspaces_get_input_profile_from_image(pipe->image.id, type, &profile, &new_profile);
+    if(profile)
     {
-      d->input = dt_colorspaces_get_rgb_profile_from_mem(cimg->profile, cimg->profile_size);
-      d->clear_input = 1;
+      d->input = profile;
+      d->clear_input = new_profile;
     }
-    dt_image_cache_read_release(darktable.image_cache, cimg);
   }
-  if(type == DT_COLORSPACE_EMBEDDED_MATRIX)
+
+  if(requested_type == DT_COLORSPACE_STANDARD_MATRIX
+     && type == DT_COLORSPACE_LIN_REC709
+     && dt_image_is_matrix_correction_supported(&pipe->image))
   {
-    // embedded matrix, hopefully D65
-    const dt_image_t *cimg = dt_image_cache_get(darktable.image_cache, pipe->image.id, 'r');
-    if(isnan(cimg->d65_color_matrix[0]))
-      type = DT_COLORSPACE_STANDARD_MATRIX;
-    else
-    {
-      d->input = dt_colorspaces_create_xyzimatrix_profile((float(*)[3])cimg->d65_color_matrix);
-      d->clear_input = 1;
-    }
-    dt_image_cache_read_release(darktable.image_cache, cimg);
-  }
-  if(type == DT_COLORSPACE_STANDARD_MATRIX)
-  {
-    if(isnan(pipe->image.adobe_XYZ_to_CAM[0][0]))
-    {
-      if(dt_image_is_matrix_correction_supported(&pipe->image))
-      {
-        fprintf(stderr, "[colorin] `%s' color matrix not found!\n", pipe->image.camera_makermodel);
-        dt_control_log(_("`%s' color matrix not found!"), pipe->image.camera_makermodel);
-      }
-      type = DT_COLORSPACE_LIN_REC709;
-    }
-    else
-    {
-      d->input = dt_colorspaces_create_xyzimatrix_profile((float(*)[3])pipe->image.adobe_XYZ_to_CAM);
-      d->clear_input = 1;
-    }
+    dt_print(DT_DEBUG_COLORPROFILE, "[colorin] `%s' color matrix not found!\n", pipe->image.camera_makermodel);
+    dt_control_log(_("`%s' color matrix not found!"), pipe->image.camera_makermodel);
   }
 
   if(!d->input)
@@ -1615,14 +1584,64 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
     d->clear_input = 0;
   }
 
+  return type;
+}
+
+static void _set_input_profile_metadata(dt_iop_colorin_data_t *d,
+                                        const dt_iop_colorin_params_t *p,
+                                        const dt_colorspaces_color_profile_type_t type)
+{
+  d->type = type;
+  if(type == DT_COLORSPACE_FILE)
+    g_strlcpy(d->filename, p->filename, sizeof(d->filename));
+  else
+    d->filename[0] = '\0';
+}
+
+void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
+{
+  const dt_iop_colorin_params_t *p = (dt_iop_colorin_params_t *)p1;
+  dt_iop_colorin_data_t *d = (dt_iop_colorin_data_t *)piece->data;
+
+  d->type_work = p->type_work;
+  g_strlcpy(d->filename_work, p->filename_work, sizeof(d->filename_work));
+
+  const cmsHPROFILE Lab = dt_colorspaces_get_profile(DT_COLORSPACE_LAB, "", DT_PROFILE_DIRECTION_ANY)->profile;
+
+  // only clean up when it's a type that we created here
+  if(d->input && d->clear_input) dt_colorspaces_cleanup_profile(d->input);
+  d->input = NULL;
+  d->clear_input = 0;
+  d->nrgb = NULL;
+
+  d->blue_mapping = p->blue_mapping;
+  _select_normalization_profile(p, d);
+  _reset_input_transforms(d);
+  _reset_processing_state(d, piece);
+  char datadir[PATH_MAX] = { 0 };
+  dt_loc_get_datadir(datadir, sizeof(datadir));
+
+  dt_colorspaces_color_profile_type_t type = p->type;
+  if(type == DT_COLORSPACE_LAB)
+  {
+    _set_input_profile_metadata(d, p, type);
+    piece->enabled = 0;
+    return;
+  }
+  piece->enabled = 1;
+
+  type = _resolve_input_profile(p, pipe, d);
+
   // should never happen, but catch that case to avoid a crash
   if(!d->input)
   {
-    fprintf(stderr, "[colorin] input profile could not be generated!\n");
+    dt_print(DT_DEBUG_COLORPROFILE, "[colorin] input profile could not be generated!\n");
     dt_control_log(_("input profile could not be generated!"));
     piece->enabled = 0;
     return;
   }
+
+  _set_input_profile_metadata(d, p, type);
 
   cmsColorSpaceSignature input_color_space = cmsGetColorSpace(d->input);
   cmsUInt32Number input_format;
@@ -1637,11 +1656,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
       break;
     default:
       // fprintf("%.*s", 4, input_color_space) doesn't work, it prints the string backwards :(
-      fprintf(stderr, "[colorin] input profile color space `%c%c%c%c' not supported\n",
-              (char)(input_color_space>>24),
-              (char)(input_color_space>>16),
-              (char)(input_color_space>>8),
-              (char)(input_color_space));
+      dt_print(DT_DEBUG_COLORPROFILE, "[colorin] input profile color space `%c%c%c%c' not supported\n",
+               (char)(input_color_space>>24),
+               (char)(input_color_space>>16),
+               (char)(input_color_space>>8),
+               (char)(input_color_space));
       input_format = TYPE_RGBA_FLT; // this will fail later, triggering the linear rec709 fallback
   }
 
@@ -1699,9 +1718,11 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
   if(!d->xform_cam_Lab && isnan(d->cmatrix[0][0]))
   {
     if(p->type == DT_COLORSPACE_FILE)
-      fprintf(stderr, "[colorin] unsupported input profile `%s' has been replaced by linear Rec709 RGB!\n", p->filename);
+      dt_print(DT_DEBUG_COLORPROFILE,
+               "[colorin] unsupported input profile `%s' has been replaced by linear Rec709 RGB!\n",
+               p->filename);
     else
-      fprintf(stderr, "[colorin] unsupported input profile has been replaced by linear Rec709 RGB!\n");
+      dt_print(DT_DEBUG_COLORPROFILE, "[colorin] unsupported input profile has been replaced by linear Rec709 RGB!\n");
     dt_control_log(_("unsupported input profile has been replaced by linear Rec709 RGB!"));
     if(d->input && d->clear_input) dt_colorspaces_cleanup_profile(d->input);
     d->nrgb = NULL;
@@ -1803,8 +1824,8 @@ void gui_update(struct dt_iop_module_t *self)
   if(idx < 0)
   {
     idx = 0;
-    fprintf(stderr, "[colorin] could not find requested working profile `%s'!\n",
-            dt_colorspaces_get_name(p->type_work, p->filename_work));
+    dt_print(DT_DEBUG_COLORPROFILE, "[colorin] could not find requested working profile `%s'!\n",
+             dt_colorspaces_get_name(p->type_work, p->filename_work));
   }
   dt_bauhaus_combobox_set(g->work_combobox, idx);
 
@@ -1834,10 +1855,12 @@ void gui_update(struct dt_iop_module_t *self)
   // Error happened, otherwise we would have returned earlier
   dt_bauhaus_combobox_set(g->profile_combobox, 0);
 
-  if(p->type != DT_COLORSPACE_ENHANCED_MATRIX)
+  const gboolean matrix_supported = dt_image_is_matrix_correction_supported(&self->dev->image_storage);
+  if(p->type != DT_COLORSPACE_ENHANCED_MATRIX
+     && !(dt_colorspaces_is_raw_matrix_profile_type(p->type) && !matrix_supported))
   {
-    fprintf(stderr, "[colorin] could not find requested profile `%s'!\n",
-            dt_colorspaces_get_name(p->type, p->filename));
+    dt_print(DT_DEBUG_COLORPROFILE, "[colorin] could not find requested profile `%s'!\n",
+             dt_colorspaces_get_name(p->type, p->filename));
 
     dt_control_log(_("The color profile `%s' referenced as input profile has not been found."), dt_colorspaces_get_name(p->type, p->filename));
   }
