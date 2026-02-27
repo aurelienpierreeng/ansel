@@ -649,14 +649,9 @@ static void _combine_masks_union(float *const restrict dest, float *const restri
   if (inverted)
   {
 #ifdef _OPENMP
-#if !defined(__SUNOS__) && !defined(__NetBSD__)
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(npixels, opacity) \
-  dt_omp_sharedconst(dest, newmask) aligned(dest, newmask : 64) \
-  schedule(simd:static)
-#else
-#pragma omp parallel for shared(dest, newmask)
-#endif
+  dt_omp_firstprivate(npixels, opacity, dest, newmask) \
+  aligned(dest, newmask : 64) schedule(simd:static)
 #endif
     for(int index = 0; index < npixels; index++)
     {
@@ -667,14 +662,9 @@ static void _combine_masks_union(float *const restrict dest, float *const restri
   else
   {
 #ifdef _OPENMP
-#if !defined(__SUNOS__) && !defined(__NetBSD__)
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(npixels, opacity) \
-  dt_omp_sharedconst(dest, newmask) aligned(dest, newmask : 64) \
-  schedule(simd:static)
-#else
-#pragma omp parallel for shared(dest, newmask)
-#endif
+  dt_omp_firstprivate(npixels, opacity, dest, newmask) \
+  aligned(dest, newmask : 64) schedule(simd:static)
 #endif
     for(int index = 0; index < npixels; index++)
     {
@@ -690,14 +680,9 @@ static void _combine_masks_intersect(float *const restrict dest, float *const re
   if (inverted)
   {
 #ifdef _OPENMP
-#if !defined(__SUNOS__) && !defined(__NetBSD__)
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(npixels, opacity) \
-  dt_omp_sharedconst(dest, newmask) aligned(dest, newmask : 64) \
-  schedule(simd:static)
-#else
-#pragma omp parallel for shared(dest, newmask)
-#endif
+  dt_omp_firstprivate(npixels, opacity, dest, newmask) \
+  aligned(dest, newmask : 64) schedule(simd:static)
 #endif
     for(int index = 0; index < npixels; index++)
     {
@@ -708,14 +693,9 @@ static void _combine_masks_intersect(float *const restrict dest, float *const re
   else
   {
 #ifdef _OPENMP
-#if !defined(__SUNOS__) && !defined(__NetBSD__)
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(npixels, opacity) \
-  dt_omp_sharedconst(dest, newmask) aligned(dest, newmask : 64) \
-  schedule(simd:static)
-#else
-#pragma omp parallel for shared(dest, newmask)
-#endif
+  dt_omp_firstprivate(npixels, opacity, dest, newmask) \
+  aligned(dest, newmask : 64) schedule(simd:static)
 #endif
     for(int index = 0; index < npixels; index++)
     {
@@ -740,14 +720,9 @@ static void _combine_masks_difference(float *const restrict dest, float *const r
   if (inverted)
   {
 #ifdef _OPENMP
-#if !defined(__SUNOS__) && !defined(__NetBSD__)
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(npixels, opacity) \
-  dt_omp_sharedconst(dest, newmask) aligned(dest, newmask : 64) \
-  schedule(simd:static)
-#else
-#pragma omp parallel for shared(dest, newmask)
-#endif
+  dt_omp_firstprivate(npixels, opacity, dest, newmask) \
+  aligned(dest, newmask : 64) schedule(simd:static)
 #endif
     for(int index = 0; index < npixels; index++)
     {
@@ -758,14 +733,10 @@ static void _combine_masks_difference(float *const restrict dest, float *const r
   else
   {
 #ifdef _OPENMP
-#if !defined(__SUNOS__) && !defined(__NetBSD__)
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(npixels, opacity) \
-  dt_omp_sharedconst(dest, newmask) aligned(dest, newmask : 64) \
-  schedule(simd:static)
-#else
-#pragma omp parallel for shared(dest, newmask)
-#endif
+  dt_omp_firstprivate(npixels, opacity, dest, newmask) \
+  aligned(dest, newmask : 64) schedule(simd:static)
+
 #endif
     for(int index = 0; index < npixels; index++)
     {
@@ -781,14 +752,10 @@ static void _combine_masks_exclusion(float *const restrict dest, float *const re
   if (inverted)
   {
 #ifdef _OPENMP
-#if !defined(__SUNOS__) && !defined(__NetBSD__)
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(npixels, opacity) \
-  dt_omp_sharedconst(dest, newmask) aligned(dest, newmask : 64) \
-  schedule(simd:static)
-#else
-#pragma omp parallel for shared(dest, newmask)
-#endif
+  dt_omp_firstprivate(npixels, opacity, dest, newmask) \
+  aligned(dest, newmask : 64) schedule(simd:static)
+
 #endif
     for(int index = 0; index < npixels; index++)
     {
@@ -802,14 +769,9 @@ static void _combine_masks_exclusion(float *const restrict dest, float *const re
   else
   {
 #ifdef _OPENMP
-#if !defined(__SUNOS__) && !defined(__NetBSD__)
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(npixels, opacity) \
-  dt_omp_sharedconst(dest, newmask) aligned(dest, newmask : 64) \
-  schedule(simd:static)
-#else
-#pragma omp parallel for shared(dest, newmask)
-#endif
+  dt_omp_firstprivate(npixels, opacity, dest, newmask) \
+  aligned(dest, newmask : 64) schedule(simd:static)
 #endif
     for(int index = 0; index < npixels; index++)
     {
@@ -885,13 +847,9 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module,
         else // if we are here, this mean that we just have to copy the shape and null other parts
         {
 #ifdef _OPENMP
-#if !defined(__SUNOS__) && !defined(__NetBSD__)
 #pragma omp parallel for simd default(none) \
-          dt_omp_firstprivate(npixels, op, inverted) \
-          dt_omp_sharedconst(buffer, bufs) schedule(simd:static) aligned(buffer, bufs : 64)
-#else
-#pragma omp parallel for shared(bufs, buffer)
-#endif
+          dt_omp_firstprivate(npixels, op, inverted, buffer, bufs) \
+          schedule(simd:static) aligned(buffer, bufs : 64)
 #endif
           for(int index = 0; index < npixels; index++)
           {
