@@ -456,75 +456,173 @@ static int _group_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
   }
 
   // and we copy each buffer inside, row by row
+  const int dst_w = r - l;
+  const int dst_h = b - t;
+  float *const dst = *buffer;
   for(int i = 0; i < nb; i++)
   {
     const double start = dt_get_wtime();
+    const int wi = w[i];
+    const int hi = h[i];
+    const int ox = px[i] - l;
+    const int oy = py[i] - t;
+    const float opacity = op[i];
+    const float *const src = bufs[i];
     if(states[i] & DT_MASKS_STATE_UNION)
     {
-      for(int y = 0; y < h[i]; y++)
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(dst, dst_w, ox, oy, wi, hi, opacity, src) \
+  schedule(static)
+#endif
+      for(int y = 0; y < hi; y++)
       {
-        for(int x = 0; x < w[i]; x++)
+        float *const dst_row = dst + (size_t)(oy + y) * dst_w + ox;
+        const float *const src_row = src + (size_t)y * wi;
+        for(int x = 0; x < wi; x++)
         {
-          (*buffer)[(py[i] + y - t) * (r - l) + px[i] + x - l]
-              = fmaxf((*buffer)[(py[i] + y - t) * (r - l) + px[i] + x - l], bufs[i][y * w[i] + x] * op[i]);
+          const float v = src_row[x] * opacity;
+          if(v > dst_row[x]) dst_row[x] = v;
         }
       }
     }
     else if(states[i] & DT_MASKS_STATE_INTERSECTION)
     {
-      for(int y = 0; y < b - t; y++)
+      const int x0 = MAX(px[i], l);
+      const int y0 = MAX(py[i], t);
+      const int x1 = MIN(px[i] + wi, r);
+      const int y1 = MIN(py[i] + hi, b);
+      if(x0 >= x1 || y0 >= y1)
       {
-        for(int x = 0; x < r - l; x++)
+        memset(dst, 0, (size_t)dst_w * dst_h * sizeof(float));
+      }
+      else
+      {
+        const int row_start = y0 - t;
+        const int row_end = y1 - t;
+        const int col_start = x0 - l;
+        const int col_end = x1 - l;
+        const int src_x_offset = x0 - px[i];
+        const int src_y_offset = t - py[i];
+
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(dst, dst_w, dst_h, wi, opacity, src, row_start, row_end, col_start, col_end, src_x_offset, src_y_offset) \
+  schedule(static)
+#endif
+        for(int y = 0; y < dst_h; y++)
         {
-          const float b1 = (*buffer)[y * (r - l) + x];
-          float b2 = 0.0f;
-          if(y + t - py[i] >= 0 && y + t - py[i] < h[i] && x + l - px[i] >= 0 && x + l - px[i] < w[i])
-            b2 = bufs[i][(y + t - py[i]) * w[i] + x + l - px[i]];
-          if(b1 > 0.0f && b2 > 0.0f)
-            (*buffer)[y * (r - l) + x] = fminf(b1, b2 * op[i]);
-          else
-            (*buffer)[y * (r - l) + x] = 0.0f;
+          float *const dst_row = dst + (size_t)y * dst_w;
+          if(y < row_start || y >= row_end)
+          {
+            memset(dst_row, 0, (size_t)dst_w * sizeof(float));
+            continue;
+          }
+
+          const int src_y = y + src_y_offset;
+          const float *const src_row = src + (size_t)src_y * wi + src_x_offset;
+          float *const dst_mid = dst_row + col_start;
+          const int mid_w = col_end - col_start;
+          for(int x = 0; x < mid_w; x++)
+          {
+            const float b1 = dst_mid[x];
+            const float b2 = src_row[x];
+            if(b1 > 0.0f && b2 > 0.0f)
+              dst_mid[x] = fminf(b1, b2 * opacity);
+            else
+              dst_mid[x] = 0.0f;
+          }
+
+          if(col_start > 0) memset(dst_row, 0, (size_t)col_start * sizeof(float));
+          if(col_end < dst_w) memset(dst_row + col_end, 0, (size_t)(dst_w - col_end) * sizeof(float));
         }
       }
     }
     else if(states[i] & DT_MASKS_STATE_DIFFERENCE)
     {
-      for(int y = 0; y < h[i]; y++)
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(dst, dst_w, ox, oy, wi, hi, opacity, src) \
+  schedule(static)
+#endif
+      for(int y = 0; y < hi; y++)
       {
-        for(int x = 0; x < w[i]; x++)
+        float *const dst_row = dst + (size_t)(oy + y) * dst_w + ox;
+        const float *const src_row = src + (size_t)y * wi;
+        for(int x = 0; x < wi; x++)
         {
-          const float b1 = (*buffer)[(py[i] + y - t) * (r - l) + px[i] + x - l];
-          const float b2 = bufs[i][y * w[i] + x] * op[i];
-          if(b1 > 0.0f && b2 > 0.0f) (*buffer)[(py[i] + y - t) * (r - l) + px[i] + x - l] = b1 * (1.0f - b2);
+          const float b1 = dst_row[x];
+          const float b2 = src_row[x] * opacity;
+          if(b1 > 0.0f && b2 > 0.0f) dst_row[x] = b1 * (1.0f - b2);
         }
       }
     }
     else if(states[i] & DT_MASKS_STATE_EXCLUSION)
     {
-      for(int y = 0; y < h[i]; y++)
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(dst, dst_w, ox, oy, wi, hi, opacity, src) \
+  schedule(static)
+#endif
+      for(int y = 0; y < hi; y++)
       {
-        for(int x = 0; x < w[i]; x++)
+        float *const dst_row = dst + (size_t)(oy + y) * dst_w + ox;
+        const float *const src_row = src + (size_t)y * wi;
+        for(int x = 0; x < wi; x++)
         {
-          const float b1 = (*buffer)[(py[i] + y - t) * (r - l) + px[i] + x - l];
-          const float b2 = bufs[i][y * w[i] + x] * op[i];
+          const float b1 = dst_row[x];
+          const float b2 = src_row[x] * opacity;
           if(b1 > 0.0f && b2 > 0.0f)
-            (*buffer)[(py[i] + y - t) * (r - l) + px[i] + x - l] = fmaxf((1.0f - b1) * b2, b1 * (1.0f - b2));
+            dst_row[x] = fmaxf((1.0f - b1) * b2, b1 * (1.0f - b2));
           else
-            (*buffer)[(py[i] + y - t) * (r - l) + px[i] + x - l]
-                = fmaxf((*buffer)[(py[i] + y - t) * (r - l) + px[i] + x - l], bufs[i][y * w[i] + x] * op[i]);
+            dst_row[x] = fmaxf(dst_row[x], b2);
         }
       }
     }
     else // if we are here, this mean that we just have to copy the shape and null other parts
     {
-      for(int y = 0; y < b - t; y++)
+      const int x0 = MAX(px[i], l);
+      const int y0 = MAX(py[i], t);
+      const int x1 = MIN(px[i] + wi, r);
+      const int y1 = MIN(py[i] + hi, b);
+      if(x0 >= x1 || y0 >= y1)
       {
-        for(int x = 0; x < r - l; x++)
+        memset(dst, 0, (size_t)dst_w * dst_h * sizeof(float));
+      }
+      else
+      {
+        const int row_start = y0 - t;
+        const int row_end = y1 - t;
+        const int col_start = x0 - l;
+        const int col_end = x1 - l;
+        const int src_x_offset = x0 - px[i];
+        const int src_y_offset = t - py[i];
+
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(dst, dst_w, dst_h, wi, opacity, src, row_start, row_end, col_start, col_end, src_x_offset, src_y_offset) \
+  schedule(static)
+#endif
+        for(int y = 0; y < dst_h; y++)
         {
-          float b2 = 0.0f;
-          if(y + t - py[i] >= 0 && y + t - py[i] < h[i] && x + l - px[i] >= 0 && x + l - px[i] < w[i])
-            b2 = bufs[i][(y + t - py[i]) * w[i] + x + l - px[i]];
-          (*buffer)[y * (r - l) + x] = b2 * op[i];
+          float *const dst_row = dst + (size_t)y * dst_w;
+          if(y < row_start || y >= row_end)
+          {
+            memset(dst_row, 0, (size_t)dst_w * sizeof(float));
+            continue;
+          }
+
+          const int src_y = y + src_y_offset;
+          const float *const src_row = src + (size_t)src_y * wi + src_x_offset;
+          float *const dst_mid = dst_row + col_start;
+          const int mid_w = col_end - col_start;
+          for(int x = 0; x < mid_w; x++)
+          {
+            dst_mid[x] = src_row[x] * opacity;
+          }
+
+          if(col_start > 0) memset(dst_row, 0, (size_t)col_start * sizeof(float));
+          if(col_end < dst_w) memset(dst_row + col_end, 0, (size_t)(dst_w - col_end) * sizeof(float));
         }
       }
     }
