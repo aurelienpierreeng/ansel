@@ -306,22 +306,49 @@ static int _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixel
   if(buf == NULL) return 1;
 
   // we fill this buffer
-  for(int yy = 0; yy < MIN(*posy, ht); yy++)
+  const int posx_ = *posx;
+  const int posy_ = *posy;
+  const int width_ = *width;
+  const int height_ = *height;
+  const float *const src = *buffer;
+
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(buf, wt, ht, posy_) \
+  schedule(static)
+#endif
+  for(int yy = 0; yy < MIN(posy_, ht); yy++)
   {
-    for(int xx = 0; xx < wt; xx++) buf[(size_t)yy * wt + xx] = 1.0f;
+    float *const row = buf + (size_t)yy * wt;
+    for(int xx = 0; xx < wt; xx++) row[xx] = 1.0f;
   }
 
-  for(int yy = MAX(*posy, 0); yy < MIN(ht, (*posy) + (*height)); yy++)
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(buf, wt, ht, posy_, posx_, width_, height_, src) \
+  schedule(static)
+#endif
+  for(int yy = MAX(posy_, 0); yy < MIN(ht, posy_ + height_); yy++)
   {
-    for(int xx = 0; xx < MIN((*posx), wt); xx++) buf[(size_t)yy * wt + xx] = 1.0f;
-    for(int xx = MAX((*posx), 0); xx < MIN(wt, (*posx) + (*width)); xx++)
-      buf[(size_t)yy * wt + xx] = 1.0f - (*buffer)[((size_t)yy - (*posy)) * (*width) + xx - (*posx)];
-    for(int xx = MAX((*posx) + (*width), 0); xx < wt; xx++) buf[(size_t)yy * wt + xx] = 1.0f;
+    float *const row = buf + (size_t)yy * wt;
+    for(int xx = 0; xx < MIN(posx_, wt); xx++) row[xx] = 1.0f;
+    const int xstart = MAX(posx_, 0);
+    const int xend = MIN(wt, posx_ + width_);
+    const float *const src_row = src + (size_t)(yy - posy_) * width_;
+    for(int xx = xstart; xx < xend; xx++)
+      row[xx] = 1.0f - src_row[xx - posx_];
+    for(int xx = MAX(posx_ + width_, 0); xx < wt; xx++) row[xx] = 1.0f;
   }
 
-  for(int yy = MAX((*posy) + (*height), 0); yy < ht; yy++)
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(buf, wt, ht, posy_, height_) \
+  schedule(static)
+#endif
+  for(int yy = MAX(posy_ + height_, 0); yy < ht; yy++)
   {
-    for(int xx = 0; xx < wt; xx++) buf[(size_t)yy * wt + xx] = 1.0f;
+    float *const row = buf + (size_t)yy * wt;
+    for(int xx = 0; xx < wt; xx++) row[xx] = 1.0f;
   }
 
   // we free the old buffer
