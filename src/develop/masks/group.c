@@ -715,6 +715,7 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module,
   if(bufs == NULL) return 1;
   int err = 0;
 
+  int i = 0;
   // and we get all masks
   for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
   {
@@ -727,8 +728,9 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module,
       memset(bufs, 0, npixels*sizeof(float));
       const int err_child = dt_masks_get_mask_roi(module, piece, sel, roi, bufs);
       const float op = fpt->opacity;
-      const int state = fpt->state;
-
+      // Add a foolproof to ensure that the first shape is no-op
+      const int no_op_state = fpt->state & ~(DT_MASKS_STATE_IS_COMBINE_OP) ;
+      const int state = (i == 0) ? no_op_state : fpt->state;
       if(err_child != 0)
       {
         err = 1;
@@ -779,6 +781,7 @@ static int _group_get_mask_roi(const dt_iop_module_t *const restrict module,
         nb_ok++;
       }
     }
+    i++;
   }
   // and we free the intermediate buffer
   dt_pixelpipe_cache_free_align(bufs);
