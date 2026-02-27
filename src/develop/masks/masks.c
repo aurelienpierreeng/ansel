@@ -429,6 +429,7 @@ static dt_masks_form_t *_group_create(dt_develop_t *dev, dt_iop_module_t *module
   return grp;
 }
 
+// get the group form associated to the module, if any
 static dt_masks_form_t *_group_from_module(dt_develop_t *dev, dt_iop_module_t *module)
 {
   return dt_masks_get_from_id(dev, module->blend_params->mask_id);
@@ -512,8 +513,7 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
     dt_masks_form_group_t *grpt = malloc(sizeof(dt_masks_form_group_t));
     grpt->formid = form->formid;
     grpt->parentid = grp->formid;
-    grpt->state = DT_MASKS_STATE_SHOW | DT_MASKS_STATE_USE;
-    if(grp->points) grpt->state |= DT_MASKS_STATE_UNION;
+    grpt->state = DT_MASKS_STATE_SHOW | DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION;
     grpt->opacity = dt_conf_get_float("plugins/darkroom/masks/opacity");
     grp->points = g_list_append(grp->points, grpt);
     // we update module gui
@@ -2702,8 +2702,7 @@ dt_masks_form_group_t *dt_masks_group_add_form(dt_masks_form_t *grp, dt_masks_fo
     dt_masks_form_group_t *grpt = malloc(sizeof(dt_masks_form_group_t));
     grpt->formid = form->formid;
     grpt->parentid = grp->formid;
-    grpt->state = DT_MASKS_STATE_SHOW | DT_MASKS_STATE_USE;
-    if(grp->points) grpt->state |= DT_MASKS_STATE_UNION;
+    grpt->state = DT_MASKS_STATE_SHOW | DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION;
     grpt->opacity = dt_conf_get_float("plugins/darkroom/masks/opacity");
     grp->points = g_list_append(grp->points, grpt);
     return grpt;
