@@ -1680,15 +1680,15 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
                                  op_icon[DT_MASKS_STATE_DIFFERENCE]);
     masks_gtk_menu_item_new_bold(_("Exclusion"), (op_form->state & DT_MASKS_STATE_EXCLUSION), DT_MASKS_STATE_EXCLUSION,
                                  op_icon[DT_MASKS_STATE_EXCLUSION]);
+   
+    sep = gtk_separator_menu_item_new();
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
   }
 
   // Common menu items
 
-  if(gui->form_selected)
+  if(!gui->creation && gui->form_selected)
   {
-    sep = gtk_separator_menu_item_new();
-    gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
-    
     menu_item = ctx_gtk_menu_item_new_with_markup(_("Move up"), menu, _masks_moveup_callback, gui);
     gtk_widget_set_sensitive(menu_item, (form_pos > 0));
     menu_item = ctx_gtk_menu_item_new_with_markup(_("Move down"), menu, _masks_movedown_callback, gui);
