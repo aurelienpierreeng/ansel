@@ -94,19 +94,28 @@ static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form
     for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
     {
       dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
-      if(!fpt) continue;
+      if(!fpt) { index++; continue; }
       dt_masks_form_t *frm = dt_masks_get_from_id(dev, fpt->formid);
       if(!frm) { index++; continue; }
 
-      const float dx = pzx - frm->gravity_center[0];
-      const float dy = pzy - frm->gravity_center[1];
-      const float dist = dx * dx + dy * dy;
+      int inside = 0, inside_border = 0, near = -1, inside_source = 0;
+      float dist = FLT_MAX;
+      if(frm->functions && frm->functions->get_distance)
+        frm->functions->get_distance(xx, yy, as, gui, index, g_list_length(frm->points),
+                                     &inside, &inside_border, &near, &inside_source, &dist);
 
-      if(dist < sel_dist)
+      if(inside || inside_border || near >= 0 || inside_source)
       {
-        sel = frm;
-        sel_dist = dist;
-        sel_index = index;
+        const float dx = pzx - frm->gravity_center[0];
+        const float dy = pzy - frm->gravity_center[1];
+        const float center_dist = dx * dx + dy * dy;
+
+        if(center_dist < sel_dist)
+        {
+          sel = frm;
+          sel_dist = center_dist;
+          sel_index = index;
+        }
       }
       index++;
     }
