@@ -2722,26 +2722,7 @@ static float _change_opacity(dt_masks_form_group_t *form_group, float value,
 {
   if(!form_group) return 0;
 
-  float new_value = value;
-  if(increment != DT_MASKS_INCREMENT_ABSOLUTE)
-  {
-    const float current = form_group->opacity;
-    switch(increment)
-    {
-      case DT_MASKS_INCREMENT_SCALE:
-        new_value = current * powf(value, (float)flow);
-        break;
-      case DT_MASKS_INCREMENT_OFFSET:
-        new_value = current + (value) * (float)flow;
-        break;
-      case DT_MASKS_INCREMENT_ABSOLUTE:
-      default:
-        new_value = value;
-        break;
-    }
-  }
-
-  form_group->opacity = CLAMPF(new_value, 0.0f, 1.0f);
+  form_group->opacity = CLAMPF(dt_masks_apply_increment(form_group->opacity, value, increment, flow), 0.0f, 1.0f);
   dt_toast_log(_("Opacity: %3.2f%%"), form_group->opacity * 100.f);
   return form_group->opacity;
 }
@@ -2797,6 +2778,35 @@ const char * _get_mask_type(dt_masks_form_t *form)
     return "unknown";
 }
 
+float dt_masks_apply_increment(float current, float amount, dt_masks_increment_t increment, int flow)
+{
+  switch(increment)
+  {
+    case DT_MASKS_INCREMENT_SCALE:
+      return current * powf(amount, (float)flow);
+    case DT_MASKS_INCREMENT_OFFSET:
+      return current + amount * (float)flow;
+    case DT_MASKS_INCREMENT_ABSOLUTE:
+    default:
+      return amount;
+  }
+}
+
+float dt_masks_apply_increment_precomputed(float current, float amount, float scale_amount, float offset_amount,
+                                           dt_masks_increment_t increment)
+{
+  switch(increment)
+  {
+    case DT_MASKS_INCREMENT_SCALE:
+      return current * scale_amount;
+    case DT_MASKS_INCREMENT_OFFSET:
+      return current + offset_amount;
+    case DT_MASKS_INCREMENT_ABSOLUTE:
+    default:
+      return amount;
+  }
+}
+
 float dt_masks_get_set_conf_value(dt_masks_form_t *form, char *feature, float new_value, float v_min, float v_max, dt_masks_increment_t increment, int flow)
 {
   gchar *key;
@@ -2807,9 +2817,8 @@ float dt_masks_get_set_conf_value(dt_masks_form_t *form, char *feature, float ne
 
   if(!g_strcmp0(feature, "rotation")) flow = (flow > 1) ? (flow - 1) * 5 : flow;
 
-  float value = (increment == DT_MASKS_INCREMENT_SCALE)    ? dt_conf_get_float(key) * powf(new_value, (float)flow)
-                : (increment == DT_MASKS_INCREMENT_OFFSET) ? dt_conf_get_float(key) + new_value * flow
-                                                           : new_value; // DT_MASKS_INCREMENT_ABSOLUTE
+  const float current = dt_conf_get_float(key);
+  float value = dt_masks_apply_increment(current, new_value, increment, flow);
   if(!g_strcmp0(feature, "rotation"))
   {
     // Ensure the rotation value stays within the interval [min, max)
@@ -2822,6 +2831,31 @@ float dt_masks_get_set_conf_value(dt_masks_form_t *form, char *feature, float ne
 
   g_free(key);
   return value;
+}
+
+float dt_masks_get_set_conf_value_with_toast(dt_masks_form_t *form, const char *feature, float amount,
+                                             float v_min, float v_max, dt_masks_increment_t increment, int flow,
+                                             const char *toast_fmt, float toast_scale)
+{
+  float value = dt_masks_get_set_conf_value(form, (char *)feature, amount, v_min, v_max, increment, flow);
+  if(toast_fmt && toast_fmt[0] != '\0')
+    dt_toast_log(toast_fmt, value * toast_scale);
+  return value;
+}
+
+void dt_masks_duplicate_points(const dt_masks_form_t *base, dt_masks_form_t *dest, size_t node_size)
+{
+  if(!base || !dest || !base->points || node_size == 0) return;
+
+  for(const GList *pts = base->points; pts; pts = g_list_next(pts))
+  {
+    const void *pt = pts->data;
+    if(!pt) continue;
+    void *npt = malloc(node_size);
+    if(!npt) continue;
+    memcpy(npt, pt, node_size);
+    dest->points = g_list_append(dest->points, npt);
+  }
 }
 
 int dt_masks_form_change_opacity(dt_masks_form_t *form, int parentid, int up, const int flow)

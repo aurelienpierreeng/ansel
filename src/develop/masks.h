@@ -720,6 +720,33 @@ float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
  */
 float dt_masks_get_set_conf_value(dt_masks_form_t *form, char *feature, float new_value, float v_min, float v_max,
                                   dt_masks_increment_t increment, const int flow);
+/**
+ * @brief Update a mask configuration value and emit a toast message.
+ *
+ * This is a convenience wrapper around dt_masks_get_set_conf_value() that keeps UI
+ * feedback consistent across mask types.
+ */
+float dt_masks_get_set_conf_value_with_toast(dt_masks_form_t *form, const char *feature, float amount,
+                                             float v_min, float v_max, dt_masks_increment_t increment, int flow,
+                                             const char *toast_fmt, float toast_scale);
+
+/**
+ * @brief Duplicate a points list for a mask using a fixed node size.
+ *
+ * The destination list is appended to, mirroring the previous per-mask implementations.
+ */
+void dt_masks_duplicate_points(const dt_masks_form_t *base, dt_masks_form_t *dest, size_t node_size);
+
+/**
+ * @brief Apply a scroll increment to a scalar value.
+ */
+float dt_masks_apply_increment(float current, float amount, dt_masks_increment_t increment, int flow);
+
+/**
+ * @brief Apply a scroll increment using precomputed scale/offset factors.
+ */
+float dt_masks_apply_increment_precomputed(float current, float amount, float scale_amount, float offset_amount,
+                                            dt_masks_increment_t increment);
 
 /** detail mask support */
 void dt_masks_extend_border(float *const mask, const int width, const int height, const int border);

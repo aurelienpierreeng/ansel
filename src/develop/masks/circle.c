@@ -142,23 +142,23 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
 
 static int _init_hardness(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float mask_hardness = dt_masks_get_set_conf_value(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
-  dt_toast_log(_("Hardness: %3.2f%%"), mask_hardness * 100.0f);
+  dt_masks_get_set_conf_value_with_toast(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX,
+                                         increment, flow, _("Hardness: %3.2f%%"), 100.0f);
   return 1;
 }
 
 static int _init_size(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
 
-  float mask_size = dt_masks_get_set_conf_value(form, "size", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
-  dt_toast_log(_("Size: %3.2f%%"), mask_size * 2.f * 100.f);
+  dt_masks_get_set_conf_value_with_toast(form, "size", amount, HARDNESS_MIN, HARDNESS_MAX,
+                                         increment, flow, _("Size: %3.2f%%"), 2.f * 100.f);
   return 1;
 }
 
 static int _init_opacity(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float mask_opacity = dt_masks_get_set_conf_value(form, "opacity", amount, 0.f, 1.f, increment, flow);
-  dt_toast_log(_("Opacity: %3.2f%%"), mask_opacity*100.f);
+  dt_masks_get_set_conf_value_with_toast(form, "opacity", amount, 0.f, 1.f,
+                                         increment, flow, _("Opacity: %3.2f%%"), 100.f);
   return 1;
 }
 
@@ -210,11 +210,8 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
   dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)(form->points)->data;
   if(!circle) return 0;
 
-  const float masks_hardness = circle->border;
-  if(increment)
-    circle->border = MAX(HARDNESS_MIN, MIN(masks_hardness * powf(amount, (float)flow), HARDNESS_MAX));
-  else
-    circle->border = MAX(HARDNESS_MIN, MIN(amount, HARDNESS_MAX));
+  circle->border = CLAMPF(dt_masks_apply_increment(circle->border, amount, increment, flow),
+                          HARDNESS_MIN, HARDNESS_MAX);
 
   _init_hardness(form, amount, increment, flow);
 
@@ -240,23 +237,7 @@ static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct 
   // Growing/shrinking
   if(node_hovered == -1 || node_hovered == 0)
   {
-    switch(increment)
-    {
-      case(DT_MASKS_INCREMENT_SCALE):
-      {
-        circle->radius *= powf(amount, (float)flow);
-        break;
-      }
-      case(DT_MASKS_INCREMENT_OFFSET):
-      {
-        circle->radius += amount * (float)flow;
-        break;
-      }
-      case(DT_MASKS_INCREMENT_ABSOLUTE):
-      {
-        circle->radius = amount;
-      }
-    }
+    circle->radius = dt_masks_apply_increment(circle->radius, amount, increment, flow);
   }
 
   _init_size(form, amount, increment, flow);
@@ -1197,13 +1178,7 @@ static void _circle_set_hint_message(const dt_masks_form_gui_t *const gui, const
 static void _circle_duplicate_points(dt_develop_t *dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)
 {
   (void)dev; // unused arg, keep compiler from complaining
-  for(GList *pts = base->points; pts; pts = g_list_next(pts))
-  {
-    dt_masks_node_circle_t *pt = (dt_masks_node_circle_t *)pts->data;
-    dt_masks_node_circle_t *npt = (dt_masks_node_circle_t *)malloc(sizeof(dt_masks_node_circle_t));
-    memcpy(npt, pt, sizeof(dt_masks_node_circle_t));
-    dest->points = g_list_append(dest->points, npt);
-  }
+  dt_masks_duplicate_points(base, dest, sizeof(dt_masks_node_circle_t));
 }
 
 static void _circle_initial_source_pos(const float iwd, const float iht, float *x, float *y)

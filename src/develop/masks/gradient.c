@@ -323,29 +323,29 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
 
 static int _init_extent(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float mask_hardness = dt_masks_get_set_conf_value(form, "extent", amount, extent_MIN, extent_MAX, increment, flow);
-  dt_toast_log(_("extent: %3.2f%%"), mask_hardness * 100.0f);
+  dt_masks_get_set_conf_value_with_toast(form, "extent", amount, extent_MIN, extent_MAX,
+                                         increment, flow, _("extent: %3.2f%%"), 100.0f);
   return 1;
 }
 
 static int _init_curvature(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float mask_curvature = dt_masks_get_set_conf_value(form, "curvature", amount, CURVATURE_MIN, CURVATURE_MAX, increment, flow);
-  dt_toast_log(_("Curvature: %3.2f%%"), mask_curvature * 50.f);
+  dt_masks_get_set_conf_value_with_toast(form, "curvature", amount, CURVATURE_MIN, CURVATURE_MAX,
+                                         increment, flow, _("Curvature: %3.2f%%"), 50.f);
   return 1;
 }
 
 static int _init_opacity(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float mask_opacity = dt_masks_get_set_conf_value(form, "opacity", amount, 0.f, 1.f, increment, flow);
-  dt_toast_log(_("Opacity: %3.2f%%"), mask_opacity*100.f);
+  dt_masks_get_set_conf_value_with_toast(form, "opacity", amount, 0.f, 1.f,
+                                         increment, flow, _("Opacity: %3.2f%%"), 100.f);
   return 1;
 }
 
 static int _init_rotation(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float mask_angle = dt_masks_get_set_conf_value(form, "rotation", amount, 0.f, 360.f, increment, flow);
-  dt_toast_log(_("Rotation: %3.2f\302\260"), mask_angle);
+  dt_masks_get_set_conf_value_with_toast(form, "rotation", amount, 0.f, 360.f,
+                                         increment, flow, _("Rotation: %3.2f\302\260"), 1.0f);
   return 1;
 }
 
@@ -397,11 +397,8 @@ static int _change_extent(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struc
   dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(form->points)->data;
   if(!gradient) return 0;
 
-  const float masks_extent = gradient->extent;
-  if(increment)
-    gradient->extent = MAX(extent_MIN, MIN(masks_extent * powf(amount, (float)flow), extent_MAX));
-  else
-    gradient->extent = MAX(extent_MIN, MIN(amount, extent_MAX));
+  gradient->extent = CLAMPF(dt_masks_apply_increment(gradient->extent, amount, increment, flow),
+                            extent_MIN, extent_MAX);
 
   _init_extent(form, amount, increment, flow);
 
@@ -427,23 +424,7 @@ static int _change_curvature(dt_masks_form_t *form, dt_masks_form_gui_t *gui, st
   // bending
   if(node_hovered == -1 || node_hovered == 0)
   {
-    switch(increment)
-    {
-      case(DT_MASKS_INCREMENT_SCALE):
-      {
-        gradient->curvature *= powf(amount, (float)flow);
-        break;
-      }
-      case(DT_MASKS_INCREMENT_OFFSET):
-      {
-        gradient->curvature += amount * (float)flow;
-        break;
-      }
-      case(DT_MASKS_INCREMENT_ABSOLUTE):
-      {
-        gradient->curvature = amount;
-      }
-    }
+    gradient->curvature = dt_masks_apply_increment(gradient->curvature, amount, increment, flow);
   }
 
   _init_curvature(form, amount, DT_MASKS_INCREMENT_SCALE, flow);
@@ -462,23 +443,7 @@ static int _change_rotation(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
 
   // Rotation
   int flow_increased = (flow > 1) ? (flow - 1) * 5 : flow;
-  switch(increment)
-  {
-    case(DT_MASKS_INCREMENT_SCALE):
-    {
-      gradient->rotation *= powf(amount, (float)flow_increased);
-      break;
-    }
-    case(DT_MASKS_INCREMENT_OFFSET):
-    {
-      gradient->rotation += amount * (float)flow_increased;
-      break;
-    }
-    case(DT_MASKS_INCREMENT_ABSOLUTE):
-    {
-      gradient->rotation = amount;
-    }
-  }
+  gradient->rotation = dt_masks_apply_increment(gradient->rotation, amount, increment, flow_increased);
 
   // Ensure the rotation value warps within the interval [0, 360)
   if(gradient->rotation > 360.f) gradient->rotation = fmodf(gradient->rotation, 360.f);
@@ -1563,15 +1528,8 @@ static void _gradient_set_hint_message(const dt_masks_form_gui_t *const gui, con
 
 static void _gradient_duplicate_points(dt_develop_t *dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)
 {
-  if(!base || !base->points) return;
   (void)dev; // unused arg, keep compiler from complaining
-  for(GList *pts = base->points; pts; pts = g_list_next(pts))
-  {
-    dt_masks_anchor_gradient_t *pt = (dt_masks_anchor_gradient_t *)pts->data;
-    dt_masks_anchor_gradient_t *npt = (dt_masks_anchor_gradient_t *)malloc(sizeof(dt_masks_anchor_gradient_t));
-    memcpy(npt, pt, sizeof(dt_masks_anchor_gradient_t));
-    dest->points = g_list_append(dest->points, npt);
-  }
+  dt_masks_duplicate_points(base, dest, sizeof(dt_masks_anchor_gradient_t));
 }
 
 // The function table for gradients.  This must be public, i.e. no "static" keyword.

@@ -479,8 +479,8 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
 
 static int _init_hardness(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float mask_hardness = dt_masks_get_set_conf_value(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
-  dt_toast_log(_("Hardness: %3.2f%%"), mask_hardness * 100.0f);
+  dt_masks_get_set_conf_value_with_toast(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX,
+                                         increment, flow, _("Hardness: %3.2f%%"), 100.0f);
   return 1;
 }
 
@@ -494,15 +494,15 @@ static int _init_size(dt_masks_form_t *form, const float amount, const dt_masks_
 
 static int _init_opacity(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float mask_opacity = dt_masks_get_set_conf_value(form, "opacity", amount, 0.f, 1.f, increment, flow);
-  dt_toast_log(_("Opacity: %3.2f%%"), mask_opacity*100.f);
+  dt_masks_get_set_conf_value_with_toast(form, "opacity", amount, 0.f, 1.f,
+                                         increment, flow, _("Opacity: %3.2f%%"), 100.f);
   return 1;
 }
 
 static int _init_rotation(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float mask_angle = dt_masks_get_set_conf_value(form, "rotation", amount, 0.f, 360.f, increment, flow);
-  dt_toast_log(_("Rotation: %3.2f\302\260"), mask_angle);
+  dt_masks_get_set_conf_value_with_toast(form, "rotation", amount, 0.f, 360.f,
+                                         increment, flow, _("Rotation: %3.2f\302\260"), 1.0f);
   return 1;
 }
 
@@ -554,11 +554,8 @@ static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
   dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)(form->points)->data;
   if(!ellipse) return 0;
 
-  const float masks_hardness = ellipse->border;
-  if(increment)
-    ellipse->border = MAX(HARDNESS_MIN, MIN(masks_hardness * powf(amount, (float)flow), HARDNESS_MAX));
-  else
-    ellipse->border = MAX(HARDNESS_MIN, MIN(amount, HARDNESS_MAX));
+  ellipse->border = CLAMPF(dt_masks_apply_increment(ellipse->border, amount, increment, flow),
+                           HARDNESS_MIN, HARDNESS_MAX);
 
   _init_hardness(form, amount, increment, flow);
 
@@ -580,26 +577,8 @@ static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct 
     return 1;
 
   // adjust the sizes directly to avoid re-querying group/form
-  switch(increment)
-  {
-    case(DT_MASKS_INCREMENT_SCALE):
-    {
-      ellipse->radius[0] *= powf(amount, (float)flow);
-      ellipse->radius[1] *= powf(amount, (float)flow);
-      break;
-    }
-    case(DT_MASKS_INCREMENT_OFFSET):
-    {
-      ellipse->radius[0] += amount * (float)flow;
-      ellipse->radius[1] += amount * (float)flow;
-      break;
-    }
-    case(DT_MASKS_INCREMENT_ABSOLUTE):
-    {
-      ellipse->radius[0] = amount;
-      ellipse->radius[1] = amount;
-    }
-  }
+  ellipse->radius[0] = dt_masks_apply_increment(ellipse->radius[0], amount, increment, flow);
+  ellipse->radius[1] = dt_masks_apply_increment(ellipse->radius[1], amount, increment, flow);
 
   _init_size(form, amount, DT_MASKS_INCREMENT_SCALE, flow);
 
@@ -617,23 +596,7 @@ static int _change_rotation(dt_masks_form_t *form, dt_masks_form_gui_t *gui, str
 
   // Rotation
   int flow_increased = (flow > 1) ? (flow - 1) * 5 : flow;
-  switch(increment)
-  {
-    case(DT_MASKS_INCREMENT_SCALE):
-    {
-      ellipse->rotation *= powf(amount, (float)flow_increased);
-      break;
-    }
-    case(DT_MASKS_INCREMENT_OFFSET):
-    {
-      ellipse->rotation += amount * (float)flow_increased;
-      break;
-    }
-    case(DT_MASKS_INCREMENT_ABSOLUTE):
-    {
-      ellipse->rotation = amount;
-    }
-  }
+  ellipse->rotation = dt_masks_apply_increment(ellipse->rotation, amount, increment, flow_increased);
 
   // Ensure the rotation value warps within the interval [0, 360)
   if(ellipse->rotation > 360.f) ellipse->rotation = fmodf(ellipse->rotation, 360.f);
@@ -1697,13 +1660,7 @@ static void _ellipse_set_form_name(struct dt_masks_form_t *const form, const siz
 static void _ellipse_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)
 {
   (void)dev; // unused arg, keep compiler from complaining
-  for (GList *pts = base->points; pts; pts = g_list_next(pts))
-  {
-    dt_masks_node_ellipse_t *pt = (dt_masks_node_ellipse_t *)pts->data;
-    dt_masks_node_ellipse_t *npt = (dt_masks_node_ellipse_t *)malloc(sizeof(dt_masks_node_ellipse_t));
-    memcpy(npt, pt, sizeof(dt_masks_node_ellipse_t));
-    dest->points = g_list_append(dest->points, npt);
-  }
+  dt_masks_duplicate_points(base, dest, sizeof(dt_masks_node_ellipse_t));
 }
 
 static void _ellipse_initial_source_pos(const float iwd, const float iht, float *x, float *y)

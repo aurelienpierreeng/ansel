@@ -1514,23 +1514,20 @@ static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_g
   const int node_selected = gui->node_selected;
   // Growing/shrinking loop
   int node_index = 0;
-  const float flowed_amount = powf(amount, (float)flow);
+  const float scale_amount = powf(amount, (float)flow);
+  const float offset_amount = amount * (float)flow;
   for(GList *l = form->points; l; l = g_list_next(l))
   {
     if(node_selected == -1 || node_selected == node_index)
     {
       dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)l->data;
       if(!node) continue;
-      if(increment)
-      {
-        node->border[0] = CLAMPF(node->border[0] * flowed_amount, HARDNESS_MIN, HARDNESS_MAX);
-        node->border[1] = CLAMPF(node->border[1] * flowed_amount, HARDNESS_MIN, HARDNESS_MAX);
-      }
-      else
-      {
-        node->border[0] = CLAMPF(amount, HARDNESS_MIN, HARDNESS_MAX);
-        node->border[1] = CLAMPF(amount, HARDNESS_MIN, HARDNESS_MAX);
-      }
+      node->border[0] = CLAMPF(dt_masks_apply_increment_precomputed(node->border[0], amount, scale_amount,
+                                                                     offset_amount, increment),
+                               HARDNESS_MIN, HARDNESS_MAX);
+      node->border[1] = CLAMPF(dt_masks_apply_increment_precomputed(node->border[1], amount, scale_amount,
+                                                                     offset_amount, increment),
+                               HARDNESS_MIN, HARDNESS_MAX);
       if(node_selected >= 0) break;
     }
     node_index++;
@@ -3367,13 +3364,7 @@ static void _polygon_set_hint_message(const dt_masks_form_gui_t *const gui, cons
 static void _polygon_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)
 {
   (void)dev; // unused arg, keep compiler from complaining
-  for(const GList *pts = base->points; pts; pts = g_list_next(pts))
-  {
-    dt_masks_node_polygon_t *pt = (dt_masks_node_polygon_t *)pts->data;
-    dt_masks_node_polygon_t *npt = (dt_masks_node_polygon_t *)malloc(sizeof(dt_masks_node_polygon_t));
-    memcpy(npt, pt, sizeof(dt_masks_node_polygon_t));
-    dest->points = g_list_append(dest->points, npt);
-  }
+  dt_masks_duplicate_points(base, dest, sizeof(dt_masks_node_polygon_t));
 }
 
 static void _polygon_initial_source_pos(const float iwd, const float iht, float *x, float *y)

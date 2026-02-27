@@ -1339,24 +1339,24 @@ static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float
 
 static int _init_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float masks_hardness = dt_masks_get_set_conf_value(form, "hardness", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
+  const float masks_hardness = dt_masks_get_set_conf_value_with_toast(form, "hardness", amount, HARDNESS_MIN, HARDNESS_MAX,
+                                                                      increment, flow, _("hardness: %3.2f%%"), 100.0f);
   if(gui->guipoints_count > 0) dt_masks_dynbuf_set(gui->guipoints_payload, -3, masks_hardness);
-  dt_toast_log(_("hardness: %3.2f%%"), masks_hardness*100.0f);
   return 1;
 }
 
 static int _init_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float masks_border = dt_masks_get_set_conf_value(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX, increment, flow);
+  const float masks_border = dt_masks_get_set_conf_value_with_toast(form, "border", amount, HARDNESS_MIN, HARDNESS_MAX,
+                                                                    increment, flow, _("size: %3.2f%%"), 2.f * 100.f);
   if(gui->guipoints_count > 0) dt_masks_dynbuf_set(gui->guipoints_payload, -4, masks_border);
-  dt_toast_log(_("size: %3.2f%%"), masks_border*2.f*100.f);
   return 1;
 }
 
 static int _init_opacity(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, const float amount, const dt_masks_increment_t increment, const int flow)
 {
-  float masks_opacity = dt_masks_get_set_conf_value(form, "opacity", amount, 0.f, 1.f, increment, flow);
-  dt_toast_log(_("opacity: %3.2f%%"), masks_opacity*100.f);
+  dt_masks_get_set_conf_value_with_toast(form, "opacity", amount, 0.f, 1.f,
+                                         increment, flow, _("opacity: %3.2f%%"), 100.f);
   return 1;
 }
 
@@ -1411,7 +1411,8 @@ static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_g
   if(!form || !form->points) return 0;
   const int node_hovered = gui->node_hovered;
   int node_index = 0;
-  const float flowed_amount = powf(amount, (float)flow);
+  const float scale_amount = powf(amount, (float)flow);
+  const float offset_amount = amount * (float)flow;
   float res_amount = 0;
   for(GList *l = form->points; l; l = g_list_next(l))
   {
@@ -1419,7 +1420,7 @@ static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_g
     {
       dt_masks_node_brush_t *point = (dt_masks_node_brush_t *)l->data;
       const float masks_hardness = point->hardness;
-      res_amount = increment ? masks_hardness * flowed_amount : amount; 
+      res_amount = dt_masks_apply_increment_precomputed(masks_hardness, amount, scale_amount, offset_amount, increment);
 
       point->hardness = CLAMPF(res_amount, HARDNESS_MIN, HARDNESS_MAX);
     }
@@ -1454,6 +1455,8 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
   }
 
   // Growing/shrinking loop
+  const float scale_amount = amount;
+  const float offset_amount = amount;
   pts_number = 0;
   for(GList *l = form->points; l; l = g_list_next(l))
   {
@@ -1461,27 +1464,10 @@ static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t
     {
       dt_masks_node_brush_t *point = (dt_masks_node_brush_t *)l->data;
       if(!point) continue;
-
-      switch(increment)
-      {
-        case(DT_MASKS_INCREMENT_SCALE):
-        {
-          point->border[0] *= amount;
-          point->border[1] *= amount;
-          break;
-        }
-        case(DT_MASKS_INCREMENT_OFFSET):
-        {
-          point->border[0] += amount;
-          point->border[1] += amount;
-          break;
-        }
-        case(DT_MASKS_INCREMENT_ABSOLUTE):
-        {
-          point->border[0] = amount;
-          point->border[1] = amount;
-        }
-      }
+      point->border[0] = dt_masks_apply_increment_precomputed(point->border[0], amount,
+                                                              scale_amount, offset_amount, increment);
+      point->border[1] = dt_masks_apply_increment_precomputed(point->border[1], amount,
+                                                              scale_amount, offset_amount, increment);
     }
     pts_number++;
   }
@@ -3042,16 +3028,8 @@ static void _brush_set_hint_message(const dt_masks_form_gui_t *const gui, const 
 
 static void _brush_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *const base, dt_masks_form_t *const dest)
 {
-  if(!base || !dest) return;
   (void)dev; // unused arg, keep compiler from complaining
-  for(GList *pts = base->points; pts; pts = g_list_next(pts))
-  {
-    dt_masks_node_brush_t *pt = (dt_masks_node_brush_t *)pts->data;
-    if(!pt) continue;
-    dt_masks_node_brush_t *npt = (dt_masks_node_brush_t *)malloc(sizeof(dt_masks_node_brush_t));
-    memcpy(npt, pt, sizeof(dt_masks_node_brush_t));
-    dest->points = g_list_append(dest->points, npt);
-  }
+  dt_masks_duplicate_points(base, dest, sizeof(dt_masks_node_brush_t));
 }
 
 static void _brush_initial_source_pos(const float iwd, const float iht, float *x, float *y)
