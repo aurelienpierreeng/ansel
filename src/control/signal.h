@@ -265,6 +265,7 @@ typedef enum dt_signal_t
 
   /* Raised when a mask form is selected/deselected */
   DT_SIGNAL_MASK_SELECTION_CHANGED,
+  DT_SIGNAL_MASK_CHANGED,
 
   /** \brief Raised when the recursive file crawler returns.
       no params,

@@ -80,6 +80,7 @@ static GType history_will_change_arg[]
 = { G_TYPE_POINTER, G_TYPE_UINT, G_TYPE_POINTER };
 static GType geotag_arg[] = { G_TYPE_POINTER, G_TYPE_UINT };
 static GType file_crawling_arg[] = { G_TYPE_POINTER, G_TYPE_UINT, G_TYPE_UINT };
+static GType mask_change_arg[] = { G_TYPE_POINTER, G_TYPE_POINTER, G_TYPE_UINT };
 
 // callback for the destructor of DT_SIGNAL_COLLECTION_CHANGED
 static void _collection_changed_destroy_callback(gpointer instance, int query_change, int changed_property,
@@ -215,6 +216,8 @@ static dt_signal_description _signal_description[DT_SIGNAL_COUNT] = {
 
   { "dt-mask-selection-changed", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 2, pointer_2arg, NULL,
     TRUE }, // DT_SIGNAL_MASK_SELECTION_CHANGED
+  { "dt-mask-changed", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 3, mask_change_arg, NULL,
+    FALSE }, //DT_SIGNAL_MASK_CHANGED
 
   { "dt-control-filelist-update", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 3, file_crawling_arg, NULL,
     FALSE }, // DT_SIGNAL_FILELIST_UPDATED

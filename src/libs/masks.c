@@ -1581,6 +1581,119 @@ static void _lib_masks_selection_change(dt_lib_module_t *self, struct dt_iop_mod
   lm->gui_reset = 0;
 }
 
+static gboolean _find_child_iter_by_formid(GtkTreeModel *model, GtkTreeIter *parent_iter, int formid, GtkTreeIter *child_iter)
+{
+  GtkTreeIter iter;
+  gboolean found = FALSE;
+
+  // Obtenir le premier enfant du parent
+  if(gtk_tree_model_iter_children(model, &iter, parent_iter))
+  {
+    do
+    {
+      int current_formid = -1;
+      gtk_tree_model_get(model, &iter, TREE_FORMID, &current_formid, -1);
+
+      if(current_formid == formid)
+      {
+        *child_iter = iter;
+        found = TRUE;
+        break;
+      }
+    } while(gtk_tree_model_iter_next(model, &iter));
+  }
+
+  return found;
+}
+
+static gboolean _find_iter_by_parentid_and_formid(GtkTreeModel *model, int parentid, int formid, GtkTreeIter *iter)
+{
+  gboolean found = FALSE;
+
+  // Obtenir le premier itérateur du modèle
+  do
+  {
+    int current_parentid = -1;
+    gtk_tree_model_get(model, iter, TREE_FORMID, &current_parentid, -1);
+
+    if(current_parentid == parentid)
+    {
+      // Rechercher le formid dans les enfants du parent
+      found = _find_child_iter_by_formid(model, iter, formid, iter);
+      if(found)
+      {
+        break;
+      }
+    }
+  } while(gtk_tree_model_iter_next(model, iter));
+
+  return found;
+}
+
+static void _lib_masks_handler_callback(gpointer instance, const int formid, const int parentid, const dt_masks_event_t event, dt_lib_module_t *self)
+{
+  if(!self) return;
+
+  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  if(!lm) return;
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
+  GtkTreeIter iter;
+  gtk_tree_model_get_iter_first(model, &iter);
+
+  const gboolean found_iter = _find_iter_by_parentid_and_formid(model, parentid, formid, &iter);
+
+  if(found_iter)
+  {
+    switch(event)
+    {
+      case DT_MASKS_EVENT_UPDATE :
+      {
+        _lib_masks_update_item(self, formid, parentid, lm, model, &iter);
+      }
+      break;
+
+      case DT_MASKS_EVENT_CHANGE :
+      {
+        _lib_masks_recreate_list(self);
+      }
+      break;
+
+      case DT_MASKS_EVENT_DELETE :
+      {
+        _lib_masks_recreate_list(self);
+      }
+      break;
+
+      case DT_MASKS_EVENT_REMOVE :
+      {
+        _lib_masks_recreate_list(self);
+        //_lib_masks_remove_item(self, formid, parentid);
+      }
+      break;
+
+      case DT_MASKS_EVENT_NONE :
+      default:
+      {
+        dt_print(DT_DEBUG_MASKS, "[_lib_masks_handler_callback] Mask event cannot be found.");
+      }
+      break;
+    }
+  }
+  
+  else if(event == DT_MASKS_EVENT_RESET)
+  {
+    _lib_masks_recreate_list(self);
+  }
+
+  else if(event == DT_MASKS_EVENT_ADD)
+  {
+    _lib_masks_recreate_list(self);
+    darktable.develop->form_visible = dt_masks_get_from_id(darktable.develop, parentid);
+  }
+
+  dt_control_queue_redraw_center();
+}
+
 void gui_init(dt_lib_module_t *self)
 {
   /* initialize ui widgets */
@@ -1674,6 +1787,8 @@ void gui_init(dt_lib_module_t *self)
 
   gtk_widget_show_all(self->widget);
 
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MASK_CHANGED, G_CALLBACK(_lib_masks_handler_callback), self);
+
   // set proxy functions
   darktable.develop->proxy.masks.module = self;
   darktable.develop->proxy.masks.list_change = _lib_masks_recreate_list;
@@ -1686,6 +1801,8 @@ void gui_cleanup(dt_lib_module_t *self)
 {
   g_free(self->data);
   self->data = NULL;
+
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_masks_handler_callback), self);
 }
 
 // clang-format off
