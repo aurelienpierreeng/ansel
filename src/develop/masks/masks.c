@@ -498,6 +498,8 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
   dt_masks_append_form(dev, form);
 
   dt_masks_form_group_t *grpt = malloc(sizeof(dt_masks_form_group_t));
+  grpt->formid = -1;
+  grpt->parentid = -1;
   if(module)
   {
     // is there already a masks group for this module ?
