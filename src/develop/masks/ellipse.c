@@ -523,6 +523,16 @@ static float _ellipse_get_interaction_value(const dt_masks_form_t *form, dt_mask
   }
 }
 
+static gboolean _ellipse_get_gravity_center(const dt_masks_form_t *form, float center[2])
+{
+  if(!form || !form->points || !center) return FALSE;
+  const dt_masks_node_ellipse_t *ellipse = (const dt_masks_node_ellipse_t *)(form->points)->data;
+  if(!ellipse) return FALSE;
+  center[0] = ellipse->center[0];
+  center[1] = ellipse->center[1];
+  return TRUE;
+}
+
 static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
                             int index, const float amount, const dt_masks_increment_t increment, const int flow);
 static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
@@ -1753,6 +1763,7 @@ const dt_masks_functions_t dt_masks_functions_ellipse = {
   .get_mask_roi = _ellipse_get_mask_roi,
   .get_area = _ellipse_get_area,
   .get_source_area = _ellipse_get_source_area,
+  .get_gravity_center = _ellipse_get_gravity_center,
   .get_interaction_value = _ellipse_get_interaction_value,
   .set_interaction_value = _ellipse_set_interaction_value,
   .mouse_moved = _ellipse_events_mouse_moved,

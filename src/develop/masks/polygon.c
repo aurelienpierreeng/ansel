@@ -1153,6 +1153,31 @@ static float _polygon_get_interaction_value(const dt_masks_form_t *form, dt_mask
   }
 }
 
+static gboolean _polygon_get_gravity_center(const dt_masks_form_t *form, float center[2])
+{
+  if(!form || !form->points || !center) return FALSE;
+
+  const int points_count = g_list_length(form->points);
+  if(points_count <= 0) return FALSE;
+
+  float *points = dt_alloc_align_float((size_t)points_count * 2);
+  if(!points) return FALSE;
+
+  int i = 0;
+  for(const GList *l = form->points; l; l = g_list_next(l))
+  {
+    const dt_masks_node_polygon_t *node = (const dt_masks_node_polygon_t *)l->data;
+    if(!node) continue;
+    points[2 * i] = node->node[0];
+    points[2 * i + 1] = node->node[1];
+    i++;
+  }
+
+  const gboolean ok = dt_masks_center_of_gravity_from_points(points, i, center);
+  dt_free_align(points);
+  return ok;
+}
+
 static int _change_size(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui,
                         struct dt_iop_module_t *module, int index, const float amount,
                         const dt_masks_increment_t increment, const int flow);
@@ -3504,6 +3529,7 @@ const dt_masks_functions_t dt_masks_functions_polygon = {
   .get_mask_roi = _polygon_get_mask_roi,
   .get_area = _polygon_get_area,
   .get_source_area = _polygon_get_source_area,
+  .get_gravity_center = _polygon_get_gravity_center,
   .get_interaction_value = _polygon_get_interaction_value,
   .set_interaction_value = _polygon_set_interaction_value,
   .mouse_moved = _polygon_events_mouse_moved,

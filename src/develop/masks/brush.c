@@ -1377,6 +1377,31 @@ static float _brush_get_interaction_value(const dt_masks_form_t *form, dt_masks_
   }
 }
 
+static gboolean _brush_get_gravity_center(const dt_masks_form_t *form, float center[2])
+{
+  if(!form || !form->points || !center) return FALSE;
+
+  const int points_count = g_list_length(form->points);
+  if(points_count <= 0) return FALSE;
+
+  float *points = dt_alloc_align_float((size_t)points_count * 2);
+  if(!points) return FALSE;
+
+  int i = 0;
+  for(const GList *l = form->points; l; l = g_list_next(l))
+  {
+    const dt_masks_node_brush_t *point = (const dt_masks_node_brush_t *)l->data;
+    if(!point) continue;
+    points[2 * i] = point->node[0];
+    points[2 * i + 1] = point->node[1];
+    i++;
+  }
+
+  const gboolean ok = dt_masks_center_of_gravity_from_points(points, i, center);
+  dt_free_align(points);
+  return ok;
+}
+
 static int _change_hardness(dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui,
                             struct dt_iop_module_t *module, int index, const float amount,
                             const dt_masks_increment_t increment, const int flow);
@@ -3148,6 +3173,7 @@ const dt_masks_functions_t dt_masks_functions_brush = {
   .get_mask_roi = _brush_get_mask_roi,
   .get_area = _brush_get_area,
   .get_source_area = _brush_get_source_area,
+  .get_gravity_center = _brush_get_gravity_center,
   .get_interaction_value = _brush_get_interaction_value,
   .set_interaction_value = _brush_set_interaction_value,
   .mouse_moved = _brush_events_mouse_moved,

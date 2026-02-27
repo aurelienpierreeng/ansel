@@ -262,6 +262,8 @@ void dt_masks_gui_form_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, i
     gui->type = form->type;
 
   }
+
+  dt_masks_form_update_gravity_center(form);
 }
 
 void dt_masks_form_gui_points_free(gpointer data)
@@ -537,6 +539,7 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
 
   } while(exist);
 
+  dt_masks_form_update_gravity_center(form);
   dt_masks_append_form(dev, form);
 
   dt_masks_form_group_t *grpt = malloc(sizeof(dt_masks_form_group_t));
@@ -1057,6 +1060,12 @@ void dt_masks_replace_current_forms(dt_develop_t *dev, GList *forms)
 
   dev->forms = forms_tmp;
   dt_pthread_rwlock_unlock(&dev->masks_mutex);
+
+  for(GList *form = dev->forms; form; form = g_list_next(form))
+  {
+    dt_masks_form_t *f = (dt_masks_form_t *)form->data;
+    dt_masks_form_update_gravity_center(f);
+  }
 }
 
 dt_masks_form_t *dt_masks_get_from_id_ext(GList *forms, int id)
@@ -1225,6 +1234,8 @@ void dt_masks_read_masks_history(dt_develop_t *dev, const int32_t imgid)
         continue;
       }
     }
+
+    dt_masks_form_update_gravity_center(form);
 
     // if this is a new history entry let's find it
     if(num_prev != num)
@@ -2229,6 +2240,7 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *grp, 
       dt_masks_iop_update(module);
 
     }
+    if(ok) dt_masks_form_update_gravity_center(grp);
     if(ok && grp->points == NULL) dt_masks_form_remove(module, NULL, grp);
     return;
   }
@@ -2317,6 +2329,40 @@ float dt_masks_form_get_interaction_value(dt_masks_form_group_t *form_group,
   return target_form->functions->get_interaction_value(target_form, interaction);
 }
 
+gboolean dt_masks_form_get_gravity_center(const dt_masks_form_t *form, float center[2])
+{
+  if(center)
+  {
+    center[0] = 0.0f;
+    center[1] = 0.0f;
+  }
+
+  if(!form || !form->functions || !form->functions->get_gravity_center || !center) return FALSE;
+  return form->functions->get_gravity_center(form, center);
+}
+
+void dt_masks_form_update_gravity_center(dt_masks_form_t *form)
+{
+  if(!form) return;
+
+  float center[2] = { 0.0f, 0.0f };
+  const gboolean ok = dt_masks_form_get_gravity_center(form, center);
+  if(ok)
+  {
+    form->gravity_center[0] = center[0];
+    form->gravity_center[1] = center[1];
+  }
+  else
+  {
+    form->gravity_center[0] = 0.0f;
+    form->gravity_center[1] = 0.0f;
+  }
+  dt_print(DT_DEBUG_MASKS,
+           "[masks] gravity center updated: form=%p id=%d type=0x%x ok=%d center=(%f,%f)\n",
+           (void *)form, form->formid, form->type, ok,
+           form->gravity_center[0], form->gravity_center[1]);
+}
+
 static float _change_opacity(dt_masks_form_group_t *form_group, float value,
                            const dt_masks_increment_t increment, const int flow)
 {
@@ -2346,6 +2392,7 @@ float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
   const float result = target_form->functions->set_interaction_value(target_form, interaction, value, increment, flow,
                                                                      gui, module);
   if(isnan(result)) return NAN;
+  dt_masks_form_update_gravity_center(target_form);
   return result;
 }
 
@@ -2537,6 +2584,7 @@ dt_masks_form_group_t *dt_masks_group_add_form(dt_masks_form_t *grp, dt_masks_fo
     grpt->state = DT_MASKS_STATE_SHOW | DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION;
     grpt->opacity = dt_conf_get_float("plugins/darkroom/masks/opacity");
     grp->points = g_list_append(grp->points, grpt);
+    dt_masks_form_update_gravity_center(grp);
     return grpt;
   }
 
@@ -2570,6 +2618,8 @@ void dt_masks_group_ungroup(dt_masks_form_t *dest_grp, dt_masks_form_t *grp)
       }
     }
   }
+
+  dt_masks_form_update_gravity_center(dest_grp);
 }
 
 uint64_t dt_masks_group_get_hash(uint64_t hash, dt_masks_form_t *form)

@@ -179,6 +179,16 @@ static float _circle_get_interaction_value(const dt_masks_form_t *form, dt_masks
   }
 }
 
+static gboolean _circle_get_gravity_center(const dt_masks_form_t *form, float center[2])
+{
+  if(!form || !form->points || !center) return FALSE;
+  const dt_masks_node_circle_t *circle = (const dt_masks_node_circle_t *)(form->points)->data;
+  if(!circle) return FALSE;
+  center[0] = circle->center[0];
+  center[1] = circle->center[1];
+  return TRUE;
+}
+
 static int _change_hardness(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
                             int index, const float amount, const dt_masks_increment_t increment, const int flow);
 static int _change_size(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
@@ -1204,6 +1214,7 @@ const dt_masks_functions_t dt_masks_functions_circle = {
   .get_mask_roi = _circle_get_mask_roi,
   .get_area = _circle_get_area,
   .get_source_area = _circle_get_source_area,
+  .get_gravity_center = _circle_get_gravity_center,
   .get_interaction_value = _circle_get_interaction_value,
   .set_interaction_value = _circle_set_interaction_value,
   .mouse_moved = _circle_events_mouse_moved,

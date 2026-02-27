@@ -332,6 +332,7 @@ typedef struct dt_masks_functions_t
                   int *width, int *height, int *posx, int *posy);
   int (*get_source_area)(dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece, struct dt_masks_form_t *form,
                          int *width, int *height, int *posx, int *posy);
+  gboolean (*get_gravity_center)(const struct dt_masks_form_t *form, float center[2]);
   float (*get_interaction_value)(const struct dt_masks_form_t *form, dt_masks_interaction_t interaction);
   float (*set_interaction_value)(struct dt_masks_form_t *form, dt_masks_interaction_t interaction, float value,
                                  dt_masks_increment_t increment, int flow,
@@ -369,6 +370,8 @@ typedef struct dt_masks_form_t
 
   // position of the origin point of source (used only for clone)
   float source[2];
+  // cached center of gravity in normalized input space
+  float gravity_center[2];
   // name of the form
   char name[128];
   // id used to store the form
@@ -701,6 +704,8 @@ dt_masks_form_group_t *dt_masks_form_get_selected_group_live(const struct dt_mas
                                                              const struct dt_masks_form_gui_t *gui);
 float dt_masks_form_get_interaction_value(dt_masks_form_group_t *form_group,
                                           dt_masks_interaction_t interaction);
+gboolean dt_masks_form_get_gravity_center(const struct dt_masks_form_t *form, float center[2]);
+void dt_masks_form_update_gravity_center(struct dt_masks_form_t *form);
 float dt_masks_form_set_interaction_value(dt_masks_form_group_t *form_group,
                                           dt_masks_interaction_t interaction,
                                           float value, dt_masks_increment_t increment, int flow,
@@ -880,6 +885,44 @@ static inline float *dt_masks_dynbuf_buffer(dt_masks_dynbuf_t *a)
 {
   assert(a != NULL);
   return a->buffer;
+}
+
+static inline gboolean dt_masks_center_of_gravity_from_points(const float *points, const int points_count,
+                                                              float center[2])
+{
+  if(!points || !center || points_count <= 0)
+  {
+    if(center)
+    {
+      center[0] = 0.0f;
+      center[1] = 0.0f;
+    }
+    return FALSE;
+  }
+
+  float sum_x = 0.0f;
+  float sum_y = 0.0f;
+
+  // Summing float in sequence is dangerous for decimal deletion,
+  // so we need to divide by points_count at every step to avoid issues.
+
+#pragma omp parallel for default(none) reduction(+:sum_x) \
+  dt_omp_firstprivate(points, points_count) if(points_count > 1024)
+  for(int i = 0; i < points_count; i++)
+  {
+    sum_x += points[i * 2] / (float)points_count;
+  }
+
+#pragma omp parallel for default(none) reduction(+:sum_y) \
+  dt_omp_firstprivate(points, points_count) if(points_count > 1024)
+  for(int i = 0; i < points_count; i++)
+  {
+    sum_y += points[i * 2 + 1] / (float)points_count;
+  }
+
+  center[0] = sum_x;
+  center[1] = sum_y;
+  return TRUE;
 }
 
 static inline size_t dt_masks_dynbuf_position(dt_masks_dynbuf_t *a)

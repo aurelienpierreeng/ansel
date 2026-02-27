@@ -905,6 +905,37 @@ static void _group_duplicate_points(dt_develop_t *const dev, dt_masks_form_t *co
   }
 }
 
+static gboolean _group_get_gravity_center(const dt_masks_form_t *form, float center[2])
+{
+  if(!form || !form->points || !center) return FALSE;
+
+  const int points_count = g_list_length(form->points);
+  if(points_count <= 0) return FALSE;
+
+  float *points = dt_alloc_align_float((size_t)points_count * 2);
+  if(!points) return FALSE;
+
+  int i = 0;
+  for(const GList *l = form->points; l; l = g_list_next(l))
+  {
+    const dt_masks_form_group_t *pt = (const dt_masks_form_group_t *)l->data;
+    if(!pt) continue;
+    dt_masks_form_t *child = dt_masks_get_from_id(darktable.develop, pt->formid);
+    if(!child) continue;
+
+    float child_center[2] = { 0.0f, 0.0f };
+    if(!dt_masks_form_get_gravity_center(child, child_center)) continue;
+
+    points[2 * i] = child_center[0];
+    points[2 * i + 1] = child_center[1];
+    i++;
+  }
+
+  const gboolean ok = dt_masks_center_of_gravity_from_points(points, i, center);
+  dt_free_align(points);
+  return ok;
+}
+
 // The function table for groups.  This must be public, i.e. no "static" keyword.
 const dt_masks_functions_t dt_masks_functions_group = {
   .point_struct_size = sizeof(struct dt_masks_form_group_t),
@@ -920,6 +951,7 @@ const dt_masks_functions_t dt_masks_functions_group = {
   .get_mask_roi = _group_get_mask_roi,
   .get_area = NULL,
   .get_source_area = NULL,
+  .get_gravity_center = _group_get_gravity_center,
   .get_interaction_value = NULL,
   .set_interaction_value = NULL,
   .mouse_moved = _group_events_mouse_moved,

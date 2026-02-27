@@ -366,6 +366,16 @@ static float _gradient_get_interaction_value(const dt_masks_form_t *form, dt_mas
   }
 }
 
+static gboolean _gradient_get_gravity_center(const dt_masks_form_t *form, float center[2])
+{
+  if(!form || !form->points || !center) return FALSE;
+  const dt_masks_anchor_gradient_t *gradient = (const dt_masks_anchor_gradient_t *)(form->points)->data;
+  if(!gradient) return FALSE;
+  center[0] = gradient->center[0];
+  center[1] = gradient->center[1];
+  return TRUE;
+}
+
 static int _change_extent(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
                           int index, const float amount, const dt_masks_increment_t increment, const int flow);
 static int _change_curvature(dt_masks_form_t *form, dt_masks_form_gui_t *gui, struct dt_iop_module_t *module,
@@ -1544,6 +1554,7 @@ const dt_masks_functions_t dt_masks_functions_gradient = {
   .get_mask = _gradient_get_mask,
   .get_mask_roi = _gradient_get_mask_roi,
   .get_area = _gradient_get_area,
+  .get_gravity_center = _gradient_get_gravity_center,
   .get_interaction_value = _gradient_get_interaction_value,
   .set_interaction_value = _gradient_set_interaction_value,
   .mouse_moved = _gradient_events_mouse_moved,
