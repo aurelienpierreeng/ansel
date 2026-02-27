@@ -516,6 +516,9 @@ void dt_masks_gui_form_save_creation(dt_develop_t *dev, dt_iop_module_t *module,
     grpt->state = DT_MASKS_STATE_SHOW | DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION;
     grpt->opacity = dt_conf_get_float("plugins/darkroom/masks/opacity");
     grp->points = g_list_append(grp->points, grpt);
+
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, grpt->formid, grpt->parentid, DT_MASKS_EVENT_ADD);
+    
     // we update module gui
       
     if(gui) dt_masks_iop_update(module);
@@ -1342,7 +1345,6 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
     dt_dev_masks_selection_change(darktable.develop, module,
                                   darktable.develop->mask_form_selected_id, FALSE);
 
-  // DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);
   if(gui)
   {
     _set_hinter_message(gui, form);
@@ -1372,6 +1374,7 @@ static void _masks_gui_remove_form_callback(GtkWidget *menu, gpointer user_data)
       _masks_remove_shape(module, sel, fpt->parentid, gui, gui->group_selected);
 
     dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, fpt->formid, fpt->parentid, DT_MASKS_EVENT_REMOVE);
   }
 }
 
@@ -1459,11 +1462,21 @@ static void _masks_operation_callback(GtkWidget *menu, gpointer user_data)
   dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   if(!gui || !menu) return;
 
+  const guint form_pos = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(menu), "form_pos"));
   const dt_masks_state_t state_op = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu), "state_op"));
+  // Advert the user if it will have no effect
+  if(form_pos == 0 && (state_op & DT_MASKS_STATE_IS_COMBINE_OP) != 0)
+  {
+    dt_control_log(_("Applying a boolean operation has no effect on the first shape of a group.\n"
+         "Move it to at least the 2nd position if you need to use boolean operations"));
+  }
+
   dt_masks_form_group_t *form_op = (dt_masks_form_group_t *)g_object_get_data(G_OBJECT(menu), "op_form");
   if(!form_op) return;
 
   apply_operation(form_op, state_op);
+
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, form_op->formid, form_op->parentid, DT_MASKS_EVENT_UPDATE);
 }
 
 #define masks_gtk_menu_item_new_bold(label, selected, state, icon)                                        \
@@ -1519,6 +1532,25 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   }
   if(!op_form) return NULL;
 
+  // Find the position of the current form in the group
+  guint form_pos = 0;
+  gboolean form_found = FALSE;
+  if(grp && (grp->type & DT_MASKS_GROUP))
+  {
+    for(GList *fpts = grp->points; fpts; fpts = g_list_next(fpts))
+    {
+      dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
+      if(fpt->formid == form->formid)
+      {
+        form_found = TRUE;
+        break;
+      }
+      form_pos++;
+    }
+  }
+
+  // Get the number of shapes in the group
+  guint list_length = (form_found && grp) ? g_list_length(grp->points) : 0;
 
 
   // Title
@@ -1556,15 +1588,17 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
     }
   }
 
+  // Create the main label string
   gchar *item_str = NULL;
   if(gui->node_hovered >= 0 || gui->seg_selected >= 0)
   {
     int item_index = (gui->node_hovered >= 0) ? gui->node_hovered : gui->seg_selected;
-    item_str = g_strdup_printf(" - (%s #%d)", gui->node_hovered >= 0 ? _("node") : _("segment"), item_index);
+    item_str = g_strdup_printf("%s %d - ", gui->node_hovered >= 0 ? _("Node") : _("Segment"), item_index);
   }
   else
     item_str = g_strdup("");
 
+  // Create an assembled image if we have an inverse state to show
   const dt_masks_state_t state = op_form->state & DT_MASKS_STATE_IS_COMBINE_OP;
   const gboolean has_inverse = (op_form->state & DT_MASKS_STATE_INVERSE) != 0;
   GdkPixbuf *icon = (state <= DT_MASKS_STATE_EXCLUSION) ? op_icon[state] : NULL;
@@ -1592,9 +1626,10 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
     else
       icon = op_icon[DT_MASKS_STATE_INVERSE];
   }
-
-  gchar *title = g_strdup_printf("<b><big>%s%s</big></b>", form_name, item_str);
-  GtkWidget *menu_item = ctx_gtk_menu_item_new_with_markup_and_pixbuf(title, icon, menu, NULL, gui);
+  
+  const gboolean draw_icon = form_pos > 0;
+  gchar *title = g_strdup_printf("<b><big>%s%s</big></b>", item_str, form_name);
+  GtkWidget *menu_item = ctx_gtk_menu_item_new_with_markup_and_pixbuf(title, (draw_icon) ? icon : NULL, menu, NULL, gui);
   gtk_widget_set_sensitive(menu_item, FALSE);
   g_free(item_str);
   g_free(title);
@@ -1703,7 +1738,7 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
   float pzx = 0.0f, pzy = 0.0f;
   dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
 
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);
+  /*DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);*/
 
   gboolean return_val = FALSE;
   if(form->functions)

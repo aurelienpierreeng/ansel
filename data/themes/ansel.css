@@ -581,6 +581,13 @@ menuitem menu menuitem label
   font-weight: 400;
 }
 
+menuitem menu menuitem.menu-active label,
+menuitem.menu-active label
+{
+  font-weight: 800;
+  color: @grey_100;
+}
+
 menubar menuitem,
 menubar menuitem label
 {
@@ -2485,9 +2492,12 @@ menu.dt-masks-context-menu menuitem.dt-masks-hide-check check
   opacity: 0;
 }
 
-/* Keep this at the end so it wins over generic menu/font state rules above */
 menu.dt-masks-context-menu menuitem.dt-masks-checked label.dt-masks-checked-label
 {
   font-weight:600;
+}
+
+menu.dt-masks-context-menu menuitem.dt-masks-checked:not(:disabled) label.dt-masks-checked-label
+{
   color: @grey_100;
 }

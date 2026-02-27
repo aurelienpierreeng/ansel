@@ -151,6 +151,17 @@ typedef enum dt_masks_type_t
 } dt_masks_type_t;
 
 /**masts states */
+
+typedef enum dt_masks_event_t
+{
+  DT_MASKS_EVENT_NONE   = 0,
+  DT_MASKS_EVENT_ADD    = 1,
+  DT_MASKS_EVENT_REMOVE = 2,
+  DT_MASKS_EVENT_UPDATE = 3,
+  DT_MASKS_EVENT_DELETE = 4,
+  DT_MASKS_EVENT_CHANGE = 5,
+  DT_MASKS_EVENT_RESET  = 6
+} dt_masks_event_t;
 typedef enum dt_masks_state_t
 {
   DT_MASKS_STATE_NONE = 0,
@@ -161,6 +172,7 @@ typedef enum dt_masks_state_t
   DT_MASKS_STATE_INTERSECTION = 1 << 4,
   DT_MASKS_STATE_DIFFERENCE = 1 << 5,
   DT_MASKS_STATE_EXCLUSION = 1 << 6,
+  DT_MASKS_STATE_NOOP = 1 << 7,
 
   DT_MASKS_STATE_IS_COMBINE_OP = DT_MASKS_STATE_UNION | DT_MASKS_STATE_INTERSECTION | DT_MASKS_STATE_DIFFERENCE | DT_MASKS_STATE_EXCLUSION
 } dt_masks_state_t;

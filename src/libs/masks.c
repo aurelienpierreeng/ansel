@@ -1440,6 +1440,37 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
   lm->gui_reset = gui_reset;
 }
 
+static void _lib_masks_update_item(dt_lib_module_t *self, int formid, int parentid, dt_lib_masks_t *lm, GtkTreeModel *model, GtkTreeIter *iter)
+{
+  // we retrieve the forms
+  dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, formid);
+  if(!form) return;
+  dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, parentid);
+
+  // and the values
+  int state = 0;
+  float opacity = 1.0f;
+
+  int index = 0;
+  if(grp && (grp->type & DT_MASKS_GROUP))
+  {
+    for(const GList *pts = grp->points; pts; pts = g_list_next(pts))
+    {
+      dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
+      if(pt->formid == formid)
+      {
+        state = pt->state;
+        opacity = pt->opacity;
+        break;
+      }
+      index++;
+    }
+  }
+
+  _set_iter_name(lm, form, state, opacity, model, iter, index);
+  return;
+}
+
 static gboolean _update_foreach(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter, gpointer data)
 {
   if(!iter) return 0;
@@ -1478,6 +1509,7 @@ static gboolean _update_foreach(GtkTreeModel *model, GtkTreePath *path, GtkTreeI
   return 0;
 }
 
+// Update each item of the list
 static void _lib_masks_update_list(dt_lib_module_t *self)
 {
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
