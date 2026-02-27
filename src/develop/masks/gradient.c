@@ -1275,6 +1275,14 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
     return 1;
   }
 
+  const float inv_grid2 = 1.0f / (grid * grid);
+  float w0[8], w1[8];
+  for(int i = 0; i < grid; i++)
+  {
+    w0[i] = (float)(grid - i);
+    w1[i] = (float)i;
+  }
+
 // we fill the mask buffer by interpolation
 #ifdef _OPENMP
 #if !defined(__SUNOS__) && !defined(__NetBSD__)
@@ -1289,17 +1297,27 @@ static int _gradient_get_mask(const dt_iop_module_t *const module, const dt_dev_
   {
     const int jj = j % grid;
     const int mj = j / grid;
-    const int grid_jj = grid - jj;
+    const float wj0 = w0[jj];
+    const float wj1 = w1[jj];
+    const size_t row_base = (size_t)mj * gw;
+    float *const row = bufptr + (size_t)j * w;
+    int ii = 0;
+    int mi = 0;
     for(int i = 0; i < w; i++)
     {
-      const int ii = i % grid;
-      const int mi = i / grid;
-      const int grid_ii = grid - ii;
-      const size_t pt_index = mj * gw + mi;
-      bufptr[j * w + i] = (points[2 * pt_index] * grid_ii * grid_jj
-                           + points[2 * (pt_index + 1)] * ii * grid_jj
-                           + points[2 * (pt_index + gw)] * grid_ii * jj
-                           + points[2 * (pt_index + gw + 1)] * ii * jj) / (grid * grid);
+      const size_t pt_index = row_base + mi;
+      const float wii0 = w0[ii];
+      const float wii1 = w1[ii];
+      row[i] = (points[2 * pt_index] * wii0 * wj0
+                + points[2 * (pt_index + 1)] * wii1 * wj0
+                + points[2 * (pt_index + gw)] * wii0 * wj1
+                + points[2 * (pt_index + gw + 1)] * wii1 * wj1) * inv_grid2;
+      ii++;
+      if(ii == grid)
+      {
+        ii = 0;
+        mi++;
+      }
     }
   }
 
@@ -1447,6 +1465,14 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_
 
   dt_pixelpipe_cache_free_align(lut);
 
+  const float inv_grid2 = 1.0f / (grid * grid);
+  float w0[8], w1[8];
+  for(int i = 0; i < grid; i++)
+  {
+    w0[i] = (float)(grid - i);
+    w1[i] = (float)i;
+  }
+
 // we fill the mask buffer by interpolation
 #ifdef _OPENMP
 #if !defined(__SUNOS__) && !defined(__NetBSD__)
@@ -1461,19 +1487,27 @@ static int _gradient_get_mask_roi(const dt_iop_module_t *const module, const dt_
   {
     const int jj = j % grid;
     const int mj = j / grid;
-    const int grid_jj = grid - jj;
+    const float wj0 = w0[jj];
+    const float wj1 = w1[jj];
+    const size_t row_base = (size_t)mj * gw;
+    float *const row = buffer + (size_t)j * w;
+    int ii = 0;
+    int mi = 0;
     for(int i = 0; i < w; i++)
     {
-      const int ii = i % grid;
-      const int mi = i / grid;
-      const int grid_ii = grid - ii;
-      const size_t mindex = (size_t)mj * gw + mi;
-      buffer[(size_t)j * w + i]
-          = (points[mindex * 2] * grid_ii * grid_jj
-             + points[(mindex + 1) * 2] * ii * grid_jj
-             + points[(mindex + gw) * 2] * grid_ii * jj
-             + points[(mindex + gw + 1) * 2] * ii * jj)
-            / (grid * grid);
+      const size_t mindex = row_base + mi;
+      const float wii0 = w0[ii];
+      const float wii1 = w1[ii];
+      row[i] = (points[mindex * 2] * wii0 * wj0
+                + points[(mindex + 1) * 2] * wii1 * wj0
+                + points[(mindex + gw) * 2] * wii0 * wj1
+                + points[(mindex + gw + 1) * 2] * wii1 * wj1) * inv_grid2;
+      ii++;
+      if(ii == grid)
+      {
+        ii = 0;
+        mi++;
+      }
     }
   }
 
