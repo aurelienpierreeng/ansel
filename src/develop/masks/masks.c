@@ -102,6 +102,24 @@ static void *_dup_masks_form_cb(const void *formdata, gpointer user_data)
   return (void *)dt_masks_dup_masks_form(f);
 }
 
+static inline dt_masks_form_group_t *_masks_group_find_form(dt_masks_form_t *grp, const int formid)
+{
+  if(!grp || !(grp->type & DT_MASKS_GROUP)) return NULL;
+  for(GList *fpts = grp->points; fpts; fpts = g_list_next(fpts))
+  {
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
+    if(fpt && fpt->formid == formid) return fpt;
+  }
+  return NULL;
+}
+
+static inline dt_masks_form_group_t *_masks_group_find_form_from_parentid(const int parentid, const int formid)
+{
+  dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, parentid);
+  if(!grp || !(grp->type & DT_MASKS_GROUP)) return NULL;
+  return _masks_group_find_form(grp, formid);
+}
+
 // duplicate the list of forms, replace item in the list with form with the same formid
 GList *dt_masks_dup_forms_deep(GList *forms, dt_masks_form_t *form)
 {
@@ -116,21 +134,8 @@ static int _get_opacity(dt_masks_form_gui_t *gui, const dt_masks_form_t *form)
   const int formid = sel->formid;
 
   // look for opacity
-  const dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, fpt->parentid);
-  if(!grp || !(grp->type & DT_MASKS_GROUP)) return 0;
-
-  int opacity = 0;
-  for(GList *fpts = grp->points; fpts; fpts = g_list_next(fpts))
-  {
-    const dt_masks_form_group_t *form_pt = (dt_masks_form_group_t *)fpts->data;
-    if(form_pt->formid == formid)
-    {
-      opacity = form_pt->opacity * 100;
-      break;
-    }
-  }
-
-  return opacity;
+  dt_masks_form_group_t *form_pt = _masks_group_find_form_from_parentid(fpt->parentid, formid);
+  return form_pt ? (form_pt->opacity * 100) : 0;
 }
 
 static void _set_hinter_message(dt_masks_form_gui_t *gui, const dt_masks_form_t *form)
@@ -1538,17 +1543,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   dt_masks_form_group_t *op_form = NULL;
   dt_masks_form_t *grp = formgroup ? dt_masks_get_from_id(darktable.develop, formgroup->parentid) : NULL;
   if(grp && (grp->type & DT_MASKS_GROUP))
-  {
-    for(const GList *pts = grp->points; pts; pts = g_list_next(pts))
-    {
-      dt_masks_form_group_t *pt = (dt_masks_form_group_t *)pts->data;
-      if(pt->formid == form->formid)
-      {
-        op_form = pt;
-        break;
-      }
-    }
-  }
+    op_form = _masks_group_find_form(grp, form->formid);
   if(!op_form) return NULL;
 
   // Find the position of the current form in the group
@@ -2664,23 +2659,14 @@ float dt_masks_form_get_opacity(dt_masks_form_t *form, int parentid)
   // Return -1.0f if we couldn't find the opacity of the parent group
   // Note that opacity is not defined at the form level.
   if(!form) return -1.f;
-  dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, parentid);
-  if(!grp || !(grp->type & DT_MASKS_GROUP)) return - 1.f;
 
   // we first need to test if the opacity can be set to the form
   if(form->type & DT_MASKS_GROUP) return -1.f;
   const int id = form->formid;
 
   // so we change the value inside the group
-  for(GList *fpts = grp->points; fpts; fpts = g_list_next(fpts))
-  {
-    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
-    if(fpt->formid == id)
-    {
-      return fpt->opacity;
-    }
-  }
-  return -1.f;
+  dt_masks_form_group_t *fpt = _masks_group_find_form_from_parentid(parentid, id);
+  return fpt ? fpt->opacity : -1.f;
 }
 
 const char * _get_mask_plugin(dt_masks_form_t *form)
@@ -2744,29 +2730,21 @@ int dt_masks_form_set_opacity(dt_masks_form_t *form, int parentid, float opacity
   // If offset == TRUE, opacity is treated as an offset to add on top of current mask opacity
   // else it is set absolutely and directly
   if(!form) return 0;
-  dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, parentid);
-  if(!grp || !(grp->type & DT_MASKS_GROUP)) return 0;
 
   // we first need to test if the opacity can be set to the form
   if(form->type & DT_MASKS_GROUP) return 0;
   const int id = form->formid;
 
   // so we change the value inside the group
-  for(GList *fpts = grp->points; fpts; fpts = g_list_next(fpts))
-  {
-    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
-    if(fpt->formid == id)
-    {
-      float new_opacity = (offset == DT_MASKS_INCREMENT_OFFSET)  ? fpt->opacity + opacity * flow
-                                : (offset == DT_MASKS_INCREMENT_SCALE) ? fpt->opacity * powf(opacity, (float)flow)
-                                                                       : opacity; // DT_MASKS_INCREMENT_ABSOLUTE
-      new_opacity = CLAMP(new_opacity, 0.0f, 1.0f);
-      fpt->opacity = new_opacity;
-      dt_toast_log(_("Opacity: %3.2f%%"), new_opacity * 100.f);
-      return 1;
-    }
-  }
-  return 0;
+  dt_masks_form_group_t *fpt = _masks_group_find_form_from_parentid(parentid, id);
+  if(!fpt) return 0;
+  float new_opacity = (offset == DT_MASKS_INCREMENT_OFFSET)  ? fpt->opacity + opacity * flow
+                            : (offset == DT_MASKS_INCREMENT_SCALE) ? fpt->opacity * powf(opacity, (float)flow)
+                                                                   : opacity; // DT_MASKS_INCREMENT_ABSOLUTE
+  new_opacity = CLAMP(new_opacity, 0.0f, 1.0f);
+  fpt->opacity = new_opacity;
+  dt_toast_log(_("Opacity: %3.2f%%"), new_opacity * 100.f);
+  return 1;
 }
 
 int dt_masks_form_change_opacity(dt_masks_form_t *form, int parentid, int up, const int flow)
