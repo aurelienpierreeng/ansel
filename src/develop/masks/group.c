@@ -58,79 +58,68 @@ static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form
 {
   if(!form || !gui) return FALSE;
 
-  // If we get here, it's either because:
-  // 1. no group is being currently edited
-  // 2. the currently-edited group didn't capture the event, meaning the click didn't happen near a control node.
-  // Both ways, we need to redetect where the click happened to see if a new shape should be selected.
-
-  // reset selection
-  dt_masks_soft_reset_form_gui(gui);
   dt_develop_t *dev = (dt_develop_t *)darktable.develop;
-  dev->mask_form_selected_id = -1;
-
-  // now we check if we are near a new form
   const float as = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;  // transformed to backbuf dimensions
-  gui->form_selected = gui->border_selected = FALSE;
-  gui->source_selected = gui->source_dragging = FALSE;
-  gui->pivot_selected = FALSE;
-  gui->handle_selected = -1;
-  gui->node_selected = gui->node_hovered = -1;
-  gui->seg_selected = -1;
-  gui->handle_border_selected = -1;
-  gui->group_selected = -1;
-
-  dt_masks_form_t *sel = NULL;
-  int sel_index = 0;
-  float sel_dist = FLT_MAX;
-
   const float scale = dev->roi.natural_scale;
-  const float xx = (pzx * dev->roi.preview_width)  / scale,
-              yy = (pzy * dev->roi.preview_height) / scale;
+  const float xx = (pzx * dev->roi.preview_width) / scale;
+  const float yy = (pzy * dev->roi.preview_height) / scale;
 
-  int index = 0;
-  for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
+  if(gui->group_selected >= 0)
   {
-    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
-    if(!fpt) continue;
-    dt_masks_form_t *frm = dt_masks_get_from_id(dev, fpt->formid);
-    if(!frm) continue; // it means the form has been deleted meanwhile
-
-    int inside, inside_border, near, inside_source;
-    float dist = FLT_MAX;
-    inside = inside_border = inside_source = 0;
-    near = -1;
-    
-
-    //float xx = -1, yy = -1;
-    //dt_dev_retrieve_full_pos(darktable.develop, pzx, pzy, &xx, &yy);
-    
-
-    if(frm->functions && frm->functions->get_distance)
-      frm->functions->get_distance(xx, yy, as, gui, index, g_list_length(frm->points),
-                                   &inside, &inside_border, &near, &inside_source, &dist);
-
-    if(inside || inside_border || near >= 0 || inside_source)
+    // If a form is selected, keep it if the click is inside or within the safety margin.
+    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
+    dt_masks_form_t *sel = fpt ? dt_masks_get_from_id(dev, fpt->formid) : NULL;
+    if(sel && sel->functions && sel->functions->get_distance)
     {
+      int inside = 0, inside_border = 0, near = -1, inside_source = 0;
+      float dist = FLT_MAX;
+      sel->functions->get_distance(xx, yy, as, gui, gui->group_selected, g_list_length(sel->points),
+                                   &inside, &inside_border, &near, &inside_source, &dist);
+      if(inside || inside_border || near >= 0 || inside_source || dist <= as)
+        return TRUE;
+    }
 
-      // Look for the closest
-      if(sel_dist > dist)
+    // Click is outside the selected form + margin: deselect.
+    dt_masks_soft_reset_form_gui(gui);
+    dev->mask_form_selected_id = -1;
+  }
+
+  if(gui->group_selected < 0)
+  {
+    dt_masks_form_t *sel = NULL;
+    int sel_index = -1;
+    float sel_dist = FLT_MAX;
+
+    int index = 0;
+    for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
+    {
+      dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
+      if(!fpt) continue;
+      dt_masks_form_t *frm = dt_masks_get_from_id(dev, fpt->formid);
+      if(!frm) { index++; continue; }
+
+      const float dx = pzx - frm->gravity_center[0];
+      const float dy = pzy - frm->gravity_center[1];
+      const float dist = dx * dx + dy * dy;
+
+      if(dist < sel_dist)
       {
         sel = frm;
         sel_dist = dist;
         sel_index = index;
       }
+      index++;
     }
-    index++;
+
+    if(sel && sel->functions)
+    {
+      gui->group_selected = sel_index;
+      dev->mask_form_selected_id = sel->formid;
+      return TRUE;
+    }
   }
 
-  if(sel && sel->functions)
-  {
-    gui->group_selected = sel_index;
-    dev->mask_form_selected_id = sel->formid;
-    return TRUE;
-  }
-
-  return FALSE;
+  return gui->group_selected >= 0;
 }
 
 static gboolean _group_events_button_pressed(struct dt_iop_module_t *module, float pzx, float pzy,
@@ -138,6 +127,8 @@ static gboolean _group_events_button_pressed(struct dt_iop_module_t *module, flo
                                         dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui, int unused2)
 {
   if(!form) return FALSE;
+
+  _detect_new_shape_selection(form, gui, pzx, pzy);
 
   if(gui->group_selected >= 0)
   {
@@ -182,7 +173,7 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
         return 1;
   }
 
-  return _detect_new_shape_selection(form, gui, pzx, pzy);
+  return 0;
 }
 
 static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *event, dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, int index)
