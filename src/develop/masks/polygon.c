@@ -3142,13 +3142,9 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
       const int yymax = MIN(ymax, height - 1);
 
 #ifdef _OPENMP
-#if !defined(__SUNOS__) && !defined(__NetBSD__)
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(xxmin, xxmax, yymin, yymax, width) \
-  shared(buffer) schedule(static) num_threads(MIN(8,darktable.num_openmp_threads))
-#else
-#pragma omp parallel for shared(buffer)
-#endif
+  dt_omp_firstprivate(xxmin, xxmax, yymin, yymax, width, buffer) \
+  schedule(static) num_threads(MIN(8,darktable.num_openmp_threads))
 #endif
       for(int yy = yymin; yy <= yymax; yy++)
       {
@@ -3233,13 +3229,8 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
     }
 
 #ifdef _OPENMP
-#if !defined(__SUNOS__) && !defined(__NetBSD__)
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(width, height, dindex) \
-  shared(buffer, dpoints)
-#else
-#pragma omp parallel for shared(buffer)
-#endif
+  dt_omp_firstprivate(width, height, dindex, buffer, dpoints)
 #endif
     for(int n = 0; n < dindex; n += 4)
       _polygon_falloff_roi(buffer, dpoints + n, dpoints + n + 2, width, height);
