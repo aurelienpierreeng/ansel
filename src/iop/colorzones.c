@@ -1268,39 +1268,7 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
   }
 
   cairo_translate(cr, 0, height);
-
-  // draw zoom info
-  if(self->dev->darkroom_skip_mouse_events)
-  {
-    char text[256];
-    PangoLayout *layout;
-    PangoRectangle ink;
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
-    pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
-    pango_font_description_set_absolute_size(desc, PANGO_SCALE);
-    layout = pango_cairo_create_layout(cr);
-    pango_layout_set_font_description(layout, desc);
-
-    // scale conservatively to 100% of width:
-    snprintf(text, sizeof(text), "zoom: 100 x: 100 y: 100");
-    pango_layout_set_text(layout, text, -1);
-    pango_layout_get_pixel_extents(layout, &ink, NULL);
-    pango_font_description_set_absolute_size(desc, width * 1.0 / ink.width * PANGO_SCALE);
-    pango_layout_set_font_description(layout, desc);
-
-    snprintf(text, sizeof(text), "zoom: %i x: %i y: %i", (int)((c->zoom_factor - 1.f) * 100.f),
-             (int)(c->offset_x * 100.f), (int)(c->offset_y * 100.f));
-
-    cairo_set_source_rgba(cr, 0.1, 0.1, 0.1, 0.5);
-    pango_layout_set_text(layout, text, -1);
-    pango_layout_get_pixel_extents(layout, &ink, NULL);
-    cairo_move_to(cr, 0.98f * width - ink.width - ink.x, -0.02 * height - ink.height - ink.y);
-    pango_cairo_show_layout(cr, layout);
-    cairo_stroke(cr);
-    pango_font_description_free(desc);
-    g_object_unref(layout);
-  }
-
+  
   // draw curves, selected last.
   cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
   cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.));
@@ -1740,33 +1708,6 @@ static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event
 
   int delta_y;
 
-  if(self->dev->darkroom_skip_mouse_events)
-  {
-    if(dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y))
-    {
-      GtkAllocation allocation;
-      gtk_widget_get_allocation(widget, &allocation);
-
-      const float mx = c->mouse_x;
-      const float my = c->mouse_y;
-      const float linx = _mouse_to_curve(mx, c->zoom_factor, c->offset_x),
-                  liny = _mouse_to_curve(my, c->zoom_factor, c->offset_y);
-
-      c->zoom_factor *= 1.0 - 0.1 * delta_y;
-      if(c->zoom_factor < 1.f) c->zoom_factor = 1.f;
-
-      c->offset_x = linx - (mx / c->zoom_factor);
-      c->offset_y = liny - (my / c->zoom_factor);
-
-      c->offset_x = CLAMP(c->offset_x, 0.f, (c->zoom_factor - 1.f) / c->zoom_factor);
-      c->offset_y = CLAMP(c->offset_y, 0.f, (c->zoom_factor - 1.f) / c->zoom_factor);
-
-      gtk_widget_queue_draw(self->widget);
-    }
-
-    return TRUE;
-  }
-
   if(dt_gui_get_scroll_unit_deltas(event, NULL, &delta_y))
   {
     if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
@@ -1814,28 +1755,6 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *
 
   const int height = allocation.height - 2 * inset;
   const int width = allocation.width - 2 * inset;
-
-  // drag the draw area
-  if(self->dev->darkroom_skip_mouse_events)
-  {
-    const float mx = c->mouse_x;
-    const float my = c->mouse_y;
-
-    c->mouse_x = CLAMP(event->x - inset, 0, width) / (float)width;
-    c->mouse_y = 1.0 - CLAMP(event->y - inset, 0, height) / (float)height;
-
-    if(event->state & GDK_BUTTON1_MASK)
-    {
-      c->offset_x += (mx - c->mouse_x) / c->zoom_factor;
-      c->offset_y += (my - c->mouse_y) / c->zoom_factor;
-
-      c->offset_x = CLAMP(c->offset_x, 0.f, (c->zoom_factor - 1.f) / c->zoom_factor);
-      c->offset_y = CLAMP(c->offset_y, 0.f, (c->zoom_factor - 1.f) / c->zoom_factor);
-
-      gtk_widget_queue_draw(self->widget);
-    }
-    return TRUE;
-  }
 
   const int ch = c->channel;
   const int nodes = p->curve_num_nodes[ch];
@@ -1957,8 +1876,6 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
   dt_iop_colorzones_gui_data_t *c = (dt_iop_colorzones_gui_data_t *)self->gui_data;
   dt_iop_colorzones_params_t *p = (dt_iop_colorzones_params_t *)self->params;
   dt_iop_colorzones_params_t *d = (dt_iop_colorzones_params_t *)self->default_params;
-
-  if(self->dev->darkroom_skip_mouse_events) return TRUE;
 
   int ch = c->channel;
   int nodes = p->curve_num_nodes[ch];
@@ -2082,8 +1999,6 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
 
 static gboolean _area_button_release_callback(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
 {
-  if(darktable.develop->darkroom_skip_mouse_events) return TRUE;
-
   if(event->button == 1)
   {
     dt_iop_module_t *self = (dt_iop_module_t *)user_data;
@@ -2096,8 +2011,6 @@ static gboolean _area_button_release_callback(GtkWidget *widget, GdkEventButton 
 
 static gboolean _area_enter_notify_callback(GtkWidget *widget, GdkEventCrossing *event, dt_iop_module_t *self)
 {
-  if(self->dev->darkroom_skip_mouse_events) return TRUE;
-
   dt_iop_colorzones_gui_data_t *c = (dt_iop_colorzones_gui_data_t *)self->gui_data;
   c->mouse_y = fabs(c->mouse_y);
   gtk_widget_queue_draw(widget);
@@ -2106,8 +2019,6 @@ static gboolean _area_enter_notify_callback(GtkWidget *widget, GdkEventCrossing 
 
 static gboolean _area_leave_notify_callback(GtkWidget *widget, GdkEventCrossing *event, dt_iop_module_t *self)
 {
-  if(self->dev->darkroom_skip_mouse_events) return TRUE;
-
   dt_iop_colorzones_gui_data_t *c = (dt_iop_colorzones_gui_data_t *)self->gui_data;
   // for fluxbox
   c->mouse_y = -fabs(c->mouse_y);
@@ -2129,8 +2040,6 @@ static gboolean _area_resized_callback(GtkWidget *widget, GdkEvent *event, gpoin
 static gboolean _area_key_press_callback(GtkWidget *widget, GdkEventKey *event, dt_iop_module_t *self)
 {
   dt_iop_colorzones_gui_data_t *c = (dt_iop_colorzones_gui_data_t *)self->gui_data;
-
-  if(self->dev->darkroom_skip_mouse_events) return FALSE;
 
   if(c->selected < 0) return FALSE;
 

@@ -615,33 +615,6 @@ static gboolean _area_scrolled_callback(GtkWidget *widget, GdkEventScroll *event
 
   gdouble delta_y;
 
-  if(self->dev->darkroom_skip_mouse_events)
-  {
-    if(dt_gui_get_scroll_deltas(event, NULL, &delta_y))
-    {
-      GtkAllocation allocation;
-      gtk_widget_get_allocation(widget, &allocation);
-
-      const float mx = g->mouse_x;
-      const float my = g->mouse_y;
-      const float linx = _mouse_to_curve(mx, g->zoom_factor, g->offset_x),
-                  liny = _mouse_to_curve(my, g->zoom_factor, g->offset_y);
-
-      g->zoom_factor *= 1.0 - 0.1 * delta_y;
-      if(g->zoom_factor < 1.f) g->zoom_factor = 1.f;
-
-      g->offset_x = linx - (mx / g->zoom_factor);
-      g->offset_y = liny - (my / g->zoom_factor);
-
-      g->offset_x = CLAMP(g->offset_x, 0.f, (g->zoom_factor - 1.f) / g->zoom_factor);
-      g->offset_y = CLAMP(g->offset_y, 0.f, (g->zoom_factor - 1.f) / g->zoom_factor);
-
-      gtk_widget_queue_draw(self->widget);
-    }
-
-    return TRUE;
-  }
-
   // if autoscale is on: do not modify g and b curves
   if((p->curve_autoscale != DT_S_SCALE_MANUAL_RGB) && g->channel != DT_IOP_RGBCURVE_R) return TRUE;
 
@@ -662,8 +635,6 @@ static gboolean _area_key_press_callback(GtkWidget *widget, GdkEventKey *event, 
 {
   dt_iop_rgbcurve_params_t *p = (dt_iop_rgbcurve_params_t *)self->params;
   dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
-
-  if(self->dev->darkroom_skip_mouse_events) return FALSE;
 
   // if autoscale is on: do not modify g and b curves
   if((p->curve_autoscale != DT_S_SCALE_MANUAL_RGB) && g->channel != DT_IOP_RGBCURVE_R) return TRUE;
@@ -977,36 +948,7 @@ static gboolean _area_draw_callback(GtkWidget *widget, cairo_t *crf, dt_iop_modu
   }
 
   // draw zoom info
-  if(self->dev->darkroom_skip_mouse_events)
-  {
-    PangoLayout *layout;
-    PangoRectangle ink;
-    PangoFontDescription *desc = pango_font_description_copy_static(darktable.bauhaus->pango_font_desc);
-    pango_font_description_set_weight(desc, PANGO_WEIGHT_BOLD);
-    pango_font_description_set_absolute_size(desc, PANGO_SCALE);
-    layout = pango_cairo_create_layout(cr);
-    pango_layout_set_font_description(layout, desc);
-
-    // scale conservatively to 100% of width:
-    snprintf(text, sizeof(text), "zoom: 100 x: 100 y: 100");
-    pango_layout_set_text(layout, text, -1);
-    pango_layout_get_pixel_extents(layout, &ink, NULL);
-    pango_font_description_set_absolute_size(desc, width * 1.0 / ink.width * PANGO_SCALE);
-    pango_layout_set_font_description(layout, desc);
-
-    snprintf(text, sizeof(text), "zoom: %i x: %i y: %i", (int)((g->zoom_factor - 1.f) * 100.f),
-             (int)(g->offset_x * 100.f), (int)(g->offset_y * 100.f));
-
-    cairo_set_source_rgba(cr, 0.1, 0.1, 0.1, 0.5);
-    pango_layout_set_text(layout, text, -1);
-    pango_layout_get_pixel_extents(layout, &ink, NULL);
-    cairo_move_to(cr, 0.98f * width - ink.width - ink.x, -0.02 * height - ink.height - ink.y);
-    pango_cairo_show_layout(cr, layout);
-    cairo_stroke(cr);
-    pango_font_description_free(desc);
-    g_object_unref(layout);
-  }
-  else if(g->selected >= 0)
+  if(g->selected >= 0)
   {
     // draw information about current selected node
     PangoLayout *layout;
@@ -1093,32 +1035,6 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget, GdkEventMotion *
 
   const int inset = DT_GUI_CURVE_EDITOR_INSET;
 
-  // drag the draw area
-  if(self->dev->darkroom_skip_mouse_events)
-  {
-    GtkAllocation allocation;
-    gtk_widget_get_allocation(widget, &allocation);
-    const int height = allocation.height - 2 * inset, width = allocation.width - 2 * inset;
-
-    const float mx = g->mouse_x;
-    const float my = g->mouse_y;
-
-    g->mouse_x = CLAMP(event->x - inset, 0, width) / (float)width;
-    g->mouse_y = 1.0 - CLAMP(event->y - inset, 0, height) / (float)height;
-
-    if(event->state & GDK_BUTTON1_MASK)
-    {
-      g->offset_x += (mx - g->mouse_x) / g->zoom_factor;
-      g->offset_y += (my - g->mouse_y) / g->zoom_factor;
-
-      g->offset_x = CLAMP(g->offset_x, 0.f, (g->zoom_factor - 1.f) / g->zoom_factor);
-      g->offset_y = CLAMP(g->offset_y, 0.f, (g->zoom_factor - 1.f) / g->zoom_factor);
-
-      gtk_widget_queue_draw(self->widget);
-    }
-    return TRUE;
-  }
-
   const int ch = g->channel;
   const int nodes = p->curve_num_nodes[ch];
   dt_iop_rgbcurve_node_t *curve_nodes = p->curve_nodes[ch];
@@ -1198,8 +1114,6 @@ static gboolean _area_button_press_callback(GtkWidget *widget, GdkEventButton *e
   dt_iop_rgbcurve_params_t *p = (dt_iop_rgbcurve_params_t *)self->params;
   dt_iop_rgbcurve_params_t *d = (dt_iop_rgbcurve_params_t *)self->default_params;
   dt_iop_rgbcurve_gui_data_t *g = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
-
-  if(self->dev->darkroom_skip_mouse_events) return TRUE;
 
   const int ch = g->channel;
   const int autoscale = p->curve_autoscale;
