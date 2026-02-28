@@ -698,7 +698,6 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
       if(gui->source_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
       {
         // we start the source dragging
-        gui->source_dragging = TRUE;
         gui->delta[0] = gpt->source[0] - gui->pos[0];
         gui->delta[1] = gpt->source[1] - gui->pos[1];
         return 1;
@@ -706,7 +705,6 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
       else if(gui->node_hovered >= 1 && gui->edit_mode == DT_MASKS_EDIT_FULL)
       {
         // we start the point dragging
-        gui->node_dragging = gui->node_hovered;
         gui->delta[0] = gpt->points[0] - gui->pos[0];
         gui->delta[1] = gpt->points[1] - gui->pos[1];
         return 1;
@@ -719,7 +717,7 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, float 
         else if(dt_modifier_is(state, GDK_SHIFT_MASK))
           gui->border_toggling = TRUE;
         else
-          gui->form_dragging = TRUE;
+          ;
 
         // Pour la rotation: stocker position absolue du clic initial
         // Pour le drag: stocker décalage
@@ -749,7 +747,6 @@ static int _ellipse_events_button_released(struct dt_iop_module_t *module, float
   if(gui->form_dragging && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
     // we end the form dragging
-    gui->form_dragging = FALSE;
     return 1;
   }
   else if(gui->border_toggling && gui->edit_mode == DT_MASKS_EDIT_FULL)
@@ -806,14 +803,10 @@ static int _ellipse_events_button_released(struct dt_iop_module_t *module, float
   else if(gui->node_dragging >= 1 && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
     // we end the node dragging
-    gui->node_dragging = -1;
     return 1;
   }
   else if(gui->source_dragging)
   {
-    // we end the form dragging
-    gui->source_dragging = FALSE;
-  
     // and select the source as default, if the mouse is not moved we are inside the
     // source and so want to move the source.
     gui->form_selected = TRUE;

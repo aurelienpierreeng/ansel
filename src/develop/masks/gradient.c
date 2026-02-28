@@ -553,8 +553,8 @@ static int _gradient_events_button_pressed(struct dt_iop_module_t *module, float
         gui->form_rotating = TRUE;
       else if(dt_modifier_is(state, GDK_SHIFT_MASK))
         gui->border_toggling = TRUE;
-      else
-        gui->form_dragging = TRUE;
+      else if(gui->seg_selected >= 0)
+        gui->form_selected = TRUE;
 
       if(gui->form_rotating)
       {
@@ -583,7 +583,6 @@ static int _gradient_events_button_released(struct dt_iop_module_t *module, floa
   if(gui->form_dragging && gui->edit_mode == DT_MASKS_EDIT_FULL)
   {
     // we end the form dragging
-    gui->form_dragging = FALSE;
     return 1;
   }
 

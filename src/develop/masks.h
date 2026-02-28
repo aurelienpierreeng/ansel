@@ -486,6 +486,9 @@ dt_masks_form_t *dt_masks_get_visible_form(const struct dt_develop_t *dev);
 void dt_masks_set_visible_form(struct dt_develop_t *dev, dt_masks_form_t *form);
 void dt_masks_gui_init(struct dt_develop_t *dev);
 void dt_masks_gui_cleanup(struct dt_develop_t *dev);
+void dt_masks_gui_set_dragging(dt_masks_form_gui_t *gui);
+void dt_masks_gui_reset_dragging(dt_masks_form_gui_t *gui);
+gboolean dt_masks_gui_is_dragging(const dt_masks_form_gui_t *gui);
 
 static inline gboolean dt_masks_gui_should_hit_test(dt_masks_form_gui_t *gui, const dt_develop_t *dev,
                                                     const float pzx, const float pzy)

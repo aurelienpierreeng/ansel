@@ -327,7 +327,6 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, float p
       if(gui->source_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
       {
         // we start the source dragging
-        gui->source_dragging = TRUE;
         gui->delta[0] = gpt->source[0] - gui->pos[0];
         gui->delta[1] = gpt->source[1] - gui->pos[1];
         return 1;
@@ -335,15 +334,12 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, float p
       else if(gui->form_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
       {
         // we start the form dragging
-        gui->form_dragging = TRUE;
         gui->delta[0] = gpt->points[0] - gui->pos[0];
         gui->delta[1] = gpt->points[1] - gui->pos[1];
         return 1;
       }
-      else if(gui->handle_selected && gui->edit_mode == DT_MASKS_EDIT_FULL)
+      else if(gui->handle_selected >= 0 && gui->edit_mode == DT_MASKS_EDIT_FULL)
       {
-        gui->handle_dragging = gui->handle_selected;
-
         return 1;
       }
     }
@@ -356,25 +352,21 @@ static int _circle_events_button_released(struct dt_iop_module_t *module, float 
                                           uint32_t state, dt_masks_form_t *form, int parentid,
                                           dt_masks_form_gui_t *gui, int index)
 {
-    if(gui->form_dragging)
-    {
-      // we end the form dragging
-      gui->form_dragging = FALSE;
-      return 1;
-    }
-    else if(gui->source_dragging)
-    {
-      // we end the form dragging
-      gui->source_dragging = FALSE;
+  if(gui->form_dragging)
+  {
+    // we end the form dragging
+    return 1;
+  }
+  else if(gui->source_dragging)
+  {
+    // select the source as default, if the mouse is not moved we are inside the
+    // source and so want to move the source.
+    gui->form_selected = TRUE;
+    gui->source_selected = TRUE;
+    gui->border_selected = FALSE;
 
-      // select the source as default, if the mouse is not moved we are inside the
-      // source and so want to move the source.
-      gui->form_selected = TRUE;
-      gui->source_selected = TRUE;
-      gui->border_selected = FALSE;
-
-      return 1;
-    }
+    return 1;
+  }
   return 0;
 }
 

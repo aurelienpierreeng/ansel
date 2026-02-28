@@ -367,6 +367,39 @@ void dt_masks_gui_cleanup(dt_develop_t *dev)
   dt_masks_set_visible_form(dev, NULL);
 }
 
+void dt_masks_gui_set_dragging(dt_masks_form_gui_t *gui)
+{
+  if(!gui) return;
+
+  if(gui->handle_selected >= 0) gui->handle_dragging = gui->handle_selected;
+  if(gui->handle_border_selected >= 0) gui->handle_border_dragging = gui->handle_border_selected;
+  if(gui->node_selected >= 0) gui->node_dragging = gui->node_selected;
+  if(gui->seg_selected >= 0) gui->seg_dragging = gui->seg_selected;
+  if(gui->source_selected)
+    gui->source_dragging = TRUE;
+  else if(gui->form_selected)
+    gui->form_dragging = TRUE;
+}
+
+void dt_masks_gui_reset_dragging(dt_masks_form_gui_t *gui)
+{
+  if(!gui) return;
+
+  gui->handle_dragging = -1;
+  gui->handle_border_dragging = -1;
+  gui->node_dragging = -1;
+  gui->seg_dragging = -1;
+  gui->form_dragging = FALSE;
+  gui->source_dragging = FALSE;
+}
+
+gboolean dt_masks_gui_is_dragging(const dt_masks_form_gui_t *gui)
+{
+  if(!gui) return FALSE;
+  return (gui->form_dragging || gui->source_dragging || gui->seg_dragging >= 0 || gui->node_dragging >= 0
+          || gui->handle_dragging >= 0 || gui->handle_border_dragging >= 0);
+}
+
 /**
  * @brief Return the group entry for a (parent, form) pair.
  *
@@ -1757,6 +1790,34 @@ static void _set_cursor_shape(dt_masks_form_gui_t *mask_gui)
     dt_control_set_cursor(GDK_FLEUR);
 }
 
+static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const int button, const uint32_t state)
+{
+  if(!mask_gui || mask_gui->creation || button != 1) return;
+
+  const gboolean has_hit = (mask_gui->node_hovered >= 0 || mask_gui->handle_selected >= 0
+                            || mask_gui->handle_border_selected >= 0 || mask_gui->seg_selected >= 0
+                            || mask_gui->form_selected || mask_gui->source_selected);
+  if(!has_hit)
+  {
+    mask_gui->node_selected = -1;
+    return;
+  }
+
+  if(mask_gui->node_hovered >= 0)
+    mask_gui->node_selected = mask_gui->node_hovered;
+  else if(mask_gui->handle_selected >= 0)
+    mask_gui->node_selected = mask_gui->handle_selected;
+  else if(mask_gui->handle_border_selected >= 0)
+    mask_gui->node_selected = mask_gui->handle_border_selected;
+  else
+    mask_gui->node_selected = -1;
+
+  if(mask_gui->form_rotating || mask_gui->border_toggling || mask_gui->gradient_toggling) return;
+  if(dt_modifier_is(state, GDK_CONTROL_MASK)) return;
+
+  dt_masks_gui_set_dragging(mask_gui);
+}
+
 int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double y, double pressure, int which)
 {
   // record mouse position even if there are no masks visible
@@ -1785,9 +1846,8 @@ int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double
   if(darktable.develop->darkroom_skip_mouse_events) return 0;
 
   int result = 0;
-  if(mask_form->functions)
-    result = mask_form->functions->mouse_moved(module, point_x, point_y, pressure, which,
-                                               mask_form, 0, mask_gui, 0);
+  result = mask_form->functions->mouse_moved(module, point_x, point_y, pressure, which,
+                                              mask_form, 0, mask_gui, 0);
 
   if(mask_gui)
   {
@@ -1810,9 +1870,8 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
   dt_dev_retrieve_full_pos(darktable.develop, x, y, &point_x, &point_y);
 
   int result = 0;
-  if(mask_form->functions)
-    result = mask_form->functions->button_released(module, point_x, point_y, button,
-                                                   state, mask_form, 0, mask_gui, 0);
+  result = mask_form->functions->button_released(module, point_x, point_y, button,
+                                                  state, mask_form, 0, mask_gui, 0);
 
   if(mask_form && (mask_form->type & DT_MASKS_GROUP) && mask_gui)
   {
@@ -1822,6 +1881,9 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
       dt_dev_masks_selection_change(darktable.develop, module,
                                     selected_group_entry->formid, FALSE);
   }
+
+  if(mask_gui && !mask_gui->creation && button == 1)
+    dt_masks_gui_reset_dragging(mask_gui);
 
   if(mask_gui)
   {
@@ -1848,10 +1910,11 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
   /*DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);*/
 
   gboolean return_val = FALSE;
-  if(mask_form->functions)
-    return_val = mask_form->functions->button_pressed(module, point_x, point_y, pressure,
-                                                      button, event_type, state,
-                                                      mask_form, 0, mask_gui, 0);
+  return_val = mask_form->functions->button_pressed(module, point_x, point_y, pressure,
+                                                    button, event_type, state,
+                                                    mask_form, 0, mask_gui, 0);
+
+  _apply_gui_button_pressed_state(mask_gui, button, state);
 
   if(button == 3 && !return_val)
   {
@@ -1876,8 +1939,7 @@ int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *eve
 
   gboolean return_value = FALSE;
 
-  if(mask_form->functions)
-    return_value = mask_form->functions->key_pressed(module, event, mask_form, 0, mask_gui, 0);
+  return_value = mask_form->functions->key_pressed(module, event, mask_form, 0, mask_gui, 0);
   
   if(!return_value)
   {

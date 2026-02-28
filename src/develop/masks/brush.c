@@ -1748,7 +1748,6 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float po
     if(mask_gui->source_selected && mask_gui->edit_mode == DT_MASKS_EDIT_FULL)
     {
       // we start the source dragging
-      mask_gui->source_dragging = TRUE;
       mask_gui->delta[0] = gui_points->source[2] - mask_gui->pos[0];
       mask_gui->delta[1] = gui_points->source[3] - mask_gui->pos[1];
       return 1;
@@ -1756,8 +1755,6 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float po
     else if(mask_gui->form_selected && mask_gui->edit_mode == DT_MASKS_EDIT_FULL)
     {
       // we start the form dragging
-      mask_gui->form_dragging = TRUE;
-      mask_gui->node_selected = -1;
       mask_gui->delta[0] = gui_points->points[2] - mask_gui->pos[0];
       mask_gui->delta[1] = gui_points->points[3] - mask_gui->pos[1];
       return 1;
@@ -1776,8 +1773,6 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float po
         mask_gui->scrollx = pointer_x;
         mask_gui->scrolly = pointer_y;
       }*/
-      mask_gui->node_selected = mask_gui->node_dragging = mask_gui->node_hovered;
-
       mask_gui->delta[0] = gui_points->points[mask_gui->node_hovered * 6 + 2] - mask_gui->pos[0];
       mask_gui->delta[1] = gui_points->points[mask_gui->node_hovered * 6 + 3] - mask_gui->pos[1];
 
@@ -1787,11 +1782,9 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float po
     {
       if(!dt_masks_node_is_cusp(gui_points, mask_gui->handle_selected))
       {
-        mask_gui->handle_dragging = mask_gui->handle_selected;
-      
         // we need to find the handle position
         float handle_x, handle_y;
-        const int k = mask_gui->handle_dragging;
+        const int k = mask_gui->handle_selected;
         _brush_ctrl2_to_handle(gui_points->points[k * 6 + 2], gui_points->points[k * 6 + 3],
                                gui_points->points[k * 6 + 4], gui_points->points[k * 6 + 5],
                                &handle_x, &handle_y, TRUE);
@@ -1804,10 +1797,8 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float po
     }
     else if(mask_gui->handle_border_selected >= 0)
     {
-      mask_gui->handle_border_dragging = mask_gui->handle_border_selected;
-
       float handle_x = NAN, handle_y = NAN;
-      if(_brush_get_border_handle_mirrored(gui_points, node_count, mask_gui->handle_border_dragging,
+      if(_brush_get_border_handle_mirrored(gui_points, node_count, mask_gui->handle_border_selected,
                                            &handle_x, &handle_y))
       {
         mask_gui->delta[0] = handle_x - mask_gui->pos[0];
@@ -1827,13 +1818,11 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, float po
       else
       {
         // we move the entire segment
-        mask_gui->seg_dragging = mask_gui->seg_selected;
         mask_gui->delta[0] = gui_points->points[mask_gui->seg_selected * 6 + 2] - mask_gui->pos[0];
         mask_gui->delta[1] = gui_points->points[mask_gui->seg_selected * 6 + 3] - mask_gui->pos[1];
       }
       return 1;
     }
-    mask_gui->node_selected = -1;
   }
 
   return 0;
@@ -2006,41 +1995,9 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, float p
 
   else if(which == 1)
   {
-    gboolean finalize = FALSE;
-    if(mask_gui->form_dragging)
-    {
-      // we end the form dragging
-      mask_gui->form_dragging = FALSE;
-      finalize = TRUE;
-    }
-    else if(mask_gui->source_dragging)
-    {
-      // we end the form dragging
-      mask_gui->source_dragging = FALSE;
-      finalize = TRUE;
-    }
-    else if(mask_gui->seg_dragging >= 0)
-    {
-      mask_gui->seg_dragging = -1;
-      finalize = TRUE;
-    }
-    else if(mask_gui->node_dragging >= 0)
-    {
-      mask_gui->node_dragging = -1;
-      finalize = TRUE;
-    }
-    else if(mask_gui->handle_dragging >= 0)
-    {
-      mask_gui->handle_dragging = -1;
-      finalize = TRUE;
-    }
-    else if(mask_gui->handle_border_dragging >= 0)
-    {
-      mask_gui->handle_border_dragging = -1;
-      finalize = TRUE;
-    }
+    const gboolean was_dragging = dt_masks_gui_is_dragging(mask_gui);
 
-    if(finalize)
+    if(was_dragging)
     {
       if(mask_gui->rebuild_pending)
       {

@@ -144,8 +144,8 @@ static gboolean _group_events_button_pressed(struct dt_iop_module_t *module, flo
     dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
     if(!fpt) return FALSE;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-    if(sel && sel->functions)
-    {
+    if(sel)
+    {      
       if(sel->functions->button_pressed(module, pzx, pzy, pressure, which, type, state, sel,
                                            fpt->parentid, gui, gui->group_selected))
         return TRUE;
@@ -175,7 +175,7 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
     dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
     if(!fpt) return 0;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-    if(sel && sel->functions)
+    if(sel)
       if(sel->functions->button_released(module, pzx, pzy, which, state, sel, fpt->parentid, gui,
                                              gui->group_selected))
         return 1;
