@@ -92,11 +92,10 @@ static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t
   // we check if it's inside borders
   if(dt_masks_point_in_form_exact(pt, 1, gpt->border, 1, gpt->border_count) < 0) return;
   *inside = 1;
-  *near = 0;
 
   // and we check if it's inside form
   if(dt_masks_point_in_form_exact(pt, 1, gpt->points, 1, gpt->points_count) < 0)
-    *inside_border = *near = 1;
+    *inside_border = 1;
 }
 
 /**

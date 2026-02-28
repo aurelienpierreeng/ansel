@@ -226,7 +226,6 @@ static void _ellipse_get_distance(float x, float y, float as, dt_masks_form_gui_
   // we check if it's inside borders
   if(dt_masks_point_in_form_exact(pt, 1, gpt->border, 10, gpt->border_count - 5) < 0) return;
   *inside = 1;
-  *near = 0;
 
   // and we check if it's inside form
   *inside_border = !_ellipse_point_close_to_path(x, y, as, gpt->points + 10, gpt->points_count - 5);

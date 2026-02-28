@@ -2091,28 +2091,6 @@ static void _dt_masks_find_best_attachment_point(const float ray_1[2], const flo
   }
 }
 
-/*static void dt_masks_get_shape_center_of_gravity(const float *points, const int points_nb, const int first_pt, float center[2])
-{
-  if(!points || points_nb <= 0)
-  {
-    center[0] = 0.0f;
-    center[1] = 0.0f;
-    return;
-  }
-
-  float sum_x = 0.0f;
-  float sum_y = 0.0f;
-
-  for(int i = first_pt; i < points_nb; i++)
-  {
-    sum_x += points[i * 2];
-    sum_y += points[i * 2 + 1];
-  }
-
-  center[0] = sum_x / points_nb;
-  center[1] = sum_y / points_nb;
-}*/
-
 void dt_masks_draw_source(cairo_t *cr, dt_masks_form_gui_t *mask_gui, const int form_index,
                           const int node_count, const float zoom_scale,
                           struct dt_masks_gui_center_point_t *center_point,
