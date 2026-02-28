@@ -387,7 +387,6 @@ typedef struct dt_develop_t
     int total, completed;
   } progress;
 
-  int mask_form_selected_id; // select a mask inside an iop
   gboolean darkroom_skip_mouse_events; // skip mouse events for masks
   gboolean mask_lock;
   gint drawing_timeout;

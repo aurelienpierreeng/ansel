@@ -344,9 +344,8 @@ dt_masks_form_group_t *dt_masks_form_group_from_parentid(int parent_id, int form
  * - dt_masks_form_get_selected_group() uses that index directly. It assumes the list
  *   is unchanged since the GUI selection was set.
  * - dt_masks_form_get_selected_group_live() resolves the selection more safely by:
- *   1) attempting the GUI index first,
- *   2) falling back to the global selected form id (develop->mask_form_selected_id),
- *   3) re-resolving through parentid/formid to refresh the pointer if needed.
+ *   1) attempting the GUI index,
+ *   2) re-resolving through parentid/formid to refresh the pointer if needed.
  *
  * Use dt_masks_form_get_selected_group() in tight GUI paths where the list is known
  * stable; use dt_masks_form_get_selected_group_live() when correctness matters across
@@ -365,15 +364,11 @@ dt_masks_form_group_t *dt_masks_form_get_selected_group(const dt_masks_form_t *m
 /**
  * @brief Resolve a "live" selected group entry, even if GUI selection is stale.
  *
- * Selection sources (in priority order):
- * 1) GUI index (mask_gui->group_selected) for the currently visible group.
- * 2) Global selected form id (develop->mask_form_selected_id) when the GUI index
- *    is unset (or when we need to re-resolve after list mutations).
+ * Selection source:
+ * - GUI index (mask_gui->group_selected) for the currently visible group.
  *
- * Why we need both:
- * - The GUI index is fast and local, but can be invalidated by GList mutations.
- * - The global selected form id is stable across list changes, but requires a
- *   lookup through parentid/formid to recover the current group entry pointer.
+ * If the GUI works on a temporary group copy, we re-resolve through parentid
+ * to get the live entry from dev->forms.
  */
 dt_masks_form_group_t *dt_masks_form_get_selected_group_live(const dt_masks_form_t *mask_form,
                                                              const dt_masks_form_gui_t *mask_gui)
@@ -383,9 +378,6 @@ dt_masks_form_group_t *dt_masks_form_get_selected_group_live(const dt_masks_form
   dt_masks_form_group_t *selected_group_entry = NULL;
   if(mask_gui->group_selected >= 0)
     selected_group_entry = dt_masks_form_get_selected_group(mask_form, mask_gui);
-  else if(mask_form->formid > 0 && darktable.develop->mask_form_selected_id > 0)
-    selected_group_entry = dt_masks_form_group_from_parentid(mask_form->formid,
-                                                             darktable.develop->mask_form_selected_id);
 
   if(!selected_group_entry) return NULL;
 
@@ -423,12 +415,20 @@ static gboolean _set_hinter_message(dt_masks_form_gui_t *mask_gui, const dt_mask
   int opacity_percent = 100;
 
   const dt_masks_form_t *selected_form = mask_form;
+  int selected_form_id = 0;
+  if(mask_form && (mask_form->type & DT_MASKS_GROUP))
+  {
+    const dt_masks_form_group_t *selected_group_entry
+        = dt_masks_form_get_selected_group_live(mask_form, mask_gui);
+    if(selected_group_entry) selected_form_id = selected_group_entry->formid;
+  }
+
   dt_print(DT_DEBUG_INPUT,
-           "[masks] hint begin: form=%p type=%d gui=%p group_selected=%d form_selected=%d node_hovered=%d seg_selected=%d mask_form_selected_id=%d\n",
+           "[masks] hint begin: form=%p type=%d gui=%p group_selected=%d form_selected=%d node_hovered=%d seg_selected=%d selected_formid=%d\n",
            (void *)mask_form, mask_form ? mask_form->type : -1, (void *)mask_gui,
            mask_gui->group_selected, mask_gui->form_selected,
            mask_gui->node_hovered, mask_gui->seg_selected,
-           darktable.develop ? darktable.develop->mask_form_selected_id : -2);
+           selected_form_id);
   if(form_type & DT_MASKS_GROUP)
   {
     // Resolve the selected form inside a group (if any).
@@ -1768,9 +1768,14 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
     result = mask_form->functions->button_released(module, point_x, point_y, button,
                                                    state, mask_form, 0, mask_gui, 0);
 
-  if(darktable.develop->mask_form_selected_id)
-    dt_dev_masks_selection_change(darktable.develop, module,
-                                  darktable.develop->mask_form_selected_id, FALSE);
+  if(mask_form && (mask_form->type & DT_MASKS_GROUP) && mask_gui)
+  {
+    const dt_masks_form_group_t *selected_group_entry
+        = dt_masks_form_get_selected_group_live(mask_form, mask_gui);
+    if(selected_group_entry)
+      dt_dev_masks_selection_change(darktable.develop, module,
+                                    selected_group_entry->formid, FALSE);
+  }
 
   if(mask_gui)
   {
@@ -3241,34 +3246,13 @@ int dt_masks_point_in_form_exact(const float *test_points, int test_point_count,
  */
 void dt_masks_select_form(struct dt_iop_module_t *module, dt_masks_form_t *selected_form)
 {
-  gboolean selection_changed = FALSE;
+  const int selected_formid = selected_form ? selected_form->formid : 0;
 
-  if(selected_form)
-  {
-    if(selected_form->formid != darktable.develop->mask_form_selected_id)
-    {
-      darktable.develop->mask_form_selected_id = selected_form->formid;
-      selection_changed = TRUE;
-    }
-  }
-  else
-  {
-    if(darktable.develop->mask_form_selected_id != 0)
-    {
-      darktable.develop->mask_form_selected_id = 0;
-      selection_changed = TRUE;
-    }
-  }
-  if(selection_changed)
-  {
-    if(!module && darktable.develop->mask_form_selected_id == 0)
-      module = darktable.develop->gui_module;
-    if(module)
-    {
-      if(module->masks_selection_changed)
-        module->masks_selection_changed(module, darktable.develop->mask_form_selected_id);
-    }
-  }
+  if(!module && selected_formid == 0)
+    module = darktable.develop->gui_module;
+
+  if(module && module->masks_selection_changed)
+    module->masks_selection_changed(module, selected_formid);
 }
 
 /**

@@ -70,11 +70,6 @@ static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form
   if(gui->group_hovered >= 0)
   {
     gui->group_selected = gui->group_hovered;
-
-    dt_masks_form_group_t *group_entry
-        = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
-    if(group_entry) dev->mask_form_selected_id = group_entry->formid;
-    
     return TRUE;
   }
 
@@ -84,7 +79,6 @@ static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form
   if(gui->group_selected >= 0)
   {
     dt_masks_soft_reset_form_gui(gui);
-    dev->mask_form_selected_id = -1;
   }
 
   // If we are not close to a node, test if we are within a shape now.
@@ -130,7 +124,6 @@ static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form
   if(sel)
   {
     gui->group_selected = sel_index;
-    dev->mask_form_selected_id = sel->formid;
     return TRUE;
   }  
 

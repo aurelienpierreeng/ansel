@@ -727,14 +727,9 @@ dt_masks_form_group_t *dt_masks_form_get_selected_group(const struct dt_masks_fo
  * @brief Return the currently selected group entry, resolving to the live form group when the GUI
  *        is operating on a temporary copy (for example the visible group created for editing).
  *
- * The selection is taken from `gui->group_selected` when available, otherwise it falls back to
- * `darktable.develop->mask_form_selected_id`. If the selected entry belongs to a temporary group
- * (non-zero parentid), the function resolves and returns the corresponding entry from the real
- * group in `dev->forms`.
- * 
- * @todo Resolve a unique reference to the group of interest upstream, so we don't
- * have to dance like that. It looks as if we can't manage what's going on in the 
- * flow...
+ * The selection is taken from `gui->group_selected`. If the selected entry belongs to a temporary
+ * group (non-zero parentid), the function resolves and returns the corresponding entry from the
+ * real group in `dev->forms`.
  */
 dt_masks_form_group_t *dt_masks_form_get_selected_group_live(const struct dt_masks_form_t *form,
                                                              const struct dt_masks_form_gui_t *gui);
