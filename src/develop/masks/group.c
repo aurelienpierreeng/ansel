@@ -64,69 +64,70 @@ static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form
   const float xx = (pzx * dev->roi.preview_width) / scale;
   const float yy = (pzy * dev->roi.preview_height) / scale;
 
+  // We compute the (expensive) nearest node in the mouse_moved event, so we already know what
+  // node is already close to our cursor, if any.
+  // In that case, the parent shape is inconditionnaly selected.
+  if(gui->group_hovered >= 0)
+  {
+    gui->group_selected = gui->group_hovered;
+
+    dt_masks_form_group_t *group_entry
+        = (dt_masks_form_group_t *)g_list_nth_data(form->points, gui->group_selected);
+    if(group_entry) dev->mask_form_selected_id = group_entry->formid;
+    
+    return TRUE;
+  }
+
+  // Reset selection
+  // If, at the next step, no shape is found under cursor,
+  // selection will stay unset, which enables the "click outside to deselect" behaviour
   if(gui->group_selected >= 0)
   {
-    // If a form is selected, keep it if the click is inside or within the safety margin.
-    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
-    dt_masks_form_t *sel = fpt ? dt_masks_get_from_id(dev, fpt->formid) : NULL;
-    if(sel && sel->functions && sel->functions->get_distance)
-    {
-      int inside = 0, inside_border = 0, near = -1, inside_source = 0;
-      float dist = FLT_MAX;
-      sel->functions->get_distance(xx, yy, as, gui, gui->group_selected, g_list_length(sel->points),
-                                   &inside, &inside_border, &near, &inside_source, &dist);
-      if(inside || inside_border || near >= 0 || inside_source || dist <= as)
-        return TRUE;
-    }
-
-    // Click is outside the selected form + margin: deselect.
     dt_masks_soft_reset_form_gui(gui);
     dev->mask_form_selected_id = -1;
   }
 
-  if(gui->group_selected < 0)
+  // If we are not close to a node, test if we are within a shape now.
+  dt_masks_form_t *sel = NULL;
+  int sel_index = -1;
+  float sel_dist = FLT_MAX;
+
+  int index = 0;
+  for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
   {
-    dt_masks_form_t *sel = NULL;
-    int sel_index = -1;
-    float sel_dist = FLT_MAX;
+    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
+    if(!fpt) { index++; continue; }
+    dt_masks_form_t *frm = dt_masks_get_from_id(dev, fpt->formid);
+    if(!frm) { index++; continue; }
 
-    int index = 0;
-    for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
+    int inside = 0, inside_border = 0, near = -1, inside_source = 0;
+    float dist = FLT_MAX;
+    if(frm->functions && frm->functions->get_distance)
+      frm->functions->get_distance(xx, yy, as, gui, index, g_list_length(frm->points),
+                                    &inside, &inside_border, &near, &inside_source, &dist);
+
+    if(inside || inside_border || near >= 0 || inside_source)
     {
-      dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
-      if(!fpt) { index++; continue; }
-      dt_masks_form_t *frm = dt_masks_get_from_id(dev, fpt->formid);
-      if(!frm) { index++; continue; }
+      const float dx = pzx - frm->gravity_center[0];
+      const float dy = pzy - frm->gravity_center[1];
+      const float center_dist = dx * dx + dy * dy;
 
-      int inside = 0, inside_border = 0, near = -1, inside_source = 0;
-      float dist = FLT_MAX;
-      if(frm->functions && frm->functions->get_distance)
-        frm->functions->get_distance(xx, yy, as, gui, index, g_list_length(frm->points),
-                                     &inside, &inside_border, &near, &inside_source, &dist);
-
-      if(inside || inside_border || near >= 0 || inside_source)
+      if(center_dist < sel_dist)
       {
-        const float dx = pzx - frm->gravity_center[0];
-        const float dy = pzy - frm->gravity_center[1];
-        const float center_dist = dx * dx + dy * dy;
-
-        if(center_dist < sel_dist)
-        {
-          sel = frm;
-          sel_dist = center_dist;
-          sel_index = index;
-        }
+        sel = frm;
+        sel_dist = center_dist;
+        sel_index = index;
       }
-      index++;
     }
-
-    if(sel && sel->functions)
-    {
-      gui->group_selected = sel_index;
-      dev->mask_form_selected_id = sel->formid;
-      return TRUE;
-    }
+    index++;
   }
+
+  if(sel)
+  {
+    gui->group_selected = sel_index;
+    dev->mask_form_selected_id = sel->formid;
+    return TRUE;
+  }  
 
   return gui->group_selected >= 0;
 }

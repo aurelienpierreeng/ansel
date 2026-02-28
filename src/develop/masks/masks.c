@@ -113,6 +113,7 @@ int dt_masks_find_closest_handle_common(float pointer_x, float pointer_y, dt_mas
   mask_gui->node_hovered = -1;
   mask_gui->seg_selected = -1;
   mask_gui->handle_border_selected = -1;
+  mask_gui->group_hovered = -1;
 
   const int node_count = (node_count_override >= 0) ? node_count_override
                                                     : (int)g_list_length(mask_form->points);
@@ -137,6 +138,7 @@ int dt_masks_find_closest_handle_common(float pointer_x, float pointer_y, dt_mas
        && dt_masks_point_is_within_radius(pointer_x, pointer_y, handle_x, handle_y, cursor_radius2))
     {
       mask_gui->handle_border_selected = selected_node;
+      mask_gui->group_hovered = form_index;
       return 1;
     }
 
@@ -147,6 +149,7 @@ int dt_masks_find_closest_handle_common(float pointer_x, float pointer_y, dt_mas
       if(dt_masks_point_is_within_radius(pointer_x, pointer_y, handle_x, handle_y, cursor_radius2))
       {
         mask_gui->handle_selected = selected_node;
+        mask_gui->group_hovered = form_index;
         return 1;
       }
     }
@@ -167,6 +170,7 @@ int dt_masks_find_closest_handle_common(float pointer_x, float pointer_y, dt_mas
        && dt_masks_point_is_within_radius(pointer_x, pointer_y, node_x, node_y, cursor_radius2))
     {
       mask_gui->node_hovered = selected_node;
+      mask_gui->group_hovered = form_index;
       return 1;
     }
   }
@@ -190,6 +194,7 @@ int dt_masks_find_closest_handle_common(float pointer_x, float pointer_y, dt_mas
          && dt_masks_point_is_within_radius(pointer_x, pointer_y, node_x, node_y, cursor_radius2))
       {
         mask_gui->node_hovered = node_index;
+        mask_gui->group_hovered = form_index;
         return 1;
       }
     }
@@ -301,6 +306,20 @@ static inline dt_masks_form_group_t *_masks_group_find_form(dt_masks_form_t *gro
     if(group_entry && group_entry->formid == form_id) return group_entry;
   }
   return NULL;
+}
+
+int dt_masks_group_index_from_formid(const dt_masks_form_t *group_form, int form_id)
+{
+  if(!group_form || !(group_form->type & DT_MASKS_GROUP)) return -1;
+
+  int index = 0;
+  for(const GList *group_node = group_form->points; group_node; group_node = g_list_next(group_node))
+  {
+    const dt_masks_form_group_t *group_entry = (const dt_masks_form_group_t *)group_node->data;
+    if(group_entry && group_entry->formid == form_id) return index;
+    index++;
+  }
+  return -1;
 }
 
 /**
@@ -471,7 +490,6 @@ void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *mask_gui)
   mask_gui->node_hovered = -1;
   mask_gui->seg_selected = -1;
   mask_gui->handle_border_selected = -1;
-  mask_gui->group_selected = -1;
   mask_gui->group_selected = -1;
   mask_gui->delta[0] = mask_gui->delta[1] = 0.0f;
   mask_gui->form_selected = mask_gui->border_selected = mask_gui->form_dragging = mask_gui->form_rotating = FALSE;

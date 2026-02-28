@@ -455,6 +455,7 @@ typedef struct dt_masks_form_gui_t
   int handle_border_dragging;
 
   int group_selected;
+  int group_hovered;
 
   // Throttle GUI rebuilds while dragging to avoid heavy border recomputation.
   double last_rebuild_ts;
@@ -718,6 +719,7 @@ float dt_masks_rotate_with_anchor(dt_develop_t *dev, const float anchor[2], cons
 
 /** Getters and setters for direct GUI interaction */
 dt_masks_form_group_t *dt_masks_form_group_from_parentid(int parentid, int formid);
+int dt_masks_group_index_from_formid(const dt_masks_form_t *group_form, int formid);
 dt_masks_form_group_t *dt_masks_form_get_selected_group(const struct dt_masks_form_t *form,
                                                         const struct dt_masks_form_gui_t *gui);
 /**
