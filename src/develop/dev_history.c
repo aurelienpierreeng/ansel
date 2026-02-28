@@ -891,7 +891,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 
   if(darktable.gui && dev->gui_attached)
   {
-    if(module->modify_roi_in || module->modify_roi_out)
+    if(module && (module->modify_roi_in || module->modify_roi_out))
       dt_dev_get_thumbnail_size(dev);
 
     if(redraw) dt_dev_process_all(dev);
