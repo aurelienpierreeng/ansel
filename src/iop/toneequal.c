@@ -110,6 +110,7 @@
 
 #include "bauhaus/bauhaus.h"
 #include "common/darktable.h"
+#include "develop/masks.h"
 #include "common/fast_guided_filter.h"
 #include "common/eigf.h"
 #include "common/interpolation.h"
@@ -561,7 +562,7 @@ void init_presets(dt_iop_module_so_t *self)
 static gboolean in_mask_editing(dt_iop_module_t *self)
 {
   const dt_develop_t *dev = self->dev;
-  return dev->form_gui && dev->form_visible;
+  return dev->form_gui && dt_masks_get_visible_form(dev);
 }
 
 static void hash_set_get(uint64_t *hash_in, uint64_t *hash_out, dt_pthread_mutex_t *lock)

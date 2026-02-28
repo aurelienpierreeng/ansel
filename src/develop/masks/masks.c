@@ -41,6 +41,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "develop/masks.h"
+#include "develop/develop.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
 #include "common/math.h"
@@ -320,6 +321,50 @@ int dt_masks_group_index_from_formid(const dt_masks_form_t *group_form, int form
     index++;
   }
   return -1;
+}
+
+/**
+ * @brief Return the currently visible form used by the masks GUI.
+ *
+ * This can be a temporary group copy used for editing, not necessarily a form
+ * stored in dev->forms.
+ */
+dt_masks_form_t *dt_masks_get_visible_form(const dt_develop_t *dev)
+{
+  if(!dev || !dev->form_gui) return NULL;
+  return dev->form_gui->form_visible;
+}
+
+void dt_masks_set_visible_form(dt_develop_t *dev, dt_masks_form_t *form)
+{
+  if(!dev || !dev->form_gui) return;
+  dev->form_gui->form_visible = form;
+}
+
+void dt_masks_gui_init(dt_develop_t *dev)
+{
+  if(!dev) return;
+
+  if(!dev->form_gui)
+  {
+    dev->form_gui = (dt_masks_form_gui_t *)calloc(1, sizeof(dt_masks_form_gui_t));
+    dt_masks_init_form_gui(dev->form_gui);
+  }
+
+  dt_masks_clear_form_gui(dev);
+  dt_masks_set_visible_form(dev, NULL);
+  dev->form_gui->pipe_hash = 0;
+  dev->form_gui->formid = 0;
+}
+
+void dt_masks_gui_cleanup(dt_develop_t *dev)
+{
+  if(!dev || !dev->form_gui) return;
+
+  dt_masks_clear_form_gui(dev);
+  free(dev->form_gui);
+  dev->form_gui = NULL;
+  dt_masks_set_visible_form(dev, NULL);
 }
 
 /**
@@ -630,20 +675,21 @@ static gboolean _masks_remove_shape(struct dt_iop_module_t *module, dt_masks_for
   if(parent_id <= 0) return 1;
 
   // we hide the form
-  if(!(darktable.develop->form_visible->type & DT_MASKS_GROUP))
+  dt_masks_form_t *visible_form = dt_masks_get_visible_form(darktable.develop);
+  if(!visible_form || !(visible_form->type & DT_MASKS_GROUP))
     dt_masks_change_form_gui(NULL);
-  else if(g_list_shorter_than(darktable.develop->form_visible->points, 2))
+  else if(g_list_shorter_than(visible_form->points, 2))
     dt_masks_change_form_gui(NULL);
   else
   {
     const int edit_mode = mask_gui->edit_mode;
     dt_masks_clear_form_gui(darktable.develop);
-    for(GList *forms = darktable.develop->form_visible->points; forms; forms = g_list_next(forms))
+    for(GList *forms = visible_form->points; forms; forms = g_list_next(forms))
     {
       dt_masks_form_group_t *group_entry = (dt_masks_form_group_t *)forms->data;
       if(group_entry->formid == mask_form->formid)
       {
-        darktable.develop->form_visible->points = g_list_remove(darktable.develop->form_visible->points, group_entry);
+        visible_form->points = g_list_remove(visible_form->points, group_entry);
         free(group_entry);
         break;
       }
@@ -1715,7 +1761,7 @@ int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double
 {
   // record mouse position even if there are no masks visible
   dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
-  dt_masks_form_t *mask_form = darktable.develop->form_visible;
+  dt_masks_form_t *mask_form = dt_masks_get_visible_form(darktable.develop);
   const float zoom_scale = darktable.develop->roi.natural_scale;
 
   float point_x = 0.0f;
@@ -1757,7 +1803,7 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
   // add an option to allow skip mouse events while editing masks
   if(darktable.develop->darkroom_skip_mouse_events) return 0;
 
-  dt_masks_form_t *mask_form = darktable.develop->form_visible;
+  dt_masks_form_t *mask_form = dt_masks_get_visible_form(darktable.develop);
   dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
   float point_x = 0.0f;
   float point_y = 0.0f;
@@ -1792,7 +1838,7 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
   // add an option to allow skip mouse events while editing masks
   if(darktable.develop->darkroom_skip_mouse_events) return 0;
 
-  dt_masks_form_t *mask_form = darktable.develop->form_visible;
+  dt_masks_form_t *mask_form = dt_masks_get_visible_form(darktable.develop);
   dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
   
   float point_x = 0.0f;
@@ -1823,7 +1869,7 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
 
 int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *event)
 {
-  dt_masks_form_t *mask_form = darktable.develop->form_visible;
+  dt_masks_form_t *mask_form = dt_masks_get_visible_form(darktable.develop);
   if(!mask_form) return 0;
   dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
   if(!mask_gui) return 0;
@@ -1867,7 +1913,7 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
   // add an option to allow skip mouse events while editing masks
   if(darktable.develop->darkroom_skip_mouse_events) return 0;
 
-  dt_masks_form_t *mask_form = darktable.develop->form_visible;
+  dt_masks_form_t *mask_form = dt_masks_get_visible_form(darktable.develop);
   dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
   float point_x = 0.0f;
   float point_y = 0.0f;
@@ -2175,7 +2221,7 @@ void dt_masks_events_post_expose(struct dt_iop_module_t *module, cairo_t *cr, in
 {
   dt_develop_t *develop = darktable.develop;
   if(!develop) return;
-  dt_masks_form_t *mask_form = develop->form_visible;
+  dt_masks_form_t *mask_form = dt_masks_get_visible_form(develop);
   dt_masks_form_gui_t *mask_gui = develop->form_gui;
   if(!mask_gui) return;
   if(!mask_form) return;
@@ -2282,7 +2328,7 @@ void dt_masks_clear_form_gui(dt_develop_t *develop)
 void dt_masks_change_form_gui(dt_masks_form_t *new_form)
 {
   dt_masks_clear_form_gui(darktable.develop);
-  darktable.develop->form_visible = new_form;
+  dt_masks_set_visible_form(darktable.develop, new_form);
 }
 
 void dt_masks_reset_form_gui(void)
@@ -3373,7 +3419,7 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *mask_gui, const fl
   {
     if(mask_gui->pos_source[0] == -1.0f && mask_gui->pos_source[1] == -1.0f)
     {
-      const dt_masks_form_t *visible_form = darktable.develop->form_visible;
+      const dt_masks_form_t *visible_form = dt_masks_get_visible_form(darktable.develop);
       if(visible_form && visible_form->functions && visible_form->functions->initial_source_pos)
       {
         visible_form->functions->initial_source_pos(raw_width, raw_height, &source_x, &source_y);

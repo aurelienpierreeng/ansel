@@ -142,7 +142,6 @@ void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
   dev->histogram_pre_tonecurve = NULL;
   dev->histogram_pre_levels = NULL;
   dev->forms = NULL;
-  dev->form_visible = NULL;
   dev->form_gui = NULL;
   dev->allforms = NULL;
 

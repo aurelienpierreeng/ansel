@@ -2395,9 +2395,10 @@ void dt_masks_iop_update(dt_iop_module_t *module)
   // update buttons status
   for(int n = 0; n < DEVELOP_MASKS_NB_SHAPES; n++)
   {
-    if(module->dev->form_gui && module->dev->form_visible && module->dev->form_gui->creation
+    dt_masks_form_t *visible_form = dt_masks_get_visible_form(module->dev);
+    if(module->dev->form_gui && visible_form && module->dev->form_gui->creation
        && module->dev->form_gui->creation_module == module
-       && (module->dev->form_visible->type & bd->masks_type[n]))
+       && (visible_form->type & bd->masks_type[n]))
     {
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_shapes[n]), TRUE);
     }

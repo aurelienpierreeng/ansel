@@ -568,7 +568,7 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
   // in creation mode
   if(gui->creation)
   {
-    dt_masks_form_t *form = darktable.develop->form_visible;
+    dt_masks_form_t *form = dt_masks_get_visible_form(darktable.develop);
     if(!form) return;
 
     // we get the default radius values

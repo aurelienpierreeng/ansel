@@ -626,7 +626,7 @@ void expose(
     const gboolean display_masks = (dev->gui_module && dev->gui_module->enabled)
                                  || dt_lib_gui_get_expanded(dt_lib_get_module("masks"));
 
-    if(dev->form_visible && display_masks)
+    if(dt_masks_get_visible_form(dev) && display_masks)
       dt_masks_events_post_expose(dev->gui_module, cri, width, height, pointerx, pointery);
       
     // module
@@ -1846,14 +1846,7 @@ void enter(dt_view_t *self)
   dev->exit = 0;
 
   // We need to init forms before we init module blending GUI
-  if(!dev->form_gui)
-  {
-    dev->form_gui = (dt_masks_form_gui_t *)calloc(1, sizeof(dt_masks_form_gui_t));
-    dt_masks_init_form_gui(dev->form_gui);
-  }
-  dt_masks_change_form_gui(NULL);
-  dev->form_gui->pipe_hash = 0;
-  dev->form_gui->formid = 0;
+  dt_masks_gui_init(dev);
   dev->gui_module = NULL;
 
   // Add IOP modules to the plugin list
@@ -2040,10 +2033,7 @@ void leave(dt_view_t *self)
   if(dev->form_gui)
   {
     dev->gui_module = NULL; // modules have already been free()
-    dt_masks_clear_form_gui(dev);
-    free(dev->form_gui);
-    dev->form_gui = NULL;
-    dt_masks_change_form_gui(NULL);
+    dt_masks_gui_cleanup(dev);
   }
 
   // clear masks
@@ -2089,7 +2079,7 @@ void mouse_leave(dt_view_t *self)
 
   // masks
   gboolean handled = FALSE;
-  if(dev->form_visible && dt_masks_events_mouse_leave(dev->gui_module))
+  if(dt_masks_get_visible_form(dev) && dt_masks_events_mouse_leave(dev->gui_module))
     handled = TRUE;
   // module
   else if(dev->gui_module && dev->gui_module->mouse_leave
@@ -2218,7 +2208,8 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   }
 
   // masks
-  else if(dev->form_visible && dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which))
+  else if(dt_masks_get_visible_form(dev)
+          && dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which))
   {
     _do_delayed_history_commit(dev);
     ret = TRUE;
@@ -2288,7 +2279,8 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
     return 1;
   }
   // masks
-  if(dev->form_visible && dt_masks_events_button_released(dev->gui_module, x, y, which, state))
+  if(dt_masks_get_visible_form(dev)
+     && dt_masks_events_button_released(dev->gui_module, x, y, which, state))
   {
     // Change on mask parameters and image output.
     _do_delayed_history_commit(dev);
@@ -2427,7 +2419,8 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   }
 
   // masks
-  if(dev->form_visible && dt_masks_events_button_pressed(dev->gui_module, x, y, pressure, which, type, state))
+  if(dt_masks_get_visible_form(dev)
+     && dt_masks_events_button_pressed(dev->gui_module, x, y, pressure, which, type, state))
   {
     _do_delayed_history_commit(dev);
     return 1;
@@ -2522,7 +2515,8 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
            up, x, y, state, delta_y);
 
   // masks
-  if(dev->form_visible && dt_masks_events_mouse_scrolled(dev->gui_module, x, y, up, state, delta_y))
+  if(dt_masks_get_visible_form(dev)
+     && dt_masks_events_mouse_scrolled(dev->gui_module, x, y, up, state, delta_y))
   {
     // Scroll on masks changes their size, therefore mask parameters and image output.
     _do_delayed_history_commit(dev);
@@ -2555,7 +2549,7 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
   dt_develop_t *dev = (dt_develop_t *)self->data;
   const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
 
-  if(dev->form_visible && dt_masks_events_key_pressed(dev->gui_module, event))
+  if(dt_masks_get_visible_form(dev) && dt_masks_events_key_pressed(dev->gui_module, event))
   {
     _do_delayed_history_commit(dev);
     return 1;

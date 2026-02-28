@@ -2360,8 +2360,8 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   if(mask_gui->creation)
   {
     // draw a cross where the source will be created
-    if(darktable.develop->form_visible
-     && (darktable.develop->form_visible->type & DT_MASKS_CLONE))
+    dt_masks_form_t *visible_form = dt_masks_get_visible_form(darktable.develop);
+    if(visible_form && (visible_form->type & DT_MASKS_CLONE))
     {
 
       float node_posx = node_count ? gui_points->points[2] : mask_gui->pos[0];
@@ -2377,7 +2377,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   else if((mask_gui->type & DT_MASKS_IS_RETOUCHE) != 0 || mask_gui->node_selected >= 0
           || mask_gui->node_dragging >= 0 || mask_gui->handle_selected >= 0)
   {
-    dt_masks_form_t *group_form = darktable.develop->form_visible ? darktable.develop->form_visible : NULL;
+    dt_masks_form_t *group_form = dt_masks_get_visible_form(darktable.develop);
     if(!group_form) return;
     dt_masks_form_group_t *group_entry = g_list_nth_data(group_form->points, form_index);
     if(!group_entry) return;
@@ -3691,7 +3691,7 @@ static void _polygon_creation_closing_form_callback(GtkWidget *widget, gpointer 
 {
   dt_masks_form_gui_t *mask_gui = (dt_masks_form_gui_t *)user_data;
   // This is a temp form on creation mode
-  dt_masks_form_t *mask_form = darktable.develop->form_visible;
+  dt_masks_form_t *mask_form = dt_masks_get_visible_form(darktable.develop);
   if(!mask_form) return;
 
   _polygon_creation_closing_form(mask_form, mask_gui);
@@ -3729,7 +3729,7 @@ static void _polygon_add_node_callback(GtkWidget *menu, gpointer user_data)
 {
   dt_masks_form_gui_t *mask_gui = (dt_masks_form_gui_t *)user_data;
   if(!mask_gui) return;
-  dt_masks_form_t *visible_forms = darktable.develop->form_visible;
+  dt_masks_form_t *visible_forms = dt_masks_get_visible_form(darktable.develop);
   if(!visible_forms) return;
 
   dt_iop_module_t *module = darktable.develop->gui_module;

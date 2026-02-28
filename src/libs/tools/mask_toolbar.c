@@ -116,9 +116,9 @@ static void _set_opacity_slider(dt_lib_tool_mask_t *d, dt_masks_form_t *sel, dt_
 
 static void give_control_to_form(gpointer instance, void *_s, void *_t, dt_lib_tool_mask_t *d)
 {
-  dt_masks_form_t *form = darktable.develop->form_visible;
+  dt_masks_form_t *form = dt_masks_get_visible_form(darktable.develop);
   dt_masks_form_gui_t *gui = darktable.develop->form_gui;
-  if(!darktable.develop->form_gui) return;
+  if(!darktable.develop->form_gui || !form) return;
 
   // we try to get the selected form among what we can find
   int group = gui->group_selected;

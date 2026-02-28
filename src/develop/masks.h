@@ -286,6 +286,9 @@ typedef struct dt_masks_form_group_t
   float opacity;
 } dt_masks_form_group_t;
 
+struct dt_masks_form_t;
+struct dt_masks_form_gui_t;
+struct dt_develop_t;
 
 /*
 * Type of user interaction to map with internal properties of masks.
@@ -413,6 +416,8 @@ typedef struct dt_masks_dynbuf_t
 typedef struct dt_masks_form_gui_t
 {
   dt_masks_type_t type;
+  // currently visible form when editing masks (GUI-only; may be a temporary copy)
+  dt_masks_form_t *form_visible;
   // points used to draw the form
   GList *points; // list of dt_masks_form_gui_points_t 
 
@@ -476,6 +481,11 @@ typedef struct dt_masks_form_gui_t
   int formid;
   uint64_t pipe_hash;
 } dt_masks_form_gui_t;
+
+dt_masks_form_t *dt_masks_get_visible_form(const struct dt_develop_t *dev);
+void dt_masks_set_visible_form(struct dt_develop_t *dev, dt_masks_form_t *form);
+void dt_masks_gui_init(struct dt_develop_t *dev);
+void dt_masks_gui_cleanup(struct dt_develop_t *dev);
 
 static inline gboolean dt_masks_gui_should_hit_test(dt_masks_form_gui_t *gui, const dt_develop_t *dev,
                                                     const float pzx, const float pzy)

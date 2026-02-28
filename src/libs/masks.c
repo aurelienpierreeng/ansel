@@ -1732,7 +1732,7 @@ static void _lib_masks_handler_callback(gpointer instance, const int formid, con
   else if(event == DT_MASKS_EVENT_ADD)
   {
     _lib_masks_recreate_list(self);
-    darktable.develop->form_visible = dt_masks_get_from_id(darktable.develop, parentid);
+    dt_masks_set_visible_form(darktable.develop, dt_masks_get_from_id(darktable.develop, parentid));
   }
 
   dt_control_queue_redraw_center();

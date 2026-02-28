@@ -391,7 +391,7 @@ static int rt_get_selected_shape_id(const dt_iop_module_t *self)
   if(!self || !self->dev) return 0;
 
   const dt_masks_form_gui_t *gui = self->dev->form_gui;
-  const dt_masks_form_t *visible_form = self->dev->form_visible;
+  const dt_masks_form_t *visible_form = dt_masks_get_visible_form(self->dev);
   if(!gui || !visible_form || !(visible_form->type & DT_MASKS_GROUP)) return 0;
 
   const dt_masks_form_group_t *selected_group_entry
@@ -979,12 +979,12 @@ static int rt_shape_is_being_added(dt_iop_module_t *self, const int shape_type)
 {
   int being_added = 0;
 
-  if(self->dev->form_gui && self->dev->form_visible
+  if(self->dev->form_gui && dt_masks_get_visible_form(self->dev)
      && (self->dev->form_gui->creation && self->dev->form_gui->creation_module == self))
   {
-    if(self->dev->form_visible->type & DT_MASKS_GROUP)
+    if(dt_masks_get_visible_form(self->dev)->type & DT_MASKS_GROUP)
     {
-      GList *forms = self->dev->form_visible->points;
+      GList *forms = dt_masks_get_visible_form(self->dev)->points;
       if(!forms) goto end;
       
       dt_masks_form_group_t *grpt = (dt_masks_form_group_t *)forms->data;
@@ -994,7 +994,7 @@ static int rt_shape_is_being_added(dt_iop_module_t *self, const int shape_type)
       if(form) being_added = (form->type & shape_type);
     }
     else
-      being_added = (self->dev->form_visible->type & shape_type);
+      being_added = (dt_masks_get_visible_form(self->dev)->type & shape_type);
   }
 
   end:

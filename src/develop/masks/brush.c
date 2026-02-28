@@ -1965,7 +1965,7 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, float p
 
       if(mask_form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
       {
-        dt_masks_form_t *grp = darktable.develop->form_visible;
+        dt_masks_form_t *grp = dt_masks_get_visible_form(darktable.develop);
         if(!grp || !(grp->type & DT_MASKS_GROUP)) return 1;
         int group_index = 0;
         int selected_index = -1;
@@ -2467,7 +2467,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
 
     if(mask_gui->guipoints_count == 0)
     {
-      dt_masks_form_t *mask_form = darktable.develop->form_visible;
+      dt_masks_form_t *mask_form = dt_masks_get_visible_form(darktable.develop);
       if(!mask_form) return;
 
       const float masks_border = dt_masks_get_set_conf_value(mask_form, "border", 1.0f, BORDER_MIN, BORDER_MAX,
@@ -2617,7 +2617,8 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
                 2.0 * M_PI);
       cairo_stroke(cr);
 
-      if(darktable.develop->form_visible && (darktable.develop->form_visible->type & DT_MASKS_CLONE))
+      dt_masks_form_t *visible_form = dt_masks_get_visible_form(darktable.develop);
+      if(visible_form && (visible_form->type & DT_MASKS_CLONE))
       {
         const int i = mask_gui->guipoints_count - 1;
         float x = 0.0f, y = 0.0f;
@@ -3301,7 +3302,7 @@ static void _brush_add_node_callback(GtkWidget *menu, gpointer user_data)
 {
   dt_masks_form_gui_t *mask_gui = (dt_masks_form_gui_t *)user_data;
   if(!mask_gui) return;
-  dt_masks_form_t *visible_forms = darktable.develop->form_visible;
+  dt_masks_form_t *visible_forms = dt_masks_get_visible_form(darktable.develop);
   if(!visible_forms) return;
 
   dt_iop_module_t *module = darktable.develop->gui_module;

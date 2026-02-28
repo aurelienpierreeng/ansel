@@ -1009,7 +1009,7 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
   // preview gradient creation
   if(gui->creation)
   {
-    dt_masks_form_t *form = darktable.develop->form_visible;
+    dt_masks_form_t *form = dt_masks_get_visible_form(darktable.develop);
     if(!form) return;
 
     float rotation = 0.0f;
