@@ -308,7 +308,6 @@ static int _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixel
   // we create a new buffer
   const int wt = piece->iwidth;
   const int ht = piece->iheight;
-  const size_t npixels = (size_t)wt * ht;
   float *buf = dt_pixelpipe_cache_alloc_align_float_cache((size_t)ht * wt, 0);
   if(buf == NULL) return 1;
 
@@ -322,7 +321,7 @@ static int _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixel
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(buf, wt, ht, posy_) \
-  schedule(static) if(npixels > 50000)
+  schedule(static) if(wt * ht > 50000)
 #endif
   for(int yy = 0; yy < MIN(posy_, ht); yy++)
   {
@@ -333,7 +332,7 @@ static int _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixel
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(buf, wt, ht, posy_, posx_, width_, height_, src) \
-  schedule(static) if(npixels > 50000)
+  schedule(static) if(wt * ht > 50000)
 #endif
   for(int yy = MAX(posy_, 0); yy < MIN(ht, posy_ + height_); yy++)
   {
@@ -350,7 +349,7 @@ static int _inverse_mask(const dt_iop_module_t *const module, const dt_dev_pixel
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(buf, wt, ht, posy_, height_) \
-  schedule(static) if(npixels > 50000)
+  schedule(static) if(wt * ht > 50000)
 #endif
   for(int yy = MAX(posy_ + height_, 0); yy < ht; yy++)
   {
