@@ -459,6 +459,9 @@ typedef struct dt_masks_form_gui_t
   float last_rebuild_pos[2];
   gboolean rebuild_pending;
 
+  // Throttle handle hit-testing when cursor barely moves.
+  float last_hit_test_pos[2];
+
   gboolean creation;
   gboolean creation_closing_form;
   dt_iop_module_t *creation_module;
@@ -469,6 +472,24 @@ typedef struct dt_masks_form_gui_t
   int formid;
   uint64_t pipe_hash;
 } dt_masks_form_gui_t;
+
+static inline gboolean dt_masks_gui_should_hit_test(dt_masks_form_gui_t *gui, const dt_develop_t *dev,
+                                                    const float pzx, const float pzy)
+{
+  if(!gui || !dev) return TRUE;
+  const float hit_thresh = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED * 0.5f;
+  const float bx = pzx * dev->roi.preview_width / dev->roi.natural_scale;
+  const float by = pzy * dev->roi.preview_height / dev->roi.natural_scale;
+  const float dx = bx - gui->last_hit_test_pos[0];
+  const float dy = by - gui->last_hit_test_pos[1];
+  if(gui->last_hit_test_pos[0] < 0.0f || (dx * dx + dy * dy) > (hit_thresh * hit_thresh))
+  {
+    gui->last_hit_test_pos[0] = bx;
+    gui->last_hit_test_pos[1] = by;
+    return TRUE;
+  }
+  return FALSE;
+}
 
 typedef struct dt_masks_gui_center_point_t
 {

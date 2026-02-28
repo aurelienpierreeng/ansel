@@ -218,6 +218,7 @@ void dt_masks_init_form_gui(dt_masks_form_gui_t *gui)
   gui->last_rebuild_ts = 0.0;
   gui->last_rebuild_pos[0] = gui->last_rebuild_pos[1] = 0.0f;
   gui->rebuild_pending = FALSE;
+  gui->last_hit_test_pos[0] = gui->last_hit_test_pos[1] = -1.0f;
 }
 
 void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *gui)
@@ -238,6 +239,7 @@ void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *gui)
   gui->last_rebuild_ts = 0.0;
   gui->last_rebuild_pos[0] = gui->last_rebuild_pos[1] = 0.0f;
   gui->rebuild_pending = FALSE;
+  gui->last_hit_test_pos[0] = gui->last_hit_test_pos[1] = -1.0f;
 }
 
 void dt_masks_gui_form_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index, dt_iop_module_t *module)
@@ -1945,6 +1947,7 @@ void dt_masks_clear_form_gui(dt_develop_t *dev)
   dev->form_gui->last_rebuild_ts = 0.0;
   dev->form_gui->last_rebuild_pos[0] = dev->form_gui->last_rebuild_pos[1] = 0.0f;
   dev->form_gui->rebuild_pending = FALSE;
+  dev->form_gui->last_hit_test_pos[0] = dev->form_gui->last_hit_test_pos[1] = -1.0f;
   // allow to select a shape inside an iop
   dt_masks_select_form(NULL, NULL);
 }

@@ -2278,7 +2278,10 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     return 1;
   }
 
-  if(_find_closest_handle(module, pzx, pzy, form, parentid, gui, index)) return 1;
+  if(dt_masks_gui_should_hit_test(gui, dev, pzx, pzy))
+  {
+    if(_find_closest_handle(module, pzx, pzy, form, parentid, gui, index)) return 1;
+  }
   if(gui->edit_mode != DT_MASKS_EDIT_FULL) return 0;
   return 1;
 }

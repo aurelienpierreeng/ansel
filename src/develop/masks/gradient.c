@@ -681,7 +681,11 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, float pz
     return 1;
   }
 
-  if(_find_closest_handle(module, pzx, pzy, form, parentid, gui, index)) return 1;
+  const dt_develop_t *const dev = darktable.develop;
+  if(dt_masks_gui_should_hit_test(gui, dev, pzx, pzy))
+  {
+    if(_find_closest_handle(module, pzx, pzy, form, parentid, gui, index)) return 1;
+  }
   if(gui->edit_mode != DT_MASKS_EDIT_FULL) return 0;
   return 1;
 }
