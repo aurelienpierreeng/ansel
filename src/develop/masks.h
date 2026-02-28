@@ -454,6 +454,10 @@ typedef struct dt_masks_form_gui_t
 
   int group_selected;
 
+  // Throttle GUI rebuilds while dragging to avoid heavy border recomputation.
+  double last_rebuild_ts;
+  float last_rebuild_pos[2];
+  gboolean rebuild_pending;
 
   gboolean creation;
   gboolean creation_closing_form;
@@ -619,6 +623,8 @@ int dt_masks_events_mouse_enter(struct dt_iop_module_t *module);
 /** functions used to manipulate gui data */
 void dt_masks_gui_form_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index,
                               struct dt_iop_module_t *module);
+gboolean dt_masks_gui_form_create_throttled(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index,
+                                            struct dt_iop_module_t *module, float pzx, float pzy);
 
 /**
  * @brief Delete a mask shape or node form from the GUI.
@@ -905,6 +911,9 @@ static inline gboolean dt_masks_center_of_gravity_from_points(const float *point
     return FALSE;
   }
 
+  double start = 0.;
+  if(darktable.unmuted & DT_DEBUG_PERF) start = dt_get_wtime();
+
   // Points must be ordered sequentially along the polygon boundary.
   // Use the shoelace formula to compute area and centroid.
   if(points_count >= 3)
@@ -947,6 +956,11 @@ static inline gboolean dt_masks_center_of_gravity_from_points(const float *point
     sum_x += points[i * 2] * inv_count;
     sum_y += points[i * 2 + 1] * inv_count;
   }
+
+  if(darktable.unmuted & DT_DEBUG_PERF)
+    dt_print(DT_DEBUG_MASKS, "[masks] computing centroid took %0.04f sec\n",
+             dt_get_wtime() - start);
+
 
   center[0] = sum_x;
   center[1] = sum_y;

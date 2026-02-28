@@ -1827,36 +1827,56 @@ static int _polygon_events_button_released(struct dt_iop_module_t *module, float
 
   if(which == 1)
   {
+    gboolean finalize = FALSE;
     if(gui->form_dragging)
     {
       // we end the form dragging
       gui->form_dragging = FALSE;
-      return 1;
+      finalize = TRUE;
     }
     else if(gui->source_dragging)
     {
       // we end the form dragging
       gui->source_dragging = FALSE;
-      return 1;
+      finalize = TRUE;
     }
     else if(gui->seg_dragging >= 0)
     {
       gui->seg_dragging = -1;
-      return 1;
+      finalize = TRUE;
     }
     else if(gui->node_dragging >= 0)
     {
       gui->node_dragging = -1;
-      return 1;
+      finalize = TRUE;
     }
     else if(gui->handle_dragging >= 0)
     {
       gui->handle_dragging = -1;
-      return 1;
+      finalize = TRUE;
     }
     else if(gui->handle_border_dragging >= 0)
     {
       gui->handle_border_dragging = -1;
+      finalize = TRUE;
+    }
+
+    if(finalize)
+    {
+      if(gui->rebuild_pending)
+      {
+        dt_masks_gui_form_create(form, gui, index, module);
+        dt_develop_t *const dev = darktable.develop;
+        if(dev)
+        {
+          const float wd = dev->roi.preview_width / dev->roi.natural_scale;
+          const float ht = dev->roi.preview_height / dev->roi.natural_scale;
+          gui->last_rebuild_ts = dt_get_wtime();
+          gui->last_rebuild_pos[0] = pzx * wd;
+          gui->last_rebuild_pos[1] = pzy * ht;
+        }
+        gui->rebuild_pending = FALSE;
+      }
       return 1;
     }
   }
@@ -1960,8 +1980,8 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     if(gui->creation) _polygon_init_ctrl_points(form);
 
     // we recreate the form points
-    dt_masks_gui_form_create(form, gui, index, module);
-    gpt->clockwise = _polygon_is_clockwise(form);
+    if(dt_masks_gui_form_create_throttled(form, gui, index, module, pzx, pzy))
+      gpt->clockwise = _polygon_is_clockwise(form);
 
     return 1;
   }
@@ -2012,7 +2032,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     next_point->ctrl2[1]  += dy;
 
     // we recreate the form points
-    dt_masks_gui_form_create(form, gui, index, module);
+    dt_masks_gui_form_create_throttled(form, gui, index, module, pzx, pzy);
     gpt->clockwise = _polygon_is_clockwise(form);
 
     return 1;
@@ -2047,7 +2067,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
 
     _polygon_init_ctrl_points(form);
     // we recreate the form points
-    dt_masks_gui_form_create(form, gui, index, module);
+    dt_masks_gui_form_create_throttled(form, gui, index, module, pzx, pzy);
 
     return 1;
   }
@@ -2105,7 +2125,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, float pzx
     node->border[0] = node->border[1] = border;
 
     // we recreate the form points
-    dt_masks_gui_form_create(form, gui, index, module);
+    dt_masks_gui_form_create_throttled(form, gui, index, module, pzx, pzy);
 
     return 1;
   }

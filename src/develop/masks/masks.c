@@ -215,6 +215,9 @@ void dt_masks_init_form_gui(dt_masks_form_gui_t *gui)
   gui->pos_source[0] = gui->pos_source[1] = -1.0f;
   gui->source_pos_type = DT_MASKS_SOURCE_POS_RELATIVE_TEMP;
   gui->form_selected = FALSE;
+  gui->last_rebuild_ts = 0.0;
+  gui->last_rebuild_pos[0] = gui->last_rebuild_pos[1] = 0.0f;
+  gui->rebuild_pending = FALSE;
 }
 
 void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *gui)
@@ -232,6 +235,9 @@ void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *gui)
   gui->pivot_selected = FALSE;
   gui->handle_border_selected = gui->seg_selected = gui->node_hovered = gui->handle_selected = -1;
   gui->handle_border_dragging = gui->seg_dragging = gui->handle_dragging = gui->node_dragging = -1;
+  gui->last_rebuild_ts = 0.0;
+  gui->last_rebuild_pos[0] = gui->last_rebuild_pos[1] = 0.0f;
+  gui->rebuild_pending = FALSE;
 }
 
 void dt_masks_gui_form_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index, dt_iop_module_t *module)
@@ -264,6 +270,48 @@ void dt_masks_gui_form_create(dt_masks_form_t *form, dt_masks_form_gui_t *gui, i
   }
 
   dt_masks_form_update_gravity_center(form);
+}
+
+gboolean dt_masks_gui_form_create_throttled(dt_masks_form_t *form, dt_masks_form_gui_t *gui, int index,
+                                            dt_iop_module_t *module, float pzx, float pzy)
+{
+  if(!form || !gui) return FALSE;
+
+  dt_develop_t *const dev = darktable.develop;
+  if(!dev)
+  {
+    dt_masks_gui_form_create(form, gui, index, module);
+    return TRUE;
+  }
+
+  const float wd = dev->roi.preview_width / dev->roi.natural_scale;
+  const float ht = dev->roi.preview_height / dev->roi.natural_scale;
+  const float px = pzx * wd;
+  const float py = pzy * ht;
+
+  const double now = dt_get_wtime();
+  const double min_dt = 1.0 / 60.0;
+  const float min_dist2 = 4.0f;
+  const gboolean force_rebuild = (dev->preview_pipe && gui->pipe_hash != dev->preview_pipe->backbuf.hash);
+
+  if(!force_rebuild && gui->last_rebuild_ts > 0.0)
+  {
+    const double dt = now - gui->last_rebuild_ts;
+    const float dx = px - gui->last_rebuild_pos[0];
+    const float dy = py - gui->last_rebuild_pos[1];
+    if(dt < min_dt && (dx * dx + dy * dy) < min_dist2)
+    {
+      gui->rebuild_pending = TRUE;
+      return FALSE;
+    }
+  }
+
+  dt_masks_gui_form_create(form, gui, index, module);
+  gui->last_rebuild_ts = now;
+  gui->last_rebuild_pos[0] = px;
+  gui->last_rebuild_pos[1] = py;
+  gui->rebuild_pending = FALSE;
+  return TRUE;
 }
 
 void dt_masks_form_gui_points_free(gpointer data)
@@ -1894,6 +1942,9 @@ void dt_masks_clear_form_gui(dt_develop_t *dev)
   dev->form_gui->group_selected = -1;
   dev->form_gui->group_selected = -1;
   dev->form_gui->edit_mode = DT_MASKS_EDIT_OFF;
+  dev->form_gui->last_rebuild_ts = 0.0;
+  dev->form_gui->last_rebuild_pos[0] = dev->form_gui->last_rebuild_pos[1] = 0.0f;
+  dev->form_gui->rebuild_pending = FALSE;
   // allow to select a shape inside an iop
   dt_masks_select_form(NULL, NULL);
 }
