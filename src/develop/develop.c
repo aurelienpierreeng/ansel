@@ -1484,16 +1484,12 @@ gboolean dt_dev_roi_delta_to_input_space(dt_develop_t *dev, const float delta[2]
 
 void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
 {
-  const int radius = DT_PIXEL_APPLY_DPI(10.0f);
+  const float radius = DT_PIXEL_APPLY_DPI(10.0f);
   float zoom_level = dt_dev_get_zoom_level(dev);
-  
-  // TODO: this should not be necessary if there is a way to execute this function
-  // after dev->roi.natural_scale is properly initialized the first time we enter the darkroom.
-  // If dev->roi.natural_scale is not ready, fallback to a generic value
-  if(zoom_level == -1.f) zoom_level = 0.1f;
 
-  darktable.gui->mouse.effect_radius = radius * zoom_level;
-  darktable.gui->mouse.effect_radius_scaled = 8.f * darktable.gui->ppd;
+  // Constant device-pixel safety margin for mask selection, independent of zoom and PPD.
+  darktable.gui->mouse.effect_radius = radius;
+  darktable.gui->mouse.effect_radius_scaled = radius * darktable.gui->ppd;
 
   dt_print(DT_DEBUG_MASKS,
            "[mouse] effect_radius=%0.2f effect_radius_scaled=%0.2f zoom_level=%0.4f ppd=%0.4f\n",

@@ -626,6 +626,15 @@ static inline void dt_draw_node(cairo_t *cr, const gboolean square, const gboole
   dt_draw_set_color_overlay(cr, FALSE, 0.8);
   cairo_stroke(cr);
 
+  if(darktable.unmuted & DT_DEBUG_MASKS)
+  {
+    const float debug_radius = darktable.gui->mouse.effect_radius_scaled / zoom_scale;
+    cairo_arc(cr, x, y, debug_radius, 0.0, 2.0 * M_PI);
+    cairo_set_line_width(cr, DT_DRAW_SIZE_LINE / zoom_scale);
+    dt_draw_set_color_overlay(cr, TRUE, 0.35f);
+    cairo_stroke(cr);
+  }
+
   cairo_restore(cr);
 }
 
