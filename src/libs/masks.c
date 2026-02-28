@@ -290,7 +290,6 @@ static void _tree_group(GtkButton *button, dt_lib_module_t *self)
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
   GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(lm->treeview));
 
-  int pos = 0;
   GList *items = gtk_tree_selection_get_selected_rows(selection, NULL);
   for(GList *items_iter = items; items_iter; items_iter = g_list_next(items_iter))
   {
@@ -309,7 +308,6 @@ static void _tree_group(GtkButton *button, dt_lib_module_t *self)
         fpt->opacity = 1.0f;
         fpt->state = DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION;
         grp->points = g_list_append(grp->points, fpt);
-        pos++;
       }
     }
   }
