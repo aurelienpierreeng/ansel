@@ -270,7 +270,6 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, float p
   if(!form) return 0;
   _find_closest_handle(module, pzx, pzy, form, parentid, gui, index);
 
-
   if(which == 1)
   {
     if(gui->creation)
@@ -358,12 +357,6 @@ static int _circle_events_button_released(struct dt_iop_module_t *module, float 
   }
   else if(gui->source_dragging)
   {
-    // select the source as default, if the mouse is not moved we are inside the
-    // source and so want to move the source.
-    gui->form_selected = TRUE;
-    gui->source_selected = TRUE;
-    gui->border_selected = FALSE;
-
     return 1;
   }
   return 0;

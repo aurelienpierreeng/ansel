@@ -806,12 +806,6 @@ static int _ellipse_events_button_released(struct dt_iop_module_t *module, float
   }
   else if(gui->source_dragging)
   {
-    // and select the source as default, if the mouse is not moved we are inside the
-    // source and so want to move the source.
-    gui->form_selected = TRUE;
-    gui->source_selected = TRUE;
-    gui->border_selected = FALSE;
-
     return 1;
   }
   return 0;
