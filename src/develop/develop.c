@@ -1484,10 +1484,11 @@ gboolean dt_dev_roi_delta_to_input_space(dt_develop_t *dev, const float delta[2]
 
 void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
 {
-  const float radius = DT_PIXEL_APPLY_DPI(10.0f);
   float zoom_level = dt_dev_get_zoom_level(dev);
+  if(zoom_level <= 0.f) zoom_level = 1.0f;
 
-  // Constant device-pixel safety margin for mask selection, independent of zoom and PPD.
+  // Constant 10 device-pixel safety margin for mask selection, independent of zoom and PPD.
+  const float radius = DT_PIXEL_APPLY_DPI(10.0f) / zoom_level;
   darktable.gui->mouse.effect_radius = radius;
   darktable.gui->mouse.effect_radius_scaled = radius * darktable.gui->ppd;
 
