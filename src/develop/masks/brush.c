@@ -1118,6 +1118,13 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
   if(!gui_points) return;
 
+  float inv_width = 1.0f;
+  float inv_height = 1.0f;
+  dt_masks_get_distance_normalization(&inv_width, &inv_height);
+
+  float min_dist_pixel = FLT_MAX;
+  float min_dist_norm = FLT_MAX;
+
   const float radius2 = radius * radius;
 
   // we first check if we are inside the source form
@@ -1146,11 +1153,13 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
       const float sdx = point_x - xx;
       const float sdy = point_y - yy;
       const float dd = (sdx * sdx) + (sdy * sdy);
-      *distance = fminf(*distance, dd);
-
-      if(*distance == dd && dd < radius2)
+      const float dd_norm = dt_masks_distance_sq_normalized(sdx, sdy, inv_width, inv_height);
+      min_dist_norm = fminf(min_dist_norm, dd_norm);
+      if(dd < min_dist_pixel)
       {
-        if(*inside == 0)
+        min_dist_pixel = dd;
+
+        if(dd < radius2 && *inside == 0)
         {
           if(current_seg == 0)
             *inside_source = corner_count - 1;
@@ -1214,13 +1223,21 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
       const float dx = point_x - xx;
       const float dy = point_y - yy;
       const float dd = (dx * dx) + (dy * dy);
-      *distance = fminf(*distance, dd);
-      if(*distance == dd && current_seg > 0 && dd < radius2)
+      const float dd_norm = dt_masks_distance_sq_normalized(dx, dy, inv_width, inv_height);
+      min_dist_norm = fminf(min_dist_norm, dd_norm);
+      if(dd < min_dist_pixel)
       {
-        *near = current_seg - 1;
+        min_dist_pixel = dd;
+
+        if(current_seg > 0 && dd < radius2)
+        {
+          *near = current_seg - 1;
+        }
       }
     }
   }
+
+  *distance = min_dist_norm;
 }
 
 static int _brush_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,

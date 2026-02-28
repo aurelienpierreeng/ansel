@@ -190,6 +190,10 @@ static void _ellipse_get_distance(float x, float y, float as, dt_masks_form_gui_
   dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return;
 
+  float inv_width = 1.0f;
+  float inv_height = 1.0f;
+  dt_masks_get_distance_normalization(&inv_width, &inv_height);
+
   const float pt[2] = { x, y };
 
   // we first check if we are inside the source form
@@ -201,13 +205,15 @@ static void _ellipse_get_distance(float x, float y, float as, dt_masks_form_gui_
       *inside = 1;
 
       // get the minial dist for center & control points
+      float min_dist_norm = FLT_MAX;
       for(int k=0; k<5; k++)
       {
         const float cx = x - gpt->source[k * 2];
         const float cy = y - gpt->source[k * 2 + 1];
-        const float dd = sqf(cx) + sqf(cy);
-        *dist = fminf(*dist, dd);
+        const float dd_norm = dt_masks_distance_sq_normalized(cx, cy, inv_width, inv_height);
+        min_dist_norm = fminf(min_dist_norm, dd_norm);
       }
+      *dist = min_dist_norm;
       return;
     }
   }
@@ -215,7 +221,7 @@ static void _ellipse_get_distance(float x, float y, float as, dt_masks_form_gui_
   // distance from center
   const float cx = x - gpt->points[0];
   const float cy = y - gpt->points[1];
-  *dist = sqf(cx) + sqf(cy);
+  *dist = dt_masks_distance_sq_normalized(cx, cy, inv_width, inv_height);
 
   // we check if it's inside borders
   if(dt_masks_point_in_form_exact(pt, 1, gpt->border, 10, gpt->border_count - 5) < 0) return;

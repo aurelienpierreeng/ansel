@@ -194,6 +194,12 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
   const dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
   if(!gpt) return;
 
+  float inv_width = 1.0f;
+  float inv_height = 1.0f;
+  dt_masks_get_distance_normalization(&inv_width, &inv_height);
+
+  float min_dist_norm = FLT_MAX;
+
   // check if we are between the two border lines
   if(!gui->form_rotating && !gui->form_dragging && gpt->border_count > 6 && gpt->points_count >= 4)
   {
@@ -258,8 +264,9 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
       const float dx = x - xx;
       const float dy = y - yy;
       const float dd = dx * dx + dy * dy;
+      const float dd_norm = dt_masks_distance_sq_normalized(dx, dy, inv_width, inv_height);
 
-      *dist = fminf(*dist, dd);
+      min_dist_norm = fminf(min_dist_norm, dd_norm);
 
       // only one segment present: if any guide point is within the mouse distance,
       // mark the (only) segment as near (index 0)
@@ -267,6 +274,8 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
         *near = 0;
     }
   }
+
+  *dist = min_dist_norm;
 }
 
 static void _gradient_node_position_cb(const dt_masks_form_gui_points_t *gui_points, int node_index,

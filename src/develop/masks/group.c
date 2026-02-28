@@ -106,16 +106,21 @@ static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form
       frm->functions->get_distance(xx, yy, as, gui, index, g_list_length(frm->points),
                                     &inside, &inside_border, &near, &inside_source, &dist);
 
+    // Handle overlapping :
+    // In case we are within more than one shape, compute the distance
+    // to the border of that shape and to its centroid. 
+    // Multiply both and pick the shape whose aggregated distance is minimum.
     if(inside || inside_border || near >= 0 || inside_source)
     {
       const float dx = pzx - frm->gravity_center[0];
       const float dy = pzy - frm->gravity_center[1];
-      const float center_dist = dx * dx + dy * dy;
+      const float center_dist2 = dx * dx + dy * dy;
+      const float combined_dist2 = dist * center_dist2;
 
-      if(center_dist < sel_dist)
+      if(combined_dist2 < sel_dist)
       {
         sel = frm;
-        sel_dist = center_dist;
+        sel_dist = combined_dist2;
         sel_index = index;
       }
     }
