@@ -26,7 +26,7 @@ static void _masks_gui_remove_form_callback(GtkWidget *menu, gpointer user_data)
 {
   dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   if(!gui) return;
-  dt_masks_form_t *forms = darktable.develop->form_visible;
+  dt_masks_form_t *forms = dt_masks_get_visible_form(darktable.develop);
   if(!forms) return;
 
   if(gui->group_selected >= 0)
@@ -49,7 +49,7 @@ void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data)
 {
   dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
   if(!gui) return;
-  dt_masks_form_t *forms = darktable.develop->form_visible;
+  dt_masks_form_t *forms = dt_masks_get_visible_form(darktable.develop);
   if(!forms) return;
 
   dt_iop_module_t *module = darktable.develop->gui_module;
@@ -63,7 +63,7 @@ void _masks_gui_delete_node_callback(GtkWidget *menu, gpointer user_data)
       dt_masks_form_cancel_creation(module, gui);
       return;
     }
-    dt_masks_form_t *sel = darktable.develop->form_visible;
+    dt_masks_form_t *sel = dt_masks_get_visible_form(darktable.develop);
     if(sel)
       dt_masks_remove_node(module, sel, 0, gui, 0, gui->node_dragging);
     gui->node_dragging -= 1;
@@ -98,7 +98,7 @@ static void _masks_move_up_down_callback(gpointer user_data, const int up)
   dt_iop_module_t *module = darktable.develop->gui_module;
   if(!module) return;
 
-  dt_masks_form_t *forms = darktable.develop->form_visible;
+  dt_masks_form_t *forms = dt_masks_get_visible_form(darktable.develop);
   if(!forms) return;
   dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(forms, gui);
   if(!fpt) return;
@@ -348,7 +348,10 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   fprintf(stderr, "----\n"
                   "form: %d\n"
                   "form_visible: %d\n"
-                  "parentid: %d\n\n", form->formid, darktable.develop->form_visible->formid,
+                  "parentid: %d\n\n", form->formid,
+                  dt_masks_get_visible_form(darktable.develop)
+                    ? dt_masks_get_visible_form(darktable.develop)->formid
+                    : -1,
                   formgroup ? formgroup->parentid : -1);
 
   /*  Operation */
