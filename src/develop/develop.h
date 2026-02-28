@@ -438,15 +438,15 @@ void dt_dev_set_backbuf(dt_backbuf_t *backbuf, const int width, const int height
                         const int64_t hash, const int64_t history_hash);
 
 /**
- * @brief Get the pointer position from widget space to preview buffer space [0..1].
+ * @brief Get a point position from widget space to preview buffer space [0..1].
  * 
- * NOTE: The input mouse coordinates are without border subtraction.
+ * NOTE: The input point coordinates are without border subtraction.
  * 
  * @param dev the develop instance
- * @param px the x mouse coordinate in widget space, with no border subtraction.
- * @param py the y mouse coordinate in widget space, with no border subtraction.
- * @param mouse_x the returned x mouse coordinate relative to processed image [0..1].
- * @param mouse_y the returned y mouse coordinate relative to processed image [0..1].
+ * @param px the x point coordinate in widget space, with no border subtraction.
+ * @param py the y point coordinate in widget space, with no border subtraction.
+ * @param mouse_x the returned x point coordinate relative to processed image [0..1].
+ * @param mouse_y the returned y point coordinate relative to processed image [0..1].
  */
 void dt_dev_retrieve_full_pos(dt_develop_t *dev, const int px, const int py, float *mouse_x, float *mouse_y);
 

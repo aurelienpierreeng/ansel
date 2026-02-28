@@ -769,7 +769,7 @@ void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch)
   *proch = dev->roi.processed_height;
  }
 
-void dt_dev_retrieve_full_pos(dt_develop_t *dev, const int px, const int py, float *mouse_x, float *mouse_y)
+void dt_dev_retrieve_full_pos(dt_develop_t *dev, const int px, const int py, float *out_x, float *out_y)
 {
   const int wd = dev->roi.processed_width;
   const int ht = dev->roi.processed_height;
@@ -781,8 +781,8 @@ void dt_dev_retrieve_full_pos(dt_develop_t *dev, const int px, const int py, flo
   const float dx = px - 0.5f * dev->roi.width - dev->roi.border_size;
   const float dy = py - 0.5f * dev->roi.height - dev->roi.border_size;
 
-  if(mouse_x) *mouse_x = dev->roi.x + dx / (wd * scale);
-  if(mouse_y) *mouse_y = dev->roi.y + dy / (ht * scale);
+  if(out_x) *out_x = dev->roi.x + dx / (wd * scale);
+  if(out_y) *out_y = dev->roi.y + dy / (ht * scale);
 }
 
 int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid)
