@@ -359,7 +359,7 @@ static inline gboolean _is_within_pxl_threshold(float *min, float *max, int pixe
 static void _polygon_points_recurs(float *p1, float *p2, double tmin, double tmax, float *polygon_min,
                                 float *polygon_max, float *border_min, float *border_max, float *rpolygon,
                                 float *rborder, dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder,
-                                int withborder)
+                                int withborder, const int pixel_threshold)
 {
   // we calculate points if needed
   if(isnan(polygon_min[0]))
@@ -374,8 +374,6 @@ static void _polygon_points_recurs(float *p1, float *p2, double tmin, double tma
                         p1[4] + (p2[4] - p1[4]) * tmax * tmax * (3.0 - 2.0 * tmax), polygon_max, polygon_max + 1,
                         border_max, border_max + 1);
   }
-
-  const int pixel_threshold = 1;
 
   // are the points near ?
   if((tmax - tmin < 0.0001)
@@ -399,8 +397,10 @@ static void _polygon_points_recurs(float *p1, float *p2, double tmin, double tma
   double tx = (tmin + tmax) / 2.0;
   float c[2] = { NAN, NAN }, b[2] = { NAN, NAN };
   float rc[2] = { 0 }, rb[2] = { 0 };
-  _polygon_points_recurs(p1, p2, tmin, tx, polygon_min, c, border_min, b, rc, rb, dpoints, dborder, withborder);
-  _polygon_points_recurs(p1, p2, tx, tmax, rc, polygon_max, rb, border_max, rpolygon, rborder, dpoints, dborder, withborder);
+  _polygon_points_recurs(p1, p2, tmin, tx, polygon_min, c, border_min, b, rc, rb, dpoints, dborder, withborder,
+                         pixel_threshold);
+  _polygon_points_recurs(p1, p2, tx, tmax, rc, polygon_max, rb, border_max, rpolygon, rborder, dpoints, dborder,
+                         withborder, pixel_threshold);
 }
 
 // Maximum number of self-intersection portions to track;
@@ -619,6 +619,8 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
 
   const float iwd = pipe->iwidth;
   const float iht = pipe->iheight;
+  const int pixel_threshold = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+                               || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL) ? 3 : 1;
   const guint nb = g_list_length(form->points);
 
   dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *intersections = NULL;
@@ -728,7 +730,8 @@ static int _polygon_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, con
     float cmin[2] = { NAN, NAN };
     float cmax[2] = { NAN, NAN };
 
-    _polygon_points_recurs(p1, p2, 0.0, 1.0, cmin, cmax, bmin, bmax, rc, rb, dpoints, dborder, border && (nb >= 3));
+    _polygon_points_recurs(p1, p2, 0.0, 1.0, cmin, cmax, bmin, bmax, rc, rb, dpoints, dborder,
+                           border && (nb >= 3), pixel_threshold);
 
     // we check gaps in the border (sharp edges)
     if(dborder)
@@ -2472,6 +2475,9 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, const dt_dev_p
 
   const int hb = *height;
   const int wb = *width;
+  const gboolean sparse = (piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+                           || piece->pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
+  const int sparse_factor = sparse ? 4 : 1;
 
   if(darktable.unmuted & DT_DEBUG_PERF)
   {
@@ -2627,6 +2633,8 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, const dt_dev_p
   // now we fill the falloff
   int p0[2] = { 0 }, p1[2] = { 0 };
   float pf1[2] = { 0.0f };
+  int prev0[2] = { 0 }, prev1[2] = { 0 };
+  gboolean have_prev = FALSE;
   int last0[2] = { -100, -100 }, last1[2] = { -100, -100 };
   int next = 0;
   for(int i = nb_corner * 3; i < border_count; i++)
@@ -2650,6 +2658,22 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, const dt_dev_p
       p1[1] = pf1[1] = border[next * 2 + 1];
     }
 
+    const gboolean used_next = (next > 0);
+
+    if(sparse && have_prev && !used_next
+       && (prev0[0] != p0[0] || prev0[1] != p0[1] || prev1[0] != p1[0] || prev1[1] != p1[1]))
+    {
+      for(int k = 1; k < sparse_factor; k++)
+      {
+        const float t = (float)k / (float)sparse_factor;
+        int mp0[2] = { (int)floorf(prev0[0] + t * (p0[0] - prev0[0]) + 0.5f),
+                       (int)floorf(prev0[1] + t * (p0[1] - prev0[1]) + 0.5f) };
+        int mp1[2] = { (int)floorf(prev1[0] + t * (p1[0] - prev1[0]) + 0.5f),
+                       (int)floorf(prev1[1] + t * (p1[1] - prev1[1]) + 0.5f) };
+        _polygon_falloff(bufptr, mp0, mp1, *posx, *posy, *width);
+      }
+    }
+
     // and we draw the falloff
     if(last0[0] != p0[0] || last0[1] != p0[1] || last1[0] != p1[0] || last1[1] != p1[1])
     {
@@ -2658,6 +2682,19 @@ static int _polygon_get_mask(const dt_iop_module_t *const module, const dt_dev_p
       last0[1] = p0[1];
       last1[0] = p1[0];
       last1[1] = p1[1];
+    }
+
+    if(!used_next)
+    {
+      prev0[0] = p0[0];
+      prev0[1] = p0[1];
+      prev1[0] = p1[0];
+      prev1[1] = p1[1];
+      have_prev = TRUE;
+    }
+    else
+    {
+      have_prev = FALSE;
     }
   }
 
@@ -3028,6 +3065,9 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   const int width = roi->width;
   const int height = roi->height;
   const float scale = roi->scale;
+  const gboolean sparse = (piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+                           || piece->pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
+  const int sparse_factor = sparse ? 4 : 1;
 
   // we need to take care of four different cases:
   // 1) polygon and feather are outside of roi
@@ -3288,7 +3328,8 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
   // deal with feather if it does not lie outside of roi
   if(!polygon_encircles_roi)
   {
-    int *dpoints = dt_pixelpipe_cache_alloc_align_cache(sizeof(int) * 4 * border_count, 0);
+    const int dpoints_capacity = 4 * border_count * (sparse ? sparse_factor : 1);
+    int *dpoints = dt_pixelpipe_cache_alloc_align_cache(sizeof(int) * dpoints_capacity, 0);
     if(dpoints == NULL)
     {
       dt_pixelpipe_cache_free_align(points);
@@ -3299,6 +3340,9 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
     int dindex = 0;
     int p0[2], p1[2];
     float pf1[2];
+    int prev0[2] = { 0, 0 };
+    int prev1[2] = { 0, 0 };
+    gboolean have_prev = FALSE;
     int last0[2] = { -100, -100 };
     int last1[2] = { -100, -100 };
     int next = 0;
@@ -3329,6 +3373,29 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
         p1[1] = pf1[1] = border[next * 2 + 1];
       }
 
+      const gboolean used_next = (next > 0);
+
+      if(sparse && have_prev && !used_next
+         && (prev0[0] != p0[0] || prev0[1] != p0[1] || prev1[0] != p1[0] || prev1[1] != p1[1]))
+      {
+        for(int k = 1; k < sparse_factor; k++)
+        {
+          const float t = (float)k / (float)sparse_factor;
+          const int mp0[2] = { (int)floorf(prev0[0] + t * (p0[0] - prev0[0]) + 0.5f),
+                               (int)floorf(prev0[1] + t * (p0[1] - prev0[1]) + 0.5f) };
+          const int mp1[2] = { (int)floorf(prev1[0] + t * (p1[0] - prev1[0]) + 0.5f),
+                               (int)floorf(prev1[1] + t * (p1[1] - prev1[1]) + 0.5f) };
+          if(dindex + 4 <= dpoints_capacity)
+          {
+            dpoints[dindex] = mp0[0];
+            dpoints[dindex + 1] = mp0[1];
+            dpoints[dindex + 2] = mp1[0];
+            dpoints[dindex + 3] = mp1[1];
+            dindex += 4;
+          }
+        }
+      }
+
       // and we draw the falloff
       if(last0[0] != p0[0] || last0[1] != p0[1] || last1[0] != p1[0] || last1[1] != p1[1])
       {
@@ -3342,6 +3409,19 @@ static int _polygon_get_mask_roi(const dt_iop_module_t *const module, const dt_d
         last0[1] = p0[1];
         last1[0] = p1[0];
         last1[1] = p1[1];
+      }
+
+      if(!used_next)
+      {
+        prev0[0] = p0[0];
+        prev0[1] = p0[1];
+        prev1[0] = p1[0];
+        prev1[1] = p1[1];
+        have_prev = TRUE;
+      }
+      else
+      {
+        have_prev = FALSE;
       }
     }
 

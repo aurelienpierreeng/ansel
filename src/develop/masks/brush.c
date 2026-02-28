@@ -599,7 +599,7 @@ static inline void _brush_payload_sync(dt_masks_dynbuf_t *dpayload, dt_masks_dyn
 static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax, float *points_min,
                                  float *points_max, float *border_min, float *border_max, float *rpoints,
                                  float *rborder, float *rpayload, dt_masks_dynbuf_t *dpoints, dt_masks_dynbuf_t *dborder,
-                                 dt_masks_dynbuf_t *dpayload)
+                                 dt_masks_dynbuf_t *dpayload, const int pixel_threshold)
 {
   const gboolean withborder = (dborder != NULL);
   const gboolean withpayload = (dpayload != NULL);
@@ -617,8 +617,6 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
                          p1[4] + (p2[4] - p1[4]) * tmax * tmax * (3.0 - 2.0 * tmax), points_max,
                          points_max + 1, border_max, border_max + 1);
   }
-
-  const int pixel_threshold = 1;
 
   // are the points near ?
   if((tmax - tmin < 0.0001f)
@@ -667,9 +665,10 @@ static void _brush_points_recurs(float *p1, float *p2, double tmin, double tmax,
   double tx = (tmin + tmax) / 2.0;
   float c[2] = { NAN, NAN }, b[2] = { NAN, NAN };
   float rc[2], rb[2], rp[2];
-  _brush_points_recurs(p1, p2, tmin, tx, points_min, c, border_min, b, rc, rb, rp, dpoints, dborder, dpayload);
+  _brush_points_recurs(p1, p2, tmin, tx, points_min, c, border_min, b, rc, rb, rp, dpoints, dborder, dpayload,
+                       pixel_threshold);
   _brush_points_recurs(p1, p2, tx, tmax, rc, points_max, rb, border_max, rpoints, rborder, rpayload, dpoints,
-                       dborder, dpayload);
+                       dborder, dpayload, pixel_threshold);
 }
 
 
@@ -699,6 +698,8 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
 
   const float iwd = pipe->iwidth;
   const float iht = pipe->iheight;
+  const int pixel_threshold = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+                               || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL) ? 3 : 1;
 
   *points = NULL;
   *points_count = 0;
@@ -912,7 +913,8 @@ static int _brush_get_pts_border(dt_develop_t *dev, dt_masks_form_t *form, const
     float cmin[2] = { NAN, NAN };
     float cmax[2] = { NAN, NAN };
 
-    _brush_points_recurs(p1, p2, 0.0, 1.0, cmin, cmax, bmin, bmax, rc, rb, rp, dpoints, dborder, dpayload);
+    _brush_points_recurs(p1, p2, 0.0, 1.0, cmin, cmax, bmin, bmax, rc, rb, rp, dpoints, dborder, dpayload,
+                         pixel_threshold);
 
     dt_masks_dynbuf_add_2(dpoints, rc[0], rc[1]);
 
@@ -2852,6 +2854,9 @@ static int _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
   }
 
   const guint nb_corner = g_list_length(form->points);
+  const gboolean sparse = (piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+                           || piece->pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
+  const int sparse_factor = sparse ? 4 : 1;
   _brush_bounding_box(points, border, nb_corner, points_count, width, height, posx, posy);
 
   if(darktable.unmuted & DT_DEBUG_PERF)
@@ -2873,6 +2878,10 @@ static int _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
 
   // now we fill the falloff
   int p0[2], p1[2];
+  int prev0[2] = { 0, 0 };
+  int prev1[2] = { 0, 0 };
+  float prev_payload[2] = { 0.0f, 0.0f };
+  gboolean have_prev = FALSE;
 
   for(int i = nb_corner * 3; i < border_count; i++)
   {
@@ -2881,7 +2890,31 @@ static int _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
     p1[0] = border[i * 2];
     p1[1] = border[i * 2 + 1];
 
+    if(sparse && have_prev
+       && (prev0[0] != p0[0] || prev0[1] != p0[1] || prev1[0] != p1[0] || prev1[1] != p1[1]))
+    {
+      for(int k = 1; k < sparse_factor; k++)
+      {
+        const float t = (float)k / (float)sparse_factor;
+        int mp0[2] = { (int)floorf(prev0[0] + t * (p0[0] - prev0[0]) + 0.5f),
+                       (int)floorf(prev0[1] + t * (p0[1] - prev0[1]) + 0.5f) };
+        int mp1[2] = { (int)floorf(prev1[0] + t * (p1[0] - prev1[0]) + 0.5f),
+                       (int)floorf(prev1[1] + t * (p1[1] - prev1[1]) + 0.5f) };
+        const float hard = prev_payload[0] + t * (payload[i * 2] - prev_payload[0]);
+        const float dens = prev_payload[1] + t * (payload[i * 2 + 1] - prev_payload[1]);
+        _brush_falloff(*buffer, mp0, mp1, *posx, *posy, *width, hard, dens);
+      }
+    }
+
     _brush_falloff(*buffer, p0, p1, *posx, *posy, *width, payload[i * 2], payload[i * 2 + 1]);
+
+    prev0[0] = p0[0];
+    prev0[1] = p0[1];
+    prev1[0] = p1[0];
+    prev1[1] = p1[1];
+    prev_payload[0] = payload[i * 2];
+    prev_payload[1] = payload[i * 2 + 1];
+    have_prev = TRUE;
   }
 
   dt_pixelpipe_cache_free_align(points);
@@ -2958,6 +2991,9 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev
   const int width = roi->width;
   const int height = roi->height;
   const float scale = roi->scale;
+  const gboolean sparse = (piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW
+                           || piece->pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
+  const int sparse_factor = sparse ? 4 : 1;
 
   // we get buffers for all points
   float *points = NULL, *border = NULL, *payload = NULL;
@@ -3019,21 +3055,69 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev
   }
 
   // now we fill the falloff
+  if(!sparse)
+  {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
   dt_omp_firstprivate(nb_corner, border_count, width, height, buffer, points, border, payload) \
   if(border_count - nb_corner * 3 > 1000)
 #endif
-  for(int i = nb_corner * 3; i < border_count; i++)
+    for(int i = nb_corner * 3; i < border_count; i++)
+    {
+      const int p0[] = { points[i * 2], points[i * 2 + 1] };
+      const int p1[] = { border[i * 2], border[i * 2 + 1] };
+
+      if(MAX(p0[0], p1[0]) < 0 || MIN(p0[0], p1[0]) >= width || MAX(p0[1], p1[1]) < 0
+         || MIN(p0[1], p1[1]) >= height)
+        continue;
+
+      _brush_falloff_roi(buffer, p0, p1, width, height, payload[i * 2], payload[i * 2 + 1]);
+    }
+  }
+  else
   {
-    const int p0[] = { points[i * 2], points[i * 2 + 1] };
-    const int p1[] = { border[i * 2], border[i * 2 + 1] };
+    int prev0[2] = { 0, 0 };
+    int prev1[2] = { 0, 0 };
+    float prev_payload[2] = { 0.0f, 0.0f };
+    gboolean have_prev = FALSE;
 
-    if(MAX(p0[0], p1[0]) < 0 || MIN(p0[0], p1[0]) >= width || MAX(p0[1], p1[1]) < 0
-       || MIN(p0[1], p1[1]) >= height)
-      continue;
+    for(int i = nb_corner * 3; i < border_count; i++)
+    {
+      int p0[2] = { points[i * 2], points[i * 2 + 1] };
+      int p1[2] = { border[i * 2], border[i * 2 + 1] };
 
-    _brush_falloff_roi(buffer, p0, p1, width, height, payload[i * 2], payload[i * 2 + 1]);
+      if(sparse && have_prev
+         && (prev0[0] != p0[0] || prev0[1] != p0[1] || prev1[0] != p1[0] || prev1[1] != p1[1]))
+      {
+        for(int k = 1; k < sparse_factor; k++)
+        {
+          const float t = (float)k / (float)sparse_factor;
+          int mp0[2] = { (int)floorf(prev0[0] + t * (p0[0] - prev0[0]) + 0.5f),
+                         (int)floorf(prev0[1] + t * (p0[1] - prev0[1]) + 0.5f) };
+          int mp1[2] = { (int)floorf(prev1[0] + t * (p1[0] - prev1[0]) + 0.5f),
+                         (int)floorf(prev1[1] + t * (p1[1] - prev1[1]) + 0.5f) };
+          if(!(MAX(mp0[0], mp1[0]) < 0 || MIN(mp0[0], mp1[0]) >= width || MAX(mp0[1], mp1[1]) < 0
+               || MIN(mp0[1], mp1[1]) >= height))
+          {
+            const float hard = prev_payload[0] + t * (payload[i * 2] - prev_payload[0]);
+            const float dens = prev_payload[1] + t * (payload[i * 2 + 1] - prev_payload[1]);
+            _brush_falloff_roi(buffer, mp0, mp1, width, height, hard, dens);
+          }
+        }
+      }
+
+      if(!(MAX(p0[0], p1[0]) < 0 || MIN(p0[0], p1[0]) >= width || MAX(p0[1], p1[1]) < 0
+           || MIN(p0[1], p1[1]) >= height))
+        _brush_falloff_roi(buffer, p0, p1, width, height, payload[i * 2], payload[i * 2 + 1]);
+
+      prev0[0] = p0[0];
+      prev0[1] = p0[1];
+      prev1[0] = p1[0];
+      prev1[1] = p1[1];
+      prev_payload[0] = payload[i * 2];
+      prev_payload[1] = payload[i * 2 + 1];
+      have_prev = TRUE;
+    }
   }
 
   dt_pixelpipe_cache_free_align(points);
