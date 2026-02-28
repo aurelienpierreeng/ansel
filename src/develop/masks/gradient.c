@@ -269,56 +269,43 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
   }
 }
 
-static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float pzy, dt_masks_form_t *form, int parentid,
-                                 dt_masks_form_gui_t *gui, int index)
+static void _gradient_node_position_cb(const dt_masks_form_gui_points_t *gui_points, int node_index,
+                                       float *node_x, float *node_y, void *user_data)
 {
-  if(!gui) return 0;
-  if(!gui->creation && gui->group_selected != index) return 0;
-  dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-  if(!gpt) return 0;
+  if(node_x) *node_x = NAN;
+  if(node_y) *node_y = NAN;
+}
 
-  // get the zoom scale
+static void _gradient_distance_cb(float pointer_x, float pointer_y, float cursor_radius,
+                                  dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
+                                  int *inside_border, int *near, int *inside_source, float *dist, void *user_data)
+{
+  _gradient_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, 0,
+                         inside, inside_border, near, inside_source, dist);
+}
 
-  const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
-
-  // we define a distance to the cursor for handle detection (in backbuf dimensions)
-  const float dist_curs = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED; // transformed to backbuf dimensions
-
-  gui->form_selected = FALSE;
-  gui->border_selected = FALSE;
-  gui->source_selected = FALSE;
-  gui->handle_selected = -1;
-  gui->node_hovered = -1;
-  gui->seg_selected = -1;
-  gui->handle_border_selected = -1;
-  gui->pivot_selected = FALSE;
-  const guint nb = g_list_length(form->points);
-
-  pzx *= darktable.develop->roi.preview_width / dev->roi.natural_scale;
-  pzy *= darktable.develop->roi.preview_height / dev->roi.natural_scale;
-
-  // are we inside the form or the borders or near a segment ???
-  int inside, inside_border, near, inside_source;
-  float dist;
-  _gradient_get_distance(pzx, pzy, dist_curs, gui, index, nb, &inside, &inside_border, &near, &inside_source, &dist);
-  if(near >= 0)
-    gui->seg_selected = near;
-  else
+static void _gradient_post_select_cb(dt_masks_form_gui_t *mask_gui, int inside, int inside_border,
+                                     int inside_source, void *user_data)
+{
+  if(inside)
   {
-    if(inside)
-    {
-      gui->pivot_selected = gui->form_selected = TRUE;
-      return 1;
-    }
-    else if(inside_border)
-    {
-      gui->form_selected = TRUE;
-      gui->border_selected = TRUE;
-      return 1;
-    }
+    mask_gui->border_selected = FALSE;
+    mask_gui->pivot_selected = TRUE;
   }
+  else if(inside_border)
+  {
+    mask_gui->pivot_selected = FALSE;
+  }
+}
 
-  return 0;
+static int _find_closest_handle(struct dt_iop_module_t *module, float pointer_x, float pointer_y,
+                                dt_masks_form_t *mask_form, int parentid,
+                                dt_masks_form_gui_t *mask_gui, int index)
+{
+  if(mask_gui) mask_gui->pivot_selected = FALSE;
+  return dt_masks_find_closest_handle_common(pointer_x, pointer_y, mask_form, parentid, mask_gui, index, 1,
+                                             NULL, NULL, _gradient_node_position_cb,
+                                             _gradient_distance_cb, _gradient_post_select_cb, NULL);
 }
 
 

@@ -95,50 +95,23 @@ static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t
     *inside_border = *near = 1;
 }
 
-static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float pzy, dt_masks_form_t *form, int parentid,
-                                 dt_masks_form_gui_t *gui, int index)
+/**
+ * @brief Circle-specific inside/border hit testing adapter.
+ */
+static void _circle_distance_cb(float pointer_x, float pointer_y, float cursor_radius,
+                                dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
+                                int *inside_border, int *near, int *inside_source, float *dist, void *user_data)
 {
-  if(!gui) return 0;
-  if(!gui->creation && gui->group_selected != index) return 0;
+  _circle_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, 0,
+                       inside, inside_border, near, inside_source, dist);
+}
 
-  // get the zoom scale
-  dt_develop_t *dev = (dt_develop_t *)darktable.develop;
-
-  // we define a distance to the cursor for handle detection (in backbuf dimensions)
-  const float dist_curs = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED; // transformed to backbuf dimensions
-
-  gui->form_selected = FALSE;
-  gui->border_selected = FALSE;
-  gui->source_selected = FALSE;
-  gui->handle_selected = -1;
-
-  pzx *= darktable.develop->roi.preview_width / dev->roi.natural_scale;
-  pzy *= darktable.develop->roi.preview_height / dev->roi.natural_scale;
-
-  int in, inside_border, near, inside_source;
-  float dist;
-  
-  _circle_get_distance(pzx, pzy, dist_curs, gui, index, 0, &in, &inside_border, &near, &inside_source, &dist);
-
-  if(inside_source)
-  {
-    gui->form_selected = TRUE;
-    gui->source_selected = TRUE;
-    return 1;
-  }
-  else if(inside_border)
-  {
-    gui->form_selected = TRUE;
-    gui->border_selected = TRUE;
-    return 1;
-  }
-  else if(in)
-  {
-    gui->form_selected = TRUE;
-    return 1;
-  }
-  
-  return 0;
+static int _find_closest_handle(struct dt_iop_module_t *module, float pointer_x, float pointer_y,
+                                dt_masks_form_t *mask_form, int parent_id,
+                                dt_masks_form_gui_t *mask_gui, int form_index)
+{
+  return dt_masks_find_closest_handle_common(pointer_x, pointer_y, mask_form, parent_id, mask_gui, form_index, 0,
+                                             NULL, NULL, NULL, _circle_distance_cb, NULL, NULL);
 }
 
 static int _init_hardness(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)

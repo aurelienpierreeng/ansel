@@ -1424,115 +1424,53 @@ static void _polygon_get_distance(float point_x, float point_y, float radius,
                                                  node_count * 3, gui_points->points_count) < 0);
 }
 
-static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float pzy,
+/**
+ * @brief Polygon-specific border handle lookup.
+ *
+ * Polygon borders are stored directly in gui_points->border at node indices.
+ */
+static gboolean _polygon_border_handle_cb(const dt_masks_form_gui_points_t *gui_points, int node_count,
+                                          int node_index, float *handle_x, float *handle_y, void *user_data)
+{
+  (void)user_data;
+  if(!gui_points || node_index < 0 || node_index >= node_count) return FALSE;
+  *handle_x = gui_points->border[node_index * 6];
+  *handle_y = gui_points->border[node_index * 6 + 1];
+  return !(isnan(*handle_x) || isnan(*handle_y));
+}
+
+/**
+ * @brief Polygon-specific curve handle lookup (depends on winding direction).
+ */
+static void _polygon_curve_handle_cb(const dt_masks_form_gui_points_t *gui_points, int node_index,
+                                     float *handle_x, float *handle_y, void *user_data)
+{
+  (void)user_data;
+  _polygon_ctrl2_to_handle(gui_points->points[node_index * 6 + 2], gui_points->points[node_index * 6 + 3],
+                           gui_points->points[node_index * 6 + 4], gui_points->points[node_index * 6 + 5],
+                           handle_x, handle_y, gui_points->clockwise);
+}
+
+/**
+ * @brief Polygon-specific inside/border/segment hit testing.
+ */
+static void _polygon_distance_cb(float pointer_x, float pointer_y, float cursor_radius,
+                                 dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
+                                 int *inside_border, int *near, int *inside_source, float *dist, void *user_data)
+{
+  (void)user_data;
+  _polygon_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, node_count,
+                        inside, inside_border, near, inside_source, dist);
+}
+
+static int _find_closest_handle(struct dt_iop_module_t *module, float pointer_x, float pointer_y,
                                 dt_masks_form_t *mask_form, int parent_id,
                                 dt_masks_form_gui_t *mask_gui, int form_index)
 {
-  if(!mask_gui) return 0;
-  if(!mask_gui->creation && mask_gui->group_selected != form_index) return 0;
-  dt_masks_form_gui_points_t *gui_points
-      = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
-  if(!gui_points) return 0;
-  const dt_develop_t *const dev = (const dt_develop_t *)darktable.develop;
-
-  // we define a distance to the cursor for handle detection (in backbuf dimensions)
-  const float dist_curs = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED; // transformed to backbuf dimensions
-  const float sq_dist = dist_curs * dist_curs;
-
-  mask_gui->form_selected = FALSE;
-  mask_gui->border_selected = FALSE;
-  mask_gui->source_selected = FALSE;
-  mask_gui->handle_selected = -1;
-  mask_gui->node_hovered = -1;
-  mask_gui->seg_selected = -1;
-  mask_gui->handle_border_selected = -1;
-  const guint node_count = g_list_length(mask_form->points);
-
-  pzx *= darktable.develop->roi.preview_width / dev->roi.natural_scale;
-  pzy *= darktable.develop->roi.preview_height / dev->roi.natural_scale;
-
-
-  if((mask_gui->group_selected == form_index) && mask_gui->node_selected >= 0)
-  {
-    const int k = mask_gui->node_selected;
-
-    // Current node's border handle
-    const float bh_x = gui_points->border[k * 6];
-    const float bh_y = gui_points->border[k * 6 + 1];
-    if(dt_masks_point_is_within_radius(pzx, pzy, bh_x, bh_y, sq_dist))
-    {
-      mask_gui->handle_border_selected = k;
-
-      return 1;
-    }
-
-    // Current node's curve handle
-    // We can select the handle only if the node is a curve
-    if(!dt_masks_node_is_cusp(gui_points ,k))
-    {
-      float ffx, ffy;
-      _polygon_ctrl2_to_handle(gui_points->points[k * 6 + 2], gui_points->points[k * 6 + 3],
-                               gui_points->points[k * 6 + 4], gui_points->points[k * 6 + 5],
-                               &ffx, &ffy, gui_points->clockwise);
-      if(dt_masks_point_is_within_radius(pzx, pzy, ffx, ffy, sq_dist))
-      {
-        mask_gui->handle_selected = k;
-
-        return 1;
-      }
-    }
-    
-    // are we close to the node ?
-    if(dt_masks_point_is_within_radius(pzx, pzy, gui_points->points[k * 6 + 2], gui_points->points[k * 6 + 3],
-                                              sq_dist))
-    {
-      mask_gui->node_hovered = k;
-
-      return 1;
-    }
-  }
-
-  // iterate all nodes and look for one that is close enough
-  for(int k = 0; k < node_count; k++)
-  {
-    if(dt_masks_point_is_within_radius(pzx, pzy, gui_points->points[k * 6 + 2],
-                                       gui_points->points[k * 6 + 3], sq_dist))
-    {
-      mask_gui->node_hovered = k;
-
-      return 1;
-    }
-  }
-
-  // are we inside the form or the borders or near a segment ???
-  int inside, inside_border, near, inside_source;
-  float dist;
-  _polygon_get_distance(pzx, pzy, dist_curs, mask_gui, form_index, node_count,
-                        &inside, &inside_border, &near, &inside_source, &dist);
-  if(near < (int)node_count && mask_gui->node_selected == -1)
-    mask_gui->seg_selected = near;
-
-  if(near < 0)
-  {
-    if(inside_source)
-    {
-      mask_gui->form_selected = TRUE;
-      mask_gui->source_selected = TRUE;
-      return 1;
-    }
-    else if(inside_border)
-    {
-      mask_gui->form_selected = TRUE;
-      mask_gui->border_selected = TRUE;
-      return 1;
-    }
-    else if(inside)
-    {
-      mask_gui->form_selected = TRUE;
-      return 1;
-    }
-  }
-  return 0;
+  (void)module;
+  return dt_masks_find_closest_handle_common(pointer_x, pointer_y, mask_form, parent_id, mask_gui, form_index, -1,
+                                             _polygon_border_handle_cb, _polygon_curve_handle_cb, NULL,
+                                             _polygon_distance_cb, NULL, NULL);
 }
 
 /**

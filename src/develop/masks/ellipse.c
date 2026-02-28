@@ -396,86 +396,54 @@ static int _ellipse_get_points_border(dt_develop_t *dev, struct dt_masks_form_t 
   return 1;
 }
 
-static int _find_closest_handle(struct dt_iop_module_t *module, float pzx, float pzy, dt_masks_form_t *form, int parentid,
-                                 dt_masks_form_gui_t *gui, int index)
+/**
+ * @brief Ellipse-specific node position lookup.
+ *
+ * Ellipse GUI nodes are stored as center + 4 control points; apply the same
+ * transform logic used in the original hit testing.
+ */
+static void _ellipse_node_position_cb(const dt_masks_form_gui_points_t *gui_points, int node_index,
+                                      float *node_x, float *node_y, void *user_data)
 {
-  if(!gui) return 0;
-  if(!gui->creation && gui->group_selected != index) return 0;
-  dt_masks_form_gui_points_t *gpt = (dt_masks_form_gui_points_t *)g_list_nth_data(gui->points, index);
-  if(!gpt) return 0;
-  const float *nodes = gpt->points;
+  const float *nodes = gui_points->points;
+  const float rotation = atan2f(nodes[3] - nodes[1], nodes[2] - nodes[0]);
+  const float sinr = sinf(rotation);
+  const float cosr = cosf(rotation);
+  _ellipse_point_transform(nodes[0], nodes[1], nodes[node_index * 2], nodes[node_index * 2 + 1],
+                           sinr, cosr, node_x, node_y);
+}
 
-  const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
+/**
+ * @brief Ellipse-specific inside/border hit testing adapter.
+ */
+static void _ellipse_distance_cb(float pointer_x, float pointer_y, float cursor_radius,
+                                 dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
+                                 int *inside_border, int *near, int *inside_source, float *dist, void *user_data)
+{
+  _ellipse_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, 0,
+                        inside, inside_border, near, inside_source, dist);
+}
 
-  // we define a distance to the cursor for handle detection (in backbuf dimensions)
-  const float dist_curs = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED; // transformed to backbuf dimensions
-  const float sq_dist = dist_curs * dist_curs;
+/**
+ * @brief Ellipse-specific post-selection hook.
+ *
+ * Ellipse uses the border hit to arm the pivot interaction.
+ */
+static void _ellipse_post_select_cb(dt_masks_form_gui_t *mask_gui, int inside, int inside_border,
+                                    int inside_source, void *user_data)
+{
+  mask_gui->pivot_selected = inside_border ? TRUE : FALSE; // cast to strict gboolean
+}
 
-  gui->form_selected = FALSE;
-  gui->border_selected = FALSE;
-  gui->source_selected = FALSE;
-  gui->handle_selected = -1;
-  gui->node_hovered = -1;
-  gui->pivot_selected = FALSE;
-
-  pzx *= darktable.develop->roi.preview_width / dev->roi.natural_scale;
-  pzy *= darktable.develop->roi.preview_height / dev->roi.natural_scale;
-
-  const float r = atan2f(nodes[3] - nodes[1], nodes[2] - nodes[0]);
-  const float sinr = sinf(r);
-  const float cosr = cosf(r);
-  float x, y;
-
-  if((gui->group_selected == index) && gui->node_selected >= 0)
-  {
-    const int k = gui->node_selected;
-
-    _ellipse_point_transform(nodes[0], nodes[1], nodes[k * 2], nodes[k * 2 + 1], sinr, cosr, &x, &y);
-
-    // are we also close to the node ?
-    if(dt_masks_point_is_within_radius(pzx, pzy, x, y, sq_dist))
-    {
-      gui->node_hovered = k;
-      return 1;
-    }
-  }
-
-  // iterate all nodes (except the first which is the center) and look for one that is close enough
-  for(int i = 1; i < 5; i++)
-  {
-    _ellipse_point_transform(nodes[0], nodes[1], nodes[i * 2], nodes[i * 2 + 1], sinr, cosr, &x, &y);
-    if(dt_masks_point_is_within_radius(pzx, pzy, x, y, sq_dist))
-    {
-      gui->node_hovered = i;
-      return 1;
-    }
-  }
-
-  int inside, inside_border, near, inside_source;
-  float dist;
-
-  _ellipse_get_distance(pzx, pzy, dist_curs, gui, index, 0, &inside, &inside_border, &near, &inside_source, &dist);
-
-  if(inside_source)
-  {
-    gui->form_selected = TRUE;
-    gui->source_selected = TRUE;
-    return 1;
-  }
-  else if(inside_border)
-  {
-    gui->form_selected = TRUE;
-    gui->border_selected = TRUE;
-    gui->pivot_selected = TRUE;
-    return 1;
-  }
-  else if(inside)
-  {
-    gui->form_selected = TRUE;
-    return 1;
-  }
-  
-  return 0;
+static int _find_closest_handle(struct dt_iop_module_t *module, float pointer_x, float pointer_y,
+                                dt_masks_form_t *mask_form, int parent_id,
+                                dt_masks_form_gui_t *mask_gui, int form_index)
+{
+  (void)module;
+  if(mask_gui) mask_gui->pivot_selected = FALSE;
+  return dt_masks_find_closest_handle_common(pointer_x, pointer_y, mask_form, parent_id, mask_gui, form_index, 5,
+                                             NULL, NULL, _ellipse_node_position_cb,
+                                             _ellipse_distance_cb, _ellipse_post_select_cb, NULL);
 }
 
 static int _init_hardness(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)

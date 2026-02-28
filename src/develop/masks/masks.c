@@ -70,6 +70,174 @@ gboolean dt_masks_point_is_within_radius(const float point_x, const float point_
 }
 
 /**
+ * @brief Centralized hit-testing for node/handle/segment selection across shapes.
+ *
+ * This function:
+ * - Translates pointer coordinates into GUI space,
+ * - Resets selection flags,
+ * - Tests border/curve handles and nodes,
+ * - Delegates inside/border/segment tests to the shape callback.
+ *
+ * node_count_override can be used for shapes that don't expose nodes via GList
+ * (e.g. gradient/ellipse control points). Pass -1 to use g_list_length().
+ *
+ * Callers provide shape-specific callbacks for handles and distance tests.
+ */
+int dt_masks_find_closest_handle_common(float pointer_x, float pointer_y, dt_masks_form_t *mask_form, int parent_id,
+                                        dt_masks_form_gui_t *mask_gui, int form_index, int node_count_override,
+                                        dt_masks_border_handle_fn border_handle_cb,
+                                        dt_masks_curve_handle_fn curve_handle_cb,
+                                        dt_masks_node_position_fn node_position_cb,
+                                        dt_masks_distance_fn distance_cb,
+                                        dt_masks_post_select_fn post_select_cb,
+                                        void *user_data)
+{
+  (void)parent_id;
+  if(!mask_gui || !mask_form || !mask_form->points) return 0;
+  if(!mask_gui->creation && mask_gui->group_selected != form_index) return 0;
+
+  dt_masks_form_gui_points_t *gui_points
+      = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
+  if(!gui_points) return 0;
+
+  const dt_develop_t *const dev = (const dt_develop_t *)darktable.develop;
+
+  // Handle detection in backbuffer space.
+  const float cursor_radius = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
+  const float cursor_radius2 = cursor_radius * cursor_radius;
+
+  mask_gui->form_selected = FALSE;
+  mask_gui->border_selected = FALSE;
+  mask_gui->source_selected = FALSE;
+  mask_gui->handle_selected = -1;
+  mask_gui->node_hovered = -1;
+  mask_gui->seg_selected = -1;
+  mask_gui->handle_border_selected = -1;
+
+  const int node_count = (node_count_override >= 0) ? node_count_override
+                                                    : (int)g_list_length(mask_form->points);
+
+  pointer_x *= darktable.develop->roi.preview_width / dev->roi.natural_scale;
+  pointer_y *= darktable.develop->roi.preview_height / dev->roi.natural_scale;
+
+  const gboolean has_bezier_layout = mask_form->uses_bezier_points_layout;
+  const gboolean can_test_nodes = (node_position_cb != NULL) || has_bezier_layout;
+  const int selected_node = mask_gui->node_selected;
+  const gboolean has_selected_node = (node_count > 0) && can_test_nodes
+                                     && (mask_gui->group_selected == form_index)
+                                     && selected_node >= 0 && selected_node < node_count;
+
+  if(has_selected_node)
+  {
+    // Current node's border handle (feather handle).
+    float handle_x = NAN;
+    float handle_y = NAN;
+    if(border_handle_cb
+       && border_handle_cb(gui_points, node_count, selected_node, &handle_x, &handle_y, user_data)
+       && dt_masks_point_is_within_radius(pointer_x, pointer_y, handle_x, handle_y, cursor_radius2))
+    {
+      mask_gui->handle_border_selected = selected_node;
+      return 1;
+    }
+
+    // Current node's curve handle.
+    if(!dt_masks_node_is_cusp(gui_points, selected_node) && curve_handle_cb)
+    {
+      curve_handle_cb(gui_points, selected_node, &handle_x, &handle_y, user_data);
+      if(dt_masks_point_is_within_radius(pointer_x, pointer_y, handle_x, handle_y, cursor_radius2))
+      {
+        mask_gui->handle_selected = selected_node;
+        return 1;
+      }
+    }
+
+    // Current node itself.
+    float node_x = NAN;
+    float node_y = NAN;
+    if(node_position_cb)
+    {
+      node_position_cb(gui_points, selected_node, &node_x, &node_y, user_data);
+    }
+    else if(has_bezier_layout)
+    {
+      node_x = gui_points->points[selected_node * 6 + 2];
+      node_y = gui_points->points[selected_node * 6 + 3];
+    }
+    if(!isnan(node_x) && !isnan(node_y)
+       && dt_masks_point_is_within_radius(pointer_x, pointer_y, node_x, node_y, cursor_radius2))
+    {
+      mask_gui->node_hovered = selected_node;
+      return 1;
+    }
+  }
+
+  if(can_test_nodes)
+  {
+    for(int node_index = 0; node_index < node_count; node_index++)
+    {
+      float node_x = NAN;
+      float node_y = NAN;
+      if(node_position_cb)
+      {
+        node_position_cb(gui_points, node_index, &node_x, &node_y, user_data);
+      }
+      else if(has_bezier_layout)
+      {
+        node_x = gui_points->points[node_index * 6 + 2];
+        node_y = gui_points->points[node_index * 6 + 3];
+      }
+      if(!isnan(node_x) && !isnan(node_y)
+         && dt_masks_point_is_within_radius(pointer_x, pointer_y, node_x, node_y, cursor_radius2))
+      {
+        mask_gui->node_hovered = node_index;
+        return 1;
+      }
+    }
+  }
+
+  if(!distance_cb) return 0;
+
+  // Segment or shape hit tests.
+  int inside = 0;
+  int inside_border = 0;
+  int near_segment = -1;
+  int inside_source = 0;
+  float nearest_distance = 0.0f;
+  distance_cb(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, node_count, &inside, &inside_border,
+              &near_segment, &inside_source, &nearest_distance, user_data);
+
+  if(near_segment >= 0)
+  {
+    if(near_segment < node_count)
+      mask_gui->seg_selected = near_segment;
+    return 1;
+  }
+
+  if(inside_source)
+  {
+    mask_gui->form_selected = TRUE;
+    mask_gui->source_selected = TRUE;
+    if(post_select_cb) post_select_cb(mask_gui, inside, inside_border, inside_source, user_data);
+    return 1;
+  }
+  if(inside_border)
+  {
+    mask_gui->form_selected = TRUE;
+    mask_gui->border_selected = TRUE;
+    if(post_select_cb) post_select_cb(mask_gui, inside, inside_border, inside_source, user_data);
+    return 1;
+  }
+  if(inside)
+  {
+    mask_gui->form_selected = TRUE;
+    if(post_select_cb) post_select_cb(mask_gui, inside, inside_border, inside_source, user_data);
+    return 1;
+  }
+
+  return 0;
+}
+
+/**
  * @brief Deep-copy a mask form, including its points list.
  *
  * Caveats:
@@ -1166,6 +1334,7 @@ dt_masks_form_t *dt_masks_create(dt_masks_type_t type)
   mask_form->type = type;
   mask_form->version = dt_masks_version();
   mask_form->formid = time(NULL) + form_id_seed++;
+  mask_form->uses_bezier_points_layout = (type & (DT_MASKS_BRUSH | DT_MASKS_POLYGON)) ? TRUE : FALSE;
 
   if (type & DT_MASKS_CIRCLE)
     mask_form->functions = &dt_masks_functions_circle;

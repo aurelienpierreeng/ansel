@@ -1275,121 +1275,48 @@ static float _brush_get_position_in_segment(float point_x, float point_y,
   return best_t;
 }
 
+/**
+ * @brief Brush-specific border handle lookup.
+ *
+ * Uses mirrored border handles computed from resampled border points.
+ */
+static gboolean _brush_border_handle_cb(const dt_masks_form_gui_points_t *gui_points, int node_count, int node_index,
+                                        float *handle_x, float *handle_y, void *user_data)
+{
+  return _brush_get_border_handle_mirrored(gui_points, node_count, node_index, handle_x, handle_y);
+}
+
+/**
+ * @brief Brush-specific curve handle lookup.
+ *
+ * Converts the node's second control point into the GUI handle position.
+ */
+static void _brush_curve_handle_cb(const dt_masks_form_gui_points_t *gui_points, int node_index,
+                                   float *handle_x, float *handle_y, void *user_data)
+{
+  _brush_ctrl2_to_handle(gui_points->points[node_index * 6 + 2], gui_points->points[node_index * 6 + 3],
+                         gui_points->points[node_index * 6 + 4], gui_points->points[node_index * 6 + 5],
+                         handle_x, handle_y, TRUE);
+}
+
+/**
+ * @brief Brush-specific inside/border/segment hit testing.
+ */
+static void _brush_distance_cb(float pointer_x, float pointer_y, float cursor_radius,
+                               dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
+                               int *inside_border, int *near, int *inside_source, float *dist, void *user_data)
+{
+  _brush_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, node_count,
+                      inside, inside_border, near, inside_source, dist);
+}
+
 static int _find_closest_handle(struct dt_iop_module_t *module, float pointer_x, float pointer_y,
                                 dt_masks_form_t *mask_form, int parentid,
                                 dt_masks_form_gui_t *mask_gui, int form_index)
 {
-  if(!mask_gui) return 0;
-  if(!mask_gui->creation && mask_gui->group_selected != form_index) return 0;
-  dt_masks_form_gui_points_t *gui_points
-      = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
-  if(!gui_points) return 0;
-
-  // get the zoom scale
-  const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
-
-  // we define a distance to the cursor for handle detection (in backbuf dimensions)
-  const float cursor_radius = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED; // transformed to backbuf dimensions
-  const float cursor_radius2 = cursor_radius * cursor_radius;
-
-  mask_gui->form_selected = FALSE;
-  mask_gui->border_selected = FALSE;
-  mask_gui->source_selected = FALSE;
-  mask_gui->handle_selected = -1;
-  mask_gui->node_hovered = -1;
-  mask_gui->seg_selected = -1;
-  mask_gui->handle_border_selected = -1;
-  const guint node_count = g_list_length(mask_form->points);
-
-  pointer_x *= darktable.develop->roi.preview_width / dev->roi.natural_scale;
-  pointer_y *= darktable.develop->roi.preview_height / dev->roi.natural_scale;
-
-
-  if((mask_gui->group_selected == form_index) && mask_gui->node_selected >= 0)
-  {
-    const int node_index = mask_gui->node_selected;
-
-    // Current node's border handle
-     float bh_x = NAN, bh_y = NAN;
-     if(_brush_get_border_handle_mirrored(gui_points, node_count, node_index, &bh_x, &bh_y)
-       && dt_masks_point_is_within_radius(pointer_x, pointer_y, bh_x, bh_y, cursor_radius2))
-    {
-      mask_gui->handle_border_selected = node_index;
-
-      return 1;
-    }
-
-    // Current node's curve handle
-    // We can select the handle only if the node is a curve
-    if(!dt_masks_node_is_cusp(gui_points, node_index))
-    {
-      float ffx, ffy;
-      _brush_ctrl2_to_handle(gui_points->points[node_index * 6 + 2], gui_points->points[node_index * 6 + 3],
-                             gui_points->points[node_index * 6 + 4], gui_points->points[node_index * 6 + 5],
-                             &ffx, &ffy, TRUE);
-    if(dt_masks_point_is_within_radius(pointer_x, pointer_y, ffx, ffy, cursor_radius2))
-      {
-        mask_gui->handle_selected = node_index;
-
-        return 1;
-      }
-    }
-
-    // are we close to the node ?
-    if(dt_masks_point_is_within_radius(pointer_x, pointer_y, gui_points->points[node_index * 6 + 2],
-                                       gui_points->points[node_index * 6 + 3], cursor_radius2))
-    {
-      mask_gui->node_hovered = node_index;
-
-      return 1;
-    }
-  }
-
-  // iterate all nodes and look for one that is close enough
-  for(int node_index = 0; node_index < node_count; node_index++)
-  {
-    if(dt_masks_point_is_within_radius(pointer_x, pointer_y, gui_points->points[node_index * 6 + 2],
-                                       gui_points->points[node_index * 6 + 3], cursor_radius2))
-    {
-      mask_gui->node_hovered = node_index;
-
-      return 1;
-    }
-  }
-
-  // are we inside the form or the borders or near a segment ???
-  int inside = 0;
-  int inside_border = 0;
-  int nearest_segment = -1;
-  int inside_source = 0;
-  float nearest_distance = 0.0f;
-  _brush_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, node_count,
-                      &inside, &inside_border, &nearest_segment, &inside_source, &nearest_distance);
-  // the maximum segment number is nb-1 (open brush)
-  if(nearest_segment < (int)node_count && mask_gui->node_selected == -1)
-    mask_gui->seg_selected = nearest_segment;
-
-  if(nearest_segment < 0)
-  {
-    if(inside_source)
-    {
-      mask_gui->form_selected = TRUE;
-      mask_gui->source_selected = TRUE;
-      return 1;
-    }
-    else if(inside_border)
-    {
-      mask_gui->form_selected = TRUE;
-      mask_gui->border_selected = TRUE;
-      return 1;
-    }
-    else if(inside)
-    {
-      mask_gui->form_selected = TRUE;
-      return 1;
-    }
-  }
-  return 0;
+  return dt_masks_find_closest_handle_common(pointer_x, pointer_y, mask_form, parentid, mask_gui, form_index, -1,
+                                             _brush_border_handle_cb, _brush_curve_handle_cb, NULL,
+                                             _brush_distance_cb, NULL, NULL);
 }
 
 
