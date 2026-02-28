@@ -317,6 +317,7 @@ typedef struct dt_masks_functions_t
   void (*initial_source_pos)(const float iwd, const float iht, float *x, float *y);
   void (*get_distance)(float x, float y, float as, struct dt_masks_form_gui_t *gui, int index, int num_points,
                        int *inside, int *inside_border, int *near, int *inside_source, float *dist);
+  // dist is squared distance in normalized coordinates (0..1), derived from preview-space deltas.
   int (*get_points)(struct dt_develop_t *dev, float x, float y, float radius_a, float radius_b, float rotation,
                     float **points, int *points_count);
   int (*get_points_border)(struct dt_develop_t *dev, struct dt_masks_form_t *form, float **points, int *points_count,
@@ -1046,6 +1047,45 @@ gboolean dt_masks_point_is_within_radius(const float px, const float py,
                                         const float radius);
 
 /**
+ * @brief Compute normalization factors to express distances in normalized image space.
+ *
+ * The input deltas are assumed to be in backbuffer coordinates (preview space).
+ * We convert them to normalized coordinates by dividing by the preview width/height
+ * scaled back to image space (natural_scale). This keeps distances comparable to
+ * normalized form centers (0..1).
+ *
+ * When the preview size is unavailable, we fall back to 1.0f (no normalization).
+ */
+static inline void dt_masks_get_distance_normalization(float *inv_width, float *inv_height)
+{
+  const dt_develop_t *dev = (const dt_develop_t *)darktable.develop;
+  if(!dev || dev->roi.preview_width <= 0 || dev->roi.preview_height <= 0 || dev->roi.natural_scale <= 0.0f)
+  {
+    if(inv_width) *inv_width = 1.0f;
+    if(inv_height) *inv_height = 1.0f;
+    return;
+  }
+
+  const float scale = dev->roi.natural_scale;
+  if(inv_width) *inv_width = scale / dev->roi.preview_width;
+  if(inv_height) *inv_height = scale / dev->roi.preview_height;
+}
+
+/**
+ * @brief Convert a squared distance in preview space to normalized image space.
+ *
+ * Pass dx,dy in preview-space units and the factors returned by
+ * dt_masks_get_distance_normalization().
+ */
+static inline float dt_masks_distance_sq_normalized(const float dx, const float dy,
+                                                    const float inv_width, const float inv_height)
+{
+  const float nx = dx * inv_width;
+  const float ny = dy * inv_height;
+  return (nx * nx) + (ny * ny);
+}
+
+/**
  * @brief Shape-specific callback to fetch a node's border handle in GUI space.
  *
  * @return TRUE if the handle is valid and written to (handle_x, handle_y).
@@ -1070,6 +1110,7 @@ typedef void (*dt_masks_node_position_fn)(const dt_masks_form_gui_points_t *gui_
  * @brief Shape-specific callback for inside/border/segment hit testing.
  *
  * This mirrors the per-shape *_get_distance() APIs and returns the same outputs.
+ * The dist output is a squared distance in normalized image coordinates.
  */
 typedef void (*dt_masks_distance_fn)(float pointer_x, float pointer_y, float cursor_radius,
                                      dt_masks_form_gui_t *mask_gui, int form_index, int node_count,
