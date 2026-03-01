@@ -634,12 +634,6 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, double
                                           dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui,
                                           int index)
 {
-  
-  
-  
-  if(!gui) return 0;
-  if(!form) return 0;
-
   _find_closest_handle(form, gui, index);
 
   if(gui->creation && which == 1
@@ -659,10 +653,7 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, double
       dt_masks_node_ellipse_t *ellipse = (dt_masks_node_ellipse_t *)(malloc(sizeof(dt_masks_node_ellipse_t)));
       if(!ellipse) return 0;
       // we change the center value
-      ellipse->center[0] = gui->pos[0];
-      ellipse->center[1] = gui->pos[1];
-      // we backtransform the point to get it in input space
-      dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, ellipse->center, 1);
+      dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, ellipse->center);
       if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
         ellipse->radius[0] = dt_conf_get_float("plugins/darkroom/spots/ellipse/radius_a");
@@ -835,12 +826,6 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, double x,
                                        double pressure, int which, dt_masks_form_t *form, int parentid,
                                        dt_masks_form_gui_t *gui, int index)
 {
-  
-  
-  
-  
-  if(!gui) return 0;
-
   if(gui->creation)
   {
     // Let the cursor motion be redrawn as it moves in GUI
@@ -860,8 +845,8 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, double x,
     {
     dt_develop_t *dev = (dt_develop_t *)darktable.develop;
     // apply delta to the current mouse position
-    float pts[2] = { gui->pos[0] + gui->delta[0], gui->pos[1] + gui->delta[1] };
-    dt_dev_coordinates_image_abs_to_raw_norm(dev, pts, 1);
+    float pts[2];
+    dt_masks_gui_delta_to_raw_norm(dev, gui, pts);
 
     if(gui->form_dragging)
     {
@@ -981,14 +966,11 @@ static void _ellipse_draw_node(const dt_masks_form_gui_t *gui, cairo_t *cr, cons
 static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index,
                                         int num_points)
 {
-   //unused arg, keep compiler from complaining
-
   // add a preview when creating an ellipse
   // in creation mode
   if(gui->creation)
   {
     dt_masks_form_t *form = dt_masks_get_visible_form(darktable.develop);
-    if(!form) return;
 
     float x = 0.0f, y = 0.0f;
     float masks_border = 0.0f;
@@ -1019,12 +1001,8 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     border_b = (flags & DT_MASKS_ELLIPSE_PROPORTIONAL) ? radius_b * (1.0f + masks_border) : radius_b + masks_border;
 
     // we get the ellipse center
-    float xpos = gui->pos[0];
-    float ypos = gui->pos[1];
-
-
-    float raw_center[2] = { gui->raw_pos[0], gui->raw_pos[1] };
-    dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, raw_center, 1);
+    float raw_center[2];
+    dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, raw_center);
     x = raw_center[0];
     y = raw_center[1];
 
@@ -1062,10 +1040,7 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     // draw a cross where the source will be created
     if(form->type & DT_MASKS_CLONE)
     {
-      x = 0.0f;
-      y = 0.0f;
-      dt_masks_calculate_source_pos_value(gui, xpos, ypos, xpos, ypos, &x, &y, FALSE);
-      dt_draw_cross(cr, zoom_scale, x, y);
+      dt_masks_draw_source_preview(cr, zoom_scale, gui, gui->pos[0], gui->pos[1], gui->pos[0], gui->pos[1], FALSE);
     }
 
     dt_pixelpipe_cache_free_align(points);

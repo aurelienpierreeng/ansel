@@ -497,12 +497,6 @@ static int _gradient_events_button_pressed(struct dt_iop_module_t *module, doubl
                                            double pressure, int which, int type, uint32_t state,
                                            dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, int index)
 {
-  
-  
-  
-  if(!gui) return 0;
-  if(!form) return 0;
-
   // Do we need to refresh currently active node ?
   // Its requested to give back the focus when clicking outside current shape.
   _find_closest_handle(form, gui, index);
@@ -522,10 +516,7 @@ static int _gradient_events_button_pressed(struct dt_iop_module_t *module, doubl
       dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(malloc(sizeof(dt_masks_anchor_gradient_t)));
       if(!gradient) return 0;
       // we change the center value
-      gradient->center[0] = gui->pos[0];
-      gradient->center[1] = gui->pos[1];
-      // we backtransform the point to get it in input space
-      dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, gradient->center, 1);
+      dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, gradient->center);
 
       gradient->extent = dt_conf_get_float("plugins/darkroom/masks/gradient/extent");
       gradient->curvature = dt_conf_get_float("plugins/darkroom/masks/gradient/curvature");
@@ -640,12 +631,6 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, double x
                                         double pressure, int which, dt_masks_form_t *form, int parentid,
                                         dt_masks_form_gui_t *gui, int index)
 {
-  
-  
-  
-  
-  if(!gui) return 0;
-
   if(gui->creation)
   {
     // Let the cursor motion be redrawn as it moves in GUI
@@ -665,8 +650,8 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, double x
   if(gui->form_dragging)
   {
     // we change the center value
-    float pts[2] = { gui->pos[0] + gui->delta[0], gui->pos[1] + gui->delta[1] };
-    dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, pts, 1);
+    float pts[2];
+    dt_masks_gui_delta_to_raw_norm(darktable.develop, gui, pts);
 
     gradient->center[0] = pts[0];
     gradient->center[1] = pts[1];
@@ -1026,14 +1011,9 @@ static void _gradient_draw_arrow(cairo_t *cr, const gboolean selected, const gbo
 
 static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int nb)
 {
-  if(!gui) return;
-
   // preview gradient creation
   if(gui->creation)
   {
-    dt_masks_form_t *form = dt_masks_get_visible_form(darktable.develop);
-    if(!form) return;
-
     float rotation = 0.0f;
     float extent = 0.0f;
     float curvature = 0.0f;
@@ -1043,8 +1023,8 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
     rotation = dt_conf_get_float("plugins/darkroom/masks/gradient/rotation");
 
     // we get the gradient center
-    float pts[2] = { gui->pos[0], gui->pos[1] };
-    dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, pts, 1);
+    float pts[2];
+    dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, pts);
 
     const float x = pts[0];
     const float y = pts[1];

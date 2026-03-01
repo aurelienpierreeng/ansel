@@ -534,7 +534,6 @@ static inline int dt_masks_gui_selected_segment_index(const dt_masks_form_gui_t 
 
 static inline gboolean dt_masks_gui_should_hit_test(dt_masks_form_gui_t *gui)
 {
-  if(!gui) return TRUE;
   const float hit_thresh = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED * 0.5f;
   const float dx = gui->pos[0] - gui->last_hit_test_pos[0];
   const float dy = gui->pos[1] - gui->last_hit_test_pos[1];
@@ -545,6 +544,23 @@ static inline gboolean dt_masks_gui_should_hit_test(dt_masks_form_gui_t *gui)
     return TRUE;
   }
   return FALSE;
+}
+
+// High-level mask event dispatchers cache the current cursor in raw absolute coordinates.
+// Reuse that cache for current-cursor conversions instead of backtransforming `gui->pos` again.
+static inline void dt_masks_gui_cursor_to_raw_norm(dt_develop_t *dev, const dt_masks_form_gui_t *gui, float point[2])
+{
+  point[0] = gui->raw_pos[0];
+  point[1] = gui->raw_pos[1];
+  dt_dev_coordinates_raw_abs_to_raw_norm(dev, point, 1);
+}
+
+// Reuse the cached absolute output-image cursor and drag delta to derive a raw-normalized point.
+static inline void dt_masks_gui_delta_to_raw_norm(dt_develop_t *dev, const dt_masks_form_gui_t *gui, float point[2])
+{
+  point[0] = gui->pos[0] + gui->delta[0];
+  point[1] = gui->pos[1] + gui->delta[1];
+  dt_dev_coordinates_image_abs_to_raw_norm(dev, point, 1);
 }
 
 typedef struct dt_masks_gui_center_point_t
@@ -756,6 +772,15 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *gui, dt_masks_fo
 void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *gui, const float initial_xpos,
                                          const float initial_ypos, const float xpos, const float ypos, float *px,
                                          float *py, const int adding);
+static inline void dt_masks_draw_source_preview(cairo_t *cr, const float zoom_scale, dt_masks_form_gui_t *gui,
+                                                const float initial_xpos, const float initial_ypos,
+                                                const float xpos, const float ypos, const int adding)
+{
+  float source_pos[2] = { 0.0f, 0.0f };
+  dt_masks_calculate_source_pos_value(gui, initial_xpos, initial_ypos, xpos, ypos,
+                                      &source_pos[0], &source_pos[1], adding);
+  dt_draw_cross(cr, zoom_scale, source_pos[0], source_pos[1]);
+}
 /**
  * @brief Rotate a mask shape around its center.
  * WARNING: gui->delta will be updated with the new position after rotation.

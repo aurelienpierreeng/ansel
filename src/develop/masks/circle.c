@@ -266,10 +266,6 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, double 
                                          double pressure, int which, int type, uint32_t state,
                                          dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, int index)
 {
-  
-  
-  if(!gui) return 0;
-  if(!form) return 0;
   _find_closest_handle(form, gui, index);
 
   if(which == 1)
@@ -289,10 +285,7 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, double 
       if(!circle) return 0;
 
       // we change the center value
-      circle->center[0] = gui->pos[0];
-      circle->center[1] = gui->pos[1];
-      // we backtransform the point to get it in input space
-      dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, circle->center, 1);
+      dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, circle->center);
 
       if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
@@ -384,12 +377,6 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, double x, 
                                       int which, dt_masks_form_t *form, int parentid,
                                       dt_masks_form_gui_t *gui, int index)
 {
-  
-  
-  
-  
-  if(!gui) return 0;
-
   if(gui->creation)
   {
     // Let the cursor motion be redrawn as it moves in GUI
@@ -402,8 +389,8 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, double x, 
   {
     dt_develop_t *dev = (dt_develop_t *)darktable.develop;
     // apply delta to the current mouse position
-    float pts[2] = { gui->pos[0] + gui->delta[0], gui->pos[1] + gui->delta[1] };
-    dt_dev_coordinates_image_abs_to_raw_norm(dev, pts, 1);
+    float pts[2];
+    dt_masks_gui_delta_to_raw_norm(dev, gui, pts);
 
     // we move all points in normalized input space
     if(gui->form_dragging)
@@ -561,15 +548,11 @@ static int _circle_get_points(dt_develop_t *dev, float x, float y, float radius,
 
 static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_form_gui_t *gui, int index, int num_points)
 {
-  const dt_develop_t *const dev = (const dt_develop_t *)darktable.develop;
-  if(!gui || !dev) return;
-
   // add a preview when creating a circle
   // in creation mode
   if(gui->creation)
   {
     dt_masks_form_t *form = dt_masks_get_visible_form(darktable.develop);
-    if(!form) return;
 
     // we get the default radius values
     float radius_shape = 0.0f;
@@ -587,8 +570,8 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
     radius_border += radius_shape;
 
     // we get the circle center at mouse position
-    float back_pts[2] = { gui->raw_pos[0], gui->raw_pos[1] };
-    dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, back_pts, 1);
+    float back_pts[2];
+    dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, back_pts);
     const float x = back_pts[0];
     const float y = back_pts[1];
     // we get all the points, distorted if needed, of the sample form
@@ -612,11 +595,7 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
 
     // draw a cross where the source will be created
     if(form->type & DT_MASKS_CLONE)
-    {
-      float pts[2] = { 0.0, 0.0 };
-      dt_masks_calculate_source_pos_value(gui, gui->pos[0], gui->pos[1], gui->pos[0], gui->pos[1], &pts[0], &pts[1], FALSE);
-      dt_draw_cross(cr, zoom_scale, pts[0], pts[1]);
-    }
+      dt_masks_draw_source_preview(cr, zoom_scale, gui, gui->pos[0], gui->pos[1], gui->pos[0], gui->pos[1], FALSE);
 
     dt_pixelpipe_cache_free_align(points);
     dt_pixelpipe_cache_free_align(border);
