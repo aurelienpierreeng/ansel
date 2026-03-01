@@ -2008,24 +2008,8 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, double 
 
   else if(which == 1)
   {
-    const gboolean was_dragging = dt_masks_gui_is_dragging(mask_gui);
-
-    if(was_dragging)
-    {
-      if(mask_gui->rebuild_pending)
-      {
-        dt_masks_gui_form_create(mask_form, mask_gui, index, module);
-        dt_develop_t *const dev = darktable.develop;
-        if(dev)
-        {
-          mask_gui->last_rebuild_ts = dt_get_wtime();
-          mask_gui->last_rebuild_pos[0] = mask_gui->pos[0];
-          mask_gui->last_rebuild_pos[1] = mask_gui->pos[1];
-        }
-        mask_gui->rebuild_pending = FALSE;
-      }
+    if(dt_masks_gui_is_dragging(mask_gui))
       return 1;
-    }
   }
   return 0;
 }

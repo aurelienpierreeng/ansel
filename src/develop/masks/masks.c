@@ -482,6 +482,88 @@ dt_masks_form_group_t *dt_masks_form_get_selected_group_live(const dt_masks_form
 }
 
 /**
+ * @brief Resolve the concrete form that should receive an event.
+ *
+ * Visible groups expose one selected child to the event path. Non-group forms
+ * dispatch to themselves.
+ */
+static dt_masks_form_t *_dt_masks_events_get_dispatch_form(dt_masks_form_t *visible_form,
+                                                           const dt_masks_form_gui_t *mask_gui,
+                                                           dt_masks_form_group_t **group_entry,
+                                                           int *parent_id, int *form_index)
+{
+  if(group_entry) *group_entry = NULL;
+  if(parent_id) *parent_id = 0;
+  if(form_index) *form_index = 0;
+
+  if(!visible_form) return NULL;
+  if(!(visible_form->type & DT_MASKS_GROUP)) return visible_form;
+
+  dt_masks_form_group_t *selected_group_entry
+      = dt_masks_form_get_selected_group_live(visible_form, mask_gui);
+  if(!selected_group_entry) return NULL;
+
+  dt_masks_form_t *selected_form = dt_masks_get_from_id(darktable.develop, selected_group_entry->formid);
+  if(!selected_form) return NULL;
+
+  if(group_entry) *group_entry = selected_group_entry;
+  if(parent_id) *parent_id = selected_group_entry->parentid;
+  if(form_index) *form_index = mask_gui->group_selected;
+
+  return selected_form;
+}
+
+/**
+ * @brief Consume the initial drag motion used to disambiguate scrolling vs dragging in groups.
+ */
+static gboolean _dt_masks_events_group_blocks_motion(dt_masks_form_gui_t *mask_gui)
+{
+  if(!mask_gui) return FALSE;
+
+  const float radius = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
+  if(mask_gui->scrollx == 0.0f || mask_gui->scrolly == 0.0f) return FALSE;
+
+  if((mask_gui->scrollx - mask_gui->pos[0] < radius && mask_gui->scrollx - mask_gui->pos[0] > -radius)
+     && (mask_gui->scrolly - mask_gui->pos[1] < radius && mask_gui->scrolly - mask_gui->pos[1] > -radius))
+    return TRUE;
+
+  mask_gui->scrollx = 0.0f;
+  mask_gui->scrolly = 0.0f;
+  return FALSE;
+}
+
+/**
+ * @brief Flush a deferred throttled rebuild before drag state is reset.
+ */
+static gboolean _dt_masks_events_flush_rebuild_if_needed(struct dt_iop_module_t *module,
+                                                         dt_masks_form_t *dispatch_form,
+                                                         dt_masks_form_gui_t *mask_gui,
+                                                         const int form_index, const int button)
+{
+  if(button != 1) return FALSE;
+  if(!dt_masks_gui_is_dragging(mask_gui)) return FALSE;
+
+  if(mask_gui->rebuild_pending)
+  {
+    if(dispatch_form)
+    {
+      dt_masks_gui_form_create(dispatch_form, mask_gui, form_index, module);
+
+      dt_develop_t *const dev = darktable.develop;
+      if(dev)
+      {
+        mask_gui->last_rebuild_ts = dt_get_wtime();
+        mask_gui->last_rebuild_pos[0] = mask_gui->pos[0];
+        mask_gui->last_rebuild_pos[1] = mask_gui->pos[1];
+      }
+    }
+    mask_gui->rebuild_pending = FALSE;
+  }
+
+  return TRUE;
+}
+
+/**
  * @brief Duplicate the list of forms, replacing a single item by formid match.
  */
 GList *dt_masks_dup_forms_deep(GList *form_list, dt_masks_form_t *replacement_form)
@@ -1898,8 +1980,21 @@ int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double
   if(darktable.develop->darkroom_skip_mouse_events) return 0;
 
   int result = 0;
-  result = mask_form->functions->mouse_moved(module, x, y, pressure, which,
-                                              mask_form, 0, mask_gui, 0);
+  dt_masks_form_group_t *group_entry = NULL;
+  int parent_id = 0;
+  int form_index = 0;
+  dt_masks_form_t *dispatch_form
+      = _dt_masks_events_get_dispatch_form(mask_form, mask_gui, &group_entry, &parent_id, &form_index);
+
+  if((mask_form->type & DT_MASKS_GROUP) && _dt_masks_events_group_blocks_motion(mask_gui))
+  {
+    result = 1;
+  }
+  else if(dispatch_form && dispatch_form->functions && dispatch_form->functions->mouse_moved)
+  {
+    result = dispatch_form->functions->mouse_moved(module, x, y, pressure, which,
+                                                   dispatch_form, parent_id, mask_gui, form_index);
+  }
 
   if(mask_gui)
   {
@@ -1921,9 +2016,19 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
   _dt_masks_events_set_current_pos(x, y, mask_gui);
   if(!mask_form) return 0;
 
+  dt_masks_form_group_t *group_entry = NULL;
+  int parent_id = 0;
+  int form_index = 0;
+  dt_masks_form_t *dispatch_form
+      = _dt_masks_events_get_dispatch_form(mask_form, mask_gui, &group_entry, &parent_id, &form_index);
+
   int result = 0;
-  result = mask_form->functions->button_released(module, x, y, button,
-                                                  state, mask_form, 0, mask_gui, 0);
+  if(dispatch_form && dispatch_form->functions && dispatch_form->functions->button_released)
+    result = dispatch_form->functions->button_released(module, x, y, button,
+                                                       state, dispatch_form, parent_id, mask_gui, form_index);
+
+  if(_dt_masks_events_flush_rebuild_if_needed(module, dispatch_form, mask_gui, form_index, button))
+    result = 1;
 
   if(mask_form && (mask_form->type & DT_MASKS_GROUP) && mask_gui)
   {
@@ -1962,21 +2067,25 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
   /*DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);*/
 
   gboolean return_val = FALSE;
-  return_val = mask_form->functions->button_pressed(module, x, y, pressure,
-                                                    button, event_type, state,
-                                                    mask_form, 0, mask_gui, 0);
+  if(mask_form->functions && mask_form->functions->button_pressed)
+    return_val = mask_form->functions->button_pressed(module, x, y, pressure,
+                                                      button, event_type, state,
+                                                      mask_form, 0, mask_gui, 0);
 
   _apply_gui_button_pressed_state(mask_gui, button, state);
 
   if(button == 3 && !return_val)
   {
+    dt_masks_form_group_t *group_entry = NULL;
+    dt_masks_form_t *menu_form
+        = _dt_masks_events_get_dispatch_form(mask_form, mask_gui, &group_entry, NULL, NULL);
+
     // mouse is over a form or one of its handles/nodes
-    if(mask_gui && (mask_gui->creation
-                    || (mask_gui->group_selected >= 0
-                        && (dt_masks_is_anything_hovered(mask_gui)
-                            || dt_masks_is_anything_selected(mask_gui)))))
+    if(menu_form && (mask_gui->creation
+                     || dt_masks_is_anything_hovered(mask_gui)
+                     || dt_masks_is_anything_selected(mask_gui)))
     {
-      GtkWidget *menu = dt_masks_create_menu(mask_gui, mask_form, NULL,
+      GtkWidget *menu = dt_masks_create_menu(mask_gui, menu_form, group_entry,
                                              mask_gui->rel_pos[0], mask_gui->rel_pos[1]);
       gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
       return_val = TRUE;
@@ -1994,8 +2103,24 @@ int dt_masks_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey *eve
   if(!mask_gui) return 0;
 
   gboolean return_value = FALSE;
+  if(mask_form->type & DT_MASKS_GROUP)
+  {
+    dt_masks_form_group_t *group_entry = NULL;
+    int parent_id = 0;
+    int form_index = 0;
+    dt_masks_form_t *dispatch_form
+        = _dt_masks_events_get_dispatch_form(mask_form, mask_gui, &group_entry, &parent_id, &form_index);
+    if(dispatch_form && dispatch_form->functions && dispatch_form->functions->key_pressed)
+      return_value = dispatch_form->functions->key_pressed(module, event, dispatch_form,
+                                                           parent_id, mask_gui, form_index);
 
-  return_value = mask_form->functions->key_pressed(module, event, mask_form, 0, mask_gui, 0);
+    if(!return_value && mask_form->functions->key_pressed)
+      return_value = mask_form->functions->key_pressed(module, event, mask_form, 0, mask_gui, 0);
+  }
+  else if(mask_form->functions->key_pressed)
+  {
+    return_value = mask_form->functions->key_pressed(module, event, mask_form, 0, mask_gui, 0);
+  }
   
   if(!return_value)
   {
@@ -2044,11 +2169,17 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
   // we want delta_y to be an absolute scrolling speed
   int scroll_flow = (scrolling_delta < 0) ? -scrolling_delta : scrolling_delta;
 
-  if(mask_form->functions)
-    result = mask_form->functions->mouse_scrolled(module, x, y,
-                                                  scroll_increases ? 1 : 0, scroll_flow,
-                                                  key_state, mask_form, 0, mask_gui, 0,
-                                                  DT_MASKS_INTERACTION_UNDEF);
+  dt_masks_form_group_t *group_entry = NULL;
+  int parent_id = 0;
+  int form_index = 0;
+  dt_masks_form_t *dispatch_form
+      = _dt_masks_events_get_dispatch_form(mask_form, mask_gui, &group_entry, &parent_id, &form_index);
+
+  if(dispatch_form && dispatch_form->functions->mouse_scrolled)
+    result = dispatch_form->functions->mouse_scrolled(module, x, y,
+                                                      scroll_increases ? 1 : 0, scroll_flow,
+                                                      key_state, dispatch_form, parent_id, mask_gui, form_index,
+                                                      DT_MASKS_INTERACTION_UNDEF);
 
   if(mask_gui)
   {

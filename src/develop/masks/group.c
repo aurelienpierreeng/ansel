@@ -63,12 +63,6 @@ static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, double x
                                         uint32_t state, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
                                         int unused, dt_masks_interaction_t interaction)
 {
-  dt_masks_form_group_t *group_entry = NULL;
-  dt_masks_form_t *selected_form = _group_get_selected_child(form, gui, &group_entry);
-  if(selected_form && selected_form->functions)
-    return selected_form->functions->mouse_scrolled(module, x, y, up, flow, state, selected_form,
-                                                    group_entry->parentid, gui, gui->group_selected,
-                                                    interaction);
   return 0;
 }
 
@@ -168,13 +162,6 @@ static gboolean _group_events_button_pressed(struct dt_iop_module_t *module, dou
                                               group_entry->parentid, gui, gui->group_selected))
     return TRUE;
 
-  if(which == 3 && (gui->form_selected || gui->node_hovered > -1 || gui->node_selected || gui->seg_selected))
-  {
-    GtkWidget *menu = dt_masks_create_menu(gui, selected_form, group_entry, gui->rel_pos[0], gui->rel_pos[1]);
-    gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
-    return TRUE;
-  }
-
   return FALSE;
 }
 
@@ -182,13 +169,6 @@ static int _group_events_button_released(struct dt_iop_module_t *module, double 
                                          uint32_t state, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
                                          int unused2)
 {
-  dt_masks_form_group_t *group_entry = NULL;
-  dt_masks_form_t *selected_form = _group_get_selected_child(form, gui, &group_entry);
-  if(selected_form && selected_form->functions->button_released(module, x, y, which, state,
-                                                                selected_form, group_entry->parentid,
-                                                                gui, gui->group_selected))
-    return 1;
-
   return 0;
 }
 
@@ -197,12 +177,6 @@ static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey
   if(!form) return 0;
 
   gboolean return_value = FALSE;
-
-  dt_masks_form_group_t *group_entry = NULL;
-  dt_masks_form_t *selected_form = _group_get_selected_child(form, gui, &group_entry);
-  if(selected_form && selected_form->functions && selected_form->functions->key_pressed)
-    return_value = selected_form->functions->key_pressed(module, event, selected_form,
-                                                         group_entry->parentid, gui, gui->group_selected);
 
   // Global key bindings for groups
   // TODO: map that to context menu
@@ -220,8 +194,8 @@ static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey
         if(gui->group_selected >= 0)
         {
           // Delete shape from current group
-          group_entry = NULL;
-          selected_form = _group_get_selected_child(form, gui, &group_entry);
+          dt_masks_form_group_t *group_entry = NULL;
+          dt_masks_form_t *selected_form = _group_get_selected_child(form, gui, &group_entry);
           if(!selected_form) return 0;
           return_value = dt_masks_gui_delete(module, selected_form, gui, group_entry->parentid);
           break;
@@ -237,26 +211,6 @@ static int _group_events_mouse_moved(struct dt_iop_module_t *module, double x, d
                                      int which, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
                                      int unused2)
 {
-  const float as = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
-
-  // we first don't do anything if we are inside a scrolling session
-  if(gui->scrollx != 0.0f && gui->scrolly != 0.0f)
-  {
-    if((gui->scrollx - gui->pos[0] < as && gui->scrollx - gui->pos[0] > -as)
-       && (gui->scrolly - gui->pos[1] < as && gui->scrolly - gui->pos[1] > -as))
-      return 1;
-    gui->scrollx = gui->scrolly = 0.0f;
-  }
-
-  // if a form is in edit mode, capture movement
-  dt_masks_form_group_t *group_entry = NULL;
-  dt_masks_form_t *selected_form = _group_get_selected_child(form, gui, &group_entry);
-  if(selected_form && selected_form->functions)
-    return selected_form->functions->mouse_moved(module, x, y, pressure, which, selected_form,
-                                                 group_entry->parentid, gui, gui->group_selected);
-
-  // capturing scroll event outside of editing mode is dangerous (zoom).
-  // Nothing will happen then.
   return 0;
 }
 
