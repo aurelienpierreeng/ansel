@@ -1441,14 +1441,15 @@ static int _change_hardness(dt_masks_form_t *mask_form, int parentid, dt_masks_f
                             const dt_masks_increment_t increment, const int flow)
 {
   if(!mask_form || !mask_form->points) return 0;
-  const int node_hovered = mask_gui->node_hovered;
+  const int node_selected = mask_gui->node_selected;
+  const int selected = (mask_gui->form_selected && node_selected == -1);
   int node_index = 0;
   const float scale_amount = powf(amount, (float)flow);
   const float offset_amount = amount * (float)flow;
   float result_amount = 0.0f;
   for(GList *node_entry = mask_form->points; node_entry; node_entry = g_list_next(node_entry))
   {
-    if(node_hovered == -1 || node_hovered == node_index)
+    if(node_selected == node_index || selected)
     {
       dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)node_entry->data;
       const float current_hardness = node->hardness;
@@ -1529,7 +1530,9 @@ static int _brush_events_mouse_scrolled(struct dt_iop_module_t *module, float po
     else
       return _init_size(mask_form, parentid, mask_gui, scroll_up ? 1.02f : 0.98f, DT_MASKS_INCREMENT_SCALE, flow);
   }
-  else if(mask_gui->form_selected || mask_gui->node_hovered >= 0 || mask_gui->handle_selected >= 0
+  else if(mask_gui->form_selected || mask_gui->source_selected
+          || mask_gui->node_hovered >= 0 || mask_gui->node_selected >= 0
+          || mask_gui->handle_selected >= 0 || mask_gui->handle_border_selected >= 0
           || mask_gui->seg_selected >= 0)
   {
     // we register the current position
