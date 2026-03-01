@@ -525,9 +525,7 @@ static int _gradient_events_button_pressed(struct dt_iop_module_t *module, doubl
       gradient->center[0] = gui->pos[0];
       gradient->center[1] = gui->pos[1];
       // we backtransform the point to get it in input space
-      dt_dev_distort_backtransform(darktable.develop, gradient->center, 1);
-      // normalize
-      dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, gradient->center, 1);
+      dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, gradient->center, 1);
 
       gradient->extent = dt_conf_get_float("plugins/darkroom/masks/gradient/extent");
       gradient->curvature = dt_conf_get_float("plugins/darkroom/masks/gradient/curvature");
@@ -668,8 +666,7 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, double x
   {
     // we change the center value
     float pts[2] = { gui->pos[0] + gui->delta[0], gui->pos[1] + gui->delta[1] };
-    dt_dev_distort_backtransform(darktable.develop, pts, 1);
-    dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, pts, 1);
+    dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, pts, 1);
 
     gradient->center[0] = pts[0];
     gradient->center[1] = pts[1];
@@ -806,7 +803,7 @@ static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotat
   dt_pixelpipe_cache_free_align(pts);
 
   // and we transform them with all distorted modules
-  if(!dt_dev_distort_transform(dev, *points, *points_count))
+  if(!dt_dev_coordinates_raw_abs_to_image_abs(dev, *points, *points_count))
   {
     dt_pixelpipe_cache_free_align(*points);
     *points = NULL;
@@ -1046,29 +1043,9 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
     rotation = dt_conf_get_float("plugins/darkroom/masks/gradient/rotation");
 
     // we get the gradient center
-    float xpos = gui->pos[0];
-    float ypos = gui->pos[1];
+    float pts[2] = { gui->pos[0], gui->pos[1] };
+    dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, pts, 1);
 
-    if((xpos == -1.f && ypos == -1.f))
-    {
-      float center[2] = { .5f + darktable.develop->roi.x, .5f + darktable.develop->roi.y };
-      dt_dev_coordinates_image_norm_to_preview_abs(darktable.develop, center, 1);
-      xpos = center[0];
-      ypos = center[1];
-    }
-    float pts[2];
-    if(gui->raw_pos[0] != -1.0f || gui->raw_pos[1] != -1.0f)
-    {
-      pts[0] = gui->raw_pos[0];
-      pts[1] = gui->raw_pos[1];
-    }
-    else
-    {
-      pts[0] = xpos;
-      pts[1] = ypos;
-      dt_dev_distort_backtransform(darktable.develop, pts, 1);
-    }
-    dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, pts, 1);
     const float x = pts[0];
     const float y = pts[1];
 

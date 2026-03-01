@@ -292,9 +292,7 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, double 
       circle->center[0] = gui->pos[0];
       circle->center[1] = gui->pos[1];
       // we backtransform the point to get it in input space
-      dt_dev_distort_backtransform(darktable.develop, circle->center, 1);
-      // normalize
-      dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, circle->center, 1);
+      dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, circle->center, 1);
 
       if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
@@ -405,8 +403,7 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, double x, 
     dt_develop_t *dev = (dt_develop_t *)darktable.develop;
     // apply delta to the current mouse position
     float pts[2] = { gui->pos[0] + gui->delta[0], gui->pos[1] + gui->delta[1] };
-    dt_dev_distort_backtransform(dev, pts, 1);
-    dt_dev_coordinates_raw_abs_to_raw_norm(dev, pts, 1);
+    dt_dev_coordinates_image_abs_to_raw_norm(dev, pts, 1);
 
     // we move all points in normalized input space
     if(gui->form_dragging)
@@ -550,7 +547,7 @@ static int _circle_get_points(dt_develop_t *dev, float x, float y, float radius,
   if(!*points) return 1;
 
   // and transform them with all distorted modules
-  if(!dt_dev_distort_transform(dev, *points, *points_count))
+  if(!dt_dev_coordinates_raw_abs_to_image_abs(dev, *points, *points_count))
   {
     dt_pixelpipe_cache_free_align(*points);
     *points = NULL;

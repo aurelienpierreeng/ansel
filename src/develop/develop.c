@@ -891,6 +891,12 @@ void dt_dev_coordinates_raw_norm_to_raw_abs(dt_develop_t *dev, float *points, si
   }
 }
 
+void dt_dev_coordinates_image_abs_to_raw_norm(dt_develop_t *dev, float *points, size_t num_points)
+{
+  dt_dev_coordinates_image_abs_to_raw_abs(dev, points, num_points);
+  dt_dev_coordinates_raw_abs_to_raw_norm(dev, points, num_points);
+}
+
 void dt_dev_coordinates_image_norm_to_preview_abs(dt_develop_t *dev, float *points, size_t num_points)
 {
   if(!dev || !points || num_points == 0) return;
@@ -1249,13 +1255,17 @@ gchar *dt_history_item_get_name_html(const struct dt_iop_module_t *module)
   return label;
 }
 
-int dt_dev_distort_transform(dt_develop_t *dev, float *points, size_t points_count)
+static int dt_dev_distort_backtransform_locked(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const double iop_order,
+                                               const int transf_direction, float *points, size_t points_count);
+
+int dt_dev_coordinates_raw_abs_to_image_abs(dt_develop_t *dev, float *points, size_t points_count)
 {
   return dt_dev_distort_transform_plus(dev, dev->virtual_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
 }
-int dt_dev_distort_backtransform(dt_develop_t *dev, float *points, size_t points_count)
+
+int dt_dev_coordinates_image_abs_to_raw_abs(dt_develop_t *dev, float *points, size_t points_count)
 {
-  return dt_dev_distort_backtransform_plus(dev, dev->virtual_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
+  return dt_dev_distort_backtransform_locked(dev, dev->virtual_pipe, 0.0f, DT_DEV_TRANSFORM_DIR_ALL, points, points_count);
 }
 
 // only call directly or indirectly from dt_dev_distort_transform_plus, so that it runs with the history locked
@@ -1287,9 +1297,9 @@ int dt_dev_distort_transform_plus(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, c
   return 1;
 }
 
-// only call directly or indirectly from dt_dev_distort_transform_plus, so that it runs with the history locked
-int dt_dev_distort_backtransform_locked(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const double iop_order,
-                                        const int transf_direction, float *points, size_t points_count)
+// Internal backtransform loop. Keep this file-local so callers use the public wrappers.
+static int dt_dev_distort_backtransform_locked(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, const double iop_order,
+                                               const int transf_direction, float *points, size_t points_count)
 {
   for(GList *pieces = g_list_last(pipe->nodes); pieces; pieces = g_list_previous(pieces))
   {

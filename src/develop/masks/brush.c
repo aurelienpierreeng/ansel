@@ -1648,9 +1648,7 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, dt_masks_form_t
   new_node->node[0] = mask_gui->pos[0];
   new_node->node[1] = mask_gui->pos[1];
   // we backtransform the point to get it in input space
-  dt_dev_distort_backtransform(darktable.develop, new_node->node, 1);
-  // normalize
-  dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, new_node->node, 1);
+  dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, new_node->node, 1);
   new_node->ctrl1[0] = new_node->ctrl1[1] = new_node->ctrl2[0] = new_node->ctrl2[1] = -1.0;
   new_node->state = DT_MASKS_POINT_STATE_NORMAL;
 
@@ -1938,9 +1936,7 @@ static int _brush_events_button_released(struct dt_iop_module_t *module, double 
       float *guipoints_payload = dt_masks_dynbuf_buffer(mask_gui->guipoints_payload);
 
       // we transform the points
-      dt_dev_distort_backtransform(darktable.develop, guipoints, mask_gui->guipoints_count);
-
-      dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, guipoints, mask_gui->guipoints_count);
+      dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, guipoints, mask_gui->guipoints_count);
 
       // we consolidate pen pressure readings into payload
       _apply_pen_pressure(mask_gui, guipoints_payload);
@@ -2091,8 +2087,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
 
     // apply delta to the current mouse position
     float raw_point[2] = { mask_gui->pos[0] + mask_gui->delta[0], mask_gui->pos[1] + mask_gui->delta[1] };
-    dt_dev_distort_backtransform(dev, raw_point, 1);
-    dt_dev_coordinates_raw_abs_to_raw_norm(dev, raw_point, 1);
+    dt_dev_coordinates_image_abs_to_raw_norm(dev, raw_point, 1);
 
     // we move all points
     const float delta_x = raw_point[0] - dragged_node->node[0];
@@ -2126,8 +2121,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
 
     // we get point0 new values
     float raw_pos[2] = { mask_gui->pos[0] + mask_gui->delta[0], mask_gui->pos[1] + mask_gui->delta[1] };
-    dt_dev_distort_backtransform(darktable.develop, raw_pos, 1);
-    dt_dev_coordinates_raw_abs_to_raw_norm(dev, raw_pos, 1);
+    dt_dev_coordinates_image_abs_to_raw_norm(dev, raw_pos, 1);
     // we move all points
     const float delta_x = raw_pos[0] - segment_node->node[0];
     const float delta_y = raw_pos[1] - segment_node->node[1];
@@ -2171,8 +2165,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
                           cursor_pos[1], &control_points[0], &control_points[1], &control_points[2],
                           &control_points[3], TRUE);
 
-    dt_dev_distort_backtransform(darktable.develop, control_points, 2);
-    dt_dev_coordinates_raw_abs_to_raw_norm(dev, control_points, 2);
+    dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, control_points, 2);
 
     // set new ctrl points
     node->ctrl1[0] = control_points[0];
@@ -2228,7 +2221,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
       pts[1] = a * xproj + b;
     }
 
-    dt_dev_distort_backtransform(darktable.develop, pts, 1);
+    dt_dev_coordinates_image_abs_to_raw_abs(darktable.develop, pts, 1);
 
     float node_pos[2] = { node->node[0], node->node[1] };
     dt_dev_coordinates_raw_norm_to_raw_abs(dev, node_pos, 1);
@@ -2247,8 +2240,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
   {
     // we get point0 new values
     float raw_pos[2] = { mask_gui->pos[0] + mask_gui->delta[0], mask_gui->pos[1] + mask_gui->delta[1] };
-    dt_dev_distort_backtransform(darktable.develop, raw_pos, 1);
-    dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, raw_pos, 1);
+    dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, raw_pos, 1);
     dt_masks_node_brush_t *dragging_shape = (dt_masks_node_brush_t *)(mask_form->points)->data;
     if(!dragging_shape) return 0;
 

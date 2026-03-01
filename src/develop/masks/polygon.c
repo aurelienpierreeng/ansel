@@ -1094,9 +1094,7 @@ static void _add_node_to_segment(struct dt_iop_module_t *module,
   new_node->node[0] = mask_gui->pos[0];
   new_node->node[1] = mask_gui->pos[1];
   // we backtransform the point to get it in input space
-  dt_dev_distort_backtransform(darktable.develop, new_node->node, 1);
-  // normalize
-  dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, new_node->node, 1);
+  dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, new_node->node, 1);
   new_node->ctrl1[0] = new_node->ctrl1[1] = new_node->ctrl2[0] = new_node->ctrl2[1] = -1.0;
   new_node->state = DT_MASKS_POINT_STATE_NORMAL;
 
@@ -1816,8 +1814,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, double
         polygon_node->node[0] = mask_gui->pos[0];
         polygon_node->node[1] = mask_gui->pos[1];
         // we backtransform the point to get it in input space
-        dt_dev_distort_backtransform(darktable.develop, polygon_node->node, 1);
-        dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, polygon_node->node, 1);
+        dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, polygon_node->node, 1);
 
         polygon_node->ctrl1[0] = polygon_node->ctrl1[1] = polygon_node->ctrl2[0] = polygon_node->ctrl2[1] = -1.0;
         polygon_node->border[0] = polygon_node->border[1] = MAX(HARDNESS_MIN, masks_border);
@@ -2070,8 +2067,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
 
     // update continuously the current node to mouse position
     float raw_point[2] = { mask_gui->pos[0] + mask_gui->delta[0], mask_gui->pos[1] + mask_gui->delta[1] };
-    dt_dev_distort_backtransform(dev, raw_point, 1);
-    dt_dev_coordinates_raw_abs_to_raw_norm(dev, raw_point, 1);
+    dt_dev_coordinates_image_abs_to_raw_norm(dev, raw_point, 1);
     // we move all points
     const float dx = raw_point[0] - dragged_node->node[0];
     const float dy = raw_point[1] - dragged_node->node[1];
@@ -2118,8 +2114,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
 
     // we get point0 new values
     float raw_point[2] = { mask_gui->pos[0] + mask_gui->delta[0], mask_gui->pos[1] + mask_gui->delta[1] };
-    dt_dev_distort_backtransform(dev, raw_point, 1);
-    dt_dev_coordinates_raw_abs_to_raw_norm(dev, raw_point, 1);
+    dt_dev_coordinates_image_abs_to_raw_norm(dev, raw_point, 1);
     // we move all points
     const float dx = raw_point[0] - point->node[0];
     const float dy = raw_point[1] - point->node[1];
@@ -2168,8 +2163,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
                             gui_points->points[mask_gui->handle_dragging * 6 + 3],
                             pts[0], pts[1], &p[0], &p[1], &p[2], &p[3], gui_points->clockwise);
 
-    dt_dev_distort_backtransform(darktable.develop, p, 2);
-    dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, p, 2);
+    dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, p, 2);
 
     // set new ctrl points
     node->ctrl1[0] = p[0];
@@ -2223,7 +2217,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
       pts[1] = a * xproj + b;
     }
 
-    dt_dev_distort_backtransform(darktable.develop, pts, 1);
+    dt_dev_coordinates_image_abs_to_raw_abs(darktable.develop, pts, 1);
 
     float node_pos[2] = { node->node[0], node->node[1] };
     dt_dev_coordinates_raw_norm_to_raw_abs(dev, node_pos, 1);
@@ -2244,8 +2238,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
   {
     // we get point0 new values
     float raw_point[2] = { mask_gui->pos[0] + mask_gui->delta[0], mask_gui->pos[1] + mask_gui->delta[1] };
-    dt_dev_distort_backtransform(dev, raw_point, 1);
-    dt_dev_coordinates_raw_abs_to_raw_norm(dev, raw_point, 1);
+    dt_dev_coordinates_image_abs_to_raw_norm(dev, raw_point, 1);
 
     if(mask_gui->form_dragging)
     {

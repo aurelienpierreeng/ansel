@@ -357,7 +357,7 @@ static int _ellipse_get_points(dt_develop_t *dev, float xx, float yy, float radi
   if(!*points) return 1;
 
   // and we transform them with all distorted modules
-  if(!dt_dev_distort_transform(dev, *points, *points_count))
+  if(!dt_dev_coordinates_raw_abs_to_image_abs(dev, *points, *points_count))
   {
     dt_pixelpipe_cache_free_align(*points);
     *points = NULL;
@@ -662,10 +662,7 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, double
       ellipse->center[0] = gui->pos[0];
       ellipse->center[1] = gui->pos[1];
       // we backtransform the point to get it in input space
-      dt_dev_distort_backtransform(darktable.develop, ellipse->center, 1);
-      // normalize
-      dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, ellipse->center, 1);
-
+      dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, ellipse->center, 1);
       if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
       {
         ellipse->radius[0] = dt_conf_get_float("plugins/darkroom/spots/ellipse/radius_a");
@@ -864,8 +861,7 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, double x,
     dt_develop_t *dev = (dt_develop_t *)darktable.develop;
     // apply delta to the current mouse position
     float pts[2] = { gui->pos[0] + gui->delta[0], gui->pos[1] + gui->delta[1] };
-    dt_dev_distort_backtransform(dev, pts, 1);
-    dt_dev_coordinates_raw_abs_to_raw_norm(dev, pts, 1);
+    dt_dev_coordinates_image_abs_to_raw_norm(dev, pts, 1);
 
     if(gui->form_dragging)
     {
@@ -1026,27 +1022,8 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     float xpos = gui->pos[0];
     float ypos = gui->pos[1];
 
-    if((xpos == -1.f && ypos == -1.f))
-    {
-      float center[2] = { .5f + darktable.develop->roi.x, .5f + darktable.develop->roi.y };
-      dt_dev_coordinates_image_norm_to_preview_abs(darktable.develop, center, 1);
-      xpos = center[0];
-      ypos = center[1];
-    }
 
-    float raw_center[2];
-    if(gui->raw_pos[0] != -1.0f || gui->raw_pos[1] != -1.0f)
-    {
-      raw_center[0] = gui->raw_pos[0];
-      raw_center[1] = gui->raw_pos[1];
-    }
-    else
-    {
-      raw_center[0] = xpos;
-      raw_center[1] = ypos;
-      dt_dev_distort_backtransform(darktable.develop, raw_center, 1);
-    }
-
+    float raw_center[2] = { gui->raw_pos[0], gui->raw_pos[1] };
     dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, raw_center, 1);
     x = raw_center[0];
     y = raw_center[1];

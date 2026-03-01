@@ -363,8 +363,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
       g->box_cood[1] = g->posy_from;
       g->box_cood[2] = g->posx_to;
       g->box_cood[3] = g->posy_to;
-      dt_dev_distort_backtransform(darktable.develop, g->box_cood, 2);
-      dt_dev_coordinates_raw_abs_to_raw_norm(self->dev, g->box_cood, 2);
+      dt_dev_coordinates_image_abs_to_raw_norm(self->dev, g->box_cood, 2);
 
       g->button_down = 0;
       g->call_auto_exposure = 1;

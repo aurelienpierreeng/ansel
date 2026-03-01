@@ -1879,7 +1879,7 @@ static void _dt_masks_events_set_current_pos(const double x, const double y, dt_
 
   mask_gui->raw_pos[0] = point[0];
   mask_gui->raw_pos[1] = point[1];
-  dt_dev_distort_backtransform(darktable.develop, mask_gui->raw_pos, 1);
+  dt_dev_coordinates_image_abs_to_raw_abs(darktable.develop, mask_gui->raw_pos, 1);
 }
 
 int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double y, double pressure, int which)
@@ -3464,7 +3464,7 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *mask_gui, dt_mas
       // set offset to form->source
       mask_form->source[0] = mask_gui->pos[0] + mask_gui->pos_source[0];
       mask_form->source[1] = mask_gui->pos[1] + mask_gui->pos_source[1];
-      dt_dev_distort_backtransform(darktable.develop, mask_form->source, 1);
+      dt_dev_coordinates_image_abs_to_raw_abs(darktable.develop, mask_form->source, 1);
       // normalize backbuf points
       dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, mask_form->source, 1);
 
@@ -3473,8 +3473,7 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *mask_gui, dt_mas
     {
       // if a position was defined by the user, use the absolute value the first time
       float source_points[2] = { mask_gui->pos_source[0], mask_gui->pos_source[1] };
-      dt_dev_distort_backtransform(darktable.develop, source_points, 1);
-      dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, source_points, 1);
+      dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, source_points, 1);
 
       mask_form->source[0] = source_points[0];
       mask_form->source[1] = source_points[1];
@@ -3490,16 +3489,13 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *mask_gui, dt_mas
     // original pos was already defined and relative value calculated, just use it
     mask_form->source[0] = mask_gui->pos[0] + mask_gui->pos_source[0];
     mask_form->source[1] = mask_gui->pos[1] + mask_gui->pos_source[1];
-    dt_dev_distort_backtransform(darktable.develop, mask_form->source, 1);
-    // normalize backbuf points
-    dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, mask_form->source, 1);
+    dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, mask_form->source, 1);
   }
   else if(mask_gui->source_pos_type == DT_MASKS_SOURCE_POS_ABSOLUTE)
   {
     // an absolute position was defined by the user
     float source_points[2] = { mask_gui->pos_source[0], mask_gui->pos_source[1] };
-    dt_dev_distort_backtransform(darktable.develop, source_points, 1);
-    dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, source_points, 1);
+    dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, source_points, 1);
 
     mask_form->source[0] = source_points[0];
     mask_form->source[1] = source_points[1];
@@ -3599,7 +3595,7 @@ float dt_masks_rotate_with_anchor(dt_develop_t *develop, const float anchor[2], 
   // check if distortion inverts the axes
   float test_points[8] = { center_x, center_y, anchor_x , anchor_y,
                            center_x + 10.0f, center_y, center_x, center_y + 10.0f };
-  dt_dev_distort_backtransform(develop, test_points, 4);
+  dt_dev_coordinates_image_abs_to_raw_abs(develop, test_points, 4);
   float check_angle = atan2f(test_points[7] - test_points[1], test_points[6] - test_points[0])
                       - atan2f(test_points[5] - test_points[1], test_points[4] - test_points[0]);
   // Normalize to the range -180 to 180 degrees

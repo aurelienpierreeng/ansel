@@ -458,6 +458,7 @@ void dt_dev_coordinates_raw_abs_to_raw_norm(dt_develop_t *dev, float *points, si
 void dt_dev_coordinates_raw_norm_to_raw_abs(dt_develop_t *dev, float *points, size_t num_points);
 void dt_dev_coordinates_image_norm_to_preview_abs(dt_develop_t *dev, float *points, size_t num_points);
 void dt_dev_coordinates_preview_abs_to_image_norm(dt_develop_t *dev, float *points, size_t num_points);
+void dt_dev_coordinates_image_abs_to_raw_norm(dt_develop_t *dev, float *points, size_t num_points);
 
 /**
  * @brief Get a point position from widget space to preview buffer space [0..1].
@@ -532,21 +533,18 @@ gchar *dt_history_item_get_label(const struct dt_iop_module_t *module);
  * distort functions
  */
 /** apply all transforms to the specified points (in virtual preview-pipe space) */
-int dt_dev_distort_transform(dt_develop_t *dev, float *points, size_t points_count);
+int dt_dev_coordinates_raw_abs_to_image_abs(dt_develop_t *dev, float *points, size_t points_count);
 /** reverse apply all transforms to the specified points (in virtual preview-pipe space) */
-int dt_dev_distort_backtransform(dt_develop_t *dev, float *points, size_t points_count);
+int dt_dev_coordinates_image_abs_to_raw_abs(dt_develop_t *dev, float *points, size_t points_count);
 /** same fct, but we can specify iop with priority between pmin and pmax */
 int dt_dev_distort_transform_plus(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
                                   float *points, size_t points_count);
 /** same fct, but can only be called from a distort_transform function called by dt_dev_distort_transform_plus */
 int dt_dev_distort_transform_locked(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, const double iop_order,
                                     const int transf_direction, float *points, size_t points_count);
-/** same fct as dt_dev_distort_backtransform, but we can specify iop with priority between pmin and pmax */
+/** same fct as dt_dev_coordinates_image_abs_to_raw_abs, but we can specify iop with priority between pmin and pmax */
 int dt_dev_distort_backtransform_plus(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, const double iop_order, const int transf_direction,
                                       float *points, size_t points_count);
-/** same fct, but can only be called from a distort_backtransform function called by dt_dev_distort_backtransform_plus */
-int dt_dev_distort_backtransform_locked(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe, const double iop_order,
-                                    const int transf_direction, float *points, size_t points_count);
 
 /** get the iop_pixelpipe instance corresponding to the iop in the given pipe */
 struct dt_dev_pixelpipe_iop_t *dt_dev_distort_get_iop_pipe(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe,
@@ -652,7 +650,7 @@ gboolean dt_dev_check_zoom_scale_bounds(dt_develop_t *dev);
 
 /**
  * @brief Convert absolute output-image coordinates to input image space by
- * calling `dt_dev_distort_backtransform()` directly, then normalize with
+ * calling `dt_dev_coordinates_image_abs_to_raw_abs()` directly, then normalize with
  * `dt_dev_coordinates_raw_abs_to_raw_norm()` when normalized raw coordinates
  * are required.
  */
