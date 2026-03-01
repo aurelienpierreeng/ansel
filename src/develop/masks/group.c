@@ -41,20 +41,34 @@
 /* Shape handlers receive widget-space coordinates, while normalized output-image
  * coordinates come from `gui->rel_pos` and absolute output-image
  * coordinates come from `gui->pos`. */
+// Centralize group child lookup so all dispatchers and expose code resolve the same
+// selected child the same way.
+static dt_masks_form_t *_group_get_child_at(dt_masks_form_t *form, const int group_index,
+                                            dt_masks_form_group_t **group_entry)
+{
+  dt_masks_form_group_t *entry = (dt_masks_form_group_t *)g_list_nth_data(form->points, group_index);
+  if(!entry) return NULL;
+  if(group_entry) *group_entry = entry;
+  return dt_masks_get_from_id(darktable.develop, entry->formid);
+}
+
+static dt_masks_form_t *_group_get_selected_child(dt_masks_form_t *form, dt_masks_form_gui_t *gui,
+                                                  dt_masks_form_group_t **group_entry)
+{
+  if(gui->group_selected < 0) return NULL;
+  return _group_get_child_at(form, gui->group_selected, group_entry);
+}
+
 static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, double x, double y, int up, const int flow,
                                         uint32_t state, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
                                         int unused, dt_masks_interaction_t interaction)
 {
-  if(gui->group_selected >= 0)
-  {
-    // we get the form
-    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
-    if(!fpt) return 0;
-    dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-    if(sel && sel->functions)
-      return sel->functions->mouse_scrolled(module, x, y, up, flow, state, sel,
-                                            fpt->parentid, gui, gui->group_selected, interaction);
-  }
+  dt_masks_form_group_t *group_entry = NULL;
+  dt_masks_form_t *selected_form = _group_get_selected_child(form, gui, &group_entry);
+  if(selected_form && selected_form->functions)
+    return selected_form->functions->mouse_scrolled(module, x, y, up, flow, state, selected_form,
+                                                    group_entry->parentid, gui, gui->group_selected,
+                                                    interaction);
   return 0;
 }
 
@@ -146,31 +160,21 @@ static gboolean _group_events_button_pressed(struct dt_iop_module_t *module, dou
 
   _detect_new_shape_selection(form, gui);
 
-  if(gui->group_selected >= 0)
-  {
-    // we get the form
-    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
-    if(!fpt) return FALSE;
-    dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-    if(sel)
-    {      
-      if(sel->functions->button_pressed(module, x, y, pressure, which, type, state, sel,
-                                           fpt->parentid, gui, gui->group_selected))
-        return TRUE;
+  dt_masks_form_group_t *group_entry = NULL;
+  dt_masks_form_t *selected_form = _group_get_selected_child(form, gui, &group_entry);
+  if(!selected_form) return FALSE;
 
-      else if(which == 3)
-      {
-        // mouse is over a form or a node
-        if(gui->group_selected >= 0
-           && (gui->form_selected || gui->node_hovered > -1 || gui->node_selected || gui->seg_selected))
-        {
-          GtkWidget *menu = dt_masks_create_menu(gui, sel, fpt, gui->rel_pos[0], gui->rel_pos[1]);
-          gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
-          return TRUE;
-        }
-      }
-    }
+  if(selected_form->functions->button_pressed(module, x, y, pressure, which, type, state, selected_form,
+                                              group_entry->parentid, gui, gui->group_selected))
+    return TRUE;
+
+  if(which == 3 && (gui->form_selected || gui->node_hovered > -1 || gui->node_selected || gui->seg_selected))
+  {
+    GtkWidget *menu = dt_masks_create_menu(gui, selected_form, group_entry, gui->rel_pos[0], gui->rel_pos[1]);
+    gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
+    return TRUE;
   }
+
   return FALSE;
 }
 
@@ -178,17 +182,12 @@ static int _group_events_button_released(struct dt_iop_module_t *module, double 
                                          uint32_t state, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
                                          int unused2)
 {
-  if(gui->group_selected >= 0)
-  {
-    // we get the form
-    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
-    if(!fpt) return 0;
-    dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-    if(sel)
-      if(sel->functions->button_released(module, x, y, which, state, sel, fpt->parentid, gui,
-                                             gui->group_selected))
-        return 1;
-  }
+  dt_masks_form_group_t *group_entry = NULL;
+  dt_masks_form_t *selected_form = _group_get_selected_child(form, gui, &group_entry);
+  if(selected_form && selected_form->functions->button_released(module, x, y, which, state,
+                                                                selected_form, group_entry->parentid,
+                                                                gui, gui->group_selected))
+    return 1;
 
   return 0;
 }
@@ -199,15 +198,11 @@ static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey
 
   gboolean return_value = FALSE;
 
-  if(gui->group_selected >= 0)
-  {
-    // we get the form
-    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
-    if(!fpt) return 0;
-    dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-    if(sel && sel->functions && sel->functions->key_pressed)
-      return_value = sel->functions->key_pressed(module, event, sel, fpt->parentid, gui, gui->group_selected);
-  }
+  dt_masks_form_group_t *group_entry = NULL;
+  dt_masks_form_t *selected_form = _group_get_selected_child(form, gui, &group_entry);
+  if(selected_form && selected_form->functions && selected_form->functions->key_pressed)
+    return_value = selected_form->functions->key_pressed(module, event, selected_form,
+                                                         group_entry->parentid, gui, gui->group_selected);
 
   // Global key bindings for groups
   // TODO: map that to context menu
@@ -225,11 +220,10 @@ static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey
         if(gui->group_selected >= 0)
         {
           // Delete shape from current group
-          dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
-          if(!fpt) return 0;
-          dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-          if(sel)
-            return_value = dt_masks_gui_delete(module, sel, gui, fpt->parentid);
+          group_entry = NULL;
+          selected_form = _group_get_selected_child(form, gui, &group_entry);
+          if(!selected_form) return 0;
+          return_value = dt_masks_gui_delete(module, selected_form, gui, group_entry->parentid);
           break;
         }
       }
@@ -255,16 +249,11 @@ static int _group_events_mouse_moved(struct dt_iop_module_t *module, double x, d
   }
 
   // if a form is in edit mode, capture movement
-  if(gui->group_selected >= 0)
-  {
-    // we get the form
-    dt_masks_form_group_t *fpt = dt_masks_form_get_selected_group(form, gui);
-    if(!fpt) return 0;
-    dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-    if(sel && sel->functions)
-      return sel->functions->mouse_moved(module, x, y, pressure, which, sel, fpt->parentid, gui,
-                                       gui->group_selected);
-  }
+  dt_masks_form_group_t *group_entry = NULL;
+  dt_masks_form_t *selected_form = _group_get_selected_child(form, gui, &group_entry);
+  if(selected_form && selected_form->functions)
+    return selected_form->functions->mouse_moved(module, x, y, pressure, which, selected_form,
+                                                 group_entry->parentid, gui, gui->group_selected);
 
   // capturing scroll event outside of editing mode is dangerous (zoom).
   // Nothing will happen then.
@@ -274,13 +263,11 @@ static int _group_events_mouse_moved(struct dt_iop_module_t *module, double x, d
 static void _group_events_post_expose_draw(cairo_t *cr, float zoom_scale, dt_masks_form_t *form,
                                           dt_masks_form_gui_t *gui, int pos)
 {
-  // we get the form
-  dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)g_list_nth_data(form->points, pos);
-  dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-  if(sel && sel->functions)
+  dt_masks_form_t *selected_form = _group_get_child_at(form, pos, NULL);
+  if(selected_form && selected_form->functions)
   {
-    gui->type = sel->type;
-    sel->functions->post_expose(cr, zoom_scale, gui, pos, g_list_length(sel->points));
+    gui->type = selected_form->type;
+    selected_form->functions->post_expose(cr, zoom_scale, gui, pos, g_list_length(selected_form->points));
   }
 }
 

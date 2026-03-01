@@ -177,12 +177,59 @@ static float _gradient_get_border_len_sq(const dt_masks_form_gui_points_t *gpt)
   return gradient_dx * gradient_dx + gradient_dy * gradient_dy;
 }
 
-static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_form_gui_t *gui, int index,
-                                   int num_points, int *inside, int *inside_border, int *near, int *inside_source, float *dist)
+typedef struct dt_masks_gradient_creation_values_t
 {
-   // unused arg, keep compiler from complaining
-  if(!gui) return;
+  float extent;
+  float curvature;
+  float rotation;
+} dt_masks_gradient_creation_values_t;
 
+static void _gradient_get_creation_values(dt_masks_gradient_creation_values_t *values)
+{
+  values->extent = dt_conf_get_float("plugins/darkroom/masks/gradient/extent");
+  values->curvature = dt_conf_get_float("plugins/darkroom/masks/gradient/curvature");
+  values->rotation = dt_conf_get_float("plugins/darkroom/masks/gradient/rotation");
+}
+
+static void _gradient_init_new(dt_masks_form_gui_t *gui, dt_masks_anchor_gradient_t *gradient)
+{
+  dt_masks_gradient_creation_values_t values;
+  dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, gradient->center);
+  _gradient_get_creation_values(&values);
+  gradient->extent = values.extent;
+  gradient->curvature = values.curvature;
+  gradient->rotation = values.rotation;
+}
+
+static int _gradient_get_points(dt_develop_t *dev, float x, float y, float rotation, float curvature,
+                                float **points, int *points_count);
+static int _gradient_get_pts_border(dt_develop_t *dev, float x, float y, float rotation, float distance,
+                                    float curvature, float **points, int *points_count);
+
+// Gradient creation preview uses the same temp-buffer contract as circle/ellipse,
+// with the shape-specific geometry generation kept here.
+static int _gradient_get_creation_preview(dt_masks_form_gui_t *gui, dt_masks_preview_buffers_t *preview)
+{
+  dt_masks_gradient_creation_values_t values;
+  _gradient_get_creation_values(&values);
+
+  float center[2];
+  dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, center);
+
+  *preview = (dt_masks_preview_buffers_t){ 0 };
+  int err = _gradient_get_points(darktable.develop, center[0], center[1], values.rotation,
+                                 values.curvature, &preview->points, &preview->points_count);
+  if(!err && values.extent > 0.0f)
+    err = _gradient_get_pts_border(darktable.develop, center[0], center[1], values.rotation,
+                                   values.extent, values.curvature, &preview->border,
+                                   &preview->border_count);
+  return err;
+}
+
+static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_form_gui_t *gui, int index,
+                                   int num_points, int *inside, int *inside_border, int *near,
+                                   int *inside_source, float *dist)
+{
   // initialise returned values
   *inside_source = 0;
   *inside = 0;
@@ -284,8 +331,8 @@ static void _gradient_distance_cb(float pointer_x, float pointer_y, float cursor
                                   dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
                                   int *inside_border, int *near, int *inside_source, float *dist, void *user_data)
 {
-  _gradient_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, 0,
-                         inside, inside_border, near, inside_source, dist);
+  _gradient_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, 0, inside,
+                         inside_border, near, inside_source, dist);
 }
 
 static void _gradient_post_select_cb(dt_masks_form_gui_t *mask_gui, int inside, int inside_border,
@@ -515,12 +562,7 @@ static int _gradient_events_button_pressed(struct dt_iop_module_t *module, doubl
       // we create the gradient
       dt_masks_anchor_gradient_t *gradient = (dt_masks_anchor_gradient_t *)(malloc(sizeof(dt_masks_anchor_gradient_t)));
       if(!gradient) return 0;
-      // we change the center value
-      dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, gradient->center);
-
-      gradient->extent = dt_conf_get_float("plugins/darkroom/masks/gradient/extent");
-      gradient->curvature = dt_conf_get_float("plugins/darkroom/masks/gradient/curvature");
-      gradient->rotation = dt_conf_get_float("plugins/darkroom/masks/gradient/rotation");
+      _gradient_init_new(gui, gradient);
 
       form->points = g_list_append(form->points, gradient);
       dt_masks_gui_form_save_creation(darktable.develop, crea_module, form, gui);
@@ -1014,52 +1056,15 @@ static void _gradient_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks
   // preview gradient creation
   if(gui->creation)
   {
-    float rotation = 0.0f;
-    float extent = 0.0f;
-    float curvature = 0.0f;
+    dt_masks_preview_buffers_t preview;
+    if(_gradient_get_creation_preview(gui, &preview)) return;
 
-    extent = dt_conf_get_float("plugins/darkroom/masks/gradient/extent");
-    curvature = dt_conf_get_float("plugins/darkroom/masks/gradient/curvature");
-    rotation = dt_conf_get_float("plugins/darkroom/masks/gradient/rotation");
-
-    // we get the gradient center
-    float pts[2];
-    dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, pts);
-
-    const float x = pts[0];
-    const float y = pts[1];
-
-    // we get all the points, distorted if needed of the sample form
-    float *points = NULL;
-    int points_count = 0;
-    float *border = NULL;
-    int border_count = 0;
-    int err = _gradient_get_points(darktable.develop, x, y, rotation, curvature, &points, &points_count);
-    if(err)
-    {
-      dt_pixelpipe_cache_free_align(points);
-      dt_pixelpipe_cache_free_align(border);
-      return;
-    }
-    if(extent > 0.0f)
-    {
-      err = _gradient_get_pts_border(darktable.develop, x, y, rotation, extent, curvature, &border, &border_count);
-      if(err)
-      {
-        dt_pixelpipe_cache_free_align(points);
-        dt_pixelpipe_cache_free_align(border);
-        return;
-      }
-    }
-
-    // draw main line
-    dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, nb, FALSE, zoom_scale, points, points_count, &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND);
-    _gradient_draw_arrow(cr, FALSE, FALSE, gui->form_rotating, zoom_scale, points, points_count);
-
-    // draw borders
-    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, nb, FALSE, zoom_scale, border, border_count, &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND);
-    dt_pixelpipe_cache_free_align(points);
-    dt_pixelpipe_cache_free_align(border);
+    dt_masks_draw_preview_shape(cr, zoom_scale, nb, preview.points, preview.points_count,
+                                preview.border, preview.border_count,
+                                &dt_masks_functions_gradient.draw_shape, CAIRO_LINE_CAP_ROUND,
+                                CAIRO_LINE_CAP_ROUND, FALSE);
+    _gradient_draw_arrow(cr, FALSE, FALSE, gui->form_rotating, zoom_scale, preview.points, preview.points_count);
+    dt_masks_preview_buffers_cleanup(&preview);
   
     return;
   }

@@ -1684,6 +1684,17 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, dt_masks_form_t
   mask_gui->seg_selected = FALSE;
 }
 
+static inline void _brush_translate_node(dt_masks_node_brush_t *node, const float delta_x, const float delta_y)
+{
+  dt_masks_translate_ctrl_node(node->node, node->ctrl1, node->ctrl2, delta_x, delta_y);
+}
+
+static void _brush_translate_all_nodes(dt_masks_form_t *mask_form, const float delta_x, const float delta_y)
+{
+  for(GList *node_entry = mask_form->points; node_entry; node_entry = g_list_next(node_entry))
+    _brush_translate_node((dt_masks_node_brush_t *)node_entry->data, delta_x, delta_y);
+}
+
 static int _brush_events_button_pressed(struct dt_iop_module_t *module, double widget_x, double widget_y,
                                         double pressure, int which, int type, uint32_t state,
                                         dt_masks_form_t *mask_form, int parentid,
@@ -2072,27 +2083,14 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
         = (dt_masks_node_brush_t *)g_list_nth_data(mask_form->points, mask_gui->node_dragging);
     if(!dragged_node) return 0;
 
-    // apply delta to the current mouse position
-    float raw_point[2];
-    dt_masks_gui_delta_to_raw_norm(dev, mask_gui, raw_point);
-
-    // we move all points
-    const float delta_x = raw_point[0] - dragged_node->node[0];
-    const float delta_y = raw_point[1] - dragged_node->node[1];
-
-    dragged_node->ctrl1[0] += delta_x;
-    dragged_node->ctrl2[0] += delta_x;
-    dragged_node->ctrl1[1] += delta_y;
-    dragged_node->ctrl2[1] += delta_y;
-    dragged_node->node[0] += delta_x;
-    dragged_node->node[1] += delta_y;
+    float delta_x = 0.0f;
+    float delta_y = 0.0f;
+    dt_masks_gui_delta_from_raw_anchor(dev, mask_gui, dragged_node->node, &delta_x, &delta_y);
+    _brush_translate_node(dragged_node, delta_x, delta_y);
 
     // if first point, adjust the source position accordingly
     if((mask_form->type & DT_MASKS_CLONE) && mask_gui->node_dragging == 0)
-    {
-      mask_form->source[0] += delta_x;
-      mask_form->source[1] += delta_y;
-    }
+      dt_masks_translate_source(mask_form, delta_x, delta_y);
 
     // we recreate the form points
     dt_masks_gui_form_create_throttled(mask_form, mask_gui, index, module, mask_gui->pos[0], mask_gui->pos[1]);
@@ -2106,32 +2104,15 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
     dt_masks_node_brush_t *segment_node_next = (dt_masks_node_brush_t *)segment_end->data;
     if(!segment_node || !segment_node_next) return 0;
 
-    // we get point0 new values
-    float raw_pos[2];
-    dt_masks_gui_delta_to_raw_norm(dev, mask_gui, raw_pos);
-    // we move all points
-    const float delta_x = raw_pos[0] - segment_node->node[0];
-    const float delta_y = raw_pos[1] - segment_node->node[1];
-
-    segment_node->node[0] += delta_x;
-    segment_node->node[1] += delta_y;
-    segment_node->ctrl1[0] += delta_x;
-    segment_node->ctrl1[1] += delta_y;
-    segment_node->ctrl2[0] += delta_x;
-    segment_node->ctrl2[1] += delta_y;
-    segment_node_next->node[0] += delta_x;
-    segment_node_next->node[1] += delta_y;
-    segment_node_next->ctrl1[0] += delta_x;
-    segment_node_next->ctrl1[1] += delta_y;
-    segment_node_next->ctrl2[0] += delta_x;
-    segment_node_next->ctrl2[1] += delta_y;
+    float delta_x = 0.0f;
+    float delta_y = 0.0f;
+    dt_masks_gui_delta_from_raw_anchor(dev, mask_gui, segment_node->node, &delta_x, &delta_y);
+    _brush_translate_node(segment_node, delta_x, delta_y);
+    _brush_translate_node(segment_node_next, delta_x, delta_y);
 
     // if first point's segment, adjust the source position accordingly
     if((mask_form->type & DT_MASKS_CLONE) && mask_gui->seg_dragging == 0)
-    {
-      mask_form->source[0] += delta_x;
-      mask_form->source[1] += delta_y;
-    }
+      dt_masks_translate_source(mask_form, delta_x, delta_y);
 
     // we recreate the form points
     dt_masks_gui_form_create_throttled(mask_form, mask_gui, index, module, mask_gui->pos[0], mask_gui->pos[1]);
@@ -2143,7 +2124,8 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
         = (dt_masks_node_brush_t *)g_list_nth_data(mask_form->points, mask_gui->handle_dragging);
     if(!node) return 0;
 
-    const float cursor_pos[2] = { mask_gui->pos[0] + mask_gui->delta[0], mask_gui->pos[1] + mask_gui->delta[1] };
+    float cursor_pos[2];
+    dt_masks_gui_delta_to_image_abs(mask_gui, cursor_pos);
 
     // compute ctrl points directly from new handle position
     float control_points[4];
@@ -2155,10 +2137,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
     dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, control_points, 2);
 
     // set new ctrl points
-    node->ctrl1[0] = control_points[0];
-    node->ctrl1[1] = control_points[1];
-    node->ctrl2[0] = control_points[2];
-    node->ctrl2[1] = control_points[3];
+    dt_masks_set_ctrl_points(node->ctrl1, node->ctrl2, control_points);
     node->state = DT_MASKS_POINT_STATE_USER;
 
     _brush_init_ctrl_points(mask_form);
@@ -2179,44 +2158,15 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
 
     const float node_px = gui_points->points[node_index * 6 + 2];
     const float node_py = gui_points->points[node_index * 6 + 3];
-    const float dx_line = handle_x - node_px;
-    const float dy_line = handle_y - node_py;
 
     float pts[2];
-    // Get the cursor position
-    const float cursor_x = mask_gui->pos[0] + mask_gui->delta[0];
-    const float cursor_y = mask_gui->pos[1] + mask_gui->delta[1];
+    float cursor_pos[2];
+    const float node_pos_gui[2] = { node_px, node_py };
+    const float handle_pos[2] = { handle_x, handle_y };
+    dt_masks_gui_delta_to_image_abs(mask_gui, cursor_pos);
+    dt_masks_project_on_line(cursor_pos, node_pos_gui, handle_pos, pts);
 
-    // Project the cursor position onto the line defined by the node and its border handle
-    if(fabsf(dx_line) < 1e-6f)
-    {
-      // The line is vertical, so we just take the y coordinate of the cursor
-      // and the x coordinate of the node
-      pts[0] = node_px;
-      pts[1] = cursor_y;
-    }
-    else
-    {
-      // Calculate the slope (a) and intercept (b) of the line defined by the node and its border handle
-      const float a = dy_line / dx_line;
-      const float b = node_py - a * node_px;
-      const float denom = a * a + 1.0f;
-      // Project the cursor position onto the line
-      const float xproj = (a * cursor_y + cursor_x - b * a) / denom;
-
-      pts[0] = xproj;
-      pts[1] = a * xproj + b;
-    }
-
-    dt_dev_coordinates_image_abs_to_raw_abs(darktable.develop, pts, 1);
-
-    float node_pos[2] = { node->node[0], node->node[1] };
-    dt_dev_coordinates_raw_norm_to_raw_abs(dev, node_pos, 1);
-    // Calculate distance from node to border handle
-    const float delta_x = pts[0] - node_pos[0];
-    const float delta_y = pts[1] - node_pos[1];
-    const float distance = sqrtf(delta_x * delta_x + delta_y * delta_y);
-    const float border = distance / fminf(iwidth, iheight);
+    const float border = dt_masks_border_from_projected_handle(dev, node->node, pts, fminf(iwidth, iheight));
 
     node->border[0] = node->border[1] = border;
     // we recreate the form points
@@ -2225,31 +2175,20 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
   }
   else if(mask_gui->form_dragging || mask_gui->source_dragging)
   {
-    // we get point0 new values
-    float raw_pos[2];
-    dt_masks_gui_delta_to_raw_norm(darktable.develop, mask_gui, raw_pos);
     dt_masks_node_brush_t *dragging_shape = (dt_masks_node_brush_t *)(mask_form->points)->data;
     if(!dragging_shape) return 0;
 
     if(mask_gui->form_dragging)
     {
-      const float delta_x = raw_pos[0] - dragging_shape->node[0];
-      const float delta_y = raw_pos[1] - dragging_shape->node[1];
-      // we move all points
-      for(GList *node_entry = mask_form->points; node_entry; node_entry = g_list_next(node_entry))
-      {
-        dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)node_entry->data;
-        if(!node) continue;
-        node->node[0] += delta_x;
-        node->node[1] += delta_y;
-        node->ctrl1[0] += delta_x;
-        node->ctrl1[1] += delta_y;
-        node->ctrl2[0] += delta_x;
-        node->ctrl2[1] += delta_y;
-      }
+      float delta_x = 0.0f;
+      float delta_y = 0.0f;
+      dt_masks_gui_delta_from_raw_anchor(dev, mask_gui, dragging_shape->node, &delta_x, &delta_y);
+      _brush_translate_all_nodes(mask_form, delta_x, delta_y);
     }
     else
     {
+      float raw_pos[2];
+      dt_masks_gui_delta_to_raw_norm(darktable.develop, mask_gui, raw_pos);
       mask_form->source[0] = raw_pos[0];
       mask_form->source[1] = raw_pos[1];
     }

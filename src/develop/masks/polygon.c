@@ -1128,6 +1128,17 @@ static void _add_node_to_segment(struct dt_iop_module_t *module,
   mask_gui->seg_selected = FALSE;
 }
 
+static inline void _polygon_translate_node(dt_masks_node_polygon_t *node, const float delta_x, const float delta_y)
+{
+  dt_masks_translate_ctrl_node(node->node, node->ctrl1, node->ctrl2, delta_x, delta_y);
+}
+
+static void _polygon_translate_all_nodes(dt_masks_form_t *mask_form, const float delta_x, const float delta_y)
+{
+  for(GList *node_entry = mask_form->points; node_entry; node_entry = g_list_next(node_entry))
+    _polygon_translate_node((dt_masks_node_polygon_t *)node_entry->data, delta_x, delta_y);
+}
+
 // TODO: Should be in masks.c
 static void _change_node_type(struct dt_iop_module_t *module, dt_masks_form_t *mask_form,
                               dt_masks_form_gui_t *mask_gui, int form_index)
@@ -2054,27 +2065,16 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
 
     dt_masks_node_polygon_t *dragged_node
         = (dt_masks_node_polygon_t *)g_list_nth_data(mask_form->points, mask_gui->node_dragging);
+    if(!dragged_node) return 0;
 
-    // update continuously the current node to mouse position
-    float raw_point[2];
-    dt_masks_gui_delta_to_raw_norm(dev, mask_gui, raw_point);
-    // we move all points
-    const float dx = raw_point[0] - dragged_node->node[0];
-    const float dy = raw_point[1] - dragged_node->node[1];
-
-    dragged_node->ctrl1[0] += dx;
-    dragged_node->ctrl2[0] += dx;
-    dragged_node->ctrl1[1] += dy;
-    dragged_node->ctrl2[1] += dy;
-    dragged_node->node[0] += dx;
-    dragged_node->node[1] += dy;
+    float dx = 0.0f;
+    float dy = 0.0f;
+    dt_masks_gui_delta_from_raw_anchor(dev, mask_gui, dragged_node->node, &dx, &dy);
+    _polygon_translate_node(dragged_node, dx, dy);
 
     // if first point, adjust the source position accordingly
     if((mask_form->type & DT_MASKS_CLONE) && mask_gui->node_dragging == 0)
-    {
-      mask_form->source[0] += dx;
-      mask_form->source[1] += dy;
-    }
+      dt_masks_translate_source(mask_form, dx, dy);
 
     if(mask_gui->creation)
       _polygon_init_ctrl_points(mask_form);
@@ -2101,36 +2101,20 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
     const GList *const next_pt = g_list_next_wraparound(pt, mask_form->points);
     dt_masks_node_polygon_t *point = (dt_masks_node_polygon_t *)pt->data;
     dt_masks_node_polygon_t *next_point = (dt_masks_node_polygon_t *)next_pt->data;
+    if(!point || !next_point) return 0;
 
-    // we get point0 new values
-    float raw_point[2];
-    dt_masks_gui_delta_to_raw_norm(dev, mask_gui, raw_point);
-    // we move all points
-    const float dx = raw_point[0] - point->node[0];
-    const float dy = raw_point[1] - point->node[1];
+    float dx = 0.0f;
+    float dy = 0.0f;
+    dt_masks_gui_delta_from_raw_anchor(dev, mask_gui, point->node, &dx, &dy);
 
     // if first or last segment, update the source accordingly
     // (the source point follows the first/last segment when moved)
     if((mask_form->type & DT_MASKS_CLONE)
        && (mask_gui->seg_dragging == 0 || mask_gui->seg_dragging == (int)node_count - 1))
-    {
-      mask_form->source[0] += dx;
-      mask_form->source[1] += dy;
-    }
+      dt_masks_translate_source(mask_form, dx, dy);
 
-    point->node[0] += dx;
-    point->node[1] += dy;
-    point->ctrl1[0] += dx;
-    point->ctrl1[1] += dy;
-    point->ctrl2[0] += dx;
-    point->ctrl2[1] += dy;
-
-    next_point->node[0] += dx;
-    next_point->node[1] += dy;
-    next_point->ctrl1[0] += dx;
-    next_point->ctrl1[1] += dy;
-    next_point->ctrl2[0] += dx;
-    next_point->ctrl2[1] += dy;
+    _polygon_translate_node(point, dx, dy);
+    _polygon_translate_node(next_point, dx, dy);
 
     // we recreate the form points
     dt_masks_gui_form_create_throttled(mask_form, mask_gui, form_index, module,
@@ -2145,7 +2129,8 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
         = (dt_masks_node_polygon_t *)g_list_nth_data(mask_form->points, mask_gui->handle_dragging);
     if(!node) return 0;
 
-    float pts[2] = { mask_gui->pos[0] + mask_gui->delta[0], mask_gui->pos[1] + mask_gui->delta[1] };
+    float pts[2];
+    dt_masks_gui_delta_to_image_abs(mask_gui, pts);
 
     // compute ctrl points directly from new handle position
     float p[4];
@@ -2156,10 +2141,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
     dt_dev_coordinates_image_abs_to_raw_norm(darktable.develop, p, 2);
 
     // set new ctrl points
-    node->ctrl1[0] = p[0];
-    node->ctrl1[1] = p[1];
-    node->ctrl2[0] = p[2];
-    node->ctrl2[1] = p[3];
+    dt_masks_set_ctrl_points(node->ctrl1, node->ctrl2, p);
     node->state = DT_MASKS_POINT_STATE_USER;
 
     _polygon_init_ctrl_points(mask_form);
@@ -2178,44 +2160,17 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
 
     const int base = node_index * 6;
     const int node_point_index = base + 2;
-    const float dx_line = gui_points->border[base] - gui_points->points[node_point_index];
 
     // Get delta between the node and its border handle
     float pts[2];
-    // Get the cursor position
-    const float cursor_x = mask_gui->pos[0] + mask_gui->delta[0];
-    const float cursor_y = mask_gui->pos[1] + mask_gui->delta[1];
+    float cursor_pos[2];
+    const float node_pos_gui[2] = { gui_points->points[node_point_index],
+                                    gui_points->points[node_point_index + 1] };
+    const float handle_pos[2] = { gui_points->border[base], gui_points->border[base + 1] };
+    dt_masks_gui_delta_to_image_abs(mask_gui, cursor_pos);
+    dt_masks_project_on_line(cursor_pos, node_pos_gui, handle_pos, pts);
 
-    // Project the cursor position onto the line defined by the node and its border handle
-    if(fabsf(dx_line) < 1e-6f)
-    {
-      // The line is vertical, so we just take the y coordinate of the cursor
-      // and the x coordinate of the node
-      pts[0] = gui_points->points[node_point_index];
-      pts[1] = cursor_y;
-    }
-    else
-    {
-      // Calculate the slope (a) and intercept (b) of the line defined by the node and its border handle
-      const float a = (gui_points->border[base + 1] - gui_points->points[node_point_index + 1]) / dx_line;
-      const float b = gui_points->points[node_point_index + 1] - a * gui_points->points[node_point_index];
-      const float denom = a * a + 1.0f;
-      // Project the cursor position onto the line
-      const float xproj = (a * cursor_y + cursor_x - b * a) / denom;
-
-      pts[0] = xproj;
-      pts[1] = a * xproj + b;
-    }
-
-    dt_dev_coordinates_image_abs_to_raw_abs(darktable.develop, pts, 1);
-
-    float node_pos[2] = { node->node[0], node->node[1] };
-    dt_dev_coordinates_raw_norm_to_raw_abs(dev, node_pos, 1);
-    // Calculate distance from node to border handle
-    const float dx = pts[0] - node_pos[0];
-    const float dy = pts[1] - node_pos[1];
-    const float bdr = sqrtf(dx * dx + dy * dy);
-    const float border = bdr / fminf(iwidth, iheight);
+    const float border = dt_masks_border_from_projected_handle(dev, node->node, pts, fminf(iwidth, iheight));
 
     node->border[0] = node->border[1] = border;
     // we recreate the form points
@@ -2226,30 +2181,19 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
   }
   else if(mask_gui->form_dragging || mask_gui->source_dragging)
   {
-    // we get point0 new values
-    float raw_point[2];
-    dt_masks_gui_delta_to_raw_norm(dev, mask_gui, raw_point);
-
     if(mask_gui->form_dragging)
     {
       dt_masks_node_polygon_t *dragging_shape = (dt_masks_node_polygon_t *)(mask_form->points)->data;
       if(!dragging_shape) return 0;
-      const float dx = raw_point[0] - dragging_shape->node[0];
-      const float dy = raw_point[1] - dragging_shape->node[1];
-      // we move all points
-      for(GList *nodes = mask_form->points; nodes; nodes = g_list_next(nodes))
-      {
-        dragging_shape = (dt_masks_node_polygon_t *)nodes->data;
-        dragging_shape->node[0] += dx;
-        dragging_shape->node[1] += dy;
-        dragging_shape->ctrl1[0] += dx;
-        dragging_shape->ctrl1[1] += dy;
-        dragging_shape->ctrl2[0] += dx;
-        dragging_shape->ctrl2[1] += dy;
-      }
+      float dx = 0.0f;
+      float dy = 0.0f;
+      dt_masks_gui_delta_from_raw_anchor(dev, mask_gui, dragging_shape->node, &dx, &dy);
+      _polygon_translate_all_nodes(mask_form, dx, dy);
     }
     else
     {
+      float raw_point[2];
+      dt_masks_gui_delta_to_raw_norm(dev, mask_gui, raw_point);
       mask_form->source[0] = raw_point[0];
       mask_form->source[1] = raw_point[1];
     }

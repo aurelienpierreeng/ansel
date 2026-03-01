@@ -563,6 +563,144 @@ static inline void dt_masks_gui_delta_to_raw_norm(dt_develop_t *dev, const dt_ma
   dt_dev_coordinates_image_abs_to_raw_norm(dev, point, 1);
 }
 
+static inline void dt_masks_gui_delta_to_image_abs(const dt_masks_form_gui_t *gui, float point[2])
+{
+  point[0] = gui->pos[0] + gui->delta[0];
+  point[1] = gui->pos[1] + gui->delta[1];
+}
+
+// Drag branches need the same "cursor + drag delta" converted back to raw space.
+// Keep that conversion in one place so all shapes use the same anchor semantics.
+static inline void dt_masks_gui_delta_from_raw_anchor(dt_develop_t *dev, const dt_masks_form_gui_t *gui,
+                                                      const float anchor[2], float *delta_x, float *delta_y)
+{
+  float point[2];
+  dt_masks_gui_delta_to_raw_norm(dev, gui, point);
+  *delta_x = point[0] - anchor[0];
+  *delta_y = point[1] - anchor[1];
+}
+
+// Clone and spot forms share the same default presets, while regular drawn masks use their own.
+static inline gboolean dt_masks_form_uses_spot_defaults(const dt_masks_form_t *form)
+{
+  return (form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE)) != 0;
+}
+
+static inline gboolean dt_masks_form_is_clone(const dt_masks_form_t *form)
+{
+  return (form->type & DT_MASKS_CLONE) != 0;
+}
+
+static inline void dt_masks_reset_source(dt_masks_form_t *form)
+{
+  form->source[0] = 0.0f;
+  form->source[1] = 0.0f;
+}
+
+static inline void dt_masks_translate_source(dt_masks_form_t *form, const float delta_x, const float delta_y)
+{
+  form->source[0] += delta_x;
+  form->source[1] += delta_y;
+}
+
+static inline void dt_masks_translate_ctrl_node(float node[2], float ctrl1[2], float ctrl2[2],
+                                                const float delta_x, const float delta_y)
+{
+  node[0] += delta_x;
+  node[1] += delta_y;
+  ctrl1[0] += delta_x;
+  ctrl1[1] += delta_y;
+  ctrl2[0] += delta_x;
+  ctrl2[1] += delta_y;
+}
+
+static inline void dt_masks_set_ctrl_points(float ctrl1[2], float ctrl2[2], const float control_points[4])
+{
+  ctrl1[0] = control_points[0];
+  ctrl1[1] = control_points[1];
+  ctrl2[0] = control_points[2];
+  ctrl2[1] = control_points[3];
+}
+
+// Brush and polygon border handles both constrain the cursor to the node->handle axis.
+static inline void dt_masks_project_on_line(const float cursor[2], const float node[2],
+                                            const float handle[2], float point[2])
+{
+  const float dx_line = handle[0] - node[0];
+  const float dy_line = handle[1] - node[1];
+
+  if(fabsf(dx_line) < 1e-6f)
+  {
+    point[0] = node[0];
+    point[1] = cursor[1];
+  }
+  else
+  {
+    const float a = dy_line / dx_line;
+    const float b = node[1] - a * node[0];
+    const float denom = a * a + 1.0f;
+    const float xproj = (a * cursor[1] + cursor[0] - b * a) / denom;
+
+    point[0] = xproj;
+    point[1] = a * xproj + b;
+  }
+}
+
+// Border handles store normalized raw-space radii, but hit/drag code works in image space.
+// Convert both ends once here so all shapes derive border thickness the same way.
+static inline float dt_masks_border_from_projected_handle(dt_develop_t *dev, const float node[2],
+                                                          const float projected_image_pos[2],
+                                                          const float scale_ref)
+{
+  float projected_raw[2] = { projected_image_pos[0], projected_image_pos[1] };
+  float node_raw[2] = { node[0], node[1] };
+  dt_dev_coordinates_image_abs_to_raw_abs(dev, projected_raw, 1);
+  dt_dev_coordinates_raw_norm_to_raw_abs(dev, node_raw, 1);
+
+  const float delta_x = projected_raw[0] - node_raw[0];
+  const float delta_y = projected_raw[1] - node_raw[1];
+  return sqrtf(delta_x * delta_x + delta_y * delta_y) / scale_ref;
+}
+
+// Circle, ellipse and gradient creation previews all follow the same drawing sequence:
+// optional save/restore, draw the shape, then draw the border preview if present.
+static inline void dt_masks_draw_preview_shape(cairo_t *cr, const float zoom_scale, const int num_points,
+                                               float *points, const int points_count,
+                                               float *border, const int border_count,
+                                               void (*const *draw_shape)(cairo_t *cr, const float *points,
+                                                                         const int points_count, const int nb,
+                                                                         const gboolean border,
+                                                                         const gboolean source),
+                                               const cairo_line_cap_t shape_cap,
+                                               const cairo_line_cap_t border_cap,
+                                               const gboolean save_restore)
+{
+  if(save_restore) cairo_save(cr);
+  if(points && points_count > 0)
+    dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count,
+                        draw_shape, shape_cap);
+  if(border && border_count > 0)
+    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count,
+                        draw_shape, border_cap);
+  if(save_restore) cairo_restore(cr);
+}
+
+// Shared scratch buffers for creation previews. Keeping them grouped makes the shape
+// preview helpers return a single value and centralizes cleanup.
+typedef struct dt_masks_preview_buffers_t
+{
+  float *points;
+  int points_count;
+  float *border;
+  int border_count;
+} dt_masks_preview_buffers_t;
+
+static inline void dt_masks_preview_buffers_cleanup(dt_masks_preview_buffers_t *buffers)
+{
+  dt_pixelpipe_cache_free_align(buffers->points);
+  dt_pixelpipe_cache_free_align(buffers->border);
+}
+
 typedef struct dt_masks_gui_center_point_t
 {
   struct

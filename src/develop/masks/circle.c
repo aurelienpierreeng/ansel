@@ -49,11 +49,9 @@
 #define BORDER_MAX 0.5f
 
 static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t *gui, int index,
-                                 int num_points, int *inside, int *inside_border, int *near, int *inside_source, float *dist)
+                                 int num_points, int *inside, int *inside_border, int *near,
+                                 int *inside_source, float *dist)
 {
-   // unused arg, keep compiler from complaining
-  if(!gui) return;
-
   // initialise returned values
   *inside_source = 0;
   *inside = 0;
@@ -101,14 +99,59 @@ static void _circle_distance_cb(float pointer_x, float pointer_y, float cursor_r
                                 dt_masks_form_gui_t *mask_gui, int form_index, int node_count, int *inside,
                                 int *inside_border, int *near, int *inside_source, float *dist, void *user_data)
 {
-  _circle_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, 0,
-                       inside, inside_border, near, inside_source, dist);
+  _circle_get_distance(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, 0, inside,
+                       inside_border, near, inside_source, dist);
 }
 
 static int _find_closest_handle(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui, int form_index)
 {
   return dt_masks_find_closest_handle_common(mask_form, mask_gui, form_index, 0,
                                              NULL, NULL, NULL, _circle_distance_cb, NULL, NULL);
+}
+
+static void _circle_get_creation_values(const dt_masks_form_t *form, float *radius, float *border)
+{
+  const gboolean use_spot_defaults = dt_masks_form_uses_spot_defaults(form);
+  *radius = dt_conf_get_float(use_spot_defaults ? "plugins/darkroom/spots/circle/size"
+                                                : "plugins/darkroom/masks/circle/size");
+  *border = dt_conf_get_float(use_spot_defaults ? "plugins/darkroom/spots/circle/border"
+                                                : "plugins/darkroom/masks/circle/border");
+}
+
+static void _circle_init_new(dt_masks_form_t *form, dt_masks_form_gui_t *gui, dt_masks_node_circle_t *circle)
+{
+  dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, circle->center);
+  _circle_get_creation_values(form, &circle->radius, &circle->border);
+
+  if(dt_masks_form_is_clone(form))
+    dt_masks_set_source_pos_initial_value(gui, form);
+  else
+    dt_masks_reset_source(form);
+}
+
+static int _circle_get_points(dt_develop_t *dev, float x, float y, float radius, float radius2, float rotation,
+                              float **points, int *points_count);
+
+// Build the temporary preview geometry for circle creation so the expose path only
+// handles drawing and buffer lifetime.
+static int _circle_get_creation_preview(dt_masks_form_t *form, dt_masks_form_gui_t *gui,
+                                        dt_masks_preview_buffers_t *preview)
+{
+  float radius_shape = 0.0f;
+  float radius_border = 0.0f;
+  _circle_get_creation_values(form, &radius_shape, &radius_border);
+  radius_border += radius_shape;
+
+  float center[2];
+  dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, center);
+
+  *preview = (dt_masks_preview_buffers_t){ 0 };
+  int err = _circle_get_points(darktable.develop, center[0], center[1], radius_shape, 0.0f, 0.0f,
+                               &preview->points, &preview->points_count);
+  if(!err && radius_shape != radius_border)
+    err = _circle_get_points(darktable.develop, center[0], center[1], radius_border, 0.0f, 0.0f,
+                             &preview->border, &preview->border_count);
+  return err;
 }
 
 static int _init_hardness(dt_masks_form_t *form, const float amount, const dt_masks_increment_t increment, const int flow)
@@ -284,32 +327,7 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, double 
       dt_masks_node_circle_t *circle = (dt_masks_node_circle_t *)(malloc(sizeof(dt_masks_node_circle_t)));
       if(!circle) return 0;
 
-      // we change the center value
-      dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, circle->center);
-
-      if(form->type & (DT_MASKS_CLONE|DT_MASKS_NON_CLONE))
-      {
-        circle->radius = dt_conf_get_float("plugins/darkroom/spots/circle/size");
-        circle->border = dt_conf_get_float("plugins/darkroom/spots/circle/border");
-
-        // calculate the source position
-        if(form->type & DT_MASKS_CLONE)
-        {
-          dt_masks_set_source_pos_initial_value(gui, form);
-        }
-        else
-        {
-          // not used by regular masks
-          form->source[0] = form->source[1] = 0.0f;
-        }
-      }
-      else
-      {
-        circle->radius = dt_conf_get_float("plugins/darkroom/masks/circle/size");
-        circle->border = dt_conf_get_float("plugins/darkroom/masks/circle/border");
-        // not used for masks
-        form->source[0] = form->source[1] = 0.0f;
-      }
+      _circle_init_new(form, gui, circle);
       form->points = g_list_append(form->points, circle);
       dt_masks_gui_form_save_creation(darktable.develop, crea_module, form, gui);
 
@@ -553,52 +571,19 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
   if(gui->creation)
   {
     dt_masks_form_t *form = dt_masks_get_visible_form(darktable.develop);
+    dt_masks_preview_buffers_t preview;
+    if(_circle_get_creation_preview(form, gui, &preview)) return;
 
-    // we get the default radius values
-    float radius_shape = 0.0f;
-    float radius_border = 0.0f;
-    if(form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE))
-    {
-      radius_shape = dt_conf_get_float("plugins/darkroom/spots/circle/size");
-      radius_border = dt_conf_get_float("plugins/darkroom/spots/circle/border");
-    }
-    else
-    {
-      radius_shape = dt_conf_get_float("plugins/darkroom/masks/circle/size");
-      radius_border = dt_conf_get_float("plugins/darkroom/masks/circle/border");
-    }
-    radius_border += radius_shape;
-
-    // we get the circle center at mouse position
-    float back_pts[2];
-    dt_masks_gui_cursor_to_raw_norm(darktable.develop, gui, back_pts);
-    const float x = back_pts[0];
-    const float y = back_pts[1];
-    // we get all the points, distorted if needed, of the sample form
-    float *points = NULL;
-    int points_count = 0;
-    float *border = NULL;
-    int border_count = 0;
-    int err = _circle_get_points(darktable.develop, x, y, radius_shape, 0.0f, 0.0f, &points, &points_count);
-    if(!err && radius_shape != radius_border)
-    {
-      err = _circle_get_points(darktable.develop, x, y, radius_border, 0.0f, 0.0f, &border, &border_count);
-    }
-    if(err) return;
-
-    // we draw the form and it's border
-
-    // we draw the main shape
-    dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, FALSE, zoom_scale, points, points_count, &dt_masks_functions_circle.draw_shape, CAIRO_LINE_CAP_BUTT);
-    // we draw the borders
-    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, FALSE, zoom_scale, border, border_count, &dt_masks_functions_circle.draw_shape, CAIRO_LINE_CAP_ROUND);
+    dt_masks_draw_preview_shape(cr, zoom_scale, num_points, preview.points, preview.points_count,
+                                preview.border, preview.border_count,
+                                &dt_masks_functions_circle.draw_shape, CAIRO_LINE_CAP_BUTT,
+                                CAIRO_LINE_CAP_ROUND, FALSE);
 
     // draw a cross where the source will be created
-    if(form->type & DT_MASKS_CLONE)
+    if(dt_masks_form_is_clone(form))
       dt_masks_draw_source_preview(cr, zoom_scale, gui, gui->pos[0], gui->pos[1], gui->pos[0], gui->pos[1], FALSE);
 
-    dt_pixelpipe_cache_free_align(points);
-    dt_pixelpipe_cache_free_align(border);
+    dt_masks_preview_buffers_cleanup(&preview);
 
     return;
   } // creation
