@@ -17,7 +17,7 @@
     Copyright (C) 2022 Miloš Komarčević.
     Copyright (C) 2023, 2025-2026 Aurélien PIERRE.
     Copyright (C) 2025-2026 Guillaume Stutin.
-    
+
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -38,7 +38,10 @@
 #include "develop/imageop.h"
 #include "develop/masks.h"
 
-static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, float pzx, float pzy, int up, const int flow,
+/* Shape handlers receive widget-space coordinates, while normalized output-image
+ * coordinates come from `gui->rel_pos` and absolute output-image
+ * coordinates come from `gui->pos`. */
+static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, double x, double y, int up, const int flow,
                                         uint32_t state, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
                                         int unused, dt_masks_interaction_t interaction)
 {
@@ -49,29 +52,32 @@ static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, float pz
     if(!fpt) return 0;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
-      return sel->functions->mouse_scrolled(module, pzx, pzy, up, flow, state, sel, fpt->parentid, gui, gui->group_selected, interaction);
+      return sel->functions->mouse_scrolled(module, x, y, up, flow, state, sel,
+                                            fpt->parentid, gui, gui->group_selected, interaction);
   }
   return 0;
 }
 
-static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form_gui_t *gui, float pzx, float pzy)
+/**
+ * @brief Update group selection from the current normalized output cursor.
+ *
+ * Absolute output-image lookups use `gui->pos`, normalized output-image
+ * coordinates use `gui->rel_pos`, and cursor/object distances are resolved in
+ * absolute output-image space.
+ */
+static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form_gui_t *gui)
 {
   if(!form || !gui) return FALSE;
 
   dt_develop_t *dev = (dt_develop_t *)darktable.develop;
-  const float as = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;  // transformed to backbuf dimensions
-  const float scale = dev->roi.natural_scale;
-  const float xx = (pzx * dev->roi.preview_width) / scale;
-  const float yy = (pzy * dev->roi.preview_height) / scale;
-
-  // We compute the (expensive) nearest node in the mouse_moved event, so we already know what
-  // node is already close to our cursor, if any.
-  // In that case, the parent shape is inconditionnaly selected.
-  if(gui->group_hovered >= 0)
-  {
-    gui->group_selected = gui->group_hovered;
+  const float as = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
+  const float xx = gui->pos[0];
+  const float yy = gui->pos[1];
+  // We compute the (expensive) nearest handle/node in mouse_moved, for the currently selected form only.
+  // If a hovered object is available while a group is already selected, keep that selection and skip
+  // expensive form detection: handles can sit far outside the shape boundary.
+  if(dt_masks_is_anything_hovered(gui))
     return TRUE;
-  }
 
   // Reset selection
   // If, at the next step, no shape is found under cursor,
@@ -102,12 +108,14 @@ static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form
 
     // Handle overlapping :
     // In case we are within more than one shape, compute the distance
-    // to the border of that shape and to its centroid. 
+    // to the border of that shape and to its centroid.
     // Multiply both and pick the shape whose aggregated distance is minimum.
+
+    // get_distance() returns a squared distance in absolute output-image space.
     if(inside || inside_border || near >= 0 || inside_source)
     {
-      const float dx = pzx - frm->gravity_center[0];
-      const float dy = pzy - frm->gravity_center[1];
+      const float dx = gui->raw_pos[0] - frm->gravity_center[0];
+      const float dy = gui->raw_pos[1] - frm->gravity_center[1];
       const float center_dist2 = dx * dx + dy * dy;
       const float combined_dist2 = dist * center_dist2;
 
@@ -130,13 +138,13 @@ static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form
   return gui->group_selected >= 0;
 }
 
-static gboolean _group_events_button_pressed(struct dt_iop_module_t *module, float pzx, float pzy,
+static gboolean _group_events_button_pressed(struct dt_iop_module_t *module, double x, double y,
                                         double pressure, int which, int type, uint32_t state,
                                         dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui, int unused2)
 {
   if(!form) return FALSE;
 
-  _detect_new_shape_selection(form, gui, pzx, pzy);
+  _detect_new_shape_selection(form, gui);
 
   if(gui->group_selected >= 0)
   {
@@ -146,16 +154,17 @@ static gboolean _group_events_button_pressed(struct dt_iop_module_t *module, flo
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel)
     {      
-      if(sel->functions->button_pressed(module, pzx, pzy, pressure, which, type, state, sel,
+      if(sel->functions->button_pressed(module, x, y, pressure, which, type, state, sel,
                                            fpt->parentid, gui, gui->group_selected))
         return TRUE;
 
       else if(which == 3)
       {
         // mouse is over a form or a node
-        if(gui && gui->group_selected >= 0 && (gui->form_selected || gui->node_hovered >= 0 || gui->seg_selected >= 0))
+        if(gui->group_selected >= 0
+           && (gui->form_selected || gui->node_hovered > -1 || gui->node_selected || gui->seg_selected))
         {
-          GtkWidget *menu = dt_masks_create_menu(gui, sel, fpt, pzx, pzy);
+          GtkWidget *menu = dt_masks_create_menu(gui, sel, fpt, gui->rel_pos[0], gui->rel_pos[1]);
           gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
           return TRUE;
         }
@@ -165,7 +174,7 @@ static gboolean _group_events_button_pressed(struct dt_iop_module_t *module, flo
   return FALSE;
 }
 
-static int _group_events_button_released(struct dt_iop_module_t *module, float pzx, float pzy, int which,
+static int _group_events_button_released(struct dt_iop_module_t *module, double x, double y, int which,
                                          uint32_t state, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
                                          int unused2)
 {
@@ -176,7 +185,7 @@ static int _group_events_button_released(struct dt_iop_module_t *module, float p
     if(!fpt) return 0;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel)
-      if(sel->functions->button_released(module, pzx, pzy, which, state, sel, fpt->parentid, gui,
+      if(sel->functions->button_released(module, x, y, which, state, sel, fpt->parentid, gui,
                                              gui->group_selected))
         return 1;
   }
@@ -230,7 +239,7 @@ static int _group_events_key_pressed(struct dt_iop_module_t *module, GdkEventKey
   return return_value;
 }
 
-static int _group_events_mouse_moved(struct dt_iop_module_t *module, float pzx, float pzy, double pressure,
+static int _group_events_mouse_moved(struct dt_iop_module_t *module, double x, double y, double pressure,
                                      int which, dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui,
                                      int unused2)
 {
@@ -239,8 +248,8 @@ static int _group_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
   // we first don't do anything if we are inside a scrolling session
   if(gui->scrollx != 0.0f && gui->scrolly != 0.0f)
   {
-    if((gui->scrollx - pzx < as && gui->scrollx - pzx > -as)
-       && (gui->scrolly - pzy < as && gui->scrolly - pzy > -as))
+    if((gui->scrollx - gui->pos[0] < as && gui->scrollx - gui->pos[0] > -as)
+       && (gui->scrolly - gui->pos[1] < as && gui->scrolly - gui->pos[1] > -as))
       return 1;
     gui->scrollx = gui->scrolly = 0.0f;
   }
@@ -253,7 +262,7 @@ static int _group_events_mouse_moved(struct dt_iop_module_t *module, float pzx, 
     if(!fpt) return 0;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
     if(sel && sel->functions)
-      return sel->functions->mouse_moved(module, pzx, pzy, pressure, which, sel, fpt->parentid, gui,
+      return sel->functions->mouse_moved(module, x, y, pressure, which, sel, fpt->parentid, gui,
                                        gui->group_selected);
   }
 

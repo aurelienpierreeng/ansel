@@ -58,6 +58,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include <assert.h>
+#include <stddef.h>
 #include <glib/gprintf.h>
 #include <math.h>
 #include <stdint.h>
@@ -769,20 +770,140 @@ void dt_dev_get_processed_size(const dt_develop_t *dev, int *procw, int *proch)
   *proch = dev->roi.processed_height;
  }
 
-void dt_dev_retrieve_full_pos(dt_develop_t *dev, const int px, const int py, float *out_x, float *out_y)
+void dt_dev_coordinates_widget_delta_to_image_delta(dt_develop_t *dev, const int delta_in, float *delta_out)
 {
-  const int wd = dev->roi.processed_width;
-  const int ht = dev->roi.processed_height;
-  if(wd == 0 || ht == 0) return; // avoid division by zero
+  
+}
+
+void dt_dev_coordinates_widget_to_image_norm(dt_develop_t *dev, float *points, size_t num_points)
+{
+  if(!dev || !points || num_points == 0) return;
+  const float processed_width = dev->roi.processed_width;
+  const float processed_height = dev->roi.processed_height;
+  if(processed_width == 0.0f || processed_height == 0.0f) return;
 
   const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
+  const float roi_x = (float)dev->roi.x;
+  const float roi_y = (float)dev->roi.y;
+  const float center_x = 0.5f * (float)dev->roi.orig_width;
+  const float center_y = 0.5f * (float)dev->roi.orig_height;
+  const float inv_scaled_width = 1.0f / (processed_width * scale);
+  const float inv_scaled_height = 1.0f / (processed_height * scale);
 
-  // calculate delta from center in processed image coordinates
-  const float dx = px - 0.5f * dev->roi.width - dev->roi.border_size;
-  const float dy = py - 0.5f * dev->roi.height - dev->roi.border_size;
+  for(size_t i = 0; i < num_points; ++i)
+  {
+    const size_t idx = i * 2;
+    const float px = points[idx + 0];
+    const float py = points[idx + 1];
+    points[idx + 0] = roi_x + (px - center_x) * inv_scaled_width;
+    points[idx + 1] = roi_y + (py - center_y) * inv_scaled_height;
+  }
+}
 
-  if(out_x) *out_x = dev->roi.x + dx / (wd * scale);
-  if(out_y) *out_y = dev->roi.y + dy / (ht * scale);
+void dt_dev_coordinates_image_norm_to_widget(dt_develop_t *dev, float *points, size_t num_points)
+{
+  if(!dev || !points || num_points == 0) return;
+  const float processed_width = dev->roi.processed_width;
+  const float processed_height = dev->roi.processed_height;
+  if(processed_width == 0.0f || processed_height == 0.0f) return;
+
+  const float scale = dt_dev_get_zoom_level(dev) / darktable.gui->ppd;
+  const float roi_x = (float)dev->roi.x;
+  const float roi_y = (float)dev->roi.y;
+  const float scaled_width = processed_width * scale;
+  const float scaled_height = processed_height * scale;
+  const float center_x = 0.5f * (float)dev->roi.orig_width;
+  const float center_y = 0.5f * (float)dev->roi.orig_height;
+
+  for(size_t i = 0; i < num_points; ++i)
+  {
+    const size_t idx = i * 2;
+    const float px = points[idx + 0];
+    const float py = points[idx + 1];
+    const float dx = (px - roi_x) * scaled_width;
+    const float dy = (py - roi_y) * scaled_height;
+    points[idx + 0] = dx + center_x;
+    points[idx + 1] = dy + center_y;
+  }
+}
+
+void dt_dev_coordinates_image_norm_to_image_abs(dt_develop_t *dev, float *points, size_t num_points)
+{
+  if(!dev || !points || num_points == 0) return;
+  const float processed_width = dev->roi.processed_width;
+  const float processed_height = dev->roi.processed_height;
+  if(processed_width == 0.0f || processed_height == 0.0f) return;
+
+  for(size_t i = 0; i < num_points; ++i)
+  {
+    const size_t idx = i * 2;
+    points[idx + 0] *= processed_width;
+    points[idx + 1] *= processed_height;
+  }
+}
+
+void dt_dev_coordinates_image_abs_to_image_norm(dt_develop_t *dev, float *points, size_t num_points)
+{
+  if(!dev || !points || num_points == 0) return;
+  const float processed_width = dev->roi.processed_width;
+  const float processed_height = dev->roi.processed_height;
+  if(processed_width == 0.0f || processed_height == 0.0f) return;
+
+  const float inv_width = 1.0f / processed_width;
+  const float inv_height = 1.0f / processed_height;
+  for(size_t i = 0; i < num_points; ++i)
+  {
+    const size_t idx = i * 2;
+    points[idx + 0] *= inv_width;
+    points[idx + 1] *= inv_height;
+  }
+}
+
+void dt_dev_coordinates_raw_abs_to_raw_norm(dt_develop_t *dev, float *points, size_t num_points)
+{
+  if(!dev || !points || num_points == 0) return;
+  const float raw_width = dev->roi.raw_width;
+  const float raw_height = dev->roi.raw_height;
+  if(raw_width == 0.0f || raw_height == 0.0f) return;
+  
+  const float inv_width = 1.f / raw_width;
+  const float inv_height = 1.f / raw_height;
+  for(size_t i = 0; i < num_points; i++)
+  {
+    const size_t idx = i * 2;
+    points[idx + 0] *= inv_width;
+    points[idx + 1] *= inv_height;
+  }
+}
+
+void dt_dev_coordinates_raw_norm_to_raw_abs(dt_develop_t *dev, float *points, size_t num_points)
+{
+  if(!dev || !points || num_points == 0) return;
+  const float raw_width = dev->roi.raw_width;
+  const float raw_height = dev->roi.raw_height;
+  if(raw_width == 0.0f || raw_height == 0.0f) return;
+  
+  for(size_t i = 0; i < num_points; i++)
+  {
+    const size_t idx = i * 2;
+    points[idx + 0] *= raw_width;
+    points[idx + 1] *= raw_height;
+  }
+}
+
+void dt_dev_coordinates_image_norm_to_preview_abs(dt_develop_t *dev, float *points, size_t num_points)
+{
+  if(!dev || !points || num_points == 0) return;
+  const float preview_width = dev->roi.preview_width;
+  const float preview_height = dev->roi.preview_height;
+  if(preview_width == 0.0f || preview_height == 0.0f) return;
+  
+  for(size_t i = 0; i < num_points; i++)
+  {
+    const size_t idx = i * 2;
+    points[idx + 0] *= preview_width;
+    points[idx + 1] *= preview_height;
+  }
 }
 
 int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid)
@@ -1416,69 +1537,6 @@ gboolean dt_dev_check_zoom_scale_bounds(dt_develop_t *dev)
     return TRUE;
   }
   return FALSE;
-}
-
-gboolean dt_dev_roi_to_input_space(dt_develop_t *dev, /*gboolean normalized_in,*/ gboolean normalize_out,
-                                   const float in_x, const float in_y, float *point_x, float *point_y)
-{
-  if(!point_x || !point_y) return FALSE;
-
-  const float scale = dev->roi.natural_scale;
-  const int wd = dev->roi.preview_width;
-  const int ht = dev->roi.preview_height;
-  const int iwd = dev->roi.raw_width;
-  const int iht = dev->roi.raw_height;
-  // avoid division by zero
-  if(wd == 0 || ht == 0 || iwd == 0 || iht == 0) return FALSE;
-
-  float pzx = in_x;
-  float pzy = in_y;
-
-  // if(normalized_in)
-  //{
-  //  De-normalize preview coordinate to pixel space
-  pzx *= dev->roi.preview_width;
-  pzy *= dev->roi.preview_height;
-  //}
-
-  pzx /= scale;
-  pzy /= scale;
-
-  // Now, the coordinates are in preview backbuf size.
-  float pts[2] = { pzx, pzy };
-
-  // We need to undistort them to get input space
-  if(!dt_dev_distort_backtransform(dev, pts, 1)) return FALSE;
-
-  // Finally normalize to input space, if needed
-  *point_x = normalize_out ? pts[0] / iwd : pts[0];
-  *point_y = normalize_out ? pts[1] / iht : pts[1];
-
-  return TRUE;
-}
-
-gboolean dt_dev_roi_delta_to_input_space(dt_develop_t *dev, const float delta[2],
-                                            const float in[2], float points[2])
-{
-  const float natural_scale = dev->roi.natural_scale;
-  const int wd = dev->roi.preview_width;
-  const int ht = dev->roi.preview_height;
-  const int iwd = dev->roi.raw_width;
-  const int iht = dev->roi.raw_height;
-  // avoid division by zero
-  if(wd == 0 || ht == 0 || iwd == 0 || iht == 0 || !points)
-    return FALSE;
-
-  float pts[2] = { in[0] * wd / natural_scale + delta[0],
-                   in[1] * ht / natural_scale + delta[1] };
-
-  if(!dt_dev_distort_backtransform(dev, pts, 1))
-    return FALSE;
-
-  points[0] = pts[0] / iwd;
-  points[1] = pts[1] / iht;
-
-  return TRUE;
 }
 
 void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)

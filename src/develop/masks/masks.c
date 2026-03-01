@@ -83,8 +83,10 @@ gboolean dt_masks_point_is_within_radius(const float point_x, const float point_
  * (e.g. gradient/ellipse control points). Pass -1 to use g_list_length().
  *
  * Callers provide shape-specific callbacks for handles and distance tests.
+ *
+ * The cached cursor in `mask_gui->pos` is authoritative for hit testing.
  */
-int dt_masks_find_closest_handle_common(float pointer_x, float pointer_y, dt_masks_form_t *mask_form, int parent_id,
+int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
                                         dt_masks_form_gui_t *mask_gui, int form_index, int node_count_override,
                                         dt_masks_border_handle_fn border_handle_cb,
                                         dt_masks_curve_handle_fn curve_handle_cb,
@@ -93,38 +95,51 @@ int dt_masks_find_closest_handle_common(float pointer_x, float pointer_y, dt_mas
                                         dt_masks_post_select_fn post_select_cb,
                                         void *user_data)
 {
-  (void)parent_id;
-  if(!mask_gui || !mask_form || !mask_form->points) return 0;
+  if(!mask_form || !mask_form->points) return 0;
   if(!mask_gui->creation && mask_gui->group_selected != form_index) return 0;
 
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
   if(!gui_points) return 0;
 
-  const dt_develop_t *const dev = (const dt_develop_t *)darktable.develop;
-
   // Handle detection in backbuffer space.
   const float cursor_radius = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
   const float cursor_radius2 = cursor_radius * cursor_radius;
+  const float cursor_x = mask_gui->pos[0];
+  const float cursor_y = mask_gui->pos[1];
+  const int selected_node = (mask_gui->node_selected) ? mask_gui->node_hovered : -1;
 
-  mask_gui->form_selected = FALSE;
-  mask_gui->border_selected = FALSE;
-  mask_gui->source_selected = FALSE;
-  mask_gui->handle_selected = -1;
   mask_gui->node_hovered = -1;
-  mask_gui->seg_selected = -1;
-  mask_gui->handle_border_selected = -1;
-  mask_gui->group_hovered = -1;
+  mask_gui->handle_hovered = -1;
+  mask_gui->seg_hovered = -1;
+  mask_gui->handle_border_hovered = -1;
+
+  if(mask_gui->node_dragging >= 0)
+  {
+    mask_gui->node_hovered = mask_gui->node_dragging;
+    return 1;
+  }
+  if(mask_gui->handle_dragging >= 0)
+  {
+    mask_gui->handle_hovered = mask_gui->handle_dragging;
+    return 1;
+  }
+  if(mask_gui->handle_border_dragging >= 0)
+  {
+    mask_gui->handle_border_hovered = mask_gui->handle_border_dragging;
+    return 1;
+  }
+  if(mask_gui->seg_dragging >= 0)
+  {
+    mask_gui->seg_hovered = mask_gui->seg_dragging;
+    return 1;
+  }
 
   const int node_count = (node_count_override >= 0) ? node_count_override
                                                     : (int)g_list_length(mask_form->points);
 
-  pointer_x *= darktable.develop->roi.preview_width / dev->roi.natural_scale;
-  pointer_y *= darktable.develop->roi.preview_height / dev->roi.natural_scale;
-
   const gboolean has_bezier_layout = mask_form->uses_bezier_points_layout;
   const gboolean can_test_nodes = (node_position_cb != NULL) || has_bezier_layout;
-  const int selected_node = mask_gui->node_selected;
   const gboolean has_selected_node = (node_count > 0) && can_test_nodes
                                      && (mask_gui->group_selected == form_index)
                                      && selected_node >= 0 && selected_node < node_count;
@@ -136,10 +151,9 @@ int dt_masks_find_closest_handle_common(float pointer_x, float pointer_y, dt_mas
     float handle_y = NAN;
     if(border_handle_cb
        && border_handle_cb(gui_points, node_count, selected_node, &handle_x, &handle_y, user_data)
-       && dt_masks_point_is_within_radius(pointer_x, pointer_y, handle_x, handle_y, cursor_radius2))
+       && dt_masks_point_is_within_radius(cursor_x, cursor_y, handle_x, handle_y, cursor_radius2))
     {
-      mask_gui->handle_border_selected = selected_node;
-      mask_gui->group_hovered = form_index;
+      mask_gui->handle_border_hovered = selected_node;
       return 1;
     }
 
@@ -147,10 +161,9 @@ int dt_masks_find_closest_handle_common(float pointer_x, float pointer_y, dt_mas
     if(!dt_masks_node_is_cusp(gui_points, selected_node) && curve_handle_cb)
     {
       curve_handle_cb(gui_points, selected_node, &handle_x, &handle_y, user_data);
-      if(dt_masks_point_is_within_radius(pointer_x, pointer_y, handle_x, handle_y, cursor_radius2))
+      if(dt_masks_point_is_within_radius(cursor_x, cursor_y, handle_x, handle_y, cursor_radius2))
       {
-        mask_gui->handle_selected = selected_node;
-        mask_gui->group_hovered = form_index;
+        mask_gui->handle_hovered = selected_node;
         return 1;
       }
     }
@@ -168,10 +181,9 @@ int dt_masks_find_closest_handle_common(float pointer_x, float pointer_y, dt_mas
       node_y = gui_points->points[selected_node * 6 + 3];
     }
     if(!isnan(node_x) && !isnan(node_y)
-       && dt_masks_point_is_within_radius(pointer_x, pointer_y, node_x, node_y, cursor_radius2))
+       && dt_masks_point_is_within_radius(cursor_x, cursor_y, node_x, node_y, cursor_radius2))
     {
       mask_gui->node_hovered = selected_node;
-      mask_gui->group_hovered = form_index;
       return 1;
     }
   }
@@ -192,10 +204,9 @@ int dt_masks_find_closest_handle_common(float pointer_x, float pointer_y, dt_mas
         node_y = gui_points->points[node_index * 6 + 3];
       }
       if(!isnan(node_x) && !isnan(node_y)
-         && dt_masks_point_is_within_radius(pointer_x, pointer_y, node_x, node_y, cursor_radius2))
+         && dt_masks_point_is_within_radius(cursor_x, cursor_y, node_x, node_y, cursor_radius2))
       {
         mask_gui->node_hovered = node_index;
-        mask_gui->group_hovered = form_index;
         return 1;
       }
     }
@@ -209,13 +220,13 @@ int dt_masks_find_closest_handle_common(float pointer_x, float pointer_y, dt_mas
   int near_segment = -1;
   int inside_source = 0;
   float nearest_distance = 0.0f;
-  distance_cb(pointer_x, pointer_y, cursor_radius, mask_gui, form_index, node_count, &inside, &inside_border,
+  distance_cb(cursor_x, cursor_y, cursor_radius, mask_gui, form_index, node_count, &inside, &inside_border,
               &near_segment, &inside_source, &nearest_distance, user_data);
 
   if(near_segment >= 0)
   {
     if(near_segment < node_count)
-      mask_gui->seg_selected = near_segment;
+      mask_gui->seg_hovered = near_segment;
     return 1;
   }
 
@@ -371,10 +382,10 @@ void dt_masks_gui_set_dragging(dt_masks_form_gui_t *gui)
 {
   if(!gui) return;
 
-  if(gui->handle_selected >= 0) gui->handle_dragging = gui->handle_selected;
-  if(gui->handle_border_selected >= 0) gui->handle_border_dragging = gui->handle_border_selected;
-  if(gui->node_selected >= 0) gui->node_dragging = gui->node_selected;
-  if(gui->seg_selected >= 0) gui->seg_dragging = gui->seg_selected;
+  if(gui->handle_selected && gui->handle_hovered >= 0) gui->handle_dragging = gui->handle_hovered;
+  if(gui->handle_border_selected && gui->handle_border_hovered >= 0) gui->handle_border_dragging = gui->handle_border_hovered;
+  if(gui->node_selected && gui->node_hovered >= 0) gui->node_dragging = gui->node_hovered;
+  if(gui->seg_selected && gui->seg_hovered >= 0) gui->seg_dragging = gui->seg_hovered;
   if(gui->source_selected)
     gui->source_dragging = TRUE;
   else if(gui->form_selected)
@@ -502,10 +513,10 @@ static gboolean _set_hinter_message(dt_masks_form_gui_t *mask_gui, const dt_mask
   }
 
   dt_print(DT_DEBUG_INPUT,
-           "[masks] hint begin: form=%p type=%d gui=%p group_selected=%d form_selected=%d node_hovered=%d seg_selected=%d selected_formid=%d\n",
+           "[masks] hint begin: form=%p type=%d gui=%p group_selected=%d form_selected=%d node_hovered=%d seg_hovered=%d selected_formid=%d\n",
            (void *)mask_form, mask_form ? mask_form->type : -1, (void *)mask_gui,
            mask_gui->group_selected, mask_gui->form_selected,
-           mask_gui->node_hovered, mask_gui->seg_selected,
+           mask_gui->node_hovered, mask_gui->seg_hovered,
            selected_form_id);
   if(form_type & DT_MASKS_GROUP)
   {
@@ -527,13 +538,6 @@ static gboolean _set_hinter_message(dt_masks_form_gui_t *mask_gui, const dt_mask
   if(selected_form->functions && selected_form->functions->set_hint_message)
   {
     selected_form->functions->set_hint_message(mask_gui, selected_form, opacity_percent, message, sizeof(message));
-    if(message[0] == '\0')
-    {
-      const gboolean was_form_selected = mask_gui->form_selected;
-      mask_gui->form_selected = TRUE;
-      selected_form->functions->set_hint_message(mask_gui, selected_form, opacity_percent, message, sizeof(message));
-      mask_gui->form_selected = was_form_selected;
-    }
   }
 
   dt_control_hinter_message(darktable.control, message);
@@ -550,10 +554,22 @@ void dt_masks_init_form_gui(dt_masks_form_gui_t *mask_gui)
   memset(mask_gui, 0, sizeof(dt_masks_form_gui_t));
 
   mask_gui->pos[0] = mask_gui->pos[1] = -1.0f;
-  mask_gui->mouse_leaved_center = TRUE;
+  mask_gui->rel_pos[0] = mask_gui->rel_pos[1] = -1.0f;
+  mask_gui->raw_pos[0] = mask_gui->raw_pos[1] = -1.0f;
   mask_gui->pos_source[0] = mask_gui->pos_source[1] = -1.0f;
   mask_gui->source_pos_type = DT_MASKS_SOURCE_POS_RELATIVE_TEMP;
+  mask_gui->node_hovered = -1;
+  mask_gui->handle_hovered = -1;
+  mask_gui->seg_hovered = -1;
+  mask_gui->handle_border_hovered = -1;
+  mask_gui->node_selected = FALSE;
+  mask_gui->handle_selected = FALSE;
+  mask_gui->seg_selected = FALSE;
+  mask_gui->handle_border_selected = FALSE;
   mask_gui->form_selected = FALSE;
+  mask_gui->border_selected = FALSE;
+  mask_gui->source_selected = FALSE;
+  mask_gui->pivot_selected = FALSE;
   mask_gui->last_rebuild_ts = 0.0;
   mask_gui->last_rebuild_pos[0] = mask_gui->last_rebuild_pos[1] = 0.0f;
   mask_gui->rebuild_pending = FALSE;
@@ -564,15 +580,18 @@ void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *mask_gui)
 {
   // Note: we have an hard reset function below that frees all buffers and such
   mask_gui->source_selected = FALSE;
-  mask_gui->handle_selected = -1;
   mask_gui->node_hovered = -1;
-  mask_gui->seg_selected = -1;
-  mask_gui->handle_border_selected = -1;
+  mask_gui->handle_hovered = -1;
+  mask_gui->seg_hovered = -1;
+  mask_gui->handle_border_hovered = -1;
+  mask_gui->node_selected = FALSE;
+  mask_gui->handle_selected = FALSE;
+  mask_gui->seg_selected = FALSE;
+  mask_gui->handle_border_selected = FALSE;
   mask_gui->group_selected = -1;
   mask_gui->delta[0] = mask_gui->delta[1] = 0.0f;
   mask_gui->form_selected = mask_gui->border_selected = mask_gui->form_dragging = mask_gui->form_rotating = FALSE;
   mask_gui->pivot_selected = FALSE;
-  mask_gui->handle_border_selected = mask_gui->seg_selected = mask_gui->node_hovered = mask_gui->handle_selected = -1;
   mask_gui->handle_border_dragging = mask_gui->seg_dragging = mask_gui->handle_dragging = mask_gui->node_dragging = -1;
   mask_gui->last_rebuild_ts = 0.0;
   mask_gui->last_rebuild_pos[0] = mask_gui->last_rebuild_pos[1] = 0.0f;
@@ -618,7 +637,7 @@ void dt_masks_gui_form_create(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
 
 gboolean dt_masks_gui_form_create_throttled(dt_masks_form_t *mask_form, dt_masks_form_gui_t *mask_gui,
                                             int form_index, dt_iop_module_t *module,
-                                            float point_x, float point_y)
+                                            float posx, float posy)
 {
   if(!mask_form || !mask_gui) return FALSE;
 
@@ -629,11 +648,6 @@ gboolean dt_masks_gui_form_create_throttled(dt_masks_form_t *mask_form, dt_masks
     return TRUE;
   }
 
-  const float preview_width = develop->roi.preview_width / develop->roi.natural_scale;
-  const float preview_height = develop->roi.preview_height / develop->roi.natural_scale;
-  const float pixel_x = point_x * preview_width;
-  const float pixel_y = point_y * preview_height;
-
   const double now = dt_get_wtime();
   const double min_delta_time = 1.0 / 60.0;
   const float min_dist2 = 4.0f;
@@ -643,8 +657,8 @@ gboolean dt_masks_gui_form_create_throttled(dt_masks_form_t *mask_form, dt_masks
   if(!force_rebuild && mask_gui->last_rebuild_ts > 0.0)
   {
     const double elapsed_time = now - mask_gui->last_rebuild_ts;
-    const float delta_x = pixel_x - mask_gui->last_rebuild_pos[0];
-    const float delta_y = pixel_y - mask_gui->last_rebuild_pos[1];
+    const float delta_x = posx - mask_gui->last_rebuild_pos[0];
+    const float delta_y = posy - mask_gui->last_rebuild_pos[1];
     if(elapsed_time < min_delta_time && (delta_x * delta_x + delta_y * delta_y) < min_dist2)
     {
       mask_gui->rebuild_pending = TRUE;
@@ -654,8 +668,8 @@ gboolean dt_masks_gui_form_create_throttled(dt_masks_form_t *mask_form, dt_masks
 
   dt_masks_gui_form_create(mask_form, mask_gui, form_index, module);
   mask_gui->last_rebuild_ts = now;
-  mask_gui->last_rebuild_pos[0] = pixel_x;
-  mask_gui->last_rebuild_pos[1] = pixel_y;
+  mask_gui->last_rebuild_pos[0] = posx;
+  mask_gui->last_rebuild_pos[1] = posy;
   mask_gui->rebuild_pending = FALSE;
   return TRUE;
 }
@@ -681,7 +695,7 @@ void dt_masks_remove_node(struct dt_iop_module_t *module, dt_masks_form_t *mask_
   mask_form->points = g_list_remove(mask_form->points, brush_node);
   free(brush_node);
   mask_gui->node_hovered = -1;
-  mask_gui->node_selected = -1;
+  mask_gui->node_selected = FALSE;
   if(mask_form->functions && mask_form->functions->init_ctrl_points)
     mask_form->functions->init_ctrl_points(mask_form);
     
@@ -770,13 +784,13 @@ gboolean dt_masks_gui_delete(struct dt_iop_module_t *module, dt_masks_form_t *ma
     return TRUE;
 
   // we remove the selected node (and the entire form if there is too few nodes left)
-  if(((mask_form->type & DT_MASKS_IS_PATH_SHAPE) != 0) && mask_gui->node_selected >= 0)
+  if(((mask_form->type & DT_MASKS_IS_PATH_SHAPE) != 0) && mask_gui->node_selected)
   {
     if(g_list_shorter_than(mask_form->points, 3))
       return _masks_remove_shape(module, mask_form, parent_id, mask_gui, mask_gui->group_selected);
 
     dt_masks_remove_node(module, mask_form, parent_id, mask_gui, mask_gui->group_selected,
-                         mask_gui->node_selected);
+                         mask_gui->node_hovered);
 
     return TRUE;
   }
@@ -1750,22 +1764,30 @@ void dt_masks_free_form(dt_masks_form_t *mask_form)
 
 int dt_masks_events_mouse_leave(struct dt_iop_module_t *module)
 {
-  if(darktable.develop->form_gui)
-  {
-    dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
-    mask_gui->mouse_leaved_center = TRUE;
-  }
   return 0;
 }
 
 int dt_masks_events_mouse_enter(struct dt_iop_module_t *module)
 {
-  if(darktable.develop->form_gui)
-  {
-    dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
-    mask_gui->mouse_leaved_center = FALSE;
-  }
   return 0;
+}
+
+gboolean dt_masks_is_anything_selected(const dt_masks_form_gui_t *mask_gui)
+{
+  return mask_gui->form_selected
+          || mask_gui->source_selected
+          || mask_gui->seg_selected
+          || mask_gui->node_selected
+          || mask_gui->handle_selected
+          || mask_gui->handle_border_selected;
+}
+
+gboolean dt_masks_is_anything_hovered(const dt_masks_form_gui_t *mask_gui)
+{
+  return mask_gui->node_hovered >= 0
+          || mask_gui->handle_hovered >= 0
+          || mask_gui->handle_border_hovered >= 0
+          || mask_gui->seg_hovered >= 0;
 }
 
 static void _set_cursor_shape(dt_masks_form_gui_t *mask_gui)
@@ -1784,33 +1806,48 @@ static void _set_cursor_shape(dt_masks_form_gui_t *mask_gui)
 
   // crosshair
   else if(!mask_gui->creation
-          && (((mask_gui->form_selected || mask_gui->seg_selected >= 0) && mask_gui->node_selected == -1)
-              || mask_gui->handle_selected >= 0 || mask_gui->handle_border_selected >= 0
-              || mask_gui->node_hovered >= 0))
+          && (dt_masks_is_anything_selected(mask_gui)
+              || dt_masks_is_anything_hovered(mask_gui)))
     dt_control_set_cursor(GDK_FLEUR);
 }
 
 static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const int button, const uint32_t state)
 {
   if(!mask_gui || mask_gui->creation || button != 1) return;
+  const gboolean form_selected = mask_gui->form_selected;
+  const gboolean border_selected = mask_gui->border_selected;
+  const gboolean source_selected = mask_gui->source_selected;
 
-  const gboolean has_hit = (mask_gui->node_hovered >= 0 || mask_gui->handle_selected >= 0
-                            || mask_gui->handle_border_selected >= 0 || mask_gui->seg_selected >= 0
-                            || mask_gui->form_selected || mask_gui->source_selected);
-  if(!has_hit)
-  {
-    mask_gui->node_selected = -1;
-    return;
-  }
+  mask_gui->node_selected = FALSE;
+  mask_gui->handle_selected = FALSE;
+  mask_gui->handle_border_selected = FALSE;
+  mask_gui->seg_selected = FALSE;
+  mask_gui->form_selected = FALSE;
+  mask_gui->border_selected = FALSE;
+  mask_gui->source_selected = FALSE;
 
   if(mask_gui->node_hovered >= 0)
-    mask_gui->node_selected = mask_gui->node_hovered;
-  else if(mask_gui->handle_selected >= 0)
-    mask_gui->node_selected = mask_gui->handle_selected;
-  else if(mask_gui->handle_border_selected >= 0)
-    mask_gui->node_selected = mask_gui->handle_border_selected;
+  {
+    mask_gui->node_selected = TRUE;
+  }
+  else if(mask_gui->handle_hovered >= 0)
+  {
+    mask_gui->handle_selected = TRUE;
+  }
+  else if(mask_gui->handle_border_hovered >= 0)
+  {
+    mask_gui->handle_border_selected = TRUE;
+  }
+  else if(mask_gui->seg_hovered >= 0)
+  {
+    mask_gui->seg_selected = TRUE;
+  }
   else
-    mask_gui->node_selected = -1;
+  {
+    mask_gui->form_selected = form_selected;
+    mask_gui->border_selected = border_selected;
+    mask_gui->source_selected = source_selected;
+  }
 
   if(mask_gui->form_rotating || mask_gui->border_toggling || mask_gui->gradient_toggling) return;
   if(dt_modifier_is(state, GDK_CONTROL_MASK)) return;
@@ -1818,26 +1855,41 @@ static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const
   dt_masks_gui_set_dragging(mask_gui);
 }
 
+/**
+ * @brief Convert the GTK/Cairo widget cursor once for the full mask event chain.
+ *
+ * The event entry points are the only place where widget-space `x, y` are consumed.
+ * Downstream handlers reuse the cached positions:
+ * - `mask_gui->rel_pos`: normalized output-image coordinates
+ * - `mask_gui->pos`: absolute output-image coordinates
+ * - `mask_gui->raw_pos`: absolute raw input-image coordinates
+ */
+static void _dt_masks_events_set_current_pos(const double x, const double y, dt_masks_form_gui_t *mask_gui)
+{
+  if(!mask_gui) return;
+
+  float point[2] = { (float)x, (float)y };
+  dt_dev_coordinates_widget_to_image_norm(darktable.develop, point, 1);
+  mask_gui->rel_pos[0] = point[0];
+  mask_gui->rel_pos[1] = point[1];
+
+  dt_dev_coordinates_image_norm_to_image_abs(darktable.develop, point, 1);
+  mask_gui->pos[0] = point[0];
+  mask_gui->pos[1] = point[1];
+
+  mask_gui->raw_pos[0] = point[0];
+  mask_gui->raw_pos[1] = point[1];
+  dt_dev_distort_backtransform(darktable.develop, mask_gui->raw_pos, 1);
+}
+
 int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double y, double pressure, int which)
 {
+  // This assume that if this event is generated, the mouse is over the center window.
   // record mouse position even if there are no masks visible
   dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
   dt_masks_form_t *mask_form = dt_masks_get_visible_form(darktable.develop);
-  const float zoom_scale = darktable.develop->roi.natural_scale;
-
-  float point_x = 0.0f;
-  float point_y = 0.0f;
-  dt_dev_retrieve_full_pos(darktable.develop, x, y, &point_x, &point_y);
-  if(mask_gui)
-  {
-    // This assume that if this event is generated, the mouse is over the center window
-    mask_gui->mouse_leaved_center = FALSE;
-    mask_gui->pos[0] = point_x * darktable.develop->roi.preview_width;
-    mask_gui->pos[1] = point_y * darktable.develop->roi.preview_height;
-    // unscale
-    mask_gui->pos[0] /= zoom_scale;
-    mask_gui->pos[1] /= zoom_scale;
-  }
+  if(!mask_gui) return 0;
+  _dt_masks_events_set_current_pos(x, y, mask_gui);
 
   // do not process if no forms visible
   if(!mask_form) return 0;
@@ -1846,7 +1898,7 @@ int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double
   if(darktable.develop->darkroom_skip_mouse_events) return 0;
 
   int result = 0;
-  result = mask_form->functions->mouse_moved(module, point_x, point_y, pressure, which,
+  result = mask_form->functions->mouse_moved(module, x, y, pressure, which,
                                               mask_form, 0, mask_gui, 0);
 
   if(mask_gui)
@@ -1865,12 +1917,12 @@ int dt_masks_events_button_released(struct dt_iop_module_t *module, double x, do
 
   dt_masks_form_t *mask_form = dt_masks_get_visible_form(darktable.develop);
   dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
-  float point_x = 0.0f;
-  float point_y = 0.0f;
-  dt_dev_retrieve_full_pos(darktable.develop, x, y, &point_x, &point_y);
+  if(!mask_gui) return 0;
+  _dt_masks_events_set_current_pos(x, y, mask_gui);
+  if(!mask_form) return 0;
 
   int result = 0;
-  result = mask_form->functions->button_released(module, point_x, point_y, button,
+  result = mask_form->functions->button_released(module, x, y, button,
                                                   state, mask_form, 0, mask_gui, 0);
 
   if(mask_form && (mask_form->type & DT_MASKS_GROUP) && mask_gui)
@@ -1902,15 +1954,15 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
 
   dt_masks_form_t *mask_form = dt_masks_get_visible_form(darktable.develop);
   dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
-  
-  float point_x = 0.0f;
-  float point_y = 0.0f;
-  dt_dev_retrieve_full_pos(darktable.develop, x, y, &point_x, &point_y);
+  if(!mask_gui) return 0;
+
+  _dt_masks_events_set_current_pos(x, y, mask_gui);
+  if(!mask_form) return 0;
 
   /*DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);*/
 
   gboolean return_val = FALSE;
-  return_val = mask_form->functions->button_pressed(module, point_x, point_y, pressure,
+  return_val = mask_form->functions->button_pressed(module, x, y, pressure,
                                                     button, event_type, state,
                                                     mask_form, 0, mask_gui, 0);
 
@@ -1918,10 +1970,14 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
 
   if(button == 3 && !return_val)
   {
-    // mouse is over a form
-    if(mask_gui && ((mask_gui->group_selected >= 0 && mask_gui->form_selected) || mask_gui->creation))
+    // mouse is over a form or one of its handles/nodes
+    if(mask_gui && (mask_gui->creation
+                    || (mask_gui->group_selected >= 0
+                        && (dt_masks_is_anything_hovered(mask_gui)
+                            || dt_masks_is_anything_selected(mask_gui)))))
     {
-      GtkWidget *menu = dt_masks_create_menu(mask_gui, mask_form, NULL, point_x, point_y);
+      GtkWidget *menu = dt_masks_create_menu(mask_gui, mask_form, NULL,
+                                             mask_gui->rel_pos[0], mask_gui->rel_pos[1]);
       gtk_menu_popup_at_pointer(GTK_MENU(menu), NULL);
       return_val = TRUE;
     }
@@ -1977,9 +2033,10 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
 
   dt_masks_form_t *mask_form = dt_masks_get_visible_form(darktable.develop);
   dt_masks_form_gui_t *mask_gui = darktable.develop->form_gui;
-  float point_x = 0.0f;
-  float point_y = 0.0f;
-  dt_dev_retrieve_full_pos(darktable.develop, x, y, &point_x, &point_y);
+  if(!mask_gui) return 0;
+
+  _dt_masks_events_set_current_pos(x, y, mask_gui);
+  if(!mask_form) return 0;
 
   int result = 0;
   const gboolean scroll_increases = dt_mask_scroll_increases(scroll_up);
@@ -1988,7 +2045,7 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
   int scroll_flow = (scrolling_delta < 0) ? -scrolling_delta : scrolling_delta;
 
   if(mask_form->functions)
-    result = mask_form->functions->mouse_scrolled(module, point_x, point_y,
+    result = mask_form->functions->mouse_scrolled(module, x, y,
                                                   scroll_increases ? 1 : 0, scroll_flow,
                                                   key_state, mask_form, 0, mask_gui, 0,
                                                   DT_MASKS_INTERACTION_UNDEF);
@@ -2238,8 +2295,11 @@ void dt_masks_draw_path_seg_by_seg(cairo_t *cr, dt_masks_form_gui_t *mask_gui, c
     const double segment_y = points[segment_coord_index + 3];
     if(coord_x == segment_x && coord_y == segment_y)
     {
-      const gboolean seg_is_selected = group_selected && (mask_gui->seg_selected == current_segment_index);
-      const gboolean all_selected = group_selected && mask_gui->node_selected == -1
+      const gboolean seg_is_selected = group_selected
+                                       && (dt_masks_gui_selected_segment_index(mask_gui)
+                                           == current_segment_index);
+      const gboolean all_selected = group_selected
+                                    && dt_masks_is_anything_selected(mask_gui)
                                     && (mask_gui->form_selected || mask_gui->form_dragging);
 
       if(mask_gui->creation && current_segment_index == node_count - 2)
@@ -2345,14 +2405,20 @@ void dt_masks_clear_form_gui(dt_develop_t *develop)
       = develop->form_gui->form_rotating = develop->form_gui->border_toggling = develop->form_gui->gradient_toggling = FALSE;
   develop->form_gui->source_selected = develop->form_gui->source_dragging = FALSE;
   develop->form_gui->pivot_selected = FALSE;
-  develop->form_gui->handle_border_selected = develop->form_gui->seg_selected = develop->form_gui->node_hovered
-      = develop->form_gui->handle_selected = -1;
+  develop->form_gui->node_hovered = -1;
+  develop->form_gui->handle_hovered = -1;
+  develop->form_gui->seg_hovered = -1;
+  develop->form_gui->handle_border_hovered = -1;
+  develop->form_gui->node_selected = FALSE;
+  develop->form_gui->handle_selected = FALSE;
+  develop->form_gui->seg_selected = FALSE;
+  develop->form_gui->handle_border_selected = FALSE;
   develop->form_gui->handle_border_dragging = develop->form_gui->seg_dragging = develop->form_gui->handle_dragging
       = develop->form_gui->node_dragging = -1;
   develop->form_gui->creation_closing_form = develop->form_gui->creation = FALSE;
   develop->form_gui->pressure_sensitivity = DT_MASKS_PRESSURE_OFF;
   develop->form_gui->creation_module = NULL;
-  develop->form_gui->node_selected = -1;
+  develop->form_gui->node_selected = FALSE;
 
   develop->form_gui->group_selected = -1;
   develop->form_gui->group_selected = -1;
@@ -3346,9 +3412,9 @@ void dt_masks_select_form(struct dt_iop_module_t *module, dt_masks_form_t *selec
  *
  * Uses key modifiers to choose absolute vs. relative positioning, and stores
  * the reference position in preview coordinates.
+ * The current implementation caches that reference in absolute output-image coordinates.
  */
-void dt_masks_set_source_pos_initial_state(dt_masks_form_gui_t *mask_gui, const uint32_t key_state,
-                                           const float point_x, const float point_y)
+void dt_masks_set_source_pos_initial_state(dt_masks_form_gui_t *mask_gui, const uint32_t key_state)
 {
   if(dt_modifier_is(key_state, GDK_SHIFT_MASK | GDK_CONTROL_MASK))
     mask_gui->source_pos_type = DT_MASKS_SOURCE_POS_ABSOLUTE;
@@ -3360,10 +3426,8 @@ void dt_masks_set_source_pos_initial_state(dt_masks_form_gui_t *mask_gui, const 
   // both source types record an absolute position,
   // for the relative type, the first time is used the position is recorded,
   // the second time a relative position is calculated based on that one
-  const float zoom_scale = darktable.develop->roi.natural_scale;
-  // normalize backbuf points
-  mask_gui->pos_source[0] = point_x * darktable.develop->roi.preview_width / zoom_scale;
-  mask_gui->pos_source[1] = point_y * darktable.develop->roi.preview_height / zoom_scale;
+  mask_gui->pos_source[0] = mask_gui->pos[0];
+  mask_gui->pos_source[1] = mask_gui->pos[1];
 }
 
 /**
@@ -3371,14 +3435,17 @@ void dt_masks_set_source_pos_initial_state(dt_masks_form_gui_t *mask_gui, const 
  *
  * Handles first-time relative positioning, existing relative offsets, and
  * absolute coordinates. Updates mask_form->source accordingly.
+ * `mask_gui->rel_pos` is the normalized output-image
+ * cursor, while `mask_gui->pos_source` stores either an absolute output-image
+ * position or an absolute output-image delta depending on the current source mode.
  */
-void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *mask_gui, dt_masks_form_t *mask_form,
-                                           const float point_x, const float point_y)
+void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *mask_gui, dt_masks_form_t *mask_form)
 {
-  const float preview_width = darktable.develop->roi.preview_width;
-  const float preview_height = darktable.develop->roi.preview_height;
   const float raw_width = darktable.develop->roi.raw_width;
   const float raw_height = darktable.develop->roi.raw_height;
+
+  const float xx = mask_gui->pos[0];
+  const float yy = mask_gui->pos[1];
 
   // if this is the first time the relative pos is used
   if(mask_gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE_TEMP)
@@ -3395,9 +3462,11 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *mask_gui, dt_mas
         fprintf(stderr, "[dt_masks_set_source_pos_initial_value] unsupported masks type when calculating source position initial value\n");
 
       // set offset to form->source
-      float delta_points[2] = { point_x, point_y };
-      dt_dev_roi_delta_to_input_space(darktable.develop, mask_gui->pos_source,
-                                      delta_points, mask_form->source);
+      mask_form->source[0] = mask_gui->pos[0] + mask_gui->pos_source[0];
+      mask_form->source[1] = mask_gui->pos[1] + mask_gui->pos_source[1];
+      dt_dev_distort_backtransform(darktable.develop, mask_form->source, 1);
+      // normalize backbuf points
+      dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, mask_form->source, 1);
 
     }
     else
@@ -3409,10 +3478,8 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *mask_gui, dt_mas
       mask_form->source[0] = source_points[0] / raw_width;
       mask_form->source[1] = source_points[1] / raw_height;
 
-      mask_gui->pos_source[0] = mask_gui->pos_source[0]
-                                - point_x * preview_width / darktable.develop->roi.natural_scale;
-      mask_gui->pos_source[1] = mask_gui->pos_source[1]
-                                - point_y * preview_height / darktable.develop->roi.natural_scale;
+      mask_gui->pos_source[0] = mask_gui->pos_source[0] - xx;
+      mask_gui->pos_source[1] = mask_gui->pos_source[1] - yy;
     }
 
     mask_gui->source_pos_type = DT_MASKS_SOURCE_POS_RELATIVE;
@@ -3420,9 +3487,11 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *mask_gui, dt_mas
   else if(mask_gui->source_pos_type == DT_MASKS_SOURCE_POS_RELATIVE)
   {
     // original pos was already defined and relative value calculated, just use it
-    float delta_points[2] = { point_x, point_y };
-    dt_dev_roi_delta_to_input_space(darktable.develop, mask_gui->pos_source,
-                                    delta_points, mask_form->source);
+    mask_form->source[0] = mask_gui->pos[0] + mask_gui->pos_source[0];
+    mask_form->source[1] = mask_gui->pos[1] + mask_gui->pos_source[1];
+    dt_dev_distort_backtransform(darktable.develop, mask_form->source, 1);
+    // normalize backbuf points
+    dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, mask_form->source, 1);
   }
   else if(mask_gui->source_pos_type == DT_MASKS_SOURCE_POS_ABSOLUTE)
   {
@@ -3500,7 +3569,9 @@ void dt_masks_calculate_source_pos_value(dt_masks_form_gui_t *mask_gui, const fl
 /**
  * @brief Compute rotation angle (degrees) around a center using an anchor point.
  *
- * The angle accounts for possible axis inversion due to distortion transforms.
+ * `anchor`, `center`, and `mask_gui->delta` are absolute output-image
+ * coordinates. The angle accounts for possible axis inversion due to
+ * distortion transforms.
  * Updates mask_gui->delta to store the last anchor position.
  */
 float dt_masks_rotate_with_anchor(dt_develop_t *develop, const float anchor[2], const float center[2],

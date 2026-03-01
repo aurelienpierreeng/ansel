@@ -155,9 +155,9 @@ typedef struct dt_gui_gtk_t
 
 
   struct {
-    // distance to the cursor for handle detection (in backbuf reference)
+    // distance to the cursor in device pixels (screen space)
     float effect_radius;
-    // distance to the cursor for handle detection (in screen reference)
+    // distance to the cursor in absolute output-image pixels
     float effect_radius_scaled;
   } mouse;
 

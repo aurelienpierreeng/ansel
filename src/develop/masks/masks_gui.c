@@ -17,10 +17,203 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #include "develop/masks.h"
+#include "bauhaus/bauhaus.h"
 #include "common/debug.h"
 #include "gui/actions/menu.h"
 #include "gui/draw.h"
 #include "dtgtk/paint.h"
+
+#include <math.h>
+
+typedef struct dt_masks_gui_interaction_slider_t
+{
+  dt_masks_form_group_t *form_group;
+  dt_masks_form_gui_t *gui;
+  dt_iop_module_t *module;
+  dt_masks_interaction_t interaction;
+  dt_masks_increment_t increment;
+  float last_value;
+  GtkWidget *slider;
+} dt_masks_gui_interaction_slider_t;
+
+static void _masks_gui_interaction_apply_value(dt_masks_gui_interaction_slider_t *data, float value)
+{
+  if(!data || !data->form_group) return;
+  const int saved_node_hovered = data->gui ? data->gui->node_hovered : -1;
+  const gboolean saved_node_selected = data->gui ? data->gui->node_selected : FALSE;
+
+  if(data->increment == DT_MASKS_INCREMENT_ABSOLUTE) // aka opacity
+  {
+    dt_masks_form_set_interaction_value(data->form_group, data->interaction, value,
+                                        DT_MASKS_INCREMENT_ABSOLUTE, 1, data->gui, data->module);
+    return;
+  }
+
+  const float delta = value - data->last_value;
+  if(fabsf(delta) < 1e-6f) return;
+
+  // Slider value is a log2 scale factor in [-3;3], so apply the delta in log space.
+  const float mult = (data->interaction == DT_MASKS_INTERACTION_HARDNESS) ? -1.f : 1.f;
+  const float scale = exp2f(mult * delta);
+  if(data->gui)
+  {
+    data->gui->node_hovered = -1;
+    data->gui->node_selected = FALSE;
+  }
+  dt_masks_form_set_interaction_value(data->form_group, data->interaction, scale,
+                                      DT_MASKS_INCREMENT_SCALE, 1, data->gui, data->module);
+  if(data->gui)
+  {
+    data->gui->node_hovered = saved_node_hovered;
+    data->gui->node_selected = saved_node_selected;
+  }
+  data->last_value = value;
+}
+
+static void _masks_gui_menu_item_block_activate(GtkWidget *widget, gpointer user_data)
+{
+  g_signal_stop_emission_by_name(widget, "activate");
+}
+
+static gboolean _masks_gui_menu_item_forward_event(GtkWidget *widget, GdkEvent *event, gpointer user_data)
+{
+  dt_masks_gui_interaction_slider_t *data = (dt_masks_gui_interaction_slider_t *)user_data;
+  if(!data || !data->slider) return FALSE;
+
+  GdkEvent *copy = gdk_event_copy(event);
+  if(!copy) return FALSE;
+
+  double x = 0.0, y = 0.0;
+  gboolean has_coords = FALSE;
+  switch(copy->type)
+  {
+    case GDK_BUTTON_PRESS:
+    case GDK_2BUTTON_PRESS:
+    case GDK_3BUTTON_PRESS:
+    case GDK_BUTTON_RELEASE:
+      x = copy->button.x;
+      y = copy->button.y;
+      has_coords = TRUE;
+      break;
+    case GDK_MOTION_NOTIFY:
+      x = copy->motion.x;
+      y = copy->motion.y;
+      has_coords = TRUE;
+      break;
+    case GDK_SCROLL:
+      x = copy->scroll.x;
+      y = copy->scroll.y;
+      has_coords = TRUE;
+      break;
+    default:
+      break;
+  }
+
+  if(has_coords)
+  {
+    int sx = 0, sy = 0;
+    if(gtk_widget_translate_coordinates(widget, data->slider, (int)x, (int)y, &sx, &sy))
+    {
+      switch(copy->type)
+      {
+        case GDK_BUTTON_PRESS:
+        case GDK_2BUTTON_PRESS:
+        case GDK_3BUTTON_PRESS:
+        case GDK_BUTTON_RELEASE:
+          copy->button.x = sx;
+          copy->button.y = sy;
+          break;
+        case GDK_MOTION_NOTIFY:
+          copy->motion.x = sx;
+          copy->motion.y = sy;
+          break;
+        case GDK_SCROLL:
+          copy->scroll.x = sx;
+          copy->scroll.y = sy;
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  GdkWindow *slider_window = gtk_widget_get_window(data->slider);
+  if(slider_window)
+  {
+    if(copy->any.window) g_object_unref(copy->any.window);
+    copy->any.window = g_object_ref(slider_window);
+    copy->any.send_event = TRUE;
+  }
+
+  gtk_widget_event(data->slider, copy);
+  gdk_event_free(copy);
+  return TRUE;
+}
+
+static void _masks_gui_interaction_slider_changed(GtkWidget *widget, gpointer user_data)
+{
+  dt_masks_gui_interaction_slider_t *data = (dt_masks_gui_interaction_slider_t *)user_data;
+  if(!data || !data->form_group) return;
+
+  _masks_gui_interaction_apply_value(data, dt_bauhaus_slider_get(widget));
+}
+
+static GtkWidget *_masks_gui_add_interaction_slider(GtkWidget *menu, const char *label, dt_masks_form_group_t *form_group,
+                                                    dt_masks_interaction_t interaction, dt_masks_increment_t increment,
+                                                    float min, float max, float step, float value, int digits,
+                                                    const char *format, float factor,
+                                                    dt_masks_form_gui_t *gui, dt_iop_module_t *module)
+{
+  GtkWidget *menu_item = gtk_menu_item_new();
+  GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+
+  gtk_widget_set_can_focus(menu_item, FALSE);
+  g_signal_connect(G_OBJECT(menu_item), "activate",
+                   G_CALLBACK(_masks_gui_menu_item_block_activate), NULL);
+  gtk_widget_add_events(menu_item, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
+                                   | GDK_POINTER_MOTION_MASK | GDK_SCROLL_MASK);
+
+  GtkWidget *slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, module ? DT_GUI_MODULE(module) : NULL,
+                                                       min, max, step, value, digits);
+  dt_bauhaus_widget_set_label(slider, label);
+  dt_bauhaus_slider_set_digits(slider, digits);
+  if(format && format[0] != '\0') dt_bauhaus_slider_set_format(slider, format);
+  if(factor != 1.0f) dt_bauhaus_slider_set_factor(slider, factor);
+  dt_bauhaus_slider_set(slider, value);
+  DT_BAUHAUS_WIDGET(slider)->expand = TRUE;
+  gtk_widget_set_hexpand(slider, TRUE);
+  gtk_widget_set_halign(slider, GTK_ALIGN_FILL);
+  gtk_widget_set_valign(slider, GTK_ALIGN_CENTER);
+  gtk_widget_set_size_request(slider, DT_PIXEL_APPLY_DPI(220), DT_PIXEL_APPLY_DPI(28));
+  gtk_widget_set_can_focus(slider, TRUE);
+  gtk_widget_set_size_request(menu_item, -1, DT_PIXEL_APPLY_DPI(48));
+
+  dt_masks_gui_interaction_slider_t *data = g_malloc0(sizeof(dt_masks_gui_interaction_slider_t));
+  data->form_group = form_group;
+  data->gui = gui;
+  data->module = module;
+  data->interaction = interaction;
+  data->increment = increment;
+  data->last_value = value;
+  data->slider = slider;
+  g_signal_connect_data(G_OBJECT(slider), "value-changed",
+                        G_CALLBACK(_masks_gui_interaction_slider_changed),
+                        data, (GClosureNotify)g_free, 0);
+  g_signal_connect(G_OBJECT(menu_item), "button-press-event",
+                   G_CALLBACK(_masks_gui_menu_item_forward_event), data);
+  g_signal_connect(G_OBJECT(menu_item), "button-release-event",
+                   G_CALLBACK(_masks_gui_menu_item_forward_event), data);
+  g_signal_connect(G_OBJECT(menu_item), "motion-notify-event",
+                   G_CALLBACK(_masks_gui_menu_item_forward_event), data);
+  g_signal_connect(G_OBJECT(menu_item), "scroll-event",
+                   G_CALLBACK(_masks_gui_menu_item_forward_event), data);
+
+  gtk_box_pack_start(GTK_BOX(box), slider, TRUE, TRUE, 0);
+  gtk_container_add(GTK_CONTAINER(menu_item), box);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+  return menu_item;
+}
 
 static void _masks_gui_remove_form_callback(GtkWidget *menu, gpointer user_data)
 {
@@ -162,7 +355,7 @@ static void _masks_operation_callback(GtkWidget *menu, gpointer user_data)
 
 
 GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form, const dt_masks_form_group_t *formgroup,
-                                const float x, const float y)
+                                const float pzx, const float pzy)
 {
   assert(gui);
   assert(form);
@@ -245,9 +438,9 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
 
   // Create the main label string
   gchar *item_str = NULL;
-  if(gui->node_hovered >= 0 || gui->seg_selected >= 0)
+  if(gui->node_hovered >= 0 || gui->seg_hovered >= 0)
   {
-    int item_index = (gui->node_hovered >= 0) ? gui->node_hovered : gui->seg_selected;
+    const int item_index = (gui->node_hovered >= 0) ? gui->node_hovered : gui->seg_hovered;
     item_str = g_strdup_printf("%s %d - ", gui->node_hovered >= 0 ? _("Node") : _("Segment"), item_index);
   }
   else
@@ -295,7 +488,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
 
   // Shape specific menu items
   if(form && form->functions && form->functions->populate_context_menu)
-    if(form->functions->populate_context_menu(menu, form, gui, x, y))
+    if(form->functions->populate_context_menu(menu, form, gui, pzx, pzy))
     {
       sep = gtk_separator_menu_item_new();
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
@@ -306,7 +499,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   {
     dt_iop_module_t *module = darktable.develop->gui_module;
     if(module && module->populate_masks_context_menu)
-      if(module->populate_masks_context_menu(module, menu, form->formid, x, y))
+      if(module->populate_masks_context_menu(module, menu, form->formid, pzx, pzy))
       {
         sep = gtk_separator_menu_item_new();
         gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
@@ -381,6 +574,27 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   }
 
   // Common menu items
+  if(!gui->creation && (gui->form_selected || gui->node_selected) && op_form)
+  {
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+
+    const float opacity = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_OPACITY);
+
+    _masks_gui_add_interaction_slider(menu, _("Size"), op_form, DT_MASKS_INTERACTION_SIZE,
+                                      DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
+                                      gui, darktable.develop->gui_module);
+    _masks_gui_add_interaction_slider(menu, _("Hardness"), op_form, DT_MASKS_INTERACTION_HARDNESS,
+                                      DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
+                                      gui, darktable.develop->gui_module);
+    if(gui->form_selected)
+      _masks_gui_add_interaction_slider(menu, _("Opacity"), op_form, DT_MASKS_INTERACTION_OPACITY,
+                                        DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.01f,
+                                        isfinite(opacity) ? opacity : 1.0f, 3, "%", 100.0f,
+                                        gui, darktable.develop->gui_module);
+
+    sep = gtk_separator_menu_item_new();
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
+  }
 
   if(!gui->creation && gui->form_selected)
   {

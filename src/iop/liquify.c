@@ -2905,8 +2905,10 @@ static void sync_pipe(struct dt_iop_module_t *module, gboolean history)
 
 static void get_point_scale(struct dt_iop_module_t *module, float x, float y, float complex *pt, float *scale)
 {
-  float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
+  float pzxpy[2] = { (float)x, (float)y };
+  dt_dev_coordinates_widget_to_image_norm(darktable.develop, pzxpy, 1);
+  const float pzx = pzxpy[0];
+  const float pzy = pzxpy[1];
   const float wd = module->dev->roi.processed_width;
   const float ht = module->dev->roi.processed_height;
   float pts[2] = { pzx * wd, pzy * ht };

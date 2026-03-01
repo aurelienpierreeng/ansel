@@ -2187,9 +2187,10 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
       float delta_x = 1 / (float) dev->pipe->processed_width;
       float delta_y = 1 / (float) dev->pipe->processed_height;
 
-      float mouse_x = 0.f;
-      float mouse_y = 0.f;
-      dt_dev_retrieve_full_pos(dev, x, y, &mouse_x, &mouse_y);
+      float mouse_point[2] = { (float)x, (float)y };
+      dt_dev_coordinates_widget_to_image_norm(dev, mouse_point, 1);
+      float mouse_x = mouse_point[0];
+      float mouse_y = mouse_point[1];
 
       if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
       {
@@ -2313,9 +2314,10 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
 
   if(dt_iop_color_picker_is_visible(dev))
   {
-    float pzx = 0.f;
-    float pzy = 0.f;
-    dt_dev_retrieve_full_pos(dev, x, y, &pzx, &pzy);
+    float pt_xy[2] = { (float)x, (float)y };
+    dt_dev_coordinates_widget_to_image_norm(dev, pt_xy, 1);
+    float pzx = pt_xy[0];
+    float pzy = pt_xy[1];
 
     float zoom_scale = dev->roi.scaling;
     const int procw = dev->roi.preview_width;

@@ -336,8 +336,10 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
   if(g && g->draw_selected_region && g->button_down && self->enabled)
   {
-    float pzx = 0.f, pzy = 0.f;
-    dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
+    float pzxpy[2] = { (float)x, (float)y };
+    dt_dev_coordinates_widget_to_image_norm(darktable.develop, pzxpy, 1);
+    float pzx = pzxpy[0];
+    float pzy = pzxpy[1];
 
     g->posx_to = pzx * self->dev->roi.preview_width;
     g->posy_to = pzy * self->dev->roi.preview_height;
@@ -397,9 +399,10 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     }
     else if(which == 1)
     {
-      float pzx = 0.f;
-      float pzy = 0.f;
-      dt_dev_retrieve_full_pos(darktable.develop, x, y, &pzx, &pzy);
+      float pzxpzypoint[2] = { (float)x, (float)y };
+      dt_dev_coordinates_widget_to_image_norm(darktable.develop, pzxpzypoint, 1);
+      float pzx = pzxpzypoint[0];
+      float pzy = pzxpzypoint[1];
 
       g->posx_from = g->posx_to = pzx * self->dev->roi.preview_width;
       g->posy_from = g->posy_to = pzy * self->dev->roi.preview_height;

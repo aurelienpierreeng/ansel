@@ -1342,9 +1342,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   double border_width = dashes / 2.;
 
   // draw cropping window
-  float pzx = 0.f;
-  float pzy = 0.f;
-  dt_dev_retrieve_full_pos(dev, pointerx, pointery, &pzx, &pzy);
+  float pzxpy[2] = { (float)pointerx, (float)pointery };
+  dt_dev_coordinates_widget_to_image_norm(dev, pzxpy, 1);
+  float pzx = pzxpy[0];
+  float pzy = pzxpy[1];
   cairo_set_line_width(cr, border_width);
 
   if(_set_max_clip(self))
@@ -1450,9 +1451,10 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   dt_iop_crop_gui_data_t *g = (dt_iop_crop_gui_data_t *)self->gui_data;
   if(!g->editing) return 0;
 
-  float pzx = 0.f;
-  float pzy = 0.f;
-  dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
+  float pzxpy[2] = { (float)x, (float)y };
+  dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
+  float pzx = pzxpy[0];
+  float pzy = pzxpy[1];
   const float zoom_scale = dt_dev_get_overlay_scale(dev);
   const int border = DT_PIXEL_APPLY_DPI(30.0) / zoom_scale;
 
@@ -1627,9 +1629,10 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   if(which == 1)
   {
     dt_develop_t *dev = self->dev;
-    float pzx = 0.f;
-    float pzy = 0.f;
-    dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
+    float pzxpy[2] = { (float)x, (float)y };
+    dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
+    float pzx = pzxpy[0];
+    float pzy = pzxpy[1];
     const float zoom_scale = dt_dev_get_overlay_scale(dev);
 
     g->button_down_x = x;

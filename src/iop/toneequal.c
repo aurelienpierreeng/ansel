@@ -2044,8 +2044,10 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   if(g == NULL) return 0;
   if(wd < 1 || ht < 1) return 0;
 
-  float pzx = 0.f, pzy = 0.f;
-  dt_dev_retrieve_full_pos(dev, x, y, &pzx, &pzy);
+  float pzxpy[2] = { (float)x, (float)y };
+  dt_dev_coordinates_widget_to_image_norm(dev, pzxpy, 1);
+  const float pzx = pzxpy[0];
+  const float pzy = pzxpy[1];
 
   const int x_pointer = pzx * wd;
   const int y_pointer = pzy * ht;

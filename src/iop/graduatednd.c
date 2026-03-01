@@ -598,9 +598,10 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
   const dt_develop_t *dev = (const dt_develop_t *)self->dev;
   const float zoom_scale = dev->roi.scaling;
-  float pzx = 0.f;
-  float pzy = 0.f;
-  dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
+  float pzxpy[2] = { (float)x, (float)y };
+  dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
+  float pzx = pzxpy[0];
+  float pzy = pzxpy[1];
 
   // are we dragging something ?
   if(g->dragging > 0)
@@ -653,8 +654,10 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
                    uint32_t state)
 {
   dt_iop_graduatednd_gui_data_t *g = (dt_iop_graduatednd_gui_data_t *)self->gui_data;
-  float pzx = 0.f, pzy = 0.f;
-  dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
+  float pzxpy[2] = { (float)x, (float)y };
+  dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
+  float pzx = pzxpy[0];
+  float pzy = pzxpy[1];
 
   if(which == 3)
   {
@@ -685,9 +688,8 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   dt_iop_graduatednd_params_t *p = (dt_iop_graduatednd_params_t *)self->params;
   if(g->dragging > 0)
   {
-    float pzx = 0.f, pzy = 0.f;
-    dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
-
+    float pzxpy[2] = { (float)x, (float)y };
+    dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
     float r = 0.0, o = 0.0;
     set_grad_from_points(self, g->xa, g->ya, g->xb, g->yb, &r, &o);
 

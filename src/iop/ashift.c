@@ -3741,9 +3741,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.0) / zoom_scale);
     dt_draw_set_color_overlay(cr, FALSE, 1.0);
 
-    float pzx = 0.f;
-    float pzy = 0.f;
-    dt_dev_retrieve_full_pos(dev, pointerx, pointery, &pzx, &pzy);
+    float pzxpy[2] = { (float)pointerx, (float)pointery };
+    dt_dev_coordinates_widget_to_image_norm(dev, pzxpy, 1);
+    const float pzx = pzxpy[0];
+    const float pzy = pzxpy[1];
 
     PangoRectangle ink;
     PangoLayout *layout;
@@ -4071,8 +4072,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // and we draw the selection box if any
   if(g->isbounding != ASHIFT_BOUNDING_OFF)
   {
-    float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_retrieve_full_pos(dev, pointerx, pointery, &pzx, &pzy);
+    float pzxpy[2] = { (float)pointerx, (float)pointery };
+    dt_dev_coordinates_widget_to_image_norm(dev, pzxpy, 1);
+    const float pzx = pzxpy[0];
+    const float pzy = pzxpy[1];
 
     double dashed[] = { DT_PIXEL_APPLY_DPI(4.0), DT_PIXEL_APPLY_DPI(4.0) };
     dashed[0] /= zoom_scale;
@@ -4093,8 +4096,10 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   // indicate which area is used for "near"-ness detection when selecting/deselecting lines
   if(g->near_delta > 0)
   {
-    float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_retrieve_full_pos(dev, pointerx, pointery, &pzx, &pzy);
+    float pzxpy[2] = { (float)pointerx, (float)pointery };
+    dt_dev_coordinates_widget_to_image_norm(dev, pzxpy, 1);
+    const float pzx = pzxpy[0];
+    const float pzy = pzxpy[1];
 
     double dashed[] = { DT_PIXEL_APPLY_DPI(4.0), DT_PIXEL_APPLY_DPI(4.0) };
     dashed[0] /= zoom_scale;
@@ -4171,8 +4176,10 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   const float ht = self->dev->roi.preview_height;
   if(wd < 1.0 || ht < 1.0) return 1;
 
-  float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
+  float pzxpy[2] = { (float)x, (float)y };
+  dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
+  float pzx = pzxpy[0];
+  float pzy = pzxpy[1];
 
   // if visibility of lines is switched off or no lines available, we have nothing to do
   if(!g->lines) return FALSE;
@@ -4386,8 +4393,10 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
   if(type == GDK_2BUTTON_PRESS && which == 1)
     return TRUE;
 
-  float pzx = 0.0f, pzy = 0.0f;
-  dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
+  float pzxpy[2] = { (float)x, (float)y };
+  dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
+  float pzx = pzxpy[0];
+  float pzy = pzxpy[1];
 
   const float wd = self->dev->roi.preview_width;
   const float ht = self->dev->roi.preview_height;
@@ -4596,8 +4605,10 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
   {
     g->straightening = FALSE;
     // adjust the line with possible current angle and flip on this module
-    float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
+    float pzxpy[2] = { (float)x, (float)y };
+    dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
+    const float pzx = pzxpy[0];
+    const float pzy = pzxpy[1];
     const float pd_w = self->dev->roi.processed_width;
     const float pd_h = self->dev->roi.processed_height;
     float pts[4] = { pzx * pd_w, pzy * pd_h, g->lastx * pd_w, g->lasty * pd_h };
@@ -4696,8 +4707,10 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
     gboolean handled = FALSE;
 
     // we compute the rectangle selection
-    float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
+    float pzxpy[2] = { (float)x, (float)y };
+    dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
+    const float pzx = pzxpy[0];
+    const float pzy = pzxpy[1];
 
     if(wd >= 1.0 && ht >= 1.0)
     {
@@ -4761,8 +4774,10 @@ int scrolled(struct dt_iop_module_t *self, double x, double y, int up, uint32_t 
   {
     gboolean handled = FALSE;
 
-    float pzx = 0.0f, pzy = 0.0f;
-    dt_dev_retrieve_full_pos(self->dev, x, y, &pzx, &pzy);
+    float pzxpy[2] = { (float)x, (float)y };
+    dt_dev_coordinates_widget_to_image_norm(self->dev, pzxpy, 1);
+    const float pzx = pzxpy[0];
+    const float pzy = pzxpy[1];
     const float wd = self->dev->roi.preview_width;
     const float ht = self->dev->roi.preview_height;
 

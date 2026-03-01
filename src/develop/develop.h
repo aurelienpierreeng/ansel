@@ -48,6 +48,7 @@
 #include <cairo.h>
 #include <glib.h>
 #include <inttypes.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "common/debug.h"
@@ -438,6 +439,26 @@ void dt_dev_set_backbuf(dt_backbuf_t *backbuf, const int width, const int height
                         const int64_t hash, const int64_t history_hash);
 
 /**
+ * @brief Coordinate conversion helpers between widget, normalized image, and absolute image spaces.
+ * 
+ * Widget space is assumed to be the darkroom center view and doesn't account for borders, zooming, panning, etc.
+ * RAW space is the full-resolution input fed to the pipeline.
+ * Image space is the output image resulting from applying a full history over the full-resolution input.
+ * Preview space is the downscaled output image preview as displayed in darkroom.
+ * 
+ * @param dev develop instance
+ * @param points pointer to num_points coordinate pairs stored as {x, y}; data is modified in place.
+ * @param num_points number of coordinate pairs referenced by points.
+ */
+void dt_dev_coordinates_widget_to_image_norm(dt_develop_t *dev, float *points, size_t num_points);
+void dt_dev_coordinates_image_norm_to_widget(dt_develop_t *dev, float *points, size_t num_points);
+void dt_dev_coordinates_image_norm_to_image_abs(dt_develop_t *dev, float *points, size_t num_points);
+void dt_dev_coordinates_image_abs_to_image_norm(dt_develop_t *dev, float *points, size_t num_points);
+void dt_dev_coordinates_raw_abs_to_raw_norm(dt_develop_t *dev, float *points, size_t num_points);
+void dt_dev_coordinates_raw_norm_to_raw_abs(dt_develop_t *dev, float *points, size_t num_points);
+void dt_dev_coordinates_image_norm_to_preview_abs(dt_develop_t *dev, float *points, size_t num_points);
+
+/**
  * @brief Get a point position from widget space to preview buffer space [0..1].
  * 
  * NOTE: The input point coordinates are without border subtraction.
@@ -629,31 +650,11 @@ gboolean dt_dev_rescale_roi_to_input(dt_develop_t *dev, cairo_t *cr, int32_t wid
 gboolean dt_dev_check_zoom_scale_bounds(dt_develop_t *dev);
 
 /**
- * @brief Get point in input image space from point in normalized ROI space.
- * The function performs a distortion backtransform.
- * 
- * @param dev the develop instance
- * @param normalize_out if TRUE, out_x and out_y will be normalized [0..1], if FALSE, they will be in pixel coordinates.
- * @param in_x the x point in normalized ROI space [0..1].
- * @param in_y the y point in normalized ROI space [0..1].
- * @param out_x the returned x point in input image space, normalized or pixel depending on `normalize_out`.
- * @param out_y the returned y point in input image space, normalized or pixel depending on `normalize_out`.
- * @return gboolean TRUE on success, FALSE if image has 0 dimension.
+ * @brief Convert absolute output-image coordinates to input image space by
+ * calling `dt_dev_distort_backtransform()` directly, then normalize with
+ * `dt_dev_coordinates_raw_abs_to_raw_norm()` when normalized raw coordinates
+ * are required.
  */
-gboolean dt_dev_roi_to_input_space(dt_develop_t *dev, /*gboolean normalized_in,*/ gboolean normalize_out, const float in_x, const float in_y, float *out_x, float *out_y);
-
-/**
- * @brief Convert a delta vector in ROI space to input image space.
- * The function performs a distortion backtransform.
- * 
- * @param dev the develop instance
- * @param delta the delta vector in anormalized ROI space.
- * @param in the input point in normalized ROI space [0..1].
- * @param points the returned two points in input image space, normalized or pixel depending on `normalize_out`.
-
- * @return gboolean TRUE on success, FALSE if image has 0 dimension or fails.
- */
-gboolean dt_dev_roi_delta_to_input_space(dt_develop_t *dev, const float delta[2],/* gboolean normalize_out,*/ const float in[2], float points[2]);
 
 // Update the mouse bounding box size according to current zoom level, dpp and DPI.
 void dt_dev_update_mouse_effect_radius(dt_develop_t *dev);
