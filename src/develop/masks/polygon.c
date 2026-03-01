@@ -1789,8 +1789,6 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, double
 {
   if(type == GDK_2BUTTON_PRESS || type == GDK_3BUTTON_PRESS) return 1;
 
-  _find_closest_handle(mask_form, mask_gui, form_index);
-
   if(which == 1)
   {
     if(mask_gui->creation)
@@ -2186,10 +2184,6 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
     dt_masks_gui_form_create(mask_form, mask_gui, form_index, module);
     return 1;
   }
-
-  if(dt_masks_gui_should_hit_test(mask_gui))
-    _find_closest_handle(mask_form, mask_gui, form_index);
-
   if(mask_gui->edit_mode != DT_MASKS_EDIT_FULL) return 0;
   return 1;
 }
@@ -3712,6 +3706,7 @@ const dt_masks_functions_t dt_masks_functions_polygon = {
   .get_gravity_center = _polygon_get_gravity_center,
   .get_interaction_value = _polygon_get_interaction_value,
   .set_interaction_value = _polygon_set_interaction_value,
+  .update_hover = _find_closest_handle,
   .mouse_moved = _polygon_events_mouse_moved,
   .mouse_scrolled = _polygon_events_mouse_scrolled,
   .button_pressed = _polygon_events_button_pressed,

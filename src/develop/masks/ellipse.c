@@ -704,8 +704,6 @@ static int _ellipse_events_button_pressed(struct dt_iop_module_t *module, double
                                           dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui,
                                           int index)
 {
-  _find_closest_handle(form, gui, index);
-
   if(gui->creation && which == 1
       && ((dt_modifier_is(state, GDK_CONTROL_MASK | GDK_SHIFT_MASK)) || dt_modifier_is(state, GDK_SHIFT_MASK)))
     {
@@ -964,10 +962,6 @@ static int _ellipse_events_mouse_moved(struct dt_iop_module_t *module, double x,
     return 1;
   }
   
-  
-  if(dt_masks_gui_should_hit_test(gui))
-    _find_closest_handle(form, gui, index);
-
   if(gui->edit_mode != DT_MASKS_EDIT_FULL) return 0;
   return 1;
 }
@@ -1707,6 +1701,7 @@ const dt_masks_functions_t dt_masks_functions_ellipse = {
   .get_gravity_center = _ellipse_get_gravity_center,
   .get_interaction_value = _ellipse_get_interaction_value,
   .set_interaction_value = _ellipse_set_interaction_value,
+  .update_hover = _find_closest_handle,
   .mouse_moved = _ellipse_events_mouse_moved,
   .mouse_scrolled = _ellipse_events_mouse_scrolled,
   .button_pressed = _ellipse_events_button_pressed,

@@ -66,102 +66,10 @@ static int _group_events_mouse_scrolled(struct dt_iop_module_t *module, double x
   return 0;
 }
 
-/**
- * @brief Update group selection from the current normalized output cursor.
- *
- * Absolute output-image lookups use `gui->pos`, normalized output-image
- * coordinates use `gui->rel_pos`, and cursor/object distances are resolved in
- * absolute output-image space.
- */
-static gboolean _detect_new_shape_selection(dt_masks_form_t *form, dt_masks_form_gui_t *gui)
-{
-  if(!form || !gui) return FALSE;
-
-  dt_develop_t *dev = (dt_develop_t *)darktable.develop;
-  const float as = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
-  const float xx = gui->pos[0];
-  const float yy = gui->pos[1];
-  // We compute the (expensive) nearest handle/node in mouse_moved, for the currently selected form only.
-  // If a hovered object is available while a group is already selected, keep that selection and skip
-  // expensive form detection: handles can sit far outside the shape boundary.
-  if(dt_masks_is_anything_hovered(gui))
-    return TRUE;
-
-  // Reset selection
-  // If, at the next step, no shape is found under cursor,
-  // selection will stay unset, which enables the "click outside to deselect" behaviour
-  if(gui->group_selected >= 0)
-  {
-    dt_masks_soft_reset_form_gui(gui);
-  }
-
-  // If we are not close to a node, test if we are within a shape now.
-  dt_masks_form_t *sel = NULL;
-  int sel_index = -1;
-  float sel_dist = FLT_MAX;
-
-  int index = 0;
-  for(GList *fpts = form->points; fpts; fpts = g_list_next(fpts))
-  {
-    dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)fpts->data;
-    if(!fpt) { index++; continue; }
-    dt_masks_form_t *frm = dt_masks_get_from_id(dev, fpt->formid);
-    if(!frm) { index++; continue; }
-
-    int inside = 0, inside_border = 0, near = -1, inside_source = 0;
-    float dist = FLT_MAX;
-    if(frm->functions && frm->functions->get_distance)
-      frm->functions->get_distance(xx, yy, as, gui, index, g_list_length(frm->points),
-                                    &inside, &inside_border, &near, &inside_source, &dist);
-
-    // Handle overlapping :
-    // In case we are within more than one shape, compute the distance
-    // to the border of that shape and to its centroid.
-    // Multiply both and pick the shape whose aggregated distance is minimum.
-
-    // get_distance() returns a squared distance in absolute output-image space.
-    if(inside || inside_border || near >= 0 || inside_source)
-    {
-      const float dx = gui->raw_pos[0] - frm->gravity_center[0];
-      const float dy = gui->raw_pos[1] - frm->gravity_center[1];
-      const float center_dist2 = dx * dx + dy * dy;
-      const float combined_dist2 = dist * center_dist2;
-
-      if(combined_dist2 < sel_dist)
-      {
-        sel = frm;
-        sel_dist = combined_dist2;
-        sel_index = index;
-      }
-    }
-    index++;
-  }
-
-  if(sel)
-  {
-    gui->group_selected = sel_index;
-    return TRUE;
-  }  
-
-  return gui->group_selected >= 0;
-}
-
 static gboolean _group_events_button_pressed(struct dt_iop_module_t *module, double x, double y,
                                         double pressure, int which, int type, uint32_t state,
                                         dt_masks_form_t *form, int unused1, dt_masks_form_gui_t *gui, int unused2)
 {
-  if(!form) return FALSE;
-
-  _detect_new_shape_selection(form, gui);
-
-  dt_masks_form_group_t *group_entry = NULL;
-  dt_masks_form_t *selected_form = _group_get_selected_child(form, gui, &group_entry);
-  if(!selected_form) return FALSE;
-
-  if(selected_form->functions->button_pressed(module, x, y, pressure, which, type, state, selected_form,
-                                              group_entry->parentid, gui, gui->group_selected))
-    return TRUE;
-
   return FALSE;
 }
 
@@ -922,6 +830,7 @@ const dt_masks_functions_t dt_masks_functions_group = {
   .get_gravity_center = _group_get_gravity_center,
   .get_interaction_value = NULL,
   .set_interaction_value = NULL,
+  .update_hover = NULL,
   .mouse_moved = _group_events_mouse_moved,
   .mouse_scrolled = _group_events_mouse_scrolled,
   .button_pressed = _group_events_button_pressed,

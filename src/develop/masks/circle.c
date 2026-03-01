@@ -309,8 +309,6 @@ static int _circle_events_button_pressed(struct dt_iop_module_t *module, double 
                                          double pressure, int which, int type, uint32_t state,
                                          dt_masks_form_t *form, int parentid, dt_masks_form_gui_t *gui, int index)
 {
-  _find_closest_handle(form, gui, index);
-
   if(which == 1)
   {
     if(gui->creation)
@@ -429,10 +427,6 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, double x, 
 
     return 1;
   }
-
-  if(dt_masks_gui_should_hit_test(gui))
-    _find_closest_handle(form, gui, index);
-
   if(gui->edit_mode != DT_MASKS_EDIT_FULL) return 0;
   return 1;
 }
@@ -1155,6 +1149,7 @@ const dt_masks_functions_t dt_masks_functions_circle = {
   .get_gravity_center = _circle_get_gravity_center,
   .get_interaction_value = _circle_get_interaction_value,
   .set_interaction_value = _circle_set_interaction_value,
+  .update_hover = _find_closest_handle,
   .mouse_moved = _circle_events_mouse_moved,
   .mouse_scrolled = _circle_events_mouse_scrolled,
   .button_pressed = _circle_events_button_pressed,

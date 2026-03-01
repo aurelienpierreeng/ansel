@@ -1754,10 +1754,6 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, double w
   if(!gui_points) return 0;
   const guint node_count = g_list_length(mask_form->points);
 
-  // Do we need to refresh currently active node ?
-  // Its requested to give back the focus when clicking outside current shape.
-  _find_closest_handle(mask_form, mask_gui, index);
-
   if(which == 1)
   {
     // The shape handler runs before the shared press-state selection update,
@@ -2181,10 +2177,6 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
     dt_masks_gui_form_create(mask_form, mask_gui, index, module);
     return 1;
   }
-
-  if(dt_masks_gui_should_hit_test(mask_gui))
-    _find_closest_handle(mask_form, mask_gui, index);
-
   if(mask_gui->edit_mode != DT_MASKS_EDIT_FULL) return 0;
   return 1;
 }
@@ -3264,6 +3256,7 @@ const dt_masks_functions_t dt_masks_functions_brush = {
   .get_gravity_center = _brush_get_gravity_center,
   .get_interaction_value = _brush_get_interaction_value,
   .set_interaction_value = _brush_set_interaction_value,
+  .update_hover = _find_closest_handle,
   .mouse_moved = _brush_events_mouse_moved,
   .mouse_scrolled = _brush_events_mouse_scrolled,
   .button_pressed = _brush_events_button_pressed,

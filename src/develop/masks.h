@@ -341,6 +341,8 @@ typedef struct dt_masks_functions_t
   float (*set_interaction_value)(struct dt_masks_form_t *form, dt_masks_interaction_t interaction, float value,
                                  dt_masks_increment_t increment, int flow,
                                  struct dt_masks_form_gui_t *gui, struct dt_iop_module_t *module);
+  /* Recompute hovered handles/nodes from the cached cursor state in gui. */
+  int (*update_hover)(struct dt_masks_form_t *form, struct dt_masks_form_gui_t *gui, int index);
   /* Mouse x and y are widget-space coordinates from GTK/Cairo */
   int (*mouse_moved)(struct dt_iop_module_t *module, double x, double y, double pressure, int which,
                      struct dt_masks_form_t *form, int parentid, struct dt_masks_form_gui_t *gui, int index);
