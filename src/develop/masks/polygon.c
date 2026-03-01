@@ -1187,9 +1187,6 @@ static void _polygon_get_sizes(struct dt_iop_module_t *module, dt_masks_form_t *
   if(!gui_points) return;
 
   const int node_count = g_list_length(mask_form->points);
-  const float wd = darktable.develop->roi.preview_width;
-  const float ht = darktable.develop->roi.preview_height;
-
   float p1[2] = { FLT_MAX, FLT_MAX };
   float p2[2] = { FLT_MIN, FLT_MIN };
 
@@ -1225,8 +1222,16 @@ static void _polygon_get_sizes(struct dt_iop_module_t *module, dt_masks_form_t *
     }
   }
 
-  *mask_size = fmaxf((p2[0] - p1[0]) / wd, (p2[1] - p1[1]) / ht);
-  if(border_size) *border_size = fmaxf((fp2[0] - fp1[0]) / wd, (fp2[1] - fp1[1]) / ht);
+  float mask_span[2] = { p2[0] - p1[0], p2[1] - p1[1] };
+  dt_dev_coordinates_preview_abs_to_image_norm(darktable.develop, mask_span, 1);
+  *mask_size = fmaxf(mask_span[0], mask_span[1]);
+
+  if(border_size)
+  {
+    float border_span[2] = { fp2[0] - fp1[0], fp2[1] - fp1[1] };
+    dt_dev_coordinates_preview_abs_to_image_norm(darktable.develop, border_span, 1);
+    *border_size = fmaxf(border_span[0], border_span[1]);
+  }
 }
 
 static gboolean _polygon_form_gravity_center(const dt_masks_form_t *mask_form, float *center_x,

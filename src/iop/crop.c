@@ -274,17 +274,18 @@ static gboolean _set_max_clip(struct dt_iop_module_t *self)
   if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                     DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 4))
     return FALSE;
+  dt_dev_coordinates_preview_abs_to_image_norm(self->dev, points, 4);
 
-  g->clip_max_x = fmaxf(points[0] / self->dev->roi.preview_width, 0.0f);
-  g->clip_max_y = fmaxf(points[1] / self->dev->roi.preview_height, 0.0f);
-  g->clip_max_w = fminf((points[2] - points[0]) / self->dev->roi.preview_width, 1.0f);
-  g->clip_max_h = fminf((points[3] - points[1]) / self->dev->roi.preview_height, 1.0f);
+  g->clip_max_x = fmaxf(points[0], 0.0f);
+  g->clip_max_y = fmaxf(points[1], 0.0f);
+  g->clip_max_w = fminf(points[2] - points[0], 1.0f);
+  g->clip_max_h = fminf(points[3] - points[1], 1.0f);
 
   /*// if clipping values are not null, this is undistorted values...
-  g->clip_x = fmaxf(points[4] / self->dev->roi.preview_width, g->clip_max_x);
-  g->clip_y = fmaxf(points[5] / self->dev->roi.preview_height, g->clip_max_y);
-  g->clip_w = fminf((points[6] - points[4]) / self->dev->roi.preview_width, g->clip_max_w);
-  g->clip_h = fminf((points[7] - points[5]) / self->dev->roi.preview_height, g->clip_max_h);
+  g->clip_x = fmaxf(points[4], g->clip_max_x);
+  g->clip_y = fmaxf(points[5], g->clip_max_y);
+  g->clip_w = fminf(points[6] - points[4], g->clip_max_w);
+  g->clip_h = fminf(points[7] - points[5], g->clip_max_h);
 */
   return TRUE;
 }

@@ -3474,9 +3474,10 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *mask_gui, dt_mas
       // if a position was defined by the user, use the absolute value the first time
       float source_points[2] = { mask_gui->pos_source[0], mask_gui->pos_source[1] };
       dt_dev_distort_backtransform(darktable.develop, source_points, 1);
+      dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, source_points, 1);
 
-      mask_form->source[0] = source_points[0] / raw_width;
-      mask_form->source[1] = source_points[1] / raw_height;
+      mask_form->source[0] = source_points[0];
+      mask_form->source[1] = source_points[1];
 
       mask_gui->pos_source[0] = mask_gui->pos_source[0] - xx;
       mask_gui->pos_source[1] = mask_gui->pos_source[1] - yy;
@@ -3498,9 +3499,10 @@ void dt_masks_set_source_pos_initial_value(dt_masks_form_gui_t *mask_gui, dt_mas
     // an absolute position was defined by the user
     float source_points[2] = { mask_gui->pos_source[0], mask_gui->pos_source[1] };
     dt_dev_distort_backtransform(darktable.develop, source_points, 1);
+    dt_dev_coordinates_raw_abs_to_raw_norm(darktable.develop, source_points, 1);
 
-    mask_form->source[0] = source_points[0] / raw_width;
-    mask_form->source[1] = source_points[1] / raw_height;
+    mask_form->source[0] = source_points[0];
+    mask_form->source[1] = source_points[1];
   }
   else
     fprintf(stderr, "[dt_masks_set_source_pos_initial_value] unknown source position type\n");

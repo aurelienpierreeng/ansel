@@ -336,13 +336,12 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
   dt_iop_basicadj_gui_data_t *g = (dt_iop_basicadj_gui_data_t *)self->gui_data;
   if(g && g->draw_selected_region && g->button_down && self->enabled)
   {
-    float pzxpy[2] = { (float)x, (float)y };
-    dt_dev_coordinates_widget_to_image_norm(darktable.develop, pzxpy, 1);
-    float pzx = pzxpy[0];
-    float pzy = pzxpy[1];
+    float point[2] = { (float)x, (float)y };
+    dt_dev_coordinates_widget_to_image_norm(darktable.develop, point, 1);
+    dt_dev_coordinates_image_norm_to_preview_abs(self->dev, point, 1);
 
-    g->posx_to = pzx * self->dev->roi.preview_width;
-    g->posy_to = pzy * self->dev->roi.preview_height;
+    g->posx_to = point[0];
+    g->posy_to = point[1];
 
     dt_control_queue_redraw_center();
 
@@ -365,10 +364,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
       g->box_cood[2] = g->posx_to;
       g->box_cood[3] = g->posy_to;
       dt_dev_distort_backtransform(darktable.develop, g->box_cood, 2);
-      g->box_cood[0] /= self->dev->roi.raw_width;
-      g->box_cood[1] /= self->dev->roi.raw_height;
-      g->box_cood[2] /= self->dev->roi.raw_width;
-      g->box_cood[3] /= self->dev->roi.raw_height;
+      dt_dev_coordinates_raw_abs_to_raw_norm(self->dev, g->box_cood, 2);
 
       g->button_down = 0;
       g->call_auto_exposure = 1;
@@ -399,13 +395,12 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     }
     else if(which == 1)
     {
-      float pzxpzypoint[2] = { (float)x, (float)y };
-      dt_dev_coordinates_widget_to_image_norm(darktable.develop, pzxpzypoint, 1);
-      float pzx = pzxpzypoint[0];
-      float pzy = pzxpzypoint[1];
+      float point[2] = { (float)x, (float)y };
+      dt_dev_coordinates_widget_to_image_norm(darktable.develop, point, 1);
+      dt_dev_coordinates_image_norm_to_preview_abs(self->dev, point, 1);
 
-      g->posx_from = g->posx_to = pzx * self->dev->roi.preview_width;
-      g->posy_from = g->posy_to = pzy * self->dev->roi.preview_height;
+      g->posx_from = g->posx_to = point[0];
+      g->posy_from = g->posy_to = point[1];
 
       g->button_down = 1;
 

@@ -2046,11 +2046,10 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
   float pzxpy[2] = { (float)x, (float)y };
   dt_dev_coordinates_widget_to_image_norm(dev, pzxpy, 1);
-  const float pzx = pzxpy[0];
-  const float pzy = pzxpy[1];
+  dt_dev_coordinates_image_norm_to_preview_abs(dev, pzxpy, 1);
 
-  const int x_pointer = pzx * wd;
-  const int y_pointer = pzy * ht;
+  const int x_pointer = pzxpy[0];
+  const int y_pointer = pzxpy[1];
 
   dt_iop_gui_enter_critical_section(self);
   // Cursor is valid if it's inside the picture frame

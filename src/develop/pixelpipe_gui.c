@@ -202,8 +202,6 @@ static int pixelpipe_picker_helper(dt_iop_module_t *module, const dt_iop_roi_t r
                                    dt_aligned_pixel_t picked_color_min, dt_aligned_pixel_t picked_color_max,
                                    dt_pixelpipe_picker_source_t picker_source, int *box)
 {
-  const float wd = darktable.develop->roi.preview_width;
-  const float ht = darktable.develop->roi.preview_height;
   const int width = roi.width;
   const int height = roi.height;
   const dt_colorpicker_sample_t *const sample = darktable.lib->proxy.colorpicker.primary_sample;
@@ -213,13 +211,16 @@ static int pixelpipe_picker_helper(dt_iop_module_t *module, const dt_iop_roi_t r
   // Get absolute pixel coordinates in final preview image.
   if(sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
   {
-    for(int k = 0; k < 4; k += 2) fbox[k] = sample->box[k] * wd;
-    for(int k = 1; k < 4; k += 2) fbox[k] = sample->box[k] * ht;
+    memcpy(fbox, sample->box, sizeof(float) * 4);
+    dt_dev_coordinates_image_norm_to_preview_abs(darktable.develop, fbox, 2);
   }
   else if(sample->size == DT_LIB_COLORPICKER_SIZE_POINT)
   {
-    fbox[0] = fbox[2] = sample->point[0] * wd;
-    fbox[1] = fbox[3] = sample->point[1] * ht;
+    fbox[0] = sample->point[0];
+    fbox[1] = sample->point[1];
+    dt_dev_coordinates_image_norm_to_preview_abs(darktable.develop, fbox, 1);
+    fbox[2] = fbox[0];
+    fbox[3] = fbox[1];
   }
 
   // Transform back to current module coordinates.

@@ -906,6 +906,23 @@ void dt_dev_coordinates_image_norm_to_preview_abs(dt_develop_t *dev, float *poin
   }
 }
 
+void dt_dev_coordinates_preview_abs_to_image_norm(dt_develop_t *dev, float *points, size_t num_points)
+{
+  if(!dev || !points || num_points == 0) return;
+  const float preview_width = dev->roi.preview_width;
+  const float preview_height = dev->roi.preview_height;
+  if(preview_width == 0.0f || preview_height == 0.0f) return;
+
+  const float inv_width = 1.f / preview_width;
+  const float inv_height = 1.f / preview_height;
+  for(size_t i = 0; i < num_points; i++)
+  {
+    const size_t idx = i * 2;
+    points[idx + 0] *= inv_width;
+    points[idx + 1] *= inv_height;
+  }
+}
+
 int dt_dev_is_current_image(dt_develop_t *dev, int32_t imgid)
 {
   return (dev->image_storage.id == imgid) ? 1 : 0;

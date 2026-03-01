@@ -723,17 +723,18 @@ static int _iop_clipping_set_max_clip(struct dt_iop_module_t *self)
   float points[8] = { 0.0f, 0.0f, wp, hp, cx * wp, cy * hp, cw * wp, ch * hp };
   if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 4))
     return 0;
+  dt_dev_coordinates_preview_abs_to_image_norm(self->dev, points, 4);
 
-  g->clip_max_x = fmaxf(points[0] / self->dev->roi.preview_width, 0.0f);
-  g->clip_max_y = fmaxf(points[1] / self->dev->roi.preview_height, 0.0f);
-  g->clip_max_w = fminf((points[2] - points[0]) / self->dev->roi.preview_width, 1.0f);
-  g->clip_max_h = fminf((points[3] - points[1]) / self->dev->roi.preview_height, 1.0f);
+  g->clip_max_x = fmaxf(points[0], 0.0f);
+  g->clip_max_y = fmaxf(points[1], 0.0f);
+  g->clip_max_w = fminf(points[2] - points[0], 1.0f);
+  g->clip_max_h = fminf(points[3] - points[1], 1.0f);
 
   // if clipping values are not null, this is undistorted values...
-  g->clip_x = fmaxf(points[4] / self->dev->roi.preview_width, g->clip_max_x);
-  g->clip_y = fmaxf(points[5] / self->dev->roi.preview_height, g->clip_max_y);
-  g->clip_w = fminf((points[6] - points[4]) / self->dev->roi.preview_width, g->clip_max_w);
-  g->clip_h = fminf((points[7] - points[5]) / self->dev->roi.preview_height, g->clip_max_h);
+  g->clip_x = fmaxf(points[4], g->clip_max_x);
+  g->clip_y = fmaxf(points[5], g->clip_max_y);
+  g->clip_w = fminf(points[6] - points[4], g->clip_max_w);
+  g->clip_h = fminf(points[7] - points[5], g->clip_max_h);
 
   return 1;
 }
@@ -3141,8 +3142,10 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
                          p->kxc * wp, p->kyc * hp, p->kxd * wp, p->kyd * hp };
         dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 4);
 
-        const float xx = pzx * self->dev->roi.preview_width,
-                    yy = pzy * self->dev->roi.preview_height;
+        float point[2] = { pzx, pzy };
+        dt_dev_coordinates_image_norm_to_preview_abs(self->dev, point, 1);
+        const float xx = point[0];
+        const float yy = point[1];
         float c[2] = { (MIN(pts[4], pts[2]) + MAX(pts[0], pts[6])) / 2.0f,
                        (MIN(pts[5], pts[7]) + MAX(pts[1], pts[3])) / 2.0f };
         const float ext = DT_PIXEL_APPLY_DPI(10.0) / (zoom_scale);

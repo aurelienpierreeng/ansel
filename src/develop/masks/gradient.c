@@ -845,10 +845,15 @@ static int _gradient_get_pts_border(dt_develop_t *dev, float x, float y, float r
   // Generate offset positions for both curves
   float center[2] = { x, y };
   dt_dev_coordinates_raw_norm_to_raw_abs(dev, center, 1);
-  const float x1 = (center[0] + distance * scale * cosf(v1)) / wd;
-  const float y1 = (center[1] + distance * scale * sinf(v1)) / ht;
-  const float x2 = (center[0] + distance * scale * cosf(v2)) / wd;
-  const float y2 = (center[1] + distance * scale * sinf(v2)) / ht;
+  float offsets[4] = { center[0] + distance * scale * cosf(v1),
+                       center[1] + distance * scale * sinf(v1),
+                       center[0] + distance * scale * cosf(v2),
+                       center[1] + distance * scale * sinf(v2) };
+  dt_dev_coordinates_raw_abs_to_raw_norm(dev, offsets, 2);
+  const float x1 = offsets[0];
+  const float y1 = offsets[1];
+  const float x2 = offsets[2];
+  const float y2 = offsets[3];
 
   // Get points for both curves
   float *points1 = NULL, *points2 = NULL;

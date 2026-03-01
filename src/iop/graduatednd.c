@@ -242,10 +242,9 @@ static float dist_seg(float xa, float ya, float xb, float yb, float xc, float yc
 static int set_grad_from_points(struct dt_iop_module_t *self, float xa, float ya, float xb, float yb,
                                 float *rotation, float *offset)
 {
-  // we want absolute positions
-  float pts[4]
-      = { xa * self->dev->roi.preview_width, ya * self->dev->roi.preview_height,
-          xb * self->dev->roi.preview_width, yb * self->dev->roi.preview_height };
+  // we want absolute preview positions
+  float pts[4] = { xa, ya, xb, yb };
+  dt_dev_coordinates_image_norm_to_preview_abs(self->dev, pts, 2);
   dt_dev_distort_backtransform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2);
   dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, self->dev->virtual_pipe, self);
   pts[0] /= (float)piece->buf_out.width;
@@ -457,10 +456,11 @@ static int set_points_from_grad(struct dt_iop_module_t *self, float *xa, float *
 
   if(!dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order, DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 2))
     return 0;
-  *xa = pts[0] / self->dev->roi.preview_width;
-  *ya = pts[1] / self->dev->roi.preview_height;
-  *xb = pts[2] / self->dev->roi.preview_width;
-  *yb = pts[3] / self->dev->roi.preview_height;
+  dt_dev_coordinates_preview_abs_to_image_norm(self->dev, pts, 2);
+  *xa = pts[0];
+  *ya = pts[1];
+  *xb = pts[2];
+  *yb = pts[3];
   return 1;
 }
 
@@ -511,7 +511,6 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   dt_iop_graduatednd_params_t *p = (dt_iop_graduatednd_params_t *)self->params;
 
   const float wd = dev->roi.preview_width;
-  const float ht = dev->roi.preview_height;
   const float zoom_scale = dev->roi.scaling;
   dt_dev_rescale_roi(dev, cr, width, height);
 
@@ -522,7 +521,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     g->define = 1;
   }
 
-  const float xa = g->xa * wd, xb = g->xb * wd, ya = g->ya * ht, yb = g->yb * ht;
+  float line[4] = { g->xa, g->ya, g->xb, g->yb };
+  dt_dev_coordinates_image_norm_to_preview_abs(dev, line, 2);
+  const float xa = line[0], ya = line[1], xb = line[2], yb = line[3];
   // the lines
   cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
   if(g->selected == 3 || g->dragging == 3)

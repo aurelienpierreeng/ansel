@@ -2244,8 +2244,9 @@ int mouse_moved(struct dt_iop_module_t *self, double x, double y, double pressur
 
   float pzxpy[2] = { (float)x, (float)y };
   dt_dev_coordinates_widget_to_image_norm(dev, pzxpy, 1);
-  const float pzx = pzxpy[0] * wd;
-  const float pzy = pzxpy[1] * ht;
+  dt_dev_coordinates_image_norm_to_preview_abs(dev, pzxpy, 1);
+  const float pzx = pzxpy[0];
+  const float pzy = pzxpy[1];
 
   // if dragging and dropping, don't update active nodes,
   // just update cursor coordinates then redraw
@@ -2334,8 +2335,9 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
 
   float pzxpy[2] = { (float)x, (float)y };
   dt_dev_coordinates_widget_to_image_norm(dev, pzxpy, 1);
-  const float pzx = pzxpy[0] * wd;
-  const float pzy = pzxpy[1] * ht;
+  dt_dev_coordinates_image_norm_to_preview_abs(dev, pzxpy, 1);
+  const float pzx = pzxpy[0];
+  const float pzy = pzxpy[1];
 
   dt_iop_gui_enter_critical_section(self);
   g->drag_drop = TRUE;
@@ -2364,8 +2366,9 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
 
   float pzxpy[2] = { (float)x, (float)y };
   dt_dev_coordinates_widget_to_image_norm(dev, pzxpy, 1);
-  const float pzx = pzxpy[0] * wd;
-  const float pzy = pzxpy[1] * ht;
+  dt_dev_coordinates_image_norm_to_preview_abs(dev, pzxpy, 1);
+  const float pzx = pzxpy[0];
+  const float pzy = pzxpy[1];
 
   dt_iop_gui_enter_critical_section(self);
   g->drag_drop = FALSE;

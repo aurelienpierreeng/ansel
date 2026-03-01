@@ -2905,22 +2905,16 @@ static void sync_pipe(struct dt_iop_module_t *module, gboolean history)
 
 static void get_point_scale(struct dt_iop_module_t *module, float x, float y, float complex *pt, float *scale)
 {
-  float pzxpy[2] = { (float)x, (float)y };
-  dt_dev_coordinates_widget_to_image_norm(darktable.develop, pzxpy, 1);
-  const float pzx = pzxpy[0];
-  const float pzy = pzxpy[1];
-  const float wd = module->dev->roi.processed_width;
-  const float ht = module->dev->roi.processed_height;
-  float pts[2] = { pzx * wd, pzy * ht };
+  float pts[2] = { (float)x, (float)y };
+  dt_dev_coordinates_widget_to_image_norm(darktable.develop, pts, 1);
+  dt_dev_coordinates_image_norm_to_image_abs(module->dev, pts, 1);
   dt_dev_distort_backtransform_plus(module->dev, module->dev->virtual_pipe,
                                     module->iop_order,DT_DEV_TRANSFORM_DIR_FORW_EXCL, pts, 1);
   dt_dev_distort_backtransform_plus(module->dev, module->dev->virtual_pipe,
                                     module->iop_order,DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 1);
-  const float nx = pts[0] / module->dev->roi.raw_width;
-  const float ny = pts[1] / module->dev->roi.raw_height;
 
   *scale = get_zoom_scale(module->dev);
-  *pt = (nx * module->dev->roi.raw_width) +  (ny * module->dev->roi.raw_height) * I;
+  *pt = pts[0] + pts[1] * I;
 }
 
 int mouse_moved(struct dt_iop_module_t *module,
