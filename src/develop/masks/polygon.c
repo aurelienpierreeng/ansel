@@ -1124,6 +1124,7 @@ static void _add_node_to_segment(struct dt_iop_module_t *module,
 
   mask_gui->node_hovered = selected_segment + 1;
   mask_gui->node_selected = TRUE;
+  mask_gui->node_selected_idx = selected_segment + 1;
   mask_gui->seg_hovered = -1;
   mask_gui->seg_selected = FALSE;
 }
@@ -1795,6 +1796,7 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, double
 
         mask_gui->node_hovered = node_count;
         mask_gui->node_selected = TRUE;
+        mask_gui->node_selected_idx = node_count;
         mask_gui->node_dragging = node_count;
         _polygon_init_ctrl_points(mask_form);
       }
@@ -3530,6 +3532,7 @@ static void _polygon_switch_node_callback(GtkWidget *widget, gpointer user_data)
   if(!selected_form) return;
 
   mask_gui->node_selected = TRUE;
+  mask_gui->node_selected_idx = mask_gui->node_hovered;
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, mask_gui->group_selected);
   const int node_index = dt_masks_gui_selected_node_index(mask_gui);
@@ -3551,6 +3554,7 @@ static void _polygon_reset_round_node_callback(GtkWidget *widget, gpointer user_
   if(!selected_form) return;
 
   mask_gui->node_selected = TRUE;
+  mask_gui->node_selected_idx = mask_gui->node_hovered;
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, mask_gui->group_selected);
   const int selected_handle = dt_masks_gui_selected_handle_index(mask_gui);

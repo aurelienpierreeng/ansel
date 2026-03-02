@@ -750,6 +750,7 @@ void dt_masks_init_form_gui(dt_masks_form_gui_t *mask_gui)
   mask_gui->handle_selected = FALSE;
   mask_gui->seg_selected = FALSE;
   mask_gui->handle_border_selected = FALSE;
+  mask_gui->node_selected_idx = -1;
   mask_gui->form_selected = FALSE;
   mask_gui->border_selected = FALSE;
   mask_gui->source_selected = FALSE;
@@ -772,6 +773,7 @@ void dt_masks_soft_reset_form_gui(dt_masks_form_gui_t *mask_gui)
   mask_gui->handle_selected = FALSE;
   mask_gui->seg_selected = FALSE;
   mask_gui->handle_border_selected = FALSE;
+  mask_gui->node_selected_idx = -1;
   mask_gui->group_selected = -1;
   mask_gui->delta[0] = mask_gui->delta[1] = 0.0f;
   mask_gui->form_selected = mask_gui->border_selected = mask_gui->form_dragging = mask_gui->form_rotating = FALSE;
@@ -880,6 +882,7 @@ void dt_masks_remove_node(struct dt_iop_module_t *module, dt_masks_form_t *mask_
   free(brush_node);
   mask_gui->node_hovered = -1;
   mask_gui->node_selected = FALSE;
+  mask_gui->node_selected_idx = -1;
   if(mask_form->functions && mask_form->functions->init_ctrl_points)
     mask_form->functions->init_ctrl_points(mask_form);
     
@@ -2003,6 +2006,8 @@ static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const
   // Drag is only allowed when this click happens on a shape that was already selected.
   // We still rebuild the fine-grained selection from the current hover target first, so the
   // pressed node/handle/segment becomes the active drag target when dragging is allowed.
+  const gboolean prev_node_selected = mask_gui->node_selected;
+  const int prev_node_selected_idx = mask_gui->node_selected_idx;
   const gboolean prev_form_selected = mask_gui->form_selected;
   const gboolean prev_border_selected = mask_gui->border_selected;
   const gboolean prev_source_selected = mask_gui->source_selected;
@@ -2011,6 +2016,7 @@ static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const
   mask_gui->handle_selected = FALSE;
   mask_gui->handle_border_selected = FALSE;
   mask_gui->seg_selected = FALSE;
+  mask_gui->node_selected_idx = -1;
   mask_gui->form_selected = FALSE;
   mask_gui->border_selected = FALSE;
   mask_gui->source_selected = FALSE;
@@ -2018,13 +2024,24 @@ static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const
   if(mask_gui->node_hovered >= 0)
   {
     mask_gui->node_selected = TRUE;
+    mask_gui->node_selected_idx = mask_gui->node_hovered;
   }
   else if(mask_gui->handle_hovered >= 0)
   {
+    if(prev_node_selected)
+    {
+      mask_gui->node_selected = TRUE;
+      mask_gui->node_selected_idx = prev_node_selected_idx;
+    }
     mask_gui->handle_selected = TRUE;
   }
   else if(mask_gui->handle_border_hovered >= 0)
   {
+    if(prev_node_selected)
+    {
+      mask_gui->node_selected = TRUE;
+      mask_gui->node_selected_idx = prev_node_selected_idx;
+    }
     mask_gui->handle_border_selected = TRUE;
   }
   else if(mask_gui->seg_hovered >= 0)
@@ -2675,6 +2692,7 @@ void dt_masks_clear_form_gui(dt_develop_t *develop)
   develop->form_gui->handle_selected = FALSE;
   develop->form_gui->seg_selected = FALSE;
   develop->form_gui->handle_border_selected = FALSE;
+  develop->form_gui->node_selected_idx = -1;
   develop->form_gui->handle_border_dragging = develop->form_gui->seg_dragging = develop->form_gui->handle_dragging
       = develop->form_gui->node_dragging = -1;
   develop->form_gui->creation_closing_form = develop->form_gui->creation = FALSE;

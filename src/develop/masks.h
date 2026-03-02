@@ -467,6 +467,7 @@ typedef struct dt_masks_form_gui_t
   gboolean handle_selected;   // this is the state of the handle referenced by handle_hovered
   gboolean seg_selected;      // this is the state of the segment referenced by segment_hovered
   gboolean handle_border_selected; // this is the state of the border handle referenced by handle_border_hovered
+  int node_selected_idx;      // stable selected node index, distinct from current hover
 
   gboolean form_selected;
   gboolean border_selected;
@@ -516,7 +517,7 @@ gboolean dt_masks_gui_is_dragging(const dt_masks_form_gui_t *gui);
 
 static inline int dt_masks_gui_selected_node_index(const dt_masks_form_gui_t *gui)
 {
-  return (gui && gui->node_selected) ? gui->node_hovered : -1;
+  return (gui && gui->node_selected) ? gui->node_selected_idx : -1;
 }
 
 static inline int dt_masks_gui_selected_handle_index(const dt_masks_form_gui_t *gui)

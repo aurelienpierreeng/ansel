@@ -41,6 +41,7 @@ static void _masks_gui_interaction_apply_value(dt_masks_gui_interaction_slider_t
   if(!data || !data->form_group) return;
   const int saved_node_hovered = data->gui ? data->gui->node_hovered : -1;
   const gboolean saved_node_selected = data->gui ? data->gui->node_selected : FALSE;
+  const int saved_node_selected_idx = data->gui ? data->gui->node_selected_idx : -1;
 
   if(data->increment == DT_MASKS_INCREMENT_ABSOLUTE) // aka opacity
   {
@@ -59,6 +60,7 @@ static void _masks_gui_interaction_apply_value(dt_masks_gui_interaction_slider_t
   {
     data->gui->node_hovered = -1;
     data->gui->node_selected = FALSE;
+    data->gui->node_selected_idx = -1;
   }
   dt_masks_form_set_interaction_value(data->form_group, data->interaction, scale,
                                       DT_MASKS_INCREMENT_SCALE, 1, data->gui, data->module);
@@ -66,6 +68,7 @@ static void _masks_gui_interaction_apply_value(dt_masks_gui_interaction_slider_t
   {
     data->gui->node_hovered = saved_node_hovered;
     data->gui->node_selected = saved_node_selected;
+    data->gui->node_selected_idx = saved_node_selected_idx;
   }
   data->last_value = value;
 }

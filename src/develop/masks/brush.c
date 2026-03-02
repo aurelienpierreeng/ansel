@@ -1623,6 +1623,7 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, dt_masks_form_t
 
   mask_gui->node_hovered = selected_segment + 1;
   mask_gui->node_selected = TRUE;
+  mask_gui->node_selected_idx = selected_segment + 1;
   mask_gui->seg_hovered = -1;
   mask_gui->seg_selected = FALSE;
 }
@@ -3118,6 +3119,7 @@ static void _brush_switch_node_callback(GtkWidget *widget, gpointer user_data)
   if(!module) return;
 
   mask_gui->node_selected = TRUE;
+  mask_gui->node_selected_idx = mask_gui->node_hovered;
 
   const int form_id = mask_gui->formid;
   dt_masks_form_t *selected_form = dt_masks_get_from_id(darktable.develop, form_id);
@@ -3141,6 +3143,7 @@ static void _brush_reset_round_node_callback(GtkWidget *widget, gpointer user_da
   if(!module) return;
 
   mask_gui->node_selected = TRUE;
+  mask_gui->node_selected_idx = mask_gui->node_hovered;
 
   const int form_id = mask_gui->formid;
   dt_masks_form_t *selected_form = dt_masks_get_from_id(darktable.develop, form_id);
