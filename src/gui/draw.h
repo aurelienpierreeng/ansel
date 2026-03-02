@@ -66,22 +66,22 @@ extern "C" {
 
 
 /** line sizes for drawing */
-#define DT_DRAW_SIZE_LINE                      DT_PIXEL_APPLY_DPI(1.5f)
-#define DT_DRAW_SIZE_LINE_SELECTED             DT_PIXEL_APPLY_DPI(3.0f)
-#define DT_DRAW_SIZE_LINE_HIGHLIGHT            (DT_PIXEL_APPLY_DPI(4.0f) + DT_DRAW_SIZE_LINE)
-#define DT_DRAW_SIZE_LINE_HIGHLIGHT_SELECTED   (DT_PIXEL_APPLY_DPI(5.0f) + DT_DRAW_SIZE_LINE_SELECTED)
-#define DT_DRAW_SIZE_CROSS                     DT_PIXEL_APPLY_DPI(7.0f)
+#define DT_DRAW_SIZE_LINE                      DT_PIXEL_APPLY_DPI_DPP(1.5f)
+#define DT_DRAW_SIZE_LINE_SELECTED             DT_PIXEL_APPLY_DPI_DPP(3.0f)
+#define DT_DRAW_SIZE_LINE_HIGHLIGHT            (DT_PIXEL_APPLY_DPI_DPP(4.0f) + DT_DRAW_SIZE_LINE)
+#define DT_DRAW_SIZE_LINE_HIGHLIGHT_SELECTED   (DT_PIXEL_APPLY_DPI_DPP(5.0f) + DT_DRAW_SIZE_LINE_SELECTED)
+#define DT_DRAW_SIZE_CROSS                     DT_PIXEL_APPLY_DPI_DPP(7.0f)
 
 /** stuff's scale */
-#define DT_DRAW_SCALE_DASH          DT_PIXEL_APPLY_DPI(12.0f)
-#define DT_DRAW_SCALE_ARROW         DT_PIXEL_APPLY_DPI(18.0f)
+#define DT_DRAW_SCALE_DASH          DT_PIXEL_APPLY_DPI_DPP(12.0f)
+#define DT_DRAW_SCALE_ARROW         DT_PIXEL_APPLY_DPI_DPP(18.0f)
 
 // radius/width of node (handles are set to be 3/4 of a node size)
-#define DT_DRAW_RADIUS_NODE          DT_PIXEL_APPLY_DPI(5.0f)
+#define DT_DRAW_RADIUS_NODE          DT_PIXEL_APPLY_DPI_DPP(5.0f)
 #define DT_DRAW_RADIUS_NODE_SELECTED (1.25f * DT_DRAW_RADIUS_NODE)
 
 // used to detect the area where rotation of a shape is possible
-#define DT_DRAW_SELECTION_ROTATION_AREA           DT_PIXEL_APPLY_DPI(50.0f)
+#define DT_DRAW_SELECTION_ROTATION_AREA           DT_PIXEL_APPLY_DPI_DPP(50.0f)
 #define DT_DRAW_SELECTION_ROTATION_RADIUS(dev)   (DT_DRAW_SELECTION_ROTATION_AREA / dt_dev_get_zoom_level((dt_develop_t *)dev))  
 
 /**dash type */
@@ -628,10 +628,10 @@ static inline void dt_draw_node(cairo_t *cr, const gboolean square, const gboole
 
   if(darktable.unmuted & DT_DEBUG_MASKS)
   {
-    const float debug_radius = darktable.gui->mouse.effect_radius_scaled;
+    const float debug_radius = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
     cairo_arc(cr, x, y, debug_radius, 0.0, 2.0 * M_PI);
-    cairo_set_line_width(cr, DT_DRAW_SIZE_LINE / zoom_scale);
-    dt_draw_set_color_overlay(cr, TRUE, 0.35f);
+    cairo_set_line_width(cr, line_width);
+    cairo_set_source_rgba(cr, 0.0, 1.0, 0.0, 1.0);
     cairo_stroke(cr);
   }
 

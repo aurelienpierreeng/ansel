@@ -73,6 +73,8 @@ extern "C" {
 /* helper macro that applies the DPI transformation to fixed pixel values. input should be defaulting to 96
  * DPI */
 #define DT_PIXEL_APPLY_DPI(value) ((value) * darktable.gui->dpi_factor)
+#define DT_PIXEL_APPLY_DPI_DPP(value) ((value) * darktable.gui->dpi_factor * darktable.gui->ppd)
+
 
 typedef struct dt_gui_widgets_t
 {
