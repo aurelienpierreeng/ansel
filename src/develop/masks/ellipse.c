@@ -982,6 +982,8 @@ static void _ellipse_draw_shape(cairo_t *cr, const float *points, const int poin
 static void _ellipse_draw_node(const dt_masks_form_gui_t *gui, cairo_t *cr, const float zoom_scale,
                       dt_masks_form_gui_points_t *gpt, const int index)
 {
+  if(!gpt || !gpt->points || gpt->points_count < 5) return;
+
   const int selected_node = dt_masks_gui_selected_node_index(gui);
   const float *nodes = gpt->points;
   float x, y;
@@ -1032,24 +1034,27 @@ static void _ellipse_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
 
   // we draw the main shape
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-  dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_ellipse.draw_shape, CAIRO_LINE_CAP_BUTT);
+  if(gpt->points && gpt->points_count > 5)
+    dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points,
+                        gpt->points_count, &dt_masks_functions_ellipse.draw_shape, CAIRO_LINE_CAP_BUTT);
   
   if(gui->group_selected == index)
   {
     // we draw the borders
-    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
-                        gpt->border_count, &dt_masks_functions_ellipse.draw_shape, CAIRO_LINE_CAP_ROUND);
+    if(gpt->border && gpt->border_count > 5)
+      dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
+                          gpt->border_count, &dt_masks_functions_ellipse.draw_shape, CAIRO_LINE_CAP_ROUND);
 
     // draw node
     _ellipse_draw_node(gui, cr, zoom_scale, gpt, index);
   }
 
   //draw the center point
-  if(gui->group_selected == index && gui->pivot_selected)
+  if(gui->group_selected == index && gui->pivot_selected && gpt->points && gpt->points_count > 0)
     dt_draw_node(cr, FALSE, FALSE, (gui->form_rotating), zoom_scale, gpt->points[0], gpt->points[1]);
 
   // draw the source if any
-  if(gpt->source_count > 10)
+  if(gpt->source && gpt->source_count > 10 && gpt->points && gpt->points_count > 0)
   {
     dt_masks_gui_center_point_t center_pt = { .main = { gpt->points[0], gpt->points[1] },
                                               .source = { gpt->source[0], gpt->source[1] }};

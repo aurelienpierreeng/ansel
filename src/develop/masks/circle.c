@@ -587,16 +587,19 @@ static void _circle_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_f
   
   // we draw the main shape
   const gboolean selected = (gui->group_selected == index) && (gui->form_selected || gui->form_dragging);
-  dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points, gpt->points_count, &dt_masks_functions_circle.draw_shape, CAIRO_LINE_CAP_BUTT);
+  if(gpt->points && gpt->points_count > 1)
+    dt_draw_shape_lines(DT_MASKS_NO_DASH, FALSE, cr, num_points, selected, zoom_scale, gpt->points,
+                        gpt->points_count, &dt_masks_functions_circle.draw_shape, CAIRO_LINE_CAP_BUTT);
   // we draw the borders
   if(gui->group_selected == index)
   { 
-    dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
-                       gpt->border_count, &dt_masks_functions_circle.draw_shape, CAIRO_LINE_CAP_ROUND);
+    if(gpt->border && gpt->border_count > 1)
+      dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, num_points, (gui->border_selected), zoom_scale, gpt->border,
+                          gpt->border_count, &dt_masks_functions_circle.draw_shape, CAIRO_LINE_CAP_ROUND);
   }
 
   // draw the source if any
-  if(gpt->source_count > 6)
+  if(gpt->source && gpt->source_count > 6 && gpt->points && gpt->points_count > 0)
   {
     dt_masks_gui_center_point_t center_pt = { .main = { gpt->points[0], gpt->points[1] },
                                               .source = { gpt->source[0], gpt->source[1] }};

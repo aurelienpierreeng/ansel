@@ -2437,6 +2437,8 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, index);
   if(!gui_points) return;
+  if(!gui_points->points) return;
+
   const int selected_node = dt_masks_gui_selected_node_index(mask_gui);
   const int selected_handle = dt_masks_gui_selected_handle_index(mask_gui);
   const int selected_handle_border = dt_masks_gui_selected_handle_border_index(mask_gui);
@@ -2502,7 +2504,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   if(mask_gui->group_selected == index)
   {
     // draw borders
-    if(gui_points->border_count > node_count * 3 + 2)
+    if(gui_points->border && gui_points->border_count > node_count * 3 + 2)
     {
       dt_draw_shape_lines(DT_MASKS_DASH_STICK, FALSE, cr, node_count, (mask_gui->border_selected), zoom_scale,
                           gui_points->border, gui_points->border_count, &dt_masks_functions_brush.draw_shape,
@@ -2510,7 +2512,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     }
 
     // draw the current node's handle if it's a curve node
-    if(mask_gui->node_selected && selected_node >= 0
+    if(mask_gui->node_selected && selected_node >= 0 && selected_node < node_count
        && !dt_masks_node_is_cusp(gui_points, selected_node))
     {
       const int n = selected_node;
@@ -2536,7 +2538,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     }
 
     // Draw the current node's border handle, if needed
-    if(mask_gui->node_selected && selected_node >= 0)
+    if(mask_gui->node_selected && selected_node >= 0 && selected_node < node_count)
     {
       const int edited = selected_node;
       const gboolean selected = (mask_gui->node_hovered == edited
@@ -2551,7 +2553,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
   }
 
   // Draw the source if needed
-  if(gui_points->source_count > node_count * 3 + 2)
+  if(gui_points->source && gui_points->source_count > node_count * 3 + 2)
   {
     dt_masks_gui_center_point_t center_pt;
     if(_brush_get_source_center(gui_points, node_count, &center_pt))

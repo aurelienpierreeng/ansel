@@ -2184,9 +2184,9 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     dt_masks_form_t *visible_form = dt_masks_get_visible_form(darktable.develop);
     if(visible_form && (visible_form->type & DT_MASKS_CLONE))
     {
-
-      float node_posx = node_count ? gui_points->points[2] : mask_gui->pos[0];
-      float node_posy = node_count ? gui_points->points[3] : mask_gui->pos[1];
+      const gboolean have_first_node = node_count && gui_points->points && gui_points->points_count > 1;
+      float node_posx = have_first_node ? gui_points->points[2] : mask_gui->pos[0];
+      float node_posy = have_first_node ? gui_points->points[3] : mask_gui->pos[1];
 
       dt_masks_draw_source_preview(cr, zoom_scale, mask_gui, node_posx, node_posy, node_posx, node_posy, FALSE);
     }
@@ -2206,7 +2206,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   }
 
   // draw polygon
-  if(node_count > 0 && gui_points->points_count > node_count * 3 + 6) // there must be something to draw
+  if(gui_points->points && node_count > 0 && gui_points->points_count > node_count * 3 + 6) // there must be something to draw
   {
     dt_masks_draw_path_seg_by_seg(cr, mask_gui, form_index, gui_points->points, gui_points->points_count,
                                   node_count, zoom_scale);
@@ -2223,7 +2223,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     }
 
     // draw the current node's handle if it's a curve node
-    if(mask_gui->node_selected && selected_node >= 0
+    if(mask_gui->node_selected && selected_node >= 0 && selected_node < node_count
        && !dt_masks_node_is_cusp(gui_points, selected_node))
     {
       const int node_index = selected_node;
@@ -2245,6 +2245,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     {
       // don't draw the last node while creating
       if(mask_gui->creation && node_index == node_count - 1) break;
+      if(!gui_points->points || gui_points->points_count <= node_index * 3 + 1) break;
 
       const gboolean squared = dt_masks_node_is_cusp(gui_points, node_index);
       const gboolean selected = (node_index == mask_gui->node_hovered || node_index == mask_gui->node_dragging);
@@ -2260,7 +2261,8 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     }
 
     // Draw the current node's border handle, if needed
-    if(mask_gui->node_selected && selected_node >= 0)
+    if(mask_gui->node_selected && selected_node >= 0 && selected_node < node_count
+       && gui_points->border && gui_points->border_count > selected_node * 3)
     {
       const int edited = selected_node;
       const gboolean selected = (mask_gui->node_hovered == edited
@@ -2273,7 +2275,8 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
   }
 
   // draw the source if needed
-  if(gui_points->source_count > node_count * 3 + 2)
+  if(gui_points->source && gui_points->source_count > node_count * 3 + 2
+     && gui_points->points && gui_points->points_count > 0)
   {
     dt_masks_gui_center_point_t center_pt;
     _polygon_gui_gravity_center(gui_points->points, gui_points->points_count,
@@ -2294,6 +2297,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
              || (mask_gui->creation && node_index == node_count - 1)))
       {
         const int proj_index = node_index * 6 + 2;
+        if(gui_points->source_count <= node_index * 3 + 1) break;
         const float proj[2] = { gui_points->source[proj_index], gui_points->source[proj_index + 1] };
         const gboolean selected = mask_gui->node_hovered == node_index;
         const gboolean squared = dt_masks_node_is_cusp(gui_points, node_index);
