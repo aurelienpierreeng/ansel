@@ -1211,26 +1211,6 @@ static void _polygon_get_sizes(struct dt_iop_module_t *module, dt_masks_form_t *
 static gboolean _polygon_form_gravity_center(const dt_masks_form_t *mask_form, float *center_x,
                                              float *center_y, float *surface);
 
-static float _polygon_get_size_from_nodes(const dt_masks_form_t *mask_form)
-{
-  if(!mask_form || !mask_form->points) return 0.0f;
-  float p1[2] = { FLT_MAX, FLT_MAX };
-  float p2[2] = { -FLT_MAX, -FLT_MAX };
-
-  for(const GList *point_node = mask_form->points; point_node; point_node = g_list_next(point_node))
-  {
-    const dt_masks_node_polygon_t *node = (const dt_masks_node_polygon_t *)point_node->data;
-    if(!node) continue;
-    p1[0] = fminf(p1[0], node->node[0]);
-    p2[0] = fmaxf(p2[0], node->node[0]);
-    p1[1] = fminf(p1[1], node->node[1]);
-    p2[1] = fmaxf(p2[1], node->node[1]);
-  }
-
-  if(p1[0] == FLT_MAX) return 0.0f;
-  return fmaxf(p2[0] - p1[0], p2[1] - p1[1]);
-}
-
 static float _polygon_get_interaction_value(const dt_masks_form_t *mask_form,
                                             dt_masks_interaction_t interaction)
 {
@@ -1240,15 +1220,24 @@ static float _polygon_get_interaction_value(const dt_masks_form_t *mask_form,
   {
     case DT_MASKS_INTERACTION_SIZE:
     {
-      const float size = _polygon_get_size_from_nodes(mask_form);
+      const float size = dt_masks_get_form_size_from_nodes(mask_form->points);
       if(size <= 0.0f) return NAN;
       return size;
     }
     case DT_MASKS_INTERACTION_HARDNESS:
     {
-      const dt_masks_node_polygon_t *node = (const dt_masks_node_polygon_t *)mask_form->points->data;
-      if(!node) return NAN;
-      return node->border[0];
+      float hardness_sum = 0.0f;
+      int hardness_count = 0;
+
+      for(const GList *point_node = mask_form->points; point_node; point_node = g_list_next(point_node))
+      {
+        const dt_masks_node_polygon_t *node = (const dt_masks_node_polygon_t *)point_node->data;
+        if(!node) continue;
+        hardness_sum += node->border[0] + node->border[1];
+        hardness_count += 2;
+      }
+
+      return hardness_count > 0 ? hardness_sum / (float)hardness_count : NAN;
     }
     default:
       return NAN;
@@ -1591,25 +1580,29 @@ static int _change_size(dt_masks_form_t *mask_form, int parent_id, dt_masks_form
       break;
   }
 
-  for(GList *node_iter = mask_form->points; node_iter; node_iter = g_list_next(node_iter))
+  int node_index = 0;
+  for(GList *node_iter = mask_form->points; node_iter; node_iter = g_list_next(node_iter), node_index++)
   {
-    dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)node_iter->data;
-    if(!node) continue;
+    if(dt_masks_gui_change_affects_selected_node_or_all(mask_gui, node_index))
+    {
+      dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)node_iter->data;
+      if(!node) continue;
 
-    const float new_node_x = center_x + (node->node[0] - center_x) * scale_delta;
-    const float new_node_y = center_y + (node->node[1] - center_y) * scale_delta;
-    const float ctrl1_offset_x = (node->ctrl1[0] - node->node[0]) * scale_delta;
-    const float ctrl1_offset_y = (node->ctrl1[1] - node->node[1]) * scale_delta;
-    const float ctrl2_offset_x = (node->ctrl2[0] - node->node[0]) * scale_delta;
-    const float ctrl2_offset_y = (node->ctrl2[1] - node->node[1]) * scale_delta;
+      const float new_node_x = center_x + (node->node[0] - center_x) * scale_delta;
+      const float new_node_y = center_y + (node->node[1] - center_y) * scale_delta;
+      const float ctrl1_offset_x = (node->ctrl1[0] - node->node[0]) * scale_delta;
+      const float ctrl1_offset_y = (node->ctrl1[1] - node->node[1]) * scale_delta;
+      const float ctrl2_offset_x = (node->ctrl2[0] - node->node[0]) * scale_delta;
+      const float ctrl2_offset_y = (node->ctrl2[1] - node->node[1]) * scale_delta;
 
-    // Update all coordinates while keeping local offsets consistent.
-    node->node[0] = new_node_x;
-    node->node[1] = new_node_y;
-    node->ctrl1[0] = new_node_x + ctrl1_offset_x;
-    node->ctrl1[1] = new_node_y + ctrl1_offset_y;
-    node->ctrl2[0] = new_node_x + ctrl2_offset_x;
-    node->ctrl2[1] = new_node_y + ctrl2_offset_y;
+      // Update all coordinates while keeping local offsets consistent.
+      node->node[0] = new_node_x;
+      node->node[1] = new_node_y;
+      node->ctrl1[0] = new_node_x + ctrl1_offset_x;
+      node->ctrl1[1] = new_node_y + ctrl1_offset_y;
+      node->ctrl2[0] = new_node_x + ctrl2_offset_x;
+      node->ctrl2[1] = new_node_y + ctrl2_offset_y;
+    }
   }
 
   float mask_size = 0.0f;
@@ -1623,20 +1616,19 @@ static int _change_size(dt_masks_form_t *mask_form, int parent_id, dt_masks_form
 }
 
 /**
- * @brief Change polygon hardness, optionally restricted to the selected node.
+ * @brief Change polygon hardness for the active node scope or the full shape.
  */
 static int _change_hardness(dt_masks_form_t *mask_form, int parent_id, dt_masks_form_gui_t *mask_gui,
                             struct dt_iop_module_t *module, int form_index, const float amount,
                             const dt_masks_increment_t increment, int flow)
 {
-  const int node_selected = dt_masks_gui_selected_node_index(mask_gui);
   int node_index = 0;
   const float scale_amount = powf(amount, (float)flow);
   const float offset_amount = amount * (float)flow;
 
-  for(GList *node_iter = mask_form->points; node_iter; node_iter = g_list_next(node_iter))
+  for(GList *node_iter = mask_form->points; node_iter; node_iter = g_list_next(node_iter), node_index++)
   {
-    if(node_selected == -1 || node_selected == node_index)
+    if(dt_masks_gui_change_affects_selected_node_or_all(mask_gui, node_index))
     {
       dt_masks_node_polygon_t *node = (dt_masks_node_polygon_t *)node_iter->data;
       if(!node) continue;
@@ -1647,9 +1639,7 @@ static int _change_hardness(dt_masks_form_t *mask_form, int parent_id, dt_masks_
       node->border[1] = CLAMPF(dt_masks_apply_increment_precomputed(node->border[1], amount, scale_amount,
                                                                      offset_amount, increment),
                                HARDNESS_MIN, HARDNESS_MAX);
-      if(node_selected >= 0) break;
     }
-    node_index++;
   }
 
   float mask_size = 1.0f;
@@ -1689,8 +1679,8 @@ static int _polygon_events_mouse_scrolled(struct dt_iop_module_t *module, double
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
       return dt_masks_form_change_opacity(mask_form, parent_id, up, flow);
     if(dt_modifier_is(state, GDK_SHIFT_MASK) || mask_gui->node_selected)
-      return _change_hardness(mask_form, parent_id, mask_gui, module, form_index, up ? 1.02f : 0.98f,
-                              DT_MASKS_INCREMENT_SCALE, flow);
+      return _change_hardness(mask_form, parent_id, mask_gui, module, form_index, up ? +0.01f : -0.01f,
+                              DT_MASKS_INCREMENT_OFFSET, flow);
     else
       return _change_size(mask_form, parent_id, mask_gui, module, form_index, up ? 1.02f : 0.98f,
                           DT_MASKS_INCREMENT_SCALE, flow);

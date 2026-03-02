@@ -45,7 +45,7 @@
 #include "develop/openmp_maths.h"
 #include "gui/actions/menu.h"
 
-#define HARDNESS_MIN 0.0005f
+#define HARDNESS_MIN 0.00001f
 #define HARDNESS_MAX 1.0f
 
 #define BORDER_MIN 0.00005f
@@ -1361,15 +1361,30 @@ static int _init_opacity(dt_masks_form_t *mask_form, int parentid, dt_masks_form
 static float _brush_get_interaction_value(const dt_masks_form_t *mask_form, dt_masks_interaction_t interaction)
 {
   if(!mask_form || !mask_form->points) return NAN;
-  const dt_masks_node_brush_t *point = (const dt_masks_node_brush_t *)(mask_form->points)->data;
-  if(!point) return NAN;
 
   switch(interaction)
   {
     case DT_MASKS_INTERACTION_SIZE:
-      return fmaxf(point->border[0], point->border[1]);
+    {
+      const float size = dt_masks_get_form_size_from_nodes(mask_form->points);
+      if(size <= 0.0f) return NAN;
+      return size;
+    }
     case DT_MASKS_INTERACTION_HARDNESS:
-      return point->hardness;
+    {
+      float hardness_sum = 0.0f;
+      int hardness_count = 0;
+
+      for(const GList *point_node = mask_form->points; point_node; point_node = g_list_next(point_node))
+      {
+        const dt_masks_node_brush_t *node = (const dt_masks_node_brush_t *)point_node->data;
+        if(!node) continue;
+        hardness_sum += node->hardness;
+        hardness_count++;
+      }
+
+      return hardness_count > 0 ? hardness_sum / (float)hardness_count : NAN;
+    }
     default:
       return NAN;
   }
@@ -1427,32 +1442,18 @@ static float _brush_set_interaction_value(dt_masks_form_t *mask_form, dt_masks_i
   }
 }
 
-static gboolean _change_node(dt_masks_form_gui_t *mask_gui, const int index)
-{
-  const int selected_node = dt_masks_gui_selected_node_index(mask_gui);
-  if(selected_node > -1)
-    return selected_node == index;
-  if(mask_gui->form_selected)
-    return TRUE;
-  if(mask_gui->node_hovered > -1)
-    return mask_gui->node_hovered == index;
-
-  // If no particular node is selected, act on all nodes
-  return TRUE;
-}
-
 static int _change_hardness(dt_masks_form_t *mask_form, int parentid, dt_masks_form_gui_t *mask_gui,
                             struct dt_iop_module_t *module, int index, const float amount,
                             const dt_masks_increment_t increment, const int flow)
 {
   if(!mask_form || !mask_form->points) return 0;
   int node_index = 0;
-  const float scale_amount = powf(amount, (float)flow);
-  const float offset_amount = amount * (float)flow;
+  const float scale_amount = 1.f / powf(amount, (float)flow);
+  const float offset_amount = -amount * (float)flow;
   float result_amount = 0.0f;
   for(GList *node_entry = mask_form->points; node_entry; node_entry = g_list_next(node_entry), node_index++)
   {
-    if(_change_node(mask_gui, node_index))
+    if(dt_masks_gui_change_affects_selected_node_or_all(mask_gui, node_index))
     {
       dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)node_entry->data;
       const float current_hardness = node->hardness;
@@ -1480,7 +1481,7 @@ static int _change_size(dt_masks_form_t *mask_form, int parentid, dt_masks_form_
   int node_index = 0;
   for(GList *node_entry = mask_form->points; node_entry; node_entry = g_list_next(node_entry), node_index++)
   {
-    if(_change_node(mask_gui, node_index))
+    if(dt_masks_gui_change_affects_selected_node_or_all(mask_gui, node_index))
     {
       dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)node_entry->data;
       if(!node) continue;
@@ -1495,7 +1496,7 @@ static int _change_size(dt_masks_form_t *mask_form, int parentid, dt_masks_form_
   node_index = 0;
   for(GList *node_entry = mask_form->points; node_entry; node_entry = g_list_next(node_entry), node_index++)
   {
-    if(_change_node(mask_gui, node_index))
+    if(dt_masks_gui_change_affects_selected_node_or_all(mask_gui, node_index))
     {
       dt_masks_node_brush_t *node = (dt_masks_node_brush_t *)node_entry->data;
       if(!node) continue;
@@ -1547,8 +1548,8 @@ static int _brush_events_mouse_scrolled(struct dt_iop_module_t *module, double w
     if(dt_modifier_is(state, GDK_CONTROL_MASK))
       return dt_masks_form_change_opacity(mask_form, parentid, scroll_up, flow);
     else if(dt_modifier_is(state, GDK_SHIFT_MASK))
-      return _change_hardness(mask_form, parentid, mask_gui, module, index, scroll_up ? 1.02f : 0.98f,
-                              DT_MASKS_INCREMENT_SCALE, flow);
+      return _change_hardness(mask_form, parentid, mask_gui, module, index, scroll_up ? -0.01f : 0.01f,
+                              DT_MASKS_INCREMENT_OFFSET, flow);
     else // resize don't care where the mouse is inside a shape
       return _change_size(mask_form, parentid, mask_gui, module, index, scroll_up ? 1.02f : 0.98f,
                           DT_MASKS_INCREMENT_SCALE, flow);

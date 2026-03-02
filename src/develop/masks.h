@@ -535,6 +535,39 @@ static inline int dt_masks_gui_selected_segment_index(const dt_masks_form_gui_t 
   return (gui && gui->seg_selected) ? gui->seg_hovered : -1;
 }
 
+static inline gboolean dt_masks_gui_change_affects_selected_node_or_all(const dt_masks_form_gui_t *gui,
+                                                                        const int index)
+{
+  if(!gui) return TRUE;
+
+  const int selected_node = dt_masks_gui_selected_node_index(gui);
+  return selected_node < 0 || selected_node == index;
+}
+
+static inline float dt_masks_get_form_size_from_nodes(const GList *points)
+{
+  if(!points || !points->data) return 0.0f;
+
+  // Brush and polygon node payloads both start with `float node[2]`.
+  const float *first = (const float *)points->data;
+  float min_x = first[0];
+  float max_x = first[0];
+  float min_y = first[1];
+  float max_y = first[1];
+
+  for(const GList *point_node = points; point_node; point_node = g_list_next(point_node))
+  {
+    const float *node = (const float *)point_node->data;
+    if(!node) continue;
+    min_x = fminf(min_x, node[0]);
+    max_x = fmaxf(max_x, node[0]);
+    min_y = fminf(min_y, node[1]);
+    max_y = fmaxf(max_y, node[1]);
+  }
+
+  return fmaxf(max_x - min_x, max_y - min_y);
+}
+
 static inline gboolean dt_masks_gui_should_hit_test(dt_masks_form_gui_t *gui)
 {
   const float hit_thresh = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED * 0.5f;

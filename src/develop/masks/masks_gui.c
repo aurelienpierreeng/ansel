@@ -39,14 +39,12 @@ typedef struct dt_masks_gui_interaction_slider_t
 static void _masks_gui_interaction_apply_value(dt_masks_gui_interaction_slider_t *data, float value)
 {
   if(!data || !data->form_group) return;
-  const int saved_node_hovered = data->gui ? data->gui->node_hovered : -1;
-  const gboolean saved_node_selected = data->gui ? data->gui->node_selected : FALSE;
-  const int saved_node_selected_idx = data->gui ? data->gui->node_selected_idx : -1;
 
   if(data->increment == DT_MASKS_INCREMENT_ABSOLUTE) // aka opacity
   {
     dt_masks_form_set_interaction_value(data->form_group, data->interaction, value,
-                                        DT_MASKS_INCREMENT_ABSOLUTE, 1, data->gui, data->module);
+                                        data->increment, 1, data->gui, data->module);
+    data->last_value = value;
     return;
   }
 
@@ -54,22 +52,9 @@ static void _masks_gui_interaction_apply_value(dt_masks_gui_interaction_slider_t
   if(fabsf(delta) < 1e-6f) return;
 
   // Slider value is a log2 scale factor in [-3;3], so apply the delta in log space.
-  const float mult = (data->interaction == DT_MASKS_INTERACTION_HARDNESS) ? -1.f : 1.f;
-  const float scale = exp2f(mult * delta);
-  if(data->gui)
-  {
-    data->gui->node_hovered = -1;
-    data->gui->node_selected = FALSE;
-    data->gui->node_selected_idx = -1;
-  }
+  const float scale = exp2f(delta);
   dt_masks_form_set_interaction_value(data->form_group, data->interaction, scale,
-                                      DT_MASKS_INCREMENT_SCALE, 1, data->gui, data->module);
-  if(data->gui)
-  {
-    data->gui->node_hovered = saved_node_hovered;
-    data->gui->node_selected = saved_node_selected;
-    data->gui->node_selected_idx = saved_node_selected_idx;
-  }
+                                      DT_MASKS_INCREMENT_SCALE, 1.f, data->gui, data->module);
   data->last_value = value;
 }
 
@@ -492,18 +477,19 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   if(!gui->creation && (gui->form_selected || gui->node_selected) && op_form)
   {
     const float opacity = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_OPACITY);
+    const float hardness = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_HARDNESS);
 
     _masks_gui_add_interaction_slider(menu, _("Size"), op_form, DT_MASKS_INTERACTION_SIZE,
                                       DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
                                       gui, darktable.develop->gui_module);
-    _masks_gui_add_interaction_slider(menu, _("Hardness"), op_form, DT_MASKS_INTERACTION_HARDNESS,
-                                      DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
+    _masks_gui_add_interaction_slider(menu, _("Fading"), op_form, DT_MASKS_INTERACTION_HARDNESS,
+                                      DT_MASKS_INCREMENT_ABSOLUTE, 0.f, 1.0f, 0.01f,
+                                      isfinite(hardness) ? hardness : 1.0f, 3, "%", 100.0f,
                                       gui, darktable.develop->gui_module);
-    if(!gui->node_selected)
-      _masks_gui_add_interaction_slider(menu, _("Opacity"), op_form, DT_MASKS_INTERACTION_OPACITY,
-                                        DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.01f,
-                                        isfinite(opacity) ? opacity : 1.0f, 3, "%", 100.0f,
-                                        gui, darktable.develop->gui_module);
+    _masks_gui_add_interaction_slider(menu, _("Opacity"), op_form, DT_MASKS_INTERACTION_OPACITY,
+                                      DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.01f,
+                                      isfinite(opacity) ? opacity : 1.0f, 3, "%", 100.0f,
+                                      gui, darktable.develop->gui_module);
 
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
   }
