@@ -689,6 +689,11 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
                                    dt_dev_pixelpipe_t *pipe, float **point_buffer, int *point_count,
                                    float **border_buffer, int *border_count, gboolean source)
 {
+  *point_buffer = NULL;
+  *point_count = 0;
+  if(border_buffer) *border_buffer = NULL;
+  if(border_buffer) *border_count = 0;
+
   if(!mask_form || !mask_form->points) return 0;
 
   double start2 = 0.0;
@@ -701,11 +706,6 @@ static int _polygon_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_
   const guint node_count = g_list_length(mask_form->points);
 
   dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *intersections = NULL;
-
-  *point_buffer = NULL;
-  *point_count = 0;
-  if(border_buffer) *border_buffer = NULL;
-  if(border_buffer) *border_count = 0;
 
   dpoints = dt_masks_dynbuf_init(1000000, "polygon dpoints");
   if(dpoints == NULL) return 1;

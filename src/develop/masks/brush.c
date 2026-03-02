@@ -716,6 +716,13 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
                                  float **border_buffer, int *border_count, float **payload_buffer,
                                  int *payload_count, int use_source)
 {
+  *point_buffer = NULL;
+  *point_count = 0;
+  if(border_buffer) *border_buffer = NULL;
+  if(border_buffer) *border_count = 0;
+  if(payload_buffer) *payload_buffer = NULL;
+  if(payload_buffer) *payload_count = 0;
+
   if(!mask_form || !mask_form->points) return 0;
   double start2 = 0.0;
   if(darktable.unmuted & DT_DEBUG_PERF) start2 = dt_get_wtime();
@@ -724,13 +731,6 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
   const float iht = pipe->iheight;
   const int pixel_threshold = (pipe->type == DT_DEV_PIXELPIPE_PREVIEW
                                || pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL) ? 3 : 1;
-
-  *point_buffer = NULL;
-  *point_count = 0;
-  if(border_buffer) *border_buffer = NULL;
-  if(border_buffer) *border_count = 0;
-  if(payload_buffer) *payload_buffer = NULL;
-  if(payload_buffer) *payload_count = 0;
 
   dt_masks_dynbuf_t *dpoints = NULL, *dborder = NULL, *dpayload = NULL;
 
@@ -2653,6 +2653,13 @@ static int _get_area(const dt_iop_module_t *const module, const dt_dev_pixelpipe
   }
 
   const guint node_count = g_list_length(mask_form->points);
+  if(!points || !border || points_count <= (int)(node_count * 3) || border_count <= (int)(node_count * 3))
+  {
+    dt_pixelpipe_cache_free_align(points);
+    dt_pixelpipe_cache_free_align(border);
+    *width = *height = *offset_x = *offset_y = 0;
+    return 0;
+  }
   _brush_bounding_box(points, border, node_count, points_count, width, height, offset_x, offset_y);
 
   dt_pixelpipe_cache_free_align(points);
@@ -2739,6 +2746,16 @@ static int _brush_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
   }
 
   const guint node_count = g_list_length(mask_form->points);
+  if(!points || !border || !payload || points_count <= (int)(node_count * 3)
+     || border_count <= (int)(node_count * 3))
+  {
+    dt_pixelpipe_cache_free_align(points);
+    dt_pixelpipe_cache_free_align(border);
+    dt_pixelpipe_cache_free_align(payload);
+    *buffer = NULL;
+    *width = *height = *offset_x = *offset_y = 0;
+    return 0;
+  }
   const gboolean use_sparse = (piece->pipe->type == DT_DEV_PIXELPIPE_PREVIEW
                                || piece->pipe->type == DT_DEV_PIXELPIPE_THUMBNAIL);
   const int sparse_step = use_sparse ? 4 : 1;
@@ -2917,6 +2934,14 @@ static int _brush_get_mask_roi(const dt_iop_module_t *const module, const dt_dev
   }
 
   const guint node_count = g_list_length(mask_form->points);
+  if(!points || !border || !payload || points_count <= (int)(node_count * 3)
+     || border_count <= (int)(node_count * 3))
+  {
+    dt_pixelpipe_cache_free_align(points);
+    dt_pixelpipe_cache_free_align(border);
+    dt_pixelpipe_cache_free_align(payload);
+    return 0;
+  }
 
   // we shift and scale down brush and border
   // Shift/scale border samples into ROI space.
