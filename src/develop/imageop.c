@@ -1491,7 +1491,6 @@ void dt_iop_unload_modules_so()
 void dt_iop_set_mask_mode(dt_iop_module_t *module, int mask_mode)
 {
   static const int key = 0;
-  // showing raster masks doesn't make sense, one can use the original source instead. or does it?
   if(mask_mode & DEVELOP_MASK_ENABLED && !(mask_mode & DEVELOP_MASK_RASTER))
   {
     char *modulename = dt_history_item_get_name(module);
@@ -2252,8 +2251,16 @@ static gboolean _mask_indicator_tooltip(GtkWidget *treeview, gint x, gint y, gbo
       g_free(source);
     }
 
-    if(!raster && !part2)
+    if(part2)
+    {
+      gchar *details = g_strdup_printf("%s\n%s", part2, _("click to display (module must be activated first)"));
+      g_free(part2);
+      part2 = details;
+    }
+    else
+    {
       part2 = g_strdup(_("click to display (module must be activated first)"));
+    }
 
     if(part2)
       text = g_strconcat(part1, "\n", part2, NULL);
@@ -2280,16 +2287,14 @@ void dt_iop_add_remove_mask_indicator(dt_iop_module_t *module)
     gtk_widget_set_visible(GTK_WIDGET(module->mask_indicator), FALSE);
     gtk_widget_set_has_tooltip(GTK_WIDGET(module->mask_indicator), FALSE);
     gtk_widget_set_sensitive(GTK_WIDGET(module->mask_indicator), FALSE);
+    return;
   }
-
-  // Raster masks can't be previewed
-  const gboolean raster = (module->blend_params->mask_mode & DEVELOP_MASK_RASTER) == DEVELOP_MASK_RASTER;
 
   // Note : DEVELOP_MASK_ENABLED means uniform blending (opacity), not masks
   const gboolean use_masks = module->blend_params->mask_mode > DEVELOP_MASK_ENABLED;
 
   gtk_widget_set_visible(GTK_WIDGET(module->mask_indicator), use_masks);
-  gtk_widget_set_sensitive(GTK_WIDGET(module->mask_indicator), !raster && module->enabled);
+  gtk_widget_set_sensitive(GTK_WIDGET(module->mask_indicator), module->enabled);
   gtk_widget_set_has_tooltip(GTK_WIDGET(module->mask_indicator), use_masks);
 }
 

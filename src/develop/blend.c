@@ -52,6 +52,7 @@
 #include "develop/imageop_math.h"
 #include <inttypes.h>
 #include <math.h>
+#include <string.h>
 
 typedef enum _develop_mask_post_processing
 {
@@ -419,6 +420,115 @@ static inline void _develop_blend_process_free_region(float *const restrict inpu
   dt_pixelpipe_cache_free_align(input);
 }
 
+static const dt_iop_module_t *_develop_blend_get_raster_source_module(const dt_develop_blend_params_t *const params,
+                                                                      const dt_iop_module_t *const self)
+{
+  if(!params || !self) return NULL;
+
+  const dt_iop_module_t *source = self->raster_mask.sink.source;
+  if(source && !strcmp(source->op, params->raster_mask_source)
+     && source->multi_priority == params->raster_mask_instance)
+    return source;
+
+  if(!self->dev || params->raster_mask_source[0] == '\0') return NULL;
+
+  for(GList *iter = g_list_first(self->dev->iop); iter; iter = g_list_next(iter))
+  {
+    const dt_iop_module_t *candidate = (const dt_iop_module_t *)iter->data;
+    if(!strcmp(candidate->op, params->raster_mask_source)
+       && candidate->multi_priority == params->raster_mask_instance)
+      return candidate;
+  }
+
+  return NULL;
+}
+
+static void _develop_blend_init_raster_mask(const dt_develop_blend_params_t *const params,
+                                            dt_iop_module_t *self,
+                                            dt_dev_pixelpipe_iop_t *piece,
+                                            float *const restrict mask,
+                                            const size_t owidth,
+                                            const size_t oheight,
+                                            int *const raster_error)
+{
+  gboolean free_mask = FALSE; // if no transformations were applied we get the cached original back
+  int local_raster_error = 0;
+  const dt_iop_module_t *raster_source = _develop_blend_get_raster_source_module(params, self);
+  float *raster_mask = raster_source
+      ? dt_dev_get_raster_mask(piece->pipe, raster_source, params->raster_mask_id,
+                               self, &free_mask, &local_raster_error)
+      : NULL;
+
+  if(raster_mask)
+  {
+    if(params->raster_mask_invert)
+    {
+#ifdef _OPENMP
+  #pragma omp parallel for simd default(none) aligned(mask, raster_mask:64) \
+      dt_omp_firstprivate(mask, raster_mask, owidth, oheight) schedule(static)
+#endif
+      for(size_t i = 0; i < owidth * oheight; i++)
+        mask[i] = 1.0f - raster_mask[i];
+    }
+    else
+    {
+      dt_iop_image_scaled_copy(mask, raster_mask, 1.0f, owidth, oheight, 1);
+    }
+
+    if(free_mask) dt_pixelpipe_cache_free_align(raster_mask);
+  }
+  else
+  {
+    const float value = params->raster_mask_invert ? 0.0f : 1.0f;
+    dt_iop_image_fill(mask, value, owidth, oheight, 1);
+  }
+
+  if(raster_error) *raster_error = local_raster_error;
+}
+
+static int _develop_blend_init_drawn_mask(const dt_develop_blend_params_t *const params,
+                                          dt_iop_module_t *self,
+                                          dt_dev_pixelpipe_iop_t *piece,
+                                          const struct dt_iop_roi_t *const roi_out,
+                                          float *const restrict mask,
+                                          const size_t owidth,
+                                          const size_t oheight)
+{
+  dt_masks_form_t *form = dt_masks_get_from_id(self->dev, params->mask_id);
+
+  if(form && (!(self->flags() & IOP_FLAGS_NO_MASKS)) && (params->mask_mode & DEVELOP_MASK_MASK))
+  {
+    if(dt_masks_group_render_roi(self, piece, form, roi_out, mask) != 0) return 1;
+
+    if(params->mask_combine & DEVELOP_COMBINE_MASKS_POS)
+      dt_iop_image_invert(mask, 1.0f, owidth, oheight, 1);
+  }
+  else if((!(self->flags() & IOP_FLAGS_NO_MASKS)) && (params->mask_mode & DEVELOP_MASK_MASK))
+  {
+    const float fill = (params->mask_combine & DEVELOP_COMBINE_MASKS_POS) ? 0.0f : 1.0f;
+    dt_iop_image_fill(mask, fill, owidth, oheight, 1);
+  }
+  else
+  {
+    const float fill = (params->mask_combine & DEVELOP_COMBINE_INCL) ? 0.0f : 1.0f;
+    dt_iop_image_fill(mask, fill, owidth, oheight, 1);
+  }
+
+  return 0;
+}
+
+static void _develop_blend_combine_masks(float *const restrict mask,
+                                         const float *const restrict other_mask,
+                                         const size_t buffsize)
+{
+#ifdef _OPENMP
+#pragma omp parallel for simd default(none) aligned(mask, other_mask:64) \
+    dt_omp_firstprivate(mask, other_mask, buffsize) schedule(static)
+#endif
+  for(size_t i = 0; i < buffsize; i++)
+    mask[i] *= other_mask[i];
+}
+
 
 static int _develop_blend_process_feather(const float *const guide, float *const mask, const size_t width,
                                           const size_t height, const int ch, const float guide_weight,
@@ -489,6 +599,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
   const unsigned int mask_mode = d->mask_mode;
   // check if blend is disabled
   if(!(mask_mode & DEVELOP_MASK_ENABLED)) return 0;
+  const unsigned int preview_mask_mode = mask_mode & (DEVELOP_MASK_MASK_CONDITIONAL | DEVELOP_MASK_RASTER);
 
   const size_t ch = piece->colors;           // the number of channels in the buffer
   const int xoffs = roi_out->x - roi_in->x;
@@ -519,7 +630,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
   // does user want us to display a specific channel?
   const dt_dev_pixelpipe_display_mask_t request_mask_display =
     (self->dev->gui_attached && (self == self->dev->gui_module) && (piece->pipe == self->dev->pipe)
-     && (mask_mode & DEVELOP_MASK_MASK_CONDITIONAL))
+     && preview_mask_mode)
         ? self->request_mask_display
         : DT_DEV_PIXELPIPE_DISPLAY_NONE;
 
@@ -530,7 +641,7 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
   // check if mask should be suppressed temporarily (i.e. just set to global opacity value)
   const gboolean suppress_mask = self->suppress_mask && self->dev->gui_attached && (self == self->dev->gui_module)
                                  && (piece->pipe == self->dev->pipe)
-                                 && (mask_mode & DEVELOP_MASK_MASK_CONDITIONAL);
+                                 && preview_mask_mode;
 
   // obtaining the list of mask operations to perform
   _develop_mask_post_processing post_operations[3];
@@ -548,77 +659,55 @@ int dt_develop_blend_process(struct dt_iop_module_t *self, struct dt_dev_pixelpi
   }
   int raster_error = 0;
   float *const restrict mask = _mask;
+  const gboolean raster_only = (mask_mode & DEVELOP_MASK_RASTER) && !(mask_mode & DEVELOP_MASK_MASK_CONDITIONAL);
 
   if(mask_mode == DEVELOP_MASK_ENABLED || suppress_mask)
   {
     // blend uniformly (no drawn or parametric mask)
     dt_iop_image_fill(mask,opacity,owidth,oheight,1);  //mask[k] = opacity;
   }
-  else if(mask_mode & DEVELOP_MASK_RASTER)
+  else if(raster_only)
   {
     /* use a raster mask from another module earlier in the pipe */
-    gboolean free_mask = FALSE; // if no transformations were applied we get the cached original back
-    float *raster_mask = dt_dev_get_raster_mask(piece->pipe, self->raster_mask.sink.source,
-                                                self->raster_mask.sink.id, self, &free_mask, &raster_error);
-
-    if(raster_mask)
-    {
-      // invert if required
-      if(d->raster_mask_invert)
-#ifdef _OPENMP
-  #pragma omp parallel for simd default(none) aligned(mask, raster_mask:64)\
-        dt_omp_firstprivate(buffsize, mask, opacity, raster_mask) \
-        schedule(static)
-#endif
-        for(size_t i = 0; i < buffsize; i++) mask[i] = (1.0 - raster_mask[i]) * opacity;
-      else
-      {
-        dt_iop_image_scaled_copy(mask, raster_mask, opacity, owidth, oheight, 1); //mask[k] = opacity * raster_mask[k];
-      }
-      if(free_mask) dt_pixelpipe_cache_free_align(raster_mask);
-    }
-    else
-    {
-      // fallback for when the raster mask couldn't be applied
-      // This is valid if user just enabled raster mask but didn't define a mask yet
-      const float value = d->raster_mask_invert ? 0.0 : 1.0;
-      dt_iop_image_fill(mask, value, owidth, oheight, 1);  //mask[k] = value;
-    }
+    _develop_blend_init_raster_mask(d, self, piece, mask, owidth, oheight, &raster_error);
+    dt_iop_image_mul_const(mask, opacity, owidth, oheight, 1);
   }
   else
   {
-    // we blend with a drawn and/or parametric mask
+    const gboolean use_raster_mask = (mask_mode & DEVELOP_MASK_RASTER) != 0;
+    const gboolean use_drawn_mask = (mask_mode & DEVELOP_MASK_MASK) != 0;
 
-    // get the drawn mask if there is one
-    dt_masks_form_t *form = dt_masks_get_from_id(self->dev, d->mask_id);
-
-    if(form && (!(self->flags() & IOP_FLAGS_NO_MASKS)) && (d->mask_mode & DEVELOP_MASK_MASK))
+    if(use_raster_mask)
     {
-      if(dt_masks_group_render_roi(self, piece, form, roi_out, mask) != 0)
+      _develop_blend_init_raster_mask(d, self, piece, mask, owidth, oheight, &raster_error);
+
+      if(use_drawn_mask)
       {
-        dt_pixelpipe_cache_free_align(_mask);
-        return 1;
-      }
+        float *const restrict drawn_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, piece->pipe);
+        if(!drawn_mask)
+        {
+          dt_control_log(_("could not allocate buffer for blending"));
+          dt_pixelpipe_cache_free_align(_mask);
+          return 1;
+        }
 
-      if(d->mask_combine & DEVELOP_COMBINE_MASKS_POS)
-      {
-        // if we have a mask and this flag is set -> invert the mask
-        dt_iop_image_invert(mask, 1.0f, owidth, oheight, 1); //mask[k] = 1.0f - mask[k];
+        if(_develop_blend_init_drawn_mask(d, self, piece, roi_out, drawn_mask, owidth, oheight) != 0)
+        {
+          dt_pixelpipe_cache_free_align(drawn_mask);
+          dt_pixelpipe_cache_free_align(_mask);
+          return 1;
+        }
+
+        _develop_blend_combine_masks(mask, drawn_mask, buffsize);
+        dt_pixelpipe_cache_free_align(drawn_mask);
       }
     }
-    else if((!(self->flags() & IOP_FLAGS_NO_MASKS)) && (d->mask_mode & DEVELOP_MASK_MASK))
+    else if(_develop_blend_init_drawn_mask(d, self, piece, roi_out, mask, owidth, oheight) != 0)
     {
-      // no form defined but drawn mask active
-      // we fill the buffer with 1.0f or 0.0f depending on mask_combine
-      const float fill = (d->mask_combine & DEVELOP_COMBINE_MASKS_POS) ? 0.0f : 1.0f;
-      dt_iop_image_fill(mask, fill, owidth, oheight, 1); //mask[k] = fill;
+      dt_pixelpipe_cache_free_align(_mask);
+      return 1;
     }
-    else
-    {
-      // we fill the buffer with 1.0f or 0.0f depending on mask_combine
-      const float fill = (d->mask_combine & DEVELOP_COMBINE_INCL) ? 0.0f : 1.0f;
-      dt_iop_image_fill(mask, fill, owidth, oheight, 1); //mask[k] = fill;
-    }
+
     _refine_with_detail_mask(self, piece, mask, roi_in, roi_out, d->details);
 
     // get parametric mask (if any) and apply global opacity
@@ -904,6 +993,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
   const unsigned int mask_mode = d->mask_mode;
   // check if blend is disabled: just return, output is already in dev_out
   if(!(mask_mode & DEVELOP_MASK_ENABLED)) return 0;
+  const unsigned int preview_mask_mode = mask_mode & (DEVELOP_MASK_MASK_CONDITIONAL | DEVELOP_MASK_RASTER);
 
   const int ch = piece->colors; // the number of channels in the buffer
   const int xoffs = roi_out->x - roi_in->x;
@@ -937,7 +1027,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
   // does user want us to display a specific channel?
   const dt_dev_pixelpipe_display_mask_t request_mask_display
       = (self->dev->gui_attached && (self == self->dev->gui_module) && (piece->pipe == self->dev->pipe)
-         && (mask_mode & DEVELOP_MASK_MASK_CONDITIONAL))
+         && preview_mask_mode)
             ? self->request_mask_display
             : DT_DEV_PIXELPIPE_DISPLAY_NONE;
 
@@ -949,7 +1039,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
   // opacity value)
   const gboolean suppress_mask = self->suppress_mask && self->dev->gui_attached && (self == self->dev->gui_module)
                                  && (piece->pipe == self->dev->pipe)
-                                 && (mask_mode & DEVELOP_MASK_MASK_CONDITIONAL);
+                                 && preview_mask_mode;
 
   // obtaining the list of mask operations to perform
   _develop_mask_post_processing post_operations[3];
@@ -957,6 +1047,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
 
   // get the clipped opacity value  0 - 1
   const float opacity = fminf(fmaxf(d->opacity / 100.0f, 0.0f), 1.0f);
+  const gboolean raster_only = (mask_mode & DEVELOP_MASK_RASTER) && !(mask_mode & DEVELOP_MASK_MASK_CONDITIONAL);
 
   // allocate space for blend mask
   float *_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, piece->pipe);
@@ -1052,73 +1143,45 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
     err = dt_opencl_enqueue_kernel_2d(devid, kernel_set_mask, sizes);
     if(err != CL_SUCCESS) goto error;
   }
-  else if(mask_mode & DEVELOP_MASK_RASTER)
+  else if(raster_only)
   {
-    /* use a raster mask from another module earlier in the pipe */
-    gboolean free_mask = FALSE; // if no transformations were applied we get the cached original back
     int raster_error = 0;
-    float *raster_mask = dt_dev_get_raster_mask(piece->pipe, self->raster_mask.sink.source,
-                                                self->raster_mask.sink.id, self, &free_mask, &raster_error);
-
-    if(raster_mask)
-    {
-      // invert if required
-      if(d->raster_mask_invert)
-#ifdef _OPENMP
-  #pragma omp parallel for default(none) \
-        dt_omp_firstprivate(buffsize, mask, opacity) \
-        shared(raster_mask)
-#endif
-        for(size_t i = 0; i < buffsize; i++) mask[i] = (1.0 - raster_mask[i]) * opacity;
-      else
-      {
-        dt_iop_image_scaled_copy(mask, raster_mask,opacity, owidth, oheight, 1); //mask[k] = opacity * raster_mask[k];
-      }
-      if(free_mask) dt_pixelpipe_cache_free_align(raster_mask);
-    }
-    else
-    {
-      // We found an user-param for raster mask but the pipeline lost its reference
-      if(raster_error) goto error;
-
-      // fallback for when the raster mask couldn't be applied
-      // that's valid if user just enabled raster mask without defining a source module
-      const float value = d->raster_mask_invert ? 0.0 : 1.0;
-      dt_iop_image_fill(mask, value, owidth, oheight, 1); //mask[k] = value;
-    }
+    _develop_blend_init_raster_mask(d, self, piece, mask, owidth, oheight, &raster_error);
+    if(raster_error) goto error;
+    dt_iop_image_mul_const(mask, opacity, owidth, oheight, 1);
 
     err = dt_opencl_write_host_to_device(devid, mask, dev_mask_1, owidth, oheight, sizeof(float));
     if(err != CL_SUCCESS) goto error;
   }
   else
   {
-    // we blend with a drawn and/or parametric mask
+    const gboolean use_raster_mask = (mask_mode & DEVELOP_MASK_RASTER) != 0;
+    const gboolean use_drawn_mask = (mask_mode & DEVELOP_MASK_MASK) != 0;
 
-    // get the drawn mask if there is one
-    dt_masks_form_t *form = dt_masks_get_from_id(self->dev, d->mask_id);
-
-    if(form && (!(self->flags() & IOP_FLAGS_NO_MASKS)) && (d->mask_mode & DEVELOP_MASK_MASK))
+    if(use_raster_mask)
     {
-      if(dt_masks_group_render_roi(self, piece, form, roi_out, mask) != 0) goto error;
+      int raster_error = 0;
+      _develop_blend_init_raster_mask(d, self, piece, mask, owidth, oheight, &raster_error);
+      if(raster_error) goto error;
 
-      if(d->mask_combine & DEVELOP_COMBINE_MASKS_POS)
+      if(use_drawn_mask)
       {
-        // if we have a mask and this flag is set -> invert the mask
-        dt_iop_image_invert(mask, 1.0f, owidth, oheight, 1); //mask[k] = 1.0f - mask[k]
+        float *const restrict drawn_mask = dt_pixelpipe_cache_alloc_align_float(buffsize, piece->pipe);
+        if(!drawn_mask) goto error;
+
+        if(_develop_blend_init_drawn_mask(d, self, piece, roi_out, drawn_mask, owidth, oheight) != 0)
+        {
+          dt_pixelpipe_cache_free_align(drawn_mask);
+          goto error;
+        }
+
+        _develop_blend_combine_masks(mask, drawn_mask, buffsize);
+        dt_pixelpipe_cache_free_align(drawn_mask);
       }
     }
-    else if((!(self->flags() & IOP_FLAGS_NO_MASKS)) && (d->mask_mode & DEVELOP_MASK_MASK))
+    else if(_develop_blend_init_drawn_mask(d, self, piece, roi_out, mask, owidth, oheight) != 0)
     {
-      // no form defined but drawn mask active
-      // we fill the buffer with 1.0f or 0.0f depending on mask_combine
-      const float fill = (d->mask_combine & DEVELOP_COMBINE_MASKS_POS) ? 0.0f : 1.0f;
-      dt_iop_image_fill(mask, fill, owidth, oheight, 1); //mask[k] = fill;
-    }
-    else
-    {
-      // we fill the buffer with 1.0f or 0.0f depending on mask_combine
-      const float fill = (d->mask_combine & DEVELOP_COMBINE_INCL) ? 0.0f : 1.0f;
-      dt_iop_image_fill(mask, fill, owidth, oheight, 1); //mask[k] = fill;
+      goto error;
     }
     _refine_with_detail_mask_cl(self, piece, mask, roi_in, roi_out, d->details, devid);
 
@@ -1323,7 +1386,7 @@ int dt_develop_blend_process_cl(struct dt_iop_module_t *self, struct dt_dev_pixe
              piece->module->multi_name, dt_pipe_type_to_str(piece->pipe->type), piece->global_mask_hash);
 
     //  get back final mask from the device to store it for later use
-    if(!(mask_mode & DEVELOP_MASK_RASTER))
+    if(!raster_only)
     {
       err = dt_opencl_copy_device_to_host(devid, mask, dev_mask_1, owidth, oheight, sizeof(float));
       if(err != CL_SUCCESS) goto error;
