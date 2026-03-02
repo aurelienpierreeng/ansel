@@ -45,6 +45,7 @@
 #include "common/styles.h"
 #include "control/conf.h"
 #include "control/control.h"
+#include "develop/blend.h"
 #include "develop/develop.h"
 #include "develop/imageop.h"
 #include "dtgtk/button.h"
@@ -64,9 +65,12 @@ static void _lib_masks_update_list(dt_lib_module_t *self);
 typedef struct dt_lib_masks_t
 {
   /* vbox with managed history items */
+  GtkWidget *blending_box;
   GtkWidget *hbox;
   GtkWidget *bt_circle, *bt_path, *bt_gradient, *bt_ellipse, *bt_brush;
   GtkWidget *treeview;
+  dt_iop_module_t *active_module;
+  dt_iop_module_t *hosted_module;
 
   GdkPixbuf *ic_inverse, *ic_union, *ic_intersection, *ic_difference, *ic_exclusion, *ic_used;
   int gui_reset;
@@ -75,7 +79,7 @@ typedef struct dt_lib_masks_t
 
 const char *name(struct dt_lib_module_t *self)
 {
-  return _("Masks");
+  return _("Masking & Blending");
 }
 
 const char **views(dt_lib_module_t *self)
@@ -153,6 +157,66 @@ static void _lib_masks_inactivate_icons(dt_lib_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(lm->bt_path), FALSE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(lm->bt_gradient), FALSE);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(lm->bt_brush), FALSE);
+}
+
+static gboolean _lib_masks_can_host_blending(const dt_iop_module_t *module)
+{
+  if(!module || !(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || !module->blend_data) return FALSE;
+
+  const dt_iop_gui_blend_data_t *bd = (const dt_iop_gui_blend_data_t *)module->blend_data;
+  return bd->blend_inited;
+}
+
+static void _lib_masks_release_blending(dt_lib_masks_t *lm)
+{
+  if(!lm) return;
+
+  if(_lib_masks_can_host_blending(lm->hosted_module))
+    dt_iop_gui_cleanup_blending_body(lm->hosted_module);
+
+  lm->hosted_module = NULL;
+}
+
+static void _lib_masks_reveal(dt_lib_module_t *self)
+{
+  if(!dt_ui_panel_visible(darktable.gui->ui, DT_UI_PANEL_LEFT))
+    dt_ui_panel_show(darktable.gui->ui, DT_UI_PANEL_LEFT, TRUE, TRUE);
+
+  if(self->expander && !dt_lib_gui_get_expanded(self))
+    dt_lib_gui_set_expanded(self, TRUE);
+
+  if(self->expander)
+  {
+    darktable.gui->scroll_to[0] = self->expander;
+    gtk_widget_grab_focus(self->expander);
+  }
+}
+
+static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_module_t *self)
+{
+  if(!self || !self->data) return;
+
+  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  dt_iop_module_t *module = darktable.develop ? darktable.develop->gui_module : NULL;
+  const gboolean module_changed = (lm->active_module != module);
+  lm->active_module = module;
+
+  if(!_lib_masks_can_host_blending(module))
+  {
+    _lib_masks_release_blending(lm);
+    gtk_widget_hide(lm->blending_box);
+    return;
+  }
+
+  if(module_changed) _lib_masks_release_blending(lm);
+
+  dt_iop_gui_init_blending_body(GTK_BOX(lm->blending_box), module);
+  lm->hosted_module = module;
+  gtk_widget_show(lm->blending_box);
+
+  dt_iop_gui_update_blending(module);
+
+  if(module_changed) _lib_masks_reveal(self);
 }
 
 static void _tree_add_circle(GtkButton *button, dt_iop_module_t *module)
@@ -1829,9 +1893,16 @@ void gui_init(dt_lib_module_t *self)
 
   gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_scroll_wrap(d->treeview, 200, "plugins/darkroom/masks/heightview"), FALSE, FALSE, 0);
 
+  d->blending_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget), d->blending_box, FALSE, FALSE, 0);
+  gtk_widget_hide(d->blending_box);
+
   gtk_widget_show_all(self->widget);
+  gtk_widget_hide(d->blending_box);
 
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MASK_CHANGED, G_CALLBACK(_lib_masks_handler_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED,
+                                  G_CALLBACK(_lib_masks_blending_gui_changed_callback), self);
 
   // set proxy functions
   darktable.develop->proxy.masks.module = self;
@@ -1839,14 +1910,23 @@ void gui_init(dt_lib_module_t *self)
   darktable.develop->proxy.masks.list_update = _lib_masks_update_list;
   darktable.develop->proxy.masks.list_remove = _lib_masks_remove_item;
   darktable.develop->proxy.masks.selection_change = _lib_masks_selection_change;
+
+  _lib_masks_blending_gui_changed_callback(NULL, self);
 }
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+  if(self && self->data)
+  {
+    dt_lib_masks_t *d = (dt_lib_masks_t *)self->data;
+    _lib_masks_release_blending(d);
+  }
+
   g_free(self->data);
   self->data = NULL;
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_masks_handler_callback), self);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_masks_blending_gui_changed_callback), self);
 }
 
 // clang-format off

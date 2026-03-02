@@ -539,6 +539,12 @@ static void _blendop_masks_mode_callback(const unsigned int mask_mode, dt_iop_gu
 
   dt_iop_set_mask_mode(data->module, mask_mode);
 
+  if(!data->blending_body_box)
+  {
+    dt_dev_add_history_item(darktable.develop, data->module, TRUE, TRUE);
+    return;
+  }
+
   if((mask_mode & DEVELOP_MASK_ENABLED)
      && ((data->masks_inited && (mask_mode & DEVELOP_MASK_MASK))
          || (data->blendif_inited && (mask_mode & DEVELOP_MASK_CONDITIONAL))))
@@ -1283,6 +1289,7 @@ static gboolean _blendop_masks_mode_changed(GtkWidget *widget, dt_iop_module_t *
   dt_iop_gui_blend_data_t *data = module->blend_data;
   _blendop_masks_mode_callback(mask_mode, data);
   dt_iop_add_remove_mask_indicator(module);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED);
   return TRUE;
 }
 
@@ -2634,6 +2641,8 @@ void dt_iop_gui_cleanup_blending(dt_iop_module_t *module)
   if(!module->blend_data) return;
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
 
+  dt_iop_gui_cleanup_blending_body(module);
+
   dt_pthread_mutex_lock(&bd->lock);
   if(bd->timeout_handle)
     g_source_remove(bd->timeout_handle);
@@ -2716,11 +2725,22 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
       break;
   }
 
+  // (un)set the mask indicator
+  dt_iop_add_remove_mask_indicator(module);
+
+  if(!bd->blending_body_box)
+  {
+    --darktable.gui->reset;
+    return;
+  }
+
   // Set the masking mode
   dt_bauhaus_combobox_set(bd->mask_mode_combo, _mask_modes_flags_to_combobox(module->blend_params->mask_mode));
 
-  // (un)set the mask indicator
-  dt_iop_add_remove_mask_indicator(module);
+  if(module->hide_enable_button)
+    gtk_widget_hide(GTK_WIDGET(bd->masks_modes_box));
+  else
+    gtk_widget_show(GTK_WIDGET(bd->masks_modes_box));
 
   // initialization of blending modes
   if(bd->csp != bd->blend_modes_csp)
@@ -2950,11 +2970,6 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
     gtk_widget_hide(GTK_WIDGET(bd->blendif_box));
   }
 
-  if(module->hide_enable_button)
-    gtk_widget_hide(GTK_WIDGET(bd->masks_modes_box));
-  else
-    gtk_widget_show(GTK_WIDGET(bd->masks_modes_box));
-
   --darktable.gui->reset;
 }
 
@@ -2988,21 +3003,24 @@ void dt_iop_gui_blending_lose_focus(dt_iop_module_t *module)
   if((module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) && module->blend_data)
   {
     dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->showmask), FALSE);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->suppress), FALSE);
+    if(bd->showmask)
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->showmask), FALSE);
+    if(bd->suppress)
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->suppress), FALSE);
     module->request_mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
     dt_iop_set_cache_bypass(module, FALSE);
     module->suppress_mask = 0;
 
     // (re)set the header mask indicator too
-    if(bd->masks_support)
+    if(bd->masks_support && bd->masks_edit)
     {
       // unselect all tools
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), FALSE);
       dt_masks_set_edit_mode(module, DT_MASKS_EDIT_OFF);
 
       for(int k=0; k < DEVELOP_MASKS_NB_SHAPES; k++)
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_shapes[k]), FALSE);
+        if(bd->masks_shapes[k])
+          gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_shapes[k]), FALSE);
     }
 
     dt_pthread_mutex_lock(&bd->lock);
@@ -3029,8 +3047,257 @@ void dt_iop_gui_blending_reload_defaults(dt_iop_module_t *module)
   bd->output_channels_shown = FALSE;
 }
 
+void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
+{
+  if(!module || !module->blend_data) return;
+
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  if(!bd->blending_body_box) return;
+
+  dt_pthread_mutex_lock(&bd->lock);
+  if(bd->timeout_handle)
+  {
+    g_source_remove(bd->timeout_handle);
+    bd->timeout_handle = 0;
+  }
+  free(bd->masks_combo_ids);
+  bd->masks_combo_ids = NULL;
+  dt_pthread_mutex_unlock(&bd->lock);
+
+  gtk_widget_destroy(bd->blending_body_box);
+
+  bd->blending_body_box = NULL;
+  bd->mask_mode_combo = NULL;
+  bd->top_box = NULL;
+  bd->bottom_box = NULL;
+  bd->masks_modes_box = NULL;
+  bd->blendif_box = NULL;
+  bd->masks_box = NULL;
+  bd->raster_box = NULL;
+  bd->colorpicker = NULL;
+  bd->colorpicker_set_values = NULL;
+  memset(bd->filter, 0, sizeof(bd->filter));
+  bd->showmask = NULL;
+  bd->suppress = NULL;
+  bd->masks_combine_combo = NULL;
+  bd->blend_modes_combo = NULL;
+  bd->blend_modes_blend_order = NULL;
+  bd->blend_mode_parameter_slider = NULL;
+  bd->masks_invert_combo = NULL;
+  bd->opacity_slider = NULL;
+  bd->masks_feathering_guide_combo = NULL;
+  bd->feathering_radius_slider = NULL;
+  bd->blur_radius_slider = NULL;
+  bd->contrast_slider = NULL;
+  bd->brightness_slider = NULL;
+  bd->channel_boost_factor_slider = NULL;
+  bd->details_slider = NULL;
+  bd->masks_combo = NULL;
+  memset(bd->masks_shapes, 0, sizeof(bd->masks_shapes));
+  bd->masks_edit = NULL;
+  bd->masks_polarity = NULL;
+  bd->raster_combo = NULL;
+  bd->raster_polarity = NULL;
+  bd->channel_tabs = NULL;
+  bd->blendif_inited = 0;
+  bd->masks_inited = 0;
+  bd->raster_inited = 0;
+  bd->blend_modes_csp = DEVELOP_BLEND_CS_NONE;
+  bd->channel_tabs_csp = DEVELOP_BLEND_CS_NONE;
+  module->fusion_slider = NULL;
+}
+
+void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
+{
+  if(!blendw || !(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || !module->blend_data) return;
+
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  if(bd->blending_body_box) return;
+
+  ++darktable.gui->reset;
+
+  GtkWidget *presets_button = dtgtk_button_new(dtgtk_cairo_paint_presets, 0, NULL);
+  gtk_widget_set_tooltip_text(presets_button, _("blending options"));
+  if(bd->blendif_support)
+  {
+    g_signal_connect(G_OBJECT(presets_button), "button-press-event", G_CALLBACK(_blendif_options_callback), module);
+  }
+  else
+  {
+    gtk_widget_set_sensitive(GTK_WIDGET(presets_button), FALSE);
+  }
+
+  bd->mask_mode_combo = _combobox_new_from_list(module, _("Blending"), dt_develop_mask_mode_names, NULL,
+                                                _("Define opacity masks and blending modes to limit the spatial application of the module."));
+  g_signal_connect(G_OBJECT(bd->mask_mode_combo), "value-changed", G_CALLBACK(_blendop_masks_mode_changed), module);
+
+  GtkWidget *blend_modes_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+
+  bd->blend_modes_combo = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(module));
+  dt_bauhaus_set_use_default_callback(bd->blend_modes_combo);
+  dt_bauhaus_disable_accels(bd->blend_modes_combo);
+  dt_bauhaus_widget_set_label(bd->blend_modes_combo, N_("blend mode"));
+  gtk_widget_set_tooltip_text(bd->blend_modes_combo, _("choose blending mode"));
+
+  g_signal_connect(G_OBJECT(bd->blend_modes_combo), "value-changed",
+                   G_CALLBACK(_blendop_blend_mode_callback), bd);
+  dt_gui_add_help_link(GTK_WIDGET(bd->blend_modes_combo), dt_get_help_url("masks_blending_op"));
+  gtk_box_pack_start(GTK_BOX(blend_modes_hbox), bd->blend_modes_combo, TRUE, TRUE, 0);
+
+  bd->blend_modes_blend_order = dt_iop_togglebutton_new(module, "blend`tools", N_("toggle blend order"), NULL,
+                                                        G_CALLBACK(_blendop_blend_order_clicked), FALSE,
+                                                        0, 0, dtgtk_cairo_paint_invert, blend_modes_hbox);
+  gtk_widget_set_tooltip_text(bd->blend_modes_blend_order, _("toggle the blending order between the input and the output of the module,"
+                                                             "\nby default the output will be blended on top of the input,"
+                                                             "\norder can be reversed by clicking on the icon (input on top of output)"));
+
+  bd->blend_mode_parameter_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), -18.0f, 18.0f, 0, 0.0f, 3);
+  dt_bauhaus_set_use_default_callback(bd->blend_mode_parameter_slider);
+  dt_bauhaus_disable_accels(bd->blend_mode_parameter_slider);
+  dt_bauhaus_widget_set_field(bd->blend_mode_parameter_slider, &module->blend_params->blend_parameter, DT_INTROSPECTION_TYPE_FLOAT);
+  dt_bauhaus_widget_set_label(bd->blend_mode_parameter_slider, N_("blend fulcrum"));
+  dt_bauhaus_slider_set_format(bd->blend_mode_parameter_slider, _(" EV"));
+  dt_bauhaus_slider_set_soft_range(bd->blend_mode_parameter_slider, -3.0, 3.0);
+  gtk_widget_set_tooltip_text(bd->blend_mode_parameter_slider, _("adjust the fulcrum used by some blending"
+                                                                 " operations"));
+  gtk_widget_set_visible(bd->blend_mode_parameter_slider, FALSE);
+
+  bd->opacity_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), 0.0, 100.0, 0, 100.0, 0);
+  dt_bauhaus_set_use_default_callback(bd->opacity_slider);
+  dt_bauhaus_disable_accels(bd->opacity_slider);
+  dt_bauhaus_widget_set_field(bd->opacity_slider, &module->blend_params->opacity, DT_INTROSPECTION_TYPE_FLOAT);
+  dt_bauhaus_widget_set_label(bd->opacity_slider, N_("opacity"));
+  dt_bauhaus_slider_set_format(bd->opacity_slider, "%");
+  module->fusion_slider = bd->opacity_slider;
+  gtk_widget_set_tooltip_text(bd->opacity_slider, _("set the opacity of the blending"));
+
+  bd->masks_combine_combo = _combobox_new_from_list(module, _("combine masks"), dt_develop_combine_masks_names, NULL,
+                                                    _("how to combine individual drawn mask and different channels of parametric mask"));
+  g_signal_connect(G_OBJECT(bd->masks_combine_combo), "value-changed",
+                   G_CALLBACK(_blendop_masks_combine_callback), bd);
+  dt_gui_add_help_link(GTK_WIDGET(bd->masks_combine_combo), dt_get_help_url("masks_combined"));
+
+  bd->masks_invert_combo = _combobox_new_from_list(module, _("invert mask"), dt_develop_invert_mask_names, NULL,
+                                                   _("apply mask in normal or inverted mode"));
+  g_signal_connect(G_OBJECT(bd->masks_invert_combo), "value-changed",
+                   G_CALLBACK(_blendop_masks_invert_callback), bd);
+
+  bd->details_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), -1.0f, 1.0f, 0, 0.0f, 2);
+  dt_bauhaus_set_use_default_callback(bd->details_slider);
+  dt_bauhaus_disable_accels(bd->details_slider);
+  dt_bauhaus_widget_set_label(bd->details_slider, N_("details threshold"));
+  dt_bauhaus_slider_set_format(bd->details_slider, "%");
+  gtk_widget_set_tooltip_text(bd->details_slider, _("adjust the threshold for the details mask (using raw data), "
+                                                    "\npositive values selects areas with strong details, "
+                                                    "\nnegative values select flat areas"));
+  g_signal_connect(G_OBJECT(bd->details_slider), "value-changed", G_CALLBACK(_blendop_blendif_details_callback), bd);
+
+  bd->masks_feathering_guide_combo = _combobox_new_from_list(module, _("feathering guide"), dt_develop_feathering_guide_names,
+                                                             &module->blend_params->feathering_guide,
+                                                             _("choose to guide mask by input or output image and"
+                                                               "\nchoose to apply feathering before or after mask blur"));
+
+  bd->feathering_radius_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), 0.0, 250.0, 0, 0.0, 1);
+  dt_bauhaus_set_use_default_callback(bd->feathering_radius_slider);
+  dt_bauhaus_disable_accels(bd->feathering_radius_slider);
+  dt_bauhaus_widget_set_field(bd->feathering_radius_slider, &module->blend_params->feathering_radius, DT_INTROSPECTION_TYPE_FLOAT);
+  dt_bauhaus_widget_set_label(bd->feathering_radius_slider, N_("feathering radius"));
+  dt_bauhaus_slider_set_format(bd->feathering_radius_slider, " px");
+  gtk_widget_set_tooltip_text(bd->feathering_radius_slider, _("spatial radius of feathering"));
+
+  bd->blur_radius_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), 0.0, 100.0, 0, 0.0, 1);
+  dt_bauhaus_set_use_default_callback(bd->blur_radius_slider);
+  dt_bauhaus_disable_accels(bd->blur_radius_slider);
+  dt_bauhaus_widget_set_field(bd->blur_radius_slider, &module->blend_params->blur_radius, DT_INTROSPECTION_TYPE_FLOAT);
+  dt_bauhaus_widget_set_label(bd->blur_radius_slider, N_("blurring radius"));
+  dt_bauhaus_slider_set_format(bd->blur_radius_slider, " px");
+  gtk_widget_set_tooltip_text(bd->blur_radius_slider, _("radius for gaussian blur of blend mask"));
+
+  bd->brightness_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), -1.0, 1.0, 0, 0.0, 2);
+  dt_bauhaus_set_use_default_callback(bd->brightness_slider);
+  dt_bauhaus_disable_accels(bd->brightness_slider);
+  dt_bauhaus_widget_set_field(bd->brightness_slider, &module->blend_params->brightness, DT_INTROSPECTION_TYPE_FLOAT);
+  dt_bauhaus_widget_set_label(bd->brightness_slider, N_("mask opacity"));
+  dt_bauhaus_slider_set_format(bd->brightness_slider, "%");
+  gtk_widget_set_tooltip_text(bd->brightness_slider, _("shifts and tilts the tone curve of the blend mask to adjust its "
+                                                       "brightness without affecting fully transparent/fully opaque "
+                                                       "regions"));
+
+  bd->contrast_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), -1.0, 1.0, 0, 0.0, 2);
+  dt_bauhaus_set_use_default_callback(bd->contrast_slider);
+  dt_bauhaus_disable_accels(bd->contrast_slider);
+  dt_bauhaus_widget_set_field(bd->contrast_slider, &module->blend_params->contrast, DT_INTROSPECTION_TYPE_FLOAT);
+  dt_bauhaus_widget_set_label(bd->contrast_slider, N_("mask contrast"));
+  dt_bauhaus_slider_set_format(bd->contrast_slider, "%");
+  gtk_widget_set_tooltip_text(bd->contrast_slider, _("gives the tone curve of the blend mask an s-like shape to "
+                                                     "adjust its contrast"));
+
+  GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_box_pack_start(GTK_BOX(hbox), dt_ui_label_new(_("mask refinement")), TRUE, TRUE, 0);
+  dt_gui_add_class(hbox, "dt_section_label");
+
+  bd->showmask = dt_iop_togglebutton_new(module, "blend`tools", N_("display mask and/or color channel"), NULL, G_CALLBACK(_blendop_blendif_showmask_clicked),
+                                         FALSE, 0, 0, dtgtk_cairo_paint_showmask, hbox);
+  gtk_widget_set_tooltip_text(bd->showmask, _("display mask and/or color channel. ctrl+click to display mask, "
+                                              "shift+click to display channel. hover over parametric mask slider to "
+                                              "select channel for display"));
+  dt_gui_add_class(bd->showmask, "dt_transparent_background");
+
+  bd->suppress = dt_iop_togglebutton_new(module, "blend`tools", N_("temporarily switch off blend mask"), NULL, G_CALLBACK(_blendop_blendif_suppress_toggled),
+                                         FALSE, 0, 0, dtgtk_cairo_paint_eye_toggle, hbox);
+  gtk_widget_set_tooltip_text(bd->suppress, _("temporarily switch off blend mask. only for module in focus"));
+  dt_gui_add_class(bd->suppress, "dt_transparent_background");
+
+  bd->blending_body_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_box_pack_start(GTK_BOX(blendw), bd->blending_body_box, TRUE, TRUE, 0);
+
+  bd->masks_modes_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
+  gtk_box_pack_start(GTK_BOX(bd->masks_modes_box), GTK_WIDGET(bd->mask_mode_combo), TRUE, TRUE, 0);
+  gtk_box_pack_end(GTK_BOX(bd->masks_modes_box), presets_button, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(bd->blending_body_box), GTK_WIDGET(bd->masks_modes_box), FALSE, FALSE, 0);
+  dt_gui_add_help_link(GTK_WIDGET(bd->masks_modes_box), dt_get_help_url("masks_blending"));
+  gtk_widget_set_name(GTK_WIDGET(bd->masks_modes_box), "blending-header");
+
+  bd->top_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  gtk_box_pack_start(GTK_BOX(bd->top_box), blend_modes_hbox, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(bd->top_box), bd->blend_mode_parameter_slider, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(bd->top_box), bd->opacity_slider, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(bd->blending_body_box), GTK_WIDGET(bd->top_box), TRUE, TRUE, 0);
+
+  dt_iop_gui_init_masks(GTK_BOX(bd->blending_body_box), module);
+  dt_iop_gui_init_raster(GTK_BOX(bd->blending_body_box), module);
+  dt_iop_gui_init_blendif(GTK_BOX(bd->blending_body_box), module);
+
+  bd->bottom_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
+  gtk_box_pack_start(GTK_BOX(bd->bottom_box), GTK_WIDGET(bd->masks_combine_combo), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(bd->bottom_box), GTK_WIDGET(bd->masks_invert_combo), TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(bd->bottom_box), hbox, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(bd->bottom_box), bd->details_slider, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(bd->bottom_box), bd->masks_feathering_guide_combo, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(bd->bottom_box), bd->feathering_radius_slider, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(bd->bottom_box), bd->blur_radius_slider, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(bd->bottom_box), bd->brightness_slider, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(bd->bottom_box), bd->contrast_slider, TRUE, TRUE, 0);
+  GtkWidget *event_box = gtk_event_box_new();
+  dt_gui_add_help_link(event_box, dt_get_help_url("masks_refinement"));
+  gtk_container_add(GTK_CONTAINER(event_box), GTK_WIDGET(bd->bottom_box));
+  gtk_box_pack_start(GTK_BOX(bd->blending_body_box), GTK_WIDGET(event_box), TRUE, TRUE, 0);
+
+  gtk_widget_set_name(GTK_WIDGET(bd->top_box), "blending-box");
+  gtk_widget_set_name(GTK_WIDGET(bd->masks_box), "blending-box");
+  gtk_widget_set_name(GTK_WIDGET(bd->raster_box), "blending-box");
+  gtk_widget_set_name(GTK_WIDGET(bd->blendif_box), "blending-box");
+  gtk_widget_set_name(GTK_WIDGET(bd->bottom_box), "blending-box");
+  gtk_widget_set_name(GTK_WIDGET(bd->blending_body_box), "blending-wrapper");
+  gtk_widget_show_all(GTK_WIDGET(bd->blending_body_box));
+
+  --darktable.gui->reset;
+}
+
 void dt_iop_gui_init_blending(GtkWidget *iopw, dt_iop_module_t *module)
 {
+  (void)iopw;
+
   /* create and add blend mode if module supports it */
   if(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)
   {
@@ -3054,182 +3321,6 @@ void dt_iop_gui_init_blending(GtkWidget *iopw, dt_iop_module_t *module)
     bd->timeout_handle = 0;
     bd->save_for_leave = 0;
     dt_pthread_mutex_unlock(&bd->lock);
-
-    //toggle buttons creation for masks modes
-    GtkWidget *presets_button = dtgtk_button_new(dtgtk_cairo_paint_presets, 0, NULL);
-    gtk_widget_set_tooltip_text(presets_button, _("blending options"));
-    if(bd->blendif_support)
-    {
-      g_signal_connect(G_OBJECT(presets_button), "button-press-event", G_CALLBACK(_blendif_options_callback), module);
-    }
-    else
-    {
-      gtk_widget_set_sensitive(GTK_WIDGET(presets_button), FALSE);
-    }
-
-    bd->mask_mode_combo = _combobox_new_from_list(module, _("Blending"), dt_develop_mask_mode_names, NULL,
-                                                  _("Define opacity masks and blending modes to limit the spatial application of the module."));
-    g_signal_connect(G_OBJECT(bd->mask_mode_combo), "value-changed", G_CALLBACK(_blendop_masks_mode_changed), module);
-    GtkWidget *blend_modes_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-
-    bd->blend_modes_combo = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(module));
-    dt_bauhaus_set_use_default_callback(bd->blend_modes_combo);
-    dt_bauhaus_disable_accels(bd->blend_modes_combo);
-    dt_bauhaus_widget_set_label(bd->blend_modes_combo, N_("blend mode"));
-    gtk_widget_set_tooltip_text(bd->blend_modes_combo, _("choose blending mode"));
-
-    g_signal_connect(G_OBJECT(bd->blend_modes_combo), "value-changed",
-                     G_CALLBACK(_blendop_blend_mode_callback), bd);
-    dt_gui_add_help_link(GTK_WIDGET(bd->blend_modes_combo), dt_get_help_url("masks_blending_op"));
-    gtk_box_pack_start(GTK_BOX(blend_modes_hbox), bd->blend_modes_combo, TRUE, TRUE, 0);
-
-    bd->blend_modes_blend_order = dt_iop_togglebutton_new(module, "blend`tools", N_("toggle blend order"), NULL,
-                                                          G_CALLBACK(_blendop_blend_order_clicked), FALSE,
-                                                          0, 0, dtgtk_cairo_paint_invert, blend_modes_hbox);
-    gtk_widget_set_tooltip_text(bd->blend_modes_blend_order, _("toggle the blending order between the input and the output of the module,"
-                                                               "\nby default the output will be blended on top of the input,"
-                                                               "\norder can be reversed by clicking on the icon (input on top of output)"));
-
-    bd->blend_mode_parameter_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), -18.0f, 18.0f, 0, 0.0f, 3);
-    dt_bauhaus_set_use_default_callback(bd->blend_mode_parameter_slider);
-    dt_bauhaus_disable_accels(bd->blend_mode_parameter_slider);
-    dt_bauhaus_widget_set_field(bd->blend_mode_parameter_slider, &module->blend_params->blend_parameter, DT_INTROSPECTION_TYPE_FLOAT);
-    dt_bauhaus_widget_set_label(bd->blend_mode_parameter_slider, N_("blend fulcrum"));
-    dt_bauhaus_slider_set_format(bd->blend_mode_parameter_slider, _(" EV"));
-    dt_bauhaus_slider_set_soft_range(bd->blend_mode_parameter_slider, -3.0, 3.0);
-    gtk_widget_set_tooltip_text(bd->blend_mode_parameter_slider, _("adjust the fulcrum used by some blending"
-                                                                   " operations"));
-    gtk_widget_set_visible(bd->blend_mode_parameter_slider, FALSE);
-
-    bd->opacity_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), 0.0, 100.0, 0, 100.0, 0);
-    dt_bauhaus_set_use_default_callback(bd->opacity_slider);
-    dt_bauhaus_disable_accels(bd->opacity_slider);
-    dt_bauhaus_widget_set_field(bd->opacity_slider, &module->blend_params->opacity, DT_INTROSPECTION_TYPE_FLOAT);
-    dt_bauhaus_widget_set_label(bd->opacity_slider, N_("opacity"));
-    dt_bauhaus_slider_set_format(bd->opacity_slider, "%");
-    module->fusion_slider = bd->opacity_slider;
-    gtk_widget_set_tooltip_text(bd->opacity_slider, _("set the opacity of the blending"));
-
-    bd->masks_combine_combo = _combobox_new_from_list(module, _("combine masks"), dt_develop_combine_masks_names, NULL,
-                                                      _("how to combine individual drawn mask and different channels of parametric mask"));
-    g_signal_connect(G_OBJECT(bd->masks_combine_combo), "value-changed",
-                     G_CALLBACK(_blendop_masks_combine_callback), bd);
-    dt_gui_add_help_link(GTK_WIDGET(bd->masks_combine_combo), dt_get_help_url("masks_combined"));
-
-    bd->masks_invert_combo = _combobox_new_from_list(module, _("invert mask"), dt_develop_invert_mask_names, NULL,
-                                                     _("apply mask in normal or inverted mode"));
-    g_signal_connect(G_OBJECT(bd->masks_invert_combo), "value-changed",
-                     G_CALLBACK(_blendop_masks_invert_callback), bd);
-
-    bd->details_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), -1.0f, 1.0f, 0, 0.0f, 2);
-    dt_bauhaus_set_use_default_callback(bd->details_slider);
-    dt_bauhaus_disable_accels(bd->details_slider);
-    dt_bauhaus_widget_set_label(bd->details_slider, N_("details threshold"));
-    dt_bauhaus_slider_set_format(bd->details_slider, "%");
-    gtk_widget_set_tooltip_text(bd->details_slider, _("adjust the threshold for the details mask (using raw data), "
-                                                      "\npositive values selects areas with strong details, "
-                                                      "\nnegative values select flat areas"));
-    g_signal_connect(G_OBJECT(bd->details_slider), "value-changed", G_CALLBACK(_blendop_blendif_details_callback), bd);
-
-    bd->masks_feathering_guide_combo = _combobox_new_from_list(module, _("feathering guide"), dt_develop_feathering_guide_names,
-                                                               &module->blend_params->feathering_guide,
-                                                               _("choose to guide mask by input or output image and"
-                                                                 "\nchoose to apply feathering before or after mask blur"));
-
-    bd->feathering_radius_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), 0.0, 250.0, 0, 0.0, 1);
-    dt_bauhaus_set_use_default_callback(bd->feathering_radius_slider);
-    dt_bauhaus_disable_accels(bd->feathering_radius_slider);
-    dt_bauhaus_widget_set_field(bd->feathering_radius_slider, &module->blend_params->feathering_radius, DT_INTROSPECTION_TYPE_FLOAT);
-    dt_bauhaus_widget_set_label(bd->feathering_radius_slider, N_("feathering radius"));
-    dt_bauhaus_slider_set_format(bd->feathering_radius_slider, " px");
-    gtk_widget_set_tooltip_text(bd->feathering_radius_slider, _("spatial radius of feathering"));
-
-    bd->blur_radius_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), 0.0, 100.0, 0, 0.0, 1);
-    dt_bauhaus_set_use_default_callback(bd->blur_radius_slider);
-    dt_bauhaus_disable_accels(bd->blur_radius_slider);
-    dt_bauhaus_widget_set_field(bd->blur_radius_slider, &module->blend_params->blur_radius, DT_INTROSPECTION_TYPE_FLOAT);
-    dt_bauhaus_widget_set_label(bd->blur_radius_slider, N_("blurring radius"));
-    dt_bauhaus_slider_set_format(bd->blur_radius_slider, " px");
-    gtk_widget_set_tooltip_text(bd->blur_radius_slider, _("radius for gaussian blur of blend mask"));
-
-    bd->brightness_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), -1.0, 1.0, 0, 0.0, 2);
-    dt_bauhaus_set_use_default_callback(bd->brightness_slider);
-    dt_bauhaus_disable_accels(bd->brightness_slider);
-    dt_bauhaus_widget_set_field(bd->brightness_slider, &module->blend_params->brightness, DT_INTROSPECTION_TYPE_FLOAT);
-    dt_bauhaus_widget_set_label(bd->brightness_slider, N_("mask opacity"));
-    dt_bauhaus_slider_set_format(bd->brightness_slider, "%");
-    gtk_widget_set_tooltip_text(bd->brightness_slider, _("shifts and tilts the tone curve of the blend mask to adjust its "
-                                                         "brightness without affecting fully transparent/fully opaque "
-                                                         "regions"));
-
-    bd->contrast_slider = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(module), -1.0, 1.0, 0, 0.0, 2);
-    dt_bauhaus_set_use_default_callback(bd->contrast_slider);
-    dt_bauhaus_disable_accels(bd->contrast_slider);
-    dt_bauhaus_widget_set_field(bd->contrast_slider, &module->blend_params->contrast, DT_INTROSPECTION_TYPE_FLOAT);
-    dt_bauhaus_widget_set_label(bd->contrast_slider, N_("mask contrast"));
-    dt_bauhaus_slider_set_format(bd->contrast_slider, "%");
-    gtk_widget_set_tooltip_text(bd->contrast_slider, _("gives the tone curve of the blend mask an s-like shape to "
-                                                       "adjust its contrast"));
-
-    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_box_pack_start(GTK_BOX(hbox), dt_ui_label_new(_("mask refinement")), TRUE, TRUE, 0);
-    dt_gui_add_class(hbox, "dt_section_label");
-
-    bd->showmask = dt_iop_togglebutton_new(module, "blend`tools", N_("display mask and/or color channel"), NULL, G_CALLBACK(_blendop_blendif_showmask_clicked),
-                                           FALSE, 0, 0, dtgtk_cairo_paint_showmask, hbox);
-    gtk_widget_set_tooltip_text(bd->showmask, _("display mask and/or color channel. ctrl+click to display mask, "
-                                                "shift+click to display channel. hover over parametric mask slider to "
-                                                "select channel for display"));
-    dt_gui_add_class(bd->showmask, "dt_transparent_background");
-
-    bd->suppress = dt_iop_togglebutton_new(module, "blend`tools", N_("temporarily switch off blend mask"), NULL, G_CALLBACK(_blendop_blendif_suppress_toggled),
-                                           FALSE, 0, 0, dtgtk_cairo_paint_eye_toggle, hbox);
-    gtk_widget_set_tooltip_text(bd->suppress, _("temporarily switch off blend mask. only for module in focus"));
-    dt_gui_add_class(bd->suppress, "dt_transparent_background");
-
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_box_pack_start(GTK_BOX(iopw), GTK_WIDGET(box), TRUE, TRUE, 0);
-
-    //box enclosing the mask mode selection buttons
-    bd->masks_modes_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
-    //mask selection buttons packing in mask_box
-    gtk_box_pack_start(GTK_BOX(bd->masks_modes_box), GTK_WIDGET(bd->mask_mode_combo), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(bd->masks_modes_box), GTK_WIDGET(presets_button), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(bd->masks_modes_box), FALSE, FALSE, 0);
-    dt_gui_add_help_link(GTK_WIDGET(bd->masks_modes_box), dt_get_help_url("masks_blending"));
-    gtk_widget_set_name(GTK_WIDGET(bd->masks_modes_box), "blending-header");
-
-    bd->top_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
-    gtk_box_pack_start(GTK_BOX(bd->top_box), blend_modes_hbox, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(bd->top_box), bd->blend_mode_parameter_slider, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(bd->top_box), bd->opacity_slider, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(bd->top_box), TRUE, TRUE, 0);
-
-    dt_iop_gui_init_masks(GTK_BOX(iopw), module);
-    dt_iop_gui_init_raster(GTK_BOX(iopw), module);
-    dt_iop_gui_init_blendif(GTK_BOX(iopw), module);
-
-    bd->bottom_box = GTK_BOX(gtk_box_new(GTK_ORIENTATION_VERTICAL, 0));
-    gtk_box_pack_start(GTK_BOX(bd->bottom_box), GTK_WIDGET(bd->masks_combine_combo), TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(bd->bottom_box), GTK_WIDGET(bd->masks_invert_combo), TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(bd->bottom_box), hbox, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(bd->bottom_box), bd->details_slider, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(bd->bottom_box), bd->masks_feathering_guide_combo, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(bd->bottom_box), bd->feathering_radius_slider, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(bd->bottom_box), bd->blur_radius_slider, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(bd->bottom_box), bd->brightness_slider, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(bd->bottom_box), bd->contrast_slider, TRUE, TRUE, 0);
-    GtkWidget* event_box = gtk_event_box_new();
-    dt_gui_add_help_link(event_box, dt_get_help_url("masks_refinement"));
-    gtk_container_add(GTK_CONTAINER(event_box), GTK_WIDGET(bd->bottom_box));
-    gtk_box_pack_start(GTK_BOX(iopw), GTK_WIDGET(event_box), TRUE, TRUE, 0);
-
-    gtk_widget_set_name(GTK_WIDGET(bd->top_box), "blending-box");
-    gtk_widget_set_name(GTK_WIDGET(bd->masks_box), "blending-box");
-    gtk_widget_set_name(GTK_WIDGET(bd->raster_box), "blending-box");
-    gtk_widget_set_name(GTK_WIDGET(bd->blendif_box), "blending-box");
-    gtk_widget_set_name(GTK_WIDGET(bd->bottom_box), "blending-box");
-    gtk_widget_set_name(GTK_WIDGET(iopw), "blending-wrapper");
 
     bd->blend_inited = 1;
 

@@ -267,6 +267,9 @@ typedef enum dt_signal_t
   DT_SIGNAL_MASK_SELECTION_CHANGED,
   DT_SIGNAL_MASK_CHANGED,
 
+  /* Raised when the focused darkroom module changes or its masks/blending GUI needs refresh */
+  DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED,
+
   /** \brief Raised when the recursive file crawler returns.
       no params,
       return :

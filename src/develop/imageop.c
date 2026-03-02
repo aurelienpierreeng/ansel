@@ -2018,6 +2018,7 @@ void dt_iop_request_focus(dt_iop_module_t *module)
     dt_gui_add_class(iop_w, "dt_module_focus");
   }
 
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_MASKS_GUI_CHANGED);
   dt_control_change_cursor(GDK_LEFT_PTR);
   dt_control_queue_redraw_center();
 }
