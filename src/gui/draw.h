@@ -64,23 +64,26 @@ extern "C" {
 #define M_PI 3.141592654
 #endif
 
+// TODO: enter directly the values applied to this factor in each following macro later once
+//  we're happy with it.
+#define DT_DRAW_SIZE_GLOBAL_FACTOR 0.75f
 
 /** line sizes for drawing */
-#define DT_DRAW_SIZE_LINE                      DT_PIXEL_APPLY_DPI_DPP(1.5f)
-#define DT_DRAW_SIZE_LINE_SELECTED             DT_PIXEL_APPLY_DPI_DPP(3.0f)
-#define DT_DRAW_SIZE_LINE_HIGHLIGHT            (DT_PIXEL_APPLY_DPI_DPP(4.0f) + DT_DRAW_SIZE_LINE)
-#define DT_DRAW_SIZE_LINE_HIGHLIGHT_SELECTED   (DT_PIXEL_APPLY_DPI_DPP(5.0f) + DT_DRAW_SIZE_LINE_SELECTED)
-#define DT_DRAW_SIZE_CROSS                     DT_PIXEL_APPLY_DPI_DPP(7.0f)
+#define DT_DRAW_SIZE_LINE                      DT_PIXEL_APPLY_DPI_DPP(1.5f * DT_DRAW_SIZE_GLOBAL_FACTOR)
+#define DT_DRAW_SIZE_LINE_SELECTED             DT_PIXEL_APPLY_DPI_DPP(3.0f * DT_DRAW_SIZE_GLOBAL_FACTOR)
+#define DT_DRAW_SIZE_LINE_HIGHLIGHT            (DT_PIXEL_APPLY_DPI_DPP(4.0f * DT_DRAW_SIZE_GLOBAL_FACTOR) + DT_DRAW_SIZE_LINE)
+#define DT_DRAW_SIZE_LINE_HIGHLIGHT_SELECTED   (DT_PIXEL_APPLY_DPI_DPP(5.0f * DT_DRAW_SIZE_GLOBAL_FACTOR) + DT_DRAW_SIZE_LINE_SELECTED)
+#define DT_DRAW_SIZE_CROSS                     DT_PIXEL_APPLY_DPI_DPP(7.0f * DT_DRAW_SIZE_GLOBAL_FACTOR)
 
 /** stuff's scale */
-#define DT_DRAW_SCALE_DASH          DT_PIXEL_APPLY_DPI_DPP(12.0f)
-#define DT_DRAW_SCALE_ARROW         DT_PIXEL_APPLY_DPI_DPP(18.0f)
+#define DT_DRAW_SCALE_DASH          DT_PIXEL_APPLY_DPI_DPP(12.0f * DT_DRAW_SIZE_GLOBAL_FACTOR)
+#define DT_DRAW_SCALE_ARROW         DT_PIXEL_APPLY_DPI_DPP(18.0f * DT_DRAW_SIZE_GLOBAL_FACTOR)
 
 // radius/width of node (handles are set to be 3/4 of a node size)
-#define DT_DRAW_RADIUS_NODE          DT_PIXEL_APPLY_DPI_DPP(5.0f)
+#define DT_DRAW_RADIUS_NODE          DT_PIXEL_APPLY_DPI_DPP(5.0f * DT_DRAW_SIZE_GLOBAL_FACTOR)
 #define DT_DRAW_RADIUS_NODE_SELECTED (1.25f * DT_DRAW_RADIUS_NODE)
 
-// used to detect the area where rotation of a shape is possible
+// used to detect the area where rotation of a shape is possible. Don't apply the global factor here since it's an user interaction area.
 #define DT_DRAW_SELECTION_ROTATION_AREA           DT_PIXEL_APPLY_DPI_DPP(50.0f)
 #define DT_DRAW_SELECTION_ROTATION_RADIUS(dev)   (DT_DRAW_SELECTION_ROTATION_AREA / dt_dev_get_zoom_level((dt_develop_t *)dev))  
 
