@@ -301,17 +301,18 @@ static void _channel_display_false_color(const float *const restrict in, uint8_t
 static void _mask_display(const float *const restrict in, uint8_t *const restrict out, const size_t buffsize,
                           const float alpha)
 {
-  const dt_aligned_pixel_t mask_color = { 1.0f, 1.0f, 0.0f }; // yellow, "unused" element aids vectorization
+  const dt_aligned_pixel_t mask_color = { 1.0f, 1.0f, 0.0f, 0.0f };
 
   #ifdef _OPENMP
-  #pragma omp parallel for simd default(none) schedule(static) aligned(in, out: 64) aligned(mask_color: 16) \
-      dt_omp_firstprivate(in, out, buffsize, alpha, mask_color)
+  #pragma omp parallel for simd default(none) schedule(static) aligned(in, out: 64) aligned(hidden_color: 16) \
+      dt_omp_firstprivate(in, out, buffsize, alpha, hidden_color)
   #endif
     for(size_t j = 0; j < buffsize; j+= 4)
     {
       const float gray = 0.3f * in[j + 0] + 0.59f * in[j + 1] + 0.11f * in[j + 2];
       const dt_aligned_pixel_t pixel = { gray, gray, gray, gray };
-      _write_pixel(pixel, out + j, mask_color, in[j + 3] * alpha);
+      const float hide = 1.0f - fminf(fmaxf(in[j + 3] * alpha, 0.0f), 1.0f);
+      _write_pixel(pixel, out + j, mask_color, hide);
     }
 }
 
