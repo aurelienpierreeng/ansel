@@ -107,7 +107,7 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
   const float cursor_radius2 = cursor_radius * cursor_radius;
   const float cursor_x = mask_gui->pos[0];
   const float cursor_y = mask_gui->pos[1];
-  const int selected_node = (mask_gui->node_selected) ? mask_gui->node_hovered : -1;
+  const int selected_node = dt_masks_gui_selected_node_index(mask_gui);
 
   mask_gui->node_hovered = -1;
   mask_gui->handle_hovered = -1;
@@ -1995,20 +1995,17 @@ static void _set_cursor_shape(dt_masks_form_gui_t *mask_gui)
     dt_control_set_cursor(GDK_FLEUR);
 }
 
-static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const int button, const uint32_t state)
+static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const int button,
+                                            const uint32_t state,
+                                            const gboolean shape_was_selected)
 {
   if(!mask_gui || mask_gui->creation || button != 1) return;
-  // Drag is only allowed from a target that was already selected before this click.
-  // We therefore snapshot the previous selection, rebuild selection from the current
-  // hover target, and only arm dragging when the new target matches an existing selection.
-  // Special case: once the form body is selected, clicking any node may start a node drag.
+  // Drag is only allowed when this click happens on a shape that was already selected.
+  // We still rebuild the fine-grained selection from the current hover target first, so the
+  // pressed node/handle/segment becomes the active drag target when dragging is allowed.
   const gboolean prev_form_selected = mask_gui->form_selected;
   const gboolean prev_border_selected = mask_gui->border_selected;
   const gboolean prev_source_selected = mask_gui->source_selected;
-  const int prev_node_selected = mask_gui->node_selected ? mask_gui->node_hovered : -1;
-  const int prev_handle_selected = mask_gui->handle_selected ? mask_gui->handle_hovered : -1;
-  const int prev_handle_border_selected = mask_gui->handle_border_selected ? mask_gui->handle_border_hovered : -1;
-  const int prev_seg_selected = mask_gui->seg_selected ? mask_gui->seg_hovered : -1;
 
   mask_gui->node_selected = FALSE;
   mask_gui->handle_selected = FALSE;
@@ -2043,21 +2040,9 @@ static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const
 
   if(mask_gui->form_rotating || mask_gui->border_toggling || mask_gui->gradient_toggling) return;
   if(dt_modifier_is(state, GDK_CONTROL_MASK)) return;
+  if(!shape_was_selected) return;
 
-  // Exact re-click required for handles, border handles, segments and source.
-  // Nodes may also drag directly when the enclosing form was already selected.
-  const gboolean can_drag_handle = mask_gui->handle_selected && mask_gui->handle_hovered == prev_handle_selected;
-  const gboolean can_drag_handle_border
-      = mask_gui->handle_border_selected && mask_gui->handle_border_hovered == prev_handle_border_selected;
-  const gboolean can_drag_node = mask_gui->node_selected
-                                 && (mask_gui->node_hovered == prev_node_selected || prev_form_selected);
-  const gboolean can_drag_segment = mask_gui->seg_selected && mask_gui->seg_hovered == prev_seg_selected;
-  const gboolean can_drag_source = mask_gui->source_selected && prev_source_selected;
-  const gboolean can_drag_form = mask_gui->form_selected && prev_form_selected;
-
-  if(can_drag_handle || can_drag_handle_border || can_drag_node || can_drag_segment
-     || can_drag_source || can_drag_form)
-    dt_masks_gui_set_dragging(mask_gui);
+  dt_masks_gui_set_dragging(mask_gui);
 }
 
 /**
@@ -2190,6 +2175,8 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
 
   _dt_masks_events_set_current_pos(x, y, mask_gui);
   if(!mask_form) return 0;
+  const gboolean prev_any_selected = dt_masks_is_anything_selected(mask_gui);
+  const int prev_group_selected = mask_gui->group_selected;
 
   /*DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_SELECTION_CHANGED, NULL, NULL);*/
 
@@ -2209,7 +2196,10 @@ int dt_masks_events_button_pressed(struct dt_iop_module_t *module, double x, dou
                                                           button, event_type, state,
                                                           dispatch_form, parent_id, mask_gui, form_index);
 
-  _apply_gui_button_pressed_state(mask_gui, button, state);
+  const gboolean shape_was_selected = (mask_form->type & DT_MASKS_GROUP)
+                                          ? (prev_group_selected >= 0 && prev_group_selected == form_index)
+                                          : prev_any_selected;
+  _apply_gui_button_pressed_state(mask_gui, button, state, shape_was_selected);
 
   if(button == 3 && !return_val)
   {
