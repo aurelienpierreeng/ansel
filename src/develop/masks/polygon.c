@@ -1317,13 +1317,6 @@ static void _polygon_get_distance(float point_x, float point_y, float radius,
                                   int node_count, int *inside, int *inside_border,
                                   int *near, int *inside_source, float *dist)
 {
-  if(!mask_gui) return;
-  dt_masks_form_gui_points_t *gui_points
-      = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
-  if(!gui_points) return;
-
-  float min_dist_pixel = FLT_MAX;
-
   // initialise returned values
   *inside_source = 0;
   *inside = 0;
@@ -1331,12 +1324,21 @@ static void _polygon_get_distance(float point_x, float point_y, float radius,
   *near = -1;
   *dist = FLT_MAX;
 
+  if(!mask_gui) return;
+  dt_masks_form_gui_points_t *gui_points
+      = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
+  if(!gui_points) return;
+
+  float min_dist_pixel = FLT_MAX;
+
   const float radius2 = radius * radius;
   const float pt[2] = { point_x, point_y };
   
   // we first check if we are inside the source form
-  if(dt_masks_point_in_form_exact(pt, 1, gui_points->source, node_count * 3,
-                                  gui_points->source_count) >= 0)
+  if(gui_points->source && gui_points->points
+     && gui_points->source_count > node_count * 3 && gui_points->points_count > node_count * 3
+     && dt_masks_point_in_form_exact(pt, 1, gui_points->source, node_count * 3,
+                                     gui_points->source_count) >= 0)
   {
     *inside_source = 1;
     *inside = 1;
@@ -1372,7 +1374,7 @@ static void _polygon_get_distance(float point_x, float point_y, float radius,
   }
 
   // we check if we are near a segment
-  if(gui_points->points_count > 2 + node_count * 3)
+  if(gui_points->points && gui_points->points_count > 2 + node_count * 3)
   {
     int current_seg = 1;
     for(int i = node_count * 3; i < gui_points->points_count; i++)
@@ -1408,14 +1410,16 @@ static void _polygon_get_distance(float point_x, float point_y, float radius,
   *dist = min_dist_pixel;
 
   // we check if it's not inside borders, meaning we are not inside at all
-  if(dt_masks_point_in_form_exact(pt, 1, gui_points->border, node_count * 3,
-                                  gui_points->border_count) < 0)
+  if(!gui_points->border || gui_points->border_count <= node_count * 3
+     || dt_masks_point_in_form_exact(pt, 1, gui_points->border, node_count * 3,
+                                     gui_points->border_count) < 0)
     return;
   
   // we are at least inside the border
   *inside = 1;
 
   // and we check if it's not inside form, meaning we are inside border only
+  if(!gui_points->points || gui_points->points_count <= node_count * 3) return;
   *inside_border = (dt_masks_point_in_form_exact(pt, 1, gui_points->points,
                                                  node_count * 3, gui_points->points_count) < 0);
 }

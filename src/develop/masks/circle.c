@@ -65,7 +65,8 @@ static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t
   // we first check if we are inside the source form
   const float pt[2] = { x, y };
 
-  if(dt_masks_point_in_form_exact(pt, 1, gpt->source, 1, gpt->source_count) >= 0)
+  if(gpt->source && gpt->source_count > 0
+     && dt_masks_point_in_form_exact(pt, 1, gpt->source, 1, gpt->source_count) >= 0)
   {
     *inside_source = 1;
     *inside = 1;
@@ -77,6 +78,8 @@ static void _circle_get_distance(float x, float y, float as, dt_masks_form_gui_t
 
     return;
   }
+
+  if(!gpt->points || gpt->points_count <= 0 || !gpt->border || gpt->border_count <= 0) return;
 
   // distance from center
   const float center_dx = x - gpt->points[0];

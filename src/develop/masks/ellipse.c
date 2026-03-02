@@ -191,7 +191,7 @@ static void _ellipse_get_distance(float x, float y, float as, dt_masks_form_gui_
   const float pt[2] = { x, y };
 
   // we first check if we are inside the source form
-  if(gpt->source_count > 10)
+  if(gpt->source && gpt->source_count > 10)
   {
     if(dt_masks_point_in_form_exact(pt, 1, gpt->source, 10, gpt->source_count - 5) >= 0)
     {
@@ -211,6 +211,8 @@ static void _ellipse_get_distance(float x, float y, float as, dt_masks_form_gui_
       return;
     }
   }
+
+  if(!gpt->points || gpt->points_count <= 5 || !gpt->border || gpt->border_count <= 5) return;
 
   // distance from center
   const float center_dx = x - gpt->points[0];

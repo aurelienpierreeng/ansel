@@ -244,7 +244,8 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
   float min_dist = FLT_MAX;
 
   // check if we are between the two border lines
-  if(!gui->form_rotating && !gui->form_dragging && gpt->border_count > 6 && gpt->points_count >= 4)
+  if(!gui->form_rotating && !gui->form_dragging && gpt->border && gpt->border_count > 6
+     && gpt->points && gpt->points_count >= 4)
   {
     const int separator_idx = _find_border_separator(gpt->border, gpt->border_count);
     if(separator_idx > 0 && separator_idx < gpt->border_count - 1)
@@ -297,7 +298,7 @@ static void _gradient_get_distance(float x, float y, float dist_mouse, dt_masks_
   }
 
   // and we check if we are near a segment (single continuous segment starting at gpt->points[3])
-  if(gpt->points_count > 3)
+  if(gpt->points && gpt->points_count > 3)
   {
     for(int i = 3; i < gpt->points_count; i++)
     {

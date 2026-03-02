@@ -1126,7 +1126,8 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
   // we first check if we are inside the source form
 
   // add support for clone masks
-  if(gui_points->points_count > 2 + corner_count * 3
+  if(gui_points->points && gui_points->source
+     && gui_points->points_count > 2 + corner_count * 3
      && gui_points->source_count > 2 + corner_count * 3)
   {
     // distance from form origin and source origin
@@ -1170,7 +1171,7 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
   }
 
  // we check if it's inside borders
-  if(gui_points->border_count > 2 + corner_count * 3)
+  if(gui_points->border && gui_points->border_count > 2 + corner_count * 3)
   {
     int nearest = -1;
 
@@ -1199,7 +1200,7 @@ static void _brush_get_distance(float point_x, float point_y, float radius,
   }
 
   // and we check if we are near a segment
-  if(gui_points->points_count > 2 + corner_count * 3)
+  if(gui_points->points && gui_points->points_count > 2 + corner_count * 3)
   {
     int current_seg = 1;
     for(int i = corner_count * 3; i < gui_points->points_count; i++)
