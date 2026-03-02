@@ -1139,39 +1139,6 @@ static void _polygon_translate_all_nodes(dt_masks_form_t *mask_form, const float
     _polygon_translate_node((dt_masks_node_polygon_t *)node_entry->data, delta_x, delta_y);
 }
 
-// TODO: Should be in masks.c
-static void _change_node_type(struct dt_iop_module_t *module, dt_masks_form_t *mask_form,
-                              dt_masks_form_gui_t *mask_gui, int form_index)
-{
-  if(!mask_form || !mask_form->points) return;
-  dt_masks_form_gui_points_t *gui_points
-      = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, mask_gui->group_selected);
-  if(!gui_points) return;
-  const int selected_node = dt_masks_gui_selected_node_index(mask_gui);
-  if(selected_node < 0) return;
-  dt_masks_node_polygon_t *node
-      = (dt_masks_node_polygon_t *)g_list_nth_data(mask_form->points, selected_node);
-  if(!node) return;
-  const gboolean is_corner = dt_masks_node_is_cusp(gui_points, selected_node);
-
-  if(is_corner)
-  {
-    // Switch to round
-    node->state = DT_MASKS_POINT_STATE_NORMAL;
-    _polygon_init_ctrl_points(mask_form);
-  }
-  else
-  {
-    // Switch to corner
-    node->ctrl1[0] = node->ctrl2[0] = node->node[0];
-    node->ctrl1[1] = node->ctrl2[1] = node->node[1];
-    node->state = DT_MASKS_POINT_STATE_USER;
-
-  }
-  // we recreate the form points
-  dt_masks_gui_form_create(mask_form, mask_gui, form_index, module);
-}
-
 static int _polygon_get_points_border(dt_develop_t *develop, dt_masks_form_t *mask_form,
                                       float **point_buffer, int *point_count,
                                       float **border_buffer, int *border_count,
@@ -1754,34 +1721,6 @@ static int _polygon_creation_closing_form(dt_masks_form_t *mask_form, dt_masks_f
   return 1;
 }
 
-/**
- * @brief Reset Bezier control points for the hovered/selected node.
- */
-static gboolean _reset_ctrl_points(struct dt_iop_module_t *module, dt_masks_form_t *mask_form,
-                                   dt_masks_form_gui_t *mask_gui, int form_index)
-{
-  if(!mask_form || !mask_form->points) return FALSE;
-  dt_masks_form_gui_points_t *gui_points
-      = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
-  if(!gui_points) return FALSE;
-
-  const int selected_handle = dt_masks_gui_selected_handle_index(mask_gui);
-  const int node_index = MAX(mask_gui->node_hovered, selected_handle);
-  dt_masks_node_polygon_t *node
-      = (dt_masks_node_polygon_t *)g_list_nth_data(mask_form->points, node_index);
-  if(!node) return FALSE;
-
-  if(node->state != DT_MASKS_POINT_STATE_NORMAL && !dt_masks_node_is_cusp(gui_points, node_index))
-  {
-    node->state = DT_MASKS_POINT_STATE_NORMAL;
-    _polygon_init_ctrl_points(mask_form);
-    // we recreate the form points
-    dt_masks_gui_form_create(mask_form, mask_gui, form_index, module);
-    gui_points->clockwise = _polygon_is_clockwise(mask_form);
-  }
-  return TRUE;
-}
-
 static int _polygon_events_button_pressed(struct dt_iop_module_t *module, double x, double y,
                                        double pressure, int which, int type, uint32_t state,
                                        dt_masks_form_t *mask_form, int parent_id,
@@ -1877,7 +1816,12 @@ static int _polygon_events_button_pressed(struct dt_iop_module_t *module, double
       // if ctrl is pressed, we change the type of point
       if(mask_gui->node_selected && dt_modifier_is(state, GDK_CONTROL_MASK))
       {
-        _change_node_type(module, mask_form, mask_gui, form_index);
+        dt_masks_node_polygon_t *node
+            = (dt_masks_node_polygon_t *)g_list_nth_data(mask_form->points, mask_gui->node_hovered);
+        if(!node) return 0;
+        dt_masks_toggle_bezier_node_type(module, mask_form, mask_gui, form_index, gui_points,
+                                         mask_gui->node_hovered, node->node, node->ctrl1, node->ctrl2,
+                                         &node->state);
         return 1;
       }
       /*// we register the current position to avoid accidental move
@@ -3586,7 +3530,14 @@ static void _polygon_switch_node_callback(GtkWidget *widget, gpointer user_data)
   if(!selected_form) return;
 
   mask_gui->node_selected = TRUE;
-  _change_node_type(module, selected_form, mask_gui, mask_gui->group_selected);
+  dt_masks_form_gui_points_t *gui_points
+      = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, mask_gui->group_selected);
+  const int node_index = dt_masks_gui_selected_node_index(mask_gui);
+  dt_masks_node_polygon_t *node
+      = (dt_masks_node_polygon_t *)g_list_nth_data(selected_form->points, node_index);
+  if(!gui_points || !node) return;
+  dt_masks_toggle_bezier_node_type(module, selected_form, mask_gui, mask_gui->group_selected, gui_points,
+                                   node_index, node->node, node->ctrl1, node->ctrl2, &node->state);
 }
 
 static void _polygon_reset_round_node_callback(GtkWidget *widget, gpointer user_data)
@@ -3600,7 +3551,16 @@ static void _polygon_reset_round_node_callback(GtkWidget *widget, gpointer user_
   if(!selected_form) return;
 
   mask_gui->node_selected = TRUE;
-  _reset_ctrl_points(module, selected_form, mask_gui, mask_gui->group_selected);
+  dt_masks_form_gui_points_t *gui_points
+      = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, mask_gui->group_selected);
+  const int selected_handle = dt_masks_gui_selected_handle_index(mask_gui);
+  const int node_index = MAX(mask_gui->node_hovered, selected_handle);
+  dt_masks_node_polygon_t *node
+      = (dt_masks_node_polygon_t *)g_list_nth_data(selected_form->points, node_index);
+  if(!gui_points || !node) return;
+  if(dt_masks_reset_bezier_ctrl_points(module, selected_form, mask_gui, mask_gui->group_selected, gui_points,
+                                       node_index, &node->state))
+    gui_points->clockwise = _polygon_is_clockwise(selected_form);
 }
 
 static void _polygon_add_node_callback(GtkWidget *menu, gpointer user_data)

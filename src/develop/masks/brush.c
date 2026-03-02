@@ -1575,63 +1575,6 @@ static void _get_pressure_sensitivity(dt_masks_form_gui_t *mask_gui)
   }
 }
 
-// TODO: Should be in masks.c
-static void _change_node_type(struct dt_iop_module_t *module, dt_masks_form_t *mask_form,
-                              dt_masks_form_gui_t *mask_gui, int index)
-{
-  if(!mask_form || !mask_form->points) return;
-  dt_masks_form_gui_points_t *gui_points
-      = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, mask_gui->group_selected);
-  if(!gui_points) return;
-  const int selected_node = dt_masks_gui_selected_node_index(mask_gui);
-  if(selected_node < 0) return;
-  dt_masks_node_brush_t *node
-      = (dt_masks_node_brush_t *)g_list_nth_data(mask_form->points, selected_node);
-  if(!node) return;
-  const gboolean is_corner = dt_masks_node_is_cusp(gui_points, selected_node);
-
-  if(is_corner)
-  {
-    // Switch to round
-    node->state = DT_MASKS_POINT_STATE_NORMAL;
-    _brush_init_ctrl_points(mask_form);
-  }
-  else
-  {
-    // Switch to corner
-    node->ctrl1[0] = node->ctrl2[0] = node->node[0];
-    node->ctrl1[1] = node->ctrl2[1] = node->node[1];
-    node->state = DT_MASKS_POINT_STATE_USER;
-  }
-  // We recreate the form points
-
-  dt_masks_gui_form_create(mask_form, mask_gui, index, module);
-}
-
-static gboolean _reset_ctrl_points(struct dt_iop_module_t *module, dt_masks_form_t *mask_form,
-                                   dt_masks_form_gui_t *mask_gui, int index)
-{
-  if(!mask_form || !mask_form->points) return FALSE;
-  dt_masks_form_gui_points_t *gui_points
-      = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, index);
-  if(!gui_points) return FALSE;
-  const int selected_handle = dt_masks_gui_selected_handle_index(mask_gui);
-  const int node_index = MAX(mask_gui->node_hovered, selected_handle);
-  dt_masks_node_brush_t *node
-      = (dt_masks_node_brush_t *)g_list_nth_data(mask_form->points, node_index);
-  if(!node) return FALSE;
-
-  if(node->state != DT_MASKS_POINT_STATE_NORMAL && !dt_masks_node_is_cusp(gui_points, node_index))
-  {
-    node->state = DT_MASKS_POINT_STATE_NORMAL;
-    _brush_init_ctrl_points(mask_form);
-    // We recreate the form points
-    dt_masks_gui_form_create(mask_form, mask_gui, index, module);
-  }
-  return TRUE;
-}
-
-
 static void _add_node_to_segment(struct dt_iop_module_t *module, dt_masks_form_t *mask_form, int parentid,
                                  dt_masks_form_gui_t *mask_gui, int index)
 {
@@ -1763,7 +1706,12 @@ static int _brush_events_button_pressed(struct dt_iop_module_t *module, double w
       // if ctrl is pressed, we change the type of point
       if(mask_gui->node_selected && dt_modifier_is(state, GDK_CONTROL_MASK))
       {
-        _change_node_type(module, mask_form, mask_gui, index);
+        dt_masks_node_brush_t *node
+            = (dt_masks_node_brush_t *)g_list_nth_data(mask_form->points, mask_gui->node_hovered);
+        if(!node) return 0;
+        dt_masks_toggle_bezier_node_type(module, mask_form, mask_gui, index, gui_points,
+                                         mask_gui->node_hovered, node->node, node->ctrl1, node->ctrl2,
+                                         &node->state);
         return 1;
       }
       /*// we register the current position to avoid accidental move
@@ -3149,7 +3097,14 @@ static void _brush_switch_node_callback(GtkWidget *widget, gpointer user_data)
   const int form_id = mask_gui->formid;
   dt_masks_form_t *selected_form = dt_masks_get_from_id(darktable.develop, form_id);
   if(!selected_form) return;
-  _change_node_type(module, selected_form, mask_gui, mask_gui->group_selected);
+  dt_masks_form_gui_points_t *gui_points
+      = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, mask_gui->group_selected);
+  const int node_index = dt_masks_gui_selected_node_index(mask_gui);
+  dt_masks_node_brush_t *node
+      = (dt_masks_node_brush_t *)g_list_nth_data(selected_form->points, node_index);
+  if(!gui_points || !node) return;
+  dt_masks_toggle_bezier_node_type(module, selected_form, mask_gui, mask_gui->group_selected, gui_points,
+                                   node_index, node->node, node->ctrl1, node->ctrl2, &node->state);
 }
 
 static void _brush_reset_round_node_callback(GtkWidget *widget, gpointer user_data)
@@ -3165,8 +3120,15 @@ static void _brush_reset_round_node_callback(GtkWidget *widget, gpointer user_da
   const int form_id = mask_gui->formid;
   dt_masks_form_t *selected_form = dt_masks_get_from_id(darktable.develop, form_id);
   if(!selected_form) return;
-
-  _reset_ctrl_points(module, selected_form, mask_gui, mask_gui->group_selected);
+  dt_masks_form_gui_points_t *gui_points
+      = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, mask_gui->group_selected);
+  const int selected_handle = dt_masks_gui_selected_handle_index(mask_gui);
+  const int node_index = MAX(mask_gui->node_hovered, selected_handle);
+  dt_masks_node_brush_t *node
+      = (dt_masks_node_brush_t *)g_list_nth_data(selected_form->points, node_index);
+  if(!gui_points || !node) return;
+  dt_masks_reset_bezier_ctrl_points(module, selected_form, mask_gui, mask_gui->group_selected, gui_points,
+                                    node_index, &node->state);
 }
 
 static void _brush_add_node_callback(GtkWidget *menu, gpointer user_data)
