@@ -321,10 +321,23 @@ typedef struct dt_iop_gui_blend_data_t
   dt_develop_blend_colorspace_t csp;
   dt_iop_module_t *module;
 
-  GtkWidget *mask_mode_combo;
-
   GtkWidget *iopw;
   GtkWidget *blending_body_box;
+  GtkWidget *blending_notebook;
+  GtkWidget *top_page;
+  GtkWidget *masks_page;
+  GtkWidget *raster_page;
+  GtkWidget *blendif_page;
+  GtkWidget *bottom_page;
+  GtkWidget *top_enable;
+  GtkWidget *masks_enable;
+  GtkWidget *raster_enable;
+  GtkWidget *blendif_enable;
+  GtkWidget *top_content;
+  GtkWidget *masks_content;
+  GtkWidget *raster_content;
+  GtkWidget *blendif_content;
+  GtkWidget *bottom_content;
   GtkBox *top_box;
   GtkBox *bottom_box;
   GtkBox *masks_modes_box;
