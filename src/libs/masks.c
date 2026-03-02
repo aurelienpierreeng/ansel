@@ -159,22 +159,41 @@ static void _lib_masks_inactivate_icons(dt_lib_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(lm->bt_brush), FALSE);
 }
 
+static gboolean _lib_masks_module_is_current(const dt_iop_module_t *module)
+{
+  return darktable.develop && module && g_list_find(darktable.develop->iop, (gpointer)module);
+}
+
+static void _lib_masks_clear_blending_box(dt_lib_masks_t *lm)
+{
+  if(!lm || !lm->blending_box) return;
+
+  GList *children = gtk_container_get_children(GTK_CONTAINER(lm->blending_box));
+  for(GList *iter = children; iter; iter = g_list_next(iter))
+    gtk_widget_destroy(GTK_WIDGET(iter->data));
+  g_list_free(children);
+}
+
 static gboolean _lib_masks_can_host_blending(const dt_iop_module_t *module)
 {
-  if(!module || !(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || !module->blend_data) return FALSE;
+  if(!_lib_masks_module_is_current(module) || !module->flags
+     || !(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || !module->blend_data)
+    return FALSE;
 
-  const dt_iop_gui_blend_data_t *bd = (const dt_iop_gui_blend_data_t *)module->blend_data;
-  return bd->blend_inited;
+  return TRUE;
 }
 
 static void _lib_masks_release_blending(dt_lib_masks_t *lm)
 {
   if(!lm) return;
 
-  if(_lib_masks_can_host_blending(lm->hosted_module))
-    dt_iop_gui_cleanup_blending_body(lm->hosted_module);
-
+  dt_iop_module_t *hosted_module = lm->hosted_module;
   lm->hosted_module = NULL;
+
+  if(_lib_masks_can_host_blending(hosted_module))
+    dt_iop_gui_cleanup_blending_body(hosted_module);
+  else
+    _lib_masks_clear_blending_box(lm);
 }
 
 static void _lib_masks_reveal(dt_lib_module_t *self)

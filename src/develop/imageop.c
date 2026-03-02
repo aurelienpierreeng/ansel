@@ -1411,10 +1411,8 @@ static void _init_module_so(void *m)
            !(module->flags() & IOP_FLAGS_NO_MASKS) &&
            (cst == IOP_CS_LAB || cst == IOP_CS_RGB))
         {
-          GtkWidget *iopw = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-          dt_iop_gui_init_blending(iopw, module_instance);
+          dt_iop_gui_init_blending(module_instance);
           dt_iop_gui_cleanup_blending(module_instance);
-          gtk_widget_destroy(iopw);
 
           blending_accels_initialized = TRUE;
         }
@@ -2471,9 +2469,9 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
     gtk_widget_show(lb);
   }
 
-  /* add the blending ui if supported */
+  /* initialize blending state if supported; the detached widget is hosted by the masks lib */
   gtk_box_pack_start(GTK_BOX(iopw), module->widget, TRUE, TRUE, 0);
-  dt_iop_gui_init_blending(iopw, module);
+  dt_iop_gui_init_blending(module);
   dt_gui_add_class(module->widget, "dt_plugin_ui_main");
   dt_gui_add_help_link(module->widget, dt_get_help_url(module->op));
   gtk_widget_hide(iopw);

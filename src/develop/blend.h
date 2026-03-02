@@ -312,7 +312,6 @@ extern const dt_develop_name_value_t dt_develop_invert_mask_names[];
 typedef struct dt_iop_gui_blend_data_t
 {
   int blendif_support;
-  int blend_inited;
   int blendif_inited;
   int masks_support;
   int masks_inited;
@@ -321,14 +320,8 @@ typedef struct dt_iop_gui_blend_data_t
   dt_develop_blend_colorspace_t csp;
   dt_iop_module_t *module;
 
-  GtkWidget *iopw;
   GtkWidget *blending_body_box;
   GtkWidget *blending_notebook;
-  GtkWidget *top_page;
-  GtkWidget *masks_page;
-  GtkWidget *raster_page;
-  GtkWidget *blendif_page;
-  GtkWidget *bottom_page;
   GtkWidget *top_enable;
   GtkWidget *masks_enable;
   GtkWidget *raster_enable;
@@ -338,9 +331,6 @@ typedef struct dt_iop_gui_blend_data_t
   GtkWidget *raster_content;
   GtkWidget *blendif_content;
   GtkWidget *bottom_content;
-  GtkBox *top_box;
-  GtkBox *bottom_box;
-  GtkBox *masks_modes_box;
   GtkBox *blendif_box;
   GtkBox *masks_box;
   GtkBox *raster_box;
@@ -491,7 +481,7 @@ void dt_develop_blendif_rgb_jzczhz_blend(struct dt_dev_pixelpipe_iop_t *piece, c
 
 /** gui related stuff */
 void dt_iop_gui_init_blendif(GtkBox *blendw, dt_iop_module_t *module);
-void dt_iop_gui_init_blending(GtkWidget *iopw, dt_iop_module_t *module);
+void dt_iop_gui_init_blending(dt_iop_module_t *module);
 void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module);
 void dt_iop_gui_update_blending(dt_iop_module_t *module);
 void dt_iop_gui_update_blendif(dt_iop_module_t *module);
