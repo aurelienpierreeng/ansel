@@ -1998,9 +1998,17 @@ static void _set_cursor_shape(dt_masks_form_gui_t *mask_gui)
 static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const int button, const uint32_t state)
 {
   if(!mask_gui || mask_gui->creation || button != 1) return;
-  const gboolean form_selected = mask_gui->form_selected;
-  const gboolean border_selected = mask_gui->border_selected;
-  const gboolean source_selected = mask_gui->source_selected;
+  // Drag is only allowed from a target that was already selected before this click.
+  // We therefore snapshot the previous selection, rebuild selection from the current
+  // hover target, and only arm dragging when the new target matches an existing selection.
+  // Special case: once the form body is selected, clicking any node may start a node drag.
+  const gboolean prev_form_selected = mask_gui->form_selected;
+  const gboolean prev_border_selected = mask_gui->border_selected;
+  const gboolean prev_source_selected = mask_gui->source_selected;
+  const int prev_node_selected = mask_gui->node_selected ? mask_gui->node_hovered : -1;
+  const int prev_handle_selected = mask_gui->handle_selected ? mask_gui->handle_hovered : -1;
+  const int prev_handle_border_selected = mask_gui->handle_border_selected ? mask_gui->handle_border_hovered : -1;
+  const int prev_seg_selected = mask_gui->seg_selected ? mask_gui->seg_hovered : -1;
 
   mask_gui->node_selected = FALSE;
   mask_gui->handle_selected = FALSE;
@@ -2028,15 +2036,28 @@ static void _apply_gui_button_pressed_state(dt_masks_form_gui_t *mask_gui, const
   }
   else
   {
-    mask_gui->form_selected = form_selected;
-    mask_gui->border_selected = border_selected;
-    mask_gui->source_selected = source_selected;
+    mask_gui->form_selected = prev_form_selected;
+    mask_gui->border_selected = prev_border_selected;
+    mask_gui->source_selected = prev_source_selected;
   }
 
   if(mask_gui->form_rotating || mask_gui->border_toggling || mask_gui->gradient_toggling) return;
   if(dt_modifier_is(state, GDK_CONTROL_MASK)) return;
 
-  dt_masks_gui_set_dragging(mask_gui);
+  // Exact re-click required for handles, border handles, segments and source.
+  // Nodes may also drag directly when the enclosing form was already selected.
+  const gboolean can_drag_handle = mask_gui->handle_selected && mask_gui->handle_hovered == prev_handle_selected;
+  const gboolean can_drag_handle_border
+      = mask_gui->handle_border_selected && mask_gui->handle_border_hovered == prev_handle_border_selected;
+  const gboolean can_drag_node = mask_gui->node_selected
+                                 && (mask_gui->node_hovered == prev_node_selected || prev_form_selected);
+  const gboolean can_drag_segment = mask_gui->seg_selected && mask_gui->seg_hovered == prev_seg_selected;
+  const gboolean can_drag_source = mask_gui->source_selected && prev_source_selected;
+  const gboolean can_drag_form = mask_gui->form_selected && prev_form_selected;
+
+  if(can_drag_handle || can_drag_handle_border || can_drag_node || can_drag_segment
+     || can_drag_source || can_drag_form)
+    dt_masks_gui_set_dragging(mask_gui);
 }
 
 /**
