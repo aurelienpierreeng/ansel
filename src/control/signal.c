@@ -71,6 +71,7 @@ typedef struct dt_signal_description
 
 static GType uint_arg[] = { G_TYPE_UINT };
 static GType int_arg[] = { G_TYPE_INT };
+static GType uint_2arg_pointer[] = { G_TYPE_UINT, G_TYPE_UINT, G_TYPE_POINTER };
 static GType pointer_arg[] = { G_TYPE_POINTER };
 static GType pointer_2arg[] = { G_TYPE_POINTER, G_TYPE_POINTER };
 static GType collection_args[] = { G_TYPE_UINT, G_TYPE_UINT, G_TYPE_POINTER, G_TYPE_UINT };
@@ -117,6 +118,12 @@ static void _image_geotag_destroy_callback(gpointer instance, gpointer imgs, con
     g_list_free(imgs);
     imgs = NULL;
   }
+}
+
+static void _image_loaded_destroy_callback(gpointer instance, guint request_id, guint result, gpointer payload,
+                                           gpointer user_data)
+{
+  g_free(payload);
 }
 
 static dt_signal_description _signal_description[DT_SIGNAL_COUNT] = {
@@ -180,6 +187,8 @@ static dt_signal_description _signal_description[DT_SIGNAL_COUNT] = {
     FALSE }, // DT_SIGNAL_DEVELOP_MODULE_MOVED
   { "dt-develop-image-changed", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
     FALSE }, // DT_SIGNAL_DEVELOP_IMAGE_CHANGE
+  { "dt-image-loaded", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_generic, 3, uint_2arg_pointer,
+    G_CALLBACK(_image_loaded_destroy_callback), FALSE }, // DT_SIGNAL_IMAGE_LOADED
   { "dt-control-profile-changed", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__VOID, 0, NULL, NULL,
     FALSE }, // DT_SIGNAL_CONTROL_PROFILE_CHANGED
   { "dt-control-profile-user-changed", NULL, NULL, G_TYPE_NONE, g_cclosure_marshal_VOID__UINT, 1, uint_arg, NULL,

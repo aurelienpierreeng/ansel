@@ -670,6 +670,13 @@ int dt_dev_load_image(dt_develop_t *dev, const int32_t imgid)
   const int ret = _dt_dev_load_raw(dev, imgid);
   if(ret) return ret;
 
+  return dt_dev_load_image_finish(dev, imgid);
+}
+
+int dt_dev_load_image_finish(dt_develop_t *dev, const int32_t imgid)
+{
+  if(!dev) return DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
+
   // we need a global lock as the dev->iop set must not be changed until read history is terminated
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
 

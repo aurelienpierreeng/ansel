@@ -93,6 +93,7 @@
 #include "common/image_cache.h"
 #include "common/imageio.h"
 #include "common/imageio_module.h"
+#include "common/mipmap_cache.h"
 #include "common/selection.h"
 #include "common/tags.h"
 #include "common/undo.h"
@@ -150,10 +151,34 @@ static void _update_softproof_gamut_checking(dt_develop_t *d);
 
 /* signal handler for filmstrip image switching */
 static void _view_darkroom_filmstrip_activate_callback(gpointer instance, int32_t imgid, gpointer user_data);
+static void _darkroom_image_loaded_callback(gpointer instance, guint request_id, guint result, gpointer payload,
+                                            gpointer user_data);
+static void _darkroom_cancel_image_load_job(void);
 
 static void _dev_change_image(dt_view_t *self, const int32_t imgid);
 
 static int _change_scaling(dt_develop_t *dev, const float x, const float y, const float new_scaling);
+
+typedef struct dt_darkroom_image_load_job_t
+{
+  int32_t imgid;
+  guint request_id;
+} dt_darkroom_image_load_job_t;
+
+typedef struct dt_darkroom_image_load_result_t
+{
+  int32_t imgid;
+  int32_t raw_width;
+  int32_t raw_height;
+  gboolean raw_inited;
+  dt_image_t image_storage;
+} dt_darkroom_image_load_result_t;
+
+static dt_job_t *_darkroom_image_load_job = NULL;
+static guint _darkroom_image_load_serial = 0;
+static guint _darkroom_image_load_active_request = 0;
+static int32_t _darkroom_pending_imgid = UNKNOWN_IMAGE;
+static dt_iop_module_t *_darkroom_pending_focus_module = NULL;
 
 const char *name(const dt_view_t *self)
 {
@@ -195,6 +220,11 @@ void cleanup(dt_view_t *self)
 
   // unref the grid lines popover if needed
   if(darktable.view_manager->guides_popover) g_object_unref(darktable.view_manager->guides_popover);
+  if(darktable.signals)
+    DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_darkroom_image_loaded_callback), (gpointer)self);
+  _darkroom_cancel_image_load_job();
+  _darkroom_pending_imgid = UNKNOWN_IMAGE;
+  _darkroom_pending_focus_module = NULL;
   dt_dev_cleanup(dev);
   free(dev);
 }
@@ -667,10 +697,210 @@ void reset(dt_view_t *self)
   dt_dev_reset_roi((dt_develop_t *)self->data);
 }
 
+static void _darkroom_log_image_load_error(const int ret)
+{
+  switch(ret)
+  {
+    case DT_DEV_IMAGE_STORAGE_MIPMAP_NOT_FOUND:
+      dt_control_log(_("Could not load the image source data."));
+      break;
+    case DT_DEV_IMAGE_STORAGE_DB_NOT_READ:
+      dt_control_log(_("Could not read image information from the database."));
+      break;
+    default:
+      dt_control_log(_("We could not load the image."));
+      break;
+  }
+}
+
+static void _darkroom_image_load_job_state(dt_job_t *job, dt_job_state_t state)
+{
+  if(job != _darkroom_image_load_job) return;
+
+  if(state == DT_JOB_STATE_CANCELLED) _darkroom_image_load_active_request = 0;
+  if(state >= DT_JOB_STATE_FINISHED) _darkroom_image_load_job = NULL;
+}
+
+static int32_t _darkroom_image_load_job_run(dt_job_t *job)
+{
+  const dt_darkroom_image_load_job_t *params = dt_control_job_get_params(job);
+  if(!params) return 0;
+
+  dt_darkroom_image_load_result_t *loaded = g_new0(dt_darkroom_image_load_result_t, 1);
+  loaded->imgid = params->imgid;
+
+  int ret = DT_DEV_IMAGE_STORAGE_OK;
+  if(params->imgid <= 0 || !darktable.mipmap_cache || !darktable.image_cache)
+    ret = DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
+
+  dt_mipmap_buffer_t buf = { 0 };
+  if(ret == DT_DEV_IMAGE_STORAGE_OK)
+  {
+    dt_mipmap_cache_get(darktable.mipmap_cache, &buf, params->imgid, DT_MIPMAP_FULL, DT_MIPMAP_BLOCKING, 'r');
+    if(buf.buf != NULL && buf.width != 0 && buf.height != 0)
+    {
+      loaded->raw_width = buf.width;
+      loaded->raw_height = buf.height;
+      loaded->raw_inited = TRUE;
+    }
+    else
+    {
+      ret = DT_DEV_IMAGE_STORAGE_MIPMAP_NOT_FOUND;
+    }
+    dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
+  }
+
+  if(ret == DT_DEV_IMAGE_STORAGE_OK)
+  {
+    const dt_image_t *image = dt_image_cache_get(darktable.image_cache, params->imgid, 'r');
+    if(image)
+    {
+      loaded->image_storage = *image;
+      dt_image_cache_read_release(darktable.image_cache, image);
+    }
+    else
+    {
+      ret = DT_DEV_IMAGE_STORAGE_DB_NOT_READ;
+    }
+  }
+
+  if(!darktable.signals || !dt_control_running())
+  {
+    g_free(loaded);
+    return 0;
+  }
+
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_IMAGE_LOADED, params->request_id, (guint)ret, loaded);
+
+  return 0;
+}
+
+static void _darkroom_cancel_image_load_job(void)
+{
+  if(!_darkroom_image_load_job) return;
+
+  dt_control_job_cancel(_darkroom_image_load_job);
+  _darkroom_image_load_job = NULL;
+  _darkroom_image_load_active_request = 0;
+  _darkroom_pending_focus_module = NULL;
+}
+
+static void _darkroom_start_image_load(const int32_t imgid)
+{
+  if(imgid <= UNKNOWN_IMAGE)
+  {
+    dt_control_log(_("No image to open !"));
+    return;
+  }
+
+  _darkroom_cancel_image_load_job();
+
+  dt_job_t *job = dt_control_job_create(&_darkroom_image_load_job_run, "darkroom load image %d", imgid);
+  if(!job)
+  {
+    dt_control_log(_("We could not queue the image load."));
+    return;
+  }
+
+  dt_darkroom_image_load_job_t *params = g_new0(dt_darkroom_image_load_job_t, 1);
+  params->imgid = imgid;
+  params->request_id = ++_darkroom_image_load_serial;
+
+  _darkroom_image_load_active_request = params->request_id;
+  _darkroom_image_load_job = job;
+
+  dt_control_job_set_params_with_size(job, params, sizeof(*params), g_free);
+  dt_control_job_set_state_callback(job, _darkroom_image_load_job_state);
+  dt_control_job_add_progress(job, _("loading image"), TRUE);
+  dt_control_add_job(darktable.control, DT_JOB_QUEUE_USER_FG, job);
+}
+
+static void _darkroom_image_loaded_callback(gpointer instance, guint request_id, guint result, gpointer payload,
+                                            gpointer user_data)
+{
+  dt_view_t *self = (dt_view_t *)user_data;
+  dt_develop_t *dev = (dt_develop_t *)self->data;
+  const dt_darkroom_image_load_result_t *loaded = (dt_darkroom_image_load_result_t *)payload;
+  (void)instance;
+
+  if(request_id == 0 || request_id != _darkroom_image_load_active_request) return;
+  if(darktable.view_manager->current_view != self) return;
+
+  _darkroom_image_load_active_request = 0;
+
+  if(!loaded) return;
+
+  if(result)
+  {
+    _darkroom_log_image_load_error((int)result);
+    return;
+  }
+
+  dev->image_storage = loaded->image_storage;
+  if(dev->gui_attached && loaded->raw_inited)
+  {
+    dev->roi.raw_width = loaded->raw_width;
+    dev->roi.raw_height = loaded->raw_height;
+    dev->roi.raw_inited = TRUE;
+  }
+
+  const int ret = dt_dev_load_image_finish(dev, loaded->imgid);
+  if(ret)
+  {
+    _darkroom_log_image_load_error(ret);
+    return;
+  }
+
+  darktable.develop->proxy.wb_coeffs[0] = 0.f;
+
+#ifdef USE_LUA
+
+  dt_lua_async_call_alien(dt_lua_event_trigger_wrapper,
+      0, NULL, NULL,
+      LUA_ASYNC_TYPENAME, "const char*", "darkroom-image-loaded",
+      LUA_ASYNC_TYPENAME, "dt_lua_image_t", GINT_TO_POINTER(dev->image_storage.id),
+      LUA_ASYNC_DONE);
+
+#endif
+
+  // synch gui and flag pipe as dirty
+  // this is done here and not in dt_read_history, as it would else be triggered before module->gui_init.
+  // locks history mutex internally
+  dt_dev_pop_history_items(dev);
+  dt_dev_history_gui_update(dev);
+  dt_dev_history_pixelpipe_update(dev, TRUE);
+
+  if(_darkroom_pending_focus_module && g_list_find(dev->iop, _darkroom_pending_focus_module))
+    dt_iop_request_focus(_darkroom_pending_focus_module);
+  _darkroom_pending_focus_module = NULL;
+
+  // Clean & Init the starting point of undo/redo
+  dt_undo_clear(darktable.undo, DT_UNDO_DEVELOP);
+  dt_dev_undo_start_record(dev);
+  dt_dev_undo_end_record(dev);
+
+  /* signal that darktable.develop is initialized and ready to be used */
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_INITIALIZE);
+
+  dt_image_check_camera_missing_sample(&dev->image_storage);
+
+  // change active image for global actions (menu)
+  dt_view_active_images_reset(FALSE);
+  dt_view_active_images_add(dev->image_storage.id, FALSE);
+
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
+
+  dt_view_image_info_update(dev->image_storage.id);
+  dt_dev_update_mouse_effect_radius(dev); // FIXME: Should be placed right after dev->roi.natural_scale is properly initialized.
+}
+
 int try_enter(dt_view_t *self)
 {
   uint32_t num_selected = dt_selection_get_length(darktable.selection);
   int32_t imgid = dt_control_get_mouse_over_id();
+  (void)self;
+
+  _darkroom_pending_imgid = UNKNOWN_IMAGE;
 
   if(imgid != UNKNOWN_IMAGE)
   {
@@ -703,25 +933,8 @@ int try_enter(dt_view_t *self)
     return 1;
   }
 
-  int ret = dt_dev_load_image(darktable.develop, imgid);
-  if(ret)
-  {
-    switch(ret)
-    {
-      case DT_DEV_IMAGE_STORAGE_MIPMAP_NOT_FOUND:
-        dt_control_log(_("Could not load the image source data."));
-        break;
-      case DT_DEV_IMAGE_STORAGE_DB_NOT_READ:
-        dt_control_log(_("Could not read image information from the database."));
-        break;
-      default:
-        dt_control_log(_("We could not load the image."));
-        break;
-    }
-    return 1;
-  }
-  darktable.develop->proxy.wb_coeffs[0] = 0.f;
-  return ret;
+  _darkroom_pending_imgid = imgid;
+  return 0;
 }
 
 static void _dev_change_image(dt_view_t *self, int32_t imgid)
@@ -1844,10 +2057,14 @@ void enter(dt_view_t *self)
   dt_print(DT_DEBUG_CONTROL, "[run_job+] 11 %f in darkroom mode\n", dt_get_wtime());
   dt_develop_t *dev = (dt_develop_t *)self->data;
   dev->exit = 0;
+  _darkroom_pending_focus_module = NULL;
 
   // We need to init forms before we init module blending GUI
   dt_masks_gui_init(dev);
   dev->gui_module = NULL;
+
+  if(!dev->iop)
+    dev->iop = dt_dev_load_modules(dev);
 
   // Add IOP modules to the plugin list
   char option[1024];
@@ -1869,35 +2086,10 @@ void enter(dt_view_t *self)
         dt_iop_gui_update_expanded(module);
 
         if(active_plugin && !strcmp(module->op, active_plugin))
-          dt_iop_request_focus(module);
+          _darkroom_pending_focus_module = module;
       }
     }
   }
-
-#ifdef USE_LUA
-
-  dt_lua_async_call_alien(dt_lua_event_trigger_wrapper,
-      0, NULL, NULL,
-      LUA_ASYNC_TYPENAME, "const char*", "darkroom-image-loaded",
-      LUA_ASYNC_TYPENAME, "dt_lua_image_t", GINT_TO_POINTER(dev->image_storage.id),
-      LUA_ASYNC_DONE);
-
-#endif
-
-  // synch gui and flag pipe as dirty
-  // this is done here and not in dt_read_history, as it would else be triggered before module->gui_init.
-  // locks history mutex internally
-  dt_dev_pop_history_items(dev);
-  dt_dev_history_gui_update(dev);
-  dt_dev_history_pixelpipe_update(dev, TRUE);
-
-  // Clean & Init the starting point of undo/redo
-  dt_undo_clear(darktable.undo, DT_UNDO_DEVELOP);
-  dt_dev_undo_start_record(dev);
-  dt_dev_undo_end_record(dev);
-
-  /* signal that darktable.develop is initialized and ready to be used */
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_INITIALIZE);
 
   _register_modules_drag_n_drop(self);
 
@@ -1906,8 +2098,6 @@ void enter(dt_view_t *self)
   dt_undo_clear(darktable.undo, DT_UNDO_TAGS);
 
   dt_iop_color_picker_init();
-
-  dt_image_check_camera_missing_sample(&dev->image_storage);
 
   // Reset focus to center view
   dt_gui_refocus_center();
@@ -1920,10 +2110,6 @@ void enter(dt_view_t *self)
   // Attach bauhaus default signal callback to IOP
   darktable.bauhaus->default_value_changed_callback = dt_bauhaus_value_changed_default_callback;
 
-  // change active image for global actions (menu)
-  dt_view_active_images_reset(FALSE);
-  dt_view_active_images_add(dev->image_storage.id, FALSE);
-
   // This gets the first selected ID to scroll where relevant, so
   // runs it before clearing the selection
   dt_thumbtable_show(darktable.gui->ui->thumbtable_filmstrip);
@@ -1933,13 +2119,18 @@ void enter(dt_view_t *self)
   // clear selection, we don't want selections in darkroom
   dt_selection_clear(darktable.selection);
 
+  DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_IMAGE_LOADED,
+                                  G_CALLBACK(_darkroom_image_loaded_callback), self);
+
   /* connect signal for filmstrip image activate */
   DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_VIEWMANAGER_THUMBTABLE_ACTIVATE,
-                            G_CALLBACK(_view_darkroom_filmstrip_activate_callback), self);
+                                  G_CALLBACK(_view_darkroom_filmstrip_activate_callback), self);
 
-  dt_view_image_info_update(dev->image_storage.id);
   gtk_widget_grab_focus(dt_ui_center(darktable.gui->ui)); // ensure the center view has focus for keybindings to work
-  dt_dev_update_mouse_effect_radius(dev); // FIXME: Should be placed right after dev->roi.natural_scale is properly initialized.
+
+  const int32_t imgid = _darkroom_pending_imgid;
+  _darkroom_pending_imgid = UNKNOWN_IMAGE;
+  _darkroom_start_image_load(imgid);
 }
 
 void leave(dt_view_t *self)
@@ -1954,6 +2145,10 @@ void leave(dt_view_t *self)
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
   if(dev->virtual_pipe) dt_atomic_set_int(&dev->virtual_pipe->shutdown, TRUE);
+
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_darkroom_image_loaded_callback), (gpointer)self);
+  _darkroom_cancel_image_load_job();
+  _darkroom_pending_focus_module = NULL;
 
   // While we wait for possible pipelines to finish,
   // do the GUI cleaning.

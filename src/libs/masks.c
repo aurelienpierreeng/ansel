@@ -216,6 +216,13 @@ static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_m
   if(!self || !self->data) return;
 
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+  if(!darktable.develop || !darktable.develop->history)
+  {
+    _lib_masks_release_blending(lm);
+    gtk_widget_hide(lm->blending_box);
+    return;
+  }
+
   dt_iop_module_t *module = darktable.develop ? darktable.develop->gui_module : NULL;
   const gboolean module_changed = (lm->active_module != module);
   lm->active_module = module;
@@ -1698,6 +1705,11 @@ static void _lib_masks_selection_change(dt_lib_module_t *self, struct dt_iop_mod
   lm->gui_reset = 1 - throw_event;
   GtkTreeIter iter;
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
+  if(!GTK_IS_TREE_MODEL(model))
+  {
+    lm->gui_reset = 0;
+    return;
+  }
   gboolean valid = gtk_tree_model_get_iter_first(model, &iter);
 
   if(valid)
@@ -1766,6 +1778,7 @@ static void _lib_masks_handler_callback(gpointer instance, const int formid, con
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
   if(!lm) return;
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
+  if(!GTK_IS_TREE_MODEL(model)) return;
   GtkTreeIter iter;
   gboolean found_iter = gtk_tree_model_get_iter_first(model, &iter);
 
