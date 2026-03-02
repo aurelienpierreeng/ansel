@@ -304,7 +304,7 @@ static void _mask_display(const float *const restrict in, uint8_t *const restric
   const dt_aligned_pixel_t mask_color = { 1.0f, 1.0f, 0.0f, 0.0f };
 
   #ifdef _OPENMP
-  #pragma omp parallel for simd default(none) schedule(static) aligned(in, out: 64) aligned(hidden_color: 16) \
+  #pragma omp parallel for simd default(none) schedule(static) aligned(in, out: 64) aligned(mask_color: 16) \
       dt_omp_firstprivate(in, out, buffsize, alpha, mask_color)
   #endif
     for(size_t j = 0; j < buffsize; j+= 4)
