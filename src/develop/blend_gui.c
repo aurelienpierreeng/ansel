@@ -2570,6 +2570,27 @@ static GtkWidget *_blendop_create_enable_toggle(dt_iop_module_t *module, const u
   return toggle;
 }
 
+static void _blendop_update_top_enable_label(dt_iop_module_t *module)
+{
+  if(!module || !module->blend_data) return;
+
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  if(!GTK_IS_BUTTON(bd->top_enable)) return;
+
+  gchar *clean_name = delete_underscore(module->name());
+  const char *multi_name = module->multi_name[0] ? module->multi_name : "0";
+  gchar *label = g_strdup_printf(_("Enable blending/masking for module %s (%s)"), clean_name, multi_name);
+  gtk_button_set_label(GTK_BUTTON(bd->top_enable), label);
+  GtkWidget *child = gtk_bin_get_child(GTK_BIN(bd->top_enable));
+  if(GTK_IS_LABEL(child))
+  {
+    gtk_label_set_line_wrap(GTK_LABEL(child), TRUE);
+    gtk_label_set_xalign(GTK_LABEL(child), 0.0f);
+  }
+  g_free(label);
+  g_free(clean_name);
+}
+
 static GtkWidget *_blendop_create_notebook_page(GtkWidget *notebook, const gchar *label, GtkWidget **content)
 {
   GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -2782,7 +2803,12 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
                                                   || (bd->raster_inited && raster_enabled)
                                                   || (bd->blendif_inited && blendif_enabled));
 
-  _blendop_sync_toggle_state(bd->top_enable, TRUE, top_enabled, bd->top_content);
+  _blendop_update_top_enable_label(module);
+  _blendop_toggle_button_set_active(bd->top_enable, top_enabled);
+  if(GTK_IS_WIDGET(bd->top_content))
+    gtk_widget_set_visible(bd->top_content, top_enabled);
+  if(GTK_IS_WIDGET(bd->blending_notebook))
+    gtk_widget_set_visible(bd->blending_notebook, top_enabled);
   _blendop_sync_toggle_state(bd->masks_enable, bd->masks_inited, masks_enabled, bd->masks_content);
   _blendop_sync_toggle_state(bd->raster_enable, bd->raster_inited, raster_enabled, bd->raster_content);
   _blendop_sync_toggle_state(bd->blendif_enable, bd->blendif_inited, blendif_enabled, bd->blendif_content);
@@ -3151,34 +3177,41 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
 
   bd->blending_body_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_box_pack_start(GTK_BOX(blendw), bd->blending_body_box, TRUE, TRUE, 0);
-  bd->blending_notebook = gtk_notebook_new();
-  gtk_notebook_set_scrollable(GTK_NOTEBOOK(bd->blending_notebook), TRUE);
-  gtk_notebook_set_action_widget(GTK_NOTEBOOK(bd->blending_notebook), presets_button, GTK_PACK_END);
-  gtk_box_pack_start(GTK_BOX(bd->blending_body_box), bd->blending_notebook, TRUE, TRUE, 0);
 
-  GtkWidget *top_header = _blendop_create_toggle_page(bd->blending_notebook, _("Blending"), module,
-                                                      DEVELOP_MASK_ENABLED, &bd->top_enable,
-                                                      &bd->top_content);
-  GtkWidget *top_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *top_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  bd->top_enable = _blendop_create_enable_toggle(module, DEVELOP_MASK_ENABLED);
+  _blendop_update_top_enable_label(module);
+  gtk_box_pack_start(GTK_BOX(top_header), bd->top_enable, FALSE, FALSE, 0);
   dt_gui_add_help_link(top_header, dt_get_help_url("masks_blending"));
   gtk_widget_set_name(top_header, "blending-header");
+  gtk_box_pack_start(GTK_BOX(bd->blending_body_box), top_header, FALSE, FALSE, 0);
+
+  bd->top_content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  GtkWidget *top_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_box_pack_start(GTK_BOX(top_box), blend_modes_hbox, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(top_box), bd->blend_mode_parameter_slider, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(top_box), bd->opacity_slider, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(bd->top_content), top_box, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(bd->blending_body_box), bd->top_content, FALSE, FALSE, 0);
 
-  _blendop_create_toggle_page(bd->blending_notebook, _("Parametric"), module,
-                              DEVELOP_MASK_CONDITIONAL, &bd->blendif_enable,
-                              &bd->blendif_content);
-  dt_iop_gui_init_blendif(GTK_BOX(bd->blendif_content), module);
+  bd->blending_notebook = gtk_notebook_new();
+  gtk_notebook_set_scrollable(GTK_NOTEBOOK(bd->blending_notebook), TRUE);
+  gtk_notebook_set_action_widget(GTK_NOTEBOOK(bd->blending_notebook), presets_button, GTK_PACK_END);
+  gtk_widget_show(presets_button);
+  gtk_box_pack_start(GTK_BOX(bd->blending_body_box), bd->blending_notebook, TRUE, TRUE, 0);
+
+  _blendop_create_toggle_page(bd->blending_notebook, _("Raster"), module,
+                              DEVELOP_MASK_RASTER, &bd->raster_enable, &bd->raster_content);
+  dt_iop_gui_init_raster(GTK_BOX(bd->raster_content), module);
 
   _blendop_create_toggle_page(bd->blending_notebook, _("Drawn"), module,
                               DEVELOP_MASK_MASK, &bd->masks_enable, &bd->masks_content);
   dt_iop_gui_init_masks(GTK_BOX(bd->masks_content), module);
 
-  _blendop_create_toggle_page(bd->blending_notebook, _("Raster"), module,
-                              DEVELOP_MASK_RASTER, &bd->raster_enable, &bd->raster_content);
-  dt_iop_gui_init_raster(GTK_BOX(bd->raster_content), module);
+  _blendop_create_toggle_page(bd->blending_notebook, _("Parametric"), module,
+                              DEVELOP_MASK_CONDITIONAL, &bd->blendif_enable,
+                              &bd->blendif_content);
+  dt_iop_gui_init_blendif(GTK_BOX(bd->blendif_content), module);
 
   _blendop_create_notebook_page(bd->blending_notebook, _("Options"), &bd->bottom_content);
   GtkWidget *bottom_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -3210,6 +3243,8 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->blendif_enable), (mask_mode & DEVELOP_MASK_CONDITIONAL) != 0);
 
   gtk_widget_show_all(GTK_WIDGET(bd->blending_body_box));
+  gtk_widget_set_visible(bd->top_content, (mask_mode & DEVELOP_MASK_ENABLED) != 0);
+  gtk_widget_set_visible(bd->blending_notebook, (mask_mode & DEVELOP_MASK_ENABLED) != 0);
 
   --darktable.gui->reset;
 }
