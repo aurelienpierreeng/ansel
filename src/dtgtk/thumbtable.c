@@ -114,10 +114,10 @@ static gboolean _thumbtable_clone_lut(dt_thumbtable_t *dst)
  * @file thumbtable.c
  *
  * We keep a double reference of thumbnail objects for the current collection:
- *  - as a linked list of variable length, in table->list
+ *  - as a hash table keyed by imgid, in table->list
  *  - as an array of fixed length, in table->lut.
  *
- * The linked list is used to keep track of allocated objects to update, redraw and free.
+ * The hash table is used to keep track of allocated objects to update, redraw and free.
  * Its length is limited to 840 elements or whatever is visible inside viewport
  * at current scroll level. It's garbage-collected.
  *
@@ -132,7 +132,7 @@ static gboolean _thumbtable_clone_lut(dt_thumbtable_t *dst)
  *
  * It is expected that thumbnails alloc/free always happen using table->list,
  * and that table->lut only updates its references accordingly, because table->list
- * will typically lead to fewer loop incrementations.
+ * gives us O(1) lookup by imgid and keeps iteration bounded to visible thumbnails.
  *
  * Keep that in mind if/when extending features.
  *
@@ -157,6 +157,16 @@ static void _scrollbar_value_changed(GtkAdjustment *adjustment, gpointer user_da
 static void _scrollbar_page_size_notify(GObject *object, GParamSpec *pspec, gpointer user_data);
 static void _parent_overlay_size_allocate(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data);
 static void _scrollbar_widget_size_allocate(GtkWidget *widget, GtkAllocation *allocation, gpointer user_data);
+
+static gint _thumb_compare_rowid_desc(gconstpointer a, gconstpointer b)
+{
+  const dt_thumbnail_t *thumb_a = (const dt_thumbnail_t *)a;
+  const dt_thumbnail_t *thumb_b = (const dt_thumbnail_t *)b;
+
+  if(thumb_a->rowid < thumb_b->rowid) return 1;
+  if(thumb_a->rowid > thumb_b->rowid) return -1;
+  return 0;
+}
 
 static int _grab_focus(dt_thumbtable_t *table)
 {
@@ -186,7 +196,7 @@ static gboolean _thumbtable_idle_update(gpointer user_data)
   table->idle_update_id = 0;
   dt_thumbtable_configure(table);
   dt_thumbtable_update(table);
-  if(!table->list) gtk_widget_queue_draw(table->grid);
+  if(table->thumb_nb == 0) gtk_widget_queue_draw(table->grid);
   return G_SOURCE_REMOVE;
 }
 
@@ -716,14 +726,8 @@ void dt_thumbtable_configure(dt_thumbtable_t *table)
 
 dt_thumbnail_t *_find_thumb_by_imgid(dt_thumbtable_t *table, const int32_t imgid)
 {
-  for(GList *item = g_list_first(table->list); item; item = g_list_next(item))
-  {
-    dt_thumbnail_t *th = (dt_thumbnail_t *)item->data;
-    if(th->info.id == imgid)
-      return th;
-  }
-
-  return NULL;
+  if(!table || imgid <= 0) return NULL;
+  return (dt_thumbnail_t *)g_hash_table_lookup(table->list, GINT_TO_POINTER(imgid));
 }
 
 gboolean dt_thumbtable_get_thumbnail_info(dt_thumbtable_t *table, int32_t imgid, dt_image_t *out)
@@ -850,7 +854,7 @@ void _add_thumbnail_at_rowid(dt_thumbtable_t *table, const size_t rowid, const i
   {
     thumb = dt_thumbnail_new(rowid, table->overlays, table, &info);
     if(!thumb) return;
-    table->list = g_list_prepend(table->list, thumb);
+    g_hash_table_insert(table->list, GINT_TO_POINTER(thumb->info.id), thumb);
     table->thumb_nb += 1;
   }
 
@@ -913,9 +917,12 @@ void _resize_thumbnails(dt_thumbtable_t *table)
 {
   if(!table->configured) return;
 
-  for(GList *link = g_list_first(table->list); link; link = g_list_next(link))
+  GHashTableIter iter;
+  gpointer value = NULL;
+  g_hash_table_iter_init(&iter, table->list);
+  while(g_hash_table_iter_next(&iter, NULL, &value))
   {
-    dt_thumbnail_t *thumb = (dt_thumbnail_t *)link->data;
+    dt_thumbnail_t *thumb = (dt_thumbnail_t *)value;
     gboolean size_changed = (table->thumb_height != thumb->height || table->thumb_width != thumb->width);
 
     if(size_changed || table->overlays != thumb->over)
@@ -957,11 +964,11 @@ void dt_thumbtable_update(dt_thumbtable_t *table)
 
   dt_pthread_mutex_lock(&table->lock);
 
-  gboolean empty_list = (table->list == NULL);
+  gboolean empty_list = (table->thumb_nb == 0);
 
   _populate_thumbnails(table);
 
-  if(!empty_list && table->list)
+  if(!empty_list)
     _resize_thumbnails(table);
 
   table->thumbs_inited = TRUE;
@@ -989,9 +996,12 @@ static void _dt_selection_changed_callback(gpointer instance, gpointer user_data
   gboolean first = TRUE;
 
   dt_pthread_mutex_lock(&table->lock);
-  for(const GList *l = g_list_first(table->list); l; l = g_list_next(l))
+
+  for(int rowid = 0; rowid < table->collection_count; rowid++)
   {
-    dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
+    dt_thumbnail_t *thumb = table->lut[rowid].thumb;
+    if(!thumb) continue;
+
     const gboolean selected = thumb->selected;
     dt_thumbnail_update_selection(thumb, dt_selection_is_id_selected(darktable.selection, thumb->info.id));
 
@@ -1026,9 +1036,12 @@ dt_thumbtable_zoom_t dt_thumbtable_get_zoom(dt_thumbtable_t *table)
 void dt_thumbtable_offset_zoom(dt_thumbtable_t *table, const double delta_x, const double delta_y)
 {
   dt_pthread_mutex_lock(&table->lock);
-  for(const GList *l = g_list_first(table->list); l; l = g_list_next(l))
+  GHashTableIter iter;
+  gpointer value = NULL;
+  g_hash_table_iter_init(&iter, table->list);
+  while(g_hash_table_iter_next(&iter, NULL, &value))
   {
-    dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
+    dt_thumbnail_t *thumb = (dt_thumbnail_t *)value;
     thumb->zoomx += delta_x;
     thumb->zoomy += delta_y;
     gtk_widget_queue_draw(thumb->w_image);
@@ -1078,16 +1091,20 @@ gboolean dt_thumbtable_get_draw_group_borders(dt_thumbtable_t *table)
 void dt_thumbtable_refresh_thumbnail_real(dt_thumbtable_t *table, int32_t imgid, gboolean reinit)
 {
   dt_pthread_mutex_lock(&table->lock);
-  for(GList *l = g_list_first(table->list); l; l = g_list_next(l))
+  if(imgid != UNKNOWN_IMAGE)
   {
-    dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
-    if(thumb->info.id == imgid)
-    {
+    dt_thumbnail_t *thumb = (dt_thumbnail_t *)g_hash_table_lookup(table->list, GINT_TO_POINTER(imgid));
+    if(thumb)
       dt_thumbnail_image_refresh(thumb);
-      break;
-    }
-    else if(imgid == UNKNOWN_IMAGE)
+  }
+  else
+  {
+    GHashTableIter iter;
+    gpointer value = NULL;
+    g_hash_table_iter_init(&iter, table->list);
+    while(g_hash_table_iter_next(&iter, NULL, &value))
     {
+      dt_thumbnail_t *thumb = (dt_thumbnail_t *)value;
       dt_thumbnail_image_refresh(thumb);
     }
   }
@@ -1637,9 +1654,12 @@ void _alternative_mode(dt_thumbtable_t *table, gboolean enable)
   table->alternate_mode = enable;
 
   dt_pthread_mutex_lock(&table->lock);
-  for(GList *l = g_list_first(table->list); l; l = g_list_next(l))
+  GHashTableIter iter;
+  gpointer value = NULL;
+  g_hash_table_iter_init(&iter, table->list);
+  while(g_hash_table_iter_next(&iter, NULL, &value))
   {
-    dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
+    dt_thumbnail_t *thumb = (dt_thumbnail_t *)value;
     dt_thumbnail_alternative_mode(thumb, enable);
   }
   dt_pthread_mutex_unlock(&table->lock);
@@ -1900,7 +1920,7 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
   table->configured = FALSE;
   table->thumbs_inited = FALSE;
   table->collection_hash = -1;
-  table->list = NULL;
+  table->list = g_hash_table_new(g_direct_hash, g_direct_equal);
   table->collection_count = 0;
   table->min_row_id = 0;
   table->max_row_id = 0;
@@ -2018,26 +2038,24 @@ void _dt_thumbtable_empty_list(dt_thumbtable_t *table)
   const double start = dt_get_wtime();
 
   dt_pthread_mutex_lock(&table->lock);
-  if(table->list)
+  // WARNING: we need to detach children from parent starting from the last
+  // otherwise, Gtk updates the index of all the next children in sequence
+  // and that takes forever when thumb_nb > 1000
+  GList *thumbs = g_hash_table_get_values(table->list);
+  thumbs = g_list_sort(thumbs, _thumb_compare_rowid_desc);
+  for(GList *l = thumbs; l; l = g_list_next(l))
   {
-    // WARNING: we need to detach children from parent starting from the last
-    // otherwise, Gtk updates the index of all the next children in sequence
-    // and that takes forever when thumb_nb > 1000
-    for(GList *l = g_list_first(table->list); l; l = g_list_next(l))
-    {
-      dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
-      gtk_widget_hide(thumb->widget);
-      g_idle_add((GSourceFunc)dt_thumbnail_destroy, thumb);
-    }
-
-    g_list_free(g_steal_pointer(&table->list));
+    dt_thumbnail_t *thumb = (dt_thumbnail_t *)l->data;
+    gtk_widget_hide(thumb->widget);
+    g_idle_add((GSourceFunc)dt_thumbnail_destroy, thumb);
   }
+  g_list_free(thumbs);
+  g_hash_table_remove_all(table->list);
   dt_pthread_mutex_unlock(&table->lock);
 
   dt_print(DT_DEBUG_LIGHTTABLE, "Cleaning the list of %i elements in %0.04f sec\n", table->thumb_nb,
            dt_get_wtime() - start);
 
-  table->list = NULL;
   table->thumb_nb = 0;
   table->thumbs_inited = FALSE;
 }
@@ -2062,6 +2080,7 @@ void dt_thumbtable_cleanup(dt_thumbtable_t *table)
 
   dt_pthread_mutex_destroy(&table->lock);
 
+  g_hash_table_destroy(table->list);
   if(table->lut) free(table->lut);
 
   free(table);

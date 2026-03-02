@@ -102,10 +102,10 @@ typedef struct dt_thumbtable_t
   // Store the current number of columns in grid
   int grid_cols;
 
-  // list of thumbnails loaded inside main widget (dt_thumbnail_t)
+  // Hash table of thumbnails loaded inside main widget (dt_thumbnail_t), keyed by imgid
   // for filmstrip and filemanager, this is all the images drawn at screen (even partially)
   // for zoommable, this is all the images in the row drawn at screen. We don't load laterals images on fly.
-  GList *list;
+  GHashTable *list;
 
   int thumbs_per_row; // number of image in a row (1 for filmstrip ; MAX_ZOOM for zoomable)
   int thumb_width;              // demanded thumb size (real size can differ of 1 due to rounding)
