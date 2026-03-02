@@ -1574,7 +1574,7 @@ void dt_dev_update_mouse_effect_radius(dt_develop_t *dev)
   // Constant 10 device-pixel safety margin for mask selection, independent of zoom and PPD.
   const float radius = DT_PIXEL_APPLY_DPI(15.0f);
   darktable.gui->mouse.effect_radius = radius / zoom_level;
-  darktable.gui->mouse.effect_radius_scaled = radius * darktable.gui->ppd;
+  darktable.gui->mouse.effect_radius_scaled = darktable.gui->mouse.effect_radius * darktable.gui->ppd;
 
   dt_print(DT_DEBUG_MASKS,
            "[mouse] effect_radius=%0.2f effect_radius_scaled=%0.2f zoom_level=%0.4f ppd=%0.4f\n",
