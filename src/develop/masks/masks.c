@@ -596,6 +596,25 @@ static void _dt_masks_events_update_hover(dt_masks_form_t *dispatch_form, dt_mas
   dispatch_form->functions->update_hover(dispatch_form, mask_gui, form_index);
 }
 
+static gboolean _dt_masks_events_cursor_over_form(const dt_masks_form_t *dispatch_form,
+                                                  dt_masks_form_gui_t *mask_gui,
+                                                  const int form_index)
+{
+  if(!dispatch_form || !mask_gui || !dispatch_form->functions || !dispatch_form->functions->get_distance)
+    return FALSE;
+
+  int inside = 0;
+  int inside_border = 0;
+  int near = -1;
+  int inside_source = 0;
+  float dist = FLT_MAX;
+  dispatch_form->functions->get_distance(mask_gui->pos[0], mask_gui->pos[1], DT_GUI_MOUSE_EFFECT_RADIUS_SCALED,
+                                         mask_gui, form_index,
+                                         g_list_length(dispatch_form->points), &inside, &inside_border, &near,
+                                         &inside_source, &dist);
+  return inside || inside_border || near >= 0 || inside_source;
+}
+
 /**
  * @brief Consume the initial drag motion used to disambiguate scrolling vs dragging in groups.
  */
@@ -2268,7 +2287,15 @@ int dt_masks_events_mouse_scrolled(struct dt_iop_module_t *module, double x, dou
   dt_masks_form_t *dispatch_form
       = _dt_masks_events_get_dispatch_form(mask_form, mask_gui, &group_entry, &parent_id, &form_index);
 
-  if(dispatch_form && dispatch_form->functions->mouse_scrolled)
+  if(!mask_gui->creation && !dt_masks_is_anything_selected(mask_gui))
+    return 0;
+
+  _dt_masks_events_update_hover(dispatch_form, mask_gui, form_index);
+
+  if(!mask_gui->creation && !_dt_masks_events_cursor_over_form(dispatch_form, mask_gui, form_index))
+    return 0;
+
+  if(dispatch_form && dispatch_form->functions && dispatch_form->functions->mouse_scrolled)
     result = dispatch_form->functions->mouse_scrolled(module, x, y,
                                                       scroll_increases ? 1 : 0, scroll_flow,
                                                       key_state, dispatch_form, parent_id, mask_gui, form_index,
