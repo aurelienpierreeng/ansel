@@ -713,6 +713,27 @@ static void _darkroom_log_image_load_error(const int ret)
   }
 }
 
+static gboolean _darkroom_attach_missing_iop_guis(dt_develop_t *dev)
+{
+  if(!dev) return FALSE;
+
+  gboolean attached = FALSE;
+
+  for(GList *modules = g_list_first(dev->iop); modules; modules = g_list_next(modules))
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)modules->data;
+
+    if(!module || dt_iop_is_hidden(module) || module->expander) continue;
+
+    if(!module->widget) dt_iop_gui_init(module);
+    dt_iop_gui_set_expander(module);
+    dt_iop_gui_update(module);
+    attached = TRUE;
+  }
+
+  return attached;
+}
+
 static void _darkroom_image_load_job_state(dt_job_t *job, dt_job_state_t state)
 {
   if(job != _darkroom_image_load_job) return;
@@ -868,6 +889,8 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
   // locks history mutex internally
   dt_dev_pop_history_items(dev);
   dt_dev_history_gui_update(dev);
+  if(_darkroom_attach_missing_iop_guis(dev))
+    dt_dev_history_gui_update(dev);
   dt_dev_history_pixelpipe_update(dev, TRUE);
 
   if(_darkroom_pending_focus_module && g_list_find(dev->iop, _darkroom_pending_focus_module))

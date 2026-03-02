@@ -1854,13 +1854,15 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   dt_gui_module_t *mod = (dt_gui_module_t *)module;
 
   // remove multiple delayed gtk_widget_queue_draw triggers
-  while(g_idle_remove_by_data(module->widget));
+  if(module->widget)
+    while(g_idle_remove_by_data(module->widget));
 
   // Detach accels
   if(!dt_iop_is_hidden(module) && !(module->flags() & IOP_FLAGS_DEPRECATED))
   {
     dt_accels_remove_accel(darktable.gui->accels, mod->accel_path, module);
     g_free(mod->accel_path);
+    mod->accel_path = NULL;
   }
 
   if(mod->instance_name)
@@ -1871,16 +1873,26 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   }
 
   g_free(mod->instance_name);
+  mod->instance_name = NULL;
 
   // widget_list doesn't own the widget referenced, so don't deep_free
   dt_gui_module_t *m = DT_GUI_MODULE(module);
   g_list_free(m->widget_list);
+  m->widget_list = NULL;
   g_list_free(m->widget_list_bh);
+  m->widget_list_bh = NULL;
   g_free(m->name);
+  m->name = NULL;
   g_free(m->view);
+  m->view = NULL;
 
-  if(module->gui_cleanup) module->gui_cleanup(module);
+  if(module->gui_data && module->gui_cleanup) module->gui_cleanup(module);
   dt_iop_gui_cleanup_blending(module);
+
+  module->widget = NULL;
+  module->header = NULL;
+  module->expander = NULL;
+  module->off = NULL;
 }
 
 void dt_iop_gui_update(dt_iop_module_t *module)
