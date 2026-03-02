@@ -486,15 +486,33 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   g_free(title);
   g_free(form_name);
 
-  GtkWidget *sep = gtk_separator_menu_item_new();
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+
+    // Common menu items
+  if(!gui->creation && (gui->form_selected || gui->node_selected) && op_form)
+  {
+    const float opacity = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_OPACITY);
+
+    _masks_gui_add_interaction_slider(menu, _("Size"), op_form, DT_MASKS_INTERACTION_SIZE,
+                                      DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
+                                      gui, darktable.develop->gui_module);
+    _masks_gui_add_interaction_slider(menu, _("Hardness"), op_form, DT_MASKS_INTERACTION_HARDNESS,
+                                      DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
+                                      gui, darktable.develop->gui_module);
+    if(!gui->node_selected)
+      _masks_gui_add_interaction_slider(menu, _("Opacity"), op_form, DT_MASKS_INTERACTION_OPACITY,
+                                        DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.01f,
+                                        isfinite(opacity) ? opacity : 1.0f, 3, "%", 100.0f,
+                                        gui, darktable.develop->gui_module);
+
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+  }
 
   // Shape specific menu items
   if(form && form->functions && form->functions->populate_context_menu)
     if(form->functions->populate_context_menu(menu, form, gui, pzx, pzy))
     {
-      sep = gtk_separator_menu_item_new();
-      gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
+      gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
     }
 
 
@@ -504,55 +522,13 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
     if(module && module->populate_masks_context_menu)
       if(module->populate_masks_context_menu(module, menu, form->formid, pzx, pzy))
       {
-        sep = gtk_separator_menu_item_new();
-        gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
+        gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
       }
   }
-
-  int i = 0;
-  for(GList *forms = darktable.develop->forms; forms; forms = g_list_next(forms))
-  {
-    dt_masks_form_t *f = (dt_masks_form_t *)forms->data;
-    fprintf(stderr, "%2d) dt_masks_form_t %s,\tID %d,\t\"%s\"\n", i,
-                                f->type & DT_MASKS_CIRCLE ? "circle" :
-                                f->type & DT_MASKS_ELLIPSE ? "ellipse" :
-                                f->type & DT_MASKS_POLYGON ? "polygon" :
-                                f->type & DT_MASKS_BRUSH ? "brush" :
-                                f->type & DT_MASKS_GRADIENT ? "gradient" :
-                                f->type & DT_MASKS_GROUP ? "group" : "unknown", f->formid, f->name);
-
-
-    if(f->type & DT_MASKS_GROUP)
-    {
-      fprintf(stderr, "   ||\n");
-      for(GList *gf = f->points; gf; gf = g_list_next(gf))
-      {
-        dt_masks_form_group_t *group_pt = (dt_masks_form_group_t *)gf->data;
-        fprintf(stderr, "   |-> dt_masks_form_group_t \tID %d,\tparentid: %d,\t state: %s%s%s%s%s%s%s%s\n", group_pt->formid, group_pt->parentid, group_pt->state & DT_MASKS_STATE_INVERSE ? _("inverse ") : "",
-                                                        group_pt->state & DT_MASKS_STATE_USE ? _("use ") : "",
-                                                        group_pt->state & DT_MASKS_STATE_NONE ? _("none ") : "",
-                                                        group_pt->state & DT_MASKS_STATE_SHOW ? _("show ") : "",
-                                                        group_pt->state & DT_MASKS_STATE_UNION ? _("union ") : "",
-                                                        group_pt->state & DT_MASKS_STATE_INTERSECTION ? _("intersection ") : "",
-                                                        group_pt->state & DT_MASKS_STATE_DIFFERENCE ? _("difference ") : "",
-                                                        group_pt->state & DT_MASKS_STATE_EXCLUSION ? _("exclusion ") : "");
-      }
-    }
-    i++;
-    fprintf(stderr, "\n");
-  }
-  fprintf(stderr, "----\n"
-                  "form: %d\n"
-                  "form_visible: %d\n"
-                  "parentid: %d\n\n", form->formid,
-                  dt_masks_get_visible_form(darktable.develop)
-                    ? dt_masks_get_visible_form(darktable.develop)->formid
-                    : -1,
-                  formgroup ? formgroup->parentid : -1);
 
   /*  Operation */
 
-  if(!gui->creation && !(form->type & DT_MASKS_IS_RETOUCHE) && (op_form) && gui->form_selected)
+  if(!gui->creation && !(form->type & DT_MASKS_IS_RETOUCHE) && (op_form) && !gui->node_selected)
   {
     menu_item = ctx_gtk_menu_item_new_with_markup(_("Operation"), menu, NULL, gui);
     GtkWidget *sub_menu = gtk_menu_new();
@@ -561,8 +537,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
 
     masks_gtk_menu_item_new_bold(_("Invert"), (op_form->state & DT_MASKS_STATE_INVERSE), DT_MASKS_STATE_INVERSE,
                                  op_icon[DT_MASKS_STATE_INVERSE]);
-    sep = gtk_separator_menu_item_new();
-    gtk_menu_shell_append(GTK_MENU_SHELL(sub_menu), sep);
+    gtk_menu_shell_append(GTK_MENU_SHELL(sub_menu), gtk_separator_menu_item_new());
     masks_gtk_menu_item_new_bold(_("Union"), (op_form->state & DT_MASKS_STATE_UNION), DT_MASKS_STATE_UNION,
                                  op_icon[DT_MASKS_STATE_UNION]);
     masks_gtk_menu_item_new_bold(_("Intersection"), (op_form->state & DT_MASKS_STATE_INTERSECTION), DT_MASKS_STATE_INTERSECTION,
@@ -572,31 +547,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
     masks_gtk_menu_item_new_bold(_("Exclusion"), (op_form->state & DT_MASKS_STATE_EXCLUSION), DT_MASKS_STATE_EXCLUSION,
                                  op_icon[DT_MASKS_STATE_EXCLUSION]);
 
-    sep = gtk_separator_menu_item_new();
-    gtk_menu_shell_append(GTK_MENU_SHELL(sub_menu), sep);
-  }
-
-  // Common menu items
-  if(!gui->creation && (gui->form_selected || gui->node_selected) && op_form)
-  {
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
-
-    const float opacity = dt_masks_form_get_interaction_value(op_form, DT_MASKS_INTERACTION_OPACITY);
-
-    _masks_gui_add_interaction_slider(menu, _("Size"), op_form, DT_MASKS_INTERACTION_SIZE,
-                                      DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
-                                      gui, darktable.develop->gui_module);
-    _masks_gui_add_interaction_slider(menu, _("Hardness"), op_form, DT_MASKS_INTERACTION_HARDNESS,
-                                      DT_MASKS_INCREMENT_SCALE, -4.f, 4.0f, 0.01f, 0.0f, 2, "x", 1.0f,
-                                      gui, darktable.develop->gui_module);
-    if(gui->form_selected)
-      _masks_gui_add_interaction_slider(menu, _("Opacity"), op_form, DT_MASKS_INTERACTION_OPACITY,
-                                        DT_MASKS_INCREMENT_ABSOLUTE, 0.0f, 1.0f, 0.01f,
-                                        isfinite(opacity) ? opacity : 1.0f, 3, "%", 100.0f,
-                                        gui, darktable.develop->gui_module);
-
-    sep = gtk_separator_menu_item_new();
-    gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
   }
 
   if(!gui->creation && gui->form_selected)
@@ -606,10 +557,10 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
     menu_item = ctx_gtk_menu_item_new_with_markup(_("Move down"), menu, _masks_movedown_callback, gui);
     gtk_widget_set_sensitive(menu_item, (form_pos < list_length - 1));
 
-    sep = gtk_separator_menu_item_new();
-    gtk_menu_shell_append(GTK_MENU_SHELL(menu), sep);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
   }
 
+  // Risky stuff at the end
   if(gui->creation)
   {
     menu_item = ctx_gtk_menu_item_new_with_markup(_("Cancel"), menu, _masks_gui_cancel_creation_callback, gui);
