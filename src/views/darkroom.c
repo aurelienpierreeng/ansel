@@ -2832,11 +2832,6 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
       _key_scroll(dev);
       return 1;
     }
-    case GDK_KEY_Escape:
-    {
-      dt_ctl_switch_mode_to("lighttable");
-      return 1;
-    }
     case GDK_KEY_Return:
     case GDK_KEY_KP_Enter:
     {

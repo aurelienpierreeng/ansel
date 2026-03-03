@@ -43,6 +43,7 @@
 */
 #include "accelerators.h"
 #include "common/darktable.h" // lots of garbage to include, only to get debug prints & flags
+#include "control/control.h"
 #include "gui/gtk.h"
 #include "gui/gtkentry.h"
 #include "gui/gdkkeys.h"
@@ -1040,6 +1041,12 @@ gboolean dt_accels_dispatch(GtkWidget *w, GdkEvent *event, gpointer user_data)
 {
   dt_accels_t *accels = (dt_accels_t *)user_data;
   if(accels->disable_accels) return FALSE;
+
+  if(event->type == GDK_KEY_PRESS && event->key.keyval == GDK_KEY_Escape)
+  {
+    dt_ctl_switch_mode_to("lighttable");
+    return TRUE;
+  }
 
   // Ditch everything that is not a key stroke or key strokes that are modifiers alone
   // Abort early for performance.
