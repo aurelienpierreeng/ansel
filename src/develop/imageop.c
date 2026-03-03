@@ -533,6 +533,8 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
   }
   if(!next) return; // what happened ???
 
+  if(module->module_will_remove && !module->module_will_remove(module)) return;
+
   if(dev->gui_attached) dt_dev_undo_start_record(dev);
 
   // we must pay attention if priority is 0

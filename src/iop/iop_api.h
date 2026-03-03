@@ -139,6 +139,8 @@ OPTIONAL(void, gui_post_expose, struct dt_iop_module_t *self, cairo_t *cr, int32
                                 int32_t pointerx, int32_t pointery);
 /** optional callback to be notified if the module acquires gui focus/loses it. */
 OPTIONAL(void, gui_focus, struct dt_iop_module_t *self, gboolean in);
+/** optional callback invoked before removing a module instance. Return FALSE to cancel the removal. */
+OPTIONAL(gboolean, module_will_remove, struct dt_iop_module_t *self);
 
 /** optional event callbacks */
 OPTIONAL(int, mouse_leave, struct dt_iop_module_t *self);
