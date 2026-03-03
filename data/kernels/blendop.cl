@@ -1172,6 +1172,30 @@ blendop_rgb_hsl(__read_only image2d_t in_a, __read_only image2d_t in_b, __read_o
 }
 
 __kernel void
+blendop_premult_over(__read_only image2d_t in_a, __read_only image2d_t in_b, __write_only image2d_t out,
+                     const int width, const int height, const int2 offs)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+
+  if(x >= width || y >= height) return;
+
+  /* drawlayer stores premultiplied RGBA in its cached sidecar mirror. This
+   * kernel applies the exact premultiplied "over" equation directly so the
+   * OpenCL path can reuse the existing interpolation helpers without first
+   * converting the layer back to straight alpha. */
+  const float4 dst = read_imagef(in_a, sampleri, (int2)(x, y) + offs);
+  const float4 src = read_imagef(in_b, sampleri, (int2)(x, y));
+  const float src_alpha = clamp(src.w, 0.0f, 1.0f);
+  const float inv_alpha = 1.0f - src_alpha;
+
+  float4 out_px;
+  out_px.xyz = src.xyz + dst.xyz * inv_alpha;
+  out_px.w = src_alpha + dst.w * inv_alpha;
+  write_imagef(out, (int2)(x, y), out_px);
+}
+
+__kernel void
 blendop_rgb_jzczhz(__read_only image2d_t in_a, __read_only image2d_t in_b, __read_only image2d_t mask, __write_only image2d_t out, const int width, const int height,
                    const int blend_mode, const float blend_parameter, const int2 offs, const int mask_display)
 {

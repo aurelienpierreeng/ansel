@@ -565,6 +565,21 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 
   g_free(status_str);
 
+  /* Realtime mode is best-effort rendering for highly interactive modules.
+   * In that mode we deliberately bypass expensive history->nodes parameter
+   * synchronization for incremental change flags (TOP_CHANGED/SYNCH), while
+   * still honoring full topology rebuild requests (REMOVE). */
+  const gboolean realtime = dt_dev_pixelpipe_get_realtime(pipe);
+  const gboolean is_incremental_sync = (status & (DT_DEV_PIPE_SYNCH | DT_DEV_PIPE_TOP_CHANGED));
+  if(realtime && is_incremental_sync && !(status & DT_DEV_PIPE_REMOVE))
+  {
+    pipe->history_hash = dev->history_hash;
+    pipe->last_history_hash = dev->history_hash;
+    pipe->changed = DT_DEV_PIPE_UNCHANGED;
+    dt_show_times_f(&start, "[dev_pixelpipe] pipeline resync with history", "for pipe %s", type);
+    return;
+  }
+
   // mask display off as a starting point
   pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
   // and blendif active

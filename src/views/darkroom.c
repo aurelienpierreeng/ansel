@@ -465,7 +465,9 @@ void expose(
   static int image_surface_height = 0;
   static int32_t image_surface_imgid = UNKNOWN_IMAGE;
   static uint64_t main_hash = 0;
+  static uint64_t main_history_hash = 0;
   static uint64_t preview_hash = 0;
+  static uint64_t preview_history_hash = 0;
   static uint64_t zoom_hash = 0;
 
   const uint64_t new_zoom_hash = dt_hash(5381, (char *)&dev->roi, sizeof(dev->roi));
@@ -505,7 +507,7 @@ void expose(
 
   if(has_main_image)
   {
-    if(main_hash != dev->pipe->backbuf.hash)
+    if(main_hash != dev->pipe->backbuf.hash || main_history_hash != dev->pipe->backbuf.history_hash)
     {
       // If we have a valid image use it, except if it's still the same as previously.
       // In this case, we will reuse the buffered surface.
@@ -531,6 +533,7 @@ void expose(
         cairo_surface_set_device_scale(surface, darktable.gui->ppd, darktable.gui->ppd);
         image_surface_imgid = _render_image(cr, surface, wd, ht, dev);
         main_hash = dev->pipe->backbuf.hash;
+        main_history_hash = dev->pipe->backbuf.history_hash;
       }
     }
     _paint_all(cri, cr, dev->image_surface);
@@ -538,6 +541,7 @@ void expose(
   else if(has_preview_image)
   {
     if(preview_hash != dev->preview_pipe->backbuf.hash
+      || preview_history_hash != dev->preview_pipe->backbuf.history_hash
       || zoom_hash != new_zoom_hash)
     {
       // Cases in which we want the refresh placeholder preview in the surface :
@@ -581,6 +585,7 @@ void expose(
         dt_dev_rescale_roi(dev, cr, width, height);
         image_surface_imgid = _render_image(cr, surface, wd, ht, dev);
         preview_hash = dev->preview_pipe->backbuf.hash;
+        preview_history_hash = dev->preview_pipe->backbuf.history_hash;
         zoom_hash = new_zoom_hash;
       }
     }
