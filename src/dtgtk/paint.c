@@ -1001,6 +1001,7 @@ void dtgtk_cairo_paint_eye_toggle(cairo_t *cr, gint x, gint y, gint w, gint h, g
 {
   PREAMBLE(1, 1, 0, 0)
 
+  cairo_save(cr);
   const double offset = 0.17;
   // Top
   cairo_arc(cr, 0.5, 0.5 + 0.3, 0.6, (1.0 + offset) * M_PI, (2.0 - offset) * M_PI);
@@ -1017,9 +1018,10 @@ void dtgtk_cairo_paint_eye_toggle(cairo_t *cr, gint x, gint y, gint w, gint h, g
   cairo_arc(cr, 0.5, iris_y, 0.10, 0, 2 * M_PI);
   cairo_fill(cr);
 
+  cairo_restore(cr);
+
   if((flags & CPF_ACTIVE))
   {
-    //cairo_translate(cr, 0, -0.18);
     cairo_move_to(cr, 0.1, 0.9);
     cairo_line_to(cr, 0.9, 0.1);
     cairo_stroke(cr);
