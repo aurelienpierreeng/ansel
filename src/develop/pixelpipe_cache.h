@@ -127,6 +127,70 @@ void dt_pixel_cache_clmem_put(struct dt_pixel_cache_entry_t *entry, void *host_p
 void dt_pixel_cache_clmem_remove(struct dt_pixel_cache_entry_t *entry, void *mem);
 void dt_pixel_cache_clmem_flush(struct dt_pixel_cache_entry_t *entry);
 
+#ifdef HAVE_OPENCL
+/**
+ * @brief Acquire a pinned OpenCL image for a host buffer tracked by the pixelpipe cache.
+ *
+ * @details
+ * This is the public helper for modules that manage their own host buffers but still want
+ * the pixelpipe cache to own the reusable pinned `cl_mem` images. The helper accepts an
+ * optional cache-entry hint for normal cache lines. If that hint is NULL, it will try to
+ * resolve the host pointer against the cache's privately-owned external allocations.
+ *
+ * On reuse, the helper synchronizes host memory to the OpenCL image before returning.
+ *
+ * @param cache Pixelpipe cache.
+ * @param host_ptr Host-backed image data.
+ * @param entry_hint Optional owning cache entry for regular cache lines, or NULL.
+ * @param devid OpenCL device id.
+ * @param width Image width.
+ * @param height Image height.
+ * @param bpp Bytes per pixel.
+ * @param flags OpenCL allocation flags (must include `CL_MEM_USE_HOST_PTR`).
+ * @param[out] out_cst Optional cached colorspace tag for reused buffers.
+ * @param[out] out_reused Optional flag set TRUE when an existing pinned image was reused.
+ * @return void* OpenCL image (`cl_mem`) or NULL on failure.
+ */
+void *dt_dev_pixelpipe_cache_get_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
+                                              struct dt_pixel_cache_entry_t *entry_hint, int devid,
+                                              int width, int height, int bpp, int flags, int *out_cst,
+                                              gboolean *out_reused);
+
+/**
+ * @brief Release or cache a pinned OpenCL image acquired with
+ * `dt_dev_pixelpipe_cache_get_pinned_image()`.
+ *
+ * @details
+ * If the image is still a host-backed pinned allocation and an owning cache entry can be
+ * resolved, it is returned to that cache entry for reuse. Otherwise it is released.
+ *
+ * @param cache Pixelpipe cache.
+ * @param host_ptr Host-backed image data.
+ * @param entry_hint Optional owning cache entry for regular cache lines, or NULL.
+ * @param cst Colorspace tag stored alongside the pinned image.
+ * @param[in,out] mem Pointer to the `cl_mem` handle (cleared on return).
+ */
+void dt_dev_pixelpipe_cache_put_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
+                                             struct dt_pixel_cache_entry_t *entry_hint, int cst, void **mem);
+
+/**
+ * @brief Drop cached pinned OpenCL images associated with a given host buffer.
+ *
+ * @details
+ * This is meant for host buffers that remain alive and continue to be mutated by the CPU
+ * (for example, privately owned working patches). Reusing a stale `CL_MEM_USE_HOST_PTR`
+ * image for such buffers can hide later host-side edits on some drivers. Flushing the
+ * cached pinned images forces the next use to rebind the host storage.
+ *
+ * @param cache Pixelpipe cache.
+ * @param host_ptr Host-backed image data.
+ * @param entry_hint Optional owning cache entry for regular cache lines, or NULL.
+ * @param devid Device id to flush, or -1 for all cached devices for that host buffer.
+ */
+void dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
+                                                    struct dt_pixel_cache_entry_t *entry_hint, int devid);
+#endif
+
 /** Peek the host data pointer of a cache entry without allocating. */
 void *dt_pixel_cache_entry_get_data(struct dt_pixel_cache_entry_t *entry);
 

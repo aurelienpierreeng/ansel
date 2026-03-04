@@ -49,6 +49,9 @@
 
 static __thread const char *dt_pixelpipe_cache_current_module = NULL;
 
+static dt_pixel_cache_entry_t *_non_threadsafe_cache_get_entry(dt_dev_pixelpipe_cache_t *cache, GHashTable *table,
+                                                               const uint64_t key);
+
 const char *dt_pixelpipe_cache_set_current_module(const char *module)
 {
   const char *previous = dt_pixelpipe_cache_current_module;
@@ -102,6 +105,16 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
                                                         dt_dev_pixelpipe_cache_t *cache, gboolean alloc,
                                                         GHashTable *table);
 static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid);
+
+static dt_pixel_cache_entry_t *_cache_entry_for_host_ptr_locked(dt_dev_pixelpipe_cache_t *cache, void *host_ptr)
+{
+  if(!cache || !host_ptr) return NULL;
+
+  const uint64_t hash = (uint64_t)(uintptr_t)host_ptr;
+  dt_pixel_cache_entry_t *entry = _non_threadsafe_cache_get_entry(cache, cache->external_entries, hash);
+  if(entry && entry->external_alloc && entry->data == host_ptr) return entry;
+  return NULL;
+}
 
 dt_pixel_cache_entry_t *_non_threadsafe_cache_get_entry(dt_dev_pixelpipe_cache_t *cache, GHashTable *table,
                                                         const uint64_t key)
@@ -396,6 +409,119 @@ void dt_pixel_cache_clmem_flush(dt_pixel_cache_entry_t *entry)
   entry->cl_mem_list = NULL;
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
 }
+
+#ifdef HAVE_OPENCL
+void *dt_dev_pixelpipe_cache_get_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
+                                              dt_pixel_cache_entry_t *entry_hint, int devid,
+                                              int width, int height, int bpp, int flags, int *out_cst,
+                                              gboolean *out_reused)
+{
+  if(out_cst) *out_cst = -1;
+  if(out_reused) *out_reused = FALSE;
+  if(!cache || !host_ptr || devid < 0 || width <= 0 || height <= 0 || bpp <= 0) return NULL;
+
+  dt_pixel_cache_entry_t *entry = entry_hint;
+  if(!entry)
+  {
+    dt_pthread_mutex_lock(&cache->lock);
+    entry = _cache_entry_for_host_ptr_locked(cache, host_ptr);
+    dt_pthread_mutex_unlock(&cache->lock);
+  }
+
+  void *mem = NULL;
+  if(entry)
+  {
+    mem = dt_pixel_cache_clmem_get(entry, host_ptr, devid, width, height, bpp, flags, out_cst);
+    if(mem && out_reused) *out_reused = TRUE;
+  }
+
+  if(!mem)
+  {
+    mem = dt_opencl_alloc_device_use_host_pointer(devid, width, height, bpp, host_ptr, flags);
+    if(!mem) return NULL;
+    return mem;
+  }
+
+  const cl_mem clmem = (cl_mem)mem;
+  const cl_mem_flags mem_flags = dt_opencl_get_mem_flags(clmem);
+  gboolean synced = FALSE;
+
+  if(mem_flags & CL_MEM_USE_HOST_PTR)
+  {
+    void *mapped = dt_opencl_map_image(devid, clmem, TRUE, CL_MAP_WRITE, width, height, bpp);
+    if(mapped)
+    {
+      const gboolean zero_copy = (mapped == host_ptr);
+      if(dt_opencl_unmap_mem_object(devid, clmem, mapped) == CL_SUCCESS)
+      {
+        dt_opencl_finish(devid);
+        synced = zero_copy;
+      }
+    }
+  }
+
+  if(!synced && dt_opencl_write_host_to_device(devid, host_ptr, mem, width, height, bpp) != CL_SUCCESS)
+  {
+    if(entry) dt_pixel_cache_clmem_remove(entry, mem);
+    dt_opencl_release_mem_object(mem);
+    return NULL;
+  }
+
+  return mem;
+}
+
+void dt_dev_pixelpipe_cache_put_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
+                                             dt_pixel_cache_entry_t *entry_hint, int cst, void **mem)
+{
+  if(!mem || !*mem) return;
+
+  dt_pixel_cache_entry_t *entry = entry_hint;
+  if(!entry && cache && host_ptr)
+  {
+    dt_pthread_mutex_lock(&cache->lock);
+    entry = _cache_entry_for_host_ptr_locked(cache, host_ptr);
+    dt_pthread_mutex_unlock(&cache->lock);
+  }
+
+  cl_mem clmem = (cl_mem)*mem;
+  const cl_mem_flags flags = dt_opencl_get_mem_flags(clmem);
+  const gboolean can_cache = (entry && host_ptr && (flags & CL_MEM_USE_HOST_PTR));
+  if(can_cache)
+  {
+    const int devid = dt_opencl_get_mem_context_id(clmem);
+    const int width = dt_opencl_get_image_width(clmem);
+    const int height = dt_opencl_get_image_height(clmem);
+    const int bpp = dt_opencl_get_image_element_size(clmem);
+    dt_pixel_cache_clmem_put(entry, host_ptr, devid, width, height, bpp, (int)flags, cst, clmem);
+  }
+  else
+  {
+    if(entry) dt_pixel_cache_clmem_remove(entry, clmem);
+    dt_opencl_release_mem_object(clmem);
+  }
+
+  *mem = NULL;
+}
+
+void dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
+                                                    dt_pixel_cache_entry_t *entry_hint, int devid)
+{
+  if(!cache || !host_ptr) return;
+
+  dt_pixel_cache_entry_t *entry = entry_hint;
+  if(!entry)
+  {
+    dt_pthread_mutex_lock(&cache->lock);
+    entry = _cache_entry_for_host_ptr_locked(cache, host_ptr);
+    dt_pthread_mutex_unlock(&cache->lock);
+  }
+
+  if(!entry) return;
+
+  if(devid >= 0) dt_opencl_events_wait_for(devid);
+  _cache_entry_clmem_flush_device(entry, devid);
+}
+#endif
 
 // Attempt to allocate from the arena; if fragmentation prevents it, evict LRU cache lines
 // until a sufficiently large contiguous run is available (or nothing remains to evict).
