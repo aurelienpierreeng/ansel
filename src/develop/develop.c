@@ -313,12 +313,13 @@ static void _flag_pipe(dt_dev_pixelpipe_t *pipe, gboolean error)
   // If dt_dev_pixelpipe_process() returned with a state int == 1
   // and the shutdown flag is on, it means history commit activated the kill-switch.
   // Any other circomstance returning 1 is a runtime error, flag it invalid.
-  if(error && !dt_atomic_get_int(&pipe->shutdown))
+  if(error && (!dt_atomic_get_int(&pipe->shutdown) || dt_dev_pixelpipe_get_realtime(pipe)))
     pipe->status = DT_DEV_PIXELPIPE_INVALID;
 
   // Before calling dt_dev_pixelpipe_process(), we set the status to DT_DEV_PIXELPIPE_UNDEF.
   // If it's still set to this value and we have a backbuf, everything went well.
-  else if(pipe->status == DT_DEV_PIXELPIPE_UNDEF && !dt_atomic_get_int(&pipe->shutdown))
+  else if(pipe->status == DT_DEV_PIXELPIPE_UNDEF
+          && (!dt_atomic_get_int(&pipe->shutdown) || dt_dev_pixelpipe_get_realtime(pipe)))
     pipe->status = DT_DEV_PIXELPIPE_VALID;
 
   // Otherwise, the main thread will have reset the status to DT_DEV_PIXELPIPE_DIRTY
@@ -518,7 +519,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
         dt_dev_pixelpipe_reset_reentry(pipe);
 
       // Catch early killswitch. dt_dev_pixelpipe_change() can be lengthy with huge masks stacks
-      if(dt_atomic_get_int(&pipe->shutdown))
+      if(dt_atomic_get_int(&pipe->shutdown) && !dt_dev_pixelpipe_get_realtime(pipe))
       {
         pipe->processing = 0;
         dt_pthread_mutex_unlock(&pipe->busy_mutex);

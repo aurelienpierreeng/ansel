@@ -202,6 +202,12 @@ typedef struct dt_dev_pixelpipe_t
   int running;
   // shutting down?
   dt_atomic_int shutdown;
+  // Best-effort processing mode. When TRUE, the processing path bypasses the
+  // early-abort shutdown kill-switch checks that normally stop a stale pipeline
+  // as soon as parameters changed. This allows long-running interactive
+  // pipelines to keep producing "good enough" output until the flag is cleared.
+  // Cleanup/teardown shutdown semantics are unchanged.
+  gboolean realtime;
   // opencl enabled for this pixelpipe?
   int opencl_enabled;
   // opencl error detected?
@@ -297,6 +303,11 @@ int dt_dev_pixelpipe_init_thumbnail(dt_dev_pixelpipe_t *pipe);
 int dt_dev_pixelpipe_init_dummy(dt_dev_pixelpipe_t *pipe);
 // inits the pixelpipe
 int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe);
+// enable/disable best-effort processing mode, bypassing the usual early-abort
+// shutdown checks while the flag stays enabled.
+void dt_dev_pixelpipe_set_realtime(dt_dev_pixelpipe_t *pipe, gboolean state);
+// return whether best-effort processing mode is currently enabled.
+gboolean dt_dev_pixelpipe_get_realtime(const dt_dev_pixelpipe_t *pipe);
 // constructs a new input buffer from given RGB float array.
 void dt_dev_pixelpipe_set_input(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev, int32_t imgid, int width,
                                 int height, dt_mipmap_size_t size);

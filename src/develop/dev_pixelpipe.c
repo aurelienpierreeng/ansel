@@ -639,10 +639,10 @@ gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe, struct dt
          && pipe->status == DT_DEV_PIXELPIPE_VALID 
          && pipe->changed == DT_DEV_PIPE_UNCHANGED
          && !pipe->processing 
-         && dev->history_hash == pipe->backbuf.history_hash;
+         && (dt_dev_pixelpipe_get_realtime(pipe) || dev->history_hash == pipe->backbuf.history_hash);
 }
 
 gboolean dt_dev_pixelpipe_is_pipeline_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 {
-  return dev->history_hash == pipe->history_hash;
+  return dt_dev_pixelpipe_get_realtime(pipe) || dev->history_hash == pipe->history_hash;
 }

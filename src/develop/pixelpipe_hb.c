@@ -303,6 +303,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->processing = 0;
   pipe->running = 0;
   dt_atomic_set_int(&pipe->shutdown, FALSE);
+  pipe->realtime = FALSE;
   pipe->opencl_error = 0;
   pipe->tiling = 0;
   pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
@@ -327,6 +328,17 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
 
   dt_dev_pixelpipe_reset_reentry(pipe);
   return 1;
+}
+
+void dt_dev_pixelpipe_set_realtime(dt_dev_pixelpipe_t *pipe, gboolean state)
+{
+  if(!pipe) return;
+  pipe->realtime = state;
+}
+
+gboolean dt_dev_pixelpipe_get_realtime(const dt_dev_pixelpipe_t *pipe)
+{
+  return pipe ? pipe->realtime : FALSE;
 }
 
 void dt_dev_pixelpipe_set_input(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int32_t imgid, int width, int height,
@@ -521,7 +533,7 @@ static gboolean _transform_for_blend(const dt_iop_module_t *const self, const dt
 }
 
 #define KILL_SWITCH_ABORT                                                                                         \
-  if(dt_atomic_get_int(&pipe->shutdown))                                                                          \
+  if(dt_atomic_get_int(&pipe->shutdown) && !dt_dev_pixelpipe_get_realtime(pipe))                                  \
   {                                                                                                               \
     if(*cl_mem_output != NULL)                                                                                    \
     {                                                                                                             \
@@ -535,7 +547,7 @@ static gboolean _transform_for_blend(const dt_iop_module_t *const self, const dt
 // Once we have a cache, stopping computation before full completion
 // has good chances of leaving it corrupted. So we invalidate it.
 #define KILL_SWITCH_AND_FLUSH_CACHE                                                                               \
-  if(dt_atomic_get_int(&pipe->shutdown))                                                                          \
+  if(dt_atomic_get_int(&pipe->shutdown) && !dt_dev_pixelpipe_get_realtime(pipe))                                  \
   {                                                                                                               \
     dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, hash, TRUE, output_entry);                           \
     *output = NULL;                                                                                               \
@@ -1645,7 +1657,7 @@ void dt_dev_pixelpipe_disable_before(dt_dev_pixelpipe_t *pipe, const char *op)
 }
 
 #define KILL_SWITCH_PIPE                                                                                          \
-  if(dt_atomic_get_int(&pipe->shutdown))                                                                          \
+  if(dt_atomic_get_int(&pipe->shutdown) && !dt_dev_pixelpipe_get_realtime(pipe))                                  \
   {                                                                                                               \
     if(pipe->devid >= 0)                                                                                          \
     {                                                                                                             \
@@ -1894,7 +1906,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
 
       _print_opencl_errors(opencl_error, pipe);
     }
-    else if(!dt_atomic_get_int(&pipe->shutdown))
+    else if(!dt_atomic_get_int(&pipe->shutdown) || dt_dev_pixelpipe_get_realtime(pipe))
     {
       // No opencl errors, no killswitch triggered: we should have a valid output buffer now.
       dt_pixel_cache_entry_t *final_entry = NULL;
