@@ -758,9 +758,6 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
         base->expander, "position", &gv);
     gtk_box_reorder_child(dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_RIGHT_CENTER),
                           module->expander, g_value_get_int(&gv) + pos_base - pos_module + 1);
-    dt_iop_gui_set_expanded(module, TRUE, FALSE);
-
-    darktable.gui->scroll_to[1] = module->expander;
 
     dt_iop_reload_defaults(module); // some modules like profiled denoise update the gui in reload_defaults
 
@@ -777,6 +774,10 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base, gboolean copy_param
         }
       }
     }
+
+    dt_iop_gui_set_expanded(module, TRUE, FALSE);
+
+    darktable.gui->scroll_to[1] = module->expander;
 
     dt_iop_gui_update_blending(module);
 
