@@ -330,6 +330,29 @@ void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, con
  */
 void dt_dev_pixelpipe_cache_unref_hash(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash);
 
+/**
+ * @brief Change the hash/key of an existing cache line in place, without
+ * freeing, reallocating or invalidating the underlying entry.
+ *
+ * @details
+ * This is useful when a cache line remains the authoritative buffer but the
+ * caller needs its identity to follow a new logical snapshot (for example a new
+ * module-parameter hash). The entry contents, locks, refcount and storage are
+ * preserved; only the hash-table key and `entry->hash` are updated.
+ *
+ * The operation fails if:
+ * - the source entry cannot be found,
+ * - or another different entry already exists at `new_hash`.
+ *
+ * @param cache
+ * @param old_hash Current key of the entry.
+ * @param new_hash Desired new key.
+ * @param entry Optional direct entry reference. May be NULL.
+ * @return int 0 on success, 1 on error.
+ */
+int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t old_hash,
+                                 const uint64_t new_hash, struct dt_pixel_cache_entry_t *entry);
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

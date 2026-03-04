@@ -1068,6 +1068,51 @@ void dt_dev_pixelpipe_cache_unref_hash(dt_dev_pixelpipe_cache_t *cache, const ui
     dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, FALSE, cache_entry);
 }
 
+int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t old_hash,
+                                 const uint64_t new_hash, dt_pixel_cache_entry_t *entry)
+{
+  if(!cache) return 1;
+  if(old_hash == new_hash) return 0;
+
+  dt_pthread_mutex_lock(&cache->lock);
+
+  if(!entry) entry = _non_threadsafe_cache_get_entry(cache, cache->entries, old_hash);
+  if(!entry)
+  {
+    dt_pthread_mutex_unlock(&cache->lock);
+    return 1;
+  }
+
+  dt_pixel_cache_entry_t *conflict = _non_threadsafe_cache_get_entry(cache, cache->entries, new_hash);
+  if(conflict && conflict != entry)
+  {
+    dt_pthread_mutex_unlock(&cache->lock);
+    return 1;
+  }
+
+  gpointer stolen_key = NULL;
+  gpointer stolen_value = NULL;
+  if(!g_hash_table_steal_extended(cache->entries, &old_hash, &stolen_key, &stolen_value))
+  {
+    dt_pthread_mutex_unlock(&cache->lock);
+    return 1;
+  }
+
+  if(stolen_value != entry)
+  {
+    g_hash_table_insert(cache->entries, stolen_key, stolen_value);
+    dt_pthread_mutex_unlock(&cache->lock);
+    return 1;
+  }
+
+  *(uint64_t *)stolen_key = new_hash;
+  entry->hash = new_hash;
+  g_hash_table_insert(cache->entries, stolen_key, stolen_value);
+
+  dt_pthread_mutex_unlock(&cache->lock);
+  return 0;
+}
+
 
 void dt_dev_pixelpipe_cache_print(dt_dev_pixelpipe_cache_t *cache)
 {
