@@ -78,6 +78,20 @@
 #include <string.h>
 #include <strings.h>
 
+static dt_control_pointer_input_t _pointer_input = { 0 };
+
+void dt_control_set_pointer_input(const dt_control_pointer_input_t *input)
+{
+  if(!input) return;
+  _pointer_input = *input;
+}
+
+void dt_control_get_pointer_input(dt_control_pointer_input_t *input)
+{
+  if(!input) return;
+  *input = _pointer_input;
+}
+
 void dt_control_init(dt_control_t *s)
 {
   // same thread as init

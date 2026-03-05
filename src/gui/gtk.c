@@ -378,7 +378,6 @@ void dt_gui_gtk_quit()
   dt_gui_add_class(win, "dt_gui_quit");
   gtk_window_set_title(GTK_WINDOW(win), _("closing Ansel..."));
 
-  g_list_free(darktable.gui->input_devices);
   dt_ui_cleanup_titlebar(darktable.gui->ui);
 
   // Write out windows dimension
@@ -478,6 +477,422 @@ static gboolean _window_configure(GtkWidget *da, GdkEvent *event, gpointer user_
   return FALSE;
 }
 
+typedef struct dt_tablet_motion_state_t
+{
+  gboolean valid;
+  double x;
+  double y;
+  guint32 time_ms;
+  double speed_px_s;
+  gboolean have_pressure;
+  double pressure;
+  gboolean have_tilt;
+  double tilt_x;
+  double tilt_y;
+} dt_tablet_motion_state_t;
+
+static dt_tablet_motion_state_t _tablet_motion_state = { 0 };
+
+static inline double _clamp01d(const double value)
+{
+  return MIN(1.0, MAX(0.0, value));
+}
+
+static const gdouble *_event_axes(const GdkEvent *event)
+{
+  if(!event) return NULL;
+  switch(event->type)
+  {
+    case GDK_MOTION_NOTIFY:
+      return ((const GdkEventMotion *)event)->axes;
+    case GDK_BUTTON_PRESS:
+    case GDK_2BUTTON_PRESS:
+    case GDK_3BUTTON_PRESS:
+    case GDK_BUTTON_RELEASE:
+      return ((const GdkEventButton *)event)->axes;
+    default:
+      return NULL;
+  }
+}
+
+static gboolean _get_axis_value_for_source(const GdkEvent *event, GdkDevice *source_device,
+                                           const GdkAxisUse axis, double *value, gboolean *from_source_map)
+{
+  if(from_source_map) *from_source_map = FALSE;
+  if(!value) return FALSE;
+
+  const gdouble *axes = _event_axes(event);
+  if(source_device && axes)
+  {
+    double source_value = 0.0;
+    if(gdk_device_get_axis(source_device, (gdouble *)axes, axis, &source_value))
+    {
+      *value = source_value;
+      if(from_source_map) *from_source_map = TRUE;
+      return TRUE;
+    }
+  }
+
+  return gdk_event_get_axis((GdkEvent *)event, axis, value);
+}
+
+static gboolean _sample_axis_from_device_state(GdkWindow *window, GdkDevice *device,
+                                                const GdkAxisUse axis, double *value)
+{
+  if(!window || !device || !value) return FALSE;
+  if(gdk_device_get_source(device) == GDK_SOURCE_KEYBOARD) return FALSE;
+  if(gdk_device_get_device_type(device) == GDK_DEVICE_TYPE_SLAVE)
+  {
+    GdkDisplay *display = gdk_device_get_display(device);
+    if(!display || !gdk_display_device_is_grabbed(display, device)) return FALSE;
+  }
+
+  const int n_axes = gdk_device_get_n_axes(device);
+  if(n_axes <= 0) return FALSE;
+
+  double *axes = g_newa(double, n_axes);
+  memset(axes, 0, sizeof(double) * n_axes);
+  GdkModifierType modifiers = 0;
+  gdk_device_get_state(device, window, axes, &modifiers);
+  return gdk_device_get_axis(device, axes, axis, value);
+}
+
+static gboolean _sample_tablet_state_from_devices(const GdkEvent *event,
+                                                  double *pressure, gboolean *have_pressure,
+                                                  double *tilt_x, double *tilt_y, gboolean *have_tilt,
+                                                  const char **picked_device_name)
+{
+  if(pressure) *pressure = 0.0;
+  if(have_pressure) *have_pressure = FALSE;
+  if(tilt_x) *tilt_x = 0.0;
+  if(tilt_y) *tilt_y = 0.0;
+  if(have_tilt) *have_tilt = FALSE;
+  if(picked_device_name) *picked_device_name = NULL;
+
+  if(!darktable.gui) return FALSE;
+  GdkWindow *window = gdk_event_get_window((GdkEvent *)event);
+  if(!window) window = gtk_widget_get_window(dt_ui_center(darktable.gui->ui));
+  if(!window) return FALSE;
+
+  int best_score = -1;
+  double best_p = 0.0;
+  gboolean best_have_p = FALSE;
+  double best_tx = 0.0;
+  double best_ty = 0.0;
+  gboolean best_have_t = FALSE;
+  const char *best_name = NULL;
+
+  GdkSeat *seat = gdk_display_get_default() ? gdk_display_get_default_seat(gdk_display_get_default()) : NULL;
+  GList *runtime_devices = seat ? gdk_seat_get_slaves(seat, GDK_SEAT_CAPABILITY_ALL_POINTING) : NULL;
+
+  for(GList *l = runtime_devices; l; l = g_list_next(l))
+  {
+    GdkDevice *device = (GdkDevice *)l->data;
+    if(!device) continue;
+    const GdkInputSource source = gdk_device_get_source(device);
+    if(source == GDK_SOURCE_KEYBOARD) continue;
+    if(gdk_device_get_device_type(device) == GDK_DEVICE_TYPE_SLAVE)
+    {
+      GdkDisplay *display = gdk_device_get_display(device);
+      /* gdk_device_get_state() requires slave devices to be grabbed.
+       * Skip non-grabbed slaves to avoid GTK/GDK criticals. */
+      if(!display || !gdk_display_device_is_grabbed(display, device)) continue;
+    }
+
+    const GdkAxisFlags axis_flags = gdk_device_get_axes(device);
+    const gboolean supports_pressure = (axis_flags & GDK_AXIS_FLAG_PRESSURE) != 0;
+    const gboolean supports_x_tilt = (axis_flags & GDK_AXIS_FLAG_XTILT) != 0;
+    const gboolean supports_y_tilt = (axis_flags & GDK_AXIS_FLAG_YTILT) != 0;
+    const gboolean pen_like = (source == GDK_SOURCE_PEN || source == GDK_SOURCE_ERASER || source == GDK_SOURCE_CURSOR);
+    if(!supports_pressure && !supports_x_tilt && !supports_y_tilt && !pen_like) continue;
+
+    const int n_axes = gdk_device_get_n_axes(device);
+    if(n_axes <= 0) continue;
+    double *axes = g_newa(double, n_axes);
+    memset(axes, 0, sizeof(double) * n_axes);
+    GdkModifierType modifiers = 0;
+    gdk_device_get_state(device, window, axes, &modifiers);
+
+    double p = 0.0;
+    gboolean have_p = FALSE;
+    double tx = 0.0;
+    double ty = 0.0;
+    gboolean have_tx = FALSE;
+    gboolean have_ty = FALSE;
+
+    for(int i = 0; i < n_axes; i++)
+    {
+      const GdkAxisUse use = gdk_device_get_axis_use(device, i);
+      if(use == GDK_AXIS_PRESSURE)
+      {
+        p = axes[i];
+        have_p = TRUE;
+      }
+      else if(use == GDK_AXIS_XTILT)
+      {
+        tx = axes[i];
+        have_tx = TRUE;
+      }
+      else if(use == GDK_AXIS_YTILT)
+      {
+        ty = axes[i];
+        have_ty = TRUE;
+      }
+    }
+
+    const gboolean have_t = have_tx || have_ty;
+    const int score = (have_p ? 2 : 0) + (have_t ? 2 : 0) + (p > 1e-4 ? 4 : 0)
+                      + ((hypot(tx, ty) > 1e-4) ? 3 : 0) + (pen_like ? 1 : 0);
+    if(score <= best_score) continue;
+
+    best_score = score;
+    best_p = p;
+    best_have_p = have_p;
+    best_tx = tx;
+    best_ty = ty;
+    best_have_t = have_t;
+    best_name = gdk_device_get_name(device);
+  }
+  if(runtime_devices) g_list_free(runtime_devices);
+
+  if(best_score < 0) return FALSE;
+  if(pressure) *pressure = best_p;
+  if(have_pressure) *have_pressure = best_have_p;
+  if(tilt_x) *tilt_x = best_tx;
+  if(tilt_y) *tilt_y = best_ty;
+  if(have_tilt) *have_tilt = best_have_t;
+  if(picked_device_name) *picked_device_name = best_name;
+  return TRUE;
+}
+
+static dt_control_pointer_input_t _extract_pointer_input(const GdkEvent *event, const double x, const double y,
+                                                         const guint32 time_ms, const gboolean reset_kinematics,
+                                                         const char *tag)
+{
+  dt_control_pointer_input_t input = { 0 };
+  input.time_ms = time_ms;
+  GdkDevice *source_device = gdk_event_get_source_device((GdkEvent *)event);
+  GdkDevice *event_device = gdk_event_get_device((GdkEvent *)event);
+  GdkDevice *device = source_device ? source_device : event_device;
+  const GdkInputSource source = device ? gdk_device_get_source(device) : GDK_SOURCE_MOUSE;
+  const GdkAxisFlags axis_flags = device ? gdk_device_get_axes(device) : 0;
+  const gboolean supports_pressure = (axis_flags & GDK_AXIS_FLAG_PRESSURE) != 0;
+  const gboolean supports_x_tilt = (axis_flags & GDK_AXIS_FLAG_XTILT) != 0;
+  const gboolean supports_y_tilt = (axis_flags & GDK_AXIS_FLAG_YTILT) != 0;
+  gboolean read_pressure = FALSE;
+  gboolean read_x_tilt = FALSE;
+  gboolean read_y_tilt = FALSE;
+  gboolean map_pressure_source = FALSE;
+  gboolean map_xtilt_source = FALSE;
+  gboolean map_ytilt_source = FALSE;
+  gboolean state_pressure_source = FALSE;
+  gboolean state_pressure_event = FALSE;
+  gboolean state_xtilt_source = FALSE;
+  gboolean state_ytilt_source = FALSE;
+  gboolean fallback_pressure = FALSE;
+  gboolean fallback_tilt = FALSE;
+  const char *fallback_device_name = NULL;
+  GdkDeviceTool *tool = gdk_event_get_device_tool((GdkEvent *)event);
+  const int tool_type = tool ? (int)gdk_device_tool_get_tool_type(tool) : -1;
+  const gboolean tool_is_stylus
+      = tool && (tool_type == GDK_DEVICE_TOOL_TYPE_PEN || tool_type == GDK_DEVICE_TOOL_TYPE_ERASER
+                 || tool_type == GDK_DEVICE_TOOL_TYPE_BRUSH || tool_type == GDK_DEVICE_TOOL_TYPE_PENCIL
+                 || tool_type == GDK_DEVICE_TOOL_TYPE_AIRBRUSH);
+  gboolean is_tablet_like = supports_pressure || supports_x_tilt || supports_y_tilt || tool_is_stylus;
+  GdkWindow *window = gdk_event_get_window((GdkEvent *)event);
+  if(!window && darktable.gui) window = gtk_widget_get_window(dt_ui_center(darktable.gui->ui));
+
+  {
+    double pressure = 0.0;
+    if(_get_axis_value_for_source(event, source_device, GDK_AXIS_PRESSURE, &pressure, &map_pressure_source))
+    {
+      read_pressure = TRUE;
+      input.pressure = _clamp01d(pressure);
+      input.has_pressure = TRUE;
+      _tablet_motion_state.have_pressure = TRUE;
+      _tablet_motion_state.pressure = input.pressure;
+    }
+    else if(is_tablet_like && _tablet_motion_state.have_pressure)
+    {
+      input.pressure = _tablet_motion_state.pressure;
+      input.has_pressure = TRUE;
+    }
+    else if(!is_tablet_like)
+    {
+      _tablet_motion_state.have_pressure = FALSE;
+    }
+  }
+
+  if(input.has_pressure && input.pressure <= 0.0 && window)
+  {
+    double p_state = 0.0;
+    if(source_device && _sample_axis_from_device_state(window, source_device, GDK_AXIS_PRESSURE, &p_state))
+    {
+      input.pressure = _clamp01d(p_state);
+      state_pressure_source = TRUE;
+    }
+    else if(event_device
+            && _sample_axis_from_device_state(window, event_device, GDK_AXIS_PRESSURE, &p_state))
+    {
+      input.pressure = _clamp01d(p_state);
+      state_pressure_event = TRUE;
+    }
+  }
+
+  {
+    double x_tilt = 0.0;
+    double y_tilt = 0.0;
+    const gboolean has_x_tilt
+        = _get_axis_value_for_source(event, source_device, GDK_AXIS_XTILT, &x_tilt, &map_xtilt_source);
+    const gboolean has_y_tilt
+        = _get_axis_value_for_source(event, source_device, GDK_AXIS_YTILT, &y_tilt, &map_ytilt_source);
+    read_x_tilt = has_x_tilt;
+    read_y_tilt = has_y_tilt;
+    if(has_x_tilt || has_y_tilt)
+    {
+      input.tilt_x = CLAMP(x_tilt, -1.0, 1.0);
+      input.tilt_y = CLAMP(y_tilt, -1.0, 1.0);
+      input.has_tilt = TRUE;
+      _tablet_motion_state.have_tilt = TRUE;
+      _tablet_motion_state.tilt_x = input.tilt_x;
+      _tablet_motion_state.tilt_y = input.tilt_y;
+    }
+    else if(is_tablet_like && _tablet_motion_state.have_tilt)
+    {
+      input.tilt_x = _tablet_motion_state.tilt_x;
+      input.tilt_y = _tablet_motion_state.tilt_y;
+      input.has_tilt = TRUE;
+    }
+    else if(!is_tablet_like)
+    {
+      _tablet_motion_state.have_tilt = FALSE;
+    }
+  }
+
+  if(!input.has_tilt && window)
+  {
+    double tx_state = 0.0, ty_state = 0.0;
+    const gboolean has_tx = source_device && _sample_axis_from_device_state(window, source_device, GDK_AXIS_XTILT, &tx_state);
+    const gboolean has_ty = source_device && _sample_axis_from_device_state(window, source_device, GDK_AXIS_YTILT, &ty_state);
+    if(has_tx || has_ty)
+    {
+      input.tilt_x = CLAMP(tx_state, -1.0, 1.0);
+      input.tilt_y = CLAMP(ty_state, -1.0, 1.0);
+      input.has_tilt = TRUE;
+      _tablet_motion_state.have_tilt = TRUE;
+      _tablet_motion_state.tilt_x = input.tilt_x;
+      _tablet_motion_state.tilt_y = input.tilt_y;
+      state_xtilt_source = has_tx;
+      state_ytilt_source = has_ty;
+    }
+  }
+
+  if(input.has_tilt)
+    input.tilt = _clamp01d(hypot(input.tilt_x, input.tilt_y));
+  else
+    input.tilt = 0.0;
+
+  if(!input.has_pressure || !input.has_tilt)
+  {
+    double fb_pressure = 0.0;
+    gboolean fb_have_pressure = FALSE;
+    double fb_tilt_x = 0.0;
+    double fb_tilt_y = 0.0;
+    gboolean fb_have_tilt = FALSE;
+    if(_sample_tablet_state_from_devices(event, &fb_pressure, &fb_have_pressure,
+                                         &fb_tilt_x, &fb_tilt_y, &fb_have_tilt,
+                                         &fallback_device_name))
+    {
+      if(!input.has_pressure && fb_have_pressure)
+      {
+        input.pressure = _clamp01d(fb_pressure);
+        input.has_pressure = TRUE;
+        fallback_pressure = TRUE;
+      }
+      if(!input.has_tilt && fb_have_tilt)
+      {
+        input.tilt_x = CLAMP(fb_tilt_x, -1.0, 1.0);
+        input.tilt_y = CLAMP(fb_tilt_y, -1.0, 1.0);
+        input.tilt = _clamp01d(hypot(input.tilt_x, input.tilt_y));
+        input.has_tilt = TRUE;
+        fallback_tilt = TRUE;
+      }
+    }
+  }
+
+  if(input.has_pressure || input.has_tilt) is_tablet_like = TRUE;
+
+  if(reset_kinematics)
+  {
+    _tablet_motion_state.valid = TRUE;
+    _tablet_motion_state.x = x;
+    _tablet_motion_state.y = y;
+    _tablet_motion_state.time_ms = time_ms;
+    _tablet_motion_state.speed_px_s = 0.0;
+    input.acceleration = 0.0;
+    return input;
+  }
+
+  if(_tablet_motion_state.valid && time_ms > _tablet_motion_state.time_ms)
+  {
+    const double dt_s = MAX((double)(time_ms - _tablet_motion_state.time_ms), 1.0) * 1e-3;
+    const double dx = x - _tablet_motion_state.x;
+    const double dy = y - _tablet_motion_state.y;
+    const double speed_px_s = hypot(dx, dy) / dt_s;
+    const double accel_px_s2 = fabs(speed_px_s - _tablet_motion_state.speed_px_s) / dt_s;
+    /* Normalize acceleration for stylus mapping. 25000 px/s² keeps a useful
+     * dynamic range while clipping extreme event jitter. */
+    input.acceleration = _clamp01d(accel_px_s2 / 25000.0);
+    _tablet_motion_state.speed_px_s = speed_px_s;
+  }
+  else
+  {
+    input.acceleration = 0.0;
+    _tablet_motion_state.speed_px_s = 0.0;
+  }
+
+  _tablet_motion_state.valid = TRUE;
+  _tablet_motion_state.x = x;
+  _tablet_motion_state.y = y;
+  _tablet_motion_state.time_ms = time_ms;
+
+  dt_print(DT_DEBUG_INPUT,
+           "[tablet] %s dev='%s' src_dev='%s' evt_dev='%s' src=%d tablet=%d tool=%d supports[p=%d xt=%d yt=%d] read[p=%d xt=%d yt=%d] map_src[p=%d xt=%d yt=%d] state[p_src=%d p_evt=%d xt_src=%d yt_src=%d] fallback[p=%d t=%d dev='%s'] values[p=%.4f tx=%.4f ty=%.4f t=%.4f a=%.4f] xy=(%.1f, %.1f) t_ms=%u reset=%d\n",
+           tag ? tag : "event",
+           device ? gdk_device_get_name(device) : "<none>",
+           source_device ? gdk_device_get_name(source_device) : "<none>",
+           event_device ? gdk_device_get_name(event_device) : "<none>",
+           (int)source,
+           is_tablet_like ? 1 : 0,
+           tool_type,
+           supports_pressure ? 1 : 0,
+           supports_x_tilt ? 1 : 0,
+           supports_y_tilt ? 1 : 0,
+           read_pressure ? 1 : 0,
+           read_x_tilt ? 1 : 0,
+           read_y_tilt ? 1 : 0,
+           map_pressure_source ? 1 : 0,
+           map_xtilt_source ? 1 : 0,
+           map_ytilt_source ? 1 : 0,
+           state_pressure_source ? 1 : 0,
+           state_pressure_event ? 1 : 0,
+           state_xtilt_source ? 1 : 0,
+           state_ytilt_source ? 1 : 0,
+           fallback_pressure ? 1 : 0,
+           fallback_tilt ? 1 : 0,
+           fallback_device_name ? fallback_device_name : "<none>",
+           input.has_pressure ? input.pressure : -1.0,
+           input.has_tilt ? input.tilt_x : 0.0,
+           input.has_tilt ? input.tilt_y : 0.0,
+           input.has_tilt ? input.tilt : 0.0,
+           input.acceleration,
+           x, y,
+           time_ms,
+           reset_kinematics ? 1 : 0);
+
+  return input;
+}
+
 static gboolean _button_pressed(GtkWidget *w, GdkEventButton *event, gpointer user_data)
 {
   if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
@@ -486,13 +901,10 @@ static gboolean _button_pressed(GtkWidget *w, GdkEventButton *event, gpointer us
   darktable.gui->has_scroll_focus = NULL;
   gtk_widget_grab_focus(w);
 
-  double pressure = 1.0;
-  GdkDevice *device = gdk_event_get_source_device((GdkEvent *)event);
-
-  if(device && (gdk_device_get_axes(device) & GDK_AXIS_FLAG_PRESSURE))
-  {
-    gdk_event_get_axis((GdkEvent *)event, GDK_AXIS_PRESSURE, &pressure);
-  }
+  const dt_control_pointer_input_t input = _extract_pointer_input((const GdkEvent *)event, event->x, event->y,
+                                                                  event->time, TRUE, "button-press");
+  dt_control_set_pointer_input(&input);
+  const double pressure = input.has_pressure ? input.pressure : 1.0;
   dt_control_button_pressed(event->x, event->y, pressure, event->button, event->type, event->state & 0xf);
   return FALSE;
 }
@@ -500,7 +912,11 @@ static gboolean _button_pressed(GtkWidget *w, GdkEventButton *event, gpointer us
 static gboolean _button_released(GtkWidget *w, GdkEventButton *event, gpointer user_data)
 {
   if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
+  const dt_control_pointer_input_t input = _extract_pointer_input((const GdkEvent *)event, event->x, event->y,
+                                                                  event->time, FALSE, "button-release");
+  dt_control_set_pointer_input(&input);
   dt_control_button_released(event->x, event->y, event->button, event->state & 0xf);
+
   return TRUE;
 }
 
@@ -508,14 +924,10 @@ static gboolean _mouse_moved(GtkWidget *w, GdkEventMotion *event, gpointer user_
 {
   if(!gtk_window_is_active(GTK_WINDOW(darktable.gui->ui->main_window))) return FALSE;
 
-  double pressure = 1.0;
-  GdkDevice *device = gdk_event_get_source_device((GdkEvent *)event);
-
-  if(device && (gdk_device_get_axes(device) & GDK_AXIS_FLAG_PRESSURE))
-  {
-    gdk_event_get_axis((GdkEvent *)event, GDK_AXIS_PRESSURE, &pressure);
-  }
-  dt_control_mouse_moved(event->x, event->y, pressure, event->state & 0xf);
+  const dt_control_pointer_input_t input = _extract_pointer_input((const GdkEvent *)event, event->x, event->y,
+                                                                  event->time, FALSE, "motion");
+  dt_control_set_pointer_input(&input);
+  dt_control_mouse_moved(event->x, event->y, input.has_pressure ? input.pressure : 1.0, event->state & 0xf);
   return FALSE;
 }
 
@@ -618,7 +1030,6 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   gui->export_popup.module = NULL;
   gui->styles_popup.window = NULL;
   gui->styles_popup.module = NULL;
-  gui->input_devices = NULL;
 
   // load the style / theme
   GtkSettings *settings = gtk_settings_get_default();
@@ -656,12 +1067,13 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   snprintf(path, sizeof(path), "%s/icons", sharedir);
   gtk_icon_theme_append_search_path(gtk_icon_theme_get_default(), path);
 
-  widget = dt_ui_center(darktable.gui->ui);
+  GtkWidget *center = dt_ui_center(darktable.gui->ui);
+  widget = center;
 
   gtk_widget_set_can_focus(widget, TRUE);
   gtk_widget_set_visible(widget, TRUE);
   gtk_widget_grab_focus(widget);
-
+  gtk_widget_add_events(widget, GDK_PROXIMITY_IN_MASK | GDK_PROXIMITY_OUT_MASK | GDK_TABLET_PAD_MASK);
   g_signal_connect(G_OBJECT(widget), "configure-event", G_CALLBACK(_configure), gui);
   g_signal_connect(G_OBJECT(widget), "draw", G_CALLBACK(_draw), NULL);
   g_signal_connect(G_OBJECT(widget), "motion-notify-event", G_CALLBACK(_mouse_moved), NULL);
@@ -687,11 +1099,30 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   // let's try to support pressure sensitive input devices like tablets for mask drawing
   dt_print(DT_DEBUG_INPUT, "[input device] Input devices found:\n\n");
 
-  gui->input_devices
+  GList *input_devices
       = gdk_seat_get_slaves(gdk_display_get_default_seat(gdk_display_get_default()), GDK_SEAT_CAPABILITY_ALL);
-  for(GList *l = gui->input_devices; l != NULL; l = g_list_next(l))
+  const int manager_slave_count = 0;
+  const int manager_floating_count = 0;
+  GList *stylus_devices
+      = gdk_seat_get_slaves(gdk_display_get_default_seat(gdk_display_get_default()), GDK_SEAT_CAPABILITY_TABLET_STYLUS);
+  dt_print(DT_DEBUG_INPUT, "[input device] seat capabilities bitmask: %u\n",
+           (unsigned int)gdk_seat_get_capabilities(gdk_display_get_default_seat(gdk_display_get_default())));
+  dt_print(DT_DEBUG_INPUT, "[input device] stylus-capable devices reported by seat: %d\n", g_list_length(stylus_devices));
+  dt_print(DT_DEBUG_INPUT, "[input device] manager fallback devices: slave=%d floating=%d merged_total=%d\n",
+           manager_slave_count, manager_floating_count, g_list_length(input_devices));
+  for(GList *l = stylus_devices; l != NULL; l = g_list_next(l))
   {
     GdkDevice *device = (GdkDevice *)l->data;
+    if(!device) continue;
+    dt_print(DT_DEBUG_INPUT, "  [tablet seat] %s source=%s axes_flags=%u n_axes=%d\n",
+             gdk_device_get_name(device), _get_source_name(gdk_device_get_source(device)),
+             (unsigned int)gdk_device_get_axes(device), gdk_device_get_n_axes(device));
+  }
+  if(stylus_devices) g_list_free(stylus_devices);
+  for(GList *l = input_devices; l != NULL; l = g_list_next(l))
+  {
+    GdkDevice *device = (GdkDevice *)l->data;
+    if(!device) continue;
     const GdkInputSource source = gdk_device_get_source(device);
     const gint n_axes = (source == GDK_SOURCE_KEYBOARD ? 0 : gdk_device_get_n_axes(device));
 
@@ -711,6 +1142,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
     }
     dt_print(DT_DEBUG_INPUT, "\n");
   }
+  if(input_devices) g_list_free(input_devices);
 
   // Gtk seems to capture some reserved shortcuts (Tab). We need to bypass it entirely
   // by hacking all events.

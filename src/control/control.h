@@ -69,11 +69,29 @@ struct dt_lib_backgroundjob_element_t;
 
 typedef GdkCursorType dt_cursor_t;
 
+typedef struct dt_control_pointer_input_t
+{
+  /* Normalized in [0, 1]. */
+  double pressure;
+  gboolean has_pressure;
+  /* Raw tablet tilt axes (typically in [-1, 1]). */
+  double tilt_x;
+  double tilt_y;
+  /* Magnitude of tilt vector, normalized in [0, 1]. */
+  double tilt;
+  gboolean has_tilt;
+  /* Normalized in [0, 1]. */
+  double acceleration;
+  guint32 time_ms;
+} dt_control_pointer_input_t;
+
 // called from gui
 void *dt_control_expose(void *voidptr);
 void dt_control_button_pressed(double x, double y, double pressure, int which, int type, uint32_t state);
 void dt_control_button_released(double x, double y, int which, uint32_t state);
 void dt_control_mouse_moved(double x, double y, double pressure, int which);
+void dt_control_set_pointer_input(const dt_control_pointer_input_t *input);
+void dt_control_get_pointer_input(dt_control_pointer_input_t *input);
 void dt_control_key_pressed(GdkEventKey *event);
 void dt_control_mouse_leave();
 void dt_control_mouse_enter();
