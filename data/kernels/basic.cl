@@ -2384,15 +2384,12 @@ colorout (read_only image2d_t in, write_only image2d_t out, const int width, con
   if(x >= width || y >= height) return;
 
   float4 pixel = read_imagef(in, sampleri, (int2)(x, y));
-  float XYZ[3], rgb[3];
-  float4 xyz = Lab_to_XYZ(pixel);
-  XYZ[0] = xyz.x;
-  XYZ[1] = xyz.y;
-  XYZ[2] = xyz.z;
+  float rgb[3];
+  const float RGB[3] = { pixel.x, pixel.y, pixel.z };
   for(int i=0;i<3;i++)
   {
     rgb[i] = 0.0f;
-    for(int j=0;j<3;j++) rgb[i] += mat[3*i+j]*XYZ[j];
+    for(int j=0;j<3;j++) rgb[i] += mat[3*i+j]*RGB[j];
   }
   pixel.x = lerp_lookup_unbounded0(lutr, rgb[0], a[0]);
   pixel.y = lerp_lookup_unbounded0(lutg, rgb[1], a[1]);
