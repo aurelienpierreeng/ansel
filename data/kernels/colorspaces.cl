@@ -77,7 +77,7 @@ colorspaces_transform_rgb_matrix_to_rgb(read_only image2d_t in, write_only image
   if(profile_info_from->nonlinearlut)
     pixel = apply_trc_in(pixel, profile_info_from, lut_from);
 
-  pixel = matrix_product(pixel, matrix);
+  pixel = matrix_product_float4(pixel, matrix);
 
   if(profile_info_to->nonlinearlut)
     pixel = apply_trc_out(pixel, profile_info_to, lut_to);

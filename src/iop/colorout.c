@@ -342,9 +342,9 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
 
-  float cmatrix[9];
-  pack_3xSSE_to_3x3(d->cmatrix, cmatrix);
-  dev_m = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 9, cmatrix);
+  float cmatrix[12];
+  pack_3xSSE_to_3x4(d->cmatrix, cmatrix);
+  dev_m = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 12, cmatrix);
   if(dev_m == NULL) goto error;
   dev_r = dt_opencl_copy_host_to_device(devid, d->lut[0], 256, 256, sizeof(float));
   if(dev_r == NULL) goto error;

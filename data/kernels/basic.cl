@@ -1094,7 +1094,7 @@ lookup_unbounded_twosided(read_only image2d_t lut, const float x, constant float
 }
 
 float
-lerp_lookup_unbounded0(read_only image2d_t lut, const float x, global const float *a)
+lerp_lookup_unbounded0(read_only image2d_t lut, const float x, constant const float *a)
 {
   // in case the tone curve is marked as linear, return the fast
   // path to linear unbounded (does not clip x at 1)
@@ -1105,24 +1105,31 @@ lerp_lookup_unbounded0(read_only image2d_t lut, const float x, global const floa
       const float ft = clamp(x * (float)0xffff, 0.0f, (float)0xffff);
       const int t = ft < 0xfffe ? ft : 0xfffe;
       const float f = ft - t;
-      const int2 p1 = (int2)((t & 0xff), (t >> 8));
-      const int2 p2 = (int2)(((t + 1) & 0xff), ((t + 1) >> 8));
+      const int tx = t & 0xff;
+      const int ty = t >> 8;
+
+      // Use hardware linear interpolation in the common case where t and t+1 are on the same row.
+      // At row seam (tx == 255), fallback to explicit 2-tap interpolation to preserve exact row-major indexing.
+      if(tx < 255)
+        return read_imagef(lut, samplerf, (float2)(tx + f + 0.5f, ty + 0.5f)).x;
+
+      const int2 p1 = (int2)(tx, ty);
+      const int2 p2 = (int2)(0, ty + 1);
       const float l1 = read_imagef(lut, sampleri, p1).x;
       const float l2 = read_imagef(lut, sampleri, p2).x;
-      return l1 * (1.0f - f) + l2 * f;
+      return fma(f, l2 - l1, l1);
     }
     else return a[1] * native_powr(x*a[0], a[2]);
   }
   else return x;
 }
 
-
 /* kernel for the plugin colorin: unbound processing */
 kernel void
 colorin_unbound (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
-                 global float *cmat, global float *lmat,
+                 constant float4 *cmat, constant float4 *lmat,
                  read_only image2d_t lutr, read_only image2d_t lutg, read_only image2d_t lutb,
-                 const int blue_mapping, global const float (*const a)[3])
+                 const int blue_mapping, constant const float (*const a)[3])
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -1131,7 +1138,7 @@ colorin_unbound (read_only image2d_t in, write_only image2d_t out, const int wid
 
   float4 pixel = read_imagef(in, sampleri, (int2)(x, y));
 
-  float cam[3], RGB[3];
+  float cam[3];
   cam[0] = lerp_lookup_unbounded0(lutr, pixel.x, a[0]);
   cam[1] = lerp_lookup_unbounded0(lutg, pixel.y, a[1]);
   cam[2] = lerp_lookup_unbounded0(lutb, pixel.z, a[2]);
@@ -1157,21 +1164,16 @@ colorin_unbound (read_only image2d_t in, write_only image2d_t out, const int wid
   }
 
   // now convert camera to work RGB using the color matrix
-  for(int j=0;j<3;j++)
-  {
-    RGB[j] = 0.0f;
-    for(int i=0;i<3;i++) RGB[j] += cmat[3*j+i] * cam[i];
-  }
-  pixel.xyz = (float3)(RGB[0], RGB[1], RGB[2]);
+  pixel.xyz = matrix_dot_float4(cmat, (float3)(cam[0], cam[1], cam[2]));
   write_imagef (out, (int2)(x, y), pixel);
 }
 
 /* kernel for the plugin colorin: with clipping */
 kernel void
 colorin_clipping (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
-                  global float *cmat, global float *lmat,
+                  constant float4 *cmat, constant float4 *lmat,
                   read_only image2d_t lutr, read_only image2d_t lutg, read_only image2d_t lutb,
-                  const int blue_mapping, global const float (*const a)[3])
+                  const int blue_mapping, constant const float (*const a)[3])
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -1180,7 +1182,7 @@ colorin_clipping (read_only image2d_t in, write_only image2d_t out, const int wi
 
   float4 pixel = read_imagef(in, sampleri, (int2)(x, y));
 
-  float cam[3], RGB[3], workRGB[3];
+  float cam[3];
   cam[0] = lerp_lookup_unbounded0(lutr, pixel.x, a[0]);
   cam[1] = lerp_lookup_unbounded0(lutg, pixel.y, a[1]);
   cam[2] = lerp_lookup_unbounded0(lutb, pixel.z, a[2]);
@@ -1206,23 +1208,15 @@ colorin_clipping (read_only image2d_t in, write_only image2d_t out, const int wi
   }
 
   // convert camera to RGB using the first color matrix
-  for(int j=0;j<3;j++)
-  {
-    RGB[j] = 0.0f;
-    for(int i=0;i<3;i++) RGB[j] += cmat[3*j+i] * cam[i];
-  }
+  float3 RGB = matrix_dot_float4(cmat, (float3)(cam[0], cam[1], cam[2]));
 
   // clamp at this stage
-  for(int i=0; i<3; i++) RGB[i] = clamp(RGB[i], 0.0f, 1.0f);
+  RGB = clamp(RGB, 0.0f, 1.0f);
 
   // convert clipped RGB to work RGB
-  for(int j=0;j<3;j++)
-  {
-    workRGB[j] = 0.0f;
-    for(int i=0;i<3;i++) workRGB[j] += lmat[3*j+i] * RGB[i];
-  }
+  const float3 workRGB = matrix_dot_float4(lmat, RGB);
 
-  pixel.xyz = (float3)(workRGB[0], workRGB[1], workRGB[2]);
+  pixel.xyz = workRGB;
   write_imagef (out, (int2)(x, y), pixel);
 }
 
@@ -2375,8 +2369,8 @@ envelope(const float L)
 /* kernel for the plugin colorout, fast matrix + shaper path only */
 kernel void
 colorout (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
-          global float *mat, read_only image2d_t lutr, read_only image2d_t lutg, read_only image2d_t lutb,
-          global const float (*const a)[3])
+          constant float4 *mat, read_only image2d_t lutr, read_only image2d_t lutg, read_only image2d_t lutb,
+          constant const float (*const a)[3])
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -2384,16 +2378,10 @@ colorout (read_only image2d_t in, write_only image2d_t out, const int width, con
   if(x >= width || y >= height) return;
 
   float4 pixel = read_imagef(in, sampleri, (int2)(x, y));
-  float rgb[3];
-  const float RGB[3] = { pixel.x, pixel.y, pixel.z };
-  for(int i=0;i<3;i++)
-  {
-    rgb[i] = 0.0f;
-    for(int j=0;j<3;j++) rgb[i] += mat[3*i+j]*RGB[j];
-  }
-  pixel.x = lerp_lookup_unbounded0(lutr, rgb[0], a[0]);
-  pixel.y = lerp_lookup_unbounded0(lutg, rgb[1], a[1]);
-  pixel.z = lerp_lookup_unbounded0(lutb, rgb[2], a[2]);
+  const float3 rgb = matrix_dot_float4(mat, pixel.xyz);
+  pixel.x = lerp_lookup_unbounded0(lutr, rgb.x, a[0]);
+  pixel.y = lerp_lookup_unbounded0(lutg, rgb.y, a[1]);
+  pixel.z = lerp_lookup_unbounded0(lutb, rgb.z, a[2]);
   write_imagef (out, (int2)(x, y), pixel);
 }
 

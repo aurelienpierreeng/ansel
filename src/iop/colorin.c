@@ -610,19 +610,19 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   cl_mem dev_m = NULL, dev_l = NULL, dev_r = NULL, dev_g = NULL, dev_b = NULL, dev_coeffs = NULL;
 
   int kernel;
-  float cmat[9], lmat[9];
+  float cmat[12], lmat[12];
 
   if(d->nrgb)
   {
     kernel = gd->kernel_colorin_clipping;
-    pack_3xSSE_to_3x3(d->nmatrix, cmat);
-    pack_3xSSE_to_3x3(d->lmatrix, lmat);
+    pack_3xSSE_to_3x4(d->nmatrix, cmat);
+    pack_3xSSE_to_3x4(d->lmatrix, lmat);
   }
   else
   {
     kernel = gd->kernel_colorin_unbound;
-    pack_3xSSE_to_3x3(d->cmatrix, cmat);
-    pack_3xSSE_to_3x3(d->lmatrix, lmat);
+    pack_3xSSE_to_3x4(d->cmatrix, cmat);
+    pack_3xSSE_to_3x4(d->lmatrix, lmat);
   }
 
   cl_int err = -999;
@@ -641,9 +641,9 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   }
 
   size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
-  dev_m = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 9, cmat);
+  dev_m = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 12, cmat);
   if(dev_m == NULL) goto error;
-  dev_l = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 9, lmat);
+  dev_l = dt_opencl_copy_host_to_device_constant(devid, sizeof(float) * 12, lmat);
   if(dev_l == NULL) goto error;
   dev_r = dt_opencl_copy_host_to_device(devid, d->lut[0], 256, 256, sizeof(float));
   if(dev_r == NULL) goto error;

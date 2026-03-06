@@ -368,7 +368,7 @@ kernel void
 colorbalancergb (read_only image2d_t in, write_only image2d_t out,
                  const int width, const int height,
                  constant const dt_colorspaces_iccprofile_info_cl_t *const profile_info,
-                 constant const float *const matrix_in, constant const float *const matrix_out,
+                 constant const float4 *const matrix_in, constant const float4 *const matrix_out,
                  read_only image2d_t gamut_lut,
                  const float shadows_weight, const float highlights_weight, const float midtones_weight, const float mask_grey_fulcrum,
                  const float hue_angle, const float chroma_global, const float4 chroma, const float vibrance,
@@ -396,7 +396,7 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
   RGB = fmax(pix_in, 0.f);
 
   // go to CIE 2006 LMS D65
-  LMS = matrix_product_float4(RGB, matrix_in);
+  LMS = (float4)(matrix_dot_float4(matrix_in, RGB.xyz), RGB.w);
 
   // go to Filmlight Yrg
   Yrg = LMS_to_Yrg(LMS);
@@ -592,7 +592,7 @@ colorbalancergb (read_only image2d_t in, write_only image2d_t out,
   }
 
   // Project back to D50 pipeline RGB
-  RGB = matrix_product_float4(XYZ_D65, matrix_out);
+  RGB = (float4)(matrix_dot_float4(matrix_out, XYZ_D65.xyz), XYZ_D65.w);
 
   if(mask_display)
   {

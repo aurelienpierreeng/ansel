@@ -62,11 +62,19 @@ static inline float lerp_lookup_unbounded(const float x, read_only image2d_t lut
       const float ft = clamp(x * (float)(lutsize - 1), 0.0f, (float)(lutsize - 1));
       const int t = ft < lutsize - 2 ? ft : lutsize - 2;
       const float f = ft - t;
-      const int2 p1 = (int2)((t & 0xff), (t >> 8) + n_lut * 256);
-      const int2 p2 = (int2)(((t + 1) & 0xff), ((t + 1) >> 8) + n_lut * 256);
+      const int tx = t & 0xff;
+      const int ty = (t >> 8) + n_lut * 256;
+
+      // Fast path: one hardware-linear fetch when both samples are on the same LUT row.
+      if(tx < 255)
+        return read_imagef(lut, samplerf, (float2)(tx + f + 0.5f, ty + 0.5f)).x;
+
+      // Seam fallback keeps exact row-major interpolation at x=255 -> x=0 (next row).
+      const int2 p1 = (int2)(tx, ty);
+      const int2 p2 = (int2)(0, ty + 1);
       const float l1 = read_imagef(lut, sampleri, p1).x;
       const float l2 = read_imagef(lut, sampleri, p2).x;
-      return l1 * (1.0f - f) + l2 * f;
+      return fma(f, l2 - l1, l1);
     }
     else return unbounded_coeffs[1] * native_powr(x*unbounded_coeffs[0], unbounded_coeffs[2]);
   }

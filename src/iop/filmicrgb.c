@@ -2476,8 +2476,13 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   const float norm_min = exp_tonemapping_v2(0.f, d->grey_source, d->black_source, d->dynamic_range);
   const float norm_max = exp_tonemapping_v2(1.f, d->grey_source, d->black_source, d->dynamic_range);
 
-  cl_mem input_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, 12 * sizeof(float), input_matrix);
-  cl_mem output_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, 12 * sizeof(float), output_matrix);
+  float input_matrix_3x4[12];
+  float output_matrix_3x4[12];
+  pack_3xSSE_to_3x4(input_matrix, input_matrix_3x4);
+  pack_3xSSE_to_3x4(output_matrix, output_matrix_3x4);
+
+  cl_mem input_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(input_matrix_3x4), input_matrix_3x4);
+  cl_mem output_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(output_matrix_3x4), output_matrix_3x4);
   cl_mem export_input_matrix_cl = NULL;
   cl_mem export_output_matrix_cl = NULL;
 
@@ -2494,8 +2499,12 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   if(use_output_profile)
   {
-    export_input_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, 12 * sizeof(float), export_input_matrix);
-    export_output_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, 12 * sizeof(float), export_output_matrix);
+    float export_input_matrix_3x4[12];
+    float export_output_matrix_3x4[12];
+    pack_3xSSE_to_3x4(export_input_matrix, export_input_matrix_3x4);
+    pack_3xSSE_to_3x4(export_output_matrix, export_output_matrix_3x4);
+    export_input_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(export_input_matrix_3x4), export_input_matrix_3x4);
+    export_output_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(export_output_matrix_3x4), export_output_matrix_3x4);
   }
 
   // used to adjust noise level depending on size. Don't amplify noise if magnified > 100%

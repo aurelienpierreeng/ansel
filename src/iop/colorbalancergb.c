@@ -986,8 +986,13 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   dt_colormatrix_mul(output_matrix, work_profile->matrix_out, XYZ_D65_to_D50_CAT16);
 
-  input_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, 12 * sizeof(float), input_matrix);
-  output_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, 12 * sizeof(float), output_matrix);
+  float input_matrix_3x4[12];
+  float output_matrix_3x4[12];
+  pack_3xSSE_to_3x4(input_matrix, input_matrix_3x4);
+  pack_3xSSE_to_3x4(output_matrix, output_matrix_3x4);
+
+  input_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(input_matrix_3x4), input_matrix_3x4);
+  output_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(output_matrix_3x4), output_matrix_3x4);
 
   // Send gamut LUT to GPU
   gamut_LUT = dt_opencl_copy_host_to_device(devid, d->gamut_LUT, LUT_ELEM, 1, sizeof(float));

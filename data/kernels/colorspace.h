@@ -49,14 +49,25 @@ static inline float4 matrix_product(const float4 xyz, constant const float *cons
   return (float4)(R, G, B, a);
 }
 
+static inline float3 matrix_dot_float4_rows(const float4 row0, const float4 row1, const float4 row2, const float3 xyz)
+{
+  const float4 vv = (float4)(xyz.x, xyz.y, xyz.z, 0.0f);
+  return (float3)(dot(row0, vv), dot(row1, vv), dot(row2, vv));
+}
+
+static inline float3 matrix_dot_float4(const constant float4 *const matrix, const float3 xyz)
+{
+  return matrix_dot_float4_rows(matrix[0], matrix[1], matrix[2], xyz);
+}
+
 // same as above but with 4xfloat padded matrix
 static inline float4 matrix_product_float4(const float4 xyz, constant const float *const matrix)
 {
-  const float R = matrix[0] * xyz.x + matrix[1] * xyz.y + matrix[2]  * xyz.z;
-  const float G = matrix[4] * xyz.x + matrix[5] * xyz.y + matrix[6]  * xyz.z;
-  const float B = matrix[8] * xyz.x + matrix[9] * xyz.y + matrix[10] * xyz.z;
-  const float a = xyz.w;
-  return (float4)(R, G, B, a);
+  const float4 row0 = vload4(0, matrix);
+  const float4 row1 = vload4(1, matrix);
+  const float4 row2 = vload4(2, matrix);
+  const float3 out = matrix_dot_float4_rows(row0, row1, row2, xyz.xyz);
+  return (float4)(out.x, out.y, out.z, xyz.w);
 }
 
 static inline float4 Lab_2_LCH(float4 Lab)

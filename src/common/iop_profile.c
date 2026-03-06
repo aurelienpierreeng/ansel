@@ -1584,9 +1584,9 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
       err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
       goto cleanup;
     }
-    float matrix3x3[9];
-    pack_3xSSE_to_3x3(matrix, matrix3x3);
-    matrix_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(matrix3x3), &matrix3x3);
+    float matrix3x4[12];
+    pack_3xSSE_to_3x4(matrix, matrix3x4);
+    matrix_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(matrix3x4), matrix3x4);
     if(matrix_cl == NULL)
     {
       fprintf(stderr,

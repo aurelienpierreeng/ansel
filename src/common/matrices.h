@@ -145,6 +145,23 @@ static inline void pack_3xSSE_to_3x3(const dt_colormatrix_t input, float output[
   output[8] = input[2][2];
 }
 
+// convert a 3x3 matrix into 3 padded float4 rows: [m00 m01 m02 0, ...]
+static inline void pack_3xSSE_to_3x4(const dt_colormatrix_t input, float output[12])
+{
+  output[0] = input[0][0];
+  output[1] = input[0][1];
+  output[2] = input[0][2];
+  output[3] = 0.0f;
+  output[4] = input[1][0];
+  output[5] = input[1][1];
+  output[6] = input[1][2];
+  output[7] = 0.0f;
+  output[8] = input[2][0];
+  output[9] = input[2][1];
+  output[10] = input[2][2];
+  output[11] = 0.0f;
+}
+
 // vectorized multiplication of padded 3x3 matrices
 static inline void dt_colormatrix_mul(dt_colormatrix_t dst, const dt_colormatrix_t m1, const dt_colormatrix_t m2)
 {

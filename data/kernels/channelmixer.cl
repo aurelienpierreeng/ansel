@@ -193,7 +193,7 @@ static inline float4 luma_chroma(const float4 input, const float4 saturation, co
       case DT_ADAPTATION_LAST: \
       default: \
       { \
-        XYZ = matrix_product_float4(LMS, RGB_to_XYZ); \
+        XYZ = matrix_product_float4(LMS, (constant const float *const)RGB_to_XYZ); \
         break; \
       } \
     }})
@@ -222,7 +222,7 @@ static inline float4 luma_chroma(const float4 input, const float4 saturation, co
     case DT_ADAPTATION_LAST: \
     default: \
     { \
-      LMS = matrix_product_float4(XYZ, XYZ_to_RGB); \
+      LMS = matrix_product_float4(XYZ, (constant const float *const)XYZ_to_RGB); \
       break; \
     } \
   }})
@@ -241,13 +241,13 @@ static inline void upscale_vector(float4 *const vector, const float scaling)
 }
 
 static inline float4 chroma_adapt_bradford(const float4 RGB,
-                                           constant const float *const RGB_to_XYZ,
-                                           constant const float *const MIX,
+                                           constant const float4 *const RGB_to_XYZ,
+                                           constant const float4 *const MIX,
                                            const float4 illuminant, const float p,
                                            const int full)
 {
   // Convert from RGB to XYZ
-  const float4 XYZ = matrix_product_float4(RGB, RGB_to_XYZ);
+  const float4 XYZ = matrix_product_float4(RGB, (constant const float *const)RGB_to_XYZ);
   const float Y = XYZ.y;
 
   // Convert to LMS
@@ -259,19 +259,19 @@ static inline float4 chroma_adapt_bradford(const float4 RGB,
   upscale_vector(&LMS, Y);
 
   // Compute the 3D mix - this is a rotation + homothety of the vector base
-  const float4 LMS_mixed = matrix_product_float4(LMS, MIX);
+  const float4 LMS_mixed = matrix_product_float4(LMS, (constant const float *const)MIX);
 
   return convert_bradford_LMS_to_XYZ(LMS_mixed);
 };
 
 static inline float4 chroma_adapt_CAT16(const float4 RGB,
-                                        constant const float *const RGB_to_XYZ,
-                                        constant const float *const MIX,
+                                        constant const float4 *const RGB_to_XYZ,
+                                        constant const float4 *const MIX,
                                         const float4 illuminant, const float p,
                                         const int full)
 {
   // Convert from RGB to XYZ
-  const float4 XYZ = matrix_product_float4(RGB, RGB_to_XYZ);
+  const float4 XYZ = matrix_product_float4(RGB, (constant const float *const)RGB_to_XYZ);
   const float Y = XYZ.y;
 
   // Convert to LMS
@@ -283,17 +283,17 @@ static inline float4 chroma_adapt_CAT16(const float4 RGB,
   upscale_vector(&LMS, Y);
 
   // Compute the 3D mix - this is a rotation + homothety of the vector base
-  const float4 LMS_mixed = matrix_product_float4(LMS, MIX);
+  const float4 LMS_mixed = matrix_product_float4(LMS, (constant const float *const)MIX);
 
   return convert_CAT16_LMS_to_XYZ(LMS_mixed);
 }
 
 static inline float4 chroma_adapt_XYZ(const float4 RGB,
-                                      constant const float *const RGB_to_XYZ,
-                                      constant const float *const MIX, const float4 illuminant)
+                                      constant const float4 *const RGB_to_XYZ,
+                                      constant const float4 *const MIX, const float4 illuminant)
 {
   // Convert from RGB to XYZ
-  float4 XYZ_mixed = matrix_product_float4(RGB, RGB_to_XYZ);
+  float4 XYZ_mixed = matrix_product_float4(RGB, (constant const float *const)RGB_to_XYZ);
   const float Y = XYZ_mixed.y;
 
   // Do white balance in XYZ
@@ -302,20 +302,20 @@ static inline float4 chroma_adapt_XYZ(const float4 RGB,
   upscale_vector(&XYZ_mixed, Y);
 
   // Compute the 3D mix in XYZ - this is a rotation + homothety of the vector base
-  return matrix_product_float4(XYZ_mixed, MIX);
+  return matrix_product_float4(XYZ_mixed, (constant const float *const)MIX);
 }
 
 static inline float4 chroma_adapt_RGB(const float4 RGB,
-                               constant const float *const RGB_to_XYZ,
-                               constant const float *const MIX)
+                               constant const float4 *const RGB_to_XYZ,
+                               constant const float4 *const MIX)
 {
   // No white balance.
 
   // Compute the 3D mix in RGB - this is a rotation + homothety of the vector base
-  float4 RGB_mixed = matrix_product_float4(RGB, MIX);
+  float4 RGB_mixed = matrix_product_float4(RGB, (constant const float *const)MIX);
 
   // Convert from RGB to XYZ
-  return matrix_product_float4(RGB_mixed, RGB_to_XYZ);
+  return matrix_product_float4(RGB_mixed, (constant const float *const)RGB_to_XYZ);
 }
 
 #define unswitch_chroma_adapt(kind) \
@@ -365,9 +365,9 @@ static inline float4 chroma_adapt_RGB(const float4 RGB,
 kernel void
 channelmixerrgb_CAT16(read_only image2d_t in, write_only image2d_t out,
                       const int width, const int height,
-                      constant const float *const RGB_to_XYZ,
-                      constant const float *const XYZ_to_RGB,
-                      constant const float *const MIX,
+                      constant const float4 *const RGB_to_XYZ,
+                      constant const float4 *const XYZ_to_RGB,
+                      constant const float4 *const MIX,
                       const float4 illuminant,
                       const float4 saturation,
                       const float4 lightness,
@@ -432,7 +432,7 @@ channelmixerrgb_CAT16(read_only image2d_t in, write_only image2d_t out,
     if(clip) XYZ = fmax(XYZ, 0.0f);
 
     // Convert back to RGB
-    RGB = matrix_product_float4(XYZ, XYZ_to_RGB);
+    RGB = matrix_product_float4(XYZ, (constant const float *const)XYZ_to_RGB);
 
     if(clip) RGB = fmax(RGB, 0.f);
     RGB.w = pix_in.w;
@@ -445,9 +445,9 @@ channelmixerrgb_CAT16(read_only image2d_t in, write_only image2d_t out,
 kernel void
 channelmixerrgb_bradford_linear(read_only image2d_t in, write_only image2d_t out,
                                 const int width, const int height,
-                                constant const float *const RGB_to_XYZ,
-                                constant const float *const XYZ_to_RGB,
-                                constant const float *const MIX,
+                                constant const float4 *const RGB_to_XYZ,
+                                constant const float4 *const XYZ_to_RGB,
+                                constant const float4 *const MIX,
                                 const float4 illuminant,
                                 const float4 saturation,
                                 const float4 lightness,
@@ -512,7 +512,7 @@ channelmixerrgb_bradford_linear(read_only image2d_t in, write_only image2d_t out
     if(clip) XYZ = fmax(XYZ, 0.0f);
 
     // Convert back to RGB
-    RGB = matrix_product_float4(XYZ, XYZ_to_RGB);
+    RGB = matrix_product_float4(XYZ, (constant const float *const)XYZ_to_RGB);
 
     if(clip) RGB = fmax(RGB, 0.f);
     RGB.w = pix_in.w;
@@ -524,9 +524,9 @@ channelmixerrgb_bradford_linear(read_only image2d_t in, write_only image2d_t out
 kernel void
 channelmixerrgb_bradford_full(read_only image2d_t in, write_only image2d_t out,
                               const int width, const int height,
-                              constant const float *const RGB_to_XYZ,
-                              constant const float *const XYZ_to_RGB,
-                              constant const float *const MIX,
+                              constant const float4 *const RGB_to_XYZ,
+                              constant const float4 *const XYZ_to_RGB,
+                              constant const float4 *const MIX,
                               const float4 illuminant,
                               const float4 saturation,
                               const float4 lightness,
@@ -591,7 +591,7 @@ channelmixerrgb_bradford_full(read_only image2d_t in, write_only image2d_t out,
     if(clip) XYZ = fmax(XYZ, 0.0f);
 
     // Convert back to RGB
-    RGB = matrix_product_float4(XYZ, XYZ_to_RGB);
+    RGB = matrix_product_float4(XYZ, (constant const float *const)XYZ_to_RGB);
 
     if(clip) RGB = fmax(RGB, 0.f);
     RGB.w = pix_in.w;
@@ -604,9 +604,9 @@ channelmixerrgb_bradford_full(read_only image2d_t in, write_only image2d_t out,
 kernel void
 channelmixerrgb_XYZ(read_only image2d_t in, write_only image2d_t out,
                     const int width, const int height,
-                    constant const float *const RGB_to_XYZ,
-                    constant const float *const XYZ_to_RGB,
-                    constant const float *const MIX,
+                    constant const float4 *const RGB_to_XYZ,
+                    constant const float4 *const XYZ_to_RGB,
+                    constant const float4 *const MIX,
                     const float4 illuminant,
                     const float4 saturation,
                     const float4 lightness,
@@ -671,7 +671,7 @@ channelmixerrgb_XYZ(read_only image2d_t in, write_only image2d_t out,
     if(clip) XYZ = fmax(XYZ, 0.0f);
 
     // Convert back to RGB
-    RGB = matrix_product_float4(XYZ, XYZ_to_RGB);
+    RGB = matrix_product_float4(XYZ, (constant const float *const)XYZ_to_RGB);
 
     if(clip) RGB = fmax(RGB, 0.f);
     RGB.w = pix_in.w;
@@ -683,9 +683,9 @@ channelmixerrgb_XYZ(read_only image2d_t in, write_only image2d_t out,
 kernel void
 channelmixerrgb_RGB(read_only image2d_t in, write_only image2d_t out,
                     const int width, const int height,
-                    constant const float *const RGB_to_XYZ,
-                    constant const float *const XYZ_to_RGB,
-                    constant const float *const MIX,
+                    constant const float4 *const RGB_to_XYZ,
+                    constant const float4 *const XYZ_to_RGB,
+                    constant const float4 *const MIX,
                     const float4 illuminant,
                     const float4 saturation,
                     const float4 lightness,
@@ -750,7 +750,7 @@ channelmixerrgb_RGB(read_only image2d_t in, write_only image2d_t out,
     if(clip) XYZ = fmax(XYZ, 0.0f);
 
     // Convert back to RGB
-    RGB = matrix_product_float4(XYZ, XYZ_to_RGB);
+    RGB = matrix_product_float4(XYZ, (constant const float *const)XYZ_to_RGB);
 
     if(clip) RGB = fmax(RGB, 0.f);
     RGB.w = pix_in.w;

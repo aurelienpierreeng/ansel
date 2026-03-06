@@ -2073,9 +2073,16 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   cl_mem input_matrix_cl = NULL;
   cl_mem output_matrix_cl = NULL;
 
-  input_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, 12 * sizeof(float), (float*)work_profile->matrix_in);
-  output_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, 12 * sizeof(float), (float*)work_profile->matrix_out);
-  cl_mem MIX_cl = dt_opencl_copy_host_to_device_constant(devid, 12 * sizeof(float), d->MIX);
+  float input_matrix_3x4[12];
+  float output_matrix_3x4[12];
+  float mix_matrix_3x4[12];
+  pack_3xSSE_to_3x4(work_profile->matrix_in, input_matrix_3x4);
+  pack_3xSSE_to_3x4(work_profile->matrix_out, output_matrix_3x4);
+  pack_3xSSE_to_3x4(d->MIX, mix_matrix_3x4);
+
+  input_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(input_matrix_3x4), input_matrix_3x4);
+  output_matrix_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(output_matrix_3x4), output_matrix_3x4);
+  cl_mem MIX_cl = dt_opencl_copy_host_to_device_constant(devid, sizeof(mix_matrix_3x4), mix_matrix_3x4);
 
   // select the right kernel for the current LMS space
   int kernel = gd->kernel_channelmixer_rgb_rgb;
