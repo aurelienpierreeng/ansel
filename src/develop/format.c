@@ -36,6 +36,9 @@ size_t dt_iop_buffer_dsc_to_bpp(const struct dt_iop_buffer_dsc_t *dsc)
     case TYPE_UINT16:
       bpp *= sizeof(uint16_t);
       break;
+    case TYPE_UINT8:
+      bpp *= sizeof(uint8_t);
+      break;
     default:
       dt_unreachable_codepath();
       break;
@@ -103,4 +106,3 @@ int default_blend_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

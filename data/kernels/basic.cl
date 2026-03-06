@@ -2797,3 +2797,158 @@ interpolation_resample (read_only image2d_t in, write_only image2d_t out, const 
     write_imagef (out, (int2)(x, y), fmax(buffer[ylid], 0.f));
   }
 }
+
+#define DT_IOP_GAMMA_KERNEL_COPY 0
+#define DT_IOP_GAMMA_KERNEL_MASK 1
+#define DT_IOP_GAMMA_KERNEL_CHANNEL_MONO 2
+#define DT_IOP_GAMMA_KERNEL_CHANNEL_FALSE_COLOR 3
+
+#define DT_IOP_GAMMA_FALSE_COLOR_MONO 0
+#define DT_IOP_GAMMA_FALSE_COLOR_A 1
+#define DT_IOP_GAMMA_FALSE_COLOR_B 2
+#define DT_IOP_GAMMA_FALSE_COLOR_R 3
+#define DT_IOP_GAMMA_FALSE_COLOR_G 4
+#define DT_IOP_GAMMA_FALSE_COLOR_B_CH 5
+#define DT_IOP_GAMMA_FALSE_COLOR_C 6
+#define DT_IOP_GAMMA_FALSE_COLOR_LCH_H 7
+#define DT_IOP_GAMMA_FALSE_COLOR_HSL_H 8
+#define DT_IOP_GAMMA_FALSE_COLOR_JZ_HZ 9
+
+static inline float _gamma_oetf(const float v)
+{
+  return (v <= 0.0031308f) ? (12.92f * v) : ((1.0f + 0.055f) * native_powr(v, 1.0f / 2.4f) - 0.055f);
+}
+
+static inline float3 _gamma_normalize_color(const float3 pixel, const float norm)
+{
+  const float max_c = fmax(pixel.x, fmax(pixel.y, pixel.z));
+  const float factor = norm / fmax(max_c, 1e-8f);
+  return pixel * factor;
+}
+
+static inline float3 _XYZ_to_Rec709_D50_cl(const float4 XYZ)
+{
+  return (float3)(3.1338561f * XYZ.x - 0.9787684f * XYZ.y + 0.0719453f * XYZ.z,
+                  -1.6168667f * XYZ.x + 1.9161415f * XYZ.y - 0.2289914f * XYZ.z,
+                  -0.4906146f * XYZ.x + 0.0334540f * XYZ.y + 1.4052427f * XYZ.z);
+}
+
+static inline float3 _XYZ_to_Rec709_D65_cl(const float4 XYZ)
+{
+  return (float3)(3.2404542f * XYZ.x - 0.9692660f * XYZ.y + 0.0556434f * XYZ.z,
+                  -1.5371385f * XYZ.x + 1.8760108f * XYZ.y - 0.2040259f * XYZ.z,
+                  -0.4985314f * XYZ.x + 0.0415560f * XYZ.y + 1.0572252f * XYZ.z);
+}
+
+static inline float4 _JzCzhz_to_JzAzBz_cl(const float4 JzCzhz)
+{
+  const float angle = 2.0f * M_PI_F * JzCzhz.z;
+  return (float4)(JzCzhz.x, JzCzhz.y * native_cos(angle), JzCzhz.y * native_sin(angle), JzCzhz.w);
+}
+
+static inline uchar _to_u8(const float value)
+{
+  return (uchar)clamp((int)round(value), 0, 255);
+}
+
+static inline uint4 _quantized_BGRX(const float3 rgb)
+{
+  const uchar r = _to_u8(255.0f * rgb.x);
+  const uchar g = _to_u8(255.0f * rgb.y);
+  const uchar b = _to_u8(255.0f * rgb.z);
+  return (uint4)((uint)b, (uint)g, (uint)r, 0u);
+}
+
+static inline uint4 _write_pixel_BGRX(const float3 linear_rgb, const float alpha)
+{
+  const float3 srgb = (float3)(_gamma_oetf(linear_rgb.x), _gamma_oetf(linear_rgb.y), _gamma_oetf(linear_rgb.z));
+  const float3 blended = (float3)(srgb.x * (1.0f - alpha) + alpha,
+                                  srgb.y * (1.0f - alpha) + alpha,
+                                  srgb.z * (1.0f - alpha));
+  return _quantized_BGRX(blended);
+}
+
+static inline float3 _false_color_pixel(const float value, const int channel)
+{
+  switch(channel)
+  {
+    case DT_IOP_GAMMA_FALSE_COLOR_A:
+    {
+      const float a = clamp(value * 256.0f - 128.0f, -56.0f, 56.0f);
+      const float4 lab = (float4)(79.0f - a * (11.0f / 56.0f), a, 0.0f, 0.0f);
+      const float4 xyz = Lab_to_XYZ(lab);
+      return _gamma_normalize_color(_XYZ_to_Rec709_D50_cl(xyz), 0.75f);
+    }
+    case DT_IOP_GAMMA_FALSE_COLOR_B:
+    {
+      const float b = clamp(value * 256.0f - 128.0f, -65.0f, 65.0f);
+      const float4 lab = (float4)(60.0f + b * (2.0f / 65.0f), 0.0f, b, 0.0f);
+      const float4 xyz = Lab_to_XYZ(lab);
+      return _gamma_normalize_color(_XYZ_to_Rec709_D50_cl(xyz), 0.75f);
+    }
+    case DT_IOP_GAMMA_FALSE_COLOR_R:
+      return (float3)(value, 0.0f, 0.0f);
+    case DT_IOP_GAMMA_FALSE_COLOR_G:
+      return (float3)(0.0f, value, 0.0f);
+    case DT_IOP_GAMMA_FALSE_COLOR_B_CH:
+      return (float3)(0.0f, 0.0f, value);
+    case DT_IOP_GAMMA_FALSE_COLOR_C:
+      return (float3)(0.5f, 0.5f * (1.0f - value), 0.5f);
+    case DT_IOP_GAMMA_FALSE_COLOR_LCH_H:
+    {
+      const float4 lch = (float4)(65.0f, 37.0f, value, 0.0f);
+      const float4 lab = LCH_2_Lab(lch);
+      const float4 xyz = Lab_to_XYZ(lab);
+      return _gamma_normalize_color(_XYZ_to_Rec709_D50_cl(xyz), 0.75f);
+    }
+    case DT_IOP_GAMMA_FALSE_COLOR_HSL_H:
+    {
+      const float4 hsl = (float4)(value, 0.5f, 0.5f, 0.0f);
+      return _gamma_normalize_color(HSL_2_RGB(hsl).xyz, 0.75f);
+    }
+    case DT_IOP_GAMMA_FALSE_COLOR_JZ_HZ:
+    {
+      const float4 JzCzhz = (float4)(0.011f, 0.01f, value, 0.0f);
+      const float4 JzAzBz = _JzCzhz_to_JzAzBz_cl(JzCzhz);
+      const float4 xyz_d65 = JzAzBz_2_XYZ(JzAzBz);
+      return _gamma_normalize_color(_XYZ_to_Rec709_D65_cl(xyz_d65), 0.75f);
+    }
+    case DT_IOP_GAMMA_FALSE_COLOR_MONO:
+    default:
+      return (float3)(value, value, value);
+  }
+}
+
+kernel void
+gamma_pack(read_only image2d_t in, write_only image2d_t out, const int width, const int height, const int mode,
+           const int channel, const float alpha)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  if(x >= width || y >= height) return;
+
+  const float4 p = read_imagef(in, sampleri, (int2)(x, y));
+  uint4 out_pixel;
+
+  if(mode == DT_IOP_GAMMA_KERNEL_COPY)
+  {
+    out_pixel = _quantized_BGRX(p.xyz);
+  }
+  else if(mode == DT_IOP_GAMMA_KERNEL_MASK)
+  {
+    const float gray = 0.3f * p.x + 0.59f * p.y + 0.11f * p.z;
+    const float hide = 1.0f - clamp(p.w, 0.0f, 1.0f);
+    out_pixel = _write_pixel_BGRX((float3)(gray, gray, gray), hide);
+  }
+  else if(mode == DT_IOP_GAMMA_KERNEL_CHANNEL_MONO)
+  {
+    const float g = p.y;
+    out_pixel = _write_pixel_BGRX((float3)(g, g, g), p.w * alpha);
+  }
+  else // DT_IOP_GAMMA_KERNEL_CHANNEL_FALSE_COLOR
+  {
+    out_pixel = _write_pixel_BGRX(_false_color_pixel(p.y, channel), p.w * alpha);
+  }
+
+  write_imageui(out, (int2)(x, y), out_pixel);
+}

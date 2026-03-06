@@ -41,6 +41,7 @@ typedef enum dt_iop_buffer_type_t {
   TYPE_UNKNOWN,
   TYPE_FLOAT,
   TYPE_UINT16,
+  TYPE_UINT8,
 } dt_iop_buffer_type_t;
 
 typedef struct dt_iop_buffer_dsc_t
@@ -92,4 +93,3 @@ int default_blend_colorspace(struct dt_iop_module_t *self, struct dt_dev_pixelpi
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

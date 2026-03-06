@@ -300,6 +300,8 @@ static const char *_image_buf_type_to_string(const dt_iop_buffer_type_t type)
       return "float";
     case TYPE_UINT16:
       return "uint16";
+    case TYPE_UINT8:
+      return "uint8";
     case TYPE_UNKNOWN:
     default:
       return "unknown";
@@ -345,6 +347,9 @@ void dt_image_print_debug_info(const dt_image_t *img, const char *context)
       break;
     case TYPE_UINT16:
       bit_depth = 16;
+      break;
+    case TYPE_UINT8:
+      bit_depth = 8;
       break;
     case TYPE_UNKNOWN:
     default:

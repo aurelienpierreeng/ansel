@@ -44,6 +44,7 @@
 #include <string.h>
 
 #include "common/colorspaces_inline_conversions.h"
+#include "common/opencl.h"
 #include "control/control.h"
 #include "develop/develop.h"
 
@@ -65,6 +66,35 @@ typedef struct dt_iop_gamma_params_t
   float gamma, linear;
 } dt_iop_gamma_params_t;
 
+#ifdef HAVE_OPENCL
+typedef struct dt_iop_gamma_global_data_t
+{
+  int kernel_gamma_pack;
+} dt_iop_gamma_global_data_t;
+
+typedef enum dt_iop_gamma_kernel_mode_t
+{
+  DT_IOP_GAMMA_KERNEL_COPY = 0,
+  DT_IOP_GAMMA_KERNEL_MASK = 1,
+  DT_IOP_GAMMA_KERNEL_CHANNEL_MONO = 2,
+  DT_IOP_GAMMA_KERNEL_CHANNEL_FALSE_COLOR = 3
+} dt_iop_gamma_kernel_mode_t;
+
+typedef enum dt_iop_gamma_false_color_t
+{
+  DT_IOP_GAMMA_FALSE_COLOR_MONO = 0,
+  DT_IOP_GAMMA_FALSE_COLOR_A = 1,
+  DT_IOP_GAMMA_FALSE_COLOR_B = 2,
+  DT_IOP_GAMMA_FALSE_COLOR_R = 3,
+  DT_IOP_GAMMA_FALSE_COLOR_G = 4,
+  DT_IOP_GAMMA_FALSE_COLOR_B_CH = 5,
+  DT_IOP_GAMMA_FALSE_COLOR_C = 6,
+  DT_IOP_GAMMA_FALSE_COLOR_LCH_H = 7,
+  DT_IOP_GAMMA_FALSE_COLOR_HSL_H = 8,
+  DT_IOP_GAMMA_FALSE_COLOR_JZ_HZ = 9
+} dt_iop_gamma_false_color_t;
+#endif
+
 const char *name()
 {
   return C_("modulename", "display encoding");
@@ -83,6 +113,14 @@ int flags()
 int default_colorspace(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
   return IOP_CS_RGB;
+}
+
+void output_format(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                   dt_iop_buffer_dsc_t *dsc)
+{
+  dsc->channels = 4;
+  dsc->datatype = TYPE_UINT8;
+  dsc->cst = self->output_colorspace(self, pipe, piece);
 }
 
 
@@ -378,6 +416,123 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
 
   return 0;
 }
+
+#ifdef HAVE_OPENCL
+static int _false_color_channel_to_kernel_code(const dt_dev_pixelpipe_display_mask_t mask_display)
+{
+  switch(mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY & ~DT_DEV_PIXELPIPE_DISPLAY_OUTPUT)
+  {
+    case DT_DEV_PIXELPIPE_DISPLAY_a:
+      return DT_IOP_GAMMA_FALSE_COLOR_A;
+    case DT_DEV_PIXELPIPE_DISPLAY_b:
+      return DT_IOP_GAMMA_FALSE_COLOR_B;
+    case DT_DEV_PIXELPIPE_DISPLAY_R:
+      return DT_IOP_GAMMA_FALSE_COLOR_R;
+    case DT_DEV_PIXELPIPE_DISPLAY_G:
+      return DT_IOP_GAMMA_FALSE_COLOR_G;
+    case DT_DEV_PIXELPIPE_DISPLAY_B:
+      return DT_IOP_GAMMA_FALSE_COLOR_B_CH;
+    case DT_DEV_PIXELPIPE_DISPLAY_LCH_C:
+    case DT_DEV_PIXELPIPE_DISPLAY_HSL_S:
+    case DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_Cz:
+      return DT_IOP_GAMMA_FALSE_COLOR_C;
+    case DT_DEV_PIXELPIPE_DISPLAY_LCH_h:
+      return DT_IOP_GAMMA_FALSE_COLOR_LCH_H;
+    case DT_DEV_PIXELPIPE_DISPLAY_HSL_H:
+      return DT_IOP_GAMMA_FALSE_COLOR_HSL_H;
+    case DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_hz:
+      return DT_IOP_GAMMA_FALSE_COLOR_JZ_HZ;
+    case DT_DEV_PIXELPIPE_DISPLAY_L:
+    case DT_DEV_PIXELPIPE_DISPLAY_GRAY:
+    case DT_DEV_PIXELPIPE_DISPLAY_HSL_l:
+    case DT_DEV_PIXELPIPE_DISPLAY_JzCzhz_Jz:
+    default:
+      return DT_IOP_GAMMA_FALSE_COLOR_MONO;
+  }
+}
+
+int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
+               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+{
+  dt_iop_gamma_global_data_t *gd = (dt_iop_gamma_global_data_t *)self->global_data;
+  const int devid = piece->pipe->devid;
+  cl_int err = CL_SUCCESS;
+
+  if(piece->colors != 4) return FALSE;
+
+  // this module expects the same size of input image as the output image.
+  if(roi_in->width != roi_out->width || roi_in->height != roi_out->height) return FALSE;
+
+  const int width = roi_out->width;
+  const int height = roi_out->height;
+  const int in_bpp = dt_opencl_get_image_element_size(dev_in);
+  const int out_bpp = dt_opencl_get_image_element_size(dev_out);
+  if(in_bpp != (int)(4 * sizeof(float)) || out_bpp != (int)(4 * sizeof(uint8_t)))
+  {
+    dt_print(DT_DEBUG_OPENCL, "[opencl_gamma] unsupported image format in_bpp=%d out_bpp=%d\n",
+             in_bpp, out_bpp);
+    return FALSE;
+  }
+
+  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+
+  const dt_dev_pixelpipe_display_mask_t mask_display = piece->pipe->mask_display;
+  const gboolean fcolor = dt_conf_is_equal("channel_display", "false color");
+  int mode = DT_IOP_GAMMA_KERNEL_COPY;
+  int channel = DT_IOP_GAMMA_FALSE_COLOR_MONO;
+  float alpha = (mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK) ? 1.0f : 0.0f;
+
+  if((mask_display & DT_DEV_PIXELPIPE_DISPLAY_CHANNEL)
+     && (mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY))
+  {
+    if(fcolor)
+    {
+      mode = DT_IOP_GAMMA_KERNEL_CHANNEL_FALSE_COLOR;
+      channel = _false_color_channel_to_kernel_code(mask_display);
+    }
+    else
+    {
+      mode = DT_IOP_GAMMA_KERNEL_CHANNEL_MONO;
+    }
+  }
+  else if(mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
+  {
+    mode = DT_IOP_GAMMA_KERNEL_MASK;
+    alpha = 1.0f;
+  }
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 0, sizeof(cl_mem), (void *)&dev_in);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 1, sizeof(cl_mem), (void *)&dev_out);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 2, sizeof(int), (void *)&width);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 3, sizeof(int), (void *)&height);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 4, sizeof(int), (void *)&mode);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 5, sizeof(int), (void *)&channel);
+  dt_opencl_set_kernel_arg(devid, gd->kernel_gamma_pack, 6, sizeof(float), (void *)&alpha);
+
+  err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_gamma_pack, sizes);
+  if(err == CL_SUCCESS) return TRUE;
+
+  dt_print(DT_DEBUG_OPENCL, "[opencl_gamma] couldn't enqueue kernel! %d\n", err);
+  return FALSE;
+}
+#endif
+
+#ifdef HAVE_OPENCL
+void init_global(dt_iop_module_so_t *module)
+{
+  const int program = 2; // basic.cl, from programs.conf
+  dt_iop_gamma_global_data_t *gd = (dt_iop_gamma_global_data_t *)malloc(sizeof(dt_iop_gamma_global_data_t));
+  module->data = gd;
+  gd->kernel_gamma_pack = dt_opencl_create_kernel(program, "gamma_pack");
+}
+
+void cleanup_global(dt_iop_module_so_t *module)
+{
+  dt_iop_gamma_global_data_t *gd = (dt_iop_gamma_global_data_t *)module->data;
+  dt_opencl_free_kernel(gd->kernel_gamma_pack);
+  free(module->data);
+  module->data = NULL;
+}
+#endif
 
 void init(dt_iop_module_t *module)
 {

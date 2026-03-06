@@ -178,7 +178,13 @@ static void *_gpu_try_reuse_pinned_from_cache(dt_pixel_cache_entry_t *cache_entr
   return mem;
 }
 
-static void *_gpu_alloc_device_with_flush(int devid, const dt_iop_roi_t *roi, const size_t bpp);
+static inline gboolean _is_gamma_rgba8_output(const dt_iop_module_t *module, const size_t bpp,
+                                              const char *message)
+{
+  return module && message && bpp == 4 * sizeof(uint8_t) && strcmp(module->op, "gamma") == 0
+         && strcmp(message, "output") == 0;
+}
+
 
 /**
  * @brief Allocate a pinned (`CL_MEM_USE_HOST_PTR`) OpenCL image, with optional reuse from cache and a flush retry.
@@ -195,10 +201,13 @@ static void *_gpu_alloc_device_with_flush(int devid, const dt_iop_roi_t *roi, co
  */
 static void *_gpu_get_pinned_or_alloc(int devid, void *host_ptr, const dt_iop_roi_t *roi, const size_t bpp,
                                       dt_pixel_cache_entry_t *cache_entry, const gboolean reuse_pinned,
-                                      int *out_cst, gboolean *out_reused)
+                                      int *out_cst, gboolean *out_reused,
+                                      const dt_iop_module_t *module, const char *message)
 {
   const int flags = CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR;
   void *mem = NULL;
+  const gboolean gamma_rgba8 = _is_gamma_rgba8_output(module, bpp, message);
+  const int cl_bpp = gamma_rgba8 ? DT_OPENCL_BPP_ENCODE_RGBA8((int)bpp) : (int)bpp;
 
   if(out_reused) *out_reused = FALSE;
 
@@ -206,7 +215,7 @@ static void *_gpu_get_pinned_or_alloc(int devid, void *host_ptr, const dt_iop_ro
     mem = _gpu_try_reuse_pinned_from_cache(cache_entry, host_ptr, devid, roi, bpp, flags, out_cst, out_reused);
 
   if(!mem)
-    mem = dt_opencl_alloc_device_use_host_pointer(devid, roi->width, roi->height, (int)bpp, host_ptr, flags);
+    mem = dt_opencl_alloc_device_use_host_pointer(devid, roi->width, roi->height, cl_bpp, host_ptr, flags);
 
   if(!mem)
   {
@@ -214,7 +223,7 @@ static void *_gpu_get_pinned_or_alloc(int devid, void *host_ptr, const dt_iop_ro
     if(reuse_pinned)
       mem = _gpu_try_reuse_pinned_from_cache(cache_entry, host_ptr, devid, roi, bpp, flags, out_cst, out_reused);
     if(!mem)
-      mem = dt_opencl_alloc_device_use_host_pointer(devid, roi->width, roi->height, (int)bpp, host_ptr, flags);
+      mem = dt_opencl_alloc_device_use_host_pointer(devid, roi->width, roi->height, cl_bpp, host_ptr, flags);
   }
 
   return mem;
@@ -227,13 +236,16 @@ static void *_gpu_get_pinned_or_alloc(int devid, void *host_ptr, const dt_iop_ro
  * This is used when we intentionally do not want a pinned host-backed image (e.g. output buffers that we do
  * not plan to cache in RAM). Allocation failure triggers a clmem cache flush and one retry.
  */
-static void *_gpu_alloc_device_with_flush(int devid, const dt_iop_roi_t *roi, const size_t bpp)
+static void *_gpu_alloc_device_with_flush(int devid, const dt_iop_roi_t *roi, const size_t bpp,
+                                          const dt_iop_module_t *module, const char *message)
 {
-  void *mem = dt_opencl_alloc_device(devid, roi->width, roi->height, bpp);
+  const gboolean gamma_rgba8 = _is_gamma_rgba8_output(module, bpp, message);
+  const int cl_bpp = gamma_rgba8 ? DT_OPENCL_BPP_ENCODE_RGBA8((int)bpp) : (int)bpp;
+  void *mem = dt_opencl_alloc_device(devid, roi->width, roi->height, cl_bpp);
   if(!mem)
   {
     dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
-    mem = dt_opencl_alloc_device(devid, roi->width, roi->height, bpp);
+    mem = dt_opencl_alloc_device(devid, roi->width, roi->height, cl_bpp);
   }
   return mem;
 }

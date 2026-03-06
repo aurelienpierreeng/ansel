@@ -2247,91 +2247,77 @@ int dt_opencl_unmap_mem_object(const int devid, cl_mem mem_object, void *mapped_
   return err;
 }
 
-void *dt_opencl_alloc_device(const int devid, const int width, const int height, const int bpp)
+static inline void *_dt_opencl_alloc_image2d(const int devid, const int width, const int height,
+                                             const cl_mem_flags flags, const cl_image_format fmt, void *host,
+                                             const char *const context)
 {
   if(!darktable.opencl->inited || devid < 0) return NULL;
   cl_int err;
+  cl_mem dev = NULL;
+  for(int attempt = 0; attempt < 2; attempt++)
+  {
+    dev = (darktable.opencl->dlocl->symbols->dt_clCreateImage2D)(darktable.opencl->dev[devid].context, flags,
+                                                                  &fmt, width, height, 0, host, &err);
+    if(err == CL_SUCCESS) break;
+    if(attempt == 0 && (err == CL_MEM_OBJECT_ALLOCATION_FAILURE || err == CL_OUT_OF_RESOURCES))
+    {
+      dt_print(DT_DEBUG_OPENCL,
+               "[opencl %s] out of memory on device %d, flushing cached pinned buffers and retrying\n",
+               context, devid);
+      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
+      continue;
+    }
+    break;
+  }
+
+  if(err != CL_SUCCESS)
+    dt_print(DT_DEBUG_OPENCL, "[opencl %s] could not alloc img buffer on device %d: %i\n", context, devid, err);
+
+  if(err == CL_SUCCESS) dt_opencl_memory_statistics(devid, dev, OPENCL_MEMORY_ADD);
+  return dev;
+}
+
+void *dt_opencl_alloc_device(const int devid, const int width, const int height, const int bpp)
+{
+  const int effective_bpp = DT_OPENCL_BPP_DECODE(bpp);
+  const gboolean rgba8 = DT_OPENCL_BPP_IS_RGBA8(bpp);
   cl_image_format fmt;
-  // guess pixel format from bytes per pixel
-  if(bpp == 4 * sizeof(float))
+  // guess pixel format from bytes per pixel (+ optional format tag for ambiguous 4-byte formats)
+  if(rgba8 && effective_bpp == 4 * sizeof(uint8_t))
+    fmt = (cl_image_format){ CL_RGBA, CL_UNSIGNED_INT8 };
+  else if(effective_bpp == 4 * sizeof(float))
     fmt = (cl_image_format){ CL_RGBA, CL_FLOAT };
-  else if(bpp == sizeof(float))
+  else if(effective_bpp == sizeof(float))
     fmt = (cl_image_format){ CL_R, CL_FLOAT };
-  else if(bpp == sizeof(uint16_t))
+  else if(effective_bpp == sizeof(uint16_t))
     fmt = (cl_image_format){ CL_R, CL_UNSIGNED_INT16 };
-  else if(bpp == sizeof(uint8_t))
+  else if(effective_bpp == sizeof(uint8_t))
     fmt = (cl_image_format){ CL_R, CL_UNSIGNED_INT8 };
   else
     return NULL;
 
-  cl_mem dev = NULL;
-  for(int attempt = 0; attempt < 2; attempt++)
-  {
-    dev = (darktable.opencl->dlocl->symbols->dt_clCreateImage2D)(
-        darktable.opencl->dev[devid].context, CL_MEM_READ_WRITE, &fmt, width, height, 0, NULL, &err);
-    if(err == CL_SUCCESS) break;
-    if(attempt == 0 && (err == CL_MEM_OBJECT_ALLOCATION_FAILURE || err == CL_OUT_OF_RESOURCES))
-    {
-      dt_print(DT_DEBUG_OPENCL,
-               "[opencl alloc_device] out of memory on device %d, flushing cached pinned buffers and retrying\n",
-               devid);
-      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
-      continue;
-    }
-    break;
-  }
-
-  if(err != CL_SUCCESS)
-    dt_print(DT_DEBUG_OPENCL, "[opencl alloc_device] could not alloc img buffer on device %d: %i\n", devid,
-             err);
-
-  if(err == CL_SUCCESS) dt_opencl_memory_statistics(devid, dev, OPENCL_MEMORY_ADD);
-
-  return dev;
+  return _dt_opencl_alloc_image2d(devid, width, height, CL_MEM_READ_WRITE, fmt, NULL, "alloc_device");
 }
-
 
 void *dt_opencl_alloc_device_use_host_pointer(const int devid, const int width, const int height,
                                               const int bpp, void *host, const int flags)
 {
-  if(!darktable.opencl->inited || devid < 0) return NULL;
-  cl_int err;
+  const int effective_bpp = DT_OPENCL_BPP_DECODE(bpp);
+  const gboolean rgba8 = DT_OPENCL_BPP_IS_RGBA8(bpp);
   cl_image_format fmt;
-  // guess pixel format from bytes per pixel
-  if(bpp == 4 * sizeof(float))
+  // guess pixel format from bytes per pixel (+ optional format tag for ambiguous 4-byte formats)
+  if(rgba8 && effective_bpp == 4 * sizeof(uint8_t))
+    fmt = (cl_image_format){ CL_RGBA, CL_UNSIGNED_INT8 };
+  else if(effective_bpp == 4 * sizeof(float))
     fmt = (cl_image_format){ CL_RGBA, CL_FLOAT };
-  else if(bpp == sizeof(float))
+  else if(effective_bpp == sizeof(float))
     fmt = (cl_image_format){ CL_R, CL_FLOAT };
-  else if(bpp == sizeof(uint16_t))
+  else if(effective_bpp == sizeof(uint16_t))
     fmt = (cl_image_format){ CL_R, CL_UNSIGNED_INT16 };
   else
     return NULL;
 
-  cl_mem dev = NULL;
-  for(int attempt = 0; attempt < 2; attempt++)
-  {
-    dev = (darktable.opencl->dlocl->symbols->dt_clCreateImage2D)(
-        darktable.opencl->dev[devid].context, flags, &fmt, width, height, 0,
-        host, &err);
-    if(err == CL_SUCCESS) break;
-    if(attempt == 0 && (err == CL_MEM_OBJECT_ALLOCATION_FAILURE || err == CL_OUT_OF_RESOURCES))
-    {
-      dt_print(DT_DEBUG_OPENCL,
-               "[opencl alloc_device_use_host_pointer] out of memory on device %d, flushing cached pinned buffers and retrying\n",
-               devid);
-      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
-      continue;
-    }
-    break;
-  }
-  if(err != CL_SUCCESS)
-    dt_print(DT_DEBUG_OPENCL,
-             "[opencl alloc_device_use_host_pointer] could not alloc img buffer on device %d: %i\n", devid,
-             err);
-
-  if(err == CL_SUCCESS) dt_opencl_memory_statistics(devid, dev, OPENCL_MEMORY_ADD);
-
-  return dev;
+  return _dt_opencl_alloc_image2d(devid, width, height, flags, fmt, host, "alloc_device_use_host_pointer");
 }
 
 void *dt_opencl_alloc_device_buffer_with_flags(const int devid, const size_t size, const int flags)
