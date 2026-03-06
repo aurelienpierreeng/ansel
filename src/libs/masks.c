@@ -245,6 +245,29 @@ static void _lib_masks_blending_gui_changed_callback(gpointer instance, dt_lib_m
   if(module_changed) _lib_masks_reveal(self);
 }
 
+static void _tree_row_collapsed(GtkTreeView *tree_view, GtkTreeIter *expanded_iter, GtkTreePath *path, dt_lib_module_t *self)
+{
+  (void)tree_view;
+  (void)path;
+  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+
+  // Recalculate tree view height after loading the data
+  dt_gui_treeview_set_auto_height(lm->treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
+}
+
+static void _tree_row_expanded(GtkTreeView *tree_view, GtkTreeIter *expanded_iter, GtkTreePath *path, dt_lib_module_t *self)
+{
+  (void)tree_view;
+  (void)path;
+  dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
+
+  #ifdef _DEBUG
+    raise(SIGTRAP);
+  #endif
+  // Recalculate tree view height after loading the data
+  dt_gui_treeview_set_auto_height(lm->treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
+}
+
 static void _tree_add_circle(GtkButton *button, dt_iop_module_t *module)
 {
   // we create the new form
@@ -1490,6 +1513,9 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
   }
 
   gtk_tree_view_set_model(GTK_TREE_VIEW(lm->treeview), GTK_TREE_MODEL(treestore));
+  
+  // Recalculate tree view height after loading the data
+  dt_gui_treeview_set_auto_height(lm->treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
 
   // select the images as selected in the previous tree
   if(selectids)
@@ -1922,8 +1948,16 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(d->treeview, "query-tooltip", G_CALLBACK(_tree_query_tooltip), NULL);
   g_signal_connect(selection, "changed", G_CALLBACK(_tree_selection_change), d);
   g_signal_connect(d->treeview, "button-press-event", (GCallback)_tree_button_pressed, self);
+  // Used to update the scrolled window's height
+  g_signal_connect(d->treeview, "row-expanded", G_CALLBACK(_tree_row_expanded), self);
+  g_signal_connect(d->treeview, "row-collapsed", G_CALLBACK(_tree_row_collapsed), self);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), dt_ui_scroll_wrap(d->treeview, 200, "plugins/darkroom/masks/heightview"), FALSE, FALSE, 0);
+  GtkWidget *scrolled_window = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  gtk_container_add(GTK_CONTAINER(scrolled_window), d->treeview);
+  gtk_box_pack_start(GTK_BOX(self->widget), scrolled_window, TRUE, TRUE, 0);
+
+  dt_gui_treeview_set_auto_height(d->treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
 
   d->blending_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), d->blending_box, FALSE, FALSE, 0);

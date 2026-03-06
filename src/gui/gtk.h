@@ -76,6 +76,12 @@ extern "C" {
 #define DT_PIXEL_APPLY_DPI_DPP(value) ((value) * darktable.gui->dpi_factor * darktable.gui->ppd)
 
 
+enum
+{
+  TREE_LIST_MIN_ROWS = 3,
+  TREE_LIST_MAX_ROWS = 11
+};
+
 typedef struct dt_gui_widgets_t
 {
   /* left panel */
@@ -201,6 +207,17 @@ typedef struct _gui_collapsible_section_t
   GtkBox *container;    // the container for all widgets into the section
   GtkWidget *label;     // The section label
 } dt_gui_collapsible_section_t;
+
+typedef struct dt_gui_treeview_auto_height_t
+{
+  int min_rows;
+  int max_rows;
+  GtkTreeModel *model;
+  gulong model_row_inserted;
+  gulong model_row_deleted;
+  gulong model_row_changed;
+  gulong model_rows_reordered;
+} dt_gui_treeview_auto_height_t;
 
 static inline cairo_surface_t *dt_cairo_image_surface_create(cairo_format_t format, int width, int height) {
   cairo_surface_t *cst = cairo_image_surface_create(format, width * darktable.gui->ppd, height * darktable.gui->ppd);
@@ -377,8 +394,18 @@ void dt_configure_ppd_dpi(dt_gui_gtk_t *gui);
 // return modifier keys currently pressed, independent of any key event
 GdkModifierType dt_key_modifier_state();
 
-GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str);
 
+/**
+ * @brief Set the automatic height for a GtkTreeView based on the number of rows.
+ * 
+ * THIS ASSUME THE TREEVIEW IS IN A SCROLLABLE CONTAINER, AND THAT THE SCROLLABLE CONTAINER HAS A FIXED HEIGHT.
+ * 
+ * @param treeview The GtkTreeView widget.
+ * @param min_rows The minimum number of rows to display.
+ * @param max_rows The maximum number of rows to display.
+ */
+void dt_gui_treeview_set_auto_height(GtkWidget *treeview, int min_rows, int max_rows);
+GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str);
 // check whether the given container has any user-added children
 gboolean dt_gui_container_has_children(GtkContainer *container);
 // return a count of the user-added children in the given container

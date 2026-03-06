@@ -1617,6 +1617,223 @@ GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str)
   return GTK_WIDGET(sw);
 }
 
+static const char *const DT_GUI_TREEVIEW_AUTO_HEIGHT_KEY = "dt-gui-treeview-auto-height";
+
+// find the scrolled window parent of a treeview, if any
+static GtkWidget *_treeview_scrolled_window(GtkWidget *treeview)
+{
+  if(!GTK_IS_WIDGET(treeview)) return NULL;
+  
+  GtkWidget *parent = treeview;
+  while(parent)
+  {
+    if(GTK_IS_SCROLLED_WINDOW(parent)) break;
+    parent = gtk_widget_get_parent(parent);
+  }
+
+  return GTK_IS_SCROLLED_WINDOW(parent) ? parent : NULL;
+}
+
+// Counts only visible items (those whose parents are expanded)
+static int _treeview_count_visible_rows(GtkTreeView *treeview, GtkTreeModel *model, GtkTreeIter *parent)
+{
+  if(!GTK_IS_TREE_MODEL(model)) return 0;
+
+  GtkTreeIter iter;
+  gboolean valid = parent ? gtk_tree_model_iter_children(model, &iter, parent)
+                          : gtk_tree_model_get_iter_first(model, &iter);
+  int count = 0;
+
+  while(valid)
+  {
+    count++;
+    
+    // If this item is expanded, recursively count its visible children
+    if(gtk_tree_model_iter_has_child(model, &iter))
+    {
+      GtkTreePath *path = gtk_tree_model_get_path(model, &iter);
+      if(path)
+      {
+        if(gtk_tree_view_row_expanded(treeview, path))
+        {
+          count += _treeview_count_visible_rows(treeview, model, &iter);
+        }
+        gtk_tree_path_free(path);
+      }
+    }
+    
+    valid = gtk_tree_model_iter_next(model, &iter);
+  }
+
+  return count;
+}
+
+void dt_gui_treeview_update_list_height(GtkWidget *treeview, int rows, int min_rows, int max_rows)
+{
+  if(!GTK_IS_TREE_VIEW(treeview)) return;
+
+  // The parent have to be a scrolled window
+  GtkWidget *scrolled_window = _treeview_scrolled_window(treeview);
+  if(!GTK_IS_SCROLLED_WINDOW(scrolled_window)) return;
+
+  const int safe_rows = MAX(0, rows);
+  const int safe_min_rows = MAX(2, min_rows);
+  const int safe_max_rows = MAX(safe_min_rows, max_rows);
+  const int requested_rows = CLAMP(safe_rows + 1, safe_min_rows, safe_max_rows);
+
+  // Calculate row height based on actual cell sizes, not total widget height
+  gint row_height = DT_PIXEL_APPLY_DPI(20);
+  if(GTK_IS_TREE_VIEW(treeview))
+  {
+    gint cell_height = 0;
+    const gint num_columns = gtk_tree_view_get_n_columns(GTK_TREE_VIEW(treeview));
+    for(int c = 0; c < num_columns; c++)
+    {
+      gint h = 0;
+      gtk_tree_view_column_cell_get_size(gtk_tree_view_get_column(GTK_TREE_VIEW(treeview), c),
+                                        NULL, NULL, NULL, NULL, &h);
+      if(h > cell_height) cell_height = h;
+    }
+    GValue separation = { G_TYPE_INT };
+    gtk_widget_style_get_property(treeview, "vertical-separator", &separation);
+    
+    if(cell_height > 0) row_height = cell_height + g_value_get_int(&separation);
+  }
+
+  GtkBorder padding;
+  gtk_style_context_get_padding(gtk_widget_get_style_context(scrolled_window),
+                                gtk_widget_get_state_flags(scrolled_window), &padding);
+
+  const gint height = requested_rows * row_height + padding.top + padding.bottom + (GTK_IS_TEXT_VIEW(treeview) ? 2 : 0);
+  gint old_height;
+  gtk_widget_get_size_request(scrolled_window, NULL, &old_height);
+  gtk_widget_set_size_request(scrolled_window, -1, height);
+}
+
+static void _treeview_auto_disconnect_model(dt_gui_treeview_auto_height_t *state)
+{
+  if(!state) return;
+
+  GtkTreeModel *model = state->model;
+  if(model)
+  {
+    if(state->model_row_inserted) g_signal_handler_disconnect(model, state->model_row_inserted);
+    if(state->model_row_deleted) g_signal_handler_disconnect(model, state->model_row_deleted);
+    if(state->model_row_changed) g_signal_handler_disconnect(model, state->model_row_changed);
+    if(state->model_rows_reordered) g_signal_handler_disconnect(model, state->model_rows_reordered);
+
+    g_object_remove_weak_pointer(G_OBJECT(model), (gpointer *)&state->model);
+  }
+
+  state->model = NULL;
+  state->model_row_inserted = 0;
+  state->model_row_deleted = 0;
+  state->model_row_changed = 0;
+  state->model_rows_reordered = 0;
+}
+
+static void _treeview_auto_update(GtkWidget *treeview)
+{
+  if(!GTK_IS_TREE_VIEW(treeview)) return;
+
+  const dt_gui_treeview_auto_height_t *state
+      = g_object_get_data(G_OBJECT(treeview), DT_GUI_TREEVIEW_AUTO_HEIGHT_KEY);
+  if(!state) return;
+
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
+  int rows = _treeview_count_visible_rows(GTK_TREE_VIEW(treeview), model, NULL);
+  
+  dt_gui_treeview_update_list_height(treeview, rows, state->min_rows, state->max_rows);
+}
+
+static void _treeview_auto_model_row_inserted(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter,
+                                              gpointer user_data)
+{
+  (void)model;
+  (void)path;
+  (void)iter;
+  _treeview_auto_update(GTK_WIDGET(user_data));
+}
+
+static void _treeview_auto_model_row_deleted(GtkTreeModel *model, GtkTreePath *path, gpointer user_data)
+{
+  (void)model;
+  (void)path;
+  _treeview_auto_update(GTK_WIDGET(user_data));
+}
+
+static void _treeview_auto_model_row_changed(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter,
+                                             gpointer user_data)
+{
+  (void)model;
+  (void)path;
+  (void)iter;
+  _treeview_auto_update(GTK_WIDGET(user_data));
+}
+
+static void _treeview_auto_model_rows_reordered(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter,
+                                                gint *new_order, gpointer user_data)
+{
+  (void)model;
+  (void)path;
+  (void)iter;
+  (void)new_order;
+  _treeview_auto_update(GTK_WIDGET(user_data));
+}
+
+static void _treeview_auto_connect_model(GtkWidget *treeview)
+{
+  if(!GTK_IS_TREE_VIEW(treeview)) return;
+
+  dt_gui_treeview_auto_height_t *state
+      = g_object_get_data(G_OBJECT(treeview), DT_GUI_TREEVIEW_AUTO_HEIGHT_KEY);
+  if(!state) return;
+
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
+  if(model == state->model) return;
+
+  _treeview_auto_disconnect_model(state);
+  if(!GTK_IS_TREE_MODEL(model)) return;
+
+  state->model = model;
+  g_object_add_weak_pointer(G_OBJECT(model), (gpointer *)&state->model);
+  state->model_row_inserted = g_signal_connect(model, "row-inserted",
+                                               G_CALLBACK(_treeview_auto_model_row_inserted), treeview);
+  state->model_row_deleted = g_signal_connect(model, "row-deleted",
+                                              G_CALLBACK(_treeview_auto_model_row_deleted), treeview);
+  state->model_row_changed = g_signal_connect(model, "row-changed",
+                                              G_CALLBACK(_treeview_auto_model_row_changed), treeview);
+  state->model_rows_reordered = g_signal_connect(model, "rows-reordered",
+                                                 G_CALLBACK(_treeview_auto_model_rows_reordered), treeview);
+}
+
+static void _treeview_auto_height_free(gpointer data)
+{
+  dt_gui_treeview_auto_height_t *state = (dt_gui_treeview_auto_height_t *)data;
+  if(!state) return;
+  _treeview_auto_disconnect_model(state);
+  free(state);
+}
+
+void dt_gui_treeview_set_auto_height(GtkWidget *treeview, const int min_rows, const int max_rows)
+{
+  if(!GTK_IS_TREE_VIEW(treeview)) return;
+
+  dt_gui_treeview_auto_height_t *state = g_object_get_data(G_OBJECT(treeview), DT_GUI_TREEVIEW_AUTO_HEIGHT_KEY);
+  if(!state)
+  {
+    state = calloc(1, sizeof(*state));
+    g_object_set_data_full(G_OBJECT(treeview), DT_GUI_TREEVIEW_AUTO_HEIGHT_KEY, state,
+                           _treeview_auto_height_free);
+  }
+  
+  state->min_rows = MAX(1, min_rows);
+  state->max_rows = MAX(state->min_rows, max_rows);
+
+  _treeview_auto_connect_model(treeview);
+  _treeview_auto_update(treeview);
+}
+
 gboolean dt_gui_container_has_children(GtkContainer *container)
 {
   g_return_val_if_fail(GTK_IS_CONTAINER(container), FALSE);
