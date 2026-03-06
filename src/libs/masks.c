@@ -261,9 +261,6 @@ static void _tree_row_expanded(GtkTreeView *tree_view, GtkTreeIter *expanded_ite
   (void)path;
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
 
-  #ifdef _DEBUG
-    raise(SIGTRAP);
-  #endif
   // Recalculate tree view height after loading the data
   dt_gui_treeview_set_auto_height(lm->treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
 }
