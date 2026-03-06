@@ -1,39 +1,145 @@
 /*
- * drawlayer sidecar TIFF subsystem
- *
- * This file is intentionally included from drawlayer.c. It centralizes the
- * sidecar filename, directory scanning, page rewrite, and layer-name handling
- * so drawlayer's higher-level code can express lifecycle rules without
- * duplicating TIFF details.
- */
+    This file is part of the Ansel project.
+    Copyright (C) 2026 Aurélien PIERRE.
 
+    Ansel is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    Ansel is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include "iop/drawlayer/io.h"
+
+#include "common/colorspaces.h"
+#include "common/image.h"
+
+#include <glib/gstdio.h>
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
 #include <tiffio.h>
 
-static void _layerio_append_error(GString *errors, const char *message)
+/** @file
+ *  @brief TIFF sidecar I/O implementation for drawlayer layers.
+ */
+
+/** @brief Clamp scalar to [0,1]. */
+static inline float _clamp01(const float value)
 {
-  if(!errors || !message || message[0] == '\0') return;
-  if(errors->len > 0) g_string_append(errors, "; ");
-  g_string_append(errors, message);
+  return fminf(fmaxf(value, 0.0f), 1.0f);
 }
 
-static void _layerio_log_errors(GString *errors)
+typedef union dt_drawlayer_io_fp32_t
 {
-  if(!errors) return;
-  if(errors->len > 0) dt_control_log("%s", errors->str);
+  uint32_t u;
+  float f;
+} dt_drawlayer_io_fp32_t;
+
+/** @brief Convert IEEE-754 binary16 to float32. */
+static inline float _half_to_float(const uint16_t h)
+{
+  static const dt_drawlayer_io_fp32_t magic = { 113u << 23 };
+  static const uint32_t shifted_exp = 0x7c00u << 13;
+  dt_drawlayer_io_fp32_t out;
+
+  out.u = (h & 0x7fffu) << 13;
+  const uint32_t exp = shifted_exp & out.u;
+  out.u += (127u - 15u) << 23;
+
+  if(exp == shifted_exp)
+    out.u += (128u - 16u) << 23;
+  else if(exp == 0)
+  {
+    out.u += 1u << 23;
+    out.f -= magic.f;
+  }
+
+  out.u |= (h & 0x8000u) << 16;
+  return out.f;
 }
 
-static void _sanitize_requested_layer_name(dt_iop_module_t *self, const char *requested, char *name,
-                                           const size_t name_size)
+/** @brief Convert float32 to IEEE-754 binary16 with rounding. */
+static inline uint16_t _float_to_half(float value)
 {
-  if(!name || name_size == 0) return;
+  dt_drawlayer_io_fp32_t in = { .f = value };
+  const uint32_t sign = (in.u >> 16) & 0x8000u;
+  const uint32_t exponent = (in.u >> 23) & 0xffu;
+  uint32_t mantissa = in.u & 0x007fffffu;
 
-  name[0] = '\0';
-  if(requested && requested[0]) g_strlcpy(name, requested, name_size);
-  g_strstrip(name);
+  if(exponent == 0xffu)
+  {
+    if(mantissa) return (uint16_t)(sign | 0x7e00u);
+    return (uint16_t)(sign | 0x7c00u);
+  }
 
-  if(name[0] == '\0') _default_layer_name(self, name, name_size);
+  const int32_t half_exponent = (int32_t)exponent - 127 + 15;
+
+  if(half_exponent >= 0x1f) return (uint16_t)(sign | 0x7c00u);
+  if(half_exponent <= 0)
+  {
+    if(half_exponent < -10) return (uint16_t)sign;
+
+    mantissa |= 0x00800000u;
+    const uint32_t shift = (uint32_t)(1 - half_exponent);
+    uint32_t half_mantissa = mantissa >> (shift + 13);
+    const uint32_t round_bit = 1u << (shift + 12);
+
+    if((mantissa & round_bit) && ((mantissa & (round_bit - 1u)) || (half_mantissa & 1u)))
+      half_mantissa++;
+
+    return (uint16_t)(sign | half_mantissa);
+  }
+
+  uint32_t half_exp = (uint32_t)half_exponent << 10;
+  uint32_t half_mantissa = mantissa >> 13;
+
+  if((mantissa & 0x00001000u) && ((mantissa & 0x00001fffu) || (half_mantissa & 1u)))
+  {
+    half_mantissa++;
+
+    if(half_mantissa == 0x0400u)
+    {
+      half_mantissa = 0;
+      half_exp += 0x0400u;
+      if(half_exp >= 0x7c00u) return (uint16_t)(sign | 0x7c00u);
+    }
+  }
+
+  return (uint16_t)(sign | half_exp | half_mantissa);
 }
 
+/** @brief Clear uint16 RGBA row/buffer to transparent black. */
+static inline void _clear_transparent_half(uint16_t *pixels, const size_t pixel_count)
+{
+  if(!pixels) return;
+  memset(pixels, 0, pixel_count * 4 * sizeof(uint16_t));
+}
+
+/** @brief Clear float RGBA row/buffer to transparent black. */
+static inline void dt_drawlayer_cache_clear_transparent_float(float *pixels, const size_t pixel_count)
+{
+  if(!pixels) return;
+  memset(pixels, 0, pixel_count * 4 * sizeof(float));
+}
+
+/** @brief Load one half-float RGBA texel to float RGBA. */
+static inline void _load_half_pixel_rgba(const uint16_t *src, float rgba[4])
+{
+  rgba[0] = _half_to_float(src[0]);
+  rgba[1] = _half_to_float(src[1]);
+  rgba[2] = _half_to_float(src[2]);
+  rgba[3] = _half_to_float(src[3]);
+}
+
+/** @brief Resolve embedded ICC blob from serialized work-profile key. */
 static gboolean _icc_blob_from_profile_key(const char *work_profile, uint8_t **icc_data, uint32_t *icc_len)
 {
   if(icc_data) *icc_data = NULL;
@@ -72,23 +178,10 @@ static gboolean _icc_blob_from_profile_key(const char *work_profile, uint8_t **i
   return TRUE;
 }
 
-static gboolean _get_sidecar_path(const int32_t imgid, char *path, const size_t path_size)
-{
-  /* The sidecar is stored next to the source image, using the source filename verbatim
-   * plus the fixed `.ansel.tiff` suffix (`image.ext.ansel.tiff`). */
-  gboolean from_cache = FALSE;
-  dt_image_full_path(imgid, path, path_size, &from_cache, __FUNCTION__);
-  if(path[0] == '\0') return FALSE;
-  g_strlcat(path, ".ansel.tiff", path_size);
-  return TRUE;
-}
-
+/** @brief Write TIFF directory tags for one RGBA half-float page. */
 static gboolean _set_directory_tags(TIFF *tiff, const uint32_t width, const uint32_t height, const char *name,
                                     const char *work_profile)
 {
-  /* Every page is written as RGBA half-float with associated alpha.
-   * The current working-profile key is stored in IMAGEDESCRIPTION so reopening can warn
-   * when the sidecar and current pipeline are no longer in the same space. */
   const uint16_t extrasamples[] = { EXTRASAMPLE_ASSOCALPHA };
 
   if(!TIFFSetField(tiff, TIFFTAG_IMAGEWIDTH, width)) return FALSE;
@@ -100,16 +193,6 @@ static gboolean _set_directory_tags(TIFF *tiff, const uint32_t width, const uint
   if(!TIFFSetField(tiff, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB)) return FALSE;
   if(!TIFFSetField(tiff, TIFFTAG_EXTRASAMPLES, 1, extrasamples)) return FALSE;
 
-  /* Keep sidecar compression conservative and broadly interoperable.
-   * What broke previously was not lossless compression itself, but the extra codec
-   * tuning. In particular, the floating-point predictor is standard on paper but still
-   * poorly supported in external readers for half-float RGBA pages: those files reopen
-   * garbled even though libtiff accepts the tag combination. So do not emit a predictor
-   * at all here. The safest practical options remain plain standard codecs only:
-   *   1. Adobe Deflate
-   *   2. legacy Deflate tag
-   *   3. LZW
-   *   4. uncompressed fallback */
   if(!TIFFSetField(tiff, TIFFTAG_COMPRESSION, COMPRESSION_ADOBE_DEFLATE)
      && !TIFFSetField(tiff, TIFFTAG_COMPRESSION, COMPRESSION_DEFLATE)
      && !TIFFSetField(tiff, TIFFTAG_COMPRESSION, COMPRESSION_LZW))
@@ -121,11 +204,9 @@ static gboolean _set_directory_tags(TIFF *tiff, const uint32_t width, const uint
   return TRUE;
 }
 
+/** @brief Read one TIFF scanline into half-float RGBA buffer. */
 static gboolean _read_scanline_rgba(TIFF *tiff, const uint32_t width, const uint32_t row, uint16_t *out)
 {
-  /* Read exactly one row as raw half-float RGBA.
-   * We intentionally reject any page that is not already 16-bit IEEE float RGBA instead
-   * of trying to convert formats here. */
   uint16_t bpp = 0;
   uint16_t spp = 0;
   uint16_t sampleformat = SAMPLEFORMAT_UINT;
@@ -159,18 +240,41 @@ static gboolean _read_scanline_rgba(TIFF *tiff, const uint32_t width, const uint
   return TRUE;
 }
 
-static gboolean _write_scanline_rgba(TIFF *tiff, const uint32_t width, const uint32_t row, const uint16_t *in)
+/** @brief Write one half-float RGBA scanline into TIFF page. */
+static gboolean _write_scanline_rgba(TIFF *tiff, const uint32_t row, const uint16_t *in)
 {
   return TIFFWriteScanline(tiff, (tdata_t)in, row, 0) != -1;
 }
 
-static void _scan_directories(TIFF *tiff, const char *target_name, const int target_order, drawlayer_dir_info_t *info)
+/** @brief Overlay one clipped float patch span into a half-float TIFF row. */
+static void _overlay_patch_row_rgba(uint16_t *dst_row, const uint32_t width, const int offset_x,
+                                    const int raw_y, const dt_drawlayer_io_patch_t *patch)
 {
-  /* Find the page referenced by the module parameters.
-   * Matching rules:
-   * - when both are available, prefer exact (name + order) matches,
-   * - otherwise prefer page name when provided (stable identity across reordering),
-   * - fall back to page index when name lookup fails. */
+  if(!dst_row || !patch || !patch->pixels || raw_y < patch->y || raw_y >= patch->y + patch->height) return;
+
+  const int dst_x0 = MAX(0, patch->x - offset_x);
+  const int dst_x1 = MIN((int)width, patch->x + patch->width - offset_x);
+  if(dst_x0 >= dst_x1) return;
+
+  const float *patch_row = patch->pixels + 4 * (size_t)(raw_y - patch->y) * patch->width;
+
+#ifdef _OPENMP
+  #pragma omp parallel for simd default(none) schedule(static) shared(dst_row, patch_row) firstprivate(dst_x0, dst_x1, offset_x, patch)
+#endif
+  for(int dst_x = dst_x0; dst_x < dst_x1; dst_x++)
+  {
+    const float *src_pixel = patch_row + 4 * (size_t)(dst_x + offset_x - patch->x);
+    dst_row[4 * dst_x + 0] = _float_to_half(src_pixel[0]);
+    dst_row[4 * dst_x + 1] = _float_to_half(src_pixel[1]);
+    dst_row[4 * dst_x + 2] = _float_to_half(src_pixel[2]);
+    dst_row[4 * dst_x + 3] = _float_to_half(src_pixel[3]);
+  }
+}
+
+/** @brief Scan TIFF directories and resolve best match for name/order target. */
+static void _scan_directories(TIFF *tiff, const char *target_name, const int target_order,
+                              dt_drawlayer_io_layer_info_t *info)
+{
   memset(info, 0, sizeof(*info));
   info->index = -1;
 
@@ -182,9 +286,9 @@ static void _scan_directories(TIFF *tiff, const char *target_name, const int tar
   gboolean exact_found = FALSE;
   gboolean named_found = FALSE;
   gboolean order_found = FALSE;
-  drawlayer_dir_info_t exact = { 0 };
-  drawlayer_dir_info_t named = { 0 };
-  drawlayer_dir_info_t ordered = { 0 };
+  dt_drawlayer_io_layer_info_t exact = { 0 };
+  dt_drawlayer_io_layer_info_t named = { 0 };
+  dt_drawlayer_io_layer_info_t ordered = { 0 };
   exact.index = -1;
   named.index = -1;
   ordered.index = -1;
@@ -273,19 +377,256 @@ static void _scan_directories(TIFF *tiff, const char *target_name, const int tar
   TIFFSetDirectory(tiff, 0);
 }
 
-static gboolean _read_region(const char *path, const char *target_name, const int target_order, const int raw_width,
-                             const int raw_height, drawlayer_patch_t *patch)
+/** @brief Write one output page, optionally copying from source and patch overlay. */
+static gboolean _write_page(TIFF *dst, TIFF *src, const int src_dir, const char *name, const char *work_profile,
+                            const dt_drawlayer_io_patch_t *patch, const int raw_width, const int raw_height)
 {
-  /* Read only the requested patch from the selected TIFF page into an already allocated
-   * float buffer. Missing files/pages are treated as an empty transparent layer. */
-  _clear_transparent_float(patch->pixels, (size_t)patch->width * patch->height);
+  uint32_t width = (uint32_t)raw_width;
+  uint32_t height = (uint32_t)raw_height;
+  const char *page_profile = work_profile;
+  uint8_t *icc_profile = NULL;
+  uint32_t icc_profile_len = 0;
+
+  if(src)
+  {
+    if(!TIFFSetDirectory(src, (tdir_t)src_dir)) return FALSE;
+    TIFFGetField(src, TIFFTAG_IMAGEWIDTH, &width);
+    TIFFGetField(src, TIFFTAG_IMAGELENGTH, &height);
+    if(!name)
+    {
+      char *src_name = NULL;
+      TIFFGetField(src, TIFFTAG_PAGENAME, &src_name);
+      name = src_name;
+    }
+    if(!page_profile)
+    {
+      char *src_profile = NULL;
+      TIFFGetField(src, TIFFTAG_IMAGEDESCRIPTION, &src_profile);
+      page_profile = src_profile;
+    }
+  }
+
+  if(!_set_directory_tags(dst, width, height, name, page_profile)) return FALSE;
+  if(page_profile && page_profile[0] && _icc_blob_from_profile_key(page_profile, &icc_profile, &icc_profile_len))
+    TIFFSetField(dst, TIFFTAG_ICCPROFILE, icc_profile_len, icc_profile);
+
+  uint16_t *src_row = g_malloc_n((gsize)width * 4, sizeof(uint16_t));
+  uint16_t *dst_row = g_malloc_n((gsize)width * 4, sizeof(uint16_t));
+  if(!src_row || !dst_row)
+  {
+    g_free(icc_profile);
+    g_free(src_row);
+    g_free(dst_row);
+    return FALSE;
+  }
+
+  const int offset_x = (raw_width - (int)width) / 2;
+  const int offset_y = (raw_height - (int)height) / 2;
+
+  for(uint32_t y = 0; y < height; y++)
+  {
+    if(src)
+    {
+      if(!_read_scanline_rgba(src, width, y, src_row))
+      {
+        g_free(icc_profile);
+        g_free(src_row);
+        g_free(dst_row);
+        return FALSE;
+      }
+      memcpy(dst_row, src_row, (size_t)width * 4 * sizeof(uint16_t));
+    }
+    else
+      _clear_transparent_half(dst_row, (size_t)width);
+
+    if(patch)
+    {
+      const int raw_y = (int)y + offset_y;
+      _overlay_patch_row_rgba(dst_row, width, offset_x, raw_y, patch);
+    }
+
+    if(!_write_scanline_rgba(dst, y, dst_row))
+    {
+      g_free(icc_profile);
+      g_free(src_row);
+      g_free(dst_row);
+      return FALSE;
+    }
+  }
+
+  g_free(icc_profile);
+  g_free(src_row);
+  g_free(dst_row);
+  return TIFFWriteDirectory(dst) != 0;
+}
+
+/** @brief Rewrite sidecar with optional update/insert/delete of one target layer. */
+static gboolean _rewrite_sidecar(const char *path, const char *target_name, const int target_order,
+                                 const char *work_profile, const dt_drawlayer_io_patch_t *patch, const int raw_width,
+                                 const int raw_height, const gboolean delete_target, const int insert_order,
+                                 int *final_order)
+{
+  if(final_order) *final_order = -1;
+
+  TIFF *src = NULL;
+  dt_drawlayer_io_layer_info_t info;
+  memset(&info, 0, sizeof(info));
+  info.index = -1;
+
+  if(g_file_test(path, G_FILE_TEST_EXISTS))
+  {
+    src = TIFFOpen(path, "rb");
+    if(!src) return FALSE;
+    _scan_directories(src, target_name, target_order, &info);
+  }
+
+  if(delete_target && (!src || !info.found))
+  {
+    if(src) TIFFClose(src);
+    return TRUE;
+  }
+
+  if(delete_target && src && info.found && info.count == 1)
+  {
+    TIFFClose(src);
+    return g_unlink(path) == 0;
+  }
+
+  gchar *tmp_path = g_strdup_printf("%s.tmp", path);
+  TIFF *dst = TIFFOpen(tmp_path, "wb");
+  if(!dst)
+  {
+    if(src) TIFFClose(src);
+    g_free(tmp_path);
+    return FALSE;
+  }
+
+  int written_index = 0;
+  gboolean ok = TRUE;
+
+  if(src)
+  {
+    for(int dir = 0; dir < info.count && ok; dir++)
+    {
+      if(!delete_target && !info.found && insert_order >= 0 && written_index == insert_order)
+      {
+        ok = _write_page(dst, NULL, -1, target_name, work_profile, patch, raw_width, raw_height);
+        if(ok && final_order) *final_order = written_index;
+        if(ok) written_index++;
+      }
+
+      const gboolean is_target = info.found && dir == info.index;
+      if(is_target && delete_target) continue;
+
+      const dt_drawlayer_io_patch_t *page_patch = (is_target && !delete_target) ? patch : NULL;
+      const char *page_label = is_target ? target_name : NULL;
+
+      ok = _write_page(dst, src, dir, page_label, is_target ? work_profile : NULL, page_patch, raw_width, raw_height);
+      if(ok && is_target && !delete_target && final_order) *final_order = written_index;
+      if(ok) written_index++;
+    }
+  }
+
+  if(ok && !delete_target && (!src || !info.found))
+  {
+    const gboolean append_at_end = (insert_order < 0 || insert_order >= written_index || !src);
+    if(append_at_end)
+    {
+      ok = _write_page(dst, NULL, -1, target_name, work_profile, patch, raw_width, raw_height);
+      if(ok && final_order) *final_order = written_index;
+    }
+  }
+
+  TIFFClose(dst);
+  if(src) TIFFClose(src);
+
+  if(ok)
+    ok = (g_rename(tmp_path, path) == 0);
+  else
+    g_unlink(tmp_path);
+
+  g_free(tmp_path);
+  return ok;
+}
+
+/** @brief Test if a layer name already exists in sidecar TIFF. */
+gboolean dt_drawlayer_io_layer_name_exists(const char *path, const char *candidate, const int ignore_index)
+{
+  if(!path || !candidate || candidate[0] == '\0' || !g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
+
+  TIFF *tiff = TIFFOpen(path, "rb");
+  if(!tiff) return FALSE;
+
+  gboolean exists = FALSE;
+  int index = 0;
+  if(TIFFSetDirectory(tiff, 0))
+  {
+    do
+    {
+      char *page_name = NULL;
+      TIFFGetField(tiff, TIFFTAG_PAGENAME, &page_name);
+      if(index != ignore_index && !g_strcmp0(page_name ? page_name : "", candidate))
+      {
+        exists = TRUE;
+        break;
+      }
+      index++;
+    } while(TIFFReadDirectory(tiff));
+  }
+
+  TIFFClose(tiff);
+  return exists;
+}
+
+/** @brief Normalize/sanitize requested layer name with fallback handling. */
+static void _sanitize_requested_layer_name(const char *requested, const char *fallback_name, char *name,
+                                           const size_t name_size)
+{
+  if(!name || name_size == 0) return;
+  name[0] = '\0';
+  if(requested && requested[0]) g_strlcpy(name, requested, name_size);
+  g_strstrip(name);
+  if(name[0] == '\0' && fallback_name && fallback_name[0]) g_strlcpy(name, fallback_name, name_size);
+}
+
+/** @brief Build absolute sidecar path from image id. */
+gboolean dt_drawlayer_io_sidecar_path(const int32_t imgid, char *path, const size_t path_size)
+{
+  gboolean from_cache = FALSE;
+  if(!path || path_size == 0) return FALSE;
+  dt_image_full_path(imgid, path, path_size, &from_cache, __FUNCTION__);
+  if(path[0] == '\0') return FALSE;
+  g_strlcat(path, ".ansel.tiff", path_size);
+  return TRUE;
+}
+
+/** @brief Find target layer metadata in sidecar TIFF. */
+gboolean dt_drawlayer_io_find_layer(const char *path, const char *target_name, const int target_order,
+                                    dt_drawlayer_io_layer_info_t *info)
+{
+  if(info) memset(info, 0, sizeof(*info));
+  if(!path || !g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
+
+  TIFF *tiff = TIFFOpen(path, "rb");
+  if(!tiff) return FALSE;
+  _scan_directories(tiff, target_name, target_order, info);
+  TIFFClose(tiff);
+  return info && info->found;
+}
+
+/** @brief Load one sidecar layer patch into float RGBA destination patch. */
+gboolean dt_drawlayer_io_load_layer(const char *path, const char *target_name, const int target_order,
+                                    const int raw_width, const int raw_height, dt_drawlayer_io_patch_t *patch)
+{
+  if(!patch || !patch->pixels || patch->width <= 0 || patch->height <= 0) return FALSE;
+  dt_drawlayer_cache_clear_transparent_float(patch->pixels, (size_t)patch->width * patch->height);
 
   if(!g_file_test(path, G_FILE_TEST_EXISTS)) return TRUE;
 
   TIFF *tiff = TIFFOpen(path, "rb");
   if(!tiff) return FALSE;
 
-  drawlayer_dir_info_t info;
+  dt_drawlayer_io_layer_info_t info;
   _scan_directories(tiff, target_name, target_order, &info);
   if(!info.found)
   {
@@ -336,251 +677,8 @@ static gboolean _read_region(const char *path, const char *target_name, const in
   return TRUE;
 }
 
-static gboolean _write_page(TIFF *dst, TIFF *src, const int src_dir, const char *name, const char *work_profile,
-                            const drawlayer_patch_t *patch, const int raw_width, const int raw_height)
-{
-  uint32_t width = (uint32_t)raw_width;
-  uint32_t height = (uint32_t)raw_height;
-  const char *page_profile = work_profile;
-  uint8_t *icc_profile = NULL;
-  uint32_t icc_profile_len = 0;
-
-  if(src)
-  {
-    if(!TIFFSetDirectory(src, (tdir_t)src_dir)) return FALSE;
-    TIFFGetField(src, TIFFTAG_IMAGEWIDTH, &width);
-    TIFFGetField(src, TIFFTAG_IMAGELENGTH, &height);
-    if(!name)
-    {
-      char *src_name = NULL;
-      TIFFGetField(src, TIFFTAG_PAGENAME, &src_name);
-      name = src_name;
-    }
-    if(!page_profile)
-    {
-      char *src_profile = NULL;
-      TIFFGetField(src, TIFFTAG_IMAGEDESCRIPTION, &src_profile);
-      page_profile = src_profile;
-    }
-  }
-
-  if(!_set_directory_tags(dst, width, height, name, page_profile)) return FALSE;
-  if(page_profile && page_profile[0] && _icc_blob_from_profile_key(page_profile, &icc_profile, &icc_profile_len))
-    TIFFSetField(dst, TIFFTAG_ICCPROFILE, icc_profile_len, icc_profile);
-
-  uint16_t *src_row = g_malloc0_n((gsize)width * 4, sizeof(uint16_t));
-  uint16_t *dst_row = g_malloc0_n((gsize)width * 4, sizeof(uint16_t));
-  if(!src_row || !dst_row)
-  {
-    g_free(icc_profile);
-    g_free(src_row);
-    g_free(dst_row);
-    return FALSE;
-  }
-
-  const int offset_x = (raw_width - (int)width) / 2;
-  const int offset_y = (raw_height - (int)height) / 2;
-
-  for(uint32_t y = 0; y < height; y++)
-  {
-    _clear_transparent_half(dst_row, (size_t)width);
-
-    if(src)
-    {
-      if(!_read_scanline_rgba(src, width, y, src_row))
-      {
-        g_free(icc_profile);
-        g_free(src_row);
-        g_free(dst_row);
-        return FALSE;
-      }
-      memcpy(dst_row, src_row, (size_t)width * 4 * sizeof(uint16_t));
-    }
-
-    if(patch)
-    {
-      const int raw_y = (int)y + offset_y;
-      if(raw_y >= patch->y && raw_y < patch->y + patch->height)
-      {
-        const float *patch_row = patch->pixels + 4 * (size_t)(raw_y - patch->y) * patch->width;
-        for(uint32_t x = 0; x < width; x++)
-        {
-          const int raw_x = (int)x + offset_x;
-          if(raw_x < patch->x || raw_x >= patch->x + patch->width) continue;
-          const float *src_pixel = patch_row + 4 * (size_t)(raw_x - patch->x);
-          dst_row[4 * x + 0] = _float_to_half(src_pixel[0]);
-          dst_row[4 * x + 1] = _float_to_half(src_pixel[1]);
-          dst_row[4 * x + 2] = _float_to_half(src_pixel[2]);
-          dst_row[4 * x + 3] = _float_to_half(src_pixel[3]);
-        }
-      }
-    }
-
-    if(!_write_scanline_rgba(dst, width, y, dst_row))
-    {
-      g_free(icc_profile);
-      g_free(src_row);
-      g_free(dst_row);
-      return FALSE;
-    }
-  }
-
-  g_free(icc_profile);
-  g_free(src_row);
-  g_free(dst_row);
-  return TIFFWriteDirectory(dst) != 0;
-}
-
-static gboolean _rewrite_sidecar(const char *path, const char *target_name, const int target_order,
-                                 const char *work_profile, const drawlayer_patch_t *patch, const int raw_width,
-                                 const int raw_height, const gboolean delete_target, const int insert_order,
-                                 int *final_order)
-{
-  /* Whole-file rewrite strategy:
-   * TIFF page insertion/deletion/update is easier and more robust here by rewriting to a
-   * temporary file, then atomically renaming it over the original sidecar. */
-  if(final_order) *final_order = -1;
-
-  TIFF *src = NULL;
-  drawlayer_dir_info_t info;
-  memset(&info, 0, sizeof(info));
-  info.index = -1;
-
-  if(g_file_test(path, G_FILE_TEST_EXISTS))
-  {
-    src = TIFFOpen(path, "rb");
-    if(!src) return FALSE;
-    _scan_directories(src, target_name, target_order, &info);
-  }
-
-  if(delete_target && (!src || !info.found))
-  {
-    if(src) TIFFClose(src);
-    return TRUE;
-  }
-
-  if(delete_target && src && info.found && info.count == 1)
-  {
-    TIFFClose(src);
-    return g_unlink(path) == 0;
-  }
-
-  gchar *tmp_path = g_strdup_printf("%s.tmp", path);
-  TIFF *dst = TIFFOpen(tmp_path, "wb");
-  if(!dst)
-  {
-    if(src) TIFFClose(src);
-    g_free(tmp_path);
-    return FALSE;
-  }
-
-  int written_index = 0;
-  gboolean ok = TRUE;
-
-  if(src)
-  {
-    for(int dir = 0; dir < info.count && ok; dir++)
-    {
-      /* Optional insertion path used by drawlayer's "create background layer"
-       * action: when creating a new page (target not found), insert it at the
-       * requested page order instead of always appending at the end. */
-      if(!delete_target && !info.found && insert_order >= 0 && written_index == insert_order)
-      {
-        ok = _write_page(dst, NULL, -1, target_name, work_profile, patch, raw_width, raw_height);
-        if(ok && final_order) *final_order = written_index;
-        if(ok) written_index++;
-      }
-
-      const gboolean is_target = info.found && dir == info.index;
-      if(is_target && delete_target) continue;
-
-      const drawlayer_patch_t *page_patch = (is_target && !delete_target) ? patch : NULL;
-      const char *page_label = is_target ? target_name : NULL;
-
-      ok = _write_page(dst, src, dir, page_label, is_target ? work_profile : NULL, page_patch, raw_width, raw_height);
-      if(ok && is_target && !delete_target && final_order) *final_order = written_index;
-      if(ok) written_index++;
-    }
-  }
-
-  if(ok && !delete_target && (!src || !info.found))
-  {
-    const gboolean append_at_end = (insert_order < 0 || insert_order >= written_index || !src);
-    if(append_at_end)
-    {
-      ok = _write_page(dst, NULL, -1, target_name, work_profile, patch, raw_width, raw_height);
-      if(ok && final_order) *final_order = written_index;
-    }
-  }
-
-  TIFFClose(dst);
-  if(src) TIFFClose(src);
-
-  if(ok)
-    ok = (g_rename(tmp_path, path) == 0);
-  else
-    g_unlink(tmp_path);
-
-  g_free(tmp_path);
-  return ok;
-}
-
-static gboolean _layer_name_exists_in_sidecar(const char *path, const char *candidate, const int ignore_index)
-{
-  if(!path || !candidate || candidate[0] == '\0' || !g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
-
-  TIFF *tiff = TIFFOpen(path, "rb");
-  if(!tiff) return FALSE;
-
-  gboolean exists = FALSE;
-  int index = 0;
-  if(TIFFSetDirectory(tiff, 0))
-  {
-    do
-    {
-      char *page_name = NULL;
-      TIFFGetField(tiff, TIFFTAG_PAGENAME, &page_name);
-      if(index != ignore_index && !g_strcmp0(page_name ? page_name : "", candidate))
-      {
-        exists = TRUE;
-        break;
-      }
-      index++;
-    } while(TIFFReadDirectory(tiff));
-  }
-
-  TIFFClose(tiff);
-  return exists;
-}
-
-static void _make_unique_layer_name(dt_iop_module_t *self, const char *path, const char *requested, char *name,
-                                    const size_t name_size);
-
-static gboolean _layerio_sidecar_path(const int32_t imgid, char *path, const size_t path_size)
-{
-  return _get_sidecar_path(imgid, path, path_size);
-}
-
-static gboolean _layerio_find_layer(const char *path, const char *target_name, const int target_order,
-                                    drawlayer_dir_info_t *info)
-{
-  if(info) memset(info, 0, sizeof(*info));
-  if(!path || !g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
-
-  TIFF *tiff = TIFFOpen(path, "rb");
-  if(!tiff) return FALSE;
-  _scan_directories(tiff, target_name, target_order, info);
-  TIFFClose(tiff);
-  return info && info->found;
-}
-
-static gboolean _layerio_load_layer(const char *path, const char *target_name, const int target_order,
-                                    const int raw_width, const int raw_height, drawlayer_patch_t *patch)
-{
-  return _read_region(path, target_name, target_order, raw_width, raw_height, patch);
-}
-
-static gboolean _layerio_load_flat_rgba(const char *path, float **pixels, int *width, int *height)
+/** @brief Load first TIFF page as flat RGBA float image. */
+gboolean dt_drawlayer_io_load_flat_rgba(const char *path, float **pixels, int *width, int *height)
 {
   if(pixels) *pixels = NULL;
   if(width) *width = 0;
@@ -604,19 +702,19 @@ static gboolean _layerio_load_flat_rgba(const char *path, float **pixels, int *w
     return FALSE;
   }
 
-  float *out = _alloc_tracked_temp_buffer((size_t)w * h * 4 * sizeof(float), "drawlayer bg export");
+  float *out = g_malloc_n((size_t)w * h * 4, sizeof(float));
   if(!out)
   {
     TIFFClose(tiff);
     return FALSE;
   }
-  _clear_transparent_float(out, (size_t)w * h);
+  dt_drawlayer_cache_clear_transparent_float(out, (size_t)w * h);
 
   const tsize_t scanline = TIFFScanlineSize(tiff);
   tdata_t row = _TIFFmalloc((tsize_t)scanline);
   if(!row)
   {
-    _free_tracked_temp_buffer((void **)&out, "drawlayer bg export");
+    g_free(out);
     TIFFClose(tiff);
     return FALSE;
   }
@@ -704,7 +802,7 @@ static gboolean _layerio_load_flat_rgba(const char *path, float **pixels, int *w
       dst[0] = r;
       dst[1] = g;
       dst[2] = b;
-      dst[3] = a;
+      dst[3] = _clamp01(a);
     }
   }
 
@@ -712,7 +810,7 @@ static gboolean _layerio_load_flat_rgba(const char *path, float **pixels, int *w
   TIFFClose(tiff);
   if(!ok)
   {
-    _free_tracked_temp_buffer((void **)&out, "drawlayer bg export");
+    g_free(out);
     return FALSE;
   }
 
@@ -722,18 +820,20 @@ static gboolean _layerio_load_flat_rgba(const char *path, float **pixels, int *w
   return TRUE;
 }
 
-static gboolean _layerio_store_layer(const char *path, const char *target_name, const int target_order,
-                                     const char *work_profile, const drawlayer_patch_t *patch,
+/** @brief Store/update/delete one layer entry in sidecar TIFF. */
+gboolean dt_drawlayer_io_store_layer(const char *path, const char *target_name, const int target_order,
+                                     const char *work_profile, const dt_drawlayer_io_patch_t *patch,
                                      const int raw_width, const int raw_height, const gboolean delete_target,
                                      int *final_order)
 {
   if(!target_name || target_name[0] == '\0') return FALSE;
-  return _rewrite_sidecar(path, target_name, target_order, work_profile, patch, raw_width, raw_height,
-                          delete_target, -1, final_order);
+  return _rewrite_sidecar(path, target_name, target_order, work_profile, patch, raw_width, raw_height, delete_target,
+                          -1, final_order);
 }
 
-static gboolean _layerio_insert_layer(const char *path, const char *target_name, const int insert_after_order,
-                                      const char *work_profile, const drawlayer_patch_t *patch,
+/** @brief Insert a new layer after given order in sidecar TIFF. */
+gboolean dt_drawlayer_io_insert_layer(const char *path, const char *target_name, const int insert_after_order,
+                                      const char *work_profile, const dt_drawlayer_io_patch_t *patch,
                                       const int raw_width, const int raw_height, int *final_order)
 {
   if(!target_name || target_name[0] == '\0') return FALSE;
@@ -742,116 +842,89 @@ static gboolean _layerio_insert_layer(const char *path, const char *target_name,
                           final_order);
 }
 
-static void _layerio_make_unique_name(dt_iop_module_t *self, const char *path, const char *requested, char *name,
+/** @brief Create unique layer name with fallback if requested name is empty. */
+void dt_drawlayer_io_make_unique_name(const char *path, const char *requested, const char *fallback_name, char *name,
                                       const size_t name_size)
 {
-  _make_unique_layer_name(self, path, requested, name, name_size);
+  _sanitize_requested_layer_name(requested, fallback_name, name, name_size);
+  if(name[0] == '\0') return;
+  if(!dt_drawlayer_io_layer_name_exists(path, name, -1)) return;
+
+  char base[DT_DRAWLAYER_IO_NAME_SIZE] = { 0 };
+  g_strlcpy(base, name, sizeof(base));
+
+  for(int suffix = 2; suffix < 100000; suffix++)
+  {
+    g_snprintf(name, name_size, "%.*s %d", MAX((int)name_size - 12, 1), base, suffix);
+    if(!dt_drawlayer_io_layer_name_exists(path, name, -1)) return;
+  }
 }
 
-static gboolean _layerio_layer_name_exists(const char *path, const char *candidate, const int ignore_index)
-{
-  return _layer_name_exists_in_sidecar(path, candidate, ignore_index);
-}
-
-static void _layerio_make_unique_name_plain(const char *path, const char *requested, char *name, const size_t name_size)
+/** @brief Create unique layer name without fallback source. */
+void dt_drawlayer_io_make_unique_name_plain(const char *path, const char *requested, char *name, const size_t name_size)
 {
   if(!name || name_size == 0) return;
   name[0] = '\0';
   if(requested) g_strlcpy(name, requested, name_size);
   g_strstrip(name);
   if(name[0] == '\0') return;
-  if(!_layer_name_exists_in_sidecar(path, name, -1)) return;
+  if(!dt_drawlayer_io_layer_name_exists(path, name, -1)) return;
 
-  char base[DRAWLAYER_NAME_SIZE] = { 0 };
+  char base[DT_DRAWLAYER_IO_NAME_SIZE] = { 0 };
   g_strlcpy(base, name, sizeof(base));
 
   for(int suffix = 2; suffix < 100000; suffix++)
   {
     g_snprintf(name, name_size, "%.*s %d", MAX((int)name_size - 12, 1), base, suffix);
-    if(!_layer_name_exists_in_sidecar(path, name, -1)) return;
+    if(!dt_drawlayer_io_layer_name_exists(path, name, -1)) return;
   }
 }
 
-static void _make_unique_layer_name(dt_iop_module_t *self, const char *path, const char *requested, char *name,
-                                    const size_t name_size)
+/** @brief List all TIFF layer page names. */
+gboolean dt_drawlayer_io_list_layer_names(const char *path, char ***names, int *count)
 {
-  _sanitize_requested_layer_name(self, requested, name, name_size);
-  if(name[0] == '\0') return;
-
-  if(!_layer_name_exists_in_sidecar(path, name, -1)) return;
-
-  char base[DRAWLAYER_NAME_SIZE] = { 0 };
-  g_strlcpy(base, name, sizeof(base));
-
-  for(int suffix = 2; suffix < 100000; suffix++)
-  {
-    g_snprintf(name, name_size, "%.*s %d", MAX((int)name_size - 12, 1), base, suffix);
-    if(!_layer_name_exists_in_sidecar(path, name, -1)) return;
-  }
-}
-
-static void _populate_layer_list(dt_iop_module_t *self)
-{
-  dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  if(!g) return;
-  _ensure_layer_name(self, params);
-
-  while(dt_bauhaus_combobox_length(g->layer_select) > 0)
-    dt_bauhaus_combobox_remove_at(g->layer_select, dt_bauhaus_combobox_length(g->layer_select) - 1);
-
-  if(!self->dev)
-  {
-    dt_bauhaus_combobox_add(g->layer_select, params->layer_name);
-    dt_bauhaus_combobox_set(g->layer_select, 0);
-    return;
-  }
-
-  char path[PATH_MAX] = { 0 };
-  if(!_get_sidecar_path(self->dev->image_storage.id, path, sizeof(path)) || !g_file_test(path, G_FILE_TEST_EXISTS))
-  {
-    dt_bauhaus_combobox_add(g->layer_select, params->layer_name);
-    dt_bauhaus_combobox_set(g->layer_select, 0);
-    return;
-  }
+  if(names) *names = NULL;
+  if(count) *count = 0;
+  if(!path || !names || !count || !g_file_test(path, G_FILE_TEST_EXISTS)) return FALSE;
 
   TIFF *tiff = TIFFOpen(path, "rb");
-  if(!tiff)
-  {
-    dt_bauhaus_combobox_add(g->layer_select, params->layer_name);
-    dt_bauhaus_combobox_set(g->layer_select, 0);
-    return;
-  }
+  if(!tiff) return FALSE;
 
-  int active = -1;
-  int index = 0;
+  GPtrArray *arr = g_ptr_array_new_with_free_func(g_free);
   if(TIFFSetDirectory(tiff, 0))
   {
     do
     {
       char *page_name = NULL;
       TIFFGetField(tiff, TIFFTAG_PAGENAME, &page_name);
-      dt_bauhaus_combobox_add(g->layer_select, page_name ? page_name : "");
-
-      if(params->layer_order == index
-         || (params->layer_name[0] && !g_strcmp0(page_name ? page_name : "", params->layer_name)))
-        active = index;
-      index++;
+      g_ptr_array_add(arr, g_strdup(page_name ? page_name : ""));
     } while(TIFFReadDirectory(tiff));
   }
-
   TIFFClose(tiff);
-  if(index == 0)
+
+  *count = (int)arr->len;
+  if(arr->len == 0)
   {
-    dt_bauhaus_combobox_add(g->layer_select, params->layer_name);
-    dt_bauhaus_combobox_set(g->layer_select, 0);
+    g_ptr_array_free(arr, TRUE);
+    *names = NULL;
+    return TRUE;
   }
-  else if(active >= 0)
-  {
-    dt_bauhaus_combobox_set(g->layer_select, active);
-  }
-  else
-  {
-    dt_bauhaus_combobox_set(g->layer_select, 0);
-  }
+
+  char **out = g_new0(char *, arr->len);
+  for(guint i = 0; i < arr->len; i++)
+    out[i] = (char *)g_ptr_array_index(arr, i);
+  g_ptr_array_free(arr, FALSE);
+  *names = out;
+  return TRUE;
+}
+
+/** @brief Free array returned by `dt_drawlayer_io_list_layer_names`. */
+void dt_drawlayer_io_free_layer_names(char ***names, int *count)
+{
+  if(!names || !*names) return;
+  const int n = (count && *count > 0) ? *count : 0;
+  for(int i = 0; i < n; i++) g_free((*names)[i]);
+  g_free(*names);
+  *names = NULL;
+  if(count) *count = 0;
 }

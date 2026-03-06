@@ -71,6 +71,9 @@ typedef GdkCursorType dt_cursor_t;
 
 typedef struct dt_control_pointer_input_t
 {
+  /* Widget-space pointer position from the latest motion/button event. */
+  double x;
+  double y;
   /* Normalized in [0, 1]. */
   double pressure;
   gboolean has_pressure;

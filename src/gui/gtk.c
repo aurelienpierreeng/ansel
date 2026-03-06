@@ -670,6 +670,8 @@ static dt_control_pointer_input_t _extract_pointer_input(const GdkEvent *event, 
                                                          const char *tag)
 {
   dt_control_pointer_input_t input = { 0 };
+  input.x = x;
+  input.y = y;
   input.time_ms = time_ms;
   GdkDevice *source_device = gdk_event_get_source_device((GdkEvent *)event);
   GdkDevice *event_device = gdk_event_get_device((GdkEvent *)event);
