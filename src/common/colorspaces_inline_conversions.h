@@ -170,16 +170,54 @@ static inline __m128 dt_prophotoRGB_to_XYZ_sse2(__m128 rgb)
 }
 #endif
 
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+dt_colormatrix_row_to_simd(const dt_colormatrix_t matrix, const int row)
+{
+  return (dt_aligned_pixel_simd_t){ matrix[row][0], matrix[row][1], matrix[row][2], matrix[row][3] };
+}
+
 #ifdef _OPENMP
-#pragma omp declare simd aligned(in,out)
+#pragma omp declare simd aligned(pixel:16) uniform(pixel)
+#endif
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+dt_load_simd_aligned(const float *const pixel)
+{
+  const float *const in = (const float *const)__builtin_assume_aligned(pixel, 16);
+  dt_aligned_pixel_simd_t out;
+  __builtin_memcpy(&out, in, sizeof(out));
+  return out;
+}
+
+#ifdef _OPENMP
+#pragma omp declare simd aligned(pixel:16) uniform(pixel)
+#endif
+static inline __attribute__((always_inline)) void
+dt_store_simd_aligned(float *const pixel, const dt_aligned_pixel_simd_t value)
+{
+  float *const out = (float *const)__builtin_assume_aligned(pixel, 16);
+  __builtin_memcpy(out, &value, sizeof(value));
+}
+
+#ifdef _OPENMP
+#pragma omp declare simd
+#endif
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+dt_mat3x4_mul_vec4(const dt_aligned_pixel_simd_t in, const dt_aligned_pixel_simd_t row0,
+                   const dt_aligned_pixel_simd_t row1, const dt_aligned_pixel_simd_t row2)
+{
+  return row0 * in[0] + row1 * in[1] + row2 * in[2];
+}
+
+#ifdef _OPENMP
+#pragma omp declare simd aligned(in,out:16) aligned(matrix:64) uniform(matrix)
 #endif
 static inline void dt_apply_transposed_color_matrix(const dt_aligned_pixel_t in, const dt_colormatrix_t matrix,
                                                     dt_aligned_pixel_t out)
 {
-  // using dt_aligned_pixel_t instead of float* for the function parameters gives GCC enough info to vectorize
-  // and eliminate intermediate memory writes without going through major contortions
-  for_each_channel(r)
-    out[r] = matrix[0][r] * in[0] + matrix[1][r] * in[1] + matrix[2][r] * in[2];
+  const dt_aligned_pixel_simd_t vin = dt_load_simd_aligned(in);
+  dt_store_simd_aligned(out, dt_mat3x4_mul_vec4(vin, dt_colormatrix_row_to_simd(matrix, 0),
+                                                dt_colormatrix_row_to_simd(matrix, 1),
+                                                dt_colormatrix_row_to_simd(matrix, 2)));
 }
 
 #ifdef _OPENMP

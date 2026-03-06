@@ -442,6 +442,8 @@ static inline void * dt_check_sse_aligned(void * pointer)
 
 // utility type to ease declaration of aligned small arrays to hold a pixel (and document their purpose)
 typedef DT_ALIGNED_PIXEL float dt_aligned_pixel_t[4];
+// SIMD view matching dt_aligned_pixel_t layout, for explicit 4-float vector math.
+typedef float dt_aligned_pixel_simd_t __attribute__((vector_size(16), aligned(16)));
 
 // To be able to vectorize per-pixel loops, we need to operate on all four channels, but if the compiler does
 // not auto-vectorize, doing so increases computation by 1/3 for a channel which typically is ignored anyway.

@@ -1131,7 +1131,7 @@ colorin_unbound (read_only image2d_t in, write_only image2d_t out, const int wid
 
   float4 pixel = read_imagef(in, sampleri, (int2)(x, y));
 
-  float cam[3], XYZ[3];
+  float cam[3], RGB[3];
   cam[0] = lerp_lookup_unbounded0(lutr, pixel.x, a[0]);
   cam[1] = lerp_lookup_unbounded0(lutg, pixel.y, a[1]);
   cam[2] = lerp_lookup_unbounded0(lutb, pixel.z, a[2]);
@@ -1141,7 +1141,7 @@ colorin_unbound (read_only image2d_t in, write_only image2d_t out, const int wid
     const float YY = cam[0] + cam[1] + cam[2];
     if(YY > 0.0f)
     {
-      // manual gamut mapping. these values cause trouble when converting back from Lab to sRGB:
+      // manual gamut mapping for problematic deep blues:
       const float zz = cam[2] / YY;
       // lower amount and higher bound_z make the effect smaller.
       // the effect is weakened the darker input values are, saturating at bound_Y
@@ -1156,14 +1156,13 @@ colorin_unbound (read_only image2d_t in, write_only image2d_t out, const int wid
     }
   }
 
-  // now convert camera to XYZ using the color matrix
+  // now convert camera to work RGB using the color matrix
   for(int j=0;j<3;j++)
   {
-    XYZ[j] = 0.0f;
-    for(int i=0;i<3;i++) XYZ[j] += cmat[3*j+i] * cam[i];
+    RGB[j] = 0.0f;
+    for(int i=0;i<3;i++) RGB[j] += cmat[3*j+i] * cam[i];
   }
-  float4 xyz = (float4)(XYZ[0], XYZ[1], XYZ[2], 0.0f);
-  pixel.xyz = XYZ_to_Lab(xyz).xyz;
+  pixel.xyz = (float3)(RGB[0], RGB[1], RGB[2]);
   write_imagef (out, (int2)(x, y), pixel);
 }
 
@@ -1181,7 +1180,7 @@ colorin_clipping (read_only image2d_t in, write_only image2d_t out, const int wi
 
   float4 pixel = read_imagef(in, sampleri, (int2)(x, y));
 
-  float cam[3], RGB[3], XYZ[3];
+  float cam[3], RGB[3], workRGB[3];
   cam[0] = lerp_lookup_unbounded0(lutr, pixel.x, a[0]);
   cam[1] = lerp_lookup_unbounded0(lutg, pixel.y, a[1]);
   cam[2] = lerp_lookup_unbounded0(lutb, pixel.z, a[2]);
@@ -1191,7 +1190,7 @@ colorin_clipping (read_only image2d_t in, write_only image2d_t out, const int wi
     const float YY = cam[0] + cam[1] + cam[2];
     if(YY > 0.0f)
     {
-      // manual gamut mapping. these values cause trouble when converting back from Lab to sRGB:
+      // manual gamut mapping for problematic deep blues:
       const float zz = cam[2] / YY;
       // lower amount and higher bound_z make the effect smaller.
       // the effect is weakened the darker input values are, saturating at bound_Y
@@ -1216,15 +1215,14 @@ colorin_clipping (read_only image2d_t in, write_only image2d_t out, const int wi
   // clamp at this stage
   for(int i=0; i<3; i++) RGB[i] = clamp(RGB[i], 0.0f, 1.0f);
 
-  // convert clipped RGB to XYZ
+  // convert clipped RGB to work RGB
   for(int j=0;j<3;j++)
   {
-    XYZ[j] = 0.0f;
-    for(int i=0;i<3;i++) XYZ[j] += lmat[3*j+i] * RGB[i];
+    workRGB[j] = 0.0f;
+    for(int i=0;i<3;i++) workRGB[j] += lmat[3*j+i] * RGB[i];
   }
 
-  float4 xyz = (float4)(XYZ[0], XYZ[1], XYZ[2], 0.0f);
-  pixel.xyz = XYZ_to_Lab(xyz).xyz;
+  pixel.xyz = (float3)(workRGB[0], workRGB[1], workRGB[2]);
   write_imagef (out, (int2)(x, y), pixel);
 }
 

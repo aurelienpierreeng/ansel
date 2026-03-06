@@ -218,9 +218,9 @@ int dt_ioppr_transform_image_colorspace_rgb_cl(const int devid, cl_mem dev_img_i
 /** the following must have the matrix_in and matrix_out generated */
 
 #ifdef _OPENMP
-#pragma omp declare simd aligned(lut:64)
+#pragma omp declare simd aligned(lut:64) uniform(lut)
 #endif
-static inline float extrapolate_lut(const float *const lut, const float v, const int lutsize)
+static inline __attribute__((always_inline)) float extrapolate_lut(const float *const lut, const float v, const int lutsize)
 {
   // TODO: check if optimization is worthwhile!
   const float ft = CLAMPS(v * (lutsize - 1), 0, lutsize - 1);
@@ -233,11 +233,19 @@ static inline float extrapolate_lut(const float *const lut, const float v, const
 
 
 #ifdef _OPENMP
-#pragma omp declare simd
+#pragma omp declare simd uniform(coeff)
 #endif
-static inline float eval_exp(const float coeff[3], const float x)
+static inline __attribute__((always_inline)) float eval_exp(const float coeff[3], const float x)
 {
   return coeff[1] * powf(x * coeff[0], coeff[2]);
+}
+
+#ifdef _OPENMP
+#pragma omp declare simd aligned(lut:64) uniform(lut, coeff)
+#endif
+static inline __attribute__((always_inline)) float dt_ioppr_eval_trc(const float x, const float *const lut, const float coeff[3], const int lutsize)
+{
+  return (x < 1.0f) ? extrapolate_lut(lut, x, lutsize) : eval_exp(coeff, x);
 }
 
 
@@ -254,8 +262,7 @@ static inline void _apply_trc(const dt_aligned_pixel_t rgb_in, dt_aligned_pixel_
 {
   for(int c = 0; c < 3; c++)
   {
-    rgb_out[c] = (lut[c][0] >= 0.0f) ? ((rgb_in[c] < 1.0f) ? extrapolate_lut(lut[c], rgb_in[c], lutsize)
-                                     : eval_exp(unbounded_coeffs[c], rgb_in[c]))
+    rgb_out[c] = (lut[c][0] >= 0.0f) ? dt_ioppr_eval_trc(rgb_in[c], lut[c], unbounded_coeffs[c], lutsize)
                                      : rgb_in[c];
   }
 }
