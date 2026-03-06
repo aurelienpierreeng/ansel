@@ -115,6 +115,26 @@ tpdf(unsigned int urandom)
   return (frandom < 0.5f ? (sqrt(2.0f*frandom) - 1.0f) : (1.0f - sqrt(2.0f*(1.0f - frandom))));
 }
 
+__kernel void
+dither_random(read_only image2d_t in, write_only image2d_t out, const int width, const int height,
+              const float dither, const int preserve_alpha)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+
+  if(x >= width || y >= height) return;
+
+  unsigned int tea_state[2] = { mad24(y, width, x), 0 };
+  encrypt_tea(tea_state);
+
+  const float dith = dither * tpdf(tea_state[0]);
+  const float4 pix_in = read_imagef(in, sampleri, (int2)(x, y));
+  float4 pix_out = clamp(pix_in + (float4)dith, (float4)0.0f, (float4)1.0f);
+
+  if(preserve_alpha) pix_out.w = pix_in.w;
+
+  write_imagef(out, (int2)(x, y), pix_out);
+}
 
 __kernel void
 vignette (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
