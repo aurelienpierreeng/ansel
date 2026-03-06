@@ -32,7 +32,6 @@ static void _sync_virtual_pipe(dt_develop_t *dev, dt_dev_pixelpipe_change_t flag
 static void _change_pipe(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_change_t flag)
 {
   if(!pipe) return;
-  pipe->status = DT_DEV_PIXELPIPE_DIRTY;
   pipe->changed |= flag;
   dt_atomic_set_int(&pipe->shutdown, TRUE);
 }
@@ -99,11 +98,24 @@ void dt_dev_pixelpipe_update_zoom_preview(dt_develop_t *dev)
 void dt_dev_pixelpipe_update_zoom_main_real(dt_develop_t *dev)
 {
   if(!dev || !dev->gui_attached) return;
+  /* Zoom/pan updates must run through the normal validity/ROI flow.
+   * If a module left the main pipe in realtime mode, force it back to
+   * standard mode here so zoom changes cannot get visually stuck on a
+   * best-effort backbuffer policy. */
+  dt_dev_pixelpipe_set_realtime(dev->pipe, FALSE);
   _change_pipe(dev->pipe, DT_DEV_PIPE_ZOOMED);
 }
 
 void dt_dev_pixelpipe_reset_all(dt_develop_t *dev)
 {
+  if(dev)
+  {
+    /* Global resets must clear transient realtime state first.
+     * If main pipe remains latched in realtime, non-stroke actions
+     * (enable/disable, cache clear, navigation) can appear stale. */
+    if(dev->pipe) dt_dev_pixelpipe_set_realtime(dev->pipe, FALSE);
+    if(dev->preview_pipe) dt_dev_pixelpipe_set_realtime(dev->preview_pipe, FALSE);
+  }
   dt_dev_pixelpipe_cache_flush(darktable.pixelpipe_cache, -1);
 
   if(darktable.gui->reset || !dev || !dev->gui_attached) return;
@@ -113,6 +125,7 @@ void dt_dev_pixelpipe_reset_all(dt_develop_t *dev)
 void dt_dev_pixelpipe_refresh_main(dt_develop_t *dev, gboolean full)
 {
   if (!dev || !dev->gui_attached) return;
+  if(dev->pipe) dt_dev_pixelpipe_set_realtime(dev->pipe, FALSE);
 
   if(full)
     dt_dev_pixelpipe_resync_history_main(dev);
@@ -125,6 +138,7 @@ void dt_dev_pixelpipe_refresh_main(dt_develop_t *dev, gboolean full)
 void dt_dev_pixelpipe_refresh_preview(dt_develop_t *dev, gboolean full)
 {
   if (!dev || !dev->gui_attached) return;
+  if(dev->preview_pipe) dt_dev_pixelpipe_set_realtime(dev->preview_pipe, FALSE);
 
   if(full)
     dt_dev_pixelpipe_resync_history_preview(dev);
@@ -137,6 +151,8 @@ void dt_dev_pixelpipe_refresh_preview(dt_develop_t *dev, gboolean full)
 void dt_dev_pixelpipe_refresh_all(dt_develop_t *dev, gboolean full)
 {
   if (!dev || !dev->gui_attached) return;
+  if(dev->pipe) dt_dev_pixelpipe_set_realtime(dev->pipe, FALSE);
+  if(dev->preview_pipe) dt_dev_pixelpipe_set_realtime(dev->preview_pipe, FALSE);
 
   // Always start reprocessing thumbnail first,
   // because it's needed for final GUI sizes,
@@ -159,6 +175,9 @@ void dt_dev_pixelpipe_refresh_all(dt_develop_t *dev, gboolean full)
 void dt_dev_pixelpipe_change_zoom_main(dt_develop_t *dev)
 {
   if (!dev || !dev->gui_attached) return;
+  /* Entering a zoom/pan change always exits realtime rendering policy.
+   * Realtime is stroke-scoped and should never control darkroom navigation. */
+  dt_dev_pixelpipe_set_realtime(dev->pipe, FALSE);
   // Slightly different logic: killswitch ASAP,
   // then redraw UI ASAP for feedback,
   // finally flag the pipe as dirty for later recompute.
@@ -481,6 +500,12 @@ void dt_dev_pixelpipe_synch_all_real(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev
   {
     dt_dev_history_item_t *last_hist = (dt_dev_history_item_t *)last_item->data;
     pipe->last_history_hash = last_hist->hash;
+    pipe->last_history_item = last_hist;
+  }
+  else
+  {
+    pipe->last_history_hash = 0;
+    pipe->last_history_item = NULL;
   }
 
   pipe->history_hash = dev->history_hash;
@@ -507,7 +532,7 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
       dt_dev_history_item_t *hist = (dt_dev_history_item_t *)history->data;
       first_item = history;
 
-      if(hist->hash == pipe->last_history_hash)
+      if(hist->hash == pipe->last_history_hash || hist == pipe->last_history_item)
       {
         // Note that this also takes care of the case where the
         // last-known history item reference hasn't changed, but its internal
@@ -534,10 +559,13 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     // Keep track of the last history item to have been synced
     dt_dev_history_item_t *last_hist = (dt_dev_history_item_t *)last_item->data;
     pipe->last_history_hash = last_hist->hash;
+    pipe->last_history_item = last_hist;
   }
   else
   {
     dt_print(DT_DEBUG_DEV, "[pixelpipe] synch top history module missing error for pipe %s\n", type);
+    pipe->last_history_hash = 0;
+    pipe->last_history_item = NULL;
   }
 
   pipe->history_hash = dev->history_hash;
@@ -550,7 +578,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 
   // Read and write immediately to ensure cross-thread consistency of the value
   // in case the GUI overwrites that while we are syncing history and nodes
-  const dt_dev_pixelpipe_change_t status = pipe->changed;
+  dt_dev_pixelpipe_change_t status = pipe->changed;
 
   gchar *type = dt_pixelpipe_get_pipe_name(pipe->type);
   char *status_str = g_strdup_printf("%s%s%s%s%s",
@@ -565,19 +593,10 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 
   g_free(status_str);
 
-  /* Realtime mode is best-effort rendering for highly interactive modules.
-   * In that mode we deliberately bypass expensive history->nodes parameter
-   * synchronization for incremental change flags (TOP_CHANGED/SYNCH), while
-   * still honoring full topology rebuild requests (REMOVE). */
-  const gboolean realtime = dt_dev_pixelpipe_get_realtime(pipe);
-  const gboolean is_incremental_sync = (status & (DT_DEV_PIPE_SYNCH | DT_DEV_PIPE_TOP_CHANGED));
-  if(realtime && is_incremental_sync && !(status & DT_DEV_PIPE_REMOVE))
+  // In realtime mode, always assume the last history item changed
+  if(dt_dev_pixelpipe_get_realtime(pipe))
   {
-    pipe->history_hash = dev->history_hash;
-    pipe->last_history_hash = dev->history_hash;
-    pipe->changed = DT_DEV_PIPE_UNCHANGED;
-    dt_show_times_f(&start, "[dev_pixelpipe] pipeline resync with history", "for pipe %s", type);
-    return;
+    status |= DT_DEV_PIPE_TOP_CHANGED;
   }
 
   // mask display off as a starting point
@@ -615,6 +634,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   }
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
+  pipe->status = DT_DEV_PIXELPIPE_DIRTY;
   pipe->changed = DT_DEV_PIPE_UNCHANGED;
 
   dt_show_times_f(&start, "[dev_pixelpipe] pipeline resync with history", "for pipe %s", type);
@@ -653,11 +673,10 @@ gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe, struct dt
   return pipe->backbuf.hash != -1 
          && pipe->status == DT_DEV_PIXELPIPE_VALID 
          && pipe->changed == DT_DEV_PIPE_UNCHANGED
-         && !pipe->processing 
-         && (dt_dev_pixelpipe_get_realtime(pipe) || dev->history_hash == pipe->backbuf.history_hash);
+         && dev->history_hash == pipe->backbuf.history_hash;
 }
 
 gboolean dt_dev_pixelpipe_is_pipeline_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 {
-  return dt_dev_pixelpipe_get_realtime(pipe) || dev->history_hash == pipe->history_hash;
+  return dev->history_hash == pipe->history_hash;
 }

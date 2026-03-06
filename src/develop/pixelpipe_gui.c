@@ -460,8 +460,10 @@ static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input
     buf_hash = hash;
   }
 
-  // Copy the cache entry reference to histogram cache.
-  pixelpipe_get_histogram_backbuf(dev, roi, entry, piece->module, buf_hash);
+  // Copy the cache entry reference to global histogram cache, except in
+  // realtime mode where we intentionally skip global histogram sampling.
+  if(!dt_dev_pixelpipe_get_realtime(pipe))
+    pixelpipe_get_histogram_backbuf(dev, roi, entry, piece->module, buf_hash);
 
   // Sample internal histogram on input and color pickers.
   collect_histogram_on_CPU(pipe, dev, (float *)input, roi_in, input_format, module, piece);
@@ -480,11 +482,13 @@ static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input
  * The preview pipe can exit early if the final output cache entry is valid.
  * When that happens, we still need to update the global histogram backbuffers to point at the right cache
  * entries for `demosaic/colorout/gamma`.
+ * Realtime mode explicitly skips this path to avoid histogram sampling overhead.
  *
  * If any required cache line is missing, we return FALSE so the caller recomputes the pipeline.
  */
 static gboolean _resync_global_histograms(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
+  if(dt_dev_pixelpipe_get_realtime(pipe)) return 1;
   if(pipe->type != DT_DEV_PIXELPIPE_PREVIEW) return 1;
 
   GList *pieces = g_list_first(pipe->nodes);

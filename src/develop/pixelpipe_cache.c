@@ -59,25 +59,6 @@ const char *dt_pixelpipe_cache_set_current_module(const char *module)
   return previous;
 }
 
-typedef struct dt_pixel_cache_entry_t
-{
-  uint64_t hash;            // unique identifier of the entry
-  void *data;               // buffer holding pixels... or anything else
-  size_t size;              // size of the data buffer
-  dt_iop_buffer_dsc_t dsc;  // metadata of the data buffer
-  int64_t age;              // timestamp of creation. Oldest entry will be the first freed if it's not locked
-  char *name;               // name of the cache entry, for debugging
-  int id;                   // id of the pipeline owning this entry. Used when flushing, a pipe can only flush its own.
-  dt_atomic_int refcount;   // reference count for the cache entry, to avoid freeing it while still in use
-  dt_pthread_rwlock_t lock; // read/write lock to avoid threads conflicts
-  gboolean auto_destroy;    // TRUE for auto-destruction the next time it's used. Used for short-lived entries (transient states).
-  gboolean external_alloc;  // TRUE for external buffers tracked in the cache
-  int hits;                 // number of times this entry was hit (utility score)
-  dt_dev_pixelpipe_cache_t *cache; // reference to parent cache object
-  GList *cl_mem_list;       // reusable OpenCL pinned buffers tied to this entry
-  dt_pthread_mutex_t cl_mem_lock;
-} dt_pixel_cache_entry_t;
-
 typedef struct dt_cache_clmem_t
 {
   void *host_ptr;
@@ -522,6 +503,20 @@ void dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *ca
   _cache_entry_clmem_flush_device(entry, devid);
 }
 #endif
+
+dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(dt_dev_pixelpipe_cache_t *cache,
+                                                                      void *host_ptr)
+{
+  if(!cache || !host_ptr) return NULL;
+
+  dt_pthread_mutex_lock(&cache->lock);
+  dt_pixel_cache_entry_t *entry = _cache_entry_for_host_ptr_locked(cache, host_ptr);
+  if(entry)
+    _non_thread_safe_cache_ref_count_entry(cache, entry->hash, TRUE, entry);
+  dt_pthread_mutex_unlock(&cache->lock);
+
+  return entry;
+}
 
 // Attempt to allocate from the arena; if fragmentation prevents it, evict LRU cache lines
 // until a sufficiently large contiguous run is available (or nothing remains to evict).
@@ -1179,6 +1174,40 @@ void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, con
 {
   dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, FALSE, cache_entry);
   dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, FALSE, cache_entry);
+}
+
+void *dt_dev_pixelpipe_cache_get_ref_unlocked(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
+                                              dt_pixel_cache_entry_t **cache_entry)
+{
+  // Realtime/display helper:
+  // 1. briefly try-read-lock to avoid acquiring while a writer is active,
+  // 2. unlock immediately,
+  // 3. keep only a refcount (no long-lived read lock).
+  // This avoids GUI-side lock contention while still providing a synchronized
+  // acquisition point for the pointer.
+  void *data = NULL;
+  if(!dt_dev_pixelpipe_cache_get_existing(cache, hash, &data, NULL, cache_entry)) return NULL;
+  if(!cache_entry || !*cache_entry) return NULL;
+
+  // Keep GUI responsive: never block on writer-held entries.
+  // tryrdlock returns 0 on success, non-zero if lock cannot be acquired now.
+  //
+  // If tryrdlock fails, still return a refcounted pointer in best-effort mode:
+  // realtime display prefers continuous refresh over strict read consistency.
+  // The caller already accepts transient tearing while the producer writes.
+  if(dt_pthread_rwlock_tryrdlock(&((*cache_entry)->lock)) == 0)
+    dt_pthread_rwlock_unlock(&((*cache_entry)->lock));
+
+  dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, TRUE, *cache_entry);
+  return data ? __builtin_assume_aligned(data, DT_CACHELINE_BYTES) : NULL;
+}
+
+void dt_dev_pixelpipe_cache_unref_unlocked(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
+                                           dt_pixel_cache_entry_t *cache_entry)
+{
+  // Companion of dt_dev_pixelpipe_cache_get_ref_unlocked():
+  // release the refcount without touching rwlocks.
+  dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, FALSE, cache_entry);
 }
 
 void dt_dev_pixelpipe_cache_unref_hash(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash)

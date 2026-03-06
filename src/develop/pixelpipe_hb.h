@@ -106,6 +106,12 @@ typedef struct dt_dev_pixelpipe_iop_t
   // bypass the cache for this module
   gboolean bypass_cache;
 
+  // Snapshot of the last output cacheline metadata for realtime runs.
+  // This is intentionally NOT used for bypass_cache mode:
+  // - bypass_cache outputs are disposable and flagged auto-destroy,
+  // - realtime outputs are long-lived enough to benefit from in-place rekey/reuse.
+  dt_pixel_cache_entry_t cache_entry;
+
   // Set to TRUE for modules that should mandatorily cache their output to the RAM
   // even when running on OpenCL. This is counter-productive for lightweight pixel ops
   // like scalar operations, due to memory copy overhead. Not for diffuse & sharpen
@@ -207,7 +213,7 @@ typedef struct dt_dev_pixelpipe_t
   // as soon as parameters changed. This allows long-running interactive
   // pipelines to keep producing "good enough" output until the flag is cleared.
   // Cleanup/teardown shutdown semantics are unchanged.
-  gboolean realtime;
+  dt_atomic_int realtime;
   // opencl enabled for this pixelpipe?
   int opencl_enabled;
   // opencl error detected?
@@ -242,6 +248,10 @@ typedef struct dt_dev_pixelpipe_t
   // that's because the sync_top option can't assume only one history
   // item was added since the last synchronization.
   uint64_t last_history_hash;
+  // pointer identity of the last synchronized history item.
+  // This complements `last_history_hash` for in-place top-entry updates where
+  // the same history node is reused and its hash changes.
+  gpointer last_history_item;
 
   // hash of the whole history stack at the time of synchonization
   // between pipe and history. This is a local copy of 

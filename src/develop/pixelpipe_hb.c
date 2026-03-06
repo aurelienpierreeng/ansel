@@ -196,6 +196,8 @@ static const char *_debug_type_to_string(const dt_iop_buffer_type_t type)
       return "float";
     case TYPE_UINT16:
       return "uint16";
+    case TYPE_UINT8:
+      return "uint8";
     case TYPE_UNKNOWN:
     default:
       return "unknown";
@@ -303,7 +305,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->processing = 0;
   pipe->running = 0;
   dt_atomic_set_int(&pipe->shutdown, FALSE);
-  pipe->realtime = FALSE;
+  dt_atomic_set_int(&pipe->realtime, FALSE);
   pipe->opencl_error = 0;
   pipe->tiling = 0;
   pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
@@ -323,6 +325,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
 
   pipe->status = DT_DEV_PIXELPIPE_DIRTY;
   pipe->last_history_hash = 0;
+  pipe->last_history_item = NULL;
   pipe->flush_cache = FALSE;
   pipe->timeout = 0;
 
@@ -333,12 +336,12 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
 void dt_dev_pixelpipe_set_realtime(dt_dev_pixelpipe_t *pipe, gboolean state)
 {
   if(!pipe) return;
-  pipe->realtime = state;
+  dt_atomic_set_int(&pipe->realtime, state ? TRUE : FALSE);
 }
 
 gboolean dt_dev_pixelpipe_get_realtime(const dt_dev_pixelpipe_t *pipe)
 {
-  return pipe ? pipe->realtime : FALSE;
+  return pipe ? dt_atomic_get_int((dt_atomic_int *)&pipe->realtime) : FALSE;
 }
 
 void dt_dev_pixelpipe_set_input(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, int32_t imgid, int width, int height,
@@ -483,6 +486,7 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     piece->global_hash = 0;
     piece->global_mask_hash = 0;
     piece->bypass_cache = FALSE;
+    piece->cache_entry.hash = (uint64_t)-1;
     piece->force_opencl_cache = TRUE;
     piece->process_cl_ready = 0;
     piece->process_tiling_ready = 0;
@@ -533,11 +537,11 @@ static gboolean _transform_for_blend(const dt_iop_module_t *const self, const dt
 }
 
 #define KILL_SWITCH_ABORT                                                                                         \
-  if(dt_atomic_get_int(&pipe->shutdown) && !dt_dev_pixelpipe_get_realtime(pipe))                                  \
+  if(dt_atomic_get_int(&pipe->shutdown))                                                                          \
   {                                                                                                               \
     if(*cl_mem_output != NULL)                                                                                    \
     {                                                                                                             \
-      _gpu_clear_buffer(cl_mem_output, NULL, NULL, IOP_CS_NONE);                                                   \
+      _gpu_clear_buffer(cl_mem_output, NULL, NULL, IOP_CS_NONE, FALSE);                                            \
     }                                                                                                             \
     dt_iop_nap(5000);                                                                                             \
     pipe->status = DT_DEV_PIXELPIPE_DIRTY;                                                                        \
@@ -547,13 +551,13 @@ static gboolean _transform_for_blend(const dt_iop_module_t *const self, const dt
 // Once we have a cache, stopping computation before full completion
 // has good chances of leaving it corrupted. So we invalidate it.
 #define KILL_SWITCH_AND_FLUSH_CACHE                                                                               \
-  if(dt_atomic_get_int(&pipe->shutdown) && !dt_dev_pixelpipe_get_realtime(pipe))                                  \
+  if(dt_atomic_get_int(&pipe->shutdown))                                                                          \
   {                                                                                                               \
     dt_dev_pixelpipe_cache_remove(darktable.pixelpipe_cache, hash, TRUE, output_entry);                           \
     *output = NULL;                                                                                               \
     if(*cl_mem_output != NULL)                                                                                    \
     {                                                                                                             \
-      _gpu_clear_buffer(cl_mem_output, NULL, NULL, IOP_CS_NONE);                                                   \
+      _gpu_clear_buffer(cl_mem_output, NULL, NULL, IOP_CS_NONE, FALSE);                                            \
     }                                                                                                             \
     dt_iop_nap(5000);                                                                                             \
     pipe->status = DT_DEV_PIXELPIPE_DIRTY;                                                                        \
@@ -712,8 +716,8 @@ static int _gpu_cpu_fallback_from_opencl_error(dt_dev_pixelpipe_t *pipe, dt_deve
       dt_print(DT_DEBUG_OPENCL,
                "[dev_pixelpipe] %s CPU fallback has no output buffer (cache allocation failed?)\n",
                module->name());
-      _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE);
-      _gpu_clear_buffer(&cl_mem_input_local, input_entry, NULL, IOP_CS_NONE);
+      _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE, pipe->realtime);
+      _gpu_clear_buffer(&cl_mem_input_local, input_entry, NULL, IOP_CS_NONE, pipe->realtime);
       return 1;
     }
   }
@@ -733,8 +737,8 @@ static int _gpu_cpu_fallback_from_opencl_error(dt_dev_pixelpipe_t *pipe, dt_deve
       dt_print(DT_DEBUG_OPENCL,
                "[dev_pixelpipe] %s CPU fallback has no input buffer (cache allocation failed?)\n",
                module->name());
-      _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE);
-      _gpu_clear_buffer(&cl_mem_input_local, input_entry, NULL, IOP_CS_NONE);
+      _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE, pipe->realtime);
+      _gpu_clear_buffer(&cl_mem_input_local, input_entry, NULL, IOP_CS_NONE, pipe->realtime);
       return 1;
     }
 
@@ -750,8 +754,8 @@ static int _gpu_cpu_fallback_from_opencl_error(dt_dev_pixelpipe_t *pipe, dt_deve
       dt_print(DT_DEBUG_OPENCL,
                "[dev_pixelpipe] %s couldn't resync GPU input to cache for CPU fallback\n",
                module->name());
-      _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE);
-      _gpu_clear_buffer(&cl_mem_input_local, input_entry, NULL, IOP_CS_NONE);
+      _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE, pipe->realtime);
+      _gpu_clear_buffer(&cl_mem_input_local, input_entry, NULL, IOP_CS_NONE, pipe->realtime);
       return 1;
     }
 
@@ -763,13 +767,13 @@ static int _gpu_cpu_fallback_from_opencl_error(dt_dev_pixelpipe_t *pipe, dt_deve
     dt_print(DT_DEBUG_OPENCL,
              "[dev_pixelpipe] %s CPU fallback has no input buffer (cache allocation failed?)\n",
              module->name());
-    _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE);
+    _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE, pipe->realtime);
     return 1;
   }
 
   // Release any OpenCL buffers from the failed GPU attempt before running the CPU module.
-  _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE);
-  _gpu_clear_buffer(&cl_mem_input_local, input_entry, NULL, IOP_CS_NONE);
+  _gpu_clear_buffer(cl_mem_output, output_entry, NULL, IOP_CS_NONE, pipe->realtime);
+  _gpu_clear_buffer(&cl_mem_input_local, input_entry, NULL, IOP_CS_NONE, pipe->realtime);
 
   return pixelpipe_process_on_CPU(pipe, dev, input, input_format, roi_in, output, out_format,
                                   roi_out, module, piece, tiling, pixelpipe_flow, input_entry);
@@ -800,7 +804,7 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, dt_d
       dt_print(DT_DEBUG_OPENCL,
                "[dev_pixelpipe] %s CPU fallback has no output buffer (cache allocation failed?)\n",
                module->name());
-      _gpu_clear_buffer(cl_mem_input, input_entry, NULL, input_cst_cl);
+      _gpu_clear_buffer(cl_mem_input, input_entry, NULL, input_cst_cl, pipe->realtime);
       return 1;
     }
   }
@@ -820,7 +824,7 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, dt_d
       dt_print(DT_DEBUG_OPENCL,
                "[dev_pixelpipe] %s CPU fallback has no input buffer (cache allocation failed?)\n",
                module->name());
-      _gpu_clear_buffer(cl_mem_input, input_entry, NULL, input_cst_cl);
+      _gpu_clear_buffer(cl_mem_input, input_entry, NULL, input_cst_cl, pipe->realtime);
       return 1;
     }
 
@@ -836,7 +840,7 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, dt_d
     return 1;
   }
 
-  _gpu_clear_buffer(cl_mem_input, input_entry, *input, input_cst_cl);
+  _gpu_clear_buffer(cl_mem_input, input_entry, *input, input_cst_cl, pipe->realtime);
 
   return pixelpipe_process_on_CPU(pipe, dev, *input, input_format, roi_in, output, out_format,
                                   roi_out, module, piece, tiling, pixelpipe_flow, input_entry);
@@ -950,13 +954,17 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
 	      goto error;
 
     // Allocate GPU memory for output: pinned memory if copying to cache, else device memory.
-    // Note: device memory is faster but can't be reused, we need to free it after use.
+    // In realtime mode both pinned and pure device images are eligible for cacheline-tied reuse.
     if(*cl_mem_output == NULL)
     {
       // Note : *output will be NULL unless piece->force_opencl_cache is TRUE
       // In this case, we start a pinned memory alloc. If NULL, it's device alloc.
       // *output decides which it is going to be.
-      *cl_mem_output = _gpu_init_buffer(pipe->devid, *output, roi_out, bpp, module, "output", output_entry, FALSE,
+      /* Realtime mode reuses host cachelines across runs; enable pinned OpenCL
+       * output reuse as well so we don't churn cl_mem objects each frame. */
+      const gboolean reuse_output_pinned = pipe->realtime;
+      *cl_mem_output = _gpu_init_buffer(pipe->devid, *output, roi_out, bpp, module, "output", output_entry,
+                                        reuse_output_pinned, pipe->realtime,
                                         &(*out_format)->cst, NULL);
       if(*cl_mem_output == NULL) goto error;
     }
@@ -1034,7 +1042,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   else if(piece->process_tiling_ready && input != NULL)
   {
     /* image is too big for direct opencl processing -> try to process image via tiling */
-    _gpu_clear_buffer(&cl_mem_input, input_entry, input, input_cst_cl);
+    _gpu_clear_buffer(&cl_mem_input, input_entry, input, input_cst_cl, pipe->realtime);
 
     // transform to module input colorspace
     dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, 0, TRUE, input_entry);
@@ -1095,7 +1103,7 @@ static int pixelpipe_process_on_GPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
   // device buffer for downstream GPU modules. This avoids stale/garbled host copies when a later CPU
   // stage (or the GUI) reads the cache without forcing GPU caching.
   // clean up OpenCL input memory and resync pipeline
-  _gpu_clear_buffer(&cl_mem_input, input_entry, input, input_cst_cl);
+  _gpu_clear_buffer(&cl_mem_input, input_entry, input, input_cst_cl, pipe->realtime);
 
   // Wait for kernels and copies to complete before accessing the cache again and releasing the locks
   // Don't rely solely on the OpenCL event list here: not all drivers/modules consistently track
@@ -1317,6 +1325,54 @@ static int _init_base_buffer(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *
   return err;
 }
 
+static gboolean _reuse_transient_output_cacheline(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                                                  const uint64_t new_hash, const size_t bufsize,
+                                                  void **output, dt_pixel_cache_entry_t **output_entry)
+{
+  /* Realtime-only fast path:
+   * reuse the previous output cacheline of this module piece by rekeying it
+   * from old_hash -> new_hash in place, instead of allocating a fresh output
+   * cacheline every run.
+   *
+   * We explicitly do not do this in bypass_cache mode, because bypass lines are
+   * meant to be consumed once and auto-destroyed immediately afterwards.
+   */
+  if(!output || !output_entry) return FALSE;
+  if(!pipe->realtime) return FALSE;
+
+  const uint64_t old_hash = piece->cache_entry.hash;
+  if(old_hash == 0 || old_hash == (uint64_t)-1 || old_hash == new_hash) return FALSE;
+  if(dt_pixel_cache_entry_get_size(&piece->cache_entry) != bufsize) return FALSE;
+
+  dt_pixel_cache_entry_t *entry = NULL;
+  if(!dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, old_hash, output, NULL, &entry) || !entry)
+    return FALSE;
+  if(dt_pixel_cache_entry_get_size(entry) != bufsize) return FALSE;
+
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, old_hash, TRUE, entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, old_hash, TRUE, entry);
+
+  void *data = dt_pixel_cache_entry_get_data(entry);
+  if(!data) data = dt_pixel_cache_alloc(darktable.pixelpipe_cache, entry);
+  if(!data)
+  {
+    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, old_hash, FALSE, entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, old_hash, FALSE, entry);
+    return FALSE;
+  }
+
+  if(dt_dev_pixelpipe_cache_rekey(darktable.pixelpipe_cache, old_hash, new_hash, entry) != 0)
+  {
+    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, old_hash, FALSE, entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, old_hash, FALSE, entry);
+    return FALSE;
+  }
+
+  *output = data;
+  *output_entry = entry;
+  return TRUE;
+}
+
 // recursive helper for process:
 static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void **output,
                                         void **cl_mem_output, dt_iop_buffer_dsc_t **out_format,
@@ -1361,6 +1417,10 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   const size_t bufsize = (size_t)bpp * roi_out.width * roi_out.height;
   uint64_t hash = dt_dev_pixelpipe_node_hash(pipe, piece, roi_out, pos);
   const gboolean bypass_cache = (module) ? piece->bypass_cache : FALSE;
+  /* Cache policy split:
+   * - bypass_cache: disposable outputs, marked auto-destroy after use.
+   * - realtime: keep outputs reusable and rekey-able across rapid runs.
+   */
 
   // 1) Fast-track:
   // If we have a cache entry for this hash, return it straight away,
@@ -1469,12 +1529,28 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // Immediately alloc output buffer only if we know we force the use of the cache.
   // Otherwise, it's handled in OpenCL fallbacks.
   dt_pixel_cache_entry_t *output_entry = NULL;
+  gboolean output_write_locked = FALSE;
+  gboolean new_entry = FALSE;
+
+  if(_reuse_transient_output_cacheline(pipe, piece, hash, bufsize, output, &output_entry))
+  {
+    // Reused transient entry is already write-locked and refcounted.
+    output_write_locked = TRUE;
+    new_entry = TRUE;
+  }
+
   gchar *type = dt_pixelpipe_get_pipe_name(pipe->type);
-  gchar *name = g_strdup_printf("module %s (%s) for pipe %s", module->op, module->multi_name, type);
-  const gboolean alloc_output = piece->force_opencl_cache;
-  gboolean new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
-                                                  alloc_output, output, out_format, &output_entry);
-  g_free(name);
+  if(!output_entry)
+  {
+    gchar *name = g_strdup_printf("module %s (%s) for pipe %s", module->op, module->multi_name, type);
+    const gboolean alloc_output = piece->force_opencl_cache;
+    new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
+                                           alloc_output, output, out_format, &output_entry);
+    g_free(name);
+    // Fresh entries are returned with write-lock held.
+    output_write_locked = new_entry;
+  }
+
   if(output_entry == NULL) 
   {
     // On error: release the cache line
@@ -1509,7 +1585,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     // There is no reason why this should happen except if another thread created an entry
     // with the same hash just before us and is not done writing in it.
     // But in this case, we could just wait for it to finish writing, and process nothin here.
-    dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, TRUE, output_entry);
+    if(!output_write_locked)
+    {
+      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, TRUE, output_entry);
+      output_write_locked = TRUE;
+    }
   }
 
   /* get tiling requirement of module */
@@ -1587,8 +1667,15 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // in case we get this buffer from the cache in the future, cache some stuff:
   **out_format = piece->dsc_out = pipe->dsc;
 
+  if(pipe->realtime && output_entry)
+  {
+    /* Keep a by-value snapshot of the current output cache entry metadata so
+     * the next realtime run can attempt in-place reuse/rekey. */
+    piece->cache_entry = *output_entry;
+  }
+
   // Release the output write lock before we potentially read it back for GUI sampling/debug.
-  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, FALSE, output_entry);
+  if(output_write_locked) dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, FALSE, output_entry);
 
   if(dev->gui_attached)
   {
@@ -1657,7 +1744,7 @@ void dt_dev_pixelpipe_disable_before(dt_dev_pixelpipe_t *pipe, const char *op)
 }
 
 #define KILL_SWITCH_PIPE                                                                                          \
-  if(dt_atomic_get_int(&pipe->shutdown) && !dt_dev_pixelpipe_get_realtime(pipe))                                  \
+  if(dt_atomic_get_int(&pipe->shutdown))                                                                          \
   {                                                                                                               \
     if(pipe->devid >= 0)                                                                                          \
     {                                                                                                             \
@@ -1698,14 +1785,17 @@ static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, dt_iop_roi
   // Keep exactly one cache reference to the last valid output ("backbuf") for display.
   // This prevents the cache entry from being evicted while still in use by the GUI,
   // without leaking references on repeated cache hits.
-  if(pipe->backbuf.hash == pipe->hash) return;
-
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, pipe->backbuf.hash);
+  const gboolean hash_changed = (pipe->backbuf.hash != pipe->hash);
+  if(hash_changed)
+    dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, pipe->backbuf.hash);
 
   int bpp = 0;
   if(entry && roi.width > 0 && roi.height > 0)
     bpp = (int)(dt_pixel_cache_entry_get_size(entry) / ((size_t)roi.width * (size_t)roi.height));
 
+  // Always refresh backbuf geometry/state, even when the cache key is unchanged.
+  // Realtime drawing can update pixels in-place in the same cacheline, so width/height/history
+  // must stay synchronized independently from key changes.
   dt_dev_set_backbuf(&pipe->backbuf, roi.width, roi.height, bpp, pipe->hash, pipe->history_hash);
 }
 
@@ -1754,7 +1844,8 @@ static void _set_opencl_cache(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
              && (piece->request_histogram & DT_REQUEST_ON));
 
       gboolean global_hist_on
-          = (_get_backuf(dev, piece->module->op)
+          = (!dt_dev_pixelpipe_get_realtime(pipe)
+             && _get_backuf(dev, piece->module->op)
              && pipe->type == DT_DEV_PIXELPIPE_PREVIEW);
 
       gboolean requested = piece->force_opencl_cache
@@ -1797,7 +1888,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
   // and history, and we still have an entry cache, abort now. Nothing to do.
   // For preview pipe, if using color pickers, we still need to traverse the pipeline.
   dt_pixel_cache_entry_t *entry = NULL;
-  if(!pipe->reentry && !pipe->bypass_cache 
+  if(!pipe->reentry && !pipe->bypass_cache
      && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe->hash, &buf, NULL, &entry)
      && _resync_global_histograms(pipe, dev))
   {
@@ -1874,7 +1965,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
 
 	  // The pipeline has copied cl_mem_out into buf, so we can release it now.
 	  #ifdef HAVE_OPENCL
-	    _gpu_clear_buffer(&cl_mem_out, NULL, NULL, IOP_CS_NONE);
+	    _gpu_clear_buffer(&cl_mem_out, NULL, NULL, IOP_CS_NONE, FALSE);
 	  #endif
 
     // get status summary of opencl queue by checking the eventlist
@@ -1906,7 +1997,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
 
       _print_opencl_errors(opencl_error, pipe);
     }
-    else if(!dt_atomic_get_int(&pipe->shutdown) || dt_dev_pixelpipe_get_realtime(pipe))
+    else if(!dt_atomic_get_int(&pipe->shutdown))
     {
       // No opencl errors, no killswitch triggered: we should have a valid output buffer now.
       dt_pixel_cache_entry_t *final_entry = NULL;

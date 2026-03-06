@@ -158,6 +158,7 @@ static void _darkroom_cancel_image_load_job(void);
 static void _dev_change_image(dt_view_t *self, const int32_t imgid);
 
 static int _change_scaling(dt_develop_t *dev, const float x, const float y, const float new_scaling);
+static void _release_expose_source_caches(void);
 
 typedef struct dt_darkroom_image_load_job_t
 {
@@ -217,6 +218,7 @@ uint32_t view(const dt_view_t *self)
 void cleanup(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
+  _release_expose_source_caches();
 
   // unref the grid lines popover if needed
   if(darktable.view_manager->guides_popover) g_object_unref(darktable.view_manager->guides_popover);
@@ -411,30 +413,439 @@ static void _render_iso12646(cairo_t *cr, int width, int height, int border)
   cairo_fill(cr);
 }
 
-static int32_t _render_image(cairo_t *cr, cairo_surface_t *surface, int width, int height, dt_develop_t *dev)
+/* Debug-only darkroom expose mode:
+ * - no persistent surface locks,
+ * - no fallback cache,
+ * - no preview substitution,
+ * - only main backbuffer if currently available.
+ *
+ * Set to 1 for baseline debugging when troubleshooting display regressions. */
+#ifndef DARKROOM_EXPOSE_DUMB_DEBUG
+#define DARKROOM_EXPOSE_DUMB_DEBUG 0
+#endif
+
+#if DARKROOM_EXPOSE_DUMB_DEBUG
+static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const int width, const int height,
+                                          const int border, const dt_aligned_pixel_t bg_color)
 {
-  cairo_rectangle(cr, 0, 0, width, height);
+  if(!cr || !dev || !dev->pipe) return FALSE;
+
+  cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
+  cairo_paint(cr);
+
+  if(!dt_dev_pixelpipe_is_backbufer_valid(dev->pipe, dev)) return FALSE;
+  const uint64_t hash = dev->pipe->backbuf.hash;
+  if(hash == (uint64_t)-1) return FALSE;
+
+  dt_pixel_cache_entry_t *entry = NULL;
+  void *data = dt_dev_pixelpipe_cache_get_ref_unlocked(darktable.pixelpipe_cache, hash, &entry);
+  if(!data || !entry)
+  {
+    if(entry) dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
+    return FALSE;
+  }
+
+  const int bw = (int)dev->pipe->backbuf.width;
+  const int bh = (int)dev->pipe->backbuf.height;
+  if(bw <= 0 || bh <= 0)
+  {
+    dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
+    return FALSE;
+  }
+
+  const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, bw);
+  const size_t required_size = (size_t)stride * (size_t)bh;
+  const size_t entry_size = dt_pixel_cache_entry_get_size(entry);
+  if(entry_size < required_size || dt_pixel_cache_entry_get_data(entry) != data)
+  {
+    dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
+    return FALSE;
+  }
+
+  cairo_surface_t *surface = cairo_image_surface_create_for_data((unsigned char *)data, CAIRO_FORMAT_RGB24,
+                                                                  bw, bh, stride);
+  if(!surface || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
+  {
+    if(surface) cairo_surface_destroy(surface);
+    dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
+    return FALSE;
+  }
+
+  int wd = bw / darktable.gui->ppd;
+  int ht = bh / darktable.gui->ppd;
+  cairo_translate(cr, .5f * (width - wd), .5f * (height - ht));
+  if(dev->iso_12646.enabled) _render_iso12646(cr, wd, ht, border);
+  cairo_surface_set_device_scale(surface, darktable.gui->ppd, darktable.gui->ppd);
+  cairo_rectangle(cr, 0, 0, wd, ht);
   cairo_set_source_surface(cr, surface, 0, 0);
   cairo_fill(cr);
+
   cairo_surface_destroy(surface);
-  return dev->image_storage.id;
+  dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
+  return TRUE;
+}
+#endif
+
+typedef struct darkroom_locked_surface_t
+{
+  uint64_t hash;
+  int width;
+  int height;
+  gboolean read_locked;
+  void *data;
+  struct dt_pixel_cache_entry_t *entry;
+  cairo_surface_t *surface;
+} darkroom_locked_surface_t;
+
+static darkroom_locked_surface_t _darkroom_main_locked = { .hash = (uint64_t)-1 };
+static darkroom_locked_surface_t _darkroom_preview_locked = { .hash = (uint64_t)-1 };
+static cairo_surface_t *_darkroom_preview_fallback_surface = NULL;
+static int32_t _darkroom_preview_fallback_imgid = UNKNOWN_IMAGE;
+static uint64_t _darkroom_preview_fallback_zoom_hash = 0;
+static uint64_t _darkroom_preview_fallback_backbuf_hash = 0;
+static int _darkroom_preview_fallback_width = 0;
+static int _darkroom_preview_fallback_height = 0;
+
+static void _release_locked_surface(darkroom_locked_surface_t *locked)
+{
+  if(!locked) return;
+
+  if(locked->surface)
+  {
+    cairo_surface_destroy(locked->surface);
+    locked->surface = NULL;
+  }
+
+  if(locked->entry && locked->hash != (uint64_t)-1)
+  {
+    if(locked->read_locked)
+      dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, locked->hash, locked->entry);
+    else
+      dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, locked->hash, locked->entry);
+  }
+
+  locked->entry = NULL;
+  locked->data = NULL;
+  locked->read_locked = FALSE;
+  locked->hash = (uint64_t)-1;
+  locked->width = 0;
+  locked->height = 0;
 }
 
-static cairo_surface_t *_get_surface(dt_dev_pixelpipe_t *pipe, int *width, int *height)
+static void _release_preview_fallback_surface(void)
 {
-  struct dt_pixel_cache_entry_t *cache_entry;
-  void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, pipe->backbuf.hash, 
-                                                    &cache_entry, darktable.develop, pipe);
-  if(!data) return NULL;
+  if(_darkroom_preview_fallback_surface)
+  {
+    cairo_surface_destroy(_darkroom_preview_fallback_surface);
+    _darkroom_preview_fallback_surface = NULL;
+  }
 
-  *width = pipe->backbuf.width;
-  *height = pipe->backbuf.height;
-  const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, *width);
-  cairo_surface_t *surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, *width, *height, stride);
+  _darkroom_preview_fallback_imgid = UNKNOWN_IMAGE;
+  _darkroom_preview_fallback_zoom_hash = 0;
+  _darkroom_preview_fallback_backbuf_hash = 0;
+  _darkroom_preview_fallback_width = 0;
+  _darkroom_preview_fallback_height = 0;
+}
 
-  dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, pipe->backbuf.hash, cache_entry);
+static void _release_expose_source_caches(void)
+{
+  _release_locked_surface(&_darkroom_main_locked);
+  _release_locked_surface(&_darkroom_preview_locked);
+  _release_preview_fallback_surface();
+}
 
-  return surface;
+static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, darkroom_locked_surface_t *locked,
+                                   const gboolean keep_previous_on_fail, const gboolean lock_read)
+{
+  if(!dev || !pipe || !locked) return FALSE;
+
+  const uint64_t hash = pipe->backbuf.hash;
+  if(hash == (uint64_t)-1) return keep_previous_on_fail && (locked->surface != NULL);
+
+  /* Fast-path reuse is only valid if the cacheline identity/data pointer are
+   * still the same behind the hash key. This avoids reusing stale cairo views
+   * when an entry is recreated or replaced under the same key. */
+  dt_pixel_cache_entry_t *live_entry = NULL;
+  void *live_data = NULL;
+  if(locked->surface && locked->hash == hash
+     && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, hash, &live_data, NULL, &live_entry)
+     && live_entry == locked->entry && live_data == locked->data)
+  {
+    locked->width = pipe->backbuf.width;
+    locked->height = pipe->backbuf.height;
+    return TRUE;
+  }
+
+  struct dt_pixel_cache_entry_t *entry = NULL;
+  /* `lock_read == FALSE` is the realtime path:
+   * keep only a refcount on the cacheline (no read lock) to avoid GUI stalls.
+   * `lock_read == TRUE` keeps strict consistency for non-realtime display. */
+  void *data = lock_read
+                   ? dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, hash, &entry, dev, pipe)
+                   : dt_dev_pixelpipe_cache_get_ref_unlocked(darktable.pixelpipe_cache, hash, &entry);
+  if(!data)
+  {
+    /* Keep previous frame only while waiting for a *different* target hash.
+     * If requested hash equals the currently locked one but cache lookup fails,
+     * the cached line was likely flushed/invalidated: drop stale lock so the
+     * line can be recreated and displayed again. */
+    if(keep_previous_on_fail && locked->surface && locked->hash != hash) return TRUE;
+    _release_locked_surface(locked);
+    return FALSE;
+  }
+
+  const int width = pipe->backbuf.width;
+  const int height = pipe->backbuf.height;
+  const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, width);
+  const size_t required_size = (size_t)stride * (size_t)height;
+  const size_t entry_size = dt_pixel_cache_entry_get_size(entry);
+  if(width <= 0 || height <= 0 || entry_size < required_size || dt_pixel_cache_entry_get_data(entry) != data)
+  {
+    if(lock_read)
+      dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, hash, entry);
+    else
+      dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
+    if(keep_previous_on_fail && locked->surface && locked->hash != hash) return TRUE;
+    _release_locked_surface(locked);
+    return FALSE;
+  }
+
+  if(locked->surface && locked->data == data && locked->width == width && locked->height == height)
+  {
+    if(locked->entry && locked->hash != (uint64_t)-1)
+    {
+      if(locked->read_locked)
+        dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, locked->hash, locked->entry);
+      else
+        dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, locked->hash, locked->entry);
+    }
+    locked->hash = hash;
+    locked->entry = entry;
+    locked->data = data;
+    locked->read_locked = lock_read;
+    return TRUE;
+  }
+
+  cairo_surface_t *surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, width, height, stride);
+  if(!surface || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
+  {
+    if(surface) cairo_surface_destroy(surface);
+    if(lock_read)
+      dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, hash, entry);
+    else
+      dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
+    if(keep_previous_on_fail && locked->surface) return TRUE;
+    _release_locked_surface(locked);
+    return FALSE;
+  }
+
+  _release_locked_surface(locked);
+  locked->hash = hash;
+  locked->width = width;
+  locked->height = height;
+  locked->data = data;
+  locked->read_locked = lock_read;
+  locked->entry = entry;
+  locked->surface = surface;
+  return TRUE;
+}
+
+static gboolean _render_main_locked_surface(cairo_t *cr, dt_develop_t *dev, darkroom_locked_surface_t *locked,
+                                            const int width, const int height, const int border,
+                                            const dt_aligned_pixel_t bg_color)
+{
+  if(!cr || !dev || !locked || !locked->surface) return FALSE;
+
+  cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
+  cairo_paint(cr);
+
+  int wd = locked->width;
+  int ht = locked->height;
+  if(wd <= 0 || ht <= 0) return FALSE;
+
+  wd /= darktable.gui->ppd;
+  ht /= darktable.gui->ppd;
+  cairo_translate(cr, .5f * (width - wd), .5f * (height - ht));
+
+  if(dev->iso_12646.enabled) _render_iso12646(cr, wd, ht, border);
+
+  cairo_surface_set_device_scale(locked->surface, darktable.gui->ppd, darktable.gui->ppd);
+  cairo_rectangle(cr, 0, 0, wd, ht);
+  cairo_set_source_surface(cr, locked->surface, 0, 0);
+  cairo_fill(cr);
+
+  return TRUE;
+}
+
+static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int width, const int height, const int border,
+                                                const dt_aligned_pixel_t bg_color, const uint64_t zoom_hash)
+{
+  if(!_darkroom_preview_locked.surface) return FALSE;
+  if(width <= 0 || height <= 0) return FALSE;
+
+  if(!_darkroom_preview_fallback_surface
+     || _darkroom_preview_fallback_width != width
+     || _darkroom_preview_fallback_height != height)
+  {
+    _release_preview_fallback_surface();
+    _darkroom_preview_fallback_surface = dt_cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
+    if(!_darkroom_preview_fallback_surface) return FALSE;
+    _darkroom_preview_fallback_width = width;
+    _darkroom_preview_fallback_height = height;
+  }
+
+  cairo_t *cr = cairo_create(_darkroom_preview_fallback_surface);
+  cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+
+  cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
+  cairo_paint(cr);
+
+  const int wd = _darkroom_preview_locked.width;
+  const int ht = _darkroom_preview_locked.height;
+
+  if(dev->iso_12646.enabled)
+  {
+    // Preview backbuffer is unclipped: draw ISO frame over the ROI-projected region.
+    const float scale = dt_dev_get_fit_scale(dev);
+    const float roi_wd = fminf(wd * scale, dev->roi.width);
+    const float roi_ht = fminf(ht * scale, dev->roi.height);
+
+    cairo_save(cr);
+    cairo_translate(cr, .5f * (width - roi_wd), .5f * (height - roi_ht));
+    _render_iso12646(cr, roi_wd, roi_ht, border);
+    cairo_restore(cr);
+  }
+
+  cairo_surface_set_device_scale(_darkroom_preview_locked.surface, 1., 1.);
+  dt_dev_clip_roi(dev, cr, width, height);
+  dt_dev_rescale_roi(dev, cr, width, height);
+  cairo_rectangle(cr, 0, 0, wd, ht);
+  cairo_set_source_surface(cr, _darkroom_preview_locked.surface, 0, 0);
+  cairo_fill(cr);
+  cairo_destroy(cr);
+
+  _darkroom_preview_fallback_imgid = dev->image_storage.id;
+  _darkroom_preview_fallback_zoom_hash = zoom_hash;
+  _darkroom_preview_fallback_backbuf_hash = dev->preview_pipe->backbuf.hash;
+  return TRUE;
+}
+
+static gboolean _render_preview_fallback_surface(cairo_t *cr)
+{
+  if(!cr || !_darkroom_preview_fallback_surface) return FALSE;
+  cairo_set_source_surface(cr, _darkroom_preview_fallback_surface, 0, 0);
+  cairo_paint(cr);
+  return TRUE;
+}
+
+static inline void _set_main_render_success(const dt_develop_t *dev, const uint64_t hash, const uint64_t zoom_hash,
+                                            uint64_t *main_hash, uint64_t *main_zoom_hash,
+                                            int32_t *image_surface_imgid)
+{
+  if(!dev || !main_hash || !main_zoom_hash || !image_surface_imgid) return;
+  *image_surface_imgid = dev->image_storage.id;
+  *main_hash = hash;
+  *main_zoom_hash = zoom_hash;
+}
+
+static inline gboolean _preview_fallback_roi_valid(const dt_develop_t *dev, const int width, const int height,
+                                                   const uint64_t zoom_hash)
+{
+  return _darkroom_preview_fallback_surface
+         && _darkroom_preview_fallback_imgid == dev->image_storage.id
+         && _darkroom_preview_fallback_zoom_hash == zoom_hash
+         && _darkroom_preview_fallback_width == width
+         && _darkroom_preview_fallback_height == height;
+}
+
+static gboolean _render_realtime_main(cairo_t *cr, dt_develop_t *dev, const int width, const int height,
+                                      const int border, const dt_aligned_pixel_t bg_color, const uint64_t zoom_hash,
+                                      uint64_t *main_hash, uint64_t *main_zoom_hash, int32_t *image_surface_imgid)
+{
+  /* Realtime policy:
+   * - prefer the current main backbuffer by hash,
+   * - fetch by refcount-only (no read lock),
+   * - if fetch fails, caller may keep showing the previous locked main surface.
+   * Reaching FALSE here means "no new main snapshot available right now". */
+  if(!_lock_pipe_surface(dev, dev->pipe, &_darkroom_main_locked, TRUE, FALSE) || !_darkroom_main_locked.surface) return FALSE;
+
+  if(!_render_main_locked_surface(cr, dev, &_darkroom_main_locked, width, height, border, bg_color)) return FALSE;
+
+  _set_main_render_success(dev, _darkroom_main_locked.hash, zoom_hash, main_hash, main_zoom_hash, image_surface_imgid);
+  return TRUE;
+}
+
+static gboolean _render_nonrealtime_main(cairo_t *cr, dt_develop_t *dev, const int width, const int height,
+                                         const int border, const dt_aligned_pixel_t bg_color, const uint64_t zoom_hash,
+                                         const uint64_t main_hash, const uint64_t main_zoom_hash,
+                                         uint64_t *out_main_hash, uint64_t *out_main_zoom_hash,
+                                         int32_t *image_surface_imgid)
+{
+  /* Non-realtime strict validity gate for main:
+   * - history hash must match current develop history,
+   * - and either backbuffer hash changed or zoom hash is unchanged.
+   * This ensures zoom/pan updates fall back to preview placeholder while
+   * waiting for a ROI-matching main backbuffer. */
+  const gboolean main_valid_now = dt_dev_pixelpipe_is_backbufer_valid(dev->pipe, dev)
+                               && (main_hash != dev->pipe->backbuf.hash || main_zoom_hash == zoom_hash);
+  if(!main_valid_now) return FALSE;
+  if(!_lock_pipe_surface(dev, dev->pipe, &_darkroom_main_locked, TRUE, TRUE) || !_darkroom_main_locked.surface) return FALSE;
+  if(!_render_main_locked_surface(cr, dev, &_darkroom_main_locked, width, height, border, bg_color)) return FALSE;
+
+  _set_main_render_success(dev, _darkroom_main_locked.hash, zoom_hash,
+                           out_main_hash, out_main_zoom_hash, image_surface_imgid);
+  return TRUE;
+}
+
+static gboolean _render_nonrealtime_preview(cairo_t *cr, dt_develop_t *dev, const gboolean has_preview_image,
+                                            const int width, const int height, const int border,
+                                            const dt_aligned_pixel_t bg_color, const uint64_t zoom_hash,
+                                            int32_t *image_surface_imgid)
+{
+  /* Preview fallback is intentionally tiered:
+   * Case A: cached preview fallback surface is ROI-valid and same preview hash.
+   *         Meaning: we already have the exact ROI-scaled placeholder for now.
+   * Case B: preview pipe is valid and lockable, rebuild fallback from preview.
+   *         Meaning: preview pipeline has fresher data for this ROI.
+   * Case C: preview cache still ROI-valid but hash changed/unavailable.
+   *         Meaning: keep old placeholder instead of flashing background.
+   * Reaching FALSE means there is no usable preview candidate for this frame. */
+  const gboolean preview_cache_valid = _preview_fallback_roi_valid(dev, width, height, zoom_hash);
+
+  if(has_preview_image
+     && preview_cache_valid
+     && _darkroom_preview_fallback_backbuf_hash == dev->preview_pipe->backbuf.hash)
+  {
+    if(!_render_preview_fallback_surface(cr)) return FALSE;
+    *image_surface_imgid = dev->image_storage.id;
+    return TRUE;
+  }
+
+  if(has_preview_image
+     && _lock_pipe_surface(dev, dev->preview_pipe, &_darkroom_preview_locked, TRUE, TRUE)
+     && _build_preview_fallback_surface(dev, width, height, border, bg_color, zoom_hash))
+  {
+    if(!_render_preview_fallback_surface(cr)) return FALSE;
+    *image_surface_imgid = dev->image_storage.id;
+    return TRUE;
+  }
+
+  /* If preview backbuf is temporarily invalid (pipeline still recomputing),
+   * reuse the last locked preview surface to rebuild a fresh ROI placeholder
+   * at current zoom/pan. This keeps navigation responsive instead of freezing
+   * on the previous main frame. */
+  if(_darkroom_preview_locked.surface
+     && _build_preview_fallback_surface(dev, width, height, border, bg_color, zoom_hash))
+  {
+    if(!_render_preview_fallback_surface(cr)) return FALSE;
+    *image_surface_imgid = dev->image_storage.id;
+    return TRUE;
+  }
+
+  if(!preview_cache_valid) return FALSE;
+  if(!_render_preview_fallback_surface(cr)) return FALSE;
+  *image_surface_imgid = dev->image_storage.id;
+  return TRUE;
 }
 
 static void _paint_all(cairo_t *cri, cairo_t *cr, cairo_surface_t *image_surface)
@@ -461,14 +872,23 @@ void expose(
   dt_develop_t *dev = (dt_develop_t *)self->data;
   const int32_t border = dev->roi.border_size;
 
+#if DARKROOM_EXPOSE_DUMB_DEBUG
+  dt_aligned_pixel_t bg_color_dbg;
+  if(dev->iso_12646.enabled)
+    _colormanage_ui_color(50., 0., 0., bg_color_dbg);
+  else
+    _colormanage_ui_color((float)dt_conf_get_int("display/brightness"), 0., 0., bg_color_dbg);
+  _render_main_direct_debug(cri, dev, width, height, border, bg_color_dbg);
+  cairo_restore(cri);
+  return;
+#endif
+
   static int image_surface_width = 0;
   static int image_surface_height = 0;
   static int32_t image_surface_imgid = UNKNOWN_IMAGE;
+  static gboolean image_surface_has_main = FALSE;
+  static uint64_t main_zoom_hash = 0;
   static uint64_t main_hash = 0;
-  static uint64_t main_history_hash = 0;
-  static uint64_t preview_hash = 0;
-  static uint64_t preview_history_hash = 0;
-  static uint64_t zoom_hash = 0;
 
   const uint64_t new_zoom_hash = dt_hash(5381, (char *)&dev->roi, sizeof(dev->roi));
 
@@ -477,13 +897,35 @@ void expose(
   // 2. buffer exists
   // 3. ROI (size and zoom) are ok -> that's especially important to limit glitches 
   // If all these conditions are not met, try to keep the previous image_surface unchanged
-  const gboolean has_main_image = dt_dev_pixelpipe_is_backbufer_valid(dev->pipe, dev);
+  const gboolean is_realtime = dt_dev_pixelpipe_get_realtime(dev->pipe);
   const gboolean has_preview_image = dt_dev_pixelpipe_is_backbufer_valid(dev->preview_pipe, dev);
+
+  /* In standard mode, drop stale locked cacheline handles as soon as a pipe
+   * becomes history-invalid. Keeping them around pins old entries across
+   * enable/disable, cache clears and other graph updates. */
+  if(!is_realtime && !dt_dev_pixelpipe_is_backbufer_valid(dev->pipe, dev))
+    _release_locked_surface(&_darkroom_main_locked);
+  if(!dt_dev_pixelpipe_is_backbufer_valid(dev->preview_pipe, dev))
+    _release_locked_surface(&_darkroom_preview_locked);
+
+  /* Explicit cache reset/flush path: if backbuffer hash is invalidated, drop
+   * any held cacheline handles so new entries can be acquired on next frame. */
+  if(dev->pipe->backbuf.hash == (uint64_t)-1) _release_locked_surface(&_darkroom_main_locked);
+  if(dev->preview_pipe->backbuf.hash == (uint64_t)-1) _release_locked_surface(&_darkroom_preview_locked);
+
+  if(image_surface_imgid != dev->image_storage.id && image_surface_imgid != UNKNOWN_IMAGE)
+  {
+    /* New image loaded while static expose caches still point to old image ids.
+     * Reaching this case means every locked source/fallback must be dropped. */
+    _release_expose_source_caches();
+    main_hash = 0;
+    main_zoom_hash = 0;
+    image_surface_has_main = FALSE;
+  }
 
   if(image_surface_width != width 
     || image_surface_height != height 
-    || dev->image_surface == NULL 
-    || image_surface_imgid != dev->image_storage.id)
+    || dev->image_surface == NULL)
   {
     // create double-buffered image to draw on, to make modules draw more fluently.
     image_surface_width = width;
@@ -491,9 +933,12 @@ void expose(
     if(dev->image_surface) cairo_surface_destroy(dev->image_surface);
     dev->image_surface = dt_cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
     image_surface_imgid = UNKNOWN_IMAGE; // invalidate old stuff
+    image_surface_has_main = FALSE;
+    /* Widget size or image id changed: ROI-scaled preview fallback is no longer
+     * geometrically valid and must be rebuilt on demand. */
+    _release_preview_fallback_surface();
   }
 
-  cairo_surface_t *surface;
   cairo_t *cr = cairo_create(dev->image_surface);
 
   // user param is Lab lightness/brightness (which is they same for greys)
@@ -505,101 +950,55 @@ void expose(
 
   cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
 
-  if(has_main_image)
+  gboolean have_drawn = FALSE;
+  gboolean drawn_from_main = FALSE;
+
+  if(is_realtime)
   {
-    if(main_hash != dev->pipe->backbuf.hash || main_history_hash != dev->pipe->backbuf.history_hash)
-    {
-      // If we have a valid image use it, except if it's still the same as previously.
-      // In this case, we will reuse the buffered surface.
-
-      // Paint background color
-      cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
-      cairo_paint(cr);
-
-      // draw image
-      int wd = 0, ht = 0;
-      surface = _get_surface(dev->pipe, &wd, &ht);
-
-      wd /= darktable.gui->ppd;
-      ht /= darktable.gui->ppd;
-      cairo_translate(cr, .5f * (width - wd), .5f * (height - ht));
-      
-      if(dev->iso_12646.enabled)
-        _render_iso12646(cr, wd, ht, border);
-
-      if(surface)
-      {
-        // Tell Cairo this surface is possibly HiDPI
-        cairo_surface_set_device_scale(surface, darktable.gui->ppd, darktable.gui->ppd);
-        image_surface_imgid = _render_image(cr, surface, wd, ht, dev);
-        main_hash = dev->pipe->backbuf.hash;
-        main_history_hash = dev->pipe->backbuf.history_hash;
-      }
-    }
-    _paint_all(cri, cr, dev->image_surface);
-  }
-  else if(has_preview_image)
-  {
-    if(preview_hash != dev->preview_pipe->backbuf.hash
-      || preview_history_hash != dev->preview_pipe->backbuf.history_hash
-      || zoom_hash != new_zoom_hash)
-    {
-      // Cases in which we want the refresh placeholder preview in the surface :
-      // 1. main image needs a refresh but we have no candidate
-      // 2. the buffered surface still contains an outdated main image
-      // 3. the buffered surface contains an outdated preview placeholder
-
-      // Paint background color
-      cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
-      cairo_paint(cr);
-
-      // draw preview
-      int wd = 0, ht = 0;
-      surface = _get_surface(dev->preview_pipe, &wd, &ht);
-
-      if(dev->iso_12646.enabled)
-      {
-        // Because the preview pipe renders an unclipped image, we need to find
-        // the preview's ROI (Region of Interest) dimensions in widget space, then
-        // draw a white rectangle around it.
-        const float scale = dt_dev_get_fit_scale(dev);
-        const float roi_wd = fminf(wd * scale, dev->roi.width);
-        const float roi_ht = fminf(ht * scale, dev->roi.height);
-        
-        cairo_save(cr);
-
-        // Position surface at preview's ROI top-left corner.
-        cairo_translate(cr, .5f * (width - roi_wd),
-                            .5f * (height - roi_ht));
-
-        _render_iso12646(cr, roi_wd, roi_ht, border);
-
-        cairo_restore(cr);
-      }
-
-      // clip to image area only
-      if(surface)
-      {
-        cairo_surface_set_device_scale(surface, 1., 1.);
-        dt_dev_clip_roi(dev, cr, width, height);
-        dt_dev_rescale_roi(dev, cr, width, height);
-        image_surface_imgid = _render_image(cr, surface, wd, ht, dev);
-        preview_hash = dev->preview_pipe->backbuf.hash;
-        preview_history_hash = dev->preview_pipe->backbuf.history_hash;
-        zoom_hash = new_zoom_hash;
-      }
-    }
-    _paint_all(cri, cr, dev->image_surface);
-  }
-  else if(dev->image_surface && image_surface_imgid == dev->image_storage.id)
-  {
-    // try to keep buffered image_surface from previous run
-    _paint_all(cri, cr, dev->image_surface);
+    /* Realtime mode: never switch to preview placeholder.
+     * Keep showing the current or last-known main backbuffer only. */
+    have_drawn = _render_realtime_main(cr, dev, width, height, border, bg_color, new_zoom_hash,
+                                       &main_hash, &main_zoom_hash, &image_surface_imgid);
+    drawn_from_main = have_drawn;
   }
   else
   {
-    // nothing to draw
-    return;
+    /* Normal mode:
+     * - first attempt strict-valid main,
+     * - then preview fallback tiers. */
+    have_drawn = _render_nonrealtime_main(cr, dev, width, height, border, bg_color, new_zoom_hash,
+                                          main_hash, main_zoom_hash,
+                                          &main_hash, &main_zoom_hash, &image_surface_imgid);
+    drawn_from_main = have_drawn;
+    if(!have_drawn)
+      have_drawn = _render_nonrealtime_preview(cr, dev, has_preview_image, width, height, border, bg_color,
+                                               new_zoom_hash, &image_surface_imgid);
+  }
+
+  if(have_drawn) image_surface_has_main = drawn_from_main;
+
+  if(!have_drawn)
+  {
+    const gboolean can_reuse_last_surface = (!is_realtime || image_surface_has_main);
+    if(dev->image_surface && image_surface_imgid == dev->image_storage.id && can_reuse_last_surface)
+    {
+      /* No fresh source for this frame, but keep last composed frame to avoid
+       * flicker/blanking while pipelines catch up. */
+      _paint_all(cri, cr, dev->image_surface);
+    }
+    else
+    {
+      /* Cold-start/no valid frame at all: only background can be shown. */
+      cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
+      cairo_paint(cr);
+      cairo_destroy(cr);
+      cairo_restore(cri);
+      return;
+    }
+  }
+  else
+  {
+    _paint_all(cri, cr, dev->image_surface);
   }
 
   cairo_restore(cri);
@@ -2165,6 +2564,7 @@ void leave(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
 
+  _release_expose_source_caches();
   if(dev->image_surface) cairo_surface_destroy(dev->image_surface);
   dev->image_surface = NULL;
 

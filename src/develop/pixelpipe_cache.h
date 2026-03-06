@@ -29,12 +29,13 @@
 #pragma once
 
 #include "common/memory_arena.h"
+#include "common/atomic.h"
+#include "develop/format.h"
 #include <inttypes.h>
 #include <glib.h>
 #include <stddef.h>
 
 struct dt_dev_pixelpipe_t;
-struct dt_iop_buffer_dsc_t;
 struct dt_iop_roi_t;
 
 
@@ -67,7 +68,27 @@ typedef struct dt_dev_pixelpipe_cache_t
 dt_dev_pixelpipe_cache_t *dt_dev_pixelpipe_cache_init(size_t max_memory);
 void dt_dev_pixelpipe_cache_cleanup(dt_dev_pixelpipe_cache_t *cache);
 
-typedef struct dt_pixel_cache_entry_t dt_pixel_cache_entry_t;
+/* Public for by-value snapshots in pipeline pieces (for example realtime
+ * output cacheline reuse/rekey). Ownership still belongs to pixelpipe_cache.
+ * External code must treat this as metadata only and never free internals. */
+typedef struct dt_pixel_cache_entry_t
+{
+  uint64_t hash;            // unique identifier of the entry
+  void *data;               // buffer holding pixels... or anything else
+  size_t size;              // size of the data buffer
+  dt_iop_buffer_dsc_t dsc;  // metadata of the data buffer
+  int64_t age;              // timestamp of creation. Oldest entry will be the first freed if it's not locked
+  char *name;               // name of the cache entry, for debugging
+  int id;                   // id of the pipeline owning this entry. Used when flushing, a pipe can only flush its own.
+  dt_atomic_int refcount;   // reference count for the cache entry, to avoid freeing it while still in use
+  dt_pthread_rwlock_t lock; // read/write lock to avoid threads conflicts
+  gboolean auto_destroy;    // TRUE for auto-destruction the next time it's used. Used for short-lived entries (transient states).
+  gboolean external_alloc;  // TRUE for external buffers tracked in the cache
+  int hits;                 // number of times this entry was hit (utility score)
+  dt_dev_pixelpipe_cache_t *cache; // reference to parent cache object
+  GList *cl_mem_list;       // reusable OpenCL pinned buffers tied to this entry
+  dt_pthread_mutex_t cl_mem_lock;
+} dt_pixel_cache_entry_t;
 
 /**
  * @brief Set the current module name for cache diagnostics (thread-local).
@@ -190,6 +211,25 @@ void dt_dev_pixelpipe_cache_put_pinned_image(dt_dev_pixelpipe_cache_t *cache, vo
 void dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
                                                     struct dt_pixel_cache_entry_t *entry_hint, int devid);
 #endif
+
+/**
+ * @brief Resolve and retain the cache entry owning a host pointer.
+ *
+ * @details
+ * This helper searches both regular and external pixelpipe cache tables for
+ * the entry whose host buffer pointer exactly matches `host_ptr`.
+ *
+ * On success it increments the entry refcount before returning, so callers can
+ * safely use the entry across asynchronous OpenCL operations.
+ * Release it with:
+ * `dt_dev_pixelpipe_cache_ref_count_entry(cache, entry->hash, FALSE, entry)`.
+ *
+ * @param cache Pixelpipe cache.
+ * @param host_ptr Host buffer pointer to resolve.
+ * @return dt_pixel_cache_entry_t* Owning cache entry with retained refcount, or NULL.
+ */
+struct dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(dt_dev_pixelpipe_cache_t *cache,
+                                                                              void *host_ptr);
 
 /** Peek the host data pointer of a cache entry without allocating. */
 void *dt_pixel_cache_entry_get_data(struct dt_pixel_cache_entry_t *entry);
@@ -385,6 +425,35 @@ void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, cons
  */
 void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, 
                                             struct dt_pixel_cache_entry_t *cache_entry);
+
+/**
+ * @brief Find an existing cache entry, synchronize once with a short read lock,
+ * then keep only a refcount (no long-lived read lock).
+ *
+ * @details
+ * Intended for best-effort realtime display paths where pointer stability is
+ * preferred over lock contention:
+ * - we attempt `tryrdlock` + immediate unlock as a synchronization point,
+ * - then keep the entry alive via refcount only.
+ * - if tryrdlock fails (writer active), we still return the refcounted pointer
+ *   in best-effort mode to avoid stalling/dropping realtime redraws.
+ *
+ * Consumers must tolerate concurrent writes after acquisition.
+ *
+ * @param cache
+ * @param hash
+ * @param cache_entry Found cache entry if any, written by the function.
+ * @return void* Data buffer associated with the cache entry, or NULL.
+ */
+void *dt_dev_pixelpipe_cache_get_ref_unlocked(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
+                                              struct dt_pixel_cache_entry_t **cache_entry);
+
+/**
+ * @brief Decrease the refcount of an entry previously acquired with the
+ * transient realtime getter above.
+ */
+void dt_dev_pixelpipe_cache_unref_unlocked(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
+                                           struct dt_pixel_cache_entry_t *cache_entry);
 
 /**
  * @brief Find the entry matching hash, and decrease its ref_count if found.

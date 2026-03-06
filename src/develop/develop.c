@@ -280,8 +280,6 @@ void dt_dev_cleanup(dt_develop_t *dev)
 
 void dt_dev_process(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe)
 {
-  pipe->status = DT_DEV_PIXELPIPE_DIRTY;
-
   if(!pipe->running)
   {
     switch(pipe->type)
@@ -310,21 +308,27 @@ void dt_dev_process_all_real(dt_develop_t *dev)
 
 static void _flag_pipe(dt_dev_pixelpipe_t *pipe, gboolean error)
 {
+  const gboolean shutdown = dt_atomic_get_int(&pipe->shutdown);
+  const gboolean pending_change = (pipe->changed != DT_DEV_PIPE_UNCHANGED);
+
   // If dt_dev_pixelpipe_process() returned with a state int == 1
   // and the shutdown flag is on, it means history commit activated the kill-switch.
   // Any other circomstance returning 1 is a runtime error, flag it invalid.
-  if(error && (!dt_atomic_get_int(&pipe->shutdown) || dt_dev_pixelpipe_get_realtime(pipe)))
+  if(error && !shutdown)
     pipe->status = DT_DEV_PIXELPIPE_INVALID;
+
+  /* If a new change request landed while this run was executing, keep the
+   * loop in DIRTY state regardless of intermediate VALID/UNDEF transitions.
+   * This decouples "needs another run" from GUI writes to pipe->status. */
+  else if(shutdown || pending_change)
+    pipe->status = DT_DEV_PIXELPIPE_DIRTY;
 
   // Before calling dt_dev_pixelpipe_process(), we set the status to DT_DEV_PIXELPIPE_UNDEF.
   // If it's still set to this value and we have a backbuf, everything went well.
-  else if(pipe->status == DT_DEV_PIXELPIPE_UNDEF
-          && (!dt_atomic_get_int(&pipe->shutdown) || dt_dev_pixelpipe_get_realtime(pipe)))
+  else if(pipe->status == DT_DEV_PIXELPIPE_UNDEF)
     pipe->status = DT_DEV_PIXELPIPE_VALID;
 
-  // Otherwise, the main thread will have reset the status to DT_DEV_PIXELPIPE_DIRTY
-  // and the pipe->shutdown to TRUE because history has changed in the middle of a process.
-  // In that case, do nothing and do another loop
+  // Otherwise keep the status as-is and let the outer loop decide.
 }
 
 int dt_dev_get_thumbnail_size(dt_develop_t *dev)
@@ -480,11 +484,17 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       pipe->timeout = 0;
     }
 
-    // Updating loop: run for as long as the output image is invalid/unavailable
-    while((pipe->status == DT_DEV_PIXELPIPE_DIRTY) && reentries < 2
-          && !dev->exit && dt_control_running())
+    // Updating loop: run while output is invalid/unavailable, or while realtime mode
+    // has a new history state to consume.
+    while(!dev->exit && dt_control_running())
     {
-      if(dev->exit || !dt_control_running()) break;
+      const gboolean needs_regular_update
+          = (((pipe->status == DT_DEV_PIXELPIPE_DIRTY) || (pipe->changed != DT_DEV_PIPE_UNCHANGED))
+             && reentries < 2);
+      const gboolean needs_realtime_update
+          = (dt_dev_pixelpipe_get_realtime(pipe) && (dev->history_hash != pipe->history_hash));
+
+      if(!(needs_regular_update || needs_realtime_update)) break;
 
       dt_pthread_mutex_lock(&pipe->busy_mutex);
       pipe->processing = 1;
@@ -519,7 +529,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
         dt_dev_pixelpipe_reset_reentry(pipe);
 
       // Catch early killswitch. dt_dev_pixelpipe_change() can be lengthy with huge masks stacks
-      if(dt_atomic_get_int(&pipe->shutdown) && !dt_dev_pixelpipe_get_realtime(pipe))
+      if(dt_atomic_get_int(&pipe->shutdown))
       {
         pipe->processing = 0;
         dt_pthread_mutex_unlock(&pipe->busy_mutex);
@@ -578,11 +588,13 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
         else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
           dt_control_queue_redraw();
       }
-      if(dev->exit || !dt_control_running()) break;
-      dt_iop_nap(250); // wait 250 ms
+
+      if(!dt_dev_pixelpipe_get_realtime(pipe))
+        dt_iop_nap(50); // wait 50 ms
+      else
+        dt_iop_nap(1);
     }
-    if(dev->exit || !dt_control_running()) break;
-    dt_iop_nap(100); // wait 100 ms
+    dt_iop_nap(50); // wait 50 ms
   }
 
   pipe->running = 0;
