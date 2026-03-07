@@ -217,6 +217,8 @@ typedef struct dt_gui_treeview_auto_height_t
   gulong model_row_deleted;
   gulong model_row_changed;
   gulong model_rows_reordered;
+  gulong model_row_expanded;
+  gulong model_row_collapsed;
 } dt_gui_treeview_auto_height_t;
 
 static inline cairo_surface_t *dt_cairo_image_surface_create(cairo_format_t format, int width, int height) {
@@ -398,13 +400,16 @@ GdkModifierType dt_key_modifier_state();
 /**
  * @brief Set the automatic height for a GtkTreeView based on the number of rows.
  * 
- * THIS ASSUME THE TREEVIEW IS IN A SCROLLABLE CONTAINER, AND THAT THE SCROLLABLE CONTAINER HAS A FIXED HEIGHT.
+ * This function creates the GtkScrolledWindow if the treeview is already wrapped in a GtkBox. The treeview is then wrapped into
+ * a GtkScrolledWindow while preserving box packing options.
+ * If the treeview is already inside a GtkScrolledWindow, its policy is set to
+ * horizontal=never and vertical=automatic.
  * 
- * @param treeview The GtkTreeView widget.
+ * @param treeview The GtkTreeView widget. It have to be already packed into a GtkBox, or already wrapped in a GtkScrolledWindow.
  * @param min_rows The minimum number of rows to display.
  * @param max_rows The maximum number of rows to display.
  */
-void dt_gui_treeview_set_auto_height(GtkWidget *treeview, int min_rows, int max_rows);
+void dt_gui_treeview_init_auto_height(GtkWidget *treeview, int min_rows, int max_rows);
 GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str);
 // check whether the given container has any user-added children
 gboolean dt_gui_container_has_children(GtkContainer *container);

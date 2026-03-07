@@ -1634,6 +1634,49 @@ static GtkWidget *_treeview_scrolled_window(GtkWidget *treeview)
   return GTK_IS_SCROLLED_WINDOW(parent) ? parent : NULL;
 }
 
+static void _treeview_auto_ensure_scrolled_window(GtkWidget *treeview)
+{
+  if(!GTK_IS_TREE_VIEW(treeview)) return;
+
+  GtkWidget *scrolled_window = _treeview_scrolled_window(treeview);
+  if(GTK_IS_SCROLLED_WINDOW(scrolled_window))
+  {
+    fprintf(stderr, "%s: treeview is already inside a scrolled window\n", G_STRFUNC);
+    // The parent is already a scrolled window, just make sure it has the right policy
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_NEVER,
+                                   GTK_POLICY_AUTOMATIC);
+    return;
+  }
+  fprintf(stderr, "%s: treeview is not inside a scrolled window, wrapping it\n", G_STRFUNC);
+  GtkWidget *parent = gtk_widget_get_parent(treeview);
+  if(!GTK_IS_BOX(parent)) return;
+  fprintf(stderr, "%s: treeview parent is a box, wrapping it in a scrolled window\n", G_STRFUNC);
+  gboolean expand = TRUE;
+  gboolean fill = TRUE;
+  guint padding = 0;
+  GtkPackType pack_type = GTK_PACK_START;
+  gtk_box_query_child_packing(GTK_BOX(parent), treeview, &expand, &fill, &padding, &pack_type);
+
+  GList *children = gtk_container_get_children(GTK_CONTAINER(parent));
+  const gint position = g_list_index(children, treeview);
+  g_list_free(children);
+
+  GtkWidget *sw = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(sw), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+
+  g_object_ref(treeview);
+  gtk_container_remove(GTK_CONTAINER(parent), treeview);
+  gtk_container_add(GTK_CONTAINER(sw), treeview);
+  g_object_unref(treeview);
+
+  if(pack_type == GTK_PACK_END)
+    gtk_box_pack_end(GTK_BOX(parent), sw, expand, fill, padding);
+  else
+    gtk_box_pack_start(GTK_BOX(parent), sw, expand, fill, padding);
+
+  if(position >= 0) gtk_box_reorder_child(GTK_BOX(parent), sw, position);
+}
+
 // Counts only visible items (those whose parents are expanded)
 static int _treeview_count_visible_rows(GtkTreeView *treeview, GtkTreeModel *model, GtkTreeIter *parent)
 {
@@ -1710,19 +1753,24 @@ void dt_gui_treeview_update_list_height(GtkWidget *treeview, int rows, int min_r
   gtk_widget_set_size_request(scrolled_window, -1, height);
 }
 
-static void _treeview_auto_disconnect_model(dt_gui_treeview_auto_height_t *state)
+static void _treeview_auto_disconnect_model(dt_gui_treeview_auto_height_t *state, GtkWidget *treeview)
 {
   if(!state) return;
 
   GtkTreeModel *model = state->model;
   if(model)
   {
-    if(state->model_row_inserted) g_signal_handler_disconnect(model, state->model_row_inserted);
-    if(state->model_row_deleted) g_signal_handler_disconnect(model, state->model_row_deleted);
-    if(state->model_row_changed) g_signal_handler_disconnect(model, state->model_row_changed);
+    if(state->model_row_inserted)   g_signal_handler_disconnect(model, state->model_row_inserted);
+    if(state->model_row_deleted)    g_signal_handler_disconnect(model, state->model_row_deleted);
+    if(state->model_row_changed)    g_signal_handler_disconnect(model, state->model_row_changed);
     if(state->model_rows_reordered) g_signal_handler_disconnect(model, state->model_rows_reordered);
-
     g_object_remove_weak_pointer(G_OBJECT(model), (gpointer *)&state->model);
+  }
+
+  if(GTK_IS_TREE_VIEW(treeview))
+  {
+    if(state->model_row_expanded)   g_signal_handler_disconnect(treeview, state->model_row_expanded);
+    if(state->model_row_collapsed)  g_signal_handler_disconnect(treeview, state->model_row_collapsed);
   }
 
   state->model = NULL;
@@ -1730,6 +1778,8 @@ static void _treeview_auto_disconnect_model(dt_gui_treeview_auto_height_t *state
   state->model_row_deleted = 0;
   state->model_row_changed = 0;
   state->model_rows_reordered = 0;
+  state->model_row_expanded = 0;
+  state->model_row_collapsed = 0;
 }
 
 static void _treeview_auto_update(GtkWidget *treeview)
@@ -1781,6 +1831,26 @@ static void _treeview_auto_model_rows_reordered(GtkTreeModel *model, GtkTreePath
   _treeview_auto_update(GTK_WIDGET(user_data));
 }
 
+static void _treeview_auto_model_row_expanded(GtkTreeView *tree_view, GtkTreeIter *expanded_iter, GtkTreePath *path,
+                                              gpointer user_data)
+{
+  (void)tree_view;
+  (void)expanded_iter;
+  (void)path;
+  _treeview_auto_update(GTK_WIDGET(user_data));
+}
+
+static void _treeview_auto_model_row_collapsed(GtkTreeView *tree_view, GtkTreeIter *collapsed_iter, GtkTreePath *path,
+                                               gpointer user_data)
+{
+  (void)tree_view;
+  (void)collapsed_iter;
+  (void)path;
+
+  // Recalculate tree view height after loading the data
+  _treeview_auto_update(GTK_WIDGET(user_data));
+}
+
 static void _treeview_auto_connect_model(GtkWidget *treeview)
 {
   if(!GTK_IS_TREE_VIEW(treeview)) return;
@@ -1792,32 +1862,46 @@ static void _treeview_auto_connect_model(GtkWidget *treeview)
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
   if(model == state->model) return;
 
-  _treeview_auto_disconnect_model(state);
+  _treeview_auto_disconnect_model(state, treeview);
   if(!GTK_IS_TREE_MODEL(model)) return;
 
   state->model = model;
   g_object_add_weak_pointer(G_OBJECT(model), (gpointer *)&state->model);
-  state->model_row_inserted = g_signal_connect(model, "row-inserted",
-                                               G_CALLBACK(_treeview_auto_model_row_inserted), treeview);
-  state->model_row_deleted = g_signal_connect(model, "row-deleted",
+  state->model_row_inserted =   g_signal_connect(model, "row-inserted",
+                                              G_CALLBACK(_treeview_auto_model_row_inserted), treeview);
+  state->model_row_deleted =    g_signal_connect(model, "row-deleted",
                                               G_CALLBACK(_treeview_auto_model_row_deleted), treeview);
-  state->model_row_changed = g_signal_connect(model, "row-changed",
+  state->model_row_changed =    g_signal_connect(model, "row-changed",
                                               G_CALLBACK(_treeview_auto_model_row_changed), treeview);
   state->model_rows_reordered = g_signal_connect(model, "rows-reordered",
-                                                 G_CALLBACK(_treeview_auto_model_rows_reordered), treeview);
+                                              G_CALLBACK(_treeview_auto_model_rows_reordered), treeview);
+  state->model_row_expanded =   g_signal_connect(treeview, "row-expanded",
+                                              G_CALLBACK(_treeview_auto_model_row_expanded), treeview);
+  state->model_row_collapsed =  g_signal_connect(treeview, "row-collapsed",
+                                              G_CALLBACK(_treeview_auto_model_row_collapsed), treeview);
+}
+
+static void _treeview_auto_on_model_changed(GObject *treeview, GParamSpec *pspec, gpointer user_data)
+{
+  (void)pspec;
+  (void)user_data;
+  _treeview_auto_connect_model(GTK_WIDGET(treeview));
+  _treeview_auto_update(GTK_WIDGET(treeview));
 }
 
 static void _treeview_auto_height_free(gpointer data)
 {
   dt_gui_treeview_auto_height_t *state = (dt_gui_treeview_auto_height_t *)data;
   if(!state) return;
-  _treeview_auto_disconnect_model(state);
+  _treeview_auto_disconnect_model(state, NULL);
   free(state);
 }
 
-void dt_gui_treeview_set_auto_height(GtkWidget *treeview, const int min_rows, const int max_rows)
+void dt_gui_treeview_init_auto_height(GtkWidget *treeview, const int min_rows, const int max_rows)
 {
   if(!GTK_IS_TREE_VIEW(treeview)) return;
+
+  _treeview_auto_ensure_scrolled_window(treeview);
 
   dt_gui_treeview_auto_height_t *state = g_object_get_data(G_OBJECT(treeview), DT_GUI_TREEVIEW_AUTO_HEIGHT_KEY);
   if(!state)
@@ -1825,6 +1909,9 @@ void dt_gui_treeview_set_auto_height(GtkWidget *treeview, const int min_rows, co
     state = calloc(1, sizeof(*state));
     g_object_set_data_full(G_OBJECT(treeview), DT_GUI_TREEVIEW_AUTO_HEIGHT_KEY, state,
                            _treeview_auto_height_free);
+    
+    // Watch for model changes to reconnect signals automatically
+    g_signal_connect(treeview, "notify::model", G_CALLBACK(_treeview_auto_on_model_changed), NULL);
   }
   
   state->min_rows = MAX(1, min_rows);
