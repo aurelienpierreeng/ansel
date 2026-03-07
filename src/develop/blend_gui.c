@@ -1390,8 +1390,14 @@ static dt_masks_form_t *_blendop_masks_group_create(dt_iop_module_t *module)
   dt_masks_form_t *group_form = dt_masks_create(DT_MASKS_GROUP);
   if(!group_form) return NULL;
 
-  gchar *module_label = dt_history_item_get_name(module);
-  snprintf(group_form->name, sizeof(group_form->name), "grp %s", module_label);
+  //gchar *module_label = dt_history_item_get_name(module);
+  gchar *module_label = g_strdup(module->multi_name);
+  if(g_strcmp0(module_label, "") == 0)
+  {
+    g_free(module_label);
+    module_label = dt_history_item_get_name(module);
+  }
+  g_snprintf(group_form->name, sizeof(group_form->name), "%s %s", _("Mask"), module_label);
   g_free(module_label);
 
   _blendop_masks_check_id(group_form);
@@ -1420,6 +1426,28 @@ static dt_masks_form_group_t *_blendop_masks_find_group_entry(dt_masks_form_t *g
   }
 
   return NULL;
+}
+
+static void _blendop_masks_init_icons(dt_iop_gui_blend_data_t *bd)
+{
+  if(!bd) return;
+
+  // Only initialize icons if they haven't been created yet
+  if(bd->masks_ic_inverse && bd->masks_ic_union && bd->masks_ic_intersection
+     && bd->masks_ic_difference && bd->masks_ic_exclusion)
+    return;
+
+  const int icon_size = DT_PIXEL_APPLY_DPI(13);
+  if(!bd->masks_ic_inverse)
+    bd->masks_ic_inverse = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_inverse, icon_size, icon_size);
+  if(!bd->masks_ic_union)
+    bd->masks_ic_union = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_union, icon_size * 2, icon_size);
+  if(!bd->masks_ic_intersection)
+    bd->masks_ic_intersection = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_intersection, icon_size * 2, icon_size);
+  if(!bd->masks_ic_difference)
+    bd->masks_ic_difference = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_difference, icon_size * 2, icon_size);
+  if(!bd->masks_ic_exclusion)
+    bd->masks_ic_exclusion = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_exclusion, icon_size * 2, icon_size);
 }
 
 static const GdkPixbuf *_blendop_masks_get_op_icon(const dt_iop_gui_blend_data_t *bd, const int state,
@@ -1782,12 +1810,48 @@ static void _blendop_masks_all_rename_callback(GtkWidget *menu_item, dt_iop_modu
 static gboolean _blendop_masks_all_button_pressed(GtkWidget *treeview, GdkEventButton *event,
                                                   dt_iop_module_t *module)
 {
-  if(!event || event->type != GDK_BUTTON_PRESS || event->button != GDK_BUTTON_SECONDARY) return FALSE;
+  if(!event || event->type != GDK_BUTTON_PRESS) return FALSE;
 
   GtkTreePath *path = NULL;
+  GtkTreeViewColumn *column = NULL;
   if(!gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &path,
-                                    NULL, NULL, NULL))
+                                    &column, NULL, NULL))
     return FALSE;
+
+  // Handle left click on checkbox column - toggle directly without requiring selection
+  if(event->button == GDK_BUTTON_PRIMARY && column)
+  {
+    dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+    if(bd && column == bd->all_shapes_col)
+    {
+      GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
+      GtkTreeIter iter;
+      if(gtk_tree_model_get_iter(model, &iter, path))
+      {
+        gboolean active = FALSE;
+        int formid = -1;
+        gtk_tree_model_get(model, &iter, BLENDOP_MASKS_ALL_COL_ACTIVE, &active, 
+                          BLENDOP_MASKS_ALL_COL_FORMID, &formid, -1);
+        
+        if(formid > 0)
+        {
+          // Toggle the checkbox value
+          gchar *path_string = gtk_tree_path_to_string(path);
+          _blendop_masks_all_toggled(NULL, path_string, module);
+          g_free(path_string);
+          gtk_tree_path_free(path);
+          return TRUE; // Block default selection behavior
+        }
+      }
+    }
+  }
+
+  // Handle right click for context menu
+  if(event->button != GDK_BUTTON_SECONDARY)
+  {
+    gtk_tree_path_free(path);
+    return FALSE;
+  }
 
   GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(treeview));
   gtk_tree_selection_unselect_all(selection);
@@ -2018,12 +2082,8 @@ static GtkWidget *_blendop_masks_group_ctx_menu(dt_iop_gui_blend_data_t *bd, dt_
 {
   if(!bd || !module) return NULL;
 
-  const int icon_size = DT_PIXEL_APPLY_DPI(13);
-  bd->masks_ic_inverse = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_inverse, icon_size, icon_size);
-  bd->masks_ic_union = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_union, icon_size * 2, icon_size);
-  bd->masks_ic_intersection = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_intersection, icon_size * 2, icon_size);
-  bd->masks_ic_difference = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_difference, icon_size * 2, icon_size);
-  bd->masks_ic_exclusion = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_exclusion, icon_size * 2, icon_size);
+  // Initialize mask operation icons if needed
+  _blendop_masks_init_icons(bd);
 
   GtkWidget *menu = gtk_menu_new();
   gtk_style_context_add_class(gtk_widget_get_style_context(menu), "dt-masks-context-menu");
@@ -3164,7 +3224,7 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
                                              G_CALLBACK(_blendop_masks_show_and_edit),
                                              FALSE, 0, 0, dtgtk_cairo_paint_masks_eye, group_shapes_header);
 
-    bd->edit_toggle = gtk_toggle_button_new_with_label(_("Connect shapes"));
+    bd->edit_toggle = gtk_toggle_button_new_with_label(_("Wire shapes"));
     gtk_widget_set_tooltip_text(bd->edit_toggle, _("Show all shapes and groups to choose which ones to connect to or disconnect from the mask."));
 
     gtk_box_pack_end(GTK_BOX(group_shapes_header), bd->edit_toggle, FALSE, FALSE, 0);
@@ -3177,6 +3237,9 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
                                                           GDK_TYPE_PIXBUF, G_TYPE_STRING, G_TYPE_INT,
                                                           G_TYPE_INT, G_TYPE_INT, G_TYPE_INT);
     gtk_tree_view_set_model(GTK_TREE_VIEW(bd->masks_group_treeview), GTK_TREE_MODEL(bd->group_shapes_store));
+
+    // Initialize mask operation icons for treeview display
+    _blendop_masks_init_icons(bd);
 
     bd->group_shapes_col = gtk_tree_view_column_new();
     gtk_tree_view_append_column(GTK_TREE_VIEW(bd->masks_group_treeview), bd->group_shapes_col);

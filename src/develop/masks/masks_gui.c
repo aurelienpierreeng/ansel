@@ -413,7 +413,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
         form_name = g_strconcat(form_name, _("gradient"), NULL);
         break;
       case DT_MASKS_GROUP:
-        form_name = g_strconcat(form_name, _("group"), NULL);
+        form_name = g_strconcat(form_name, _("mask"), NULL);
         break;
       default:
         g_free(form_name); // Erase the "New " prefix

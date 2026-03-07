@@ -373,8 +373,8 @@ static void _tree_group(GtkButton *button, dt_lib_module_t *self)
 {
   dt_lib_masks_t *lm = (dt_lib_masks_t *)self->data;
   // we create the new group
-  dt_masks_form_t *grp = dt_masks_create(DT_MASKS_GROUP);
-  snprintf(grp->name, sizeof(grp->name), _("group #%d"), g_list_length(darktable.develop->forms));
+  dt_masks_form_t *mask = dt_masks_create(DT_MASKS_GROUP);
+  snprintf(mask->name, sizeof(mask->name), _("Mask #%d"), g_list_length(darktable.develop->forms));
 
   // we add all selected forms to this group
   GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(lm->treeview));
@@ -394,17 +394,17 @@ static void _tree_group(GtkButton *button, dt_lib_module_t *self)
       {
         dt_masks_form_group_t *fpt = (dt_masks_form_group_t *)malloc(sizeof(dt_masks_form_group_t));
         fpt->formid = id;
-        fpt->parentid = grp->formid;
+        fpt->parentid = mask->formid;
         fpt->opacity = 1.0f;
         fpt->state = DT_MASKS_STATE_USE | DT_MASKS_STATE_UNION;
-        grp->points = g_list_append(grp->points, fpt);
+        mask->points = g_list_append(mask->points, fpt);
       }
     }
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
 
   // we add this group to the general list
-  darktable.develop->forms = g_list_append(darktable.develop->forms, grp);
+  darktable.develop->forms = g_list_append(darktable.develop->forms, mask);
 
   // add we save
   dt_dev_add_history_item(darktable.develop, NULL, FALSE, TRUE);

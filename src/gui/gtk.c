@@ -1723,11 +1723,10 @@ static void dt_gui_widget_update_list_height(GtkWidget *widget, int rows, int mi
   GtkWidget *scrolled_window = _search_parent_scrolled_window(widget);
   if(!GTK_IS_SCROLLED_WINDOW(scrolled_window)) return;
 
-  const int one_more = !GTK_IS_TEXT_VIEW(widget) ? 1 : 0; // add one more row to have space
   const int safe_rows = MAX(0, rows);
-  const int safe_min_rows = MAX(1 + one_more, min_rows);
+  const int safe_min_rows = MAX(1, min_rows);
   const int safe_max_rows = MAX(safe_min_rows, max_rows);
-  const int requested_rows = CLAMP(safe_rows + one_more, safe_min_rows, safe_max_rows);
+  const int requested_rows = CLAMP(safe_rows, safe_min_rows, safe_max_rows);
 
   // Calculate row height based on actual cell sizes or line size
   float row_height = darktable.bauhaus->line_height;
@@ -1751,7 +1750,9 @@ static void dt_gui_widget_update_list_height(GtkWidget *widget, int rows, int mi
   GtkBorder padding;
   gtk_style_context_get_padding(gtk_widget_get_style_context(widget),
                                 gtk_widget_get_state_flags(widget), &padding);
-  const gint height = requested_rows * row_height + padding.top + padding.bottom;
+  const int padding_top = MAX(DT_PIXEL_APPLY_DPI(2), padding.top);
+  const int padding_bottom = MAX(DT_PIXEL_APPLY_DPI(2), padding.bottom);
+  const gint height = requested_rows * row_height + padding_top + padding_bottom + DT_PIXEL_APPLY_DPI(1);
 
   gtk_widget_set_size_request(scrolled_window, -1, height);
 }
