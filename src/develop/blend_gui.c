@@ -62,6 +62,7 @@
 #include "dtgtk/button.h"
 #include "dtgtk/gradientslider.h"
 
+#include "gui/actions/menu.h"
 #include "gui/gtk.h"
 #include "gui/presets.h"
 
@@ -1113,7 +1114,9 @@ static void _blendop_masks_mode_changed(GtkToggleButton *togglebutton, dt_iop_mo
   if(darktable.gui->reset) return;
 
   const unsigned int bit = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(togglebutton), "mask-bit"));
-  if(!bit || !module || !module->blend_data) return;
+  if(!bit) return;
+  if(!module) return;
+  if(!module->blend_data) return;
 
   uint32_t mask_mode = module->blend_params->mask_mode;
   const gboolean active = gtk_toggle_button_get_active(togglebutton);
@@ -1250,7 +1253,8 @@ static gboolean _blendop_masks_add_shape(GtkWidget *widget, GdkEventButton *even
   dt_iop_color_picker_reset(self, FALSE);
   bd->masks_shown = DT_MASKS_EDIT_FULL;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), TRUE);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), FALSE);
+  if(GTK_IS_TOGGLE_BUTTON(bd->masks_edit))
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), FALSE);
   // we create the new form
   dt_masks_creation_mode(self, bd->masks_type[this]);
   dt_control_queue_redraw_center();
@@ -1330,6 +1334,827 @@ static gboolean _blendop_masks_polarity_callback(GtkToggleButton *togglebutton, 
   dt_control_queue_redraw_widget(GTK_WIDGET(togglebutton));
 
   return TRUE;
+}
+
+typedef enum _blendop_masks_all_cols_t
+{
+  BLENDOP_MASKS_ALL_COL_ACTIVE = 0,
+  BLENDOP_MASKS_ALL_COL_NAME,
+  BLENDOP_MASKS_ALL_COL_FORMID,
+  BLENDOP_MASKS_ALL_COL_COUNT
+} _blendop_masks_all_cols_t;
+
+typedef enum _blendop_masks_group_cols_t
+{
+  BLENDOP_MASKS_GROUP_COL_OP_ICON = 0,
+  BLENDOP_MASKS_GROUP_COL_INV_ICON,
+  BLENDOP_MASKS_GROUP_COL_NAME,
+  BLENDOP_MASKS_GROUP_COL_FORMID,
+  BLENDOP_MASKS_GROUP_COL_PARENTID,
+  BLENDOP_MASKS_GROUP_COL_STATE,
+  BLENDOP_MASKS_GROUP_COL_INDEX,
+  BLENDOP_MASKS_GROUP_COL_COUNT
+} _blendop_masks_group_cols_t;
+
+static dt_masks_form_t *_blendop_masks_group_from_module(dt_iop_module_t *module)
+{
+  if(!module) return NULL;
+  if(!module->blend_params) return NULL;
+  return dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
+}
+
+static void _blendop_masks_check_id(dt_masks_form_t *mask_form)
+{
+  if(!mask_form) return;
+
+  int new_form_id = 100;
+  for(GList *form_node = darktable.develop->forms; form_node;)
+  {
+    const dt_masks_form_t *existing_form = (dt_masks_form_t *)form_node->data;
+    if(existing_form->formid == mask_form->formid)
+    {
+      mask_form->formid = new_form_id++;
+      form_node = darktable.develop->forms;
+    }
+    else
+    {
+      form_node = g_list_next(form_node);
+    }
+  }
+}
+
+static dt_masks_form_t *_blendop_masks_group_create(dt_iop_module_t *module)
+{
+  if(!module) return NULL;
+
+  dt_masks_form_t *group_form = dt_masks_create(DT_MASKS_GROUP);
+  if(!group_form) return NULL;
+
+  gchar *module_label = dt_history_item_get_name(module);
+  snprintf(group_form->name, sizeof(group_form->name), "grp %s", module_label);
+  g_free(module_label);
+
+  _blendop_masks_check_id(group_form);
+  dt_masks_append_form(darktable.develop, group_form);
+  module->blend_params->mask_id = group_form->formid;
+
+  return group_form;
+}
+
+static dt_masks_form_group_t *_blendop_masks_find_group_entry(dt_masks_form_t *group_form, const int formid, int *index)
+{
+  if(index) *index = -1;
+  if(!group_form) return NULL;
+  if(!(group_form->type & DT_MASKS_GROUP)) return NULL;
+
+  int group_index = 0;
+  for(GList *group_node = group_form->points; group_node; group_node = g_list_next(group_node))
+  {
+    dt_masks_form_group_t *group_entry = (dt_masks_form_group_t *)group_node->data;
+    if(group_entry->formid == formid)
+    {
+      if(index) *index = group_index;
+      return group_entry;
+    }
+    group_index++;
+  }
+
+  return NULL;
+}
+
+static const GdkPixbuf *_blendop_masks_get_op_icon(const dt_iop_gui_blend_data_t *bd, const int state,
+                                                   const int index)
+{
+  if(!bd || index == 0) return NULL;
+
+  if(state & DT_MASKS_STATE_UNION) return bd->masks_ic_union;
+  if(state & DT_MASKS_STATE_INTERSECTION) return bd->masks_ic_intersection;
+  if(state & DT_MASKS_STATE_DIFFERENCE) return bd->masks_ic_difference;
+  if(state & DT_MASKS_STATE_EXCLUSION) return bd->masks_ic_exclusion;
+  return NULL;
+}
+
+static const GdkPixbuf *_blendop_masks_get_inverse_icon(const dt_iop_gui_blend_data_t *bd, const int state)
+{
+  return (bd && (state & DT_MASKS_STATE_INVERSE)) ? bd->masks_ic_inverse : NULL;
+}
+
+static int _blendop_masks_group_tree_append(const dt_iop_gui_blend_data_t *bd, GtkTreeStore *tree_store,
+                                            GtkTreeIter *parent_iter, const dt_masks_form_t *parent_group);
+
+static gboolean _blendop_masks_is_group_with_shapes(const dt_masks_form_t *mask_form)
+{
+  if(!mask_form) return FALSE;
+  if(!(mask_form->type & DT_MASKS_GROUP)) return FALSE;
+  if(!mask_form->points) return FALSE;
+
+  for(const GList *group_node = mask_form->points; group_node; group_node = g_list_next(group_node))
+  {
+    const dt_masks_form_group_t *group_entry = (const dt_masks_form_group_t *)group_node->data;
+    if(!group_entry) continue;
+
+    const dt_masks_form_t *child_form = dt_masks_get_from_id(darktable.develop, group_entry->formid);
+    if(!child_form) continue;
+    if(!(child_form->type & DT_MASKS_GROUP)) return TRUE;
+    if(_blendop_masks_is_group_with_shapes(child_form)) return TRUE;
+  }
+
+  return FALSE;
+}
+
+static int _blendop_masks_group_tree_append_entry(const dt_iop_gui_blend_data_t *bd, GtkTreeStore *tree_store,
+                                                  GtkTreeIter *parent_iter,
+                                                  const dt_masks_form_group_t *group_entry,
+                                                  const dt_masks_form_t *mask_form, const int index)
+{
+  if(!bd || !tree_store || !group_entry || !mask_form) return 0;
+
+  GtkTreeIter iter;
+  gtk_tree_store_append(tree_store, &iter, parent_iter);
+  gtk_tree_store_set(tree_store, &iter, BLENDOP_MASKS_GROUP_COL_OP_ICON,
+                     _blendop_masks_get_op_icon(bd, group_entry->state, index),
+                     BLENDOP_MASKS_GROUP_COL_INV_ICON,
+                     _blendop_masks_get_inverse_icon(bd, group_entry->state),
+                     BLENDOP_MASKS_GROUP_COL_NAME, mask_form->name,
+                     BLENDOP_MASKS_GROUP_COL_FORMID, group_entry->formid,
+                     BLENDOP_MASKS_GROUP_COL_PARENTID, group_entry->parentid,
+                     BLENDOP_MASKS_GROUP_COL_STATE, group_entry->state,
+                     BLENDOP_MASKS_GROUP_COL_INDEX, index, -1);
+
+  int row_count = 1;
+  if(mask_form->type & DT_MASKS_GROUP)
+    row_count += _blendop_masks_group_tree_append(bd, tree_store, &iter, mask_form);
+
+  return row_count;
+}
+
+static int _blendop_masks_group_tree_append(const dt_iop_gui_blend_data_t *bd, GtkTreeStore *tree_store,
+                                            GtkTreeIter *parent_iter, const dt_masks_form_t *parent_group)
+{
+  if(!bd) return 0;
+  if(!tree_store) return 0;
+  if(!parent_group) return 0;
+  if(!(parent_group->type & DT_MASKS_GROUP)) return 0;
+
+  int row_count = 0;
+
+  // First pass: groups containing shapes.
+  int index = 0;
+  for(const GList *group_node = parent_group->points; group_node; group_node = g_list_next(group_node))
+  {
+    const dt_masks_form_group_t *group_entry = (const dt_masks_form_group_t *)group_node->data;
+    const dt_masks_form_t *mask_form = group_entry
+                                           ? dt_masks_get_from_id(darktable.develop, group_entry->formid)
+                                           : NULL;
+    if(mask_form && _blendop_masks_is_group_with_shapes(mask_form))
+      row_count += _blendop_masks_group_tree_append_entry(bd, tree_store, parent_iter, group_entry, mask_form,
+                                                          index);
+    index++;
+  }
+
+  // Second pass: all remaining entries.
+  index = 0;
+  for(const GList *group_node = parent_group->points; group_node; group_node = g_list_next(group_node))
+  {
+    const dt_masks_form_group_t *group_entry = (const dt_masks_form_group_t *)group_node->data;
+    const dt_masks_form_t *mask_form = group_entry
+                                           ? dt_masks_get_from_id(darktable.develop, group_entry->formid)
+                                           : NULL;
+    if(mask_form && !_blendop_masks_is_group_with_shapes(mask_form))
+    {
+      row_count += _blendop_masks_group_tree_append_entry(bd, tree_store, parent_iter, group_entry, mask_form,
+                                                          index);
+    }
+    index++;
+  }
+
+  return row_count;
+}
+
+static gboolean _blendop_masks_find_iter_by_formid(GtkTreeModel *model, GtkTreeIter *iter,
+                                                    const int formid_col, const int formid)
+{
+  if(!model || !iter) return FALSE;
+
+  gboolean valid = gtk_tree_model_get_iter_first(model, iter);
+  while(valid)
+  {
+    int current_formid = -1;
+    gtk_tree_model_get(model, iter, formid_col, &current_formid, -1);
+    if(current_formid == formid) return TRUE;
+    valid = gtk_tree_model_iter_next(model, iter);
+  }
+
+  return FALSE;
+}
+
+static void _blendop_masks_all_selection_changed(GtkTreeSelection *selection, dt_iop_module_t *module);
+static gboolean _blendop_masks_all_button_pressed(GtkWidget *treeview, GdkEventButton *event,
+                                                  dt_iop_module_t *module);
+static void _blendop_masks_group_selection_changed(GtkTreeSelection *selection, dt_iop_module_t *module);
+static gboolean _blendop_masks_group_button_pressed(GtkWidget *treeview, GdkEventButton *event,
+                                                    dt_iop_module_t *module);
+
+static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
+{
+  if(!module) return;
+  if(!module->blend_data) return;
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  if(!bd) return;
+  if(!GTK_IS_TREE_VIEW(bd->masks_treeview)) return;
+  if(!GTK_IS_TREE_VIEW(bd->masks_group_treeview)) return;
+
+  GtkTreeModel *all_model = gtk_tree_view_get_model(GTK_TREE_VIEW(bd->masks_treeview));
+  GtkTreeModel *group_model = gtk_tree_view_get_model(GTK_TREE_VIEW(bd->masks_group_treeview));
+  if(!GTK_IS_LIST_STORE(all_model)) return;
+  if(!GTK_IS_TREE_STORE(group_model)) return;
+
+  // Block signals during model updates to prevent callbacks from accessing inconsistent state
+  GtkTreeSelection *all_selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(bd->masks_treeview));
+  GtkTreeSelection *group_selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(bd->masks_group_treeview));
+  g_signal_handlers_block_by_func(all_selection, G_CALLBACK(_blendop_masks_all_selection_changed), module);
+  g_signal_handlers_block_by_func(group_selection, G_CALLBACK(_blendop_masks_group_selection_changed), module);
+  g_signal_handlers_block_by_func(bd->masks_treeview, G_CALLBACK(_blendop_masks_all_button_pressed), module);
+  g_signal_handlers_block_by_func(bd->masks_group_treeview, G_CALLBACK(_blendop_masks_group_button_pressed), module);
+
+  gtk_list_store_clear(GTK_LIST_STORE(all_model));
+  gtk_tree_store_clear(GTK_TREE_STORE(group_model));
+
+  dt_masks_form_t *group_form = _blendop_masks_group_from_module(module);
+
+  // First pass: groups containing shapes first.
+  for(const GList *form_node = darktable.develop->forms; form_node; form_node = g_list_next(form_node))
+  {
+    dt_masks_form_t *mask_form = (dt_masks_form_t *)form_node->data;
+    if(!mask_form) continue;
+    if(mask_form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE)) continue;
+    if(group_form && mask_form->formid == group_form->formid) continue;
+    if(!_blendop_masks_is_group_with_shapes(mask_form)) continue;
+
+    const gboolean active = _blendop_masks_find_group_entry(group_form, mask_form->formid, NULL) != NULL;
+    GtkTreeIter iter;
+    gtk_list_store_append(GTK_LIST_STORE(all_model), &iter);
+    gtk_list_store_set(GTK_LIST_STORE(all_model), &iter, BLENDOP_MASKS_ALL_COL_ACTIVE, active,
+                       BLENDOP_MASKS_ALL_COL_NAME, mask_form->name, BLENDOP_MASKS_ALL_COL_FORMID, mask_form->formid,
+                       -1);
+  }
+
+  // Second pass: then all non-group (and empty-group) entries.
+  for(const GList *form_node = darktable.develop->forms; form_node; form_node = g_list_next(form_node))
+  {
+    dt_masks_form_t *mask_form = (dt_masks_form_t *)form_node->data;
+    if(!mask_form) continue;
+    if(mask_form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE)) continue;
+    if(group_form && mask_form->formid == group_form->formid) continue;
+    if(_blendop_masks_is_group_with_shapes(mask_form)) continue;
+
+    const gboolean active = _blendop_masks_find_group_entry(group_form, mask_form->formid, NULL) != NULL;
+    GtkTreeIter iter;
+    gtk_list_store_append(GTK_LIST_STORE(all_model), &iter);
+    gtk_list_store_set(GTK_LIST_STORE(all_model), &iter, BLENDOP_MASKS_ALL_COL_ACTIVE, active,
+                       BLENDOP_MASKS_ALL_COL_NAME, mask_form->name, BLENDOP_MASKS_ALL_COL_FORMID, mask_form->formid,
+                       -1);
+  }
+
+  if(group_form && (group_form->type & DT_MASKS_GROUP))
+    _blendop_masks_group_tree_append(bd, GTK_TREE_STORE(group_model), NULL, group_form);
+
+  // Unblock signals after model updates are complete
+  g_signal_handlers_unblock_by_func(all_selection, G_CALLBACK(_blendop_masks_all_selection_changed), module);
+  g_signal_handlers_unblock_by_func(group_selection, G_CALLBACK(_blendop_masks_group_selection_changed), module);
+  g_signal_handlers_unblock_by_func(bd->masks_treeview, G_CALLBACK(_blendop_masks_all_button_pressed), module);
+  g_signal_handlers_unblock_by_func(bd->masks_group_treeview, G_CALLBACK(_blendop_masks_group_button_pressed), module);
+}
+
+static void _blendop_masks_apply_and_commit(dt_iop_module_t *module)
+{
+  if(!module) return;
+  if(!module->dev) return;
+
+  dt_masks_iop_update(module);
+  dt_dev_add_history_item(module->dev, module, TRUE, TRUE);
+  dt_control_queue_redraw_center();
+}
+
+static void _blendop_masks_all_name_edited(GtkCellRendererText *cell, gchar *path_string,
+                                           gchar *new_text, dt_iop_module_t *module)
+{
+  (void)cell;
+  if(!module) return;
+  if(!module->blend_data) return;
+
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(bd->masks_treeview));
+  if(!GTK_IS_TREE_MODEL(model)) return;
+
+  GtkTreeIter iter;
+  if(!gtk_tree_model_get_iter_from_string(model, &iter, path_string)) return;
+
+  int formid = -1;
+  gtk_tree_model_get(model, &iter, BLENDOP_MASKS_ALL_COL_FORMID, &formid, -1);
+  dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
+  if(!mask_form) return;
+
+  const gchar *text = (new_text && *new_text) ? new_text : " ";
+  g_strlcpy(mask_form->name, text, sizeof(mask_form->name));
+
+  dt_dev_add_history_item(darktable.develop, NULL, FALSE, TRUE);
+  _blendop_masks_refresh_lists(module);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, mask_form->formid, 0,
+                                DT_MASKS_EVENT_CHANGE);
+}
+
+static void _blendop_masks_all_selection_changed(GtkTreeSelection *selection, dt_iop_module_t *module)
+{
+  if(darktable.gui->reset) return;
+  if(!module) return;
+  if(!selection) return;
+
+  GtkTreeModel *model = NULL;
+  GtkTreeIter iter;
+  if(!gtk_tree_selection_get_selected(selection, &model, &iter)) return;
+  if(!GTK_IS_TREE_MODEL(model)) return;
+
+  int formid = -1;
+  gtk_tree_model_get(model, &iter, BLENDOP_MASKS_ALL_COL_FORMID, &formid, -1);
+  if(formid <= 0) return;
+
+  dt_dev_masks_selection_change(darktable.develop, NULL, formid, TRUE);
+}
+
+static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_string, dt_iop_module_t *module)
+{
+  (void)cell;
+  if(darktable.gui->reset) return;
+  if(!module) return;
+  if(!module->blend_data) return;
+
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(bd->masks_treeview));
+  if(!GTK_IS_TREE_MODEL(model)) return;
+
+  GtkTreeIter iter;
+  if(!gtk_tree_model_get_iter_from_string(model, &iter, path_string)) return;
+
+  gboolean active = FALSE;
+  int formid = -1;
+  gtk_tree_model_get(model, &iter, BLENDOP_MASKS_ALL_COL_ACTIVE, &active, BLENDOP_MASKS_ALL_COL_FORMID, &formid, -1);
+
+  dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
+  if(!mask_form) return;
+
+  dt_masks_form_t *group_form = _blendop_masks_group_from_module(module);
+  const int parentid_before = group_form ? group_form->formid : 0;
+
+  if(active)
+  {
+    if(group_form)
+      dt_masks_form_remove(module, group_form, mask_form);
+  }
+  else
+  {
+    if(!group_form)
+      group_form = _blendop_masks_group_create(module);
+    if(!group_form) return;
+
+    if(!_blendop_masks_find_group_entry(group_form, mask_form->formid, NULL))
+    {
+      dt_masks_group_add_form(group_form, mask_form);
+      dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
+    }
+  }
+
+  _blendop_masks_apply_and_commit(module);
+
+  const int parentid_after = group_form ? group_form->formid : parentid_before;
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid,
+                                active ? parentid_before : parentid_after,
+                                active ? DT_MASKS_EVENT_REMOVE : DT_MASKS_EVENT_ADD);
+}
+
+static void _blendop_masks_all_delete_callback(GtkWidget *menu_item, dt_iop_module_t *module)
+{
+  if(!module) return;
+
+  const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-formid"));
+  dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
+  if(!mask_form) return;
+
+  dt_masks_change_form_gui(NULL);
+  dt_masks_form_remove(module, NULL, mask_form);
+  _blendop_masks_apply_and_commit(module);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, 0, DT_MASKS_EVENT_DELETE);
+}
+
+static void _blendop_masks_all_duplicate_callback(GtkWidget *menu_item, dt_iop_module_t *module)
+{
+  if(!module) return;
+
+  const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-formid"));
+  if(dt_masks_form_duplicate(darktable.develop, formid) <= 0) return;
+
+  _blendop_masks_apply_and_commit(module);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, 0, 0, DT_MASKS_EVENT_RESET);
+}
+
+static void _blendop_masks_all_rename_callback(GtkWidget *menu_item, dt_iop_module_t *module)
+{
+  if(!module) return;
+  if(!module->blend_data) return;
+
+  const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-formid"));
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  GtkTreeView *view = GTK_TREE_VIEW(bd->masks_treeview);
+  GtkTreeModel *model = gtk_tree_view_get_model(view);
+  if(!GTK_IS_TREE_MODEL(model)) return;
+
+  GtkTreeIter iter;
+  if(!_blendop_masks_find_iter_by_formid(model, &iter, BLENDOP_MASKS_ALL_COL_FORMID, formid)) return;
+
+  GtkTreePath *path = gtk_tree_model_get_path(model, &iter);
+  GtkTreeViewColumn *column = gtk_tree_view_get_column(view, 0);
+  GtkCellRenderer *renderer = g_object_get_data(G_OBJECT(view), "blendop-masks-name-renderer");
+  if(path && column && renderer)
+    gtk_tree_view_set_cursor_on_cell(view, path, column, renderer, TRUE);
+  if(path) gtk_tree_path_free(path);
+}
+
+static gboolean _blendop_masks_all_button_pressed(GtkWidget *treeview, GdkEventButton *event,
+                                                  dt_iop_module_t *module)
+{
+  if(!event || event->type != GDK_BUTTON_PRESS || event->button != GDK_BUTTON_SECONDARY) return FALSE;
+
+  GtkTreePath *path = NULL;
+  if(!gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &path,
+                                    NULL, NULL, NULL))
+    return FALSE;
+
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(treeview));
+  gtk_tree_selection_unselect_all(selection);
+  gtk_tree_selection_select_path(selection, path);
+
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
+  GtkTreeIter iter;
+  int formid = -1;
+  if(gtk_tree_model_get_iter(model, &iter, path))
+    gtk_tree_model_get(model, &iter, BLENDOP_MASKS_ALL_COL_FORMID, &formid, -1);
+  gtk_tree_path_free(path);
+  if(formid <= 0) return TRUE;
+
+  GtkWidget *menu = gtk_menu_new();
+  GtkWidget *item = gtk_menu_item_new_with_label(_("delete"));
+  g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
+  g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_all_delete_callback), module);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+  item = gtk_menu_item_new_with_label(_("duplicate"));
+  g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
+  g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_all_duplicate_callback), module);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+  item = gtk_menu_item_new_with_label(_("rename"));
+  g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
+  g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_all_rename_callback), module);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+  gtk_widget_show_all(menu);
+  gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)event);
+  return TRUE;
+}
+
+static void _blendop_masks_group_remove_callback(GtkWidget *menu_item, dt_iop_module_t *module)
+{
+  if(!module) return;
+
+  const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-formid"));
+  const int parentid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-parentid"));
+  dt_masks_form_t *group_form = dt_masks_get_from_id(darktable.develop, parentid);
+  dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
+  if(!group_form || !mask_form) return;
+
+  dt_masks_form_remove(module, group_form, mask_form);
+  _blendop_masks_apply_and_commit(module);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, parentid,
+                                DT_MASKS_EVENT_REMOVE);
+}
+
+static void _blendop_masks_group_operation_callback(GtkWidget *menu_item, gpointer user_data)
+{
+  dt_iop_module_t *module = (dt_iop_module_t *)user_data;
+  if(!module) return;
+
+  const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-formid"));
+  const int parentid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-parentid"));
+  const dt_masks_state_t state = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-state"));
+
+  dt_masks_form_group_t *group_entry = dt_masks_form_group_from_parentid(parentid, formid);
+  if(!group_entry) return;
+
+  const int old_state = group_entry->state;
+  apply_operation(group_entry, state);
+  if(group_entry->state == old_state) return;
+
+  _blendop_masks_apply_and_commit(module);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, parentid,
+                                DT_MASKS_EVENT_UPDATE);
+}
+
+static void _blendop_masks_group_selection_changed(GtkTreeSelection *selection, dt_iop_module_t *module)
+{
+  if(darktable.gui->reset) return;
+  if(!module) return;
+  if(!selection) return;
+
+  GtkTreeModel *model = NULL;
+  GtkTreeIter iter;
+  if(!gtk_tree_selection_get_selected(selection, &model, &iter)) return;
+  if(!GTK_IS_TREE_MODEL(model)) return;
+
+  int formid = -1;
+  gtk_tree_model_get(model, &iter, BLENDOP_MASKS_GROUP_COL_FORMID, &formid, -1);
+  if(formid <= 0) return;
+
+  // Switching edit mode is required to actually display mask overlays in the center view.
+  dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
+  // Keep lib/masks tree selection in sync without re-triggering its selection handler,
+  // otherwise the visible overlay can be replaced by only the clicked shape.
+  dt_dev_masks_selection_change(darktable.develop, module, formid, FALSE);
+
+  // Mark the selected shape as active in the central mask GUI state.
+  if(module->dev && module->dev->form_gui)
+  {
+    dt_masks_form_gui_t *gui = module->dev->form_gui;
+    dt_masks_form_t *visible_form = dt_masks_get_visible_form(module->dev);
+    const int selected_index = dt_masks_group_index_from_formid(visible_form, formid);
+    if(selected_index >= 0)
+    {
+      gui->group_selected = selected_index;
+      gui->form_selected = TRUE;
+      gui->border_selected = FALSE;
+      gui->source_selected = FALSE;
+      gui->node_selected = FALSE;
+      gui->handle_selected = FALSE;
+      gui->seg_selected = FALSE;
+      gui->handle_border_selected = FALSE;
+      gui->node_selected_idx = -1;
+      gui->form_dragging = FALSE;
+      gui->source_dragging = FALSE;
+      gui->form_rotating = FALSE;
+      gui->pivot_selected = FALSE;
+    }
+  }
+}
+
+static gboolean _blendop_masks_group_move_by_index(dt_masks_form_t *group_form, const int index,
+                                                   const gboolean move_up)
+{
+  if(!group_form) return FALSE;
+  if(!(group_form->type & DT_MASKS_GROUP)) return FALSE;
+  if(index < 0) return FALSE;
+
+  const guint length = g_list_length(group_form->points);
+  if(length == 0 || (guint)index >= length) return FALSE;
+  if(move_up && index == 0) return FALSE;
+  if(!move_up && (guint)index >= length - 1) return FALSE;
+
+  dt_masks_form_group_t *entry = (dt_masks_form_group_t *)g_list_nth_data(group_form->points, index);
+  if(!entry) return FALSE;
+
+  const int new_index = move_up ? index - 1 : index + 1;
+  group_form->points = g_list_remove(group_form->points, entry);
+  group_form->points = g_list_insert(group_form->points, entry, new_index);
+  return TRUE;
+}
+
+static void _blendop_masks_group_move_callback(GtkWidget *menu_item, dt_iop_module_t *module)
+{
+  if(!module) return;
+
+  const int parentid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-parentid"));
+  const int index = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-index"));
+  const gboolean move_up = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-move-up"));
+  dt_masks_form_t *group_form = dt_masks_get_from_id(darktable.develop, parentid);
+  if(!_blendop_masks_group_move_by_index(group_form, index, move_up)) return;
+
+  dt_masks_change_form_gui(NULL);
+  _blendop_masks_apply_and_commit(module);
+  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, 0, parentid, DT_MASKS_EVENT_UPDATE);
+}
+
+static void _blendop_masks_edit_list_toggle(GtkToggleButton *togglebutton, dt_iop_module_t *module)
+{
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+
+  if(!GTK_IS_TOGGLE_BUTTON(togglebutton)) return;
+
+  // The edit toggle swaps the visible list between:
+  // - current module mask tree
+  // - global all-shapes list
+  const gboolean edit_mode = gtk_toggle_button_get_active(togglebutton);
+
+  if(GTK_IS_STACK(bd->lists_stack))
+    gtk_stack_set_visible_child_name(GTK_STACK(bd->lists_stack), edit_mode ? "all" : "group");
+  
+
+  if(GTK_IS_LABEL(bd->group_shapes_label))
+    gtk_label_set_text(GTK_LABEL(bd->group_shapes_label),
+                       edit_mode ? _("Add/remove shapes") : _("Current module mask"));
+}
+
+static GtkWidget *_blendop_masks_shape_buttons(dt_iop_module_t *module, dt_iop_gui_blend_data_t *bd)
+{
+  if(!module || !bd) return NULL;
+
+  GtkWidget *all_shapes_buttons = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_widget_set_halign(all_shapes_buttons, GTK_ALIGN_END);
+  gtk_widget_set_valign(all_shapes_buttons, GTK_ALIGN_START);
+
+  bd->masks_type[0] = DT_MASKS_GRADIENT;
+  bd->masks_shapes[0] = dt_iop_togglebutton_new(module, "blend`shapes", N_("add gradient"),
+                                                N_("add multiple gradients"),
+                                                G_CALLBACK(_blendop_masks_add_shape),
+                                                FALSE, 0, 0, dtgtk_cairo_paint_masks_gradient,
+                                                all_shapes_buttons);
+  gtk_widget_set_valign(bd->masks_shapes[0], GTK_ALIGN_START);
+
+  bd->masks_type[4] = DT_MASKS_BRUSH;
+  bd->masks_shapes[4] = dt_iop_togglebutton_new(module, "blend`shapes", N_("add brush"),
+                                                N_("add multiple brush strokes"),
+                                                G_CALLBACK(_blendop_masks_add_shape),
+                                                FALSE, 0, 0, dtgtk_cairo_paint_masks_brush,
+                                                all_shapes_buttons);
+  gtk_widget_set_valign(bd->masks_shapes[4], GTK_ALIGN_START);
+
+  bd->masks_type[1] = DT_MASKS_POLYGON;
+  bd->masks_shapes[1] = dt_iop_togglebutton_new(module, "blend`shapes", N_("add path"),
+                                                N_("add multiple paths"),
+                                                G_CALLBACK(_blendop_masks_add_shape),
+                                                FALSE, 0, 0, dtgtk_cairo_paint_masks_path,
+                                                all_shapes_buttons);
+  gtk_widget_set_valign(bd->masks_shapes[1], GTK_ALIGN_START);
+
+  bd->masks_type[2] = DT_MASKS_ELLIPSE;
+  bd->masks_shapes[2] = dt_iop_togglebutton_new(module, "blend`shapes", N_("add ellipse"),
+                                                N_("add multiple ellipses"),
+                                                G_CALLBACK(_blendop_masks_add_shape),
+                                                FALSE, 0, 0, dtgtk_cairo_paint_masks_ellipse,
+                                                all_shapes_buttons);
+  gtk_widget_set_valign(bd->masks_shapes[2], GTK_ALIGN_START);
+
+  bd->masks_type[3] = DT_MASKS_CIRCLE;
+  bd->masks_shapes[3] = dt_iop_togglebutton_new(module, "blend`shapes", N_("add circle"),
+                                                N_("add multiple circles"),
+                                                G_CALLBACK(_blendop_masks_add_shape),
+                                                FALSE, 0, 0, dtgtk_cairo_paint_masks_circle,
+                                                all_shapes_buttons);
+  gtk_widget_set_valign(bd->masks_shapes[3], GTK_ALIGN_START);
+
+  return all_shapes_buttons;
+}
+
+static GtkWidget *_blendop_masks_group_ctx_menu(dt_iop_gui_blend_data_t *bd, dt_iop_module_t *module,
+                                                const int formid, const int parentid, const int state,
+                                                const int index, const int list_length)
+{
+  if(!bd || !module) return NULL;
+
+  const int icon_size = DT_PIXEL_APPLY_DPI(13);
+  bd->masks_ic_inverse = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_inverse, icon_size, icon_size);
+  bd->masks_ic_union = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_union, icon_size * 2, icon_size);
+  bd->masks_ic_intersection = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_intersection, icon_size * 2, icon_size);
+  bd->masks_ic_difference = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_difference, icon_size * 2, icon_size);
+  bd->masks_ic_exclusion = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_exclusion, icon_size * 2, icon_size);
+
+  GtkWidget *menu = gtk_menu_new();
+  gtk_style_context_add_class(gtk_widget_get_style_context(menu), "dt-masks-context-menu");
+
+  GtkWidget *op_item = gtk_menu_item_new_with_label(_("Operation"));
+  GtkWidget *op_submenu = gtk_menu_new();
+  gtk_menu_item_set_submenu(GTK_MENU_ITEM(op_item), op_submenu);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), op_item);
+
+  GtkWidget *item = ctx_gtk_check_menu_item_new_with_markup_and_pixbuf(_("Invert"), bd->masks_ic_inverse,
+                                                                        op_submenu,
+                                                                        _blendop_masks_group_operation_callback,
+                                                                        module,
+                                                                        (state & DT_MASKS_STATE_INVERSE) != 0, TRUE);
+  g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
+  g_object_set_data(G_OBJECT(item), "blend-parentid", GINT_TO_POINTER(parentid));
+  g_object_set_data(G_OBJECT(item), "blend-state", GINT_TO_POINTER(DT_MASKS_STATE_INVERSE));
+
+  gtk_menu_shell_append(GTK_MENU_SHELL(op_submenu), gtk_separator_menu_item_new());
+
+  item = ctx_gtk_check_menu_item_new_with_markup_and_pixbuf(_("Union"), bd->masks_ic_union, op_submenu,
+                                                            _blendop_masks_group_operation_callback, module,
+                                                            (state & DT_MASKS_STATE_UNION) != 0, FALSE);
+  gtk_widget_set_sensitive(item, index > 0);
+  g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
+  g_object_set_data(G_OBJECT(item), "blend-parentid", GINT_TO_POINTER(parentid));
+  g_object_set_data(G_OBJECT(item), "blend-state", GINT_TO_POINTER(DT_MASKS_STATE_UNION));
+
+  item = ctx_gtk_check_menu_item_new_with_markup_and_pixbuf(_("Intersection"), bd->masks_ic_intersection, op_submenu,
+                                                            _blendop_masks_group_operation_callback, module,
+                                                            (state & DT_MASKS_STATE_INTERSECTION) != 0, FALSE);
+  gtk_widget_set_sensitive(item, index > 0);
+  g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
+  g_object_set_data(G_OBJECT(item), "blend-parentid", GINT_TO_POINTER(parentid));
+  g_object_set_data(G_OBJECT(item), "blend-state", GINT_TO_POINTER(DT_MASKS_STATE_INTERSECTION));
+
+  item = ctx_gtk_check_menu_item_new_with_markup_and_pixbuf(_("Difference"), bd->masks_ic_difference, op_submenu,
+                                                            _blendop_masks_group_operation_callback, module,
+                                                            (state & DT_MASKS_STATE_DIFFERENCE) != 0, FALSE);
+  gtk_widget_set_sensitive(item, index > 0);
+  g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
+  g_object_set_data(G_OBJECT(item), "blend-parentid", GINT_TO_POINTER(parentid));
+  g_object_set_data(G_OBJECT(item), "blend-state", GINT_TO_POINTER(DT_MASKS_STATE_DIFFERENCE));
+
+  item = ctx_gtk_check_menu_item_new_with_markup_and_pixbuf(_("Exclusion"), bd->masks_ic_exclusion, op_submenu,
+                                                            _blendop_masks_group_operation_callback, module,
+                                                            (state & DT_MASKS_STATE_EXCLUSION) != 0, FALSE);
+  gtk_widget_set_sensitive(item, index > 0);
+  g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
+  g_object_set_data(G_OBJECT(item), "blend-parentid", GINT_TO_POINTER(parentid));
+  g_object_set_data(G_OBJECT(item), "blend-state", GINT_TO_POINTER(DT_MASKS_STATE_EXCLUSION));
+
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+
+  item = gtk_menu_item_new_with_label(_("Move Up"));
+  gtk_widget_set_sensitive(item, index > 0);
+  g_object_set_data(G_OBJECT(item), "blend-parentid", GINT_TO_POINTER(parentid));
+  g_object_set_data(G_OBJECT(item), "blend-index", GINT_TO_POINTER(index));
+  g_object_set_data(G_OBJECT(item), "blend-move-up", GINT_TO_POINTER(TRUE));
+  g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_group_move_callback), module);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+  item = gtk_menu_item_new_with_label(_("Move Down"));
+  gtk_widget_set_sensitive(item, index >= 0 && index < list_length - 1);
+  g_object_set_data(G_OBJECT(item), "blend-parentid", GINT_TO_POINTER(parentid));
+  g_object_set_data(G_OBJECT(item), "blend-index", GINT_TO_POINTER(index));
+  g_object_set_data(G_OBJECT(item), "blend-move-up", GINT_TO_POINTER(FALSE));
+  g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_group_move_callback), module);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+
+  item = gtk_menu_item_new_with_label(_("Remove"));
+  g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
+  g_object_set_data(G_OBJECT(item), "blend-parentid", GINT_TO_POINTER(parentid));
+  g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_group_remove_callback), module);
+  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+
+  return menu;
+}
+
+static gboolean _blendop_masks_group_button_pressed(GtkWidget *treeview, GdkEventButton *event,
+                                                    dt_iop_module_t *module)
+{
+  if(!event || event->type != GDK_BUTTON_PRESS || event->button != GDK_BUTTON_SECONDARY) return FALSE;
+
+  GtkTreePath *path = NULL;
+  if(!gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &path,
+                                    NULL, NULL, NULL))
+    return FALSE;
+
+  GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(treeview));
+  gtk_tree_selection_unselect_all(selection);
+  gtk_tree_selection_select_path(selection, path);
+
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
+  GtkTreeIter iter;
+  int formid = -1;
+  int parentid = -1;
+  int state = 0;
+  int index = -1;
+  if(gtk_tree_model_get_iter(model, &iter, path))
+    gtk_tree_model_get(model, &iter, BLENDOP_MASKS_GROUP_COL_FORMID, &formid,
+                       BLENDOP_MASKS_GROUP_COL_PARENTID, &parentid,
+                       BLENDOP_MASKS_GROUP_COL_STATE, &state,
+                       BLENDOP_MASKS_GROUP_COL_INDEX, &index, -1);
+  gtk_tree_path_free(path);
+
+  if(formid <= 0 || parentid <= 0) return TRUE;
+
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  dt_masks_form_t *parent_group = dt_masks_get_from_id(darktable.develop, parentid);
+  const int list_length = (parent_group && (parent_group->type & DT_MASKS_GROUP))
+                              ? g_list_length(parent_group->points)
+                              : 0;
+
+  GtkWidget *menu = _blendop_masks_group_ctx_menu(bd, module, formid, parentid, state, index, list_length);
+  if(!menu) return TRUE;
+  gtk_widget_show_all(menu);
+  gtk_menu_popup_at_pointer(GTK_MENU(menu), (GdkEvent *)event);
+  return TRUE;
+}
+
+static void _blendop_masks_handler_callback(gpointer instance, const int formid, const int parentid,
+                                            const dt_masks_event_t event, dt_iop_module_t *module)
+{
+  (void)instance;
+  (void)formid;
+  (void)parentid;
+  (void)event;
+  _blendop_masks_refresh_lists(module);
 }
 
 gboolean blend_color_picker_apply(dt_iop_module_t *module, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece)
@@ -2239,35 +3064,47 @@ void dt_masks_iop_update(dt_iop_module_t *module)
 
   /* update masks state */
   dt_masks_form_t *grp = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
-  dt_bauhaus_combobox_clear(bd->masks_combo);
-  if(grp && (grp->type & DT_MASKS_GROUP) && grp->points)
+  const gboolean has_group_shapes = grp && (grp->type & DT_MASKS_GROUP) && grp->points;
+  if(GTK_IS_WIDGET(bd->masks_combo))
   {
-    char txt[512];
-    const guint n = g_list_length(grp->points);
-    snprintf(txt, sizeof(txt), ngettext("%d shape used", "%d shapes used", n), n);
-    dt_bauhaus_combobox_add(bd->masks_combo, txt);
+    dt_bauhaus_combobox_clear(bd->masks_combo);
+    if(has_group_shapes)
+    {
+      char txt[512];
+      const guint n = g_list_length(grp->points);
+      snprintf(txt, sizeof(txt), ngettext("%d shape used", "%d shapes used", n), n);
+      dt_bauhaus_combobox_add(bd->masks_combo, txt);
+    }
+    else
+    {
+      dt_bauhaus_combobox_add(bd->masks_combo, _("no mask used"));
+    }
+    dt_bauhaus_combobox_set(bd->masks_combo, 0);
+    gtk_widget_queue_draw(bd->masks_combo);
   }
-  else
+
+  if(!has_group_shapes)
   {
-    dt_bauhaus_combobox_add(bd->masks_combo, _("no mask used"));
     bd->masks_shown = DT_MASKS_EDIT_OFF;
     // reset the gui
     dt_masks_set_edit_mode(module, DT_MASKS_EDIT_OFF);
   }
-  dt_bauhaus_combobox_set(bd->masks_combo, 0);
-  gtk_widget_queue_draw(bd->masks_combo);
 
   if(bd->masks_support)
   {
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), bd->masks_shown != DT_MASKS_EDIT_OFF);
+    if(GTK_IS_TOGGLE_BUTTON(bd->masks_edit))
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), bd->masks_shown != DT_MASKS_EDIT_OFF);
 
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_polarity),
-                                 bp->mask_combine & DEVELOP_COMBINE_MASKS_POS);
+    if(GTK_IS_TOGGLE_BUTTON(bd->masks_polarity))
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_polarity),
+                                   bp->mask_combine & DEVELOP_COMBINE_MASKS_POS);
   }
 
   // update buttons status
   for(int n = 0; n < DEVELOP_MASKS_NB_SHAPES; n++)
   {
+    if(!GTK_IS_TOGGLE_BUTTON(bd->masks_shapes[n])) continue;
+
     dt_masks_form_t *visible_form = dt_masks_get_visible_form(module->dev);
     if(module->dev->form_gui && visible_form && module->dev->form_gui->creation
        && module->dev->form_gui->creation_module == module
@@ -2281,6 +3118,7 @@ void dt_masks_iop_update(dt_iop_module_t *module)
     }
   }
 
+  _blendop_masks_refresh_lists(module);
   dt_iop_add_remove_mask_indicator(module);
 
   --darktable.gui->reset;
@@ -2302,59 +3140,132 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     bd->masks_combo_ids = NULL;
     bd->masks_shown = DT_MASKS_EDIT_OFF;
 
-    GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    dt_gui_add_class(hbox, "dt_section_label"); // make the combo look like a section label
+    bd->lists_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
-    bd->masks_combo = dt_bauhaus_combobox_new(darktable.bauhaus, DT_GUI_MODULE(module));
-    dt_bauhaus_set_use_default_callback(bd->masks_combo);
-    dt_bauhaus_widget_set_label(bd->masks_combo, N_("drawn mask"));
+    GtkCellRenderer *renderer = NULL;
+    GtkTreeSelection *selection = NULL;
 
-    dt_bauhaus_combobox_add(bd->masks_combo, _("no mask used"));
-    g_signal_connect(G_OBJECT(bd->masks_combo), "value-changed",
-                     G_CALLBACK(dt_masks_iop_value_changed_callback), module);
-    dt_bauhaus_combobox_add_populate_fct(bd->masks_combo, dt_masks_iop_combo_populate);
-    gtk_box_pack_start(GTK_BOX(hbox), bd->masks_combo, TRUE, TRUE, 0);
+    GtkWidget *group_shapes_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    bd->group_shapes_label = gtk_label_new(_("Current mask"));
+    dt_gui_add_class(bd->group_shapes_label, "dt_section_label");
+    gtk_widget_set_halign(bd->group_shapes_label, GTK_ALIGN_START);
+    gtk_widget_set_hexpand(bd->group_shapes_label, TRUE);
+    gtk_box_pack_start(GTK_BOX(group_shapes_header), bd->group_shapes_label, TRUE, TRUE, 0);
 
+    // buttons for mask polarity and edit mode
     bd->masks_polarity = dt_iop_togglebutton_new(module, "blend`tools", N_("toggle polarity of drawn mask"), NULL,
                                                  G_CALLBACK(_blendop_masks_polarity_callback),
-                                                 FALSE, 0, 0, dtgtk_cairo_paint_plusminus, hbox);
+                                                 FALSE, 0, 0, dtgtk_cairo_paint_plusminus, group_shapes_header);
     dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(bd->masks_polarity), dtgtk_cairo_paint_plusminus, 0, NULL);
     dt_gui_add_class(bd->masks_polarity, "dt_ignore_fg_state");
 
-    GtkWidget *abox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    bd->masks_edit = dt_iop_togglebutton_new(module, "blend`tools", N_("show and edit mask elements"), N_("show and edit in restricted mode"),
+    bd->masks_edit = dt_iop_togglebutton_new(module, "blend`tools", N_("show and edit mask elements"),
+                                             N_("show and edit in restricted mode"),
                                              G_CALLBACK(_blendop_masks_show_and_edit),
-                                             FALSE, 0, 0, dtgtk_cairo_paint_masks_eye, abox);
+                                             FALSE, 0, 0, dtgtk_cairo_paint_masks_eye, group_shapes_header);
 
-    bd->masks_type[0] = DT_MASKS_GRADIENT;
-    bd->masks_shapes[0] = dt_iop_togglebutton_new(module, "blend`shapes", N_("add gradient"), N_("add multiple gradients"),
-                                                  G_CALLBACK(_blendop_masks_add_shape),
-                                                  FALSE, 0, 0, dtgtk_cairo_paint_masks_gradient, abox);
+    bd->edit_toggle = gtk_toggle_button_new_with_label(_("Connect shapes"));
+    gtk_widget_set_tooltip_text(bd->edit_toggle, _("Show all shapes and groups to choose which ones to connect to or disconnect from the mask."));
 
-    bd->masks_type[4] = DT_MASKS_BRUSH;
-    bd->masks_shapes[4] = dt_iop_togglebutton_new(module, "blend`shapes", N_("add brush"), N_("add multiple brush strokes"),
-                                                  G_CALLBACK(_blendop_masks_add_shape),
-                                                  FALSE, 0, 0, dtgtk_cairo_paint_masks_brush, abox);
+    gtk_box_pack_end(GTK_BOX(group_shapes_header), bd->edit_toggle, FALSE, FALSE, 0);
 
-    bd->masks_type[1] = DT_MASKS_POLYGON;
-    bd->masks_shapes[1] = dt_iop_togglebutton_new(module, "blend`shapes", N_("add path"), N_("add multiple paths"),
-                                                  G_CALLBACK(_blendop_masks_add_shape),
-                                                  FALSE, 0, 0, dtgtk_cairo_paint_masks_path, abox);
+    gtk_box_pack_start(GTK_BOX(bd->lists_box), group_shapes_header, FALSE, FALSE, 0);
 
-    bd->masks_type[2] = DT_MASKS_ELLIPSE;
-    bd->masks_shapes[2] = dt_iop_togglebutton_new(module, "blend`shapes", N_("add ellipse"), N_("add multiple ellipses"),
-                                                  G_CALLBACK(_blendop_masks_add_shape),
-                                                  FALSE, 0, 0, dtgtk_cairo_paint_masks_ellipse, abox);
+    // Current mask list
+    bd->masks_group_treeview = gtk_tree_view_new();
+    bd->group_shapes_store = gtk_tree_store_new(BLENDOP_MASKS_GROUP_COL_COUNT, GDK_TYPE_PIXBUF,
+                                                          GDK_TYPE_PIXBUF, G_TYPE_STRING, G_TYPE_INT,
+                                                          G_TYPE_INT, G_TYPE_INT, G_TYPE_INT);
+    gtk_tree_view_set_model(GTK_TREE_VIEW(bd->masks_group_treeview), GTK_TREE_MODEL(bd->group_shapes_store));
 
-    bd->masks_type[3] = DT_MASKS_CIRCLE;
-    bd->masks_shapes[3] = dt_iop_togglebutton_new(module, "blend`shapes", N_("add circle"), N_("add multiple circles"),
-                                                  G_CALLBACK(_blendop_masks_add_shape),
-                                                  FALSE, 0, 0, dtgtk_cairo_paint_masks_circle, abox);
+    bd->group_shapes_col = gtk_tree_view_column_new();
+    gtk_tree_view_append_column(GTK_TREE_VIEW(bd->masks_group_treeview), bd->group_shapes_col);
 
-    gtk_box_pack_start(GTK_BOX(bd->masks_box), GTK_WIDGET(hbox), TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(bd->masks_box), GTK_WIDGET(abox), TRUE, TRUE, 0);
+    renderer = gtk_cell_renderer_pixbuf_new();
+    gtk_tree_view_column_pack_start(bd->group_shapes_col, renderer, FALSE);
+    gtk_tree_view_column_add_attribute(bd->group_shapes_col, renderer, "pixbuf", BLENDOP_MASKS_GROUP_COL_OP_ICON);
+
+    renderer = gtk_cell_renderer_pixbuf_new();
+    gtk_tree_view_column_pack_start(bd->group_shapes_col, renderer, FALSE);
+    gtk_tree_view_column_add_attribute(bd->group_shapes_col, renderer, "pixbuf", BLENDOP_MASKS_GROUP_COL_INV_ICON);
+
+    renderer = gtk_cell_renderer_text_new();
+    gtk_tree_view_column_pack_start(bd->group_shapes_col, renderer, TRUE);
+    gtk_tree_view_column_add_attribute(bd->group_shapes_col, renderer, "text", BLENDOP_MASKS_GROUP_COL_NAME);
+
+    selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(bd->masks_group_treeview));
+    gtk_tree_selection_set_mode(selection, GTK_SELECTION_SINGLE);
+    g_signal_connect(selection, "changed", G_CALLBACK(_blendop_masks_group_selection_changed), module);
+    gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(bd->masks_group_treeview), FALSE);
+    gtk_tree_view_set_show_expanders(GTK_TREE_VIEW(bd->masks_group_treeview), TRUE);
+    g_signal_connect(bd->masks_group_treeview, "button-press-event",
+                     G_CALLBACK(_blendop_masks_group_button_pressed), module);
+
+    bd->group_shapes_sw = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(bd->group_shapes_sw), bd->masks_group_treeview);
+    dt_gui_widget_init_auto_height(bd->masks_group_treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
+
+    // Creating shapes buttons (circle, ellipse ....)
+    bd->all_shapes_buttons = _blendop_masks_shape_buttons(module, bd);
+    if(!GTK_IS_WIDGET(bd->all_shapes_buttons)) return;
+    gtk_box_pack_end(GTK_BOX(bd->lists_box), bd->all_shapes_buttons, FALSE, FALSE, 0);
+
+    // All shapes list
+    bd->masks_treeview = gtk_tree_view_new();
+    bd->all_shapes_store = gtk_list_store_new(BLENDOP_MASKS_ALL_COL_COUNT, G_TYPE_BOOLEAN,
+                                              G_TYPE_STRING, G_TYPE_INT);
+    gtk_tree_view_set_model(GTK_TREE_VIEW(bd->masks_treeview), GTK_TREE_MODEL(bd->all_shapes_store));
+
+    bd->all_shapes_col = gtk_tree_view_column_new();
+    gtk_tree_view_append_column(GTK_TREE_VIEW(bd->masks_treeview), bd->all_shapes_col);
+
+    renderer = gtk_cell_renderer_toggle_new();
+    g_object_set(renderer, "activatable", TRUE, NULL);
+    g_signal_connect(renderer, "toggled", G_CALLBACK(_blendop_masks_all_toggled), module);
+    gtk_tree_view_column_pack_start(bd->all_shapes_col, renderer, FALSE);
+    gtk_tree_view_column_add_attribute(bd->all_shapes_col, renderer, "active", BLENDOP_MASKS_ALL_COL_ACTIVE);
+
+    renderer = gtk_cell_renderer_text_new();
+    g_object_set(renderer, "editable", TRUE, NULL);
+    g_signal_connect(renderer, "edited", G_CALLBACK(_blendop_masks_all_name_edited), module);
+    gtk_tree_view_column_pack_start(bd->all_shapes_col, renderer, TRUE);
+    gtk_tree_view_column_add_attribute(bd->all_shapes_col, renderer, "text", BLENDOP_MASKS_ALL_COL_NAME);
+    g_object_set_data(G_OBJECT(bd->masks_treeview), "blendop-masks-name-renderer", renderer);
+
+    selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(bd->masks_treeview));
+    gtk_tree_selection_set_mode(selection, GTK_SELECTION_SINGLE);
+    g_signal_connect(selection, "changed", G_CALLBACK(_blendop_masks_all_selection_changed), module);
+    gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(bd->masks_treeview), FALSE);
+    g_signal_connect(bd->masks_treeview, "button-press-event",
+                     G_CALLBACK(_blendop_masks_all_button_pressed), module);
+
+    bd->all_shapes_sw = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(bd->all_shapes_sw), bd->masks_treeview);
+    dt_gui_widget_init_auto_height(bd->masks_treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
+
+    // The two lists share the same slot; Edit selects which one is visible.
+    bd->lists_stack = gtk_stack_new();
+    gtk_stack_set_transition_type(GTK_STACK(bd->lists_stack), GTK_STACK_TRANSITION_TYPE_NONE);
+    gtk_stack_set_homogeneous(GTK_STACK(bd->lists_stack), FALSE);
+    gtk_stack_add_named(GTK_STACK(bd->lists_stack), bd->group_shapes_sw, "group");
+    gtk_stack_add_named(GTK_STACK(bd->lists_stack), bd->all_shapes_sw, "all");
+    gtk_box_pack_start(GTK_BOX(bd->lists_box), bd->lists_stack, FALSE, FALSE, 0);
+
+    // Default state:
+    // - current-module tree is visible
+    // - all-shapes tree is hidden
+    // The toggle callback flips these two scrolled windows.
+    g_signal_connect(bd->edit_toggle, "toggled", G_CALLBACK(_blendop_masks_edit_list_toggle), module);
+    if(GTK_IS_TOGGLE_BUTTON(bd->edit_toggle))
+    {
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->edit_toggle), FALSE);
+      _blendop_masks_edit_list_toggle(GTK_TOGGLE_BUTTON(bd->edit_toggle), module);
+    }
+
+    gtk_box_pack_start(GTK_BOX(bd->masks_box), bd->lists_box, FALSE, FALSE, 0);
 
     bd->masks_inited = 1;
+    _blendop_masks_refresh_lists(module);
   }
   gtk_container_add(GTK_CONTAINER(event_box), GTK_WIDGET(bd->masks_box));
 }
@@ -2508,6 +3419,7 @@ void dt_iop_gui_cleanup_blending(dt_iop_module_t *module)
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
 
   dt_iop_gui_cleanup_blending_body(module);
+  DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_blendop_masks_handler_callback), module);
 
   dt_pthread_mutex_lock(&bd->lock);
   if(bd->timeout_handle)
@@ -2747,6 +3659,7 @@ void dt_iop_gui_update_blending(dt_iop_module_t *module)
   }
 
   dt_develop_blend_mode_t blend_mode = module->blend_params->blend_mode & DEVELOP_BLEND_MODE_MASK;
+  // module->blend_params->mask_mode
   if(!dt_bauhaus_combobox_set_from_value(bd->blend_modes_combo, blend_mode))
   {
     // add deprecated blend mode
@@ -2989,6 +3902,14 @@ void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
   bd->masks_combo_ids = NULL;
   dt_pthread_mutex_unlock(&bd->lock);
 
+  if(bd->masks_ic_inverse) g_object_unref(bd->masks_ic_inverse);
+  if(bd->masks_ic_union) g_object_unref(bd->masks_ic_union);
+  if(bd->masks_ic_intersection) g_object_unref(bd->masks_ic_intersection);
+  if(bd->masks_ic_difference) g_object_unref(bd->masks_ic_difference);
+  if(bd->masks_ic_exclusion) g_object_unref(bd->masks_ic_exclusion);
+  if(bd->group_shapes_store) g_object_unref(bd->group_shapes_store);
+  if(bd->all_shapes_store) g_object_unref(bd->all_shapes_store);
+
   gtk_widget_destroy(bd->blending_body_box);
 
   bd->blending_body_box = NULL;
@@ -3027,6 +3948,23 @@ void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
   memset(bd->masks_shapes, 0, sizeof(bd->masks_shapes));
   bd->masks_edit = NULL;
   bd->masks_polarity = NULL;
+  bd->edit_toggle = NULL;
+  bd->masks_treeview = NULL;
+  bd->masks_group_treeview = NULL;
+  bd->group_shapes_store = NULL;
+  bd->group_shapes_col = NULL;
+  bd->all_shapes_store = NULL;
+  bd->group_shapes_sw = NULL;
+  bd->all_shapes_col = NULL;
+  bd->all_shapes_sw = NULL;
+  bd->lists_stack = NULL;
+  bd->all_shapes_buttons = NULL;
+  bd->lists_box = NULL;
+  bd->masks_ic_inverse = NULL;
+  bd->masks_ic_union = NULL;
+  bd->masks_ic_intersection = NULL;
+  bd->masks_ic_difference = NULL;
+  bd->masks_ic_exclusion = NULL;
   bd->raster_combo = NULL;
   bd->raster_polarity = NULL;
   bd->channel_tabs = NULL;
@@ -3040,7 +3978,9 @@ void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
 
 void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
 {
-  if(!blendw || !(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING) || !module->blend_data) return;
+  if(!blendw) return;
+  if(!(module->flags() & IOP_FLAGS_SUPPORTS_BLENDING)) return;
+  if(!module->blend_data) return;
 
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
   if(bd->blending_body_box) return;
@@ -3271,6 +4211,12 @@ void dt_iop_gui_init_blending(dt_iop_module_t *module)
   bd->timeout_handle = 0;
   bd->save_for_leave = 0;
   dt_pthread_mutex_unlock(&bd->lock);
+
+  if(bd->masks_support)
+  {
+    DT_DEBUG_CONTROL_SIGNAL_CONNECT(darktable.signals, DT_SIGNAL_MASK_CHANGED,
+                                    G_CALLBACK(_blendop_masks_handler_callback), module);
+  }
 }
 
 // clang-format off

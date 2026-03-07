@@ -370,9 +370,28 @@ typedef struct dt_iop_gui_blend_data_t
   GtkWidget *masks_shapes[DEVELOP_MASKS_NB_SHAPES];
   int masks_type[DEVELOP_MASKS_NB_SHAPES];
   GtkWidget *masks_edit;
+  GtkWidget *group_shapes_label;
   GtkWidget *masks_polarity;
+  GtkWidget *edit_toggle;
   int *masks_combo_ids;
   int masks_shown;
+  GtkWidget *masks_treeview;
+  GtkWidget *masks_group_treeview;
+  GtkTreeStore *group_shapes_store;
+  GtkTreeViewColumn *group_shapes_col;
+  GtkListStore *all_shapes_store;
+  GtkWidget *group_shapes_sw;
+  GtkTreeViewColumn *all_shapes_col;
+  GtkWidget *all_shapes_sw;
+  GtkWidget *lists_stack;
+  GdkPixbuf *masks_ic_inverse;
+  GdkPixbuf *masks_ic_union;
+  GdkPixbuf *masks_ic_intersection;
+  GdkPixbuf *masks_ic_difference;
+  GdkPixbuf *masks_ic_exclusion;
+  GtkWidget *all_shapes_buttons;
+  GtkWidget *lists_box;
+
 
   GtkWidget *raster_combo;
   GtkWidget *raster_polarity;

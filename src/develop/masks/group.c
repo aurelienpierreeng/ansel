@@ -126,7 +126,7 @@ static void _group_events_post_expose_draw(cairo_t *cr, float zoom_scale, dt_mas
                                           dt_masks_form_gui_t *gui, int pos)
 {
   dt_masks_form_t *selected_form = _group_get_child_at(form, pos, NULL);
-  if(selected_form && selected_form->functions)
+  if(selected_form && selected_form->functions && selected_form->functions->post_expose)
   {
     gui->type = selected_form->type;
     selected_form->functions->post_expose(cr, zoom_scale, gui, pos, g_list_length(selected_form->points));

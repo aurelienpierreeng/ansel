@@ -327,15 +327,13 @@ static void _masks_operation_callback(GtkWidget *menu, gpointer user_data)
 
 #define masks_gtk_menu_item_new_bold(label, selected, state, icon)                                        \
 {                                                                                                         \
-  gchar *op_title = g_strdup(label);                                                                      \
-  gchar *op_label = g_strdup_printf("%s", op_title);                                                      \
+  gchar *op_label = g_strdup(label);                                                                      \
   menu_item = ctx_gtk_check_menu_item_new_with_markup_and_pixbuf(op_label, icon,                          \
                                                                     sub_menu,                             \
                                                                     _masks_operation_callback, gui,       \
                                                                     (selected != 0),                      \
                                                                     ((state) == DT_MASKS_STATE_INVERSE)); \
   g_free(op_label);                                                                                       \
-  g_free(op_title);                                                                                       \
   g_object_set_data(G_OBJECT(menu_item), "state_op", GINT_TO_POINTER(state));                             \
   g_object_set_data(G_OBJECT(menu_item), "op_form", op_form);                                             \
   g_object_set_data(G_OBJECT(menu_item), "form_pos", GINT_TO_POINTER(form_pos));                          \
