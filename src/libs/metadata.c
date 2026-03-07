@@ -732,11 +732,14 @@ void gui_init(dt_lib_module_t *self)
     const char *name = (char *)dt_metadata_get_name_by_display_order(i);
     d->setting_name[i] = g_strdup_printf("plugins/lighttable/metadata/%s_text_height", name);
 
-    GtkWidget *swindow = dt_ui_scroll_wrap(GTK_WIDGET(textview), 100, d->setting_name[i]);
+    GtkWidget *swindow = gtk_scrolled_window_new(NULL, NULL);
+    gtk_container_add(GTK_CONTAINER(swindow), textview);
 
     gtk_grid_attach(grid, swindow, 1, i, 1, 1);
     gtk_widget_set_hexpand(swindow, TRUE);
     d->swindow[i] = swindow;
+    
+    dt_gui_widget_init_auto_height(GTK_WIDGET(textview), 1, 3);
 
     gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(textview), GTK_WRAP_WORD_CHAR);
     gtk_text_view_set_accepts_tab(GTK_TEXT_VIEW(textview), FALSE);

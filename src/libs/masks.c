@@ -1924,7 +1924,7 @@ void gui_init(dt_lib_module_t *self)
   g_signal_connect(d->treeview, "button-press-event", (GCallback)_tree_button_pressed, self);
 
   gtk_box_pack_start(GTK_BOX(self->widget), d->treeview, TRUE, TRUE, 0);
-  dt_gui_treeview_init_auto_height(d->treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
+  dt_gui_widget_init_auto_height(d->treeview, TREE_LIST_MIN_ROWS, TREE_LIST_MAX_ROWS);
 
   d->blending_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), d->blending_box, FALSE, FALSE, 0);

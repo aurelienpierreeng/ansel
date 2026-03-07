@@ -208,18 +208,20 @@ typedef struct _gui_collapsible_section_t
   GtkWidget *label;     // The section label
 } dt_gui_collapsible_section_t;
 
-typedef struct dt_gui_treeview_auto_height_t
+typedef struct dt_gui_widget_auto_height_t
 {
   int min_rows;
   int max_rows;
   GtkTreeModel *model;
+  GtkTextBuffer *buffer;
   gulong model_row_inserted;
   gulong model_row_deleted;
   gulong model_row_changed;
   gulong model_rows_reordered;
   gulong model_row_expanded;
   gulong model_row_collapsed;
-} dt_gui_treeview_auto_height_t;
+  gulong buffer_changed;
+} dt_gui_widget_auto_height_t;
 
 static inline cairo_surface_t *dt_cairo_image_surface_create(cairo_format_t format, int width, int height) {
   cairo_surface_t *cst = cairo_image_surface_create(format, width * darktable.gui->ppd, height * darktable.gui->ppd);
@@ -398,18 +400,20 @@ GdkModifierType dt_key_modifier_state();
 
 
 /**
- * @brief Set the automatic height for a GtkTreeView based on the number of rows.
+ * @brief Set the automatic height for a widget based on the number of rows or lines it contains.
  * 
- * This function creates the GtkScrolledWindow if the treeview is already wrapped in a GtkBox. The treeview is then wrapped into
- * a GtkScrolledWindow while preserving box packing options.
- * If the treeview is already inside a GtkScrolledWindow, its policy is set to
+ * Compatible with GtkTreeView and GtkTextView.
+ * 
+ * If the widget is already wrapped in a `GtkBox`, this function creates a `GtkScrolledWindow` to contain the widget to scroll.
+ * The widget is then wrapped into a `GtkScrolledWindow` while preserving box packing options.
+ * If the widget is already inside a `GtkScrolledWindow`, its policy is set to
  * horizontal=never and vertical=automatic.
  * 
- * @param treeview The GtkTreeView widget. It have to be already packed into a GtkBox, or already wrapped in a GtkScrolledWindow.
+ * @param widget The GtkWidget. It have to be already packed into a `GtkBox`, or already wrapped in a `GtkScrolledWindow`.
  * @param min_rows The minimum number of rows to display.
  * @param max_rows The maximum number of rows to display.
  */
-void dt_gui_treeview_init_auto_height(GtkWidget *treeview, int min_rows, int max_rows);
+void dt_gui_widget_init_auto_height(GtkWidget *widget , int min_rows, int max_rows);
 GtkWidget *dt_ui_scroll_wrap(GtkWidget *w, gint min_size, char *config_str);
 // check whether the given container has any user-added children
 gboolean dt_gui_container_has_children(GtkContainer *container);
