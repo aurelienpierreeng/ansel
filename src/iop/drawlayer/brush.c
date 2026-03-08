@@ -55,17 +55,6 @@ static inline void _seed_noise_state(uint32_t state[4], const uint64_t seed)
   if((state[0] | state[1] | state[2] | state[3]) == 0u) state[0] = 1u;
 }
 
-/**
- * @brief Deterministic poisson-like scalar noise sample.
- * @note Output is clamped to [0,1].
- */
-static inline float _poisson_noise01(const uint64_t seed, const float mu, const float sigma, const int flip)
-{
-  uint32_t state[4] = { 0 };
-  _seed_noise_state(state, seed);
-  return _clamp01(dt_noise_generator(DT_NOISE_POISSONIAN, mu, sigma, flip, state));
-}
-
 /** @brief Stable scalar hash in [0,1] from precomputed cell seed. */
 static inline float _cell_hash01_from_seed(const uint64_t cell_seed, const uint64_t salt)
 {
