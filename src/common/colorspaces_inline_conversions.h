@@ -183,9 +183,7 @@ static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
 dt_load_simd_aligned(const float *const pixel)
 {
   const float *const in = (const float *const)__builtin_assume_aligned(pixel, 16);
-  dt_aligned_pixel_simd_t out;
-  __builtin_memcpy(&out, in, sizeof(out));
-  return out;
+  return dt_load_simd(in);
 }
 
 #ifdef _OPENMP
@@ -195,7 +193,7 @@ static inline __attribute__((always_inline)) void
 dt_store_simd_aligned(float *const pixel, const dt_aligned_pixel_simd_t value)
 {
   float *const out = (float *const)__builtin_assume_aligned(pixel, 16);
-  __builtin_memcpy(out, &value, sizeof(value));
+  dt_store_simd(out, value);
 }
 
 #ifdef _OPENMP

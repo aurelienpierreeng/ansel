@@ -39,26 +39,6 @@ static inline float _clamp01(const float v)
   return fminf(fmaxf(v, 0.0f), 1.0f);
 }
 
-/** @brief Load 4 floats as one SIMD RGBA vector. */
-static inline dt_aligned_pixel_simd_t _simd_load_rgba(const float *rgba)
-{
-  dt_aligned_pixel_simd_t v;
-  memcpy(&v, rgba, sizeof(v));
-  return v;
-}
-
-/** @brief Store SIMD RGBA vector back to 4 floats. */
-static inline void _simd_store_rgba(float *rgba, const dt_aligned_pixel_simd_t v)
-{
-  memcpy(rgba, &v, sizeof(v));
-}
-
-/** @brief Broadcast one scalar to all SIMD lanes. */
-static inline dt_aligned_pixel_simd_t _simd_set1(const float s)
-{
-  return (dt_aligned_pixel_simd_t){ s, s, s, s };
-}
-
 /** @brief Linear interpolation helper. */
 static inline float _lerpf(const float a, const float b, const float t)
 {
@@ -511,7 +491,7 @@ static gboolean _prepare_blur_context(dt_aligned_pixel_simd_t *blur_px, const fl
 {
   if(!blur_px) return FALSE;
   float blur_weight_sum = 0.0f;
-  dt_aligned_pixel_simd_t blur_sum = _simd_set1(0.0f);
+  dt_aligned_pixel_simd_t blur_sum = dt_simd_set1(0.0f);
   const dt_drawlayer_brush_dab_t *dab = view->dab;
 
   for(int y = view->bounds.nw[1]; y < view->bounds.se[1]; y++)
@@ -525,13 +505,13 @@ static gboolean _prepare_blur_context(dt_aligned_pixel_simd_t *blur_px, const fl
       if(blur_weight <= 0.0f) continue;
 
       const float *pixel = buffer + 4 * ((size_t)y * width + x);
-      blur_sum += _simd_load_rgba(pixel) * _simd_set1(blur_weight);
+      blur_sum += dt_load_simd(pixel) * dt_simd_set1(blur_weight);
       blur_weight_sum += blur_weight;
     }
   }
 
   if(blur_weight_sum <= 1e-8f) return FALSE;
-  *blur_px = blur_sum * _simd_set1(1.0f / blur_weight_sum);
+  *blur_px = blur_sum * dt_simd_set1(1.0f / blur_weight_sum);
   return TRUE;
 }
 
@@ -549,20 +529,20 @@ static dt_aligned_pixel_simd_t _apply_non_smudge_stroke_mode(const dt_drawlayer_
     case DT_DRAWLAYER_BRUSH_MODE_ERASE:
     {
       const float inv_alpha = 1.0f - src_alpha;
-      return old_px * _simd_set1(inv_alpha);
+      return old_px * dt_simd_set1(inv_alpha);
     }
     case DT_DRAWLAYER_BRUSH_MODE_BLUR:
     {
       const float inv_alpha = 1.0f - src_alpha;
-      return blur_px * _simd_set1(src_alpha) + old_px * _simd_set1(inv_alpha);
+      return blur_px * dt_simd_set1(src_alpha) + old_px * dt_simd_set1(inv_alpha);
     }
     case DT_DRAWLAYER_BRUSH_MODE_PAINT:
     case DT_DRAWLAYER_BRUSH_MODE_SMUDGE:
     default:
     {
       const float inv_alpha = 1.0f - src_alpha;
-      const dt_aligned_pixel_simd_t src_px = _simd_load_rgba(dab->color) * _simd_set1(src_alpha);
-      return src_px + old_px * _simd_set1(inv_alpha);
+      const dt_aligned_pixel_simd_t src_px = dt_load_simd(dab->color) * dt_simd_set1(src_alpha);
+      return src_px + old_px * dt_simd_set1(inv_alpha);
     }
   }
 }
@@ -585,7 +565,7 @@ static inline dt_aligned_pixel_simd_t _sample_rgba_float_bilinear(const float *b
                                                                   const int height, const float x,
                                                                   const float y)
 {
-  if(!buffer || width <= 0 || height <= 0) return _simd_set1(0.0f);
+  if(!buffer || width <= 0 || height <= 0) return dt_simd_set1(0.0f);
 
   const float fx = CLAMP(x, 0.0f, (float)(width - 1));
   const float fy = CLAMP(y, 0.0f, (float)(height - 1));
@@ -600,12 +580,12 @@ static inline dt_aligned_pixel_simd_t _sample_rgba_float_bilinear(const float *b
   const float *p10 = buffer + 4 * ((size_t)y0 * width + x1);
   const float *p01 = buffer + 4 * ((size_t)y1 * width + x0);
   const float *p11 = buffer + 4 * ((size_t)y1 * width + x1);
-  const dt_aligned_pixel_simd_t p00v = _simd_load_rgba(p00);
-  const dt_aligned_pixel_simd_t p10v = _simd_load_rgba(p10);
-  const dt_aligned_pixel_simd_t p01v = _simd_load_rgba(p01);
-  const dt_aligned_pixel_simd_t p11v = _simd_load_rgba(p11);
-  const dt_aligned_pixel_simd_t txv = _simd_set1(tx);
-  const dt_aligned_pixel_simd_t tyv = _simd_set1(ty);
+  const dt_aligned_pixel_simd_t p00v = dt_load_simd(p00);
+  const dt_aligned_pixel_simd_t p10v = dt_load_simd(p10);
+  const dt_aligned_pixel_simd_t p01v = dt_load_simd(p01);
+  const dt_aligned_pixel_simd_t p11v = dt_load_simd(p11);
+  const dt_aligned_pixel_simd_t txv = dt_simd_set1(tx);
+  const dt_aligned_pixel_simd_t tyv = dt_simd_set1(ty);
   const dt_aligned_pixel_simd_t av = p00v + (p10v - p00v) * txv;
   const dt_aligned_pixel_simd_t bv = p01v + (p11v - p01v) * txv;
   return av + (bv - av) * tyv;
@@ -622,7 +602,7 @@ static inline dt_aligned_pixel_simd_t _sample_smudge_source_float(const float *b
                                                                   const float motion_dy,
                                                                   const int jitter_x, const int jitter_y)
 {
-  dt_aligned_pixel_simd_t rgba_sum = _simd_set1(0.0f);
+  dt_aligned_pixel_simd_t rgba_sum = dt_simd_set1(0.0f);
   if(!buffer || width <= 0 || height <= 0) return rgba_sum;
 
   float dir_x = motion_dx;
@@ -661,12 +641,12 @@ static inline dt_aligned_pixel_simd_t _sample_smudge_source_float(const float *b
     const float px = sx + dir_x * taps[i][0] + perp_x * taps[i][1];
     const float py = sy + dir_y * taps[i][0] + perp_y * taps[i][1];
     const float w = taps[i][2];
-    rgba_sum += _sample_rgba_float_bilinear(buffer, width, height, px, py) * _simd_set1(w);
+    rgba_sum += _sample_rgba_float_bilinear(buffer, width, height, px, py) * dt_simd_set1(w);
     weight_sum += w;
   }
 
   if(weight_sum > 1e-8f)
-    rgba_sum *= _simd_set1(1.0f / weight_sum);
+    rgba_sum *= dt_simd_set1(1.0f / weight_sum);
   return rgba_sum;
 }
 
@@ -719,17 +699,17 @@ static dt_aligned_pixel_simd_t _apply_smudge_stroke_mode(float *buffer, const in
 
   if(!smudge_pixels || smudge_width <= 0) return old_px;
   float *carry = smudge_pixels + 4 * ((size_t)(y - view->bounds.nw[1]) * smudge_width + (x - view->bounds.nw[0]));
-  const dt_aligned_pixel_simd_t carried_px = _simd_load_rgba(carry);
+  const dt_aligned_pixel_simd_t carried_px = dt_load_simd(carry);
   const float pickup_blend = _clamp01(dab->opacity);
   const float carried_alpha = _clamp01(carry[3]);
   const float deposit_alpha = _smudge_deposit_alpha(src_alpha, carried_alpha, dab->opacity);
   const float inv_alpha = 1.0f - deposit_alpha;
 
-  const dt_aligned_pixel_simd_t out_px = carried_px * _simd_set1(deposit_alpha)
-                                         + old_px * _simd_set1(inv_alpha);
+  const dt_aligned_pixel_simd_t out_px = carried_px * dt_simd_set1(deposit_alpha)
+                                         + old_px * dt_simd_set1(inv_alpha);
   const dt_aligned_pixel_simd_t next_carry = carried_px
-                                             + (sampled_px - carried_px) * _simd_set1(pickup_blend);
-  _simd_store_rgba(carry, next_carry);
+                                             + (sampled_px - carried_px) * dt_simd_set1(pickup_blend);
+  dt_store_simd(carry, next_carry);
   return out_px;
 }
 
@@ -766,7 +746,7 @@ gboolean dt_drawlayer_brush_rasterize(float *buffer, const int width, const int 
     return FALSE;
   view.alpha_noise_gain = _estimate_alpha_noise_gain(&prepared, &view);
 
-  dt_aligned_pixel_simd_t blur_px = _simd_set1(0.0f);
+  dt_aligned_pixel_simd_t blur_px = dt_simd_set1(0.0f);
   switch(view.dab->mode)
   {
     case DT_DRAWLAYER_BRUSH_MODE_BLUR:
@@ -792,7 +772,7 @@ gboolean dt_drawlayer_brush_rasterize(float *buffer, const int width, const int 
       {
         float *pixel = buffer + 4 * ((size_t)y * width + x);
         const float old_alpha = _clamp01(pixel[3]);
-        const dt_aligned_pixel_simd_t old_px = (old_alpha > 1e-8f) ? _simd_load_rgba(pixel) : _simd_set1(0.0f);
+        const dt_aligned_pixel_simd_t old_px = (old_alpha > 1e-8f) ? dt_load_simd(pixel) : dt_simd_set1(0.0f);
         dt_drawlayer_brush_pixel_eval_t pixel_eval = { 0 };
         if(!_prepare_analytic_pixel_context(&view, sample_opacity_scale,
                                             stroke_mask, stroke_mask_width, stroke_mask_height,
@@ -803,7 +783,7 @@ gboolean dt_drawlayer_brush_rasterize(float *buffer, const int width, const int 
             = _apply_smudge_stroke_mode(buffer, width, height, runtime_private, &view,
                                         scale, origin_x, origin_y,
                                         x, y, pixel_eval.src_alpha, old_px);
-        _simd_store_rgba(pixel, out_px);
+        dt_store_simd(pixel, out_px);
 
         if(pixel_eval.stroke_alpha)
         {
@@ -826,7 +806,7 @@ gboolean dt_drawlayer_brush_rasterize(float *buffer, const int width, const int 
       {
         float *pixel = buffer + 4 * ((size_t)y * width + x);
         const float old_alpha = _clamp01(pixel[3]);
-        const dt_aligned_pixel_simd_t old_px = (old_alpha > 1e-8f) ? _simd_load_rgba(pixel) : _simd_set1(0.0f);
+        const dt_aligned_pixel_simd_t old_px = (old_alpha > 1e-8f) ? dt_load_simd(pixel) : dt_simd_set1(0.0f);
         dt_drawlayer_brush_pixel_eval_t pixel_eval = { 0 };
         if(!_prepare_analytic_pixel_context(&view, sample_opacity_scale,
                                             stroke_mask, stroke_mask_width, stroke_mask_height,
@@ -835,7 +815,7 @@ gboolean dt_drawlayer_brush_rasterize(float *buffer, const int width, const int 
 
         const dt_aligned_pixel_simd_t out_px
             = _apply_non_smudge_stroke_mode(view.dab, pixel_eval.src_alpha, old_px, blur_px);
-        _simd_store_rgba(pixel, out_px);
+        dt_store_simd(pixel, out_px);
 
         if(pixel_eval.stroke_alpha)
         {

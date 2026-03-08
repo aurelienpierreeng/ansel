@@ -445,6 +445,25 @@ typedef DT_ALIGNED_PIXEL float dt_aligned_pixel_t[4];
 // SIMD view matching dt_aligned_pixel_t layout, for explicit 4-float vector math.
 typedef float dt_aligned_pixel_simd_t __attribute__((vector_size(16), aligned(16)));
 
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t dt_simd_set1(const float value)
+{
+  return (dt_aligned_pixel_simd_t){ value, value, value, value };
+}
+
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+dt_load_simd(const float *const pixel)
+{
+  dt_aligned_pixel_simd_t out;
+  __builtin_memcpy(&out, pixel, sizeof(out));
+  return out;
+}
+
+static inline __attribute__((always_inline)) void
+dt_store_simd(float *const pixel, const dt_aligned_pixel_simd_t value)
+{
+  __builtin_memcpy(pixel, &value, sizeof(value));
+}
+
 // To be able to vectorize per-pixel loops, we need to operate on all four channels, but if the compiler does
 // not auto-vectorize, doing so increases computation by 1/3 for a channel which typically is ignored anyway.
 // Select the appropriate number of channels over which to loop to produce the fastest code.

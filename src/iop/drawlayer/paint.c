@@ -49,26 +49,6 @@ static inline float _lerpf(const float a, const float b, const float t)
   return a + (b - a) * t;
 }
 
-/** @brief Load 4 floats as one SIMD vector. */
-static inline dt_aligned_pixel_simd_t _simd_load4(const float *value)
-{
-  dt_aligned_pixel_simd_t v;
-  memcpy(&v, value, sizeof(v));
-  return v;
-}
-
-/** @brief Store 4 SIMD lanes into a float array. */
-static inline void _simd_store4(float *value, const dt_aligned_pixel_simd_t v)
-{
-  memcpy(value, &v, sizeof(v));
-}
-
-/** @brief Broadcast one scalar to all SIMD lanes. */
-static inline dt_aligned_pixel_simd_t _simd_set1(const float s)
-{
-  return (dt_aligned_pixel_simd_t){ s, s, s, s };
-}
-
 /** @brief Compute angular measure used by strip-based profile integration. */
 static inline float _paint_voronoi_strip_angle_measure(const float rho, const float strip_ratio)
 {
@@ -128,9 +108,9 @@ static dt_drawlayer_brush_dab_t _paint_build_segment_window_sample(const dt_draw
   const float m1y = (count >= 3) ? 0.5f * (p_end->y - p_prev->y) : (p_end->y - p_start->y);
   const float m2x = p_end->x - p_start->x;
   const float m2y = p_end->y - p_start->y;
-  const dt_aligned_pixel_simd_t t4 = _simd_set1(t);
-  const dt_aligned_pixel_simd_t color_start = _simd_load4(p_start->color);
-  const dt_aligned_pixel_simd_t color_end = _simd_load4(p_end->color);
+  const dt_aligned_pixel_simd_t t4 = dt_simd_set1(t);
+  const dt_aligned_pixel_simd_t color_start = dt_load_simd(p_start->color);
+  const dt_aligned_pixel_simd_t color_end = dt_load_simd(p_end->color);
 
   dt_drawlayer_brush_dab_t dab = {
     .x = _paint_cubic_hermitef(p_start->x, p_end->x, m1x, m2x, t),
@@ -155,7 +135,7 @@ static dt_drawlayer_brush_dab_t _paint_build_segment_window_sample(const dt_draw
     .shape = (t < 0.5f) ? p_start->shape : p_end->shape,
     .mode = (t < 0.5f) ? p_start->mode : p_end->mode,
   };
-  _simd_store4(dab.color, color_start + (color_end - color_start) * t4);
+  dt_store_simd(dab.color, color_start + (color_end - color_start) * t4);
   return dab;
 }
 
