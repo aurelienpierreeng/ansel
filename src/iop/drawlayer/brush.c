@@ -521,9 +521,9 @@ static inline float _smudge_hash_signed(const int x, const int y, const int lane
  * @brief Bilinear RGBA sample from float buffer.
  * @note Coordinates are clamped to valid image bounds.
  */
-static inline dt_aligned_pixel_simd_t _sample_rgba_float_bilinear(const float *buffer, const int width,
-                                                                  const int height, const float x,
-                                                                  const float y)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+_sample_rgba_float_bilinear(const float *buffer, const int width, const int height, const float x,
+                            const float y)
 {
   if(!buffer || width <= 0 || height <= 0) return dt_simd_set1(0.0f);
 
@@ -556,11 +556,10 @@ static inline dt_aligned_pixel_simd_t _sample_rgba_float_bilinear(const float *b
  * @param motion_dx Motion X used to orient anisotropic taps.
  * @param motion_dy Motion Y used to orient anisotropic taps.
  */
-static inline dt_aligned_pixel_simd_t _sample_smudge_source_float(const float *buffer, const int width,
-                                                                  const int height, const float sx,
-                                                                  const float sy, const float motion_dx,
-                                                                  const float motion_dy,
-                                                                  const int jitter_x, const int jitter_y)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+_sample_smudge_source_float(const float *buffer, const int width, const int height, const float sx,
+                            const float sy, const float motion_dx, const float motion_dy,
+                            const int jitter_x, const int jitter_y)
 {
   dt_aligned_pixel_simd_t rgba_sum = dt_simd_set1(0.0f);
   if(!buffer || width <= 0 || height <= 0) return rgba_sum;

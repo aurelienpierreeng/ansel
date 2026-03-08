@@ -482,9 +482,6 @@ dt_store_simd(float *const pixel, const dt_aligned_pixel_simd_t value)
   __builtin_memcpy(pixel, &value, sizeof(value));
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(pixel:16) uniform(pixel)
-#endif
 static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
 dt_load_simd_aligned(const float *const pixel)
 {
@@ -492,9 +489,6 @@ dt_load_simd_aligned(const float *const pixel)
   return dt_load_simd(in);
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(pixel:16) uniform(pixel)
-#endif
 static inline __attribute__((always_inline)) void
 dt_store_simd_aligned(float *const pixel, const dt_aligned_pixel_simd_t value)
 {
@@ -502,9 +496,6 @@ dt_store_simd_aligned(float *const pixel, const dt_aligned_pixel_simd_t value)
   dt_store_simd(out, value);
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
 static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
 dt_mat3x4_mul_vec4(const dt_aligned_pixel_simd_t in, const dt_aligned_pixel_simd_t row0,
                    const dt_aligned_pixel_simd_t row1, const dt_aligned_pixel_simd_t row2)

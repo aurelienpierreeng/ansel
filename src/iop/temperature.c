@@ -483,10 +483,8 @@ static void dt_wb_preset_interpolate(const wb_data *const p1, // the smaller tun
   }
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(inp,outp)
-#endif
-static inline void scaled_copy_4wide(float *const outp, const float *const inp, const dt_aligned_pixel_simd_t coeffs)
+static inline __attribute__((always_inline)) void
+scaled_copy_4wide(float *const outp, const float *const inp, const dt_aligned_pixel_simd_t coeffs)
 {
   dt_store_simd(outp, dt_load_simd(inp) * coeffs);
 }

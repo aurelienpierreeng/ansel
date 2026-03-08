@@ -58,10 +58,8 @@ static const dt_colormatrix_t Bradford_LMS_to_XYZ_transposed = { {  0.9870f,  0.
                                                                   { -0.1471f,  0.5184f,  0.0400f, 0.f },
                                                                   {  0.1600f,  0.0493f,  0.9685f, 0.f } };
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
-static inline dt_aligned_pixel_simd_t convert_XYZ_to_bradford_LMS(const dt_aligned_pixel_simd_t XYZ)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+convert_XYZ_to_bradford_LMS(const dt_aligned_pixel_simd_t XYZ)
 {
   // Warning : needs XYZ normalized with Y - you need to downscale before
   return dt_mat3x4_mul_vec4(XYZ,
@@ -70,10 +68,8 @@ static inline dt_aligned_pixel_simd_t convert_XYZ_to_bradford_LMS(const dt_align
                             dt_colormatrix_row_to_simd(XYZ_to_Bradford_LMS_transposed, 2));
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
-static inline dt_aligned_pixel_simd_t convert_bradford_LMS_to_XYZ(const dt_aligned_pixel_simd_t LMS)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+convert_bradford_LMS_to_XYZ(const dt_aligned_pixel_simd_t LMS)
 {
   // Warning : output XYZ normalized with Y - you need to upscale later
   return dt_mat3x4_mul_vec4(LMS,
@@ -102,10 +98,8 @@ static const dt_colormatrix_t CAT16_LMS_to_XYZ_transposed = { {  1.862068f,  0.3
                                                                { -1.011255f,  0.621447f, -0.034123f, 0.f },
                                                                {  0.149187f, -0.008974f,  1.049964f, 0.f } };
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
-static inline dt_aligned_pixel_simd_t convert_XYZ_to_CAT16_LMS(const dt_aligned_pixel_simd_t XYZ)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+convert_XYZ_to_CAT16_LMS(const dt_aligned_pixel_simd_t XYZ)
 {
   // Warning : needs XYZ normalized with Y - you need to downscale before
   return dt_mat3x4_mul_vec4(XYZ,
@@ -114,10 +108,8 @@ static inline dt_aligned_pixel_simd_t convert_XYZ_to_CAT16_LMS(const dt_aligned_
                             dt_colormatrix_row_to_simd(XYZ_to_CAT16_LMS_transposed, 2));
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd
-#endif
-static inline dt_aligned_pixel_simd_t convert_CAT16_LMS_to_XYZ(const dt_aligned_pixel_simd_t LMS)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+convert_CAT16_LMS_to_XYZ(const dt_aligned_pixel_simd_t LMS)
 {
   // Warning : output XYZ normalized with Y - you need to upscale later
   return dt_mat3x4_mul_vec4(LMS,
@@ -127,11 +119,8 @@ static inline dt_aligned_pixel_simd_t convert_CAT16_LMS_to_XYZ(const dt_aligned_
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd uniform(kind)
-#endif
-static inline dt_aligned_pixel_simd_t convert_any_LMS_to_XYZ(const dt_aligned_pixel_simd_t LMS,
-                                                             const dt_adaptation_t kind)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+convert_any_LMS_to_XYZ(const dt_aligned_pixel_simd_t LMS, const dt_adaptation_t kind)
 {
   switch(kind)
   {
@@ -149,11 +138,8 @@ static inline dt_aligned_pixel_simd_t convert_any_LMS_to_XYZ(const dt_aligned_pi
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd uniform(kind)
-#endif
-static inline dt_aligned_pixel_simd_t convert_any_XYZ_to_LMS(const dt_aligned_pixel_simd_t XYZ,
-                                                             const dt_adaptation_t kind)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+convert_any_XYZ_to_LMS(const dt_aligned_pixel_simd_t XYZ, const dt_adaptation_t kind)
 {
   switch(kind)
   {
@@ -193,12 +179,10 @@ static inline void convert_any_LMS_to_RGB(const dt_aligned_pixel_t LMS, dt_align
 
 /* Bradford adaptations pre-computed for D50 and D65 outputs */
 
-#ifdef _OPENMP
-#pragma omp declare simd uniform(origin_illuminant)
-#endif
-static inline dt_aligned_pixel_simd_t bradford_adapt_D65(const dt_aligned_pixel_simd_t lms_in,
-                                                         const dt_aligned_pixel_simd_t origin_illuminant,
-                                                         const float p, const int full)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+bradford_adapt_D65(const dt_aligned_pixel_simd_t lms_in,
+                   const dt_aligned_pixel_simd_t origin_illuminant,
+                   const float p, const int full)
 {
   static const dt_aligned_pixel_simd_t D65 = { 0.941238f, 1.040633f, 1.088932f, 0.f };
   dt_aligned_pixel_simd_t temp = lms_in / origin_illuminant;
@@ -207,12 +191,10 @@ static inline dt_aligned_pixel_simd_t bradford_adapt_D65(const dt_aligned_pixel_
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd uniform(origin_illuminant)
-#endif
-static inline dt_aligned_pixel_simd_t bradford_adapt_D50(const dt_aligned_pixel_simd_t lms_in,
-                                                         const dt_aligned_pixel_simd_t origin_illuminant,
-                                                         const float p, const int full)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+bradford_adapt_D50(const dt_aligned_pixel_simd_t lms_in,
+                   const dt_aligned_pixel_simd_t origin_illuminant,
+                   const float p, const int full)
 {
   static const dt_aligned_pixel_simd_t D50 = { 0.996078f, 1.020646f, 0.818155f, 0.f };
   dt_aligned_pixel_simd_t temp = lms_in / origin_illuminant;
@@ -223,12 +205,10 @@ static inline dt_aligned_pixel_simd_t bradford_adapt_D50(const dt_aligned_pixel_
 
 /* CAT16 adaptations pre-computed for D50 and D65 outputs */
 
-#ifdef _OPENMP
-#pragma omp declare simd uniform(origin_illuminant)
-#endif
-static inline dt_aligned_pixel_simd_t CAT16_adapt_D65(const dt_aligned_pixel_simd_t lms_in,
-                                                      const dt_aligned_pixel_simd_t origin_illuminant,
-                                                      const float D, const int full)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+CAT16_adapt_D65(const dt_aligned_pixel_simd_t lms_in,
+                const dt_aligned_pixel_simd_t origin_illuminant,
+                const float D, const int full)
 {
   static const dt_aligned_pixel_simd_t D65 = { 0.97553267f, 1.01647859f, 1.0848344f, 0.f };
   return full ? lms_in * D65 / origin_illuminant
@@ -236,12 +216,10 @@ static inline dt_aligned_pixel_simd_t CAT16_adapt_D65(const dt_aligned_pixel_sim
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd uniform(origin_illuminant)
-#endif
-static inline dt_aligned_pixel_simd_t CAT16_adapt_D50(const dt_aligned_pixel_simd_t lms_in,
-                                                      const dt_aligned_pixel_simd_t origin_illuminant,
-                                                      const float D, const int full)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+CAT16_adapt_D50(const dt_aligned_pixel_simd_t lms_in,
+                const dt_aligned_pixel_simd_t origin_illuminant,
+                const float D, const int full)
 {
   static const dt_aligned_pixel_simd_t D50 = { 0.994535f, 1.000997f, 0.833036f, 0.f };
   return full ? lms_in * D50 / origin_illuminant
@@ -250,21 +228,17 @@ static inline dt_aligned_pixel_simd_t CAT16_adapt_D50(const dt_aligned_pixel_sim
 
 /* XYZ adaptations pre-computed for D50 and D65 outputs */
 
-#ifdef _OPENMP
-#pragma omp declare simd uniform(origin_illuminant)
-#endif
-static inline dt_aligned_pixel_simd_t XYZ_adapt_D65(const dt_aligned_pixel_simd_t lms_in,
-                                                    const dt_aligned_pixel_simd_t origin_illuminant)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+XYZ_adapt_D65(const dt_aligned_pixel_simd_t lms_in,
+              const dt_aligned_pixel_simd_t origin_illuminant)
 {
   static const dt_aligned_pixel_simd_t D65 = { 0.9504285453771807f, 1.0f, 1.0889003707981277f, 0.f };
   return lms_in * D65 / origin_illuminant;
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd uniform(origin_illuminant)
-#endif
-static inline dt_aligned_pixel_simd_t XYZ_adapt_D50(const dt_aligned_pixel_simd_t lms_in,
-                                                    const dt_aligned_pixel_simd_t origin_illuminant)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+XYZ_adapt_D50(const dt_aligned_pixel_simd_t lms_in,
+              const dt_aligned_pixel_simd_t origin_illuminant)
 {
   static const dt_aligned_pixel_simd_t D50 = { 0.9642119944211994f, 1.0f, 0.8251882845188288f, 0.f };
   return lms_in * D50 / origin_illuminant;
@@ -320,21 +294,24 @@ static inline void XYZ_D65_to_D50(const dt_aligned_pixel_t XYZ_in, dt_aligned_pi
 
 /* Helper function to directly chroma-adapt a pixel in CIE XYZ 1931 2° */
 
-static inline dt_aligned_pixel_simd_t _downscale_vector_simd(const dt_aligned_pixel_simd_t vector, const float scaling)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+_downscale_vector_simd(const dt_aligned_pixel_simd_t vector, const float scaling)
 {
   const int valid = (scaling > NORM_MIN) && !isnan(scaling);
   return vector / dt_simd_set1(valid ? (scaling + NORM_MIN) : NORM_MIN);
 }
 
-static inline dt_aligned_pixel_simd_t _upscale_vector_simd(const dt_aligned_pixel_simd_t vector, const float scaling)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+_upscale_vector_simd(const dt_aligned_pixel_simd_t vector, const float scaling)
 {
   const int valid = (scaling > NORM_MIN) && !isnan(scaling);
   return vector * dt_simd_set1(valid ? (scaling + NORM_MIN) : NORM_MIN);
 }
 
-static inline dt_aligned_pixel_simd_t chroma_adapt_pixel(const dt_aligned_pixel_simd_t in,
-                                                         const dt_aligned_pixel_simd_t illuminant,
-                                                         const dt_adaptation_t adaptation, const float p)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+chroma_adapt_pixel(const dt_aligned_pixel_simd_t in,
+                   const dt_aligned_pixel_simd_t illuminant,
+                   const dt_adaptation_t adaptation, const float p)
 {
 
   /* WE START IN XYZ */

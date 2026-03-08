@@ -555,11 +555,8 @@ static int get_white_balance_coeff(struct dt_iop_module_t *self, dt_aligned_pixe
 }
 
 
-#ifdef _OPENMP
-#pragma omp declare simd uniform(compression, clip)
-#endif
-static inline dt_aligned_pixel_simd_t gamut_mapping(const dt_aligned_pixel_simd_t input, const float compression,
-                                                    const int clip)
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+gamut_mapping(const dt_aligned_pixel_simd_t input, const float compression, const int clip)
 {
   // Get the sum XYZ
   const float sum = input[0] + input[1] + input[2];
