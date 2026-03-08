@@ -440,12 +440,14 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
   for(GList *nodes = g_list_first(pipe->nodes); nodes; nodes = g_list_next(nodes))
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
+    if(piece == NULL) continue;
     // printf("cleanup module `%s'\n", piece->module->name());
-    dt_iop_cleanup_pipe(piece->module, pipe, piece);
+    if(piece->module) dt_iop_cleanup_pipe(piece->module, pipe, piece);
     free(piece->histogram);
     piece->histogram = NULL;
     dt_pixelpipe_raster_cleanup(piece->raster_masks);
     free(piece);
+    piece = NULL;
   }
   g_list_free(pipe->nodes);
   pipe->nodes = NULL;
