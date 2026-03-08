@@ -62,11 +62,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#if defined(__SSE__)
-#include <xmmintrin.h>
-#endif
 
 #include "bauhaus/bauhaus.h"
+#include "common/darktable.h"
 #include "common/histogram.h"
 #include "common/image_cache.h"
 #include "common/mipmap_cache.h"
@@ -498,14 +496,34 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   const float black = d->black;
   const float scale = d->scale;
   const size_t npixels = (size_t)roi_out->width * roi_out->height;
+
+  if(ch == 4)
+  {
+    const dt_aligned_pixel_simd_t black_v = dt_simd_set1(black);
+    const dt_aligned_pixel_simd_t scale_v = dt_simd_set1(scale);
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+  dt_omp_firstprivate(npixels, black_v, scale_v, in, out) \
+  schedule(static)
+#endif
+    for(size_t k = 0; k < npixels; k++)
+    {
+      const size_t p = 4 * k;
+      const dt_aligned_pixel_simd_t in_v = dt_load_simd(in + p);
+      dt_store_simd(out + p, (in_v - black_v) * scale_v);
+    }
+  }
+  else
+  {
 #ifdef _OPENMP
 #pragma omp parallel for simd default(none) \
-  dt_omp_firstprivate(ch, npixels, black, scale, in, out)  \
+  dt_omp_firstprivate(ch, npixels, black, scale, in, out) \
   schedule(simd:static) aligned(in, out : 64)
 #endif
-  for(size_t k = 0; k < ch * npixels; k++)
-  {
-    out[k] = (in[k] - black) * scale;
+    for(size_t k = 0; k < ch * npixels; k++)
+    {
+      out[k] = (in[k] - black) * scale;
+    }
   }
 
   if(piece->pipe->mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
