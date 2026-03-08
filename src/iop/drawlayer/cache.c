@@ -479,8 +479,9 @@ gboolean dt_drawlayer_cache_populate_process_patch_from_base(const dt_drawlayer_
       }
     }
   }
-
+#ifdef HAVE_OPENCL
   dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, process_patch->pixels, NULL, -1);
+#endif
   return TRUE;
 }
 
@@ -558,7 +559,9 @@ gboolean dt_drawlayer_cache_flush_process_patch_to_base(dt_drawlayer_cache_patch
            update_buffer + 4 * ((size_t)yy * dst_w),
            (size_t)dst_w * 4 * sizeof(float));
   }
+#ifdef HAVE_OPENCL
   dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, base_patch->pixels, NULL, -1);
+#endif
   dt_drawlayer_cache_patch_wrunlock(base_patch);
 
   if(base_stroke_mask && process_stroke_mask && base_stroke_mask->pixels && process_stroke_mask->pixels
