@@ -350,9 +350,9 @@ static inline void WB_coeffs_to_illuminant_xy(const float CAM_to_XYZ[4][3], cons
   static const dt_aligned_pixel_t D65 = { 0.941238f, 1.040633f, 1.088932f, 0.f };
   const float p = powf(1.088932f / 0.818155f, 0.0834f);
 
-  convert_XYZ_to_bradford_LMS(XYZ, LMS);
-  bradford_adapt_D50(LMS, D65, p, FALSE, LMS);
-  convert_bradford_LMS_to_XYZ(LMS, XYZ);
+  dt_store_simd_aligned(LMS, convert_XYZ_to_bradford_LMS(dt_load_simd_aligned(XYZ)));
+  dt_store_simd_aligned(LMS, bradford_adapt_D50(dt_load_simd_aligned(LMS), dt_load_simd_aligned(D65), p, FALSE));
+  dt_store_simd_aligned(XYZ, convert_bradford_LMS_to_XYZ(dt_load_simd_aligned(LMS)));
 
   // Get white point chromaticity
   XYZ[0] /= XYZ[1];
