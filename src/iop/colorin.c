@@ -756,14 +756,16 @@ static void process_cmatrix_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
     float *out = (float *)ovoid + (size_t)ch * j * roi_out->width;
     dt_aligned_pixel_t cam;
 
-    for(int i = 0; i < roi_out->width; i++, in += ch, out += ch)
+    for(int i = 0; i < roi_out->width; i++)
     {
+      const float *const in_pixel = in + (size_t)ch * i;
+      float *const out_pixel = out + (size_t)ch * i;
       // memcpy(cam, buf_in, sizeof(float)*3);
       // avoid calling this for linear profiles (marked with negative entries), assures unbounded
       // color management without extrapolation.
       for(int c = 0; c < 3; c++)
-        cam[c] = (d->lut[c][0] >= 0.0f) ? dt_ioppr_eval_trc(in[c], d->lut[c], d->unbounded_coeffs[c], LUT_SAMPLES)
-                                        : in[c];
+        cam[c] = (d->lut[c][0] >= 0.0f) ? dt_ioppr_eval_trc(in_pixel[c], d->lut[c], d->unbounded_coeffs[c], LUT_SAMPLES)
+                                        : in_pixel[c];
       cam[3] = 0.0f;
 
       apply_blue_mapping(cam, cam);
@@ -771,13 +773,13 @@ static void process_cmatrix_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
 
       if(!clipping)
       {
-        dt_store_simd_aligned(out, dt_mat3x4_mul_vec4(cam_v, cm0, cm1, cm2));
+        dt_store_simd_aligned(out_pixel, dt_mat3x4_mul_vec4(cam_v, cm0, cm1, cm2));
       }
       else
       {
         const dt_aligned_pixel_simd_t nRGB = dt_mat3x4_mul_vec4(cam_v, nm0, nm1, nm2);
         const dt_aligned_pixel_simd_t cRGB = _colorin_clamp_rgb01_vec4(nRGB);
-        dt_store_simd_aligned(out, dt_mat3x4_mul_vec4(cRGB, lm0, lm1, lm2));
+        dt_store_simd_aligned(out_pixel, dt_mat3x4_mul_vec4(cRGB, lm0, lm1, lm2));
       }
     }
   }
@@ -968,9 +970,9 @@ static void process_lcms2_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
     float *out = (float *)ovoid + (size_t)ch * k * roi_out->width;
 
     float *camptr = (float *)out;
-    for(int j = 0; j < roi_out->width; j++, in += 4, camptr += 4)
+    for(int j = 0; j < roi_out->width; j++)
     {
-      apply_blue_mapping(in, camptr);
+      apply_blue_mapping(in + 4 * j, camptr + 4 * j);
     }
 
     // convert from input profile to pipeline work RGB.
@@ -986,9 +988,10 @@ static void process_lcms2_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
 #ifdef _OPENMP
 #pragma omp simd aligned(rgbptr:64)
 #endif
-      for(int j = 0; j < roi_out->width; j++, rgbptr += 4)
+      for(int j = 0; j < roi_out->width; j++)
       {
-        for(int c = 0; c < 3; c++) rgbptr[c] = CLAMP(rgbptr[c], 0.0f, 1.0f);
+        float *const pixel = rgbptr + 4 * j;
+        for(int c = 0; c < 3; c++) pixel[c] = CLAMP(pixel[c], 0.0f, 1.0f);
       }
 
       cmsDoTransform(d->xform_nrgb_Lab, out, out, roi_out->width);
@@ -1027,9 +1030,10 @@ static void process_lcms2_proper(struct dt_iop_module_t *self, dt_dev_pixelpipe_
 #ifdef _OPENMP
 #pragma omp simd aligned(rgbptr:64)
 #endif
-      for(int j = 0; j < roi_out->width; j++, rgbptr += 4)
+      for(int j = 0; j < roi_out->width; j++)
       {
-        for(int c = 0; c < 3; c++) rgbptr[c] = CLAMP(rgbptr[c], 0.0f, 1.0f);
+        float *const pixel = rgbptr + 4 * j;
+        for(int c = 0; c < 3; c++) pixel[c] = CLAMP(pixel[c], 0.0f, 1.0f);
       }
 
       cmsDoTransform(d->xform_nrgb_Lab, out, out, roi_out->width);
