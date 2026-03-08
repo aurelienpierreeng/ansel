@@ -173,24 +173,17 @@ static float _maketaps_bilinear(float *taps,
                                 const float first_tap,
                                 const float interval)
 {
-  static const dt_aligned_pixel_t bootstrap = { 0.0f, 1.0f, 2.0f, 3.0f };
-  dt_aligned_pixel_t iter;
-  dt_aligned_pixel_t vt;
-  for_four_channels(c)
-    iter[c] = 4.0f * interval;
-  for_four_channels(c)
-    vt[c] = first_tap + bootstrap[c] * interval;
+  static const dt_aligned_pixel_simd_t bootstrap = { 0.0f, 1.0f, 2.0f, 3.0f };
+  const dt_aligned_pixel_simd_t interval_v = dt_simd_set1(interval);
+  const dt_aligned_pixel_simd_t iter = dt_simd_set1(4.0f * interval);
+  dt_aligned_pixel_simd_t vt = dt_simd_set1(first_tap) + bootstrap * interval_v;
 
   const int runs = (num_taps + 3) / 4;
 
   for(size_t i = 0; i < runs; i++)
   {
-    // compute and store the values for the current four taps
-    for_four_channels(c)
-      taps[4*i + c] = 1.0f - (vt[c] < 0.0f ? -vt[c] : vt[c]);
-    // prepare next iteration
-    for_four_channels(c)
-      vt[c] += iter[c];
+    dt_store_simd_aligned(taps + 4 * i, dt_simd_set1(1.0f) - dt_simd_abs(vt));
+    vt += iter;
   }
   return 1.0f; //kernel norm is 1.0f by construction
 }
@@ -205,63 +198,31 @@ static float _maketaps_bicubic(float *taps,
                                const float first_tap,
                                const float interval)
 {
-  static const dt_aligned_pixel_t bootstrap = { 0.0f, 1.0f, 2.0f, 3.0f };
-  static const dt_aligned_pixel_t half = { .5f, .5f, .5f, .5f };
-  static const dt_aligned_pixel_t two = { 2.f, 2.f, 2.f, 2.f };
-  static const dt_aligned_pixel_t three = { 3.f, 3.f, 3.f, 3.f };
-  static const dt_aligned_pixel_t four = { 4.f, 4.f, 4.f, 4.f };
-  static const dt_aligned_pixel_t five = { 5.f, 5.f, 5.f, 5.f };
-  static const dt_aligned_pixel_t eight = { 8.f, 8.f, 8.f, 8.f };
-  dt_aligned_pixel_t iter;
-  dt_aligned_pixel_t vt;
-  for_four_channels(c)
-    iter[c] = 4.0f * interval;
-  for_four_channels(c)
-    vt[c] = first_tap + bootstrap[c] * interval;
+  static const dt_aligned_pixel_simd_t bootstrap = { 0.0f, 1.0f, 2.0f, 3.0f };
+  const dt_aligned_pixel_simd_t half = dt_simd_set1(0.5f);
+  const dt_aligned_pixel_simd_t two = dt_simd_set1(2.0f);
+  const dt_aligned_pixel_simd_t three = dt_simd_set1(3.0f);
+  const dt_aligned_pixel_simd_t four = dt_simd_set1(4.0f);
+  const dt_aligned_pixel_simd_t five = dt_simd_set1(5.0f);
+  const dt_aligned_pixel_simd_t eight = dt_simd_set1(8.0f);
+  const dt_aligned_pixel_simd_t interval_v = dt_simd_set1(interval);
+  const dt_aligned_pixel_simd_t iter = dt_simd_set1(4.0f * interval);
+  dt_aligned_pixel_simd_t vt = dt_simd_set1(first_tap) + bootstrap * interval_v;
 
   const int runs = (num_taps + 3) / 4;
 
   for(size_t i = 0; i < runs; i++)
   {
-    // compute and store the values for the current four taps
-    dt_aligned_pixel_t vt_abs;
-    dt_aligned_pixel_t t2;   // tap-squared
+    const dt_aligned_pixel_simd_t vt_abs = dt_simd_abs(vt);
+    const dt_aligned_pixel_simd_t t2 = vt * vt;
+    const dt_aligned_pixel_simd_t t5 = five * vt_abs;
+    const dt_aligned_pixel_simd_t r12 = (vt_abs * (t5 - eight - t2) + four) * half;
+    const dt_aligned_pixel_simd_t r01 = ((three * t2 - t5) * vt_abs + two) * half;
+    dt_aligned_pixel_simd_t taps4 = r12;
     for_four_channels(c)
-    {
-      vt_abs[c] = vt[c] < 0.0f ? -vt[c] : vt[c];
-      t2[c] = vt[c] * vt[c];
-    }
-    dt_aligned_pixel_t t5;
-    dt_aligned_pixel_t mt2_add_t5_sub_8;
-    for_four_channels(c)
-    {
-      t5[c] = five[c] * vt_abs[c];
-      mt2_add_t5_sub_8[c] = t5[c] - eight[c] - t2[c];
-    }
-    dt_aligned_pixel_t b;
-    dt_aligned_pixel_t r12;
-    for_four_channels(c)
-    {
-      b[c] = vt_abs[c] * mt2_add_t5_sub_8[c] + four[c];
-      r12[c] = b[c] * half[c]; // the value for 1 < t < 2
-    }
-    dt_aligned_pixel_t t23;
-    dt_aligned_pixel_t e;
-    dt_aligned_pixel_t r01;
-    for_four_channels(c)
-    {
-      t23[c] = three[c] * t2[c] - t5[c];
-      e[c] = t23[c] * vt_abs[c] + two[c];
-      r01[c] = e[c] * half[c];
-    }
-    // combine the values depending on whether abs(tap) is less than one or not
-    for_four_channels(c)
-    {
-      taps[4*i + c] = vt_abs[c] <= 1.0f ? r01[c] : r12[c];
-    }
-    // prepare next iteration
-    for_four_channels(c)
-      vt[c] += iter[c];
+      taps4[c] = (vt_abs[c] <= 1.0f) ? r01[c] : r12[c];
+    dt_store_simd_aligned(taps + 4 * i, taps4);
+    vt += iter;
   }
   return 1.0f; //kernel norm is 1.0f by construction
 }
@@ -317,60 +278,43 @@ static float _maketaps_lanczos(float *taps,
                                const float first_tap,
                                const float interval)
 {
-  static const dt_aligned_pixel_t bootstrap = { 0.0f, 1.0f, 2.0f, 3.0f };
-  dt_aligned_pixel_t iter;
-  dt_aligned_pixel_t vt;
-  for_four_channels(c)
-    iter[c] = 4.0f * interval;
-  for_four_channels(c)
-    vt[c] = first_tap + bootstrap[c] * interval;
-  dt_aligned_pixel_t vw;
-  for_four_channels(c)
-    vw[c] = width;
+  static const dt_aligned_pixel_simd_t bootstrap = { 0.0f, 1.0f, 2.0f, 3.0f };
+  const dt_aligned_pixel_simd_t interval_v = dt_simd_set1(interval);
+  const dt_aligned_pixel_simd_t iter = dt_simd_set1(4.0f * interval);
+  dt_aligned_pixel_simd_t vt = dt_simd_set1(first_tap) + bootstrap * interval_v;
+  const dt_aligned_pixel_simd_t vw = dt_simd_set1(width);
 
   const int runs = (num_taps + 3) / 4;
 
   for(size_t i = 0; i < runs; i++)
   {
-    // compute and store the values for the current four taps
-    static const dt_aligned_pixel_t eps
-      = { DT_LANCZOS_EPSILON, DT_LANCZOS_EPSILON, DT_LANCZOS_EPSILON, DT_LANCZOS_EPSILON };
-    static const dt_aligned_pixel_t pi = { M_PI_F, M_PI_F, M_PI_F, M_PI_F };
-    static const dt_aligned_pixel_t pi2
-      = { M_PI_F*M_PI_F, M_PI_F*M_PI_F, M_PI_F*M_PI_F, M_PI_F*M_PI_F };
-    dt_aligned_pixel_t r;
-    dt_aligned_pixel_t sign;
+    const dt_aligned_pixel_simd_t eps = dt_simd_set1(DT_LANCZOS_EPSILON);
+    const dt_aligned_pixel_simd_t pi = dt_simd_set1(M_PI_F);
+    const dt_aligned_pixel_simd_t pi2 = dt_simd_set1(M_PI_F * M_PI_F);
+    dt_aligned_pixel_simd_t r = dt_simd_set1(0.0f);
+    dt_aligned_pixel_simd_t sign = dt_simd_set1(1.0f);
     for_four_channels(c)
     {
       int a = (int)vt[c];
       r[c] = vt[c] - (float)a;
       sign[c] = (a & 1) ? -1.0f : 1.0f;
     }
+    const dt_aligned_pixel_simd_t sine_arg1_v = pi * r;
+    const dt_aligned_pixel_simd_t sine_arg2_v = pi * vt / vw;
     dt_aligned_pixel_t sine_arg1;
     dt_aligned_pixel_t sine_arg2;
-    for_four_channels(c)
-    {
-      sine_arg1[c] = pi[c] * r[c];
-      sine_arg2[c] = pi[c] * vt[c] / vw[c];
-    }
     dt_aligned_pixel_t sine1;
     dt_aligned_pixel_t sine2;
+    dt_store_simd_aligned(sine_arg1, sine_arg1_v);
+    dt_store_simd_aligned(sine_arg2, sine_arg2_v);
     dt_vector_sin(sine_arg1, sine1);
     dt_vector_sin(sine_arg2, sine2);
-    dt_aligned_pixel_t num;
-    dt_aligned_pixel_t denom;
-    for_four_channels(c)
-    {
-      num[c] = (vw[c] * sign[c] * sine1[c] * sine2[c]) + eps[c];
-      denom[c] = (pi2[c] * vt[c] * vt[c]) + eps[c];
-    }
-    for_four_channels(c)
-    {
-      taps[4*i + c] = num[c] / denom[c];
-    }
-    // prepare next iteration
-    for_four_channels(c)
-      vt[c] += iter[c];
+    const dt_aligned_pixel_simd_t sine1_v = dt_load_simd_aligned(sine1);
+    const dt_aligned_pixel_simd_t sine2_v = dt_load_simd_aligned(sine2);
+    const dt_aligned_pixel_simd_t num = (vw * sign * sine1_v * sine2_v) + eps;
+    const dt_aligned_pixel_simd_t denom = (pi2 * vt * vt) + eps;
+    dt_store_simd_aligned(taps + 4 * i, num / denom);
+    vt += iter;
   }
   // we need to compute the norm, even though it is very close to 1.0
   // and causes an increase of maxDE on the integration tests only
@@ -639,25 +583,17 @@ void dt_interpolation_compute_pixel4c(const struct dt_interpolation *itor,
     const size_t itor_width = 2 * itor->width;
 
     // Apply the kernel
-    dt_aligned_pixel_t pixel = { 0.0f, 0.0f, 0.0f, 0.0f };
+    dt_aligned_pixel_simd_t pixel = dt_simd_set1(0.0f);
     for(size_t i = 0; i < itor_width; i++)
     {
-      dt_aligned_pixel_t h = { 0.0f, 0.0f, 0.0f, 0.0f };
+      dt_aligned_pixel_simd_t h = dt_simd_set1(0.0f);
       for(size_t j = 0; j < itor_width; j++)
-      {
-        const float kern = kernelh[j];
-        dt_aligned_pixel_t inpx;
-        copy_pixel(inpx, in + 4*j);
-        for_each_channel(c)
-          h[c] = h[c] + kern * inpx[c];
-      }
-      for_each_channel(c)
-        pixel[c] += kernelv[i] * h[c];
+        h += dt_load_simd_aligned(in + 4 * j) * dt_simd_set1(kernelh[j]);
+      pixel += h * dt_simd_set1(kernelv[i]);
       in += linestride;
     }
 
-    for_each_channel(c,aligned(out))
-      out[c] = fmaxf(0.0f, oonorm * pixel[c]);
+    dt_store_simd(out, dt_simd_max_zero(pixel * dt_simd_set1(oonorm)));
   }
   else if(ix >= 0 && iy >= 0 && ix < width && iy < height)
   {
@@ -681,33 +617,26 @@ void dt_interpolation_compute_pixel4c(const struct dt_interpolation *itor,
                            bordermode, 2 * itor->width, iy, height);
 
     // Apply the kernel
-    dt_aligned_pixel_t pixel = { 0.0f, 0.0f, 0.0f, 0.0f };
+    dt_aligned_pixel_simd_t pixel = dt_simd_set1(0.0f);
     for(ssize_t i = ytap_first; i < ytap_last; i++)
     {
       const ssize_t clip_y = _clip(iy + i, 0, height - 1, bordermode);
-      dt_aligned_pixel_t h = { 0.0f, 0.0f, 0.0f, 0.0f };
+      dt_aligned_pixel_simd_t h = dt_simd_set1(0.0f);
       const float *ipixel = in + clip_y * linestride;
       for(ssize_t j = xtap_first; j < xtap_last; j++)
       {
         const ssize_t clip_x = _clip(ix + j, 0, width - 1, bordermode);
-        dt_aligned_pixel_t inpx;
-        copy_pixel(inpx, ipixel + 4 * clip_x);
-        const float kern = kernelh[j];
-        for_each_channel(c)
-          h[c] += kern * inpx[c];
+        h += dt_load_simd_aligned(ipixel + 4 * clip_x) * dt_simd_set1(kernelh[j]);
       }
-      for_each_channel(c)
-        pixel[c] += kernelv[i] * h[c];
+      pixel += h * dt_simd_set1(kernelv[i]);
     }
 
-    for_each_channel(c,aligned(out))
-      out[c] = fmaxf(0.0f, oonorm * pixel[c]);
+    dt_store_simd(out, dt_simd_max_zero(pixel * dt_simd_set1(oonorm)));
   }
   else
   {
     // data for *out has no valid *in location so just set to zero.
-    for_each_channel(c,aligned(out))
-      out[c] = 0.0f;
+    dt_store_simd(out, dt_simd_set1(0.0f));
   }
 }
 
@@ -1086,7 +1015,7 @@ static void _interpolation_resample_plain(const struct dt_interpolation *itor,
     for(size_t ox = 0; ox < width; ox++)
     {
       // This will hold the resulting pixel
-      dt_aligned_pixel_t vs = { 0.0f, 0.0f, 0.0f, 0.0f };
+      dt_aligned_pixel_simd_t vs = dt_simd_set1(0.0f);
 
       // Number of horizontal samples contributing to the output
       int hl = hlength[hlidx++]; // H(orizontal) L(ength)
@@ -1096,22 +1025,19 @@ static void _interpolation_resample_plain(const struct dt_interpolation *itor,
         // This is our input line
         size_t baseidx_vindex = (size_t)vindex[viidx++] * in_stride_floats;
 
-        dt_aligned_pixel_t vhs = { 0.0f, 0.0f, 0.0f, 0.0f };
+        dt_aligned_pixel_simd_t vhs = dt_simd_set1(0.0f);
 
         for(size_t ix = 0; ix < hl; ix++)
         {
           // Apply the precomputed filter kernel
           const size_t baseidx = baseidx_vindex + (size_t)hindex[hkidx] * 4;
           const float htap = hkernel[hkidx++];
-          dt_aligned_pixel_t tmp;
-          copy_pixel(tmp, in + baseidx);
-          for_each_channel(c, aligned(tmp,vhs:16))
-            vhs[c] += tmp[c] * htap;
+          vhs += dt_load_simd_aligned(in + baseidx) * dt_simd_set1(htap);
         }
 
         // Accumulate contribution from this line
         const float vtap = vkernel[vkidx++];
-        for_each_channel(c, aligned(vhs,vs:16)) vs[c] += vhs[c] * vtap;
+        vs += vhs * dt_simd_set1(vtap);
 
         // Reset horizontal resampling context
         hkidx -= hl;
@@ -1123,8 +1049,7 @@ static void _interpolation_resample_plain(const struct dt_interpolation *itor,
       // Clip negative RGB that may be produced by Lanczos undershooting
       // Negative RGB are invalid values no matter the RGB space (light is positive)
       dt_aligned_pixel_t pixel;
-      for_each_channel(c, aligned(vs:16))
-        pixel[c] = MAX(vs[c], 0.f);
+      dt_store_simd_aligned(pixel, dt_simd_max_zero(vs));
       copy_pixel_nontemporal(out + baseidx, pixel);
 
       // Reset vertical resampling context
