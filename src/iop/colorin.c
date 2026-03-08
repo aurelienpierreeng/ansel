@@ -957,6 +957,7 @@ static void process_lcms2_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
 {
   const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
   const int ch = piece->colors;
+  assert(ch == 4);
 
 // use general lcms2 fallback
 #ifdef _OPENMP
@@ -972,7 +973,9 @@ static void process_lcms2_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
     float *camptr = (float *)out;
     for(int j = 0; j < roi_out->width; j++)
     {
-      apply_blue_mapping(in + 4 * j, camptr + 4 * j);
+      float *const pixel = camptr + 4 * j;
+      apply_blue_mapping(in + 4 * j, pixel);
+      pixel[3] = 0.0f;
     }
 
     // convert from input profile to pipeline work RGB.
@@ -992,6 +995,7 @@ static void process_lcms2_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
       {
         float *const pixel = rgbptr + 4 * j;
         for(int c = 0; c < 3; c++) pixel[c] = CLAMP(pixel[c], 0.0f, 1.0f);
+        pixel[3] = 0.0f;
       }
 
       cmsDoTransform(d->xform_nrgb_Lab, out, out, roi_out->width);
