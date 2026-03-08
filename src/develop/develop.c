@@ -590,11 +590,11 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       }
 
       if(!dt_dev_pixelpipe_get_realtime(pipe))
-        dt_iop_nap(50); // wait 50 ms
+        dt_iop_nap(50000); // wait 50 ms
       else
-        dt_iop_nap(1);
+        dt_iop_nap(10000);
     }
-    dt_iop_nap(50); // wait 50 ms
+    dt_iop_nap(50000); // wait 50 ms
   }
 
   pipe->running = 0;

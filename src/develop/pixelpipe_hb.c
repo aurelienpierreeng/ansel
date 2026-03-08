@@ -569,7 +569,8 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
                                     void **output, dt_iop_buffer_dsc_t **out_format, const dt_iop_roi_t *roi_out,
                                     dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
                                     dt_develop_tiling_t *tiling, dt_pixelpipe_flow_t *pixelpipe_flow,
-                                    dt_pixel_cache_entry_t *input_entry)
+                                    dt_pixel_cache_entry_t *input_entry,
+                                    dt_pixel_cache_entry_t *output_entry)
 {
   assert(input == dt_pixel_cache_entry_get_data(input_entry));
 
@@ -578,6 +579,11 @@ static int pixelpipe_process_on_CPU(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
     fprintf(stdout, "[dev_pixelpipe] %s got a NULL input, report that to developers\n", module->name());
     return 1;
   }
+  if(output && *output == NULL && output_entry)
+  {
+    *output = dt_pixel_cache_alloc(darktable.pixelpipe_cache, output_entry);
+  }
+
   if(output == NULL || *output == NULL)
   {
     fprintf(stdout, "[dev_pixelpipe] %s got a NULL output, report that to developers\n", module->name());
@@ -776,7 +782,7 @@ static int _gpu_cpu_fallback_from_opencl_error(dt_dev_pixelpipe_t *pipe, dt_deve
   _gpu_clear_buffer(&cl_mem_input_local, input_entry, NULL, IOP_CS_NONE, pipe->realtime);
 
   return pixelpipe_process_on_CPU(pipe, dev, input, input_format, roi_in, output, out_format,
-                                  roi_out, module, piece, tiling, pixelpipe_flow, input_entry);
+                                  roi_out, module, piece, tiling, pixelpipe_flow, input_entry, output_entry);
 }
 
 // Return -1 if no fallback happened. Otherwise return the CPU processing error code (0 on success).
@@ -843,7 +849,7 @@ static int _gpu_early_cpu_fallback_if_unsupported(dt_dev_pixelpipe_t *pipe, dt_d
   _gpu_clear_buffer(cl_mem_input, input_entry, *input, input_cst_cl, pipe->realtime);
 
   return pixelpipe_process_on_CPU(pipe, dev, *input, input_format, roi_in, output, out_format,
-                                  roi_out, module, piece, tiling, pixelpipe_flow, input_entry);
+                                  roi_out, module, piece, tiling, pixelpipe_flow, input_entry, output_entry);
 }
 
 
@@ -1635,7 +1641,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
                                    input_entry, output_entry);
 #else
   error = pixelpipe_process_on_CPU(pipe, dev, input, input_format, &roi_in, output, out_format, &roi_out, module,
-                                   piece, &tiling, &pixelpipe_flow, input_entry);
+                                   piece, &tiling, &pixelpipe_flow, input_entry, output_entry);
 #endif
 
   dt_pixelpipe_cache_set_current_module(prev_module);
@@ -1812,9 +1818,9 @@ static void _set_opencl_cache(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 
     if(piece->enabled)
     {
-      // OpenCL cache is forced if:
-      // - current module requires it (heavy processing)
-      // - next module doesn't support OpenCL (will take its input from cache only)
+      // Host cache retention is forced if:
+      // - current module explicitly requests it
+      // - next module doesn't support OpenCL (will take its input from host cache)
       // - current module has global histogram sampling
       // - current module has colorpicker/internal histogram
       // - current module is currently being modified in GUI
@@ -1851,7 +1857,7 @@ static void _set_opencl_cache(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
       gboolean requested = piece->force_opencl_cache
           || color_picker_on || histogram_on || global_hist_on;
 
-      piece->force_opencl_cache = (requested || opencl_cache || !supports_opencl);
+      piece->force_opencl_cache = (requested || opencl_cache);
 
       //fprintf(stdout, "%s has OpenCL cache %i, requested intern %i, requested next %i\n", piece->module->op, piece->force_opencl_cache, requested, opencl_cache);
 
