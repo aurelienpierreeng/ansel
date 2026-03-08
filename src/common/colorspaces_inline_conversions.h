@@ -177,26 +177,6 @@ dt_colormatrix_row_to_simd(const dt_colormatrix_t matrix, const int row)
 }
 
 #ifdef _OPENMP
-#pragma omp declare simd aligned(pixel:16) uniform(pixel)
-#endif
-static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
-dt_load_simd_aligned(const float *const pixel)
-{
-  const float *const in = (const float *const)__builtin_assume_aligned(pixel, 16);
-  return dt_load_simd(in);
-}
-
-#ifdef _OPENMP
-#pragma omp declare simd aligned(pixel:16) uniform(pixel)
-#endif
-static inline __attribute__((always_inline)) void
-dt_store_simd_aligned(float *const pixel, const dt_aligned_pixel_simd_t value)
-{
-  float *const out = (float *const)__builtin_assume_aligned(pixel, 16);
-  dt_store_simd(out, value);
-}
-
-#ifdef _OPENMP
 #pragma omp declare simd
 #endif
 static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t

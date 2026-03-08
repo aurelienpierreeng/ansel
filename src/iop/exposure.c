@@ -509,8 +509,8 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     for(size_t k = 0; k < npixels; k++)
     {
       const size_t p = 4 * k;
-      const dt_aligned_pixel_simd_t in_v = dt_load_simd(in + p);
-      dt_store_simd(out + p, (in_v - black_v) * scale_v);
+      const dt_aligned_pixel_simd_t in_v = dt_load_simd_aligned(in + p);
+      dt_store_simd_aligned(out + p, (in_v - black_v) * scale_v);
     }
   }
   else

@@ -451,6 +451,24 @@ static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t dt_simd_set
 }
 
 static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+dt_simd_abs(const dt_aligned_pixel_simd_t value)
+{
+  dt_aligned_pixel_simd_t out = value;
+  for(int c = 0; c < 4; c++)
+    out[c] = fabsf(value[c]);
+  return out;
+}
+
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+dt_simd_max_zero(const dt_aligned_pixel_simd_t value)
+{
+  dt_aligned_pixel_simd_t out = value;
+  for(int c = 0; c < 4; c++)
+    out[c] = MAX(value[c], 0.0f);
+  return out;
+}
+
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
 dt_load_simd(const float *const pixel)
 {
   dt_aligned_pixel_simd_t out;
@@ -462,6 +480,26 @@ static inline __attribute__((always_inline)) void
 dt_store_simd(float *const pixel, const dt_aligned_pixel_simd_t value)
 {
   __builtin_memcpy(pixel, &value, sizeof(value));
+}
+
+#ifdef _OPENMP
+#pragma omp declare simd aligned(pixel:16) uniform(pixel)
+#endif
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+dt_load_simd_aligned(const float *const pixel)
+{
+  const float *const in = (const float *const)__builtin_assume_aligned(pixel, 16);
+  return dt_load_simd(in);
+}
+
+#ifdef _OPENMP
+#pragma omp declare simd aligned(pixel:16) uniform(pixel)
+#endif
+static inline __attribute__((always_inline)) void
+dt_store_simd_aligned(float *const pixel, const dt_aligned_pixel_simd_t value)
+{
+  float *const out = (float *const)__builtin_assume_aligned(pixel, 16);
+  dt_store_simd(out, value);
 }
 
 // To be able to vectorize per-pixel loops, we need to operate on all four channels, but if the compiler does
