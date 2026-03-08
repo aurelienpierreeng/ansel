@@ -45,16 +45,6 @@ static inline float _lerpf(const float a, const float b, const float t)
   return a + (b - a) * t;
 }
 
-/** @brief Initialize deterministic RNG state from 64-bit seed. */
-static inline void _seed_noise_state(uint32_t state[4], const uint64_t seed)
-{
-  state[0] = splitmix32(seed ^ 0x9e3779b97f4a7c15ull);
-  state[1] = splitmix32(seed ^ 0xbf58476d1ce4e5b9ull);
-  state[2] = splitmix32(seed ^ 0x94d049bb133111ebull);
-  state[3] = splitmix32(seed ^ 0xda942042e4dd58b5ull);
-  if((state[0] | state[1] | state[2] | state[3]) == 0u) state[0] = 1u;
-}
-
 /** @brief Stable scalar hash in [0,1] from precomputed cell seed. */
 static inline float _cell_hash01_from_seed(const uint64_t cell_seed, const uint64_t salt)
 {
@@ -130,25 +120,6 @@ static inline float _sprinkle_noise_at_pixel_precomputed(const float px, const f
   const float field = w0 * g0 + w1 * g1 + w2 * g2;
   const float centered = 2.0f * field - 1.0f;
   return fmaxf(0.0f, 1.0f + strength * centered);
-}
-
-/**
- * @brief Compute sprinkle modulation for one pixel.
- * @return Multiplicative alpha factor, typically around 1.
- */
-static inline float _sprinkle_noise_at_pixel(const dt_drawlayer_brush_dab_t *dab, const float px, const float py)
-{
-  if(!dab || dab->sprinkles <= 1e-6f) return 1.0f;
-  float w0 = 0.0f, w1 = 0.0f, w2 = 0.0f;
-  _sprinkle_octave_weights(dab->sprinkle_coarseness, &w0, &w1, &w2);
-  const uint64_t seed0 = ((uint64_t)dab->stroke_batch << 32) ^ 0x7f4a7c159e3779b9ull;
-  return _sprinkle_noise_at_pixel_precomputed(px, py,
-                                              1.0f / fmaxf(dab->sprinkle_size, 1.0f),
-                                              _clamp01(dab->sprinkles),
-                                              w0, w1, w2,
-                                              seed0,
-                                              seed0 ^ 0xbf58476d1ce4e5b9ull,
-                                              seed0 ^ 0x94d049bb133111ebull);
 }
 
 typedef struct dt_drawlayer_sprinkle_preview_t

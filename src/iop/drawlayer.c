@@ -423,30 +423,6 @@ static inline float _clamp01(const float value)
   return fminf(fmaxf(value, 0.0f), 1.0f);
 }
 
-static inline void _process_patch_lock(dt_iop_drawlayer_gui_data_t *g)
-{
-  if(g) dt_pthread_mutex_lock(&g->process_patch_mutex);
-}
-
-static inline void _process_patch_unlock(dt_iop_drawlayer_gui_data_t *g)
-{
-  if(g) dt_pthread_mutex_unlock(&g->process_patch_mutex);
-}
-
-static inline void _process_patch_read_lock(dt_iop_drawlayer_gui_data_t *g)
-{
-  if(!g) return;
-  dt_pthread_mutex_lock(&g->process_patch_mutex);
-  dt_drawlayer_cache_patch_rdlock(&g->process_read_patch);
-}
-
-static inline void _process_patch_read_unlock(dt_iop_drawlayer_gui_data_t *g)
-{
-  if(!g) return;
-  dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
-  dt_pthread_mutex_unlock(&g->process_patch_mutex);
-}
-
 static gboolean _ensure_external_patch_buffer(drawlayer_patch_t *patch, const int width, const int height,
                                               const char *name)
 {
@@ -1109,7 +1085,7 @@ static void _process_backend_dab(dt_iop_module_t *self, const dt_drawlayer_brush
   dt_drawlayer_damaged_rect_t process_step_damage = { 0 };
   dt_drawlayer_paint_runtime_state_reset(&process_step_path);
 
-  _process_patch_lock(g);
+  dt_pthread_mutex_lock(&g->process_patch_mutex);
   dt_drawlayer_cache_patch_wrlock(&g->process_patch);
   if(g->process_patch_valid && g->process_patch.pixels && g->process_patch.width > 0 && g->process_patch.height > 0
      && g->process_combined_roi.scale > 1e-6f)
@@ -1136,7 +1112,7 @@ static void _process_backend_dab(dt_iop_module_t *self, const dt_drawlayer_brush
     }
   }
   dt_drawlayer_cache_patch_wrunlock(&g->process_patch);
-  _process_patch_unlock(g);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
 
   if(have_process_damage)
   {
@@ -1659,7 +1635,7 @@ static gboolean _build_process_patch_from_base(dt_iop_module_t *self,
   dt_iop_roi_t previous_process_roi = { 0 };
   int previous_process_width = 0;
   int previous_process_height = 0;
-  _process_patch_lock(g);
+  dt_pthread_mutex_lock(&g->process_patch_mutex);
   have_process_patch = (g->process_patch_valid && g->process_patch.pixels);
   if(have_process_patch)
   {
@@ -1676,7 +1652,7 @@ static gboolean _build_process_patch_from_base(dt_iop_module_t *self,
                      && abs(g->process_combined_roi.y - padded_roi.y) <= 2
                      && g->process_combined_roi.width == padded_roi.width
                      && g->process_combined_roi.height == padded_roi.height
-                     && fabsf(g->process_combined_roi.scale - combined_roi.scale) <= 1e-2f);
+                     && fabs(g->process_combined_roi.scale - combined_roi.scale) <= 1e-2);
     if(!same_geometry && (g->painting || dt_drawlayer_worker_any_active(g->rt)))
       keep_live_geometry = (g->process_patch_padding == process_pad
                             && g->process_patch.width == patch_width
@@ -1684,7 +1660,7 @@ static gboolean _build_process_patch_from_base(dt_iop_module_t *self,
                             && g->process_read_patch.pixels);
     need_flush = g->process_patch_dirty;
   }
-  _process_patch_unlock(g);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
   if(same_geometry)
   {
     const gint64 now = g_get_monotonic_time();
@@ -1733,7 +1709,7 @@ static gboolean _build_process_patch_from_base(dt_iop_module_t *self,
   }
 
   gboolean populated = FALSE;
-  _process_patch_lock(g);
+  dt_pthread_mutex_lock(&g->process_patch_mutex);
   populated = dt_drawlayer_cache_populate_process_patch_from_base(&g->base_patch, &g->stroke_mask,
                                                                   &g->process_patch,
                                                                   &g->process_stroke_mask,
@@ -1752,7 +1728,7 @@ static gboolean _build_process_patch_from_base(dt_iop_module_t *self,
     g->process_geom_hash = _drawlayer_process_cache_hash(piece, roi_in, roi_out);
     dt_drawlayer_paint_runtime_state_reset(g->process_path);
   }
-  _process_patch_unlock(g);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
   if(!populated) return FALSE;
   {
     const gint64 now = g_get_monotonic_time();
@@ -1798,9 +1774,9 @@ static void _flush_process_patch_to_base(dt_iop_module_t *self, dt_iop_drawlayer
   if(!g) return;
   if(!g->painting && dt_drawlayer_worker_any_active(g->rt))
     dt_drawlayer_worker_flush_finished_strokes(g->rt);
-  _process_patch_lock(g);
+  dt_pthread_mutex_lock(&g->process_patch_mutex);
   _flush_process_patch_to_base_locked(self, g);
-  _process_patch_unlock(g);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
 }
 
 static void _copy_input_to_output(const float *input, float *output, const int width, const int height)
@@ -1954,8 +1930,8 @@ static int _drawlayer_copy_or_resample_layer_roi(const int devid, cl_mem dev_sou
                                                  const dt_iop_roi_t *const target_roi,
                                                  const dt_iop_roi_t *const source_roi)
 {
-  const gboolean can_copy_crop = (fabsf(target_roi->scale - 1.0f) <= 1e-6f
-                                  && fabsf(source_roi->scale - 1.0f) <= 1e-6f
+  const gboolean can_copy_crop = (fabs(target_roi->scale - 1.0) <= 1e-6
+                                  && fabs(source_roi->scale - 1.0) <= 1e-6
                                   && source_roi->x >= 0 && source_roi->y >= 0
                                   && source_roi->x + target_roi->width <= source_w
                                   && source_roi->y + target_roi->height <= source_h
@@ -2627,7 +2603,7 @@ static void _reset_stroke_session(dt_iop_drawlayer_gui_data_t *g)
   g->stroke_sample_count = 0;
   g->stroke_event_index = 0;
   g->last_dab_valid = FALSE;
-  _process_patch_lock(g);
+  dt_pthread_mutex_lock(&g->process_patch_mutex);
   _paint_reset_stroke_runtime(g);
   dt_drawlayer_paint_runtime_state_reset(&g->process_dirty_rect);
   if(g->stroke_mask.pixels)
@@ -2636,7 +2612,7 @@ static void _reset_stroke_session(dt_iop_drawlayer_gui_data_t *g)
   if(g->process_stroke_mask.pixels)
     memset(g->process_stroke_mask.pixels, 0,
            (size_t)g->process_stroke_mask.width * g->process_stroke_mask.height * sizeof(float));
-  _process_patch_unlock(g);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
 }
 
 static void _invalidate_process_patch(dt_iop_drawlayer_gui_data_t *g)
@@ -2646,7 +2622,7 @@ static void _invalidate_process_patch(dt_iop_drawlayer_gui_data_t *g)
    * edits use this path; in-stroke backend dabs update the transformed tile
    * incrementally and therefore do not need to invalidate it. */
   if(!g) return;
-  _process_patch_lock(g);
+  dt_pthread_mutex_lock(&g->process_patch_mutex);
   dt_drawlayer_cache_invalidate_process_patch_state(&g->process_patch_valid, &g->process_patch_dirty,
                                                     &g->process_dirty_rect,
                                                     &g->process_patch_padding, &g->process_combined_roi);
@@ -2654,7 +2630,7 @@ static void _invalidate_process_patch(dt_iop_drawlayer_gui_data_t *g)
   g->process_cl_prewarm_hash = 0;
   g->process_cl_prewarm_devid = -1;
   dt_drawlayer_paint_runtime_state_reset(g->process_path);
-  _process_patch_unlock(g);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
   /* Do not clear `process_stroke_mask` here: it is either reset on stroke
    * start or reinitialized when rebuilding the process patch. */
 }
@@ -3177,9 +3153,11 @@ static void _prime_gui_process_patch_from_backbuffer(dt_iop_module_t *self,
     return;
 
   gboolean need_build = FALSE;
-  _process_patch_read_lock(g);
+    dt_pthread_mutex_lock(&g->process_patch_mutex);
+  dt_drawlayer_cache_patch_rdlock(&g->process_read_patch);
   need_build = !g->process_patch_valid || !g->process_read_patch.pixels;
-  _process_patch_read_unlock(g);
+    dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
   if(need_build)
     _build_process_patch_from_base(self, g, piece, roi_in, roi_out);
 }
@@ -3197,23 +3175,27 @@ static void _prewarm_gui_process_patch_cl(dt_iop_module_t *self,
   if(!_is_drawlayer_display_pipe(self, piece)) return;
   if(piece->pipe->devid < 0 || gd->kernel_premult_over < 0) return;
   if(roi_out->width <= 0 || roi_out->height <= 0) return;
-  _process_patch_read_lock(g);
+    dt_pthread_mutex_lock(&g->process_patch_mutex);
+  dt_drawlayer_cache_patch_rdlock(&g->process_read_patch);
   if(!g->process_patch_valid || !g->process_read_patch.pixels)
   {
-    _process_patch_read_unlock(g);
+      dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
     return;
   }
   if(g->process_cl_prewarm_hash == g->process_geom_hash
      && g->process_cl_prewarm_devid == piece->pipe->devid)
   {
-    _process_patch_read_unlock(g);
+      dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
     return;
   }
 
   drawlayer_process_scratch_t *scratch = _get_process_scratch();
   if(!scratch)
   {
-    _process_patch_read_unlock(g);
+      dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
     return;
   }
 
@@ -3223,7 +3205,8 @@ static void _prewarm_gui_process_patch_cl(dt_iop_module_t *self,
   {
     if(dev_in) dt_opencl_release_mem_object(dev_in);
     if(dev_out) dt_opencl_release_mem_object(dev_out);
-    _process_patch_read_unlock(g);
+      dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
     return;
   }
 
@@ -3235,7 +3218,8 @@ static void _prewarm_gui_process_patch_cl(dt_iop_module_t *self,
   {
     dt_opencl_release_mem_object(dev_in);
     dt_opencl_release_mem_object(dev_out);
-    _process_patch_read_unlock(g);
+      dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
     return;
   }
 
@@ -3247,7 +3231,8 @@ static void _prewarm_gui_process_patch_cl(dt_iop_module_t *self,
                                                      dt_dev_pixelpipe_get_realtime(piece->pipe), FALSE);
   dt_opencl_release_mem_object(dev_in);
   dt_opencl_release_mem_object(dev_out);
-  _process_patch_read_unlock(g);
+    dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
 
   if(warmed)
   {
@@ -5633,10 +5618,12 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
                  (now - process_t) / 1000.0);
         process_t = now;
       }
-      _process_patch_read_lock(g);
+        dt_pthread_mutex_lock(&g->process_patch_mutex);
+  dt_drawlayer_cache_patch_rdlock(&g->process_read_patch);
       if(!g->process_read_patch.pixels || g->process_read_patch.width <= 0 || g->process_read_patch.height <= 0)
       {
-        _process_patch_read_unlock(g);
+          dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
         return dt_iop_clip_and_zoom_roi_cl(piece->pipe->devid, dev_out, dev_in, roi_out, roi_in) == CL_SUCCESS;
       }
 
@@ -5646,7 +5633,8 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
       if(!dt_drawlayer_cache_build_process_blend_rois(&g->process_read_patch, g->process_patch_padding, roi_out,
                                                       &blend_target_roi, &source_process_roi, &direct_copy))
       {
-        _process_patch_read_unlock(g);
+          dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
         return dt_iop_clip_and_zoom_roi_cl(piece->pipe->devid, dev_out, dev_in, roi_out, roi_in) == CL_SUCCESS;
       }
       cl_mem process_source = NULL;
@@ -5660,7 +5648,8 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
                                                      use_preview_bg, preview_bg,
                                                      dt_dev_pixelpipe_get_realtime(piece->pipe),
                                                      dt_dev_pixelpipe_get_realtime(piece->pipe) && !process_source);
-      _process_patch_read_unlock(g);
+        dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
       {
         const gint64 now = g_get_monotonic_time();
         dt_print(DT_DEBUG_PERF, "[drawlayer] process_cl step=blend-process-patch ms=%.3f total=%.3f ok=%d",
@@ -5739,9 +5728,9 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
    * output back to the device. */
   if(g && g->process_read_clmem)
   {
-    _process_patch_lock(g);
+    dt_pthread_mutex_lock(&g->process_patch_mutex);
     _clear_process_read_clmem(g);
-    _process_patch_unlock(g);
+    dt_pthread_mutex_unlock(&g->process_patch_mutex);
     g->process_cl_prewarm_hash = 0;
     g->process_cl_prewarm_devid = -1;
   }
@@ -5816,12 +5805,14 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
                  (now - process_t) / 1000.0);
         process_t = now;
       }
-      _process_patch_read_lock(g);
+        dt_pthread_mutex_lock(&g->process_patch_mutex);
+  dt_drawlayer_cache_patch_rdlock(&g->process_read_patch);
       gboolean direct_copy = FALSE;
       if(!dt_drawlayer_cache_build_process_blend_rois(&g->process_read_patch, g->process_patch_padding, roi_out,
                                                       NULL, NULL, &direct_copy))
       {
-        _process_patch_read_unlock(g);
+          dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
         _copy_input_to_output(input, output, roi_out->width, roi_out->height);
         return 0;
       }
@@ -5833,7 +5824,8 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
         scratch = _get_process_scratch();
         if(!scratch)
         {
-          _process_patch_read_unlock(g);
+            dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
           _copy_input_to_output(input, output, roi_out->width, roi_out->height);
           return 0;
         }
@@ -5843,14 +5835,16 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
                                                                    "drawlayer process scratch");
         if(!layerbuf)
         {
-          _process_patch_read_unlock(g);
+            dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
           _copy_input_to_output(input, output, roi_out->width, roi_out->height);
           return 0;
         }
         if(!dt_drawlayer_cache_resample_process_patch_to_output(&g->process_read_patch, g->process_patch_padding,
                                                                 roi_out, layerbuf, roi_out->width))
         {
-          _process_patch_read_unlock(g);
+            dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
           _copy_input_to_output(input, output, roi_out->width, roi_out->height);
           return 0;
         }
@@ -5863,7 +5857,8 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
       }
 
       _blend_layer_over_input(output, input, layer_pixels, pixels, use_preview_bg, preview_bg);
-      _process_patch_read_unlock(g);
+        dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
       {
         const gint64 now = g_get_monotonic_time();
         dt_print(DT_DEBUG_PERF, "[drawlayer] process step=blend-process-patch ms=%.3f total=%.3f",

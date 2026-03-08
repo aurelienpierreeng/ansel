@@ -599,7 +599,6 @@ static void _paint_process_one_raw_input(dt_drawlayer_paint_stroke_t *state,
   {
     const dt_drawlayer_brush_dab_t spacing_ref_segment[2] = { segment_start, dab };
     const float segment_spacing = _paint_segment_sample_spacing(spacing_ref_segment, 2, distance_percent);
-    int emitted = 0;
     while(TRUE)
     {
       const float sample_spacing = segment_spacing;
@@ -625,7 +624,6 @@ static void _paint_process_one_raw_input(dt_drawlayer_paint_stroke_t *state,
       _freeze_emitted_dab_raster_state(&sample, sample_spacing);
       _emit_dab(state, &sample, callbacks, user_data);
       state->sampled_arc_length = target_arc;
-      emitted++;
     }
   }
 

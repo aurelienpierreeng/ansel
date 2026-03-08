@@ -381,7 +381,7 @@ gboolean dt_drawlayer_cache_populate_process_patch_from_base(const dt_drawlayer_
   if(process_combined_roi) *process_combined_roi = *combined_roi;
 
   dt_drawlayer_cache_patch_rdlock(base_patch);
-  if(fabsf(combined_roi->scale - 1.0f) <= 1e-6f)
+  if(fabs(combined_roi->scale - 1.0) <= 1e-6f)
   {
     const int src_x0 = MAX(0, combined_roi->x);
     const int src_y0 = MAX(0, combined_roi->y);
@@ -441,7 +441,7 @@ gboolean dt_drawlayer_cache_populate_process_patch_from_base(const dt_drawlayer_
     if(!have_base_mask)
       memset(process_stroke_mask->pixels, 0,
              (size_t)process_stroke_mask->width * process_stroke_mask->height * sizeof(float));
-    else if(fabsf(combined_roi->scale - 1.0f) <= 1e-6f)
+    else if(fabs(combined_roi->scale - 1.0) <= 1e-6)
     {
       const int src_x0 = MAX(0, combined_roi->x);
       const int src_y0 = MAX(0, combined_roi->y);
