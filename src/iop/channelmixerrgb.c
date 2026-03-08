@@ -676,9 +676,6 @@ static inline void luma_chroma(const dt_aligned_pixel_t input, const dt_aligned_
   }
 }
 
-#ifdef _OPENMP
-#pragma omp declare simd aligned(in, out, XYZ_to_RGB, RGB_to_XYZ, MIX : 64) aligned(illuminant, saturation, lightness, grey:16)
-#endif
 static inline void loop_switch(const float *const restrict in, float *const restrict out,
                                const size_t width, const size_t height, const size_t ch, const dt_colormatrix_t XYZ_to_RGB,
                                const dt_colormatrix_t RGB_to_XYZ, const dt_colormatrix_t MIX,
@@ -688,9 +685,25 @@ static inline void loop_switch(const float *const restrict in, float *const rest
                                const dt_adaptation_t kind,
                                const dt_iop_channelmixer_rgb_version_t version)
 {
+  dt_colormatrix_t RGB_to_XYZ_t;
+  dt_colormatrix_t XYZ_to_RGB_t;
+  dt_colormatrix_t MIX_t;
+  transpose_3xSSE(RGB_to_XYZ, RGB_to_XYZ_t);
+  transpose_3xSSE(XYZ_to_RGB, XYZ_to_RGB_t);
+  transpose_3xSSE(MIX, MIX_t);
+  const dt_aligned_pixel_simd_t rgb_to_xyz0 = dt_colormatrix_row_to_simd(RGB_to_XYZ_t, 0);
+  const dt_aligned_pixel_simd_t rgb_to_xyz1 = dt_colormatrix_row_to_simd(RGB_to_XYZ_t, 1);
+  const dt_aligned_pixel_simd_t rgb_to_xyz2 = dt_colormatrix_row_to_simd(RGB_to_XYZ_t, 2);
+  const dt_aligned_pixel_simd_t xyz_to_rgb0 = dt_colormatrix_row_to_simd(XYZ_to_RGB_t, 0);
+  const dt_aligned_pixel_simd_t xyz_to_rgb1 = dt_colormatrix_row_to_simd(XYZ_to_RGB_t, 1);
+  const dt_aligned_pixel_simd_t xyz_to_rgb2 = dt_colormatrix_row_to_simd(XYZ_to_RGB_t, 2);
+  const dt_aligned_pixel_simd_t mix0 = dt_colormatrix_row_to_simd(MIX_t, 0);
+  const dt_aligned_pixel_simd_t mix1 = dt_colormatrix_row_to_simd(MIX_t, 1);
+  const dt_aligned_pixel_simd_t mix2 = dt_colormatrix_row_to_simd(MIX_t, 2);
+
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(width, height, ch, in, out, XYZ_to_RGB, RGB_to_XYZ, MIX, illuminant, saturation, lightness, grey, p, gamut, clip, apply_grey, kind, version) \
+  dt_omp_firstprivate(width, height, ch, in, out, xyz_to_rgb0, xyz_to_rgb1, xyz_to_rgb2, rgb_to_xyz0, rgb_to_xyz1, rgb_to_xyz2, mix0, mix1, mix2, illuminant, saturation, lightness, grey, p, gamut, clip, apply_grey, kind, version) \
   schedule(simd:static)
 #endif
   for(size_t k = 0; k < height * width * 4; k += 4)
@@ -698,9 +711,12 @@ static inline void loop_switch(const float *const restrict in, float *const rest
     // intermediate temp buffers
     dt_aligned_pixel_t temp_one;
     dt_aligned_pixel_t temp_two;
+    const dt_aligned_pixel_simd_t in_v = dt_load_simd_aligned(in + k);
 
-    for(size_t c = 0; c < DT_PIXEL_SIMD_CHANNELS; c++)
-      temp_two[c] = (clip) ? fmaxf(in[k + c], 0.0f) : in[k + c];
+    if(clip)
+      dt_store_simd_aligned(temp_two, dt_simd_max_zero(in_v));
+    else
+      dt_store_simd_aligned(temp_two, in_v);
 
     /* WE START IN PIPELINE RGB */
 
@@ -709,7 +725,8 @@ static inline void loop_switch(const float *const restrict in, float *const rest
       case DT_ADAPTATION_FULL_BRADFORD:
       {
         // Convert from RGB to XYZ
-        dot_product(temp_two, RGB_to_XYZ, temp_one);
+        dt_store_simd_aligned(temp_one, dt_mat3x4_mul_vec4(dt_load_simd_aligned(temp_two),
+                                                           rgb_to_xyz0, rgb_to_xyz1, rgb_to_xyz2));
         const float Y = temp_one[1];
 
         // Convert to LMS
@@ -721,7 +738,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
           upscale_vector(temp_one, Y);
 
           // Compute the 3D mix - this is a rotation + homothety of the vector base
-          dot_product(temp_one, MIX, temp_two);
+          dt_store_simd_aligned(temp_two, dt_mat3x4_mul_vec4(dt_load_simd_aligned(temp_one), mix0, mix1, mix2));
         }
         convert_bradford_LMS_to_XYZ(temp_two, temp_one);
 
@@ -730,7 +747,8 @@ static inline void loop_switch(const float *const restrict in, float *const rest
       case DT_ADAPTATION_LINEAR_BRADFORD:
       {
         // Convert from RGB to XYZ
-        dot_product(temp_two, RGB_to_XYZ, temp_one);
+        dt_store_simd_aligned(temp_one, dt_mat3x4_mul_vec4(dt_load_simd_aligned(temp_two),
+                                                           rgb_to_xyz0, rgb_to_xyz1, rgb_to_xyz2));
         const float Y = temp_one[1];
 
         // Convert to LMS
@@ -742,7 +760,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
           upscale_vector(temp_one, Y);
 
           // Compute the 3D mix - this is a rotation + homothety of the vector base
-          dot_product(temp_one, MIX, temp_two);
+          dt_store_simd_aligned(temp_two, dt_mat3x4_mul_vec4(dt_load_simd_aligned(temp_one), mix0, mix1, mix2));
         }
         convert_bradford_LMS_to_XYZ(temp_two, temp_one);
 
@@ -751,7 +769,8 @@ static inline void loop_switch(const float *const restrict in, float *const rest
       case DT_ADAPTATION_CAT16:
       {
         // Convert from RGB to XYZ
-        dot_product(temp_two, RGB_to_XYZ, temp_one);
+        dt_store_simd_aligned(temp_one, dt_mat3x4_mul_vec4(dt_load_simd_aligned(temp_two),
+                                                           rgb_to_xyz0, rgb_to_xyz1, rgb_to_xyz2));
         const float Y = temp_one[1];
 
         // Convert to LMS
@@ -763,7 +782,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
           upscale_vector(temp_one, Y);
 
           // Compute the 3D mix - this is a rotation + homothety of the vector base
-          dot_product(temp_one, MIX, temp_two);
+          dt_store_simd_aligned(temp_two, dt_mat3x4_mul_vec4(dt_load_simd_aligned(temp_one), mix0, mix1, mix2));
         }
         convert_CAT16_LMS_to_XYZ(temp_two, temp_one);
 
@@ -772,7 +791,8 @@ static inline void loop_switch(const float *const restrict in, float *const rest
       case DT_ADAPTATION_XYZ:
       {
         // Convert from RGB to XYZ
-        dot_product(temp_two, RGB_to_XYZ, temp_one);
+        dt_store_simd_aligned(temp_one, dt_mat3x4_mul_vec4(dt_load_simd_aligned(temp_two),
+                                                           rgb_to_xyz0, rgb_to_xyz1, rgb_to_xyz2));
         const float Y = temp_one[1];
 
         // Do white balance in XYZ
@@ -781,7 +801,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
         upscale_vector(temp_two, Y);
 
         // Compute the 3D mix in XYZ - this is a rotation + homothety of the vector base
-        dot_product(temp_two, MIX, temp_one);
+        dt_store_simd_aligned(temp_one, dt_mat3x4_mul_vec4(dt_load_simd_aligned(temp_two), mix0, mix1, mix2));
 
         break;
       }
@@ -792,10 +812,11 @@ static inline void loop_switch(const float *const restrict in, float *const rest
         // No white balance.
 
         // Compute the 3D mix in RGB - this is a rotation + homothety of the vector base
-        dot_product(temp_two, MIX, temp_one);
+        dt_store_simd_aligned(temp_one, dt_mat3x4_mul_vec4(dt_load_simd_aligned(temp_two), mix0, mix1, mix2));
 
         // Convert from RGB to XYZ
-        dot_product(temp_one, RGB_to_XYZ, temp_two);
+        dt_store_simd_aligned(temp_two, dt_mat3x4_mul_vec4(dt_load_simd_aligned(temp_one),
+                                                           rgb_to_xyz0, rgb_to_xyz1, rgb_to_xyz2));
 
         for(size_t c = 0; c < DT_PIXEL_SIMD_CHANNELS; ++c) temp_one[c] = temp_two[c];
         break;
@@ -823,7 +844,8 @@ static inline void loop_switch(const float *const restrict in, float *const rest
       default:
       {
         // Convert from XYZ to RGB
-        dot_product(temp_two, XYZ_to_RGB, temp_one);
+        dt_store_simd_aligned(temp_one, dt_mat3x4_mul_vec4(dt_load_simd_aligned(temp_two),
+                                                           xyz_to_rgb0, xyz_to_rgb1, xyz_to_rgb2));
         break;
       }
     }
@@ -844,9 +866,7 @@ static inline void loop_switch(const float *const restrict in, float *const rest
     {
       // Turn LMS, XYZ or pipeline RGB into monochrome
       const float grey_mix = fmaxf(scalar_product(temp_two, grey), 0.0f);
-
-      out[k] = out[k + 1] = out[k + 2] = grey_mix;
-      out[k + 3] = in[k + 3]; // alpha mask
+      dt_store_simd_aligned(out + k, (dt_aligned_pixel_simd_t){ grey_mix, grey_mix, grey_mix, in_v[3] });
     }
     else
     {
@@ -866,7 +886,8 @@ static inline void loop_switch(const float *const restrict in, float *const rest
         default:
         {
           // Convert from RBG to XYZ
-          dot_product(temp_two, RGB_to_XYZ, temp_one);
+          dt_store_simd_aligned(temp_one, dt_mat3x4_mul_vec4(dt_load_simd_aligned(temp_two),
+                                                             rgb_to_xyz0, rgb_to_xyz1, rgb_to_xyz2));
           break;
         }
       }
@@ -877,14 +898,16 @@ static inline void loop_switch(const float *const restrict in, float *const rest
       if(clip) for(size_t c = 0; c < DT_PIXEL_SIMD_CHANNELS; c++) temp_one[c] = fmaxf(temp_one[c], 0.0f);
 
       // Convert back to RGB
-      dot_product(temp_one, XYZ_to_RGB, temp_two);
+      dt_store_simd_aligned(temp_two, dt_mat3x4_mul_vec4(dt_load_simd_aligned(temp_one),
+                                                         xyz_to_rgb0, xyz_to_rgb1, xyz_to_rgb2));
 
       if(clip)
-        for(size_t c = 0; c < DT_PIXEL_SIMD_CHANNELS; c++) out[k + c] = fmaxf(temp_two[c], 0.0f);
+        dt_store_simd_aligned(out + k,
+                              (dt_aligned_pixel_simd_t){ fmaxf(temp_two[0], 0.0f), fmaxf(temp_two[1], 0.0f),
+                                                         fmaxf(temp_two[2], 0.0f), in_v[3] });
       else
-        for(size_t c = 0; c < DT_PIXEL_SIMD_CHANNELS; c++) out[k + c] = temp_two[c];
-
-      out[k + 3] = in[k + 3]; // alpha mask
+        dt_store_simd_aligned(out + k,
+                              (dt_aligned_pixel_simd_t){ temp_two[0], temp_two[1], temp_two[2], in_v[3] });
     }
   }
 }

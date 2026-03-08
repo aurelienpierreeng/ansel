@@ -177,16 +177,6 @@ dt_colormatrix_row_to_simd(const dt_colormatrix_t matrix, const int row)
 }
 
 #ifdef _OPENMP
-#pragma omp declare simd
-#endif
-static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
-dt_mat3x4_mul_vec4(const dt_aligned_pixel_simd_t in, const dt_aligned_pixel_simd_t row0,
-                   const dt_aligned_pixel_simd_t row1, const dt_aligned_pixel_simd_t row2)
-{
-  return row0 * in[0] + row1 * in[1] + row2 * in[2];
-}
-
-#ifdef _OPENMP
 #pragma omp declare simd aligned(in,out:16) aligned(matrix:64) uniform(matrix)
 #endif
 static inline void dt_apply_transposed_color_matrix(const dt_aligned_pixel_t in, const dt_colormatrix_t matrix,

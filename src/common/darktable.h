@@ -502,6 +502,16 @@ dt_store_simd_aligned(float *const pixel, const dt_aligned_pixel_simd_t value)
   dt_store_simd(out, value);
 }
 
+#ifdef _OPENMP
+#pragma omp declare simd
+#endif
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+dt_mat3x4_mul_vec4(const dt_aligned_pixel_simd_t in, const dt_aligned_pixel_simd_t row0,
+                   const dt_aligned_pixel_simd_t row1, const dt_aligned_pixel_simd_t row2)
+{
+  return row0 * in[0] + row1 * in[1] + row2 * in[2];
+}
+
 // To be able to vectorize per-pixel loops, we need to operate on all four channels, but if the compiler does
 // not auto-vectorize, doing so increases computation by 1/3 for a channel which typically is ignored anyway.
 // Select the appropriate number of channels over which to loop to produce the fastest code.
