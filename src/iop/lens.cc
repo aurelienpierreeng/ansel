@@ -415,6 +415,19 @@ static lfModifier * get_modifier(int *mods_done, int w, int h, const dt_iop_lens
   return mod;
 }
 
+static inline void _lens_fill_vignette_row(float *const buf, const int width, const int ch)
+{
+  if(ch == DT_PIXEL_SIMD_CHANNELS)
+  {
+    const dt_aligned_pixel_simd_t half = dt_simd_set1(0.5f);
+    for(int x = 0; x < width; x++) dt_store_simd_aligned(buf + (size_t)x * ch, half);
+  }
+  else
+  {
+    for(int k = 0; k < ch * width; k++) buf[k] = 0.5f;
+  }
+}
+
 /* Why do we care about being a monochrome image or not?
  The lensfun library does not have an algorithm for distortion or tca correction specialized for monochrome images,
    the builtin correction works with subtle differences for the color channels leading to some colorizing of the images.
@@ -472,9 +485,7 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-      dt_omp_firstprivate(padded_bufsize, ch, ch_width, d, interpolation, ivoid, mask_display, ovoid, roi_in, roi_out)	\
-      dt_omp_sharedconst(buf, raw_monochrome) \
-      shared(modifier) \
+      dt_omp_firstprivate(padded_bufsize, ch, ch_width, d, interpolation, ivoid, mask_display, ovoid, roi_in, roi_out, modifier, buf, raw_monochrome)	\
       schedule(static)
 #endif
       for(int y = 0; y < roi_out->height; y++)
@@ -486,37 +497,46 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
         float *out = ((float *)ovoid) + (size_t)y * roi_out->width * ch;
         for(int x = 0; x < roi_out->width; x++, bufptr += 6, out += ch)
         {
+          dt_aligned_pixel_simd_t pixel = { 0.f };
           for(int c = 0; c < 3; c++)
           {
             if(d->do_nan_checks && (!isfinite(bufptr[c * 2]) || !isfinite(bufptr[c * 2 + 1])))
             {
-              out[c] = 0.0f;
+              pixel[c] = 0.0f;
               continue;
             }
 
             const float *const inptr = (const float *const)ivoid + (size_t)c;
             const float pi0 = fmaxf(fminf(bufptr[c * 2] - roi_in->x, roi_in->width - 1.0f), 0.0f);
             const float pi1 = fmaxf(fminf(bufptr[c * 2 + 1] - roi_in->y, roi_in->height - 1.0f), 0.0f);
-            out[c] = dt_interpolation_compute_sample(interpolation, inptr, pi0, pi1, roi_in->width,
-                                                     roi_in->height, ch, ch_width);
+            pixel[c] = dt_interpolation_compute_sample(interpolation, inptr, pi0, pi1, roi_in->width,
+                                                       roi_in->height, ch, ch_width);
           }
 
-          if(raw_monochrome) out[0] = out[2] = out[1];
+          if(raw_monochrome) pixel[0] = pixel[2] = pixel[1];
 
           if(mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
           {
             if(d->do_nan_checks && (!isfinite(bufptr[2]) || !isfinite(bufptr[3])))
             {
-              out[3] = 0.0f;
-              continue;
+              pixel[3] = 0.0f;
+            }
+            else
+            {
+              // take green channel distortion also for alpha channel
+              const float *const inptr = (const float *const)ivoid + (size_t)3;
+              const float pi0 = fmaxf(fminf(bufptr[2] - roi_in->x, roi_in->width - 1.0f), 0.0f);
+              const float pi1 = fmaxf(fminf(bufptr[3] - roi_in->y, roi_in->height - 1.0f), 0.0f);
+              pixel[3] = dt_interpolation_compute_sample(interpolation, inptr, pi0, pi1, roi_in->width,
+                                                         roi_in->height, ch, ch_width);
             }
 
-            // take green channel distortion also for alpha channel
-            const float *const inptr = (const float *const)ivoid + (size_t)3;
-            const float pi0 = fmaxf(fminf(bufptr[2] - roi_in->x, roi_in->width - 1.0f), 0.0f);
-            const float pi1 = fmaxf(fminf(bufptr[3] - roi_in->y, roi_in->height - 1.0f), 0.0f);
-            out[3] = dt_interpolation_compute_sample(interpolation, inptr, pi0, pi1, roi_in->width,
-                                                     roi_in->height, ch, ch_width);
+            if(ch == DT_PIXEL_SIMD_CHANNELS) dt_store_simd_aligned(out, pixel);
+            else for(int c = 0; c < ch; c++) out[c] = pixel[c];
+          }
+          else
+          {
+            for(int c = 0; c < 3; c++) out[c] = pixel[c];
           }
         }
       }
@@ -531,8 +551,7 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
     {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-      dt_omp_firstprivate(ch, pixelformat, roi_out, ovoid) \
-      shared(modifier) \
+      dt_omp_firstprivate(ch, pixelformat, roi_out, ovoid, modifier) \
       schedule(static)
 #endif
       for(int y = 0; y < roi_out->height; y++)
@@ -559,8 +578,7 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
     {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-      dt_omp_firstprivate(ch, pixelformat, roi_in) \
-      shared(buf, modifier) \
+      dt_omp_firstprivate(ch, pixelformat, roi_in, buf, modifier) \
       schedule(static)
 #endif
       for(int y = 0; y < roi_in->height; y++)
@@ -587,9 +605,7 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-      dt_omp_firstprivate(padded_buf2size, ch, ch_width, d, interpolation, mask_display, ovoid, roi_in, roi_out) \
-      dt_omp_sharedconst(buf2, raw_monochrome) \
-      shared(buf, modifier) \
+      dt_omp_firstprivate(padded_buf2size, ch, ch_width, d, interpolation, mask_display, ovoid, roi_in, roi_out, buf2, raw_monochrome, buf, modifier) \
       schedule(static)
 #endif
       for(int y = 0; y < roi_out->height; y++)
@@ -601,35 +617,44 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
         float *out = ((float *)ovoid) + (size_t)y * roi_out->width * ch;
         for(int x = 0; x < roi_out->width; x++, buf2ptr += 6, out += ch)
         {
+          dt_aligned_pixel_simd_t pixel = { 0.f };
           for(int c = 0; c < 3; c++)
           {
             if(d->do_nan_checks && (!isfinite(buf2ptr[c * 2]) || !isfinite(buf2ptr[c * 2 + 1])))
             {
-              out[c] = 0.0f;
+              pixel[c] = 0.0f;
               continue;
             }
 
             float *bufptr = ((float *)buf) + c;
             const float pi0 = fmaxf(fminf(buf2ptr[c * 2] - roi_in->x, roi_in->width - 1.0f), 0.0f);
             const float pi1 = fmaxf(fminf(buf2ptr[c * 2 + 1] - roi_in->y, roi_in->height - 1.0f), 0.0f);
-            out[c] = dt_interpolation_compute_sample(interpolation, bufptr, pi0, pi1, roi_in->width,
-                                                     roi_in->height, ch, ch_width);
+            pixel[c] = dt_interpolation_compute_sample(interpolation, bufptr, pi0, pi1, roi_in->width,
+                                                       roi_in->height, ch, ch_width);
           }
-          if(raw_monochrome) out[0] = out[2] = out[1];
+          if(raw_monochrome) pixel[0] = pixel[2] = pixel[1];
           if(mask_display & DT_DEV_PIXELPIPE_DISPLAY_MASK)
           {
             if(d->do_nan_checks && (!isfinite(buf2ptr[2]) || !isfinite(buf2ptr[3])))
             {
-              out[3] = 0.0f;
-              continue;
+              pixel[3] = 0.0f;
+            }
+            else
+            {
+              // take green channel distortion also for alpha channel
+              float *bufptr = ((float *)buf) + 3;
+              const float pi0 = fmaxf(fminf(buf2ptr[2] - roi_in->x, roi_in->width - 1.0f), 0.0f);
+              const float pi1 = fmaxf(fminf(buf2ptr[3] - roi_in->y, roi_in->height - 1.0f), 0.0f);
+              pixel[3] = dt_interpolation_compute_sample(interpolation, bufptr, pi0, pi1, roi_in->width,
+                                                         roi_in->height, ch, ch_width);
             }
 
-            // take green channel distortion also for alpha channel
-            float *bufptr = ((float *)buf) + 3;
-            const float pi0 = fmaxf(fminf(buf2ptr[2] - roi_in->x, roi_in->width - 1.0f), 0.0f);
-            const float pi1 = fmaxf(fminf(buf2ptr[3] - roi_in->y, roi_in->height - 1.0f), 0.0f);
-            out[3] = dt_interpolation_compute_sample(interpolation, bufptr, pi0, pi1, roi_in->width,
-                                                     roi_in->height, ch, ch_width);
+            if(ch == DT_PIXEL_SIMD_CHANNELS) dt_store_simd_aligned(out, pixel);
+            else for(int c = 0; c < ch; c++) out[c] = pixel[c];
+          }
+          else
+          {
+            for(int c = 0; c < 3; c++) out[c] = pixel[c];
           }
         }
       }
@@ -745,9 +770,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-      dt_omp_firstprivate(tmpbufwidth, roi_out) \
-      dt_omp_sharedconst(raw_monochrome) \
-      shared(tmpbuf, d, modifier) \
+      dt_omp_firstprivate(tmpbufwidth, roi_out, raw_monochrome, tmpbuf, d, modifier) \
       schedule(static)
 #endif
       for(int y = 0; y < roi_out->height; y++)
@@ -785,8 +808,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-      dt_omp_firstprivate(ch, pixelformat, roi_out) \
-      shared(tmpbuf, modifier, d) \
+      dt_omp_firstprivate(ch, pixelformat, roi_out, tmpbuf, modifier, d) \
       schedule(static)
 #endif
       for(int y = 0; y < roi_out->height; y++)
@@ -794,7 +816,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
         /* Colour correction: vignetting */
         // actually this way row stride does not matter.
         float *buf = tmpbuf + (size_t)y * ch * roi_out->width;
-        for(int k = 0; k < ch * roi_out->width; k++) buf[k] = 0.5f;
+        _lens_fill_vignette_row(buf, roi_out->width, ch);
         modifier->ApplyColorModification(buf, roi_out->x, roi_out->y + y, roi_out->width, 1,
                                          pixelformat, ch * roi_out->width);
       }
@@ -827,8 +849,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-      dt_omp_firstprivate(ch, pixelformat, roi_in) \
-      shared(tmpbuf, modifier, d) \
+      dt_omp_firstprivate(ch, pixelformat, roi_in, tmpbuf, modifier, d) \
       schedule(static)
 #endif
       for(int y = 0; y < roi_in->height; y++)
@@ -836,7 +857,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
         /* Colour correction: vignetting */
         // actually this way row stride does not matter.
         float *buf = tmpbuf + (size_t)y * ch * roi_in->width;
-        for(int k = 0; k < ch * roi_in->width; k++) buf[k] = 0.5f;
+        _lens_fill_vignette_row(buf, roi_in->width, ch);
         modifier->ApplyColorModification(buf, roi_in->x, roi_in->y + y, roi_in->width, 1,
                                          pixelformat, ch * roi_in->width);
       }
@@ -866,7 +887,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 #pragma omp parallel for default(none) \
       dt_omp_firstprivate(tmpbufwidth, roi_out) \
       dt_omp_sharedconst(raw_monochrome) \
-      shared(tmpbuf, d, modifier) \
+      dt_omp_firstprivate(tmpbuf, d, modifier) \
       schedule(static)
 #endif
       for(int y = 0; y < roi_out->height; y++)
@@ -1039,9 +1060,7 @@ void distort_mask(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *p
 
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(padded_bufsize, d, in, interpolation, out, roi_in, roi_out) \
-  dt_omp_sharedconst(buf) \
-  shared(modifier) \
+  dt_omp_firstprivate(padded_bufsize, d, in, interpolation, out, roi_in, roi_out, buf, modifier) \
   schedule(static)
 #endif
   for(int y = 0; y < roi_out->height; y++)
@@ -1111,8 +1130,8 @@ void modify_roi_in(struct dt_iop_module_t *self, struct dt_dev_pixelpipe_iop_t *
 #ifdef _OPENMP
 #pragma omp parallel default(none) \
     dt_omp_firstprivate(aheight, awidth, buf, height, nbpoints, width, xoff, \
-                        xstep, yoff, ystep) \
-    shared(modifier) reduction(min : xm, ym) reduction(max : xM, yM)
+                        xstep, yoff, ystep, modifier) \
+    reduction(min : xm, ym) reduction(max : xM, yM)
 #endif
     {
 #ifdef _OPENMP
