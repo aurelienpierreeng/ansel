@@ -506,8 +506,8 @@ static gboolean _publish_process_patch_locked(dt_iop_drawlayer_gui_data_t *g,
   if(full_copy)
   {
     _copy_patch_rect(&g->process_patch, &g->process_read_patch, &full_rect);
-    dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, g->process_read_patch.pixels, NULL, -1);
 #ifdef HAVE_OPENCL
+    dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, g->process_read_patch.pixels, NULL, -1);
     g->process_read_clmem_dirty = TRUE;
 #endif
     return TRUE;
@@ -517,8 +517,8 @@ static gboolean _publish_process_patch_locked(dt_iop_drawlayer_gui_data_t *g,
    * process-patch mutex is held, so readers never observe a partially copied
    * tile and stale snapshots are not reintroduced by buffer swapping. */
   _copy_patch_rect(&g->process_patch, &g->process_read_patch, damage);
-  dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, g->process_read_patch.pixels, NULL, -1);
 #ifdef HAVE_OPENCL
+  dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, g->process_read_patch.pixels, NULL, -1);
   g->process_read_clmem_dirty = TRUE;
 #endif
   return TRUE;
@@ -1081,8 +1081,10 @@ static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, con
                    + ((size_t)(replay_bounds.nw[1] + yy) * g->base_patch.width + replay_bounds.nw[0]) * 4;
       memcpy(dst, src, (size_t)replay_width * 4 * sizeof(float));
     }
+#ifdef HAVE_OPENCL
     dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, g->base_patch.pixels,
                                                    g->base_patch.cache_entry, -1);
+#endif
     dt_drawlayer_cache_patch_wrunlock(&g->base_patch);
   }
   dt_iop_nap(200000);
@@ -1390,7 +1392,9 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
   dt_drawlayer_cache_patch_rdlock(patch);
   memcpy(published.pixels, patch->pixels, (size_t)patch->width * patch->height * 4 * sizeof(float));
   dt_drawlayer_cache_patch_rdunlock(patch);
+#ifdef HAVE_OPENCL
   dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, published.pixels, published.cache_entry, -1);
+#endif
   _clear_patch(&published);
   dt_print(DT_DEBUG_PERF,
            "[drawlayer] cache rekey conflict old=%" PRIu64 " new=%" PRIu64 " -> published snapshot instead\n",
