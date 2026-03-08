@@ -59,9 +59,6 @@
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-#if defined(__SSE__)
-#include <xmmintrin.h>
-#endif
 #include <assert.h>
 #include <lcms2.h>
 #include <math.h>
@@ -489,11 +486,9 @@ static void dt_wb_preset_interpolate(const wb_data *const p1, // the smaller tun
 #ifdef _OPENMP
 #pragma omp declare simd aligned(inp,outp)
 #endif
-static inline void scaled_copy_4wide(float *const outp, const float *const inp, const float *const coeffs)
+static inline void scaled_copy_4wide(float *const outp, const float *const inp, const dt_aligned_pixel_simd_t coeffs)
 {
-  // this needs to be in a separate function to make GCC8 vectorize it at -O2 as well as -O3
-  for_four_channels(c, aligned(inp, coeffs, outp))
-    outp[c] = inp[c] * coeffs[c];
+  dt_store_simd(outp, dt_load_simd(inp) * coeffs);
 }
 
 int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
@@ -516,7 +511,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
 #endif
     for(int j = 0; j < roi_out->height; j++)
     {
-      const float DT_ALIGNED_PIXEL coeffs[3][4] =
+      const dt_aligned_pixel_simd_t coeffs[3] =
       {
         { d_coeffs[FCxtrans(j, 0, roi_out, xtrans)], d_coeffs[FCxtrans(j, 1, roi_out, xtrans)],
           d_coeffs[FCxtrans(j, 2, roi_out, xtrans)], d_coeffs[FCxtrans(j, 3, roi_out, xtrans)] },
@@ -526,13 +521,11 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
           d_coeffs[FCxtrans(j, 10, roi_out, xtrans)], d_coeffs[FCxtrans(j, 11, roi_out, xtrans)] },
       };
       // process sensels four at a time
-      //(note that attempting to ensure alignment for this main loop actually slowed things down marginally)
       int i = 0;
       for(int coeff = 0; i + 4 < roi_out->width; i += 4, coeff = (coeff+1)%3)
       {
         const size_t p = (size_t)j * roi_out->width + i;
-        for_four_channels(c) // in and out are NOT aligned when width is not a multiple of 4
-          out[p+c] = in[p+c] * coeffs[coeff][c];
+        dt_store_simd(out + p, dt_load_simd(in + p) * coeffs[coeff]);
       }
       // process the leftover sensels
       for(; i < roi_out->width; i++)
@@ -552,50 +545,60 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
 #endif
     for(int j = 0; j < roi_out->height; j++)
     {
-      int i = 0;
-      const int alignment = ((4 - (j * width & (4 - 1))) & (4 - 1));
       const int offset_j = j + roi_out->y;
+      const dt_aligned_pixel_simd_t coeffs = {
+        d_coeffs[FC(offset_j, roi_out->x + 0, filters)],
+        d_coeffs[FC(offset_j, roi_out->x + 1, filters)],
+        d_coeffs[FC(offset_j, roi_out->x + 2, filters)],
+        d_coeffs[FC(offset_j, roi_out->x + 3, filters)]
+      };
+      int i = 0;
 
-      // process the unaligned sensels at the start of the row (when width is not a multiple of 4)
-      for( ; i < alignment; i++)
+      for(; i + 3 < width; i += 4)
+      {
+        const size_t p = (size_t)j * width + i;
+        scaled_copy_4wide(out + p, in + p, coeffs);
+      }
+      for(; i < width; i++)
       {
         const size_t p = (size_t)j * width + i;
         out[p] = in[p] * d_coeffs[FC(offset_j, i + roi_out->x, filters)];
-      }
-      const dt_aligned_pixel_t coeffs = { d_coeffs[FC(offset_j, i + roi_out->x, filters)],
-                                          d_coeffs[FC(offset_j, i + roi_out->x + 1,filters)],
-                                          d_coeffs[FC(offset_j, i + roi_out->x + 2, filters)],
-                                          d_coeffs[FC(offset_j, i + roi_out->x + 3, filters)] };
-      // process sensels four at a time
-      for(; i < (width & ~3); i += 4)
-      {
-        const size_t p = (size_t)j * width + i;
-        scaled_copy_4wide(out + p,in + p, coeffs);
-      }
-      // process the leftover sensels
-      for(i = width & ~3; i < width; i++)
-      {
-        const size_t p = (size_t)j * width + i;
-        out[p] = in[p] * d_coeffs[FC(j + roi_out->y, i + roi_out->x, filters)];
       }
     }
   }
   else
   { // non-mosaiced
     const size_t ch = piece->colors;
+    const size_t npixels = (size_t)roi_out->width * roi_out->height;
 
+    if(ch == 4)
+    {
+      const dt_aligned_pixel_simd_t coeffs = { d->coeffs[0], d->coeffs[1], d->coeffs[2], 1.0f };
+#ifdef _OPENMP
+#pragma omp parallel for default(none) \
+    dt_omp_firstprivate(npixels, in, out, coeffs) \
+    schedule(static)
+#endif
+      for(size_t k = 0; k < npixels; k++)
+      {
+        const size_t p = 4 * k;
+        dt_store_simd_aligned(out + p, dt_load_simd_aligned(in + p) * coeffs);
+      }
+    }
+    else
+    {
 #ifdef _OPENMP
 #pragma omp parallel for SIMD() default(none) \
-    dt_omp_firstprivate(ch, d, in, out, roi_out) \
-    schedule(static) \
-    collapse(2)
+    dt_omp_firstprivate(ch, d, in, out, npixels) \
+    schedule(static)
 #endif
-    for(size_t k = 0; k < ch * roi_out->width * roi_out->height; k += ch)
-    {
-      for(ptrdiff_t c = 0; c < 3; c++)
+      for(size_t k = 0; k < ch * npixels; k += ch)
       {
-        const size_t p = k + c;
-        out[p] = in[p] * d->coeffs[c];
+        for(ptrdiff_t c = 0; c < 3; c++)
+        {
+          const size_t p = k + c;
+          out[p] = in[p] * d->coeffs[c];
+        }
       }
     }
 
