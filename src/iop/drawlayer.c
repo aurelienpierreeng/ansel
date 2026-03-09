@@ -403,6 +403,7 @@ static void _set_drawlayer_pipeline_realtime_mode(dt_iop_module_t *self, gboolea
 static gboolean _background_layer_job_done_idle(gpointer user_data);
 static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, const GArray *history,
                                                       float distance_percent);
+static gboolean _prime_live_process_patch_before_stroke(dt_iop_module_t *self);
 
 typedef struct drawlayer_wait_dialog_t
 {
@@ -3222,6 +3223,35 @@ static void _prime_gui_process_patch_from_backbuffer(dt_iop_module_t *self,
     _build_process_patch_from_base(self, g, piece, roi_in, roi_out);
 }
 
+static gboolean _prime_live_process_patch_before_stroke(dt_iop_module_t *self)
+{
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
+  if(!self || !self->dev || !self->dev->gui_attached || !g) return FALSE;
+
+  gboolean need_build = FALSE;
+  dt_pthread_mutex_lock(&g->process_patch_mutex);
+  dt_drawlayer_cache_patch_rdlock(&g->process_read_patch);
+  need_build = !g->process_patch_valid || !g->process_read_patch.pixels;
+  dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
+  dt_pthread_mutex_unlock(&g->process_patch_mutex);
+  if(!need_build) return TRUE;
+
+  dt_dev_pixelpipe_t *pipes[] = { self->dev->pipe, self->dev->preview_pipe };
+  for(size_t k = 0; k < G_N_ELEMENTS(pipes); k++)
+  {
+    dt_dev_pixelpipe_t *pipe = pipes[k];
+    if(!pipe) continue;
+
+    dt_dev_pixelpipe_iop_t *piece = dt_dev_distort_get_iop_pipe(self->dev, pipe, self);
+    if(!piece || !_is_drawlayer_display_pipe(self, piece)) continue;
+
+    if(_build_process_patch_from_base(self, g, piece, &piece->planned_roi_in, &piece->planned_roi_out))
+      return TRUE;
+  }
+
+  return FALSE;
+}
+
 #ifdef HAVE_OPENCL
 static void _prewarm_gui_process_patch_cl(dt_iop_module_t *self,
                                           const dt_dev_pixelpipe_iop_t *piece,
@@ -5513,6 +5543,10 @@ int button_pressed(dt_iop_module_t *self, double x, double y, double pressure, i
    * sample processing focused on dab rasterization only.
    */
   _prepare_undo_snapshot(self);
+  /* The first backend dab must find a live frontend process tile already
+   * materialized, otherwise `_process_backend_dab()` has nowhere to stamp it
+   * and the initial sample of the stroke is lost from the displayed preview. */
+  _prime_live_process_patch_before_stroke(self);
   if(!_start_worker(self, g->rt))
   {
     _set_drawlayer_pipeline_realtime_mode(self, FALSE);
