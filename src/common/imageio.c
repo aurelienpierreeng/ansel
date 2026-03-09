@@ -1091,8 +1091,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
 
   struct dt_pixel_cache_entry_t *cache_entry;
   void *data = NULL;
-  if(!dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe.backbuf.hash, &data, NULL, &cache_entry,
-                                          NULL, 0, -1, NULL))
+  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, pipe.backbuf.hash, &data, NULL, &cache_entry))
     goto error;
   
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, TRUE, cache_entry);

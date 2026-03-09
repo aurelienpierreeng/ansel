@@ -91,14 +91,6 @@ static void _cache_entry_resync_host_pinned_images_locked(dt_pixel_cache_entry_t
                                                           int devid);
 static void _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid);
 
-typedef struct dt_cache_exact_hit_request_t
-{
-  const dt_iop_roi_t *roi;
-  size_t bpp;
-  int preferred_devid;
-  void **cl_mem_output;
-} dt_cache_exact_hit_request_t;
-
 static dt_pixel_cache_entry_t *_cache_entry_for_host_ptr_locked(dt_dev_pixelpipe_cache_t *cache, void *host_ptr)
 {
   if(!cache || !host_ptr) return NULL;
@@ -264,8 +256,8 @@ static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t
 }
 #endif
 
-gboolean dt_dev_pixelpipe_cache_materialize_host_data(dt_dev_pixelpipe_cache_t *cache, int preferred_devid,
-                                                      dt_pixel_cache_entry_t *entry)
+static gboolean _cache_entry_materialize_host_data(dt_dev_pixelpipe_cache_t *cache, int preferred_devid,
+                                                   dt_pixel_cache_entry_t *entry)
 {
   if(!cache || !entry) return FALSE;
   if(dt_pixel_cache_entry_get_data(entry) == NULL) return FALSE;
@@ -1168,11 +1160,6 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
   return 1;
 }
 
-static inline gboolean _cache_exact_hit_requested(const dt_cache_exact_hit_request_t *request)
-{
-  return request && request->roi && request->bpp > 0 && request->cl_mem_output;
-}
-
 static inline void _cache_clear_lookup_outputs(void **data, dt_pixel_cache_entry_t **entry)
 {
   if(data) *data = NULL;
@@ -1184,27 +1171,43 @@ static inline gboolean _cache_entry_has_host_payload(void **data)
   return !data || *data != NULL;
 }
 
-static gboolean _cache_try_restore_device_payload(dt_pixel_cache_entry_t *cache_entry,
-                                                  const dt_cache_exact_hit_request_t *request)
+static dt_pixel_cache_entry_t *_cache_lookup_existing(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
+                                                      void **data, dt_iop_buffer_dsc_t **dsc)
 {
-  if(!_cache_exact_hit_requested(request) || !cache_entry || !request->cl_mem_output
-     || *request->cl_mem_output != NULL || request->preferred_devid < 0)
+  dt_pthread_mutex_lock(&cache->lock);
+  cache->queries++;
+  dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
+
+  if(cache_entry)
+  {
+    cache->hits++;
+    cache_entry->hits++;
+    _pixelpipe_cache_finalize_entry(cache_entry, data, dsc, "found");
+  }
+
+  dt_pthread_mutex_unlock(&cache->lock);
+  return cache_entry;
+}
+
+static gboolean _cache_try_restore_device_payload(dt_pixel_cache_entry_t *cache_entry,
+                                                  const dt_iop_roi_t *roi, const size_t bpp,
+                                                  const int preferred_devid, void **cl_mem_output)
+{
+  if(!cache_entry || !roi || bpp == 0 || !cl_mem_output || *cl_mem_output != NULL || preferred_devid < 0)
     return FALSE;
 
-  *request->cl_mem_output = dt_pixel_cache_clmem_get(cache_entry, NULL, request->preferred_devid,
-                                                     request->roi->width, request->roi->height,
-                                                     (int)request->bpp, CL_MEM_READ_WRITE, NULL);
-  return *request->cl_mem_output != NULL;
+  *cl_mem_output = dt_pixel_cache_clmem_get(cache_entry, NULL, preferred_devid,
+                                            roi->width, roi->height, (int)bpp,
+                                            CL_MEM_READ_WRITE, NULL);
+  return *cl_mem_output != NULL;
 }
 
 static gboolean _cache_try_restore_host_payload(dt_dev_pixelpipe_cache_t *cache, void **data,
                                                 dt_pixel_cache_entry_t *cache_entry,
-                                                const dt_cache_exact_hit_request_t *request)
+                                                const int preferred_devid)
 {
   if(!cache || !cache_entry) return FALSE;
-  if(!dt_dev_pixelpipe_cache_materialize_host_data(cache,
-                                                   request ? request->preferred_devid : -1,
-                                                   cache_entry))
+  if(!_cache_entry_materialize_host_data(cache, preferred_devid, cache_entry))
     return FALSE;
 
   if(data) *data = dt_pixel_cache_entry_get_data(cache_entry);
@@ -1222,51 +1225,45 @@ static void _cache_remove_invalid_exact_hit(dt_dev_pixelpipe_cache_t *cache, con
   _cache_clear_lookup_outputs(data, entry);
 }
 
-int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
-                                        void **data, dt_iop_buffer_dsc_t **dsc, dt_pixel_cache_entry_t **entry,
-                                        const dt_iop_roi_t *roi, const size_t bpp,
-                                        const int preferred_devid, void **cl_mem_output)
+gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, void **data,
+                                     dt_iop_buffer_dsc_t **dsc, dt_pixel_cache_entry_t **entry)
 {
-  const dt_cache_exact_hit_request_t request = {
-    .roi = roi,
-    .bpp = bpp,
-    .preferred_devid = preferred_devid,
-    .cl_mem_output = cl_mem_output,
-  };
-
-  // Find the cache entry for this hash, if any
-  dt_pthread_mutex_lock(&cache->lock);
-  cache->queries++;
-  dt_pixel_cache_entry_t *cache_entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
-
-  if(cache_entry)
-  {
-    cache->hits++;
-    cache_entry->hits++;
-    _pixelpipe_cache_finalize_entry(cache_entry, data, dsc, "found");
-  }
-
-  dt_pthread_mutex_unlock(&cache->lock);
-
+  dt_pixel_cache_entry_t *cache_entry = _cache_lookup_existing(cache, hash, data, dsc);
   if(!cache_entry)
   {
     _cache_clear_lookup_outputs(data, entry);
     return FALSE;
   }
 
-  if(!_cache_exact_hit_requested(&request) || _cache_entry_has_host_payload(data))
+  if(entry) *entry = cache_entry;
+  return TRUE;
+}
+
+gboolean dt_dev_pixelpipe_cache_peek_exact(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, void **data,
+                                           dt_iop_buffer_dsc_t **dsc, dt_pixel_cache_entry_t **entry,
+                                           const dt_iop_roi_t *roi, const size_t bpp,
+                                           const int preferred_devid, void **cl_mem_output)
+{
+  dt_pixel_cache_entry_t *cache_entry = _cache_lookup_existing(cache, hash, data, dsc);
+  if(!cache_entry)
+  {
+    _cache_clear_lookup_outputs(data, entry);
+    return FALSE;
+  }
+
+  if(_cache_entry_has_host_payload(data))
   {
     if(entry) *entry = cache_entry;
     return TRUE;
   }
 
-  if(_cache_try_restore_device_payload(cache_entry, &request))
+  if(_cache_try_restore_device_payload(cache_entry, roi, bpp, preferred_devid, cl_mem_output))
   {
     if(entry) *entry = cache_entry;
     return TRUE;
   }
 
-  if(_cache_try_restore_host_payload(cache, data, cache_entry, &request))
+  if(_cache_try_restore_host_payload(cache, data, cache_entry, preferred_devid))
   {
     if(entry) *entry = cache_entry;
     return TRUE;
@@ -1450,7 +1447,7 @@ void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, cons
                                            dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 {
   void *data = NULL;
-  if(!dt_dev_pixelpipe_cache_get_existing(cache, hash, &data, NULL, cache_entry, NULL, 0, -1, NULL))
+  if(!dt_dev_pixelpipe_cache_peek(cache, hash, &data, NULL, cache_entry))
   {
     // Ask for a new recompute if cacheline is missing
     dt_dev_process(dev, pipe);
@@ -1487,7 +1484,7 @@ void *dt_dev_pixelpipe_cache_get_ref_unlocked(dt_dev_pixelpipe_cache_t *cache, c
   // This avoids GUI-side lock contention while still providing a synchronized
   // acquisition point for the pointer.
   void *data = NULL;
-  if(!dt_dev_pixelpipe_cache_get_existing(cache, hash, &data, NULL, cache_entry, NULL, 0, -1, NULL)) return NULL;
+  if(!dt_dev_pixelpipe_cache_peek(cache, hash, &data, NULL, cache_entry)) return NULL;
   if(!cache_entry || !*cache_entry) return NULL;
 
   // Keep GUI responsive: never block on writer-held entries.

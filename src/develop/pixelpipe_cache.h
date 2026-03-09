@@ -296,51 +296,29 @@ void *dt_pixelpipe_cache_alloc_align_cache_impl(dt_dev_pixelpipe_cache_t *cache,
 void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void **mem, const char *message);
 
 /**
- * @brief Get an existing cache line from the cache. This is similar to `dt_dev_pixelpipe_cache_get`,
- * but it does not create a new cache line if it is not found.
- *
- * Historical note: unlike `dt_dev_pixelpipe_cache_get()`, this is intentionally a non-owning lookup.
- * It does not change reference counts or entry locks. Callers that need lifetime guarantees must retain
- * the entry explicitly with `dt_dev_pixelpipe_cache_ref_count_entry()` and/or `dt_dev_pixelpipe_cache_rdlock_entry()`.
- *
- * If `roi`, `bpp` and `cl_mem_output` are provided, the lookup becomes an authoritative exact-hit query:
- * the cacheline must immediately satisfy the hit either from RAM, from a cached device buffer or by
- * materializing a host buffer from cached device data. If that fails, the cacheline is removed and
- * the function returns FALSE.
- *
- * @param cache
- * @param hash
- * @param data
- * @param dsc
- * @param roi Optional buffer geometry for exact-hit validation.
- * @param bpp Optional bytes-per-pixel for exact-hit validation.
- * @param preferred_devid Preferred OpenCL device id for exact-hit validation, or -1.
- * @param cl_mem_output Optional returned cached device buffer for exact-hit validation.
- * @return int TRUE if found, FALSE if not found.
- */
-int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, void **data,
-                                        struct dt_iop_buffer_dsc_t **dsc, struct dt_pixel_cache_entry_t **entry,
-                                        const struct dt_iop_roi_t *roi, const size_t bpp,
-                                        const int preferred_devid, void **cl_mem_output);
-
-/**
- * @brief Ensure a cache entry has an authoritative host buffer.
+ * @brief Non-owning lookup of an existing cache line.
  *
  * @details
- * If a cacheline already has `entry->data`, this returns TRUE immediately. Otherwise it tries to
- * allocate the host buffer and resynchronize it from one cached device buffer stored in `cl_mem_list`,
- * preferring `preferred_devid` when it is >= 0.
- *
- * This is the uniform policy used when GPU-only cachelines must become host-authoritative again,
- * for example before evicting cached `cl_mem` images or when a cache hit must satisfy a CPU consumer.
- *
- * @param cache Pixelpipe cache.
- * @param preferred_devid Preferred OpenCL device id, or -1 to accept any cached device buffer.
- * @param entry Cache entry to materialize.
- * @return TRUE if a valid host buffer exists on return, FALSE otherwise.
+ * This does not create a new cache line and does not change reference counts or entry locks.
+ * Callers that need lifetime guarantees must retain the entry explicitly with
+ * `dt_dev_pixelpipe_cache_ref_count_entry()` and/or `dt_dev_pixelpipe_cache_rdlock_entry()`.
  */
-gboolean dt_dev_pixelpipe_cache_materialize_host_data(dt_dev_pixelpipe_cache_t *cache, int preferred_devid,
-                                                      struct dt_pixel_cache_entry_t *entry);
+gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, void **data,
+                                     struct dt_iop_buffer_dsc_t **dsc, struct dt_pixel_cache_entry_t **entry);
+
+/**
+ * @brief Non-owning authoritative exact-hit lookup of an existing cache line.
+ *
+ * @details
+ * Unlike `dt_dev_pixelpipe_cache_peek()`, this only succeeds if the cacheline can immediately
+ * satisfy the hit from RAM, from a cached device buffer, or by materializing RAM from cached
+ * device state. If that fails, the broken cacheline is removed and the function returns FALSE.
+ */
+gboolean dt_dev_pixelpipe_cache_peek_exact(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, void **data,
+                                           struct dt_iop_buffer_dsc_t **dsc,
+                                           struct dt_pixel_cache_entry_t **entry,
+                                           const struct dt_iop_roi_t *roi, const size_t bpp,
+                                           const int preferred_devid, void **cl_mem_output);
 
 /**
  * @brief Remove cache lines matching id. Entries locked in read/write or having reference

@@ -1479,8 +1479,7 @@ static gboolean _reuse_transient_output_cacheline(dt_dev_pixelpipe_t *pipe, dt_d
   }
 
   dt_pixel_cache_entry_t *entry = NULL;
-  if(!dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, old_hash, output, NULL, &entry,
-                                          NULL, 0, -1, NULL) || !entry)
+  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, old_hash, output, NULL, &entry) || !entry)
     return FALSE;
   if(dt_pixel_cache_entry_get_size(entry) < bufsize)
   {
@@ -1524,17 +1523,16 @@ static gboolean _try_get_exact_output_cache_hit(dt_dev_pixelpipe_t *pipe, dt_dev
 
   return _can_take_direct_cache_hit(pipe, piece)
          && _can_take_transient_gui_cache_hit(pipe, dev, module, piece)
-         && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, hash, output, out_format,
-                                                existing_cache, roi_out, bpp,
-                                                pipe ? pipe->devid : -1, cl_mem_output);
+         && dt_dev_pixelpipe_cache_peek_exact(darktable.pixelpipe_cache, hash, output, out_format,
+                                              existing_cache, roi_out, bpp,
+                                              pipe ? pipe->devid : -1, cl_mem_output);
 }
 
 static gboolean _acquire_input_cache_entry(const uint64_t input_hash, void **input,
                                            dt_iop_buffer_dsc_t **input_format,
                                            dt_pixel_cache_entry_t **input_entry)
 {
-  return dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, input_hash, input, input_format,
-                                             input_entry, NULL, 0, -1, NULL);
+  return dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, input_hash, input, input_format, input_entry);
 }
 
 static gboolean _acquire_output_cache_entry(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
@@ -2080,8 +2078,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
   dt_pixel_cache_entry_t *entry = NULL;
   if(!pipe->reentry && !pipe->bypass_cache
      && _can_take_pipe_cache_hit(pipe, dev)
-     && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe->hash, &buf, NULL, &entry,
-                                            NULL, 0, -1, NULL)
+     && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, pipe->hash, &buf, NULL, &entry)
      && _resync_global_histograms(pipe, dev))
   {
     _update_backbuf_cache_reference(pipe, roi, entry);
@@ -2189,8 +2186,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
     {
       // No opencl errors, no killswitch triggered: we should have a valid output buffer now.
       dt_pixel_cache_entry_t *final_entry = NULL;
-      if(dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, pipe->hash, NULL, NULL, &final_entry,
-                                             NULL, 0, -1, NULL))
+      if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, pipe->hash, NULL, NULL, &final_entry))
         _update_backbuf_cache_reference(pipe, roi, final_entry);
       else
         _update_backbuf_cache_reference(pipe, roi, NULL);
