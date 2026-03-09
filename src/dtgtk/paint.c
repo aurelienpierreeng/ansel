@@ -3295,6 +3295,35 @@ void dtgtk_cairo_paint_pin(cairo_t *cr, gint x, gint y, gint w, gint h, gint fla
   FINISH
 }
 
+void dtgtk_cairo_paint_link_chain(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  const double radius = 0.20;
+  const double offset = 0.24;
+  const double height = (radius + offset) * 2.0;
+  const double scale_y = 1 / height;
+  const double angle = M_PI / 4.0;
+
+  cairo_translate(cr, 0.5, 0.5);
+  cairo_rotate(cr, angle);
+  cairo_scale(cr, 1, scale_y);
+
+  cairo_new_sub_path(cr);
+  cairo_arc(cr, 0.0, -offset + 0.08, radius, 0, 1 * M_PI);
+  cairo_arc(cr, 0.0, -offset - 0.08, radius, 1 * M_PI, 2 * M_PI);
+  cairo_close_path(cr);
+
+  cairo_new_sub_path(cr);
+  cairo_arc(cr, 0.0, offset + 0.08, radius, 0, 1 * M_PI);
+  cairo_arc(cr, 0.0, offset - 0.08, radius, 1 * M_PI, 2 * M_PI);
+  cairo_close_path(cr);
+
+  cairo_stroke(cr);
+
+  FINISH
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent

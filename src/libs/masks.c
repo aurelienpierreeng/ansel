@@ -72,7 +72,7 @@ typedef struct dt_lib_masks_t
   dt_iop_module_t *active_module;
   dt_iop_module_t *hosted_module;
 
-  GdkPixbuf *ic_inverse, *ic_union, *ic_intersection, *ic_difference, *ic_exclusion, *ic_used;
+  GdkPixbuf *ic_inverse, *ic_union, *ic_intersection, *ic_difference, *ic_exclusion, *ic_wired;
   int gui_reset;
 } dt_lib_masks_t;
 
@@ -1347,7 +1347,7 @@ static void _lib_masks_list_recurs(GtkTreeStore *treestore, GtkTreeIter *topleve
   if(grp_id == 0)
   {
     _is_form_used(form->formid, NULL, str2, sizeof(str2), &nbuse);
-    if(nbuse > 0) icuse = lm->ic_used;
+    if(nbuse > 0) icuse = lm->ic_wired;
   }
 
   if(!(form->type & DT_MASKS_GROUP))
@@ -1862,7 +1862,7 @@ void gui_init(dt_lib_module_t *self)
   // initialise all masks pixbuf. This is needed for the "automatic" cell renderer of the treeview
   const int bs2 = DT_PIXEL_APPLY_DPI(13);
   d->ic_inverse = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_inverse, bs2, bs2);
-  d->ic_used = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_used, bs2, bs2);
+  d->ic_wired = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_link_chain, bs2, bs2);
   d->ic_union = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_union, bs2 * 2, bs2);
   d->ic_intersection = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_intersection, bs2 * 2, bs2);
   d->ic_difference = dt_draw_get_pixbuf_from_cairo(dtgtk_cairo_paint_masks_difference, bs2 * 2, bs2);
@@ -1871,6 +1871,10 @@ void gui_init(dt_lib_module_t *self)
   // initialise widgets
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *mask_manager_label = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_box_pack_start(GTK_BOX(mask_manager_label), dt_ui_label_new(_("Shape manager")), TRUE, TRUE, 0);
+  dt_gui_add_class(mask_manager_label, "dt_section_label");
+  gtk_box_pack_start(GTK_BOX(self->widget), mask_manager_label, FALSE, FALSE, 0);
 
   GtkWidget *label = gtk_label_new(_("created shapes"));
   gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
