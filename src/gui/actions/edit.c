@@ -465,7 +465,7 @@ void append_edit(GtkWidget **menus, GList **lists, const dt_menus_t index)
   add_sub_sub_menu_entry(menus, parent, lists, _("Append"), index, NULL,
                          history_append_callback, history_append_checked_callback, NULL, NULL, 0, 0);
 
-  add_sub_sub_menu_entry(menus, parent, lists, _("Appstart"), index, NULL,
+  add_sub_sub_menu_entry(menus, parent, lists, _("Prepend"), index, NULL,
                          history_appstart_callback, history_appstart_checked_callback, NULL, NULL, 0, 0);
 
   add_sub_sub_menu_entry(menus, parent, lists, _("Replace"), index, NULL,
