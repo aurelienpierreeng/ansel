@@ -758,6 +758,15 @@ static inline gboolean _preview_fallback_roi_valid(const dt_develop_t *dev, cons
          && _darkroom_preview_fallback_height == height;
 }
 
+static inline gboolean _previous_main_surface_roi_valid(const dt_develop_t *dev,
+                                                        const uint64_t main_zoom_hash,
+                                                        const uint64_t zoom_hash)
+{
+  return dev && _darkroom_main_locked.surface
+         && _darkroom_main_locked.hash != (uint64_t)-1
+         && main_zoom_hash == zoom_hash;
+}
+
 static gboolean _render_realtime_main(cairo_t *cr, dt_develop_t *dev, const int width, const int height,
                                       const int border, const dt_aligned_pixel_t bg_color, const uint64_t zoom_hash,
                                       uint64_t *main_hash, uint64_t *main_zoom_hash, int32_t *image_surface_imgid)
@@ -790,6 +799,20 @@ static gboolean _render_nonrealtime_main(cairo_t *cr, dt_develop_t *dev, const i
                                && (main_hash != dev->pipe->backbuf.hash || main_zoom_hash == zoom_hash);
   if(!main_valid_now) return FALSE;
   if(!_lock_pipe_surface(dev, dev->pipe, &_darkroom_main_locked, TRUE, TRUE) || !_darkroom_main_locked.surface) return FALSE;
+  if(!_render_main_locked_surface(cr, dev, &_darkroom_main_locked, width, height, border, bg_color)) return FALSE;
+
+  _set_main_render_success(dev, _darkroom_main_locked.hash, zoom_hash,
+                           out_main_hash, out_main_zoom_hash, image_surface_imgid);
+  return TRUE;
+}
+
+static gboolean _render_previous_main(cairo_t *cr, dt_develop_t *dev, const int width, const int height,
+                                      const int border, const dt_aligned_pixel_t bg_color,
+                                      const uint64_t main_zoom_hash, const uint64_t zoom_hash,
+                                      uint64_t *out_main_hash, uint64_t *out_main_zoom_hash,
+                                      int32_t *image_surface_imgid)
+{
+  if(!_previous_main_surface_roi_valid(dev, main_zoom_hash, zoom_hash)) return FALSE;
   if(!_render_main_locked_surface(cr, dev, &_darkroom_main_locked, width, height, border, bg_color)) return FALSE;
 
   _set_main_render_success(dev, _darkroom_main_locked.hash, zoom_hash,
@@ -856,6 +879,237 @@ static void _paint_all(cairo_t *cri, cairo_t *cr, cairo_surface_t *image_surface
   cairo_paint(cri);
 }
 
+typedef struct darkroom_expose_state_t
+{
+  int image_surface_width;
+  int image_surface_height;
+  int32_t image_surface_imgid;
+  gboolean image_surface_has_main;
+  uint64_t main_zoom_hash;
+  uint64_t main_hash;
+} darkroom_expose_state_t;
+
+typedef struct darkroom_expose_request_t
+{
+  cairo_t *cr;
+  dt_develop_t *dev;
+  int width;
+  int height;
+  int border;
+  gboolean is_realtime;
+  gboolean has_preview_image;
+  uint64_t zoom_hash;
+  dt_aligned_pixel_t bg_color;
+} darkroom_expose_request_t;
+
+typedef struct darkroom_draw_result_t
+{
+  gboolean have_drawn;
+  gboolean drawn_from_main;
+  const char *source;
+  uint64_t hash;
+} darkroom_draw_result_t;
+
+static inline void _darkroom_reset_expose_state(darkroom_expose_state_t *state)
+{
+  if(!state) return;
+  state->image_surface_imgid = UNKNOWN_IMAGE;
+  state->image_surface_has_main = FALSE;
+  state->main_zoom_hash = 0;
+  state->main_hash = 0;
+}
+
+static void _darkroom_release_stale_sources(const darkroom_expose_request_t *req,
+                                            const darkroom_expose_state_t *state)
+{
+  if(!req || !req->dev || !state) return;
+
+  // Valid means :
+  // 1. up to date with current history stack (don't paint transient renderings if any)
+  // 2. buffer exists
+  // 3. ROI (size and zoom) are ok -> that's especially important to limit glitches
+  // If all these conditions are not met, try to keep the previous image_surface unchanged
+  /* Keep the previous main backbuffer around while waiting for a new render of
+   * the same ROI. This avoids transient preview substitution glitches during
+   * redraw storms (notably drawlayer realtime strokes on GPU). Drop it only
+   * once the ROI really changed. */
+  if(!req->is_realtime && !dt_dev_pixelpipe_is_backbufer_valid(req->dev->pipe, req->dev)
+     && state->main_zoom_hash != req->zoom_hash)
+    _release_locked_surface(&_darkroom_main_locked);
+  if(!dt_dev_pixelpipe_is_backbufer_valid(req->dev->preview_pipe, req->dev))
+    _release_locked_surface(&_darkroom_preview_locked);
+
+  /* Explicit cache reset/flush path: if backbuffer hash is invalidated, drop
+   * any held cacheline handles once the ROI changed, so new entries can be
+   * acquired on next frame without losing same-ROI transient reuse. */
+  if(req->dev->pipe->backbuf.hash == (uint64_t)-1 && state->main_zoom_hash != req->zoom_hash)
+    _release_locked_surface(&_darkroom_main_locked);
+  if(req->dev->preview_pipe->backbuf.hash == (uint64_t)-1)
+    _release_locked_surface(&_darkroom_preview_locked);
+}
+
+static void _darkroom_prepare_image_surface(const darkroom_expose_request_t *req, darkroom_expose_state_t *state)
+{
+  if(!req || !req->dev || !state) return;
+
+  if(state->image_surface_imgid != req->dev->image_storage.id
+     && state->image_surface_imgid != UNKNOWN_IMAGE)
+  {
+    /* New image loaded while static expose caches still point to old image ids.
+     * Reaching this case means every locked source/fallback must be dropped. */
+    _release_expose_source_caches();
+    _darkroom_reset_expose_state(state);
+  }
+
+  if(state->image_surface_width == req->width
+     && state->image_surface_height == req->height
+     && req->dev->image_surface != NULL)
+    return;
+
+  // create double-buffered image to draw on, to make modules draw more fluently.
+  state->image_surface_width = req->width;
+  state->image_surface_height = req->height;
+  if(req->dev->image_surface) cairo_surface_destroy(req->dev->image_surface);
+  req->dev->image_surface = dt_cairo_image_surface_create(CAIRO_FORMAT_RGB24, req->width, req->height);
+  state->image_surface_imgid = UNKNOWN_IMAGE; // invalidate old stuff
+  state->image_surface_has_main = FALSE;
+  /* Widget size or image id changed: ROI-scaled preview fallback is no longer
+   * geometrically valid and must be rebuilt on demand. */
+  _release_preview_fallback_surface();
+}
+
+static inline void _darkroom_set_draw_result(darkroom_draw_result_t *result, const gboolean drawn_from_main,
+                                             const char *source, const uint64_t hash)
+{
+  if(!result) return;
+  result->have_drawn = TRUE;
+  result->drawn_from_main = drawn_from_main;
+  result->source = source;
+  result->hash = hash;
+}
+
+static gboolean _darkroom_try_render_main_sources(const darkroom_expose_request_t *req,
+                                                  darkroom_expose_state_t *state,
+                                                  darkroom_draw_result_t *result)
+{
+  if(!req || !state || !result) return FALSE;
+
+  if(req->is_realtime)
+  {
+    /* Realtime mode: never switch to preview placeholder.
+     * Keep showing the current or last-known main backbuffer only. */
+    if(_render_realtime_main(req->cr, req->dev, req->width, req->height, req->border, req->bg_color,
+                             req->zoom_hash, &state->main_hash, &state->main_zoom_hash,
+                             &state->image_surface_imgid))
+    {
+      _darkroom_set_draw_result(result, TRUE, "fresh main backbuf", _darkroom_main_locked.hash);
+      return TRUE;
+    }
+  }
+  else
+  {
+    /* Normal mode:
+     * - first attempt strict-valid main,
+     * - then keep previous main if ROI is unchanged,
+     * - then preview fallback tiers. */
+    if(_render_nonrealtime_main(req->cr, req->dev, req->width, req->height, req->border, req->bg_color,
+                                req->zoom_hash, state->main_hash, state->main_zoom_hash,
+                                &state->main_hash, &state->main_zoom_hash, &state->image_surface_imgid))
+    {
+      _darkroom_set_draw_result(result, TRUE, "fresh main backbuf", _darkroom_main_locked.hash);
+      return TRUE;
+    }
+  }
+
+  if(_render_previous_main(req->cr, req->dev, req->width, req->height, req->border, req->bg_color,
+                           state->main_zoom_hash, req->zoom_hash,
+                           &state->main_hash, &state->main_zoom_hash, &state->image_surface_imgid))
+  {
+    _darkroom_set_draw_result(result, TRUE, "reused last main backbuf", _darkroom_main_locked.hash);
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+static gboolean _darkroom_try_render_preview_source(const darkroom_expose_request_t *req,
+                                                    darkroom_expose_state_t *state,
+                                                    darkroom_draw_result_t *result)
+{
+  if(!req || !state || !result || req->is_realtime) return FALSE;
+
+  if(!_render_nonrealtime_preview(req->cr, req->dev, req->has_preview_image, req->width, req->height,
+                                  req->border, req->bg_color, req->zoom_hash, &state->image_surface_imgid))
+    return FALSE;
+
+  _darkroom_set_draw_result(result, FALSE, "fresh preview fallback", _darkroom_preview_fallback_backbuf_hash);
+  return TRUE;
+}
+
+static void _darkroom_try_render_frame(const darkroom_expose_request_t *req, darkroom_expose_state_t *state,
+                                       darkroom_draw_result_t *result)
+{
+  if(!result) return;
+  result->have_drawn = FALSE;
+  result->drawn_from_main = FALSE;
+  result->source = "none";
+  result->hash = (uint64_t)-1;
+
+  if(_darkroom_try_render_main_sources(req, state, result)) return;
+  _darkroom_try_render_preview_source(req, state, result);
+}
+
+static gboolean _darkroom_reuse_last_frame(cairo_t *cri, cairo_t *cr, const dt_develop_t *dev,
+                                           const darkroom_expose_request_t *req,
+                                           const darkroom_expose_state_t *state,
+                                           darkroom_draw_result_t *result)
+{
+  if(!cri || !cr || !dev || !req || !state || !result) return FALSE;
+
+  const gboolean can_reuse_last_surface = (!req->is_realtime || state->image_surface_has_main);
+  if(!(dev->image_surface && state->image_surface_imgid == dev->image_storage.id && can_reuse_last_surface))
+    return FALSE;
+
+  /* No fresh source for this frame, but keep last composed frame to avoid
+   * flicker/blanking while pipelines catch up. */
+  result->source = state->image_surface_has_main ? "reused last main surface" : "reused last preview surface";
+  result->hash = state->image_surface_has_main ? state->main_hash : _darkroom_preview_fallback_backbuf_hash;
+  _paint_all(cri, cr, dev->image_surface);
+  return TRUE;
+}
+
+static void _darkroom_draw_background_only(cairo_t *cri, cairo_t *cr, const dt_aligned_pixel_t bg_color,
+                                           darkroom_draw_result_t *result)
+{
+  if(!cri || !cr || !result) return;
+  /* Cold-start/no valid frame at all: only background can be shown. */
+  result->source = "background only";
+  cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
+  cairo_paint(cr);
+  cairo_destroy(cr);
+  dt_print(DT_DEBUG_DEV, "[darkroom] expose drew %s (backbuf hash=%" PRIu64 ")\n",
+           result->source, result->hash);
+  cairo_restore(cri);
+}
+
+static gboolean _darkroom_finish_frame(cairo_t *cri, cairo_t *cr, const darkroom_expose_request_t *req,
+                                       darkroom_expose_state_t *state, darkroom_draw_result_t *result)
+{
+  if(!req || !state || !result) return FALSE;
+
+  if(result->have_drawn)
+  {
+    state->image_surface_has_main = result->drawn_from_main;
+    _paint_all(cri, cr, req->dev->image_surface);
+    return TRUE;
+  }
+
+  if(_darkroom_reuse_last_frame(cri, cr, req->dev, req, state, result)) return TRUE;
+
+  _darkroom_draw_background_only(cri, cr, req->bg_color, result);
+  return FALSE;
+}
+
 void expose(
     dt_view_t *self,
     cairo_t *cri,
@@ -868,7 +1122,7 @@ void expose(
   dt_get_times(&start);
 
   cairo_save(cri);
-  
+
   dt_develop_t *dev = (dt_develop_t *)self->data;
   const int32_t border = dev->roi.border_size;
 
@@ -882,151 +1136,51 @@ void expose(
   cairo_restore(cri);
   return;
 #endif
+  static darkroom_expose_state_t expose_state = {
+    .image_surface_width = 0,
+    .image_surface_height = 0,
+    .image_surface_imgid = UNKNOWN_IMAGE,
+    .image_surface_has_main = FALSE,
+    .main_zoom_hash = 0,
+    .main_hash = 0,
+  };
 
-  static int image_surface_width = 0;
-  static int image_surface_height = 0;
-  static int32_t image_surface_imgid = UNKNOWN_IMAGE;
-  static gboolean image_surface_has_main = FALSE;
-  static uint64_t main_zoom_hash = 0;
-  static uint64_t main_hash = 0;
+  darkroom_expose_request_t req = {
+    .cr = NULL,
+    .dev = dev,
+    .width = width,
+    .height = height,
+    .border = border,
+    .is_realtime = dt_dev_pixelpipe_get_realtime(dev->pipe),
+    .has_preview_image = dt_dev_pixelpipe_is_backbufer_valid(dev->preview_pipe, dev),
+    .zoom_hash = dt_hash(5381, (char *)&dev->roi, sizeof(dev->roi)),
+    .bg_color = { 0.0f },
+  };
+  darkroom_draw_result_t draw_result = {
+    .have_drawn = FALSE,
+    .drawn_from_main = FALSE,
+    .source = "none",
+    .hash = (uint64_t)-1,
+  };
 
-  const uint64_t new_zoom_hash = dt_hash(5381, (char *)&dev->roi, sizeof(dev->roi));
+  _darkroom_release_stale_sources(&req, &expose_state);
+  _darkroom_prepare_image_surface(&req, &expose_state);
 
-  // Valid means : 
-  // 1. up to date with current history stack (don't paint transient renderings if any)
-  // 2. buffer exists
-  // 3. ROI (size and zoom) are ok -> that's especially important to limit glitches 
-  // If all these conditions are not met, try to keep the previous image_surface unchanged
-  const gboolean is_realtime = dt_dev_pixelpipe_get_realtime(dev->pipe);
-  const gboolean has_preview_image = dt_dev_pixelpipe_is_backbufer_valid(dev->preview_pipe, dev);
-
-  /* In standard mode, drop stale locked cacheline handles as soon as a pipe
-   * becomes history-invalid. Keeping them around pins old entries across
-   * enable/disable, cache clears and other graph updates. */
-  if(!is_realtime && !dt_dev_pixelpipe_is_backbufer_valid(dev->pipe, dev))
-    _release_locked_surface(&_darkroom_main_locked);
-  if(!dt_dev_pixelpipe_is_backbufer_valid(dev->preview_pipe, dev))
-    _release_locked_surface(&_darkroom_preview_locked);
-
-  /* Explicit cache reset/flush path: if backbuffer hash is invalidated, drop
-   * any held cacheline handles so new entries can be acquired on next frame. */
-  if(dev->pipe->backbuf.hash == (uint64_t)-1) _release_locked_surface(&_darkroom_main_locked);
-  if(dev->preview_pipe->backbuf.hash == (uint64_t)-1) _release_locked_surface(&_darkroom_preview_locked);
-
-  if(image_surface_imgid != dev->image_storage.id && image_surface_imgid != UNKNOWN_IMAGE)
-  {
-    /* New image loaded while static expose caches still point to old image ids.
-     * Reaching this case means every locked source/fallback must be dropped. */
-    _release_expose_source_caches();
-    main_hash = 0;
-    main_zoom_hash = 0;
-    image_surface_has_main = FALSE;
-  }
-
-  if(image_surface_width != width 
-    || image_surface_height != height 
-    || dev->image_surface == NULL)
-  {
-    // create double-buffered image to draw on, to make modules draw more fluently.
-    image_surface_width = width;
-    image_surface_height = height;
-    if(dev->image_surface) cairo_surface_destroy(dev->image_surface);
-    dev->image_surface = dt_cairo_image_surface_create(CAIRO_FORMAT_RGB24, width, height);
-    image_surface_imgid = UNKNOWN_IMAGE; // invalidate old stuff
-    image_surface_has_main = FALSE;
-    /* Widget size or image id changed: ROI-scaled preview fallback is no longer
-     * geometrically valid and must be rebuilt on demand. */
-    _release_preview_fallback_surface();
-  }
-
-  cairo_t *cr = cairo_create(dev->image_surface);
+  req.cr = cairo_create(dev->image_surface);
 
   // user param is Lab lightness/brightness (which is they same for greys)
-  dt_aligned_pixel_t bg_color;
   if(dev->iso_12646.enabled)
-    _colormanage_ui_color(50., 0., 0., bg_color);
+    _colormanage_ui_color(50., 0., 0., req.bg_color);
   else
-    _colormanage_ui_color((float)dt_conf_get_int("display/brightness"), 0., 0., bg_color);
+    _colormanage_ui_color((float)dt_conf_get_int("display/brightness"), 0., 0., req.bg_color);
 
-  cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
+  cairo_pattern_set_filter(cairo_get_source(req.cr), CAIRO_FILTER_NEAREST);
 
-  gboolean have_drawn = FALSE;
-  gboolean drawn_from_main = FALSE;
-  const char *draw_source = "none";
-  uint64_t draw_hash = (uint64_t)-1;
-
-  if(is_realtime)
-  {
-    /* Realtime mode: never switch to preview placeholder.
-     * Keep showing the current or last-known main backbuffer only. */
-    have_drawn = _render_realtime_main(cr, dev, width, height, border, bg_color, new_zoom_hash,
-                                       &main_hash, &main_zoom_hash, &image_surface_imgid);
-    drawn_from_main = have_drawn;
-    if(have_drawn)
-    {
-      draw_source = "fresh main backbuf";
-      draw_hash = _darkroom_main_locked.hash;
-    }
-  }
-  else
-  {
-    /* Normal mode:
-     * - first attempt strict-valid main,
-     * - then preview fallback tiers. */
-    have_drawn = _render_nonrealtime_main(cr, dev, width, height, border, bg_color, new_zoom_hash,
-                                          main_hash, main_zoom_hash,
-                                          &main_hash, &main_zoom_hash, &image_surface_imgid);
-    drawn_from_main = have_drawn;
-    if(have_drawn)
-    {
-      draw_source = "fresh main backbuf";
-      draw_hash = _darkroom_main_locked.hash;
-    }
-    if(!have_drawn)
-    {
-      have_drawn = _render_nonrealtime_preview(cr, dev, has_preview_image, width, height, border, bg_color,
-                                               new_zoom_hash, &image_surface_imgid);
-      if(have_drawn)
-      {
-        draw_source = "fresh preview fallback";
-        draw_hash = _darkroom_preview_fallback_backbuf_hash;
-      }
-    }
-  }
-
-  if(have_drawn) image_surface_has_main = drawn_from_main;
-
-  if(!have_drawn)
-  {
-    const gboolean can_reuse_last_surface = (!is_realtime || image_surface_has_main);
-    if(dev->image_surface && image_surface_imgid == dev->image_storage.id && can_reuse_last_surface)
-    {
-      /* No fresh source for this frame, but keep last composed frame to avoid
-       * flicker/blanking while pipelines catch up. */
-      draw_source = image_surface_has_main ? "reused last main surface" : "reused last preview surface";
-      draw_hash = image_surface_has_main ? main_hash : _darkroom_preview_fallback_backbuf_hash;
-      _paint_all(cri, cr, dev->image_surface);
-    }
-    else
-    {
-      /* Cold-start/no valid frame at all: only background can be shown. */
-      draw_source = "background only";
-      cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
-      cairo_paint(cr);
-      cairo_destroy(cr);
-      dt_print(DT_DEBUG_DEV, "[darkroom] expose drew %s (backbuf hash=%" PRIu64 ")\n",
-               draw_source, draw_hash);
-      cairo_restore(cri);
-      return;
-    }
-  }
-  else
-  {
-    _paint_all(cri, cr, dev->image_surface);
-  }
+  _darkroom_try_render_frame(&req, &expose_state, &draw_result);
+  if(!_darkroom_finish_frame(cri, req.cr, &req, &expose_state, &draw_result)) return;
 
   dt_print(DT_DEBUG_DEV, "[darkroom] expose drew %s (backbuf hash=%" PRIu64 ")\n",
-           draw_source, draw_hash);
+           draw_result.source, draw_result.hash);
 
   cairo_restore(cri);
 
