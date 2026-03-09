@@ -2248,17 +2248,15 @@ static void _set_drawlayer_os_cursor_hidden(const gboolean hidden)
   g_object_unref(cursor);
 }
 
-static gboolean _should_show_leave_wait_dialog(const dt_iop_drawlayer_gui_data_t *g)
+static gboolean _drawlayer_has_pending_rasterization(const dt_iop_drawlayer_gui_data_t *g)
 {
-  return g
-         && (g->painting || g->cache_dirty || g->process_patch_dirty || g->stroke_sample_count > 0
-             || g->finish_commit_pending || dt_drawlayer_worker_any_active(g->rt));
+  return g && dt_drawlayer_worker_any_active(g->rt);
 }
 
-static drawlayer_wait_dialog_t _show_leave_wait_dialog(void)
+static drawlayer_wait_dialog_t _show_drawlayer_wait_dialog(const char *title, const char *message)
 {
   drawlayer_wait_dialog_t wait = { 0 };
-  if(!darktable.gui || !darktable.gui->ui) return wait;
+  if(!darktable.gui || !darktable.gui->ui || !title || !title[0] || !message || !message[0]) return wait;
 
   GtkWidget *dialog = gtk_dialog_new();
   GtkWidget *main = dt_ui_main_window(darktable.gui->ui);
@@ -2267,12 +2265,13 @@ static drawlayer_wait_dialog_t _show_leave_wait_dialog(void)
   gtk_window_set_destroy_with_parent(GTK_WINDOW(dialog), TRUE);
   gtk_window_set_deletable(GTK_WINDOW(dialog), FALSE);
   gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
-  gtk_window_set_title(GTK_WINDOW(dialog), _("Saving layer"));
+  gtk_window_set_title(GTK_WINDOW(dialog), title);
+  gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ON_PARENT);
 
   GtkWidget *content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_PIXEL_APPLY_DPI(12));
   GtkWidget *spinner = gtk_spinner_new();
-  GtkWidget *label = gtk_label_new(_("Waiting for the layer to be saved..."));
+  GtkWidget *label = gtk_label_new(message);
   gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
   gtk_box_pack_start(GTK_BOX(box), spinner, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
@@ -2284,8 +2283,26 @@ static drawlayer_wait_dialog_t _show_leave_wait_dialog(void)
   gtk_window_present(GTK_WINDOW(dialog));
   GdkDisplay *display = gtk_widget_get_display(dialog);
   if(display) gdk_display_flush(display);
+  /* `gui_focus()` / explicit sidecar save show this dialog and then immediately
+   * enter synchronous worker-drain / TIFF-write code on the UI thread. Give GTK
+   * a couple of non-blocking iterations so the modal maps and paints before that
+   * blocking section starts, otherwise it may never become visible at all. */
+  for(int k = 0; k < 2; k++)
+    gtk_main_iteration_do(FALSE);
   wait.dialog = dialog;
   return wait;
+}
+
+static inline drawlayer_wait_dialog_t _show_leave_wait_dialog(void)
+{
+  return _show_drawlayer_wait_dialog(_("Saving layer"),
+                                     _("Waiting for the layer to be saved..."));
+}
+
+static inline drawlayer_wait_dialog_t _show_focus_loss_wait_dialog(void)
+{
+  return _show_drawlayer_wait_dialog(_("Finishing drawing"),
+                                     _("Waiting for the drawing rasterization to finish..."));
 }
 
 static void _hide_leave_wait_dialog(drawlayer_wait_dialog_t *wait)
@@ -2293,6 +2310,59 @@ static void _hide_leave_wait_dialog(drawlayer_wait_dialog_t *wait)
   if(!wait || !wait->dialog) return;
   gtk_widget_destroy(wait->dialog);
   wait->dialog = NULL;
+}
+
+typedef struct drawlayer_modal_wait_state_t
+{
+  GMainLoop *loop;
+  const dt_iop_drawlayer_gui_data_t *g;
+} drawlayer_modal_wait_state_t;
+
+static gboolean _drawlayer_modal_wait_tick(gpointer user_data)
+{
+  drawlayer_modal_wait_state_t *state = (drawlayer_modal_wait_state_t *)user_data;
+  if(!state || !state->loop) return G_SOURCE_REMOVE;
+  if(!_drawlayer_has_pending_rasterization(state->g))
+  {
+    g_main_loop_quit(state->loop);
+    return G_SOURCE_REMOVE;
+  }
+
+  return G_SOURCE_CONTINUE;
+}
+
+static void _drawlayer_wait_for_rasterization_modal(const dt_iop_drawlayer_gui_data_t *g,
+                                                    const char *title, const char *message)
+{
+  if(!_drawlayer_has_pending_rasterization(g)) return;
+
+  drawlayer_wait_dialog_t wait = _show_drawlayer_wait_dialog(title, message);
+  GMainLoop *loop = g_main_loop_new(NULL, FALSE);
+  drawlayer_modal_wait_state_t state = {
+    .loop = loop,
+    .g = g,
+  };
+  const guint source_id = g_timeout_add(16, _drawlayer_modal_wait_tick, &state);
+
+  if(_drawlayer_has_pending_rasterization(g))
+    g_main_loop_run(loop);
+
+  if(source_id) g_source_remove(source_id);
+  _hide_leave_wait_dialog(&wait);
+  g_main_loop_unref(loop);
+}
+
+static void _show_drawlayer_modal_message(const GtkMessageType type, const char *primary, const char *secondary)
+{
+  if(!darktable.gui || !darktable.gui->ui || !primary || primary[0] == '\0') return;
+
+  GtkWidget *dialog = gtk_message_dialog_new(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+                                             GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
+                                             type, GTK_BUTTONS_OK, "%s", primary);
+  if(secondary && secondary[0] != '\0')
+    gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s", secondary);
+  gtk_dialog_run(GTK_DIALOG(dialog));
+  gtk_widget_destroy(dialog);
 }
 
 static gboolean _color_picker_set_from_position(dt_iop_module_t *self, const float x, const float y)
@@ -4360,13 +4430,17 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
 
   if(!g->cache_valid || !g->base_patch.pixels)
   {
-    dt_control_log(_("no drawing layer is loaded in memory"));
+    _show_drawlayer_modal_message(GTK_MESSAGE_ERROR,
+                                  _("No drawing layer is loaded in memory."),
+                                  _("The sidecar save was aborted."));
     _sync_save_button(self);
     return;
   }
   if(!_layer_name_non_empty(g->cache_layer_name))
   {
-    dt_control_log(_("layer name is empty, sidecar save aborted"));
+    _show_drawlayer_modal_message(GTK_MESSAGE_ERROR,
+                                  _("Layer name is empty."),
+                                  _("The sidecar save was aborted."));
     _refresh_layer_widgets(self);
     return;
   }
@@ -4388,12 +4462,17 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
     return;
   }
 
+  _drawlayer_wait_for_rasterization_modal(g, _("Saving layer"),
+                                          _("Waiting for the layer rasterization to finish..."));
+
   /* Saving the sidecar is explicit persistence, not a history edit.
    * We still finalize any pending stroke first so the flush sees the latest
    * authoritative cache state, then write that cache to the TIFF immediately. */
   if(!_commit_dabs(self, FALSE))
   {
-    dt_control_log(_("failed to finalize drawing stroke before saving sidecar"));
+    _show_drawlayer_modal_message(GTK_MESSAGE_ERROR,
+                                  _("Failed to finalize the drawing stroke."),
+                                  _("The sidecar was not saved."));
     _sync_save_button(self);
     return;
   }
@@ -4404,7 +4483,9 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
 
   if(!_flush_layer_cache(self))
   {
-    dt_control_log(_("failed to write drawing layer sidecar"));
+    _show_drawlayer_modal_message(GTK_MESSAGE_ERROR,
+                                  _("Failed to write the drawing layer sidecar."),
+                                  _("The sidecar TIFF could not be updated."));
     _sync_save_button(self);
     return;
   }
@@ -4412,13 +4493,9 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
   _release_all_base_patch_extra_refs(g);
   _refresh_layer_widgets(self);
 
-  dt_control_log(_("drawing layer sidecar saved"));
-
-  GtkWidget *done = gtk_message_dialog_new(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
-                                           GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL, GTK_MESSAGE_INFO,
-                                           GTK_BUTTONS_OK, "%s", _("Drawing sidecar saved."));
-  gtk_dialog_run(GTK_DIALOG(done));
-  gtk_widget_destroy(done);
+  _show_drawlayer_modal_message(GTK_MESSAGE_INFO,
+                                _("Drawing sidecar saved."),
+                                _("The current in-memory layer has been written to the sidecar TIFF."));
 }
 
 static void _create_layer_clicked(GtkButton *button, gpointer user_data)
@@ -5066,10 +5143,10 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
     const int pending_samples = g ? (int)g->stroke_sample_count : 0;
     const gboolean had_pending_edits
         = (g && (g->cache_dirty || g->process_patch_dirty || g->stroke_sample_count > 0));
-    drawlayer_wait_dialog_t wait = { 0 };
-    if(_should_show_leave_wait_dialog(g)) wait = _show_leave_wait_dialog();
     _set_drawlayer_os_cursor_hidden(FALSE);
     _set_drawlayer_pipeline_realtime_mode(self, FALSE);
+    _drawlayer_wait_for_rasterization_modal(g, _("Finishing drawing"),
+                                            _("Waiting for the drawing rasterization to finish..."));
     /* On focus loss we want exactly one final coherent state pushed to history:
      * 1) drain workers/queues without creating intermediate history entries,
      * 2) fold process tile into authoritative base,
@@ -5082,7 +5159,6 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
     if(!_flush_layer_cache(self)) dt_control_log(_("failed to write drawing layer sidecar"));
     if(had_pending_edits && self->dev && params) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
     _stop_worker(self, g->rt);
-    _hide_leave_wait_dialog(&wait);
   }
   else if(self->gui_data)
   {
@@ -5111,15 +5187,14 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
 void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
-  drawlayer_wait_dialog_t wait = { 0 };
-  if(_should_show_leave_wait_dialog(g)) wait = _show_leave_wait_dialog();
   _set_drawlayer_os_cursor_hidden(FALSE);
   _set_drawlayer_pipeline_realtime_mode(self, FALSE);
+  _drawlayer_wait_for_rasterization_modal(g, _("Saving layer"),
+                                          _("Waiting for the layer rasterization to finish..."));
   _commit_dabs(self, FALSE);
   if(g) _flush_process_patch_to_base(self, g);
   _flush_layer_cache(self);
   _stop_worker(self, g->rt);
-  _hide_leave_wait_dialog(&wait);
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_ui_pipe_finished_callback), self);
 
