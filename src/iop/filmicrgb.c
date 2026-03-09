@@ -932,6 +932,7 @@ static inline float linear_saturation(const float x, const float luminance, cons
 #ifdef _OPENMP
 #pragma omp declare simd aligned(in, mask : 64) uniform(feathering, normalize, width, height, ch)
 #endif
+__DT_CLONE_TARGETS__
 static inline gint mask_clipped_pixels(const float *const restrict in, float *const restrict mask,
                                        const float normalize, const float feathering, const size_t width,
                                        const size_t height, const size_t ch)
@@ -1027,6 +1028,7 @@ inline static void inpaint_noise(const float *const in, const float *const mask,
     }
 }
 
+__DT_CLONE_TARGETS__
 inline static void wavelets_reconstruct_RGB(const float *const restrict HF, const float *const restrict LF,
                                             const float *const restrict texture, const float *const restrict mask,
                                             float *const restrict reconstructed, const size_t width,
@@ -1085,6 +1087,7 @@ inline static void wavelets_reconstruct_RGB(const float *const restrict HF, cons
   }
 }
 
+__DT_CLONE_TARGETS__
 inline static void wavelets_reconstruct_ratios(const float *const restrict HF, const float *const restrict LF,
                                                const float *const restrict texture,
                                                const float *const restrict mask,
@@ -1169,6 +1172,7 @@ static inline void init_reconstruct(const float *const restrict in, const float 
 }
 
 
+__DT_CLONE_TARGETS__
 static inline void wavelets_detail_level(const float *const restrict detail, const float *const restrict LF,
                                              float *const restrict HF, float *const restrict texture,
                                              const size_t width, const size_t height, const size_t ch)

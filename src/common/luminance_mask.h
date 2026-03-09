@@ -73,7 +73,6 @@ typedef enum dt_iop_luminance_mask_method_t
 #ifdef _OPENMP
 #pragma omp declare simd
 #endif
-__DT_CLONE_TARGETS__
 static float linear_contrast(const float pixel, const float fulcrum, const float contrast)
 {
   // Increase the slope of the value around a fulcrum value
@@ -84,7 +83,6 @@ static float linear_contrast(const float pixel, const float fulcrum, const float
 #ifdef _OPENMP
 #pragma omp declare simd aligned(image, luminance:64) uniform(image, luminance)
 #endif
-__DT_CLONE_TARGETS__
 static void pixel_rgb_mean(const float *const restrict image,
                            float *const restrict luminance,
                            const size_t k, const size_t ch,
@@ -108,7 +106,6 @@ static void pixel_rgb_mean(const float *const restrict image,
 #ifdef _OPENMP
 #pragma omp declare simd aligned(image, luminance:64) uniform(image, luminance)
 #endif
-__DT_CLONE_TARGETS__
 static void pixel_rgb_value(const float *const restrict image,
                             float *const restrict luminance,
                             const size_t k, const size_t ch,
@@ -125,7 +122,6 @@ static void pixel_rgb_value(const float *const restrict image,
 #ifdef _OPENMP
 #pragma omp declare simd aligned(image, luminance:64) uniform(image, luminance)
 #endif
-__DT_CLONE_TARGETS__
 static void pixel_rgb_lightness(const float *const restrict image,
                                 float *const restrict luminance,
                                 const size_t k, const size_t ch,
@@ -142,7 +138,6 @@ static void pixel_rgb_lightness(const float *const restrict image,
 #ifdef _OPENMP
 #pragma omp declare simd aligned(image, luminance:64) uniform(image, luminance)
 #endif
-__DT_CLONE_TARGETS__
 static void pixel_rgb_norm_1(const float *const restrict image,
                              float *const restrict luminance,
                              const size_t k, const size_t ch,
@@ -166,7 +161,6 @@ static void pixel_rgb_norm_1(const float *const restrict image,
 #ifdef _OPENMP
 #pragma omp declare simd aligned(image, luminance:64) uniform(image, luminance)
 #endif
-__DT_CLONE_TARGETS__
 static void pixel_rgb_norm_2(const float *const restrict image,
                              float *const restrict luminance,
                              const size_t k, const size_t ch,
@@ -189,7 +183,6 @@ static void pixel_rgb_norm_2(const float *const restrict image,
 #ifdef _OPENMP
 #pragma omp declare simd aligned(image, luminance:64) uniform(image, luminance)
 #endif
-__DT_CLONE_TARGETS__
 static void pixel_rgb_norm_power(const float *const restrict image,
                                  float *const restrict luminance,
                                  const size_t k, const size_t ch,
@@ -219,7 +212,6 @@ static void pixel_rgb_norm_power(const float *const restrict image,
 #ifdef _OPENMP
 #pragma omp declare simd aligned(image, luminance:64) uniform(image, luminance)
 #endif
-__DT_CLONE_TARGETS__
 static void pixel_rgb_geomean(const float *const restrict image,
                               float *const restrict luminance,
                               const size_t k, const size_t ch,
@@ -311,4 +303,3 @@ static inline void luminance_mask(const float *const restrict in, float *const r
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

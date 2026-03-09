@@ -257,6 +257,7 @@ dt_omp_firstprivate(blurred_in, blurred_manifold_lower, blurred_manifold_higher,
 }
 
 #define DT_CACORRECTRGB_MAX_EV_DIFF 2.0f
+__DT_CLONE_TARGETS__
 static int get_manifolds(const float* const restrict in, const size_t width, const size_t height,
                          const float sigma, const float sigma2,
                          const dt_iop_cacorrectrgb_guide_channel_t guide,
@@ -533,6 +534,7 @@ error:;
 }
 #undef DT_CACORRECTRGB_MAX_EV_DIFF
 
+__DT_CLONE_TARGETS__
 static void apply_correction(const float* const restrict in,
                           const float* const restrict manifolds,
                           const size_t width, const size_t height, const float sigma,

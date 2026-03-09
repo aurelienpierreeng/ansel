@@ -69,6 +69,7 @@
  * - variance of guide
  * - average of mask
  * - covariance of mask and guide. */
+__DT_CLONE_TARGETS__
 static inline int eigf_variance_analysis(const float *const restrict guide, // I
                                          const float *const restrict mask, //p
                                          float *const restrict out,
@@ -150,6 +151,7 @@ error:
 
 // same function as above, but specialized for the case where guide == mask
 // for increased performance
+__DT_CLONE_TARGETS__
 static inline int eigf_variance_analysis_no_mask(const float *const restrict guide, // I
                                                  float *const restrict out,
                                                  const size_t width, const size_t height,
@@ -216,6 +218,7 @@ error:
   return err;
 }
 
+__DT_CLONE_TARGETS__
 static inline void eigf_blending(float *const restrict image, const float *const restrict mask,
                                  const float *const restrict av, const size_t Ndim,
                                  const dt_iop_guided_filter_blending_t filter, const float feathering)
@@ -252,6 +255,7 @@ static inline void eigf_blending(float *const restrict image, const float *const
 
 // same function as above, but specialized for the case where guide == mask
 // for increased performance
+__DT_CLONE_TARGETS__
 static inline void eigf_blending_no_mask(float *const restrict image, const float *const restrict av,
                                          const size_t Ndim, const dt_iop_guided_filter_blending_t filter,
                                          const float feathering)

@@ -87,7 +87,6 @@
  */
 
 
-__DT_CLONE_TARGETS__
 static inline int choleski_decompose_fast(const float *const restrict A,
                                           float *const restrict L, size_t n)
 {
@@ -114,7 +113,6 @@ static inline int choleski_decompose_fast(const float *const restrict A,
 }
 
 
-__DT_CLONE_TARGETS__
 static inline int choleski_decompose_safe(const float *const restrict A,
                                           float *const restrict L, size_t n)
 {
@@ -163,7 +161,6 @@ static inline int choleski_decompose_safe(const float *const restrict A,
 }
 
 
-__DT_CLONE_TARGETS__
 static inline int triangular_descent_fast(const float *const restrict L,
                                           const float *const restrict y, float *const restrict b,
                                           const size_t n)
@@ -184,7 +181,6 @@ static inline int triangular_descent_fast(const float *const restrict L,
 }
 
 
-__DT_CLONE_TARGETS__
 static inline int triangular_descent_safe(const float *const restrict L,
                                           const float *const restrict y, float *const restrict b,
                                           const size_t n)
@@ -215,7 +211,6 @@ static inline int triangular_descent_safe(const float *const restrict L,
 }
 
 
-__DT_CLONE_TARGETS__
 static inline int triangular_ascent_fast(const float *const restrict L,
                               const float *const restrict b, float *const restrict x,
                               const size_t n)
@@ -236,7 +231,6 @@ static inline int triangular_ascent_fast(const float *const restrict L,
 }
 
 
-__DT_CLONE_TARGETS__
 static inline int triangular_ascent_safe(const float *const restrict L,
                               const float *const restrict b, float *const restrict x,
                               const size_t n)
@@ -266,7 +260,6 @@ static inline int triangular_ascent_safe(const float *const restrict L,
 }
 
 
-__DT_CLONE_TARGETS__
 static inline int solve_hermitian(const float *const restrict A,
                                   float *const restrict y,
                                   const size_t n, const int checks)
@@ -329,7 +322,6 @@ error:
 }
 
 
-__DT_CLONE_TARGETS__
 static inline int transpose_dot_matrix(float *const restrict A, // input
                                        float *const restrict A_square, // output
                                        const size_t m, const size_t n)
@@ -351,7 +343,6 @@ static inline int transpose_dot_matrix(float *const restrict A, // input
 }
 
 
-__DT_CLONE_TARGETS__
 static inline int transpose_dot_vector(float *const restrict A, // input
                                        float *const restrict y, // input
                                        float *const restrict y_square, // output
@@ -372,7 +363,6 @@ static inline int transpose_dot_vector(float *const restrict A, // input
 }
 
 
-__DT_CLONE_TARGETS__
 static inline int pseudo_solve(float *const restrict A,
                                float *const restrict y,
                                const size_t m, const size_t n, const int checks)

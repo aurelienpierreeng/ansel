@@ -629,7 +629,6 @@ static const dt_colormatrix_t gauss_kernel =
     { 0.124401914f, 0.196172249f, 0.124401914f },
     { 0.076555024f, 0.124401914f, 0.076555024f } };
 
-__DT_CLONE_TARGETS__
 static float get_luminance_from_buffer(const float *const buffer,
                                        const size_t width, const size_t height,
                                        const size_t x, const size_t y)
@@ -687,7 +686,6 @@ static float get_luminance_from_buffer(const float *const buffer,
 #ifdef _OPENMP
 #pragma omp declare simd
 #endif
-__DT_CLONE_TARGETS__
 static float gaussian_denom(const float sigma)
 {
   // Gaussian function denominator such that y = exp(- radius^2 / denominator)
@@ -700,7 +698,6 @@ static float gaussian_denom(const float sigma)
 #ifdef _OPENMP
 #pragma omp declare simd
 #endif
-__DT_CLONE_TARGETS__
 static float gaussian_func(const float radius, const float denominator)
 {
   // Gaussian function without normalization
@@ -799,7 +796,6 @@ static inline void apply_toneequalizer(const float *const restrict in,
 }
 #endif // USE_LUT
 
-__DT_CLONE_TARGETS__
 static inline float pixel_correction(const float exposure,
                                      const float *const restrict factors,
                                      const float sigma)
@@ -820,7 +816,6 @@ static inline float pixel_correction(const float exposure,
 }
 
 
-__DT_CLONE_TARGETS__
 static inline int compute_luminance_mask(const float *const restrict in, float *const restrict luminance,
                                          const size_t width, const size_t height, const size_t ch,
                                          const dt_iop_toneequalizer_data_t *const d)
@@ -937,7 +932,6 @@ static inline void display_luminance_mask(const float *const restrict in,
 }
 
 
-__DT_CLONE_TARGETS__
 static int toneeq_process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
              const void *const restrict ivoid, void *const restrict ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
@@ -1262,7 +1256,6 @@ static void get_channels_factors(float factors[CHANNELS], const dt_iop_toneequal
 }
 
 
-__DT_CLONE_TARGETS__
 static int compute_channels_factors(const float factors[PIXEL_CHAN], float out[CHANNELS], const float sigma)
 {
   // Input factors are the weights for the radial-basis curve approximation of user params
@@ -1289,7 +1282,6 @@ static int compute_channels_factors(const float factors[PIXEL_CHAN], float out[C
 }
 
 
-__DT_CLONE_TARGETS__
 static int compute_channels_gains(const float in[CHANNELS], float out[CHANNELS])
 {
   // Helper function to compute the new channels gains (log) from the factors (linear)

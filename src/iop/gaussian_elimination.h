@@ -111,7 +111,6 @@ static int gauss_solve(double *A, double *b, int n)
 }
 
 
-__DT_CLONE_TARGETS__
 static inline int transpose_dot_matrix(double *const restrict A, // input
                                        double *const restrict A_square, // output
                                        const size_t m, const size_t n)
@@ -132,7 +131,6 @@ static inline int transpose_dot_matrix(double *const restrict A, // input
 }
 
 
-__DT_CLONE_TARGETS__
 static inline int transpose_dot_vector(double *const restrict A, // input
                                        double *const restrict y, // input
                                        double *const restrict y_square, // output

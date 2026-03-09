@@ -92,7 +92,6 @@ typedef enum dt_iop_guided_filter_blending_t
  #ifdef _OPENMP
 #pragma omp declare simd
 #endif
-__DT_CLONE_TARGETS__
 static inline float fast_clamp(const float value, const float bottom, const float top)
 {
   // vectorizable clamping between bottom and top values

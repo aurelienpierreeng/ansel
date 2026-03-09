@@ -134,6 +134,7 @@ int dt_iop_alloc_image_buffers(struct dt_iop_module_t *const module,
 // Copy an image buffer, specifying the number of floats it contains.  Use of this function is to be preferred
 // over a bare memcpy both because it helps document the purpose of the code and because it gives us a single
 // point where we can optimize performance on different architectures.
+__DT_CLONE_TARGETS__
 void dt_iop_image_copy(float *const __restrict__ out, const float *const __restrict__ in, const size_t nfloats)
 {
 #ifdef _OPENMP
@@ -185,6 +186,7 @@ void dt_iop_copy_image_roi(float *const __restrict__ out, const float *const __r
   }
 }
 
+__DT_CLONE_TARGETS__
 void dt_iop_image_scaled_copy(float *const restrict buf, const float *const restrict src, const float scale,
                               const size_t width, const size_t height, const size_t ch)
 {
@@ -210,6 +212,7 @@ void dt_iop_image_scaled_copy(float *const restrict buf, const float *const rest
     buf[k] = scale * src[k];
 }
 
+__DT_CLONE_TARGETS__
 void dt_iop_image_fill(float *const buf, const float fill_value, const size_t width, const size_t height,
                        const size_t ch)
 {
@@ -247,6 +250,7 @@ void dt_iop_image_fill(float *const buf, const float fill_value, const size_t wi
   }
 }
 
+__DT_CLONE_TARGETS__
 void dt_iop_image_add_const(float *const buf, const float add_value, const size_t width, const size_t height,
                             const size_t ch)
 {
@@ -272,6 +276,7 @@ void dt_iop_image_add_const(float *const buf, const float add_value, const size_
     buf[k] += add_value;
 }
 
+__DT_CLONE_TARGETS__
 void dt_iop_image_add_image(float *const buf, const float* const other_image,
                             const size_t width, const size_t height, const size_t ch)
 {
@@ -297,6 +302,7 @@ void dt_iop_image_add_image(float *const buf, const float* const other_image,
     buf[k] += other_image[k];
 }
 
+__DT_CLONE_TARGETS__
 void dt_iop_image_sub_image(float *const buf, const float* const other_image,
                             const size_t width, const size_t height, const size_t ch)
 {
@@ -322,6 +328,7 @@ void dt_iop_image_sub_image(float *const buf, const float* const other_image,
     buf[k] -= other_image[k];
 }
 
+__DT_CLONE_TARGETS__
 void dt_iop_image_invert(float *const buf, const float max_value, const size_t width, const size_t height,
                          const size_t ch)
 {
@@ -347,6 +354,7 @@ void dt_iop_image_invert(float *const buf, const float max_value, const size_t w
     buf[k] = max_value - buf[k];
 }
 
+__DT_CLONE_TARGETS__
 void dt_iop_image_mul_const(float *const buf, const float mul_value, const size_t width, const size_t height,
                             const size_t ch)
 {
@@ -372,6 +380,7 @@ void dt_iop_image_mul_const(float *const buf, const float mul_value, const size_
     buf[k] *= mul_value;
 }
 
+__DT_CLONE_TARGETS__
 void dt_iop_image_div_const(float *const buf, const float div_value, const size_t width, const size_t height,
                             const size_t ch)
 {
@@ -398,6 +407,7 @@ void dt_iop_image_div_const(float *const buf, const float div_value, const size_
 }
 
 // elementwise: buf = lammda*buf + (1-lambda)*other
+__DT_CLONE_TARGETS__
 void dt_iop_image_linear_blend(float *const restrict buf, const float lambda, const float *const restrict other,
                                const size_t width, const size_t height, const size_t ch)
 {

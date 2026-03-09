@@ -385,6 +385,26 @@ error:
 }
 #endif
 
+__DT_CLONE_TARGETS__
+static inline void process_fastpath_matrix(const float *const restrict in, float *const restrict out,
+                                           const size_t npixels,
+                                           const dt_aligned_pixel_simd_t cm0,
+                                           const dt_aligned_pixel_simd_t cm1,
+                                           const dt_aligned_pixel_simd_t cm2)
+{
+#ifdef _OPENMP
+#pragma omp parallel for simd default(none) \
+    dt_omp_firstprivate(in, out, npixels, cm0, cm1, cm2) \
+    schedule(static) aligned(in, out:64)
+#endif
+  for(size_t k = 0; k < npixels; k++)
+  {
+    const size_t idx = 4 * k;
+    const dt_aligned_pixel_simd_t vin = dt_load_simd_aligned(in + idx);
+    dt_store_simd_aligned(out + idx, dt_mat3x4_mul_vec4(vin, cm0, cm1, cm2));
+  }
+}
+
 int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
              void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
@@ -403,25 +423,14 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   else if(!isnan(d->cmatrix[0][0]))
   {
     const float *const restrict in = DT_IS_ALIGNED(ivoid);
-    float *const restrict out_aligned = DT_IS_ALIGNED(ovoid);
+    float *const restrict out_aligned = DT_IS_ALIGNED(out);
     dt_colormatrix_t cmatrix;
     transpose_3xSSE(d->cmatrix, cmatrix);
     const dt_aligned_pixel_simd_t cm0 = dt_colormatrix_row_to_simd(cmatrix, 0);
     const dt_aligned_pixel_simd_t cm1 = dt_colormatrix_row_to_simd(cmatrix, 1);
     const dt_aligned_pixel_simd_t cm2 = dt_colormatrix_row_to_simd(cmatrix, 2);
 
-#ifdef _OPENMP
-#pragma omp parallel for simd default(none) \
-    dt_omp_firstprivate(in, out_aligned, npixels, cm0, cm1, cm2) \
-    schedule(static) aligned(in, out_aligned:64)
-#endif
-    for(size_t k = 0; k < npixels; k++)
-    {
-      const size_t idx = 4 * k;
-      const dt_aligned_pixel_simd_t vin = dt_load_simd_aligned(in + idx);
-      dt_store_simd_aligned(out_aligned + idx, dt_mat3x4_mul_vec4(vin, cm0, cm1, cm2));
-    }
-
+    process_fastpath_matrix(in, out_aligned, npixels, cm0, cm1, cm2);
     process_fastpath_apply_tonecurves(d, out_aligned, npixels);
   }
   else

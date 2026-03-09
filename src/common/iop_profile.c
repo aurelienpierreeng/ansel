@@ -398,6 +398,7 @@ static inline void _apply_tonecurves(const float *const image_in, float *const i
 }
 
 
+__DT_CLONE_TARGETS__
 static inline void _transform_rgb_to_lab_matrix(const float *const restrict image_in, float *const restrict image_out,
                                                 const int width, const int height,
                                                 const dt_iop_order_iccprofile_info_t *const profile_info)
@@ -452,6 +453,7 @@ static inline void _transform_rgb_to_lab_matrix(const float *const restrict imag
 }
 
 
+__DT_CLONE_TARGETS__
 static inline void _transform_lab_to_rgb_matrix(const float *const image_in, float *const image_out, const int width,
                                          const int height,
                                          const dt_iop_order_iccprofile_info_t *const profile_info)
@@ -492,6 +494,7 @@ static inline void _transform_lab_to_rgb_matrix(const float *const image_in, flo
 }
 
 
+__DT_CLONE_TARGETS__
 static inline void _transform_matrix_rgb(const float *const restrict image_in,
                                          float *const restrict image_out,
                                          const int width, const int height,
@@ -1046,7 +1049,6 @@ void dt_ioppr_get_export_profile_type(struct dt_develop_t *dev,
     fprintf(stderr, "[dt_ioppr_get_export_profile_type] can't find colorout iop\n");
 }
 
-__DT_CLONE_TARGETS__
 void dt_ioppr_transform_image_colorspace(struct dt_iop_module_t *self, const float *const image_in,
                                          float *const image_out, const int width, const int height,
                                          const int cst_from, const int cst_to, int *converted_cst,
@@ -1102,7 +1104,6 @@ void dt_ioppr_transform_image_colorspace(struct dt_iop_module_t *self, const flo
 }
 
 
-__DT_CLONE_TARGETS__
 void dt_ioppr_transform_image_colorspace_rgb(const float *const restrict image_in, float *const restrict image_out, const int width,
                                              const int height,
                                              const dt_iop_order_iccprofile_info_t *const profile_info_from,

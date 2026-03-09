@@ -719,6 +719,7 @@ static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t _colorin_cl
   return in;
 }
 
+__DT_CLONE_TARGETS__
 static void process_cmatrix_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
                                const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                                const dt_iop_roi_t *const roi_out)
@@ -785,6 +786,7 @@ static void process_cmatrix_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
   }
 }
 
+__DT_CLONE_TARGETS__
 static void process_cmatrix_fastpath_simple(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
                                             const void *const ivoid, void *const ovoid,
                                             const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
@@ -817,6 +819,7 @@ static void process_cmatrix_fastpath_simple(struct dt_iop_module_t *self, dt_dev
   }
 }
 
+__DT_CLONE_TARGETS__
 static void process_cmatrix_fastpath_clipping(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
                                               const void *const ivoid, void *const ovoid,
                                               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
@@ -855,6 +858,7 @@ static void process_cmatrix_fastpath_clipping(struct dt_iop_module_t *self, dt_d
   }
 }
 
+__DT_CLONE_TARGETS__
 static void process_cmatrix_fastpath(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
                                      const void *const ivoid, void *const ovoid, const dt_iop_roi_t *const roi_in,
                                      const dt_iop_roi_t *const roi_out)

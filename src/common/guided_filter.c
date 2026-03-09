@@ -113,6 +113,7 @@ static inline float *get_color_pixel(color_image img, size_t i)
 //    6 variance (R-R, R-G, R-B, G-G, G-B, B-B)
 // for computational efficiency, we'll pack them into a four-channel image and a 9-channel image
 // image instead of running 13 separate box filters: guide+input, R/G/B/R-R/R-G/R-B/G-G/G-B/B-B.
+__DT_CLONE_TARGETS__
 static int guided_filter_tiling(color_image imgg, gray_image img, gray_image img_out, tile target, const int w,
                                 const float eps, const float guide_weight, const float min, const float max)
 {
