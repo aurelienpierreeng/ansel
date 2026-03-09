@@ -962,6 +962,71 @@ static void _publish_backend_stroke_damage(dt_iop_module_t *self)
     g->cache_dirty = TRUE;
 }
 
+typedef struct drawlayer_fullres_replay_scratch_t
+{
+  float *replay_pixels;
+  size_t replay_pixels_capacity;
+  float *stroke_mask;
+  size_t stroke_mask_capacity;
+  dt_drawlayer_paint_stroke_t *stroke;
+} drawlayer_fullres_replay_scratch_t;
+
+static void _destroy_fullres_replay_scratch(gpointer data)
+{
+  drawlayer_fullres_replay_scratch_t *scratch = (drawlayer_fullres_replay_scratch_t *)data;
+  if(!scratch) return;
+  dt_free_align(scratch->replay_pixels);
+  dt_free_align(scratch->stroke_mask);
+  if(scratch->stroke) dt_drawlayer_paint_runtime_private_destroy(&scratch->stroke);
+  dt_free(scratch);
+}
+
+static GPrivate _drawlayer_fullres_replay_scratch_key = G_PRIVATE_INIT(_destroy_fullres_replay_scratch);
+
+static drawlayer_fullres_replay_scratch_t *_get_fullres_replay_scratch(void)
+{
+  drawlayer_fullres_replay_scratch_t *scratch
+      = (drawlayer_fullres_replay_scratch_t *)g_private_get(&_drawlayer_fullres_replay_scratch_key);
+  if(scratch) return scratch;
+
+  scratch = g_malloc0(sizeof(*scratch));
+  if(!scratch) return NULL;
+
+  scratch->stroke = dt_drawlayer_paint_runtime_private_create();
+  if(!scratch->stroke)
+  {
+    dt_free(scratch);
+    return NULL;
+  }
+  scratch->stroke->dab_window = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_brush_dab_t));
+  if(!scratch->stroke->dab_window)
+  {
+    dt_drawlayer_paint_runtime_private_destroy(&scratch->stroke);
+    dt_free(scratch);
+    return NULL;
+  }
+
+  g_private_set(&_drawlayer_fullres_replay_scratch_key, scratch);
+  return scratch;
+}
+
+static float *_ensure_fullres_replay_float_buffer(float **buffer, size_t *capacity_values, const size_t needed_values)
+{
+  if(!buffer || !capacity_values || needed_values == 0) return NULL;
+  if(*capacity_values < needed_values)
+  {
+    dt_free_align(*buffer);
+    *buffer = dt_alloc_align(needed_values * sizeof(float));
+    if(!*buffer)
+    {
+      *capacity_values = 0;
+      return NULL;
+    }
+    *capacity_values = needed_values;
+  }
+  return *buffer;
+}
+
 static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, const GArray *history,
                                                       const float distance_percent)
 {
@@ -990,33 +1055,22 @@ static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, con
   const int replay_height = replay_bounds.se[1] - replay_bounds.nw[1] + 1;
   if(replay_width <= 0 || replay_height <= 0) return FALSE;
 
-  dt_drawlayer_paint_stroke_t *stroke = dt_drawlayer_paint_runtime_private_create();
-  if(!stroke) return FALSE;
+  drawlayer_fullres_replay_scratch_t *scratch = _get_fullres_replay_scratch();
+  if(!scratch || !scratch->stroke) return FALSE;
+
+  dt_drawlayer_paint_stroke_t *stroke = scratch->stroke;
   stroke->distance_percent = distance_percent;
-  stroke->dab_window = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_brush_dab_t));
-  if(!stroke->dab_window)
-  {
-    dt_drawlayer_paint_runtime_private_destroy(&stroke);
-    return FALSE;
-  }
-
-  float *replay_pixels = dt_drawlayer_cache_alloc_temp_buffer(
-    (size_t)replay_width * replay_height * 4 * sizeof(float), "drawlayer fullres replay tile");
-  if(!replay_pixels)
-  {
-    dt_drawlayer_paint_runtime_private_destroy(&stroke);
-    return FALSE;
-  }
-
   dt_drawlayer_paint_runtime_private_reset(stroke);
-  float *stroke_mask = dt_drawlayer_cache_alloc_temp_buffer(
-    (size_t)replay_width * replay_height * sizeof(float), "drawlayer fullres stroke mask");
-  if(!stroke_mask)
-  {
-    dt_drawlayer_cache_free_temp_buffer((void **)&replay_pixels, "drawlayer fullres replay tile");
-    dt_drawlayer_paint_runtime_private_destroy(&stroke);
-    return FALSE;
-  }
+
+  float *replay_pixels = _ensure_fullres_replay_float_buffer(&scratch->replay_pixels,
+                                                             &scratch->replay_pixels_capacity,
+                                                             (size_t)replay_width * replay_height * 4);
+  if(!replay_pixels) return FALSE;
+
+  float *stroke_mask = _ensure_fullres_replay_float_buffer(&scratch->stroke_mask,
+                                                           &scratch->stroke_mask_capacity,
+                                                           (size_t)replay_width * replay_height);
+  if(!stroke_mask) return FALSE;
   memset(stroke_mask, 0, (size_t)replay_width * replay_height * sizeof(float));
   dt_drawlayer_damaged_rect_t replay_damage = { 0 };
 
@@ -1065,9 +1119,6 @@ static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, con
     dt_drawlayer_cache_patch_wrunlock(&g->base_patch);
   }
   dt_iop_nap(200000);
-  dt_drawlayer_cache_free_temp_buffer((void **)&stroke_mask, "drawlayer fullres stroke mask");
-  dt_drawlayer_cache_free_temp_buffer((void **)&replay_pixels, "drawlayer fullres replay tile");
-  dt_drawlayer_paint_runtime_private_destroy(&stroke);
   return wrote_replay_tile;
 }
 
@@ -5375,15 +5426,6 @@ int mouse_leave(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   if(!g) return 0;
-  if(!_drawlayer_pipeline_realtime_active(g)
-     && g->cache_valid && g->process_patch_valid && g->process_patch.pixels)
-  {
-    /* Persist the display-sized process tile back into authoritative cache when
-     * leaving the drawing area, keeping heavy commits off the active draw loop.
-     * In realtime mode, stylus hover/leave transitions can happen frequently;
-     * defer this expensive flush to explicit sync points. */
-    _flush_process_patch_to_base(self, g);
-  }
   _sync_drawlayer_pipeline_realtime_mode(self);
   g->pointer_valid = FALSE;
   _set_drawlayer_os_cursor_hidden(FALSE);
