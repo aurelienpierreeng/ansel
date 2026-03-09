@@ -103,6 +103,69 @@ typedef enum dt_pixelpipe_flow_t
 static void get_output_format(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
                               dt_develop_t *dev, dt_iop_buffer_dsc_t *dsc);
 
+#ifndef NDEBUG
+static const uint64_t DT_PIXELPIPE_PIECE_GUARD_BEGIN = UINT64_C(0x4454504950454247);
+static const uint64_t DT_PIXELPIPE_PIECE_GUARD_END = UINT64_C(0x4454504950454547);
+
+static void _dt_debug_pixelpipe_abort_corrupted_piece(const dt_dev_pixelpipe_t *pipe,
+                                                      const dt_dev_pixelpipe_iop_t *piece,
+                                                      const char *stage, const int pos)
+{
+  fprintf(stderr,
+          "[pixelpipe] corrupted pipe node detected at %s (pos=%d, pipe=%s, piece=%p, module=%p, init_module=%p, pipe_ptr=%p)\n",
+          stage ? stage : "unknown", pos, pipe ? dt_pixelpipe_get_pipe_name(pipe->type) : "unknown",
+          (void *)piece, piece ? (void *)piece->module : NULL, piece ? (void *)piece->debug_module_init : NULL,
+          piece ? (void *)piece->pipe : NULL);
+  if(piece)
+  {
+    fprintf(stderr,
+            "[pixelpipe] guard values: begin=%" PRIx64 " end=%" PRIx64 "\n",
+            piece->debug_guard_begin, piece->debug_guard_end);
+  }
+  abort();
+}
+
+static void _dt_debug_pixelpipe_check_piece(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
+                                            const char *stage, const int pos)
+{
+  if(piece == NULL) return;
+
+  if(piece->debug_guard_begin != DT_PIXELPIPE_PIECE_GUARD_BEGIN
+     || piece->debug_guard_end != DT_PIXELPIPE_PIECE_GUARD_END
+     || piece->debug_module_init == NULL
+     || piece->module != piece->debug_module_init
+     || piece->pipe != pipe)
+    _dt_debug_pixelpipe_abort_corrupted_piece(pipe, piece, stage, pos);
+}
+
+static inline void _dt_debug_pixelpipe_init_piece(dt_dev_pixelpipe_iop_t *piece, dt_dev_pixelpipe_t *pipe,
+                                                  dt_iop_module_t *module)
+{
+  piece->debug_guard_begin = DT_PIXELPIPE_PIECE_GUARD_BEGIN;
+  piece->debug_guard_end = DT_PIXELPIPE_PIECE_GUARD_END;
+  piece->debug_module_init = module;
+  piece->pipe = pipe;
+}
+#else
+static inline void _dt_debug_pixelpipe_check_piece(const dt_dev_pixelpipe_t *pipe,
+                                                   const dt_dev_pixelpipe_iop_t *piece,
+                                                   const char *stage, const int pos)
+{
+  (void)pipe;
+  (void)piece;
+  (void)stage;
+  (void)pos;
+}
+
+static inline void _dt_debug_pixelpipe_init_piece(dt_dev_pixelpipe_iop_t *piece, dt_dev_pixelpipe_t *pipe,
+                                                  dt_iop_module_t *module)
+{
+  (void)piece;
+  (void)pipe;
+  (void)module;
+}
+#endif
+
 char *dt_pixelpipe_get_pipe_name(dt_dev_pixelpipe_type_t pipe_type)
 {
   char *r = NULL;
@@ -440,6 +503,7 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
   {
     dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)nodes->data;
     if(piece == NULL) continue;
+    _dt_debug_pixelpipe_check_piece(pipe, piece, "cleanup", -1);
     // printf("cleanup module `%s'\n", piece->module->name());
     if(piece->module) dt_iop_cleanup_pipe(piece->module, pipe, piece);
     dt_free(piece->histogram);
@@ -479,6 +543,7 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     piece->iheight = pipe->iheight;
     piece->module = module;
     piece->pipe = pipe;
+    _dt_debug_pixelpipe_init_piece(piece, pipe, module);
     piece->data = NULL;
     piece->hash = 0;
     piece->blendop_hash = 0;
@@ -1402,6 +1467,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
     if(piece) 
     {
+      _dt_debug_pixelpipe_check_piece(pipe, piece, "process-rec-entry", pos);
       roi_out = piece->planned_roi_out;
       roi_in = piece->planned_roi_in;
       module = piece->module;
@@ -1467,6 +1533,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   dt_iop_buffer_dsc_t _input_format = { 0 };
   dt_iop_buffer_dsc_t *input_format = &_input_format;
   piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
+  _dt_debug_pixelpipe_check_piece(pipe, piece, "process-rec-before-run", pos);
 
   uint64_t input_hash = 0;
   if(dt_dev_pixelpipe_process_rec(pipe, dev, &input, &cl_mem_input, &input_format, &input_hash, roi_in,
@@ -1644,6 +1711,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 #endif
 
   dt_pixelpipe_cache_set_current_module(prev_module);
+  _dt_debug_pixelpipe_check_piece(pipe, piece, "process-rec-after-run", pos);
 
   _print_perf_debug(pipe, pixelpipe_flow, piece, module, &start);
 

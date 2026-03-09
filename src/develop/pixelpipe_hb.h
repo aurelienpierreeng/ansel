@@ -56,6 +56,9 @@ typedef struct dt_dev_pixelpipe_raster_mask_t
 
 typedef struct dt_dev_pixelpipe_iop_t
 {
+#ifndef NDEBUG
+  uint64_t debug_guard_begin;
+#endif
   struct dt_iop_module_t *module;  // the module in the dev operation stack
   struct dt_dev_pixelpipe_t *pipe; // the pipe this piece belongs to
   void *data;                      // to be used by the module to store stuff per pipe piece
@@ -118,6 +121,10 @@ typedef struct dt_dev_pixelpipe_iop_t
   gboolean force_opencl_cache;
 
   GHashTable *raster_masks; // GList* of dt_dev_pixelpipe_raster_mask_t
+#ifndef NDEBUG
+  struct dt_iop_module_t *debug_module_init;
+  uint64_t debug_guard_end;
+#endif
 } dt_dev_pixelpipe_iop_t;
 
 typedef enum dt_dev_pixelpipe_change_t
