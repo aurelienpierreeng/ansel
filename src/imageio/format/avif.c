@@ -477,7 +477,7 @@ int write_image(struct dt_imageio_module_data_t *data,
   if(xmp_string && (xmp_len = strlen(xmp_string)) > 0)
   {
     (void)avifImageSetMetadataXMP(image, (const uint8_t *)xmp_string, xmp_len);
-    g_free(xmp_string);
+    dt_free(xmp_string);
   }
 
   encoder = avifEncoderCreate();
@@ -615,7 +615,7 @@ out:
   avifImageDestroy(image);
   avifEncoderDestroy(encoder);
   avifRWDataFree(&output);
-  free(icc_profile_data);
+  dt_free(icc_profile_data);
 
   return rc;
 }
@@ -682,7 +682,7 @@ int set_params(dt_imageio_module_format_t *self,
 void free_params(dt_imageio_module_format_t *self,
                  dt_imageio_module_data_t *params)
 {
-  free(params);
+  dt_free(params);
 }
 
 
@@ -930,7 +930,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
 void gui_cleanup(dt_imageio_module_format_t *self)
 {
-  free(self->gui_data);
+  dt_free(self->gui_data);
 }
 
 void gui_reset(dt_imageio_module_format_t *self)

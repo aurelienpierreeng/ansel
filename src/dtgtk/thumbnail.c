@@ -141,11 +141,11 @@ static void _image_update_group_tooltip(dt_thumbnail_t *thumb)
 
   // and the number of grouped images
   gchar *ttf = g_strdup_printf("%d %s\n%s", nb, _("grouped images"), tt);
-  g_free(tt);
+  dt_free(tt);
 
   // let's apply the tooltip
   gtk_widget_set_tooltip_markup(thumb->w_group, ttf);
-  g_free(ttf);
+  dt_free(ttf);
 }
 
 static void _thumb_update_rating_class(dt_thumbnail_t *thumb)
@@ -158,7 +158,7 @@ static void _thumb_update_rating_class(dt_thumbnail_t *thumb)
       dt_gui_add_class(thumb->w_main, cn);
     else
       dt_gui_remove_class(thumb->w_main, cn);
-    g_free(cn);
+    dt_free(cn);
   }
 }
 
@@ -173,8 +173,8 @@ static void _thumb_write_extension(dt_thumbnail_t *thumb)
   gchar *uext = dt_view_extend_modes_str(ext, thumb->info.is_hdr, thumb->info.is_bw, thumb->info.is_bw_flow);
   gchar *label = g_strdup_printf("%s #%i", uext, thumb->rowid + 1);
   gtk_label_set_text(GTK_LABEL(thumb->w_ext), label);
-  g_free(uext);
-  g_free(label);
+  dt_free(uext);
+  dt_free(label);
 }
 
 static GtkWidget *_gtk_menu_item_new_with_markup(const char *label, GtkWidget *menu,
@@ -199,7 +199,7 @@ static GtkWidget *_menuitem_from_text(const char *label, const char *value, GtkW
 {
   gchar *text = g_strdup_printf("%s%s", label, value);
   GtkWidget *menu_item = _gtk_menu_item_new_with_markup(text, menu, activate_callback, thumb);
-  g_free(text);
+  dt_free(text);
   return menu_item;
 }
 
@@ -1012,7 +1012,7 @@ static gboolean _altered_enter(GtkWidget *widget, GdkEventCrossing *event, gpoin
     if(tooltip)
     {
       gtk_widget_set_tooltip_text(thumb->w_altered, tooltip);
-      g_free(tooltip);
+      dt_free(tooltip);
     }
   }
   return FALSE;
@@ -1367,8 +1367,7 @@ int dt_thumbnail_destroy(dt_thumbnail_t *thumb)
 
   dt_pthread_mutex_destroy(&thumb->lock);
 
-  free(thumb);
-  thumb = NULL;
+  dt_free(thumb);
 
   return 0;
 }

@@ -16,6 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "iop/drawlayer/io.h"
 
 #include "common/colorspaces.h"
@@ -169,7 +170,7 @@ static gboolean _icc_blob_from_profile_key(const char *work_profile, uint8_t **i
 
   if(!cmsSaveProfileToMem(profile->profile, buf, &len) || len == 0)
   {
-    g_free(buf);
+    dt_free(buf);
     return FALSE;
   }
 
@@ -414,9 +415,9 @@ static gboolean _write_page(TIFF *dst, TIFF *src, const int src_dir, const char 
   uint16_t *dst_row = g_malloc_n((gsize)width * 4, sizeof(uint16_t));
   if(!src_row || !dst_row)
   {
-    g_free(icc_profile);
-    g_free(src_row);
-    g_free(dst_row);
+    dt_free(icc_profile);
+    dt_free(src_row);
+    dt_free(dst_row);
     return FALSE;
   }
 
@@ -429,9 +430,9 @@ static gboolean _write_page(TIFF *dst, TIFF *src, const int src_dir, const char 
     {
       if(!_read_scanline_rgba(src, width, y, src_row))
       {
-        g_free(icc_profile);
-        g_free(src_row);
-        g_free(dst_row);
+        dt_free(icc_profile);
+        dt_free(src_row);
+        dt_free(dst_row);
         return FALSE;
       }
       memcpy(dst_row, src_row, (size_t)width * 4 * sizeof(uint16_t));
@@ -447,16 +448,16 @@ static gboolean _write_page(TIFF *dst, TIFF *src, const int src_dir, const char 
 
     if(!_write_scanline_rgba(dst, y, dst_row))
     {
-      g_free(icc_profile);
-      g_free(src_row);
-      g_free(dst_row);
+      dt_free(icc_profile);
+      dt_free(src_row);
+      dt_free(dst_row);
       return FALSE;
     }
   }
 
-  g_free(icc_profile);
-  g_free(src_row);
-  g_free(dst_row);
+  dt_free(icc_profile);
+  dt_free(src_row);
+  dt_free(dst_row);
   return TIFFWriteDirectory(dst) != 0;
 }
 
@@ -497,7 +498,7 @@ static gboolean _rewrite_sidecar(const char *path, const char *target_name, cons
   if(!dst)
   {
     if(src) TIFFClose(src);
-    g_free(tmp_path);
+    dt_free(tmp_path);
     return FALSE;
   }
 
@@ -545,7 +546,7 @@ static gboolean _rewrite_sidecar(const char *path, const char *target_name, cons
   else
     g_unlink(tmp_path);
 
-  g_free(tmp_path);
+  dt_free(tmp_path);
   return ok;
 }
 
@@ -657,7 +658,7 @@ gboolean dt_drawlayer_io_load_layer(const char *path, const char *target_name, c
     if(src_y < 0 || src_y >= (int)info.height) continue;
     if(!_read_scanline_rgba(tiff, info.width, (uint32_t)src_y, row))
     {
-      g_free(row);
+      dt_free(row);
       TIFFClose(tiff);
       return FALSE;
     }
@@ -672,7 +673,7 @@ gboolean dt_drawlayer_io_load_layer(const char *path, const char *target_name, c
     }
   }
 
-  g_free(row);
+  dt_free(row);
   TIFFClose(tiff);
   return TRUE;
 }
@@ -714,7 +715,7 @@ gboolean dt_drawlayer_io_load_flat_rgba(const char *path, float **pixels, int *w
   tdata_t row = _TIFFmalloc((tsize_t)scanline);
   if(!row)
   {
-    g_free(out);
+    dt_free(out);
     TIFFClose(tiff);
     return FALSE;
   }
@@ -810,7 +811,7 @@ gboolean dt_drawlayer_io_load_flat_rgba(const char *path, float **pixels, int *w
   TIFFClose(tiff);
   if(!ok)
   {
-    g_free(out);
+    dt_free(out);
     return FALSE;
   }
 
@@ -923,8 +924,7 @@ void dt_drawlayer_io_free_layer_names(char ***names, int *count)
 {
   if(!names || !*names) return;
   const int n = (count && *count > 0) ? *count : 0;
-  for(int i = 0; i < n; i++) g_free((*names)[i]);
-  g_free(*names);
-  *names = NULL;
+  for(int i = 0; i < n; i++) dt_free((*names)[i]);
+  dt_free(*names);
   if(count) *count = 0;
 }

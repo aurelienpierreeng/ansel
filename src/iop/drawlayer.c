@@ -17,6 +17,7 @@
 */
 
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 
@@ -1248,7 +1249,7 @@ static void _destroy_process_scratch(gpointer data)
   dt_drawlayer_cache_free_temp_buffer((void **)&scratch->layerbuf, "drawlayer process scratch");
   dt_drawlayer_cache_free_temp_buffer((void **)&scratch->cl_background_rgba, "drawlayer process scratch");
   dt_drawlayer_cache_free_temp_buffer((void **)&scratch->flush_update_rgba, "drawlayer process update scratch");
-  g_free(scratch);
+  dt_free(scratch);
 }
 
 static GPrivate _drawlayer_process_scratch_key = G_PRIVATE_INIT(_destroy_process_scratch);
@@ -4037,12 +4038,15 @@ static int32_t _background_layer_job_run(dt_job_t *job)
     g_snprintf(result->message, sizeof(result->message), _("created background layer `%s'"), bg_name);
   } while(0);
 
-  if(export_pixels) g_free(export_pixels);
+  if(export_pixels)
+  {
+    dt_free(export_pixels);
+  }
   if(bg_patch.pixels) dt_drawlayer_cache_free_temp_buffer((void **)&bg_patch.pixels, "drawlayer bg layer");
   if(tmp_path)
   {
     g_unlink(tmp_path);
-    g_free(tmp_path);
+    dt_free(tmp_path);
   }
 
   g_main_context_invoke(NULL, _background_layer_job_done_idle, result);
@@ -4096,7 +4100,7 @@ static gboolean _background_layer_job_done_idle(gpointer user_data)
     }
   }
 
-  g_free(result);
+  dt_free(result);
   return G_SOURCE_REMOVE;
 }
 
@@ -4152,7 +4156,7 @@ static gboolean _create_background_layer_from_input(dt_iop_module_t *self)
   dt_job_t *job = dt_control_job_create(_background_layer_job_run, "drawlayer create background layer");
   if(!job)
   {
-    g_free(job_params);
+    dt_free(job_params);
     return FALSE;
   }
 
@@ -4568,7 +4572,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_iop_drawlayer_global_data_t *gd = (dt_iop_drawlayer_global_data_t *)module->data;
   if(!gd) return;
   dt_opencl_free_kernel(gd->kernel_premult_over);
-  free(gd);
+  dt_free(gd);
   module->data = NULL;
 }
 #endif
@@ -4627,8 +4631,7 @@ void cleanup_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev
   if(!piece || !piece->data) return;
   dt_iop_drawlayer_data_t *data = (dt_iop_drawlayer_data_t *)piece->data;
   _clear_headless_cache(data);
-  free(piece->data);
-  piece->data = NULL;
+  dt_free(piece->data);
   piece->data_size = 0;
 }
 

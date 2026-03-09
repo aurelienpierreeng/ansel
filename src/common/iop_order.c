@@ -738,7 +738,7 @@ static gboolean dt_ioppr_write_iop_order(const dt_iop_order_t kind, GList *iop_o
     if(sqlite3_step(stmt) != SQLITE_DONE) return FALSE;
     sqlite3_finalize(stmt);
 
-    g_free(iop_list_txt);
+    dt_free(iop_list_txt);
   }
   else
   {
@@ -1011,7 +1011,7 @@ void dt_ioppr_rebuild_iop_order_from_modules(struct dt_develop_t *dev, GList *or
 
   if(new_iop_order_list)
   {
-    g_list_free_full(dev->iop_order_list, free);
+    g_list_free_full(dev->iop_order_list, dt_free_gpointer);
     dev->iop_order_list = new_iop_order_list;
     dt_ioppr_resync_modules_order(dev);
   }
@@ -1030,7 +1030,11 @@ void dt_ioppr_set_default_iop_order(dt_develop_t *dev, const int32_t imgid)
 
   _ioppr_reset_iop_order(iop_order_list);
 
-  if(dev->iop_order_list) g_list_free_full(dev->iop_order_list, free);
+  if(dev->iop_order_list)
+  {
+    g_list_free_full(dev->iop_order_list, dt_free_gpointer);
+    dev->iop_order_list = NULL;
+  }
   dev->iop_order_list = iop_order_list;
 
   // we now set the module list given to this iop-order
@@ -1062,7 +1066,8 @@ void dt_ioppr_change_iop_order(struct dt_develop_t *dev, const int32_t imgid, GL
 
   dt_dev_write_history(darktable.develop);
   dt_ioppr_write_iop_order(DT_IOP_ORDER_CUSTOM, iop_list, imgid);
-  g_list_free_full(iop_list, free);
+  g_list_free_full(iop_list, dt_free_gpointer);
+  iop_list = NULL;
 
   dt_ioppr_migrate_iop_order(darktable.develop, imgid);
 }
@@ -1123,7 +1128,7 @@ GList *dt_ioppr_merge_module_multi_instance_iop_order_list(GList *iop_order_list
       e->instance = entry->instance;
 
       // free this entry as not merged into the list
-      free(entry);
+      dt_free(entry);
 
       // next replace should happen to any module after this one
       link = g_list_next(link);
@@ -1446,6 +1451,7 @@ void dt_ioppr_update_for_style_items(dt_develop_t *dev, GList *st_items, gboolea
   }
 
   g_list_free(e_list);
+  e_list = NULL;
 }
 
 void dt_ioppr_update_for_modules(dt_develop_t *dev, GList *modules, gboolean append)
@@ -1482,7 +1488,8 @@ void dt_ioppr_update_for_modules(dt_develop_t *dev, GList *modules, gboolean app
     el = g_list_next(el);
   }
 
-  g_list_free_full(e_list, free);
+  g_list_free_full(e_list, dt_free_gpointer);
+  e_list = NULL;
 }
 
 // returns the first dt_dev_history_item_t on history_list where hist->module == mod
@@ -1911,6 +1918,7 @@ gboolean dt_ioppr_move_iop_before(struct dt_develop_t *dev, dt_iop_module_t *mod
   dev->iop_order_list = g_list_insert_before(dev->iop_order_list, next, current->data);
 
   g_list_free(current);
+  current = NULL;
 
   dt_ioppr_resync_modules_order(dev);
 
@@ -1937,6 +1945,7 @@ gboolean dt_ioppr_move_iop_after(struct dt_develop_t *dev, dt_iop_module_t *modu
     dev->iop_order_list = g_list_append(dev->iop_order_list, current->data);
 
   g_list_free(current);
+  current = NULL;
 
   dt_ioppr_resync_modules_order(dev);
 
@@ -2082,7 +2091,11 @@ static void _ioppr_check_rules(GList *iop_list, const int32_t imgid, const char 
     }
   }
 
-  if(fences) g_list_free(fences);
+  if(fences)
+  {
+    g_list_free(fences);
+    fences = NULL;
+  }
 }
 
 void dt_ioppr_insert_module_instance(struct dt_develop_t *dev, dt_iop_module_t *module)
@@ -2354,7 +2367,8 @@ GList *dt_ioppr_deserialize_text_iop_order_list(const char *buf)
   }
   iop_order_list = g_list_reverse(iop_order_list);  // list was built in reverse order, so un-reverse it
 
-  g_list_free_full(list, g_free);
+  g_list_free_full(list, dt_free_gpointer);
+  list = NULL;
 
   _ioppr_reset_iop_order(iop_order_list);
 
@@ -2363,7 +2377,8 @@ GList *dt_ioppr_deserialize_text_iop_order_list(const char *buf)
   return iop_order_list;
 
  error:
-  g_list_free_full(iop_order_list, free);
+  g_list_free_full(iop_order_list, dt_free_gpointer);
+  iop_order_list = NULL;
   return NULL;
 }
 
@@ -2382,7 +2397,7 @@ GList *dt_ioppr_deserialize_iop_order_list(const char *buf, size_t size)
     const int32_t len = *(int32_t *)buf;
     buf += sizeof(int32_t);
 
-    if(len < 0 || len > 20) { free(entry); goto error; }
+    if(len < 0 || len > 20) { dt_free(entry); goto error; }
 
     // set module name
     memcpy(entry->operation, buf, len);
@@ -2393,7 +2408,7 @@ GList *dt_ioppr_deserialize_iop_order_list(const char *buf, size_t size)
     entry->instance = *(int32_t *)buf;
     buf += sizeof(int32_t);
 
-    if(entry->instance < 0 || entry->instance > 1000) { free(entry); goto error; }
+    if(entry->instance < 0 || entry->instance > 1000) { dt_free(entry); goto error; }
 
     // append to the list
     iop_order_list = g_list_prepend(iop_order_list, entry);
@@ -2407,7 +2422,8 @@ GList *dt_ioppr_deserialize_iop_order_list(const char *buf, size_t size)
   return iop_order_list;
 
  error:
-  g_list_free_full(iop_order_list, free);
+  g_list_free_full(iop_order_list, dt_free_gpointer);
+  iop_order_list = NULL;
   return NULL;
 }
 

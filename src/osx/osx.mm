@@ -31,6 +31,7 @@
 /* workaround to fix issue #12720 */
 #define _DARWIN_C_SOURCE
 
+#include "common/darktable.h"
 #include <Carbon/Carbon.h>
 #include <ApplicationServices/ApplicationServices.h>
 #include <CoreServices/CoreServices.h>
@@ -149,7 +150,7 @@ char* dt_osx_get_bundle_res_path()
   if(bundle_id)
     result = gtkosx_application_get_resource_path();
 #endif
-  g_free(bundle_id);
+  dt_free(bundle_id);
 
 #endif
 
@@ -180,7 +181,7 @@ static void _setup_ssl_trust(const char* const res_path)
 #ifdef HAVE_P11KIT
   gchar* const hash = g_compute_checksum_for_string(G_CHECKSUM_SHA1, res_path, strlen(res_path));
   gchar* const file_path = g_build_filename(g_get_user_data_dir(), "ansel", "pkcs11", hash, "p11-kit-trust.module", NULL);
-  g_free(hash);
+  dt_free(hash);
   {
     GFile* const cfg_file = g_file_new_for_path(file_path);
     {
@@ -200,11 +201,11 @@ static void _setup_ssl_trust(const char* const res_path)
                                          "x-init-reserved: paths=%s/share/curl/curl-ca-bundle.crt\n",
                                          res_path, res_path);
       g_file_replace_contents(cfg_file, buf, strlen(buf), NULL, FALSE, G_FILE_CREATE_NONE, NULL, NULL, NULL);
-      g_free(buf);
+      dt_free(buf);
     }
     g_object_unref(cfg_file);
   }
-  g_free(file_path);
+  dt_free(file_path);
 #endif
 }
 
@@ -229,14 +230,14 @@ void dt_osx_prepare_environment()
     {
       setlocale(LC_ALL, saved_locale);
     }
-    free(saved_locale);
+    dt_free(saved_locale);
   }
   // set LANG according to user settings, unless already set
   // otherwise we may get some non-default interface language
   // and not even detect it
   char* user_locale = _get_user_locale();
   g_setenv("LANG", user_locale, FALSE);
-  free(user_locale);
+  dt_free(user_locale);
   // set all required paths if we are in the app bundle
   char* res_path = dt_osx_get_bundle_res_path();
   if(res_path)
@@ -251,12 +252,12 @@ void dt_osx_prepare_environment()
       {
         gchar* gtk_im_path = g_build_filename(etc_path, "gtk-3.0", "gtk.immodules", NULL);
         g_setenv("GTK_IM_MODULE_FILE", gtk_im_path, TRUE);
-        g_free(gtk_im_path);
+        dt_free(gtk_im_path);
       }
       {
         gchar* pixbuf_path = g_build_filename(etc_path, "gtk-3.0", "loaders.cache", NULL);
         g_setenv("GDK_PIXBUF_MODULE_FILE", pixbuf_path, TRUE);
-        g_free(pixbuf_path);
+        dt_free(pixbuf_path);
       }
     }
     {
@@ -265,15 +266,15 @@ void dt_osx_prepare_environment()
       {
         gchar* schema_path = g_build_filename(share_path, "glib-2.0", "schemas", NULL);
         g_setenv("GSETTINGS_SCHEMA_DIR", schema_path, TRUE);
-        g_free(schema_path);
+        dt_free(schema_path);
       }
-      g_free(share_path);
+      dt_free(share_path);
     }
     {
       {
         gchar* gio_path = g_build_filename(lib_path, "gio", "modules", NULL);
         g_setenv("GIO_MODULE_DIR", gio_path, TRUE);
-        g_free(gio_path);
+        dt_free(gio_path);
       }
     }
 
@@ -282,18 +283,18 @@ void dt_osx_prepare_environment()
       g_setenv("MAGICK_HOME", res_path, TRUE);
       gchar* im_config_path = g_build_filename(etc_path, "ImageMagick-7", NULL);
       g_setenv("MAGICK_CONFIGURE_PATH", im_config_path, TRUE);
-      g_free(im_config_path);
+      dt_free(im_config_path);
       gchar* im_modules_path = g_build_filename(lib_path, "ImageMagick", "modules-Q16HDRI", NULL);
       g_setenv("MAGICK_CODER_MODULE_PATH", im_modules_path, TRUE);
       g_setenv("MAGICK_CODER_FILTER_PATH", im_modules_path, TRUE);
-      g_free(im_modules_path);
+      dt_free(im_modules_path);
     }
 #endif
 
     _setup_ssl_trust(res_path); //uses GIO, so call after GIO_MODULE_DIR is set
-    g_free(etc_path);
-    g_free(lib_path);
-    g_free(res_path);
+    dt_free(etc_path);
+    dt_free(lib_path);
+    dt_free(res_path);
   }
 }
 

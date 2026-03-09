@@ -78,7 +78,7 @@ const char *get_lang()
         }
       }
 
-      g_free(nlang);
+      dt_free(nlang);
       if(is_language_supported) break;
 
       lang_index++;

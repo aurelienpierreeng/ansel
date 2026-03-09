@@ -196,8 +196,7 @@ void gui_cleanup(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_history_change_callback), self);
   dt_lib_history_t *d = (dt_lib_history_t *)self->data;
   if(d && d->history_store) g_object_unref(d->history_store);
-  g_free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 static const char *_history_icon_name(const gboolean enabled, const gboolean default_enabled, const gboolean always_on,
@@ -235,7 +234,10 @@ static gchar *_lib_history_change_text(dt_introspection_field_t *field, const ch
         if((change_parts[num_parts] = _lib_history_change_text(entry, description, params, oldpar)))
           num_parts++;
 
-        if(d) g_free(description);
+        if(d)
+        {
+          dt_free(description);
+        }
       }
 
       gchar *struct_text = num_parts ? g_strjoinv("\n", change_parts) : NULL;
@@ -264,12 +266,12 @@ static gchar *_lib_history_change_text(dt_introspection_field_t *field, const ch
       {
         char *description = g_strdup_printf("%s[%d]", d, i);
         char *element_text = _lib_history_change_text(field->Array.field, description, (uint8_t *)params + item_offset, (uint8_t *)oldpar + item_offset);
-        g_free(description);
+        dt_free(description);
 
         if(element_text && ++num_parts <= max_elements)
           change_parts[num_parts - 1] = element_text;
         else
-          g_free(element_text);
+          dt_free(element_text);
       }
 
       gchar *array_text = NULL;
@@ -377,7 +379,8 @@ static const dt_dev_history_item_t * _find_previous_history_step(const dt_dev_hi
     gchar *full_format = g_strconcat("%s\t", format, "\t\u2192\t", format, NULL);                                 \
     change_parts[num_parts++]                                                                                     \
         = g_strdup_printf(full_format, label, (old_blend->field), (hitem->blend_params->field));                  \
-    g_free(full_format);                                                                                          \
+    dt_free(full_format);                                                                                          \
+    full_format = NULL;                                                                                           \
   }
 
 #define add_blend_history_change_enum(field, label, list)                                                         \
@@ -402,7 +405,8 @@ static const dt_dev_history_item_t * _find_previous_history_step(const dt_dev_hi
   {                                                                                                               \
     gchar *full_format = g_strconcat("%s\t", format, "\t\u2192\t", format, NULL);                                 \
     change_parts[num_parts++] = g_strdup_printf(full_format, label, (hprev->field), (hitem->field));              \
-    g_free(full_format);                                                                                          \
+    dt_free(full_format);                                                                                          \
+    full_format = NULL;                                                                                           \
   }
 
 #define add_history_change_string(field, label)                                                                   \
@@ -691,11 +695,11 @@ static gchar *_history_tooltip_with_hint(const dt_dev_history_item_t *hitem)
   if(tooltip_text && tooltip_text[0])
   {
     gchar *tooltip_with_hint = g_strconcat(tooltip_text, "\n\n", hint, NULL);
-    g_free(tooltip_text);
+    dt_free(tooltip_text);
     return tooltip_with_hint;
   }
 
-  g_free(tooltip_text);
+  dt_free(tooltip_text);
   return g_strdup(hint);
 }
 
@@ -717,7 +721,7 @@ static void _history_store_prepend_item(dt_lib_history_t *d, const dt_dev_histor
     label = g_strdup_printf("%s%s", clean_name, star);
   else
     label = g_strdup_printf("%s %s%s", clean_name, hitem->multi_name, star);
-  g_free(clean_name);
+  dt_free(clean_name);
 
   gchar number[10];
   g_snprintf(number, sizeof(number), "%2d", history_end);
@@ -731,8 +735,8 @@ static void _history_store_prepend_item(dt_lib_history_t *d, const dt_dev_histor
                      DT_HISTORY_VIEW_COL_ICON_NAME, icon_name, DT_HISTORY_VIEW_COL_ENABLED, enabled,
                      DT_HISTORY_VIEW_COL_TOOLTIP, tooltip_text ? tooltip_text : "", -1);
 
-  g_free(tooltip_text);
-  g_free(label);
+  dt_free(tooltip_text);
+  dt_free(label);
 }
 
 static void _history_select_row_for_end(dt_lib_history_t *d, const int history_end)

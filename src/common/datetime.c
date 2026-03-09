@@ -143,11 +143,11 @@ gboolean dt_datetime_gdatetime_to_local(char *local, const size_t local_size,
       if(msec)
       { // add milliseconds
         char *sdt2 = _datetime_append_msec(sdt, gdt);
-        g_free(sdt);
+        dt_free(sdt);
         sdt = sdt2;
       }
       g_strlcpy(local, sdt, local_size);
-      g_free(sdt);
+      dt_free(sdt);
       return TRUE;
     }
   }
@@ -268,11 +268,11 @@ gboolean dt_datetime_gdatetime_to_exif(char *exif, const size_t exif_size, GDate
     {
       // the format %f seems not to be available in glib2.0  before version 2.70
       char *sdt2 = _datetime_append_msec(sdt, gdt);
-      g_free(sdt);
+      dt_free(sdt);
       sdt = sdt2;
     }
     g_strlcpy(exif, sdt, exif_size);
-    g_free(sdt);
+    dt_free(sdt);
     return TRUE;
   }
   return FALSE;

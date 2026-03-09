@@ -31,6 +31,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "common/debug.h"
 #include "control/conf.h"
 #include"control/control.h"
@@ -240,13 +241,13 @@ static int _group_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
   float *op = malloc(sizeof(float) * nb);
   if(!bufs || !w || !h || !px || !py || !states || !op)
   {
-    free(op);
-    free(states);
-    free(py);
-    free(px);
-    free(h);
-    free(w);
-    free(bufs);
+    dt_free(op);
+    dt_free(states);
+    dt_free(py);
+    dt_free(px);
+    dt_free(h);
+    dt_free(w);
+    dt_free(bufs);
     return 1;
   }
 
@@ -489,14 +490,14 @@ static int _group_get_mask(const dt_iop_module_t *const module, const dt_dev_pix
   }
 
 cleanup:
-  free(op);
-  free(states);
-  free(py);
-  free(px);
-  free(h);
-  free(w);
+  dt_free(op);
+  dt_free(states);
+  dt_free(py);
+  dt_free(px);
+  dt_free(h);
+  dt_free(w);
   for(int i = 0; i < nb; i++) dt_pixelpipe_cache_free_align(bufs[i]);
-  free(bufs);
+  dt_free(bufs);
   return err;
 }
 

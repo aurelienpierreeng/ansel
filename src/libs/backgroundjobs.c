@@ -111,7 +111,7 @@ void gui_init(dt_lib_module_t *self)
   {
     dt_progress_t *progress = (dt_progress_t *)iter->data;
     void *gui_data = dt_control_progress_get_gui_data(progress);
-    free(gui_data);
+    dt_free(gui_data);
     gui_data = _lib_backgroundjobs_added(self, dt_control_progress_has_progress_bar(progress),
                                          dt_control_progress_get_message(progress));
     dt_control_progress_set_gui_data(progress, gui_data);
@@ -151,7 +151,7 @@ static gboolean _added_gui_thread(gpointer user_data)
   gtk_widget_show_all(params->instance_widget);
   gtk_widget_show(params->self_widget);
 
-  free(params);
+  dt_free(params);
   return FALSE;
 }
 
@@ -164,7 +164,7 @@ static void *_lib_backgroundjobs_added(dt_lib_module_t *self, gboolean has_progr
   _added_gui_thread_t *params = (_added_gui_thread_t *)malloc(sizeof(_added_gui_thread_t));
   if(!params)
   {
-    free(instance);
+    dt_free(instance);
     return NULL;
   }
 
@@ -220,8 +220,8 @@ static gboolean _destroyed_gui_thread(gpointer user_data)
     gtk_widget_hide(params->self->widget);
 
   // free data
-  free(params->instance);
-  free(params);
+  dt_free(params->instance);
+  dt_free(params);
   return FALSE;
 }
 
@@ -257,7 +257,7 @@ static gboolean _cancellable_gui_thread(gpointer user_data)
   gtk_box_pack_start(hbox, GTK_WIDGET(button), FALSE, FALSE, 0);
   gtk_widget_show_all(button);
 
-  free(params);
+  dt_free(params);
   return FALSE;
 }
 
@@ -287,7 +287,7 @@ static gboolean _update_gui_thread(gpointer user_data)
 
   gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(params->instance->progressbar), CLAMP(params->value, 0, 1.0));
 
-  free(params);
+  dt_free(params);
   return FALSE;
 }
 
@@ -316,8 +316,8 @@ static gboolean _update_message_gui_thread(gpointer user_data)
 
   gtk_label_set_text(GTK_LABEL(params->instance->label), params->message);
 
-  g_free(params->message);
-  free(params);
+  dt_free(params->message);
+  dt_free(params);
   return FALSE;
 }
 

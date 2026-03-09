@@ -37,6 +37,7 @@
 // gcc -W -Wall -std=c99 -lz -lm `pkg-config --cflags --libs glib-2.0` -g -O3 -fopenmp -DSTANDALONE -o ansel-pdf pdf.c
 
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 
@@ -107,7 +108,7 @@ int dt_pdf_parse_length(const char *str, float *length)
   }
 
 end:
-  g_free(nptr);
+  dt_free(nptr);
   return res;
 }
 
@@ -194,7 +195,7 @@ int dt_pdf_parse_paper_size(const char *str, float *width, float *height)
   }
 
 end:
-  g_free(ptr);
+  dt_free(ptr);
   return res;
 }
 
@@ -222,7 +223,7 @@ dt_pdf_t *dt_pdf_start(const char *filename, float width, float height, float dp
   pdf->fd = g_fopen(filename, "wb");
   if(!pdf->fd)
   {
-    free(pdf);
+    dt_free(pdf);
     return NULL;
   }
 
@@ -289,13 +290,13 @@ static size_t _pdf_stream_encoder_Flate(dt_pdf_t *pdf, const unsigned char *data
 
   if(result != Z_OK)
   {
-    free(buffer);
+    dt_free(buffer);
     return 0;
   }
 
   fwrite(buffer, 1, destLen, pdf->fd);
 
-  free(buffer);
+  dt_free(buffer);
   return destLen;
 }
 
@@ -321,7 +322,7 @@ int dt_pdf_add_icc(dt_pdf_t *pdf, const char *filename)
   if (data)
   {
     int icc_id = dt_pdf_add_icc_from_data(pdf, data, len);
-    free(data);
+    dt_free(data);
     return icc_id;
   }
   else
@@ -429,7 +430,7 @@ dt_pdf_image_t *dt_pdf_add_image(dt_pdf_t *pdf, const unsigned char *image, int 
   stream_size = _pdf_write_stream(pdf, pdf->default_encoder, image, (size_t)3 * (bpp / 8) * width * height);
   if(stream_size == 0)
   {
-    free(pdf_image);
+    dt_free(pdf_image);
     return NULL;
   }
   bytes_written += stream_size;
@@ -764,8 +765,8 @@ time_error:
           pdf->bytes_written);
 
   fclose(pdf->fd);
-  free(pdf->offsets);
-  free(pdf);
+  dt_free(pdf->offsets);
+  dt_free(pdf);
 }
 
 #ifdef STANDALONE
@@ -801,8 +802,8 @@ float * read_ppm(const char * filename, int * wd, int * ht)
     if(res != width * height)
     {
       fprintf(stderr, "error reading 8 bit PPM\n");
-      free(tmp);
-      free(image);
+      dt_free(tmp);
+      dt_free(image);
       fclose(f);
       return NULL;
     }
@@ -812,7 +813,7 @@ float * read_ppm(const char * filename, int * wd, int * ht)
     #endif
     for(int i = 0; i < width * height * 3; i++)
       image[i] = (float)tmp[i] / max;
-    free(tmp);
+    dt_free(tmp);
   }
   else
   {
@@ -822,8 +823,8 @@ float * read_ppm(const char * filename, int * wd, int * ht)
     if(res != width * height)
     {
       fprintf(stderr, "error reading 16 bit PPM\n");
-      free(tmp);
-      free(image);
+      dt_free(tmp);
+      dt_free(image);
       fclose(f);
       return NULL;
     }
@@ -839,7 +840,7 @@ float * read_ppm(const char * filename, int * wd, int * ht)
     #endif
     for(int i = 0; i < width * height * 3; i++)
       image[i] = (float)tmp[i] / max;
-    free(tmp);
+    dt_free(tmp);
   }
   fclose(f);
 
@@ -886,7 +887,7 @@ int main(int argc, char *argv[])
     uint16_t *data = (uint16_t *)malloc(sizeof(uint16_t) * 3 * width * height);
     if(!data)
     {
-      free(image);
+      dt_free(image);
       exit(1);
     }
 
@@ -897,8 +898,8 @@ int main(int argc, char *argv[])
       data[i] = CLIP(image[i]) * 65535;
 
     images[i] = dt_pdf_add_image(pdf, (unsigned char *)data, width, height, 16, icc_id, border);
-    free(image);
-    free(data);
+    dt_free(image);
+    dt_free(data);
   }
 
   // add pages with one image each, filling the page minus borders
@@ -939,9 +940,9 @@ int main(int argc, char *argv[])
   dt_pdf_finish(pdf, pages, n_pages);
 
   for(int i = 0; i < n_images; i++)
-    free(images[i]);
+    dt_free(images[i]);
   for(int i = 0; i < n_pages; i++)
-    free(pages[i]);
+    dt_free(pages[i]);
 
   return 0;
 }

@@ -172,6 +172,7 @@ static void _lib_masks_clear_blending_box(dt_lib_masks_t *lm)
   for(GList *iter = children; iter; iter = g_list_next(iter))
     gtk_widget_destroy(GTK_WIDGET(iter->data));
   g_list_free(children);
+  children = NULL;
 }
 
 static gboolean _lib_masks_can_host_blending(const dt_iop_module_t *module)
@@ -402,6 +403,7 @@ static void _tree_group(GtkButton *button, dt_lib_module_t *self)
     }
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
+  items = NULL;
 
   // we add this group to the general list
   darktable.develop->forms = g_list_append(darktable.develop->forms, mask);
@@ -506,6 +508,7 @@ static void _tree_inverse(GtkButton *button, dt_lib_module_t *self)
     }
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
+  items = NULL;
 
   if(change)
   {
@@ -560,6 +563,7 @@ static void _tree_intersection(GtkButton *button, dt_lib_module_t *self)
     }
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
+  items = NULL;
 
   if(change)
   {
@@ -614,6 +618,7 @@ static void _tree_difference(GtkButton *button, dt_lib_module_t *self)
     }
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
+  items = NULL;
 
   if(change)
   {
@@ -668,6 +673,7 @@ static void _tree_exclusion(GtkButton *button, dt_lib_module_t *self)
     }
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
+  items = NULL;
 
   if(change)
   {
@@ -722,6 +728,7 @@ static void _tree_union(GtkButton *button, dt_lib_module_t *self)
     }
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
+  items = NULL;
 
   if(change)
   {
@@ -757,6 +764,7 @@ static void _tree_moveup(GtkButton *button, dt_lib_module_t *self)
     }
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
+  items = NULL;
 
   lm->gui_reset = 0;
   _lib_masks_recreate_list(self);
@@ -789,6 +797,7 @@ static void _tree_movedown(GtkButton *button, dt_lib_module_t *self)
     }
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
+  items = NULL;
 
   lm->gui_reset = 0;
   _lib_masks_recreate_list(self);
@@ -823,6 +832,7 @@ static void _tree_delete_shape(GtkButton *button, dt_lib_module_t *self)
     }
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
+  items = NULL;
 
   lm->gui_reset = 0;
   _lib_masks_recreate_list(self);
@@ -852,6 +862,7 @@ static void _tree_duplicate_shape(GtkButton *button, dt_lib_module_t *self)
     }
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
+  items = NULL;
 }
 
 static void _tree_cell_edited(GtkCellRendererText *cell, gchar *path_string, gchar *new_text,
@@ -936,6 +947,7 @@ static void _tree_selection_change(GtkTreeSelection *selection, dt_lib_masks_t *
     }
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
+  items = NULL;
 
   dt_masks_form_t *grp2 = dt_masks_create(DT_MASKS_GROUP);
   grp2->formid = 0;
@@ -1009,6 +1021,7 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_l
         }
       }
       g_list_free_full(selected, (GDestroyNotify)gtk_tree_path_free);
+      selected = NULL;
     }
     if(depth > 1) from_group = 1;
 
@@ -1093,7 +1106,7 @@ static int _tree_button_pressed(GtkWidget *treeview, GdkEventButton *event, dt_l
                   g_strlcat(str, " ", sizeof(str));
                   gchar *module_label = dt_history_item_get_name(m);
                   g_strlcat(str, module_label, sizeof(str));
-                  g_free(module_label);
+                  dt_free(module_label);
                   nbuse++;
                 }
               }
@@ -1242,12 +1255,14 @@ static gboolean _tree_restrict_select(GtkTreeSelection *selection, GtkTreeModel 
     {
       gtk_tree_selection_unselect_path(selection, item);
       g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
+      items = NULL;
       items_iter = items = gtk_tree_selection_get_selected_rows(selection, NULL);
       continue;
     }
     items_iter = g_list_next(items_iter);
   }
   g_list_free_full(items, (GDestroyNotify)gtk_tree_path_free);
+  items = NULL;
   return TRUE;
 }
 
@@ -1271,7 +1286,7 @@ static gboolean _tree_query_tooltip(GtkWidget *widget, gint x, gint y, gboolean 
   }
 
   gtk_tree_path_free(path);
-  g_free(tmp);
+  dt_free(tmp);
 
   return show;
 }
@@ -1443,6 +1458,7 @@ GList *_lib_masks_get_selected(dt_lib_module_t *self)
 
   g_list_foreach(items, (GFunc)gtk_tree_path_free, NULL);
   g_list_free(items);
+  items = NULL;
 
   return res;
 }
@@ -1521,6 +1537,7 @@ static void _lib_masks_recreate_list(dt_lib_module_t *self)
       }
     }
     g_list_free(selectids);
+    selectids = NULL;
   }
 
   g_object_unref(treestore);
@@ -1651,6 +1668,7 @@ static void _lib_masks_remove_item(dt_lib_module_t *self, int formid, int parent
     }
   }
   g_list_free(rl);
+  rl = NULL;
 }
 
 static gboolean _lib_masks_selection_change_r(GtkTreeModel *model, GtkTreeSelection *selection,
@@ -1955,8 +1973,7 @@ void gui_cleanup(dt_lib_module_t *self)
     _lib_masks_release_blending(d);
   }
 
-  g_free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_masks_handler_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_masks_blending_gui_changed_callback), self);

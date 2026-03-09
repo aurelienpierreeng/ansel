@@ -35,6 +35,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -824,8 +825,7 @@ void cleanup_global(dt_iop_module_so_t *self)
   dt_opencl_free_kernel(gd->kernel_rawprepare_4f);
   dt_opencl_free_kernel(gd->kernel_rawprepare_1f_unnormalized);
   dt_opencl_free_kernel(gd->kernel_rawprepare_1f);
-  free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 void gui_update(dt_iop_module_t *self)
@@ -891,7 +891,7 @@ void gui_init(dt_iop_module_t *self)
     gtk_widget_set_tooltip_text(g->black_level_separate[i], _(black_label[i]));
     dt_bauhaus_slider_set_soft_max(g->black_level_separate[i], 16384);
 
-    g_free(par);
+    dt_free(par);
   }
 
   g->white_point = dt_bauhaus_slider_from_params(self, "raw_white_point");

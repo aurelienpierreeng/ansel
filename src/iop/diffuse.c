@@ -1494,8 +1494,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_filmic_bspline_vertical);
   dt_opencl_free_kernel(gd->kernel_filmic_bspline_horizontal);
   dt_opencl_free_kernel(gd->kernel_filmic_wavelets_detail);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 #endif
 

@@ -21,6 +21,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "common/printprof.h"
 #include "common/colorspaces.h"
 #include "lcms2.h"
@@ -97,7 +98,7 @@ int dt_apply_printer_profile(void **in, uint32_t width, uint32_t height, int bpp
 
   cmsDeleteTransform(hTransform);
 
-  free(*in);
+  dt_free(*in);
   *in = out;
 
   return 0;

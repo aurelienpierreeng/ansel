@@ -792,8 +792,7 @@ dt_drawlayer_damaged_rect_t *dt_drawlayer_paint_runtime_state_create(void)
 void dt_drawlayer_paint_runtime_state_destroy(dt_drawlayer_damaged_rect_t **state)
 {
   if(!state || !*state) return;
-  g_free(*state);
-  *state = NULL;
+  dt_free(*state);
 }
 
 void dt_drawlayer_paint_runtime_state_reset(dt_drawlayer_damaged_rect_t *state)
@@ -818,9 +817,8 @@ void dt_drawlayer_paint_runtime_private_destroy(dt_drawlayer_paint_stroke_t **st
 {
   if(!state || !*state) return;
   if((*state)->raw_inputs) g_array_free((*state)->raw_inputs, TRUE);
-  g_free((*state)->smudge_pixels);
-  g_free(*state);
-  *state = NULL;
+  dt_free((*state)->smudge_pixels);
+  dt_free(*state);
 }
 
 void dt_drawlayer_paint_runtime_private_reset(dt_drawlayer_paint_stroke_t *state)

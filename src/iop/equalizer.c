@@ -170,8 +170,8 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     tmp[k] = (float *)malloc(sizeof(float) * wd * ht);
     if(!tmp[k])
     {
-      for(int kk = 1; kk < k; kk++) free(tmp[kk]);
-      free(tmp);
+      for(int kk = 1; kk < k; kk++) dt_free(tmp[kk]);
+      dt_free(tmp);
       return 1;
     }
   }
@@ -180,8 +180,8 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   {
     if(dt_iop_equalizer_wtf(ovoid, tmp, level, width, height))
     {
-      for(int k = 1; k < numl_cap; k++) free(tmp[k]);
-      free(tmp);
+      for(int k = 1; k < numl_cap; k++) dt_free(tmp[k]);
+      dt_free(tmp);
       return 1;
     }
   }
@@ -258,14 +258,14 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   {
     if(dt_iop_equalizer_iwtf(ovoid, tmp, level, width, height))
     {
-      for(int k = 1; k < numl_cap; k++) free(tmp[k]);
-      free(tmp);
+      for(int k = 1; k < numl_cap; k++) dt_free(tmp[k]);
+      dt_free(tmp);
       return 1;
     }
   }
 
-  for(int k = 1; k < numl_cap; k++) free(tmp[k]);
-  free(tmp);
+  for(int k = 1; k < numl_cap; k++) dt_free(tmp[k]);
+  dt_free(tmp);
 // printf("thread %d finished equalizer", (int)pthread_self());
 // if(piece->iscale != 1.0) printf(" for preview\n");
 // else printf("\n");

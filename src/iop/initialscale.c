@@ -27,6 +27,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -150,10 +151,8 @@ void init(dt_iop_module_t *self)
 
 void cleanup(dt_iop_module_t *self)
 {
-  free(self->params);
-  self->params = NULL;
-  free(self->default_params);
-  self->default_params = NULL;
+  dt_free(self->params);
+  dt_free(self->default_params);
 }
 
 typedef struct dt_iop_initialscale_gui_data_t

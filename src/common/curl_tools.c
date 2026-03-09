@@ -40,7 +40,7 @@ void dt_curl_init(CURL *curl, gboolean verbose)
   dt_loc_get_datadir(datadir, sizeof(datadir));
   gchar *crtfilename = g_build_filename(datadir, "..", "curl", "curl-ca-bundle.crt", NULL);
   if(g_file_test(crtfilename, G_FILE_TEST_EXISTS)) curl_easy_setopt(curl, CURLOPT_CAINFO, crtfilename);
-  g_free(crtfilename);
+  dt_free(crtfilename);
 
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 

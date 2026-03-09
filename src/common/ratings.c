@@ -141,6 +141,7 @@ static void _ratings_undo_data_free(gpointer data)
 {
   GList *l = (GList *)data;
   g_list_free(l);
+  l = NULL;
 }
 
 // wrapper that does some precalculation to deal with toggle effects and rating increase/decrease
@@ -247,6 +248,7 @@ void dt_ratings_apply_on_image(const int32_t imgid, const int rating, const gboo
       dt_undo_end_group(darktable.undo);
     }
     g_list_free(imgs);
+    imgs = NULL;
   }
   else
     dt_control_log(_("no images selected to apply rating"));

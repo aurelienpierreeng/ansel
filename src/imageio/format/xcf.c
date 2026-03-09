@@ -137,7 +137,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
 
   char *comment = g_strdup_printf("Created with %s", darktable_package_string);
   xcf_set(xcf, XCF_PROP, XCF_PROP_PARASITES, "gimp-comment", XCF_PARASITE_PERSISTENT, strlen(comment) + 1, comment);
-  g_free(comment);
+  dt_free(comment);
 
   // TODO: this needs to be serialized, together with the exif data
 //   char *xmp_string = dt_exif_xmp_read_string(imgid);
@@ -210,7 +210,9 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
         xcf_add_data(xcf, channel_data, 1);
 
         if(free_channel_data)
-          free(channel_data);
+        {
+          dt_free(channel_data);
+        }
         if(free_mask)
           dt_pixelpipe_cache_free_align(raster_mask);
       }
@@ -220,7 +222,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
 
 exit:
   xcf_close(xcf);
-  free(profile);
+  dt_free(profile);
 
   return res;
 
@@ -245,7 +247,7 @@ void *get_params(dt_imageio_module_format_t *self)
 
 void free_params(dt_imageio_module_format_t *self, dt_imageio_module_data_t *params)
 {
-  free(params);
+  dt_free(params);
 }
 
 int set_params(dt_imageio_module_format_t *self, const void *params, int size)
@@ -358,7 +360,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
 void gui_cleanup(dt_imageio_module_format_t *self)
 {
-  free(self->gui_data);
+  dt_free(self->gui_data);
 }
 
 void gui_reset(dt_imageio_module_format_t *self)

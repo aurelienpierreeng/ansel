@@ -162,6 +162,7 @@ static void _colorlabels_undo_data_free(gpointer data)
 {
   GList *l = (GList *)data;
   g_list_free(l);
+  l = NULL;
 }
 
 void dt_colorlabels_remove_labels(const int32_t imgid)

@@ -181,8 +181,7 @@ void gui_cleanup(dt_lib_module_t *self)
   if(d->image_surface) cairo_surface_destroy(d->image_surface);
   d->image_surface = NULL;
 
-  g_free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 void gui_reset(dt_lib_module_t *self)
@@ -343,11 +342,14 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
       fit = g_strdup(_("Fit"));
   
     zoomline = g_strdup_printf("%s %.0f%%", fit ? fit : "", dev->roi.scaling * dev->roi.natural_scale * 100);
-    if(fit) g_free(fit);
+    if(fit)
+    {
+      dt_free(fit);
+    }
   }
 
   pango_layout_set_text(layout, zoomline, -1);
-  g_free(zoomline);
+  dt_free(zoomline);
   pango_layout_get_pixel_extents(layout, NULL, &logic);
   d->zoom_h = logic.height;
   d->zoom_w = logic.width;

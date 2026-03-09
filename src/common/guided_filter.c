@@ -37,6 +37,7 @@
     
 */
 
+#include "common/darktable.h"
 #include "common/box_filters.h"
 #include "common/guided_filter.h"
 #include "common/math.h"
@@ -415,7 +416,7 @@ void dt_guided_filter_free_cl_global(dt_guided_filter_cl_global_t *g)
   dt_opencl_free_kernel(g->kernel_guided_filter_update_covariance);
   dt_opencl_free_kernel(g->kernel_guided_filter_solve);
   dt_opencl_free_kernel(g->kernel_guided_filter_generate_result);
-  free(g);
+  dt_free(g);
 }
 
 

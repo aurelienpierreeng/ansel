@@ -63,6 +63,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "develop/imageop.h"
 #include "bauhaus/bauhaus.h"
 #include "common/collection.h"
@@ -216,10 +217,8 @@ static void default_gui_cleanup(dt_iop_module_t *self)
 
 static void default_cleanup(dt_iop_module_t *module)
 {
-  g_free(module->params);
-  module->params = NULL;
-  free(module->default_params);
-  module->default_params = NULL;
+  dt_free(module->params);
+  dt_free(module->default_params);
 }
 
 
@@ -442,7 +441,7 @@ int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, dt
   module->enabled = module->default_enabled = module->workflow_enabled = 0; // all modules disabled by default.
   g_strlcpy(module->op, so->op, 20);
   module->raster_mask.source.users = g_hash_table_new(NULL, NULL);
-  module->raster_mask.source.masks = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, g_free);
+  module->raster_mask.source.masks = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, dt_free_gpointer);
   module->raster_mask.sink.source = NULL;
   module->raster_mask.sink.id = 0;
 
@@ -1019,7 +1018,7 @@ static void _gui_off_callback(GtkToggleButton *togglebutton, gpointer user_data)
   gchar *module_label = dt_history_item_get_name(module);
   snprintf(tooltip, sizeof(tooltip), module->enabled ? _("%s is switched on") : _("%s is switched off"),
            module_label);
-  g_free(module_label);
+  dt_free(module_label);
   gtk_widget_set_tooltip_text(GTK_WIDGET(togglebutton), tooltip);
   gtk_widget_queue_draw(GTK_WIDGET(togglebutton));
 
@@ -1056,7 +1055,7 @@ static void _iop_panel_label(dt_iop_module_t *module)
   char *module_name = dt_history_item_get_label(module);
   dt_capitalize_label(module_name);
   gtk_label_set_markup_with_mnemonic(GTK_LABEL(lab), module_name);
-  g_free(module_name);
+  dt_free(module_name);
 
   // Module name hasn't changed or no instance name: abort now
   if(!g_strcmp0(module_name, gtk_label_get_text(GTK_LABEL(lab))) || module->multi_name[0] == '\0')
@@ -1067,8 +1066,8 @@ static void _iop_panel_label(dt_iop_module_t *module)
   {
     char *instance_path = dt_accels_build_path(_("Darkroom/Modules/Instances"), mod->instance_name);
     dt_accels_remove_shortcut(darktable.gui->accels, instance_path);
-    g_free(instance_path);
-    g_free(mod->instance_name);
+    dt_free(instance_path);
+    dt_free(mod->instance_name);
   }
 
   gchar *clean_name = delete_underscore(module->name());
@@ -1081,7 +1080,7 @@ static void _iop_panel_label(dt_iop_module_t *module)
                                           darktable.gui->accels->darkroom_accels, _("Darkroom/Modules/Instances"),
                                           mod->instance_name);
 
-  g_free(clean_name);
+  dt_free(clean_name);
 
   gtk_label_set_ellipsize(GTK_LABEL(lab), !module->multi_name[0] ? PANGO_ELLIPSIZE_END: PANGO_ELLIPSIZE_MIDDLE);
   g_object_set(G_OBJECT(lab), "xalign", 0.0, (gchar *)0);
@@ -1149,7 +1148,7 @@ void dt_iop_gui_init(dt_iop_module_t *module)
     dt_gui_module_t *mod = (dt_gui_module_t *)module;
     mod->accel_path =  dt_accels_build_path(_("Darkroom/Modules"), clean_name);
 
-    g_free(clean_name);
+    dt_free(clean_name);
   }
 
   // We absolutely need to init the module controls after the module object
@@ -1268,7 +1267,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
       if(dt_iop_load_module_by_so(module, module_so, NULL))
       {
-        free(module);
+        dt_free(module);
         continue;
       }
 /*
@@ -1276,7 +1275,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       if(module->params_size == 0)
       {
         dt_iop_cleanup_module(module);
-        free(module);
+        dt_free(module);
         continue;
       }
       // we call reload_defaults() in case the module defines it
@@ -1289,9 +1288,9 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       // convert the old params to new
       if(module->legacy_params(module, old_params, old_params_version, new_params, module_version))
       {
-        free(new_params);
+        dt_free(new_params);
         dt_iop_cleanup_module(module);
-        free(module);
+        dt_free(module);
         continue;
       }
 
@@ -1315,9 +1314,9 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       sqlite3_step(stmt2);
       sqlite3_finalize(stmt2);
 
-      free(new_params);
+      dt_free(new_params);
       dt_iop_cleanup_module(module);
-      free(module);
+      dt_free(module);
     }
     else if(module_version > old_params_version)
     {
@@ -1338,14 +1337,14 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
       if(dt_iop_load_module_by_so(module, module_so, NULL))
       {
-        free(module);
+        dt_free(module);
         continue;
       }
 
       if(module->params_size == 0)
       {
         dt_iop_cleanup_module(module);
-        free(module);
+        dt_free(module);
         continue;
       }
       void *new_blend_params = malloc(sizeof(dt_develop_blend_params_t));
@@ -1380,9 +1379,9 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       sqlite3_step(stmt2);
       sqlite3_finalize(stmt2);
 
-      free(new_blend_params);
+      dt_free(new_blend_params);
       dt_iop_cleanup_module(module);
-      free(module);
+      dt_free(module);
     }
   }
   sqlite3_reset(stmt);
@@ -1426,7 +1425,7 @@ static void _init_module_so(void *m)
       dt_iop_cleanup_module(module_instance);
     }
 
-    free(module_instance);
+    dt_free(module_instance);
   }
 }
 
@@ -1444,7 +1443,7 @@ int dt_iop_load_module(dt_iop_module_t *module, dt_iop_module_so_t *module_so, d
   memset(module, 0, sizeof(dt_iop_module_t));
   if(dt_iop_load_module_by_so(module, module_so, dev))
   {
-    free(module);
+    dt_free(module);
     return 1;
   }
   return 0;
@@ -1454,10 +1453,8 @@ void dt_iop_cleanup_module(dt_iop_module_t *module)
 {
   module->cleanup(module);
 
-  free(module->blend_params);
-  module->blend_params = NULL;
-  free(module->default_blendop_params);
-  module->default_blendop_params = NULL;
+  dt_free(module->blend_params);
+  dt_free(module->default_blendop_params);
 
   // don't have a picker pointing to a disappeared module
   if(darktable.lib
@@ -1465,8 +1462,7 @@ void dt_iop_cleanup_module(dt_iop_module_t *module)
      && darktable.lib->proxy.colorpicker.picker_proxy->module == module)
     darktable.lib->proxy.colorpicker.picker_proxy = NULL;
 
-  free(module->histogram);
-  module->histogram = NULL;
+  dt_free(module->histogram);
   g_hash_table_destroy(module->raster_mask.source.users);
   g_hash_table_destroy(module->raster_mask.source.masks);
   module->raster_mask.source.users = NULL;
@@ -1486,7 +1482,7 @@ void dt_iop_unload_modules_so()
     dt_iop_module_so_t *module = (dt_iop_module_so_t *)darktable.iop->data;
     if(module->cleanup_global) module->cleanup_global(module);
     if(module->module) g_module_close(module->module);
-    free(darktable.iop->data);
+    dt_free(darktable.iop->data);
     darktable.iop = g_list_delete_link(darktable.iop, darktable.iop);
   }
 }
@@ -1817,7 +1813,7 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
       dt_conf_set_bool(string, TRUE);
 
   piece->process_cl_ready &= dt_conf_get_bool(string);
-  g_free(string);
+  dt_free(string);
 
   //uint64_t old_hash = module->hash;
 
@@ -1863,19 +1859,17 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   if(!dt_iop_is_hidden(module) && !(module->flags() & IOP_FLAGS_DEPRECATED))
   {
     dt_accels_remove_accel(darktable.gui->accels, mod->accel_path, module);
-    g_free(mod->accel_path);
-    mod->accel_path = NULL;
+    dt_free(mod->accel_path);
   }
 
   if(mod->instance_name)
   {
     char *instance_path = dt_accels_build_path(_("Darkroom/Modules/Instances"), mod->instance_name);
     dt_accels_remove_shortcut(darktable.gui->accels, instance_path);
-    g_free(instance_path);
+    dt_free(instance_path);
   }
 
-  g_free(mod->instance_name);
-  mod->instance_name = NULL;
+  dt_free(mod->instance_name);
 
   // widget_list doesn't own the widget referenced, so don't deep_free
   dt_gui_module_t *m = DT_GUI_MODULE(module);
@@ -1883,10 +1877,8 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   m->widget_list = NULL;
   g_list_free(m->widget_list_bh);
   m->widget_list_bh = NULL;
-  g_free(m->name);
-  m->name = NULL;
-  g_free(m->view);
-  m->view = NULL;
+  dt_free(m->name);
+  dt_free(m->view);
 
   if(module->gui_data && module->gui_cleanup) module->gui_cleanup(module);
   dt_iop_gui_cleanup_blending(module);
@@ -2251,13 +2243,13 @@ static gboolean _mask_indicator_tooltip(GtkWidget *treeview, gint x, gint y, gbo
     {
       gchar *source = dt_history_item_get_name(module->raster_mask.sink.source);
       part2 = g_strdup_printf(_("taken from module %s"), source);
-      g_free(source);
+      dt_free(source);
     }
 
     if(part2)
     {
       gchar *details = g_strdup_printf("%s\n%s", part2, _("click to display (module must be activated first)"));
-      g_free(part2);
+      dt_free(part2);
       part2 = details;
     }
     else
@@ -2272,9 +2264,9 @@ static gboolean _mask_indicator_tooltip(GtkWidget *treeview, gint x, gint y, gbo
 
     gtk_tooltip_set_text(tooltip, text);
     res = TRUE;
-    g_free(part1);
-    g_free(part2);
-    g_free(text);
+    dt_free(part1);
+    dt_free(part2);
+    dt_free(text);
   }
   return res;
 }

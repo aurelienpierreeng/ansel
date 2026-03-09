@@ -24,6 +24,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "control/signal.h"
 #include "dtgtk/button.h"
 #include "gui/gtk.h"
@@ -93,9 +94,9 @@ void gui_init(dt_lib_module_t *self)
 void gui_cleanup(dt_lib_module_t *self)
 {
   dt_lib_module_toolbox_t *d = (dt_lib_module_toolbox_t *)self->data;
-  g_list_free_full(d->child_views,free);
-  g_free(self->data);
-  self->data = NULL;
+  g_list_free_full(d->child_views, dt_free_gpointer);
+  d->child_views = NULL;
+  dt_free(self->data);
 }
 
 void view_enter(struct dt_lib_module_t *self,struct dt_view_t *old_view,struct dt_view_t *new_view)

@@ -56,7 +56,7 @@ void dt_presets_save_to_file(const int rowid, const char *preset_name, const cha
   gchar *presetname = g_strdup(preset_name);
   gchar *filename = g_strdup_printf("%s/%s.dtpreset", filedir, g_strdelimit(presetname, "/<>:\"\\|*?[]", '_'));
 
-  g_free(presetname);
+  dt_free(presetname);
 
   // clang-format off
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
@@ -104,7 +104,7 @@ void dt_presets_save_to_file(const int rowid, const char *preset_name, const cha
     if(writer == NULL)
     {
       fprintf(stderr, "[dt_presets_save_to_file] Error creating the xml writer\n, path: %s", filename);
-      g_free(filename);
+      dt_free(filename);
       return;
     }
 
@@ -112,7 +112,7 @@ void dt_presets_save_to_file(const int rowid, const char *preset_name, const cha
     if(rc < 0)
     {
       fprintf(stderr, "[dt_presets_save_to_file]: Error on encoding setting");
-      g_free(filename);
+      dt_free(filename);
       return;
     }
 
@@ -151,7 +151,7 @@ void dt_presets_save_to_file(const int rowid, const char *preset_name, const cha
     xmlTextWriterEndDocument(writer);
     xmlFreeTextWriter(writer);
   }
-  g_free(filename);
+  dt_free(filename);
 }
 
 static gchar *get_preset_element(xmlDocPtr doc, gchar *name)
@@ -190,7 +190,7 @@ static int get_preset_element_int(xmlDocPtr doc, gchar *name)
 {
   gchar *value = get_preset_element(doc, name);
   const int result = value ? atoi(value) : 0;
-  g_free(value);
+  dt_free(value);
   return result;
 }
 
@@ -198,7 +198,7 @@ static int get_preset_element_float(xmlDocPtr doc, gchar *name)
 {
   gchar *value = get_preset_element(doc, name);
   const float result = value ? atof(value) : 0.0f;
-  g_free(value);
+  dt_free(value);
   return result;
 }
 
@@ -297,15 +297,15 @@ int dt_presets_import_from_file(const char *preset_path)
 
   sqlite3_finalize(stmt);
 
-  g_free(name);
-  g_free(description);
-  g_free(operation);
-  g_free(model);
-  g_free(maker);
-  g_free(lens);
-  g_free(op_params);
-  g_free(blendop_params);
-  g_free(multi_name);
+  dt_free(name);
+  dt_free(description);
+  dt_free(operation);
+  dt_free(model);
+  dt_free(maker);
+  dt_free(lens);
+  dt_free(op_params);
+  dt_free(blendop_params);
+  dt_free(multi_name);
 
   return result;
 }

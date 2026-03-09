@@ -40,6 +40,7 @@
 */
 /** a class to manage a table of thumbnail for lighttable and filmstrip.  */
 
+#include "common/darktable.h"
 #include "dtgtk/thumbtable.h"
 #include "dtgtk/thumbnail.h"
 #include "dtgtk/thumbtable_info.h"
@@ -1163,7 +1164,10 @@ static void _dt_image_info_changed_callback(gpointer instance, gpointer imgs, gp
 
 static void _dt_collection_lut(dt_thumbtable_t *table)
 {
-  if(table->lut) free(table->lut);
+  if(table->lut)
+  {
+    dt_free(table->lut);
+  }
   table->lut = NULL;
 
   // In-memory collected images don't store group_id, so we need to fetch it again from DB
@@ -1293,8 +1297,7 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
     table->collapse_groups = collapse_groups;
     if(table->lut)
     {
-      free(table->lut);
-      table->lut = NULL;
+      dt_free(table->lut);
     }
     if(!_thumbtable_clone_lut(table))
       _dt_collection_lut(table);
@@ -1342,7 +1345,7 @@ static void _thumbs_update_overlays_mode(dt_thumbtable_t *table)
   // we change the overlay mode
   gchar *txt = g_strdup("plugins/lighttable/overlays/global");
   dt_thumbnail_overlay_t over = sanitize_overlays(dt_conf_get_int(txt));
-  g_free(txt);
+  dt_free(txt);
 
   dt_thumbtable_set_overlays_mode(table, over);
 }
@@ -1360,8 +1363,8 @@ void dt_thumbtable_set_overlays_mode(dt_thumbtable_t *table, dt_thumbnail_overla
   gchar *cl1 = _thumbs_get_overlays_class(over);
   dt_gui_remove_class(table->grid, cl0);
   dt_gui_add_class(table->grid, cl1);
-  g_free(cl0);
-  g_free(cl1);
+  dt_free(cl0);
+  dt_free(cl1);
 
   table->thumbs_inited = FALSE;
   table->overlays = over;
@@ -1393,7 +1396,7 @@ static void _event_dnd_get(GtkWidget *widget, GdkDragContext *context, GtkSelect
         }
         gtk_selection_data_set(selection_data, gtk_selection_data_get_target(selection_data),
                                _DWORD, (guchar *)imgs, imgs_nb * sizeof(uint32_t));
-        free(imgs);
+        dt_free(imgs);
       }
       break;
     }
@@ -1410,7 +1413,7 @@ static void _event_dnd_get(GtkWidget *widget, GdkDragContext *context, GtkSelect
         gchar *uri = g_strdup_printf("file://%s", pathname); // TODO: should we add the host?
         gtk_selection_data_set(selection_data, gtk_selection_data_get_target(selection_data),
                                _BYTE, (guchar *)uri, strlen(uri));
-        g_free(uri);
+        dt_free(uri);
       }
       else
       {
@@ -1426,10 +1429,11 @@ static void _event_dnd_get(GtkWidget *widget, GdkDragContext *context, GtkSelect
         }
         images = g_list_reverse(images); // list was built in reverse order, so un-reverse it
         gchar *uri_list = dt_util_glist_to_str("\r\n", images);
-        g_list_free_full(images, g_free);
+        g_list_free_full(images, dt_free_gpointer);
+        images = NULL;
         gtk_selection_data_set(selection_data, gtk_selection_data_get_target(selection_data), _BYTE,
                                (guchar *)uri_list, strlen(uri_list));
-        g_free(uri_list);
+        dt_free(uri_list);
       }
       break;
     }
@@ -1528,6 +1532,7 @@ static gboolean _thumbtable_dnd_import(GtkSelectionData *selection_data)
 
   g_strfreev(uris);
   g_list_free(files);
+  files = NULL;
   return elements >= 0 ? TRUE : FALSE;
 }
 
@@ -1975,59 +1980,59 @@ dt_thumbtable_t *dt_thumbtable_new(dt_thumbtable_mode_t mode)
   gchar *path = dt_accels_build_path(path_base, _("Move up"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
                                  path, table->grid, GDK_KEY_Up, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(path_base, _("Move down"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
                                  path, table->grid, GDK_KEY_Down, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(path_base, _("Move left"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
                                  path, table->grid, GDK_KEY_Left, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(path_base, _("Move right"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
                                  path, table->grid, GDK_KEY_Right, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(path_base, _("Go to previous page"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
                                  path, table->grid, GDK_KEY_Page_Up, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(path_base, _("Go to next page"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
                                  path, table->grid, GDK_KEY_Page_Down, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(path_base, _("Go to the start"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
                                  path, table->grid, GDK_KEY_Home, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(path_base, _("Go to the end"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
                                  path, table->grid, GDK_KEY_End, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(path_base, _("Select the current thumbnail"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
                                  path, table->grid, GDK_KEY_space, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(path_base, _("Toogle the current thumbnail from selection"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
                                  path, table->grid, GDK_KEY_space, GDK_CONTROL_MASK);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(path_base, _("Expand the current selection up to the hovered thumbnail"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
                                  path, table->grid, GDK_KEY_space, GDK_SHIFT_MASK);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(path_base, _("Open the current thumbnail in darkroom"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
                                  path, table->grid, GDK_KEY_Return, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(path_base, _("Enable thumbnail transient alternative view"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, accel_group,
                                  path, table->grid, GDK_KEY_Alt_L, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(_("Global/Menu/File"), _("Remove image from library"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->global_accels,
                                  path, table->grid, GDK_KEY_Delete, 0);
-  g_free(path);
+  dt_free(path);
   return table;
 }
 
@@ -2050,6 +2055,7 @@ void _dt_thumbtable_empty_list(dt_thumbtable_t *table)
     g_idle_add((GSourceFunc)dt_thumbnail_destroy, thumb);
   }
   g_list_free(thumbs);
+  thumbs = NULL;
   g_hash_table_remove_all(table->list);
   dt_pthread_mutex_unlock(&table->lock);
 
@@ -2081,10 +2087,12 @@ void dt_thumbtable_cleanup(dt_thumbtable_t *table)
   dt_pthread_mutex_destroy(&table->lock);
 
   g_hash_table_destroy(table->list);
-  if(table->lut) free(table->lut);
+  if(table->lut)
+  {
+    dt_free(table->lut);
+  }
 
-  free(table);
-  table = NULL;
+  dt_free(table);
 }
 
 void dt_thumbtable_update_parent(dt_thumbtable_t *table)
@@ -2133,6 +2141,7 @@ void dt_thumbtable_select_all(dt_thumbtable_t *table)
   {
     dt_selection_select_list(darktable.selection, img);
     g_list_free(img);
+    img = NULL;
   }
 }
 
@@ -2164,6 +2173,7 @@ void dt_thumbtable_select_range(dt_thumbtable_t *table, const int rowid)
       if(row > rowid_end) rowid_end = row;
     }
     g_list_free(selected);
+    selected = NULL;
   }
   else
   {
@@ -2201,6 +2211,7 @@ void dt_thumbtable_select_range(dt_thumbtable_t *table, const int rowid)
   {
     dt_selection_select_list(darktable.selection, img);
     g_list_free(img);
+    img = NULL;
   }
 }
 
@@ -2215,6 +2226,7 @@ void dt_thumbtable_invert_selection(dt_thumbtable_t *table)
     dt_thumbtable_select_all(table);
     dt_selection_deselect_list(darktable.selection, to_deselect);
     g_list_free(to_deselect);
+    to_deselect = NULL;
   }
 }
 

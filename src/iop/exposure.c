@@ -433,7 +433,7 @@ static void _process_common_setup(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t 
       dt_dev_histogram_stats_t histogram_stats;
       _deflicker_prepare_histogram(self, &histogram, &histogram_stats);
       _compute_correction(self, &d->params, piece->pipe, histogram, &histogram_stats, &exposure);
-      free(histogram);
+      dt_free(histogram);
     }
 
     // second, show computed correction in UI.
@@ -616,7 +616,7 @@ void gui_update(struct dt_iop_module_t *self)
   gchar *label = g_strdup_printf(_("compensate camera exposure (%+.1f EV)"), _get_exposure_bias(self));
   gtk_button_set_label(GTK_BUTTON(g->compensate_exposure_bias), label);
   gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(g->compensate_exposure_bias))), PANGO_ELLIPSIZE_MIDDLE);
-  g_free(label);
+  dt_free(label);
 
   g->spot_RGB[0] = 0.f;
   g->spot_RGB[1] = 0.f;
@@ -631,8 +631,7 @@ void gui_update(struct dt_iop_module_t *self)
 
   dt_iop_gui_leave_critical_section(self);
 
-  free(g->deflicker_histogram);
-  g->deflicker_histogram = NULL;
+  dt_free(g->deflicker_histogram);
 
   gtk_label_set_text(g->deflicker_used_EC, "");
   dt_iop_gui_enter_critical_section(self);
@@ -668,8 +667,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 {
   dt_iop_exposure_global_data_t *gd = (dt_iop_exposure_global_data_t *)module->data;
   dt_opencl_free_kernel(gd->kernel_exposure);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 static void _exposure_set_white(struct dt_iop_module_t *self, const float white)
@@ -814,8 +812,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   if(w == g->mode)
   {
-    free(g->deflicker_histogram);
-    g->deflicker_histogram = NULL;
+    dt_free(g->deflicker_histogram);
 
     switch(p->mode)
     {
@@ -869,7 +866,7 @@ static gboolean _draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t *self)
     gtk_label_set_text(g->deflicker_used_EC, str);
     --darktable.gui->reset;
 
-    g_free(str);
+    dt_free(str);
   }
   dt_iop_gui_leave_critical_section(self);
   return FALSE;
@@ -1147,8 +1144,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
 {
   dt_iop_exposure_gui_data_t *g = (dt_iop_exposure_gui_data_t *)self->gui_data;
 
-  free(g->deflicker_histogram);
-  g->deflicker_histogram = NULL;
+  dt_free(g->deflicker_histogram);
 
   IOP_GUI_FREE;
 }

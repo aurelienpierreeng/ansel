@@ -16,6 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "develop/masks.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
@@ -333,7 +334,8 @@ static void _masks_operation_callback(GtkWidget *menu, gpointer user_data)
                                                                     _masks_operation_callback, gui,       \
                                                                     (selected != 0),                      \
                                                                     ((state) == DT_MASKS_STATE_INVERSE)); \
-  g_free(op_label);                                                                                       \
+  dt_free(op_label);                                                                                       \
+  op_label = NULL;                                                                                        \
   g_object_set_data(G_OBJECT(menu_item), "state_op", GINT_TO_POINTER(state));                             \
   g_object_set_data(G_OBJECT(menu_item), "op_form", op_form);                                             \
   g_object_set_data(G_OBJECT(menu_item), "form_pos", GINT_TO_POINTER(form_pos));                          \
@@ -416,7 +418,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
         form_name = g_strconcat(form_name, _("mask"), NULL);
         break;
       default:
-        g_free(form_name); // Erase the "New " prefix
+        dt_free(form_name); // Erase the "New " prefix
         form_name = g_strdup(_("Unknown shape"));
         break;
     }
@@ -465,9 +467,9 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
   gchar *title = g_strdup_printf("<b><big>%s%s</big></b>", item_str, form_name);
   GtkWidget *menu_item = ctx_gtk_menu_item_new_with_markup_and_pixbuf(title, (draw_icon) ? icon : NULL, menu, NULL, gui);
   gtk_widget_set_sensitive(menu_item, FALSE);
-  g_free(item_str);
-  g_free(title);
-  g_free(form_name);
+  dt_free(item_str);
+  dt_free(title);
+  dt_free(form_name);
 
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
 

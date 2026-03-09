@@ -623,7 +623,7 @@ void dt_image_local_copy_paths_from_fullpath(const char *fullpath, int32_t imgid
   // cache filename format: <cachedir>/img-<MD5>.<ext>
   snprintf(local_copy_path, local_copy_len, "%s/img-%s%s", cachedir, md5_filename, c);
 
-  g_free(md5_filename);
+  dt_free(md5_filename);
 }
 
 void dt_image_path_append_version_no_db(int version, char *pathname, size_t pathname_len)
@@ -641,7 +641,7 @@ void dt_image_path_append_version_no_db(int version, char *pathname, size_t path
     char *c2 = filename + strlen(filename);
     while(*c2 != '.' && c2 > filename) c2--;
     g_strlcpy(c, c2, pathname + pathname_len - c);
-    g_free(filename);
+    dt_free(filename);
   }
 }
 
@@ -667,7 +667,7 @@ void dt_image_print_exif(const dt_image_t *img, char *line, size_t line_len)
   snprintf(line, line_len, "%s f/%.1f %dmm ISO %d", exposure_str, img->exif_aperture, (int)img->exif_focal_length,
            (int)img->exif_iso);
 
-  g_free(exposure_str);
+  dt_free(exposure_str);
 }
 
 int dt_image_get_xmp_rating_from_flags(const int flags)
@@ -800,7 +800,8 @@ static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_dat
 static void _geotag_undo_data_free(gpointer data)
 {
   GList *l = (GList *)data;
-  g_list_free_full(l, g_free);
+  g_list_free_full(l, dt_free_gpointer);
+  l = NULL;
 }
 
 static void _image_set_location(GList *imgs, const dt_image_geoloc_t *geoloc, GList **undo, const gboolean undo_on)
@@ -851,6 +852,7 @@ void dt_image_set_location(const int32_t imgid, const dt_image_geoloc_t *geoloc,
   if(group_on) dt_grouping_add_grouped_images(&imgs);
   dt_image_set_locations(imgs, geoloc, undo_on);
   g_list_free(imgs);
+  imgs = NULL;
 }
 
 static void _image_set_images_locations(const GList *img, const GArray *gloc,
@@ -1157,7 +1159,7 @@ static int32_t _image_duplicate_with_version_ext(const int32_t imgid, const int3
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
 
-    g_free(filename);
+    dt_free(filename);
   }
   return newid;
 }
@@ -1378,7 +1380,7 @@ int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboo
       gchar *idfield = g_strndup(c4, c3 - c4);
 
       version = atoi(idfield);
-      g_free(idfield);
+      dt_free(idfield);
     }
 
     int newid = id;
@@ -1425,7 +1427,8 @@ int dt_image_read_duplicates(const uint32_t id, const char *filename, const gboo
     count_xmps_processed++;
   }
 
-  g_list_free_full(files, g_free);
+  g_list_free_full(files, dt_free_gpointer);
+  files = NULL;
   return count_xmps_processed;
 }
 
@@ -1435,7 +1438,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   char *normalized_filename = dt_util_normalize_path(filename);
   if(!normalized_filename || !dt_util_test_image_file(normalized_filename))
   {
-    g_free(normalized_filename);
+    dt_free(normalized_filename);
     return 0;
   }
   const char *cc = normalized_filename + strlen(normalized_filename);
@@ -1443,7 +1446,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
     ;
   if(!strcasecmp(cc, ".dt") || !strcasecmp(cc, ".dttags") || !strcasecmp(cc, ".xmp"))
   {
-    g_free(normalized_filename);
+    dt_free(normalized_filename);
     return 0;
   }
   char *ext = g_ascii_strdown(cc + 1, -1);
@@ -1456,8 +1459,8 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
     }
   if(!supported)
   {
-    g_free(normalized_filename);
-    g_free(ext);
+    dt_free(normalized_filename);
+    dt_free(ext);
     return 0;
   }
   int rc;
@@ -1468,9 +1471,9 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   if(id > UNKNOWN_IMAGE)
   {
     dt_control_log(_("Image %s is already in library and will not be re-imported.\n"), imgfname);
-    g_free(imgfname);
-    g_free(ext);
-    g_free(normalized_filename);
+    dt_free(imgfname);
+    dt_free(ext);
+    dt_free(normalized_filename);
     return id;
   }
 
@@ -1485,13 +1488,13 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   if(extra_file)
   {
     flags |= DT_IMAGE_HAS_WAV;
-    g_free(extra_file);
+    dt_free(extra_file);
   }
   extra_file = dt_image_get_text_path_from_path(normalized_filename);
   if(extra_file)
   {
     flags |= DT_IMAGE_HAS_TXT;
-    g_free(extra_file);
+    dt_free(extra_file);
   }
 
   //insert a v0 record (which may be updated later if no v0 xmp exists)
@@ -1574,8 +1577,8 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
         dt_image_cache_write_release(darktable.image_cache, other_img, DT_IMAGE_CACHE_RELAXED);
         group_id = other_id;
       }
-      g_free(ext_lowercase);
-      g_free(other_basename);
+      dt_free(ext_lowercase);
+      dt_free(other_basename);
     }
     else
     {
@@ -1642,7 +1645,7 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   guint tagid = 0;
   char tagname[512];
   snprintf(tagname, sizeof(tagname), "darktable|format|%s", ext);
-  g_free(ext);
+  dt_free(ext);
   dt_tag_new(tagname, &tagid);
   dt_tag_attach(tagid, id, FALSE, FALSE);
 
@@ -1652,10 +1655,10 @@ static int32_t _image_import_internal(const int32_t film_id, const char *filenam
   //synch database entries to xmp
   if(dt_image_get_xmp_mode()) dt_image_synch_all_xmp(normalized_filename);
 
-  g_free(imgfname);
-  g_free(basename);
-  g_free(sql_pattern);
-  g_free(normalized_filename);
+  dt_free(imgfname);
+  dt_free(basename);
+  dt_free(sql_pattern);
+  dt_free(normalized_filename);
 
 #ifdef USE_LUA
   //Synchronous calling of lua post-import-image events
@@ -1704,8 +1707,8 @@ int32_t dt_image_get_id_full_path(const gchar *filename)
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, file, -1, SQLITE_STATIC);
   if(sqlite3_step(stmt) == SQLITE_ROW) id=sqlite3_column_int(stmt, 0);
   sqlite3_finalize(stmt);
-  g_free(dir);
-  g_free(file);
+  dt_free(dir);
+  dt_free(file);
 
   return id;
 }
@@ -1875,16 +1878,16 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
         g_object_unref(new);
         new = NULL;
       }
-      g_free(newBasename);
+      dt_free(newBasename);
     }
     else
     {
       gchar *imgbname = g_path_get_basename(oldimg);
       g_snprintf(newimg, sizeof(newimg), "%s%c%s", newdir, G_DIR_SEPARATOR, imgbname);
       new = g_file_new_for_path(newimg);
-      g_free(imgbname);
+      dt_free(imgbname);
     }
-    g_free(newdir);
+    dt_free(newdir);
   }
 
   if(new)
@@ -1958,6 +1961,7 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
         dup_list = g_list_delete_link(dup_list, dup_list);
       }
       g_list_free(dup_list);
+      dup_list = NULL;
 
       // finally, rename local copy if any
       if(g_file_test(copysrcpath, G_FILE_TEST_EXISTS))
@@ -1983,22 +1987,22 @@ int32_t dt_image_rename(const int32_t imgid, const int32_t filmid, const gchar *
           {
             gchar *oldBasename = g_path_get_basename(copysrcpath);
             dt_control_log(_("cannot access local copy `%s'"), oldBasename);
-            g_free(oldBasename);
+            dt_free(oldBasename);
           }
           else if(g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_EXISTS)
                   || g_error_matches(moveError, G_IO_ERROR, G_IO_ERROR_IS_DIRECTORY))
           {
             gchar *newBasename = g_path_get_basename(copydestpath);
             dt_control_log(_("cannot write local copy `%s'"), newBasename);
-            g_free(newBasename);
+            dt_free(newBasename);
           }
           else
           {
             gchar *oldBasename = g_path_get_basename(copysrcpath);
             gchar *newBasename = g_path_get_basename(copydestpath);
             dt_control_log(_("error moving local copy `%s' -> `%s'"), oldBasename, newBasename);
-            g_free(oldBasename);
-            g_free(newBasename);
+            dt_free(oldBasename);
+            dt_free(newBasename);
           }
         }
 
@@ -2079,7 +2083,7 @@ int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gc
         g_object_unref(dest);
         dest = NULL;
       }
-      g_free(destBasename);
+      dt_free(destBasename);
     }
     else
     {
@@ -2091,10 +2095,8 @@ int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gc
     {
       src = g_file_new_for_path(srcpath);
     }
-    g_free(newdir);
-    newdir = NULL;
-    g_free(destpath);
-    destpath = NULL;
+    dt_free(newdir);
+    dt_free(destpath);
   }
 
   if(dest)
@@ -2110,7 +2112,7 @@ int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gc
       if(dest_image_path)
       {
         _copy_text_sidecar_if_present(srcpath, dest_image_path);
-        g_free(dest_image_path);
+        dt_free(dest_image_path);
       }
 
       // update database
@@ -2288,7 +2290,7 @@ int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gc
                                    NULL);
       }
 
-      g_free(filename);
+      dt_free(filename);
     }
     else
     {
@@ -2298,8 +2300,8 @@ int32_t dt_image_copy_rename(const int32_t imgid, const int32_t filmid, const gc
     g_object_unref(src);
     g_clear_error(&gerror);
   }
-  g_free(oldFilename);
-  g_free(newFilename);
+  dt_free(oldFilename);
+  dt_free(newFilename);
 
   return newid;
 }
@@ -2645,12 +2647,14 @@ void dt_image_synch_xmp(const int selected)
     GList *imgs = g_list_append(NULL, GINT_TO_POINTER(selected));
     dt_control_save_xmps(imgs, FALSE);
     g_list_free(imgs);
+    imgs = NULL;
   }
   else
   {
     GList *imgs = dt_act_on_get_images();
     dt_image_synch_xmps(imgs);
     g_list_free(imgs);
+    imgs = NULL;
   }
 }
 
@@ -2664,6 +2668,7 @@ void dt_image_synch_all_xmp(const gchar *pathname)
       GList *imgs = g_list_append(NULL, GINT_TO_POINTER(imgid));
       dt_control_save_xmps(imgs, FALSE);
       g_list_free(imgs);
+      imgs = NULL;
     }
   }
 }
@@ -2702,6 +2707,7 @@ void dt_image_local_copy_synch()
                    count);
   }
   g_list_free(imgs);
+  imgs = NULL;
 }
 
 void dt_image_get_datetime(const int32_t imgid, char *datetime)
@@ -2717,7 +2723,8 @@ void dt_image_get_datetime(const int32_t imgid, char *datetime)
 static void _datetime_undo_data_free(gpointer data)
 {
   GList *l = (GList *)data;
-  g_list_free_full(l, g_free);
+  g_list_free_full(l, dt_free_gpointer);
+  l = NULL;
 }
 
 typedef struct _datetime_t
@@ -2822,7 +2829,7 @@ char *dt_image_get_audio_path_from_path(const char *image_path)
   result[len + 2] = 'V';
   if(g_file_test(result, G_FILE_TEST_EXISTS)) return result;
 
-  g_free(result);
+  dt_free(result);
   return NULL;
 }
 
@@ -2854,7 +2861,7 @@ static char *_text_path_legacy_if_exists(const char *image_path)
   result[len + 2] = 'T';
   if(g_file_test(result, G_FILE_TEST_EXISTS)) return result;
 
-  g_free(result);
+  dt_free(result);
   return NULL;
 }
 
@@ -2913,8 +2920,8 @@ static void _copy_text_sidecar_if_present(const char *src_image_path, const char
     g_object_unref(src);
   }
 
-  g_free(dest_txt);
-  g_free(src_txt);
+  dt_free(dest_txt);
+  dt_free(src_txt);
 }
 
 static void _move_text_sidecar_if_present(const char *src_image_path, const char *dest_image_path, const gboolean overwrite)
@@ -2942,8 +2949,8 @@ static void _move_text_sidecar_if_present(const char *src_image_path, const char
     g_object_unref(src);
   }
 
-  g_free(dest_txt);
-  g_free(src_txt);
+  dt_free(dest_txt);
+  dt_free(src_txt);
 }
 
 char *dt_image_get_text_path(const int32_t imgid)
@@ -3001,12 +3008,12 @@ char *dt_image_camera_missing_sample_message(const struct dt_image_t *img, gbool
   if(logmsg)
   {
     char *newmsg = dt_util_str_replace(msg, "<b>", "<span foreground='red'><b>");
-    g_free(msg);
+    dt_free(msg);
     msg = dt_util_str_replace(newmsg, "</b>", "</b></span>");
-    g_free(newmsg);
+    dt_free(newmsg);
   }
 
-  g_free(T3);
+  dt_free(T3);
   return msg;
 }
 
@@ -3016,7 +3023,7 @@ void dt_image_check_camera_missing_sample(const struct dt_image_t *img)
   {
     char *msg = dt_image_camera_missing_sample_message(img, TRUE);
     dt_control_log(msg, (char *)NULL);
-    g_free(msg);
+    dt_free(msg);
   }
 }
 

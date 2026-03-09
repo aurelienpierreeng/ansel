@@ -27,6 +27,7 @@
    You should have received a copy of the GNU General Public License
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include "common/darktable.h"
 #include "lua/preferences.h"
 #include "control/conf.h"
 #include "gui/gtk.h"
@@ -126,28 +127,28 @@ typedef struct pref_element
 
 static void destroy_pref_element(pref_element *elt)
 {
-  free(elt->script);
-  free(elt->name);
-  free(elt->label);
-  free(elt->tooltip);
-  free(elt->tooltip_reset);
+  dt_free(elt->script);
+  dt_free(elt->name);
+  dt_free(elt->label);
+  dt_free(elt->tooltip);
+  dt_free(elt->tooltip_reset);
   if(elt->widget) g_object_unref(elt->widget);
   switch(elt->type)
   {
     case pref_enum:
-      free(elt->type_data.enum_data.default_value);
+      dt_free(elt->type_data.enum_data.default_value);
       break;
     case pref_dir:
-      free(elt->type_data.dir_data.default_value);
+      dt_free(elt->type_data.dir_data.default_value);
       break;
     case pref_file:
-      free(elt->type_data.file_data.default_value);
+      dt_free(elt->type_data.file_data.default_value);
       break;
     case pref_string:
-      free(elt->type_data.string_data.default_value);
+      dt_free(elt->type_data.string_data.default_value);
       break;
     case pref_lua:
-      free(elt->type_data.lua_data.default_value);
+      dt_free(elt->type_data.lua_data.default_value);
       break;
     case pref_bool:
     case pref_int:
@@ -155,7 +156,7 @@ static void destroy_pref_element(pref_element *elt)
     default:
       break;
   }
-  free(elt);
+  dt_free(elt);
 }
 
 static pref_element *pref_list = NULL;
@@ -177,6 +178,7 @@ static int get_keys(lua_State *L)
     table_index++;
   }
   g_list_free(keys);
+  keys = NULL;
   return 1;
 }
 
@@ -309,7 +311,7 @@ static void response_callback_enum(GtkDialog *dialog, gint response_id, pref_ele
     get_pref_name(pref_name, sizeof(pref_name), cur_elt->script, cur_elt->name);
     char *text = gtk_combo_box_text_get_active_text(GTK_COMBO_BOX_TEXT(cur_elt->widget));
     dt_conf_set_string(pref_name, text);
-    g_free(text);
+    dt_free(text);
   }
 }
 
@@ -322,7 +324,7 @@ static void response_callback_dir(GtkDialog *dialog, gint response_id, pref_elem
     get_pref_name(pref_name, sizeof(pref_name), cur_elt->script, cur_elt->name);
     gchar *folder = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(cur_elt->widget));
     dt_conf_set_string(pref_name, folder);
-    g_free(folder);
+    dt_free(folder);
   }
 }
 
@@ -335,7 +337,7 @@ static void response_callback_file(GtkDialog *dialog, gint response_id, pref_ele
     get_pref_name(pref_name, sizeof(pref_name), cur_elt->script, cur_elt->name);
     gchar *file = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(cur_elt->widget));
     dt_conf_set_string(pref_name, file);
-    g_free(file);
+    dt_free(file);
   }
 }
 
@@ -496,7 +498,7 @@ static gboolean reset_widget_lua(GtkWidget *label, GdkEventButton *event, pref_e
     lua_call(L, 3, 0);
     dt_lua_unlock();
     dt_conf_set_string(pref_name, old_str);
-    g_free(old_str);
+    dt_free(old_str);
     return TRUE;
   }
   return FALSE;
@@ -516,18 +518,18 @@ static void update_widget_enum(pref_element* cur_elt, GtkWidget* dialog, GtkWidg
     if(!active_entry)
     {
       gtk_combo_box_set_active(GTK_COMBO_BOX(cur_elt->widget), -1);
-      g_free(active_entry);
+      dt_free(active_entry);
       break;
     }
     else if(!strcmp(active_entry, value))
     {
-      g_free(active_entry);
+      dt_free(active_entry);
       break;
     }
     else
     {
       gtk_combo_box_set_active(GTK_COMBO_BOX(cur_elt->widget), gtk_combo_box_get_active(GTK_COMBO_BOX(cur_elt->widget)) + 1);
-      g_free(active_entry);
+      dt_free(active_entry);
     }
   } while(true);
 }

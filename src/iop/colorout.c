@@ -54,6 +54,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -267,8 +268,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 {
   dt_iop_colorout_global_data_t *gd = (dt_iop_colorout_global_data_t *)module->data;
   dt_opencl_free_kernel(gd->kernel_colorout);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 static void process_fastpath_apply_tonecurves(const dt_iop_colorout_data_t *const d,
@@ -480,7 +480,7 @@ static cmsHPROFILE _make_clipping_profile(cmsHPROFILE profile)
     if(cmsSaveProfileToMem(old_profile, data, &size))
       profile = cmsOpenProfileFromMem(data, size);
 
-    free(data);
+    dt_free(data);
   }
 
   return profile;

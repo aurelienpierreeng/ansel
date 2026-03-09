@@ -302,7 +302,7 @@ static void _scale_optim()
   }
   dt_conf_set_string(CONFIG_PREFIX "resizing_factor", scale_buf);
 
-  free(scale_str);
+  dt_free(scale_str);
 }
 
 static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
@@ -347,8 +347,7 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
     gtk_window_set_title(GTK_WINDOW(dialog), _("export to disk"));
     const gint res = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
-    g_free(confirm_message);
-    confirm_message = NULL;
+    dt_free(confirm_message);
 
     if(res != GTK_RESPONSE_YES)
     {
@@ -375,7 +374,7 @@ static void _export_button_clicked(GtkWidget *widget, dt_lib_export_t *d)
   dt_control_export(list, max_width, max_height, format_index, storage_index, TRUE, export_masks,
                     style, icc_type, icc_filename, icc_intent, d->metadata_export);
 
-  g_free(icc_filename);
+  dt_free(icc_filename);
 
   _scale_optim();
   gtk_entry_set_text(GTK_ENTRY(d->scale), dt_conf_get_string_const(CONFIG_PREFIX "resizing_factor"));
@@ -523,8 +522,8 @@ void _set_dimensions(dt_lib_export_t *d, uint32_t max_width, uint32_t max_height
   dt_conf_set_int(CONFIG_PREFIX "width", max_width);
   dt_conf_set_int(CONFIG_PREFIX "height", max_height);
 
-  g_free(max_width_char);
-  g_free(max_height_char);
+  dt_free(max_width_char);
+  dt_free(max_height_char);
   _resync_print_dimensions(d);
 }
 
@@ -579,7 +578,7 @@ void gui_reset(dt_lib_module_t *self)
     }
   }
 
-  g_free(iccfilename);
+  dt_free(iccfilename);
 
   // style
   // set it to none if the var is not set or the style doesn't exist anymore
@@ -594,7 +593,7 @@ void gui_reset(dt_lib_module_t *self)
     dt_bauhaus_combobox_set(d->style, 0);
 
   // export metadata presets
-  g_free(d->metadata_export);
+  dt_free(d->metadata_export);
   d->metadata_export = dt_lib_export_metadata_get_conf();
 
   dt_imageio_module_format_t *mformat = dt_imageio_get_format();
@@ -866,9 +865,9 @@ static void _resync_print_dimensions(dt_lib_export_t *self)
   gtk_entry_set_text(GTK_ENTRY(self->print_width), pwidth);
   gtk_entry_set_text(GTK_ENTRY(self->print_height), pheight);
   gtk_entry_set_text(GTK_ENTRY(self->print_dpi), pdpi);
-  g_free(pwidth);
-  g_free(pheight);
-  g_free(pdpi);
+  dt_free(pwidth);
+  dt_free(pheight);
+  dt_free(pdpi);
   --darktable.gui->reset;
 }
 
@@ -890,8 +889,8 @@ static void _resync_pixel_dimensions(dt_lib_export_t *self)
   gchar *pheight = g_strdup_printf("%d", height);
   gtk_entry_set_text(GTK_ENTRY(self->width), pwidth);
   gtk_entry_set_text(GTK_ENTRY(self->height), pheight);
-  g_free(pwidth);
-  g_free(pheight);
+  dt_free(pwidth);
+  dt_free(pheight);
   --darktable.gui->reset;
 }
 
@@ -917,7 +916,7 @@ static void _print_width_changed(GtkEditable *entry, gpointer user_data)
   ++darktable.gui->reset;
   gchar *pwidth = g_strdup_printf("%d", width);
   gtk_entry_set_text(GTK_ENTRY(d->width), pwidth);
-  g_free(pwidth);
+  dt_free(pwidth);
   _size_in_px_update(d);
   --darktable.gui->reset;
 }
@@ -944,7 +943,7 @@ static void _print_height_changed(GtkEditable *entry, gpointer user_data)
   ++darktable.gui->reset;
   gchar *pheight = g_strdup_printf("%d", height);
   gtk_entry_set_text(GTK_ENTRY(d->height), pheight);
-  g_free(pheight);
+  dt_free(pheight);
   _size_in_px_update(d);
   --darktable.gui->reset;
 }
@@ -1054,6 +1053,7 @@ static void _lib_export_styles_changed_callback(gpointer instance, gpointer user
   dt_bauhaus_combobox_set(d->style, 0);
 
   g_list_free_full(styles, dt_style_free);
+  styles = NULL;
 }
 
 void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
@@ -1260,9 +1260,9 @@ void gui_init(dt_lib_module_t *self)
     "You can use custom color spaces defined\n"
     "by ICC profiles stored in:\n- %s\n- %s"), user_profile_dir, system_profile_dir);
   gtk_widget_set_tooltip_text(d->profile, tooltip);
-  g_free(system_profile_dir);
-  g_free(user_profile_dir);
-  g_free(tooltip);
+  dt_free(system_profile_dir);
+  dt_free(user_profile_dir);
+  dt_free(tooltip);
 
   //  Add intent combo
 
@@ -1299,7 +1299,7 @@ void gui_init(dt_lib_module_t *self)
                               ""
                               ));
   gtk_widget_set_tooltip_text(d->intent, tooltip);
-  g_free(tooltip);
+  dt_free(tooltip);
 
   //  Add style combo
 
@@ -1389,7 +1389,7 @@ void gui_init(dt_lib_module_t *self)
     }
   }
 
-  g_free(iccfilename);
+  dt_free(iccfilename);
 
   // style
   // set it to none if the var is not set or the style doesn't exist anymore
@@ -1442,10 +1442,9 @@ void gui_cleanup(dt_lib_module_t *self)
     _export_presets_stmt = NULL;
   }
 
-  g_free(d->metadata_export);
+  dt_free(d->metadata_export);
 
-  free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 void init_presets(dt_lib_module_t *self)
@@ -1595,16 +1594,16 @@ void init_presets(dt_lib_module_t *self)
         sqlite3_step(innerstmt);
         sqlite3_finalize(innerstmt);
 
-        free(new_fdata);
-        free(new_sdata);
-        free(new_params);
+        dt_free(new_fdata);
+        dt_free(new_sdata);
+        dt_free(new_params);
       }
 
       continue;
 
     delete_preset:
-      free(new_fdata);
-      free(new_sdata);
+      dt_free(new_fdata);
+      dt_free(new_sdata);
       fprintf(stderr, "[export_init_presets] export preset '%s' can't be updated from versions %d/%d to "
                       "versions %d/%d. dropping preset\n",
               name, fversion, sversion, new_fversion, new_sversion);
@@ -1648,7 +1647,7 @@ void *legacy_params(dt_lib_module_t *self, const void *const old_params, const s
     dt_imageio_module_storage_t *smod = dt_imageio_get_storage_by_name(sname);
     if(!fmod || !smod)
     {
-      free(new_params);
+      dt_free(new_params);
       return NULL;
     }
 
@@ -1787,7 +1786,7 @@ void *legacy_params(dt_lib_module_t *self, const void *const old_params, const s
     pos += flags_size;
     memcpy((uint8_t *)new_params + pos, (uint8_t *)old_params + pos - flags_size, old_params_size - sizeof(int32_t) * 6);
 
-    g_free(flags);
+    dt_free(flags);
     *new_size = new_params_size;
     *new_version = 6;
     return new_params;
@@ -1868,8 +1867,7 @@ void *get_params(dt_lib_module_t *self, int *size)
 
   if(icctype != DT_COLORSPACE_FILE)
   {
-    g_free(iccfilename);
-    iccfilename = NULL;
+    dt_free(iccfilename);
   }
 
   if(!iccfilename) iccfilename = g_strdup("");
@@ -1927,8 +1925,8 @@ void *get_params(dt_lib_module_t *self, int *size)
   }
   g_assert(pos == *size);
 
-  g_free(iccfilename);
-  g_free(style);
+  dt_free(iccfilename);
+  dt_free(style);
 
   if(fdata) mformat->free_params(mformat, fdata);
   if(sdata) mstorage->free_params(mstorage, sdata);
@@ -1957,7 +1955,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
   buf += sizeof(int32_t);
   const char *metadata_export = buf;
   buf += strlen(metadata_export) + 1;
-  g_free(d->metadata_export);
+  dt_free(d->metadata_export);
   d->metadata_export = g_strdup(metadata_export);
   dt_lib_export_metadata_set_conf(d->metadata_export);
   const char *iccfilename = buf;

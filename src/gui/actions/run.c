@@ -87,6 +87,7 @@ static int32_t preload_image_cache(dt_job_t *job)
   }
 
   g_list_free(selection);
+  selection = NULL;
   return 0;
 }
 
@@ -109,6 +110,7 @@ static gboolean clear_image_cache(GtkAccelGroup *group, GObject *acceleratable, 
   }
 
   g_list_free(selection);
+  selection = NULL;
 
   // Redraw thumbnails
   dt_thumbtable_refresh_thumbnail(darktable.gui->ui->thumbtable_lighttable, UNKNOWN_IMAGE, TRUE);

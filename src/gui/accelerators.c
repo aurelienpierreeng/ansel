@@ -72,7 +72,7 @@ static void _g_list_closure_unref(gpointer data)
 {
   PayloadClosure *pc = (PayloadClosure *)data;
   if(pc->base) g_closure_unref(pc->base);
-  g_free(pc);
+  dt_free(pc);
 }
 
 static inline void _shortcut_set_widget_data(GtkWidget *widget, dt_shortcut_t *shortcut)
@@ -110,7 +110,7 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
     }
     else
     {
-      g_free(current_markup);
+      dt_free(current_markup);
       gchar *current_text = gtk_widget_get_tooltip_text(widget);
       if(current_text && current_text[0])
       {
@@ -119,7 +119,7 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
       }
       else
       {
-        g_free(current_text);
+        dt_free(current_text);
         g_object_set_data(G_OBJECT(widget), "dt-accel-tooltip-base-none", GINT_TO_POINTER(1));
       }
     }
@@ -150,7 +150,7 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
   gchar *shortcut_label = gtk_accelerator_get_label(shortcut->key, shortcut->mods);
   if(!shortcut_label || !shortcut_label[0])
   {
-    g_free(shortcut_label);
+    dt_free(shortcut_label);
     return TRUE;
   }
 
@@ -161,24 +161,24 @@ static gboolean _accels_tooltip_query_hook(GSignalInvocationHint *hint, guint n_
     gchar *esc_desc = g_markup_escape_text(shortcut_desc, -1);
     gchar *new_markup = g_strdup_printf("%s\n<small>%s: %s</small>", base_markup, esc_desc, esc_label);
     gtk_widget_set_tooltip_markup(widget, new_markup);
-    g_free(new_markup);
-    g_free(esc_label);
-    g_free(esc_desc);
+    dt_free(new_markup);
+    dt_free(esc_label);
+    dt_free(esc_desc);
   }
   else if(base_text && base_text[0])
   {
     gchar *new_text = g_strdup_printf("%s\n%s: %s", base_text, shortcut_desc, shortcut_label);
     gtk_widget_set_tooltip_text(widget, new_text);
-    g_free(new_text);
+    dt_free(new_text);
   }
   else
   {
     gchar *new_text = g_strdup_printf("%s: %s", shortcut_desc, shortcut_label);
     gtk_widget_set_tooltip_text(widget, new_text);
-    g_free(new_text);
+    dt_free(new_text);
   }
 
-  g_free(shortcut_label);
+  dt_free(shortcut_label);
 
   return TRUE;
 }
@@ -198,9 +198,10 @@ static void _accels_install_tooltip_hook(void)
 static void _clean_shortcut(gpointer data)
 {
   dt_shortcut_t *shortcut = (dt_shortcut_t *)data;
-  g_free(shortcut->path);
+  dt_free(shortcut->path);
   g_list_free_full(shortcut->closure, _g_list_closure_unref);
-  g_free(shortcut);
+  shortcut->closure = NULL;
+  dt_free(shortcut);
 }
 
 
@@ -271,8 +272,7 @@ static void _find_parent_hashtable(gpointer _key, gpointer value, gpointer user_
   // Remove the last branch of the path to build the path of the immediate ancestor
   gchar **child_parts = g_strsplit(child_shortcut->path, "/", -1);
   guint n = g_strv_length(child_parts);
-  g_free(child_parts[n - 1]);
-  child_parts[n - 1] = NULL;
+  dt_free(child_parts[n - 1]);
   gchar *parent_path = g_strjoinv ("/", child_parts);
   g_strfreev(child_parts);
 
@@ -289,7 +289,7 @@ static void _find_parent_hashtable(gpointer _key, gpointer value, gpointer user_
     */
   }
 
-  g_free(parent_path);
+  dt_free(parent_path);
 }
 
 
@@ -368,8 +368,8 @@ void dt_accels_cleanup(dt_accels_t *accels)
 
   dt_pthread_mutex_destroy(&accels->lock);
 
-  g_free(accels->config_file);
-  g_free(accels);
+  dt_free(accels->config_file);
+  dt_free(accels);
 }
 
 
@@ -531,7 +531,7 @@ static gboolean _virtual_shortcut_callback(GtkAccelGroup *group, GObject *accele
   if(gdk_keymap_get_entries_for_keyval(keymap, shortcut->key, &keys, &n))
   {
     if(n > 0) keycode = keys[0].keycode;
-    g_free(keys);
+    dt_free(keys);
   }
 
   // Create a virtual key stroke using our shortcut keys
@@ -624,7 +624,7 @@ void dt_accels_new_virtual_instance_shortcut(dt_accels_t *accels,
     dt_pthread_mutex_unlock(&accels->lock);
   }
 
-  g_free(accel_path);
+  dt_free(accel_path);
 }
 
 
@@ -734,7 +734,7 @@ void dt_accels_new_action_shortcut(dt_accels_t *accels,
     // then dt_accels_connect_accels will update keys and possibly wire the widgets in Gtk
   }
 
-  g_free(accel_path);
+  dt_free(accel_path);
 }
 
 
@@ -840,7 +840,7 @@ void dt_accels_remove_accel(dt_accels_t *accels, const char *path, gpointer data
   g_hash_table_foreach(accels->acceleratables, _remove_accel_hashtable, (gpointer)params);
   dt_pthread_mutex_unlock(&accels->lock);
 
-  free(params);
+  dt_free(params);
 }
 
 void dt_accels_remove_shortcut(dt_accels_t *accels, const char *path)
@@ -880,7 +880,7 @@ static void _accels_keys_decode(dt_accels_t *accels, GdkEvent *event, guint *key
     gchar *accel_name = gtk_accelerator_name(*keyval, *mods);
     dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] %s : %s\n",
              (event->type == GDK_KEY_PRESS) ? "Key pressed" : "Key released", accel_name);
-    g_free(accel_name);
+    dt_free(accel_name);
   }
 
   // Remove the consumed Shift modifier for numbers.
@@ -964,6 +964,7 @@ static const char * _find_path_for_keys(dt_accels_t *accels, guint key, GdkModif
   if(item) path = (char *)item->data;
 
   g_list_free(result.results);
+  result.results = NULL;
   return path;
 }
 
@@ -1005,6 +1006,7 @@ static gboolean _has_shortcut(dt_accels_t *accels, GtkAccelGroup *group, guint k
 
   const gboolean has_accel = (result.results != NULL);
   g_list_free(result.results);
+  result.results = NULL;
   return has_accel;
 }
 
@@ -1015,7 +1017,7 @@ static gboolean _key_pressed(GtkWidget *w, GdkEvent *event, dt_accels_t *accels,
   gchar *accel_name = gtk_accelerator_name(keyval, mods);
   GQuark accel_quark = g_quark_from_string(accel_name);
   dt_print(DT_DEBUG_SHORTCUTS, "[shortcuts] Combination of keys decoded: %s\n", accel_name);
-  g_free(accel_name);
+  dt_free(accel_name);
 
   // Look into the active group first, aka darkroom, lighttable, etc.
   if(_has_shortcut(accels, accels->active_group, keyval, mods)
@@ -1167,14 +1169,14 @@ static int guess_key_group(dt_accels_t *accels, guint keyval, guint hardware_key
     if(keyvals[i] == keyval)
     {
       int group = keys[i].group;
-      g_free(keys);
-      g_free(keyvals);
+      dt_free(keys);
+      dt_free(keyvals);
       return group; // found matching group
     }
   }
 
-  g_free(keys);
-  g_free(keyvals);
+  dt_free(keys);
+  dt_free(keyvals);
   return 0; // not found, default
 }
 
@@ -1249,7 +1251,7 @@ static void _shortcut_edited(GtkCellRenderer *cell, const gchar *path_string, gu
                                               _("Delete it first."));
     gtk_dialog_run(GTK_DIALOG(dlg));
     gtk_widget_destroy(dlg);
-    g_free(new_text);
+    dt_free(new_text);
   }
 
   gtk_tree_path_free(path);
@@ -1308,7 +1310,7 @@ void _for_each_accel_create_treeview_row(gpointer key, gpointer value, gpointer 
   {
     // Build the partial path so far
     gchar *tmp = g_strconcat(accum, "/", parts[i], NULL);
-    g_free(accum);
+    dt_free(accum);
     accum = tmp;
 
     // Find out if current node exists.
@@ -1339,12 +1341,12 @@ void _for_each_accel_create_treeview_row(gpointer key, gpointer value, gpointer 
     else
       gtk_tree_store_set(store, iter, COL_NAME, parts[i], COL_KEYS, "", COL_PATH, accum + len_ansel, -1);
 
-    g_free(label);
+    dt_free(label);
 
     parent = iter;
   }
 
-  g_free(accum);
+  dt_free(accum);
   g_strfreev(parts);
 }
 
@@ -1381,7 +1383,7 @@ void _for_each_path_create_treeview_row(gpointer key, gpointer value, gpointer u
                        5, shortcut->key,
                        6, shortcut->mods,
                        -1);
-    g_free(tail);
+    dt_free(tail);
     g_strfreev(parts);
   }
 }
@@ -1411,12 +1413,12 @@ static gint _sort_model_func(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIter *b
     // Compare strings
     res = g_utf8_collate(ka_ci, kb_ci);
 
-    g_free(ka_ci);
-    g_free(kb_ci);
+    dt_free(ka_ci);
+    dt_free(kb_ci);
   }
 
-  g_free(ka);
-  g_free(kb);
+  dt_free(ka);
+  dt_free(kb);
   return res;
 }
 
@@ -1452,9 +1454,9 @@ static gboolean filter_callback(GtkTreeModel *model, GtkTreeIter *iter, gpointer
       gchar *needle_ci = g_utf8_casefold(needle_path, -1);
       gchar *haystack_ci = g_utf8_casefold(path, -1);
       show &= (g_strrstr(haystack_ci, needle_ci) != NULL);
-      g_free(needle_ci);
-      g_free(haystack_ci);
-      g_free(path);
+      dt_free(needle_ci);
+      dt_free(haystack_ci);
+      dt_free(path);
     }
     else
     {
@@ -1575,7 +1577,7 @@ void dt_accels_window(dt_accels_t *accels, GtkWindow *main_window)
                                            G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_UINT, G_TYPE_UINT);
 
   // Add a tree view row for each accel
-  GHashTable *node_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+  GHashTable *node_cache = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
   _accel_treeview_t _data = { .store = store , .node_cache = node_cache};
   g_hash_table_foreach(accels->acceleratables, _for_each_accel_create_treeview_row, &_data);
   g_hash_table_destroy(node_cache);
@@ -1648,7 +1650,7 @@ void dt_accels_window(dt_accels_t *accels, GtkWindow *main_window)
   gtk_widget_destroy(dialog);
   g_object_unref(filter_model);
   g_object_unref(store);
-  g_free(params);
+  dt_free(params);
 }
 
 // Case-insensitive partial matching
@@ -1683,8 +1685,8 @@ static int _match_text(GtkTreeModel *model, GtkTreeIter *iter, const char *needl
     ret = relevance;
   }
 
-  g_free(label);
-  g_free(label_ci);
+  dt_free(label);
+  dt_free(label_ci);
 
   return ret;
 }
@@ -1710,7 +1712,7 @@ static void _find_and_rank_matches(GtkTreeModel *model, GtkWidget *search_entry)
     } while(gtk_tree_model_iter_next(model, &iter));
   }
 
-  g_free(needle_ci);
+  dt_free(needle_ci);
 
   // Restore sorting
   gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(model), 2, GTK_SORT_ASCENDING);
@@ -1786,7 +1788,7 @@ static gboolean _dispatch_selected_shortcut_idle(gpointer data)
 {
   dt_accels_dispatch_state_t *state = (dt_accels_dispatch_state_t *)data;
   _dispatch_selected_shortcut(state);
-  g_free(state);
+  dt_free(state);
   return G_SOURCE_REMOVE;
 }
 

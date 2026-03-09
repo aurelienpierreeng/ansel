@@ -65,6 +65,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "glib.h"
 
 #ifdef HAVE_CONFIG_H
@@ -1377,13 +1378,13 @@ void init_global(dt_iop_module_so_t *module)
 #else
     // code for older lensfun preserved as-is
 #ifdef LF_MAX_DATABASE_VERSION
-    g_free(dt_iop_lensfun_db->HomeDataDir);
+    dt_free(dt_iop_lensfun_db->HomeDataDir);
     dt_iop_lensfun_db->HomeDataDir = g_strdup(sysdbpath);
     if(dt_iop_lensfun_db->Load() != LF_NO_ERROR)
     {
       fprintf(stderr, "[iop_lens]: could not load lensfun database in `%s'!\n", sysdbpath);
 #endif
-      g_free(dt_iop_lensfun_db->HomeDataDir);
+      dt_free(dt_iop_lensfun_db->HomeDataDir);
       dt_iop_lensfun_db->HomeDataDir = g_build_filename(path, "lensfun", (char *)NULL);
       if(dt_iop_lensfun_db->Load() != LF_NO_ERROR)
         fprintf(stderr, "[iop_lens]: could not load lensfun database in `%s'!\n", dt_iop_lensfun_db->HomeDataDir);
@@ -1393,9 +1394,9 @@ void init_global(dt_iop_module_so_t *module)
 #endif
 
 #ifdef LF_MAX_DATABASE_VERSION
-    g_free(sysdbpath);
+    dt_free(sysdbpath);
 #endif
-    g_free(path);
+    dt_free(path);
   }
 }
 
@@ -1412,7 +1413,7 @@ void reload_defaults(dt_iop_module_t *module)
 
   new_lens = _lens_sanitize(img->exif_lens);
   g_strlcpy(d->lens, new_lens, sizeof(d->lens));
-  free(new_lens);
+  dt_free(new_lens);
   g_strlcpy(d->camera, img->exif_model, sizeof(d->camera));
   d->crop = img->exif_crop;
   d->aperture = img->exif_aperture;
@@ -1527,8 +1528,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_lens_distort_lanczos2);
   dt_opencl_free_kernel(gd->kernel_lens_distort_lanczos3);
   dt_opencl_free_kernel(gd->kernel_lens_vignette);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 /// ############################################################
@@ -1668,7 +1668,7 @@ static void camera_set(dt_iop_module_t *self, const lfCamera *cam)
     else
       fm = g_strdup_printf("%s", model);
     gtk_label_set_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(g->camera_model))), fm);
-    g_free(fm);
+    dt_free(fm);
   }
 
   if(variant)
@@ -1682,7 +1682,7 @@ static void camera_set(dt_iop_module_t *self, const lfCamera *cam)
                          "crop factor:\t%.1f"),
                        maker, model, _variant, cam->Mount, cam->CropFactor);
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->camera_model), fm);
-  g_free(fm);
+  dt_free(fm);
 }
 
 static void camera_menu_select(GtkMenuItem *menuitem, gpointer user_data)
@@ -1733,7 +1733,7 @@ static void camera_menu_fill(dt_iop_module_t *self, const lfCamera *const *camli
     {
       gchar *fm = g_strdup_printf("%s (%s)", m, camlist[i]->Variant);
       item = gtk_menu_item_new_with_label(fm);
-      g_free(fm);
+      dt_free(fm);
     }
     gtk_widget_show(item);
     g_object_set_data(G_OBJECT(item), "lfCamera", (void *)camlist[i]);
@@ -1906,7 +1906,7 @@ static void lens_set(dt_iop_module_t *self, const lfLens *lens)
     else
       fm = g_strdup_printf("%s", model);
     gtk_label_set_text(GTK_LABEL(gtk_bin_get_child(GTK_BIN(g->lens_model))), fm);
-    g_free(fm);
+    dt_free(fm);
   }
 
   char focal[100], aperture[100], mounts[200];
@@ -1954,7 +1954,7 @@ static void lens_set(dt_iop_module_t *self, const lfLens *lens)
                        lfLens::GetLensTypeDesc(lens->Type, NULL), mounts);
 
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->lens_model), fm);
-  g_free(fm);
+  dt_free(fm);
 
   /* Create the focal/aperture/distance combo boxes */
   gtk_container_foreach(GTK_CONTAINER(g->lens_param_box), delete_children, NULL);
@@ -2576,7 +2576,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
 
   while(g->modifiers)
   {
-    g_free(g->modifiers->data);
+    dt_free(g->modifiers->data);
     g->modifiers = g_list_delete_link(g->modifiers, g->modifiers);
   }
 

@@ -69,6 +69,7 @@
 // http://websvn.kde.org/trunk/KDE/kdelibs/kdeui/util/kwallet.cpp?revision=1107541&view=markup
 
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 
@@ -102,7 +103,7 @@ static gchar *char2qstring(const gchar *in, gsize *size)
   if(error)
   {
     dt_print(DT_DEBUG_PWSTORAGE, "[pwstorage_kwallet] ERROR: error converting string: %s\n", error->message);
-    g_free(out);
+    dt_free(out);
     g_error_free(error);
     return NULL;
   }
@@ -121,7 +122,7 @@ static gchar *char2qstring(const gchar *in, gsize *size)
   memcpy(result, &BE_bytes, sizeof(guint));
   memcpy(result + sizeof(guint), out, bytes);
 
-  g_free(out);
+  dt_free(out);
   return result;
 }
 
@@ -177,11 +178,11 @@ static gboolean start_kwallet(backend_kwallet_context_t *context)
   if(error_string && error_string[0] != '\0')
   {
     dt_print(DT_DEBUG_PWSTORAGE, "[pwstorage_kwallet] ERROR: error launching kwalletd: %s\n", error_string);
-    g_free(error_string);
+    dt_free(error_string);
     return FALSE;
   }
 
-  g_free(error_string);
+  dt_free(error_string);
 
   return TRUE;
 }
@@ -216,7 +217,7 @@ static gboolean init_kwallet(backend_kwallet_context_t *context)
   if(check_error(error) || !is_enabled) return FALSE;
 
   // Get the wallet name.
-  g_free(context->wallet_name);
+  dt_free(context->wallet_name);
 
   ret = g_dbus_proxy_call_sync(context->proxy, "networkWallet", NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL,
                                &error);
@@ -244,7 +245,7 @@ const backend_kwallet_context_t *dt_pwstorage_kwallet_new()
   context->connection = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, &error);
   if(check_error(error))
   {
-    g_free(context);
+    dt_free(context);
     return NULL;
   }
 
@@ -254,7 +255,7 @@ const backend_kwallet_context_t *dt_pwstorage_kwallet_new()
     if(!start_kwallet(context) || !init_kwallet(context))
     {
       g_object_unref(context->connection);
-      g_free(context);
+      dt_free(context);
       return NULL;
     }
   }
@@ -268,8 +269,8 @@ void dt_pwstorage_kwallet_destroy(const backend_kwallet_context_t *context)
   backend_kwallet_context_t *c = (backend_kwallet_context_t *)context;
   g_object_unref(c->connection);
   g_object_unref(c->proxy);
-  g_free(c->wallet_name);
-  g_free(c);
+  dt_free(c->wallet_name);
+  dt_free(c);
 }
 
 // get the handle for connections to KWallet
@@ -389,20 +390,22 @@ gboolean dt_pwstorage_kwallet_set(const backend_kwallet_context_t *context, cons
     gchar *new_key = char2qstring(key, &length);
     if(new_key == NULL)
     {
-      g_free(g_array_free(byte_array, FALSE));
+      gchar *byte_array_data = g_array_free(byte_array, FALSE);
+      dt_free(byte_array_data);
       return FALSE;
     }
     g_array_append_vals(byte_array, new_key, length);
-    g_free(new_key);
+    dt_free(new_key);
 
     gchar *new_value = char2qstring(value, &length);
     if(new_value == NULL)
     {
-      g_free(g_array_free(byte_array, FALSE));
+      gchar *byte_array_data = g_array_free(byte_array, FALSE);
+      dt_free(byte_array_data);
       return FALSE;
     }
     g_array_append_vals(byte_array, new_value, length);
-    g_free(new_value);
+    dt_free(new_value);
   }
 
   int wallet_handle = get_wallet_handle(context);
@@ -465,7 +468,7 @@ static gchar *array2string(const gchar *pos, guint *length)
   GError *error = NULL;
   gchar *out = g_utf16_to_utf8(tmp_string, *length / sizeof(gunichar2), &read, &written, &error);
 
-  free(tmp_string);
+  dt_free(tmp_string);
 
   if(error)
   {
@@ -481,7 +484,7 @@ static gchar *array2string(const gchar *pos, guint *length)
 // Get the (key,value) pairs back from KWallet.
 GHashTable *dt_pwstorage_kwallet_get(const backend_kwallet_context_t *context, const gchar *slot)
 {
-  GHashTable *table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+  GHashTable *table = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
   GError *error = NULL;
 
   // Is there an entry in the wallet?

@@ -36,6 +36,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 
@@ -466,8 +467,8 @@ void get_cache_filename(const char *const lutname, char *const cache_filename)
   char *cache_file = g_build_filename(cache_dir, lutname, NULL);
   g_strlcpy(cache_filename, cache_file, DT_IOP_LUT3D_MAX_PATHNAME);
   g_strlcpy(&cache_filename[strlen(cache_filename)], ".cimgz", DT_IOP_LUT3D_MAX_PATHNAME-strlen(cache_file));
-  g_free(cache_dir);
-  g_free(cache_file);
+  dt_free(cache_dir);
+  dt_free(cache_file);
 }
 
 #ifdef HAVE_GMIC
@@ -775,7 +776,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
           fprintf(stderr, "[lut3d] DOMAIN MIN <> 0.0 is not supported\n");
           dt_control_log(_("DOMAIN MIN <> 0.0 is not supported"));
           dt_pixelpipe_cache_free_align(lclut);
-          free(line);
+          dt_free(line);
           fclose(cube_file);
         }
       }
@@ -786,7 +787,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
           fprintf(stderr, "[lut3d] DOMAIN MAX <> 1.0 is not supported\n");
           dt_control_log(_("DOMAIN MAX <> 1.0 is not supported"));
           dt_pixelpipe_cache_free_align(lclut);
-          free(line);
+          dt_free(line);
           fclose(cube_file);
         }
       }
@@ -794,7 +795,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
       {
         fprintf(stderr, "[lut3d] 1D cube lut is not supported\n");
         dt_control_log(_("[1D cube lut is not supported"));
-        free(line);
+        dt_free(line);
         fclose(cube_file);
         return 0;
       }
@@ -805,7 +806,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
         {
           fprintf(stderr, "[lut3d] error - LUT 3D size %d > 256\n", level);
           dt_control_log(_("error - lut 3D size %d exceeds the maximum supported"), level);
-          free(line);
+          dt_free(line);
           fclose(cube_file);
           return 0;
         }
@@ -816,7 +817,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
         {
           fprintf(stderr, "[lut3d] error - allocating buffer for cube lut\n");
           dt_control_log(_("error - allocating buffer for cube lut"));
-          free(line);
+          dt_free(line);
           fclose(cube_file);
           return 0;
         }
@@ -827,7 +828,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
         {
           fprintf(stderr, "[lut3d] error - cube lut size is not defined\n");
           dt_control_log(_("error - cube lut size is not defined"));
-          free(line);
+          dt_free(line);
           fclose(cube_file);
           return 0;
         }
@@ -838,7 +839,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
           {
             fprintf(stderr, "[lut3d] error - invalid number line %d\n", (int)i/3);
             dt_control_log(_("error - cube lut invalid number line %d"), (int)i/3);
-            free(line);
+            dt_free(line);
             fclose(cube_file);
             return 0;
           }
@@ -856,7 +857,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
     dt_control_log(_("error - cube lut lines number %d is not correct, should be %d"),
                    (int)i/3, (int)buf_size/3);
     dt_pixelpipe_cache_free_align(lclut);
-    free(line);
+    dt_free(line);
     fclose(cube_file);
     return 0;
   }
@@ -866,7 +867,7 @@ uint16_t calculate_clut_cube(const char *const filepath, float **clut)
     dt_control_log(_("warning - cube lut %d out of range values [0,1]"), out_of_range_nb);
   }
   *clut = lclut;
-  free(line);
+  dt_free(line);
   fclose(cube_file);
   return level;
 }
@@ -909,7 +910,7 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
             {
               fprintf(stderr, "[lut3d] error - the maximum shaper lut value %d is too low\n", max_shaper);
               dt_control_log(_("error - the maximum shaper lut value %d is too low"), max_shaper);
-              free(line);
+              dt_free(line);
               fclose(cube_file);
               return 0;
             }
@@ -920,7 +921,7 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
             {
               fprintf(stderr, "[lut3d] error - allocating buffer for cube lut\n");
               dt_control_log(_("error - allocating buffer for cube lut"));
-              free(line);
+              dt_free(line);
               fclose(cube_file);
               return 0;
             }
@@ -933,7 +934,7 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
         {
           fprintf(stderr, "[lut3d] error - cube lut size is not defined\n");
           dt_control_log(_("error - cube lut size is not defined"));
-          free(line);
+          dt_free(line);
           fclose(cube_file);
           return 0;
         }
@@ -962,11 +963,11 @@ uint16_t calculate_clut_3dl(const char *const filepath, float **clut)
     fprintf(stderr, "[lut3d] error - cube lut lines number is not correct\n");
     dt_control_log(_("error - cube lut lines number is not correct"));
     dt_pixelpipe_cache_free_align(lclut);
-    free(line);
+    dt_free(line);
     fclose(cube_file);
     return 0;
   }
-  free(line);
+  dt_free(line);
   fclose(cube_file);
 
   // search bit depth: min 2^x > max_value
@@ -1146,8 +1147,8 @@ void init_global(dt_iop_module_so_t *module)
   // make sure the cache dir exists
   char *cache_dir = g_build_filename(g_get_user_cache_dir(), "gmic", NULL);
   char *cache_gmic_dir = dt_loc_init_generic(cache_dir, NULL, NULL);
-  g_free(cache_dir);
-  g_free(cache_gmic_dir);
+  dt_free(cache_dir);
+  dt_free(cache_gmic_dir);
 #endif // HAVE_GMIC
 }
 
@@ -1158,8 +1159,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_lut3d_trilinear);
   dt_opencl_free_kernel(gd->kernel_lut3d_pyramid);
   dt_opencl_free_kernel(gd->kernel_lut3d_none);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 static int calculate_clut(dt_iop_lut3d_params_t *const p, float **clut)
@@ -1191,9 +1191,9 @@ static int calculate_clut(dt_iop_lut3d_params_t *const p, float **clut)
       {
         level = calculate_clut_3dl(fullpath, clut);
       }
-      g_free(fullpath);
+      dt_free(fullpath);
     }
-    g_free(lutfolder);
+    dt_free(lutfolder);
 #ifdef HAVE_GMIC
   }
 #endif // HAVE_GMIC
@@ -1212,9 +1212,9 @@ static gboolean list_match_string(GtkTreeModel *model, GtkTreePath *path, GtkTre
 
   visible = (g_strrstr(haystack, needle) != NULL);
 
-  g_free(haystack);
-  g_free(needle);
-  g_free(str);
+  dt_free(haystack);
+  dt_free(needle);
+  dt_free(str);
   gtk_list_store_set((GtkListStore *)model, iter, DT_LUT3D_COL_VISIBLE, visible, -1);
   return FALSE;
 }
@@ -1266,10 +1266,10 @@ static gboolean select_lutname_in_list(dt_iop_lut3d_gui_data_t *g, const char *c
        GtkTreePath *path = gtk_tree_model_get_path (model, &iter);
        gtk_tree_view_scroll_to_cell((GtkTreeView *)g->lutname, path, NULL, TRUE, 0.2, 0);
        gtk_tree_path_free(path);
-       g_free(name);
+       dt_free(name);
        return TRUE;
      }
-     g_free(name);
+     dt_free(name);
      valid = gtk_tree_model_iter_next(model, &iter);
     }
     return FALSE;
@@ -1298,7 +1298,7 @@ static void get_selected_lutname(dt_iop_lut3d_gui_data_t *g, char *const lutname
     gchar *name;
     gtk_tree_model_get(model, &iter, DT_LUT3D_COL_NAME, &name, -1);
     g_strlcpy(lutname, name, DT_IOP_LUT3D_MAX_LUTNAME);
-    g_free(name);
+    dt_free(name);
   }
   else lutname[0] = 0;
 }
@@ -1335,10 +1335,10 @@ static void get_compressed_clut(dt_iop_module_t *self, gboolean newlutname)
           select_lutname_in_list(g, p->lutname);
         }
       }
-      g_free(fullpath);
+      dt_free(fullpath);
     }
   }
-  g_free(lutfolder);
+  dt_free(lutfolder);
 }
 
 static void show_hide_controls(dt_iop_module_t *self)
@@ -1460,7 +1460,7 @@ static void lutname_callback(GtkTreeSelection *selection, dt_iop_module_t *self)
       get_compressed_clut(self, TRUE);
       dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
     }
-    g_free(lutname);
+    dt_free(lutname);
   }
 }
 
@@ -1512,7 +1512,7 @@ gboolean check_extension(char *filename)
 #else
   if (!g_strcmp0(fext, ".png") || !g_strcmp0(fext, ".cube") || !g_strcmp0(fext, ".3dl") ) res = TRUE;
 #endif // HAVE_GMIC
-  g_free(fext);
+  dt_free(fext);
   return res;
 }
 
@@ -1546,7 +1546,7 @@ static void update_filepath_combobox(dt_iop_lut3d_gui_data_t *g, char *filepath,
                 : g_strdup(file);
           filepath_set_unix_separator(ofilepath);
           dt_bauhaus_combobox_add(g->filepath, ofilepath);
-          g_free(ofilepath);
+          dt_free(ofilepath);
         }
       }
       dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(g->filepath);
@@ -1559,10 +1559,10 @@ static void update_filepath_combobox(dt_iop_lut3d_gui_data_t *g, char *filepath,
       char *invalidfilepath = g_strconcat(invalid_filepath_prefix, filepath, NULL);
       dt_bauhaus_combobox_add(g->filepath, invalidfilepath);
       dt_bauhaus_combobox_set_from_text(g->filepath, invalidfilepath);
-      g_free(invalidfilepath);
+      dt_free(invalidfilepath);
     }
-    g_free(relativepath);
-    g_free(folder);
+    dt_free(relativepath);
+    dt_free(folder);
   }
 }
 
@@ -1575,7 +1575,7 @@ static void button_clicked(GtkWidget *widget, dt_iop_module_t *self)
   {
     fprintf(stderr, "[lut3d] Lut root folder not defined\n");
     dt_control_log(_("lut root folder not defined"));
-    g_free(lutfolder);
+    dt_free(lutfolder);
     return;
   }
   GtkWidget *win = dt_ui_main_window(darktable.gui->ui);
@@ -1589,7 +1589,7 @@ static void button_clicked(GtkWidget *widget, dt_iop_module_t *self)
     gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(filechooser), lutfolder);
   else
     gtk_file_chooser_select_filename(GTK_FILE_CHOOSER(filechooser), composed);
-  g_free(composed);
+  dt_free(composed);
 
   GtkFileFilter* filter = GTK_FILE_FILTER(gtk_file_filter_new());
   gtk_file_filter_add_pattern(filter, "*.png");
@@ -1629,12 +1629,12 @@ static void button_clicked(GtkWidget *widget, dt_iop_module_t *self)
       fprintf(stderr, "[lut3d] select file outside Lut root folder is not allowed\n");
       dt_control_log(_("select file outside Lut root folder is not allowed"));
     }
-    g_free(filepath);
+    dt_free(filepath);
     gtk_widget_set_sensitive(g->filepath, p->filepath[0]);
     g_strlcpy(p->filepath, dt_bauhaus_combobox_get_text(g->filepath), sizeof(p->filepath));
     dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
   }
-  g_free(lutfolder);
+  dt_free(lutfolder);
   g_object_unref(filechooser);
 }
 
@@ -1672,7 +1672,7 @@ void gui_update(dt_iop_module_t *self)
     gtk_widget_set_sensitive(g->filepath, p->filepath[0]);
     update_filepath_combobox(g, p->filepath, lutfolder);
   }
-  g_free(lutfolder);
+  dt_free(lutfolder);
 
   _show_hide_colorspace(self);
 

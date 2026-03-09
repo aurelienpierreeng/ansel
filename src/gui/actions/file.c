@@ -18,6 +18,7 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "gui/actions/menu.h"
 #include "common/collection.h"
 #include "libs/collect.h"
@@ -225,7 +226,7 @@ void append_file(GtkWidget **menus, GList **lists, const dt_menus_t index)
     // Pass the position of current menuitem in list as custom-data pointer
     gchar *item_label = g_strdup_printf(_("Most recent collection #%i"), i);
     add_sub_sub_menu_entry(menus, parent, lists, item_label, index, GINT_TO_POINTER(i), update_collection_callback, NULL, NULL, NULL, 0, 0);
-    g_free(item_label);
+    dt_free(item_label);
 
     // Call init directly just this once
     GtkWidget *this = get_last_widget(lists);

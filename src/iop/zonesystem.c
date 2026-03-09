@@ -210,8 +210,8 @@ static void process_common_setup(struct dt_iop_module_t *self, dt_dev_pixelpipe_
     if(g->in_preview_buffer == NULL || g->out_preview_buffer == NULL || g->preview_width != width
        || g->preview_height != height)
     {
-      g_free(g->in_preview_buffer);
-      g_free(g->out_preview_buffer);
+      dt_free(g->in_preview_buffer);
+      dt_free(g->out_preview_buffer);
       g->in_preview_buffer = g_malloc_n((size_t)width * height, sizeof(guchar));
       g->out_preview_buffer = g_malloc_n((size_t)width * height, sizeof(guchar));
       g->preview_width = width;
@@ -305,7 +305,7 @@ static void process_common_cleanup(struct dt_iop_module_t *self, dt_dev_pixelpip
       dt_iop_gui_leave_critical_section(self);
     }
 
-    g_free(tmp);
+    dt_free(tmp);
     if(gauss) dt_gaussian_free(gauss);
   }
 }
@@ -411,7 +411,7 @@ static void size_allocate_callback(GtkWidget *widget, GtkAllocation *allocation,
   dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
 
   if(g->image) cairo_surface_destroy(g->image);
-  free(g->image_buffer);
+  dt_free(g->image_buffer);
 
   /* load the dt logo as a background */
   g->image = dt_util_get_logo(MIN(allocation->width, allocation->height) * 0.75);
@@ -486,10 +486,10 @@ void gui_cleanup(struct dt_iop_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_iop_zonesystem_redraw_preview_callback), self);
 
   dt_iop_zonesystem_gui_data_t *g = (dt_iop_zonesystem_gui_data_t *)self->gui_data;
-  g_free(g->in_preview_buffer);
-  g_free(g->out_preview_buffer);
+  dt_free(g->in_preview_buffer);
+  dt_free(g->out_preview_buffer);
   if(g->image) cairo_surface_destroy(g->image);
-  free(g->image_buffer);
+  dt_free(g->image_buffer);
 
   IOP_GUI_FREE;
 }
@@ -782,7 +782,7 @@ static gboolean dt_iop_zonesystem_preview_draw(GtkWidget *widget, cairo_t *crf, 
     cairo_set_source_rgb(cr, .1, .1, .1);
     cairo_stroke(cr);
 
-    g_free(image);
+    dt_free(image);
   }
   else
   {

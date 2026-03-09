@@ -119,9 +119,9 @@ void dt_gui_presets_init()
   gchar *prev = dt_conf_get_string("ui_last/presets_autogen_signature");
   _gui_presets_autogen_enabled = !(prev && !g_strcmp0(prev, sig));
   dt_conf_set_string("ui_last/presets_autogen_signature", sig);
-  g_free(prev);
-  g_free(sig);
-  g_free(lang);
+  dt_free(prev);
+  dt_free(sig);
+  dt_free(lang);
 
   // remove auto generated presets from plugins, not the user included ones.
   if(_gui_presets_autogen_enabled)
@@ -285,7 +285,7 @@ static void _menuitem_delete_preset(GtkMenuItem *menuitem, dt_iop_module_t *modu
   if(writeprotect)
   {
     dt_control_log(_("preset `%s' is write-protected, can't delete!"), name);
-    g_free(name);
+    dt_free(name);
     return;
   }
 
@@ -308,7 +308,7 @@ static void _menuitem_delete_preset(GtkMenuItem *menuitem, dt_iop_module_t *modu
   if(res == GTK_RESPONSE_YES)
     dt_lib_presets_remove(name, module->op, module->version());
 
-  g_free(name);
+  dt_free(name);
 }
 static void _edit_preset_final_callback(dt_gui_presets_edit_dialog_t *g)
 {
@@ -424,7 +424,7 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
 
     // commit all the user input fields
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
-    g_free(query);
+    dt_free(query);
     DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, name, -1, SQLITE_TRANSIENT);
     DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 2, gtk_entry_get_text(g->description), -1, SQLITE_TRANSIENT);
 
@@ -496,7 +496,7 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
       char *filedir = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(filechooser));
       dt_presets_save_to_file(g->old_id, name, filedir);
       dt_control_log(_("preset %s was successfully exported"), name);
-      g_free(filedir);
+      dt_free(filedir);
       dt_conf_set_folder_from_file_chooser("ui_last/export_path", GTK_FILE_CHOOSER(filechooser));
     }
 
@@ -511,10 +511,10 @@ static void _edit_preset_response(GtkDialog *dialog, gint response_id, dt_gui_pr
   }
 
   gtk_widget_destroy(GTK_WIDGET(dialog));
-  g_free(g->original_name);
-  g_free(g->module_name);
-  g_free(g->operation);
-  free(g);
+  dt_free(g->original_name);
+  dt_free(g->module_name);
+  dt_free(g->operation);
+  dt_free(g);
 }
 
 void dt_gui_presets_confirm_and_delete(GtkWidget *parent_dialog, const char *name, const char *module_name, int rowid)
@@ -886,7 +886,7 @@ static void _edit_preset(const char *name_in, dt_iop_module_t *module)
     if(writeprotect)
     {
       dt_control_log(_("preset `%s' is write-protected! can't edit it!"), name);
-      g_free(name);
+      dt_free(name);
       return;
     }
   }
@@ -895,7 +895,7 @@ static void _edit_preset(const char *name_in, dt_iop_module_t *module)
 
   dt_gui_presets_show_iop_edit_dialog(name, module, (GCallback)_edit_preset_final_callback, NULL, TRUE, TRUE,
                                       FALSE, GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
-  g_free(name);
+  dt_free(name);
 }
 
 static void _menuitem_edit_preset(GtkMenuItem *menuitem, dt_iop_module_t *module)
@@ -1101,7 +1101,7 @@ static void _opencl_disable_callback(GtkButton *button, dt_iop_module_t *module)
   gboolean active = gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(button));
   gchar *string = g_strdup_printf("/plugins/%s/opencl", module->op);
   dt_conf_set_bool(string, active);
-  g_free(string);
+  dt_free(string);
 }
 
 static void _cache_disable_callback(GtkButton *button, dt_iop_module_t *module)
@@ -1109,7 +1109,7 @@ static void _cache_disable_callback(GtkButton *button, dt_iop_module_t *module)
   gboolean active = gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(button));
   gchar *string = g_strdup_printf("/plugins/%s/cache", module->op);
   dt_conf_set_bool(string, active);
-  g_free(string);
+  dt_free(string);
 }
 #endif
 
@@ -1199,7 +1199,7 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
     DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, op, -1, SQLITE_TRANSIENT);
   }
-  g_free(query);
+  dt_free(query);
   // collect all presets for op from db
   gboolean found = 0;
   int last_wp = -1;
@@ -1247,7 +1247,7 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
       label = g_strdup(name);
     mi = gtk_menu_item_new_with_label(label);
     dt_gui_add_class(mi, "dt_transparent_background");
-    g_free(label);
+    dt_free(label);
 
     if(module
        && !memcmp(params, op_params, MIN(op_params_size, params_size))
@@ -1310,7 +1310,7 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
         g_object_set_data_full(G_OBJECT(mi), "dt-preset-name", g_strdup(darktable.gui->last_preset), g_free);
         g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(_menuitem_update_preset), module);
         gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
-        g_free(markup);
+        dt_free(markup);
       }
     }
   }
@@ -1335,7 +1335,7 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
     gchar *string = g_strdup_printf("/plugins/%s/opencl", module->op);
 
     gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), dt_conf_get_bool(string));
-    g_free(string);
+    dt_free(string);
 
     g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_opencl_disable_callback), module);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
@@ -1347,7 +1347,7 @@ static void _gui_presets_popup_menu_show_internal(dt_dev_operation_t op, int32_t
     string = g_strdup_printf("/plugins/%s/cache", module->op);
 
     gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), dt_conf_get_bool(string));
-    g_free(string);
+    dt_free(string);
 
     g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(_cache_disable_callback), module);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);

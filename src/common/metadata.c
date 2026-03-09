@@ -32,6 +32,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "common/metadata.h"
 #include "common/debug.h"
 #include "common/collection.h"
@@ -211,7 +212,7 @@ void dt_metadata_init()
       }
       dt_conf_set_int(setting, flag);
     }
-    g_free(setting);
+    dt_free(setting);
   }
 }
 
@@ -300,7 +301,7 @@ static void _bulk_remove_metadata(const int img, const gchar *metadata_list)
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
-    g_free(query);
+    dt_free(query);
   }
 }
 
@@ -313,7 +314,7 @@ static void _bulk_add_metadata(gchar *metadata_list)
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
     sqlite3_step(stmt);
     sqlite3_finalize(stmt);
-    g_free(query);
+    dt_free(query);
   }
 }
 
@@ -325,8 +326,8 @@ static void _pop_undo_execute(const int32_t imgid, GList *before, GList *after)
   _bulk_remove_metadata(imgid, tobe_removed_list);
   _bulk_add_metadata(tobe_added_list);
 
-  g_free(tobe_removed_list);
-  g_free(tobe_added_list);
+  dt_free(tobe_removed_list);
+  dt_free(tobe_added_list);
 }
 
 static void _pop_undo(gpointer user_data, const dt_undo_type_t type, dt_undo_data_t data, const dt_undo_action_t action, GList **imgs)
@@ -367,15 +368,18 @@ GList *dt_metadata_get_list_id(const int id)
 static void _undo_metadata_free(gpointer data)
 {
   dt_undo_metadata_t *metadata = (dt_undo_metadata_t *)data;
-  g_list_free_full(metadata->before, g_free);
-  g_list_free_full(metadata->after, g_free);
-  g_free(metadata);
+  g_list_free_full(metadata->before, dt_free_gpointer);
+  metadata->before = NULL;
+  g_list_free_full(metadata->after, dt_free_gpointer);
+  metadata->after = NULL;
+  dt_free(metadata);
 }
 
 static void _metadata_undo_data_free(gpointer data)
 {
   GList *l = (GList *)data;
   g_list_free_full(l, _undo_metadata_free);
+  l = NULL;
 }
 
 gchar *_cleanup_metadata_value(const gchar *value)
@@ -391,7 +395,7 @@ gchar *_cleanup_metadata_value(const gchar *value)
     while(*c == ' ') c++;
   }
   c = g_strdup(c ? c : ""); // avoid NULL value
-  g_free(v);
+  dt_free(v);
   return c;
 }
 
@@ -556,7 +560,7 @@ static void _metadata_add_metadata_to_list(GList **list, const GList *metadata)
     if(same_key && different_value)
     {
       // same key but different value - replace the old value by the new one
-      g_free(same2->data);
+      dt_free(same2->data);
       same2->data = g_strdup(m2->data);
     }
     else if(!same_key)
@@ -581,11 +585,13 @@ static void _metadata_remove_metadata_from_list(GList **list, const GList *metad
       // same key for that image - remove metadata item
       GList *same2 = g_list_next(same_key);
       *list = g_list_remove_link(*list, same_key);
-      g_free(same_key->data);
+      dt_free(same_key->data);
       g_list_free(same_key);
+      same_key = NULL;
       *list = g_list_remove_link(*list, same2);
-      g_free(same2->data);
+      dt_free(same2->data);
       g_list_free(same2);
+      same2 = NULL;
     }
   }
 }
@@ -659,8 +665,10 @@ void dt_metadata_set(const int32_t imgid, const char *key, const char *value, co
 
       _metadata_execute(imgs, metadata, &undo, undo_on, DT_MA_ADD);
 
-      g_list_free_full(metadata, g_free);
+      g_list_free_full(metadata, dt_free_gpointer);
+      metadata = NULL;
       g_list_free(imgs);
+      imgs = NULL;
       if(undo_on)
       {
         dt_undo_record(darktable.undo, NULL, DT_UNDO_METADATA, undo, _pop_undo, _metadata_undo_data_free);
@@ -685,7 +693,7 @@ void dt_metadata_set_import(const int32_t imgid, const char *key, const char *va
       const gchar *name = dt_metadata_get_name(keyid);
       char *setting = g_strdup_printf("plugins/lighttable/metadata/%s_flag", name);
       imported = dt_conf_get_int(setting) & DT_METADATA_FLAG_IMPORTED;
-      g_free(setting);
+      dt_free(setting);
     }
     if(imported)
     {
@@ -703,8 +711,10 @@ void dt_metadata_set_import(const int32_t imgid, const char *key, const char *va
 
         _metadata_execute(imgs, metadata, &undo, FALSE, DT_MA_ADD);
 
-        g_list_free_full(metadata, g_free);
+        g_list_free_full(metadata, dt_free_gpointer);
+        metadata = NULL;
         g_list_free(imgs);
+        imgs = NULL;
       }
     }
   }
@@ -750,7 +760,8 @@ void dt_metadata_set_list(const GList *imgs, GList *key_value, const gboolean un
       dt_undo_end_group(darktable.undo);
     }
 
-    g_list_free_full(metadata, g_free);
+    g_list_free_full(metadata, dt_free_gpointer);
+    metadata = NULL;
   }
 }
 
@@ -765,7 +776,7 @@ void dt_metadata_clear(const GList *imgs, const gboolean undo_on)
       const gchar *name = dt_metadata_get_name(i);
       char *setting = g_strdup_printf("plugins/lighttable/metadata/%s_flag", name);
       const gboolean hidden = dt_conf_get_int(setting) & DT_METADATA_FLAG_HIDDEN;
-      g_free(setting);
+      dt_free(setting);
       if(!hidden)
       {
         // caution: metadata is a simple list here
@@ -788,7 +799,8 @@ void dt_metadata_clear(const GList *imgs, const gboolean undo_on)
       dt_undo_end_group(darktable.undo);
     }
 
-    g_list_free_full(metadata, g_free);
+    g_list_free_full(metadata, dt_free_gpointer);
+    metadata = NULL;
   }
 }
 
@@ -824,7 +836,7 @@ int dt_metadata_already_imported(const char *filename, const char *datetime)
   if(sqlite3_step(stmt) == SQLITE_ROW && sqlite3_column_int(stmt, 0) > -1)
     imgid = sqlite3_column_int(stmt, 0);
   sqlite3_finalize(stmt);
-  g_free(id);
+  dt_free(id);
   return imgid;
 }
 

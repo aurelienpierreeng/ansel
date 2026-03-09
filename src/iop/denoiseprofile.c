@@ -55,6 +55,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -2216,7 +2217,7 @@ static int process_wavelets_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
     size_t region[] = { width, height, 1 };
     err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, region);
     if(err != CL_SUCCESS) goto error;
-    free(dev_detail);
+    dt_free(dev_detail);
     return TRUE;
   }
 
@@ -2629,7 +2630,7 @@ static int process_wavelets_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_io
   dt_opencl_release_mem_object(dev_filter);
   for(int k = 0; k < max_scale; k++)
     dt_opencl_release_mem_object(dev_detail[k]);
-  free(dev_detail);
+  dt_free(dev_detail);
   dt_pixelpipe_cache_free_align(sumsum);
   return TRUE;
 
@@ -2640,7 +2641,7 @@ error:
   dt_opencl_release_mem_object(dev_filter);
   for(int k = 0; k < max_scale; k++)
     dt_opencl_release_mem_object(dev_detail[k]);
-  free(dev_detail);
+  dt_free(dev_detail);
   dt_pixelpipe_cache_free_align(sumsum);
   dt_print(DT_DEBUG_OPENCL, "[opencl_denoiseprofile] couldn't enqueue kernel! %d, devid %d\n", err, devid);
   return FALSE;
@@ -2742,7 +2743,11 @@ void reload_defaults(dt_iop_module_t *module)
 
     // get matching profiles:
     char name[512];
-    if(g->profiles) g_list_free_full(g->profiles, dt_noiseprofile_free);
+    if(g->profiles)
+    {
+      g_list_free_full(g->profiles, dt_noiseprofile_free);
+      g->profiles = NULL;
+    }
     g->profiles = dt_noiseprofile_get_matching(&module->dev->image_storage);
     g->interpolated = dt_noiseprofile_generic; // default to generic poissonian
     g_strlcpy(name, _(g->interpolated.name), sizeof(name));
@@ -2846,8 +2851,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_denoiseprofile_synthesize);
   dt_opencl_free_kernel(gd->kernel_denoiseprofile_reduce_first);
   dt_opencl_free_kernel(gd->kernel_denoiseprofile_reduce_second);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 static dt_noiseprofile_t dt_iop_denoiseprofile_get_auto_profile(dt_iop_module_t *self)
@@ -2874,6 +2878,7 @@ static dt_noiseprofile_t dt_iop_denoiseprofile_get_auto_profile(dt_iop_module_t 
     last = current;
   }
   g_list_free_full(profiles, dt_noiseprofile_free);
+  profiles = NULL;
   return interpolated;
 }
 
@@ -3241,7 +3246,7 @@ static gboolean denoiseprofile_draw_variance(GtkWidget *widget, cairo_t *crf, gp
     ++darktable.gui->reset;
     gtk_label_set_text(c->label_var_R, str);
     --darktable.gui->reset;
-    g_free(str);
+    dt_free(str);
   }
   if(!isnan(c->variance_G))
   {
@@ -3249,7 +3254,7 @@ static gboolean denoiseprofile_draw_variance(GtkWidget *widget, cairo_t *crf, gp
     ++darktable.gui->reset;
     gtk_label_set_text(c->label_var_G, str);
     --darktable.gui->reset;
-    g_free(str);
+    dt_free(str);
   }
   if(!isnan(c->variance_B))
   {
@@ -3257,7 +3262,7 @@ static gboolean denoiseprofile_draw_variance(GtkWidget *widget, cairo_t *crf, gp
     ++darktable.gui->reset;
     gtk_label_set_text(c->label_var_B, str);
     --darktable.gui->reset;
-    g_free(str);
+    dt_free(str);
   }
   return FALSE;
 }
@@ -3794,6 +3799,7 @@ void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_denoiseprofile_gui_data_t *g = (dt_iop_denoiseprofile_gui_data_t *)self->gui_data;
   g_list_free_full(g->profiles, dt_noiseprofile_free);
+  g->profiles = NULL;
   dt_draw_curve_destroy(g->transition_curve);
   // nothing else necessary, gtk will clean up the slider.
 

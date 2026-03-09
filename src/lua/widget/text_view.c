@@ -20,6 +20,7 @@
    You should have received a copy of the GNU General Public License
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include "common/darktable.h"
 #include "gui/gtk.h"
 #include "lua/types.h"
 #include "lua/widget/common.h"
@@ -67,7 +68,7 @@ static int text_member(lua_State *L)
   }
   gchar *text = gtk_text_buffer_get_all_text(textbuffer);
   lua_pushstring(L, text);
-  g_free(text);
+  dt_free(text);
   return 1;
 }
 
@@ -91,9 +92,9 @@ static int tostring_member(lua_State *L)
   GtkTextBuffer * textbuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(widget->widget));
   gchar *text = gtk_text_buffer_get_all_text(textbuffer);
   gchar *res = g_strdup_printf("%s (\"%s\")", G_OBJECT_TYPE_NAME(widget->widget), text ? text : "");
-  g_free(text);
+  dt_free(text);
   lua_pushstring(L, res);
-  g_free(res);
+  dt_free(res);
   return 1;
 }
 

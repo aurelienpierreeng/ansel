@@ -106,7 +106,7 @@ dt_dlopencl_t *dt_dlopencl_init(const char *name)
 
     if(ocl == NULL)
     {
-      free(module);
+      dt_free(module);
       return NULL;
     }
 
@@ -114,8 +114,8 @@ dt_dlopencl_t *dt_dlopencl_init(const char *name)
 
     if(ocl->symbols == NULL)
     {
-      free(ocl);
-      free(module);
+      dt_free(ocl);
+      dt_free(module);
       return NULL;
     }
 
@@ -224,12 +224,12 @@ dt_dlopencl_t *dt_dlopencl_init(const char *name)
       dt_print(DT_DEBUG_OPENCL, "[opencl_init] could not load all required symbols from library\n");
   }
 
-  free(module);
+  dt_free(module);
 
   if(!success)
   {
-    free(ocl->symbols);
-    free(ocl);
+    dt_free(ocl->symbols);
+    dt_free(ocl);
     return NULL;
   }
 

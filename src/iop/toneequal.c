@@ -1576,8 +1576,7 @@ void init_global(dt_iop_module_so_t *module)
 
 void cleanup_global(dt_iop_module_so_t *module)
 {
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 

@@ -1377,7 +1377,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
 
 cleanup:
   dt_pixelpipe_cache_free_align(thread_buffers);
-  if(buffer1) free(buffer1);
+  dt_free(buffer1);
   dt_pixelpipe_cache_free_align(RawDataTmp);
   dt_pixelpipe_cache_free_align(Gtmp);
   dt_pixelpipe_cache_free_align(redfactor);

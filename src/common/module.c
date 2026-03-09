@@ -21,6 +21,7 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "common/darktable.h"
 #include <stdlib.h>
 #include <string.h>
 #include <gmodule.h>
@@ -75,17 +76,17 @@ GList *dt_module_load_modules(const char *subdir, size_t module_size,
       // fprintf(stdout, "%s does NOT exist\n", pref_line);
     }
 
-    g_free(pref_line);
+    dt_free(pref_line);
 
     if(load) res = load_module_so(module, libname, plugin_name);
     // if(res) fprintf(stdout, "Plugin %s/%s NOT loaded\n", subdir, plugin_name);
 
-    g_free(plugin_name);
-    g_free(libname);
+    dt_free(plugin_name);
+    dt_free(libname);
 
     if(res)
     {
-      free(module);
+      dt_free(module);
       continue;
     }
 

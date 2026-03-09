@@ -58,6 +58,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -500,8 +501,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_iop_colorin_global_data_t *gd = (dt_iop_colorin_global_data_t *)module->data;
   dt_opencl_free_kernel(gd->kernel_colorin_unbound);
   dt_opencl_free_kernel(gd->kernel_colorin_clipping);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 #if 0
@@ -1556,7 +1556,7 @@ static void update_profile_list(dt_iop_module_t *self)
   if(!g) return;
 
   // clear and refill the image profile list
-  g_list_free_full(g->image_profiles, free);
+  g_list_free_full(g->image_profiles, dt_free_gpointer);
   g->image_profiles = NULL;
   g->n_image_profiles = 0;
 
@@ -1695,9 +1695,9 @@ void gui_init(struct dt_iop_module_t *self)
     char *user_profile_dir = g_build_filename(confdir, "color", "in", NULL);
     char *tooltip = g_strdup_printf(_("ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
     gtk_widget_set_tooltip_text(g->profile_combobox, tooltip);
-    g_free(system_profile_dir);
-    g_free(user_profile_dir);
-    g_free(tooltip);
+    dt_free(system_profile_dir);
+    dt_free(user_profile_dir);
+    dt_free(tooltip);
   }
 
   dt_bauhaus_combobox_set(g->work_combobox, 0);
@@ -1706,9 +1706,9 @@ void gui_init(struct dt_iop_module_t *self)
     char *user_profile_dir = g_build_filename(confdir, "color", "out", NULL);
     char *tooltip = g_strdup_printf(_("ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
     gtk_widget_set_tooltip_text(g->work_combobox, tooltip);
-    g_free(system_profile_dir);
-    g_free(user_profile_dir);
-    g_free(tooltip);
+    dt_free(system_profile_dir);
+    dt_free(user_profile_dir);
+    dt_free(tooltip);
   }
 
   g_signal_connect(G_OBJECT(g->profile_combobox), "value-changed", G_CALLBACK(profile_changed), (gpointer)self);
@@ -1723,7 +1723,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
   dt_iop_colorin_gui_data_t *g = (dt_iop_colorin_gui_data_t *)self->gui_data;
   while(g->image_profiles)
   {
-    g_free(g->image_profiles->data);
+    dt_free(g->image_profiles->data);
     g->image_profiles = g_list_delete_link(g->image_profiles, g->image_profiles);
   }
 

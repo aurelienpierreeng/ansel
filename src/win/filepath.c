@@ -24,6 +24,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "dtwin.h"
 
 GList* win_image_find_duplicates(const char* filename)
@@ -51,7 +52,7 @@ GList* win_image_find_duplicates(const char* filename)
     wchar_t *wpattern = g_utf8_to_utf16(pattern, -1, NULL, NULL, NULL);
     WIN32_FIND_DATAW data;
     HANDLE handle = FindFirstFileW(wpattern, &data);
-    g_free(wpattern);
+    dt_free(wpattern);
     gchar *imgfile_without_path=g_strndup(c3,c2-c3); /*Need to remove path from front of filename*/
     if(handle != INVALID_HANDLE_VALUE)
     {
@@ -77,19 +78,19 @@ GList* win_image_find_duplicates(const char* filename)
         if(valid_xmp_name)
             files = g_list_append(files, g_build_filename(imgpath, file, NULL));
 
-        g_free(short_file_name);
-        g_free(file);
+        dt_free(short_file_name);
+        dt_free(file);
       }
       while(FindNextFileW(handle, &data));
 
     }
 
-    g_free(imgfile_without_path);
+    dt_free(imgfile_without_path);
     FindClose(handle);
     glob_pattern++;
   }
 
-  g_free(imgpath);
+  dt_free(imgpath);
   return files;
 }
 

@@ -69,6 +69,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "common/collection.h"
 #include "common/debug.h"
 #include "common/colorlabels.h"
@@ -122,7 +123,7 @@ dt_collection_t *dt_collection_new()
 
 void dt_collection_free(const dt_collection_t *collection)
 {
-  g_free(collection->query);
+  dt_free(collection->query);
   g_strfreev(collection->where_ext);
   if(_collection_count_stmt)
   {
@@ -149,7 +150,7 @@ void dt_collection_free(const dt_collection_t *collection)
     sqlite3_finalize(_collection_image_offset_stmt);
     _collection_image_offset_stmt = NULL;
   }
-  g_free((dt_collection_t *)collection);
+  dt_free(collection);
 }
 
 const dt_collection_params_t *dt_collection_params(const dt_collection_t *collection)
@@ -231,8 +232,8 @@ void dt_collection_memory_update()
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 
-  g_free(query);
-  g_free(ins_query);
+  dt_free(query);
+  dt_free(ins_query);
 
   // Handle culling mode across re-queryings : re-restrict collection to selection
   if(darktable.gui && darktable.gui->culling_mode)
@@ -418,7 +419,7 @@ int dt_collection_update(const dt_collection_t *collection)
     if((collection->params.query_flags & COLLECTION_QUERY_USE_WHERE_EXT))
       wq = dt_util_dstrcat(wq, " %s %s", and_operator(&and_term), where_ext);
 
-    g_free(rejected_check);
+    dt_free(rejected_check);
   }
   else
   {
@@ -427,7 +428,7 @@ int dt_collection_update(const dt_collection_t *collection)
     wq = g_strdup(" id=0");
   }
 
-  g_free(where_ext);
+  dt_free(where_ext);
 
   /* build select part includes where */
   /* only COLOR */
@@ -517,11 +518,11 @@ int dt_collection_update(const dt_collection_t *collection)
   result = _dt_collection_store(collection, query);
 
   /* free memory used */
-  g_free(sq);
-  g_free(wq);
-  g_free(selq_pre);
-  g_free(selq_post);
-  g_free(query);
+  dt_free(sq);
+  dt_free(wq);
+  dt_free(selq_pre);
+  dt_free(selq_post);
+  dt_free(query);
 
   return result;
 }
@@ -540,7 +541,7 @@ void dt_collection_reset(const dt_collection_t *collection)
   int flags = dt_conf_get_int("plugins/collection/filter_flags");
   params->filter_flags = (flags < 0) ? ~0 : flags;
 
-  g_free(params->text_filter);
+  dt_free(params->text_filter);
   params->text_filter = dt_conf_get_string("plugins/collection/text_filter");
   params->sort = dt_conf_get_int("plugins/collection/sort");
   params->descending = dt_conf_get_bool("plugins/collection/descending");
@@ -574,7 +575,7 @@ char *dt_collection_get_text_filter(const dt_collection_t *collection)
 void dt_collection_set_text_filter(const dt_collection_t *collection, char *text_filter)
 {
   dt_collection_params_t *params = (dt_collection_params_t *)&collection->params;
-  g_free(params->text_filter);
+  dt_free(params->text_filter);
   params->text_filter = text_filter;
 }
 
@@ -613,7 +614,7 @@ gchar *dt_collection_get_extended_where(const dt_collection_t *collection, int e
     complete_string = g_strjoinv(complete_string, ((dt_collection_t *)collection)->where_ext);
 
   gchar *where_ext = g_strdup_printf("(1=1%s)", complete_string);
-  g_free(complete_string);
+  dt_free(complete_string);
 
   return where_ext;
 }
@@ -694,7 +695,7 @@ const char *dt_collection_name(dt_collection_properties_t prop)
           const char *name = (gchar *)dt_metadata_get_name_by_display_order(i);
           char *setting = g_strdup_printf("plugins/lighttable/metadata/%s_flag", name);
           const gboolean hidden = dt_conf_get_int(setting) & DT_METADATA_FLAG_HIDDEN;
-          free(setting);
+          dt_free(setting);
           if(!hidden) col_name = _(name);
         }
       }
@@ -806,7 +807,7 @@ static int _dt_collection_store(const dt_collection_t *collection, gchar *query)
   }
 
   /* store query in context */
-  g_free(collection->query);
+  dt_free(collection->query);
 
   ((dt_collection_t *)collection)->query = g_strdup(query);
 
@@ -955,8 +956,7 @@ void dt_collection_split_operator_number(const gchar *input, char **number1, cha
 
     if(*operator && strcmp(*operator, "") == 0)
     {
-      g_free(*operator);
-      *operator= NULL;
+      dt_free(*operator);
     }
   }
 
@@ -1009,8 +1009,8 @@ void dt_collection_split_operator_datetime(const gchar *input, char **number1, c
     *number2 = _dt_collection_compute_datetime("<=", txt2);
     *operator= g_strdup("[]");
 
-    g_free(txt);
-    g_free(txt2);
+    dt_free(txt);
+    dt_free(txt2);
     g_match_info_free(match_info);
     g_regex_unref(regex);
     return;
@@ -1038,7 +1038,7 @@ void dt_collection_split_operator_datetime(const gchar *input, char **number1, c
     else
       *number1 = _dt_collection_compute_datetime(*operator, txt);
 
-    g_free(txt);
+    dt_free(txt);
   }
 
   // ensure operator is not null
@@ -1102,8 +1102,7 @@ void dt_collection_split_operator_exposure(const gchar *input, char **number1, c
 
     if(*operator && strcmp(*operator, "") == 0)
     {
-      g_free(*operator);
-      *operator= NULL;
+      dt_free(*operator);
     }
   }
 
@@ -1163,10 +1162,10 @@ void dt_collection_get_makermodels(const gchar *filter, GList **sanitized, GList
         g_hash_table_add(names, key);
       }
     }
-    g_free(haystack);
-    g_free(makermodel);
+    dt_free(haystack);
+    dt_free(makermodel);
   }
-  g_free(needle);
+  dt_free(needle);
 
   if(sanitized)
   {
@@ -1342,11 +1341,13 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
         char *clause = sqlite3_mprintf(" OR (maker = '%q' AND model = '%q')", tuple->data, tuple->next->data);
         query = dt_util_dstrcat(query, "%s", clause);
         sqlite3_free(clause);
-        g_free(tuple->data);
-        g_free(tuple->next->data);
+        dt_free(tuple->data);
+        dt_free(tuple->next->data);
         g_list_free(tuple);
+        tuple = NULL;
       }
       g_list_free(lists);
+      lists = NULL;
       query = dt_util_dstrcat(query, ")");
       break;
 
@@ -1420,9 +1421,9 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
       else
         query = g_strdup_printf("(focal_length LIKE '%%%s%%')", escaped_text);
 
-      g_free(operator);
-      g_free(number1);
-      g_free(number2);
+      dt_free(operator);
+      dt_free(number1);
+      dt_free(number2);
     }
     break;
 
@@ -1443,9 +1444,9 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
       else
         query = g_strdup_printf("(iso LIKE '%%%s%%')", escaped_text);
 
-      g_free(operator);
-      g_free(number1);
-      g_free(number2);
+      dt_free(operator);
+      dt_free(number1);
+      dt_free(number2);
     }
     break;
 
@@ -1469,9 +1470,9 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
       else
         query = g_strdup_printf("(ROUND(aperture,1) LIKE '%%%s%%')", escaped_text);
 
-      g_free(operator);
-      g_free(number1);
-      g_free(number2);
+      dt_free(operator);
+      dt_free(number1);
+      dt_free(number2);
     }
     break;
 
@@ -1499,9 +1500,9 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
       else
         query = g_strdup_printf("(exposure LIKE '%%%s%%')", escaped_text);
 
-      g_free(operator);
-      g_free(number1);
-      g_free(number2);
+      dt_free(operator);
+      dt_free(number1);
+      dt_free(number2);
     }
     break;
 
@@ -1513,13 +1514,14 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
       {
         char *name = (char*)l->data;	// remember the original content of this list node
         l->data = g_strdup_printf("(filename LIKE '%%%s%%')", name);
-        g_free(name);			// free the original filename
+        dt_free(name);			// free the original filename
       }
 
       char *subquery = dt_util_glist_to_str(" OR ", list);
       query = g_strdup_printf("(%s)", subquery);
-      g_free(subquery);
-      g_list_free_full(list, g_free);	// free the SQL clauses as well as the list
+      dt_free(subquery);
+      g_list_free_full(list, dt_free_gpointer);	// free the SQL clauses as well as the list
+      list = NULL;
 
       break;
     }
@@ -1563,9 +1565,9 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
       else
         query = g_strdup("1 = 1");
 
-      g_free(operator);
-      g_free(number1);
-      g_free(number2);
+      dt_free(operator);
+      dt_free(number1);
+      dt_free(number2);
       break;
     }
 
@@ -1666,9 +1668,9 @@ static gchar *get_query_string(const dt_collection_properties_t property, const 
           }
         }
 
-        g_free(operator);
-        g_free(number1);
-        g_free(number2);
+        dt_free(operator);
+        dt_free(number1);
+        dt_free(number2);
       }
       break;
 
@@ -1888,7 +1890,7 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
       next = sqlite3_column_int(stmt2, 0);
     }
     sqlite3_finalize(stmt2);
-    g_free(query);
+    dt_free(query);
     // 3. if next is still unvalid, let's try to find the first untouched image BEFORE the list
     if(next < 0)
     {
@@ -1909,9 +1911,9 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
         next = sqlite3_column_int(stmt2, 0);
       }
       sqlite3_finalize(stmt2);
-      g_free(query);
+      dt_free(query);
     }
-    g_free(txt);
+    dt_free(txt);
   }
 
   char confname[200];
@@ -1945,9 +1947,9 @@ void dt_collection_update_query(const dt_collection_t *collection, dt_collection
 
       query_parts[i] =  g_strdup_printf(" %s %s", conj[mode], query);
 
-      g_free(query);
+      dt_free(query);
     }
-    g_free(text);
+    dt_free(text);
   }
 
   /* set the extended where and the use of it in the query */
@@ -2017,7 +2019,7 @@ void dt_culling_mode_to_selection()
 gboolean dt_collection_hint_message_internal(void *message)
 {
   dt_control_hinter_message(darktable.control, message);
-  g_free(message);
+  dt_free(message);
   return FALSE;
 }
 
@@ -2042,6 +2044,7 @@ void dt_collection_hint_message(const dt_collection_t *collection)
       selected++;
     }
     g_list_free(selected_imgids);
+    selected_imgids = NULL;
     message = g_strdup_printf(_("%d image of %d (#%d) in current collection is selected"), cs, c, selected);
   }
   else

@@ -17,6 +17,7 @@
 */
 
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 
@@ -361,8 +362,7 @@ void dt_drawlayer_widgets_cleanup(dt_drawlayer_widgets_t **widgets)
   if(!widgets || !*widgets) return;
   _clear_color_picker_surface(*widgets);
   _clear_profile_surface(*widgets);
-  g_free(*widgets);
-  *widgets = NULL;
+  dt_free(*widgets);
 }
 
 /** @brief Set current color and synchronize picker internals. */
@@ -812,8 +812,8 @@ gboolean dt_drawlayer_widgets_draw_brush_profiles(dt_drawlayer_widgets_t *widget
                (size_t)cell_w_px * 4);
       }
     }
-    g_free(rgba_scratch);
-    g_free(cell);
+    dt_free(rgba_scratch);
+    dt_free(cell);
 
     cairo_surface_mark_dirty(widgets->profile_surface);
     widgets->profile_surface_dirty = FALSE;

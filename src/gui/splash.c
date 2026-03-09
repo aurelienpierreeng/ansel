@@ -216,9 +216,9 @@ static void _splash_slide_free(gpointer data)
 {
   dt_splash_slide_t *slide = (dt_splash_slide_t *)data;
   if(!slide) return;
-  g_free(slide->path);
-  g_free(slide->author);
-  g_free(slide);
+  dt_free(slide->path);
+  dt_free(slide->author);
+  dt_free(slide);
 }
 
 static gboolean _splash_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
@@ -317,7 +317,7 @@ static gboolean _splash_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data)
     cairo_restore(cr);
 
     g_object_unref(layout);
-    g_free(label);
+    dt_free(label);
   }
 
   return FALSE;
@@ -352,9 +352,9 @@ static void _splash_load_authors(void)
       g_ptr_array_add(splash->authors, g_strdup(trim));
     }
     g_strfreev(lines);
-    g_free(content);
+    dt_free(content);
   }
-  g_free(path);
+  dt_free(path);
 
   if(splash->authors->len == 0)
   {
@@ -389,14 +389,14 @@ static void _splash_load_slides(void)
 
         if(g_file_test(path, G_FILE_TEST_EXISTS))
           g_ptr_array_add(splash->slides, _splash_slide_new(path, author));
-        g_free(path);
+        dt_free(path);
       }
       g_strfreev(parts);
     }
     g_strfreev(lines);
-    g_free(content);
+    dt_free(content);
   }
-  g_free(list_path);
+  dt_free(list_path);
 }
 
 static void _splash_update_message(const gchar *message)
@@ -570,7 +570,7 @@ void dt_gui_splash_init(void)
 
   gchar *app_name = _splash_capitalize_name(PACKAGE_NAME);
   GtkWidget *title_fixed = _splash_shadow_label_new(app_name, "splash-title", "splash-title-shadow", NULL);
-  g_free(app_name);
+  dt_free(app_name);
   gtk_box_pack_start(GTK_BOX(title_box), title_fixed, FALSE, FALSE, 0);
 
   GtkWidget *version_fixed = _splash_shadow_label_new(darktable_package_string, "splash-version",
@@ -579,7 +579,7 @@ void dt_gui_splash_init(void)
 
   gchar *authors_line = _splash_build_author_list(5);
   GtkWidget *authors_fixed = _splash_shadow_label_new(authors_line, "splash-authors", "splash-authors-shadow", NULL);
-  g_free(authors_line);
+  dt_free(authors_line);
   gtk_box_pack_start(GTK_BOX(title_box), authors_fixed, FALSE, FALSE, 0);
 
   GtkWidget *ticker_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
@@ -689,7 +689,7 @@ void dt_gui_splash_updatef(const char *format, ...)
   gchar *buf = g_strdup_vprintf(format, ap);
   va_end(ap);
   _splash_update_message(buf);
-  g_free(buf);
+  dt_free(buf);
 }
 
 void dt_gui_splash_close(void)
@@ -706,11 +706,10 @@ void dt_gui_splash_close(void)
 
   g_ptr_array_free(splash->authors, TRUE);
   g_ptr_array_free(splash->slides, TRUE);
-  g_free(splash->logo_path);
+  dt_free(splash->logo_path);
   _splash_clear_slide_cache();
 
-  free(splash);
-  splash = NULL;
+  dt_free(splash);
 }
 
 // clang-format off

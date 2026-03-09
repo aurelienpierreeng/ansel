@@ -521,7 +521,7 @@ static int process_vng_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
   dt_opencl_release_mem_object(dev_lookup);
   dev_lookup = NULL;
 
-  free(lookup);
+  dt_free(lookup);
 
   dt_opencl_release_mem_object(dev_code);
   dev_code = NULL;
@@ -532,8 +532,7 @@ static int process_vng_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *
   dt_opencl_release_mem_object(dev_green_eq);
   dev_green_eq = NULL;
 
-  free(ips);
-  ips = NULL;
+  dt_free(ips);
 
   // color smoothing
   if((data->color_smoothing) && smooth)
@@ -549,11 +548,11 @@ error:
   dt_opencl_release_mem_object(dev_tmp);
   dt_opencl_release_mem_object(dev_xtrans);
   dt_opencl_release_mem_object(dev_lookup);
-  free(lookup);
+  dt_free(lookup);
   dt_opencl_release_mem_object(dev_code);
   dt_opencl_release_mem_object(dev_ips);
   dt_opencl_release_mem_object(dev_green_eq);
-  free(ips);
+  dt_free(ips);
   dt_print(DT_DEBUG_OPENCL, "[opencl_demosaic] couldn't enqueue kernel! %d\n", err);
   return FALSE;
 }

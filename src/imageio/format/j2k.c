@@ -397,7 +397,7 @@ int write_image(dt_imageio_module_data_t *j2k_tmp, const char *filename, const v
     if(!image)
     {
       fprintf(stderr, "Error: opj_image_create() failed\n");
-      free(rates);
+      dt_free(rates);
       rc = 0;
       goto exit;
     }
@@ -433,7 +433,7 @@ int write_image(dt_imageio_module_data_t *j2k_tmp, const char *filename, const v
 //      default:
 //        fprintf(stderr, "Error: this shouldn't happen, there is no bit depth of %d for jpeg 2000 images.\n",
 //                prec);
-//        free(rates);
+//        g_free(rates);
 //        opj_image_destroy(image);
 //        return 1;
     }
@@ -447,7 +447,7 @@ int write_image(dt_imageio_module_data_t *j2k_tmp, const char *filename, const v
   if(parameters.cp_cinema)
   {
     cinema_setup_encoder(&parameters, image, rates);
-    free(rates);
+    dt_free(rates);
   }
 
   /* encode the destination image */
@@ -527,9 +527,9 @@ int write_image(dt_imageio_module_data_t *j2k_tmp, const char *filename, const v
 
 exit:
   /* free user parameters structure */
-  g_free(parameters.cp_comment);
-  free(parameters.cp_matrice);
-  free(parameters.mct_data);
+  dt_free(parameters.cp_comment);
+  dt_free(parameters.cp_matrice);
+  dt_free(parameters.mct_data);
 
   return ((rc == 1) ? 0 : 1);
 }
@@ -587,7 +587,7 @@ void *get_params(dt_imageio_module_format_t *self)
 
 void free_params(dt_imageio_module_format_t *self, dt_imageio_module_data_t *params)
 {
-  free(params);
+  dt_free(params);
 }
 
 int set_params(dt_imageio_module_format_t *self, const void *params, const int size)
@@ -695,7 +695,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
 void gui_cleanup(dt_imageio_module_format_t *self)
 {
-  free(self->gui_data);
+  dt_free(self->gui_data);
 }
 
 void gui_reset(dt_imageio_module_format_t *self)

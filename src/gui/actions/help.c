@@ -16,6 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "gui/actions/menu.h"
 #include "common/l10n.h"
 #include "control/control.h"
@@ -32,14 +33,14 @@ static gboolean show_about_dialog(GtkAccelGroup *group, GObject *acceleratable, 
   gtk_about_dialog_set_version(GTK_ABOUT_DIALOG(dialog), darktable_package_version);
   char *copyright = g_strdup_printf(_("Copyright \302\251 darktable authors 2009-2022\nCopyright \302\251 Aur\303\251lien Pierre 2022-%s"), darktable_last_commit_year);
   gtk_about_dialog_set_copyright(GTK_ABOUT_DIALOG(dialog), copyright);
-  g_free(copyright);
+  dt_free(copyright);
   gtk_about_dialog_set_comments(GTK_ABOUT_DIALOG(dialog),
                                 _("Organize and develop images from digital cameras"));
   gtk_about_dialog_set_website(GTK_ABOUT_DIALOG(dialog), "https://ansel.photos");
   gtk_about_dialog_set_website_label(GTK_ABOUT_DIALOG(dialog), _("Website"));
   char *icon = g_strdup("ansel");
   gtk_about_dialog_set_logo_icon_name(GTK_ABOUT_DIALOG(dialog), icon);
-  g_free(icon);
+  dt_free(icon);
 
   const char *str = _("all those of you that made previous releases possible");
 

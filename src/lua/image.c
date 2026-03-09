@@ -313,7 +313,8 @@ static int metadata_member(lua_State *L)
     else
       lua_pushstring(L, "");
     releasereadimage(L, my_image);
-    g_list_free_full(res, g_free);
+    g_list_free_full(res, dt_free_gpointer);
+    res = NULL;
     return 1;
   }
   else

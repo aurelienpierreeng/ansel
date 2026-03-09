@@ -57,6 +57,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "bauhaus/bauhaus.h"
 #include "common/calculator.h"
 #include "common/math.h"
@@ -475,10 +476,10 @@ static dt_bauhaus_combobox_entry_t *new_combobox_entry(const char *label, dt_bau
 static void free_combobox_entry(gpointer data)
 {
   dt_bauhaus_combobox_entry_t *entry = (dt_bauhaus_combobox_entry_t *)data;
-  g_free(entry->label);
+  dt_free(entry->label);
   if(entry->free_func)
     entry->free_func(entry->data);
-  free(entry);
+  dt_free(entry);
 }
 
 static GdkRGBA *default_color_assign()
@@ -873,13 +874,13 @@ static void _widget_finalize(GObject *widget)
   {
     dt_bauhaus_slider_data_t *d = &w->data.slider;
     if(d->timeout_handle) g_source_remove(d->timeout_handle);
-    free(d->grad_pos);
+    dt_free(d->grad_pos);
   }
   else
   {
     dt_bauhaus_combobox_data_t *d = &w->data.combobox;
     g_ptr_array_free(d->entries, TRUE);
-    free(d->text);
+    dt_free(d->text);
   }
   gtk_border_free(w->margin);
   gtk_border_free(w->padding);
@@ -1042,56 +1043,56 @@ dt_bauhaus_t * dt_bauhaus_init()
   gchar *path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Increase value (normal step)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                   path, NULL, GDK_KEY_Right, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Decrease value (normal step)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                   path, NULL, GDK_KEY_Left, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Increase value (fine step)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                   path, NULL, GDK_KEY_Right, GDK_CONTROL_MASK);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Decrease value (fine step)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                   path, NULL, GDK_KEY_Left, GDK_CONTROL_MASK);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Increase value (coarse step)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                   path, NULL, GDK_KEY_Right, GDK_SHIFT_MASK);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Decrease value (coarse step)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                   path, NULL, GDK_KEY_Left, GDK_SHIFT_MASK);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Sliders"), _("Toggle color-picker"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                   path, NULL, GDK_KEY_Insert, 0);
-  g_free(path);
+  dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Controls/Comboboxes"), _("Open editing mode"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                   path, NULL, GDK_KEY_Return, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Comboboxes"), _("Exit editing mode"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                   path, NULL, GDK_KEY_Escape, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Comboboxes"), _("Select previous (in editing mode)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                   path, NULL, GDK_KEY_Up, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Comboboxes"), _("Select next (in editing mode)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                   path, NULL, GDK_KEY_Down, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Comboboxes"), _("Validate result (in editing mode)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                   path, NULL, GDK_KEY_Return, 0);
-  g_free(path);
+  dt_free(path);
   path = dt_accels_build_path(_("Darkroom/Controls/Comboboxes"), _("Toggle color-picker"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                   path, NULL, GDK_KEY_Insert, 0);
-  g_free(path);
+  dt_free(path);
 
   return bauhaus;
 }
@@ -1283,8 +1284,8 @@ void dt_bauhaus_widget_set_label(GtkWidget *widget, const char *label)
       dt_accels_new_darkroom_action(_action_request_focus, widget, scope, plugin_name, 0, 0, _("Focuses the control"));
       g_object_set_data(G_OBJECT(widget), "accel-path", dt_accels_build_path("Darkroom/Modules", plugin_name));
       gtk_widget_set_has_tooltip(widget, TRUE);
-      g_free(scope);
-      g_free(plugin_name);
+      dt_free(scope);
+      dt_free(plugin_name);
     }
 
     gtk_widget_queue_draw(GTK_WIDGET(w));
@@ -2028,9 +2029,9 @@ static void dt_bauhaus_widget_accept(struct dt_bauhaus_widget_t *w, gboolean tim
               matches++;
               match = j;
             }
-            g_free(text_cmp);
+            dt_free(text_cmp);
           }
-          g_free(keys);
+          dt_free(keys);
 
           // Accept result only if exactly one match was found. Anything else is ambiguous
           if(matches == 1)
@@ -2167,7 +2168,7 @@ static gboolean dt_bauhaus_popup_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       show_pango_text(w, context, cr, &bounding_value,
                       (w->bauhaus->keys_cnt) ? w->bauhaus->keys : text, BH_ALIGN_RIGHT,
                       BH_ALIGN_MIDDLE, PANGO_ELLIPSIZE_NONE, NULL, &value_width, NULL, GTK_STATE_FLAG_NORMAL);
-      g_free(text);
+      dt_free(text);
 
       // label on top of marker:
       gchar *label_text = _build_label(w);
@@ -2178,7 +2179,7 @@ static gboolean dt_bauhaus_popup_draw(GtkWidget *widget, cairo_t *crf, gpointer 
                                       .height = w->bauhaus->line_height };
       show_pango_text(w, context, cr, &bounding_label, label_text, BH_ALIGN_LEFT, BH_ALIGN_MIDDLE,
                       PANGO_ELLIPSIZE_END, NULL, NULL, NULL, GTK_STATE_FLAG_NORMAL);
-      g_free(label_text);
+      dt_free(label_text);
 
       cairo_restore(cr);
     }
@@ -2249,10 +2250,10 @@ static gboolean dt_bauhaus_popup_draw(GtkWidget *widget, cairo_t *crf, gpointer 
                           d->entries_ellipsis, bg_color, NULL, NULL, state);
         }
 
-        g_free(text_cmp);
+        dt_free(text_cmp);
       }
       cairo_restore(cr);
-      g_free(keys);
+      dt_free(keys);
     }
     break;
     default:
@@ -2440,7 +2441,7 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
                                         .height = w->bauhaus->line_height };
         show_pango_text(w, context, cr, &bounding_value, text, BH_ALIGN_RIGHT, BH_ALIGN_MIDDLE,
                         PANGO_ELLIPSIZE_NONE, NULL, &value_width, NULL, state);
-        g_free(text);
+        dt_free(text);
       }
 
       // label on top of marker:
@@ -2452,7 +2453,7 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
                                       .height = w->bauhaus->line_height };
       show_pango_text(w, context, cr, &bounding_label, label_text, BH_ALIGN_LEFT, BH_ALIGN_MIDDLE,
                         PANGO_ELLIPSIZE_END, NULL, NULL, NULL, state);
-      g_free(label_text);
+      dt_free(label_text);
     }
     break;
     default:

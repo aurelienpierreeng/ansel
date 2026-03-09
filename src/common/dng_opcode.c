@@ -57,7 +57,7 @@ static uint32_t get_long(uint8_t *ptr)
 
 void dt_dng_opcode_process_opcode_list_2(uint8_t *buf, uint32_t buf_size, dt_image_t *img)
 {
-  g_list_free_full(img->dng_gain_maps, g_free);
+  g_list_free_full(img->dng_gain_maps, dt_free_gpointer);
   img->dng_gain_maps = NULL;
 
   uint32_t count = get_long(&buf[0]);

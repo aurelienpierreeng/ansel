@@ -16,6 +16,7 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "gui/actions/menu.h"
 #include "gui/preferences.h"
 #include "common/undo.h"
@@ -128,6 +129,7 @@ static gboolean compress_history_callback(GtkAccelGroup *group, GObject *acceler
   if(imgs) dt_history_compress_on_list(imgs);
 
   g_list_free(imgs);
+  imgs = NULL;
   return TRUE;
 }
 
@@ -156,6 +158,7 @@ static gboolean delete_history_callback(GtkAccelGroup *group, GObject *accelerat
 
   dt_control_queue_redraw_center();
   g_list_free(imgs);
+  imgs = NULL;
   return TRUE;
 }
 
@@ -171,6 +174,7 @@ static gboolean copy_callback(GtkAccelGroup *group, GObject *acceleratable, guin
   GList *imgs = dt_selection_get_list(darktable.selection);
   gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
   g_list_free(imgs);
+  imgs = NULL;
 
   if(is_darkroom_image_in_list)
   {
@@ -194,6 +198,7 @@ static gboolean copy_parts_callback(GtkAccelGroup *group, GObject *acceleratable
   GList *imgs = dt_selection_get_list(darktable.selection);
   gboolean is_darkroom_image_in_list = dt_menu_is_image_in_dev(imgs);
   g_list_free(imgs);
+  imgs = NULL;
 
   if(is_darkroom_image_in_list)
   {
@@ -227,6 +232,7 @@ static gboolean paste_all_callback(GtkAccelGroup *group, GObject *acceleratable,
   if(imgs) dt_history_paste_on_list(imgs);
 
   g_list_free(imgs);
+  imgs = NULL;
   return TRUE;
 }
 
@@ -243,6 +249,7 @@ static gboolean paste_parts_callback(GtkAccelGroup *group, GObject *acceleratabl
   if(!dt_history_paste_parts_prepare())
   {
     g_list_free(imgs);
+    imgs = NULL;
     return FALSE;
   }
 
@@ -254,6 +261,7 @@ static gboolean paste_parts_callback(GtkAccelGroup *group, GObject *acceleratabl
 
   dt_control_queue_redraw_center();
   g_list_free(imgs);
+  imgs = NULL;
   return TRUE;
 }
 
@@ -330,7 +338,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
       //remember last import path if applying history to multiple images
       dt_conf_set_folder_from_file_chooser("ui_last/import_path", GTK_FILE_CHOOSER(filechooser));
     }
-    g_free(dtfilename);
+    dt_free(dtfilename);
   }
 
   if(dt_menu_is_image_in_dev(imgs))
@@ -338,6 +346,7 @@ static gboolean load_xmp_callback(GtkAccelGroup *group, GObject *acceleratable, 
 
   g_object_unref(filechooser);
   g_list_free(imgs);
+  imgs = NULL;
   return TRUE;
 }
 

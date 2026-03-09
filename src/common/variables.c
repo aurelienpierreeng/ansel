@@ -274,10 +274,10 @@ static void _cleanup_expansion(dt_variables_params_t *params)
     g_date_time_unref(params->data->datetime);
     params->data->datetime = NULL;
   }
-  g_free(params->data->homedir);
-  g_free(params->data->pictures_folder);
-  g_free(params->data->camera_maker);
-  g_free(params->data->camera_alias);
+  dt_free(params->data->homedir);
+  dt_free(params->data->pictures_folder);
+  dt_free(params->data->camera_maker);
+  dt_free(params->data->camera_alias);
 }
 
 static inline gboolean _has_prefix(char **str, const char *prefix)
@@ -434,7 +434,7 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     if(g_strcmp0(params->jobcode, "infos") != 0)
     {
       gchar *res = dt_util_str_replace(result, "/", "_");
-      g_free(result);
+      dt_free(result);
       result = res;
     }
   }
@@ -460,7 +460,7 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     if(!isnan(params->data->elevation)) parts[i++] = g_strdup_printf("%.2f", params->data->elevation);
     result = g_strjoinv(", ", parts);
     for(int j = 0; j < i; j++)
-      g_free(parts[j]);
+      dt_free(parts[j]);
   }
   else if(_has_prefix(variable, "EXIF.MAKER") || _has_prefix(variable, "MAKER"))
     result = g_strdup(params->data->camera_maker);
@@ -486,7 +486,8 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     {
       result = g_strdup((char *)res->data);
     }
-    g_list_free_full(res, &g_free);
+    g_list_free_full(res, dt_free_gpointer);
+    res = NULL;
   }
   else if(_has_prefix(variable, "VERSION.IF_MULTI") || _has_prefix(variable, "VERSION_IF_MULTI"))
   {
@@ -525,7 +526,7 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     {
       gchar *dirname = g_path_get_dirname(params->filename);
       result = g_path_get_basename(dirname);
-      g_free(dirname);
+      dt_free(dirname);
     }
   }
   else if(_has_prefix(variable, "FILE.DIRECTORY") || _has_prefix(variable, "FILE_DIRECTORY"))
@@ -650,6 +651,7 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
                                (guint)(c.red*255), (guint)(c.green*255), (guint)(c.blue*255));
     }
     g_list_free(res);
+    res = NULL;
   }
   else if(_has_prefix(variable, "LABELS"))
   {
@@ -666,8 +668,10 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
       labels = g_list_reverse(labels);  // list was built in reverse order, so un-reverse it
       result = dt_util_glist_to_str(",", labels);
       g_list_free(labels);
+      labels = NULL;
     }
     g_list_free(res);
+    res = NULL;
   }
   else if(_has_prefix(variable, "TITLE") || _has_prefix(variable, "Xmp.dc.title"))
   {
@@ -676,7 +680,8 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     {
       result = g_strdup((char *)res->data);
     }
-    g_list_free_full(res, &g_free);
+    g_list_free_full(res, dt_free_gpointer);
+    res = NULL;
   }
   else if(_has_prefix(variable, "DESCRIPTION") || _has_prefix(variable, "Xmp.dc.description"))
   {
@@ -685,7 +690,8 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     {
       result = g_strdup((char *)res->data);
     }
-    g_list_free_full(res, &g_free);
+    g_list_free_full(res, dt_free_gpointer);
+    res = NULL;
   }
   else if(_has_prefix(variable, "CREATOR") || _has_prefix(variable, "Xmp.dc.creator"))
   {
@@ -694,7 +700,8 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     {
       result = g_strdup((char *)res->data);
     }
-    g_list_free_full(res, &g_free);
+    g_list_free_full(res, dt_free_gpointer);
+    res = NULL;
   }
   else if(_has_prefix(variable, "PUBLISHER") || _has_prefix(variable, "Xmp.dc.publisher"))
   {
@@ -703,7 +710,8 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     {
       result = g_strdup((char *)res->data);
     }
-    g_list_free_full(res, &g_free);
+    g_list_free_full(res, dt_free_gpointer);
+    res = NULL;
   }
   else if(_has_prefix(variable, "RIGHTS") || _has_prefix(variable, "Xmp.dc.rights"))
   {
@@ -712,7 +720,8 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
     {
       result = g_strdup((char *)res->data);
     }
-    g_list_free_full(res, &g_free);
+    g_list_free_full(res, dt_free_gpointer);
+    res = NULL;
   }
   else if(_has_prefix(variable, "OPENCL.ACTIVATED") || _has_prefix(variable, "OPENCL_ACTIVATED"))
   {
@@ -761,10 +770,10 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
           if (tag)
           {
             result = g_strdup(tag);
-            g_free(tag);
+            dt_free(tag);
           }
         }
-        g_free(category);
+        dt_free(category);
       }
     }
   }
@@ -772,9 +781,10 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
   {
     GList *tags_list = dt_tag_get_list_export(params->imgid, params->data->tags_flags);
     char *tags = dt_util_glist_to_str(", ", tags_list);
-    g_list_free_full(tags_list, g_free);
+    g_list_free_full(tags_list, dt_free_gpointer);
+    tags_list = NULL;
     result = g_strdup(tags);
-    g_free(tags);
+    dt_free(tags);
   }
   else if(_has_prefix(variable, "SIDECAR_TXT") && g_strcmp0(params->jobcode, "infos") == 0
           && (params->data->flags & DT_IMAGE_HAS_TXT))
@@ -787,8 +797,8 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
       {
         result = g_strdup_printf("\n%s", txt);
       }
-      g_free(txt);
-      g_free(path);
+      dt_free(txt);
+      dt_free(path);
     }
   }
   else if(_has_prefix(variable, "DARKTABLE.VERSION") || _has_prefix(variable, "DARKTABLE_VERSION")
@@ -807,7 +817,7 @@ static char *_get_base_value(dt_variables_params_t *params, char **variable)
   if(params->escape_markup && escape)
   {
     gchar *e_res = g_markup_escape_text(result, -1);
-    g_free(result);
+    dt_free(result);
     return e_res;
   }
   return result;
@@ -841,11 +851,11 @@ static char *_variable_get_value(dt_variables_params_t *params, char **variable)
         char *replacement = _expand_source(params, variable, ')');
         if(*base_value == '\0')
         {
-          g_free(base_value);
+          dt_free(base_value);
           base_value = replacement;
         }
         else
-          g_free(replacement);
+          dt_free(replacement);
       }
       break;
     case '+':
@@ -857,11 +867,11 @@ static char *_variable_get_value(dt_variables_params_t *params, char **variable)
         char *replacement = _expand_source(params, variable, ')');
         if(*base_value != '\0')
         {
-          g_free(base_value);
+          dt_free(base_value);
           base_value = replacement;
         }
         else
-          g_free(replacement);
+          dt_free(replacement);
       }
       break;
     case ':':
@@ -902,7 +912,7 @@ static char *_variable_get_value(dt_variables_params_t *params, char **variable)
         }
 
         char *_base_value = g_strndup(start, end - start);
-        g_free(base_value);
+        dt_free(base_value);
         base_value = _base_value;
       }
       break;
@@ -917,10 +927,10 @@ static char *_variable_get_value(dt_variables_params_t *params, char **variable)
         if(!strncmp(base_value, pattern, pattern_length))
         {
           char *_base_value = g_strdup(base_value + pattern_length);
-          g_free(base_value);
+          dt_free(base_value);
           base_value = _base_value;
         }
-        g_free(pattern);
+        dt_free(pattern);
       }
       break;
     case '%':
@@ -933,7 +943,7 @@ static char *_variable_get_value(dt_variables_params_t *params, char **variable)
         const size_t pattern_length = strlen(pattern);
         if(!strncmp(base_value + base_value_length - pattern_length, pattern, pattern_length))
           base_value[base_value_length - pattern_length] = '\0';
-        g_free(pattern);
+        dt_free(pattern);
       }
       break;
     case '/':
@@ -971,8 +981,8 @@ static char *_variable_get_value(dt_variables_params_t *params, char **variable)
             // TODO: write a dt_util_str_replace that can deal with pattern_length ^^
             char *p = g_strndup(pattern, pattern_length);
             char *_base_value = dt_util_str_replace(base_value, p, replacement);
-            g_free(p);
-            g_free(base_value);
+            dt_free(p);
+            dt_free(base_value);
             base_value = _base_value;
             break;
           }
@@ -983,7 +993,7 @@ static char *_variable_get_value(dt_variables_params_t *params, char **variable)
               char *_base_value = g_malloc(base_value_length - pattern_length + replacement_length + 1);
               char *end = g_stpcpy(_base_value, replacement);
               g_stpcpy(end, base_value + pattern_length);
-              g_free(base_value);
+              dt_free(base_value);
               base_value = _base_value;
             }
             break;
@@ -996,7 +1006,7 @@ static char *_variable_get_value(dt_variables_params_t *params, char **variable)
               base_value[base_value_length - pattern_length] = '\0';
               char *end = g_stpcpy(_base_value, base_value);
               g_stpcpy(end, replacement);
-              g_free(base_value);
+              dt_free(base_value);
               base_value = _base_value;
             }
             break;
@@ -1006,7 +1016,7 @@ static char *_variable_get_value(dt_variables_params_t *params, char **variable)
             // TODO: is there a strstr_len that limits the length of pattern?
             char *p = g_strndup(pattern, pattern_length);
             gchar *found = g_strstr_len(base_value, -1, p);
-            g_free(p);
+            dt_free(p);
             if(found)
             {
               *found = '\0';
@@ -1014,14 +1024,14 @@ static char *_variable_get_value(dt_variables_params_t *params, char **variable)
               char *end = g_stpcpy(_base_value, base_value);
               end = g_stpcpy(end, replacement);
               g_stpcpy(end, found + pattern_length);
-              g_free(base_value);
+              dt_free(base_value);
               base_value = _base_value;
             }
             break;
           }
         }
-        g_free(pattern);
-        g_free(replacement);
+        dt_free(pattern);
+        dt_free(replacement);
       }
       break;
     case '^':
@@ -1062,7 +1072,7 @@ static char *_variable_get_value(dt_variables_params_t *params, char **variable)
           g_unichar_to_utf8(changed, _base_value);
           g_stpcpy(_base_value + utf8_length, next);
         }
-        g_free(base_value);
+        dt_free(base_value);
         base_value = _base_value;
       }
       break;
@@ -1073,8 +1083,7 @@ static char *_variable_get_value(dt_variables_params_t *params, char **variable)
   else
   {
     // error case
-    g_free(base_value);
-    base_value = NULL;
+    dt_free(base_value);
   }
 
   return base_value;
@@ -1128,7 +1137,7 @@ static char *_expand_source(dt_variables_params_t *params, char **source, char e
         _grow_buffer(&result, &result_iter, &result_length, replacement_length);
         memcpy(result_iter, replacement, replacement_length);
         result_iter += replacement_length;
-        g_free(replacement);
+        dt_free(replacement);
       }
       else
       {
@@ -1175,8 +1184,8 @@ void dt_variables_params_destroy(dt_variables_params_t *params)
   if(params->data->file_datetime)
     g_date_time_unref(params->data->file_datetime);
 
-  g_free(params->data);
-  g_free(params);
+  dt_free(params->data);
+  dt_free(params);
 }
 
 void dt_variables_set_datetime(dt_variables_params_t *params, GDateTime *datetime)

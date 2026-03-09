@@ -143,13 +143,13 @@ static void load_themes_dir(const char *basedir)
       darktable.themes = g_list_append(darktable.themes, g_strdup(d_name));
     g_dir_close(dir);
   }
-  g_free(themes_dir);
+  dt_free(themes_dir);
 }
 
 static void load_themes(void)
 {
   // Clear theme list...
-  g_list_free_full(darktable.themes, g_free);
+  g_list_free_full(darktable.themes, dt_free_gpointer);
   darktable.themes = NULL;
 
   // check themes dirs
@@ -232,7 +232,7 @@ static void save_usercss(GtkTextBuffer *buffer)
     fprintf(stderr, "%s: error saving css to %s: %s\n", G_STRFUNC, usercsspath, error->message);
     g_clear_error(&error);
   }
-  g_free(usercsscontent);
+  dt_free(usercsscontent);
 }
 
 static void save_usercss_callback(GtkWidget *widget, gpointer user_data)
@@ -356,7 +356,7 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
     if(!g_strcmp0(name, theme_name)) selected = k;
     k++;
   }
-  g_free(theme_name);
+  dt_free(theme_name);
 
   gtk_combo_box_set_active(GTK_COMBO_BOX(widget), selected);
 
@@ -474,16 +474,16 @@ static void init_tab_general(GtkWidget *dialog, GtkWidget *stack, dt_gui_themetw
       //load default text with some pointers
       gchar *errtext = g_strconcat("/* ", _("ERROR Loading user.css"), " */", NULL);
       gtk_text_buffer_set_text(buffer, errtext, -1);
-      g_free(errtext);
+      dt_free(errtext);
     }
-    g_free(usercsscontent);
+    dt_free(usercsscontent);
   }
   else
   {
     //load default text
     gchar *deftext = g_strconcat("/* ", _("Enter CSS theme tweaks here"), " */\n\n", NULL);
     gtk_text_buffer_set_text(buffer, deftext, -1);
-    g_free(deftext);
+    dt_free(deftext);
   }
 
 }
@@ -576,7 +576,7 @@ void dt_gui_preferences_show()
   destroy_tab_lua(lua_grid);
 #endif
 
-  free(tweak_widgets);
+  dt_free(tweak_widgets);
   gtk_widget_destroy(_preferences_dialog);
 
   if(restart_required)
@@ -712,7 +712,7 @@ static void tree_insert_presets(GtkTreeStore *tree_model)
                          _(module), P_EDITABLE_COLUMN, NULL, P_NAME_COLUMN, "", P_MODEL_COLUMN, "",
                          P_MAKER_COLUMN, "", P_LENS_COLUMN, "", P_ISO_COLUMN, "", P_EXPOSURE_COLUMN, "",
                          P_APERTURE_COLUMN, "", P_FOCAL_LENGTH_COLUMN, "", P_AUTOAPPLY_COLUMN, NULL, -1);
-      g_free(last_module);
+      dt_free(last_module);
       last_module = g_strdup(operation);
       parent = iter;
     }
@@ -725,16 +725,16 @@ static void tree_insert_presets(GtkTreeStore *tree_model)
                        P_FOCAL_LENGTH_COLUMN, focal_length, P_AUTOAPPLY_COLUMN,
                        autoapply ? check_pixbuf : NULL, -1);
 
-    g_free(focal_length);
-    g_free(aperture);
-    g_free(exposure);
-    g_free(iso);
-    g_free(module);
-    g_free(smaker);
-    g_free(smodel);
-    g_free(slens);
+    dt_free(focal_length);
+    dt_free(aperture);
+    dt_free(exposure);
+    dt_free(iso);
+    dt_free(module);
+    dt_free(smaker);
+    dt_free(smodel);
+    dt_free(slens);
   }
-  g_free(last_module);
+  dt_free(last_module);
   sqlite3_finalize(stmt);
 
   g_object_unref(lock_pixbuf);
@@ -749,17 +749,17 @@ static gboolean _search_func(GtkTreeModel *model, gint column, const gchar *key,
 
   gtk_tree_model_get(model, iter, P_NAME_COLUMN, &label, -1);
   gchar *name_case = g_utf8_casefold(label, -1);
-  g_free(label);
+  dt_free(label);
   gtk_tree_model_get(model, iter, P_MODULE_COLUMN, &label, -1);
   gchar *module_case = g_utf8_casefold(label, -1);
-  g_free(label);
+  dt_free(label);
 
   const gboolean different = !((name_case && strstr(name_case, key_case))
                                || (module_case && strstr(module_case, key_case)));
 
-  g_free(name_case);
-  g_free(module_case);
-  g_free(key_case);
+  dt_free(name_case);
+  dt_free(module_case);
+  dt_free(key_case);
 
   if(!different)
   {
@@ -932,8 +932,8 @@ static void tree_row_activated_presets(GtkTreeView *tree, GtkTreePath *path, Gtk
       edit_preset(tree, rowid, name, operation);
     else
       g_object_unref(editable);
-    g_free(name);
-    g_free(operation);
+    dt_free(name);
+    dt_free(operation);
   }
 }
 
@@ -986,12 +986,14 @@ static gboolean tree_key_press_presets(GtkWidget *widget, GdkEventKey *event, gp
       tree_insert_presets(tree_store);
 
       if(operation)
-        g_free(operation);
+      {
+        dt_free(operation);
+      }
     }
     else
       g_object_unref(editable);
 
-    g_free(name);
+    dt_free(name);
 
     return TRUE;
   }
@@ -1039,7 +1041,7 @@ static void import_preset(GtkButton *button, gpointer data)
   {
     GSList *filenames = gtk_file_chooser_get_filenames(GTK_FILE_CHOOSER(chooser));
     g_slist_foreach(filenames, (GFunc)_import_preset_from_file, NULL);
-    g_slist_free_full(filenames, g_free);
+    g_slist_free_full(filenames, dt_free_gpointer);
 
     GtkTreeStore *tree_store = GTK_TREE_STORE(model);
     gtk_tree_store_clear(tree_store);
@@ -1081,7 +1083,7 @@ static void export_preset(GtkButton *button, gpointer data)
 
       dt_presets_save_to_file(rowid, preset_name, filedir);
 
-      g_free(preset_name);
+      dt_free(preset_name);
     }
 
     sqlite3_finalize(stmt);
@@ -1090,7 +1092,7 @@ static void export_preset(GtkButton *button, gpointer data)
 
     dt_conf_set_folder_from_file_chooser("ui_last/export_path", GTK_FILE_CHOOSER(filechooser));
 
-    g_free(filedir);
+    dt_free(filedir);
   }
   g_object_unref(filechooser);
 }
@@ -1105,8 +1107,8 @@ static gint compare_rows_presets(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIte
   gtk_tree_model_get(model, b, P_MODULE_COLUMN, &b_text, -1);
   if(*a_text == '\0' && *b_text == '\0')
   {
-    g_free(a_text);
-    g_free(b_text);
+    dt_free(a_text);
+    dt_free(b_text);
 
     gtk_tree_model_get(model, a, P_NAME_COLUMN, &a_text, -1);
     gtk_tree_model_get(model, b, P_NAME_COLUMN, &b_text, -1);
@@ -1114,8 +1116,8 @@ static gint compare_rows_presets(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIte
 
   const int res = strcoll(a_text, b_text);
 
-  g_free(a_text);
-  g_free(b_text);
+  dt_free(a_text);
+  dt_free(b_text);
 
   return res;
 }
@@ -1242,7 +1244,7 @@ _gui_preferences_enum_callback(GtkWidget *widget, gpointer data)
     gchar *s = NULL;
     gtk_tree_model_get(gtk_combo_box_get_model(GTK_COMBO_BOX(widget)), &iter, 0, &s, -1);
     dt_conf_set_string((char *)data, s);
-    g_free(s);
+    dt_free(s);
   }
 }
 
@@ -1259,12 +1261,12 @@ void _gui_preferences_enum_set(GtkWidget *widget, const char *str)
     gtk_tree_model_get(model, &iter, 0, &value, -1);
     if(!g_strcmp0(value, str))
     {
-      g_free(value);
+      dt_free(value);
       found = TRUE;
       break;
     }
     i++;
-    g_free(value);
+    dt_free(value);
     valid = gtk_tree_model_iter_next(model, &iter);
   }
   if(found)
@@ -1294,7 +1296,7 @@ void dt_gui_preferences_enum_update(GtkWidget *widget)
   const char *key = gtk_widget_get_name(widget);
   char *str = dt_conf_get_string(key);
   _gui_preferences_enum_set(widget, str);
-  g_free(str);
+  dt_free(str);
 }
 
 GtkWidget *dt_gui_preferences_enum(GtkGrid *grid, const char *key, const guint col,
@@ -1327,8 +1329,9 @@ GtkWidget *dt_gui_preferences_enum(GtkGrid *grid, const char *key, const guint c
     }
     i++;
   }
-  g_list_free_full(vals, g_free);
-  g_free(str);
+  g_list_free_full(vals, dt_free_gpointer);
+  vals = NULL;
+  dt_free(str);
 
   GtkWidget *w = gtk_combo_box_new_with_model(GTK_TREE_MODEL(store));
   gtk_widget_set_hexpand(w, FALSE);

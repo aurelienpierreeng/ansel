@@ -38,6 +38,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "common/debug.h"
 #include "common/file_location.h"
 #include "common/image_cache.h"
@@ -152,11 +153,11 @@ static void _setup_selected_images_list(dt_lib_module_t *self);
 static void free_tz_tuple(gpointer data)
 {
   tz_tuple_t *tz_tuple = (tz_tuple_t *)data;
-  g_free(tz_tuple->display);
+  dt_free(tz_tuple->display);
 #ifdef _WIN32
-  g_free(tz_tuple->name); // on non-Windows both point to the same string
+  dt_free(tz_tuple->name); // on non-Windows both point to the same string
 #endif
-  free(tz_tuple);
+  dt_free(tz_tuple);
 }
 
 const char *name(struct dt_lib_module_t *self)
@@ -293,10 +294,10 @@ static gchar *_datetime_tooltip(GDateTime *start, GDateTime *end, GTimeZone *tz)
   gchar *dtsu = _utc_timeval_to_utc_text(start, FALSE);
   gchar *dteu = _utc_timeval_to_utc_text(end, FALSE);
   gchar *res = g_strdup_printf("%s -> %s LT\n%s -> %s UTC", dtsl, dtel, dtsu, dteu);
-  g_free(dtsl);
-  g_free(dtel);
-  g_free(dtsu);
-  g_free(dteu);
+  dt_free(dtsl);
+  dt_free(dtel);
+  dt_free(dtsu);
+  dt_free(dteu);
   return res;
 }
 
@@ -355,6 +356,7 @@ static void _refresh_images_displayed_on_track(const int segid, const gboolean a
         GList *img = g_list_prepend(NULL, &p);
         im->image = dt_view_map_add_marker(darktable.view_manager, MAP_DISPLAY_THUMB, img);
         g_list_free(img);
+        img = NULL;
         count = 0;
       }
     }
@@ -381,7 +383,7 @@ static void _update_nb_images(dt_lib_module_t *self)
   d->map.nb_imgs = nb_imgs;
   gchar *nb = g_strdup_printf("%d/%d", nb_imgs, d->nb_imgs);
   gtk_label_set_text(GTK_LABEL(d->map.nb_imgs_label), nb);
-  g_free(nb);
+  dt_free(nb);
 }
 
 static void _update_buttons(dt_lib_module_t *self)
@@ -511,8 +513,7 @@ static void _remove_tracks_from_map(dt_lib_module_t *self)
         d->map.tracks->td[i].track = NULL;
       }
     }
-    g_free(d->map.tracks);
-    d->map.tracks = NULL;
+    dt_free(d->map.tracks);
   }
   if(d->map.gpx)
   {
@@ -540,7 +541,8 @@ static gboolean _refresh_display_track(const gboolean active, const int segid, d
                                                               MAP_DISPLAY_TRACK, pts);
     osm_gps_map_track_set_color((OsmGpsMapTrack *)d->map.tracks->td[segid].track, &color[segid % 6]);
     grow = _update_map_box(segid, pts, self);
-    g_list_free_full(pts, g_free);
+    g_list_free_full(pts, dt_free_gpointer);
+    pts = NULL;
   }
   else
   {
@@ -638,6 +640,7 @@ static void _select_images(GtkWidget *widget, dt_lib_module_t *self)
   dt_selection_clear(darktable.selection);
   dt_selection_select_list(darktable.selection, imgs);
   g_list_free(imgs);
+  imgs = NULL;
 }
 
 static void _images_preview_toggled(GtkToggleButton *button, dt_lib_module_t *self)
@@ -672,8 +675,8 @@ static void _refresh_track_list(dt_lib_module_t *self)
                        DT_GEO_TRACKS_IMAGES, nb_imgs,
                        DT_GEO_TRACKS_TOOLTIP, tooltip,
                        -1);
-    g_free(dts);
-    g_free(tooltip);
+    dt_free(dts);
+    dt_free(tooltip);
     valid = gtk_tree_model_iter_next(model, &iter);
   }
   _update_nb_images(self);
@@ -719,8 +722,8 @@ static void _show_gpx_tracks(dt_lib_module_t *self)
                        DT_GEO_TRACKS_TOOLTIP, tooltip,
                        -1);
     segid++;
-    g_free(dts);
-    g_free(tooltip);
+    dt_free(dts);
+    dt_free(tooltip);
   }
   gtk_tree_view_set_model(GTK_TREE_VIEW(d->map.gpx_view), model);
   g_object_unref(model);
@@ -745,7 +748,7 @@ static void _apply_gpx(GtkWidget *widget, dt_lib_module_t *self)
     }
     dt_control_gpx_apply(gtk_label_get_text(GTK_LABEL(d->map.gpx_file)), -1, tz, imgs);
   }
-  g_free(tz);
+  dt_free(tz);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->map.preview_button), FALSE);
 }
 
@@ -818,7 +821,7 @@ static gboolean _row_tooltip_setup(GtkWidget *view, gint x, gint y, gboolean kb_
         gtk_tooltip_set_text(tooltip, text);
         res = TRUE;
       }
-      g_free(text);
+      dt_free(text);
     }
   }
   gtk_tree_path_free(path);
@@ -836,7 +839,7 @@ static void _preview_gpx_file(GtkWidget *widget, dt_lib_module_t *self)
 
   gchar *filedir = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(widget));
   struct dt_gpx_t *gpx = dt_gpx_new(filedir);
-  g_free(filedir);
+  dt_free(filedir);
 
   GtkWidget *area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
   GtkWidget *w = gtk_scrolled_window_new(NULL, NULL);
@@ -875,22 +878,22 @@ static void _preview_gpx_file(GtkWidget *widget, dt_lib_module_t *self)
     _set_up_label(dte, GTK_ALIGN_START, grid, 2, line, PANGO_ELLIPSIZE_NONE);
     char *nb = g_strdup_printf("%d", t->nb_trkpt);
     _set_up_label(nb, GTK_ALIGN_CENTER, grid, 3, line, PANGO_ELLIPSIZE_NONE);
-    g_free(nb);
+    dt_free(nb);
     nb = g_strdup_printf("%d", nb_imgs);
     _set_up_label(nb, GTK_ALIGN_CENTER, grid, 4, line, PANGO_ELLIPSIZE_NONE);
-    g_free(nb);
+    dt_free(nb);
     line++;
     total_pts += t->nb_trkpt;
-    g_free(dts);
-    g_free(dte);
+    dt_free(dts);
+    dt_free(dte);
   }
 
   char *nb = g_strdup_printf("%d", total_pts);
   _set_up_label(nb, GTK_ALIGN_CENTER, grid, 3, line, PANGO_ELLIPSIZE_NONE);
-  g_free(nb);
+  dt_free(nb);
   nb = g_strdup_printf("%d / %d", total_imgs, d->nb_imgs);
   _set_up_label(nb, GTK_ALIGN_CENTER, grid, 4, line, PANGO_ELLIPSIZE_NONE);
-  g_free(nb);
+  dt_free(nb);
 
   dt_gpx_destroy(gpx);
 
@@ -914,7 +917,8 @@ static void _setup_selected_images_list(dt_lib_module_t *self)
     if(dt_conf_get_bool("/views/map/enable"))
       _remove_images_from_map(self);
 #endif
-    g_list_free_full(d->imgs, g_free);
+    g_list_free_full(d->imgs, dt_free_gpointer);
+    d->imgs = NULL;
   }
   d->imgs = NULL;
   d->nb_imgs = 0;
@@ -997,12 +1001,12 @@ static void _choose_gpx_callback(GtkWidget *widget, dt_lib_module_t *self)
     {
       gchar *tz = dt_conf_get_string("plugins/lighttable/geotagging/tz");
       dt_control_gpx_apply(filename, -1, tz, NULL);
-      g_free(tz);
-      g_list_free_full(d->imgs, g_free);
+      dt_free(tz);
+      g_list_free_full(d->imgs, dt_free_gpointer);
       d->imgs = NULL;
       d->nb_imgs = 0;
     }
-    g_free(filename);
+    dt_free(filename);
   }
 
   gtk_widget_destroy(filechooser);
@@ -1061,21 +1065,21 @@ static GList *_lib_geotagging_get_timezones(void)
   gchar *zone_tab = g_strdup("/usr/share/zoneinfo/zone.tab");
   if(!g_file_test(zone_tab, G_FILE_TEST_IS_REGULAR))
   {
-    g_free(zone_tab);
+    dt_free(zone_tab);
     zone_tab = g_strdup("/usr/lib/zoneinfo/zone.tab");
     if(!g_file_test(zone_tab, G_FILE_TEST_IS_REGULAR))
     {
-      g_free(zone_tab);
+      dt_free(zone_tab);
       zone_tab = g_build_filename(g_getenv("TZDIR"), "zone.tab", NULL);
       if(!g_file_test(zone_tab, G_FILE_TEST_IS_REGULAR))
       {
-        g_free(zone_tab);
+        dt_free(zone_tab);
         char datadir[PATH_MAX] = { 0 };
         dt_loc_get_datadir(datadir, sizeof(datadir));
         zone_tab = g_build_filename(datadir, "zone.tab", NULL);
         if(!g_file_test(zone_tab, G_FILE_TEST_IS_REGULAR))
         {
-          g_free(zone_tab);
+          dt_free(zone_tab);
           // TODO: Solaris test
           return NULL;
         }
@@ -1085,7 +1089,7 @@ static GList *_lib_geotagging_get_timezones(void)
 
   // parse zone.tab and put all time zone descriptions into timezones
   fp = g_fopen(zone_tab, "r");
-  g_free(zone_tab);
+  dt_free(zone_tab);
 
   if(!fp) return NULL;
 
@@ -1106,7 +1110,7 @@ static GList *_lib_geotagging_get_timezones(void)
     g_strfreev(tokens);
     if(name[0] == '\0')
     {
-      g_free(name);
+      dt_free(name);
       continue;
     }
     size_t last_char = strlen(name) - 1;
@@ -1198,15 +1202,15 @@ static GList *_lib_geotagging_get_timezones(void)
 
               subkeyname_utf8 = NULL; // to not free it later
             }
-            free(display_name);
+            dt_free(display_name);
           }
-          g_free(subkeyname_utf8);
-          g_free(subkeypath_utf8);
-          g_free(subkeypath);
+          dt_free(subkeyname_utf8);
+          dt_free(subkeypath_utf8);
+          dt_free(subkeypath);
         }
       }
 
-      free(subkeyname);
+      dt_free(subkeyname);
     }
   }
 
@@ -1684,10 +1688,10 @@ static gboolean _completion_match_func(GtkEntryCompletion *completion, const gch
       {
         res = g_strstr_len(casefold, -1, key) != NULL;
       }
-      g_free(casefold);
+      dt_free(casefold);
     }
-    g_free(normalized);
-    g_free(tag);
+    dt_free(normalized);
+    dt_free(tag);
   }
 
   return res;
@@ -1819,7 +1823,7 @@ void gui_init(dt_lib_module_t *self)
     if(!strcmp(tz_tuple->name, tz))
       gtk_entry_set_text(GTK_ENTRY(d->timezone), tz_tuple->display);
   }
-  g_free(tz);
+  dt_free(tz);
 
   // add entry completion
   GtkEntryCompletion *completion = gtk_entry_completion_new();
@@ -2005,7 +2009,8 @@ void gui_cleanup(dt_lib_module_t *self)
     _remove_images_from_map(self);
   }
 #endif
-    g_list_free_full(d->imgs, g_free);
+    g_list_free_full(d->imgs, dt_free_gpointer);
+    d->imgs = NULL;
   }
   d->imgs = NULL;
   d->imgs = 0;
@@ -2017,8 +2022,7 @@ void gui_cleanup(dt_lib_module_t *self)
     DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_geotag_changed), self);
   }
 #endif
-  free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 // clang-format off

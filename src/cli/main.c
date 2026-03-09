@@ -282,7 +282,7 @@ int main(int argc, char *arg[])
           usage(arg[0]);
           exit(1);
         }
-        g_free(str);
+        dt_free(str);
       }
       else if(!strcmp(arg[k], "--style") && argc > k + 1)
       {
@@ -303,7 +303,7 @@ int main(int argc, char *arg[])
           usage(arg[0]);
           exit(1);
         }
-        g_free(str);
+        dt_free(str);
       }
       else if(!strcmp(arg[k], "--out-ext") && argc > k + 1)
       {
@@ -334,7 +334,7 @@ int main(int argc, char *arg[])
         k++;
         gchar *str = g_ascii_strup(arg[k], -1);
         icc_type = get_icc_type(str);
-        g_free(str);
+        dt_free(str);
         if(icc_type >= DT_COLORSPACE_LAST){
           fprintf(stderr, _("incorrect ICC type for --icc-type: '%s'\n"), arg[k]);
           icc_types();
@@ -348,7 +348,7 @@ int main(int argc, char *arg[])
         if(g_file_test(arg[k], G_FILE_TEST_EXISTS) && ! g_file_test(arg[k], G_FILE_TEST_IS_DIR))
         {
           if(icc_filename)
-            g_free(icc_filename);
+            dt_free(icc_filename);
           icc_filename = g_strdup(arg[k]);
         }
         else
@@ -359,7 +359,7 @@ int main(int argc, char *arg[])
         k++;
         gchar *str = g_ascii_strup(arg[k], -1);
         icc_intent = get_icc_intent(str);
-        g_free(str);
+        dt_free(str);
         if(icc_intent >= DT_INTENT_LAST){
           fprintf(stderr, _("incorrect ICC intent for --icc-intent: '%s'\n"), arg[k]);
           icc_intents();
@@ -409,20 +409,27 @@ int main(int argc, char *arg[])
   if( (inputs && file_counter < 1) || (!inputs && file_counter < 2) || file_counter > 3)
   {
     usage(arg[0]);
-    free(m_arg);
+    dt_free(m_arg);
     if(output_filename)
-      g_free(output_filename);
+    {
+      dt_free(output_filename);
+    }
     if(output_ext)
-      g_free(output_ext);
+    {
+      dt_free(output_ext);
+    }
     if(inputs)
-      g_list_free_full(inputs, g_free);
+    {
+      g_list_free_full(inputs, dt_free_gpointer);
+      inputs = NULL;
+    }
     exit(1);
   }
   else if(inputs && file_counter == 1)
   {
     //user specified inputs as options, and only dest is present
     if(output_filename)
-      g_free(output_filename);
+      dt_free(output_filename);
     output_filename = g_strdup(input_filename);
     input_filename = xmp_filename = NULL;
   }
@@ -430,7 +437,7 @@ int main(int argc, char *arg[])
   {
     // inputs as options, xmp & output specified
     if(output_filename)
-      g_free(output_filename);
+      dt_free(output_filename);
     output_filename = g_strdup(xmp_filename);
     xmp_filename = input_filename;
     input_filename = NULL;
@@ -439,19 +446,24 @@ int main(int argc, char *arg[])
   {
     fprintf(stderr, _("error: input file and import opts specified! that's not supported!\n"));
     usage(arg[0]);
-    free(m_arg);
+    dt_free(m_arg);
     if(output_filename)
-      g_free(output_filename);
+    {
+      dt_free(output_filename);
+    }
     if(output_ext)
-      g_free(output_ext);
-    g_list_free_full(inputs, g_free);
+    {
+      dt_free(output_ext);
+    }
+    g_list_free_full(inputs, dt_free_gpointer);
+    inputs = NULL;
     exit(1);
   }
   else if(file_counter == 2)
   {
     // assume no xmp file given
     if(output_filename)
-      g_free(output_filename);
+      dt_free(output_filename);
     output_filename = g_strdup(xmp_filename);
     xmp_filename = NULL;
   }
@@ -473,11 +485,11 @@ int main(int argc, char *arg[])
     fprintf(stderr, _("notice: output location is a directory. assuming '%s/$(FILE_NAME).%s' output pattern"), output_filename, output_ext);
     fprintf(stderr, "\n");
     gchar* temp_of = g_strdup(output_filename);
-    g_free(output_filename);
+    dt_free(output_filename);
     if(g_str_has_suffix(temp_of, "/"))
       temp_of[strlen(temp_of) - 1] = '\0';
     output_filename = g_strconcat(temp_of, "/$(FILE_NAME)", NULL);
-    g_free(temp_of);
+    dt_free(temp_of);
   }
 
   // the output file already exists, so there will be a sequence number added
@@ -494,12 +506,17 @@ int main(int argc, char *arg[])
   // init dt without gui and without data.db:
   if(dt_init(m_argc, m_arg, FALSE, custom_presets, NULL))
   {
-    free(m_arg);
-    g_free(output_filename);
+    dt_free(m_arg);
+    dt_free(output_filename);
     if(output_ext)
-      g_free(output_ext);
+    {
+      dt_free(output_ext);
+    }
     if(inputs)
-      g_list_free_full(inputs, g_free);
+    {
+      g_list_free_full(inputs, dt_free_gpointer);
+      inputs = NULL;
+    }
     exit(1);
   }
 
@@ -529,7 +546,7 @@ int main(int argc, char *arg[])
       gchar *directory = g_path_get_dirname(input);
       filmid = dt_film_new(&film, directory);
       const int32_t id = dt_image_import(filmid, input, TRUE);
-      g_free(directory);
+      dt_free(directory);
       if(!id)
       {
         fprintf(stderr, _("error: can't open file %s"), input);
@@ -542,18 +559,22 @@ int main(int argc, char *arg[])
 
   //we no longer need inputs
   if(inputs)
-      g_list_free_full(inputs, g_free);
-  inputs = NULL;
+  {
+    g_list_free_full(inputs, dt_free_gpointer);
+    inputs = NULL;
+  }
 
   const int total = g_list_length(id_list);
 
   if(total == 0)
   {
     fprintf(stderr, _("no images to export, aborting\n"));
-    free(m_arg);
-    g_free(output_filename);
+    dt_free(m_arg);
+    dt_free(output_filename);
     if(output_ext)
-      g_free(output_ext);
+    {
+      dt_free(output_ext);
+    }
     exit(1);
   }
 
@@ -568,10 +589,12 @@ int main(int argc, char *arg[])
       {
         fprintf(stderr, _("error: can't open xmp file %s"), xmp_filename);
         fprintf(stderr, "\n");
-        free(m_arg);
-        g_free(output_filename);
+        dt_free(m_arg);
+        dt_free(output_filename);
         if(output_ext)
-          g_free(output_ext);
+        {
+          dt_free(output_ext);
+        }
         exit(1);
       }
       // don't write new xmp:
@@ -601,7 +624,7 @@ int main(int argc, char *arg[])
       // too long ext, no point in wasting time
       fprintf(stderr, _("too long output file extension: %s\n"), ext);
       usage(arg[0]);
-      g_free(output_filename);
+      dt_free(output_filename);
       exit(1);
     }
     else if(!ext || strlen(ext) <= 1)
@@ -609,7 +632,7 @@ int main(int argc, char *arg[])
       // no ext or empty ext, no point in wasting time
       fprintf(stderr, _("no output file extension given\n"));
       usage(arg[0]);
-      g_free(output_filename);
+      dt_free(output_filename);
       exit(1);
     }
     *ext = '\0';
@@ -626,13 +649,13 @@ int main(int argc, char *arg[])
 
   if(!strcmp(output_ext, "jpg"))
   {
-    g_free(output_ext);
+    dt_free(output_ext);
     output_ext = g_strdup("jpeg");
   }
 
   if(!strcmp(output_ext, "tif"))
   {
-    g_free(output_ext);
+    dt_free(output_ext);
     output_ext = g_strdup("tiff");
   }
 
@@ -647,9 +670,9 @@ int main(int argc, char *arg[])
     fprintf(
         stderr, "%s\n",
         _("cannot find disk storage module. please check your installation, something seems to be broken."));
-    free(m_arg);
-    g_free(output_filename);
-    g_free(output_ext);
+    dt_free(m_arg);
+    dt_free(output_filename);
+    dt_free(output_ext);
     exit(1);
   }
 
@@ -657,9 +680,9 @@ int main(int argc, char *arg[])
   if(sdata == NULL)
   {
     fprintf(stderr, "%s\n", _("failed to get parameters from storage module, aborting export ..."));
-    free(m_arg);
-    g_free(output_filename);
-    g_free(output_ext);
+    dt_free(m_arg);
+    dt_free(output_filename);
+    dt_free(output_ext);
     exit(1);
   }
 
@@ -667,15 +690,15 @@ int main(int argc, char *arg[])
   // any longer ...
   g_strlcpy((char *)sdata, output_filename, DT_MAX_PATH_FOR_PARAMS);
   // all is good now, the last line didn't happen.
-  g_free(output_filename);
+  dt_free(output_filename);
 
   format = dt_imageio_get_format_by_name(output_ext);
   if(format == NULL)
   {
     fprintf(stderr, _("unknown extension '.%s'"), output_ext);
     fprintf(stderr, "\n");
-    free(m_arg);
-    g_free(output_ext);
+    dt_free(m_arg);
+    dt_free(output_ext);
     exit(1);
   }
 
@@ -683,8 +706,8 @@ int main(int argc, char *arg[])
   if(fdata == NULL)
   {
     fprintf(stderr, "%s\n", _("failed to get parameters from format module, aborting export ..."));
-    free(m_arg);
-    g_free(output_ext);
+    dt_free(m_arg);
+    dt_free(output_ext);
     exit(1);
   }
 
@@ -743,13 +766,16 @@ int main(int argc, char *arg[])
   storage->free_params(storage, sdata);
   format->free_params(format, fdata);
   g_list_free(id_list);
+  id_list = NULL;
 
   if(icc_filename)
-    g_free(icc_filename);
+  {
+    dt_free(icc_filename);
+  }
 
   dt_cleanup();
 
-  free(m_arg);
+  dt_free(m_arg);
   exit(res);
 }
 

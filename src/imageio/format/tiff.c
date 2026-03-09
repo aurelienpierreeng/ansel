@@ -447,7 +447,7 @@ int write_image(dt_imageio_module_data_t *d_tmp, const char *filename, const voi
 
         if(w != d->global.width)
         {
-          free(rowdata);
+          dt_free(rowdata);
           const size_t _rowsize = (w * layers) * d->bpp / 8;
           rowdata = malloc(_rowsize);
         }
@@ -551,12 +551,10 @@ exit:
     TIFFClose(tif);
     tif = NULL;
   }
-  free(profile);
-  profile = NULL;
-  free(rowdata);
-  rowdata = NULL;
+  dt_free(profile);
+  dt_free(rowdata);
 #ifdef _WIN32
-  g_free(wfilename);
+  dt_free(wfilename);
 #endif
   if(free_mask)
     dt_pixelpipe_cache_free_align(raster_mask);
@@ -688,7 +686,7 @@ void *get_params(dt_imageio_module_format_t *self)
 
 void free_params(dt_imageio_module_format_t *self, dt_imageio_module_data_t *params)
 {
-  free(params);
+  dt_free(params);
 }
 
 int set_params(dt_imageio_module_format_t *self, const void *params, const int size)
@@ -872,7 +870,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
 void gui_cleanup(dt_imageio_module_format_t *self)
 {
-  free(self->gui_data);
+  dt_free(self->gui_data);
 }
 
 void gui_reset(dt_imageio_module_format_t *self)

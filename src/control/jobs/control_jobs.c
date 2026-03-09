@@ -188,7 +188,7 @@ static int32_t _generic_dt_control_fileop_images_job_run(dt_job_t *job,
   // create new film roll for the destination directory
   dt_film_t new_film;
   const int32_t film_id = dt_film_new(&new_film, newdir);
-  g_free(newdir);
+  dt_free(newdir);
 
   if(film_id <= 0)
   {
@@ -230,10 +230,14 @@ void dt_control_image_enumerator_cleanup(void *p)
 {
   dt_control_image_enumerator_t *params = p;
 
-  if(params->index) g_list_free(params->index);
+  if(params->index)
+  {
+    g_list_free(params->index);
+    params->index = NULL;
+  }
   params->index = NULL;
 
-  free(params);
+  dt_free(params);
 }
 
 typedef enum {PROGRESS_NONE, PROGRESS_SIMPLE, PROGRESS_CANCELLABLE} progress_type_t;
@@ -309,6 +313,7 @@ void dt_control_write_sidecar_files()
   if(!imgs) return;
   dt_control_save_xmps(imgs, FALSE);
   g_list_free(imgs);
+  imgs = NULL;
 }
 
 typedef struct dt_control_merge_hdr_t
@@ -587,7 +592,7 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
                        1.0f,
                        (const float (*))d.wb_coeffs,
                        d.adobe_XYZ_to_CAM);
-  free(exif);
+  dt_free(exif);
 
   dt_control_job_set_progress(job, 1.0);
 
@@ -599,7 +604,7 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
   dt_film_t film;
   const int filmid = dt_film_new(&film, directory);
   const uint32_t imageid = dt_image_import(filmid, pathname, TRUE);
-  g_free(directory);
+  dt_free(directory);
 
   // refresh the thumbtable view
   dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
@@ -608,8 +613,8 @@ static int32_t dt_control_merge_hdr_job_run(dt_job_t *job)
   dt_control_queue_redraw_center();
 
 end:
-  free(d.pixels);
-  free(d.weight);
+  dt_free(d.pixels);
+  dt_free(d.weight);
 
   return 0;
 }
@@ -801,7 +806,7 @@ static int32_t dt_control_remove_images_job_run(dt_job_t *job)
   if(!remove_ok)
   {
     dt_control_log(_("cannot remove local copy when the original file is not accessible."));
-    free(imgs);
+    dt_free(imgs);
     return 0;
   }
 
@@ -813,7 +818,7 @@ static int32_t dt_control_remove_images_job_run(dt_job_t *job)
   // We need a list of files to regenerate .xmp files if there are duplicates
   GList *list = _get_full_pathname(imgs);
 
-  free(imgs);
+  dt_free(imgs);
 
   double fraction = 0.0f;
   while(t)
@@ -1056,7 +1061,7 @@ static int32_t dt_control_delete_images_job_run(dt_job_t *job)
   // We need a list of files to regenerate .xmp files if there are duplicates
   GList *list = _get_full_pathname(imgs);
 
-  free(imgs);
+  dt_free(imgs);
 
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
                               "SELECT COUNT(*) FROM main.images WHERE filename IN (SELECT filename FROM "
@@ -1109,7 +1114,8 @@ static int32_t dt_control_delete_images_job_run(dt_job_t *job)
           break;
       }
 
-      g_list_free_full(files, g_free);
+      g_list_free_full(files, dt_free_gpointer);
+      files = NULL;
     }
     else
     {
@@ -1130,7 +1136,7 @@ static int32_t dt_control_delete_images_job_run(dt_job_t *job)
 
 delete_next_file:
 #ifdef _WIN32
-    g_free(dirname);
+    dt_free(dirname);
 #endif
     t = g_list_next(t);
     fraction += 1.0 / total;
@@ -1148,6 +1154,7 @@ delete_next_file:
     list = g_list_delete_link(list, list);
   }
   g_list_free(list);
+  list = NULL;
   dt_film_remove_empty();
   dt_collection_update_query(darktable.collection, DT_COLLECTION_CHANGE_RELOAD, DT_COLLECTION_PROP_UNDEF,
                              g_list_copy(params->index));
@@ -1212,6 +1219,7 @@ static int32_t dt_control_gpx_apply_job_run(dt_job_t *job)
         cntr++;
       }
       g_list_free(grps);
+      grps = NULL;
     }
     g_date_time_unref(utc_time);
   } while((t = g_list_next(t)) != NULL);
@@ -1465,7 +1473,8 @@ static int32_t dt_control_export_job_run(dt_job_t *job)
     if(fraction > 1.0) fraction = 1.0;
     dt_control_job_set_progress(job, fraction);
   }
-  g_list_free_full(metadata.list, g_free);
+  g_list_free_full(metadata.list, dt_free_gpointer);
+  metadata.list = NULL;
 
   if(mstorage->finalize_store) mstorage->finalize_store(mstorage, sdata);
 
@@ -1501,10 +1510,10 @@ static void dt_control_gpx_apply_job_cleanup(void *p)
 
   dt_control_gpx_apply_t *data = params->data;
   params->data = NULL;
-  g_free(data->filename);
-  g_free(data->tz);
+  dt_free(data->filename);
+  dt_free(data->tz);
 
-  free(data);
+  dt_free(data);
 
   dt_control_image_enumerator_cleanup(params);
 }
@@ -1794,7 +1803,7 @@ void dt_control_move_images()
   return;
 
 abort:
-  g_free(dir);
+  dt_free(dir);
   dt_control_job_dispose(job);
 }
 
@@ -1853,7 +1862,7 @@ void dt_control_copy_images()
   return;
 
 abort:
-  g_free(dir);
+  dt_free(dir);
   dt_control_job_dispose(job);
 }
 
@@ -1905,9 +1914,9 @@ static void dt_control_export_cleanup(void *p)
 
   mstorage->free_params(mstorage, sdata);
 
-  g_free(settings->icc_filename);
-  g_free(settings->metadata_export);
-  free(params->data);
+  dt_free(settings->icc_filename);
+  dt_free(settings->metadata_export);
+  dt_free(params->data);
 
   dt_control_image_enumerator_cleanup(params);
 }
@@ -1979,7 +1988,7 @@ static void _add_datetime_offset(const char *odt, const long int offset, char *n
 
   if(datetime)
     g_strlcpy(ndt, datetime, DT_DATETIME_LENGTH);
-  g_free(datetime);
+  dt_free(datetime);
 }
 
 static int32_t dt_control_datetime_job_run(dt_job_t *job)
@@ -2028,6 +2037,7 @@ static int32_t dt_control_datetime_job_run(dt_job_t *job)
         cntr++;
       }
       g_list_free(grps);
+      grps = NULL;
     }
     imgs = g_list_reverse(imgs);
     dt_image_set_datetimes(imgs, dtime, TRUE);
@@ -2066,7 +2076,7 @@ static void dt_control_datetime_job_cleanup(void *p)
 {
   dt_control_image_enumerator_t *params = (dt_control_image_enumerator_t *)p;
 
-  free(params->data);
+  dt_free(params->data);
 
   dt_control_image_enumerator_cleanup(params);
 }

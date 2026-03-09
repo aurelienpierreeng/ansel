@@ -197,7 +197,7 @@ void dt_grouping_add_grouped_images(GList **images)
             gimgs = g_list_prepend(gimgs, GINT_TO_POINTER(image_id));
         }
         sqlite3_finalize(stmt);
-        g_free(query);
+        dt_free(query);
       }
     }
   }

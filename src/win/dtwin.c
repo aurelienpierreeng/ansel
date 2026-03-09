@@ -19,6 +19,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "dtwin.h"
 #include <setjmp.h>
 #include <windows.h>
@@ -380,7 +381,7 @@ boolean dt_win_file_trash(GFile *file, GCancellable *cancellable, GError **error
     g_set_error(error, G_IO_ERROR, g_io_error_from_errno(0), "Unable to trash file %s",
                 g_file_get_parse_name(file));
 
-  g_free(wfilename);
+  dt_free(wfilename);
   return success;
 }
 // clang-format off

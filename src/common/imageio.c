@@ -277,8 +277,7 @@ int dt_imageio_large_thumbnail(const char *filename, uint8_t **buffer, int32_t *
 
     mret = MagickExportImagePixels(image, 0, 0, *th_width, *th_height, "RGBP", CharPixel, *buffer);
     if(mret != MagickTrue) {
-      free(*buffer);
-      *buffer = NULL;
+      dt_free(*buffer);
       fprintf(stderr,
           "[dt_imageio_large_thumbnail IM] error while reading thumbnail\n");
       goto error_im;
@@ -308,8 +307,8 @@ error_im:
   }
 
 error:
-  free(mime_type);
-  free(buf);
+  dt_free(mime_type);
+  dt_free(buf);
   return res;
 }
 
@@ -767,6 +766,7 @@ gboolean _apply_style_before_export(dt_develop_t *dev, dt_imageio_module_data_t 
   }
 
   g_list_free_full(style_items, dt_style_item_free);
+  style_items = NULL;
 
   return FALSE;
 }
@@ -1155,7 +1155,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   res = format->write_image(format_params, filename, outbuf, icc_type, icc_filename, exif_profile, length, imgid,
                             num, total, &pipe, export_masks);
 
-  if(exif_profile) free(exif_profile);
+  dt_free(exif_profile);
   if(res) goto error;
 
   dt_dev_pixelpipe_cleanup(&pipe);

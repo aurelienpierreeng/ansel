@@ -194,10 +194,12 @@ static void _update(dt_lib_module_t *self)
     if(!changed)
     {
       g_list_free(imgs);
+      imgs = NULL;
       return;
     }
   }
   g_list_free(d->last_act_on);
+  d->last_act_on = NULL;
   d->last_act_on = imgs;
 
   GList *metadata[DT_METADATA_NUMBER];
@@ -250,7 +252,7 @@ static void _update(dt_lib_module_t *self)
     const uint32_t keyid = dt_metadata_get_keyid_by_display_order(i);
     if(dt_metadata_get_type(keyid) == DT_METADATA_TYPE_INTERNAL)
       continue;
-    g_list_free_full(d->metadata_list[i], g_free);
+    g_list_free_full(d->metadata_list[i], dt_free_gpointer);
     d->metadata_list[i] = metadata[keyid];
     _fill_text_view(i, metadata_count[keyid], self);
   }
@@ -302,14 +304,16 @@ static void _write_metadata(GtkTextView *textview, dt_lib_module_t *self)
   for(GList *l = key_value; l; l = l->next)
   {
     l = l->next;
-    g_free(l->data);  // metadata value
+    dt_free(l->data);  // metadata value
   }
   g_list_free(key_value);
+  key_value = NULL;
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_METADATA_CHANGED, DT_METADATA_SIGNAL_NEW_VALUE);
 
   dt_image_synch_xmps(imgs);
   g_list_free(imgs);
+  imgs = NULL;
   _update(self);
   d->editing = FALSE;
 }
@@ -434,7 +438,7 @@ static void _update_layout(dt_lib_module_t *self)
     gchar *setting = g_strdup_printf("plugins/lighttable/metadata/%s_flag", name);
     const gboolean hidden = type == DT_METADATA_TYPE_INTERNAL ||
                             dt_conf_get_int(setting) & DT_METADATA_FLAG_HIDDEN;
-    g_free(setting);
+    dt_free(setting);
 
     GtkWidget *label = gtk_grid_get_child_at(GTK_GRID(self->widget), 0, i);
     gtk_widget_set_visible(label, !hidden);
@@ -464,7 +468,7 @@ void gui_reset(dt_lib_module_t *self)
     const gchar *name = dt_metadata_get_name_by_display_order(i);
     gchar *setting = g_strdup_printf("plugins/lighttable/metadata/%s_flag", name);
     const gboolean hidden = dt_conf_get_int(setting) & DT_METADATA_FLAG_HIDDEN;
-    g_free(setting);
+    dt_free(setting);
     const int type = dt_metadata_get_type_by_display_order(i);
     // we don't want to lose hidden information
     if(!hidden && type != DT_METADATA_TYPE_INTERNAL)
@@ -531,7 +535,7 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
       name[i] = (gchar *)dt_metadata_get_name_by_display_order(i);
       gchar *setting = g_strdup_printf("plugins/lighttable/metadata/%s_flag", name[i]);
       const uint32_t flag = dt_conf_get_int(setting);
-      g_free(setting);
+      dt_free(setting);
       visible[i] = !(flag & DT_METADATA_FLAG_HIDDEN);
       private[i] = flag & DT_METADATA_FLAG_PRIVATE;
       gtk_list_store_append(store, &iter);
@@ -627,7 +631,7 @@ void _menuitem_preferences(GtkMenuItem *menuitem, dt_lib_module_t *self)
           flag = new_private ? flag | DT_METADATA_FLAG_PRIVATE : flag & ~DT_METADATA_FLAG_PRIVATE;
         }
         dt_conf_set_int(setting, flag);
-        g_free(setting);
+        dt_free(setting);
       }
       valid = gtk_tree_model_iter_next(model, &iter);
     }
@@ -784,15 +788,14 @@ void gui_cleanup(dt_lib_module_t *self)
     if(dt_metadata_get_type_by_display_order(i) == DT_METADATA_TYPE_INTERNAL)
       continue;
     g_signal_handlers_block_by_func(d->textview[i], _lost_focus, self);
-    g_free(d->setting_name[i]);
+    dt_free(d->setting_name[i]);
   }
   if(_metadata_update_stmt)
   {
     sqlite3_finalize(_metadata_update_stmt);
     _metadata_update_stmt = NULL;
   }
-  free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 static void add_rights_preset(dt_lib_module_t *self, char *name, char *string)
@@ -804,7 +807,7 @@ static void add_rights_preset(dt_lib_module_t *self, char *name, char *string)
   char *params = calloc(sizeof(char), params_size);
   memcpy(params + 4, string, params_size - metadata_nb);
   dt_lib_presets_add(name, self->plugin_name, self->version(), params, params_size, TRUE);
-  free(params);
+  dt_free(params);
 }
 
 void init_presets(dt_lib_module_t *self)
@@ -840,7 +843,7 @@ void *legacy_params(dt_lib_module_t *self, const void *const old_params, const s
       metadata[i] = buf;
       if(!metadata[i])
       {
-        free(new_params);
+        dt_free(new_params);
         return NULL;
       }
       metadata_len[i] = strlen(metadata[i]) + 1;
@@ -909,7 +912,7 @@ void *get_params(dt_lib_module_t *self, int *size)
       continue;
     memcpy(params + pos, metadata[i], metadata_len[i]);
     pos += metadata_len[i];
-    g_free(metadata[i]);
+    dt_free(metadata[i]);
   }
 
   g_assert(pos == *size);
@@ -954,9 +957,11 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
   dt_metadata_set_list(imgs, key_value, TRUE);
 
   g_list_free(key_value);
+  key_value = NULL;
 
   dt_image_synch_xmps(imgs);
   g_list_free(imgs);
+  imgs = NULL;
   // force the ui refresh to update the info from preset
   g_list_free(d->last_act_on);
   d->last_act_on = NULL;

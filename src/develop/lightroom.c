@@ -825,7 +825,7 @@ static void _lrop(const dt_develop_t *dev, const xmlDocPtr doc, const int32_t im
         data->color = 4;
 
       data->has_colorlabel = TRUE;
-      g_free(v);
+      dt_free(v);
     }
   }
   if(dev == NULL && (!xmlStrcmp(name, (const xmlChar *)"subject")
@@ -1074,7 +1074,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
 
   if(doc == NULL)
   {
-    g_free(pathname);
+    dt_free(pathname);
     return FALSE ;
   }
 
@@ -1084,7 +1084,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
 
   if(entryNode == NULL)
   {
-    g_free(pathname);
+    dt_free(pathname);
     xmlFreeDoc(doc);
     return FALSE;
   }
@@ -1092,7 +1092,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
   if(xmlStrcmp(entryNode->name, (const xmlChar *)"xmpmeta"))
   {
     if(!iauto) dt_control_log(_("`%s' not a lightroom XMP!"), pathname);
-    g_free(pathname);
+    dt_free(pathname);
     return FALSE;
   }
 
@@ -1102,7 +1102,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
 
   if(xpathCtx == NULL)
   {
-    g_free(pathname);
+    dt_free(pathname);
     xmlFreeDoc(doc);
     return FALSE;
   }
@@ -1115,7 +1115,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
   {
     if(!iauto) dt_control_log(_("`%s' not a lightroom XMP!"), pathname);
     xmlXPathFreeContext(xpathCtx);
-    g_free(pathname);
+    dt_free(pathname);
     xmlFreeDoc(doc);
     return FALSE;
   }
@@ -1134,7 +1134,7 @@ gboolean dt_lightroom_import(int32_t imgid, dt_develop_t *dev, gboolean iauto)
       xmlFreeDoc(doc);
       xmlFree(value);
       if(!iauto) dt_control_log(_("`%s' not a lightroom XMP!"), pathname);
-      g_free(pathname);
+      dt_free(pathname);
       return FALSE;
     }
     xmlFree(value);

@@ -51,7 +51,7 @@ char *dt_lib_export_metadata_get_conf(void)
     while (dt_conf_key_exists(conf_keyword))
     {
       gchar *nameformula = dt_conf_get_string(conf_keyword);
-      g_free(conf_keyword);
+      dt_free(conf_keyword);
       if(nameformula[0])
       {
         char *formula = g_strstr_len(nameformula, strlen(nameformula), ";");
@@ -62,11 +62,11 @@ char *dt_lib_export_metadata_get_conf(void)
           metadata_presets = dt_util_dstrcat(metadata_presets,"\1%s\1%s", nameformula, formula);
         }
       }
-      g_free(nameformula);
+      dt_free(nameformula);
       i++;
       conf_keyword = g_strdup_printf("%s%d", formula_keyword, i);
     }
-    g_free(conf_keyword);
+    dt_free(conf_keyword);
   }
   else
   {
@@ -86,7 +86,7 @@ void dt_lib_export_metadata_set_conf(const char *metadata_presets)
     char *flags_hexa = list->data;
     dt_conf_set_string(flags_keyword, flags_hexa);
     list = g_list_remove(list, flags_hexa);
-    g_free(flags_hexa);
+    dt_free(flags_hexa);
     if (list)
     {
       for (GList *tags = list; tags; tags = g_list_next(tags))
@@ -98,25 +98,26 @@ void dt_lib_export_metadata_set_conf(const char *metadata_presets)
         nameformula = g_strdup_printf("%s;%s", tagname, formula);
         conf_keyword = g_strdup_printf("%s%d", formula_keyword, i);
         dt_conf_set_string(conf_keyword, nameformula);
-        g_free(nameformula);
-        g_free(conf_keyword);
+        dt_free(nameformula);
+        dt_free(conf_keyword);
         i++;
       }
     }
   }
   else dt_conf_set_string(flags_keyword, "");
-  g_list_free_full(list, g_free);
+  g_list_free_full(list, dt_free_gpointer);
+  list = NULL;
 
   // clean up deprecated formulas
   conf_keyword = g_strdup_printf("%s%d", formula_keyword, i);
   while (dt_conf_key_exists(conf_keyword))
   {
     dt_conf_set_string(conf_keyword, "");
-    g_free(conf_keyword);
+    dt_free(conf_keyword);
     i++;
     conf_keyword = g_strdup_printf("%s%d", formula_keyword, i);
   }
-  g_free(conf_keyword);
+  dt_free(conf_keyword);
 }
 
 // clang-format off

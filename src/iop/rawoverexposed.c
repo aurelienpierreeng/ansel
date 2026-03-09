@@ -480,8 +480,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_rawoverexposed_falsecolor);
   dt_opencl_free_kernel(gd->kernel_rawoverexposed_mark_solid);
   dt_opencl_free_kernel(gd->kernel_rawoverexposed_mark_cfa);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

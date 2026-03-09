@@ -82,8 +82,8 @@ int main(int argc, char *argv[])
     // This ensures that only darktable's main window will be visible
     FreeConsole();
 
-    g_free(logdir);
-    g_free(logfile);
+    dt_free(logdir);
+    dt_free(logfile);
 
     // don't buffer stdout/stderr. we have basically two options: unbuffered or line buffered.
     // unbuffered keeps the order in which things are printed but concurrent threads printing can lead to intermangled output. ugly.

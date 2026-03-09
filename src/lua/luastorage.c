@@ -26,6 +26,7 @@
    You should have received a copy of the GNU General Public License
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include "common/darktable.h"
 #include "lua/luastorage.h"
 #include "common/file_location.h"
 #include "common/image.h"
@@ -111,8 +112,8 @@ static int store_wrapper(struct dt_imageio_module_storage_t *self, struct dt_ima
                        icc_filename, icc_intent, self, self_data, num, total, metadata) != 0)
   {
     fprintf(stderr, "[%s] could not export to file: `%s'!\n", self->name(self), complete_name);
-    g_free(complete_name);
-    g_free(filename);
+    dt_free(complete_name);
+    dt_free(filename);
     return 1;
   }
 
@@ -136,7 +137,7 @@ static int store_wrapper(struct dt_imageio_module_storage_t *self, struct dt_ima
   {
     lua_pop(L, 3);
     dt_lua_unlock();
-    g_free(filename);
+    dt_free(filename);
     return 0;
   }
 
@@ -152,7 +153,7 @@ static int store_wrapper(struct dt_imageio_module_storage_t *self, struct dt_ima
   dt_lua_treated_pcall(L, 8, 0);
   lua_pop(L, 2);
   dt_lua_unlock();
-  g_free(filename);
+  dt_free(filename);
   return false;
 }
 
@@ -196,6 +197,7 @@ static int initialize_store_wrapper(struct dt_imageio_module_storage_t *self, dt
   if(!lua_isnoneornil(L, -1))
   {
     g_list_free(*images);
+    *images = NULL;
     if(lua_type(L, -1) != LUA_TTABLE)
     {
       dt_print(DT_DEBUG_LUA, "LUA ERROR initialization function of storage did not return nil or table\n");
@@ -279,8 +281,8 @@ static void free_param_wrapper_destroy(void * data)
     lua_settable(darktable.lua_state.state, LUA_REGISTRYINDEX);
     dt_lua_unlock();
   }
-  free(d);
-  free(params);
+  dt_free(d);
+  dt_free(params);
 }
 static int32_t free_param_wrapper_job(dt_job_t *job)
 {
@@ -510,7 +512,7 @@ static int destroy_storage(lua_State *L)
   storage->gui_cleanup(storage);
   if(storage->widget) g_object_unref(storage->widget);
   if(storage->module) g_module_close(storage->module);
-  free(storage);
+  dt_free(storage);
   return 0;
 }
 

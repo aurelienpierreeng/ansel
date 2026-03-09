@@ -85,7 +85,7 @@ GList *dt_map_location_get_locations_by_path(const gchar *path,
                                              const gboolean remove_root);
 
 // retrieve list of locations which are on the map
-// to be freed with g_list_free_full(list, g_free)
+// to be freed with g_list_free_full(list, dt_free_gpointer)
 GList *dt_map_location_get_locations_on_map(const dt_map_box_t *const bbox);
 
 // free map location list

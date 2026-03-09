@@ -37,6 +37,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -405,9 +406,9 @@ static void kmeans(const float *col, const int width, const int height, const in
     // var_out[k][0], var_out[k][1], weight_out[k]);
   }
 
-  free(cnt);
-  free(var);
-  free(mean);
+  dt_free(cnt);
+  dt_free(var);
+  dt_free(mean);
 
   for(int k = 0; k < n; k++)
   {
@@ -471,6 +472,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   {
     dt_iop_gui_enter_critical_section(self);
     dt_free_align(g->buffer);
+    g->buffer = NULL;
 
     g->buffer = dt_iop_image_alloc(width, height, 4);
     g->width = width;
@@ -506,7 +508,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     float2 *const var_ratio = malloc(sizeof(float2) * data->n);
     if(!var_ratio)
     {
-      free(mapio);
+      dt_free(mapio);
       return 1;
     }
 
@@ -541,8 +543,8 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       dt_bilateral_t *b = dt_bilateral_init(width, height, sigma_s, sigma_r);
       if(!b)
       {
-        free(var_ratio);
-        free(mapio);
+        dt_free(var_ratio);
+        dt_free(mapio);
         return 1;
       }
       dt_bilateral_splat(b, out);
@@ -555,8 +557,8 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     float *const weight_buf = dt_pixelpipe_cache_alloc_perthread(data->n, sizeof(float), &allocsize);
     if(weight_buf == NULL)
     {
-      free(var_ratio);
-      free(mapio);
+      dt_free(var_ratio);
+      dt_free(mapio);
       return 1;
     }
 
@@ -598,8 +600,8 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     }
 
     dt_pixelpipe_cache_free_align(weight_buf);
-    free(var_ratio);
-    free(mapio);
+    dt_free(var_ratio);
+    dt_free(mapio);
   }
   // incomplete parameter set -> do nothing
   else
@@ -936,6 +938,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
 
   cmsDeleteTransform(g->xform);
   dt_free_align(g->buffer);
+  g->buffer = NULL;
 
   IOP_GUI_FREE;
 }

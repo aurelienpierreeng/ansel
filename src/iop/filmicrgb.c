@@ -3380,8 +3380,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_filmic_wavelets_reconstruct);
   dt_opencl_free_kernel(gd->kernel_filmic_compute_ratios);
   dt_opencl_free_kernel(gd->kernel_filmic_restore_ratios);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 

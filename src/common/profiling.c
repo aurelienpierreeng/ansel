@@ -21,6 +21,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "common/profiling.h"
 
 dt_timer_t *dt_timer_start_with_name(const char *file, const char *function, const char *description)
@@ -41,7 +42,7 @@ void dt_timer_stop_with_name(dt_timer_t *t)
   fprintf(stderr, "Timer %s in function %s took %.3f seconds to execute.\n", t->description, t->function,
           g_timer_elapsed(t->timer, &ms));
   g_timer_destroy(t->timer);
-  g_free(t);
+  dt_free(t);
 }
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py

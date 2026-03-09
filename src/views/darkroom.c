@@ -228,7 +228,7 @@ void cleanup(dt_view_t *self)
   _darkroom_pending_imgid = UNKNOWN_IMAGE;
   _darkroom_pending_focus_module = NULL;
   dt_dev_cleanup(dev);
-  free(dev);
+  dt_free(dev);
 }
 
 static cairo_status_t _write_snapshot_data(void *closure, const unsigned char *data, unsigned int length)
@@ -1191,7 +1191,7 @@ static int32_t _darkroom_image_load_job_run(dt_job_t *job)
 
   if(!darktable.signals || !dt_control_running())
   {
-    g_free(loaded);
+    dt_free(loaded);
     return 0;
   }
 
@@ -1755,10 +1755,14 @@ gboolean _switch_to_next_picture(GtkAccelGroup *accel_group, GObject *accelerabl
   {
     int32_t next_img = GPOINTER_TO_INT(current_item->next->data);
     g_list_free(current_collection);
+    current_collection = NULL;
     _dev_change_image(data, next_img);
   }
   else
+  {
     g_list_free(current_collection);
+    current_collection = NULL;
+  }
 
   return TRUE;
 }
@@ -1776,10 +1780,14 @@ gboolean _switch_to_prev_picture(GtkAccelGroup *accel_group, GObject *accelerabl
   {
     int32_t prev_img = GPOINTER_TO_INT(current_item->prev->data);
     g_list_free(current_collection);
+    current_collection = NULL;
     _dev_change_image(data, prev_img);
   }
   else
+  {
     g_list_free(current_collection);
+    current_collection = NULL;
+  }
 
   return TRUE;
 }
@@ -1797,77 +1805,77 @@ void gui_init(dt_view_t *self)
   gchar *path = dt_accels_build_path(_("Darkroom/Actions"), _("Give focus to the main image"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_Return, 0);
-  g_free(path);
+  dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move up"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_Up, 0);
-  g_free(path);
+  dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move up (coarse step)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_Up, GDK_SHIFT_MASK);
-  g_free(path);
+  dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move up (fine step)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_Up, GDK_CONTROL_MASK);
-  g_free(path);
+  dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move down"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_Down, 0);
-  g_free(path);
+  dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move down (coarse step)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_Down, GDK_SHIFT_MASK);
-  g_free(path);
+  dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move down (fine step)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_Down, GDK_CONTROL_MASK);
-  g_free(path);
+  dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move left"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_Left, 0);
-  g_free(path);
+  dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move left (coarse step)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_Left, GDK_SHIFT_MASK);
-  g_free(path);
+  dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move left (fine step)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_Left, GDK_CONTROL_MASK);
-  g_free(path);
+  dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move right"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_Right, 0);
-  g_free(path);
+  dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move right (coarse step)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_Right, GDK_SHIFT_MASK);
-  g_free(path);
+  dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Move right (fine step)"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_Right, GDK_CONTROL_MASK);
-  g_free(path);
+  dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Zoom in"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_plus, GDK_CONTROL_MASK);
-  g_free(path);
+  dt_free(path);
 
   path = dt_accels_build_path(_("Darkroom/Main image"), _("Zoom out"));
   dt_accels_new_virtual_shortcut(darktable.gui->accels, darktable.gui->accels->darkroom_accels,
                                  path, dt_ui_center(darktable.gui->ui), GDK_KEY_minus, GDK_CONTROL_MASK);
-  g_free(path);
+  dt_free(path);
   /*
    * Add view specific tool buttons
    */
@@ -2086,9 +2094,9 @@ void gui_init(dt_view_t *self)
     char *user_profile_dir = g_build_filename(confdir, "color", "out", NULL);
     char *tooltip = g_strdup_printf(_("softproof ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
     gtk_widget_set_tooltip_text(softproof_profile, tooltip);
-    g_free(tooltip);
-    g_free(system_profile_dir);
-    g_free(user_profile_dir);
+    dt_free(tooltip);
+    dt_free(system_profile_dir);
+    dt_free(user_profile_dir);
 
     g_signal_connect(G_OBJECT(softproof_profile), "value-changed", G_CALLBACK(softproof_profile_callback), dev);
 
@@ -2165,6 +2173,7 @@ static dt_iop_module_t *_get_dnd_dest_module(GtkBox *container, gint x, gint y, 
     }
   }
   g_list_free(children);
+  children = NULL;
 
   if(widget_dest)
   {
@@ -2641,13 +2650,13 @@ void leave(dt_view_t *self)
     dt_iop_module_t *module = (dt_iop_module_t *)(dev->iop->data);
     if(!dt_iop_is_hidden(module)) dt_iop_gui_cleanup_module(module);
     dt_iop_cleanup_module(module);
-    free(module);
+    dt_free(module);
     dev->iop = g_list_delete_link(dev->iop, dev->iop);
   }
   while(dev->alliop)
   {
     dt_iop_cleanup_module((dt_iop_module_t *)dev->alliop->data);
-    free(dev->alliop->data);
+    dt_free(dev->alliop->data);
     dev->alliop = g_list_delete_link(dev->alliop, dev->alliop);
   }
   dev->iop = dev->alliop = NULL;
@@ -2655,7 +2664,7 @@ void leave(dt_view_t *self)
   // cleanup visible masks
   if(dev->form_gui)
   {
-    dev->gui_module = NULL; // modules have already been free()
+    dev->gui_module = NULL; // modules have already been g_free()
     dt_masks_gui_cleanup(dev);
   }
 

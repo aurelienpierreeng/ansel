@@ -36,6 +36,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "control/signal.h"
 #include "control/control.h"
 #include <glib.h>
@@ -107,7 +108,7 @@ static void _image_info_changed_destroy_callback(gpointer instance, gpointer img
 // callback for the destructor of DT_SIGNAL_PRESETS_CHANGED
 static void _presets_changed_destroy_callback(gpointer instance, gpointer module, gpointer user_data)
 {
-  g_free(module);
+  dt_free(module);
 }
 
 // callback for the destructor of DT_SIGNAL_GEOTAG_CHANGED
@@ -123,7 +124,7 @@ static void _image_geotag_destroy_callback(gpointer instance, gpointer imgs, con
 static void _image_loaded_destroy_callback(gpointer instance, guint request_id, guint result, gpointer payload,
                                            gpointer user_data)
 {
-  g_free(payload);
+  dt_free(payload);
 }
 
 static dt_signal_description _signal_description[DT_SIGNAL_COUNT] = {
@@ -281,8 +282,8 @@ static gboolean _signal_raise(gpointer user_data)
   _signal_param_t *params = (_signal_param_t *)user_data;
   g_signal_emitv(params->instance_and_params, params->signal_id, 0, NULL);
   for(int i = 0; i <= params->n_params; i++) g_value_unset(&params->instance_and_params[i]);
-  free(params->instance_and_params);
-  free(params);
+  dt_free(params->instance_and_params);
+  dt_free(params);
   return FALSE;
 }
 
@@ -320,7 +321,7 @@ static void _print_trace (const char* op)
     for (i = 0; i < size; i++)
       dt_print(DT_DEBUG_SIGNAL, "[signal-trace-%s]: %s\n", op, strings[i]);
 
-    free (strings);
+    dt_free(strings);
   }
 #endif
 }
@@ -338,7 +339,7 @@ void dt_control_signal_raise(const dt_control_signal_t *ctlsig, dt_signal_t sign
   GValue *instance_and_params = calloc(1 + signal_description->n_params, sizeof(GValue));
   if(!instance_and_params)
   {
-    free(params);
+    dt_free(params);
     return;
   }
 
@@ -376,8 +377,8 @@ void dt_control_signal_raise(const dt_control_signal_t *ctlsig, dt_signal_t sign
                 g_type_name(type), signal_description->name);
         va_end(extra_args);
         for(int j = 0; j <= i; j++) g_value_unset(&instance_and_params[j]);
-        free(instance_and_params);
-        free(params);
+        dt_free(instance_and_params);
+        dt_free(params);
         return;
     }
   }

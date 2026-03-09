@@ -16,6 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "common/topological_sort.h"
 #include <stdio.h>
 #include <string.h>
@@ -71,12 +72,12 @@ int flatten_nodes(GList *input_nodes, GList **out_nodes)
       if(((!strcmp(canon->tag, "dst") && !strcmp(in->tag, "src"))
           || (!strcmp(canon->tag, "src") && !strcmp(in->tag, "dst"))))
       {
-        g_free(canon->tag);
+        dt_free(canon->tag);
         canon->tag = g_strdup("dst+src");
       }
       else if(strcmp(canon->tag, "dst+src"))
       {
-        g_free(canon->tag);
+        dt_free(canon->tag);
         canon->tag = g_strdup("mixed");
       }
     }
@@ -344,7 +345,12 @@ int topological_sort(GList *nodes, GList **sorted, GList **cycle_out)
       if(_dfs_visit(n, outgoing, color, &result, &dfs_count, &dfs_stack, &cycle))
       {
         g_list_free(result);
-        if(dfs_stack) g_list_free(dfs_stack);
+        result = NULL;
+        if(dfs_stack)
+        {
+          g_list_free(dfs_stack);
+          dfs_stack = NULL;
+        }
         g_hash_table_destroy(outgoing);
         g_hash_table_destroy(color);
         *sorted = NULL;
@@ -356,8 +362,16 @@ int topological_sort(GList *nodes, GList **sorted, GList **cycle_out)
     }
   }
 
-  if(dfs_stack) g_list_free(dfs_stack);
-  if(cycle) g_list_free(cycle); // should never happen on success, but keep cleanup symmetric
+  if(dfs_stack)
+  {
+    g_list_free(dfs_stack);
+    dfs_stack = NULL;
+  }
+  if(cycle)
+  {
+    g_list_free(cycle); // should never happen on success, but keep cleanup symmetric
+    cycle = NULL;
+  }
 
   g_hash_table_destroy(outgoing);
   g_hash_table_destroy(color);
@@ -394,14 +408,21 @@ static void dt_digraph_node_free_full(dt_digraph_node_t *node, dt_node_user_data
 {
   if(!node) return;
 
-  if(node->previous) g_list_free(node->previous);
+  if(node->previous)
+  {
+    g_list_free(node->previous);
+    node->previous = NULL;
+  }
 
   if(user_destroy && node->user_data) user_destroy(node->user_data);
 
-  if(node->tag) g_free(node->tag);
-  g_free((char *)node->id);
+  if(node->tag)
+  {
+    dt_free(node->tag);
+  }
+  dt_free(node->id);
 
-  g_free(node);
+  dt_free(node);
 }
 
 static void _dt_digraph_nodes_free_full(GList *nodes, dt_node_user_data_destroy_t user_destroy)
@@ -410,6 +431,7 @@ static void _dt_digraph_nodes_free_full(GList *nodes, dt_node_user_data_destroy_
     dt_digraph_node_free_full(it->data, user_destroy);
 
   g_list_free(nodes);
+  nodes = NULL;
 }
 
 static void _dt_digraph_nodes_hashtable_free_full(GHashTable *ht, dt_node_user_data_destroy_t user_destroy)

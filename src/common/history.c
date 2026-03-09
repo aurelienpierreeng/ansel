@@ -91,11 +91,11 @@ static inline void _history_stmt_mutex_ensure(void)
 void dt_history_item_free(gpointer data)
 {
   dt_history_item_t *item = (dt_history_item_t *)data;
-  g_free(item->op);
-  g_free(item->name);
+  dt_free(item->op);
+  dt_free(item->name);
   item->op = NULL;
   item->name = NULL;
-  g_free(item);
+  dt_free(item);
 }
 
 static void _remove_preset_flag(const int32_t imgid)
@@ -238,7 +238,7 @@ GList *dt_history_get_items(const int32_t imgid, gboolean enabled)
     item->op = g_strdup(op);
     result = g_list_prepend(result, item);
 
-    g_free(mname);
+    dt_free(mname);
   }
   sqlite3_finalize(stmt);
   return g_list_reverse(result);   // list was built in reverse order, so un-reverse it
@@ -274,14 +274,15 @@ char *dt_history_get_items_as_string(const int32_t imgid)
     char *clean_name = delete_underscore(name);
     items = g_list_prepend(items, clean_name);
 
-    g_free(iname);
-    g_free(name);
-    g_free(multi_name);
+    dt_free(iname);
+    dt_free(name);
+    dt_free(multi_name);
   }
   sqlite3_finalize(stmt);
   items = g_list_reverse(items); // list was built in reverse order, so un-reverse it
   char *result = dt_util_glist_to_str("\n", items);
-  g_list_free_full(items, g_free);
+  g_list_free_full(items, dt_free_gpointer);
+  items = NULL;
   return result;
 }
 
@@ -680,7 +681,7 @@ void dt_history_db_foreach_auto_preset_row(const int32_t imgid, const dt_image_t
     // clang-format on
 
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, stmt_ptr, NULL);
-    g_free(query);
+    dt_free(query);
   }
 
   sqlite3_stmt *stmt = *stmt_ptr;

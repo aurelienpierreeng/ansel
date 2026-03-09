@@ -422,10 +422,9 @@ void gui_cleanup(dt_lib_module_t *self)
 {
   dt_lib_snapshots_t *d = (dt_lib_snapshots_t *)self->data;
 
-  g_free(d->snapshot);
+  dt_free(d->snapshot);
 
-  g_free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 static void _lib_snapshots_add_button_clicked_callback(GtkWidget *widget, gpointer user_data)

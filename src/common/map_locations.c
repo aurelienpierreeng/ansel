@@ -37,7 +37,7 @@ guint dt_map_location_new(const char *const name)
   char *loc_name = g_strconcat(location_tag_prefix, name, NULL);
   guint locid = -1;
   dt_tag_new(loc_name, &locid);
-  g_free(loc_name);
+  dt_free(loc_name);
   return locid;
 }
 
@@ -59,7 +59,7 @@ void dt_map_location_delete(const guint locid)
       sqlite3_finalize(stmt);
       dt_tag_remove(locid, TRUE);
     }
-  g_free(name);
+  dt_free(name);
   }
 }
 
@@ -74,9 +74,9 @@ void dt_map_location_rename(const guint locid, const char *const name)
     {
       char *new_name = g_strconcat(location_tag_prefix, name, NULL);
       dt_tag_rename(locid, new_name);
-      g_free(new_name);
+      dt_free(new_name);
     }
-    g_free(old_name);
+    dt_free(old_name);
   }
 }
 
@@ -85,7 +85,7 @@ gboolean dt_map_location_name_exists(const char *const name)
 {
   char *new_name = g_strconcat(location_tag_prefix, name, NULL);
   const gboolean exists = dt_tag_exists(new_name, NULL);
-  g_free(new_name);
+  dt_free(new_name);
   return exists;
 }
 
@@ -161,8 +161,8 @@ GList *dt_map_location_get_locations_by_path(const gchar *path,
   }
   sqlite3_finalize(stmt);
 
-  g_free(path1);
-  g_free(path2);
+  dt_free(path1);
+  dt_free(path2);
   return locs;
 }
 
@@ -240,8 +240,9 @@ void dt_map_location_free_polygons(dt_location_draw_t *ld)
 {
   if(ld->data.shape == MAP_LOCATION_SHAPE_POLYGONS && ld->data.polygons)
   {
-    g_free(ld->data.polygons->data);
+    dt_free(ld->data.polygons->data);
     g_list_free(ld->data.polygons);
+    ld->data.polygons = NULL;
   }
   ld->data.polygons = NULL;
   ld->data.plg_pts = 0;
@@ -283,8 +284,8 @@ static gboolean _is_point_in_polygon(const dt_geo_map_display_point_t *pt,
 
 static void _free_result_item(dt_map_location_t *t, gpointer unused)
 {
-  g_free(t->tag);
-  g_free(t);
+  dt_free(t->tag);
+  dt_free(t);
 }
 
 // free map location list
@@ -293,6 +294,7 @@ void dt_map_location_free_result(GList **result)
   if(result && *result)
   {
     g_list_free_full(*result, (GDestroyNotify)_free_result_item);
+    *result = NULL;
   }
 }
 
@@ -558,6 +560,7 @@ void dt_map_location_update_locations(const int32_t imgid, const GList *tags)
     }
   }
   g_list_free(old_tags);
+  old_tags = NULL;
 }
 
 // update location's images - remove old ones and add new ones
@@ -590,7 +593,9 @@ gboolean dt_map_location_update_images(dt_location_draw_t *ld)
     }
   }
   g_list_free(new_imgs);
+  new_imgs = NULL;
   g_list_free(imgs);
+  imgs = NULL;
   return res;
 }
 

@@ -108,6 +108,7 @@ void update(dt_lib_module_t *self)
       GList *iop_list = dt_ioppr_deserialize_iop_order_list(params, params_len);
       gchar *iop_list_text = dt_ioppr_serialize_text_iop_order_list(iop_list);
       g_list_free(iop_list);
+      iop_list = NULL;
       index++;
 
       if(!strcmp(iop_order_list, iop_list_text))
@@ -115,16 +116,16 @@ void update(dt_lib_module_t *self)
         gtk_label_set_text(GTK_LABEL(d->widget), name);
         d->current_mode = index;
         found = TRUE;
-        g_free(iop_list_text);
+        dt_free(iop_list_text);
         break;
     }
 
-      g_free(iop_list_text);
+      dt_free(iop_list_text);
     }
 
     sqlite3_finalize(stmt);
 
-    g_free(iop_order_list);
+    dt_free(iop_order_list);
 
     if(!found)
     {
@@ -179,8 +180,7 @@ void gui_cleanup(dt_lib_module_t *self)
   dt_lib_ioporder_t *d = (dt_lib_ioporder_t *)self->data;
 
   if(d->widget) gtk_widget_destroy(d->widget);
-  free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 void gui_reset (dt_lib_module_t *self)
@@ -202,7 +202,8 @@ void gui_reset (dt_lib_module_t *self)
     d->current_mode = DT_IOP_ORDER_V30;
     if(d->widget)
       gtk_label_set_text(GTK_LABEL(d->widget), _("v3.0"));
-    g_list_free_full(iop_order_list, free);
+    g_list_free_full(iop_order_list, dt_free_gpointer);
+    iop_order_list = NULL;
   }
 }
 
@@ -215,7 +216,7 @@ void init_presets(dt_lib_module_t *self)
   list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_LEGACY);
   params = dt_ioppr_serialize_iop_order_list(list, &size);
   dt_lib_presets_add(_("legacy"), self->plugin_name, self->version(), (const char *)params, (int32_t)size, TRUE);
-  free(params);
+  dt_free(params);
 
   list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_V30);
   params = dt_ioppr_serialize_iop_order_list(list, &size);
@@ -226,7 +227,7 @@ void init_presets(dt_lib_module_t *self)
   params = dt_ioppr_serialize_iop_order_list(list, &size);
   dt_lib_presets_add(_("v3.0 for JPEG/non-RAW input"), self->plugin_name, self->version(), (const char *)params, (int32_t)size,
                      TRUE);
-  free(params);
+  dt_free(params);
 }
 
 int set_params(dt_lib_module_t *self, const void *params, int size)
@@ -245,7 +246,8 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
 
     update(self);
 
-    g_list_free_full(iop_order_list, free);
+    g_list_free_full(iop_order_list, dt_free_gpointer);
+    iop_order_list = NULL;
     return 0;
   }
   else

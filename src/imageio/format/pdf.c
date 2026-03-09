@@ -303,7 +303,7 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
         unsigned char *buf = malloc(sizeof(unsigned char) * len);
         cmsSaveProfileToMem(profile->profile, buf, &len);
         icc_id = dt_pdf_add_icc_from_data(d->pdf, buf, len);
-        free(buf);
+        dt_free(buf);
         _pdf_icc_t *icc = (_pdf_icc_t *)malloc(sizeof(_pdf_icc_t));
         icc->profile = profile;
         icc->icc_id = icc_id;
@@ -384,11 +384,13 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
     dt_pdf_finish(d->pdf, pages, n_images);
 
     // we allocated the images and pages. the main pdf object gets free'ed in dt_pdf_finish().
-    g_list_free_full(d->images, free);
-    for(i = 0; i < n_images; i++) free(pages[i]);
-    free(pages);
-    g_free(d->actual_filename);
-    g_list_free_full(d->icc_profiles, free);
+    g_list_free_full(d->images, dt_free_gpointer);
+    d->images = NULL;
+    for(i = 0; i < n_images; i++) dt_free(pages[i]);
+    dt_free(pages);
+    dt_free(d->actual_filename);
+    g_list_free_full(d->icc_profiles, dt_free_gpointer);
+    d->icc_profiles = NULL;
 
     d->pdf = NULL;
     d->images = NULL;
@@ -502,7 +504,7 @@ static void _set_paper_size(dt_imageio_module_format_t *self, const char *text)
         else
           _set_paper_size(self, dt_pdf_paper_sizes[0].name);
 
-        g_free(old_size);
+        dt_free(old_size);
       }
     }
   }
@@ -616,7 +618,7 @@ void gui_init(dt_imageio_module_format_t *self)
                                          "example: 210 mm x 2.97 cm"));
   gchar *size_str = dt_conf_get_string("plugins/imageio/format/pdf/size");
   _set_paper_size(self, size_str);
-  g_free(size_str);
+  dt_free(size_str);
 
   // orientation
 
@@ -740,7 +742,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
 void gui_cleanup(dt_imageio_module_format_t *self)
 {
-  free(self->gui_data);
+  dt_free(self->gui_data);
 }
 
 void gui_reset(dt_imageio_module_format_t *self)
@@ -801,22 +803,24 @@ void free_params(dt_imageio_module_format_t *self, dt_imageio_module_data_t *par
   if(d->pdf)
     dt_pdf_finish(d->pdf, NULL, 0);
 
-  g_list_free_full(d->images, free);
+  g_list_free_full(d->images, dt_free_gpointer);
+  d->images = NULL;
 
   if(d->actual_filename)
   {
     g_unlink(d->actual_filename); // no need to leave broken files on disk
-    g_free(d->actual_filename);
+    dt_free(d->actual_filename);
   }
 
-  g_list_free_full(d->icc_profiles, free);
+  g_list_free_full(d->icc_profiles, dt_free_gpointer);
+  d->icc_profiles = NULL;
 
   d->pdf = NULL;
   d->images = NULL;
   d->actual_filename = NULL;
   d->icc_profiles = NULL;
 
-  free(params);
+  dt_free(params);
 }
 
 int set_params(dt_imageio_module_format_t *self, const void *params, const int size)

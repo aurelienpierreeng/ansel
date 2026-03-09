@@ -27,6 +27,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include <cups/cups.h>
 #include <cups/ppd.h>
 #include <glib.h>
@@ -481,11 +482,11 @@ void dt_print_file(const int32_t imgid, const char *filename, const char *job_ti
                  G_SPAWN_SEARCH_PATH | G_SPAWN_STDOUT_TO_DEV_NULL | G_SPAWN_STDERR_TO_DEV_NULL,
                  NULL, NULL, NULL, NULL, &exit_status, NULL);
 
-    g_free(argv[1]);
-    g_free(argv[3]);
-    g_free(argv[7]);
-    g_free(argv[11]);
-    g_free(argv[13]);
+    dt_free(argv[1]);
+    dt_free(argv[3]);
+    dt_free(argv[7]);
+    dt_free(argv[11]);
+    dt_free(argv[13]);
 
     if(exit_status==0)
     {

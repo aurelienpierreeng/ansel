@@ -56,6 +56,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
 #include "common/eaw.h"
@@ -647,7 +648,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   dt_opencl_release_mem_object(dev_tmp);
   for(int k = 0; k < max_scale; k++)
     dt_opencl_release_mem_object(dev_detail[k]);
-  free(dev_detail);
+  dt_free(dev_detail);
   return TRUE;
 
 error:
@@ -655,7 +656,7 @@ error:
   dt_opencl_release_mem_object(dev_tmp);
   for(int k = 0; k < max_scale; k++)
     dt_opencl_release_mem_object(dev_detail[k]);
-  free(dev_detail);
+  dt_free(dev_detail);
   dt_print(DT_DEBUG_OPENCL, "[opencl_atrous] couldn't enqueue kernel! %d\n", err);
   return FALSE;
 }
@@ -722,8 +723,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_zero);
   dt_opencl_free_kernel(gd->kernel_addbuffers);
 #endif
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 static inline void _apply_mix(dt_iop_module_t *self,

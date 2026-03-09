@@ -171,6 +171,5 @@ void gui_cleanup(dt_lib_module_t *self)
   dt_lib_tool_mask_t *d = (dt_lib_tool_mask_t *)self->data;
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(give_control_to_form),
                                (gpointer)d);
-  g_free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }

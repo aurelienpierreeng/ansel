@@ -35,6 +35,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 // our includes go first:
@@ -420,16 +421,13 @@ void cleanup(dt_iop_module_t *module)
   // Releases any memory allocated in init(module)
   // Implement this function explicitly if the module allocates additional memory besides (default_)params.
   // this is rare.
-  free(module->params);
-  module->params = NULL;
-  free(module->default_params);
-  module->default_params = NULL;
+  dt_free(module->params);
+  dt_free(module->default_params);
 }
 
 void cleanup_global(dt_iop_module_so_t *module)
 {
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 /** Put your local callbacks here, be sure to make them static so they won't be visible outside this file! */

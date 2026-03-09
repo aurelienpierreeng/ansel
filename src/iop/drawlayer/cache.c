@@ -16,6 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "iop/drawlayer/cache.h"
 
 #include "develop/imageop_math.h"
@@ -75,7 +76,7 @@ void dt_drawlayer_cache_patch_clear(dt_drawlayer_cache_patch_t *patch, const cha
   }
   else
   {
-    g_free(patch->pixels);
+    dt_free(patch->pixels);
   }
   memset(patch, 0, sizeof(*patch));
 }

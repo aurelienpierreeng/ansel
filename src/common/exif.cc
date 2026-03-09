@@ -426,7 +426,7 @@ static void dt_strlcpy_to_utf8(char *dest, size_t dest_max, Exiv2::ExifData::con
   if(s != NULL)
   {
     g_strlcpy(dest, s, dest_max);
-    g_free(s);
+    dt_free(s);
   }
   else
   {
@@ -546,7 +546,7 @@ static bool _exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int 
             while(*value == ' ') value++;
           }
           dt_metadata_set_import(img->id, key, value);
-          free(adr);
+          dt_free(adr);
         }
       }
     }
@@ -634,7 +634,7 @@ static bool _exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int 
       }
       // no need to do any Unicode<->locale conversion, the field is specified as ASCII
       g_strlcpy(img->exif_lens, lens, sizeof(img->exif_lens));
-      free(adr);
+      dt_free(adr);
     }
 
     /* read timestamp from Xmp.exif.DateTimeOriginal */
@@ -643,16 +643,24 @@ static bool _exif_decode_xmp_data(dt_image_t *img, Exiv2::XmpData &xmpData, int 
     {
       char *datetime = strdup(pos->toString().c_str());
       if(datetime[0] != '\0') dt_datetime_exif_to_img(img, datetime);
-      free(datetime);
+      dt_free(datetime);
     }
 
-    if(imgs) g_list_free(imgs);
+    if(imgs)
+    {
+      g_list_free(imgs);
+      imgs = NULL;
+    }
     imgs = NULL;
     return true;
   }
   catch(Exiv2::AnyError &e)
   {
-    if(imgs) g_list_free(imgs);
+    if(imgs)
+    {
+      g_list_free(imgs);
+      imgs = NULL;
+    }
     imgs = NULL;
     std::string s(e.what());
     std::cerr << "[exiv2 _exif_decode_xmp_data] " << img->filename << ": " << s << std::endl;
@@ -696,7 +704,7 @@ static bool _exif_decode_iptc_data(dt_image_t *img, Exiv2::IptcData &iptcData)
         guint tagid = 0;
         dt_tag_new(tag, &tagid);
         dt_tag_attach(tagid, img->id, FALSE, FALSE);
-        g_free(tag);
+        dt_free(tag);
         ++pos;
       }
       DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_TAG_CHANGED);
@@ -736,7 +744,7 @@ static bool _exif_decode_iptc_data(dt_image_t *img, Exiv2::IptcData &iptcData)
       {
         gchar *time = g_strdup(pos->toString().c_str());
         datetime = g_string_append(datetime, time);
-        g_free(time);
+        dt_free(time);
       }
       else
         datetime = g_string_append(datetime, "00:00:00");
@@ -814,7 +822,7 @@ static gboolean _check_dng_opcodes(Exiv2::ExifData &exifData, dt_image_t *img)
     uint8_t *data = (uint8_t *)g_malloc(pos->size());
     pos->copy(data, Exiv2::invalidByteOrder);
     dt_dng_opcode_process_opcode_list_2(data, pos->size(), img);
-    g_free(data);
+    dt_free(data);
     has_opcodes = TRUE;
   }
   else
@@ -1313,7 +1321,7 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       else
         pretty = g_strconcat("Canon RF ", &img->exif_lens[2], (char *)NULL);
       g_strlcpy(img->exif_lens, pretty, sizeof(img->exif_lens));
-      g_free(pretty);
+      dt_free(pretty);
     }
 
     /* Capitalize Nikon Z-mount lenses properly for UI presentation */
@@ -2125,7 +2133,8 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
       if(res != NULL)
       {
         exifData["Exif.Image.Artist"] = (char *)res->data;
-        g_list_free_full(res, &g_free);
+        g_list_free_full(res, dt_free_gpointer);
+        res = NULL;
       }
 
       res = dt_metadata_get(imgid, "Xmp.dc.description", NULL);
@@ -2136,7 +2145,8 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
           exifData["Exif.Image.ImageDescription"] = desc;
         else
           exifData["Exif.Photo.UserComment"] = desc;
-        g_list_free_full(res, &g_free);
+        g_list_free_full(res, dt_free_gpointer);
+        res = NULL;
       }
 #if EXIV2_TEST_VERSION(0,27,4)
       else
@@ -2149,7 +2159,8 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
       if(res != NULL)
       {
         exifData["Exif.Image.Copyright"] = (char *)res->data;
-        g_list_free_full(res, &g_free);
+        g_list_free_full(res, dt_free_gpointer);
+        res = NULL;
       }
 #if EXIV2_TEST_VERSION(0,27,4)
       else
@@ -2164,6 +2175,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
         const int rating = GPOINTER_TO_INT(res->data) + 1;
         exifData["Exif.Image.Rating"] = rating;
         g_list_free(res);
+        res = NULL;
       }
 
       // GPS data
@@ -2183,8 +2195,8 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
         gchar *lat_str = g_strdup_printf("%ld/1 %ld/1000000 0/1", lat_deg, lat_min);
         exifData["Exif.GPSInfo.GPSLongitude"] = long_str;
         exifData["Exif.GPSInfo.GPSLatitude"] = lat_str;
-        g_free(long_str);
-        g_free(lat_str);
+        dt_free(long_str);
+        dt_free(lat_str);
       }
       if(!std::isnan(cimg->geoloc.elevation))
       {
@@ -2194,7 +2206,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
         long ele_dm = (int)floor(fabs(10.0 * cimg->geoloc.elevation));
         gchar *ele_str = g_strdup_printf("%ld/10", ele_dm);
         exifData["Exif.GPSInfo.GPSAltitude"] = ele_str;
-        g_free(ele_str);
+        dt_free(ele_str);
       }
 
       // According to the Exif specs DateTime is to be set to the last modification time while
@@ -2231,8 +2243,7 @@ int dt_exif_read_blob(uint8_t **buf, const char *path, const int32_t imgid, cons
     // std::cerr.rdbuf(savecerr);
     std::string s(e.what());
     std::cerr << "[exiv2 dt_exif_read_blob] " << path << ": " << s << std::endl;
-    free(*buf);
-    *buf = NULL;
+    dt_free(*buf);
     return 0;
   }
 }
@@ -2256,7 +2267,7 @@ char *dt_exif_xmp_encode(const unsigned char *input, const int len, int *output_
       do_compress = TRUE;
     else
       do_compress = FALSE;
-    g_free(config);
+    dt_free(config);
   }
 
   return dt_exif_xmp_encode_internal(input, len, output_len, do_compress);
@@ -2278,7 +2289,7 @@ char *dt_exif_xmp_encode_internal(const unsigned char *input, const int len, int
 
     if(result != Z_OK)
     {
-      free(buffer1);
+      dt_free(buffer1);
       return NULL;
     }
 
@@ -2286,14 +2297,14 @@ char *dt_exif_xmp_encode_internal(const unsigned char *input, const int len, int
     const int factor = MIN(len / destLen + 1, 99);
 
     char *buffer2 = (char *)g_base64_encode(buffer1, destLen);
-    free(buffer1);
+    dt_free(buffer1);
     if(!buffer2) return NULL;
 
     int outlen = strlen(buffer2) + 5; // leading "gz" + compression factor + base64 string + trailing '\0'
     output = (char *)malloc(outlen);
     if(!output)
     {
-      g_free(buffer2);
+      dt_free(buffer2);
       return NULL;
     }
 
@@ -2302,7 +2313,7 @@ char *dt_exif_xmp_encode_internal(const unsigned char *input, const int len, int
     output[2] = factor / 10 + '0';
     output[3] = factor % 10 + '0';
     g_strlcpy(output + 4, buffer2, outlen);
-    g_free(buffer2);
+    dt_free(buffer2);
 
     if(output_len) *output_len = outlen;
   }
@@ -2358,7 +2369,10 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
     // increasing buffer sizes, eg. we don't know (unlikely) factors > 99
     do
     {
-      if(output) free(output);
+      if(output)
+      {
+        dt_free(output);
+      }
       output = (unsigned char *)malloc(bufLen);
       if(!output) break;
 
@@ -2371,11 +2385,14 @@ unsigned char *dt_exif_xmp_decode(const char *input, const int len, int *output_
     } while(result == Z_BUF_ERROR);
 
 
-    free(buffer);
+    dt_free(buffer);
 
     if(result != Z_OK)
     {
-      if(output) free(output);
+      if(output)
+      {
+        dt_free(output);
+      }
       return NULL;
     }
 
@@ -2532,11 +2549,11 @@ static void print_history_entry(history_entry_t *entry)
 static void free_history_entry(gpointer data)
 {
   history_entry_t *entry = (history_entry_t *)data;
-  g_free(entry->operation);
-  g_free(entry->multi_name);
-  free(entry->params);
-  free(entry->blendop_params);
-  free(entry);
+  dt_free(entry->operation);
+  dt_free(entry->multi_name);
+  dt_free(entry->params);
+  dt_free(entry->blendop_params);
+  dt_free(entry);
 }
 
 // we have to use pugixml as the old format could contain empty rdf:li elements in the multi_name array
@@ -2699,7 +2716,8 @@ static GList *read_history_v2(Exiv2::XmpData &xmpData, const char *filename)
       {
         std::cerr << "error reading history from '" << key << "' (" << filename << ")" << std::endl;
         g_list_free_full(history_entries, free_history_entry);
-        g_free(key);
+        history_entries = NULL;
+        dt_free(key);
         return NULL;
       }
 
@@ -2709,7 +2727,8 @@ static GList *read_history_v2(Exiv2::XmpData &xmpData, const char *filename)
         std::cerr << "error reading history from '"
                   << key << "' (" << filename << ")" << std::endl;
         g_list_free_full(history_entries, free_history_entry);
-        g_free(key);
+        history_entries = NULL;
+        dt_free(key);
         return NULL;
       }
       if(*(key_iter++) != '/') goto skip;
@@ -2799,7 +2818,7 @@ static GList *read_history_v2(Exiv2::XmpData &xmpData, const char *filename)
       }
     }
 skip:
-    g_free(key);
+    dt_free(key);
   }
 
   // a final sanity check
@@ -2821,10 +2840,10 @@ skip:
 void free_mask_entry(gpointer data)
 {
   mask_entry_t *entry = (mask_entry_t *)data;
-  g_free(entry->mask_name);
-  free(entry->mask_points);
-  free(entry->mask_src);
-  free(entry);
+  dt_free(entry->mask_name);
+  dt_free(entry->mask_points);
+  dt_free(entry->mask_src);
+  dt_free(entry);
 }
 
 static GHashTable *read_masks(Exiv2::XmpData &xmpData, const char *filename, const int version)
@@ -2916,7 +2935,8 @@ static GList *read_masks_v3(Exiv2::XmpData &xmpData, const char *filename, const
       {
         std::cerr << "error reading masks history from '" << key << "' (" << filename << ")" << std::endl;
         g_list_free_full(history_entries, free_mask_entry);
-        g_free(key);
+        history_entries = NULL;
+        dt_free(key);
         return NULL;
       }
 
@@ -2925,7 +2945,8 @@ static GList *read_masks_v3(Exiv2::XmpData &xmpData, const char *filename, const
       {
         std::cerr << "error reading masks history from '" << key << "' (" << filename << ")" << std::endl;
         g_list_free_full(history_entries, free_mask_entry);
-        g_free(key);
+        history_entries = NULL;
+        dt_free(key);
         return NULL;
       }
       if(*(key_iter++) != '/') goto skip;
@@ -2990,7 +3011,7 @@ static GList *read_masks_v3(Exiv2::XmpData &xmpData, const char *filename, const
 
     }
 skip:
-    g_free(key);
+    dt_free(key);
   }
 
   return history_entries;
@@ -3315,11 +3336,14 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
             fprintf(stderr,
                     "[exif] cannot get iop-order for module '%s', XMP may be corrupted\n",
                     entry->operation);
-            g_list_free_full(iop_order_list, free);
+            g_list_free_full(iop_order_list, dt_free_gpointer);
+            iop_order_list = NULL;
             g_list_free_full(history_entries, free_history_entry);
+            history_entries = NULL;
             g_list_free_full(mask_entries_v3, free_mask_entry);
+            mask_entries_v3 = NULL;
             if(mask_entries) g_hash_table_destroy(mask_entries);
-            g_free(e);
+            dt_free(e);
             return 1;
           }
         }
@@ -3431,9 +3455,12 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
       }
     }
 
-    g_list_free_full(iop_order_list, free);
+    g_list_free_full(iop_order_list, dt_free_gpointer);
+    iop_order_list = NULL;
     g_list_free_full(history_entries, free_history_entry);
+    history_entries = NULL;
     g_list_free_full(mask_entries_v3, free_mask_entry);
+    mask_entries_v3 = NULL;
     if(mask_entries) g_hash_table_destroy(mask_entries);
 
     if(all_ok)
@@ -3452,7 +3479,7 @@ int dt_exif_xmp_read(dt_image_t *img, const char *filename, const int history_on
           memcpy(&be_hash, decoded, sizeof(be_hash));
           img->history_hash = GUINT64_FROM_BE(be_hash);
         }
-        if(decoded) free(decoded);
+        dt_free(decoded);
       }
     }
     else
@@ -3528,8 +3555,8 @@ static void dt_set_xmp_dt_history(Exiv2::XmpData &xmpData, const int32_t imgid, 
     snprintf(key, sizeof(key), "Xmp.darktable.masks_history[%d]/darktable:mask_src", num);
     xmpData[key] = mask_src;
 
-    free(mask_d);
-    free(mask_src);
+    dt_free(mask_d);
+    dt_free(mask_src);
 
     num++;
   }
@@ -3595,10 +3622,10 @@ static void dt_set_xmp_dt_history(Exiv2::XmpData &xmpData, const int32_t imgid, 
       xmpData[key] = blendop_version;
       snprintf(key, sizeof(key), "Xmp.darktable.history[%d]/darktable:blendop_params", num);
       xmpData[key] = blendop_params;
-      free(blendop_params);
+      dt_free(blendop_params);
     }
 
-    free(params);
+    dt_free(params);
 
     num++;
   }
@@ -3729,9 +3756,9 @@ static void dt_set_xmp_exif_geotag(Exiv2::XmpData &xmpData, double longitude, do
     xmpData["Xmp.exif.GPSVersionID"] = "2.2.0.0";
     xmpData["Xmp.exif.GPSLongitude"] = long_str;
     xmpData["Xmp.exif.GPSLatitude"] = lat_str;
-    g_free(long_str);
-    g_free(lat_str);
-    g_free(str);
+    dt_free(long_str);
+    dt_free(lat_str);
+    dt_free(str);
   }
   if(!std::isnan(altitude))
   {
@@ -3740,7 +3767,7 @@ static void dt_set_xmp_exif_geotag(Exiv2::XmpData &xmpData, double longitude, do
     long ele_dm = (int)floor(fabs(10.0 * altitude));
     gchar *ele_str = g_strdup_printf("%ld/10", ele_dm);
     xmpData["Xmp.exif.GPSAltitude"] = ele_str;
-    g_free(ele_str);
+    dt_free(ele_str);
   }
 }
 
@@ -3759,7 +3786,7 @@ static void dt_set_xmp_dt_metadata(Exiv2::XmpData &xmpData, const int32_t imgid,
       const gchar *name = dt_metadata_get_name(keyid);
       gchar *setting = dt_util_dstrcat(NULL, "plugins/lighttable/metadata/%s_flag", name);
       const uint32_t flag =  dt_conf_get_int(setting);
-      g_free(setting);
+      dt_free(setting);
       if(!(flag & (DT_METADATA_FLAG_PRIVATE | DT_METADATA_FLAG_HIDDEN)))
         xmpData[dt_metadata_get_key(keyid)] = sqlite3_column_text(stmt, 1);
     }
@@ -3802,7 +3829,7 @@ static void _exif_xmp_append_history_hash(Exiv2::XmpData &xmpData, const int32_t
       if(value)
       {
         xmpData["Xmp.darktable.history_current_hash"] = value;
-        free(value);
+        dt_free(value);
       }
     }
     if(!image)
@@ -3850,7 +3877,8 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData, const int32_t imgid, co
   {
     iop_order_list = dt_ioppr_serialize_text_iop_order_list(iop_list);
   }
-  g_list_free_full(iop_list, free);
+  g_list_free_full(iop_list, dt_free_gpointer);
+  iop_list = NULL;
 
   // Store datetime_taken as DateTimeOriginal to take into account the user's selected date/time
   gchar exif_datetime[DT_DATETIME_LENGTH];
@@ -3885,7 +3913,8 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData, const int32_t imgid, co
     v1->read((char *)tag->data);
   }
   if(v1->count() > 0) xmpData.add(Exiv2::XmpKey("Xmp.dc.subject"), v1.get());
-  g_list_free_full(tags, g_free);
+  g_list_free_full(tags, dt_free_gpointer);
+  tags = NULL;
 
   GList *hierarchical = dt_tag_get_hierarchical(imgid);
   for(GList *hier = hierarchical; hier; hier = g_list_next(hier))
@@ -3893,7 +3922,8 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData, const int32_t imgid, co
     v2->read((char *)hier->data);
   }
   if(v2->count() > 0) xmpData.add(Exiv2::XmpKey("Xmp.lr.hierarchicalSubject"), v2.get());
-  g_list_free_full(hierarchical, g_free);
+  g_list_free_full(hierarchical, dt_free_gpointer);
+  hierarchical = NULL;
   /* TODO: Add tags to IPTC namespace as well */
 
   xmpData["Xmp.darktable.xmp_version"] = xmp_version;
@@ -3911,7 +3941,7 @@ static void _exif_xmp_read_data(Exiv2::XmpData &xmpData, const int32_t imgid, co
   _exif_xmp_append_history_hash(xmpData, imgid, image);
 
   sqlite3_finalize(stmt);
-  g_free(iop_order_list);
+  dt_free(iop_order_list);
 }
 
 // helper to create an xmp data thing. throws exiv2 exceptions if stuff goes wrong.
@@ -3955,7 +3985,8 @@ static void _exif_xmp_read_data_export(Exiv2::XmpData &xmpData, const int32_t im
   {
     iop_order_list = dt_ioppr_serialize_text_iop_order_list(iop_list);
   }
-  g_list_free_full(iop_list, free);
+  g_list_free_full(iop_list, dt_free_gpointer);
+  iop_list = NULL;
 
   if(metadata->flags & DT_META_METADATA)
   {
@@ -3997,7 +4028,8 @@ static void _exif_xmp_read_data_export(Exiv2::XmpData &xmpData, const int32_t im
       v1->read((char *)tag->data);
     }
     if(v1->count() > 0) xmpData.add(Exiv2::XmpKey("Xmp.dc.subject"), v1.get());
-    g_list_free_full(tags, g_free);
+    g_list_free_full(tags, dt_free_gpointer);
+    tags = NULL;
   }
 
   if (metadata->flags & DT_META_HIERARCHICAL_TAG)
@@ -4009,7 +4041,8 @@ static void _exif_xmp_read_data_export(Exiv2::XmpData &xmpData, const int32_t im
       v2->read((char *)hier->data);
     }
     if(v2->count() > 0) xmpData.add(Exiv2::XmpKey("Xmp.lr.hierarchicalSubject"), v2.get());
-    g_list_free_full(hierarchical, g_free);
+    g_list_free_full(hierarchical, dt_free_gpointer);
+    hierarchical = NULL;
   }
 
   if (metadata->flags & DT_META_DT_HISTORY)
@@ -4029,7 +4062,7 @@ static void _exif_xmp_read_data_export(Exiv2::XmpData &xmpData, const int32_t im
   }
 
   sqlite3_finalize(stmt);
-  g_free(iop_order_list);
+  dt_free(iop_order_list);
 }
 
 #if EXIV2_TEST_VERSION(0,27,0)
@@ -4338,7 +4371,7 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
                   float float_value = (float)std::atof(result);
                   if(!std::isnan(float_value))
                   {
-                    g_free(result);
+                    dt_free(result);
                     int int_value = (int)float_value;
                     int divisor = 1;
                     while(fabs(float_value - int_value) > 0.000001)
@@ -4353,7 +4386,7 @@ int dt_exif_xmp_attach_export(const int32_t imgid, const char *filename, void *m
                 exifData[tagname] = result;
               }
             }
-            g_free(result);
+            dt_free(result);
           }
         }
         else
@@ -4439,7 +4472,7 @@ int dt_exif_xmp_write_with_imgpath(const dt_image_t *image, const char *filename
         }
 
         checksum_old = g_compute_checksum_for_data(G_CHECKSUM_MD5, content, end);
-        free(content);
+        dt_free(content);
       }
       else
       {
@@ -4483,7 +4516,7 @@ int dt_exif_xmp_write_with_imgpath(const dt_image_t *image, const char *filename
         write_sidecar = g_strcmp0(checksum_old, checksum_new) != 0;
         g_checksum_free(checksum);
       }
-      g_free(checksum_old);
+      dt_free(checksum_old);
     }
 
     if(write_sidecar)

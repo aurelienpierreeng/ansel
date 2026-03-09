@@ -23,6 +23,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "common/dbus.h"
 #include "control/progress.h"
 #include "control/control.h"
@@ -303,8 +304,8 @@ void dt_control_progress_destroy(dt_control_t *control, dt_progress_t *progress)
 
   // free the object
   dt_pthread_mutex_destroy(&progress->mutex);
-  g_free(progress->message);
-  free(progress);
+  dt_free(progress->message);
+  dt_free(progress);
 }
 
 void dt_control_progress_make_cancellable(struct dt_control_t *control, dt_progress_t *progress,
@@ -388,7 +389,7 @@ const gchar *dt_control_progress_get_message(dt_progress_t *progress)
 void dt_control_progress_set_message(dt_control_t *control, dt_progress_t *progress, const char *message)
 {
   dt_pthread_mutex_lock(&progress->mutex);
-  g_free(progress->message);
+  dt_free(progress->message);
   progress->message = g_strdup(message);
   dt_pthread_mutex_unlock(&progress->mutex);
 

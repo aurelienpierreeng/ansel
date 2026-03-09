@@ -73,12 +73,16 @@ void dt_cache_cleanup(dt_cache_t *cache)
       cache->cleanup(cache->cleanup_data, entry);
     }
     else
+    {
       dt_free_align(entry->data);
+      entry->data = NULL;
+    }
 
     dt_pthread_rwlock_destroy(&entry->lock);
     g_slice_free1(sizeof(*entry), entry);
   }
   g_list_free(cache->lru);
+  cache->lru = NULL;
   dt_pthread_mutex_destroy(&cache->lock);
 }
 
@@ -232,7 +236,7 @@ restart:
 
   if(!entry->data)
   {
-    g_free(entry);
+    dt_free(entry);
     dt_pthread_mutex_unlock(&cache->lock);
     return NULL;
   }
@@ -312,7 +316,10 @@ restart:
     cache->cleanup(cache->cleanup_data, entry);
   }
   else
+  {
     dt_free_align(entry->data);
+    entry->data = NULL;
+  }
 
   dt_pthread_rwlock_unlock(&entry->lock);
   dt_pthread_rwlock_destroy(&entry->lock);
@@ -357,7 +364,10 @@ void dt_cache_gc(dt_cache_t *cache, const float fill_ratio)
       cache->cleanup(cache->cleanup_data, entry);
     }
     else
+    {
       dt_free_align(entry->data);
+      entry->data = NULL;
+    }
 
     dt_pthread_rwlock_unlock(&entry->lock);
     dt_pthread_rwlock_destroy(&entry->lock);

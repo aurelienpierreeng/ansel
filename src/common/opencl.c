@@ -163,8 +163,7 @@ int dt_opencl_get_device_info(dt_opencl_t *cl, cl_device_id device, cl_device_in
   return CL_SUCCESS;
 
 error:
-  free(*param_value);
-  *param_value = NULL;
+  dt_free(*param_value);
   *param_value_size = 0;
   return err;
 }
@@ -234,7 +233,7 @@ static int _dt_opencl_get_conf_int(const gchar *key_device, const gchar *conf_na
     *safety_ok = FALSE;
   }
 
-  g_free(key);
+  dt_free(key);
   return res;
 }
 
@@ -568,8 +567,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
   {
     dt_print_nts(DT_DEBUG_OPENCL, "   MAX WORK ITEM SIZES:      [ ");
     for(size_t i = 0; i < infoint; i++) dt_print_nts(DT_DEBUG_OPENCL, "%zu ", infointtab[i]);
-    free(infointtab);
-    infointtab = NULL;
+    dt_free(infointtab);
     dt_print_nts(DT_DEBUG_OPENCL, "]\n");
   }
   else
@@ -699,10 +697,10 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
 
   dt_print_nts(DT_DEBUG_OPENCL, "   CL COMPILER OPTION:       %s\n", my_option);
 
-  g_free(compile_option_name_cname);
-  g_free(my_option);
-  g_free(escapedkerneldir);
-  g_free(escapedkerneldir_md5);
+  dt_free(compile_option_name_cname);
+  dt_free(my_option);
+  dt_free(escapedkerneldir);
+  dt_free(escapedkerneldir_md5);
   escapedkerneldir = NULL;
 
   const char *clincludes[DT_OPENCL_MAX_INCLUDES] = { "rgb_norms.h", "noise_generator.h", "color_conversion.h", "colorspaces.cl", "colorspace.h", "common.h", NULL };
@@ -726,7 +724,7 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
       int prog = -1;
       gchar *confline_pattern = g_strdup_printf("%%%zu[^\n]\n", PATH_MAX * sizeof(char) - 1);
       int rd = fscanf(f, confline_pattern, confentry);
-      g_free(confline_pattern);
+      dt_free(confline_pattern);
       if(rd != 1) continue;
       // remove comments:
       size_t end = strlen(confentry);
@@ -796,29 +794,29 @@ static int dt_opencl_device_init(dt_opencl_t *cl, const int dev, cl_device_id *d
     res = -1;
     goto end;
   }
-  for(int n = 0; n < DT_OPENCL_MAX_INCLUDES; n++) g_free(includemd5[n]);
+  for(int n = 0; n < DT_OPENCL_MAX_INCLUDES; n++) dt_free(includemd5[n]);
   res = 0;
 
 end:
   // we always write the device config to keep track of disabled devices
   dt_opencl_write_device_config(dev);
 
-  free(infostr);
-  free(cname);
-  free(vendor);
-  free(driverversion);
-  free(deviceversion);
+  dt_free(infostr);
+  dt_free(cname);
+  dt_free(vendor);
+  dt_free(driverversion);
+  dt_free(deviceversion);
 
-  free(dtcache);
-  free(cachedir);
-  free(devname);
-  free(drvversion);
-  free(platform_name);
-  free(platform_vendor);
+  dt_free(dtcache);
+  dt_free(cachedir);
+  dt_free(devname);
+  dt_free(drvversion);
+  dt_free(platform_name);
+  dt_free(platform_vendor);
 
-  free(filename);
-  free(confentry);
-  free(binname);
+  dt_free(filename);
+  dt_free(confentry);
+  dt_free(binname);
 
   return res;
 }
@@ -946,9 +944,8 @@ void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboole
     devices = (cl_device_id *)malloc(sizeof(cl_device_id) * num_devices);
     if(!cl->dev || !devices)
     {
-      free(cl->dev);
-      cl->dev = NULL;
-      free(devices);
+      dt_free(cl->dev);
+      dt_free(devices);
       dt_print_nts(DT_DEBUG_OPENCL, "[opencl_init] could not allocate memory\n");
       goto finally;
     }
@@ -975,7 +972,10 @@ void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboole
   dt_print_nts(DT_DEBUG_OPENCL, "[opencl_init] found %d device%s\n", num_devices, num_devices > 1 ? "s" : "");
   if(num_devices == 0)
   {
-    if(devices) free(devices);
+    if(devices)
+    {
+      dt_free(devices);
+    }
     goto finally;
   }
 
@@ -988,8 +988,7 @@ void dt_opencl_init(dt_opencl_t *cl, const gboolean exclude_opencl, const gboole
     // increase dev only if dt_opencl_device_init was successful (res == 0)
     ++dev;
   }
-  free(devices);
-  devices = NULL;
+  dt_free(devices);
 
   if(dev > 0)
   {
@@ -1046,15 +1045,15 @@ finally:
     for(int i = 0; cl->dev && i < cl->num_devs; i++) dt_opencl_cleanup_device(cl, i);
   }
 
-  free(all_num_devices);
-  free(all_platforms);
-  free(platform_name);
-  free(platform_vendor);
+  dt_free(all_num_devices);
+  dt_free(all_platforms);
+  dt_free(platform_name);
+  dt_free(platform_vendor);
 
   if(locale)
   {
     setlocale(LC_ALL, locale);
-    free(locale);
+    dt_free(locale);
   }
 
   return;
@@ -1096,15 +1095,15 @@ void dt_opencl_cleanup_device(dt_opencl_t *cl, int i)
   {
     dt_opencl_events_reset(i);
 
-    free(cl->dev[i].eventlist);
-    free(cl->dev[i].eventtags);
+    dt_free(cl->dev[i].eventlist);
+    dt_free(cl->dev[i].eventtags);
   }
 
-  free((void *)(cl->dev[i].vendor));
-  free((void *)(cl->dev[i].name));
-  free((void *)(cl->dev[i].cname));
-  free((void *)(cl->dev[i].options));
-  free((void *)(cl->dev[i].options_md5));
+  dt_free(cl->dev[i].vendor);
+  dt_free(cl->dev[i].name);
+  dt_free(cl->dev[i].cname);
+  dt_free(cl->dev[i].options);
+  dt_free(cl->dev[i].options_md5);
 }
 
 void dt_opencl_cleanup(dt_opencl_t *cl)
@@ -1123,20 +1122,20 @@ void dt_opencl_cleanup(dt_opencl_t *cl)
     for(int i = 0; i < cl->num_devs; i++)
       dt_opencl_cleanup_device(cl, i);
 
-    free(cl->dev_priority_image);
-    free(cl->dev_priority_preview);
-    free(cl->dev_priority_export);
-    free(cl->dev_priority_thumbnail);
+    dt_free(cl->dev_priority_image);
+    dt_free(cl->dev_priority_preview);
+    dt_free(cl->dev_priority_export);
+    dt_free(cl->dev_priority_thumbnail);
   }
 
   if(cl->dlocl)
   {
-    free(cl->dlocl->symbols);
-    g_free(cl->dlocl->library);
-    free(cl->dlocl);
+    dt_free(cl->dlocl->symbols);
+    dt_free(cl->dlocl->library);
+    dt_free(cl->dlocl);
   }
 
-  free(cl->dev);
+  dt_free(cl->dev);
   dt_pthread_mutex_destroy(&cl->lock);
 }
 
@@ -1260,7 +1259,7 @@ static void dt_opencl_priority_parse(dt_opencl_t *cl, char *configstr, int *prio
   {
     priority_list[0] = -1;
     *mandatory = 0;
-    free(full);
+    dt_free(full);
     return;
   }
 
@@ -1339,7 +1338,7 @@ static void dt_opencl_priority_parse(dt_opencl_t *cl, char *configstr, int *prio
   // opencl use can only be mandatory if at least one opencl device is given
   *mandatory = (priority_list[0] != -1) ? mnd : 0;
 
-  free(full);
+  dt_free(full);
 }
 
 // set device priorities according to config string
@@ -1399,8 +1398,7 @@ int dt_opencl_lock_device(const int pipetype)
       mandatory = cl->mandatory[3];
       break;
     default:
-      free(priority);
-      priority = NULL;
+      dt_free(priority);
       mandatory = 0;
   }
 
@@ -1421,7 +1419,7 @@ int dt_opencl_lock_device(const int pipetype)
         if(!dt_pthread_mutex_BAD_trylock(&cl->dev[*prio].lock))
         {
           int devid = *prio;
-          free(priority);
+          dt_free(priority);
           return devid;
         }
         prio++;
@@ -1429,7 +1427,7 @@ int dt_opencl_lock_device(const int pipetype)
 
       if(!mandatory)
       {
-        free(priority);
+        dt_free(priority);
         return -1;
       }
 
@@ -1447,7 +1445,7 @@ int dt_opencl_lock_device(const int pipetype)
     }
   }
 
-  free(priority);
+  dt_free(priority);
 
   // no free GPU :(
   // use CPU processing, if no free device:
@@ -1522,7 +1520,7 @@ void dt_opencl_md5sum(const char **files, char **md5sums)
 
     if(rd != filesize)
     {
-      free(file);
+      dt_free(file);
       dt_print(DT_DEBUG_OPENCL, "[opencl_md5sums] could not read all of file `%s'!\n", filename);
       *md5sums = NULL;
       continue;
@@ -1530,7 +1528,7 @@ void dt_opencl_md5sum(const char **files, char **md5sums)
 
     *md5sums = g_compute_checksum_for_data(G_CHECKSUM_MD5, (guchar *)file, filesize);
 
-    free(file);
+    dt_free(file);
   }
 }
 
@@ -1567,7 +1565,7 @@ int dt_opencl_load_program(const int dev, const int prog, const char *filename, 
   fclose(f);
   if(rd != filesize)
   {
-    free(file);
+    dt_free(file);
     dt_print(DT_DEBUG_OPENCL, "[opencl_load_source] could not read all of file `%s'!\n", filename);
     return 0;
   }
@@ -1600,7 +1598,7 @@ int dt_opencl_load_program(const int dev, const int prog, const char *filename, 
 
   char *source_md5 = g_compute_checksum_for_data(G_CHECKSUM_MD5, (guchar *)file, start - file);
   g_strlcpy(md5sum, source_md5, 33);
-  g_free(source_md5);
+  dt_free(source_md5);
 
   file[filesize] = '\0';
 
@@ -1656,7 +1654,7 @@ int dt_opencl_load_program(const int dev, const int prog, const char *filename, 
             *loaded_cached = 1;
           }
         }
-        free(cached_content);
+        dt_free(cached_content);
       }
     }
     fclose(cached);
@@ -1685,7 +1683,7 @@ int dt_opencl_load_program(const int dev, const int prog, const char *filename, 
 
     cl->dev[dev].program[prog] = (cl->dlocl->symbols->dt_clCreateProgramWithSource)(
         cl->dev[dev].context, 1, (const char **)&file, &filesize, &err);
-    free(file);
+    dt_free(file);
     if((err != CL_SUCCESS) || (cl->dev[dev].program[prog] == NULL))
     {
       dt_print(DT_DEBUG_OPENCL, "[opencl_load_source] could not create program from file `%s'! (%i)\n",
@@ -1699,7 +1697,7 @@ int dt_opencl_load_program(const int dev, const int prog, const char *filename, 
   }
   else
   {
-    free(file);
+    dt_free(file);
     dt_vprint(DT_DEBUG_OPENCL, "[opencl_load_program] loaded cached binary program from file '%s' MD5: '%s' \n", binname, md5sum);
   }
 
@@ -1743,7 +1741,7 @@ int dt_opencl_build_program(const int dev, const int prog, const char *binname, 
       dt_vprint(DT_DEBUG_OPENCL, "BUILD LOG:\n");
       dt_vprint(DT_DEBUG_OPENCL, "%s\n", build_log);
 
-      free(build_log);
+      dt_free(build_log);
     }
   }
 
@@ -1770,7 +1768,7 @@ int dt_opencl_build_program(const int dev, const int prog, const char *binname, 
       if(err != CL_SUCCESS)
       {
         dt_print(DT_DEBUG_OPENCL, "[opencl_build_program] CL_PROGRAM_DEVICES failed: %i\n", err);
-        free(devices);
+        dt_free(devices);
         return CL_SUCCESS;
       }
 
@@ -1780,8 +1778,8 @@ int dt_opencl_build_program(const int dev, const int prog, const char *binname, 
       if(err != CL_SUCCESS)
       {
         dt_print(DT_DEBUG_OPENCL, "[opencl_build_program] CL_PROGRAM_BINARY_SIZES failed: %i\n", err);
-        free(binary_sizes);
-        free(devices);
+        dt_free(binary_sizes);
+        dt_free(devices);
         return CL_SUCCESS;
       }
 
@@ -1827,10 +1825,10 @@ int dt_opencl_build_program(const int dev, const int prog, const char *binname, 
         }
 
     ret:
-      for(int i = 0; i < numdev; i++) free(binaries[i]);
-      free(binaries);
-      free(binary_sizes);
-      free(devices);
+      for(int i = 0; i < numdev; i++) dt_free(binaries[i]);
+      dt_free(binaries);
+      dt_free(binary_sizes);
+      dt_free(devices);
     }
     return CL_SUCCESS;
   }
@@ -2612,8 +2610,8 @@ cl_event *dt_opencl_events_get_slot(const int devid, const char *tag)
     *eventtags = calloc(newevents, sizeof(dt_opencl_eventtag_t));
     if(!*eventlist || !*eventtags)
     {
-      free(*eventlist);
-      free(*eventtags);
+      dt_free(*eventlist);
+      dt_free(*eventtags);
       *eventlist = NULL;
       *eventtags = NULL;
       dt_print(DT_DEBUG_OPENCL, "[dt_opencl_events_get_slot] NO eventlist for device %i\n", devid);
@@ -2654,14 +2652,14 @@ cl_event *dt_opencl_events_get_slot(const int devid, const char *tag)
     {
       dt_print(DT_DEBUG_OPENCL, "[dt_opencl_events_get_slot] NO new eventlist with size %i for device %i\n",
          newevents, devid);
-      free(neweventlist);
-      free(neweventtags);
+      dt_free(neweventlist);
+      dt_free(neweventtags);
       return NULL;
     }
     memcpy(neweventlist, *eventlist, sizeof(cl_event) * *maxevents);
     memcpy(neweventtags, *eventtags, sizeof(dt_opencl_eventtag_t) * *maxevents);
-    free(*eventlist);
-    free(*eventtags);
+    dt_free(*eventlist);
+    dt_free(*eventtags);
     *eventlist = neweventlist;
     *eventtags = neweventtags;
     *maxevents = newevents;
@@ -2935,8 +2933,8 @@ void dt_opencl_events_profiling(const int devid, const int aggregated)
            "[opencl_profiling] spent %7.4f seconds totally in command queue (with %d event%s missing)\n",
            (double)total, *lostevents, *lostevents == 1 ? "" : "s");
 
-  free(timings);
-  free(tags);
+  dt_free(timings);
+  dt_free(tags);
 
   return;
 }

@@ -108,7 +108,7 @@ static void _finished_stroke_job_destroy(drawlayer_finished_stroke_job_t *job)
 {
   if(!job) return;
   if(job->history) g_array_free(job->history, TRUE);
-  g_free(job);
+  dt_free(job);
 }
 
 /** @brief Deep-copy preserved stroke history into one deferred replay job. */
@@ -378,10 +378,10 @@ static void _rt_destroy_state(dt_iop_module_t *self, dt_drawlayer_worker_t **rt_
       _finished_stroke_job_destroy((drawlayer_finished_stroke_job_t *)g_queue_pop_head(rt->finished_stroke_queue));
     g_queue_free(rt->finished_stroke_queue);
   }
-  g_free(worker->ring);
+  dt_free(worker->ring);
   g_cond_clear(&rt->worker_cond);
   g_mutex_clear(&rt->worker_mutex);
-  g_free(rt);
+  dt_free(rt);
   *rt_out = NULL;
 }
 
@@ -450,7 +450,7 @@ static void *_drawlayer_fullres_worker_main(void *user_data)
 {
   drawlayer_rt_thread_ctx_t *ctx = (drawlayer_rt_thread_ctx_t *)user_data;
   dt_drawlayer_worker_t *rt = ctx ? ctx->rt : NULL;
-  g_free(ctx);
+  dt_free(ctx);
 
   dt_iop_module_t *self = rt ? rt->self : NULL;
   if(!self || !rt) return NULL;
@@ -517,7 +517,7 @@ static gboolean _start_fullres_worker(dt_drawlayer_worker_t *rt)
   const int err = dt_pthread_create(&rt->fullres_thread, _drawlayer_fullres_worker_main, ctx, TRUE);
   if(err != 0)
   {
-    g_free(ctx);
+    dt_free(ctx);
     return FALSE;
   }
 
@@ -608,7 +608,7 @@ static void *_drawlayer_worker_main(void *user_data)
 {
   drawlayer_rt_thread_ctx_t *ctx = (drawlayer_rt_thread_ctx_t *)user_data;
   dt_drawlayer_worker_t *rt = ctx ? ctx->rt : NULL;
-  g_free(ctx);
+  dt_free(ctx);
 
   dt_iop_module_t *self = rt ? rt->self : NULL;
   drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
@@ -691,7 +691,7 @@ static gboolean _start_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
   const int err = dt_pthread_create(&worker->thread, _drawlayer_worker_main, ctx, TRUE);
   if(err != 0)
   {
-    g_free(ctx);
+    dt_free(ctx);
     return FALSE;
   }
 

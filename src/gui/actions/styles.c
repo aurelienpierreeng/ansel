@@ -16,6 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "gui/actions/menu.h"
 #include "gui/gtk.h"
 #include "gui/styles.h"
@@ -64,6 +65,7 @@ static gboolean _styles_apply_callback(GtkAccelGroup *group, GObject *accelerata
   if(imgs) dt_history_style_on_list(imgs, style_name, duplicate);
 
   g_list_free(imgs);
+  imgs = NULL;
 
   return TRUE;
 }
@@ -166,7 +168,7 @@ static gchar *_styles_build_tooltip(const dt_style_t *style)
     {
       gchar *desc = g_markup_escape_text(style->description, -1);
       tooltip = g_strconcat("<b>", desc, "</b>\n", items_string, NULL);
-      g_free(desc);
+      dt_free(desc);
     }
     else
     {
@@ -178,7 +180,7 @@ static gchar *_styles_build_tooltip(const dt_style_t *style)
     tooltip = g_markup_escape_text(style->description, -1);
   }
 
-  g_free(items_string);
+  dt_free(items_string);
   return tooltip;
 }
 
@@ -193,7 +195,7 @@ static GtkWidget *_styles_get_submenu(GtkWidget **menus, GList **lists, GHashTab
   gchar *group_label = g_markup_escape_text(group, -1);
   if(!group_label) group_label = g_strdup("");
   add_top_submenu_entry(menus, lists, group_label, index);
-  g_free(group_label);
+  dt_free(group_label);
 
   GtkWidget *menu_item = get_last_widget(lists);
   submenu = gtk_menu_item_get_submenu(GTK_MENU_ITEM(menu_item));
@@ -226,10 +228,11 @@ static void _styles_menu_clear(void)
   for(GList *child = children; child; child = g_list_next(child))
     gtk_widget_destroy(GTK_WIDGET(child->data));
   g_list_free(children);
+  children = NULL;
 
   if(*_styles_lists)
   {
-    g_list_free_full(*_styles_lists, g_free);
+    g_list_free_full(*_styles_lists, dt_free_gpointer);
     *_styles_lists = NULL;
   }
 }
@@ -279,7 +282,7 @@ void append_styles(GtkWidget **menus, GList **lists, const dt_menus_t index)
   }
   else
   {
-    GHashTable *submenus = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    GHashTable *submenus = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
 
     for(GList *iter = styles; iter; iter = g_list_next(iter))
     {
@@ -296,13 +299,14 @@ void append_styles(GtkWidget **menus, GList **lists, const dt_menus_t index)
 
       _styles_add_menu_entry(menus, lists, parent_menu, index, label, tooltip, style->name);
 
-      g_free(label);
-      g_free(tooltip);
+      dt_free(label);
+      dt_free(tooltip);
       g_strfreev(split);
     }
 
     g_hash_table_destroy(submenus);
     g_list_free_full(styles, dt_style_free);
+    styles = NULL;
   }
 
   add_menu_separator(menus[index]);

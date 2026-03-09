@@ -34,6 +34,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include <gdk/gdkkeysyms.h>
 
 #include "common/collection.h"
@@ -309,8 +310,7 @@ void gui_init(dt_lib_module_t *self)
 void gui_cleanup(dt_lib_module_t *self)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_dt_collection_changed_callback), self);
-  g_free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 static void _set_columns(dt_lib_module_t *self, int columns)

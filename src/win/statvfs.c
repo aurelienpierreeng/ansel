@@ -40,6 +40,7 @@
  * limitations under the License.
  */
 
+#include "common/darktable.h"
 #include <glib.h>
 
 #include <string.h>
@@ -70,7 +71,7 @@ int statvfs(const char *path, struct statvfs *buf)
   res = GetDiskFreeSpaceW(wszDrive, &lpSectorsPerCluster, &lpBytesPerSector, &lpNumberOfFreeClusters,
                          &lpTotalNumberOfClusters);
 
-  g_free(wszDrive);
+  dt_free(wszDrive);
 
   buf->f_bsize = lpBytesPerSector;                        /* file system block size */
   buf->f_frsize = lpBytesPerSector * lpSectorsPerCluster; /* fragment size */

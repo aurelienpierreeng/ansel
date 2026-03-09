@@ -44,6 +44,7 @@
 */
 
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -667,7 +668,7 @@ static void _distort_paths(const struct dt_iop_module_t *module,
     }
   }
 
-  free(buffer);
+  dt_free(buffer);
 }
 
 static void distort_paths_raw_to_piece(const struct dt_iop_module_t *module,
@@ -952,7 +953,7 @@ static int build_round_stamp(float complex **pstamp,
   const float *restrict lookup_table = build_lookup_table(table_size, warp->control1, warp->control2);
   if(lookup_table == NULL)
   {
-    free((void *)stamp);
+    dt_free(stamp);
     return 1;
   }
 
@@ -1040,7 +1041,7 @@ static void add_to_global_distortion_map(float complex *global_map,
   cairo_region_t *mmreg = cairo_region_create_rectangle(&mmext);
   cairo_region_intersect_rectangle(mmreg, global_map_extent);
   cairo_region_get_extents(mmreg, &cmmext);
-  free(mmreg);
+  dt_free(mmreg);
 
   #ifdef _OPENMP
   #pragma omp parallel for schedule (static) default (shared)
@@ -1188,7 +1189,7 @@ static float complex *create_global_distortion_map(const cairo_rectangle_int_t *
       return NULL;
     }
     add_to_global_distortion_map(map, map_extent, warp, stamp, &r);
-    free((void *) stamp);
+    dt_free(stamp);
   }
 
   if(inverted)
@@ -1274,7 +1275,9 @@ static float complex *build_global_distortion_map(struct dt_iop_module_t *module
   float complex *map = create_global_distortion_map(map_extent, interpolated_in_roi, FALSE);
 
   g_slist_free(interpolated_in_roi);
-  g_list_free_full(interpolated, free);
+  interpolated_in_roi = NULL;
+  g_list_free_full(interpolated, dt_free_gpointer);
+  interpolated = NULL;
   return map;
 }
 
@@ -1329,7 +1332,9 @@ void modify_roi_in(struct dt_iop_module_t *module,
   cairo_rectangle_int_t extent;
   GSList *interpolated_in_roi = _get_map_extent(roi_out, interpolated, &extent);
   g_slist_free(interpolated_in_roi);
-  g_list_free_full(interpolated, free);
+  interpolated_in_roi = NULL;
+  g_list_free_full(interpolated, dt_free_gpointer);
+  interpolated = NULL;
 
   // (eventually) extend roi_in
   cairo_region_union_rectangle(roi_in_region, &extent);
@@ -1393,7 +1398,9 @@ static int _distort_xtransform(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *pi
 
     float complex *map = create_global_distortion_map(&extent, interpolated_in_roi, inverted);
     g_slist_free(interpolated_in_roi);
-    g_list_free_full(interpolated, free);
+    interpolated_in_roi = NULL;
+    g_list_free_full(interpolated, dt_free_gpointer);
+    interpolated = NULL;
 
     if(map == NULL) return 0;
 
@@ -1671,7 +1678,7 @@ error:
   dt_opencl_release_mem_object(dev_map);
   dt_opencl_release_mem_object(dev_roi_out);
   dt_opencl_release_mem_object(dev_roi_in);
-  if(k) free(k);
+  dt_free(k);
 
   return err;
 }
@@ -1735,8 +1742,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   // called once at shutdown
   dt_iop_liquify_global_data_t *gd = (dt_iop_liquify_global_data_t *) module->data;
   dt_opencl_free_kernel(gd->warp_kernel);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 void init(dt_iop_module_t *module)
@@ -1925,7 +1931,7 @@ static GList *interpolate_paths(dt_iop_liquify_params_t *p)
         arc_length += cabsf(w->radius - w->point) * STAMP_RELOCATION;
         l = g_list_append(l, w);
       }
-      free((void *) buffer);
+      dt_free(buffer);
       continue;
     }
   }
@@ -2246,7 +2252,8 @@ static void _draw_paths(dt_iop_module_t *module,
     }
   }
 
-  g_list_free_full(interpolated, free);
+  g_list_free_full(interpolated, dt_free_gpointer);
+  interpolated = NULL;
 }
 
 /*
@@ -2490,6 +2497,7 @@ static void draw_paths(struct dt_iop_module_t *module, cairo_t *cr, const float 
   _draw_paths(module, cr, scale, params, layers);
 
   g_list_free(layers);
+  layers = NULL;
 }
 
 static dt_liquify_hit_t _hit_test_paths(struct dt_iop_module_t *module,
@@ -2508,6 +2516,7 @@ static dt_liquify_hit_t _hit_test_paths(struct dt_iop_module_t *module,
 
   hit = _hit_paths(module, params, layers, &pt);
   g_list_free(layers);
+  layers = NULL;
   return hit;
 }
 
@@ -2632,10 +2641,10 @@ static void smooth_path_linsys(size_t n,
     }
   }
 
-  free(a);
-  free(b);
-  free(c);
-  free(d);
+  dt_free(a);
+  dt_free(b);
+  dt_free(c);
+  dt_free(d);
 }
 
 static int path_length(dt_iop_liquify_params_t *p, dt_liquify_path_data_t *n)
@@ -2741,10 +2750,10 @@ static void smooth_paths_linsys(dt_iop_liquify_params_t *params)
       node = node_next(params, node);
     }
 
-    free(pt);
-    free(c1);
-    free(c2);
-    free(eqn);
+    dt_free(pt);
+    dt_free(c1);
+    dt_free(c2);
+    dt_free(eqn);
   }
 }
 

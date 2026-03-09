@@ -169,7 +169,7 @@ int write_image(dt_imageio_module_data_t *tmp, const char *filename, const void 
   if(xmp_string && strlen(xmp_string) > 0)
   {
     header.insert("xmp", Imf::StringAttribute(xmp_string));
-    g_free(xmp_string);
+    dt_free(xmp_string);
   }
 
   // try to add the chromaticities
@@ -306,7 +306,7 @@ icc_end:
     file.setFrameBuffer(data);
     file.writePixels(exr->global.height);
 
-    free(out);
+    dt_free(out);
   }
 
   return 0;
@@ -426,7 +426,7 @@ void *get_params(dt_imageio_module_format_t *self)
 
 void free_params(dt_imageio_module_format_t *self, dt_imageio_module_data_t *params)
 {
-  free(params);
+  dt_free(params);
 }
 
 int set_params(dt_imageio_module_format_t *self, const void *params, const int size)
@@ -518,7 +518,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
 void gui_cleanup(dt_imageio_module_format_t *self)
 {
-  free(self->gui_data);
+  dt_free(self->gui_data);
 }
 
 void gui_reset(dt_imageio_module_format_t *self)

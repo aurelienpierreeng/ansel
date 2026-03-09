@@ -395,7 +395,7 @@ gboolean dt_gui_quit_callback(GtkWidget *widget, GdkEvent *event, gpointer user_
 
 void dt_gui_store_last_preset(const char *name)
 {
-  g_free(darktable.gui->last_preset);
+  dt_free(darktable.gui->last_preset);
   darktable.gui->last_preset = g_strdup(name);
 }
 
@@ -413,6 +413,7 @@ static gboolean _osx_quit_callback(GtkosxApplication *OSXapp, gpointer user_data
       break;
   if(window == NULL) dt_control_quit();
   g_list_free(windows);
+  windows = NULL;
   return TRUE;
 }
 
@@ -653,7 +654,11 @@ static gboolean _sample_tablet_state_from_devices(const GdkEvent *event,
     best_have_t = have_t;
     best_name = gdk_device_get_name(device);
   }
-  if(runtime_devices) g_list_free(runtime_devices);
+  if(runtime_devices)
+  {
+    g_list_free(runtime_devices);
+    runtime_devices = NULL;
+  }
 
   if(best_score < 0) return FALSE;
   if(pressure) *pressure = best_p;
@@ -1055,8 +1060,8 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   GtkAccelFlags flags = 0;
   if(dt_conf_get_bool("accels/mask")) flags |= GTK_ACCEL_MASK;
   gui->accels = dt_accels_init(keyboardrc_path, flags);
-  g_free(keyboardrc);
-  g_free(keyboardrc_path);
+  dt_free(keyboardrc);
+  dt_free(keyboardrc_path);
 
   // Initializing widgets
   _init_widgets(gui);
@@ -1120,7 +1125,11 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
              gdk_device_get_name(device), _get_source_name(gdk_device_get_source(device)),
              (unsigned int)gdk_device_get_axes(device), gdk_device_get_n_axes(device));
   }
-  if(stylus_devices) g_list_free(stylus_devices);
+  if(stylus_devices)
+  {
+    g_list_free(stylus_devices);
+    stylus_devices = NULL;
+  }
   for(GList *l = input_devices; l != NULL; l = g_list_next(l))
   {
     GdkDevice *device = (GdkDevice *)l->data;
@@ -1144,7 +1153,11 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
     }
     dt_print(DT_DEBUG_INPUT, "\n");
   }
-  if(input_devices) g_list_free(input_devices);
+  if(input_devices)
+  {
+    g_list_free(input_devices);
+    input_devices = NULL;
+  }
 
   // Gtk seems to capture some reserved shortcuts (Tab). We need to bypass it entirely
   // by hacking all events.
@@ -1467,6 +1480,7 @@ void dt_ellipsize_combo(GtkComboBox *cbox)
     g_object_set(G_OBJECT(tr), "ellipsize", PANGO_ELLIPSIZE_MIDDLE, (gchar *)0);
   }
   g_list_free(renderers);
+  renderers = NULL;
 }
 
 typedef struct result_t
@@ -1662,7 +1676,7 @@ char *dt_gui_show_standalone_string_dialog(const char *title, const char *markup
   if(result.result == RESULT_YES)
     return result.entry_text;
 
-  g_free(result.entry_text);
+  dt_free(result.entry_text);
   return NULL;
 }
 
@@ -1693,9 +1707,9 @@ void dt_gui_load_theme(const char *theme)
     gchar *font_size_updated = dt_util_str_replace(font_size, ",", ".");
     gchar *font_name = g_strdup_printf(_("Sans %s"), font_size_updated);
     g_object_set(gtk_settings_get_default(), "gtk-font-name", font_name, NULL);
-    g_free(font_size_updated);
-    g_free(font_size);
-    g_free(font_name);
+    dt_free(font_size_updated);
+    dt_free(font_size);
+    dt_free(font_name);
   }
 
   gchar *path, *usercsspath;
@@ -1708,12 +1722,12 @@ void dt_gui_load_theme(const char *theme)
   if(!g_file_test(path, G_FILE_TEST_EXISTS))
   {
     // dt dir theme
-    g_free(path);
+    dt_free(path);
     path = g_build_filename(datadir, "themes", theme_css, NULL);
     if(!g_file_test(path, G_FILE_TEST_EXISTS))
     {
       // fallback to default theme
-      g_free(path);
+      dt_free(path);
       path = g_build_filename(datadir, "themes", "ansel.css", NULL);
       dt_conf_set_string("ui_last/theme", "ansel");
     }
@@ -1750,15 +1764,15 @@ void dt_gui_load_theme(const char *theme)
     themecss = g_strjoin(NULL, "@import url('", path_uri, "');", NULL);
   }
 
-  g_free(path_uri);
-  g_free(usercsspath_uri);
-  g_free(path);
-  g_free(usercsspath);
+  dt_free(path_uri);
+  dt_free(usercsspath_uri);
+  dt_free(path);
+  dt_free(usercsspath);
 
   if(dt_conf_get_bool("ui/hide_tooltips"))
   {
     gchar *newcss = g_strjoin(NULL, themecss, " tooltip {opacity: 0; background: transparent;}", NULL);
-    g_free(themecss);
+    dt_free(themecss);
     themecss = newcss;
   }
 
@@ -1768,7 +1782,7 @@ void dt_gui_load_theme(const char *theme)
     g_clear_error(&error);
   }
 
-  g_free(themecss);
+  dt_free(themecss);
 
   g_object_unref(themes_style_provider);
 
@@ -1875,7 +1889,7 @@ static void _notebook_size_callback(GtkNotebook *notebook, GdkRectangle *allocat
       gtk_widget_set_size_request(sizes[i].data, -1, -1);
   }
 
-  g_free(sizes);
+  dt_free(sizes);
 }
 
 // GTK_STATE_FLAG_PRELIGHT does not seem to get set on the label on hover so
@@ -1905,7 +1919,7 @@ GtkWidget *dt_ui_notebook_page(GtkNotebook *notebook, const char *text, const ch
   gchar *text_cpy = g_strdup(_(text));
   dt_capitalize_label(text_cpy);
   GtkWidget *label = gtk_label_new(text_cpy);
-  g_free(text_cpy);
+  dt_free(text_cpy);
   GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   if(strlen(text) > 2)
     gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
@@ -2089,6 +2103,7 @@ static void _widget_auto_ensure_scrolled_window(GtkWidget *w)
   GList *children = gtk_container_get_children(GTK_CONTAINER(parent));
   const gint position = g_list_index(children, w);
   g_list_free(children);
+  children = NULL;
 
   GtkWidget *sw = gtk_scrolled_window_new(NULL, NULL);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(sw), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
@@ -2383,7 +2398,7 @@ static void _widget_auto_height_free(gpointer data)
   if(!state) return;
   _widget_auto_disconnect_model(state, NULL);
   _widget_auto_disconnect_buffer(state);
-  free(state);
+  dt_free(state);
 }
 
 void dt_gui_widget_init_auto_height(GtkWidget *w, const int min_rows, const int max_rows)
@@ -2425,6 +2440,7 @@ gboolean dt_gui_container_has_children(GtkContainer *container)
   GList *children = gtk_container_get_children(container);
   gboolean has_children = children != NULL;
   g_list_free(children);
+  children = NULL;
   return has_children;
 }
 
@@ -2434,6 +2450,7 @@ int dt_gui_container_num_children(GtkContainer *container)
   GList *children = gtk_container_get_children(container);
   int num_children = g_list_length(children);
   g_list_free(children);
+  children = NULL;
   return num_children;
 }
 
@@ -2443,6 +2460,7 @@ GtkWidget *dt_gui_container_first_child(GtkContainer *container)
   GList *children = gtk_container_get_children(container);
   GtkWidget *child = children ? (GtkWidget*)children->data : NULL;
   g_list_free(children);
+  children = NULL;
   return child;
 }
 
@@ -2452,6 +2470,7 @@ GtkWidget *dt_gui_container_nth_child(GtkContainer *container, int which)
   GList *children = gtk_container_get_children(container);
   GtkWidget *child = (GtkWidget*)g_list_nth_data(children, which);
   g_list_free(children);
+  children = NULL;
   return child;
 }
 

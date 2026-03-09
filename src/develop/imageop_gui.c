@@ -97,7 +97,7 @@ GtkWidget *dt_bauhaus_slider_from_params(dt_iop_module_t *self, const char *para
   {
     memcpy(param_name, param, param_length);
   }
-  g_free(base_name);
+  dt_free(base_name);
 
   const dt_introspection_field_t *f = self->so->get_f(param_name);
 
@@ -157,7 +157,7 @@ GtkWidget *dt_bauhaus_slider_from_params(dt_iop_module_t *self, const char *para
 
         dt_bauhaus_widget_set_label(slider, str);
 
-        g_free(str);
+        dt_free(str);
       }
     }
   }
@@ -168,7 +168,7 @@ GtkWidget *dt_bauhaus_slider_from_params(dt_iop_module_t *self, const char *para
     slider = dt_bauhaus_slider_new(darktable.bauhaus, DT_GUI_MODULE(self));
     dt_bauhaus_widget_set_label(slider, str);
 
-    g_free(str);
+    dt_free(str);
   }
 
   if(!self->widget) self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
@@ -177,7 +177,7 @@ GtkWidget *dt_bauhaus_slider_from_params(dt_iop_module_t *self, const char *para
   dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(slider);
   w->use_default_callback = TRUE;
 
-  g_free(param_name);
+  dt_free(param_name);
 
   return slider;
 }
@@ -209,7 +209,7 @@ GtkWidget *dt_bauhaus_combobox_from_params(dt_iop_module_t *self, const char *pa
 
       dt_bauhaus_widget_set_label(combobox, str);
 
-      g_free(str);
+      dt_free(str);
     }
 
     if(f->header.type == DT_INTROSPECTION_TYPE_BOOL)
@@ -234,7 +234,7 @@ GtkWidget *dt_bauhaus_combobox_from_params(dt_iop_module_t *self, const char *pa
 
     dt_bauhaus_widget_set_label(combobox, str);
 
-    g_free(str);
+    dt_free(str);
   }
 
   if(!self->widget) self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
@@ -280,7 +280,7 @@ GtkWidget *dt_bauhaus_toggle_from_params(dt_iop_module_t *self, const char *para
 
   _add_widget_to_module_list(self, button);
 
-  g_free(str);
+  dt_free(str);
   if(!self->widget) self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
   gtk_box_pack_start(GTK_BOX(self->widget), button, FALSE, FALSE, 0);
 
@@ -300,7 +300,7 @@ GtkWidget *dt_iop_togglebutton_new(dt_iop_module_t *self, const char *section, c
   {
     gchar *tooltip = g_strdup_printf(_("%s\nctrl+click to %s"), _(label), _(ctrl_label));
     gtk_widget_set_tooltip_text(w, tooltip);
-    g_free(tooltip);
+    dt_free(tooltip);
   }
 
   _add_widget_to_module_list(self, w);

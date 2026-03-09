@@ -42,6 +42,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "common/colorspaces.h"
@@ -266,9 +267,9 @@ static int kmeans(const float *col, const dt_iop_roi_t *const roi, const int n, 
   int *const cnt = malloc(sizeof(int) * n);
   if(!mean || !var || !cnt)
   {
-    free(cnt);
-    free(var);
-    free(mean);
+    dt_free(cnt);
+    dt_free(var);
+    dt_free(mean);
     return 1;
   }
 
@@ -338,9 +339,9 @@ static int kmeans(const float *col, const dt_iop_roi_t *const roi, const int n, 
     // for(int k=0;k<n;k++) printf("%f %f -- var %f %f\n", mean_out[k][0], mean_out[k][1], var_out[k][0],
     // var_out[k][1]);
   }
-  free(cnt);
-  free(var);
-  free(mean);
+  dt_free(cnt);
+  dt_free(var);
+  dt_free(mean);
   for(int k = 0; k < n; k++)
   {
     // we actually want the std deviation.
@@ -412,15 +413,15 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     float2 *const var = malloc(sizeof(float2) * data->n);
     if(!mean || !var)
     {
-      free(mean);
-      free(var);
+      dt_free(mean);
+      dt_free(var);
       return 1;
     }
 
     if(kmeans(in, roi_in, data->n, mean, var))
     {
-      free(var);
-      free(mean);
+      dt_free(var);
+      dt_free(mean);
       return 1;
     }
 
@@ -428,8 +429,8 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     int *const mapio = malloc(sizeof(int) * data->n);
     if(!mapio)
     {
-      free(var);
-      free(mean);
+      dt_free(var);
+      dt_free(mean);
       return 1;
     }
 
@@ -471,9 +472,9 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       }
     }
 
-    free(mapio);
-    free(var);
-    free(mean);
+    dt_free(mapio);
+    dt_free(var);
+    dt_free(mean);
   }
   else
   {

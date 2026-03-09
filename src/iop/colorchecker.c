@@ -40,6 +40,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/math.h"
@@ -324,7 +325,7 @@ void init_presets(dt_iop_module_so_t *self)
   assert(hk_params);
   dt_gui_presets_add_generic(_("helmholtz/kohlrausch monochrome"), self->op,
                              self->version(), hk_params, params_len, 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
-  free(hk_params);
+  dt_free(hk_params);
 
   /** The following are based on Jo's Fuji film emulations, without tonecurve which is let to user choice
    *  https://jo.dreggn.org/blog/ansel-fuji-styles.tar.xz
@@ -340,7 +341,7 @@ void init_presets(dt_iop_module_so_t *self)
   assert(astia_params);
   dt_gui_presets_add_generic(_("Fuji Astia emulation"), self->op,
                              self->version(), astia_params, params_len, 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
-  free(astia_params);
+  dt_free(astia_params);
 
 
   const char *chrome_params_input =
@@ -353,7 +354,7 @@ void init_presets(dt_iop_module_so_t *self)
   assert(chrome_params);
   dt_gui_presets_add_generic(_("Fuji Classic Chrome emulation"), self->op,
                              self->version(), chrome_params, params_len, 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
-  free(chrome_params);
+  dt_free(chrome_params);
 
 
   const char *mchrome_params_input =
@@ -366,7 +367,7 @@ void init_presets(dt_iop_module_so_t *self)
   assert(mchrome_params);
   dt_gui_presets_add_generic(_("Fuji Monochrome emulation"), self->op,
                              self->version(), mchrome_params, params_len, 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
-  free(mchrome_params);
+  dt_free(mchrome_params);
 
 
   const char *provia_params_input =
@@ -379,7 +380,7 @@ void init_presets(dt_iop_module_so_t *self)
   assert(provia_params);
   dt_gui_presets_add_generic(_("Fuji Provia emulation"), self->op,
                              self->version(), provia_params, params_len, 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
-  free(provia_params);
+  dt_free(provia_params);
 
 
   const char *velvia_params_input =
@@ -392,7 +393,7 @@ void init_presets(dt_iop_module_so_t *self)
   assert(velvia_params);
   dt_gui_presets_add_generic(_("Fuji Velvia emulation"), self->op,
                              self->version(), velvia_params, params_len, 1, DEVELOP_BLEND_CS_RGB_DISPLAY);
-  free(velvia_params);
+  dt_free(velvia_params);
 }
 
 // fast logarithms stolen from paul mineiro http://fastapprox.googlecode.com/svn/trunk/fastapprox/src/fastonebigheader.h
@@ -618,11 +619,11 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   if(err != CL_SUCCESS) goto error;
 
   dt_opencl_release_mem_object(dev_params);
-  free(params);
+  dt_free(params);
   return TRUE;
 
 error:
-  free(params);
+  dt_free(params);
   dt_opencl_release_mem_object(dev_params);
   dt_print(DT_DEBUG_OPENCL, "[opencl_colorchecker] couldn't enqueue kernel! %d\n", err);
   return FALSE;
@@ -833,9 +834,9 @@ void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pix
       for(int i=0;i<N+4;i++) d->coeff_b[i] = b[i];
     }
     // free resources
-    free(pivot);
-    free(b);
-    free(A);
+    dt_free(pivot);
+    dt_free(b);
+    dt_free(A);
   }
   }
 }
@@ -954,8 +955,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 {
   dt_iop_colorchecker_global_data_t *gd = (dt_iop_colorchecker_global_data_t *)module->data;
   dt_opencl_free_kernel(gd->kernel_colorchecker);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker, dt_dev_pixelpipe_iop_t *piece)

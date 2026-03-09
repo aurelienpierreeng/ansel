@@ -61,6 +61,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -896,8 +897,8 @@ error:;
     dt_pixelpipe_cache_free_align(col[k]);
     dt_pixelpipe_cache_free_align(comb[k]);
   }
-  if(col) free(col);
-  if(comb) free(comb);
+  dt_free(col);
+  dt_free(comb);
   return err;
 }
 

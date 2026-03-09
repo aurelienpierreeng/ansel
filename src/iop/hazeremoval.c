@@ -195,8 +195,7 @@ void cleanup_global(dt_iop_module_so_t *self)
   dt_opencl_free_kernel(gd->kernel_hazeremoval_box_max_x);
   dt_opencl_free_kernel(gd->kernel_hazeremoval_box_max_y);
   dt_opencl_free_kernel(gd->kernel_hazeremoval_dehaze);
-  free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 

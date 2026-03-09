@@ -458,10 +458,10 @@ static void color_picker_helper_bayer_parallel(const dt_iop_buffer_dsc_t *const 
   }
 
 error:;
-  if(cnt) free(cnt);
-  if(mmax) free(mmax);
-  if(mmin) free(mmin);
-  if(msum) free(msum);
+  dt_free(cnt);
+  dt_free(mmax);
+  dt_free(mmin);
+  dt_free(msum);
 }
 
 static void color_picker_helper_bayer(const dt_iop_buffer_dsc_t *dsc, const float *const pixel,
@@ -593,10 +593,10 @@ static void color_picker_helper_xtrans_parallel(const dt_iop_buffer_dsc_t *const
   }
 
 error:;
-  if(cnt) free(cnt);
-  if(mmax) free(mmax);
-  if(mmin) free(mmin);
-  if(msum) free(msum);
+  dt_free(cnt);
+  dt_free(mmax);
+  dt_free(mmin);
+  dt_free(msum);
 }
 
 static void color_picker_helper_xtrans(const dt_iop_buffer_dsc_t *dsc, const float *const pixel,

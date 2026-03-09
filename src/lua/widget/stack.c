@@ -43,6 +43,7 @@ static int active_member(lua_State*L)
       int index = lua_tointeger(L,3) ;
       if(index < 1 || index > length) {
         g_list_free(children);
+        children = NULL;
         return luaL_error(L,"Invalid index for stack widget : %d\n",index);
       }
       gtk_stack_set_visible_child(GTK_STACK(stack->widget),g_list_nth_data(children,index-1));
@@ -51,14 +52,17 @@ static int active_member(lua_State*L)
       luaA_to(L,lua_widget,&child,3);
       if(!g_list_find(children,child->widget)) {
         g_list_free(children);
+        children = NULL;
         return luaL_error(L,"Active child of stack widget is not in the stack\n");
       }
       gtk_stack_set_visible_child(GTK_STACK(stack->widget),child->widget);
     } else {
       g_list_free(children);
+      children = NULL;
       return luaL_error(L,"Invalid type for stack active child\n");
     }
     g_list_free(children);
+    children = NULL;
     return 0;
   }
   GtkWidget * child = gtk_stack_get_visible_child(GTK_STACK(stack->widget));

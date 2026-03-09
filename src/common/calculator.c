@@ -22,6 +22,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include <glib.h>
 #include <math.h>
 #include <stdio.h>
@@ -172,7 +173,7 @@ static token_t *get_token(parser_state_t *self)
     }
   }
 
-  free(token);
+  dt_free(token);
   return NULL;
 }
 
@@ -202,7 +203,7 @@ static float parse_additive_expression(parser_state_t *self)
 
     if(operator!= O_PLUS &&operator!= O_MINUS) return left;
 
-    free(self->token);
+    dt_free(self->token);
     self->token = get_token(self);
 
     const float right = parse_multiplicative_expression(self);
@@ -228,7 +229,7 @@ static float parse_multiplicative_expression(parser_state_t *self)
 
     if(operator!= O_MULTIPLY &&operator!= O_DIVISION &&operator!= O_MODULO) return left;
 
-    free(self->token);
+    dt_free(self->token);
     self->token = get_token(self);
 
     float right = parse_power_expression(self);
@@ -254,7 +255,7 @@ static float parse_power_expression(parser_state_t *self)
   {
     if(self->token->data.operator!= O_POWER) return left;
 
-    free(self->token);
+    dt_free(self->token);
     self->token = get_token(self);
 
     const float right = parse_unary_expression(self);
@@ -273,14 +274,14 @@ static float parse_unary_expression(parser_state_t *self)
   {
     if(self->token->data.operator== O_MINUS)
     {
-      free(self->token);
+      dt_free(self->token);
       self->token = get_token(self);
 
       return -1.0 * parse_unary_expression(self);
     }
     if(self->token->data.operator== O_PLUS)
     {
-      free(self->token);
+      dt_free(self->token);
       self->token = get_token(self);
 
       return parse_unary_expression(self);
@@ -297,18 +298,18 @@ static float parse_primary_expression(parser_state_t *self)
   if(self->token->type == T_NUMBER)
   {
     const float result = self->token->data.number;
-    free(self->token);
+    dt_free(self->token);
     self->token = get_token(self);
     return result;
   }
   if(self->token->type == T_OPERATOR && self->token->data.operator== O_LEFTROUND)
   {
-    free(self->token);
+    dt_free(self->token);
     self->token = get_token(self);
     const float result = parse_expression(self);
     if(!self->token || self->token->type != T_OPERATOR || self->token->data.operator!= O_RIGHTROUND)
       return NAN;
-    free(self->token);
+    dt_free(self->token);
     self->token = get_token(self);
     return result;
   }
@@ -350,7 +351,7 @@ float dt_calculator_solve(const float x, const char *formula)
       //       case O_MODULO:
       //       case O_POWER:
       //         operator = self->token->data.operator;
-      //         free(self->token);
+      //         g_free(self->token);
       //         self->token = get_token(self);
       //         break;
       default:
@@ -374,9 +375,9 @@ float dt_calculator_solve(const float x, const char *formula)
   if(self->token) result = NAN;
 
 end:
-  free(self->token);
-  free(self);
-  g_free(dotformula);
+  dt_free(self->token);
+  dt_free(self);
+  dt_free(dotformula);
 
   return result;
 }
@@ -400,4 +401,3 @@ end:
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

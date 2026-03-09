@@ -34,6 +34,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
 #include "common/imagebuf.h"
@@ -159,7 +160,7 @@ static GList *_brush_ramer_douglas_peucker(const float *point_buffer, int point_
 
     // remove last element from left_list to avoid duplication at the split
     GList *end1 = g_list_last(left_list);
-    free(end1->data);
+    dt_free(end1->data);
     left_list = g_list_delete_link(left_list, end1);
 
     result_list = g_list_concat(left_list, right_list);
@@ -992,8 +993,7 @@ static int _brush_get_pts_border(dt_develop_t *develop, dt_masks_form_t *mask_fo
     }
   }
 
-  free(nodes);
-  nodes = NULL;
+  dt_free(nodes);
 
   *point_count = dt_masks_dynbuf_position(dpoints) / 2;
   *point_buffer = dt_masks_dynbuf_harvest(dpoints);
@@ -1602,14 +1602,14 @@ static void _add_node_to_segment(struct dt_iop_module_t *module, dt_masks_form_t
   GList *pt = g_list_nth(mask_form->points, selected_segment);
   if(!pt || !pt->data)
   {
-    free(new_node);
+    dt_free(new_node);
     return;
   }
   dt_masks_node_brush_t *point0 = (dt_masks_node_brush_t *)pt->data;
   const GList *const next_pt = g_list_next_wraparound(pt, mask_form->points);
   if(!next_pt || !next_pt->data)
   {
-    free(new_node);
+    dt_free(new_node);
     return;
   }
   dt_masks_node_brush_t *point1 = (dt_masks_node_brush_t *)next_pt->data;
@@ -3210,7 +3210,7 @@ static int _brush_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t 
       const dt_menu_icon_t icon = is_corner ? DT_MENU_ICON_CIRCLE : DT_MENU_ICON_SQUARE;
       menu_item = ctx_gtk_menu_item_new_with_icon_and_shortcut(to_change_type, accel, menu,
                                                                _brush_switch_node_callback, mask_gui, icon);
-      g_free(to_change_type);
+      dt_free(to_change_type);
     }
 
     {
@@ -3229,7 +3229,7 @@ static int _brush_populate_context_menu(GtkWidget *menu, struct dt_masks_form_t 
   }
 
   end:
-  g_free(accel);
+  dt_free(accel);
   return ret;
 }
 

@@ -40,6 +40,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "develop/masks.h"
 #include "develop/develop.h"
 #include "bauhaus/bauhaus.h"
@@ -373,8 +374,7 @@ void dt_masks_gui_cleanup(dt_develop_t *dev)
   if(!dev || !dev->form_gui) return;
 
   dt_masks_clear_form_gui(dev);
-  free(dev->form_gui);
-  dev->form_gui = NULL;
+  dt_free(dev->form_gui);
   dt_masks_set_visible_form(dev, NULL);
 }
 
@@ -869,7 +869,7 @@ void dt_masks_form_gui_points_free(gpointer data)
   dt_pixelpipe_cache_free_align(gui_points->points);
   dt_pixelpipe_cache_free_align(gui_points->border);
   dt_pixelpipe_cache_free_align(gui_points->source);
-  free(gui_points);
+  dt_free(gui_points);
 }
 
 void dt_masks_remove_node(struct dt_iop_module_t *module, dt_masks_form_t *mask_form, int parent_id,
@@ -879,7 +879,7 @@ void dt_masks_remove_node(struct dt_iop_module_t *module, dt_masks_form_t *mask_
   dt_masks_node_brush_t *brush_node = (dt_masks_node_brush_t *)g_list_nth_data(mask_form->points, node_index);
   if(!brush_node) return;
   mask_form->points = g_list_remove(mask_form->points, brush_node);
-  free(brush_node);
+  dt_free(brush_node);
   mask_gui->node_hovered = -1;
   mask_gui->node_selected = FALSE;
   mask_gui->node_selected_idx = -1;
@@ -924,7 +924,7 @@ static gboolean _masks_remove_shape(struct dt_iop_module_t *module, dt_masks_for
       if(group_entry->formid == mask_form->formid)
       {
         visible_form->points = g_list_remove(visible_form->points, group_entry);
-        free(group_entry);
+        dt_free(group_entry);
         break;
       }
     }
@@ -1064,7 +1064,7 @@ static void _set_group_name_from_module(dt_iop_module_t *module, dt_masks_form_t
 {
   gchar *module_label = dt_history_item_get_name(module);
   snprintf(group_form->name, sizeof(group_form->name), "grp %s", module_label);
-  g_free(module_label);
+  dt_free(module_label);
 }
 
 static dt_masks_form_t *_group_create(dt_develop_t *develop, dt_iop_module_t *module, dt_masks_type_t group_type)
@@ -1194,7 +1194,10 @@ void dt_masks_gui_form_save_creation(dt_develop_t *develop, dt_iop_module_t *mod
   }
 
   // Free group_entry if it is unused.
-  if(!mask_gui && !module) free(group_entry);
+  if(!mask_gui && !module)
+  {
+    dt_free(group_entry);
+  }
 }
 
 int dt_masks_form_duplicate(dt_develop_t *develop, int form_id)
@@ -1781,7 +1784,7 @@ int dt_masks_copy_used_forms_for_module(dt_develop_t *develop_dest, dt_develop_t
       dt_masks_form_t *new_form = dt_masks_dup_masks_form(mask_form);
       if(!new_form)
       {
-        free(used_form_ids);
+        dt_free(used_form_ids);
         return 1;
       }
       develop_dest->forms = g_list_append(develop_dest->forms, new_form);
@@ -1793,7 +1796,7 @@ int dt_masks_copy_used_forms_for_module(dt_develop_t *develop_dest, dt_develop_t
     }
   }
 
-  free(used_form_ids);
+  dt_free(used_form_ids);
   return 0;
 }
 
@@ -1937,16 +1940,16 @@ void dt_masks_write_masks_history_item(const int32_t image_id, const int history
     DT_DEBUG_SQLITE3_BIND_INT(statement, 7, point_count);
     sqlite3_step(statement);
     sqlite3_finalize(statement);
-    free(point_buffer);
+    dt_free(point_buffer);
   }
 }
 
 void dt_masks_free_form(dt_masks_form_t *mask_form)
 {
   if(!mask_form) return;
-  g_list_free_full(mask_form->points, free);
+  g_list_free_full(mask_form->points, dt_free_gpointer);
   mask_form->points = NULL;
-  free(mask_form);
+  dt_free(mask_form);
 }
 
 int dt_masks_events_mouse_leave(struct dt_iop_module_t *module)
@@ -2886,7 +2889,7 @@ void dt_masks_iop_combo_populate(GtkWidget *widget, void *data)
   const guint forms_count = g_list_length(module->dev->forms);
   const guint iop_count = g_list_length(module->dev->iop);
   guint combo_capacity = 5 + forms_count + iop_count;
-  free(blend_data->masks_combo_ids);
+  dt_free(blend_data->masks_combo_ids);
   blend_data->masks_combo_ids = malloc(sizeof(int) * combo_capacity);
 
   int *combo_ids = blend_data->masks_combo_ids;
@@ -2950,7 +2953,7 @@ void dt_masks_iop_combo_populate(GtkWidget *widget, void *data)
       {
         gchar *module_label = dt_history_item_get_name(other_module);
         dt_bauhaus_combobox_add(combo, g_strdup_printf(_("reuse shapes from %s"), module_label));
-        g_free(module_label);
+        dt_free(module_label);
         combo_ids[combo_index] = -1 * iop_index;
         combo_index++;
       }
@@ -3047,7 +3050,7 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *group
       {
         removed = 1;
         group_form->points = g_list_remove(group_form->points, group_entry);
-        free(group_entry);
+        dt_free(group_entry);
         break;
       }
     }
@@ -3102,7 +3105,7 @@ void dt_masks_form_remove(struct dt_iop_module_t *module, dt_masks_form_t *group
             {
               removed = 1;
               iop_group->points = g_list_remove(iop_group->points, group_entry);
-              free(group_entry);
+              dt_free(group_entry);
               group_node = iop_group->points; // jump back to start of list
               continue;
             }
@@ -3293,7 +3296,7 @@ float dt_masks_get_set_conf_value(dt_masks_form_t *mask_form, char *feature, flo
 
   dt_conf_set_float(config_key, updated_value);
 
-  g_free(config_key);
+  dt_free(config_key);
   return updated_value;
 }
 
@@ -3557,7 +3560,7 @@ static int _masks_cleanup_unused(GList **forms_list, GList *history_list, const 
     }
   }
 
-  free(used_form_ids);
+  dt_free(used_form_ids);
 
   *forms_list = forms;
 

@@ -189,7 +189,7 @@ static void _selection_select(dt_selection_t *selection, int32_t imgid)
 
   gchar *query = g_strdup_printf("INSERT OR IGNORE INTO main.selected_images VALUES (%d)", imgid);
   DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), query, NULL, NULL, NULL);
-  g_free(query);
+  dt_free(query);
 }
 
 static void _selection_deselect(dt_selection_t *selection, int32_t imgid)
@@ -198,7 +198,7 @@ static void _selection_deselect(dt_selection_t *selection, int32_t imgid)
 
   gchar *query = g_strdup_printf("DELETE FROM main.selected_images WHERE imgid = %d", imgid);
   DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), query, NULL, NULL, NULL);
-  g_free(query);
+  dt_free(query);
 }
 
 void dt_selection_push(dt_selection_t *selection)
@@ -254,12 +254,13 @@ void dt_selection_free(dt_selection_t *selection)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_selection_update_collection),
                                      (gpointer)selection);
   g_list_free(selection->ids);
+  selection->ids = NULL;
   if(_selection_database_to_glist_stmt)
   {
     sqlite3_finalize(_selection_database_to_glist_stmt);
     _selection_database_to_glist_stmt = NULL;
   }
-  g_free(selection);
+  dt_free(selection);
 }
 
 void dt_selection_clear(dt_selection_t *selection)
@@ -333,7 +334,7 @@ void dt_selection_select_list(struct dt_selection_t *selection, const GList *con
     }
     gchar *query = g_strdup_printf("INSERT OR IGNORE INTO main.selected_images VALUES %s", ids);
     DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), query, NULL, NULL, NULL);
-    g_free(query);
+    dt_free(query);
   }
 
   _update_gui();
@@ -356,8 +357,8 @@ void dt_selection_deselect_list(struct dt_selection_t *selection, const GList *c
     }
     gchar *query = g_strdup_printf("DELETE FROM main.selected_images WHERE imgid IN (%s)", ids);
     DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), query, NULL, NULL, NULL);
-    g_free(query);
-    g_free(ids);
+    dt_free(query);
+    dt_free(ids);
   }
 
   _update_gui();

@@ -37,6 +37,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include <glib.h>
 
 #include "bauhaus/bauhaus.h"
@@ -459,8 +460,7 @@ static void _create_pdf(dt_job_t *job, dt_images_box imgs, const float width, co
   for(int k=0; k<imgs.count; k++)
   {
     dt_image_box *box = &imgs.box[k];
-    g_free(box->buf);
-    box->buf = NULL;
+    dt_free(box->buf);
   }
 }
 
@@ -654,13 +654,13 @@ static void _print_job_cleanup(void *p)
 {
   dt_lib_print_job_t *params = p;
   if(params->pdf_filename[0]) g_unlink(params->pdf_filename);
-  free(params->pdf_page);
-  free(params->buf);
-  g_free(params->style);
-  g_free(params->buf_icc_profile);
-  g_free(params->p_icc_profile);
-  g_free(params->job_title);
-  free(params);
+  dt_free(params->pdf_page);
+  dt_free(params->buf);
+  dt_free(params->style);
+  dt_free(params->buf_icc_profile);
+  dt_free(params->p_icc_profile);
+  dt_free(params->job_title);
+  dt_free(params);
 }
 
 static void _print_button_clicked(GtkWidget *widget, gpointer user_data)
@@ -712,7 +712,8 @@ static void _print_button_clicked(GtkWidget *widget, gpointer user_data)
   {
     // FIXME: in metadata_view.c, non-printables are filtered, should we do this here?
     params->job_title = g_strdup((gchar *)res->data);
-    g_list_free_full(res, &g_free);
+    g_list_free_full(res, dt_free_gpointer);
+    res = NULL;
   }
   else
   {
@@ -730,7 +731,7 @@ static void _print_button_clicked(GtkWidget *widget, gpointer user_data)
   // FIXME: ellipsize title/printer as the export completed message is ellipsized
   gchar *message = g_strdup_printf(_("processing `%s' for `%s'"), params->job_title, params->prt.printer.name);
   dt_control_job_add_progress(job, message, TRUE);
-  g_free(message);
+  dt_free(message);
 
   // FIXME: getting this from conf as w/prior code, but switch to getting from ps
   params->style = dt_conf_get_string("plugins/print/print/style");
@@ -763,7 +764,11 @@ static void _set_printer(const dt_lib_module_t *self, const char *printer_name)
 
   // add papers for the given printer
   dt_bauhaus_combobox_clear(ps->papers);
-  if(ps->paper_list) g_list_free_full(ps->paper_list, free);
+  if(ps->paper_list)
+  {
+    g_list_free_full(ps->paper_list, dt_free_gpointer);
+    ps->paper_list = NULL;
+  }
   ps->paper_list = dt_get_papers (&ps->prt.printer);
   for(const GList *papers = ps->paper_list; papers; papers = g_list_next (papers))
   {
@@ -776,7 +781,11 @@ static void _set_printer(const dt_lib_module_t *self, const char *printer_name)
 
   // add corresponding supported media
   dt_bauhaus_combobox_clear(ps->media);
-  if(ps->media_list) g_list_free_full(ps->media_list, free);
+  if(ps->media_list)
+  {
+    g_list_free_full(ps->media_list, dt_free_gpointer);
+    ps->media_list = NULL;
+  }
   ps->media_list = dt_get_media_type(&ps->prt.printer);
   for(const GList *media = ps->media_list; media; media = g_list_next (media))
   {
@@ -871,12 +880,12 @@ _update_slider(dt_lib_print_settings_t *ps)
 
     value = g_strdup_printf(precision, w);
     gtk_label_set_text(GTK_LABEL(ps->width), value);
-    g_free(value);
+    dt_free(value);
 
     value = g_strdup_printf(precision, h);
     gtk_label_set_text(GTK_LABEL(ps->height), value);
-    g_free(value);
-    g_free(precision);
+    dt_free(value);
+    dt_free(precision);
 
     // compute the image down/up scale and report information
 
@@ -894,7 +903,7 @@ _update_slider(dt_lib_print_settings_t *ps)
                             ? (int)ps->prt.printer.resolution
                             : (int)(ps->prt.printer.resolution / scale));
     gtk_label_set_text(GTK_LABEL(ps->info), value);
-    g_free(value);
+    dt_free(value);
   }
 }
 
@@ -1134,7 +1143,7 @@ _style_callback(GtkWidget *widget, dt_lib_module_t *self)
     dt_conf_set_string("plugins/print/print/style", style);
   }
 
-  g_free(ps->v_style);
+  dt_free(ps->v_style);
   ps->v_style = dt_conf_get_string("plugins/print/print/style");
 }
 
@@ -1150,7 +1159,7 @@ _profile_changed(GtkWidget *widget, dt_lib_module_t *self)
     {
       dt_conf_set_int("plugins/print/print/icctype", pp->type);
       dt_conf_set_string("plugins/print/print/iccprofile", pp->filename);
-      g_free(ps->v_iccprofile);
+      dt_free(ps->v_iccprofile);
       ps->v_icctype = pp->type;
       ps->v_iccprofile = g_strdup(pp->filename);
       return;
@@ -1158,7 +1167,7 @@ _profile_changed(GtkWidget *widget, dt_lib_module_t *self)
   }
   dt_conf_set_int("plugins/print/print/icctype", DT_COLORSPACE_NONE);
   dt_conf_set_string("plugins/print/print/iccprofile", "");
-  g_free(ps->v_iccprofile);
+  dt_free(ps->v_iccprofile);
   ps->v_icctype = DT_COLORSPACE_NONE;
   ps->v_iccprofile = g_strdup("");
 }
@@ -1175,7 +1184,7 @@ _printer_profile_changed(GtkWidget *widget, dt_lib_module_t *self)
     {
       dt_conf_set_int("plugins/print/printer/icctype", pp->type);
       dt_conf_set_string("plugins/print/printer/iccprofile", pp->filename);
-      g_free(ps->v_piccprofile);
+      dt_free(ps->v_piccprofile);
       ps->v_picctype = pp->type;
       ps->v_piccprofile = g_strdup(pp->filename);
 
@@ -1186,7 +1195,7 @@ _printer_profile_changed(GtkWidget *widget, dt_lib_module_t *self)
   }
   dt_conf_set_int("plugins/print/printer/icctype", DT_COLORSPACE_NONE);
   dt_conf_set_string("plugins/print/printer/iccprofile", "");
-  g_free(ps->v_piccprofile);
+  dt_free(ps->v_piccprofile);
   ps->v_picctype = DT_COLORSPACE_NONE;
   ps->v_piccprofile = g_strdup("");
   gtk_widget_set_sensitive(GTK_WIDGET(ps->black_point_compensation), FALSE);
@@ -1333,7 +1342,7 @@ static void _new_printer_callback(dt_printer_info_t *printer, void *user_data)
     _set_printer(self, printer->name);
   }
   count++;
-  g_free(default_printer);
+  dt_free(default_printer);
 
   g_signal_handlers_unblock_by_func(G_OBJECT(d->printers), G_CALLBACK(_printer_changed), NULL);
 }
@@ -2058,7 +2067,7 @@ void gui_post_expose(struct dt_lib_module_t *self, cairo_t *cr, int32_t width, i
 
     pango_font_description_free(desc);
     g_object_unref(layout);
-    g_free(precision);
+    dt_free(precision);
   }
 
   if(ps->imgs.screen.borderless)
@@ -2286,7 +2295,7 @@ void gui_init(dt_lib_module_t *self)
       if(prof->type == printer_profile_type &&
         (prof->type != DT_COLORSPACE_FILE || !g_strcmp0(prof->filename, printer_profile)))
       {
-        g_free(d->v_piccprofile);
+        dt_free(d->v_piccprofile);
         d->v_picctype = printer_profile_type;
         d->v_piccprofile = g_strdup(printer_profile);
         combo_idx = n;
@@ -2299,7 +2308,7 @@ void gui_init(dt_lib_module_t *self)
   {
     dt_conf_set_int("plugins/print/printer/icctype", DT_COLORSPACE_NONE);
     dt_conf_set_string("plugins/print/printer/iccprofile", "");
-    g_free(d->v_piccprofile);
+    dt_free(d->v_piccprofile);
     d->v_picctype = DT_COLORSPACE_NONE;
     d->v_piccprofile = g_strdup("");
     combo_idx = 0;
@@ -2308,7 +2317,7 @@ void gui_init(dt_lib_module_t *self)
 
   char *tooltip = g_strdup_printf(_("printer ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
   gtk_widget_set_tooltip_text(d->pprofile, tooltip);
-  g_free(tooltip);
+  dt_free(tooltip);
 
   g_signal_connect(G_OBJECT(d->pprofile), "value-changed", G_CALLBACK(_printer_profile_changed), (gpointer)self);
 
@@ -2610,7 +2619,7 @@ void gui_init(dt_lib_module_t *self)
     if(prof->type == icctype
        && (prof->type != DT_COLORSPACE_FILE || !g_strcmp0(prof->filename, iccprofile)))
     {
-      g_free(d->v_iccprofile);
+      dt_free(d->v_iccprofile);
       d->v_icctype = icctype;
       d->v_iccprofile = g_strdup(iccprofile);
       combo_idx = n;
@@ -2621,7 +2630,7 @@ void gui_init(dt_lib_module_t *self)
   {
     dt_conf_set_int("plugins/print/print/icctype", DT_COLORSPACE_NONE);
     dt_conf_set_string("plugins/print/print/iccprofile", "");
-    g_free(d->v_iccprofile);
+    dt_free(d->v_iccprofile);
     d->v_icctype = DT_COLORSPACE_NONE;
     d->v_iccprofile = g_strdup("");
     combo_idx = 0;
@@ -2631,7 +2640,7 @@ void gui_init(dt_lib_module_t *self)
 
   tooltip = g_strdup_printf(_("output ICC profiles in %s or %s"), user_profile_dir, system_profile_dir);
   gtk_widget_set_tooltip_text(d->profile, tooltip);
-  g_free(tooltip);
+  dt_free(tooltip);
 
   g_signal_connect(G_OBJECT(d->profile), "value-changed", G_CALLBACK(_profile_changed), (gpointer)self);
 
@@ -2669,12 +2678,13 @@ void gui_init(dt_lib_module_t *self)
     n++;
     if(g_strcmp0(style->name,current_style)==0)
     {
-      g_free(d->v_style);
+      dt_free(d->v_style);
       d->v_style = g_strdup(current_style);
       combo_idx=n;
     }
   }
   g_list_free_full(styles, dt_style_free);
+  styles = NULL;
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(d->style), TRUE, TRUE, 0);
   gtk_widget_set_tooltip_text(d->style, _("temporary style to use while printing"));
 
@@ -2682,7 +2692,7 @@ void gui_init(dt_lib_module_t *self)
   if(combo_idx == -1)
   {
     dt_conf_set_string("plugins/print/print/style", "");
-    g_free(d->v_style);
+    dt_free(d->v_style);
     d->v_style = g_strdup("");
     combo_idx=0;
   }
@@ -2700,8 +2710,8 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(self->widget), button, TRUE, TRUE, 0);
   dt_gui_add_help_link(button, dt_get_help_url("print_settings_button"));
 
-  g_free(system_profile_dir);
-  g_free(user_profile_dir);
+  dt_free(system_profile_dir);
+  dt_free(user_profile_dir);
 
   // Let's start the printer discovery now
 
@@ -3174,16 +3184,18 @@ void gui_cleanup(dt_lib_module_t *self)
   g_signal_handlers_disconnect_by_func(G_OBJECT(ps->b_left), G_CALLBACK(_left_border_callback), self);
   g_signal_handlers_disconnect_by_func(G_OBJECT(ps->b_right), G_CALLBACK(_right_border_callback), self);
 
-  g_list_free_full(ps->profiles, g_free);
-  g_list_free_full(ps->paper_list, free);
-  g_list_free_full(ps->media_list, free);
+  g_list_free_full(ps->profiles, dt_free_gpointer);
+  ps->profiles = NULL;
+  g_list_free_full(ps->paper_list, dt_free_gpointer);
+  ps->paper_list = NULL;
+  g_list_free_full(ps->media_list, dt_free_gpointer);
+  ps->media_list = NULL;
 
-  g_free(ps->v_iccprofile);
-  g_free(ps->v_piccprofile);
-  g_free(ps->v_style);
+  dt_free(ps->v_iccprofile);
+  dt_free(ps->v_piccprofile);
+  dt_free(ps->v_style);
 
-  free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 void gui_reset(dt_lib_module_t *self)

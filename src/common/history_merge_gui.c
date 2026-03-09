@@ -59,7 +59,7 @@ static gchar *_hm_module_label_short(const dt_iop_module_t *mod)
   if(mod && mod->multi_name[0] != '\0')
   {
     gchar *out = g_strdup_printf("%s (%s)", name, mod->multi_name);
-    g_free(name);
+    dt_free(name);
     return out;
   }
   return name;
@@ -100,7 +100,7 @@ static gchar *_hm_pretty_id_from_id_ht(const char *id, GHashTable *id_ht, const 
     gchar *name = _hm_clean_module_name(mod);
     if(mod->multi_name[0] == '\0') return name;
     gchar *out = g_strdup_printf("%s (%s)", name ? name : "", mod->multi_name);
-    g_free(name);
+    dt_free(name);
     return out;
   }
 
@@ -118,7 +118,7 @@ static void _hm_append_cycle_label(GString *out, const char *s, const gboolean b
   gchar *esc = g_markup_escape_text(s ? s : "", -1);
   if(bold) g_string_append_printf(out, "<b>%s</b>", esc);
   else g_string_append(out, esc);
-  g_free(esc);
+  dt_free(esc);
 }
 
 dt_hm_constraint_choice_t _hm_ask_user_constraints_choice(GHashTable *id_ht, const char *faulty_id,
@@ -167,12 +167,12 @@ dt_hm_constraint_choice_t _hm_ask_user_constraints_choice(GHashTable *id_ht, con
   const int res = gtk_dialog_run(dialog);
   gtk_widget_destroy(GTK_WIDGET(dialog));
 
-  g_free(text);
-  g_free(faulty);
-  g_free(sp);
-  g_free(sn);
-  g_free(dp);
-  g_free(dn);
+  dt_free(text);
+  dt_free(faulty);
+  dt_free(sp);
+  dt_free(sn);
+  dt_free(dp);
+  dt_free(dn);
 
   if(res == GTK_RESPONSE_ACCEPT) return DT_HM_CONSTRAINTS_PREFER_SRC;
   return DT_HM_CONSTRAINTS_PREFER_DEST;
@@ -208,8 +208,8 @@ gboolean _hm_warn_missing_raster_producers(const GList *mod_list)
       gchar *user = _hm_module_label_short(mod);
       gchar *prod = _hm_module_label_short(producer);
       g_string_append_printf(lines, "• %s → %s\n", user, prod);
-      g_free(user);
-      g_free(prod);
+      dt_free(user);
+      dt_free(prod);
     }
   }
 
@@ -249,7 +249,7 @@ gboolean _hm_warn_missing_raster_producers(const GList *mod_list)
   const int res = gtk_dialog_run(dialog);
   gtk_widget_destroy(GTK_WIDGET(dialog));
 
-  g_free(text);
+  dt_free(text);
   g_string_free(lines, TRUE);
 
   return res == GTK_RESPONSE_ACCEPT;
@@ -305,7 +305,7 @@ void _hm_show_toposort_cycle_popup(GList *cycle_nodes, GHashTable *id_ht)
   gchar *prefix = g_markup_escape_text(
       _("Module ordering constraints contain a cycle and cannot be satisfied.\n\nCycle:\n\n"), -1);
   g_string_append(text, prefix);
-  g_free(prefix);
+  dt_free(prefix);
   g_string_append(text, cycle->str);
 
   gtk_label_set_markup(GTK_LABEL(label), text->str);
@@ -327,11 +327,11 @@ static gchar *_hm_module_row_label(const dt_iop_module_t *mod)
   if(mod->multi_name[0] == '\0')
   {
     gchar *out = g_strdup_printf("%4d  %s", mod->iop_order, name ? name : "");
-    g_free(name);
+    dt_free(name);
     return out;
   }
   gchar *out = g_strdup_printf("%4d  %s (%s)", mod->iop_order, name ? name : "", mod->multi_name);
-  g_free(name);
+  dt_free(name);
   return out;
 }
 
@@ -460,7 +460,7 @@ GPtrArray *_hm_collect_labels_from_history_map(GHashTable *last_by_id, const GHa
     if(_hm_history_item_uses_masks(hist))
     {
       gchar *tmp = g_strdup_printf("%s*", label);
-      g_free(label);
+      dt_free(label);
       label = tmp;
     }
 
@@ -478,9 +478,10 @@ GPtrArray *_hm_collect_labels_from_history_map(GHashTable *last_by_id, const GHa
     _hm_label_t *item = (_hm_label_t *)l->data;
     g_ptr_array_add(result, item->label);
     g_ptr_array_add(styles, GINT_TO_POINTER(item->style));
-    g_free(item);
+    dt_free(item);
   }
   g_list_free(labels);
+  labels = NULL;
 
   if(out_styles)
     *out_styles = styles;
@@ -512,7 +513,7 @@ static gboolean _hm_module_visible_in_report(const dt_iop_module_t *mod, const G
   if(!mod_list_ids) return FALSE;
   gchar *id = _hm_make_node_id(mod->op, mod->multi_name);
   const gboolean keep = g_hash_table_contains((GHashTable *)mod_list_ids, id);
-  g_free(id);
+  dt_free(id);
   return keep;
 }
 
@@ -527,7 +528,7 @@ static gchar *_hm_report_dest_label(const dt_iop_module_t *mod, GHashTable *dst_
   if(_hm_history_item_uses_masks(hist_dst))
   {
     gchar *tmp = g_strdup_printf("%s*", dst_txt);
-    g_free(dst_txt);
+    dt_free(dst_txt);
     dst_txt = tmp;
   }
 
@@ -535,17 +536,17 @@ static gchar *_hm_report_dest_label(const dt_iop_module_t *mod, GHashTable *dst_
   if(inserted)
   {
     gchar *tmp = g_strdup_printf("[%s ]", dst_txt);
-    g_free(dst_txt);
+    dt_free(dst_txt);
     dst_txt = tmp;
   }
   else if(dst_txt[0] != '\0')
   {
     gchar *tmp = g_strdup_printf(" %s", dst_txt);
-    g_free(dst_txt);
+    dt_free(dst_txt);
     dst_txt = tmp;
   }
 
-  g_free(id);
+  dt_free(id);
   return dst_txt;
 }
 
@@ -590,7 +591,7 @@ static GPtrArray *_hm_report_collect_dest_ids(GtkTreeModel *model)
     if(!is_input && id && id[0] != '\0')
       g_ptr_array_add(ids, id);
     else
-      g_free(id);
+      dt_free(id);
 
     valid = gtk_tree_model_iter_next(model, &iter);
   }
@@ -678,6 +679,7 @@ static gboolean _hm_report_apply_visible_order(dt_develop_t *dev_dest, const GPt
 
   dt_ioppr_rebuild_iop_order_from_modules(dev_dest, ordered);
   g_list_free(ordered);
+  ordered = NULL;
   return TRUE;
 }
 
@@ -685,7 +687,7 @@ static GHashTable *_hm_report_build_moved_set(dt_develop_t *dev_src, GtkTreeMode
                                               const GHashTable *mod_list_ids)
 {
   /* Build a set of module ids that changed relative order between source and destination. */
-  GHashTable *moved = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  GHashTable *moved = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
   if(!dev_src) return moved;
 
   GPtrArray *dest_ids = _hm_report_collect_dest_ids(model);
@@ -708,7 +710,7 @@ static GHashTable *_hm_report_build_moved_set(dt_develop_t *dev_src, GtkTreeMode
     if(g_hash_table_contains(dest_id_set, id))
       g_ptr_array_add(src_common, id);
     else
-      g_free(id);
+      dt_free(id);
   }
 
   GHashTable *src_id_set = g_hash_table_new(g_str_hash, g_str_equal);
@@ -793,8 +795,8 @@ static void _hm_report_update_move_styles(GtkListStore *store, dt_develop_t *dev
                        src_moved ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL, HM_REPORT_COL_DST_WEIGHT,
                        dst_moved ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL, -1);
 
-    g_free(src_id);
-    g_free(dst_id);
+    dt_free(src_id);
+    dt_free(dst_id);
     valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(store), &iter);
   }
 
@@ -805,7 +807,7 @@ static void _hm_report_update_arrows(GtkListStore *store, GHashTable *override, 
                                      GHashTable *dst_last_before_by_id)
 {
   /* Refresh override arrows after destination order changes. */
-  GHashTable *dst_row = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  GHashTable *dst_row = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
 
   GtkTreeIter iter;
   gboolean valid = gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store), &iter);
@@ -820,17 +822,17 @@ static void _hm_report_update_arrows(GtkListStore *store, GHashTable *override, 
 
     if(!is_input)
     {
-      g_free(src_id);
+      dt_free(src_id);
 
       if(dst_id && dst_id[0] != '\0')
         g_hash_table_replace(dst_row, dst_id, GINT_TO_POINTER(row));
       else
-        g_free(dst_id);
+        dt_free(dst_id);
     }
     else
     {
-      g_free(src_id);
-      g_free(dst_id);
+      dt_free(src_id);
+      dt_free(dst_id);
     }
 
     valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(store), &iter);
@@ -882,8 +884,8 @@ static void _hm_report_update_arrows(GtkListStore *store, GHashTable *override, 
 
     gtk_list_store_set(store, &iter, HM_REPORT_COL_ARROW, arrow, -1);
 
-    g_free(src_id);
-    g_free(dst_id);
+    dt_free(src_id);
+    dt_free(dst_id);
     valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(store), &iter);
     row++;
   }
@@ -936,10 +938,10 @@ static void _hm_report_update_dest_labels(GtkListStore *store, dt_develop_t *dev
       dt_iop_module_t *mod = _hm_module_from_id(dev_dest, id);
       gchar *dst_txt = mod ? _hm_report_dest_label(mod, dst_last_by_id, orig_ids) : g_strdup("");
       gtk_list_store_set(store, &iter, HM_REPORT_COL_DST, dst_txt, -1);
-      g_free(dst_txt);
+      dt_free(dst_txt);
     }
 
-    g_free(id);
+    dt_free(id);
     valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(store), &iter);
   }
 }
@@ -1004,16 +1006,16 @@ static void _hm_report_drag_data_get(GtkWidget *widget, GdkDragContext *context,
                      &is_input, -1);
   if(is_input || !dst_id || dst_id[0] == '\0')
   {
-    g_free(dst_id);
+    dt_free(dst_id);
     if(path != ctx->drag_path) gtk_tree_path_free(path);
     return;
   }
-  g_free(dst_id);
+  dt_free(dst_id);
 
   gchar *path_str = gtk_tree_path_to_string(path);
   gtk_selection_data_set(selection_data, gdk_atom_intern_static_string("DT_HISTORY_MERGE_DST_ROW"), 8,
                          (const guchar *)path_str, strlen(path_str));
-  g_free(path_str);
+  dt_free(path_str);
 
   if(path != ctx->drag_path) gtk_tree_path_free(path);
 }
@@ -1031,7 +1033,7 @@ static void _hm_report_drag_data_received(GtkWidget *widget, GdkDragContext *con
   if(!src_path_str) return;
 
   GtkTreePath *src_path = gtk_tree_path_new_from_string(src_path_str);
-  g_free(src_path_str);
+  dt_free(src_path_str);
   if(!src_path) return;
 
   GtkTreePath *dst_path = NULL;
@@ -1068,7 +1070,7 @@ static void _hm_report_drag_data_received(GtkWidget *widget, GdkDragContext *con
 
   if(src_input || !src_dst_id || src_dst_id[0] == '\0')
   {
-    g_free(src_dst_id);
+    dt_free(src_dst_id);
     gtk_tree_path_free(src_path);
     gtk_tree_path_free(dst_path);
     return;
@@ -1092,7 +1094,7 @@ static void _hm_report_drag_data_received(GtkWidget *widget, GdkDragContext *con
     }
     else
     {
-      g_free(id);
+      dt_free(id);
     }
     valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(ctx->store), &iter);
     row_index++;
@@ -1113,8 +1115,8 @@ static void _hm_report_drag_data_received(GtkWidget *widget, GdkDragContext *con
 
   if(src_pos < 0)
   {
-    g_free(src_dst_id);
-    for(guint i = 0; i < dest_ids->len; i++) g_free(g_ptr_array_index(dest_ids, i));
+    dt_free(src_dst_id);
+    for(guint i = 0; i < dest_ids->len; i++) dt_free(g_ptr_array_index(dest_ids, i));
     g_ptr_array_free(dest_ids, TRUE);
     g_ptr_array_free(dest_rows, TRUE);
     gtk_tree_path_free(src_path);
@@ -1142,8 +1144,8 @@ static void _hm_report_drag_data_received(GtkWidget *widget, GdkDragContext *con
 
   if(target_pos == src_pos || target_pos == src_pos + 1)
   {
-    g_free(src_dst_id);
-    for(guint i = 0; i < dest_ids->len; i++) g_free(g_ptr_array_index(dest_ids, i));
+    dt_free(src_dst_id);
+    for(guint i = 0; i < dest_ids->len; i++) dt_free(g_ptr_array_index(dest_ids, i));
     g_ptr_array_free(dest_ids, TRUE);
     g_ptr_array_free(dest_rows, TRUE);
     gtk_tree_path_free(src_path);
@@ -1167,10 +1169,10 @@ static void _hm_report_drag_data_received(GtkWidget *widget, GdkDragContext *con
 
   _hm_report_apply_store_order(ctx);
 
-  for(guint i = 0; i < dest_ids->len; i++) g_free(g_ptr_array_index(dest_ids, i));
+  for(guint i = 0; i < dest_ids->len; i++) dt_free(g_ptr_array_index(dest_ids, i));
   g_ptr_array_free(dest_ids, TRUE);
   g_ptr_array_free(dest_rows, TRUE);
-  g_free(src_dst_id);
+  dt_free(src_dst_id);
 
   gtk_tree_path_free(src_path);
   gtk_tree_path_free(dst_path);
@@ -1183,7 +1185,7 @@ static GHashTable *_hm_build_override_map(const dt_develop_t *dev_dest, GHashTab
    *
    * We only report overrides when source and destination history items differ.
    */
-  GHashTable *override = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  GHashTable *override = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
   const int history_end = dt_dev_get_history_end_ext((dt_develop_t *)dev_dest);
 
   for(GList *modules = g_list_first(dev_dest->iop); modules; modules = g_list_next(modules))
@@ -1203,7 +1205,7 @@ static GHashTable *_hm_build_override_map(const dt_develop_t *dev_dest, GHashTab
     if(match_src && !match_dst)
       g_hash_table_replace(override, id, GINT_TO_POINTER(1));
     else
-      g_free(id);
+      dt_free(id);
   }
 
   return override;
@@ -1256,7 +1258,7 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   gtk_label_set_line_wrap(GTK_LABEL(order_label), TRUE);
   gtk_label_set_max_width_chars(GTK_LABEL(order_label), 100);
   gtk_box_pack_start(GTK_BOX(content_area), order_label, FALSE, FALSE, 6);
-  g_free(order_label_text);
+  dt_free(order_label_text);
 
   GtkWidget *scrolled = gtk_scrolled_window_new(NULL, NULL);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
@@ -1383,7 +1385,7 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
       if(_hm_history_item_uses_masks(hist_src))
       {
         gchar *tmp = g_strdup_printf("%s*", src_txt);
-        g_free(src_txt);
+        dt_free(src_txt);
         src_txt = tmp;
       }
     }
@@ -1399,11 +1401,11 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
                        HM_REPORT_COL_DST_WEIGHT, PANGO_WEIGHT_NORMAL, HM_REPORT_COL_ORIG_STYLE, orig_style,
                        HM_REPORT_COL_SRC_STYLE, src_style, HM_REPORT_COL_DST_STYLE, dst_style,
                        HM_REPORT_COL_IS_INPUT, FALSE, -1);
-    g_free(dst_id);
-    g_free(src_id);
+    dt_free(dst_id);
+    dt_free(src_id);
 
-    g_free(src_txt);
-    g_free(dst_txt);
+    dt_free(src_txt);
+    dt_free(dst_txt);
   }
 
   {
@@ -1416,7 +1418,7 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
                        HM_REPORT_COL_DST_WEIGHT, PANGO_WEIGHT_NORMAL, HM_REPORT_COL_ORIG_STYLE, PANGO_STYLE_NORMAL,
                        HM_REPORT_COL_SRC_STYLE, PANGO_STYLE_NORMAL, HM_REPORT_COL_DST_STYLE, PANGO_STYLE_NORMAL,
                        HM_REPORT_COL_IS_INPUT, TRUE, -1);
-    g_free(input_label);
+    dt_free(input_label);
   }
 
   _hm_report_update_move_styles(store, dev_src, mod_list_ids);
@@ -1440,7 +1442,7 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   g_signal_handler_disconnect(tree, drag_get_handler);
   g_signal_handler_disconnect(tree, drag_recv_handler);
   if(reorder_ctx->drag_path) gtk_tree_path_free(reorder_ctx->drag_path);
-  g_free(reorder_ctx);
+  dt_free(reorder_ctx);
 
   gtk_widget_destroy(GTK_WIDGET(dialog));
 
@@ -1449,12 +1451,12 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   g_ptr_array_free(dst_mods, TRUE);
   if(dst_last_by_id) g_hash_table_destroy(dst_last_by_id);
 
-  g_free(src_base);
-  g_free(dst_base);
-  g_free(orig_title);
-  g_free(src_title);
-  g_free(dst_title);
-  g_free(title_text);
+  dt_free(src_base);
+  dt_free(dst_base);
+  dt_free(orig_title);
+  dt_free(src_title);
+  dt_free(dst_title);
+  dt_free(title_text);
 
   return (res == GTK_RESPONSE_ACCEPT);
 }

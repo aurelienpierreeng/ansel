@@ -256,7 +256,7 @@ int dt_film_import(const char *dirname)
       dt_film_remove(film->id);
     }
     dt_film_cleanup(film);
-    free(film);
+    dt_free(film);
     return 0;
   }
 
@@ -271,7 +271,7 @@ int dt_film_import(const char *dirname)
     fprintf(stderr, "[film_import] failed to open directory %s: %s\n", film->dirname, error->message);
     g_error_free(error);
     dt_film_cleanup(film);
-    free(film);
+    dt_free(film);
     return 0;
   }
 
@@ -335,7 +335,8 @@ static gboolean ask_and_delete(gpointer user_data)
     for(GList *iter = empty_dirs; iter; iter = g_list_next(iter))
       rmdir((char *)iter->data);
 
-  g_list_free_full(empty_dirs, g_free);
+  g_list_free_full(empty_dirs, dt_free_gpointer);
+  empty_dirs = NULL;
   g_object_unref(store);
 
   return FALSE;

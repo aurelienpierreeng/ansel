@@ -16,6 +16,7 @@
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include <inttypes.h>
 
 #include <webp/decode.h>
@@ -48,7 +49,7 @@ dt_imageio_retval_t dt_imageio_open_webp(dt_image_t *img, const char *filename, 
   if(fread(read_buffer, 1, filesize, f) != filesize)
   {
     fclose(f);
-    g_free(read_buffer);
+    dt_free(read_buffer);
     dt_print(DT_DEBUG_IMAGEIO, "[webp_open] failed to read %zu bytes from %s\n", filesize, filename);
     return DT_IMAGEIO_FILE_CORRUPTED;
   }
@@ -60,7 +61,7 @@ dt_imageio_retval_t dt_imageio_open_webp(dt_image_t *img, const char *filename, 
     // If we couldn't get the webp metadata, then the file we're trying to read is most likely in
     // a different format (darktable just trying different loaders until it finds the right one).
     // We just have to return without complaining.
-    g_free(read_buffer);
+    dt_free(read_buffer);
     return DT_IMAGEIO_FILE_CORRUPTED;
   }
   img->width = w;
@@ -71,7 +72,7 @@ dt_imageio_retval_t dt_imageio_open_webp(dt_image_t *img, const char *filename, 
   float *mipbuf = (float *)dt_mipmap_cache_alloc(mbuf, img);
   if(!mipbuf)
   {
-    g_free(read_buffer);
+    dt_free(read_buffer);
     dt_print(DT_DEBUG_IMAGEIO, "[webp_open] could not alloc full buffer for image: %s\n", img->filename);
     return DT_IMAGEIO_CACHE_FULL;
   }
@@ -79,7 +80,7 @@ dt_imageio_retval_t dt_imageio_open_webp(dt_image_t *img, const char *filename, 
   uint8_t *int_RGBA_buf = WebPDecodeRGBA(read_buffer, filesize, &w, &h);
   if(!int_RGBA_buf)
   {
-    g_free(read_buffer);
+    dt_free(read_buffer);
     dt_print(DT_DEBUG_IMAGEIO,"[webp_open] failed to decode file: %s\n", filename);
     return DT_IMAGEIO_FILE_CORRUPTED;
   }
@@ -115,7 +116,7 @@ dt_imageio_retval_t dt_imageio_open_webp(dt_image_t *img, const char *filename, 
     WebPMuxDelete(mux);
   }
 
-  g_free(read_buffer);
+  dt_free(read_buffer);
 
   img->buf_dsc.cst = IOP_CS_RGB;
   img->buf_dsc.filters = 0u;

@@ -361,7 +361,7 @@ void dt_dev_pixelpipe_set_icc(dt_dev_pixelpipe_t *pipe, dt_colorspaces_color_pro
                               const gchar *icc_filename, dt_iop_color_intent_t icc_intent)
 {
   pipe->icc_type = icc_type;
-  g_free(pipe->icc_filename);
+  dt_free(pipe->icc_filename);
   pipe->icc_filename = g_strdup(icc_filename ? icc_filename : "");
   pipe->icc_intent = icc_intent;
 }
@@ -379,8 +379,7 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
   }
   dt_pthread_mutex_destroy(&(pipe->busy_mutex));
   pipe->icc_type = DT_COLORSPACE_NONE;
-  g_free(pipe->icc_filename);
-  pipe->icc_filename = NULL;
+  dt_free(pipe->icc_filename);
 
   pipe->output_imgid = UNKNOWN_IMAGE;
 
@@ -443,16 +442,14 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
     if(piece == NULL) continue;
     // printf("cleanup module `%s'\n", piece->module->name());
     if(piece->module) dt_iop_cleanup_pipe(piece->module, pipe, piece);
-    free(piece->histogram);
-    piece->histogram = NULL;
+    dt_free(piece->histogram);
     dt_pixelpipe_raster_cleanup(piece->raster_masks);
-    free(piece);
-    piece = NULL;
+    dt_free(piece);
   }
   g_list_free(pipe->nodes);
   pipe->nodes = NULL;
   // and iop order
-  g_list_free_full(pipe->iop_order_list, free);
+  g_list_free_full(pipe->iop_order_list, dt_free_gpointer);
   pipe->iop_order_list = NULL;
 }
 
@@ -1165,7 +1162,7 @@ static void _print_perf_debug(dt_dev_pixelpipe_t *pipe, const dt_pixelpipe_flow_
           ? "GPU"
           : pixelpipe_flow & PIXELPIPE_FLOW_BLENDED_ON_CPU ? "CPU" : "",
       dt_pixelpipe_get_pipe_name(pipe->type));
-  g_free(module_label);
+  dt_free(module_label);
 }
 
 
@@ -1235,7 +1232,7 @@ static void _print_nan_debug(dt_dev_pixelpipe_t *pipe, void *cl_mem_output, void
                 dt_pixelpipe_get_pipe_name(pipe->type));
     }
 
-    g_free(module_label);
+    dt_free(module_label);
   }
 }
 
@@ -1525,11 +1522,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(dev->gui_attached)
   {
     gchar *module_label = dt_history_item_get_name(module);
-    g_free(darktable.main_message);
+    dt_free(darktable.main_message);
     darktable.main_message = g_strdup_printf(_("Processing module `%s` for pipeline %s (%ix%i px @ %0.f%%)..."), 
                                              module_label, dt_pixelpipe_get_pipe_name(pipe->type), 
                                              roi_out.width, roi_out.height, roi_out.scale * 100.f);
-    g_free(module_label);
+    dt_free(module_label);
     dt_control_queue_redraw_center();
   }
 
@@ -1554,7 +1551,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     const gboolean alloc_output = piece->force_opencl_cache;
     new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
                                            alloc_output, output, out_format, &output_entry);
-    g_free(name);
+    dt_free(name);
     // Fresh entries are returned with write-lock held.
     output_write_locked = new_entry;
   }
@@ -1687,8 +1684,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   if(dev->gui_attached)
   {
-    g_free(darktable.main_message);
-    darktable.main_message = NULL;
+    dt_free(darktable.main_message);
     dt_control_queue_redraw_center();
 
     if(dev->loading_cache && strcmp(module->op, "initialscale") == 0)
@@ -1840,7 +1836,7 @@ static void _set_opencl_cache(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 
       piece->force_opencl_cache = dt_conf_get_bool(string);
 
-      g_free(string);
+      dt_free(string);
 
       gboolean color_picker_on
           = (dev->gui_module && darktable.lib->proxy.colorpicker.picker_proxy 
@@ -1969,7 +1965,7 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
     err = dt_dev_pixelpipe_process_rec(pipe, dev, &buf, &cl_mem_out, &out_format, &buf_hash, roi, pieces, pos);
     gchar *msg = g_strdup_printf("[pixelpipe] %s internal pixel pipeline processing", dt_pixelpipe_get_pipe_name(pipe->type));
     dt_show_times(&start, msg);
-    g_free(msg);
+    dt_free(msg);
 
 	  // The pipeline has copied cl_mem_out into buf, so we can release it now.
 	  #ifdef HAVE_OPENCL
@@ -2086,7 +2082,7 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece, 
     dt_control_log(_("The %s module is trying to reuse a mask from a module but it can't be found.\n"
                       "\n%s"),
                       target_name, hint ? hint : "");
-    g_free(hint);
+    dt_free(hint);
 
     fprintf(stderr, "[raster masks] no source module for module %s could be found\n", target_name);
     success = FALSE;
@@ -2105,13 +2101,13 @@ static gboolean _dt_dev_raster_mask_check(dt_dev_pixelpipe_iop_t *source_piece, 
     fprintf(stderr, "[raster masks] module %s trying to reuse a mask from disabled instance of %s\n",
             target_name, source_name);
 
-    g_free(clean_source_name);
-    g_free(source_name);
+    dt_free(clean_source_name);
+    dt_free(source_name);
     success = FALSE;
   }
 
-  g_free(clean_target_name);
-  g_free(target_name);
+  dt_free(clean_target_name);
+  dt_free(target_name);
   return success;
 }
 
@@ -2129,8 +2125,8 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
   if(!raster_mask_source)
   {
     fprintf(stderr, "[raster masks] The source module of the mask for %s was not found\n", target_name);
-    g_free(clean_target_name);
-    g_free(target_name);
+    dt_free(clean_target_name);
+    dt_free(target_name);
     return NULL;
   }
 
@@ -2193,8 +2189,8 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
       // This should terminate the pipeline now:
       if(error) *error = 1;
 
-      g_free(clean_target_name);
-      g_free(target_name);
+      dt_free(clean_target_name);
+      dt_free(target_name);
       return NULL;
     }
     // If we fetch the raster mask again, straight from its provider, we need to distort it
@@ -2217,8 +2213,8 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
           {
             fprintf(stderr, "[raster masks] could not allocate memory for transformed mask\n");
             if(error) *error = 1;
-            g_free(clean_target_name);
-            g_free(target_name);
+            dt_free(clean_target_name);
+            dt_free(target_name);
             return NULL;
           }
 
@@ -2255,8 +2251,8 @@ float *dt_dev_get_raster_mask(dt_dev_pixelpipe_t *pipe, const dt_iop_module_t *r
     }
   }
 
-  g_free(clean_target_name);
-  g_free(target_name);
+  dt_free(clean_target_name);
+  dt_free(target_name);
   return raster_mask;
 }
 

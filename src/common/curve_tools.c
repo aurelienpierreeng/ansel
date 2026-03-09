@@ -30,6 +30,7 @@
    Copyright 2004-2008 by Shawn Freeman, Udi Fuchs
 */
 
+#include "common/darktable.h"
 #include "curve_tools.h"
 
 #include <float.h>
@@ -306,8 +307,8 @@ static float *spline_cubic_set_internal(int n, float t[], float y[], int ibcbeg,
   {
     // nc_message(NC_SET_ERROR, "spline_cubic_set() error: "
     //   "IBCBEG must be 0, 1 or 2. The input value is %u.\n", ibcbeg);
-    free(a);
-    free(b);
+    dt_free(a);
+    dt_free(b);
     return NULL;
   }
   //
@@ -345,8 +346,8 @@ static float *spline_cubic_set_internal(int n, float t[], float y[], int ibcbeg,
   {
     // nc_message(NC_SET_ERROR, "spline_cubic_set() error: "
     //   "IBCEND must be 0, 1 or 2. The input value is %u", ibcend);
-    free(a);
-    free(b);
+    dt_free(a);
+    dt_free(b);
     return NULL;
   }
   //
@@ -370,14 +371,14 @@ static float *spline_cubic_set_internal(int n, float t[], float y[], int ibcbeg,
     {
       //  nc_message(NC_SET_ERROR, "spline_cubic_set() error: "
       //     "The linear system could not be solved.\n");
-      free(a);
-      free(b);
+      dt_free(a);
+      dt_free(b);
       return NULL;
     }
   }
 
-  free(a);
-  free(b);
+  dt_free(a);
+  dt_free(b);
   return ypp;
 }
 /************************************************************
@@ -459,7 +460,7 @@ float *monotone_hermite_set(int n, float x[], float y[])
       }
     }
   }
-  free(delta);
+  dt_free(delta);
   return m;
 }
 
@@ -744,7 +745,7 @@ int CurveDataSample(CurveData *curve, CurveSample *sample)
     }
   }
 
-  free(ypp);
+  dt_free(ypp);
   return CT_SUCCESS;
 }
 
@@ -753,4 +754,3 @@ int CurveDataSample(CurveData *curve, CurveSample *sample)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

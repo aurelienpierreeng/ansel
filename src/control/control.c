@@ -513,7 +513,7 @@ void dt_control_log(const char *msg, ...)
   char *escaped_msg = g_markup_vprintf_escaped(msg, ap);
   const int msglen = strlen(escaped_msg);
   g_strlcpy(darktable.control->log_message[darktable.control->log_pos], escaped_msg, DT_CTL_LOG_MSG_SIZE);
-  g_free(escaped_msg);
+  dt_free(escaped_msg);
   va_end(ap);
   if(darktable.control->log_message_timeout_id)
     g_source_remove(darktable.control->log_message_timeout_id);
@@ -539,7 +539,7 @@ static void _toast_log(const gboolean markup, const char *msg, va_list ap)
   {
     char *escaped_msg = g_markup_vprintf_escaped(msg, ap);
     g_strlcpy(darktable.control->toast_message[darktable.control->toast_pos], escaped_msg, DT_CTL_TOAST_MSG_SIZE);
-    g_free(escaped_msg);
+    dt_free(escaped_msg);
   }
 
   if(darktable.control->toast_message_timeout_id) g_source_remove(darktable.control->toast_message_timeout_id);

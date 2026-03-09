@@ -104,27 +104,27 @@ typedef struct
 void dt_style_free(gpointer data)
 {
   dt_style_t *style = (dt_style_t *)data;
-  g_free(style->name);
-  g_free(style->description);
+  dt_free(style->name);
+  dt_free(style->description);
   style->name = NULL;
   style->description = NULL;
-  g_free(style);
+  dt_free(style);
 }
 
 void dt_style_item_free(gpointer data)
 {
   dt_style_item_t *item = (dt_style_item_t *)data;
-  g_free(item->name);
-  g_free(item->operation);
-  g_free(item->multi_name);
-  free(item->params);
-  free(item->blendop_params);
+  dt_free(item->name);
+  dt_free(item->operation);
+  dt_free(item->multi_name);
+  dt_free(item->params);
+  dt_free(item->blendop_params);
   item->name = NULL;
   item->operation = NULL;
   item->multi_name = NULL;
   item->params = NULL;
   item->blendop_params = NULL;
-  free(item);
+  dt_free(item);
 }
 
 int32_t dt_styles_get_id_by_name(const char *name);
@@ -199,7 +199,8 @@ static void _dt_style_cleanup_multi_instance(int id)
   }
 
   /* 3. free the list we built in step 1 */
-  g_list_free_full(list, free);
+  g_list_free_full(list, dt_free_gpointer);
+  list = NULL;
 }
 
 gboolean dt_styles_has_module_order(const char *name)
@@ -273,7 +274,7 @@ static gboolean dt_styles_create_style_header(const char *name, const char *desc
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 
-  g_free(iop_list_txt);
+  dt_free(iop_list_txt);
   return TRUE;
 }
 
@@ -366,8 +367,9 @@ static void  _dt_style_update_iop_order(const gchar *name, const int id, const i
     DT_DEBUG_SQLITE3_BIND_INT(stmt, 1, id);
   }
 
-  g_list_free_full(iop_list, free);
-  g_free(iop_list_txt);
+  g_list_free_full(iop_list, dt_free_gpointer);
+  iop_list = NULL;
+  dt_free(iop_list_txt);
 
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
@@ -427,7 +429,7 @@ void dt_styles_update(const char *name, const char *newname, const char *newdesc
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_STYLE_CHANGED);
 
-  g_free(desc);
+  dt_free(desc);
 }
 
 void dt_styles_create_from_style(const char *name, const char *newname, const char *description,
@@ -520,7 +522,8 @@ gboolean dt_styles_create_from_image(const char *name, const char *description,
   /* first create the style header */
   if(!dt_styles_create_style_header(name, description, iop_list)) return FALSE;
 
-  g_list_free_full(iop_list, g_free);
+  g_list_free_full(iop_list, dt_free_gpointer);
+  iop_list = NULL;
 
   if((id = dt_styles_get_id_by_name(name)) != 0)
   {
@@ -718,7 +721,7 @@ static dt_iop_module_t *_dt_styles_tmp_module_from_style_item(dt_develop_t *dev,
   {
     fprintf(stderr, "[dt_styles_apply] can't load module %s %s\n", style_item->operation,
             style_item->multi_name ? style_item->multi_name : "(null)");
-    free(module);
+    dt_free(module);
     return NULL;
   }
 
@@ -729,7 +732,7 @@ static dt_iop_module_t *_dt_styles_tmp_module_from_style_item(dt_develop_t *dev,
   if(!_dt_styles_apply_item_to_module(module, style_item))
   {
     dt_iop_cleanup_module(module);
-    free(module);
+    dt_free(module);
     return NULL;
   }
 
@@ -793,7 +796,7 @@ static GList *_dt_styles_build_mod_list_from_history(dt_develop_t *dev, GHashTab
     if(!hist || !hist->module) continue;
     char *id_str = g_strdup_printf("%s|%s", hist->op_name, hist->multi_name);
     const gboolean keep = g_hash_table_contains(style_ids, id_str);
-    g_free(id_str);
+    dt_free(id_str);
     if(!keep) continue;
 
     if(!g_list_find(mod_list, hist->module))
@@ -806,7 +809,7 @@ static void _dt_styles_tmp_module_free(dt_iop_module_t *module)
 {
   if(!module) return;
   dt_iop_cleanup_module(module);
-  free(module);
+  dt_free(module);
 }
 
 static int _styles_init_source_dev(dt_develop_t *dev_src, const char *name, const int32_t imgid)
@@ -821,7 +824,7 @@ static int _styles_init_source_dev(dt_develop_t *dev_src, const char *name, cons
   GList *iop_list = dt_styles_module_order_list(name);
   if(iop_list)
   {
-    g_list_free_full(dev_src->iop_order_list, free);
+    g_list_free_full(dev_src->iop_order_list, dt_free_gpointer);
     dev_src->iop_order_list = iop_list;
     dt_ioppr_resync_pipeline(dev_src, 0, NULL, FALSE);
   }
@@ -910,13 +913,14 @@ static int _styles_prepare_source_dev(dt_develop_t *dev_src, const char *name, c
   if(_styles_init_source_dev(dev_src, name, imgid)) return 1;
 
   GList *si_list = _dt_styles_get_apply_items(style_id);
-  GHashTable *style_ids = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  GHashTable *style_ids = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
   GList *applied_items = _styles_collect_applied_items(dev_src, si_list, style_ids);
 
   if(!applied_items)
   {
     g_hash_table_destroy(style_ids);
     g_list_free_full(si_list, dt_style_item_free);
+    si_list = NULL;
     return 1;
   }
 
@@ -924,19 +928,23 @@ static int _styles_prepare_source_dev(dt_develop_t *dev_src, const char *name, c
   if(_styles_rebuild_history_from_items(dev_src, applied_items))
   {
     g_list_free(applied_items);
+    applied_items = NULL;
     g_hash_table_destroy(style_ids);
     g_list_free_full(si_list, dt_style_item_free);
+    si_list = NULL;
     return 1;
   }
 
   // Build module list from the compressed history to guarantee a matching history entry
   GList *mod_list = _dt_styles_build_mod_list_from_history(dev_src, style_ids);
   g_list_free(applied_items);
+  applied_items = NULL;
 
   if(!mod_list)
   {
     g_hash_table_destroy(style_ids);
     g_list_free_full(si_list, dt_style_item_free);
+    si_list = NULL;
     return 1;
   }
 
@@ -978,8 +986,10 @@ int dt_styles_apply_to_image_merge(const char *name, const int style_id, const i
   }
 
   g_list_free(mod_list);
+  mod_list = NULL;
   g_hash_table_destroy(style_ids);
   g_list_free_full(si_list, dt_style_item_free);
+  si_list = NULL;
   dt_dev_cleanup(&dev_src);
 
   return ret_val;
@@ -1181,8 +1191,10 @@ char *dt_styles_get_item_list_as_string(const char *name)
   names = g_list_reverse(names);  // list was built in reverse order, so un-reverse it
 
   char *result = dt_util_glist_to_str("\n", names);
-  g_list_free_full(names, g_free);
+  g_list_free_full(names, dt_free_gpointer);
+  names = NULL;
   g_list_free_full(items, dt_style_item_free);
+  items = NULL;
   return result;
 }
 
@@ -1240,7 +1252,7 @@ void dt_styles_save_to_file(const char *style_name, const char *filedir, gboolea
   // convert all characters to underscore which are not allowed in filenames
   char *filename = g_strdup(style_name);
   snprintf(stylename, sizeof(stylename), "%s/%s.dtstyle", filedir, g_strdelimit(filename, "/<>:\"\\|*?[]", '_'));
-  g_free(filename);
+  dt_free(filename);
 
   // check if file exists
   if(g_file_test(stylename, G_FILE_TEST_EXISTS) == TRUE)
@@ -1285,8 +1297,9 @@ void dt_styles_save_to_file(const char *style_name, const char *filedir, gboolea
   {
     char *iop_list_text = dt_ioppr_serialize_text_iop_order_list(iop_list);
     xmlTextWriterWriteFormatElement(writer, BAD_CAST "iop_list", "%s", iop_list_text);
-    g_free(iop_list_text);
-    g_list_free_full(iop_list, g_free);
+    dt_free(iop_list_text);
+    g_list_free_full(iop_list, dt_free_gpointer);
+    iop_list = NULL;
   }
   xmlTextWriterEndElement(writer);
 
@@ -1348,9 +1361,11 @@ static void dt_styles_style_data_free(StyleData *style, gboolean free_segments)
 {
   g_string_free(style->info->name, free_segments);
   g_string_free(style->info->description, free_segments);
-  g_list_free_full(style->info->iop_list, g_free);
+  g_list_free_full(style->info->iop_list, dt_free_gpointer);
+  style->info->iop_list = NULL;
   g_list_free(style->plugins);
-  g_free(style);
+  style->plugins = NULL;
+  dt_free(style);
 }
 
 static void dt_styles_start_tag_handler(GMarkupParseContext *context, const gchar *element_name,
@@ -1493,7 +1508,7 @@ static void dt_style_plugin_save(StylePluginData *plugin, gpointer styleId)
 
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
-  free(params);
+  dt_free(params);
 }
 
 static void dt_style_save(StyleData *style)

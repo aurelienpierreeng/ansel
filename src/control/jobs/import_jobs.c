@@ -15,6 +15,7 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "import_jobs.h"
 #include "common/collection.h"
 #include "common/datetime.h"
@@ -65,7 +66,7 @@ gchar *_path_cleanup(gchar *path_in)
 {
   gchar *clean = dt_cleanup_separators(path_in);
   gchar *path_out = dt_util_remove_whitespace(clean);
-  g_free(clean);
+  dt_free(clean);
   return path_out;
 }
 
@@ -86,8 +87,8 @@ gchar *dt_build_filename_from_pattern(const char *const filename, const int inde
   // remove this if we decide to do the correction on user's settings directly
   gchar *file = _path_cleanup(file_expand);
   gchar *path = _path_cleanup(path_expand);
-  g_free(file_expand);
-  g_free(path_expand);
+  dt_free(file_expand);
+  dt_free(path_expand);
 
   gchar *dir = g_build_path(G_DIR_SEPARATOR_S, data->base_folder, path, (char *) NULL);
   data->target_dir = dt_util_normalize_path(dir);
@@ -95,9 +96,9 @@ gchar *dt_build_filename_from_pattern(const char *const filename, const int inde
 
   dt_print(DT_DEBUG_PRINT, "[Import] Importing file to %s\n", res);
 
-  g_free(file);
-  g_free(path);
-  g_free(dir);
+  dt_free(file);
+  dt_free(path);
+  dt_free(dir);
   dt_variables_params_destroy(params);
   return res;
 }
@@ -148,7 +149,7 @@ const int32_t _import_job(dt_control_import_t *data, gchar *img_path_to_db)
   dt_film_t film;
   const int32_t filmid = dt_film_new(&film, dirname);
   const int32_t imgid = dt_image_import(filmid, img_path_to_db, FALSE);
-  g_free(dirname);
+  dt_free(dirname);
   return imgid;
 }
 
@@ -178,7 +179,7 @@ void dt_import_duplicate_get_dest_name(char *xmp_dest_name, const char *dest_fil
 
   dt_print(DT_DEBUG_IMPORT, "[Import] XMP destination name: %s\n", xmp_dest_name);
 
-  free(norm_dest_file);
+  dt_free(norm_dest_file);
 }
 
 /**
@@ -206,10 +207,11 @@ int _import_copy_xmp(const char *const filename, gchar *dest_file_path)
       dt_print(DT_DEBUG_IMPORT, "[Import] copying %s to %s %s\n", xmp_source, xmp_dest_name,
                (success) ? "succeeded" : "failed");
       if(success) xmp_cntr++;
-      free(xmp_source);
+      dt_free(xmp_source);
     }
   }
   g_list_free(xmp_files);
+  xmp_files = NULL;
   return xmp_cntr;
 }
 
@@ -228,8 +230,8 @@ int _import_copy_txt(const char *const filename, const char *dest_file_path)
              (success) ? "succeeded" : "failed");
   }
 
-  g_free(txt_dest);
-  g_free(txt_source);
+  dt_free(txt_dest);
+  dt_free(txt_source);
   return success ? 1 : 0;
 }
 
@@ -260,7 +262,7 @@ int _import_copy_file(const char *const filename, const int index, dt_control_im
 
   gchar *dest_file_path = dt_build_filename_from_pattern(filename, index, img, data);
   dt_print(DT_DEBUG_IMPORT, "[Import] Image %s will be copied into %s\n", filename, dest_file_path);
-  free(img);
+  dt_free(img);
 
   int process = TRUE;
 
@@ -299,7 +301,7 @@ int _import_copy_file(const char *const filename, const int index, dt_control_im
     dt_print(DT_DEBUG_IMPORT, "[Import] File copy skipped, the target file %s already exists on the destination.\n", dest_file_path);
   }
 
-  g_free(dest_file_path);
+  dt_free(dest_file_path);
   return !process;
 }
 
@@ -309,7 +311,8 @@ void _write_xmp_id(const char *filename, int32_t imgid)
   if(res != NULL)
   {
     // Image ID is already set in metadata, don't overwrite it
-    g_list_free_full(res, g_free);
+    g_list_free_full(res, dt_free_gpointer);
+    res = NULL;
     return;
   }
   // else : init it
@@ -442,15 +445,23 @@ static int32_t _control_import_job_run(dt_job_t *job)
 void dt_control_import_data_free(dt_control_import_t *data)
 {
   g_date_time_unref(data->datetime);
-  g_free(data->jobcode);
-  g_free(data->base_folder);
-  g_free(data->target_subfolder_pattern);
-  g_free(data->target_file_pattern);
-  g_free(data->target_dir);
+  dt_free(data->jobcode);
+  dt_free(data->base_folder);
+  dt_free(data->target_subfolder_pattern);
+  dt_free(data->target_file_pattern);
+  dt_free(data->target_dir);
 
   // GList of pathes stored as *char. We need to free the list and the *char
-  if(data->discarded) g_list_free_full(data->discarded, g_free);
-  if(data->imgs) g_list_free_full(data->imgs, g_free);
+  if(data->discarded)
+  {
+    g_list_free_full(data->discarded, dt_free_gpointer);
+    data->discarded = NULL;
+  }
+  if(data->imgs)
+  {
+    g_list_free_full(data->imgs, dt_free_gpointer);
+    data->imgs = NULL;
+  }
 }
 
 static int _discarded_files_popup(dt_control_image_enumerator_t *params)
@@ -521,7 +532,7 @@ static int _discarded_files_popup(dt_control_image_enumerator_t *params)
   gtk_widget_destroy(dialog);
 
   dt_control_import_data_free(data);
-  free(data);
+  dt_free(data);
   dt_control_image_enumerator_cleanup(params);
 
   return 0;
@@ -541,7 +552,7 @@ static void _control_import_job_cleanup(void *p)
   else
   {
     dt_control_import_data_free(data);
-    free(data);
+    dt_free(data);
     dt_control_image_enumerator_cleanup(params);
   }
 }

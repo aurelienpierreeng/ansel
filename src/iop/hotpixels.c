@@ -45,6 +45,7 @@
 */
 
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -398,7 +399,7 @@ static gboolean draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t *self)
   gtk_label_set_text(g->message, str);
   --darktable.gui->reset;
 
-  g_free(str);
+  dt_free(str);
 
   return FALSE;
 }

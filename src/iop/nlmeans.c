@@ -42,6 +42,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -503,8 +504,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_nlmeans_vert);
   dt_opencl_free_kernel(gd->kernel_nlmeans_accu);
   dt_opencl_free_kernel(gd->kernel_nlmeans_finish);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 /** commit is the synch point between core and gui, so it copies params to pipe data. */

@@ -167,8 +167,7 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
-  free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 static gboolean _event_box_enter_leave(GtkWidget *widget, GdkEventCrossing *event, gpointer user_data)
@@ -203,9 +202,9 @@ static GtkWidget *_lib_location_place_widget_new(dt_lib_location_t *lib, _lib_lo
   gchar *lon = dt_util_longitude_str(place->lon);
   gchar *location = g_strconcat(lat, ", ", lon, NULL);
   w = gtk_label_new(location);
-  g_free(lat);
-  g_free(lon);
-  g_free(location);
+  dt_free(lat);
+  dt_free(lon);
+  dt_free(location);
   gtk_label_set_line_wrap(GTK_LABEL(w), TRUE);
   gtk_widget_set_halign(w, GTK_ALIGN_START);
   gtk_box_pack_start(GTK_BOX(vb), w, FALSE, FALSE, 0);
@@ -234,7 +233,7 @@ static size_t _lib_location_curl_write_data(void *buffer, size_t size, size_t nm
   char *newdata = g_malloc0(lib->response_size + nmemb + 1);
   if(lib->response != NULL) memcpy(newdata, lib->response, lib->response_size);
   memcpy(newdata + lib->response_size, buffer, nmemb);
-  g_free(lib->response);
+  dt_free(lib->response);
   lib->response = newdata;
   lib->response_size += nmemb;
 
@@ -280,15 +279,15 @@ static void _clear_markers(dt_lib_location_t *lib)
 
 static void free_location(_lib_location_result_t *location)
 {
-  g_free(location->name);
-  g_list_free_full(location->marker_points, free);
-  free(location);
+  dt_free(location->name);
+  g_list_free_full(location->marker_points, dt_free_gpointer);
+  location->marker_points = NULL;
+  dt_free(location);
 }
 
 static void clear_search(dt_lib_location_t *lib)
 {
-  g_free(lib->response);
-  lib->response = NULL;
+  dt_free(lib->response);
   lib->response_size = 0;
   lib->selected_location = NULL;
 
@@ -296,7 +295,7 @@ static void clear_search(dt_lib_location_t *lib)
   lib->places = NULL;
 
   dt_gui_container_destroy_children(GTK_CONTAINER(lib->result));
-  g_list_free_full(lib->callback_params, free);
+  g_list_free_full(lib->callback_params, dt_free_gpointer);
   lib->callback_params = NULL;
 
   _clear_markers(lib);
@@ -416,8 +415,8 @@ bail_out:
 
   if(curl) curl_easy_cleanup(curl);
 
-  g_free(text);
-  g_free(query);
+  dt_free(text);
+  dt_free(query);
 
   if(ctx) g_markup_parse_context_free(ctx);
 
@@ -571,11 +570,11 @@ broken_bbox:
               {
                 if(new_mp > old_mp)
                 {
-                  g_list_free_full(lib->marker_points, g_free);
+                  g_list_free_full(lib->marker_points, dt_free_gpointer);
                   lib->marker_points = place->marker_points;
                 }
                 else
-                  g_list_free_full(place->marker_points, g_free);
+                  g_list_free_full(place->marker_points, dt_free_gpointer);
                 place->marker_points = NULL;
                 startptr = endptr + (g_str_has_prefix(endptr, ")),((") ? 5 : 3);
                 continue;
@@ -583,10 +582,13 @@ broken_bbox:
               else
               {
                 if(new_mp > old_mp)
-                  g_list_free_full(lib->marker_points, g_free);
+                {
+                  g_list_free_full(lib->marker_points, dt_free_gpointer);
+                  lib->marker_points = NULL;
+                }
                 else
                 {
-                  g_list_free_full(place->marker_points, g_free);
+                  g_list_free_full(place->marker_points, dt_free_gpointer);
                   place->marker_points = lib->marker_points;
                 }
                 lib->marker_points = NULL;
@@ -608,7 +610,7 @@ broken_bbox:
           place->marker_points = g_list_reverse(place->marker_points);
           if(error)
           {
-            g_list_free_full(place->marker_points, free);
+            g_list_free_full(place->marker_points, dt_free_gpointer);
             place->marker_points = NULL;
           }
           else
@@ -620,7 +622,7 @@ broken_bbox:
         {
           gchar *s = g_strndup(*avalue, 100);
           fprintf(stderr, "unsupported outline: %s%s\n", s, strlen(s) == strlen(*avalue) ? "" : " ...");
-          g_free(s);
+          dt_free(s);
         }
       }
       else if(strcmp(*aname, "type") == 0)
@@ -654,8 +656,8 @@ broken_bbox:
   return;
 
 bail_out:
-  g_free(place->name);
-  g_free(place);
+  dt_free(place->name);
+  dt_free(place);
 }
 
 struct params_fixed_t

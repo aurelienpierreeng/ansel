@@ -78,8 +78,8 @@ int write_image(dt_imageio_module_data_t *data, const char *filename, const void
 
   status = 0;
 END:
-  g_free(targetfile);
-  g_free(xmpfile);
+  dt_free(targetfile);
+  dt_free(xmpfile);
   return status;
 }
 
@@ -96,7 +96,7 @@ void *get_params(dt_imageio_module_format_t *self)
 
 void free_params(dt_imageio_module_format_t *self, dt_imageio_module_data_t *params)
 {
-  free(params);
+  dt_free(params);
 }
 
 int set_params(dt_imageio_module_format_t *self, const void *params, const int size)

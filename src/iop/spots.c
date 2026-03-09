@@ -42,6 +42,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "control/conf.h"
@@ -629,7 +630,7 @@ static int _process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
           }
         }
 
-        free(filter);
+        dt_free(filter);
       }
       else
       {
@@ -794,7 +795,7 @@ void gui_update(dt_iop_module_t *self)
   if(grp && (grp->type & DT_MASKS_GROUP)) nb = g_list_length(grp->points);
   gchar *str = g_strdup_printf("%d", nb);
   gtk_label_set_text(g->label, str);
-  g_free(str);
+  dt_free(str);
 
   // enable/disable shapes toolbar
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->bt_circle), _shape_is_being_added(self, DT_MASKS_CIRCLE));

@@ -221,7 +221,7 @@ static int dt_mipmap_cache_get_filename(gchar *mipmapfilename, size_t size)
   r = 0;
 
 exit:
-  g_free(abspath);
+  dt_free(abspath);
 
   return r;
 }
@@ -433,6 +433,7 @@ void *dt_mipmap_cache_alloc(dt_mipmap_buffer_t *buf, const dt_image_t *img)
 
   // Free and reset everything
   dt_free_align(entry->data);
+  entry->data = NULL;
   ASAN_POISON_MEMORY_REGION(entry->data, entry->data_size);
 
   // Get a new allocation
@@ -478,6 +479,7 @@ void dt_mipmap_cache_allocate_dynamic(void *data, dt_cache_entry_t *entry)
 
   // Free and reset everything
   dt_free_align(entry->data);
+  entry->data = NULL;
 
   // Get a new allocation
   const size_t buffer_size = (mip <= DT_MIPMAP_F) ? cache->buffer_size[mip] : _get_entry_size(sizeof(float) * 4 * 64);
@@ -690,6 +692,7 @@ write_error:
     }
   }
   dt_free_align(entry->data);
+  entry->data = NULL;
 }
 
 void dt_mipmap_cache_init(dt_mipmap_cache_t *cache)

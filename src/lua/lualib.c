@@ -22,6 +22,7 @@
    You should have received a copy of the GNU General Public License
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include "common/darktable.h"
 #include "lua/lualib.h"
 #include "control/control.h"
 
@@ -80,10 +81,11 @@ static void gui_reset_wrapper(struct dt_lib_module_t *self)
 static void gui_cleanup_wrapper(struct dt_lib_module_t *self)
 {
   lua_lib_data_t *gui_data =self->data;
-  free(gui_data->name);
-  free(gui_data->views);
+  dt_free(gui_data->name);
+  dt_free(gui_data->views);
   g_list_free(gui_data->position_descriptions);
-  free(self->data);
+  gui_data->position_descriptions = NULL;
+  dt_free(self->data);
   self->widget = NULL;
 }
 

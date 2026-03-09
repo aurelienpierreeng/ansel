@@ -137,10 +137,10 @@ static void _dt_sigsegv_handler(int param)
   }
 
   if(delete_file) g_unlink(name_used);
-  g_free(pid_arg);
-  g_free(comm_arg);
-  g_free(log_arg);
-  g_free(name_used);
+  dt_free(pid_arg);
+  dt_free(comm_arg);
+  dt_free(log_arg);
+  dt_free(name_used);
 
   /* pass it further to the old handler*/
   _dt_sigsegv_old_handler(param);
@@ -182,11 +182,11 @@ static LONG WINAPI dt_toplevel_exception_handler(PEXCEPTION_POINTERS pExceptionI
                                                name_used);
     wchar_t *wexception_message = g_utf8_to_utf16(exception_message, -1, NULL, NULL, NULL);
     MessageBoxW(0, wexception_message, L"Error!", MB_OK);
-    g_free(exception_message);
-    g_free(wexception_message);
+    dt_free(exception_message);
+    dt_free(wexception_message);
   }
 
-  g_free(name_used);
+  dt_free(name_used);
 
   // finally call the original exception handler (which should be drmingw's exception handler)
   return _dt_exceptionfilter_old_handler(pExceptionInfo);

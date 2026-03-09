@@ -654,7 +654,9 @@ void dt_ioppr_cleanup_profile_info(dt_iop_order_iccprofile_info_t *profile_info)
   for(int i = 0; i < 3; i++)
   {
     dt_free_align(profile_info->lut_in[i]);
+    profile_info->lut_in[i] = NULL;
     dt_free_align(profile_info->lut_out[i]);
+    profile_info->lut_out[i] = NULL;
   }
 }
 
@@ -1170,7 +1172,7 @@ void dt_colorspaces_free_cl_global(dt_colorspaces_cl_global_t *g)
   dt_opencl_free_kernel(g->kernel_colorspaces_transform_rgb_matrix_to_lab);
   dt_opencl_free_kernel(g->kernel_colorspaces_transform_rgb_matrix_to_rgb);
 
-  free(g);
+  dt_free(g);
 }
 
 void dt_ioppr_get_profile_info_cl(const dt_iop_order_iccprofile_info_t *const profile_info, dt_colorspaces_iccprofile_info_cl_t *profile_info_cl)
@@ -1273,10 +1275,13 @@ void dt_ioppr_free_iccprofile_params_cl(dt_colorspaces_iccprofile_info_cl_t **_p
   cl_mem dev_profile_info = *_dev_profile_info;
   cl_mem dev_profile_lut = *_dev_profile_lut;
 
-  if(profile_info_cl) free(profile_info_cl);
+  if(profile_info_cl)
+  {
+    dt_free(profile_info_cl);
+  }
   dt_opencl_release_mem_object(dev_profile_info);
   dt_opencl_release_mem_object(dev_profile_lut);
-  if(profile_lut_cl) free(profile_lut_cl);
+  dt_free(profile_lut_cl);
 
   *_profile_info_cl = NULL;
   *_profile_lut_cl = NULL;
@@ -1446,7 +1451,7 @@ cleanup:
   if(dev_tmp && in_place) dt_opencl_release_mem_object(dev_tmp);
   dt_opencl_release_mem_object(dev_profile_info);
   dt_opencl_release_mem_object(dev_lut);
-  if(lut_cl) free(lut_cl);
+  dt_free(lut_cl);
 
   return (err == CL_SUCCESS) ? TRUE : FALSE;
 }
@@ -1663,11 +1668,11 @@ cleanup:
 
   dt_opencl_release_mem_object(dev_profile_info_from);
   dt_opencl_release_mem_object(dev_lut_from);
-  if(lut_from_cl) free(lut_from_cl);
+  dt_free(lut_from_cl);
 
   dt_opencl_release_mem_object(dev_profile_info_to);
   dt_opencl_release_mem_object(dev_lut_to);
-  if(lut_to_cl) free(lut_to_cl);
+  dt_free(lut_to_cl);
 
   dt_opencl_release_mem_object(matrix_cl);
 

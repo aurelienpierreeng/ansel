@@ -25,6 +25,7 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "common/darktable.h"
 #include "common/l10n.h"
 #include "common/file_location.h"
 #include "control/conf.h"
@@ -61,7 +62,7 @@ static gchar* _dt_full_locale_name(const char *locale)
     if(output)
     {
       gchar **locales = g_strsplit (output, "\n", -1);
-      g_free(output);
+      dt_free(output);
       int j = 0;
       while(locales[j])
       {
@@ -101,7 +102,7 @@ static void set_locale(const char *ui_lang, const char *old_env)
     if(full_locale)
     {
       g_setenv("LANG", full_locale, TRUE);
-      g_free(full_locale);
+      dt_free(full_locale);
     }
     g_setenv("LANGUAGE", ui_lang, TRUE);
     dt_l10n_disable_setlocale_early();
@@ -121,8 +122,8 @@ static gint sort_languages(gconstpointer a, gconstpointer b)
 
   int result = g_strcmp0(name_a, name_b);
 
-  g_free(name_a);
-  g_free(name_b);
+  dt_free(name_a);
+  dt_free(name_b);
 
   return result;
 }
@@ -217,8 +218,7 @@ static void get_language_names(GList *languages)
     if(!json_reader_is_object(reader))
     {
       fprintf(stderr, "[l10n] error: unexpected layout of `%s' (element %d)\n", filename, i);
-      free(saved_locale);
-      saved_locale = NULL;
+      dt_free(saved_locale);
       goto end;
     }
 
@@ -254,7 +254,7 @@ static void get_language_names(GList *languages)
           if(g_strcmp0(name, localized_name) == 0 &&
              g_strcmp0(language->code, language->base_code) != 0)
           {
-            g_free(localized_name);
+            dt_free(localized_name);
 
             g_setenv("LANGUAGE", language->base_code, TRUE);
             setlocale (LC_ALL, language->base_code);
@@ -269,13 +269,13 @@ static void get_language_names(GList *languages)
           {
             char *tmp = localized_name;
             localized_name = g_strndup(localized_name, semicolon - localized_name);
-            g_free(tmp);
+            dt_free(tmp);
           }
 
           // we initialize the name to the language code to have something on systems lacking iso-codes, so free it!
-          g_free(language->name);
+          dt_free(language->name);
           language->name = g_strdup_printf("%s (%s)", localized_name, language->code);
-          g_free(localized_name);
+          dt_free(localized_name);
 
           // we can't break out of the loop here. at least pt is in our list twice!
         }
@@ -290,8 +290,7 @@ static void get_language_names(GList *languages)
   if(saved_locale)
   {
     setlocale(LC_ALL, saved_locale);
-    free(saved_locale);
-    saved_locale = NULL;
+    dt_free(saved_locale);
   }
 
   json_reader_end_member(reader); // 639-2
@@ -299,9 +298,9 @@ static void get_language_names(GList *languages)
 end:
   // cleanup
 #ifdef __APPLE__
-  g_free(res_path);
+  dt_free(res_path);
 #endif
-  g_free(filename);
+  dt_free(filename);
   if(error) g_error_free(error);
   if(reader) g_object_unref(reader);
   if(parser) g_object_unref(parser);
@@ -330,7 +329,7 @@ dt_l10n_t *dt_l10n_init(gboolean init_list)
       langLocale = g_utf16_to_utf8(wcLocaleName, -1, NULL, NULL, NULL);
       if(langLocale != NULL)
       {
-        g_free(ui_lang);
+        dt_free(ui_lang);
         ui_lang = g_strdup(langLocale);
       }
     }
@@ -379,7 +378,7 @@ dt_l10n_t *dt_l10n_init(gboolean init_list)
           {
             char *tmp = language->base_code;
             language->base_code = g_strndup(language->base_code, delimiter - language->base_code);
-            g_free(tmp);
+            dt_free(tmp);
           }
 
           // check if this is the system default
@@ -402,7 +401,7 @@ dt_l10n_t *dt_l10n_init(gboolean init_list)
           if(g_strcmp0(ui_lang, language->code) == 0)
             selected = language;
         }
-        g_free(testname);
+        dt_free(testname);
       }
       g_dir_close(dir) ;
     }
@@ -441,7 +440,7 @@ dt_l10n_t *dt_l10n_init(gboolean init_list)
   else
     set_locale(ui_lang, old_env);
 
-  g_free(ui_lang);
+  dt_free(ui_lang);
 
   return result;
 }

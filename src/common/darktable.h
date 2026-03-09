@@ -385,27 +385,47 @@ void dt_pixelpipe_cache_free_align_cache(struct dt_dev_pixelpipe_cache_t *cache,
 #define dt_pixelpipe_cache_free_align(mem) \
   dt_pixelpipe_cache_free_align_cache(darktable.pixelpipe_cache, (void **)&(mem), __FILE__ ":" DT_STRINGIFY(__LINE__));
 
+#define dt_free(ptr)    \
+  do                    \
+  {                     \
+    g_free((void *)(ptr)); \
+    *(void **)(&(ptr)) = NULL; \
+  } while(0)
+
+static inline void dt_free_gpointer(gpointer ptr)
+{
+  g_free(ptr);
+  ptr = NULL;
+}
+
 #ifdef _WIN32
-  static inline void dt_free_align(void *mem)
+  static inline void dt_free_align_ptr(void *mem)
   {
     _aligned_free(mem);
   }
-  #define dt_free_align_ptr dt_free_align
 #elif _DEBUG // debug build makes sure that we get a crash on using plain free() on an aligned allocation
-  static inline void dt_free_align(void *mem)
+  static inline void dt_free_align_ptr(void *mem)
   {
     // on a debug build, we deliberately offset the returned pointer from dt_alloc_align, so eliminate the offset
-    if (mem)
+    if(mem)
     {
       short offset = ((short*)mem)[-1];
       free(((char*)mem)-offset);
     }
   }
-  #define dt_free_align_ptr dt_free_align
 #else
-  #define dt_free_align(A) if(A) free(A)
-  #define dt_free_align_ptr free
+  static inline void dt_free_align_ptr(void *mem)
+  {
+    if(mem) free(mem);
+  }
 #endif
+
+#define dt_free_align(ptr)  \
+  do                        \
+  {                         \
+    dt_free_align_ptr((void *)(ptr)); \
+    *(void **)(&(ptr)) = NULL; \
+  } while(0)
 
 static inline void* dt_calloc_align(size_t size)
 {

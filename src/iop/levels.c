@@ -655,6 +655,7 @@ void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_levels_gui_data_t *g = (dt_iop_levels_gui_data_t *)self->gui_data;
   g_list_free(g->modes);
+  g->modes = NULL;
 
   IOP_GUI_FREE;
 }

@@ -25,6 +25,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 // our includes go first:
@@ -578,7 +579,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   const int radius = MAX(roundf(p->radius / scale), 2);
   const size_t kernel_width = 2 * radius + 1;
 
-  float *const restrict kernel = dt_alloc_align_float(kernel_width * kernel_width);
+  float *restrict kernel = dt_alloc_align_float(kernel_width * kernel_width);
   if(kernel == NULL) return 1;
   if(build_pixel_kernel(kernel, kernel_width, kernel_width, p))
   {
@@ -710,8 +711,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 {
   dt_iop_blurs_global_data_t *gd = (dt_iop_blurs_global_data_t *)module->data;
   dt_opencl_free_kernel(gd->kernel_blurs_convolve);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 #endif
 
@@ -782,6 +782,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
     // Widget size changed, flush the cache buffer and restart
     g->img_cached = FALSE;
     dt_free_align(g->img);
+    g->img = NULL;
   }
 
   if(!g->img_cached)
@@ -860,6 +861,7 @@ void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_blurs_gui_data_t *g = (dt_iop_blurs_gui_data_t *)self->gui_data;
   dt_free_align(g->img);
+  g->img = NULL;
   IOP_GUI_FREE;
 }
 

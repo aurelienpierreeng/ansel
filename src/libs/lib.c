@@ -52,6 +52,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "libs/lib.h"
 #include "common/debug.h"
 #include "common/module.h"
@@ -325,7 +326,7 @@ static void menuitem_delete_preset(GtkMenuItem *menuitem, dt_lib_module_info_t *
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_PRESETS_CHANGED,
                                   g_strdup(minfo->plugin_name));
   }
-  g_free(name);
+  dt_free(name);
 }
 
 gchar *dt_lib_presets_duplicate(const gchar *preset, const gchar *module_name, int module_version)
@@ -351,7 +352,7 @@ gchar *dt_lib_presets_duplicate(const gchar *preset, const gchar *module_name, i
     DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 3, tx, -1, SQLITE_TRANSIENT);
     if(sqlite3_step(stmt) != SQLITE_ROW) ko = FALSE;
     sqlite3_finalize(stmt);
-    g_free(tx);
+    dt_free(tx);
   }
   gchar *nname = g_strdup_printf("%s_%d", preset, i);
 
@@ -436,7 +437,7 @@ gboolean dt_lib_presets_apply(const gchar *preset, const gchar *module_name, int
         {
           gchar *tx = g_strdup_printf("plugins/darkroom/%s/last_preset", module_name);
           dt_conf_set_string(tx, preset);
-          g_free(tx);
+          dt_free(tx);
           res = module->set_params(module, blob, length);
           break;
         }
@@ -487,9 +488,9 @@ static void pick_callback(GtkMenuItem *menuitem, dt_lib_module_info_t *minfo)
 static void free_module_info(GtkWidget *widget, gpointer user_data)
 {
   dt_lib_module_info_t *minfo = (dt_lib_module_info_t *)user_data;
-  g_free(minfo->plugin_name);
-  free(minfo->params);
-  free(minfo);
+  dt_free(minfo->plugin_name);
+  dt_free(minfo->params);
+  dt_free(minfo);
 }
 
 static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
@@ -519,7 +520,7 @@ static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
   DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, minfo->plugin_name, -1, SQLITE_TRANSIENT);
   DT_DEBUG_SQLITE3_BIND_INT(stmt, 2, minfo->version);
-  g_free(query);
+  dt_free(query);
 
   // collect all presets for op from db
   int found = 0;
@@ -626,7 +627,7 @@ static void dt_lib_presets_popup_menu_show(dt_lib_module_info_t *minfo)
       g_object_set_data_full(G_OBJECT(mi), "dt-preset-name", g_strdup(darktable.gui->last_preset), g_free);
       g_signal_connect(G_OBJECT(mi), "activate", G_CALLBACK(menuitem_update_preset), minfo);
       gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
-      g_free(markup);
+      dt_free(markup);
     }
     cnt++;
   }
@@ -760,7 +761,7 @@ static void *_update_params(dt_lib_module_t *module,
     size_t size;
     int version;
     void *new_params = module->legacy_params(module, params, old_params_size, old_version, &version, &size);
-    free(params);
+    dt_free(params);
     if(new_params == NULL) return NULL;
     params = new_params;
     old_version = version;
@@ -868,7 +869,7 @@ void dt_lib_init_presets(dt_lib_module_t *module)
           sqlite3_step(innerstmt);
           sqlite3_finalize(innerstmt);
         }
-        free(new_params);
+        dt_free(new_params);
       }
     }
     sqlite3_reset(stmt);
@@ -936,10 +937,10 @@ static void dt_lib_init_module(void *m)
         dt_accels_new_action_shortcut(darktable.gui->accels, _lib_plugin_focus_accel, m,
                                       accel_group, label, clean_name, 0, 0, FALSE,
                                       _("Focuses the module"));
-      g_free(label);
+      dt_free(label);
     }
 
-    g_free(clean_name);
+    dt_free(clean_name);
   }
 }
 
@@ -947,9 +948,11 @@ void dt_lib_unload_module(dt_lib_module_t *module)
 {
   dt_gui_module_t *m = DT_GUI_MODULE(module);
   g_list_free(m->widget_list);
+  m->widget_list = NULL;
   g_list_free(m->widget_list_bh);
-  g_free(m->name);
-  g_free(m->view);
+  m->widget_list_bh = NULL;
+  dt_free(m->name);
+  dt_free(m->view);
 
   if(module->module) g_module_close(module->module);
 }
@@ -1162,7 +1165,7 @@ GtkWidget *dt_lib_gui_get_expander(dt_lib_module_t *module)
   dt_capitalize_label(mname);
   gtk_label_set_markup(GTK_LABEL(label), mname);
   gtk_widget_set_tooltip_text(label_evb, mname);
-  g_free(mname);
+  dt_free(mname);
   gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
   g_object_set(G_OBJECT(label), "halign", GTK_ALIGN_START, "xalign", 0.0, (gchar *)0);
   gtk_widget_set_name(label, "lib-panel-label");
@@ -1211,7 +1214,7 @@ void dt_lib_cleanup(dt_lib_t *lib)
         module->data = NULL;
       }
       dt_lib_unload_module(module);
-      free(module);
+      dt_free(module);
     }
     lib->plugins = g_list_delete_link(lib->plugins, lib->plugins);
   }
@@ -1275,7 +1278,7 @@ gboolean dt_lib_is_visible(dt_lib_module_t *module)
   gchar *key = _get_lib_view_path(module, "_visible");
   gboolean ret = TRUE; /* if not key found, always make module visible */
   if(key && dt_conf_key_exists(key)) ret = dt_conf_get_bool(key);
-  g_free(key);
+  dt_free(key);
 
   return ret;
 }
@@ -1285,7 +1288,7 @@ void dt_lib_set_visible(dt_lib_module_t *module, gboolean visible)
   gchar *key = _get_lib_view_path(module, "_visible");
   GtkWidget *widget;
   dt_conf_set_bool(key, visible);
-  g_free(key);
+  dt_free(key);
   if(module->widget)
   {
     if(module->expander)
@@ -1399,7 +1402,7 @@ GtkWidget *dt_action_button_new(dt_lib_module_t *self, const gchar *label, gpoin
   gchar *label_copy = g_strdup(_(label));
   dt_capitalize_label(label_copy);
   GtkWidget *button = gtk_button_new_with_label(label_copy);
-  g_free(label_copy);
+  dt_free(label_copy);
   gtk_label_set_ellipsize(GTK_LABEL(gtk_bin_get_child(GTK_BIN(button))), PANGO_ELLIPSIZE_END);
   if(tooltip) gtk_widget_set_tooltip_text(button, tooltip);
   g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(callback), data);

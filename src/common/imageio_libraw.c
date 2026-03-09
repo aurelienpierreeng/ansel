@@ -252,7 +252,7 @@ dt_imageio_retval_t dt_imageio_open_libraw(dt_image_t *img, const char *filename
 #if defined(_WIN32) && (defined(UNICODE) || defined(_UNICODE))
   wchar_t *wfilename = g_utf8_to_utf16(filename, -1, NULL, NULL, NULL);
   libraw_err = libraw_open_wfile(raw, wfilename);
-  g_free(wfilename);
+  dt_free(wfilename);
 #else
   libraw_err = libraw_open_file(raw, filename);
 #endif

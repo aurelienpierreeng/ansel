@@ -32,6 +32,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "common/collection.h"
 #include "common/selection.h"
 #include "common/colorspaces.h"
@@ -378,7 +379,7 @@ void cleanup(dt_view_t *self)
 {
   dt_slideshow_t *lib = (dt_slideshow_t *)self->data;
   dt_pthread_mutex_destroy(&lib->lock);
-  free(self->data);
+  dt_free(self->data);
 }
 
 int try_enter(dt_view_t *self)
@@ -447,7 +448,7 @@ void enter(dt_view_t *self)
     {
       selrank = sqlite3_column_int(stmt, 0) - 1;
     }
-    g_free(query);
+    dt_free(query);
     sqlite3_finalize(stmt);
   }
 

@@ -49,6 +49,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "bauhaus/bauhaus.h"
 #include "dtgtk/paint.h"
 #include "gui/draw.h"
@@ -755,7 +756,7 @@ void _gradient_arc(cairo_t *cr, double lw, int nb_steps, double x_center, double
     cairo_arc(cr, x_center, y_center, radius, portions[i], portions[i + 1]);
     cairo_stroke(cr);
   }
-  free(portions);
+  dt_free(portions);
 }
 
 void dtgtk_cairo_paint_masks_parametric(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)

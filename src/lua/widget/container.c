@@ -54,6 +54,7 @@ static int container_reset(lua_State* L)
   }
   lua_pop(L,1);
   g_list_free(children);
+  children = NULL;
   return 0;
 }
 
@@ -158,6 +159,7 @@ static int container_numindex(lua_State*L)
       luaL_error(L,"Incorrect index or value when setting the child of a container : you can only append, not change a child in the middle");
     }
     g_list_free(children);
+    children = NULL;
     return 0;
   } else {
     if(index < 0 || index >= length)
@@ -170,6 +172,7 @@ static int container_numindex(lua_State*L)
       luaA_push(L, lua_widget, &searched_widget);
     }
     g_list_free(children);
+    children = NULL;
     return 1;
   }
 }

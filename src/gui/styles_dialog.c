@@ -267,8 +267,8 @@ static void _gui_styles_new_style_response(GtkDialog *dialog, gint response_id, 
     }
   }
   gtk_widget_destroy(GTK_WIDGET(dialog));
-  g_free(g->nameorig);
-  g_free(g);
+  dt_free(g->nameorig);
+  dt_free(g);
 }
 
 static void _gui_styles_edit_style_response(GtkDialog *dialog, gint response_id, dt_gui_styles_dialog_t *g)
@@ -326,8 +326,8 @@ static void _gui_styles_edit_style_response(GtkDialog *dialog, gint response_id,
     }
   }
   gtk_widget_destroy(GTK_WIDGET(dialog));
-  g_free(g->nameorig);
-  g_free(g);
+  dt_free(g->nameorig);
+  dt_free(g);
 }
 
 static void _gui_styles_item_toggled(GtkCellRendererToggle *cell, gchar *path_str, gpointer data)
@@ -481,7 +481,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
     if(desc)
     {
       gtk_entry_set_text(GTK_ENTRY(sd->description), desc);
-      g_free(desc);
+      dt_free(desc);
     }
   }
 
@@ -621,6 +621,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
         }
       }
       g_list_free_full(items, dt_style_item_free);
+      items = NULL;
     }
   }
   else
@@ -634,7 +635,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
                        DT_STYLE_ITEMS_COL_NAME,     label,
                        DT_STYLE_ITEMS_COL_NUM, -1,
                        -1);
-    g_free(label);
+    dt_free(label);
 
     GList *items = dt_history_get_items(imgid, FALSE);
     if(items)
@@ -669,6 +670,7 @@ static void _gui_styles_dialog_run(gboolean edit, const char *name, int32_t imgi
         has_item = TRUE;
       }
       g_list_free_full(items, dt_history_item_free);
+      items = NULL;
     }
     else
     {

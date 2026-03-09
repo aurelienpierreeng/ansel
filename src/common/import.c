@@ -145,7 +145,7 @@ static void _recurse_folder(GVfs *vfs, GFile *folder, dt_import_t *const import)
 static void _gtk_label_set_and_free(GtkWidget *widget, gchar *label)
 {
   gtk_label_set_text(GTK_LABEL(widget), label);
-  g_free(label);
+  dt_free(label);
 }
 
 static void _filter_document(GVfs *vfs, GFile *document, dt_import_t *import)
@@ -169,7 +169,7 @@ static void _filter_document(GVfs *vfs, GFile *document, dt_import_t *import)
   else if(pathname && g_file_test(pathname, G_FILE_TEST_IS_DIR))
   {
     _recurse_folder(vfs, document, import);
-    g_free(pathname);
+    dt_free(pathname);
   }
 }
 
@@ -274,7 +274,7 @@ static int32_t dt_get_selected_files(dt_import_t *import)
   }
   else if(import->files)
   {
-    g_list_free_full(g_steal_pointer(&import->files), g_free);
+    g_list_free_full(g_steal_pointer(&import->files), dt_free_gpointer);
     import->files = NULL;
     // no callback will be triggered. Free here.
 
@@ -345,7 +345,7 @@ static GdkPixbuf *_import_get_thumbnail(const gchar *filename, const int width, 
 
     dt_pixelpipe_cache_free_align(buffer);
     dt_pixelpipe_cache_free_align(rgb);
-    g_free(mime_type);
+    dt_free(mime_type);
   }
 
   // Fallback to whatever Gtk found in the file
@@ -387,7 +387,7 @@ void _dt_check_basedir()
     gchar *file_expand = dt_variables_expand(params, basedir, FALSE);
     dt_conf_set_string("session/base_directory_pattern", file_expand);
 
-    g_free(file_expand);
+    dt_free(file_expand);
     dt_variables_params_destroy(params);
   }
 }
@@ -422,8 +422,8 @@ static void _build_filter(GtkFileFilter *filter, const gchar *extension)
   gchar *TEXT = g_utf8_strup(text, -1); // uppercase variant
   gtk_file_filter_add_pattern(filter, text);
   gtk_file_filter_add_pattern(filter, TEXT);
-  g_free(text);
-  g_free(TEXT);
+  dt_free(text);
+  dt_free(TEXT);
 }
 
 /* Add file extension patterns for file chooser filters
@@ -550,7 +550,7 @@ static void update_preview_cb(GtkFileChooser *file_chooser, gpointer userdata)
   int valid_exif = 0;
   if(have_file)
   {
-    g_free(d->path_file);
+    dt_free(d->path_file);
     d->path_file = g_strdup(filename);
 
     img = malloc(sizeof(dt_image_t));
@@ -561,7 +561,7 @@ static void update_preview_cb(GtkFileChooser *file_chooser, gpointer userdata)
   else
   {
     g_object_unref(in);
-    g_free(filename);
+    dt_free(filename);
     return;
   }
 
@@ -594,8 +594,8 @@ static void update_preview_cb(GtkFileChooser *file_chooser, gpointer userdata)
   const int is_metadata_in_lib = _is_in_library_by_metadata(in);
   g_object_unref(in);
   const gboolean is_in_lib = (is_path_in_lib > -1) || (is_metadata_in_lib > -1);
-  g_free(folder);
-  g_free(basename);
+  dt_free(folder);
+  dt_free(basename);
 
   /* If alread imported, find out where */
   int32_t imgid = UNKNOWN_IMAGE;
@@ -633,9 +633,9 @@ static void update_preview_cb(GtkFileChooser *file_chooser, gpointer userdata)
     if(is_in_lib) _exif_text_set_and_free(d, EXIF_PATH_FIELD, g_strdup_printf(_("%s"), path));
   }
 
-  g_free(filename);
-  g_free(uri);
-  g_free(img);
+  dt_free(filename);
+  dt_free(uri);
+  dt_free(img);
 }
 
 static void _update_directory(GtkWidget *file_chooser, dt_lib_import_t *d)
@@ -718,16 +718,19 @@ static void _set_test_path(dt_lib_import_t *d, dt_image_t *img)
     gchar * cut = g_strdup(g_strrstr(basedir, G_DIR_SEPARATOR_S));
     gchar *fake_path = g_strdup(g_strrstr(_path, cut));
 
-    if(free_after) g_free(img);
+    if(free_after)
+    {
+      dt_free(img);
+    }
 
     if(fake_path && fake_path[0] != 0)
       _gtk_label_set_and_free(d->test_path, g_strdup_printf(_("Result of the pattern : ...%s"), fake_path));
     else
       gtk_label_set_text(GTK_LABEL(d->test_path), _("Can't build a valid path."));
 
-    g_free(cut);
-    g_free(_path);
-    g_free(fake_path);
+    dt_free(cut);
+    dt_free(_path);
+    dt_free(fake_path);
     dt_control_import_data_free(&data);
   }
 }
@@ -744,7 +747,7 @@ static void _filelist_changed_callback(gpointer instance, GList *files, guint el
     _gtk_label_set_and_free(d->selected_files, g_strdup_printf(_("%i files selected"), elements));
 
     // The list of files is not used in GUI. It's not freed in the job either.
-    g_list_free_full(g_steal_pointer(&files), g_free);
+    g_list_free_full(g_steal_pointer(&files), dt_free_gpointer);
     files = NULL;
     dt_pthread_mutex_unlock(&d->lock);
   }
@@ -1247,7 +1250,7 @@ static void _do_select_new(dt_lib_import_t *d)
     }
   }
   g_object_unref(files);
-  g_free(folder);
+  dt_free(folder);
 }
 
 static void gui_cleanup(dt_lib_import_t *d)
@@ -1273,8 +1276,8 @@ static dt_lib_import_t * _init()
 static void _cleanup(dt_lib_import_t *d)
 {
   dt_pthread_mutex_destroy(&d->lock);
-  g_free(d->path_file);
-  g_free(d);
+  dt_free(d->path_file);
+  dt_free(d);
 }
 
 void dt_images_import()
@@ -1313,11 +1316,10 @@ static void dt_import_cleanup(void *data)
   // import->files needs to be freed manually
   // it is freed by the import job if used
   dt_import_t *import = (dt_import_t *)data;
-  g_slist_free_full(import->selection, g_free);
+  g_slist_free_full(import->selection, dt_free_gpointer);
   import->selection = NULL;
   g_object_unref(import->filter);
-  g_free(import);
-  import = NULL;
+  dt_free(import);
 }
 
 // clang-format off

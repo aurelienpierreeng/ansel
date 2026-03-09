@@ -455,7 +455,7 @@ static cmsToneCurve* _colorspaces_create_transfer(int32_t size, double (*fct)(do
   }
 
   cmsToneCurve* result = cmsBuildTabulatedToneCurveFloat(NULL, size, values);
-  g_free(values);
+  dt_free(values);
   return result;
 }
 
@@ -1063,7 +1063,7 @@ dt_colorspaces_color_profile_type_t dt_image_find_best_color_profile(int32_t img
 
 finish:
   dt_image_cache_write_release(darktable.image_cache, img, DT_IMAGE_CACHE_RELAXED);
-  g_free(ext);
+  dt_free(ext);
   return color_profile;
 }
 
@@ -1396,9 +1396,9 @@ void dt_colorspaces_get_profile_name(cmsHPROFILE p, const char *language, const 
     g_strlcpy(name, utf8, len);
   }
 
-  free(buf);
-  free(wbuf);
-  g_free(utf8);
+  dt_free(buf);
+  dt_free(wbuf);
+  dt_free(utf8);
   return;
 
 error:
@@ -1406,9 +1406,9 @@ error:
     g_strlcpy(name, buf, len); // better a little weird than totally borked
   else
     *name = '\0'; // nothing to do here
-  free(buf);
-  free(wbuf);
-  g_free(utf8);
+  dt_free(buf);
+  dt_free(wbuf);
+  dt_free(utf8);
 }
 
 void rgb2hsl(const dt_aligned_pixel_t rgb, float *h, float *s, float *l)
@@ -1543,7 +1543,7 @@ void dt_colorspaces_update_display_transforms()
 // make sure that darktable.color_profiles->xprofile_lock is held when calling this!
 static void _update_display_profile(guchar *tmp_data, gsize size, char *name, size_t name_size)
 {
-  g_free(darktable.color_profiles->xprofile_data);
+  dt_free(darktable.color_profiles->xprofile_data);
   darktable.color_profiles->xprofile_data = tmp_data;
   darktable.color_profiles->xprofile_size = size;
 
@@ -1584,8 +1584,8 @@ static gint _sort_profiles(gconstpointer a, gconstpointer b)
 
   gint result = g_strcmp0(name_a, name_b);
 
-  g_free(name_a);
-  g_free(name_b);
+  dt_free(name_a);
+  dt_free(name_b);
 
   return result;
 }
@@ -1604,7 +1604,7 @@ static GList *load_profile_from_dir(const char *subdir)
   char *dirname = g_build_filename(confdir, "color", subdir, NULL);
   if(!g_file_test(dirname, G_FILE_TEST_IS_DIR))
   {
-    g_free(dirname);
+    dt_free(dirname);
     dirname = g_build_filename(datadir, "color", subdir, NULL);
   }
   GDir *dir = g_dir_open(dirname, 0, NULL);
@@ -1642,14 +1642,14 @@ static GList *load_profile_from_dir(const char *subdir)
         }
 
 icc_loading_done:
-        if(icc_content) free(icc_content);
+        dt_free(icc_content);
       }
-      g_free(filename);
+      dt_free(filename);
     }
     g_dir_close(dir);
     temp_profiles = g_list_sort(temp_profiles, _sort_profiles);
   }
-  g_free(dirname);
+  dt_free(dirname);
   return temp_profiles;
 }
 
@@ -1869,13 +1869,14 @@ void dt_colorspaces_cleanup(dt_colorspaces_t *self)
     dt_colorspaces_color_profile_t *p = (dt_colorspaces_color_profile_t *)iter->data;
     if(p) dt_colorspaces_cleanup_profile(p->profile);
   }
-  g_list_free_full(self->profiles, free);
+  g_list_free_full(self->profiles, dt_free_gpointer);
+  self->profiles = NULL;
 
   pthread_rwlock_destroy(&self->xprofile_lock);
-  g_free(self->colord_profile_file);
-  g_free(self->xprofile_data);
+  dt_free(self->colord_profile_file);
+  dt_free(self->xprofile_data);
 
-  free(self);
+  dt_free(self);
 }
 
 const char *dt_colorspaces_get_name(dt_colorspaces_color_profile_type_t type,
@@ -1967,7 +1968,7 @@ static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, 
         /* the profile has changed (either because the user changed the colord settings or because we are on a
          * different screen now) */
         // update darktable.color_profiles->colord_profile_file
-        g_free(darktable.color_profiles->colord_profile_file);
+        dt_free(darktable.color_profiles->colord_profile_file);
         darktable.color_profiles->colord_profile_file = g_strdup(filename);
 
         // read the file
@@ -1985,7 +1986,7 @@ static void dt_colorspaces_get_display_profile_colord_callback(GObject *source, 
         }
         else
         {
-          g_free(tmp_data);
+          dt_free(tmp_data);
         }
       }
     }
@@ -2074,7 +2075,7 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
     gint format = 0;
     gdk_property_get(gdk_screen_get_root_window(screen), gdk_atom_intern(atom_name, FALSE), GDK_NONE, 0,
                      64 * 1024 * 1024, FALSE, &type, &format, &buffer_size, &buffer);
-    g_free(atom_name);
+    dt_free(atom_name);
   }
 
 #ifdef USE_COLORDGTK
@@ -2141,10 +2142,10 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
         gsize size;
         g_file_get_contents(path, (gchar **)&buffer, &size, NULL);
         buffer_size = size;
-        g_free(path);
+        dt_free(path);
       }
     }
-    g_free(wpath);
+    dt_free(wpath);
     DeleteDC(hdc);
   }
   profile_source = g_strdup("windows color profile api");
@@ -2162,11 +2163,11 @@ void dt_colorspaces_set_display_profile(const dt_colorspaces_color_profile_type_
   }
   else
   {
-    g_free(buffer);
+    dt_free(buffer);
   }
   pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
   if(profile_changed) DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_CHANGED);
-  g_free(profile_source);
+  dt_free(profile_source);
 }
 
 static gboolean _colorspaces_is_base_name(const char *profile)

@@ -208,7 +208,7 @@ int write_image(dt_imageio_module_data_t *p_tmp, const char *filename, const voi
                     (png_const_bytep)buf,
 #endif
                     len);
-      free(buf);
+      dt_free(buf);
     }
   }
 
@@ -222,7 +222,7 @@ int write_image(dt_imageio_module_data_t *p_tmp, const char *filename, const voi
       memcpy(buf, "Exif\0\0", 6);
       memcpy(buf + 6, exif, exif_len);
       PNGwriteRawProfile(png_ptr, info_ptr, "exif", buf, exif_len + 6);
-      free(buf);
+      dt_free(buf);
     }
   }
 
@@ -471,7 +471,7 @@ void *get_params(dt_imageio_module_format_t *self)
 
 void free_params(dt_imageio_module_format_t *self, dt_imageio_module_data_t *params)
 {
-  free(params);
+  dt_free(params);
 }
 
 int set_params(dt_imageio_module_format_t *self, const void *params, const int size)
@@ -580,7 +580,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
 void gui_cleanup(dt_imageio_module_format_t *self)
 {
-  free(self->gui_data);
+  dt_free(self->gui_data);
 }
 
 void gui_reset(dt_imageio_module_format_t *self)

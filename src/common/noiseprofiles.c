@@ -24,6 +24,7 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "common/darktable.h"
 #include "common/noiseprofiles.h"
 #include "common/file_location.h"
 #include "control/control.h"
@@ -363,10 +364,10 @@ end:
 void dt_noiseprofile_free(gpointer data)
 {
   dt_noiseprofile_t *profile = (dt_noiseprofile_t *)data;
-  g_free(profile->name);
-  g_free(profile->maker);
-  g_free(profile->model);
-  free(profile);
+  dt_free(profile->name);
+  dt_free(profile->maker);
+  dt_free(profile->model);
+  dt_free(profile);
 }
 
 void dt_noiseprofile_interpolate(

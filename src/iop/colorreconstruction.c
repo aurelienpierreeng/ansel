@@ -38,6 +38,7 @@
 */
 
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -254,14 +255,14 @@ static void dt_iop_colorreconstruct_bilateral_dump(dt_iop_colorreconstruct_bilat
 {
   if(!bf) return;
   dt_pixelpipe_cache_free_align(bf->buf);
-  free(bf);
+  dt_free(bf);
 }
 
 static void dt_iop_colorreconstruct_bilateral_free(dt_iop_colorreconstruct_bilateral_t *b)
 {
   if(!b) return;
   dt_pixelpipe_cache_free_align(b->buf);
-  free(b);
+  dt_free(b);
 }
 
 static dt_iop_colorreconstruct_bilateral_t *dt_iop_colorreconstruct_bilateral_init(const dt_iop_roi_t *roi, // dimensions of input image
@@ -649,7 +650,7 @@ static void dt_iop_colorreconstruct_bilateral_free_cl(dt_iop_colorreconstruct_bi
   // free device mem
   dt_opencl_release_mem_object(b->dev_grid);
   dt_opencl_release_mem_object(b->dev_grid_tmp);
-  free(b);
+  dt_free(b);
 }
 
 static dt_iop_colorreconstruct_bilateral_cl_t *dt_iop_colorreconstruct_bilateral_init_cl(
@@ -1108,8 +1109,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_colorreconstruct_splat);
   dt_opencl_free_kernel(gd->kernel_colorreconstruct_blur_line);
   dt_opencl_free_kernel(gd->kernel_colorreconstruct_slice);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 

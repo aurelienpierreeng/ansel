@@ -135,7 +135,7 @@ static gboolean _get_node_for_name(GtkTreeModel *model, gboolean root, GtkTreeIt
     gchar *name;
     gtk_tree_model_get(model, iter, DT_STYLES_COL_NAME, &name, -1);
     const gboolean match = !g_strcmp0(name, parent_name);
-    g_free(name);
+    dt_free(name);
     if(match)
     {
       return TRUE;
@@ -203,10 +203,11 @@ static void _gui_styles_update_view(dt_lib_styles_t *d)
       }
       g_strfreev(split);
 
-      g_free(items_string);
-      g_free(tooltip);
+      dt_free(items_string);
+      dt_free(tooltip);
     }
     g_list_free_full(result, dt_style_free);
+    result = NULL;
   }
 
   gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(d->tree), DT_STYLES_COL_TOOLTIP);
@@ -233,13 +234,14 @@ static void _styles_row_activated_callback(GtkTreeView *view, GtkTreePath *path,
   if(name)
   {
     dt_history_style_on_list(list, name, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->duplicate)));
-    g_free(name);
+    dt_free(name);
   }
   g_list_free(list);
+  list = NULL;
 }
 
 // get list of style names from selection
-// free returned list with g_list_free_full(list, g_free)
+// free returned list with g_list_free_full(list, dt_free_gpointer)
 GList* _get_selected_style_names(GList* selected_styles, GtkTreeModel *model)
 {
   GtkTreeIter iter;
@@ -267,6 +269,7 @@ static void apply_clicked(GtkWidget *w, gpointer user_data)
   GList *selected_styles = gtk_tree_selection_get_selected_rows(selection, &model);
   GList *style_names = _get_selected_style_names(selected_styles, model);
   g_list_free_full(selected_styles, (GDestroyNotify) gtk_tree_path_free);
+  selected_styles = NULL;
 
   if(style_names == NULL) return;
 
@@ -274,8 +277,10 @@ static void apply_clicked(GtkWidget *w, gpointer user_data)
 
   if(list) dt_multiple_styles_apply_to_list(style_names, list, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->duplicate)));
 
-  g_list_free_full(style_names, g_free);
+  g_list_free_full(style_names, dt_free_gpointer);
+  style_names = NULL;
   g_list_free(list);
+  list = NULL;
 }
 
 static void create_clicked(GtkWidget *w, gpointer user_data)
@@ -285,6 +290,7 @@ static void create_clicked(GtkWidget *w, gpointer user_data)
   GList *list = dt_act_on_get_images();
   dt_styles_create_from_list(list);
   g_list_free(list);
+  list = NULL;
   _gui_styles_update_view(d);
 }
 
@@ -313,7 +319,7 @@ static void edit_clicked(GtkWidget *w, gpointer user_data)
     {
       dt_gui_styles_dialog_edit(name);
       _gui_styles_update_view(d);
-      g_free(name);
+      dt_free(name);
     }
   }
   g_list_free_full (styles, (GDestroyNotify) gtk_tree_path_free);
@@ -354,6 +360,7 @@ static void delete_clicked(GtkWidget *w, gpointer user_data)
   GList *selected_styles = gtk_tree_selection_get_selected_rows(selection, &model);
   GList *style_names = _get_selected_style_names(selected_styles, model);
   g_list_free_full(selected_styles, (GDestroyNotify) gtk_tree_path_free);
+  selected_styles = NULL;
 
   if(style_names == NULL) return;
 
@@ -378,7 +385,8 @@ static void delete_clicked(GtkWidget *w, gpointer user_data)
     }
     dt_database_release_transaction(darktable.db);
   }
-  g_list_free_full(style_names, g_free);
+  g_list_free_full(style_names, dt_free_gpointer);
+  style_names = NULL;
 }
 
 static void export_clicked(GtkWidget *w, gpointer user_data)
@@ -393,6 +401,7 @@ static void export_clicked(GtkWidget *w, gpointer user_data)
   GList *selected_styles = gtk_tree_selection_get_selected_rows(selection, &model);
   GList *style_names = _get_selected_style_names(selected_styles, model);
   g_list_free_full(selected_styles, (GDestroyNotify) gtk_tree_path_free);
+  selected_styles = NULL;
 
   if(style_names == NULL) return;
 
@@ -523,10 +532,11 @@ static void export_clicked(GtkWidget *w, gpointer user_data)
       dt_control_log(_("style %s was successfully exported"), (char*)style->data);
     }
     dt_conf_set_folder_from_file_chooser("ui_last/export_path", GTK_FILE_CHOOSER(filechooser));
-    g_free(filedir);
+    dt_free(filedir);
   }
   g_object_unref(filechooser);
-  g_list_free_full(style_names, g_free);
+  g_list_free_full(style_names, dt_free_gpointer);
+  style_names = NULL;
 }
 
 static void import_clicked(GtkWidget *w, gpointer user_data)
@@ -705,9 +715,9 @@ static void import_clicked(GtkWidget *w, gpointer user_data)
       {
         dt_styles_import_from_file((char*)filename->data);
       }
-      g_free(bname);
+      dt_free(bname);
     }
-    g_slist_free_full(filenames, g_free);
+    g_slist_free_full(filenames, dt_free_gpointer);
 
     dt_lib_styles_t *d = (dt_lib_styles_t *)user_data;
     _gui_styles_update_view(d);
@@ -731,6 +741,7 @@ static gboolean entry_activated(GtkEntry *entry, gpointer user_data)
     GList *imgs = dt_act_on_get_images();
     dt_history_style_on_list(imgs, name, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d->duplicate)));
     g_list_free(imgs);
+    imgs = NULL;
   }
 
   return FALSE;
@@ -907,8 +918,7 @@ void gui_cleanup(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_mouse_over_image_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
 
-  free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 void gui_reset(dt_lib_module_t *self)
@@ -936,6 +946,7 @@ void gui_reset(dt_lib_module_t *self)
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_STYLE_CHANGED);
   }
   g_list_free_full(all_styles, dt_style_free);
+  all_styles = NULL;
   dt_database_release_transaction(darktable.db);
   _update(self);
 }

@@ -20,6 +20,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "backend_libsecret.h"
 #include "control/conf.h"
 
@@ -78,7 +79,7 @@ const backend_libsecret_context_t *dt_pwstorage_libsecret_new()
 
 void dt_pwstorage_libsecret_destroy(const backend_libsecret_context_t *context)
 {
-  free((backend_libsecret_context_t *)context);
+  dt_free(context);
 }
 
 gboolean dt_pwstorage_libsecret_set(const backend_libsecret_context_t *context, const gchar *slot,
@@ -100,7 +101,7 @@ gboolean dt_pwstorage_libsecret_set(const backend_libsecret_context_t *context, 
   gchar *label = g_strdup_printf("ansel@%s", slot);
   if(!label)
   {
-    g_free(secret_value);
+    dt_free(secret_value);
     return FALSE;
   }
 
@@ -119,8 +120,8 @@ gboolean dt_pwstorage_libsecret_set(const backend_libsecret_context_t *context, 
     g_error_free(error);
   }
 
-  g_free(secret_value);
-  g_free(label);
+  dt_free(secret_value);
+  dt_free(label);
 
   return res;
 }
@@ -159,10 +160,10 @@ GHashTable *dt_pwstorage_libsecret_get(const backend_libsecret_context_t *contex
   goto end;
 
 error:
-  attributes = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+  attributes = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
 
 end:
-  g_free(secret_value);
+  dt_free(secret_value);
   return attributes;
 }
 
@@ -213,7 +214,7 @@ static GHashTable *secret_to_attributes(gchar *secret)
   JsonNode *json_root = json_parser_get_root(json_parser);
   JsonReader *json_reader = json_reader_new(json_root);
 
-  GHashTable *attributes = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+  GHashTable *attributes = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
 
   /* Save each element as an attribute pair */
   gint n_attributes = json_reader_count_members(json_reader);

@@ -69,7 +69,7 @@ static dt_imageio_retval_t _read_pbm(dt_image_t *img, FILE*f, float *buf)
     }
   }
 
-  free(line);
+  dt_free(line);
 
   return result;
 }
@@ -103,7 +103,7 @@ static dt_imageio_retval_t _read_pgm(dt_image_t *img, FILE*f, float *buf)
         buf_iter += 4;
       }
     }
-    free(line);
+    dt_free(line);
   }
   else
   {
@@ -128,7 +128,7 @@ static dt_imageio_retval_t _read_pgm(dt_image_t *img, FILE*f, float *buf)
         buf_iter += 4;
       }
     }
-    free(line);
+    dt_free(line);
   }
 
   return result;
@@ -165,7 +165,7 @@ static dt_imageio_retval_t _read_ppm(dt_image_t *img, FILE*f, float *buf)
         *buf_iter++ = 0.0;
       }
     }
-    free(line);
+    dt_free(line);
   }
   else
   {
@@ -193,7 +193,7 @@ static dt_imageio_retval_t _read_ppm(dt_image_t *img, FILE*f, float *buf)
         *buf_iter++ = 0.0;
       }
     }
-    free(line);
+    dt_free(line);
   }
 
   return result;

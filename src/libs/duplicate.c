@@ -379,8 +379,7 @@ void gui_cleanup(dt_lib_module_t *self)
     _duplicate_versions_stmt = NULL;
   }
 
-  g_free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 // clang-format off

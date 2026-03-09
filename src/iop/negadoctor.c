@@ -419,8 +419,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 {
   dt_iop_negadoctor_global_data_t *gd = module->data;
   dt_opencl_free_kernel(gd->kernel_negadoctor);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

@@ -330,7 +330,7 @@ int dt_imageio_heif_read_profile(const char *filename,
         dt_print(DT_DEBUG_IMAGEIO,
                 "Failed to read embedded ICC profile from HEIF image [%s]\n",
                 filename);
-        g_free(icc_data);
+        dt_free(icc_data);
         goto out;
       }
       size = icc_size;

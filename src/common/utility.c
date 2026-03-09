@@ -185,7 +185,7 @@ gchar *dt_util_glist_to_str(const gchar *separator, GList *items)
   result = g_strjoinv(separator, strings);
 
   // free the array
-  g_free(strings);
+  dt_free(strings);
 
   return result;
 }
@@ -204,7 +204,7 @@ GList *dt_util_glist_uniq(GList *items)
     gchar *value = (gchar *)iter->data;
     if(!g_strcmp0(last, value))
     {
-      g_free(value);
+      dt_free(value);
       items = g_list_delete_link(items, iter);
       iter = last_item;
     }
@@ -253,7 +253,7 @@ gchar *dt_util_fix_path(const gchar *path)
     }
 
     gchar *home_path = dt_loc_get_home_dir(user);
-    g_free(user);
+    dt_free(user);
 
     if(home_path == NULL)
     {
@@ -261,7 +261,7 @@ gchar *dt_util_fix_path(const gchar *path)
     }
 
     rpath = g_build_filename(home_path, path + off, NULL);
-    g_free(home_path);
+    dt_free(home_path);
   }
   else
   {
@@ -328,7 +328,7 @@ gboolean dt_util_test_image_file(const char *filename)
 
   wchar_t *wfilename = g_utf8_to_utf16(filename, -1, NULL, NULL, NULL);
   const int result = _wstati64(wfilename, &stats);
-  g_free(wfilename);
+  dt_free(wfilename);
   if(result) return FALSE; // there was an error
  #else
   struct stat stats;
@@ -349,7 +349,7 @@ gboolean dt_util_test_writable_dir(const char *path)
 
   wchar_t *wpath = g_utf8_to_utf16(path, -1, NULL, NULL, NULL);
   const int result = _wstati64(wpath, &stats);
-  g_free(wpath);
+  dt_free(wpath);
 
   if(result)
   { // error while testing path:
@@ -493,8 +493,7 @@ static cairo_surface_t *_util_get_svg_img(gchar *logo, const float size)
     {
       fprintf(stderr, "warning: can't load darktable logo from SVG file `%s'\n", dtlogo);
       cairo_surface_destroy(surface);
-      free(image_buffer);
-      image_buffer = NULL;
+      dt_free(image_buffer);
       surface = NULL;
     }
     else
@@ -513,8 +512,8 @@ static cairo_surface_t *_util_get_svg_img(gchar *logo, const float size)
     g_error_free(error);
   }
 
-  g_free(logo);
-  g_free(dtlogo);
+  dt_free(logo);
+  dt_free(dtlogo);
 
   return surface;
 }
@@ -708,24 +707,24 @@ gchar *dt_util_normalize_path(const gchar *_input)
   }
 
 #ifdef _WIN32
-  g_free(input);
+  dt_free(input);
 #endif
 
   if(g_path_is_absolute(filename) == FALSE)
   {
     char *current_dir = g_get_current_dir();
     char *tmp_filename = g_build_filename(current_dir, filename, NULL);
-    g_free(filename);
+    dt_free(filename);
     filename = g_realpath(tmp_filename);
     if(filename == NULL)
     {
-      g_free(current_dir);
-      g_free(tmp_filename);
-      g_free(filename);
+      dt_free(current_dir);
+      dt_free(tmp_filename);
+      dt_free(filename);
       return NULL;
     }
-    g_free(current_dir);
-    g_free(tmp_filename);
+    dt_free(current_dir);
+    dt_free(tmp_filename);
   }
 
 #ifdef _WIN32
@@ -737,7 +736,7 @@ gchar *dt_util_normalize_path(const gchar *_input)
   // some other formats like \Device\... are not supported
 
   GFile *gfile = g_file_new_for_path(filename);
-  g_free(filename);
+  dt_free(filename);
   if(!gfile)
     return NULL;
   filename = g_file_get_path(gfile);
@@ -755,7 +754,7 @@ gchar *dt_util_normalize_path(const gchar *_input)
     return filename;
   else
   {
-    g_free(filename);
+    dt_free(filename);
     return NULL;
   }
 #endif
@@ -858,7 +857,7 @@ GList *dt_util_str_to_glist(const gchar *separator, const gchar *text)
     }
   }
   list = g_list_reverse(list);
-  g_free(entry);
+  dt_free(entry);
   return list;
 }
 
@@ -911,7 +910,7 @@ char *dt_read_file(const char *const filename, size_t *filesize)
     if (filesize) *filesize = end;
     return content;
   }
-  free(content);
+  dt_free(content);
   return NULL;
 }
 
@@ -936,7 +935,7 @@ END:
   if(fout != NULL) fclose(fout);
   if(fin != NULL) fclose(fin);
 
-  g_free(content);
+  dt_free(content);
 }
 
 void dt_copy_resource_file(const char *src, const char *dst)
@@ -945,7 +944,7 @@ void dt_copy_resource_file(const char *src, const char *dst)
   dt_loc_get_datadir(share, sizeof(share));
   gchar *sourcefile = g_build_filename(share, src, NULL);
   dt_copy_file(sourcefile, dst);
-  g_free(sourcefile);
+  dt_free(sourcefile);
 }
 
 RsvgDimensionData dt_get_svg_dimension(RsvgHandle *svg)

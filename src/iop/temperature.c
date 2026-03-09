@@ -1527,8 +1527,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_whitebalance_4f);
   dt_opencl_free_kernel(gd->kernel_whitebalance_1f);
   dt_opencl_free_kernel(gd->kernel_whitebalance_1f_xtrans);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 static void temp_tint_callback(GtkWidget *slider, dt_iop_module_t *self)

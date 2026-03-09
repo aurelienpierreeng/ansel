@@ -434,7 +434,7 @@ static void _process_histogram(dt_backbuf_t *backbuf, cairo_t *cr, const int wid
     cairo_restore(cr);
   }
 
-  free(bins);
+  dt_free(bins);
 }
 
 
@@ -1512,7 +1512,7 @@ static gboolean _sample_tooltip_callback(GtkWidget *widget, gint x, gint y, gboo
   gtk_tooltip_set_custom(tooltip, view);
   gtk_widget_map(view); // FIXME: workaround added in order to fix #9908, probably a Gtk issue, remove when fixed upstream
 
-  g_free(tooltip_text);
+  dt_free(tooltip_text);
 
   return TRUE;
 }
@@ -1583,7 +1583,7 @@ static void _remove_sample(dt_colorpicker_sample_t *sample)
   gtk_widget_destroy(sample->container);
   darktable.lib->proxy.colorpicker.live_samples
     = g_slist_remove(darktable.lib->proxy.colorpicker.live_samples, (gpointer)sample);
-  free(sample);
+  dt_free(sample);
 }
 
 static void _remove_sample_cb(GtkButton *widget, dt_colorpicker_sample_t *sample)

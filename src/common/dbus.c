@@ -213,7 +213,7 @@ void dt_dbus_destroy(const dt_dbus_t *dbus)
   if(dbus->dbus_connection)
     g_object_unref(G_OBJECT(dbus->dbus_connection));
 
-  g_free((dt_dbus_t *)dbus);
+  dt_free(dbus);
 }
 
 gboolean dt_dbus_connected(const dt_dbus_t *dbus)

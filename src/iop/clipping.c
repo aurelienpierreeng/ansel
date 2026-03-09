@@ -70,6 +70,7 @@
 */
 
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -2139,7 +2140,7 @@ void gui_init(struct dt_iop_module_t *self)
     if(dd == d && nn == n)
     {
       // same as the last one, remove this entry
-      g_free(aspect->name);
+      dt_free(aspect->name);
       GList *prev = g_list_previous(iter);
       g->aspect_list = g_list_delete_link(g->aspect_list, iter);
       // it should never be NULL as the 1st element can't be a duplicate, but better safe than sorry
@@ -2204,9 +2205,8 @@ void gui_init(struct dt_iop_module_t *self)
 static void free_aspect(gpointer data)
 {
   dt_iop_clipping_aspect_t *aspect = (dt_iop_clipping_aspect_t *)data;
-  g_free(aspect->name);
-  aspect->name = NULL;
-  g_free(aspect);
+  dt_free(aspect->name);
+  dt_free(aspect);
 }
 
 void gui_cleanup(struct dt_iop_module_t *self)

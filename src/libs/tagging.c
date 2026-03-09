@@ -147,7 +147,7 @@ static gboolean _is_user_tag(GtkTreeModel *model, GtkTreeIter *iter)
   char *path;
   gtk_tree_model_get(model, iter, DT_LIB_TAGGING_COL_PATH, &path, -1);
   const gboolean user_tag = !g_str_has_prefix(path, "darktable|") || g_str_has_prefix(path, "darktable|style|");
-  g_free(path);
+  dt_free(path);
   return user_tag;
 }
 
@@ -208,15 +208,15 @@ static gboolean _set_matching_tag_visibility(GtkTreeModel *model, GtkTreePath *p
     gchar *haystack = g_utf8_strdown(tagname, -1);
     gchar *needle = g_utf8_strdown(d->keyword, -1);
     visible = (g_strrstr(haystack, needle) != NULL);
-    g_free(haystack);
-    g_free(needle);
+    dt_free(haystack);
+    dt_free(needle);
   }
   if(d->tree_flag)
     gtk_tree_store_set(GTK_TREE_STORE(model), iter, DT_LIB_TAGGING_COL_VISIBLE, visible, -1);
   else
     gtk_list_store_set(GTK_LIST_STORE(model), iter, DT_LIB_TAGGING_COL_VISIBLE, visible, -1);
-  g_free(tagname);
-  g_free(synonyms);
+  dt_free(tagname);
+  dt_free(synonyms);
   return FALSE;
 }
 
@@ -280,11 +280,11 @@ static gboolean _find_tag_iter_tagname(GtkTreeModel *model, GtkTreeIter *iter,
     {
       gchar *haystack = g_utf8_strdown(path, -1);
       found = g_strstr_len(haystack, strlen(haystack), tagname) != NULL;
-      g_free(haystack);
+      dt_free(haystack);
     }
     else
       found = !g_strcmp0(tagname, path);
-    g_free(path);
+    dt_free(path);
     if(found) return found;
     GtkTreeIter child, parent = *iter;
     if(gtk_tree_model_iter_children(model, &child, &parent))
@@ -329,7 +329,7 @@ static void _show_tag_on_view(GtkTreeView *view, const char *tagname,
       if(_find_tag_iter_tagname(model, &iter, t, needle))
         _show_iter_on_view(view, &iter, select);
     }
-    g_free(lt);
+    dt_free(lt);
   }
 }
 
@@ -337,7 +337,7 @@ static void _show_keyword_on_view(GtkTreeView *view, const char *keyword, const 
 {
   gchar *needle = g_utf8_strdown(keyword, -1);
   _show_tag_on_view(view, needle, TRUE, select);
-  g_free(needle);
+  dt_free(needle);
 }
 
 static gboolean _select_previous_user_attached_tag(const int index, GtkTreeView *view)
@@ -483,9 +483,9 @@ static void _init_treeview(dt_lib_module_t *self, const int which)
               _propagate_sel_to_parents(GTK_TREE_MODEL(store), &iter);
             common_length++;
             parent = iter;
-            g_free(pth2);
+            dt_free(pth2);
           }
-          g_free(pth);
+          dt_free(pth);
 
           // remember things for the next round
           if(last_tokens) g_strfreev(last_tokens);
@@ -572,9 +572,9 @@ static void _tree_tagname_show(GtkTreeViewColumn *col, GtkCellRenderer *renderer
     coltext = g_markup_printf_escaped(istag ? "%s (%d)" : "<i>%s</i> (%d)", hide ? name : path, count);
   }
   g_object_set(renderer, "markup", coltext, NULL);
-  g_free(coltext);
-  g_free(name);
-  g_free(path);
+  dt_free(coltext);
+  dt_free(name);
+  dt_free(path);
 }
 
 static void _tree_tagname_show_attached(GtkTreeViewColumn *col, GtkCellRenderer *renderer,
@@ -750,7 +750,7 @@ static void _find_root_iter_iter(GtkTreeModel *model, GtkTreeIter *iter, GtkTree
     {
       char *path = NULL;
       gtk_tree_model_get(model, parent, DT_LIB_TAGGING_COL_PATH, &path, -1);
-      g_free(path);
+      dt_free(path);
       return; // no need to go further
     }
     child = *parent;
@@ -758,7 +758,7 @@ static void _find_root_iter_iter(GtkTreeModel *model, GtkTreeIter *iter, GtkTree
   *parent = child;  // last before root
   char *path = NULL;
   gtk_tree_model_get(model, parent, DT_LIB_TAGGING_COL_PATH, &path, -1);
-  g_free(path);
+  dt_free(path);
 }
 
 // with tag detach update the tree selection
@@ -861,13 +861,13 @@ static void _delete_tree_path(GtkTreeModel *model, GtkTreeIter *iter, gboolean r
 
         char *path2 = NULL;
         gtk_tree_model_get(model, &tobedel, DT_LIB_TAGGING_COL_PATH, &path2, -1);
-        g_free(path2);
+        dt_free(path2);
 
         _calculate_sel_on_tree(model, &tobedel);
       }
       char *path = NULL;
       gtk_tree_model_get(model, &tobedel, DT_LIB_TAGGING_COL_PATH, &path, -1);
-      g_free(path);
+      dt_free(path);
       gtk_tree_store_remove(GTK_TREE_STORE(model), &tobedel);
     } while (!root && valid);
   }
@@ -894,9 +894,9 @@ static void _delete_tree_path(GtkTreeModel *model, GtkTreeIter *iter, gboolean r
           gtk_list_store_remove(GTK_LIST_STORE(model), &tobedel);
         }
       }
-      g_free(path2);
+      dt_free(path2);
     }
-    g_free(path);
+    dt_free(path);
   }
 }
 
@@ -968,10 +968,10 @@ static gboolean _update_tag_name_per_name(GtkTreeModel *model, GtkTreePath *path
         gtk_list_store_set(GTK_LIST_STORE(model), iter, DT_LIB_TAGGING_COL_PATH,
                            newpath, DT_LIB_TAGGING_COL_TAG, newpath, -1);
       }
-      g_free(newpath);
+      dt_free(newpath);
     }
   }
-  g_free(tagname);
+  dt_free(tagname);
   return FALSE;
 }
 
@@ -1052,6 +1052,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
       GList *imgs = dt_act_on_get_images();
       dt_tag_set_tags(tags, imgs, TRUE, FALSE, TRUE);
       g_list_free(imgs);
+      imgs = NULL;
       gboolean change = FALSE;
       for(GList *tag = tags; tag; tag = g_list_next(tag))
       {
@@ -1066,6 +1067,7 @@ int set_params(dt_lib_module_t *self, const void *params, int size)
         dt_image_synch_xmp(-1);
       }
       g_list_free(tags);
+      tags = NULL;
     }
   }
   return 0;
@@ -1183,8 +1185,10 @@ static void _detach_selected_tag(GtkTreeView *view, dt_lib_module_t *self)
       dt_image_synch_xmps(affected_images);
     }
     g_list_free(affected_images);
+    affected_images = NULL;
   }
   g_list_free(imgs);
+  imgs = NULL;
 }
 
 static void _attach_button_clicked(GtkButton *button, dt_lib_module_t *self)
@@ -1380,6 +1384,7 @@ static void _new_button_clicked(GtkButton *button, dt_lib_module_t *self)
   const gboolean res = dt_tag_attach_string_list(tag, imgs, TRUE);
   if(res) dt_image_synch_xmps(imgs);
   g_list_free(imgs);
+  imgs = NULL;
 
   /** record last tag used */
   _save_last_tag_used(tag, d);
@@ -1493,7 +1498,7 @@ static void _pop_menu_dictionary_delete_tag(GtkWidget *menuitem, dt_lib_module_t
     text = g_strdup_printf(_("selected: %s"), tagname);
     label = gtk_label_new(text);
     gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, TRUE, 0);
-    g_free(text);
+    dt_free(text);
 
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, TRUE, 0);
@@ -1502,7 +1507,7 @@ static void _pop_menu_dictionary_delete_tag(GtkWidget *menuitem, dt_lib_module_t
     label = gtk_label_new(NULL);
     gtk_label_set_markup(GTK_LABEL(label), text);
     gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
-    g_free(text);
+    dt_free(text);
 
   #ifdef GDK_WINDOWING_QUARTZ
     dt_osx_disallow_fullscreen(dialog);
@@ -1514,7 +1519,7 @@ static void _pop_menu_dictionary_delete_tag(GtkWidget *menuitem, dt_lib_module_t
   }
   if(res != GTK_RESPONSE_YES)
   {
-    g_free(tagname);
+    dt_free(tagname);
     return;
   }
 
@@ -1542,7 +1547,8 @@ static void _pop_menu_dictionary_delete_tag(GtkWidget *menuitem, dt_lib_module_t
 
   dt_image_synch_xmps(tagged_images);
   g_list_free(tagged_images);
-  g_free(tagname);
+  tagged_images = NULL;
+  dt_free(tagname);
   _raise_signal_tag_changed(self);
 }
 
@@ -1581,7 +1587,7 @@ static void _pop_menu_dictionary_delete_node(GtkWidget *menuitem, dt_lib_module_
   text = g_strdup_printf(_("selected: %s"), tagname);
   label = gtk_label_new(text);
   gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, TRUE, 0);
-  g_free(text);
+  dt_free(text);
 
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
   gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, TRUE, 0);
@@ -1589,12 +1595,12 @@ static void _pop_menu_dictionary_delete_node(GtkWidget *menuitem, dt_lib_module_
   label = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(label), text);
   gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
-  g_free(text);
+  dt_free(text);
   text = g_strdup_printf(ngettext("<u>%d</u> image will be updated", "<u>%d</u> images will be updated", img_count), img_count);
   label = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(label), text);
   gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
-  g_free(text);
+  dt_free(text);
 
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(dialog);
@@ -1605,7 +1611,7 @@ static void _pop_menu_dictionary_delete_node(GtkWidget *menuitem, dt_lib_module_
   gtk_widget_destroy(dialog);
   if(res != GTK_RESPONSE_YES)
   {
-    g_free(tagname);
+    dt_free(tagname);
     return;
   }
 
@@ -1628,8 +1634,9 @@ static void _pop_menu_dictionary_delete_node(GtkWidget *menuitem, dt_lib_module_
   dt_tag_free_result(&tag_family);
   dt_image_synch_xmps(tagged_images);
   g_list_free(tagged_images);
+  tagged_images = NULL;
   _raise_signal_tag_changed(self);
-  g_free(tagname);
+  dt_free(tagname);
 }
 
 // create tag allows the user to create a single tag, which can be an element of the hierarchy or not
@@ -1679,7 +1686,7 @@ static void _pop_menu_dictionary_create_tag(GtkWidget *menuitem, dt_lib_module_t
   parent = gtk_check_button_new_with_label(text);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(parent), TRUE);
   gtk_box_pack_end(GTK_BOX(vbox2), parent, FALSE, TRUE, 0);
-  g_free(text);
+  dt_free(text);
 
   category = gtk_check_button_new_with_label(_("category"));
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(category), FALSE);
@@ -1727,7 +1734,7 @@ static void _pop_menu_dictionary_create_tag(GtkWidget *menuitem, dt_lib_module_t
       gtk_dialog_run(GTK_DIALOG(warning_dialog));
       gtk_widget_destroy(warning_dialog);
       gtk_widget_destroy(dialog);
-      g_free(tagname);
+      dt_free(tagname);
       return;
     }
     guint new_tagid = 0;
@@ -1742,15 +1749,15 @@ static void _pop_menu_dictionary_create_tag(GtkWidget *menuitem, dt_lib_module_t
       gchar *new_synonyms_list = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
       if(new_tagid && new_synonyms_list && new_synonyms_list[0])
         dt_tag_set_synonyms(new_tagid, new_synonyms_list);
-      g_free(new_synonyms_list);
+      dt_free(new_synonyms_list);
       _init_treeview(self, 1);
       _show_tag_on_view(view, new_tagname, FALSE, TRUE);
     }
-    g_free(new_tagname);
+    dt_free(new_tagname);
   }
   _init_treeview(self, 0);
   gtk_widget_destroy(dialog);
-  g_free(tagname);
+  dt_free(tagname);
 }
 
 // edit tag allows the user to rename a single tag, which can be an element of the hierarchy and change other parameters
@@ -1778,8 +1785,8 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
   dt_tag_count_tags_images(tagname, &tag_count, &img_count);
   if(tag_count == 0)
   {
-    g_free(tagname);
-    g_free(synonyms_list);
+    dt_free(tagname);
+    dt_free(synonyms_list);
     return;
   }
 
@@ -1794,7 +1801,7 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
   text = g_strdup_printf(_("selected: %s"), tagname);
   label = gtk_label_new(text);
   gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, TRUE, 0);
-  g_free(text);
+  dt_free(text);
 
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
   gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, TRUE, 0);
@@ -1802,12 +1809,12 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
   label = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(label), text);
   gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
-  g_free(text);
+  dt_free(text);
   text = g_strdup_printf(ngettext("<u>%d</u> image will be updated", "<u>%d</u> images will be updated", img_count), img_count);
   label = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(label), text);
   gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
-  g_free(text);
+  dt_free(text);
 
   box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, TRUE, 0);
@@ -1869,7 +1876,7 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
         gtk_dialog_run(GTK_DIALOG(warning_dialog));
         gtk_widget_destroy(warning_dialog);
         gtk_widget_destroy(dialog);
-        g_free(tagname);
+        dt_free(tagname);
         return;
       }
 
@@ -1903,13 +1910,16 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
                           _("at least one new tag name (%s) already exists, aborting"), new_tagname);
           gtk_dialog_run(GTK_DIALOG(warning_dialog));
           gtk_widget_destroy(warning_dialog);
-          g_free(new_tagname);
-          if(subtag) g_free(new_prefix_tag);
+          dt_free(new_tagname);
+          if(subtag)
+          {
+            dt_free(new_prefix_tag);
+          }
           gtk_widget_destroy(dialog);
-          g_free(tagname);
+          dt_free(tagname);
           return;
         };
-        g_free(new_tagname);
+        dt_free(new_tagname);
       }
 
       // rename related tags
@@ -1917,7 +1927,7 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
       {
         char *new_tagname = g_strconcat(new_prefix_tag, &((dt_tag_t *)taglist->data)->tag[tagname_len], NULL);
         dt_tag_rename(((dt_tag_t *)taglist->data)->id, new_tagname);
-        g_free(new_tagname);
+        dt_free(new_tagname);
       }
 
       // update the store
@@ -1932,13 +1942,17 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
       gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(store), GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID, GTK_SORT_ASCENDING);
       gtk_tree_model_foreach(store, (GtkTreeModelForeachFunc)_update_tag_name_per_name, to);
       gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(store), sort_column, sort_order);
-      g_free(to);
-      if(subtag) g_free(new_prefix_tag);
+      dt_free(to);
+      if(subtag)
+      {
+        dt_free(new_prefix_tag);
+      }
 
       _raise_signal_tag_changed(self);
       dt_tag_free_result(&tag_family);
       dt_image_synch_xmps(tagged_images);
       g_list_free(tagged_images);
+      tagged_images = NULL;
     }
 
     if(tagid)
@@ -1972,13 +1986,13 @@ static void _pop_menu_dictionary_edit_tag(GtkWidget *menuitem, dt_lib_module_t *
         else
           gtk_tree_store_set(GTK_TREE_STORE(store), &store_iter, DT_LIB_TAGGING_COL_SYNONYM, new_synonyms_list, -1);
       }
-      g_free(new_synonyms_list);
+      dt_free(new_synonyms_list);
     }
   }
   _init_treeview(self, 0);
   gtk_widget_destroy(dialog);
-  g_free(synonyms_list);
-  g_free(tagname);
+  dt_free(synonyms_list);
+  dt_free(tagname);
 }
 
 static gboolean _apply_rename_path(GtkWidget *dialog, const char *tagname,
@@ -2012,7 +2026,7 @@ static gboolean _apply_rename_path(GtkWidget *dialog, const char *tagname,
       gtk_dialog_run(GTK_DIALOG(warning_dialog));
       gtk_widget_destroy(warning_dialog);
     }
-    g_free(new_tagname);
+    dt_free(new_tagname);
   }
 
   if(!tagname_exists)
@@ -2021,7 +2035,7 @@ static gboolean _apply_rename_path(GtkWidget *dialog, const char *tagname,
     {
       char *new_tagname = g_strconcat(newtag, &((dt_tag_t *)taglist->data)->tag[tagname_len], NULL);
       dt_tag_rename(((dt_tag_t *)taglist->data)->id, new_tagname);
-      g_free(new_tagname);
+      dt_free(new_tagname);
     }
     _init_treeview(self, 0);
     _init_treeview(self, 1);
@@ -2032,6 +2046,7 @@ static gboolean _apply_rename_path(GtkWidget *dialog, const char *tagname,
   }
   dt_tag_free_result(&tag_family);
   g_list_free(tagged_images);
+  tagged_images = NULL;
 
   return success;
 }
@@ -2070,7 +2085,7 @@ static void _pop_menu_dictionary_change_path(GtkWidget *menuitem, dt_lib_module_
   text = g_strdup_printf(_("selected: %s"), tagname);
   label = gtk_label_new(text);
   gtk_box_pack_start(GTK_BOX(vbox), label, FALSE, TRUE, 0);
-  g_free(text);
+  dt_free(text);
 
   GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
   gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, TRUE, 0);
@@ -2078,12 +2093,12 @@ static void _pop_menu_dictionary_change_path(GtkWidget *menuitem, dt_lib_module_
   label = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(label), text);
   gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
-  g_free(text);
+  dt_free(text);
   text = g_strdup_printf(ngettext("<u>%d</u> image will be updated", "<u>%d</u> images will be updated", img_count), img_count);
   label = gtk_label_new(NULL);
   gtk_label_set_markup(GTK_LABEL(label), text);
   gtk_box_pack_start(GTK_BOX(box), label, FALSE, TRUE, 0);
-  g_free(text);
+  dt_free(text);
 
   GtkWidget *entry = gtk_entry_new();
   dt_accels_disconnect_on_text_input(entry);
@@ -2112,13 +2127,13 @@ static void _pop_menu_dictionary_change_path(GtkWidget *menuitem, dt_lib_module_
       gtk_dialog_run(GTK_DIALOG(warning_dialog));
       gtk_widget_destroy(warning_dialog);
       gtk_widget_destroy(dialog);
-      g_free(tagname);
+      dt_free(tagname);
       return;
     }
     _apply_rename_path(dialog, tagname, newtag, self);
   }
   gtk_widget_destroy(dialog);
-  g_free(tagname);
+  dt_free(tagname);
 }
 
 static void _pop_menu_dictionary_goto_tag_collection(GtkWidget *menuitem, dt_lib_module_t *self)
@@ -2139,9 +2154,9 @@ static void _pop_menu_dictionary_goto_tag_collection(GtkWidget *menuitem, dt_lib
       dt_control_signal_block_by_func(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
       dt_collection_deserialize(tag_collection);
       dt_control_signal_unblock_by_func(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
-      g_free(tag_collection);
+      dt_free(tag_collection);
     }
-    g_free(path);
+    dt_free(path);
   }
 }
 
@@ -2168,7 +2183,7 @@ static void _pop_menu_dictionary_copy_tag(GtkWidget *menuitem, dt_lib_module_t *
     char *tag;
     gtk_tree_model_get(model, &iter, DT_LIB_TAGGING_COL_PATH, &tag, -1);
     gtk_entry_set_text(d->entry, tag);
-    g_free(tag);
+    dt_free(tag);
     gtk_entry_grab_focus_without_selecting(d->entry);
   }
 }
@@ -2204,7 +2219,7 @@ static void _pop_menu_dictionary_set_as_tag(GtkWidget *menuitem, dt_lib_module_t
 
   _init_treeview(self, 1);
   _show_tag_on_view(d->dictionary_view, tagname, FALSE, TRUE);
-  g_free(tagname);
+  dt_free(tagname);
 
 }
 
@@ -2295,7 +2310,7 @@ static void _pop_menu_dictionary(GtkWidget *treeview, GdkEventButton *event, dt_
       char *collection = g_malloc(4096);
       dt_collection_serialize(collection, 4096);
       if(g_strcmp0(d->collection, collection) == 0) d->collection[0] = '\0';
-      g_free(collection);
+      dt_free(collection);
     }
     if(count || d->collection[0])
     {
@@ -2344,7 +2359,10 @@ static gboolean _click_on_view_dictionary(GtkWidget *view, GdkEventButton *event
         char *tagname;
         gtk_tree_model_get(model, &iter,
                            DT_LIB_TAGGING_COL_PATH, &tagname, -1);
-        if(d->drag.tagname) g_free(d->drag.tagname);
+        if(d->drag.tagname)
+        {
+          dt_free(d->drag.tagname);
+        }
         d->drag.tagname = tagname;
         if(d->drag.path) gtk_tree_path_free(d->drag.path);
         d->drag.path = path;
@@ -2470,12 +2488,12 @@ static gboolean _row_tooltip_setup(GtkWidget *treeview, gint x, gint y, gboolean
           text = dt_util_dstrcat(text, " %s\n", (flags & DT_TF_PRIVATE) ? _("(private)") : "");
           text = dt_util_dstrcat(text, "synonyms: %s", (synonyms && synonyms[0]) ? synonyms : " - ");
           gtk_tooltip_set_text(tooltip, text);
-          g_free(text);
+          dt_free(text);
           res = TRUE;
         }
       }
-      g_free(synonyms);
-      g_free(tagname);
+      dt_free(synonyms);
+      dt_free(tagname);
     }
   }
   gtk_tree_path_free(path);
@@ -2509,8 +2527,8 @@ static void _import_button_clicked(GtkButton *button, dt_lib_module_t *self)
       dt_control_log(_("error importing tags"));
     else
       dt_control_log(_("%zd tags imported"), count);
-    g_free(filename);
-    g_free(dirname);
+    dt_free(filename);
+    dt_free(dirname);
   }
 
   g_object_unref(filechooser);
@@ -2546,12 +2564,12 @@ static void _export_button_clicked(GtkButton *button, dt_lib_module_t *self)
       dt_control_log(_("error exporting tags"));
     else
       dt_control_log(_("%zd tags exported"), count);
-    g_free(filename);
-    g_free(dirname);
+    dt_free(filename);
+    dt_free(dirname);
   }
 
   g_date_time_unref(now);
-  g_free(export_filename);
+  dt_free(export_filename);
   g_object_unref(filechooser);
 }
 
@@ -2649,8 +2667,8 @@ static gint _sort_tree_tag_func(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIter
   if(tag_a == NULL) tag_a = g_strdup("");
   if(tag_b == NULL) tag_b = g_strdup("");
   const gboolean sort = g_strcmp0(tag_a, tag_b);
-  g_free(tag_a);
-  g_free(tag_b);
+  dt_free(tag_a);
+  dt_free(tag_b);
   return sort;
 }
 
@@ -2677,8 +2695,8 @@ static gint _sort_tree_path_func(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIte
     tag_b = g_strdup("");
 
   const gboolean sort = g_strcmp0(tag_a, tag_b);
-  g_free(tag_a);
-  g_free(tag_b);
+  dt_free(tag_a);
+  dt_free(tag_b);
   return sort;
 }
 
@@ -2755,13 +2773,13 @@ static gboolean _match_selected_func(GtkEntryCompletion *completion, GtkTreeMode
   {
     cut_off = (int)(g_utf8_strlen(currentText, -1) - g_utf8_strlen(lastTag, -1))+1;
   }
-  free(currentText);
+  dt_free(currentText);
 
   gtk_editable_delete_text(e, cut_off, cur_pos);
   cur_pos = cut_off;
   gtk_editable_insert_text(e, tag, -1, &cur_pos);
   gtk_editable_set_position(e, cur_pos);
-  g_free(tag);  // release result of gtk_tree_model_get
+  dt_free(tag);  // release result of gtk_tree_model_get
   return TRUE;
 }
 
@@ -2819,10 +2837,10 @@ static gboolean _completion_match_func(GtkEntryCompletion *completion, const gch
       {
         res = g_strstr_len(casefold, -1, lastTag) != NULL;
       }
-      g_free(casefold);
+      dt_free(casefold);
     }
-    g_free(normalized);
-    g_free(tag);
+    dt_free(normalized);
+    dt_free(tag);
   }
 
   return res;
@@ -2845,7 +2863,7 @@ static void _dnd_clear_root(dt_lib_module_t *self)
   gtk_tree_model_get(model, &iter, DT_LIB_TAGGING_COL_PATH, &name, -1);
   if(name && name[0] == '\0')
     gtk_tree_store_remove(d->dictionary_treestore, &iter);
-  g_free(name);
+  dt_free(name);
   d->drag.root = FALSE;
 }
 
@@ -2906,9 +2924,8 @@ static void _event_dnd_received(GtkWidget *widget, GdkDragContext *context, gint
       name = dt_util_dstrcat(name, "%s%s", root ? "" : "|", leave ? leave : d->drag.tagname);
       _apply_rename_path(NULL, d->drag.tagname, name, self);
 
-      g_free(name);
-      g_free(d->drag.tagname);
-      d->drag.tagname = NULL;
+      dt_free(name);
+      dt_free(d->drag.tagname);
       gtk_tree_path_free(path); // release result of gtk_tree_view_get_path_at_pos above
       success = TRUE;
     }
@@ -2933,6 +2950,7 @@ static void _event_dnd_received(GtkWidget *widget, GdkDragContext *context, gint
       if(tagid)
         dt_tag_attach_images(tagid, imgs, TRUE);
       g_list_free(imgs);
+      imgs = NULL;
       _update_attached_count(tagid, d->dictionary_view, d->tree_flag);
       _init_treeview(self, 0);
       _raise_signal_tag_changed(self);
@@ -3303,11 +3321,13 @@ void gui_cleanup(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_tagging_tags_changed_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_selection_changed_callback), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_collection_updated_callback), self);
-  g_free(d->collection);
-  if(d->drag.tagname) g_free(d->drag.tagname);
+  dt_free(d->collection);
+  if(d->drag.tagname)
+  {
+    dt_free(d->drag.tagname);
+  }
   if(d->drag.path) gtk_tree_path_free(d->drag.path);
-  free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 #if 0
@@ -3319,6 +3339,7 @@ static gboolean _lib_tagging_tag_key_press(GtkWidget *entry, GdkEventKey *event,
   {
     case GDK_KEY_Escape:
       g_list_free(d->floating_tag_imgs);
+      d->floating_tag_imgs = NULL;
       gtk_widget_destroy(d->floating_tag_window);
       gtk_window_present(GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
       return TRUE;
@@ -3331,6 +3352,7 @@ static gboolean _lib_tagging_tag_key_press(GtkWidget *entry, GdkEventKey *event,
       const gboolean res = dt_tag_attach_string_list(tag, d->floating_tag_imgs, TRUE);
       if(res) dt_image_synch_xmps(d->floating_tag_imgs);
       g_list_free(d->floating_tag_imgs);
+      d->floating_tag_imgs = NULL;
 
       /** record last tag used */
       _save_last_tag_used(tag, d);
@@ -3365,6 +3387,7 @@ static void _lib_tagging_tag_redo(dt_action_t *action)
     const gboolean res = dt_tag_attach_string_list(d->last_tag, imgs, TRUE);
     if(res) dt_image_synch_xmps(imgs);
     g_list_free(imgs);
+    imgs = NULL;
     _init_treeview(self, 0);
     _init_treeview(self, 1);
     if(res) _raise_signal_tag_changed(self);
@@ -3477,7 +3500,7 @@ static void _size_recent_tags_list()
       if(p) *p = '\0';
     }
     dt_conf_set_string("plugins/lighttable/tagging/recent_tags", list2);
-    g_free(list2);
+    dt_free(list2);
   }
 }
 
@@ -3516,7 +3539,7 @@ void set_preferences(void *menu, dt_lib_module_t *self)
 
 static void _save_last_tag_used(const char *tagnames, dt_lib_tagging_t *d)
 {
-  g_free(d->last_tag);
+  dt_free(d->last_tag);
   d->last_tag = g_strdup(tagnames);
 
   const int nb_recent = _get_recent_tags_list_length();
@@ -3536,20 +3559,23 @@ static void _save_last_tag_used(const char *tagnames, dt_lib_tagging_t *d)
         if(found)
         {
           tags = g_list_remove_link(tags, found);
-          g_free(found->data);
+          dt_free(found->data);
           g_list_free(found);
+          found = NULL;
         }
         tags = g_list_prepend(tags, g_strdup(escaped));
         sqlite3_free(escaped);
       }
-      g_list_free_full(ntags, g_free);
+      g_list_free_full(ntags, dt_free_gpointer);
+      ntags = NULL;
 
       char *nsl = dt_util_glist_to_str("','", tags);
       dt_conf_set_string("plugins/lighttable/tagging/recent_tags", nsl);
-      g_free(nsl);
+      dt_free(nsl);
       if(g_list_length(tags) > nb_recent)
         _size_recent_tags_list();
-      g_list_free_full(tags, g_free);
+      g_list_free_full(tags, dt_free_gpointer);
+      tags = NULL;
     }
   }
 }

@@ -83,7 +83,7 @@ static inline gchar *g_realpath(const char *path)
   if(rc == 0 || rc > len)
   {
     /* Weird failure again */
-    g_free(buffer);
+    dt_free(buffer);
     return g_strdup(path);
   }
 

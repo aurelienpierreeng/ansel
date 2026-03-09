@@ -34,6 +34,7 @@
 #define __STDC_FORMAT_MACROS
 
 #if defined(__SSE__)
+#include "common/darktable.h"
 #include <xmmintrin.h>
 #endif
 
@@ -2396,7 +2397,7 @@ void amaze_demosaic_RT(dt_dev_pixelpipe_iop_t *piece, const float *const in,
     } // end of main loop
 
     // clean up
-    free(buffer);
+    dt_free(buffer);
   }
 }
 

@@ -275,7 +275,7 @@ static int _non_thread_safe_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t
     g_hash_table_foreach(cache->entries, _print_cache_lines, NULL);
   }
 
-  free(lru);
+  dt_free(lru);
   return error;
 }
 
@@ -303,7 +303,7 @@ void *dt_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_ptr, in
       entry->cl_mem_list = g_list_delete_link(entry->cl_mem_list, l);
       void *mem = c->mem;
       if(out_cst) *out_cst = c->cst;
-      g_free(c);
+      dt_free(c);
       dt_pthread_mutex_unlock(&entry->cl_mem_lock);
       return mem;
     }
@@ -370,7 +370,7 @@ void dt_pixel_cache_clmem_remove(dt_pixel_cache_entry_t *entry, void *mem)
     if(c && c->mem == mem)
     {
       entry->cl_mem_list = g_list_delete_link(entry->cl_mem_list, l);
-      g_free(c);
+      dt_free(c);
     }
     l = next;
   }
@@ -384,7 +384,7 @@ void dt_pixel_cache_clmem_flush(dt_pixel_cache_entry_t *entry)
   {
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
     dt_opencl_release_mem_object(c->mem);
-    g_free(c);
+    dt_free(c);
   }
   g_list_free(entry->cl_mem_list);
   entry->cl_mem_list = NULL;
@@ -603,7 +603,7 @@ static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const
     {
       entry->cl_mem_list = g_list_delete_link(entry->cl_mem_list, l);
       dt_opencl_release_mem_object(c->mem);
-      g_free(c);
+      dt_free(c);
     }
     l = next;
   }
@@ -784,7 +784,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
 
   if(alloc && !cache_entry->data)
   {
-    free(cache_entry);
+    dt_free(cache_entry);
     return NULL;
   }
   
@@ -796,9 +796,9 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
   if(!key)
   {
     dt_pthread_rwlock_destroy(&cache_entry->lock);
-    g_free(cache_entry->name);
+    dt_free(cache_entry->name);
     dt_pthread_mutex_destroy(&cache_entry->cl_mem_lock);
-    free(cache_entry);
+    dt_free(cache_entry);
     return NULL;
   }
   *key = hash;
@@ -827,8 +827,8 @@ static void _free_cache_entry(dt_pixel_cache_entry_t *cache_entry)
   cache_entry->cache->current_memory -= cache_entry->size;
   dt_pthread_rwlock_destroy(&cache_entry->lock);
   dt_pthread_mutex_destroy(&cache_entry->cl_mem_lock);
-  g_free(cache_entry->name);
-  free(cache_entry);
+  dt_free(cache_entry->name);
+  dt_free(cache_entry);
 }
 
 static int garbage_collection = 0;
@@ -837,8 +837,8 @@ dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
 {
   dt_dev_pixelpipe_cache_t *cache = (dt_dev_pixelpipe_cache_t *)malloc(sizeof(dt_dev_pixelpipe_cache_t));
   dt_pthread_mutex_init(&cache->lock, NULL);
-  cache->entries = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, (GDestroyNotify)_free_cache_entry);
-  cache->external_entries = g_hash_table_new_full(g_int64_hash, g_int64_equal, g_free, (GDestroyNotify)_free_cache_entry);
+  cache->entries = g_hash_table_new_full(g_int64_hash, g_int64_equal, dt_free_gpointer, (GDestroyNotify)_free_cache_entry);
+  cache->external_entries = g_hash_table_new_full(g_int64_hash, g_int64_equal, dt_free_gpointer, (GDestroyNotify)_free_cache_entry);
   cache->max_memory = max_memory;
   cache->current_memory = 0;
   cache->queries = cache->hits = 0;
@@ -848,7 +848,7 @@ dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
     if(cache->entries) g_hash_table_destroy(cache->entries);
     if(cache->external_entries) g_hash_table_destroy(cache->external_entries);
     dt_pthread_mutex_destroy(&cache->lock);
-    free(cache);
+    dt_free(cache);
     return NULL;
   }
 
@@ -857,7 +857,7 @@ dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
     dt_pthread_mutex_destroy(&cache->lock);
     g_hash_table_destroy(cache->external_entries);
     g_hash_table_destroy(cache->entries);
-    free(cache);
+    dt_free(cache);
     return NULL;
   }
 

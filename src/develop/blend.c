@@ -39,6 +39,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "blend.h"
 #include "common/gaussian.h"
 #include "common/guided_filter.h"
@@ -1486,7 +1487,7 @@ void dt_develop_blend_free_cl_global(dt_blendop_cl_global_t *b)
   dt_opencl_free_kernel(b->kernel_read_mask);
   dt_opencl_free_kernel(b->kernel_calc_blend);
   dt_opencl_free_kernel(b->kernel_mask_blur);
-  free(b);
+  dt_free(b);
 #endif
 }
 
@@ -2050,14 +2051,14 @@ int dt_develop_blend_legacy_params_from_so(dt_iop_module_so_t *module_so, const 
   dt_iop_module_t *module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
   if(dt_iop_load_module_by_so(module, module_so, NULL))
   {
-    free(module);
+    dt_free(module);
     return 1;
   }
 
   if(module->params_size == 0)
   {
     dt_iop_cleanup_module(module);
-    free(module);
+    dt_free(module);
     return 1;
   }
 
@@ -2066,7 +2067,7 @@ int dt_develop_blend_legacy_params_from_so(dt_iop_module_so_t *module_so, const 
                                                  new_params, dt_develop_blend_version(),
                                                  length);
   dt_iop_cleanup_module(module);
-  free(module);
+  dt_free(module);
   return res;
 }
 

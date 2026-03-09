@@ -157,7 +157,7 @@ static void button_clicked(GtkWidget *widget, dt_imageio_module_storage_t *self)
   char *c = g_strstr_len(old, -1, "$");
   if(c) *c = '\0';
   gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(filechooser), old);
-  g_free(old);
+  dt_free(old);
   if(gtk_native_dialog_run(GTK_NATIVE_DIALOG(filechooser)) == GTK_RESPONSE_ACCEPT)
   {
     gchar *dir = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(filechooser));
@@ -170,9 +170,9 @@ static void button_clicked(GtkWidget *widget, dt_imageio_module_storage_t *self)
 
     gtk_entry_set_text(GTK_ENTRY(d->entry), escaped); // the signal handler will write this to conf
     gtk_editable_set_position(GTK_EDITABLE(d->entry), strlen(escaped));
-    g_free(dir);
-    g_free(composed);
-    g_free(escaped);
+    dt_free(dir);
+    dt_free(composed);
+    dt_free(escaped);
   }
   g_object_unref(filechooser);
 }
@@ -236,7 +236,7 @@ void gui_init(dt_imageio_module_storage_t *self)
 
 void gui_cleanup(dt_imageio_module_storage_t *self)
 {
-  free(self->gui_data);
+  dt_free(self->gui_data);
 }
 
 void gui_reset(dt_imageio_module_storage_t *self)
@@ -280,7 +280,7 @@ try_again:
 
     gchar *fixed_path = dt_util_fix_path(pattern);
     g_strlcpy(pattern, fixed_path, sizeof(pattern));
-    g_free(fixed_path);
+    dt_free(fixed_path);
 
     d->vp->filename = input_dir;
     d->vp->jobcode = "export";
@@ -289,7 +289,7 @@ try_again:
 
     gchar *result_filename = dt_variables_expand(d->vp, pattern, TRUE);
     g_strlcpy(filename, result_filename, sizeof(filename));
-    g_free(result_filename);
+    dt_free(result_filename);
 
     // if filenamepattern is a directory just add ${FILE_NAME} as default..
     // this can happen if the filename component of the pattern is an empty variable
@@ -326,7 +326,7 @@ try_again:
 
   /* prevent overwrite of files */
   failed:
-    g_free(output_dir);
+    dt_free(output_dir);
 
     if(!fail && d->onsave_action == DT_EXPORT_ONCONFLICT_UNIQUEFILENAME)
     {
@@ -401,7 +401,7 @@ void free_params(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *pa
   if(!params) return;
   dt_imageio_disk_t *d = (dt_imageio_disk_t *)params;
   dt_variables_params_destroy(d->vp);
-  free(params);
+  dt_free(params);
 }
 
 int set_params(dt_imageio_module_storage_t *self, const void *params, const int size)

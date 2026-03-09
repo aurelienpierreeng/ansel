@@ -40,6 +40,7 @@
 */
 
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -806,7 +807,7 @@ void post_history_commit(dt_iop_module_t *self)
   if(grp && (grp->type & DT_MASKS_GROUP)) nb = g_list_length(grp->points);
   gchar *str = g_strdup_printf("%d", nb);
   gtk_label_set_text(g->label_form, str);
-  g_free(str);
+  dt_free(str);
 
   // update edit shapes status
   dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)self->blend_data;
@@ -2023,8 +2024,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_retouch_image_lab2rgb);
   dt_opencl_free_kernel(gd->kernel_retouch_copy_mask_to_alpha);
 
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
@@ -2126,7 +2126,7 @@ void gui_update(dt_iop_module_t *self)
   if(grp && (grp->type & DT_MASKS_GROUP)) nb = g_list_length(grp->points);
   gchar *str = g_strdup_printf("%d", nb);
   gtk_label_set_text(g->label_form, str);
-  g_free(str);
+  dt_free(str);
 
   // update wavelet decompose labels
   rt_update_wd_bar_labels(p, g);
@@ -2276,17 +2276,17 @@ void gui_init(dt_iop_module_t *self)
                                _("shift+click to set the tool as default"));
   gchar *tt = g_strdup_printf("%s\n%s", _("activate blur tool"), tt2);
   gtk_widget_set_tooltip_text(g->bt_blur, tt);
-  g_free(tt);
+  dt_free(tt);
   tt = g_strdup_printf("%s\n%s", _("activate fill tool"), tt2);
   gtk_widget_set_tooltip_text(g->bt_fill, tt);
-  g_free(tt);
+  dt_free(tt);
   tt = g_strdup_printf("%s\n%s", _("activate cloning tool"), tt2);
   gtk_widget_set_tooltip_text(g->bt_clone, tt);
-  g_free(tt);
+  dt_free(tt);
   tt = g_strdup_printf("%s\n%s", _("activate healing tool"), tt2);
   gtk_widget_set_tooltip_text(g->bt_heal, tt);
-  g_free(tt);
-  g_free(tt2);
+  dt_free(tt);
+  dt_free(tt2);
 
   // wavelet decompose bar labels
   GtkWidget *grid_wd_labels = gtk_grid_new();

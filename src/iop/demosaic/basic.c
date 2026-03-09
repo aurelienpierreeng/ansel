@@ -126,7 +126,7 @@ static void lin_interpolate(float *out, const float *const in, const dt_iop_roi_
     }
   }
 
-  free(lookup);
+  dt_free(lookup);
 }
 
 

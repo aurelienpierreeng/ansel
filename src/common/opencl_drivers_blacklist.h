@@ -52,12 +52,12 @@ static gboolean dt_opencl_check_driver_blacklist(const char *device_version)
     if(!g_strrstr(device, bad_opencl_drivers[i])) continue;
 
     // oops, found in black list
-    g_free(device);
+    dt_free(device);
     return TRUE;
   }
 
   // did not find in the black list, guess it's ok.
-  g_free(device);
+  dt_free(device);
   return FALSE;
 }
 

@@ -591,7 +591,7 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
   dt_print(DT_DEBUG_DEV, "[dt_dev_pixelpipe_change] pipeline state changing for pipe %s, flag %s\n",
      type, status_str);
 
-  g_free(status_str);
+  dt_free(status_str);
 
   // In realtime mode, always assume the last history item changed
   if(dt_dev_pixelpipe_get_realtime(pipe))

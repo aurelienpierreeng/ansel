@@ -86,7 +86,7 @@ void dt_loc_init(const char *datadir, const char *moduledir, const char *localed
   dt_loc_init_user_cache_dir(cachedir);
   dt_loc_init_sharedir(application_directory);
   dt_loc_init_tmp_dir(tmpdir);
-  free(application_directory);
+  dt_free(application_directory);
 }
 
 gchar *dt_loc_get_home_dir(const gchar *user)
@@ -121,12 +121,12 @@ gchar *dt_loc_get_home_dir(const gchar *user)
   getpwnam_r(user, &pwd, buffer, bufsize, &result);
   if(result == NULL)
   {
-    g_free(buffer);
+    dt_free(buffer);
     return NULL;
   }
 
   gchar *dir = g_strdup(pwd.pw_dir);
-  g_free(buffer);
+  dt_free(buffer);
 
   return dir;
 #else
@@ -195,7 +195,7 @@ gchar *dt_loc_init_generic(const char *absolute_value, const char *application_d
   // removes '.', '..', and extra '/' characters.
   result = g_realpath(path);
 
-  g_free(path);
+  dt_free(path);
   return result;
 }
 
@@ -204,7 +204,7 @@ void dt_loc_init_user_config_dir(const char *configdir)
   char *default_config_dir = g_build_filename(g_get_user_config_dir(), "ansel", NULL);
   darktable.configdir = dt_loc_init_generic(configdir, NULL, default_config_dir);
   dt_check_opendir("ansel.configdir", darktable.configdir);
-  g_free(default_config_dir);
+  dt_free(default_config_dir);
 }
 
 void dt_loc_init_tmp_dir(const char *tmpdir)
@@ -218,7 +218,7 @@ void dt_loc_init_user_cache_dir(const char *cachedir)
   char *default_cache_dir = g_build_filename(g_get_user_cache_dir(), "ansel", NULL);
   darktable.cachedir = dt_loc_init_generic(cachedir, NULL, default_cache_dir);
   dt_check_opendir("ansel.cachedir", darktable.cachedir);
-  g_free(default_cache_dir);
+  dt_free(default_cache_dir);
 }
 
 void dt_loc_init_moduledir(const char* application_directory, const char *moduledir)
@@ -238,7 +238,7 @@ void dt_check_opendir(const char* context, const char* directory)
 #if _WIN32
   wchar_t *wdirectory = g_utf8_to_utf16 (directory, -1, NULL, NULL, NULL);
   DWORD attribs = GetFileAttributesW(wdirectory);
-  g_free(wdirectory);
+  dt_free(wdirectory);
   if (attribs != INVALID_FILE_ATTRIBUTES &&
       (attribs & FILE_ATTRIBUTE_DIRECTORY))
   {

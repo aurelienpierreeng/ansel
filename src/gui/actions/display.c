@@ -82,12 +82,12 @@ static gboolean _panel_is_visible(dt_ui_panel_t panel)
   gchar *key = panels_get_view_path("panel_collaps_state");
   if(dt_conf_get_int(key))
   {
-    g_free(key);
+    dt_free(key);
     return FALSE;
   }
   key = panels_get_panel_path(panel, "_visible");
   const gboolean ret = dt_conf_get_bool(key);
-  g_free(key);
+  dt_free(key);
   return ret;
 }
 
@@ -110,7 +110,7 @@ void dt_ui_toggle_panels_visibility(dt_ui_t *ui)
   else dt_conf_set_int(key, 1);
 
   dt_ui_restore_panels(ui);
-  g_free(key);
+  dt_free(key);
 }
 
 void dt_ui_panel_show(dt_ui_t *ui, const dt_ui_panel_t p, gboolean show, gboolean write)
@@ -143,20 +143,20 @@ void dt_ui_panel_show(dt_ui_t *ui, const dt_ui_panel_t p, gboolean show, gboolea
       if(dt_conf_get_int(key) != 0)
       {
         dt_conf_set_int(key, 0);
-        g_free(key);
+        dt_free(key);
         // we ensure that all panels state are recorded as hidden
         for(int k = 0; k < DT_UI_PANEL_SIZE; k++)
         {
           key = panels_get_panel_path(k, "_visible");
           dt_conf_set_bool(key, FALSE);
-          g_free(key);
+          dt_free(key);
         }
       }
       else
-        g_free(key);
+        dt_free(key);
       key = panels_get_panel_path(p, "_visible");
       dt_conf_set_bool(key, show);
-      g_free(key);
+      dt_free(key);
     }
     else
     {
@@ -176,13 +176,13 @@ void dt_ui_panel_show(dt_ui_t *ui, const dt_ui_panel_t p, gboolean show, gboolea
       {
         key = panels_get_view_path("panel_collaps_state");
         dt_conf_set_int(key, 1);
-        g_free(key);
+        dt_free(key);
       }
       else
       {
         key = panels_get_panel_path(p, "_visible");
         dt_conf_set_bool(key, show);
-        g_free(key);
+        dt_free(key);
       }
     }
   }
@@ -417,6 +417,7 @@ static gboolean _jpg_combobox_changed(GtkAccelGroup *group, GObject *acceleratab
       dt_mipmap_cache_remove(darktable.mipmap_cache, imgid, FALSE);
     }
     g_list_free(imgs);
+    imgs = NULL;
 
     // Change the mode
     dt_conf_set_int("lighttable/embedded_jpg", mode);

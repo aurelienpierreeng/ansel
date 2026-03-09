@@ -75,8 +75,8 @@ typedef struct dt_control_crawler_result_t
 
 static void _free_crawler_result(dt_control_crawler_result_t *entry)
 {
-  g_free(entry->image_path);
-  g_free(entry->xmp_path);
+  dt_free(entry->image_path);
+  dt_free(entry->xmp_path);
   entry->image_path = entry->xmp_path = NULL;
 }
 
@@ -177,13 +177,13 @@ GList *dt_control_crawler_run(void)
     {
       wchar_t *wfilename = g_utf8_to_utf16(xmp_path_locale, -1, NULL, NULL, NULL);
       stat_res = _wstati64(wfilename, &statbuf);
-      g_free(wfilename);
+      dt_free(wfilename);
     }
 #else
     struct stat statbuf;
     stat_res = stat(xmp_path_locale, &statbuf);
 #endif
-    g_free(xmp_path_locale);
+    dt_free(xmp_path_locale);
     if(stat_res) continue; // TODO: shall we report these?
 
     // step 1: check if the xmp is newer than our db entry
@@ -213,7 +213,7 @@ GList *dt_control_crawler_run(void)
 
     char *txt_path = dt_image_get_text_path_from_path(image_path);
     gboolean has_txt = txt_path != NULL;
-    g_free(txt_path);
+    dt_free(txt_path);
 
     char *extra_path = (char *)calloc(len + 3 + 1, sizeof(char));
     g_strlcpy(extra_path, image_path, len + 1);
@@ -251,7 +251,7 @@ GList *dt_control_crawler_run(void)
       sqlite3_clear_bindings(inner_stmt);
     }
 
-    free(extra_path);
+    dt_free(extra_path);
   }
 
   dt_database_release_transaction(darktable.db);
@@ -282,7 +282,7 @@ static void dt_control_crawler_response_callback(GtkWidget *dialog,
   dt_control_crawler_gui_t *gui = (dt_control_crawler_gui_t *)user_data;
   g_object_unref(G_OBJECT(gui->model));
   gtk_widget_destroy(dialog);
-  free(gui);
+  dt_free(gui);
 }
 
 
@@ -307,6 +307,7 @@ static void _delete_selected_rows(dt_control_crawler_gui_t *gui)
   // Cleanup the list of rows
   g_list_foreach(rr_list, (GFunc) gtk_tree_row_reference_free, NULL);
   g_list_free(rr_list);
+  rr_list = NULL;
 }
 
 
@@ -405,7 +406,10 @@ static void _log_synchronization(dt_control_crawler_gui_t *gui,
                      0, message,
                      -1);
 
-  if(to_free) g_free(message);
+  if(to_free)
+  {
+    dt_free(message);
+  }
 }
 
 
@@ -727,9 +731,10 @@ void dt_control_crawler_show_image_list(GList *images)
        DT_CONTROL_CRAWLER_COL_TIME_DELTA, timestamp_delta,
        -1);
     _free_crawler_result(item);
-    g_free(timestamp_delta);
+    dt_free(timestamp_delta);
   }
-  g_list_free_full(images, g_free);
+  g_list_free_full(images, dt_free_gpointer);
+  images = NULL;
 
   GtkWidget *tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(store));
   GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(tree));

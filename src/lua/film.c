@@ -20,6 +20,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "lua/film.h"
 #include "common/debug.h"
 #include "common/film.h"
@@ -191,7 +192,7 @@ static int films_new(lua_State *L)
   const char *path = luaL_checkstring(L, -1);
   char *expanded_path = dt_util_fix_path(path);
   char *final_path = g_realpath(expanded_path);
-  g_free(expanded_path);
+  dt_free(expanded_path);
   if(!final_path)
   {
     return luaL_error(L, "Couldn't create film for directory '%s' : %s\n", path, strerror(errno));
@@ -200,7 +201,7 @@ static int films_new(lua_State *L)
   dt_film_t my_film;
   dt_film_init(&my_film);
   int film_id = dt_film_new(&my_film, final_path);
-  g_free(final_path);
+  dt_free(final_path);
   if(film_id)
   {
     luaA_push(L, dt_lua_film_t, &film_id);

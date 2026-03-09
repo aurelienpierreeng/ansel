@@ -225,7 +225,7 @@ static int usage(const char *argv0)
 #endif
 
 #ifdef _WIN32
-  g_free(logfile);
+  dt_free(logfile);
 #endif
 
   return 1;
@@ -313,7 +313,7 @@ int dt_load_from_string(const gchar *input, gboolean open_image_in_dr, gboolean 
     dt_film_t film;
     const int filmid = dt_film_new(&film, directory);
     id = dt_image_import(filmid, filename, TRUE);
-    g_free(directory);
+    dt_free(directory);
     if(id)
     {
       dt_film_open(filmid);
@@ -342,7 +342,7 @@ int dt_load_from_string(const gchar *input, gboolean open_image_in_dr, gboolean 
     }
     if(single_image) *single_image = TRUE;
   }
-  g_free(filename);
+  dt_free(filename);
   return id;
 }
 
@@ -413,7 +413,10 @@ static inline size_t _get_total_memory()
     first = 0;
   }
   fclose(f);
-  if(len > 0) free(line);
+  if(len > 0)
+  {
+    dt_free(line);
+  }
   return mem;
 #elif defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__) || defined(__NetBSD__)            \
     || defined(__OpenBSD__)
@@ -819,7 +822,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
           fprintf(stderr, "unknown signal name: '%s'. use 'ALL' to enable debug for all or use full signal name\n", str);
           return usage(argv[0]);
         }
-        g_free(str);
+        dt_free(str);
         #undef CHKSIGDBG
         k++;
         argv[k-1] = NULL;
@@ -849,7 +852,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
           entry->value = g_strdup(c);
           config_override = g_slist_append(config_override, entry);
         }
-        g_free(keyval);
+        dt_free(keyval);
       }
       else if(!strcmp(argv[k], "--noiseprofiles") && argc > k + 1)
       {
@@ -970,7 +973,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
 
     if(set_env) g_setenv("XDG_DATA_DIRS", new_xdg_data_dirs, 1);
     dt_print(DT_DEBUG_DEV, "new_xdg_data_dirs: %s\n", new_xdg_data_dirs);
-    g_free(new_xdg_data_dirs);
+    dt_free(new_xdg_data_dirs);
   }
 
   setlocale(LC_ALL, "");
@@ -1003,7 +1006,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
   // initialize the config backend. this needs to be done first...
   darktable.conf = (dt_conf_t *)calloc(1, sizeof(dt_conf_t));
   dt_conf_init(darktable.conf, anselrc, config_override);
-  g_slist_free_full(config_override, g_free);
+  g_slist_free_full(config_override, dt_free_gpointer);
 
   // set the interface language and prepare selection for prefs
   darktable.l10n = dt_l10n_init(init_gui);
@@ -1076,7 +1079,7 @@ int dt_init(int argc, char *argv[], const gboolean init_gui, const gboolean load
                                                                 "org.darktable.service.Remote", "Open",
                                                                 g_variant_new("(s)", filename), NULL,
                                                                 G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL) != NULL;
-            g_free(filename);
+            dt_free(filename);
           }
           if(connection) g_object_unref(connection);
         }
@@ -1379,7 +1382,7 @@ void dt_cleanup()
     //dt_dbus_destroy(darktable.dbus);
 
     dt_lib_cleanup(darktable.lib);
-    free(darktable.lib);
+    dt_free(darktable.lib);
   }
 
 #ifdef USE_LUA
@@ -1387,7 +1390,7 @@ void dt_cleanup()
 #endif
 
   dt_view_manager_cleanup(darktable.view_manager);
-  free(darktable.view_manager);
+  dt_free(darktable.view_manager);
 
   if(init_gui)
   {
@@ -1395,14 +1398,14 @@ void dt_cleanup()
     dt_control_shutdown(darktable.control);
 
     dt_imageio_cleanup(darktable.imageio);
-    free(darktable.imageio);
+    dt_free(darktable.imageio);
 
     dt_gui_presets_cleanup();
 
     dt_gui_gtk_t *gui = darktable.gui;
     darktable.gui = NULL;
     dt_accels_cleanup(gui->accels);
-    free(gui);
+    dt_free(gui);
   }
 
   dt_colorlabels_cleanup();
@@ -1418,21 +1421,19 @@ void dt_cleanup()
 
   // Mipmap cleanup may still consult the image cache for paths.
   dt_mipmap_cache_cleanup(darktable.mipmap_cache);
-  free(darktable.mipmap_cache);
-  darktable.mipmap_cache = NULL;
+  dt_free(darktable.mipmap_cache);
   dt_image_cache_cleanup(darktable.image_cache);
-  free(darktable.image_cache);
-  darktable.image_cache = NULL;
+  dt_free(darktable.image_cache);
 
   dt_colorspaces_cleanup(darktable.color_profiles);
   dt_conf_cleanup(darktable.conf);
-  free(darktable.conf);
+  dt_free(darktable.conf);
   dt_points_cleanup(darktable.points);
-  free(darktable.points);
+  dt_free(darktable.points);
   dt_iop_unload_modules_so();
-  g_list_free_full(darktable.iop_order_list, free);
+  g_list_free_full(darktable.iop_order_list, dt_free_gpointer);
   darktable.iop_order_list = NULL;
-  g_list_free_full(darktable.iop_order_rules, free);
+  g_list_free_full(darktable.iop_order_rules, dt_free_gpointer);
   darktable.iop_order_rules = NULL;
 
 #ifdef HAVE_OPENCL
@@ -1446,7 +1447,7 @@ void dt_cleanup()
   dt_dev_pixelpipe_cache_cleanup(darktable.pixelpipe_cache);
 
   dt_opencl_cleanup(darktable.opencl);
-  free(darktable.opencl);
+  dt_free(darktable.opencl);
   dt_pwstorage_destroy(darktable.pwstorage);
 
 #ifdef HAVE_GRAPHICSMAGICK
@@ -1507,7 +1508,7 @@ void dt_cleanup()
     dt_pthread_mutex_destroy(&darktable.control->log_mutex);
     dt_pthread_mutex_destroy(&darktable.control->run_mutex);
   }
-  free(darktable.control);
+  dt_free(darktable.control);
 
   dt_capabilities_cleanup();
 
@@ -1817,7 +1818,7 @@ void dt_print_mem_usage()
     else if(!strncmp(line, "VmHWM:", 6))
       g_strlcpy(vmhwm, line + 8, sizeof(vmhwm));
   }
-  free(line);
+  dt_free(line);
   fclose(f);
 
   fprintf(stderr, "[memory] max address space (vmpeak): %15s"

@@ -46,6 +46,7 @@
 */
 
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -1357,13 +1358,13 @@ static int edge_enhance(const double *in, double *out, const int width, const in
     out[k] = sqrt(Gx[k] * Gx[k] + Gy[k] * Gy[k]);
   }
 
-  free(Gx);
-  free(Gy);
+  dt_free(Gx);
+  dt_free(Gy);
   return TRUE;
 
 error:
-  if(Gx) free(Gx);
-  if(Gy) free(Gy);
+  dt_free(Gx);
+  dt_free(Gy);
   return FALSE;
 }
 
@@ -1621,13 +1622,13 @@ static int line_detect(float *in, const int width, const int height, const int x
   *alines = ashift_lines;
 
   // free intermediate buffers
-  free(lsd_lines);
-  free(greyscale);
+  dt_free(lsd_lines);
+  dt_free(greyscale);
   return lct > 0 ? TRUE : FALSE;
 
 error:
-  free(lsd_lines);
-  free(greyscale);
+  dt_free(lsd_lines);
+  dt_free(greyscale);
   return FALSE;
 }
 
@@ -1666,8 +1667,7 @@ static int _get_structure(dt_iop_module_t *module, dt_iop_ashift_enhance_t enhan
   g->lines_count = 0;
   g->vertical_count = 0;
   g->horizontal_count = 0;
-  free(g->lines);
-  g->lines = NULL;
+  dt_free(g->lines);
 
   dt_iop_ashift_line_t *lines;
   int lines_count;
@@ -1698,11 +1698,11 @@ static int _get_structure(dt_iop_module_t *module, dt_iop_ashift_enhance_t enhan
   g->lines_version++;
   g->lines = lines;
 
-  free(buffer);
+  dt_free(buffer);
   return TRUE;
 
 error:
-  free(buffer);
+  dt_free(buffer);
   return FALSE;
 }
 
@@ -1928,10 +1928,10 @@ static void ransac(const dt_iop_ashift_line_t *lines, int *index_set, int *inout
   memcpy(index_set, best_set, set_size);
   memcpy(inout_set, best_inout, set_size);
 
-  free(inout);
-  free(perm);
-  free(best_inout);
-  free(best_set);
+  dt_free(inout);
+  dt_free(perm);
+  dt_free(best_inout);
+  dt_free(best_set);
 }
 
 
@@ -2026,14 +2026,14 @@ static int _remove_outliers(dt_iop_module_t *module)
   g->horizontal_count = hcount;
   g->lines_version++;
 
-  free(inout_set);
-  free(lines_set);
+  dt_free(inout_set);
+  dt_free(lines_set);
 
   return TRUE;
 
 error:
-  free(inout_set);
-  free(lines_set);
+  dt_free(inout_set);
+  dt_free(lines_set);
   return FALSE;
 }
 
@@ -2816,7 +2816,10 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
     if(dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                      DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, 4))
     {
-      if(g->lines) free(g->lines);
+      if(g->lines)
+      {
+        dt_free(g->lines);
+      }
       g->lines = (dt_iop_ashift_line_t *)g_malloc0(sizeof(dt_iop_ashift_line_t) * 4);
       // vertical lines
       _draw_basic_line(&g->lines[0], pts[0], pts[1], pts[2], pts[3],
@@ -2852,7 +2855,10 @@ static gboolean _draw_retrieve_lines_from_params(dt_iop_module_t *self, dt_iop_a
     if(dt_dev_distort_transform_plus(self->dev, self->dev->virtual_pipe, self->iop_order,
                                      DT_DEV_TRANSFORM_DIR_BACK_EXCL, pts, p->last_drawn_lines_count * 2))
     {
-      if(g->lines) free(g->lines);
+      if(g->lines)
+      {
+        dt_free(g->lines);
+      }
       g->lines = (dt_iop_ashift_line_t *)g_malloc0(sizeof(dt_iop_ashift_line_t) * p->last_drawn_lines_count);
 
       int vnb = 0; // number of vertical lines
@@ -2899,7 +2905,10 @@ static int _do_clean_structure(dt_iop_module_t *module, dt_iop_ashift_params_t *
   g->lines_count = 0;
   g->vertical_count = 0;
   g->horizontal_count = 0;
-  if(g->lines) free(g->lines);
+  if(g->lines)
+  {
+    dt_free(g->lines);
+  }
   g->lines = NULL;
   g->lines_version++;
   g->current_structure_method = ASHIFT_METHOD_NONE;
@@ -3156,7 +3165,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     if(g->buf == NULL || (size_t)g->buf_width * g->buf_height < (size_t)width * height)
     {
       // if needed allocate buffer
-      free(g->buf); // a no-op if g->buf is NULL
+      dt_free(g->buf); // a no-op if g->buf is NULL
       // only get new buffer if no old buffer available or old buffer does not fit in terms of size
       g->buf = malloc(sizeof(float) * 4 * width * height);
       if(!g->buf)
@@ -3295,7 +3304,7 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
     if(g->buf == NULL || (size_t)g->buf_width * g->buf_height < (size_t)iwidth * iheight)
     {
       // if needed allocate buffer
-      free(g->buf); // a no-op if g->buf is NULL
+      dt_free(g->buf); // a no-op if g->buf is NULL
       // only get new buffer if no old buffer or old buffer does not fit in terms of size
       g->buf = malloc(sizeof(float) * 4 * iwidth * iheight);
     }
@@ -3678,9 +3687,9 @@ static int get_points(struct dt_iop_module_t *self, const dt_iop_ashift_line_t *
   return TRUE;
 
 error:
-  if(my_points_idx != NULL) free(my_points_idx);
-  if(my_points != NULL) free(my_points);
-  if(my_extremas) free(my_extremas);
+  dt_free(my_points_idx);
+  dt_free(my_points);
+  dt_free(my_extremas);
   return FALSE;
 }
 
@@ -3780,7 +3789,7 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
     gchar *view_angle = NULL;
     view_angle = g_strdup_printf("%.2f\302\260", angle);
     pango_layout_set_text(layout, view_angle ? view_angle : "-1\302\260", -1);
-    g_free(view_angle);
+    dt_free(view_angle);
 
     PangoRectangle logic;
     pango_layout_get_pixel_extents(layout, &ink, &logic);
@@ -3962,12 +3971,9 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
          && g->lines_hash != lines_hash))
   {
     // we need to reprocess points
-    free(g->points);
-    g->points = NULL;
-    free(g->points_idx);
-    g->points_idx = NULL;
-    free(g->draw_points);
-    g->draw_points = NULL;
+    dt_free(g->points);
+    dt_free(g->points_idx);
+    dt_free(g->draw_points);
     g->points_lines_count = 0;
 
     const float scale = dt_dev_get_natural_scale(dev);
@@ -4518,7 +4524,10 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
               pos++;
             }
           }
-          if(g->lines) free(g->lines);
+          if(g->lines)
+          {
+            dt_free(g->lines);
+          }
           g->lines = lines;
           g->lines_count = count;
         }
@@ -4557,7 +4566,10 @@ int button_pressed(struct dt_iop_module_t *self, double x, double y, double pres
     {
       lines[i] = g->lines[i];
     }
-    if(g->lines) free(g->lines);
+    if(g->lines)
+    {
+      dt_free(g->lines);
+    }
     g->lines = lines;
     g->lines_count = count;
     _draw_basic_line(&g->lines[count - 1], pts[0], pts[1], pts[0], pts[1], ASHIFT_LINE_VERTICAL_SELECTED);
@@ -5406,8 +5418,7 @@ void reload_defaults(dt_iop_module_t *module)
     dt_bauhaus_slider_set_default(g->crop_factor, crop_factor);
 
     dt_iop_gui_enter_critical_section(module);
-    free(g->buf);
-    g->buf = NULL;
+    dt_free(g->buf);
     g->buf_width = 0;
     g->buf_height = 0;
     g->buf_x_off = 0;
@@ -5419,8 +5430,7 @@ void reload_defaults(dt_iop_module_t *module)
     dt_iop_gui_leave_critical_section(module);
 
     g->fitting = 0;
-    free(g->lines);
-    g->lines = NULL;
+    dt_free(g->lines);
     g->lines_count =0;
     g->horizontal_count = 0;
     g->vertical_count = 0;
@@ -5437,10 +5447,8 @@ void reload_defaults(dt_iop_module_t *module)
     g->near_delta = 0;
     g->selecting_lines_version = 0;
 
-    free(g->points);
-    g->points = NULL;
-    free(g->points_idx);
-    g->points_idx = NULL;
+    dt_free(g->points);
+    dt_free(g->points_idx);
     g->points_lines_count = 0;
     g->points_version = 0;
 
@@ -5479,8 +5487,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_ashift_bicubic);
   dt_opencl_free_kernel(gd->kernel_ashift_lanczos2);
   dt_opencl_free_kernel(gd->kernel_ashift_lanczos3);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 // adjust labels of lens shift parameters according to flip status of image
@@ -5731,10 +5738,22 @@ void gui_cleanup(struct dt_iop_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_process_after_preview_callback), self);
 
   dt_iop_ashift_gui_data_t *g = (dt_iop_ashift_gui_data_t *)self->gui_data;
-  if(g->lines) free(g->lines);
-  if(g->buf) free(g->buf);
-  if(g->points) free(g->points);
-  if(g->points_idx) free(g->points_idx);
+  if(g->lines)
+  {
+    dt_free(g->lines);
+  }
+  if(g->buf)
+  {
+    dt_free(g->buf);
+  }
+  if(g->points)
+  {
+    dt_free(g->points);
+  }
+  if(g->points_idx)
+  {
+    dt_free(g->points_idx);
+  }
 
   IOP_GUI_FREE;
 }

@@ -25,6 +25,7 @@
 
 #ifdef HAVE_OPENCL
 
+#include "common/darktable.h"
 #include <stdlib.h>
 #ifndef __APPLE__
 #include <stdio.h>
@@ -72,7 +73,7 @@ dt_gmodule_t *dt_gmodule_open(const char *library)
     module->library = name;
   }
   else
-    g_free(name);
+    dt_free(name);
 
   return module;
 }

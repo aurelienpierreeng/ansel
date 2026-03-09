@@ -267,6 +267,7 @@ int dt_gui_hist_dialog_new(dt_history_copy_item_t *d, int32_t imgid, gboolean is
       }
     }
     g_list_free_full(items, dt_history_item_free);
+    items = NULL;
   }
   else
   {

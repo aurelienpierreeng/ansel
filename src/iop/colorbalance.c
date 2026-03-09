@@ -49,6 +49,7 @@ http://www.youtube.com/watch?v=JVoUgR6bhBc
  */
 
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 // our includes go first:
@@ -278,22 +279,22 @@ static void add_preset(dt_iop_module_so_t *self, const char *name,
     if(dt_develop_blend_legacy_params_from_so(self, bp, blendop_version, bp_new, dt_develop_blend_version(),
       blen) == 0)
     {
-      free(bp);
+      dt_free(bp);
       bp = bp_new;
       blen = sizeof(dt_develop_blend_params_t);
     }
     else
     {
-      free(bp);
-      free(bp_new);
+      dt_free(bp);
+      dt_free(bp_new);
       bp = NULL;
     }
   }
 
   if(p && bp)
     dt_gui_presets_add_with_blendop(name, self->op, version, p, len, bp, 1);
-  free(bp);
-  free(p);
+  dt_free(bp);
+  dt_free(p);
 }
 
 void init_presets(dt_iop_module_so_t *self)
@@ -1426,8 +1427,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_colorbalance);
   dt_opencl_free_kernel(gd->kernel_colorbalance_lgg);
   dt_opencl_free_kernel(gd->kernel_colorbalance_cdl);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,
@@ -1694,7 +1694,7 @@ static gboolean dt_iop_area_draw(GtkWidget *widget, cairo_t *cr, dt_iop_module_t
 
   cairo_set_source_surface(cr, source, 0.0, 0.0);
   cairo_paint(cr);
-  free(buf);
+  dt_free(buf);
 
   // draw border
   float line_width = 1;
@@ -1781,7 +1781,7 @@ static void _configure_slider_blocks(gpointer instance, dt_iop_module_t *self)
     gtk_container_add(GTK_CONTAINER(new_container), g->blocks[i]);
   }
 
-  g_free(layout);
+  dt_free(layout);
 
   for(int i=0; i<3; i++) g_object_unref(G_OBJECT(g->blocks[i]));
 

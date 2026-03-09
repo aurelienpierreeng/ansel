@@ -24,6 +24,7 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "common/darktable.h"
 #include "lua/styles.h"
 #include "common/debug.h"
 #include "common/styles.h"
@@ -42,8 +43,8 @@ static int style_gc(lua_State *L)
 {
   dt_style_t style;
   luaA_to(L, dt_style_t, &style, -1);
-  g_free(style.name);
-  g_free(style.description);
+  dt_free(style.name);
+  dt_free(style.description);
   return 0;
 }
 
@@ -74,6 +75,7 @@ static int style_duplicate(lua_State *L)
   GList *filter = style_item_table_to_id_list(L, 4);
   dt_styles_create_from_style(style.name, newname, description, filter, -1, NULL, TRUE, FALSE);
   g_list_free(filter);
+  filter = NULL;
   return 0;
 }
 
@@ -94,8 +96,9 @@ static int style_getnumber(lua_State *L)
   }
   items = g_list_remove(items, item);
   g_list_free_full(items, dt_style_item_free);
+  items = NULL;
   luaA_push(L, dt_style_item_t, item);
-  free(item);
+  dt_free(item);
   return 1;
 }
 
@@ -108,6 +111,7 @@ static int style_length(lua_State *L)
   GList *items = dt_styles_get_item_list(style.name, TRUE, -1);
   lua_pushinteger(L, g_list_length(items));
   g_list_free_full(items, dt_style_item_free);
+  items = NULL;
   return 1;
 }
 
@@ -164,10 +168,10 @@ static int style_item_gc(lua_State *L)
 {
   // FIXME: Can't we use dt_style_item_free() instead? Or may the pointer itself not be freed?
   dt_style_item_t *item = luaL_checkudata(L, -1, "dt_style_item_t");
-  g_free(item->name);
-  g_free(item->operation);
-  free(item->params);
-  free(item->blendop_params);
+  dt_free(item->name);
+  dt_free(item->operation);
+  dt_free(item->params);
+  dt_free(item->blendop_params);
   return 0;
 }
 
@@ -207,7 +211,7 @@ static int style_table_index(lua_State *L)
     const char *name = (const char *)sqlite3_column_text(stmt, 0);
     dt_style_t *style = dt_styles_get_by_name(name);
     luaA_push(L, dt_style_t, style);
-    free(style);
+    dt_free(style);
   }
   else
   {
@@ -245,11 +249,12 @@ int dt_lua_style_create_from_image(lua_State *L)
     if(!strcmp(data->name, newname))
     {
       luaA_push(L, dt_style_t, data);
-      g_free(data);
+      dt_free(data);
       style_list = g_list_delete_link(style_list, style_list);
     }
   }
   g_list_free_full(style_list, dt_style_free); // deal with what's left
+  style_list = NULL;
   return 1;
 }
 

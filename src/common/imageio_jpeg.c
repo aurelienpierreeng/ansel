@@ -413,7 +413,7 @@ static boolean marker_is_icc(jpeg_saved_marker_ptr marker)
  * returned data, and *icc_data_len is set to its length.
  *
  * IMPORTANT: the data at **icc_data_ptr has been allocated with malloc()
- * and must be freed by the caller with free() when the caller no longer
+ * and must be freed by the caller with g_free() when the caller no longer
  * needs it.  (Alternatively, we could write this routine to use the
  * IJG library's memory allocator, so that the data would be freed implicitly
  * at jpeg_finish_decompress() time.  But it seems likely that many apps

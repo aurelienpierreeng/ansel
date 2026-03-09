@@ -41,6 +41,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include <assert.h>
@@ -416,8 +417,7 @@ void cleanup_global(dt_iop_module_so_t *self)
 {
   const dt_iop_flip_global_data_t *gd = (dt_iop_flip_global_data_t *)self->data;
   dt_opencl_free_kernel(gd->kernel_flip);
-  free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 void commit_params(struct dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_t *pipe,

@@ -46,6 +46,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "develop/blend.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
@@ -770,7 +771,7 @@ static int _blendop_blendif_disp_alternative_worker(GtkWidget *widget, dt_iop_mo
                                 (in_out == 0) ? _("input") : _("output"),
                                 (mode == 1) ? label : "");
   gtk_label_set_text(data->filter[in_out].head, text);
-  g_free(text);
+  dt_free(text);
 
   return (mode == 1) ? 1 : 0;
 }
@@ -882,7 +883,7 @@ static void _update_gradient_slider_pickers(GtkWidget *callback_dummy, dt_iop_mo
           CLAMP(picker_max[data->tab], 0.0f, 1.0f));
       gtk_label_set_text(data->filter[in_out].picker_label, text);
 
-      g_free(text);
+      dt_free(text);
     }
     else
     {
@@ -1394,11 +1395,11 @@ static dt_masks_form_t *_blendop_masks_group_create(dt_iop_module_t *module)
   gchar *module_label = g_strdup(module->multi_name);
   if(g_strcmp0(module_label, "") == 0)
   {
-    g_free(module_label);
+    dt_free(module_label);
     module_label = dt_history_item_get_name(module);
   }
   g_snprintf(group_form->name, sizeof(group_form->name), "%s %s", _("Mask"), module_label);
-  g_free(module_label);
+  dt_free(module_label);
 
   _blendop_masks_check_id(group_form);
   dt_masks_append_form(darktable.develop, group_form);
@@ -1838,7 +1839,7 @@ static gboolean _blendop_masks_all_button_pressed(GtkWidget *treeview, GdkEventB
           // Toggle the checkbox value
           gchar *path_string = gtk_tree_path_to_string(path);
           _blendop_masks_all_toggled(NULL, path_string, module);
-          g_free(path_string);
+          dt_free(path_string);
           gtk_tree_path_free(path);
           return TRUE; // Block default selection behavior
         }
@@ -3488,12 +3489,11 @@ void dt_iop_gui_cleanup_blending(dt_iop_module_t *module)
   if(bd->timeout_handle)
     g_source_remove(bd->timeout_handle);
 
-  free(bd->masks_combo_ids);
+  dt_free(bd->masks_combo_ids);
   dt_pthread_mutex_unlock(&bd->lock);
   dt_pthread_mutex_destroy(&bd->lock);
 
-  g_free(module->blend_data);
-  module->blend_data = NULL;
+  dt_free(module->blend_data);
 }
 
 
@@ -3562,8 +3562,8 @@ static void _blendop_update_top_enable_label(dt_iop_module_t *module)
     gtk_label_set_line_wrap(GTK_LABEL(child), TRUE);
     gtk_label_set_xalign(GTK_LABEL(child), 0.0f);
   }
-  g_free(label);
-  g_free(clean_name);
+  dt_free(label);
+  dt_free(clean_name);
 }
 
 static GtkWidget *_blendop_create_notebook_page(GtkWidget *notebook, const gchar *label, GtkWidget **content)
@@ -3961,8 +3961,7 @@ void dt_iop_gui_cleanup_blending_body(dt_iop_module_t *module)
     g_source_remove(bd->timeout_handle);
     bd->timeout_handle = 0;
   }
-  free(bd->masks_combo_ids);
-  bd->masks_combo_ids = NULL;
+  dt_free(bd->masks_combo_ids);
   dt_pthread_mutex_unlock(&bd->lock);
 
   if(bd->masks_ic_inverse) g_object_unref(bd->masks_ic_inverse);

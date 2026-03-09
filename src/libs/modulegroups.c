@@ -523,8 +523,7 @@ void gui_cleanup(dt_lib_module_t *self)
     g_modulegroups_data = NULL;
   }
 
-  g_free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 static gboolean _is_module_in_history(const dt_iop_module_t *module)

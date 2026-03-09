@@ -442,8 +442,8 @@ ERROR_EXIT:
   dt_iop_image_copy_by_size(o, i, roi_out->width, roi_out->height, ch);
 
 FINISH_PROCESS:
-  free(xy_small);
-  free(xy_avg);
+  dt_free(xy_small);
+  dt_free(xy_avg);
   return err;
 }
 

@@ -85,8 +85,8 @@ static gboolean on_match_select(GtkEntryCompletion *widget, GtkTreeModel *model,
   gtk_editable_insert_text(e, addtext, -1, &p);
   gtk_editable_set_position(e, p);
   g_value_unset(&value);
-  g_free(addtext);
-  g_free(s);
+  dt_free(addtext);
+  dt_free(s);
   return TRUE;
 }
 
@@ -122,10 +122,10 @@ static gboolean on_match_func(GtkEntryCompletion *completion, const gchar *key, 
     {
       var_start = p + trigger_char_len;
       var_present = TRUE;
-      g_free(ss);
+      dt_free(ss);
       break;
     }
-    g_free(ss);
+    dt_free(ss);
   }
 
   if(var_present)
@@ -148,12 +148,12 @@ static gboolean on_match_func(GtkEntryCompletion *completion, const gchar *key, 
 
         if(!g_ascii_strncasecmp(varname, case_normalized_string, strlen(varname))) ret = TRUE;
 
-        g_free(case_normalized_string);
+        dt_free(case_normalized_string);
       }
-      g_free(normalized_string);
+      dt_free(normalized_string);
     }
-    g_free(varname);
-    g_free(item);
+    dt_free(varname);
+    dt_free(item);
   }
 
   return ret;
@@ -306,7 +306,7 @@ gchar *dt_gtkentry_build_completion_tooltip_text(const gchar *header,
 
   gchar *ret = g_strjoinv("\n", (gchar **)lines);
 
-  free(lines);
+  dt_free(lines);
 
   return ret;
 }

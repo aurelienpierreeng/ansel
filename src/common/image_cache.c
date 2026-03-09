@@ -320,9 +320,10 @@ void dt_image_cache_allocate(void *data, dt_cache_entry_t *entry)
 void dt_image_cache_deallocate(void *data, dt_cache_entry_t *entry)
 {
   dt_image_t *img = (dt_image_t *)entry->data;
-  g_free(img->profile);
-  g_list_free_full(img->dng_gain_maps, g_free);
-  g_free(img);
+  dt_free(img->profile);
+  g_list_free_full(img->dng_gain_maps, dt_free_gpointer);
+  img->dng_gain_maps = NULL;
+  dt_free(img);
 }
 
 void dt_image_cache_init(dt_image_cache_t *cache)
@@ -532,7 +533,7 @@ void dt_image_cache_write_release(dt_image_cache_t *cache, dt_image_t *img, dt_i
     gchar *dir = g_path_get_dirname(img->fullpath);
     if(dir && dir[0] && strcmp(dir, "."))
       g_strlcpy(folder, dir, sizeof(folder));
-    g_free(dir);
+    dt_free(dir);
   }
 
   if(img->filename[0] && folder[0])

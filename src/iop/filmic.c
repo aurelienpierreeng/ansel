@@ -1342,8 +1342,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
   // compute the curves and their LUT
   dt_iop_filmic_nodes_t *nodes_data = (dt_iop_filmic_nodes_t *)malloc(sizeof(dt_iop_filmic_nodes_t));
   compute_curve_lut(p, d->table, d->table_temp, 0x10000, d, nodes_data);
-  free(nodes_data);
-  nodes_data = NULL;
+  dt_free(nodes_data);
 
   // Build a window function based on the log.
   // This will be used to selectively desaturate the non-linear parts
@@ -1459,18 +1458,15 @@ void init_global(dt_iop_module_so_t *module)
 
 void cleanup(dt_iop_module_t *module)
 {
-  free(module->params);
-  module->params = NULL;
-  free(module->default_params);
-  module->default_params = NULL;
+  dt_free(module->params);
+  dt_free(module->default_params);
 }
 
 void cleanup_global(dt_iop_module_so_t *module)
 {
   dt_iop_filmic_global_data_t *gd = (dt_iop_filmic_global_data_t *)module->data;
   dt_opencl_free_kernel(gd->kernel_filmic);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 void gui_reset(dt_iop_module_t *self)
@@ -1559,8 +1555,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
     cairo_fill(cr);
     cairo_stroke(cr);
   }
-  free(nodes_data);
-  nodes_data = NULL;
+  dt_free(nodes_data);
 
   // draw curve
   cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.));

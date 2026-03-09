@@ -25,6 +25,7 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "common/darktable.h"
 #include <lcms2.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,11 +50,12 @@ typedef enum parser_state_t {
 void free_chart(chart_t *chart)
 {
   if(!chart) return;
-  g_list_free_full(chart->f_list, free);
+  g_list_free_full(chart->f_list, dt_free_gpointer);
+  chart->f_list = NULL;
   if(chart->d_table) g_hash_table_unref(chart->d_table);
   if(chart->box_table) g_hash_table_unref(chart->box_table);
   if(chart->patch_sets) g_hash_table_unref(chart->patch_sets);
-  free(chart);
+  dt_free(chart);
 }
 
 static char *parse_string(char **c)
@@ -134,7 +136,7 @@ void checker_set_color(box_t *box, dt_colorspaces_color_profile_type_t color_spa
 
 static void free_labels_list(gpointer data)
 {
-  g_list_free_full((GList *)data, g_free);
+  g_list_free_full((GList *)data, dt_free_gpointer);
 }
 
 // In some environments ERROR is already defined, ie: WIN32
@@ -169,9 +171,9 @@ chart_t *parse_cht(const char *filename)
 
   // data gathered from the CHT file
   unsigned int n_boxes;
-  result->d_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, free);
-  result->box_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, free);
-  result->patch_sets = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, free_labels_list);
+  result->d_table = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
+  result->box_table = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
+  result->patch_sets = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, free_labels_list);
 
   float x_min = FLT_MAX, x_max = FLT_MIN, y_min = FLT_MAX, y_max = FLT_MIN;
 
@@ -336,7 +338,7 @@ chart_t *parse_cht(const char *filename)
               }
 
               if(!first_label) first_label = label;
-              g_free(last_label);
+              dt_free(last_label);
               last_label = label;
 
               // store it
@@ -357,8 +359,8 @@ chart_t *parse_cht(const char *filename)
               x += xi;
               if(!strinc(x_label, x_label_size))
               {
-                free(y_label);
-                free(x_label);
+                dt_free(y_label);
+                dt_free(x_label);
                 ERROR;
               }
             }
@@ -369,8 +371,8 @@ chart_t *parse_cht(const char *filename)
             y_steps++;
             if(!strinc(y_label, y_label_size))
             {
-              free(y_label);
-              free(x_label);
+              dt_free(y_label);
+              dt_free(x_label);
               ERROR;
             }
           }
@@ -378,9 +380,9 @@ chart_t *parse_cht(const char *filename)
           if((kl == 'X' || kl == 'Y') && first_label && last_label)
             g_hash_table_insert(result->patch_sets, g_strdup_printf("%s .. %s", first_label, last_label), labels);
 
-          g_free(last_label);
-          free(y_label);
-          free(x_label);
+          dt_free(last_label);
+          dt_free(y_label);
+          dt_free(x_label);
         }
         else
           ERROR;

@@ -257,7 +257,7 @@ int write_image(dt_imageio_module_data_t *webp, const char *filename, const void
 out:
   WebPPictureFree(&pic);
   WebPMemoryWriterClear(&writer); // no need to WebPDataClear(&bitstream) as well
-  g_free(buf); // instead of WebPDataClear(&icc_profile)
+  dt_free(buf); // instead of WebPDataClear(&icc_profile)
   WebPDataClear(&assembled_data);
   WebPMuxDelete(mux);
   fclose(out);
@@ -328,7 +328,7 @@ int set_params(dt_imageio_module_format_t *self, const void *params, const int s
 
 void free_params(dt_imageio_module_format_t *self, dt_imageio_module_data_t *params)
 {
-  free(params);
+  dt_free(params);
 }
 
 int bpp(dt_imageio_module_data_t *p)
@@ -434,7 +434,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
 void gui_cleanup(dt_imageio_module_format_t *self)
 {
-  free(self->gui_data);
+  dt_free(self->gui_data);
 }
 
 void gui_reset(dt_imageio_module_format_t *self)

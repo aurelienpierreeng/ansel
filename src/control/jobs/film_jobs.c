@@ -71,9 +71,9 @@ static void dt_film_import1_cleanup(void *p)
   dt_film_import1_t *params = p;
 
   dt_film_cleanup(params->film);
-  free(params->film);
+  dt_free(params->film);
 
-  free(params);
+  dt_free(params);
 }
 
 dt_job_t *dt_film_import1_create(dt_film_t *film)
@@ -109,7 +109,7 @@ static int32_t _pathlist_import_run(dt_job_t *job)
 static void _pathlist_import_cleanup(void *p)
 {
   dt_film_import1_t *params = p;
-  free(params);
+  dt_free(params);
 }
 
 dt_job_t *dt_pathlist_import_create(int argc, char *argv[])
@@ -150,11 +150,11 @@ dt_job_t *dt_pathlist_import_create(int argc, char *argv[])
           if(!g_file_test(fullname, G_FILE_TEST_IS_DIR) && dt_supported_image(fname))
             params->imagelist = g_list_prepend(params->imagelist, fullname);
           else
-            g_free(fullname);
+            dt_free(fullname);
         }
       }
       g_dir_close(cdir);
-      g_free(path);
+      dt_free(path);
     }
   }
   params->imagelist = g_list_reverse(params->imagelist);
@@ -188,13 +188,13 @@ static GList *_film_recursive_get_files(const gchar *path, gboolean recursive, G
     if(recursive && g_file_test(fullname, G_FILE_TEST_IS_DIR))
     {
       *result = _film_recursive_get_files(fullname, recursive, result);
-      g_free(fullname);
+      dt_free(fullname);
     }
     /* or test if we found a supported image format to import */
     else if(!g_file_test(fullname, G_FILE_TEST_IS_DIR) && dt_supported_image(filename))
       *result = g_list_prepend(*result, fullname);
     else
-      g_free(fullname);
+      dt_free(fullname);
 
   } while(TRUE);
 
@@ -222,8 +222,8 @@ static void _apply_filmroll_gpx(dt_film_t *cfr)
         gchar *gpx_file = g_build_path(G_DIR_SEPARATOR_S, cfr->dirname, dfn, NULL);
         gchar *tz = dt_conf_get_string("plugins/lighttable/geotagging/tz");
         dt_control_gpx_apply(gpx_file, cfr->id, tz, NULL);
-        g_free(gpx_file);
-        g_free(tz);
+        dt_free(gpx_file);
+        dt_free(tz);
       }
     }
   }
@@ -237,8 +237,8 @@ static int _film_filename_cmp(gchar *a, gchar *b)
   gchar *a_basename = g_path_get_basename(a);
   gchar *b_basename = g_path_get_basename(b);
   const int ret = g_strcmp0(a_basename, b_basename);
-  g_free(a_basename);
-  g_free(b_basename);
+  dt_free(a_basename);
+  dt_free(b_basename);
   return ret;
 }
 
@@ -276,7 +276,7 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
   lua_pushvalue(L, -1);
   dt_lua_event_trigger(L, "pre-import", 1);
   {
-    g_list_free_full(images, g_free);
+    g_list_free_full(images, dt_free_gpointer);
     // recreate list of images
     images = NULL;
     for(int i = 1; i < image_count; i++)
@@ -338,8 +338,7 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
           dt_film_remove(cfr->id);
         }
         dt_film_cleanup(cfr);
-        free(cfr);
-        cfr = NULL;
+        dt_free(cfr);
       }
 
       /* initialize and create a new film to import to */
@@ -348,7 +347,7 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
       dt_film_new(cfr, cdn);
     }
 
-    g_free(cdn);
+    dt_free(cdn);
 
     /* import image */
     imgid = dt_image_import(cfr->id, (const gchar *)image->data, FALSE);
@@ -373,7 +372,8 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
     }
   }
 
-  g_list_free_full(images, g_free);
+  g_list_free_full(images, dt_free_gpointer);
+  images = NULL;
   all_imgs = g_list_reverse(all_imgs);
 
   // only redraw at the end, to not spam the cpu with exposure events
@@ -390,7 +390,7 @@ static void _film_import1(dt_job_t *job, dt_film_t *film, GList *images)
   if(cfr && cfr != film)
   {
     dt_film_cleanup(cfr);
-    free(cfr);
+    dt_free(cfr);
   }
 }
 

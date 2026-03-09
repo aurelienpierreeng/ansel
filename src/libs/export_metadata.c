@@ -80,7 +80,7 @@ static gboolean _find_metadata_iter_per_text(GtkTreeModel *model, GtkTreeIter *i
   {
     gtk_tree_model_get(model, &it, col, &name, -1);
     const gboolean found = g_strcmp0(text, name) == 0;
-    g_free(name);
+    dt_free(name);
     if(found)
     {
       if (iter) *iter = it;
@@ -109,7 +109,7 @@ static void _add_selected_metadata(GtkTreeView *view, dt_lib_export_metadata_t *
       selection = gtk_tree_view_get_selection(d->view);
       gtk_tree_selection_select_iter(selection, &iter);
     }
-    g_free(tagname);
+    dt_free(tagname);
   }
 }
 
@@ -150,11 +150,11 @@ static gboolean _set_matching_tag_visibility(GtkTreeModel *model, GtkTreePath *p
     gchar *haystack = g_utf8_strdown(tagname, -1);
     gchar *needle = g_utf8_strdown(d->sel_entry_text, -1);
     visible = (g_strrstr(haystack, needle) != NULL);
-    g_free(haystack);
-    g_free(needle);
+    dt_free(haystack);
+    dt_free(needle);
   }
   gtk_list_store_set(GTK_LIST_STORE(model), iter, DT_LIB_EXPORT_METADATA_COL_VISIBLE, visible, -1);
-  g_free(tagname);
+  dt_free(tagname);
   return FALSE;
 }
 
@@ -413,7 +413,7 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
     char *flags_hexa = list->data;
     flags = strtol(flags_hexa, NULL, 16);
     list = g_list_remove(list, flags_hexa);
-    g_free(flags_hexa);
+    dt_free(flags_hexa);
     if (list)
     {
       for (GList *tags = list; tags; tags = g_list_next(tags))
@@ -429,7 +429,8 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
       }
     }
   }
-  g_list_free_full(list, g_free);
+  g_list_free_full(list, dt_free_gpointer);
+  list = NULL;
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(exiftag), flags & DT_META_EXIF);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dtmetadata), flags & DT_META_METADATA);
@@ -488,15 +489,15 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
           DT_LIB_EXPORT_METADATA_COL_FORMULA, &formula, -1);
       // metadata presets are stored into a single string with '\1' as a separator
       newlist = dt_util_dstrcat(newlist,"\1%s\1%s", tagname, formula);
-      g_free(tagname);
-      g_free(formula);
+      dt_free(tagname);
+      dt_free(formula);
       valid = gtk_tree_model_iter_next (GTK_TREE_MODEL(d->liststore), &iter);
     }
-    g_free(metadata_presets);
+    dt_free(metadata_presets);
     dt_lib_export_metadata_set_conf(newlist);
   }
   gtk_widget_destroy(dialog);
-  free(d);
+  dt_free(d);
   return newlist;
 }
 

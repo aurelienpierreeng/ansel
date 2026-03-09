@@ -41,6 +41,7 @@
 */
 
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -1787,7 +1788,7 @@ int extract_color_checker(const float *const restrict in, float *const restrict 
   g->profile_ready = TRUE;
 
   // Update GUI label
-  g_free(g->delta_E_label_text);
+  dt_free(g->delta_E_label_text);
   g->delta_E_label_text
       = g_strdup_printf(_("\n<b>Profile quality report: %s</b>\n"
                           "input \316\224E: \tavg. %.2f ; \tmax. %.2f\n"
@@ -1841,7 +1842,7 @@ int validate_color_checker(const float *const restrict in,
     diagnostic = _("bad");
 
   // Update GUI label
-  g_free(g->delta_E_label_text);
+  dt_free(g->delta_E_label_text);
   g->delta_E_label_text = g_strdup_printf(_("\n<b>Profile quality report: %s</b>\n"
                                             "output \316\224E: \tavg. %.2f; \tmax. %.2f\n\n"
                                             "<b>Normalization values</b>\n"
@@ -2167,8 +2168,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_channelmixer_rgb_bradford_linear);
   dt_opencl_free_kernel(gd->kernel_channelmixer_rgb_xyz);
   dt_opencl_free_kernel(gd->kernel_channelmixer_rgb_rgb);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 #endif
 
@@ -3330,7 +3330,7 @@ static void update_approx_cct(dt_iop_module_t *self)
                                   "cannot be computed at all so you need to use a custom illuminant."));
   }
   gtk_label_set_text(GTK_LABEL(g->approx_cct), str);
-  g_free(str);
+  dt_free(str);
 }
 
 
@@ -3538,8 +3538,7 @@ void reload_defaults(dt_iop_module_t *module)
     dt_bauhaus_combobox_set_default(g->adaptation, d->adaptation);
     if(g->delta_E_label_text)
     {
-      g_free(g->delta_E_label_text);
-      g->delta_E_label_text = NULL;
+      dt_free(g->delta_E_label_text);
     }
 
     if(dt_image_is_matrix_correction_supported(img) && !dt_image_is_monochrome(img))
@@ -4269,7 +4268,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
     g->delta_E_in = NULL;
   }
 
-  g_free(g->delta_E_label_text);
+  dt_free(g->delta_E_label_text);
 
   IOP_GUI_FREE;
 }

@@ -65,6 +65,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include <assert.h>
@@ -824,8 +825,7 @@ void init_global(dt_iop_module_so_t *module)
 
 void cleanup_global(dt_iop_module_so_t *module)
 {
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 static void logbase_callback(GtkWidget *slider, dt_iop_module_t *self)

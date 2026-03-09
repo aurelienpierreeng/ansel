@@ -130,7 +130,7 @@ error:
 
   if(ctx) g_markup_parse_context_free(ctx);
 
-  g_free(gpx);
+  dt_free(gpx);
 
   if(gpxmf) g_mapped_file_unref(gpxmf);
 
@@ -139,24 +139,32 @@ error:
 
 void _track_seg_free(dt_gpx_track_segment_t *trkseg)
 {
-  g_free(trkseg->name);
-  g_free(trkseg);
+  dt_free(trkseg->name);
+  dt_free(trkseg);
 }
 
 void _track_pts_free(dt_gpx_track_point_t *trkpt)
 {
   g_date_time_unref(trkpt->time);
-  g_free(trkpt);
+  dt_free(trkpt);
 }
 
 void dt_gpx_destroy(struct dt_gpx_t *gpx)
 {
   g_assert(gpx != NULL);
 
-  if(gpx->trkpts) g_list_free_full(gpx->trkpts, (GDestroyNotify)_track_pts_free);
-  if(gpx->trksegs) g_list_free_full(gpx->trksegs, (GDestroyNotify)_track_seg_free);
+  if(gpx->trkpts)
+  {
+    g_list_free_full(gpx->trkpts, (GDestroyNotify)_track_pts_free);
+    gpx->trkpts = NULL;
+  }
+  if(gpx->trksegs)
+  {
+    g_list_free_full(gpx->trksegs, (GDestroyNotify)_track_seg_free);
+    gpx->trksegs = NULL;
+  }
 
-  g_free(gpx);
+  dt_free(gpx);
 }
 
 gboolean dt_gpx_get_location(struct dt_gpx_t *gpx, GDateTime *timestamp, dt_image_geoloc_t *geoloc)
@@ -285,7 +293,7 @@ void _gpx_parser_start_element(GMarkupParseContext *ctx, const gchar *element_na
     if(gpx->current_track_point)
     {
       fprintf(stderr, "broken GPX file, new trkpt element before the previous ended.\n");
-      g_free(gpx->current_track_point);
+      dt_free(gpx->current_track_point);
     }
 
     const gchar **attribute_name = attribute_names;
@@ -377,9 +385,8 @@ void _gpx_parser_end_element(GMarkupParseContext *context, const gchar *element_
       if(!gpx->invalid_track_point)
         gpx->trkpts = g_list_prepend(gpx->trkpts, gpx->current_track_point);
       else
-        g_free(gpx->current_track_point);
+        dt_free(gpx->current_track_point);
 
-      gpx->current_track_point = NULL;
     }
     else if(strcmp(element_name, "trkseg") == 0)
     {
@@ -398,7 +405,10 @@ void _gpx_parser_text(GMarkupParseContext *context, const gchar *text, gsize tex
 
   if(gpx->current_parser_element == GPX_PARSER_ELEMENT_NAME)
   {
-    if(gpx->seg_name) g_free(gpx->seg_name);
+    if(gpx->seg_name)
+    {
+      dt_free(gpx->seg_name);
+    }
     gpx->seg_name =  g_strdup(text);
   }
 

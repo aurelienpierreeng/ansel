@@ -19,6 +19,7 @@
    You should have received a copy of the GNU General Public License
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include "common/darktable.h"
 #include "lua/types.h"
 #include "lua/widget/common.h"
 
@@ -94,7 +95,7 @@ static int tostring_member(lua_State *L)
   const gchar *text = gtk_label_get_text(GTK_LABEL(widget->widget));
   gchar *res = g_strdup_printf("%s (\"%s\")", G_OBJECT_TYPE_NAME(widget->widget), text ? text : "");
   lua_pushstring(L, res);
-  g_free(res);
+  dt_free(res);
   return 1;
 }
 

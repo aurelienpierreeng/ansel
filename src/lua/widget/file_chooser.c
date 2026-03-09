@@ -20,6 +20,7 @@
    You should have received a copy of the GNU General Public License
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include "common/darktable.h"
 #include "gui/gtk.h"
 #include "lua/types.h"
 #include "lua/widget/common.h"
@@ -79,7 +80,7 @@ static int value_member(lua_State *L)
   }
   gchar *filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(file_chooser_button->widget));
   lua_pushstring(L,filename);
-  g_free(filename);
+  dt_free(filename);
   return 1;
 }
 
@@ -90,7 +91,7 @@ static int tostring_member(lua_State *L)
   const gchar *text = gtk_file_chooser_button_get_title(GTK_FILE_CHOOSER_BUTTON(widget->widget));
   gchar *res = g_strdup_printf("%s (\"%s\")", G_OBJECT_TYPE_NAME(widget->widget), text ? text : "");
   lua_pushstring(L, res);
-  g_free(res);
+  dt_free(res);
   return 1;
 }
 

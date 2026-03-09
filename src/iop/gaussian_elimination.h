@@ -106,7 +106,7 @@ static int gauss_solve(double *A, double *b, int n)
   int *p = malloc(n * sizeof(*p));
   int err_code = 1;
   if((err_code = gauss_make_triangular(A, p, n))) gauss_solve_triangular(A, p, b, n);
-  free(p);
+  dt_free(p);
   return err_code;
 }
 

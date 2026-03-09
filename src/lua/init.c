@@ -121,14 +121,14 @@ static int run_early_script(lua_State* L)
   dt_loc_get_datadir(basedir, sizeof(basedir));
   char *luarc = g_build_filename(basedir, "luarc", NULL);
   dt_lua_check_print_error(L, luaL_dofile(L, luarc));
-  g_free(luarc);
+  dt_free(luarc);
   if(darktable.gui != NULL)
   {
     // run user init script
     dt_loc_get_user_config_dir(basedir, sizeof(basedir));
     luarc = g_build_filename(basedir, "luarc", NULL);
     dt_lua_check_print_error(L, luaL_dofile(L, luarc));
-    g_free(luarc);
+    dt_free(luarc);
   }
   if(!lua_isnil(L,1)){
     const char *lua_command = lua_tostring(L, 1);
@@ -202,7 +202,7 @@ void dt_lua_init(lua_State *L, const char *lua_command)
    gtk takes argv and modifies it to remove gtk specific parts
 
    so we need to copy (strdup) parameters from lua
-   but because gtk might do crazy stuff, we keep a copy of our original argv to be able to free() it
+   but because gtk might do crazy stuff, we keep a copy of our original argv to be able to g_free() it
    */
 static int load_from_lua(lua_State *L)
 {
@@ -231,10 +231,10 @@ static int load_from_lua(lua_State *L)
   }
   for(int i = 0; i < argc; i++)
   {
-    free(argv_copy[i]);
+    dt_free(argv_copy[i]);
   }
-  free(argv_copy);
-  free(argv);
+  dt_free(argv_copy);
+  dt_free(argv);
   dt_lua_push_darktable_lib(L);
   return 1;
 }

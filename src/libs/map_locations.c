@@ -24,6 +24,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "common/collection.h"
 #include "common/debug.h"
 #include "common/map_locations.h"
@@ -216,9 +217,9 @@ static void _locations_tree_update(dt_lib_module_t *self, const guint locid)
                             -1);
           common_length++;
           parent = iter;
-          g_free(pth2);
+          dt_free(pth2);
         }
-        g_free(pth);
+        dt_free(pth);
 
         // remember things for the next round
         if(last_tokens) g_strfreev(last_tokens);
@@ -294,9 +295,9 @@ static void _tree_name_show(GtkTreeViewColumn *col, GtkCellRenderer *renderer,
     coltext = g_markup_printf_escaped(locid ? "%s (%d)" : "<i>%s</i> (%d)", name, count);
   }
   g_object_set(renderer, "markup", coltext, NULL);
-  g_free(coltext);
-  g_free(name);
-  g_free(path);
+  dt_free(coltext);
+  dt_free(name);
+  dt_free(path);
 }
 
 static void _new_button_clicked(GtkButton *button, dt_lib_module_t *self)
@@ -319,7 +320,7 @@ static void _new_button_clicked(GtkButton *button, dt_lib_module_t *self)
   char *new_name = g_strdup(name);
   while(dt_map_location_name_exists(new_name))
   {
-    g_free(new_name);
+    dt_free(new_name);
     new_name = g_strdup_printf("%s %d", name, i);
     i++;
   }
@@ -332,9 +333,9 @@ static void _new_button_clicked(GtkButton *button, dt_lib_module_t *self)
                      DT_MAP_LOCATION_COL_PATH, new_name,
                      DT_MAP_LOCATION_COL_COUNT, 0,
                     -1);
-  g_free(new_name);
-  g_free(name);
-  g_free(path);
+  dt_free(new_name);
+  dt_free(name);
+  dt_free(path);
 
   // set the new record editable
   g_object_set(G_OBJECT(d->renderer), "editable", TRUE, NULL);
@@ -382,7 +383,7 @@ static void _delete_tree_path(GtkTreeModel *model, GtkTreeIter *iter, gboolean r
     valid = gtk_tree_model_iter_next(model, &parent);
     char *path = NULL;
     gtk_tree_model_get(model, &tobedel, DT_MAP_LOCATION_COL_PATH, &path, -1);
-    g_free(path);
+    dt_free(path);
     gtk_tree_store_remove(GTK_TREE_STORE(model), &tobedel);
   } while (!root  && valid);
 }
@@ -410,10 +411,10 @@ static gboolean _update_tag_name_per_name(GtkTreeModel *model, GtkTreePath *path
       char *newpath = g_strconcat(newtagname, &tagname[strlen(oldtagname)] , NULL);
       gtk_tree_store_set(GTK_TREE_STORE(model), iter,
                          DT_MAP_LOCATION_COL_PATH, newpath, -1);
-      g_free(newpath);
+      dt_free(newpath);
     }
   }
-  g_free(tagname);
+  dt_free(tagname);
   return FALSE;
 }
 
@@ -451,6 +452,7 @@ static void _view_map_geotag_changed(gpointer instance, GList *imgs, const int n
       // update locations for that image
       dt_map_location_update_locations(GPOINTER_TO_INT(img->data), tags);
       g_list_free(tags);
+      tags = NULL;
     }
     // update count on the treeview
     GList *locs = dt_map_location_get_locations_by_path("", TRUE);
@@ -585,7 +587,7 @@ static void _name_editing_done(GtkCellEditable *editable, dt_lib_module_t *self)
             const char *new_part = &((dt_map_location_t *)tag->data)->tag[path_len + (reset ? 1 :0)];
             char *new_name = g_strconcat(new_path, new_part, NULL);
             dt_map_location_rename(((dt_map_location_t *)tag->data)->id, new_name);
-            g_free(new_name);
+            dt_free(new_name);
           }
           dt_map_location_free_result(&children);
 
@@ -619,7 +621,7 @@ static void _name_editing_done(GtkCellEditable *editable, dt_lib_module_t *self)
         dt_control_log(_("location name \'%s\' already exists"), new_path);
         canceled = TRUE;
       }
-      g_free(new_path);
+      dt_free(new_path);
     }
     if(canceled)
     {
@@ -630,8 +632,8 @@ static void _name_editing_done(GtkCellEditable *editable, dt_lib_module_t *self)
         gtk_tree_selection_unselect_all(selection);
       }
     }
-    g_free(path);
-    g_free(leave);
+    dt_free(path);
+    dt_free(leave);
   }
   g_object_set(G_OBJECT(d->renderer), "editable", FALSE, NULL);
   _display_buttons(self);
@@ -652,7 +654,7 @@ static void _name_start_editing(GtkCellRenderer *renderer, GtkCellEditable *edit
       char *name = NULL;
       gtk_tree_model_get(model, &iter, DT_MAP_LOCATION_COL_TAG, &name, -1);
       gtk_entry_set_text(GTK_ENTRY(editable), name);
-      g_free(name);
+      dt_free(name);
     }
     gtk_tree_path_free(new_path);
 
@@ -671,8 +673,8 @@ static gint _sort_position_names_func(GtkTreeModel *model,
   if(tag_a == NULL) tag_a = g_strdup("");
   if(tag_b == NULL) tag_b = g_strdup("");
   const gboolean sort = g_ascii_strncasecmp(tag_a, tag_b, -1);
-  g_free(tag_a);
-  g_free(tag_b);
+  dt_free(tag_a);
+  dt_free(tag_b);
   return sort;
 }
 
@@ -749,7 +751,7 @@ static void _show_location(dt_lib_module_t *self)
     {
       dt_map_location_data_t *p = dt_map_location_get_data(locid);
       dt_view_map_add_location(darktable.view_manager, p, locid);
-      g_free(p);
+      dt_free(p);
     }
     else
     {
@@ -773,8 +775,8 @@ static gboolean _set_location_collection(dt_lib_module_t *self)
                                        DT_COLLECTION_PROP_GEOTAGGING,
                                        _("tagged"), name);
     dt_collection_deserialize(collection);
-    g_free(collection);
-    g_free(name);
+    dt_free(collection);
+    dt_free(name);
     return TRUE;
   }
   return FALSE;
@@ -1026,8 +1028,7 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
-  free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_geotag_changed), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_view_map_location_changed), self);

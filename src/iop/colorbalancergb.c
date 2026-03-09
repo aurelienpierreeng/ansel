@@ -33,6 +33,7 @@
 */
 
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 // our includes go first:
@@ -1078,8 +1079,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 {
   dt_iop_colorbalancergb_global_data_t *gd = (dt_iop_colorbalancergb_global_data_t *)module->data;
   dt_opencl_free_kernel(gd->kernel_colorbalance_rgb);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 #endif
 
@@ -1356,6 +1356,7 @@ void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelp
 {
   dt_iop_colorbalancergb_data_t *d = (dt_iop_colorbalancergb_data_t *)(piece->data);
   dt_free_align(d->gamut_LUT);
+  d->gamut_LUT = NULL;
   dt_free_align(piece->data);
   piece->data = NULL;
 }
@@ -1593,7 +1594,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, gpointer 
 
   cairo_set_source_surface(cr, surface, 0, margin_top);
   cairo_paint(cr);
-  free(data);
+  dt_free(data);
   cairo_surface_destroy(surface);
 
   // set the graph as the origin of the coordinates

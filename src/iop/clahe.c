@@ -153,7 +153,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   float *const restrict dest_buf = dt_pixelpipe_cache_alloc_perthread_float(roi_out->width, &destbuf_size);
   if(dest_buf == NULL)
   {
-    free(luminance);
+    dt_free(luminance);
     return 1;
   }
 
@@ -281,7 +281,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   dt_pixelpipe_cache_free_align(dest_buf);
 
   // Cleanup
-  free(luminance);
+  dt_free(luminance);
 
 #undef BINS
   return 0;
@@ -349,10 +349,8 @@ void init(dt_iop_module_t *module)
 
 void cleanup(dt_iop_module_t *module)
 {
-  free(module->params);
-  module->params = NULL;
-  free(module->default_params);
-  module->default_params = NULL;
+  dt_free(module->params);
+  dt_free(module->default_params);
 }
 
 void gui_init(struct dt_iop_module_t *self)

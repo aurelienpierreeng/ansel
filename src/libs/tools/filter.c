@@ -219,7 +219,7 @@ static char *_decode_text_filter(const char *text)
     }
     else
       text2 = g_strconcat(start, (char *)p, "\"", NULL);
-    g_free(text1);
+    dt_free(text1);
     return text2;
   }
   else return text1;
@@ -253,7 +253,7 @@ static gboolean _text_entry_changed_wait(gpointer user_data)
         dt_collection_set_text_filter(darktable.collection, text);
         _lib_filter_update_query(self, DT_COLLECTION_PROP_SORT);
       }
-      else g_free(text);
+      else dt_free(text);
       _set_widget_dimmed(d->text, FALSE);
       return FALSE;
     }
@@ -582,7 +582,7 @@ void gui_init(dt_lib_module_t *self)
   dt_accels_new_widget_shortcut(darktable.gui->accels, d->refresh, "activate",
                                 darktable.gui->accels->lighttable_accels, path, GDK_KEY_r, GDK_CONTROL_MASK,
                                 FALSE);
-  g_free(path);
+  dt_free(path);
 
   // dumb empty flexible spacer at the end
   GtkWidget *spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
@@ -677,7 +677,7 @@ void gui_init(dt_lib_module_t *self)
   dt_accels_new_widget_shortcut(darktable.gui->accels, d->culling, "activate",
                                 darktable.gui->accels->lighttable_accels, path, GDK_KEY_s, GDK_CONTROL_MASK,
                                 FALSE);
-  g_free(path);
+  dt_free(path);
 
   // dumb empty flexible spacer at the end
   spacer = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
@@ -725,7 +725,7 @@ void gui_init(dt_lib_module_t *self)
   char *text = _decode_text_filter(dt_collection_get_text_filter(darktable.collection));
   gtk_entry_set_text(GTK_ENTRY(d->text), text);
   gtk_entry_set_placeholder_text(GTK_ENTRY(d->text), _("Search an image..."));
-  g_free(text);
+  dt_free(text);
   g_signal_connect(G_OBJECT(d->text), "search-changed", G_CALLBACK(_text_entry_changed), self);
   g_signal_connect(G_OBJECT(d->text), "stop-search", G_CALLBACK(_reset_text_entry), self);
   gtk_entry_set_width_chars(GTK_ENTRY(d->text), 24);
@@ -764,7 +764,7 @@ void gui_init(dt_lib_module_t *self)
   dt_accels_new_widget_shortcut(darktable.gui->accels, first_entry, "activate",
                                 darktable.gui->accels->lighttable_accels, path, 0, 0,
                                 FALSE);
-  g_free(path);
+  dt_free(path);
 
   GtkWidget *second_entry = gtk_menu_item_new_with_label(_("Deselect all filters"));
   gtk_menu_shell_append(GTK_MENU_SHELL(d->menu), second_entry);
@@ -773,7 +773,7 @@ void gui_init(dt_lib_module_t *self)
   dt_accels_new_widget_shortcut(darktable.gui->accels, second_entry, "activate",
                                 darktable.gui->accels->lighttable_accels, path, 0, 0,
                                 FALSE);
-  g_free(path);
+  dt_free(path);
 
   gtk_widget_show_all(d->menu);
 }
@@ -782,8 +782,7 @@ void gui_cleanup(dt_lib_module_t *self)
 {
   dt_collection_set_text_filter(darktable.collection, NULL);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_lib_filter_images_order_change), self);
-  g_free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 /* save the images order if the first collect filter is on tag*/

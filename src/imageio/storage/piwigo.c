@@ -167,23 +167,22 @@ static void _piwigo_ctx_destroy(_piwigo_api_context_t **ctx)
     curl_easy_cleanup((*ctx)->curl_ctx);
     if((*ctx)->cookie_file) g_unlink((*ctx)->cookie_file);
     g_object_unref((*ctx)->json_parser);
-    g_free((*ctx)->cookie_file);
-    g_free((*ctx)->url);
-    g_free((*ctx)->server);
-    g_free((*ctx)->username);
-    g_free((*ctx)->password);
-    g_free((*ctx)->pwg_token);
-    free(*ctx);
-    *ctx = NULL;
+    dt_free((*ctx)->cookie_file);
+    dt_free((*ctx)->url);
+    dt_free((*ctx)->server);
+    dt_free((*ctx)->username);
+    dt_free((*ctx)->password);
+    dt_free((*ctx)->pwg_token);
+    dt_free(*ctx);
   }
 }
 
 static void _piwigo_free_account(void *data)
 {
   _piwigo_account_t *account = (_piwigo_account_t *)data;
-  g_free(account->server);
-  g_free(account->username);
-  g_free(account->password);
+  dt_free(account->server);
+  dt_free(account->username);
+  dt_free(account->password);
 }
 
 static void _piwigo_load_account(dt_storage_piwigo_gui_data_t *ui)
@@ -221,7 +220,7 @@ static void _piwigo_load_account(dt_storage_piwigo_gui_data_t *ui)
         if(account->server && strlen(account->server)>0)
           ui->accounts = g_list_append(ui->accounts, account);
         else
-          free(account); // we didn't add account to list, freeing it
+          dt_free(account); // we didn't add account to list, freeing it
       }
 
       g_object_unref(parser);
@@ -406,6 +405,7 @@ static void _piwigo_api_authenticate(_piwigo_api_context_t *ctx)
   _piwigo_api_post(ctx, args, NULL, TRUE);
 
   g_list_free(args);
+  args = NULL;
 
   //  getStatus to retrieve the pwd_token
 
@@ -423,6 +423,7 @@ static void _piwigo_api_authenticate(_piwigo_api_context_t *ctx)
   }
 
   g_list_free(args);
+  args = NULL;
 }
 
 static void _piwigo_api_post(_piwigo_api_context_t *ctx, GList *args, char *filename, gboolean isauth)
@@ -573,7 +574,7 @@ static void _piwigo_album_changed(GtkComboBox *cb, gpointer data)
       }
     }
     dt_conf_set_string("storage/piwigo/last_album", v);
-    g_free(v);
+    dt_free(v);
   }
 }
 
@@ -629,6 +630,7 @@ static void _piwigo_refresh_albums(dt_storage_piwigo_gui_data_t *ui, const gchar
   _piwigo_api_post(ui->api, args, NULL, FALSE);
 
   g_list_free(args);
+  args = NULL;
 
   if(ui->api->response && !ui->api->error_occured)
   {
@@ -677,7 +679,7 @@ static void _piwigo_refresh_albums(dt_storage_piwigo_gui_data_t *ui, const gchar
   else
     dt_control_log(_("cannot refresh albums"));
 
-  g_free(to_select);
+  dt_free(to_select);
 
   gtk_widget_set_sensitive(GTK_WIDGET(ui->album_list), TRUE);
   gtk_widget_set_sensitive(GTK_WIDGET(ui->parent_album_list), TRUE);
@@ -703,6 +705,7 @@ static gboolean _piwigo_api_create_new_album(dt_storage_piwigo_params_t *p)
   _piwigo_api_post(p->api, args, NULL, FALSE);
 
   g_list_free(args);
+  args = NULL;
 
   if(!p->api->response || p->api->error_occured)
   {
@@ -750,6 +753,7 @@ static gboolean _piwigo_api_upload_photo(dt_storage_piwigo_params_t *p, gchar *f
   _piwigo_api_post(p->api, args, fname, FALSE);
 
   g_list_free(args);
+  args = NULL;
 
   return !p->api->error_occured;
 }
@@ -763,7 +767,7 @@ static void _piwigo_login_clicked(GtkButton *button, gpointer data)
   gchar *last_album = dt_conf_get_string("storage/piwigo/last_album");
   _piwigo_refresh_albums(ui, last_album);
   dt_conf_set_string("storage/piwigo/last_album", last_album);
-  g_free(last_album);
+  dt_free(last_album);
 }
 
 // Refresh button pressed...
@@ -774,7 +778,7 @@ static void _piwigo_refresh_clicked(GtkButton *button, gpointer data)
   gchar *last_album = dt_conf_get_string("storage/piwigo/last_album");
   _piwigo_refresh_albums(ui, NULL);
   dt_conf_set_string("storage/piwigo/last_album", last_album);
-  g_free(last_album);
+  dt_free(last_album);
 }
 
 const char *name(const struct dt_imageio_module_storage_t *self)
@@ -830,7 +834,7 @@ void gui_init(dt_imageio_module_storage_t *self)
   gtk_box_pack_start(GTK_BOX(hbox), dt_ui_label_new(_("server")), FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(hbox), GTK_WIDGET(ui->server_entry), TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), GTK_WIDGET(hbox), TRUE, TRUE, 0);
-  g_free(server);
+  dt_free(server);
 
   // login
   hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
@@ -929,7 +933,7 @@ void gui_init(dt_imageio_module_storage_t *self)
 
 void gui_cleanup(dt_imageio_module_storage_t *self)
 {
-  g_free(self->gui_data);
+  dt_free(self->gui_data);
 }
 
 void gui_reset(dt_imageio_module_storage_t *self)
@@ -952,6 +956,7 @@ static gboolean _finalize_store(gpointer user_data)
     _piwigo_api_post(g->api, args, NULL, FALSE);
 
     g_list_free(args);
+    args = NULL;
   }
 
   _piwigo_refresh_albums(g, dt_bauhaus_combobox_get_text(g->album_list));
@@ -1005,7 +1010,8 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
     if(title != NULL)
     {
       caption = g_strdup(title->data);
-      g_list_free_full(title, &g_free);
+      g_list_free_full(title, dt_free_gpointer);
+      title = NULL;
     }
     else
     {
@@ -1018,7 +1024,8 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
     if(desc != NULL)
     {
       description = g_strdup(desc->data);
-      g_list_free_full(desc, &g_free);
+      g_list_free_full(desc, dt_free_gpointer);
+      desc = NULL;
     }
     dt_image_cache_read_release(darktable.image_cache, img);
 
@@ -1026,7 +1033,8 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
     if(auth != NULL)
     {
       author = g_strdup(auth->data);
-      g_list_free_full(auth, &g_free);
+      g_list_free_full(auth, dt_free_gpointer);
+      auth = NULL;
     }
   }
   if(dt_imageio_export(imgid, fname, format, fdata, TRUE, TRUE, export_masks, icc_type, icc_filename,
@@ -1046,7 +1054,8 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
     {
       GList *tags_list = dt_tag_get_list_export(imgid, metadata->flags);
       p->tags = dt_util_glist_to_str(",", tags_list);
-      g_list_free_full(tags_list, g_free);
+      g_list_free_full(tags_list, dt_free_gpointer);
+      tags_list = NULL;
     }
 
     if(p->new_album)
@@ -1073,8 +1082,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
     }
     if(p->tags)
     {
-      g_free(p->tags);
-      p->tags = NULL;
+      dt_free(p->tags);
     }
   }
   dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
@@ -1083,9 +1091,9 @@ cleanup:
 
   // And remove from filesystem..
   g_unlink(fname);
-  g_free(caption);
-  g_free(description);
-  g_free(author);
+  dt_free(caption);
+  dt_free(description);
+  dt_free(author);
 
   if(!result)
   {
@@ -1206,7 +1214,7 @@ void *get_params(dt_imageio_module_storage_t *self)
   return p;
 
  cleanup:
-    g_free(p);
+    dt_free(p);
     return NULL;
 }
 
@@ -1234,10 +1242,10 @@ void free_params(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *pa
 
   if(p)
   {
-    g_free(p->album);
-    g_free(p->tags);
+    dt_free(p->album);
+    dt_free(p->tags);
     _piwigo_ctx_destroy(&p->api);
-    free(p);
+    dt_free(p);
   }
 }
 

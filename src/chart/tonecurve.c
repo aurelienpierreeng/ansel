@@ -20,6 +20,7 @@
  *    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "common/darktable.h"
 #include "chart/tonecurve.h"
 
 #include <assert.h>
@@ -40,8 +41,8 @@ void tonecurve_delete(tonecurve_t *c)
 {
   if(!c) return;
 
-  free(c->y);
-  free(c->x);
+  dt_free(c->y);
+  dt_free(c->x);
 }
 
 static inline double _tonecurve_apply(const double *x, const double *y, const int32_t num, const double L)

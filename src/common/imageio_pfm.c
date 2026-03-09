@@ -113,7 +113,7 @@ dt_imageio_retval_t dt_imageio_open_pfm(dt_image_t *img, const char *filename, d
            sizeof(float) * 4 * img->width);
     memcpy(buf + img->width * (img->height - 1 - j) * 4, line, sizeof(float) * 4 * img->width);
   }
-  free(line);
+  dt_free(line);
   fclose(f);
 
   img->buf_dsc.cst = IOP_CS_RGB;

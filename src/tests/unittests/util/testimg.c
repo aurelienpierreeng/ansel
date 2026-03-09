@@ -18,6 +18,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,8 +44,8 @@ Testimg *testimg_alloc(const int width, const int height)
 
 void testimg_free(Testimg *const ti)
 {
-  free(ti->pixels);
-  free(ti);
+  dt_free(ti->pixels);
+  dt_free(ti);
 }
 
 void testimg_print_chan(const Testimg *const ti, int chan_idx)
@@ -215,7 +216,7 @@ Testimg *testimg_gen_rgb_space(const int width)
     p[1] = tmp[y / width];
     p[2] = tmp[y % width];
   }
-  free(tmp);
+  dt_free(tmp);
   return ti;
 }
 
@@ -262,7 +263,7 @@ Testimg *testimg_gen_grey_max_dr_neg()
   float *p = get_pixel(ti, ti->width - 1, 0);
   p[0] = p[1] = p[2] = -0.0f;
 
-  testimg_free(tmp);
+  testimdt_free(tmp);
   return ti;
 }
 

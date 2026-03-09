@@ -391,8 +391,8 @@ static void _toast_log_lat_lon(const float lat, const float lon)
   gchar *latitude = dt_util_latitude_str(lat);
   gchar *longitude = dt_util_longitude_str(lon);
   dt_toast_log("%s %s",latitude, longitude);
-  g_free(latitude);
-  g_free(longitude);
+  dt_free(latitude);
+  dt_free(longitude);
 }
 
 static GdkPixbuf *_view_map_images_count(const int nb_images, const gboolean same_loc,
@@ -784,12 +784,11 @@ void cleanup(dt_view_t *self)
     osm_gps_map_image_remove_all(lib->map);
     if(lib->points)
     {
-      g_free(lib->points);
-      lib->points = NULL;
+      dt_free(lib->points);
     }
     if(lib->images)
     {
-      g_slist_free_full(lib->images, g_free);
+      g_slist_free_full(lib->images, dt_free_gpointer);
       lib->images = NULL;
     }
     if(lib->loc.main.id)
@@ -806,7 +805,7 @@ void cleanup(dt_view_t *self)
         // polygons are freed only from others list
         dt_map_location_free_polygons(d);
       }
-      g_list_free_full(lib->loc.others, g_free);
+      g_list_free_full(lib->loc.others, dt_free_gpointer);
       lib->loc.others = NULL;
     }
     // FIXME: it would be nice to cleanly destroy the object, but we are doing this inside expose() so
@@ -814,7 +813,7 @@ void cleanup(dt_view_t *self)
     //     g_object_unref(G_OBJECT(lib->map));
   }
   if(lib->main_query) sqlite3_finalize(lib->main_query);
-  free(self->data);
+  dt_free(self->data);
 }
 
 void configure(dt_view_t *self, int wd, int ht)
@@ -1042,8 +1041,9 @@ static void _view_map_delete_other_location(dt_map_t *lib, GList *other)
   _view_map_remove_location(lib, d);
   dt_map_location_free_polygons(d);
   lib->loc.others = g_list_remove_link(lib->loc.others, other);
-  g_free(other->data);
+  dt_free(other->data);
   g_list_free(other);
+  other = NULL;
 }
 
 static void _view_map_draw_main_location(dt_map_t *lib, dt_location_draw_t *ld)
@@ -1120,7 +1120,8 @@ static void _view_map_draw_other_locations(dt_map_t *lib, dt_map_box_t *bbox)
         d->location = _view_map_draw_location(lib, d, FALSE);
     }
     // free the new list
-    g_list_free_full(others, g_free);
+    g_list_free_full(others, dt_free_gpointer);
+    others = NULL;
   }
 }
 
@@ -1307,7 +1308,7 @@ static void _view_map_changed_callback_delayed(gpointer user_data)
         if(image->image)
           osm_gps_map_image_remove(lib->map, image->image);
       }
-      g_slist_free_full(lib->images, g_free);
+      g_slist_free_full(lib->images, dt_free_gpointer);
       lib->images = NULL;
     }
   }
@@ -1347,8 +1348,9 @@ static void _view_map_changed_callback_delayed(gpointer user_data)
     }
 
     if(lib->points)
-      g_free(lib->points);
-    lib->points = NULL;
+    {
+      dt_free(lib->points);
+    }
     lib->nb_points = img_count;
     if(img_count > 0)
       lib->points = (dt_geo_position_t *)calloc(img_count, sizeof(dt_geo_position_t));
@@ -1437,6 +1439,7 @@ static void _view_map_changed_callback_delayed(gpointer user_data)
         }
       }
       g_list_free(sel_imgs);
+      sel_imgs = NULL;
     }
 
     needs_redraw = _view_map_draw_images(self);
@@ -2576,7 +2579,7 @@ static gboolean _view_map_center_on_image_list(dt_view_t *self, const char* tabl
     count = sqlite3_column_int(stmt, 4);
   }
   sqlite3_finalize(stmt);
-  g_free(query);
+  dt_free(query);
 
   if(count>0)
   {
@@ -2690,7 +2693,7 @@ static void _view_map_dnd_get_callback(GtkWidget *widget, GdkDragContext *contex
             }
             gtk_selection_data_set(selection_data, gtk_selection_data_get_target(selection_data),
                                    _DWORD, (guchar *)imgs, imgs_nb * sizeof(uint32_t));
-            free(imgs);
+            dt_free(imgs);
           }
         }
         else if(lib->loc.main.id > 0)
@@ -2700,7 +2703,7 @@ static void _view_map_dnd_get_callback(GtkWidget *widget, GdkDragContext *contex
           imgs[0] = -1;
           gtk_selection_data_set(selection_data, gtk_selection_data_get_target(selection_data),
                                  _DWORD, (guchar *)imgs, sizeof(uint32_t));
-          free(imgs);
+          dt_free(imgs);
         }
       }
       break;
@@ -2716,7 +2719,7 @@ static void _view_map_dnd_get_callback(GtkWidget *widget, GdkDragContext *contex
         gchar *uri = g_strdup_printf("file://%s", pathname); // TODO: should we add the host?
         gtk_selection_data_set(selection_data, gtk_selection_data_get_target(selection_data), _BYTE,
                                (guchar *)uri, strlen(uri));
-        g_free(uri);
+        dt_free(uri);
       }
       break;
     }
@@ -2771,7 +2774,7 @@ static void _view_map_build_main_query(dt_map_t *lib)
   /* prepare the main query statement */
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), geo_query, -1, &lib->main_query, NULL);
 
-  g_free(geo_query);
+  dt_free(geo_query);
 }
 
 // starting point taken from https://github.com/gyaikhom/dbscan
@@ -2901,8 +2904,8 @@ static void _dbscan(dt_geo_position_t *points, unsigned int num_points,
         }
       }
     }
-  g_free(db.seeds);
-  g_free(db.spreads);
+  dt_free(db.seeds);
+  dt_free(db.spreads);
   }
 }
 

@@ -185,7 +185,7 @@ static gboolean is_image_visible_cb(lua_State *L)
 
 void cleanup(dt_view_t *self)
 {
-  free(self->data);
+  dt_free(self->data);
 }
 
 

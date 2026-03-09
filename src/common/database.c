@@ -333,8 +333,8 @@ static gboolean _migrate_schema(dt_database_t *db, int version)
     if(!last_name || strcmp(last_name, name) || !last_operation || strcmp(last_operation, operation)
        || last_op_version != op_version)
     {
-      g_free(last_name);
-      g_free(last_operation);
+      dt_free(last_name);
+      dt_free(last_operation);
       last_name = g_strdup(name);
       last_operation = g_strdup(operation);
       last_op_version = op_version;
@@ -376,8 +376,8 @@ static gboolean _migrate_schema(dt_database_t *db, int version)
     sqlite3_finalize(innerstmt);
   }
   sqlite3_finalize(stmt);
-  g_free(last_name);
-  g_free(last_operation);
+  dt_free(last_name);
+  dt_free(last_operation);
   // now we should be able to create the index
   // clang-format off
   _SQLITE3_EXEC(db->handle,
@@ -408,7 +408,7 @@ static gboolean _migrate_schema(dt_database_t *db, int version)
     sqlite3_step(innerstmt);
     sqlite3_reset(innerstmt);
     sqlite3_clear_bindings(innerstmt);
-    g_free(filename);
+    dt_free(filename);
   }
   sqlite3_finalize(stmt);
   sqlite3_finalize(innerstmt);
@@ -914,7 +914,7 @@ static int _upgrade_library_schema_step(dt_database_t *db, int version)
         do
         {
           style_version++;
-          g_free(new_name);
+          dt_free(new_name);
           new_name = g_strdup_printf("%s #%d", name, style_version);
           sqlite3_reset(select_stmt);
           sqlite3_clear_bindings(select_stmt);
@@ -927,7 +927,7 @@ static int _upgrade_library_schema_step(dt_database_t *db, int version)
         TRY_STEP(update_name_stmt, SQLITE_DONE, "[init] can't update name of style in database\n");
         sqlite3_reset(update_name_stmt);
         sqlite3_clear_bindings(update_name_stmt);
-        g_free(new_name);
+        dt_free(new_name);
       }
 
       // move the style to data.styles and get the rowid
@@ -1154,7 +1154,8 @@ static int _upgrade_library_schema_step(dt_database_t *db, int version)
       TRY_STEP(stmt, SQLITE_DONE, "[init] can't insert default value in iop_order_tmp\n");
       sqlite3_finalize(stmt);
     }
-    g_list_free_full(prior_v1, free);
+    g_list_free_full(prior_v1, dt_free_gpointer);
+    prior_v1 = NULL;
 
     // create the order of the pipe
     // iop_order is by default the module priority
@@ -1383,7 +1384,7 @@ static int _upgrade_library_schema_step(dt_database_t *db, int version)
             TRY_STEP(ins_stmt, SQLITE_DONE, "[init] can't insert into module_order (custom order)\n");
             sqlite3_finalize(ins_stmt);
 
-            g_free(iop_list_txt);
+            dt_free(iop_list_txt);
           }
           else
           {
@@ -1397,7 +1398,9 @@ static int _upgrade_library_schema_step(dt_database_t *db, int version)
           }
 
           g_list_free(item_list);
-          g_list_free_full(iop_order_list, free);
+          item_list = NULL;
+          g_list_free_full(iop_order_list, dt_free_gpointer);
+          iop_order_list = NULL;
 
           item_list = NULL;
         }
@@ -2147,7 +2150,8 @@ static int _upgrade_data_schema_step(dt_database_t *db, int version)
       TRY_STEP(stmt, SQLITE_DONE, "[init] can't insert default value in iop_order_tmp\n");
       sqlite3_finalize(stmt);
     }
-    g_list_free_full(prior_v1, free);
+    g_list_free_full(prior_v1, dt_free_gpointer);
+    prior_v1 = NULL;
 
     // do the same as for history
     // clang-format off
@@ -2577,7 +2581,7 @@ static void _sanitize_db(dt_database_t *db)
         sqlite3_step(innerstmt);
         sqlite3_reset(innerstmt);
         sqlite3_clear_bindings(innerstmt);
-        g_free(new_tag);
+        dt_free(new_tag);
       }
     }
   }
@@ -2699,7 +2703,7 @@ gboolean dt_database_show_error(const dt_database_t *db)
         lck_filename = g_strconcat(lck_dirname, "/library.db.lock", NULL);
         if(g_access(lck_filename, F_OK) != -1)
           status += remove(lck_filename);
-        g_free(lck_filename);
+        dt_free(lck_filename);
 
         if(status==0)
         {
@@ -2719,12 +2723,12 @@ gboolean dt_database_show_error(const dt_database_t *db)
       }
     }
 
-    g_free(lck_dirname);
-    g_free(label_text);
+    dt_free(lck_dirname);
+    dt_free(label_text);
   }
 
-  g_free(db->error_message);
-  g_free(db->error_dbfilename);
+  dt_free(db->error_message);
+  dt_free(db->error_dbfilename);
   ((dt_database_t *)db)->error_other_pid = 0;
   ((dt_database_t *)db)->error_message = NULL;
   ((dt_database_t *)db)->error_dbfilename = NULL;
@@ -2746,7 +2750,7 @@ static gboolean pid_is_alive(int pid)
     char *filename = g_utf16_to_utf8(wfilename, -1, NULL, NULL, NULL);
     if(ret && n_filename > 0 && filename && g_str_has_suffix(filename, "ansel.exe"))
       pid_is_alive = TRUE;
-    g_free(filename);
+    dt_free(filename);
     CloseHandle(h);
   }
 #else
@@ -2768,7 +2772,7 @@ static gboolean pid_is_alive(int pid)
       {
         pid_is_alive = FALSE;
       }
-      g_free(contents);
+      dt_free(contents);
     }
   }
 #endif
@@ -2863,7 +2867,7 @@ lock_again:
     }
   }
 
-  g_free(pid);
+  dt_free(pid);
 
   if(db->error_message)
     db->error_dbfilename = g_strdup(dbfilename);
@@ -2906,7 +2910,7 @@ void ask_for_upgrade(const gchar *dbname, const gboolean has_gui)
     dt_gui_show_standalone_yes_no_dialog(_("ansel - schema migration"), label_text,
                                          _("close Ansel"), _("upgrade database"));
 
-  g_free(label_text);
+  dt_free(label_text);
 
   // if no upgrade, we exit now, nothing we can do more
   if(!shall_we_update_the_db)
@@ -2956,8 +2960,8 @@ void dt_database_backup(const char *filename)
     g_object_unref(dest);
   }
 
-  g_free(version);
-  g_free(backup);
+  dt_free(version);
+  dt_free(backup);
 }
 
 int _get_pragma_int_val(sqlite3 *db, const char* pragma)
@@ -2971,7 +2975,7 @@ int _get_pragma_int_val(sqlite3 *db, const char* pragma)
     val = sqlite3_column_int(stmt, 0);
   }
   sqlite3_finalize(stmt);
-  g_free(query);
+  dt_free(query);
 
   return val;
 }
@@ -2989,14 +2993,14 @@ gchar* _get_pragma_string_val(sqlite3 *db, const char* pragma)
     {
       gchar* cur_val = g_strdup((const char *)sqlite3_column_text(stmt, 0));
       gchar* tmp_val = g_strdup(val);
-      g_free(val);
+      dt_free(val);
       val = g_strconcat(tmp_val, "\n", cur_val, NULL);
-      g_free(cur_val);
-      g_free(tmp_val);
+      dt_free(cur_val);
+      dt_free(tmp_val);
     }
   }
   sqlite3_finalize(stmt);
-  g_free(query);
+  dt_free(query);
   return val;
 }
 
@@ -3067,14 +3071,14 @@ start:
   {
     char *data_path = g_path_get_dirname(dbfilename_data);
     g_mkdir_with_parents(data_path, 0750);
-    g_free(data_path);
+    dt_free(data_path);
     dt_database_backup(dbfilename_data);
   }
   if(g_strcmp0(dbfilename_library, ":memory:"))
   {
     char *library_path = g_path_get_dirname(dbfilename_library);
     g_mkdir_with_parents(library_path, 0750);
-    g_free(library_path);
+    dt_free(library_path);
     dt_database_backup(dbfilename_library);
   }
 
@@ -3087,7 +3091,7 @@ start:
   if(!db->lock_acquired)
   {
     fprintf(stderr, "[init] database is locked, probably another process is already using it\n");
-    g_free(dbname);
+    dt_free(dbname);
     return db;
   }
 
@@ -3103,12 +3107,12 @@ start:
     dt_loc_get_datadir(dbfilename_library, sizeof(dbfilename_library));
     fprintf(stderr, "[init] try `cp %s/anselrc %s/anselrc'\n", dbfilename_library, datadir);
     sqlite3_close(db->handle);
-    g_free(dbname);
-    g_free(db->lockfile_data);
-    g_free(db->dbfilename_data);
-    g_free(db->lockfile_library);
-    g_free(db->dbfilename_library);
-    g_free(db);
+    dt_free(dbname);
+    dt_free(db->lockfile_data);
+    dt_free(db->dbfilename_data);
+    dt_free(db->lockfile_library);
+    dt_free(db->dbfilename_library);
+    dt_free(db);
     return NULL;
   }
 
@@ -3144,8 +3148,8 @@ start:
     gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
     dt_database_destroy(db);
-    g_free(dbname);
-    g_free(label_options);
+    dt_free(dbname);
+    dt_free(label_options);
     db = NULL;
     return NULL;
   }
@@ -3198,7 +3202,7 @@ start:
     rc = sqlite3_prepare_v2(db->handle, "select value from data.db_info where key = 'version'", -1, &stmt, NULL);
     if(!g_strcmp0(data_status, "ok") && rc == SQLITE_OK && sqlite3_step(stmt) == SQLITE_ROW)
     {
-      g_free(data_status); // status is OK and we don't need to care :)
+      dt_free(data_status); // status is OK and we don't need to care :)
 
       // compare the version of the db with what is current for this executable
       const int db_version = sqlite3_column_int(stmt, 0);
@@ -3297,13 +3301,13 @@ start:
                                                    "%s"),
                                                  dbfilename_data, quick_check_text, label_options);
 
-      g_free(quick_check_text);
-      g_free(data_status);
+      dt_free(quick_check_text);
+      dt_free(data_status);
 
       GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG (dialog));
       GtkWidget *label = gtk_label_new(NULL);
       gtk_label_set_markup(GTK_LABEL(label), label_text);
-      g_free(label_text);
+      dt_free(label_text);
       gtk_container_add(GTK_CONTAINER (content_area), label);
 
       gtk_widget_show_all(content_area);
@@ -3319,7 +3323,7 @@ start:
       {
         fprintf(stderr, "[init] database `%s' is corrupt and can't be opened! either replace it from a backup or "
         "delete the file so that darktable can create a new one the next time. aborting\n", dbfilename_data);
-        g_free(data_snap);
+        dt_free(data_snap);
         goto error;
       }
 
@@ -3361,8 +3365,8 @@ start:
           g_object_unref(dest);
         }
       }
-      g_free(data_snap);
-      g_free(dbname);
+      dt_free(data_snap);
+      dt_free(dbname);
       goto start;
     }
   }
@@ -3375,7 +3379,7 @@ start:
   rc = sqlite3_prepare_v2(db->handle, "select value from main.db_info where key = 'version'", -1, &stmt, NULL);
   if(!g_strcmp0(libdb_status, "ok") && rc == SQLITE_OK && sqlite3_step(stmt) == SQLITE_ROW)
   {
-    g_free(libdb_status);//it's ok :)
+    dt_free(libdb_status);//it's ok :)
 
     // compare the version of the db with what is current for this executable
     const int db_version = sqlite3_column_int(stmt, 0);
@@ -3473,13 +3477,13 @@ start:
                                                  "%s"),
                                                dbfilename_data, quick_check_text, label_options);
 
-    g_free(quick_check_text);
-    g_free(libdb_status);
+    dt_free(quick_check_text);
+    dt_free(libdb_status);
 
     GtkWidget *content_area = gtk_dialog_get_content_area(GTK_DIALOG (dialog));
     GtkWidget *label = gtk_label_new(NULL);
     gtk_label_set_markup(GTK_LABEL(label), label_text);
-    g_free(label_text);
+    dt_free(label_text);
     gtk_container_add(GTK_CONTAINER (content_area), label);
 
     gtk_widget_show_all(content_area);
@@ -3495,7 +3499,7 @@ start:
     {
       fprintf(stderr, "[init] database `%s' is corrupt and can't be opened! either replace it from a backup or "
         "delete the file so that darktable can create a new one the next time. aborting\n", dbfilename_library);
-      g_free(data_snap);
+      dt_free(data_snap);
       goto error;
     }
 
@@ -3536,8 +3540,8 @@ start:
         g_object_unref(dest);
       }
     }
-    g_free(data_snap);
-    g_free(dbname);
+    dt_free(data_snap);
+    dt_free(dbname);
     goto start;
   }
   else
@@ -3613,7 +3617,7 @@ start:
 #endif
 
 error:
-  g_free(dbname);
+  dt_free(dbname);
 
   return db;
 }
@@ -3624,16 +3628,16 @@ void dt_database_destroy(const dt_database_t *db)
   if (db->lockfile_data)
   {
     g_unlink(db->lockfile_data);
-    g_free(db->lockfile_data);
+    dt_free(db->lockfile_data);
   }
   if (db->lockfile_library)
   {
     g_unlink(db->lockfile_library);
-    g_free(db->lockfile_library);
+    dt_free(db->lockfile_library);
   }
-  g_free(db->dbfilename_data);
-  g_free(db->dbfilename_library);
-  g_free((dt_database_t *)db);
+  dt_free(db->dbfilename_data);
+  dt_free(db->dbfilename_library);
+  dt_free(db);
 
   sqlite3_shutdown();
 }
@@ -3673,7 +3677,7 @@ static void _database_migrate_to_xdg_structure()
     }
   }
 
-  g_free(conf_db);
+  dt_free(conf_db);
 }
 
 /* delete old mipmaps files */
@@ -3812,8 +3816,8 @@ gboolean _ask_for_maintenance(const gboolean has_gui, const gboolean closing_tim
       dt_gui_show_standalone_yes_no_dialog(_("ansel - schema maintenance"), label_text,
                                            _("later"), _("yes"));
 
-    g_free(label_text);
-    g_free(size_info);
+    dt_free(label_text);
+    dt_free(size_info);
 
     return shall_perform_maintenance;
 }
@@ -3938,7 +3942,7 @@ static int _backup_db(
       dt_print(DT_DEBUG_SQL, "[db backup] %s to %s\n", src_db_name, dest_filename);
       gchar *pragma = g_strdup_printf("%s.page_count", src_db_name);
       const int spc = _get_pragma_int_val(src_db, pragma);
-      g_free(pragma);
+      dt_free(pragma);
       const int pc = MIN(spc, MAX(5,spc/100));
       do
       {
@@ -3985,33 +3989,33 @@ gboolean dt_database_snapshot(const struct dt_database_t *db)
   if(!(rc==SQLITE_OK))
   {
     g_unlink(lib_tmpbackup_file);
-    g_free(lib_tmpbackup_file);
-    g_free(lib_backup_file);
-    g_free(date_suffix);
+    dt_free(lib_tmpbackup_file);
+    dt_free(lib_backup_file);
+    dt_free(date_suffix);
     return FALSE;
   }
   g_rename(lib_tmpbackup_file, lib_backup_file);
   g_chmod(lib_backup_file, S_IRUSR);
-  g_free(lib_tmpbackup_file);
-  g_free(lib_backup_file);
+  dt_free(lib_tmpbackup_file);
+  dt_free(lib_backup_file);
 
   gchar *dat_backup_file = g_strdup_printf(file_pattern, db->dbfilename_data, date_suffix);
   gchar *dat_tmpbackup_file = g_strdup_printf(temp_pattern, db->dbfilename_data, date_suffix);
 
-  g_free(date_suffix);
+  dt_free(date_suffix);
 
   rc = _backup_db(db->handle, "data", dat_tmpbackup_file, _print_backup_progress);
   if(!(rc==SQLITE_OK))
   {
     g_unlink(dat_tmpbackup_file);
-    g_free(dat_tmpbackup_file);
-    g_free(dat_backup_file);
+    dt_free(dat_tmpbackup_file);
+    dt_free(dat_backup_file);
     return FALSE;
   }
   g_rename(dat_tmpbackup_file, dat_backup_file);
   g_chmod(dat_backup_file, S_IRUSR);
-  g_free(dat_tmpbackup_file);
-  g_free(dat_backup_file);
+  dt_free(dat_tmpbackup_file);
+  dt_free(dat_backup_file);
 
   return TRUE;
 }
@@ -4090,7 +4094,7 @@ gboolean dt_database_maybe_snapshot(const struct dt_database_t *db)
 
   gchar *lib_snap_format = g_strdup_printf("%s-snp-", lib_basename);
   gchar *lib_backup_format = g_strdup_printf("%s-pre-", lib_basename);
-  g_free(lib_basename);
+  dt_free(lib_basename);
 
   GFileInfo *info = NULL;
   guint64 last_snap = 0;
@@ -4116,8 +4120,8 @@ gboolean dt_database_maybe_snapshot(const struct dt_database_t *db)
     g_object_unref(info);
   }
   g_object_unref(parent);
-  g_free(lib_snap_format);
-  g_free(lib_backup_format);
+  dt_free(lib_snap_format);
+  dt_free(lib_backup_format);
 
   if(error)
   {
@@ -4139,8 +4143,8 @@ gboolean dt_database_maybe_snapshot(const struct dt_database_t *db)
   gchar *now_txt = g_date_time_format(date_now, "%Y%m%d%H%M%S");
   gchar *ls_txt = g_date_time_format(date_last_snap, "%Y%m%d%H%M%S");
   dt_print(DT_DEBUG_SQL, "[db backup] last snap: %s; curr date: %s.\n", ls_txt, now_txt);
-  g_free(now_txt);
-  g_free(ls_txt);
+  dt_free(now_txt);
+  dt_free(ls_txt);
 
   GTimeSpan span_from_last_snap = g_date_time_difference(date_now, date_last_snap);
 
@@ -4260,13 +4264,13 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
   g_object_unref(lib_file);
   gchar *lib_snap_format = g_strdup_printf("%s-snp-", lib_basename);
   gchar *lib_tmp_format = g_strdup_printf("%s-tmp-", lib_basename);
-  g_free(lib_basename);
+  dt_free(lib_basename);
 
   gchar *dat_basename = g_file_get_basename(dat_file);
   g_object_unref(dat_file);
   gchar *dat_snap_format = g_strdup_printf("%s-snp-", dat_basename);
   gchar *dat_tmp_format = g_strdup_printf("%s-tmp-", dat_basename);
-  g_free(dat_basename);
+  dt_free(dat_basename);
 
   GQueue *lib_snaps = g_queue_new();
   GQueue *dat_snaps = g_queue_new();
@@ -4284,10 +4288,10 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
       dt_print(DT_DEBUG_SQL, "[db backup] couldn't enumerate library parent: %s.\n", error->message);
       g_object_unref(lib_parent);
       g_object_unref(dat_parent);
-      g_free(lib_snap_format);
-      g_free(dat_snap_format);
-      g_free(lib_tmp_format);
-      g_free(dat_tmp_format);
+      dt_free(lib_snap_format);
+      dt_free(dat_snap_format);
+      dt_free(lib_tmp_format);
+      dt_free(dat_tmp_format);
       g_queue_free(lib_snaps);
       g_queue_free(dat_snaps);
       g_queue_free(tmplib_snaps);
@@ -4318,16 +4322,16 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
       }
       g_object_unref(info);
     }
-    g_free(lib_snap_format);
-    g_free(dat_snap_format);
+    dt_free(lib_snap_format);
+    dt_free(dat_snap_format);
 
     if(error)
     {
       dt_print(DT_DEBUG_SQL, "[db backup] problem enumerating library parent: %s.\n", error->message);
       g_object_unref(lib_parent);
       g_object_unref(dat_parent);
-      g_free(lib_tmp_format);
-      g_free(dat_tmp_format);
+      dt_free(lib_tmp_format);
+      dt_free(dat_tmp_format);
       g_queue_free_full(lib_snaps, g_free);
       g_queue_free_full(dat_snaps, g_free);
       g_queue_free_full(tmplib_snaps, g_free);
@@ -4351,10 +4355,10 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
       dt_print(DT_DEBUG_SQL, "[db backup] couldn't enumerate library parent: %s.\n", error->message);
       g_object_unref(lib_parent);
       g_object_unref(dat_parent);
-      g_free(lib_snap_format);
-      g_free(dat_snap_format);
-      g_free(lib_tmp_format);
-      g_free(dat_tmp_format);
+      dt_free(lib_snap_format);
+      dt_free(dat_snap_format);
+      dt_free(lib_tmp_format);
+      dt_free(dat_tmp_format);
       g_error_free(error);
       g_queue_free(lib_snaps);
       g_queue_free(dat_snaps);
@@ -4369,10 +4373,10 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
       dt_print(DT_DEBUG_SQL, "[db backup] couldn't enumerate data parent: %s.\n", error->message);
       g_object_unref(lib_parent);
       g_object_unref(dat_parent);
-      g_free(lib_snap_format);
-      g_free(dat_snap_format);
-      g_free(lib_tmp_format);
-      g_free(dat_tmp_format);
+      dt_free(lib_snap_format);
+      dt_free(dat_snap_format);
+      dt_free(lib_tmp_format);
+      dt_free(dat_tmp_format);
       g_file_enumerator_close(library_dir_files, NULL, NULL);
       g_object_unref(library_dir_files);
       g_error_free(error);
@@ -4400,15 +4404,15 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
       }
       g_object_unref(info);
     }
-    g_free(lib_snap_format);
+    dt_free(lib_snap_format);
 
     if(error)
     {
       dt_print(DT_DEBUG_SQL, "[db backup] problem enumerating library parent: %s.\n", error->message);
       g_object_unref(lib_parent);
       g_object_unref(dat_parent);
-      g_free(lib_tmp_format);
-      g_free(dat_tmp_format);
+      dt_free(lib_tmp_format);
+      dt_free(dat_tmp_format);
       g_queue_free_full(lib_snaps, g_free);
       g_queue_free(dat_snaps);
       g_queue_free_full(tmplib_snaps, g_free);
@@ -4438,9 +4442,9 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
       }
       g_object_unref(info);
     }
-    g_free(dat_snap_format);
-    g_free(lib_tmp_format);
-    g_free(dat_tmp_format);
+    dt_free(dat_snap_format);
+    dt_free(lib_tmp_format);
+    dt_free(dat_tmp_format);
 
     if(error)
     {
@@ -4473,15 +4477,15 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
   {
     gchar *head = g_queue_pop_head(lib_snaps);
     g_ptr_array_add(ret, g_strconcat(lib_parent_path, G_DIR_SEPARATOR_S, head, NULL));
-    g_free(head);
+    dt_free(head);
   }
   while(!g_queue_is_empty(tmplib_snaps))
   {
     gchar *head = g_queue_pop_head(tmplib_snaps);
     g_ptr_array_add(ret, g_strconcat(lib_parent_path, G_DIR_SEPARATOR_S, head, NULL));
-    g_free(head);
+    dt_free(head);
   }
-  g_free(lib_parent_path);
+  dt_free(lib_parent_path);
   g_queue_free_full(lib_snaps, g_free);
   g_queue_free_full(tmplib_snaps, g_free); // should be totally freed, but eh - this won't make doublefree
 
@@ -4492,15 +4496,15 @@ char **dt_database_snaps_to_remove(const struct dt_database_t *db)
   {
     gchar *head = g_queue_pop_head(dat_snaps);
     g_ptr_array_add(ret, g_strconcat(dat_parent_path, G_DIR_SEPARATOR_S, head, NULL));
-    g_free(head);
+    dt_free(head);
   }
   while(!g_queue_is_empty(tmpdat_snaps))
   {
     gchar *head = g_queue_pop_head(tmpdat_snaps);
     g_ptr_array_add(ret, g_strconcat(dat_parent_path, G_DIR_SEPARATOR_S, head, NULL));
-    g_free(head);
+    dt_free(head);
   }
-  g_free(dat_parent_path);
+  dt_free(dat_parent_path);
   g_queue_free_full(dat_snaps, g_free);
   g_queue_free_full(tmpdat_snaps, g_free);
 
@@ -4542,7 +4546,7 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
 
   gchar *db_snap_format = g_strdup_printf("%s-snp-", db_basename);
   gchar *db_backup_format = g_strdup_printf("%s-pre-", db_basename);
-  g_free(db_basename);
+  dt_free(db_basename);
 
   GFileInfo *info = NULL;
   guint64 last_snap = 0;
@@ -4565,14 +4569,14 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
       if(try_snap > last_snap)
       {
         last_snap = try_snap;
-        g_free(last_snap_name);
+        dt_free(last_snap_name);
         last_snap_name = g_strdup(fname);
       }
     }
     g_object_unref(info);
   }
-  g_free(db_snap_format);
-  g_free(db_backup_format);
+  dt_free(db_snap_format);
+  dt_free(db_backup_format);
 
   if(error)
   {
@@ -4580,7 +4584,7 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
     g_file_enumerator_close(db_dir_files, NULL, NULL);
     g_object_unref(db_dir_files);
     g_error_free(error);
-    g_free(last_snap_name);
+    dt_free(last_snap_name);
     return NULL;
   }
 
@@ -4597,8 +4601,8 @@ gchar *dt_database_get_most_recent_snap(const char* db_filename)
   g_object_unref(parent);
 
   gchar *ret = g_strconcat(parent_path, G_DIR_SEPARATOR_S, last_snap_name, NULL);
-  g_free(parent_path);
-  g_free(last_snap_name);
+  dt_free(parent_path);
+  dt_free(last_snap_name);
 
   return ret;
 }

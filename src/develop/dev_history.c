@@ -177,7 +177,11 @@ gboolean dt_dev_history_item_update_from_params(dt_develop_t *dev, dt_dev_histor
     if(!hist->blend_params) return FALSE;
   }
 
-  if(hist->forms) g_list_free_full(hist->forms, (void (*)(void *))dt_masks_free_form);
+  if(hist->forms)
+  {
+    g_list_free_full(hist->forms, (void (*)(void *))dt_masks_free_form);
+    hist->forms = NULL;
+  }
   hist->forms = forms;
 
   module->enabled = enabled;
@@ -247,7 +251,7 @@ dt_iop_module_t *dt_dev_create_module_instance(dt_develop_t *dev, const char *op
   if(dt_iop_load_module(module, base->so, dev))
   {
     fprintf(stderr, "[dt_dev_create_module_instance] can't load module %s\n", op);
-    free(module);
+    dt_free(module);
     return NULL;
   }
 
@@ -521,10 +525,14 @@ static void _history_undo_data_free(gpointer data)
   dt_undo_history_t *hist = (dt_undo_history_t *)data;
   if(!hist) return;
   g_list_free_full(hist->before_snapshot, dt_dev_free_history_item);
+  hist->before_snapshot = NULL;
   g_list_free_full(hist->after_snapshot, dt_dev_free_history_item);
-  g_list_free_full(hist->before_iop_order_list, free);
-  g_list_free_full(hist->after_iop_order_list, free);
-  free(hist);
+  hist->after_snapshot = NULL;
+  g_list_free_full(hist->before_iop_order_list, dt_free_gpointer);
+  hist->before_iop_order_list = NULL;
+  g_list_free_full(hist->after_iop_order_list, dt_free_gpointer);
+  hist->after_iop_order_list = NULL;
+  dt_free(hist);
 }
 
 /**
@@ -558,7 +566,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
   dt_dev_history_free_history(dev);
   dev->history = history_temp;
   dt_dev_set_history_end_ext(dev, history_end);
-  g_list_free_full(dev->iop_order_list, free);
+  g_list_free_full(dev->iop_order_list, dt_free_gpointer);
   dev->iop_order_list = iop_order_temp;
   dt_dev_pop_history_items_ext(dev);
   dt_dev_write_history_ext(dev, dev->image_storage.id);
@@ -601,7 +609,7 @@ void dt_dev_history_undo_start_record_locked(dt_develop_t *dev)
   {
     g_list_free_full(dev->undo_history_before_snapshot, dt_dev_free_history_item);
     dev->undo_history_before_snapshot = NULL;
-    g_list_free_full(dev->undo_history_before_iop_order_list, free);
+    g_list_free_full(dev->undo_history_before_iop_order_list, dt_free_gpointer);
     dev->undo_history_before_iop_order_list = NULL;
     dev->undo_history_before_end = 0;
 
@@ -914,14 +922,11 @@ void dt_dev_free_history_item(gpointer data)
   dt_dev_history_item_t *item = (dt_dev_history_item_t *)data;
   if(!item) return; // nothing to free
 
-  g_free(item->params);
-  item->params = NULL;
-  g_free(item->blend_params);
-  item->blend_params = NULL;
+  dt_free(item->params);
+  dt_free(item->blend_params);
   g_list_free_full(item->forms, (void (*)(void *))dt_masks_free_form);
   item->forms = NULL;
-  g_free(item);
-  item = NULL;
+  dt_free(item);
 }
 
 void dt_dev_history_free_history(dt_develop_t *dev)
@@ -1256,16 +1261,18 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev, int32_t imgid)
     {
       GList *iop_list = dt_ioppr_deserialize_iop_order_list(params, params_len);
       dt_ioppr_write_iop_order_list(iop_list, imgid);
-      g_list_free_full(iop_list, free);
+      g_list_free_full(iop_list, dt_free_gpointer);
+      iop_list = NULL;
       dt_ioppr_set_default_iop_order(dev, imgid);
-      g_free(params);
+      dt_free(params);
     }
     else
     {
       // we have no auto-apply order, so apply iop order, depending of the workflow
       GList *iop_list = dt_ioppr_get_iop_order_list_version(DT_IOP_ORDER_V30);
       dt_ioppr_write_iop_order_list(iop_list, imgid);
-      g_list_free_full(iop_list, free);
+      g_list_free_full(iop_list, dt_free_gpointer);
+      iop_list = NULL;
       dt_ioppr_set_default_iop_order(dev, imgid);
     }
   }
@@ -1510,7 +1517,7 @@ static int _sync_params(dt_dev_history_item_t *hist, const void *module_params, 
       dt_control_log(_("module `%s' %s version mismatch: %d != %d"), hist->module->op,
                       preset, hist->module->version(), modversion);
 
-      g_free(preset);
+      dt_free(preset);
       return 1;
     }
     else
@@ -1610,7 +1617,7 @@ static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, co
         stderr,
         "[dev_read_history] the module `%s' requested by image `%s' is not installed on this computer!\n",
         operation, dev->image_storage.filename);
-    free(hist);
+    dt_free(hist);
     return;
   }
 
@@ -1627,14 +1634,14 @@ static void _process_history_db_entry(dt_develop_t *dev, const int32_t imgid, co
     dt_iop_compute_module_hash(hist->module, NULL);
 
     // Done. We don't add to history
-    free(hist);
+    dt_free(hist);
     return;
   }
 
   // Copy module params if valid version, else try to convert legacy params
   if(_sync_params(hist, module_params, param_length, modversion, legacy_params, preset_name))
   {
-    free(hist);
+    dt_free(hist);
     return;
   }
 

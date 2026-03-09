@@ -387,8 +387,8 @@ dt_menu_entry_t *set_menu_entry(GtkWidget **menus, GList **items_list,
 
       gchar *path = dt_accels_build_path(parent_path, clean_label);
       gtk_widget_set_accel_path(entry->widget, path, (action_callback != NULL) ? accel_group : NULL);
-      g_free(path);
-      g_free(clean_label);
+      dt_free(path);
+      dt_free(clean_label);
     }
     else
     {
@@ -464,8 +464,8 @@ void add_generic_top_menu_entry(GtkWidget *menu_bar, GtkWidget **menus, GList **
 
   gchar *accel_path = dt_accels_build_path(accel_path_prefix, clean_label);
   gtk_menu_set_accel_path(GTK_MENU(menus[index]), accel_path);
-  g_free(clean_label);
-  g_free(accel_path);
+  dt_free(clean_label);
+  dt_free(accel_path);
 
   GtkWidget *menu_label = gtk_menu_item_new_with_mnemonic(label);
   gtk_menu_item_set_submenu(GTK_MENU_ITEM(menu_label), menus[index]);
@@ -495,8 +495,8 @@ void add_generic_top_submenu_entry(GtkWidget **menus, GList **lists, const gchar
 
   gchar *accel_path = dt_accels_build_path(gtk_menu_get_accel_path(GTK_MENU(menus[index])), clean_label);
   gtk_menu_set_accel_path(GTK_MENU(submenu), accel_path);
-  g_free(clean_label);
-  g_free(accel_path);
+  dt_free(clean_label);
+  dt_free(accel_path);
 
   dt_menu_entry_t *entry = set_menu_entry(menus, lists, label, index, GTK_MENU(menus[index]), NULL, NULL, NULL, NULL, NULL, 0, 0, accel_group);
   gtk_menu_item_set_submenu(GTK_MENU_ITEM(entry->widget), submenu);

@@ -43,6 +43,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include "bauhaus/bauhaus.h"
@@ -233,8 +234,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 {
   dt_iop_colorcorrection_global_data_t *gd = (dt_iop_colorcorrection_global_data_t *)module->data;
   dt_opencl_free_kernel(gd->kernel_colorcorrection);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 

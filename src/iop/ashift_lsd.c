@@ -147,6 +147,7 @@
  */
 /*----------------------------------------------------------------------------*/
 
+#include "common/darktable.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -292,8 +293,8 @@ static void free_ntuple_list(ntuple_list in)
 {
   if( in == NULL || in->values == NULL )
     error("free_ntuple_list: invalid n-tuple input.");
-  free( (void *) in->values );
-  free( (void *) in );
+  dt_free(in->values);
+  dt_free(in);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -395,8 +396,8 @@ static void free_image_char(image_char i)
 {
   if( i == NULL || i->data == NULL )
     error("free_image_char: invalid input image.");
-  free( (void *) i->data );
-  free( (void *) i );
+  dt_free(i->data);
+  dt_free(i);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -521,8 +522,8 @@ static void free_image_double(image_double i)
 {
   if( i == NULL || i->data == NULL )
     error("free_image_double: invalid input image.");
-  free( (void *) i->data );
-  free( (void *) i );
+  dt_free(i->data);
+  dt_free(i);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -923,8 +924,8 @@ static image_double ll_angle( image_double in, double threshold,
   *list_p = start;
 
   /* free memory */
-  free( (void *) range_l_s );
-  free( (void *) range_l_e );
+  dt_free(range_l_s);
+  dt_free(range_l_e);
 
   return g;
 }
@@ -1083,8 +1084,7 @@ __attribute__((constructor)) static void invConstructor()
 
 __attribute__((destructor)) static void invDestructor()
 {
-  free(inv);
-  inv = NULL;
+  dt_free(inv);
 }
 
 // clang-format off
@@ -1373,7 +1373,7 @@ static double inter_hi(double x, double x1, double y1, double x2, double y2)
 static void ri_del(rect_iter * iter)
 {
   if( iter == NULL ) error("ri_del: NULL iterator.");
-  free( (void *) iter );
+  dt_free(iter);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -2232,14 +2232,14 @@ static double * LineSegmentDetection( int * n_out,
 
 
   /* free memory */
-  free( (void *) image );   /* only the double_image structure should be freed,
+  dt_free(image);   /* only the double_image structure should be freed,
                                the data pointer was provided to this functions
                                and should not be destroyed.                 */
   free_image_double(angles);
   free_image_double(modgrad);
   free_image_char(used);
-  free( (void *) reg );
-  free( (void *) mem_p );
+  dt_free(reg);
+  dt_free(mem_p);
 
   /* return the result */
   if( reg_img != NULL && reg_x != NULL && reg_y != NULL )
@@ -2255,14 +2255,14 @@ static double * LineSegmentDetection( int * n_out,
       /* free the 'region' structure.
          we cannot use the function 'free_image_int' because we need to keep
          the memory with the image data to be returned by this function. */
-      free( (void *) region );
+      dt_free(region);
     }
   if( out->size > (unsigned int) INT_MAX )
     error("too many detections to fit in an INT.");
   *n_out = (int) (out->size);
 
   return_value = out->values;
-  free( (void *) out );  /* only the 'ntuple_list' structure must be freed,
+  dt_free(out);  /* only the 'ntuple_list' structure must be freed,
                             but the 'values' pointer must be keep to return
                             as a result. */
 

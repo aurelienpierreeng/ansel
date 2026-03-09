@@ -28,6 +28,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "chart/dtcairo.h"
 #include "chart/colorchart.h"
 #include "chart/common.h"
@@ -305,7 +306,7 @@ static void source_image_changed_callback(GtkFileChooserButton *widget, gpointer
   dt_lut_t *self = (dt_lut_t *)user_data;
   char *new_filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(widget));
   open_source_image(self, new_filename);
-  g_free(new_filename);
+  dt_free(new_filename);
 }
 
 static gboolean open_source_image(dt_lut_t *self, const char *filename)
@@ -323,7 +324,7 @@ static void ref_image_changed_callback(GtkFileChooserButton *widget, gpointer us
   dt_lut_t *self = (dt_lut_t *)user_data;
   char *new_filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(widget));
   open_reference_image(self, new_filename);
-  g_free(new_filename);
+  dt_free(new_filename);
 }
 
 static char *get_filename_base(const char *filename)
@@ -354,7 +355,7 @@ static gboolean open_reference_image(dt_lut_t *self, const char *filename)
     }
     collect_reference_patches(self);
     update_table(self);
-    free(self->reference_filename);
+    dt_free(self->reference_filename);
     self->reference_filename = get_filename_base(filename);
   }
   gtk_widget_queue_draw(self->reference.drawing_area);
@@ -386,7 +387,7 @@ static gboolean open_image(image_t *image, const char *filename)
   {
     fprintf(stderr, "error creating cairo surface from `%s'\n", filename);
     cairo_surface_destroy(image_surface);
-    free(pfm);
+    dt_free(pfm);
     return FALSE;
   }
   image->surface = image_surface;
@@ -411,7 +412,7 @@ static void cht_changed_callback(GtkFileChooserButton *widget, gpointer user_dat
   dt_lut_t *self = (dt_lut_t *)user_data;
   char *new_filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(widget));
   open_cht(self, new_filename);
-  g_free(new_filename);
+  dt_free(new_filename);
 }
 
 static gboolean open_cht(dt_lut_t *self, const char *filename)
@@ -481,7 +482,7 @@ static void it8_changed_callback(GtkFileChooserButton *widget, gpointer user_dat
   dt_lut_t *self = (dt_lut_t *)user_data;
   char *new_filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(widget));
   open_it8(self, new_filename);
-  g_free(new_filename);
+  dt_free(new_filename);
 }
 
 static gboolean open_it8(dt_lut_t *self, const char *filename)
@@ -498,7 +499,7 @@ static gboolean open_it8(dt_lut_t *self, const char *filename)
     gtk_file_chooser_unselect_all(GTK_FILE_CHOOSER(self->it8_button));
   else
   {
-    free(self->reference_filename);
+    dt_free(self->reference_filename);
     self->reference_filename = get_filename_base(filename);
     gtk_widget_set_sensitive(self->process_button, TRUE);
   }
@@ -524,9 +525,9 @@ static char *get_export_filename(dt_lut_t *self, const char *extension, char **n
     *last_dot = '\0';
     char *new_filename = g_strconcat(reference_filename, extension, NULL);
     gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), new_filename);
-    g_free(new_filename);
+    dt_free(new_filename);
   }
-  g_free(reference_filename);
+  dt_free(reference_filename);
 
   GtkWidget *grid = gtk_grid_new();
   gtk_grid_set_row_spacing(GTK_GRID(grid), 10);
@@ -543,8 +544,8 @@ static char *get_export_filename(dt_lut_t *self, const char *extension, char **n
 
   gtk_entry_set_text(GTK_ENTRY(name_entry), *name);
   gtk_entry_set_text(GTK_ENTRY(description_entry), *description);
-  g_free(*name);
-  g_free(*description);
+  dt_free(*name);
+  dt_free(*description);
   *name = NULL;
   *description = NULL;
 
@@ -729,9 +730,9 @@ static void export_raw_button_clicked_callback(GtkButton *button, gpointer user_
   char *name = NULL, *description = NULL;
   char *filename = get_export_filename(self, ".csv", &name, &description, NULL, NULL, NULL, NULL);
   if(filename) export_raw(self, filename, name, description);
-  g_free(name);
-  g_free(description);
-  g_free(filename);
+  dt_free(name);
+  dt_free(description);
+  dt_free(filename);
 }
 
 static void export_button_clicked_callback(GtkButton *button, gpointer user_data)
@@ -745,9 +746,9 @@ static void export_button_clicked_callback(GtkButton *button, gpointer user_data
                                        &include_basecurve, &include_colorchecker, &include_colorin, &include_tonecurve);
   if(filename) export_style(self, filename, name, description,
                             include_basecurve, include_colorchecker, include_colorin, include_tonecurve);
-  g_free(name);
-  g_free(description);
-  g_free(filename);
+  dt_free(name);
+  dt_free(description);
+  dt_free(filename);
 }
 
 static void add_patches_to_array(dt_lut_t *self, GList *patch_names, int *N, int *i, double *target_L,
@@ -1039,7 +1040,7 @@ static void process_data(dt_lut_t *self, double *target_L, double *target_a, dou
     cy[k] = rgb[0];
   }
   tonecurve_create(&rgbcurve, cx, cy, num_tonecurve);
-  free(grays);
+  dt_free(grays);
 
   // now unapply the curve:
   for(int k = 0; k < N; k++)
@@ -1074,12 +1075,12 @@ static void process_data(dt_lut_t *self, double *target_L, double *target_a, dou
     // TODO: is the rank interesting, too?
     char *result_string = g_strdup_printf(_("average dE: %.02f\nmax dE: %.02f"), avgerr, maxerr);
     gtk_label_set_text(GTK_LABEL(self->result_label), result_string);
-    g_free(result_string);
+    dt_free(result_string);
   }
 
-  free(coeff_b);
-  free(coeff_a);
-  free(coeff_L);
+  dt_free(coeff_b);
+  dt_free(coeff_a);
+  dt_free(coeff_L);
 
   int sp = 0;
   int cperm[300] = { 0 };
@@ -1094,7 +1095,7 @@ static void process_data(dt_lut_t *self, double *target_L, double *target_a, dou
             colorchecker_Lab[3 * cperm[k] + 1], colorchecker_Lab[3 * cperm[k] + 2]);
 #endif
 
-  free(perm);
+  dt_free(perm);
   self->tonecurve_encoded = encode_tonecurve(&tonecurve);
   self->colorchecker_encoded = encode_colorchecker(sp, colorchecker_Lab, target, cperm);
 
@@ -1106,8 +1107,8 @@ static void process_button_clicked_callback(GtkButton *button, gpointer user_dat
   dt_lut_t *self = (dt_lut_t *)user_data;
 
   gtk_widget_set_sensitive(self->export_button, FALSE);
-  free(self->tonecurve_encoded);
-  free(self->colorchecker_encoded);
+  dt_free(self->tonecurve_encoded);
+  dt_free(self->colorchecker_encoded);
   self->tonecurve_encoded = NULL;
   self->colorchecker_encoded = NULL;
 
@@ -1140,10 +1141,10 @@ static void process_button_clicked_callback(GtkButton *button, gpointer user_dat
   gtk_widget_set_sensitive(self->export_button, TRUE);
   gtk_widget_set_sensitive(self->export_raw_button, TRUE);
 
-  free(target_L);
-  free(target_a);
-  free(target_b);
-  free(colorchecker_Lab);
+  dt_free(target_L);
+  dt_free(target_a);
+  dt_free(target_b);
+  dt_free(colorchecker_Lab);
 }
 
 static void cht_state_callback(GtkWidget *widget, GtkStateFlags flags, gpointer user_data)
@@ -1414,14 +1415,14 @@ static void update_table(dt_lut_t *self)
       gtk_list_store_set(GTK_LIST_STORE(self->model), &iter, COLUMN_RGB_IN, s_RGB_in, COLUMN_LAB_IN, s_Lab_in,
                          COLUMN_LAB_REF, s_Lab_ref, COLUMN_DE_1976, s_deltaE_1976, COLUMN_DE_1976_FLOAT,
                          deltaE_1976, COLUMN_DE_2000, s_deltaE_2000, COLUMN_DE_2000_FLOAT, deltaE_2000, -1);
-      g_free(s_RGB_in);
-      g_free(s_Lab_in);
-      g_free(s_Lab_ref);
-      g_free(s_deltaE_1976);
-      g_free(s_deltaE_2000);
+      dt_free(s_RGB_in);
+      dt_free(s_Lab_in);
+      dt_free(s_Lab_ref);
+      dt_free(s_deltaE_1976);
+      dt_free(s_deltaE_2000);
     } // if(box)
 
-    g_free(name);
+    dt_free(name);
     valid = gtk_tree_model_iter_next(self->model, &iter);
   } // while(valid)
 }
@@ -1461,6 +1462,7 @@ static void init_table(dt_lut_t *self)
     gtk_list_store_set(GTK_LIST_STORE(self->model), &iter, COLUMN_NAME, (char *)name->data, -1);
   }
   g_list_free(patch_names);
+  patch_names = NULL;
 
   update_table(self);
 }
@@ -1653,7 +1655,7 @@ static void free_image(image_t *image)
   reset_bb(image);
   if(image->image) cairo_pattern_destroy(image->image);
   if(image->surface) cairo_surface_destroy(image->surface);
-  free(image->xyz);
+  dt_free(image->xyz);
   image->image = NULL;
   image->surface = NULL;
   image->xyz = NULL;
@@ -1690,7 +1692,7 @@ static int main_gui(dt_lut_t *self, int argc, char *argv[])
       reference_filename = argv[3];
     else
       it8_filename = argv[3];
-    g_free(upper_string);
+    dt_free(upper_string);
   }
 
   // build the GUI
@@ -1872,10 +1874,10 @@ static int main_csv(dt_lut_t *self, int argc, char *argv[])
   {
     fprintf(stderr, "error parsing `%s', giving up\n", filename_csv);
 
-    free(target_L);
-    free(target_a);
-    free(target_b);
-    free(colorchecker_Lab);
+    dt_free(target_L);
+    dt_free(target_a);
+    dt_free(target_b);
+    dt_free(colorchecker_Lab);
 
     return 1;
   }
@@ -1887,12 +1889,12 @@ static int main_csv(dt_lut_t *self, int argc, char *argv[])
   // TODO: add command line options to control what modules to include
   export_style(self, filename_style, name, description, TRUE, TRUE, TRUE, TRUE);
 
-  free(target_L);
-  free(target_a);
-  free(target_b);
-  free(colorchecker_Lab);
-  free(name);
-  free(description);
+  dt_free(target_L);
+  dt_free(target_a);
+  dt_free(target_b);
+  dt_free(colorchecker_Lab);
+  dt_free(name);
+  dt_free(description);
 
   return 0;
 }
@@ -1919,7 +1921,7 @@ int main(int argc, char *argv[])
 
   int res = 1;
   dt_lut_t *self = (dt_lut_t *)calloc(1, sizeof(dt_lut_t));
-  self->picked_source_patches = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, free);
+  self->picked_source_patches = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
 
   if(argc >= 2 && !strcmp(argv[1], "--help"))
     show_usage(argv[0]);
@@ -1940,9 +1942,9 @@ int main(int argc, char *argv[])
   free_image(&self->source);
   free_image(&self->reference);
   free_chart(self->chart);
-  free(self->tonecurve_encoded);
-  free(self->colorchecker_encoded);
-  free(self);
+  dt_free(self->tonecurve_encoded);
+  dt_free(self->colorchecker_encoded);
+  dt_free(self);
 
   return res;
 }

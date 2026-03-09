@@ -547,7 +547,7 @@ static void _gradient_slider_destroy(GtkWidget *widget)
   }
 
   if(gslider->colors)
-    g_list_free_full(gslider->colors, g_free);
+    g_list_free_full(gslider->colors, dt_free_gpointer);
 
   gslider->colors = NULL;
 
@@ -781,7 +781,7 @@ void dtgtk_gradient_slider_multivalue_set_stop(GtkDarktableGradientSlider *gslid
 void dtgtk_gradient_slider_multivalue_clear_stops(GtkDarktableGradientSlider *gslider)
 {
   g_return_if_fail(gslider != NULL);
-  g_list_free_full(gslider->colors, g_free);
+  g_list_free_full(gslider->colors, dt_free_gpointer);
   gslider->colors = NULL;
 }
 

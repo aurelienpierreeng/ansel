@@ -119,9 +119,13 @@ static void _hm_free_input_node(dt_digraph_node_t *n)
 {
   if(!n) return;
   g_list_free(n->previous);
-  if(n->tag) g_free(n->tag);
-  g_free((char *)n->id);
-  g_free(n);
+  n->previous = NULL;
+  if(n->tag)
+  {
+    dt_free(n->tag);
+  }
+  dt_free(n->id);
+  dt_free(n);
 }
 
 static void _hm_free_input_nodes(GList *input_nodes)
@@ -139,6 +143,7 @@ static void _hm_free_input_nodes(GList *input_nodes)
    *   We free only the list container, not the pointed-to nodes here.
    */
   g_list_free_full(input_nodes, (GDestroyNotify)_hm_free_input_node);
+  input_nodes = NULL;
 }
 
 void _hm_id_to_op_name(const char *id, char *op, char *name)
@@ -182,7 +187,7 @@ static int _hm_build_prev_map_from_ids(const GList *ids, GHashTable **out_prev)
    * Ownership:
    * - Returns a hashtable owning both keys and values (g_hash_table_destroy()).
    */
-  GHashTable *prev = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+  GHashTable *prev = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
   if(!prev) return 1;
 
   const char *prev_id = NULL;
@@ -210,7 +215,7 @@ static int _hm_build_next_map_from_ids(const GList *ids, GHashTable **out_next)
    * Ownership:
    * - Returns a hashtable owning both keys and values (g_hash_table_destroy()).
    */
-  GHashTable *next = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+  GHashTable *next = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
   if(!next) return 1;
 
   const char *prev_id = NULL;
@@ -291,7 +296,7 @@ typedef struct
 
 static int _hm_build_last_history_by_id_from_history(GList *history, const int history_end, GHashTable **out_map)
 {
-  GHashTable *map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  GHashTable *map = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
   if(!map) return 1;
 
   int idx = 0;
@@ -334,7 +339,7 @@ static void _hm_restore_dest_from_backup(dt_develop_t *dev_dest, _hm_dest_backup
   backup->history = NULL;
   dt_dev_set_history_end_ext(dev_dest, backup->history_end);
 
-  g_list_free_full(dev_dest->iop_order_list, free);
+  g_list_free_full(dev_dest->iop_order_list, dt_free_gpointer);
   dev_dest->iop_order_list = backup->iop_order_list;
   backup->iop_order_list = NULL;
 
@@ -344,8 +349,16 @@ static void _hm_restore_dest_from_backup(dt_develop_t *dev_dest, _hm_dest_backup
 
 static void _hm_backup_cleanup(_hm_dest_backup_t *backup)
 {
-  if(backup->history) g_list_free_full(backup->history, dt_dev_free_history_item);
-  if(backup->iop_order_list) g_list_free_full(backup->iop_order_list, free);
+  if(backup->history)
+  {
+    g_list_free_full(backup->history, dt_dev_free_history_item);
+    backup->history = NULL;
+  }
+  if(backup->iop_order_list)
+  {
+    g_list_free_full(backup->iop_order_list, dt_free_gpointer);
+    backup->iop_order_list = NULL;
+  }
   if(backup->orig_labels) g_ptr_array_free(backup->orig_labels, TRUE);
   if(backup->orig_styles) g_ptr_array_free(backup->orig_styles, TRUE);
   if(backup->orig_ids) g_hash_table_destroy(backup->orig_ids);
@@ -365,7 +378,7 @@ int _hm_build_last_history_by_id(const dt_develop_t *dev, GHashTable **out_map)
    *
    * This is used to decide whether a post-merge history item matches the source or destination history.
    */
-  GHashTable *map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  GHashTable *map = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
   if(!map) return 1;
 
   const int history_end = dt_dev_get_history_end_ext((dt_develop_t *)dev);
@@ -383,7 +396,7 @@ int _hm_build_last_history_by_id(const dt_develop_t *dev, GHashTable **out_map)
 static int _hm_build_id_set_from_mod_list(const GList *mod_list, GHashTable **out_ids)
 {
   /* Build a set of node ids from the pasted module list. */
-  GHashTable *ids = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  GHashTable *ids = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
   if(!ids) return 1;
   for(const GList *l = g_list_first((GList *)mod_list); l; l = g_list_next(l))
   {
@@ -430,7 +443,7 @@ static _hm_id_info_t *_hm_id_info_upsert(GHashTable *id_ht, const char *op, cons
   }
   else
   {
-    g_free(id);
+    dt_free(id);
   }
 
   info->flags |= origin;
@@ -447,7 +460,7 @@ static _hm_id_info_t *_hm_id_info_upsert(GHashTable *id_ht, const char *op, cons
  * We filter using `id_ht` so later steps can operate on a consistent kept set.
  *
  * Ownership:
- * - Returned ids are owned by the caller (free with g_list_free_full(list, g_free)).
+ * - Returned ids are owned by the caller (free with g_list_free_full(list, dt_free_gpointer)).
  */
 static int _hm_ids_from_iop_list(GList *iop, GHashTable *id_ht, const guint keep_mask, GList **out_ids)
 {
@@ -462,7 +475,7 @@ static int _hm_ids_from_iop_list(GList *iop, GHashTable *id_ht, const guint keep
     if(info && (info->flags & keep_mask))
       ids = g_list_append(ids, id);
     else
-      g_free(id);
+      dt_free(id);
   }
   *out_ids = ids;
   return 0;
@@ -579,7 +592,7 @@ static int _hm_build_isolated_nodes_from_modules(const GList *modules, const cha
     dt_digraph_node_t *n = dt_digraph_node_new(id);
     if(!n)
     {
-      g_free(id);
+      dt_free(id);
       _hm_free_input_nodes(nodes);
       return 1;
     }
@@ -588,14 +601,14 @@ static int _hm_build_isolated_nodes_from_modules(const GList *modules, const cha
       n->tag = g_strdup(tag);
       if(!n->tag)
       {
-        g_free(id);
+        dt_free(id);
         _hm_free_input_node(n);
         _hm_free_input_nodes(nodes);
         return 1;
       }
     }
     nodes = g_list_append(nodes, n);
-    g_free(id);
+    dt_free(id);
   }
   *out_nodes = nodes;
   return 0;
@@ -620,8 +633,8 @@ static int _hm_build_raster_mask_nodes_from_modules(const GList *modules, GHashT
     const _hm_id_info_t *prod_info = (_hm_id_info_t *)g_hash_table_lookup(id_ht, prod_id);
     if(!(user_info && (user_info->flags & keep_mask) && prod_info && (prod_info->flags & keep_mask)))
     {
-      g_free(user_id);
-      g_free(prod_id);
+      dt_free(user_id);
+      dt_free(prod_id);
       continue;
     }
 
@@ -651,8 +664,8 @@ static int _hm_build_raster_mask_nodes_from_modules(const GList *modules, GHashT
     nodes = g_list_append(nodes, prod);
     nodes = g_list_append(nodes, user);
 
-    g_free(user_id);
-    g_free(prod_id);
+    dt_free(user_id);
+    dt_free(prod_id);
   }
   *out_nodes = nodes;
   return 0;
@@ -744,11 +757,23 @@ static void _hm_topo_merge_cleanup(_hm_topo_merge_ctx_t *ctx)
    * This must be safe to call multiple times and after partial initialization, hence the NULL checks.
    */
 
-  if(ctx->sorted) g_list_free(ctx->sorted);
+  if(ctx->sorted)
+  {
+    g_list_free(ctx->sorted);
+    ctx->sorted = NULL;
+  }
   if(ctx->flat) dt_digraph_cleanup_full(ctx->flat, NULL, NULL);
   if(ctx->input_nodes) _hm_free_input_nodes(ctx->input_nodes);
-  if(ctx->dest_ids) g_list_free_full(ctx->dest_ids, g_free);
-  if(ctx->src_ids) g_list_free_full(ctx->src_ids, g_free);
+  if(ctx->dest_ids)
+  {
+    g_list_free_full(ctx->dest_ids, dt_free_gpointer);
+    ctx->dest_ids = NULL;
+  }
+  if(ctx->src_ids)
+  {
+    g_list_free_full(ctx->src_ids, dt_free_gpointer);
+    ctx->src_ids = NULL;
+  }
   if(ctx->src_focus_ids) g_hash_table_destroy(ctx->src_focus_ids);
   if(ctx->id_ht) g_hash_table_destroy(ctx->id_ht);
 
@@ -774,7 +799,7 @@ static int _hm_topo_build_id_info_table(_hm_topo_merge_ctx_t *ctx, dt_develop_t 
 
   // Build a single ID->info table, filled in the requested order:
   // 1) mod_list, 2) dev_src->iop, 3) dev_dest->iop.
-  ctx->id_ht = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+  ctx->id_ht = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
   if(!ctx->id_ht) return 1;
 
   // Register ids for modules we intend to paste.
@@ -828,7 +853,7 @@ static int _hm_topo_build_constraint_ids(_hm_topo_merge_ctx_t *ctx, dt_develop_t
   // - merge_iop_order=TRUE: import ordering constraints around all pasted modules.
   // - merge_iop_order=FALSE: import ordering constraints only around modules that are missing in destination,
   //   to determine where they should be inserted into the existing destination pipeline.
-  ctx->src_focus_ids = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  ctx->src_focus_ids = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
   if(!ctx->src_focus_ids) return 1;
   for(const GList *l = g_list_first((GList *)mod_list); l; l = g_list_next(l))
   {
@@ -840,7 +865,7 @@ static int _hm_topo_build_constraint_ids(_hm_topo_merge_ctx_t *ctx, dt_develop_t
 
     if(merge_iop_order || !exists_in_dest) g_hash_table_add(ctx->src_focus_ids, g_strdup(id));
 
-    g_free(id);
+    dt_free(id);
   }
 
   // Restrict sorting to everything in destination plus what we need to paste, plus rule nodes.
@@ -964,7 +989,7 @@ static int _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *id
     dt_digraph_node_t *faulty;
   } _hm_cycle_t;
 
-  seen_cycles = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+  seen_cycles = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, NULL);
   if(!seen_cycles) goto cleanup;
 
   // Scan all edges a<-b and record those where b also has a as predecessor (2-cycle).
@@ -992,7 +1017,7 @@ static int _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *id
       if(!key) goto cleanup;
       if(g_hash_table_contains(seen_cycles, key))
       {
-        g_free(key);
+        dt_free(key);
         continue;
       }
       g_hash_table_add(seen_cycles, key);
@@ -1083,7 +1108,8 @@ static int _hm_topo_resolve_incompatible_constraints(GList *flat, GHashTable *id
     }
   }
 
-  g_list_free_full(_hm_cycles, g_free);
+  g_list_free_full(_hm_cycles, dt_free_gpointer);
+  _hm_cycles = NULL;
   g_hash_table_destroy(seen_cycles);
   g_hash_table_destroy(src_prev);
   g_hash_table_destroy(src_next);
@@ -1097,7 +1123,8 @@ cleanup:
   if(src_next) g_hash_table_destroy(src_next);
   if(dst_prev) g_hash_table_destroy(dst_prev);
   if(dst_next) g_hash_table_destroy(dst_next);
-  g_list_free_full(_hm_cycles, g_free);
+  g_list_free_full(_hm_cycles, dt_free_gpointer);
+  _hm_cycles = NULL;
   return 1;
 }
 
@@ -1120,11 +1147,19 @@ static int _hm_topo_sort_constraints(_hm_topo_merge_ctx_t *ctx)
     dt_print(DT_DEBUG_HISTORY, "[dt_history_merge_module_list_into_image_topological] iop-order merge: "
                                "unsatisfiable constraints (cycle)\n");
     _hm_show_toposort_cycle_popup(cycle_nodes, ctx->id_ht);
-    if(cycle_nodes) g_list_free(cycle_nodes);
+    if(cycle_nodes)
+    {
+      g_list_free(cycle_nodes);
+      cycle_nodes = NULL;
+    }
     return 1;
   }
 
-  if(cycle_nodes) g_list_free(cycle_nodes);
+  if(cycle_nodes)
+  {
+    g_list_free(cycle_nodes);
+    cycle_nodes = NULL;
+  }
   return 0;
 }
 
@@ -1187,6 +1222,7 @@ static int _hm_topo_apply_solution(_hm_topo_merge_ctx_t *ctx, dt_develop_t *dev_
   {
     dt_ioppr_rebuild_iop_order_from_modules(dev_dest, ordered_modules);
     g_list_free(ordered_modules);
+    ordered_modules = NULL;
   }
 
   dt_print(

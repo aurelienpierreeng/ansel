@@ -1142,8 +1142,7 @@ static inline dt_masks_dynbuf_t *dt_masks_dynbuf_init(size_t size, const char *t
                (unsigned long)a->size, a->buffer);
     if(a->buffer == NULL)
     {
-      free(a);
-      a = NULL;
+      dt_free(a);
     }
   }
   return a;
@@ -1327,7 +1326,7 @@ static inline void dt_masks_dynbuf_free(dt_masks_dynbuf_t *a)
   dt_print(DT_DEBUG_MASKS, "[masks dynbuf '%s'] freed (was %p)\n", a->tag,
           a->buffer);
   dt_pixelpipe_cache_free_align(a->buffer);
-  free(a);
+  dt_free(a);
 }
 
 static inline int dt_masks_roundup(int num, int mult)

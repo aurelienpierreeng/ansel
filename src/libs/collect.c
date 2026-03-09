@@ -393,9 +393,9 @@ void init_presets(dt_lib_module_t *self)
   dt_lib_presets_add(_("taken: last 30 days"), self->plugin_name, self->version(),
                        &params, sizeof(params), TRUE);
 
-  g_free(datetime_today);
-  g_free(datetime_24hrs);
-  g_free(datetime_30d);
+  dt_free(datetime_today);
+  dt_free(datetime_24hrs);
+  dt_free(datetime_30d);
 #undef CLEAR_PARAMS
 }
 
@@ -528,7 +528,7 @@ static void view_popup_menu_onSearchFilmroll(GtkWidget *menuitem, gpointer userd
     gchar *uri = NULL;
     uri = gtk_file_chooser_get_uri(GTK_FILE_CHOOSER(filechooser));
     new_path = g_filename_from_uri(uri, NULL, NULL);
-    g_free(uri);
+    dt_free(uri);
     if(new_path)
     {
       gchar *old = NULL;
@@ -544,8 +544,7 @@ static void view_popup_menu_onSearchFilmroll(GtkWidget *menuitem, gpointer userd
       sqlite3_reset(stmt);
       sqlite3_clear_bindings(stmt);
       DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, q_tree_path, -1, SQLITE_TRANSIENT);
-      g_free(q_tree_path);
-      q_tree_path = NULL;
+      dt_free(q_tree_path);
 
       while(sqlite3_step(stmt) == SQLITE_ROW)
       {
@@ -590,8 +589,8 @@ static void view_popup_menu_onSearchFilmroll(GtkWidget *menuitem, gpointer userd
     else
       goto error;
   }
-  g_free(tree_path);
-  g_free(new_path);
+  dt_free(tree_path);
+  dt_free(new_path);
   g_object_unref(filechooser);
   return;
 
@@ -600,8 +599,8 @@ error:
   g_object_unref(filechooser);
   dt_control_log(_("problem selecting new path for the filmroll in %s"), tree_path);
 
-  g_free(tree_path);
-  g_free(new_path);
+  dt_free(tree_path);
+  dt_free(new_path);
 }
 
 static void view_popup_menu_onRemove(GtkWidget *menuitem, gpointer userdata)
@@ -637,7 +636,7 @@ static void view_popup_menu_onRemove(GtkWidget *menuitem, gpointer userdata)
                             filmroll_path);
     // clang-format on
     DT_DEBUG_SQLITE3_EXEC(dt_database_get(darktable.db), fullq, NULL, NULL, NULL);
-    g_free(filmroll_path);
+    dt_free(filmroll_path);
 
     dt_selection_reload_from_database(darktable.selection);
 
@@ -657,7 +656,7 @@ static void view_popup_menu_onRemove(GtkWidget *menuitem, gpointer userdata)
       }
     }
 
-    g_free(fullq);
+    dt_free(fullq);
   }
 }
 
@@ -800,6 +799,7 @@ static gboolean view_onButtonPressed(GtkWidget *treeview, GdkEventButton *event,
       GtkTreePath *last_path = (GtkTreePath *)g_list_last(selected)->data;
       gtk_tree_selection_select_range(selection, first_path, last_path);
       g_list_free_full(selected, (GDestroyNotify)gtk_tree_path_free);
+      selected = NULL;
       row_activated_with_event(GTK_TREE_VIEW(treeview), path, NULL, event, d);
     }
     else if(!dt_modifier_is(event->state, GDK_SHIFT_MASK))
@@ -891,9 +891,9 @@ static gboolean list_select(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
     gtk_tree_view_scroll_to_cell(d->view, path, NULL, FALSE, 0.2, 0);
   }
 
-  g_free(haystack);
-  g_free(needle);
-  g_free(str);
+  dt_free(haystack);
+  dt_free(needle);
+  dt_free(str);
 
   return FALSE;
 }
@@ -923,9 +923,9 @@ static gboolean range_select(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter
       range->path1 = gtk_tree_path_copy(path);
   }
 
-  g_free(haystack);
-  g_free(needle);
-  g_free(str);
+  dt_free(haystack);
+  dt_free(needle);
+  dt_free(str);
 
   return FALSE;
 }
@@ -1018,11 +1018,11 @@ static gboolean tree_expand(GtkTreeModel *model, GtkTreePath *path, GtkTreeIter 
     expanded = TRUE;
   }
 
-  g_free(haystack);
-  g_free(needle);
-  g_free(txt2);
-  g_free(str);
-  g_free(txt);
+  dt_free(haystack);
+  dt_free(needle);
+  dt_free(txt2);
+  dt_free(str);
+  dt_free(txt);
 
   return expanded; // if we expanded the path, we can stop iteration (saves half on average)
 }
@@ -1082,9 +1082,9 @@ static gboolean list_match_string(GtkTreeModel *model, GtkTreePath *path, GtkTre
         visible = (nb1 == nb2);
       }
     }
-    g_free(operator);
-    g_free(number);
-    g_free(number2);
+    dt_free(operator);
+    dt_free(number);
+    dt_free(number2);
   }
   else if (property == DT_COLLECTION_PROP_FILENAME && strchr(needle,',') != NULL)
   {
@@ -1096,7 +1096,8 @@ static gboolean list_match_string(GtkTreeModel *model, GtkTreePath *path, GtkTre
       if((visible = (g_strrstr(haystack, name + (name[0]=='%')) != NULL))) break;
     }
 
-    g_list_free_full(list, g_free);
+    g_list_free_full(list, dt_free_gpointer);
+    list = NULL;
 
   }
   else
@@ -1119,8 +1120,8 @@ static gboolean list_match_string(GtkTreeModel *model, GtkTreePath *path, GtkTre
     }
   }
 
-  g_free(haystack);
-  g_free(str);
+  dt_free(haystack);
+  dt_free(str);
 
   if (visible != was_visible)
     gtk_list_store_set(GTK_LIST_STORE(model), iter, DT_LIB_COLLECT_COL_VISIBLE, visible, -1);
@@ -1144,11 +1145,11 @@ static gboolean tree_match_string(GtkTreeModel *model, GtkTreePath *path, GtkTre
     gchar *haystack = g_utf8_strdown(str, -1),
           *needle = g_utf8_strdown(gtk_entry_get_text(GTK_ENTRY(dr->text)), -1);
     visible = (g_strrstr(haystack, needle) != NULL);
-    g_free(haystack);
-    g_free(needle);
+    dt_free(haystack);
+    dt_free(needle);
   }
 
-  g_free(str);
+  dt_free(str);
 
   gtk_tree_store_set(GTK_TREE_STORE(model), iter, DT_LIB_COLLECT_COL_VISIBLE, visible, -1);
   return FALSE;
@@ -1252,7 +1253,7 @@ static GtkTreeModel *_create_filtered_model(GtkTreeModel *model, dt_lib_collect_
         DT_DEBUG_SQLITE3_BIND_TEXT(stmt, 1, pth, -1, SQLITE_TRANSIENT);
         if(sqlite3_step(stmt) == SQLITE_ROW) id = sqlite3_column_int(stmt, 0);
 
-        g_free(pth);
+        dt_free(pth);
 
         if(id != -1)
         {
@@ -1326,8 +1327,8 @@ static char **split_path(const char *path)
   for(unsigned int i = 0; i < size; i++)
     result[i] = tokens[i + 1];
 
-  g_free(tokens[0]);
-  g_free(tokens);
+  dt_free(tokens[0]);
+  dt_free(tokens);
 
 #endif
 
@@ -1343,9 +1344,9 @@ typedef struct name_key_tuple_t
 static void free_tuple(gpointer data)
 {
   name_key_tuple_t *tuple = (name_key_tuple_t *)data;
-  g_free(tuple->name);
-  g_free(tuple->collate_key);
-  free(tuple);
+  dt_free(tuple->name);
+  dt_free(tuple->collate_key);
+  dt_free(tuple);
 }
 
 static gint sort_folder_tag(gconstpointer a, gconstpointer b)
@@ -1390,10 +1391,10 @@ void tree_count_show(GtkTreeViewColumn *col, GtkCellRenderer *renderer, GtkTreeM
   {
     gchar *coltext = g_strdup_printf("%s (%d)", name, count);
     g_object_set(renderer, "text", coltext, NULL);
-    g_free(coltext);
+    dt_free(coltext);
   }
 
-  g_free(name);
+  dt_free(name);
 }
 
 static const char *UNCATEGORIZED_TAG = N_("uncategorized");
@@ -1547,7 +1548,7 @@ static void tree_view(dt_lib_collect_rule_t *dr)
         }
     }
 
-    g_free(where_ext);
+    dt_free(where_ext);
 
     DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query, -1, &stmt, NULL);
 
@@ -1584,8 +1585,8 @@ static void tree_view(dt_lib_collect_rule_t *dr)
         char *name_folded = g_utf8_casefold(name, -1);
         char *name_folded_slash = g_strconcat(name_folded, G_DIR_SEPARATOR_S, NULL);
         collate_key = g_utf8_collate_key_for_filename(name_folded_slash, -1);
-        g_free(name_folded_slash);
-        g_free(name_folded);
+        dt_free(name_folded_slash);
+        dt_free(name_folded);
       }
       else
         collate_key = tag_collate_key(name);
@@ -1598,7 +1599,7 @@ static void tree_view(dt_lib_collect_rule_t *dr)
       sorted_names = g_list_prepend(sorted_names, tuple);
     }
     sqlite3_finalize(stmt);
-    g_free(query);
+    dt_free(query);
     // this order should not be altered. the right feeding of the tree relies on it.
     sorted_names = g_list_sort(sorted_names, sort_folder_tag);
     const gboolean sort_descend = dt_conf_get_bool("plugins/collect/descending");
@@ -1646,7 +1647,7 @@ static void tree_view(dt_lib_collect_rule_t *dr)
           uncategorized_found = TRUE;
           index++;
         }
-        g_free(next_name);
+        dt_free(next_name);
       }
 
       if(!uncategorized_found)
@@ -1729,10 +1730,10 @@ static void tree_view(dt_lib_collect_rule_t *dr)
 
             common_length++;
             parent = iter;
-            g_free(pth2);
+            dt_free(pth2);
           }
 
-          g_free(pth);
+          dt_free(pth);
 
           // remember things for the next round
           if(last_tokens) g_strfreev(last_tokens);
@@ -1743,6 +1744,7 @@ static void tree_view(dt_lib_collect_rule_t *dr)
       }
     }
     g_list_free_full(sorted_names, free_tuple);
+    sorted_names = NULL;
 
     gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(d->view), DT_LIB_COLLECT_COL_TOOLTIP);
 
@@ -1796,11 +1798,11 @@ static void tree_view(dt_lib_collect_rule_t *dr)
       {
         gtk_tree_selection_select_range(gtk_tree_view_get_selection(d->view), range->path1, range->path2);
       }
-      g_free(range->start);
-      g_free(range->stop);
+      dt_free(range->start);
+      dt_free(range->stop);
       gtk_tree_path_free(range->path1);
       gtk_tree_path_free(range->path2);
-      free(range);
+      dt_free(range);
     }
     else
       gtk_tree_model_foreach(d->treefilter, (GtkTreeModelForeachFunc)tree_expand, dr);
@@ -1861,10 +1863,10 @@ static void list_view(dt_lib_collect_rule_t *dr)
                              DT_LIB_COLLECT_COL_COUNT, count,
                              DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_NORMAL, -1);
 
-          g_free(value);
+          dt_free(value);
           index++;
         }
-        g_free(makermodel_query);
+        dt_free(makermodel_query);
         break;
 
       case DT_COLLECTION_PROP_HISTORY: // History
@@ -2042,7 +2044,7 @@ static void list_view(dt_lib_collect_rule_t *dr)
                    " ORDER BY ver",
                    orders, where_ext);
           // clang-format on
-          g_free(orders);
+          dt_free(orders);
         }
         break;
 
@@ -2068,7 +2070,7 @@ static void list_view(dt_lib_collect_rule_t *dr)
           const char *name = (gchar *)dt_metadata_get_name(keyid);
           char *setting = g_strdup_printf("plugins/lighttable/metadata/%s_flag", name);
           const gboolean hidden = dt_conf_get_int(setting) & DT_METADATA_FLAG_HIDDEN;
-          g_free(setting);
+          dt_free(setting);
           if(!hidden)
           {
             // clang-format off
@@ -2114,12 +2116,12 @@ static void list_view(dt_lib_collect_rule_t *dr)
                      " ORDER BY %s", where_ext, order_by);
           // clang-format on
 
-          g_free(order_by);
+          dt_free(order_by);
         }
         break;
     }
 
-    g_free(where_ext);
+    dt_free(where_ext);
 
     if(strlen(query) > 0)
     {
@@ -2152,8 +2154,8 @@ static void list_view(dt_lib_collect_rule_t *dr)
                            DT_LIB_COLLECT_COL_COUNT, count, DT_LIB_COLLECT_COL_UNREACHABLE, status,
                            DT_LIB_COLLECT_COL_FONT, PANGO_WEIGHT_NORMAL, -1);
 
-        g_free(text);
-        g_free(escaped_text);
+        dt_free(text);
+        dt_free(escaped_text);
       }
       sqlite3_finalize(stmt);
     }
@@ -2204,7 +2206,7 @@ static void list_view(dt_lib_collect_rule_t *dr)
     dr->searchstring = needle;
     gtk_tree_model_foreach(model, (GtkTreeModelForeachFunc)list_match_string, dr);
     dr->searchstring = NULL;
-    g_free(needle);
+    dt_free(needle);
   }
   // we update list selection
   gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(d->view));
@@ -2234,11 +2236,11 @@ static void list_view(dt_lib_collect_rule_t *dr)
       {
         gtk_tree_selection_select_range(gtk_tree_view_get_selection(d->view), range->path1, range->path2);
       }
-      g_free(range->start);
-      g_free(range->stop);
+      dt_free(range->start);
+      dt_free(range->stop);
       gtk_tree_path_free(range->path1);
       gtk_tree_path_free(range->path2);
-      free(range);
+      dt_free(range);
     }
     else
       gtk_tree_model_foreach(d->listfilter, (GtkTreeModelForeachFunc)list_select, dr);
@@ -2262,14 +2264,14 @@ static void _clean_wildcards(dt_lib_collect_rule_t *dr)
     gchar *no_percent_filmroll = dt_string_replace(no_star_filmroll, "%");
 
     dt_conf_set_string(pref, no_percent_filmroll);
-    g_free(no_percent_filmroll);
-    g_free(no_star_filmroll);
-    g_free(filmroll);
+    dt_free(no_percent_filmroll);
+    dt_free(no_star_filmroll);
+    dt_free(filmroll);
 
     // reload GUI from conf
     get_properties(dr);
   }
-  g_free(pref);
+  dt_free(pref);
 }
 
 
@@ -2367,7 +2369,7 @@ static void _set_tooltip(dt_lib_collect_rule_t *d)
   //set the combobox tooltip as well
   gchar *tip = gtk_widget_get_tooltip_text(d->text);
   gtk_widget_set_tooltip_text(GTK_WIDGET(d->combo), tip);
-  g_free(tip);
+  dt_free(tip);
 }
 
 static void _set_rules_visibility(dt_lib_collect_rule_t *dr, gboolean last, gboolean active)
@@ -2698,6 +2700,7 @@ static void row_activated_with_event(GtkTreeView *view, GtkTreePath *path, GtkTr
   if(!gtk_tree_model_get_iter(model, &iter, path1))
   {
     g_list_free_full(sels, (GDestroyNotify)gtk_tree_path_free);
+    sels = NULL;
     return;
   }
 
@@ -2730,8 +2733,8 @@ static void row_activated_with_event(GtkTreeView *view, GtkTreePath *path, GtkTr
       else
         n_text = g_strdup_printf("[%s;%s]", text, text2);
 
-      g_free(text);
-      g_free(text2);
+      dt_free(text);
+      dt_free(text2);
       text = n_text;
     }
     else if(item == DT_COLLECTION_PROP_TAG
@@ -2744,7 +2747,7 @@ static void row_activated_with_event(GtkTreeView *view, GtkTreePath *path, GtkTr
         if(dt_modifier_is(event->state, GDK_CONTROL_MASK))
         {
           gchar *n_text = g_strconcat(text, "|%", NULL);
-          g_free(text);
+          dt_free(text);
           text = n_text;
         }
         /* if a tag has children, left-clicking on a parent node should display all images in and under this
@@ -2752,7 +2755,7 @@ static void row_activated_with_event(GtkTreeView *view, GtkTreePath *path, GtkTr
         else if(!dt_modifier_is(event->state, GDK_SHIFT_MASK))
         {
           gchar *n_text = g_strconcat(text, "*", NULL);
-          g_free(text);
+          dt_free(text);
           text = n_text;
         }
       }
@@ -2785,12 +2788,13 @@ static void row_activated_with_event(GtkTreeView *view, GtkTreePath *path, GtkTr
       _combo_set_active_collection(active_rule->combo, item);
   }
   g_list_free_full(sels, (GDestroyNotify)gtk_tree_path_free);
+  sels = NULL;
 
   g_signal_handlers_block_matched(active_rule->text, G_SIGNAL_MATCH_FUNC, 0, 0, NULL, entry_changed, NULL);
   gtk_entry_set_text(GTK_ENTRY(active_rule->text), text);
   gtk_editable_set_position(GTK_EDITABLE(active_rule->text), -1);
   g_signal_handlers_unblock_matched(active_rule->text, G_SIGNAL_MATCH_FUNC, 0, 0, NULL, entry_changed, NULL);
-  g_free(text);
+  dt_free(text);
 
   if(item == DT_COLLECTION_PROP_TAG
      || item == DT_COLLECTION_PROP_FILMROLL
@@ -2853,7 +2857,7 @@ static void entry_activated(GtkWidget *entry, dt_lib_collect_rule_t *d)
         gtk_entry_set_text(GTK_ENTRY(d->text), text);
         gtk_editable_set_position(GTK_EDITABLE(d->text), -1);
         g_signal_handlers_unblock_matched(d->text, G_SIGNAL_MATCH_FUNC, 0, 0, NULL, entry_changed, NULL);
-        g_free(text);
+        dt_free(text);
         update_view(d);
       }
     }
@@ -3146,7 +3150,7 @@ static void menuitem_clear(GtkMenuItem *menuitem, dt_lib_collect_rule_t *d)
       dt_conf_set_int(confname, item);
       snprintf(confname, sizeof(confname), "plugins/lighttable/collect/string%1d", i);
       dt_conf_set_string(confname, string);
-      g_free(string);
+      dt_free(string);
     }
   }
 
@@ -3226,7 +3230,7 @@ static void _populate_collect_combo(GtkWidget *w)
       const gchar *name = dt_metadata_get_name(keyid);
       gchar *setting = g_strdup_printf("plugins/lighttable/metadata/%s_flag", name);
       const gboolean hidden = dt_conf_get_int(setting) & DT_METADATA_FLAG_HIDDEN;
-      g_free(setting);
+      dt_free(setting);
       const int meta_type = dt_metadata_get_type(keyid);
       if(meta_type != DT_METADATA_TYPE_INTERNAL && !hidden)
       {
@@ -3475,7 +3479,7 @@ void gui_cleanup(dt_lib_module_t *self)
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(tag_changed), self);
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(geotag_changed), self);
   darktable.view_manager->proxy.module_collect.module = NULL;
-  free(d->params);
+  dt_free(d->params);
 
   /* cleanup mem */
   if(_collect_filmrolls_select_like_stmt)
@@ -3495,8 +3499,7 @@ void gui_cleanup(dt_lib_module_t *self)
 
   /* TODO: Make sure we are cleaning up all allocations */
 
-  free(self->data);
-  self->data = NULL;
+  dt_free(self->data);
 }
 
 static int is_time_property(int property)
@@ -3548,7 +3551,7 @@ static int filter_cb(lua_State *L)
       }
     }
     set_params(self, new_p, size);
-    free(new_p);
+    dt_free(new_p);
 
   }
 
@@ -3558,7 +3561,7 @@ static int filter_cb(lua_State *L)
     luaA_push(L, dt_lib_collect_params_rule_t, &p->rule[i]);
     lua_seti(L, -2, i + 1);  // lua tables are 1 based
   }
-  free(p);
+  dt_free(p);
   return 1;
 }
 
@@ -3665,7 +3668,7 @@ void init(struct dt_lib_module_t *self)
       const char *name = dt_metadata_get_name(i);
       gchar *setting = g_strdup_printf("plugins/lighttable/metadata/%s_flag", name);
       const gboolean hidden = dt_conf_get_int(setting) & DT_METADATA_FLAG_HIDDEN;
-      g_free(setting);
+      dt_free(setting);
 
       if(!hidden)
         luaA_enum_value(L, dt_collection_properties_t, DT_COLLECTION_PROP_METADATA + i);

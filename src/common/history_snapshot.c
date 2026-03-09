@@ -249,7 +249,7 @@ void dt_history_snapshot_undo_lt_history_data_free(gpointer data)
   if(hist->before == 0)
     _clear_undo_snapshot(hist->imgid, hist->before);
 
-  g_free(hist);
+  dt_free(hist);
 }
 
 void dt_history_snapshot_undo_pop(gpointer user_data, dt_undo_type_t type, dt_undo_data_t data, dt_undo_action_t action, GList **imgs)

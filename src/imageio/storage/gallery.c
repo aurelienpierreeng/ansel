@@ -145,7 +145,7 @@ static void button_clicked(GtkWidget *widget, dt_imageio_module_storage_t *self)
   char *c = g_strstr_len(old, -1, "$");
   if(c) *c = '\0';
   gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(filechooser), old);
-  g_free(old);
+  dt_free(old);
   if(gtk_native_dialog_run(GTK_NATIVE_DIALOG(filechooser)) == GTK_RESPONSE_ACCEPT)
   {
     gchar *dir = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(filechooser));
@@ -157,9 +157,9 @@ static void button_clicked(GtkWidget *widget, dt_imageio_module_storage_t *self)
     gchar *escaped = dt_util_str_replace(composed, "\\", "\\\\");
 
     gtk_entry_set_text(GTK_ENTRY(d->entry), escaped); // the signal handler will write this to conf
-    g_free(dir);
-    g_free(composed);
-    g_free(escaped);
+    dt_free(dir);
+    dt_free(composed);
+    dt_free(escaped);
   }
   g_object_unref(filechooser);
 }
@@ -225,7 +225,7 @@ void gui_init(dt_imageio_module_storage_t *self)
 
 void gui_cleanup(dt_imageio_module_storage_t *self)
 {
-  free(self->gui_data);
+  dt_free(self->gui_data);
 }
 
 void gui_reset(dt_imageio_module_storage_t *self)
@@ -267,7 +267,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
 
   gchar *result_tmp_dir = dt_variables_expand(d->vp, d->filename, TRUE);
   g_strlcpy(tmp_dir, result_tmp_dir, sizeof(tmp_dir));
-  g_free(result_tmp_dir);
+  dt_free(result_tmp_dir);
 
   // if filenamepattern is a directory just let att ${FILE_NAME} as default..
   if(g_file_test(tmp_dir, G_FILE_TEST_IS_DIR)
@@ -283,11 +283,11 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
 
   gchar *fixed_path = dt_util_fix_path(d->filename);
   g_strlcpy(d->filename, fixed_path, sizeof(d->filename));
-  g_free(fixed_path);
+  dt_free(fixed_path);
 
   gchar *result_filename = dt_variables_expand(d->vp, d->filename, TRUE);
   g_strlcpy(filename, result_filename, sizeof(filename));
-  g_free(result_filename);
+  dt_free(result_filename);
 
   g_strlcpy(dirname, filename, sizeof(dirname));
 
@@ -368,8 +368,16 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
            esc_relthumbfilename,
            num, num-1, title ? title : "&nbsp;", description ? description : "&nbsp;");
 
-  if(res_title) g_list_free_full(res_title, &g_free);
-  if(res_desc) g_list_free_full(res_desc, &g_free);
+  if(res_title)
+  {
+    g_list_free_full(res_title, dt_free_gpointer);
+    res_title = NULL;
+  }
+  if(res_desc)
+  {
+    g_list_free_full(res_desc, dt_free_gpointer);
+    res_desc = NULL;
+  }
 
   // export image to file. need this to be able to access meaningful
   // fdata->width and height below.
@@ -378,9 +386,9 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
   {
     fprintf(stderr, "[imageio_storage_gallery] could not export to file: `%s'!\n", filename);
     dt_control_log(_("could not export to file `%s'!"), filename);
-    free(pair);
-    g_free(esc_relfilename);
-    g_free(esc_relthumbfilename);
+    dt_free(pair);
+    dt_free(esc_relfilename);
+    dt_free(esc_relthumbfilename);
     return 1;
   }
 
@@ -393,12 +401,12 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
            "},\n",
            esc_relfilename, fdata->width, fdata->height, esc_relthumbfilename);
 
-  g_free(esc_relfilename);
-  g_free(esc_relthumbfilename);
+  dt_free(esc_relfilename);
+  dt_free(esc_relthumbfilename);
 
   pair->pos = num;
   d->l = g_list_insert_sorted(d->l, pair, (GCompareFunc)sort_pos);
-  free(pair);
+  dt_free(pair);
 
   /* also export thumbnail: */
   // write with reduced resolution:
@@ -554,7 +562,7 @@ void finalize_store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t 
   {
     pair_t *p = (pair_t *)d->l->data;
     fprintf(f, "%s", p->item);
-    free(p);
+    dt_free(p);
     d->l = g_list_delete_link(d->l, d->l);
   }
   fprintf(f, "];\n"
@@ -608,7 +616,7 @@ void free_params(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *pa
   if(!params) return;
   dt_imageio_gallery_t *d = (dt_imageio_gallery_t *)params;
   dt_variables_params_destroy(d->vp);
-  free(params);
+  dt_free(params);
 }
 
 int set_params(dt_imageio_module_storage_t *self, const void *params, const int size)

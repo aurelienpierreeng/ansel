@@ -179,6 +179,7 @@ static int _history_copy_and_paste_on_image_merge(int32_t imgid, int32_t dest_im
                                               dt_conf_get_bool("history/copy_iop_order"), mode,
                                               dt_conf_get_bool("history/paste_instances"));
     g_list_free(mod_list);
+    mod_list = NULL;
   }
   dt_dev_cleanup(dev_src);
 

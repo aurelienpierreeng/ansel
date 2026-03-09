@@ -120,7 +120,7 @@ static void _new_connection(SoupServer *server, SoupMessage *msg, const char *pa
 
   char *resp_body = g_strdup_printf(reply, page_title, res ? 0 : 1, title, body);
   size_t resp_length = strlen(resp_body);
-  g_free(page_title);
+  dt_free(page_title);
 
   soup_message_set_status(msg, SOUP_STATUS_OK);
   soup_message_set_response(msg, "text/html", SOUP_MEMORY_TAKE, resp_body, resp_length);
@@ -147,7 +147,7 @@ static void _new_connection(SoupServer *server, SoupServerMessage *msg, gpointer
     return;
   }
 
-  GHashTable *query = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+  GHashTable *query = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
   
   gboolean res = params->callback(query, params->user_data);
   g_hash_table_unref(query);
@@ -159,7 +159,7 @@ static void _new_connection(SoupServer *server, SoupServerMessage *msg, gpointer
 
   char *page_title = g_strdup_printf(_("ansel >> %s"), params->id);
   char *resp_body = g_strdup_printf(reply, page_title, res ? 0 : 1, _(params->id), body);
-  g_free(page_title);
+  dt_free(page_title);
 
   soup_server_message_set_status(msg, SOUP_STATUS_OK, "OK");
   soup_server_message_set_response(msg, "text/html; charset=utf-8", 
@@ -255,7 +255,7 @@ soup_server_run(httpserver);
   soup_server_add_early_handler(httpserver, path, (SoupServerCallback)_new_connection, params, (GDestroyNotify)g_free);
 #endif
 
-  g_free(path);
+  dt_free(path);
 
   dt_print(DT_DEBUG_CONTROL, "[http server] listening on %s\n", server->url);
   return server;
@@ -269,8 +269,8 @@ void dt_http_server_kill(dt_http_server_t *server)
     g_object_unref(server->server);
     server->server = NULL;
   }
-  g_free(server->url);
-  g_free(server);
+  dt_free(server->url);
+  dt_free(server);
 }
 
 // clang-format off

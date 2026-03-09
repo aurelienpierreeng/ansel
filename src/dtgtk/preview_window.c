@@ -98,7 +98,7 @@ void dt_preview_window_spawn(const int32_t imgid)
   gchar *name = g_strdup_printf(_("Ansel - Preview : %s"), img->filename);
   dt_image_cache_read_release(darktable.image_cache, img);
   gtk_window_set_title(GTK_WINDOW(dialog), name);
-  g_free(name);
+  dt_free(name);
 
 #ifdef GDK_WINDOWING_QUARTZ
   dt_osx_disallow_fullscreen(dialog);

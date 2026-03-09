@@ -108,7 +108,7 @@ void gui_init(dt_imageio_module_storage_t *self)
 
 void gui_cleanup(dt_imageio_module_storage_t *self)
 {
-  free(self->gui_data);
+  dt_free(self->gui_data);
 }
 
 void gui_reset(dt_imageio_module_storage_t *self)
@@ -154,9 +154,9 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
   {
     fprintf(stderr, "[imageio_storage_email] could not export to file: `%s'!\n", attachment->file);
     dt_control_log(_("could not export to file `%s'!"), attachment->file);
-    g_free(attachment->file);
-    g_free(attachment);
-    g_free(filename);
+    dt_free(attachment->file);
+    dt_free(attachment);
+    dt_free(filename);
     return 1;
   }
 
@@ -168,7 +168,7 @@ int store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *sdata, co
 #endif
   d->images = g_list_append(d->images, attachment);
 
-  g_free(filename);
+  dt_free(filename);
 
   return 0;
 }
@@ -197,7 +197,7 @@ int set_params(dt_imageio_module_storage_t *self, const void *params, const int 
 void free_params(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *params)
 {
   if(!params) return;
-  free(params);
+  dt_free(params);
 }
 
 void finalize_store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t *params)
@@ -231,14 +231,14 @@ void finalize_store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t 
     if (body != NULL) {
       gchar *body_bak = body;
       body = g_strconcat(body_bak, imgbody, NULL);
-      g_free(body_bak);
+      dt_free(body_bak);
     }
     else
     {
       body = g_strdup(imgbody);
     }
-    g_free(imgbody);
-    g_free(filename);
+    dt_free(imgbody);
+    dt_free(filename);
 
     argv[n]   = g_strdup("--attach");
     // use attachment->file directly as we need to freed it, and this way it will be
@@ -246,7 +246,7 @@ void finalize_store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t 
     argv[n+1] = attachment->file;
     n += 2;
   }
-  g_list_free_full(d->images, g_free);
+  g_list_free_full(d->images, dt_free_gpointer);
   d->images = NULL;
 
   argv[4] = body;
@@ -262,8 +262,8 @@ void finalize_store(dt_imageio_module_storage_t *self, dt_imageio_module_data_t 
   g_spawn_sync (NULL, argv, NULL, G_SPAWN_SEARCH_PATH | G_SPAWN_STDOUT_TO_DEV_NULL | G_SPAWN_STDERR_TO_DEV_NULL,
                 NULL, NULL, NULL, NULL, &exit_status, NULL);
 
-  for (int k=4; k<argc; k++) g_free(argv[k]);
-  g_free(argv);
+  for (int k=4; k<argc; k++) dt_free(argv[k]);
+  dt_free(argv);
 
   if(exit_status)
   {

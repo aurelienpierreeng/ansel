@@ -218,7 +218,7 @@ marker_is_icc (jpeg_saved_marker_ptr marker)
  * returned data, and *icc_data_len is set to its length.
  *
  * IMPORTANT: the data at **icc_data_ptr has been allocated with malloc()
- * and must be freed by the caller with free() when the caller no longer
+ * and must be freed by the caller with g_free() when the caller no longer
  * needs it.  (Alternatively, we could write this routine to use the
  * IJG library's memory allocator, so that the data would be freed implicitly
  * at jpeg_finish_decompress() time.  But it seems likely that many apps
@@ -373,7 +373,7 @@ int write_image(dt_imageio_module_data_t *jpg_tmp, const char *filename, const v
     {
       cmsSaveProfileToMem(out_profile, buf, &len);
       write_icc_profile(&(jpg->cinfo), buf, len);
-      free(buf);
+      dt_free(buf);
     }
   }
 
@@ -518,7 +518,7 @@ void *get_params(dt_imageio_module_format_t *self)
 
 void free_params(dt_imageio_module_format_t *self, dt_imageio_module_data_t *params)
 {
-  free(params);
+  dt_free(params);
 }
 
 int set_params(dt_imageio_module_format_t *self, const void *params, const int size)
@@ -604,7 +604,7 @@ void gui_init(dt_imageio_module_format_t *self)
 
 void gui_cleanup(dt_imageio_module_format_t *self)
 {
-  free(self->gui_data);
+  dt_free(self->gui_data);
 }
 
 void gui_reset(dt_imageio_module_format_t *self)

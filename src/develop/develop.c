@@ -57,6 +57,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include <assert.h>
 #include <stddef.h>
 #include <glib/gprintf.h>
@@ -106,7 +107,7 @@ GList *dt_dev_load_modules(dt_develop_t *dev)
     module = (dt_iop_module_t *)calloc(1, sizeof(dt_iop_module_t));
     if(dt_iop_load_module_by_so(module, module_so, dev))
     {
-      free(module);
+      dt_free(module);
       continue;
     }
     res = g_list_insert_sorted(res, module, dt_sort_iop_by_order);
@@ -207,18 +208,18 @@ void dt_dev_cleanup(dt_develop_t *dev)
   if(dev->pipe)
   {
     dt_dev_pixelpipe_cleanup(dev->pipe);
-    free(dev->pipe);
+    dt_free(dev->pipe);
   }
   if(dev->preview_pipe)
   {
     dt_dev_pixelpipe_cleanup(dev->preview_pipe);
-    free(dev->preview_pipe);
+    dt_free(dev->preview_pipe);
   }
   if(dev->virtual_pipe)
   {
     // Virtual pipe has nodes and committed params but no pixel buffers.
     dt_dev_pixelpipe_cleanup(dev->virtual_pipe);
-    free(dev->virtual_pipe);
+    dt_free(dev->virtual_pipe);
   }
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
@@ -234,36 +235,40 @@ void dt_dev_cleanup(dt_develop_t *dev)
   dev->undo_history_depth = 0;
   g_list_free_full(dev->undo_history_before_snapshot, dt_dev_free_history_item);
   dev->undo_history_before_snapshot = NULL;
-  g_list_free_full(dev->undo_history_before_iop_order_list, free);
+  g_list_free_full(dev->undo_history_before_iop_order_list, dt_free_gpointer);
   dev->undo_history_before_iop_order_list = NULL;
   dev->undo_history_before_end = 0;
 
   while(dev->iop)
   {
     dt_iop_cleanup_module((dt_iop_module_t *)dev->iop->data);
-    free(dev->iop->data);
+    dt_free(dev->iop->data);
     dev->iop = g_list_delete_link(dev->iop, dev->iop);
   }
   while(dev->alliop)
   {
     dt_iop_cleanup_module((dt_iop_module_t *)dev->alliop->data);
-    free(dev->alliop->data);
+    dt_free(dev->alliop->data);
     dev->alliop = g_list_delete_link(dev->alliop, dev->alliop);
   }
-  g_list_free_full(dev->iop_order_list, free);
+  g_list_free_full(dev->iop_order_list, dt_free_gpointer);
+  dev->iop_order_list = NULL;
   while(dev->allprofile_info)
   {
     dt_ioppr_cleanup_profile_info((dt_iop_order_iccprofile_info_t *)dev->allprofile_info->data);
     dt_free_align(dev->allprofile_info->data);
+    dev->allprofile_info->data = NULL;
     dev->allprofile_info = g_list_delete_link(dev->allprofile_info, dev->allprofile_info);
   }
 
-  free(dev->histogram_pre_tonecurve);
-  free(dev->histogram_pre_levels);
+  dt_free(dev->histogram_pre_tonecurve);
+  dt_free(dev->histogram_pre_levels);
 
   dt_pthread_rwlock_wrlock(&dev->masks_mutex);
   g_list_free_full(dev->forms, (void (*)(void *))dt_masks_free_form);
+  dev->forms = NULL;
   g_list_free_full(dev->allforms, (void (*)(void *))dt_masks_free_form);
+  dev->allforms = NULL;
   dt_pthread_rwlock_unlock(&dev->masks_mutex);
 
   dt_pthread_rwlock_destroy(&dev->masks_mutex);
@@ -556,7 +561,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 
       gchar *msg = g_strdup_printf("[dev_process_%s] pipeline processing thread", dt_pixelpipe_get_pipe_name(pipe->type));
       dt_show_times(&thread_start, msg);
-      g_free(msg);
+      dt_free(msg);
 
       dt_control_log_busy_leave();
       dt_control_toast_busy_leave();
@@ -1257,7 +1262,7 @@ gchar *dt_history_item_get_name(const struct dt_iop_module_t *module)
   {
     gchar *clean_name = delete_underscore(module->name());
     label = g_strdup_printf("%s %s", clean_name, module->multi_name);
-    g_free(clean_name);
+    dt_free(clean_name);
   }
   return label;
 }
@@ -1271,7 +1276,7 @@ gchar *dt_history_item_get_name_html(const struct dt_iop_module_t *module)
     label = g_markup_escape_text(clean_name, -1);
   else
     label = g_markup_printf_escaped("%s <span size=\"smaller\">%s</span>", clean_name, module->multi_name);
-  g_free(clean_name);
+  dt_free(clean_name);
   return label;
 }
 

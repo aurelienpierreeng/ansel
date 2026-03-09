@@ -1201,8 +1201,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_write_blended_dual);
   dt_pixelpipe_cache_free_align(gd->lmmse_gamma_in);
   dt_pixelpipe_cache_free_align(gd->lmmse_gamma_out);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 

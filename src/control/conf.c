@@ -67,13 +67,13 @@ typedef struct dt_conf_dreggn_t
 static void _free_confgen_value(void *value)
 {
   dt_confgen_value_t *s = (dt_confgen_value_t *)value;
-  g_free(s->def);
-  g_free(s->min);
-  g_free(s->max);
-  g_free(s->enum_values);
-  g_free(s->shortdesc);
-  g_free(s->longdesc);
-  g_free(s);
+  dt_free(s->def);
+  dt_free(s->min);
+  dt_free(s->max);
+  dt_free(s->enum_values);
+  dt_free(s->shortdesc);
+  dt_free(s->longdesc);
+  dt_free(s);
 }
 
 /** return slot for this variable or newly allocated slot. */
@@ -130,32 +130,47 @@ static int dt_conf_set_if_not_overridden(const char *name, char *str)
 void dt_conf_set_int(const char *name, int val)
 {
   char *str = g_strdup_printf("%d", val);
-  if(dt_conf_set_if_not_overridden(name, str)) g_free(str);
+  if(dt_conf_set_if_not_overridden(name, str))
+  {
+    dt_free(str);
+  }
 }
 
 void dt_conf_set_int64(const char *name, int64_t val)
 {
   char *str = g_strdup_printf("%" PRId64, val);
-  if(dt_conf_set_if_not_overridden(name, str)) g_free(str);
+  if(dt_conf_set_if_not_overridden(name, str))
+  {
+    dt_free(str);
+  }
 }
 
 void dt_conf_set_float(const char *name, float val)
 {
   char *str = (char *)g_malloc(G_ASCII_DTOSTR_BUF_SIZE);
   g_ascii_dtostr(str, G_ASCII_DTOSTR_BUF_SIZE, val);
-  if(dt_conf_set_if_not_overridden(name, str)) g_free(str);
+  if(dt_conf_set_if_not_overridden(name, str))
+  {
+    dt_free(str);
+  }
 }
 
 void dt_conf_set_bool(const char *name, int val)
 {
   char *str = g_strdup(val ? "TRUE" : "FALSE");
-  if(dt_conf_set_if_not_overridden(name, str)) g_free(str);
+  if(dt_conf_set_if_not_overridden(name, str))
+  {
+    dt_free(str);
+  }
 }
 
 void dt_conf_set_string(const char *name, const char *val)
 {
   char *str = g_strdup(val);
-  if(dt_conf_set_if_not_overridden(name, str)) g_free(str);
+  if(dt_conf_set_if_not_overridden(name, str))
+  {
+    dt_free(str);
+  }
 }
 
 void dt_conf_set_folder_from_file_chooser(const char *name, GtkFileChooser *chooser)
@@ -170,15 +185,21 @@ void dt_conf_set_folder_from_file_chooser(const char *name, GtkFileChooser *choo
     if(pathname)
     {
       gchar *folder = g_path_get_dirname(pathname);
-      if(dt_conf_set_if_not_overridden(name, folder)) g_free(folder);
-      g_free(pathname);
+      if(dt_conf_set_if_not_overridden(name, folder))
+      {
+        dt_free(folder);
+      }
+      dt_free(pathname);
     }
     return;
   }
 #endif
 
   gchar *folder = gtk_file_chooser_get_current_folder(chooser);
-  if(dt_conf_set_if_not_overridden(name, folder)) g_free(folder);
+  if(dt_conf_set_if_not_overridden(name, folder))
+  {
+    dt_free(folder);
+  }
 }
 
 int dt_conf_get_int_fast(const char *name)
@@ -198,7 +219,9 @@ int dt_conf_get_int_fast(const char *name)
       {
         char *fix_badval = g_strdup(def_val);
         if(dt_conf_set_if_not_overridden(name, fix_badval))
-          g_free(fix_badval);
+        {
+          dt_free(fix_badval);
+        }
       }
     }
     else
@@ -241,7 +264,9 @@ int64_t dt_conf_get_int64_fast(const char *name)
       {
         char *fix_badval = g_strdup(def_val);
         if(dt_conf_set_if_not_overridden(name, fix_badval))
-          g_free(fix_badval);
+        {
+          dt_free(fix_badval);
+        }
       }
     }
     else
@@ -284,7 +309,9 @@ float dt_conf_get_float_fast(const char *name)
       {
         char *fix_badval = g_strdup(def_val);
         if(dt_conf_set_if_not_overridden(name, fix_badval))
-          g_free(fix_badval);
+        {
+          dt_free(fix_badval);
+        }
       }
     }
     else
@@ -435,7 +462,7 @@ static char *_sanitize_confgen(const char *name, const char *value)
         result = g_strdup(dt_confgen_get(name, DT_DEFAULT));
       else
         result = g_strdup(value);
-      g_free(v);
+      dt_free(v);
     }
     break;
     default:
@@ -448,10 +475,10 @@ static char *_sanitize_confgen(const char *name, const char *value)
 
 void dt_conf_init(dt_conf_t *cf, const char *filename, GSList *override_entries)
 {
-  cf->x_confgen = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, _free_confgen_value);
+  cf->x_confgen = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, _free_confgen_value);
 
-  cf->table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-  cf->override_entries = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+  cf->table = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
+  cf->override_entries = g_hash_table_new_full(g_str_hash, g_str_equal, dt_free_gpointer, dt_free_gpointer);
   dt_pthread_mutex_init(&darktable.conf->mutex, NULL);
 
   // init conf filename
@@ -561,11 +588,11 @@ GSList *dt_conf_all_string_entries(const char *dir)
 void dt_conf_string_entry_free(gpointer data)
 {
   dt_conf_string_entry_t *nv = (dt_conf_string_entry_t *)data;
-  g_free(nv->key);
-  g_free(nv->value);
+  dt_free(nv->key);
+  dt_free(nv->value);
   nv->key = NULL;
   nv->value = NULL;
-  g_free(nv);
+  dt_free(nv);
 }
 
 gboolean dt_confgen_exists(const char *name)
@@ -819,12 +846,12 @@ gchar* dt_conf_expand_default_dir(const char *dir)
   {
     gchar *homedir = dt_loc_get_home_dir(NULL);
     path = g_strdup_printf("%s%s", homedir, dir + strlen(HOME_DIR));
-    g_free(homedir);
+    dt_free(homedir);
   }
   else path = g_strdup(dir);
 
   gchar *normalized_path = dt_util_normalize_path(path);
-  g_free(path);
+  dt_free(path);
 
   return normalized_path;
 }
@@ -850,6 +877,7 @@ void dt_conf_save(dt_conf_t *cf)
     }
 
     g_list_free(sorted);
+    sorted = NULL;
     fclose(f);
   }
 }

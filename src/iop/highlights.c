@@ -50,6 +50,7 @@
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include <assert.h>
@@ -2232,8 +2233,7 @@ void cleanup_global(dt_iop_module_so_t *module)
 
   dt_opencl_free_kernel(gd->kernel_interpolate_bilinear);
 
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 void init_pipe(struct dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)

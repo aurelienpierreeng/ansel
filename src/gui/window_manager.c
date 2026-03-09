@@ -17,6 +17,7 @@
     You should have received a copy of the GNU General Public License
     along with Ansel.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "control/control.h"
 #include "views/view.h"
 #include "gui/window_manager.h"
@@ -77,7 +78,7 @@ int dt_ui_panel_get_size(dt_ui_t *ui, const dt_ui_panel_t p)
     if(key && dt_conf_key_exists(key))
     {
       size = dt_conf_get_int(key);
-      g_free(key);
+      dt_free(key);
     }
     else // size hasn't been adjusted, so return default sizes
     {
@@ -173,7 +174,7 @@ static void _ui_init_panel_size(GtkWidget *widget, dt_ui_t *ui)
     if(key) gtk_widget_set_size_request(widget, -1, s);
   }
 
-  g_free(key);
+  dt_free(key);
 }
 
 void dt_ui_restore_panels(dt_ui_t *ui)
@@ -186,7 +187,7 @@ void dt_ui_restore_panels(dt_ui_t *ui)
   /* restore from a previous collapse all panel state if enabled */
   gchar *key = panels_get_view_path("panel_collaps_state");
   const uint32_t state = dt_conf_get_int(key);
-  g_free(key);
+  dt_free(key);
   if(state)
   {
     /* hide all panels (we let saved state as it is, to recover them when pressing TAB)*/
@@ -203,7 +204,7 @@ void dt_ui_restore_panels(dt_ui_t *ui)
       else
         dt_ui_panel_show(ui, k, TRUE, TRUE);
 
-      g_free(key);
+      dt_free(key);
     }
   }
 }
@@ -285,7 +286,7 @@ static gboolean _panel_handle_motion_callback(GtkWidget *w, GdkEventButton *e, g
 
     // we store and apply the new value
     dt_conf_set_int(key, sx);
-    g_free(key);
+    dt_free(key);
 
     return TRUE;
   }
@@ -771,6 +772,9 @@ void dt_hinter_set_message(dt_ui_t *ui, const char *message)
 void dt_ui_cleanup_titlebar(dt_ui_t *ui)
 {
   for(int i = 0; i < DT_MENU_LAST; i++)
-    g_list_free_full(ui->header->item_lists[i], g_free);
-  g_free(ui->header);
+  {
+    g_list_free_full(ui->header->item_lists[i], dt_free_gpointer);
+    ui->header->item_lists[i] = NULL;
+  }
+  dt_free(ui->header);
 }

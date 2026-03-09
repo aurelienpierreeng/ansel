@@ -130,8 +130,9 @@ void dt_view_manager_gui_init(dt_view_manager_t *vm)
 void dt_view_manager_cleanup(dt_view_manager_t *vm)
 {
   g_list_free(vm->active_images);
+  vm->active_images = NULL;
   for(GList *iter = vm->views; iter; iter = g_list_next(iter)) dt_view_unload_module((dt_view_t *)iter->data);
-  g_list_free_full(vm->views, free);
+  g_list_free_full(vm->views, dt_free_gpointer);
   vm->views = NULL;
 }
 
@@ -779,7 +780,7 @@ dt_view_surface_value_t dt_view_image_get_surface(int32_t imgid, int width, int 
   cairo_surface_t *tmp_surface = cairo_image_surface_create_for_data(rgbbuf, CAIRO_FORMAT_RGB24, buf_wd, buf_ht, stride);
   if(!tmp_surface)
   {
-    free(rgbbuf);
+    dt_free(rgbbuf);
     return ret;
   }
 
@@ -809,7 +810,7 @@ dt_view_surface_value_t dt_view_image_get_surface(int32_t imgid, int width, int 
   else
     ret = DT_VIEW_SURFACE_OK;
 
-  if(rgbbuf) free(rgbbuf);
+  dt_free(rgbbuf);
 
   // logs
   if((darktable.unmuted & (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF)) == (DT_DEBUG_LIGHTTABLE | DT_DEBUG_PERF))
@@ -835,37 +836,37 @@ char* dt_view_extend_modes_str(const char * name, const gboolean is_hdr, const g
   if(0 == g_ascii_strcasecmp(upcase, "JPG"))
   {
       gchar* canonical = g_strdup("JPEG");
-      g_free(upcase);
+      dt_free(upcase);
       upcase = canonical;
   }
   else if(0 == g_ascii_strcasecmp(upcase, "HDR"))
   {
       gchar* canonical = g_strdup("RGBE");
-      g_free(upcase);
+      dt_free(upcase);
       upcase = canonical;
   }
   else if(0 == g_ascii_strcasecmp(upcase, "TIF"))
   {
       gchar* canonical = g_strdup("TIFF");
-      g_free(upcase);
+      dt_free(upcase);
       upcase = canonical;
   }
 
   if(is_hdr)
   {
     gchar* fullname = g_strdup_printf("%s HDR", upcase);
-    g_free(upcase);
+    dt_free(upcase);
     upcase = fullname;
   }
   if(is_bw)
   {
     gchar* fullname = g_strdup_printf("%s B&W", upcase);
-    g_free(upcase);
+    dt_free(upcase);
     upcase = fullname;
     if(!is_bw_flow)
     {
       fullname = g_strdup_printf("%s-", upcase);
-      g_free(upcase);
+      dt_free(upcase);
       upcase = fullname;
     }
   }
@@ -1041,10 +1042,10 @@ void dt_view_audio_start(dt_view_manager_t *vm, int32_t imgid)
       else
         vm->audio.audio_player_id = -1;
 
-      g_free(filename);
+      dt_free(filename);
     }
   }
-  g_free(player);
+  dt_free(player);
 }
 
 void dt_view_audio_stop(dt_view_manager_t *vm)
@@ -1096,12 +1097,12 @@ void dt_view_image_info_update(int32_t imgid)
 
   gchar *pattern = dt_conf_get_string("plugins/darkroom/image_infos_pattern");
   gchar *msg = dt_variables_expand(vp, pattern, TRUE);
-  g_free(pattern);
+  dt_free(pattern);
   dt_variables_params_destroy(vp);
 
   dt_ui_set_image_info_label(darktable.gui->ui, msg);
 
-  g_free(msg);
+  dt_free(msg);
 }
 
 

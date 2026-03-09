@@ -56,6 +56,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "common/darktable.h"
 #include "bauhaus/bauhaus.h"
 #include "common/imagebuf.h"
 #include "common/tags.h"
@@ -397,11 +398,11 @@ static gchar *_string_escape(const gchar *string)
 
   result_old = result;
   result = dt_util_str_replace(result_old, "<", "&lt;");
-  g_free(result_old);
+  dt_free(result_old);
 
   result_old = result;
   result = dt_util_str_replace(result_old, ">", "&gt;");
-  g_free(result_old);
+  dt_free(result_old);
 
   return result;
 }
@@ -410,8 +411,8 @@ static gchar *_string_substitute(gchar *string, const gchar *search, const gchar
 {
   gchar *_replace = _string_escape(replace);
   gchar *result = dt_util_str_replace(string, search, _replace);
-  g_free(_replace);
-  g_free(string);  // dt_util_str_replace always returns a new string, and we don't need the original after this func
+  dt_free(_replace);
+  dt_free(string);  // dt_util_str_replace always returns a new string, and we don't need the original after this func
   return result;
 }
 
@@ -478,7 +479,7 @@ static gchar *_watermark_get_svgdoc(dt_iop_module_t *self, dt_iop_watermark_data
     dt_variables_set_tags_flags(params, flags);
     gchar *svgdoc = dt_variables_expand(params, svgdata, FALSE);  // returns a new string
     dt_variables_params_destroy(params);
-    g_free(svgdata);  // free the old one
+    dt_free(svgdata);  // free the old one
     svgdata = svgdoc; // and make the expanded string our result
   }
   return svgdata;
@@ -568,7 +569,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   {
     fprintf(stderr, "[watermark] cairo surface error: %s\n",
             cairo_status_to_string(cairo_surface_status(surface)));
-    g_free(image);
+    dt_free(image);
     dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
     return 0;
   }
@@ -582,11 +583,11 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     /* create the rsvghandle from parsed svg data */
     GError *error = NULL;
     svg = rsvg_handle_new_from_data((const guint8 *)svgdoc, strlen(svgdoc), &error);
-    g_free(svgdoc);
+    dt_free(svgdoc);
     if(!svg || error)
     {
       cairo_surface_destroy(surface);
-      g_free(image);
+      dt_free(image);
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
       dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
       fprintf(stderr, "[watermark] error processing svg file: %s\n", error->message);
@@ -614,7 +615,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
         fprintf(stderr, "[watermark] cairo png surface 2 error: %s\n",
                 cairo_status_to_string(cairo_surface_status(surface_two)));
         cairo_surface_destroy(surface);
-        g_free(image);
+        dt_free(image);
         dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
         dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
         return 0;
@@ -725,7 +726,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
     {
       cairo_surface_destroy(surface);
       g_object_unref(svg);
-      g_free(image);
+      dt_free(image);
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
       dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
       return 1;
@@ -738,8 +739,8 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
               cairo_status_to_string(cairo_surface_status(surface_two)));
       cairo_surface_destroy(surface);
       g_object_unref(svg);
-      g_free(image);
-      g_free(image_two);
+      dt_free(image);
+      dt_free(image_two);
       dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, ch);
       dt_pthread_mutex_unlock(&darktable.plugin_threadsafe);
       return 0;
@@ -844,10 +845,10 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   /* clean up */
   cairo_surface_destroy(surface);
   cairo_surface_destroy(surface_two);
-  g_free(image);
+  dt_free(image);
   if(type == DT_WTM_SVG)
   {
-    g_free(image_two);
+    dt_free(image_two);
     g_object_unref(svg);
   }
 
@@ -924,13 +925,14 @@ static void load_watermarks(const char *basedir, dt_iop_watermark_gui_data_t *g)
         extension++;
         gchar *text = g_strdup_printf("%s (%s)", filename, extension);
         dt_bauhaus_combobox_add(g->watermarks, text);
-        g_free(text);
+        dt_free(text);
       }
     }
   }
 
-  g_list_free_full(files, g_free);
-  g_free(watermarks_dir);
+  g_list_free_full(files, dt_free_gpointer);
+  files = NULL;
+  dt_free(watermarks_dir);
 }
 
 static void refresh_watermarks(dt_iop_module_t *self)
@@ -942,7 +944,7 @@ static void refresh_watermarks(dt_iop_module_t *self)
 
   // Clear combobox...
   dt_bauhaus_combobox_clear(g->watermarks);
-  g_list_free_full(g->watermarks_filenames, g_free);
+  g_list_free_full(g->watermarks_filenames, dt_free_gpointer);
   g->watermarks_filenames = NULL;
 
   // check watermarkdir and update combo with entries...
@@ -1031,7 +1033,7 @@ static void fontsel_callback(GtkWidget *button, gpointer user_data)
 
   gchar *fontname = gtk_font_chooser_get_font(GTK_FONT_CHOOSER(button));
   g_strlcpy(p->font, fontname, sizeof(p->font));
-  g_free(fontname);
+  dt_free(fontname);
   dt_conf_set_string("plugins/darkroom/watermark/font", p->font);
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
 }
@@ -1125,7 +1127,7 @@ void gui_init(struct dt_iop_module_t *self)
   gtk_widget_set_hexpand(GTK_WIDGET(g->watermarks), TRUE);
   char *tooltip = g_strdup_printf(_("SVG watermarks in %s/watermarks or %s/watermarks"), configdir, datadir);
   gtk_widget_set_tooltip_text(g->watermarks, tooltip);
-  g_free(tooltip);
+  dt_free(tooltip);
   g->refresh = dtgtk_button_new(dtgtk_cairo_paint_refresh, 0, NULL);
 
   gtk_grid_attach(grid, label, 0, line++, 1, 1);
@@ -1235,7 +1237,7 @@ void gui_init(struct dt_iop_module_t *self)
 void gui_cleanup(struct dt_iop_module_t *self)
 {
   dt_iop_watermark_gui_data_t *g = (dt_iop_watermark_gui_data_t *)self->gui_data;
-  g_list_free_full(g->watermarks_filenames, g_free);
+  g_list_free_full(g->watermarks_filenames, dt_free_gpointer);
   g->watermarks_filenames = NULL;
 
   IOP_GUI_FREE;

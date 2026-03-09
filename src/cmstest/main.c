@@ -33,6 +33,7 @@
 */
 
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 
@@ -107,17 +108,17 @@ char *get_profile_description(unsigned char *data, long data_size)
     result = g_strdup(utf8);
   }
 
-  free(buf);
-  free(wbuf);
-  g_free(utf8);
+  dt_free(buf);
+  dt_free(wbuf);
+  dt_free(utf8);
   cmsCloseProfile(p);
   return result;
 
 error:
   if(buf) result = g_strdup(buf); // better a little weird than totally borked
-  free(buf);
-  free(wbuf);
-  g_free(utf8);
+  dt_free(buf);
+  dt_free(wbuf);
+  dt_free(utf8);
   cmsCloseProfile(p);
   return result;
 }
@@ -447,7 +448,7 @@ end:
                                : "the X atom and colord returned different profiles";
       tmp = get_profile_description(tmp_data, size);
       colord_description = tmp ? tmp : g_strdup("(none)");
-      g_free(tmp_data);
+      dt_free(tmp_data);
     }
 #endif // HAVE_COLORD
 
@@ -461,9 +462,9 @@ end:
     printf("\tcolord:\t\"%s\"\n\t\tdescription: %s\n", colord_filename, colord_description);
 #endif
 
-    g_free(x_atom_description);
+    dt_free(x_atom_description);
 #ifdef HAVE_COLORD
-    g_free(colord_description);
+    dt_free(colord_description);
 #endif
 
   }
@@ -486,14 +487,15 @@ end:
   for(GList *iter = monitor_list; iter; iter = g_list_next(iter))
   {
     monitor_t *monitor = (monitor_t *)iter->data;
-    g_free(monitor->name);
-    g_free(monitor->x_atom_name);
+    dt_free(monitor->name);
+    dt_free(monitor->x_atom_name);
     XFree(monitor->x_atom_data);
 #ifdef HAVE_COLORD
-    g_free(monitor->colord_filename);
+    dt_free(monitor->colord_filename);
 #endif
   }
-  g_list_free_full(monitor_list, g_free);
+  g_list_free_full(monitor_list, dt_free_gpointer);
+  monitor_list = NULL;
 
   return EXIT_SUCCESS;
 

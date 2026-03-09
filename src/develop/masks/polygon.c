@@ -38,6 +38,7 @@
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include "common/darktable.h"
 #include "bauhaus/bauhaus.h"
 #include "common/debug.h"
 #include "common/imagebuf.h"
@@ -209,7 +210,7 @@ static void _polygon_init_ctrl_points(dt_masks_form_t *mask_form)
   for(guint node_index = 0; node_index < node_count; node_index++)
   {
     dt_masks_node_polygon_t *point3 = nodes[node_index];
-    if(!point3) { free(nodes); return; }
+    if(!point3) { dt_free(nodes); return; }
     // if the point has not been set manually, we redefine it
     if(point3->state == DT_MASKS_POINT_STATE_NORMAL)
     {
@@ -217,7 +218,7 @@ static void _polygon_init_ctrl_points(dt_masks_form_t *mask_form)
       dt_masks_node_polygon_t *point2 = nodes[(node_index + node_count - 1) % node_count];
       dt_masks_node_polygon_t *point4 = nodes[(node_index + 1) % node_count];
       dt_masks_node_polygon_t *point5 = nodes[(node_index + 2) % node_count];
-      if(!point1 || !point2 || !point4 || !point5) { free(nodes); return; }
+      if(!point1 || !point2 || !point4 || !point5) { dt_free(nodes); return; }
 
       float bezier1_x = 0.0f;
       float bezier1_y = 0.0f;
@@ -239,7 +240,7 @@ static void _polygon_init_ctrl_points(dt_masks_form_t *mask_form)
       point3->ctrl2[1] = bezier1_y;
     }
   }
-  free(nodes);
+  dt_free(nodes);
   return;
 }
 
@@ -1103,14 +1104,14 @@ static void _add_node_to_segment(struct dt_iop_module_t *module,
   GList *pt = g_list_nth(mask_form->points, selected_segment);
   if(!pt || !pt->data)
   {
-    free(new_node);
+    dt_free(new_node);
     return;
   }
   dt_masks_node_polygon_t *point0 = (dt_masks_node_polygon_t *)pt->data;
   const GList *const next_pt = g_list_next_wraparound(pt, mask_form->points);
   if(!next_pt || !next_pt->data)
   {
-    free(new_node);
+    dt_free(new_node);
     return;
   }
   dt_masks_node_polygon_t *point1 = (dt_masks_node_polygon_t *)next_pt->data;
@@ -1704,8 +1705,7 @@ static int _polygon_creation_closing_form(dt_masks_form_t *mask_form, dt_masks_f
   // we delete last point (the one we are currently dragging)
   dt_masks_node_polygon_t *last_node = (dt_masks_node_polygon_t *)g_list_last(mask_form->points)->data;
   mask_form->points = g_list_remove(mask_form->points, last_node);
-  free(last_node);
-  last_node = NULL;
+  dt_free(last_node);
 
   mask_gui->node_dragging = -1;
   _polygon_init_ctrl_points(mask_form);
@@ -2749,8 +2749,8 @@ static int _polygon_crop_to_roi(float *polygon, const int point_count, float xmi
   roi_crop_segment_t *ymax_segs = malloc(sizeof(*ymax_segs) * point_count);
   if(!xmax_segs || !ymax_segs)
   {
-    free(xmax_segs);
-    free(ymax_segs);
+    dt_free(xmax_segs);
+    dt_free(ymax_segs);
     goto fallback_passes;
   }
 
@@ -2819,8 +2819,7 @@ static int _polygon_crop_to_roi(float *polygon, const int point_count, float xmi
     }
   }
 
-  free(xmax_segs);
-  xmax_segs = NULL;
+  dt_free(xmax_segs);
 
   int ymin_l = -1, ymin_r = -1;
   int ymax_l = -1, ymax_r = -1;
@@ -2887,8 +2886,7 @@ static int _polygon_crop_to_roi(float *polygon, const int point_count, float xmi
     }
   }
 
-  free(ymax_segs);
-  ymax_segs = NULL;
+  dt_free(ymax_segs);
   return 1;
 
 fallback_passes:
@@ -3627,7 +3625,7 @@ static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_
       menu_item = ctx_gtk_menu_item_new_with_icon_and_shortcut(to_change_type, accel, menu,
                                                                _polygon_switch_node_callback, mask_gui, icon);
 
-      g_free(to_change_type);
+      dt_free(to_change_type);
     }
 
     {
@@ -3647,7 +3645,7 @@ static int _polygon_populate_context_menu(GtkWidget *menu, struct dt_masks_form_
   }
 
   end:
-  g_free(accel);
+  dt_free(accel);
   return ret;
 }
 

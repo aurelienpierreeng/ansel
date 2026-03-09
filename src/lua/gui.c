@@ -63,6 +63,7 @@ static int _selection_cb(lua_State *L)
     dt_selection_clear(darktable.selection);
     dt_selection_select_list(darktable.selection, new_selection);
     g_list_free(new_selection);
+    new_selection = NULL;
   }
   lua_newtable(L);
   int table_index = 1;
@@ -102,6 +103,7 @@ static int _act_on_cb(lua_State *L)
     table_index++;
   }
   g_list_free(l);
+  l = NULL;
   return 1;
 }
 

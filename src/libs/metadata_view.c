@@ -308,7 +308,7 @@ static void _metadata_update_markup(const gint32 i, const char *const format, dt
   GtkLabel *label = GTK_LABEL(gtk_grid_get_child_at(GTK_GRID(d->grid), 1, m->order));
   char *markup = g_markup_printf_escaped(format, gtk_label_get_text(label));
   gtk_label_set_markup(label, markup);
-  g_free(markup);
+  dt_free(markup);
 }
 
 /* helper function for updating a metadata value */
@@ -320,7 +320,10 @@ static void _metadata_update_value(const int i, const char *value, dt_lib_module
   dt_lib_metadata_info_t *m = _get_metadata_per_index(i, self);
   if(m)
   {
-    if(m->value) g_free(m->value);
+    if(m->value)
+    {
+      dt_free(m->value);
+    }
     m->value = g_strdup(str);
     GtkWidget *w_value = gtk_grid_get_child_at(GTK_GRID(d->grid), 1, m->order);
     gtk_label_set_text(GTK_LABEL(w_value), str);
@@ -334,7 +337,10 @@ static void _metadata_update_tooltip(const int i, const char *tooltip, dt_lib_mo
   dt_lib_metadata_info_t *m = _get_metadata_per_index(i, self);
   if(m)
   {
-    if(m->tooltip) g_free(m->tooltip);
+    if(m->tooltip)
+    {
+      dt_free(m->tooltip);
+    }
     m->tooltip = g_strdup(tooltip);
   }
 }
@@ -485,14 +491,14 @@ static void _metadata_get_flags(const dt_image_t *const img, char *const text, c
   value[14] = '\0';
 
   flags_tooltip = g_strjoinv("\n", tooltip_parts);
-  g_free(loader_tooltip);
+  dt_free(loader_tooltip);
 
   (void)g_strlcpy(text, value, FLAG_NB);
   (void)g_strlcpy(tooltip, flags_tooltip, tooltip_size);
 
-  g_free(value);
-  g_free(star_string);
-  g_free(flags_tooltip);
+  dt_free(value);
+  dt_free(star_string);
+  dt_free(flags_tooltip);
 
 #undef EMPTY_FIELD
 #undef FALSE_FIELD
@@ -573,8 +579,8 @@ static void _concatenate_multiple_images(gboolean skip[md_size], int count)
                                       "WHERE imgid in (%s) GROUP BY tagid", images);
   // clang-format on
   DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), tag_query, -1, &stmt_tags, NULL);
-  g_free(tag_query);
-  g_free(query);
+  dt_free(tag_query);
+  dt_free(query);
 
   if(sqlite3_step(stmt) == SQLITE_ROW)
     for(int32_t md = 0; md < md_tag_names; md++)
@@ -598,7 +604,7 @@ static void _concatenate_multiple_images(gboolean skip[md_size], int count)
   skip[md_categories] = !same_categories;
 
   sqlite3_finalize(stmt_tags);
-  g_free(images);
+  dt_free(images);
 }
 
 
@@ -756,7 +762,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
       {
         gchar *const str = dt_util_format_exposure(tinfo.exif_exposure);
         _metadata_update_value(md_exif_exposure, str, self);
-        g_free(str);
+        dt_free(str);
       }
       break;
 
@@ -842,7 +848,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
           {
             gchar *latitude = dt_util_latitude_str((float)tinfo.geoloc.latitude);
             _metadata_update_value(md_geotagging_lat, latitude, self);
-            g_free(latitude);
+            dt_free(latitude);
           }
           else
           {
@@ -864,7 +870,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
           {
             gchar *longitude = dt_util_longitude_str((float)tinfo.geoloc.longitude);
             _metadata_update_value(md_geotagging_lon, longitude, self);
-            g_free(longitude);
+            dt_free(longitude);
           }
           else
           {
@@ -886,7 +892,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
           {
             gchar *elevation = dt_util_elevation_str((float)tinfo.geoloc.elevation);
             _metadata_update_value(md_geotagging_ele, elevation, self);
-            g_free(elevation);
+            dt_free(elevation);
           }
           else
           {
@@ -936,7 +942,7 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
               else
                 categoriesstring = dt_util_dstrcat(categoriesstring, categoriesstring ? "\n%s" : "%s",
                                                    ((dt_tag_t *)taglist->data)->leave);
-              g_free(category);
+              dt_free(category);
             }
           }
           if(tagstring) tagstring[strlen(tagstring)-2] = '\0';
@@ -947,8 +953,8 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
         else
           _metadata_update_value(md_categories, categoriesstring ? categoriesstring : NODATA_STRING, self);
 
-        g_free(tagstring);
-        g_free(categoriesstring);
+        dt_free(tagstring);
+        dt_free(categoriesstring);
         dt_tag_free_result(&tags);
       }
       break;
@@ -972,7 +978,8 @@ static void _metadata_view_update_values(dt_lib_module_t *self)
         {
           g_strlcpy(text, (char *)res->data, sizeof(text));
           _filter_non_printable(text, sizeof(text));
-          g_list_free_full(res, &g_free);
+          g_list_free_full(res, dt_free_gpointer);
+          res = NULL;
         }
         _metadata_update_value(md, text, self);
       }
@@ -1157,7 +1164,8 @@ static void _apply_preferences(const char *prefs_list, dt_lib_module_t *self)
     else continue;
     k++;
   }
-  g_list_free_full(prefs, g_free);
+  g_list_free_full(prefs, dt_free_gpointer);
+  prefs = NULL;
 
   _lib_metadata_refill_grid(self);
 }
@@ -1166,7 +1174,7 @@ static void _save_preferences(dt_lib_module_t *self)
 {
   char *pref = _get_current_configuration(self);
   dt_conf_set_string("plugins/lighttable/metadata_view/visible", pref);
-  g_free(pref);
+  dt_free(pref);
 }
 
 static void _select_toggled_callback(GtkCellRendererToggle *cell_renderer, gchar *path_str, gpointer user_data)
@@ -1376,18 +1384,24 @@ void gui_init(dt_lib_module_t *self)
 
 static void _free_metadata_queue(dt_lib_metadata_info_t *m)
 {
-  if(m->value) g_free(m->value);
-  if(m->tooltip) g_free(m->tooltip);
-  g_free(m);
+  if(m->value)
+  {
+    dt_free(m->value);
+  }
+  if(m->tooltip)
+  {
+    dt_free(m->tooltip);
+  }
+  dt_free(m);
 }
 
 void gui_cleanup(dt_lib_module_t *self)
 {
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_mouse_over_image_callback), self);
   dt_lib_metadata_view_t *d = (dt_lib_metadata_view_t *)self->data;
-  g_list_free_full(d->metadata,  (GDestroyNotify)_free_metadata_queue);
-  g_free(self->data);
-  self->data = NULL;
+  g_list_free_full(d->metadata, (GDestroyNotify)_free_metadata_queue);
+  d->metadata = NULL;
+  dt_free(self->data);
 }
 
 void gui_reset(dt_lib_module_t *self)
@@ -1588,10 +1602,14 @@ static int lua_destroy_info(lua_State *L)
     {
       dt_lib_metadata_info_t *m = (dt_lib_metadata_info_t *)tbr->data;
       d->metadata = g_list_remove_link(d->metadata, tbr);
-      g_free(m->value);
-      if(m->tooltip) g_free(m->tooltip);
-      g_free(m);
+      dt_free(m->value);
+      if(m->tooltip)
+      {
+        dt_free(m->tooltip);
+      }
+      dt_free(m);
       g_list_free(tbr);
+      tbr = NULL;
       gtk_grid_remove_row(GTK_GRID(d->grid), 0);
       _lib_metadata_refill_grid(self);
     }

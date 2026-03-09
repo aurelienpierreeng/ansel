@@ -123,8 +123,8 @@ static dt_guides_t *_conf_get_guide(gchar *module_name)
   if(!dt_conf_key_exists(key)) dt_conf_set_string(key, DEFAULT_GUIDE_NAME);
   gchar *val = dt_conf_get_string(key);
   guide = (dt_guides_t *)g_list_nth_data(darktable.guides, _guides_get_value(val));
-  g_free(val);
-  g_free(key);
+  dt_free(val);
+  dt_free(key);
 
   // if we don't have any valid guide, let's fallback to default one
   if(!guide)
@@ -156,13 +156,13 @@ static void dt_guides_draw_grid(cairo_t *cr, const float x, const float y, const
   {
     gchar *key = _conf_get_path("global", "grid_nbh", NULL);
     if(dt_conf_key_exists(key)) nbh = dt_conf_get_int(key);
-    g_free(key);
+    dt_free(key);
     key = _conf_get_path("global", "grid_nbv", NULL);
     if(dt_conf_key_exists(key)) nbv = dt_conf_get_int(key);
-    g_free(key);
+    dt_free(key);
     key = _conf_get_path("global", "grid_subdiv", NULL);
     if(dt_conf_key_exists(key)) subdiv = dt_conf_get_int(key);
-    g_free(key);
+    dt_free(key);
     loaded = TRUE;
   }
   // if stille not loaded that mean we don't want to be here !
@@ -199,7 +199,7 @@ static void _grid_horizontal_changed(GtkWidget *w, void *data)
   int horizontal = dt_bauhaus_slider_get(w);
   gchar *key = _conf_get_path("global", "grid_nbh", NULL);
   dt_conf_set_int(key, horizontal);
-  g_free(key);
+  dt_free(key);
   dt_control_queue_redraw_center();
 }
 
@@ -208,7 +208,7 @@ static void _grid_vertical_changed(GtkWidget *w, void *data)
   int vertical = dt_bauhaus_slider_get(w);
   gchar *key = _conf_get_path("global", "grid_nbv", NULL);
   dt_conf_set_int(key, vertical);
-  g_free(key);
+  dt_free(key);
   dt_control_queue_redraw_center();
 }
 
@@ -217,7 +217,7 @@ static void _grid_subdiv_changed(GtkWidget *w, void *data)
   int subdiv = dt_bauhaus_slider_get(w);
   gchar *key = _conf_get_path("global", "grid_subdiv", NULL);
   dt_conf_set_int(key, subdiv);
-  g_free(key);
+  dt_free(key);
   dt_control_queue_redraw_center();
 }
 
@@ -232,7 +232,7 @@ static GtkWidget *_guides_gui_grid(dt_iop_module_t *self, void *user_data)
   gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(grid_horizontal), TRUE, TRUE, 0);
   gchar *key = _conf_get_path("global", "grid_nbh", NULL);
   dt_bauhaus_slider_set(grid_horizontal, dt_conf_key_exists(key) ? dt_conf_get_int(key) : 3);
-  g_free(key);
+  dt_free(key);
   g_signal_connect(G_OBJECT(grid_horizontal), "value-changed", G_CALLBACK(_grid_horizontal_changed), user_data);
 
   GtkWidget *grid_vertical = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL), 0, 12, 1, 3, 0);
@@ -242,7 +242,7 @@ static GtkWidget *_guides_gui_grid(dt_iop_module_t *self, void *user_data)
   gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(grid_vertical), TRUE, TRUE, 0);
   key = _conf_get_path("global", "grid_nbv", NULL);
   dt_bauhaus_slider_set(grid_vertical, dt_conf_key_exists(key) ? dt_conf_get_int(key) : 3);
-  g_free(key);
+  dt_free(key);
   g_signal_connect(G_OBJECT(grid_vertical), "value-changed", G_CALLBACK(_grid_vertical_changed), user_data);
 
   GtkWidget *grid_subdiv = dt_bauhaus_slider_new_with_range(darktable.bauhaus, DT_GUI_MODULE(NULL), 0, 10, 1, 3, 0);
@@ -252,7 +252,7 @@ static GtkWidget *_guides_gui_grid(dt_iop_module_t *self, void *user_data)
   gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(grid_subdiv), TRUE, TRUE, 0);
   key = _conf_get_path("global", "grid_subdiv", NULL);
   dt_bauhaus_slider_set(grid_subdiv, dt_conf_key_exists(key) ? dt_conf_get_int(key) : 3);
-  g_free(key);
+  dt_free(key);
   g_signal_connect(G_OBJECT(grid_subdiv), "value-changed", G_CALLBACK(_grid_subdiv_changed), user_data);
 
   return box;
@@ -563,10 +563,10 @@ static void _guides_add_guide(GList **list, const char *name,
     if(val)
     {
       const int i = _guides_get_value(val);
-      g_free(val);
+      dt_free(val);
       dt_bauhaus_combobox_set(darktable.view_manager->guides, i);
     }
-    g_free(key);
+    dt_free(key);
   }
 }
 
@@ -623,7 +623,7 @@ static void _settings_flip_update(_guides_settings_t *gw)
   {
     gchar *key = _conf_get_path("global", guide->name, "flip");
     dt_bauhaus_combobox_set(gw->g_flip, dt_conf_get_int(key));
-    g_free(key);
+    dt_free(key);
   }
 
   --darktable.gui->reset;
@@ -635,7 +635,7 @@ static void _settings_guides_changed(GtkWidget *w, _guides_settings_t *gw)
   dt_guides_t *guide = (dt_guides_t *)g_list_nth_data(darktable.guides, dt_bauhaus_combobox_get(darktable.view_manager->guides));
   gchar *key = _conf_get_path("global", "guide", NULL);
   dt_conf_set_string(key, guide ? guide->name : "rule of thirds");
-  g_free(key);
+  dt_free(key);
 
   // we update the flip combo
   _settings_flip_update(gw);
@@ -656,7 +656,7 @@ static void _settings_flip_changed(GtkWidget *w, _guides_settings_t *gw)
   {
     gchar *key = _conf_get_path("global", guide->name, "flip");
     dt_conf_set_int(key, dt_bauhaus_combobox_get(w));
-    g_free(key);
+    dt_free(key);
   }
 
   // we update the drawing
@@ -769,14 +769,14 @@ void dt_guides_update_button_state()
 
   gchar *key = _conf_get_path("global", "show", NULL);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bt), dt_conf_get_bool(key));
-  g_free(key);
+  dt_free(key);
 }
 
 void dt_guides_button_toggled(gboolean active)
 {
   gchar *key = _conf_get_path("global", "show", NULL);
   dt_conf_set_bool(key, active);
-  g_free(key);
+  dt_free(key);
 }
 
 void dt_guides_draw(cairo_t *cr, const float left, const float top, const float width, const float height,
@@ -787,7 +787,7 @@ void dt_guides_draw(cairo_t *cr, const float left, const float top, const float 
   // first, we check if we need to show the guides or not
   gchar *key = _conf_get_path("global", "show", NULL);
   gboolean show = dt_conf_get_bool(key);
-  g_free(key);
+  dt_free(key);
   if(!show) return;
 
   // let's get the guide to show
@@ -800,7 +800,7 @@ void dt_guides_draw(cairo_t *cr, const float left, const float top, const float 
   {
     key = _conf_get_path("global", guide->name, "flip");
     if(dt_conf_key_exists(key)) flip = dt_conf_get_int(key);
-    g_free(key);
+    dt_free(key);
   }
 
   // save context
@@ -834,12 +834,13 @@ static void free_guide(void *data)
 {
   dt_guides_t *guide = (dt_guides_t *)data;
   if(guide->free) guide->free(guide->user_data);
-  free(guide);
+  dt_free(guide);
 }
 
 void dt_guides_cleanup(GList *guides)
 {
   g_list_free_full(guides, free_guide);
+  guides = NULL;
 }
 
 void dt_guides_update_popover_values()
@@ -848,9 +849,9 @@ void dt_guides_update_popover_values()
   gchar *key = _conf_get_path("global", "guide", NULL);
   if(!dt_conf_key_exists(key)) dt_conf_set_string(key, DEFAULT_GUIDE_NAME);
   gchar *val = dt_conf_get_string(key);
-  g_free(key);
+  dt_free(key);
   const int i = _guides_get_value(val);
-  g_free(val);
+  dt_free(val);
   dt_bauhaus_combobox_set(darktable.view_manager->guides, i);
   // colors
   dt_bauhaus_combobox_set(darktable.view_manager->guides_colors, dt_conf_get_int("darkroom/ui/overlay_color"));

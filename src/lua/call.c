@@ -21,6 +21,7 @@
    You should have received a copy of the GNU General Public License
    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include "common/darktable.h"
 #include "lua/call.h"
 #include "control/control.h"
 #include "lua/lua.h"
@@ -300,7 +301,8 @@ static void alien_job_destroy(void *data_ptr)
     }
   }
   g_list_free(data->extra);
-  free(data);
+  data->extra = NULL;
+  dt_free(data);
 }
 
 static gboolean alien_job_dispatch (GSource* source, GSourceFunc callback, gpointer user_data)
@@ -406,8 +408,8 @@ static gboolean string_job_prepare (GSource *source, gint    *timeout)
 
 static void string_data_destroy(string_call_data * data)
 {
-  free(data->function);
-  free(data);
+  dt_free(data->function);
+  dt_free(data);
 }
 
 static gboolean string_job_dispatch (GSource* source, GSourceFunc callback, gpointer user_data)

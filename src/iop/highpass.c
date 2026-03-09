@@ -39,6 +39,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 #ifdef HAVE_CONFIG_H
+#include "common/darktable.h"
 #include "config.h"
 #endif
 #include <assert.h>
@@ -283,13 +284,13 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
 
   dt_opencl_release_mem_object(dev_m);
   dt_opencl_release_mem_object(dev_tmp);
-  free(mat);
+  dt_free(mat);
   return TRUE;
 
 error:
   dt_opencl_release_mem_object(dev_m);
   dt_opencl_release_mem_object(dev_tmp);
-  free(mat);
+  dt_free(mat);
   dt_print(DT_DEBUG_OPENCL, "[opencl_highpass] couldn't enqueue kernel! %d\n", err);
   return FALSE;
 }
@@ -409,8 +410,7 @@ void cleanup_global(dt_iop_module_so_t *module)
   dt_opencl_free_kernel(gd->kernel_highpass_hblur);
   dt_opencl_free_kernel(gd->kernel_highpass_vblur);
   dt_opencl_free_kernel(gd->kernel_highpass_mix);
-  free(module->data);
-  module->data = NULL;
+  dt_free(module->data);
 }
 
 
