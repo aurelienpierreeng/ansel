@@ -181,10 +181,14 @@ typedef enum dt_drawlayer_runtime_event_t
   DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_ENTER,
   DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_LEAVE,
   DT_DRAWLAYER_RUNTIME_EVENT_GUI_SCROLL,
+  DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS,
   DT_DRAWLAYER_RUNTIME_EVENT_GUI_CHANGE_IMAGE,
   DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC,
   DT_DRAWLAYER_RUNTIME_EVENT_GUI_PIPE_FINISHED,
   DT_DRAWLAYER_RUNTIME_EVENT_GUI_STROKE_ABORT,
+  DT_DRAWLAYER_RUNTIME_EVENT_GUI_UNDO,
+  DT_DRAWLAYER_RUNTIME_EVENT_GUI_REDO,
+  DT_DRAWLAYER_RUNTIME_EVENT_GUI_HISTORY_INVALIDATE,
   DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT,
   DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CPU_BEFORE,
   DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CPU_AFTER,
@@ -246,6 +250,8 @@ typedef enum dt_drawlayer_runtime_action_t
   DT_DRAWLAYER_RUNTIME_ACTION_SYNC_SAVE_BUTTON,
   DT_DRAWLAYER_RUNTIME_ACTION_REFRESH_GUI,
   DT_DRAWLAYER_RUNTIME_ACTION_INVALIDATE_LAYER_CACHE,
+  DT_DRAWLAYER_RUNTIME_ACTION_INVALIDATE_UNDO_REDO,
+  DT_DRAWLAYER_RUNTIME_ACTION_SWAP_UNDO_REDO,
 } dt_drawlayer_runtime_action_t;
 
 typedef struct dt_drawlayer_runtime_result_t
@@ -274,6 +280,10 @@ typedef struct dt_drawlayer_runtime_action_request_t
       gboolean valid;
       gboolean hide_cursor;
     } pointer;
+    struct
+    {
+      gboolean undo;
+    } swap_undo_redo;
   } data;
 } dt_drawlayer_runtime_action_request_t;
 
@@ -399,6 +409,7 @@ typedef struct dt_drawlayer_runtime_update_request_t
   dt_drawlayer_runtime_event_t event;
   dt_drawlayer_runtime_raw_input_kind_t raw_input_kind;
   const dt_drawlayer_runtime_inputs_t *inputs;
+  gboolean flush_pending;
   dt_drawlayer_runtime_release_t release;
 } dt_drawlayer_runtime_update_request_t;
 

@@ -249,9 +249,11 @@ static void _touch_stroke_commit_hash(dt_iop_drawlayer_params_t *params, int dab
 static void _flush_process_patch_to_base(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g);
 static void _flush_process_patch_to_base_locked(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g);
 static void _invalidate_undo_redo(dt_iop_module_t *self);
+static gboolean _prepare_undo_snapshot(dt_iop_module_t *self);
+static gboolean _swap_undo_redo(dt_iop_module_t *self, gboolean undo);
 static void _sync_save_button(dt_iop_module_t *self);
 static void _sync_mode_sensitive_widgets(dt_iop_module_t *self);
-static gboolean _sync_temp_buffers(dt_iop_module_t *self, gboolean flush_pending, gboolean record_history);
+static gboolean _sync_temp_buffers(dt_iop_module_t *self, gboolean flush_pending);
 static int _offer_missing_layer_recreation(dt_iop_module_t *self, const char *missing_name);
 static void _set_drawlayer_pipeline_realtime_mode(dt_iop_module_t *self, gboolean state);
 static void _sync_drawlayer_pipeline_realtime_mode(dt_iop_module_t *self);
@@ -261,6 +263,10 @@ static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, con
 static gboolean _prime_live_process_patch_before_stroke(dt_iop_module_t *self);
 static void _drawlayer_runtime_collect_state(void *user_data, dt_drawlayer_runtime_inputs_t *inputs,
                                              dt_drawlayer_worker_snapshot_t *worker_snapshot);
+static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t *self,
+                                                                 dt_iop_drawlayer_gui_data_t *g,
+                                                                 dt_drawlayer_runtime_event_t event,
+                                                                 gboolean flush_pending);
 static gboolean _drawlayer_runtime_perform_action(void *user_data,
                                                   const dt_drawlayer_runtime_action_request_t *action,
                                                   dt_drawlayer_runtime_result_t *result);
@@ -2149,7 +2155,7 @@ static gboolean _brush_profile_button_press(GtkWidget *widget, GdkEventButton *e
 
   _sync_params_from_gui(self, FALSE);
   _sync_mode_sensitive_widgets(self);
-  _sync_temp_buffers(self, TRUE, FALSE);
+  if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, TRUE).ok) return FALSE;
   _sync_brush_profile_preview_widget(self);
   gtk_widget_queue_draw(widget);
   return TRUE;
@@ -2845,14 +2851,13 @@ static gboolean _compute_view_patch(dt_iop_module_t *self, const float padding, 
   return view->patch.width > 0 && view->patch.height > 0;
 }
 
-static gboolean _sync_temp_buffers(dt_iop_module_t *self, const gboolean flush_pending,
-                                   const gboolean record_history)
+static gboolean _sync_temp_buffers(dt_iop_module_t *self, const gboolean flush_pending)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   if(!g || !self->dev) return FALSE;
 
   if(flush_pending && (g->manager.painting_active || g->stroke.stroke_sample_count > 0)
-     && !_commit_dabs(self, record_history))
+     && !_commit_dabs(self, FALSE))
     return FALSE;
   _pause_worker(self, g->stroke.worker);
   if(!_ensure_layer_cache(self))
@@ -3179,8 +3184,6 @@ static gboolean _swap_undo_redo(dt_iop_module_t *self, const gboolean undo)
   if(!self || !self->dev || !g || !params) return FALSE;
 
   if((undo && !g->process.undo_available) || (!undo && !g->process.redo_available)) return FALSE;
-  if(!_commit_dabs(self, FALSE)) return FALSE;
-  if(!_sync_temp_buffers(self, FALSE, FALSE)) return FALSE;
   if(!g->process.base_patch.pixels || !g->process.undo_patch.pixels) return FALSE;
 
   _release_all_base_patch_extra_refs(g);
@@ -3567,7 +3570,7 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
   params->sidecar_timestamp = 0;
   memset(params->work_profile, 0, sizeof(params->work_profile));
 
-  if(!_sync_temp_buffers(self, FALSE, FALSE))
+  if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, FALSE).ok)
   {
     *params = previous;
     gui_update(self);
@@ -3783,7 +3786,8 @@ static void _widget_changed(GtkWidget *widget, gpointer user_data)
 
   if(widget == g->controls.brush_mode || widget == g->controls.brush_shape) _sync_mode_sensitive_widgets(self);
 
-  if(widget == g->controls.size || widget == g->controls.softness || widget == g->controls.brush_shape) _sync_temp_buffers(self, TRUE, FALSE);
+  if(widget == g->controls.size || widget == g->controls.softness || widget == g->controls.brush_shape)
+    _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, TRUE);
 
   if(widget == g->controls.brush_shape || widget == g->controls.opacity || widget == g->controls.softness || widget == g->controls.sprinkles
      || widget == g->controls.sprinkle_size || widget == g->controls.sprinkle_coarseness)
@@ -3810,7 +3814,7 @@ static void _layer_selected(GtkWidget *widget, gpointer user_data)
   const int previous_order = params->layer_order;
   g_strlcpy(params->layer_name, text, sizeof(params->layer_name));
   params->layer_order = active;
-  if(!_sync_temp_buffers(self, TRUE, FALSE))
+  if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, TRUE).ok)
   {
     g_strlcpy(params->layer_name, previous_name, sizeof(params->layer_name));
     params->layer_order = previous_order;
@@ -3837,7 +3841,8 @@ static void _delete_layer_clicked(GtkButton *button, gpointer user_data)
   if(!_confirm_delete_layer(self, FALSE)) return;
 
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  _invalidate_undo_redo(self);
+  _update_gui_runtime_manager(self, (dt_iop_drawlayer_gui_data_t *)self->gui_data,
+                              DT_DRAWLAYER_RUNTIME_EVENT_GUI_HISTORY_INVALIDATE, FALSE);
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
   self->enabled = FALSE;
   dt_iop_gui_set_enable_button(self);
@@ -3853,7 +3858,7 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
   if(!self || !self->dev || !g || !params) return FALSE;
 
   if(!_commit_dabs(self, FALSE)) return FALSE;
-  if(!_sync_temp_buffers(self, FALSE, FALSE)) return FALSE;
+  if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, FALSE).ok) return FALSE;
   if(!g->process.base_patch.pixels) return FALSE;
 
   const size_t count = (size_t)g->process.base_patch.width * g->process.base_patch.height;
@@ -3870,7 +3875,7 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
 
   g->process.cache_dirty = TRUE;
   _invalidate_process_patch(g);
-  _invalidate_undo_redo(self);
+  _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_HISTORY_INVALIDATE, FALSE);
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
   _reset_stroke_session(g);
 
@@ -3885,7 +3890,7 @@ static gboolean _clear_current_layer(dt_iop_module_t *self)
   if(!self || !self->dev || !g || !params) return FALSE;
 
   if(!_commit_dabs(self, FALSE)) return FALSE;
-  if(!_sync_temp_buffers(self, FALSE, FALSE)) return FALSE;
+  if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_SYNC_TEMP_BUFFERS, FALSE).ok) return FALSE;
   if(!g->process.base_patch.pixels) return FALSE;
 
   dt_drawlayer_cache_patch_wrlock(&g->process.base_patch);
@@ -3895,7 +3900,7 @@ static gboolean _clear_current_layer(dt_iop_module_t *self)
 
   g->process.cache_dirty = TRUE;
   _invalidate_process_patch(g);
-  _invalidate_undo_redo(self);
+  _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_HISTORY_INVALIDATE, FALSE);
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
   _reset_stroke_session(g);
 
@@ -4022,14 +4027,18 @@ static void _undo_clicked(GtkButton *button, gpointer user_data)
 {
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(!_swap_undo_redo(self, TRUE)) dt_control_log(_("failed to undo drawing stroke"));
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
+  if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_UNDO, FALSE).ok)
+    dt_control_log(_("failed to undo drawing stroke"));
 }
 
 static void _redo_clicked(GtkButton *button, gpointer user_data)
 {
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  if(!_swap_undo_redo(self, FALSE)) dt_control_log(_("failed to redo drawing stroke"));
+  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
+  if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_REDO, FALSE).ok)
+    dt_control_log(_("failed to redo drawing stroke"));
 }
 
 static void _preview_bg_toggled(GtkToggleButton *button, gpointer user_data)
@@ -4175,6 +4184,41 @@ static void _drawlayer_runtime_collect_state(void *user_data, dt_drawlayer_runti
   _fill_runtime_inputs(&ctx->runtime, NULL, inputs);
 }
 
+static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t *self,
+                                                                 dt_iop_drawlayer_gui_data_t *g,
+                                                                 const dt_drawlayer_runtime_event_t event,
+                                                                 const gboolean flush_pending)
+{
+  dt_drawlayer_runtime_result_t result = {
+    .ok = TRUE,
+    .raw_input_ok = TRUE,
+  };
+  if(!self || !g) return result;
+
+  drawlayer_runtime_host_context_t runtime_host = {
+    .runtime = {
+      .self = self,
+      .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
+      .gui = g,
+      .manager = &g->manager,
+      .process_state = &g->process,
+    },
+  };
+  const dt_drawlayer_runtime_host_t runtime_manager = {
+    .user_data = &runtime_host,
+    .collect_inputs = _drawlayer_runtime_collect_state,
+    .perform_action = _drawlayer_runtime_perform_action,
+  };
+  return dt_drawlayer_runtime_manager_update(
+      &g->manager,
+      &(dt_drawlayer_runtime_update_request_t){
+        .event = event,
+        .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
+        .flush_pending = flush_pending,
+      },
+      &runtime_manager);
+}
+
 static void _show_runtime_feedback(const dt_iop_drawlayer_gui_data_t *g,
                                    const dt_drawlayer_runtime_feedback_t feedback)
 {
@@ -4224,7 +4268,7 @@ static gboolean _drawlayer_runtime_perform_action(void *user_data,
       return FALSE;
 
     case DT_DRAWLAYER_RUNTIME_ACTION_SYNC_TEMP_BUFFERS:
-      return _sync_temp_buffers(self, action->data.sync_temp_buffers.flush_pending, FALSE);
+      return _sync_temp_buffers(self, action->data.sync_temp_buffers.flush_pending);
 
     case DT_DRAWLAYER_RUNTIME_ACTION_COMMIT:
       return _commit_dabs(self, action->data.commit_mode == DT_DRAWLAYER_RUNTIME_COMMIT_HISTORY);
@@ -4251,8 +4295,7 @@ static gboolean _drawlayer_runtime_perform_action(void *user_data,
       return TRUE;
 
     case DT_DRAWLAYER_RUNTIME_ACTION_PREPARE_UNDO_SNAPSHOT:
-      _prepare_undo_snapshot(self);
-      return TRUE;
+      return _prepare_undo_snapshot(self);
 
     case DT_DRAWLAYER_RUNTIME_ACTION_PRIME_LIVE_PROCESS_PATCH:
       _prime_live_process_patch_before_stroke(self);
@@ -4336,6 +4379,13 @@ static gboolean _drawlayer_runtime_perform_action(void *user_data,
       g->process.cache_valid = FALSE;
       g->process.cache_dirty = FALSE;
       return TRUE;
+
+    case DT_DRAWLAYER_RUNTIME_ACTION_INVALIDATE_UNDO_REDO:
+      _invalidate_undo_redo(self);
+      return TRUE;
+
+    case DT_DRAWLAYER_RUNTIME_ACTION_SWAP_UNDO_REDO:
+      return _swap_undo_redo(self, action->data.swap_undo_redo.undo);
 
     case DT_DRAWLAYER_RUNTIME_ACTION_NONE:
     default:
@@ -4474,7 +4524,8 @@ void gui_reset(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   _default_layer_name(self, params->layer_name, sizeof(params->layer_name));
   params->layer_order = -1;
-  _invalidate_undo_redo(self);
+  _update_gui_runtime_manager(self, (dt_iop_drawlayer_gui_data_t *)self->gui_data,
+                              DT_DRAWLAYER_RUNTIME_EVENT_GUI_HISTORY_INVALIDATE, FALSE);
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   if(g)
@@ -5042,28 +5093,20 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
 void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
+  if(g == NULL) return;
+
   _set_drawlayer_os_cursor_hidden(FALSE);
-  if(g) g->manager.realtime_active = FALSE;
-  _set_drawlayer_pipeline_realtime_mode(self, FALSE);
-  _drawlayer_wait_for_rasterization_modal(g, _("Saving layer"),
-                                          _("Waiting for the layer rasterization to finish..."));
-  _commit_dabs(self, FALSE);
-  if(g) _flush_process_patch_to_base(self, g);
-  _flush_layer_cache(self);
-  _stop_worker(self, g->stroke.worker);
+  _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_LOSS, FALSE);
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_develop_ui_pipe_finished_callback), self);
 
-  if(g)
-  {
-    _release_all_base_patch_extra_refs(g);
-    dt_drawlayer_process_state_cleanup(&g->process);
-    memset(&g->session.live_patch, 0, sizeof(g->session.live_patch));
-    dt_drawlayer_widgets_cleanup(&g->ui.widgets);
-    _clear_cursor_stamp_surface(g);
-    dt_drawlayer_worker_cleanup(&g->stroke.worker);
-  }
-
+  _release_all_base_patch_extra_refs(g);
+  dt_drawlayer_process_state_cleanup(&g->process);
+  memset(&g->session.live_patch, 0, sizeof(g->session.live_patch));
+  dt_drawlayer_widgets_cleanup(&g->ui.widgets);
+  _clear_cursor_stamp_surface(g);
+  dt_drawlayer_worker_cleanup(&g->stroke.worker);
+  
   IOP_GUI_FREE;
 }
 
