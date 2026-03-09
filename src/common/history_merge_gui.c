@@ -1228,7 +1228,7 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   const char *merge_mode = merge_iop_order ? _("merge") : _("destination");
   const char *strategy_name
       = (strategy == DT_HISTORY_MERGE_APPEND) ? _("append")
-        : (strategy == DT_HISTORY_MERGE_APPSTART) ? _("appstart")
+        : (strategy == DT_HISTORY_MERGE_APPSTART) ? _("prepend")
         : _("replace");
 
   gchar *title_text
