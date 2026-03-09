@@ -1108,6 +1108,7 @@ static void _process_backend_dab(dt_iop_module_t *self, const dt_drawlayer_brush
     have_process_damage = dt_drawlayer_paint_runtime_get_stroke_damage(&process_step_path, &process_step_damage);
     if(have_process_damage)
     {
+      g->process_patch_dirty = TRUE;
       dt_drawlayer_paint_runtime_note_dab_damage(&g->process_dirty_rect, &process_step_damage);
       _publish_process_patch_locked(g, &process_step_damage, FALSE);
     }
