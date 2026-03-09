@@ -5724,17 +5724,33 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
   dt_pthread_mutex_unlock(&g->process_patch_mutex);
         return dt_iop_clip_and_zoom_roi_cl(piece->pipe->devid, dev_out, dev_in, roi_out, roi_in) == CL_SUCCESS;
       }
+      const gboolean realtime = dt_dev_pixelpipe_get_realtime(piece->pipe);
       cl_mem process_source = NULL;
-      if(dt_dev_pixelpipe_get_realtime(piece->pipe))
+      if(realtime)
         process_source = _ensure_process_read_clmem_locked(g, piece->pipe->devid);
-      const gboolean ok = _blend_layer_over_input_cl(piece->pipe->devid, gd->kernel_premult_over, dev_out, dev_in,
-                                                     scratch, g->process_read_patch.pixels, g->process_read_patch.cache_entry,
-                                                     process_source,
-                                                     g->process_read_patch.width, g->process_read_patch.height,
-                                                     &blend_target_roi, &source_process_roi, direct_copy,
-                                                     use_preview_bg, preview_bg,
-                                                     dt_dev_pixelpipe_get_realtime(piece->pipe),
-                                                     dt_dev_pixelpipe_get_realtime(piece->pipe) && !process_source);
+      gboolean ok = _blend_layer_over_input_cl(piece->pipe->devid, gd->kernel_premult_over, dev_out, dev_in,
+                                               scratch, g->process_read_patch.pixels, g->process_read_patch.cache_entry,
+                                               process_source,
+                                               g->process_read_patch.width, g->process_read_patch.height,
+                                               &blend_target_roi, &source_process_roi, direct_copy,
+                                               use_preview_bg, preview_bg,
+                                               realtime,
+                                               realtime && !process_source);
+      if(!ok && realtime && process_source)
+      {
+        /* Realtime draws prefer the dedicated device mirror of `process_read_patch`,
+         * but if that reusable image became inconsistent after cache churn, fall
+         * back once to the authoritative host snapshot. This preserves the fast
+         * path when valid while matching the pre-regression behavior on failure. */
+        _clear_process_read_clmem(g);
+        ok = _blend_layer_over_input_cl(piece->pipe->devid, gd->kernel_premult_over, dev_out, dev_in,
+                                        scratch, g->process_read_patch.pixels, g->process_read_patch.cache_entry,
+                                        NULL,
+                                        g->process_read_patch.width, g->process_read_patch.height,
+                                        &blend_target_roi, &source_process_roi, direct_copy,
+                                        use_preview_bg, preview_bg,
+                                        FALSE, TRUE);
+      }
         dt_drawlayer_cache_patch_rdunlock(&g->process_read_patch);
   dt_pthread_mutex_unlock(&g->process_patch_mutex);
       {
