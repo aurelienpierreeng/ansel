@@ -44,12 +44,40 @@ typedef struct dt_drawlayer_session_state_t
 typedef struct dt_drawlayer_process_state_t
 {
   dt_drawlayer_damaged_rect_t *backend_path;
+  /** `base_patch`: RAM copy, converted as 32 bits floats of the full-res TIFF
+   * layer. It's our interface between user interaction and disk file.
+   */
   dt_drawlayer_cache_patch_t base_patch;
+  /* `process_patch`: mutable, display-sized process tile used internally
+   * while painting. Backend stroke workers update this buffer in-place to
+   * provide low-latency realtime preview and incremental edits. Access to
+   * `process_patch` and its meta-flags is serialized by
+   * `process_patch_mutex`. Use `process_patch_valid` / `process_patch_dirty`
+   * to query its state. */
   dt_drawlayer_cache_patch_t process_patch;
+
+  /* `process_read_patch`: read-only host-side snapshot published for
+   * consumers (GUI, pipeline, and safe GPU reads). This snapshot is created
+   * by copying the authoritative `process_patch` during a publish step so
+   * readers can access stable pixels without racing concurrent in-flight
+   * edits. The snapshot may be backed by host-pinned memory for OpenCL and
+   * is managed via the cache patch lock helpers (rdlock/wrunlock). */
   dt_drawlayer_cache_patch_t process_read_patch;
+
+  /* Mutex protecting modifications to `process_patch` and related flags. */
   dt_pthread_mutex_t process_patch_mutex;
   dt_drawlayer_cache_patch_t undo_patch;
+
+  /* `stroke_mask`: authoritative full-resolution stroke alpha mask aligned
+   * with `base_patch`. This stores accumulated stroke coverage in base/source
+   * coordinates and is used for undo/redo, sidecar persistence, and for
+   * replaying or committing strokes back into the authoritative `base_patch`. */
   dt_drawlayer_cache_patch_t stroke_mask;
+
+  /* `process_stroke_mask`: display-sized mask derived from `stroke_mask` and
+   * resampled to `process_patch` coordinates. This transformed mask is used
+   * during realtime blending/preview and when folding incremental edits from
+   * `process_patch` back into `base_patch` (the flush path). */
   dt_drawlayer_cache_patch_t process_stroke_mask;
   gboolean cache_valid;
   gboolean cache_dirty;
@@ -60,7 +88,10 @@ typedef struct dt_drawlayer_process_state_t
   int cache_layer_order;
   gboolean base_patch_loaded_ref;
   uint32_t base_patch_stroke_refs;
+  /* true when `process_patch` contains valid pixel data for the current view */
   gboolean process_patch_valid;
+  /* true when `process_patch` contains incremental edits that haven't been
+   * folded back into `base_patch` (i.e. needs flush). */
   gboolean process_patch_dirty;
   dt_drawlayer_damaged_rect_t process_dirty_rect;
   int process_patch_padding;
@@ -230,7 +261,6 @@ typedef enum dt_drawlayer_runtime_action_t
   DT_DRAWLAYER_RUNTIME_ACTION_SYNC_REALTIME_MODE,
   DT_DRAWLAYER_RUNTIME_ACTION_SHOW_FEEDBACK,
   DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_WORKER_RUNNING,
-  DT_DRAWLAYER_RUNTIME_ACTION_SYNC_TEMP_BUFFERS,
   DT_DRAWLAYER_RUNTIME_ACTION_COMMIT,
   DT_DRAWLAYER_RUNTIME_ACTION_REQUEST_COMMIT,
   DT_DRAWLAYER_RUNTIME_ACTION_WAIT_FULLRES_WORKER,
@@ -244,6 +274,7 @@ typedef enum dt_drawlayer_runtime_action_t
   DT_DRAWLAYER_RUNTIME_ACTION_QUEUE_RAW_INPUT,
   DT_DRAWLAYER_RUNTIME_ACTION_RELEASE_PROCESS_CLMEM,
   DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_LAYER_CACHE,
+  DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_WIDGET_CACHE,
   DT_DRAWLAYER_RUNTIME_ACTION_BUILD_PROCESS_PATCH,
   DT_DRAWLAYER_RUNTIME_ACTION_SET_POINTER_STATE,
   DT_DRAWLAYER_RUNTIME_ACTION_QUEUE_REDRAW_CENTER,
@@ -267,10 +298,6 @@ typedef struct dt_drawlayer_runtime_action_request_t
   {
     dt_drawlayer_runtime_feedback_t feedback;
     dt_drawlayer_runtime_commit_mode_t commit_mode;
-    struct
-    {
-      gboolean flush_pending;
-    } sync_temp_buffers;
     struct
     {
       dt_drawlayer_runtime_raw_input_kind_t kind;
@@ -400,7 +427,6 @@ typedef struct dt_drawlayer_runtime_source_t
 typedef struct dt_drawlayer_runtime_release_t
 {
   dt_drawlayer_process_state_t *process;
-  const dt_drawlayer_cache_patch_t *headless_base_patch;
   dt_drawlayer_runtime_source_t *source;
 } dt_drawlayer_runtime_release_t;
 
@@ -441,6 +467,7 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
                                                                   const dt_drawlayer_runtime_update_request_t *request,
                                                                   const dt_drawlayer_runtime_host_t *host);
 void dt_drawlayer_runtime_manager_bind_piece(dt_drawlayer_runtime_manager_t *headless_manager,
+                                             dt_drawlayer_process_state_t *headless_process,
                                              dt_drawlayer_runtime_manager_t *gui_manager,
                                              dt_drawlayer_process_state_t *gui_process,
                                              gboolean display_pipe,
