@@ -484,6 +484,11 @@ static gboolean _publish_process_patch_locked(dt_iop_drawlayer_gui_data_t *g,
   {
     _copy_patch_rect(&g->process_patch, &g->process_read_patch, &full_rect);
 #ifdef HAVE_OPENCL
+    /* `process_read_patch` is an external host buffer that may also be mirrored
+     * through the generic pixelpipe pinned-image cache. Invalidate those cached
+     * host-backed device objects whenever we rewrite the snapshot in place so a
+     * later focused drawlayer render cannot reopen stale GPU views for the same
+     * host pointer after pan/zoom or stroke updates. */
     dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, g->process_read_patch.pixels, NULL, -1);
     g->process_read_clmem_dirty = TRUE;
 #endif
@@ -495,6 +500,8 @@ static gboolean _publish_process_patch_locked(dt_iop_drawlayer_gui_data_t *g,
    * tile and stale snapshots are not reintroduced by buffer swapping. */
   _copy_patch_rect(&g->process_patch, &g->process_read_patch, damage);
 #ifdef HAVE_OPENCL
+  /* See full-copy case above: keep the generic host-pinned cache in sync with
+   * the authoritative host snapshot stored in `process_read_patch`. */
   dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, g->process_read_patch.pixels, NULL, -1);
   g->process_read_clmem_dirty = TRUE;
 #endif

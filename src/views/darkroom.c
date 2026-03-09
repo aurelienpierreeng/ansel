@@ -568,7 +568,8 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   dt_pixel_cache_entry_t *live_entry = NULL;
   void *live_data = NULL;
   if(locked->surface && locked->hash == hash
-     && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, hash, &live_data, NULL, &live_entry)
+     && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, hash, &live_data, NULL, &live_entry,
+                                            NULL, 0, -1, NULL)
      && live_entry == locked->entry && live_data == locked->data)
   {
     locked->width = pipe->backbuf.width;
@@ -952,6 +953,8 @@ void expose(
 
   gboolean have_drawn = FALSE;
   gboolean drawn_from_main = FALSE;
+  const char *draw_source = "none";
+  uint64_t draw_hash = (uint64_t)-1;
 
   if(is_realtime)
   {
@@ -960,6 +963,11 @@ void expose(
     have_drawn = _render_realtime_main(cr, dev, width, height, border, bg_color, new_zoom_hash,
                                        &main_hash, &main_zoom_hash, &image_surface_imgid);
     drawn_from_main = have_drawn;
+    if(have_drawn)
+    {
+      draw_source = "fresh main backbuf";
+      draw_hash = _darkroom_main_locked.hash;
+    }
   }
   else
   {
@@ -970,9 +978,21 @@ void expose(
                                           main_hash, main_zoom_hash,
                                           &main_hash, &main_zoom_hash, &image_surface_imgid);
     drawn_from_main = have_drawn;
+    if(have_drawn)
+    {
+      draw_source = "fresh main backbuf";
+      draw_hash = _darkroom_main_locked.hash;
+    }
     if(!have_drawn)
+    {
       have_drawn = _render_nonrealtime_preview(cr, dev, has_preview_image, width, height, border, bg_color,
                                                new_zoom_hash, &image_surface_imgid);
+      if(have_drawn)
+      {
+        draw_source = "fresh preview fallback";
+        draw_hash = _darkroom_preview_fallback_backbuf_hash;
+      }
+    }
   }
 
   if(have_drawn) image_surface_has_main = drawn_from_main;
@@ -984,14 +1004,19 @@ void expose(
     {
       /* No fresh source for this frame, but keep last composed frame to avoid
        * flicker/blanking while pipelines catch up. */
+      draw_source = image_surface_has_main ? "reused last main surface" : "reused last preview surface";
+      draw_hash = image_surface_has_main ? main_hash : _darkroom_preview_fallback_backbuf_hash;
       _paint_all(cri, cr, dev->image_surface);
     }
     else
     {
       /* Cold-start/no valid frame at all: only background can be shown. */
+      draw_source = "background only";
       cairo_set_source_rgb(cr, bg_color[0], bg_color[1], bg_color[2]);
       cairo_paint(cr);
       cairo_destroy(cr);
+      dt_print(DT_DEBUG_DEV, "[darkroom] expose drew %s (backbuf hash=%" PRIu64 ")\n",
+               draw_source, draw_hash);
       cairo_restore(cri);
       return;
     }
@@ -1000,6 +1025,9 @@ void expose(
   {
     _paint_all(cri, cr, dev->image_surface);
   }
+
+  dt_print(DT_DEBUG_DEV, "[darkroom] expose drew %s (backbuf hash=%" PRIu64 ")\n",
+           draw_source, draw_hash);
 
   cairo_restore(cri);
 

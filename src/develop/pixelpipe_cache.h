@@ -210,6 +210,23 @@ void dt_dev_pixelpipe_cache_put_pinned_image(dt_dev_pixelpipe_cache_t *cache, vo
  */
 void dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
                                                     struct dt_pixel_cache_entry_t *entry_hint, int devid);
+
+/**
+ * @brief Resynchronize cached pinned OpenCL images from an authoritative host buffer.
+ *
+ * @details
+ * This is meant for host-backed cachelines that stay valid but are rewritten in place by the CPU.
+ * Unlike `dt_dev_pixelpipe_cache_flush_host_pinned_image()`, this preserves reusable pinned
+ * `CL_MEM_USE_HOST_PTR` images when possible by pushing current host contents back to the cached
+ * OpenCL image objects. Any cached image that cannot be synchronized is dropped individually.
+ *
+ * @param cache Pixelpipe cache.
+ * @param host_ptr Host-backed image data.
+ * @param entry_hint Optional owning cache entry for regular cache lines, or NULL.
+ * @param devid Device id to resynchronize, or -1 for all cached devices for that host buffer.
+ */
+void dt_dev_pixelpipe_cache_resync_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
+                                                     struct dt_pixel_cache_entry_t *entry_hint, int devid);
 #endif
 
 /**
@@ -282,18 +299,48 @@ void dt_pixelpipe_cache_free_align_cache(dt_dev_pixelpipe_cache_t *cache, void *
  * @brief Get an existing cache line from the cache. This is similar to `dt_dev_pixelpipe_cache_get`,
  * but it does not create a new cache line if it is not found.
  *
- * This internally increases the reference count,
- * so you have to manually decrease it using `dt_dev_pixelpipe_ref_count_entry()` once
- * the cache line content has been consumed or it will never be freed.
+ * Historical note: unlike `dt_dev_pixelpipe_cache_get()`, this is intentionally a non-owning lookup.
+ * It does not change reference counts or entry locks. Callers that need lifetime guarantees must retain
+ * the entry explicitly with `dt_dev_pixelpipe_cache_ref_count_entry()` and/or `dt_dev_pixelpipe_cache_rdlock_entry()`.
+ *
+ * If `roi`, `bpp` and `cl_mem_output` are provided, the lookup becomes an authoritative exact-hit query:
+ * the cacheline must immediately satisfy the hit either from RAM, from a cached device buffer or by
+ * materializing a host buffer from cached device data. If that fails, the cacheline is removed and
+ * the function returns FALSE.
  *
  * @param cache
  * @param hash
  * @param data
  * @param dsc
+ * @param roi Optional buffer geometry for exact-hit validation.
+ * @param bpp Optional bytes-per-pixel for exact-hit validation.
+ * @param preferred_devid Preferred OpenCL device id for exact-hit validation, or -1.
+ * @param cl_mem_output Optional returned cached device buffer for exact-hit validation.
  * @return int TRUE if found, FALSE if not found.
  */
 int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, void **data,
-                                        struct dt_iop_buffer_dsc_t **dsc, struct dt_pixel_cache_entry_t **entry);
+                                        struct dt_iop_buffer_dsc_t **dsc, struct dt_pixel_cache_entry_t **entry,
+                                        const struct dt_iop_roi_t *roi, const size_t bpp,
+                                        const int preferred_devid, void **cl_mem_output);
+
+/**
+ * @brief Ensure a cache entry has an authoritative host buffer.
+ *
+ * @details
+ * If a cacheline already has `entry->data`, this returns TRUE immediately. Otherwise it tries to
+ * allocate the host buffer and resynchronize it from one cached device buffer stored in `cl_mem_list`,
+ * preferring `preferred_devid` when it is >= 0.
+ *
+ * This is the uniform policy used when GPU-only cachelines must become host-authoritative again,
+ * for example before evicting cached `cl_mem` images or when a cache hit must satisfy a CPU consumer.
+ *
+ * @param cache Pixelpipe cache.
+ * @param preferred_devid Preferred OpenCL device id, or -1 to accept any cached device buffer.
+ * @param entry Cache entry to materialize.
+ * @return TRUE if a valid host buffer exists on return, FALSE otherwise.
+ */
+gboolean dt_dev_pixelpipe_cache_materialize_host_data(dt_dev_pixelpipe_cache_t *cache, int preferred_devid,
+                                                      struct dt_pixel_cache_entry_t *entry);
 
 /**
  * @brief Remove cache lines matching id. Entries locked in read/write or having reference
@@ -304,7 +351,13 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
  */
 void dt_dev_pixelpipe_cache_flush(dt_dev_pixelpipe_cache_t *cache, const int id);
 
-/** Release cached OpenCL pinned buffers for a device (-1 for all). */
+/**
+ * @brief Release cached OpenCL buffers for a device (-1 for all).
+ *
+ * @details
+ * Device-only cachelines are first materialized back to host RAM when needed so published
+ * cache entries remain authoritative after the `cl_mem` objects are dropped.
+ */
 void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid);
 
 

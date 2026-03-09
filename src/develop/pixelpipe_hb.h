@@ -106,10 +106,12 @@ typedef struct dt_dev_pixelpipe_iop_t
   // bypass the cache for this module
   gboolean bypass_cache;
 
-  // Snapshot of the last output cacheline metadata for realtime runs.
-  // This is intentionally NOT used for bypass_cache mode:
-  // - bypass_cache outputs are disposable and flagged auto-destroy,
-  // - realtime outputs are long-lived enough to benefit from in-place rekey/reuse.
+  // Snapshot of the last reusable output cacheline metadata.
+  // This is intentionally NOT used for bypass_cache / no_cache / reentry modes:
+  // - disposable outputs are flagged auto-destroy and must not be rekeyed,
+  // - realtime outputs and GPU-transient outputs can safely reuse their cacheline.
+  // The reused line is rekeyed while still write-locked, and it is destroyed if processing later
+  // fails before producing a valid output for the new hash.
   dt_pixel_cache_entry_t cache_entry;
 
   // Set to TRUE for modules that should mandatorily cache their output to the RAM

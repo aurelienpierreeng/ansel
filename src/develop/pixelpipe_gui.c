@@ -177,7 +177,8 @@ static void pixelpipe_get_histogram_backbuf(dt_develop_t *dev, const dt_iop_roi_
 
   // Hash has changed, our previous stored entry is obsolete: decrement its refcount.
   dt_pixel_cache_entry_t *previous_entry;
-  if(dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, backbuf->hash, NULL, NULL, &previous_entry))
+  if(dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, backbuf->hash, NULL, NULL, &previous_entry,
+                                         NULL, 0, -1, NULL))
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, backbuf->hash, FALSE, previous_entry);
 
   // Update metadata. The global histogram backbuf stores its bpp; infer it from cache entry size.
@@ -519,7 +520,8 @@ static gboolean _resync_global_histograms(dt_dev_pixelpipe_t *pipe, dt_develop_t
           buf_hash = hash;
         }
 
-        if(!dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, buf_hash, NULL, NULL, &entry))
+        if(!dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, buf_hash, NULL, NULL, &entry,
+                                                NULL, 0, -1, NULL))
           return 0;
 
         pixelpipe_get_histogram_backbuf(dev, roi, entry, piece->module, buf_hash);

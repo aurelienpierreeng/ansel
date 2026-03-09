@@ -673,6 +673,7 @@ gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe, struct dt
   return pipe->backbuf.hash != -1 
          && pipe->status == DT_DEV_PIXELPIPE_VALID 
          && pipe->changed == DT_DEV_PIPE_UNCHANGED
+         && pipe->hash == pipe->backbuf.hash
          && dev->history_hash == pipe->backbuf.history_hash;
 }
 

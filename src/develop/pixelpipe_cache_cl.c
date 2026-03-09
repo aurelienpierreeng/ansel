@@ -377,6 +377,9 @@ static void *_gpu_init_buffer(int devid, void *const host_ptr, const dt_iop_roi_
  * - If the image is host-backed (`CL_MEM_USE_HOST_PTR`) and we have both `cache_entry` and `host_ptr`,
  *   we put it in the cache entry's `cl_mem_list` for reuse.
  * - Otherwise, we release it immediately.
+ * - Pure device allocations may also be cached for scratch-pad reuse. When those cached `cl_mem`
+ *   objects are later evicted, the cache layer is responsible for materializing host RAM first if
+ *   no authoritative host buffer exists yet.
  *
  * Additionally, when we release an image, we must ensure there is no stale pointer in `cl_mem_list`
  * (for example, if some earlier path cached it and we are now deciding to free it). We call
