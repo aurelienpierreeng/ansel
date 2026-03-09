@@ -203,6 +203,8 @@ src/imageio/storage/disk.c
 src/imageio/storage/gallery.c
 src/imageio/storage/piwigo.c
 src/imageio/storage/example.c
+src/iop/drawlayer.c
+src/iop/drawlayer/worker.c
 src/iop/initialscale.c
 src/iop/demosaic/dual.c
 src/iop/demosaic/lmmse.c
