@@ -107,15 +107,59 @@ static void get_output_format(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe,
 static const uint64_t DT_PIXELPIPE_PIECE_GUARD_BEGIN = UINT64_C(0x4454504950454247);
 static const uint64_t DT_PIXELPIPE_PIECE_GUARD_END = UINT64_C(0x4454504950454547);
 
+typedef struct dt_debug_pixelpipe_piece_info_t
+{
+  const dt_iop_module_t *module;
+  const dt_dev_pixelpipe_t *pipe;
+} dt_debug_pixelpipe_piece_info_t;
+
+static GHashTable *_dt_debug_pixelpipe_piece_registry = NULL;
+static GMutex _dt_debug_pixelpipe_piece_registry_mutex;
+
+static dt_debug_pixelpipe_piece_info_t *_dt_debug_pixelpipe_lookup_piece_info(const dt_dev_pixelpipe_iop_t *piece)
+{
+  dt_debug_pixelpipe_piece_info_t *info = NULL;
+  g_mutex_lock(&_dt_debug_pixelpipe_piece_registry_mutex);
+  if(_dt_debug_pixelpipe_piece_registry)
+    info = (dt_debug_pixelpipe_piece_info_t *)g_hash_table_lookup(_dt_debug_pixelpipe_piece_registry, piece);
+  g_mutex_unlock(&_dt_debug_pixelpipe_piece_registry_mutex);
+  return info;
+}
+
+static void _dt_debug_pixelpipe_register_piece(const dt_dev_pixelpipe_iop_t *piece, const dt_dev_pixelpipe_t *pipe,
+                                               const dt_iop_module_t *module)
+{
+  dt_debug_pixelpipe_piece_info_t *info = dt_calloc_align(sizeof(*info));
+  info->module = module;
+  info->pipe = pipe;
+
+  g_mutex_lock(&_dt_debug_pixelpipe_piece_registry_mutex);
+  if(_dt_debug_pixelpipe_piece_registry == NULL)
+    _dt_debug_pixelpipe_piece_registry = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, dt_free_gpointer);
+  g_hash_table_insert(_dt_debug_pixelpipe_piece_registry, (gpointer)piece, info);
+  g_mutex_unlock(&_dt_debug_pixelpipe_piece_registry_mutex);
+}
+
+static void _dt_debug_pixelpipe_unregister_piece(const dt_dev_pixelpipe_iop_t *piece)
+{
+  g_mutex_lock(&_dt_debug_pixelpipe_piece_registry_mutex);
+  if(_dt_debug_pixelpipe_piece_registry)
+    g_hash_table_remove(_dt_debug_pixelpipe_piece_registry, piece);
+  g_mutex_unlock(&_dt_debug_pixelpipe_piece_registry_mutex);
+}
+
 static void _dt_debug_pixelpipe_abort_corrupted_piece(const dt_dev_pixelpipe_t *pipe,
                                                       const dt_dev_pixelpipe_iop_t *piece,
                                                       const char *stage, const int pos)
 {
+  const dt_debug_pixelpipe_piece_info_t *info = _dt_debug_pixelpipe_lookup_piece_info(piece);
   fprintf(stderr,
-          "[pixelpipe] corrupted pipe node detected at %s (pos=%d, pipe=%s, piece=%p, module=%p, init_module=%p, pipe_ptr=%p)\n",
+          "[pixelpipe] corrupted pipe node detected at %s (pos=%d, pipe=%s, piece=%p, module=%p, init_module=%p, pipe_ptr=%p, expected_module=%p, expected_pipe=%p)\n",
           stage ? stage : "unknown", pos, pipe ? dt_pixelpipe_get_pipe_name(pipe->type) : "unknown",
           (void *)piece, piece ? (void *)piece->module : NULL, piece ? (void *)piece->debug_module_init : NULL,
-          piece ? (void *)piece->pipe : NULL);
+          piece ? (void *)piece->pipe : NULL,
+          info ? (void *)info->module : NULL,
+          info ? (void *)info->pipe : NULL);
   if(piece)
   {
     fprintf(stderr,
@@ -128,11 +172,17 @@ static void _dt_debug_pixelpipe_abort_corrupted_piece(const dt_dev_pixelpipe_t *
 static void _dt_debug_pixelpipe_check_piece(const dt_dev_pixelpipe_t *pipe, const dt_dev_pixelpipe_iop_t *piece,
                                             const char *stage, const int pos)
 {
+  const dt_debug_pixelpipe_piece_info_t *info = NULL;
   if(piece == NULL) return;
+  info = _dt_debug_pixelpipe_lookup_piece_info(piece);
 
   if(piece->debug_guard_begin != DT_PIXELPIPE_PIECE_GUARD_BEGIN
      || piece->debug_guard_end != DT_PIXELPIPE_PIECE_GUARD_END
      || piece->debug_module_init == NULL
+     || info == NULL
+     || info->module == NULL
+     || info->pipe != pipe
+     || info->module != piece->debug_module_init
      || piece->module != piece->debug_module_init
      || piece->pipe != pipe)
     _dt_debug_pixelpipe_abort_corrupted_piece(pipe, piece, stage, pos);
@@ -145,6 +195,7 @@ static inline void _dt_debug_pixelpipe_init_piece(dt_dev_pixelpipe_iop_t *piece,
   piece->debug_guard_end = DT_PIXELPIPE_PIECE_GUARD_END;
   piece->debug_module_init = module;
   piece->pipe = pipe;
+  _dt_debug_pixelpipe_register_piece(piece, pipe, module);
 }
 #else
 static inline void _dt_debug_pixelpipe_check_piece(const dt_dev_pixelpipe_t *pipe,
@@ -163,6 +214,11 @@ static inline void _dt_debug_pixelpipe_init_piece(dt_dev_pixelpipe_iop_t *piece,
   (void)piece;
   (void)pipe;
   (void)module;
+}
+
+static inline void _dt_debug_pixelpipe_unregister_piece(const dt_dev_pixelpipe_iop_t *piece)
+{
+  (void)piece;
 }
 #endif
 
@@ -508,6 +564,7 @@ void dt_dev_pixelpipe_cleanup_nodes(dt_dev_pixelpipe_t *pipe)
     if(piece->module) dt_iop_cleanup_pipe(piece->module, pipe, piece);
     dt_free(piece->histogram);
     dt_pixelpipe_raster_cleanup(piece->raster_masks);
+    _dt_debug_pixelpipe_unregister_piece(piece);
     dt_free(piece);
   }
   g_list_free(pipe->nodes);
