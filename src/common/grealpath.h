@@ -83,7 +83,8 @@ static inline gchar *g_realpath(const char *path)
   if(rc == 0 || rc > len)
   {
     /* Weird failure again */
-    dt_free(buffer);
+    g_free(buffer);
+    buffer = NULL;
     return g_strdup(path);
   }
 
@@ -96,4 +97,3 @@ static inline gchar *g_realpath(const char *path)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-
