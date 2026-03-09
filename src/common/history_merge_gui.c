@@ -1250,7 +1250,7 @@ gboolean _hm_show_merge_report_popup(dt_develop_t *dev_dest, dt_develop_t *dev_s
   const char *order_text = used_source_order ? _("Source pipeline order was used")
                                              : _("Destination pipeline order was used");
   const char *fallback_text = (used_source_order != merge_iop_order)
-                                  ? _(" as a fallback because we could not resolve positionning constraints with source order.")
+                                  ? _(" as a fallback because we could not resolve positioning constraints with source order.")
                                   : ".";
   gchar *order_label_text = g_strdup_printf("%s%s", order_text, fallback_text);
   GtkWidget *order_label = gtk_label_new(order_label_text);
