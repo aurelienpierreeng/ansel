@@ -148,7 +148,6 @@ void dt_pixel_cache_clmem_put(struct dt_pixel_cache_entry_t *entry, void *host_p
 void dt_pixel_cache_clmem_remove(struct dt_pixel_cache_entry_t *entry, void *mem);
 void dt_pixel_cache_clmem_flush(struct dt_pixel_cache_entry_t *entry);
 
-#ifdef HAVE_OPENCL
 /**
  * @brief Acquire a pinned OpenCL image for a host buffer tracked by the pixelpipe cache.
  *
@@ -227,7 +226,6 @@ void dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *ca
  */
 void dt_dev_pixelpipe_cache_resync_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
                                                      struct dt_pixel_cache_entry_t *entry_hint, int devid);
-#endif
 
 /**
  * @brief Resolve and retain the cache entry owning a host pointer.

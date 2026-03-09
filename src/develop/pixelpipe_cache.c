@@ -708,6 +708,52 @@ void dt_dev_pixelpipe_cache_resync_host_pinned_image(dt_dev_pixelpipe_cache_t *c
   dt_dev_pixelpipe_cache_wrlock_entry(cache, 0, FALSE, entry);
   dt_dev_pixelpipe_cache_ref_count_entry(cache, entry->hash, FALSE, entry);
 }
+#else
+void *dt_dev_pixelpipe_cache_get_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
+                                              dt_pixel_cache_entry_t *entry_hint, int devid,
+                                              int width, int height, int bpp, int flags, int *out_cst,
+                                              gboolean *out_reused)
+{
+  (void)cache;
+  (void)host_ptr;
+  (void)entry_hint;
+  (void)devid;
+  (void)width;
+  (void)height;
+  (void)bpp;
+  (void)flags;
+  if(out_cst) *out_cst = -1;
+  if(out_reused) *out_reused = FALSE;
+  return NULL;
+}
+
+void dt_dev_pixelpipe_cache_put_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
+                                             dt_pixel_cache_entry_t *entry_hint, int cst, void **mem)
+{
+  (void)cache;
+  (void)host_ptr;
+  (void)entry_hint;
+  (void)cst;
+  if(mem) *mem = NULL;
+}
+
+void dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
+                                                    dt_pixel_cache_entry_t *entry_hint, int devid)
+{
+  (void)cache;
+  (void)host_ptr;
+  (void)entry_hint;
+  (void)devid;
+}
+
+void dt_dev_pixelpipe_cache_resync_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
+                                                     dt_pixel_cache_entry_t *entry_hint, int devid)
+{
+  (void)cache;
+  (void)host_ptr;
+  (void)entry_hint;
+  (void)devid;
+}
 #endif
 
 dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(dt_dev_pixelpipe_cache_t *cache,
