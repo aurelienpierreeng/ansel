@@ -1088,7 +1088,7 @@ notebook tab label
 
 notebook tab:hover label
 {
-  border-bottom: 3px solid @grey_100;
+  border-bottom: 3px solid @grey_70;
   color: @grey_100;
 }
 
