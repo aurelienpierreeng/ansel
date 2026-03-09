@@ -27,6 +27,22 @@
 
 /** @brief Opaque worker state (thread, queue, stroke runtime). */
 typedef struct dt_drawlayer_worker_t dt_drawlayer_worker_t;
+typedef enum dt_drawlayer_worker_state_t
+{
+  DT_DRAWLAYER_WORKER_STATE_STOPPED = 0,
+  DT_DRAWLAYER_WORKER_STATE_IDLE,
+  DT_DRAWLAYER_WORKER_STATE_BUSY,
+  DT_DRAWLAYER_WORKER_STATE_PAUSING,
+  DT_DRAWLAYER_WORKER_STATE_PAUSED,
+} dt_drawlayer_worker_state_t;
+typedef struct dt_drawlayer_worker_snapshot_t
+{
+  dt_drawlayer_worker_state_t backend_state;
+  guint backend_queue_count;
+  dt_drawlayer_worker_state_t fullres_state;
+  guint fullres_queue_count;
+  gboolean commit_pending;
+} dt_drawlayer_worker_snapshot_t;
 /** @brief Callback processing one finished stroke on the deferred full-resolution worker. */
 typedef gboolean (*dt_drawlayer_worker_finished_stroke_cb)(dt_iop_module_t *self,
                                                            const GArray *history,
@@ -46,6 +62,9 @@ void dt_drawlayer_worker_cleanup(dt_drawlayer_worker_t **worker);
 gboolean dt_drawlayer_worker_active(const dt_drawlayer_worker_t *worker);
 /** @brief Query whether any worker still has pending activity, including full-resolution replay. */
 gboolean dt_drawlayer_worker_any_active(const dt_drawlayer_worker_t *worker);
+/** @brief Return a thread-safe worker snapshot for runtime scheduling. */
+void dt_drawlayer_worker_get_snapshot(const dt_drawlayer_worker_t *worker,
+                                      dt_drawlayer_worker_snapshot_t *snapshot);
 /** @brief Request asynchronous commit once queues become idle. */
 void dt_drawlayer_worker_request_commit(dt_drawlayer_worker_t *worker);
 /** @brief Flush pending events and force commit transition. */

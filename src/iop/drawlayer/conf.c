@@ -236,7 +236,7 @@ static void _color_history_valid_key(const int index, char *key, const size_t ke
 /** @brief Load persisted color-history stack from config into widgets state. */
 static void _load_color_history(dt_iop_drawlayer_gui_data_t *g)
 {
-  if(!g || !g->widgets) return;
+  if(!g || !g->ui.widgets) return;
 
   float history[DT_DRAWLAYER_COLOR_HISTORY_COUNT][3] = { { 0.0f } };
   gboolean valid[DT_DRAWLAYER_COLOR_HISTORY_COUNT] = { FALSE };
@@ -254,17 +254,17 @@ static void _load_color_history(dt_iop_drawlayer_gui_data_t *g)
     _color_history_key(i, 'b', key, sizeof(key));
     history[i][2] = _clamp01(dt_conf_key_exists(key) ? dt_conf_get_float(key) : 0.0f);
   }
-  dt_drawlayer_widgets_set_color_history(g->widgets, history, valid);
+  dt_drawlayer_widgets_set_color_history(g->ui.widgets, history, valid);
 }
 
 /** @brief Persist current widget color-history stack into config. */
 static void _store_color_history(const dt_iop_drawlayer_gui_data_t *g)
 {
-  if(!g || !g->widgets) return;
+  if(!g || !g->ui.widgets) return;
 
   float history[DT_DRAWLAYER_COLOR_HISTORY_COUNT][3] = { { 0.0f } };
   gboolean valid[DT_DRAWLAYER_COLOR_HISTORY_COUNT] = { FALSE };
-  dt_drawlayer_widgets_get_color_history(g->widgets, history, valid);
+  dt_drawlayer_widgets_get_color_history(g->ui.widgets, history, valid);
 
   char key[128] = { 0 };
   for(int i = 0; i < DT_DRAWLAYER_COLOR_HISTORY_COUNT; i++)
@@ -285,30 +285,30 @@ static void _store_color_history(const dt_iop_drawlayer_gui_data_t *g)
 static void _remember_display_color(dt_iop_module_t *self, const float display_rgb[3])
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !g->widgets || !display_rgb) return;
+  if(!g || !g->ui.widgets || !display_rgb) return;
 
-  if(!dt_drawlayer_widgets_push_color_history(g->widgets, display_rgb)) return;
+  if(!dt_drawlayer_widgets_push_color_history(g->ui.widgets, display_rgb)) return;
   _store_color_history(g);
-  if(g->color_swatch) gtk_widget_queue_draw(g->color_swatch);
+  if(g->controls.color_swatch) gtk_widget_queue_draw(g->controls.color_swatch);
 }
 
 /** @brief Apply display-space brush color to conf, widgets and redraw. */
 static void _apply_display_brush_color(dt_iop_module_t *self, const float display_rgb[3], const gboolean remember)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!self || !g || !g->widgets || !display_rgb) return;
+  if(!self || !g || !g->ui.widgets || !display_rgb) return;
 
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_R, _clamp01(display_rgb[0]));
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_G, _clamp01(display_rgb[1]));
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_B, _clamp01(display_rgb[2]));
 
-  dt_drawlayer_widgets_set_display_color(g->widgets, display_rgb);
+  dt_drawlayer_widgets_set_display_color(g->ui.widgets, display_rgb);
   _clear_cursor_stamp_surface(g);
 
   if(remember) _remember_display_color(self, display_rgb);
 
-  if(g->color) gtk_widget_queue_draw(g->color);
-  if(g->color_swatch) gtk_widget_queue_draw(g->color_swatch);
+  if(g->controls.color) gtk_widget_queue_draw(g->controls.color);
+  if(g->controls.color_swatch) gtk_widget_queue_draw(g->controls.color_swatch);
   dt_control_queue_redraw_center();
 }
 
@@ -316,13 +316,13 @@ static void _apply_display_brush_color(dt_iop_module_t *self, const float displa
 static void _sync_color_picker_from_conf(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !g->widgets) return;
+  if(!g || !g->ui.widgets) return;
 
   float display_rgb[3] = { 0.0f };
   _conf_display_color(display_rgb);
 
-  dt_drawlayer_widgets_set_display_color(g->widgets, display_rgb);
-  if(g->color_swatch) gtk_widget_queue_draw(g->color_swatch);
+  dt_drawlayer_widgets_set_display_color(g->ui.widgets, display_rgb);
+  if(g->controls.color_swatch) gtk_widget_queue_draw(g->controls.color_swatch);
 }
 
 /** @brief Sync active GUI widget values back into persistent config keys. */
@@ -332,37 +332,37 @@ static void _sync_params_from_gui(dt_iop_module_t *self, const gboolean record_h
   (void)record_history;
   if(!g || (darktable.gui && darktable.gui->reset)) return;
 
-  dt_conf_set_int(DRAWLAYER_CONF_BRUSH_SHAPE, dt_drawlayer_widgets_get_brush_profile_selection(g->widgets));
-  dt_conf_set_int(DRAWLAYER_CONF_BRUSH_MODE, dt_bauhaus_combobox_get(g->brush_mode));
-  dt_conf_set_float(DRAWLAYER_CONF_SIZE, dt_bauhaus_slider_get(g->size));
-  dt_conf_set_float(DRAWLAYER_CONF_DISTANCE, dt_bauhaus_slider_get(g->distance));
-  dt_conf_set_float(DRAWLAYER_CONF_SMOOTHING, dt_bauhaus_slider_get(g->smoothing));
-  dt_conf_set_float(DRAWLAYER_CONF_OPACITY, dt_bauhaus_slider_get(g->opacity));
-  dt_conf_set_float(DRAWLAYER_CONF_FLOW, dt_bauhaus_slider_get(g->flow));
-  dt_conf_set_float(DRAWLAYER_CONF_SPRINKLES, dt_bauhaus_slider_get(g->sprinkles));
-  dt_conf_set_float(DRAWLAYER_CONF_SPRINKLE_SIZE, dt_bauhaus_slider_get(g->sprinkle_size));
-  dt_conf_set_float(DRAWLAYER_CONF_SPRINKLE_COARSENESS, dt_bauhaus_slider_get(g->sprinkle_coarseness));
-  dt_conf_set_float(DRAWLAYER_CONF_SOFTNESS, 1.0f - dt_bauhaus_slider_get(g->softness));
-  if(g->image_colorpicker_source)
-    dt_conf_set_int(DRAWLAYER_CONF_PICK_SOURCE, dt_bauhaus_combobox_get(g->image_colorpicker_source));
-  dt_conf_set_float(DRAWLAYER_CONF_HDR_EV, dt_bauhaus_slider_get(g->hdr_exposure));
+  dt_conf_set_int(DRAWLAYER_CONF_BRUSH_SHAPE, dt_drawlayer_widgets_get_brush_profile_selection(g->ui.widgets));
+  dt_conf_set_int(DRAWLAYER_CONF_BRUSH_MODE, dt_bauhaus_combobox_get(g->controls.brush_mode));
+  dt_conf_set_float(DRAWLAYER_CONF_SIZE, dt_bauhaus_slider_get(g->controls.size));
+  dt_conf_set_float(DRAWLAYER_CONF_DISTANCE, dt_bauhaus_slider_get(g->controls.distance));
+  dt_conf_set_float(DRAWLAYER_CONF_SMOOTHING, dt_bauhaus_slider_get(g->controls.smoothing));
+  dt_conf_set_float(DRAWLAYER_CONF_OPACITY, dt_bauhaus_slider_get(g->controls.opacity));
+  dt_conf_set_float(DRAWLAYER_CONF_FLOW, dt_bauhaus_slider_get(g->controls.flow));
+  dt_conf_set_float(DRAWLAYER_CONF_SPRINKLES, dt_bauhaus_slider_get(g->controls.sprinkles));
+  dt_conf_set_float(DRAWLAYER_CONF_SPRINKLE_SIZE, dt_bauhaus_slider_get(g->controls.sprinkle_size));
+  dt_conf_set_float(DRAWLAYER_CONF_SPRINKLE_COARSENESS, dt_bauhaus_slider_get(g->controls.sprinkle_coarseness));
+  dt_conf_set_float(DRAWLAYER_CONF_SOFTNESS, 1.0f - dt_bauhaus_slider_get(g->controls.softness));
+  if(g->controls.image_colorpicker_source)
+    dt_conf_set_int(DRAWLAYER_CONF_PICK_SOURCE, dt_bauhaus_combobox_get(g->controls.image_colorpicker_source));
+  dt_conf_set_float(DRAWLAYER_CONF_HDR_EV, dt_bauhaus_slider_get(g->controls.hdr_exposure));
 
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_PRESSURE_SIZE, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->map_pressure_size)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_PRESSURE_OPACITY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->map_pressure_opacity)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_PRESSURE_FLOW, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->map_pressure_flow)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_PRESSURE_SOFTNESS, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->map_pressure_softness)));
+  dt_conf_set_bool(DRAWLAYER_CONF_MAP_PRESSURE_SIZE, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_size)));
+  dt_conf_set_bool(DRAWLAYER_CONF_MAP_PRESSURE_OPACITY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_opacity)));
+  dt_conf_set_bool(DRAWLAYER_CONF_MAP_PRESSURE_FLOW, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_flow)));
+  dt_conf_set_bool(DRAWLAYER_CONF_MAP_PRESSURE_SOFTNESS, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_pressure_softness)));
 
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_TILT_SIZE, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->map_tilt_size)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_TILT_OPACITY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->map_tilt_opacity)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_TILT_FLOW, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->map_tilt_flow)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_TILT_SOFTNESS, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->map_tilt_softness)));
+  dt_conf_set_bool(DRAWLAYER_CONF_MAP_TILT_SIZE, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_size)));
+  dt_conf_set_bool(DRAWLAYER_CONF_MAP_TILT_OPACITY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_opacity)));
+  dt_conf_set_bool(DRAWLAYER_CONF_MAP_TILT_FLOW, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_flow)));
+  dt_conf_set_bool(DRAWLAYER_CONF_MAP_TILT_SOFTNESS, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_tilt_softness)));
 
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_ACCEL_SIZE, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->map_accel_size)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_ACCEL_OPACITY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->map_accel_opacity)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_ACCEL_FLOW, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->map_accel_flow)));
-  dt_conf_set_bool(DRAWLAYER_CONF_MAP_ACCEL_SOFTNESS, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->map_accel_softness)));
+  dt_conf_set_bool(DRAWLAYER_CONF_MAP_ACCEL_SIZE, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_size)));
+  dt_conf_set_bool(DRAWLAYER_CONF_MAP_ACCEL_OPACITY, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_opacity)));
+  dt_conf_set_bool(DRAWLAYER_CONF_MAP_ACCEL_FLOW, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_flow)));
+  dt_conf_set_bool(DRAWLAYER_CONF_MAP_ACCEL_SOFTNESS, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->controls.map_accel_softness)));
 
-  if(g->pressure_profile) dt_conf_set_int(DRAWLAYER_CONF_PRESSURE_PROFILE, dt_bauhaus_combobox_get(g->pressure_profile));
-  if(g->tilt_profile) dt_conf_set_int(DRAWLAYER_CONF_TILT_PROFILE, dt_bauhaus_combobox_get(g->tilt_profile));
-  if(g->accel_profile) dt_conf_set_int(DRAWLAYER_CONF_ACCEL_PROFILE, dt_bauhaus_combobox_get(g->accel_profile));
+  if(g->controls.pressure_profile) dt_conf_set_int(DRAWLAYER_CONF_PRESSURE_PROFILE, dt_bauhaus_combobox_get(g->controls.pressure_profile));
+  if(g->controls.tilt_profile) dt_conf_set_int(DRAWLAYER_CONF_TILT_PROFILE, dt_bauhaus_combobox_get(g->controls.tilt_profile));
+  if(g->controls.accel_profile) dt_conf_set_int(DRAWLAYER_CONF_ACCEL_PROFILE, dt_bauhaus_combobox_get(g->controls.accel_profile));
 }

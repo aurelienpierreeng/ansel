@@ -55,18 +55,14 @@ typedef struct drawlayer_rt_callbacks_t
 /** @brief One worker thread runtime including event ring buffer. */
 typedef struct drawlayer_rt_worker_t
 {
-  drawlayer_rt_worker_kind_t kind;               /**< Worker role id. */
-  const drawlayer_rt_callbacks_t *callbacks;     /**< Worker behavior callbacks. */
   pthread_t thread;                              /**< POSIX worker thread handle. */
   dt_drawlayer_paint_raw_input_t *ring;          /**< FIFO ring storage. */
   guint ring_capacity;                           /**< Max events in ring. */
   guint ring_head;                               /**< Pop index. */
   guint ring_tail;                               /**< Push index. */
   guint ring_count;                              /**< Current queued events. */
-  gboolean started;                              /**< Thread started flag. */
+  dt_drawlayer_worker_state_t state;             /**< Consolidated worker lifecycle state. */
   gboolean stop;                                 /**< Stop-request flag. */
-  gboolean paused;                               /**< Pause-request flag. */
-  gboolean busy;                                 /**< Worker currently executing callback. */
 } drawlayer_rt_worker_t;
 
 /** @brief One finished stroke queued for deferred full-resolution replay. */
@@ -84,17 +80,16 @@ struct dt_drawlayer_worker_t
   gboolean *finish_commit_pending;              /**< External commit-request flag mirror. */
   guint *stroke_sample_count;                   /**< External per-stroke sample counter mirror. */
   uint32_t *current_stroke_batch;               /**< External stroke-batch counter mirror. */
-  GMutex worker_mutex;                          /**< Mutex guarding queue/flags. */
-  GCond worker_cond;                            /**< Condition variable for worker wakeups. */
+  dt_pthread_mutex_t worker_mutex;              /**< Mutex guarding queue/flags. */
+  pthread_cond_t worker_cond;                   /**< Condition variable for worker wakeups. */
   drawlayer_rt_worker_t workers[DRAWLAYER_RT_WORKER_COUNT]; /**< Worker slots. */
   guint finish_commit_source_id;                /**< Pending idle callback id (0 if none). */
   GArray *backend_history;                      /**< Emitted dab history owned by worker. */
   dt_drawlayer_paint_stroke_t *stroke;          /**< Worker-owned current stroke runtime. */
   pthread_t fullres_thread;                     /**< Deferred full-resolution replay worker. */
   GQueue *finished_stroke_queue;                /**< Queue of finished stroke replay jobs. */
-  gboolean fullres_started;                     /**< Full-resolution worker started flag. */
+  dt_drawlayer_worker_state_t fullres_state;    /**< Full-resolution worker lifecycle state. */
   gboolean fullres_stop;                        /**< Full-resolution worker stop flag. */
-  gboolean fullres_busy;                        /**< Full-resolution worker busy flag. */
   gboolean finished_stroke_queued;              /**< Current preserved stroke already handed off. */
   dt_drawlayer_worker_finished_stroke_cb finished_stroke_cb; /**< Replay callback owned by drawlayer. */
 };
@@ -218,11 +213,38 @@ static gboolean _rt_queue_pop_locked(dt_drawlayer_worker_t *rt,
   return TRUE;
 }
 
-/** @brief Set worker busy flag atomically under caller synchronization. */
-static void _rt_set_worker_busy(dt_drawlayer_worker_t *rt, const gboolean busy)
+static inline gboolean _worker_is_started(const drawlayer_rt_worker_t *worker)
+{
+  return worker && worker->state != DT_DRAWLAYER_WORKER_STATE_STOPPED;
+}
+
+static inline gboolean _worker_is_busy(const drawlayer_rt_worker_t *worker)
+{
+  return worker && worker->state == DT_DRAWLAYER_WORKER_STATE_BUSY;
+}
+
+static inline gboolean _worker_pause_requested(const drawlayer_rt_worker_t *worker)
+{
+  return worker
+         && (worker->state == DT_DRAWLAYER_WORKER_STATE_PAUSING
+             || worker->state == DT_DRAWLAYER_WORKER_STATE_PAUSED);
+}
+
+static inline gboolean _fullres_worker_started(const dt_drawlayer_worker_t *rt)
+{
+  return rt && rt->fullres_state != DT_DRAWLAYER_WORKER_STATE_STOPPED;
+}
+
+static inline gboolean _fullres_worker_busy(const dt_drawlayer_worker_t *rt)
+{
+  return rt && rt->fullres_state == DT_DRAWLAYER_WORKER_STATE_BUSY;
+}
+
+/** @brief Set worker state atomically under caller synchronization. */
+static void _rt_set_worker_state(dt_drawlayer_worker_t *rt, const dt_drawlayer_worker_state_t state)
 {
   drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
-  if(worker) worker->busy = busy;
+  if(worker) worker->state = state;
 }
 
 /** @brief Try elevating current thread scheduling policy for lower-latency input. */
@@ -243,14 +265,14 @@ static void _set_current_thread_realtime_best_effort(void)
 static gboolean _workers_active_locked(const dt_drawlayer_worker_t *rt)
 {
   const drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
-  return worker && (worker->busy || worker->ring_count > 0
+  return worker && (_worker_is_busy(worker) || worker->ring_count > 0
                     || (rt->finish_commit_pending && *rt->finish_commit_pending));
 }
 
 /** @brief Check whether deferred full-resolution replay still has pending activity (lock must be held). */
 static gboolean _fullres_active_locked(const dt_drawlayer_worker_t *rt)
 {
-  return rt && (rt->fullres_busy || rt->fullres_stop
+  return rt && (_fullres_worker_busy(rt) || rt->fullres_stop
                 || (rt->finished_stroke_queue && !g_queue_is_empty(rt->finished_stroke_queue)));
 }
 
@@ -266,7 +288,7 @@ static gboolean _workers_ready_for_commit_locked(const dt_drawlayer_worker_t *rt
   const drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
   return worker && rt->finish_commit_pending && rt->painting
          && *rt->finish_commit_pending && !*rt->painting
-         && !worker->busy && worker->ring_count == 0;
+         && !_worker_is_busy(worker) && worker->ring_count == 0;
 }
 
 /** @brief Thread-safe wrapper for active-workers status. */
@@ -274,9 +296,9 @@ static gboolean _rt_workers_active(dt_drawlayer_worker_t *rt)
 {
   gboolean active = FALSE;
   if(!rt) return FALSE;
-  g_mutex_lock(&rt->worker_mutex);
+  dt_pthread_mutex_lock(&rt->worker_mutex);
   active = _workers_active_locked(rt);
-  g_mutex_unlock(&rt->worker_mutex);
+  dt_pthread_mutex_unlock(&rt->worker_mutex);
   return active;
 }
 
@@ -285,9 +307,9 @@ static gboolean _rt_workers_any_active(dt_drawlayer_worker_t *rt)
 {
   gboolean active = FALSE;
   if(!rt) return FALSE;
-  g_mutex_lock(&rt->worker_mutex);
+  dt_pthread_mutex_lock(&rt->worker_mutex);
   active = _workers_any_active_locked(rt);
-  g_mutex_unlock(&rt->worker_mutex);
+  dt_pthread_mutex_unlock(&rt->worker_mutex);
   return active;
 }
 
@@ -299,10 +321,10 @@ static gboolean _async_commit_idle(gpointer user_data)
   if(!rt || !self || !self->dev) return G_SOURCE_REMOVE;
 
   gboolean should_commit = FALSE;
-  g_mutex_lock(&rt->worker_mutex);
+  dt_pthread_mutex_lock(&rt->worker_mutex);
   rt->finish_commit_source_id = 0;
   should_commit = _workers_ready_for_commit_locked(rt);
-  g_mutex_unlock(&rt->worker_mutex);
+  dt_pthread_mutex_unlock(&rt->worker_mutex);
 
   if(should_commit) _commit_dabs(self, TRUE);
   return G_SOURCE_REMOVE;
@@ -347,11 +369,11 @@ static void _backend_worker_process_stroke_end(dt_iop_module_t *self, dt_drawlay
   if(rt->stroke)
     _flush_pending_backend_input(self, rt->stroke);
   _enqueue_finished_stroke(rt);
-  g_mutex_lock(&rt->worker_mutex);
+  dt_pthread_mutex_lock(&rt->worker_mutex);
   if(rt->finish_commit_pending) *rt->finish_commit_pending = TRUE;
   _schedule_async_commit_if_ready_locked(rt);
-  g_cond_broadcast(&rt->worker_cond);
-  g_mutex_unlock(&rt->worker_mutex);
+  pthread_cond_broadcast(&rt->worker_cond);
+  dt_pthread_mutex_unlock(&rt->worker_mutex);
 }
 
 static const drawlayer_rt_callbacks_t _rt_callbacks[] = {
@@ -379,8 +401,8 @@ static void _rt_destroy_state(dt_iop_module_t *self, dt_drawlayer_worker_t **rt_
     g_queue_free(rt->finished_stroke_queue);
   }
   dt_free(worker->ring);
-  g_cond_clear(&rt->worker_cond);
-  g_mutex_clear(&rt->worker_mutex);
+  pthread_cond_destroy(&rt->worker_cond);
+  dt_pthread_mutex_destroy(&rt->worker_mutex);
   dt_free(rt);
   *rt_out = NULL;
 }
@@ -404,12 +426,10 @@ static void _rt_init_state(dt_iop_module_t *self, dt_drawlayer_worker_t **rt_out
   rt->stroke_sample_count = stroke_sample_count;
   rt->current_stroke_batch = current_stroke_batch;
   rt->finished_stroke_cb = finished_stroke_cb;
-  g_mutex_init(&rt->worker_mutex);
-  g_cond_init(&rt->worker_cond);
+  dt_pthread_mutex_init(&rt->worker_mutex, NULL);
+  pthread_cond_init(&rt->worker_cond, NULL);
 
   drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
-  worker->kind = DRAWLAYER_RT_WORKER_BACKEND;
-  worker->callbacks = &_rt_callbacks[DRAWLAYER_RT_WORKER_BACKEND];
   worker->ring_capacity = DRAWLAYER_WORKER_RING_CAPACITY;
   worker->ring = g_malloc_n(worker->ring_capacity, sizeof(dt_drawlayer_paint_raw_input_t));
   rt->backend_history = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_brush_dab_t));
@@ -428,15 +448,15 @@ static gboolean _wait_worker_idle(dt_iop_module_t *self, dt_drawlayer_worker_t *
 {
   (void)self;
   const drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
-  if(!rt || !worker || !worker->started) return TRUE;
+  if(!rt || !worker || !_worker_is_started(worker)) return TRUE;
 
-  g_mutex_lock(&rt->worker_mutex);
-  while(worker->busy || worker->ring_count > 0)
+  dt_pthread_mutex_lock(&rt->worker_mutex);
+  while(_worker_is_busy(worker) || worker->ring_count > 0)
   {
     if(worker->stop) break;
-    g_cond_wait(&rt->worker_cond, &rt->worker_mutex);
+    dt_pthread_cond_wait(&rt->worker_cond, &rt->worker_mutex);
   }
-  g_mutex_unlock(&rt->worker_mutex);
+  dt_pthread_mutex_unlock(&rt->worker_mutex);
   return TRUE;
 }
 
@@ -457,45 +477,39 @@ static void *_drawlayer_fullres_worker_main(void *user_data)
 
   dt_pthread_setname("draw-base");
 
-#ifdef _OPENMP
-#pragma omp parallel
-  {
-  }
-#endif
-
   while(TRUE)
   {
     drawlayer_finished_stroke_job_t *job = NULL;
 
-    g_mutex_lock(&rt->worker_mutex);
+    dt_pthread_mutex_lock(&rt->worker_mutex);
     while(!rt->fullres_stop && (!rt->finished_stroke_queue || g_queue_is_empty(rt->finished_stroke_queue)))
     {
-      rt->fullres_busy = FALSE;
-      g_cond_broadcast(&rt->worker_cond);
-      g_cond_wait(&rt->worker_cond, &rt->worker_mutex);
+      rt->fullres_state = DT_DRAWLAYER_WORKER_STATE_IDLE;
+      pthread_cond_broadcast(&rt->worker_cond);
+      dt_pthread_cond_wait(&rt->worker_cond, &rt->worker_mutex);
     }
 
     if(rt->fullres_stop)
     {
-      rt->fullres_busy = FALSE;
-      g_cond_broadcast(&rt->worker_cond);
-      g_mutex_unlock(&rt->worker_mutex);
+      rt->fullres_state = DT_DRAWLAYER_WORKER_STATE_IDLE;
+      pthread_cond_broadcast(&rt->worker_cond);
+      dt_pthread_mutex_unlock(&rt->worker_mutex);
       break;
     }
 
     job = (drawlayer_finished_stroke_job_t *)g_queue_pop_head(rt->finished_stroke_queue);
-    rt->fullres_busy = (job != NULL);
-    g_mutex_unlock(&rt->worker_mutex);
+    rt->fullres_state = job ? DT_DRAWLAYER_WORKER_STATE_BUSY : DT_DRAWLAYER_WORKER_STATE_IDLE;
+    dt_pthread_mutex_unlock(&rt->worker_mutex);
 
     if(job && rt->finished_stroke_cb)
       rt->finished_stroke_cb(self, job->history, job->distance_percent);
 
     _finished_stroke_job_destroy(job);
 
-    g_mutex_lock(&rt->worker_mutex);
-    rt->fullres_busy = FALSE;
-    g_cond_broadcast(&rt->worker_cond);
-    g_mutex_unlock(&rt->worker_mutex);
+    dt_pthread_mutex_lock(&rt->worker_mutex);
+    rt->fullres_state = DT_DRAWLAYER_WORKER_STATE_IDLE;
+    pthread_cond_broadcast(&rt->worker_cond);
+    dt_pthread_mutex_unlock(&rt->worker_mutex);
   }
 
   return NULL;
@@ -505,10 +519,10 @@ static void *_drawlayer_fullres_worker_main(void *user_data)
 static gboolean _start_fullres_worker(dt_drawlayer_worker_t *rt)
 {
   if(!rt) return FALSE;
-  if(rt->fullres_started) return TRUE;
+  if(_fullres_worker_started(rt)) return TRUE;
 
   rt->fullres_stop = FALSE;
-  rt->fullres_busy = FALSE;
+  rt->fullres_state = DT_DRAWLAYER_WORKER_STATE_IDLE;
 
   drawlayer_rt_thread_ctx_t *ctx = g_malloc(sizeof(*ctx));
   if(!ctx) return FALSE;
@@ -521,22 +535,22 @@ static gboolean _start_fullres_worker(dt_drawlayer_worker_t *rt)
     return FALSE;
   }
 
-  rt->fullres_started = TRUE;
+  rt->fullres_state = DT_DRAWLAYER_WORKER_STATE_IDLE;
   return TRUE;
 }
 
 /** @brief Wait until deferred full-resolution replay queue is drained and idle. */
 static void _wait_fullres_idle(dt_drawlayer_worker_t *rt)
 {
-  if(!rt || !rt->fullres_started) return;
+  if(!rt || !_fullres_worker_started(rt)) return;
 
-  g_mutex_lock(&rt->worker_mutex);
-  while(rt->fullres_busy || (rt->finished_stroke_queue && !g_queue_is_empty(rt->finished_stroke_queue)))
+  dt_pthread_mutex_lock(&rt->worker_mutex);
+  while(_fullres_worker_busy(rt) || (rt->finished_stroke_queue && !g_queue_is_empty(rt->finished_stroke_queue)))
   {
     if(rt->fullres_stop) break;
-    g_cond_wait(&rt->worker_cond, &rt->worker_mutex);
+    dt_pthread_cond_wait(&rt->worker_cond, &rt->worker_mutex);
   }
-  g_mutex_unlock(&rt->worker_mutex);
+  dt_pthread_mutex_unlock(&rt->worker_mutex);
 }
 
 /** @brief Queue preserved finished stroke for deferred full-resolution replay (lock must be held). */
@@ -574,7 +588,7 @@ static gboolean _enqueue_finished_stroke(dt_drawlayer_worker_t *rt)
   }
 
   gboolean queued = FALSE;
-  g_mutex_lock(&rt->worker_mutex);
+  dt_pthread_mutex_lock(&rt->worker_mutex);
   if(!rt->finished_stroke_queue && new_queue)
   {
     rt->finished_stroke_queue = new_queue;
@@ -593,9 +607,9 @@ static gboolean _enqueue_finished_stroke(dt_drawlayer_worker_t *rt)
     queued = TRUE;
     next_history = NULL;
     job = NULL;
-    g_cond_broadcast(&rt->worker_cond);
+    pthread_cond_broadcast(&rt->worker_cond);
   }
-  g_mutex_unlock(&rt->worker_mutex);
+  dt_pthread_mutex_unlock(&rt->worker_mutex);
 
   if(new_queue) g_queue_free(new_queue);
   if(next_history) g_array_free(next_history, TRUE);
@@ -612,7 +626,7 @@ static void *_drawlayer_worker_main(void *user_data)
 
   dt_iop_module_t *self = rt ? rt->self : NULL;
   drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
-  const drawlayer_rt_callbacks_t *cb = worker ? worker->callbacks : NULL;
+  const drawlayer_rt_callbacks_t *cb = &_rt_callbacks[DRAWLAYER_RT_WORKER_BACKEND];
   if(!self || !rt || !worker || !cb) return NULL;
 
   dt_pthread_setname(cb->thread_name);
@@ -623,26 +637,27 @@ static void *_drawlayer_worker_main(void *user_data)
     dt_drawlayer_paint_raw_input_t event = { 0 };
     gboolean have_event = FALSE;
 
-    g_mutex_lock(&rt->worker_mutex);
-    while(!worker->stop && (worker->paused || worker->ring_count == 0))
+    dt_pthread_mutex_lock(&rt->worker_mutex);
+    while(!worker->stop && (_worker_pause_requested(worker) || worker->ring_count == 0))
     {
-      _rt_set_worker_busy(rt, FALSE);
+      _rt_set_worker_state(rt, _worker_pause_requested(worker) ? DT_DRAWLAYER_WORKER_STATE_PAUSED
+                                                               : DT_DRAWLAYER_WORKER_STATE_IDLE);
       if(cb->on_idle) cb->on_idle(self, rt);
-      g_cond_broadcast(&rt->worker_cond);
-      g_cond_wait(&rt->worker_cond, &rt->worker_mutex);
+      pthread_cond_broadcast(&rt->worker_cond);
+      dt_pthread_cond_wait(&rt->worker_cond, &rt->worker_mutex);
     }
 
     if(worker->stop)
     {
-      _rt_set_worker_busy(rt, FALSE);
-      g_cond_broadcast(&rt->worker_cond);
-      g_mutex_unlock(&rt->worker_mutex);
+      _rt_set_worker_state(rt, DT_DRAWLAYER_WORKER_STATE_STOPPED);
+      pthread_cond_broadcast(&rt->worker_cond);
+      dt_pthread_mutex_unlock(&rt->worker_mutex);
       break;
     }
 
     have_event = _rt_queue_pop_locked(rt, &event);
-    _rt_set_worker_busy(rt, have_event);
-    g_mutex_unlock(&rt->worker_mutex);
+    _rt_set_worker_state(rt, have_event ? DT_DRAWLAYER_WORKER_STATE_BUSY : DT_DRAWLAYER_WORKER_STATE_IDLE);
+    dt_pthread_mutex_unlock(&rt->worker_mutex);
 
     if(!have_event) continue;
 
@@ -659,11 +674,12 @@ static void *_drawlayer_worker_main(void *user_data)
       if(cb->process_sample) cb->process_sample(self, rt, &event);
     }
 
-    g_mutex_lock(&rt->worker_mutex);
-    _rt_set_worker_busy(rt, FALSE);
+    dt_pthread_mutex_lock(&rt->worker_mutex);
+    _rt_set_worker_state(rt, _worker_pause_requested(worker) ? DT_DRAWLAYER_WORKER_STATE_PAUSED
+                                                             : DT_DRAWLAYER_WORKER_STATE_IDLE);
     if(cb->on_idle) cb->on_idle(self, rt);
-    g_cond_broadcast(&rt->worker_cond);
-    g_mutex_unlock(&rt->worker_mutex);
+    pthread_cond_broadcast(&rt->worker_cond);
+    dt_pthread_mutex_unlock(&rt->worker_mutex);
   }
 
   return NULL;
@@ -674,15 +690,14 @@ static gboolean _start_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
   drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
   if(!self || !rt || !worker) return FALSE;
-  if(worker->started)
+  if(_worker_is_started(worker))
   {
-    if(!rt->fullres_started) _start_fullres_worker(rt);
+    if(!_fullres_worker_started(rt)) _start_fullres_worker(rt);
     return TRUE;
   }
 
   worker->stop = FALSE;
-  worker->paused = FALSE;
-  worker->busy = FALSE;
+  worker->state = DT_DRAWLAYER_WORKER_STATE_IDLE;
 
   drawlayer_rt_thread_ctx_t *ctx = g_malloc(sizeof(*ctx));
   if(!ctx) return FALSE;
@@ -695,8 +710,8 @@ static gboolean _start_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
     return FALSE;
   }
 
-  worker->started = TRUE;
-  if(!rt->fullres_started) _start_fullres_worker(rt);
+  worker->state = DT_DRAWLAYER_WORKER_STATE_IDLE;
+  if(!_fullres_worker_started(rt)) _start_fullres_worker(rt);
   return TRUE;
 }
 
@@ -706,11 +721,11 @@ static void _cancel_async_commit(dt_drawlayer_worker_t *rt)
   if(!rt) return;
 
   guint source_id = 0;
-  g_mutex_lock(&rt->worker_mutex);
+  dt_pthread_mutex_lock(&rt->worker_mutex);
   if(rt->finish_commit_pending) *rt->finish_commit_pending = FALSE;
   source_id = rt->finish_commit_source_id;
   rt->finish_commit_source_id = 0;
-  g_mutex_unlock(&rt->worker_mutex);
+  dt_pthread_mutex_unlock(&rt->worker_mutex);
 
   if(source_id != 0) g_source_remove(source_id);
 }
@@ -722,37 +737,34 @@ static void _stop_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
   _cancel_async_commit(rt);
   if(!rt) return;
 
-  if(worker && worker->started)
+  if(worker && _worker_is_started(worker))
   {
     _wait_worker_idle(self, rt);
 
-    g_mutex_lock(&rt->worker_mutex);
+    dt_pthread_mutex_lock(&rt->worker_mutex);
     worker->stop = TRUE;
-    g_cond_broadcast(&rt->worker_cond);
-    g_mutex_unlock(&rt->worker_mutex);
+    pthread_cond_broadcast(&rt->worker_cond);
+    dt_pthread_mutex_unlock(&rt->worker_mutex);
 
     pthread_join(worker->thread, NULL);
-    worker->started = FALSE;
+    worker->state = DT_DRAWLAYER_WORKER_STATE_STOPPED;
     worker->stop = FALSE;
-    worker->paused = FALSE;
-    worker->busy = FALSE;
     _rt_queue_clear_locked(rt);
     _stroke_clear(rt);
   }
 
-  if(rt->fullres_started)
+  if(_fullres_worker_started(rt))
   {
     _wait_fullres_idle(rt);
 
-    g_mutex_lock(&rt->worker_mutex);
+    dt_pthread_mutex_lock(&rt->worker_mutex);
     rt->fullres_stop = TRUE;
-    g_cond_broadcast(&rt->worker_cond);
-    g_mutex_unlock(&rt->worker_mutex);
+    pthread_cond_broadcast(&rt->worker_cond);
+    dt_pthread_mutex_unlock(&rt->worker_mutex);
 
     pthread_join(rt->fullres_thread, NULL);
-    rt->fullres_started = FALSE;
+    rt->fullres_state = DT_DRAWLAYER_WORKER_STATE_STOPPED;
     rt->fullres_stop = FALSE;
-    rt->fullres_busy = FALSE;
   }
 }
 
@@ -761,13 +773,14 @@ static void _pause_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
   (void)self;
   drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
-  if(!rt || !worker || !worker->started) return;
+  if(!rt || !worker || !_worker_is_started(worker)) return;
 
-  g_mutex_lock(&rt->worker_mutex);
-  worker->paused = TRUE;
-  while(worker->busy && !worker->stop)
-    g_cond_wait(&rt->worker_cond, &rt->worker_mutex);
-  g_mutex_unlock(&rt->worker_mutex);
+  dt_pthread_mutex_lock(&rt->worker_mutex);
+  worker->state = _worker_is_busy(worker) ? DT_DRAWLAYER_WORKER_STATE_PAUSING
+                                          : DT_DRAWLAYER_WORKER_STATE_PAUSED;
+  while(_worker_is_busy(worker) && !worker->stop)
+    dt_pthread_cond_wait(&rt->worker_cond, &rt->worker_mutex);
+  dt_pthread_mutex_unlock(&rt->worker_mutex);
 }
 
 /** @brief Resume worker processing and wake sleeping thread. */
@@ -775,12 +788,12 @@ static void _resume_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
   (void)self;
   drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
-  if(!rt || !worker || !worker->started) return;
+  if(!rt || !worker || !_worker_is_started(worker)) return;
 
-  g_mutex_lock(&rt->worker_mutex);
-  worker->paused = FALSE;
-  g_cond_broadcast(&rt->worker_cond);
-  g_mutex_unlock(&rt->worker_mutex);
+  dt_pthread_mutex_lock(&rt->worker_mutex);
+  worker->state = DT_DRAWLAYER_WORKER_STATE_IDLE;
+  pthread_cond_broadcast(&rt->worker_cond);
+  dt_pthread_mutex_unlock(&rt->worker_mutex);
 }
 
 /** @brief Generic enqueue helper ensuring worker startup. */
@@ -790,10 +803,10 @@ static gboolean _enqueue_event(dt_iop_module_t *self, dt_drawlayer_worker_t *rt,
   if(!rt || !event) return FALSE;
   if(!_start_worker(self, rt)) return FALSE;
 
-  g_mutex_lock(&rt->worker_mutex);
+  dt_pthread_mutex_lock(&rt->worker_mutex);
   const gboolean ok = _rt_queue_push_locked(rt, event);
-  g_cond_broadcast(&rt->worker_cond);
-  g_mutex_unlock(&rt->worker_mutex);
+  pthread_cond_broadcast(&rt->worker_cond);
+  dt_pthread_mutex_unlock(&rt->worker_mutex);
   return ok;
 }
 
@@ -807,7 +820,7 @@ static gboolean _enqueue_input(dt_iop_module_t *self, dt_drawlayer_worker_t *rt,
   const dt_drawlayer_paint_raw_input_t event = *input;
 
   gboolean ok = FALSE;
-  g_mutex_lock(&rt->worker_mutex);
+  dt_pthread_mutex_lock(&rt->worker_mutex);
   if(!_rt_queue_full(rt))
   {
     ok = _rt_queue_push_locked(rt, &event);
@@ -835,8 +848,8 @@ static gboolean _enqueue_input(dt_iop_module_t *self, dt_drawlayer_worker_t *rt,
     if(rt->finish_commit_pending) *rt->finish_commit_pending = TRUE;
     dt_control_log(_("drawing worker queue is full, stroke aborted"));
   }
-  g_cond_broadcast(&rt->worker_cond);
-  g_mutex_unlock(&rt->worker_mutex);
+  pthread_cond_broadcast(&rt->worker_cond);
+  dt_pthread_mutex_unlock(&rt->worker_mutex);
   return ok;
 }
 
@@ -885,27 +898,44 @@ gboolean dt_drawlayer_worker_any_active(const dt_drawlayer_worker_t *worker)
   return _rt_workers_any_active((dt_drawlayer_worker_t *)worker);
 }
 
+void dt_drawlayer_worker_get_snapshot(const dt_drawlayer_worker_t *worker,
+                                      dt_drawlayer_worker_snapshot_t *snapshot)
+{
+  if(snapshot) *snapshot = (dt_drawlayer_worker_snapshot_t){ 0 };
+  dt_drawlayer_worker_t *rt = (dt_drawlayer_worker_t *)worker;
+  if(!rt || !snapshot) return;
+
+  dt_pthread_mutex_lock(&rt->worker_mutex);
+  const drawlayer_rt_worker_t *backend = &rt->workers[DRAWLAYER_RT_WORKER_BACKEND];
+  snapshot->backend_state = backend->state;
+  snapshot->backend_queue_count = backend->ring_count;
+  snapshot->fullres_state = rt->fullres_state;
+  snapshot->fullres_queue_count = (rt->finished_stroke_queue) ? (guint)rt->finished_stroke_queue->length : 0u;
+  snapshot->commit_pending = rt->finish_commit_pending && *rt->finish_commit_pending;
+  dt_pthread_mutex_unlock(&rt->worker_mutex);
+}
+
 /** @brief Public commit request helper. */
 void dt_drawlayer_worker_request_commit(dt_drawlayer_worker_t *worker)
 {
   if(!worker) return;
-  g_mutex_lock(&worker->worker_mutex);
+  dt_pthread_mutex_lock(&worker->worker_mutex);
   if(worker->finish_commit_pending) *worker->finish_commit_pending = TRUE;
   _schedule_async_commit_if_ready_locked(worker);
-  g_cond_broadcast(&worker->worker_cond);
-  g_mutex_unlock(&worker->worker_mutex);
+  pthread_cond_broadcast(&worker->worker_cond);
+  dt_pthread_mutex_unlock(&worker->worker_mutex);
 }
 
 /** @brief Flush pending backend stroke inputs synchronously. */
 void dt_drawlayer_worker_flush_pending(dt_drawlayer_worker_t *worker)
 {
   if(!worker || !worker->self) return;
-  g_mutex_lock(&worker->worker_mutex);
+  dt_pthread_mutex_lock(&worker->worker_mutex);
   const drawlayer_rt_worker_t *backend = &worker->workers[DRAWLAYER_RT_WORKER_BACKEND];
-  const gboolean can_flush = !backend->busy && backend->ring_count == 0;
+  const gboolean can_flush = !_worker_is_busy(backend) && backend->ring_count == 0;
   if(can_flush && worker->stroke)
     _flush_pending_backend_input(worker->self, worker->stroke);
-  g_mutex_unlock(&worker->worker_mutex);
+  dt_pthread_mutex_unlock(&worker->worker_mutex);
 }
 
 /** @brief Wait until deferred full-resolution replay queue becomes idle. */
@@ -918,9 +948,9 @@ void dt_drawlayer_worker_flush_finished_strokes(dt_drawlayer_worker_t *worker)
 void dt_drawlayer_worker_reset_stroke(dt_drawlayer_worker_t *worker)
 {
   if(!worker) return;
-  g_mutex_lock(&worker->worker_mutex);
+  dt_pthread_mutex_lock(&worker->worker_mutex);
   _stroke_clear(worker);
-  g_mutex_unlock(&worker->worker_mutex);
+  dt_pthread_mutex_unlock(&worker->worker_mutex);
 }
 
 /** @brief Read-only access to preserved emitted dab history. */

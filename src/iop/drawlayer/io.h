@@ -19,6 +19,7 @@
 #pragma once
 
 #include <glib.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -51,6 +52,38 @@ typedef struct dt_drawlayer_io_layer_info_t
   char work_profile[DT_DRAWLAYER_IO_PROFILE_SIZE];  /**< Embedded working profile key. */
 } dt_drawlayer_io_layer_info_t;
 
+typedef struct _dt_job_t dt_job_t;
+
+/** @brief Parameters owned by the async "create background from input" job. */
+typedef struct dt_drawlayer_io_background_job_params_t
+{
+  int32_t imgid;
+  int raw_width;
+  int raw_height;
+  int dst_x;
+  int dst_y;
+  int insert_after_order;
+  char sidecar_path[PATH_MAX];
+  char work_profile[DT_DRAWLAYER_IO_PROFILE_SIZE];
+  char requested_bg_name[DT_DRAWLAYER_IO_NAME_SIZE];
+  char filter[64];
+  char initiator_layer_name[DT_DRAWLAYER_IO_NAME_SIZE];
+  int initiator_layer_order;
+  GSourceFunc done_idle;
+} dt_drawlayer_io_background_job_params_t;
+
+/** @brief Result posted back to the UI after background-layer creation. */
+typedef struct dt_drawlayer_io_background_job_result_t
+{
+  gboolean success;
+  int32_t imgid;
+  int64_t sidecar_timestamp;
+  char created_bg_name[DT_DRAWLAYER_IO_NAME_SIZE];
+  char initiator_layer_name[DT_DRAWLAYER_IO_NAME_SIZE];
+  int initiator_layer_order;
+  char message[256];
+} dt_drawlayer_io_background_job_result_t;
+
 /** @brief Build absolute sidecar TIFF path from image id. */
 gboolean dt_drawlayer_io_sidecar_path(int32_t imgid, char *path, size_t path_size);
 /** @brief Lookup layer by name/order and return directory metadata. */
@@ -80,3 +113,5 @@ void dt_drawlayer_io_make_unique_name_plain(const char *path, const char *reques
 gboolean dt_drawlayer_io_list_layer_names(const char *path, char ***names, int *count);
 /** @brief Free name list returned by `dt_drawlayer_io_list_layer_names`. */
 void dt_drawlayer_io_free_layer_names(char ***names, int *count);
+/** @brief Worker entrypoint for async "create background from input" sidecar jobs. */
+int32_t dt_drawlayer_io_background_layer_job_run(dt_job_t *job);

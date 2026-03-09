@@ -1,0 +1,443 @@
+#pragma once
+
+#include "common/dtpthread.h"
+#include "iop/drawlayer/cache.h"
+#include "iop/drawlayer/widgets.h"
+#include "iop/drawlayer/worker.h"
+
+#ifdef HAVE_OPENCL
+#include "common/opencl.h"
+#endif
+
+#include <stdint.h>
+
+/** @file
+ *  @brief Private runtime state/helpers shared by drawlayer module entrypoints.
+ */
+
+#define DRAWLAYER_NAME_SIZE 64
+#define DRAWLAYER_PROFILE_SIZE 256
+
+typedef struct drawlayer_view_patch_t
+{
+  int x;
+  int y;
+  int width;
+  int height;
+} drawlayer_view_patch_t;
+
+typedef struct dt_drawlayer_session_state_t
+{
+  gboolean pointer_valid;
+  float last_view_x;
+  float last_view_y;
+  float last_view_scale;
+  dt_drawlayer_damaged_rect_t live_view_rect;
+  float live_padding;
+  dt_drawlayer_damaged_rect_t preview_rect;
+  drawlayer_view_patch_t live_patch;
+  int preview_bg_mode;
+  char missing_layer_prompt_name[DRAWLAYER_NAME_SIZE];
+  gboolean background_job_running;
+} dt_drawlayer_session_state_t;
+
+typedef struct dt_drawlayer_process_state_t
+{
+  dt_drawlayer_damaged_rect_t *backend_path;
+  dt_drawlayer_cache_patch_t base_patch;
+  dt_drawlayer_cache_patch_t process_patch;
+  dt_drawlayer_cache_patch_t process_read_patch;
+  dt_pthread_mutex_t process_patch_mutex;
+  dt_drawlayer_cache_patch_t undo_patch;
+  dt_drawlayer_cache_patch_t stroke_mask;
+  dt_drawlayer_cache_patch_t process_stroke_mask;
+  gboolean cache_valid;
+  gboolean cache_dirty;
+  gboolean undo_available;
+  gboolean redo_available;
+  int32_t cache_imgid;
+  char cache_layer_name[DRAWLAYER_NAME_SIZE];
+  int cache_layer_order;
+  gboolean base_patch_loaded_ref;
+  uint32_t base_patch_stroke_refs;
+  gboolean process_patch_valid;
+  gboolean process_patch_dirty;
+  dt_drawlayer_damaged_rect_t process_dirty_rect;
+  int process_patch_padding;
+#ifdef HAVE_OPENCL
+  cl_mem process_read_clmem;
+  int process_read_clmem_width;
+  int process_read_clmem_height;
+  int process_read_clmem_devid;
+  gboolean process_read_clmem_dirty;
+#endif
+  dt_iop_roi_t process_combined_roi;
+} dt_drawlayer_process_state_t;
+
+typedef struct dt_drawlayer_stroke_state_t
+{
+  dt_drawlayer_worker_t *worker;
+  guint stroke_sample_count;
+  uint32_t stroke_event_index;
+  gboolean last_dab_valid;
+  float last_dab_x;
+  float last_dab_y;
+  gboolean finish_commit_pending;
+  uint32_t current_stroke_batch;
+} dt_drawlayer_stroke_state_t;
+
+typedef struct dt_drawlayer_ui_state_t
+{
+  dt_drawlayer_widgets_t *widgets;
+  cairo_surface_t *cursor_surface;
+  int cursor_surface_size;
+  double cursor_surface_ppd;
+  float cursor_radius;
+  float cursor_opacity;
+  float cursor_hardness;
+  int cursor_shape;
+  float cursor_color[3];
+} dt_drawlayer_ui_state_t;
+
+typedef struct dt_drawlayer_controls_t
+{
+  GtkWidget *brush_shape;
+  GtkWidget *brush_mode;
+  GtkWidget *color;
+  GtkWidget *color_row;
+  GtkWidget *color_swatch;
+  GtkWidget *image_colorpicker;
+  GtkWidget *image_colorpicker_source;
+  GtkWidget *size;
+  GtkWidget *distance;
+  GtkWidget *smoothing;
+  GtkWidget *opacity;
+  GtkWidget *flow;
+  GtkWidget *sprinkles;
+  GtkWidget *sprinkle_size;
+  GtkWidget *sprinkle_coarseness;
+  GtkWidget *softness;
+  GtkWidget *hdr_exposure;
+  GtkEntry *layer_name;
+  GtkWidget *layer_select;
+  GtkWidget *undo_button;
+  GtkWidget *redo_button;
+  GtkWidget *preview_bg_image;
+  GtkWidget *preview_bg_white;
+  GtkWidget *preview_bg_grey;
+  GtkWidget *preview_bg_black;
+  GtkWidget *delete_layer;
+  GtkWidget *create_layer;
+  GtkWidget *create_background;
+  GtkWidget *save_layer;
+  GtkWidget *fill_white;
+  GtkWidget *fill_black;
+  GtkWidget *fill_transparent;
+  GtkWidget *map_pressure_size;
+  GtkWidget *map_pressure_opacity;
+  GtkWidget *map_pressure_flow;
+  GtkWidget *map_pressure_softness;
+  GtkWidget *map_tilt_size;
+  GtkWidget *map_tilt_opacity;
+  GtkWidget *map_tilt_flow;
+  GtkWidget *map_tilt_softness;
+  GtkWidget *map_accel_size;
+  GtkWidget *map_accel_opacity;
+  GtkWidget *map_accel_flow;
+  GtkWidget *map_accel_softness;
+  GtkWidget *pressure_profile;
+  GtkWidget *tilt_profile;
+  GtkWidget *accel_profile;
+} dt_drawlayer_controls_t;
+
+typedef enum dt_drawlayer_runtime_actor_t
+{
+  DT_DRAWLAYER_RUNTIME_ACTOR_NONE = 0,
+  DT_DRAWLAYER_RUNTIME_ACTOR_GUI,
+  DT_DRAWLAYER_RUNTIME_ACTOR_PIPELINE_CPU,
+  DT_DRAWLAYER_RUNTIME_ACTOR_PIPELINE_CL,
+  DT_DRAWLAYER_RUNTIME_ACTOR_RASTER_BACKEND,
+  DT_DRAWLAYER_RUNTIME_ACTOR_RASTER_FULLRES,
+  DT_DRAWLAYER_RUNTIME_ACTOR_TIFF_IO,
+  DT_DRAWLAYER_RUNTIME_ACTOR_COUNT,
+} dt_drawlayer_runtime_actor_t;
+
+typedef enum dt_drawlayer_runtime_buffer_t
+{
+  DT_DRAWLAYER_RUNTIME_BUFFER_BASE_PATCH = 0,
+  DT_DRAWLAYER_RUNTIME_BUFFER_PROCESS_PATCH,
+  DT_DRAWLAYER_RUNTIME_BUFFER_PROCESS_SNAPSHOT,
+  DT_DRAWLAYER_RUNTIME_BUFFER_PROCESS_CL,
+  DT_DRAWLAYER_RUNTIME_BUFFER_STROKE_MASK,
+  DT_DRAWLAYER_RUNTIME_BUFFER_PROCESS_STROKE_MASK,
+  DT_DRAWLAYER_RUNTIME_BUFFER_COUNT,
+} dt_drawlayer_runtime_buffer_t;
+
+typedef enum dt_drawlayer_runtime_event_t
+{
+  DT_DRAWLAYER_RUNTIME_EVENT_NONE = 0,
+  DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_GAIN,
+  DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_LOSS,
+  DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_ENTER,
+  DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_LEAVE,
+  DT_DRAWLAYER_RUNTIME_EVENT_GUI_SCROLL,
+  DT_DRAWLAYER_RUNTIME_EVENT_GUI_CHANGE_IMAGE,
+  DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC,
+  DT_DRAWLAYER_RUNTIME_EVENT_GUI_PIPE_FINISHED,
+  DT_DRAWLAYER_RUNTIME_EVENT_GUI_STROKE_ABORT,
+  DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT,
+  DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CPU_BEFORE,
+  DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CPU_AFTER,
+  DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CL_BEFORE,
+  DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CL_AFTER,
+  DT_DRAWLAYER_RUNTIME_EVENT_SIDECAR_LOAD_BEGIN,
+  DT_DRAWLAYER_RUNTIME_EVENT_SIDECAR_LOAD_END,
+  DT_DRAWLAYER_RUNTIME_EVENT_SIDECAR_SAVE_BEGIN,
+  DT_DRAWLAYER_RUNTIME_EVENT_SIDECAR_SAVE_END,
+  DT_DRAWLAYER_RUNTIME_EVENT_COMMIT_BEGIN,
+  DT_DRAWLAYER_RUNTIME_EVENT_COMMIT_END,
+} dt_drawlayer_runtime_event_t;
+
+typedef enum dt_drawlayer_runtime_raw_input_kind_t
+{
+  DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE = 0,
+  DT_DRAWLAYER_RUNTIME_RAW_INPUT_SAMPLE,
+  DT_DRAWLAYER_RUNTIME_RAW_INPUT_STROKE_BEGIN,
+  DT_DRAWLAYER_RUNTIME_RAW_INPUT_STROKE_END,
+} dt_drawlayer_runtime_raw_input_kind_t;
+
+typedef enum dt_drawlayer_runtime_commit_mode_t
+{
+  DT_DRAWLAYER_RUNTIME_COMMIT_NONE = 0,
+  DT_DRAWLAYER_RUNTIME_COMMIT_QUIET,
+  DT_DRAWLAYER_RUNTIME_COMMIT_HISTORY,
+} dt_drawlayer_runtime_commit_mode_t;
+
+typedef enum dt_drawlayer_runtime_feedback_t
+{
+  DT_DRAWLAYER_RUNTIME_FEEDBACK_NONE = 0,
+  DT_DRAWLAYER_RUNTIME_FEEDBACK_FOCUS_LOSS_WAIT,
+  DT_DRAWLAYER_RUNTIME_FEEDBACK_SAVE_WAIT,
+} dt_drawlayer_runtime_feedback_t;
+
+typedef enum dt_drawlayer_runtime_action_t
+{
+  DT_DRAWLAYER_RUNTIME_ACTION_NONE = 0,
+  DT_DRAWLAYER_RUNTIME_ACTION_SYNC_REALTIME_MODE,
+  DT_DRAWLAYER_RUNTIME_ACTION_SHOW_FEEDBACK,
+  DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_WORKER_RUNNING,
+  DT_DRAWLAYER_RUNTIME_ACTION_SYNC_TEMP_BUFFERS,
+  DT_DRAWLAYER_RUNTIME_ACTION_COMMIT,
+  DT_DRAWLAYER_RUNTIME_ACTION_REQUEST_COMMIT,
+  DT_DRAWLAYER_RUNTIME_ACTION_WAIT_FULLRES_WORKER,
+  DT_DRAWLAYER_RUNTIME_ACTION_FLUSH_PROCESS_PATCH,
+  DT_DRAWLAYER_RUNTIME_ACTION_FLUSH_SIDECAR,
+  DT_DRAWLAYER_RUNTIME_ACTION_STOP_WORKER,
+  DT_DRAWLAYER_RUNTIME_ACTION_PREPARE_UNDO_SNAPSHOT,
+  DT_DRAWLAYER_RUNTIME_ACTION_PRIME_LIVE_PROCESS_PATCH,
+  DT_DRAWLAYER_RUNTIME_ACTION_BEGIN_STROKE_CAPTURE,
+  DT_DRAWLAYER_RUNTIME_ACTION_END_STROKE_CAPTURE,
+  DT_DRAWLAYER_RUNTIME_ACTION_QUEUE_RAW_INPUT,
+  DT_DRAWLAYER_RUNTIME_ACTION_RELEASE_PROCESS_CLMEM,
+  DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_LAYER_CACHE,
+  DT_DRAWLAYER_RUNTIME_ACTION_BUILD_PROCESS_PATCH,
+  DT_DRAWLAYER_RUNTIME_ACTION_SET_POINTER_STATE,
+  DT_DRAWLAYER_RUNTIME_ACTION_QUEUE_REDRAW_CENTER,
+  DT_DRAWLAYER_RUNTIME_ACTION_SYNC_SAVE_BUTTON,
+  DT_DRAWLAYER_RUNTIME_ACTION_REFRESH_GUI,
+  DT_DRAWLAYER_RUNTIME_ACTION_INVALIDATE_LAYER_CACHE,
+} dt_drawlayer_runtime_action_t;
+
+typedef struct dt_drawlayer_runtime_result_t
+{
+  gboolean ok;
+  gboolean raw_input_ok;
+} dt_drawlayer_runtime_result_t;
+
+typedef struct dt_drawlayer_runtime_action_request_t
+{
+  dt_drawlayer_runtime_action_t action;
+  union
+  {
+    dt_drawlayer_runtime_feedback_t feedback;
+    dt_drawlayer_runtime_commit_mode_t commit_mode;
+    struct
+    {
+      gboolean flush_pending;
+    } sync_temp_buffers;
+    struct
+    {
+      dt_drawlayer_runtime_raw_input_kind_t kind;
+    } raw_input;
+    struct
+    {
+      gboolean valid;
+      gboolean hide_cursor;
+    } pointer;
+  } data;
+} dt_drawlayer_runtime_action_request_t;
+
+typedef struct dt_drawlayer_runtime_buffer_state_t
+{
+  gboolean resident;
+  gboolean valid;
+  gboolean dirty;
+  guint read_locks;
+  dt_drawlayer_runtime_actor_t last_reader;
+  gboolean write_locked;
+  dt_drawlayer_runtime_actor_t writer;
+} dt_drawlayer_runtime_buffer_state_t;
+
+typedef struct dt_drawlayer_runtime_thread_state_t
+{
+  gboolean active;
+  gboolean waiting;
+  guint queued;
+} dt_drawlayer_runtime_thread_state_t;
+
+typedef struct dt_drawlayer_runtime_manager_t
+{
+  dt_pthread_mutex_t mutex;
+  dt_drawlayer_runtime_buffer_state_t buffers[DT_DRAWLAYER_RUNTIME_BUFFER_COUNT];
+  dt_drawlayer_runtime_thread_state_t threads[DT_DRAWLAYER_RUNTIME_ACTOR_COUNT];
+  gboolean layer_cache_valid;
+  gboolean process_patch_dirty;
+  gboolean process_snapshot_valid;
+  gboolean process_cl_valid;
+  gboolean sidecar_io_active;
+  gboolean gui_focused;
+  gboolean realtime_active;
+  gboolean painting_active;
+  gboolean undo_available;
+  gboolean redo_available;
+  gboolean background_job_running;
+  dt_drawlayer_runtime_event_t last_event;
+  dt_drawlayer_runtime_raw_input_kind_t last_raw_input_kind;
+} dt_drawlayer_runtime_manager_t;
+
+typedef struct dt_drawlayer_runtime_inputs_t
+{
+  const dt_drawlayer_session_state_t *session;
+  const dt_drawlayer_process_state_t *process;
+  const dt_drawlayer_stroke_state_t *stroke;
+  const dt_drawlayer_worker_snapshot_t *worker;
+  const dt_drawlayer_cache_patch_t *base_patch;
+  gboolean base_patch_valid;
+  gboolean base_patch_dirty;
+  gboolean painting_active;
+  gboolean gui_attached;
+  gboolean module_focused;
+  gboolean display_pipe;
+  gboolean have_layer_selection;
+  gboolean have_valid_output_roi;
+  gboolean use_opencl;
+  gboolean view_changed;
+  gboolean padding_changed;
+} dt_drawlayer_runtime_inputs_t;
+
+typedef struct dt_drawlayer_runtime_host_t
+{
+  void *user_data;
+  void (*collect_inputs)(void *user_data,
+                         dt_drawlayer_runtime_inputs_t *inputs,
+                         dt_drawlayer_worker_snapshot_t *worker_snapshot);
+  gboolean (*perform_action)(void *user_data,
+                             const dt_drawlayer_runtime_action_request_t *action,
+                             dt_drawlayer_runtime_result_t *result);
+} dt_drawlayer_runtime_host_t;
+
+typedef struct dt_iop_drawlayer_gui_data_t
+{
+  dt_drawlayer_session_state_t session;
+  dt_drawlayer_process_state_t process;
+  dt_drawlayer_stroke_state_t stroke;
+  dt_drawlayer_runtime_manager_t manager;
+  dt_drawlayer_ui_state_t ui;
+  dt_drawlayer_controls_t controls;
+} dt_iop_drawlayer_gui_data_t;
+
+typedef struct dt_drawlayer_process_view_t
+{
+  const dt_drawlayer_cache_patch_t *patch;
+  dt_iop_roi_t blend_target_roi;
+  dt_iop_roi_t source_process_roi;
+  gboolean direct_copy;
+} dt_drawlayer_process_view_t;
+
+typedef enum dt_drawlayer_runtime_source_kind_t
+{
+  DT_DRAWLAYER_SOURCE_NONE = 0,
+  DT_DRAWLAYER_SOURCE_GUI_PROCESS,
+  DT_DRAWLAYER_SOURCE_HEADLESS_BASE,
+} dt_drawlayer_runtime_source_kind_t;
+
+typedef struct dt_drawlayer_runtime_source_t
+{
+  dt_drawlayer_runtime_source_kind_t kind;
+  dt_drawlayer_process_view_t process_view;
+  const float *pixels;
+  dt_pixel_cache_entry_t *cache_entry;
+  int width;
+  int height;
+  gboolean direct_copy;
+  dt_iop_roi_t target_roi;
+  dt_iop_roi_t source_roi;
+  dt_drawlayer_runtime_buffer_t tracked_buffer;
+  dt_drawlayer_runtime_actor_t tracked_actor;
+  gboolean tracked_read_lock;
+} dt_drawlayer_runtime_source_t;
+
+typedef struct dt_drawlayer_runtime_release_t
+{
+  dt_drawlayer_process_state_t *process;
+  const dt_drawlayer_cache_patch_t *headless_base_patch;
+  dt_drawlayer_runtime_source_t *source;
+} dt_drawlayer_runtime_release_t;
+
+typedef struct dt_drawlayer_runtime_update_request_t
+{
+  dt_drawlayer_runtime_event_t event;
+  dt_drawlayer_runtime_raw_input_kind_t raw_input_kind;
+  const dt_drawlayer_runtime_inputs_t *inputs;
+  dt_drawlayer_runtime_release_t release;
+} dt_drawlayer_runtime_update_request_t;
+
+void dt_drawlayer_process_state_init(dt_drawlayer_process_state_t *state);
+void dt_drawlayer_process_state_cleanup(dt_drawlayer_process_state_t *state);
+void dt_drawlayer_process_state_reset_stroke(dt_drawlayer_process_state_t *state);
+void dt_drawlayer_process_state_invalidate(dt_drawlayer_process_state_t *state);
+gboolean dt_drawlayer_process_state_publish_locked(dt_drawlayer_process_state_t *state,
+                                                   const dt_drawlayer_damaged_rect_t *damage,
+                                                   gboolean full_copy);
+gboolean dt_drawlayer_process_state_lock_view(dt_drawlayer_process_state_t *state, const dt_iop_roi_t *roi_out,
+                                              dt_drawlayer_process_view_t *view);
+void dt_drawlayer_process_state_unlock_view(dt_drawlayer_process_state_t *state);
+void dt_drawlayer_ui_cursor_clear(dt_drawlayer_ui_state_t *state);
+void dt_drawlayer_runtime_manager_init(dt_drawlayer_runtime_manager_t *state);
+void dt_drawlayer_runtime_manager_cleanup(dt_drawlayer_runtime_manager_t *state);
+void dt_drawlayer_runtime_manager_note_buffer_lock(dt_drawlayer_runtime_manager_t *state,
+                                                   dt_drawlayer_runtime_buffer_t buffer,
+                                                   dt_drawlayer_runtime_actor_t actor,
+                                                   gboolean write_lock,
+                                                   gboolean acquire);
+void dt_drawlayer_runtime_manager_note_sidecar_io(dt_drawlayer_runtime_manager_t *state, gboolean active);
+void dt_drawlayer_runtime_manager_note_thread(dt_drawlayer_runtime_manager_t *state,
+                                              dt_drawlayer_runtime_actor_t actor,
+                                              gboolean active,
+                                              gboolean waiting,
+                                              guint queued);
+dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_runtime_manager_t *state,
+                                                                  const dt_drawlayer_runtime_update_request_t *request,
+                                                                  const dt_drawlayer_runtime_host_t *host);
+void dt_drawlayer_runtime_manager_bind_piece(dt_drawlayer_runtime_manager_t *headless_manager,
+                                             dt_drawlayer_runtime_manager_t *gui_manager,
+                                             dt_drawlayer_process_state_t *gui_process,
+                                             gboolean display_pipe,
+                                             dt_drawlayer_runtime_manager_t **runtime_manager,
+                                             dt_drawlayer_process_state_t **runtime_process,
+                                             gboolean *runtime_display_pipe);
+
+#ifdef HAVE_OPENCL
+void dt_drawlayer_process_state_clear_clmem(dt_drawlayer_process_state_t *state);
+cl_mem dt_drawlayer_process_state_ensure_read_clmem_locked(dt_drawlayer_process_state_t *state, int devid);
+#endif

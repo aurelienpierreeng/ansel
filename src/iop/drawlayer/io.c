@@ -21,6 +21,10 @@
 
 #include "common/colorspaces.h"
 #include "common/image.h"
+#include "common/imageio.h"
+#include "common/imageio_module.h"
+#include "control/jobs.h"
+#include "iop/drawlayer/cache.h"
 
 #include <glib/gstdio.h>
 #include <math.h>
@@ -124,13 +128,6 @@ static inline void _clear_transparent_half(uint16_t *pixels, const size_t pixel_
   memset(pixels, 0, pixel_count * 4 * sizeof(uint16_t));
 }
 
-/** @brief Clear float RGBA row/buffer to transparent black. */
-static inline void dt_drawlayer_cache_clear_transparent_float(float *pixels, const size_t pixel_count)
-{
-  if(!pixels) return;
-  memset(pixels, 0, pixel_count * 4 * sizeof(float));
-}
-
 /** @brief Load one half-float RGBA texel to float RGBA. */
 static inline void _load_half_pixel_rgba(const uint16_t *src, float rgba[4])
 {
@@ -138,6 +135,66 @@ static inline void _load_half_pixel_rgba(const uint16_t *src, float rgba[4])
   rgba[1] = _half_to_float(src[1]);
   rgba[2] = _half_to_float(src[2]);
   rgba[3] = _half_to_float(src[3]);
+}
+
+typedef struct drawlayer_tiff_export_params_t
+{
+  dt_imageio_module_data_t global;
+  int bpp;
+  int compress;
+  int compresslevel;
+  int shortfile;
+} drawlayer_tiff_export_params_t;
+
+static gboolean _layer_name_non_empty(const char *name)
+{
+  if(!name) return FALSE;
+  char tmp[DT_DRAWLAYER_IO_NAME_SIZE] = { 0 };
+  g_strlcpy(tmp, name, sizeof(tmp));
+  g_strstrip(tmp);
+  return tmp[0] != '\0';
+}
+
+static int64_t _sidecar_timestamp_from_path(const char *path)
+{
+  if(!path || path[0] == '\0' || !g_file_test(path, G_FILE_TEST_EXISTS)) return 0;
+
+  GStatBuf st = { 0 };
+  if(g_stat(path, &st) != 0) return 0;
+  return (int64_t)st.st_mtime;
+}
+
+static gboolean _export_pre_module_fullres_to_tiff(const int32_t imgid, const char *filter, const char *path)
+{
+  if(imgid <= 0 || !path || path[0] == '\0') return FALSE;
+
+  dt_imageio_module_format_t *format = dt_imageio_get_format_by_name("tiff");
+  if(!format) return FALSE;
+
+  dt_imageio_module_data_t *format_params = format->get_params(format);
+  if(!format_params) return FALSE;
+
+  format_params->max_width = 0;
+  format_params->max_height = 0;
+  format_params->width = 0;
+  format_params->height = 0;
+  format_params->style[0] = '\0';
+
+  if(format->params_size(format) >= sizeof(drawlayer_tiff_export_params_t))
+  {
+    drawlayer_tiff_export_params_t *const tiff_params = (drawlayer_tiff_export_params_t *)format_params;
+    tiff_params->bpp = 32;
+    tiff_params->compress = 0;
+    tiff_params->compresslevel = 0;
+    tiff_params->shortfile = 0;
+  }
+
+  const int rc = dt_imageio_export_with_flags(
+      imgid, path, format, format_params, TRUE, FALSE, TRUE, FALSE, FALSE, (filter && filter[0]) ? filter : NULL,
+      FALSE, FALSE, DT_COLORSPACE_NONE, NULL, DT_INTENT_PERCEPTUAL, NULL, NULL, 0, 0, NULL);
+
+  format->free_params(format, format_params);
+  return rc == 0;
 }
 
 /** @brief Resolve embedded ICC blob from serialized work-profile key. */
@@ -927,4 +984,93 @@ void dt_drawlayer_io_free_layer_names(char ***names, int *count)
   for(int i = 0; i < n; i++) dt_free((*names)[i]);
   dt_free(*names);
   if(count) *count = 0;
+}
+
+int32_t dt_drawlayer_io_background_layer_job_run(dt_job_t *job)
+{
+  const dt_drawlayer_io_background_job_params_t *params
+      = (const dt_drawlayer_io_background_job_params_t *)dt_control_job_get_params(job);
+  if(!params) return 0;
+
+  dt_drawlayer_io_background_job_result_t *result = g_new0(dt_drawlayer_io_background_job_result_t, 1);
+  result->imgid = params->imgid;
+  g_strlcpy(result->initiator_layer_name, params->initiator_layer_name, sizeof(result->initiator_layer_name));
+  result->initiator_layer_order = params->initiator_layer_order;
+  g_strlcpy(result->message, _("failed to create background layer from input"), sizeof(result->message));
+
+  gchar *tmp_path = NULL;
+  const int tmp_fd = g_file_open_tmp("ansel-drawlayer-bg-XXXXXX.tiff", &tmp_path, NULL);
+  if(tmp_fd >= 0) g_close(tmp_fd, NULL);
+
+  float *export_pixels = NULL;
+  int export_w = 0;
+  int export_h = 0;
+  dt_drawlayer_io_patch_t bg_patch = { 0 };
+
+  do
+  {
+    if(tmp_fd < 0 || !tmp_path) break;
+    if(!_export_pre_module_fullres_to_tiff(params->imgid, params->filter, tmp_path)) break;
+    if(!dt_drawlayer_io_load_flat_rgba(tmp_path, &export_pixels, &export_w, &export_h)) break;
+    if(!export_pixels || export_w <= 0 || export_h <= 0) break;
+
+    bg_patch.width = params->raw_width;
+    bg_patch.height = params->raw_height;
+    bg_patch.x = 0;
+    bg_patch.y = 0;
+    bg_patch.pixels = dt_drawlayer_cache_alloc_temp_buffer(
+        (size_t)params->raw_width * params->raw_height * 4 * sizeof(float), "drawlayer bg layer");
+    if(!bg_patch.pixels) break;
+    dt_drawlayer_cache_clear_transparent_float(bg_patch.pixels, (size_t)params->raw_width * params->raw_height);
+
+    const int clip_x0 = MAX(params->dst_x, 0);
+    const int clip_y0 = MAX(params->dst_y, 0);
+    const int clip_x1 = MIN(params->dst_x + export_w, params->raw_width);
+    const int clip_y1 = MIN(params->dst_y + export_h, params->raw_height);
+    if(clip_x1 <= clip_x0 || clip_y1 <= clip_y0) break;
+
+    const int copy_w = clip_x1 - clip_x0;
+    const int copy_h = clip_y1 - clip_y0;
+    const int src_x0 = clip_x0 - params->dst_x;
+    const int src_y0 = clip_y0 - params->dst_y;
+    for(int y = 0; y < copy_h; y++)
+    {
+      const float *src = export_pixels + 4 * ((size_t)(src_y0 + y) * export_w + src_x0);
+      float *dst = bg_patch.pixels + 4 * ((size_t)(clip_y0 + y) * params->raw_width + clip_x0);
+      memcpy(dst, src, (size_t)copy_w * 4 * sizeof(float));
+    }
+
+    char bg_name[DT_DRAWLAYER_IO_NAME_SIZE] = { 0 };
+    dt_drawlayer_io_make_unique_name_plain(params->sidecar_path, params->requested_bg_name, bg_name,
+                                           sizeof(bg_name));
+    if(!_layer_name_non_empty(bg_name)) break;
+
+    int final_order = -1;
+    if(!dt_drawlayer_io_insert_layer(params->sidecar_path, bg_name, params->insert_after_order,
+                                     params->work_profile, &bg_patch, params->raw_width, params->raw_height,
+                                     &final_order))
+      break;
+
+    dt_drawlayer_io_layer_info_t io_info = { 0 };
+    if(!dt_drawlayer_io_find_layer(params->sidecar_path, bg_name, final_order, &io_info)) break;
+
+    result->success = TRUE;
+    result->sidecar_timestamp = _sidecar_timestamp_from_path(params->sidecar_path);
+    g_strlcpy(result->created_bg_name, bg_name, sizeof(result->created_bg_name));
+    g_snprintf(result->message, sizeof(result->message), _("created background layer `%s'"), bg_name);
+  } while(0);
+
+  if(export_pixels) dt_free(export_pixels);
+  if(bg_patch.pixels) dt_drawlayer_cache_free_temp_buffer((void **)&bg_patch.pixels, "drawlayer bg layer");
+  if(tmp_path)
+  {
+    g_unlink(tmp_path);
+    dt_free(tmp_path);
+  }
+
+  if(params->done_idle)
+    g_main_context_invoke(NULL, params->done_idle, result);
+  else
+    dt_free(result);
+  return 0;
 }
