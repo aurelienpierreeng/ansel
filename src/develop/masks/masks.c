@@ -3412,7 +3412,7 @@ dt_masks_form_group_t *dt_masks_group_add_form(dt_masks_form_t *group_form, dt_m
     return group_entry;
   }
 
-  dt_control_log(_("masks can not contain themselves"));
+  dt_control_log(_("Masks can not contain themselves"));
   return NULL;
 }
 

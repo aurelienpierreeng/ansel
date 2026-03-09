@@ -561,7 +561,7 @@ GtkWidget *dt_masks_create_menu(dt_masks_form_gui_t *gui, dt_masks_form_t *form,
     }
     else
     {
-      menu_item = ctx_gtk_menu_item_new_with_markup(_("Remove form"), menu, _masks_gui_remove_form_callback, gui);
+      menu_item = ctx_gtk_menu_item_new_with_markup(_("Remove shape from mask"), menu, _masks_gui_remove_form_callback, gui);
       menu_item_set_fake_accel(menu_item, GDK_KEY_Delete, 0);
       gtk_widget_set_sensitive(menu_item, gui->form_selected >= 0);
     }

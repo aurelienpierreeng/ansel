@@ -1342,6 +1342,9 @@ typedef enum _blendop_masks_all_cols_t
   BLENDOP_MASKS_ALL_COL_ACTIVE = 0,
   BLENDOP_MASKS_ALL_COL_NAME,
   BLENDOP_MASKS_ALL_COL_FORMID,
+  BLENDOP_MASKS_ALL_COL_SENSITIVE,
+  BLENDOP_MASKS_ALL_COL_MARKUP,
+  BLENDOP_MASKS_ALL_COL_STATUS_MARKUP,
   BLENDOP_MASKS_ALL_COL_COUNT
 } _blendop_masks_all_cols_t;
 
@@ -1623,9 +1626,14 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
     const gboolean active = _blendop_masks_find_group_entry(group_form, mask_form->formid, NULL) != NULL;
     GtkTreeIter iter;
     gtk_list_store_append(GTK_LIST_STORE(all_model), &iter);
+    gchar *display_markup = g_markup_printf_escaped("%s", mask_form->name);
     gtk_list_store_set(GTK_LIST_STORE(all_model), &iter, BLENDOP_MASKS_ALL_COL_ACTIVE, active,
                        BLENDOP_MASKS_ALL_COL_NAME, mask_form->name, BLENDOP_MASKS_ALL_COL_FORMID, mask_form->formid,
+                       BLENDOP_MASKS_ALL_COL_SENSITIVE, TRUE,
+               BLENDOP_MASKS_ALL_COL_MARKUP, display_markup,
+               BLENDOP_MASKS_ALL_COL_STATUS_MARKUP, "",
                        -1);
+    g_free(display_markup);
   }
 
   // Second pass: then all non-group (and empty-group) entries.
@@ -1638,11 +1646,49 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
     if(_blendop_masks_is_group_with_shapes(mask_form)) continue;
 
     const gboolean active = _blendop_masks_find_group_entry(group_form, mask_form->formid, NULL) != NULL;
+    gboolean sensitive = TRUE;
+    const gchar *locked_group_name = NULL;
+    
+    // Check if this shape belongs to an active group
+    for(const GList *parent_node = darktable.develop->forms; parent_node; parent_node = g_list_next(parent_node))
+    {
+      dt_masks_form_t *parent_form = (dt_masks_form_t *)parent_node->data;
+      if(!parent_form || !_blendop_masks_is_group_with_shapes(parent_form)) continue;
+      
+      const gboolean parent_active = _blendop_masks_find_group_entry(group_form, parent_form->formid, NULL) != NULL;
+      if(parent_active && _blendop_masks_find_group_entry(parent_form, mask_form->formid, NULL))
+      {
+        sensitive = FALSE;
+        locked_group_name = parent_form->name;
+        break;
+      }
+    }
+
+    const gboolean display_active = active || !sensitive;
+    gchar *display_markup = NULL;
+    gchar *status_markup = NULL;
+    if(!sensitive && locked_group_name && *locked_group_name)
+    {
+      gchar *already_in = g_strdup_printf(_("Already in '%s'"), locked_group_name);
+      status_markup = g_markup_printf_escaped("<i>%s</i>", already_in);
+      g_free(already_in);
+      display_markup = g_markup_printf_escaped("%s", mask_form->name);
+    }
+    else
+    {
+      display_markup = g_markup_printf_escaped("%s", mask_form->name);
+      status_markup = g_strdup("");
+    }
+    
     GtkTreeIter iter;
     gtk_list_store_append(GTK_LIST_STORE(all_model), &iter);
-    gtk_list_store_set(GTK_LIST_STORE(all_model), &iter, BLENDOP_MASKS_ALL_COL_ACTIVE, active,
+    gtk_list_store_set(GTK_LIST_STORE(all_model), &iter, BLENDOP_MASKS_ALL_COL_ACTIVE, display_active,
                        BLENDOP_MASKS_ALL_COL_NAME, mask_form->name, BLENDOP_MASKS_ALL_COL_FORMID, mask_form->formid,
+                       BLENDOP_MASKS_ALL_COL_SENSITIVE, sensitive, BLENDOP_MASKS_ALL_COL_MARKUP, display_markup,
+                       BLENDOP_MASKS_ALL_COL_STATUS_MARKUP, status_markup,
                        -1);
+    g_free(display_markup);
+    g_free(status_markup);
   }
 
   if(group_form && (group_form->type & DT_MASKS_GROUP))
@@ -1726,8 +1772,13 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
   if(!gtk_tree_model_get_iter_from_string(model, &iter, path_string)) return;
 
   gboolean active = FALSE;
+  gboolean sensitive = TRUE;
   int formid = -1;
-  gtk_tree_model_get(model, &iter, BLENDOP_MASKS_ALL_COL_ACTIVE, &active, BLENDOP_MASKS_ALL_COL_FORMID, &formid, -1);
+  gtk_tree_model_get(model, &iter, BLENDOP_MASKS_ALL_COL_ACTIVE, &active,
+                     BLENDOP_MASKS_ALL_COL_FORMID, &formid,
+                     BLENDOP_MASKS_ALL_COL_SENSITIVE, &sensitive, -1);
+
+  if(!sensitive) return;
 
   dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
   if(!mask_form) return;
@@ -1750,6 +1801,30 @@ static void _blendop_masks_all_toggled(GtkCellRendererToggle *cell, gchar *path_
     {
       dt_masks_group_add_form(group_form, mask_form);
       dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
+    }
+  }
+
+  // If this is a group with shapes, update sensitive state of child shapes
+  if(_blendop_masks_is_group_with_shapes(mask_form))
+  {
+    const gboolean new_active = !active;  // Toggle state
+    GtkTreeIter search_iter;
+    gboolean valid = gtk_tree_model_get_iter_first(model, &search_iter);
+    
+    while(valid)
+    {
+      int child_formid = -1;
+      gtk_tree_model_get(model, &search_iter, BLENDOP_MASKS_ALL_COL_FORMID, &child_formid, -1);
+      
+      // Check if this child belongs to the toggled group
+      if(_blendop_masks_find_group_entry(mask_form, child_formid, NULL))
+      {
+        // Lock (gray out) if group is being activated, unlock if deactivated
+        gtk_list_store_set(GTK_LIST_STORE(model), &search_iter, 
+                          BLENDOP_MASKS_ALL_COL_SENSITIVE, !new_active, -1);
+      }
+      
+      valid = gtk_tree_model_iter_next(model, &search_iter);
     }
   }
 
@@ -1801,11 +1876,45 @@ static void _blendop_masks_all_rename_callback(GtkWidget *menu_item, dt_iop_modu
   if(!_blendop_masks_find_iter_by_formid(model, &iter, BLENDOP_MASKS_ALL_COL_FORMID, formid)) return;
 
   GtkTreePath *path = gtk_tree_model_get_path(model, &iter);
-  GtkTreeViewColumn *column = gtk_tree_view_get_column(view, 0);
+  GtkTreeViewColumn *column = gtk_tree_view_get_column(view, 1);
   GtkCellRenderer *renderer = g_object_get_data(G_OBJECT(view), "blendop-masks-name-renderer");
   if(path && column && renderer)
     gtk_tree_view_set_cursor_on_cell(view, path, column, renderer, TRUE);
   if(path) gtk_tree_path_free(path);
+}
+
+static gboolean _blendop_masks_all_handle_left_click(GtkWidget *treeview, GtkTreePath *path,
+                                                        GtkTreeViewColumn *column, dt_iop_module_t *module)
+{
+  if(!module) return FALSE;
+  if(!path || !column) return FALSE;
+
+  dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
+  if(!bd || column != bd->all_shapes_col) return FALSE;
+
+  GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
+  GtkTreeIter iter;
+  if(!gtk_tree_model_get_iter(model, &iter, path)) return FALSE;
+
+  gboolean sensitive = TRUE;
+  int formid = -1;
+  gtk_tree_model_get(model, &iter, BLENDOP_MASKS_ALL_COL_SENSITIVE, &sensitive,
+                     BLENDOP_MASKS_ALL_COL_FORMID, &formid, -1);
+
+  if(formid <= 0) return FALSE;
+
+  if(!sensitive)
+  {
+    gtk_tree_path_free(path);
+    return TRUE;
+  }
+
+  // Toggle the checkbox value.
+  gchar *path_string = gtk_tree_path_to_string(path);
+  _blendop_masks_all_toggled(NULL, path_string, module);
+  dt_free(path_string);
+  gtk_tree_path_free(path);
+  return TRUE; // Block default selection behavior.
 }
 
 static gboolean _blendop_masks_all_button_pressed(GtkWidget *treeview, GdkEventButton *event,
@@ -1822,29 +1931,8 @@ static gboolean _blendop_masks_all_button_pressed(GtkWidget *treeview, GdkEventB
   // Handle left click on checkbox column - toggle directly without requiring selection
   if(event->button == GDK_BUTTON_PRIMARY && column)
   {
-    dt_iop_gui_blend_data_t *bd = (dt_iop_gui_blend_data_t *)module->blend_data;
-    if(bd && column == bd->all_shapes_col)
-    {
-      GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(treeview));
-      GtkTreeIter iter;
-      if(gtk_tree_model_get_iter(model, &iter, path))
-      {
-        gboolean active = FALSE;
-        int formid = -1;
-        gtk_tree_model_get(model, &iter, BLENDOP_MASKS_ALL_COL_ACTIVE, &active, 
-                          BLENDOP_MASKS_ALL_COL_FORMID, &formid, -1);
-        
-        if(formid > 0)
-        {
-          // Toggle the checkbox value
-          gchar *path_string = gtk_tree_path_to_string(path);
-          _blendop_masks_all_toggled(NULL, path_string, module);
-          dt_free(path_string);
-          gtk_tree_path_free(path);
-          return TRUE; // Block default selection behavior
-        }
-      }
-    }
+    if(_blendop_masks_all_handle_left_click(treeview, path, column, module))
+      return TRUE;
   }
 
   // Handle right click for context menu
@@ -1867,17 +1955,17 @@ static gboolean _blendop_masks_all_button_pressed(GtkWidget *treeview, GdkEventB
   if(formid <= 0) return TRUE;
 
   GtkWidget *menu = gtk_menu_new();
-  GtkWidget *item = gtk_menu_item_new_with_label(_("delete"));
+  GtkWidget *item = gtk_menu_item_new_with_label(_("Delete"));
   g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
   g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_all_delete_callback), module);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
-  item = gtk_menu_item_new_with_label(_("duplicate"));
+  item = gtk_menu_item_new_with_label(_("Duplicate"));
   g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
   g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_all_duplicate_callback), module);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
-  item = gtk_menu_item_new_with_label(_("rename"));
+  item = gtk_menu_item_new_with_label(_("Rename"));
   g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
   g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_all_rename_callback), module);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
@@ -2157,7 +2245,7 @@ static GtkWidget *_blendop_masks_group_ctx_menu(dt_iop_gui_blend_data_t *bd, dt_
 
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
 
-  item = gtk_menu_item_new_with_label(_("Remove"));
+  item = gtk_menu_item_new_with_label(_("Remove from mask"));
   g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
   g_object_set_data(G_OBJECT(item), "blend-parentid", GINT_TO_POINTER(parentid));
   g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_group_remove_callback), module);
@@ -3277,7 +3365,8 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     // All shapes list
     bd->masks_treeview = gtk_tree_view_new();
     bd->all_shapes_store = gtk_list_store_new(BLENDOP_MASKS_ALL_COL_COUNT, G_TYPE_BOOLEAN,
-                                              G_TYPE_STRING, G_TYPE_INT);
+                                              G_TYPE_STRING, G_TYPE_INT, G_TYPE_BOOLEAN,
+                                              G_TYPE_STRING, G_TYPE_STRING);
     gtk_tree_view_set_model(GTK_TREE_VIEW(bd->masks_treeview), GTK_TREE_MODEL(bd->all_shapes_store));
 
     bd->all_shapes_col = gtk_tree_view_column_new();
@@ -3288,13 +3377,29 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     g_signal_connect(renderer, "toggled", G_CALLBACK(_blendop_masks_all_toggled), module);
     gtk_tree_view_column_pack_start(bd->all_shapes_col, renderer, FALSE);
     gtk_tree_view_column_add_attribute(bd->all_shapes_col, renderer, "active", BLENDOP_MASKS_ALL_COL_ACTIVE);
+    gtk_tree_view_column_add_attribute(bd->all_shapes_col, renderer, "sensitive", BLENDOP_MASKS_ALL_COL_SENSITIVE);
+
+    GtkTreeViewColumn *all_shapes_name_col = gtk_tree_view_column_new();
+    gtk_tree_view_append_column(GTK_TREE_VIEW(bd->masks_treeview), all_shapes_name_col);
 
     renderer = gtk_cell_renderer_text_new();
     g_object_set(renderer, "editable", TRUE, NULL);
     g_signal_connect(renderer, "edited", G_CALLBACK(_blendop_masks_all_name_edited), module);
-    gtk_tree_view_column_pack_start(bd->all_shapes_col, renderer, TRUE);
-    gtk_tree_view_column_add_attribute(bd->all_shapes_col, renderer, "text", BLENDOP_MASKS_ALL_COL_NAME);
+    gtk_tree_view_column_pack_start(all_shapes_name_col, renderer, TRUE);
+    gtk_tree_view_column_add_attribute(all_shapes_name_col, renderer, "markup", BLENDOP_MASKS_ALL_COL_MARKUP);
+    gtk_tree_view_column_add_attribute(all_shapes_name_col, renderer, "sensitive", BLENDOP_MASKS_ALL_COL_SENSITIVE);
     g_object_set_data(G_OBJECT(bd->masks_treeview), "blendop-masks-name-renderer", renderer);
+
+    GtkTreeViewColumn *all_shapes_status_col = gtk_tree_view_column_new();
+    gtk_tree_view_append_column(GTK_TREE_VIEW(bd->masks_treeview), all_shapes_status_col);
+
+    renderer = gtk_cell_renderer_text_new();
+    g_object_set(renderer, "xalign", 1.0f, NULL);
+    gtk_tree_view_column_pack_end(all_shapes_status_col, renderer, TRUE);
+    gtk_tree_view_column_add_attribute(all_shapes_status_col, renderer, "markup",
+                       BLENDOP_MASKS_ALL_COL_STATUS_MARKUP);
+    gtk_tree_view_column_add_attribute(all_shapes_status_col, renderer, "sensitive",
+                       BLENDOP_MASKS_ALL_COL_SENSITIVE);
 
     selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(bd->masks_treeview));
     gtk_tree_selection_set_mode(selection, GTK_SELECTION_SINGLE);
