@@ -91,6 +91,14 @@ static void _cache_entry_resync_host_pinned_images_locked(dt_pixel_cache_entry_t
                                                           int devid);
 static void _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid);
 
+typedef struct dt_cache_exact_hit_request_t
+{
+  const dt_iop_roi_t *roi;
+  size_t bpp;
+  int preferred_devid;
+  void **cl_mem_output;
+} dt_cache_exact_hit_request_t;
+
 static dt_pixel_cache_entry_t *_cache_entry_for_host_ptr_locked(dt_dev_pixelpipe_cache_t *cache, void *host_ptr)
 {
   if(!cache || !host_ptr) return NULL;
@@ -1160,11 +1168,72 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
   return 1;
 }
 
+static inline gboolean _cache_exact_hit_requested(const dt_cache_exact_hit_request_t *request)
+{
+  return request && request->roi && request->bpp > 0 && request->cl_mem_output;
+}
+
+static inline void _cache_clear_lookup_outputs(void **data, dt_pixel_cache_entry_t **entry)
+{
+  if(data) *data = NULL;
+  if(entry) *entry = NULL;
+}
+
+static inline gboolean _cache_entry_has_host_payload(void **data)
+{
+  return !data || *data != NULL;
+}
+
+static gboolean _cache_try_restore_device_payload(dt_pixel_cache_entry_t *cache_entry,
+                                                  const dt_cache_exact_hit_request_t *request)
+{
+  if(!_cache_exact_hit_requested(request) || !cache_entry || !request->cl_mem_output
+     || *request->cl_mem_output != NULL || request->preferred_devid < 0)
+    return FALSE;
+
+  *request->cl_mem_output = dt_pixel_cache_clmem_get(cache_entry, NULL, request->preferred_devid,
+                                                     request->roi->width, request->roi->height,
+                                                     (int)request->bpp, CL_MEM_READ_WRITE, NULL);
+  return *request->cl_mem_output != NULL;
+}
+
+static gboolean _cache_try_restore_host_payload(dt_dev_pixelpipe_cache_t *cache, void **data,
+                                                dt_pixel_cache_entry_t *cache_entry,
+                                                const dt_cache_exact_hit_request_t *request)
+{
+  if(!cache || !cache_entry) return FALSE;
+  if(!dt_dev_pixelpipe_cache_materialize_host_data(cache,
+                                                   request ? request->preferred_devid : -1,
+                                                   cache_entry))
+    return FALSE;
+
+  if(data) *data = dt_pixel_cache_entry_get_data(cache_entry);
+  return _cache_entry_has_host_payload(data);
+}
+
+static void _cache_remove_invalid_exact_hit(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
+                                            dt_pixel_cache_entry_t *cache_entry,
+                                            void **data, dt_pixel_cache_entry_t **entry)
+{
+  dt_print(DT_DEBUG_CACHE,
+           "[pixelpipe] cache entry %" PRIu64 " has no authoritative RAM nor vRAM payload and will be removed\n",
+           hash);
+  dt_dev_pixelpipe_cache_remove(cache, hash, TRUE, cache_entry);
+  _cache_clear_lookup_outputs(data, entry);
+}
+
 int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
                                         void **data, dt_iop_buffer_dsc_t **dsc, dt_pixel_cache_entry_t **entry,
                                         const dt_iop_roi_t *roi, const size_t bpp,
                                         const int preferred_devid, void **cl_mem_output)
 {
+  const dt_cache_exact_hit_request_t request = {
+    .roi = roi,
+    .bpp = bpp,
+    .preferred_devid = preferred_devid,
+    .cl_mem_output = cl_mem_output,
+  };
+
   // Find the cache entry for this hash, if any
   dt_pthread_mutex_lock(&cache->lock);
   cache->queries++;
@@ -1179,47 +1248,31 @@ int dt_dev_pixelpipe_cache_get_existing(dt_dev_pixelpipe_cache_t *cache, const u
 
   dt_pthread_mutex_unlock(&cache->lock);
 
-  const gboolean exact_hit = (roi && bpp > 0 && cl_mem_output);
   if(!cache_entry)
   {
-    if(data) *data = NULL;
-    if(entry) *entry = NULL;
+    _cache_clear_lookup_outputs(data, entry);
     return FALSE;
   }
 
-  if(!exact_hit || (data && *data != NULL))
+  if(!_cache_exact_hit_requested(&request) || _cache_entry_has_host_payload(data))
   {
     if(entry) *entry = cache_entry;
     return TRUE;
   }
 
-  if(*cl_mem_output == NULL && preferred_devid >= 0)
-    *cl_mem_output = dt_pixel_cache_clmem_get(cache_entry, NULL, preferred_devid,
-                                              roi->width, roi->height, (int)bpp, CL_MEM_READ_WRITE, NULL);
-
-  if(*cl_mem_output != NULL)
+  if(_cache_try_restore_device_payload(cache_entry, &request))
   {
     if(entry) *entry = cache_entry;
     return TRUE;
   }
 
-  if(dt_dev_pixelpipe_cache_materialize_host_data(cache, preferred_devid, cache_entry))
+  if(_cache_try_restore_host_payload(cache, data, cache_entry, &request))
   {
-    if(data) *data = dt_pixel_cache_entry_get_data(cache_entry);
-    if(!data || *data != NULL)
-    {
-      if(entry) *entry = cache_entry;
-      return TRUE;
-    }
+    if(entry) *entry = cache_entry;
+    return TRUE;
   }
 
-  dt_print(DT_DEBUG_CACHE,
-           "[pixelpipe] cache entry %" PRIu64 " has no authoritative RAM nor vRAM payload and will be removed\n",
-           hash);
-  dt_dev_pixelpipe_cache_remove(cache, hash, TRUE, cache_entry);
-
-  if(data) *data = NULL;
-  if(entry) *entry = NULL;
+  _cache_remove_invalid_exact_hit(cache, hash, cache_entry, data, entry);
   return FALSE;
 }
 

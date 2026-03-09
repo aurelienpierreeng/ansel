@@ -103,6 +103,14 @@ typedef enum dt_pixelpipe_flow_t
 static void get_output_format(dt_iop_module_t *module, dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
                               dt_develop_t *dev, dt_iop_buffer_dsc_t *dsc);
 
+typedef struct dt_output_cache_state_t
+{
+  dt_pixel_cache_entry_t *entry;
+  gboolean write_locked;
+  gboolean recycled;
+  gboolean new_entry;
+} dt_output_cache_state_t;
+
 static inline gboolean _reuse_module_output_cacheline(const dt_dev_pixelpipe_t *pipe,
                                                       const dt_dev_pixelpipe_iop_t *piece)
 {
@@ -117,6 +125,13 @@ static inline gboolean _can_take_direct_cache_hit(const dt_dev_pixelpipe_t *pipe
          && (!piece || !piece->bypass_cache);
 }
 
+static inline gboolean _is_focused_realtime_gui_module(const dt_dev_pixelpipe_t *pipe,
+                                                       const dt_develop_t *dev,
+                                                       const dt_iop_module_t *module)
+{
+  return pipe && pipe->realtime && dev && dev->gui_attached && module && dev->gui_module == module;
+}
+
 static inline gboolean _can_take_transient_gui_cache_hit(const dt_dev_pixelpipe_t *pipe,
                                                          const dt_develop_t *dev,
                                                          const dt_iop_module_t *module,
@@ -129,7 +144,7 @@ static inline gboolean _can_take_transient_gui_cache_hit(const dt_dev_pixelpipe_
    * whether their output is RAM-cached or GPU-cached. Reusable cachelines can
    * still be taken back later as scratch storage. */
   (void)piece;
-  return !(pipe && pipe->realtime && dev && dev->gui_attached && module && dev->gui_module == module);
+  return !_is_focused_realtime_gui_module(pipe, dev, module);
 }
 
 static inline gboolean _can_take_pipe_cache_hit(const dt_dev_pixelpipe_t *pipe,
@@ -1498,6 +1513,67 @@ static gboolean _reuse_transient_output_cacheline(dt_dev_pixelpipe_t *pipe, dt_d
   return TRUE;
 }
 
+static gboolean _try_get_exact_output_cache_hit(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
+                                                dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
+                                                const uint64_t hash, const dt_iop_roi_t *roi_out,
+                                                const size_t bpp, void **output,
+                                                void **cl_mem_output, dt_iop_buffer_dsc_t **out_format,
+                                                dt_pixel_cache_entry_t **existing_cache)
+{
+  if(existing_cache) *existing_cache = NULL;
+
+  return _can_take_direct_cache_hit(pipe, piece)
+         && _can_take_transient_gui_cache_hit(pipe, dev, module, piece)
+         && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, hash, output, out_format,
+                                                existing_cache, roi_out, bpp,
+                                                pipe ? pipe->devid : -1, cl_mem_output);
+}
+
+static gboolean _acquire_input_cache_entry(const uint64_t input_hash, void **input,
+                                           dt_iop_buffer_dsc_t **input_format,
+                                           dt_pixel_cache_entry_t **input_entry)
+{
+  return dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, input_hash, input, input_format,
+                                             input_entry, NULL, 0, -1, NULL);
+}
+
+static gboolean _acquire_output_cache_entry(dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece,
+                                            dt_iop_module_t *module, const uint64_t hash,
+                                            const size_t bufsize, void **output,
+                                            dt_iop_buffer_dsc_t **out_format,
+                                            dt_output_cache_state_t *state)
+{
+  if(!state) return FALSE;
+  *state = (dt_output_cache_state_t){ 0 };
+
+  if(_reuse_transient_output_cacheline(pipe, piece, hash, bufsize, output, &state->entry))
+  {
+    state->write_locked = TRUE;
+    state->recycled = TRUE;
+    state->new_entry = TRUE;
+    return TRUE;
+  }
+
+  gchar *type = dt_pixelpipe_get_pipe_name(pipe->type);
+  gchar *name = g_strdup_printf("module %s (%s) for pipe %s", module->op, module->multi_name, type);
+  const gboolean alloc_output = piece->force_opencl_cache;
+  state->new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, name,
+                                                pipe->type, alloc_output, output, out_format,
+                                                &state->entry);
+  dt_free(name);
+  state->write_locked = state->new_entry;
+
+  return state->entry != NULL;
+}
+
+static inline void _lock_existing_output_cache_entry(const uint64_t hash, dt_output_cache_state_t *state)
+{
+  if(!state || state->new_entry || state->write_locked || !state->entry) return;
+
+  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, TRUE, state->entry);
+  state->write_locked = TRUE;
+}
+
 // recursive helper for process:
 static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void **output,
                                         void **cl_mem_output, dt_iop_buffer_dsc_t **out_format,
@@ -1555,10 +1631,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // This case is handled below.
   dt_pixel_cache_entry_t *existing_cache = NULL;
   const gboolean exact_output_cache_hit
-      = _can_take_direct_cache_hit(pipe, piece)
-        && _can_take_transient_gui_cache_hit(pipe, dev, module, piece)
-        && dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, hash, output, out_format, &existing_cache,
-                                               &roi_out, bpp, pipe ? pipe->devid : -1, cl_mem_output);
+      = _try_get_exact_output_cache_hit(pipe, dev, module, piece, hash, &roi_out, bpp,
+                                        output, cl_mem_output, out_format, &existing_cache);
 
   if(existing_cache && pipe->type != DT_DEV_PIXELPIPE_PREVIEW)
   {
@@ -1613,8 +1687,7 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // Get cache line for input as early as possible: this is needed for correctness (locks/refcounts)
   // and to ensure `input` points to the host buffer when it exists.
   dt_pixel_cache_entry_t *input_entry = NULL;
-  if(!dt_dev_pixelpipe_cache_get_existing(darktable.pixelpipe_cache, input_hash, &input, &input_format, &input_entry,
-                                          NULL, 0, -1, NULL))
+  if(!_acquire_input_cache_entry(input_hash, &input, &input_format, &input_entry))
   {
     dt_print(DT_DEBUG_OPENCL, "[dev_pixelpipe] %s has no cache-backed input buffer\n", module->name());
     return 1;
@@ -1659,37 +1732,18 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // Get cache line for output, possibly allocating a new one for output
   // Immediately alloc output buffer only if we know we force the use of the cache.
   // Otherwise, it's handled in OpenCL fallbacks.
-  dt_pixel_cache_entry_t *output_entry = NULL;
-  gboolean output_write_locked = FALSE;
-  gboolean recycled_output_cacheline = FALSE;
-  gboolean new_entry = FALSE;
-
-  if(_reuse_transient_output_cacheline(pipe, piece, hash, bufsize, output, &output_entry))
-  {
-    // Reused transient entry is already write-locked and refcounted.
-    output_write_locked = TRUE;
-    recycled_output_cacheline = TRUE;
-    new_entry = TRUE;
-  }
-
-  gchar *type = dt_pixelpipe_get_pipe_name(pipe->type);
-  if(!output_entry)
-  {
-    gchar *name = g_strdup_printf("module %s (%s) for pipe %s", module->op, module->multi_name, type);
-    const gboolean alloc_output = piece->force_opencl_cache;
-    new_entry = dt_dev_pixelpipe_cache_get(darktable.pixelpipe_cache, hash, bufsize, name, pipe->type,
-                                           alloc_output, output, out_format, &output_entry);
-    dt_free(name);
-    // Fresh entries are returned with write-lock held.
-    output_write_locked = new_entry;
-  }
-
-  if(output_entry == NULL) 
+  dt_output_cache_state_t output_state = { 0 };
+  if(!_acquire_output_cache_entry(pipe, piece, module, hash, bufsize, output, out_format, &output_state))
   {
     // On error: release the cache line
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
     return 1;
   }
+  dt_pixel_cache_entry_t *output_entry = output_state.entry;
+  gboolean output_write_locked = output_state.write_locked;
+  const gboolean recycled_output_cacheline = output_state.recycled;
+  const gboolean new_entry = output_state.new_entry;
+  gchar *type = dt_pixelpipe_get_pipe_name(pipe->type);
 
   dt_pixelpipe_flow_t pixelpipe_flow = (PIXELPIPE_FLOW_NONE | PIXELPIPE_FLOW_HISTOGRAM_NONE);
 
@@ -1715,11 +1769,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(!new_entry)
   {
     // We have an output cache entry already, lock it for writing. 
-    if(!output_write_locked)
-    {
-      dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, hash, TRUE, output_entry);
-      output_write_locked = TRUE;
-    }
+    _lock_existing_output_cache_entry(hash, &output_state);
+    output_write_locked = output_state.write_locked;
   }
 
   /* get tiling requirement of module */

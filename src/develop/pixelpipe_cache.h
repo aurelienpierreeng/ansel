@@ -355,8 +355,9 @@ void dt_dev_pixelpipe_cache_flush(dt_dev_pixelpipe_cache_t *cache, const int id)
  * @brief Release cached OpenCL buffers for a device (-1 for all).
  *
  * @details
- * Device-only cachelines are first materialized back to host RAM when needed so published
- * cache entries remain authoritative after the `cl_mem` objects are dropped.
+ * This is intentionally a lightweight VRAM-pressure/retry helper: it drops cached
+ * `cl_mem` objects without taking per-entry write locks. Realtime paths rely on it
+ * to free scratch OpenCL buffers without stalling in-flight renders.
  */
 void dt_dev_pixelpipe_cache_flush_clmem(dt_dev_pixelpipe_cache_t *cache, const int devid);
 
