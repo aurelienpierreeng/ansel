@@ -1084,14 +1084,6 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   return 0;
 }
 
-#if defined(__SSE2__)
-int process_sse2(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *const ivoid,
-                  void *const ovoid, const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
-{
-  return process(self, piece, ivoid, ovoid, roi_in, roi_out);
-}
-#endif
-
 static void _reset_input_transforms(dt_iop_colorin_data_t *d)
 {
   if(d->xform_cam_Lab)
