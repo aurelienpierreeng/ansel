@@ -54,17 +54,17 @@ typedef union token_data_t
   operators_t operator;
 } token_data_t;
 
-typedef struct token_t
+typedef struct dt_calc_token_t
 {
   token_types_t type;
   token_data_t data;
-} token_t;
+} dt_calc_token_t;
 
 typedef struct parser_state_t
 {
   char *p;
   float x;
-  token_t *token;
+  dt_calc_token_t *token;
 } parser_state_t;
 
 /** the scanner **/
@@ -74,11 +74,11 @@ static float read_number(parser_state_t *self)
   return g_ascii_strtod(self->p, &self->p);
 }
 
-static token_t *get_token(parser_state_t *self)
+static dt_calc_token_t *get_token(parser_state_t *self)
 {
   if(!self->p) return NULL;
 
-  token_t *token = (token_t *)malloc(sizeof(token_t));
+  dt_calc_token_t *token = (dt_calc_token_t *)malloc(sizeof(dt_calc_token_t));
 
   for(; *self->p; self->p++)
   {
