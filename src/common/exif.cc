@@ -1721,21 +1721,8 @@ int dt_exif_get_thumbnail(const char *path, uint8_t **buffer, size_t *size, char
       return 1;
     }
 
-    // Select the desired target mipmap
-    Exiv2::PreviewProperties selected;
-    if(min_width < 1)
-    {
-      // Largest mipmap
-      selected = list.back();
-    }
-    else
-    {
-      for(size_t i = 0; i < list.size(); i++)
-      {
-        selected = list[i];
-        if(MAX(selected.width_, selected.height_) >= (size_t)min_width) break;
-      }
-    }
+    // Get the largest mipmap
+    Exiv2::PreviewProperties selected = list.back();
 
     // Get the selected preview image
     Exiv2::PreviewImage preview = loader.getPreviewImage(selected);
