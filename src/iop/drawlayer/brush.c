@@ -734,11 +734,14 @@ gboolean dt_drawlayer_brush_rasterize(float *buffer, const int width, const int 
         {
           case DT_DRAWLAYER_BRUSH_MODE_ERASE:
             out_px = old_px * inv_alpha;
+            break;
           case DT_DRAWLAYER_BRUSH_MODE_BLUR:
             out_px = blur_px * dt_simd_set1(pixel_eval.src_alpha) + old_px * inv_alpha;    
+            break;
           case DT_DRAWLAYER_BRUSH_MODE_PAINT:
           default:
             out_px = dt_load_simd(view.dab->color) * dt_simd_set1(pixel_eval.src_alpha) + old_px * inv_alpha;
+            break;
         }
 
         dt_store_simd(pixel, out_px);
