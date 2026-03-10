@@ -93,21 +93,28 @@ static gboolean _thumbtable_clone_lut(dt_thumbtable_t *dst)
   }
 
   const uint32_t count = src->collection_count;
-  dst->lut = malloc(count * sizeof(dt_thumbtable_cache_t));
-  if(!dst->lut)
+  dt_thumbtable_cache_t *cloned_lut = malloc(count * sizeof(dt_thumbtable_cache_t));
+  if(!cloned_lut)
   {
     dt_pthread_mutex_unlock(&src->lock);
     return FALSE;
   }
 
-  memcpy(dst->lut, src->lut, count * sizeof(dt_thumbtable_cache_t));
+  memcpy(cloned_lut, src->lut, count * sizeof(dt_thumbtable_cache_t));
   dt_pthread_mutex_unlock(&src->lock);
 
   for(uint32_t i = 0; i < count; i++)
-    dst->lut[i].thumb = NULL;
+    cloned_lut[i].thumb = NULL;
 
+  dt_thumbtable_cache_t *old_lut = NULL;
+  dt_pthread_mutex_lock(&dst->lock);
+  old_lut = dst->lut;
+  dst->lut = cloned_lut;
   dst->collection_count = count;
   dst->collection_inited = TRUE;
+  dt_pthread_mutex_unlock(&dst->lock);
+
+  dt_free(old_lut);
   return TRUE;
 }
 
@@ -997,6 +1004,11 @@ static void _dt_selection_changed_callback(gpointer instance, gpointer user_data
   gboolean first = TRUE;
 
   dt_pthread_mutex_lock(&table->lock);
+  if(!table->lut || !table->collection_inited || table->collection_count == 0)
+  {
+    dt_pthread_mutex_unlock(&table->lock);
+    return;
+  }
 
   for(int rowid = 0; rowid < table->collection_count; rowid++)
   {
@@ -1164,12 +1176,6 @@ static void _dt_image_info_changed_callback(gpointer instance, gpointer imgs, gp
 
 static void _dt_collection_lut(dt_thumbtable_t *table)
 {
-  if(table->lut)
-  {
-    dt_free(table->lut);
-  }
-  table->lut = NULL;
-
   // In-memory collected images don't store group_id, so we need to fetch it again from DB
   sqlite3_stmt *stmt = dt_thumbtable_info_get_collection_stmt();
 
@@ -1217,35 +1223,43 @@ static void _dt_collection_lut(dt_thumbtable_t *table)
 
   if(!collection || collection->len == 0)
   {
+    dt_thumbtable_cache_t *old_lut = NULL;
+    dt_pthread_mutex_lock(&table->lock);
+    old_lut = table->lut;
+    table->lut = NULL;
     table->collection_count = 0;
+    table->collection_inited = FALSE;
+    dt_pthread_mutex_unlock(&table->lock);
+
+    dt_free(old_lut);
     if(collection) g_array_free(collection, TRUE);
     return;
   }
-
-  table->collection_count = collection->len;
-
-  dt_pthread_mutex_lock(&table->lock);
 
   // Build the collection LUT, aka a fixed-sized array of image objects
   // where the position of an image in the collection is directly the index in the LUT/array.
   // This makes for very efficient position -> imgid/thumbnail accesses directly in C,
   // especially from GUI code. The downside is we need to fully clear and recreate the LUT
   // everytime a collection changes (meaning filters OR sorting changed).
-  table->lut = malloc(table->collection_count * sizeof(dt_thumbtable_cache_t));
+  dt_thumbtable_cache_t *new_lut = malloc(collection->len * sizeof(dt_thumbtable_cache_t));
 
-  if(!table->lut)
+  if(!new_lut)
   {
     g_array_free(collection, TRUE);
-    dt_pthread_mutex_unlock(&table->lock);
     return;
   }
 
-  memcpy(table->lut, collection->data, collection->len * sizeof(dt_thumbtable_cache_t));
+  memcpy(new_lut, collection->data, collection->len * sizeof(dt_thumbtable_cache_t));
 
+  dt_thumbtable_cache_t *old_lut = NULL;
+  dt_pthread_mutex_lock(&table->lock);
+  old_lut = table->lut;
+  table->lut = new_lut;
+  table->collection_count = collection->len;
   table->collection_inited = TRUE;
-
   dt_pthread_mutex_unlock(&table->lock);
 
+  dt_free(old_lut);
   g_array_free(collection, TRUE);
 }
 
@@ -1264,7 +1278,6 @@ static gboolean _dt_collection_get_hash(dt_thumbtable_t *table)
   {
     // Collection changed: reset everything
     table->collection_hash = hash;
-    table->collection_count = num_pics;
     table->collection_inited = FALSE;
     return TRUE;
   }
@@ -1295,10 +1308,6 @@ static void _dt_collection_changed_callback(gpointer instance, dt_collection_cha
     // If groups are collapsed, we add only the group leader image to the collection
     // It needs to be set before running _dt_collection_lut()
     table->collapse_groups = collapse_groups;
-    if(table->lut)
-    {
-      dt_free(table->lut);
-    }
     if(!_thumbtable_clone_lut(table))
       _dt_collection_lut(table);
 
