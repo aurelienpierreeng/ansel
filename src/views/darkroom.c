@@ -1499,7 +1499,6 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
 
   dt_view_image_info_update(dev->image_storage.id);
-  dt_dev_update_mouse_effect_radius(dev); // FIXME: Should be placed right after dev->roi.natural_scale is properly initialized.
 }
 
 int try_enter(dt_view_t *self)

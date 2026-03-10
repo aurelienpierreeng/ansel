@@ -751,6 +751,8 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
       dt_dev_process_all(dev);
     }
   }
+  dt_dev_update_mouse_effect_radius(dev);
+
 }
 
 void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h)
