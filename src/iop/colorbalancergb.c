@@ -524,7 +524,6 @@ static inline void opacity_masks(const float x,
   }
 }
 
-
 static inline float soft_clip(const float x, const float soft_threshold, const float hard_threshold)
 {
   // use an exponential soft clipping above soft_threshold
@@ -601,9 +600,12 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   */
   dt_colormatrix_t input_matrix;
   dt_colormatrix_t output_matrix;
+  dt_colormatrix_t input_matrix_transposed;
+  dt_colormatrix_t output_matrix_transposed;
 
   dt_colormatrix_mul(output_matrix, XYZ_D50_to_D65_CAT16, work_profile->matrix_in); // output_matrix used as temp buffer
   dt_colormatrix_mul(input_matrix, XYZ_D65_to_LMS_2006_D65, output_matrix);
+  transpose_3xSSE(input_matrix, input_matrix_transposed);
 
   // Premultiply the output matrix
 
@@ -613,6 +615,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   */
 
   dt_colormatrix_mul(output_matrix, work_profile->matrix_out, XYZ_D65_to_D50_CAT16);
+  transpose_3xSSE(output_matrix, output_matrix_transposed);
 
   const float *const restrict in = __builtin_assume_aligned(((const float *const restrict)ivoid), 64);
   float *const restrict out = __builtin_assume_aligned(((float *const restrict)ovoid), 64);
@@ -627,6 +630,24 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   const float *const restrict saturation = __builtin_assume_aligned((const float *const restrict)d->saturation, 16);
   const float *const restrict brilliance = __builtin_assume_aligned((const float *const restrict)d->brilliance, 16);
 
+  const dt_aligned_pixel_simd_t input0 = dt_colormatrix_row_to_simd(input_matrix_transposed, 0);
+  const dt_aligned_pixel_simd_t input1 = dt_colormatrix_row_to_simd(input_matrix_transposed, 1);
+  const dt_aligned_pixel_simd_t input2 = dt_colormatrix_row_to_simd(input_matrix_transposed, 2);
+  const dt_aligned_pixel_simd_t output0 = dt_colormatrix_row_to_simd(output_matrix_transposed, 0);
+  const dt_aligned_pixel_simd_t output1 = dt_colormatrix_row_to_simd(output_matrix_transposed, 1);
+  const dt_aligned_pixel_simd_t output2 = dt_colormatrix_row_to_simd(output_matrix_transposed, 2);
+
+  const dt_aligned_pixel_simd_t global_v = dt_load_simd_aligned(global);
+  const dt_aligned_pixel_simd_t highlights_v = dt_load_simd_aligned(highlights);
+  const dt_aligned_pixel_simd_t shadows_v = dt_load_simd_aligned(shadows);
+  const dt_aligned_pixel_simd_t midtones_v = dt_load_simd_aligned(midtones);
+  const dt_aligned_pixel_simd_t checker_color_1_v = dt_load_simd(d->checker_color_1);
+  const dt_aligned_pixel_simd_t checker_color_2_v = dt_load_simd(d->checker_color_2);
+
+  const dt_aligned_pixel_simd_t jz_ai0 = dt_colormatrix_row_to_simd(AI_transposed, 0);
+  const dt_aligned_pixel_simd_t jz_ai1 = dt_colormatrix_row_to_simd(AI_transposed, 1);
+  const dt_aligned_pixel_simd_t jz_ai2 = dt_colormatrix_row_to_simd(AI_transposed, 2);
+
   const gint mask_display
       = (piece->pipe->type == DT_DEV_PIXELPIPE_FULL && self->dev->gui_attached
          && g && g->mask_display);
@@ -634,122 +655,95 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   // pixel size of the checker background
   const size_t checker_1 = (mask_display) ? DT_PIXEL_APPLY_DPI(d->checker_size) : 0;
   const size_t checker_2 = 2 * checker_1;
+  const size_t npixels = (size_t)roi_out->width * roi_out->height;
 
   const float L_white = Y_to_dt_UCS_L_star(d->white_fulcrum);
-
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-  dt_omp_firstprivate(in, out, roi_in, roi_out, d, g, mask_display, input_matrix, output_matrix, gamut_LUT, \
-    global, highlights, shadows, midtones, chroma, saturation, brilliance, checker_1, checker_2, L_white) \
-    schedule(static) collapse(2)
-#endif
-  for(size_t i = 0; i < roi_out->height; i++)
-  for(size_t j = 0; j < roi_out->width; j++)
+  #ifdef _OPENMP
+  #pragma omp parallel for default(none) \
+    dt_omp_firstprivate(in, out, roi_in, roi_out, d, g, mask_display, gamut_LUT, npixels, \
+      global, highlights, shadows, midtones, chroma, saturation, brilliance, checker_1, checker_2, L_white, \
+      input0, input1, input2, output0, output1, output2, global_v, highlights_v, shadows_v, midtones_v, \
+      checker_color_1_v, checker_color_2_v, jz_ai0, jz_ai1, jz_ai2) \
+      schedule(static)
+  #endif
+  for(size_t idx = 0; idx < npixels; idx++)
   {
-    const size_t k = ((i * roi_out->width) + j) * 4;
+    const size_t k = idx * 4;
     const float *const restrict pix_in = __builtin_assume_aligned(in + k, 16);
     float *const restrict pix_out = __builtin_assume_aligned(out + k, 16);
+    const dt_aligned_pixel_simd_t pix_in_v = dt_load_simd_aligned(pix_in);
 
-    dt_aligned_pixel_t XYZ_D65 = { 0.f };
-    dt_aligned_pixel_t LMS = { 0.f };
-    dt_aligned_pixel_t RGB = { 0.f };
-    dt_aligned_pixel_t Yrg = { 0.f };
-    dt_aligned_pixel_t Ych = { 0.f };
-
-    // clip pipeline RGB
-    for_four_channels(c, aligned(pix_in:16)) RGB[c] = fmaxf(pix_in[c], 0.0f);
-
-    // go to CIE 2006 LMS D65
-    dot_product(RGB, input_matrix, LMS);
-
-    /* The previous line is equivalent to :
-      // go to CIE 1931 XYZ 2° D50
-      dot_product(RGB, RGB_to_XYZ, XYZ_D50); // matrice product
-
-      // chroma adapt D50 to D65
-      XYZ_D50_to_65(XYZ_D50, XYZ_D65); // matrice product
-
-      // go to CIE 2006 LMS
-      XYZ_to_LMS(XYZ_D65, LMS); // matrice product
-    */
-
-    // go to Filmlight Yrg
-    LMS_to_Yrg(LMS, Yrg);
-
-    // go to Ych
-    Yrg_to_Ych(Yrg, Ych);
-
-    // Sanitize input : no negative luminance
-    Ych[0] = fmaxf(Ych[0], 0.f);
-
-    // Opacities for luma masks
-    dt_aligned_pixel_t opacities;
-    dt_aligned_pixel_t opacities_comp;
-    opacity_masks(powf(Ych[0], 0.4101205819200422f), // center middle grey in 50 %
-                  d->shadows_weight, d->highlights_weight, d->midtones_weight, d->mask_grey_fulcrum, opacities, opacities_comp);
+    dt_aligned_pixel_simd_t RGB_v = dt_simd_max_zero(pix_in_v);
+    RGB_v[3] = 0.f;
+    const dt_aligned_pixel_simd_t LMS_v = dt_mat3x4_mul_vec4(RGB_v, input0, input1, input2);
+    dt_aligned_pixel_simd_t Ych_v = Yrg_to_Ych_simd(LMS_to_Yrg_simd(LMS_v));
+    Ych_v[0] = fmaxf(Ych_v[0], 0.f);
+    dt_aligned_pixel_t opacities = { 0.f };
+    dt_aligned_pixel_t opacities_comp = { 0.f };
+    opacity_masks(powf(Ych_v[0], 0.4101205819200422f), d->shadows_weight, d->highlights_weight,
+                  d->midtones_weight, d->mask_grey_fulcrum, opacities, opacities_comp);
 
     // Hue shift - do it now because we need the gamut limit at output hue right after
-    Ych[2] += d->hue_angle;
+    Ych_v[2] += d->hue_angle;
 
-    // Ensure hue ± correction is in [-PI; PI]
-    if(Ych[2] > M_PI_F) Ych[2] -= 2.f * M_PI_F;
-    else if(Ych[2] < -M_PI_F) Ych[2] += 2.f * M_PI_F;
+    // Ensure hue +- correction is in [-PI; PI]
+    if(Ych_v[2] > M_PI_F) Ych_v[2] -= 2.f * M_PI_F;
+    else if(Ych_v[2] < -M_PI_F) Ych_v[2] += 2.f * M_PI_F;
 
     // Linear chroma : distance to achromatic at constant luminance in scene-referred
     const float chroma_boost = d->chroma_global + scalar_product(opacities, chroma);
-    const float vibrance = d->vibrance * (1.0f - powf(Ych[1], fabsf(d->vibrance)));
+    const float vibrance = d->vibrance * (1.0f - powf(Ych_v[1], fabsf(d->vibrance)));
     const float chroma_factor = fmaxf(1.f + chroma_boost + vibrance, 0.f);
-    Ych[1] *= chroma_factor;
+    Ych_v[1] *= chroma_factor;
 
     // clip chroma at constant hue and Y if needed
-    gamut_check_Yrg(Ych);
+    Ych_v = gamut_check_Yrg_simd(Ych_v);
 
     // go to Yrg for real
-    Ych_to_Yrg(Ych, Yrg);
+    dt_aligned_pixel_simd_t Yrg_v = Ych_to_Yrg_simd(Ych_v);
 
     // Go to LMS
-    Yrg_to_LMS(Yrg, LMS);
+    dt_aligned_pixel_simd_t LMS_work_v = Yrg_to_LMS_simd(Yrg_v);
 
     // Go to Filmlight RGB
-    LMS_to_gradingRGB(LMS, RGB);
+    RGB_v = LMS_to_gradingRGB_simd(LMS_work_v);
 
     // Color balance
-    for_four_channels(c, aligned(RGB, opacities, opacities_comp, global, shadows, midtones, highlights:16))
-    {
-      // global : offset
-      RGB[c] += global[c];
+    RGB_v += global_v;
+    const dt_aligned_pixel_simd_t slopes_v
+        = opacities_comp[2] * (opacities_comp[0] + opacities[0] * shadows_v) + opacities[2] * highlights_v;
+    RGB_v *= slopes_v;
+    RGB_v[3] = 0.f;
 
-      //  highlights, shadows : 2 slopes with masking
-      RGB[c] *= opacities_comp[2] * (opacities_comp[0] + opacities[0] * shadows[c]) + opacities[2] * highlights[c];
-      // factorization of : (RGB[c] * (1.f - alpha) + RGB[c] * d->shadows[c] * alpha) * (1.f - beta)  + RGB[c] * d->highlights[c] * beta;
+    //  highlights, shadows : 2 slopes with masking
+    // factorization of : (RGB[c] * (1.f - alpha) + RGB[c] * d->shadows[c] * alpha) * (1.f - beta)  + RGB[c] * d->highlights[c] * beta;
+    const dt_aligned_pixel_simd_t RGB_abs_v = dt_simd_abs(RGB_v) / d->white_fulcrum;
 
-      // midtones : power with sign preservation
-      const float sign = (RGB[c] < 0.f) ? -1.f : 1.f;
-      RGB[c] = sign * powf(fabsf(RGB[c]) / d->white_fulcrum, midtones[c]) * d->white_fulcrum;
-    }
+    // midtones : power with sign preservation
+    RGB_v = dt_simd_copysign(dt_simd_pow(RGB_abs_v, midtones_v) * d->white_fulcrum, RGB_v);
+    RGB_v[3] = 0.f;
 
     // for the non-linear ops we need to go in Yrg again because RGB doesn't preserve color
-    gradingRGB_to_LMS(RGB, LMS);
-    LMS_to_Yrg(LMS, Yrg);
+    LMS_work_v = gradingRGB_to_LMS_simd(RGB_v);
+    Yrg_v = LMS_to_Yrg_simd(LMS_work_v);
 
     // Y midtones power (gamma)
-    Yrg[0] = powf(fmaxf(Yrg[0] / d->white_fulcrum, 0.f), d->midtones_Y) * d->white_fulcrum;
+    Yrg_v[0] = powf(fmaxf(Yrg_v[0] / d->white_fulcrum, 0.f), d->midtones_Y) * d->white_fulcrum;
 
     // Y fulcrumed contrast
-    Yrg[0] = d->grey_fulcrum * powf(Yrg[0] / d->grey_fulcrum, d->contrast);
+    Yrg_v[0] = d->grey_fulcrum * powf(Yrg_v[0] / d->grey_fulcrum, d->contrast);
 
-    Yrg_to_LMS(Yrg, LMS);
-    LMS_to_XYZ(LMS, XYZ_D65);
+    LMS_work_v = Yrg_to_LMS_simd(Yrg_v);
+    dt_aligned_pixel_simd_t XYZ_D65_v = LMS_to_XYZ_simd(LMS_work_v);
 
-    // Perceptual color adjustments
     if(d->saturation_formula == DT_COLORBALANCE_SATURATION_JZAZBZ)
     {
-      dt_aligned_pixel_t Jab = { 0.f };
-      dt_XYZ_2_JzAzBz(XYZ_D65, Jab);
+      // Perceptual color adjustments
+      dt_aligned_pixel_simd_t Jab_v = dt_XYZ_2_JzAzBz_simd(XYZ_D65_v);
 
       // Convert to JCh
-      float JC[2] = { Jab[0], dt_fast_hypotf(Jab[1], Jab[2]) };   // brightness/chroma vector
-      const float h = atan2f(Jab[2], Jab[1]);  // hue : (a, b) angle
+      float JC[2] = { Jab_v[0], dt_fast_hypotf(Jab_v[1], Jab_v[2]) };   // brightness/chroma vector
+      const float h = atan2f(Jab_v[2], Jab_v[1]);  // hue : (a, b) angle
 
       // Project JC onto S, the saturation eigenvector, with orthogonal vector O.
       // Note : O should be = (C * cosf(T) - J * sinf(T)) = 0 since S is the eigenvector,
@@ -758,13 +752,13 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       const float sin_T = sinf(T);
       const float cos_T = cosf(T);
       const float DT_ALIGNED_PIXEL M_rot_dir[2][2] = { {  cos_T,  sin_T },
-                                                      { -sin_T,  cos_T } };
+                                                       { -sin_T,  cos_T } };
       const float DT_ALIGNED_PIXEL M_rot_inv[2][2] = { {  cos_T, -sin_T },
-                                                      {  sin_T,  cos_T } };
+                                                       {  sin_T,  cos_T } };
       float SO[2];
 
       // brilliance & Saturation : mix of chroma and luminance
-      const float boosts[2] = { 1.f + d->brilliance_global + scalar_product(opacities, brilliance),     // move in S direction
+      const float boosts[2] = { 1.f + d->brilliance_global + scalar_product(opacities, brilliance), // move in S direction
                                 d->saturation_global + scalar_product(opacities, saturation) }; // move in O direction
 
       SO[0] = JC[0] * M_rot_dir[0][0] + JC[1] * M_rot_dir[0][1];
@@ -804,43 +798,37 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
               {  1.0f, -0.0960192420263190f, -0.8118918960560390f, 0.0f } };
 
       // Do a test conversion to L'M'S'
-      const dt_aligned_pixel_t IzAzBz = { Iz, JC[1] * cos_H, JC[1] * sin_H, 0.f };
-      dot_product(IzAzBz, AI, LMS);
+      const dt_aligned_pixel_simd_t IzAzBz_v = { Iz, JC[1] * cos_H, JC[1] * sin_H, 0.f };
+      const dt_aligned_pixel_simd_t LMS_test_v = dt_mat3x4_mul_vec4(IzAzBz_v, jz_ai0, jz_ai1, jz_ai2);
 
       // Clip chroma
       float max_C = JC[1];
-      if(LMS[0] < 0.f)
+      if(LMS_test_v[0] < 0.f)
         max_C = fmin(-Iz / (AI[0][1] * cos_H + AI[0][2] * sin_H), max_C);
 
-      if(LMS[1] < 0.f)
+      if(LMS_test_v[1] < 0.f)
         max_C = fmin(-Iz / (AI[1][1] * cos_H + AI[1][2] * sin_H), max_C);
 
-      if(LMS[2] < 0.f)
+      if(LMS_test_v[2] < 0.f)
         max_C = fmin(-Iz / (AI[2][1] * cos_H + AI[2][2] * sin_H), max_C);
 
       // Project back to JzAzBz for real
-      Jab[0] = JC[0];
-      Jab[1] = max_C * cos_H;
-      Jab[2] = max_C * sin_H;
-
-      dt_JzAzBz_2_XYZ(Jab, XYZ_D65);
+      const dt_aligned_pixel_simd_t Jab_out_v = { JC[0], max_C * cos_H, max_C * sin_H, 0.f };
+      XYZ_D65_v = dt_JzAzBz_2_XYZ_simd(Jab_out_v);
     }
     else
     {
-      dt_aligned_pixel_t xyY, JCH, HCB;
-      dt_XYZ_to_xyY(XYZ_D65, xyY);
-      xyY_to_dt_UCS_JCH(xyY, L_white, JCH);
-      dt_UCS_JCH_to_HCB(JCH, HCB);
+      dt_aligned_pixel_simd_t xyY_v = dt_XYZ_to_xyY_simd(XYZ_D65_v);
+      dt_aligned_pixel_simd_t JCH_v = xyY_to_dt_UCS_JCH_simd(xyY_v, L_white);
+      dt_aligned_pixel_simd_t HCB_v = dt_UCS_JCH_to_HCB_simd(JCH_v);
 
-      const float radius = hypotf(HCB[1], HCB[2]);
-      const float sin_T = (radius > 0.f) ? HCB[1] / radius : 0.f;
-      const float cos_T = (radius > 0.f) ? HCB[2] / radius : 0.f;
+      const float radius = hypotf(HCB_v[1], HCB_v[2]);
+      const float sin_T = (radius > 0.f) ? HCB_v[1] / radius : 0.f;
+      const float cos_T = (radius > 0.f) ? HCB_v[2] / radius : 0.f;
       const float DT_ALIGNED_PIXEL M_rot_inv[2][2] = { { cos_T,  sin_T }, { -sin_T, cos_T } };
-      // This would be the full matrice of direct rotation if we didn't need only its last row
-      //const float DT_ALIGNED_PIXEL M_rot_dir[2][2] = { { cos_T, -sin_T }, {  sin_T, cos_T } };
 
-      float P = HCB[1];
-      float W = sin_T * HCB[1] + cos_T * HCB[2];
+      float P = HCB_v[1];
+      float W = sin_T * HCB_v[1] + cos_T * HCB_v[2];
 
       float a = fmaxf(1.f + d->saturation_global + scalar_product(opacities, saturation), 0.f);
       const float b = fmaxf(1.f + d->brilliance_global + scalar_product(opacities, brilliance), 0.f);
@@ -851,61 +839,52 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       const float P_prime = (a - 1.f) * P;
       const float W_prime = sqrtf(sqf(P) * (1.f - sqf(a)) + sqf(W)) * b;
 
-      HCB[1] = fmaxf(M_rot_inv[0][0] * P_prime + M_rot_inv[0][1] * W_prime, 0.f);
-      HCB[2] = fmaxf(M_rot_inv[1][0] * P_prime + M_rot_inv[1][1] * W_prime, 0.f);
+      HCB_v[1] = fmaxf(M_rot_inv[0][0] * P_prime + M_rot_inv[0][1] * W_prime, 0.f);
+      HCB_v[2] = fmaxf(M_rot_inv[1][0] * P_prime + M_rot_inv[1][1] * W_prime, 0.f);
 
-      dt_UCS_HCB_to_JCH(HCB, JCH);
-
-      // Gamut mapping
-      const float max_colorfulness = lookup_gamut(gamut_LUT, JCH[2]); // WARNING : this is M²
-      const float max_chroma = 15.932993652962535f * powf(JCH[0] * L_white, 0.6523997524738018f) * powf(max_colorfulness, 0.6007557017508491f) / L_white;
-      const dt_aligned_pixel_t JCH_gamut_boundary = { JCH[0], max_chroma, JCH[2], 0.f };
-      dt_aligned_pixel_t HSB_gamut_boundary;
-      dt_UCS_JCH_to_HSB(JCH_gamut_boundary, HSB_gamut_boundary);
-
-      // Clip saturation at constant brightness
-      dt_aligned_pixel_t HSB = { HCB[0], (HCB[2] > 0.f) ? HCB[1] / HCB[2] : 0.f, HCB[2], 0.f };
-      HSB[1] = soft_clip(HSB[1], 0.8f * HSB_gamut_boundary[1], HSB_gamut_boundary[1]);
-
-      dt_UCS_HSB_to_JCH(HSB, JCH);
-      dt_UCS_JCH_to_xyY(JCH, L_white, xyY);
-      dt_xyY_to_XYZ(xyY, XYZ_D65);
+      JCH_v = dt_UCS_HCB_to_JCH_simd(HCB_v);
+      const float max_colorfulness = lookup_gamut(gamut_LUT, JCH_v[2]);
+      const float max_chroma = 15.932993652962535f * powf(JCH_v[0] * L_white, 0.6523997524738018f)
+                               * powf(max_colorfulness, 0.6007557017508491f) / L_white;
+      const dt_aligned_pixel_simd_t JCH_gamut_boundary_v = { JCH_v[0], max_chroma, JCH_v[2], 0.f };
+      const dt_aligned_pixel_simd_t HSB_gamut_boundary_v = dt_UCS_JCH_to_HSB_simd(JCH_gamut_boundary_v);
+      dt_aligned_pixel_simd_t HSB_v = { HCB_v[0], (HCB_v[2] > 0.f) ? HCB_v[1] / HCB_v[2] : 0.f, HCB_v[2], 0.f };
+      HSB_v[1] = soft_clip(HSB_v[1], 0.8f * HSB_gamut_boundary_v[1], HSB_gamut_boundary_v[1]);
+      JCH_v = dt_UCS_HSB_to_JCH_simd(HSB_v);
+      xyY_v = dt_UCS_JCH_to_xyY_simd(JCH_v, L_white);
+      XYZ_D65_v = dt_xyY_to_XYZ_simd(xyY_v);
     }
 
-    // Project back to D50 pipeline RGB
-    dot_product(XYZ_D65, output_matrix, pix_out);
-
-    /* The previous line is equivalent to :
-      XYZ_D65_to_50(XYZ_D65, XYZ_D50);           // matrix product
-      dot_product(XYZ_D50, XYZ_to_RGB, pix_out); // matrix product
-    */
-
+    dt_aligned_pixel_simd_t pix_out_v = dt_mat3x4_mul_vec4(XYZ_D65_v, output0, output1, output2);
     if(mask_display)
     {
-      // draw checkerboard
-      dt_aligned_pixel_t color;
+      const size_t i = idx / roi_out->width;
+      const size_t j = idx - i * roi_out->width;
+      
+      dt_aligned_pixel_simd_t color_v;
       if(i % checker_1 < i % checker_2)
       {
-        if(j % checker_1 < j % checker_2) for_four_channels(c) color[c] = d->checker_color_2[c];
-        else for_four_channels(c) color[c] = d->checker_color_1[c];
+        if(j % checker_1 < j % checker_2) color_v = checker_color_2_v;
+        else color_v = checker_color_1_v;
       }
       else
       {
-        if(j % checker_1 < j % checker_2) for_four_channels(c) color[c] = d->checker_color_1[c];
-        else for_four_channels(c) color[c] = d->checker_color_2[c];
+        if(j % checker_1 < j % checker_2) color_v = checker_color_1_v;
+        else color_v = checker_color_2_v;
       }
 
       float opacity = opacities[g->mask_type];
       const float opacity_comp = 1.0f - opacity;
 
-      for_four_channels(c, aligned(pix_out, color:16)) pix_out[c] = opacity_comp * color[c] + opacity * fmaxf(pix_out[c], 0.f);
-      pix_out[3] = 1.0f; // alpha is opaque, we need to preview it
+      pix_out_v = opacity_comp * color_v + opacity * dt_simd_max_zero(pix_out_v);
+      pix_out_v[3] = 1.0f;
     }
     else
     {
-      for_four_channels(c, aligned(pix_out:16)) pix_out[c] = fmaxf(pix_out[c], 0.f);
-      pix_out[3] = pix_in[3]; // alpha copy
+      pix_out_v = dt_simd_max_zero(pix_out_v);
+      pix_out_v[3] = pix_in_v[3];
     }
+    dt_store_simd_aligned(pix_out, pix_out_v);
   }
 
   return 0;

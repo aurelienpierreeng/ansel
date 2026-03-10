@@ -471,6 +471,24 @@ dt_simd_max_zero(const dt_aligned_pixel_simd_t value)
 }
 
 static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+dt_simd_copysign(const dt_aligned_pixel_simd_t magnitude, const dt_aligned_pixel_simd_t sign)
+{
+  dt_aligned_pixel_simd_t out = magnitude;
+  for(int c = 0; c < 4; c++)
+    out[c] = copysignf(magnitude[c], sign[c]);
+  return out;
+}
+
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
+dt_simd_pow(const dt_aligned_pixel_simd_t base, const dt_aligned_pixel_simd_t exponent)
+{
+  dt_aligned_pixel_simd_t out = base;
+  for(int c = 0; c < 4; c++)
+    out[c] = powf(base[c], exponent[c]);
+  return out;
+}
+
+static inline __attribute__((always_inline)) dt_aligned_pixel_simd_t
 dt_load_simd(const float *const pixel)
 {
   dt_aligned_pixel_simd_t out;
