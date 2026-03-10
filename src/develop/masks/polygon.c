@@ -2256,7 +2256,7 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
 
     // Draw the current node's border handle, if needed
     if(mask_gui->node_selected && selected_node >= 0 && selected_node < node_count
-       && gui_points->border && gui_points->border_count > selected_node * 3)
+       && gui_points->border && gui_points->border_count > selected_node * 3 && !mask_gui->creation)
     {
       const int edited = selected_node;
       const gboolean selected = (mask_gui->node_hovered == edited
