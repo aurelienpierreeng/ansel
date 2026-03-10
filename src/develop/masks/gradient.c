@@ -713,8 +713,7 @@ static int _gradient_events_mouse_moved(struct dt_iop_module_t *module, double x
 
     return 1;
   }
-  if(gui->edit_mode != DT_MASKS_EDIT_FULL) return 0;
-  return 1;
+  return 0;
 }
 
 // check if (x,y) lies within reasonable limits relative to image frame

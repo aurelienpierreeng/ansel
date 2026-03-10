@@ -110,6 +110,13 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
   const float cursor_y = mask_gui->pos[1];
   const int selected_node = dt_masks_gui_selected_node_index(mask_gui);
 
+  // Keep track of current state, in case we need to refresh total deselection.
+  const gboolean need_refresh_anyway = dt_masks_gui_was_anything_selected(mask_gui);
+
+  mask_gui->form_selected = FALSE;
+  mask_gui->border_selected = FALSE;
+  mask_gui->source_selected = FALSE;
+
   mask_gui->node_hovered = -1;
   mask_gui->handle_hovered = -1;
   mask_gui->seg_hovered = -1;
@@ -252,7 +259,8 @@ int dt_masks_find_closest_handle_common(dt_masks_form_t *mask_form,
     return 1;
   }
 
-  return 0;
+  // Deselection needs a refresh at least once.
+  return need_refresh_anyway;
 }
 
 /**
@@ -589,11 +597,12 @@ static gboolean _dt_masks_events_should_update_hover_on_move(dt_masks_form_gui_t
   return dt_masks_gui_should_hit_test(mask_gui);
 }
 
-static void _dt_masks_events_update_hover(dt_masks_form_t *dispatch_form, dt_masks_form_gui_t *mask_gui,
+static int _dt_masks_events_update_hover(dt_masks_form_t *dispatch_form, dt_masks_form_gui_t *mask_gui,
                                           const int form_index)
 {
-  if(!dispatch_form || !mask_gui || !dispatch_form->functions || !dispatch_form->functions->update_hover) return;
-  dispatch_form->functions->update_hover(dispatch_form, mask_gui, form_index);
+  if(!dispatch_form || !mask_gui || !dispatch_form->functions || !dispatch_form->functions->update_hover)
+    return 0;
+  return dispatch_form->functions->update_hover(dispatch_form, mask_gui, form_index);
 }
 
 static gboolean _dt_masks_events_cursor_over_form(const dt_masks_form_t *dispatch_form,
@@ -2121,9 +2130,9 @@ int dt_masks_events_mouse_moved(struct dt_iop_module_t *module, double x, double
         = _dt_masks_events_get_dispatch_form(mask_form, mask_gui, &group_entry, &parent_id, &form_index);
 
     if(_dt_masks_events_should_update_hover_on_move(mask_gui))
-      _dt_masks_events_update_hover(dispatch_form, mask_gui, form_index);
+      result = _dt_masks_events_update_hover(dispatch_form, mask_gui, form_index);
 
-    if(dispatch_form && dispatch_form->functions && dispatch_form->functions->mouse_moved)
+    if(!result && dispatch_form && dispatch_form->functions && dispatch_form->functions->mouse_moved)
       result = dispatch_form->functions->mouse_moved(module, x, y, pressure, which,
                                                      dispatch_form, parent_id, mask_gui, form_index);
   }

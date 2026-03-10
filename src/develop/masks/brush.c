@@ -2128,8 +2128,7 @@ static int _brush_events_mouse_moved(struct dt_iop_module_t *module, double widg
     dt_masks_gui_form_create(mask_form, mask_gui, index, module);
     return 1;
   }
-  if(mask_gui->edit_mode != DT_MASKS_EDIT_FULL) return 0;
-  return 1;
+  return 0;
 }
 
 static void _brush_draw_shape(cairo_t *cr, const float *points, const int points_count, const int node_nb, const gboolean border, const gboolean source)
@@ -2523,7 +2522,7 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
                              gui_points->points[n * 6 + 4], gui_points->points[n * 6 + 5], &handle[0], &handle[1],
                              TRUE);
       const float pt[2] = { gui_points->points[n * 6 + 2], gui_points->points[n * 6 + 3] };
-      const gboolean selected = (mask_gui->node_hovered == n || selected_handle == n);
+      const gboolean selected = (mask_gui->node_hovered == n || selected_handle == n || (mask_gui->handle_hovered == n));
       dt_draw_handle(cr, pt, zoom_scale, handle, selected, FALSE);
     }
 
@@ -2544,7 +2543,8 @@ static void _brush_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_fo
     {
       const int edited = selected_node;
       const gboolean selected = (mask_gui->node_hovered == edited
-                              || selected_handle_border == edited);
+                              || selected_handle_border == edited
+                              || mask_gui->handle_border_hovered == edited);
       float handle[2] = {NAN, NAN};
       // Show the border handle on the opposite side from the curve handle
       if(_brush_get_border_handle_mirrored(gui_points, node_count, edited, &handle[0], &handle[1]))

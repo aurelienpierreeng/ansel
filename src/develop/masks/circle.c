@@ -430,8 +430,7 @@ static int _circle_events_mouse_moved(struct dt_iop_module_t *module, double x, 
 
     return 1;
   }
-  if(gui->edit_mode != DT_MASKS_EDIT_FULL) return 0;
-  return 1;
+  return 0;
 }
 
 static void _circle_draw_shape(cairo_t *cr, const float *points, const int points_count, const int coord_nb, const gboolean border, const gboolean source)

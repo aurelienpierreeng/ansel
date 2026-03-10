@@ -2124,8 +2124,7 @@ static int _polygon_events_mouse_moved(struct dt_iop_module_t *module, double x,
     dt_masks_gui_form_create(mask_form, mask_gui, form_index, module);
     return 1;
   }
-  if(mask_gui->edit_mode != DT_MASKS_EDIT_FULL) return 0;
-  return 1;
+  return 0;
 }
 
 /**
@@ -2227,7 +2226,8 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
                                &handle[0], &handle[1], gui_points->clockwise);
       const float pt[2] = { gui_points->points[node_index * 6 + 2], gui_points->points[node_index * 6 + 3] };
       const gboolean selected = (mask_gui->node_hovered == node_index
-                                 || (selected_handle == node_index));
+                                 || (selected_handle == node_index)
+                                 || (mask_gui->handle_hovered == node_index));
       dt_draw_handle(cr, pt, zoom_scale, handle, selected, FALSE);
     }
   }
@@ -2260,7 +2260,8 @@ static void _polygon_events_post_expose(cairo_t *cr, float zoom_scale, dt_masks_
     {
       const int edited = selected_node;
       const gboolean selected = (mask_gui->node_hovered == edited
-                                 || (selected_handle_border == edited));
+                                 || (selected_handle_border == edited)
+                                 || mask_gui->handle_border_hovered == edited);
       const int curr_node = edited * 6;  
       const float handle[2] = { gui_points->border[curr_node], gui_points->border[curr_node + 1] };
 

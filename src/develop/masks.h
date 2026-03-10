@@ -515,6 +515,12 @@ void dt_masks_gui_set_dragging(dt_masks_form_gui_t *gui);
 void dt_masks_gui_reset_dragging(dt_masks_form_gui_t *gui);
 gboolean dt_masks_gui_is_dragging(const dt_masks_form_gui_t *gui);
 
+// Test wether the form, the border, the source or the pivot is selected 
+static inline gboolean dt_masks_gui_was_anything_selected(const dt_masks_form_gui_t *gui)
+{
+  return gui && (gui->form_selected || gui->border_selected || gui->source_selected || gui->pivot_selected);
+}
+
 static inline int dt_masks_gui_selected_node_index(const dt_masks_form_gui_t *gui)
 {
   return (gui && gui->node_selected) ? gui->node_selected_idx : -1;
@@ -532,7 +538,7 @@ static inline int dt_masks_gui_selected_handle_border_index(const dt_masks_form_
 
 static inline int dt_masks_gui_selected_segment_index(const dt_masks_form_gui_t *gui)
 {
-  return (gui && gui->seg_selected) ? gui->seg_hovered : -1;
+  return (gui) ? gui->seg_hovered : -1;
 }
 
 static inline gboolean dt_masks_gui_change_affects_selected_node_or_all(const dt_masks_form_gui_t *gui,
