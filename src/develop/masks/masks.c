@@ -536,11 +536,20 @@ static gboolean _dt_masks_events_group_update_selection(dt_masks_form_t *group_f
   const float radius = DT_GUI_MOUSE_EFFECT_RADIUS_SCALED;
   const float cursor_x = mask_gui->pos[0];
   const float cursor_y = mask_gui->pos[1];
+  const int prev_group_selected = mask_gui->group_selected;
+  const gboolean prev_border_selected = mask_gui->border_selected;
+  int locked_formid = -1;
 
   if(dt_masks_is_anything_hovered(mask_gui))
     return TRUE;
 
-  if(mask_gui->group_selected >= 0)
+  if(prev_border_selected && prev_group_selected >= 0)
+  {
+    dt_masks_form_group_t *selected_group_entry = dt_masks_form_get_selected_group_live(group_form, mask_gui);
+    if(selected_group_entry) locked_formid = selected_group_entry->formid;
+  }
+
+  if(prev_group_selected >= 0)
     dt_masks_soft_reset_form_gui(mask_gui);
 
   dt_masks_form_t *selected_form = NULL;
@@ -552,6 +561,7 @@ static gboolean _dt_masks_events_group_update_selection(dt_masks_form_t *group_f
   {
     dt_masks_form_group_t *group_entry = (dt_masks_form_group_t *)group_node->data;
     if(!group_entry) continue;
+    if(locked_formid >= 0 && group_entry->formid != locked_formid) continue;
 
     dt_masks_form_t *form = dt_masks_get_from_id(dev, group_entry->formid);
     if(!form) continue;
@@ -564,6 +574,10 @@ static gboolean _dt_masks_events_group_update_selection(dt_masks_form_t *group_f
     if(form->functions && form->functions->get_distance)
       form->functions->get_distance(cursor_x, cursor_y, radius, mask_gui, index, g_list_length(form->points),
                                     &inside, &inside_border, &near, &inside_source, &dist);
+
+    const gboolean is_selected_form = (prev_group_selected == index);
+    if(!is_selected_form && (inside_border || near >= 0))
+      continue;
 
     if(inside || inside_border || near >= 0 || inside_source)
     {
