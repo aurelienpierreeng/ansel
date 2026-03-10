@@ -87,9 +87,12 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
                                                         GHashTable *table);
 static void _cache_entry_clmem_flush_device(dt_pixel_cache_entry_t *entry, const int devid);
 static gboolean _cache_entry_materialize_host_data_locked(dt_pixel_cache_entry_t *entry, int preferred_devid);
+
+#ifdef HAVE_OPENCL
 static void _cache_entry_resync_host_pinned_images_locked(dt_pixel_cache_entry_t *entry, void *host_ptr,
                                                           int devid);
 static void _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid);
+#endif
 
 static dt_pixel_cache_entry_t *_cache_entry_for_host_ptr_locked(dt_dev_pixelpipe_cache_t *cache, void *host_ptr)
 {
@@ -319,13 +322,6 @@ static void _cache_entry_resync_host_pinned_images_locked(dt_pixel_cache_entry_t
   }
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
 }
-#else
-static void _cache_entry_resync_host_pinned_images_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid)
-{
-  (void)entry;
-  (void)host_ptr;
-  (void)devid;
-}
 #endif
 
 #ifdef HAVE_OPENCL
@@ -350,13 +346,6 @@ static void _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *
     l = next;
   }
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
-}
-#else
-static void _cache_entry_clmem_flush_host_pinned_locked(dt_pixel_cache_entry_t *entry, void *host_ptr, int devid)
-{
-  (void)entry;
-  (void)host_ptr;
-  (void)devid;
 }
 #endif
 
@@ -1235,6 +1224,7 @@ static dt_pixel_cache_entry_t *_cache_lookup_existing(dt_dev_pixelpipe_cache_t *
   return cache_entry;
 }
 
+#ifdef HAVE_OPENCL
 static gboolean _cache_try_restore_device_payload(dt_pixel_cache_entry_t *cache_entry,
                                                   const dt_iop_roi_t *roi, const size_t bpp,
                                                   const int preferred_devid, void **cl_mem_output)
@@ -1247,6 +1237,14 @@ static gboolean _cache_try_restore_device_payload(dt_pixel_cache_entry_t *cache_
                                             CL_MEM_READ_WRITE, NULL);
   return *cl_mem_output != NULL;
 }
+#else
+static gboolean _cache_try_restore_device_payload(dt_pixel_cache_entry_t *cache_entry,
+                                                  const dt_iop_roi_t *roi, const size_t bpp,
+                                                  const int preferred_devid, void **cl_mem_output)
+{
+  return FALSE;
+}
+#endif
 
 static gboolean _cache_try_restore_host_payload(dt_dev_pixelpipe_cache_t *cache, void **data,
                                                 dt_pixel_cache_entry_t *cache_entry,
