@@ -297,7 +297,6 @@ static inline float _sample_alpha_noise_raw(const dt_drawlayer_brush_dab_t *dab,
                                             const dt_drawlayer_brush_runtime_view_t *view,
                                             const int pixel_x, const int pixel_y)
 {
-  (void)dab;
   float alpha_noise = 1.0f;
   if(view && view->have_sprinkles)
   {
@@ -387,24 +386,6 @@ static inline float _stroke_flow_alpha(const dt_drawlayer_brush_dab_t *dab, cons
 }
 
 /**
- * @brief Resolve stroke-mask pointer/state for one pixel.
- * @post `stroke_alpha==NULL` when stroke mask is unavailable or out of range.
- */
-static inline void _lookup_stroke_alpha(const dt_drawlayer_brush_runtime_view_t *view, float *stroke_mask,
-                                        const int stroke_mask_width, const int stroke_mask_height,
-                                        const int x, const int y, float **stroke_alpha, float *stroke_old_alpha)
-{
-  /* Stroke-local alpha mask tracks overlap for the current stroke only. */
-  if(stroke_alpha) *stroke_alpha = NULL;
-  if(stroke_old_alpha) *stroke_old_alpha = 0.0f;
-  if(!view || !view->use_stroke_mask || !stroke_mask || !stroke_alpha || !stroke_old_alpha) return;
-  if(x < 0 || y < 0 || x >= stroke_mask_width || y >= stroke_mask_height) return;
-
-  *stroke_alpha = stroke_mask + (size_t)y * stroke_mask_width + x;
-  *stroke_old_alpha = _clamp01(**stroke_alpha);
-}
-
-/**
  * @brief Compute full analytic per-pixel brush context.
  * @return TRUE when pixel contributes non-zero alpha.
  */
@@ -432,8 +413,14 @@ static gboolean _prepare_analytic_pixel_context(const dt_drawlayer_brush_runtime
   pixel_eval->brush_alpha = _clamp01(dab->opacity * pixel_eval->profile * alpha_noise);
   if(pixel_eval->brush_alpha <= 0.0f) return FALSE;
 
-  _lookup_stroke_alpha(view, stroke_mask, stroke_mask_width, stroke_mask_height, x, y,
-                       &pixel_eval->stroke_alpha, &pixel_eval->stroke_old_alpha);
+  // Flow caps the stroke-wise opacity to the user-specified value
+  // For this reason, we need to resolve first the stroke over transparent content,
+  // then slap the transparent layer over the background. Aka temporary buffer.
+  if(view->use_stroke_mask)
+  {
+    pixel_eval->stroke_alpha = stroke_mask + (size_t)y * stroke_mask_width + x;
+    pixel_eval->stroke_old_alpha = _clamp01(*pixel_eval->stroke_alpha);
+  }
 
   pixel_eval->src_alpha
       = _stroke_flow_alpha(dab, dab->opacity, dab->flow, sample_opacity_scale,
@@ -475,37 +462,6 @@ static gboolean _prepare_blur_context(dt_aligned_pixel_simd_t *blur_px, const fl
   return TRUE;
 }
 
-/**
- * @brief Apply PAINT/ERASE/BLUR blending for one pixel.
- * @pre `src_alpha` is already resolved by flow/profile logic.
- */
-static dt_aligned_pixel_simd_t _apply_non_smudge_stroke_mode(const dt_drawlayer_brush_dab_t *dab,
-                                                             const float src_alpha,
-                                                             const dt_aligned_pixel_simd_t old_px,
-                                                             const dt_aligned_pixel_simd_t blur_px)
-{
-  switch(dab->mode)
-  {
-    case DT_DRAWLAYER_BRUSH_MODE_ERASE:
-    {
-      const float inv_alpha = 1.0f - src_alpha;
-      return old_px * dt_simd_set1(inv_alpha);
-    }
-    case DT_DRAWLAYER_BRUSH_MODE_BLUR:
-    {
-      const float inv_alpha = 1.0f - src_alpha;
-      return blur_px * dt_simd_set1(src_alpha) + old_px * dt_simd_set1(inv_alpha);
-    }
-    case DT_DRAWLAYER_BRUSH_MODE_PAINT:
-    case DT_DRAWLAYER_BRUSH_MODE_SMUDGE:
-    default:
-    {
-      const float inv_alpha = 1.0f - src_alpha;
-      const dt_aligned_pixel_simd_t src_px = dt_load_simd(dab->color) * dt_simd_set1(src_alpha);
-      return src_px + old_px * dt_simd_set1(inv_alpha);
-    }
-  }
-}
 
 /** @brief Stable signed pseudo-random helper in [-1,1]. */
 static inline float _smudge_hash_signed(const int x, const int y, const int lane)
@@ -772,8 +728,19 @@ gboolean dt_drawlayer_brush_rasterize(float *buffer, const int width, const int 
                                             x, y, old_alpha, &pixel_eval))
           continue;
 
-        const dt_aligned_pixel_simd_t out_px
-            = _apply_non_smudge_stroke_mode(view.dab, pixel_eval.src_alpha, old_px, blur_px);
+        dt_aligned_pixel_simd_t out_px;
+        const dt_aligned_pixel_simd_t inv_alpha = dt_simd_set1(1.0f - pixel_eval.src_alpha);
+        switch(view.dab->mode)
+        {
+          case DT_DRAWLAYER_BRUSH_MODE_ERASE:
+            out_px = old_px * inv_alpha;
+          case DT_DRAWLAYER_BRUSH_MODE_BLUR:
+            out_px = blur_px * dt_simd_set1(pixel_eval.src_alpha) + old_px * inv_alpha;    
+          case DT_DRAWLAYER_BRUSH_MODE_PAINT:
+          default:
+            out_px = dt_load_simd(view.dab->color) * dt_simd_set1(pixel_eval.src_alpha) + old_px * inv_alpha;
+        }
+
         dt_store_simd(pixel, out_px);
 
         if(pixel_eval.stroke_alpha)
