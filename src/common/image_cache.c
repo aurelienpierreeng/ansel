@@ -222,42 +222,8 @@ void dt_image_from_stmt(dt_image_t *img, sqlite3_stmt *stmt)
   
   dt_datetime_gtimespan_to_local(img->datetime, sizeof(img->datetime), img->exif_datetime_taken, FALSE, FALSE);
 
-  // buffer size? colorspace?
-  if(img->flags & DT_IMAGE_LDR)
-  {
-    img->buf_dsc.channels = 4;
-    img->buf_dsc.datatype = TYPE_FLOAT;
-    img->buf_dsc.cst = IOP_CS_RGB;
-  }
-  else if(img->flags & DT_IMAGE_HDR)
-  {
-    if(img->flags & DT_IMAGE_RAW)
-    {
-      img->buf_dsc.channels = 1;
-      img->buf_dsc.datatype = TYPE_FLOAT;
-      img->buf_dsc.cst = IOP_CS_RAW;
-    }
-    else
-    {
-      img->buf_dsc.channels = 4;
-      img->buf_dsc.datatype = TYPE_FLOAT;
-      img->buf_dsc.cst = IOP_CS_RGB;
-    }
-  }
-  else if(img->flags & DT_IMAGE_S_RAW)
-  {
-    // sraw: already RGB-like data
-    img->buf_dsc.channels = 4;
-    img->buf_dsc.datatype = TYPE_FLOAT;
-    img->buf_dsc.cst = IOP_CS_RGB;
-  }
-  else
-  {
-    // raw
-    img->buf_dsc.channels = 1;
-    img->buf_dsc.datatype = TYPE_UINT16;
-    img->buf_dsc.cst = IOP_CS_RAW;
-  }
+  // img->buf_dsc are written by imageio drivers : never (re)set them from DB,
+  // they are not saved anyway.
 
   img->has_localcopy = (img->flags & DT_IMAGE_LOCAL_COPY);
   img->has_audio = (img->flags & DT_IMAGE_HAS_WAV);
