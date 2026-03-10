@@ -136,13 +136,36 @@ void dt_control_allow_change_cursor()
   darktable.control->lock_cursor_shape = FALSE;
 }
 
+static void _control_set_cursor_on_widget(GtkWidget *widget, GdkCursor *cursor)
+{
+  if(!widget) return;
+
+  GdkWindow *window = gtk_widget_get_window(widget);
+  if(window) gdk_window_set_cursor(window, cursor);
+}
+
+static void _control_apply_cursor(GdkCursor *cursor)
+{
+  GtkWidget *main_window = dt_ui_main_window(darktable.gui->ui);
+  GtkWidget *center_base = dt_ui_center_base(darktable.gui->ui);
+  GtkWidget *center = dt_ui_center(darktable.gui->ui);
+
+  _control_set_cursor_on_widget(main_window, cursor);
+
+  if(gtk_widget_get_window(center_base) != gtk_widget_get_window(main_window))
+    _control_set_cursor_on_widget(center_base, cursor);
+
+  if(gtk_widget_get_window(center) != gtk_widget_get_window(center_base)
+     && gtk_widget_get_window(center) != gtk_widget_get_window(main_window))
+    _control_set_cursor_on_widget(center, cursor);
+}
+
 void dt_control_change_cursor(dt_cursor_t curs)
 {
   if (!darktable.control->lock_cursor_shape)
   {
-    GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
     GdkCursor *cursor = gdk_cursor_new_for_display(gdk_display_get_default(), curs);
-    gdk_window_set_cursor(gtk_widget_get_window(widget), cursor);
+    _control_apply_cursor(cursor);
     g_object_unref(cursor);
   }
 }
@@ -151,9 +174,8 @@ void dt_control_change_cursor_with_name(const char *curs_str)
 {
   if (!darktable.control->lock_cursor_shape)
   {
-      GtkWidget *widget = dt_ui_main_window(darktable.gui->ui);
-      GdkCursor *cursor = gdk_cursor_new_from_name(gdk_display_get_default(), curs_str);
-    gdk_window_set_cursor(gtk_widget_get_window(widget), cursor);
+    GdkCursor *cursor = gdk_cursor_new_from_name(gdk_display_get_default(), curs_str);
+    _control_apply_cursor(cursor);
     g_object_unref(cursor);
   }
 }
