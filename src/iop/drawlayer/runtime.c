@@ -179,8 +179,6 @@ static void _sync_runtime_state_from_inputs(dt_drawlayer_runtime_manager_t *stat
   {
     state->layer_cache_valid = process->cache_valid;
     state->process_patch_dirty = process->process_patch_dirty;
-    state->undo_available = process->undo_available;
-    state->redo_available = process->redo_available;
     state->process_snapshot_valid = process->process_patch_valid && process->process_read_patch.pixels
                                     && process->process_read_patch.width > 0
                                     && process->process_read_patch.height > 0;
@@ -381,9 +379,6 @@ static void _update_realtime_state(dt_drawlayer_runtime_manager_t *state,
       case DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CPU_AFTER:
       case DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CL_BEFORE:
       case DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CL_AFTER:
-      case DT_DRAWLAYER_RUNTIME_EVENT_GUI_UNDO:
-      case DT_DRAWLAYER_RUNTIME_EVENT_GUI_REDO:
-      case DT_DRAWLAYER_RUNTIME_EVENT_GUI_HISTORY_INVALIDATE:
       case DT_DRAWLAYER_RUNTIME_EVENT_SIDECAR_LOAD_BEGIN:
       case DT_DRAWLAYER_RUNTIME_EVENT_SIDECAR_LOAD_END:
       case DT_DRAWLAYER_RUNTIME_EVENT_SIDECAR_SAVE_BEGIN:
@@ -405,7 +400,6 @@ typedef struct dt_drawlayer_runtime_schedule_t
   gboolean ensure_worker_running;
   gboolean stop_worker;
   gboolean sync_widget_cache;
-  gboolean prepare_undo_snapshot;
   gboolean prime_live_process_patch;
   gboolean queue_raw_input;
   gboolean request_commit;
@@ -419,12 +413,8 @@ typedef struct dt_drawlayer_runtime_schedule_t
   gboolean pointer_valid;
   gboolean pointer_hide_cursor;
   gboolean queue_redraw_center;
-  gboolean sync_save_button;
   gboolean refresh_gui;
   gboolean invalidate_layer_cache;
-  gboolean invalidate_undo_redo;
-  gboolean swap_undo_redo;
-  gboolean swap_undo_redo_undo;
   gboolean rasterization_busy;
 } dt_drawlayer_runtime_schedule_t;
 
@@ -578,7 +568,6 @@ static void _build_runtime_schedule(dt_drawlayer_runtime_manager_t *state,
       schedule->stop_worker = TRUE;
       schedule->release_process_clmem = state->process_cl_valid;
       schedule->invalidate_layer_cache = TRUE;
-      schedule->sync_save_button = TRUE;
       schedule->refresh_gui = TRUE;
       schedule->sync_widget_cache = TRUE;
       schedule->ensure_worker_running = inputs->module_focused;
@@ -598,32 +587,6 @@ static void _build_runtime_schedule(dt_drawlayer_runtime_manager_t *state,
       schedule->request_commit = TRUE;
       break;
 
-    case DT_DRAWLAYER_RUNTIME_EVENT_GUI_UNDO:
-      if(state->undo_available)
-      {
-        schedule->sync_realtime_mode = TRUE;
-        schedule->commit_mode = DT_DRAWLAYER_RUNTIME_COMMIT_QUIET;
-        schedule->sync_widget_cache = inputs->gui_attached && inputs->have_layer_selection;
-        schedule->swap_undo_redo = TRUE;
-        schedule->swap_undo_redo_undo = TRUE;
-      }
-      break;
-
-    case DT_DRAWLAYER_RUNTIME_EVENT_GUI_REDO:
-      if(state->redo_available)
-      {
-        schedule->sync_realtime_mode = TRUE;
-        schedule->commit_mode = DT_DRAWLAYER_RUNTIME_COMMIT_QUIET;
-        schedule->sync_widget_cache = inputs->gui_attached && inputs->have_layer_selection;
-        schedule->swap_undo_redo = TRUE;
-        schedule->swap_undo_redo_undo = FALSE;
-      }
-      break;
-
-    case DT_DRAWLAYER_RUNTIME_EVENT_GUI_HISTORY_INVALIDATE:
-      schedule->invalidate_undo_redo = TRUE;
-      break;
-
     case DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT:
       switch(request->raw_input_kind)
       {
@@ -635,7 +598,6 @@ static void _build_runtime_schedule(dt_drawlayer_runtime_manager_t *state,
                                       ? DT_DRAWLAYER_RUNTIME_COMMIT_HISTORY
                                       : DT_DRAWLAYER_RUNTIME_COMMIT_NONE;
           schedule->sync_widget_cache = TRUE;
-          schedule->prepare_undo_snapshot = TRUE;
           schedule->prime_live_process_patch = TRUE;
           schedule->ensure_worker_running = TRUE;
           schedule->queue_raw_input = TRUE;
@@ -789,36 +751,6 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
       if(schedule.sync_widget_cache && !_perform_runtime_widget_cache_sync(host, &result)) result.ok = FALSE;
       break;
 
-    case DT_DRAWLAYER_RUNTIME_EVENT_GUI_UNDO:
-    case DT_DRAWLAYER_RUNTIME_EVENT_GUI_REDO:
-      if(result.ok
-         && !_perform_runtime_commit_sequence(state, request, host, schedule.commit_mode, &result))
-        result.ok = FALSE;
-      if(result.ok && schedule.sync_widget_cache
-         && !_perform_runtime_widget_cache_sync(host, &result))
-        result.ok = FALSE;
-      if(result.ok && schedule.swap_undo_redo)
-      {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_SWAP_UNDO_REDO,
-          .data.swap_undo_redo = {
-            .undo = schedule.swap_undo_redo_undo,
-          },
-        };
-        if(!_perform_runtime_action(host, &action, &result)) result.ok = FALSE;
-      }
-      break;
-
-    case DT_DRAWLAYER_RUNTIME_EVENT_GUI_HISTORY_INVALIDATE:
-      if(schedule.invalidate_undo_redo)
-      {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_INVALIDATE_UNDO_REDO,
-        };
-        _perform_runtime_action(host, &action, &result);
-      }
-      break;
-
     case DT_DRAWLAYER_RUNTIME_EVENT_GUI_STROKE_ABORT:
     {
       const dt_drawlayer_runtime_action_request_t end_capture = {
@@ -904,13 +836,6 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
         };
         _perform_runtime_action(host, &action, &result);
       }
-      if(schedule.sync_save_button)
-      {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_SYNC_SAVE_BUTTON,
-        };
-        _perform_runtime_action(host, &action, &result);
-      }
       if(schedule.refresh_gui)
       {
         const dt_drawlayer_runtime_action_request_t action = {
@@ -938,13 +863,6 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
         if(result.ok && schedule.sync_widget_cache
            && !_perform_runtime_widget_cache_sync(host, &result))
           result.ok = FALSE;
-        if(result.ok && schedule.prepare_undo_snapshot)
-        {
-          const dt_drawlayer_runtime_action_request_t action = {
-            .action = DT_DRAWLAYER_RUNTIME_ACTION_PREPARE_UNDO_SNAPSHOT,
-          };
-          if(!_perform_runtime_action(host, &action, &result)) result.ok = FALSE;
-        }
         if(result.ok && schedule.prime_live_process_patch)
         {
           const dt_drawlayer_runtime_action_request_t action = {
@@ -1111,7 +1029,6 @@ void dt_drawlayer_process_state_cleanup(dt_drawlayer_process_state_t *state)
   dt_drawlayer_cache_patch_clear(&state->base_patch, "drawlayer patch");
   dt_drawlayer_cache_patch_clear(&state->process_patch, "drawlayer patch");
   dt_drawlayer_cache_patch_clear(&state->process_read_patch, "drawlayer patch");
-  dt_drawlayer_cache_patch_clear(&state->undo_patch, "drawlayer patch");
   dt_drawlayer_cache_patch_clear(&state->stroke_mask, "drawlayer patch");
   dt_drawlayer_cache_patch_clear(&state->process_stroke_mask, "drawlayer patch");
   dt_pthread_mutex_destroy(&state->process_patch_mutex);

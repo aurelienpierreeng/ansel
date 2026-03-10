@@ -66,12 +66,10 @@ typedef struct dt_drawlayer_process_state_t
 
   /* Mutex protecting modifications to `process_patch` and related flags. */
   dt_pthread_mutex_t process_patch_mutex;
-  dt_drawlayer_cache_patch_t undo_patch;
 
   /* `stroke_mask`: authoritative full-resolution stroke alpha mask aligned
    * with `base_patch`. This stores accumulated stroke coverage in base/source
-   * coordinates and is used for undo/redo, sidecar persistence, and for
-   * replaying or committing strokes back into the authoritative `base_patch`. */
+   * coordinates and is used to pre-render brushes using flow to cap opacity. */
   dt_drawlayer_cache_patch_t stroke_mask;
 
   /* `process_stroke_mask`: display-sized mask derived from `stroke_mask` and
@@ -81,8 +79,7 @@ typedef struct dt_drawlayer_process_state_t
   dt_drawlayer_cache_patch_t process_stroke_mask;
   gboolean cache_valid;
   gboolean cache_dirty;
-  gboolean undo_available;
-  gboolean redo_available;
+
   int32_t cache_imgid;
   char cache_layer_name[DRAWLAYER_NAME_SIZE];
   int cache_layer_order;
@@ -151,8 +148,6 @@ typedef struct dt_drawlayer_controls_t
   GtkWidget *hdr_exposure;
   GtkEntry *layer_name;
   GtkWidget *layer_select;
-  GtkWidget *undo_button;
-  GtkWidget *redo_button;
   GtkWidget *preview_bg_image;
   GtkWidget *preview_bg_white;
   GtkWidget *preview_bg_grey;
@@ -217,9 +212,6 @@ typedef enum dt_drawlayer_runtime_event_t
   DT_DRAWLAYER_RUNTIME_EVENT_GUI_RESYNC,
   DT_DRAWLAYER_RUNTIME_EVENT_GUI_PIPE_FINISHED,
   DT_DRAWLAYER_RUNTIME_EVENT_GUI_STROKE_ABORT,
-  DT_DRAWLAYER_RUNTIME_EVENT_GUI_UNDO,
-  DT_DRAWLAYER_RUNTIME_EVENT_GUI_REDO,
-  DT_DRAWLAYER_RUNTIME_EVENT_GUI_HISTORY_INVALIDATE,
   DT_DRAWLAYER_RUNTIME_EVENT_GUI_RAW_INPUT,
   DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CPU_BEFORE,
   DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CPU_AFTER,
@@ -267,7 +259,6 @@ typedef enum dt_drawlayer_runtime_action_t
   DT_DRAWLAYER_RUNTIME_ACTION_FLUSH_PROCESS_PATCH,
   DT_DRAWLAYER_RUNTIME_ACTION_FLUSH_SIDECAR,
   DT_DRAWLAYER_RUNTIME_ACTION_STOP_WORKER,
-  DT_DRAWLAYER_RUNTIME_ACTION_PREPARE_UNDO_SNAPSHOT,
   DT_DRAWLAYER_RUNTIME_ACTION_PRIME_LIVE_PROCESS_PATCH,
   DT_DRAWLAYER_RUNTIME_ACTION_BEGIN_STROKE_CAPTURE,
   DT_DRAWLAYER_RUNTIME_ACTION_END_STROKE_CAPTURE,
@@ -278,11 +269,8 @@ typedef enum dt_drawlayer_runtime_action_t
   DT_DRAWLAYER_RUNTIME_ACTION_BUILD_PROCESS_PATCH,
   DT_DRAWLAYER_RUNTIME_ACTION_SET_POINTER_STATE,
   DT_DRAWLAYER_RUNTIME_ACTION_QUEUE_REDRAW_CENTER,
-  DT_DRAWLAYER_RUNTIME_ACTION_SYNC_SAVE_BUTTON,
   DT_DRAWLAYER_RUNTIME_ACTION_REFRESH_GUI,
   DT_DRAWLAYER_RUNTIME_ACTION_INVALIDATE_LAYER_CACHE,
-  DT_DRAWLAYER_RUNTIME_ACTION_INVALIDATE_UNDO_REDO,
-  DT_DRAWLAYER_RUNTIME_ACTION_SWAP_UNDO_REDO,
 } dt_drawlayer_runtime_action_t;
 
 typedef struct dt_drawlayer_runtime_result_t
@@ -307,10 +295,6 @@ typedef struct dt_drawlayer_runtime_action_request_t
       gboolean valid;
       gboolean hide_cursor;
     } pointer;
-    struct
-    {
-      gboolean undo;
-    } swap_undo_redo;
   } data;
 } dt_drawlayer_runtime_action_request_t;
 
@@ -345,8 +329,6 @@ typedef struct dt_drawlayer_runtime_manager_t
   gboolean gui_focused;
   gboolean realtime_active;
   gboolean painting_active;
-  gboolean undo_available;
-  gboolean redo_available;
   gboolean background_job_running;
   dt_drawlayer_runtime_event_t last_event;
   dt_drawlayer_runtime_raw_input_kind_t last_raw_input_kind;

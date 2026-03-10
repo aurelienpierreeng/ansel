@@ -242,10 +242,6 @@ static void _touch_stroke_commit_hash(dt_iop_drawlayer_params_t *params, int dab
                                       float last_dab_x, float last_dab_y);
 static void _flush_process_patch_to_base(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g);
 static void _flush_process_patch_to_base_locked(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g);
-static void _invalidate_undo_redo(dt_iop_module_t *self);
-static gboolean _prepare_undo_snapshot(dt_iop_module_t *self);
-static gboolean _swap_undo_redo(dt_iop_module_t *self, gboolean undo);
-static void _sync_save_button(dt_iop_module_t *self);
 static void _sync_mode_sensitive_widgets(dt_iop_module_t *self);
 static gboolean _sync_widget_cache(dt_iop_module_t *self);
 static void _set_drawlayer_pipeline_realtime_mode(dt_iop_module_t *self, gboolean state);
@@ -993,15 +989,6 @@ static drawlayer_process_scratch_t *_get_process_scratch(void)
   if(!scratch) return NULL;
   g_private_set(&_drawlayer_process_scratch_key, scratch);
   return scratch;
-}
-
-static uint64_t _drawlayer_sidecar_cache_hash(const char *path, const char *layer_name, const char *purpose)
-{
-  uint64_t hash = 5381u;
-  if(path) hash = dt_hash(hash, path, strlen(path));
-  if(layer_name) hash = dt_hash(hash, layer_name, strlen(layer_name));
-  if(purpose) hash = dt_hash(hash, purpose, strlen(purpose));
-  return hash ? hash : 1u;
 }
 
 static uint64_t _drawlayer_params_cache_hash(const int32_t imgid, const dt_iop_drawlayer_params_t *params)
@@ -2465,7 +2452,6 @@ static gboolean _ensure_layer_cache(dt_iop_module_t *self)
     g_string_free(errors, TRUE);
     return FALSE;
   }
-  _invalidate_undo_redo(self);
   /* We are about to replace/rebind `g->process.base_patch`; drop all explicit extra
    * refs from the previous entry first so counters never leak across entries. */
   _release_all_base_patch_extra_refs(g);
@@ -2688,8 +2674,6 @@ static gboolean _ensure_layer_cache(dt_iop_module_t *self)
     g->process.cache_valid = FALSE;
     g->process.cache_dirty = FALSE;
   }
-
-  if(ui_thread) _sync_save_button(self);
 
   _layerio_log_errors(errors);
   g_string_free(errors, TRUE);
@@ -3053,34 +3037,6 @@ static void _touch_stroke_commit_hash(dt_iop_drawlayer_params_t *params, const i
   params->stroke_commit_hash = (uint32_t)(hash ? hash : 1u);
 }
 
-static void _sync_undo_redo_buttons(dt_iop_module_t *self)
-{
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  GMainContext *const ui_ctx = g_main_context_default();
-  if(!g || !(ui_ctx && g_main_context_is_owner(ui_ctx))) return;
-
-  g->manager.undo_available = g->process.undo_available;
-  g->manager.redo_available = g->process.redo_available;
-
-  if(g->controls.undo_button)
-    gtk_widget_set_sensitive(g->controls.undo_button, g->manager.undo_available && !g->manager.painting_active);
-  if(g->controls.redo_button)
-    gtk_widget_set_sensitive(g->controls.redo_button, g->manager.redo_available && !g->manager.painting_active);
-}
-
-static void _sync_save_button(dt_iop_module_t *self)
-{
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  GMainContext *const ui_ctx = g_main_context_default();
-  if(!g || !g->controls.save_layer || !(ui_ctx && g_main_context_is_owner(ui_ctx))) return;
-
-  /* The sidecar save action should stay available whenever we have an
-   * authoritative layer cache in memory. Unlike undo/redo, it is useful while
-   * the module is focused because it is the explicit persistence escape hatch
-   * for users who do not want to rely on focus-loss or shutdown hooks. */
-  gtk_widget_set_sensitive(g->controls.save_layer, g->process.cache_valid && g->process.base_patch.pixels);
-}
-
 static void _refresh_layer_widgets(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
@@ -3097,120 +3053,6 @@ static void _refresh_layer_widgets(dt_iop_module_t *self)
 
   if(g->controls.layer_select) _populate_layer_list(self);
   if(g->controls.create_background) gtk_widget_set_sensitive(g->controls.create_background, !g->session.background_job_running);
-  _sync_save_button(self);
-}
-
-static void _invalidate_undo_redo(dt_iop_module_t *self)
-{
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g) return;
-
-  _clear_patch(&g->process.undo_patch);
-  _clear_patch(&g->process.stroke_mask);
-  g->process.undo_available = FALSE;
-  g->process.redo_available = FALSE;
-  _sync_undo_redo_buttons(self);
-}
-
-static gboolean _prepare_undo_snapshot(dt_iop_module_t *self)
-{
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !g->process.cache_valid || !g->process.base_patch.pixels) return FALSE;
-
-  const size_t count = (size_t)g->process.base_patch.width * g->process.base_patch.height * 4;
-  if(count == 0) return FALSE;
-
-  if(g->process.undo_patch.width != g->process.base_patch.width || g->process.undo_patch.height != g->process.base_patch.height
-     || !g->process.undo_patch.pixels)
-  {
-    const uint64_t undo_hash
-        = g->process.base_patch.cache_hash
-              ? dt_hash(g->process.base_patch.cache_hash, "undo", strlen("undo"))
-              : _drawlayer_sidecar_cache_hash(g->process.cache_layer_name, g->process.cache_layer_name, "undo");
-    if(!dt_drawlayer_cache_patch_alloc_shared(
-           &g->process.undo_patch, undo_hash, (size_t)g->process.base_patch.width * g->process.base_patch.height, g->process.base_patch.width,
-           g->process.base_patch.height, "drawlayer undo cache", NULL))
-    {
-      _clear_patch(&g->process.undo_patch);
-      g->process.undo_available = FALSE;
-      g->process.redo_available = FALSE;
-      return FALSE;
-    }
-    g->process.undo_patch.x = g->process.base_patch.x;
-    g->process.undo_patch.y = g->process.base_patch.y;
-  }
-  else
-  {
-    g->process.undo_patch.x = g->process.base_patch.x;
-    g->process.undo_patch.y = g->process.base_patch.y;
-  }
-
-  dt_drawlayer_cache_patch_rdlock(&g->process.base_patch);
-  memcpy(g->process.undo_patch.pixels, g->process.base_patch.pixels, count * sizeof(float));
-  dt_drawlayer_cache_patch_rdunlock(&g->process.base_patch);
-
-  const size_t mask_count = (size_t)g->process.base_patch.width * g->process.base_patch.height;
-  if(g->process.stroke_mask.width != g->process.base_patch.width || g->process.stroke_mask.height != g->process.base_patch.height
-     || !g->process.stroke_mask.pixels)
-  {
-    _clear_patch(&g->process.stroke_mask);
-    g->process.stroke_mask.width = g->process.base_patch.width;
-    g->process.stroke_mask.height = g->process.base_patch.height;
-    g->process.stroke_mask.x = 0;
-    g->process.stroke_mask.y = 0;
-    g->process.stroke_mask.pixels
-        = dt_drawlayer_cache_alloc_temp_buffer(mask_count * sizeof(float), "drawlayer stroke mask");
-    g->process.stroke_mask.external_alloc = TRUE;
-    if(!g->process.stroke_mask.pixels)
-    {
-      g->process.stroke_mask.width = 0;
-      g->process.stroke_mask.height = 0;
-      g->process.undo_available = TRUE;
-      g->process.redo_available = FALSE;
-      return TRUE;
-    }
-  }
-  memset(g->process.stroke_mask.pixels, 0, mask_count * sizeof(float));
-
-  g->process.undo_available = TRUE;
-  g->process.redo_available = FALSE;
-
-  _sync_undo_redo_buttons(self);
-  return TRUE;
-}
-
-static gboolean _swap_undo_redo(dt_iop_module_t *self, const gboolean undo)
-{
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  dt_iop_drawlayer_params_t *params = self ? (dt_iop_drawlayer_params_t *)self->params : NULL;
-  if(!self || !self->dev || !g || !params) return FALSE;
-
-  if((undo && !g->process.undo_available) || (!undo && !g->process.redo_available)) return FALSE;
-  if(!g->process.base_patch.pixels || !g->process.undo_patch.pixels) return FALSE;
-
-  _release_all_base_patch_extra_refs(g);
-  drawlayer_patch_t tmp = g->process.base_patch;
-  g->process.base_patch = g->process.undo_patch;
-  g->process.undo_patch = tmp;
-  g->process.cache_valid = TRUE;
-  g->process.cache_dirty = TRUE;
-  _invalidate_process_patch(g);
-
-  if(undo)
-  {
-    g->process.undo_available = FALSE;
-    g->process.redo_available = TRUE;
-  }
-  else
-  {
-    g->process.undo_available = TRUE;
-    g->process.redo_available = FALSE;
-  }
-
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
-  _sync_undo_redo_buttons(self);
-  dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-  return TRUE;
 }
 
 static void _sync_preview_bg_buttons(dt_iop_module_t *self)
@@ -3843,8 +3685,6 @@ static void _delete_layer_clicked(GtkButton *button, gpointer user_data)
   if(!_confirm_delete_layer(self, FALSE)) return;
 
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  _update_gui_runtime_manager(self, (dt_iop_drawlayer_gui_data_t *)self->gui_data,
-                              DT_DRAWLAYER_RUNTIME_EVENT_GUI_HISTORY_INVALIDATE, FALSE);
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
   self->enabled = FALSE;
   dt_iop_gui_set_enable_button(self);
@@ -3877,7 +3717,6 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
 
   g->process.cache_dirty = TRUE;
   _invalidate_process_patch(g);
-  _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_HISTORY_INVALIDATE, FALSE);
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
   _reset_stroke_session(g);
 
@@ -3902,7 +3741,6 @@ static gboolean _clear_current_layer(dt_iop_module_t *self)
 
   g->process.cache_dirty = TRUE;
   _invalidate_process_patch(g);
-  _update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_HISTORY_INVALIDATE, FALSE);
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
   _reset_stroke_session(g);
 
@@ -3943,7 +3781,6 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
     _show_drawlayer_modal_message(GTK_MESSAGE_ERROR,
                                   _("No drawing layer is loaded in memory."),
                                   _("The sidecar save was aborted."));
-    _sync_save_button(self);
     return;
   }
   if(!_layer_name_non_empty(g->process.cache_layer_name))
@@ -3968,7 +3805,6 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
   gtk_widget_destroy(dialog);
   if(response != GTK_RESPONSE_ACCEPT)
   {
-    _sync_save_button(self);
     return;
   }
 
@@ -3983,7 +3819,6 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
     _show_drawlayer_modal_message(GTK_MESSAGE_ERROR,
                                   _("Failed to finalize the drawing stroke."),
                                   _("The sidecar was not saved."));
-    _sync_save_button(self);
     return;
   }
 
@@ -3996,7 +3831,6 @@ static void _save_layer_clicked(GtkButton *button, gpointer user_data)
     _show_drawlayer_modal_message(GTK_MESSAGE_ERROR,
                                   _("Failed to write the drawing layer sidecar."),
                                   _("The sidecar TIFF could not be updated."));
-    _sync_save_button(self);
     return;
   }
 
@@ -4023,24 +3857,6 @@ static void _create_background_clicked(GtkButton *button, gpointer user_data)
   (void)button;
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   if(!_create_background_layer_from_input(self)) dt_control_log(_("failed to create background layer from input"));
-}
-
-static void _undo_clicked(GtkButton *button, gpointer user_data)
-{
-  (void)button;
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_UNDO, FALSE).ok)
-    dt_control_log(_("failed to undo drawing stroke"));
-}
-
-static void _redo_clicked(GtkButton *button, gpointer user_data)
-{
-  (void)button;
-  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!_update_gui_runtime_manager(self, g, DT_DRAWLAYER_RUNTIME_EVENT_GUI_REDO, FALSE).ok)
-    dt_control_log(_("failed to redo drawing stroke"));
 }
 
 static void _preview_bg_toggled(GtkToggleButton *button, gpointer user_data)
@@ -4112,7 +3928,6 @@ static void _begin_gui_stroke_capture(dt_iop_module_t *self, const dt_drawlayer_
   g->stroke.stroke_sample_count = 0;
   g->stroke.stroke_event_index = event_index;
   g->stroke.last_dab_valid = FALSE;
-  _sync_undo_redo_buttons(self);
   dt_iop_gui_leave_critical_section(self);
 }
 
@@ -4120,7 +3935,6 @@ static void _end_gui_stroke_capture(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   if(!g) return;
-  _sync_undo_redo_buttons(self);
 }
 
 static void _fill_runtime_inputs(const drawlayer_runtime_request_t *runtime,
@@ -4293,9 +4107,6 @@ static gboolean _drawlayer_runtime_perform_action(void *user_data,
       _stop_worker(self, g->stroke.worker);
       return TRUE;
 
-    case DT_DRAWLAYER_RUNTIME_ACTION_PREPARE_UNDO_SNAPSHOT:
-      return _prepare_undo_snapshot(self);
-
     case DT_DRAWLAYER_RUNTIME_ACTION_PRIME_LIVE_PROCESS_PATCH:
       _prime_live_process_patch_before_stroke(self);
       return TRUE;
@@ -4366,10 +4177,6 @@ static gboolean _drawlayer_runtime_perform_action(void *user_data,
       dt_control_queue_redraw_center();
       return TRUE;
 
-    case DT_DRAWLAYER_RUNTIME_ACTION_SYNC_SAVE_BUTTON:
-      _sync_save_button(self);
-      return TRUE;
-
     case DT_DRAWLAYER_RUNTIME_ACTION_REFRESH_GUI:
       gui_update(self);
       return TRUE;
@@ -4380,13 +4187,6 @@ static gboolean _drawlayer_runtime_perform_action(void *user_data,
       g->process.cache_valid = FALSE;
       g->process.cache_dirty = FALSE;
       return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_INVALIDATE_UNDO_REDO:
-      _invalidate_undo_redo(self);
-      return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_SWAP_UNDO_REDO:
-      return _swap_undo_redo(self, action->data.swap_undo_redo.undo);
 
     case DT_DRAWLAYER_RUNTIME_ACTION_NONE:
     default:
@@ -4525,8 +4325,6 @@ void gui_reset(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   _default_layer_name(self, params->layer_name, sizeof(params->layer_name));
   params->layer_order = -1;
-  _update_gui_runtime_manager(self, (dt_iop_drawlayer_gui_data_t *)self->gui_data,
-                              DT_DRAWLAYER_RUNTIME_EVENT_GUI_HISTORY_INVALIDATE, FALSE);
   _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   if(g)
@@ -4595,11 +4393,7 @@ void gui_init(dt_iop_module_t *self)
   if(self->reset_button) gtk_widget_hide(self->reset_button);
 
   GtkWidget *history_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, DT_GUI_IOP_MODULE_CONTROL_SPACING);
-  g->controls.undo_button = gtk_button_new_with_label(_("undo"));
-  g->controls.redo_button = gtk_button_new_with_label(_("redo"));
   g->controls.save_layer = gtk_button_new_with_label(_("save sidecar"));
-  gtk_box_pack_start(GTK_BOX(history_box), g->controls.undo_button, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(history_box), g->controls.redo_button, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(history_box), g->controls.save_layer, TRUE, TRUE, 0);
   gtk_box_pack_start(GTK_BOX(self->widget), history_box, FALSE, FALSE, 0);
 
@@ -4840,8 +4634,6 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->controls.hdr_exposure), "value-changed", G_CALLBACK(_widget_changed), self);
   g_signal_connect(g->controls.layer_name, "changed", G_CALLBACK(_widget_changed), self);
   g_signal_connect(G_OBJECT(g->controls.layer_select), "value-changed", G_CALLBACK(_layer_selected), self);
-  g_signal_connect(g->controls.undo_button, "clicked", G_CALLBACK(_undo_clicked), self);
-  g_signal_connect(g->controls.redo_button, "clicked", G_CALLBACK(_redo_clicked), self);
   g_signal_connect(g->controls.preview_bg_image, "toggled", G_CALLBACK(_preview_bg_toggled), self);
   g_signal_connect(g->controls.preview_bg_white, "toggled", G_CALLBACK(_preview_bg_toggled), self);
   g_signal_connect(g->controls.preview_bg_grey, "toggled", G_CALLBACK(_preview_bg_toggled), self);
@@ -4939,9 +4731,7 @@ void gui_update(dt_iop_module_t *self)
     dt_bauhaus_combobox_set(g->controls.accel_profile, _conf_mapping_profile(DRAWLAYER_CONF_ACCEL_PROFILE));
 
   _sync_mode_sensitive_widgets(self);
-  _sync_undo_redo_buttons(self);
   _sync_preview_bg_buttons(self);
-  _sync_save_button(self);
   _populate_layer_list(self);
 
   if(self->dev)
@@ -5060,7 +4850,6 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
     }
 
     dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
-    _sync_save_button(self);
 
     if(g && params && !g->process.cache_valid && _current_layer_missing_in_sidecar(self))
     {
@@ -5341,7 +5130,6 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
     };
     if(g->session.pointer_valid) dt_drawlayer_runtime_manager_update(&g->manager, &leave_update, &runtime_manager);
     dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
-    _sync_undo_redo_buttons(self);
     return 0;
   }
 
@@ -5407,7 +5195,6 @@ int mouse_moved(dt_iop_module_t *self, double x, double y, double pressure, int 
             .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
           },
           &runtime_manager);
-      _sync_undo_redo_buttons(self);
     }
   }
   else
