@@ -22,6 +22,7 @@
 #include "common/debug.h"
 #include "gui/actions/menu.h"
 #include "gui/draw.h"
+#include "gui/gtk.h"
 #include "dtgtk/paint.h"
 
 #include <math.h>
@@ -204,6 +205,56 @@ static GtkWidget *_masks_gui_add_interaction_slider(GtkWidget *menu, const char 
   return menu_item;
 }
 
+static int _masks_gui_confirm_remove_form_dialog(const char *form_name)
+{
+  if(!darktable.gui || !darktable.gui->ui) return GTK_RESPONSE_NO;
+
+  GtkWidget *dialog = gtk_message_dialog_new(
+      GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+      GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
+      GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, _("Delete the shape '%s' ?"), form_name);
+  gtk_message_dialog_format_secondary_text(
+      GTK_MESSAGE_DIALOG(dialog), "'%s' %s\n\n%s", form_name,
+      _("will no longer be used."),
+      _("Do you want to delete it permanently, or keep it unused?"));
+
+  gtk_dialog_add_button(GTK_DIALOG(dialog), _("Keep unused shape"), GTK_RESPONSE_NO);
+  gtk_dialog_add_button(GTK_DIALOG(dialog), _("Delete shape"), GTK_RESPONSE_YES);
+  gtk_dialog_add_button(GTK_DIALOG(dialog), _("Cancel"), GTK_RESPONSE_CANCEL);
+  gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CANCEL);
+
+  const int response = gtk_dialog_run(GTK_DIALOG(dialog));
+  gtk_widget_destroy(dialog);
+
+  return response;
+}
+
+static int _masks_gui_form_group_use_count(const dt_develop_t *dev, const int formid)
+{
+  if(!dev) return 0;
+
+  int count = 0;
+  for(GList *form_node = dev->forms; form_node; form_node = g_list_next(form_node))
+  {
+    dt_masks_form_t *group_form = (dt_masks_form_t *)form_node->data;
+    if(!group_form || !(group_form->type & DT_MASKS_GROUP)) continue;
+
+    for(GList *group_node = group_form->points; group_node; group_node = g_list_next(group_node))
+    {
+      dt_masks_form_group_t *group_entry = (dt_masks_form_group_t *)group_node->data;
+      if(group_entry && group_entry->formid == formid)
+      {
+        count++;
+        if(count > 1) goto done;
+        break;
+      }
+    }
+  }
+
+done:
+  return count;
+}
+
 static void _masks_gui_remove_form_callback(GtkWidget *menu, gpointer user_data)
 {
   dt_masks_form_gui_t *gui = (dt_masks_form_gui_t *)user_data;
@@ -219,11 +270,30 @@ static void _masks_gui_remove_form_callback(GtkWidget *menu, gpointer user_data)
     dt_iop_module_t *module = darktable.develop->gui_module;
     if(!module) return;
     dt_masks_form_t *sel = dt_masks_get_from_id(darktable.develop, fpt->formid);
-    if(sel)
-      dt_masks_gui_delete(module, sel, gui, fpt->parentid);
+    if(!sel) return;
 
+    const int parentid = fpt->parentid;
+    const int formid = fpt->formid;
+    const int use_count = _masks_gui_form_group_use_count(darktable.develop, formid);
+
+    if(use_count <= 1)
+    {
+      const int response = _masks_gui_confirm_remove_form_dialog(sel->name);
+      if(response == GTK_RESPONSE_CANCEL) return;
+      if(response == GTK_RESPONSE_YES)
+      {
+        dt_masks_gui_delete(module, sel, gui, parentid);
+        dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
+        DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, parentid, DT_MASKS_EVENT_DELETE);
+        return;
+      }
+    }
+
+    // Default
+    dt_masks_change_form_gui(NULL);
+    dt_masks_form_remove(module, NULL, sel);
     dt_dev_add_history_item(darktable.develop, module, TRUE, TRUE);
-    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, fpt->formid, fpt->parentid, DT_MASKS_EVENT_REMOVE);
+    DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, 0, DT_MASKS_EVENT_REMOVE);
   }
 }
 

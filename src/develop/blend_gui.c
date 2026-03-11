@@ -1474,6 +1474,28 @@ static const GdkPixbuf *_blendop_masks_get_inverse_icon(const dt_iop_gui_blend_d
 static int _blendop_masks_group_tree_append(const dt_iop_gui_blend_data_t *bd, GtkTreeStore *tree_store,
                                             GtkTreeIter *parent_iter, const dt_masks_form_t *parent_group);
 
+// Check if this is a parent mask reusing a single parent mask (and no shapes).
+// Such a wrapper is redundant and should be hidden: the child mask should be used directly instead.
+static gboolean _blendop_masks_is_single_group_wrapper(const dt_masks_form_t *mask_form)
+{
+  if(!mask_form) return FALSE;
+  if(!(mask_form->type & DT_MASKS_GROUP)) return FALSE;
+  if(!mask_form->points) return FALSE;
+  
+  // Check if there is exactly one item
+  if(g_list_length(mask_form->points) != 1) return FALSE;
+  
+  // Get the single child
+  const dt_masks_form_group_t *group_entry = (const dt_masks_form_group_t *)mask_form->points->data;
+  if(!group_entry) return FALSE;
+  
+  const dt_masks_form_t *child_form = dt_masks_get_from_id(darktable.develop, group_entry->formid);
+  if(!child_form) return FALSE;
+  
+  // Check if the single child is a group
+  return (child_form->type & DT_MASKS_GROUP) ? TRUE : FALSE;
+}
+
 static gboolean _blendop_masks_is_group_with_shapes(const dt_masks_form_t *mask_form)
 {
   if(!mask_form) return FALSE;
@@ -1615,6 +1637,7 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
   dt_masks_form_t *group_form = _blendop_masks_group_from_module(module);
 
   // First pass: groups containing shapes first.
+  int first_pass_count = 0;
   for(const GList *form_node = darktable.develop->forms; form_node; form_node = g_list_next(form_node))
   {
     dt_masks_form_t *mask_form = (dt_masks_form_t *)form_node->data;
@@ -1622,6 +1645,8 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
     if(mask_form->type & (DT_MASKS_CLONE | DT_MASKS_NON_CLONE)) continue;
     if(group_form && mask_form->formid == group_form->formid) continue;
     if(!_blendop_masks_is_group_with_shapes(mask_form)) continue;
+    // Skip groups containing only a single group
+    if(_blendop_masks_is_single_group_wrapper(mask_form)) continue;
 
     const gboolean active = _blendop_masks_find_group_entry(group_form, mask_form->formid, NULL) != NULL;
     GtkTreeIter iter;
@@ -1634,6 +1659,7 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
                BLENDOP_MASKS_ALL_COL_STATUS_MARKUP, "",
                        -1);
     g_free(display_markup);
+    first_pass_count++;
   }
 
   // Second pass: then all non-group (and empty-group) entries.
@@ -1667,19 +1693,17 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
     const gboolean display_active = active || !sensitive;
     gchar *display_markup = NULL;
     gchar *status_markup = NULL;
+    display_markup = g_markup_printf_escaped("%s", mask_form->name);
+
     if(!sensitive && locked_group_name && *locked_group_name)
     {
       gchar *already_in = g_strdup_printf(_("Already in '%s'"), locked_group_name);
       status_markup = g_markup_printf_escaped("<i>%s</i>", already_in);
       g_free(already_in);
-      display_markup = g_markup_printf_escaped("%s", mask_form->name);
     }
     else
-    {
-      display_markup = g_markup_printf_escaped("%s", mask_form->name);
       status_markup = g_strdup("");
-    }
-    
+
     GtkTreeIter iter;
     gtk_list_store_append(GTK_LIST_STORE(all_model), &iter);
     gtk_list_store_set(GTK_LIST_STORE(all_model), &iter, BLENDOP_MASKS_ALL_COL_ACTIVE, display_active,
@@ -1975,22 +1999,6 @@ static gboolean _blendop_masks_all_button_pressed(GtkWidget *treeview, GdkEventB
   return TRUE;
 }
 
-static void _blendop_masks_group_remove_callback(GtkWidget *menu_item, dt_iop_module_t *module)
-{
-  if(!module) return;
-
-  const int formid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-formid"));
-  const int parentid = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(menu_item), "blend-parentid"));
-  dt_masks_form_t *group_form = dt_masks_get_from_id(darktable.develop, parentid);
-  dt_masks_form_t *mask_form = dt_masks_get_from_id(darktable.develop, formid);
-  if(!group_form || !mask_form) return;
-
-  dt_masks_form_remove(module, group_form, mask_form);
-  _blendop_masks_apply_and_commit(module);
-  DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_MASK_CHANGED, formid, parentid,
-                                DT_MASKS_EVENT_REMOVE);
-}
-
 static void _blendop_masks_group_operation_callback(GtkWidget *menu_item, gpointer user_data)
 {
   dt_iop_module_t *module = (dt_iop_module_t *)user_data;
@@ -2241,14 +2249,6 @@ static GtkWidget *_blendop_masks_group_ctx_menu(dt_iop_gui_blend_data_t *bd, dt_
   g_object_set_data(G_OBJECT(item), "blend-index", GINT_TO_POINTER(index));
   g_object_set_data(G_OBJECT(item), "blend-move-up", GINT_TO_POINTER(FALSE));
   g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_group_move_callback), module);
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
-
-  gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
-
-  item = gtk_menu_item_new_with_label(_("Remove from mask"));
-  g_object_set_data(G_OBJECT(item), "blend-formid", GINT_TO_POINTER(formid));
-  g_object_set_data(G_OBJECT(item), "blend-parentid", GINT_TO_POINTER(parentid));
-  g_signal_connect(item, "activate", G_CALLBACK(_blendop_masks_group_remove_callback), module);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 
   return menu;
@@ -3295,8 +3295,8 @@ void dt_iop_gui_init_masks(GtkBox *blendw, dt_iop_module_t *module)
     GtkTreeSelection *selection = NULL;
 
     GtkWidget *group_shapes_header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    dt_gui_add_class(group_shapes_header, "dt_section_label");
     bd->group_shapes_label = gtk_label_new(_("Current mask"));
-    dt_gui_add_class(bd->group_shapes_label, "dt_section_label");
     gtk_widget_set_halign(bd->group_shapes_label, GTK_ALIGN_START);
     gtk_widget_set_hexpand(bd->group_shapes_label, TRUE);
     gtk_box_pack_start(GTK_BOX(group_shapes_header), bd->group_shapes_label, TRUE, TRUE, 0);
