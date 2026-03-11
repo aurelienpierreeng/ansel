@@ -1533,11 +1533,7 @@ void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, cons
 {
   void *data = NULL;
   if(!dt_dev_pixelpipe_cache_peek(cache, hash, &data, NULL, cache_entry))
-  {
-    // Ask for a new recompute if cacheline is missing
-    dt_dev_process(dev, pipe);
     return NULL;
-  } 
 
   // Assuming this function is called from GUI, we don't want to make it hang
   // if our entry data is getting written by something heavy in a pipe thread.
