@@ -546,7 +546,13 @@ static gboolean _dt_masks_events_group_update_selection(dt_masks_form_t *group_f
   if(prev_border_selected && prev_group_selected >= 0)
   {
     dt_masks_form_group_t *selected_group_entry = dt_masks_form_get_selected_group_live(group_form, mask_gui);
-    if(selected_group_entry) locked_formid = selected_group_entry->formid;
+    if(selected_group_entry)
+    {
+      dt_masks_form_t *selected_form = dt_masks_get_from_id(dev, selected_group_entry->formid);
+      // Avoid selecting an unselected shape through its border if it's a closed shape type
+      if(selected_form && (selected_form->type & DT_MASKS_IS_CLOSED_SHAPE))
+        locked_formid = selected_group_entry->formid;
+    }
   }
 
   if(prev_group_selected >= 0)
