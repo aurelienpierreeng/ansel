@@ -286,6 +286,9 @@ typedef struct dt_dev_pixelpipe_t
   // and can lead to memory pressure (RAM buffers + OpenCL pinned/device buffers).
   gboolean no_cache;
 
+  // Temporarily pause the infinite loop of pipeline
+  gboolean pause;
+
   // Timeout in usec to delay the start of the pipeline
   // Use for example if you want to ensure one pipe starts after another.
   // Timeout is reset to 0 after the pipeline has run.

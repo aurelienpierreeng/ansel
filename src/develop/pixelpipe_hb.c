@@ -309,29 +309,6 @@ static inline gboolean _is_focused_realtime_gui_module(const dt_dev_pixelpipe_t 
   return pipe && pipe->realtime && dev && dev->gui_attached && module && dev->gui_module == module;
 }
 
-static inline gboolean _can_take_transient_gui_cache_hit(const dt_dev_pixelpipe_t *pipe,
-                                                         const dt_develop_t *dev,
-                                                         const dt_iop_module_t *module,
-                                                         const dt_dev_pixelpipe_iop_t *piece)
-{
-  /* Focused GUI modules may depend on transient runtime state that is not part
-   * of the serialized module hash yet (for example drawlayer live stroke data).
-   * Keep the committed baseline behavior by forcing a recompute for focused
-   * realtime modules instead of accepting a direct cache hit, regardless of
-   * whether their output is RAM-cached or GPU-cached. Reusable cachelines can
-   * still be taken back later as scratch storage. */
-  (void)piece;
-  return !_is_focused_realtime_gui_module(pipe, dev, module);
-}
-
-static inline gboolean _can_take_pipe_cache_hit(const dt_dev_pixelpipe_t *pipe,
-                                                const dt_develop_t *dev)
-{
-  /* Same rationale as `_can_take_transient_gui_cache_hit()`: while a focused GUI
-   * module is driving realtime updates, the serialized pipe hash is not enough
-   * to prove the final display output is still valid. */
-  return !(pipe && dev && pipe->realtime && dev->gui_attached && dev->gui_module);
-}
 
 static inline gboolean _cache_gpu_device_buffer(const dt_dev_pixelpipe_t *pipe,
                                                 const dt_pixel_cache_entry_t *cache_entry)
@@ -1713,22 +1690,6 @@ static gboolean _reuse_transient_output_cacheline(dt_dev_pixelpipe_t *pipe, dt_d
   return TRUE;
 }
 
-static gboolean _try_get_exact_output_cache_hit(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
-                                                dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
-                                                const uint64_t hash, const dt_iop_roi_t *roi_out,
-                                                const size_t bpp, void **output,
-                                                void **cl_mem_output, dt_iop_buffer_dsc_t **out_format,
-                                                dt_pixel_cache_entry_t **existing_cache)
-{
-  if(existing_cache) *existing_cache = NULL;
-
-  return _can_take_direct_cache_hit(pipe, piece)
-         && _can_take_transient_gui_cache_hit(pipe, dev, module, piece)
-         && dt_dev_pixelpipe_cache_peek_exact(darktable.pixelpipe_cache, hash, output, out_format,
-                                              existing_cache, roi_out, bpp,
-                                              pipe ? pipe->devid : -1, cl_mem_output);
-}
-
 static gboolean _acquire_input_cache_entry(const uint64_t input_hash, void **input,
                                            dt_iop_buffer_dsc_t **input_format,
                                            dt_pixel_cache_entry_t **input_entry)
@@ -1830,8 +1791,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   // This case is handled below.
   dt_pixel_cache_entry_t *existing_cache = NULL;
   const gboolean exact_output_cache_hit
-      = _try_get_exact_output_cache_hit(pipe, dev, module, piece, hash, &roi_out, bpp,
-                                        output, cl_mem_output, out_format, &existing_cache);
+      = dt_dev_pixelpipe_cache_peek_exact(darktable.pixelpipe_cache, hash, output, out_format,
+                                          &existing_cache, &roi_out, bpp, pipe->devid, cl_mem_output);
 
   if(existing_cache && pipe->type != DT_DEV_PIXELPIPE_PREVIEW)
   {
@@ -2315,7 +2276,6 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
   // For preview pipe, if using color pickers, we still need to traverse the pipeline.
   dt_pixel_cache_entry_t *entry = NULL;
   if(!pipe->reentry && !pipe->bypass_cache
-     && _can_take_pipe_cache_hit(pipe, dev)
      && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, pipe->hash, &buf, NULL, &entry)
      && _resync_global_histograms(pipe, dev))
   {

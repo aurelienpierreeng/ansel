@@ -495,13 +495,12 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 
     // Updating loop: run while output is invalid/unavailable, or while realtime mode
     // has a new history state to consume.
-    while(!dev->exit && dt_control_running())
+    while(!dev->exit && dt_control_running() && !pipe->pause)
     {
       const gboolean needs_regular_update
           = (((pipe->status == DT_DEV_PIXELPIPE_DIRTY) || (pipe->changed != DT_DEV_PIPE_UNCHANGED))
              && reentries < 2);
-      const gboolean needs_realtime_update
-          = (dt_dev_pixelpipe_get_realtime(pipe) && (dev->history_hash != pipe->history_hash));
+      const gboolean needs_realtime_update = (dev->history_hash != pipe->history_hash);
 
       if(!(needs_regular_update || needs_realtime_update)) break;
 
