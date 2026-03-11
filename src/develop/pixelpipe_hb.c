@@ -1871,8 +1871,8 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
   if(dt_dev_pixelpipe_process_rec(pipe, dev, &input, &cl_mem_input, &input_format, &input_hash, roi_in,
                                   g_list_previous(pieces), pos - 1))
   {
-    // On error: release the cache line
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, FALSE, NULL);
+    /* Child recursion failed before this module acquired any output cache entry.
+     * Dropping `hash` here underflows cached exact-hit outputs during shutdown. */
     return 1;
   }
 
