@@ -464,8 +464,8 @@ int dt_iop_load_module_by_so(dt_iop_module_t *module, dt_iop_module_so_t *so, dt
 
   // now init the instance:
   module->init(module);
-  module->hash = 0;
-  module->blendop_hash = 0;
+  module->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  module->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 
   if(module->params_size == 0)
   {
@@ -612,7 +612,6 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
   /* redraw */
   dt_dev_pixelpipe_rebuild_all(dev);
   dt_control_queue_redraw_center();
-  dt_dev_process_all(dev);
 
   --darktable.gui->reset;
 }
@@ -1791,7 +1790,10 @@ void dt_iop_commit_params(dt_iop_module_t *module, dt_iop_params_t *params,
   assert(piece->pipe == pipe);
   if(!piece->enabled)
   {
-    piece->global_hash = piece->global_mask_hash = piece->hash = 0;
+    piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     return;
   }
 
@@ -2222,7 +2224,7 @@ static void _display_mask_indicator_callback(GtkToggleButton *bt, dt_iop_module_
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->showmask), is_active);
 
   dt_iop_request_focus(module);
-  dt_dev_pixelpipe_refresh_main(module->dev, FALSE);
+  dt_dev_pixelpipe_update_history_main(module->dev);
 }
 
 static gboolean _mask_indicator_tooltip(GtkWidget *treeview, gint x, gint y, gboolean kb_mode,

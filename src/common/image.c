@@ -907,7 +907,7 @@ void dt_image_set_flip(const int32_t imgid, const dt_image_orientation_t orienta
   dt_image_t *image = dt_image_cache_get(darktable.image_cache, imgid, 'w');
   if(image)
   {
-    image->history_hash = 0;
+    image->history_hash = UINT64_MAX;
     dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_RELAXED);
   }
 
@@ -1756,7 +1756,7 @@ void dt_image_init(dt_image_t *img)
   img->group_id = UNKNOWN_IMAGE;
   img->group_members = 0;
   img->history_items = 0;
-  img->history_hash = 0;
+  img->history_hash = UINT64_MAX;
   img->mipmap_hash = 0;
   img->self_hash = 0;
   img->flags = 0;

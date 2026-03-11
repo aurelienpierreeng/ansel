@@ -3142,7 +3142,7 @@ static gboolean _commit_dabs(dt_iop_module_t *self, const gboolean record_histor
        * center redraw. Otherwise a late-finishing worker commit can leave the
        * display showing the previous processed state until some unrelated UI
        * event happens to trigger a recompute. */
-      dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
+      dt_dev_pixelpipe_update_history_all(self->dev);
     }
 
     /* The final stroke-end raster batches may land after the button-release
@@ -3426,7 +3426,7 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
   if(self->dev)
   {
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-    dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
+    dt_dev_pixelpipe_update_history_all(self->dev);
   }
   _refresh_layer_widgets(self);
   gui_update(self);
@@ -3671,7 +3671,7 @@ static void _layer_selected(GtkWidget *widget, gpointer user_data)
   if(self->dev)
   {
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-    dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
+    dt_dev_pixelpipe_update_history_all(self->dev);
   }
   _refresh_layer_widgets(self);
 }
@@ -3879,7 +3879,7 @@ static void _preview_bg_toggled(GtkToggleButton *button, gpointer user_data)
   _sync_preview_bg_buttons(self);
   if(params) _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
-  dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
+  dt_dev_pixelpipe_update_history_all(self->dev);
 }
 
 static gboolean _build_raw_input_event(dt_iop_module_t *self, const double wx, const double wy, const double pressure,

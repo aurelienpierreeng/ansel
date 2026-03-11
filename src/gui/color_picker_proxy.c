@@ -233,7 +233,7 @@ static gboolean _color_picker_callback_button_press(GtkWidget *button, GdkEventB
   }
 
   darktable.lib->proxy.colorpicker.update_panel(darktable.lib->proxy.colorpicker.module);
-  dt_dev_pixelpipe_refresh_preview(darktable.develop, TRUE);
+  dt_dev_pixelpipe_resync_history_preview(darktable.develop);
 
   return TRUE;
 }

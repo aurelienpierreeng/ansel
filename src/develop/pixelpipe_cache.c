@@ -135,6 +135,7 @@ dt_pixel_cache_entry_t *_non_threadsafe_cache_get_entry(dt_dev_pixelpipe_cache_t
 
 dt_pixel_cache_entry_t *dt_dev_pixelpipe_cache_get_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash)
 {
+  if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return NULL;
   dt_pthread_mutex_lock(&cache->lock);
   dt_pixel_cache_entry_t *entry = _non_threadsafe_cache_get_entry(cache, cache->entries, hash);
   dt_pthread_mutex_unlock(&cache->lock);
@@ -1175,6 +1176,15 @@ int dt_dev_pixelpipe_cache_get(dt_dev_pixelpipe_cache_t *cache, const uint64_t h
                                const gboolean alloc, void **data, dt_iop_buffer_dsc_t **dsc,
                                dt_pixel_cache_entry_t **entry)
 {
+  if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
+  {
+    dt_print(DT_DEBUG_CACHE, "[pixelpipe_cache] refusing invalid hash allocation for %s\n",
+             name ? name : "unknown");
+    if(data) *data = NULL;
+    if(entry) *entry = NULL;
+    return 1;
+  }
+
   // Search or create cache entry (under cache lock)
   dt_pthread_mutex_lock(&cache->lock);
   cache->queries++;
@@ -1301,6 +1311,12 @@ static void _cache_remove_invalid_exact_hit(dt_dev_pixelpipe_cache_t *cache, con
 gboolean dt_dev_pixelpipe_cache_peek(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, void **data,
                                      dt_iop_buffer_dsc_t **dsc, dt_pixel_cache_entry_t **entry)
 {
+  if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
+  {
+    _cache_clear_lookup_outputs(data, entry);
+    return FALSE;
+  }
+
   dt_pixel_cache_entry_t *cache_entry = _cache_lookup_existing(cache, hash, data, dsc);
   if(!cache_entry)
   {
@@ -1531,6 +1547,8 @@ void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, cons
                                            dt_pixel_cache_entry_t **cache_entry, 
                                            dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 {
+  if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return NULL;
+
   void *data = NULL;
   if(!dt_dev_pixelpipe_cache_peek(cache, hash, &data, NULL, cache_entry))
     return NULL;
@@ -1558,6 +1576,8 @@ void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, con
 void *dt_dev_pixelpipe_cache_get_ref_unlocked(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
                                               dt_pixel_cache_entry_t **cache_entry)
 {
+  if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return NULL;
+
   // Realtime/display helper:
   // 1. briefly try-read-lock to avoid acquiring while a writer is active,
   // 2. unlock immediately,

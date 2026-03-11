@@ -1730,7 +1730,7 @@ void gui_reset(dt_lib_module_t *self)
   _destroy_surface(d);
   _trigger_recompute(d);
 
-  dt_dev_pixelpipe_refresh_preview(darktable.develop, FALSE);
+  dt_dev_pixelpipe_update_preview(darktable.develop);
 }
 
 void gui_init(dt_lib_module_t *self)

@@ -233,7 +233,7 @@ static void _auto_levels_callback(GtkButton *button, dt_iop_module_t *self)
   }
   dt_iop_gui_leave_critical_section(self);
 
-  dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
+  dt_dev_pixelpipe_update_history_all(self->dev);
 }
 
 static void _select_region_toggled_callback(GtkToggleButton *togglebutton, dt_iop_module_t *self)
@@ -368,7 +368,7 @@ int button_released(struct dt_iop_module_t *self, double x, double y, int which,
       g->button_down = 0;
       g->call_auto_exposure = 1;
 
-      dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
+      dt_dev_pixelpipe_update_history_all(self->dev);
     }
     else
       g->button_down = 0;

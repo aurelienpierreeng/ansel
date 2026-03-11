@@ -302,6 +302,11 @@ typedef struct dt_develop_t
   // This is updated when history is changed, read or written.
   uint64_t history_hash;
 
+  // Darkroom pipelines are running fulltime in background until leaving darkroom.
+  // Set that to TRUE once they get shutdown.
+  gboolean pipelines_started;
+  gboolean pixelpipe_init_batching;
+
   /* proxy for communication between plugins and develop/darkroom */
   struct
   {
@@ -421,13 +426,9 @@ dt_dev_image_storage_t dt_dev_ensure_image_storage(dt_develop_t *dev, const int3
 // GUI-thread second phase of image loading: read history and rebuild pipelines.
 int dt_dev_load_image_finish(dt_develop_t *dev, const int32_t imgid);
 
-// Launch a pipeline job
-void dt_dev_process(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe);
-
-// Lazy helpers that will update GUI pipelines (main image and small preview)
-// only when needed, and only the one(s) needed.
-void dt_dev_process_all_real(dt_develop_t *dev);
-#define dt_dev_process_all(dev) DT_DEBUG_TRACE_WRAPPER(DT_DEBUG_DEV, dt_dev_process_all_real, (dev))
+// Start background pipeline threads. They run fulltime until we close darkroom,
+// so no need to recall that
+void dt_dev_start_all_pipelines(dt_develop_t *dev);
 
 int dt_dev_load_image(dt_develop_t *dev, const int32_t imgid);
 /** checks if provided imgid is the image currently in develop */

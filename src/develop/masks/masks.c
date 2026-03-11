@@ -373,7 +373,7 @@ void dt_masks_gui_init(dt_develop_t *dev)
 
   dt_masks_clear_form_gui(dev);
   dt_masks_set_visible_form(dev, NULL);
-  dev->form_gui->pipe_hash = 0;
+  dev->form_gui->pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   dev->form_gui->formid = 0;
 }
 
@@ -1021,7 +1021,8 @@ void dt_masks_gui_form_remove(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
 {
   dt_masks_form_gui_points_t *gui_points
       = (dt_masks_form_gui_points_t *)g_list_nth_data(mask_gui->points, form_index);
-  mask_gui->pipe_hash = mask_gui->formid = 0;
+  mask_gui->pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  mask_gui->formid = 0;
 
   if(gui_points)
   {
@@ -1039,18 +1040,19 @@ void dt_masks_gui_form_test_create(dt_masks_form_t *mask_form, dt_masks_form_gui
                                    dt_iop_module_t *module)
 {
   // we test if the image has changed
-  if(mask_gui->pipe_hash > 0)
+  if(mask_gui->pipe_hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
   {
     if(mask_gui->pipe_hash != darktable.develop->preview_pipe->backbuf.hash)
     {
-      mask_gui->pipe_hash = mask_gui->formid = 0;
+      mask_gui->pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+      mask_gui->formid = 0;
       g_list_free_full(mask_gui->points, dt_masks_form_gui_points_free);
       mask_gui->points = NULL;
     }
   }
 
   // we create the form if needed
-  if(mask_gui->pipe_hash == 0)
+  if(mask_gui->pipe_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
   {
     if(mask_form->type & DT_MASKS_GROUP)
     {
@@ -2709,7 +2711,8 @@ void dt_masks_clear_form_gui(dt_develop_t *develop)
   dt_masks_dynbuf_free(develop->form_gui->guipoints_payload);
   develop->form_gui->guipoints_payload = NULL;
   develop->form_gui->guipoints_count = 0;
-  develop->form_gui->pipe_hash = develop->form_gui->formid = 0;
+  develop->form_gui->pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  develop->form_gui->formid = 0;
   develop->form_gui->delta[0] = develop->form_gui->delta[1] = 0.0f;
   develop->form_gui->scrollx = develop->form_gui->scrolly = 0.0f;
   develop->form_gui->form_selected = develop->form_gui->border_selected = develop->form_gui->form_dragging

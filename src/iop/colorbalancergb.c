@@ -1479,7 +1479,7 @@ static void mask_callback(GtkWidget *togglebutton, dt_iop_module_t *self)
   dt_bauhaus_widget_set_quad_active(GTK_WIDGET(g->highlights_weight), g->mask_type == MASK_HIGHLIGHTS);
 
   dt_iop_set_cache_bypass(self, g->mask_display);
-  dt_dev_pixelpipe_refresh_main(self->dev, FALSE);
+  dt_dev_pixelpipe_update_history_main(self->dev);
 }
 
 
@@ -1654,7 +1654,7 @@ static void checker_1_picker_callback(GtkColorButton *widget, dt_iop_module_t *s
   dt_conf_set_float("plugins/darkroom/colorbalancergb/checker1/red", color.red);
   dt_conf_set_float("plugins/darkroom/colorbalancergb/checker1/green", color.green);
   dt_conf_set_float("plugins/darkroom/colorbalancergb/checker1/blue", color.blue);
-  dt_dev_pixelpipe_refresh_main(self->dev, FALSE);
+  dt_dev_pixelpipe_update_history_main(self->dev);
 }
 
 
@@ -1667,7 +1667,7 @@ static void checker_2_picker_callback(GtkColorButton *widget, dt_iop_module_t *s
   dt_conf_set_float("plugins/darkroom/colorbalancergb/checker2/red", color.red);
   dt_conf_set_float("plugins/darkroom/colorbalancergb/checker2/green", color.green);
   dt_conf_set_float("plugins/darkroom/colorbalancergb/checker2/blue", color.blue);
-  dt_dev_pixelpipe_refresh_main(self->dev, FALSE);
+  dt_dev_pixelpipe_update_history_main(self->dev);
 }
 
 
@@ -1676,7 +1676,7 @@ static void checker_size_callback(GtkWidget *widget, dt_iop_module_t *self)
   if(darktable.gui->reset) return;
   const size_t size = dt_bauhaus_slider_get(widget);
   dt_conf_set_int("plugins/darkroom/colorbalancergb/checker/size", size);
-  dt_dev_pixelpipe_refresh_main(self->dev, FALSE);
+  dt_dev_pixelpipe_update_history_main(self->dev);
 }
 
 

@@ -1117,6 +1117,9 @@ void expose(
   cairo_save(cri);
 
   dt_develop_t *dev = (dt_develop_t *)self->data;
+  if(!dev->pixelpipe_init_batching)
+    dt_dev_start_all_pipelines(dev);
+
   const int32_t border = dev->roi.border_size;
 
 #if DARKROOM_EXPOSE_DUMB_DEBUG
@@ -1316,7 +1319,11 @@ static void _darkroom_image_load_job_state(dt_job_t *job, dt_job_state_t state)
 {
   if(job != _darkroom_image_load_job) return;
 
-  if(state == DT_JOB_STATE_CANCELLED) _darkroom_image_load_active_request = 0;
+  if(state == DT_JOB_STATE_CANCELLED)
+  {
+    _darkroom_image_load_active_request = 0;
+    if(darktable.develop) darktable.develop->pixelpipe_init_batching = FALSE;
+  }
   if(state >= DT_JOB_STATE_FINISHED) _darkroom_image_load_job = NULL;
 }
 
@@ -1381,6 +1388,7 @@ static void _darkroom_cancel_image_load_job(void)
   dt_control_job_cancel(_darkroom_image_load_job);
   _darkroom_image_load_job = NULL;
   _darkroom_image_load_active_request = 0;
+  if(darktable.develop) darktable.develop->pixelpipe_init_batching = FALSE;
   _darkroom_pending_focus_module = NULL;
 }
 
@@ -1393,10 +1401,12 @@ static void _darkroom_start_image_load(const int32_t imgid)
   }
 
   _darkroom_cancel_image_load_job();
+  if(darktable.develop) darktable.develop->pixelpipe_init_batching = TRUE;
 
   dt_job_t *job = dt_control_job_create(&_darkroom_image_load_job_run, "darkroom load image %d", imgid);
   if(!job)
   {
+    if(darktable.develop) darktable.develop->pixelpipe_init_batching = FALSE;
     dt_control_log(_("We could not queue the image load."));
     return;
   }
@@ -1427,10 +1437,15 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
 
   _darkroom_image_load_active_request = 0;
 
-  if(!loaded) return;
+  if(!loaded)
+  {
+    dev->pixelpipe_init_batching = FALSE;
+    return;
+  }
 
   if(result)
   {
+    dev->pixelpipe_init_batching = FALSE;
     _darkroom_log_image_load_error((int)result);
     return;
   }
@@ -1446,6 +1461,7 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
   const int ret = dt_dev_load_image_finish(dev, loaded->imgid);
   if(ret)
   {
+    dev->pixelpipe_init_batching = FALSE;
     _darkroom_log_image_load_error(ret);
     return;
   }
@@ -1469,7 +1485,9 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
   dt_dev_history_gui_update(dev);
   if(_darkroom_attach_missing_iop_guis(dev))
     dt_dev_history_gui_update(dev);
-  dt_dev_history_pixelpipe_update(dev, TRUE);
+
+  dt_dev_pixelpipe_rebuild_all(dev);
+  dt_dev_get_thumbnail_size(dev);
 
   if(_darkroom_pending_focus_module && g_list_find(dev->iop, _darkroom_pending_focus_module))
     dt_iop_request_focus(_darkroom_pending_focus_module);
@@ -1488,6 +1506,9 @@ static void _darkroom_image_loaded_callback(gpointer instance, guint request_id,
   // change active image for global actions (menu)
   dt_view_active_images_reset(FALSE);
   dt_view_active_images_add(dev->image_storage.id, FALSE);
+
+  dev->pixelpipe_init_batching = FALSE;
+  dt_control_queue_redraw_center();
 
   DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_DEVELOP_IMAGE_CHANGED);
 
@@ -1665,7 +1686,7 @@ static void _overexposed_quickbutton_clicked(GtkWidget *w, gpointer user_data)
 {
   dt_develop_t *d = (dt_develop_t *)user_data;
   d->overexposed.enabled = !d->overexposed.enabled;
-  dt_dev_pixelpipe_refresh_main(d, TRUE);
+  dt_dev_pixelpipe_resync_history_main(d);
 }
 
 static void colorscheme_callback(GtkWidget *combo, gpointer user_data)
@@ -1675,7 +1696,7 @@ static void colorscheme_callback(GtkWidget *combo, gpointer user_data)
   if(d->overexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->overexposed.button));
 
-  dt_dev_pixelpipe_refresh_main(d, TRUE);
+  dt_dev_pixelpipe_resync_history_main(d);
 }
 
 static void lower_callback(GtkWidget *slider, gpointer user_data)
@@ -1685,7 +1706,7 @@ static void lower_callback(GtkWidget *slider, gpointer user_data)
   if(d->overexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->overexposed.button));
 
-  dt_dev_pixelpipe_refresh_main(d, TRUE);
+  dt_dev_pixelpipe_resync_history_main(d);
 }
 
 static void upper_callback(GtkWidget *slider, gpointer user_data)
@@ -1695,7 +1716,7 @@ static void upper_callback(GtkWidget *slider, gpointer user_data)
   if(d->overexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->overexposed.button));
 
-  dt_dev_pixelpipe_refresh_main(d, TRUE);
+  dt_dev_pixelpipe_resync_history_main(d);
 }
 
 static void mode_callback(GtkWidget *slider, gpointer user_data)
@@ -1705,7 +1726,7 @@ static void mode_callback(GtkWidget *slider, gpointer user_data)
   if(d->overexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->overexposed.button));
 
-  dt_dev_pixelpipe_refresh_main(d, FALSE);
+  dt_dev_pixelpipe_update_history_main(d);
 }
 
 /* rawoverexposed */
@@ -1713,7 +1734,7 @@ static void _rawoverexposed_quickbutton_clicked(GtkWidget *w, gpointer user_data
 {
   dt_develop_t *d = (dt_develop_t *)user_data;
   d->rawoverexposed.enabled = !d->rawoverexposed.enabled;
-  dt_dev_pixelpipe_refresh_main(d, TRUE);
+  dt_dev_pixelpipe_resync_history_main(d);
 }
 
 static void rawoverexposed_mode_callback(GtkWidget *combo, gpointer user_data)
@@ -1723,7 +1744,7 @@ static void rawoverexposed_mode_callback(GtkWidget *combo, gpointer user_data)
   if(d->rawoverexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->rawoverexposed.button));
 
-  dt_dev_pixelpipe_refresh_main(d, TRUE);
+  dt_dev_pixelpipe_resync_history_main(d);
 }
 
 static void rawoverexposed_colorscheme_callback(GtkWidget *combo, gpointer user_data)
@@ -1733,7 +1754,7 @@ static void rawoverexposed_colorscheme_callback(GtkWidget *combo, gpointer user_
   if(d->rawoverexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->rawoverexposed.button));
 
-  dt_dev_pixelpipe_refresh_main(d, TRUE);
+  dt_dev_pixelpipe_resync_history_main(d);
 }
 
 static void rawoverexposed_threshold_callback(GtkWidget *slider, gpointer user_data)
@@ -1743,7 +1764,7 @@ static void rawoverexposed_threshold_callback(GtkWidget *slider, gpointer user_d
   if(d->rawoverexposed.enabled == FALSE)
     gtk_button_clicked(GTK_BUTTON(d->rawoverexposed.button));
 
-  dt_dev_pixelpipe_refresh_main(d, TRUE);
+  dt_dev_pixelpipe_resync_history_main(d);
 }
 
 /* softproof */
@@ -1756,7 +1777,7 @@ static void _softproof_quickbutton_clicked(GtkWidget *w, gpointer user_data)
     darktable.color_profiles->mode = DT_PROFILE_SOFTPROOF;
 
   _update_softproof_gamut_checking(d);
-  dt_dev_pixelpipe_refresh_main(d, TRUE);
+  dt_dev_pixelpipe_resync_history_main(d);
 }
 
 /* gamut */
@@ -1770,7 +1791,7 @@ static void _gamut_quickbutton_clicked(GtkWidget *w, gpointer user_data)
 
   _update_softproof_gamut_checking(d);
 
-  dt_dev_pixelpipe_refresh_main(d, TRUE);
+  dt_dev_pixelpipe_resync_history_main(d);
 }
 
 /* set the gui state for both softproof and gamut checking */
@@ -1821,7 +1842,7 @@ end:
   if(profile_changed)
   {
     DT_DEBUG_CONTROL_SIGNAL_RAISE(darktable.signals, DT_SIGNAL_CONTROL_PROFILE_USER_CHANGED, DT_COLORSPACES_PROFILE_TYPE_SOFTPROOF);
-    dt_dev_pixelpipe_refresh_main(d, TRUE);
+    dt_dev_pixelpipe_resync_history_main(d);
   }
 }
 
@@ -2755,6 +2776,8 @@ void leave(dt_view_t *self)
   dt_atomic_set_int(&dev->pipe->shutdown, TRUE);
   dt_atomic_set_int(&dev->preview_pipe->shutdown, TRUE);
   if(dev->virtual_pipe) dt_atomic_set_int(&dev->virtual_pipe->shutdown, TRUE);
+  dev->pipelines_started = FALSE;
+  dev->pixelpipe_init_batching = FALSE;
 
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_darkroom_image_loaded_callback), (gpointer)self);
   _darkroom_cancel_image_load_job();
@@ -3081,7 +3104,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
     if(darktable.lib->proxy.colorpicker.primary_sample->size == DT_LIB_COLORPICKER_SIZE_BOX)
       dt_control_set_cursor(GDK_LEFT_PTR);
 
-    dt_dev_pixelpipe_refresh_preview(dev, FALSE);
+    dt_dev_pixelpipe_update_preview(dev);
     return 1;
   }
   // masks
@@ -3090,7 +3113,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
   {
     // Change on mask parameters and image output.
     _do_delayed_history_commit(dev);
-    dt_dev_pixelpipe_refresh_preview(dev, FALSE); // Needed if mask selection changed
+    dt_dev_pixelpipe_update_preview(dev); // Needed if mask selection changed
     return 1;
   }
 

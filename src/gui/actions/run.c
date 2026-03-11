@@ -24,7 +24,7 @@
 static gboolean clear_caches_callback(GtkAccelGroup *group, GObject *acceleratable, guint keyval, GdkModifierType mods, gpointer user_data)
 {
   dt_dev_pixelpipe_reset_all(darktable.develop);
-  dt_dev_pixelpipe_refresh_all(darktable.develop, TRUE);
+  dt_dev_pixelpipe_resync_history_all(darktable.develop);
   return TRUE;
 }
 

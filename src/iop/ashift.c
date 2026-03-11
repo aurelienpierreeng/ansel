@@ -2557,7 +2557,7 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
   if(p->cropmode == ASHIFT_CROP_OFF)
   {
     _clear_shadow_crop_box(g);
-    dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
+    dt_dev_pixelpipe_update_history_all(self->dev);
     return;
   }
 
@@ -2684,7 +2684,7 @@ static void do_crop(dt_iop_module_t *self, dt_iop_ashift_params_t *p)
          iter, cropfit.x, cropfit.y, cropfit.alpha, p->cl, p->cr, p->ct, p->cb, wd, ht);
 #endif
 
-  dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
+  dt_dev_pixelpipe_update_history_all(self->dev);
   return;
 
 failed:
@@ -2698,7 +2698,7 @@ failed:
   g->fitting = 0;
   dt_control_log(_("automatic cropping failed"));
 
-  dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
+  dt_dev_pixelpipe_update_history_all(self->dev);
   return;
 }
 
@@ -2933,7 +2933,7 @@ static int _do_get_structure_auto(dt_iop_module_t *self, dt_iop_ashift_params_t 
   if(b == NULL)
   {
     dt_control_log(_("Data pending - Please repeat"));
-    dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
+    dt_dev_pixelpipe_update_preview(self->dev);
     goto error;
   }
 
@@ -2983,7 +2983,7 @@ static void _do_get_structure_lines(dt_iop_module_t *self)
   if(b == NULL)
   {
     dt_control_log(_("Data pending - Please repeat"));
-    dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
+    dt_dev_pixelpipe_update_preview(self->dev);
     return;
   }
 
@@ -3018,7 +3018,7 @@ static void _do_get_structure_quad(dt_iop_module_t *self)
   if(b == NULL)
   {
     dt_control_log(_("Data pending - Please repeat"));
-    dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
+    dt_dev_pixelpipe_update_preview(self->dev);
     return;
   }
 
@@ -4896,7 +4896,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   else
     g->jobcode = ASHIFT_JOBCODE_DO_CROP;
 
-  dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
+  dt_dev_pixelpipe_update_history_all(self->dev);
 }
 
 void gui_reset(struct dt_iop_module_t *self)
@@ -4936,7 +4936,7 @@ static void cropmode_callback(GtkWidget *widget, gpointer user_data)
   if(g->editing)
   {
     // Update temporary copy
-    dt_dev_pixelpipe_refresh_all(self->dev, FALSE);
+    dt_dev_pixelpipe_update_history_all(self->dev);
   }
   else
   {
@@ -4985,7 +4985,7 @@ static int _event_fit_v_button_clicked(GtkWidget *widget, GdkEventButton *event,
       // the preview image is ready
       g->jobcode = ASHIFT_JOBCODE_FIT;
       g->jobparams = g->lastfit = fitaxis;
-      dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
+      dt_dev_pixelpipe_update_preview(self->dev);
     }
     return TRUE;
   }
@@ -5032,7 +5032,7 @@ static int _event_fit_h_button_clicked(GtkWidget *widget, GdkEventButton *event,
       // the preview image is ready
       g->jobcode = ASHIFT_JOBCODE_FIT;
       g->jobparams = g->lastfit = fitaxis;
-      dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
+      dt_dev_pixelpipe_update_preview(self->dev);
     }
     return TRUE;
   }
@@ -5081,7 +5081,7 @@ static int _event_fit_both_button_clicked(GtkWidget *widget, GdkEventButton *eve
       // the preview image is ready
       g->jobcode = ASHIFT_JOBCODE_FIT;
       g->jobparams = g->lastfit = fitaxis;
-      dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
+      dt_dev_pixelpipe_update_preview(self->dev);
     }
     return TRUE;
   }
@@ -5137,7 +5137,7 @@ static int _event_structure_auto_clicked(GtkWidget *widget, GdkEventButton *even
       g->jobparams = enhance;
     }
 
-    dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
+    dt_dev_pixelpipe_update_preview(self->dev);
     return TRUE;
   }
   return FALSE;
@@ -5162,7 +5162,7 @@ static int _event_structure_quad_clicked(GtkWidget *widget, GdkEventButton *even
     // module is not enabled -> invoke it and queue the job to be processed once
     // the preview image is ready
     g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE_QUAD;
-    dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
+    dt_dev_pixelpipe_update_preview(self->dev);
   }
 
   return TRUE;
@@ -5189,7 +5189,7 @@ static int _event_structure_lines_clicked(GtkWidget *widget, GdkEventButton *eve
     g->jobcode = ASHIFT_JOBCODE_GET_STRUCTURE_LINES;
   }
 
-  dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
+  dt_dev_pixelpipe_update_preview(self->dev);
   return TRUE;
 }
 
@@ -5234,7 +5234,7 @@ static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *se
   }
 
   // It sucks that we need to invalidate the preview too but we need its final dimension.
-  dt_dev_pixelpipe_refresh_all(self->dev, TRUE);
+  dt_dev_pixelpipe_resync_history_all(self->dev);
 }
 
 static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
@@ -5424,7 +5424,7 @@ void reload_defaults(dt_iop_module_t *module)
     g->buf_x_off = 0;
     g->buf_y_off = 0;
     g->buf_scale = 1.0f;
-    g->buf_hash = 0;
+    g->buf_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     g->isflipped = -1;
     g->lastfit = ASHIFT_FIT_NONE;
     dt_iop_gui_leave_critical_section(module);
@@ -5434,8 +5434,8 @@ void reload_defaults(dt_iop_module_t *module)
     g->lines_count =0;
     g->horizontal_count = 0;
     g->vertical_count = 0;
-    g->grid_hash = 0;
-    g->lines_hash = 0;
+    g->grid_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    g->lines_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     g->rotation_range = ROTATION_RANGE_SOFT;
     g->lensshift_v_range = LENSSHIFT_RANGE_SOFT;
     g->lensshift_h_range = LENSSHIFT_RANGE_SOFT;
@@ -5527,7 +5527,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->buf_x_off = 0;
   g->buf_y_off = 0;
   g->buf_scale = 1.0f;
-  g->buf_hash = 0;
+  g->buf_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   g->isflipped = -1;
   g->lastfit = ASHIFT_FIT_NONE;
   g->editing = FALSE;
@@ -5544,8 +5544,8 @@ void gui_init(struct dt_iop_module_t *self)
   g->points_idx = NULL;
   g->points_lines_count = 0;
   g->points_version = 0;
-  g->grid_hash = 0;
-  g->lines_hash = 0;
+  g->grid_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  g->lines_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   g->rotation_range = ROTATION_RANGE_SOFT;
   g->lensshift_v_range = LENSSHIFT_RANGE_SOFT;
   g->lensshift_h_range = LENSSHIFT_RANGE_SOFT;

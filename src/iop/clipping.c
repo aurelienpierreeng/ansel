@@ -1259,7 +1259,7 @@ static void _event_preview_updated_callback(gpointer instance, dt_iop_module_t *
   g->preview_ready = TRUE;
   DT_DEBUG_CONTROL_SIGNAL_DISCONNECT(darktable.signals, G_CALLBACK(_event_preview_updated_callback), self);
   // force max size to be recomputed
-  g->clip_max_pipe_hash = 0;
+  g->clip_max_pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
 }
 
 void gui_focus(struct dt_iop_module_t *self, gboolean in)
@@ -1299,7 +1299,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
       self->dev->gui_module = self;
       commit_box(self, g, p);
       self->dev->gui_module = old_gui;
-      g->clip_max_pipe_hash = 0;
+      g->clip_max_pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     }
   }
   else if(in)
@@ -2013,7 +2013,7 @@ void gui_init(struct dt_iop_module_t *self)
   g->clip_w = g->clip_h = 1.0;
   g->clip_max_x = g->clip_max_y = 0.0;
   g->clip_max_w = g->clip_max_h = 1.0;
-  g->clip_max_pipe_hash = 0;
+  g->clip_max_pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   g->cropping = 0;
   g->straightening = 0;
   g->applied = 1;

@@ -128,6 +128,7 @@ GList *dt_dev_load_modules(dt_develop_t *dev)
 void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
 {
   memset(dev, 0, sizeof(dt_develop_t));
+  dev->history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   dev->gui_module = NULL;
   dt_pthread_rwlock_init(&dev->history_mutex, NULL);
   dt_pthread_rwlock_init(&dev->masks_mutex, NULL);
@@ -283,7 +284,7 @@ void dt_dev_cleanup(dt_develop_t *dev)
   dt_conf_set_float("darkroom/ui/overexposed/upper", dev->overexposed.upper);
 }
 
-void dt_dev_process(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe)
+static void _dev_start_pipeline(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe)
 {
   if(!pipe->running)
   {
@@ -302,13 +303,19 @@ void dt_dev_process(dt_develop_t *dev, struct dt_dev_pixelpipe_t *pipe)
   // else : join currently-running threads
 }
 
-void dt_dev_process_all_real(dt_develop_t *dev)
+void dt_dev_start_all_pipelines(dt_develop_t *dev)
 {
+  const gboolean preview_running = dev && dev->preview_pipe && dev->preview_pipe->running;
+  const gboolean main_running = dev && dev->pipe && dev->pipe->running;
+  if(dev->pipelines_started && preview_running && main_running) return;
+
   // Try to make the preview pipe runs first, we need it for many output sizes computations
   // aka give a timeout to main pipe. No guaranty though, we don't control threads.
   dev->pipe->timeout = 150000; // 150 ms
-  dt_dev_process(dev, dev->preview_pipe);
-  dt_dev_process(dev, dev->pipe);
+  _dev_start_pipeline(dev, dev->preview_pipe);
+  _dev_start_pipeline(dev, dev->pipe);
+
+  dev->pipelines_started = TRUE;
 }
 
 static void _flag_pipe(dt_dev_pixelpipe_t *pipe, gboolean error)
@@ -334,6 +341,21 @@ static void _flag_pipe(dt_dev_pixelpipe_t *pipe, gboolean error)
     pipe->status = DT_DEV_PIXELPIPE_VALID;
 
   // Otherwise keep the status as-is and let the outer loop decide.
+}
+
+static gboolean _darkroom_pipeline_inputs_ready(const dt_develop_t *dev)
+{
+  if(!dev) return FALSE;
+
+  return dev->image_storage.id > 0
+         && dev->roi.width >= 32
+         && dev->roi.height >= 32
+         && dev->roi.raw_width >= 32
+         && dev->roi.raw_height >= 32
+         && dev->roi.processed_width >= 32
+         && dev->roi.processed_height >= 32
+         && dev->roi.preview_width >= 32
+         && dev->roi.preview_height >= 32;
 }
 
 int dt_dev_get_thumbnail_size(dt_develop_t *dev)
@@ -373,7 +395,6 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
   const int preview_width = roundf(natural_scale * processed_width);
   const int preview_height = roundf(natural_scale * processed_height);
 
-  const gboolean first = !dev->roi.output_inited;
   dev->roi.processed_width = processed_width;
   dev->roi.processed_height = processed_height;
   dev->roi.natural_scale = natural_scale;
@@ -440,27 +461,25 @@ static gboolean _update_darkroom_roi(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe
 
 void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 {
-  // -1×-1 px means the dimensions of the main preview in darkroom were not inited yet.
-  // 0×0 px is not feasible.
-  // Anything lower than 32 px might cause segfaults with blurs and local contrast.
-  // When the window size get inited, we will get a new order to recompute with a "zoom_changed" flag.
-  // Until then, don't bother computing garbage that will not be reused later.
-  if(dev->roi.width < 32 || dev->roi.height < 32 
-    || dev->roi.raw_width < 32 || dev->roi.raw_height < 32
-    || dev->roi.processed_height < 32 || dev->roi.processed_width < 32
-    || dev->roi.preview_height < 32 || dev->roi.preview_width < 32) 
-      return;
-
-  if(dev->image_storage.id <= 0) return;
-
-  dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
-                               DT_MIPMAP_FULL);
-
   pipe->running = 1;
 
   // Infinite loop: run for as long as the thread is running
   while(!dev->exit && dt_control_running())
   {
+    if(!_darkroom_pipeline_inputs_ready(dev))
+    {
+      pipe->status = DT_DEV_PIXELPIPE_DIRTY;
+      dt_iop_nap(50000); // wait 50 ms until GUI/image sizes are initialized
+      continue;
+    }
+
+    if(pipe->imgid != dev->image_storage.id
+       || pipe->iwidth != dev->roi.raw_width
+       || pipe->iheight != dev->roi.raw_height
+       || pipe->image.id != dev->image_storage.id)
+      dt_dev_pixelpipe_set_input(pipe, dev, dev->image_storage.id, dev->roi.raw_width, dev->roi.raw_height,
+                                 DT_MIPMAP_FULL);
+
     // Keep track of ROI changes out of the loop
     float scale = 1.f;
     int x = 0, y = 0, wd = 0, ht = 0;
@@ -505,7 +524,8 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       }
 
       // Resynch history with pipeline. NB: this locks dev->history_mutex
-      dt_dev_pixelpipe_change(pipe, dev);
+      while(pipe->changed != DT_DEV_PIPE_UNCHANGED)
+        dt_dev_pixelpipe_change(pipe, dev);
 
       // If user zoomed/panned in darkroom during the previous loop of recomputation,
       // the kill-switch event was sent, which terminated the pipeline before completion in the previous run,
@@ -706,9 +726,8 @@ int dt_dev_load_image_finish(dt_develop_t *dev, const int32_t imgid)
     dt_dev_history_notify_change(dev, imgid);
   }
 
-  if(dev->gui_attached) 
+  if(dev->gui_attached && !dev->pixelpipe_init_batching) 
   {
-    dt_dev_pixelpipe_rebuild_all(dev);
     dt_dev_get_thumbnail_size(dev);
   }
 

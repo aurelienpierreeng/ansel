@@ -208,7 +208,7 @@ static void _history_snapshot_undo_restore(const int32_t imgid, const int snap_i
   if(image)
   {
     // FIXME: this might be wrong or need more accurate handling
-    image->history_hash = 0;
+    image->history_hash = UINT64_MAX;
     dt_image_cache_write_release(darktable.image_cache, image, DT_IMAGE_CACHE_RELAXED);
   }
 }

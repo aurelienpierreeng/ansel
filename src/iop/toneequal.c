@@ -587,7 +587,6 @@ static void invalidate_luminance_cache(dt_iop_module_t *const self)
   g->thumb_preview_hash = 0;
   g->ui_preview_hash = 0;
   dt_iop_gui_leave_critical_section(self);
-  dt_dev_pixelpipe_refresh_preview(self->dev, FALSE);
 }
 
 
@@ -1930,7 +1929,7 @@ static void show_luminance_mask_callback(GtkWidget *togglebutton, GdkEventButton
 
   dt_iop_set_cache_bypass(self, g->mask_display);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_luminance_mask), g->mask_display);
-  dt_dev_pixelpipe_refresh_main(self->dev, FALSE);
+  dt_dev_pixelpipe_update_history_main(self->dev);
 
   // Unlock the colour picker so we can display our own custom cursor
   dt_iop_color_picker_reset(self, TRUE);
@@ -2450,7 +2449,7 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
     const gboolean was_mask = g->mask_display;
     g->mask_display = FALSE;
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_luminance_mask), FALSE);
-    if(was_mask) dt_dev_pixelpipe_refresh_main(self->dev, FALSE);
+    if(was_mask) dt_dev_pixelpipe_update_history_main(self->dev);
     dt_collection_hint_message(darktable.collection);
   }
   else

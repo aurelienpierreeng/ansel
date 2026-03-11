@@ -573,6 +573,7 @@ static void _pop_undo(gpointer user_data, dt_undo_type_t type, dt_undo_data_t da
   dt_pthread_rwlock_unlock(&dev->history_mutex);
 
   dt_dev_history_gui_update(dev);
+  // TODO: check if we need to rebuild the full pipeline and do it only if needed
   dt_dev_history_pixelpipe_update(dev, TRUE);
   dt_dev_history_notify_change(dev, dev->image_storage.id);
 
@@ -901,8 +902,6 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
   {
     if(module && (module->modify_roi_in || module->modify_roi_out))
       dt_dev_get_thumbnail_size(dev);
-
-    if(redraw) dt_dev_process_all(dev);
     
     if(module) 
     { 
@@ -1060,7 +1059,7 @@ void dt_dev_pop_history_items(dt_develop_t *dev)
   dt_dev_pop_history_items_ext(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   // Update darkroom sizes after releasing the history lock to avoid deadlocks.
-  if(dev->gui_attached) dt_dev_get_thumbnail_size(dev);
+  if(dev->gui_attached && !dev->pixelpipe_init_batching) dt_dev_get_thumbnail_size(dev);
   if(darktable.gui && dev->gui_attached) --darktable.gui->reset;
 }
 
@@ -1099,8 +1098,6 @@ void dt_dev_history_pixelpipe_update(dt_develop_t *dev, gboolean rebuild)
     dt_dev_pixelpipe_rebuild_all(dev);
   else
     dt_dev_pixelpipe_resync_history_all(dev);
-
-  dt_dev_process_all(dev);
 }
 
 /**

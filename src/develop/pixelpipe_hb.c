@@ -552,8 +552,8 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->processed_width = pipe->iwidth = 0;
   pipe->processed_height = pipe->iheight = 0;
   pipe->nodes = NULL;
-  pipe->hash = 0;
-  pipe->history_hash = 0;
+  pipe->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  pipe->history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   pipe->bypass_cache = 0;
   pipe->no_cache = FALSE;
   dt_dev_set_backbuf(&pipe->backbuf, 0, 0, 0, -1, -1);
@@ -585,7 +585,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->output_profile_info = NULL;
 
   pipe->status = DT_DEV_PIXELPIPE_DIRTY;
-  pipe->last_history_hash = 0;
+  pipe->last_history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   pipe->last_history_item = NULL;
   pipe->flush_cache = FALSE;
   pipe->timeout = 0;
@@ -656,7 +656,7 @@ void dt_dev_pixelpipe_cleanup(dt_dev_pixelpipe_t *pipe)
 
 gboolean dt_dev_pixelpipe_set_reentry(dt_dev_pixelpipe_t *pipe, uint64_t hash)
 {
-  if(pipe->reentry_hash == 0)
+  if(pipe->reentry_hash == DT_PIXELPIPE_CACHE_HASH_INVALID)
   {
     pipe->reentry = TRUE;
     pipe->reentry_hash = hash;
@@ -673,7 +673,7 @@ gboolean dt_dev_pixelpipe_unset_reentry(dt_dev_pixelpipe_t *pipe, uint64_t hash)
   if(pipe->reentry_hash == hash)
   {
     pipe->reentry = FALSE;
-    pipe->reentry_hash = 0;
+    pipe->reentry_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     dt_print(DT_DEBUG_DEV, "[dev_pixelpipe] re-entry flag unset for %" PRIu64 "\n", hash);
     return TRUE;
   }
@@ -689,7 +689,7 @@ gboolean dt_dev_pixelpipe_has_reentry(dt_dev_pixelpipe_t *pipe)
 void dt_dev_pixelpipe_reset_reentry(dt_dev_pixelpipe_t *pipe)
 {
   pipe->reentry = FALSE;
-  pipe->reentry_hash = 0;
+  pipe->reentry_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   pipe->flush_cache = FALSE;
   dt_print(DT_DEBUG_DEV, "[dev_pixelpipe] re-entry flag reset\n");
 }
@@ -741,11 +741,12 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     piece->module = module;
     piece->pipe = pipe;
     piece->data = NULL;
-    piece->hash = 0;
-    piece->blendop_hash = 0;
-    piece->global_hash = 0;
-    piece->global_mask_hash = 0;
+    piece->hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->blendop_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->global_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+    piece->global_mask_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->bypass_cache = FALSE;
+    memset(&piece->cache_entry, 0, sizeof(piece->cache_entry));
     piece->cache_entry.hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
     piece->force_opencl_cache = TRUE;
     piece->process_cl_ready = 0;
@@ -1640,7 +1641,7 @@ static gboolean _reuse_transient_output_cacheline(dt_dev_pixelpipe_t *pipe, dt_d
   if(!_reuse_module_output_cacheline(pipe, piece)) return FALSE;
 
   const uint64_t old_hash = piece->cache_entry.hash;
-  if(old_hash == 0 || old_hash == DT_PIXELPIPE_CACHE_HASH_INVALID || old_hash == new_hash) return FALSE;
+  if(old_hash == DT_PIXELPIPE_CACHE_HASH_INVALID || old_hash == new_hash) return FALSE;
   if(dt_pixel_cache_entry_get_size(&piece->cache_entry) < bufsize)
   {
     _trace_cache_owner(pipe, piece ? piece->module : NULL, "reuse-reject-size-snapshot", "output",
@@ -2189,12 +2190,26 @@ static void _print_opencl_errors(int error, dt_dev_pixelpipe_t *pipe)
 
 static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, dt_iop_roi_t roi, dt_pixel_cache_entry_t *entry)
 {
-  _trace_cache_owner(pipe, NULL, "backbuf-update", "backbuf", pipe ? pipe->hash : DT_PIXELPIPE_CACHE_HASH_INVALID,
+  const uint64_t requested_hash = pipe ? pipe->hash : DT_PIXELPIPE_CACHE_HASH_INVALID;
+  const uint64_t entry_hash = entry ? entry->hash : DT_PIXELPIPE_CACHE_HASH_INVALID;
+
+  _trace_cache_owner(pipe, NULL, "backbuf-update", "backbuf", requested_hash,
                      entry ? entry->data : NULL, entry, FALSE);
+
+  if(!pipe) return;
+
+  if(!entry || requested_hash == DT_PIXELPIPE_CACHE_HASH_INVALID || entry_hash == DT_PIXELPIPE_CACHE_HASH_INVALID
+     || entry_hash != requested_hash)
+  {
+    dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, pipe->backbuf.hash);
+    dt_dev_set_backbuf(&pipe->backbuf, 0, 0, 0, DT_PIXELPIPE_CACHE_HASH_INVALID, pipe->history_hash);
+    return;
+  }
+
   // Keep exactly one cache reference to the last valid output ("backbuf") for display.
   // This prevents the cache entry from being evicted while still in use by the GUI,
   // without leaking references on repeated cache hits.
-  const gboolean hash_changed = (pipe->backbuf.hash != pipe->hash);
+  const gboolean hash_changed = (pipe->backbuf.hash != entry_hash);
   if(hash_changed)
     dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, pipe->backbuf.hash);
 
@@ -2208,7 +2223,7 @@ static void _update_backbuf_cache_reference(dt_dev_pixelpipe_t *pipe, dt_iop_roi
   // Always refresh backbuf geometry/state, even when the cache key is unchanged.
   // Realtime drawing can update pixels in-place in the same cacheline, so width/height/history
   // must stay synchronized independently from key changes.
-  dt_dev_set_backbuf(&pipe->backbuf, roi.width, roi.height, bpp, pipe->hash, pipe->history_hash);
+  dt_dev_set_backbuf(&pipe->backbuf, roi.width, roi.height, bpp, entry_hash, pipe->history_hash);
 }
 
 static void _set_opencl_cache(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
