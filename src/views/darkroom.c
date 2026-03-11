@@ -933,18 +933,11 @@ static void _darkroom_release_stale_sources(const darkroom_expose_request_t *req
    * the same ROI. This avoids transient preview substitution glitches during
    * redraw storms (notably drawlayer realtime strokes on GPU). Drop it only
    * once the ROI really changed. */
-  if(!req->is_realtime && !dt_dev_pixelpipe_is_backbufer_valid(req->dev->pipe, req->dev)
-     && state->main_zoom_hash != req->zoom_hash)
+  if((!req->is_realtime && !dt_dev_pixelpipe_is_backbufer_valid(req->dev->pipe, req->dev)
+     && state->main_zoom_hash != req->zoom_hash) || state->main_zoom_hash != req->zoom_hash)
     _release_locked_surface(&_darkroom_main_locked);
-  if(!dt_dev_pixelpipe_is_backbufer_valid(req->dev->preview_pipe, req->dev))
-    _release_locked_surface(&_darkroom_preview_locked);
 
-  /* Explicit cache reset/flush path: if backbuffer hash is invalidated, drop
-   * any held cacheline handles once the ROI changed, so new entries can be
-   * acquired on next frame without losing same-ROI transient reuse. */
-  if(req->dev->pipe->backbuf.hash == (uint64_t)-1 && state->main_zoom_hash != req->zoom_hash)
-    _release_locked_surface(&_darkroom_main_locked);
-  if(req->dev->preview_pipe->backbuf.hash == (uint64_t)-1)
+  if(!dt_dev_pixelpipe_is_backbufer_valid(req->dev->preview_pipe, req->dev))
     _release_locked_surface(&_darkroom_preview_locked);
 }
 
