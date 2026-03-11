@@ -169,30 +169,18 @@ void dt_drawlayer_paint_finalize_path(dt_drawlayer_paint_stroke_t *state,
  *
  * @param dab Input dab sample from path stream.
  * @param distance_percent Sampling distance parameter in [0,1].
- * @param buffer Destination float RGBA buffer.
- * @param width Buffer width.
- * @param height Buffer height.
- * @param origin_x Layer-to-buffer X origin offset.
- * @param origin_y Layer-to-buffer Y origin offset.
+ * @param patch Destination float RGBA patch.
  * @param scale Layer-to-buffer scale factor.
- * @param stroke_mask Optional stroke-local alpha mask.
- * @param stroke_mask_width Stroke mask width.
- * @param stroke_mask_height Stroke mask height.
+ * @param stroke_mask Optional stroke-local alpha mask patch.
  * @param runtime_state Accumulated stroke damage output.
  * @param runtime_private Mutable stroke runtime payload.
  * @return TRUE when dab replay succeeded.
  */
 gboolean dt_drawlayer_paint_rasterize_segment_to_buffer(const dt_drawlayer_brush_dab_t *dab,
                                                         float distance_percent,
-                                                        float *buffer,
-                                                        int width,
-                                                        int height,
-                                                        int origin_x,
-                                                        int origin_y,
+                                                        dt_drawlayer_cache_patch_t *patch,
                                                         float scale,
-                                                        float *stroke_mask,
-                                                        int stroke_mask_width,
-                                                        int stroke_mask_height,
+                                                        dt_drawlayer_cache_patch_t *stroke_mask,
                                                         dt_drawlayer_damaged_rect_t *runtime_state,
                                                         dt_drawlayer_paint_stroke_t *runtime_private);
 

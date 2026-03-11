@@ -21,6 +21,8 @@
 #include <glib.h>
 #include <stdint.h>
 
+typedef struct dt_drawlayer_cache_patch_t dt_drawlayer_cache_patch_t;
+
 /**
  * @file brush.h
  * @brief Dab-level brush rasterization API for drawlayer.
@@ -86,27 +88,21 @@ struct dt_drawlayer_paint_stroke_t;
 /**
  * @brief Rasterize one dab into a float RGBA buffer.
  *
- * @param buffer Destination premultiplied RGBA float buffer (`width*height*4`).
- * @param width Destination width in pixels, must be >0.
- * @param height Destination height in pixels, must be >0.
- * @param origin_x Layer-to-buffer X origin offset.
- * @param origin_y Layer-to-buffer Y origin offset.
+ * @param patch Destination premultiplied RGBA float patch.
  * @param scale Layer-to-buffer scale factor, must be >0.
  * @param dab Fully resolved dab input (coordinates already in layer space).
  * @param sample_opacity_scale Opacity normalization factor derived from spacing.
- * @param stroke_mask Optional stroke-local alpha mask for overlap-aware flow.
- * @param stroke_mask_width Stroke mask width in pixels.
- * @param stroke_mask_height Stroke mask height in pixels.
+ * @param stroke_mask Optional stroke-local alpha mask patch for overlap-aware flow.
  * @param stroke Mutable stroke runtime payload (smudge context + dab bounds output).
  * @return TRUE when at least one pixel was processed; FALSE on invalid inputs or empty footprint.
  *
  * @pre `dab->radius > 0`, `dab->opacity > 0`, `scale > 0`.
  * @pre Coordinates transformation to layer space is handled by the caller.
  */
-gboolean dt_drawlayer_brush_rasterize(float *buffer, int width, int height, int origin_x,
-                                      int origin_y, float scale, const dt_drawlayer_brush_dab_t *dab,
-                                      float sample_opacity_scale, float *stroke_mask,
-                                      int stroke_mask_width, int stroke_mask_height,
+gboolean dt_drawlayer_brush_rasterize(dt_drawlayer_cache_patch_t *patch, float scale,
+                                      const dt_drawlayer_brush_dab_t *dab,
+                                      float sample_opacity_scale,
+                                      dt_drawlayer_cache_patch_t *stroke_mask,
                                       struct dt_drawlayer_paint_stroke_t *stroke);
 
 /**

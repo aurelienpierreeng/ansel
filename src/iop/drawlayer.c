@@ -744,6 +744,22 @@ static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, con
   if(!stroke_mask) return FALSE;
   memset(stroke_mask, 0, (size_t)replay_width * replay_height * sizeof(float));
   dt_drawlayer_damaged_rect_t replay_damage = { 0 };
+  dt_drawlayer_cache_patch_t replay_patch = {
+    .x = replay_bounds.nw[0],
+    .y = replay_bounds.nw[1],
+    .width = replay_width,
+    .height = replay_height,
+    .pixels = replay_pixels,
+    .external_alloc = TRUE,
+  };
+  dt_drawlayer_cache_patch_t replay_stroke_mask = {
+    .x = replay_bounds.nw[0],
+    .y = replay_bounds.nw[1],
+    .width = replay_width,
+    .height = replay_height,
+    .pixels = stroke_mask,
+    .external_alloc = TRUE,
+  };
 
   dt_drawlayer_cache_patch_rdlock(&g->process.base_patch);
   for(int yy = 0; yy < replay_height; yy++)
@@ -760,8 +776,7 @@ static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, con
   {
     const dt_drawlayer_brush_dab_t *dab = &g_array_index(history, dt_drawlayer_brush_dab_t, i);
     wrote_replay_tile |= dt_drawlayer_paint_rasterize_segment_to_buffer(
-        dab, _clamp01(stroke->distance_percent), replay_pixels, replay_width, replay_height, replay_bounds.nw[0],
-        replay_bounds.nw[1], 1.0f, stroke_mask, replay_width, replay_height, &replay_damage, stroke);
+        dab, _clamp01(stroke->distance_percent), &replay_patch, 1.0f, &replay_stroke_mask, &replay_damage, stroke);
     dt_iop_nap(5000);
   }
   if(wrote_replay_tile)
@@ -804,11 +819,15 @@ static void _process_backend_dab(dt_iop_module_t *self, const dt_drawlayer_brush
   if(g->process.process_patch_valid && g->process.process_patch.pixels && g->process.process_patch.width > 0 && g->process.process_patch.height > 0
      && g->process.process_combined_roi.scale > 1e-6f)
   {
+    dt_drawlayer_cache_patch_t process_patch = g->process.process_patch;
+    process_patch.x = g->process.process_combined_roi.x;
+    process_patch.y = g->process.process_combined_roi.y;
+    dt_drawlayer_cache_patch_t process_stroke_mask = g->process.process_stroke_mask;
+    process_stroke_mask.x = process_patch.x;
+    process_stroke_mask.y = process_patch.y;
     dt_drawlayer_paint_rasterize_segment_to_buffer(
-        dab, _clamp01(stroke->distance_percent), g->process.process_patch.pixels, g->process.process_patch.width,
-        g->process.process_patch.height, g->process.process_combined_roi.x, g->process.process_combined_roi.y,
-        g->process.process_combined_roi.scale, g->process.process_stroke_mask.pixels, g->process.process_stroke_mask.width,
-        g->process.process_stroke_mask.height, &process_step_path, stroke);
+        dab, _clamp01(stroke->distance_percent), &process_patch, g->process.process_combined_roi.scale,
+        &process_stroke_mask, &process_step_path, stroke);
     have_process_damage = dt_drawlayer_paint_runtime_get_stroke_damage(&process_step_path, &process_step_damage);
     if(have_process_damage)
     {

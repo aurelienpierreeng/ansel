@@ -24,6 +24,7 @@
  */
 
 #include "iop/drawlayer/brush.h"
+#include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/paint.h"
 #include "iop/drawlayer/brush_profile.h"
 
@@ -632,11 +633,10 @@ static dt_aligned_pixel_simd_t _apply_smudge_stroke_mode(float *buffer, const in
  * @brief Public dab rasterization entry point.
  * @details Assumes caller already converted coordinates to layer space.
  */
-gboolean dt_drawlayer_brush_rasterize(float *buffer, const int width, const int height, const int origin_x,
-                                      const int origin_y, const float scale,
+gboolean dt_drawlayer_brush_rasterize(dt_drawlayer_cache_patch_t *patch, const float scale,
                                       const dt_drawlayer_brush_dab_t *dab,
-                                      const float sample_opacity_scale, float *stroke_mask,
-                                      const int stroke_mask_width, const int stroke_mask_height,
+                                      const float sample_opacity_scale,
+                                      dt_drawlayer_cache_patch_t *stroke_mask,
                                       dt_drawlayer_paint_stroke_t *runtime_private)
 {
   /* Entry point for dab-level rasterization.
@@ -644,8 +644,17 @@ gboolean dt_drawlayer_brush_rasterize(float *buffer, const int width, const int 
    * 1) precompute dab bounds and orientation,
    * 2) resolve per-pixel alpha (profile/noise/flow),
    * 3) blend into target buffer and update stroke-local alpha mask. */
-  if(!buffer || !dab || !runtime_private) return FALSE;
+  if(!patch || !patch->pixels || !dab || !runtime_private) return FALSE;
   if(dab->radius <= 0.0f || dab->opacity <= 0.0f || scale <= 0.0f) return FALSE;
+
+  float *const buffer = patch->pixels;
+  const int width = patch->width;
+  const int height = patch->height;
+  const int origin_x = patch->x;
+  const int origin_y = patch->y;
+  float *const stroke_mask_pixels = stroke_mask ? stroke_mask->pixels : NULL;
+  const int stroke_mask_width = stroke_mask ? stroke_mask->width : 0;
+  const int stroke_mask_height = stroke_mask ? stroke_mask->height : 0;
 
   dt_drawlayer_brush_dab_t prepared = *dab;
   prepared.opacity = _clamp01(prepared.opacity);
@@ -690,7 +699,7 @@ gboolean dt_drawlayer_brush_rasterize(float *buffer, const int width, const int 
         const dt_aligned_pixel_simd_t old_px = (old_alpha > 1e-8f) ? dt_load_simd(pixel) : dt_simd_set1(0.0f);
         dt_drawlayer_brush_pixel_eval_t pixel_eval = { 0 };
         if(!_prepare_analytic_pixel_context(&view, sample_opacity_scale,
-                                            stroke_mask, stroke_mask_width, stroke_mask_height,
+                                            stroke_mask_pixels, stroke_mask_width, stroke_mask_height,
                                             x, y, old_alpha, &pixel_eval))
           continue;
 
@@ -713,7 +722,7 @@ gboolean dt_drawlayer_brush_rasterize(float *buffer, const int width, const int 
   {
 #ifdef _OPENMP
 #pragma omp parallel for default(none) collapse(2) \
-  dt_omp_firstprivate(view, buffer, stroke_mask, sample_opacity_scale, blur_px, width, height, origin_x, origin_y, scale, stroke_mask_width, stroke_mask_height)
+  dt_omp_firstprivate(view, buffer, stroke_mask_pixels, sample_opacity_scale, blur_px, width, height, origin_x, origin_y, scale, stroke_mask_width, stroke_mask_height)
 #endif
     for(int y = view.bounds.nw[1]; y < view.bounds.se[1]; y++)
     {
@@ -724,7 +733,7 @@ gboolean dt_drawlayer_brush_rasterize(float *buffer, const int width, const int 
         const dt_aligned_pixel_simd_t old_px = (old_alpha > 1e-8f) ? dt_load_simd(pixel) : dt_simd_set1(0.0f);
         dt_drawlayer_brush_pixel_eval_t pixel_eval = { 0 };
         if(!_prepare_analytic_pixel_context(&view, sample_opacity_scale,
-                                            stroke_mask, stroke_mask_width, stroke_mask_height,
+                                            stroke_mask_pixels, stroke_mask_width, stroke_mask_height,
                                             x, y, old_alpha, &pixel_eval))
           continue;
 

@@ -24,6 +24,7 @@
  */
 
 #include "iop/drawlayer/paint.h"
+#include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/brush_profile.h"
 
 #include "common/darktable.h"
@@ -706,15 +707,9 @@ static inline void _advance_smudge_pickup_state(dt_drawlayer_paint_stroke_t *sta
 
 gboolean dt_drawlayer_paint_rasterize_segment_to_buffer(const dt_drawlayer_brush_dab_t *dab,
                                                         const float distance_percent,
-                                                        float *buffer,
-                                                        const int width,
-                                                        const int height,
-                                                        const int origin_x,
-                                                        const int origin_y,
+                                                        dt_drawlayer_cache_patch_t *patch,
                                                         const float scale,
-                                                        float *stroke_mask,
-                                                        const int stroke_mask_width,
-                                                        const int stroke_mask_height,
+                                                        dt_drawlayer_cache_patch_t *stroke_mask,
                                                         dt_drawlayer_damaged_rect_t *runtime_state,
                                                         dt_drawlayer_paint_stroke_t *runtime_private)
 {
@@ -755,10 +750,8 @@ gboolean dt_drawlayer_paint_rasterize_segment_to_buffer(const dt_drawlayer_brush
   }
 
   const double t0 = dt_get_wtime();
-  const gboolean rasterized = dt_drawlayer_brush_rasterize(buffer, width, height, origin_x, origin_y,
-                                                           scale, sample, sample_opacity_scale,
-                                                           stroke_mask, stroke_mask_width,
-                                                           stroke_mask_height, runtime_private);
+  const gboolean rasterized
+      = dt_drawlayer_brush_rasterize(patch, scale, sample, sample_opacity_scale, stroke_mask, runtime_private);
   const double t1 = dt_get_wtime();
   if(rasterized && runtime_state && runtime_private && runtime_private->bounds.valid)
     dt_drawlayer_paint_runtime_note_dab_damage(runtime_state, &runtime_private->bounds);
