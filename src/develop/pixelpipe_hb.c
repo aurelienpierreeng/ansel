@@ -1636,7 +1636,6 @@ static gboolean _reuse_transient_output_cacheline(dt_dev_pixelpipe_t *pipe, dt_d
    * can observe or wait for the old hash while we are about to overwrite it. If processing later
    * fails, the inconsistent rekeyed output is destroyed straight away.
    */
-  return FALSE;
   if(!output || !output_entry) return FALSE;
   if(!_reuse_module_output_cacheline(pipe, piece)) return FALSE;
 
