@@ -374,27 +374,12 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
   const int preview_height = roundf(natural_scale * processed_height);
 
   const gboolean first = !dev->roi.output_inited;
-  const gboolean changed = first
-    || processed_width != dev->roi.processed_width
-    || processed_height != dev->roi.processed_height
-    || preview_width != dev->roi.preview_width
-    || preview_height != dev->roi.preview_height
-    || fabsf(natural_scale - dev->roi.natural_scale) > 1e-6f;
-
   dev->roi.processed_width = processed_width;
   dev->roi.processed_height = processed_height;
   dev->roi.natural_scale = natural_scale;
   dev->roi.preview_width = preview_width;
   dev->roi.preview_height = preview_height;
   dev->roi.output_inited = TRUE;
-
-  if(changed)
-  {
-    // Sizes may have changed, recompute pipelines
-    dt_dev_pixelpipe_update_zoom_main(dev);
-    dt_dev_pixelpipe_update_zoom_preview(dev);
-    dt_dev_process_all(dev);
-  }
 
   dt_print(DT_DEBUG_DEV,
             "[pixelpipe] thumbnail sizes raw %dx%d -> processed %dx%d -> preview %dx%d (scale %.5f)\n",
@@ -747,12 +732,10 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
     if(dev->image_storage.id > -1 && dt_dev_get_thumbnail_size(dev))
     {
       // Only if it's not our initial configure call, aka if we already have an image
+      dt_dev_update_mouse_effect_radius(dev);
       dt_control_queue_redraw_center();
-      dt_dev_process_all(dev);
     }
   }
-  dt_dev_update_mouse_effect_radius(dev);
-
 }
 
 void dt_dev_check_zoom_pos_bounds(dt_develop_t *dev, float *dev_x, float *dev_y, float *box_w, float *box_h)
