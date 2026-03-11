@@ -491,12 +491,25 @@ void *dt_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_ptr, in
   if(out_cst) *out_cst = -1;
 
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
-  for(GList *l = entry->cl_mem_list; l; l = l->next)
+  for(GList *l = entry->cl_mem_list; l;)
   {
+    GList *next = l->next;
     dt_cache_clmem_t *c = (dt_cache_clmem_t *)l->data;
-    if(c->host_ptr == host_ptr && c->devid == devid && c->width == width && c->height == height
+    if(c && c->host_ptr == host_ptr && c->width == width && c->height == height
        && c->bpp == bpp && c->flags == flags)
     {
+      /* Reuse must stay on the same OpenCL device. Be defensive and verify the
+       * live cl_mem context too, not only the cached metadata. */
+      const int mem_devid = dt_opencl_get_mem_context_id((cl_mem)c->mem);
+      if(c->devid != devid || mem_devid != devid)
+      {
+        entry->cl_mem_list = g_list_delete_link(entry->cl_mem_list, l);
+        dt_opencl_release_mem_object((cl_mem)c->mem);
+        dt_free(c);
+        l = next;
+        continue;
+      }
+
       entry->cl_mem_list = g_list_delete_link(entry->cl_mem_list, l);
       void *mem = c->mem;
       if(out_cst) *out_cst = c->cst;
@@ -504,6 +517,7 @@ void *dt_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_ptr, in
       dt_pthread_mutex_unlock(&entry->cl_mem_lock);
       return mem;
     }
+    l = next;
   }
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
   return NULL;
