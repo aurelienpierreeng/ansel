@@ -1473,13 +1473,6 @@ static gboolean _drawlayer_acquire_source_image(const int devid, const float *la
   {
     source->mem = dt_pixel_cache_clmem_get(resolved_entry, NULL, devid, source_w, source_h, 4 * (int)sizeof(float),
                                            CL_MEM_READ_WRITE, NULL);
-    if(!source->mem)
-    {
-      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
-      source->mem = dt_pixel_cache_clmem_get(resolved_entry, NULL, devid, source_w, source_h,
-                                             4 * (int)sizeof(float), CL_MEM_READ_WRITE, NULL);
-    }
-
     if(source->mem)
     {
       if(_drawlayer_sync_host_image_to_device(devid, source->mem, (void *)layer_pixels, source_w, source_h,
@@ -1557,12 +1550,6 @@ static gboolean _drawlayer_acquire_layer_image(const int devid, dt_pixel_cache_e
   {
     layer->mem = dt_pixel_cache_clmem_get(resolved_entry, NULL, devid, target_roi->width, target_roi->height,
                                           4 * (int)sizeof(float), CL_MEM_READ_WRITE, NULL);
-    if(!layer->mem)
-    {
-      dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, devid);
-      layer->mem = dt_pixel_cache_clmem_get(resolved_entry, NULL, devid, target_roi->width, target_roi->height,
-                                            4 * (int)sizeof(float), CL_MEM_READ_WRITE, NULL);
-    }
     layer->is_cached_device = (layer->mem != NULL);
   }
 
@@ -2778,6 +2765,9 @@ static void _set_drawlayer_pipeline_realtime_mode(dt_iop_module_t *self, const g
 {
   if(!self || !self->dev || !self->dev->pipe) return;
   dt_dev_pixelpipe_set_realtime(self->dev->pipe, state);
+
+  if(!state || !self->dev->preview_pipe) return;
+  self->dev->preview_pipe->pause = state;
 }
 
 static gboolean _sync_widget_cache(dt_iop_module_t *self)
