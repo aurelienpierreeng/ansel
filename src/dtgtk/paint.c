@@ -357,6 +357,40 @@ void dtgtk_cairo_paint_switch(cairo_t *cr, gint x, gint y, gint w, gint h, gint 
   FINISH
 }
 
+void dtgtk_cairo_paint_module_switch(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  const gboolean prelight = flags & CPF_PRELIGHT;
+  const double bar_w = prelight ? 0.76 : 0.16;
+  const double bar_x = 0.5 - bar_w * 0.5;
+  const double bar_y = 0.08;
+  const double bar_h = 0.84;
+  const double radius = bar_w * 0.5;
+
+  cairo_new_sub_path(cr);
+  cairo_arc(cr, bar_x + bar_w - radius, bar_y + radius, radius, -M_PI / 2.0, 0.0);
+  cairo_arc(cr, bar_x + bar_w - radius, bar_y + bar_h - radius, radius, 0.0, M_PI / 2.0);
+  cairo_arc(cr, bar_x + radius, bar_y + bar_h - radius, radius, M_PI / 2.0, M_PI);
+  cairo_arc(cr, bar_x + radius, bar_y + radius, radius, M_PI, 3.0 * M_PI / 2.0);
+  cairo_close_path(cr);
+  cairo_fill(cr);
+
+  FINISH
+}
+
+void dtgtk_cairo_paint_module_switch_on(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  const double dot_radius = 0.09;
+
+  cairo_arc(cr, 0.5, 0.5, dot_radius, 0.0, 2.0 * M_PI);
+  cairo_fill(cr);
+
+  FINISH
+}
+
 void dtgtk_cairo_paint_switch_inactive(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data)
 {
   PREAMBLE(1, .3f, 0, 0)

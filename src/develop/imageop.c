@@ -1102,15 +1102,15 @@ void dt_iop_gui_set_enable_button_icon(GtkWidget *w, dt_iop_module_t *module)
   // set on/off icon
   if(module->default_enabled && module->hide_enable_button)
   {
-    dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(w), dtgtk_cairo_paint_switch_on, 0, module);
+    dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(w), dtgtk_cairo_paint_module_switch_on, 0, module);
   }
   else if(!module->default_enabled && module->hide_enable_button)
   {
-    dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(w), dtgtk_cairo_paint_switch_off, 0, module);
+    dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(w), dtgtk_cairo_paint_module_switch_on, 0, module);
   }
   else
   {
-    dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(w), dtgtk_cairo_paint_switch, 0, module);
+    dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(w), dtgtk_cairo_paint_module_switch, 0, module);
   }
 }
 
@@ -1125,6 +1125,14 @@ void dt_iop_gui_set_enable_button(dt_iop_module_t *module)
       gtk_widget_set_sensitive(GTK_WIDGET(module->off), FALSE);
     else
       gtk_widget_set_sensitive(GTK_WIDGET(module->off), TRUE);
+
+    dt_gui_remove_class(GTK_WIDGET(module->off), "dt_iop_enable_forced_on");
+    dt_gui_remove_class(GTK_WIDGET(module->off), "dt_iop_enable_forced_off");
+    if(module->hide_enable_button)
+    {
+      dt_gui_add_class(GTK_WIDGET(module->off),
+                       module->enabled ? "dt_iop_enable_forced_on" : "dt_iop_enable_forced_off");
+    }
 
     dt_iop_gui_set_enable_button_icon(GTK_WIDGET(module->off), module);
   }
@@ -2447,8 +2455,9 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_PRESETS]), "clicked", G_CALLBACK(_presets_popup_callback), module);
 
   /* add enabled button */
-  hw[IOP_MODULE_SWITCH] = dtgtk_togglebutton_new(dtgtk_cairo_paint_switch, 0, module);
+  hw[IOP_MODULE_SWITCH] = dtgtk_togglebutton_new(dtgtk_cairo_paint_module_switch, 0, module);
   dt_gui_add_class(hw[IOP_MODULE_SWITCH], "dt_transparent_background");
+  dt_gui_add_class(hw[IOP_MODULE_SWITCH], "dt_iop_enable_button");
   dt_iop_gui_set_enable_button_icon(hw[IOP_MODULE_SWITCH], module);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(hw[IOP_MODULE_SWITCH]), module->enabled);
   g_signal_connect(G_OBJECT(hw[IOP_MODULE_SWITCH]), "toggled", G_CALLBACK(_gui_off_callback), module);

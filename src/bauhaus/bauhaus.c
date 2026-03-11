@@ -925,6 +925,14 @@ void dt_bauhaus_load_theme(dt_bauhaus_t *bauhaus)
   gtk_style_context_lookup_color(ctx, "bauhaus_border", &bauhaus->color_border);
   gtk_style_context_lookup_color(ctx, "bauhaus_fill", &bauhaus->color_fill);
   gtk_style_context_lookup_color(ctx, "bauhaus_indicator_border", &bauhaus->indicator_border);
+  if(!gtk_style_context_lookup_color(ctx, "bauhaus_value", &bauhaus->color_value))
+    bauhaus->color_value = bauhaus->color_fill;
+  if(!gtk_style_context_lookup_color(ctx, "bauhaus_value_insensitive", &bauhaus->color_value_insensitive))
+    bauhaus->color_value_insensitive = bauhaus->color_fg_insensitive;
+  if(!gtk_style_context_lookup_color(ctx, "bauhaus_value_text", &bauhaus->color_value_text))
+    bauhaus->color_value_text = bauhaus->color_value;
+  if(!gtk_style_context_lookup_color(ctx, "bauhaus_value_text_insensitive", &bauhaus->color_value_text_insensitive))
+    bauhaus->color_value_text_insensitive = bauhaus->color_value_insensitive;
 
   gtk_style_context_lookup_color(ctx, "graph_bg", &bauhaus->graph_bg);
   gtk_style_context_lookup_color(ctx, "graph_exterior", &bauhaus->graph_exterior);
@@ -1950,7 +1958,7 @@ static void dt_bauhaus_draw_baseline(struct dt_bauhaus_widget_t *w, cairo_t *cr,
     // only brighten, useful for colored sliders to not get too faint:
     cairo_save(cr);
     cairo_set_operator(cr, CAIRO_OPERATOR_SCREEN);
-    set_color(cr, w->bauhaus->color_fill);
+    set_color(cr, w->bauhaus->color_value);
     cairo_rectangle(cr, origin, baseline_top, delta, baseline_height);
     cairo_fill(cr);
     cairo_restore(cr);
@@ -2145,18 +2153,18 @@ static gboolean dt_bauhaus_popup_draw(GtkWidget *widget, cairo_t *crf, gpointer 
       cairo_save(cr);
 
       // draw mouse over indicator line
-      set_color(cr, *fg_color);
+      set_color(cr, w->bauhaus->color_value_text);
       draw_slider_line(cr, d->oldpos, mouse_off, scale, main_width, main_height, bottom_baseline, 2);
       cairo_stroke(cr);
 
       // draw indicator
-      dt_bauhaus_draw_indicator(w, d->pos, cr, main_width, *fg_color, *bg_color);
+      dt_bauhaus_draw_indicator(w, d->pos, cr, main_width, w->bauhaus->color_value, *bg_color);
 
       cairo_restore(cr);
 
       // draw numerical value:
       cairo_save(cr);
-      set_color(cr, *fg_color);
+      set_color(cr, w->bauhaus->color_value_text);
 
       float value_width = 0.f;
       char *text = dt_bauhaus_slider_get_text(GTK_WIDGET(w), dt_bauhaus_slider_get(GTK_WIDGET(w)));
@@ -2177,6 +2185,7 @@ static gboolean dt_bauhaus_popup_draw(GtkWidget *widget, cairo_t *crf, gpointer 
                                       .y = 0.,
                                       .width = label_width,
                                       .height = w->bauhaus->line_height };
+      set_color(cr, *fg_color);
       show_pango_text(w, context, cr, &bounding_label, label_text, BH_ALIGN_LEFT, BH_ALIGN_MIDDLE,
                       PANGO_ELLIPSIZE_END, NULL, NULL, NULL, GTK_STATE_FLAG_NORMAL);
       dt_free(label_text);
@@ -2360,9 +2369,13 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
 
   GdkRGBA *bg_color = default_color_assign();
   GdkRGBA *text_color = default_color_assign();
+  GdkRGBA *value_color = default_color_assign();
+  GdkRGBA *value_text_color = default_color_assign();
   const GtkStateFlags state = gtk_widget_get_state_flags(widget);
   gtk_style_context_get_color(context, state, text_color);
   gtk_style_context_get(context, state, "background-color", &bg_color, NULL);
+  *value_color = gtk_widget_is_sensitive(widget) ? w->bauhaus->color_value : w->bauhaus->color_value_insensitive;
+  *value_text_color = gtk_widget_is_sensitive(widget) ? w->bauhaus->color_value_text : w->bauhaus->color_value_text_insensitive;
   _margins_retrieve(w);
 
   // Paint background first
@@ -2395,6 +2408,7 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
                                       .y = 0.,
                                       .width = available_width,
                                       .height = inner_height };
+      set_color(cr, *text_color);
       show_pango_text(w, context, cr, &bounding_label, w->label, BH_ALIGN_LEFT, BH_ALIGN_MIDDLE,
                       combo_ellipsis, NULL, &label_width, &label_height, state);
 
@@ -2409,6 +2423,7 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
                                       .y = 0.,
                                       .width = available_width - label_width - INNER_PADDING,
                                       .height = inner_height };
+      set_color(cr, *value_text_color);
       show_pango_text(w, context, cr, &bounding_value, text, BH_ALIGN_RIGHT, BH_ALIGN_MIDDLE, combo_ellipsis, NULL,
                       NULL, NULL, state);
 
@@ -2431,7 +2446,7 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
       if(gtk_widget_is_sensitive(widget))
       {
         cairo_save(cr);
-        dt_bauhaus_draw_indicator(w, w->data.slider.pos, cr, available_width, *text_color, *bg_color);
+        dt_bauhaus_draw_indicator(w, w->data.slider.pos, cr, available_width, *value_color, *bg_color);
         cairo_restore(cr);
 
         char *text = dt_bauhaus_slider_get_text(widget, dt_bauhaus_slider_get(widget));
@@ -2439,6 +2454,7 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
                                         .y = 0.,
                                         .width = available_width,
                                         .height = w->bauhaus->line_height };
+        set_color(cr, *value_text_color);
         show_pango_text(w, context, cr, &bounding_value, text, BH_ALIGN_RIGHT, BH_ALIGN_MIDDLE,
                         PANGO_ELLIPSIZE_NONE, NULL, &value_width, NULL, state);
         dt_free(text);
@@ -2451,6 +2467,7 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
                                       .y = 0.,
                                       .width = label_width,
                                       .height = w->bauhaus->line_height };
+      set_color(cr, *text_color);
       show_pango_text(w, context, cr, &bounding_label, label_text, BH_ALIGN_LEFT, BH_ALIGN_MIDDLE,
                         PANGO_ELLIPSIZE_END, NULL, NULL, NULL, state);
       dt_free(label_text);
@@ -2466,6 +2483,8 @@ static gboolean _widget_draw(GtkWidget *widget, cairo_t *crf)
   cairo_surface_destroy(cst);
 
   gdk_rgba_free(text_color);
+  gdk_rgba_free(value_color);
+  gdk_rgba_free(value_text_color);
   gdk_rgba_free(bg_color);
 
   return TRUE;

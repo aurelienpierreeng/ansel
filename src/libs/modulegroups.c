@@ -471,9 +471,15 @@ void gui_init(dt_lib_module_t *self)
   for(int i = 0; i < DT_MODULEGROUP_SIZE; i++)
   {
     GtkWidget *label = gtk_label_new(labels[i]);
+    dt_gui_add_class(label, "dt_modulegroups_tab_label");
     gtk_widget_set_tooltip_text(label, tooltips[i]);
+    gtk_widget_set_halign(label, GTK_ALIGN_CENTER);
+    gtk_widget_set_hexpand(label, TRUE);
+    gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
+
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_notebook_append_page(GTK_NOTEBOOK(d->notebook), page, label);
+    gtk_container_child_set(GTK_CONTAINER(d->notebook), page, "tab-expand", TRUE, "tab-fill", TRUE, NULL);
   }
   gtk_notebook_set_current_page(GTK_NOTEBOOK(d->notebook), d->current);
   gtk_notebook_popup_enable(GTK_NOTEBOOK(d->notebook));

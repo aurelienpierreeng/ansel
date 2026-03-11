@@ -945,6 +945,7 @@ static void gui_init(dt_lib_import_t *d)
       _("Cancel"), GTK_RESPONSE_CANCEL,
       _("Import"), GTK_RESPONSE_ACCEPT,
       NULL);
+  dt_gui_add_class(d->dialog, "dt_import_dialog");
 
 #ifdef GDK_WINDOWING_QUARTZ
 // TODO: On MacOS (at least on version 13) the dialog windows doesn't behave as expected. The dialog
@@ -1074,7 +1075,7 @@ static void gui_init(dt_lib_import_t *d)
   gtk_file_chooser_set_preview_widget(GTK_FILE_CHOOSER(d->file_chooser), preview_box);
   /* BOTTOM PANEL */
 
-  GtkWidget *files = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *files = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
   GtkWidget *file_handling = gtk_label_new("");
   gtk_label_set_markup(GTK_LABEL(file_handling), _("<b>File handling</b>"));
   gtk_box_pack_start(GTK_BOX(files), GTK_WIDGET(file_handling), FALSE, FALSE, 0);

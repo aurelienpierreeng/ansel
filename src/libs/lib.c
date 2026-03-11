@@ -987,13 +987,9 @@ static void presets_popup_callback(GtkButton *button, dt_lib_module_t *module)
 
 void dt_lib_gui_set_expanded(dt_lib_module_t *module, gboolean expanded)
 {
-  if(!module->expander || !module->arrow) return;
+  if(!module->expander) return;
 
   dtgtk_expander_set_expanded(DTGTK_EXPANDER(module->expander), expanded);
-
-  /* update expander arrow state */
-  gint flags = (expanded ? CPF_DIRECTION_DOWN : CPF_DIRECTION_RIGHT);
-  dtgtk_button_set_paint(DTGTK_BUTTON(module->arrow), dtgtk_cairo_paint_solid_arrow, flags, NULL);
 
   /* show / hide plugin widget */
   if(expanded)
@@ -1151,12 +1147,6 @@ GtkWidget *dt_lib_gui_get_expander(dt_lib_module_t *module)
   /*
    * initialize the header widgets
    */
-  /* add the expand indicator icon */
-  module->arrow = dtgtk_button_new(dtgtk_cairo_paint_solid_arrow, 0, NULL);
-  gtk_widget_set_tooltip_text(module->arrow, _("show module"));
-  g_signal_connect(G_OBJECT(module->arrow), "button-press-event", G_CALLBACK(_lib_plugin_header_button_press), module);
-  gtk_box_pack_start(GTK_BOX(header), module->arrow, FALSE, FALSE, 0);
-
   /* add module label */
   GtkWidget *label = gtk_label_new("");
   GtkWidget *label_evb = gtk_event_box_new();

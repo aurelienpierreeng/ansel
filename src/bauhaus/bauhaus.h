@@ -269,7 +269,8 @@ struct dt_bauhaus_t
   PangoFontDescription *pango_font_desc; // no need to recreate this for every string we want to print
 
   // colors for sliders and comboboxes
-  GdkRGBA color_fg, color_fg_insensitive, color_bg, color_border, indicator_border, color_fill;
+  GdkRGBA color_fg, color_fg_insensitive, color_bg, color_border, indicator_border, color_fill,
+      color_value, color_value_insensitive, color_value_text, color_value_text_insensitive;
 
   // colors for graphs
   GdkRGBA graph_bg, graph_exterior, graph_border, graph_fg, graph_grid, graph_fg_active, graph_overlay, inset_histogram;

@@ -78,7 +78,7 @@ void update(dt_lib_module_t *self)
     gtk_widget_show(d->widget);
     gtk_box_pack_start(GTK_BOX(dtgtk_expander_get_header(DTGTK_EXPANDER(self->expander))), d->widget, TRUE, TRUE, 0);
 
-    gtk_widget_destroy(self->arrow);
+    if(self->arrow) gtk_widget_destroy(self->arrow);
     self->arrow = NULL;
   }
 
