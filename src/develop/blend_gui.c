@@ -4292,7 +4292,6 @@ void dt_iop_gui_init_blending_body(GtkBox *blendw, dt_iop_module_t *module)
   _blendop_update_top_enable_label(module);
   gtk_box_pack_start(GTK_BOX(top_header), bd->top_enable, FALSE, FALSE, 0);
   dt_gui_add_help_link(top_header, dt_get_help_url("masks_blending"));
-  gtk_widget_set_name(top_header, "blending-header");
   gtk_box_pack_start(GTK_BOX(bd->blending_body_box), top_header, FALSE, FALSE, 0);
 
   bd->top_content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
