@@ -1783,7 +1783,7 @@ cleanup:
   else if(!source_mem_override && source.mem)
     dt_opencl_release_mem_object(source.mem);
   if(resolved_entry_ref)
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, resolved_entry->hash, FALSE, resolved_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, resolved_entry);
 
   if(err != CL_SUCCESS) dt_print(DT_DEBUG_OPENCL, "[drawlayer] process_cl blend path failed: %d\n\n", err);
 

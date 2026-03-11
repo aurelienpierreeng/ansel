@@ -52,6 +52,27 @@ static __thread const char *dt_pixelpipe_cache_current_module = NULL;
 static dt_pixel_cache_entry_t *_non_threadsafe_cache_get_entry(dt_dev_pixelpipe_cache_t *cache, GHashTable *table,
                                                                const uint64_t key);
 
+static inline const char *_cache_debug_module_name(void)
+{
+  return dt_pixelpipe_cache_current_module ? dt_pixelpipe_cache_current_module : "-";
+}
+
+static void _trace_exact_hit(const char *phase, const uint64_t hash, dt_pixel_cache_entry_t *cache_entry,
+                             void *data, void *cl_mem_output, const int preferred_devid, const gboolean verbose)
+{
+  if(!(darktable.unmuted & DT_DEBUG_CACHE)) return;
+  if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
+
+  dt_print(DT_DEBUG_CACHE,
+           "[pixelpipe_cache] exact-hit %s req=%" PRIu64 " entry=%" PRIu64 "/%" PRIu64
+           " data=%p cl=%p refs=%i auto=%i dev=%i module=%s name=%s\n",
+           phase, hash, cache_entry ? cache_entry->hash : DT_PIXELPIPE_CACHE_HASH_INVALID,
+           cache_entry ? cache_entry->serial : 0, data, cl_mem_output,
+           cache_entry ? dt_atomic_get_int(&cache_entry->refcount) : -1,
+           cache_entry ? cache_entry->auto_destroy : -1, preferred_devid, _cache_debug_module_name(),
+           (cache_entry && cache_entry->name) ? cache_entry->name : "-");
+}
+
 const char *dt_pixelpipe_cache_set_current_module(const char *module)
 {
   const char *previous = dt_pixelpipe_cache_current_module;
@@ -131,9 +152,14 @@ void dt_pixel_cache_message(dt_pixel_cache_entry_t *cache_entry, const char *mes
 {
   if(!(darktable.unmuted & DT_DEBUG_CACHE)) return;
   if(verbose && !(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
-  dt_print(DT_DEBUG_CACHE, "[pixelpipe] cache entry %" PRIu64 ": %s (%lu MiB - age %" PRId64 " - hits %i - refs %i) %s\n", 
-           cache_entry->hash, cache_entry->name, dt_pixel_cache_get_size(cache_entry), 
-           cache_entry->age, cache_entry->hits, dt_atomic_get_int(&cache_entry->refcount), message);
+  dt_print(DT_DEBUG_CACHE,
+           "[pixelpipe] cache entry %" PRIu64 "/%" PRIu64 ": %s (data=%p - %lu MiB - age %" PRId64
+           " - hits %i - refs %i - auto %i - ext %i - id %i - module %s) %s\n",
+           cache_entry->hash, cache_entry->serial,
+           cache_entry->name ? cache_entry->name : "-", cache_entry->data,
+           dt_pixel_cache_get_size(cache_entry), cache_entry->age, cache_entry->hits,
+           dt_atomic_get_int(&cache_entry->refcount), cache_entry->auto_destroy,
+           cache_entry->external_alloc, cache_entry->id, _cache_debug_module_name(), message);
 }
 
 static void _pixelpipe_cache_finalize_entry(dt_pixel_cache_entry_t *cache_entry, void **data,
@@ -670,9 +696,9 @@ void dt_dev_pixelpipe_cache_flush_host_pinned_image(dt_dev_pixelpipe_cache_t *ca
   if(!entry) return;
 
   if(devid >= 0) dt_opencl_events_wait_for(devid);
-  dt_dev_pixelpipe_cache_ref_count_entry(cache, entry->hash, TRUE, entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, entry);
   _cache_entry_clmem_flush_host_pinned_locked(entry, host_ptr, devid);
-  dt_dev_pixelpipe_cache_ref_count_entry(cache, entry->hash, FALSE, entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, entry);
 }
 
 void dt_dev_pixelpipe_cache_resync_host_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
@@ -691,11 +717,11 @@ void dt_dev_pixelpipe_cache_resync_host_pinned_image(dt_dev_pixelpipe_cache_t *c
   if(!entry) return;
 
   if(devid >= 0) dt_opencl_events_wait_for(devid);
-  dt_dev_pixelpipe_cache_ref_count_entry(cache, entry->hash, TRUE, entry);
-  dt_dev_pixelpipe_cache_wrlock_entry(cache, 0, TRUE, entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, entry);
   _cache_entry_resync_host_pinned_images_locked(entry, host_ptr, devid);
-  dt_dev_pixelpipe_cache_wrlock_entry(cache, 0, FALSE, entry);
-  dt_dev_pixelpipe_cache_ref_count_entry(cache, entry->hash, FALSE, entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, entry);
 }
 #else
 void *dt_dev_pixelpipe_cache_get_pinned_image(dt_dev_pixelpipe_cache_t *cache, void *host_ptr,
@@ -1011,6 +1037,7 @@ static dt_pixel_cache_entry_t *dt_pixel_cache_new_entry(const uint64_t hash, con
   cache_entry->hits = 0;
   cache_entry->dsc = dsc;
   cache_entry->hash = hash;
+  cache_entry->serial = cache->next_serial++;
   cache_entry->id = id;
   cache_entry->refcount = 0;
   cache_entry->auto_destroy = FALSE;
@@ -1082,6 +1109,7 @@ dt_dev_pixelpipe_cache_t * dt_dev_pixelpipe_cache_init(size_t max_memory)
   cache->external_entries = g_hash_table_new_full(g_int64_hash, g_int64_equal, dt_free_gpointer, (GDestroyNotify)_free_cache_entry);
   cache->max_memory = max_memory;
   cache->current_memory = 0;
+  cache->next_serial = 1;
   cache->queries = cache->hits = 0;
 
   if(!cache->entries || !cache->external_entries)
@@ -1262,6 +1290,7 @@ static void _cache_remove_invalid_exact_hit(dt_dev_pixelpipe_cache_t *cache, con
                                             dt_pixel_cache_entry_t *cache_entry,
                                             void **data, dt_pixel_cache_entry_t **entry)
 {
+  _trace_exact_hit("drop-invalid", hash, cache_entry, data ? *data : NULL, NULL, -1, FALSE);
   dt_print(DT_DEBUG_CACHE,
            "[pixelpipe] cache entry %" PRIu64 " has no authoritative RAM nor vRAM payload and will be removed\n",
            hash);
@@ -1297,18 +1326,24 @@ gboolean dt_dev_pixelpipe_cache_peek_exact(dt_dev_pixelpipe_cache_t *cache, cons
 
   if(_cache_entry_has_host_payload(data))
   {
+    _trace_exact_hit("host", hash, cache_entry, data ? *data : NULL,
+                     cl_mem_output ? *cl_mem_output : NULL, preferred_devid, FALSE);
     if(entry) *entry = cache_entry;
     return TRUE;
   }
 
   if(_cache_try_restore_device_payload(cache_entry, roi, bpp, preferred_devid, cl_mem_output))
   {
+    _trace_exact_hit("device", hash, cache_entry, data ? *data : NULL,
+                     cl_mem_output ? *cl_mem_output : NULL, preferred_devid, FALSE);
     if(entry) *entry = cache_entry;
     return TRUE;
   }
 
   if(_cache_try_restore_host_payload(cache, data, cache_entry, preferred_devid))
   {
+    _trace_exact_hit("restore-host", hash, cache_entry, data ? *data : NULL,
+                     cl_mem_output ? *cl_mem_output : NULL, preferred_devid, FALSE);
     if(entry) *entry = cache_entry;
     return TRUE;
   }
@@ -1460,6 +1495,7 @@ void dt_dev_pixelpipe_cache_flag_auto_destroy(dt_dev_pixelpipe_cache_t *cache, u
   }
 
   cache_entry->auto_destroy = TRUE;
+  dt_pixel_cache_message(cache_entry, "auto destroy flagged", TRUE);
   dt_pthread_mutex_unlock(&cache->lock);
 }
 
@@ -1479,8 +1515,13 @@ void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache, 
 
   if(cache_entry->auto_destroy)
   {
-    const uint64_t key = hash;
+    const uint64_t key = (cache_entry != NULL) ? cache_entry->hash : hash;
+    dt_pixel_cache_message(cache_entry, "auto destroy removing", FALSE);
     g_hash_table_remove(cache->entries, &key);
+  }
+  else
+  {
+    dt_pixel_cache_message(cache_entry, "auto destroy skipped", TRUE);
   }
   
   dt_pthread_mutex_unlock(&cache->lock);
@@ -1506,7 +1547,7 @@ void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, cons
   if(locked) return NULL;
   // else: trylock also locks it.
 
-  dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, TRUE, *cache_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, *cache_entry);
 
   return data ? __builtin_assume_aligned(data, DT_CACHELINE_BYTES) : NULL;
 }
@@ -1514,8 +1555,8 @@ void *dt_dev_pixelpipe_cache_get_read_only(dt_dev_pixelpipe_cache_t *cache, cons
 void dt_dev_pixelpipe_cache_close_read_only(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, 
                                             dt_pixel_cache_entry_t *cache_entry)
 {
-  dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, FALSE, cache_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(cache, hash, FALSE, cache_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, cache_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, cache_entry);
 }
 
 void *dt_dev_pixelpipe_cache_get_ref_unlocked(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
@@ -1540,7 +1581,7 @@ void *dt_dev_pixelpipe_cache_get_ref_unlocked(dt_dev_pixelpipe_cache_t *cache, c
   if(dt_pthread_rwlock_tryrdlock(&((*cache_entry)->lock)) == 0)
     dt_pthread_rwlock_unlock(&((*cache_entry)->lock));
 
-  dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, TRUE, *cache_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, *cache_entry);
   return data ? __builtin_assume_aligned(data, DT_CACHELINE_BYTES) : NULL;
 }
 
@@ -1549,12 +1590,12 @@ void dt_dev_pixelpipe_cache_unref_unlocked(dt_dev_pixelpipe_cache_t *cache, cons
 {
   // Companion of dt_dev_pixelpipe_cache_get_ref_unlocked():
   // release the refcount without touching rwlocks.
-  dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, FALSE, cache_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, cache_entry);
 }
 
 void dt_dev_pixelpipe_cache_unref_hash(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash)
 {
-  if(hash == (uint64_t)-1) return;
+  if(hash == DT_PIXELPIPE_CACHE_HASH_INVALID) return;
 
   dt_pthread_mutex_lock(&cache->lock);
   cache->queries++;
@@ -1562,7 +1603,7 @@ void dt_dev_pixelpipe_cache_unref_hash(dt_dev_pixelpipe_cache_t *cache, const ui
   dt_pthread_mutex_unlock(&cache->lock);
 
   if(cache_entry)
-    dt_dev_pixelpipe_cache_ref_count_entry(cache, hash, FALSE, cache_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, cache_entry);
 }
 
 int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t old_hash,
@@ -1576,6 +1617,9 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
   if(!entry) entry = _non_threadsafe_cache_get_entry(cache, cache->entries, old_hash);
   if(!entry)
   {
+    dt_print(DT_DEBUG_CACHE,
+             "[pixelpipe_cache] rekey miss old=%" PRIu64 " new=%" PRIu64 " module=%s\n",
+             old_hash, new_hash, _cache_debug_module_name());
     dt_pthread_mutex_unlock(&cache->lock);
     return 1;
   }
@@ -1583,6 +1627,11 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
   dt_pixel_cache_entry_t *conflict = _non_threadsafe_cache_get_entry(cache, cache->entries, new_hash);
   if(conflict && conflict != entry)
   {
+    dt_print(DT_DEBUG_CACHE,
+             "[pixelpipe_cache] rekey conflict old=%" PRIu64 " new=%" PRIu64
+             " entry=%" PRIu64 "/%" PRIu64 " conflict=%" PRIu64 "/%" PRIu64 " module=%s\n",
+             old_hash, new_hash, entry->hash, entry->serial, conflict->hash, conflict->serial,
+             _cache_debug_module_name());
     dt_pthread_mutex_unlock(&cache->lock);
     return 1;
   }
@@ -1591,12 +1640,22 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
   gpointer stolen_value = NULL;
   if(!g_hash_table_steal_extended(cache->entries, &old_hash, &stolen_key, &stolen_value))
   {
+    dt_print(DT_DEBUG_CACHE,
+             "[pixelpipe_cache] rekey steal-miss old=%" PRIu64 " new=%" PRIu64
+             " entry=%" PRIu64 "/%" PRIu64 " module=%s\n",
+             old_hash, new_hash, entry->hash, entry->serial, _cache_debug_module_name());
     dt_pthread_mutex_unlock(&cache->lock);
     return 1;
   }
 
   if(stolen_value != entry)
   {
+    dt_print(DT_DEBUG_CACHE,
+             "[pixelpipe_cache] rekey stolen-entry mismatch old=%" PRIu64 " new=%" PRIu64
+             " expected=%" PRIu64 "/%" PRIu64 " got=%" PRIu64 "/%" PRIu64 " module=%s\n",
+             old_hash, new_hash, entry->hash, entry->serial,
+             ((dt_pixel_cache_entry_t *)stolen_value)->hash, ((dt_pixel_cache_entry_t *)stolen_value)->serial,
+             _cache_debug_module_name());
     g_hash_table_insert(cache->entries, stolen_key, stolen_value);
     dt_pthread_mutex_unlock(&cache->lock);
     return 1;
@@ -1605,6 +1664,11 @@ int dt_dev_pixelpipe_cache_rekey(dt_dev_pixelpipe_cache_t *cache, const uint64_t
   *(uint64_t *)stolen_key = new_hash;
   entry->hash = new_hash;
   g_hash_table_insert(cache->entries, stolen_key, stolen_value);
+  dt_print(DT_DEBUG_CACHE,
+           "[pixelpipe_cache] rekey old=%" PRIu64 " new=%" PRIu64 " entry=%" PRIu64 "/%" PRIu64
+           " refs=%i auto=%i data=%p module=%s\n",
+           old_hash, new_hash, entry->hash, entry->serial, dt_atomic_get_int(&entry->refcount),
+           entry->auto_destroy, entry->data, _cache_debug_module_name());
 
   dt_pthread_mutex_unlock(&cache->lock);
   return 0;

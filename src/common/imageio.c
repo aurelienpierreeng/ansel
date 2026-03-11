@@ -1094,7 +1094,7 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, pipe.backbuf.hash, &data, NULL, &cache_entry))
     goto error;
   
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, TRUE, cache_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, cache_entry);
 
   // Down-conversion to low-precision formats:
   const size_t pixels = pipe.backbuf.width * pipe.backbuf.height * 4;
@@ -1126,8 +1126,8 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   }
 
   // Decrease ref count on the cache entry and release the read lock
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, 0, FALSE, cache_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, 0, FALSE, cache_entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, cache_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, cache_entry);
 
   if(outbuf == NULL) goto error;
 

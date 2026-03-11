@@ -178,7 +178,7 @@ static void pixelpipe_get_histogram_backbuf(dt_develop_t *dev, const dt_iop_roi_
   // Hash has changed, our previous stored entry is obsolete: decrement its refcount.
   dt_pixel_cache_entry_t *previous_entry;
   if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, backbuf->hash, NULL, NULL, &previous_entry))
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, backbuf->hash, FALSE, previous_entry);
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, previous_entry);
 
   // Update metadata. The global histogram backbuf stores its bpp; infer it from cache entry size.
   const size_t entry_size = dt_pixel_cache_entry_get_size(entry);
@@ -186,7 +186,7 @@ static void pixelpipe_get_histogram_backbuf(dt_develop_t *dev, const dt_iop_roi_
   dt_dev_set_backbuf(backbuf, roi.width, roi.height, bpp, hash, -1);
 
   // Increment the refcount on current entry so nobody removes it while the GUI still needs it.
-  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, hash, TRUE, entry);
+  dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, entry);
 }
 
 /**
@@ -438,8 +438,8 @@ static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input
   if(!(dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_PREVIEW))
     return;
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, hash, TRUE, output_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, input_hash, TRUE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, output_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, input_entry);
 
   // Need to go first because we want module output RGB without color conversion.
   // Gamma outputs uint8_t so we take its input. We want float32.
@@ -469,8 +469,8 @@ static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input
   collect_histogram_on_CPU(pipe, dev, (float *)input, roi_in, input_format, module, piece);
   _sample_color_picker(pipe, dev, (float *)input, input_format, roi_in, output, output_format, roi_out, module, piece);
 
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, hash, FALSE, output_entry);
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, input_hash, FALSE, input_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, output_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, input_entry);
 }
 
 /**

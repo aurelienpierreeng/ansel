@@ -38,6 +38,8 @@
 struct dt_dev_pixelpipe_t;
 struct dt_iop_roi_t;
 
+#define DT_PIXELPIPE_CACHE_HASH_INVALID ((uint64_t)-1)
+
 
 /**
  * @file pixelpipe_cache.h
@@ -54,6 +56,7 @@ typedef struct dt_dev_pixelpipe_cache_t
   GHashTable *entries;
   // External (temporary) buffers keyed by address hash, separate from pipeline cache entries.
   GHashTable *external_entries;
+  uint64_t next_serial;
   uint64_t queries;
   uint64_t hits;
   size_t max_memory;
@@ -74,6 +77,7 @@ void dt_dev_pixelpipe_cache_cleanup(dt_dev_pixelpipe_cache_t *cache);
 typedef struct dt_pixel_cache_entry_t
 {
   uint64_t hash;            // unique identifier of the entry
+  uint64_t serial;          // stable identity across rekeys, changes on fresh allocations
   void *data;               // buffer holding pixels... or anything else
   size_t size;              // size of the data buffer
   dt_iop_buffer_dsc_t dsc;  // metadata of the data buffer
@@ -352,7 +356,7 @@ int dt_dev_pixelpipe_cache_flush_old(dt_dev_pixelpipe_cache_t *cache);
  * locked will be ignored. If force is TRUE, we ignore reference count, but not locks.
  *
  * @param cache
- * @param hash
+ * @param hash Cache-entry hash fallback. Ignored when `entry` is not NULL.
  * @param force
  */
 int dt_dev_pixelpipe_cache_remove(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, const gboolean force,
@@ -375,7 +379,7 @@ int dt_dev_pixel_pipe_cache_remove_lru(dt_dev_pixelpipe_cache_t *cache);
  * WARNING: cache entries whose reference count is greater than 0 will never be deleted from cache.
  *
  * @param cache
- * @param hash
+ * @param hash Cache-entry hash fallback. Ignored when `entry` is not NULL.
  * @param lock TRUE to lock, FALSE to unlock
  */
 void dt_dev_pixelpipe_cache_ref_count_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, gboolean lock,
@@ -385,7 +389,7 @@ void dt_dev_pixelpipe_cache_ref_count_entry(dt_dev_pixelpipe_cache_t *cache, con
  * @brief Lock or release the write lock on the entry
  *
  * @param cache
- * @param hash
+ * @param hash Cache-entry hash fallback. Ignored when `entry` is not NULL.
  * @param lock TRUE to lock, FALSE to release
  */
 void dt_dev_pixelpipe_cache_wrlock_entry(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash, gboolean lock,
@@ -413,7 +417,7 @@ void dt_dev_pixelpipe_cache_rdlock_entry(dt_dev_pixelpipe_cache_t *cache, const 
  * If not manually freed this way, the entry will be caught using the generic LRU garbage collection.
  *
  * @param cache
- * @param hash
+ * @param hash Cache-entry hash fallback. Ignored when `entry` is not NULL.
  */
 void dt_dev_pixelpipe_cache_flag_auto_destroy(dt_dev_pixelpipe_cache_t *cache, uint64_t hash,
                                               struct dt_pixel_cache_entry_t *entry);
@@ -426,7 +430,7 @@ void dt_dev_pixelpipe_cache_flag_auto_destroy(dt_dev_pixelpipe_cache_t *cache, u
  * another thread will not free this or that another thread ends up using it.
  *
  * @param cache
- * @param hash
+ * @param hash Cache-entry hash fallback. Ignored when `entry` is not NULL.
  */
 void dt_dev_pixelpipe_cache_auto_destroy_apply(dt_dev_pixelpipe_cache_t *cache, const uint64_t hash,
                                                struct dt_pixel_cache_entry_t *entry);
