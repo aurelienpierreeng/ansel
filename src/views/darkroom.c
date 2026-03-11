@@ -558,6 +558,7 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
                                    const gboolean keep_previous_on_fail, const gboolean lock_read)
 {
   if(!dev || !pipe || !locked) return FALSE;
+  (void)lock_read;
 
   const uint64_t hash = pipe->backbuf.hash;
   if(hash == (uint64_t)-1) return keep_previous_on_fail && (locked->surface != NULL);
@@ -577,12 +578,11 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   }
 
   struct dt_pixel_cache_entry_t *entry = NULL;
-  /* `lock_read == FALSE` is the realtime path:
-   * keep only a refcount on the cacheline (no read lock) to avoid GUI stalls.
-   * `lock_read == TRUE` keeps strict consistency for non-realtime display. */
-  void *data = lock_read
-                   ? dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, hash, &entry, dev, pipe)
-                   : dt_dev_pixelpipe_cache_get_ref_unlocked(darktable.pixelpipe_cache, hash, &entry);
+  /* Never keep long-lived read locks on cache-backed GUI surfaces.
+   * Recomputing the same image can reuse the same cache hash and needs a write
+   * lock on that entry; if darkroom still holds a read lock on the old surface,
+   * the worker can block forever waiting for the GUI to replace the surface. */
+  void *data = dt_dev_pixelpipe_cache_get_ref_unlocked(darktable.pixelpipe_cache, hash, &entry);
   if(!data)
   {
     /* Keep previous frame only while waiting for a *different* target hash.
@@ -601,10 +601,7 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   const size_t entry_size = dt_pixel_cache_entry_get_size(entry);
   if(width <= 0 || height <= 0 || entry_size < required_size || dt_pixel_cache_entry_get_data(entry) != data)
   {
-    if(lock_read)
-      dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, hash, entry);
-    else
-      dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
+    dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
     if(keep_previous_on_fail && locked->surface && locked->hash != hash) return TRUE;
     _release_locked_surface(locked);
     return FALSE;
@@ -614,15 +611,12 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   {
     if(locked->entry && locked->hash != (uint64_t)-1)
     {
-      if(locked->read_locked)
-        dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, locked->hash, locked->entry);
-      else
-        dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, locked->hash, locked->entry);
+      dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, locked->hash, locked->entry);
     }
     locked->hash = hash;
     locked->entry = entry;
     locked->data = data;
-    locked->read_locked = lock_read;
+    locked->read_locked = FALSE;
     return TRUE;
   }
 
@@ -630,10 +624,7 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   if(!surface || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS)
   {
     if(surface) cairo_surface_destroy(surface);
-    if(lock_read)
-      dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, hash, entry);
-    else
-      dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
+    dt_dev_pixelpipe_cache_unref_unlocked(darktable.pixelpipe_cache, hash, entry);
     if(keep_previous_on_fail && locked->surface) return TRUE;
     _release_locked_surface(locked);
     return FALSE;
@@ -644,7 +635,7 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   locked->width = width;
   locked->height = height;
   locked->data = data;
-  locked->read_locked = lock_read;
+  locked->read_locked = FALSE;
   locked->entry = entry;
   locked->surface = surface;
   return TRUE;
@@ -2835,6 +2826,11 @@ void leave(dt_view_t *self)
   dt_pthread_mutex_lock(&dev->virtual_pipe->busy_mutex);
   dt_dev_pixelpipe_cleanup_nodes(dev->virtual_pipe);
   dt_pthread_mutex_unlock(&dev->virtual_pipe->busy_mutex);
+
+  /* Device-side cache payloads are only an acceleration layer. Once darkroom
+   * leaves and all pipe workers are quiescent, drop all cached cl_mem objects
+   * so a later reopen can only exact-hit host-authoritative cachelines. */
+  dt_dev_pixelpipe_cache_flush_clmem(darktable.pixelpipe_cache, -1);
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_history_free_history(dev);
