@@ -859,15 +859,7 @@ dialog .sidebar row:selected:hover label,
   margin: 0.21em 0;
 }
 
-#collapse-block frame
-{
-  border: none;
-  border-color: transparent;
-  box-shadow: none;
-  background-color: transparent;
-  background-image: none;
-}
-
+#collapse-block frame,
 #collapse-block frame > border
 {
   border: none;
@@ -877,26 +869,31 @@ dialog .sidebar row:selected:hover label,
   background-image: none;
 }
 
-#collapsible
+#collapsible,
+#collapsible #bauhaus-slider,
+.dt_section_expander,
+.dt_section_expander label
 {
-  border: none;
-  border-color: transparent;
-  box-shadow: none;
-  padding: 0.28em;
+  background-color: @button_bg;
 }
 
 #collapsible,
-#collapsible #bauhaus-slider
+.dt_section_expander,
+.dt_section_expander label
 {
-  background-color: @button_bg;
+  border: none;
+  border-color: transparent;
+}
+
+#collapsible
+{
+  box-shadow: none;
+  padding: 0.28em;
 }
 
 .dt_section_expander,
 .dt_section_expander label
 {
-  background-color: @button_bg;
-  border: none;
-  border-color: transparent;
   margin-top: 0.14em;
 }
 
@@ -2705,22 +2702,9 @@ textview,
   background-color: @field_bg;
 }
 
-#footer-toolbar entry,
 #footer-toolbar .toggle
 {
   margin: 1px 2px;
-}
-
-.quick_filter_box button,
-.quick_filter_box togglebutton,
-.quick_filter_box .dt_module_btn,
-#module-header button,
-#module-header togglebutton,
-#module-header .dt_module_btn
-{
-  padding: 3px;
-  background-color: transparent;
-  background-image: none;
 }
 
 combobox,
@@ -2736,41 +2720,46 @@ combobox
   margin: 2px 0.25em;
 }
 
-spinbutton entry
-{
-  margin: 1px 2px;
-  padding: 4px 8px;
-  min-height: 1em;
-}
-
-combobox button
-{
-  background-color: @button_bg;
-  background-image: none;
-  padding: 2px;
-  border: none;
-  border-radius: 2px;
-  box-shadow: none;
-}
-
-spinbutton button
-{
-  background-color: @button_bg;
-  background-image: none;
-  border: none;
-  border-radius: 2px;
-  padding: 4px 8px;
-  margin: 1px 2px;
-  min-height: 1em;
-  box-shadow: none;
-}
-
+combobox button,
+spinbutton button,
 .combo,
 combobox button.combo,
 combobox button cellview,
 combobox button box
 {
   background-color: @button_bg;
+  background-image: none;
+}
+
+combobox button,
+spinbutton button
+{
+  border: none;
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+combobox button
+{
+  padding: 2px;
+}
+
+spinbutton button
+{
+  margin: 1px 2px;
+  padding: 4px 8px;
+  min-height: 1em;
+}
+
+.quick_filter_box button,
+.quick_filter_box togglebutton,
+.quick_filter_box .dt_module_btn,
+#module-header button,
+#module-header togglebutton,
+#module-header .dt_module_btn
+{
+  padding: 3px;
+  background-color: transparent;
   background-image: none;
 }
 
@@ -2874,12 +2863,7 @@ checkbutton:not(:hover) check:checked
 .dt_plugin_ui_main .dt_bauhaus,
 .dt_plugin_ui_main checkbutton,
 .dt_plugin_ui_main combobox,
-.dt_plugin_ui_main spinbutton
-{
-  margin-top: 0.14em;
-  margin-bottom: 0.14em;
-}
-
+.dt_plugin_ui_main spinbutton,
 .dt_plugin_ui_main .dt_section_label,
 .dt_plugin_ui_main .dt_section_expander,
 .dt_plugin_ui_main #collapse-block
