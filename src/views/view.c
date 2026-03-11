@@ -751,28 +751,7 @@ dt_view_surface_value_t dt_view_image_get_surface(int32_t imgid, int width, int 
     assert(buf.color_space == DT_COLORSPACE_DISPLAY);
   }
 
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static) default(none) dt_omp_firstprivate(buf, rgbbuf, transform)
-#endif
-  for(int i = 0; i < buf.height; i++)
-  {
-    const uint8_t *const restrict in = buf.buf + i * buf.width * 4;
-    uint8_t *const restrict out = rgbbuf + i * buf.width * 4;
-
-    if(transform)
-    {
-      cmsDoTransform(transform, in, out, buf.width);
-    }
-    else
-    {
-      for(int j = 0; j < buf.width; j++)
-      {
-        out[4 * j + 0] = in[4 * j + 2];
-        out[4 * j + 1] = in[4 * j + 1];
-        out[4 * j + 2] = in[4 * j + 0];
-      }
-    }
-  }
+  dt_colorspaces_transform_rgba8_to_bgra8(transform, buf.buf, rgbbuf, buf.width, buf.height);
   pthread_rwlock_unlock(&darktable.color_profiles->xprofile_lock);
   dt_mipmap_cache_release(darktable.mipmap_cache, &buf);
 

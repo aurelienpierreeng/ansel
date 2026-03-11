@@ -436,9 +436,13 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
   else
   {
 // fprintf(stderr,"Using xform codepath\n");
+    /* Alias the LCMS transform before the OpenMP region and share that alias
+     * explicitly instead of reaching through `d->xform` inside the loop. */
+    const cmsHTRANSFORM xform = d->xform;
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-    dt_omp_firstprivate(d, gamutcheck, ivoid, out, roi_out) \
+    dt_omp_firstprivate(gamutcheck, ivoid, out, roi_out) \
+    shared(xform) \
     schedule(static)
 #endif
     for(int k = 0; k < roi_out->height; k++)
@@ -446,7 +450,7 @@ int process(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const v
       const float *in = ((float *)ivoid) + (size_t)4 * k * roi_out->width;
       float *const restrict outp = out + (size_t)4 * k * roi_out->width;
 
-      cmsDoTransform(d->xform, in, outp, roi_out->width);
+      dt_colorspaces_transform_rgba_float_row(xform, in, outp, roi_out->width);
 
       if(gamutcheck)
       {

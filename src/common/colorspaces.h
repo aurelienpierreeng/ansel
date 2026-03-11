@@ -239,6 +239,17 @@ const dt_colorspaces_color_profile_t *dt_colorspaces_get_work_profile(const int3
 /** return the embedded profile of a particular image **/
 const cmsHPROFILE dt_colorspaces_get_embedded_profile(const int32_t imgid, dt_colorspaces_color_profile_type_t *type, gboolean *new_profile);
 
+/* LCMS transform handles are not safe to rediscover indirectly from mutable owner
+ * structs inside OpenMP regions. Alias the cmsHTRANSFORM to a local variable before
+ * entering a parallel region, declare that alias shared there, and pass only that
+ * stable handle to these helpers. */
+void dt_colorspaces_transform_rgba_float_row(const cmsHTRANSFORM transform, const float *in, float *out,
+                                             const int width);
+void dt_colorspaces_transform_rgba_float_image(const cmsHTRANSFORM transform, const float *image_in, float *image_out,
+                                               const int width, const int height);
+void dt_colorspaces_transform_rgba8_to_bgra8(const cmsHTRANSFORM transform, const uint8_t *image_in, uint8_t *image_out,
+                                             const int width, const int height);
+
 /** return the output profile as set in colorout, taking export override into account if passed in. */
 const dt_colorspaces_color_profile_t *dt_colorspaces_get_output_profile(const int32_t imgid,
                                                                         dt_colorspaces_color_profile_type_t *over_type,

@@ -1540,6 +1540,63 @@ void dt_colorspaces_update_display_transforms()
   _update_display_transforms(darktable.color_profiles);
 }
 
+void dt_colorspaces_transform_rgba_float_row(const cmsHTRANSFORM transform, const float *in, float *out,
+                                             const int width)
+{
+  cmsDoTransform(transform, in, out, width);
+}
+
+void dt_colorspaces_transform_rgba_float_image(const cmsHTRANSFORM transform, const float *image_in, float *image_out,
+                                               const int width, const int height)
+{
+  if(!transform || !image_in || !image_out || width <= 0 || height <= 0) return;
+
+  /* Share the aliased LCMS transform explicitly. Do not read it indirectly
+   * through module state inside the loop body. */
+#ifdef _OPENMP
+#pragma omp parallel for default(none) shared(transform) firstprivate(image_in, image_out, width, height) schedule(static)
+#endif
+  for(int y = 0; y < height; y++)
+  {
+    const float *const in = image_in + (size_t)y * width * 4;
+    float *const out = image_out + (size_t)y * width * 4;
+    dt_colorspaces_transform_rgba_float_row(transform, in, out, width);
+  }
+}
+
+void dt_colorspaces_transform_rgba8_to_bgra8(const cmsHTRANSFORM transform, const uint8_t *image_in, uint8_t *image_out,
+                                             const int width, const int height)
+{
+  if(!image_in || !image_out || width <= 0 || height <= 0) return;
+
+  /* Same threading rule as float transforms: pass an aliased transform handle
+   * into the helper and share only that stable local state. */
+#ifdef _OPENMP
+#pragma omp parallel for default(none) shared(transform) firstprivate(image_in, image_out, width, height) schedule(static)
+#endif
+  for(int y = 0; y < height; y++)
+  {
+    const uint8_t *const restrict in = image_in + (size_t)y * width * 4u;
+    uint8_t *const restrict out = image_out + (size_t)y * width * 4u;
+
+    if(transform)
+    {
+      cmsDoTransform(transform, in, out, width);
+      for(int x = 0; x < width; x++) out[4 * x + 3] = UINT8_MAX;
+    }
+    else
+    {
+      for(int x = 0; x < width; x++)
+      {
+        out[4 * x + 0] = in[4 * x + 2];
+        out[4 * x + 1] = in[4 * x + 1];
+        out[4 * x + 2] = in[4 * x + 0];
+        out[4 * x + 3] = UINT8_MAX;
+      }
+    }
+  }
+}
+
 // make sure that darktable.color_profiles->xprofile_lock is held when calling this!
 static void _update_display_profile(guchar *tmp_data, gsize size, char *name, size_t name_size)
 {

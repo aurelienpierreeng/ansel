@@ -960,13 +960,20 @@ static void process_lcms2_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
                              const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
+  /* LCMS is handled through local aliases so the OpenMP region shares explicit
+   * transform state rather than dereferencing `d->xform_*` inside the loop. */
+  const cmsHTRANSFORM xform_cam_lab = d->xform_cam_Lab;
+  const cmsHTRANSFORM xform_cam_nrgb = d->xform_cam_nrgb;
+  const cmsHTRANSFORM xform_nrgb_lab = d->xform_nrgb_Lab;
+  const gboolean use_nrgb = (d->nrgb != NULL);
   const int ch = piece->colors;
   assert(ch == 4);
 
 // use general lcms2 fallback
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(ch, d, ivoid, ovoid, roi_out) \
+  dt_omp_firstprivate(ch, ivoid, ovoid, roi_out) \
+  shared(use_nrgb, xform_cam_lab, xform_cam_nrgb, xform_nrgb_lab) \
   schedule(static)
 #endif
   for(int k = 0; k < roi_out->height; k++)
@@ -983,13 +990,13 @@ static void process_lcms2_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
     }
 
     // convert from input profile to pipeline work RGB.
-    if(!d->nrgb)
+    if(!use_nrgb)
     {
-      cmsDoTransform(d->xform_cam_Lab, out, out, roi_out->width);
+      dt_colorspaces_transform_rgba_float_row(xform_cam_lab, out, out, roi_out->width);
     }
     else
     {
-      cmsDoTransform(d->xform_cam_nrgb, out, out, roi_out->width);
+      dt_colorspaces_transform_rgba_float_row(xform_cam_nrgb, out, out, roi_out->width);
 
       float *rgbptr = (float *)out;
 #ifdef _OPENMP
@@ -1002,7 +1009,7 @@ static void process_lcms2_bm(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_
         pixel[3] = 0.0f;
       }
 
-      cmsDoTransform(d->xform_nrgb_Lab, out, out, roi_out->width);
+      dt_colorspaces_transform_rgba_float_row(xform_nrgb_lab, out, out, roi_out->width);
     }
   }
 }
@@ -1012,12 +1019,19 @@ static void process_lcms2_proper(struct dt_iop_module_t *self, dt_dev_pixelpipe_
                                  const dt_iop_roi_t *const roi_out)
 {
   const dt_iop_colorin_data_t *const d = (dt_iop_colorin_data_t *)piece->data;
+  /* LCMS is handled through local aliases so the OpenMP region shares explicit
+   * transform state rather than dereferencing `d->xform_*` inside the loop. */
+  const cmsHTRANSFORM xform_cam_lab = d->xform_cam_Lab;
+  const cmsHTRANSFORM xform_cam_nrgb = d->xform_cam_nrgb;
+  const cmsHTRANSFORM xform_nrgb_lab = d->xform_nrgb_Lab;
+  const gboolean use_nrgb = (d->nrgb != NULL);
   const int ch = piece->colors;
 
 // use general lcms2 fallback
 #ifdef _OPENMP
 #pragma omp parallel for default(none) \
-  dt_omp_firstprivate(ch, d, ivoid, ovoid, roi_out) \
+  dt_omp_firstprivate(ch, ivoid, ovoid, roi_out) \
+  shared(use_nrgb, xform_cam_lab, xform_cam_nrgb, xform_nrgb_lab) \
   schedule(static)
 #endif
   for(int k = 0; k < roi_out->height; k++)
@@ -1026,13 +1040,13 @@ static void process_lcms2_proper(struct dt_iop_module_t *self, dt_dev_pixelpipe_
     float *out = (float *)ovoid + (size_t)ch * k * roi_out->width;
 
     // convert from input profile to pipeline work RGB.
-    if(!d->nrgb)
+    if(!use_nrgb)
     {
-      cmsDoTransform(d->xform_cam_Lab, in, out, roi_out->width);
+      dt_colorspaces_transform_rgba_float_row(xform_cam_lab, in, out, roi_out->width);
     }
     else
     {
-      cmsDoTransform(d->xform_cam_nrgb, in, out, roi_out->width);
+      dt_colorspaces_transform_rgba_float_row(xform_cam_nrgb, in, out, roi_out->width);
 
       float *rgbptr = (float *)out;
 #ifdef _OPENMP
@@ -1044,7 +1058,7 @@ static void process_lcms2_proper(struct dt_iop_module_t *self, dt_dev_pixelpipe_
         for(int c = 0; c < 3; c++) pixel[c] = CLAMP(pixel[c], 0.0f, 1.0f);
       }
 
-      cmsDoTransform(d->xform_nrgb_Lab, out, out, roi_out->width);
+      dt_colorspaces_transform_rgba_float_row(xform_nrgb_lab, out, out, roi_out->width);
     }
   }
 }

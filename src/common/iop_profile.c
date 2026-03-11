@@ -93,7 +93,6 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
                                              const int height, const dt_colorspaces_color_profile_type_t type,
                                              const char *filename, const int intent, const int direction)
 {
-  const int ch = 4;
   cmsHTRANSFORM *xform = NULL;
   cmsHPROFILE *rgb_profile = NULL;
   cmsHPROFILE *lab_profile = NULL;
@@ -156,19 +155,7 @@ static void _transform_from_to_rgb_lab_lcms2(const float *const image_in, float 
 
   if(xform)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-    dt_omp_firstprivate(image_in, image_out, width, height, ch) \
-    shared(xform) \
-    schedule(static)
-#endif
-    for(int y = 0; y < height; y++)
-    {
-      const float *const in = image_in + y * width * ch;
-      float *const out = image_out + y * width * ch;
-
-      cmsDoTransform(xform, in, out, width);
-    }
+    dt_colorspaces_transform_rgba_float_image(xform, image_in, image_out, width, height);
   }
   else
     fprintf(stderr, "[_transform_from_to_rgb_lab_lcms2] cannot create transform\n");
@@ -182,7 +169,6 @@ static void _transform_rgb_to_rgb_lcms2(const float *const image_in, float *cons
                                         const dt_colorspaces_color_profile_type_t type_to, const char *filename_to,
                                         const int intent)
 {
-  const int ch = 4;
   cmsHTRANSFORM *xform = NULL;
   cmsHPROFILE *from_rgb_profile = NULL;
   cmsHPROFILE *to_rgb_profile = NULL;
@@ -253,19 +239,7 @@ static void _transform_rgb_to_rgb_lcms2(const float *const image_in, float *cons
 
   if(xform)
   {
-#ifdef _OPENMP
-#pragma omp parallel for default(none) \
-    dt_omp_firstprivate(image_in, image_out, width, height, ch) \
-    shared(xform) \
-    schedule(static)
-#endif
-    for(int y = 0; y < height; y++)
-    {
-      const float *const in = image_in + y * width * ch;
-      float *const out = image_out + y * width * ch;
-
-      cmsDoTransform(xform, in, out, width);
-    }
+    dt_colorspaces_transform_rgba_float_image(xform, image_in, image_out, width, height);
   }
   else
     fprintf(stderr, "[_transform_rgb_to_rgb_lcms2] cannot create transform\n");
