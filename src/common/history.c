@@ -789,13 +789,15 @@ gboolean dt_history_db_get_autoapply_ioporder_params(const int32_t imgid, const 
 }
 
 
-void dt_history_hash_set_mipmap(const int32_t imgid, const dt_image_cache_write_mode_t mode)
+void dt_history_hash_set_mipmap(const int32_t imgid, const uint64_t history_hash,
+                                const dt_image_cache_write_mode_t mode)
 {
   if(imgid <= 0) return;
+  if(history_hash == UINT64_MAX) return;
 
   dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'w');
   if(!img) return;
-  img->mipmap_hash = img->history_hash;
+  img->mipmap_hash = history_hash;
   dt_image_cache_write_release(darktable.image_cache, img, mode);
 }
 

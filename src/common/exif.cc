@@ -3809,7 +3809,7 @@ static void _exif_xmp_append_history_hash(Exiv2::XmpData &xmpData, const int32_t
 
   if(cached)
   {
-    if(cached->history_hash)
+    if(cached->history_hash != UINT64_MAX)
     {
       const uint64_t be_hash = GUINT64_TO_BE(cached->history_hash);
       char *value = dt_exif_xmp_encode(reinterpret_cast<const unsigned char *>(&be_hash), sizeof(be_hash), NULL);

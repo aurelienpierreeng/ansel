@@ -1757,7 +1757,7 @@ void dt_image_init(dt_image_t *img)
   img->group_members = 0;
   img->history_items = 0;
   img->history_hash = UINT64_MAX;
-  img->mipmap_hash = 0;
+  img->mipmap_hash = UINT64_MAX;
   img->self_hash = 0;
   img->flags = 0;
   img->id = UNKNOWN_IMAGE;

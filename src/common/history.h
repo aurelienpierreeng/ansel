@@ -125,8 +125,9 @@ gboolean dt_history_check_module_exists(int32_t imgid, const char *operation, gb
 /** cleanup cached statements */
 void dt_history_cleanup(void);
 
-/** update mipmap hash in database from cached image history hash */
-void dt_history_hash_set_mipmap(const int32_t imgid, const dt_image_cache_write_mode_t mode);
+/** update mipmap hash in database from the provided image history hash */
+void dt_history_hash_set_mipmap(const int32_t imgid, const uint64_t history_hash,
+                                const dt_image_cache_write_mode_t mode);
 
 #ifdef __cplusplus
 }

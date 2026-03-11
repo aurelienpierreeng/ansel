@@ -114,8 +114,8 @@ static const int dt_mipmap_cache_exif_data_adobergb_length
 
 static gboolean _mipmap_cache_disk_hash_matches(const int32_t imgid)
 {
-  uint64_t history_hash = 0;
-  uint64_t mipmap_hash = 0;
+  uint64_t history_hash = UINT64_MAX;
+  uint64_t mipmap_hash = UINT64_MAX;
   const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
   if(img)
   {
@@ -124,7 +124,20 @@ static gboolean _mipmap_cache_disk_hash_matches(const int32_t imgid)
     dt_image_cache_read_release(darktable.image_cache, img);
   }
 
-  return (mipmap_hash == history_hash);
+  return history_hash != UINT64_MAX && mipmap_hash != UINT64_MAX && mipmap_hash == history_hash;
+}
+
+static uint64_t _mipmap_cache_get_history_hash(const int32_t imgid)
+{
+  uint64_t history_hash = UINT64_MAX;
+  const dt_image_t *img = dt_image_cache_get(darktable.image_cache, imgid, 'r');
+  if(img)
+  {
+    history_hash = img->history_hash;
+    dt_image_cache_read_release(darktable.image_cache, img);
+  }
+
+  return history_hash;
 }
 
 struct dt_mipmap_buffer_dsc
@@ -686,7 +699,10 @@ write_error:
           }
           if(f) fclose(f);
           if(wrote_to_disk)
-            dt_history_hash_set_mipmap(imgid, DT_IMAGE_CACHE_RELAXED);
+          {
+            const uint64_t history_hash = _mipmap_cache_get_history_hash(imgid);
+            dt_history_hash_set_mipmap(imgid, history_hash, DT_IMAGE_CACHE_RELAXED);
+          }
         }
       }
     }
@@ -934,7 +950,10 @@ static void _generate_blocking(dt_cache_entry_t *entry, dt_mipmap_buffer_t *buf,
              imgid, dsc->width, dsc->height);
     _init_8((uint8_t *)_get_buffer_from_dsc(dsc), &dsc->width, &dsc->height, &dsc->iscale, &dsc->color_space, imgid, mip);
     if(dsc->width > 0 && dsc->height > 0)
-      dt_history_hash_set_mipmap(imgid, DT_IMAGE_CACHE_MINIMAL);
+    {
+      const uint64_t history_hash = _mipmap_cache_get_history_hash(imgid);
+      dt_history_hash_set_mipmap(imgid, history_hash, DT_IMAGE_CACHE_RELAXED);
+    }
   }
   dsc->flags &= ~DT_MIPMAP_BUFFER_DSC_FLAG_GENERATE;
   _paint_skulls(buf, dsc, mip);
@@ -1266,6 +1285,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
   char filename[PATH_MAX] = { 0 };
   char ext[6] = { 0 };
   gboolean input_exists, is_jpg_input, use_embedded_jpg;
+  const int embedded_jpg_mode = dt_conf_get_int("lighttable/embedded_jpg");
   _write_mipmap_to_disk(imgid, filename, ext, &input_exists, &is_jpg_input, &use_embedded_jpg, NULL);
 
   /* do not even try to process file if it isn't available */
@@ -1282,7 +1302,7 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
   // try to generate mip from larger mip
   // This expects that invalid mips will be flushed, so the assumption is:
   // if mip then it's valid (with regard to current history)
-  if(res && size < DT_MIPMAP_F - 1)
+  if(res && !use_embedded_jpg && size < DT_MIPMAP_F - 1)
   {
     for(dt_mipmap_size_t k = size + 1; k < DT_MIPMAP_F; k++)
     {
@@ -1354,6 +1374,17 @@ static void _init_8(uint8_t *buf, uint32_t *width, uint32_t *height, float *isca
 
   if(res)
   {
+    if(embedded_jpg_mode == 2)
+    {
+      dt_print(DT_DEBUG_CACHE,
+               "[mipmap_cache] embedded JPEG mode forbids raw processing for image %d at mip %d\n",
+               imgid, size);
+      *width = *height = 0;
+      *iscale = 0.0f;
+      *color_space = DT_COLORSPACE_NONE;
+      return;
+    }
+
     // try the real thing: rawspeed + pixelpipe
     dt_imageio_module_format_t format;
     _dummy_data_t dat;

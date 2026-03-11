@@ -63,6 +63,7 @@
 #include "common/debug.h"
 #include "common/exif.h"
 #include "common/image_cache.h"
+#include "common/history.h"
 #include "common/imageio.h"
 #include "common/imageio_module.h"
 #ifdef HAVE_OPENEXR
@@ -1088,6 +1089,9 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
     dt_print(DT_DEBUG_IMAGEIO, "[dt_imageio_export_with_flags] no valid output buffer\n");
     goto error;
   }
+
+  if(thumbnail_export)
+    dt_history_hash_set_mipmap(imgid, dev.history_hash, DT_IMAGE_CACHE_RELAXED);
 
   struct dt_pixel_cache_entry_t *cache_entry;
   void *data = NULL;
