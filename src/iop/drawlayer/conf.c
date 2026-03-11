@@ -303,7 +303,7 @@ static void _apply_display_brush_color(dt_iop_module_t *self, const float displa
   dt_conf_set_float(DRAWLAYER_CONF_COLOR_B, _clamp01(display_rgb[2]));
 
   dt_drawlayer_widgets_set_display_color(g->ui.widgets, display_rgb);
-  _clear_cursor_stamp_surface(g);
+  dt_drawlayer_ui_cursor_clear(&g->ui);
 
   if(remember) _remember_display_color(self, display_rgb);
 
