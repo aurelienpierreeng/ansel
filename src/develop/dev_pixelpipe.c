@@ -670,7 +670,7 @@ void dt_dev_pixelpipe_sync_virtual(dt_develop_t *dev, dt_dev_pixelpipe_change_t 
 
 gboolean dt_dev_pixelpipe_is_backbufer_valid(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 {
-  return pipe->backbuf.hash != -1 
+  return pipe->backbuf.hash != DT_PIXELPIPE_CACHE_HASH_INVALID
          && pipe->status == DT_DEV_PIXELPIPE_VALID 
          && pipe->changed == DT_DEV_PIPE_UNCHANGED
          && pipe->hash == pipe->backbuf.hash
