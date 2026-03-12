@@ -994,6 +994,8 @@ static void _enter_edit_mode(GtkToggleButton *button, struct dt_iop_module_t *se
 
   if(g->editing)
   {
+    dt_iop_set_cache_bypass(self, TRUE);
+
     // Take a backup of current params
     memcpy(&g->previous_params, p, sizeof(dt_iop_crop_params_t));
     g->cropping = GRAB_CENTER;
@@ -1005,6 +1007,8 @@ static void _enter_edit_mode(GtkToggleButton *button, struct dt_iop_module_t *se
   }
   else
   {
+    dt_iop_set_cache_bypass(self, FALSE);
+
     // Restore the params backup
     memcpy(p, &g->previous_params, sizeof(dt_iop_crop_params_t));
     g->cropping = GRAB_NONE;
@@ -1020,6 +1024,7 @@ static void _enter_edit_mode(GtkToggleButton *button, struct dt_iop_module_t *se
 
   // It sucks that we need to invalidate the preview too but we need its final dimension.
   dt_dev_pixelpipe_resync_history_all(self->dev);
+  dt_dev_get_thumbnail_size(self->dev);
 }
 
 static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
@@ -1029,9 +1034,11 @@ static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
   // Close edit mode on commit
   g->editing = FALSE;
   gtk_widget_set_sensitive(g->commit_button, FALSE);
+  dt_iop_set_cache_bypass(self, FALSE);
 
   // Commit history and refresh view
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_get_thumbnail_size(self->dev);
 
   // The following will de-activate the edit button and trigger the callback.
   // Prevent the callback to revert the param change.

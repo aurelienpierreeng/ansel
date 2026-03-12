@@ -1267,6 +1267,8 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   dt_iop_clipping_gui_data_t *g = (dt_iop_clipping_gui_data_t *)self->gui_data;
   dt_iop_clipping_params_t *p = (dt_iop_clipping_params_t *)self->params;
 
+  dt_iop_set_cache_bypass(self, in);
+
   if(self->enabled)
   {
     if(in)
@@ -1304,6 +1306,9 @@ void gui_focus(struct dt_iop_module_t *self, gboolean in)
   }
   else if(in)
     g->preview_ready = TRUE;
+
+  dt_dev_pixelpipe_resync_history_all(self->dev);
+  dt_dev_get_thumbnail_size(self->dev);
 }
 
 

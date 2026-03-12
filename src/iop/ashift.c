@@ -5235,6 +5235,7 @@ static void _enter_edit_mode(GtkToggleButton* button, struct dt_iop_module_t *se
 
   // It sucks that we need to invalidate the preview too but we need its final dimension.
   dt_dev_pixelpipe_resync_history_all(self->dev);
+  dt_dev_get_thumbnail_size(self->dev);
 }
 
 static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
@@ -5253,6 +5254,7 @@ static void _event_commit_clicked(GtkButton *button, dt_iop_module_t *self)
 
   // Commit history and refresh view
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
+  dt_dev_get_thumbnail_size(self->dev);
 
   // The following will de-activate the edit button and trigger the callback.
   // Prevent the callback to revert the param change.
