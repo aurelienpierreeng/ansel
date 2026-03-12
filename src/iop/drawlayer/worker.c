@@ -995,6 +995,16 @@ gboolean dt_drawlayer_worker_any_active(const dt_drawlayer_worker_t *worker)
   return _rt_workers_any_active((dt_drawlayer_worker_t *)worker);
 }
 
+gboolean dt_drawlayer_worker_ensure_running(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
+{
+  return _start_worker(self, rt);
+}
+
+void dt_drawlayer_worker_stop(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
+{
+  _stop_worker(self, rt);
+}
+
 void dt_drawlayer_worker_get_snapshot(const dt_drawlayer_worker_t *worker,
                                       dt_drawlayer_worker_snapshot_t *snapshot)
 {

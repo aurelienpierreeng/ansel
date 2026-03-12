@@ -68,6 +68,10 @@ void dt_drawlayer_worker_get_snapshot(const dt_drawlayer_worker_t *worker,
 void dt_drawlayer_worker_request_commit(dt_drawlayer_worker_t *worker);
 /** @brief Flush pending events and force commit transition. */
 void dt_drawlayer_worker_flush_pending(dt_drawlayer_worker_t *worker);
+/** @brief Ensure realtime/backend worker threads are started. */
+gboolean dt_drawlayer_worker_ensure_running(dt_iop_module_t *self, dt_drawlayer_worker_t *worker);
+/** @brief Stop realtime and full-resolution worker threads. */
+void dt_drawlayer_worker_stop(dt_iop_module_t *self, dt_drawlayer_worker_t *worker);
 /** @brief Seal current stroke for synchronous commit by folding queued raw inputs into preserved history. */
 void dt_drawlayer_worker_seal_for_commit(dt_drawlayer_worker_t *worker);
 /** @brief Wait until deferred full-resolution replay queue is idle. */

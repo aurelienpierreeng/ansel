@@ -17,6 +17,7 @@
 */
 
 #include "develop/pixelpipe_cache.h"
+#include "control/control.h"
 #include "iop/drawlayer/runtime.h"
 
 #include <string.h>
@@ -137,8 +138,45 @@ void dt_drawlayer_runtime_manager_note_thread(dt_drawlayer_runtime_manager_t *st
   dt_pthread_mutex_unlock(&state->mutex);
 }
 
+static void _fill_runtime_inputs(const dt_drawlayer_runtime_context_t *runtime,
+                                 const dt_drawlayer_worker_snapshot_t *worker_snapshot,
+                                 dt_drawlayer_runtime_inputs_t *inputs)
+{
+  if(inputs) *inputs = (dt_drawlayer_runtime_inputs_t){ 0 };
+  if(!runtime || !inputs) return;
+
+  const dt_drawlayer_runtime_request_t *const request = &runtime->runtime;
+  dt_iop_module_t *const self = request->self;
+  dt_iop_drawlayer_gui_data_t *const g = request->gui;
+  dt_drawlayer_process_state_t *const process = request->process_state ? request->process_state : (g ? &g->process : NULL);
+  const dt_iop_drawlayer_params_t *const runtime_params
+      = request->runtime_params ? request->runtime_params : (const dt_iop_drawlayer_params_t *)self->params;
+
+  *inputs = (dt_drawlayer_runtime_inputs_t){
+    .session = g ? &g->session : NULL,
+    .process = process,
+    .stroke = g ? &g->stroke : NULL,
+    .worker = worker_snapshot,
+    .base_patch = NULL,
+    .base_patch_valid = FALSE,
+    .base_patch_dirty = FALSE,
+    .painting_active = g && g->manager.painting_active,
+    .gui_attached = self && self->dev && self->dev->gui_attached && g,
+    .module_focused = self && self->dev && self->dev->gui_module == self,
+    .display_pipe = request->display_pipe,
+    .have_layer_selection = runtime_params && runtime_params->layer_name[0] != '\0',
+    .have_valid_output_roi = request->roi_out && request->roi_out->width > 0 && request->roi_out->height > 0,
+    .use_opencl = request->use_opencl,
+    .view_changed = g && self && self->dev
+                    && (fabsf(g->session.last_view_x - self->dev->roi.x) > 1e-6f
+                        || fabsf(g->session.last_view_y - self->dev->roi.y) > 1e-6f
+                        || fabsf(g->session.last_view_scale - self->dev->roi.scaling) > 1e-6f),
+    .padding_changed = g && self && fabsf(g->session.live_padding - dt_drawlayer_current_live_padding(self)) > 1e-6f,
+  };
+}
+
 static void _collect_runtime_inputs(const dt_drawlayer_runtime_update_request_t *request,
-                                    const dt_drawlayer_runtime_host_t *host,
+                                    const dt_drawlayer_runtime_context_t *context,
                                     dt_drawlayer_runtime_inputs_t *inputs,
                                     dt_drawlayer_worker_snapshot_t *worker_snapshot)
 {
@@ -149,16 +187,9 @@ static void _collect_runtime_inputs(const dt_drawlayer_runtime_update_request_t 
     if(inputs) *inputs = *request->inputs;
     return;
   }
-  if(!host || !host->collect_inputs) return;
-  host->collect_inputs(host->user_data, inputs, worker_snapshot);
-}
-
-static gboolean _perform_runtime_action(const dt_drawlayer_runtime_host_t *host,
-                                        const dt_drawlayer_runtime_action_request_t *action,
-                                        dt_drawlayer_runtime_result_t *result)
-{
-  if(!host || !host->perform_action || !action) return FALSE;
-  return host->perform_action(host->user_data, action, result);
+  if(context && context->runtime.gui && context->runtime.gui->stroke.worker && worker_snapshot)
+    dt_drawlayer_worker_get_snapshot(context->runtime.gui->stroke.worker, worker_snapshot);
+  _fill_runtime_inputs(context, worker_snapshot, inputs);
 }
 
 static void _sync_runtime_state_from_inputs(dt_drawlayer_runtime_manager_t *state,
@@ -427,23 +458,18 @@ static gboolean _perform_runtime_commit_sequence(dt_drawlayer_runtime_manager_t 
                                                  dt_drawlayer_runtime_result_t *result)
 {
   if(commit_mode == DT_DRAWLAYER_RUNTIME_COMMIT_NONE) return TRUE;
+  const dt_drawlayer_runtime_context_t *const context
+      = host ? (const dt_drawlayer_runtime_context_t *)host->user_data : NULL;
+  if(!context || !context->runtime.self || !context->runtime.gui) return FALSE;
 
   const dt_drawlayer_runtime_update_request_t begin = {
     .event = DT_DRAWLAYER_RUNTIME_EVENT_COMMIT_BEGIN,
     .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
     .inputs = request ? request->inputs : NULL,
   };
-  const dt_drawlayer_runtime_action_request_t action = {
-    .action = DT_DRAWLAYER_RUNTIME_ACTION_COMMIT,
-    .data.commit_mode = commit_mode,
-  };
   _update_manager_information(state, &begin, host, NULL);
-  _perform_runtime_action(host,
-                          &(dt_drawlayer_runtime_action_request_t){
-                            .action = DT_DRAWLAYER_RUNTIME_ACTION_SYNC_REALTIME_MODE,
-                          },
-                          result);
-  if(!_perform_runtime_action(host, &action, result)) return FALSE;
+  dt_drawlayer_set_pipeline_realtime_mode(context->runtime.self, context->runtime.gui->manager.realtime_active);
+  if(!dt_drawlayer_commit_dabs(context->runtime.self, commit_mode == DT_DRAWLAYER_RUNTIME_COMMIT_HISTORY)) return FALSE;
 
   const dt_drawlayer_runtime_update_request_t end = {
     .event = DT_DRAWLAYER_RUNTIME_EVENT_COMMIT_END,
@@ -451,26 +477,19 @@ static gboolean _perform_runtime_commit_sequence(dt_drawlayer_runtime_manager_t 
     .inputs = request ? request->inputs : NULL,
   };
   _update_manager_information(state, &end, host, NULL);
-  _perform_runtime_action(host,
-                          &(dt_drawlayer_runtime_action_request_t){
-                            .action = DT_DRAWLAYER_RUNTIME_ACTION_SYNC_REALTIME_MODE,
-                          },
-                          result);
+  dt_drawlayer_set_pipeline_realtime_mode(context->runtime.self, context->runtime.gui->manager.realtime_active);
   return TRUE;
 }
 
 static gboolean _perform_runtime_widget_cache_sync(const dt_drawlayer_runtime_host_t *host,
                                                    dt_drawlayer_runtime_result_t *result)
 {
-  const dt_drawlayer_runtime_action_request_t ensure_layer = {
-    .action = DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_LAYER_CACHE,
-  };
-  if(!_perform_runtime_action(host, &ensure_layer, result)) return FALSE;
-
-  const dt_drawlayer_runtime_action_request_t ensure_widget = {
-    .action = DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_WIDGET_CACHE,
-  };
-  return _perform_runtime_action(host, &ensure_widget, result);
+  const dt_drawlayer_runtime_context_t *const context
+      = host ? (const dt_drawlayer_runtime_context_t *)host->user_data : NULL;
+  (void)result;
+  if(!context || !context->runtime.self) return FALSE;
+  if(!dt_drawlayer_ensure_layer_cache(context->runtime.self)) return FALSE;
+  return dt_drawlayer_sync_widget_cache(context->runtime.self);
 }
 
 static void _release_runtime_source(dt_drawlayer_runtime_manager_t *state,
@@ -659,7 +678,8 @@ static void _update_manager_information(dt_drawlayer_runtime_manager_t *state,
 
   dt_drawlayer_runtime_inputs_t inputs = { 0 };
   dt_drawlayer_worker_snapshot_t worker_snapshot = { 0 };
-  _collect_runtime_inputs(request, host, &inputs, &worker_snapshot);
+  _collect_runtime_inputs(request, host ? (const dt_drawlayer_runtime_context_t *)host->user_data : NULL,
+                          &inputs, &worker_snapshot);
 
   dt_pthread_mutex_lock(&state->mutex);
   _sync_runtime_state_from_inputs(state, &inputs);
@@ -678,52 +698,42 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
     .raw_input_ok = TRUE,
   };
   if(!state || !request || !host) return result;
+  const dt_drawlayer_runtime_context_t *const context
+      = (const dt_drawlayer_runtime_context_t *)host->user_data;
+  if(!context) return result;
+
+  dt_iop_module_t *const self = context->runtime.self;
+  dt_iop_drawlayer_gui_data_t *const g = context->runtime.gui;
+  dt_drawlayer_process_state_t *const process = context->runtime.process_state;
 
   dt_drawlayer_runtime_schedule_t schedule = { 0 };
   _update_manager_information(state, request, host, &schedule);
 
-  if(schedule.sync_realtime_mode)
-  {
-    const dt_drawlayer_runtime_action_request_t action = {
-      .action = DT_DRAWLAYER_RUNTIME_ACTION_SYNC_REALTIME_MODE,
-    };
-    _perform_runtime_action(host, &action, &result);
-  }
+  if(schedule.sync_realtime_mode && self && g)
+    dt_drawlayer_set_pipeline_realtime_mode(self, g->manager.realtime_active);
 
   switch(request->event)
   {
     case DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_GAIN:
-      if(schedule.ensure_worker_running)
+      if(schedule.ensure_worker_running && self && g
+         && !dt_drawlayer_worker_ensure_running(self, g->stroke.worker))
       {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_WORKER_RUNNING,
-        };
-        _perform_runtime_action(host, &action, &result);
+        dt_control_log(_("failed to start drawing worker"));
+        result.ok = FALSE;
       }
-      if(schedule.sync_widget_cache) 
-        _perform_runtime_widget_cache_sync(host, &result);
+      if(schedule.sync_widget_cache && result.ok
+         && !_perform_runtime_widget_cache_sync(host, &result))
+        result.ok = FALSE;
       break;
 
     case DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_ENTER:
     case DT_DRAWLAYER_RUNTIME_EVENT_GUI_MOUSE_LEAVE:
-      if(schedule.set_pointer_state)
+      if(schedule.set_pointer_state && g)
       {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_SET_POINTER_STATE,
-          .data.pointer = {
-            .valid = schedule.pointer_valid,
-            .hide_cursor = schedule.pointer_hide_cursor,
-          },
-        };
-        _perform_runtime_action(host, &action, &result);
+        g->session.pointer_valid = schedule.pointer_valid;
+        dt_drawlayer_set_os_cursor_hidden(schedule.pointer_hide_cursor);
       }
-      if(schedule.queue_redraw_center)
-      {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_QUEUE_REDRAW_CENTER,
-        };
-        _perform_runtime_action(host, &action, &result);
-      }
+      if(schedule.queue_redraw_center) dt_control_queue_redraw_center();
       break;
 
     case DT_DRAWLAYER_RUNTIME_EVENT_GUI_SCROLL:
@@ -735,13 +745,7 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
       if(result.ok && schedule.sync_widget_cache
          && !_perform_runtime_widget_cache_sync(host, &result))
         result.ok = FALSE;
-      if(schedule.queue_redraw_center)
-      {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_QUEUE_REDRAW_CENTER,
-        };
-        _perform_runtime_action(host, &action, &result);
-      }
+      if(schedule.queue_redraw_center) dt_control_queue_redraw_center();
       break;
 
     case DT_DRAWLAYER_RUNTIME_EVENT_GUI_PIPE_FINISHED:
@@ -749,48 +753,21 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
       break;
 
     case DT_DRAWLAYER_RUNTIME_EVENT_GUI_STROKE_ABORT:
-    {
-      const dt_drawlayer_runtime_action_request_t end_capture = {
-        .action = DT_DRAWLAYER_RUNTIME_ACTION_END_STROKE_CAPTURE,
-      };
-      _perform_runtime_action(host, &end_capture, &result);
-      if(schedule.request_commit)
-      {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_REQUEST_COMMIT,
-        };
-        _perform_runtime_action(host, &action, &result);
-      }
+      if(self) dt_drawlayer_end_gui_stroke_capture(self);
+      if(schedule.request_commit && g) dt_drawlayer_worker_request_commit(g->stroke.worker);
       break;
-    }
 
     case DT_DRAWLAYER_RUNTIME_EVENT_GUI_FOCUS_LOSS:
     case DT_DRAWLAYER_RUNTIME_EVENT_GUI_CHANGE_IMAGE:
       if(result.ok
          && !_perform_runtime_commit_sequence(state, request, host, schedule.commit_mode, &result))
         result.ok = FALSE;
-      if(result.ok && schedule.feedback != DT_DRAWLAYER_RUNTIME_FEEDBACK_NONE)
-      {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_SHOW_FEEDBACK,
-          .data.feedback = schedule.feedback,
-        };
-        _perform_runtime_action(host, &action, &result);
-      }
-      if(schedule.wait_fullres_worker)
-      {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_WAIT_FULLRES_WORKER,
-        };
-        _perform_runtime_action(host, &action, &result);
-      }
-      if(schedule.flush_process_patch)
-      {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_FLUSH_PROCESS_PATCH,
-        };
-        _perform_runtime_action(host, &action, &result);
-      }
+      if(result.ok && schedule.feedback != DT_DRAWLAYER_RUNTIME_FEEDBACK_NONE && g)
+        dt_drawlayer_show_runtime_feedback(g, schedule.feedback);
+      if(schedule.wait_fullres_worker && g)
+        dt_drawlayer_worker_flush_finished_strokes(g->stroke.worker);
+      if(schedule.flush_process_patch && self && g)
+        dt_drawlayer_flush_process_patch_to_base(self, g);
       if(schedule.flush_sidecar)
       {
         const dt_drawlayer_runtime_update_request_t begin = {
@@ -798,11 +775,12 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
           .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
           .inputs = request->inputs,
         };
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_FLUSH_SIDECAR,
-        };
         _update_manager_information(state, &begin, host, NULL);
-        if(!_perform_runtime_action(host, &action, &result)) result.ok = FALSE;
+        if(self && !dt_drawlayer_flush_layer_cache(self))
+        {
+          dt_control_log(_("failed to write drawing layer sidecar"));
+          result.ok = FALSE;
+        }
         const dt_drawlayer_runtime_update_request_t end = {
           .event = DT_DRAWLAYER_RUNTIME_EVENT_SIDECAR_SAVE_END,
           .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
@@ -810,44 +788,32 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
         };
         _update_manager_information(state, &end, host, NULL);
       }
-      if(schedule.stop_worker)
-      {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_STOP_WORKER,
-        };
-        _perform_runtime_action(host, &action, &result);
-      }
+      if(schedule.stop_worker && self && g) dt_drawlayer_worker_stop(self, g->stroke.worker);
 #ifdef HAVE_OPENCL
-      if(schedule.release_process_clmem)
+      if(schedule.release_process_clmem && process)
       {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_RELEASE_PROCESS_CLMEM,
-        };
-        _perform_runtime_action(host, &action, &result);
+        dt_drawlayer_cache_patch_wrlock(&process->process_read_patch);
+        dt_drawlayer_process_state_clear_clmem(process);
+        dt_drawlayer_cache_patch_wrunlock(&process->process_read_patch);
       }
 #endif
-      if(schedule.invalidate_layer_cache)
+      if(schedule.invalidate_layer_cache && g)
       {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_INVALIDATE_LAYER_CACHE,
-        };
-        _perform_runtime_action(host, &action, &result);
+        dt_drawlayer_release_all_base_patch_extra_refs(g);
+        dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
+        g->process.cache_valid = FALSE;
+        g->process.cache_dirty = FALSE;
+        dt_drawlayer_process_state_invalidate(&g->process);
       }
-      if(schedule.refresh_gui)
+      if(schedule.refresh_gui && self) gui_update(self);
+      if(schedule.sync_widget_cache && result.ok
+         && !_perform_runtime_widget_cache_sync(host, &result))
+        result.ok = FALSE;
+      if(schedule.ensure_worker_running && self && g
+         && !dt_drawlayer_worker_ensure_running(self, g->stroke.worker))
       {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_REFRESH_GUI,
-        };
-        _perform_runtime_action(host, &action, &result);
-      }
-      if(schedule.sync_widget_cache) 
-        _perform_runtime_widget_cache_sync(host, &result);
-      if(schedule.ensure_worker_running)
-      {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_WORKER_RUNNING,
-        };
-        _perform_runtime_action(host, &action, &result);
+        dt_control_log(_("failed to start drawing worker"));
+        result.ok = FALSE;
       }
       break;
 
@@ -860,76 +826,56 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
         if(result.ok && schedule.sync_widget_cache
            && !_perform_runtime_widget_cache_sync(host, &result))
           result.ok = FALSE;
-        if(result.ok && schedule.prime_live_process_patch)
+        if(result.ok && schedule.prime_live_process_patch && self)
+          dt_drawlayer_prime_live_process_patch_before_stroke(self);
+        if(result.ok && schedule.ensure_worker_running && self && g)
         {
-          const dt_drawlayer_runtime_action_request_t action = {
-            .action = DT_DRAWLAYER_RUNTIME_ACTION_PRIME_LIVE_PROCESS_PATCH,
-          };
-          _perform_runtime_action(host, &action, &result);
+          if(!dt_drawlayer_worker_ensure_running(self, g->stroke.worker))
+          {
+            dt_control_log(_("failed to start drawing worker"));
+            result.ok = FALSE;
+          }
         }
-        if(result.ok && schedule.ensure_worker_running)
-        {
-          const dt_drawlayer_runtime_action_request_t action = {
-            .action = DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_WORKER_RUNNING,
-          };
-          if(!_perform_runtime_action(host, &action, &result)) result.ok = FALSE;
-        }
-        if(result.ok)
-        {
-          const dt_drawlayer_runtime_action_request_t action = {
-            .action = DT_DRAWLAYER_RUNTIME_ACTION_BEGIN_STROKE_CAPTURE,
-          };
-          _perform_runtime_action(host, &action, &result);
-        }
+        if(result.ok && self) dt_drawlayer_begin_gui_stroke_capture(self, context->raw_input);
       }
       else if(request->raw_input_kind == DT_DRAWLAYER_RUNTIME_RAW_INPUT_STROKE_END)
-      {
-        const dt_drawlayer_runtime_action_request_t end_capture = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_END_STROKE_CAPTURE,
-        };
-        _perform_runtime_action(host, &end_capture, &result);
-      }
+        if(self) dt_drawlayer_end_gui_stroke_capture(self);
 
-      if(result.ok && schedule.ensure_worker_running
+      if(result.ok && schedule.ensure_worker_running && self && g
          && request->raw_input_kind != DT_DRAWLAYER_RUNTIME_RAW_INPUT_STROKE_BEGIN)
       {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_WORKER_RUNNING,
-        };
-        if(!_perform_runtime_action(host, &action, &result)
+        if(!dt_drawlayer_worker_ensure_running(self, g->stroke.worker)
            && request->raw_input_kind != DT_DRAWLAYER_RUNTIME_RAW_INPUT_SAMPLE)
+        {
+          dt_control_log(_("failed to start drawing worker"));
           result.ok = FALSE;
+        }
       }
 
-      if(schedule.request_commit)
-      {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_REQUEST_COMMIT,
-        };
-        _perform_runtime_action(host, &action, &result);
-      }
+      if(schedule.request_commit && g) dt_drawlayer_worker_request_commit(g->stroke.worker);
 
-      if(schedule.queue_raw_input)
+      if(schedule.queue_raw_input && g)
       {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_QUEUE_RAW_INPUT,
-          .data.raw_input = {
-            .kind = request->raw_input_kind,
-          },
-        };
-        _perform_runtime_action(host, &action, &result);
+        gboolean ok = TRUE;
+        if(!context->raw_input)
+          ok = FALSE;
+        else if(request->raw_input_kind == DT_DRAWLAYER_RUNTIME_RAW_INPUT_STROKE_END)
+          ok = dt_drawlayer_worker_enqueue_stroke_end(g->stroke.worker, context->raw_input);
+        else if(request->raw_input_kind == DT_DRAWLAYER_RUNTIME_RAW_INPUT_STROKE_BEGIN
+                || request->raw_input_kind == DT_DRAWLAYER_RUNTIME_RAW_INPUT_SAMPLE)
+          ok = dt_drawlayer_worker_enqueue_input(g->stroke.worker, context->raw_input);
+        result.raw_input_ok = ok;
       }
       break;
 
     case DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CPU_BEFORE:
     case DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CL_BEFORE:
 #ifdef HAVE_OPENCL
-      if(schedule.release_process_clmem)
+      if(schedule.release_process_clmem && process)
       {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_RELEASE_PROCESS_CLMEM,
-        };
-        _perform_runtime_action(host, &action, &result);
+        dt_drawlayer_cache_patch_wrlock(&process->process_read_patch);
+        dt_drawlayer_process_state_clear_clmem(process);
+        dt_drawlayer_cache_patch_wrunlock(&process->process_read_patch);
       }
 #endif
       if(schedule.ensure_layer_cache)
@@ -939,11 +885,8 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
           .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
           .inputs = request->inputs,
         };
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_LAYER_CACHE,
-        };
         _update_manager_information(state, &begin, host, NULL);
-        if(!_perform_runtime_action(host, &action, &result)) result.ok = FALSE;
+        if(self && !dt_drawlayer_ensure_layer_cache(self)) result.ok = FALSE;
         const dt_drawlayer_runtime_update_request_t end = {
           .event = DT_DRAWLAYER_RUNTIME_EVENT_SIDECAR_LOAD_END,
           .raw_input_kind = DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE,
@@ -951,13 +894,10 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
         };
         _update_manager_information(state, &end, host, NULL);
       }
-      if(schedule.build_process_patch)
-      {
-        const dt_drawlayer_runtime_action_request_t action = {
-          .action = DT_DRAWLAYER_RUNTIME_ACTION_BUILD_PROCESS_PATCH,
-        };
-        _perform_runtime_action(host, &action, &result);
-      }
+      if(schedule.build_process_patch && self && g && process && process->cache_valid && context->runtime.piece
+         && context->runtime.roi_out)
+        dt_drawlayer_build_process_patch_from_base(self, g, context->runtime.piece, context->runtime.roi_in,
+                                                   context->runtime.roi_out);
       break;
 
     case DT_DRAWLAYER_RUNTIME_EVENT_PROCESS_CPU_AFTER:
@@ -977,13 +917,8 @@ dt_drawlayer_runtime_result_t dt_drawlayer_runtime_manager_update(dt_drawlayer_r
     _release_runtime_source(state, request->release.process, request->release.source);
 
   _update_manager_information(state, request->inputs ? request : NULL, host, NULL);
-  if(schedule.sync_realtime_mode)
-  {
-    const dt_drawlayer_runtime_action_request_t action = {
-      .action = DT_DRAWLAYER_RUNTIME_ACTION_SYNC_REALTIME_MODE,
-    };
-    _perform_runtime_action(host, &action, &result);
-  }
+  if(schedule.sync_realtime_mode && self && g)
+    dt_drawlayer_set_pipeline_realtime_mode(self, g->manager.realtime_active);
 
   return result;
 }

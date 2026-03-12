@@ -46,6 +46,7 @@
 #include "gui/gui_throttle.h"
 #include "iop/drawlayer/brush.h"
 #include "iop/drawlayer/cache.h"
+#include "iop/drawlayer/common.h"
 #include "iop/drawlayer/io.h"
 #include "iop/drawlayer/paint.h"
 #include "iop/drawlayer/runtime.h"
@@ -124,15 +125,6 @@ typedef enum drawlayer_input_map_flag_t
   DRAWLAYER_INPUT_MAP_ACCEL_SOFTNESS = 1u << 11,
 } drawlayer_input_map_flag_t;
 
-typedef struct dt_iop_drawlayer_params_t
-{
-  unsigned int stroke_commit_hash; // $DEFAULT: 0
-  char layer_name[DRAWLAYER_NAME_SIZE];
-  char work_profile[DRAWLAYER_PROFILE_SIZE];
-  int64_t sidecar_timestamp; // $DEFAULT: 0
-  int layer_order;           // $DEFAULT: -1
-} dt_iop_drawlayer_params_t;
-
 typedef enum drawlayer_preview_bg_mode_t
 {
   DRAWLAYER_PREVIEW_BG_IMAGE = 0,
@@ -209,28 +201,26 @@ typedef struct drawlayer_layer_cache_key_t
   int layer_order;
 } drawlayer_layer_cache_key_t;
 
-typedef struct drawlayer_runtime_request_t
-{
-  dt_iop_module_t *self;
-  dt_dev_pixelpipe_iop_t *piece;
-  const dt_iop_drawlayer_params_t *runtime_params;
-  dt_iop_drawlayer_gui_data_t *gui;
-  dt_drawlayer_runtime_manager_t *manager;
-  dt_drawlayer_process_state_t *process_state;
-  gboolean display_pipe;
-  const dt_iop_roi_t *roi_in;
-  const dt_iop_roi_t *roi_out;
-  gboolean use_opencl;
-} drawlayer_runtime_request_t;
+typedef dt_drawlayer_runtime_request_t drawlayer_runtime_request_t;
+typedef dt_drawlayer_runtime_context_t drawlayer_runtime_host_context_t;
 
-typedef struct drawlayer_runtime_host_context_t
-{
-  drawlayer_runtime_request_t runtime;
-  const dt_drawlayer_paint_raw_input_t *raw_input;
-} drawlayer_runtime_host_context_t;
+#define _commit_dabs dt_drawlayer_commit_dabs
+#define _flush_layer_cache dt_drawlayer_flush_layer_cache
+#define _flush_process_patch_to_base dt_drawlayer_flush_process_patch_to_base
+#define _sync_widget_cache dt_drawlayer_sync_widget_cache
+#define _set_drawlayer_pipeline_realtime_mode dt_drawlayer_set_pipeline_realtime_mode
+#define _prime_live_process_patch_before_stroke dt_drawlayer_prime_live_process_patch_before_stroke
+#define _ensure_layer_cache dt_drawlayer_ensure_layer_cache
+#define _build_process_patch_from_base dt_drawlayer_build_process_patch_from_base
+#define _release_all_base_patch_extra_refs dt_drawlayer_release_all_base_patch_extra_refs
+#define _drawlayer_wait_for_rasterization_modal dt_drawlayer_wait_for_rasterization_modal
+#define _set_drawlayer_os_cursor_hidden dt_drawlayer_set_os_cursor_hidden
+#define _current_live_padding dt_drawlayer_current_live_padding
+#define _drawlayer_runtime_collect_inputs NULL
+#define _drawlayer_runtime_perform_action NULL
 
-static gboolean _commit_dabs(dt_iop_module_t *self, const gboolean record_history);
-static gboolean _flush_layer_cache(dt_iop_module_t *self);
+gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, gboolean record_history);
+gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self);
 static gboolean _compute_view_patch(dt_iop_module_t *self, float padding, drawlayer_view_patch_info_t *view);
 static gboolean _widget_to_layer_coords(dt_iop_module_t *self, const double wx, const double wy, float *lx,
                                         float *ly);
@@ -241,24 +231,20 @@ static void _process_backend_dab(dt_iop_module_t *self, const dt_drawlayer_brush
                                  drawlayer_paint_backend_ctx_t *ctx);
 static void _touch_stroke_commit_hash(dt_iop_drawlayer_params_t *params, int dab_count, gboolean have_last_dab,
                                       float last_dab_x, float last_dab_y, uint32_t publish_serial);
-static void _flush_process_patch_to_base(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g);
+void dt_drawlayer_flush_process_patch_to_base(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g);
 static void _flush_process_patch_to_base_locked(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g);
 static void _sync_mode_sensitive_widgets(dt_iop_module_t *self);
-static gboolean _sync_widget_cache(dt_iop_module_t *self);
-static void _set_drawlayer_pipeline_realtime_mode(dt_iop_module_t *self, gboolean state);
+gboolean dt_drawlayer_sync_widget_cache(dt_iop_module_t *self);
+void dt_drawlayer_set_pipeline_realtime_mode(dt_iop_module_t *self, gboolean state);
 static int _offer_missing_layer_recreation(dt_iop_module_t *self, const char *missing_name);
 static gboolean _background_layer_job_done_idle(gpointer user_data);
 static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, const GArray *raw_inputs);
-static gboolean _prime_live_process_patch_before_stroke(dt_iop_module_t *self);
-static void _drawlayer_runtime_collect_inputs(void *user_data, dt_drawlayer_runtime_inputs_t *inputs,
-                                              dt_drawlayer_worker_snapshot_t *worker_snapshot);
+gboolean dt_drawlayer_prime_live_process_patch_before_stroke(dt_iop_module_t *self);
+float dt_drawlayer_current_live_padding(dt_iop_module_t *self);
 static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t *self,
                                                                  dt_iop_drawlayer_gui_data_t *g,
                                                                  dt_drawlayer_runtime_event_t event,
                                                                  gboolean flush_pending);
-static gboolean _drawlayer_runtime_perform_action(void *user_data,
-                                                  const dt_drawlayer_runtime_action_request_t *action,
-                                                  dt_drawlayer_runtime_result_t *result);
 
 typedef struct drawlayer_wait_dialog_t
 {
@@ -1121,7 +1107,7 @@ static void _retain_base_patch_stroke_ref(dt_iop_drawlayer_gui_data_t *g)
   g->process.base_patch_stroke_refs++;
 }
 
-static void _release_all_base_patch_extra_refs(dt_iop_drawlayer_gui_data_t *g)
+void dt_drawlayer_release_all_base_patch_extra_refs(dt_iop_drawlayer_gui_data_t *g)
 {
   if(!g) return;
   if(!g->process.base_patch.cache_entry)
@@ -1290,9 +1276,9 @@ static gboolean _refresh_piece_base_cache(dt_iop_module_t *self, dt_iop_drawlaye
   return TRUE;
 }
 
-static gboolean _build_process_patch_from_base(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g,
-                                               const dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_in,
-                                               const dt_iop_roi_t *roi_out)
+gboolean dt_drawlayer_build_process_patch_from_base(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g,
+                                                    const dt_dev_pixelpipe_iop_t *piece, const dt_iop_roi_t *roi_in,
+                                                    const dt_iop_roi_t *roi_out)
 {
   const gint64 t0 = g_get_monotonic_time();
   gint64 t = t0;
@@ -1478,7 +1464,7 @@ static void _flush_process_patch_to_base_locked(dt_iop_module_t *self, dt_iop_dr
                              (const dt_iop_drawlayer_params_t *)self->params);
 }
 
-static void _flush_process_patch_to_base(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g)
+void dt_drawlayer_flush_process_patch_to_base(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g)
 {
   if(!g) return;
   if(!g->manager.painting_active && dt_drawlayer_worker_any_active(g->stroke.worker))
@@ -1956,7 +1942,7 @@ static void _ensure_cursor_stamp_surface(dt_iop_module_t *self, const float widg
   g->ui.cursor_color[2] = display_rgb[2];
 }
 
-static void _set_drawlayer_os_cursor_hidden(const gboolean hidden)
+void dt_drawlayer_set_os_cursor_hidden(const gboolean hidden)
 {
   if(!darktable.gui || !darktable.gui->ui) return;
 
@@ -2035,8 +2021,8 @@ static gboolean _drawlayer_modal_wait_tick(gpointer user_data)
   return G_SOURCE_CONTINUE;
 }
 
-static void _drawlayer_wait_for_rasterization_modal(const dt_iop_drawlayer_gui_data_t *g,
-                                                    const char *title, const char *message)
+void dt_drawlayer_wait_for_rasterization_modal(const dt_iop_drawlayer_gui_data_t *g,
+                                               const char *title, const char *message)
 {
   if(!(g && dt_drawlayer_worker_any_active(g->stroke.worker))) return;
 
@@ -2398,7 +2384,7 @@ static gboolean _layer_cache_matches(const dt_iop_drawlayer_gui_data_t *g, const
   return TRUE;
 }
 
-static gboolean _ensure_layer_cache(dt_iop_module_t *self)
+gboolean dt_drawlayer_ensure_layer_cache(dt_iop_module_t *self)
 {
   /* Make sure `base_patch` mirrors the currently selected sidecar layer.
    * The low-level TIFF read/write primitives live in drawlayer/io.c, while this
@@ -2713,7 +2699,7 @@ static gboolean _ensure_layer_cache(dt_iop_module_t *self)
   return ok || !cache_loaded;
 }
 
-static gboolean _flush_layer_cache(dt_iop_module_t *self)
+gboolean dt_drawlayer_flush_layer_cache(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   if(!g || !self->dev || !g->process.cache_valid || !g->process.cache_dirty || !g->process.base_patch.pixels) return TRUE;
@@ -2810,7 +2796,7 @@ static gboolean _ensure_widget_cache(dt_iop_module_t *self)
   return TRUE;
 }
 
-static float _current_live_padding(dt_iop_module_t *self)
+float dt_drawlayer_current_live_padding(dt_iop_module_t *self)
 {
   dt_drawlayer_brush_dab_t dab = {
     .radius = fmaxf(_conf_size(), 0.5f),
@@ -2873,7 +2859,7 @@ static gboolean _compute_view_patch(dt_iop_module_t *self, const float padding, 
   return view->patch.width > 0 && view->patch.height > 0;
 }
 
-static void _set_drawlayer_pipeline_realtime_mode(dt_iop_module_t *self, const gboolean state)
+void dt_drawlayer_set_pipeline_realtime_mode(dt_iop_module_t *self, const gboolean state)
 {
   if(!self || !self->dev || !self->dev->pipe) return;
   const gboolean was_realtime = dt_dev_pixelpipe_get_realtime(self->dev->pipe);
@@ -2887,7 +2873,7 @@ static void _set_drawlayer_pipeline_realtime_mode(dt_iop_module_t *self, const g
     dt_atomic_set_int(&self->dev->preview_pipe->shutdown, TRUE);
 }
 
-static gboolean _sync_widget_cache(dt_iop_module_t *self)
+gboolean dt_drawlayer_sync_widget_cache(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   if(!g || !self->dev) return FALSE;
@@ -2904,7 +2890,7 @@ static gboolean _sync_widget_cache(dt_iop_module_t *self)
   return TRUE;
 }
 
-static gboolean _prime_live_process_patch_before_stroke(dt_iop_module_t *self)
+gboolean dt_drawlayer_prime_live_process_patch_before_stroke(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   if(!self || !self->dev || !self->dev->gui_attached || !g) return FALSE;
@@ -3108,7 +3094,7 @@ static void _sync_preview_bg_buttons(dt_iop_module_t *self)
                                  g->session.preview_bg_mode == DRAWLAYER_PREVIEW_BG_BLACK);
 }
 
-static gboolean _commit_dabs(dt_iop_module_t *self, const gboolean record_history)
+gboolean dt_drawlayer_commit_dabs(dt_iop_module_t *self, const gboolean record_history)
 {
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
@@ -3983,7 +3969,7 @@ static gboolean _build_raw_input_event(dt_iop_module_t *self, const double wx, c
   return TRUE;
 }
 
-static void _begin_gui_stroke_capture(dt_iop_module_t *self, const dt_drawlayer_paint_raw_input_t *first_input)
+void dt_drawlayer_begin_gui_stroke_capture(dt_iop_module_t *self, const dt_drawlayer_paint_raw_input_t *first_input)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   if(!self || !g) return;
@@ -4008,61 +3994,10 @@ static void _begin_gui_stroke_capture(dt_iop_module_t *self, const dt_drawlayer_
   dt_iop_gui_leave_critical_section(self);
 }
 
-static void _end_gui_stroke_capture(dt_iop_module_t *self)
+void dt_drawlayer_end_gui_stroke_capture(dt_iop_module_t *self)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   if(!g) return;
-}
-
-static void _fill_runtime_inputs(const drawlayer_runtime_request_t *runtime,
-                                 const dt_drawlayer_worker_snapshot_t *worker_snapshot,
-                                 dt_drawlayer_runtime_inputs_t *inputs)
-{
-  if(inputs) *inputs = (dt_drawlayer_runtime_inputs_t){ 0 };
-  if(!runtime || !inputs) return;
-
-  dt_iop_module_t *const self = runtime->self;
-  dt_iop_drawlayer_gui_data_t *const g = runtime->gui;
-  dt_drawlayer_process_state_t *const process = runtime->process_state ? runtime->process_state : (g ? &g->process : NULL);
-  const dt_iop_drawlayer_params_t *const runtime_params
-      = runtime->runtime_params ? runtime->runtime_params : (const dt_iop_drawlayer_params_t *)self->params;
-
-  *inputs = (dt_drawlayer_runtime_inputs_t){
-    .session = g ? &g->session : NULL,
-    .process = process,
-    .stroke = g ? &g->stroke : NULL,
-    .worker = worker_snapshot,
-    .base_patch = NULL,
-    .base_patch_valid = FALSE,
-    .base_patch_dirty = FALSE,
-    .painting_active = g && g->manager.painting_active,
-    .gui_attached = self && self->dev && self->dev->gui_attached && g,
-    .module_focused = self && self->dev && self->dev->gui_module == self,
-    .display_pipe = runtime->display_pipe,
-    .have_layer_selection = runtime_params && runtime_params->layer_name[0] != '\0',
-    .have_valid_output_roi = runtime->roi_out && runtime->roi_out->width > 0 && runtime->roi_out->height > 0,
-    .use_opencl = runtime->use_opencl,
-    .view_changed = g && self && self->dev
-                    && (fabsf(g->session.last_view_x - self->dev->roi.x) > 1e-6f
-                        || fabsf(g->session.last_view_y - self->dev->roi.y) > 1e-6f
-                        || fabsf(g->session.last_view_scale - self->dev->roi.scaling) > 1e-6f),
-    .padding_changed = g && self && fabsf(g->session.live_padding - _current_live_padding(self)) > 1e-6f,
-  };
-}
-
-static void _drawlayer_runtime_collect_inputs(void *user_data, dt_drawlayer_runtime_inputs_t *inputs,
-                                              dt_drawlayer_worker_snapshot_t *worker_snapshot)
-{
-  if(inputs) *inputs = (dt_drawlayer_runtime_inputs_t){ 0 };
-  if(worker_snapshot) *worker_snapshot = (dt_drawlayer_worker_snapshot_t){ 0 };
-
-  const drawlayer_runtime_host_context_t *const ctx = (const drawlayer_runtime_host_context_t *)user_data;
-  if(!ctx) return;
-
-  if(ctx->runtime.gui && ctx->runtime.gui->stroke.worker && worker_snapshot)
-    dt_drawlayer_worker_get_snapshot(ctx->runtime.gui->stroke.worker, worker_snapshot);
-
-  _fill_runtime_inputs(&ctx->runtime, worker_snapshot, inputs);
 }
 
 static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t *self,
@@ -4076,7 +4011,7 @@ static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t
   };
   if(!self || !g) return result;
 
-  drawlayer_runtime_host_context_t runtime_host = {
+  const drawlayer_runtime_host_context_t runtime_host = {
     .runtime = {
       .self = self,
       .runtime_params = (const dt_iop_drawlayer_params_t *)self->params,
@@ -4086,7 +4021,7 @@ static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t
     },
   };
   const dt_drawlayer_runtime_host_t runtime_manager = {
-    .user_data = &runtime_host,
+    .user_data = (void *)&runtime_host,
     .collect_inputs = _drawlayer_runtime_collect_inputs,
     .perform_action = _drawlayer_runtime_perform_action,
   };
@@ -4100,8 +4035,8 @@ static dt_drawlayer_runtime_result_t _update_gui_runtime_manager(dt_iop_module_t
       &runtime_manager);
 }
 
-static void _show_runtime_feedback(const dt_iop_drawlayer_gui_data_t *g,
-                                   const dt_drawlayer_runtime_feedback_t feedback)
+void dt_drawlayer_show_runtime_feedback(const dt_iop_drawlayer_gui_data_t *g,
+                                        const dt_drawlayer_runtime_feedback_t feedback)
 {
   if(!g) return;
 
@@ -4120,143 +4055,6 @@ static void _show_runtime_feedback(const dt_iop_drawlayer_gui_data_t *g,
     case DT_DRAWLAYER_RUNTIME_FEEDBACK_NONE:
     default:
       break;
-  }
-}
-
-static gboolean _drawlayer_runtime_perform_action(void *user_data,
-                                                  const dt_drawlayer_runtime_action_request_t *action,
-                                                  dt_drawlayer_runtime_result_t *result)
-{
-  const drawlayer_runtime_host_context_t *const ctx = (const drawlayer_runtime_host_context_t *)user_data;
-  const drawlayer_runtime_request_t *const runtime = ctx ? &ctx->runtime : NULL;
-  dt_iop_module_t *const self = runtime ? runtime->self : NULL;
-  dt_iop_drawlayer_gui_data_t *const g = runtime ? runtime->gui : NULL;
-  if(!ctx || !action || !self || !g) return FALSE;
-
-  switch(action->action)
-  {
-    case DT_DRAWLAYER_RUNTIME_ACTION_SYNC_REALTIME_MODE:
-      _set_drawlayer_pipeline_realtime_mode(self, g && g->manager.realtime_active);
-      return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_SHOW_FEEDBACK:
-      _show_runtime_feedback(g, action->data.feedback);
-      return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_WORKER_RUNNING:
-      if(_start_worker(self, g->stroke.worker)) return TRUE;
-      dt_control_log(_("failed to start drawing worker"));
-      return FALSE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_COMMIT:
-      return _commit_dabs(self, action->data.commit_mode == DT_DRAWLAYER_RUNTIME_COMMIT_HISTORY);
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_REQUEST_COMMIT:
-      dt_drawlayer_worker_request_commit(g->stroke.worker);
-      return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_WAIT_FULLRES_WORKER:
-      dt_drawlayer_worker_flush_finished_strokes(g->stroke.worker);
-      return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_FLUSH_PROCESS_PATCH:
-      _flush_process_patch_to_base(self, g);
-      return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_FLUSH_SIDECAR:
-      if(_flush_layer_cache(self)) return TRUE;
-      dt_control_log(_("failed to write drawing layer sidecar"));
-      return FALSE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_STOP_WORKER:
-      _stop_worker(self, g->stroke.worker);
-      return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_PRIME_LIVE_PROCESS_PATCH:
-      _prime_live_process_patch_before_stroke(self);
-      return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_BEGIN_STROKE_CAPTURE:
-      _begin_gui_stroke_capture(self, ctx->raw_input);
-      return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_END_STROKE_CAPTURE:
-      _end_gui_stroke_capture(self);
-      return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_QUEUE_RAW_INPUT:
-    {
-      gboolean ok = TRUE;
-      if(!ctx->raw_input)
-      {
-        ok = FALSE;
-      }
-      else
-      {
-        switch(action->data.raw_input.kind)
-        {
-          case DT_DRAWLAYER_RUNTIME_RAW_INPUT_STROKE_END:
-            ok = dt_drawlayer_worker_enqueue_stroke_end(g->stroke.worker, ctx->raw_input);
-            break;
-
-          case DT_DRAWLAYER_RUNTIME_RAW_INPUT_STROKE_BEGIN:
-          case DT_DRAWLAYER_RUNTIME_RAW_INPUT_SAMPLE:
-            ok = dt_drawlayer_worker_enqueue_input(g->stroke.worker, ctx->raw_input);
-            break;
-
-          case DT_DRAWLAYER_RUNTIME_RAW_INPUT_NONE:
-          default:
-            ok = TRUE;
-            break;
-        }
-      }
-      if(result) result->raw_input_ok = ok;
-      return TRUE;
-    }
-
-#ifdef HAVE_OPENCL
-    case DT_DRAWLAYER_RUNTIME_ACTION_RELEASE_PROCESS_CLMEM:
-      dt_drawlayer_cache_patch_wrlock(&g->process.process_read_patch);
-      dt_drawlayer_process_state_clear_clmem(&g->process);
-      dt_drawlayer_cache_patch_wrunlock(&g->process.process_read_patch);
-      return TRUE;
-#endif
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_LAYER_CACHE:
-      return _ensure_layer_cache(self);
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_WIDGET_CACHE:
-      return _sync_widget_cache(self);
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_BUILD_PROCESS_PATCH:
-      if(runtime->process_state && runtime->process_state->cache_valid && runtime->piece && runtime->roi_out && g)
-        _build_process_patch_from_base(self, g, runtime->piece, runtime->roi_in, runtime->roi_out);
-      return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_SET_POINTER_STATE:
-      g->session.pointer_valid = action->data.pointer.valid;
-      _set_drawlayer_os_cursor_hidden(action->data.pointer.hide_cursor);
-      return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_QUEUE_REDRAW_CENTER:
-      dt_control_queue_redraw_center();
-      return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_REFRESH_GUI:
-      gui_update(self);
-      return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_INVALIDATE_LAYER_CACHE:
-      _release_all_base_patch_extra_refs(g);
-      dt_drawlayer_cache_patch_clear(&g->process.base_patch, "drawlayer patch");
-      g->process.cache_valid = FALSE;
-      g->process.cache_dirty = FALSE;
-      dt_drawlayer_process_state_invalidate(&g->process);
-      return TRUE;
-
-    case DT_DRAWLAYER_RUNTIME_ACTION_NONE:
-    default:
-      return TRUE;
   }
 }
 

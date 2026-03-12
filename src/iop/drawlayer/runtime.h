@@ -1,5 +1,6 @@
 #pragma once
 
+#include "iop/drawlayer/common.h"
 #include "common/dtpthread.h"
 #include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/widgets.h"
@@ -14,9 +15,6 @@
 /** @file
  *  @brief Private runtime state/helpers shared by drawlayer module entrypoints.
  */
-
-#define DRAWLAYER_NAME_SIZE 64
-#define DRAWLAYER_PROFILE_SIZE 256
 
 typedef struct drawlayer_view_patch_t
 {
@@ -244,63 +242,11 @@ typedef enum dt_drawlayer_runtime_commit_mode_t
   DT_DRAWLAYER_RUNTIME_COMMIT_HISTORY,
 } dt_drawlayer_runtime_commit_mode_t;
 
-typedef enum dt_drawlayer_runtime_feedback_t
-{
-  DT_DRAWLAYER_RUNTIME_FEEDBACK_NONE = 0,
-  DT_DRAWLAYER_RUNTIME_FEEDBACK_FOCUS_LOSS_WAIT,
-  DT_DRAWLAYER_RUNTIME_FEEDBACK_SAVE_WAIT,
-} dt_drawlayer_runtime_feedback_t;
-
-typedef enum dt_drawlayer_runtime_action_t
-{
-  DT_DRAWLAYER_RUNTIME_ACTION_NONE = 0,
-  DT_DRAWLAYER_RUNTIME_ACTION_SYNC_REALTIME_MODE,
-  DT_DRAWLAYER_RUNTIME_ACTION_SHOW_FEEDBACK,
-  DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_WORKER_RUNNING,
-  DT_DRAWLAYER_RUNTIME_ACTION_COMMIT,
-  DT_DRAWLAYER_RUNTIME_ACTION_REQUEST_COMMIT,
-  DT_DRAWLAYER_RUNTIME_ACTION_WAIT_FULLRES_WORKER,
-  DT_DRAWLAYER_RUNTIME_ACTION_FLUSH_PROCESS_PATCH,
-  DT_DRAWLAYER_RUNTIME_ACTION_FLUSH_SIDECAR,
-  DT_DRAWLAYER_RUNTIME_ACTION_STOP_WORKER,
-  DT_DRAWLAYER_RUNTIME_ACTION_PRIME_LIVE_PROCESS_PATCH,
-  DT_DRAWLAYER_RUNTIME_ACTION_BEGIN_STROKE_CAPTURE,
-  DT_DRAWLAYER_RUNTIME_ACTION_END_STROKE_CAPTURE,
-  DT_DRAWLAYER_RUNTIME_ACTION_QUEUE_RAW_INPUT,
-  DT_DRAWLAYER_RUNTIME_ACTION_RELEASE_PROCESS_CLMEM,
-  DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_LAYER_CACHE,
-  DT_DRAWLAYER_RUNTIME_ACTION_ENSURE_WIDGET_CACHE,
-  DT_DRAWLAYER_RUNTIME_ACTION_BUILD_PROCESS_PATCH,
-  DT_DRAWLAYER_RUNTIME_ACTION_SET_POINTER_STATE,
-  DT_DRAWLAYER_RUNTIME_ACTION_QUEUE_REDRAW_CENTER,
-  DT_DRAWLAYER_RUNTIME_ACTION_REFRESH_GUI,
-  DT_DRAWLAYER_RUNTIME_ACTION_INVALIDATE_LAYER_CACHE,
-} dt_drawlayer_runtime_action_t;
-
 typedef struct dt_drawlayer_runtime_result_t
 {
   gboolean ok;
   gboolean raw_input_ok;
 } dt_drawlayer_runtime_result_t;
-
-typedef struct dt_drawlayer_runtime_action_request_t
-{
-  dt_drawlayer_runtime_action_t action;
-  union
-  {
-    dt_drawlayer_runtime_feedback_t feedback;
-    dt_drawlayer_runtime_commit_mode_t commit_mode;
-    struct
-    {
-      dt_drawlayer_runtime_raw_input_kind_t kind;
-    } raw_input;
-    struct
-    {
-      gboolean valid;
-      gboolean hide_cursor;
-    } pointer;
-  } data;
-} dt_drawlayer_runtime_action_request_t;
 
 typedef struct dt_drawlayer_runtime_buffer_state_t
 {
@@ -358,6 +304,8 @@ typedef struct dt_drawlayer_runtime_inputs_t
   gboolean padding_changed;
 } dt_drawlayer_runtime_inputs_t;
 
+typedef struct dt_drawlayer_runtime_action_request_t dt_drawlayer_runtime_action_request_t;
+
 typedef struct dt_drawlayer_runtime_host_t
 {
   void *user_data;
@@ -378,6 +326,26 @@ typedef struct dt_iop_drawlayer_gui_data_t
   dt_drawlayer_ui_state_t ui;
   dt_drawlayer_controls_t controls;
 } dt_iop_drawlayer_gui_data_t;
+
+typedef struct dt_drawlayer_runtime_request_t
+{
+  dt_iop_module_t *self;
+  dt_dev_pixelpipe_iop_t *piece;
+  const dt_iop_drawlayer_params_t *runtime_params;
+  dt_iop_drawlayer_gui_data_t *gui;
+  dt_drawlayer_runtime_manager_t *manager;
+  dt_drawlayer_process_state_t *process_state;
+  gboolean display_pipe;
+  const dt_iop_roi_t *roi_in;
+  const dt_iop_roi_t *roi_out;
+  gboolean use_opencl;
+} dt_drawlayer_runtime_request_t;
+
+typedef struct dt_drawlayer_runtime_context_t
+{
+  dt_drawlayer_runtime_request_t runtime;
+  const dt_drawlayer_paint_raw_input_t *raw_input;
+} dt_drawlayer_runtime_context_t;
 
 typedef struct dt_drawlayer_process_view_t
 {
