@@ -504,6 +504,10 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 
       if(!(needs_regular_update || needs_realtime_update)) break;
 
+      // If we know history changed, ensure at least the last step is resynced
+      if(needs_realtime_update)
+        pipe->changed |= DT_DEV_PIPE_TOP_CHANGED;
+
       dt_pthread_mutex_lock(&pipe->busy_mutex);
       pipe->processing = 1;
 

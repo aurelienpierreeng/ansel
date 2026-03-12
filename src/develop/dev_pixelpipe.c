@@ -541,12 +541,6 @@ void dt_dev_pixelpipe_change(dt_dev_pixelpipe_t *pipe, struct dt_develop_t *dev)
 
   dt_free(status_str);
 
-  // In realtime mode, always assume the last history item changed
-  if(dt_dev_pixelpipe_get_realtime(pipe))
-  {
-    status |= DT_DEV_PIPE_TOP_CHANGED;
-  }
-
   // mask display off as a starting point
   pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
   // and blendif active
