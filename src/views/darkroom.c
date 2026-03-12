@@ -863,8 +863,9 @@ void expose(
   const gboolean main_backbuf_is_newer = main_has_backbuf && main_backbuf_hash != expose_state.main_hash;
   const gboolean main_ready_for_current_view
       = main_has_backbuf && (!roi_changed || main_backbuf_is_newer || !_darkroom_main_locked.surface);
+  const gboolean showing_full_image = allow_uncropped_full_image || fabsf(dev->roi.scaling - 1.0f) < 1e-6f;
   const gboolean preview_matches_full_image
-      = preview_has_backbuf
+      = preview_has_backbuf && showing_full_image
         && (allow_uncropped_full_image
             || (full_width > 0 && full_height > 0
                 && dev->preview_pipe->backbuf.width == full_width
@@ -928,9 +929,9 @@ void expose(
       dt_control_queue_redraw_center();
   }
 
-  /* Rule 1: same-size preview and main backbufs are equivalent, so if preview
-   * completed first for the exact full-image size, use it as the displayed
-   * main frame instead of treating it as a second-class fallback. */
+  /* Rule 2: preview is directly equivalent to main only in full-image view
+   * (fit scale / uncropped edit modes). Otherwise it must go through the
+   * ROI-scaled fallback path below. */
   if(!drawn && preview_matches_full_image)
   {
     if(_lock_pipe_surface(dev, dev->preview_pipe, &_darkroom_preview_locked, FALSE, TRUE)
