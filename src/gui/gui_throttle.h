@@ -2,6 +2,8 @@
 
 #include <glib.h>
 
+#include "develop/pixelpipe.h"
+
 struct dt_dev_pixelpipe_t;
 
 typedef void (*dt_gui_throttle_callback_t)(gpointer user_data);
@@ -11,6 +13,7 @@ void dt_gui_throttle_cleanup(void);
 
 void dt_gui_throttle_record_runtime(const struct dt_dev_pixelpipe_t *pipe, gint64 runtime_us);
 int dt_gui_throttle_get_runtime_us(void);
+int dt_gui_throttle_get_pipe_runtime_us(dt_dev_pixelpipe_type_t pipe_type);
 guint dt_gui_throttle_get_timeout_ms(void);
 gint64 dt_gui_throttle_get_timeout_us(void);
 

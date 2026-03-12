@@ -68,6 +68,8 @@ void dt_drawlayer_worker_get_snapshot(const dt_drawlayer_worker_t *worker,
 void dt_drawlayer_worker_request_commit(dt_drawlayer_worker_t *worker);
 /** @brief Flush pending events and force commit transition. */
 void dt_drawlayer_worker_flush_pending(dt_drawlayer_worker_t *worker);
+/** @brief Seal current stroke for synchronous commit by folding queued raw inputs into preserved history. */
+void dt_drawlayer_worker_seal_for_commit(dt_drawlayer_worker_t *worker);
 /** @brief Wait until deferred full-resolution replay queue is idle. */
 void dt_drawlayer_worker_flush_finished_strokes(dt_drawlayer_worker_t *worker);
 /** @brief Clear preserved stroke runtime/history after a completed commit. */

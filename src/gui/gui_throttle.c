@@ -41,6 +41,14 @@ typedef struct dt_gui_throttle_state_t
   uint8_t recent_runtime_count;
   uint8_t recent_runtime_pos;
   dt_atomic_int avg_runtime_us;
+  uint32_t recent_full_runtime_us[5];
+  uint8_t recent_full_runtime_count;
+  uint8_t recent_full_runtime_pos;
+  dt_atomic_int avg_full_runtime_us;
+  uint32_t recent_preview_runtime_us[5];
+  uint8_t recent_preview_runtime_count;
+  uint8_t recent_preview_runtime_pos;
+  dt_atomic_int avg_preview_runtime_us;
 
   GQueue pending_tasks;
   guint timeout_source;
@@ -107,14 +115,24 @@ void dt_gui_throttle_init(void)
 
   const int saved_runtime_us = MAX(dt_conf_get_int(DT_GUI_THROTTLE_RUNTIME_CONF), 0);
   dt_atomic_set_int(&_gui_throttle.avg_runtime_us, saved_runtime_us);
+  dt_atomic_set_int(&_gui_throttle.avg_full_runtime_us, saved_runtime_us);
+  dt_atomic_set_int(&_gui_throttle.avg_preview_runtime_us, saved_runtime_us);
 
   if(saved_runtime_us > 0)
   {
     for(uint8_t i = 0; i < G_N_ELEMENTS(_gui_throttle.recent_runtime_us); i++)
+    {
       _gui_throttle.recent_runtime_us[i] = (uint32_t)saved_runtime_us;
+      _gui_throttle.recent_full_runtime_us[i] = (uint32_t)saved_runtime_us;
+      _gui_throttle.recent_preview_runtime_us[i] = (uint32_t)saved_runtime_us;
+    }
 
     _gui_throttle.recent_runtime_count = G_N_ELEMENTS(_gui_throttle.recent_runtime_us);
     _gui_throttle.recent_runtime_pos = 0;
+    _gui_throttle.recent_full_runtime_count = G_N_ELEMENTS(_gui_throttle.recent_full_runtime_us);
+    _gui_throttle.recent_full_runtime_pos = 0;
+    _gui_throttle.recent_preview_runtime_count = G_N_ELEMENTS(_gui_throttle.recent_preview_runtime_us);
+    _gui_throttle.recent_preview_runtime_pos = 0;
   }
 }
 
@@ -154,12 +172,64 @@ void dt_gui_throttle_record_runtime(const dt_dev_pixelpipe_t *pipe, const gint64
 
   const int avg_runtime_us = (int)(runtime_sum / MAX(_gui_throttle.recent_runtime_count, (uint8_t)1));
   dt_atomic_set_int(&_gui_throttle.avg_runtime_us, avg_runtime_us);
+
+  if(pipe->type == DT_DEV_PIXELPIPE_FULL)
+  {
+    _gui_throttle.recent_full_runtime_us[_gui_throttle.recent_full_runtime_pos] = clamped_runtime_us;
+    if(_gui_throttle.recent_full_runtime_count < G_N_ELEMENTS(_gui_throttle.recent_full_runtime_us))
+      _gui_throttle.recent_full_runtime_count++;
+    _gui_throttle.recent_full_runtime_pos
+        = (uint8_t)((_gui_throttle.recent_full_runtime_pos + 1) % G_N_ELEMENTS(_gui_throttle.recent_full_runtime_us));
+
+    uint64_t full_runtime_sum = 0;
+    for(uint8_t i = 0; i < _gui_throttle.recent_full_runtime_count; i++)
+      full_runtime_sum += _gui_throttle.recent_full_runtime_us[i];
+
+    const int avg_full_runtime_us
+        = (int)(full_runtime_sum / MAX(_gui_throttle.recent_full_runtime_count, (uint8_t)1));
+    dt_atomic_set_int(&_gui_throttle.avg_full_runtime_us, avg_full_runtime_us);
+  }
+  else if(pipe->type == DT_DEV_PIXELPIPE_PREVIEW)
+  {
+    _gui_throttle.recent_preview_runtime_us[_gui_throttle.recent_preview_runtime_pos] = clamped_runtime_us;
+    if(_gui_throttle.recent_preview_runtime_count < G_N_ELEMENTS(_gui_throttle.recent_preview_runtime_us))
+      _gui_throttle.recent_preview_runtime_count++;
+    _gui_throttle.recent_preview_runtime_pos
+        = (uint8_t)((_gui_throttle.recent_preview_runtime_pos + 1)
+                    % G_N_ELEMENTS(_gui_throttle.recent_preview_runtime_us));
+
+    uint64_t preview_runtime_sum = 0;
+    for(uint8_t i = 0; i < _gui_throttle.recent_preview_runtime_count; i++)
+      preview_runtime_sum += _gui_throttle.recent_preview_runtime_us[i];
+
+    const int avg_preview_runtime_us
+        = (int)(preview_runtime_sum / MAX(_gui_throttle.recent_preview_runtime_count, (uint8_t)1));
+    dt_atomic_set_int(&_gui_throttle.avg_preview_runtime_us, avg_preview_runtime_us);
+  }
   dt_pthread_mutex_unlock(&_gui_throttle.runtime_mutex);
 }
 
 int dt_gui_throttle_get_runtime_us(void)
 {
   return MAX(dt_atomic_get_int(&_gui_throttle.avg_runtime_us), 0);
+}
+
+int dt_gui_throttle_get_pipe_runtime_us(const dt_dev_pixelpipe_type_t pipe_type)
+{
+  switch(pipe_type)
+  {
+    case DT_DEV_PIXELPIPE_FULL:
+      return MAX(dt_atomic_get_int(&_gui_throttle.avg_full_runtime_us), 0);
+
+    case DT_DEV_PIXELPIPE_PREVIEW:
+      return MAX(dt_atomic_get_int(&_gui_throttle.avg_preview_runtime_us), 0);
+
+    case DT_DEV_PIXELPIPE_NONE:
+    case DT_DEV_PIXELPIPE_EXPORT:
+    case DT_DEV_PIXELPIPE_THUMBNAIL:
+    default:
+      return dt_gui_throttle_get_runtime_us();
+  }
 }
 
 guint dt_gui_throttle_get_timeout_ms(void)

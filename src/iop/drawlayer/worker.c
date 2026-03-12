@@ -371,8 +371,8 @@ static void _backend_worker_on_idle(dt_iop_module_t *self, dt_drawlayer_worker_t
   };
   if(self && g && rt && rt->stroke && rt->stroke->pending_dabs && rt->stroke->pending_dabs->len > 0)
   {
-    gint64 live_publish_interval_us = dt_gui_throttle_get_timeout_us();
-    if(live_publish_interval_us <= 0) live_publish_interval_us = 20000;
+    const gint64 live_publish_interval_us
+        = MAX((gint64)dt_gui_throttle_get_pipe_runtime_us(DT_DEV_PIXELPIPE_FULL), (gint64)20000);
 
     dt_drawlayer_cache_patch_wrlock(&g->process.process_patch);
     guint processed_dabs = 0;
@@ -1028,6 +1028,35 @@ void dt_drawlayer_worker_flush_pending(dt_drawlayer_worker_t *worker)
 {
   if(!worker || !worker->self) return;
   _wait_worker_idle(worker->self, worker);
+}
+
+void dt_drawlayer_worker_seal_for_commit(dt_drawlayer_worker_t *worker)
+{
+  if(!worker || !worker->self) return;
+
+  /* Quiet commit paths do not need the live raster worker to finish stamping
+   * every display-sized dab. The authoritative stroke result is replayed later
+   * from preserved raw inputs, so we pause after the current callback, fold any
+   * queued raw inputs into that preserved history, and discard unreplayed live
+   * dab backlog. */
+  _pause_worker(worker->self, worker);
+
+  dt_pthread_mutex_lock(&worker->worker_mutex);
+  if(!worker->stroke_raw_inputs)
+    worker->stroke_raw_inputs = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_paint_raw_input_t));
+
+  dt_drawlayer_paint_raw_input_t event = { 0 };
+  while(worker->stroke_raw_inputs && _rt_queue_pop_locked(worker, &event))
+    g_array_append_val(worker->stroke_raw_inputs, event);
+
+  if(worker->stroke && worker->stroke->pending_dabs)
+    g_array_set_size(worker->stroke->pending_dabs, 0);
+  if(worker->stroke && worker->stroke->dab_window)
+    g_array_set_size(worker->stroke->dab_window, 0);
+
+  worker->workers[DRAWLAYER_RT_WORKER_BACKEND].state = DT_DRAWLAYER_WORKER_STATE_IDLE;
+  pthread_cond_broadcast(&worker->worker_cond);
+  dt_pthread_mutex_unlock(&worker->worker_mutex);
 }
 
 /** @brief Wait until deferred full-resolution replay queue becomes idle. */

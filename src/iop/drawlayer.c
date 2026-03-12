@@ -622,8 +622,8 @@ static void _process_backend_input(dt_iop_module_t *self, const dt_drawlayer_pai
 
   if(stroke->pending_dabs && stroke->pending_dabs->len > 0)
   {
-    gint64 live_publish_interval_us = dt_gui_throttle_get_timeout_us();
-    if(live_publish_interval_us <= 0) live_publish_interval_us = 20000;
+    const gint64 live_publish_interval_us
+        = MAX((gint64)dt_gui_throttle_get_pipe_runtime_us(DT_DEV_PIXELPIPE_FULL), (gint64)20000);
     const gint64 input_ts = input->event_ts ? input->event_ts : g_get_monotonic_time();
     if(g->stroke.live_publish_ts == 0)
       g->stroke.live_publish_ts = input_ts - live_publish_interval_us;
@@ -3121,11 +3121,16 @@ static gboolean _commit_dabs(dt_iop_module_t *self, const gboolean record_histor
 
   _cancel_async_commit(g->stroke.worker);
 
+  if(!record_history)
+    dt_drawlayer_worker_seal_for_commit(g->stroke.worker);
+
   /* Commit ordering is strict:
    * - the preview queue and backend queue workers must be idle,
+   * - the deferred full-resolution replay queue must be drained too,
    * - the layer cache must already contain the stroke,
    * - only then do we mutate params/history so the pipeline invalidation sees a coherent state. */
   _wait_worker_idle(self, g->stroke.worker);
+  dt_drawlayer_worker_flush_finished_strokes(g->stroke.worker);
   gboolean replayed_to_base = FALSE;
   if(!dt_drawlayer_worker_finished_stroke_queued(g->stroke.worker))
   {
@@ -3140,7 +3145,10 @@ static gboolean _commit_dabs(dt_iop_module_t *self, const gboolean record_histor
    * module consumes that rectangle to update process/base dirty regions. */
   _publish_backend_stroke_damage(self);
   if(replayed_to_base)
+  {
     _invalidate_process_patch(g);
+    _prime_live_process_patch_before_stroke(self);
+  }
 
   int sample_count = 0;
   gboolean had_stroke = FALSE;
@@ -3179,10 +3187,9 @@ static gboolean _commit_dabs(dt_iop_module_t *self, const gboolean record_histor
       dt_dev_undo_end_record(self->dev);
       if(self->post_history_commit) self->post_history_commit(self);
 
-      if(self->dev->pipe) dt_dev_pixelpipe_set_realtime(self->dev->pipe, FALSE);
-      dt_dev_pixelpipe_update_history_all(self->dev);
-      if(self->dev->preview_pipe) self->dev->preview_pipe->pause = FALSE;
       g->manager.realtime_active = FALSE;
+      _set_drawlayer_pipeline_realtime_mode(self, FALSE);
+      dt_dev_pixelpipe_update_history_all(self->dev);
       dt_dev_write_history(self->dev);
       dt_dev_history_notify_change(self->dev, self->dev->image_storage.id);
     }
