@@ -49,6 +49,8 @@ typedef struct dt_drawlayer_paint_raw_input_t
 {
   float wx;               /**< Pointer X in widget coordinates. */
   float wy;               /**< Pointer Y in widget coordinates. */
+  float lx;               /**< Pointer X in layer coordinates, captured at enqueue time. */
+  float ly;               /**< Pointer Y in layer coordinates, captured at enqueue time. */
   float pressure;         /**< Normalized pressure in [0,1]. */
   float tilt;             /**< Normalized tilt magnitude in [0,1]. */
   float acceleration;     /**< Normalized pointer acceleration in [0,1]. */
@@ -56,6 +58,7 @@ typedef struct dt_drawlayer_paint_raw_input_t
   uint32_t stroke_batch;  /**< Monotonic stroke id for the session. */
   uint32_t event_index;   /**< Monotonic index within the current stroke. */
   uint8_t stroke_pos;     /**< Value from @ref dt_drawlayer_paint_stroke_pos_t. */
+  uint8_t have_layer_coords; /**< TRUE when `lx`/`ly` are valid. */
   uint8_t pressure_profile; /**< Mapping profile enum for pressure modifiers. */
   uint8_t tilt_profile;     /**< Mapping profile enum for tilt modifiers. */
   uint8_t accel_profile;    /**< Mapping profile enum for acceleration modifiers. */
@@ -97,6 +100,7 @@ typedef struct dt_drawlayer_paint_stroke_t
 {
   GArray *history;      /**< Emitted, evenly-spaced dabs (`dt_drawlayer_brush_dab_t`). */
   GArray *raw_inputs;   /**< FIFO raw input queue (`dt_drawlayer_paint_raw_input_t`). */
+  GArray *pending_dabs; /**< Newly emitted dabs not yet rasterized (`dt_drawlayer_brush_dab_t`). */
   guint raw_input_cursor; /**< Cursor of next raw input to consume in `raw_inputs`. */
   GArray *dab_window;   /**< Rolling local raster window (`dt_drawlayer_brush_dab_t`, max ~3). */
   dt_drawlayer_brush_dab_t last_input_dab; /**< Last converted raw-input dab (pre-resampling). */
@@ -153,17 +157,25 @@ void dt_drawlayer_paint_path_state_reset(dt_drawlayer_paint_stroke_t *state);
 gboolean dt_drawlayer_paint_queue_raw_input(dt_drawlayer_paint_stroke_t *state,
                                             const dt_drawlayer_paint_raw_input_t *input);
 /**
- * @brief Drain queued raw input events and emit evenly spaced dabs.
+ * @brief Drain queued raw input events and append evenly spaced dabs to `state->pending_dabs`.
  *
  * @note No coalescing is performed here. FIFO order is preserved.
  */
-void dt_drawlayer_paint_raster_path(dt_drawlayer_paint_stroke_t *state,
-                                    const dt_drawlayer_paint_callbacks_t *callbacks,
-                                    void *user_data);
+void dt_drawlayer_paint_interpolate_path(dt_drawlayer_paint_stroke_t *state,
+                                         const dt_drawlayer_paint_callbacks_t *callbacks,
+                                         void *user_data);
 /** @brief Force emission of a pending initial dab when a stroke had no emitted samples yet. */
 void dt_drawlayer_paint_finalize_path(dt_drawlayer_paint_stroke_t *state,
                                       const dt_drawlayer_paint_callbacks_t *callbacks,
                                       void *user_data);
+/** @brief Rasterize a precomputed dab list into one float RGBA patch. */
+gboolean dt_drawlayer_paint_raster_path(const GArray *dabs,
+                                        float distance_percent,
+                                        dt_drawlayer_cache_patch_t *patch,
+                                        float scale,
+                                        dt_drawlayer_cache_patch_t *stroke_mask,
+                                        dt_drawlayer_damaged_rect_t *runtime_state,
+                                        dt_drawlayer_paint_stroke_t *runtime_private);
 /**
  * @brief Replay one emitted dab segment into a float buffer through brush API.
  *

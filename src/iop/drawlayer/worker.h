@@ -45,8 +45,7 @@ typedef struct dt_drawlayer_worker_snapshot_t
 } dt_drawlayer_worker_snapshot_t;
 /** @brief Callback processing one finished stroke on the deferred full-resolution worker. */
 typedef gboolean (*dt_drawlayer_worker_finished_stroke_cb)(dt_iop_module_t *self,
-                                                           const GArray *history,
-                                                           float distance_percent);
+                                                           const GArray *raw_inputs);
 
 /** @brief Initialize worker and bind external state mirrors. */
 void dt_drawlayer_worker_init(dt_iop_module_t *self,
@@ -73,10 +72,12 @@ void dt_drawlayer_worker_flush_pending(dt_drawlayer_worker_t *worker);
 void dt_drawlayer_worker_flush_finished_strokes(dt_drawlayer_worker_t *worker);
 /** @brief Clear preserved stroke runtime/history after a completed commit. */
 void dt_drawlayer_worker_reset_stroke(dt_drawlayer_worker_t *worker);
-/** @brief Read-only access to preserved emitted dab history (valid only while worker is idle). */
-GArray *dt_drawlayer_worker_history(dt_drawlayer_worker_t *worker);
+/** @brief Read-only access to preserved raw input queue for current stroke (valid only while worker is idle). */
+GArray *dt_drawlayer_worker_raw_inputs(dt_drawlayer_worker_t *worker);
 /** @brief Read-only access to preserved stroke runtime (valid only while worker is idle). */
 dt_drawlayer_paint_stroke_t *dt_drawlayer_worker_stroke(dt_drawlayer_worker_t *worker);
+/** @brief Return the number of interpolated-but-not-yet-rasterized dabs in the current stroke batch. */
+guint dt_drawlayer_worker_pending_dab_count(const dt_drawlayer_worker_t *worker);
 /** @brief Query whether the current preserved stroke has already been handed off for full-resolution replay. */
 gboolean dt_drawlayer_worker_finished_stroke_queued(const dt_drawlayer_worker_t *worker);
 

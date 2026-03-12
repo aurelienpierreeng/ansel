@@ -1105,11 +1105,7 @@ gboolean dt_drawlayer_process_state_publish_locked(dt_drawlayer_process_state_t 
   const dt_drawlayer_damaged_rect_t *publish_rect = publish_full_copy ? &full_rect : damage;
   _copy_patch_rect(&state->process_patch, &state->process_read_patch, publish_rect);
   state->process_snapshot_valid = TRUE;
-  dt_drawlayer_cache_patch_wrunlock(&state->process_read_patch);
-  dt_drawlayer_cache_patch_rdunlock(&state->process_patch);
 #ifdef HAVE_OPENCL
-  dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, state->process_read_patch.pixels, NULL,
-                                                 -1);
   state->process_read_clmem_dirty = TRUE;
   if(publish_full_copy)
   {
@@ -1119,6 +1115,12 @@ gboolean dt_drawlayer_process_state_publish_locked(dt_drawlayer_process_state_t 
   {
     dt_drawlayer_paint_runtime_note_dab_damage(&state->process_read_clmem_dirty_rect, publish_rect);
   }
+#endif
+  dt_drawlayer_cache_patch_wrunlock(&state->process_read_patch);
+  dt_drawlayer_cache_patch_rdunlock(&state->process_patch);
+#ifdef HAVE_OPENCL
+  dt_dev_pixelpipe_cache_flush_host_pinned_image(darktable.pixelpipe_cache, state->process_read_patch.pixels, NULL,
+                                                 -1);
 #endif
   return TRUE;
 }

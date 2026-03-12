@@ -113,6 +113,7 @@ typedef struct dt_drawlayer_stroke_state_t
   float last_dab_y;
   gboolean finish_commit_pending;
   gint64 live_publish_ts;
+  uint32_t live_publish_serial;
   dt_drawlayer_damaged_rect_t live_publish_damage;
   uint32_t current_stroke_batch;
 } dt_drawlayer_stroke_state_t;

@@ -240,7 +240,7 @@ static gboolean _layer_points_to_widget_coords(dt_iop_module_t *self, float *pts
 static void _process_backend_dab(dt_iop_module_t *self, const dt_drawlayer_brush_dab_t *dab,
                                  drawlayer_paint_backend_ctx_t *ctx);
 static void _touch_stroke_commit_hash(dt_iop_drawlayer_params_t *params, int dab_count, gboolean have_last_dab,
-                                      float last_dab_x, float last_dab_y);
+                                      float last_dab_x, float last_dab_y, uint32_t publish_serial);
 static void _flush_process_patch_to_base(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g);
 static void _flush_process_patch_to_base_locked(dt_iop_module_t *self, dt_iop_drawlayer_gui_data_t *g);
 static void _sync_mode_sensitive_widgets(dt_iop_module_t *self);
@@ -248,8 +248,7 @@ static gboolean _sync_widget_cache(dt_iop_module_t *self);
 static void _set_drawlayer_pipeline_realtime_mode(dt_iop_module_t *self, gboolean state);
 static int _offer_missing_layer_recreation(dt_iop_module_t *self, const char *missing_name);
 static gboolean _background_layer_job_done_idle(gpointer user_data);
-static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, const GArray *history,
-                                                      float distance_percent);
+static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, const GArray *raw_inputs);
 static gboolean _prime_live_process_patch_before_stroke(dt_iop_module_t *self);
 static void _drawlayer_runtime_collect_inputs(void *user_data, dt_drawlayer_runtime_inputs_t *inputs,
                                               dt_drawlayer_worker_snapshot_t *worker_snapshot);
@@ -386,6 +385,24 @@ static void _fill_input_brush_settings(dt_iop_module_t *self, dt_drawlayer_paint
   input->display_color[2] = display_rgb[2];
 }
 
+static void _fill_input_layer_coords(dt_iop_module_t *self, dt_drawlayer_paint_raw_input_t *input)
+{
+  if(!input) return;
+  input->have_layer_coords = FALSE;
+  input->lx = 0.0f;
+  input->ly = 0.0f;
+  if(!self) return;
+
+  float lx = 0.0f;
+  float ly = 0.0f;
+  if(_widget_to_layer_coords(self, input->wx, input->wy, &lx, &ly))
+  {
+    input->lx = lx;
+    input->ly = ly;
+    input->have_layer_coords = TRUE;
+  }
+}
+
 static gboolean _build_worker_input_dab(dt_iop_module_t *self, dt_drawlayer_paint_stroke_t *state,
                                         const dt_drawlayer_paint_raw_input_t *input, dt_drawlayer_brush_dab_t *dab)
 {
@@ -401,9 +418,9 @@ static gboolean _build_worker_input_dab(dt_iop_module_t *self, dt_drawlayer_pain
    *   - color preparation in both display and pipeline spaces */
   if(!self || !state || !input || !dab) return FALSE;
 
-  float lx = 0.0f;
-  float ly = 0.0f;
-  if(!_widget_to_layer_coords(self, input->wx, input->wy, &lx, &ly)) return FALSE;
+  float lx = input->lx;
+  float ly = input->ly;
+  if(!input->have_layer_coords && !_widget_to_layer_coords(self, input->wx, input->wy, &lx, &ly)) return FALSE;
 
   const float pressure_norm = _clamp01(input->pressure);
   const float tilt_norm = _clamp01(input->tilt);
@@ -545,6 +562,12 @@ static void _paint_emit_backend_dab_cb(void *user_data, const dt_drawlayer_brush
   if(ctx && ctx->self) _process_backend_dab(ctx->self, (const dt_drawlayer_brush_dab_t *)dab, ctx);
 }
 
+static void _paint_emit_noop_cb(void *user_data, const dt_drawlayer_brush_dab_t *dab)
+{
+  (void)user_data;
+  (void)dab;
+}
+
 static void _paint_stroke_seed_cb(void *user_data, const uint64_t stroke_seed)
 {
   drawlayer_paint_backend_ctx_t *ctx = (drawlayer_paint_backend_ctx_t *)user_data;
@@ -560,20 +583,20 @@ static void _publish_backend_progress(drawlayer_paint_backend_ctx_t *ctx, const 
   if(!g || !g->stroke.live_publish_damage.valid) return;
 
   dt_drawlayer_process_state_publish_locked(&g->process, &g->stroke.live_publish_damage, FALSE);
+  g->stroke.live_publish_serial++;
+
+  dt_develop_t *dev = ctx->self->dev;
+  if(!dev) return;
 
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)ctx->self->params;
   const int sample_count = (int)g->stroke.stroke_sample_count;
-  _touch_stroke_commit_hash(params, sample_count, g->stroke.last_dab_valid, g->stroke.last_dab_x, g->stroke.last_dab_y);
+  _touch_stroke_commit_hash(params, sample_count, g->stroke.last_dab_valid, g->stroke.last_dab_x,
+                            g->stroke.last_dab_y, g->stroke.live_publish_serial);
 
-  dt_develop_t *dev = ctx->self->dev;
-  if(dev)
-  {
-    dt_pthread_rwlock_wrlock(&dev->history_mutex);
-    dt_dev_add_history_item_ext(dev, ctx->self, FALSE, FALSE);
-    dev->history_hash = dt_dev_history_get_hash(dev);
-    dt_pthread_rwlock_unlock(&dev->history_mutex);
-  }
-
+  dt_pthread_rwlock_wrlock(&dev->history_mutex);
+  dt_dev_add_history_item_ext(dev, ctx->self, FALSE, FALSE);
+  dev->history_hash = dt_dev_history_get_hash(dev);
+  dt_pthread_rwlock_unlock(&dev->history_mutex);
   dt_drawlayer_paint_runtime_state_reset(&g->stroke.live_publish_damage);
   g->stroke.live_publish_ts = g_get_monotonic_time();
 }
@@ -595,40 +618,35 @@ static void _process_backend_input(dt_iop_module_t *self, const dt_drawlayer_pai
     .on_stroke_seed = _paint_stroke_seed_cb,
   };
   if(!dt_drawlayer_paint_queue_raw_input(stroke, input)) return;
-  dt_drawlayer_paint_raster_path(stroke, &callbacks, &ctx);
+  dt_drawlayer_paint_interpolate_path(stroke, &callbacks, &ctx);
 
-  if(g->stroke.live_publish_damage.valid)
+  if(stroke->pending_dabs && stroke->pending_dabs->len > 0)
   {
     gint64 live_publish_interval_us = dt_gui_throttle_get_timeout_us();
     if(live_publish_interval_us <= 0) live_publish_interval_us = 20000;
     const gint64 input_ts = input->event_ts ? input->event_ts : g_get_monotonic_time();
     if(g->stroke.live_publish_ts == 0)
-      g->stroke.live_publish_ts = input_ts;
-    else if(input_ts - g->stroke.live_publish_ts >= live_publish_interval_us)
+      g->stroke.live_publish_ts = input_ts - live_publish_interval_us;
+
+    if(input_ts - g->stroke.live_publish_ts >= live_publish_interval_us)
     {
-      _publish_backend_progress(&ctx, TRUE);
-      g->stroke.live_publish_ts = input_ts;
+      dt_drawlayer_cache_patch_wrlock(&g->process.process_patch);
+      guint processed_dabs = 0;
+      const double batch_t0 = dt_get_wtime();
+      while(processed_dabs < stroke->pending_dabs->len)
+      {
+        const dt_drawlayer_brush_dab_t *dab
+            = &g_array_index(stroke->pending_dabs, dt_drawlayer_brush_dab_t, processed_dabs);
+        _process_backend_dab(self, dab, &ctx);
+        processed_dabs++;
+        const gint64 elapsed_us = (gint64)(1000000.0 * (dt_get_wtime() - batch_t0));
+        if(elapsed_us >= live_publish_interval_us) break;
+      }
+      if(processed_dabs > 0) g_array_remove_range(stroke->pending_dabs, 0, processed_dabs);
+      dt_drawlayer_cache_patch_wrunlock(&g->process.process_patch);
+      if(processed_dabs > 0) _publish_backend_progress(&ctx, TRUE);
     }
   }
-}
-
-static void _flush_pending_backend_input(dt_iop_module_t *self, dt_drawlayer_paint_stroke_t *stroke)
-{
-  dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !stroke) return;
-
-  drawlayer_paint_backend_ctx_t ctx = {
-    .self = self,
-    .stroke = stroke,
-  };
-  const dt_drawlayer_paint_callbacks_t callbacks = {
-    .build_dab = _paint_build_dab_cb,
-    .layer_to_widget = _paint_layer_to_widget_cb,
-    .emit_dab = _paint_emit_backend_dab_cb,
-    .on_stroke_seed = _paint_stroke_seed_cb,
-  };
-  dt_drawlayer_paint_finalize_path(stroke, &callbacks, &ctx);
-  _publish_backend_progress(&ctx, TRUE);
 }
 
 static void _publish_backend_stroke_damage(dt_iop_module_t *self)
@@ -660,7 +678,13 @@ static void _destroy_fullres_replay_scratch(gpointer data)
   if(!scratch) return;
   dt_free_align(scratch->replay_pixels);
   dt_free_align(scratch->stroke_mask);
-  if(scratch->stroke) dt_drawlayer_paint_runtime_private_destroy(&scratch->stroke);
+  if(scratch->stroke)
+  {
+    if(scratch->stroke->history) g_array_free(scratch->stroke->history, TRUE);
+    if(scratch->stroke->pending_dabs) g_array_free(scratch->stroke->pending_dabs, TRUE);
+    if(scratch->stroke->dab_window) g_array_free(scratch->stroke->dab_window, TRUE);
+    dt_drawlayer_paint_runtime_private_destroy(&scratch->stroke);
+  }
   dt_free(scratch);
 }
 
@@ -681,9 +705,29 @@ static drawlayer_fullres_replay_scratch_t *_get_fullres_replay_scratch(void)
     dt_free(scratch);
     return NULL;
   }
+  scratch->stroke->history = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_brush_dab_t));
+  if(!scratch->stroke->history)
+  {
+    dt_drawlayer_paint_runtime_private_destroy(&scratch->stroke);
+    dt_free(scratch);
+    return NULL;
+  }
+  scratch->stroke->pending_dabs = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_brush_dab_t));
+  if(!scratch->stroke->pending_dabs)
+  {
+    g_array_free(scratch->stroke->history, TRUE);
+    scratch->stroke->history = NULL;
+    dt_drawlayer_paint_runtime_private_destroy(&scratch->stroke);
+    dt_free(scratch);
+    return NULL;
+  }
   scratch->stroke->dab_window = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_brush_dab_t));
   if(!scratch->stroke->dab_window)
   {
+    g_array_free(scratch->stroke->pending_dabs, TRUE);
+    scratch->stroke->pending_dabs = NULL;
+    g_array_free(scratch->stroke->history, TRUE);
+    scratch->stroke->history = NULL;
     dt_drawlayer_paint_runtime_private_destroy(&scratch->stroke);
     dt_free(scratch);
     return NULL;
@@ -711,21 +755,60 @@ static float *_ensure_fullres_replay_float_buffer(float **buffer, size_t *capaci
   return *buffer;
 }
 
-static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, const GArray *history,
-                                                      const float distance_percent)
+static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, const GArray *raw_inputs)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  if(!g || !history || history->len == 0) return FALSE;
+  if(!g || !raw_inputs || raw_inputs->len == 0) return FALSE;
   if(!g->process.base_patch.pixels || g->process.base_patch.width <= 0 || g->process.base_patch.height <= 0) return FALSE;
 
-  dt_drawlayer_damaged_rect_t replay_bounds = { 0 };
-  for(guint i = 0; i < history->len; i++)
+  drawlayer_fullres_replay_scratch_t *scratch = _get_fullres_replay_scratch();
+  if(!scratch || !scratch->stroke) return FALSE;
+
+  dt_drawlayer_paint_stroke_t *stroke = scratch->stroke;
+  dt_drawlayer_paint_path_state_reset(stroke);
+  dt_drawlayer_paint_runtime_private_reset(stroke);
+  if(!stroke->history)
   {
-    const dt_drawlayer_brush_dab_t *dab = &g_array_index(history, dt_drawlayer_brush_dab_t, i);
+    stroke->history = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_brush_dab_t));
+    if(!stroke->history) return FALSE;
+  }
+  g_array_set_size(stroke->history, 0);
+  if(!stroke->pending_dabs)
+  {
+    stroke->pending_dabs = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_brush_dab_t));
+    if(!stroke->pending_dabs) return FALSE;
+  }
+  g_array_set_size(stroke->pending_dabs, 0);
+  if(stroke->dab_window) g_array_set_size(stroke->dab_window, 0);
+
+  drawlayer_paint_backend_ctx_t replay_ctx = {
+    .self = self,
+    .stroke = stroke,
+  };
+  const dt_drawlayer_paint_callbacks_t callbacks = {
+    .build_dab = _paint_build_dab_cb,
+    .layer_to_widget = _paint_layer_to_widget_cb,
+    .emit_dab = _paint_emit_noop_cb,
+    .on_stroke_seed = _paint_stroke_seed_cb,
+  };
+  for(guint i = 0; i < raw_inputs->len; i++)
+  {
+    const dt_drawlayer_paint_raw_input_t *input = &g_array_index(raw_inputs, dt_drawlayer_paint_raw_input_t, i);
+    if(!dt_drawlayer_paint_queue_raw_input(stroke, input)) return FALSE;
+  }
+  dt_drawlayer_paint_interpolate_path(stroke, &callbacks, &replay_ctx);
+  dt_drawlayer_paint_finalize_path(stroke, &callbacks, &replay_ctx);
+  if(!stroke->history || stroke->history->len == 0 || !stroke->pending_dabs || stroke->pending_dabs->len == 0)
+    return FALSE;
+
+  dt_drawlayer_damaged_rect_t replay_bounds = { 0 };
+  for(guint i = 0; i < stroke->history->len; i++)
+  {
+    const dt_drawlayer_brush_dab_t *dab = &g_array_index(stroke->history, dt_drawlayer_brush_dab_t, i);
     const int x0 = CLAMP((int)floorf(dab->x - dab->radius - 1.0f), 0, g->process.base_patch.width - 1);
     const int y0 = CLAMP((int)floorf(dab->y - dab->radius - 1.0f), 0, g->process.base_patch.height - 1);
-    const int x1 = CLAMP((int)ceilf(dab->x + dab->radius + 1.0f), 0, g->process.base_patch.width - 1);
-    const int y1 = CLAMP((int)ceilf(dab->y + dab->radius + 1.0f), 0, g->process.base_patch.height - 1);
+    const int x1 = CLAMP((int)ceilf(dab->x + dab->radius + 1.0f), 0, g->process.base_patch.width);
+    const int y1 = CLAMP((int)ceilf(dab->y + dab->radius + 1.0f), 0, g->process.base_patch.height);
     const dt_drawlayer_damaged_rect_t dab_bounds = {
       .valid = TRUE,
       .nw = { x0, y0 },
@@ -735,16 +818,9 @@ static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, con
   }
   if(!replay_bounds.valid) return FALSE;
 
-  const int replay_width = replay_bounds.se[0] - replay_bounds.nw[0] + 1;
-  const int replay_height = replay_bounds.se[1] - replay_bounds.nw[1] + 1;
+  const int replay_width = replay_bounds.se[0] - replay_bounds.nw[0];
+  const int replay_height = replay_bounds.se[1] - replay_bounds.nw[1];
   if(replay_width <= 0 || replay_height <= 0) return FALSE;
-
-  drawlayer_fullres_replay_scratch_t *scratch = _get_fullres_replay_scratch();
-  if(!scratch || !scratch->stroke) return FALSE;
-
-  dt_drawlayer_paint_stroke_t *stroke = scratch->stroke;
-  stroke->distance_percent = distance_percent;
-  dt_drawlayer_paint_runtime_private_reset(stroke);
 
   float *replay_pixels = _ensure_fullres_replay_float_buffer(
       &scratch->replay_pixels, &scratch->replay_pixels_capacity, (size_t)replay_width * replay_height * 4);
@@ -782,14 +858,9 @@ static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, con
   }
   dt_drawlayer_cache_patch_rdunlock(&g->process.base_patch);
 
-  gboolean wrote_replay_tile = FALSE;
-  for(guint i = 0; i < history->len; i++)
-  {
-    const dt_drawlayer_brush_dab_t *dab = &g_array_index(history, dt_drawlayer_brush_dab_t, i);
-    wrote_replay_tile |= dt_drawlayer_paint_rasterize_segment_to_buffer(
-        dab, _clamp01(stroke->distance_percent), &replay_patch, 1.0f, &replay_stroke_mask, &replay_damage, stroke);
-    dt_iop_nap(5000);
-  }
+  const gboolean wrote_replay_tile
+      = dt_drawlayer_paint_raster_path(stroke->pending_dabs, _clamp01(stroke->distance_percent), &replay_patch, 1.0f,
+                                       &replay_stroke_mask, &replay_damage, stroke);
   if(wrote_replay_tile)
   {
     dt_drawlayer_cache_patch_wrlock(&g->process.base_patch);
@@ -806,7 +877,6 @@ static gboolean _replay_finished_stroke_to_base_patch(dt_iop_module_t *self, con
 #endif
     dt_drawlayer_cache_patch_wrunlock(&g->process.base_patch);
   }
-  dt_iop_nap(200000);
   return wrote_replay_tile;
 }
 
@@ -819,13 +889,14 @@ static void _process_backend_dab(dt_iop_module_t *self, const dt_drawlayer_brush
 
   /* Realtime hot path stamps only the current-view process tile.
    * The full-resolution authoritative `base_patch` is replayed once from the
-   * preserved dab history when the stroke commits. */
+   * preserved raw input history when the stroke commits. */
   gboolean have_process_damage = FALSE;
   dt_drawlayer_damaged_rect_t process_step_path = { 0 };
   dt_drawlayer_damaged_rect_t process_step_damage = { 0 };
   dt_drawlayer_paint_runtime_state_reset(&process_step_path);
 
-  dt_drawlayer_cache_patch_wrlock(&g->process.process_patch);
+  /* Caller keeps `process_patch` write-locked for the whole raw-input batch so
+   * dense strokes don't thrash the rwlock once per dab. */
   if(g->process.process_patch_valid && g->process.process_patch.pixels && g->process.process_patch.width > 0 && g->process.process_patch.height > 0
      && g->process.process_combined_roi.scale > 1e-6f)
   {
@@ -845,7 +916,6 @@ static void _process_backend_dab(dt_iop_module_t *self, const dt_drawlayer_brush
       dt_drawlayer_paint_runtime_note_dab_damage(&g->process.process_dirty_rect, &process_step_damage);
     }
   }
-  dt_drawlayer_cache_patch_wrunlock(&g->process.process_patch);
 
   if(have_process_damage)
   {
@@ -1268,6 +1338,7 @@ static gboolean _build_process_patch_from_base(dt_iop_module_t *self, dt_iop_dra
   gboolean have_process_patch = FALSE;
   gboolean same_geometry = FALSE;
   gboolean keep_live_geometry = FALSE;
+  const gboolean have_pending_live_batch = dt_drawlayer_worker_pending_dab_count(g->stroke.worker) > 0;
   gboolean need_flush = FALSE;
   dt_iop_roi_t previous_process_roi = { 0 };
   int previous_process_width = 0;
@@ -1288,7 +1359,9 @@ static gboolean _build_process_patch_from_base(dt_iop_module_t *self, dt_iop_dra
                      && g->process.process_combined_roi.width == padded_roi.width
                      && g->process.process_combined_roi.height == padded_roi.height
                      && fabs(g->process.process_combined_roi.scale - combined_roi.scale) <= 1e-2);
-    if(!same_geometry && (g->manager.painting_active || dt_drawlayer_worker_any_active(g->stroke.worker)))
+    if(!same_geometry
+       && ((g->manager.painting_active || dt_drawlayer_worker_any_active(g->stroke.worker))
+           || have_pending_live_batch))
       keep_live_geometry = (g->process.process_patch_padding == process_pad && g->process.process_patch.width == patch_width
                             && g->process.process_patch.height == patch_height && g->process.process_snapshot_valid
                             && g->process.process_read_patch.pixels);
@@ -1312,9 +1385,9 @@ static gboolean _build_process_patch_from_base(dt_iop_module_t *self, dt_iop_dra
     const gint64 now = g_get_monotonic_time();
     if(darktable.unmuted & DT_DEBUG_VERBOSE)
       dt_print(DT_DEBUG_PERF,
-               "[drawlayer] process step=process-patch-keep-live ms=%.3f total=%.3f painting=%d workers=%d\n",
+               "[drawlayer] process step=process-patch-keep-live ms=%.3f total=%.3f painting=%d workers=%d pending=%d\n",
                (now - t) / 1000.0, (now - t0) / 1000.0, g->manager.painting_active ? 1 : 0,
-               dt_drawlayer_worker_any_active(g->stroke.worker) ? 1 : 0);
+               dt_drawlayer_worker_any_active(g->stroke.worker) ? 1 : 0, have_pending_live_batch ? 1 : 0);
     return TRUE;
   }
 
@@ -2285,6 +2358,7 @@ static void _reset_stroke_session(dt_iop_drawlayer_gui_data_t *g)
   g->stroke.stroke_event_index = 0;
   g->stroke.last_dab_valid = FALSE;
   g->stroke.live_publish_ts = 0;
+  g->stroke.live_publish_serial = 0;
   dt_drawlayer_paint_runtime_state_reset(&g->stroke.live_publish_damage);
   dt_drawlayer_process_state_reset_stroke(&g->process);
 }
@@ -2974,7 +3048,8 @@ static gboolean _layer_to_widget_coords(dt_iop_module_t *self, const float x, co
 }
 
 static void _touch_stroke_commit_hash(dt_iop_drawlayer_params_t *params, const int dab_count,
-                                      const gboolean have_last_dab, const float last_dab_x, const float last_dab_y)
+                                      const gboolean have_last_dab, const float last_dab_x,
+                                      const float last_dab_y, const uint32_t publish_serial)
 {
   if(!params) return;
 
@@ -2986,7 +3061,7 @@ static void _touch_stroke_commit_hash(dt_iop_drawlayer_params_t *params, const i
     memcpy(&y_bits, &last_dab_y, sizeof(y_bits));
   }
 
-  const uint32_t seed[4] = { (uint32_t)dab_count, have_last_dab ? 1u : 0u, x_bits, y_bits };
+  const uint32_t seed[5] = { (uint32_t)dab_count, have_last_dab ? 1u : 0u, x_bits, y_bits, publish_serial };
 
   uint64_t hash = params->stroke_commit_hash ? params->stroke_commit_hash : 5381u;
   hash = dt_hash(hash, (const char *)seed, sizeof(seed));
@@ -3051,12 +3126,11 @@ static gboolean _commit_dabs(dt_iop_module_t *self, const gboolean record_histor
    * - the layer cache must already contain the stroke,
    * - only then do we mutate params/history so the pipeline invalidation sees a coherent state. */
   _wait_worker_idle(self, g->stroke.worker);
-  dt_drawlayer_worker_flush_pending(g->stroke.worker);
   if(!dt_drawlayer_worker_finished_stroke_queued(g->stroke.worker))
   {
     const dt_drawlayer_paint_stroke_t *stroke = dt_drawlayer_worker_stroke(g->stroke.worker);
-    const GArray *history = dt_drawlayer_worker_history(g->stroke.worker);
-    if(stroke && history) _replay_finished_stroke_to_base_patch(self, history, stroke->distance_percent);
+    const GArray *raw_inputs = dt_drawlayer_worker_raw_inputs(g->stroke.worker);
+    if(stroke && raw_inputs) _replay_finished_stroke_to_base_patch(self, raw_inputs);
   }
   /* Damage-rectangle ownership stays in drawlayer:
    * paint accumulates per-dab bounds into a stroke rectangle, and on commit the
@@ -3095,7 +3169,7 @@ static gboolean _commit_dabs(dt_iop_module_t *self, const gboolean record_histor
      * Base-patch synchronization is handled at explicit persistence points
      * (save/focus-out/mouse-leave/geometry rebuild) so recomputes can keep
      * blending the already-updated process tile directly. */
-    _touch_stroke_commit_hash(params, sample_count, had_last_dab, last_dab_x, last_dab_y);
+    _touch_stroke_commit_hash(params, sample_count, had_last_dab, last_dab_x, last_dab_y, 0u);
     _retain_base_patch_stroke_ref(g);
     if(record_history && self->dev)
     {
@@ -3410,7 +3484,7 @@ static gboolean _create_new_layer(dt_iop_module_t *self, const char *requested_n
   }
 
   g->session.missing_layer_prompt_name[0] = '\0';
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
+  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   if(self->dev)
   {
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
@@ -3661,7 +3735,7 @@ static void _layer_selected(GtkWidget *widget, gpointer user_data)
   }
 
   g->session.missing_layer_prompt_name[0] = '\0';
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
+  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   if(self->dev)
   {
     dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
@@ -3679,7 +3753,7 @@ static void _delete_layer_clicked(GtkButton *button, gpointer user_data)
   if(!_confirm_delete_layer(self, FALSE)) return;
 
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
+  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   self->enabled = FALSE;
   dt_iop_gui_set_enable_button(self);
   if(self->dev) dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
@@ -3711,7 +3785,7 @@ static gboolean _fill_current_layer(dt_iop_module_t *self, const float value)
 
   g->process.cache_dirty = TRUE;
   _invalidate_process_patch(g);
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
+  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   _reset_stroke_session(g);
 
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
@@ -3735,7 +3809,7 @@ static gboolean _clear_current_layer(dt_iop_module_t *self)
 
   g->process.cache_dirty = TRUE;
   _invalidate_process_patch(g);
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
+  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   _reset_stroke_session(g);
 
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
@@ -3871,7 +3945,7 @@ static void _preview_bg_toggled(GtkToggleButton *button, gpointer user_data)
     g->session.preview_bg_mode = DRAWLAYER_PREVIEW_BG_IMAGE;
 
   _sync_preview_bg_buttons(self);
-  if(params) _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
+  if(params) _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   dt_dev_add_history_item(self->dev, self, TRUE, TRUE);
   dt_dev_pixelpipe_update_history_all(self->dev);
 }
@@ -3899,6 +3973,7 @@ static gboolean _build_raw_input_event(dt_iop_module_t *self, const double wx, c
     .event_index = ++g->stroke.stroke_event_index,
     .stroke_pos = stroke_pos,
   };
+  _fill_input_layer_coords(self, input);
   _fill_input_brush_settings(self, input);
   return TRUE;
 }
@@ -3923,6 +3998,7 @@ static void _begin_gui_stroke_capture(dt_iop_module_t *self, const dt_drawlayer_
   g->stroke.stroke_event_index = event_index;
   g->stroke.last_dab_valid = FALSE;
   g->stroke.live_publish_ts = 0;
+  g->stroke.live_publish_serial = 0;
   dt_drawlayer_paint_runtime_state_reset(&g->stroke.live_publish_damage);
   dt_iop_gui_leave_critical_section(self);
 }
@@ -4310,7 +4386,7 @@ void gui_reset(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   _default_layer_name(self, params->layer_name, sizeof(params->layer_name));
   params->layer_order = -1;
-  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f);
+  _touch_stroke_commit_hash(params, 0, FALSE, 0.0f, 0.0f, 0u);
   dt_iop_drawlayer_gui_data_t *g = (dt_iop_drawlayer_gui_data_t *)self->gui_data;
   if(g)
   {
@@ -4828,7 +4904,8 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
     _set_drawlayer_os_cursor_hidden(FALSE);
     if(g) dt_drawlayer_runtime_manager_update(&g->manager, &update, &runtime_manager);
     if(had_pending_edits && params)
-      _touch_stroke_commit_hash(params, pending_samples, g->stroke.last_dab_valid, g->stroke.last_dab_x, g->stroke.last_dab_y);
+      _touch_stroke_commit_hash(params, pending_samples, g->stroke.last_dab_valid, g->stroke.last_dab_x,
+                                g->stroke.last_dab_y, 0u);
     if(had_pending_edits && self->dev && params)
     {
       dt_dev_undo_start_record(self->dev);
@@ -5274,6 +5351,7 @@ int button_pressed(dt_iop_module_t *self, double x, double y, double pressure, i
     .event_index = 1u,
     .stroke_pos = DT_DRAWLAYER_PAINT_STROKE_FIRST,
   };
+  _fill_input_layer_coords(self, &first);
   _fill_input_brush_settings(self, &first);
   drawlayer_runtime_host_context_t runtime_host = {
     .runtime = {
@@ -5327,6 +5405,7 @@ int button_released(dt_iop_module_t *self, double x, double y, int which, uint32
       .event_index = ++g->stroke.stroke_event_index,
       .stroke_pos = DT_DRAWLAYER_PAINT_STROKE_END,
     };
+    _fill_input_layer_coords(self, &end);
     _fill_input_brush_settings(self, &end);
     drawlayer_runtime_host_context_t runtime_host = {
       .runtime = {

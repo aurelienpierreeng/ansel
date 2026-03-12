@@ -198,6 +198,15 @@ static gboolean _ensure_raw_inputs(dt_drawlayer_paint_stroke_t *state)
   return state->raw_inputs != NULL;
 }
 
+/** @brief Lazily allocate pending-dab batch storage for one stroke state. */
+static gboolean _ensure_pending_dabs(dt_drawlayer_paint_stroke_t *state)
+{
+  if(!state) return FALSE;
+  if(state->pending_dabs) return TRUE;
+  state->pending_dabs = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_brush_dab_t));
+  return state->pending_dabs != NULL;
+}
+
 /** @brief Sample the current raw segment at parametric position `t`. */
 static dt_drawlayer_brush_dab_t _sample_raw_segment_cubic_param(const dt_drawlayer_paint_stroke_t *state,
                                                                 const dt_drawlayer_brush_dab_t *segment_start,
@@ -367,11 +376,10 @@ static void _apply_quadratic_dab_smoothing(dt_drawlayer_paint_stroke_t *state,
 }
 
 /** @brief Emit one dab and append it to emitted-history tracking. */
-static void _emit_dab(dt_drawlayer_paint_stroke_t *state, dt_drawlayer_brush_dab_t *dab,
-                      const dt_drawlayer_paint_callbacks_t *callbacks, void *user_data)
+static void _emit_dab(dt_drawlayer_paint_stroke_t *state, dt_drawlayer_brush_dab_t *dab)
 {
   /* Emit one dab and keep a full emitted history for smoothing/prediction. */
-  if(!state || !dab || !callbacks || !callbacks->emit_dab) return;
+  if(!state || !dab || !state->history || !state->pending_dabs) return;
   if(state->history && state->history->len > 0)
   {
     const dt_drawlayer_brush_dab_t *prev
@@ -385,8 +393,8 @@ static void _emit_dab(dt_drawlayer_paint_stroke_t *state, dt_drawlayer_brush_dab
       dab->dir_y = dy / len;
     }
   }
-  if(state->history) g_array_append_val(state->history, *dab);
-  callbacks->emit_dab(user_data, dab);
+  g_array_append_val(state->history, *dab);
+  g_array_append_val(state->pending_dabs, *dab);
 }
 
 /** @brief Freeze raster-time normalization into one emitted dab record. */
@@ -452,6 +460,7 @@ static void _paint_reset_path_runtime_state(dt_drawlayer_paint_stroke_t *state)
    * Queue storage and reusable allocations are kept by the owner. */
   if(!state) return;
   if(state->history) g_array_set_size(state->history, 0);
+  if(state->pending_dabs) g_array_set_size(state->pending_dabs, 0);
   if(state->dab_window) g_array_set_size(state->dab_window, 0);
   state->last_input_dab = (dt_drawlayer_brush_dab_t){ 0 };
   state->have_last_input_dab = FALSE;
@@ -500,14 +509,16 @@ static uint64_t _paint_make_stroke_seed(const dt_drawlayer_paint_raw_input_t *in
 static void _emit_first_sample_if_needed(dt_drawlayer_paint_stroke_t *state, const dt_drawlayer_brush_dab_t *dab,
                                          const dt_drawlayer_paint_callbacks_t *callbacks, void *user_data)
 {
-  if(!state || !dab || !callbacks || !callbacks->emit_dab) return;
+  (void)callbacks;
+  (void)user_data;
+  if(!state || !dab || !state->history || !_ensure_pending_dabs(state)) return;
   state->last_input_dab = *dab;
   state->have_last_input_dab = TRUE;
 
   dt_drawlayer_brush_dab_t first = *dab;
   first.stroke_pos = DT_DRAWLAYER_PAINT_STROKE_FIRST;
   _freeze_emitted_dab_raster_state(&first, _paint_dab_sample_spacing(&first, _clamp01(state->distance_percent)));
-  _emit_dab(state, &first, callbacks, user_data);
+  _emit_dab(state, &first);
   state->sampled_arc_length = 0.0f;
 }
 
@@ -519,13 +530,15 @@ void dt_drawlayer_paint_finalize_path(dt_drawlayer_paint_stroke_t *state,
                                       const dt_drawlayer_paint_callbacks_t *callbacks,
                                       void *user_data)
 {
-  if(!state || !callbacks || !callbacks->emit_dab || !state->have_last_input_dab) return;
+  (void)callbacks;
+  (void)user_data;
+  if(!state || !state->have_last_input_dab || !state->history || !_ensure_pending_dabs(state)) return;
   if(!state->history || state->history->len > 0) return;
 
   dt_drawlayer_brush_dab_t dab = state->last_input_dab;
   dab.stroke_pos = DT_DRAWLAYER_PAINT_STROKE_FIRST;
   _freeze_emitted_dab_raster_state(&dab, _paint_dab_sample_spacing(&dab, _clamp01(state->distance_percent)));
-  _emit_dab(state, &dab, callbacks, user_data);
+  _emit_dab(state, &dab);
   state->sampled_arc_length = 0.0f;
 }
 
@@ -534,7 +547,7 @@ static void _flush_pending_initial_if_needed(dt_drawlayer_paint_stroke_t *state,
                                              const dt_drawlayer_brush_dab_t *dab,
                                              const dt_drawlayer_paint_callbacks_t *callbacks, void *user_data)
 {
-  if(!state || !dab || !callbacks || !state->history || state->history->len != 0) return;
+  if(!state || !dab || !state->history || state->history->len != 0) return;
 
   const float dx = dab->x - state->last_input_dab.x;
   const float dy = dab->y - state->last_input_dab.y;
@@ -562,7 +575,7 @@ static void _paint_process_one_raw_input(dt_drawlayer_paint_stroke_t *state,
    * - update cumulative arc length,
    * - emit uniformly spaced samples using arc-length interpolation,
    * - apply optional smoothing and spacing enforcement. */
-  if(!state || !input || !callbacks || !callbacks->build_dab || !callbacks->emit_dab) return;
+  if(!state || !input || !callbacks || !callbacks->build_dab || !_ensure_pending_dabs(state)) return;
 
   const float distance_percent = _clamp01(input->distance_percent);
   state->distance_percent = distance_percent;
@@ -623,7 +636,7 @@ static void _paint_process_one_raw_input(dt_drawlayer_paint_stroke_t *state,
       _enforce_dab_center_spacing(state, &sample, sample_spacing,
                                   callbacks->layer_to_widget, user_data);
       _freeze_emitted_dab_raster_state(&sample, sample_spacing);
-      _emit_dab(state, &sample, callbacks, user_data);
+      _emit_dab(state, &sample);
       state->sampled_arc_length = target_arc;
     }
   }
@@ -657,9 +670,9 @@ static void _paint_compact_raw_input_queue(dt_drawlayer_paint_stroke_t *state)
   state->raw_input_cursor = 0;
 }
 
-void dt_drawlayer_paint_raster_path(dt_drawlayer_paint_stroke_t *state,
-                                    const dt_drawlayer_paint_callbacks_t *callbacks,
-                                    void *user_data)
+void dt_drawlayer_paint_interpolate_path(dt_drawlayer_paint_stroke_t *state,
+                                         const dt_drawlayer_paint_callbacks_t *callbacks,
+                                         void *user_data)
 {
   /* Drain all queued raw inputs in FIFO order. No coalescing here. */
   if(!state || !state->raw_inputs || !callbacks) return;
@@ -673,6 +686,26 @@ void dt_drawlayer_paint_raster_path(dt_drawlayer_paint_stroke_t *state,
   }
 
   _paint_compact_raw_input_queue(state);
+}
+
+gboolean dt_drawlayer_paint_raster_path(const GArray *dabs,
+                                        const float distance_percent,
+                                        dt_drawlayer_cache_patch_t *patch,
+                                        const float scale,
+                                        dt_drawlayer_cache_patch_t *stroke_mask,
+                                        dt_drawlayer_damaged_rect_t *runtime_state,
+                                        dt_drawlayer_paint_stroke_t *runtime_private)
+{
+  if(!dabs || dabs->len == 0 || !runtime_private) return FALSE;
+
+  gboolean wrote = FALSE;
+  for(guint i = 0; i < dabs->len; i++)
+  {
+    const dt_drawlayer_brush_dab_t *dab = &g_array_index(dabs, dt_drawlayer_brush_dab_t, i);
+    wrote |= dt_drawlayer_paint_rasterize_segment_to_buffer(dab, distance_percent, patch, scale, stroke_mask,
+                                                            runtime_state, runtime_private);
+  }
+  return wrote;
 }
 
 static inline void _advance_smudge_pickup_state(dt_drawlayer_paint_stroke_t *state,
@@ -760,8 +793,8 @@ gboolean dt_drawlayer_paint_rasterize_segment_to_buffer(const dt_drawlayer_brush
   {
     if(runtime_private && runtime_private->bounds.valid)
     {
-      const int bounds_w = runtime_private->bounds.se[0] - runtime_private->bounds.nw[0] + 1;
-      const int bounds_h = runtime_private->bounds.se[1] - runtime_private->bounds.nw[1] + 1;
+      const int bounds_w = runtime_private->bounds.se[0] - runtime_private->bounds.nw[0];
+      const int bounds_h = runtime_private->bounds.se[1] - runtime_private->bounds.nw[1];
       dt_print(DT_DEBUG_PERF,
                "[drawlayer] paint raster mode=%d pos=%d spacing=%.3f alpha_scale=%.4f area=%dx%d ms=%.3f\n",
                sample->mode, sample->stroke_pos, spacing, sample_opacity_scale, bounds_w, bounds_h,
