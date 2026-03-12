@@ -480,6 +480,7 @@ int dt_dev_pixelpipe_init_export(dt_dev_pixelpipe_t *pipe, int levels, gboolean 
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_EXPORT;
+  pipe->gui_observable_source = FALSE;
   pipe->levels = levels;
   pipe->store_all_raster_masks = store_masks;
   return res;
@@ -489,6 +490,7 @@ int dt_dev_pixelpipe_init_thumbnail(dt_dev_pixelpipe_t *pipe)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_THUMBNAIL;
+  pipe->gui_observable_source = FALSE;
   pipe->no_cache = TRUE;
   return res;
 }
@@ -497,6 +499,7 @@ int dt_dev_pixelpipe_init_dummy(dt_dev_pixelpipe_t *pipe)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_THUMBNAIL;
+  pipe->gui_observable_source = FALSE;
   pipe->no_cache = TRUE;
   return res;
 }
@@ -506,6 +509,7 @@ int dt_dev_pixelpipe_init_preview(dt_dev_pixelpipe_t *pipe)
   // Init with the size of MIPMAP_F
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_PREVIEW;
+  pipe->gui_observable_source = TRUE;
 
   // Needed for caching
   pipe->store_all_raster_masks = TRUE;
@@ -516,6 +520,7 @@ int dt_dev_pixelpipe_init(dt_dev_pixelpipe_t *pipe)
 {
   const int res = dt_dev_pixelpipe_init_cached(pipe);
   pipe->type = DT_DEV_PIXELPIPE_FULL;
+  pipe->gui_observable_source = FALSE;
 
   // Needed for caching
   pipe->store_all_raster_masks = TRUE;
@@ -549,6 +554,7 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->mask_display = DT_DEV_PIXELPIPE_DISPLAY_NONE;
   pipe->bypass_blendif = 0;
   pipe->input_timestamp = 0;
+  pipe->gui_observable_source = FALSE;
   pipe->levels = IMAGEIO_RGB | IMAGEIO_INT8;
   dt_pthread_mutex_init(&(pipe->busy_mutex), NULL);
   pipe->icc_type = DT_COLORSPACE_NONE;
@@ -564,6 +570,10 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->status = DT_DEV_PIXELPIPE_DIRTY;
   pipe->last_history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   pipe->last_history_item = NULL;
+  memset(pipe->recent_runtime_us, 0, sizeof(pipe->recent_runtime_us));
+  pipe->recent_runtime_count = 0;
+  pipe->recent_runtime_pos = 0;
+  dt_atomic_set_int(&pipe->avg_runtime_us, 0);
   pipe->flush_cache = FALSE;
   pipe->timeout = 0;
 
@@ -1650,16 +1660,6 @@ static gboolean _reuse_transient_output_cacheline(dt_dev_pixelpipe_t *pipe, dt_d
     return FALSE;
   }
 
-  /* Previous outputs may only be rekeyed in-place when nobody still holds a
-   * reference to their current contents. A bare refcount is what recursive
-   * callers/backbufs keep between modules; those consumers expect the buffer to
-   * stay semantically immutable until they drop it. */
-  if(dt_atomic_get_int(&entry->refcount) > 0)
-  {
-    _trace_cache_owner(pipe, piece ? piece->module : NULL, "reuse-reject-busy", "output",
-                       old_hash, output ? *output : NULL, entry, FALSE);
-    return FALSE;
-  }
 
   dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, entry);
   dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, entry);
@@ -1785,17 +1785,25 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   // 1) Fast-track:
   // If we have a cache entry for this hash, return it straight away,
-  // don't recurse through pipeline and don't process.
-  // We can't do it for the preview pipe because it needs to resync
-  // the global histograms, so we will need to recurse through pipeline anyway.
-  // This case is handled below.
+  // don't recurse through pipeline and don't process, unless this module still
+  // needs GUI-side sampling from its host input or the gamma display histogram
+  // needs the upstream cache entry.
   dt_pixel_cache_entry_t *existing_cache = NULL;
   const gboolean exact_output_cache_hit
       = dt_dev_pixelpipe_cache_peek_exact(darktable.pixelpipe_cache, hash, output, out_format,
                                           &existing_cache, &roi_out, bpp, pipe->devid, cl_mem_output);
 
-  if(existing_cache && pipe->type != DT_DEV_PIXELPIPE_PREVIEW)
+  const gboolean exact_hit_needs_gui_host_input
+      = module && piece && _module_needs_gui_host_input_sampling(pipe, dev, module, piece);
+  const gboolean exact_hit_needs_gui_input_backbuf
+      = module && _module_needs_gui_input_backbuf_sync(pipe, dev, module);
+  const gboolean exact_hit_needs_gui_output_backbuf
+      = module && piece && _module_needs_gui_output_backbuf_sync(pipe, dev, module);
+
+  if(existing_cache && !exact_hit_needs_gui_host_input && !exact_hit_needs_gui_input_backbuf)
   {
+    if(exact_hit_needs_gui_output_backbuf)
+      _sync_module_output_backbuf_on_exact_hit(pipe, dev, module, piece, existing_cache, roi_out, hash);
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, existing_cache);
     _trace_cache_owner(pipe, module, "exact-hit-return", "output", hash, *output, existing_cache, FALSE);
     dt_print(DT_DEBUG_PIPE, "[dev_pixelpipe] found %" PRIu64 " (%s) for %s pipeline in cache\n", hash,
@@ -1912,14 +1920,15 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
 
   dt_pixelpipe_flow_t pixelpipe_flow = (PIXELPIPE_FLOW_NONE | PIXELPIPE_FLOW_HISTOGRAM_NONE);
 
-  // If we found an existing cache entry for this hash (= !new_entry), and
-  // bypassing the cache is not requested by the pipe, stop before processing.
-  // This is mostly for the preview pipe since we didn't stop the recursion earlier
-  // at the last-found cache line.
-  if(exact_output_cache_hit && !new_entry && pipe->type == DT_DEV_PIXELPIPE_PREVIEW && input)
+  // If we found an existing cache entry for this hash (= !new_entry), and the
+  // remaining GUI work can be satisfied from the exact cache hit, stop before
+  // processing.
+  if(exact_output_cache_hit && !new_entry
+     && (!exact_hit_needs_gui_host_input || input)
+     && !exact_hit_needs_gui_input_backbuf)
   {
     dt_print(DT_DEBUG_PIPE, "[pipeline] found %" PRIu64 " (%s) for %s pipeline in cache\n", hash, module ? module->op : "noop", type);
-    _trace_cache_owner(pipe, module, "exact-hit-preview", "output", hash, *output, output_entry, FALSE);
+    _trace_cache_owner(pipe, module, "exact-hit-observable", "output", hash, *output, output_entry, FALSE);
     if(output_entry)
     {
       _trace_cache_dsc_mismatch(pipe, module, &piece->dsc_out, &output_entry->dsc);
@@ -1927,9 +1936,11 @@ static int dt_dev_pixelpipe_process_rec(dt_dev_pixelpipe_t *pipe, dt_develop_t *
     }
     _trace_buffer_content(pipe, module, "exact-hit-output", *output, *out_format, &roi_out);
 
-    // Sample all color pickers and histograms
-    _sample_gui(pipe, dev, input, output, roi_in, roi_out, input_format, out_format, module,
-                piece, input_hash, hash, in_bpp, bpp, input_entry, output_entry);
+    if(exact_hit_needs_gui_host_input)
+      _sample_gui(pipe, dev, input, output, roi_in, roi_out, input_format, out_format, module,
+                  piece, input_hash, hash, in_bpp, bpp, input_entry, output_entry);
+    else
+      _sync_module_output_backbuf_on_exact_hit(pipe, dev, module, piece, output_entry, roi_out, hash);
 
     // Note: the write lock is not held here since it's not a new entry.
     _trace_cache_owner(pipe, module, "release-after-exact-hit", "input", input_hash, input, input_entry, FALSE);
@@ -2233,7 +2244,7 @@ static void _set_opencl_cache(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
       gboolean global_hist_on
           = (!dt_dev_pixelpipe_get_realtime(pipe)
              && _get_backuf(dev, piece->module->op)
-             && pipe->type == DT_DEV_PIXELPIPE_PREVIEW);
+             && pipe->gui_observable_source);
 
       gboolean requested = piece->force_opencl_cache
           || color_picker_on || histogram_on || global_hist_on;
@@ -2271,12 +2282,13 @@ int dt_dev_pixelpipe_process(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, dt_iop
 
   void *buf = NULL;
 
-  // If the last backbuf image is still valid with regard to current pipe topology 
-  // and history, and we still have an entry cache, abort now. Nothing to do.
-  // For preview pipe, if using color pickers, we still need to traverse the pipeline.
+  // If the last backbuf image is still valid with regard to current pipe topology
+  // and history, and we still have an entry cache, abort now. Nothing to do,
+  // unless GUI observers still need per-module host-buffer sampling.
   dt_pixel_cache_entry_t *entry = NULL;
   if(!pipe->reentry && !pipe->bypass_cache
      && dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, pipe->hash, &buf, NULL, &entry)
+     && !_pipe_needs_gui_sampling_traversal(pipe, dev)
      && _resync_global_histograms(pipe, dev))
   {
     _update_backbuf_cache_reference(pipe, roi, entry);

@@ -47,9 +47,9 @@
  * Caveats / expectations (read this before editing)
  * ------------------------------------------------
  *
- * 1) **Preview-only by design**
- *    These helpers are intended for `DT_DEV_PIXELPIPE_PREVIEW` when `dev->gui_attached` is true.
- *    They must not be invoked for exports or background processing.
+ * 1) **GUI-observable pipes only**
+ *    These helpers are intended for pipes advertising `pipe->gui_observable_source` when
+ *    `dev->gui_attached` is true. They must not be invoked for exports or background processing.
  *
  * 2) **Cache entries are the source of truth**
  *    The GUI should never access transient buffers directly. We always sample through cache entries, with
@@ -157,6 +157,78 @@ static dt_backbuf_t *_get_backuf(dt_develop_t *dev, const char *op)
     return &dev->display_histogram;
   else
     return NULL;
+}
+
+static void pixelpipe_get_histogram_backbuf(dt_develop_t *dev, const dt_iop_roi_t roi, dt_pixel_cache_entry_t *entry,
+                                            dt_iop_module_t *module, const uint64_t hash);
+
+static inline gboolean _pipe_tracks_gui_observables(const dt_dev_pixelpipe_t *pipe, const dt_develop_t *dev)
+{
+  return pipe && dev && dev->gui_attached && pipe->gui_observable_source;
+}
+
+static inline gboolean _module_requests_color_picker(const dt_develop_t *dev, const dt_iop_module_t *module)
+{
+  return dev && module && dev->gui_module && darktable.lib->proxy.colorpicker.picker_proxy
+         && module == dev->gui_module && dev->gui_module->enabled
+         && dev->gui_module->request_color_pick != DT_REQUEST_COLORPICK_OFF;
+}
+
+static inline gboolean _module_requests_input_histogram(const dt_develop_t *dev,
+                                                        const dt_dev_pixelpipe_iop_t *piece)
+{
+  return dev && piece && (piece->request_histogram & DT_REQUEST_ON)
+         && (dev->gui_attached || !(piece->request_histogram & DT_REQUEST_ONLY_IN_GUI));
+}
+
+static inline gboolean _module_needs_gui_host_input_sampling(const dt_dev_pixelpipe_t *pipe,
+                                                             const dt_develop_t *dev,
+                                                             const dt_iop_module_t *module,
+                                                             const dt_dev_pixelpipe_iop_t *piece)
+{
+  return _pipe_tracks_gui_observables(pipe, dev)
+         && (_module_requests_color_picker(dev, module)
+             || _module_requests_input_histogram(dev, piece));
+}
+
+static inline gboolean _module_needs_gui_output_backbuf_sync(const dt_dev_pixelpipe_t *pipe,
+                                                             const dt_develop_t *dev,
+                                                             const dt_iop_module_t *module)
+{
+  return _pipe_tracks_gui_observables(pipe, dev) && !dt_dev_pixelpipe_get_realtime(pipe)
+         && module && _get_backuf((dt_develop_t *)dev, module->op) && strcmp(module->op, "gamma") != 0;
+}
+
+static inline gboolean _module_needs_gui_input_backbuf_sync(const dt_dev_pixelpipe_t *pipe,
+                                                            const dt_develop_t *dev,
+                                                            const dt_iop_module_t *module)
+{
+  return _pipe_tracks_gui_observables(pipe, dev) && !dt_dev_pixelpipe_get_realtime(pipe)
+         && module && !strcmp(module->op, "gamma");
+}
+
+static gboolean _pipe_needs_gui_sampling_traversal(const dt_dev_pixelpipe_t *pipe, const dt_develop_t *dev)
+{
+  if(!_pipe_tracks_gui_observables(pipe, dev) || !pipe->nodes) return FALSE;
+
+  for(GList *pieces = g_list_first(pipe->nodes); pieces; pieces = g_list_next(pieces))
+  {
+    dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)pieces->data;
+    if(piece && piece->enabled
+       && _module_needs_gui_host_input_sampling(pipe, dev, piece->module, piece))
+      return TRUE;
+  }
+
+  return FALSE;
+}
+
+static void _sync_module_output_backbuf_on_exact_hit(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev,
+                                                     dt_iop_module_t *module, dt_dev_pixelpipe_iop_t *piece,
+                                                     dt_pixel_cache_entry_t *output_entry,
+                                                     const dt_iop_roi_t roi_out, const uint64_t hash)
+{
+  if(!_module_needs_gui_output_backbuf_sync(pipe, dev, module) || !output_entry) return;
+  pixelpipe_get_histogram_backbuf(dev, roi_out, output_entry, piece->module, hash);
 }
 
 /**
@@ -435,7 +507,7 @@ static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input
   (void)in_bpp;
   (void)bpp;
 
-  if(!(dev->gui_attached && pipe->type == DT_DEV_PIXELPIPE_PREVIEW))
+  if(!_pipe_tracks_gui_observables(pipe, dev))
     return;
 
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, output_entry);
@@ -479,7 +551,7 @@ static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input
  * @return TRUE if all required cache lines exist, FALSE if a recompute is needed.
  *
  * @details
- * The preview pipe can exit early if the final output cache entry is valid.
+ * A GUI-observable pipe can exit early if the final output cache entry is valid.
  * When that happens, we still need to update the global histogram backbuffers to point at the right cache
  * entries for `demosaic/colorout/gamma`.
  * Realtime mode explicitly skips this path to avoid histogram sampling overhead.
@@ -489,7 +561,7 @@ static void _sample_gui(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev, void *input
 static gboolean _resync_global_histograms(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   if(dt_dev_pixelpipe_get_realtime(pipe)) return 1;
-  if(pipe->type != DT_DEV_PIXELPIPE_PREVIEW) return 1;
+  if(!_pipe_tracks_gui_observables(pipe, dev)) return 1;
 
   GList *pieces = g_list_first(pipe->nodes);
   int64_t input_hash = -1;

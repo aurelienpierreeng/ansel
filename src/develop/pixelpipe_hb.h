@@ -229,6 +229,10 @@ typedef struct dt_dev_pixelpipe_t
   // input data based on this timestamp:
   int input_timestamp;
   dt_dev_pixelpipe_type_t type;
+  // This pipe feeds GUI-side observables such as global histograms and picker
+  // sampling. The processing core reacts to this property instead of branching
+  // on pipeline type.
+  gboolean gui_observable_source;
   // the final output pixel format this pixelpipe will be converted to
   dt_imageio_levels_t levels;
   // opencl device that has been locked for this pipe.
@@ -259,6 +263,10 @@ typedef struct dt_dev_pixelpipe_t
   // between pipe and history. This is a local copy of 
   // dev_history_get_hash()
   uint64_t history_hash;
+  uint32_t recent_runtime_us[5];
+  uint8_t recent_runtime_count;
+  uint8_t recent_runtime_pos;
+  dt_atomic_int avg_runtime_us;
 
   // Modules can set this to TRUE internally so the pipeline will
   // restart right away, in the same thread.

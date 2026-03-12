@@ -556,12 +556,14 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
 
       dt_times_t thread_start;
       dt_get_times(&thread_start);
+      const gint64 process_start_us = g_get_monotonic_time();
 
       dev->progress.completed = 0;
       dev->progress.total = 0;
       int ret = dt_dev_pixelpipe_process(pipe, dev, roi);
       dev->progress.completed = 0;
       dev->progress.total = 0;
+      const gint64 process_runtime_us = g_get_monotonic_time() - process_start_us;
 
       gchar *msg = g_strdup_printf("[dev_process_%s] pipeline processing thread", dt_pixelpipe_get_pipe_name(pipe->type));
       dt_show_times(&thread_start, msg);
@@ -579,6 +581,21 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       else
       {
         _flag_pipe(pipe, ret);
+      }
+
+      if(pipe->status == DT_DEV_PIXELPIPE_VALID && process_runtime_us > 0)
+      {
+        const uint32_t runtime_us = (uint32_t)MIN(process_runtime_us, (gint64)G_MAXUINT32);
+        pipe->recent_runtime_us[pipe->recent_runtime_pos] = runtime_us;
+        if(pipe->recent_runtime_count < G_N_ELEMENTS(pipe->recent_runtime_us))
+          pipe->recent_runtime_count++;
+        pipe->recent_runtime_pos
+            = (uint8_t)((pipe->recent_runtime_pos + 1) % G_N_ELEMENTS(pipe->recent_runtime_us));
+
+        uint64_t runtime_sum = 0;
+        for(uint8_t i = 0; i < pipe->recent_runtime_count; i++)
+          runtime_sum += pipe->recent_runtime_us[i];
+        dt_atomic_set_int(&pipe->avg_runtime_us, (int)(runtime_sum / MAX(pipe->recent_runtime_count, (uint8_t)1)));
       }
 
       pipe->processing = 0;
