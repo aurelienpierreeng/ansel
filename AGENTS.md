@@ -6,6 +6,8 @@ This file defines repository-specific instructions for coding agents working in 
 
 Prefer explicit code at the call site over helper indirection when the code controls behavior, ownership, or synchronization.
 
+Code should be documented through Doxygen docstrings. In particular, the design choices need to be explained. Add in comments explainations on what we are looping on, looking for what.
+
 ## Helper policy
 
 Do not introduce or keep helper functions whose main effect is to hide:
@@ -59,3 +61,19 @@ Assume upstream contracts are valid unless the user asks for defensive programmi
 ## Validation
 
 After non-trivial code changes, run the narrowest relevant build or test target that exercises the edited code.
+
+## Coding style
+
+- Functions that have many input arguments should take structures as input.
+- Comparing large number of variables for equality should be achieved through `memcmp` over data structures when possible.
+- All loops should be parallelized using OpenMP 4.5 when loop iterations write on different addresses and the overhead is worse it. Avoid false sharing on variables. Mind the fact that we also maintain builds without OpenMP.
+- Pixels loops on RGBA should use `dt_aligned_pixel_simd_t` vector type when possible.
+- Prefer linear branching when possible, over deeply nested cumulative conditions.
+- Functions should contain 2 to 3 `if` as much as possible. 
+- Nesting `if` and `switch` on more than 3 levels is forbidden.
+- Create the least amount of data structures.
+- Write the least amount of code.
+- Reuse existing API as much as possible. Extend them if needed.
+- The maximum cyclomatic complexity of a single sourcecode file is 500. If you reach more than that, find a way to topically split features into subfiles.
+- Use the least amount of public API, and keep as much as possible private.
+- Write C in an object-oriented mindset: `.h` are public API, `.c` are private, both should inherit from parent but not from children, they should depend on the least amount of external resources and be fully enclosed (modular). Data structures are classes, they take properties and can take callbacks as methods. Implement abstract API using preprocessor macros.
