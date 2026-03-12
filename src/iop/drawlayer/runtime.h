@@ -51,9 +51,9 @@ typedef struct dt_drawlayer_process_state_t
   /* `process_patch`: mutable, display-sized process tile used internally
    * while painting. Backend stroke workers update this buffer in-place to
    * provide low-latency realtime preview and incremental edits. Access to
-   * `process_patch` and its meta-flags is serialized by
-   * `process_patch_mutex`. Use `process_patch_valid` / `process_patch_dirty`
-   * to query its state. */
+   * `process_patch`, `process_read_patch`, and their meta-flags is serialized
+   * through the cache-patch lock helpers backed by each patch `cache_entry`.
+   * Use `process_patch_valid` / `process_patch_dirty` to query its state. */
   dt_drawlayer_cache_patch_t process_patch;
 
   /* `process_read_patch`: read-only host-side snapshot published for
@@ -63,9 +63,6 @@ typedef struct dt_drawlayer_process_state_t
    * edits. The snapshot may be backed by host-pinned memory for OpenCL and
    * is managed via the cache patch lock helpers (rdlock/wrunlock). */
   dt_drawlayer_cache_patch_t process_read_patch;
-
-  /* Mutex protecting modifications to `process_patch` and related flags. */
-  dt_pthread_mutex_t process_patch_mutex;
 
   /* `stroke_mask`: authoritative full-resolution stroke alpha mask aligned
    * with `base_patch`. This stores accumulated stroke coverage in base/source
@@ -90,6 +87,9 @@ typedef struct dt_drawlayer_process_state_t
   /* true when `process_patch` contains incremental edits that haven't been
    * folded back into `base_patch` (i.e. needs flush). */
   gboolean process_patch_dirty;
+  /* true when `process_read_patch` contains a coherent published snapshot of
+   * `process_patch` for GUI/process consumption. */
+  gboolean process_snapshot_valid;
   dt_drawlayer_damaged_rect_t process_dirty_rect;
   int process_patch_padding;
 #ifdef HAVE_OPENCL
@@ -98,6 +98,7 @@ typedef struct dt_drawlayer_process_state_t
   int process_read_clmem_height;
   int process_read_clmem_devid;
   gboolean process_read_clmem_dirty;
+  dt_drawlayer_damaged_rect_t process_read_clmem_dirty_rect;
 #endif
   dt_iop_roi_t process_combined_roi;
 } dt_drawlayer_process_state_t;
@@ -111,6 +112,8 @@ typedef struct dt_drawlayer_stroke_state_t
   float last_dab_x;
   float last_dab_y;
   gboolean finish_commit_pending;
+  gint64 live_publish_ts;
+  dt_drawlayer_damaged_rect_t live_publish_damage;
   uint32_t current_stroke_batch;
 } dt_drawlayer_stroke_state_t;
 
@@ -428,9 +431,6 @@ void dt_drawlayer_process_state_invalidate(dt_drawlayer_process_state_t *state);
 gboolean dt_drawlayer_process_state_publish_locked(dt_drawlayer_process_state_t *state,
                                                    const dt_drawlayer_damaged_rect_t *damage,
                                                    gboolean full_copy);
-gboolean dt_drawlayer_process_state_lock_view(dt_drawlayer_process_state_t *state, const dt_iop_roi_t *roi_out,
-                                              dt_drawlayer_process_view_t *view);
-void dt_drawlayer_process_state_unlock_view(dt_drawlayer_process_state_t *state);
 void dt_drawlayer_ui_cursor_clear(dt_drawlayer_ui_state_t *state);
 void dt_drawlayer_runtime_manager_init(dt_drawlayer_runtime_manager_t *state);
 void dt_drawlayer_runtime_manager_cleanup(dt_drawlayer_runtime_manager_t *state);

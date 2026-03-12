@@ -65,14 +65,16 @@ void dt_drawlayer_cache_clear_transparent_float(float *pixels, const size_t pixe
 void dt_drawlayer_cache_patch_clear(dt_drawlayer_cache_patch_t *patch, const char *external_alloc_name)
 {
   if(!patch) return;
-  if(patch->cache_entry)
+  if(patch->external_alloc)
   {
-    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, patch->cache_hash, FALSE, patch->cache_entry);
-  }
-  else if(patch->external_alloc && patch->pixels)
-  {
+    if(patch->cache_entry)
+      dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, patch->cache_hash, FALSE, patch->cache_entry);
     void *buffer = patch->pixels;
     dt_pixelpipe_cache_free_align_cache(darktable.pixelpipe_cache, &buffer, external_alloc_name);
+  }
+  else if(patch->cache_entry)
+  {
+    dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, patch->cache_hash, FALSE, patch->cache_entry);
   }
   else
   {
@@ -127,28 +129,32 @@ gboolean dt_drawlayer_cache_patch_alloc_shared(dt_drawlayer_cache_patch_t *patch
 void dt_drawlayer_cache_patch_rdlock(const dt_drawlayer_cache_patch_t *patch)
 {
   if(!patch || !patch->cache_entry) return;
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, patch->cache_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
+                                      patch->cache_entry);
 }
 
 /** @brief Release read lock on shared patch cache entry. */
 void dt_drawlayer_cache_patch_rdunlock(const dt_drawlayer_cache_patch_t *patch)
 {
   if(!patch || !patch->cache_entry) return;
-  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, patch->cache_entry);
+  dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                      patch->cache_entry);
 }
 
 /** @brief Acquire write lock on shared patch cache entry. */
 void dt_drawlayer_cache_patch_wrlock(const dt_drawlayer_cache_patch_t *patch)
 {
   if(!patch || !patch->cache_entry) return;
-  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, patch->cache_entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE,
+                                      patch->cache_entry);
 }
 
 /** @brief Release write lock on shared patch cache entry. */
 void dt_drawlayer_cache_patch_wrunlock(const dt_drawlayer_cache_patch_t *patch)
 {
   if(!patch || !patch->cache_entry) return;
-  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, patch->cache_entry);
+  dt_dev_pixelpipe_cache_wrlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE,
+                                      patch->cache_entry);
 }
 
 /** @brief Reset process-patch validity and dirty-state bookkeeping. */
@@ -187,6 +193,11 @@ gboolean dt_drawlayer_cache_ensure_process_patch_buffer(dt_drawlayer_cache_patch
                                                                  patch_buffer_name);
     process_patch->external_alloc = TRUE;
     if(!process_patch->pixels) return FALSE;
+    process_patch->cache_entry
+        = dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(darktable.pixelpipe_cache, process_patch->pixels);
+    process_patch->cache_hash = process_patch->cache_entry ? process_patch->cache_entry->hash
+                                                           : DT_PIXELPIPE_CACHE_HASH_INVALID;
+    if(!process_patch->cache_entry) return FALSE;
   }
 
   const size_t mask_count = (size_t)width * height;
@@ -202,6 +213,16 @@ gboolean dt_drawlayer_cache_ensure_process_patch_buffer(dt_drawlayer_cache_patch
                                                                         mask_buffer_name);
     process_stroke_mask->external_alloc = TRUE;
     if(!process_stroke_mask->pixels)
+    {
+      process_stroke_mask->width = 0;
+      process_stroke_mask->height = 0;
+      return FALSE;
+    }
+    process_stroke_mask->cache_entry
+        = dt_dev_pixelpipe_cache_ref_entry_for_host_ptr(darktable.pixelpipe_cache, process_stroke_mask->pixels);
+    process_stroke_mask->cache_hash = process_stroke_mask->cache_entry ? process_stroke_mask->cache_entry->hash
+                                                                       : DT_PIXELPIPE_CACHE_HASH_INVALID;
+    if(!process_stroke_mask->cache_entry)
     {
       process_stroke_mask->width = 0;
       process_stroke_mask->height = 0;
@@ -369,11 +390,6 @@ gboolean dt_drawlayer_cache_populate_process_patch_from_base(const dt_drawlayer_
 {
   if(!base_patch || !process_patch || !combined_roi || !base_patch->pixels || base_patch->width <= 0
      || base_patch->height <= 0 || patch_width <= 0 || patch_height <= 0 || combined_roi->scale <= 1e-6f)
-    return FALSE;
-
-  if(!dt_drawlayer_cache_ensure_process_patch_buffer(process_patch, process_stroke_mask,
-                                                     patch_width, patch_height,
-                                                     patch_buffer_name, mask_buffer_name))
     return FALSE;
 
   process_patch->x = 0;
