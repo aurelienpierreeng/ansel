@@ -125,6 +125,17 @@ static void _process_backend_input(dt_iop_module_t *self, const dt_drawlayer_pai
                                    dt_drawlayer_paint_stroke_t *stroke);
 static void _process_backend_dab(dt_iop_module_t *self, const dt_drawlayer_brush_dab_t *dab,
                                  drawlayer_paint_backend_ctx_t *ctx);
+static inline drawlayer_rt_worker_t *_backend_worker(dt_drawlayer_worker_t *rt);
+static inline const drawlayer_rt_worker_t *_backend_worker_const(const dt_drawlayer_worker_t *rt);
+static inline gint64 _live_publish_interval_us(void);
+static inline gboolean _live_publish_deadline_reached(const dt_drawlayer_worker_t *rt, const gint64 input_ts,
+                                                      const gint64 interval_us);
+static inline drawlayer_paint_backend_ctx_t _make_backend_ctx(dt_iop_module_t *self, dt_drawlayer_worker_t *worker,
+                                                              dt_drawlayer_paint_stroke_t *stroke);
+static guint _rasterize_pending_dab_batch(drawlayer_paint_backend_ctx_t *ctx, gint64 budget_us);
+static void _drain_queued_raw_inputs_locked(dt_drawlayer_worker_t *worker);
+static gboolean _rt_queue_pop_locked(dt_drawlayer_worker_t *rt,
+                                     dt_drawlayer_paint_raw_input_t *event);
 static drawlayer_fullres_replay_scratch_t *_get_fullres_replay_scratch(void);
 static float *_ensure_fullres_replay_float_buffer(float **buffer, size_t *capacity_values, size_t needed_values);
 
@@ -317,11 +328,7 @@ static void _process_backend_input(dt_iop_module_t *self, const dt_drawlayer_pai
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
   if(!g || !input || !stroke) return;
 
-  drawlayer_paint_backend_ctx_t ctx = {
-    .self = self,
-    .worker = g->stroke.worker,
-    .stroke = stroke,
-  };
+  drawlayer_paint_backend_ctx_t ctx = _make_backend_ctx(self, g->stroke.worker, stroke);
   const dt_drawlayer_paint_callbacks_t callbacks = {
     .build_dab = _paint_build_dab_cb,
     .layer_to_widget = _paint_layer_to_widget_cb,
@@ -333,28 +340,14 @@ static void _process_backend_input(dt_iop_module_t *self, const dt_drawlayer_pai
 
   if(stroke->pending_dabs && stroke->pending_dabs->len > 0)
   {
-    const gint64 live_publish_interval_us
-        = MAX((gint64)dt_gui_throttle_get_pipe_runtime_us(DT_DEV_PIXELPIPE_FULL), (gint64)20000);
+    const gint64 live_publish_interval_us = _live_publish_interval_us();
     const gint64 input_ts = input->event_ts ? input->event_ts : g_get_monotonic_time();
     if(ctx.worker && ctx.worker->live_publish_ts == 0)
       ctx.worker->live_publish_ts = input_ts - live_publish_interval_us;
 
-    if(ctx.worker && input_ts - ctx.worker->live_publish_ts >= live_publish_interval_us)
+    if(_live_publish_deadline_reached(ctx.worker, input_ts, live_publish_interval_us))
     {
-      dt_drawlayer_cache_patch_wrlock(&g->process.process_patch);
-      guint processed_dabs = 0;
-      const double batch_t0 = dt_get_wtime();
-      while(processed_dabs < stroke->pending_dabs->len)
-      {
-        const dt_drawlayer_brush_dab_t *dab
-            = &g_array_index(stroke->pending_dabs, dt_drawlayer_brush_dab_t, processed_dabs);
-        _process_backend_dab(self, dab, &ctx);
-        processed_dabs++;
-        const gint64 elapsed_us = (gint64)(1000000.0 * (dt_get_wtime() - batch_t0));
-        if(elapsed_us >= live_publish_interval_us) break;
-      }
-      if(processed_dabs > 0) g_array_remove_range(stroke->pending_dabs, 0, processed_dabs);
-      dt_drawlayer_cache_patch_wrunlock(&g->process.process_patch);
+      const guint processed_dabs = _rasterize_pending_dab_batch(&ctx, live_publish_interval_us);
       if(processed_dabs > 0) _publish_backend_progress(&ctx, TRUE);
     }
   }
@@ -724,10 +717,78 @@ static void _reset_live_publish(dt_drawlayer_worker_t *rt)
   dt_drawlayer_paint_runtime_state_reset(&rt->live_publish_damage);
 }
 
+static inline drawlayer_rt_worker_t *_backend_worker(dt_drawlayer_worker_t *rt)
+{
+  return rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+}
+
+static inline const drawlayer_rt_worker_t *_backend_worker_const(const dt_drawlayer_worker_t *rt)
+{
+  return rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+}
+
+static inline gint64 _live_publish_interval_us(void)
+{
+  return MAX((gint64)dt_gui_throttle_get_pipe_runtime_us(DT_DEV_PIXELPIPE_FULL), (gint64)20000);
+}
+
+static inline gboolean _live_publish_deadline_reached(const dt_drawlayer_worker_t *rt, const gint64 input_ts,
+                                                      const gint64 interval_us)
+{
+  return rt && input_ts - rt->live_publish_ts >= interval_us;
+}
+
+static inline drawlayer_paint_backend_ctx_t _make_backend_ctx(dt_iop_module_t *self, dt_drawlayer_worker_t *worker,
+                                                              dt_drawlayer_paint_stroke_t *stroke)
+{
+  return (drawlayer_paint_backend_ctx_t){
+    .self = self,
+    .worker = worker,
+    .stroke = stroke,
+  };
+}
+
+static guint _rasterize_pending_dab_batch(drawlayer_paint_backend_ctx_t *ctx, gint64 budget_us)
+{
+  dt_iop_drawlayer_gui_data_t *g = (ctx && ctx->self) ? (dt_iop_drawlayer_gui_data_t *)ctx->self->gui_data : NULL;
+  dt_drawlayer_paint_stroke_t *stroke = ctx ? ctx->stroke : NULL;
+  if(!g || !stroke || !stroke->pending_dabs || stroke->pending_dabs->len == 0) return 0;
+
+  dt_drawlayer_cache_patch_wrlock(&g->process.process_patch);
+  guint processed_dabs = 0;
+  const double batch_t0 = dt_get_wtime();
+  while(processed_dabs < stroke->pending_dabs->len)
+  {
+    const dt_drawlayer_brush_dab_t *dab
+        = &g_array_index(stroke->pending_dabs, dt_drawlayer_brush_dab_t, processed_dabs);
+    _process_backend_dab(ctx->self, dab, ctx);
+    processed_dabs++;
+
+    if(budget_us > 0)
+    {
+      const gint64 elapsed_us = (gint64)(1000000.0 * (dt_get_wtime() - batch_t0));
+      if(elapsed_us >= budget_us) break;
+    }
+  }
+  if(processed_dabs > 0) g_array_remove_range(stroke->pending_dabs, 0, processed_dabs);
+  dt_drawlayer_cache_patch_wrunlock(&g->process.process_patch);
+  return processed_dabs;
+}
+
+static void _drain_queued_raw_inputs_locked(dt_drawlayer_worker_t *worker)
+{
+  if(!worker->stroke_raw_inputs)
+    worker->stroke_raw_inputs = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_paint_raw_input_t));
+
+  dt_drawlayer_paint_raw_input_t event = { 0 };
+  while(worker->stroke_raw_inputs && _rt_queue_pop_locked(worker, &event))
+    g_array_append_val(worker->stroke_raw_inputs, event);
+}
+
 /** @brief Clear queued events (lock must be held). */
 static void _rt_queue_clear_locked(dt_drawlayer_worker_t *rt)
 {
-  drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+  drawlayer_rt_worker_t *worker = _backend_worker(rt);
   if(!worker) return;
   worker->ring_head = 0;
   worker->ring_tail = 0;
@@ -737,14 +798,14 @@ static void _rt_queue_clear_locked(dt_drawlayer_worker_t *rt)
 /** @brief Test whether event queue is empty. */
 static gboolean _rt_queue_empty(const dt_drawlayer_worker_t *rt)
 {
-  const drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+  const drawlayer_rt_worker_t *worker = _backend_worker_const(rt);
   return !worker || worker->ring_count == 0;
 }
 
 /** @brief Test whether event queue is full. */
 static gboolean _rt_queue_full(const dt_drawlayer_worker_t *rt)
 {
-  const drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+  const drawlayer_rt_worker_t *worker = _backend_worker_const(rt);
   return !worker || (worker->ring_capacity > 0 && worker->ring_count >= worker->ring_capacity);
 }
 
@@ -752,7 +813,7 @@ static gboolean _rt_queue_full(const dt_drawlayer_worker_t *rt)
 static gboolean _rt_queue_push_locked(dt_drawlayer_worker_t *rt,
                                       const dt_drawlayer_paint_raw_input_t *event)
 {
-  drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+  drawlayer_rt_worker_t *worker = _backend_worker(rt);
   if(!worker || !event || !worker->ring || worker->ring_capacity == 0 || _rt_queue_full(rt)) return FALSE;
   worker->ring[worker->ring_tail] = *event;
   worker->ring_tail = (worker->ring_tail + 1) % worker->ring_capacity;
@@ -764,7 +825,7 @@ static gboolean _rt_queue_push_locked(dt_drawlayer_worker_t *rt,
 static gboolean _rt_queue_pop_locked(dt_drawlayer_worker_t *rt,
                                      dt_drawlayer_paint_raw_input_t *event)
 {
-  drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+  drawlayer_rt_worker_t *worker = _backend_worker(rt);
   if(!worker || !event || !worker->ring || worker->ring_capacity == 0 || _rt_queue_empty(rt)) return FALSE;
   *event = worker->ring[worker->ring_head];
   worker->ring_head = (worker->ring_head + 1) % worker->ring_capacity;
@@ -807,7 +868,7 @@ static inline gboolean _fullres_worker_busy(const dt_drawlayer_worker_t *rt)
 /** @brief Set worker state atomically under caller synchronization. */
 static void _rt_set_worker_state(dt_drawlayer_worker_t *rt, const dt_drawlayer_worker_state_t state)
 {
-  drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+  drawlayer_rt_worker_t *worker = _backend_worker(rt);
   if(worker) worker->state = state;
 }
 
@@ -828,7 +889,7 @@ static void _set_current_thread_realtime_best_effort(void)
 /** @brief Check whether workers still have pending activity (lock must be held). */
 static gboolean _workers_active_locked(const dt_drawlayer_worker_t *rt)
 {
-  const drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+  const drawlayer_rt_worker_t *worker = _backend_worker_const(rt);
   return worker && (_worker_is_busy(worker) || worker->ring_count > 0
                     || (rt->finish_commit_pending && *rt->finish_commit_pending));
 }
@@ -849,7 +910,7 @@ static gboolean _workers_any_active_locked(const dt_drawlayer_worker_t *rt)
 /** @brief Check if workers are idle and commit can be safely scheduled. */
 static gboolean _workers_ready_for_commit_locked(const dt_drawlayer_worker_t *rt)
 {
-  const drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+  const drawlayer_rt_worker_t *worker = _backend_worker_const(rt);
   return worker && rt->finish_commit_pending && rt->painting
          && *rt->finish_commit_pending && !*rt->painting
          && !_worker_is_busy(worker) && worker->ring_count == 0;
@@ -906,30 +967,10 @@ static void _schedule_async_commit_if_ready_locked(dt_drawlayer_worker_t *rt)
 static void _backend_worker_on_idle(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
   dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-  drawlayer_paint_backend_ctx_t ctx = {
-    .self = self,
-    .worker = rt,
-    .stroke = rt ? rt->stroke : NULL,
-  };
+  drawlayer_paint_backend_ctx_t ctx = _make_backend_ctx(self, rt, rt ? rt->stroke : NULL);
   if(self && g && rt && rt->stroke && rt->stroke->pending_dabs && rt->stroke->pending_dabs->len > 0)
   {
-    const gint64 live_publish_interval_us
-        = MAX((gint64)dt_gui_throttle_get_pipe_runtime_us(DT_DEV_PIXELPIPE_FULL), (gint64)20000);
-
-    dt_drawlayer_cache_patch_wrlock(&g->process.process_patch);
-    guint processed_dabs = 0;
-    const double batch_t0 = dt_get_wtime();
-    while(processed_dabs < rt->stroke->pending_dabs->len)
-    {
-      const dt_drawlayer_brush_dab_t *dab
-          = &g_array_index(rt->stroke->pending_dabs, dt_drawlayer_brush_dab_t, processed_dabs);
-      _process_backend_dab(self, dab, &ctx);
-      processed_dabs++;
-      const gint64 elapsed_us = (gint64)(1000000.0 * (dt_get_wtime() - batch_t0));
-      if(elapsed_us >= live_publish_interval_us) break;
-    }
-    if(processed_dabs > 0) g_array_remove_range(rt->stroke->pending_dabs, 0, processed_dabs);
-    dt_drawlayer_cache_patch_wrunlock(&g->process.process_patch);
+    const guint processed_dabs = _rasterize_pending_dab_batch(&ctx, _live_publish_interval_us());
     if(processed_dabs > 0) _publish_backend_progress(&ctx, TRUE);
     return;
   }
@@ -965,11 +1006,7 @@ static void _backend_worker_process_stroke_end(dt_iop_module_t *self, dt_drawlay
   if(rt->stroke)
   {
     dt_iop_drawlayer_gui_data_t *g = self ? (dt_iop_drawlayer_gui_data_t *)self->gui_data : NULL;
-    drawlayer_paint_backend_ctx_t ctx = {
-      .self = self,
-      .worker = rt,
-      .stroke = rt->stroke,
-    };
+    drawlayer_paint_backend_ctx_t ctx = _make_backend_ctx(self, rt, rt->stroke);
     const dt_drawlayer_paint_callbacks_t callbacks = {
       .build_dab = _paint_build_dab_cb,
       .layer_to_widget = _paint_layer_to_widget_cb,
@@ -979,20 +1016,9 @@ static void _backend_worker_process_stroke_end(dt_iop_module_t *self, dt_drawlay
     if(g)
     {
       dt_drawlayer_paint_finalize_path(rt->stroke, &callbacks, &ctx);
-      dt_drawlayer_cache_patch_wrlock(&g->process.process_patch);
-      if(rt->stroke->pending_dabs)
-      {
-        for(guint i = 0; i < rt->stroke->pending_dabs->len; i++)
-        {
-          const dt_drawlayer_brush_dab_t *dab
-              = &g_array_index(rt->stroke->pending_dabs, dt_drawlayer_brush_dab_t, i);
-          _process_backend_dab(self, dab, &ctx);
-        }
-        g_array_set_size(rt->stroke->pending_dabs, 0);
-      }
-      dt_drawlayer_cache_patch_wrunlock(&g->process.process_patch);
+      _rasterize_pending_dab_batch(&ctx, 0);
+      _publish_backend_progress(&ctx, TRUE);
     }
-    _publish_backend_progress(&ctx, TRUE);
   }
   _enqueue_finished_stroke(rt);
   dt_pthread_mutex_lock(&rt->worker_mutex);
@@ -1016,7 +1042,7 @@ static void _rt_destroy_state(dt_iop_module_t *self, dt_drawlayer_worker_t **rt_
 {
   if(!rt_out || !*rt_out) return;
   dt_drawlayer_worker_t *rt = *rt_out;
-  drawlayer_rt_worker_t *worker = &rt->workers[DRAWLAYER_RT_WORKER_BACKEND];
+  drawlayer_rt_worker_t *worker = _backend_worker(rt);
   _stop_worker(self ? self : rt->self, rt);
   _stroke_destroy(rt);
   if(rt->backend_history) g_array_free(rt->backend_history, TRUE);
@@ -1058,7 +1084,7 @@ static void _rt_init_state(dt_iop_module_t *self, dt_drawlayer_worker_t **rt_out
   dt_pthread_mutex_init(&rt->worker_mutex, NULL);
   pthread_cond_init(&rt->worker_cond, NULL);
 
-  drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+  drawlayer_rt_worker_t *worker = _backend_worker(rt);
   worker->ring_capacity = DRAWLAYER_WORKER_RING_CAPACITY;
   worker->ring = g_malloc_n(worker->ring_capacity, sizeof(dt_drawlayer_paint_raw_input_t));
   rt->backend_history = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_brush_dab_t));
@@ -1078,7 +1104,7 @@ static void _rt_cleanup_state(dt_drawlayer_worker_t **rt_out)
 static gboolean _wait_worker_idle(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
   (void)self;
-  const drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+  const drawlayer_rt_worker_t *worker = _backend_worker_const(rt);
   if(!rt || !worker || !_worker_is_started(worker)) return TRUE;
 
   dt_pthread_mutex_lock(&rt->worker_mutex);
@@ -1254,7 +1280,7 @@ static void *_drawlayer_worker_main(void *user_data)
   dt_free(ctx);
 
   dt_iop_module_t *self = rt ? rt->self : NULL;
-  drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+  drawlayer_rt_worker_t *worker = _backend_worker(rt);
   const drawlayer_rt_callbacks_t *cb = &_rt_callbacks[DRAWLAYER_RT_WORKER_BACKEND];
   if(!self || !rt || !worker || !cb) return NULL;
 
@@ -1331,7 +1357,7 @@ static void *_drawlayer_worker_main(void *user_data)
 /** @brief Start backend worker thread if not running. */
 static gboolean _start_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
-  drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+  drawlayer_rt_worker_t *worker = _backend_worker(rt);
   if(!self || !rt || !worker) return FALSE;
   if(_worker_is_started(worker))
   {
@@ -1376,7 +1402,7 @@ static void _cancel_async_commit(dt_drawlayer_worker_t *rt)
 /** @brief Stop worker thread and clear transient state. */
 static void _stop_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
-  drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+  drawlayer_rt_worker_t *worker = _backend_worker(rt);
   _cancel_async_commit(rt);
   if(!rt) return;
 
@@ -1415,7 +1441,7 @@ static void _stop_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 static void _pause_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
   (void)self;
-  drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+  drawlayer_rt_worker_t *worker = _backend_worker(rt);
   if(!rt || !worker || !_worker_is_started(worker)) return;
 
   dt_pthread_mutex_lock(&rt->worker_mutex);
@@ -1430,7 +1456,7 @@ static void _pause_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 static void _resume_worker(dt_iop_module_t *self, dt_drawlayer_worker_t *rt)
 {
   (void)self;
-  drawlayer_rt_worker_t *worker = rt ? &rt->workers[DRAWLAYER_RT_WORKER_BACKEND] : NULL;
+  drawlayer_rt_worker_t *worker = _backend_worker(rt);
   if(!rt || !worker || !_worker_is_started(worker)) return;
 
   dt_pthread_mutex_lock(&rt->worker_mutex);
@@ -1474,7 +1500,7 @@ static gboolean _enqueue_input(dt_iop_module_t *self, dt_drawlayer_worker_t *rt,
     /* Saturated queue policy: abort current stroke deterministically instead of
      * silently dropping or coalescing raw input events. Keep FIFO backlog and
      * force a stroke end at the newest queued slot. */
-    drawlayer_rt_worker_t *worker = &rt->workers[DRAWLAYER_RT_WORKER_BACKEND];
+    drawlayer_rt_worker_t *worker = _backend_worker(rt);
     dt_drawlayer_paint_raw_input_t end_input = *input;
     end_input.stroke_pos = DT_DRAWLAYER_PAINT_STROKE_END;
     end_input.event_index = input->event_index + 1u;
@@ -1559,7 +1585,7 @@ void dt_drawlayer_worker_get_snapshot(const dt_drawlayer_worker_t *worker,
   if(!rt || !snapshot) return;
 
   dt_pthread_mutex_lock(&rt->worker_mutex);
-  const drawlayer_rt_worker_t *backend = &rt->workers[DRAWLAYER_RT_WORKER_BACKEND];
+  const drawlayer_rt_worker_t *backend = _backend_worker_const(rt);
   snapshot->backend_state = backend->state;
   snapshot->backend_queue_count = backend->ring_count;
   snapshot->fullres_state = rt->fullres_state;
@@ -1598,19 +1624,15 @@ void dt_drawlayer_worker_seal_for_commit(dt_drawlayer_worker_t *worker)
   _pause_worker(worker->self, worker);
 
   dt_pthread_mutex_lock(&worker->worker_mutex);
-  if(!worker->stroke_raw_inputs)
-    worker->stroke_raw_inputs = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_paint_raw_input_t));
-
-  dt_drawlayer_paint_raw_input_t event = { 0 };
-  while(worker->stroke_raw_inputs && _rt_queue_pop_locked(worker, &event))
-    g_array_append_val(worker->stroke_raw_inputs, event);
+  _drain_queued_raw_inputs_locked(worker);
 
   if(worker->stroke && worker->stroke->pending_dabs)
     g_array_set_size(worker->stroke->pending_dabs, 0);
   if(worker->stroke && worker->stroke->dab_window)
     g_array_set_size(worker->stroke->dab_window, 0);
 
-  worker->workers[DRAWLAYER_RT_WORKER_BACKEND].state = DT_DRAWLAYER_WORKER_STATE_IDLE;
+  drawlayer_rt_worker_t *backend = _backend_worker(worker);
+  backend->state = DT_DRAWLAYER_WORKER_STATE_IDLE;
   pthread_cond_broadcast(&worker->worker_cond);
   dt_pthread_mutex_unlock(&worker->worker_mutex);
 }
