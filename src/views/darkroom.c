@@ -758,6 +758,33 @@ static inline gboolean _previous_main_surface_roi_valid(const dt_develop_t *dev,
          && main_zoom_hash == zoom_hash;
 }
 
+static inline gboolean _locked_surface_matches_full_image(const dt_develop_t *dev,
+                                                          const darkroom_locked_surface_t *locked)
+{
+  if(!dev || !locked || !locked->surface) return FALSE;
+  const int full_width = (int)lround((double)dev->roi.preview_width * darktable.gui->ppd);
+  const int full_height = (int)lround((double)dev->roi.preview_height * darktable.gui->ppd);
+  return full_width > 0 && full_height > 0
+         && locked->width == full_width && locked->height == full_height;
+}
+
+static gboolean _render_fullsize_preview_as_main(cairo_t *cr, dt_develop_t *dev, const int width, const int height,
+                                                  const int border, const dt_aligned_pixel_t bg_color,
+                                                  const uint64_t zoom_hash, uint64_t *main_hash,
+                                                  uint64_t *main_zoom_hash, int32_t *image_surface_imgid)
+{
+  if(!_lock_pipe_surface(dev, dev->preview_pipe, &_darkroom_preview_locked, TRUE, TRUE)
+     || !_locked_surface_matches_full_image(dev, &_darkroom_preview_locked))
+    return FALSE;
+
+  if(!_render_main_locked_surface(cr, dev, &_darkroom_preview_locked, width, height, border, bg_color))
+    return FALSE;
+
+  _set_main_render_success(dev, _darkroom_preview_locked.hash, zoom_hash, main_hash, main_zoom_hash,
+                           image_surface_imgid);
+  return TRUE;
+}
+
 static gboolean _render_realtime_main(cairo_t *cr, dt_develop_t *dev, const int width, const int height,
                                       const int border, const dt_aligned_pixel_t bg_color, const uint64_t zoom_hash,
                                       uint64_t *main_hash, uint64_t *main_zoom_hash, int32_t *image_surface_imgid)
@@ -989,11 +1016,21 @@ static gboolean _darkroom_try_render_main_sources(const darkroom_expose_request_
       _darkroom_set_draw_result(result, TRUE, "fresh main backbuf", _darkroom_main_locked.hash);
       return TRUE;
     }
+
+    if(_render_fullsize_preview_as_main(req->cr, req->dev, req->width, req->height, req->border, req->bg_color,
+                                        req->zoom_hash, &state->main_hash, &state->main_zoom_hash,
+                                        &state->image_surface_imgid))
+    {
+      _darkroom_set_draw_result(result, TRUE, "fresh full-size preview backbuf",
+                                _darkroom_preview_locked.hash);
+      return TRUE;
+    }
   }
   else
   {
     /* Normal mode:
      * - first attempt strict-valid main,
+     * - then accept a same-size preview frame as a full image,
      * - then keep previous main if ROI is unchanged,
      * - then preview fallback tiers. */
     if(_render_nonrealtime_main(req->cr, req->dev, req->width, req->height, req->border, req->bg_color,
@@ -1001,6 +1038,15 @@ static gboolean _darkroom_try_render_main_sources(const darkroom_expose_request_
                                 &state->main_hash, &state->main_zoom_hash, &state->image_surface_imgid))
     {
       _darkroom_set_draw_result(result, TRUE, "fresh main backbuf", _darkroom_main_locked.hash);
+      return TRUE;
+    }
+
+    if(_render_fullsize_preview_as_main(req->cr, req->dev, req->width, req->height, req->border, req->bg_color,
+                                        req->zoom_hash, &state->main_hash, &state->main_zoom_hash,
+                                        &state->image_surface_imgid))
+    {
+      _darkroom_set_draw_result(result, TRUE, "fresh full-size preview backbuf",
+                                _darkroom_preview_locked.hash);
       return TRUE;
     }
   }
