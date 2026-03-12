@@ -587,11 +587,7 @@ static inline void dt_sfence()
   // the following generates an MFENCE instruction on x86/x64.  We
   // only really need SFENCE, which is less expensive, but none of the
   // other memory orders generate *any* fence instructions on x64.
-#ifdef __cplusplus
-  std::atomic_thread_fence(std::memory_order_seq_cst);
-#else
-  atomic_thread_fence(memory_order_seq_cst);
-#endif
+  __atomic_thread_fence(__ATOMIC_SEQ_CST);
 #endif
 }
 
