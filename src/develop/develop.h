@@ -394,7 +394,6 @@ typedef struct dt_develop_t
 
   gboolean darkroom_skip_mouse_events; // skip mouse events for masks
   gboolean mask_lock;
-  gint drawing_timeout;
 
   cairo_surface_t *image_surface;
 

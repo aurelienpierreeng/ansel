@@ -61,12 +61,12 @@
 #include "bauhaus/bauhaus.h"
 #include "common/calculator.h"
 #include "common/math.h"
-#include "control/conf.h"
 #include "common/debug.h"
 #include "control/control.h"
 
 
 #include "gui/color_picker_proxy.h"
+#include "gui/gui_throttle.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
@@ -870,10 +870,10 @@ static gboolean _enter_leave(GtkWidget *widget, GdkEventCrossing *event)
 static void _widget_finalize(GObject *widget)
 {
   struct dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
+  dt_gui_throttle_cancel(widget);
   if(w->type == DT_BAUHAUS_SLIDER)
   {
     dt_bauhaus_slider_data_t *d = &w->data.slider;
-    if(d->timeout_handle) g_source_remove(d->timeout_handle);
     dt_free(d->grad_pos);
   }
   else
@@ -1137,7 +1137,6 @@ static void _bauhaus_widget_init(dt_bauhaus_t *bauhaus, dt_bauhaus_widget_t *w, 
   w->quad_paint_data = NULL;
   w->quad_toggle = 0;
   w->show_quad = TRUE;
-  w->timeout = dt_conf_get_int("processing/timeout");
   w->expand = TRUE;
 
   gtk_widget_add_events(GTK_WIDGET(w), GDK_POINTER_MOTION_MASK
@@ -1436,7 +1435,6 @@ GtkWidget *dt_bauhaus_slider_from_widget(dt_bauhaus_t *bh, dt_bauhaus_widget_t *
   d->fill_feedback = feedback;
 
   d->is_dragging = 0;
-  d->timeout_handle = 0;
 
   dt_gui_add_class(GTK_WIDGET(w), "bauhaus_slider");
 
@@ -1480,7 +1478,6 @@ void dt_bauhaus_combobox_from_widget(dt_bauhaus_t *bh, dt_bauhaus_widget_t* w,dt
   d->entries_ellipsis = PANGO_ELLIPSIZE_END;
   d->populate = NULL;
   d->text = NULL;
-  d->timeout_handle = 0;
 
   dt_gui_add_class(GTK_WIDGET(w), "bauhaus_combobox");
 
@@ -1655,17 +1652,15 @@ void dt_bauhaus_combobox_set_text(GtkWidget *widget, const char *text)
 }
 
 
-static gint _delayed_combobox_commit(gpointer data)
+static void _delayed_combobox_commit(gpointer data)
 {
   // Commit combobox value change to pipeline history, handling a safety timout
   // so incremental scrollings don't trigger a recompute at every scroll step.
   struct dt_bauhaus_widget_t *w = data;
-  dt_bauhaus_combobox_data_t *d = &w->data.combobox;
-  d->timeout_handle = 0;
 
   // If a reset started after the timeout was scheduled (e.g. while reloading history,
   // applying a style, etc.), don't commit anything to history from this stale callback.
-  if(darktable.gui && darktable.gui->reset) return G_SOURCE_REMOVE;
+  if(darktable.gui && darktable.gui->reset) return;
 
   if(w->use_default_callback)
   {
@@ -1684,8 +1679,6 @@ static gint _delayed_combobox_commit(gpointer data)
 
   // We need te emit this signal inconditionnaly
   g_signal_emit_by_name(G_OBJECT(w), "value-changed");
-
-  return G_SOURCE_REMOVE;
 }
 
 /**
@@ -1707,11 +1700,7 @@ void _combobox_set(GtkWidget *widget, const int pos, gboolean timeout)
 
   // When updating programmatically (GUI reset), ensure no delayed commit from a
   // previous user interaction survives, even if the value doesn't change.
-  if(darktable.gui->reset && d->timeout_handle)
-  {
-    g_source_remove(d->timeout_handle);
-    d->timeout_handle = 0;
-  }
+  if(darktable.gui->reset) dt_gui_throttle_cancel(widget);
 
   if(old_pos != new_pos)
   {
@@ -1725,18 +1714,15 @@ void _combobox_set(GtkWidget *widget, const int pos, gboolean timeout)
     // If a delayed commit is pending from a previous user interaction, cancel it.
     // This is especially important when updating widgets programmatically (during GUI reset),
     // as we don't want stale timeouts to later emit "value-changed" and commit to history.
-    if(d->timeout_handle)
-    {
-      g_source_remove(d->timeout_handle);
-      d->timeout_handle = 0;
-    }
-
     if(!darktable.gui->reset)
     {
-      if (w->timeout > 0)
-        d->timeout_handle = g_timeout_add(w->timeout, _delayed_combobox_commit, w);
+      if(timeout)
+        dt_gui_throttle_queue(widget, _delayed_combobox_commit, w);
       else
+      {
+        dt_gui_throttle_cancel(widget);
         _delayed_combobox_commit(w);
+      }
     }
   }
 }
@@ -2730,8 +2716,7 @@ static gboolean dt_bauhaus_combobox_button_press(GtkWidget *widget, GdkEventButt
   _bh_active_region_t activated = _bh_get_active_region(widget, &event_x, &event_y, &width, NULL);
 
   dt_bauhaus_combobox_data_t *d = &w->data.combobox;
-  if(d->timeout_handle) g_source_remove(d->timeout_handle);
-  d->timeout_handle = 0;
+  dt_gui_throttle_cancel(widget);
 
   if(activated == BH_REGION_OUT)
   {
@@ -2919,16 +2904,15 @@ void dt_bauhaus_slider_set_offset(GtkWidget *widget, float offset)
   d->offset = offset;
 }
 
-static gboolean _delayed_slider_commit(gpointer data)
+static void _delayed_slider_commit(gpointer data)
 {
   // Commit slider value change to pipeline history, handling a safety timout
   // so incremental scrolls don't trigger a recompute at every scroll step.
   struct dt_bauhaus_widget_t *w = data;
-  w->data.slider.timeout_handle = 0;
 
   // If a reset started after the timeout was scheduled (e.g. while reloading history,
   // applying a style, etc.), don't commit anything to history from this stale callback.
-  if(darktable.gui && darktable.gui->reset) return G_SOURCE_REMOVE;
+  if(darktable.gui && darktable.gui->reset) return;
 
   if(w->use_default_callback)
   {
@@ -2947,8 +2931,6 @@ static gboolean _delayed_slider_commit(gpointer data)
 
   // We need te emit this signal inconditionnaly
   g_signal_emit_by_name(G_OBJECT(w), "value-changed");
-
-  return G_SOURCE_REMOVE;
 }
 
 /**
@@ -2984,18 +2966,19 @@ static void dt_bauhaus_slider_set_normalized(struct dt_bauhaus_widget_t *w, floa
     // If a delayed commit is pending from a previous user interaction, cancel it.
     // This prevents stale timers from firing after programmatic updates (GUI reset)
     // and unexpectedly committing module changes to history.
-    if(d->timeout_handle)
-    {
-      g_source_remove(d->timeout_handle);
-      d->timeout_handle = 0;
-    }
-
     if(!darktable.gui->reset && raise)
     {
-      if (w->timeout > 0)
-        d->timeout_handle = g_timeout_add(w->timeout, _delayed_slider_commit, w);
+      if(timeout)
+        dt_gui_throttle_queue(GTK_WIDGET(w), _delayed_slider_commit, w);
       else
+      {
+        dt_gui_throttle_cancel(GTK_WIDGET(w));
         _delayed_slider_commit(w);
+      }
+    }
+    else if(!raise || darktable.gui->reset)
+    {
+      dt_gui_throttle_cancel(GTK_WIDGET(w));
     }
   }
 }
@@ -3204,8 +3187,7 @@ static gboolean dt_bauhaus_slider_button_release(GtkWidget *widget, GdkEventButt
   if(d->is_dragging)
   {
     d->is_dragging = 0;
-    if(d->timeout_handle) g_source_remove(d->timeout_handle);
-    d->timeout_handle = 0;
+    dt_gui_throttle_cancel(widget);
 
     if(event->button == 1)
     {

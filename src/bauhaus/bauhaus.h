@@ -114,7 +114,6 @@ typedef struct dt_bauhaus_slider_data_t
   float offset;         // addition before printing
 
   gboolean is_dragging;      // indicates is mouse is dragging slider
-  guint timeout_handle; // used to store id of timeout routine
 } dt_bauhaus_slider_data_t;
 
 typedef enum dt_bauhaus_combobox_alignment_t
@@ -143,7 +142,6 @@ typedef struct dt_bauhaus_combobox_data_t
   char *text;           // to hold arbitrary text if editable
   PangoEllipsizeMode entries_ellipsis;
   GPtrArray *entries;
-  guint timeout_handle; // used to store id of timeout routine
   void (*populate)(GtkWidget *w, void *module); // function to populate the combo list on the fly
 } dt_bauhaus_combobox_data_t;
 
@@ -195,8 +193,6 @@ typedef struct dt_bauhaus_widget_t
 
   // margin and padding structure, defined in css, retrieve on each draw
   GtkBorder *margin, *padding;
-
-  int timeout;
 
   // TRUE if accels should not be enabled here.
   // Use that for blending

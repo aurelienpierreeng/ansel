@@ -199,6 +199,13 @@
     <shortdescription>Pipe recompute timeout (milliseconds)</shortdescription>
     <longdescription>Timeout preventing intermediate setting steps (e.g. while scrolling) to recompute the pipeline too often. Set to 0 to recompute immediately on module change.</longdescription>
   </dtconfig>
+  <dtconfig>
+    <name>processing/gui_throttle_runtime_us</name>
+    <type min="0">int</type>
+    <default>0</default>
+    <shortdescription>Stored GUI throttle pipeline runtime (microseconds)</shortdescription>
+    <longdescription>Saved app-wide average runtime of the last darkroom GUI pipeline runs, reused to seed GUI throttling on startup.</longdescription>
+  </dtconfig>
   <dtconfig prefs="processing" section="cpugpu">
     <name>cache_disk_backend</name>
     <type>bool</type>

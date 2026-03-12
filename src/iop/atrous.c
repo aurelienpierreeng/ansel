@@ -1080,7 +1080,7 @@ static void reset_mix(dt_iop_module_t *self)
 void gui_update(struct dt_iop_module_t *self)
 {
   reset_mix(self);
-  dt_iop_cancel_history_update(self);
+  dt_gui_throttle_cancel(self);
   gtk_widget_queue_draw(self->widget);
 }
 
@@ -1466,7 +1466,7 @@ static gboolean area_motion_notify(GtkWidget *widget, GdkEventMotion *event, gpo
       get_params(p, c->channel2, c->mouse_x, c->mouse_y + c->mouse_pick, c->mouse_radius);
     }
     gtk_widget_queue_draw(widget);
-    dt_iop_queue_history_update(self, FALSE);
+    dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
   }
   else if(event->y > height)
   {
@@ -1661,7 +1661,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
   dt_iop_atrous_gui_data_t *c = (dt_iop_atrous_gui_data_t *)self->gui_data;
   dt_conf_set_int("plugins/darkroom/atrous/gui_channel", c->channel);
   dt_draw_curve_destroy(c->minmax_curve);
-  dt_iop_cancel_history_update(self);
+  dt_gui_throttle_cancel(self);
 
   IOP_GUI_FREE;
 }

@@ -90,6 +90,7 @@
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
+#include "gui/gui_throttle.h"
 #include "gui/presets.h"
 #include "libs/modulegroups.h"
 #ifdef GDK_WINDOWING_QUARTZ
@@ -2803,37 +2804,10 @@ gboolean dt_iop_is_first_instance(GList *modules, dt_iop_module_t *module)
   return is_first;
 }
 
-static gboolean _postponed_history_update(gpointer data)
+void dt_iop_throttled_history_update(gpointer data)
 {
   dt_iop_module_t *self = (dt_iop_module_t*)data;
   dt_dev_add_history_item(darktable.develop, self, TRUE, TRUE);
-  self->timeout_handle = 0;
-  return FALSE; //cancel the timer
-}
-
-/** queue a delayed call of the add_history function after user interaction, to capture parameter updates (but not */
-/** too often). */
-void dt_iop_queue_history_update(dt_iop_module_t *module, gboolean extend_prior)
-{
-  if (module->timeout_handle && extend_prior)
-  {
-    // we already queued an update, but we don't want to have the update happen until the timeout expires
-    // without any activity, so cancel the queued callback
-    g_source_remove(module->timeout_handle);
-  }
-  if (!module->timeout_handle || extend_prior)
-  {
-    module->timeout_handle = g_timeout_add(dt_conf_get_int("processing/timeout"), _postponed_history_update, module);
-  }
-}
-
-void dt_iop_cancel_history_update(dt_iop_module_t *module)
-{
-  if (module->timeout_handle)
-  {
-    g_source_remove(module->timeout_handle);
-    module->timeout_handle = 0;
-  }
 }
 
 const char **dt_iop_set_description(dt_iop_module_t *module, const char *main_text, const char *purpose, const char *input, const char *process,

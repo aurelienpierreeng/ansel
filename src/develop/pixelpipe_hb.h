@@ -263,11 +263,6 @@ typedef struct dt_dev_pixelpipe_t
   // between pipe and history. This is a local copy of 
   // dev_history_get_hash()
   uint64_t history_hash;
-  uint32_t recent_runtime_us[5];
-  uint8_t recent_runtime_count;
-  uint8_t recent_runtime_pos;
-  dt_atomic_int avg_runtime_us;
-
   // Modules can set this to TRUE internally so the pipeline will
   // restart right away, in the same thread.
   // The reentry flag can only be reset (to FALSE) by the same object that captured it.

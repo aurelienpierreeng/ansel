@@ -574,10 +574,6 @@ int dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe)
   pipe->status = DT_DEV_PIXELPIPE_DIRTY;
   pipe->last_history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
   pipe->last_history_item = NULL;
-  memset(pipe->recent_runtime_us, 0, sizeof(pipe->recent_runtime_us));
-  pipe->recent_runtime_count = 0;
-  pipe->recent_runtime_pos = 0;
-  dt_atomic_set_int(&pipe->avg_runtime_us, 0);
   pipe->flush_cache = FALSE;
   pipe->timeout = 0;
 

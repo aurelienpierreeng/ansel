@@ -190,6 +190,7 @@ FILE(GLOB SOURCE_FILES
   "gui/gtkentry.c"
   "gui/guides.c"
   "gui/gtk.c"
+  "gui/gui_throttle.c"
   "gui/splash.c"
   "gui/hist_dialog.c"
   "gui/preferences.c"

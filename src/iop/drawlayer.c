@@ -43,6 +43,7 @@
 #include "develop/pixelpipe_cache.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
+#include "gui/gui_throttle.h"
 #include "iop/drawlayer/brush.h"
 #include "iop/drawlayer/cache.h"
 #include "iop/drawlayer/io.h"
@@ -598,12 +599,8 @@ static void _process_backend_input(dt_iop_module_t *self, const dt_drawlayer_pai
 
   if(g->stroke.live_publish_damage.valid)
   {
-    gint64 live_publish_interval_us = 20000;
-    if(self->dev && self->dev->pipe)
-    {
-      const int avg_runtime_us = dt_atomic_get_int(&self->dev->pipe->avg_runtime_us);
-      if(avg_runtime_us > 0) live_publish_interval_us = avg_runtime_us;
-    }
+    gint64 live_publish_interval_us = dt_gui_throttle_get_timeout_us();
+    if(live_publish_interval_us <= 0) live_publish_interval_us = 20000;
     const gint64 input_ts = input->event_ts ? input->event_ts : g_get_monotonic_time();
     if(g->stroke.live_publish_ts == 0)
       g->stroke.live_publish_ts = input_ts;

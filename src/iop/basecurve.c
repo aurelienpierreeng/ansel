@@ -1005,7 +1005,7 @@ void gui_update(struct dt_iop_module_t *self)
   gtk_widget_set_visible(g->exposure_step, p->exposure_fusion != 0);
   gtk_widget_set_visible(g->exposure_bias, p->exposure_fusion != 0);
 
-  dt_iop_cancel_history_update(self);
+  dt_gui_throttle_cancel(self);
   // gui curve is read directly from params during expose event.
   gtk_widget_queue_draw(self->widget);
 }
@@ -1488,7 +1488,7 @@ static gboolean _move_point_internal(dt_iop_module_t *self, GtkWidget *widget, f
   dt_iop_basecurve_sanity_check(self, widget);
 
   gtk_widget_queue_draw(widget);
-  dt_iop_queue_history_update(self, FALSE);
+  dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
   return TRUE;
 }
 
@@ -1646,7 +1646,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
 {
   dt_iop_basecurve_gui_data_t *c = (dt_iop_basecurve_gui_data_t *)self->gui_data;
   dt_draw_curve_destroy(c->minmax_curve);
-  dt_iop_cancel_history_update(self);
+  dt_gui_throttle_cancel(self);
 
   IOP_GUI_FREE;
 }

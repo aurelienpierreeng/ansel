@@ -109,6 +109,7 @@
 
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
+#include "gui/gui_throttle.h"
 #include "gui/guides.h"
 #include "gui/presets.h"
 #include "libs/colorpicker.h"
@@ -219,6 +220,7 @@ void cleanup(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
   _release_expose_source_caches();
+  dt_gui_throttle_cancel(dev);
 
   // unref the grid lines popover if needed
   if(darktable.view_manager->guides_popover) g_object_unref(darktable.view_manager->guides_popover);
@@ -2803,6 +2805,7 @@ void enter(dt_view_t *self)
 void leave(dt_view_t *self)
 {
   dt_develop_t *dev = (dt_develop_t *)self->data;
+  dt_gui_throttle_cancel(dev);
 
   _release_expose_source_caches();
   if(dev->image_surface) cairo_surface_destroy(dev->image_surface);
@@ -3009,10 +3012,9 @@ void mouse_enter(dt_view_t *self)
   dt_masks_events_mouse_enter(dev->gui_module);
 }
 
-static int _delayed_history_commit(gpointer data)
+static void _delayed_history_commit(gpointer data)
 {
   dt_develop_t *dev = (dt_develop_t *)data;
-  dev->drawing_timeout = 0;
 
   // Figure out if an history item needs to be added
   // aka drawn masks have changed somehow. This is more expensive
@@ -3024,18 +3026,6 @@ static int _delayed_history_commit(gpointer data)
 
   if(dev->forms_changed)
     dt_dev_add_history_item(dev, dev->gui_module, FALSE, TRUE);
-
-  return G_SOURCE_REMOVE;
-}
-
-static void _do_delayed_history_commit(dt_develop_t *dev)
-{
-  if(dev->drawing_timeout)
-  {
-    g_source_remove(dev->drawing_timeout);
-    dev->drawing_timeout = 0;
-  }
-  dev->drawing_timeout = g_timeout_add(dt_conf_get_int("processing/timeout"), _delayed_history_commit, dev);
 }
 
 void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which)
@@ -3082,7 +3072,7 @@ void mouse_moved(dt_view_t *self, double x, double y, double pressure, int which
   else if(dt_masks_get_visible_form(dev)
           && dt_masks_events_mouse_moved(dev->gui_module, x, y, pressure, which))
   {
-    _do_delayed_history_commit(dev);
+    dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
     ret = TRUE;
   }
 
@@ -3154,7 +3144,7 @@ int button_released(dt_view_t *self, double x, double y, int which, uint32_t sta
      && dt_masks_events_button_released(dev->gui_module, x, y, which, state))
   {
     // Change on mask parameters and image output.
-    _do_delayed_history_commit(dev);
+    dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
     dt_dev_pixelpipe_update_preview(dev); // Needed if mask selection changed
     return 1;
   }
@@ -3294,7 +3284,7 @@ int button_pressed(dt_view_t *self, double x, double y, double pressure, int whi
   if(dt_masks_get_visible_form(dev)
      && dt_masks_events_button_pressed(dev->gui_module, x, y, pressure, which, type, state))
   {
-    _do_delayed_history_commit(dev);
+    dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
     return 1;
   }
   // module
@@ -3391,7 +3381,7 @@ int scrolled(dt_view_t *self, double x, double y, int up, int state, int delta_y
      && dt_masks_events_mouse_scrolled(dev->gui_module, x, y, up, state, delta_y))
   {
     // Scroll on masks changes their size, therefore mask parameters and image output.
-    _do_delayed_history_commit(dev);
+    dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
     return TRUE;
   }
 
@@ -3423,7 +3413,7 @@ int key_pressed(dt_view_t *self, GdkEventKey *event)
 
   if(dt_masks_get_visible_form(dev) && dt_masks_events_key_pressed(dev->gui_module, event))
   {
-    _do_delayed_history_commit(dev);
+    dt_gui_throttle_queue(dev, _delayed_history_commit, dev);
     return 1;
   }
 

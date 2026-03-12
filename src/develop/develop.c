@@ -88,11 +88,9 @@
 #include "develop/masks.h"
 #include "develop/pixelpipe_cache.h"
 #include "gui/gtk.h"
+#include "gui/gui_throttle.h"
 #include "gui/presets.h"
 
-#define DT_DEV_AVERAGE_DELAY_START 250
-#define DT_DEV_PREVIEW_AVERAGE_DELAY_START 50
-#define DT_DEV_AVERAGE_DELAY_COUNT 5
 #define DT_IOP_ORDER_INFO (darktable.unmuted & DT_DEBUG_IOPORDER)
 
 GList *dt_dev_load_modules(dt_develop_t *dev)
@@ -197,12 +195,7 @@ void dt_dev_cleanup(dt_develop_t *dev)
   if(!dev) return;
   // image_cache does not have to be unref'd, this is done outside develop module.
 
-  // On dev cleanup, it is expected to force an history save
-  if(dev->drawing_timeout) 
-  {
-    g_source_remove(dev->drawing_timeout);
-    dev->drawing_timeout = 0;
-  }
+  dt_gui_throttle_cancel(dev);
 
   dev->proxy.chroma_adaptation = NULL;
   dev->proxy.wb_coeffs[0] = 0.f;
@@ -587,20 +580,7 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
         _flag_pipe(pipe, ret);
       }
 
-      if(pipe->status == DT_DEV_PIXELPIPE_VALID && process_runtime_us > 0)
-      {
-        const uint32_t runtime_us = (uint32_t)MIN(process_runtime_us, (gint64)G_MAXUINT32);
-        pipe->recent_runtime_us[pipe->recent_runtime_pos] = runtime_us;
-        if(pipe->recent_runtime_count < G_N_ELEMENTS(pipe->recent_runtime_us))
-          pipe->recent_runtime_count++;
-        pipe->recent_runtime_pos
-            = (uint8_t)((pipe->recent_runtime_pos + 1) % G_N_ELEMENTS(pipe->recent_runtime_us));
-
-        uint64_t runtime_sum = 0;
-        for(uint8_t i = 0; i < pipe->recent_runtime_count; i++)
-          runtime_sum += pipe->recent_runtime_us[i];
-        dt_atomic_set_int(&pipe->avg_runtime_us, (int)(runtime_sum / MAX(pipe->recent_runtime_count, (uint8_t)1)));
-      }
+      if(pipe->status == DT_DEV_PIXELPIPE_VALID) dt_gui_throttle_record_runtime(pipe, process_runtime_us);
 
       pipe->processing = 0;
 

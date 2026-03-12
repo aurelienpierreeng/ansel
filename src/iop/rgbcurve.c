@@ -600,7 +600,7 @@ static gboolean _move_point_internal(dt_iop_module_t *self, GtkWidget *widget, f
     curve[g->selected].x = new_x;
     curve[g->selected].y = new_y;
 
-    dt_iop_queue_history_update(self, FALSE);
+    dt_gui_throttle_queue(self, dt_iop_throttled_history_update, self);
   }
 
   return TRUE;
@@ -1374,7 +1374,7 @@ void gui_update(struct dt_iop_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->chk_compensate_middle_grey), p->compensate_middle_grey);
   dt_bauhaus_combobox_set(g->cmb_preserve_colors, p->preserve_colors);
 
-  dt_iop_cancel_history_update(self);
+  dt_gui_throttle_cancel(self);
 
   _rgbcurve_show_hide_controls(p, g);
 
@@ -1388,7 +1388,7 @@ void gui_cleanup(struct dt_iop_module_t *self)
 
   for(int k = 0; k < DT_IOP_RGBCURVE_MAX_CHANNELS; k++) dt_draw_curve_destroy(g->minmax_curve[k]);
 
-  dt_iop_cancel_history_update(self);
+  dt_gui_throttle_cancel(self);
 
   IOP_GUI_FREE;
 }

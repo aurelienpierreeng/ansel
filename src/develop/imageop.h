@@ -82,6 +82,7 @@ typedef struct dt_iop_roi_t
 #include "develop/pixelpipe.h"
 #include "dtgtk/togglebutton.h"
 #include "gui/gtk.h"
+#include "gui/gui_throttle.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -472,10 +473,8 @@ gboolean dt_iop_gui_module_is_visible(dt_iop_module_t *module);
 // initializes memory.darktable_iop_names
 void dt_iop_set_darktable_iop_table();
 
-/** queue a delayed call to dt_dev_add_history_item to capture module parameters */
-void dt_iop_queue_history_update(dt_iop_module_t *module, gboolean extend_prior);
-/** cancel any previously-queued history update */
-void dt_iop_cancel_history_update(dt_iop_module_t *module);
+/** shared callback for throttled module history updates */
+void dt_iop_throttled_history_update(gpointer data);
 
 /** add/remove mask indicator to iop module header */
 void dt_iop_add_remove_mask_indicator(dt_iop_module_t *module);
