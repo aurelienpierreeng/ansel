@@ -21,6 +21,10 @@
 #include <glib.h>
 #include <stdint.h>
 
+#ifndef OUTER_LOOP
+#define OUTER_LOOP 1
+#endif
+
 typedef struct dt_drawlayer_cache_patch_t dt_drawlayer_cache_patch_t;
 
 /**

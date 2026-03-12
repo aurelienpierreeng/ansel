@@ -138,9 +138,28 @@ static gboolean _rt_queue_pop_locked(dt_drawlayer_worker_t *rt,
                                      dt_drawlayer_paint_raw_input_t *event);
 static drawlayer_fullres_replay_scratch_t *_get_fullres_replay_scratch(void);
 static float *_ensure_fullres_replay_float_buffer(float **buffer, size_t *capacity_values, size_t needed_values);
+static guint _worker_batch_min_size(void);
+static gboolean _dab_batch_supports_outer_loop(const GArray *dabs, guint count);
+static void _log_worker_batch_timing(const char *tag, guint processed_dabs, guint thread_count, double elapsed_ms,
+                                     gboolean outer_loop);
+#if defined(_OPENMP) && OUTER_LOOP
+static guint _rasterize_dab_batch_outer_loop(const GArray *dabs, guint max_dabs, float distance_percent,
+                                             dt_drawlayer_cache_patch_t *patch, float scale,
+                                             dt_drawlayer_cache_patch_t *stroke_mask,
+                                             dt_drawlayer_damaged_rect_t *batch_damage,
+                                             const char *tag);
+#endif
 
 /* GUI worker painting into uint8 buffers is deimplemented. Realtime preview
  * now relies on the regular pipeline/backbuffer path. */
+
+#if defined(_OPENMP) && OUTER_LOOP
+#include <omp.h>
+#endif
+
+#define DRAWLAYER_BATCH_TILE_SIZE 128
+#define DRAWLAYER_OUTER_LIVE_BATCH_MULTIPLIER 2u
+#define DRAWLAYER_OUTER_FULLRES_BATCH_MULTIPLIER 4u
 
 gboolean dt_drawlayer_build_worker_input_dab(dt_iop_module_t *self, dt_drawlayer_paint_stroke_t *state,
                                              const dt_drawlayer_paint_raw_input_t *input,
@@ -551,9 +570,37 @@ gboolean dt_drawlayer_worker_replay_finished_stroke_to_base_patch(dt_iop_module_
   }
   dt_drawlayer_cache_patch_rdunlock(&g->process.base_patch);
 
-  const gboolean wrote_replay_tile
-      = dt_drawlayer_paint_raster_path(stroke->pending_dabs, _clamp01(stroke->distance_percent), &replay_patch, 1.0f,
-                                       &replay_stroke_mask, &replay_damage, stroke);
+  gboolean wrote_replay_tile = FALSE;
+#if defined(_OPENMP) && OUTER_LOOP
+  if(stroke->pending_dabs->len >= _worker_batch_min_size()
+     && _dab_batch_supports_outer_loop(stroke->pending_dabs, stroke->pending_dabs->len))
+  {
+    while(stroke->pending_dabs->len > 0)
+    {
+      const guint batch_dabs
+          = MIN(stroke->pending_dabs->len, _worker_batch_min_size() * DRAWLAYER_OUTER_FULLRES_BATCH_MULTIPLIER);
+      dt_drawlayer_damaged_rect_t batch_damage = { 0 };
+      const guint processed_dabs = _rasterize_dab_batch_outer_loop(
+          stroke->pending_dabs, batch_dabs, _clamp01(stroke->distance_percent), &replay_patch, 1.0f,
+          &replay_stroke_mask, &batch_damage, "fullres");
+      if(processed_dabs == 0) break;
+      g_array_remove_range(stroke->pending_dabs, 0, processed_dabs);
+      dt_drawlayer_paint_runtime_note_dab_damage(&replay_damage, &batch_damage);
+      wrote_replay_tile = wrote_replay_tile || batch_damage.valid;
+      dt_iop_nap(100);
+    }
+  }
+  else
+#endif
+  {
+    const double replay_t0 = dt_get_wtime();
+    wrote_replay_tile = dt_drawlayer_paint_raster_path(stroke->pending_dabs, _clamp01(stroke->distance_percent),
+                                                       &replay_patch, 1.0f, &replay_stroke_mask, &replay_damage,
+                                                       stroke);
+    if(wrote_replay_tile)
+      _log_worker_batch_timing("fullres", stroke->pending_dabs->len, 1, 1000.0 * (dt_get_wtime() - replay_t0),
+                               FALSE);
+  }
   if(wrote_replay_tile)
   {
     dt_drawlayer_cache_patch_wrlock(&g->process.base_patch);
@@ -733,6 +780,34 @@ static inline gint64 _live_publish_interval_us(void)
   return MAX((gint64)dt_gui_throttle_get_pipe_runtime_us(DT_DEV_PIXELPIPE_FULL), (gint64)20000);
 }
 
+static guint _worker_batch_min_size(void)
+{
+#if defined(_OPENMP) && OUTER_LOOP
+  return MAX(1, omp_get_max_threads());
+#else
+  return 1;
+#endif
+}
+
+static gboolean _dab_batch_supports_outer_loop(const GArray *dabs, const guint count)
+{
+  if(!dabs || count == 0) return FALSE;
+  for(guint i = 0; i < count; i++)
+  {
+    const dt_drawlayer_brush_dab_t *dab = &g_array_index(dabs, dt_drawlayer_brush_dab_t, i);
+    if(dab->mode == DT_DRAWLAYER_BRUSH_MODE_SMUDGE) return FALSE;
+  }
+  return TRUE;
+}
+
+static void _log_worker_batch_timing(const char *tag, const guint processed_dabs, const guint thread_count,
+                                     const double elapsed_ms, const gboolean outer_loop)
+{
+  if(!(darktable.unmuted & DT_DEBUG_PERF)) return;
+  dt_print(DT_DEBUG_PERF, "[drawlayer] batch worker=%s dabs=%u threads=%u outer=%d ms=%.3f\n",
+           tag ? tag : "unknown", processed_dabs, thread_count, outer_loop ? 1 : 0, elapsed_ms);
+}
+
 static inline gboolean _live_publish_deadline_reached(const dt_drawlayer_worker_t *rt, const gint64 input_ts,
                                                       const gint64 interval_us)
 {
@@ -749,11 +824,216 @@ static inline drawlayer_paint_backend_ctx_t _make_backend_ctx(dt_iop_module_t *s
   };
 }
 
+#if defined(_OPENMP) && OUTER_LOOP
+static gboolean _dab_bounds_in_patch(const dt_drawlayer_cache_patch_t *patch, const float scale,
+                                     const dt_drawlayer_brush_dab_t *dab, dt_drawlayer_damaged_rect_t *bounds)
+{
+  if(bounds) *bounds = (dt_drawlayer_damaged_rect_t){ 0 };
+  if(!patch || !dab || !bounds || !patch->pixels || patch->width <= 0 || patch->height <= 0
+     || dab->radius <= 0.0f || dab->opacity <= 0.0f || scale <= 0.0f)
+    return FALSE;
+
+  const float support_radius = dab->radius;
+  bounds->valid = TRUE;
+  bounds->nw[0] = MAX(0, (int)floorf((dab->x - support_radius) * scale) - patch->x);
+  bounds->nw[1] = MAX(0, (int)floorf((dab->y - support_radius) * scale) - patch->y);
+  bounds->se[0] = MIN(patch->width, (int)ceilf((dab->x + support_radius) * scale) - patch->x + 1);
+  bounds->se[1] = MIN(patch->height, (int)ceilf((dab->y + support_radius) * scale) - patch->y + 1);
+  return bounds->se[0] > bounds->nw[0] && bounds->se[1] > bounds->nw[1];
+}
+
+static dt_drawlayer_paint_stroke_t *_create_batch_runtime(void)
+{
+  dt_drawlayer_paint_stroke_t *runtime = dt_drawlayer_paint_runtime_private_create();
+  if(!runtime) return NULL;
+  runtime->dab_window = g_array_new(FALSE, FALSE, sizeof(dt_drawlayer_brush_dab_t));
+  if(!runtime->dab_window)
+  {
+    dt_drawlayer_paint_runtime_private_destroy(&runtime);
+    return NULL;
+  }
+  return runtime;
+}
+
+static void _destroy_batch_runtime(dt_drawlayer_paint_stroke_t **runtime)
+{
+  if(!runtime || !*runtime) return;
+  if((*runtime)->dab_window) g_array_free((*runtime)->dab_window, TRUE);
+  (*runtime)->dab_window = NULL;
+  dt_drawlayer_paint_runtime_private_destroy(runtime);
+}
+
+static void _lock_batch_tiles(omp_lock_t *locks, const int tile_cols, const int tile_origin_x,
+                              const int tile_origin_y, const dt_drawlayer_damaged_rect_t *bounds)
+{
+  if(!locks || tile_cols <= 0 || !bounds || !bounds->valid) return;
+  const int tx0 = bounds->nw[0] / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_x;
+  const int ty0 = bounds->nw[1] / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_y;
+  const int tx1 = MAX(tx0, (bounds->se[0] - 1) / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_x);
+  const int ty1 = MAX(ty0, (bounds->se[1] - 1) / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_y);
+  for(int ty = ty0; ty <= ty1; ty++)
+    for(int tx = tx0; tx <= tx1; tx++)
+      omp_set_lock(&locks[ty * tile_cols + tx]);
+}
+
+static void _unlock_batch_tiles(omp_lock_t *locks, const int tile_cols, const int tile_origin_x,
+                                const int tile_origin_y, const dt_drawlayer_damaged_rect_t *bounds)
+{
+  if(!locks || tile_cols <= 0 || !bounds || !bounds->valid) return;
+  const int tx0 = bounds->nw[0] / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_x;
+  const int ty0 = bounds->nw[1] / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_y;
+  const int tx1 = MAX(tx0, (bounds->se[0] - 1) / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_x);
+  const int ty1 = MAX(ty0, (bounds->se[1] - 1) / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_y);
+  for(int ty = ty1; ty >= ty0; ty--)
+    for(int tx = tx1; tx >= tx0; tx--)
+      omp_unset_lock(&locks[ty * tile_cols + tx]);
+}
+
+static guint _rasterize_dab_batch_outer_loop(const GArray *dabs, const guint max_dabs, const float distance_percent,
+                                             dt_drawlayer_cache_patch_t *patch, const float scale,
+                                             dt_drawlayer_cache_patch_t *stroke_mask,
+                                             dt_drawlayer_damaged_rect_t *batch_damage,
+                                             const char *tag)
+{
+  if(!dabs || max_dabs == 0 || !patch || !patch->pixels || patch->width <= 0 || patch->height <= 0) return 0;
+
+  const guint thread_count = _worker_batch_min_size();
+  dt_drawlayer_damaged_rect_t batch_bounds = { 0 };
+  for(guint i = 0; i < max_dabs; i++)
+  {
+    dt_drawlayer_damaged_rect_t dab_bounds = { 0 };
+    const dt_drawlayer_brush_dab_t *dab = &g_array_index(dabs, dt_drawlayer_brush_dab_t, i);
+    if(_dab_bounds_in_patch(patch, scale, dab, &dab_bounds))
+      dt_drawlayer_paint_runtime_note_dab_damage(&batch_bounds, &dab_bounds);
+  }
+  if(!batch_bounds.valid) return 0;
+
+  const int tile_origin_x = batch_bounds.nw[0] / DRAWLAYER_BATCH_TILE_SIZE;
+  const int tile_origin_y = batch_bounds.nw[1] / DRAWLAYER_BATCH_TILE_SIZE;
+  const int tile_cols = MAX(1, (batch_bounds.se[0] + DRAWLAYER_BATCH_TILE_SIZE - 1) / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_x);
+  const int tile_rows = MAX(1, (batch_bounds.se[1] + DRAWLAYER_BATCH_TILE_SIZE - 1) / DRAWLAYER_BATCH_TILE_SIZE - tile_origin_y);
+  dt_drawlayer_paint_stroke_t **thread_runtime = g_malloc0((size_t)thread_count * sizeof(*thread_runtime));
+  dt_drawlayer_damaged_rect_t *thread_damage = g_malloc0((size_t)thread_count * sizeof(*thread_damage));
+  omp_lock_t *tile_locks = g_malloc0((size_t)tile_cols * tile_rows * sizeof(*tile_locks));
+  if(!thread_runtime || !thread_damage || !tile_locks)
+  {
+    g_free(thread_runtime);
+    g_free(thread_damage);
+    g_free(tile_locks);
+    return 0;
+  }
+
+  for(guint i = 0; i < thread_count; i++)
+  {
+    thread_runtime[i] = _create_batch_runtime();
+    if(!thread_runtime[i])
+    {
+      for(guint k = 0; k < i; k++) _destroy_batch_runtime(&thread_runtime[k]);
+      g_free(thread_runtime);
+      g_free(thread_damage);
+      g_free(tile_locks);
+      return 0;
+    }
+  }
+
+  for(int i = 0; i < tile_cols * tile_rows; i++)
+    omp_init_lock(&tile_locks[i]);
+
+  const double t0 = dt_get_wtime();
+#pragma omp parallel for schedule(static) default(none) \
+  shared(dabs, patch, stroke_mask, thread_runtime, thread_damage, tile_locks, tile_cols, tile_origin_x, tile_origin_y, max_dabs, distance_percent, scale)
+  for(guint i = 0; i < max_dabs; i++)
+  {
+    const int tid = omp_get_thread_num();
+    dt_drawlayer_paint_stroke_t *runtime = thread_runtime[tid];
+    dt_drawlayer_damaged_rect_t runtime_damage = { 0 };
+    dt_drawlayer_damaged_rect_t dab_damage = { 0 };
+    dt_drawlayer_damaged_rect_t bounds = { 0 };
+    const dt_drawlayer_brush_dab_t *dab = &g_array_index(dabs, dt_drawlayer_brush_dab_t, i);
+
+    dt_drawlayer_paint_path_state_reset(runtime);
+    dt_drawlayer_paint_runtime_private_reset(runtime);
+    if(runtime->dab_window) g_array_set_size(runtime->dab_window, 0);
+    if(!_dab_bounds_in_patch(patch, scale, dab, &bounds))
+      continue;
+
+    _lock_batch_tiles(tile_locks, tile_cols, tile_origin_x, tile_origin_y, &bounds);
+    dt_drawlayer_paint_rasterize_segment_to_buffer(dab, distance_percent, patch, scale, stroke_mask,
+                                                   &runtime_damage, runtime);
+    _unlock_batch_tiles(tile_locks, tile_cols, tile_origin_x, tile_origin_y, &bounds);
+
+    if(dt_drawlayer_paint_runtime_get_stroke_damage(&runtime_damage, &dab_damage))
+      dt_drawlayer_paint_runtime_note_dab_damage(&thread_damage[tid], &dab_damage);
+  }
+  const double t1 = dt_get_wtime();
+
+  if(batch_damage) dt_drawlayer_paint_runtime_state_reset(batch_damage);
+  for(guint i = 0; i < thread_count; i++)
+  {
+    if(batch_damage) dt_drawlayer_paint_runtime_note_dab_damage(batch_damage, &thread_damage[i]);
+    _destroy_batch_runtime(&thread_runtime[i]);
+  }
+  for(int i = 0; i < tile_cols * tile_rows; i++)
+    omp_destroy_lock(&tile_locks[i]);
+
+  g_free(thread_runtime);
+  g_free(thread_damage);
+  g_free(tile_locks);
+
+  _log_worker_batch_timing(tag, max_dabs, thread_count, 1000.0 * (t1 - t0), TRUE);
+  return max_dabs;
+}
+#endif
+
 static guint _rasterize_pending_dab_batch(drawlayer_paint_backend_ctx_t *ctx, gint64 budget_us)
 {
   dt_iop_drawlayer_gui_data_t *g = (ctx && ctx->self) ? (dt_iop_drawlayer_gui_data_t *)ctx->self->gui_data : NULL;
   dt_drawlayer_paint_stroke_t *stroke = ctx ? ctx->stroke : NULL;
   if(!g || !stroke || !stroke->pending_dabs || stroke->pending_dabs->len == 0) return 0;
+
+  const guint remaining_dabs = stroke->pending_dabs->len;
+  const guint min_batch = _worker_batch_min_size();
+
+#if defined(_OPENMP) && OUTER_LOOP
+  if(remaining_dabs >= min_batch && _dab_batch_supports_outer_loop(stroke->pending_dabs, remaining_dabs))
+  {
+    const guint batch_dabs = (budget_us > 0)
+                                 ? MIN(remaining_dabs, min_batch * DRAWLAYER_OUTER_LIVE_BATCH_MULTIPLIER)
+                                 : remaining_dabs;
+    dt_drawlayer_damaged_rect_t batch_damage = { 0 };
+    dt_drawlayer_cache_patch_t process_patch = g->process.process_patch;
+    dt_drawlayer_cache_patch_t process_stroke_mask = g->process.process_stroke_mask;
+    process_patch.x = g->process.process_combined_roi.x;
+    process_patch.y = g->process.process_combined_roi.y;
+    process_stroke_mask.x = process_patch.x;
+    process_stroke_mask.y = process_patch.y;
+
+    dt_drawlayer_cache_patch_wrlock(&g->process.process_patch);
+    const guint processed_dabs = _rasterize_dab_batch_outer_loop(
+        stroke->pending_dabs, batch_dabs, _clamp01(stroke->distance_percent), &process_patch,
+        g->process.process_combined_roi.scale, &process_stroke_mask, &batch_damage, "realtime");
+    dt_drawlayer_cache_patch_wrunlock(&g->process.process_patch);
+
+    if(processed_dabs > 0)
+    {
+      const dt_drawlayer_brush_dab_t *last_dab
+          = &g_array_index(stroke->pending_dabs, dt_drawlayer_brush_dab_t, processed_dabs - 1);
+      g_array_remove_range(stroke->pending_dabs, 0, processed_dabs);
+      if(batch_damage.valid)
+      {
+        g->process.process_patch_dirty = TRUE;
+        g->process.cache_dirty = TRUE;
+        dt_drawlayer_paint_runtime_note_dab_damage(&g->process.process_dirty_rect, &batch_damage);
+        if(ctx->worker)
+          dt_drawlayer_paint_runtime_note_dab_damage(&ctx->worker->live_publish_damage, &batch_damage);
+        g->stroke.last_dab_valid = TRUE;
+        g->stroke.last_dab_x = last_dab->x;
+        g->stroke.last_dab_y = last_dab->y;
+      }
+    }
+    return processed_dabs;
+  }
+#endif
 
   dt_drawlayer_cache_patch_wrlock(&g->process.process_patch);
   guint processed_dabs = 0;
@@ -768,11 +1048,13 @@ static guint _rasterize_pending_dab_batch(drawlayer_paint_backend_ctx_t *ctx, gi
     if(budget_us > 0)
     {
       const gint64 elapsed_us = (gint64)(1000000.0 * (dt_get_wtime() - batch_t0));
-      if(elapsed_us >= budget_us) break;
+      if(processed_dabs >= min_batch && elapsed_us >= budget_us) break;
     }
   }
   if(processed_dabs > 0) g_array_remove_range(stroke->pending_dabs, 0, processed_dabs);
   dt_drawlayer_cache_patch_wrunlock(&g->process.process_patch);
+  if(processed_dabs > 0)
+    _log_worker_batch_timing("realtime", processed_dabs, 1, 1000.0 * (dt_get_wtime() - batch_t0), FALSE);
   return processed_dabs;
 }
 
