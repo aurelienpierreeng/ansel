@@ -244,40 +244,14 @@ typedef struct dt_drawlayer_runtime_result_t
   gboolean raw_input_ok;
 } dt_drawlayer_runtime_result_t;
 
-typedef struct dt_drawlayer_runtime_buffer_state_t
-{
-  gboolean resident;
-  gboolean valid;
-  gboolean dirty;
-  guint read_locks;
-  dt_drawlayer_runtime_actor_t last_reader;
-  gboolean write_locked;
-  dt_drawlayer_runtime_actor_t writer;
-} dt_drawlayer_runtime_buffer_state_t;
-
-typedef struct dt_drawlayer_runtime_thread_state_t
-{
-  gboolean active;
-  gboolean waiting;
-  guint queued;
-} dt_drawlayer_runtime_thread_state_t;
+typedef struct dt_drawlayer_runtime_private_t dt_drawlayer_runtime_private_t;
 
 typedef struct dt_drawlayer_runtime_manager_t
 {
-  dt_pthread_mutex_t mutex;
-  dt_drawlayer_runtime_buffer_state_t buffers[DT_DRAWLAYER_RUNTIME_BUFFER_COUNT];
-  dt_drawlayer_runtime_thread_state_t threads[DT_DRAWLAYER_RUNTIME_ACTOR_COUNT];
-  gboolean layer_cache_valid;
-  gboolean process_patch_dirty;
-  gboolean process_snapshot_valid;
-  gboolean process_cl_valid;
-  gboolean sidecar_io_active;
-  gboolean gui_focused;
   gboolean realtime_active;
   gboolean painting_active;
   gboolean background_job_running;
-  dt_drawlayer_runtime_event_t last_event;
-  dt_drawlayer_runtime_raw_input_kind_t last_raw_input_kind;
+  dt_drawlayer_runtime_private_t *priv;
 } dt_drawlayer_runtime_manager_t;
 
 typedef struct dt_drawlayer_runtime_inputs_t
