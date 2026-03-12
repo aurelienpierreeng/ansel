@@ -756,19 +756,22 @@ gboolean dt_drawlayer_paint_rasterize_segment_to_buffer(const dt_drawlayer_brush
   if(rasterized && runtime_state && runtime_private && runtime_private->bounds.valid)
     dt_drawlayer_paint_runtime_note_dab_damage(runtime_state, &runtime_private->bounds);
 
-  if(runtime_private && runtime_private->bounds.valid)
+  if(darktable.unmuted & DT_DEBUG_VERBOSE)
   {
-    const int bounds_w = runtime_private->bounds.se[0] - runtime_private->bounds.nw[0] + 1;
-    const int bounds_h = runtime_private->bounds.se[1] - runtime_private->bounds.nw[1] + 1;
-    dt_print(DT_DEBUG_PERF,
-             "[drawlayer] paint raster mode=%d pos=%d spacing=%.3f alpha_scale=%.4f area=%dx%d ms=%.3f\n",
-             sample->mode, sample->stroke_pos, spacing, sample_opacity_scale, bounds_w, bounds_h,
-             1000.0 * (t1 - t0));
+    if(runtime_private && runtime_private->bounds.valid)
+    {
+      const int bounds_w = runtime_private->bounds.se[0] - runtime_private->bounds.nw[0] + 1;
+      const int bounds_h = runtime_private->bounds.se[1] - runtime_private->bounds.nw[1] + 1;
+      dt_print(DT_DEBUG_PERF,
+               "[drawlayer] paint raster mode=%d pos=%d spacing=%.3f alpha_scale=%.4f area=%dx%d ms=%.3f\n",
+               sample->mode, sample->stroke_pos, spacing, sample_opacity_scale, bounds_w, bounds_h,
+               1000.0 * (t1 - t0));
+    }
+    else
+      dt_print(DT_DEBUG_PERF,
+               "[drawlayer] paint raster mode=%d pos=%d spacing=%.3f alpha_scale=%.4f area=0x0 ms=%.3f\n",
+               sample->mode, sample->stroke_pos, spacing, sample_opacity_scale, 1000.0 * (t1 - t0));
   }
-  else
-    dt_print(DT_DEBUG_PERF,
-             "[drawlayer] paint raster mode=%d pos=%d spacing=%.3f alpha_scale=%.4f area=0x0 ms=%.3f\n",
-             sample->mode, sample->stroke_pos, spacing, sample_opacity_scale, 1000.0 * (t1 - t0));
 
   if(history->len > 3) g_array_remove_range(history, 0, history->len - 3);
   return TRUE;

@@ -330,9 +330,12 @@ void dt_pixelpipe_get_global_hash(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     // Update global hash for this stage
     hash = dt_hash(hash, (const char *)&local_hash, sizeof(uint64_t));
 
-    gchar *type = _get_debug_pipe_name(pipe, dev);
-    dt_print(DT_DEBUG_PIPE, "[pixelpipe] global hash for %20s (%s) in pipe %s with hash %lu\n", piece->module->op, piece->module->multi_name, type, (long unsigned int)hash);
-
+    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    {
+      gchar *type = _get_debug_pipe_name(pipe, dev);
+      dt_print(DT_DEBUG_PIPE, "[pixelpipe] global hash for %20s (%s) in pipe %s with hash %lu\n",
+               piece->module->op, piece->module->multi_name, type, (long unsigned int)hash);
+    }
     // In case of drawn masks, we would need to account only for the distortions of previous modules.
     // Aka conditional to: if((piece->module->operation_tags() & IOP_TAG_DISTORT) == IOP_TAG_DISTORT)
     // But in case of parametric masks, they depend on previous modules parameters.

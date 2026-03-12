@@ -1031,9 +1031,10 @@ static gboolean _rekey_shared_base_patch(drawlayer_patch_t *patch, const int32_t
                                                  published.cache_entry, -1);
 #endif
   dt_drawlayer_cache_patch_clear(&published, "drawlayer patch");
-  dt_print(DT_DEBUG_PERF,
-           "[drawlayer] cache rekey conflict old=%" PRIu64 " new=%" PRIu64 " -> published snapshot instead\n",
-           patch->cache_hash, new_hash);
+  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    dt_print(DT_DEBUG_PERF,
+             "[drawlayer] cache rekey conflict old=%" PRIu64 " new=%" PRIu64 " -> published snapshot instead\n",
+             patch->cache_hash, new_hash);
   return TRUE;
 }
 
@@ -1248,7 +1249,8 @@ static gboolean _build_process_patch_from_base(dt_iop_module_t *self, dt_iop_dra
                                                           &combined_roi);
   {
     const gint64 now = g_get_monotonic_time();
-    dt_print(DT_DEBUG_PERF, "[drawlayer] process step=build-process-roi ms=%.3f\n", (now - t) / 1000.0);
+    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      dt_print(DT_DEBUG_PERF, "[drawlayer] process step=build-process-roi ms=%.3f\n", (now - t) / 1000.0);
     t = now;
   }
 
@@ -1299,8 +1301,9 @@ static gboolean _build_process_patch_from_base(dt_iop_module_t *self, dt_iop_dra
   if(same_geometry)
   {
     const gint64 now = g_get_monotonic_time();
-    dt_print(DT_DEBUG_PERF, "[drawlayer] process step=process-patch-hit ms=%.3f total=%.3f\n", (now - t) / 1000.0,
-             (now - t0) / 1000.0);
+    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      dt_print(DT_DEBUG_PERF, "[drawlayer] process step=process-patch-hit ms=%.3f total=%.3f\n",
+               (now - t) / 1000.0, (now - t0) / 1000.0);
     return TRUE;
   }
 
@@ -1310,22 +1313,24 @@ static gboolean _build_process_patch_from_base(dt_iop_module_t *self, dt_iop_dra
   if(keep_live_geometry)
   {
     const gint64 now = g_get_monotonic_time();
-    dt_print(DT_DEBUG_PERF,
-             "[drawlayer] process step=process-patch-keep-live ms=%.3f total=%.3f painting=%d workers=%d\n",
-             (now - t) / 1000.0, (now - t0) / 1000.0, g->manager.painting_active ? 1 : 0,
-             dt_drawlayer_worker_any_active(g->stroke.worker) ? 1 : 0);
+    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      dt_print(DT_DEBUG_PERF,
+               "[drawlayer] process step=process-patch-keep-live ms=%.3f total=%.3f painting=%d workers=%d\n",
+               (now - t) / 1000.0, (now - t0) / 1000.0, g->manager.painting_active ? 1 : 0,
+               dt_drawlayer_worker_any_active(g->stroke.worker) ? 1 : 0);
     return TRUE;
   }
 
   if(have_process_patch)
   {
-    dt_print(DT_DEBUG_PERF,
-             "[drawlayer] process step=process-patch-miss old=(x=%d y=%d w=%d h=%d s=%.6f pw=%d ph=%d) "
-             "new=(x=%d y=%d w=%d h=%d s=%.6f pw=%d ph=%d)\n",
-             previous_process_roi.x, previous_process_roi.y, previous_process_roi.width,
-             previous_process_roi.height, previous_process_roi.scale, previous_process_width,
-             previous_process_height, padded_roi.x, padded_roi.y, padded_roi.width, padded_roi.height,
-             padded_roi.scale, patch_width, patch_height);
+    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      dt_print(DT_DEBUG_PERF,
+               "[drawlayer] process step=process-patch-miss old=(x=%d y=%d w=%d h=%d s=%.6f pw=%d ph=%d) "
+               "new=(x=%d y=%d w=%d h=%d s=%.6f pw=%d ph=%d)\n",
+               previous_process_roi.x, previous_process_roi.y, previous_process_roi.width,
+               previous_process_roi.height, previous_process_roi.scale, previous_process_width,
+               previous_process_height, padded_roi.x, padded_roi.y, padded_roi.width, padded_roi.height,
+               padded_roi.scale, patch_width, patch_height);
   }
 
   if(need_flush)
@@ -1337,7 +1342,9 @@ static gboolean _build_process_patch_from_base(dt_iop_module_t *self, dt_iop_dra
                              (const dt_iop_drawlayer_params_t *)self->params);
     {
       const gint64 now = g_get_monotonic_time();
-      dt_print(DT_DEBUG_PERF, "[drawlayer] process step=flush-old-process-patch ms=%.3f\n", (now - t) / 1000.0);
+      if(darktable.unmuted & DT_DEBUG_VERBOSE)
+        dt_print(DT_DEBUG_PERF, "[drawlayer] process step=flush-old-process-patch ms=%.3f\n",
+                 (now - t) / 1000.0);
       t = now;
     }
   }
@@ -1366,13 +1373,16 @@ static gboolean _build_process_patch_from_base(dt_iop_module_t *self, dt_iop_dra
   dt_drawlayer_process_state_publish_locked(&g->process, NULL, TRUE);
   {
     const gint64 now = g_get_monotonic_time();
-    dt_print(DT_DEBUG_PERF, "[drawlayer] process step=build-process-patch-clipzoom ms=%.3f\n", (now - t) / 1000.0);
+    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      dt_print(DT_DEBUG_PERF, "[drawlayer] process step=build-process-patch-clipzoom ms=%.3f\n",
+               (now - t) / 1000.0);
     t = now;
   }
   {
     const gint64 now = g_get_monotonic_time();
-    dt_print(DT_DEBUG_PERF, "[drawlayer] process step=build-process-patch-finalize ms=%.3f total=%.3f\n",
-             (now - t) / 1000.0, (now - t0) / 1000.0);
+    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      dt_print(DT_DEBUG_PERF, "[drawlayer] process step=build-process-patch-finalize ms=%.3f total=%.3f\n",
+               (now - t) / 1000.0, (now - t0) / 1000.0);
   }
   return TRUE;
 }
@@ -2884,7 +2894,6 @@ static gboolean _update_runtime_state(const drawlayer_runtime_request_t *request
       source->tracked_buffer = DT_DRAWLAYER_RUNTIME_BUFFER_PROCESS_SNAPSHOT;
       source->tracked_actor = request->use_opencl ? DT_DRAWLAYER_RUNTIME_ACTOR_PIPELINE_CL
                                                   : DT_DRAWLAYER_RUNTIME_ACTOR_PIPELINE_CPU;
-      fprintf(stdout, "FOUND CACHED DS LAYER\n");
       return TRUE;
     }
   }
@@ -5543,15 +5552,17 @@ int process_cl(struct dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_m
       .process = runtime_request.process_state,
       .source = &source,
     };
-    dt_print(DT_DEBUG_PERF, "[drawlayer] process_cl step=blend-%s total=%.3f ok=%d\n",
-             source_label, (g_get_monotonic_time() - process_t0) / 1000.0, ok ? 1 : 0);
+    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      dt_print(DT_DEBUG_PERF, "[drawlayer] process_cl step=blend-%s total=%.3f ok=%d\n",
+               source_label, (g_get_monotonic_time() - process_t0) / 1000.0, ok ? 1 : 0);
     dt_drawlayer_runtime_manager_update(manager, &process_post, &runtime_manager);
     return ok;
   }
 
 process_cl_fallback:
-  dt_print(DT_DEBUG_PERF, "[drawlayer] process_cl step=no-cache-pass-through total=%.3f\n",
-           (g_get_monotonic_time() - process_t0) / 1000.0);
+  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    dt_print(DT_DEBUG_PERF, "[drawlayer] process_cl step=no-cache-pass-through total=%.3f\n",
+             (g_get_monotonic_time() - process_t0) / 1000.0);
   const gboolean ok = dt_iop_clip_and_zoom_roi_cl(piece->pipe->devid, dev_out, dev_in, roi_out, roi_in)
                       == CL_SUCCESS;
   dt_drawlayer_runtime_manager_update(manager, &process_post, &runtime_manager);
@@ -5694,8 +5705,9 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
     }
 
     _blend_layer_over_input(output, input, layer_pixels, pixels, preview_bg.enabled, preview_bg.value);
-    dt_print(DT_DEBUG_PERF, "[drawlayer] process step=blend-%s total=%.3f\n", source_label,
-             (g_get_monotonic_time() - process_t0) / 1000.0);
+    if(darktable.unmuted & DT_DEBUG_VERBOSE)
+      dt_print(DT_DEBUG_PERF, "[drawlayer] process step=blend-%s total=%.3f\n", source_label,
+               (g_get_monotonic_time() - process_t0) / 1000.0);
 
     process_post.release = (dt_drawlayer_runtime_release_t){
       .process = runtime_request.process_state,
@@ -5711,8 +5723,9 @@ int process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, const void *co
    * the correct backend behavior is therefore a no-op pass-through rather than
    * reopening/scanning/loading the TIFF in the hot process path. */
 fallback_pass_through:
-  dt_print(DT_DEBUG_PERF, "[drawlayer] process step=no-cache-pass-through total=%.3f\n",
-           (g_get_monotonic_time() - process_t0) / 1000.0);
+  if(darktable.unmuted & DT_DEBUG_VERBOSE)
+    dt_print(DT_DEBUG_PERF, "[drawlayer] process step=no-cache-pass-through total=%.3f\n",
+             (g_get_monotonic_time() - process_t0) / 1000.0);
   dt_iop_image_copy_by_size(output, input, roi_out->width, roi_out->height, 4);
   dt_drawlayer_runtime_manager_update(manager, &process_post, &runtime_manager);
   return 0;

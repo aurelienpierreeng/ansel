@@ -167,6 +167,8 @@ static void _trace_buffer_content(const dt_dev_pixelpipe_t *pipe, const dt_iop_m
                                   const char *phase, const void *buffer,
                                   const dt_iop_buffer_dsc_t *format, const dt_iop_roi_t *roi)
 {
+  if(!(darktable.unmuted & DT_DEBUG_CACHE)) return;
+  if(!(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
   if(!buffer || !format || !roi) return;
   if(roi->width <= 0 || roi->height <= 0) return;
 
@@ -449,6 +451,8 @@ static void _debug_dump_module_io(dt_dev_pixelpipe_t *pipe, dt_iop_module_t *mod
                                   const size_t in_bpp, const size_t out_bpp,
                                   const int cst_before, const int cst_after)
 {
+  if(!(darktable.unmuted & DT_DEBUG_PIPE)) return;
+  if(!(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
   const char *module_name = module ? module->op : "base";
   const char *pipe_name = dt_pixelpipe_get_pipe_name(pipe->type);
   const char *stage_name = stage ? stage : "process";
@@ -1440,6 +1444,8 @@ static void _print_perf_debug(dt_dev_pixelpipe_t *pipe, const dt_pixelpipe_flow_
 
 static void _print_nan_debug(dt_dev_pixelpipe_t *pipe, void *cl_mem_output, void *output, const dt_iop_roi_t *roi_out, dt_iop_buffer_dsc_t *out_format, dt_iop_module_t *module, const size_t bpp)
 {
+  if(!(darktable.unmuted & DT_DEBUG_NAN)) return;
+  if(!(darktable.unmuted & DT_DEBUG_VERBOSE)) return;
   if((darktable.unmuted & DT_DEBUG_NAN) && strcmp(module->op, "gamma") != 0)
   {
     gchar *module_label = dt_history_item_get_name(module);
