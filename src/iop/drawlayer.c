@@ -3126,23 +3126,21 @@ static gboolean _commit_dabs(dt_iop_module_t *self, const gboolean record_histor
    * - the layer cache must already contain the stroke,
    * - only then do we mutate params/history so the pipeline invalidation sees a coherent state. */
   _wait_worker_idle(self, g->stroke.worker);
+  gboolean replayed_to_base = FALSE;
   if(!dt_drawlayer_worker_finished_stroke_queued(g->stroke.worker))
   {
     const dt_drawlayer_paint_stroke_t *stroke = dt_drawlayer_worker_stroke(g->stroke.worker);
     const GArray *raw_inputs = dt_drawlayer_worker_raw_inputs(g->stroke.worker);
-    if(stroke && raw_inputs) _replay_finished_stroke_to_base_patch(self, raw_inputs);
+    if(stroke && raw_inputs) replayed_to_base = _replay_finished_stroke_to_base_patch(self, raw_inputs);
   }
+  else
+    replayed_to_base = TRUE;
   /* Damage-rectangle ownership stays in drawlayer:
    * paint accumulates per-dab bounds into a stroke rectangle, and on commit the
    * module consumes that rectangle to update process/base dirty regions. */
   _publish_backend_stroke_damage(self);
-  /* Do not resample the display-sized process tile back into `base_patch` at
-   * stroke end. If the view geometry did not change, the current process tile
-   * remains the highest-fidelity representation of the just-painted stroke.
-   * Upsampling it into base and then immediately reusing base to rebuild the
-   * same view adds avoidable memory traffic and visibly destroys high-frequency
-   * brush detail (noise/sprinkles). Base synchronization is deferred
-   * to geometry changes and explicit persistence points. */
+  if(replayed_to_base)
+    _invalidate_process_patch(g);
 
   int sample_count = 0;
   gboolean had_stroke = FALSE;
