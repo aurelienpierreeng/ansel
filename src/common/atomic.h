@@ -31,19 +31,27 @@
 //   4. otherwise: fall back to using Posix mutex to serialize access
 
 #if defined(__cplusplus) && __cplusplus > 201100
-#include <atomic>
-
-typedef std::atomic<int> dt_atomic_int;
-typedef std::atomic<uint64_t> dt_atomic_uint64;
-inline void dt_atomic_set_int(dt_atomic_int *var, int value) { std::atomic_store(var,value); }
-inline int dt_atomic_get_int(dt_atomic_int *var) { return std::atomic_load(var); }
-inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value) { std::atomic_store(var,value); }
-inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *var) { return std::atomic_load(var); }
-inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return std::atomic_fetch_add(var,incr); }
-inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return std::atomic_fetch_sub(var,decr); }
-inline int dt_atomic_exch_int(dt_atomic_int *var, int value) { return std::atomic_exchange(var,value); }
+// Shared structs cross C and C++ translation units. Keep atomic storage layout identical to the C side
+// and use compiler builtins for synchronization, otherwise std::atomic can change ABI-visible layout.
+typedef int dt_atomic_int;
+typedef uint64_t dt_atomic_uint64;
+inline void dt_atomic_set_int(dt_atomic_int *var, int value) { __atomic_store_n(var, value, __ATOMIC_SEQ_CST); }
+inline int dt_atomic_get_int(dt_atomic_int *var) { return __atomic_load_n(var, __ATOMIC_SEQ_CST); }
+inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value)
+{
+  __atomic_store_n(var, value, __ATOMIC_SEQ_CST);
+}
+inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *var)
+{
+  return __atomic_load_n(var, __ATOMIC_SEQ_CST);
+}
+inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return __atomic_fetch_add(var, incr, __ATOMIC_SEQ_CST); }
+inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return __atomic_fetch_sub(var, decr, __ATOMIC_SEQ_CST); }
+inline int dt_atomic_exch_int(dt_atomic_int *var, int value) { return __atomic_exchange_n(var, value, __ATOMIC_SEQ_CST); }
 inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
-{ return std::atomic_compare_exchange_strong(var,expected,value); }
+{
+  return __atomic_compare_exchange_n(var, expected, value, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+}
 
 #elif !defined(__STDC_NO_ATOMICS__)
 
