@@ -1636,7 +1636,6 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
   dt_masks_form_t *group_form = _blendop_masks_group_from_module(module);
 
   // First pass: groups containing shapes first.
-  int first_pass_count = 0;
   for(const GList *form_node = darktable.develop->forms; form_node; form_node = g_list_next(form_node))
   {
     dt_masks_form_t *mask_form = (dt_masks_form_t *)form_node->data;
@@ -1658,7 +1657,6 @@ static void _blendop_masks_refresh_lists(dt_iop_module_t *module)
                BLENDOP_MASKS_ALL_COL_STATUS_MARKUP, "",
                        -1);
     g_free(display_markup);
-    first_pass_count++;
   }
 
   // Second pass: then all non-group (and empty-group) entries.

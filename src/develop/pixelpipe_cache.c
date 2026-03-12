@@ -490,6 +490,8 @@ void *dt_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_ptr, in
 {
   if(out_cst) *out_cst = -1;
 
+#ifdef HAVE_OPENCL
+
   dt_pthread_mutex_lock(&entry->cl_mem_lock);
   for(GList *l = entry->cl_mem_list; l;)
   {
@@ -520,6 +522,9 @@ void *dt_pixel_cache_clmem_get(dt_pixel_cache_entry_t *entry, void *host_ptr, in
     l = next;
   }
   dt_pthread_mutex_unlock(&entry->cl_mem_lock);
+
+#endif
+
   return NULL;
 }
 
