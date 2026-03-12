@@ -3701,6 +3701,7 @@ void gui_init(dt_iop_module_t *self)
   dt_iop_drawlayer_params_t *params = (dt_iop_drawlayer_params_t *)self->params;
   _ensure_gui_conf_defaults();
   g->ui.widgets = dt_drawlayer_widgets_init();
+  dt_drawlayer_runtime_manager_init(&g->manager);
   dt_drawlayer_process_state_init(&g->process);
   _load_color_history(g);
   _ensure_layer_name(self, params);
@@ -4241,6 +4242,7 @@ void gui_cleanup(dt_iop_module_t *self)
 
   _release_all_base_patch_extra_refs(g);
   dt_drawlayer_process_state_cleanup(&g->process);
+  dt_drawlayer_runtime_manager_cleanup(&g->manager);
   memset(&g->session.live_patch, 0, sizeof(g->session.live_patch));
   dt_drawlayer_widgets_cleanup(&g->ui.widgets);
   dt_drawlayer_ui_cursor_clear(&g->ui);
