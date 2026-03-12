@@ -23,6 +23,8 @@ else()
   project(ansel VERSION 0 LANGUAGES CXX C)
 endif()
 
+set(CMAKE_C_STANDARD 11)
+
 # Shell to use for scripts (prefer bash for bash-specific scripts)
 if(WIN32)
   if(CMAKE_SH)
