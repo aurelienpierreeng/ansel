@@ -395,7 +395,7 @@ void dt_dev_invalidate_history_module(GList *list, struct dt_iop_module_t *modul
  * @param dev
  * @return uint64_t
  */
-uint64_t dt_dev_history_get_hash(struct dt_develop_t *dev);
+uint64_t dt_dev_history_compute_hash(struct dt_develop_t *dev);
 
 /**
  * @brief Get the current history end index (GUI perspective).

@@ -828,7 +828,7 @@ gboolean dt_dev_add_history_item_ext(dt_develop_t *dev, struct dt_iop_module_t *
   return add_new_pipe_node;
 }
 
-uint64_t dt_dev_history_get_hash(dt_develop_t *dev)
+uint64_t dt_dev_history_compute_hash(dt_develop_t *dev)
 {
   uint64_t hash = 5381;
   for(GList *hist = g_list_nth(dev->history, dt_dev_get_history_end_ext(dev) - 1);
@@ -874,7 +874,7 @@ void dt_dev_add_history_item_real(dt_develop_t *dev, dt_iop_module_t *module, gb
 
   // We don't update history hash in dt_dev_add_history_item_ext
   // because it can be called within loops, so that can be expensive.
-  dev->history_hash = dt_dev_history_get_hash(dev);
+  dev->history_hash = dt_dev_history_compute_hash(dev);
 
   // Recompute pipeline last
   const gboolean has_raster = module && dt_iop_module_has_raster_mask(module);
@@ -1046,7 +1046,7 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev)
   dt_ioppr_resync_pipeline(dev, 0, "dt_dev_pop_history_items_ext end", TRUE);
 
   // Reloading defaults might have changed the global history hash
-  dev->history_hash = dt_dev_history_get_hash(dev);
+  dev->history_hash = dt_dev_history_compute_hash(dev);
 
   // Update darkroom sizes in case clipping & distortion changed.
   // This is now handled by the wrapper after releasing the history lock.
@@ -1181,7 +1181,7 @@ void dt_dev_write_history_ext(dt_develop_t *dev, const int32_t imgid)
 
   dt_print(DT_DEBUG_HISTORY, "[dt_dev_write_history_ext] writing history for image %i...\n", imgid);
 
-  dev->history_hash = dt_dev_history_get_hash(dev);
+  dev->history_hash = dt_dev_history_compute_hash(dev);
 
   _cleanup_history(imgid);
 

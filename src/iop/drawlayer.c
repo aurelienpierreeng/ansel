@@ -595,7 +595,7 @@ static void _publish_backend_progress(drawlayer_paint_backend_ctx_t *ctx, const 
 
   dt_pthread_rwlock_wrlock(&dev->history_mutex);
   dt_dev_add_history_item_ext(dev, ctx->self, FALSE, FALSE);
-  dev->history_hash = dt_dev_history_get_hash(dev);
+  dev->history_hash = dt_dev_history_compute_hash(dev);
   dt_pthread_rwlock_unlock(&dev->history_mutex);
   dt_drawlayer_paint_runtime_state_reset(&g->stroke.live_publish_damage);
   g->stroke.live_publish_ts = g_get_monotonic_time();
@@ -3176,7 +3176,7 @@ static gboolean _commit_dabs(dt_iop_module_t *self, const gboolean record_histor
       dt_dev_undo_start_record(self->dev);
       dt_pthread_rwlock_wrlock(&self->dev->history_mutex);
       dt_dev_add_history_item_ext(self->dev, self, TRUE, FALSE);
-      self->dev->history_hash = dt_dev_history_get_hash(self->dev);
+      self->dev->history_hash = dt_dev_history_compute_hash(self->dev);
       dt_pthread_rwlock_unlock(&self->dev->history_mutex);
       dt_dev_undo_end_record(self->dev);
       if(self->post_history_commit) self->post_history_commit(self);
@@ -4911,7 +4911,7 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
       dt_dev_undo_start_record(self->dev);
       dt_pthread_rwlock_wrlock(&self->dev->history_mutex);
       dt_dev_add_history_item_ext(self->dev, self, TRUE, FALSE);
-      self->dev->history_hash = dt_dev_history_get_hash(self->dev);
+      self->dev->history_hash = dt_dev_history_compute_hash(self->dev);
       dt_pthread_rwlock_unlock(&self->dev->history_mutex);
       dt_dev_undo_end_record(self->dev);
       if(self->post_history_commit) self->post_history_commit(self);
