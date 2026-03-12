@@ -76,6 +76,8 @@ void dt_drawlayer_worker_stop(dt_iop_module_t *self, dt_drawlayer_worker_t *work
 void dt_drawlayer_worker_seal_for_commit(dt_drawlayer_worker_t *worker);
 /** @brief Wait until deferred full-resolution replay queue is idle. */
 void dt_drawlayer_worker_flush_finished_strokes(dt_drawlayer_worker_t *worker);
+/** @brief Publish accumulated backend stroke damage into drawlayer process/runtime state. */
+void dt_drawlayer_worker_publish_backend_stroke_damage(dt_iop_module_t *self);
 /** @brief Clear preserved stroke runtime/history after a completed commit. */
 void dt_drawlayer_worker_reset_stroke(dt_drawlayer_worker_t *worker);
 /** @brief Read-only access to preserved raw input queue for current stroke (valid only while worker is idle). */
@@ -86,6 +88,8 @@ dt_drawlayer_paint_stroke_t *dt_drawlayer_worker_stroke(dt_drawlayer_worker_t *w
 guint dt_drawlayer_worker_pending_dab_count(const dt_drawlayer_worker_t *worker);
 /** @brief Query whether the current preserved stroke has already been handed off for full-resolution replay. */
 gboolean dt_drawlayer_worker_finished_stroke_queued(const dt_drawlayer_worker_t *worker);
+/** @brief Replay one finished stroke into the authoritative base patch from preserved raw inputs. */
+gboolean dt_drawlayer_worker_replay_finished_stroke_to_base_patch(dt_iop_module_t *self, const GArray *raw_inputs);
 
 /** @brief Enqueue one raw input event (FIFO, no coalescing). */
 gboolean dt_drawlayer_worker_enqueue_input(dt_drawlayer_worker_t *worker,
