@@ -861,13 +861,15 @@ void expose(
   const gboolean main_has_backbuf = main_backbuf_hash != DT_PIXELPIPE_CACHE_HASH_INVALID;
   const gboolean preview_has_backbuf = preview_backbuf_hash != DT_PIXELPIPE_CACHE_HASH_INVALID;
   const gboolean main_backbuf_is_newer = main_has_backbuf && main_backbuf_hash != expose_state.main_hash;
+  const gboolean main_ready_for_current_view
+      = main_has_backbuf && (!roi_changed || main_backbuf_is_newer || !_darkroom_main_locked.surface);
   const gboolean preview_matches_full_image
       = preview_has_backbuf
         && (allow_uncropped_full_image
             || (full_width > 0 && full_height > 0
                 && dev->preview_pipe->backbuf.width == full_width
                 && dev->preview_pipe->backbuf.height == full_height));
-  const gboolean full_image_backbuf_ready = main_has_backbuf || preview_matches_full_image;
+  const gboolean full_image_backbuf_ready = main_ready_for_current_view || preview_matches_full_image;
 
   dt_aligned_pixel_t bg_color = { 0.0f };
   const char *draw_source = "background only";
@@ -884,9 +886,10 @@ void expose(
   cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_NEAREST);
 
   /* Selection policy, kept intentionally linear:
-   * 1. Prefer the main pipe whenever it already has a backbuf. Main is the
-   *    authoritative display source, so darkroom does not try to second-guess
-   *    it from size heuristics.
+   * 1. Prefer the main pipe whenever it already has the backbuf for the
+   *    current darkroom view. We do not guess that from size. If ROI did not
+   *    change, the existing main frame stays authoritative. If ROI changed, a
+   *    new main backbuf hash means the updated main frame arrived.
    * 2. If preview produced the exact same full-image buffer size first
    *    (zoom-to-fit / same ROI), treat it exactly like main.
    * 3. Only when zoom/pan changed and main has not caught up yet, use a scaled
@@ -901,11 +904,11 @@ void expose(
   if(full_image_backbuf_ready)
     _release_preview_fallback_surface();
 
-  /* Rule 1: main wins whenever it has any backbuf at all. If a newer main hash
-   * was just published but the cacheline is not lockable on this expose yet,
-   * queue another redraw and keep showing the previous composed frame rather
-   * than dropping back to preview. */
-  if(main_has_backbuf)
+  /* Rule 1: main wins whenever it is ready for the current view. During a
+   * zoom/pan/widget-size transition, the previous main hash stays visible until
+   * a different main hash is published; only then does main override preview
+   * fallback again. */
+  if(main_ready_for_current_view)
   {
     if(_lock_pipe_surface(dev, dev->pipe, &_darkroom_main_locked, FALSE, FALSE)
        && _darkroom_main_locked.surface
