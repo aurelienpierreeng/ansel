@@ -841,7 +841,7 @@ void dt_masks_gui_form_create(dt_masks_form_t *mask_form, dt_masks_form_gui_t *m
          != 0)
         return;
     }
-    mask_gui->pipe_hash = darktable.develop->preview_pipe->backbuf.hash;
+    mask_gui->pipe_hash = dt_dev_backbuf_get_hash(&darktable.develop->preview_pipe->backbuf);
     mask_gui->formid = mask_form->formid;
     mask_gui->type = mask_form->type;
 
@@ -867,7 +867,8 @@ gboolean dt_masks_gui_form_create_throttled(dt_masks_form_t *mask_form, dt_masks
   const double min_delta_time = 1.0 / 60.0;
   const float min_dist2 = 4.0f;
   const gboolean force_rebuild
-      = (develop->preview_pipe && mask_gui->pipe_hash != develop->preview_pipe->backbuf.hash);
+      = (develop->preview_pipe
+         && mask_gui->pipe_hash != dt_dev_backbuf_get_hash(&develop->preview_pipe->backbuf));
 
   if(!force_rebuild && mask_gui->last_rebuild_ts > 0.0)
   {
@@ -1042,7 +1043,7 @@ void dt_masks_gui_form_test_create(dt_masks_form_t *mask_form, dt_masks_form_gui
   // we test if the image has changed
   if(mask_gui->pipe_hash != DT_PIXELPIPE_CACHE_HASH_INVALID)
   {
-    if(mask_gui->pipe_hash != darktable.develop->preview_pipe->backbuf.hash)
+    if(mask_gui->pipe_hash != dt_dev_backbuf_get_hash(&darktable.develop->preview_pipe->backbuf))
     {
       mask_gui->pipe_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
       mask_gui->formid = 0;

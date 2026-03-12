@@ -245,11 +245,12 @@ static void pixelpipe_get_histogram_backbuf(dt_develop_t *dev, const dt_iop_roi_
 {
   dt_backbuf_t *backbuf = _get_backuf(dev, module->op);
   if(backbuf == NULL) return;     // This module is not wired to global histograms.
-  if(backbuf->hash == hash) return; // Hash didn't change, nothing to update.
+  if(dt_dev_backbuf_get_hash(backbuf) == hash) return; // Hash didn't change, nothing to update.
 
   // Hash has changed, our previous stored entry is obsolete: decrement its refcount.
   dt_pixel_cache_entry_t *previous_entry;
-  if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, backbuf->hash, NULL, NULL, &previous_entry))
+  if(dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf), NULL, NULL,
+                                 &previous_entry))
     dt_dev_pixelpipe_cache_ref_count_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, FALSE, previous_entry);
 
   // Update metadata. The global histogram backbuf stores its bpp; infer it from cache entry size.

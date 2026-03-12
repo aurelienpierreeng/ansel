@@ -286,7 +286,7 @@ void _reset_cache(dt_lib_histogram_t *d)
 static gboolean _is_backbuf_ready(dt_lib_histogram_t *d)
 {
   return (dt_dev_pixelpipe_is_backbufer_valid(darktable.develop->preview_pipe, darktable.develop)) &&
-         (d->backbuf->hash != (uint64_t)-1);
+         (dt_dev_backbuf_get_hash(d->backbuf) != (uint64_t)-1);
 }
 
 static void _redraw_scopes(dt_lib_histogram_t *d)
@@ -370,13 +370,14 @@ static void _process_histogram(dt_backbuf_t *backbuf, cairo_t *cr, const int wid
   // Check if the cache entry we know is still active on the cache
   struct dt_pixel_cache_entry_t *entry;
   dt_develop_t *dev = darktable.develop;
-  void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, backbuf->hash, &entry, dev, dev->preview_pipe);
+  void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf),
+                                                    &entry, dev, dev->preview_pipe);
   if(!data) return;
 
   uint32_t *bins = calloc(4 * HISTOGRAM_BINS, sizeof(uint32_t));
   if(bins == NULL) 
   {
-    dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, backbuf->hash, entry);
+    dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf), entry);
     return;
   }
 
@@ -401,7 +402,7 @@ static void _process_histogram(dt_backbuf_t *backbuf, cairo_t *cr, const int wid
     _bin_pixels_histogram_in_roi(data, bins, 0, backbuf->width, 0, backbuf->height, width);
   }
 
-  dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, backbuf->hash, entry);
+  dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf), entry);
 
   uint32_t overall_histogram_max = _find_max_histogram(bins, 4 * HISTOGRAM_BINS);
 
@@ -623,7 +624,8 @@ static void _process_waveform(dt_backbuf_t *backbuf, cairo_t *cr, const int widt
 {
   struct dt_pixel_cache_entry_t *entry;
   dt_develop_t *dev = darktable.develop;
-  void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, backbuf->hash, &entry, dev, dev->preview_pipe);
+  void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf),
+                                                    &entry, dev, dev->preview_pipe);
   if(!data) return;
 
   const size_t binning_size = (vertical) ? 4 * TONES * backbuf->height : 4 * TONES * backbuf->width;
@@ -671,7 +673,7 @@ static void _process_waveform(dt_backbuf_t *backbuf, cairo_t *cr, const int widt
 error:;
   dt_pixelpipe_cache_free_align(bins);
   dt_pixelpipe_cache_free_align(image);
-  dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, backbuf->hash, entry);
+  dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf), entry);
 }
 
 static float _Luv_to_vectorscope_coord_zoom(const float value, const float zoom)
@@ -829,7 +831,8 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, cairo_t *cr, const int w
 
   struct dt_pixel_cache_entry_t *entry;
   dt_develop_t *dev = darktable.develop;
-  void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, backbuf->hash, &entry, dev, dev->pipe);
+  void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf),
+                                                    &entry, dev, dev->pipe);
   if(!data) return;
 
   uint32_t *const restrict vectorscope = dt_pixelpipe_cache_alloc_align_cache(
@@ -989,14 +992,14 @@ static void _process_vectorscope(dt_backbuf_t *backbuf, cairo_t *cr, const int w
 error:;
   dt_pixelpipe_cache_free_align(image);
   dt_pixelpipe_cache_free_align(vectorscope);
-  dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, backbuf->hash, entry);
+  dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf), entry);
 }
 
 gboolean _needs_recompute(dt_lib_histogram_t *d, const int width, const int height)
 {
   // Check if cache is up-to-date
   dt_lib_histogram_scope_type_t view = dt_bauhaus_combobox_get(d->display);
-  gboolean hash_match = (d->cache.hash == d->backbuf->hash);
+  gboolean hash_match = (d->cache.hash == dt_dev_backbuf_get_hash(d->backbuf));
   gboolean size_match = (d->cache.width == width && d->cache.height == height);
   gboolean zoom_match = (d->cache.zoom == d->zoom);
   gboolean view_match = (d->cache.view == view);
@@ -1036,7 +1039,7 @@ gboolean _redraw_surface(dt_lib_histogram_t *d)
   _get_allocation_size(d, &width, &height);
 
   // Save cache integrity
-  d->cache.hash = d->backbuf->hash;
+  d->cache.hash = dt_dev_backbuf_get_hash(d->backbuf);
   d->cache.width = width;
   d->cache.height = height;
   d->cache.zoom = d->zoom;
@@ -1120,7 +1123,8 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
 {
   struct dt_pixel_cache_entry_t *entry;
   dt_develop_t *dev = darktable.develop;
-  void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, backbuf->hash, &entry, dev, dev->preview_pipe);
+  void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf),
+                                                    &entry, dev, dev->preview_pipe);
   if(!data) return;
 
   const float *const pixel = data;
@@ -1184,7 +1188,7 @@ static void _pixelpipe_pick_from_image(const dt_backbuf_t *const backbuf,
     }
   }
 
-  dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, backbuf->hash, entry);
+  dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(backbuf), entry);
 
   memcpy(sample->display, sample->scope, sizeof(lib_colorpicker_sample_statistics));
 }

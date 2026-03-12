@@ -3956,12 +3956,12 @@ void gui_post_expose(struct dt_iop_module_t *self, cairo_t *cr, int32_t width, i
   if(g->fitting || g->lines == NULL || !g->buf || !self->enabled) return;
 
   // ensure virtual pipe params are in sync so distortions use current settings
-  if(dev->virtual_pipe->history_hash != dev->history_hash)
+  if(dt_dev_pixelpipe_get_history_hash(dev->virtual_pipe) != dt_dev_get_history_hash(dev))
     dt_dev_pixelpipe_sync_virtual(dev, DT_DEV_PIPE_TOP_CHANGED);
 
   // get hash value that changes if distortions from here to the end of the pixelpipe changed
   // virtual_pipe doesn't process pixels, so its hash isn't reliable for invalidation.
-  const uint64_t hash = dev->preview_pipe->hash;
+  const uint64_t hash = dt_dev_pixelpipe_get_hash(dev->preview_pipe);
   // get hash value that changes if coordinates of lines have changed
   const uint64_t lines_hash = _get_lines_hash(g->lines, g->lines_count);
 

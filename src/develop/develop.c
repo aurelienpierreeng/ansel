@@ -126,7 +126,7 @@ GList *dt_dev_load_modules(dt_develop_t *dev)
 void dt_dev_init(dt_develop_t *dev, int32_t gui_attached)
 {
   memset(dev, 0, sizeof(dt_develop_t));
-  dev->history_hash = DT_PIXELPIPE_CACHE_HASH_INVALID;
+  dt_dev_set_history_hash(dev, DT_PIXELPIPE_CACHE_HASH_INVALID);
   dev->gui_module = NULL;
   dt_pthread_rwlock_init(&dev->history_mutex, NULL);
   dt_pthread_rwlock_init(&dev->masks_mutex, NULL);
@@ -366,7 +366,7 @@ int dt_dev_get_thumbnail_size(dt_develop_t *dev)
 
   if(!dev->virtual_pipe->nodes)
     dev->virtual_pipe->changed |= DT_DEV_PIPE_REMOVE;
-  else if(dev->virtual_pipe->history_hash != dev->history_hash)
+  else if(dt_dev_pixelpipe_get_history_hash(dev->virtual_pipe) != dt_dev_get_history_hash(dev))
     dev->virtual_pipe->changed |= DT_DEV_PIPE_SYNCH;
 
   if(dev->virtual_pipe->changed != DT_DEV_PIPE_UNCHANGED)
@@ -493,7 +493,8 @@ void dt_dev_darkroom_pipeline(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
       const gboolean needs_regular_update
           = (((pipe->status == DT_DEV_PIXELPIPE_DIRTY) || (pipe->changed != DT_DEV_PIPE_UNCHANGED))
              && reentries < 2);
-      const gboolean needs_realtime_update = (dev->history_hash != pipe->history_hash);
+      const gboolean needs_realtime_update
+          = (dt_dev_get_history_hash(dev) != dt_dev_pixelpipe_get_history_hash(pipe));
 
       if(!(needs_regular_update || needs_realtime_update)) break;
 
@@ -738,7 +739,7 @@ void dt_dev_configure_real(dt_develop_t *dev, int wd, int ht)
 {
   // Called only from Darkroom to init and update drawing size
   // depending on sidebars and main window resizing.
-  if(dev->roi.width != wd || dev->roi.height != ht || dev->pipe->backbuf.hash == -1)
+  if(dev->roi.width != wd || dev->roi.height != ht || dt_dev_backbuf_get_hash(&dev->pipe->backbuf) == -1)
   {
     // If dimensions didn't change or we don't have a valid output image to display
 
@@ -1441,7 +1442,7 @@ void dt_dev_set_history_end_ext(dt_develop_t *dev, const uint32_t index)
 {
   const int num_items = g_list_length(dev->history);
   dev->history_end = CLAMP(index, 0, num_items);
-  dev->history_hash = dt_dev_history_compute_hash(dev);
+  dt_dev_set_history_hash(dev, dt_dev_history_compute_hash(dev));
 }
 
 void dt_dev_append_changed_tag(const int32_t imgid)
@@ -1616,9 +1617,9 @@ void dt_dev_set_backbuf(dt_backbuf_t *backbuf, const int width, const int height
 {
   backbuf->height = height;
   backbuf->width = width;
-  backbuf->hash = hash;
+  dt_dev_backbuf_set_hash(backbuf, hash);
   backbuf->bpp = bpp;
-  backbuf->history_hash = history_hash;
+  dt_dev_backbuf_set_history_hash(backbuf, history_hash);
 }
 
 // clang-format off

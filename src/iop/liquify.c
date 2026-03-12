@@ -2858,7 +2858,7 @@ void gui_post_expose(struct dt_iop_module_t *module,
   dt_iop_gui_leave_critical_section(module);
 
   // distort all points
-  if(develop->virtual_pipe->history_hash != develop->history_hash)
+  if(dt_dev_pixelpipe_get_history_hash(develop->virtual_pipe) != dt_dev_get_history_hash(develop))
     dt_dev_pixelpipe_sync_virtual(develop, DT_DEV_PIPE_TOP_CHANGED);
   const distort_params_t d_params = { develop, develop->virtual_pipe, 1.0, 1.0, DT_DEV_TRANSFORM_DIR_ALL, FALSE };
   _distort_paths(module, &d_params, &copy_params);

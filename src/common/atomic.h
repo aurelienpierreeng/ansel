@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <stdint.h>
+
 // implement an atomic variable for inter-thread signalling purposes
 // the manner in which we implement depends on the capabilities of the compiler:
 //   1. standard-compliant C++ compiler: use C++11 atomics in <atomic>
@@ -32,8 +34,11 @@
 #include <atomic>
 
 typedef std::atomic<int> dt_atomic_int;
+typedef std::atomic<uint64_t> dt_atomic_uint64;
 inline void dt_atomic_set_int(dt_atomic_int *var, int value) { std::atomic_store(var,value); }
 inline int dt_atomic_get_int(dt_atomic_int *var) { return std::atomic_load(var); }
+inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value) { std::atomic_store(var,value); }
+inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *var) { return std::atomic_load(var); }
 inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return std::atomic_fetch_add(var,incr); }
 inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return std::atomic_fetch_sub(var,decr); }
 inline int dt_atomic_exch_int(dt_atomic_int *var, int value) { return std::atomic_exchange(var,value); }
@@ -45,8 +50,11 @@ inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
 #include <stdatomic.h>
 
 typedef atomic_int dt_atomic_int;
+typedef _Atomic(uint64_t) dt_atomic_uint64;
 inline void dt_atomic_set_int(dt_atomic_int *var, int value) { atomic_store(var,value); }
 inline int dt_atomic_get_int(dt_atomic_int *var) { return atomic_load(var); }
+inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value) { atomic_store(var,value); }
+inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *var) { return atomic_load(var); }
 inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return atomic_fetch_add(var,incr); }
 inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return atomic_fetch_sub(var,decr); }
 inline int dt_atomic_exch_int(dt_atomic_int *var, int value) { return atomic_exchange(var,value); }
@@ -58,9 +66,13 @@ inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
 // that we can use GNU intrinsics corresponding to the C11 atomics
 
 typedef volatile int dt_atomic_int;
+typedef volatile uint64_t dt_atomic_uint64;
 inline void dt_atomic_set_int(dt_atomic_int *var, int value) { __atomic_store(var,&value,__ATOMIC_SEQ_CST); }
 inline int dt_atomic_get_int(dt_atomic_int *var)
 { int value ; __atomic_load(var,&value,__ATOMIC_SEQ_CST); return value; }
+inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value) { __atomic_store(var,&value,__ATOMIC_SEQ_CST); }
+inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *var)
+{ uint64_t value; __atomic_load(var,&value,__ATOMIC_SEQ_CST); return value; }
 
 inline int dt_atomic_add_int(dt_atomic_int *var, int incr) { return __atomic_fetch_add(var,incr,__ATOMIC_SEQ_CST); }
 inline int dt_atomic_sub_int(dt_atomic_int *var, int decr) { return __atomic_fetch_sub(var,decr,__ATOMIC_SEQ_CST); }
@@ -77,7 +89,15 @@ inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
 extern pthread_mutex_t dt_atom_mutex;
 
 typedef int dt_atomic_int;
+typedef uint64_t dt_atomic_uint64;
 inline void dt_atomic_set_int(dt_atomic_int *var, int value)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  *var = value;
+  pthread_mutex_unlock(&dt_atom_mutex);
+}
+
+inline void dt_atomic_set_uint64(dt_atomic_uint64 *var, uint64_t value)
 {
   pthread_mutex_lock(&dt_atom_mutex);
   *var = value;
@@ -88,6 +108,14 @@ inline int dt_atomic_get_int(const dt_atomic_int *const var)
 {
   pthread_mutex_lock(&dt_atom_mutex);
   int value = *var;
+  pthread_mutex_unlock(&dt_atom_mutex);
+  return value;
+}
+
+inline uint64_t dt_atomic_get_uint64(const dt_atomic_uint64 *const var)
+{
+  pthread_mutex_lock(&dt_atom_mutex);
+  const uint64_t value = *var;
   pthread_mutex_unlock(&dt_atom_mutex);
   return value;
 }
@@ -141,4 +169,3 @@ inline int dt_atomic_CAS_int(dt_atomic_int *var, int *expected, int value)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

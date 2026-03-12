@@ -218,14 +218,16 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
   gtk_render_background(context, cr, 0, 0, allocation.width, allocation.height);
   cairo_save(cr);
   
-  if(has_preview_image && (!d->image_surface || image_hash != dev->preview_pipe->backbuf.hash))
+  if(has_preview_image
+     && (!d->image_surface || image_hash != dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf)))
   {
     if(d->image_surface) cairo_surface_destroy(d->image_surface);
     d->image_surface = dt_cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
 
     // Fetch the backbuffer
     struct dt_pixel_cache_entry_t *cache_entry;
-    void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache, dev->preview_pipe->backbuf.hash, 
+    void *data = dt_dev_pixelpipe_cache_get_read_only(darktable.pixelpipe_cache,
+                                                      dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf),
                                                       &cache_entry, darktable.develop, dev->preview_pipe);
     if(!data) return TRUE;
 
@@ -235,7 +237,7 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, wd);
     cairo_surface_t *tmp_surface = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, wd, ht, stride);
 
-    image_hash = dev->preview_pipe->backbuf.hash;
+    image_hash = dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf);
 
     cairo_t *cri = cairo_create(d->image_surface);
     cairo_rectangle(cri, 0, 0, width, height);
@@ -247,7 +249,8 @@ static gboolean _lib_navigation_draw_callback(GtkWidget *widget, cairo_t *crf, g
     cairo_surface_destroy(tmp_surface);
     cairo_destroy(cri);
 
-    dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache, dev->preview_pipe->backbuf.hash, cache_entry);
+    dt_dev_pixelpipe_cache_close_read_only(darktable.pixelpipe_cache,
+                                           dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf), cache_entry);
 
     imgid = dev->image_storage.id;
   }

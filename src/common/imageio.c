@@ -1084,18 +1084,19 @@ int dt_imageio_export_with_flags(const int32_t imgid, const char *filename,
   dt_show_times(&start, thumbnail_export ? "[dev_process_thumbnail] pixel pipeline processing thread"
                                          : "[dev_process_export] pixel pipeline processing thread");
 
-  if(pipe.backbuf.hash == -1 || err)
+  if(dt_dev_backbuf_get_hash(&pipe.backbuf) == -1 || err)
   {
     dt_print(DT_DEBUG_IMAGEIO, "[dt_imageio_export_with_flags] no valid output buffer\n");
     goto error;
   }
 
   if(thumbnail_export)
-    dt_history_hash_set_mipmap(imgid, dev.history_hash, DT_IMAGE_CACHE_RELAXED);
+    dt_history_hash_set_mipmap(imgid, dt_dev_get_history_hash(&dev), DT_IMAGE_CACHE_RELAXED);
 
   struct dt_pixel_cache_entry_t *cache_entry;
   void *data = NULL;
-  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, pipe.backbuf.hash, &data, NULL, &cache_entry))
+  if(!dt_dev_pixelpipe_cache_peek(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&pipe.backbuf), &data, NULL,
+                                  &cache_entry))
     goto error;
   
   dt_dev_pixelpipe_cache_rdlock_entry(darktable.pixelpipe_cache, DT_PIXELPIPE_CACHE_HASH_INVALID, TRUE, cache_entry);

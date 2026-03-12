@@ -300,7 +300,7 @@ typedef struct dt_develop_t
   
   // Track history changes from C.
   // This is updated when history is changed, read or written.
-  uint64_t history_hash;
+  dt_atomic_uint64 history_hash;
 
   // Darkroom pipelines are running fulltime in background until leaving darkroom.
   // Set that to TRUE once they get shutdown.
@@ -399,6 +399,16 @@ typedef struct dt_develop_t
 
   gboolean loading_cache;
 } dt_develop_t;
+
+static inline uint64_t dt_dev_get_history_hash(const dt_develop_t *dev)
+{
+  return dt_atomic_get_uint64(&dev->history_hash);
+}
+
+static inline void dt_dev_set_history_hash(dt_develop_t *dev, const uint64_t history_hash)
+{
+  dt_atomic_set_uint64(&dev->history_hash, history_hash);
+}
 
 #ifdef __cplusplus
 extern "C" {

@@ -436,7 +436,7 @@ static gboolean _render_main_direct_debug(cairo_t *cr, dt_develop_t *dev, const 
   cairo_paint(cr);
 
   if(!dt_dev_pixelpipe_is_backbufer_valid(dev->pipe, dev)) return FALSE;
-  const uint64_t hash = dev->pipe->backbuf.hash;
+  const uint64_t hash = dt_dev_backbuf_get_hash(&dev->pipe->backbuf);
   if(hash == (uint64_t)-1) return FALSE;
 
   dt_pixel_cache_entry_t *entry = NULL;
@@ -562,7 +562,7 @@ static gboolean _lock_pipe_surface(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe, 
   if(!dev || !pipe || !locked) return FALSE;
   (void)lock_read;
 
-  const uint64_t hash = pipe->backbuf.hash;
+  const uint64_t hash = dt_dev_backbuf_get_hash(&pipe->backbuf);
   if(hash == (uint64_t)-1) return keep_previous_on_fail && (locked->surface != NULL);
 
   /* Fast-path reuse is only valid if the cacheline identity/data pointer are
@@ -719,7 +719,7 @@ static gboolean _build_preview_fallback_surface(dt_develop_t *dev, const int wid
 
   _darkroom_preview_fallback_imgid = dev->image_storage.id;
   _darkroom_preview_fallback_zoom_hash = zoom_hash;
-  _darkroom_preview_fallback_backbuf_hash = dev->preview_pipe->backbuf.hash;
+  _darkroom_preview_fallback_backbuf_hash = dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf);
   return TRUE;
 }
 
@@ -765,8 +765,9 @@ static inline gboolean _darkroom_pipe_has_backbuf(const dt_dev_pixelpipe_t *pipe
                                                   const gboolean require_current_history)
 {
   if(!pipe || !dev) return FALSE;
-  return pipe->backbuf.hash != DT_PIXELPIPE_CACHE_HASH_INVALID
-         && (!require_current_history || dev->history_hash == pipe->backbuf.history_hash);
+  return dt_dev_backbuf_get_hash(&pipe->backbuf) != DT_PIXELPIPE_CACHE_HASH_INVALID
+         && (!require_current_history
+             || dt_dev_get_history_hash(dev) == dt_dev_backbuf_get_history_hash(&pipe->backbuf));
 }
 
 static inline gboolean _darkroom_pipe_backbuf_matches_full_image(const dt_dev_pixelpipe_t *pipe,
@@ -831,7 +832,7 @@ static gboolean _render_current_main(cairo_t *cr, dt_develop_t *dev, const int w
   const gboolean allow_uncropped_full_image = _darkroom_gui_module_requests_uncropped_full_image(dev);
   if(!_darkroom_pipe_has_backbuf(dev->pipe, dev, require_current_history)
      || (!allow_uncropped_full_image && !_darkroom_pipe_backbuf_matches_full_image(dev->pipe, dev))
-     || !_darkroom_backbuf_matches_current_roi(dev->pipe->backbuf.hash, last_main_hash,
+     || !_darkroom_backbuf_matches_current_roi(dt_dev_backbuf_get_hash(&dev->pipe->backbuf), last_main_hash,
                                                last_main_zoom_hash, zoom_hash))
     return FALSE;
   if(!_lock_pipe_surface(dev, dev->pipe, &_darkroom_main_locked, FALSE, FALSE) || !_darkroom_main_locked.surface) return FALSE;
@@ -846,8 +847,8 @@ static gboolean _render_previous_main(cairo_t *cr, dt_develop_t *dev, const int 
                                       uint64_t *out_main_hash, uint64_t *out_main_zoom_hash,
                                       int32_t *image_surface_imgid)
 {
-  if(dev && dev->pipe && dev->pipe->backbuf.hash != DT_PIXELPIPE_CACHE_HASH_INVALID
-     && dev->pipe->backbuf.hash != _darkroom_main_locked.hash)
+  if(dev && dev->pipe && dt_dev_backbuf_get_hash(&dev->pipe->backbuf) != DT_PIXELPIPE_CACHE_HASH_INVALID
+     && dt_dev_backbuf_get_hash(&dev->pipe->backbuf) != _darkroom_main_locked.hash)
     return FALSE;
   if(!_previous_main_surface_roi_valid(dev, main_zoom_hash, zoom_hash)) return FALSE;
   if(!_render_main_locked_surface(cr, dev, &_darkroom_main_locked, width, height, border, bg_color)) return FALSE;
@@ -874,7 +875,7 @@ static gboolean _render_nonrealtime_preview(cairo_t *cr, dt_develop_t *dev, cons
 
   if(has_preview_image
      && preview_cache_valid
-     && _darkroom_preview_fallback_backbuf_hash == dev->preview_pipe->backbuf.hash)
+     && _darkroom_preview_fallback_backbuf_hash == dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf))
   {
     if(!_render_preview_fallback_surface(cr)) return FALSE;
     *image_surface_imgid = dev->image_storage.id;
@@ -1025,8 +1026,9 @@ static gboolean _darkroom_try_render_main_sources(const darkroom_expose_request_
   }
 
   /* Rule 1: a same-size preview backbuf is equivalent to a main backbuf. */
-  if(_darkroom_backbuf_matches_current_roi(req->dev->preview_pipe ? req->dev->preview_pipe->backbuf.hash
-                                                                  : DT_PIXELPIPE_CACHE_HASH_INVALID,
+  if(_darkroom_backbuf_matches_current_roi(req->dev->preview_pipe
+                                             ? dt_dev_backbuf_get_hash(&req->dev->preview_pipe->backbuf)
+                                             : DT_PIXELPIPE_CACHE_HASH_INVALID,
                                            state->main_hash, state->main_zoom_hash, req->zoom_hash)
      && _render_fullsize_preview_as_main(req->cr, req->dev, req->width, req->height, req->border, req->bg_color,
                                          req->zoom_hash, &state->main_hash, &state->main_zoom_hash,
@@ -1091,8 +1093,8 @@ static gboolean _darkroom_reuse_last_frame(cairo_t *cri, cairo_t *cr, const dt_d
 
   if(state->image_surface_has_main
      && dev->pipe
-     && dev->pipe->backbuf.hash != DT_PIXELPIPE_CACHE_HASH_INVALID
-     && dev->pipe->backbuf.hash != state->main_hash)
+     && dt_dev_backbuf_get_hash(&dev->pipe->backbuf) != DT_PIXELPIPE_CACHE_HASH_INVALID
+     && dt_dev_backbuf_get_hash(&dev->pipe->backbuf) != state->main_hash)
     return FALSE;
 
   /* No fresh source for this frame, but keep last composed frame to avoid
@@ -2917,24 +2919,24 @@ void leave(dt_view_t *self)
   darktable.develop->image_storage.id = -1;
 
   // Release the cache entries for histogram buffers
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dev->raw_histogram.hash);
-  dev->raw_histogram.hash = -1;
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->raw_histogram));
+  dt_dev_backbuf_set_hash(&dev->raw_histogram, -1);
 
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dev->output_histogram.hash);
-  dev->output_histogram.hash = -1;
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->output_histogram));
+  dt_dev_backbuf_set_hash(&dev->output_histogram, -1);
 
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dev->display_histogram.hash);
-  dev->display_histogram.hash = -1;  
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->display_histogram));
+  dt_dev_backbuf_set_hash(&dev->display_histogram, -1);
 
   // Release the cache entries for GUI backbufs
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dev->pipe->backbuf.hash);
-  dev->pipe->backbuf.hash = -1;
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->pipe->backbuf));
+  dt_dev_backbuf_set_hash(&dev->pipe->backbuf, -1);
 
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dev->preview_pipe->backbuf.hash);
-  dev->preview_pipe->backbuf.hash = -1;
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->preview_pipe->backbuf));
+  dt_dev_backbuf_set_hash(&dev->preview_pipe->backbuf, -1);
 
-  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dev->virtual_pipe->backbuf.hash);
-  dev->virtual_pipe->backbuf.hash = -1;
+  dt_dev_pixelpipe_cache_unref_hash(darktable.pixelpipe_cache, dt_dev_backbuf_get_hash(&dev->virtual_pipe->backbuf));
+  dt_dev_backbuf_set_hash(&dev->virtual_pipe->backbuf, -1);
 
 
   dt_print(DT_DEBUG_CONTROL, "[run_job-] 11 %f in darkroom mode\n", dt_get_wtime());

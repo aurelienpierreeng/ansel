@@ -151,9 +151,29 @@ typedef struct dt_backbuf_t
   size_t bpp;            // bits per pixel
   size_t width;          // pixel size of image
   size_t height;         // pixel size of image
-  uint64_t hash;         // data checksum/integrity hash, for example to connect to a cacheline
-  uint64_t history_hash; // arbitrary state hash
+  dt_atomic_uint64 hash;         // data checksum/integrity hash, for example to connect to a cacheline
+  dt_atomic_uint64 history_hash; // arbitrary state hash
 } dt_backbuf_t;
+
+static inline uint64_t dt_dev_backbuf_get_hash(const dt_backbuf_t *backbuf)
+{
+  return dt_atomic_get_uint64(&backbuf->hash);
+}
+
+static inline void dt_dev_backbuf_set_hash(dt_backbuf_t *backbuf, const uint64_t hash)
+{
+  dt_atomic_set_uint64(&backbuf->hash, hash);
+}
+
+static inline uint64_t dt_dev_backbuf_get_history_hash(const dt_backbuf_t *backbuf)
+{
+  return dt_atomic_get_uint64(&backbuf->history_hash);
+}
+
+static inline void dt_dev_backbuf_set_history_hash(dt_backbuf_t *backbuf, const uint64_t history_hash)
+{
+  dt_atomic_set_uint64(&backbuf->history_hash, history_hash);
+}
 
 typedef struct dt_dev_pixelpipe_t
 {
@@ -193,7 +213,7 @@ typedef struct dt_dev_pixelpipe_t
   // after the last synchronization between dev history and pipe nodes completed.
   // This is computed in dt_dev_pixelpipe_get_global_hash
   // ahead of processing image.
-  uint64_t hash;
+  dt_atomic_uint64 hash;
 
   dt_pthread_mutex_t busy_mutex;
 
@@ -262,7 +282,7 @@ typedef struct dt_dev_pixelpipe_t
   // hash of the whole history stack at the time of synchonization
   // between pipe and history. This is a local copy of 
   // dev_history_get_hash()
-  uint64_t history_hash;
+  dt_atomic_uint64 history_hash;
   // Modules can set this to TRUE internally so the pipeline will
   // restart right away, in the same thread.
   // The reentry flag can only be reset (to FALSE) by the same object that captured it.
@@ -298,6 +318,26 @@ typedef struct dt_dev_pixelpipe_t
   int timeout;
 
 } dt_dev_pixelpipe_t;
+
+static inline uint64_t dt_dev_pixelpipe_get_hash(const dt_dev_pixelpipe_t *pipe)
+{
+  return dt_atomic_get_uint64(&pipe->hash);
+}
+
+static inline void dt_dev_pixelpipe_set_hash(dt_dev_pixelpipe_t *pipe, const uint64_t hash)
+{
+  dt_atomic_set_uint64(&pipe->hash, hash);
+}
+
+static inline uint64_t dt_dev_pixelpipe_get_history_hash(const dt_dev_pixelpipe_t *pipe)
+{
+  return dt_atomic_get_uint64(&pipe->history_hash);
+}
+
+static inline void dt_dev_pixelpipe_set_history_hash(dt_dev_pixelpipe_t *pipe, const uint64_t history_hash)
+{
+  dt_atomic_set_uint64(&pipe->history_hash, history_hash);
+}
 
 struct dt_develop_t;
 
