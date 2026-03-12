@@ -41,7 +41,6 @@ typedef struct dt_drawlayer_session_state_t
 
 typedef struct dt_drawlayer_process_state_t
 {
-  dt_drawlayer_damaged_rect_t *backend_path;
   /** `base_patch`: RAM copy, converted as 32 bits floats of the full-res TIFF
    * layer. It's our interface between user interaction and disk file.
    */
@@ -110,9 +109,6 @@ typedef struct dt_drawlayer_stroke_state_t
   float last_dab_x;
   float last_dab_y;
   gboolean finish_commit_pending;
-  gint64 live_publish_ts;
-  uint32_t live_publish_serial;
-  dt_drawlayer_damaged_rect_t live_publish_damage;
   uint32_t current_stroke_batch;
 } dt_drawlayer_stroke_state_t;
 

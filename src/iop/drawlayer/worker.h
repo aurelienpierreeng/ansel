@@ -78,6 +78,10 @@ void dt_drawlayer_worker_seal_for_commit(dt_drawlayer_worker_t *worker);
 void dt_drawlayer_worker_flush_finished_strokes(dt_drawlayer_worker_t *worker);
 /** @brief Publish accumulated backend stroke damage into drawlayer process/runtime state. */
 void dt_drawlayer_worker_publish_backend_stroke_damage(dt_iop_module_t *self);
+/** @brief Reset worker-owned backend damage accumulator. */
+void dt_drawlayer_worker_reset_backend_path(dt_drawlayer_worker_t *worker);
+/** @brief Reset worker-owned transient live-publish state. */
+void dt_drawlayer_worker_reset_live_publish(dt_drawlayer_worker_t *worker);
 /** @brief Clear preserved stroke runtime/history after a completed commit. */
 void dt_drawlayer_worker_reset_stroke(dt_drawlayer_worker_t *worker);
 /** @brief Read-only access to preserved raw input queue for current stroke (valid only while worker is idle). */

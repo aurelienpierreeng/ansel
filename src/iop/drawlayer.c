@@ -1812,10 +1812,9 @@ static void _reset_stroke_session(dt_iop_drawlayer_gui_data_t *g)
   g->stroke.stroke_sample_count = 0;
   g->stroke.stroke_event_index = 0;
   g->stroke.last_dab_valid = FALSE;
-  g->stroke.live_publish_ts = 0;
-  g->stroke.live_publish_serial = 0;
-  dt_drawlayer_paint_runtime_state_reset(&g->stroke.live_publish_damage);
   dt_drawlayer_process_state_reset_stroke(&g->process);
+  dt_drawlayer_worker_reset_backend_path(g->stroke.worker);
+  dt_drawlayer_worker_reset_live_publish(g->stroke.worker);
 }
 
 static void _invalidate_process_patch(dt_iop_drawlayer_gui_data_t *g)
@@ -2258,7 +2257,7 @@ static gboolean _ensure_widget_cache(dt_iop_module_t *self)
   g->session.live_view_rect = live_view_rect;
   g->session.preview_rect = preview_rect;
 
-  dt_drawlayer_paint_runtime_state_reset(g->process.backend_path);
+  dt_drawlayer_worker_reset_backend_path(g->stroke.worker);
   g->session.last_view_x = self->dev->roi.x;
   g->session.last_view_y = self->dev->roi.y;
   g->session.last_view_scale = self->dev->roi.scaling;
@@ -3453,14 +3452,12 @@ void dt_drawlayer_begin_gui_stroke_capture(dt_iop_module_t *self, const dt_drawl
   g->session.pointer_valid = TRUE;
   g->stroke.current_stroke_batch = stroke_batch;
   if(!dt_drawlayer_worker_active(g->stroke.worker))
-    dt_drawlayer_paint_runtime_state_reset(g->process.backend_path);
+    dt_drawlayer_worker_reset_backend_path(g->stroke.worker);
   g->stroke.finish_commit_pending = FALSE;
   g->stroke.stroke_sample_count = 0;
   g->stroke.stroke_event_index = event_index;
   g->stroke.last_dab_valid = FALSE;
-  g->stroke.live_publish_ts = 0;
-  g->stroke.live_publish_serial = 0;
-  dt_drawlayer_paint_runtime_state_reset(&g->stroke.live_publish_damage);
+  dt_drawlayer_worker_reset_live_publish(g->stroke.worker);
   dt_iop_gui_leave_critical_section(self);
 }
 

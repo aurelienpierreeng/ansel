@@ -941,7 +941,6 @@ void dt_drawlayer_process_state_init(dt_drawlayer_process_state_t *state)
 {
   if(!state) return;
   memset(state, 0, sizeof(*state));
-  state->backend_path = dt_drawlayer_paint_runtime_state_create();
   state->cache_imgid = -1;
   state->cache_layer_order = -1;
 #ifdef HAVE_OPENCL
@@ -957,7 +956,6 @@ void dt_drawlayer_process_state_cleanup(dt_drawlayer_process_state_t *state)
 #ifdef HAVE_OPENCL
   dt_drawlayer_process_state_clear_clmem(state);
 #endif
-  dt_drawlayer_paint_runtime_state_destroy(&state->backend_path);
   dt_drawlayer_cache_patch_clear(&state->base_patch, "drawlayer patch");
   dt_drawlayer_cache_patch_clear(&state->process_patch, "drawlayer patch");
   dt_drawlayer_cache_patch_clear(&state->process_read_patch, "drawlayer patch");
@@ -977,7 +975,6 @@ void dt_drawlayer_process_state_reset_stroke(dt_drawlayer_process_state_t *state
 {
   if(!state) return;
   dt_drawlayer_cache_patch_wrlock(&state->process_patch);
-  dt_drawlayer_paint_runtime_state_reset(state->backend_path);
   dt_drawlayer_paint_runtime_state_reset(&state->process_dirty_rect);
   if(state->stroke_mask.pixels)
     memset(state->stroke_mask.pixels, 0, (size_t)state->stroke_mask.width * state->stroke_mask.height * sizeof(float));
